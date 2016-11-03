@@ -398,7 +398,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   // controls need to be repositioned in the GraphicsLayer tree.
   void setTopmostScrollChild(PaintLayer*);
   PaintLayer* topmostScrollChild() const {
-    ASSERT(!m_nextTopmostScrollChild);
+    DCHECK(!m_nextTopmostScrollChild);
     return m_topmostScrollChild;
   }
 
@@ -426,6 +426,10 @@ class CORE_EXPORT PaintLayerScrollableArea final
   bool isPaintLayerScrollableArea() const override { return true; }
 
   LayoutBox* layoutBox() const override { return &box(); }
+
+  FloatQuad localToVisibleContentQuad(const FloatQuad&,
+                                      const LayoutObject*,
+                                      unsigned = 0) const final;
 
   bool shouldRebuildHorizontalScrollbarLayer() const {
     return m_rebuildHorizontalScrollbarLayer;

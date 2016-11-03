@@ -173,7 +173,6 @@ class Port(object):
         self._filesystem = host.filesystem
         self._webkit_finder = WebKitFinder(host.filesystem)
 
-        self._helper = None
         self._http_server = None
         self._websocket_server = None
         self._is_wptserve_enabled = getattr(options, 'enable_wptserve', False)
@@ -349,11 +348,6 @@ class Port(object):
                 self.get_option('configuration'))
         else:
             _log.error('')
-
-        helper_path = self._path_to_helper()
-        if helper_path:
-            result = self._check_file_exists(helper_path,
-                                             'layout test helper') and result
 
         if self.get_option('pixel_tests'):
             result = self.check_image_diff() and result
@@ -930,11 +924,12 @@ class Port(object):
         """Checks whether the given test is skipped for this port.
 
         This should return True if the test is skipped because the port
-        runs smoke tests only, or because the
+        runs smoke tests only, or because the test is skipped in a file like
+        NeverFixTests (but not TestExpectations).
         """
         fs = self.host.filesystem
         if self.default_smoke_test_only():
-            smoke_test_filename = fs.join(self.layout_tests_dir(), 'SmokeTests')
+            smoke_test_filename = self.path_to_smoke_tests_file()
             if fs.exists(smoke_test_filename) and test not in fs.read_text_file(smoke_test_filename):
                 return True
 
@@ -946,6 +941,9 @@ class Port(object):
         # two copies of the test expectations.
         return (SKIP in full_expectations.get_expectations(test) and
                 SKIP not in generic_expectations.get_expectations(test))
+
+    def path_to_smoke_tests_file(self):
+        return self.host.filesystem.join(self.layout_tests_dir(), 'SmokeTests')
 
     def _tests_from_skipped_file_contents(self, skipped_file_contents):
         tests_to_skip = []
@@ -1140,21 +1138,6 @@ class Port(object):
         """Return a newly created Driver subclass for starting/stopping the test driver."""
         return self._driver_class()(self, worker_number, pixel_tests=self.get_option('pixel_tests'), no_timeout=no_timeout)
 
-    def start_helper(self):
-        """If a port needs to reconfigure graphics settings or do other
-        things to ensure a known test configuration, it should override this
-        method.
-        """
-        helper_path = self._path_to_helper()
-        if helper_path:
-            _log.debug("Starting layout helper %s", helper_path)
-            # Note: Not thread safe: http://bugs.python.org/issue2320
-            self._helper = self._executive.popen([helper_path],
-                                                 stdin=self._executive.PIPE, stdout=self._executive.PIPE, stderr=None)
-            is_ready = self._helper.stdout.readline()
-            if not is_ready.startswith('ready'):
-                _log.error("layout_test_helper failed to be ready")
-
     def requires_http_server(self):
         """Does the port require an HTTP server for running tests? This could
         be the case when the tests aren't run on the host platform.
@@ -1221,22 +1204,6 @@ class Port(object):
         if self.host.platform.is_cygwin() or self.host.platform.is_win():
             return False
         return True
-
-    def stop_helper(self):
-        """Shut down the test helper if it is running. Do nothing if
-        it isn't, or it isn't available. If a port overrides start_helper()
-        it must override this routine as well.
-        """
-        if self._helper:
-            _log.debug("Stopping layout test helper")
-            try:
-                self._helper.stdin.write("x\n")
-                self._helper.stdin.close()
-                self._helper.wait()
-            except IOError:
-                pass
-            finally:
-                self._helper = None
 
     def stop_http_server(self):
         """Shut down the http server if it is running. Do nothing if it isn't."""
@@ -1532,15 +1499,6 @@ class Port(object):
     def _path_to_driver(self, target=None):
         """Returns the full path to the test driver."""
         return self._build_path(target, self.driver_name())
-
-    def _path_to_helper(self):
-        """Returns the full path to the layout_test_helper binary, which
-        is used to help configure the system for the test run, or None
-        if no helper is needed.
-
-        This is likely only used by start/stop_helper().
-        """
-        return None
 
     def _path_to_image_diff(self):
         """Returns the full path to the image_diff binary, or None if it is not available.

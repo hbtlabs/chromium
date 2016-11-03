@@ -644,9 +644,6 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_WEBSITE_SETTINGS_CATEGORY_ALLOWED_EXCEPT_THIRD_PARTY" desc="Summary text for when only third-party cookies are blocked.">
         Allowed, except third-party
       </message>
-      <message name="IDS_WEBSITE_SETTINGS_CATEGORY_ALWAYS_ALLOWED" desc="Summary text explaining that a permission is allowed, and cannot be changed by the user, e.g. JavaScript: always allowed.">
-        Always allowed
-      </message>
       <message name="IDS_WEBSITE_SETTINGS_CATEGORY_ASK" desc="Summary text explaining that Chrome will ask the user before allowing a site to use a certain permission, e.g. JavaScript: ask first.">
         Ask first
       </message>
@@ -810,14 +807,6 @@ To obtain new licenses, connect to the internet and play your downloaded content
       </message>
       <message name="IDS_ORIGIN_SETTINGS_STORAGE_USAGE_BRIEF" desc="Explanation of how much local storage a website is using">
         <ph name="STORAGE_AMOUNT">%1$s<ex>2 MB</ex></ph> stored data
-      </message>
-
-      <!-- Fullscreen preferences -->
-      <message name="IDS_WEBSITE_SETTINGS_FULLSCREEN" desc="Title for Fullscreen settings, which control which websites can enter fullscreen without popup alert.">
-        Full screen
-      </message>
-      <message name="IDS_FULLSCREEN_PERMISSION_TITLE" desc="Title for the permission of entering fullscreen without popup alert [CHAR-LIMIT=32]">
-        Full screen
       </message>
 
       <!-- USB preferences -->
@@ -1611,11 +1600,11 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_PAGE_INFO_CONNECTION_OFFLINE" desc="Message to display in the page info bubble when viewing and offline page.">
         You are viewing an offline copy of this page from <ph name="CREATION_TIME">%1$s<ex>Feb 9, 2016</ex></ph>
       </message>
-      <message name="IDS_PAGE_INFO_OFFLINE_ICON" desc="Content description for the offline page icon on page info dialog.">
-        Offline content
-      </message>
       <message name="IDS_PAGE_INFO_DOMAIN_HIDDEN" desc="Message to display in the page info bubble when the domain is hidden.">
         This content is from <ph name="DOMAIN_NAME">%1$s<ex>google.com</ex></ph>, delivered by Google.
+      </message>
+      <message name="IDS_PAGE_INFO_OPEN_ONLINE_BUTTON" desc="Text in the button that attempts to open an online version of the offline website displayed in the tab.">
+        Open Online
       </message>
 
       <!-- Sad tab page -->
@@ -1909,6 +1898,12 @@ To obtain new licenses, connect to the internet and play your downloaded content
       </message>
       <message name="IDS_ACCESSIBILITY_STOP" desc="Content description for the stop button that stops playing the media.">
         Stop
+      </message>
+      <message name="IDS_ACCESSIBILITY_PREVIOUS_TRACK" desc="Content description for the previous track button that switchs media to the previous track.">
+        Previous track
+      </message>
+      <message name="IDS_ACCESSIBILITY_NEXT_TRACK" desc="Content description for the next track button that switchs media to the next track.">
+        Next track
       </message>
 
       <!-- New Tab Page strings -->

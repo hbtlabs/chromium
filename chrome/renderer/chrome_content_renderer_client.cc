@@ -46,7 +46,6 @@
 #include "chrome/renderer/media/chrome_key_systems.h"
 #include "chrome/renderer/net/net_error_helper.h"
 #include "chrome/renderer/net_benchmarking_extension.h"
-#include "chrome/renderer/page_load_histograms.h"
 #include "chrome/renderer/page_load_metrics/metrics_render_frame_observer.h"
 #include "chrome/renderer/pepper/pepper_helper.h"
 #include "chrome/renderer/plugins/non_loadable_plugin_placeholder.h"
@@ -475,12 +474,9 @@ void ChromeContentRendererClient::RenderFrameCreated(
   new NetErrorHelper(render_frame);
 
   if (render_frame->IsMainFrame()) {
-    // Only attach MainRenderFrameObserver to the main frame, since
+    // Only attach MetricsRenderFrameObserver to the main frame, since
     // we only want to log page load metrics for the main frame.
     new page_load_metrics::MetricsRenderFrameObserver(render_frame);
-    // Similarly, PageLoadHistograms are currently only collected for the main
-    // frame.
-    new PageLoadHistograms(render_frame);
   } else {
     // Avoid any race conditions from having the browser tell subframes that
     // they're prerendering.
@@ -1360,7 +1356,7 @@ void ChromeContentRendererClient::AddImageContextMenuProperties(
     std::map<std::string, std::string>* properties) {
   DCHECK(properties);
   WebString header_key(ASCIIToUTF16(
-      data_reduction_proxy::chrome_proxy_header()));
+      data_reduction_proxy::chrome_proxy_content_transform_header()));
   if (!response.httpHeaderField(header_key).isNull() &&
       data_reduction_proxy::IsEmptyImagePreview(
           response.httpHeaderField(header_key).utf8())) {

@@ -59,17 +59,19 @@ class FrameConsole;
 class FrameSelection;
 class FrameView;
 class InputMethodController;
+class InspectorWebPerfAgent;
+class InstrumentingAgents;
 class InterfaceProvider;
 class InterfaceRegistry;
 class IntPoint;
 class IntSize;
-class InstrumentingAgents;
 class LayoutView;
 class LayoutViewItem;
 class LocalDOMWindow;
 class NavigationScheduler;
 class Node;
 class NodeTraversal;
+class Performance;
 template <typename Strategy>
 class PositionWithAffinityTemplate;
 class PluginData;
@@ -83,6 +85,8 @@ extern template class CORE_EXTERN_TEMPLATE_EXPORT Supplement<LocalFrame>;
 class CORE_EXPORT LocalFrame final : public Frame,
                                      public Supplementable<LocalFrame> {
   USING_GARBAGE_COLLECTED_MIXIN(LocalFrame);
+
+  friend class LocalFrameTest;
 
  public:
   static LocalFrame* create(FrameLoaderClient*,
@@ -160,6 +164,9 @@ class CORE_EXPORT LocalFrame final : public Frame,
   InstrumentingAgents* instrumentingAgents() {
     return m_instrumentingAgents.get();
   }
+
+  void enableInspectorWebPerfAgent(Performance*);
+  void disableInspectorWebPerfAgent(Performance*);
 
   // =========================================================================
   // All public functions below this point are candidates to move out of
@@ -264,6 +271,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
   bool m_inViewSourceMode;
 
   Member<InstrumentingAgents> m_instrumentingAgents;
+  Member<InspectorWebPerfAgent> m_inspectorWebPerfAgent;
 
   InterfaceProvider* const m_interfaceProvider;
   InterfaceRegistry* const m_interfaceRegistry;

@@ -33,12 +33,14 @@
 #include "core/editing/PositionWithAffinity.h"
 #include "core/fetch/ImageResourceObserver.h"
 #include "core/layout/LayoutObjectChildList.h"
+#include "core/layout/MapCoordinatesFlags.h"
 #include "core/layout/PaintInvalidationState.h"
 #include "core/layout/ScrollAlignment.h"
 #include "core/layout/SubtreeLayoutScope.h"
 #include "core/layout/api/HitTestAction.h"
 #include "core/layout/api/SelectionState.h"
 #include "core/layout/compositing/CompositingState.h"
+#include "core/paint/LayerHitTestRects.h"
 #include "core/paint/PaintPhase.h"
 #include "core/style/ComputedStyle.h"
 #include "platform/geometry/FloatQuad.h"
@@ -80,27 +82,6 @@ enum MarkingBehavior {
   MarkContainerChain,
 };
 
-enum MapCoordinatesMode {
-  IsFixed = 1 << 0,
-  UseTransforms = 1 << 1,
-
-  // When walking up the containing block chain, applies a container flip for
-  // the first element found, if any, for which isFlippedBlocksWritingMode is
-  // true. This option should generally be used when mapping a source rect in
-  // the "physical coordinates with flipped block-flow" coordinate space (see
-  // LayoutBoxModelObject.h) to one in a physical destination space.
-  ApplyContainerFlip = 1 << 2,
-  TraverseDocumentBoundaries = 1 << 3,
-
-  // Applies to LayoutView::mapLocalToAncestor() and LayoutView::
-  // mapToVisualRectInAncestorSpace() only, to indicate the input point or rect
-  // is in frame coordinates instead of frame contents coordinates. This
-  // disables view clipping and scroll offset adjustment.
-  // TODO(wangxianzhu): Remove this when root-layer-scrolls launches.
-  InputIsInFrameCoordinates = 1 << 4,
-};
-typedef unsigned MapCoordinatesFlags;
-
 enum ScheduleRelayoutBehavior { ScheduleRelayout, DontScheduleRelayout };
 
 const LayoutUnit& caretWidth();
@@ -114,8 +95,6 @@ struct AnnotatedRegionValue {
   LayoutRect bounds;
   bool draggable;
 };
-
-typedef WTF::HashMap<const PaintLayer*, Vector<LayoutRect>> LayerHitTestRects;
 
 #ifndef NDEBUG
 const int showTreeCharacterOffset = 39;
@@ -690,7 +669,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
   // Returns the smallest rectangle enclosing all of the painted content
   // respecting clipping, masking, filters, opacity, stroke-width and markers
-  virtual FloatRect paintInvalidationRectInLocalSVGCoordinates() const;
+  virtual FloatRect visualRectInLocalSVGCoordinates() const;
 
   // This only returns the transform="" value from the SVG element.
   // Most callsites want localToParentTransform() instead.
@@ -1351,15 +1330,14 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // Returns the rect that should have paint invalidated whenever this object
   // changes. The rect is in the view's coordinate space. This method deals with
   // outlines and overflow.
-  virtual LayoutRect absoluteClippedOverflowRect() const;
+  virtual LayoutRect absoluteVisualRect() const;
 
   // Returns the rect that should have paint invalidated whenever this object
   // changes. The rect is in the object's local coordinate space. This is for
-  // non-SVG objects and LayoutSVGRoot only.
-  // SVG objects (except LayoutSVGRoot) should use
-  // paintInvalidationRectInLocalSVGCoordinates() and map with SVG transforms
+  // non-SVG objects and LayoutSVGRoot only. SVG objects (except LayoutSVGRoot)
+  // should use visualRectInLocalSVGCoordinates() and map with SVG transforms
   // instead.
-  virtual LayoutRect localOverflowRectForPaintInvalidation() const;
+  virtual LayoutRect localVisualRect() const;
 
   // Given a rect in the object's coordinate space, mutates the rect into one
   // representing the size of its visual painted output as if |ancestor| was the
@@ -1595,19 +1573,16 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
   bool isRelayoutBoundaryForInspector() const;
 
-  // The previous paint invalidation rect, in the the space of the paint
-  // invalidation container (*not* the graphics layer that paints
-  // this object).
-  LayoutRect previousPaintInvalidationRectIncludingCompositedScrolling(
+  // The previous visual rect, in the the space of the paint invalidation
+  // container (*not* the graphics layer that paints this object).
+  LayoutRect previousVisualRectIncludingCompositedScrolling(
       const LayoutBoxModelObject& paintInvalidationContainer) const;
 
   // The returned rect does *not* account for composited scrolling.
-  const LayoutRect& previousPaintInvalidationRect() const {
-    return m_previousPaintInvalidationRect;
-  }
+  const LayoutRect& previousVisualRect() const { return m_previousVisualRect; }
 
-  // Called when the previous paint invalidation rect(s) is no longer valid.
-  virtual void clearPreviousPaintInvalidationRects();
+  // Called when the previous visual rect(s) is no longer valid.
+  virtual void clearPreviousVisualRects();
 
   // Only adjusts if the paint invalidation container is not a composited
   // scroller.
@@ -1712,8 +1687,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
       m_layoutObject.ensureIsReadyForPaintInvalidation();
     }
 
-    void setPreviousPaintInvalidationRect(const LayoutRect& r) {
-      m_layoutObject.setPreviousPaintInvalidationRect(r);
+    void setPreviousVisualRect(const LayoutRect& r) {
+      m_layoutObject.setPreviousVisualRect(r);
     }
     void setPreviousPositionFromPaintInvalidationBacking(const LayoutPoint& p) {
       m_layoutObject.setPreviousPositionFromPaintInvalidationBacking(p);
@@ -1721,8 +1696,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     void setPreviousBackgroundObscured(bool b) {
       m_layoutObject.setPreviousBackgroundObscured(b);
     }
-    void clearPreviousPaintInvalidationRects() {
-      m_layoutObject.clearPreviousPaintInvalidationRects();
+    void clearPreviousVisualRects() {
+      m_layoutObject.clearPreviousVisualRects();
     }
 
    protected:
@@ -1748,10 +1723,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
 
   void setIsScrollAnchorObject() { m_bitfields.setIsScrollAnchorObject(true); }
-
-  // If unconditionally is true, you are responsible for ensuring that
-  // no ScrollAnchors reference this LayoutObject.
-  void clearIsScrollAnchorObject(bool unconditionally = false);
+  // Clears the IsScrollAnchorObject bit if and only if no ScrollAnchors still
+  // reference this LayoutObject.
+  void maybeClearIsScrollAnchorObject();
 
   bool scrollAnchorDisablingStyleChanged() {
     return m_bitfields.scrollAnchorDisablingStyleChanged();
@@ -1909,8 +1883,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   virtual void computeSelfHitTestRects(Vector<LayoutRect>&,
                                        const LayoutPoint& layerOffset) const {}
 
-  void setPreviousPaintInvalidationRect(const LayoutRect& rect) {
-    m_previousPaintInvalidationRect = rect;
+  void setPreviousVisualRect(const LayoutRect& rect) {
+    m_previousVisualRect = rect;
   }
 
 #if ENABLE(ASSERT)
@@ -1958,12 +1932,11 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
 
  private:
-  // Adjusts a paint invalidation rect in the space of
-  // |m_previousPaintInvalidationRect| and
-  // |m_previousPositionFromPaintInvalidationBacking|
-  // to be in the space of the |paintInvalidationContainer|, if needed. They can
-  // be different only if |paintInvalidationContainer| is a composited scroller.
-  void adjustInvalidationRectForCompositedScrolling(
+  // Adjusts a visual rect in the space of |m_previousVisualRect| and
+  // |m_previousPositionFromPaintInvalidationBacking| to be in the space of the
+  // |paintInvalidationContainer|, if needed. They can be different only if
+  // |paintInvalidationContainer| is a composited scroller.
+  void adjustVisualRectForCompositedScrolling(
       LayoutRect&,
       const LayoutBoxModelObject& paintInvalidationContainer) const;
 
@@ -2372,10 +2345,10 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // Store state between styleWillChange and styleDidChange
   static bool s_affectsParentBlock;
 
-  // This stores the paint invalidation rect from the previous frame. This rect
-  // does *not* account for composited scrolling. See
-  // adjustInvalidationRectForCompositedScrolling().
-  LayoutRect m_previousPaintInvalidationRect;
+  // This stores the visual rect from the previous frame. This rect does *not*
+  // account for composited scrolling. See
+  // adjustVisualRectForCompositedScrolling().
+  LayoutRect m_previousVisualRect;
 
   // This stores the position in the paint invalidation backing's coordinate.
   // It is used to detect layoutObject shifts that forces a full invalidation.

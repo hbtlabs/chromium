@@ -40,36 +40,23 @@ bool ServerWindowCompositorFrameSinkManager::ShouldDraw() {
 
 void ServerWindowCompositorFrameSinkManager::CreateCompositorFrameSink(
     mojom::CompositorFrameSinkType compositor_frame_sink_type,
-    mojo::InterfaceRequest<cc::mojom::MojoCompositorFrameSink> request,
+    gfx::AcceleratedWidget widget,
+    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
+    scoped_refptr<SurfacesContextProvider> context_provider,
+    cc::mojom::MojoCompositorFrameSinkRequest request,
     cc::mojom::MojoCompositorFrameSinkClientPtr client) {
   cc::FrameSinkId frame_sink_id(
       WindowIdToTransportId(window_->id()),
       static_cast<uint32_t>(compositor_frame_sink_type));
   CompositorFrameSinkData& data =
       type_to_compositor_frame_sink_map_[compositor_frame_sink_type];
+  // TODO(fsamuel): Create the CompositorFrameSink through the DisplayCompositor
+  // mojo interface and hold on to a MojoCompositorFrameSinkPtr.
   data.compositor_frame_sink =
       base::MakeUnique<ServerWindowCompositorFrameSink>(
-          this, frame_sink_id, std::move(request), std::move(client));
+          this, frame_sink_id, widget, gpu_memory_buffer_manager,
+          std::move(context_provider), std::move(request), std::move(client));
   data.surface_sequence_generator.set_frame_sink_id(frame_sink_id);
-}
-
-ServerWindowCompositorFrameSink*
-ServerWindowCompositorFrameSinkManager::GetDefaultCompositorFrameSink() const {
-  return GetCompositorFrameSinkByType(mojom::CompositorFrameSinkType::DEFAULT);
-}
-
-ServerWindowCompositorFrameSink*
-ServerWindowCompositorFrameSinkManager::GetUnderlayCompositorFrameSink() const {
-  return GetCompositorFrameSinkByType(mojom::CompositorFrameSinkType::UNDERLAY);
-}
-
-ServerWindowCompositorFrameSink*
-ServerWindowCompositorFrameSinkManager::GetCompositorFrameSinkByType(
-    mojom::CompositorFrameSinkType type) const {
-  auto iter = type_to_compositor_frame_sink_map_.find(type);
-  return iter == type_to_compositor_frame_sink_map_.end()
-             ? nullptr
-             : iter->second.compositor_frame_sink.get();
 }
 
 bool ServerWindowCompositorFrameSinkManager::HasCompositorFrameSinkOfType(
@@ -78,7 +65,9 @@ bool ServerWindowCompositorFrameSinkManager::HasCompositorFrameSinkOfType(
 }
 
 bool ServerWindowCompositorFrameSinkManager::HasAnyCompositorFrameSink() const {
-  return GetDefaultCompositorFrameSink() || GetUnderlayCompositorFrameSink();
+  return HasCompositorFrameSinkOfType(
+             mojom::CompositorFrameSinkType::DEFAULT) ||
+         HasCompositorFrameSinkOfType(mojom::CompositorFrameSinkType::UNDERLAY);
 }
 
 cc::SurfaceSequence

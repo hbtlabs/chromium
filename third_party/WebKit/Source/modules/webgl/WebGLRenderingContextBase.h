@@ -65,14 +65,9 @@ class GLES2Interface;
 
 namespace blink {
 
-class ANGLEInstancedArrays;
-class EXTBlendMinMax;
 class EXTDisjointTimerQuery;
 class EXTDisjointTimerQueryWebGL2;
-class EXTFragDepth;
-class EXTShaderTextureLOD;
 class EXTsRGB;
-class EXTTextureFilterAnisotropic;
 class ExceptionState;
 class HTMLCanvasElementOrOffscreenCanvas;
 class HTMLImageElement;
@@ -81,14 +76,9 @@ class ImageBitmap;
 class ImageBuffer;
 class ImageData;
 class IntSize;
-class OESElementIndexUint;
-class OESStandardDerivatives;
 class OESTextureFloat;
-class OESTextureFloatLinear;
 class OESTextureHalfFloat;
-class OESTextureHalfFloatLinear;
 class OESVertexArrayObject;
-class WaitableEvent;
 class WebGLActiveInfo;
 class WebGLBuffer;
 class WebGLCompressedTextureASTC;
@@ -100,13 +90,11 @@ class WebGLCompressedTextureS3TC;
 class WebGLCompressedTextureS3TCsRGB;
 class WebGLContextGroup;
 class WebGLContextObject;
-class WebGLDebugRendererInfo;
 class WebGLDebugShaders;
 class WebGLDepthTexture;
 class WebGLDrawBuffers;
 class WebGLExtension;
 class WebGLFramebuffer;
-class WebGLLoseContext;
 class WebGLObject;
 class WebGLProgram;
 class WebGLRenderbuffer;
@@ -116,7 +104,6 @@ class WebGLSharedObject;
 class WebGLUniformLocation;
 class WebGLVertexArrayObjectBase;
 
-class WebGLRenderingContextLostCallback;
 class WebGLRenderingContextErrorMessageCallback;
 
 // This class uses the color mask to prevent drawing to the alpha channel, if
@@ -1540,6 +1527,16 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   static const char* getTexImageFunctionName(TexImageFunctionID);
   IntRect sentinelEmptyRect();
   IntRect safeGetImageSize(Image*);
+
+  // Helper implementing readPixels for WebGL 1.0 and 2.0.
+  void readPixelsHelper(GLint x,
+                        GLint y,
+                        GLsizei width,
+                        GLsizei height,
+                        GLenum format,
+                        GLenum type,
+                        DOMArrayBufferView* pixels,
+                        GLuint offset);
 
  private:
   WebGLRenderingContextBase(HTMLCanvasElement*,

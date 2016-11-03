@@ -225,7 +225,6 @@ static_library("test_support") {
     "//content/public/renderer",
     "//content/public/utility",
     "//content/renderer:for_content_tests",
-    "//content/shell:pak",
     "//content/utility:for_content_tests",
     "//device/base/synchronization",
     "//device/geolocation",
@@ -262,6 +261,10 @@ static_library("test_support") {
     "//url",
     "//url/mojo:url_mojom_gurl",
     "//v8",
+  ]
+
+  data_deps = [
+    "//content/shell:pak",
   ]
 
   if (is_android) {
@@ -658,6 +661,8 @@ test("content_browsertests") {
     ":test_support",
     ":web_ui_test_mojo_bindings",
     "//base/test:test_support",
+    "//components/discardable_memory/client",
+    "//components/discardable_memory/common",
     "//content:resources",
     "//content/app:both_for_content_tests",
     "//content/browser:for_content_tests",
@@ -670,7 +675,6 @@ test("content_browsertests") {
     "//content/public/renderer",
     "//content/renderer:for_content_tests",
     "//content/shell:content_shell_lib",
-    "//content/shell:pak",
     "//content/test:test_support",
     "//device/base/synchronization",
     "//device/battery",
@@ -720,6 +724,7 @@ test("content_browsertests") {
   data = []
 
   data_deps = [
+    "//content/shell:pak",
     "//third_party/mesa:osmesa",
   ]
 
@@ -816,6 +821,10 @@ test("content_browsertests") {
     deps += [ "//chromeos" ]
   }
 
+  if (use_aura) {
+    sources += [ "../browser/web_contents/drag_and_drop_browsertest.cc" ]
+  }
+
   if (use_aura && !is_win) {
     deps += [ "//ui/events:test_support" ]
   }
@@ -836,6 +845,7 @@ test("content_browsertests") {
       "../browser/webrtc/webrtc_content_browsertest_base.h",
       "../browser/webrtc/webrtc_data_browsertest.cc",
       "../browser/webrtc/webrtc_datachannel_browsertest.cc",
+      "../browser/webrtc/webrtc_depth_capture_browsertest.cc",
       "../browser/webrtc/webrtc_getusermedia_browsertest.cc",
       "../browser/webrtc/webrtc_image_capture_browsertest.cc",
       "../browser/webrtc/webrtc_internals_browsertest.cc",
@@ -878,6 +888,12 @@ test("content_browsertests") {
       "../renderer/dom_serializer_browsertest.cc",
       "../renderer/resource_fetcher_browsertest.cc",
       "../renderer/savable_resources_browsertest.cc",
+    ]
+
+    deps += [
+      "//components/discardable_memory/client",
+      "//components/discardable_memory/common",
+      "//components/discardable_memory/service",
     ]
   }
 
@@ -1258,10 +1274,8 @@ test("content_unittests") {
     "../common/cursors/webcursor_unittest.cc",
     "../common/database_connections_unittest.cc",
     "../common/database_identifier_unittest.cc",
-    "../common/discardable_shared_memory_heap_unittest.cc",
     "../common/dom_storage/dom_storage_map_unittest.cc",
     "../common/fileapi/file_system_util_unittest.cc",
-    "../common/host_discardable_shared_memory_manager_unittest.cc",
     "../common/host_shared_bitmap_manager_unittest.cc",
     "../common/indexed_db/indexed_db_key_unittest.cc",
     "../common/input/event_with_latency_info_unittest.cc",
@@ -1671,7 +1685,6 @@ test("content_perftests") {
 
   sources = [
     "../browser/renderer_host/input/input_router_impl_perftest.cc",
-    "../common/discardable_shared_memory_heap_perftest.cc",
     "../test/run_all_perftests.cc",
   ]
   deps = [

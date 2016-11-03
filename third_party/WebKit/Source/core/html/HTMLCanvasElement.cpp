@@ -149,6 +149,7 @@ void HTMLCanvasElement::dispose() {
     m_context->detachCanvas();
     m_context = nullptr;
   }
+  m_imageBuffer = nullptr;
 }
 
 void HTMLCanvasElement::parseAttribute(const QualifiedName& name,
@@ -856,6 +857,9 @@ class UnacceleratedSurfaceFactory
 };
 
 bool HTMLCanvasElement::shouldUseDisplayList(const IntSize& deviceSize) {
+  if (m_context->colorSpace() != kLegacyCanvasColorSpace)
+    return false;
+
   if (RuntimeEnabledFeatures::forceDisplayList2dCanvasEnabled())
     return true;
 

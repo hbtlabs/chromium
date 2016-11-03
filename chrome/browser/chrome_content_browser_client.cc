@@ -890,7 +890,7 @@ content::BrowserMainParts* ChromeContentBrowserClient::CreateBrowserMainParts(
   // Construct additional browser parts. Stages are called in the order in
   // which they are added.
 #if defined(TOOLKIT_VIEWS)
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && !defined(USE_OZONE)
   main_parts->AddParts(new ChromeBrowserMainExtraPartsViewsLinux());
 #else
   main_parts->AddParts(new ChromeBrowserMainExtraPartsViews());
@@ -1191,17 +1191,16 @@ bool ChromeContentBrowserClient::CanCommitURL(
 
 bool ChromeContentBrowserClient::ShouldAllowOpenURL(
     content::SiteInstance* site_instance, const GURL& url) {
-  GURL from_url = site_instance->GetSiteURL();
-
 #if defined(ENABLE_EXTENSIONS)
   bool result;
   if (ChromeContentBrowserClientExtensionsPart::ShouldAllowOpenURL(
-      site_instance, from_url, url, &result))
+          site_instance, url, &result))
     return result;
 #endif
 
   // Do not allow chrome://chrome-signin navigate to other chrome:// URLs, since
   // the signin page may host untrusted web content.
+  GURL from_url = site_instance->GetSiteURL();
   if (from_url.GetOrigin().spec() == chrome::kChromeUIChromeSigninURL &&
       url.SchemeIs(content::kChromeUIScheme) &&
       url.host_piece() != chrome::kChromeUIChromeSigninHost) {
@@ -2810,10 +2809,6 @@ void ChromeContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_WIN)
-const wchar_t* ChromeContentBrowserClient::GetResourceDllName() {
-  return chrome::kBrowserResourcesDll;
-}
-
 base::string16 ChromeContentBrowserClient::GetAppContainerSidForSandboxType(
     int sandbox_type) const {
   base::string16 sid;
@@ -3079,14 +3074,14 @@ ChromeContentBrowserClient::CreateThrottlesForNavigation(
     content::NavigationHandle* handle) {
   ScopedVector<content::NavigationThrottle> throttles;
 
-  if (handle->IsInMainFrame()) {
 #if defined(ENABLE_PLUGINS)
-    std::unique_ptr<content::NavigationThrottle> flash_url_throttle =
-        FlashDownloadInterception::MaybeCreateThrottleFor(handle);
-    if (flash_url_throttle)
-      throttles.push_back(std::move(flash_url_throttle));
+  std::unique_ptr<content::NavigationThrottle> flash_url_throttle =
+      FlashDownloadInterception::MaybeCreateThrottleFor(handle);
+  if (flash_url_throttle)
+    throttles.push_back(std::move(flash_url_throttle));
 #endif
 
+  if (handle->IsInMainFrame()) {
     throttles.push_back(
         page_load_metrics::MetricsNavigationThrottle::Create(handle));
   }

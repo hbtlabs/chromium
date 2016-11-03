@@ -329,6 +329,12 @@ def resolve_type(protocol, prop):
     return protocol.type_definitions[prop["type"]]
 
 
+def new_style(domain):
+    domains = ["DOMStorage", "Rendering", "Emulation", "Network", "Memory", "Page", "LayerTree", "Database", "IndexedDB", "CacheStorage", "DOM", "CSS",
+        "ApplicationCache", "DOMDebugger", "Input", "DeviceOrientation", "Tracing", "Animation" ]
+    return domain["domain"] in domains
+
+
 def join_arrays(dict, keys):
     result = []
     for key in keys:
@@ -339,7 +345,7 @@ def join_arrays(dict, keys):
 
 def has_disable(commands):
     for command in commands:
-        if command["name"] == "disable":
+        if command["name"] == "disable" and (not ("handlers" in command) or "renderer" in command["handlers"]):
             return True
     return False
 
@@ -421,6 +427,7 @@ def main():
             "type_definition": functools.partial(type_definition, protocol),
             "has_disable": has_disable,
             "format_include": format_include,
+            "new_style": new_style,
         }
 
         if domain["domain"] in protocol.generate_domains:
@@ -448,7 +455,6 @@ def main():
             "ValueConversions_h.template",
             "Maybe_h.template",
             "Array_h.template",
-            "BackendCallback_h.template",
             "DispatcherBase_h.template",
             "Parser_h.template",
         ]

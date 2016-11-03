@@ -26,8 +26,8 @@ WindowMus* WindowMus::Get(Window* window) {
 }
 
 WindowPortMus::WindowPortMus(WindowTreeClient* client,
-                             bool create_remote_window)
-    : WindowMus(create_remote_window), window_tree_client_(client) {}
+                             WindowMusType window_mus_type)
+    : WindowMus(window_mus_type), window_tree_client_(client) {}
 
 WindowPortMus::~WindowPortMus() {
   if (surface_info_)
@@ -53,6 +53,32 @@ void WindowPortMus::SetImeVisibility(bool visible,
 void WindowPortMus::SetPredefinedCursor(ui::mojom::Cursor cursor_id) {
   window_tree_client_->SetPredefinedCursor(this, predefined_cursor_, cursor_id);
   predefined_cursor_ = cursor_id;
+}
+
+std::unique_ptr<WindowCompositorFrameSink>
+WindowPortMus::RequestCompositorFrameSink(
+    ui::mojom::CompositorFrameSinkType type,
+    scoped_refptr<cc::ContextProvider> context_provider,
+    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager) {
+  std::unique_ptr<WindowCompositorFrameSinkBinding>
+      compositor_frame_sink_binding;
+  std::unique_ptr<WindowCompositorFrameSink> compositor_frame_sink =
+      WindowCompositorFrameSink::Create(std::move(context_provider),
+                                        gpu_memory_buffer_manager,
+                                        &compositor_frame_sink_binding);
+  AttachCompositorFrameSink(type, std::move(compositor_frame_sink_binding));
+  return compositor_frame_sink;
+}
+
+void WindowPortMus::AttachCompositorFrameSink(
+    ui::mojom::CompositorFrameSinkType type,
+    std::unique_ptr<WindowCompositorFrameSinkBinding>
+        compositor_frame_sink_binding) {
+  window_tree_client_->AttachCompositorFrameSink(
+      server_id(), type,
+      std::move(compositor_frame_sink_binding->compositor_frame_sink_request_),
+      mojo::MakeProxy(std::move(
+          compositor_frame_sink_binding->compositor_frame_sink_client_)));
 }
 
 WindowPortMus::ServerChangeIdType WindowPortMus::ScheduleChange(
@@ -120,7 +146,6 @@ Window* WindowPortMus::GetWindow() {
 }
 
 void WindowPortMus::AddChildFromServer(WindowMus* window) {
-  DCHECK(has_server_window());
   ServerChangeData data;
   data.child_id = window->server_id();
   ScopedServerChange change(this, ServerChangeType::ADD, data);
@@ -128,7 +153,6 @@ void WindowPortMus::AddChildFromServer(WindowMus* window) {
 }
 
 void WindowPortMus::RemoveChildFromServer(WindowMus* child) {
-  DCHECK(has_server_window());
   ServerChangeData data;
   data.child_id = child->server_id();
   ScopedServerChange change(this, ServerChangeType::REMOVE, data);
@@ -138,7 +162,6 @@ void WindowPortMus::RemoveChildFromServer(WindowMus* child) {
 void WindowPortMus::ReorderFromServer(WindowMus* child,
                                       WindowMus* relative,
                                       ui::mojom::OrderDirection direction) {
-  DCHECK(has_server_window());
   // Keying off solely the id isn't entirely accurate, in so far as if Window
   // does some other reordering then the server and client are out of sync.
   // But we assume only one client can make changes to a particular window at
@@ -153,7 +176,6 @@ void WindowPortMus::ReorderFromServer(WindowMus* child,
 }
 
 void WindowPortMus::SetBoundsFromServer(const gfx::Rect& bounds) {
-  DCHECK(has_server_window());
   ServerChangeData data;
   data.bounds = bounds;
   ScopedServerChange change(this, ServerChangeType::BOUNDS, data);
@@ -161,7 +183,6 @@ void WindowPortMus::SetBoundsFromServer(const gfx::Rect& bounds) {
 }
 
 void WindowPortMus::SetVisibleFromServer(bool visible) {
-  DCHECK(has_server_window());
   ServerChangeData data;
   data.visible = visible;
   ScopedServerChange change(this, ServerChangeType::VISIBLE, data);
@@ -172,8 +193,7 @@ void WindowPortMus::SetVisibleFromServer(bool visible) {
 }
 
 void WindowPortMus::SetOpacityFromServer(float opacity) {
-  // TODO(sky): this may not be necessary anymore.
-  DCHECK(has_server_window());
+  // TODO(sky): route to server.
   // Changes to opacity don't make it back to the server.
   window_->layer()->SetOpacity(opacity);
 }
@@ -216,7 +236,6 @@ void WindowPortMus::SetSurfaceIdFromServer(
 }
 
 void WindowPortMus::AddTransientChildFromServer(WindowMus* child) {
-  DCHECK(has_server_window());
   ServerChangeData data;
   data.child_id = child->server_id();
   ScopedServerChange change(this, ServerChangeType::ADD_TRANSIENT, data);
@@ -225,7 +244,6 @@ void WindowPortMus::AddTransientChildFromServer(WindowMus* child) {
 }
 
 void WindowPortMus::RemoveTransientChildFromServer(WindowMus* child) {
-  DCHECK(has_server_window());
   ServerChangeData data;
   data.child_id = child->server_id();
   ScopedServerChange change(this, ServerChangeType::REMOVE_TRANSIENT, data);
@@ -235,7 +253,6 @@ void WindowPortMus::RemoveTransientChildFromServer(WindowMus* child) {
 
 WindowPortMus::ChangeSource WindowPortMus::OnTransientChildAdded(
     WindowMus* child) {
-  DCHECK(has_server_window());
   ServerChangeData change_data;
   change_data.child_id = child->server_id();
   // If there was a change it means we scheduled the change by way of
@@ -247,7 +264,6 @@ WindowPortMus::ChangeSource WindowPortMus::OnTransientChildAdded(
 
 WindowPortMus::ChangeSource WindowPortMus::OnTransientChildRemoved(
     WindowMus* child) {
-  DCHECK(has_server_window());
   ServerChangeData change_data;
   change_data.child_id = child->server_id();
   // If there was a change it means we scheduled the change by way of
@@ -285,21 +301,14 @@ void WindowPortMus::NotifyEmbeddedAppDisconnected() {
     observer.OnEmbeddedAppDisconnected(window_);
 }
 
-std::unique_ptr<WindowPortInitData> WindowPortMus::OnPreInit(Window* window) {
+void WindowPortMus::OnPreInit(Window* window) {
   window_ = window;
-  return window_tree_client_->OnWindowMusCreated(this);
-}
-
-void WindowPortMus::OnPostInit(std::unique_ptr<WindowPortInitData> init_data) {
-  window_tree_client_->OnWindowMusInitDone(this, std::move(init_data));
+  window_tree_client_->OnWindowMusCreated(this);
 }
 
 void WindowPortMus::OnDeviceScaleFactorChanged(float device_scale_factor) {}
 
 void WindowPortMus::OnWillAddChild(Window* child) {
-  if (!has_server_window())
-    return;
-
   ServerChangeData change_data;
   change_data.child_id = Get(child)->server_id();
   if (!RemoveChangeByTypeAndData(ServerChangeType::ADD, change_data))
@@ -307,9 +316,6 @@ void WindowPortMus::OnWillAddChild(Window* child) {
 }
 
 void WindowPortMus::OnWillRemoveChild(Window* child) {
-  if (!has_server_window())
-    return;
-
   ServerChangeData change_data;
   change_data.child_id = Get(child)->server_id();
   if (!RemoveChangeByTypeAndData(ServerChangeType::REMOVE, change_data))
@@ -317,9 +323,6 @@ void WindowPortMus::OnWillRemoveChild(Window* child) {
 }
 
 void WindowPortMus::OnWillMoveChild(size_t current_index, size_t dest_index) {
-  if (!has_server_window())
-    return;
-
   ServerChangeData change_data;
   change_data.child_id = Get(window_->children()[current_index])->server_id();
   if (!RemoveChangeByTypeAndData(ServerChangeType::REORDER, change_data))
@@ -327,9 +330,6 @@ void WindowPortMus::OnWillMoveChild(size_t current_index, size_t dest_index) {
 }
 
 void WindowPortMus::OnVisibilityChanged(bool visible) {
-  if (!has_server_window())
-    return;
-
   ServerChangeData change_data;
   change_data.visible = visible;
   if (!RemoveChangeByTypeAndData(ServerChangeType::VISIBLE, change_data))
@@ -338,9 +338,6 @@ void WindowPortMus::OnVisibilityChanged(bool visible) {
 
 void WindowPortMus::OnDidChangeBounds(const gfx::Rect& old_bounds,
                                       const gfx::Rect& new_bounds) {
-  if (!has_server_window())
-    return;
-
   ServerChangeData change_data;
   change_data.bounds = new_bounds;
   if (!RemoveChangeByTypeAndData(ServerChangeType::BOUNDS, change_data))
@@ -349,18 +346,12 @@ void WindowPortMus::OnDidChangeBounds(const gfx::Rect& old_bounds,
 
 std::unique_ptr<WindowPortPropertyData> WindowPortMus::OnWillChangeProperty(
     const void* key) {
-  if (!has_server_window())
-    return nullptr;
-
   return window_tree_client_->OnWindowMusWillChangeProperty(this, key);
 }
 
 void WindowPortMus::OnPropertyChanged(
     const void* key,
     std::unique_ptr<WindowPortPropertyData> data) {
-  if (!has_server_window())
-    return;
-
   ServerChangeData change_data;
   change_data.property_name =
       GetPropertyConverter()->GetTransportNameForPropertyKey(key);

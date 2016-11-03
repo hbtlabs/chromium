@@ -20,8 +20,8 @@
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "cc/resources/shared_bitmap_manager.h"
+#include "components/discardable_memory/service/discardable_shared_memory_manager.h"
 #include "content/common/cache_storage/cache_storage_types.h"
-#include "content/common/host_discardable_shared_memory_manager.h"
 #include "content/common/host_shared_bitmap_manager.h"
 #include "content/common/render_message_filter.mojom.h"
 #include "content/public/browser/browser_associated_interface.h"
@@ -120,9 +120,6 @@ class CONTENT_EXPORT RenderMessageFilter
   friend class base::DeleteHelper<RenderMessageFilter>;
 
   void OnGetProcessMemorySizes(size_t* private_bytes, size_t* shared_bytes);
-  void OnCreateWidget(int opener_id,
-                      blink::WebPopupType popup_type,
-                      int* route_id);
   void OnCreateFullscreenWidget(int opener_id, int* route_id);
 
 #if defined(OS_MACOSX)
@@ -135,6 +132,9 @@ class CONTENT_EXPORT RenderMessageFilter
   void GenerateRoutingID(const GenerateRoutingIDCallback& routing_id) override;
   void CreateNewWindow(mojom::CreateNewWindowParamsPtr params,
                        const CreateNewWindowCallback& callback) override;
+  void CreateNewWidget(int32_t opener_id,
+                       blink::WebPopupType popup_type,
+                       const CreateNewWidgetCallback& callback) override;
 
   // Message handlers called on the browser IO thread:
   void OnEstablishGpuChannel(IPC::Message* reply);
@@ -167,13 +167,16 @@ class CONTENT_EXPORT RenderMessageFilter
   // Browser side discardable shared memory allocation.
   void AllocateLockedDiscardableSharedMemoryOnFileThread(
       uint32_t size,
-      DiscardableSharedMemoryId id,
+      discardable_memory::DiscardableSharedMemoryId id,
       IPC::Message* reply_message);
-  void OnAllocateLockedDiscardableSharedMemory(uint32_t size,
-                                               DiscardableSharedMemoryId id,
-                                               IPC::Message* reply_message);
-  void DeletedDiscardableSharedMemoryOnFileThread(DiscardableSharedMemoryId id);
-  void OnDeletedDiscardableSharedMemory(DiscardableSharedMemoryId id);
+  void OnAllocateLockedDiscardableSharedMemory(
+      uint32_t size,
+      discardable_memory::DiscardableSharedMemoryId id,
+      IPC::Message* reply_message);
+  void DeletedDiscardableSharedMemoryOnFileThread(
+      discardable_memory::DiscardableSharedMemoryId id);
+  void OnDeletedDiscardableSharedMemory(
+      discardable_memory::DiscardableSharedMemoryId id);
 
 #if defined(OS_LINUX)
   void SetThreadPriorityOnFileThread(base::PlatformThreadId ns_tid,

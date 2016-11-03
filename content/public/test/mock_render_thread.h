@@ -77,7 +77,6 @@ class MockRenderThread : public RenderThread {
   int64_t GetIdleNotificationDelayInMs() const override;
   void SetIdleNotificationDelayInMs(
       int64_t idle_notification_delay_in_ms) override;
-  void UpdateHistograms(int sequence_number) override;
   int PostTaskToAllWebWorkers(const base::Closure& closure) override;
   bool ResolveProxy(const GURL& url, std::string* proxy_list) override;
   base::WaitableEvent* GetShutdownEvent() override;
@@ -120,15 +119,14 @@ class MockRenderThread : public RenderThread {
   void OnCreateWindow(const mojom::CreateNewWindowParams& params,
                       mojom::CreateNewWindowReply* reply);
 
+  // The Widget expects to be returned a valid route_id.
+  void OnCreateWidget(int opener_id,
+                      blink::WebPopupType popup_type,
+                      int* route_id);
  protected:
   // This function operates as a regular IPC listener. Subclasses
   // overriding this should first delegate to this implementation.
   virtual bool OnMessageReceived(const IPC::Message& msg);
-
-  // The Widget expects to be returned valid route_id.
-  void OnCreateWidget(int opener_id,
-                      blink::WebPopupType popup_type,
-                      int* route_id);
 
   // The Frame expects to be returned a valid route_id different from its own.
   void OnCreateChildFrame(const FrameHostMsg_CreateChildFrame_Params& params,

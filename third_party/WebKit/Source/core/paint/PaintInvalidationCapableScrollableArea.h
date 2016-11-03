@@ -11,7 +11,6 @@
 
 namespace blink {
 
-class LayoutBox;
 class LayoutScrollbarPart;
 class PaintInvalidationState;
 struct PaintInvalidatorContext;
@@ -32,9 +31,8 @@ class CORE_EXPORT PaintInvalidationCapableScrollableArea
   void invalidatePaintOfScrollControlsIfNeeded(const PaintInvalidationState&);
   void invalidatePaintOfScrollControlsIfNeeded(const PaintInvalidatorContext&);
 
-  // Should be called when the previous paint invalidation rects are no longer
-  // valid.
-  void clearPreviousPaintInvalidationRects();
+  // Should be called when the previous visual rects are no longer valid.
+  void clearPreviousVisualRects();
 
   virtual IntRect scrollCornerAndResizerRect() const {
     return scrollCornerRect();
@@ -50,9 +48,9 @@ class CORE_EXPORT PaintInvalidationCapableScrollableArea
 
   bool m_horizontalScrollbarPreviouslyWasOverlay;
   bool m_verticalScrollbarPreviouslyWasOverlay;
-  LayoutRect m_horizontalScrollbarPreviousPaintInvalidationRect;
-  LayoutRect m_verticalScrollbarPreviousPaintInvalidationRect;
-  LayoutRect m_scrollCornerAndResizerPreviousPaintInvalidationRect;
+  LayoutRect m_horizontalScrollbarPreviousVisualRect;
+  LayoutRect m_verticalScrollbarPreviousVisualRect;
+  LayoutRect m_scrollCornerAndResizerPreviousVisualRect;
 };
 
 }  // namespace blink

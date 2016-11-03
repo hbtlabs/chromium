@@ -106,7 +106,7 @@ PaintLayerScrollableArea::PaintLayerScrollableArea(PaintLayer& layer)
       m_scrollCorner(nullptr),
       m_resizer(nullptr),
       m_scrollAnchor(this)
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
       ,
       m_hasBeenDisposed(false)
 #endif
@@ -125,7 +125,9 @@ PaintLayerScrollableArea::PaintLayerScrollableArea(PaintLayer& layer)
 }
 
 PaintLayerScrollableArea::~PaintLayerScrollableArea() {
-  ASSERT(m_hasBeenDisposed);
+#if DCHECK_IS_ON()
+  DCHECK(m_hasBeenDisposed);
+#endif
 }
 
 void PaintLayerScrollableArea::dispose() {
@@ -180,7 +182,7 @@ void PaintLayerScrollableArea::dispose() {
       !box().documentBeingDestroyed())
     m_scrollAnchor.clearSelf();
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   m_hasBeenDisposed = true;
 #endif
 }
@@ -370,7 +372,7 @@ void PaintLayerScrollableArea::updateScrollOffset(const ScrollOffset& newOffset,
   m_scrollOffset = newOffset;
 
   LocalFrame* frame = box().frame();
-  ASSERT(frame);
+  DCHECK(frame);
 
   FrameView* frameView = box().frameView();
 
@@ -399,11 +401,9 @@ void PaintLayerScrollableArea::updateScrollOffset(const ScrollOffset& newOffset,
   // The caret rect needs to be invalidated after scrolling
   frame->selection().setCaretRectNeedsUpdate();
 
-  FloatQuad quadForFakeMouseMoveEvent = FloatQuad(
-      FloatRect(layer()
-                    ->layoutObject()
-                    ->previousPaintInvalidationRectIncludingCompositedScrolling(
-                        paintInvalidationContainer)));
+  FloatQuad quadForFakeMouseMoveEvent = FloatQuad(FloatRect(
+      layer()->layoutObject()->previousVisualRectIncludingCompositedScrolling(
+          paintInvalidationContainer)));
 
   quadForFakeMouseMoveEvent =
       paintInvalidationContainer.localToAbsoluteQuad(quadForFakeMouseMoveEvent);
@@ -454,8 +454,8 @@ void PaintLayerScrollableArea::updateScrollOffset(const ScrollOffset& newOffset,
     frameView->didChangeScrollOffset();
   }
 
-  // All scrolls clear the fragment anchor.
-  frameView->clearFragmentAnchor();
+  if (scrollTypeClearsFragmentAnchor(scrollType))
+    frameView->clearFragmentAnchor();
 
   // Clear the scroll anchor, unless it is the reason for this scroll.
   if (RuntimeEnabledFeatures::scrollAnchoringEnabled() &&
@@ -671,7 +671,7 @@ void PaintLayerScrollableArea::updateScrollbarsEnabledState() {
 }
 
 void PaintLayerScrollableArea::updateAfterLayout() {
-  ASSERT(box().hasOverflowClip());
+  DCHECK(box().hasOverflowClip());
 
   bool relayoutIsPrevented = PreventRelayoutScope::relayoutIsPrevented();
   bool scrollbarsAreFrozen =
@@ -815,6 +815,17 @@ bool PaintLayerScrollableArea::shouldPerformScrollAnchoring() const {
          m_scrollAnchor.hasScroller() &&
          layoutBox()->style()->overflowAnchor() != AnchorNone &&
          !box().document().finishingOrIsPrinting();
+}
+
+FloatQuad PaintLayerScrollableArea::localToVisibleContentQuad(
+    const FloatQuad& quad,
+    const LayoutObject* localObject,
+    MapCoordinatesFlags flags) const {
+  LayoutBox* box = layoutBox();
+  if (!box)
+    return quad;
+  DCHECK(localObject);
+  return localObject->localToAncestorQuad(quad, box, flags);
 }
 
 ScrollBehavior PaintLayerScrollableArea::scrollBehaviorStyle() const {
@@ -1467,7 +1478,7 @@ void PaintLayerScrollableArea::resize(const PlatformEvent& evt,
   if (!inResizeMode() || !box().canResize() || !box().node())
     return;
 
-  ASSERT(box().node()->isElementNode());
+  DCHECK(box().node()->isElementNode());
   Element* element = toElement(box().node());
 
   Document& document = element->document();
@@ -1626,7 +1637,7 @@ void PaintLayerScrollableArea::updateScrollableAreaSet(bool hasOverflow) {
     return;
 
   if (m_scrollsOverflow) {
-    ASSERT(canHaveOverflowScrollbars(box()));
+    DCHECK(canHaveOverflowScrollbars(box()));
     frameView->addScrollableArea(this);
   } else {
     frameView->removeScrollableArea(this);
@@ -1637,7 +1648,7 @@ void PaintLayerScrollableArea::updateCompositingLayersAfterScroll() {
   PaintLayerCompositor* compositor = box().view()->compositor();
   if (compositor->inCompositingMode()) {
     if (usesCompositedScrolling()) {
-      ASSERT(layer()->hasCompositedLayerMapping());
+      DCHECK(layer()->hasCompositedLayerMapping());
       layer()->compositedLayerMapping()->setNeedsGraphicsLayerUpdate(
           GraphicsLayerUpdateSubtree);
       compositor->setNeedsCompositingUpdate(
@@ -1687,9 +1698,7 @@ static bool layerNeedsCompositedScrolling(
       layer->canPaintBackgroundOntoScrollingContentsLayer() &&
       layer->backgroundIsKnownToBeOpaqueInRect(
           toLayoutBox(layer->layoutObject())->paddingBoxRect()) &&
-      !layer->transformAncestor() && !layer->transform() &&
-      !layer->opacityAncestor() &&
-      !layer->layoutObject()->style()->hasOpacity();
+      !layer->compositesWithTransform() && !layer->compositesWithOpacity();
   if (mode == PaintLayerScrollableArea::ConsiderLCDText &&
       !layer->compositor()->preferCompositingToLCDTextEnabled() &&
       !backgroundSupportsLCDText)
@@ -1760,8 +1769,8 @@ PaintLayerScrollableArea::ScrollbarManager::scrollableArea() {
 }
 
 void PaintLayerScrollableArea::ScrollbarManager::destroyDetachedScrollbars() {
-  ASSERT(!m_hBarIsAttached || m_hBar);
-  ASSERT(!m_vBarIsAttached || m_vBar);
+  DCHECK(!m_hBarIsAttached || m_hBar);
+  DCHECK(!m_vBarIsAttached || m_vBar);
   if (m_hBar && !m_hBarIsAttached)
     destroyScrollbar(HorizontalScrollbar);
   if (m_vBar && !m_vBarIsAttached)
@@ -1810,7 +1819,7 @@ void PaintLayerScrollableArea::ScrollbarManager::setHasVerticalScrollbar(
 
 Scrollbar* PaintLayerScrollableArea::ScrollbarManager::createScrollbar(
     ScrollbarOrientation orientation) {
-  ASSERT(orientation == HorizontalScrollbar ? !m_hBarIsAttached
+  DCHECK(orientation == HorizontalScrollbar ? !m_hBarIsAttached
                                             : !m_vBarIsAttached);
   Scrollbar* scrollbar = nullptr;
   const LayoutObject& actualLayoutObject =
@@ -1838,7 +1847,7 @@ void PaintLayerScrollableArea::ScrollbarManager::destroyScrollbar(
     ScrollbarOrientation orientation) {
   Member<Scrollbar>& scrollbar =
       orientation == HorizontalScrollbar ? m_hBar : m_vBar;
-  ASSERT(orientation == HorizontalScrollbar ? !m_hBarIsAttached
+  DCHECK(orientation == HorizontalScrollbar ? !m_hBarIsAttached
                                             : !m_vBarIsAttached);
   if (!scrollbar)
     return;

@@ -60,11 +60,12 @@ class PLATFORM_EXPORT UserGestureToken : public RefCounted<UserGestureToken> {
   enum Status { NewGesture, PossiblyExistingGesture };
   enum TimeoutPolicy { Default, OutOfProcess, HasPaused };
 
-  virtual ~UserGestureToken() {}
+  ~UserGestureToken() {}
   bool hasGestures() const;
   void transferGestureTo(UserGestureToken*);
   bool consumeGesture();
   void setTimeoutPolicy(TimeoutPolicy);
+  void resetTimestamp();
 
   // If this UserGestureToken is wrapped in a UserGestureIndicator, and the
   // UserGestureIndicator is the lowest on the callstack (and therefore this

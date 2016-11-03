@@ -31,6 +31,7 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/sync_helper.h"
+#include "chrome/common/features.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/crx_file/id_util.h"
@@ -53,7 +54,7 @@
 #include "extensions/common/value_builder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/permission_request_creator.h"
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "chrome/browser/supervised_user/supervised_user_features.h"
@@ -704,8 +705,8 @@ TEST_F(ExtensionServiceSyncTest, GetSyncExtensionDataUserSettings) {
 
 TEST_F(ExtensionServiceSyncTest, SyncForUninstalledExternalExtension) {
   InitializeEmptyExtensionService();
-  InstallCRXWithLocation(
-      data_dir().AppendASCII("good.crx"), Manifest::EXTERNAL_PREF, INSTALL_NEW);
+  InstallCRX(data_dir().AppendASCII("good.crx"), Manifest::EXTERNAL_PREF,
+             INSTALL_NEW, Extension::NO_FLAGS);
   const Extension* extension = service()->GetInstalledExtension(good_crx);
   ASSERT_TRUE(extension);
 
@@ -1556,7 +1557,7 @@ TEST_F(ExtensionServiceSyncTest, DontSyncThemes) {
   EXPECT_TRUE(processor->changes().empty());
 }
 
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 class ExtensionServiceTestSupervised : public ExtensionServiceSyncTest,
                                        public SupervisedUserService::Delegate {
@@ -2380,7 +2381,7 @@ TEST_F(ExtensionServiceSyncTest, SyncExtensionHasAllhostsWithheld) {
   EXPECT_TRUE(modifier.HasSetAllowedOnAllUrls());
 }
 
-#endif  // defined(ENABLE_SUPERVISED_USERS)
+#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 // Tests sync behavior in the case of an item that starts out as an app and
 // gets updated to become an extension.

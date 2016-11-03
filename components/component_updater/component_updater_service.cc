@@ -35,6 +35,7 @@
 #include "components/update_client/configurator.h"
 #include "components/update_client/crx_update_item.h"
 #include "components/update_client/update_client.h"
+#include "components/update_client/update_client_errors.h"
 #include "components/update_client/utils.h"
 #include "url/gurl.h"
 
@@ -247,14 +248,13 @@ void CrxUpdateService::MaybeThrottle(const std::string& id,
 }
 
 void CrxUpdateService::OnDemandUpdate(const std::string& id,
-                                      CompletionCallback callback) {
+                                      const Callback& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (!GetComponent(id)) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(callback,
-                   update_client::Error::ERROR_UPDATE_INVALID_ARGUMENT));
+        base::Bind(callback, update_client::Error::INVALID_ARGUMENT));
     return;
   }
 
@@ -275,12 +275,12 @@ bool CrxUpdateService::OnDemandUpdateWithCooldown(const std::string& id) {
       return false;
   }
 
-  OnDemandUpdateInternal(id, CompletionCallback());
+  OnDemandUpdateInternal(id, Callback());
   return true;
 }
 
 void CrxUpdateService::OnDemandUpdateInternal(const std::string& id,
-                                              CompletionCallback callback) {
+                                              const Callback& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   UMA_HISTOGRAM_ENUMERATION("ComponentUpdater.Calls", UPDATE_TYPE_MANUAL,
@@ -314,7 +314,7 @@ bool CrxUpdateService::CheckForUpdates() {
         unsecure_ids,
         base::Bind(&CrxUpdateService::OnUpdate, base::Unretained(this)),
         base::Bind(&CrxUpdateService::OnUpdateComplete, base::Unretained(this),
-                   CompletionCallback(), base::TimeTicks::Now()));
+                   Callback(), base::TimeTicks::Now()));
   }
 
   if (!secure_ids.empty()) {
@@ -322,7 +322,7 @@ bool CrxUpdateService::CheckForUpdates() {
         secure_ids,
         base::Bind(&CrxUpdateService::OnUpdate, base::Unretained(this)),
         base::Bind(&CrxUpdateService::OnUpdateComplete, base::Unretained(this),
-                   CompletionCallback(), base::TimeTicks::Now()));
+                   Callback(), base::TimeTicks::Now()));
   }
 
   return true;
@@ -375,13 +375,14 @@ void CrxUpdateService::OnUpdate(const std::vector<std::string>& ids,
   }
 }
 
-void CrxUpdateService::OnUpdateComplete(CompletionCallback callback,
+void CrxUpdateService::OnUpdateComplete(Callback callback,
                                         const base::TimeTicks& start_time,
-                                        int error) {
+                                        update_client::Error error) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  VLOG(1) << "Update completed with error " << error;
+  VLOG(1) << "Update completed with error " << static_cast<int>(error);
 
-  UMA_HISTOGRAM_BOOLEAN("ComponentUpdater.UpdateCompleteResult", error != 0);
+  UMA_HISTOGRAM_BOOLEAN("ComponentUpdater.UpdateCompleteResult",
+                        error != update_client::Error::NONE);
   UMA_HISTOGRAM_LONG_TIMES_100("ComponentUpdater.UpdateCompleteTime",
                                base::TimeTicks::Now() - start_time);
 

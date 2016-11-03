@@ -655,7 +655,7 @@ TEST_P(EndToEndTest, SimpleRequestResponse) {
   ASSERT_TRUE(Initialize());
 
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
   EXPECT_EQ(2, client_->client()->GetNumSentClientHellos());
 }
 
@@ -664,7 +664,7 @@ TEST_P(EndToEndTest, SimpleRequestResponseWithLargeReject) {
   ASSERT_TRUE(Initialize());
 
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
   EXPECT_EQ(3, client_->client()->GetNumSentClientHellos());
 }
 
@@ -676,60 +676,65 @@ TEST_P(EndToEndTest, DISABLED_SimpleRequestResponsev6) {
   ASSERT_TRUE(Initialize());
 
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 }
 
 TEST_P(EndToEndTest, SeparateFinPacket) {
   ASSERT_TRUE(Initialize());
 
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
-  request.set_has_complete_message(false);
-
   // Send a request in two parts: the request and then an empty packet with FIN.
-  client_->SendMessage(request);
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/foo";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
+  client_->SendMessage(headers, "", /*fin=*/false);
   client_->SendData("", true);
   client_->WaitForResponse();
   EXPECT_EQ(kFooResponseBody, client_->response_body());
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 
   // Now do the same thing but with a content length.
-  request.AddBody("foo", true);
-  client_->SendMessage(request);
-  client_->SendData("", true);
+  headers["content-length"] = "3";
+  client_->SendMessage(headers, "", /*fin=*/false);
+  client_->SendData("foo", true);
   client_->WaitForResponse();
   EXPECT_EQ(kFooResponseBody, client_->response_body());
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 }
 
 TEST_P(EndToEndTest, MultipleRequestResponse) {
   ASSERT_TRUE(Initialize());
 
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
   EXPECT_EQ(kBarResponseBody, client_->SendSynchronousRequest("/bar"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 }
 
 TEST_P(EndToEndTest, MultipleClients) {
   ASSERT_TRUE(Initialize());
   std::unique_ptr<QuicTestClient> client2(CreateQuicClient(nullptr));
 
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
-  request.AddHeader("content-length", "3");
-  request.set_has_complete_message(false);
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/foo";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
+  headers["content-length"] = "3";
 
-  client_->SendMessage(request);
-  client2->SendMessage(request);
+  client_->SendMessage(headers, "", /*fin=*/false);
+  client2->SendMessage(headers, "", /*fin=*/false);
 
   client_->SendData("bar", true);
   client_->WaitForResponse();
   EXPECT_EQ(kFooResponseBody, client_->response_body());
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 
   client2->SendData("eep", true);
   client2->WaitForResponse();
   EXPECT_EQ(kFooResponseBody, client2->response_body());
-  EXPECT_EQ(200u, client2->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client2->response_headers()->find(":status")->second);
 }
 
 TEST_P(EndToEndTest, RequestOverMultiplePackets) {
@@ -740,7 +745,7 @@ TEST_P(EndToEndTest, RequestOverMultiplePackets) {
   ASSERT_TRUE(Initialize());
 
   EXPECT_EQ(kBarResponseBody, client_->SendSynchronousRequest(huge_request));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 }
 
 TEST_P(EndToEndTest, MultiplePacketsRandomOrder) {
@@ -753,23 +758,26 @@ TEST_P(EndToEndTest, MultiplePacketsRandomOrder) {
   SetReorderPercentage(50);
 
   EXPECT_EQ(kBarResponseBody, client_->SendSynchronousRequest(huge_request));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 }
 
 TEST_P(EndToEndTest, PostMissingBytes) {
   ASSERT_TRUE(Initialize());
 
   // Add a content length header with no body.
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
-  request.AddHeader("content-length", "3");
-  request.set_skip_message_validation(true);
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/foo";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
+  headers["content-length"] = "3";
 
   // This should be detected as stream fin without complete request,
   // triggering an error response.
-  client_->SendCustomSynchronousRequest(request);
+  client_->SendCustomSynchronousRequest(headers, "");
   EXPECT_EQ(QuicSimpleServerStream::kErrorResponseBody,
             client_->response_body());
-  EXPECT_EQ(500u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("500", client_->response_headers()->find(":status")->second);
 }
 
 TEST_P(EndToEndTest, LargePostNoPacketLoss) {
@@ -781,10 +789,14 @@ TEST_P(EndToEndTest, LargePostNoPacketLoss) {
   string body;
   GenerateBody(&body, 1024 * 1024);
 
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
-  request.AddBody(body, true);
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/foo";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
 
-  EXPECT_EQ(kFooResponseBody, client_->SendCustomSynchronousRequest(request));
+  EXPECT_EQ(kFooResponseBody,
+            client_->SendCustomSynchronousRequest(headers, body));
   // TODO(ianswett): There should not be packet loss in this test, but on some
   // platforms the receive buffer overflows.
   VerifyCleanConnection(true);
@@ -799,11 +811,14 @@ TEST_P(EndToEndTest, LargePostNoPacketLoss1sRTT) {
   // 100 KB body.
   string body;
   GenerateBody(&body, 100 * 1024);
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/foo";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
 
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
-  request.AddBody(body, true);
-
-  EXPECT_EQ(kFooResponseBody, client_->SendCustomSynchronousRequest(request));
+  EXPECT_EQ(kFooResponseBody,
+            client_->SendCustomSynchronousRequest(headers, body));
   VerifyCleanConnection(false);
 }
 
@@ -825,11 +840,15 @@ TEST_P(EndToEndTest, LargePostWithPacketLoss) {
   // 10 KB body.
   string body;
   GenerateBody(&body, 1024 * 10);
+  test::GenerateBody(&body, 1024 * 10);
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/foo";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
 
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
-  request.AddBody(body, true);
-
-  EXPECT_EQ(kFooResponseBody, client_->SendCustomSynchronousRequest(request));
+  EXPECT_EQ(kFooResponseBody,
+            client_->SendCustomSynchronousRequest(headers, body));
   VerifyCleanConnection(true);
 }
 
@@ -851,11 +870,14 @@ TEST_P(EndToEndTest, LargePostWithPacketLossAndBlockedSocket) {
   // 10 KB body.
   string body;
   GenerateBody(&body, 1024 * 10);
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/foo";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
 
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
-  request.AddBody(body, true);
-
-  EXPECT_EQ(kFooResponseBody, client_->SendCustomSynchronousRequest(request));
+  EXPECT_EQ(kFooResponseBody,
+            client_->SendCustomSynchronousRequest(headers, body));
 }
 
 TEST_P(EndToEndTest, LargePostNoPacketLossWithDelayAndReordering) {
@@ -869,11 +891,14 @@ TEST_P(EndToEndTest, LargePostNoPacketLossWithDelayAndReordering) {
   // 1 MB body.
   string body;
   GenerateBody(&body, 1024 * 1024);
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/foo";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
 
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
-  request.AddBody(body, true);
-
-  EXPECT_EQ(kFooResponseBody, client_->SendCustomSynchronousRequest(request));
+  EXPECT_EQ(kFooResponseBody,
+            client_->SendCustomSynchronousRequest(headers, body));
 }
 
 TEST_P(EndToEndTest, LargePostZeroRTTFailure) {
@@ -886,11 +911,14 @@ TEST_P(EndToEndTest, LargePostZeroRTTFailure) {
 
   string body;
   GenerateBody(&body, 20480);
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/foo";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
 
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
-  request.AddBody(body, true);
-
-  EXPECT_EQ(kFooResponseBody, client_->SendCustomSynchronousRequest(request));
+  EXPECT_EQ(kFooResponseBody,
+            client_->SendCustomSynchronousRequest(headers, body));
   // In the non-stateless case, the same session is used for both
   // hellos, so the number of hellos sent on that session is 2.  In
   // the stateless case, the first client session will be completely
@@ -908,7 +936,8 @@ TEST_P(EndToEndTest, LargePostZeroRTTFailure) {
   client_->Connect();
   client_->WaitForResponseForMs(-1);
   ASSERT_TRUE(client_->client()->connected());
-  EXPECT_EQ(kFooResponseBody, client_->SendCustomSynchronousRequest(request));
+  EXPECT_EQ(kFooResponseBody,
+            client_->SendCustomSynchronousRequest(headers, body));
 
   if (negotiated_version_ <= QUIC_VERSION_32) {
     EXPECT_EQ(expected_num_hellos_latest_session,
@@ -928,7 +957,8 @@ TEST_P(EndToEndTest, LargePostZeroRTTFailure) {
 
   client_->Connect();
   ASSERT_TRUE(client_->client()->connected());
-  EXPECT_EQ(kFooResponseBody, client_->SendCustomSynchronousRequest(request));
+  EXPECT_EQ(kFooResponseBody,
+            client_->SendCustomSynchronousRequest(headers, body));
   // In the non-stateless case, the same session is used for both
   // hellos, so the number of hellos sent on that session is 2.  In
   // the stateless case, the first client session will be completely
@@ -1010,11 +1040,14 @@ TEST_P(EndToEndTest, LargePostSynchronousRequest) {
 
   string body;
   GenerateBody(&body, 20480);
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/foo";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
 
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
-  request.AddBody(body, true);
-
-  EXPECT_EQ(kFooResponseBody, client_->SendCustomSynchronousRequest(request));
+  EXPECT_EQ(kFooResponseBody,
+            client_->SendCustomSynchronousRequest(headers, body));
   // In the non-stateless case, the same session is used for both
   // hellos, so the number of hellos sent on that session is 2.  In
   // the stateless case, the first client session will be completely
@@ -1032,7 +1065,8 @@ TEST_P(EndToEndTest, LargePostSynchronousRequest) {
   client_->Connect();
   client_->WaitForInitialResponse();
   ASSERT_TRUE(client_->client()->connected());
-  EXPECT_EQ(kFooResponseBody, client_->SendCustomSynchronousRequest(request));
+  EXPECT_EQ(kFooResponseBody,
+            client_->SendCustomSynchronousRequest(headers, body));
 
   if (negotiated_version_ <= QUIC_VERSION_32) {
     EXPECT_EQ(expected_num_hellos_latest_session,
@@ -1052,7 +1086,8 @@ TEST_P(EndToEndTest, LargePostSynchronousRequest) {
 
   client_->Connect();
   ASSERT_TRUE(client_->client()->connected());
-  EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
+  EXPECT_EQ(kFooResponseBody,
+            client_->SendCustomSynchronousRequest(headers, body));
   // In the non-stateless case, the same session is used for both
   // hellos, so the number of hellos sent on that session is 2.  In
   // the stateless case, the first client session will be completely
@@ -1112,11 +1147,14 @@ TEST_P(EndToEndTest, LargePostSmallBandwidthLargeBuffer) {
   // 1 MB body.
   string body;
   GenerateBody(&body, 1024 * 1024);
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/foo";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
 
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
-  request.AddBody(body, true);
-
-  EXPECT_EQ(kFooResponseBody, client_->SendCustomSynchronousRequest(request));
+  EXPECT_EQ(kFooResponseBody,
+            client_->SendCustomSynchronousRequest(headers, body));
   // This connection may drop packets, because the buffer is smaller than the
   // max CWND.
   VerifyCleanConnection(true);
@@ -1169,13 +1207,16 @@ TEST_P(EndToEndTest, InvalidStream) {
   string body;
   GenerateBody(&body, kMaxPacketSize);
 
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
-  request.AddBody(body, true);
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/foo";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
   // Force the client to write with a stream ID belonging to a nonexistent
   // server-side stream.
   QuicSessionPeer::SetNextOutgoingStreamId(client_->client()->session(), 2);
 
-  client_->SendCustomSynchronousRequest(request);
+  client_->SendCustomSynchronousRequest(headers, body);
   // EXPECT_EQ(QUIC_STREAM_CONNECTION_ERROR, client_->stream_error());
   EXPECT_EQ(QUIC_STREAM_CONNECTION_ERROR, client_->stream_error());
   EXPECT_EQ(QUIC_INVALID_STREAM_ID, client_->connection_error());
@@ -1190,19 +1231,22 @@ TEST_P(EndToEndTest, LargeHeaders) {
   string body;
   test::GenerateBody(&body, kMaxPacketSize);
 
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
-  request.AddHeader("key1", string(15 * 1024, 'a'));
-  request.AddHeader("key2", string(15 * 1024, 'a'));
-  request.AddHeader("key3", string(15 * 1024, 'a'));
-  request.AddBody(body, true);
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/foo";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
+  headers["key1"] = string(15 * 1024, 'a');
+  headers["key2"] = string(15 * 1024, 'a');
+  headers["key3"] = string(15 * 1024, 'a');
 
-  client_->SendCustomSynchronousRequest(request);
+  client_->SendCustomSynchronousRequest(headers, body);
   if (FLAGS_quic_limit_uncompressed_headers) {
     EXPECT_EQ(QUIC_HEADERS_TOO_LARGE, client_->stream_error());
   } else {
     EXPECT_EQ(QUIC_STREAM_NO_ERROR, client_->stream_error());
     EXPECT_EQ(kFooResponseBody, client_->response_body());
-    EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+    EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
   }
   EXPECT_EQ(QUIC_NO_ERROR, client_->connection_error());
 }
@@ -1214,17 +1258,19 @@ TEST_P(EndToEndTest, EarlyResponseWithQuicStreamNoError) {
   string large_body;
   GenerateBody(&large_body, 1024 * 1024);
 
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
-  request.AddBody(large_body, false);
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/foo";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
 
   // Insert an invalid content_length field in request to trigger an early
   // response from server.
-  request.AddHeader("content-length", "-3");
+  headers["content-length"] = "-3";
 
-  request.set_skip_message_validation(true);
-  client_->SendCustomSynchronousRequest(request);
+  client_->SendCustomSynchronousRequest(headers, large_body);
   EXPECT_EQ("bad", client_->response_body());
-  EXPECT_EQ(500u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("500", client_->response_headers()->find(":status")->second);
   EXPECT_EQ(QUIC_STREAM_NO_ERROR, client_->stream_error());
   EXPECT_EQ(QUIC_NO_ERROR, client_->connection_error());
 }
@@ -1232,10 +1278,6 @@ TEST_P(EndToEndTest, EarlyResponseWithQuicStreamNoError) {
 // TODO(rch): this test seems to cause net_unittests timeouts :|
 TEST_P(EndToEndTest, DISABLED_MultipleTermination) {
   ASSERT_TRUE(Initialize());
-
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
-  request.AddHeader("content-length", "3");
-  request.set_has_complete_message(false);
 
   // Set the offset so we won't frame.  Otherwise when we pick up termination
   // before HTTP framing is complete, we send an error and close the stream,
@@ -1282,14 +1324,17 @@ TEST_P(EndToEndTest, NegotiateMaxOpenStreams) {
   QuicSessionPeer::SetMaxOpenOutgoingStreams(client_->client()->session(),
                                              kServerMaxStreams + 1);
 
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
-  request.AddHeader("content-length", "3");
-  request.set_has_complete_message(false);
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/foo";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
+  headers["content-length"] = "3";
 
   // The server supports a small number of additional streams beyond the
   // negotiated limit. Open enough streams to go beyond that limit.
   for (int i = 0; i < kServerMaxStreams + 1; ++i) {
-    client_->SendMessage(request);
+    client_->SendMessage(headers, "", /*fin=*/false);
   }
   client_->WaitForResponse();
 
@@ -1318,14 +1363,17 @@ TEST_P(EndToEndTest, MaxIncomingDynamicStreamsLimitRespected) {
   QuicSessionPeer::SetMaxOpenOutgoingStreams(client_->client()->session(),
                                              kServerMaxStreams + 1);
 
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
-  request.AddHeader("content-length", "3");
-  request.set_has_complete_message(false);
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/foo";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
+  headers["content-length"] = "3";
 
   // The server supports a small number of additional streams beyond the
   // negotiated limit. Open enough streams to go beyond that limit.
   for (int i = 0; i < kServerMaxStreams + 1; ++i) {
-    client_->SendMessage(request);
+    client_->SendMessage(headers, "", /*fin=*/false);
   }
   client_->WaitForResponse();
 
@@ -1506,7 +1554,7 @@ TEST_P(EndToEndTest, 0ByteConnectionId) {
   ASSERT_TRUE(Initialize());
 
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 
   QuicPacketHeader* header = QuicConnectionPeer::GetLastHeader(
       client_->client()->session()->connection());
@@ -1519,7 +1567,7 @@ TEST_P(EndToEndTest, 8ByteConnectionId) {
   ASSERT_TRUE(Initialize());
 
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
   QuicPacketHeader* header = QuicConnectionPeer::GetLastHeader(
       client_->client()->session()->connection());
   EXPECT_EQ(PACKET_8BYTE_CONNECTION_ID,
@@ -1532,7 +1580,7 @@ TEST_P(EndToEndTest, 15ByteConnectionId) {
 
   // Our server is permissive and allows for out of bounds values.
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
   QuicPacketHeader* header = QuicConnectionPeer::GetLastHeader(
       client_->client()->session()->connection());
   EXPECT_EQ(PACKET_8BYTE_CONNECTION_ID,
@@ -1544,10 +1592,10 @@ TEST_P(EndToEndTest, ResetConnection) {
   client_->client()->WaitForCryptoHandshakeConfirmed();
 
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
   client_->ResetConnection();
   EXPECT_EQ(kBarResponseBody, client_->SendSynchronousRequest("/bar"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 }
 
 TEST_P(EndToEndTest, MaxStreamsUberTest) {
@@ -1631,7 +1679,7 @@ TEST_P(EndToEndTest, ConnectionMigrationClientIPChanged) {
   ASSERT_TRUE(Initialize());
 
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 
   // Store the client IP address which was used to send the first request.
   IPAddress old_host = client_->client()->GetLatestClientAddress().address();
@@ -1643,7 +1691,7 @@ TEST_P(EndToEndTest, ConnectionMigrationClientIPChanged) {
 
   // Send a request using the new socket.
   EXPECT_EQ(kBarResponseBody, client_->SendSynchronousRequest("/bar"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 }
 
 TEST_P(EndToEndTest, ConnectionMigrationClientPortChanged) {
@@ -1653,7 +1701,7 @@ TEST_P(EndToEndTest, ConnectionMigrationClientPortChanged) {
   ASSERT_TRUE(Initialize());
 
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 
   // Store the client address which was used to send the first request.
   IPEndPoint old_address = client_->client()->GetLatestClientAddress();
@@ -1689,7 +1737,7 @@ TEST_P(EndToEndTest, ConnectionMigrationClientPortChanged) {
 
   // Send a second request, using the new FD.
   EXPECT_EQ(kBarResponseBody, client_->SendSynchronousRequest("/bar"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 
   // Verify that the client's ephemeral port is different.
   IPEndPoint new_address = client_->client()->GetLatestClientAddress();
@@ -1849,7 +1897,7 @@ TEST_P(EndToEndTest, RequestWithNoBodyWillNeverSendStreamFrameWithFIN) {
 
   // Send a simple headers only request, and receive response.
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 
   // Now verify that the server is not waiting for a final FIN or RST.
   server_thread_->Pause();
@@ -1915,9 +1963,13 @@ TEST_P(EndToEndTest, AckNotifierWithPacketLossAndBlockedSocket) {
   client_writer_->set_fake_blocked_socket_percentage(10);
 
   // Create a POST request and send the headers only.
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
-  request.set_has_complete_message(false);
-  client_->SendMessage(request);
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/foo";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
+
+  client_->SendMessage(headers, "", /*fin=*/false);
 
   // The TestAckListener will cause a failure if not notified.
   scoped_refptr<TestAckListener> delegate(new TestAckListener(2));
@@ -1931,7 +1983,7 @@ TEST_P(EndToEndTest, AckNotifierWithPacketLossAndBlockedSocket) {
   client_->SendData(request_string, true, delegate.get());
   client_->WaitForResponse();
   EXPECT_EQ(kFooResponseBody, client_->response_body());
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 
   // Send another request to flush out any pending ACKs on the server.
   client_->SendSynchronousRequest("/bar");
@@ -1972,7 +2024,7 @@ TEST_P(EndToEndTest, ServerSendPublicReset) {
 
   // The request should fail.
   EXPECT_EQ("", client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(0u, client_->response_headers()->parsed_response_code());
+  EXPECT_TRUE(client_->response_headers()->empty());
   EXPECT_EQ(QUIC_PUBLIC_RESET, client_->connection_error());
 }
 
@@ -2009,7 +2061,7 @@ TEST_P(EndToEndTest, ServerSendPublicResetWithDifferentConnectionId) {
 
   // The connection should be unaffected.
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 
   client_->client()->session()->connection()->set_debug_visitor(nullptr);
 }
@@ -2038,7 +2090,7 @@ TEST_P(EndToEndTest, ClientSendPublicResetWithDifferentConnectionId) {
 
   // The connection should be unaffected.
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 }
 
 // Send a version negotiation packet from the server for a different
@@ -2068,7 +2120,7 @@ TEST_P(EndToEndTest, ServerSendVersionNegotiationWithDifferentConnectionId) {
 
   // The connection should be unaffected.
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 
   client_->client()->session()->connection()->set_debug_visitor(nullptr);
 }
@@ -2080,7 +2132,7 @@ TEST_P(EndToEndTest, BadPacketHeaderTruncated) {
 
   // Start the connection.
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 
   // Packet with invalid public flags.
   char packet[] = {// public flags (8 byte connection_id)
@@ -2103,7 +2155,7 @@ TEST_P(EndToEndTest, BadPacketHeaderTruncated) {
 
   // The connection should not be terminated.
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 }
 
 // A bad header shouldn't tear down the connection, because the receiver can't
@@ -2113,7 +2165,7 @@ TEST_P(EndToEndTest, BadPacketHeaderFlags) {
 
   // Start the connection.
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 
   // Packet with invalid public flags.
   char packet[] = {
@@ -2142,7 +2194,7 @@ TEST_P(EndToEndTest, BadPacketHeaderFlags) {
 
   // The connection should not be terminated.
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 }
 
 // Send a packet from the client with bad encrypted data.  The server should not
@@ -2152,7 +2204,7 @@ TEST_P(EndToEndTest, BadEncryptedData) {
 
   // Start the connection.
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 
   std::unique_ptr<QuicEncryptedPacket> packet(ConstructEncryptedPacket(
       client_->client()->session()->connection()->connection_id(), false, false,
@@ -2180,7 +2232,7 @@ TEST_P(EndToEndTest, BadEncryptedData) {
 
   // The connection should not be terminated.
   EXPECT_EQ(kFooResponseBody, client_->SendSynchronousRequest("/foo"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
 }
 
 // A test stream that gives |response_body_| as an error response body.
@@ -2430,7 +2482,12 @@ TEST_P(EndToEndTest, EarlyResponseFinRecording) {
 
   // A POST that gets an early error response, after the headers are received
   // and before the body is received, due to invalid content-length.
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/garbage");
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/garbage";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
+
   // The body must be large enough that the FIN will be in a different packet
   // than the end of the headers, but short enough to not require a flow control
   // update.  This allows headers processing to trigger the error response
@@ -2439,16 +2496,14 @@ TEST_P(EndToEndTest, EarlyResponseFinRecording) {
   const uint32_t kRequestBodySize = kMaxPacketSize + 10;
   string request_body;
   GenerateBody(&request_body, kRequestBodySize);
-  request.AddBody(request_body, false);
   // Set an invalid content-length, so the request will receive an early 500
   // response.  Must be done after AddBody, which also sets content-length.
-  request.AddHeader("content-length", "-1");
-  request.set_skip_message_validation(true);
+  headers["content-length"] = "-1";
 
   // Send the request.
-  client_->SendMessage(request);
+  client_->SendMessage(headers, request_body);
   client_->WaitForResponse();
-  EXPECT_EQ(500u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("500", client_->response_headers()->find(":status")->second);
 
   // Pause the server so we can access the server's internals without races.
   server_thread_->Pause();
@@ -2482,19 +2537,22 @@ TEST_P(EndToEndTest, LargePostEarlyResponse) {
 
   // POST to a URL that gets an early error response, after the headers are
   // received and before the body is received.
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/garbage");
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/garbage";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
+
   // Invalid content-length so the request will receive an early 500 response.
-  request.AddHeader("content-length", "-1");
-  request.set_skip_message_validation(true);
-  request.set_has_complete_message(false);
+  headers["content-length"] = "-1";
 
   // Tell the client to not close the stream if it receives an early response.
   client_->set_allow_bidirectional_data(true);
   // Send the headers.
-  client_->SendMessage(request);
+  client_->SendMessage(headers, "", false);
   // Receive the response and let the server close writing.
   client_->WaitForInitialResponse();
-  EXPECT_EQ(500u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("500", client_->response_headers()->find(":status")->second);
 
   // Receive the reset stream from server on early response.
   ReliableQuicStream* stream =
@@ -2528,7 +2586,7 @@ TEST_P(EndToEndTest, Trailers) {
       trailers.Clone());
 
   EXPECT_EQ(kBody, client_->SendSynchronousRequest("/trailer_url"));
-  EXPECT_EQ(200u, client_->response_headers()->parsed_response_code());
+  EXPECT_EQ("200", client_->response_headers()->find(":status")->second);
   EXPECT_EQ(trailers, client_->response_trailers());
 }
 
@@ -2861,16 +2919,20 @@ TEST_P(EndToEndTest, DISABLED_TestHugePostWithPacketLoss) {
   // To avoid storing the whole request body in memory, use a loop to repeatedly
   // send body size of kSizeBytes until the whole request body size is reached.
   const int kSizeBytes = 128 * 1024;
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::POST, "/foo");
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/foo";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
+
   // Request body size is 4G plus one more kSizeBytes.
   int64_t request_body_size_bytes = pow(2, 32) + kSizeBytes;
   ASSERT_LT(INT64_C(4294967296), request_body_size_bytes);
-  request.AddHeader("content-length", IntToString(request_body_size_bytes));
-  request.set_has_complete_message(false);
+  headers["content-length"] = IntToString(request_body_size_bytes);
   string body;
   test::GenerateBody(&body, kSizeBytes);
 
-  client_->SendMessage(request);
+  client_->SendMessage(headers, "", /*fin=*/false);
   for (int i = 0; i < request_body_size_bytes / kSizeBytes; ++i) {
     bool fin = (i == request_body_size_bytes - 1);
     client_->SendData(string(body.data(), kSizeBytes), fin);
@@ -2978,8 +3040,13 @@ TEST_P(EndToEndBufferedPacketsTest, Buffer0RttRequest) {
   client_->client()->StartConnect();
   ASSERT_TRUE(client_->client()->connected());
   // Send a request before handshake finishes.
-  HTTPMessage request(HttpConstants::HTTP_1_1, HttpConstants::GET, "/bar");
-  client_->SendMessage(request);
+  SpdyHeaderBlock headers;
+  headers[":method"] = "POST";
+  headers[":path"] = "/bar";
+  headers[":scheme"] = "https";
+  headers[":authority"] = server_hostname_;
+
+  client_->SendMessage(headers, "");
   client_->WaitForResponse();
   EXPECT_EQ(kBarResponseBody, client_->response_body());
   QuicConnectionStats client_stats =

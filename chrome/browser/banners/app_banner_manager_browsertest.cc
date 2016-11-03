@@ -206,8 +206,16 @@ IN_PROC_BROWSER_TEST_F(AppBannerManagerBrowserTest,
                 ui::PAGE_TRANSITION_GENERATED, 3, SHOWING_WEB_APP_BANNER, true);
 }
 
+// Disabled due to flakiness: crbug.com/661511.
+#if defined(OS_LINUX) || defined(OS_WIN)
+#define MAYBE_WebAppBannerCreatedDirectMultipleLargerTotal \
+    DISABLED_WebAppBannerCreatedDirectMultipleLargerTotal
+#else
+#define MAYBE_WebAppBannerCreatedDirectMultipleLargerTotal \
+    WebAppBannerCreatedDirectMultipleLargerTotal
+#endif
 IN_PROC_BROWSER_TEST_F(AppBannerManagerBrowserTest,
-                       WebAppBannerCreatedDirectMultipleLargerTotal) {
+                       MAYBE_WebAppBannerCreatedDirectMultipleLargerTotal) {
   AppBannerSettingsHelper::SetEngagementWeights(0.5, 1);
   AppBannerSettingsHelper::SetTotalEngagementToTrigger(3);
   RunBannerTest("/banners/manifest_test_page.html",
@@ -228,8 +236,9 @@ IN_PROC_BROWSER_TEST_F(AppBannerManagerBrowserTest,
                 SHOWING_WEB_APP_BANNER, true);
 }
 
+// Flaky http://crbug.com/660798
 IN_PROC_BROWSER_TEST_F(AppBannerManagerBrowserTest,
-                       WebAppBannerCreatedIndirectLargerTotal) {
+                       DISABLED_WebAppBannerCreatedIndirectLargerTotal) {
   AppBannerSettingsHelper::SetTotalEngagementToTrigger(5);
   RunBannerTest("/banners/manifest_test_page.html", ui::PAGE_TRANSITION_LINK, 4,
                 SHOWING_WEB_APP_BANNER, true);

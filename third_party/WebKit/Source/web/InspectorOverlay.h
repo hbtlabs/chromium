@@ -46,10 +46,7 @@
 namespace blink {
 
 class Color;
-class EmptyChromeClient;
 class LocalFrame;
-class GraphicsContext;
-class GraphicsLayer;
 class InspectorCSSAgent;
 class LayoutEditor;
 class Node;
@@ -58,7 +55,7 @@ class PageOverlay;
 class PlatformGestureEvent;
 class PlatformMouseEvent;
 class PlatformTouchEvent;
-class WebViewImpl;
+class WebLocalFrameImpl;
 
 namespace protocol {
 class Value;
@@ -71,10 +68,7 @@ class InspectorOverlay final
   USING_GARBAGE_COLLECTED_MIXIN(InspectorOverlay);
 
  public:
-  static InspectorOverlay* create(WebViewImpl* webViewImpl) {
-    return new InspectorOverlay(webViewImpl);
-  }
-
+  explicit InspectorOverlay(WebLocalFrameImpl*);
   ~InspectorOverlay() override;
   DECLARE_TRACE();
 
@@ -99,7 +93,6 @@ class InspectorOverlay final
   String evaluateInOverlayForTest(const String&);
 
  private:
-  explicit InspectorOverlay(WebViewImpl*);
   class InspectorOverlayChromeClient;
   class InspectorPageOverlayDelegate;
 
@@ -156,7 +149,7 @@ class InspectorOverlay final
   void inspect(Node*);
   void initializeLayoutEditorIfNeeded(Node*);
 
-  WebViewImpl* m_webViewImpl;
+  Member<WebLocalFrameImpl> m_frameImpl;
   String m_pausedInDebuggerMessage;
   Member<Node> m_highlightNode;
   Member<Node> m_eventTargetNode;

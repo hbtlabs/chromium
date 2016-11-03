@@ -134,9 +134,8 @@ cr.define('settings', function() {
      */
     getCookieList: function() {
       var list = [];
-
-      for (var group of this.children_) {
-        for (var cookie of group.children_) {
+      for (var child of this.children_) {
+        for (var cookie of child.children_) {
           list.push({title: cookie.data.title,
                      id: cookie.data.id,
                      data: cookie.data});
@@ -184,7 +183,6 @@ cr.define('settings', function() {
             description += getCookieDataCategoryText(
                 dataType, descriptionNode.data.totalUsage);
           }
-
         }
         list.push({ site: title, id: id, localData: description });
       }
@@ -211,6 +209,19 @@ cr.define('settings', function() {
           if (node != null)
             return node;
         }
+      }
+      return null;
+    },
+
+    /**
+     * Fetch a CookieTreeNode by site.
+     * @param {string} site The web site to look up.
+     * @return {?settings.CookieTreeNode} The node found, if any.
+     */
+    fetchNodeBySite: function(site) {
+      for (var i = 0; i < this.children_.length; ++i) {
+        if (this.children_[i].data.title == site)
+          return this.children_[i];
       }
       return null;
     },

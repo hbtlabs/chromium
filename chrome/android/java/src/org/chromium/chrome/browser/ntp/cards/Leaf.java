@@ -7,7 +7,9 @@ package org.chromium.chrome.browser.ntp.cards;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 
 /**
- * A leaf in the tree, i.e. a single item.
+ * A permanent leaf in the tree, i.e. a single item.
+ * If the leaf is not to be a permanent member of the tree, see {@link OptionalLeaf} for an
+ * implementation that will take care of hiding or showing the item.
  */
 public abstract class Leaf implements TreeNode {
     @Override

@@ -480,7 +480,7 @@ are declared in build/common.gypi.
         Chrome history
       </message>
       <message name="IDS_MD_HISTORY_NO_SYNCED_RESULTS" desc="Text indicating that there are no synced tabs from other devices.">
-        No synced tabs
+        No tabs from other devices
       </message>
       <message name="IDS_MD_HISTORY_OPEN_TABS_MENU_ITEM" desc="Label displayed in history sidebar button to display synced tabs from other devices.">
         Tabs from other devices
@@ -11623,25 +11623,25 @@ Tell us what happened exactly before you got the profile error message:
         Sync isn't working
       </message>
       <message name="IDS_SYNC_ERROR_USER_MENU_SIGNIN_MESSAGE" desc="Message of the out-of-date signin info error in the header of desktop user menu.">
-        Sign-in details are out of date.
+        Sign-in details are out of date
       </message>
       <message name="IDS_SYNC_ERROR_USER_MENU_SIGNIN_BUTTON" desc="Button in the header of desktop user menu that prompts the user to sign in again to fix the out-of-date signin info error.">
         Sign in again
       </message>
       <message name="IDS_SYNC_ERROR_USER_MENU_PASSPHRASE_MESSAGE" desc="Message of the out-of-date sync passphrase error in the header of desktop user menu.">
-        Passphrase required to start sync.
+        Passphrase required to start sync
       </message>
       <message name="IDS_SYNC_ERROR_USER_MENU_PASSPHRASE_BUTTON" desc="Button in the header of desktop user menu that prompts the user to enter the sync passphrase to fix the out-of-date passphrase error.">
         Enter passphrase
       </message>
       <message name="IDS_SYNC_ERROR_USER_MENU_SIGNIN_AGAIN_MESSAGE" desc="Message of the unrecoverable error in the header of desktop user menu.">
-        Try signing in again.
+        Try signing in again
       </message>
       <message name="IDS_SYNC_ERROR_USER_MENU_SIGNIN_AGAIN_BUTTON" desc="Button in the header of desktop user menu that signs out and signs back in in an attempt to resolve an unrecoverable error.">
         Sign in again
       </message>
       <message name="IDS_SYNC_ERROR_USER_MENU_SIGNOUT_MESSAGE" desc="Message of the unrecoverable error in the header of desktop user menu for managed users.">
-        Try signing out and back in again.
+        Try signing out and back in again
       </message>
       <message name="IDS_SYNC_ERROR_USER_MENU_SIGNOUT_BUTTON" desc="Button in the header of desktop user menu for managed users to sign out in an attempt to resolve an unrecoverable error.">
         Sign out
@@ -13345,6 +13345,9 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
           <message name="IDS_PIN_KEYBOARD_HINT_TEXT_PIN_PASSWORD" desc="Text to display in the pin field for user pod when no pin has been entered, and passwords are allowed.">
             PIN or password
           </message>
+          <message name="IDS_PIN_KEYBOARD_DELETE_ACCESSIBLE_NAME" desc="Text to be spoken when the focus is set to the delete button of the PIN keyboard.">
+            Delete
+          </message>
           <message name="IDS_PIN_KEYBOARD_ERROR_MESSAGE" desc="Text to display the error message on the pin keyboard if the user has entered a wrong password or pin.">
             PIN or password incorrect.
           </message>
@@ -13363,6 +13366,9 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
         </message>
         <message name="IDS_LOGIN_POD_PASSWORD_FIELD_ACCESSIBLE_NAME" desc="Text to be spoken when the focus is set to the password field of a user pod on the sign-in screen.">
           Password for <ph name="USER_EMAIL_ADDRESS">$1<ex>john.doe@example.com</ex></ph>
+        </message>
+        <message name="IDS_LOGIN_POD_SUBMIT_BUTTON_ACCESSIBLE_NAME" desc="Text to be spoken when the focus is set to the submit button of a user pod on the sign-in screen.">
+          Submit
         </message>
         <message name="IDS_LOGIN_POD_MENU_BUTTON_ACCESSIBLE_NAME" desc="Text to be spoken when the focus is set to the menu button of the user pod on the login screen.">
           Options menu for <ph name="USER_EMAIL_ADDRESS">$1<ex>john.doe@example.com</ex></ph>
@@ -15581,6 +15587,23 @@ read aloud to screenreader users to announce that a completion is available.">
     </if>
 
     <if expr="is_android">
+      <message name="IDS_FLAGS_MODAL_PERMISSION_PROMPTS_NAME" desc="Name for the flag to enable modal permission prompts on Android" translateable="false">
+        Modal Permission Prompts
+      </message>
+      <message name="IDS_FLAGS_MODAL_PERMISSION_PROMPTS_DESCRIPTION" desc="Description for the flag to enable modal permission prompts on Android." translateable="false">
+        Whether to use permission dialogs in place of permission infobars.
+      </message>
+    </if>
+    <if expr="not is_macosx">
+      <message name="IDS_FLAGS_PERMISSION_PROMPT_PERSISTENCE_TOGGLE_NAME" desc="Name for the flag to enable a persistence toggle in permission prompts" translateable="false">
+        Persistence Toggle in Permission Prompts
+      </message>
+      <message name="IDS_FLAGS_PERMISSION_PROMPT_PERSISTENCE_TOGGLE_DESCRIPTION" desc="Description for the flag to enable a persistence toggle in permission prompts" translateable="false">
+        Whether to display a persistence toggle in permission prompts.
+      </message>
+    </if>
+
+    <if expr="is_android">
       <message name="IDS_FLAGS_NO_CREDIT_CARD_ABORT" desc="Title for the flag to enable the No Card Abort in Payment Request." translateable="false">
         No Credit Card Abort
       </message>
@@ -15588,6 +15611,25 @@ read aloud to screenreader users to announce that a completion is available.">
         Whether or not the No Credit Card Abort is enabled.
       </message>
     </if>
+
+    <!-- Consistent omnibox geolocation -->
+    <if expr="is_android">
+        <message name="IDS_FLAGS_ENABLE_CONSISTENT_OMNIBOX_GEOLOCATION_NAME" desc="Name for the flag to enable consistent omnibox geolocation">
+            Have consistent omnibox geolocation access.
+        </message>
+        <message name="IDS_FLAGS_ENABLE_CONSISTENT_OMNIBOX_GEOLOCATION_DESCRIPTION" desc="Desciption for the flag to enable consistent omnibox geolocation">
+            Have consistent geolocation access between the omnibox and default search engine.
+        </message>
+    </if>
+
+    <!-- NTP content suggestions strings -->
+    <message name="IDS_NTP_DOWNLOAD_SUGGESTIONS_SECTION_HEADER" desc="Header of the downloads section, which is a list of pages (or files) that the user downloaded, displayed as cards on the New Tab Page.">
+      Downloads
+    </message>
+
+    <message name="IDS_NTP_DOWNLOADS_SUGGESTIONS_SECTION_EMPTY" desc="On the New Tab Page, text of card explaining to the user that they can expect to see some download related content suggestions in this section in the future.">
+      Your downloads appear here
+    </message>
   </messages>
  </release>
 </grit>

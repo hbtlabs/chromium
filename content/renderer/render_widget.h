@@ -403,6 +403,8 @@ class CONTENT_EXPORT RenderWidget
   // For unit tests.
   friend class RenderWidgetTest;
 
+  using CreateWidgetCallback = base::OnceCallback<bool()>;
+
   enum ResizeAck {
     SEND_RESIZE_ACK,
     NO_RESIZE_ACK,
@@ -430,7 +432,7 @@ class CONTENT_EXPORT RenderWidget
   // Called by Init and subclasses to perform initialization.
   bool DoInit(int32_t opener_id,
               blink::WebWidget* web_widget,
-              IPC::SyncMessage* create_widget_message);
+              CreateWidgetCallback create_widget_callback);
 
   // Allows the process to exit once the unload handler has finished, if there
   // are no other active RenderWidgets.
@@ -529,12 +531,8 @@ class CONTENT_EXPORT RenderWidget
 
   // Override points to notify derived classes that a paint has happened.
   // DidInitiatePaint happens when that has completed, and subsequent rendering
-  // won't affect the painted content. DidFlushPaint happens once we've received
-  // the ACK that the screen has been updated. For a given paint operation,
-  // these overrides will always be called in the order DidInitiatePaint,
-  // DidFlushPaint.
+  // won't affect the painted content.
   virtual void DidInitiatePaint() {}
-  virtual void DidFlushPaint();
 
   virtual GURL GetURLForGraphicsContext3D();
 
@@ -803,6 +801,10 @@ class CONTENT_EXPORT RenderWidget
   // window rect.
   void ScreenRectToEmulatedIfNeeded(blink::WebRect* window_rect) const;
   void EmulatedToScreenRectIfNeeded(blink::WebRect* window_rect) const;
+
+  bool CreateWidget(int32_t opener_id,
+                    blink::WebPopupType popup_type,
+                    int32_t* routing_id);
 
   // Indicates whether this widget has focus.
   bool has_focus_;

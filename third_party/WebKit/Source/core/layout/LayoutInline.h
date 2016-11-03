@@ -211,6 +211,8 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
                            const HitTestLocation& locationInContainer,
                            const LayoutPoint& accumulatedOffset);
 
+  LayoutPoint firstLineBoxTopLeft() const;
+
   const char* name() const override { return "LayoutInline"; }
 
   LayoutRect debugRect() const override;
@@ -285,12 +287,12 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
   LayoutUnit offsetWidth() const final { return linesBoundingBox().width(); }
   LayoutUnit offsetHeight() const final { return linesBoundingBox().height(); }
 
-  LayoutRect absoluteClippedOverflowRect() const override;
+  LayoutRect absoluteVisualRect() const override;
 
   // This method differs from visualOverflowRect in that it doesn't include the
   // rects for culled inline boxes, which aren't necessary for paint
   // invalidation.
-  LayoutRect localOverflowRectForPaintInvalidation() const override;
+  LayoutRect localVisualRect() const override;
 
   bool mapToVisualRectInAncestorSpace(
       const LayoutBoxModelObject* ancestor,

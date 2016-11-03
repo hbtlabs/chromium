@@ -5,6 +5,7 @@
 #ifndef GPU_COMMAND_BUFFER_SERVICE_BUFFER_MANAGER_H_
 #define GPU_COMMAND_BUFFER_SERVICE_BUFFER_MANAGER_H_
 
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -318,14 +319,14 @@ class GPU_EXPORT BufferManager : public base::trace_event::MemoryDumpProvider {
   bool RequestBufferAccess(ErrorState* error_state,
                            Buffer* buffer,
                            const char* func_name,
-                           const char* message_tag);
+                           const char* error_message_format, ...);
   // Generates INVALID_OPERATION if offset + size is out of range.
   bool RequestBufferAccess(ErrorState* error_state,
                            Buffer* buffer,
                            GLintptr offset,
                            GLsizeiptr size,
                            const char* func_name,
-                           const char* message_tag);
+                           const char* error_message);
   // Returns false and generates INVALID_OPERATION if buffer at binding |ii|
   // doesn't exist, is mapped, or smaller than |variable_sizes[ii]| * |count|.
   // Return true otherwise.
@@ -336,10 +337,6 @@ class GPU_EXPORT BufferManager : public base::trace_event::MemoryDumpProvider {
       GLsizei count,
       const char* func_name,
       const char* message_tag);
-
-  uint32_t mapped_buffer_count() const {
-    return mapped_buffer_count_;
-  }
 
  private:
   friend class Buffer;
@@ -391,8 +388,13 @@ class GPU_EXPORT BufferManager : public base::trace_event::MemoryDumpProvider {
                GLenum usage,
                bool use_shadow);
 
-  void IncreaseMappedBufferCount();
-  void DecreaseMappedBufferCount();
+  // Same as public RequestBufferAccess taking similar arguments, but
+  // allows caller to assemble the va_list.
+  bool RequestBufferAccessV(ErrorState* error_state,
+                            Buffer* buffer,
+                            const char* func_name,
+                            const char* error_message_format,
+                            va_list varargs);
 
   std::unique_ptr<MemoryTypeTracker> memory_type_tracker_;
   MemoryTracker* memory_tracker_;
@@ -419,10 +421,6 @@ class GPU_EXPORT BufferManager : public base::trace_event::MemoryDumpProvider {
 
   bool lost_context_;
   bool use_client_side_arrays_for_stream_buffers_;
-
-  // Keep track of total mapped buffer count. In most use cases it should be 0,
-  // so we could bypass checking each individual buffer as an optimization.
-  uint32_t mapped_buffer_count_;
 
   DISALLOW_COPY_AND_ASSIGN(BufferManager);
 };

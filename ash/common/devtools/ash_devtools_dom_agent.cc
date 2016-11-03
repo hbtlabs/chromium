@@ -21,14 +21,15 @@ std::unique_ptr<DOM::Node> BuildNode(
     std::unique_ptr<Array<DOM::Node>> children) {
   static DOM::NodeId node_ids = 0;
   constexpr int kDomElementNodeType = 1;
-  return DOM::Node::create()
-      .setNodeId(node_ids++)
-      .setNodeName(name)
-      .setNodeType(kDomElementNodeType)
-      .setAttributes(std::move(attributes))
-      .setChildNodeCount(children->length())
-      .setChildren(std::move(children))
-      .build();
+  std::unique_ptr<DOM::Node> node = DOM::Node::create()
+                                        .setNodeId(node_ids++)
+                                        .setNodeName(name)
+                                        .setNodeType(kDomElementNodeType)
+                                        .setAttributes(std::move(attributes))
+                                        .build();
+  node->setChildNodeCount(children->length());
+  node->setChildren(std::move(children));
+  return node;
 }
 
 std::unique_ptr<Array<std::string>> GetAttributes(const ash::WmWindow* window) {
@@ -98,10 +99,18 @@ AshDevToolsDOMAgent::BuildInitialTree() {
   return BuildNode("root", nullptr, std::move(children));
 }
 
-void AshDevToolsDOMAgent::getDocument(
-    ui::devtools::protocol::ErrorString* error,
+ui::devtools::protocol::Response AshDevToolsDOMAgent::enable() {
+  return ui::devtools::protocol::Response::OK();
+}
+
+ui::devtools::protocol::Response AshDevToolsDOMAgent::disable() {
+  return ui::devtools::protocol::Response::OK();
+}
+
+ui::devtools::protocol::Response AshDevToolsDOMAgent::getDocument(
     std::unique_ptr<ui::devtools::protocol::DOM::Node>* out_root) {
   *out_root = BuildInitialTree();
+  return ui::devtools::protocol::Response::OK();
 }
 
 }  // namespace devtools

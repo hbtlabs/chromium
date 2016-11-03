@@ -38,7 +38,6 @@ ServiceWorkerRegistration::ServiceWorkerRegistration(
       is_uninstalling_(false),
       is_uninstalled_(false),
       should_activate_when_ready_(false),
-      is_navigation_preload_enabled_(false),
       resources_total_size_bytes_(0),
       context_(context),
       task_runner_(base::ThreadTaskRunnerHandle::Get()) {
@@ -49,11 +48,6 @@ ServiceWorkerRegistration::ServiceWorkerRegistration(
 }
 
 ServiceWorkerRegistration::~ServiceWorkerRegistration() {
-  // Can be false during shutdown, in which case the DCHECK_CURRENTLY_ON below
-  // would cry.
-  if (!BrowserThread::IsThreadInitialized(BrowserThread::IO))
-    return;
-
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(!listeners_.might_have_observers());
   if (context_)
@@ -123,8 +117,7 @@ void ServiceWorkerRegistration::SetActiveVersion(
   active_version_ = version;
   if (active_version_) {
     active_version_->AddListener(this);
-    active_version_->set_navigation_preload_enabled(
-        is_navigation_preload_enabled_);
+    active_version_->SetNavigationPreloadState(navigation_preload_state_);
   }
   mask.add(ChangedVersionAttributesMask::ACTIVE_VERSION);
 
@@ -399,11 +392,20 @@ void ServiceWorkerRegistration::SetTaskRunnerForTest(
 }
 
 void ServiceWorkerRegistration::EnableNavigationPreload(bool enable) {
-  if (is_navigation_preload_enabled_ == enable)
+  if (navigation_preload_state_.enabled == enable)
     return;
-  is_navigation_preload_enabled_ = enable;
+  navigation_preload_state_.enabled = enable;
   if (active_version_)
-    active_version_->set_navigation_preload_enabled(enable);
+    active_version_->SetNavigationPreloadState(navigation_preload_state_);
+}
+
+void ServiceWorkerRegistration::SetNavigationPreloadHeader(
+    const std::string& header) {
+  if (navigation_preload_state_.header == header)
+    return;
+  navigation_preload_state_.header = header;
+  if (active_version_)
+    active_version_->SetNavigationPreloadState(navigation_preload_state_);
 }
 
 void ServiceWorkerRegistration::RegisterRegistrationFinishedCallback(

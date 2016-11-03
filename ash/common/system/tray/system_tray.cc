@@ -10,7 +10,6 @@
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shelf/wm_shelf_util.h"
-#include "ash/common/system/cast/tray_cast.h"
 #include "ash/common/system/date/tray_date.h"
 #include "ash/common/system/date/tray_system_info.h"
 #include "ash/common/system/tiles/tray_tiles.h"
@@ -53,6 +52,7 @@
 #include "ash/common/system/chromeos/audio/tray_audio_chromeos.h"
 #include "ash/common/system/chromeos/bluetooth/tray_bluetooth.h"
 #include "ash/common/system/chromeos/brightness/tray_brightness.h"
+#include "ash/common/system/chromeos/cast/tray_cast.h"
 #include "ash/common/system/chromeos/enterprise/tray_enterprise.h"
 #include "ash/common/system/chromeos/media_security/multi_profile_media_tray_item.h"
 #include "ash/common/system/chromeos/network/tray_network.h"
@@ -213,6 +213,7 @@ SystemTray::SystemTray(WmShelf* wm_shelf)
       tray_cast_(nullptr),
       tray_date_(nullptr),
       tray_tiles_(nullptr),
+      tray_system_info_(nullptr),
       tray_update_(nullptr),
       screen_capture_tray_item_(nullptr),
       screen_share_tray_item_(nullptr) {
@@ -308,7 +309,8 @@ void SystemTray::CreateItems(SystemTrayDelegate* delegate) {
   if (use_material_design) {
     tray_tiles_ = new TrayTiles(this);
     AddTrayItem(tray_tiles_);
-    AddTrayItem(new TraySystemInfo(this));
+    tray_system_info_ = new TraySystemInfo(this);
+    AddTrayItem(tray_system_info_);
   } else {
     AddTrayItem(tray_date_);
   }
@@ -592,12 +594,11 @@ void SystemTray::ShowItems(const std::vector<SystemTrayItem*>& items,
     // (like network) replaces most of the menu.
     full_system_tray_menu_ = items.size() > 1;
     // The menu width is fixed, and it is a per language setting.
-    int menu_width =
-        std::max(MaterialDesignController::IsSystemTrayMenuMaterial()
-                     ? kMinimumSystemTrayMenuWidthMd
-                     : kMinimumSystemTrayMenuWidth,
-                 l10n_util::GetLocalizedContentsWidthInPixels(
-                     IDS_SYSTEM_TRAY_MENU_BUBBLE_WIDTH_PIXELS));
+    int menu_width = std::max(
+        MaterialDesignController::IsSystemTrayMenuMaterial()
+            ? kMinimumSystemTrayMenuWidthMd
+            : kMinimumSystemTrayMenuWidth,
+        WmShell::Get()->system_tray_delegate()->GetSystemTrayMenuWidth());
 
     TrayBubbleView::InitParams init_params(TrayBubbleView::ANCHOR_TYPE_TRAY,
                                            GetAnchorAlignment(), menu_width,
@@ -837,6 +838,14 @@ TrayCast* SystemTray::GetTrayCastForTesting() const {
 
 TrayDate* SystemTray::GetTrayDateForTesting() const {
   return tray_date_;
+}
+
+TraySystemInfo* SystemTray::GetTraySystemInfoForTesting() const {
+  return tray_system_info_;
+}
+
+TrayTiles* SystemTray::GetTrayTilesForTesting() const {
+  return tray_tiles_;
 }
 
 TrayUpdate* SystemTray::GetTrayUpdateForTesting() const {

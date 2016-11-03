@@ -2097,11 +2097,17 @@ void WebViewImpl::exitFullscreenForElement(Element* element) {
 }
 
 bool WebViewImpl::hasHorizontalScrollbar() {
-  return mainFrameImpl()->frameView()->horizontalScrollbar();
+  return mainFrameImpl()
+      ->frameView()
+      ->layoutViewportScrollableArea()
+      ->horizontalScrollbar();
 }
 
 bool WebViewImpl::hasVerticalScrollbar() {
-  return mainFrameImpl()->frameView()->verticalScrollbar();
+  return mainFrameImpl()
+      ->frameView()
+      ->layoutViewportScrollableArea()
+      ->verticalScrollbar();
 }
 
 const WebInputEvent* WebViewImpl::m_currentInputEvent = nullptr;
@@ -3621,10 +3627,7 @@ WebDragOperation WebViewImpl::dragTargetDragEnterOrOver(
                     static_cast<DragOperation>(m_operationsAllowed));
 
   DragSession dragSession;
-  if (dragAction == DragEnter)
-    dragSession = m_page->dragController().dragEntered(&dragData);
-  else
-    dragSession = m_page->dragController().dragUpdated(&dragData);
+  dragSession = m_page->dragController().dragEnteredOrUpdated(&dragData);
 
   DragOperation dropEffect = dragSession.operation;
 
@@ -3979,8 +3982,11 @@ void WebViewImpl::setPageOverlayColor(WebColor color) {
   if (color == Color::transparent)
     return;
 
+  if (!mainFrameImpl())
+    return;
+
   m_pageColorOverlay =
-      PageOverlay::create(this, wrapUnique(new ColorOverlay(color)));
+      PageOverlay::create(mainFrameImpl(), wrapUnique(new ColorOverlay(color)));
   m_pageColorOverlay->update();
 }
 

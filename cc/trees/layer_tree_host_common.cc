@@ -380,13 +380,10 @@ static void ComputeInitialRenderSurfaceLayerList(
     }
     layer->set_is_drawn_render_surface_layer_list_member(false);
 
-    bool layer_is_drawn =
-        property_trees->effect_tree.Node(layer->effect_tree_index())->is_drawn;
     bool is_root = layer_tree_impl->IsRootLayer(layer);
-    bool skip_layer =
-        !is_root && draw_property_utils::LayerShouldBeSkipped(
-                        layer, layer_is_drawn, property_trees->transform_tree,
-                        property_trees->effect_tree);
+    bool skip_layer = !is_root && draw_property_utils::LayerShouldBeSkipped(
+                                      layer, property_trees->transform_tree,
+                                      property_trees->effect_tree);
     if (skip_layer)
       continue;
 
@@ -435,6 +432,8 @@ static void ComputeInitialRenderSurfaceLayerList(
             surface->render_target()->nearest_occlusion_immune_ancestor());
       }
     }
+    bool layer_is_drawn =
+        property_trees->effect_tree.Node(layer->effect_tree_index())->is_drawn;
     bool layer_should_be_drawn = draw_property_utils::LayerNeedsUpdate(
         layer, layer_is_drawn, property_trees);
     if (!layer_should_be_drawn)
@@ -604,12 +603,16 @@ void CalculateDrawPropertiesInternal(
           inputs->elastic_overscroll);
       // Similarly, the device viewport and device transform are shared
       // by both trees.
-      inputs->property_trees->clip_tree.SetViewportClip(
+      PropertyTrees* property_trees = inputs->property_trees;
+      property_trees->clip_tree.SetViewportClip(
           gfx::RectF(gfx::SizeF(inputs->device_viewport_size)));
-      inputs->property_trees->transform_tree.SetDeviceTransform(
+      float page_scale_factor_for_root =
+          inputs->page_scale_layer == inputs->root_layer
+              ? inputs->page_scale_factor
+              : 1.f;
+      property_trees->transform_tree.SetRootTransformsAndScales(
+          inputs->device_scale_factor, page_scale_factor_for_root,
           inputs->device_transform, inputs->root_layer->position());
-      inputs->property_trees->transform_tree.SetDeviceTransformScaleFactor(
-          inputs->device_transform);
       draw_property_utils::ComputeVisibleRects(
           inputs->root_layer, inputs->property_trees,
           inputs->can_render_to_separate_surface, &visible_layer_list);

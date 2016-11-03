@@ -84,7 +84,7 @@ TEST(PropertyTreeSerializationTest, TransformTreeSerialization) {
   gfx::Transform transform =
       gfx::Transform(1.05f, 2.15f, 3.14f, 4.13f, 5.12f, 6.11f, 7.1f, 8.9f, 9.8f,
                      10.7f, 11.6f, 12.5f, 13.4f, 14.3f, 15.2f, 16.1f);
-  original.SetDeviceTransformScaleFactor(transform);
+  original.SetRootTransformsAndScales(0.6f, 1.f, transform, gfx::PointF());
   original.AddNodeAffectedByInnerViewportBoundsDelta(0);
   original.AddNodeAffectedByOuterViewportBoundsDelta(1);
 
@@ -366,7 +366,9 @@ class PropertyTreeTest : public testing::Test {
     new_tree.FromProtobuf(proto, &effect_id_to_index_map);
 
     EXPECT_EQ(*effect_tree, new_tree);
+    PropertyTrees* property_trees = effect_tree->property_trees();
     *effect_tree = new_tree;
+    effect_tree->SetPropertyTrees(property_trees);
   }
 
  private:
@@ -388,29 +390,24 @@ class PropertyTreeTestComputeTransformRoot : public PropertyTreeTest {
   void StartTest() override {
     PropertyTrees property_trees;
     TransformTree& tree = property_trees.transform_tree;
-    TransformNode& root = *tree.Node(0);
-    root.id = 0;
-    root.local.Translate(2, 2);
-    tree.SetTargetId(root.id, 0);
+    TransformNode contents_root;
+    contents_root.local.Translate(2, 2);
+    contents_root.source_node_id = 0;
+    contents_root.id = tree.Insert(contents_root, 0);
+    tree.SetTargetId(contents_root.id, 0);
     SetupTransformTreeForTest(&tree);
-    tree.UpdateTransforms(0);
+    tree.UpdateTransforms(1);
 
     gfx::Transform expected;
     gfx::Transform transform;
-    bool success = tree.ComputeTransformForTesting(0, 0, &transform);
-    EXPECT_TRUE(success);
-    EXPECT_TRANSFORMATION_MATRIX_EQ(expected, transform);
-
-    transform.MakeIdentity();
     expected.Translate(2, 2);
-    success = tree.ComputeTransformForTesting(0, -1, &transform);
-    EXPECT_TRUE(success);
+    tree.CombineTransformsBetween(1, 0, &transform);
     EXPECT_TRANSFORMATION_MATRIX_EQ(expected, transform);
 
     transform.MakeIdentity();
     expected.MakeIdentity();
     expected.Translate(-2, -2);
-    success = tree.ComputeTransformForTesting(-1, 0, &transform);
+    bool success = tree.CombineInversesBetween(0, 1, &transform);
     EXPECT_TRUE(success);
     EXPECT_TRANSFORMATION_MATRIX_EQ(expected, transform);
   }
@@ -424,46 +421,46 @@ class PropertyTreeTestComputeTransformChild : public PropertyTreeTest {
   void StartTest() override {
     PropertyTrees property_trees;
     TransformTree& tree = property_trees.transform_tree;
-    TransformNode& root = *tree.Node(0);
-    root.local.Translate(2, 2);
-    tree.SetTargetId(root.id, 0);
-    tree.UpdateTransforms(0);
+    TransformNode contents_root;
+    contents_root.local.Translate(2, 2);
+    contents_root.source_node_id = 0;
+    contents_root.id = tree.Insert(contents_root, 0);
+    tree.SetTargetId(contents_root.id, 0);
+    tree.UpdateTransforms(contents_root.id);
 
     TransformNode child;
     child.local.Translate(3, 3);
-    child.source_node_id = 0;
-    child.id = tree.Insert(child, 0);
+    child.source_node_id = 1;
+    child.id = tree.Insert(child, contents_root.id);
     tree.SetTargetId(child.id, 0);
 
     SetupTransformTreeForTest(&tree);
-    tree.UpdateTransforms(1);
+    tree.UpdateTransforms(child.id);
 
     gfx::Transform expected;
     gfx::Transform transform;
 
     expected.Translate(3, 3);
-    bool success = tree.ComputeTransformForTesting(1, 0, &transform);
-    EXPECT_TRUE(success);
+    tree.CombineTransformsBetween(2, 1, &transform);
     EXPECT_TRANSFORMATION_MATRIX_EQ(expected, transform);
 
     transform.MakeIdentity();
     expected.MakeIdentity();
     expected.Translate(-3, -3);
-    success = tree.ComputeTransformForTesting(0, 1, &transform);
+    bool success = tree.CombineInversesBetween(1, 2, &transform);
     EXPECT_TRUE(success);
     EXPECT_TRANSFORMATION_MATRIX_EQ(expected, transform);
 
     transform.MakeIdentity();
     expected.MakeIdentity();
     expected.Translate(5, 5);
-    success = tree.ComputeTransformForTesting(1, -1, &transform);
-    EXPECT_TRUE(success);
+    tree.CombineTransformsBetween(2, 0, &transform);
     EXPECT_TRANSFORMATION_MATRIX_EQ(expected, transform);
 
     transform.MakeIdentity();
     expected.MakeIdentity();
     expected.Translate(-5, -5);
-    success = tree.ComputeTransformForTesting(-1, 1, &transform);
+    success = tree.CombineInversesBetween(0, 2, &transform);
     EXPECT_TRUE(success);
     EXPECT_TRANSFORMATION_MATRIX_EQ(expected, transform);
   }
@@ -477,40 +474,41 @@ class PropertyTreeTestComputeTransformSibling : public PropertyTreeTest {
   void StartTest() override {
     PropertyTrees property_trees;
     TransformTree& tree = property_trees.transform_tree;
-    TransformNode& root = *tree.Node(0);
-    root.local.Translate(2, 2);
-    tree.SetTargetId(root.id, 0);
-    tree.UpdateTransforms(0);
+    TransformNode contents_root;
+    contents_root.source_node_id = 0;
+    contents_root.local.Translate(2, 2);
+    contents_root.id = tree.Insert(contents_root, 0);
+    tree.SetTargetId(contents_root.id, 0);
+    tree.UpdateTransforms(1);
 
     TransformNode child;
     child.local.Translate(3, 3);
-    child.source_node_id = 0;
-    child.id = tree.Insert(child, 0);
+    child.source_node_id = 1;
+    child.id = tree.Insert(child, 1);
     tree.SetTargetId(child.id, 0);
 
     TransformNode sibling;
     sibling.local.Translate(7, 7);
-    sibling.source_node_id = 0;
-    sibling.id = tree.Insert(sibling, 0);
+    sibling.source_node_id = 1;
+    sibling.id = tree.Insert(sibling, 1);
     tree.SetTargetId(sibling.id, 0);
 
     SetupTransformTreeForTest(&tree);
 
-    tree.UpdateTransforms(1);
     tree.UpdateTransforms(2);
+    tree.UpdateTransforms(3);
 
     gfx::Transform expected;
     gfx::Transform transform;
 
     expected.Translate(4, 4);
-    bool success = tree.ComputeTransformForTesting(2, 1, &transform);
-    EXPECT_TRUE(success);
+    tree.CombineTransformsBetween(3, 2, &transform);
     EXPECT_TRANSFORMATION_MATRIX_EQ(expected, transform);
 
     transform.MakeIdentity();
     expected.MakeIdentity();
     expected.Translate(-4, -4);
-    success = tree.ComputeTransformForTesting(1, 2, &transform);
+    bool success = tree.CombineInversesBetween(2, 3, &transform);
     EXPECT_TRUE(success);
     EXPECT_TRANSFORMATION_MATRIX_EQ(expected, transform);
   }
@@ -534,47 +532,48 @@ class PropertyTreeTestComputeTransformSiblingSingularAncestor
     // transforms between these nodes.
     PropertyTrees property_trees;
     TransformTree& tree = property_trees.transform_tree;
-    TransformNode& root = *tree.Node(0);
-    root.local.Translate(2, 2);
-    tree.SetTargetId(root.id, 0);
-    tree.UpdateTransforms(0);
+    TransformNode contents_root;
+    contents_root.local.Translate(2, 2);
+    contents_root.source_node_id = 0;
+    contents_root.id = tree.Insert(contents_root, 0);
+    tree.SetTargetId(contents_root.id, 0);
+    tree.UpdateTransforms(1);
 
     TransformNode singular;
     singular.local.matrix().set(2, 2, 0.0);
-    singular.source_node_id = 0;
-    singular.id = tree.Insert(singular, 0);
+    singular.source_node_id = 1;
+    singular.id = tree.Insert(singular, 1);
     tree.SetTargetId(singular.id, 0);
 
     TransformNode child;
     child.local.Translate(3, 3);
-    child.source_node_id = 1;
-    child.id = tree.Insert(child, 1);
+    child.source_node_id = 2;
+    child.id = tree.Insert(child, 2);
     tree.SetTargetId(child.id, 0);
 
     TransformNode sibling;
     sibling.local.Translate(7, 7);
-    sibling.source_node_id = 1;
-    sibling.id = tree.Insert(sibling, 1);
+    sibling.source_node_id = 2;
+    sibling.id = tree.Insert(sibling, 2);
     tree.SetTargetId(sibling.id, 0);
 
     SetupTransformTreeForTest(&tree);
 
-    tree.UpdateTransforms(1);
     tree.UpdateTransforms(2);
     tree.UpdateTransforms(3);
+    tree.UpdateTransforms(4);
 
     gfx::Transform expected;
     gfx::Transform transform;
 
     expected.Translate(4, 4);
-    bool success = tree.ComputeTransformForTesting(3, 2, &transform);
-    EXPECT_TRUE(success);
+    tree.CombineTransformsBetween(4, 3, &transform);
     EXPECT_TRANSFORMATION_MATRIX_EQ(expected, transform);
 
     transform.MakeIdentity();
     expected.MakeIdentity();
     expected.Translate(-4, -4);
-    success = tree.ComputeTransformForTesting(2, 3, &transform);
+    bool success = tree.CombineInversesBetween(3, 4, &transform);
     EXPECT_TRUE(success);
     EXPECT_TRANSFORMATION_MATRIX_EQ(expected, transform);
   }
@@ -653,9 +652,7 @@ class PropertyTreeTestTransformsWithFlattening : public PropertyTreeTest {
                                     tree.ToScreen(grand_child));
 
     gfx::Transform grand_child_to_child;
-    bool success = tree.ComputeTransformForTesting(grand_child, child,
-                                                   &grand_child_to_child);
-    EXPECT_TRUE(success);
+    tree.CombineTransformsBetween(grand_child, child, &grand_child_to_child);
     EXPECT_TRANSFORMATION_MATRIX_EQ(rotation_about_x, grand_child_to_child);
 
     // Remove flattening at grand_child, and recompute transforms.
@@ -672,9 +669,8 @@ class PropertyTreeTestTransformsWithFlattening : public PropertyTreeTest {
         flattened_rotation_about_x * rotation_about_x * rotation_about_x,
         tree.ToScreen(grand_child));
 
-    success = tree.ComputeTransformForTesting(grand_child, child,
-                                              &grand_child_to_child);
-    EXPECT_TRUE(success);
+    grand_child_to_child.MakeIdentity();
+    tree.CombineTransformsBetween(grand_child, child, &grand_child_to_child);
     EXPECT_TRANSFORMATION_MATRIX_EQ(rotation_about_x, grand_child_to_child);
   }
 };
@@ -687,19 +683,21 @@ class PropertyTreeTestMultiplicationOrder : public PropertyTreeTest {
   void StartTest() override {
     PropertyTrees property_trees;
     TransformTree& tree = property_trees.transform_tree;
-    TransformNode& root = *tree.Node(0);
-    root.local.Translate(2, 2);
-    tree.SetTargetId(root.id, 0);
-    tree.UpdateTransforms(0);
+    TransformNode contents_root;
+    contents_root.local.Translate(2, 2);
+    contents_root.source_node_id = 0;
+    contents_root.id = tree.Insert(contents_root, 0);
+    tree.SetTargetId(contents_root.id, 0);
+    tree.UpdateTransforms(1);
 
     TransformNode child;
     child.local.Scale(2, 2);
-    child.source_node_id = 0;
-    child.id = tree.Insert(child, 0);
+    child.source_node_id = 1;
+    child.id = tree.Insert(child, 1);
     tree.SetTargetId(child.id, 0);
 
     SetupTransformTreeForTest(&tree);
-    tree.UpdateTransforms(1);
+    tree.UpdateTransforms(2);
 
     gfx::Transform expected;
     expected.Translate(2, 2);
@@ -708,11 +706,10 @@ class PropertyTreeTestMultiplicationOrder : public PropertyTreeTest {
     gfx::Transform transform;
     gfx::Transform inverse;
 
-    bool success = tree.ComputeTransformForTesting(1, -1, &transform);
-    EXPECT_TRUE(success);
+    tree.CombineTransformsBetween(2, 0, &transform);
     EXPECT_TRANSFORMATION_MATRIX_EQ(expected, transform);
 
-    success = tree.ComputeTransformForTesting(-1, 1, &inverse);
+    bool success = tree.CombineInversesBetween(0, 2, &inverse);
     EXPECT_TRUE(success);
 
     transform = transform * inverse;
@@ -729,18 +726,20 @@ class PropertyTreeTestComputeTransformWithUninvertibleTransform
   void StartTest() override {
     PropertyTrees property_trees;
     TransformTree& tree = property_trees.transform_tree;
-    TransformNode& root = *tree.Node(0);
-    tree.SetTargetId(root.id, 0);
-    tree.UpdateTransforms(0);
+    TransformNode contents_root;
+    contents_root.source_node_id = 0;
+    contents_root.id = tree.Insert(contents_root, 0);
+    tree.SetTargetId(contents_root.id, 0);
+    tree.UpdateTransforms(1);
 
     TransformNode child;
     child.local.Scale(0, 0);
-    child.source_node_id = 0;
-    child.id = tree.Insert(child, 0);
+    child.source_node_id = 1;
+    child.id = tree.Insert(child, 1);
     tree.SetTargetId(child.id, 0);
 
     SetupTransformTreeForTest(&tree);
-    tree.UpdateTransforms(1);
+    tree.UpdateTransforms(2);
 
     gfx::Transform expected;
     expected.Scale(0, 0);
@@ -748,13 +747,12 @@ class PropertyTreeTestComputeTransformWithUninvertibleTransform
     gfx::Transform transform;
     gfx::Transform inverse;
 
-    bool success = tree.ComputeTransformForTesting(1, 0, &transform);
-    EXPECT_TRUE(success);
+    tree.CombineTransformsBetween(2, 1, &transform);
     EXPECT_TRANSFORMATION_MATRIX_EQ(expected, transform);
 
     // To compute this would require inverting the 0 matrix, so we cannot
     // succeed.
-    success = tree.ComputeTransformForTesting(0, 1, &inverse);
+    bool success = tree.CombineInversesBetween(1, 2, &inverse);
     EXPECT_FALSE(success);
   }
 };
@@ -768,14 +766,16 @@ class PropertyTreeTestComputeTransformToTargetWithZeroSurfaceContentsScale
   void StartTest() override {
     PropertyTrees property_trees;
     TransformTree& tree = property_trees.transform_tree;
-    TransformNode& root = *tree.Node(0);
-    tree.SetTargetId(root.id, 0);
-    tree.UpdateTransforms(0);
+    TransformNode contents_root;
+    contents_root.source_node_id = 0;
+    contents_root.id = tree.Insert(contents_root, 0);
+    tree.SetTargetId(contents_root.id, 0);
+    tree.UpdateTransforms(1);
 
     TransformNode grand_parent;
     grand_parent.local.Scale(2.f, 0.f);
-    grand_parent.source_node_id = 0;
-    int grand_parent_id = tree.Insert(grand_parent, 0);
+    grand_parent.source_node_id = 1;
+    int grand_parent_id = tree.Insert(grand_parent, 1);
     tree.SetTargetId(grand_parent_id, 0);
     tree.SetContentTargetId(grand_parent_id, grand_parent_id);
     tree.UpdateTransforms(grand_parent_id);
@@ -801,9 +801,7 @@ class PropertyTreeTestComputeTransformToTargetWithZeroSurfaceContentsScale
     expected_transform.Translate(4.f, 5.f);
 
     gfx::Transform transform;
-    bool success =
-        tree.ComputeTransformForTesting(child_id, grand_parent_id, &transform);
-    EXPECT_TRUE(success);
+    tree.CombineTransformsBetween(child_id, grand_parent_id, &transform);
     EXPECT_TRANSFORMATION_MATRIX_EQ(expected_transform, transform);
 
     tree.Node(grand_parent_id)->local.MakeIdentity();
@@ -814,9 +812,8 @@ class PropertyTreeTestComputeTransformToTargetWithZeroSurfaceContentsScale
 
     draw_property_utils::ComputeTransforms(&tree);
 
-    success =
-        tree.ComputeTransformForTesting(child_id, grand_parent_id, &transform);
-    EXPECT_TRUE(success);
+    transform.MakeIdentity();
+    tree.CombineTransformsBetween(child_id, grand_parent_id, &transform);
     EXPECT_TRANSFORMATION_MATRIX_EQ(expected_transform, transform);
 
     tree.Node(grand_parent_id)->local.MakeIdentity();
@@ -827,9 +824,8 @@ class PropertyTreeTestComputeTransformToTargetWithZeroSurfaceContentsScale
 
     draw_property_utils::ComputeTransforms(&tree);
 
-    success =
-        tree.ComputeTransformForTesting(child_id, grand_parent_id, &transform);
-    EXPECT_TRUE(success);
+    transform.MakeIdentity();
+    tree.CombineTransformsBetween(child_id, grand_parent_id, &transform);
     EXPECT_TRANSFORMATION_MATRIX_EQ(expected_transform, transform);
   }
 };
@@ -876,9 +872,7 @@ class PropertyTreeTestFlatteningWhenDestinationHasOnlyFlatAncestors
     flattened_rotation_about_x.FlattenTo2d();
 
     gfx::Transform grand_child_to_parent;
-    bool success = tree.ComputeTransformForTesting(grand_child, parent,
-                                                   &grand_child_to_parent);
-    EXPECT_TRUE(success);
+    tree.CombineTransformsBetween(grand_child, parent, &grand_child_to_parent);
     EXPECT_TRANSFORMATION_MATRIX_EQ(flattened_rotation_about_x,
                                     grand_child_to_parent);
   }
@@ -892,7 +886,8 @@ class PropertyTreeTestScreenSpaceOpacityUpdateTest : public PropertyTreeTest {
   void StartTest() override {
     // This tests that screen space opacity is updated for the subtree when
     // opacity of a node changes.
-    EffectTree tree;
+    PropertyTrees property_trees;
+    EffectTree& tree = property_trees.effect_tree;
 
     int parent = tree.Insert(EffectNode(), 0);
     int child = tree.Insert(EffectNode(), parent);
@@ -981,6 +976,8 @@ class PropertyTreeTestSingularTransformSnapTest : public PropertyTreeTest {
     int parent = tree.Insert(TransformNode(), 0);
     int effect_parent = effect_tree.Insert(EffectNode(), 0);
     effect_tree.Node(effect_parent)->has_render_surface = true;
+    effect_tree.Node(effect_parent)->surface_contents_scale =
+        gfx::Vector2dF(1.f, 1.f);
     tree.SetTargetId(parent, parent);
     tree.Node(parent)->scrolls = true;
     tree.Node(parent)->source_node_id = 0;

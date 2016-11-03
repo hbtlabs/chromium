@@ -207,12 +207,12 @@ bool LayoutTextControl::hasValidAvgCharWidth(const SimpleFontData* fontData,
   // Some fonts match avgCharWidth to CJK full-width characters.
   // Heuristic check to avoid such fonts.
   DCHECK(fontData);
-  if (fontData) {
-    const FontMetrics& metrics = fontData->getFontMetrics();
-    if (metrics.hasZeroWidth() &&
-        fontData->avgCharWidth() > metrics.zeroWidth() * 1.7)
-      return false;
-  }
+  if (!fontData)
+    return false;
+  const FontMetrics& metrics = fontData->getFontMetrics();
+  if (metrics.hasZeroWidth() &&
+      fontData->avgCharWidth() > metrics.zeroWidth() * 1.7)
+    return false;
 
   static HashSet<AtomicString>* fontFamiliesWithInvalidCharWidthMap = nullptr;
 
@@ -330,6 +330,34 @@ LayoutObject* LayoutTextControl::layoutSpecialExcludedChild(
   if (relayoutChildren)
     layoutScope.setChildNeedsLayout(placeholderLayoutObject);
   return placeholderLayoutObject;
+}
+
+int LayoutTextControl::firstLineBoxBaseline() const {
+  int result = LayoutBlock::firstLineBoxBaseline();
+  if (result != -1)
+    return result;
+
+  // When the text is empty, |LayoutBlock::firstLineBoxBaseline()| cannot
+  // compute the baseline because lineboxes do not exist.
+  Element* innerEditor = innerEditorElement();
+  if (!innerEditor || !innerEditor->layoutObject())
+    return -1;
+
+  LayoutBlock* innerEditorLayoutObject =
+      toLayoutBlock(innerEditor->layoutObject());
+  const SimpleFontData* fontData =
+      innerEditorLayoutObject->style(true)->font().primaryFont();
+  DCHECK(fontData);
+  if (!fontData)
+    return -1;
+
+  LayoutUnit baseline(fontData->getFontMetrics().ascent(AlphabeticBaseline));
+  for (LayoutObject* box = innerEditorLayoutObject; box && box != this;
+       box = box->parent()) {
+    if (box->isBox())
+      baseline += toLayoutBox(box)->logicalTop();
+  }
+  return baseline.toInt();
 }
 
 }  // namespace blink

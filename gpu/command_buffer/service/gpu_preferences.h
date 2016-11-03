@@ -95,6 +95,9 @@ struct GPU_EXPORT GpuPreferences {
   // Enable GPU service logging.
   bool enable_gpu_service_logging_gpu = false;
 
+  // Enable logging of GPU driver debug messages.
+  bool enable_gpu_driver_debug_logging = false;
+
   // Turn off gpu program caching
   bool disable_gpu_program_cache = false;
 
@@ -132,7 +135,7 @@ struct GPU_EXPORT GpuPreferences {
   bool enable_gpu_service_tracing = false;
 
   // Enable OpenGL ES 3 APIs without proper service side validation.
-  bool enable_unsafe_es3_apis = false;
+  bool enable_unsafe_es3_apis = true;
 
   // Use the Pass-through command decoder, skipping all validation and state
   // tracking.

@@ -61,6 +61,7 @@
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/net/network_connect_delegate_chromeos.h"
 #include "chrome/browser/chromeos/net/network_portal_detector_impl.h"
+#include "chrome/browser/chromeos/net/network_pref_state_observer.h"
 #include "chrome/browser/chromeos/net/wake_on_wifi_manager.h"
 #include "chrome/browser/chromeos/options/cert_library.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
@@ -545,7 +546,8 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
     // In case of multi-profiles --login-profile will contain user_id_hash.
     std::string user_id_hash =
         parsed_command_line().GetSwitchValueASCII(switches::kLoginProfile);
-    user_manager->UserLoggedIn(account_id, user_id_hash, true);
+    session_manager::SessionManager::Get()->CreateSessionForRestart(
+        account_id, user_id_hash);
     VLOG(1) << "Relaunching browser for user: " << account_id.Serialize()
             << " with hash: " << user_id_hash;
   }
@@ -651,6 +653,9 @@ void ChromeBrowserMainPartsChromeos::PostProfileInit() {
     if (!is_official_build || StartupUtils::IsEulaAccepted())
       network_portal_detector::GetInstance()->Enable(true);
   }
+
+  // Initialize an observer to update NetworkHandler's pref based services.
+  network_pref_state_observer_ = base::MakeUnique<NetworkPrefStateObserver>();
 
   // Initialize input methods.
   input_method::InputMethodManager* manager =
@@ -795,6 +800,7 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
 
   // We should remove observers attached to D-Bus clients before
   // DBusThreadManager is shut down.
+  network_pref_state_observer_.reset();
   extension_volume_observer_.reset();
   peripheral_battery_observer_.reset();
   power_prefs_.reset();

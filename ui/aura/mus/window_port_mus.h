@@ -13,8 +13,10 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "services/ui/public/interfaces/cursor.mojom.h"
+#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/aura_export.h"
 #include "ui/aura/mus/mus_types.h"
+#include "ui/aura/mus/window_compositor_frame_sink.h"
 #include "ui/aura/mus/window_mus.h"
 #include "ui/aura/window_port.h"
 #include "ui/gfx/geometry/rect.h"
@@ -36,9 +38,8 @@ class WindowTreeClientPrivate;
 // calling back to WindowTreeClient.
 class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
  public:
-  // See WindowMus's constructor for details on |create_remote_window|.
-  explicit WindowPortMus(WindowTreeClient* client,
-                         bool create_remote_window = true);
+  // See WindowMus's constructor for details on |window_mus_type|.
+  WindowPortMus(WindowTreeClient* client, WindowMusType window_mus_type);
   ~WindowPortMus() override;
 
   static WindowPortMus* Get(Window* window);
@@ -51,6 +52,16 @@ class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
 
   ui::mojom::Cursor predefined_cursor() const { return predefined_cursor_; }
   void SetPredefinedCursor(ui::mojom::Cursor cursor_id);
+
+  std::unique_ptr<WindowCompositorFrameSink> RequestCompositorFrameSink(
+      ui::mojom::CompositorFrameSinkType type,
+      scoped_refptr<cc::ContextProvider> context_provider,
+      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager);
+
+  void AttachCompositorFrameSink(
+      ui::mojom::CompositorFrameSinkType type,
+      std::unique_ptr<WindowCompositorFrameSinkBinding>
+          compositor_frame_sink_binding);
 
   void set_surface_id_handler(SurfaceIdHandler* surface_id_handler) {
     surface_id_handler_ = surface_id_handler;
@@ -190,8 +201,7 @@ class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
   void NotifyEmbeddedAppDisconnected() override;
 
   // WindowPort:
-  std::unique_ptr<WindowPortInitData> OnPreInit(Window* window) override;
-  void OnPostInit(std::unique_ptr<WindowPortInitData> init_data) override;
+  void OnPreInit(Window* window) override;
   void OnDeviceScaleFactorChanged(float device_scale_factor) override;
   void OnWillAddChild(Window* child) override;
   void OnWillRemoveChild(Window* child) override;

@@ -1219,10 +1219,7 @@ test("browser_tests") {
     # implemented. See crbug.com/611756
   ]
 
-  configs += [
-    "//build/config:precompiled_headers",
-    "//third_party/WebKit/public:debug_devtools",
-  ]
+  configs += [ "//build/config:precompiled_headers" ]
 
   deps = [
     ":browser_tests_runner",
@@ -1230,6 +1227,7 @@ test("browser_tests") {
     ":test_support",
     "//base",
     "//components/sync:test_support_model",
+    "//third_party/WebKit/public:features",
   ]
 
   data_deps = []
@@ -1406,7 +1404,6 @@ test("browser_tests") {
       "../browser/extensions/api/font_settings/font_settings_apitest.cc",
       "../browser/extensions/api/gcm/gcm_apitest.cc",
       "../browser/extensions/api/history/history_apitest.cc",
-      "../browser/extensions/api/hotword_private/hotword_private_apitest.cc",
       "../browser/extensions/api/i18n/i18n_apitest.cc",
       "../browser/extensions/api/identity/identity_apitest.cc",
       "../browser/extensions/api/idltest/idltest_apitest.cc",
@@ -2239,6 +2236,7 @@ test("browser_tests") {
         "../browser/chromeos/login/screens/mock_wrong_hwid_screen.h",
         "../browser/chromeos/login/screens/network_screen_browsertest.cc",
         "../browser/chromeos/login/screens/update_screen_browsertest.cc",
+        "../browser/chromeos/login/session/chrome_session_manager_browsertest.cc",
         "../browser/chromeos/login/session_login_browsertest.cc",
         "../browser/chromeos/login/signin/device_id_browsertest.cc",
         "../browser/chromeos/login/signin/oauth2_browsertest.cc",
@@ -2305,6 +2303,7 @@ test("browser_tests") {
         "../browser/download/notification/download_notification_browsertest.cc",
         "../browser/drive/drive_notification_manager_factory_browsertest.cc",
         "../browser/extensions/api/certificate_provider/certificate_provider_apitest.cc",
+        "../browser/extensions/api/hotword_private/hotword_private_apitest.cc",
         "../browser/extensions/api/vpn_provider/vpn_provider_apitest.cc",
         "../browser/ui/ash/launcher/arc_app_launcher_browsertest.cc",
         "../browser/ui/webui/options/chromeos/accounts_options_browsertest.cc",
@@ -3158,6 +3157,7 @@ test("unit_tests") {
     "../browser/net/spdyproxy/data_reduction_proxy_chrome_settings_unittest.cc",
     "../browser/net/spdyproxy/data_reduction_proxy_settings_unittest_android.cc",
     "../browser/net/url_info_unittest.cc",
+    "../browser/ntp_snippets/download_suggestions_provider_unittest.cc",
     "../browser/page_load_metrics/metrics_web_contents_observer_unittest.cc",
     "../browser/page_load_metrics/observers/aborts_page_load_metrics_observer_unittest.cc",
     "../browser/page_load_metrics/observers/core_page_load_metrics_observer_unittest.cc",
@@ -3168,6 +3168,7 @@ test("unit_tests") {
     "../browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.cc",
     "../browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.h",
     "../browser/page_load_metrics/observers/previews_page_load_metrics_observer_unittest.cc",
+    "../browser/page_load_metrics/observers/protocol_page_load_metrics_observer_unittest.cc",
     "../browser/page_load_metrics/observers/service_worker_page_load_metrics_observer_unittest.cc",
     "../browser/password_manager/chrome_password_manager_client_unittest.cc",
     "../browser/password_manager/password_manager_internals_service_unittest.cc",
@@ -3442,10 +3443,12 @@ test("unit_tests") {
 
   if (!is_ios) {
     deps += [
+      "//chrome/browser/ntp_snippets:test_support",
       "//components/autofill/content/renderer:test_support",
       "//components/data_reduction_proxy/core/browser:test_support",
       "//components/data_use_measurement/core",
       "//components/metrics/proto",
+      "//components/ntp_snippets:test_support",
       "//components/os_crypt:test_support",
       "//components/safe_browsing_db",
       "//components/safe_json:test_support",
@@ -3565,6 +3568,7 @@ test("unit_tests") {
       "../browser/ui/content_settings/content_setting_image_model_unittest.cc",
       "../browser/ui/exclusive_access/fullscreen_controller_state_unittest.cc",
       "../browser/ui/extensions/extension_action_view_controller_unittest.cc",
+      "../browser/ui/extensions/extension_message_bubble_bridge_unittest.cc",
       "../browser/ui/global_error/global_error_service_unittest.cc",
       "../browser/ui/omnibox/clipboard_utils_unittest.cc",
       "../browser/ui/omnibox/omnibox_controller_unittest.cc",
@@ -3769,6 +3773,7 @@ test("unit_tests") {
       "../browser/extensions/api/image_writer_private/write_from_url_operation_unittest.cc",
       "../browser/extensions/api/management/management_api_unittest.cc",
       "../browser/extensions/api/omnibox/omnibox_unittest.cc",
+      "../browser/extensions/api/passwords_private/passwords_private_delegate_impl_unittest.cc",
       "../browser/extensions/api/permissions/permissions_api_helpers_unittest.cc",
       "../browser/extensions/api/permissions/permissions_api_unittest.cc",
       "../browser/extensions/api/preference/preference_api_prefs_unittest.cc",

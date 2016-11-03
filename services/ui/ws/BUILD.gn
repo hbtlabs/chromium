@@ -113,6 +113,7 @@ static_library("lib") {
 
   deps = [
     "//gpu/command_buffer/client",
+    "//gpu/command_buffer/client:gles2_interface",
     "//gpu/ipc/client",
     "//gpu/ipc/common",
     "//services/ui/gpu",  # TODO(sad): Temporary until GPU process split.
@@ -122,7 +123,7 @@ static_library("lib") {
   public_deps = [
     "//base",
     "//cc",
-    "//cc/ipc:interfaces",
+    "//cc/ipc:internal_interfaces",
     "//cc/surfaces",
     "//cc/surfaces:surface_id",
     "//mojo/common:common_base",

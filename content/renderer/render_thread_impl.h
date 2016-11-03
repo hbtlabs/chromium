@@ -23,7 +23,6 @@
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
-#include "content/child/child_discardable_shared_memory_manager.h"
 #include "content/child/child_thread_impl.h"
 #include "content/child/memory/child_memory_coordinator_impl.h"
 #include "content/common/associated_interface_registry_impl.h"
@@ -207,7 +206,6 @@ class CONTENT_EXPORT RenderThreadImpl
   int64_t GetIdleNotificationDelayInMs() const override;
   void SetIdleNotificationDelayInMs(
       int64_t idle_notification_delay_in_ms) override;
-  void UpdateHistograms(int sequence_number) override;
   int PostTaskToAllWebWorkers(const base::Closure& closure) override;
   bool ResolveProxy(const GURL& url, std::string* proxy_list) override;
   base::WaitableEvent* GetShutdownEvent() override;

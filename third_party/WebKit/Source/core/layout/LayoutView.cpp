@@ -90,7 +90,6 @@ LayoutView::LayoutView(Document* document)
       m_selectionEnd(nullptr),
       m_selectionStartPos(-1),
       m_selectionEndPos(-1),
-      m_pageLogicalHeightChanged(false),
       m_layoutState(nullptr),
       m_layoutQuoteHead(nullptr),
       m_layoutCounterCount(0),
@@ -278,10 +277,7 @@ void LayoutView::layout() {
   if (!needsLayout())
     return;
 
-  LayoutState rootLayoutState(pageLogicalHeight(), pageLogicalHeightChanged(),
-                              *this);
-
-  m_pageLogicalHeightChanged = false;
+  LayoutState rootLayoutState(pageLogicalHeight(), *this);
 
   layoutContent();
 
@@ -318,7 +314,7 @@ LayoutRect LayoutView::visualOverflowRect() const {
   return layoutOverflowRect();
 }
 
-LayoutRect LayoutView::localOverflowRectForPaintInvalidation() const {
+LayoutRect LayoutView::localVisualRect() const {
   // TODO(wangxianzhu): This is only required without rootLayerScrolls (though
   // it is also correct but unnecessary with rootLayerScrolls) because of the
   // special LayoutView overflow model.
@@ -486,7 +482,7 @@ bool LayoutView::mapToVisualRectInAncestorSpace(
 
   if (LayoutBox* obj = owner->layoutBox()) {
     if (!(mode & InputIsInFrameCoordinates)) {
-      // Intersect the viewport with the paint invalidation rect.
+      // Intersect the viewport with the visual rect.
       LayoutRect viewRectangle = viewRect();
       if (visualRectFlags & EdgeInclusive) {
         if (!rect.inclusiveIntersect(viewRectangle))
@@ -678,9 +674,9 @@ void LayoutView::setSelection(
 
   // Blocks contain selected objects and fill gaps between them, either on the
   // left, right, or in between lines and blocks.
-  // In order to get the paint invalidation rect right, we have to examine left,
-  // middle, and right rects individually, since otherwise the union of those
-  // rects might remain the same even when changes have occurred.
+  // In order to get the visual rect right, we have to examine left, middle, and
+  // right rects individually, since otherwise the union of those rects might
+  // remain the same even when changes have occurred.
   typedef HashMap<LayoutBlock*, SelectionState> SelectedBlockMap;
   SelectedBlockMap oldSelectedBlocks;
   // FIXME: |newSelectedBlocks| doesn't really need to store the SelectionState,

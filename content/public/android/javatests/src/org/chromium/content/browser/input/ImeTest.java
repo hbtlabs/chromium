@@ -4,16 +4,13 @@
 
 package org.chromium.content.browser.input;
 
-import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.res.Configuration;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.PowerManager;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.text.InputType;
@@ -30,6 +27,7 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
+import org.chromium.base.test.util.UrlUtils;
 import org.chromium.base.test.util.parameter.Parameter;
 import org.chromium.base.test.util.parameter.ParameterizedTest;
 import org.chromium.content.browser.ContentViewCore;
@@ -101,8 +99,6 @@ public class ImeTest extends ContentShellTestBase {
         DOMUtils.waitForNonZeroNodeBounds(mWebContents, "input_text");
         boolean result = DOMUtils.clickNode(this, mContentViewCore, "input_text");
 
-        // TODO(yabinh): Sometimes |result| is false. We suspect it's because the screen is locked.
-        if (!result) assertScreenIsOn();
         assertEquals("Failed to dispatch touch event.", true, result);
         assertWaitForKeyboardStatus(true);
 
@@ -123,17 +119,34 @@ public class ImeTest extends ContentShellTestBase {
         resetAllStates();
     }
 
-    @TargetApi(Build.VERSION_CODES.KITKAT_WATCH)
-    @SuppressWarnings("deprecation")
-    private void assertScreenIsOn() {
-        PowerManager pm = (PowerManager) getInstrumentation().getContext().getSystemService(
-                Context.POWER_SERVICE);
+    private void fullyLoadUrl(final String url) throws Throwable {
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                getActivity().getActiveShell().loadUrl(url);
+            }
+        });
+        waitForActiveShellToBeDoneLoading();
+    }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
-            assertTrue("Many tests will fail if the screen is not on.", pm.isInteractive());
-        } else {
-            assertTrue("Many tests will fail if the screen is not on.", pm.isScreenOn());
-        }
+    @MediumTest
+    @Feature({"TextInput", "Main"})
+    @RetryOnFailure
+    public void testKeyboardDismissedWhenNavigating() throws Throwable {
+        assertWaitForKeyboardStatus(true);
+
+        // Hide keyboard when loading a new Url.
+        fullyLoadUrl(UrlUtils.getIsolatedTestFileUrl(INPUT_FORM_HTML));
+        assertWaitForKeyboardStatus(false);
+
+        DOMUtils.clickNode(this, mContentViewCore, "input_text");
+        assertWaitForKeyboardStatus(true);
+
+        // Hide keyboard when navigating.
+        final String code = "document.getElementById(\"link\").click()";
+        JavaScriptUtils.executeJavaScriptAndWaitForResult(
+                getContentViewCore().getWebContents(), code);
+        assertWaitForKeyboardStatus(false);
     }
 
     @MediumTest
@@ -654,21 +667,15 @@ public class ImeTest extends ContentShellTestBase {
         });
     }
 
-    private void reloadPage() {
+    private void reloadPage() throws Throwable {
         // Reload the page, then focus will be lost and keyboard should be hidden.
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                final String currentUrl = getContentViewCore().getWebContents().getUrl();
-                getActivity().getActiveShell().loadUrl(currentUrl);
-            }
-        });
+        fullyLoadUrl(getContentViewCore().getWebContents().getUrl());
     }
 
     @SmallTest
     @Feature({"TextInput"})
     @RetryOnFailure
-    public void testPhysicalKeyboard_AttachDetach() throws Exception {
+    public void testPhysicalKeyboard_AttachDetach() throws Throwable {
         attachPhysicalKeyboard();
         // We still call showSoftKeyboard, which will be ignored by physical keyboard.
         waitForKeyboardStates(1, 0, 1, new Integer[] {TextInputType.TEXT});
@@ -1266,7 +1273,7 @@ public class ImeTest extends ContentShellTestBase {
 
     @SmallTest
     @Feature({"TextInput"})
-    @RetryOnFailure
+    @DisabledTest(message = "crbug.com/661572")
     public void testPastePopupShowAndHide() throws Throwable {
         commitText("hello", 1);
         waitAndVerifyUpdateSelection(0, 5, 5, -1, -1);

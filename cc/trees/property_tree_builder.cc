@@ -20,6 +20,7 @@
 #include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/layer_tree_settings.h"
+#include "cc/trees/mutator_host.h"
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/transform_node.h"
 #include "ui/gfx/geometry/point_f.h"
@@ -244,56 +245,56 @@ static const gfx::Transform& Transform(LayerImpl* layer) {
 // Methods to query state from the AnimationHost ----------------------
 template <typename LayerType>
 bool OpacityIsAnimating(LayerType* layer) {
-  return layer->GetAnimationHost()->IsAnimatingOpacityProperty(
+  return layer->GetMutatorHost()->IsAnimatingOpacityProperty(
       layer->element_id(), layer->GetElementTypeForAnimation());
 }
 
 template <typename LayerType>
 bool HasPotentiallyRunningOpacityAnimation(LayerType* layer) {
-  return layer->GetAnimationHost()->HasPotentiallyRunningOpacityAnimation(
+  return layer->GetMutatorHost()->HasPotentiallyRunningOpacityAnimation(
       layer->element_id(), layer->GetElementTypeForAnimation());
 }
 
 template <typename LayerType>
 bool FilterIsAnimating(LayerType* layer) {
-  return layer->GetAnimationHost()->IsAnimatingFilterProperty(
+  return layer->GetMutatorHost()->IsAnimatingFilterProperty(
       layer->element_id(), layer->GetElementTypeForAnimation());
 }
 
 template <typename LayerType>
 bool HasPotentiallyRunningFilterAnimation(LayerType* layer) {
-  return layer->GetAnimationHost()->HasPotentiallyRunningFilterAnimation(
+  return layer->GetMutatorHost()->HasPotentiallyRunningFilterAnimation(
       layer->element_id(), layer->GetElementTypeForAnimation());
 }
 
 template <typename LayerType>
 bool TransformIsAnimating(LayerType* layer) {
-  return layer->GetAnimationHost()->IsAnimatingTransformProperty(
+  return layer->GetMutatorHost()->IsAnimatingTransformProperty(
       layer->element_id(), layer->GetElementTypeForAnimation());
 }
 
 template <typename LayerType>
 bool HasPotentiallyRunningTransformAnimation(LayerType* layer) {
-  return layer->GetAnimationHost()->HasPotentiallyRunningTransformAnimation(
+  return layer->GetMutatorHost()->HasPotentiallyRunningTransformAnimation(
       layer->element_id(), layer->GetElementTypeForAnimation());
 }
 
 template <typename LayerType>
 bool HasOnlyTranslationTransforms(LayerType* layer) {
-  return layer->GetAnimationHost()->HasOnlyTranslationTransforms(
+  return layer->GetMutatorHost()->HasOnlyTranslationTransforms(
       layer->element_id(), layer->GetElementTypeForAnimation());
 }
 
 template <typename LayerType>
 bool AnimationsPreserveAxisAlignment(LayerType* layer) {
-  return layer->GetAnimationHost()->AnimationsPreserveAxisAlignment(
+  return layer->GetMutatorHost()->AnimationsPreserveAxisAlignment(
       layer->element_id());
 }
 
 template <typename LayerType>
 bool HasAnyAnimationTargetingProperty(LayerType* layer,
                                       TargetProperty::Type property) {
-  return layer->GetAnimationHost()->HasAnyAnimationTargetingProperty(
+  return layer->GetMutatorHost()->HasAnyAnimationTargetingProperty(
       layer->element_id(), property);
 }
 
@@ -636,12 +637,10 @@ bool AddTransformNodeIfNeeded(
   }
 
   float post_local_scale_factor = 1.0f;
-  if (is_root)
-    post_local_scale_factor =
-        data_for_children->property_trees->transform_tree.device_scale_factor();
 
   if (is_page_scale_layer) {
-    post_local_scale_factor *= data_from_ancestor.page_scale_factor;
+    if (!is_root)
+      post_local_scale_factor *= data_from_ancestor.page_scale_factor;
     data_for_children->property_trees->transform_tree.set_page_scale_factor(
         data_from_ancestor.page_scale_factor);
   }
@@ -649,10 +648,14 @@ bool AddTransformNodeIfNeeded(
   node->source_node_id = source_index;
   node->post_local_scale_factor = post_local_scale_factor;
   if (is_root) {
-    data_for_children->property_trees->transform_tree.SetDeviceTransform(
-        *data_from_ancestor.device_transform, layer->position());
+    float page_scale_factor_for_root =
+        is_page_scale_layer ? data_from_ancestor.page_scale_factor : 1.f;
     data_for_children->property_trees->transform_tree
-        .SetDeviceTransformScaleFactor(*data_from_ancestor.device_transform);
+        .SetRootTransformsAndScales(data_for_children->property_trees
+                                        ->transform_tree.device_scale_factor(),
+                                    page_scale_factor_for_root,
+                                    *data_from_ancestor.device_transform,
+                                    layer->position());
   } else {
     node->source_offset = source_offset;
     node->update_post_local_transform(layer->position(),
@@ -1359,8 +1362,11 @@ void BuildPropertyTreesTopLevelInternal(
     draw_property_utils::UpdateElasticOverscroll(
         property_trees, overscroll_elasticity_layer, elastic_overscroll);
     property_trees->clip_tree.SetViewportClip(gfx::RectF(viewport));
-    property_trees->transform_tree.SetDeviceTransform(device_transform,
-                                                      root_layer->position());
+    float page_scale_factor_for_root =
+        page_scale_layer == root_layer ? page_scale_factor : 1.f;
+    property_trees->transform_tree.SetRootTransformsAndScales(
+        device_scale_factor, page_scale_factor_for_root, device_transform,
+        root_layer->position());
     return;
   }
 

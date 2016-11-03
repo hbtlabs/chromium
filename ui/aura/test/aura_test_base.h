@@ -57,8 +57,8 @@ class AuraTestBase : public testing::Test,
     window_tree_client_delegate_ = window_tree_client_delegate;
   }
 
-  // Turns on mus. Must be called before SetUp().
-  void EnableMus();
+  // Turns on mus with a test WindowTree. Must be called before SetUp().
+  void EnableMusWithTestWindowTree();
 
   // Used to configure the backend. This is exposed to make parameterized tests
   // easy to write. This *must* be called from SetUp().
@@ -87,7 +87,7 @@ class AuraTestBase : public testing::Test,
   void SetPropertyConverter(std::unique_ptr<PropertyConverter> helper);
 
   // WindowTreeClientDelegate:
-  void OnEmbed(Window* root) override;
+  void OnEmbed(std::unique_ptr<WindowTreeHostMus> window_tree_host) override;
   void OnUnembed(Window* root) override;
   void OnEmbedRootDestroyed(Window* root) override;
   void OnLostConnection(WindowTreeClient* client) override;
@@ -105,7 +105,8 @@ class AuraTestBase : public testing::Test,
       std::map<std::string, std::vector<uint8_t>>* properties) override;
   void OnWmClientJankinessChanged(const std::set<Window*>& client_windows,
                                   bool janky) override;
-  void OnWmNewDisplay(Window* window, const display::Display& display) override;
+  void OnWmNewDisplay(std::unique_ptr<WindowTreeHostMus> window_tree_host,
+                      const display::Display& display) override;
   void OnWmDisplayRemoved(Window* window) override;
   void OnWmDisplayModified(const display::Display& display) override;
   ui::mojom::EventResult OnAccelerator(uint32_t id,

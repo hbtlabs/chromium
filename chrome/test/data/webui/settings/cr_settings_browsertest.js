@@ -898,12 +898,36 @@ CrSettingsMainPageTest.prototype = {
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    'test_browser_proxy.js',
     'settings_main_test.js',
   ]),
 };
 
 TEST_F('CrSettingsMainPageTest', 'MAYBE_MainPage_All', function() {
   settings_main_page.registerTests();
+  mocha.run();
+});
+
+/**
+ * Test fixture for chrome/browser/resources/settings/search_settings.js.
+ * @constructor
+ * @extends {CrSettingsBrowserTest}
+ */
+function CrSettingsSearchTest() {}
+
+CrSettingsSearchTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload: 'chrome://md-settings/settings_page/settings_section.html',
+
+  /** @override */
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    'search_settings_test.js',
+  ]),
+};
+
+TEST_F('CrSettingsSearchTest', 'All', function() {
   mocha.run();
 });
 
@@ -971,24 +995,6 @@ TEST_F('CrSettingsMetricsReportingTest', 'All', function() {
 });
 
 GEN('#endif');
-
-function CrSettingsActionMenuTest() {}
-
-CrSettingsActionMenuTest.prototype = {
-  __proto__: CrSettingsBrowserTest.prototype,
-
-  /** @override */
-  browsePreload: 'chrome://md-settings/settings_action_menu.html',
-
-  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
-    'settings_action_menu_test.js',
-  ]),
-};
-
-TEST_F('CrSettingsActionMenuTest', 'All', function() {
-  mocha.run();
-});
-
 GEN('#if defined(OS_CHROMEOS)');
 
 /**

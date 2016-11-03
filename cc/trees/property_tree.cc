@@ -20,6 +20,7 @@
 #include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_impl.h"
+#include "cc/trees/mutator_host.h"
 #include "cc/trees/property_tree.h"
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/transform_node.h"
@@ -181,23 +182,6 @@ void TransformTree::set_needs_update(bool needs_update) {
   needs_update_ = needs_update;
 }
 
-bool TransformTree::ComputeTransformForTesting(
-    int source_id,
-    int dest_id,
-    gfx::Transform* transform) const {
-  transform->MakeIdentity();
-
-  if (source_id == dest_id)
-    return true;
-
-  if (source_id > dest_id) {
-    CombineTransformsBetween(source_id, dest_id, transform);
-    return true;
-  }
-
-  return CombineInversesBetween(source_id, dest_id, transform);
-}
-
 bool TransformTree::ComputeTranslation(int source_id,
                                        int dest_id,
                                        gfx::Transform* transform) const {
@@ -270,6 +254,7 @@ void TransformTree::ResetChangeTracking() {
 void TransformTree::UpdateTransforms(int id) {
   TransformNode* node = Node(id);
   TransformNode* parent_node = parent(node);
+  DCHECK(parent_node);
   TransformNode* target_node = Node(TargetId(id));
   TransformNode* source_node = Node(node->source_node_id);
   // TODO(flackr): Only dirty when scroll offset changes.
@@ -560,21 +545,15 @@ void TransformTree::UpdateLocalTransform(TransformNode* node) {
 void TransformTree::UpdateScreenSpaceTransform(TransformNode* node,
                                                TransformNode* parent_node,
                                                TransformNode* target_node) {
-  if (!parent_node) {
-    SetToScreen(node->id, node->to_parent);
-    node->ancestors_are_invertible = true;
-    node->to_screen_is_potentially_animated = false;
-    node->node_and_ancestors_are_flat = node->to_parent.IsFlat();
-  } else {
-    gfx::Transform to_screen_space_transform = ToScreen(parent_node->id);
-    if (node->flattens_inherited_transform)
-      to_screen_space_transform.FlattenTo2d();
-    to_screen_space_transform.PreconcatTransform(node->to_parent);
-    node->ancestors_are_invertible = parent_node->ancestors_are_invertible;
-    node->node_and_ancestors_are_flat =
-        parent_node->node_and_ancestors_are_flat && node->to_parent.IsFlat();
-    SetToScreen(node->id, to_screen_space_transform);
-  }
+  DCHECK(parent_node);
+  gfx::Transform to_screen_space_transform = ToScreen(parent_node->id);
+  if (node->flattens_inherited_transform)
+    to_screen_space_transform.FlattenTo2d();
+  to_screen_space_transform.PreconcatTransform(node->to_parent);
+  node->ancestors_are_invertible = parent_node->ancestors_are_invertible;
+  node->node_and_ancestors_are_flat =
+      parent_node->node_and_ancestors_are_flat && node->to_parent.IsFlat();
+  SetToScreen(node->id, to_screen_space_transform);
 
   gfx::Transform from_screen;
   if (!ToScreen(node->id).GetInverse(&from_screen))
@@ -584,9 +563,9 @@ void TransformTree::UpdateScreenSpaceTransform(TransformNode* node,
 
 void TransformTree::UpdateAnimationProperties(TransformNode* node,
                                               TransformNode* parent_node) {
+  DCHECK(parent_node);
   bool ancestor_is_animating = false;
-  if (parent_node)
-    ancestor_is_animating = parent_node->to_screen_is_potentially_animated;
+  ancestor_is_animating = parent_node->to_screen_is_potentially_animated;
   node->to_screen_is_potentially_animated =
       node->has_potential_animation || ancestor_is_animating;
 }
@@ -636,7 +615,8 @@ void TransformTree::UpdateSnapping(TransformNode* node) {
 void TransformTree::UpdateTransformChanged(TransformNode* node,
                                            TransformNode* parent_node,
                                            TransformNode* source_node) {
-  if (parent_node && parent_node->transform_changed) {
+  DCHECK(parent_node);
+  if (parent_node->transform_changed) {
     node->transform_changed = true;
     return;
   }
@@ -649,11 +629,7 @@ void TransformTree::UpdateTransformChanged(TransformNode* node,
 void TransformTree::UpdateNodeAndAncestorsAreAnimatedOrInvertible(
     TransformNode* node,
     TransformNode* parent_node) {
-  if (!parent_node) {
-    node->node_and_ancestors_are_animated_or_invertible =
-        node->has_potential_animation || node->is_invertible;
-    return;
-  }
+  DCHECK(parent_node);
   if (!parent_node->node_and_ancestors_are_animated_or_invertible) {
     node->node_and_ancestors_are_animated_or_invertible = false;
     return;
@@ -668,30 +644,51 @@ void TransformTree::UpdateNodeAndAncestorsAreAnimatedOrInvertible(
       node->has_potential_animation || is_invertible;
 }
 
-void TransformTree::SetDeviceTransform(const gfx::Transform& transform,
-                                       gfx::PointF root_position) {
-  gfx::Transform root_post_local = transform;
-  TransformNode* node = Node(1);
-  root_post_local.Scale(node->post_local_scale_factor,
-                        node->post_local_scale_factor);
-  root_post_local.Translate(root_position.x(), root_position.y());
-  if (node->post_local == root_post_local)
-    return;
-
-  node->post_local = root_post_local;
-  node->needs_local_transform_update = true;
-  set_needs_update(true);
-}
-
-void TransformTree::SetDeviceTransformScaleFactor(
-    const gfx::Transform& transform) {
+void TransformTree::SetRootTransformsAndScales(
+    float device_scale_factor,
+    float page_scale_factor_for_root,
+    const gfx::Transform& device_transform,
+    gfx::PointF root_position) {
   gfx::Vector2dF device_transform_scale_components =
-      MathUtil::ComputeTransform2dScaleComponents(transform, 1.f);
+      MathUtil::ComputeTransform2dScaleComponents(device_transform, 1.f);
 
   // Not handling the rare case of different x and y device scale.
   device_transform_scale_factor_ =
       std::max(device_transform_scale_components.x(),
                device_transform_scale_components.y());
+
+  // If DT is the device transform, DSF is the matrix scaled by (device scale
+  // factor * page scale factor for root), RP is the matrix translated by root's
+  // position,
+  // Let Screen Space Scale(SSS) = scale component of DT*DSF*RP,
+  // then the screen space transform of the root transform node is set to SSS
+  // and the post local transform of the contents root node is set to
+  // SSS^-1*DT*DSF*RP.
+  gfx::Transform transform = device_transform;
+  transform.Scale(device_scale_factor * page_scale_factor_for_root,
+                  device_scale_factor * page_scale_factor_for_root);
+  transform.Translate(root_position.x(), root_position.y());
+  float fallback_value = device_scale_factor * page_scale_factor_for_root;
+  gfx::Vector2dF screen_space_scale =
+      MathUtil::ComputeTransform2dScaleComponents(transform, fallback_value);
+  DCHECK_NE(screen_space_scale.x(), 0.f);
+  DCHECK_NE(screen_space_scale.y(), 0.f);
+
+  gfx::Transform root_to_screen;
+  root_to_screen.Scale(screen_space_scale.x(), screen_space_scale.y());
+  gfx::Transform root_from_screen;
+  bool invertible = root_to_screen.GetInverse(&root_from_screen);
+  DCHECK(invertible);
+  SetToScreen(kRootNodeId, root_to_screen);
+  SetFromScreen(kRootNodeId, root_from_screen);
+  set_needs_update(true);
+
+  transform.ConcatTransform(root_from_screen);
+  TransformNode* contents_root_node = Node(kContentsRootNodeId);
+  if (contents_root_node->post_local != transform) {
+    contents_root_node->post_local = transform;
+    contents_root_node->needs_local_transform_update = true;
+  }
 }
 
 void TransformTree::UpdateInnerViewportContainerBoundsDelta() {
@@ -747,6 +744,7 @@ const gfx::Transform& TransformTree::ToScreen(int node_id) const {
 void TransformTree::SetToScreen(int node_id, const gfx::Transform& transform) {
   DCHECK(static_cast<int>(cached_data_.size()) > node_id);
   cached_data_[node_id].to_screen = transform;
+  cached_data_[node_id].is_showing_backface = transform.IsBackFaceVisible();
 }
 
 int TransformTree::TargetId(int node_id) const {
@@ -915,45 +913,21 @@ void EffectTree::UpdateEffectChanged(EffectNode* node,
 
 void EffectTree::UpdateBackfaceVisibility(EffectNode* node,
                                           EffectNode* parent_node) {
-  if (!parent_node) {
+  if (parent_node && parent_node->hidden_by_backface_visibility) {
+    node->hidden_by_backface_visibility = true;
+    return;
+  } else if (node->double_sided) {
     node->hidden_by_backface_visibility = false;
     return;
   }
-  if (parent_node->hidden_by_backface_visibility) {
-    node->hidden_by_backface_visibility = true;
-    return;
-  }
-
-  TransformTree& transform_tree = property_trees()->transform_tree;
-  if (node->has_render_surface && !node->double_sided) {
-    TransformNode* transform_node = transform_tree.Node(node->transform_id);
-    if (transform_node->is_invertible &&
-        transform_node->ancestors_are_invertible) {
-      if (transform_node->sorting_context_id) {
-        const TransformNode* parent_transform_node =
-            transform_tree.parent(transform_node);
-        if (parent_transform_node &&
-            parent_transform_node->sorting_context_id ==
-                transform_node->sorting_context_id) {
-          gfx::Transform surface_draw_transform;
-          property_trees()->GetToTarget(transform_node->id, node->target_id,
-                                        &surface_draw_transform);
-          node->hidden_by_backface_visibility =
-              surface_draw_transform.IsBackFaceVisible();
-        } else {
-          node->hidden_by_backface_visibility =
-              transform_node->local.IsBackFaceVisible();
-        }
-        return;
-      }
-    }
-  }
-  node->hidden_by_backface_visibility = false;
+  node->hidden_by_backface_visibility =
+      property_trees()
+          ->transform_tree.cached_data()[node->transform_id]
+          .is_showing_backface;
 }
 
 void EffectTree::UpdateSurfaceContentsScale(EffectNode* effect_node) {
-  if (!effect_node->has_render_surface ||
-      effect_node->transform_id == kRootNodeId) {
+  if (!effect_node->has_render_surface) {
     effect_node->surface_contents_scale = gfx::Vector2dF(1.0f, 1.0f);
     return;
   }
@@ -1131,12 +1105,10 @@ void EffectTree::ResetChangeTracking() {
 void TransformTree::UpdateNodeAndAncestorsHaveIntegerTranslations(
     TransformNode* node,
     TransformNode* parent_node) {
+  DCHECK(parent_node);
   node->node_and_ancestors_have_only_integer_translation =
-      node->to_parent.IsIdentityOrIntegerTranslation();
-  if (parent_node)
-    node->node_and_ancestors_have_only_integer_translation =
-        node->node_and_ancestors_have_only_integer_translation &&
-        parent_node->node_and_ancestors_have_only_integer_translation;
+      node->to_parent.IsIdentityOrIntegerTranslation() &&
+      parent_node->node_and_ancestors_have_only_integer_translation;
 }
 
 void ClipTree::SetViewportClip(gfx::RectF viewport_rect) {
@@ -2035,11 +2007,11 @@ CombinedAnimationScale PropertyTrees::GetAnimationScales(
       // TODO(sunxd): make LayerTreeImpl::MaximumTargetScale take layer id as
       // parameter.
       LayerImpl* layer_impl = layer_tree_impl->LayerById(node->owner_id);
-      layer_impl->GetAnimationHost()->MaximumTargetScale(
+      layer_impl->GetMutatorHost()->MaximumTargetScale(
           layer_impl->element_id(), layer_impl->GetElementTypeForAnimation(),
           &cached_data_.animation_scales[transform_node_id]
                .local_maximum_animation_target_scale);
-      layer_impl->GetAnimationHost()->AnimationStartScale(
+      layer_impl->GetMutatorHost()->AnimationStartScale(
           layer_impl->element_id(), layer_impl->GetElementTypeForAnimation(),
           &cached_data_.animation_scales[transform_node_id]
                .local_starting_animation_scale);
@@ -2178,10 +2150,9 @@ DrawTransforms& PropertyTrees::GetDrawTransforms(int transform_id,
   } else if (transform_id > dest_id) {
     transform_tree.CombineTransformsBetween(transform_id, dest_id,
                                             &target_space_transform);
-    if (dest_id != TransformTree::kRootNodeId)
-      target_space_transform.matrix().postScale(
-          effect_node->surface_contents_scale.x(),
-          effect_node->surface_contents_scale.y(), 1.f);
+    target_space_transform.matrix().postScale(
+        effect_node->surface_contents_scale.x(),
+        effect_node->surface_contents_scale.y(), 1.f);
     data.transforms.to_valid = true;
     data.transforms.from_valid = false;
     data.transforms.might_be_invertible = true;

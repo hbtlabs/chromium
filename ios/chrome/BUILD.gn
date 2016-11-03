@@ -10,6 +10,13 @@ test("ios_chrome_unittests") {
     # Ensure that all unit tests are run.
     "//ios/chrome/test:run_all_unittests",
 
+    # Ensure that packed resources are available (it should be a dependency
+    # of //ios/chrome/app however, Chrome on iOS uses different resources,
+    # so the dependency cannot be added there).
+    # TODO(crbug.com/653086): find a way to fix those dependency as part of
+    # building Chromium for iOS, and then remove the dependency.
+    "//ios/chrome/app/resources:packed_resources",
+
     # Add unit_tests target here.
     "//ios/chrome/app:unit_tests",
     "//ios/chrome/app/application_delegate:unit_tests",
@@ -30,6 +37,7 @@ test("ios_chrome_unittests") {
     "//ios/chrome/browser/ui/alert_coordinator:unit_tests",
     "//ios/chrome/browser/ui/commands:unit_tests",
     "//ios/chrome/browser/ui/context_menu:unit_tests",
+    "//ios/chrome/browser/ui/dialogs:unit_tests",
     "//ios/chrome/browser/ui/elements:unit_tests",
     "//ios/chrome/browser/ui/keyboard:unit_tests",
     "//ios/chrome/browser/update_client:unit_tests",

@@ -39,6 +39,8 @@ const char kChromeUIConstrainedHTMLTestURL[] = "chrome://constrained-test/";
 const char kChromeUICrashesURL[] = "chrome://crashes/";
 const char kChromeUICreditsURL[] = "chrome://credits/";
 const char kChromeUIDevicesURL[] = "chrome://devices/";
+const char kChromeUIDevToolsCustomURL[] =
+    "chrome-devtools://devtools/custom/inspector.html";
 const char kChromeUIDevToolsURL[] =
     "chrome-devtools://devtools/bundled/inspector.html";
 const char kChromeUIDomainReliabilityInternalsURL[] =
@@ -74,7 +76,6 @@ const char kChromeUIPluginsURL[] = "chrome://plugins/";
 const char kChromeUIPolicyURL[] = "chrome://policy/";
 const char kChromeUIProfileSigninConfirmationURL[] =
     "chrome://profile-signin-confirmation/";
-const char kChromeUIUserManagerURL[] = "chrome://user-manager/";
 const char kChromeUIMdUserManagerUrl[] = "chrome://md-user-manager/";
 const char kChromeUIPrintURL[] = "chrome://print/";
 const char kChromeUIQuitURL[] = "chrome://quit/";
@@ -180,6 +181,7 @@ const char kChromeUIDeviceLogHost[] = "device-log";
 const char kChromeUIDevicesHost[] = "devices";
 const char kChromeUIDevToolsHost[] = "devtools";
 const char kChromeUIDevToolsBundledPath[] = "bundled";
+const char kChromeUIDevToolsCustomPath[] = "custom";
 const char kChromeUIDevToolsRemotePath[] = "remote";
 const char kChromeUIDNSHost[] = "dns";
 const char kChromeUIDomainReliabilityInternalsHost[] =
@@ -223,7 +225,6 @@ const char kChromeUIComponentsHost[] = "components";
 const char kChromeUIPolicyHost[] = "policy";
 const char kChromeUIProfileSigninConfirmationHost[] =
     "profile-signin-confirmation";
-const char kChromeUIUserManagerHost[] = "user-manager";
 const char kChromeUIMdUserManagerHost[] = "md-user-manager";
 const char kChromeUIPredictorsHost[] = "predictors";
 const char kChromeUIProfilerHost[] = "profiler";

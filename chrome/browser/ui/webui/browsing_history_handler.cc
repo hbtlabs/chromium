@@ -65,7 +65,7 @@
 #include "chrome/browser/extensions/activity_log/activity_log.h"
 #endif
 
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/supervised_user_navigation_observer.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
@@ -300,7 +300,7 @@ BrowsingHistoryHandler::HistoryEntry::ToValue(
   result->SetString("deviceName", device_name);
   result->SetString("deviceType", device_type);
 
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   if (supervised_user_service) {
     const SupervisedUserURLFilter* url_filter =
         supervised_user_service->GetURLFilterForUIThread();
@@ -762,7 +762,7 @@ void BrowsingHistoryHandler::ReturnResultsToFrontEnd() {
   BookmarkModel* bookmark_model =
       BookmarkModelFactory::GetForBrowserContext(profile);
   SupervisedUserService* supervised_user_service = NULL;
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   if (profile->IsSupervised())
     supervised_user_service =
         SupervisedUserServiceFactory::GetForProfile(profile);
@@ -1010,5 +1010,6 @@ void BrowsingHistoryHandler::OnURLsDeleted(
 }
 
 void BrowsingHistoryHandler::OnWebHistoryDeleted() {
-  web_ui()->CallJavascriptFunctionUnsafe("historyDeleted");
+  if (!has_pending_delete_request_)
+    web_ui()->CallJavascriptFunctionUnsafe("historyDeleted");
 }

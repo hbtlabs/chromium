@@ -98,22 +98,11 @@ static LayoutRect relativeBounds(const LayoutObject* layoutObject,
     // Only LayoutBox and LayoutText are supported.
     ASSERT_NOT_REACHED();
   }
-  LayoutBox* scrollerBox = scrollerLayoutBox(scroller);
 
   LayoutRect relativeBounds = LayoutRect(
-      layoutObject->localToAncestorQuad(FloatRect(localBounds), scrollerBox)
+      scroller->localToVisibleContentQuad(FloatRect(localBounds), layoutObject)
           .boundingBox());
-  // When root layer scrolling is off, the LayoutView will have no scroll
-  // offset (since scrolling is handled by the FrameView) so
-  // localToAncestorQuad returns document coords, so we must subtract scroll
-  // offset to get viewport coords. We discard the fractional part of the
-  // scroll offset so that the rounding in adjust() matches the snapping of
-  // the anchor node to the pixel grid of the layer it paints into. For
-  // non-FrameView scrollers, we rely on the flooring behavior of
-  // LayoutBox::scrolledContentOffset.
-  if (!RuntimeEnabledFeatures::rootLayerScrollingEnabled() &&
-      scrollerBox->isLayoutView())
-    relativeBounds.moveBy(IntPoint(-scroller->scrollOffsetInt()));
+
   return relativeBounds;
 }
 
@@ -306,16 +295,12 @@ void ScrollAnchor::adjust() {
                     UseCounter::ScrollAnchored);
 }
 
-void ScrollAnchor::clearSelf(bool unconditionally) {
+void ScrollAnchor::clearSelf() {
   LayoutObject* anchorObject = m_anchorObject;
   m_anchorObject = nullptr;
 
   if (anchorObject)
-    anchorObject->clearIsScrollAnchorObject(unconditionally);
-}
-
-void ScrollAnchor::clearSelf() {
-  clearSelf(false);
+    anchorObject->maybeClearIsScrollAnchorObject();
 }
 
 void ScrollAnchor::clear() {
@@ -330,7 +315,7 @@ void ScrollAnchor::clear() {
     if (PaintLayerScrollableArea* scrollableArea = layer->getScrollableArea()) {
       ScrollAnchor* anchor = scrollableArea->scrollAnchor();
       DCHECK(anchor);
-      anchor->clearSelf(true);
+      anchor->clearSelf();
     }
     layer = layer->parent();
   }
@@ -338,7 +323,7 @@ void ScrollAnchor::clear() {
   if (FrameView* view = layoutObject->frameView()) {
     ScrollAnchor* anchor = view->scrollAnchor();
     DCHECK(anchor);
-    anchor->clearSelf(true);
+    anchor->clearSelf();
   }
 }
 
