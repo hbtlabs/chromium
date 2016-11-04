@@ -58,7 +58,6 @@ struct FrameHostMsg_ShowPopup_Params;
 #endif
 
 namespace base {
-class FilePath;
 class ListValue;
 }
 
@@ -96,9 +95,7 @@ struct ContentSecurityPolicyHeader;
 struct ContextMenuParams;
 struct FileChooserParams;
 struct FrameOwnerProperties;
-struct GlobalRequestID;
 struct FileChooserParams;
-struct Referrer;
 struct ResourceResponse;
 
 class CONTENT_EXPORT RenderFrameHostImpl
@@ -374,15 +371,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // Navigates to an interstitial page represented by the provided data URL.
   void NavigateToInterstitialURL(const GURL& data_url);
-
-  // Treat this prospective navigation as though it originated from the frame.
-  // Used, e.g., for a navigation request that originated from a RemoteFrame.
-  // |source_site_instance| is the SiteInstance of the frame that initiated the
-  // navigation.
-  // TODO(creis): Remove this method and have RenderFrameProxyHost call
-  // RequestOpenURL with its FrameTreeNode.
-  void OpenURL(const FrameHostMsg_OpenURL_Params& params,
-               SiteInstance* source_site_instance);
 
   // Stop the load in progress.
   void Stop();

@@ -12,6 +12,7 @@ import("//components/os_crypt/features.gni")
 import("//media/media_options.gni")
 import("//net/features.gni")
 import("//ppapi/features/features.gni")
+import("//printing/features/features.gni")
 import("//third_party/protobuf/proto_library.gni")
 
 # //build/config/android/rules.gni imports //tools/grit/grit_rule.gni, which
@@ -1269,6 +1270,7 @@ split_static_library("browser") {
   public_deps = [
     "//chrome/common",
     "//components/autofill/core/browser",
+    "//components/payments:payment_validation",
     "//components/sync",
     "//content/public/browser",
     "//sql",
@@ -1407,6 +1409,7 @@ split_static_library("browser") {
     "//components/user_prefs",
     "//components/user_prefs/tracked:user_prefs_tracked",
     "//components/variations",
+    "//components/variations/field_trial_config",
     "//components/variations/net",
     "//components/variations/service",
     "//components/visitedlink/browser",
@@ -1439,6 +1442,7 @@ split_static_library("browser") {
     "//mojo/public/js",
     "//net:extras",
     "//net:net_with_v8",
+    "//printing/features",
     "//services/service_manager/public/cpp",
     "//skia",
     "//sql",
@@ -1960,6 +1964,10 @@ split_static_library("browser") {
       "safe_browsing/protocol_manager_helper.h",
       "safe_browsing/safe_browsing_blocking_page.cc",
       "safe_browsing/safe_browsing_blocking_page.h",
+      "safe_browsing/safe_browsing_navigation_observer.cc",
+      "safe_browsing/safe_browsing_navigation_observer.h",
+      "safe_browsing/safe_browsing_navigation_observer_manager.cc",
+      "safe_browsing/safe_browsing_navigation_observer_manager.h",
       "safe_browsing/safe_browsing_service.cc",
       "safe_browsing/safe_browsing_service.h",
       "safe_browsing/services_delegate.h",
@@ -2555,6 +2563,7 @@ split_static_library("browser") {
     ]
     deps += [
       "//components/cdm/browser",
+      "//components/payments/android:payments_jni",
       "//components/resources:components_resources",
       "//third_party/android_opengl/etc1",
       "//third_party/android_tools:cpu_features",
@@ -3915,6 +3924,7 @@ if (android_java_ui) {
       "../android/java/src/org/chromium/chrome/browser/password_manager/AccountChooserDialog.java",
       "../android/java/src/org/chromium/chrome/browser/password_manager/AutoSigninFirstRunDialog.java",
       "../android/java/src/org/chromium/chrome/browser/password_manager/Credential.java",
+      "../android/java/src/org/chromium/chrome/browser/payments/PaymentValidator.java",
       "../android/java/src/org/chromium/chrome/browser/permissions/PermissionDialogController.java",
       "../android/java/src/org/chromium/chrome/browser/permissions/PermissionDialogDelegate.java",
       "../android/java/src/org/chromium/chrome/browser/physicalweb/UrlManager.java",

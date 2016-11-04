@@ -49,6 +49,11 @@ void DropConnectionOnIOThread(ClientNetworkComponents* net_components) {
   net_components->GetBrowserConnectionHandler()->DropCurrentConnection();
 }
 
+void AppendDefaultCommandLineFlags(base::CommandLine* command_line) {
+  // Enables the updated compositing path before any tabs are created.
+  command_line->AppendSwitch(switches::kEnableUpdatedCompositingPath);
+}
+
 }  // namespace
 
 // This function is declared in //blimp/client/public/blimp_client_context.h,
@@ -139,6 +144,8 @@ BlimpClientContextImpl::BlimpClientContextImpl(
       FROM_HERE, base::Bind(&ClientNetworkComponents::Initialize,
                             base::Unretained(net_components_.get())));
 
+  AppendDefaultCommandLineFlags(base::CommandLine::ForCurrentProcess());
+
   UMA_HISTOGRAM_BOOLEAN("Blimp.Supported", true);
 }
 
@@ -148,7 +155,20 @@ BlimpClientContextImpl::~BlimpClientContextImpl() {
 }
 
 void BlimpClientContextImpl::SetDelegate(BlimpClientContextDelegate* delegate) {
+  DCHECK(!delegate_ || !delegate);
   delegate_ = delegate;
+
+  // TODO(xingliu): Pass the IdentityProvider needed by |assignment_fetcher_|
+  // in the constructor, see crbug/661848.
+  if (delegate_) {
+    assignment_fetcher_ = base::MakeUnique<AssignmentFetcher>(
+        io_thread_task_runner_, file_thread_task_runner_,
+        delegate_->CreateIdentityProvider(), GetAssignerURL(),
+        base::Bind(&BlimpClientContextImpl::OnAssignmentReceived,
+                   weak_factory_.GetWeakPtr()),
+        base::Bind(&BlimpClientContextDelegate::OnAuthenticationError,
+                   base::Unretained(delegate_)));
+  }
 }
 
 std::unique_ptr<BlimpContents> BlimpClientContextImpl::CreateBlimpContents(
@@ -161,15 +181,7 @@ std::unique_ptr<BlimpContents> BlimpClientContextImpl::CreateBlimpContents(
 }
 
 void BlimpClientContextImpl::Connect() {
-  if (!assignment_fetcher_) {
-    assignment_fetcher_ = base::MakeUnique<AssignmentFetcher>(
-        io_thread_task_runner_, file_thread_task_runner_,
-        delegate_->CreateIdentityProvider(), GetAssignerURL(),
-        base::Bind(&BlimpClientContextImpl::OnAssignmentReceived,
-                   weak_factory_.GetWeakPtr()),
-        base::Bind(&BlimpClientContextDelegate::OnAuthenticationError,
-                   base::Unretained(delegate_)));
-  }
+  DCHECK(assignment_fetcher_);
   assignment_fetcher_->Fetch();
 }
 
@@ -187,6 +199,7 @@ BlimpClientContextImpl::CreateFeedbackData() {
 }
 
 IdentitySource* BlimpClientContextImpl::GetIdentitySource() {
+  DCHECK(assignment_fetcher_);
   return assignment_fetcher_->GetIdentitySource();
 }
 

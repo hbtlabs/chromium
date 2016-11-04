@@ -116,7 +116,6 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/profiling.h"
 #include "chrome/common/stack_sampling_configuration.h"
-#include "chrome/common/variations/variations_util.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "components/component_updater/component_updater_service.h"
@@ -142,6 +141,7 @@
 #include "components/task_scheduler_util/initialization_util.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "components/translate/core/browser/translate_download_manager.h"
+#include "components/variations/field_trial_config/field_trial_util.h"
 #include "components/variations/pref_names.h"
 #include "components/variations/service/variations_service.h"
 #include "components/variations/variations_associated_data.h"
@@ -167,6 +167,7 @@
 #include "net/http/http_network_layer.h"
 #include "net/http/http_stream_factory.h"
 #include "net/url_request/url_request.h"
+#include "printing/features/features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/material_design/material_design_controller.h"
@@ -244,9 +245,9 @@
 #include "extensions/components/javascript_dialog_extensions_client/javascript_dialog_extension_client_impl.h"
 #endif  // defined(ENABLE_EXTENSIONS)
 
-#if defined(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
 #include "printing/printed_document.h"
-#endif  // defined(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
 
 #if defined(ENABLE_RLZ)
 #include "chrome/browser/rlz/chrome_rlz_tracker_delegate.h"
@@ -696,10 +697,12 @@ void ChromeBrowserMainParts::SetupFieldTrials() {
     base::FieldTrial::EnableBenchmarking();
   }
 
-  if (command_line->HasSwitch(switches::kForceFieldTrialParams)) {
-    bool result = chrome_variations::AssociateParamsFromString(
-        command_line->GetSwitchValueASCII(switches::kForceFieldTrialParams));
-    CHECK(result) << "Invalid --" << switches::kForceFieldTrialParams
+  if (command_line->HasSwitch(variations::switches::kForceFieldTrialParams)) {
+    bool result = variations::AssociateParamsFromString(
+        command_line->GetSwitchValueASCII(
+            variations::switches::kForceFieldTrialParams));
+    CHECK(result) << "Invalid --"
+                  << variations::switches::kForceFieldTrialParams
                   << " list specified.";
   }
 
@@ -743,10 +746,11 @@ void ChromeBrowserMainParts::SetupFieldTrials() {
       command_line->GetSwitchValueASCII(switches::kDisableFeatures));
 
 #if defined(FIELDTRIAL_TESTING_ENABLED)
-  if (!command_line->HasSwitch(switches::kDisableFieldTrialTestingConfig) &&
+  if (!command_line->HasSwitch(
+          variations::switches::kDisableFieldTrialTestingConfig) &&
       !command_line->HasSwitch(switches::kForceFieldTrials) &&
       !command_line->HasSwitch(variations::switches::kVariationsServerURL)) {
-    chrome_variations::AssociateDefaultFieldTrialConfig(feature_list.get());
+    variations::AssociateDefaultFieldTrialConfig(feature_list.get());
   }
 #endif  // defined(FIELDTRIAL_TESTING_ENABLED)
 
@@ -1774,13 +1778,13 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   // needs to read prefs that get set after that runs.
   browser_process_->intranet_redirect_detector();
 
-#if defined(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
   if (parsed_command_line().HasSwitch(switches::kDebugPrint)) {
     base::FilePath path =
         parsed_command_line().GetSwitchValuePath(switches::kDebugPrint);
     printing::PrintedDocument::set_debug_dump_path(path);
   }
-#endif  // defined(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
 
   HandleTestParameters(parsed_command_line());
   browser_process_->metrics_service()->RecordBreakpadHasDebugger(
@@ -1807,7 +1811,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   browser_process_->metrics_service()->LogNeedForCleanShutdown();
 #endif  // !defined(OS_ANDROID)
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   // Create the instance of the cloud print proxy service so that it can launch
   // the service process if needed. This is needed because the service process
   // might have shutdown because an update was available.
@@ -1815,7 +1819,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   // BrowserContextKeyedServiceFactory::ServiceIsCreatedWithBrowserContext()
   // instead?
   CloudPrintProxyServiceFactory::GetForProfile(profile_);
-#endif  // defined(ENABLE_PRINT_PREVIEW)
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
   // Start watching all browser threads for responsiveness.
   metrics::MetricsService::SetExecutionPhase(

@@ -107,9 +107,11 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "net/http/http_server_properties_manager.h"
+#include "printing/features/features.h"
 
 #if BUILDFLAG(ENABLE_APP_LIST)
 #include "chrome/browser/apps/drive/drive_app_mapping.h"
+#include "chrome/browser/ui/app_list/app_list_syncable_service.h"
 #endif
 
 #if BUILDFLAG(ENABLE_BACKGROUND)
@@ -536,7 +538,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   PluginsUI::RegisterProfilePrefs(registry);
 #endif
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   printing::StickySettings::RegisterProfilePrefs(registry);
 #endif
 
@@ -566,6 +568,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   DevToolsWindow::RegisterProfilePrefs(registry);
 #if BUILDFLAG(ENABLE_APP_LIST)
   DriveAppMapping::RegisterProfilePrefs(registry);
+  app_list::AppListSyncableService::RegisterProfilePrefs(registry);
 #endif
   extensions::CommandService::RegisterProfilePrefs(registry);
   extensions::ExtensionSettingsHandler::RegisterProfilePrefs(registry);

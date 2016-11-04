@@ -59,10 +59,12 @@ public abstract class ChromeFeatureList {
     public static final String NO_CREDIT_CARD_ABORT = "NoCreditCardAbort";
     public static final String NTP_FAKE_OMNIBOX_TEXT = "NTPFakeOmniboxText";
     public static final String NTP_SNIPPETS = "NTPSnippets";
+    public static final String NTP_SNIPPETS_INCREASED_VISIBILITY = "NTPSnippetsIncreasedVisibility";
     public static final String NTP_SNIPPETS_SAVE_TO_OFFLINE = "NTPSaveToOffline";
     public static final String NTP_SNIPPETS_OFFLINE_BADGE = "NTPOfflineBadge";
     public static final String NTP_SUGGESTIONS_SECTION_DISMISSAL = "NTPSuggestionsSectionDismissal";
     public static final String TAB_REPARENTING = "TabReparenting";
+    public static final String VR_SHELL = "VrShell";
     public static final String WEB_PAYMENTS = "WebPayments";
     public static final String WEBAPKS = "WebApks";
 

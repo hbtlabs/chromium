@@ -38,7 +38,6 @@ class SingleThreadTaskRunner;
 
 namespace blink {
 class WebContentDecryptionModule;
-class WebContentDecryptionModuleResult;
 class WebFrame;
 class WebMediaPlayerClient;
 class WebMediaPlayerEncryptedMediaClient;
@@ -53,12 +52,10 @@ namespace gpu {
 namespace gles2 {
 class GLES2Interface;
 }
-struct MailboxHolder;
 }
 
 namespace media {
 class MediaLog;
-class WebContentDecryptionModuleImpl;
 }
 
 namespace content {
@@ -114,6 +111,7 @@ class WebMediaPlayerAndroid
                  blink::WebSetSinkIdCallbacks* web_callback) override;
   void requestRemotePlayback() override;
   void requestRemotePlaybackControl() override;
+  void requestRemotePlaybackStop() override;
   blink::WebTimeRanges buffered() const override;
   blink::WebTimeRanges seekable() const override;
 

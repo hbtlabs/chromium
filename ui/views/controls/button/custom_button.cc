@@ -4,7 +4,7 @@
 
 #include "ui/views/controls/button/custom_button.h"
 
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -135,7 +135,7 @@ void CustomButton::OnEnabledChanged() {
   if (enabled()) {
     bool should_enter_hover_state = ShouldEnterHoveredState();
     SetState(should_enter_hover_state ? STATE_HOVERED : STATE_NORMAL);
-    ink_drop()->SetHovered(should_enter_hover_state);
+    GetInkDrop()->SetHovered(should_enter_hover_state);
   } else {
     SetState(STATE_DISABLED);
   }
@@ -171,13 +171,14 @@ bool CustomButton::OnMouseDragged(const ui::MouseEvent& event) {
     if (HitTestPoint(event.location())) {
       SetState(should_enter_pushed ? STATE_PRESSED : STATE_HOVERED);
       if (should_show_pending &&
-          ink_drop()->GetTargetInkDropState() == views::InkDropState::HIDDEN) {
+          GetInkDrop()->GetTargetInkDropState() ==
+              views::InkDropState::HIDDEN) {
         AnimateInkDrop(views::InkDropState::ACTION_PENDING, &event);
       }
     } else {
       SetState(STATE_NORMAL);
       if (should_show_pending &&
-          ink_drop()->GetTargetInkDropState() ==
+          GetInkDrop()->GetTargetInkDropState() ==
               views::InkDropState::ACTION_PENDING) {
         AnimateInkDrop(views::InkDropState::HIDDEN, &event);
       }
@@ -238,7 +239,7 @@ bool CustomButton::OnKeyPressed(const ui::KeyEvent& event) {
   // KeyRelease and Enter clicks the button on KeyPressed.
   if (event.key_code() == ui::VKEY_SPACE) {
     SetState(STATE_PRESSED);
-    if (ink_drop()->GetTargetInkDropState() !=
+    if (GetInkDrop()->GetTargetInkDropState() !=
         views::InkDropState::ACTION_PENDING) {
       AnimateInkDrop(views::InkDropState::ACTION_PENDING, nullptr /* event */);
     }
@@ -316,7 +317,7 @@ void CustomButton::ShowContextMenu(const gfx::Point& p,
   if (state_ != STATE_DISABLED)
     SetState(STATE_NORMAL);
   if (hide_ink_drop_when_showing_context_menu_) {
-    ink_drop()->SetHovered(false);
+    GetInkDrop()->SetHovered(false);
     AnimateInkDrop(InkDropState::HIDDEN, nullptr /* event */);
   }
   View::ShowContextMenu(p, source_type);
@@ -330,21 +331,21 @@ void CustomButton::OnDragDone() {
   AnimateInkDrop(InkDropState::HIDDEN, nullptr /* event */);
 }
 
-void CustomButton::GetAccessibleState(ui::AXViewState* state) {
-  Button::GetAccessibleState(state);
+void CustomButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  Button::GetAccessibleNodeData(node_data);
   switch (state_) {
     case STATE_HOVERED:
-      state->AddStateFlag(ui::AX_STATE_HOVERED);
+      node_data->AddStateFlag(ui::AX_STATE_HOVERED);
       break;
     case STATE_PRESSED:
-      state->AddStateFlag(ui::AX_STATE_PRESSED);
+      node_data->AddStateFlag(ui::AX_STATE_PRESSED);
       break;
     case STATE_DISABLED:
-      state->AddStateFlag(ui::AX_STATE_DISABLED);
+      node_data->AddStateFlag(ui::AX_STATE_DISABLED);
       break;
     case STATE_NORMAL:
     case STATE_COUNT:
-      // No additional accessibility state set for this button state.
+      // No additional accessibility node_data set for this button node_data.
       break;
   }
 }
@@ -385,7 +386,7 @@ void CustomButton::OnBlur() {
   Button::OnBlur();
   if (IsHotTracked() || state_ == STATE_PRESSED) {
     SetState(STATE_NORMAL);
-    if (ink_drop()->GetTargetInkDropState() != views::InkDropState::HIDDEN)
+    if (GetInkDrop()->GetTargetInkDropState() != views::InkDropState::HIDDEN)
       AnimateInkDrop(views::InkDropState::HIDDEN, nullptr /* event */);
     // TODO(bruthig) : Fix CustomButtons to work well when multiple input
     // methods are interacting with a button. e.g. By animating to HIDDEN here
@@ -470,9 +471,9 @@ void CustomButton::NotifyClick(const ui::Event& event) {
 }
 
 void CustomButton::OnClickCanceled(const ui::Event& event) {
-  if (ink_drop()->GetTargetInkDropState() ==
+  if (GetInkDrop()->GetTargetInkDropState() ==
           views::InkDropState::ACTION_PENDING ||
-      ink_drop()->GetTargetInkDropState() ==
+      GetInkDrop()->GetTargetInkDropState() ==
           views::InkDropState::ALTERNATE_ACTION_PENDING) {
     AnimateInkDrop(views::InkDropState::HIDDEN,
                    ui::LocatedEvent::FromIfValid(&event));

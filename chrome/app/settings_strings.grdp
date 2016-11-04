@@ -339,6 +339,9 @@
   <message name="IDS_SETTINGS_CREDIT_CARD_EXPIRATION_YEAR" desc="Accessibility label on the year drop down to let users know the field corresponds to the expiration year">
     Expiration year
   </message>
+  <message name="IDS_SETTINGS_CREDIT_CARD_EXPIRED" desc="The error message that is shown when user attempts to enter or save an expired credit card.">
+    Your credit card is expired.
+  </message>
   <message name="IDS_SETTINGS_PASSWORDS" desc="Name for the password section and toggle">
     Manage passwords
   </message>
@@ -2139,6 +2142,50 @@
   <message name="IDS_SETTINGS_PERSONALIZE_GOOGLE_SERVICES_TEXT" desc="Text of the personalize Google services section. When clicked, takes the user to the Google Activity Controls.">
     Control how Google uses your browsing history to personalize Search, ads, and other Google services
   </message>
+
+  <!-- Import Settings Dialog -->
+  <!-- Android uses custom UI for Bookmark importing -->
+  <if expr="not is_android">
+    <message name="IDS_SETTINGS_IMPORT_FROM_LABEL" desc="Label before profile select combo box">
+      From:
+    </message>
+    <message name="IDS_SETTINGS_IMPORT_ITEMS_LABEL" desc="Label before item select checkboxes">
+      Select items to import:
+    </message>
+    <message name="IDS_SETTINGS_IMPORT_LOADING_PROFILES" desc="Status text to notify the user that profiles are being loaded">
+      Loading...
+    </message>
+
+    <message name="IDS_SETTINGS_IMPORT_HISTORY_CHECKBOX" desc="Checkbox for importing browsing history">
+      Browsing history
+    </message>
+    <message name="IDS_SETTINGS_IMPORT_FAVORITES_CHECKBOX" desc="Checkbox for importing favorites">
+      Favorites/Bookmarks
+    </message>
+    <message name="IDS_SETTINGS_IMPORT_PASSWORDS_CHECKBOX" desc="Checkbox for importing saved passwords">
+      Saved passwords
+    </message>
+    <message name="IDS_SETTINGS_IMPORT_SEARCH_ENGINES_CHECKBOX" desc="Checkbox for importing search engines">
+      Search engines
+    </message>
+    <message name="IDS_SETTINGS_IMPORT_AUTOFILL_FORM_DATA_CHECKBOX" desc="Checkbox for importing form data for autofill">
+      Autofill form data
+    </message>
+
+    <message name="IDS_SETTINGS_IMPORT_SUCCEEDED" desc="Status text to notify the user that the import succeeded">
+      Success!
+    </message>
+    <message name="IDS_SETTINGS_IMPORT_CHOOSE_FILE" desc="Text for the Choose File on dialog">
+      Choose File
+    </message>
+    <message name="IDS_SETTINGS_IMPORT_COMMIT" desc="Text for OK button on dialog">
+      Import
+    </message>
+
+    <message name="IDS_SETTINGS_IMPORT_NO_PROFILE_FOUND" desc="Message displayed when we do not find any supported browser to import from.">
+      No supported browser found
+    </message>
+  </if>
 
   <!-- Users Page -->
   <message name="IDS_SETTINGS_USERS" desc="Name of the settings page which manages users on the device.">

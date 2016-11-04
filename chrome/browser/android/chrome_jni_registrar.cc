@@ -164,6 +164,7 @@
 #include "components/gcm_driver/android/component_jni_registrar.h"
 #include "components/gcm_driver/instance_id/android/component_jni_registrar.h"
 #include "components/invalidation/impl/android/component_jni_registrar.h"
+#include "components/payments/android/payments_jni_registrar.h"
 #include "components/policy/core/browser/android/component_jni_registrar.h"
 #include "components/safe_json/android/component_jni_registrar.h"
 #include "components/signin/core/browser/android/component_jni_registrar.h"
@@ -172,8 +173,9 @@
 #include "components/url_formatter/android/component_jni_registrar.h"
 #include "components/variations/android/component_jni_registrar.h"
 #include "components/web_contents_delegate_android/component_jni_registrar.h"
+#include "printing/features/features.h"
 
-#if defined(ENABLE_PRINTING) && !defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINTING) && !BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #include "printing/printing_context_android.h"
 #endif
 
@@ -332,6 +334,7 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
      autofill::PasswordGenerationPopupViewAndroid::Register},
     {"PasswordUIViewAndroid",
      PasswordUIViewAndroid::RegisterPasswordUIViewAndroid},
+    {"PaymentValidator", RegisterPaymentValidator},
     {"PermissionDialogDelegate",
      PermissionDialogDelegate::RegisterPermissionDialogDelegate},
     {"PermissionUpdateInfoBarDelegate",
@@ -404,7 +407,7 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"WebsitePreferenceBridge", RegisterWebsitePreferenceBridge},
     {"WebsiteSettingsPopupAndroid",
      WebsiteSettingsPopupAndroid::RegisterWebsiteSettingsPopupAndroid},
-#if defined(ENABLE_PRINTING) && !defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINTING) && !BUILDFLAG(ENABLE_PRINT_PREVIEW)
     {"PrintingContext",
      printing::PrintingContextAndroid::RegisterPrintingContext},
 #endif

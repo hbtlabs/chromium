@@ -40,7 +40,7 @@ Canvas2dFixedRenderingMode status=test
 EnableCanvas2dDynamicRenderingModeSwitching status=experimental
 Canvas2dImageChromium status=experimental
 ClientHints status=stable
-CompositeOpaqueFixedPosition status=test, settable_from_internals=True
+CompositeOpaqueFixedPosition status=stable, settable_from_internals=True
 CompositeOpaqueScrollers status=stable, settable_from_internals=True
 ColorCorrectRendering settable_from_internals=True
 CompositedSelectionUpdate
@@ -67,7 +67,7 @@ CSSOMSmoothScroll status=experimental
 CSSOffsetPositionAnchor status=experimental
 CSSPaintAPI status=experimental, depends_on=CSSTypedOM, depends_on=Worklet
 CSSSnapSize status=experimental
-CSSStickyPosition status=experimental
+CSSStickyPosition status=stable
 CSSTouchActionPanDirections status=stable
 CSSTouchActionPinchZoom status=stable
 CSSTypedOM status=experimental
@@ -82,6 +82,9 @@ DecodeToYUV status=experimental
 DesktopCaptureDisableLocalEchoControl status=experimental
 DeviceLight status=experimental
 DisplayList2dCanvas status=stable
+DocumentCookie
+DocumentDomain
+DocumentWrite
 DocumentWriteEvaluator
 DOMConvenienceAPI status=stable
 DurableStorage status=stable
@@ -112,7 +115,7 @@ IDBObserver status=experimental
 ImageCapture status=experimental
 ImageOrientation status=test
 IndexedDBExperimental status=experimental
-InertTopControls status=experimental
+InertTopControls status=stable
 InputEvent status=experimental
 InputModeAttribute status=experimental
 InputMultipleFieldsUI status=stable

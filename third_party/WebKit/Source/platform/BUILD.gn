@@ -326,10 +326,12 @@ component("platform") {
     "WebIconSizesParser.cpp",
     "WebScheduler.cpp",
     "WebTaskRunner.cpp",
+    "WebTaskRunner.h",
     "WebTextInputInfo.cpp",
     "WebThread.cpp",
     "WebThreadSupportingGC.cpp",
     "WebThreadSupportingGC.h",
+    "WebURLLoader.cpp",
     "Widget.cpp",
     "Widget.h",
     "WindowsKeyboardCodes.h",
@@ -525,7 +527,6 @@ component("platform") {
     "exported/WebMediaStream.cpp",
     "exported/WebMediaStreamSource.cpp",
     "exported/WebMediaStreamTrack.cpp",
-    "exported/WebMediaStreamTrackSourcesRequest.cpp",
     "exported/WebMemoryCoordinator.cpp",
     "exported/WebMessagePortChannelClient.cpp",
     "exported/WebMixedContent.cpp",
@@ -555,7 +556,6 @@ component("platform") {
     "exported/WebServiceWorkerProxy.cpp",
     "exported/WebServiceWorkerRequest.cpp",
     "exported/WebServiceWorkerResponse.cpp",
-    "exported/WebSourceInfo.cpp",
     "exported/WebSpeechSynthesisUtterance.cpp",
     "exported/WebSpeechSynthesisVoice.cpp",
     "exported/WebSpeechSynthesizerClientImpl.cpp",
@@ -572,6 +572,8 @@ component("platform") {
     "exported/WebURLResponse.cpp",
     "exported/WrappedResourceRequest.h",
     "exported/WrappedResourceResponse.h",
+    "feature_policy/FeaturePolicy.cpp",
+    "feature_policy/FeaturePolicy.h",
     "fonts/AcceptLanguagesResolver.cpp",
     "fonts/AcceptLanguagesResolver.h",
     "fonts/AlternateFontFamily.h",
@@ -1067,7 +1069,6 @@ component("platform") {
     "mediastream/MediaStreamDescriptor.h",
     "mediastream/MediaStreamSource.cpp",
     "mediastream/MediaStreamSource.h",
-    "mediastream/MediaStreamTrackSourcesRequest.h",
     "mediastream/MediaStreamWebAudioSource.cpp",
     "mediastream/MediaStreamWebAudioSource.h",
     "mhtml/ArchiveResource.cpp",
@@ -1635,6 +1636,7 @@ test("blink_platform_unittests") {
     "blob/BlobDataTest.cpp",
     "clipboard/ClipboardUtilitiesTest.cpp",
     "exported/FilePathConversionTest.cpp",
+    "feature_policy/FeaturePolicyTest.cpp",
     "fonts/AcceptLanguagesResolverTest.cpp",
     "fonts/FontCacheTest.cpp",
     "fonts/FontDescriptionTest.cpp",
@@ -1947,6 +1949,19 @@ fuzzer_test("blink_json_parser_fuzzer") {
     ":platform",
   ]
   dict = "//testing/libfuzzer/fuzzers/dicts/json.dict"
+}
+
+# Fuzzer for blink::FeaturePolicy.
+fuzzer_test("feature_policy_fuzzer") {
+  sources = [
+    "feature_policy/FeaturePolicyFuzzer.cpp",
+  ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":platform",
+  ]
+  dict = "//testing/libfuzzer/fuzzers/dicts/feature_policy.dict"
+  seed_corpus = "//testing/libfuzzer/fuzzers/feature_policy_corpus"
 }
 
 # NOTE: These are legacy unit tests and tests that require a Platform

@@ -70,19 +70,13 @@
 #include "content/renderer/media/android/renderer_media_player_manager.h"
 #endif
 
-class TransportDIB;
 struct FrameMsg_PostMessage_Params;
 struct FrameMsg_SerializeAsMHTML_Params;
 struct FrameMsg_TextTrackSettings_Params;
 
-namespace IPC {
-class SyncMessage;
-}
-
 namespace blink {
 class InterfaceRegistry;
 class WebContentDecryptionModule;
-class WebMouseEvent;
 class WebPresentationClient;
 class WebPushClient;
 class WebSecurityOrigin;
@@ -103,7 +97,6 @@ namespace media {
 class CdmFactory;
 class DecoderFactory;
 class MediaPermission;
-class MediaServiceProvider;
 class RemotingController;
 class RendererWebMediaPlayerDelegate;
 class SurfaceManager;
@@ -135,18 +128,15 @@ class MediaInterfaceProvider;
 class MediaStreamDispatcher;
 class MediaStreamRendererFactory;
 class MediaPermissionDispatcher;
-class MidiDispatcher;
 class NavigationState;
 class PageState;
 class PepperPluginInstanceImpl;
 class PresentationDispatcher;
 class PushMessagingDispatcher;
 class RenderAccessibilityImpl;
-class RendererCdmManager;
 class RendererMediaPlayerManager;
 class RendererMediaSessionManager;
 class RendererPpapiHost;
-class RendererSurfaceViewManager;
 class RenderFrameObserver;
 class RenderViewImpl;
 class RenderWidget;
@@ -154,7 +144,6 @@ class RenderWidgetFullscreenPepper;
 class ResourceRequestBodyImpl;
 class ScreenOrientationDispatcher;
 class UserMediaClientImpl;
-class WakeLockDispatcher;
 struct CommonNavigationParams;
 struct CustomContextMenuContext;
 struct FileChooserFileInfo;
@@ -260,7 +249,7 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // TODO(jam): this is a temporary getter until all the code is transitioned
   // to using RenderFrame instead of RenderView.
-  RenderViewImpl* render_view() { return render_view_.get(); }
+  RenderViewImpl* render_view() { return render_view_; }
 
   const blink::WebHistoryItem& current_history_item() {
     return current_history_item_;
@@ -527,8 +516,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void willSubmitForm(const blink::WebFormElement& form) override;
   void didCreateDataSource(blink::WebLocalFrame* frame,
                            blink::WebDataSource* datasource) override;
-  void didStartProvisionalLoad(blink::WebLocalFrame* frame,
-                               double triggering_event_time) override;
+  void didStartProvisionalLoad(blink::WebLocalFrame* frame) override;
   void didReceiveServerRedirectForProvisionalLoad(
       blink::WebLocalFrame* frame) override;
   void didFailProvisionalLoad(blink::WebLocalFrame* frame,
@@ -1108,7 +1096,7 @@ class CONTENT_EXPORT RenderFrameImpl
   // Blink Web* layer to check for provisional frames.
   bool in_frame_tree_;
 
-  base::WeakPtr<RenderViewImpl> render_view_;
+  RenderViewImpl* render_view_;
   int routing_id_;
 
   // If this frame was created to replace a proxy, this will store the routing

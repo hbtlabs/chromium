@@ -9,6 +9,7 @@ import("//build/config/ui.gni")
 import("//build/split_static_library.gni")
 import("//chrome/common/features.gni")
 import("//media/media_options.gni")
+import("//printing/features/features.gni")
 
 config("ui_warnings") {
   if (is_clang) {
@@ -564,6 +565,7 @@ split_static_library("ui") {
     "//device/usb",
     "//media",
     "//net:net_with_v8",
+    "//printing/features",
     "//services/service_manager/runner/common",
     "//skia",
     "//storage/browser",
@@ -1111,6 +1113,8 @@ split_static_library("ui") {
       "webui/settings/settings_clear_browsing_data_handler.h",
       "webui/settings/settings_cookies_view_handler.cc",
       "webui/settings/settings_cookies_view_handler.h",
+      "webui/settings/settings_import_data_handler.cc",
+      "webui/settings/settings_import_data_handler.h",
       "webui/settings/settings_manage_profile_handler.cc",
       "webui/settings/settings_manage_profile_handler.h",
       "webui/settings/settings_media_devices_selection_handler.cc",

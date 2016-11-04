@@ -1,8 +1,4 @@
 -ChromeServiceWorkerTest.FallbackMainResourceRequestWhenJSDisabled
--LogWebUIUrlTest.TestUberPage
--MediaGalleriesPlatformAppBrowserTest.MediaGalleriesRead
--MediaGalleriesPlatformAppBrowserTest.ToURL
--OptionsWebUIExtendedTest.OverlayBackToChild
 -PDFExtensionTest.PdfAccessibilityInOOPIF
 -PlatformAppBrowserTest.ActiveAppsAreRecorded
 -PlatformAppUrlRedirectorBrowserTest.PrerenderedClickInTabIntercepted
@@ -35,3 +31,7 @@
 # returns null for browser-side navigations
 -PageLoadMetricsBrowserTest.Ignore204Pages
 -PageLoadMetricsBrowserTest.IgnoreDownloads
+
+# https://crbug.com/650246: ResourcePrefetchPredictor doesn't work correctly yet
+# with PlzNavigate
+-ResourcePrefetchPredictorBrowserTest.*

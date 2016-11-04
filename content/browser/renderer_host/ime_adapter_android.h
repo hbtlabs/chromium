@@ -18,7 +18,6 @@ class RenderFrameHost;
 class RenderWidgetHostImpl;
 class RenderWidgetHostViewAndroid;
 class WebContents;
-struct NativeWebKeyboardEvent;
 
 // This class is in charge of dispatching key events from the java side
 // and forward to renderer along with input method results via
@@ -73,8 +72,6 @@ class ImeAdapterAndroid {
                            bool immediateRequest, bool monitorRequest);
   bool RequestTextInputStateUpdate(JNIEnv*,
                                    const base::android::JavaParamRef<jobject>&);
-  bool BeginBatchEdit(JNIEnv*, const base::android::JavaParamRef<jobject>&);
-  bool EndBatchEdit(JNIEnv*, const base::android::JavaParamRef<jobject>&);
   bool IsImeThreadEnabled(JNIEnv*, const base::android::JavaParamRef<jobject>&);
 
   // Called from native -> java

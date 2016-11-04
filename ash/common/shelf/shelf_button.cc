@@ -17,7 +17,7 @@
 #include "grit/ash_resources.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkPaint.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -395,9 +395,9 @@ bool ShelfButton::OnMouseDragged(const ui::MouseEvent& event) {
   return true;
 }
 
-void ShelfButton::GetAccessibleState(ui::AXViewState* state) {
-  state->role = ui::AX_ROLE_BUTTON;
-  state->name = shelf_view_->GetTitleForView(this);
+void ShelfButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ui::AX_ROLE_BUTTON;
+  node_data->SetName(shelf_view_->GetTitleForView(this));
 }
 
 void ShelfButton::Layout() {
@@ -527,7 +527,7 @@ bool ShelfButton::ShouldShowInkDropHighlight() const {
 void ShelfButton::NotifyClick(const ui::Event& event) {
   CustomButton::NotifyClick(event);
   if (listener_)
-    listener_->ButtonPressed(this, event, ink_drop());
+    listener_->ButtonPressed(this, event, GetInkDrop());
 }
 
 void ShelfButton::UpdateState() {

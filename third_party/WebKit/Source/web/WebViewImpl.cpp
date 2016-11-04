@@ -352,7 +352,7 @@ void WebView::willEnterModalLoop() {
 
 void WebView::didExitModalLoop() {
   DCHECK(pageLoadDeferrerStack().size());
-  pageLoadDeferrerStack().removeLast();
+  pageLoadDeferrerStack().pop_back();
 }
 
 void WebViewImpl::setMainFrame(WebFrame* frame) {
@@ -3470,6 +3470,10 @@ void WebViewImpl::performPluginAction(const WebPluginAction& action,
       }
     }
   }
+}
+
+void WebViewImpl::audioStateChanged(bool isAudioPlaying) {
+  m_scheduler->audioStateChanged(isAudioPlaying);
 }
 
 WebHitTestResult WebViewImpl::hitTestResultAt(const WebPoint& point) {

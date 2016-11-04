@@ -4,8 +4,7 @@
 
 package org.chromium.chrome.browser.ntp.cards;
 
-import org.chromium.base.Callback;
-import org.chromium.base.Promise;
+import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ntp.NewTabPage.DestructionObserver;
 import org.chromium.chrome.browser.ntp.NewTabPageView.NewTabPageManager;
@@ -15,19 +14,21 @@ import org.chromium.chrome.browser.ntp.snippets.SectionHeader;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticleViewHolder;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
-import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
-import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.OfflinePageModelObserver;
+import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadBridge;
+import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadItem;
 
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 /**
  * A group of suggestions, with a header, a status card, and a progress indicator. This is
  * responsible for tracking whether its suggestions have been saved offline.
  */
 public class SuggestionsSection extends InnerNode {
+    private static final String TAG = "NtpCards";
+
     private final List<TreeNode> mChildren = new ArrayList<>();
     private final List<SnippetArticle> mSuggestions = new ArrayList<>();
     private final SectionHeader mHeader;
@@ -36,10 +37,10 @@ public class SuggestionsSection extends InnerNode {
     private final ProgressItem mProgressIndicator = new ProgressItem();
     private final ActionItem mMoreButton;
     private final SuggestionsCategoryInfo mCategoryInfo;
-    private final OfflinePageBridge mOfflinePageBridge;
+    private final OfflinePageDownloadBridge mOfflinePageDownloadBridge;
 
     public SuggestionsSection(NodeParent parent, SuggestionsCategoryInfo info,
-            NewTabPageManager manager, OfflinePageBridge offlineBridge) {
+            NewTabPageManager manager, OfflinePageDownloadBridge offlinePageDownloadBridge) {
         super(parent);
         mHeader = new SectionHeader(info.getTitle());
         mCategoryInfo = info;
@@ -47,19 +48,43 @@ public class SuggestionsSection extends InnerNode {
         mStatus = StatusItem.createNoSuggestionsItem(info);
         resetChildren();
 
-        mOfflinePageBridge = offlineBridge;
-        final OfflinePageModelObserver offlinePageObserver = new OfflinePageModelObserver() {
+        mOfflinePageDownloadBridge = offlinePageDownloadBridge;
+        // We need to setup a listener because the OfflinePageDownloadBridge won't be available
+        // when Chrome is freshly opened.
+        setupOfflinePageDownloadBridgeObserver(manager);
+    }
+
+    private void setupOfflinePageDownloadBridgeObserver(NewTabPageManager manager) {
+        // TODO(peconn): Update logic to listen to specific events, not just recalculate every time.
+        final OfflinePageDownloadBridge.Observer observer =
+                new OfflinePageDownloadBridge.Observer() {
             @Override
-            public void offlinePageModelChanged() {
+            public void onItemsLoaded() {
+                markSnippetsAvailableOffline();
+            }
+
+            @Override
+            public void onItemAdded(OfflinePageDownloadItem item) {
+                markSnippetsAvailableOffline();
+            }
+
+            @Override
+            public void onItemDeleted(String guid) {
+                markSnippetsAvailableOffline();
+            }
+
+            @Override
+            public void onItemUpdated(OfflinePageDownloadItem item) {
                 markSnippetsAvailableOffline();
             }
         };
 
-        mOfflinePageBridge.addObserver(offlinePageObserver);
+        mOfflinePageDownloadBridge.addObserver(observer);
+
         manager.addDestructionObserver(new DestructionObserver() {
             @Override
             public void onDestroy() {
-                mOfflinePageBridge.removeObserver(offlinePageObserver);
+                mOfflinePageDownloadBridge.removeObserver(observer);
             }
         });
     }
@@ -147,41 +172,52 @@ public class SuggestionsSection extends InnerNode {
         return mSuggestions.size();
     }
 
-    public void setSuggestions(List<SnippetArticle> suggestions, @CategoryStatusEnum int status) {
-        copyThumbnails(suggestions);
+    public String[] getDisplayedSuggestionIds() {
+        String[] suggestionIds = new String[mSuggestions.size()];
+        for (int i = 0; i < mSuggestions.size(); ++i) {
+            suggestionIds[i] = mSuggestions.get(i).mIdWithinCategory;
+        }
+        return suggestionIds;
+    }
 
+    public void addSuggestions(List<SnippetArticle> suggestions, @CategoryStatusEnum int status) {
         int itemCountBefore = getItemCount();
         setStatusInternal(status);
 
-        mSuggestions.clear();
+        Log.d(TAG, "addSuggestions: current number of suggestions: %d", mSuggestions.size());
+
+        int sizeBefore = suggestions.size();
+
+        // TODO(dgn): remove once the backend stops sending duplicates.
+        if (suggestions.removeAll(mSuggestions)) {
+            Log.d(TAG, "addSuggestions: Removed duplicates from incoming suggestions. "
+                            + "Count changed from %d to %d",
+                    sizeBefore, suggestions.size());
+        }
+
         mSuggestions.addAll(suggestions);
 
         markSnippetsAvailableOffline();
 
         resetChildren();
+        // TODO(dgn): change to handle only adding new items, or handling no modifications.
         notifySectionChanged(itemCountBefore);
     }
 
 
     /** Checks which SnippetArticles are available offline, and updates them accordingly. */
     private void markSnippetsAvailableOffline() {
-        final Set<String> urls = new HashSet<>();
-        Promise<Set<String>> promise = new Promise<>();
+        Map<String, String> urlToOfflineGuid = new HashMap<>();
 
-        for (final SnippetArticle article : mSuggestions) {
-            urls.add(article.mUrl);
-            urls.add(article.mAmpUrl);
-
-            promise.then(new Callback<Set<String>>() {
-                @Override
-                public void onResult(Set<String> offlineUrls) {
-                    if (offlineUrls.contains(article.mUrl)) article.setAvailableOffline(true);
-                    if (offlineUrls.contains(article.mAmpUrl)) article.setAmpAvailableOffline(true);
-                }
-            });
+        for (OfflinePageDownloadItem item : mOfflinePageDownloadBridge.getAllItems()) {
+            urlToOfflineGuid.put(item.getUrl(), item.getGuid());
         }
 
-        mOfflinePageBridge.checkPagesExistOffline(urls, promise.fulfillmentCallback());
+        for (final SnippetArticle article : mSuggestions) {
+            String guid = urlToOfflineGuid.get(article.mUrl);
+            guid = guid != null ? guid : urlToOfflineGuid.get(article.mAmpUrl);
+            article.setOfflinePageDownloadGuid(guid);
+        }
     }
 
     /** Sets the status for the section. Some statuses can cause the suggestions to be cleared. */
@@ -201,15 +237,6 @@ public class SuggestionsSection extends InnerNode {
     @CategoryInt
     public int getCategory() {
         return mCategoryInfo.getCategory();
-    }
-
-    private void copyThumbnails(List<SnippetArticle> suggestions) {
-        for (SnippetArticle suggestion : suggestions) {
-            int index = mSuggestions.indexOf(suggestion);
-            if (index == -1) continue;
-
-            suggestion.setThumbnailBitmap(mSuggestions.get(index).getThumbnailBitmap());
-        }
     }
 
     @Override

@@ -15,7 +15,7 @@
 #include "ash/common/wm_shell.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_palette.h"
@@ -39,7 +39,9 @@ views::Separator* CreateListItemSeparator() {
   separator->SetColor(kBorderLightColor);
   separator->SetPreferredSize(kSeparatorWidth);
   separator->SetBorder(views::Border::CreateEmptyBorder(
-      kMenuSeparatorVerticalPadding, 0, kMenuSeparatorVerticalPadding, 0));
+      kMenuSeparatorVerticalPadding,
+      kMenuExtraMarginFromLeftEdge + kMenuButtonSize,
+      kMenuSeparatorVerticalPadding, 0));
   return separator;
 }
 
@@ -59,11 +61,11 @@ class SelectableHoverHighlightView : public HoverHighlightView {
 
  protected:
   // views::View:
-  void GetAccessibleState(ui::AXViewState* state) override {
-    HoverHighlightView::GetAccessibleState(state);
-    state->role = ui::AX_ROLE_CHECK_BOX;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    HoverHighlightView::GetAccessibleNodeData(node_data);
+    node_data->role = ui::AX_ROLE_CHECK_BOX;
     if (selected_)
-      state->AddStateFlag(ui::AX_STATE_CHECKED);
+      node_data->AddStateFlag(ui::AX_STATE_CHECKED);
   }
 
  private:
@@ -248,8 +250,10 @@ void ImeListView::AppendImeListAndProperties(
         property_map_[property_view] = property_list[i].key;
       }
 
-      // Adds a separator on the bottom of property items.
-      scroll_content()->AddChildView(CreateListItemSeparator());
+      // Adds a separator on the bottom of property items if there are still
+      // other IMEs under the current one.
+      if (i < list.size() - 1)
+        scroll_content()->AddChildView(CreateListItemSeparator());
     }
   }
 }

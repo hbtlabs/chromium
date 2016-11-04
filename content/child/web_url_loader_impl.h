@@ -14,12 +14,6 @@
 #include "third_party/WebKit/public/platform/WebURLLoader.h"
 #include "url/gurl.h"
 
-namespace base {
-
-class SingleThreadTaskRunner;
-
-}  // namespace base
-
 namespace content {
 
 class ResourceDispatcher;
@@ -70,7 +64,8 @@ class CONTENT_EXPORT WebURLLoaderImpl
   void setDefersLoading(bool value) override;
   void didChangePriority(blink::WebURLRequest::Priority new_priority,
                          int intra_priority_value) override;
-  void setLoadingTaskRunner(blink::WebTaskRunner* loading_task_runner) override;
+  void setLoadingTaskRunner(
+      base::SingleThreadTaskRunner* loading_task_runner) override;
 
  private:
   class Context;

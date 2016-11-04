@@ -1569,6 +1569,7 @@ std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::buildObjectForNode(
   std::unique_ptr<protocol::DOM::Node> value =
       protocol::DOM::Node::create()
           .setNodeId(id)
+          .setBackendNodeId(DOMNodeIds::idForNode(node))
           .setNodeType(static_cast<int>(node->getNodeType()))
           .setNodeName(node->nodeName())
           .setLocalName(localName)
@@ -1876,6 +1877,10 @@ void InspectorDOMAgent::invalidateFrameOwnerElement(LocalFrame* frame) {
 }
 
 void InspectorDOMAgent::didCommitLoad(LocalFrame*, DocumentLoader* loader) {
+  Document* document = loader->frame()->document();
+  if (m_domListener)
+    m_domListener->didAddDocument(document);
+
   LocalFrame* inspectedFrame = m_inspectedFrames->root();
   if (loader->frame() != inspectedFrame) {
     invalidateFrameOwnerElement(loader->frame());

@@ -12,6 +12,7 @@
 #include "base/threading/thread.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/arc_obb_mounter_client.h"
+#include "chromeos/dbus/auth_policy_client.h"
 #include "chromeos/dbus/cras_audio_client.h"
 #include "chromeos/dbus/cros_disks_client.h"
 #include "chromeos/dbus/cryptohome_client.h"
@@ -41,7 +42,7 @@
 
 namespace chromeos {
 
-static DBusThreadManager* g_dbus_thread_manager = NULL;
+static DBusThreadManager* g_dbus_thread_manager = nullptr;
 static bool g_using_dbus_thread_manager_for_testing = false;
 
 DBusThreadManager::DBusThreadManager(ProcessMask process_mask,
@@ -90,9 +91,9 @@ DBusThreadManager::~DBusThreadManager() {
     return;  // Called form Shutdown() or local test instance.
 
   // There should never be both a global instance and a local instance.
-  CHECK(this == g_dbus_thread_manager);
+  CHECK_EQ(this, g_dbus_thread_manager);
   if (g_using_dbus_thread_manager_for_testing) {
-    g_dbus_thread_manager = NULL;
+    g_dbus_thread_manager = nullptr;
     g_using_dbus_thread_manager_for_testing = false;
     VLOG(1) << "DBusThreadManager destroyed";
   } else {
@@ -106,6 +107,11 @@ dbus::Bus* DBusThreadManager::GetSystemBus() {
 
 ArcObbMounterClient* DBusThreadManager::GetArcObbMounterClient() {
   return clients_browser_ ? clients_browser_->arc_obb_mounter_client_.get()
+                          : nullptr;
+}
+
+AuthPolicyClient* DBusThreadManager::GetAuthPolicyClient() {
+  return clients_browser_ ? clients_browser_->auth_policy_client_.get()
                           : nullptr;
 }
 
@@ -242,6 +248,7 @@ std::unique_ptr<DBusThreadManagerSetter>
 DBusThreadManager::GetSetterForTesting() {
   if (!g_using_dbus_thread_manager_for_testing) {
     g_using_dbus_thread_manager_for_testing = true;
+    CHECK(!g_dbus_thread_manager);
     // TODO(jamescook): Don't initialize clients as a side-effect of using a
     // test API. For now, assume the caller wants all clients.
     g_dbus_thread_manager =
@@ -254,7 +261,7 @@ DBusThreadManager::GetSetterForTesting() {
 
 // static
 bool DBusThreadManager::IsInitialized() {
-  return g_dbus_thread_manager != NULL;
+  return !!g_dbus_thread_manager;
 }
 
 // static
@@ -262,7 +269,7 @@ void DBusThreadManager::Shutdown() {
   // Ensure that we only shutdown DBusThreadManager once.
   CHECK(g_dbus_thread_manager);
   DBusThreadManager* dbus_thread_manager = g_dbus_thread_manager;
-  g_dbus_thread_manager = NULL;
+  g_dbus_thread_manager = nullptr;
   g_using_dbus_thread_manager_for_testing = false;
   delete dbus_thread_manager;
   VLOG(1) << "DBusThreadManager Shutdown completed";

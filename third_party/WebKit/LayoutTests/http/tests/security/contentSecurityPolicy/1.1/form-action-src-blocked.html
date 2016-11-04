@@ -9,14 +9,26 @@
         testRunner.clearBackForwardList();
         testRunner.dumpBackForwardList();
     }
+
     window.addEventListener('load', function() {
+        document.getElementById('theform').addEventListener('submit', function(e) {
+            console.log('submit event fired.');
+        });
+
         setTimeout(function() {
             document.getElementById('submit').click();
         }, 0);
     });
-    setTimeout(function () {
-        testRunner.notifyDone();
-    }, 1000);
+
+    document.addEventListener('securitypolicyviolation', function(e) {
+        console.log('securitypolicyviolation event fired.');
+        console.log('securitypolicyviolation_event.documentURI=' + e.documentURI);
+        console.log('securitypolicyviolation_event.blockedURI=' + e.blockedURI);
+        console.log('securitypolicyviolation_event.violatedDirective=' + e.violatedDirective);
+        setTimeout(function() {
+            testRunner.notifyDone();
+        }, 0);
+    });
 </script>
 </head>
 <body>

@@ -4,6 +4,7 @@
 
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
+import("//printing/features/features.gni")
 import("//testing/test.gni")
 import("//tools/grit/repack.gni")
 
@@ -107,6 +108,7 @@ test("components_unittests") {
     "//components/password_manager/core/browser:unit_tests",
     "//components/password_manager/core/common:unit_tests",
     "//components/password_manager/sync/browser:unit_tests",
+    "//components/payments:unit_tests",
     "//components/physical_web/data_source:unit_tests",
     "//components/precache/core:unit_tests",
     "//components/prefs:unit_tests",
@@ -412,6 +414,7 @@ if (!is_ios) {
       "//device/geolocation",
       "//ipc:test_support",
       "//net:test_support",
+      "//printing/features",
       "//services/service_manager/public/cpp",
       "//testing/gmock",
       "//testing/gtest",
@@ -464,6 +467,7 @@ if (!is_ios) {
 
   test("components_perftests") {
     sources = [
+      "omnibox/browser/history_quick_provider_performance_unittest.cc",
       "test/run_all_perftests.cc",
       "visitedlink/test/visitedlink_perftest.cc",
     ]
@@ -473,6 +477,9 @@ if (!is_ios) {
 
     deps = [
       "//base",
+      "//components/history/core/test",
+      "//components/omnibox/browser",
+      "//components/omnibox/browser:test_support",
       "//components/test:test_support",
       "//components/visitedlink/browser",
       "//testing/perf",

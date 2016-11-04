@@ -5671,10 +5671,10 @@ Keep your key file in a safe place. You will need it to create new versions of y
         Allow extensions to create panel windows that open outside of the browser frame. Attempts to open a panel will open a popup instead if not enabled. Default behavior is to allow only for whitelisted extensions. Enabled behavior is to allow for all extensions. Disabled behavior is to disallow panels for any extension.
       </message>
       <message name="IDS_FLAGS_WEBGL2_NAME" desc="Name of the 'Enable WebGL 2.0' flag.">
-        WebGL 2.0 Prototype
+        WebGL 2.0
       </message>
       <message name="IDS_FLAGS_WEBGL2_DESCRIPTION" desc="Description for the flag to enable WebGL 2.0.">
-        Enabling this option allows web applications to access the experimental WebGL 2.0 feature. This option should only be used for application development, and should not be used when browsing arbitrary web sites.
+        Allow web applications to access WebGL 2.0.
       </message>
       <message name="IDS_FLAGS_WEBGL_DRAFT_EXTENSIONS_NAME" desc="Name of the 'Enable WebGL Draft Extensions' flag.">
         WebGL Draft Extensions
@@ -14823,6 +14823,30 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
         <message name="IDS_PRINTER_DETECTED_NOTIFICATION_PRINT_APP_FOUND_BODY" desc="Content for notification shown to the user when a printer gets plugged in to a Chrome OS device if the active user already has a print app that supports the printer installed.">
           Your printer is ready.
         </message>
+        <message name="IDS_PRINTER_DETECTED_NOTIFICATION_SET_UP_TITLE" desc="Title for notification shown to the user when a printer gets plugged in to a Chrome OS device and ready to be set up.">
+          Printer detected
+        </message>
+        <message name="IDS_PRINTER_DETECTED_NOTIFICATION_SET_UP_IN_PROGRESS_TITLE" desc="Title for notification when the USB printer is in the setup process.">
+          Set up printer...
+        </message>
+        <message name="IDS_PRINTER_DETECTED_NOTIFICATION_SET_UP_SUCCESS_TITLE" desc="Title for notification when the USB printer is setup successfully.">
+          Success!
+        </message>
+        <message name="IDS_PRINTER_DETECTED_NOTIFICATION_SET_UP_FAILED_TITLE" desc="Title for the notification when the setup of the USB printer is failed.">
+          Failed to set up printer
+        </message>
+        <message name="IDS_PRINTER_DETECTED_NOTIFICATION_SET_UP_BUTTON" desc="Content for the notification button to guide the user to go throught the printer setup process.">
+          Click to set up
+        </message>
+        <message name="IDS_PRINTER_DETECTED_NOTIFICATION_SET_UP_CANCEL_BUTTON" desc="Content for the notification button to cancel the USB printer setup process.">
+          Cancel printer setup
+        </message>
+        <message name="IDS_PRINTER_DETECTED_NOTIFICATION_SET_UP_CLOSE_BUTTON" desc="Content for the notification button to close the current notification.">
+          Close
+        </message>
+        <message name="IDS_PRINTER_DETECTED_NOTIFICATION_SET_UP_GET_HELP_BUTTON" desc="Content for the notification button to direct the user to the chrome://setting CUPS printers subpage if the setup process is failed.">
+          Get help
+        </message> 
       </if>
 
       <!-- Strings for ARC intent picker -->
@@ -15120,13 +15144,13 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
         "<ph name="CHROME_EXTENSION_NAME">$1<ex>Chrome extension name</ex></ph>" wants to connect to:
       </message>
       <message name="IDS_DEVICE_CHOOSER_NO_DEVICES_FOUND_PROMPT" desc="The label that is used to inform the user that no devices were found in the chooser popup.">
-        No devices found.
+        No devices found
       </message>
       <message name="IDS_DEVICE_CHOOSER_DEVICE_NAME_WITH_ID" desc="To distinguish devices with the same name, the device chooser shows the device name with id.">
         <ph name="DEVICE_NAME">$1<ex>device name</ex></ph> (<ph name="DEVICE_ID">$2<ex>device id</ex></ph>)
       </message>
       <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_NO_DEVICES_FOUND_PROMPT" desc="The label that is used to inform the user that no Bluetooth devices were found in the chooser popup.">
-        No Bluetooth devices found.
+        No Bluetooth devices found
       </message>
       <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_TURN_ADAPTER_OFF" desc="Text of a link the user can click to get help information when Bluetooth adapter is turned off.">
         <ph name="TURN_ON_BLUETOOTH_LINK">$1<ex>Turn on Bluetooth</ex></ph> to allow pairing
@@ -15135,10 +15159,10 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
         Turn on Bluetooth
       </message>
       <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_SCANNING" desc="The label that is used to indicate the chooser is scanning for Bluetooth devices.">
-        Scanning for devices...
+        ''' while scanning for devices...
       </message>
       <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_RE_SCAN" desc="Text of a link the user can click to start a new scan for Bluetooth devices.">
-        Re-scan
+        re-scan
       </message>
       <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_PAIR_BUTTON_TEXT" desc="Label on the button that closes the Bluetooth chooser popup and pairs the selected device.">
         Pair
@@ -15149,11 +15173,11 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       <message name="IDS_DEVICE_CHOOSER_CANCEL_BUTTON_TEXT" desc="Label on the button that closes the chooser popup without selecting an option.">
         Cancel
       </message>
-      <message name="IDS_DEVICE_CHOOSER_FOOTNOTE_TEXT" desc="This text is shown at the bottom of the chooser popup with a link to part of its text.">
-        Not seeing your device? <ph name="GET_HELP_LINK">$1<ex>Get help</ex></ph>
+      <message name="IDS_DEVICE_CHOOSER_GET_HELP_LINK_WITH_SCANNING_STATUS" desc="This text is shown at the bottom of the chooser popup with a link to 'Get help'.">
+        Get help<ph name="SCANNING_STATUS">$1<ex> while scanning for devices...</ex></ph>
       </message>
-      <message name="IDS_DEVICE_CHOOSER_GET_HELP_LINK_TEXT" desc="Text of the 'Get help' link at the bottom of the chooser popup.">
-        Get help
+      <message name="IDS_DEVICE_CHOOSER_GET_HELP_LINK_WITH_RE_SCAN_LINK" desc="This text is shown at the bottom of the chooser popup with links to 'Get help' and 're-scan'.">
+        <ph name="GET_HELP_LINK">$1<ex>Get help</ex></ph> or <ph name="RE_SCAN_LINK">$2<ex>re-scan</ex></ph>
       </message>
       <message name="IDS_DEVICE_CHOOSER_PAIRED_STATUS_TEXT" desc="The label that is used to inform the user that the device is paired.">
         Paired
@@ -15268,6 +15292,12 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       </message>
       <message name="IDS_FLAGS_ENABLE_NTP_SNIPPETS_DESCRIPTION" desc="Description for the flag to enable snippets on the New Tab page." translateable="false">
         If enabled, the New Tab page will show a list of content snippets
+      </message>
+      <message name="IDS_FLAGS_ENABLE_NTP_SNIPPETS_VISIBILITY_NAME" desc="Name for the flag to enable increased visibilty for snippets on the New Tab Page." translateable="false">
+        Make New Tab Page Snippets more visible.
+      </message>
+      <message name="IDS_FLAGS_ENABLE_NTP_SNIPPETS_VISIBILITY_DESCRIPTION" desc="Description for the flag to enable increased visibility for recently viewed tabs on the New Tab page." translateable="false">
+        If enabled, the NTP snippets will become more discoverable with a larger portion of the first card above the fold.
       </message>
       <message name="IDS_FLAGS_ENABLE_NTP_RECENT_OFFLINE_TAB_SUGGESTIONS_NAME" desc="Name for the flag to enable suggestions for recently viewed tabs, which were captured offline, on the New Tab page." translateable="false">
         Show recent offline tabs on the New Tab page
@@ -15410,10 +15440,10 @@ read aloud to screenreader users to announce that a completion is available.">
     </if>
     <if expr="is_android">
       <message name="IDS_FLAGS_ENABLE_VR_SHELL_NAME" desc="Name of the flag to enable VR shell">
-        Enable VR shell.
+        Enable Chrome VR.
       </message>
       <message name="IDS_FLAGS_ENABLE_VR_SHELL_DESCRIPTION" desc="Description for the flag to enable VR shell">
-        Enable VR shell if available for this device.
+        Allow browsing with a VR headset if available for this device.
       </message>
       <message name="IDS_VR_SHELL_UI_BACK_BUTTON" desc="Text under the VR scene history back button">
         Back
@@ -15582,7 +15612,7 @@ read aloud to screenreader users to announce that a completion is available.">
             Enabled
         </message>
         <message name="IDS_FLAGS_ENABLE_DEFAULT_MEDIA_SESSION_ENABLED_DUCK_FLASH" desc="Option for enabling the default MediaSession with Flash">
-            Enabled (Flash ducks when losing audio focus, experimental)
+            Enabled (Flash lowers volume when interrupted by other sound, experimental)
         </message>
     </if>
 

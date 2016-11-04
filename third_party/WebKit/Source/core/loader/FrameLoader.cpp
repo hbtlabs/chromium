@@ -88,6 +88,7 @@
 #include "platform/PluginScriptForbiddenScope.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/UserGestureIndicator.h"
+#include "platform/feature_policy/FeaturePolicy.h"
 #include "platform/network/HTTPParsers.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/scroll/ScrollAnimatorBase.h"
@@ -575,6 +576,25 @@ void FrameLoader::didBeginDocument() {
     OriginTrialContext::addTokensFromHeader(
         m_frame->document(),
         m_documentLoader->response().httpHeaderField(HTTPNames::Origin_Trial));
+    if (RuntimeEnabledFeatures::featurePolicyEnabled()) {
+      std::unique_ptr<FeaturePolicy> featurePolicy(
+          FeaturePolicy::createFromParentPolicy(
+              (isLoadingMainFrame()
+                   ? nullptr
+                   : m_frame->client()->parent()->getFeaturePolicy()),
+              m_frame->securityContext()->getSecurityOrigin()));
+      Vector<String> messages;
+      featurePolicy->setHeaderPolicy(
+          m_documentLoader->response().httpHeaderField(
+              HTTPNames::Feature_Policy),
+          messages);
+      for (auto& message : messages) {
+        m_frame->document()->addConsoleMessage(ConsoleMessage::create(
+            OtherMessageSource, ErrorMessageLevel,
+            "Error with Feature-Policy header: " + message));
+      }
+      m_frame->setFeaturePolicy(std::move(featurePolicy));
+    }
   }
 
   if (m_documentLoader) {
@@ -1677,11 +1697,7 @@ void FrameLoader::startLoad(FrameLoadRequest& frameLoadRequest,
   m_progressTracker->progressStarted();
   m_provisionalDocumentLoader->appendRedirect(
       m_provisionalDocumentLoader->request().url());
-  double triggeringEventTime =
-      frameLoadRequest.triggeringEvent()
-          ? frameLoadRequest.triggeringEvent()->platformTimeStamp()
-          : 0;
-  client()->dispatchDidStartProvisionalLoad(triggeringEventTime);
+  client()->dispatchDidStartProvisionalLoad();
   DCHECK(m_provisionalDocumentLoader);
   m_provisionalDocumentLoader->startLoadingMainResource();
 
@@ -1860,11 +1876,13 @@ void FrameLoader::modifyRequestForCSP(ResourceRequest& resourceRequest,
   // https://w3c.github.io/webappsec/specs/upgrade/#feature-detect
   if (resourceRequest.frameType() != WebURLRequest::FrameTypeNone) {
     // Early return if the request has already been upgraded.
-    if (resourceRequest.httpHeaderField("Upgrade-Insecure-Requests") ==
-        AtomicString("1"))
+    if (!resourceRequest.httpHeaderField(HTTPNames::Upgrade_Insecure_Requests)
+             .isNull()) {
       return;
+    }
 
-    resourceRequest.addHTTPHeaderField("Upgrade-Insecure-Requests", "1");
+    resourceRequest.setHTTPHeaderField(HTTPNames::Upgrade_Insecure_Requests,
+                                       "1");
   }
 
   upgradeInsecureRequest(resourceRequest, document);

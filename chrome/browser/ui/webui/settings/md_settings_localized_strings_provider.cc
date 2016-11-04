@@ -732,6 +732,26 @@ void AddEasyUnlockStrings(content::WebUIDataSource* html_source) {
                          chrome::kEasyUnlockLearnMoreUrl);
 }
 
+void AddImportDataStrings(content::WebUIDataSource* html_source) {
+  LocalizedString localized_strings[] = {
+    {"importFromLabel", IDS_SETTINGS_IMPORT_FROM_LABEL},
+    {"importDescription", IDS_SETTINGS_IMPORT_ITEMS_LABEL},
+    {"importLoading", IDS_SETTINGS_IMPORT_LOADING_PROFILES},
+    {"importHistory", IDS_SETTINGS_IMPORT_HISTORY_CHECKBOX},
+    {"importFavorites", IDS_SETTINGS_IMPORT_FAVORITES_CHECKBOX},
+    {"importPasswords", IDS_SETTINGS_IMPORT_PASSWORDS_CHECKBOX},
+    {"importSearch", IDS_SETTINGS_IMPORT_SEARCH_ENGINES_CHECKBOX},
+    {"importAutofillFormData", IDS_SETTINGS_IMPORT_AUTOFILL_FORM_DATA_CHECKBOX},
+    {"importSucceeded", IDS_SETTINGS_IMPORT_SUCCEEDED},
+    {"importChooseFile", IDS_SETTINGS_IMPORT_CHOOSE_FILE},
+    {"importCommit", IDS_SETTINGS_IMPORT_COMMIT},
+    {"noProfileFound", IDS_SETTINGS_IMPORT_NO_PROFILE_FOUND},
+    {"findYourImportedBookmarks", IDS_SETTINGS_IMPORT_FIND_YOUR_BOOKMARKS},
+  };
+  AddLocalizedStringsBulk(html_source, localized_strings,
+                          arraysize(localized_strings));
+}
+
 void AddInternetStrings(content::WebUIDataSource* html_source) {
   LocalizedString localized_strings[] = {
       {"internetAddConnection", IDS_SETTINGS_INTERNET_ADD_CONNECTION},
@@ -890,10 +910,12 @@ void AddMultiProfilesStrings(content::WebUIDataSource* html_source,
 
   const user_manager::User* user =
       chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
-  std::string primary_user_email = user_manager->GetPrimaryUser()->email();
-  html_source->AddString("primaryUserEmail", primary_user_email);
-  html_source->AddBoolean("isSecondaryUser",
-                          user && user->email() != primary_user_email);
+  const user_manager::User* primary_user = user_manager->GetPrimaryUser();
+  html_source->AddString("primaryUserEmail",
+                         primary_user->GetAccountId().GetUserEmail());
+  html_source->AddBoolean(
+      "isSecondaryUser",
+      user && user->GetAccountId() != primary_user->GetAccountId());
 }
 #endif
 
@@ -942,6 +964,7 @@ void AddPasswordsAndFormsStrings(content::WebUIDataSource* html_source) {
       {"creditCardNumber", IDS_SETTINGS_CREDIT_CARD_NUMBER},
       {"creditCardExpirationMonth", IDS_SETTINGS_CREDIT_CARD_EXPIRATION_MONTH},
       {"creditCardExpirationYear", IDS_SETTINGS_CREDIT_CARD_EXPIRATION_YEAR},
+      {"creditCardExpired", IDS_SETTINGS_CREDIT_CARD_EXPIRED},
       {"editCreditCardTitle", IDS_SETTINGS_EDIT_CREDIT_CARD_TITLE},
       {"addCreditCardTitle", IDS_SETTINGS_ADD_CREDIT_CARD_TITLE},
       {"autofillDetail", IDS_SETTINGS_AUTOFILL_DETAIL},
@@ -1745,6 +1768,7 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source,
 
 #if defined(OS_CHROMEOS)
   AddEasyUnlockStrings(html_source);
+  AddImportDataStrings(html_source);
   AddInternetStrings(html_source);
   AddCrNetworkStrings(html_source);
 #endif

@@ -72,6 +72,7 @@
 #include "core/css/resolver/StyleAdjuster.h"
 #include "core/css/resolver/StyleResolverState.h"
 #include "core/css/resolver/StyleResolverStats.h"
+#include "core/css/resolver/StyleRuleUsageTracker.h"
 #include "core/dom/CSSSelectorWatch.h"
 #include "core/dom/FirstLetterPseudoElement.h"
 #include "core/dom/NodeComputedStyle.h"
@@ -171,17 +172,13 @@ static void collectScopedResolversForHostedShadowTrees(
   // Adding scoped resolver for active shadow roots for shadow host styling.
   for (ShadowRoot* shadowRoot = &shadow->youngestShadowRoot(); shadowRoot;
        shadowRoot = shadowRoot->olderShadowRoot()) {
-    if (shadowRoot->numberOfStyles() > 0) {
-      if (ScopedStyleResolver* resolver = shadowRoot->scopedStyleResolver())
-        resolvers.append(resolver);
-    }
+    if (ScopedStyleResolver* resolver = shadowRoot->scopedStyleResolver())
+      resolvers.append(resolver);
   }
 }
 
 StyleResolver::StyleResolver(Document& document)
-    : m_document(document),
-      m_printMediaType(false),
-      m_styleSharingDepth(0) {
+    : m_document(document), m_printMediaType(false), m_styleSharingDepth(0) {
   FrameView* view = document.view();
   DCHECK(view);
   m_medium = new MediaQueryEvaluator(&view->frame());
@@ -193,6 +190,10 @@ StyleResolver::~StyleResolver() {}
 
 void StyleResolver::dispose() {
   m_matchedPropertiesCache.clear();
+}
+
+void StyleResolver::setRuleUsageTracker(StyleRuleUsageTracker* tracker) {
+  m_tracker = tracker;
 }
 
 void StyleResolver::lazyAppendAuthorStyleSheets(
@@ -321,8 +322,6 @@ static void matchHostRules(const Element& element,
 
   for (ShadowRoot* shadowRoot = &shadow->oldestShadowRoot(); shadowRoot;
        shadowRoot = shadowRoot->youngerShadowRoot()) {
-    if (!shadowRoot->numberOfStyles())
-      continue;
     if (ScopedStyleResolver* resolver = shadowRoot->scopedStyleResolver()) {
       collector.clearMatchedRules();
       resolver->collectMatchingShadowHostRules(collector);
@@ -759,6 +758,9 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForElement(
       }
     }
 
+    if (m_tracker)
+      addMatchedRulesToTracker(collector);
+
     if (element->computedStyle() &&
         element->computedStyle()->textAutosizingMultiplier() !=
             state.style()->textAutosizingMultiplier()) {
@@ -933,6 +935,9 @@ bool StyleResolver::pseudoStyleForElementInternal(
     matchAuthorRules(*state.element(), collector);
     collector.finishAddingAuthorRulesForTreeScope();
 
+    if (m_tracker)
+      addMatchedRulesToTracker(collector);
+
     if (!collector.matchedResult().hasMatchedProperties())
       return false;
 
@@ -1014,15 +1019,16 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForPage(int pageIndex) {
 
   bool inheritedOnly = false;
 
+  NeedsApplyPass needsApplyPass;
   const MatchResult& result = collector.matchedResult();
   applyMatchedProperties<HighPropertyPriority>(state, result.allRules(), false,
-                                               inheritedOnly);
+                                               inheritedOnly, needsApplyPass);
 
   // If our font got dirtied, go ahead and update it now.
   updateFont(state);
 
   applyMatchedProperties<LowPropertyPriority>(state, result.allRules(), false,
-                                              inheritedOnly);
+                                              inheritedOnly, needsApplyPass);
 
   loadPendingResources(state);
 
@@ -1055,6 +1061,11 @@ void StyleResolver::updateFont(StyleResolverState& state) {
   state.setConversionZoom(state.style()->effectiveZoom());
 }
 
+void StyleResolver::addMatchedRulesToTracker(
+    const ElementRuleCollector& collector) {
+  collector.addMatchedRulesToTracker(m_tracker);
+}
+
 StyleRuleList* StyleResolver::styleRulesForElement(Element* element,
                                                    unsigned rulesToInclude) {
   DCHECK(element);
@@ -1076,6 +1087,9 @@ CSSRuleList* StyleResolver::pseudoCSSRulesForElement(Element* element,
                                  state.style());
   collector.setMode(SelectorChecker::CollectingCSSRules);
   collectPseudoRulesForElement(*element, collector, pseudoId, rulesToInclude);
+
+  if (m_tracker)
+    addMatchedRulesToTracker(collector);
   return collector.matchedCSSRuleList();
 }
 
@@ -1457,6 +1471,7 @@ void StyleResolver::applyPropertiesForApplyAtRule(
     StyleResolverState& state,
     const CSSValue& value,
     bool isImportant,
+    NeedsApplyPass& needsApplyPass,
     PropertyWhitelistType propertyWhitelistType) {
   state.style()->setHasVariableReferenceFromNonInheritedProperty();
   if (!state.style()->inheritedVariables())
@@ -1465,9 +1480,10 @@ void StyleResolver::applyPropertiesForApplyAtRule(
   const StylePropertySet* propertySet =
       state.customPropertySetForApplyAtRule(name);
   bool inheritedOnly = false;
-  if (propertySet)
+  if (propertySet) {
     applyProperties<priority>(state, propertySet, isImportant, inheritedOnly,
-                              propertyWhitelistType);
+                              needsApplyPass, propertyWhitelistType);
+  }
 }
 
 template <CSSPropertyPriority priority>
@@ -1476,6 +1492,7 @@ void StyleResolver::applyProperties(
     const StylePropertySet* properties,
     bool isImportant,
     bool inheritedOnly,
+    NeedsApplyPass& needsApplyPass,
     PropertyWhitelistType propertyWhitelistType) {
   unsigned propertyCount = properties->propertyCount();
   for (unsigned i = 0; i < propertyCount; ++i) {
@@ -1484,19 +1501,27 @@ void StyleResolver::applyProperties(
 
     if (property == CSSPropertyApplyAtRule) {
       DCHECK(!inheritedOnly);
-      applyPropertiesForApplyAtRule<priority>(
-          state, current.value(), isImportant, propertyWhitelistType);
+      applyPropertiesForApplyAtRule<priority>(state, current.value(),
+                                              isImportant, needsApplyPass,
+                                              propertyWhitelistType);
       continue;
     }
 
-    if (isImportant != current.isImportant())
-      continue;
-
-    if (property == CSSPropertyAll) {
+    if (property == CSSPropertyAll && isImportant == current.isImportant()) {
+      if (needsApplyPass.needsUpdate()) {
+        needsApplyPass.set(HighPropertyPriority, isImportant);
+        needsApplyPass.set(LowPropertyPriority, isImportant);
+      }
       applyAllProperty<priority>(state, current.value(), inheritedOnly,
                                  propertyWhitelistType);
       continue;
     }
+
+    if (needsApplyPass.needsUpdate())
+      needsApplyPass.set(priorityForProperty(property), current.isImportant());
+
+    if (isImportant != current.isImportant())
+      continue;
 
     if (!isPropertyInWhitelist(propertyWhitelistType, property, document()))
       continue;
@@ -1521,8 +1546,13 @@ template <CSSPropertyPriority priority>
 void StyleResolver::applyMatchedProperties(StyleResolverState& state,
                                            const MatchedPropertiesRange& range,
                                            bool isImportant,
-                                           bool inheritedOnly) {
+                                           bool inheritedOnly,
+                                           NeedsApplyPass& needsApplyPass) {
   if (range.isEmpty())
+    return;
+
+  if (!needsApplyPass.needsUpdate() &&
+      !needsApplyPass.get(priority, isImportant))
     return;
 
   if (state.style()->insideLink() != NotInsideLink) {
@@ -1536,7 +1566,7 @@ void StyleResolver::applyMatchedProperties(StyleResolverState& state,
                                                CSSSelector::MatchVisited);
 
       applyProperties<priority>(state, matchedProperties.properties.get(),
-                                isImportant, inheritedOnly,
+                                isImportant, inheritedOnly, needsApplyPass,
                                 static_cast<PropertyWhitelistType>(
                                     matchedProperties.m_types.whitelistType));
     }
@@ -1544,11 +1574,12 @@ void StyleResolver::applyMatchedProperties(StyleResolverState& state,
     state.setApplyPropertyToVisitedLinkStyle(false);
     return;
   }
-  for (const auto& matchedProperties : range)
+  for (const auto& matchedProperties : range) {
     applyProperties<priority>(state, matchedProperties.properties.get(),
-                              isImportant, inheritedOnly,
+                              isImportant, inheritedOnly, needsApplyPass,
                               static_cast<PropertyWhitelistType>(
                                   matchedProperties.m_types.whitelistType));
+  }
 }
 
 static unsigned computeMatchedPropertiesHash(
@@ -1621,22 +1652,29 @@ void StyleResolver::applyMatchedProperties(StyleResolverState& state,
     applyInheritedOnly = true;
   }
 
+  NeedsApplyPass needsApplyPass;
+
   // TODO(leviw): We need the proper bit for tracking whether we need to do this
   // work.
   applyMatchedProperties<ResolveVariables>(state, matchResult.authorRules(),
-                                           false, applyInheritedOnly);
+                                           false, applyInheritedOnly,
+                                           needsApplyPass);
   applyMatchedProperties<ResolveVariables>(state, matchResult.authorRules(),
-                                           true, applyInheritedOnly);
+                                           true, applyInheritedOnly,
+                                           needsApplyPass);
   // TODO(leviw): stop recalculating every time
   CSSVariableResolver::resolveVariableDefinitions(state);
 
   if (RuntimeEnabledFeatures::cssApplyAtRulesEnabled()) {
     if (cacheCustomPropertiesForApplyAtRules(state,
                                              matchResult.authorRules())) {
+      needsApplyPass.setNeedsUpdate(true);
       applyMatchedProperties<ResolveVariables>(state, matchResult.authorRules(),
-                                               false, applyInheritedOnly);
+                                               false, applyInheritedOnly,
+                                               needsApplyPass);
       applyMatchedProperties<ResolveVariables>(state, matchResult.authorRules(),
-                                               true, applyInheritedOnly);
+                                               true, applyInheritedOnly,
+                                               needsApplyPass);
       CSSVariableResolver::resolveVariableDefinitions(state);
     }
   }
@@ -1646,13 +1684,15 @@ void StyleResolver::applyMatchedProperties(StyleResolverState& state,
   // other properties depend on.  The order is (1) high-priority not important,
   // (2) high-priority important, (3) normal not important and (4) normal
   // important.
-  applyMatchedProperties<HighPropertyPriority>(state, matchResult.allRules(),
-                                               false, applyInheritedOnly);
-  for (auto range : ImportantAuthorRanges(matchResult))
-    applyMatchedProperties<HighPropertyPriority>(state, range, true,
-                                                 applyInheritedOnly);
-  applyMatchedProperties<HighPropertyPriority>(state, matchResult.uaRules(),
-                                               true, applyInheritedOnly);
+  needsApplyPass.setNeedsUpdate(true);
+  applyMatchedProperties<HighPropertyPriority>(
+      state, matchResult.allRules(), false, applyInheritedOnly, needsApplyPass);
+  for (auto range : ImportantAuthorRanges(matchResult)) {
+    applyMatchedProperties<HighPropertyPriority>(
+        state, range, true, applyInheritedOnly, needsApplyPass);
+  }
+  applyMatchedProperties<HighPropertyPriority>(
+      state, matchResult.uaRules(), true, applyInheritedOnly, needsApplyPass);
 
   if (UNLIKELY(isSVGForeignObjectElement(element))) {
     // LayoutSVGRoot handles zooming for the whole SVG subtree, so foreignObject
@@ -1689,8 +1729,8 @@ void StyleResolver::applyMatchedProperties(StyleResolverState& state,
   CSSVariableResolver::computeRegisteredVariables(state);
 
   // Now do the normal priority UA properties.
-  applyMatchedProperties<LowPropertyPriority>(state, matchResult.uaRules(),
-                                              false, applyInheritedOnly);
+  applyMatchedProperties<LowPropertyPriority>(
+      state, matchResult.uaRules(), false, applyInheritedOnly, needsApplyPass);
 
   // Cache the UA properties to pass them to LayoutTheme in adjustComputedStyle.
   state.cacheUserAgentBorderAndBackground();
@@ -1698,12 +1738,14 @@ void StyleResolver::applyMatchedProperties(StyleResolverState& state,
   // Now do the author and user normal priority properties and all the
   // !important properties.
   applyMatchedProperties<LowPropertyPriority>(state, matchResult.authorRules(),
-                                              false, applyInheritedOnly);
-  for (auto range : ImportantAuthorRanges(matchResult))
-    applyMatchedProperties<LowPropertyPriority>(state, range, true,
-                                                applyInheritedOnly);
-  applyMatchedProperties<LowPropertyPriority>(state, matchResult.uaRules(),
-                                              true, applyInheritedOnly);
+                                              false, applyInheritedOnly,
+                                              needsApplyPass);
+  for (auto range : ImportantAuthorRanges(matchResult)) {
+    applyMatchedProperties<LowPropertyPriority>(
+        state, range, true, applyInheritedOnly, needsApplyPass);
+  }
+  applyMatchedProperties<LowPropertyPriority>(
+      state, matchResult.uaRules(), true, applyInheritedOnly, needsApplyPass);
 
   if (state.style()->hasAppearance() && !applyInheritedOnly) {
     // Check whether the final border and background differs from the cached UA
@@ -1765,6 +1807,9 @@ void StyleResolver::applyCallbackSelectors(StyleResolverState& state) {
   MatchRequest matchRequest(watchedSelectorsRuleSet);
   collector.collectMatchingRules(matchRequest);
   collector.sortAndTransferMatchedRules();
+
+  if (m_tracker)
+    addMatchedRulesToTracker(collector);
 
   StyleRuleList* rules = collector.matchedStyleRuleList();
   if (!rules)
@@ -1833,6 +1878,7 @@ DEFINE_TRACE(StyleResolver) {
   visitor->trace(m_styleSharingLists);
   visitor->trace(m_pendingStyleSheets);
   visitor->trace(m_document);
+  visitor->trace(m_tracker);
 }
 
 }  // namespace blink

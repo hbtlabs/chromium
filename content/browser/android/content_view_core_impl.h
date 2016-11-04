@@ -30,10 +30,6 @@
 #include "ui/gfx/selection_bound.h"
 #include "url/gurl.h"
 
-namespace cc {
-struct ViewportSelectionBound;
-}
-
 namespace ui {
 class WindowAndroid;
 }
@@ -328,8 +324,7 @@ class ContentViewCoreImpl : public ContentViewCore,
                         int composition_start,
                         int composition_end,
                         bool show_ime_if_needed,
-                        bool is_non_ime_change,
-                        bool in_batch_edit_mode);
+                        bool is_non_ime_change);
   void SetTitle(const base::string16& title);
   void OnBackgroundColorChanged(SkColor color);
 

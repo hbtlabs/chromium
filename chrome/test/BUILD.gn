@@ -123,6 +123,7 @@ static_library("test_support") {
     "//content/test:test_support",
     "//net",
     "//net:test_support",
+    "//printing/features",
     "//skia",
     "//sql",
     "//sql:test_support",
@@ -1227,6 +1228,7 @@ test("browser_tests") {
     ":test_support",
     "//base",
     "//components/sync:test_support_model",
+    "//printing/features",
     "//third_party/WebKit/public:features",
   ]
 
@@ -1310,7 +1312,10 @@ test("browser_tests") {
       "../browser/autofill/autofill_server_browsertest.cc",
       "../browser/autofill/content_autofill_driver_browsertest.cc",
       "../browser/autofill/form_structure_browsertest.cc",
-      "../browser/banners/app_banner_manager_browsertest.cc",
+
+      # Disabled. Systemic flakiness. See http://crbug.com/660798.
+      # "../browser/banners/app_banner_manager_browsertest.cc",
+
       "../browser/bitmap_fetcher/bitmap_fetcher_browsertest.cc",
       "../browser/browser_encoding_browsertest.cc",
       "../browser/browsing_data/autofill_counter_browsertest.cc",
@@ -1638,6 +1643,9 @@ test("browser_tests") {
       "../browser/policy/policy_network_browsertest.cc",
       "../browser/policy/policy_prefs_browsertest.cc",
       "../browser/policy/policy_startup_browsertest.cc",
+      "../browser/predictors/resource_prefetch_predictor_browsertest.cc",
+      "../browser/predictors/resource_prefetch_predictor_test_util.cc",
+      "../browser/predictors/resource_prefetch_predictor_test_util.h",
       "../browser/prefetch/prefetch_browsertest.cc",
       "../browser/prefs/pref_functional_browsertest.cc",
       "../browser/prefs/pref_service_browsertest.cc",
@@ -2368,6 +2376,7 @@ test("browser_tests") {
       sources += [
         "../browser/safe_browsing/permission_reporter_browsertest.cc",
         "../browser/safe_browsing/safe_browsing_blocking_page_test.cc",
+        "../browser/safe_browsing/safe_browsing_navigation_observer_browsertest.cc",
         "../browser/safe_browsing/safe_browsing_service_browsertest.cc",
         "../renderer/safe_browsing/phishing_classifier_browsertest.cc",
         "../renderer/safe_browsing/phishing_classifier_delegate_browsertest.cc",
@@ -3314,7 +3323,6 @@ test("unit_tests") {
     "../common/secure_origin_whitelist_unittest.cc",
     "../common/switch_utils_unittest.cc",
     "../common/variations/child_process_field_trial_syncer_unittest.cc",
-    "../common/variations/variations_util_unittest.cc",
     "../renderer/app_categorizer_unittest.cc",
     "../renderer/chrome_content_renderer_client_unittest.cc",
     "../renderer/content_settings_observer_unittest.cc",
@@ -4213,6 +4221,7 @@ test("unit_tests") {
       "../browser/safe_browsing/protocol_manager_unittest.cc",
       "../browser/safe_browsing/protocol_parser_unittest.cc",
       "../browser/safe_browsing/safe_browsing_database_unittest.cc",
+      "../browser/safe_browsing/safe_browsing_navigation_observer_unittest.cc",
       "../browser/safe_browsing/safe_browsing_store_file_unittest.cc",
       "../browser/safe_browsing/safe_browsing_store_unittest.cc",
       "../browser/safe_browsing/sandboxed_dmg_analyzer_mac_unittest.cc",
@@ -5027,6 +5036,7 @@ if (is_chromeos) {
       "//ash/autoclick/mus:manifest",
       "//ash/mus:manifest",
       "//ash/touch_hud/mus:manifest",
+      "//mash/catalog_viewer:manifest",
       "//mash/quick_launch:manifest",
       "//mash/session:manifest",
       "//mash/task_viewer:manifest",
@@ -5036,6 +5046,7 @@ if (is_chromeos) {
     packaged_services = [
       "accessibility_autoclick",
       "ash",
+      "catalog_viewer",
       "mash_session",
       "quick_launch",
       "task_viewer",

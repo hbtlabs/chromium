@@ -190,7 +190,7 @@ void StyleSheetHandler::startRuleHeader(StyleRule::RuleType type,
                                         unsigned offset) {
   // Pop off data for a previous invalid rule.
   if (m_currentRuleData)
-    m_currentRuleDataStack.removeLast();
+    m_currentRuleDataStack.pop_back();
 
   RefPtr<CSSRuleSourceData> data = CSSRuleSourceData::create(type);
   data->ruleHeaderRange.start = offset;
@@ -258,7 +258,7 @@ PassRefPtr<CSSRuleSourceData> StyleSheetHandler::popRuleData() {
   ASSERT(!m_currentRuleDataStack.isEmpty());
   m_currentRuleData = nullptr;
   RefPtr<CSSRuleSourceData> data = m_currentRuleDataStack.last().get();
-  m_currentRuleDataStack.removeLast();
+  m_currentRuleDataStack.pop_back();
   return data.release();
 }
 
@@ -1597,6 +1597,24 @@ InspectorStyleSheet::buildObjectForRuleWithoutMedia(CSSStyleRule* rule) {
     if (!id().isEmpty())
       result->setStyleSheetId(id());
   }
+
+  return result;
+}
+
+std::unique_ptr<protocol::CSS::RuleUsage>
+InspectorStyleSheet::buildObjectForRuleUsage(CSSRule* rule, bool wasUsed) {
+  CSSStyleSheet* styleSheet = pageStyleSheet();
+  if (!styleSheet)
+    return nullptr;
+
+  CSSRuleSourceData* sourceData = sourceDataForRule(rule);
+
+  std::unique_ptr<protocol::CSS::RuleUsage> result =
+      protocol::CSS::RuleUsage::create()
+          .setStyleSheetId(id())
+          .setRange(buildSourceRangeObject(sourceData->ruleBodyRange))
+          .setUsed(wasUsed)
+          .build();
 
   return result;
 }

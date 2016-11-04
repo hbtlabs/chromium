@@ -4,8 +4,11 @@
 package org.chromium.chrome.browser.ntp.snippets;
 
 import android.graphics.Bitmap;
+import android.text.TextUtils;
 
 import org.chromium.chrome.browser.ntp.snippets.ContentSuggestionsCardLayout.ContentSuggestionsCardLayoutEnum;
+
+import java.io.File;
 
 /**
  * Represents the data for an article card on the NTP.
@@ -41,7 +44,7 @@ public class SnippetArticle {
     /** The position of this article within its section. */
     public final int mPosition;
 
-    /** The position of this article in the complete list. Populated by NewTabPageAdapter.*/
+    /** The position of this article in the complete list. Populated by NewTabPageAdapter. */
     public int mGlobalPosition = -1;
 
     /** The layout that should be used to display the snippet. */
@@ -54,14 +57,23 @@ public class SnippetArticle {
     /** Stores whether impression of this article has been tracked already. */
     private boolean mImpressionTracked;
 
-    /** Whether the linked article (normal URL) is available offline. */
-    private boolean mAvailableOffline;
-
-    /** Whether the linked AMP article is available offline. */
-    private boolean mAmpAvailableOffline;
-
     /** To be run when the offline status of the article or AMP article changes. */
     private Runnable mOfflineStatusChangeRunnable;
+
+    /** Whether the linked article represents a downloaded asset. */
+    public boolean mIsDownloadedAsset;
+
+    /** The path to the downloaded asset (only for download asset articles). */
+    private String mDownloadAssetPath;
+
+    /** The downloaded asset (only for download asset articles). */
+    private File mFile;
+
+    /** The mime type of the downloaded asset (only for download asset articles). */
+    private String mDownloadAssetMimeType;
+
+    /** The path to the offline page, if any. */
+    private String mOfflinePagePath;
 
     /**
      * Creates a SnippetArticleListItem object that will hold the data.
@@ -115,42 +127,53 @@ public class SnippetArticle {
         return true;
     }
 
-    /** Sets whether the non-AMP URL is available offline. */
-    public void setAvailableOffline(boolean available) {
-        boolean previous = mAvailableOffline;
-        mAvailableOffline = available;
-
-        if (mOfflineStatusChangeRunnable != null && available != previous) {
-            mOfflineStatusChangeRunnable.run();
-        }
-    }
-
-    /** Sets whether the AMP URL is available offline. */
-    public void setAmpAvailableOffline(boolean available) {
-        boolean previous = mAmpAvailableOffline;
-        mAmpAvailableOffline = available;
-
-        if (mOfflineStatusChangeRunnable != null && available != previous) {
-            mOfflineStatusChangeRunnable.run();
-        }
-    }
-
-    /** Whether the non-AMP URL is available offline. */
-    public boolean isAvailableOffline() {
-        return mAvailableOffline;
-    }
-
-    /** Whether the AMP URL is available offline. */
-    public boolean isAmpAvailableOffline() {
-        return mAmpAvailableOffline;
-    }
-
     /**
      * Sets the {@link Runnable} to be run when the article's offline status changes.
      * Pass null to wipe.
      */
     public void setOfflineStatusChangeRunnable(Runnable runnable) {
         mOfflineStatusChangeRunnable = runnable;
+    }
+
+    /**
+     * @return the downloaded asset. May only be called if mIsDownloadedAsset is {@code true}.
+     */
+    public File getDownloadAssetFile() {
+        assert mIsDownloadedAsset;
+        if (mFile == null) mFile = new File(mDownloadAssetPath);
+        return mFile;
+    }
+
+    /** Returns the mime type of the download asset. May only be called if mIsDownloadAsset is true.
+     */
+    public String getDownloadAssetMimeType() {
+        assert mIsDownloadedAsset;
+        return mDownloadAssetMimeType;
+    }
+
+    /** Marks the article suggestion as a download asset with the given path and mime type. */
+    public void setDownloadAsset(String filePath, String mimeType) {
+        mIsDownloadedAsset = true;
+        mDownloadAssetPath = filePath;
+        mDownloadAssetMimeType = mimeType;
+    }
+
+    /** Sets OfflinePageDownloads guid for the offline version of the snippet. Null to clear.*/
+    public void setOfflinePageDownloadGuid(String path) {
+        String previous = mOfflinePagePath;
+        mOfflinePagePath = path;
+
+        if (mOfflineStatusChangeRunnable != null && !TextUtils.equals(previous, mOfflinePagePath)) {
+            mOfflineStatusChangeRunnable.run();
+        }
+    }
+
+    /**
+     * Gets the OfflinePageDownloads guid for the offline version of the snippet.
+     * Null if page is not available offline.
+     */
+    public String getOfflinePageDownloadGuid() {
+        return mOfflinePagePath;
     }
 
     @Override

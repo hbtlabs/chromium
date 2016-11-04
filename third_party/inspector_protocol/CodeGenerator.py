@@ -329,12 +329,6 @@ def resolve_type(protocol, prop):
     return protocol.type_definitions[prop["type"]]
 
 
-def new_style(domain):
-    domains = ["DOMStorage", "Rendering", "Emulation", "Network", "Memory", "Page", "LayerTree", "Database", "IndexedDB", "CacheStorage", "DOM", "CSS",
-        "ApplicationCache", "DOMDebugger", "Input", "DeviceOrientation", "Tracing", "Animation" ]
-    return domain["domain"] in domains
-
-
 def join_arrays(dict, keys):
     result = []
     for key in keys:
@@ -426,8 +420,7 @@ def main():
             "resolve_type": functools.partial(resolve_type, protocol),
             "type_definition": functools.partial(type_definition, protocol),
             "has_disable": has_disable,
-            "format_include": format_include,
-            "new_style": new_style,
+            "format_include": format_include
         }
 
         if domain["domain"] in protocol.generate_domains:

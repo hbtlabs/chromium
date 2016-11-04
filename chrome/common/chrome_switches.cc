@@ -7,6 +7,7 @@
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "build/build_config.h"
+#include "printing/features/features.h"
 
 namespace switches {
 
@@ -237,9 +238,6 @@ const char kDisableExtensionsFileAccessCheck[] =
 // requests originating from extensions.
 const char kDisableExtensionsHttpThrottling[] =
     "disable-extensions-http-throttling";
-
-// Disable field trial tests configured in fieldtrial_testing_config.json.
-const char kDisableFieldTrialTestingConfig[] = "disable-field-trial-config";
 
 // Disables the HTTP/2 protocol.
 const char kDisableHttp2[] = "disable-http2";
@@ -534,16 +532,6 @@ const char kFastStart[]            = "fast-start";
 // Forces application mode. This hides certain system UI elements and forces
 // the app to be installed if it hasn't been already.
 const char kForceAppMode[]                  = "force-app-mode";
-
-// This option can be used to force parameters of field trials when testing
-// changes locally. The argument is a param list of (key, value) pairs prefixed
-// by an associated (trial, group) pair. You specify the param list for multiple
-// (trial, group) pairs with a comma separator.
-// Example:
-//   "Trial1.Group1:k1/v1/k2/v2,Trial2.Group2:k3/v3/k4/v4"
-// Trial names, groups names, parameter names, and value should all be URL
-// escaped for all non-alphanumeric characters.
-const char kForceFieldTrialParams[] = "force-fieldtrial-params";
 
 // Displays the First Run experience when the browser is started, regardless of
 // whether or not it's actually the First Run (this overrides kNoFirstRun).
@@ -1031,9 +1019,6 @@ const char kDisableAppLink[] = "disable-app-link";
 // Disables Contextual Search.
 const char kDisableContextualSearch[] = "disable-contextual-search";
 
-// Disable VR UI if supported.
-const char kDisableVrShell[] = "disable-vr-shell";
-
 // Enable the accessibility tab switcher.
 const char kEnableAccessibilityTabSwitcher[] =
     "enable-accessibility-tab-switcher";
@@ -1054,9 +1039,6 @@ const char kEnableHostedMode[] = "enable-hosted-mode";
 // Enables a hung renderer InfoBar allowing the user to close or wait on
 // unresponsive web content.
 const char kEnableHungRendererInfoBar[] = "enable-hung-renderer-infobar";
-
-// Enable VR UI if supported.
-const char kEnableVrShell[] = "enable-vr-shell";
 
 // Enables "Add to Home screen" in the app menu to generate WebAPKs.
 const char kEnableWebApk[] = "enable-webapk";
@@ -1258,7 +1240,7 @@ const char kWindows10CustomTitlebar[]       = "windows10-custom-titlebar";
 const char kWindows8Search[]                = "windows8-search";
 #endif  // defined(OS_WIN)
 
-#if defined(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
 // Enables support to debug printing subsystem.
 const char kDebugPrint[] = "debug-print";
 #endif

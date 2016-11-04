@@ -230,10 +230,6 @@ using blink::WebMouseEvent;
 using blink::WebNavigationPolicy;
 using blink::WebNavigationType;
 using blink::WebNode;
-using blink::WebPeerConnection00Handler;
-using blink::WebPeerConnection00HandlerClient;
-using blink::WebPeerConnectionHandler;
-using blink::WebPeerConnectionHandlerClient;
 using blink::WebPluginAction;
 using blink::WebPoint;
 using blink::WebRect;
@@ -950,7 +946,7 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   settings->setMinimumFontSize(prefs.minimum_font_size);
   settings->setMinimumLogicalFontSize(prefs.minimum_logical_font_size);
   settings->setDefaultTextEncodingName(
-      base::ASCIIToUTF16(prefs.default_encoding));
+      WebString::fromASCII(prefs.default_encoding));
   settings->setJavaScriptEnabled(prefs.javascript_enabled);
   settings->setWebSecurityEnabled(prefs.web_security_enabled);
   settings->setJavaScriptCanOpenWindowsAutomatically(
@@ -1112,7 +1108,7 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   settings->setMediaPlaybackRequiresUserGesture(
       prefs.user_gesture_required_for_media_playback);
   settings->setDefaultVideoPosterURL(
-      base::ASCIIToUTF16(prefs.default_video_poster_url.spec()));
+      WebString::fromASCII(prefs.default_video_poster_url.spec()));
   settings->setSupportDeprecatedTargetDensityDPI(
       prefs.support_deprecated_target_density_dpi);
   settings->setUseLegacyBackgroundSizeShorthandBehavior(
@@ -1367,6 +1363,7 @@ bool RenderViewImpl::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(PageMsg_WasShown, OnPageWasShown)
     IPC_MESSAGE_HANDLER(PageMsg_SetHistoryOffsetAndLength,
                         OnSetHistoryOffsetAndLength)
+    IPC_MESSAGE_HANDLER(PageMsg_AudioStateChanged, OnAudioStateChanged)
 
 #if defined(OS_ANDROID)
     IPC_MESSAGE_HANDLER(ViewMsg_UpdateBrowserControlsState,
@@ -1456,6 +1453,10 @@ void RenderViewImpl::OnSetInitialFocus(bool reverse) {
 
 void RenderViewImpl::OnUpdateWindowScreenRect(gfx::Rect window_screen_rect) {
   RenderWidget::OnUpdateWindowScreenRect(window_screen_rect);
+}
+
+void RenderViewImpl::OnAudioStateChanged(bool is_audio_playing) {
+  webview()->audioStateChanged(is_audio_playing);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

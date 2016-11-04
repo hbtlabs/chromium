@@ -12,7 +12,7 @@
 #include "ash/common/system/tray/tray_item_view.h"
 #include "ash/common/system/tray/tray_popup_label_button_border.h"
 #include "ash/common/wm_shell.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/views/border.h"
@@ -23,18 +23,53 @@
 
 namespace ash {
 
+namespace {
+
+class BorderlessLabelButton : public views::LabelButton {
+ public:
+  BorderlessLabelButton(views::ButtonListener* listener,
+                        const base::string16& text)
+      : LabelButton(listener, text) {
+    if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
+      SetInkDropMode(views::InkDropHostView::InkDropMode::ON);
+      set_has_ink_drop_action_on_click(true);
+      set_ink_drop_base_color(kTrayPopupInkDropBaseColor);
+      set_ink_drop_visible_opacity(kTrayPopupInkDropRippleOpacity);
+      const int kHorizontalPadding = 20;
+      SetBorder(
+          views::Border::CreateEmptyBorder(gfx::Insets(0, kHorizontalPadding)));
+      // TODO(tdanderson): Update focus rect for material design. See
+      // crbug.com/615892
+    } else {
+      SetBorder(std::unique_ptr<views::Border>(new TrayPopupLabelButtonBorder));
+      SetFocusPainter(views::Painter::CreateSolidFocusPainter(
+          kFocusBorderColor, gfx::Insets(1, 1, 2, 2)));
+      set_animate_on_state_change(false);
+    }
+    SetHorizontalAlignment(gfx::ALIGN_CENTER);
+    SetFocusForPlatform();
+  }
+
+  ~BorderlessLabelButton() override {}
+
+  // views::LabelButton:
+  int GetHeightForWidth(int width) const override {
+    if (MaterialDesignController::IsSystemTrayMenuMaterial())
+      return kMenuButtonSize - 2 * kTrayPopupInkDropInset;
+
+    return LabelButton::GetHeightForWidth(width);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(BorderlessLabelButton);
+};
+
+}  // namespace
+
 views::LabelButton* CreateTrayPopupBorderlessButton(
     views::ButtonListener* listener,
     const base::string16& text) {
-  auto* button = new views::LabelButton(listener, text);
-  button->SetBorder(
-      std::unique_ptr<views::Border>(new TrayPopupLabelButtonBorder));
-  button->SetFocusForPlatform();
-  button->set_animate_on_state_change(false);
-  button->SetHorizontalAlignment(gfx::ALIGN_CENTER);
-  button->SetFocusPainter(views::Painter::CreateSolidFocusPainter(
-      kFocusBorderColor, gfx::Insets(1, 1, 2, 2)));
-  return button;
+  return new BorderlessLabelButton(listener, text);
 }
 
 views::LabelButton* CreateTrayPopupButton(views::ButtonListener* listener,
@@ -106,14 +141,14 @@ void SetTrayLabelItemBorder(TrayItemView* tray_view, ShelfAlignment alignment) {
 void GetAccessibleLabelFromDescendantViews(
     views::View* view,
     std::vector<base::string16>& out_labels) {
-  ui::AXViewState temp_state;
-  view->GetAccessibleState(&temp_state);
-  if (!temp_state.name.empty())
-    out_labels.push_back(temp_state.name);
+  ui::AXNodeData temp_node_data;
+  view->GetAccessibleNodeData(&temp_node_data);
+  if (!temp_node_data.GetStringAttribute(ui::AX_ATTR_NAME).empty())
+    out_labels.push_back(temp_node_data.GetString16Attribute(ui::AX_ATTR_NAME));
 
   // Do not descend into static text labels which may compute their own labels
   // recursively.
-  if (temp_state.role == ui::AX_ROLE_STATIC_TEXT)
+  if (temp_node_data.role == ui::AX_ROLE_STATIC_TEXT)
     return;
 
   for (int i = 0; i < view->child_count(); ++i)

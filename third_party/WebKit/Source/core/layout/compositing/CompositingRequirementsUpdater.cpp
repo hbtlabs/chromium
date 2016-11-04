@@ -118,7 +118,7 @@ class CompositingRequirementsUpdater::OverlapMap {
     // This effectively creates a new "clean slate" for overlap state.
     // This is used when we know that a subtree or remaining set of
     // siblings does not need to check overlap with things behind it.
-    m_overlapStack.append(OverlapMapContainers());
+    m_overlapStack.grow(m_overlapStack.size() + 1);
   }
 
   void finishCurrentOverlapTestingContext() {
@@ -133,7 +133,7 @@ class CompositingRequirementsUpdater::OverlapMap {
         m_overlapStack.last().clipped);
     m_overlapStack[m_overlapStack.size() - 2].unclipped.unite(
         m_overlapStack.last().unclipped);
-    m_overlapStack.removeLast();
+    m_overlapStack.pop_back();
   }
 
  private:
