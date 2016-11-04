@@ -681,6 +681,15 @@ TEST_F(BluetoothTest, GetName_NullName) {
     return;
   }
   InitWithFakeAdapter();
+
+// StartLowEnergyDiscoverySession is not yet implemented on ChromeOS|bluez,
+// and is non trivial to implement. On ChromeOS, it is not essential for
+// this test to operate, and so it is simply skipped. Android at least
+// does require this step.
+#if !defined(OS_CHROMEOS)
+  StartLowEnergyDiscoverySession();
+#endif
+
   BluetoothDevice* device = SimulateLowEnergyDevice(5);
   EXPECT_FALSE(device->GetName());
 }
