@@ -37,7 +37,7 @@
             "category": "Console",
             "actionId": "console.clear",
             "title": "Clear console",
-            "iconClass": "clear-toolbar-item",
+            "iconClass": "largeicon-clear",
             "className": "WebInspector.ConsoleView.ActionDelegate",
             "bindings": [
                 {
@@ -67,6 +67,18 @@
             "options": [
                 { "value": true, "title": "Hide network messages" },
                 { "value": false, "title": "Show network messages" }
+            ]
+        },
+        {
+            "type": "setting",
+            "category": "Console",
+            "title": "Hide violations",
+            "settingName": "hideViolationMessages",
+            "settingType": "boolean",
+            "defaultValue": true,
+            "options": [
+                { "value": true, "title": "Hide violations" },
+                { "value": false, "title": "Show violations" }
             ]
         },
         {

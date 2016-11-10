@@ -438,21 +438,11 @@ class SimulatorTestRunner(TestRunner):
 
   def extract_test_data(self):
     """Extracts data emitted by the test."""
-    # Find the directory named after the unique device ID of the simulator we
-    # started. We expect only one because we use a new homedir each time.
-    udid_dir = os.path.join(
-        self.homedir, 'Library', 'Developer', 'CoreSimulator', 'Devices')
-    if not os.path.exists(udid_dir):
-      return
-    udids = os.listdir(udid_dir)
-    if len(udids) != 1:
-      return
-
     # Find the Documents directory of the test app. The app directory names
     # don't correspond with any known information, so we have to examine them
     # all until we find one with a matching CFBundleIdentifier.
     apps_dir = os.path.join(
-        udid_dir, udids[0], 'data', 'Containers', 'Data', 'Application')
+        self.homedir, 'Containers', 'Data', 'Application')
     if os.path.exists(apps_dir):
       for appid_dir in os.listdir(apps_dir):
         docs_dir = os.path.join(apps_dir, appid_dir, 'Documents')
@@ -645,7 +635,6 @@ class DeviceTestRunner(TestRunner):
         'xcodebuild',
         'test-without-building',
         'BUILT_PRODUCTS_DIR=%s' % os.path.dirname(self.app_path),
-        'NSUnbufferedIO=YES',
         '-destination', 'id=%s' % self.udid,
         '-project', XCTEST_PROJECT,
         '-scheme', XCTEST_SCHEME,
@@ -682,9 +671,19 @@ class DeviceTestRunner(TestRunner):
     """
     env = super(DeviceTestRunner, self).get_launch_env()
     if self.xctest_path:
-      # e.g. ios_web_shell_test_host
-      env['APP_TARGET_NAME'] = (
-        os.path.splitext(os.path.basename(self.app_path))[0])
-      # e.g. ios_web_shell_test
-      env['TEST_TARGET_NAME'] = env['APP_TARGET_NAME'].rsplit('_', 1)[0]
+      env['NSUnbufferedIO'] = 'YES'
+      # e.g. ios_web_shell_egtests
+      env['APP_TARGET_NAME'] = os.path.splitext(
+          os.path.basename(self.app_path))[0]
+
+      # Two convention for the test name have been in use. Old convention was to
+      # use the host name without _host suffix while the new convention is to
+      # use host name with _module suffix. As new convention does not use _host
+      # suffix its presence can be used to determine correct name for the test
+      # target. TODO(crbug.com/662404): remove once only new convention is used.
+      # e.g. ios_web_shell_egtests_module
+      if env['APP_TARGET_NAME'].endswith('_host'):
+        env['TEST_TARGET_NAME'] = env['APP_TARGET_NAME'].rsplit('_', 1)[0]
+      else:
+        env['TEST_TARGET_NAME'] = env['APP_TARGET_NAME'] + '_module'
     return env

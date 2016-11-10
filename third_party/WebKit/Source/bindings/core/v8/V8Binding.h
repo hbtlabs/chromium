@@ -64,7 +64,6 @@ class Frame;
 class LocalDOMWindow;
 class LocalFrame;
 class NodeFilter;
-class TracedValue;
 class WorkerGlobalScope;
 class WorkerOrWorkletGlobalScope;
 class XPathNSResolver;
@@ -1162,6 +1161,9 @@ typedef void (*InstallTemplateFunction)(
 CORE_EXPORT v8::Local<v8::Value> freezeV8Object(v8::Local<v8::Value>,
                                                 v8::Isolate*);
 
+CORE_EXPORT v8::Local<v8::Value> fromJSONString(v8::Isolate*,
+                                                const String& stringifiedJSON,
+                                                ExceptionState&);
 }  // namespace blink
 
 #endif  // V8Binding_h

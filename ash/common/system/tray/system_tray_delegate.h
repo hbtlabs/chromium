@@ -104,6 +104,10 @@ class ASH_EXPORT SystemTrayDelegate {
   // Returns the domain that manages the device, if it is enterprise-enrolled.
   virtual std::string GetEnterpriseDomain() const;
 
+  // Returns the realm that manages the device, if it is enterprise enrolled
+  // with Active Directory and joined the realm (Active Directory domain).
+  virtual std::string GetEnterpriseRealm() const;
+
   // Returns notification for enterprise enrolled devices.
   virtual base::string16 GetEnterpriseMessage() const;
 
@@ -143,9 +147,6 @@ class ASH_EXPORT SystemTrayDelegate {
 
   // Attempts to restart the system for update.
   virtual void RequestRestartForUpdate();
-
-  // Attempts to shut down the system.
-  virtual void RequestShutdown();
 
   // Returns a list of available bluetooth devices.
   virtual void GetAvailableBluetoothDevices(BluetoothDeviceList* devices);
@@ -203,6 +204,9 @@ class ASH_EXPORT SystemTrayDelegate {
 
   // Retrieves the session length limit. Returns |false| if no limit is set.
   virtual bool GetSessionLengthLimit(base::TimeDelta* session_length_limit);
+
+  // Get the system tray menu size in pixels (dependent on the language).
+  virtual int GetSystemTrayMenuWidth();
 
   // The active user has been changed. This will be called when the UI is ready
   // to be switched to the new user.

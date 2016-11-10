@@ -9,15 +9,24 @@
 #define CHROME_COMMON_CHROME_FEATURES_H_
 
 #include "base/feature_list.h"
+#include "printing/features/features.h"
 
 namespace features {
 
 // All features in alphabetical order. The features should be documented
 // alongside the definition of their values in the .cc file.
 
+#if defined(OS_MACOSX)
+extern const base::Feature kAppleScriptExecuteJavaScript;
+#endif  // defined(OS_MACOSX)
+
 #if defined(OS_CHROMEOS)
 extern const base::Feature kArcMemoryManagement;
 #endif  // defined(OS_CHROMEOS)
+
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+extern const base::Feature kAutoDismissingDialogs;
+#endif
 
 #if defined(OS_WIN) || defined(OS_MACOSX)
 extern const base::Feature kAutomaticTabDiscarding;
@@ -79,7 +88,7 @@ extern const base::Feature kOverrideYouTubeFlashEmbed;
 extern const base::Feature kPreferHtmlOverPlugins;
 #endif
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 extern const base::Feature kPrintScaling;
 #endif
 

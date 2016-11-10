@@ -499,7 +499,7 @@ TEST(BrowserControlsOffsetManagerTest, ScrollThenRestoreBottomControls) {
 }
 
 TEST(BrowserControlsOffsetManagerTest,
-     ScrollThenRestoreBottomControlsNoBrowserControls) {
+     ScrollThenRestoreBottomControlsNoTopControls) {
   MockBrowserControlsOffsetManagerClient client(0.f, 0.5f, 0.5f);
   client.SetBottomControlsHeight(100.f);
   BrowserControlsOffsetManager* manager = client.manager();

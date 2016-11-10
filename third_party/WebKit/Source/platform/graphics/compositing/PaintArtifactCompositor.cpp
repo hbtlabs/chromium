@@ -453,8 +453,17 @@ class PropertyTreeManager {
 };
 
 void PropertyTreeManager::setDeviceScaleFactor(float deviceScaleFactor) {
-  auto& rootTransformNode = *transformTree().Node(kSecondaryRootNodeId);
-  rootTransformNode.local.Scale(deviceScaleFactor, deviceScaleFactor);
+  // TODO(jaydasika): We shouldn't set ToScreeen and FromScreen of root
+  // transform node here. They should be set while updating transform tree in
+  // cc.
+  gfx::Transform toScreen;
+  toScreen.Scale(deviceScaleFactor, deviceScaleFactor);
+  transformTree().SetToScreen(kRealRootNodeId, toScreen);
+  gfx::Transform fromScreen;
+  bool invertible = toScreen.GetInverse(&fromScreen);
+  DCHECK(invertible);
+  transformTree().SetFromScreen(kRealRootNodeId, fromScreen);
+  transformTree().set_needs_update(true);
 }
 
 int PropertyTreeManager::compositorIdForTransformNode(
@@ -631,7 +640,7 @@ int PropertyTreeManager::switchToEffectNode(
   const EffectPaintPropertyNode* ancestor =
       lowestCommonAncestor(currentEffectNode(), &nextEffect);
   while (currentEffectNode() != ancestor)
-    m_effectStack.removeLast();
+    m_effectStack.pop_back();
 
 #if DCHECK_IS_ON()
   DCHECK(m_isFirstEffectEver || currentEffectNode())

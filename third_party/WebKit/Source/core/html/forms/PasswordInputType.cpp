@@ -36,6 +36,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/forms/FormController.h"
+#include "core/layout/LayoutTextControlSingleLine.h"
 #include "public/platform/InterfaceProvider.h"
 #include "public/platform/modules/sensitive_input_visibility/sensitive_input_visibility_service.mojom-blink.h"
 #include "wtf/Assertions.h"
@@ -86,23 +87,44 @@ void PasswordInputType::disableSecureTextInput() {
     element().document().setUseSecureKeyboardEntryWhenActive(false);
 }
 
-LayoutObject* PasswordInputType::createLayoutObject(
-    const ComputedStyle& style) const {
-  LayoutObject* layoutObject = TextFieldInputType::createLayoutObject(style);
+void PasswordInputType::onAttachWithLayoutObject() {
   Document& document = element().document();
-  if (document.isSecureContext() || !layoutObject) {
+  DCHECK(document.frame());
+  if (document.isSecureContext()) {
     // The browser process only cares about passwords on pages where the
     // top-level URL is not secure. Secure contexts must have a top-level
     // URL that is secure, so there is no need to send notifications for
     // password fields in secure contexts.
-    return layoutObject;
+    return;
   }
 
+  document.incrementPasswordCount();
+  if (document.passwordCount() > 1) {
+    // Only send a message on the first visible password field; the
+    // browser process doesn't care about the presence of additional
+    // password fields beyond that.
+    return;
+  }
   mojom::blink::SensitiveInputVisibilityServicePtr sensitiveInputServicePtr;
-  element().document().frame()->interfaceProvider()->getInterface(
+  document.frame()->interfaceProvider()->getInterface(
       mojo::GetProxy(&sensitiveInputServicePtr));
   sensitiveInputServicePtr->PasswordFieldVisibleInInsecureContext();
-  return layoutObject;
+}
+
+void PasswordInputType::onDetachWithLayoutObject() {
+  Document& document = element().document();
+  DCHECK(document.frame());
+  if (document.isSecureContext()) {
+    return;
+  }
+  document.decrementPasswordCount();
+  if (document.passwordCount() > 0)
+    return;
+
+  mojom::blink::SensitiveInputVisibilityServicePtr sensitiveInputServicePtr;
+  document.frame()->interfaceProvider()->getInterface(
+      mojo::GetProxy(&sensitiveInputServicePtr));
+  sensitiveInputServicePtr->AllPasswordFieldsInInsecureContextInvisible();
 }
 
 }  // namespace blink

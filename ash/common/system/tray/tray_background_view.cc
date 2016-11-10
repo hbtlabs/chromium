@@ -17,7 +17,7 @@
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "grit/ash_resources.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/nine_image_painter_factory.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_element.h"
@@ -236,7 +236,7 @@ void TrayBackgroundView::TrayContainer::UpdateLayout() {
   const gfx::Insets margin(
       is_horizontal ? gfx::Insets(cross_axis_margin_, main_axis_margin_)
                     : gfx::Insets(main_axis_margin_, cross_axis_margin_));
-  SetBorder(views::Border::CreateEmptyBorder(insets + margin));
+  SetBorder(views::CreateEmptyBorder(insets + margin));
 
   views::BoxLayout* layout = new views::BoxLayout(orientation, 0, 0, 0);
   if (!ash::MaterialDesignController::IsShelfMaterial())
@@ -352,9 +352,9 @@ void TrayBackgroundView::ChildPreferredSizeChanged(views::View* child) {
   PreferredSizeChanged();
 }
 
-void TrayBackgroundView::GetAccessibleState(ui::AXViewState* state) {
-  ActionableView::GetAccessibleState(state);
-  state->name = GetAccessibleNameForTray();
+void TrayBackgroundView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  ActionableView::GetAccessibleNodeData(node_data);
+  node_data->SetName(GetAccessibleNameForTray());
 }
 
 void TrayBackgroundView::AboutToRequestFocusFromTabTraversal(bool reverse) {

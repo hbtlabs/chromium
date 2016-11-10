@@ -6,7 +6,6 @@
 
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
-#include "core/layout/LayoutBlockFlow.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutPartItem.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
@@ -33,8 +32,20 @@ static void setPreviousSelectionVisualRect(const LayoutObject& object,
     selectionVisualRectMap().set(&object, rect);
 }
 
+typedef HashMap<const LayoutObject*, LayoutPoint> LocationInBackingMap;
+static LocationInBackingMap& locationInBackingMap() {
+  DEFINE_STATIC_LOCAL(LocationInBackingMap, map, ());
+  return map;
+}
+
 void ObjectPaintInvalidator::objectWillBeDestroyed(const LayoutObject& object) {
+  // TODO(wangxianzhu): Use the same mechanism as for locatinInBackingMap().
   selectionVisualRectMap().remove(&object);
+
+  DCHECK(object.hasPreviousLocationInBacking() ==
+         locationInBackingMap().contains(&object));
+  if (object.hasPreviousLocationInBacking())
+    locationInBackingMap().remove(&object);
 }
 
 // TODO(trchen): Use std::function<void, LayoutObject&> when available.
@@ -370,6 +381,29 @@ void ObjectPaintInvalidator::slowSetPaintingLayerNeedsRepaint() {
     paintingLayer->setNeedsRepaint();
 }
 
+LayoutPoint ObjectPaintInvalidator::previousLocationInBacking() const {
+  DCHECK(m_object.hasPreviousLocationInBacking() ==
+         locationInBackingMap().contains(&m_object));
+  return m_object.hasPreviousLocationInBacking()
+             ? locationInBackingMap().get(&m_object)
+             : m_object.previousVisualRect().location();
+}
+
+void ObjectPaintInvalidator::setPreviousLocationInBacking(
+    const LayoutPoint& location) {
+  DCHECK(m_object.hasPreviousLocationInBacking() ==
+         locationInBackingMap().contains(&m_object));
+  if (location == m_object.previousVisualRect().location()) {
+    if (m_object.hasPreviousLocationInBacking()) {
+      locationInBackingMap().remove(&m_object);
+      m_object.getMutableForPainting().setHasPreviousLocationInBacking(false);
+    }
+  } else {
+    locationInBackingMap().set(&m_object, location);
+    m_object.getMutableForPainting().setHasPreviousLocationInBacking(true);
+  }
+}
+
 void ObjectPaintInvalidatorWithContext::fullyInvalidatePaint(
     PaintInvalidationReason reason,
     const LayoutRect& oldVisualRect,
@@ -500,10 +534,18 @@ ObjectPaintInvalidatorWithContext::invalidatePaintIfNeededWithComputedReason(
       // invalidated for paint offset mutation, but incurs no pixel difference
       // (i.e. bounds stay the same) so no rect-based invalidation is issued.
       // See crbug.com/508383 and crbug.com/515977.  This is a workaround to
-      // force display items to update paint offset.
-      if (m_context.forcedSubtreeInvalidationFlags &
-          PaintInvalidatorContext::ForcedSubtreeInvalidationChecking) {
+      // force display items to update paint offset. Exclude non-root SVG whose
+      // paint offset is always zero.
+      if ((!m_object.isSVG() || m_object.isSVGRoot()) &&
+          (m_context.forcedSubtreeInvalidationFlags &
+           PaintInvalidatorContext::ForcedSubtreeInvalidationChecking)) {
         reason = PaintInvalidationLocationChange;
+        break;
+      }
+      if (m_object.isSVG() &&
+          (m_context.forcedSubtreeInvalidationFlags &
+           PaintInvalidatorContext::ForcedSubtreeSVGResourceChange)) {
+        reason = PaintInvalidationSVGResourceChange;
         break;
       }
       return PaintInvalidationNone;

@@ -25,7 +25,7 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Skip('WebglExtension_WEBGL_compressed_texture_atc',
         ['win', 'mac', 'linux'])
     self.Skip('WebglExtension_WEBGL_compressed_texture_etc',
-        ['linux', 'mac'])
+        ['win', 'mac', 'linux'])
     self.Skip('WebglExtension_WEBGL_compressed_texture_etc1',
         ['mac', 'linux'])
     self.Skip('WebglExtension_WEBGL_compressed_texture_pvrtc',
@@ -55,8 +55,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['mac'], bug=654187)
 
     # All platforms.
-    self.Fail('conformance2/textures/misc/tex-image-with-bad-args.html',
-        bug=656889)
     self.Fail('conformance2/context/methods-2.html', bug=616554)
     self.Flaky('conformance2/query/occlusion-query.html', bug=603168)
 
@@ -66,10 +64,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     # Win / NVidia
     self.Flaky('deqp/functional/gles3/fbomultisample*',
         ['win', 'nvidia'], bug=631317)
-
-    # This should be fixed in the latest driver.
-    self.Fail('deqp/functional/gles3/fboinvalidate/sub.html',
-        ['win', 'nvidia'], bug=1246) # ANGLE bug.
 
     # Win / AMD
 
@@ -105,29 +99,14 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     # Win / Intel
     self.Skip('conformance2/textures/misc/copy-texture-image.html',
         ['win', 'intel'], bug=617449)
-    self.Fail('conformance2/textures/video/tex-2d-rgb9_e5-rgb-half_float.html',
-        ['win', 'intel'], bug=628395)
     # Seems to cause the harness to fail immediately afterward
     self.Skip('conformance2/textures/video/tex-2d-rgba16f-rgba-half_float.html',
         ['win', 'intel'], bug=648337)
-    self.Fail('deqp/functional/gles3/shaderderivate_*',
-        ['win', 'intel'], bug=483282)
-    self.Fail('deqp/functional/gles3/shaderstruct.html',
-        ['win', 'intel'], bug=483282)
     self.Flaky('deqp/functional/gles3/lifetime.html',
         ['win', 'intel'], bug=620379)
-    self.Fail('deqp/functional/gles3/texturespecification/' +
-        'teximage3d_depth.html',
-        ['win', 'intel'], bug=614418)
     self.Skip('deqp/functional/gles3/texturespecification/' +
         'teximage3d_depth_pbo.html',
         ['win', 'intel'], bug=617449)
-    self.Fail('deqp/functional/gles3/texturespecification/' +
-        'texsubimage3d_depth.html',
-        ['win', 'intel'], bug=614418)
-    self.Fail('deqp/functional/gles3/texturespecification/' +
-        'texstorage3d_format_depth_stencil.html',
-        ['win', 'intel'], bug=614418)
     self.Fail('deqp/functional/gles3/textureformat/sized_color_3d_pot_00.html',
         ['win', 'intel'], bug=614418)
     self.Fail('deqp/functional/gles3/textureformat/sized_color_3d_pot_01.html',
@@ -140,11 +119,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['win', 'intel'], bug=614418)
     self.Flaky('deqp/functional/gles3/textureformat/unsized_3d.html',
         ['win', 'intel'], bug=614418)
-    self.Fail('deqp/functional/gles3/shadertexturefunction/' +
-        'texelfetchoffset.html',
-        ['win', 'intel'], bug=483282)
-    self.Fail('deqp/functional/gles3/textureshadow/2d_array_*.html',
-        ['win', 'intel'], bug=483282)
 
     self.Fail('deqp/functional/gles3/fbomultisample*',
         ['win', 'intel'], bug=483282)

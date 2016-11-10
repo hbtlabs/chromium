@@ -50,6 +50,7 @@ class IDBDatabase;
 class IDBIndex;
 class IDBObjectStore;
 class IDBOpenDBRequest;
+class IDBRequest;
 class ScriptState;
 
 class MODULES_EXPORT IDBTransaction final : public EventTargetWithInlineData,
@@ -126,9 +127,6 @@ class MODULES_EXPORT IDBTransaction final : public EventTargetWithInlineData,
   // ScriptWrappable
   bool hasPendingActivity() const final;
 
-  // ActiveDOMObject
-  void contextDestroyed() override;
-
   // For use in IDBObjectStore.isNewlyCreated(). The rest of the code should use
   // IDBObjectStore.isNewlyCreated() instead of calling this method directly.
   int64_t oldMaxObjectStoreId() const {
@@ -193,7 +191,6 @@ class MODULES_EXPORT IDBTransaction final : public EventTargetWithInlineData,
 
   State m_state = Active;
   bool m_hasPendingActivity = true;
-  bool m_contextStopped = false;
   Member<DOMException> m_error;
 
   HeapListHashSet<Member<IDBRequest>> m_requestList;

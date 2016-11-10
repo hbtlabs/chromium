@@ -1134,11 +1134,13 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     'disabled_tester_configs': [
       {
         'swarming_dimension_sets': [
-          # BUG 555545: Disable webgl_conformance_gl_tests on Win/AMD
+          # crbug.com/555545 and crbug.com/649824:
+          # Disable webgl_conformance_gl_tests on older Win/AMD cards.
+          # (They seem to be running fine on newer cards.)
+          # Note that these must match the GPUs exactly; wildcard
+          # matches (i.e., only device ID) aren't supported!
           {
-            # TODO(kbr): add device PCI ID 6613 once deployed
-            # http://crbug.com/639353
-            'gpu': '1002',
+            'gpu': '1002:6779',
             'os': 'Windows-2008ServerR2-SP1'
           },
           # BUG 590951: Disable webgl_conformance_gl_tests on Win/Intel
@@ -1162,7 +1164,8 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     'tester_configs': [
       {
         'fyi_only': True,
-        'os_types': ['linux']
+        'os_types': ['linux'],
+        'run_on_optional': True,
       }
     ],
     'target_name': 'webgl_conformance',

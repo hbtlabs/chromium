@@ -50,7 +50,6 @@
 #include "chrome/browser/ui/webui/profiler_ui.h"
 #include "chrome/browser/ui/webui/settings/md_settings_ui.h"
 #include "chrome/browser/ui/webui/settings_utils.h"
-#include "chrome/browser/ui/webui/signin/md_user_manager_ui.h"
 #include "chrome/browser/ui/webui/signin/profile_signin_confirmation_ui.h"
 #include "chrome/browser/ui/webui/signin_internals_ui.h"
 #include "chrome/browser/ui/webui/supervised_user_internals_ui.h"
@@ -80,6 +79,7 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/url_utils.h"
+#include "printing/features/features.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/web_dialogs/web_dialog_ui.h"
 #include "url/gurl.h"
@@ -92,7 +92,7 @@
 #include "chrome/browser/ui/webui/media/webrtc_logs_ui.h"
 #endif
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #include "chrome/browser/ui/webui/print_preview/print_preview_ui.h"
 #endif
 
@@ -152,7 +152,7 @@
 #include "components/proximity_auth/webui/url_constants.h"
 #endif
 
-#if defined(OS_CHROMEOS) && !defined(NDEBUG)
+#if defined(OS_CHROMEOS) && !defined(OFFICIAL_BUILD)
 #include "chrome/browser/ui/webui/chromeos/emulator/device_emulator_ui.h"
 #endif
 
@@ -163,9 +163,9 @@
 #if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
 #include "chrome/browser/ui/sync/sync_promo_ui.h"
 #include "chrome/browser/ui/webui/signin/inline_login_ui.h"
+#include "chrome/browser/ui/webui/signin/md_user_manager_ui.h"
 #include "chrome/browser/ui/webui/signin/signin_error_ui.h"
 #include "chrome/browser/ui/webui/signin/sync_confirmation_ui.h"
-#include "chrome/browser/ui/webui/signin/user_manager_ui.h"
 #include "chrome/browser/ui/webui/welcome_ui.h"
 #endif
 
@@ -215,15 +215,6 @@ template<class T>
 WebUIController* NewWebUI(WebUI* web_ui, const GURL& url) {
   return new T(web_ui);
 }
-
-#if defined(ENABLE_EXTENSIONS)
-// Special cases for extensions.
-template<>
-WebUIController* NewWebUI<ExtensionWebUI>(WebUI* web_ui,
-                                          const GURL& url) {
-  return new ExtensionWebUI(web_ui, url);
-}
-#endif  // defined(ENABLE_EXTENSIONS)
 
 // Special case for older about: handlers.
 template<>
@@ -312,11 +303,6 @@ bool IsAboutUI(const GURL& url) {
 WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
                                              Profile* profile,
                                              const GURL& url) {
-#if defined(ENABLE_EXTENSIONS)
-  if (ExtensionWebUI::NeedsExtensionWebUI(profile, url))
-    return &NewWebUI<ExtensionWebUI>;
-#endif
-
   // This will get called a lot to check all URLs, so do a quick check of other
   // schemes to filter out most URLs.
   if (!url.SchemeIs(content::kChromeDevToolsScheme) &&
@@ -511,12 +497,12 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<chromeos::SlowTraceController>;
   if (url.host() == chrome::kChromeUIVoiceSearchHost)
     return &NewWebUI<VoiceSearchUI>;
-#if !defined(NDEBUG)
+#if !defined(OFFICIAL_BUILD)
   if (!base::SysInfo::IsRunningOnChromeOS()) {
     if (url.host() == chrome::kChromeUIDeviceEmulatorHost)
       return &NewWebUI<DeviceEmulatorUI>;
   }
-#endif  // !defined(NDEBUG)
+#endif  // !defined(OFFICIAL_BUILD)
 #endif  // defined(OS_CHROMEOS)
 #if defined(OS_ANDROID)
   if (url.host() == chrome::kChromeUIOfflineInternalsHost)
@@ -543,8 +529,6 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
 #if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
   if (url.host() == chrome::kChromeUIChromeSigninHost)
     return &NewWebUI<InlineLoginUI>;
-  if (url.host() == chrome::kChromeUIUserManagerHost)
-    return &NewWebUI<UserManagerUI>;
   if (url.host() == chrome::kChromeUIMdUserManagerHost)
     return &NewWebUI<MDUserManagerUI>;
   if (url.host() == chrome::kChromeUISigninErrorHost)
@@ -603,7 +587,7 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
   if (url.host() == chrome::kChromeUIPluginsHost)
     return &NewWebUI<PluginsUI>;
 #endif
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   if (url.host() == chrome::kChromeUIPrintHost &&
       !profile->GetPrefs()->GetBoolean(prefs::kPrintPreviewDisabled)) {
     return &NewWebUI<PrintPreviewUI>;
@@ -673,14 +657,7 @@ bool ChromeWebUIControllerFactory::UseWebUIForURL(
 
 bool ChromeWebUIControllerFactory::UseWebUIBindingsForURL(
     content::BrowserContext* browser_context, const GURL& url) const {
-  bool needs_extensions_web_ui = false;
-#if defined(ENABLE_EXTENSIONS)
-  // Extensions are rendered via WebUI in tabs, but don't actually need WebUI
-  // bindings (see the ExtensionWebUI constructor).
-  needs_extensions_web_ui =
-      ExtensionWebUI::NeedsExtensionWebUI(browser_context, url);
-#endif
-  return !needs_extensions_web_ui && UseWebUIForURL(browser_context, url);
+  return UseWebUIForURL(browser_context, url);
 }
 
 WebUIController* ChromeWebUIControllerFactory::CreateWebUIControllerForURL(

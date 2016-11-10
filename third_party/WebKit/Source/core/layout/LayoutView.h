@@ -168,21 +168,13 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   }
 
   LayoutUnit pageLogicalHeight() const { return m_pageLogicalHeight; }
-  void setPageLogicalHeight(LayoutUnit height) {
-    if (m_pageLogicalHeight != height) {
-      m_pageLogicalHeight = height;
-      m_pageLogicalHeightChanged = true;
-    }
-  }
-  bool pageLogicalHeightChanged() const { return m_pageLogicalHeightChanged; }
+  void setPageLogicalHeight(LayoutUnit height) { m_pageLogicalHeight = height; }
 
   // Notification that this view moved into or out of a native window.
   void setIsInWindow(bool);
 
   PaintLayerCompositor* compositor();
   bool usesCompositing() const;
-
-  LayoutRect backgroundRect(LayoutBox* backgroundLayoutObject) const;
 
   IntRect documentRect() const;
 
@@ -229,6 +221,9 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   // It is very likely you do not want to call this method.
   void setShouldDoFullPaintInvalidationForViewAndAllDescendants();
 
+  void setShouldDoFullPaintInvalidationOnResizeIfNeeded(bool widthChanged,
+                                                        bool heightChanged);
+
   // The document scrollbar is always on the right, even in RTL. This is to
   // prevent it from moving around on navigations.
   // TODO(skobes): This is not quite the ideal behavior, see
@@ -273,8 +268,6 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   void checkLayoutState();
 #endif
 
-  void setShouldDoFullPaintInvalidationOnResizeIfNeeded();
-
   void updateFromStyle() override;
   bool allowsOverflowClip() const override;
 
@@ -308,7 +301,6 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   // This is only used during printing to split the content into pages.
   // Outside of printing, this is 0.
   LayoutUnit m_pageLogicalHeight;
-  bool m_pageLogicalHeightChanged;
 
   // LayoutState is an optimization used during layout.
   // |m_layoutState| will be nullptr outside of layout.

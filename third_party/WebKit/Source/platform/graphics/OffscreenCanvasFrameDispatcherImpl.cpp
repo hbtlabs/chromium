@@ -136,8 +136,8 @@ void OffscreenCanvasFrameDispatcherImpl::
         cc::TransferableResource& resource,
         RefPtr<StaticBitmapImage> image) {
   image->ensureMailbox();
-  resource.mailbox_holder = gpu::MailboxHolder(
-      image->getMailbox(), image->getSyncToken(), GL_TEXTURE_2D);
+  resource.mailbox_holder =
+      gpu::MailboxHolder(image->mailbox(), image->syncToken(), GL_TEXTURE_2D);
   resource.read_lock_fences_enabled = false;
   resource.is_software = false;
 
@@ -153,7 +153,7 @@ void OffscreenCanvasFrameDispatcherImpl::dispatchFrame(
     called on SwiftShader. */) {
   if (!image)
     return;
-  if (!verifyImageSize(image->imageForCurrentFrame()))
+  if (!verifyImageSize(image->size()))
     return;
   cc::CompositorFrame frame;
   // TODO(crbug.com/652931): update the device_scale_factor
@@ -318,9 +318,15 @@ void OffscreenCanvasFrameDispatcherImpl::DidReceiveCompositorFrameAck() {
   // TODO(fsamuel): Implement this.
 }
 
+void OffscreenCanvasFrameDispatcherImpl::OnBeginFrame(
+    const cc::BeginFrameArgs& beginFrameArgs) {}
+
 void OffscreenCanvasFrameDispatcherImpl::ReclaimResources(
     const cc::ReturnedResourceArray& resources) {
   for (const auto& resource : resources) {
+    RefPtr<StaticBitmapImage> image = m_cachedImages.get(resource.id);
+    if (image)
+      image->updateSyncToken(resource.sync_token);
     m_cachedImages.remove(resource.id);
     m_sharedBitmaps.remove(resource.id);
     m_cachedTextureIds.remove(resource.id);
@@ -328,8 +334,8 @@ void OffscreenCanvasFrameDispatcherImpl::ReclaimResources(
 }
 
 bool OffscreenCanvasFrameDispatcherImpl::verifyImageSize(
-    const sk_sp<SkImage>& image) {
-  if (image && image->width() == m_width && image->height() == m_height)
+    const IntSize imageSize) {
+  if (imageSize.width() == m_width && imageSize.height() == m_height)
     return true;
   return false;
 }

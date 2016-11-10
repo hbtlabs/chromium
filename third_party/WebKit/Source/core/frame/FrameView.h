@@ -58,7 +58,6 @@
 namespace blink {
 
 class AXObjectCache;
-class CancellableTaskFactory;
 class ComputedStyle;
 class DocumentLifecycle;
 class Cursor;
@@ -434,6 +433,9 @@ class CORE_EXPORT FrameView final
   Widget* getWidget() override;
   CompositorAnimationTimeline* compositorAnimationTimeline() const override;
   LayoutBox* layoutBox() const override;
+  FloatQuad localToVisibleContentQuad(const FloatQuad&,
+                                      const LayoutObject*,
+                                      unsigned = 0) const final;
 
   LayoutRect scrollIntoView(const LayoutRect& rectInContent,
                             const ScrollAlignment& alignX,
@@ -682,6 +684,8 @@ class CORE_EXPORT FrameView final
   // frame.
   void updateRenderThrottlingStatusForTesting();
 
+  void beginLifecycleUpdates();
+
   // Paint properties for SPv2 Only.
   void setPreTranslation(
       PassRefPtr<TransformPaintPropertyNode> preTranslation) {
@@ -838,6 +842,8 @@ class CORE_EXPORT FrameView final
   void scheduleOrPerformPostLayoutTasks();
   void performPostLayoutTasks();
 
+  void maybeRecordLoadReason();
+
   DocumentLifecycle& lifecycle() const;
 
   void contentsResized() override;
@@ -855,7 +861,7 @@ class CORE_EXPORT FrameView final
   bool wasViewportResized();
   void sendResizeEventIfNeeded();
 
-  void updateScrollableAreaSet();
+  void updateParentScrollableAreaSet();
 
   void scheduleUpdateWidgetsIfNecessary();
   void updateWidgetsTimerFired(TimerBase*);
@@ -1047,6 +1053,7 @@ class CORE_EXPORT FrameView final
   // notifications, i.e., not in the middle of the lifecycle.
   bool m_hiddenForThrottling;
   bool m_subtreeThrottled;
+  bool m_lifecycleUpdatesThrottled;
 
   // Paint properties for SPv2 Only.
   // The hierarchy of transform subtree created by a FrameView.

@@ -53,16 +53,20 @@ public abstract class ChromeFeatureList {
     public static final String AUTOFILL_SCAN_CARDHOLDER_NAME = "AutofillScanCardholderName";
     public static final String CCT_EXTERNAL_LINK_HANDLING = "CCTExternalLinkHandling";
     public static final String CHROME_HOME = "ChromeHome";
+    public static final String CONSISTENT_OMNIBOX_GEOLOCATION = "ConsistentOmniboxGeolocation";
     public static final String CONTEXTUAL_SEARCH_SINGLE_ACTIONS = "ContextualSearchSingleActions";
     /** Whether we show an important sites dialog in the "Clear Browsing Data" flow. */
     public static final String IMPORTANT_SITES_IN_CBD = "ImportantSitesInCBD";
     public static final String NO_CREDIT_CARD_ABORT = "NoCreditCardAbort";
     public static final String NTP_FAKE_OMNIBOX_TEXT = "NTPFakeOmniboxText";
+    public static final String NTP_FOREIGN_SESSIONS_SUGGESTIONS = "NTPForeignSessionsSuggestions";
     public static final String NTP_SNIPPETS = "NTPSnippets";
+    public static final String NTP_SNIPPETS_INCREASED_VISIBILITY = "NTPSnippetsIncreasedVisibility";
     public static final String NTP_SNIPPETS_SAVE_TO_OFFLINE = "NTPSaveToOffline";
     public static final String NTP_SNIPPETS_OFFLINE_BADGE = "NTPOfflineBadge";
     public static final String NTP_SUGGESTIONS_SECTION_DISMISSAL = "NTPSuggestionsSectionDismissal";
     public static final String TAB_REPARENTING = "TabReparenting";
+    public static final String VR_SHELL = "VrShell";
     public static final String WEB_PAYMENTS = "WebPayments";
     public static final String WEBAPKS = "WebApks";
 

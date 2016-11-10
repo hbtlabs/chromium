@@ -12,6 +12,7 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/output/begin_frame_args.h"
+#include "platform/scheduler/base/real_time_domain.h"
 #include "platform/scheduler/base/task_queue_impl.h"
 #include "platform/scheduler/base/task_queue_selector.h"
 #include "platform/scheduler/base/virtual_time_domain.h"
@@ -41,6 +42,9 @@ constexpr base::TimeDelta kThreadLoadTrackerReportingInterval =
     base::TimeDelta::FromMinutes(1);
 constexpr base::TimeDelta kThreadLoadTrackerWaitingPeriodBeforeReporting =
     base::TimeDelta::FromMinutes(2);
+// We do not throttle anything while audio is played and shortly after that.
+constexpr base::TimeDelta kThrottlingDelayAfterAudioIsPlayed =
+    base::TimeDelta::FromSeconds(5);
 
 void ReportForegroundRendererTaskLoad(base::TimeTicks time, double load) {
   int load_percentage = static_cast<int>(load * 100);
@@ -70,7 +74,8 @@ RendererSchedulerImpl::RendererSchedulerImpl(
     : helper_(main_task_runner,
               "renderer.scheduler",
               TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
-              TRACE_DISABLED_BY_DEFAULT("renderer.scheduler.debug")),
+              TRACE_DISABLED_BY_DEFAULT("renderer.scheduler.debug"),
+              true /* set_crash_keys */),
       idle_helper_(&helper_,
                    this,
                    "renderer.scheduler",
@@ -188,6 +193,7 @@ RendererSchedulerImpl::MainThreadOnly::MainThreadOnly(
       begin_frame_not_expected_soon(false),
       in_idle_period_for_testing(false),
       use_virtual_time(false),
+      is_audio_playing(false),
       rail_mode_observer(nullptr) {}
 
 RendererSchedulerImpl::MainThreadOnly::~MainThreadOnly() {}
@@ -214,6 +220,7 @@ void RendererSchedulerImpl::Shutdown() {
 
   task_queue_throttler_.reset();
   helper_.Shutdown();
+  idle_helper_.Shutdown();
   MainThreadOnly().was_shutdown = true;
   MainThreadOnly().rail_mode_observer = nullptr;
 }
@@ -491,6 +498,23 @@ void RendererSchedulerImpl::OnRendererForegrounded() {
   ResumeTimerQueueWhenForegroundedOrResumed();
 }
 
+void RendererSchedulerImpl::OnAudioStateChanged() {
+  bool is_audio_playing = false;
+  for (WebViewSchedulerImpl* web_view_scheduler :
+       MainThreadOnly().web_view_schedulers) {
+    is_audio_playing = is_audio_playing || web_view_scheduler->IsAudioPlaying();
+  }
+
+  if (is_audio_playing == MainThreadOnly().is_audio_playing)
+    return;
+
+  MainThreadOnly().last_audio_state_change =
+      helper_.scheduler_tqm_delegate()->NowTicks();
+  MainThreadOnly().is_audio_playing = is_audio_playing;
+
+  UpdatePolicy();
+}
+
 void RendererSchedulerImpl::SuspendRenderer() {
   helper_.CheckOnValidThread();
   DCHECK(MainThreadOnly().renderer_backgrounded);
@@ -665,6 +689,16 @@ void RendererSchedulerImpl::UpdateForInputEventOnCompositorThread(
       AnyThread().awaiting_touch_start_response = false;
       break;
 
+    case blink::WebInputEvent::MouseWheel:
+      AnyThread().last_gesture_was_compositor_driven =
+          input_event_state == InputEventState::EVENT_CONSUMED_BY_COMPOSITOR;
+      AnyThread().awaiting_touch_start_response = false;
+      // If the event was sent to the main thread, assume the default gesture is
+      // prevented until we see evidence otherwise.
+      AnyThread().default_gesture_prevented =
+          !AnyThread().last_gesture_was_compositor_driven;
+      break;
+
     case blink::WebInputEvent::Undefined:
       break;
 
@@ -835,6 +869,27 @@ void RendererSchedulerImpl::UpdatePolicyLocked(UpdateType update_type) {
     new_policy_duration = touchstart_expected_flag_valid_for_duration;
   }
 
+  // Do not throttle while audio is playing or for a short period after that
+  // to make sure that pages playing short audio clips powered by timers
+  // work.
+  if (MainThreadOnly().last_audio_state_change &&
+      !MainThreadOnly().is_audio_playing) {
+    base::TimeTicks audio_will_expire =
+        MainThreadOnly().last_audio_state_change.value() +
+        kThrottlingDelayAfterAudioIsPlayed;
+
+    base::TimeDelta audio_will_expire_after = audio_will_expire - now;
+
+    if (audio_will_expire_after > base::TimeDelta()) {
+      if (new_policy_duration.is_zero()) {
+        new_policy_duration = audio_will_expire_after;
+      } else {
+        new_policy_duration =
+            std::min(new_policy_duration, audio_will_expire_after);
+      }
+    }
+  }
+
   if (new_policy_duration > base::TimeDelta()) {
     MainThreadOnly().current_policy_expiration_time = now + new_policy_duration;
     delayed_update_policy_runner_.SetDeadline(FROM_HERE, new_policy_duration,
@@ -990,6 +1045,10 @@ void RendererSchedulerImpl::UpdatePolicyLocked(UpdateType update_type) {
     new_policy.timer_queue_policy.time_domain_type = TimeDomainType::VIRTUAL;
   }
 
+  new_policy.should_disable_throttling =
+      ShouldDisableThrottlingBecauseOfAudio(now) ||
+      MainThreadOnly().use_virtual_time;
+
   // Tracing is done before the early out check, because it's quite possible we
   // will otherwise miss this information in traces.
   CreateTraceEventObjectSnapshotLocked();
@@ -1043,6 +1102,15 @@ void RendererSchedulerImpl::UpdatePolicyLocked(UpdateType update_type) {
       new_policy.rail_mode != MainThreadOnly().current_policy.rail_mode) {
     MainThreadOnly().rail_mode_observer->OnRAILModeChanged(
         new_policy.rail_mode);
+  }
+
+  if (new_policy.should_disable_throttling !=
+      MainThreadOnly().current_policy.should_disable_throttling) {
+    if (new_policy.should_disable_throttling) {
+      task_queue_throttler()->DisableThrottling();
+    } else {
+      task_queue_throttler()->EnableThrottling();
+    }
   }
 
   DCHECK(compositor_task_runner_->IsQueueEnabled());
@@ -1312,6 +1380,8 @@ RendererSchedulerImpl::AsValueLocked(base::TimeTicks optional_now) const {
                    MainThreadOnly()
                        .timer_task_cost_estimator.expected_task_duration()
                        .InMillisecondsF());
+  state->SetBoolean("is_audio_playing", MainThreadOnly().is_audio_playing);
+
   // TODO(skyostil): Can we somehow trace how accurate these estimates were?
   state->SetDouble(
       "longest_jank_free_task_duration",
@@ -1414,6 +1484,10 @@ void RendererSchedulerImpl::ResetForNavigationLocked() {
   MainThreadOnly().idle_time_estimator.Clear();
   MainThreadOnly().have_seen_a_begin_main_frame = false;
   MainThreadOnly().have_reported_blocking_intervention_since_navigation = false;
+  for (WebViewSchedulerImpl* web_view_scheduler :
+       MainThreadOnly().web_view_schedulers) {
+    web_view_scheduler->OnNavigation();
+  }
   UpdatePolicyLocked(UpdateType::MAY_EARLY_OUT_IF_POLICY_UNCHANGED);
 }
 
@@ -1572,9 +1646,28 @@ void RendererSchedulerImpl::EnableVirtualTime() {
   for (const scoped_refptr<TaskQueue>& task_queue : unthrottled_task_runners_)
     task_queue->SetTimeDomain(time_domain);
 
-  task_queue_throttler_->EnableVirtualTime();
-
   ForceUpdatePolicy();
+}
+
+bool RendererSchedulerImpl::ShouldDisableThrottlingBecauseOfAudio(
+    base::TimeTicks now) {
+  if (!MainThreadOnly().last_audio_state_change)
+    return false;
+
+  if (MainThreadOnly().is_audio_playing)
+    return true;
+
+  return MainThreadOnly().last_audio_state_change.value() +
+             kThrottlingDelayAfterAudioIsPlayed >
+         now;
+}
+
+TimeDomain* RendererSchedulerImpl::GetActiveTimeDomain() {
+  if (MainThreadOnly().use_virtual_time) {
+    return GetVirtualTimeDomain();
+  } else {
+    return real_time_domain();
+  }
 }
 
 // static

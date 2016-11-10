@@ -207,12 +207,13 @@ ContentViewCoreImpl::ContentViewCoreImpl(
     JNIEnv* env,
     const JavaRef<jobject>& obj,
     WebContents* web_contents,
+    float dpi_scale,
     const JavaRef<jobject>& java_bridge_retained_object_set)
     : WebContentsObserver(web_contents),
       java_ref_(env, obj),
       web_contents_(static_cast<WebContentsImpl*>(web_contents)),
       page_scale_(1),
-      dpi_scale_(ui::GetScaleFactorForNativeView(GetViewAndroid())),
+      dpi_scale_(dpi_scale),
       device_orientation_(0),
       accessibility_enabled_(false) {
   GetViewAndroid()->SetLayer(cc::Layer::Create());
@@ -641,8 +642,6 @@ void ContentViewCoreImpl::ShowPastePopup(int x_dip, int y_dip) {
   if (!view)
     return;
 
-  view->OnShowingPastePopup(gfx::PointF(x_dip, y_dip));
-
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())
@@ -788,6 +787,15 @@ float ContentViewCoreImpl::GetBottomControlsHeightDip() const {
   return GetBottomControlsHeightPix() / dpi_scale();
 }
 
+void ContentViewCoreImpl::SendScreenRectsAndResizeWidget() {
+  RenderWidgetHostViewAndroid* view = GetRenderWidgetHostViewAndroid();
+  if (view) {
+    // |SendScreenRects()| indirectly calls GetViewSize() that asks Java layer.
+    web_contents_->SendScreenRects();
+    view->WasResized();
+  }
+}
+
 void ContentViewCoreImpl::MoveRangeSelectionExtent(const gfx::PointF& extent) {
   if (!web_contents_)
     return;
@@ -851,6 +859,16 @@ void ContentViewCoreImpl::SetFocus(JNIEnv* env,
                                    const JavaParamRef<jobject>& obj,
                                    jboolean focused) {
   SetFocusInternal(focused);
+}
+
+void ContentViewCoreImpl::SetDIPScale(JNIEnv* env,
+                                      const JavaParamRef<jobject>& obj,
+                                      jfloat dpi_scale) {
+  if (dpi_scale_ == dpi_scale)
+    return;
+
+  dpi_scale_ = dpi_scale;
+  SendScreenRectsAndResizeWidget();
 }
 
 void ContentViewCoreImpl::SetFocusInternal(bool focused) {
@@ -1152,13 +1170,6 @@ void ContentViewCoreImpl::PinchBy(JNIEnv* env,
   SendGestureEvent(event);
 }
 
-void ContentViewCoreImpl::DismissTextHandles(JNIEnv* env,
-                                             const JavaParamRef<jobject>& obj) {
-  RenderWidgetHostViewAndroid* rwhv = GetRenderWidgetHostViewAndroid();
-  if (rwhv)
-    rwhv->DismissTextHandles();
-}
-
 void ContentViewCoreImpl::SetTextHandlesTemporarilyHidden(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
@@ -1221,16 +1232,12 @@ void ContentViewCoreImpl::RemoveJavascriptInterface(
 
 void ContentViewCoreImpl::WasResized(JNIEnv* env,
                                      const JavaParamRef<jobject>& obj) {
-  RenderWidgetHostViewAndroid* view = GetRenderWidgetHostViewAndroid();
   gfx::Size physical_size(
       Java_ContentViewCore_getPhysicalBackingWidthPix(env, obj),
       Java_ContentViewCore_getPhysicalBackingHeightPix(env, obj));
   GetViewAndroid()->GetLayer()->SetBounds(physical_size);
 
-  if (view) {
-    web_contents_->SendScreenRects();
-    view->WasResized();
-  }
+  SendScreenRectsAndResizeWidget();
 }
 
 long ContentViewCoreImpl::GetNativeImeAdapter(
@@ -1259,8 +1266,7 @@ void ContentViewCoreImpl::UpdateImeAdapter(long native_ime_adapter,
                                            int composition_start,
                                            int composition_end,
                                            bool show_ime_if_needed,
-                                           bool is_non_ime_change,
-                                           bool in_batch_edit_mode) {
+                                           bool is_non_ime_change) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())
@@ -1270,8 +1276,7 @@ void ContentViewCoreImpl::UpdateImeAdapter(long native_ime_adapter,
   Java_ContentViewCore_updateImeAdapter(
       env, obj, native_ime_adapter, text_input_type, text_input_flags,
       jstring_text, selection_start, selection_end, composition_start,
-      composition_end, show_ime_if_needed, is_non_ime_change,
-      in_batch_edit_mode);
+      composition_end, show_ime_if_needed, is_non_ime_change);
 }
 
 void ContentViewCoreImpl::SetAccessibilityEnabled(
@@ -1540,6 +1545,7 @@ jlong Init(JNIEnv* env,
            const JavaParamRef<jobject>& jweb_contents,
            const JavaParamRef<jobject>& jview_android_delegate,
            jlong jwindow_android,
+           jfloat dipScale,
            const JavaParamRef<jobject>& retained_objects_set) {
   WebContentsImpl* web_contents = static_cast<WebContentsImpl*>(
       WebContents::FromJavaWebContents(jweb_contents));
@@ -1553,8 +1559,9 @@ jlong Init(JNIEnv* env,
   DCHECK(window_android);
   window_android->AddChild(view_android);
 
+  // TODO: pass dipScale.
   ContentViewCoreImpl* view = new ContentViewCoreImpl(
-      env, obj, web_contents, retained_objects_set);
+      env, obj, web_contents, dipScale, retained_objects_set);
   return reinterpret_cast<intptr_t>(view);
 }
 

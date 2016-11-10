@@ -263,7 +263,7 @@ WebInspector.ProfileType.DataDisplayDelegate.prototype = {
   showProfile: function(profile) {},
 
   /**
-   * @param {!HeapProfilerAgent.HeapSnapshotObjectId} snapshotObjectId
+   * @param {!Protocol.HeapProfiler.HeapSnapshotObjectId} snapshotObjectId
    * @param {string} perspectiveName
    */
   showObject: function(snapshotObjectId, perspectiveName) {}
@@ -429,7 +429,7 @@ WebInspector.ProfilesPanel = class extends WebInspector.PanelWithSidebar {
     toolbar.appendToolbarItem(this._toggleRecordButton);
 
     this.clearResultsButton =
-        new WebInspector.ToolbarButton(WebInspector.UIString('Clear all profiles'), 'clear-toolbar-item');
+        new WebInspector.ToolbarButton(WebInspector.UIString('Clear all profiles'), 'largeicon-clear');
     this.clearResultsButton.addEventListener('click', this._reset, this);
     toolbar.appendToolbarItem(this.clearResultsButton);
 
@@ -761,7 +761,7 @@ WebInspector.ProfilesPanel = class extends WebInspector.PanelWithSidebar {
 
   /**
    * @override
-   * @param {!HeapProfilerAgent.HeapSnapshotObjectId} snapshotObjectId
+   * @param {!Protocol.HeapProfiler.HeapSnapshotObjectId} snapshotObjectId
    * @param {string} perspectiveName
    */
   showObject(snapshotObjectId, perspectiveName) {

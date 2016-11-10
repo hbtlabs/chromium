@@ -13,10 +13,11 @@ namespace blink {
 class ComputedStyle;
 class LayoutBox;
 class LayoutObject;
-class NGBlockLayoutAlgorithm;
 class NGConstraintSpace;
-class NGFragment;
+class NGFragmentBase;
+class NGLayoutAlgorithm;
 class NGPhysicalFragment;
+struct MinAndMaxContentSizes;
 
 // Represents a node to be laid out.
 class CORE_EXPORT NGBox final : public GarbageCollectedFinalized<NGBox> {
@@ -31,8 +32,21 @@ class CORE_EXPORT NGBox final : public GarbageCollectedFinalized<NGBox> {
   // returns true. The same constraint space has to be passed each time.
   // TODO(layout-ng): Should we have a StartLayout function to avoid passing
   // the same space for each Layout iteration?
-  bool Layout(const NGConstraintSpace*, NGFragment**);
+  bool Layout(const NGConstraintSpace*, NGFragmentBase**);
+
+  // Computes the value of min-content and max-content for this box.
+  // The return value has the same meaning as for Layout.
+  // If the underlying layout algorithm returns NotImplemented from
+  // ComputeMinAndMaxContentSizes, this function will synthesize these sizes
+  // using Layout with special constraint spaces.
+  // It is not legal to interleave a pending Layout() with a pending
+  // ComputeOrSynthesizeMinAndMaxContentSizes (i.e. you have to call Layout
+  // often enough that it returns true before calling
+  // ComputeOrSynthesizeMinAndMaxContentSizes)
+  bool ComputeMinAndMaxContentSizes(MinAndMaxContentSizes*);
+
   const ComputedStyle* Style() const;
+  ComputedStyle* MutableStyle();
 
   NGBox* NextSibling();
 
@@ -41,12 +55,7 @@ class CORE_EXPORT NGBox final : public GarbageCollectedFinalized<NGBox> {
   void SetNextSibling(NGBox*);
   void SetFirstChild(NGBox*);
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
-    visitor->trace(algorithm_);
-    visitor->trace(fragment_);
-    visitor->trace(next_sibling_);
-    visitor->trace(first_child_);
-  }
+  DECLARE_VIRTUAL_TRACE();
 
  private:
   // This is necessary for interop between old and new trees -- after our parent
@@ -55,6 +64,7 @@ class CORE_EXPORT NGBox final : public GarbageCollectedFinalized<NGBox> {
   void PositionUpdated();
 
   bool CanUseNewLayout();
+  bool HasInlineChildren();
 
   // After we run the layout algorithm, this function copies back the geometry
   // data to the layout box.
@@ -70,7 +80,8 @@ class CORE_EXPORT NGBox final : public GarbageCollectedFinalized<NGBox> {
   RefPtr<ComputedStyle> style_;
   Member<NGBox> next_sibling_;
   Member<NGBox> first_child_;
-  Member<NGBlockLayoutAlgorithm> algorithm_;
+  Member<NGLayoutAlgorithm> layout_algorithm_;
+  Member<NGLayoutAlgorithm> minmax_algorithm_;
   Member<NGPhysicalFragment> fragment_;
 };
 

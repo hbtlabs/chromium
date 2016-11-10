@@ -7,9 +7,11 @@
 #include <string>
 #include <utility>
 
+#include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_action_data.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/default_style.h"
@@ -256,11 +258,6 @@ Textfield::Textfield()
   GetRenderText()->SetFontList(GetDefaultFontList());
   View::SetBorder(std::unique_ptr<Border>(new FocusableBorder()));
   SetFocusBehavior(FocusBehavior::ALWAYS);
-
-// On Linux, middle click should update or paste the selection clipboard.
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-  selection_controller_.set_handles_selection_clipboard(true);
-#endif
 
   // These allow BrowserView to pass edit commands from the Chrome menu to us
   // when we're focused by simply asking the FocusManager to
@@ -872,30 +869,42 @@ void Textfield::OnDragDone() {
   drop_cursor_visible_ = false;
 }
 
-void Textfield::GetAccessibleState(ui::AXViewState* state) {
-  state->role = ui::AX_ROLE_TEXT_FIELD;
-  state->name = accessible_name_;
+void Textfield::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ui::AX_ROLE_TEXT_FIELD;
+  node_data->SetName(accessible_name_);
   if (read_only())
-    state->AddStateFlag(ui::AX_STATE_READ_ONLY);
+    node_data->AddStateFlag(ui::AX_STATE_READ_ONLY);
   else
-    state->AddStateFlag(ui::AX_STATE_EDITABLE);
+    node_data->AddStateFlag(ui::AX_STATE_EDITABLE);
   if (text_input_type_ == ui::TEXT_INPUT_TYPE_PASSWORD) {
-    state->AddStateFlag(ui::AX_STATE_PROTECTED);
-    state->value = base::string16(text().size(), '*');
+    node_data->AddStateFlag(ui::AX_STATE_PROTECTED);
+    node_data->SetValue(base::string16(text().size(), '*'));
   } else {
-    state->value = text();
+    node_data->SetValue(text());
   }
-  state->placeholder = GetPlaceholderText();
+  node_data->AddStringAttribute(ui::AX_ATTR_PLACEHOLDER,
+                                base::UTF16ToUTF8(GetPlaceholderText()));
 
   const gfx::Range range = GetSelectedRange();
-  state->selection_start = range.start();
-  state->selection_end = range.end();
+  node_data->AddIntAttribute(ui::AX_ATTR_TEXT_SEL_START, range.start());
+  node_data->AddIntAttribute(ui::AX_ATTR_TEXT_SEL_END, range.end());
+}
 
-  if (!read_only()) {
-    state->set_value_callback =
-        base::Bind(&Textfield::AccessibilitySetValue,
-                   weak_ptr_factory_.GetWeakPtr());
+bool Textfield::HandleAccessibleAction(const ui::AXActionData& action_data) {
+  if (read_only())
+    return View::HandleAccessibleAction(action_data);
+
+  if (action_data.action == ui::AX_ACTION_SET_VALUE) {
+    SetText(action_data.value);
+    ClearSelection();
+    return true;
+  } else if (action_data.action == ui::AX_ACTION_REPLACE_SELECTED_TEXT) {
+    InsertOrReplaceText(action_data.value);
+    ClearSelection();
+    return true;
   }
+
+  return View::HandleAccessibleAction(action_data);
 }
 
 void Textfield::OnBoundsChanged(const gfx::Rect& previous_bounds) {
@@ -1762,6 +1771,10 @@ bool Textfield::IsReadOnly() const {
   return read_only();
 }
 
+bool Textfield::SupportsDrag() const {
+  return true;
+}
+
 void Textfield::SetTextBeingDragged(bool value) {
   initiating_drag_ = value;
 }
@@ -1822,17 +1835,6 @@ void Textfield::UpdateSelectionClipboard() {
       controller_->OnAfterCutOrCopy(ui::CLIPBOARD_TYPE_SELECTION);
   }
 #endif
-}
-
-void Textfield::AccessibilitySetValue(const base::string16& new_value,
-                                      bool clear_first) {
-  if (read_only())
-    return;
-  if (!clear_first)
-    InsertOrReplaceText(new_value);
-  else
-    SetText(new_value);
-  ClearSelection();
 }
 
 void Textfield::UpdateBackgroundColor() {

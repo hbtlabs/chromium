@@ -19,6 +19,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
@@ -27,6 +28,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
+#include "components/variations/variations_associated_data.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
@@ -375,13 +377,6 @@ bool RenderViewHostImpl::CreateRenderView(
 
   GetProcess()->GetRendererInterface()->CreateView(std::move(params));
 
-  // If the RWHV has not yet been set, the surface ID namespace will get
-  // passed down by the call to SetView().
-  if (GetWidget()->GetView()) {
-    Send(new ViewMsg_SetFrameSinkId(GetRoutingID(),
-                                    GetWidget()->GetView()->GetFrameSinkId()));
-  }
-
   // If it's enabled, tell the renderer to set up the Javascript bindings for
   // sending messages back to the browser.
   if (GetProcess()->IsForGuestsOnly())
@@ -412,6 +407,23 @@ void RenderViewHostImpl::SyncRendererPrefs() {
   GetPlatformSpecificPrefs(&renderer_preferences);
   Send(new ViewMsg_SetRendererPrefs(GetRoutingID(), renderer_preferences));
 }
+
+namespace {
+
+void SetFloatParameterFromMap(
+    const std::map<std::string, std::string>& settings,
+    const std::string& setting_name,
+    float* value) {
+  const auto& find_it = settings.find(setting_name);
+  if (find_it == settings.end())
+    return;
+  double parsed_value;
+  if (!base::StringToDouble(find_it->second, &parsed_value))
+    return;
+  *value = parsed_value;
+}
+
+}  // namespace
 
 WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
   TRACE_EVENT0("browser", "RenderViewHostImpl::GetWebkitPrefs");
@@ -571,6 +583,20 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
 
   if (delegate_ && delegate_->HideDownloadUI())
     prefs.hide_download_ui = true;
+
+  std::map<std::string, std::string> expensive_background_throttling_prefs;
+  variations::GetVariationParamsByFeature(
+      features::kExpensiveBackgroundTimerThrottling,
+      &expensive_background_throttling_prefs);
+  SetFloatParameterFromMap(expensive_background_throttling_prefs, "cpu_budget",
+                           &prefs.expensive_background_throttling_cpu_budget);
+  SetFloatParameterFromMap(
+      expensive_background_throttling_prefs, "initial_budget",
+      &prefs.expensive_background_throttling_initial_budget);
+  SetFloatParameterFromMap(expensive_background_throttling_prefs, "max_budget",
+                           &prefs.expensive_background_throttling_max_budget);
+  SetFloatParameterFromMap(expensive_background_throttling_prefs, "max_delay",
+                           &prefs.expensive_background_throttling_max_delay);
 
   GetContentClient()->browser()->OverrideWebkitPrefs(this, &prefs);
   return prefs;
@@ -856,7 +882,6 @@ bool RenderViewHostImpl::OnMessageReceived(const IPC::Message& msg) {
                         OnDidContentsPreferredSizeChange)
     IPC_MESSAGE_HANDLER(ViewHostMsg_RouteCloseEvent,
                         OnRouteCloseEvent)
-    IPC_MESSAGE_HANDLER(DragHostMsg_StartDragging, OnStartDragging)
     IPC_MESSAGE_HANDLER(DragHostMsg_UpdateDragCursor, OnUpdateDragCursor)
     IPC_MESSAGE_HANDLER(ViewHostMsg_TakeFocus, OnTakeFocus)
     IPC_MESSAGE_HANDLER(ViewHostMsg_FocusedNodeChanged, OnFocusedNodeChanged)
@@ -997,63 +1022,6 @@ void RenderViewHostImpl::OnDidContentsPreferredSizeChange(
 void RenderViewHostImpl::OnRouteCloseEvent() {
   // Have the delegate route this to the active RenderViewHost.
   delegate_->RouteCloseEvent(this);
-}
-
-void RenderViewHostImpl::OnStartDragging(
-    const DropData& drop_data,
-    WebDragOperationsMask drag_operations_mask,
-    const SkBitmap& bitmap,
-    const gfx::Vector2d& bitmap_offset_in_dip,
-    const DragEventSourceInfo& event_info) {
-  RenderViewHostDelegateView* view = delegate_->GetDelegateView();
-  if (!view) {
-    // Need to clear drag and drop state in blink.
-    DragSourceSystemDragEnded();
-    return;
-  }
-
-  DropData filtered_data(drop_data);
-  RenderProcessHost* process = GetProcess();
-  ChildProcessSecurityPolicyImpl* policy =
-      ChildProcessSecurityPolicyImpl::GetInstance();
-
-  // Allow drag of Javascript URLs to enable bookmarklet drag to bookmark bar.
-  if (!filtered_data.url.SchemeIs(url::kJavaScriptScheme))
-    process->FilterURL(true, &filtered_data.url);
-  process->FilterURL(false, &filtered_data.html_base_url);
-  // Filter out any paths that the renderer didn't have access to. This prevents
-  // the following attack on a malicious renderer:
-  // 1. StartDragging IPC sent with renderer-specified filesystem paths that it
-  //    doesn't have read permissions for.
-  // 2. We initiate a native DnD operation.
-  // 3. DnD operation immediately ends since mouse is not held down. DnD events
-  //    still fire though, which causes read permissions to be granted to the
-  //    renderer for any file paths in the drop.
-  filtered_data.filenames.clear();
-  for (std::vector<ui::FileInfo>::const_iterator it =
-           drop_data.filenames.begin();
-       it != drop_data.filenames.end();
-       ++it) {
-    if (policy->CanReadFile(GetProcess()->GetID(), it->path))
-      filtered_data.filenames.push_back(*it);
-  }
-
-  storage::FileSystemContext* file_system_context =
-      BrowserContext::GetStoragePartition(GetProcess()->GetBrowserContext(),
-                                          GetSiteInstance())
-          ->GetFileSystemContext();
-  filtered_data.file_system_files.clear();
-  for (size_t i = 0; i < drop_data.file_system_files.size(); ++i) {
-    storage::FileSystemURL file_system_url =
-        file_system_context->CrackURL(drop_data.file_system_files[i].url);
-    if (policy->CanReadFileSystemFile(GetProcess()->GetID(), file_system_url))
-      filtered_data.file_system_files.push_back(drop_data.file_system_files[i]);
-  }
-
-  float scale = GetScaleFactorForView(GetWidget()->GetView());
-  gfx::ImageSkia image(gfx::ImageSkiaRep(bitmap, scale));
-  view->StartDragging(filtered_data, drag_operations_mask, image,
-      bitmap_offset_in_dip, event_info);
 }
 
 void RenderViewHostImpl::OnUpdateDragCursor(WebDragOperation current_op) {

@@ -263,7 +263,6 @@ class TestV2AppLauncherItemController : public LauncherItemController {
   ~TestV2AppLauncherItemController() override {}
 
   // Override for LauncherItemController:
-  bool IsOpen() const override { return true; }
   bool IsVisible() const override { return true; }
   void Launch(ash::LaunchSource source, int event_flags) override {}
   ash::ShelfItemDelegate::PerformedAction Activate(
@@ -344,6 +343,11 @@ class ChromeLauncherControllerImplTest : public BrowserWithTestWindowTest {
 
     if (auto_start_arc_test_)
       arc_test_.SetUp(profile());
+
+    // Wait until |extension_system| is signaled as started.
+    base::RunLoop run_loop;
+    extension_system->ready().Post(FROM_HERE, run_loop.QuitClosure());
+    run_loop.Run();
 
     app_service_ =
         app_list::AppListSyncableServiceFactory::GetForProfile(profile());
@@ -852,7 +856,7 @@ class ChromeLauncherControllerImplTest : public BrowserWithTestWindowTest {
     // Set Arc id before showing the window to be recognized in
     // ArcAppWindowLauncherController.
     exo::ShellSurface::SetApplicationId(widget->GetNativeWindow(),
-                                        &window_app_id);
+                                        window_app_id);
     widget->Show();
     widget->Activate();
     return widget;
@@ -3088,8 +3092,8 @@ TEST_F(MultiProfileMultiBrowserShelfLayoutChromeLauncherControllerImplTest,
   EXPECT_FALSE(v2_app_3.window()->GetNativeWindow()->IsVisible());
   EXPECT_TRUE(v2_app_4.window()->GetNativeWindow()->IsVisible());
 
-  // Switching to desktop #3 and create an app for user #1 there should land on
-  // his own desktop (#1).
+  // Switching to desktop #3 and creating an app for user #1 should place it on
+  // that user's desktop (#1).
   SwitchActiveUser(account_id3);
   V2App v2_app_5(profile1, extension1_.get());
   EXPECT_FALSE(v2_app_5.window()->GetNativeWindow()->IsVisible());
@@ -4013,4 +4017,36 @@ TEST_F(ChromeLauncherControllerImplTest, CheckPositionConflict) {
       position_2.Equals(app_service_->GetPinPosition(extension2_->id())));
   EXPECT_TRUE(
       position_3.Equals(app_service_->GetPinPosition(extension3_->id())));
+}
+
+// Test the case when sync app is turned off and we need to use local copy to
+// support user's pins.
+TEST_F(ChromeLauncherControllerImplTest, SyncOffLocalUpdate) {
+  InitLauncherController();
+
+  extension_service_->AddExtension(extension1_.get());
+  extension_service_->AddExtension(extension2_.get());
+
+  syncer::SyncChangeList sync_list;
+  InsertAddPinChange(&sync_list, 0, extension_misc::kChromeAppId);
+  InsertAddPinChange(&sync_list, 1, extension1_->id());
+  InsertAddPinChange(&sync_list, 1, extension2_->id());
+  SendPinChanges(sync_list, true);
+
+  EXPECT_EQ("AppList, Chrome, App1, App2", GetPinnedAppStatus());
+
+  syncer::SyncDataList copy_sync_list =
+      app_service_->GetAllSyncData(syncer::APP_LIST);
+
+  app_service_->StopSyncing(syncer::APP_LIST);
+  RecreateChromeLauncher();
+
+  // Pinned state should not change.
+  EXPECT_EQ("AppList, Chrome, App1, App2", GetPinnedAppStatus());
+  launcher_controller_->UnpinAppWithID(extension2_->id());
+  EXPECT_EQ("AppList, Chrome, App1", GetPinnedAppStatus());
+
+  // Resume syncing and sync information overrides local copy.
+  StartAppSyncService(copy_sync_list);
+  EXPECT_EQ("AppList, Chrome, App1, App2", GetPinnedAppStatus());
 }

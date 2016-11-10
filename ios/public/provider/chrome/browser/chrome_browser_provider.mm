@@ -35,11 +35,6 @@ void ChromeBrowserProvider::AssertBrowserContextKeyedFactoriesBuilt() {}
 void ChromeBrowserProvider::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {}
 
-UpdatableResourceProvider*
-ChromeBrowserProvider::GetUpdatableResourceProvider() {
-  return nullptr;
-}
-
 InfoBarViewPlaceholder ChromeBrowserProvider::CreateInfoBarView(
     CGRect frame,
     InfoBarViewDelegate* delegate) {
@@ -134,9 +129,18 @@ VoiceSearchProvider* ChromeBrowserProvider::GetVoiceSearchProvider() const {
   return nullptr;
 }
 
+AppDistributionProvider* ChromeBrowserProvider::GetAppDistributionProvider()
+    const {
+  return nullptr;
+}
+
 id<LogoVendor> ChromeBrowserProvider::CreateLogoVendor(
     ios::ChromeBrowserState* browser_state,
     id<UrlLoader> loader) const {
+  return nil;
+}
+
+OmahaServiceProvider* ChromeBrowserProvider::GetOmahaServiceProvider() const {
   return nil;
 }
 

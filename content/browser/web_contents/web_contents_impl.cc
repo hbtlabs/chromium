@@ -928,10 +928,9 @@ RenderWidgetHostView* WebContentsImpl::GetTopLevelRenderWidgetHostView() {
 
 RenderWidgetHostView* WebContentsImpl::GetFullscreenRenderWidgetHostView()
     const {
-  RenderWidgetHost* const widget_host =
-      RenderWidgetHostImpl::FromID(fullscreen_widget_process_id_,
-                                   fullscreen_widget_routing_id_);
-  return widget_host ? widget_host->GetView() : NULL;
+  if (auto widget_host = GetFullscreenRenderWidgetHost())
+    return widget_host->GetView();
+  return nullptr;
 }
 
 WebContentsView* WebContentsImpl::GetView() const {
@@ -1259,8 +1258,7 @@ void WebContentsImpl::SetAudioMuted(bool mute) {
   for (auto& observer : observers_)
     observer.DidUpdateAudioMutingState(mute);
 
-  // Notification for UI updates in response to the changed muting state.
-  NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB);
+  OnAudioStateChanged(!mute && audio_stream_monitor_.IsCurrentlyAudible());
 }
 
 bool WebContentsImpl::IsConnectedToBluetoothDevice() const {
@@ -1318,6 +1316,14 @@ void WebContentsImpl::NotifyNavigationStateChanged(
 
   if (GetOuterWebContents())
     GetOuterWebContents()->NotifyNavigationStateChanged(changed_flags);
+}
+
+void WebContentsImpl::OnAudioStateChanged(bool is_audio_playing) {
+  SendPageMessage(
+      new PageMsg_AudioStateChanged(MSG_ROUTING_NONE, is_audio_playing));
+
+  // Notification for UI updates in response to the changed muting state.
+  NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB);
 }
 
 base::TimeTicks WebContentsImpl::GetLastActiveTime() const {
@@ -1558,7 +1564,8 @@ void WebContentsImpl::Init(const WebContents::CreateParams& params) {
 
   GetRenderManager()->Init(site_instance.get(), view_routing_id,
                            params.main_frame_routing_id,
-                           main_frame_widget_routing_id);
+                           main_frame_widget_routing_id,
+                           params.renderer_initiated_creation);
 
   // blink::FrameTree::setName always keeps |unique_name| empty in case of a
   // main frame - let's do the same thing here.
@@ -2059,10 +2066,15 @@ void WebContentsImpl::CreateNewWindow(
       // delete the RenderView that had already been created.
       Send(new ViewMsg_Close(route_id));
     }
+    // Note: even though we're not creating a WebContents here, it could have
+    // been created by the embedder so ensure that the RenderFrameHost is
+    // properly initialized.
     // It's safe to only target the frame because the render process will not
     // have a chance to create more frames at this point.
-    ResourceDispatcherHostImpl::ResumeBlockedRequestsForRouteFromUI(
-        GlobalFrameRoutingId(render_process_id, main_frame_route_id));
+    RenderFrameHostImpl* rfh =
+        RenderFrameHostImpl::FromID(render_process_id, main_frame_route_id);
+    if (rfh)
+      rfh->Init();
     return;
   }
 
@@ -3807,6 +3819,10 @@ void WebContentsImpl::OnPasswordInputShownOnHttp() {
   controller_.ssl_manager()->DidShowPasswordInputOnHttp();
 }
 
+void WebContentsImpl::OnAllPasswordInputsHiddenOnHttp() {
+  controller_.ssl_manager()->DidHideAllPasswordInputsOnHttp();
+}
+
 void WebContentsImpl::OnCreditCardInputShownOnHttp() {
   controller_.ssl_manager()->DidShowCreditCardInputOnHttp();
 }
@@ -3969,6 +3985,18 @@ void WebContentsImpl::NotifyViewSwapped(RenderViewHost* old_host,
 
 void WebContentsImpl::NotifyFrameSwapped(RenderFrameHost* old_host,
                                          RenderFrameHost* new_host) {
+  // Copies the background color from an old WebContents to a new one that
+  // replaces it on the screen. This allows the new WebContents to use the
+  // old one's background color as the starting background color, before having
+  // loaded any contents. As a result, we avoid flashing white when navigating
+  // from a site whith a dark background to another site with a dark background.
+  if (old_host && new_host) {
+    RenderWidgetHostView* old_view = old_host->GetView();
+    RenderWidgetHostView* new_view = new_host->GetView();
+    if (old_view && new_view)
+      new_view->SetBackgroundColor(old_view->background_color());
+  }
+
   for (auto& observer : observers_)
     observer.RenderFrameHostChanged(old_host, new_host);
 }
@@ -4996,6 +5024,11 @@ int WebContentsImpl::GetOuterDelegateFrameTreeNodeId() {
     return node_->outer_contents_frame_tree_node_id();
 
   return FrameTreeNode::kFrameTreeNodeInvalidId;
+}
+
+RenderWidgetHostImpl* WebContentsImpl::GetFullscreenRenderWidgetHost() const {
+  return RenderWidgetHostImpl::FromID(fullscreen_widget_process_id_,
+                                      fullscreen_widget_routing_id_);
 }
 
 RenderFrameHostManager* WebContentsImpl::GetRenderManager() const {

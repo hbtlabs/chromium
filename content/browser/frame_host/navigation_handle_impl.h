@@ -8,7 +8,11 @@
 #include "content/public/browser/navigation_handle.h"
 
 #include <stddef.h>
+
+#include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
@@ -106,6 +110,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   bool HasCommitted() override;
   bool IsErrorPage() override;
   const net::HttpResponseHeaders* GetResponseHeaders() override;
+  net::HttpResponseInfo::ConnectionInfo GetConnectionInfo() override;
   void Resume() override;
   void CancelDeferredNavigation(
       NavigationThrottle::ThrottleCheckResult result) override;
@@ -127,6 +132,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       const std::string& raw_response_header) override;
   void CallDidCommitNavigationForTesting(const GURL& url) override;
   bool WasStartedFromContextMenu() const override;
+  const GlobalRequestID& GetGlobalRequestID() override;
 
   NavigationData* GetNavigationData() override;
 
@@ -216,6 +222,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       const GURL& new_referrer_url,
       bool new_is_external_protocol,
       scoped_refptr<net::HttpResponseHeaders> response_headers,
+      net::HttpResponseInfo::ConnectionInfo connection_info,
       const ThrottleChecksFinishedCallback& callback);
 
   // Called when the URLRequest has delivered response headers and metadata.
@@ -230,6 +237,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   void WillProcessResponse(
       RenderFrameHostImpl* render_frame_host,
       scoped_refptr<net::HttpResponseHeaders> response_headers,
+      net::HttpResponseInfo::ConnectionInfo connection_info,
       const SSLStatus& ssl_status,
       const GlobalRequestID& request_id,
       bool should_replace_current_entry,
@@ -261,15 +269,6 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   }
 
   SSLStatus ssl_status() { return ssl_status_; }
-
-  // This is valid after the network response has started.
-  // TODO(clamy): See if this can be initialized earlier if needed by
-  // non-transfer code. There may be some issues in PlzNavigate, where
-  // WillStartRequest will be called before starting a request on the IO thread.
-  const GlobalRequestID& request_id() const {
-    DCHECK_GE(state_, WILL_PROCESS_RESPONSE);
-    return request_id_;
-  }
 
   // Called when the navigation is transferred to a different renderer.
   void Transfer();
@@ -346,6 +345,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   const bool is_srcdoc_;
   bool was_redirected_;
   scoped_refptr<net::HttpResponseHeaders> response_headers_;
+  net::HttpResponseInfo::ConnectionInfo connection_info_;
 
   // The original url of the navigation. This may differ from |url_| if the
   // navigation encounters redirects.

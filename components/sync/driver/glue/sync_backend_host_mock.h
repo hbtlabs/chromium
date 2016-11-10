@@ -28,14 +28,14 @@ class SyncBackendHostMock : public SyncBackendHost {
 
   void Initialize(
       SyncFrontend* frontend,
-      std::unique_ptr<base::Thread> sync_thread,
-      const scoped_refptr<base::SingleThreadTaskRunner>& db_thread,
-      const scoped_refptr<base::SingleThreadTaskRunner>& file_thread,
+      base::Thread* sync_thread,
       const WeakHandle<JsEventHandler>& event_handler,
       const GURL& service_url,
       const std::string& sync_user_agent,
       const SyncCredentials& credentials,
       bool delete_sync_data_folder,
+      bool enable_local_sync_backend,
+      const base::FilePath& local_sync_backend_folder,
       std::unique_ptr<SyncManagerFactory> sync_manager_factory,
       const WeakHandle<UnrecoverableErrorHandler>& unrecoverable_error_handler,
       const base::Closure& report_unrecoverable_error_function,
@@ -56,7 +56,7 @@ class SyncBackendHostMock : public SyncBackendHost {
 
   void StopSyncingForShutdown() override;
 
-  std::unique_ptr<base::Thread> Shutdown(ShutdownReason reason) override;
+  void Shutdown(ShutdownReason reason) override;
 
   void UnregisterInvalidationIds() override;
 
@@ -102,8 +102,6 @@ class SyncBackendHostMock : public SyncBackendHost {
 
   void EnableDirectoryTypeDebugInfoForwarding() override;
   void DisableDirectoryTypeDebugInfoForwarding() override;
-
-  base::MessageLoop* GetSyncLoopForTesting() override;
 
   void RefreshTypesForTest(ModelTypeSet types) override;
 

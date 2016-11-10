@@ -55,7 +55,8 @@ WebInspector.DebuggerPausedMessage = class {
     } else if (details.callFrames.length) {
       var uiLocation = debuggerWorkspaceBinding.rawLocationToUILocation(details.callFrames[0].location());
       var breakpoint =
-          uiLocation ? breakpointManager.findBreakpointOnLine(uiLocation.uiSourceCode, uiLocation.lineNumber) : null;
+          uiLocation ? breakpointManager.findBreakpoint(
+              uiLocation.uiSourceCode, uiLocation.lineNumber, uiLocation.columnNumber) : null;
       var defaultText =
           breakpoint ? WebInspector.UIString('Paused on breakpoint') : WebInspector.UIString('Debugger paused');
       messageWrapper = buildWrapper(defaultText);
@@ -80,7 +81,8 @@ WebInspector.DebuggerPausedMessage = class {
     function buildWrapper(mainText, subText, title) {
       var messageWrapper = createElement('span');
       var mainElement = messageWrapper.createChild('div', 'status-main');
-      mainElement.textContent = mainText;
+      mainElement.appendChild(WebInspector.Icon.create('smallicon-info', 'status-icon'));
+      mainElement.appendChild(createTextNode(mainText));
       if (subText) {
         var subElement = messageWrapper.createChild('div', 'status-sub monospace');
         subElement.textContent = subText;

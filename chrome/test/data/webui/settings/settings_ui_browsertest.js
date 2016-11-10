@@ -111,6 +111,54 @@ TEST_F('SettingsUIBrowserTest', 'MAYBE_All', function() {
       assertFalse(ui.advancedOpened_);
       assertFalse(main.advancedToggleExpanded);
     });
+
+    test('URL initiated search propagates to search box', function() {
+      toolbar = /** @type {!CrToolbarElement} */ (ui.$$('cr-toolbar'));
+      var searchField = /** @type {CrToolbarSearchFieldElement} */ (
+          toolbar.getSearchField());
+      assertEquals('', searchField.getSearchInput().bindValue);
+
+      var query = 'foo';
+      settings.navigateTo(
+          settings.Route.BASIC, new URLSearchParams(`search=${query}`));
+      assertEquals(query, searchField.getSearchInput().bindValue);
+    });
+
+    test('search box initiated search propagates to URL', function() {
+      var searchField = /** @type {CrToolbarSearchFieldElement} */ (
+          toolbar.getSearchField());
+
+      settings.navigateTo(
+          settings.Route.BASIC, /* dynamicParams */ null,
+          /* removeSearch */ true);
+      assertEquals('', searchField.getSearchInput().bindValue);
+      assertFalse(settings.getQueryParameters().has('search'));
+
+      var value = 'GOOG';
+      searchField.setValue(value);
+      assertEquals(value, settings.getQueryParameters().get('search'));
+    });
+
+     test('whitespace only search query is ignored', function() {
+      toolbar = /** @type {!CrToolbarElement} */ (ui.$$('cr-toolbar'));
+      var searchField = /** @type {CrToolbarSearchFieldElement} */ (
+          toolbar.getSearchField());
+      searchField.setValue('    ');
+      var urlParams = settings.getQueryParameters();
+      assertFalse(urlParams.has('search'));
+
+      searchField.setValue('   foo');
+      urlParams = settings.getQueryParameters();
+      assertEquals('foo', urlParams.get('search'));
+
+      searchField.setValue('   foo ');
+      urlParams = settings.getQueryParameters();
+      assertEquals('foo ', urlParams.get('search'));
+
+      searchField.setValue('   ');
+      urlParams = settings.getQueryParameters();
+      assertFalse(urlParams.has('search'));
+    });
   });
 
   mocha.run();

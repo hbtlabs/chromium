@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/chromeos/ime/candidate_view.h"
 #include "ui/chromeos/ime/candidate_window_constants.h"
@@ -100,7 +101,7 @@ class InformationTextArea : public views::View {
       : min_width_(min_width) {
     label_ = new views::Label;
     label_->SetHorizontalAlignment(align);
-    label_->SetBorder(views::Border::CreateEmptyBorder(2, 2, 2, 4));
+    label_->SetBorder(views::CreateEmptyBorder(2, 2, 2, 4));
 
     SetLayoutManager(new views::FillLayout());
     AddChildView(label_);
@@ -123,11 +124,8 @@ class InformationTextArea : public views::View {
 
   // Sets the border thickness for top/bottom.
   void SetBorderFromPosition(BorderPosition position) {
-    SetBorder(views::Border::CreateSolidSidedBorder(
-        (position == TOP) ? 1 : 0,
-        0,
-        (position == BOTTOM) ? 1 : 0,
-        0,
+    SetBorder(views::CreateSolidSidedBorder(
+        (position == TOP) ? 1 : 0, 0, (position == BOTTOM) ? 1 : 0, 0,
         GetNativeTheme()->GetSystemColor(
             ui::NativeTheme::kColorId_MenuBorderColor)));
   }
@@ -160,7 +158,7 @@ CandidateWindowView::CandidateWindowView(gfx::NativeView parent)
   set_background(
       views::Background::CreateSolidBackground(theme->GetSystemColor(
           ui::NativeTheme::kColorId_WindowBackground)));
-  SetBorder(views::Border::CreateSolidBorder(
+  SetBorder(views::CreateSolidBorder(
       1, theme->GetSystemColor(ui::NativeTheme::kColorId_MenuBorderColor)));
 
   SetLayoutManager(new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0));
@@ -280,7 +278,7 @@ void CandidateWindowView::UpdateCandidates(
     for (size_t i = 0; i < candidate_views_.size(); ++i) {
       const size_t index_in_page = i;
       const size_t candidate_index = start_from + index_in_page;
-      CandidateView* candidate_view = candidate_views_[index_in_page];
+      CandidateView* candidate_view = candidate_views_[index_in_page].get();
       // Set the candidate text.
       if (candidate_index < new_candidate_window.candidates().size()) {
         const ui::CandidateWindow::Entry& entry =
@@ -304,8 +302,8 @@ void CandidateWindowView::UpdateCandidates(
       }
     }
     if (new_candidate_window.orientation() == ui::CandidateWindow::VERTICAL) {
-      for (size_t i = 0; i < candidate_views_.size(); ++i)
-        candidate_views_[i]->SetWidths(max_shortcut_width, max_candidate_width);
+      for (const auto& view : candidate_views_)
+        view->SetWidths(max_shortcut_width, max_candidate_width);
     }
 
     CandidateWindowBorder* border = static_cast<CandidateWindowBorder*>(
@@ -359,16 +357,16 @@ void CandidateWindowView::MaybeInitializeCandidateViews(
 
   // Reset all candidate_views_ when orientation changes.
   if (orientation != candidate_window_.orientation())
-    base::STLDeleteElements(&candidate_views_);
+    candidate_views_.clear();
 
-  while (page_size < candidate_views_.size()) {
-    delete candidate_views_.back();
+  while (page_size < candidate_views_.size())
     candidate_views_.pop_back();
-  }
+
   while (page_size > candidate_views_.size()) {
-    CandidateView* new_candidate = new CandidateView(this, orientation);
-    candidate_area_->AddChildView(new_candidate);
-    candidate_views_.push_back(new_candidate);
+    std::unique_ptr<CandidateView> new_candidate =
+        base::MakeUnique<CandidateView>(this, orientation);
+    candidate_area_->AddChildView(new_candidate.get());
+    candidate_views_.push_back(std::move(new_candidate));
   }
 }
 
@@ -408,7 +406,7 @@ int CandidateWindowView::GetDialogButtons() const {
 void CandidateWindowView::ButtonPressed(views::Button* sender,
                                         const ui::Event& event) {
   for (size_t i = 0; i < candidate_views_.size(); ++i) {
-    if (sender == candidate_views_[i]) {
+    if (sender == candidate_views_[i].get()) {
       for (Observer& observer : observers_)
         observer.OnCandidateCommitted(i);
       return;

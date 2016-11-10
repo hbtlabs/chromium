@@ -150,10 +150,6 @@ base::ProcessId ChannelNacl::GetPeerPID() const {
   return -1;
 }
 
-base::ProcessId ChannelNacl::GetSelfPID() const {
-  return -1;
-}
-
 bool ChannelNacl::Connect() {
   WillConnect();
 
@@ -223,10 +219,6 @@ bool ChannelNacl::Send(Message* message) {
     return ProcessOutgoingMessages();
 
   return true;
-}
-
-AttachmentBroker* ChannelNacl::GetAttachmentBroker() {
-  return nullptr;
 }
 
 void ChannelNacl::DidRecvMsg(std::unique_ptr<MessageContents> contents) {
@@ -390,10 +382,6 @@ base::ProcessId ChannelNacl::GetSenderPID() {
   // The untrusted side of the IPC::Channel should never have to worry about
   // sender's process id.
   return base::kNullProcessId;
-}
-
-bool ChannelNacl::IsAttachmentBrokerEndpoint() {
-  return is_attachment_broker_endpoint();
 }
 
 // Channel's methods

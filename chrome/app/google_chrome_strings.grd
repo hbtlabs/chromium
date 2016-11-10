@@ -781,6 +781,9 @@ Google Chrome is unable to recover your settings.
 
 Signing in anyway will merge Chrome information like bookmarks, history, and other settings to <ph name="ACCOUNT_EMAIL_NEW">$2<ex>user@example.com</ex></ph>.
         </message>
+        <message name="IDS_SYNC_USED_PROFILE_ERROR" desc="An error message shown when user tries to sign in to a profile that is used by other user name before.">
+          Someone previously signed in to Chrome on this computer as <ph name="ACCOUNT_EMAIL_LAST">$1<ex>user@example.com</ex></ph>. Please create a new Chrome user to keep your information separate.
+        </message>
       </if>
 
       <!-- Enterprise sign-in profile linking -->
@@ -1143,11 +1146,21 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
         Your manager must remove and add you back to Chrome.
       </message>
       <message name="IDS_SYNC_ERROR_USER_MENU_UPGRADE_MESSAGE" desc="Message of the out-of-date Chrome client error in the header of desktop user menu.">
-        Chrome is out of date.
+        Chrome is out of date
       </message>
       <message name="IDS_SYNC_ERROR_USER_MENU_UPGRADE_BUTTON" desc="Button in the header of desktop user menu that prompts the user to update Chrome to fix the out-of-date Chrome client error.">
         Update Chrome
       </message>
+
+      <!-- Sync errors. Android uses native UI to handle Sync settings -->
+      <if expr="not is_android">
+        <message name="IDS_SYNC_UPGRADE_CLIENT" desc="Message indicating client needs to be upgraded to the latest version.">
+          Update Chrome to start sync
+        </message>
+        <message name="IDS_SYNC_UPGRADE_CLIENT_LINK_LABEL" desc="Hyperlink text indicating client needs to be upgraded to the latest version.">
+          Update Chrome
+        </message>
+      </if>
 
       <!-- Upgrade recovery bubble -->
       <message name="IDS_RUN_RECOVERY" desc="Text for the button the user clicks to recover Chrome and its updater.">
@@ -1192,7 +1205,7 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
       <message name="IDS_FEEDBACK_SERVICE_DIALOG_EXPLANATION_SCOUT" desc="Explanation of the dialog asking whether the user wants to upload some system information and page content for Safe Browsing analysis">
         You can help make Chrome safer and easier to use by automatically sending some system information and page content to Google to help detect dangerous apps and sites.
       </message>
-      
+
       <!-- Page Information Window -->
       <message name="IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_NO_CT" desc="The text of the identity section when the page is secure and no Certificate Transparency information is present.">
         Chrome verified that <ph name="ISSUER">$1<ex>VeriSign</ex></ph> issued this website's certificate. The server did not supply any Certificate Transparency information.

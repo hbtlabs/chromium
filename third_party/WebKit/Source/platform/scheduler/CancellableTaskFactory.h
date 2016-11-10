@@ -6,8 +6,8 @@
 #define CancellableTaskFactory_h
 
 #include "platform/PlatformExport.h"
+#include "platform/WebTaskRunner.h"
 #include "platform/heap/Handle.h"
-#include "public/platform/WebTaskRunner.h"
 #include "wtf/Allocator.h"
 #include "wtf/Functional.h"
 #include "wtf/Noncopyable.h"
@@ -30,16 +30,10 @@
 //
 //   std::unique_ptr<WTF::Closure> task =
 //       WTF::bind(wrapPersistent(foo), &Foo::bar);
-//   RefPtr<TaskHandle> handle =
+//   TaskHandle handle =
 //       task_runner->postCancellableTask(BLINK_FROM_HERE, std::move(task));
-//   handle->cancel();
-//
-// Note that the task is not automatically cancelled on the scope out of
-// RefPtr<TaskHandle>, since the wrapped task has a reference to the TaskHandle.
-
+//   handle.cancel();
 namespace blink {
-
-class TraceLocation;
 
 class PLATFORM_EXPORT CancellableTaskFactory {
   WTF_MAKE_NONCOPYABLE(CancellableTaskFactory);

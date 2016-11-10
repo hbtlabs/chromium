@@ -22,6 +22,7 @@
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/common/cursors/webcursor.h"
+#include "content/common/drag_event_source_info.h"
 #include "content/common/edit_command.h"
 #include "content/common/input/synthetic_gesture_params.h"
 #include "content/public/common/screen_info.h"
@@ -37,6 +38,7 @@
 #include "third_party/WebKit/public/platform/WebDisplayMode.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
+#include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
 #include "third_party/WebKit/public/platform/WebTextInputInfo.h"
 #include "third_party/WebKit/public/web/WebCompositionUnderline.h"
 #include "third_party/WebKit/public/web/WebPopupType.h"
@@ -65,8 +67,10 @@ namespace scheduler {
 class RenderWidgetSchedulingState;
 }
 struct WebDeviceEmulationParams;
+class WebDragData;
 class WebFrameWidget;
 class WebGestureEvent;
+class WebImage;
 class WebLocalFrame;
 class WebMouseEvent;
 class WebNode;
@@ -287,6 +291,11 @@ class CONTENT_EXPORT RenderWidget
   bool requestPointerLock() override;
   void requestPointerUnlock() override;
   bool isPointerLocked() override;
+  void startDragging(blink::WebReferrerPolicy policy,
+                     const blink::WebDragData& data,
+                     blink::WebDragOperationsMask mask,
+                     const blink::WebImage& image,
+                     const blink::WebPoint& imageOffset) override;
 
   // Override point to obtain that the current input method state and caret
   // position.
@@ -496,8 +505,6 @@ class CONTENT_EXPORT RenderWidget
   void OnUpdateScreenRects(const gfx::Rect& view_screen_rect,
                            const gfx::Rect& window_screen_rect);
   void OnUpdateWindowScreenRect(const gfx::Rect& window_screen_rect);
-  void OnShowImeIfNeeded();
-  void OnSetFrameSinkId(const cc::FrameSinkId& frame_sink_id);
   void OnHandleCompositorProto(const std::vector<uint8_t>& proto);
 
 #if defined(OS_ANDROID)
@@ -509,10 +516,6 @@ class CONTENT_EXPORT RenderWidget
 
   // Called by the browser process to update text input state.
   void OnRequestTextInputStateUpdate();
-
-  // Called by the browser process to begin (when |begin| is set) or end batch
-  // edit mode. Note that text input state will not be updated in this mode.
-  void OnImeBatchEdit(bool begin);
 #endif
 
   // Called by the browser process to update the cursor and composition
@@ -531,12 +534,8 @@ class CONTENT_EXPORT RenderWidget
 
   // Override points to notify derived classes that a paint has happened.
   // DidInitiatePaint happens when that has completed, and subsequent rendering
-  // won't affect the painted content. DidFlushPaint happens once we've received
-  // the ACK that the screen has been updated. For a given paint operation,
-  // these overrides will always be called in the order DidInitiatePaint,
-  // DidFlushPaint.
+  // won't affect the painted content.
   virtual void DidInitiatePaint() {}
-  virtual void DidFlushPaint();
 
   virtual GURL GetURLForGraphicsContext3D();
 
@@ -675,10 +674,6 @@ class CONTENT_EXPORT RenderWidget
   // It is possible that one ImeEventGuard is nested inside another
   // ImeEventGuard. We keep track of the outermost one, and update it as needed.
   ImeEventGuard* ime_event_guard_;
-
-  // Whether IME is in batch edit mode, in which case we do not update text
-  // input state.
-  bool ime_in_batch_edit_;
 
   // True if we have requested this widget be closed.  No more messages will
   // be sent, except for a Close.
@@ -826,6 +821,11 @@ class CONTENT_EXPORT RenderWidget
   // Stores edit commands associated to the next key event.
   // Will be cleared as soon as the next key event is processed.
   EditCommands edit_commands_;
+
+  // This field stores drag/drop related info for the event that is currently
+  // being handled. If the current event results in starting a drag/drop
+  // session, this info is sent to the browser along with other drag/drop info.
+  DragEventSourceInfo possible_drag_event_info_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderWidget);
 };

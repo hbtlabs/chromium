@@ -118,6 +118,11 @@ public interface WebContents extends Parcelable {
     void onShow();
 
     /**
+     * Removes handles used in text selection.
+     */
+    void dismissTextHandles();
+
+    /**
      * Suspends all media players for this WebContents.  Note: There may still
      * be activities generating audio, so setAudioMuted() should also be called
      * to ensure all audible activity is silenced.
@@ -177,11 +182,6 @@ public interface WebContents extends Parcelable {
      * @param animate Whether the transition should be animated or not.
      */
     void updateBrowserControlsState(boolean enableHiding, boolean enableShowing, boolean animate);
-
-    /**
-     * Shows the IME if the focused widget could accept text input.
-     */
-    void showImeIfNeeded();
 
     /**
      * Brings the Editable to the visible area while IME is up to make easier for inputing text.

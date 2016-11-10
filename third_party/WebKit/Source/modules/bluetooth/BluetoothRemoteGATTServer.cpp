@@ -10,6 +10,7 @@
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/events/Event.h"
+#include "modules/bluetooth/Bluetooth.h"
 #include "modules/bluetooth/BluetoothError.h"
 #include "modules/bluetooth/BluetoothRemoteGATTService.h"
 #include "modules/bluetooth/BluetoothSupplement.h"
@@ -99,13 +100,10 @@ ScriptPromise BluetoothRemoteGATTServer::connect(ScriptState* scriptState) {
 void BluetoothRemoteGATTServer::disconnect(ScriptState* scriptState) {
   if (!m_connected)
     return;
-  m_connected = false;
-  ClearActiveAlgorithms();
+  device()->cleanupDisconnectedDeviceAndFireEvent();
   WebBluetooth* webbluetooth =
       BluetoothSupplement::fromScriptState(scriptState);
   webbluetooth->disconnect(device()->id());
-  device()->dispatchEvent(
-      Event::createBubble(EventTypeNames::gattserverdisconnected));
 }
 
 // Class that allows us to resolve the promise with a single service or
@@ -140,16 +138,16 @@ class GetPrimaryServicesCallback
 
     if (m_quantity == mojom::blink::WebBluetoothGATTQueryQuantity::SINGLE) {
       DCHECK_EQ(1u, webServices.size());
-      m_resolver->resolve(BluetoothRemoteGATTService::take(
-          m_resolver, wrapUnique(webServices[0]), m_device));
+      m_resolver->resolve(m_device->getOrCreateBluetoothRemoteGATTService(
+          wrapUnique(webServices[0])));
       return;
     }
 
     HeapVector<Member<BluetoothRemoteGATTService>> services;
     services.reserveInitialCapacity(webServices.size());
     for (WebBluetoothRemoteGATTService* webService : webServices) {
-      services.append(BluetoothRemoteGATTService::take(
-          m_resolver, wrapUnique(webService), m_device));
+      services.append(m_device->getOrCreateBluetoothRemoteGATTService(
+          wrapUnique(webService)));
     }
     m_resolver->resolve(services);
   }

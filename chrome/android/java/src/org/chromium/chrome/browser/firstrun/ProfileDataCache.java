@@ -45,7 +45,7 @@ public class ProfileDataCache implements Observer {
         public String givenName;
     }
 
-    private final HashMap<String, CacheEntry> mCacheEntries = new HashMap<String, CacheEntry>();
+    private final HashMap<String, CacheEntry> mCacheEntries = new HashMap<>();
 
     private final Bitmap mPlaceholderImage;
     private final int mImageSizePx;
@@ -62,9 +62,10 @@ public class ProfileDataCache implements Observer {
         mContext = context;
         mProfile = profile;
 
-        final DisplayAndroid displayAndroid = DisplayAndroid.get(context);
-        mImageSizePx = (int) Math.ceil(PROFILE_IMAGE_SIZE_DP * displayAndroid.getDIPScale());
-        mImageStrokePx = (int) Math.ceil(PROFILE_IMAGE_STROKE_DP * displayAndroid.getDIPScale());
+        // There's no WindowAndroid present at this time, so get the default display.
+        final DisplayAndroid displayAndroid = DisplayAndroid.getNonMultiDisplay(context);
+        mImageSizePx = (int) Math.ceil(PROFILE_IMAGE_SIZE_DP * displayAndroid.getDipScale());
+        mImageStrokePx = (int) Math.ceil(PROFILE_IMAGE_STROKE_DP * displayAndroid.getDipScale());
         mImageStrokeColor = Color.WHITE;
 
         Bitmap placeHolder = BitmapFactory.decodeResource(mContext.getResources(),

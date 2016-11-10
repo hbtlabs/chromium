@@ -19,13 +19,16 @@ const base::Feature kRecentOfflineTabSuggestionsFeature{
     "NTPOfflinePageSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kSaveToOfflineFeature{
-    "NTPSaveToOffline", base::FEATURE_DISABLED_BY_DEFAULT};
+    "NTPSaveToOffline", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kOfflineBadgeFeature{
-    "NTPOfflineBadge", base::FEATURE_DISABLED_BY_DEFAULT};
+    "NTPOfflineBadge", base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kIncreasedVisibility{
+    "NTPSnippetsIncreasedVisibility", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kDownloadSuggestionsFeature{
-    "NTPDownloadSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
+    "NTPDownloadSuggestions", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kPhysicalWebPageSuggestionsFeature{
     "NTPPhysicalWebPageSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -38,6 +41,9 @@ const base::Feature kSectionDismissalFeature{
 
 const base::Feature kForeignSessionsSuggestionsFeature{
     "NTPForeignSessionsSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kFetchMoreFeature{"NTPSuggestionsFetchMore",
+                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 int GetParamAsInt(const base::Feature& feature,
                   const std::string& param_name,

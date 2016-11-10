@@ -22,8 +22,7 @@ namespace content {
 // of embedded services.
 struct CONTENT_EXPORT ServiceInfo {
   using ServiceFactory =
-      base::Callback<std::unique_ptr<service_manager::Service>(
-          const base::Closure& quit_closure)>;
+      base::Callback<std::unique_ptr<service_manager::Service>()>;
 
   ServiceInfo();
   ServiceInfo(const ServiceInfo& other);
@@ -44,10 +43,6 @@ struct CONTENT_EXPORT ServiceInfo {
   //
   // If |task_runner| is not null, this value is ignored.
   bool use_own_thread = false;
-
-  // Whether a ServiceContext is created and passed to the service when the
-  // service is created.
-  bool service_owns_context = false;
 };
 
 }  // namespace content

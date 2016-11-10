@@ -197,7 +197,7 @@ interface ExtendableMessageEvent : ExtendableEvent
 interface FetchEvent : ExtendableEvent
     getter clientId
     getter isReload
-    getter navigationPreload
+    getter preloadResponse
     getter request
     method constructor
     method respondWith
@@ -657,6 +657,7 @@ interface ServiceWorkerRegistration : EventTarget
     getter installing
     getter navigationPreload
     getter onupdatefound
+    getter paymentAppManager
     getter pushManager
     getter scope
     getter sync
@@ -1262,6 +1263,11 @@ interface WorkerNavigator
     getter storage
     getter userAgent
     method constructor
+interface WritableStream
+    getter locked
+    method abort
+    method constructor
+    method getWriter
 interface webkitIDBCursor
     getter direction
     getter key

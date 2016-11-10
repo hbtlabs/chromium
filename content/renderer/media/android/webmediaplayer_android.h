@@ -38,7 +38,6 @@ class SingleThreadTaskRunner;
 
 namespace blink {
 class WebContentDecryptionModule;
-class WebContentDecryptionModuleResult;
 class WebFrame;
 class WebMediaPlayerClient;
 class WebMediaPlayerEncryptedMediaClient;
@@ -53,12 +52,10 @@ namespace gpu {
 namespace gles2 {
 class GLES2Interface;
 }
-struct MailboxHolder;
 }
 
 namespace media {
 class MediaLog;
-class WebContentDecryptionModuleImpl;
 }
 
 namespace content {
@@ -114,6 +111,7 @@ class WebMediaPlayerAndroid
                  blink::WebSetSinkIdCallbacks* web_callback) override;
   void requestRemotePlayback() override;
   void requestRemotePlaybackControl() override;
+  void requestRemotePlaybackStop() override;
   blink::WebTimeRanges buffered() const override;
   blink::WebTimeRanges seekable() const override;
 
@@ -200,6 +198,7 @@ class WebMediaPlayerAndroid
       override;
   void OnDisconnectedFromRemoteDevice() override;
   void OnCancelledRemotePlaybackRequest() override;
+  void OnRemotePlaybackStarted() override;
   void OnDidExitFullscreen() override;
   void OnMediaPlayerPlay() override;
   void OnMediaPlayerPause() override;
@@ -216,7 +215,7 @@ class WebMediaPlayerAndroid
   // WebMediaPlayerDelegate::Observer implementation.
   void OnHidden() override;
   void OnShown() override;
-  void OnSuspendRequested(bool must_suspend) override;
+  bool OnSuspendRequested(bool must_suspend) override;
   void OnPlay() override;
   void OnPause() override;
   void OnVolumeMultiplierUpdate(double multiplier) override;

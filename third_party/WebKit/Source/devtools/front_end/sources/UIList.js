@@ -84,9 +84,12 @@ WebInspector.UIList.Item = class {
 
     this.titleElement = this.element.createChild('div', 'title');
     this.subtitleElement = this.element.createChild('div', 'subtitle');
-
+    /** @type {?Element} */
+    this._actionElement = null;
     this._hidden = false;
     this._isLabel = !!isLabel;
+    /** @type {?HTMLElement} */
+    this._icon = null;
     this.setTitle(title);
     this.setSubtitle(subtitle);
     this.setSelected(false);
@@ -157,14 +160,16 @@ WebInspector.UIList.Item = class {
     if (this._selected)
       return;
     this._selected = true;
-    this.element.classList.add('selected');
+    this._icon = WebInspector.Icon.create('smallicon-thick-right-arrow', 'selected-icon');
+    this.element.appendChild(this._icon);
   }
 
   deselect() {
     if (!this._selected)
       return;
     this._selected = false;
-    this.element.classList.remove('selected');
+    this._icon.remove();
+    this._icon = null;
   }
 
   toggleSelected() {
@@ -199,7 +204,7 @@ WebInspector.UIList.Item = class {
    * @param {boolean} x
    */
   setDimmed(x) {
-    this.element.classList.toggle('dimmed', x);
+    this.element.classList.toggle('dimmed-item', x);
   }
 
   discard() {
@@ -210,5 +215,24 @@ WebInspector.UIList.Item = class {
    */
   setHoverable(hoverable) {
     this.element.classList.toggle('ignore-hover', !hoverable);
+  }
+
+  /**
+   * @param {?string} title
+   * @param {?function(!Event):!Promise} handler
+   */
+  setAction(title, handler) {
+    if (this._actionElement)
+      this._actionElement.remove();
+    if (!title || !handler)
+      return;
+    this._actionElement = this.element.createChild('div', 'action');
+    var link = this._actionElement.createChild('a', 'action-link');
+    link.textContent = title;
+    link.addEventListener('click', (event) => {
+      link.disabled = true;
+      handler(event).then(() => link.disabled = false);
+      event.stopPropagation();
+    });
   }
 };

@@ -27,7 +27,6 @@
 #include "cc/input/browser_controls_state.h"
 #include "cc/resources/shared_bitmap.h"
 #include "content/common/content_export.h"
-#include "content/common/drag_event_source_info.h"
 #include "content/common/frame_message_enums.h"
 #include "content/common/navigation_gesture.h"
 #include "content/common/page_message_enums.h"
@@ -73,36 +72,19 @@
 #pragma warning(disable: 4250)
 #endif
 
-class SkBitmap;
-struct PP_NetAddress_Private;
-struct ViewMsg_StopFinding_Params;
-
-namespace base {
-class CommandLine;
-}
-
 namespace blink {
 class WebApplicationCacheHost;
-class WebApplicationCacheHostClient;
-class WebDOMMessageEvent;
 class WebDataSource;
 class WebDateTimeChooserCompletion;
-class WebDragData;
 class WebGestureEvent;
 class WebIconURL;
 class WebImage;
-class WebPeerConnection00Handler;
-class WebPeerConnection00HandlerClient;
 class WebMouseEvent;
-class WebPeerConnectionHandler;
-class WebPeerConnectionHandlerClient;
 class WebSpeechRecognizer;
 class WebStorageNamespace;
-class WebTouchEvent;
 class WebURLRequest;
 struct WebActiveWheelFlingParameters;
 struct WebDateTimeChooserParams;
-struct WebFileChooserParams;
 struct WebMediaPlayerAction;
 struct WebPluginAction;
 struct WebPoint;
@@ -116,28 +98,18 @@ class WebHitTestResult;
 namespace content {
 
 class HistoryController;
-class HistoryEntry;
-class PageState;
 class RenderViewImplTest;
 class RenderViewObserver;
 class RenderViewTest;
 class RendererDateTimePicker;
-class RendererWebColorChooserImpl;
 class SpeechRecognitionDispatcher;
-class WebPluginDelegateProxy;
 struct FaviconURL;
 struct FileChooserParams;
-struct FileChooserFileInfo;
-struct RenderViewImplParams;
 struct ResizeParams;
 
 namespace mojom {
 class CreateViewParams;
 }
-
-#if defined(OS_ANDROID)
-class WebMediaPlayerProxyAndroid;
-#endif
 
 //
 // RenderView is an object that manages a WebView object, and provides a
@@ -339,11 +311,6 @@ class CONTENT_EXPORT RenderViewImpl
   void setStatusText(const blink::WebString& text) override;
   void setMouseOverURL(const blink::WebURL& url) override;
   void setKeyboardFocusURL(const blink::WebURL& url) override;
-  void startDragging(blink::WebLocalFrame* frame,
-                     const blink::WebDragData& data,
-                     blink::WebDragOperationsMask mask,
-                     const blink::WebImage& image,
-                     const blink::WebPoint& imageOffset) override;
   bool acceptsLoadDrops() override;
   void focusNext() override;
   void focusPrevious() override;
@@ -523,11 +490,8 @@ class CONTENT_EXPORT RenderViewImpl
   void RenderWidgetFocusChangeComplete() override;
   bool DoesRenderWidgetHaveTouchEventHandlersAt(
       const gfx::Point& point) const override;
-  bool RenderWidgetWillHandleGestureEvent(
-      const blink::WebGestureEvent& event) override;
   bool RenderWidgetWillHandleMouseEvent(
       const blink::WebMouseEvent& event) override;
-  void RenderWidgetDidFlushPaint() override;
 
   // Old WebFrameClient implementations ----------------------------------------
 
@@ -613,6 +577,7 @@ class CONTENT_EXPORT RenderViewImpl
   void OnZoom(PageZoom zoom);
   void OnForceRedraw(const ui::LatencyInfo& latency_info);
   void OnSelectWordAroundCaret();
+  void OnAudioStateChanged(bool is_audio_playing);
 #if defined(OS_ANDROID)
   void OnUndoScrollFocusedEditableNodeIntoRect();
   void OnUpdateBrowserControlsState(bool enable_hiding,
@@ -878,11 +843,6 @@ class CONTENT_EXPORT RenderViewImpl
   // All the registered observers.  We expect this list to be small, so vector
   // is fine.
   base::ObserverList<RenderViewObserver> observers_;
-
-  // This field stores drag/drop related info for the event that is currently
-  // being handled. If the current event results in starting a drag/drop
-  // session, this info is sent to the browser along with other drag/drop info.
-  DragEventSourceInfo possible_drag_event_info_;
 
   // NOTE: stats_collection_observer_ should be the last members because their
   // constructors call the AddObservers method of RenderViewImpl.

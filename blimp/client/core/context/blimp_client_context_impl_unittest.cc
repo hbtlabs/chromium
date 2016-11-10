@@ -22,6 +22,7 @@
 #include "ui/gfx/native_widget_types.h"
 
 #if defined(OS_ANDROID)
+#include "blimp/client/core/settings/android/settings_android.h"
 #include "ui/android/window_android.h"
 #endif  // defined(OS_ANDROID)
 
@@ -66,9 +67,10 @@ TEST_F(BlimpClientContextImplTest,
   TestingPrefServiceSimple prefs;
   Settings::RegisterPrefs(prefs.registry());
 
+  auto settings = base::MakeUnique<Settings>(&prefs);
   BlimpClientContextImpl blimp_client_context(
       io_thread_.task_runner(), io_thread_.task_runner(),
-      base::MakeUnique<MockCompositorDependencies>(), &prefs);
+      base::MakeUnique<MockCompositorDependencies>(), std::move(settings));
   TestBlimpClientContextDelegate delegate;
   blimp_client_context.SetDelegate(&delegate);
 
@@ -82,6 +84,7 @@ TEST_F(BlimpClientContextImplTest,
       blimp_client_context.CreateBlimpContents(window_);
   DCHECK(blimp_contents);
   DCHECK_EQ(blimp_contents.get(), attached_blimp_contents);
+  blimp_client_context.SetDelegate(nullptr);
 }
 
 }  // namespace

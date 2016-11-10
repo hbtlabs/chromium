@@ -1,6 +1,9 @@
 # These tests currently fail when they run with --site-per-process.
 # See https://crbug.com/477150.
 
+# https://crbug.com/661725 - Propagating user gesture via postMessage doesn't work for OOPIFs
+crbug.com/661725 http/tests/security/frameNavigation/xss-ALLOWED-top-navigation-after-postMessage.html [ Timeout ]
+
 # https://crbug.com/611838 - regression when geolocation tests use JS mock.
 crbug.com/611838 http/tests/security/powerfulFeatureRestrictions/geolocation-on-secure-origin-in-insecure-origin.html [ Timeout ]
 
@@ -21,16 +24,12 @@ crbug.com/608015 http/tests/inspector-protocol/access-inspected-object.html [ Fa
 # https://crbug.com/608023 - does injecting injections work with OOPIFs?
 crbug.com/608023 http/tests/inspector/injected-script-for-origin.html [ Failure ]
 
-# https://crbug.com/554119 - Popup menu is in the wrong location.
-crbug.com/554119 http/tests/webfont/popup-menu-load-webfont-after-open.html [ Failure ]
-
 # https://crbug.com/602493 - Layout tests harness doesn't support history dump across OOPIFs
 crbug.com/602493 http/tests/security/mixedContent/insecure-iframe-in-main-frame.html [ Crash ]
 
 # https://crbug.com/582522 - extra mixedContent checks reported with --site-per-process
 # https://crbug.com/602497 - Inconsistent console messages about mixed content,
 #                            when running with or without --site-per-process
-crbug.com/602497 http/tests/security/mixedContent/active-subresource-in-http-iframe-not-blocked.https.html [ Failure ]
 crbug.com/602497 http/tests/security/mixedContent/insecure-iframe-in-iframe.html [ Failure ]
 crbug.com/602497 http/tests/security/mixedContent/insecure-iframe-in-main-frame-allowed.html [ Failure ]
 
@@ -91,6 +90,15 @@ crbug.com/623265 http/tests/inspector/indexeddb/resources-panel.html [ Timeout ]
 # https://crbug.com/645641 - test_runner.cc(1863) Check failed:
 # layout_test_runtime_flags_.have_top_loading_frame()
 crbug.com/645641 imported/wpt/html/syntax/parsing/html5lib_tests19.html [ Crash Failure ]
+
+# https://crbug.com/659917: with experimental mojo-loading feature:
+crbug.com/659917 virtual/mojo-loading/http/tests/xmlhttprequest/origin-exact-matching [ Crash ]
+crbug.com/659917 virtual/mojo-loading/http/tests/xmlhttprequest/origin-whitelisting-all.html [ Crash ]
+crbug.com/659917 virtual/mojo-loading/http/tests/xmlhttprequest/detaching-frame-2.html [ Crash ]
+crbug.com/659917 virtual/mojo-loading/http/tests/xmlhttprequest/origin-whitelisting-ip-addresses.html [ Crash ]
+crbug.com/659917 virtual/mojo-loading/http/tests/xmlhttprequest/document-domain-set.html [ Crash ]
+crbug.com/659917 virtual/mojo-loading/http/tests/xmlhttprequest/access-control-preflight-request-must-not-contain-cookie.html [ Crash ]
+crbug.com/659917 virtual/mojo-loading/http/tests/xmlhttprequest/origin-whitelisting-ip-addresses-with-subdomains.html [ Crash ]
 
 # TODO(lukasza, alexmos): Triage these failures.
 Bug(none) fast/frames/cached-frame-counter.html [ Timeout ]

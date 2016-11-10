@@ -46,15 +46,14 @@ void MockModelTypeStore::ReadAllMetadata(const ReadMetadataCallback& callback) {
     read_all_metadata_handler_.Run(callback);
   } else {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(callback, Result::SUCCESS,
-                   base::Passed(std::unique_ptr<RecordList>()), std::string()));
+        FROM_HERE, base::Bind(callback, SyncError(),
+                              base::Passed(std::unique_ptr<MetadataBatch>())));
   }
 }
 
 std::unique_ptr<MockModelTypeStore::WriteBatch>
 MockModelTypeStore::CreateWriteBatch() {
-  return base::WrapUnique(new MockModelTypeStore::WriteBatch());
+  return base::WrapUnique(new MockModelTypeStore::WriteBatch(this));
 }
 
 void MockModelTypeStore::CommitWriteBatch(

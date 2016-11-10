@@ -6,6 +6,7 @@
 #define COMPONENTS_NTP_SNIPPETS_REMOTE_NTP_SNIPPETS_SERVICE_H_
 
 #include <cstddef>
+#include <deque>
 #include <map>
 #include <memory>
 #include <set>
@@ -117,6 +118,9 @@ class NTPSnippetsService final : public ContentSuggestionsProvider,
   void DismissSuggestion(const ContentSuggestion::ID& suggestion_id) override;
   void FetchSuggestionImage(const ContentSuggestion::ID& suggestion_id,
                             const ImageFetchedCallback& callback) override;
+  void Fetch(const Category& category,
+             const std::set<std::string>& known_suggestion_ids,
+             const FetchDoneCallback& callback) override;
   void ClearHistory(
       base::Time begin,
       base::Time end,
@@ -136,12 +140,6 @@ class NTPSnippetsService final : public ContentSuggestionsProvider,
     return categories_.find(category)->second.snippets;
   }
 
-  // Available snippets, only for unit tests.
-  const NTPSnippet::PtrVector& GetArchivedSnippetsForTesting(
-      Category category) const {
-    return categories_.find(category)->second.archived;
-  }
-
   // Dismissed snippets, only for unit tests.
   const NTPSnippet::PtrVector& GetDismissedSnippetsForTesting(
       Category category) const {
@@ -150,6 +148,7 @@ class NTPSnippetsService final : public ContentSuggestionsProvider,
 
  private:
   friend class NTPSnippetsServiceTest;
+
   FRIEND_TEST_ALL_PREFIXES(NTPSnippetsServiceTest,
                            RemoveExpiredDismissedContent);
   FRIEND_TEST_ALL_PREFIXES(NTPSnippetsServiceTest, RescheduleOnStateChange);
@@ -207,17 +206,29 @@ class NTPSnippetsService final : public ContentSuggestionsProvider,
   void OnDatabaseLoaded(NTPSnippet::PtrVector snippets);
   void OnDatabaseError();
 
-  // Callback for the NTPSnippetsFetcher.
+  // Callback for fetch-more requests with the NTPSnippetsFetcher.
+  void OnFetchMoreFinished(
+      FetchDoneCallback fetching_callback,
+      NTPSnippetsFetcher::OptionalFetchedCategories fetched_categories);
+
+  // Callback for regular fetch requests with the NTPSnippetsFetcher.
   void OnFetchFinished(
       NTPSnippetsFetcher::OptionalFetchedCategories fetched_categories);
 
   // Moves all snippets from |to_archive| into the archive of the |category|.
-  // It also deletes the snippets from the DB and keeps the archive reasonably
-  // short.
+  // Clears |to_archive|. As the archive is a FIFO buffer of limited size, this
+  // function will also delete images from the database in case the associated
+  // snippet gets evicted from the archive.
   void ArchiveSnippets(Category category, NTPSnippet::PtrVector* to_archive);
 
-  // Replace old snippets in |category| by newly available snippets.
-  void ReplaceSnippets(Category category, NTPSnippet::PtrVector new_snippets);
+  // Sanitizes new fetched snippets -- e.g. adding missing dates and filtering
+  // out incomplete results.
+  void SanitizeFetchedCategory(
+      NTPSnippetsFetcher::FetchedCategory* fetched_category);
+
+  // Adds newly available suggestions in |category| to the available ones.
+  void IntegrateSnippets(const Category& category,
+                         NTPSnippet::PtrVector new_snippets);
 
   // Removes expired dismissed snippets from the service and the database.
   void ClearExpiredDismissedSnippets();
@@ -275,6 +286,12 @@ class NTPSnippetsService final : public ContentSuggestionsProvider,
   // and notifies the observer.
   void NotifyNewSuggestions(Category category);
 
+  // Converts the cached snippets in the given |category| to content suggestions
+  // and passes them to the |callback|.
+  // TODO(tschumann): Make |callback| required.
+  void NotifyMoreSuggestions(Category category,
+                             base::Optional<FetchDoneCallback> callback);
+
   // Updates the internal status for |category| to |category_status_| and
   // notifies the content suggestions observer if it changed.
   void UpdateCategoryStatus(Category category, CategoryStatus status);
@@ -283,6 +300,11 @@ class NTPSnippetsService final : public ContentSuggestionsProvider,
 
   void RestoreCategoriesFromPrefs();
   void StoreCategoriesToPrefs();
+
+  NTPSnippetsFetcher::Params BuildFetchParams(
+      bool exclude_archived_suggestions) const;
+
+  void MarkEmptyCategoriesAsLoading();
 
   State state_;
 
@@ -309,7 +331,8 @@ class NTPSnippetsService final : public ContentSuggestionsProvider,
     // All previous suggestions that we keep around in memory because they can
     // be on some open NTP. We do not persist this list so that on a new start
     // of Chrome, this is empty.
-    NTPSnippet::PtrVector archived;
+    // |archived| is a FIFO buffer with a maximum length.
+    std::deque<std::unique_ptr<NTPSnippet>> archived;
 
     // Suggestions that the user dismissed. We keep these around until they
     // expire so we won't re-add them to |snippets| on the next fetch.
@@ -324,6 +347,7 @@ class NTPSnippetsService final : public ContentSuggestionsProvider,
     ~CategoryContent();
     CategoryContent& operator=(CategoryContent&&);
   };
+
   std::map<Category, CategoryContent, Category::CompareByID> categories_;
 
   // The ISO 639-1 code of the language used by the application.

@@ -81,7 +81,7 @@ void BaseRenderingContext2D::restore() {
   if (m_stateStack.size() <= 1)
     return;
   m_path.transform(state().transform());
-  m_stateStack.removeLast();
+  m_stateStack.pop_back();
   m_stateStack.last()->clearResolvedFilter();
   m_path.transform(state().transform().inverse());
   SkCanvas* c = drawingCanvas();
@@ -1033,7 +1033,7 @@ void BaseRenderingContext2D::drawImageInternal(SkCanvas* c,
     ctm.mapRect(&bounds);
     SkPaint layerPaint;
     layerPaint.setBlendMode(paint->getBlendMode());
-    layerPaint.setImageFilter(paint->getImageFilter());
+    layerPaint.setImageFilter(sk_ref_sp(paint->getImageFilter()));
 
     c->saveLayer(&bounds, &layerPaint);
     c->concat(ctm);

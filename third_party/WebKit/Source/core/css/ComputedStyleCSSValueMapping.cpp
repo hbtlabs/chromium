@@ -90,13 +90,6 @@ inline static CSSValue* zoomAdjustedPixelValueOrAuto(
   return zoomAdjustedPixelValue(length.value(), style);
 }
 
-inline static CSSPrimitiveValue* zoomAdjustedNumberValue(
-    double value,
-    const ComputedStyle& style) {
-  return CSSPrimitiveValue::create(value / style.effectiveZoom(),
-                                   CSSPrimitiveValue::UnitType::Number);
-}
-
 static CSSValue* zoomAdjustedPixelValueForLength(const Length& length,
                                                  const ComputedStyle& style) {
   if (length.isFixed())
@@ -239,7 +232,7 @@ static CSSValue* valueForPositionOffset(const ComputedStyle& style,
         return CSSPrimitiveValue::create(0,
                                          CSSPrimitiveValue::UnitType::Pixels);
 
-      if (opposite.isPercentOrCalc() || opposite.isCalculated()) {
+      if (opposite.isPercentOrCalc()) {
         if (layoutObject->isBox()) {
           LayoutUnit containingBlockSize =
               (propertyID == CSSPropertyLeft || propertyID == CSSPropertyRight)
@@ -865,6 +858,12 @@ static CSSValue* specifiedValueForGridTrackSize(const GridTrackSize& trackSize,
       return specifiedValueForGridTrackBreadth(trackSize.minTrackBreadth(),
                                                style);
     case MinMaxTrackSizing: {
+      if (trackSize.minTrackBreadth().isAuto() &&
+          trackSize.maxTrackBreadth().isFlex()) {
+        return CSSPrimitiveValue::create(trackSize.maxTrackBreadth().flex(),
+                                         CSSPrimitiveValue::UnitType::Fraction);
+      }
+
       auto* minMaxTrackBreadths = CSSFunctionValue::create(CSSValueMinmax);
       minMaxTrackBreadths->append(*specifiedValueForGridTrackBreadth(
           trackSize.minTrackBreadth(), style));
@@ -1346,10 +1345,10 @@ static const CSSValue& valueForBorderRadiusCorner(LengthSize radius,
   return list;
 }
 
-static CSSFunctionValue* valueForMatrixTransform(
-    const TransformationMatrix& transform,
-    const ComputedStyle& style) {
+static CSSFunctionValue* valueForMatrixTransform(TransformationMatrix transform,
+                                                 const ComputedStyle& style) {
   CSSFunctionValue* transformValue = nullptr;
+  transform.zoom(1 / style.effectiveZoom());
   if (transform.isAffine()) {
     transformValue = CSSFunctionValue::create(CSSValueMatrix);
 
@@ -1361,8 +1360,10 @@ static CSSFunctionValue* valueForMatrixTransform(
         transform.c(), CSSPrimitiveValue::UnitType::Number));
     transformValue->append(*CSSPrimitiveValue::create(
         transform.d(), CSSPrimitiveValue::UnitType::Number));
-    transformValue->append(*zoomAdjustedNumberValue(transform.e(), style));
-    transformValue->append(*zoomAdjustedNumberValue(transform.f(), style));
+    transformValue->append(*CSSPrimitiveValue::create(
+        transform.e(), CSSPrimitiveValue::UnitType::Number));
+    transformValue->append(*CSSPrimitiveValue::create(
+        transform.f(), CSSPrimitiveValue::UnitType::Number));
   } else {
     transformValue = CSSFunctionValue::create(CSSValueMatrix3d);
 
@@ -1393,9 +1394,12 @@ static CSSFunctionValue* valueForMatrixTransform(
     transformValue->append(*CSSPrimitiveValue::create(
         transform.m34(), CSSPrimitiveValue::UnitType::Number));
 
-    transformValue->append(*zoomAdjustedNumberValue(transform.m41(), style));
-    transformValue->append(*zoomAdjustedNumberValue(transform.m42(), style));
-    transformValue->append(*zoomAdjustedNumberValue(transform.m43(), style));
+    transformValue->append(*CSSPrimitiveValue::create(
+        transform.m41(), CSSPrimitiveValue::UnitType::Number));
+    transformValue->append(*CSSPrimitiveValue::create(
+        transform.m42(), CSSPrimitiveValue::UnitType::Number));
+    transformValue->append(*CSSPrimitiveValue::create(
+        transform.m43(), CSSPrimitiveValue::UnitType::Number));
     transformValue->append(*CSSPrimitiveValue::create(
         transform.m44(), CSSPrimitiveValue::UnitType::Number));
   }

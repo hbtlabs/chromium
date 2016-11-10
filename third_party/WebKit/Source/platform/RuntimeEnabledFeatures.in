@@ -40,7 +40,7 @@ Canvas2dFixedRenderingMode status=test
 EnableCanvas2dDynamicRenderingModeSwitching status=experimental
 Canvas2dImageChromium status=experimental
 ClientHints status=stable
-CompositeOpaqueFixedPosition status=test, settable_from_internals=True
+CompositeOpaqueFixedPosition status=stable, settable_from_internals=True
 CompositeOpaqueScrollers status=stable, settable_from_internals=True
 ColorCorrectRendering settable_from_internals=True
 CompositedSelectionUpdate
@@ -67,7 +67,7 @@ CSSOMSmoothScroll status=experimental
 CSSOffsetPositionAnchor status=experimental
 CSSPaintAPI status=experimental, depends_on=CSSTypedOM, depends_on=Worklet
 CSSSnapSize status=experimental
-CSSStickyPosition status=experimental
+CSSStickyPosition status=stable
 CSSTouchActionPanDirections status=stable
 CSSTouchActionPinchZoom status=stable
 CSSTypedOM status=experimental
@@ -82,6 +82,9 @@ DecodeToYUV status=experimental
 DesktopCaptureDisableLocalEchoControl status=experimental
 DeviceLight status=experimental
 DisplayList2dCanvas status=stable
+DocumentCookie
+DocumentDomain
+DocumentWrite
 DocumentWriteEvaluator
 DOMConvenienceAPI status=stable
 DurableStorage status=stable
@@ -102,24 +105,25 @@ FileAPIBlobClose status=experimental
 FileSystem status=stable
 ForeignFetch status=experimental, origin_trial_feature_name=ForeignFetch
 FramebustingNeedsSameOriginOrUserGesture status=stable, settable_from_internals=True
-FullscreenUnprefixed status=test
+FullscreenUnprefixed status=test, settable_from_internals=True
 FrameTimingSupport status=experimental
 GamepadExtensions origin_trial_feature_name=WebVR
 GeometryInterfaces status=experimental, implied_by=CompositorWorker
 GetUserMedia status=stable
 GlobalCacheStorage status=stable
 IDBObserver status=experimental
-ImageCapture status=experimental
+ImageCapture status=experimental, origin_trial_feature_name=ImageCapture
 ImageOrientation status=test
 IndexedDBExperimental status=experimental
-InertTopControls status=experimental
+InertTopControls status=stable
 InputEvent status=experimental
 InputModeAttribute status=experimental
 InputMultipleFieldsUI status=stable
 InstalledApp status=experimental
 IntersectionObserver status=stable
 LangAttributeAwareFormControlUI
-LayoutNG
+LayoutNG depends_on=LayoutNGInline
+LayoutNGInline
 LinkServiceWorker status=experimental, origin_trial_feature_name=ForeignFetch
 LongTaskObserver status=experimental, origin_trial_feature_name=LongTaskObserver
 FractionalScrollOffsets
@@ -130,7 +134,7 @@ MediaCaptureFromVideo status=experimental
 MediaConstraints status=stable
 MediaDocumentDownloadButton
 MediaGetSettings status=test
-MediaSession status=test
+MediaSession status=experimental
 MediaSourceExperimental status=experimental
 MediaSourceNewAbortAndDuration status=experimental
 MediaStreamSpeech status=experimental
@@ -165,6 +169,7 @@ PaintUnderInvalidationChecking settable_from_internals=True
 PassiveDocumentEventListeners status=experimental
 PassiveEventListenersDueToFling status=experimental
 PassPaintVisualRectToCompositor
+PaymentApp status=experimental
 PaymentRequest status=experimental
 PaymentRequestPayerName status=stable
 PerformanceObserver status=stable
@@ -187,6 +192,7 @@ ReducedReferrerGranularity
 ReloadwithoutSubResourceCacheRevalidation
 RemotePlayback status=experimental
 RenderingPipelineThrottling status=stable
+RenderingPipelineThrottlingLoadingIframes status=experimental
 RenderUnicodeControlCharacters status=stable
 ResizeObserver status=experimental
 // Handles frame scrolling via the root PaintLayer instead of the FrameView.
@@ -215,11 +221,9 @@ SlimmingPaintStrictCullRectClipping
 StableBlinkFeatures status=stable
 StackedCSSPropertyAnimations status=experimental
 StyleSharing status=stable
-StyleMatchedPropertiesCache status=stable
 // Do not turn this flag into stable, because many interfaces that should not
 // be shipped would be enabled. Instead, remove the flag from the shipping
 // interface.
-ExperimentalStream status=experimental
 SpeculativeLaunchServiceWorker
 StorageEstimate status=experimental
 Suborigins status=experimental

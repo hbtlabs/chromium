@@ -45,10 +45,6 @@
 #include "ui/gl/gl_image_shared_memory.h"
 #include "ui/gl/gl_surface.h"
 
-#if defined(OS_POSIX)
-#include "ipc/ipc_channel_posix.h"
-#endif
-
 namespace gpu {
 namespace {
 
@@ -461,7 +457,6 @@ void GpuChannelMessageFilter::OnFilterAdded(IPC::Channel* channel) {
 }
 
 void GpuChannelMessageFilter::OnFilterRemoved() {
-  DCHECK(channel_);
   for (scoped_refptr<IPC::MessageFilter>& filter : channel_filters_) {
     filter->OnFilterRemoved();
   }

@@ -9,8 +9,13 @@ source_set("browser") {
   sources = [
     "chrome_browser_provider.h",
     "chrome_browser_provider.mm",
+    "distribution/app_distribution_provider.h",
+    "distribution/app_distribution_provider.mm",
     "geolocation_updater_provider.h",
     "geolocation_updater_provider.mm",
+    "native_app_launcher/native_app_types.h",
+    "omaha/omaha_service_provider.h",
+    "omaha/omaha_service_provider.mm",
     "signin/chrome_identity.h",
     "signin/chrome_identity.mm",
     "signin/chrome_identity_browser_opener.h",
@@ -29,8 +34,6 @@ source_set("browser") {
     "ui/infobar_view_protocol.h",
     "ui/logo_vendor.h",
     "ui/text_field_styling.h",
-    "updatable_resource_provider.h",
-    "updatable_resource_provider.mm",
     "voice/audio_session_controller.h",
     "voice/logo_animation_controller.h",
     "voice/voice_search_bar.h",
@@ -59,6 +62,7 @@ source_set("browser") {
     "//components/sync_sessions",
     "//ios/public/provider/web",
     "//ios/web",
+    "//url",
   ]
 
   libs = [
@@ -76,6 +80,10 @@ source_set("test_support") {
   testonly = true
 
   sources = [
+    "distribution/test_app_distribution_provider.h",
+    "distribution/test_app_distribution_provider.mm",
+    "omaha/test_omaha_service_provider.h",
+    "omaha/test_omaha_service_provider.mm",
     "signin/fake_chrome_identity.h",
     "signin/fake_chrome_identity.mm",
     "signin/fake_chrome_identity_interaction_manager.h",
@@ -86,8 +94,6 @@ source_set("test_support") {
     "test_chrome_browser_provider.mm",
     "test_chrome_provider_initializer.h",
     "test_chrome_provider_initializer.mm",
-    "test_updatable_resource_provider.h",
-    "test_updatable_resource_provider.mm",
     "voice/test_voice_search_provider.h",
     "voice/test_voice_search_provider.mm",
   ]
@@ -96,7 +102,9 @@ source_set("test_support") {
     ":browser",
     "//base",
     "//components/signin/ios/browser:test_support",
-    "//testing/gmock",
     "//testing/gtest",
+  ]
+  public_deps = [
+    "//testing/gmock",
   ]
 }

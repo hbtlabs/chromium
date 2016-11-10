@@ -22,10 +22,6 @@
 #include "ipc/ipc_listener.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 
-namespace base {
-class FilePath;
-}
-
 namespace IPC {
 class MessageFilter;
 }
@@ -83,9 +79,6 @@ class CONTENT_EXPORT ChildProcessHostImpl : public ChildProcessHost,
   bool IsChannelOpening() override;
   void AddFilter(IPC::MessageFilter* filter) override;
   service_manager::InterfaceProvider* GetRemoteInterfaces() override;
-#if defined(OS_POSIX)
-  base::ScopedFD TakeClientFileDescriptor() override;
-#endif
 
  private:
   friend class ChildProcessHost;

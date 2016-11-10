@@ -123,6 +123,13 @@ public class RemoteMediaPlayerBridge {
         }
 
         @Override
+        public void onCastStarted() {
+            if (mNativeRemoteMediaPlayerBridge != 0) {
+                nativeOnCastStarted(mNativeRemoteMediaPlayerBridge);
+            }
+        }
+
+        @Override
         public void onCastStopping() {
             if (mNativeRemoteMediaPlayerBridge != 0) {
                 nativeOnCastStopping(mNativeRemoteMediaPlayerBridge);
@@ -210,6 +217,15 @@ public class RemoteMediaPlayerBridge {
     private void requestRemotePlaybackControl() {
         Log.d(TAG, "requestRemotePlaybackControl");
         RemoteMediaPlayerController.instance().requestRemotePlaybackControl(mMediaStateListener);
+    }
+
+    /**
+     * Called when a lower layer requests to stop casting the video.
+     */
+    @CalledByNative
+    private void requestRemotePlaybackStop() {
+        Log.d(TAG, "requestRemotePlaybackStop");
+        RemoteMediaPlayerController.instance().requestRemotePlaybackStop(mMediaStateListener);
     }
 
     @CalledByNative
@@ -346,6 +362,7 @@ public class RemoteMediaPlayerBridge {
     private native int nativeGetLocalPosition(long nativeRemoteMediaPlayerBridge);
     private native void nativeOnCastStarting(long nativeRemoteMediaPlayerBridge,
             String castingMessage);
+    private native void nativeOnCastStarted(long nativeRemoteMediaPlayerBridge);
     private native void nativeOnCastStopping(long nativeRemoteMediaPlayerBridge);
     private native void nativeOnError(long nativeRemoteMediaPlayerBridge);
     private native void nativeOnSeekCompleted(long nativeRemoteMediaPlayerBridge);

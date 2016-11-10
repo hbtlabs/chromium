@@ -54,10 +54,12 @@ IPC_MESSAGE_CONTROL1(ChromotingDaemonNetworkMsg_TerminalDisconnected,
                      int /* terminal_id */)
 
 // Notifies the network process that |terminal_id| is now attached to
-// a desktop integration process. |desktop_pipe| is the client end of the
-// desktop-to-network pipe opened.
-IPC_MESSAGE_CONTROL2(ChromotingDaemonNetworkMsg_DesktopAttached,
+// a desktop integration process. |session_id| is the id of the desktop session
+// being attached. |desktop_pipe| is the client end of the desktop-to-network
+// pipe opened.
+IPC_MESSAGE_CONTROL3(ChromotingDaemonNetworkMsg_DesktopAttached,
                      int /* terminal_id */,
+                     int /* session_id */,
                      IPC::ChannelHandle /* desktop_pipe */)
 
 //-----------------------------------------------------------------------------
@@ -247,22 +249,7 @@ IPC_MESSAGE_CONTROL1(ChromotingRemoteSecurityKeyToNetworkMsg_Request,
 
 //---------------------------------------------------------
 // Chromoting messages sent from the network process to the remote_security_key
-// process.  The network process uses two types of IPC channels to communicate
-// with the remote_security_key process.  The first is the 'service' channel.
-// It uses a hard-coded path known by the client and server classes and its job
-// is to create a new, private IPC channel for the client and provide the path
-// to that channel over the original IPC channel.  This purpose for this
-// mechanism is to allow the network process to service multiple concurrent
-// security key requests.  Once a client receives the connection details for
-// its private IPC channel, the server channel is reset and can be called by
-// another client.
-// The second type of IPC channel is strictly used for passing security key
-// request and response messages.  It is destroyed once the client disconnects.
-
-// The IPC channel path for this remote_security_key connection.  This message
-// is sent from the well-known IPC server channel.
-IPC_MESSAGE_CONTROL1(ChromotingNetworkToRemoteSecurityKeyMsg_ConnectionDetails,
-                     std::string /* IPC Server path */)
+// process.
 
 // The array of bytes representing a security key response from the remote
 // client.  This message is sent over the per-client IPC channel.

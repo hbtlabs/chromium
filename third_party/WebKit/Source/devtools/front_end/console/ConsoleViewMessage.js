@@ -120,7 +120,7 @@ WebInspector.ConsoleViewMessage = class {
   _buildTableMessage(consoleMessage) {
     var formattedMessage = createElement('span');
     WebInspector.appendStyle(formattedMessage, 'components/objectValue.css');
-    formattedMessage.className = 'console-message-text source-code';
+    formattedMessage.className = 'source-code';
     var anchorElement = this._buildMessageAnchor(consoleMessage);
     if (anchorElement)
       formattedMessage.appendChild(anchorElement);
@@ -174,7 +174,7 @@ WebInspector.ConsoleViewMessage = class {
     if (flatValues.length) {
       this._dataGrid = WebInspector.SortableDataGrid.create(columnNames, flatValues);
 
-      var formattedResult = createElement('span');
+      var formattedResult = createElementWithClass('span', 'console-message-text');
       var tableElement = formattedResult.createChild('div', 'console-message-formatted-table');
       var dataGridContainer = tableElement.createChild('span');
       tableElement.appendChild(this._formatParameter(table, true, false));
@@ -191,6 +191,7 @@ WebInspector.ConsoleViewMessage = class {
    */
   _buildMessage(consoleMessage) {
     var messageElement;
+    var messageText = consoleMessage.messageText;
     if (consoleMessage.source === WebInspector.ConsoleMessage.MessageSource.ConsoleAPI) {
       switch (consoleMessage.type) {
         case WebInspector.ConsoleMessage.MessageType.Trace:
@@ -213,13 +214,13 @@ WebInspector.ConsoleViewMessage = class {
           break;
         case WebInspector.ConsoleMessage.MessageType.Profile:
         case WebInspector.ConsoleMessage.MessageType.ProfileEnd:
-          messageElement = this._format([consoleMessage.messageText]);
+          messageElement = this._format([messageText]);
           break;
         default:
           if (consoleMessage.parameters && consoleMessage.parameters.length === 1 &&
               consoleMessage.parameters[0].type === 'string')
             messageElement = this._tryFormatAsError(/** @type {string} */ (consoleMessage.parameters[0].value));
-          var args = consoleMessage.parameters || [consoleMessage.messageText];
+          var args = consoleMessage.parameters || [messageText];
           messageElement = messageElement || this._format(args);
       }
     } else if (consoleMessage.source === WebInspector.ConsoleMessage.MessageSource.Network) {
@@ -227,7 +228,7 @@ WebInspector.ConsoleViewMessage = class {
         messageElement = createElement('span');
         if (consoleMessage.level === WebInspector.ConsoleMessage.MessageLevel.Error ||
             consoleMessage.level === WebInspector.ConsoleMessage.MessageLevel.RevokedError) {
-          messageElement.createTextChildren(consoleMessage.request.requestMethod, ' ');
+          messageElement.createTextChild(consoleMessage.request.requestMethod + ' ');
           messageElement.appendChild(WebInspector.Linkifier.linkifyUsingRevealer(
               consoleMessage.request, consoleMessage.request.url, consoleMessage.request.url));
           if (consoleMessage.request.failed)
@@ -237,20 +238,23 @@ WebInspector.ConsoleViewMessage = class {
                 ' ', String(consoleMessage.request.statusCode), ' (', consoleMessage.request.statusText, ')');
         } else {
           var fragment = WebInspector.linkifyStringAsFragmentWithCustomLinkifier(
-              consoleMessage.messageText, linkifyRequest.bind(consoleMessage));
+              messageText, linkifyRequest.bind(consoleMessage));
           messageElement.appendChild(fragment);
         }
       } else {
-        messageElement = this._format([consoleMessage.messageText]);
+        messageElement = this._format([messageText]);
       }
     } else {
-      var args = consoleMessage.parameters || [consoleMessage.messageText];
+      if (consoleMessage.source === WebInspector.ConsoleMessage.MessageSource.Violation)
+        messageText = WebInspector.UIString('[Violation] %s', messageText);
+      var args = consoleMessage.parameters || [messageText];
       messageElement = this._format(args);
     }
+    messageElement.classList.add('console-message-text');
 
     var formattedMessage = createElement('span');
     WebInspector.appendStyle(formattedMessage, 'components/objectValue.css');
-    formattedMessage.className = 'console-message-text source-code';
+    formattedMessage.className = 'source-code';
 
     var anchorElement = this._buildMessageAnchor(consoleMessage);
     if (anchorElement)
@@ -304,7 +308,6 @@ WebInspector.ConsoleViewMessage = class {
    */
   _buildMessageWithStackTrace(consoleMessage, target, linkifier) {
     var toggleElement = createElementWithClass('div', 'console-message-stack-trace-toggle');
-    var triangleElement = toggleElement.createChild('div', 'console-message-stack-trace-triangle');
     var contentElement = toggleElement.createChild('div', 'console-message-stack-trace-wrapper');
 
     var messageElement = this._buildMessage(consoleMessage);
@@ -328,14 +331,14 @@ WebInspector.ConsoleViewMessage = class {
      * @param {?Event} event
      */
     function toggleStackTrace(event) {
-      if (event.target.hasSelection())
+      var linkClicked = event.target && event.target.enclosingNodeOrSelfWithNodeName('a');
+      if (event.target.hasSelection() || linkClicked)
         return;
       expandStackTrace(stackTraceElement.classList.contains('hidden'));
       event.consume();
     }
 
     clickableElement.addEventListener('click', toggleStackTrace, false);
-    triangleElement.addEventListener('click', toggleStackTrace, false);
     if (consoleMessage.type === WebInspector.ConsoleMessage.MessageType.Trace)
       expandStackTrace(true);
 
@@ -357,7 +360,7 @@ WebInspector.ConsoleViewMessage = class {
   }
 
   /**
-   * @param {!RuntimeAgent.StackTrace} stackTrace
+   * @param {!Protocol.Runtime.StackTrace} stackTrace
    * @return {?Element}
    */
   _linkifyStackTraceTopFrame(stackTrace) {
@@ -572,7 +575,7 @@ WebInspector.ConsoleViewMessage = class {
 
   /**
    * @param {?WebInspector.RemoteObject} object
-   * @param {!Array.<!RuntimeAgent.PropertyPreview>} propertyPath
+   * @param {!Array.<!Protocol.Runtime.PropertyPreview>} propertyPath
    * @return {!Element}
    */
   _renderPropertyPreviewOrAccessor(object, propertyPath) {

@@ -39,13 +39,9 @@
 #include "core/layout/svg/line/SVGRootInlineBox.h"
 #include "platform/text/BidiResolver.h"
 #include "platform/text/Character.h"
-#include "wtf/StdLibExtras.h"
 #include "wtf/Vector.h"
-#include "wtf/text/CharacterNames.h"
 
 namespace blink {
-
-using namespace WTF::Unicode;
 
 class ExpansionOpportunities {
  public:
@@ -1366,9 +1362,9 @@ void LayoutBlockFlow::linkToEndLineIfNeeded(LineLayoutState& layoutState) {
             FloatingObject* floatingObject = insertFloatingObject(*box);
             ASSERT(!floatingObject->originatingLine());
             floatingObject->setOriginatingLine(line);
-            setLogicalHeight(logicalTopForChild(*box) -
-                             marginBeforeForChild(*box) + delta);
-            positionNewFloats();
+            LayoutUnit logicalTop =
+                logicalTopForChild(*box) - marginBeforeForChild(*box) + delta;
+            positionNewFloats(logicalTop);
           }
         }
       }
@@ -1383,7 +1379,7 @@ void LayoutBlockFlow::linkToEndLineIfNeeded(LineLayoutState& layoutState) {
   // now. This has to be done before adding in the bottom border/padding, or the
   // float will
   // include the padding incorrectly. -dwh
-  if (positionNewFloats() && lastRootBox())
+  if (positionNewFloats(logicalHeight()) && lastRootBox())
     appendFloatsToLastLine(layoutState, InlineIterator(), InlineBidiResolver(),
                            BidiStatus());
 }
@@ -1402,7 +1398,7 @@ void LayoutBlockFlow::markDirtyFloatsForPaintInvalidation(
     }
     insertFloatingObject(*f);
   }
-  positionNewFloats();
+  positionNewFloats(logicalHeight());
 }
 
 // InlineMinMaxIterator is a class that will iterate over all layout objects
@@ -2082,7 +2078,6 @@ RootInlineBox* LayoutBlockFlow::determineStartPosition(
 
   unsigned numCleanFloats = 0;
   if (!layoutState.floats().isEmpty()) {
-    LayoutUnit savedLogicalHeight = logicalHeight();
     // Restore floats from clean lines.
     RootInlineBox* line = firstRootBox();
     while (line != curr) {
@@ -2091,16 +2086,15 @@ RootInlineBox* LayoutBlockFlow::determineStartPosition(
           FloatingObject* floatingObject = insertFloatingObject(*box);
           ASSERT(!floatingObject->originatingLine());
           floatingObject->setOriginatingLine(line);
-          setLogicalHeight(logicalTopForChild(*box) -
-                           marginBeforeForChild(*box));
-          positionNewFloats();
+          LayoutUnit logicalTop =
+              logicalTopForChild(*box) - marginBeforeForChild(*box);
+          positionNewFloats(logicalTop);
           ASSERT(layoutState.floats()[numCleanFloats].object == box);
           numCleanFloats++;
         }
       }
       line = line->nextRootBox();
     }
-    setLogicalHeight(savedLogicalHeight);
   }
   layoutState.setFloatIndex(numCleanFloats);
 

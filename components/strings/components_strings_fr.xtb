@@ -50,6 +50,7 @@
 <translation id="1491663344921578213">Vous ne pouvez pas consulter le site Web <ph name="SITE" /> pour le moment, car les certificats y sont épinglés. Les attaques et les erreurs réseau sont généralement temporaires. Vous devriez donc pouvoir accéder à cette page ultérieurement. <ph name="BEGIN_LEARN_MORE_LINK" />En savoir plus<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="1506687042165942984">Afficher une copie enregistrée (non actualisée) de cette page</translation>
 <translation id="1519264250979466059">Date de création</translation>
+<translation id="153384715582417236">C'est tout !</translation>
 <translation id="1549470594296187301">Vous devez activer JavaScript pour utiliser cette fonctionnalité.</translation>
 <translation id="1559528461873125649">Fichier ou répertoire inexistant</translation>
 <translation id="1559572115229829303">&lt;p&gt;Impossible d'établir une connexion privée à <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> : la date et l'heure de votre appareil (<ph name="DATE_AND_TIME" />) sont incorrectes.&lt;/p&gt;
@@ -350,7 +351,6 @@
 <translation id="4728558894243024398">Plate-forme</translation>
 <translation id="4744603770635761495">Chemin d'accès exécutable</translation>
 <translation id="4756388243121344051">&amp;Historique</translation>
-<translation id="4759238208242260848">Téléchargements</translation>
 <translation id="4764776831041365478">Il se peut que la page Web à l'adresse <ph name="URL" /> soit temporairement inaccessible ou qu'elle ait été déplacée de façon permanente à une autre adresse Web.</translation>
 <translation id="4771973620359291008">Une erreur inconnue s'est produite.</translation>
 <translation id="4782449893814226250">Une demande d'autorisation a été envoyée à tes parents pour la consultation de cette page.</translation>
@@ -387,8 +387,10 @@
 <translation id="5171045022955879922">Rechercher ou saisir une URL</translation>
 <translation id="5172758083709347301">Ordinateur</translation>
 <translation id="5179510805599951267">Cette page n'est pas rédigée en <ph name="ORIGINAL_LANGUAGE" /> ? Signaler l'erreur</translation>
+<translation id="5181140330217080051">Téléchargement</translation>
 <translation id="5190835502935405962">Barre de favoris</translation>
 <translation id="5199729219167945352">Prototypes</translation>
+<translation id="5199841536747119669">Vos suggestions s'affichent ici</translation>
 <translation id="5251803541071282808">Cloud</translation>
 <translation id="5277279256032773186">Vous utilisez Chrome au travail ? Les entreprises peuvent gérer les paramètres Chrome de leurs employés. En savoir plus</translation>
 <translation id="5299298092464848405">Erreur d'analyse de la règle.</translation>
@@ -468,6 +470,7 @@
 <translation id="6263376278284652872">Favoris de <ph name="DOMAIN" /></translation>
 <translation id="6264485186158353794">Retour à la sécurité</translation>
 <translation id="6282194474023008486">Code postal</translation>
+<translation id="6290238015253830360">Vos articles suggérés s'affichent ici</translation>
 <translation id="6305205051461490394"><ph name="URL" /> est inaccessible.</translation>
 <translation id="6321917430147971392">Vérifiez vos paramètres DNS</translation>
 <translation id="6328639280570009161">Essayez de désactiver la prédiction réseau</translation>
@@ -651,6 +654,7 @@ Conseil : Le mode navigation privée (<ph name="SHORTCUT_KEY" />) pourra vous �
 <translation id="8363502534493474904">Désactiver le mode Avion</translation>
 <translation id="8364627913115013041">Non définie</translation>
 <translation id="8380941800586852976">Dangereux</translation>
+<translation id="8382348898565613901">Vos favoris récemment consultés s'affichent ici</translation>
 <translation id="8412145213513410671">Erreurs (<ph name="CRASH_COUNT" />)</translation>
 <translation id="8412392972487953978">Vous devez saisir deux fois la même phrase secrète.</translation>
 <translation id="8428213095426709021">Paramètres</translation>
@@ -662,7 +666,6 @@ Conseil : Le mode navigation privée (<ph name="SHORTCUT_KEY" />) pourra vous �
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> a mis trop de temps à répondre.</translation>
 <translation id="852346902619691059">Impossible de vérifier que ce serveur est bien <ph name="DOMAIN" />, car son certificat de sécurité n'est pas considéré comme fiable par le système d'exploitation de votre appareil. Cela peut être dû à une mauvaise configuration ou bien à l'interception de votre connexion par un pirate informatique. <ph name="BEGIN_LEARN_MORE_LINK" />En savoir plus<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="8530504477309582336">Ce type de carte n'est pas compatible avec Google Payments. Veuillez sélectionner une autre carte.</translation>
-<translation id="8550022383519221471">Le service de synchronisation n'est pas disponible pour votre domaine.</translation>
 <translation id="8553075262323480129">La traduction a échoué, car nous n'avons pas pu déterminer la langue de la page.</translation>
 <translation id="8559762987265718583">Impossible d'établir une connexion privée à <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> : la date et l'heure de votre appareil (<ph name="DATE_AND_TIME" />) sont incorrectes.</translation>
 <translation id="856992080682148">Le certificat de ce site arrive à expiration en 2017 ou à une date ultérieure, et la chaîne de certificats contient un certificat signé avec SHA-1.</translation>
@@ -670,7 +673,6 @@ Conseil : Le mode navigation privée (<ph name="SHORTCUT_KEY" />) pourra vous �
 <translation id="8591846766485502580">Ce message s'affiche, car l'un de tes parents a bloqué ce site.</translation>
 <translation id="859285277496340001">Le certificat n'indique aucun mécanisme permettant de vérifier s'il a été révoqué.</translation>
 <translation id="8647750283161643317">Rétablir tous les tests par défaut</translation>
-<translation id="8680787084697685621">Les informations de connexion au compte sont obsolètes.</translation>
 <translation id="8703575177326907206">Votre connexion à <ph name="DOMAIN" /> n'est pas chiffrée.</translation>
 <translation id="8725066075913043281">Réessayer</translation>
 <translation id="8728672262656704056">Vous êtes passé en mode navigation privée</translation>

@@ -239,15 +239,16 @@ void RenderWidgetCompositor::Initialize(float device_scale_factor) {
   cc::LayerTreeSettings settings =
       GenerateLayerTreeSettings(*cmd, compositor_deps_, device_scale_factor);
 
-  if (cmd->HasSwitch(switches::kUseRemoteCompositing) &&
-      cmd->HasSwitch(switches::kUseLayerTreeHostRemote)) {
+  animation_host_ = cc::AnimationHost::CreateMainInstance();
+
+  if (cmd->HasSwitch(switches::kUseRemoteCompositing)) {
     DCHECK(!threaded_);
 
     cc::LayerTreeHostRemote::InitParams params;
     params.client = this;
     params.main_task_runner =
         compositor_deps_->GetCompositorMainThreadTaskRunner();
-    params.animation_host = cc::AnimationHost::CreateMainInstance();
+    params.mutator_host = animation_host_.get();
     params.remote_compositor_bridge =
         GetContentClient()->renderer()->CreateRemoteCompositorBridge(
             this, params.main_task_runner);
@@ -256,31 +257,24 @@ void RenderWidgetCompositor::Initialize(float device_scale_factor) {
             ->CreateEnginePictureCache();
     params.settings = &settings;
     layer_tree_host_ = base::MakeUnique<cc::LayerTreeHostRemote>(&params);
-    return;
-  }
-
-  cc::LayerTreeHostInProcess::InitParams params;
-  params.client = this;
-  params.settings = &settings;
-  params.task_graph_runner = compositor_deps_->GetTaskGraphRunner();
-  params.main_task_runner =
-      compositor_deps_->GetCompositorMainThreadTaskRunner();
-  params.animation_host = cc::AnimationHost::CreateMainInstance();
-
-  if (cmd->HasSwitch(switches::kUseRemoteCompositing)) {
-    DCHECK(!threaded_);
-    params.image_serialization_processor =
-        compositor_deps_->GetImageSerializationProcessor();
-    layer_tree_host_ =
-        cc::LayerTreeHostInProcess::CreateRemoteServer(this, &params);
-  } else if (!threaded_) {
-    // Single-threaded layout tests.
-    layer_tree_host_ =
-        cc::LayerTreeHostInProcess::CreateSingleThreaded(this, &params);
   } else {
-    layer_tree_host_ = cc::LayerTreeHostInProcess::CreateThreaded(
-        compositor_deps_->GetCompositorImplThreadTaskRunner(), &params);
+    cc::LayerTreeHostInProcess::InitParams params;
+    params.client = this;
+    params.settings = &settings;
+    params.task_graph_runner = compositor_deps_->GetTaskGraphRunner();
+    params.main_task_runner =
+        compositor_deps_->GetCompositorMainThreadTaskRunner();
+    params.mutator_host = animation_host_.get();
+    if (!threaded_) {
+      // Single-threaded layout tests.
+      layer_tree_host_ =
+          cc::LayerTreeHostInProcess::CreateSingleThreaded(this, &params);
+    } else {
+      layer_tree_host_ = cc::LayerTreeHostInProcess::CreateThreaded(
+          compositor_deps_->GetCompositorImplThreadTaskRunner(), &params);
+    }
   }
+
   DCHECK(layer_tree_host_);
 }
 
@@ -680,18 +674,16 @@ void RenderWidgetCompositor::clearRootLayer() {
 
 void RenderWidgetCompositor::attachCompositorAnimationTimeline(
     cc::AnimationTimeline* compositor_timeline) {
-  cc::AnimationHost* animation_host =
-      layer_tree_host_->GetLayerTree()->animation_host();
-  DCHECK(animation_host);
-  animation_host->AddAnimationTimeline(compositor_timeline);
+  DCHECK(animation_host_);
+  DCHECK(compositor_deps_->IsThreadedAnimationEnabled());
+  animation_host_->AddAnimationTimeline(compositor_timeline);
 }
 
 void RenderWidgetCompositor::detachCompositorAnimationTimeline(
     cc::AnimationTimeline* compositor_timeline) {
-  cc::AnimationHost* animation_host =
-      layer_tree_host_->GetLayerTree()->animation_host();
-  DCHECK(animation_host);
-  animation_host->RemoveAnimationTimeline(compositor_timeline);
+  DCHECK(animation_host_);
+  DCHECK(compositor_deps_->IsThreadedAnimationEnabled());
+  animation_host_->RemoveAnimationTimeline(compositor_timeline);
 }
 
 void RenderWidgetCompositor::setViewportSize(

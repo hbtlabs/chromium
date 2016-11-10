@@ -61,6 +61,7 @@
 #include "core/page/FrameTree.h"
 #include "core/page/Page.h"
 #include "platform/HTTPNames.h"
+#include "platform/MIMETypeRegistry.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/mhtml/ArchiveResource.h"
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
@@ -70,7 +71,6 @@
 #include "platform/weborigin/SecurityPolicy.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebDocumentSubresourceFilter.h"
-#include "public/platform/WebMimeRegistry.h"
 #include "wtf/Assertions.h"
 #include "wtf/AutoReset.h"
 #include "wtf/text/WTFString.h"
@@ -96,13 +96,15 @@ static bool shouldInheritSecurityOriginFromOwner(const KURL& url) {
 
 DocumentLoader::DocumentLoader(LocalFrame* frame,
                                const ResourceRequest& req,
-                               const SubstituteData& substituteData)
+                               const SubstituteData& substituteData,
+                               ClientRedirectPolicy clientRedirectPolicy)
     : m_frame(frame),
       m_fetcher(FrameFetchContext::createContextAndFetcher(this, nullptr)),
       m_originalRequest(req),
       m_substituteData(substituteData),
       m_request(req),
-      m_isClientRedirect(false),
+      m_isClientRedirect(clientRedirectPolicy ==
+                         ClientRedirectPolicy::ClientRedirect),
       m_replacesCurrentHistoryItem(false),
       m_dataReceived(false),
       m_navigationType(NavigationTypeOther),
@@ -112,7 +114,12 @@ DocumentLoader::DocumentLoader(LocalFrame* frame,
       m_wasBlockedAfterXFrameOptionsOrCSP(false),
       m_state(NotStarted),
       m_inDataReceived(false),
-      m_dataBuffer(SharedBuffer::create()) {}
+      m_dataBuffer(SharedBuffer::create()) {
+  // The document URL needs to be added to the head of the list as that is
+  // where the redirects originated.
+  if (m_isClientRedirect)
+    appendRedirect(m_frame->document()->url());
+}
 
 FrameLoader* DocumentLoader::frameLoader() const {
   if (!m_frame)
@@ -347,8 +354,7 @@ bool DocumentLoader::redirectReceived(
 }
 
 static bool canShowMIMEType(const String& mimeType, LocalFrame* frame) {
-  if (Platform::current()->mimeRegistry()->supportsMIMEType(mimeType) ==
-      WebMimeRegistry::IsSupported)
+  if (MIMETypeRegistry::isSupportedMIMEType(mimeType))
     return true;
   PluginData* pluginData = frame->pluginData();
   return !mimeType.isEmpty() && pluginData &&
@@ -394,7 +400,7 @@ void DocumentLoader::cancelLoadAfterXFrameOptionsOrCSPDenied(
   KURL blockedURL = SecurityOrigin::urlWithUniqueSecurityOrigin();
   m_originalRequest.setURL(blockedURL);
   m_request.setURL(blockedURL);
-  m_redirectChain.removeLast();
+  m_redirectChain.pop_back();
   appendRedirect(blockedURL);
   m_response = ResourceResponse(blockedURL, "text/html", 0, nullAtom, String());
   finishedLoading(monotonicallyIncreasingTime());

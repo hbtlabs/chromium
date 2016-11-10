@@ -6,10 +6,12 @@
 
 #include "ash/public/cpp/shell_window_ids.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "mash/session/public/interfaces/session.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/service_context.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/md_text_button.h"
@@ -73,23 +75,23 @@ class ScreenlockView : public views::WidgetDelegateView,
 Screenlock::Screenlock() {}
 Screenlock::~Screenlock() {}
 
-void Screenlock::OnStart(const service_manager::ServiceInfo& info) {
-  tracing_.Initialize(connector(), info.identity.name());
+void Screenlock::OnStart(service_manager::ServiceContext* context) {
+  tracing_.Initialize(context->connector(), context->identity().name());
 
   mash::session::mojom::SessionPtr session;
-  connector()->ConnectToInterface("service:mash_session", &session);
+  context->connector()->ConnectToInterface("service:mash_session", &session);
   session->AddScreenlockStateListener(
       bindings_.CreateInterfacePtrAndBind(this));
 
-  aura_init_.reset(
-      new views::AuraInit(connector(), "views_mus_resources.pak"));
-  window_manager_connection_ =
-      views::WindowManagerConnection::Create(connector(), info.identity);
+  aura_init_ = base::MakeUnique<views::AuraInit>(
+      context->connector(), context->identity(), "views_mus_resources.pak");
+  window_manager_connection_ = views::WindowManagerConnection::Create(
+      context->connector(), context->identity());
 
   views::Widget* widget = new views::Widget;
   views::Widget::InitParams params(
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
-  params.delegate = new ScreenlockView(connector());
+  params.delegate = new ScreenlockView(context->connector());
 
   std::map<std::string, std::vector<uint8_t>> properties;
   properties[ui::mojom::WindowManager::kInitialContainerId_Property] =
@@ -101,6 +103,12 @@ void Screenlock::OnStart(const service_manager::ServiceInfo& info) {
       widget, window, ui::mojom::CompositorFrameSinkType::DEFAULT);
   widget->Init(params);
   widget->Show();
+}
+
+bool Screenlock::OnConnect(
+    const service_manager::ServiceInfo& remote_info,
+    service_manager::InterfaceRegistry* registry) {
+  return false;
 }
 
 void Screenlock::ScreenlockStateChanged(bool screen_locked) {

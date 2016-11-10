@@ -5,6 +5,7 @@
 #ifndef SERVICES_SERVICE_MANAGER_PUBLIC_CPP_INTERFACE_REGISTRY_H_
 #define SERVICES_SERVICE_MANAGER_PUBLIC_CPP_INTERFACE_REGISTRY_H_
 
+#include <list>
 #include <memory>
 #include <queue>
 #include <set>
@@ -149,8 +150,10 @@ class InterfaceRegistry : public mojom::InterfaceProvider {
   // Populates a set with the interface names this registry can bind.
   void GetInterfaceNames(std::set<std::string>* interface_names);
 
-  // Sets a closure to be run when the InterfaceProvider pipe is closed.
-  void SetConnectionLostClosure(const base::Closure& connection_lost_closure);
+  // Sets a closure to be run when the InterfaceProvider pipe is closed. Note
+  // that by the time any added closure is invoked, the InterfaceRegistry may
+  // have been deleted.
+  void AddConnectionLostClosure(const base::Closure& connection_lost_closure);
 
  private:
   using InterfaceNameToBinderMap =
@@ -172,6 +175,8 @@ class InterfaceRegistry : public mojom::InterfaceProvider {
   // Called whenever |remote_interface_provider_spec_| changes to rebuild the
   // contents of |exposed_interfaces_| and |expose_all_interfaces_|.
   void RebuildExposedInterfaces();
+
+  void OnConnectionError();
 
   mojom::InterfaceProviderRequest pending_request_;
 
@@ -208,6 +213,8 @@ class InterfaceRegistry : public mojom::InterfaceProvider {
   // while binding is paused.
   std::queue<std::pair<std::string, mojo::ScopedMessagePipeHandle>>
       pending_interface_requests_;
+
+  std::list<base::Closure> connection_lost_closures_;
 
   base::WeakPtrFactory<InterfaceRegistry> weak_factory_;
 

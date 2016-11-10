@@ -40,6 +40,9 @@
       Relaunch and Powerwash
     </message>
     <message name="IDS_SETTINGS_UPGRADE_UPDATING" desc="Status label: Updating ChromiumOS or ChromeOS">
+      Updating your device
+    </message>
+    <message name="IDS_SETTINGS_UPGRADE_UPDATING_PERCENT" desc="Status label: Updating ChromiumOS or ChromeOS (90%)">
       Updating your device (<ph name="PROGRESS_PERCENT">$1<ex>90%</ex></ph>)
     </message>
     <message name="IDS_SETTINGS_UPGRADE_SUCCESSFUL_RELAUNCH" desc="Status label: Successfully updated ChromiumOS/ChromeOS">
@@ -338,6 +341,9 @@
   </message>
   <message name="IDS_SETTINGS_CREDIT_CARD_EXPIRATION_YEAR" desc="Accessibility label on the year drop down to let users know the field corresponds to the expiration year">
     Expiration year
+  </message>
+  <message name="IDS_SETTINGS_CREDIT_CARD_EXPIRED" desc="The error message that is shown when user attempts to enter or save an expired credit card.">
+    Your credit card is expired.
   </message>
   <message name="IDS_SETTINGS_PASSWORDS" desc="Name for the password section and toggle">
     Manage passwords
@@ -934,10 +940,13 @@
     <message name="IDS_SETTINGS_USE_24_HOUR_CLOCK" desc="Label for the checkbox which enables a 24-hour clock (as opposed to a 12-hour clock).">
       Use 24-hour clock
     </message>
+    <message name="IDS_SETTINGS_SET_DATE_TIME" desc="Label for the button that shows the dialog for setting the system date and time.">
+      Set date and time
+    </message>
 
     <!-- Easy Unlock Page -->
     <message name="IDS_SETTINGS_EASY_UNLOCK_SECTION_TITLE" desc="The title of the Easy Unlock section on the settings page.">
-      Smart Lock (beta)
+      Smart Lock for Chromebook (beta)
     </message>
     <message name="IDS_SETTINGS_EASY_UNLOCK_SETUP_INTRO" desc="The text to show in Easy Unlock section to introduce the feature.">
       Unlock your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> with your Android phone.
@@ -1790,9 +1799,6 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_SESSION_ONLY" desc="Label for sites in site settings allowing cookies for the current session only.">
     Clear on exit
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_EXCEPTIONS" desc="Label for exception sites in site settings.">
-    Exceptions
-  </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_URL" desc="Label for site URL text entry in site settings.">
     Site URL
   </message>
@@ -1823,12 +1829,6 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE_HEADER" desc="A header for the list of showing all sites and their data.">
     All cookies and site data
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE_DIALOG" desc="A label for cookie dialog, stating which site we're showing data for.">
-    <ph name="SITE">$1<ex>www.example.com</ex></ph> locally stored data
-  </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE" desc="Label prefix for a cookie.">
-    Cookie: <ph name="NAME">$1<ex>cookie_1</ex></ph>
-  </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE_REMOVE" desc="Label for the button to delete a single site cookie.">
     Remove
   </message>
@@ -1840,6 +1840,9 @@
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE_REMOVE_DIALOG_TITLE" desc="Title of the dialog that warns about deleting all site data.">
     Clear site data
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE_SUBPAGE" desc="A label for cookie subpage, stating which site we're showing data for.">
+    <ph name="SITE">$1<ex>www.example.com</ex></ph> locally stored data
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_REMOVE_DIALOG_TITLE" desc="Title of the dialog that warns about deleting all site data and resetting permissions.">
     Clear and reset site
@@ -1897,6 +1900,9 @@
   </message>
   <message name="IDS_SETTINGS_SITE_DETAILS" desc="A title for the site settings details subpage.">
     Site details
+  </message>
+  <message name="IDS_SETTINGS_SITE_NO_SITES_ADDED" desc="Explenation for not showing a list of site exceptions">
+    No sites added
   </message>
 
   <!-- Sync / People Page -->
@@ -2143,6 +2149,50 @@
     Control how Google uses your browsing history to personalize Search, ads, and other Google services
   </message>
 
+  <!-- Import Settings Dialog -->
+  <!-- Android uses custom UI for Bookmark importing -->
+  <if expr="not is_android">
+    <message name="IDS_SETTINGS_IMPORT_FROM_LABEL" desc="Label before profile select combo box">
+      From:
+    </message>
+    <message name="IDS_SETTINGS_IMPORT_ITEMS_LABEL" desc="Label before item select checkboxes">
+      Select items to import:
+    </message>
+    <message name="IDS_SETTINGS_IMPORT_LOADING_PROFILES" desc="Status text to notify the user that profiles are being loaded">
+      Loading...
+    </message>
+
+    <message name="IDS_SETTINGS_IMPORT_HISTORY_CHECKBOX" desc="Checkbox for importing browsing history">
+      Browsing history
+    </message>
+    <message name="IDS_SETTINGS_IMPORT_FAVORITES_CHECKBOX" desc="Checkbox for importing favorites">
+      Favorites/Bookmarks
+    </message>
+    <message name="IDS_SETTINGS_IMPORT_PASSWORDS_CHECKBOX" desc="Checkbox for importing saved passwords">
+      Saved passwords
+    </message>
+    <message name="IDS_SETTINGS_IMPORT_SEARCH_ENGINES_CHECKBOX" desc="Checkbox for importing search engines">
+      Search engines
+    </message>
+    <message name="IDS_SETTINGS_IMPORT_AUTOFILL_FORM_DATA_CHECKBOX" desc="Checkbox for importing form data for autofill">
+      Autofill form data
+    </message>
+
+    <message name="IDS_SETTINGS_IMPORT_SUCCEEDED" desc="Status text to notify the user that the import succeeded">
+      Success!
+    </message>
+    <message name="IDS_SETTINGS_IMPORT_CHOOSE_FILE" desc="Text for the Choose File on dialog">
+      Choose File
+    </message>
+    <message name="IDS_SETTINGS_IMPORT_COMMIT" desc="Text for OK button on dialog">
+      Import
+    </message>
+
+    <message name="IDS_SETTINGS_IMPORT_NO_PROFILE_FOUND" desc="Message displayed when we do not find any supported browser to import from.">
+      No supported browser found
+    </message>
+  </if>
+
   <!-- Users Page -->
   <message name="IDS_SETTINGS_USERS" desc="Name of the settings page which manages users on the device.">
     Manage other users
@@ -2319,6 +2369,9 @@
     <message name="IDS_SETTINGS_KEYBOARD_KEY_ESCAPE" desc="In Device Settings, the dropdown list item for the Escape key.">
       Escape
     </message>
+    <message name="IDS_SETTINGS_KEYBOARD_KEY_BACKSPACE" desc="In Device Settings, the dropdown list item for the Backspace key.">
+      Backspace
+    </message>
     <message name="IDS_SETTINGS_KEYBOARD_KEY_DISABLED" desc="In Device Settings, the dropdown list item for a disabled key.">
       Disabled
     </message>
@@ -2386,10 +2439,10 @@
     <message name="IDS_SETTINGS_DISPLAY_SCREEN" desc="In Device Settings > Displays, the label for the dropdown menu for changing the dispay type.">
       Screen
     </message>
-    <message name="IDS_SETTINGS_DISPLAY_SCREEN_PRIMARY" desc="The label for the dropdown menu list item to set the seleted screen as primary display.">
+    <message name="IDS_SETTINGS_DISPLAY_SCREEN_PRIMARY" desc="The label for the dropdown menu list item to set the selected screen as primary display.">
       Primary display
     </message>
-    <message name="IDS_SETTINGS_DISPLAY_SCREEN_EXTENDED" desc="The label for the dropdown menu list item to set the seleted screen as extended display.">
+    <message name="IDS_SETTINGS_DISPLAY_SCREEN_EXTENDED" desc="The label for the dropdown menu list item to set the selected screen as extended display.">
       Extended display
     </message>
     <message name="IDS_SETTINGS_DISPLAY_RESOLUTION_TITLE" desc="In Device Settings > Displays, the label for the section for changing a display's resolution.">

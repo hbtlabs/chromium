@@ -10,6 +10,7 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/sequenced_task_runner.h"
 #include "base/threading/non_thread_safe.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/model/model_type_store.h"
@@ -30,11 +31,12 @@ class ModelTypeStoreImpl : public ModelTypeStore, public base::NonThreadSafe {
   ~ModelTypeStoreImpl() override;
 
   static void CreateStore(
-      const ModelType type,
+      ModelType type,
       const std::string& path,
       scoped_refptr<base::SequencedTaskRunner> blocking_task_runner,
       const InitCallback& callback);
-  static void CreateInMemoryStoreForTest(const InitCallback& callback);
+  static void CreateInMemoryStoreForTest(ModelType type,
+                                         const InitCallback& callback);
 
   // ModelTypeStore implementation.
   void ReadData(const IdList& id_list,
@@ -44,6 +46,9 @@ class ModelTypeStoreImpl : public ModelTypeStore, public base::NonThreadSafe {
   std::unique_ptr<WriteBatch> CreateWriteBatch() override;
   void CommitWriteBatch(std::unique_ptr<WriteBatch> write_batch,
                         const CallbackWithResult& callback) override;
+
+ protected:
+  // ModelTypeStore implementation.
   void WriteData(WriteBatch* write_batch,
                  const std::string& id,
                  const std::string& value) override;
@@ -59,7 +64,7 @@ class ModelTypeStoreImpl : public ModelTypeStore, public base::NonThreadSafe {
  private:
   class WriteBatchImpl : public WriteBatch {
    public:
-    WriteBatchImpl();
+    explicit WriteBatchImpl(ModelTypeStore* store);
     ~WriteBatchImpl() override;
     std::unique_ptr<leveldb::WriteBatch> leveldb_write_batch_;
   };
@@ -70,10 +75,6 @@ class ModelTypeStoreImpl : public ModelTypeStore, public base::NonThreadSafe {
       scoped_refptr<base::SequencedTaskRunner> blocking_task_runner,
       const InitCallback& callback,
       scoped_refptr<ModelTypeStoreBackend> backend);
-
-  // Format prefix key for data/metadata records with |type|.
-  static std::string FormatDataPrefix(const ModelType type);
-  static std::string FormatMetaPrefix(const ModelType type);
 
   static leveldb::WriteBatch* GetLeveldbWriteBatch(WriteBatch* write_batch);
 
@@ -105,6 +106,17 @@ class ModelTypeStoreImpl : public ModelTypeStore, public base::NonThreadSafe {
   void WriteModificationsDone(const CallbackWithResult& callback,
                               Result result);
 
+  // Parse the serialized metadata into protos and pass them to |callback|.
+  void DeserializeMetadata(const ReadMetadataCallback& callback,
+                           const std::string& global_metadata,
+                           std::unique_ptr<RecordList> metadata_records);
+
+  // Helper function to create a SyncError with message |msg|.
+  SyncError MakeSyncError(const std::string& msg);
+
+  // The model type using this store.
+  const ModelType type_;
+
   // Backend should be deleted on backend thread.
   // To accomplish this store's dtor posts task to backend thread passing
   // backend ownership to task parameter.
@@ -114,6 +126,9 @@ class ModelTypeStoreImpl : public ModelTypeStore, public base::NonThreadSafe {
   // Key prefix for data/metadata records of this model type.
   const std::string data_prefix_;
   const std::string metadata_prefix_;
+
+  // Key for this type's global metadata record.
+  const std::string global_metadata_key_;
 
   base::WeakPtrFactory<ModelTypeStoreImpl> weak_ptr_factory_;
 };

@@ -10,35 +10,16 @@
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "components/sync/driver/change_processor.h"
 #include "components/sync/driver/sync_client.h"
 #include "components/sync/syncable/user_share.h"
 
 namespace syncer {
 
-SyncBackendRegistrar::SyncBackendRegistrar(
-    const std::string& name,
-    SyncClient* sync_client,
-    std::unique_ptr<base::Thread> sync_thread,
-    const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
-    const scoped_refptr<base::SingleThreadTaskRunner>& db_thread,
-    const scoped_refptr<base::SingleThreadTaskRunner>& file_thread)
-    : name_(name),
-      sync_client_(sync_client),
-      ui_thread_(ui_thread),
-      db_thread_(db_thread),
-      file_thread_(file_thread) {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+SyncBackendRegistrar::SyncBackendRegistrar(const std::string& name,
+                                           SyncClient* sync_client)
+    : name_(name), sync_client_(sync_client) {
   DCHECK(sync_client_);
-
-  sync_thread_ = std::move(sync_thread);
-  if (!sync_thread_) {
-    sync_thread_ = base::MakeUnique<base::Thread>("Chrome_SyncThread");
-    base::Thread::Options options;
-    options.timer_slack = base::TIMER_SLACK_MAXIMUM;
-    CHECK(sync_thread_->StartWithOptions(options));
-  }
 
   MaybeAddWorker(GROUP_DB);
   MaybeAddWorker(GROUP_FILE);
@@ -46,14 +27,10 @@ SyncBackendRegistrar::SyncBackendRegistrar(
   MaybeAddWorker(GROUP_PASSIVE);
   MaybeAddWorker(GROUP_HISTORY);
   MaybeAddWorker(GROUP_PASSWORD);
-
-  // Must have at least one worker for SyncBackendRegistrar to be destroyed
-  // correctly, as it is destroyed after the last worker dies.
-  DCHECK_GT(workers_.size(), 0u);
 }
 
 void SyncBackendRegistrar::RegisterNonBlockingType(ModelType type) {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+  DCHECK(ui_thread_checker_.CalledOnValidThread());
   base::AutoLock lock(lock_);
   // There may have been a previously successful sync of a type when passive,
   // which is now NonBlocking. We're not sure what order these two sets of types
@@ -103,7 +80,7 @@ void SyncBackendRegistrar::SetInitialTypes(ModelTypeSet initial_types) {
 }
 
 void SyncBackendRegistrar::AddRestoredNonBlockingType(ModelType type) {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+  DCHECK(ui_thread_checker_.CalledOnValidThread());
   base::AutoLock lock(lock_);
   DCHECK(non_blocking_types_.Has(type));
   DCHECK(routing_info_.find(type) == routing_info_.end());
@@ -112,7 +89,7 @@ void SyncBackendRegistrar::AddRestoredNonBlockingType(ModelType type) {
 }
 
 bool SyncBackendRegistrar::IsNigoriEnabled() const {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+  DCHECK(ui_thread_checker_.CalledOnValidThread());
   base::AutoLock lock(lock_);
   return routing_info_.find(NIGORI) != routing_info_.end();
 }
@@ -164,7 +141,7 @@ ModelTypeSet SyncBackendRegistrar::GetLastConfiguredTypes() const {
 }
 
 void SyncBackendRegistrar::RequestWorkerStopOnUIThread() {
-  DCHECK(ui_thread_->BelongsToCurrentThread());
+  DCHECK(ui_thread_checker_.CalledOnValidThread());
   base::AutoLock lock(lock_);
   for (WorkerMap::const_iterator it = workers_.begin(); it != workers_.end();
        ++it) {
@@ -198,7 +175,7 @@ void SyncBackendRegistrar::ActivateDataType(ModelType type,
 void SyncBackendRegistrar::DeactivateDataType(ModelType type) {
   DVLOG(1) << "Deactivate: " << ModelTypeToString(type);
 
-  DCHECK(ui_thread_->BelongsToCurrentThread() || IsControlType(type));
+  DCHECK(ui_thread_checker_.CalledOnValidThread() || IsControlType(type));
   base::AutoLock lock(lock_);
 
   routing_info_.erase(type);
@@ -282,97 +259,30 @@ ChangeProcessor* SyncBackendRegistrar::GetProcessorUnsafe(
 bool SyncBackendRegistrar::IsCurrentThreadSafeForModel(
     ModelType model_type) const {
   lock_.AssertAcquired();
-  return IsOnThreadForGroup(model_type,
-                            GetGroupForModelType(model_type, routing_info_));
-}
+  ModelSafeGroup group = GetGroupForModelType(model_type, routing_info_);
+  DCHECK_NE(GROUP_NON_BLOCKING, group);
 
-bool SyncBackendRegistrar::IsOnThreadForGroup(ModelType type,
-                                              ModelSafeGroup group) const {
-  switch (group) {
-    case GROUP_PASSIVE:
-      return IsControlType(type);
-    case GROUP_UI:
-      return ui_thread_->BelongsToCurrentThread();
-    case GROUP_DB:
-      return db_thread_->BelongsToCurrentThread();
-    case GROUP_FILE:
-      return file_thread_->BelongsToCurrentThread();
-    case GROUP_HISTORY:
-      // TODO(sync): How to check we're on the right thread?
-      return type == TYPED_URLS;
-    case GROUP_PASSWORD:
-      // TODO(sync): How to check we're on the right thread?
-      return type == PASSWORDS;
-    case GROUP_NON_BLOCKING:
-      // IsOnThreadForGroup shouldn't be called for non-blocking types.
-      return false;
+  if (group == GROUP_PASSIVE) {
+    return IsControlType(model_type);
   }
-  NOTREACHED();
-  return false;
+
+  auto it = workers_.find(group);
+  DCHECK(it != workers_.end());
+  return it->second->IsOnModelThread();
 }
 
 SyncBackendRegistrar::~SyncBackendRegistrar() {
-  DCHECK(workers_.empty());
-}
-
-void SyncBackendRegistrar::OnWorkerLoopDestroyed(ModelSafeGroup group) {
-  RemoveWorker(group);
+  // All data types should have been deactivated by now.
+  DCHECK(processors_.empty());
 }
 
 void SyncBackendRegistrar::MaybeAddWorker(ModelSafeGroup group) {
   const scoped_refptr<ModelSafeWorker> worker =
-      sync_client_->CreateModelWorkerForGroup(group, this);
+      sync_client_->CreateModelWorkerForGroup(group);
   if (worker) {
     DCHECK(workers_.find(group) == workers_.end());
     workers_[group] = worker;
-    workers_[group]->RegisterForLoopDestruction();
   }
-}
-
-void SyncBackendRegistrar::OnWorkerUnregistrationDone(ModelSafeGroup group) {
-  RemoveWorker(group);
-}
-
-void SyncBackendRegistrar::RemoveWorker(ModelSafeGroup group) {
-  DVLOG(1) << "Remove " << ModelSafeGroupToString(group) << " worker.";
-
-  bool last_worker = false;
-  {
-    base::AutoLock al(lock_);
-    WorkerMap::iterator it = workers_.find(group);
-    CHECK(it != workers_.end());
-    stopped_workers_.push_back(it->second);
-    workers_.erase(it);
-    last_worker = workers_.empty();
-  }
-
-  if (last_worker) {
-    // Self-destruction after last worker.
-    DVLOG(1) << "Destroy registrar on loop of "
-             << ModelSafeGroupToString(group);
-    delete this;
-  }
-}
-
-std::unique_ptr<base::Thread> SyncBackendRegistrar::ReleaseSyncThread() {
-  return std::move(sync_thread_);
-}
-
-void SyncBackendRegistrar::Shutdown() {
-  // All data types should have been deactivated by now.
-  DCHECK(processors_.empty());
-
-  // Unregister worker from observing loop destruction.
-  base::AutoLock al(lock_);
-  for (WorkerMap::iterator it = workers_.begin(); it != workers_.end(); ++it) {
-    it->second->UnregisterForLoopDestruction(
-        base::Bind(&SyncBackendRegistrar::OnWorkerUnregistrationDone,
-                   base::Unretained(this)));
-  }
-}
-
-base::Thread* SyncBackendRegistrar::sync_thread() {
-  return sync_thread_.get();
 }
 
 ModelSafeGroup SyncBackendRegistrar::GetInitialGroupForType(

@@ -77,10 +77,10 @@ class MockRenderThread : public RenderThread {
   int64_t GetIdleNotificationDelayInMs() const override;
   void SetIdleNotificationDelayInMs(
       int64_t idle_notification_delay_in_ms) override;
-  void UpdateHistograms(int sequence_number) override;
   int PostTaskToAllWebWorkers(const base::Closure& closure) override;
   bool ResolveProxy(const GURL& url, std::string* proxy_list) override;
   base::WaitableEvent* GetShutdownEvent() override;
+  int32_t GetClientId() override;
 #if defined(OS_WIN)
   void PreCacheFont(const LOGFONT& log_font) override;
   void ReleaseCachedFonts() override;

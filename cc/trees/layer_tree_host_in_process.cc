@@ -26,8 +26,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
-#include "cc/animation/animation_events.h"
-#include "cc/animation/animation_host.h"
 #include "cc/base/math_util.h"
 #include "cc/blimp/client_picture_cache.h"
 #include "cc/blimp/engine_picture_cache.h"
@@ -54,6 +52,7 @@
 #include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/layer_tree_impl.h"
+#include "cc/trees/mutator_host.h"
 #include "cc/trees/property_tree_builder.h"
 #include "cc/trees/proxy_main.h"
 #include "cc/trees/remote_channel_impl.h"
@@ -192,8 +191,7 @@ LayerTreeHostInProcess::LayerTreeHostInProcess(InitParams* params,
     : LayerTreeHostInProcess(
           params,
           mode,
-          base::MakeUnique<LayerTree>(std::move(params->animation_host),
-                                      this)) {}
+          base::MakeUnique<LayerTree>(params->mutator_host, this)) {}
 
 LayerTreeHostInProcess::LayerTreeHostInProcess(
     InitParams* params,
@@ -320,7 +318,7 @@ void LayerTreeHostInProcess::InitializeProxy(std::unique_ptr<Proxy> proxy) {
   proxy_ = std::move(proxy);
   proxy_->Start();
 
-  layer_tree_->animation_host()->SetSupportsScrollAnimations(
+  layer_tree_->mutator_host()->SetSupportsScrollAnimations(
       proxy_->SupportsImplScrolling());
 }
 
@@ -450,7 +448,10 @@ void LayerTreeHostInProcess::FinishCommitOnImplThread(
   if (layer_tree_->needs_full_tree_sync())
     TreeSynchronizer::SynchronizeTrees(layer_tree_->root_layer(), sync_tree);
 
-  layer_tree_->PushPropertiesTo(sync_tree);
+  float page_scale_delta = 1.f;
+  if (reflected_main_frame_state_)
+    page_scale_delta = reflected_main_frame_state_->page_scale_delta;
+  layer_tree_->PushPropertiesTo(sync_tree, page_scale_delta);
 
   sync_tree->PassSwapPromises(swap_promise_manager_.TakeSwapPromises());
 
@@ -471,6 +472,19 @@ void LayerTreeHostInProcess::FinishCommitOnImplThread(
 
     TreeSynchronizer::PushLayerProperties(layer_tree_.get(), sync_tree);
 
+    if (reflected_main_frame_state_) {
+      for (const auto& scroll_update : reflected_main_frame_state_->scrolls) {
+        int layer_id = scroll_update.layer_id;
+        gfx::Vector2dF scroll_delta = scroll_update.scroll_delta;
+
+        PropertyTrees* property_trees = layer_tree_->property_trees();
+        property_trees->scroll_tree.SetScrollOffset(
+            layer_id, gfx::ScrollOffsetWithDelta(
+                          layer_tree_->LayerById(layer_id)->scroll_offset(),
+                          scroll_delta));
+      }
+    }
+
     // This must happen after synchronizing property trees and after pushing
     // properties, which updates the clobber_active_value flag.
     sync_tree->UpdatePropertyTreeScrollOffset(layer_tree_->property_trees());
@@ -483,13 +497,13 @@ void LayerTreeHostInProcess::FinishCommitOnImplThread(
     sync_tree->UpdatePropertyTreeScrollingAndAnimationFromMainThread();
 
     TRACE_EVENT0("cc", "LayerTreeHostInProcess::AnimationHost::PushProperties");
-    DCHECK(host_impl->animation_host());
-    layer_tree_->animation_host()->PushPropertiesTo(
-        host_impl->animation_host());
+    DCHECK(host_impl->mutator_host());
+    layer_tree_->mutator_host()->PushPropertiesTo(host_impl->mutator_host());
   }
 
   micro_benchmark_controller_.ScheduleImplBenchmarks(host_impl);
   layer_tree_->property_trees()->ResetAllChangeTracking();
+  reflected_main_frame_state_ = nullptr;
 }
 
 void LayerTreeHostInProcess::WillCommit() {
@@ -554,14 +568,13 @@ LayerTreeHostInProcess::CreateLayerTreeHostImpl(
   DCHECK(task_runner_provider_->IsImplThread());
 
   const bool supports_impl_scrolling = task_runner_provider_->HasImplThread();
-  std::unique_ptr<AnimationHost> animation_host_impl =
-      layer_tree_->animation_host()->CreateImplInstance(
-          supports_impl_scrolling);
+  std::unique_ptr<MutatorHost> mutator_host_impl =
+      layer_tree_->mutator_host()->CreateImplInstance(supports_impl_scrolling);
 
   std::unique_ptr<LayerTreeHostImpl> host_impl = LayerTreeHostImpl::Create(
       settings_, client, task_runner_provider_.get(),
       rendering_stats_instrumentation_.get(), task_graph_runner_,
-      std::move(animation_host_impl), id_);
+      std::move(mutator_host_impl), id_);
   host_impl->SetHasGpuRasterizationTrigger(has_gpu_rasterization_trigger_);
   host_impl->SetContentIsSuitableForGpuRasterization(
       content_is_suitable_for_gpu_rasterization_);
@@ -624,9 +637,9 @@ void LayerTreeHostInProcess::SetNextCommitForcesRedraw() {
 }
 
 void LayerTreeHostInProcess::SetAnimationEvents(
-    std::unique_ptr<AnimationEvents> events) {
+    std::unique_ptr<MutatorEvents> events) {
   DCHECK(task_runner_provider_->IsMainThread());
-  layer_tree_->animation_host()->SetAnimationEvents(std::move(events));
+  layer_tree_->mutator_host()->SetAnimationEvents(std::move(events));
 }
 
 void LayerTreeHostInProcess::SetDebugState(
@@ -882,6 +895,14 @@ void LayerTreeHostInProcess::ApplyScrollAndScale(ScrollAndScaleSet* info) {
   ApplyViewportDeltas(info);
 }
 
+void LayerTreeHostInProcess::SetReflectedMainFrameState(
+    std::unique_ptr<ReflectedMainFrameState> reflected_main_frame_state) {
+  DCHECK(IsThreaded());
+
+  reflected_main_frame_state_ = std::move(reflected_main_frame_state);
+  SetNeedsCommit();
+}
+
 const base::WeakPtr<InputHandler>& LayerTreeHostInProcess::GetInputHandler()
     const {
   return input_handler_weak_ptr_;
@@ -897,13 +918,13 @@ void LayerTreeHostInProcess::UpdateBrowserControlsState(
 }
 
 void LayerTreeHostInProcess::AnimateLayers(base::TimeTicks monotonic_time) {
-  AnimationHost* animation_host = layer_tree_->animation_host();
-  std::unique_ptr<AnimationEvents> events = animation_host->CreateEvents();
+  MutatorHost* mutator_host = layer_tree_->mutator_host();
+  std::unique_ptr<MutatorEvents> events = mutator_host->CreateEvents();
 
-  if (animation_host->AnimateLayers(monotonic_time))
-    animation_host->UpdateAnimationState(true, events.get());
+  if (mutator_host->AnimateLayers(monotonic_time))
+    mutator_host->UpdateAnimationState(true, events.get());
 
-  if (!events->events_.empty())
+  if (!events->IsEmpty())
     layer_tree_->property_trees()->needs_rebuild = true;
 }
 

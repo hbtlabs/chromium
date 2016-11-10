@@ -102,7 +102,7 @@ WebInspector.ServiceWorkersView = class extends WebInspector.VBox {
    */
   _registrationErrorAdded(event) {
     var registration = /** @type {!WebInspector.ServiceWorkerRegistration} */ (event.data['registration']);
-    var error = /** @type {!ServiceWorkerAgent.ServiceWorkerErrorMessage} */ (event.data['error']);
+    var error = /** @type {!Protocol.ServiceWorker.ServiceWorkerErrorMessage} */ (event.data['error']);
     var section = this._sections.get(registration);
     if (!section)
       return;
@@ -286,7 +286,7 @@ WebInspector.ServiceWorkersView.Section = class {
 
     this._section.setFieldVisible(WebInspector.UIString('Errors'), !!this._registration.errors.length);
     var errorsValue = this._wrapWidget(this._section.appendField(WebInspector.UIString('Errors')));
-    var errorsLabel = createLabel(String(this._registration.errors.length), 'error-icon');
+    var errorsLabel = createLabel(String(this._registration.errors.length), 'smallicon-error');
     errorsLabel.classList.add('service-worker-errors-label');
     errorsValue.appendChild(errorsLabel);
     this._moreButton = createLink(
@@ -311,7 +311,7 @@ WebInspector.ServiceWorkersView.Section = class {
   }
 
   /**
-   * @param {!ServiceWorkerAgent.ServiceWorkerErrorMessage} error
+   * @param {!Protocol.ServiceWorker.ServiceWorkerErrorMessage} error
    */
   _addError(error) {
     var target = this._targetForVersionId(error.versionId);
@@ -319,7 +319,7 @@ WebInspector.ServiceWorkersView.Section = class {
     if (this._errorsList.childElementCount > 100)
       this._errorsList.firstElementChild.remove();
     message.appendChild(this._linkifier.linkifyScriptLocation(target, null, error.sourceURL, error.lineNumber));
-    message.appendChild(createLabel('#' + error.versionId + ': ' + error.errorMessage, 'error-icon'));
+    message.appendChild(createLabel('#' + error.versionId + ': ' + error.errorMessage, 'smallicon-error'));
   }
 
   _unregisterButtonClicked() {

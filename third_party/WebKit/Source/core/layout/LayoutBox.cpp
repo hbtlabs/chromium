@@ -404,6 +404,11 @@ void LayoutBox::updateGridPositionAfterStyleChange(
       oldStyle->hasOutOfFlowPosition() == style()->hasOutOfFlowPosition())
     return;
 
+  // Positioned items don't participate on the layout of the grid,
+  // so we don't need to mark the grid as dirty if they change positions.
+  if (oldStyle->hasOutOfFlowPosition() && style()->hasOutOfFlowPosition())
+    return;
+
   // It should be possible to not dirty the grid in some cases (like moving an
   // explicitly placed grid item).
   // For now, it's more simple to just always recompute the grid.
@@ -668,9 +673,12 @@ void LayoutBox::scrollRectToVisible(const LayoutRect& rect,
     }
   }
 
-  // If we are fixed-position, it is useless to scroll the parent.
-  if (hasLayer() && layer()->scrollsWithViewport())
+  // If we are fixed-position and scroll with the viewport, it is useless to
+  // scroll the parent.
+  if (style()->position() == FixedPosition && hasLayer() &&
+      layer()->scrollsWithViewport()) {
     return;
+  }
 
   if (frame()->page()->autoscrollController().autoscrollInProgress())
     parentBox = enclosingScrollableBox();
@@ -706,8 +714,8 @@ void LayoutBox::updateLayerTransformAfterLayout() {
     layer()->updateTransformationMatrix();
 }
 
-LayoutUnit LayoutBox::logicalHeightIncludingOverflow() const {
-  if (!m_overflow)
+LayoutUnit LayoutBox::logicalHeightWithVisibleOverflow() const {
+  if (!m_overflow || hasOverflowClip())
     return logicalHeight();
   LayoutRect overflow = layoutOverflowRect();
   if (style()->isHorizontalWritingMode())
@@ -1785,10 +1793,11 @@ void LayoutBox::excludeScrollbars(
     LayoutRect& rect,
     OverlayScrollbarClipBehavior overlayScrollbarClipBehavior) const {
   if (PaintLayerScrollableArea* scrollableArea = this->getScrollableArea()) {
-    if (shouldPlaceBlockDirectionScrollbarOnLogicalLeft())
+    if (shouldPlaceBlockDirectionScrollbarOnLogicalLeft()) {
       rect.move(
           scrollableArea->verticalScrollbarWidth(overlayScrollbarClipBehavior),
           0);
+    }
     rect.contract(
         scrollableArea->verticalScrollbarWidth(overlayScrollbarClipBehavior),
         scrollableArea->horizontalScrollbarHeight(
@@ -4711,7 +4720,7 @@ void LayoutBox::updateFragmentationInfoForChild(LayoutBox& child) {
     return;
 
   LayoutUnit logicalTop = child.logicalTop();
-  LayoutUnit logicalHeight = child.logicalHeightIncludingOverflow();
+  LayoutUnit logicalHeight = child.logicalHeightWithVisibleOverflow();
   LayoutUnit spaceLeft =
       pageRemainingLogicalHeightForOffset(logicalTop, AssociateWithLatterPage);
   if (spaceLeft < logicalHeight)
@@ -4728,7 +4737,7 @@ bool LayoutBox::childNeedsRelayoutForPagination(const LayoutBox& child) const {
   // to do this if there's a chance that we need to recalculate pagination
   // struts inside.
   if (LayoutUnit pageLogicalHeight = pageLogicalHeightForOffset(logicalTop)) {
-    LayoutUnit logicalHeight = child.logicalHeightIncludingOverflow();
+    LayoutUnit logicalHeight = child.logicalHeightWithVisibleOverflow();
     LayoutUnit remainingSpace = pageRemainingLogicalHeightForOffset(
         logicalTop, AssociateWithLatterPage);
     if (child.offsetToNextPage()) {

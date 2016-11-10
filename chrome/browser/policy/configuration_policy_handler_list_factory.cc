@@ -605,7 +605,16 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     base::Value::TYPE_BOOLEAN },
 
 #if defined(OS_CHROMEOS)
+  { key::kNetworkThrottlingEnabled,
+    prefs::kNetworkThrottlingEnabled,
+    base::Value::TYPE_DICTIONARY },
+
   { key::kAllowScreenLock, prefs::kAllowScreenLock, base::Value::TYPE_BOOLEAN },
+
+  { key::kQuickUnlockModeWhitelist, prefs::kQuickUnlockModeWhitelist,
+    base::Value::TYPE_LIST },
+  { key::kQuickUnlockTimeout, prefs::kQuickUnlockTimeout,
+    base::Value::TYPE_INTEGER },
 #endif
 };
 

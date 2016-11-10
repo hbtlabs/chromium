@@ -6,6 +6,7 @@ import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//media/media_options.gni")
 import("//ppapi/features/features.gni")
+import("//printing/features/features.gni")
 import("//third_party/webrtc/build/webrtc.gni")
 import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
@@ -403,6 +404,7 @@ target(link_target_type, "renderer") {
     "//cc/proto",
     "//cc/surfaces",
     "//cc/surfaces:surface_id",
+    "//components/discardable_memory/client",
     "//components/url_formatter",
     "//content:resources",
     "//content/child",
@@ -417,7 +419,6 @@ target(link_target_type, "renderer") {
     "//device/battery:mojo_bindings",
     "//device/bluetooth",
     "//device/sensors/public/cpp",
-    "//device/time_zone_monitor/public/interfaces",
     "//device/usb/public/interfaces",
     "//device/vibration:mojo_bindings",
     "//device/vr:mojo_bindings",
@@ -440,6 +441,7 @@ target(link_target_type, "renderer") {
     "//mojo/public/js",
     "//net",
     "//ppapi/features",
+    "//printing/features",
     "//sandbox",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/interfaces",
@@ -542,6 +544,10 @@ target(link_target_type, "renderer") {
       "media/image_capture_frame_grabber.h",
       "media/local_media_stream_audio_source.cc",
       "media/local_media_stream_audio_source.h",
+      "media/media_devices_event_dispatcher.cc",
+      "media/media_devices_event_dispatcher.h",
+      "media/media_devices_listener_impl.cc",
+      "media/media_devices_listener_impl.h",
       "media/media_recorder_handler.cc",
       "media/media_recorder_handler.h",
       "media/media_stream.cc",

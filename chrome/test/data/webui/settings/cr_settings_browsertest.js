@@ -424,7 +424,6 @@ TEST_F('CrSettingsResetPageTest', 'ResetPage', function() {
 });
 
 /**
- * Test fixture for chrome/browser/resources/settings/appearance_page/.
  * @constructor
  * @extends {CrSettingsBrowserTest}
  */
@@ -444,8 +443,32 @@ CrSettingsAppearancePageTest.prototype = {
   ]),
 };
 
-TEST_F('CrSettingsAppearancePageTest', 'AppearancePage', function() {
-  settings_appearance.registerTests();
+TEST_F('CrSettingsAppearancePageTest', 'All', function() {
+  mocha.run();
+});
+
+/**
+ * @constructor
+ * @extends {CrSettingsBrowserTest}
+ */
+function CrSettingsAppearanceFontsPageTest() {}
+
+CrSettingsAppearanceFontsPageTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload:
+      'chrome://md-settings/appearance_page/appearance_fonts_page.html',
+
+  /** @override */
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    ROOT_PATH + 'ui/webui/resources/js/promise_resolver.js',
+    'test_browser_proxy.js',
+    'appearance_fonts_page_test.js',
+  ]),
+};
+
+TEST_F('CrSettingsAppearanceFontsPageTest', 'All', function() {
   mocha.run();
 });
 
@@ -815,6 +838,9 @@ CrSettingsNonExistentRouteTest.prototype = {
 
   /** @override */
   browsePreload: 'chrome://md-settings/non/existent/route',
+
+  /** @override */
+  runAccessibilityChecks: false,
 };
 
 TEST_F('CrSettingsNonExistentRouteTest', 'All', function() {
@@ -845,6 +871,9 @@ CrSettingsRouteDynamicParametersTest.prototype = {
 
   /** @override */
   browsePreload: 'chrome://md-settings/people?guid=a%2Fb&foo=42',
+
+  /** @override */
+  runAccessibilityChecks: false,
 };
 
 TEST_F('CrSettingsRouteDynamicParametersTest', 'MAYBE_All', function() {
@@ -898,6 +927,7 @@ CrSettingsMainPageTest.prototype = {
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    'test_browser_proxy.js',
     'settings_main_test.js',
   ]),
 };
@@ -994,24 +1024,6 @@ TEST_F('CrSettingsMetricsReportingTest', 'All', function() {
 });
 
 GEN('#endif');
-
-function CrSettingsActionMenuTest() {}
-
-CrSettingsActionMenuTest.prototype = {
-  __proto__: CrSettingsBrowserTest.prototype,
-
-  /** @override */
-  browsePreload: 'chrome://md-settings/settings_action_menu.html',
-
-  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
-    'settings_action_menu_test.js',
-  ]),
-};
-
-TEST_F('CrSettingsActionMenuTest', 'All', function() {
-  mocha.run();
-});
-
 GEN('#if defined(OS_CHROMEOS)');
 
 /**

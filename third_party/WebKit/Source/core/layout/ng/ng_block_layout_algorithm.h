@@ -16,7 +16,8 @@ namespace blink {
 
 class ComputedStyle;
 class NGConstraintSpace;
-class NGPhysicalFragment;
+class NGPhysicalFragmentBase;
+class NGBreakToken;
 
 // A class for general block layout (e.g. a <div> with no special style).
 // Lays out the children in sequence.
@@ -30,13 +31,16 @@ class CORE_EXPORT NGBlockLayoutAlgorithm : public NGLayoutAlgorithm {
   //              fragment within.
   NGBlockLayoutAlgorithm(PassRefPtr<const ComputedStyle>,
                          NGBox* first_child,
-                         NGConstraintSpace* space);
+                         NGConstraintSpace* space,
+                         NGBreakToken* break_token = nullptr);
 
-  bool Layout(NGPhysicalFragment**) override;
+  bool Layout(NGPhysicalFragmentBase**) override;
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
+  // Creates a new constraint space for the current child.
+  NGConstraintSpace* CreateConstraintSpaceForCurrentChild() const;
   bool LayoutCurrentChild();
 
   // Computes collapsed margins for 2 adjoining blocks and updates the resultant
@@ -55,7 +59,7 @@ class CORE_EXPORT NGBlockLayoutAlgorithm : public NGLayoutAlgorithm {
   // @param fragment Fragment that needs to be placed.
   // @param child_margins Margins information for the current child fragment.
   // @return Position of the fragment in the parent's constraint space.
-  NGLogicalOffset PositionFragment(const NGFragment& fragment,
+  NGLogicalOffset PositionFragment(const NGFragmentBase& fragment,
                                    const NGBoxStrut& child_margins);
 
   // Calculates position of the float fragment that needs to be
@@ -64,7 +68,7 @@ class CORE_EXPORT NGBlockLayoutAlgorithm : public NGLayoutAlgorithm {
   // @param fragment Fragment that needs to be placed.
   // @param margins Margins information for the fragment.
   // @return Position of the fragment in the parent's constraint space.
-  NGLogicalOffset PositionFloatFragment(const NGFragment& fragment,
+  NGLogicalOffset PositionFloatFragment(const NGFragmentBase& fragment,
                                         const NGBoxStrut& margins);
 
   // Updates block-{start|end} of the currently constructed fragment.
@@ -84,6 +88,7 @@ class CORE_EXPORT NGBlockLayoutAlgorithm : public NGLayoutAlgorithm {
 
   Member<NGBox> first_child_;
   Member<NGConstraintSpace> constraint_space_;
+  Member<NGBreakToken> break_token_;
   Member<NGFragmentBuilder> builder_;
   Member<NGConstraintSpaceBuilder> space_builder_;
   Member<NGConstraintSpace> space_for_current_child_;

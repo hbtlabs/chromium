@@ -43,8 +43,6 @@
 #include "chromeos/audio/chromeos_sounds.h"
 #endif
 
-DECLARE_WINDOW_PROPERTY_TYPE(std::string*)
-
 namespace exo {
 namespace {
 
@@ -329,7 +327,6 @@ ShellSurface::ScopedAnimationsDisabled::~ScopedAnimationsDisabled() {
 ////////////////////////////////////////////////////////////////////////////////
 // ShellSurface, public:
 
-DEFINE_LOCAL_WINDOW_PROPERTY_KEY(std::string*, kApplicationIdKey, nullptr)
 DEFINE_LOCAL_WINDOW_PROPERTY_KEY(Surface*, kMainSurfaceKey, nullptr)
 
 ShellSurface::ShellSurface(Surface* surface,
@@ -532,21 +529,22 @@ void ShellSurface::SetSystemModal(bool system_modal) {
 
 // static
 void ShellSurface::SetApplicationId(aura::Window* window,
-                                    std::string* application_id) {
-  window->SetProperty(kApplicationIdKey, application_id);
+                                    const std::string& id) {
+  TRACE_EVENT1("exo", "ShellSurface::SetApplicationId", "application_id", id);
+  window->SetProperty(aura::client::kAppIdKey, new std::string(id));
 }
 
 // static
 const std::string ShellSurface::GetApplicationId(aura::Window* window) {
-  std::string* string_ptr = window->GetProperty(kApplicationIdKey);
+  std::string* string_ptr = window->GetProperty(aura::client::kAppIdKey);
   return string_ptr ? *string_ptr : std::string();
 }
 
 void ShellSurface::SetApplicationId(const std::string& application_id) {
-  TRACE_EVENT1("exo", "ShellSurface::SetApplicationId", "application_id",
-               application_id);
-
+  // Store the value in |application_id_| in case the window does not exist yet.
   application_id_ = application_id;
+  if (widget_ && widget_->GetNativeWindow())
+    SetApplicationId(widget_->GetNativeWindow(), application_id);
 }
 
 void ShellSurface::Move() {
@@ -626,7 +624,10 @@ std::unique_ptr<base::trace_event::TracedValue> ShellSurface::AsTracedValue()
   std::unique_ptr<base::trace_event::TracedValue> value(
       new base::trace_event::TracedValue());
   value->SetString("title", base::UTF16ToUTF8(title_));
-  value->SetString("application_id", application_id_);
+  std::string application_id;
+  if (GetWidget() && GetWidget()->GetNativeWindow())
+    application_id = GetApplicationId(GetWidget()->GetNativeWindow());
+  value->SetString("application_id", application_id);
   return value;
 }
 
@@ -1023,7 +1024,7 @@ void ShellSurface::CreateShellSurfaceWidget(ui::WindowShowState show_state) {
   window->SetName("ExoShellSurface");
   window->AddChild(surface_->window());
   window->SetEventTargeter(base::WrapUnique(new CustomWindowTargeter(widget_)));
-  SetApplicationId(window, &application_id_);
+  SetApplicationId(window, application_id_);
   SetMainSurface(window, surface_);
 
   // Start tracking changes to window bounds and window state.
@@ -1227,8 +1228,11 @@ gfx::Point ShellSurface::GetSurfaceOrigin() const {
 
   // If initial bounds were specified then surface origin is always relative
   // to those bounds.
-  if (!initial_bounds_.IsEmpty())
-    return initial_bounds_.origin() - window_bounds.OffsetFromOrigin();
+  if (!initial_bounds_.IsEmpty()) {
+    gfx::Point origin = window_bounds.origin();
+    wm::ConvertPointToScreen(widget_->GetNativeWindow()->parent(), &origin);
+    return initial_bounds_.origin() - origin.OffsetFromOrigin();
+  }
 
   gfx::Rect visible_bounds = GetVisibleBounds();
   switch (resize_component_) {
@@ -1283,8 +1287,12 @@ void ShellSurface::UpdateWidgetBounds() {
 
   // Avoid changing widget origin unless initial bounds were specified and
   // widget origin is always relative to it.
-  if (initial_bounds_.IsEmpty())
+  if (initial_bounds_.IsEmpty()) {
     new_widget_bounds.set_origin(widget_->GetWindowBoundsInScreen().origin());
+  } else {
+    new_widget_bounds.set_origin(initial_bounds_.origin() +
+                                 visible_bounds.OffsetFromOrigin());
+  }
 
   // Update widget origin using the surface origin if the current location of
   // surface is being anchored to one side of the widget as a result of a

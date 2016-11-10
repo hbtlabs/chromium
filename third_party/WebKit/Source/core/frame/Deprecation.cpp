@@ -54,6 +54,16 @@ String willBeRemoved(const char* feature,
       feature, milestoneString(milestone), details);
 }
 
+String replacedWillBeRemoved(const char* feature,
+                             const char* replacement,
+                             Milestone milestone,
+                             const char* details) {
+  return String::format(
+      "%s is deprecated and will be removed in %s. Please use %s instead. See "
+      "https://www.chromestatus.com/features/%s for more details.",
+      feature, milestoneString(milestone), replacement, details);
+}
+
 }  // anonymous namespace
 
 namespace blink {
@@ -258,8 +268,9 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
              "standard 'cancelAnimationFrame' instead.";
 
     case UseCounter::PrefixedCancelRequestAnimationFrame:
-      return "'webkitCancelRequestAnimationFrame' is vendor-specific. Please "
-             "use the standard 'cancelAnimationFrame' instead.";
+      return replacedWillBeRemoved("webkitCancelRequestAnimationFrame",
+                                   "cancelAnimationFrame", M57,
+                                   "5588435494502400");
 
     case UseCounter::PictureSourceSrc:
       return "<source src> with a <picture> parent is invalid and therefore "
@@ -391,10 +402,6 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
       return replacedBy("'Performance.onwebkitresourcetimingbufferfull'",
                         "'Performance.onresourcetimingbufferfull'");
 
-    case UseCounter::MediaStreamTrackGetSources:
-      return willBeRemoved("MediaStreamTrack.getSources", M56,
-                           "4765305641369600");
-
     case UseCounter::WebAnimationHyphenatedProperty:
       return "Hyphenated property names in Web Animations keyframes are "
              "invalid and therefore ignored. Please use camelCase instead.";
@@ -409,24 +416,6 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
           "for contentType strings without codecs will be removed in %s. "
           "Please specify the desired codec(s) as part of the contentType.",
           milestoneString(M56));
-
-    case UseCounter::TouchStartUserGestureUtilized:
-      return willBeRemoved(
-          "Performing operations that require explicit user interaction on "
-          "touchstart events",
-          M56, "5649871251963904");
-
-    case UseCounter::TouchMoveUserGestureUtilized:
-      return willBeRemoved(
-          "Performing operations that require explicit user interaction on "
-          "touchmove events",
-          M56, "5649871251963904");
-
-    case UseCounter::TouchEndDuringScrollUserGestureUtilized:
-      return willBeRemoved(
-          "Performing operations that require explicit user interaction on "
-          "touchend events that occur as part of a scroll",
-          M56, "5649871251963904");
 
     case UseCounter::MIDIMessageEventReceivedTime:
       return willBeRemoved("MIDIMessageEvent.receivedTime", M56,
@@ -443,11 +432,6 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
     case UseCounter::V8SVGViewElement_ViewTarget_AttributeGetter:
       return willBeRemoved("SVGViewElement.viewTarget", M56,
                            "5665473114931200");
-
-    case UseCounter::ScriptInvalidTypeOrLanguage:
-      return willBeRemoved(
-          "Fetching scripts with an invalid type/language attributes", M56,
-          "5760718284521472");
 
     case UseCounter::VRDeprecatedFieldOfView:
       return replacedBy("VREyeParameters.fieldOfView",

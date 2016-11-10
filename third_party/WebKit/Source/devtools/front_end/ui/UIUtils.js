@@ -1454,8 +1454,10 @@ WebInspector.appendStyle =
      * @this {Element}
      */
     createdCallback: function() {
-      var root = WebInspector.createShadowRootWithCoreStyles(this, 'ui/smallIcon.css');
-      this._iconElement = root.createChild('div');
+      var root = WebInspector.createShadowRootWithCoreStyles(this);
+      this._iconElement = WebInspector.Icon.create();
+      this._iconElement.style.setProperty('margin-right', '4px');
+      root.appendChild(this._iconElement);
       root.createChild('content');
     },
 
@@ -1464,7 +1466,7 @@ WebInspector.appendStyle =
      * @this {Element}
      */
     set type(type) {
-      this._iconElement.className = type;
+      this._iconElement.setIconType(type);
     },
 
     __proto__: HTMLLabelElement.prototype
@@ -1611,6 +1613,70 @@ WebInspector.bindInput = function(input, apply, validate, numeric) {
   }
 
   return setValue;
+};
+
+  /**
+   * @param {!CanvasRenderingContext2D} context
+   * @param {string} text
+   * @param {number} maxWidth
+   * @return {string}
+   */
+WebInspector.trimTextMiddle = function(context, text, maxWidth) {
+  const maxLength = 200;
+  if (maxWidth <= 10)
+    return '';
+  if (text.length > maxLength)
+    text = text.trimMiddle(maxLength);
+  const textWidth = WebInspector.measureTextWidth(context, text);
+  if (textWidth <= maxWidth)
+    return text;
+
+  var l = 0;
+  var r = text.length;
+  var lv = 0;
+  var rv = textWidth;
+  while (l < r && lv !== rv && lv !== maxWidth) {
+    const m = Math.ceil(l + (r - l) * (maxWidth - lv) / (rv - lv));
+    const mv = WebInspector.measureTextWidth(context, text.trimMiddle(m));
+    if (mv <= maxWidth) {
+      l = m;
+      lv = mv;
+    } else {
+      r = m - 1;
+      rv = mv;
+    }
+  }
+  text = text.trimMiddle(l);
+  return text !== '\u2026' ? text : '';
+};
+
+/**
+ * @param {!CanvasRenderingContext2D} context
+ * @param {string} text
+ * @return {number}
+ */
+WebInspector.measureTextWidth = function(context, text) {
+  const maxCacheableLength = 200;
+  if (text.length > maxCacheableLength)
+    return context.measureText(text).width;
+
+  var widthCache = WebInspector.measureTextWidth._textWidthCache;
+  if (!widthCache) {
+    widthCache = new Map();
+    WebInspector.measureTextWidth._textWidthCache = widthCache;
+  }
+  const font = context.font;
+  var textWidths = widthCache.get(font);
+  if (!textWidths) {
+    textWidths = new Map();
+    widthCache.set(font, textWidths);
+  }
+  var width = textWidths.get(text);
+  if (!width) {
+    width = context.measureText(text).width;
+    textWidths.set(text, width);
+  }
+  return width;
 };
 
 /**

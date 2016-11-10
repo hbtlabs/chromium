@@ -30,6 +30,7 @@
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
 #include "chrome/browser/chromeos/accessibility/spoken_feedback_event_rewriter.h"
+#include "chrome/browser/chromeos/app_mode/arc/arc_kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_launch_error.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_mode_idle_app_name_notification.h"
@@ -61,6 +62,8 @@
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/net/network_connect_delegate_chromeos.h"
 #include "chrome/browser/chromeos/net/network_portal_detector_impl.h"
+#include "chrome/browser/chromeos/net/network_pref_state_observer.h"
+#include "chrome/browser/chromeos/net/network_throttling_observer.h"
 #include "chrome/browser/chromeos/net/wake_on_wifi_manager.h"
 #include "chrome/browser/chromeos/options/cert_library.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
@@ -412,6 +415,8 @@ void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
   DeviceOAuth2TokenServiceFactory::Initialize();
 
   wake_on_wifi_manager_.reset(new WakeOnWifiManager());
+  network_throttling_observer_.reset(
+      new NetworkThrottlingObserver(g_browser_process->local_state()));
 
   arc_service_launcher_.reset(new arc::ArcServiceLauncher());
   arc_service_launcher_->Initialize();
@@ -518,6 +523,8 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
       parsed_command_line().HasSwitch(::switches::kEnableNativeCups));
 
   power_prefs_.reset(new PowerPrefs(PowerPolicyController::Get()));
+
+  arc_kiosk_app_manager_.reset(new ArcKioskAppManager());
 
   // In Aura builds this will initialize ash::Shell.
   ChromeBrowserMainPartsLinux::PreProfileInit();
@@ -653,6 +660,9 @@ void ChromeBrowserMainPartsChromeos::PostProfileInit() {
       network_portal_detector::GetInstance()->Enable(true);
   }
 
+  // Initialize an observer to update NetworkHandler's pref based services.
+  network_pref_state_observer_ = base::MakeUnique<NetworkPrefStateObserver>();
+
   // Initialize input methods.
   input_method::InputMethodManager* manager =
       input_method::InputMethodManager::Get();
@@ -738,8 +748,6 @@ void ChromeBrowserMainPartsChromeos::PreBrowserStart() {
 
 void ChromeBrowserMainPartsChromeos::PostBrowserStart() {
   if (!chrome::IsRunningInMash()) {
-    system::InputDeviceSettings::Get()->InitTouchDevicesStatusFromLocalPrefs();
-
     // These are dependent on the ash::Shell singleton already having been
     // initialized. Consequently, these cannot be used when running as a mus
     // client.
@@ -770,6 +778,7 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   BootTimesRecorder::Get()->AddLogoutTimeMarker("UIMessageLoopEnded", true);
 
   arc_service_launcher_->Shutdown();
+  arc_kiosk_app_manager_.reset();
 
   // Destroy the application name notifier for Kiosk mode.
   KioskModeIdleAppNameNotification::Shutdown();
@@ -796,11 +805,13 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
 
   // We should remove observers attached to D-Bus clients before
   // DBusThreadManager is shut down.
+  network_pref_state_observer_.reset();
   extension_volume_observer_.reset();
   peripheral_battery_observer_.reset();
   power_prefs_.reset();
   renderer_freezer_.reset();
   wake_on_wifi_manager_.reset();
+  network_throttling_observer_.reset();
   ScreenLocker::ShutDownClass();
   keyboard_event_rewriters_.reset();
   low_disk_notification_.reset();

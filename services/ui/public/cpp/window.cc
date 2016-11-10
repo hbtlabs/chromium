@@ -812,13 +812,9 @@ void Window::LocalSetSurfaceId(std::unique_ptr<SurfaceInfo> surface_info) {
     const cc::SurfaceId& existing_surface_id = surface_info_->surface_id;
     cc::SurfaceId new_surface_id =
         surface_info ? surface_info->surface_id : cc::SurfaceId();
-    if (!existing_surface_id.is_null() &&
+    if (existing_surface_id.is_valid() &&
         existing_surface_id != new_surface_id) {
-      // Return the existing surface sequence.
-      if (client_) {
-        client_->OnWindowSurfaceDetached(server_id_,
-                                         surface_info_->surface_sequence);
-      }
+      // TODO(kylechar): Start return reference here?
     }
   }
   if (parent_ && parent_->surface_id_handler_) {

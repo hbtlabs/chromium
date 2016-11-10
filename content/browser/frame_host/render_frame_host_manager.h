@@ -27,7 +27,6 @@
 
 namespace content {
 class BrowserContext;
-class CrossProcessFrameConnector;
 class FrameNavigationEntry;
 class FrameTreeNode;
 class InterstitialPageImpl;
@@ -46,7 +45,6 @@ class RenderWidgetHostDelegate;
 class RenderWidgetHostView;
 class TestWebContents;
 class WebUIImpl;
-struct CommonNavigationParams;
 struct ContentSecurityPolicyHeader;
 struct FrameOwnerProperties;
 struct FrameReplicationState;
@@ -197,7 +195,8 @@ class CONTENT_EXPORT RenderFrameHostManager
   void Init(SiteInstance* site_instance,
             int32_t view_routing_id,
             int32_t frame_routing_id,
-            int32_t widget_routing_id);
+            int32_t widget_routing_id,
+            bool renderer_initiated_creation);
 
   // Returns the currently active RenderFrameHost.
   //
@@ -671,7 +670,8 @@ class CONTENT_EXPORT RenderFrameHostManager
       int32_t view_routing_id,
       int32_t frame_routing_id,
       int32_t widget_routing_id,
-      bool hidden);
+      bool hidden,
+      bool renderer_initiated_creation);
 
   // PlzNavigate
   // Create and initialize a speculative RenderFrameHost for an ongoing

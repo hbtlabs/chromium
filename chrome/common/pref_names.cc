@@ -21,6 +21,8 @@ const char kArcApps[] = "arc.apps";
 const char kArcBackupRestoreEnabled[] = "arc.backup_restore.enabled";
 // A preference to keep Android apps enabled state.
 const char kArcEnabled[] = "arc.enabled";
+// A preference that indicates that user accepted PlayStore terms.
+const char kArcTermsAccepted[] = "arc.terms.accepted";
 // A preference to keep user's consent to use location service.
 const char kArcLocationServiceEnabled[] = "arc.location_service.enabled";
 // A preference to keep list of Android packages and their infomation.
@@ -310,6 +312,12 @@ const char kWebKitSerifFontFamilyTraditionalHan[] =
     "webkit.webprefs.fonts.serif.Hant";
 const char kWebKitSansSerifFontFamilyTraditionalHan[] =
     "webkit.webprefs.fonts.sansserif.Hant";
+#if defined(OS_WIN) || defined(OS_MACOSX)
+const char kWebKitCursiveFontFamilySimplifiedHan[] =
+    "webkit.webprefs.fonts.cursive.Hans";
+const char kWebKitCursiveFontFamilyTraditionalHan[] =
+    "webkit.webprefs.fonts.cursive.Hant";
+#endif
 
 // WebKit preferences.
 const char kWebKitWebSecurityEnabled[] = "webkit.webprefs.web_security_enabled";
@@ -897,6 +905,19 @@ const char kEolStatus[] = "eol_status";
 // Boolean pref indicating the End Of Life notification was dismissed by the
 // user.
 const char kEolNotificationDismissed[] = "eol_notification_dismissed";
+
+// A list of allowed quick unlock modes. A quick unlock mode can only be used if
+// its type is on this list, or if type all (all quick unlock modes enabled) is
+// on this list.
+const char kQuickUnlockModeWhitelist[] = "quick_unlock_mode_whitelist";
+// Enum that specifies how often a user has to enter their password to continue
+// using quick unlock. These values are the same as the ones in
+// chromeos::QuickUnlockPasswordConfirmationFrequency.
+// 0 - six hours. Users will have to enter their password every six hours.
+// 1 - twelve hours. Users will have to enter their password every twelve hours.
+// 2 - day. Users will have to enter their password every day.
+// 3 - week. Users will have to enter their password every week.
+const char kQuickUnlockTimeout[] = "quick_unlock_timeout";
 #endif  // defined(OS_CHROMEOS)
 
 // A boolean pref set to true if a Home button to open the Home pages should be
@@ -1382,6 +1403,13 @@ const char kTaskManagerColumnVisibility[] = "task_manager.column_visibility";
 
 // A boolean indicating if ending processes are enabled or disabled by policy.
 const char kTaskManagerEndProcessEnabled[] = "task_manager.end_process_enabled";
+
+#if defined(OS_CHROMEOS)
+// Dictionary indicating current network bandwidth throttling settings.
+// Contains a boolean (is throttling enabled) and two integers (upload rate
+// and download rate in kbits/s to throttle to)
+const char kNetworkThrottlingEnabled[] = "net.throttling_enabled";
+#endif
 
 // A collection of position, size, and other data relating to app windows to
 // restore on startup.
@@ -2091,6 +2119,9 @@ const char kAppListEnableMethod[] = "app_list.how_enabled";
 
 // The time that the app launcher was enabled. Cleared when UMA is recorded.
 const char kAppListEnableTime[] = "app_list.when_enabled";
+
+// Keeps local state of app list while sync service is not available.
+const char kAppListLocalState[] = "app_list.local_state";
 
 #if defined(OS_MACOSX)
 // Integer representing the version of the app launcher shortcut installed on

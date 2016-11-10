@@ -29,6 +29,7 @@
  */
 
 #include "platform/CrossThreadFunctional.h"
+#include "platform/WebTaskRunner.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/Heap.h"
 #include "platform/heap/HeapLinkedStack.h"
@@ -39,7 +40,6 @@
 #include "platform/heap/Visitor.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebTaskRunner.h"
 #include "public/platform/WebTraceLocation.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/HashTraits.h"
@@ -742,6 +742,11 @@ class ClassWithMember : public GarbageCollected<ClassWithMember> {
 
   DEFINE_INLINE_TRACE() {
     EXPECT_TRUE(ThreadHeap::isHeapObjectAlive(this));
+
+    // Const pointer should also be alive. See http://crbug.com/661363.
+    const ClassWithMember* constPtr = static_cast<const ClassWithMember*>(this);
+    EXPECT_TRUE(ThreadHeap::isHeapObjectAlive(constPtr));
+
     if (!traceCount())
       EXPECT_FALSE(ThreadHeap::isHeapObjectAlive(m_traceCounter));
     else

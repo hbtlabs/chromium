@@ -315,7 +315,8 @@ void PaintInvalidationState::updateForChildren(PaintInvalidationReason reason) {
                ForcedSubtreeFullInvalidationForStackedContents);
       break;
     case PaintInvalidationSVGResourceChange:
-      setForceSubtreeInvalidationCheckingWithinContainer();
+      m_forcedSubtreeInvalidationFlags |=
+          PaintInvalidatorContext::ForcedSubtreeSVGResourceChange;
       break;
     default:
       break;
@@ -409,11 +410,16 @@ static FloatPoint slowLocalToAncestorPoint(const LayoutObject& object,
   return result;
 }
 
-LayoutPoint
-PaintInvalidationState::computePositionFromPaintInvalidationBacking() const {
+LayoutPoint PaintInvalidationState::computeLocationInBacking(
+    const LayoutPoint& visualRectLocation) const {
 #if ENABLE(ASSERT)
   DCHECK(!m_didUpdateForChildren);
 #endif
+
+  // Use visual rect location for LayoutTexts because it suffices to check
+  // visual rect change for layout caused invalidation.
+  if (m_currentObject.isText())
+    return visualRectLocation;
 
   FloatPoint point;
   if (m_paintInvalidationContainer != &m_currentObject) {
@@ -422,7 +428,9 @@ PaintInvalidationState::computePositionFromPaintInvalidationBacking() const {
         point = m_svgTransform.mapPoint(point);
       point += FloatPoint(m_paintOffset);
 #ifdef CHECK_FAST_PATH_SLOW_PATH_EQUALITY
-            DCHECK(point == slowLocalOriginToAncestorPoint(m_currentObject, m_paintInvalidationContainer, FloatPoint());
+      DCHECK(point ==
+             slowLocalOriginToAncestorPoint(
+                 m_currentObject, m_paintInvalidationContainer, FloatPoint()));
 #endif
     } else {
       point = slowLocalToAncestorPoint(

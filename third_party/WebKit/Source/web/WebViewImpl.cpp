@@ -352,7 +352,7 @@ void WebView::willEnterModalLoop() {
 
 void WebView::didExitModalLoop() {
   DCHECK(pageLoadDeferrerStack().size());
-  pageLoadDeferrerStack().removeLast();
+  pageLoadDeferrerStack().pop_back();
 }
 
 void WebViewImpl::setMainFrame(WebFrame* frame) {
@@ -435,7 +435,7 @@ WebViewImpl::WebViewImpl(WebViewClient* client,
       m_scheduler(wrapUnique(Platform::current()
                                  ->currentThread()
                                  ->scheduler()
-                                 ->createWebViewScheduler(this)
+                                 ->createWebViewScheduler(this, this)
                                  .release())),
       m_lastFrameTimeMonotonic(0),
       m_overrideCompositorVisibility(false) {
@@ -1096,6 +1096,22 @@ void WebViewImpl::ReportIntervention(const WebString& message) {
     return;
   WebConsoleMessage consoleMessage(WebConsoleMessage::LevelWarning, message);
   mainFrame()->addMessageToConsole(consoleMessage);
+}
+
+float WebViewImpl::expensiveBackgroundThrottlingCPUBudget() {
+  return settingsImpl()->expensiveBackgroundThrottlingCPUBudget();
+}
+
+float WebViewImpl::expensiveBackgroundThrottlingInitialBudget() {
+  return settingsImpl()->expensiveBackgroundThrottlingInitialBudget();
+}
+
+float WebViewImpl::expensiveBackgroundThrottlingMaxBudget() {
+  return settingsImpl()->expensiveBackgroundThrottlingMaxBudget();
+}
+
+float WebViewImpl::expensiveBackgroundThrottlingMaxDelay() {
+  return settingsImpl()->expensiveBackgroundThrottlingMaxDelay();
 }
 
 WebInputEventResult WebViewImpl::handleKeyEvent(const WebKeyboardEvent& event) {
@@ -3472,6 +3488,10 @@ void WebViewImpl::performPluginAction(const WebPluginAction& action,
   }
 }
 
+void WebViewImpl::audioStateChanged(bool isAudioPlaying) {
+  m_scheduler->audioStateChanged(isAudioPlaying);
+}
+
 WebHitTestResult WebViewImpl::hitTestResultAt(const WebPoint& point) {
   return coreHitTestResultAt(point);
 }
@@ -3627,10 +3647,7 @@ WebDragOperation WebViewImpl::dragTargetDragEnterOrOver(
                     static_cast<DragOperation>(m_operationsAllowed));
 
   DragSession dragSession;
-  if (dragAction == DragEnter)
-    dragSession = m_page->dragController().dragEntered(&dragData);
-  else
-    dragSession = m_page->dragController().dragUpdated(&dragData);
+  dragSession = m_page->dragController().dragEnteredOrUpdated(&dragData);
 
   DragOperation dropEffect = dragSession.operation;
 
@@ -3950,19 +3967,6 @@ bool WebViewImpl::useExternalPopupMenus() {
   return shouldUseExternalPopupMenus;
 }
 
-void WebViewImpl::startDragging(LocalFrame* frame,
-                                const WebDragData& dragData,
-                                WebDragOperationsMask mask,
-                                const WebImage& dragImage,
-                                const WebPoint& dragImageOffset) {
-  if (!m_client)
-    return;
-  DCHECK(!m_doingDragAndDrop);
-  m_doingDragAndDrop = true;
-  m_client->startDragging(WebLocalFrameImpl::fromFrame(frame), dragData, mask,
-                          dragImage, dragImageOffset);
-}
-
 void WebViewImpl::setIgnoreInputEvents(bool newValue) {
   DCHECK_NE(m_ignoreInputEvents, newValue);
   m_ignoreInputEvents = newValue;
@@ -3986,7 +3990,7 @@ void WebViewImpl::setPageOverlayColor(WebColor color) {
     return;
 
   m_pageColorOverlay =
-      PageOverlay::create(this, wrapUnique(new ColorOverlay(color)));
+      PageOverlay::create(mainFrameImpl(), wrapUnique(new ColorOverlay(color)));
   m_pageColorOverlay->update();
 }
 

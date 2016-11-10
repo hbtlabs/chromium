@@ -46,6 +46,7 @@ V8AbstractEventListener::V8AbstractEventListener(bool isAttribute,
                                                  DOMWrapperWorld& world,
                                                  v8::Isolate* isolate)
     : EventListener(JSEventListenerType),
+      m_listener(nullptr),
       m_isAttribute(isAttribute),
       m_world(world),
       m_isolate(isolate),
@@ -108,8 +109,7 @@ void V8AbstractEventListener::setListenerObject(
   } else {
     m_keepAlive = this;
   }
-  m_listener.set(isolate(), listener);
-  m_listener.setWeak(this, &wrapperCleared);
+  m_listener.set(isolate(), listener, this, &wrapperCleared);
 }
 
 void V8AbstractEventListener::invokeEventHandler(ScriptState* scriptState,
@@ -226,7 +226,7 @@ DEFINE_TRACE(V8AbstractEventListener) {
 }
 
 DEFINE_TRACE_WRAPPERS(V8AbstractEventListener) {
-  visitor->traceWrappers(&m_listener);
+  visitor->traceWrappers(m_listener.cast<v8::Value>());
 }
 
 }  // namespace blink

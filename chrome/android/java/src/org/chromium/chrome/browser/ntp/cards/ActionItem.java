@@ -4,42 +4,98 @@
 
 package org.chromium.chrome.browser.ntp.cards;
 
+import android.support.annotation.IntDef;
 import android.view.View;
 
+import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ntp.NewTabPageView.NewTabPageManager;
 import org.chromium.chrome.browser.ntp.UiConfig;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsConfig;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+
 /**
  * Item that allows the user to perform an action on the NTP.
+ * Note: Use {@link #refreshVisibility()} to update the visibility of the button instead of calling
+ * {@link #setVisible(boolean)} directly.
  */
-class ActionItem extends Leaf {
-    private static final String TAG = "NtpCards";
+class ActionItem extends OptionalLeaf {
+    @IntDef({ACTION_NONE, ACTION_VIEW_ALL, ACTION_FETCH_MORE, ACTION_RELOAD})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface Action {}
+    public static final int ACTION_NONE = 0;
+    public static final int ACTION_VIEW_ALL = 1;
+    public static final int ACTION_FETCH_MORE = 2;
+    public static final int ACTION_RELOAD = 3;
 
     private final SuggestionsCategoryInfo mCategoryInfo;
+    private final SuggestionsSection mParentSection;
 
-    // The position (index) of this item within its section, for logging purposes.
-    private int mPosition;
-    private boolean mImpressionTracked = false;
-    private boolean mDismissable;
+    @Action
+    private int mCurrentAction = ACTION_NONE;
+    private boolean mImpressionTracked;
 
-    public ActionItem(SuggestionsCategoryInfo categoryInfo) {
-        mCategoryInfo = categoryInfo;
+    public ActionItem(SuggestionsSection section) {
+        super(section);
+        mCategoryInfo = section.getCategoryInfo();
+        mParentSection = section;
+    }
+
+    /** Call this instead of {@link #setVisible(boolean)} to update the visibility. */
+    public void refreshVisibility() {
+        mCurrentAction = findAppropriateAction();
+        setVisible(mCurrentAction != ACTION_NONE);
     }
 
     @Override
-    @ItemViewType
-    protected int getItemViewType() {
+    public int getItemViewType() {
         return ItemViewType.ACTION;
     }
 
-    public int getPosition() {
-        return mPosition;
+    @Override
+    protected void onBindViewHolder(NewTabPageViewHolder holder) {
+        assert holder instanceof ViewHolder;
+        ((ViewHolder) holder).onBindViewHolder(this);
     }
 
-    public void setPosition(int position) {
-        mPosition = position;
+    private int getPosition() {
+        // TODO(dgn): looks dodgy. Confirm that's what we want.
+        return mParentSection.getSuggestionsCount();
+    }
+
+    @VisibleForTesting
+    void performAction(NewTabPageManager manager, NewTabPageAdapter adapter) {
+        manager.trackSnippetCategoryActionClick(mCategoryInfo.getCategory(), getPosition());
+
+        switch (mCurrentAction) {
+            case ACTION_VIEW_ALL:
+                mCategoryInfo.performViewAllAction(manager);
+                return;
+            case ACTION_FETCH_MORE:
+                manager.getSuggestionsSource().fetchSuggestions(
+                        mCategoryInfo.getCategory(), mParentSection.getDisplayedSuggestionIds());
+                mParentSection.onFetchMore();
+                return;
+            case ACTION_RELOAD:
+                // TODO(dgn): reload only the current section. https://crbug.com/634892
+                adapter.reloadSnippets();
+                return;
+            case ACTION_NONE:
+            default:
+                // Should never be reached.
+                assert false;
+        }
+    }
+
+    @Action
+    private int findAppropriateAction() {
+        boolean hasSuggestions = mParentSection.hasSuggestions();
+        if (mCategoryInfo.hasViewAllAction()) return ACTION_VIEW_ALL;
+        if (hasSuggestions && mCategoryInfo.hasFetchMoreAction()) return ACTION_FETCH_MORE;
+        if (!hasSuggestions && mCategoryInfo.hasReloadAction()) return ACTION_RELOAD;
+        return ACTION_NONE;
     }
 
     public static class ViewHolder extends CardViewHolder {
@@ -53,10 +109,7 @@ class ActionItem extends Leaf {
                     .setOnClickListener(new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
-                            int category = mActionListItem.mCategoryInfo.getCategory();
-                            manager.trackSnippetCategoryActionClick(
-                                    category, mActionListItem.mPosition);
-                            mActionListItem.mCategoryInfo.performEmptyStateAction(
+                            mActionListItem.performAction(
                                     manager, recyclerView.getNewTabPageAdapter());
                         }
                     });
@@ -68,7 +121,7 @@ class ActionItem extends Leaf {
                         mActionListItem.mImpressionTracked = true;
                         manager.trackSnippetCategoryActionImpression(
                                 mActionListItem.mCategoryInfo.getCategory(),
-                                mActionListItem.mPosition);
+                                mActionListItem.getPosition());
                     }
                 }
             });
@@ -76,24 +129,13 @@ class ActionItem extends Leaf {
 
         @Override
         public boolean isDismissable() {
-            return SnippetsConfig.isSectionDismissalEnabled() && mActionListItem.mDismissable;
+            return SnippetsConfig.isSectionDismissalEnabled()
+                    && !mActionListItem.mParentSection.hasSuggestions();
         }
 
         public void onBindViewHolder(ActionItem item) {
             super.onBindViewHolder();
-
             mActionListItem = item;
         }
-    }
-
-    @Override
-    protected void onBindViewHolder(NewTabPageViewHolder holder) {
-        assert holder instanceof ViewHolder;
-        ((ViewHolder) holder).onBindViewHolder(this);
-    }
-
-    /** Set whether this item can be dismissed.*/
-    public void setDismissable(boolean dismissable) {
-        this.mDismissable = dismissable;
     }
 }

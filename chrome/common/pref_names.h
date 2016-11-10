@@ -19,6 +19,7 @@ namespace prefs {
 extern const char kArcApps[];
 extern const char kArcBackupRestoreEnabled[];
 extern const char kArcEnabled[];
+extern const char kArcTermsAccepted[];
 extern const char kArcLocationServiceEnabled[];
 extern const char kArcPackages[];
 extern const char kArcSetNotificationsEnabledDeferred[];
@@ -127,6 +128,10 @@ extern const char kWebKitStandardFontFamilyTraditionalHan[];
 extern const char kWebKitFixedFontFamilyTraditionalHan[];
 extern const char kWebKitSerifFontFamilyTraditionalHan[];
 extern const char kWebKitSansSerifFontFamilyTraditionalHan[];
+#if defined(OS_WIN) || defined(OS_MACOSX)
+extern const char kWebKitCursiveFontFamilySimplifiedHan[];
+extern const char kWebKitCursiveFontFamilyTraditionalHan[];
+#endif
 
 extern const char kWebKitDefaultFontSize[];
 extern const char kWebKitDefaultFixedFontSize[];
@@ -300,6 +305,8 @@ extern const char kQuickUnlockPinSecret[];
 extern const char kEolStatus[];
 extern const char kEolNotificationDismissed[];
 extern const char kQuickUnlockFeatureNotificationShown[];
+extern const char kQuickUnlockModeWhitelist[];
+extern const char kQuickUnlockTimeout[];
 #endif  // defined(OS_CHROMEOS)
 extern const char kShowHomeButton[];
 extern const char kSpeechRecognitionFilterProfanities[];
@@ -648,6 +655,7 @@ extern const char kLogoutStartedLast[];
 extern const char kConsumerManagementStage[];
 extern const char kIsBootstrappingSlave[];
 extern const char kReportArcStatusEnabled[];
+extern const char kNetworkThrottlingEnabled[];
 #endif  // defined(OS_CHROMEOS)
 
 extern const char kClearPluginLSODataEnabled[];
@@ -764,6 +772,7 @@ extern const char kAppListAppLaunchCount[];
 extern const char kAppLauncherHasBeenEnabled[];
 extern const char kAppListEnableMethod[];
 extern const char kAppListEnableTime[];
+extern const char kAppListLocalState[];
 #if defined(OS_MACOSX)
 extern const char kAppLauncherShortcutVersion[];
 #endif

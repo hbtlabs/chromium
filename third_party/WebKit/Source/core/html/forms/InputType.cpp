@@ -526,6 +526,7 @@ void InputType::setValue(const String& sanitizedValue,
       element().dispatchFormControlChangeEvent();
       break;
     case DispatchNoEvent:
+      element().setTextAsOfLastFormControlChangeEvent(element().value());
       break;
   }
 }
@@ -643,6 +644,10 @@ const AtomicString& InputType::defaultAutocapitalize() const {
 }
 
 void InputType::copyNonAttributeProperties(const HTMLInputElement&) {}
+
+void InputType::onAttachWithLayoutObject() {}
+
+void InputType::onDetachWithLayoutObject() {}
 
 bool InputType::shouldAppearIndeterminate() const {
   return false;

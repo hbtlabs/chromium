@@ -128,6 +128,13 @@ FrameTreeNode::~FrameTreeNode() {
     opener_->RemoveObserver(opener_observer_.get());
 
   g_frame_tree_node_id_map.Get().erase(frame_tree_node_id_);
+
+  if (navigation_request_) {
+    // PlzNavigate: if a frame with a pending navigation is detached, make sure
+    // the WebContents (and its observers) update their loading state.
+    navigation_request_.reset();
+    DidStopLoading();
+  }
 }
 
 void FrameTreeNode::AddObserver(Observer* observer) {
@@ -154,7 +161,7 @@ FrameTreeNode* FrameTreeNode::AddChild(std::unique_ptr<FrameTreeNode> child,
   child->render_manager()->Init(
       render_manager_.current_host()->GetSiteInstance(),
       render_manager_.current_host()->GetRoutingID(), frame_routing_id,
-      MSG_ROUTING_NONE);
+      MSG_ROUTING_NONE, false);
 
   // Other renderer processes in this BrowsingInstance may need to find out
   // about the new frame.  Create a proxy for the child frame in all

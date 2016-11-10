@@ -19,6 +19,7 @@
 #include "components/offline_pages/background/request_picker.h"
 #include "components/offline_pages/background/save_page_request.h"
 #include "components/offline_pages/client_policy_controller.h"
+#include "components/offline_pages/offline_page_feature.h"
 #include "components/offline_pages/offline_page_item.h"
 #include "components/offline_pages/offline_page_model.h"
 
@@ -118,6 +119,23 @@ void RecordAttemptCount(const SavePageRequest& request,
   }
 }
 
+// Record the network quality at request creation time per namespace.
+void RecordSavePageLaterNetworkQuality(
+    const ClientId& client_id,
+    const net::EffectiveConnectionType effective_connection) {
+  // The histogram below is an expansion of the UMA_HISTOGRAM_ENUMERATION
+  // macro adapted to allow for a dynamically suffixed histogram name.
+  // Note: The factory creates and owns the histogram.
+  base::HistogramBase* histogram = base::LinearHistogram::FactoryGet(
+      AddHistogramSuffix(
+          client_id,
+          "OfflinePages.Background.EffectiveConnectionType.SavePageLater"),
+      1, net::EFFECTIVE_CONNECTION_TYPE_LAST - 1,
+      net::EFFECTIVE_CONNECTION_TYPE_LAST,
+      base::HistogramBase::kUmaTargetedHistogramFlag);
+  histogram->Add(effective_connection);
+}
+
 // This should use the same algorithm as we use for OfflinePageItem, so the IDs
 // are similar.
 int64_t GenerateOfflineId() {
@@ -195,6 +213,13 @@ int64_t RequestCoordinator::SavePageLater(const GURL& url,
   queue_->AddRequest(request,
                      base::Bind(&RequestCoordinator::AddRequestResultCallback,
                                 weak_ptr_factory_.GetWeakPtr()));
+
+  // Record the network quality when this request is made.
+  if (network_quality_estimator_) {
+    RecordSavePageLaterNetworkQuality(
+        client_id, network_quality_estimator_->GetEffectiveConnectionType());
+  }
+
   return id;
 }
 void RequestCoordinator::GetAllRequests(const GetRequestsCallback& callback) {
@@ -218,13 +243,12 @@ void RequestCoordinator::StopPrerendering(Offliner::RequestStatus stop_status) {
     offliner_->Cancel();
 
     // If we timed out, let the offliner done callback handle it.
-    if (processing_state_ == ProcessingWindowState::IMMEDIATE_WINDOW &&
-        stop_status == Offliner::RequestStatus::REQUEST_COORDINATOR_TIMED_OUT)
+    if (stop_status == Offliner::RequestStatus::REQUEST_COORDINATOR_TIMED_OUT)
       return;
 
     // Otherwise, this attempt never really had a chance to run, mark it
     // aborted.
-    AbortRequestAttempt(active_request_.get());
+    AbortRequestAttempt(*active_request_.get());
   }
 
   // Stopping offliner means it will not call callback so set last status.
@@ -279,19 +303,19 @@ bool RequestCoordinator::CancelActiveRequestIfItMatches(
   return false;
 }
 
-void RequestCoordinator::AbortRequestAttempt(SavePageRequest* request) {
-  if (request->started_attempt_count() >= policy_->GetMaxStartedTries()) {
+void RequestCoordinator::AbortRequestAttempt(const SavePageRequest& request) {
+  if (request.started_attempt_count() >= policy_->GetMaxStartedTries()) {
     const BackgroundSavePageResult result(
         BackgroundSavePageResult::START_COUNT_EXCEEDED);
-    event_logger_.RecordDroppedSavePageRequest(request->client_id().name_space,
-                                               result, request->request_id());
-    RemoveAttemptedRequest(*request, result);
+    event_logger_.RecordDroppedSavePageRequest(request.client_id().name_space,
+                                               result, request.request_id());
+    RemoveAttemptedRequest(request, result);
   } else {
     queue_->MarkAttemptAborted(
-        request->request_id(),
+        request.request_id(),
         base::Bind(&RequestCoordinator::MarkAttemptAbortedDone,
-                   weak_ptr_factory_.GetWeakPtr(), request->request_id(),
-                   request->client_id()));
+                   weak_ptr_factory_.GetWeakPtr(), request.request_id(),
+                   request.client_id()));
   }
 }
 
@@ -310,9 +334,11 @@ void RequestCoordinator::MarkAttemptAbortedDone(
     int64_t request_id,
     const ClientId& client_id,
     std::unique_ptr<UpdateRequestsResult> result) {
-  // If the request succeeded, nothing to do.  If it failed, we can't really do
-  // much, so just log it.
-  if (!IsSingleSuccessResult(result.get())) {
+  // If the request succeeded, notify observer. If it failed, we can't really
+  // do much, so just log it.
+  if (IsSingleSuccessResult(result.get())) {
+    NotifyChanged(result->updated_items.at(0));
+  } else {
     DVLOG(1) << "Failed to mark request aborted: " << request_id;
     RequestQueue::UpdateRequestResult request_result =
         result->store_state != StoreState::LOADED
@@ -332,6 +358,15 @@ void RequestCoordinator::RemoveRequests(
       base::Bind(&RequestCoordinator::HandleRemovedRequestsAndCallback,
                  weak_ptr_factory_.GetWeakPtr(), callback,
                  BackgroundSavePageResult::REMOVED));
+
+  // Record the network quality when this request is made.
+  if (network_quality_estimator_) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "OfflinePages.Background.EffectiveConnectionType.RemoveRequests",
+        network_quality_estimator_->GetEffectiveConnectionType(),
+        net::EFFECTIVE_CONNECTION_TYPE_LAST);
+  }
+
   if (canceled)
     TryNextRequest();
 }
@@ -344,6 +379,14 @@ void RequestCoordinator::PauseRequests(
       base::Bind(&RequestCoordinator::UpdateMultipleRequestsCallback,
                  weak_ptr_factory_.GetWeakPtr()));
 
+  // Record the network quality when this request is made.
+  if (network_quality_estimator_) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "OfflinePages.Background.EffectiveConnectionType.PauseRequests",
+        network_quality_estimator_->GetEffectiveConnectionType(),
+        net::EFFECTIVE_CONNECTION_TYPE_LAST);
+  }
+
   if (canceled)
     TryNextRequest();
 }
@@ -354,6 +397,15 @@ void RequestCoordinator::ResumeRequests(
       request_ids, SavePageRequest::RequestState::AVAILABLE,
       base::Bind(&RequestCoordinator::UpdateMultipleRequestsCallback,
                  weak_ptr_factory_.GetWeakPtr()));
+
+  // Record the network quality when this request is made.
+  if (network_quality_estimator_) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "OfflinePages.Background.EffectiveConnectionType.ResumeRequests",
+        network_quality_estimator_->GetEffectiveConnectionType(),
+        net::EFFECTIVE_CONNECTION_TYPE_LAST);
+  }
+
   // Schedule a task, in case there is not one scheduled.
   ScheduleAsNeeded();
 }
@@ -474,7 +526,6 @@ bool RequestCoordinator::StartProcessingInternal(
   current_conditions_.reset(new DeviceConditions(device_conditions));
   if (is_starting_ || is_busy_)
     return false;
-  is_starting_ = true;
   processing_state_ = processing_state;
   scheduler_callback_ = callback;
 
@@ -501,19 +552,12 @@ RequestCoordinator::TryImmediateStart() {
     return OfflinerImmediateStartStatus::BUSY;
 
   // Make sure we are not on svelte device to start immediately.
-  if (is_low_end_device_) {
+  if (is_low_end_device_ &&
+      !offline_pages::IsOfflinePagesSvelteConcurrentLoadingEnabled()) {
     DVLOG(2) << "low end device, returning";
     // Let the scheduler know we are done processing and failed due to svelte.
     immediate_schedule_callback_.Run(false);
     return OfflinerImmediateStartStatus::NOT_STARTED_ON_SVELTE;
-  }
-
-  if (network_quality_estimator_) {
-    // TODO(dougarnett): Add UMA for quality type experienced.
-    net::EffectiveConnectionType quality =
-        network_quality_estimator_->GetEffectiveConnectionType();
-    VLOG(2) << "TryImmediateStart:  Quality estimate "
-        << static_cast<int>(quality);
   }
 
   if (GetConnectionType() ==
@@ -533,6 +577,7 @@ RequestCoordinator::TryImmediateStart() {
 }
 
 void RequestCoordinator::TryNextRequest() {
+  is_starting_ = true;
   base::TimeDelta processing_time_budget;
   if (processing_state_ == ProcessingWindowState::SCHEDULED_WINDOW) {
     processing_time_budget = base::TimeDelta::FromSeconds(
@@ -543,11 +588,13 @@ void RequestCoordinator::TryNextRequest() {
         policy_->GetProcessingTimeBudgetForImmediateLoadInSeconds());
   }
 
-  // If there is no time left in the budget, return to the scheduler.
-  // We do not remove the pending task that was set up earlier in case
-  // we run out of time, so the background scheduler will return to us
-  // at the next opportunity to run background tasks.
-  if ((base::Time::Now() - operation_start_time_) > processing_time_budget) {
+  // If there is no network or no time left in the budget, return to the
+  // scheduler. We do not remove the pending scheduler task that was set
+  // up earlier in case we run out of time, so the background scheduler
+  // will return to us at the next opportunity to run background tasks.
+  if (GetConnectionType() ==
+          net::NetworkChangeNotifier::ConnectionType::CONNECTION_NONE ||
+      (base::Time::Now() - operation_start_time_) > processing_time_budget) {
     is_starting_ = false;
 
     // Let the scheduler know we are done processing.
@@ -655,6 +702,9 @@ void RequestCoordinator::StartOffliner(
   active_request_.reset(
       new SavePageRequest(update_result->updated_items.at(0)));
 
+  // Inform observer of active request.
+  NotifyChanged(*active_request_.get());
+
   // Start the load and save process in the offliner (Async).
   if (offliner_->LoadAndSave(
           update_result->updated_items.at(0),
@@ -702,9 +752,7 @@ void RequestCoordinator::OfflinerDoneCallback(const SavePageRequest& request,
     // Update the request for the canceled attempt.
     // TODO(dougarnett): See if we can conclusively identify other attempt
     // aborted cases to treat this way (eg, for Render Process Killed).
-    SavePageRequest updated_request(request);
-    AbortRequestAttempt(&updated_request);
-    NotifyChanged(updated_request);
+    AbortRequestAttempt(request);
   } else if (status == Offliner::RequestStatus::SAVED) {
     // Remove the request from the queue if it succeeded.
     RemoveAttemptedRequest(request, BackgroundSavePageResult::SUCCESS);
@@ -776,13 +824,13 @@ void RequestCoordinator::MarkRequestCompleted(int64_t request_id) {
 
   // Remove the request, but send out SUCCEEDED instead of removed.
   std::vector<int64_t> request_ids { request_id };
-    queue_->RemoveRequests(
-      request_ids,
-      base::Bind(&RequestCoordinator::HandleRemovedRequestsAndCallback,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 base::Bind(&RequestCoordinator::CompletedRequestCallback,
-                            weak_ptr_factory_.GetWeakPtr()),
-                 BackgroundSavePageResult::SUCCESS));
+  queue_->RemoveRequests(
+    request_ids,
+    base::Bind(&RequestCoordinator::HandleRemovedRequestsAndCallback,
+               weak_ptr_factory_.GetWeakPtr(),
+               base::Bind(&RequestCoordinator::CompletedRequestCallback,
+                          weak_ptr_factory_.GetWeakPtr()),
+               BackgroundSavePageResult::SUCCESS));
 }
 
 const Scheduler::TriggerConditions RequestCoordinator::GetTriggerConditions(

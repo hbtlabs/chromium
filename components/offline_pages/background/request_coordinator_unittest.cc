@@ -14,6 +14,7 @@
 #include "base/logging.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/sys_info.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -25,6 +26,7 @@
 #include "components/offline_pages/background/request_queue_in_memory_store.h"
 #include "components/offline_pages/background/save_page_request.h"
 #include "components/offline_pages/background/scheduler.h"
+#include "components/offline_pages/offline_page_feature.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace offline_pages {
@@ -42,6 +44,7 @@ const int kRequestId1(1);
 const int kRequestId2(2);
 const long kTestTimeBudgetSeconds = 200;
 const int kBatteryPercentageHigh = 75;
+const int kMaxCompletedTries = 3;
 const bool kPowerRequired = true;
 const bool kUserRequested = true;
 const int kAttemptCount = 1;
@@ -183,13 +186,13 @@ class ObserverStub : public RequestCoordinator::Observer {
         completed_called_(false),
         changed_called_(false),
         last_status_(RequestCoordinator::BackgroundSavePageResult::SUCCESS),
-        state_(SavePageRequest::RequestState::PRERENDERING) {}
+        state_(SavePageRequest::RequestState::OFFLINING) {}
 
   void Clear() {
     added_called_ = false;
     completed_called_ = false;
     changed_called_ = false;
-    state_ = SavePageRequest::RequestState::PRERENDERING;
+    state_ = SavePageRequest::RequestState::OFFLINING;
     last_status_ = RequestCoordinator::BackgroundSavePageResult::SUCCESS;
   }
 
@@ -305,6 +308,24 @@ class RequestCoordinatorTest
     coordinator()->SetNetworkConditionsForTest(connection);
   }
 
+  void SetEffectiveConnectionTypeForTest(net::EffectiveConnectionType type) {
+    network_quality_estimator_->SetEffectiveConnectionTypeForTest(type);
+  }
+
+  void SetNetworkConnected(bool connected) {
+    if (connected) {
+      SetNetworkConditionsForTest(
+          net::NetworkChangeNotifier::ConnectionType::CONNECTION_3G);
+      SetEffectiveConnectionTypeForTest(
+          net::EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_3G);
+    } else {
+      SetNetworkConditionsForTest(
+          net::NetworkChangeNotifier::ConnectionType::CONNECTION_NONE);
+      SetEffectiveConnectionTypeForTest(
+          net::EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_OFFLINE);
+    }
+  }
+
   void SetIsLowEndDeviceForTest(bool is_low_end_device) {
     coordinator()->is_low_end_device_ = is_low_end_device;
   }
@@ -316,10 +337,6 @@ class RequestCoordinatorTest
 
   void SetOperationStartTimeForTest(base::Time start_time) {
     coordinator()->operation_start_time_ = start_time;
-  }
-
-  void SetEffectiveConnectionTypeForTest(net::EffectiveConnectionType type) {
-    network_quality_estimator_->SetEffectiveConnectionTypeForTest(type);
   }
 
   void ScheduleForTest() { coordinator_->ScheduleAsNeeded(); }
@@ -398,10 +415,7 @@ void RequestCoordinatorTest::SetUp() {
       std::move(policy), std::move(factory), std::move(queue),
       std::move(scheduler_stub), network_quality_estimator_.get()));
   coordinator_->AddObserver(&observer_);
-  SetEffectiveConnectionTypeForTest(
-      net::EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_OFFLINE);
-  SetNetworkConditionsForTest(
-      net::NetworkChangeNotifier::ConnectionType::CONNECTION_NONE);
+  SetNetworkConnected(true);
 }
 
 void RequestCoordinatorTest::PumpLoop() {
@@ -509,12 +523,6 @@ TEST_F(RequestCoordinatorTest, SavePageLater) {
   DeviceConditions device_conditions(false, 75,
                                      net::NetworkChangeNotifier::CONNECTION_3G);
   SetDeviceConditionsForTest(device_conditions);
-  // Set up the fake network conditions for the NetworkConnectionNotifier.
-  SetNetworkConditionsForTest(
-      net::NetworkChangeNotifier::ConnectionType::CONNECTION_3G);
-  // Set up the fake network conditions for the network quality estimator.
-  SetEffectiveConnectionTypeForTest(
-      net::EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_3G);
   EnableOfflinerCallback(true);
   base::Callback<void(bool)> callback =
       base::Bind(&RequestCoordinatorTest::ImmediateScheduleCallbackFunction,
@@ -641,6 +649,7 @@ TEST_F(RequestCoordinatorTest, OfflinerDoneRequestFailed) {
   // Add a request to the queue, wait for callbacks to finish.
   offline_pages::SavePageRequest request(
       kRequestId1, kUrl1, kClientId1, base::Time::Now(), kUserRequested);
+  request.set_completed_attempt_count(kMaxCompletedTries - 1);
   SetupForOfflinerDoneCallbackTest(&request);
 
   // Add second request to the queue to check handling when first fails.
@@ -672,7 +681,7 @@ TEST_F(RequestCoordinatorTest, OfflinerDoneRequestFailed) {
   PumpLoop();
 
   // Now just one request in the queue since failed request removed
-  // (for single attempt policy).
+  // (max number of attempts exceeded).
   EXPECT_EQ(1UL, last_requests().size());
   // Check that the observer got the notification that we failed (and the
   // subsequent notification that the request was removed).
@@ -955,6 +964,12 @@ TEST_F(RequestCoordinatorTest, StartProcessingThenStopProcessingLater) {
 
   // Let all the async parts of the start processing pipeline run to completion.
   PumpLoop();
+
+  // Observer called for starting processing.
+  EXPECT_TRUE(observer().changed_called());
+  EXPECT_EQ(SavePageRequest::RequestState::OFFLINING, observer().state());
+  observer().Clear();
+
   // Since the offliner is disabled, this callback should not be called.
   EXPECT_FALSE(immediate_schedule_callback_called());
 
@@ -967,6 +982,11 @@ TEST_F(RequestCoordinatorTest, StartProcessingThenStopProcessingLater) {
 
   // Let the async callbacks in the cancel run.
   PumpLoop();
+
+  // Observer called for stopped processing.
+  EXPECT_TRUE(observer().changed_called());
+  EXPECT_EQ(SavePageRequest::RequestState::AVAILABLE, observer().state());
+  observer().Clear();
 
   EXPECT_FALSE(is_busy());
 
@@ -1096,13 +1116,6 @@ TEST_F(RequestCoordinatorTest, WatchdogTimeoutForImmediateProcessing) {
   // If low end device, pretend it is not so that immediate start happens.
   SetIsLowEndDeviceForTest(false);
 
-  // Set up the fake network conditions for the NetworkConnectionNotifier.
-  SetNetworkConditionsForTest(
-      net::NetworkChangeNotifier::ConnectionType::CONNECTION_3G);
-  // Set up the fake network conditions for the network quality estimator.
-  SetEffectiveConnectionTypeForTest(
-      net::EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_3G);
-
   // Ensure that the new request does not finish - we simulate it being
   // in progress by asking it to skip making the completion callback.
   EnableOfflinerCallback(false);
@@ -1181,6 +1194,53 @@ TEST_F(RequestCoordinatorTest, TimeBudgetExceeded) {
   EXPECT_EQ(1UL, last_requests().size());
 }
 
+TEST_F(RequestCoordinatorTest, TryNextRequestWithNoNetwork) {
+  // Build two requests to use with the pre-renderer, and put it on the queue.
+  offline_pages::SavePageRequest request1(kRequestId1, kUrl1, kClientId1,
+                                          base::Time::Now(), kUserRequested);
+  offline_pages::SavePageRequest request2(kRequestId1 + 1, kUrl1, kClientId1,
+                                          base::Time::Now(), kUserRequested);
+  coordinator()->queue()->AddRequest(
+      request1, base::Bind(&RequestCoordinatorTest::AddRequestDone,
+                           base::Unretained(this)));
+  coordinator()->queue()->AddRequest(
+      request2, base::Bind(&RequestCoordinatorTest::AddRequestDone,
+                           base::Unretained(this)));
+  PumpLoop();
+
+  // Set up for the call to StartProcessing.
+  DeviceConditions device_conditions(!kPowerRequired, kBatteryPercentageHigh,
+                                     net::NetworkChangeNotifier::CONNECTION_3G);
+  base::Callback<void(bool)> callback = base::Bind(
+      &RequestCoordinatorTest::WaitingCallbackFunction, base::Unretained(this));
+  EnableOfflinerCallback(false);
+
+  // Sending the request to the offliner.
+  EXPECT_TRUE(coordinator()->StartProcessing(device_conditions, callback));
+  PumpLoop();
+  EXPECT_TRUE(coordinator()->is_busy());
+
+  // Now lose the network connection.
+  SetNetworkConnected(false);
+
+  // Complete first request and then TryNextRequest should decide not
+  // to pick another request (because of no network connection).
+  SendOfflinerDoneCallback(request1, Offliner::RequestStatus::SAVED);
+  PumpLoop();
+
+  // Not starting nor busy with next request.
+  EXPECT_FALSE(coordinator()->is_starting());
+  EXPECT_FALSE(coordinator()->is_busy());
+
+  // Get queued requests.
+  coordinator()->queue()->GetRequests(base::Bind(
+      &RequestCoordinatorTest::GetRequestsDone, base::Unretained(this)));
+  PumpLoop();
+
+  // We should find one request in the queue.
+  EXPECT_EQ(1UL, last_requests().size());
+}
+
 TEST_F(RequestCoordinatorTest, GetAllRequests) {
   // Add two requests to the queue.
   offline_pages::SavePageRequest request1(kRequestId1, kUrl1, kClientId1,
@@ -1210,7 +1270,13 @@ TEST_F(RequestCoordinatorTest, GetAllRequests) {
   EXPECT_EQ(kRequestId2, last_requests().at(1)->request_id());
 }
 
-TEST_F(RequestCoordinatorTest, PauseAndResumeObserver) {
+#if defined(OS_IOS)
+// Flaky on IOS. http://crbug/663311
+#define MAYBE_PauseAndResumeObserver DISABLED_PauseAndResumeObserver
+#else
+#define MAYBE_PauseAndResumeObserver PauseAndResumeObserver
+#endif
+TEST_F(RequestCoordinatorTest, MAYBE_PauseAndResumeObserver) {
   // Add a request to the queue.
   offline_pages::SavePageRequest request1(kRequestId1, kUrl1, kClientId1,
                                           base::Time::Now(), kUserRequested);
@@ -1236,7 +1302,7 @@ TEST_F(RequestCoordinatorTest, PauseAndResumeObserver) {
   PumpLoop();
 
   EXPECT_TRUE(observer().changed_called());
-  EXPECT_EQ(SavePageRequest::RequestState::AVAILABLE, observer().state());
+  EXPECT_EQ(SavePageRequest::RequestState::OFFLINING, observer().state());
 }
 
 TEST_F(RequestCoordinatorTest, RemoveRequest) {
@@ -1268,12 +1334,6 @@ TEST_F(RequestCoordinatorTest, RemoveRequest) {
 
 TEST_F(RequestCoordinatorTest,
        SavePageStartsProcessingWhenConnectedAndNotLowEndDevice) {
-  // Set up the fake network conditions for the NetworkConnectionNotifier.
-  SetNetworkConditionsForTest(
-      net::NetworkChangeNotifier::ConnectionType::CONNECTION_3G);
-  // Set up the fake network conditions for the network quality estimator.
-  SetEffectiveConnectionTypeForTest(
-      net::EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_3G);
   EXPECT_NE(
       coordinator()->SavePageLater(
           kUrl1, kClientId1, kUserRequested,
@@ -1289,7 +1349,47 @@ TEST_F(RequestCoordinatorTest,
   }
 }
 
+TEST_F(RequestCoordinatorTest,
+       SavePageStartsProcessingWhenConnectedOnLowEndDeviceIfFlagEnabled) {
+  // Set up the fake network conditions for the NetworkConnectionNotifier.
+  SetNetworkConditionsForTest(
+      net::NetworkChangeNotifier::ConnectionType::CONNECTION_3G);
+  // Set up the fake network conditions for the network quality estimator.
+  SetEffectiveConnectionTypeForTest(
+      net::EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_3G);
+  // Mark device as low-end device.
+  SetIsLowEndDeviceForTest(true);
+  EXPECT_FALSE(offline_pages::IsOfflinePagesSvelteConcurrentLoadingEnabled());
+
+  // Make a request.
+  EXPECT_NE(coordinator()->SavePageLater(
+                kUrl1, kClientId1, kUserRequested,
+                RequestCoordinator::RequestAvailability::ENABLED_FOR_OFFLINER),
+            0);
+  PumpLoop();
+
+  // Verify not immediately busy (since low-end device).
+  EXPECT_FALSE(is_busy());
+
+  // Set feature flag to allow concurrent loads.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      kOfflinePagesSvelteConcurrentLoadingFeature);
+  EXPECT_TRUE(offline_pages::IsOfflinePagesSvelteConcurrentLoadingEnabled());
+
+  // Make another request.
+  EXPECT_NE(coordinator()->SavePageLater(
+                kUrl2, kClientId2, kUserRequested,
+                RequestCoordinator::RequestAvailability::ENABLED_FOR_OFFLINER),
+            0);
+  PumpLoop();
+
+  // Verify immediate processing did start this time.
+  EXPECT_TRUE(is_busy());
+}
+
 TEST_F(RequestCoordinatorTest, SavePageDoesntStartProcessingWhenDisconnected) {
+  SetNetworkConnected(false);
   EXPECT_NE(
       coordinator()->SavePageLater(
           kUrl1, kClientId1, kUserRequested,
@@ -1299,7 +1399,10 @@ TEST_F(RequestCoordinatorTest, SavePageDoesntStartProcessingWhenDisconnected) {
 }
 
 TEST_F(RequestCoordinatorTest,
-       SavePageDoesntStartProcessingWhenPoorlyConnected) {
+       SavePageDoesStartProcessingWhenPoorlyConnected) {
+  // Set specific network type for 2G with poor effective connection.
+  SetNetworkConditionsForTest(
+      net::NetworkChangeNotifier::ConnectionType::CONNECTION_2G);
   SetEffectiveConnectionTypeForTest(
       net::EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_SLOW_2G);
   EXPECT_NE(
@@ -1307,11 +1410,14 @@ TEST_F(RequestCoordinatorTest,
           kUrl1, kClientId1, kUserRequested,
           RequestCoordinator::RequestAvailability::ENABLED_FOR_OFFLINER), 0);
   PumpLoop();
-  EXPECT_FALSE(is_busy());
+  EXPECT_TRUE(is_busy());
 }
 
 TEST_F(RequestCoordinatorTest,
        ResumeStartsProcessingWhenConnectedAndNotLowEndDevice) {
+  // Start unconnected.
+  SetNetworkConnected(false);
+
   // Add a request to the queue.
   offline_pages::SavePageRequest request1(kRequestId1, kUrl1, kClientId1,
                                           base::Time::Now(), kUserRequested);
@@ -1337,10 +1443,7 @@ TEST_F(RequestCoordinatorTest,
   PumpLoop();
 
   // Now simulate reasonable connection.
-  SetNetworkConditionsForTest(
-      net::NetworkChangeNotifier::ConnectionType::CONNECTION_3G);
-  SetEffectiveConnectionTypeForTest(
-      net::EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_3G);
+  SetNetworkConnected(true);
 
   // Resume the request while connected.
   coordinator()->ResumeRequests(request_ids);

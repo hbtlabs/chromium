@@ -511,7 +511,8 @@ WebInspector.ConsoleView = class extends WebInspector.VBox {
    */
   _appendMessageToEnd(viewMessage) {
     if (!this._filter.shouldBeVisible(viewMessage)) {
-      this._hiddenByFilterCount++;
+      if (this._filter.shouldBeVisibleByDefault(viewMessage))
+        this._hiddenByFilterCount++;
       return;
     }
 
@@ -754,8 +755,11 @@ WebInspector.ConsoleView = class extends WebInspector.VBox {
     }
     section.addAlternateKeys(keys, WebInspector.UIString('Clear console'));
 
-    section.addKey(shortcut.makeDescriptor(shortcut.Keys.Tab), WebInspector.UIString('Autocomplete common prefix'));
-    section.addKey(shortcut.makeDescriptor(shortcut.Keys.Right), WebInspector.UIString('Accept suggestion'));
+    keys = [
+      shortcut.makeDescriptor(shortcut.Keys.Tab),
+      shortcut.makeDescriptor(shortcut.Keys.Right)
+    ];
+    section.addRelatedKeys(keys, WebInspector.UIString('Accept suggestion'));
 
     var shortcutU = shortcut.makeDescriptor('u', WebInspector.KeyboardShortcut.Modifiers.Ctrl);
     this._shortcuts[shortcutU.key] = this._clearPromptBackwards.bind(this);
@@ -798,7 +802,7 @@ WebInspector.ConsoleView = class extends WebInspector.VBox {
   /**
    * @param {?WebInspector.RemoteObject} result
    * @param {!WebInspector.ConsoleMessage} originatingConsoleMessage
-   * @param {!RuntimeAgent.ExceptionDetails=} exceptionDetails
+   * @param {!Protocol.Runtime.ExceptionDetails=} exceptionDetails
    */
   _printResult(result, originatingConsoleMessage, exceptionDetails) {
     if (!result)
@@ -823,7 +827,7 @@ WebInspector.ConsoleView = class extends WebInspector.VBox {
    */
   _commandEvaluated(event) {
     var data =
-        /** @type {{result: ?WebInspector.RemoteObject, text: string, commandMessage: !WebInspector.ConsoleMessage, exceptionDetails: (!RuntimeAgent.ExceptionDetails|undefined)}} */
+        /** @type {{result: ?WebInspector.RemoteObject, text: string, commandMessage: !WebInspector.ConsoleMessage, exceptionDetails: (!Protocol.Runtime.ExceptionDetails|undefined)}} */
         (event.data);
     this._prompt.history().pushHistoryItem(data.text);
     this._consoleHistorySetting.set(
@@ -1067,11 +1071,15 @@ WebInspector.ConsoleViewFilter = class extends WebInspector.Object {
     filterBar.addFilter(this._textFilterUI);
 
     this._hideNetworkMessagesCheckbox = new WebInspector.CheckboxFilterUI(
-        'hide-network-messages', WebInspector.UIString('Hide network messages'), true,
+        '', WebInspector.UIString('Hide network'), true,
         WebInspector.moduleSetting('hideNetworkMessages'));
-    this._hideNetworkMessagesCheckbox.addEventListener(
-        WebInspector.FilterUI.Events.FilterChanged, this._filterChanged.bind(this), this);
+    this._hideViolationMessagesCheckbox = new WebInspector.CheckboxFilterUI(
+        '', WebInspector.UIString('Hide violations'), false,
+        WebInspector.moduleSetting('hideViolationMessages'));
+    WebInspector.moduleSetting('hideNetworkMessages').addChangeListener(this._filterChanged, this);
+    WebInspector.moduleSetting('hideViolationMessages').addChangeListener(this._filterChanged, this);
     filterBar.addFilter(this._hideNetworkMessagesCheckbox);
+    filterBar.addFilter(this._hideViolationMessagesCheckbox);
 
     var levels = [
       {name: WebInspector.ConsoleMessage.MessageLevel.Error, label: WebInspector.UIString('Errors')},
@@ -1143,6 +1151,10 @@ WebInspector.ConsoleViewFilter = class extends WebInspector.Object {
         viewMessage.consoleMessage().source === WebInspector.ConsoleMessage.MessageSource.Network)
       return false;
 
+    if (WebInspector.moduleSetting('hideViolationMessages').get() &&
+        viewMessage.consoleMessage().source === WebInspector.ConsoleMessage.MessageSource.Violation)
+      return false;
+
     if (viewMessage.consoleMessage().isGroupMessage())
       return true;
 
@@ -1165,12 +1177,21 @@ WebInspector.ConsoleViewFilter = class extends WebInspector.Object {
     return true;
   }
 
+  /**
+   * @return {boolean}
+   */
+  shouldBeVisibleByDefault(viewMessage) {
+    return viewMessage.consoleMessage().source !==
+        WebInspector.ConsoleMessage.MessageSource.Violation;
+  }
+
   reset() {
     this._messageURLFilters = {};
     this._messageURLFiltersSetting.set(this._messageURLFilters);
     this._messageLevelFiltersSetting.set({});
     this._view._showAllMessagesCheckbox.inputElement.checked = true;
     WebInspector.moduleSetting('hideNetworkMessages').set(false);
+    WebInspector.moduleSetting('hideViolationMessages').set(true);
     this._textFilterUI.setValue('');
     this._filterChanged();
   }
@@ -1203,7 +1224,7 @@ WebInspector.ConsoleCommand = class extends WebInspector.ConsoleViewMessage {
       this._contentElement = createElementWithClass('div', 'console-user-command');
       this._contentElement.message = this;
 
-      this._formattedCommand = createElementWithClass('span', 'console-message-text source-code');
+      this._formattedCommand = createElementWithClass('span', 'source-code');
       this._formattedCommand.textContent = this.text.replaceControlCharacters();
       this._contentElement.appendChild(this._formattedCommand);
 

@@ -106,7 +106,7 @@ std::unique_ptr<{{type.id}}> {{type.id}}::clone() const
 std::unique_ptr<API::{{type.id}}> API::{{type.id}}::fromJSONString(const {{config.exported.string_in}}& json)
 {
     ErrorSupport errors;
-    std::unique_ptr<Value> value = parseJSON(json);
+    std::unique_ptr<Value> value = StringUtil::parseJSON(json);
     if (!value)
         return nullptr;
     return protocol::{{domain.domain}}::{{type.id}}::parse(value.get(), &errors);
@@ -145,16 +145,12 @@ const char* {{ literal | to_title_case}} = "{{literal}}";
 
 // ------------- Frontend notifications.
   {% for event in domain.events %}
-    {% if "handlers" in event and not ("renderer" in event["handlers"]) %}{% continue %}{% endif %}
+    {% if not generate_event(domain.domain, event.name) %}{% continue %}{% endif %}
 
 void Frontend::{{event.name}}(
     {%- for parameter in event.parameters %}
       {% if "optional" in parameter -%}
-        {%- if new_style(domain) -%}
         Maybe<{{resolve_type(parameter).raw_type}}>
-        {%- else -%}
-        const Maybe<{{resolve_type(parameter).raw_type}}>&
-        {%- endif -%}
       {%- else -%}
         {{resolve_type(parameter).pass_type}}
       {%- endif %} {{parameter.name}}{%- if not loop.last -%}, {% endif -%}
@@ -191,7 +187,7 @@ public:
         , m_backend(backend) {
   {% for command in domain.commands %}
     {% if "redirect" in command %}{% continue %}{% endif %}
-    {% if "handlers" in command and not ("renderer" in command["handlers"]) %}{% continue %}{% endif %}
+    {% if not generate_command(domain.domain, command.name) %}{% continue %}{% endif %}
         m_dispatchMap["{{domain.domain}}.{{command.name}}"] = &DispatcherImpl::{{command.name}};
   {% endfor %}
     }
@@ -205,7 +201,7 @@ protected:
 
   {% for command in domain.commands %}
     {% if "redirect" in command %}{% continue %}{% endif %}
-    {% if "handlers" in command and not ("renderer" in command["handlers"]) %}{% continue %}{% endif %}
+    {% if not generate_command(domain.domain, command.name) %}{% continue %}{% endif %}
     DispatchResponse::Status {{command.name}}(int callId, std::unique_ptr<DictionaryValue> requestMessageObject, ErrorSupport*);
   {% endfor %}
 
@@ -226,8 +222,8 @@ DispatchResponse::Status DispatcherImpl::dispatch(int callId, const String& meth
 
   {% for command in domain.commands %}
     {% if "redirect" in command %}{% continue %}{% endif %}
-    {% if "handlers" in command and not ("renderer" in command["handlers"]) %}{% continue %}{% endif %}
-    {% if "async" in command %}
+    {% if not generate_command(domain.domain, command.name) %}{% continue %}{% endif %}
+    {% if is_async_command(domain.domain, command.name) %}
 
 class {{command.name | to_title_case}}CallbackImpl : public Backend::{{command.name | to_title_case}}Callback, public DispatcherBase::Callback {
 public:
@@ -237,11 +233,7 @@ public:
     void sendSuccess(
       {%- for parameter in command.returns -%}
         {%- if "optional" in parameter -%}
-          {%- if new_style(domain) -%}
         Maybe<{{resolve_type(parameter).raw_type}}> {{parameter.name}}
-          {%- else -%}
-        const Maybe<{{resolve_type(parameter).raw_type}}>& {{parameter.name}}
-          {%- endif -%}
         {%- else -%}
         {{resolve_type(parameter).pass_type}} {{parameter.name}}
         {%- endif -%}
@@ -260,19 +252,11 @@ public:
         sendIfActive(std::move(resultObject), DispatchResponse::OK());
     }
 
-      {% if new_style(domain) %}
     void sendFailure(const DispatchResponse& response) override
     {
         DCHECK(response.status() == DispatchResponse::kError);
         sendIfActive(nullptr, response);
     }
-      {% else %}
-    void sendFailure(const ErrorString& error) override
-    {
-        DCHECK(error.length());
-        sendIfActive(nullptr, DispatchResponse::Error(error));
-    }
-      {% endif %}
 };
     {% endif %}
 
@@ -301,7 +285,7 @@ DispatchResponse::Status DispatcherImpl::{{command.name}}(int callId, std::uniqu
         return DispatchResponse::kError;
     }
     {% endif %}
-    {% if "returns" in command and not ("async" in command) %}
+    {% if "returns" in command and not is_async_command(domain.domain, command.name) %}
     // Declare output parameters.
       {% for property in command.returns %}
         {% if "optional" in property %}
@@ -312,35 +296,23 @@ DispatchResponse::Status DispatcherImpl::{{command.name}}(int callId, std::uniqu
       {% endfor %}
     {% endif %}
 
-    {% if not("async" in command) %}
+    {% if not is_async_command(domain.domain, command.name) %}
     std::unique_ptr<DispatcherBase::WeakPtr> weak = weakPtr();
-      {% if not new_style(domain) %}
-    ErrorString error;
-    m_backend->{{command.name}}(&error
-      {%- else %}
     DispatchResponse response = m_backend->{{command.name}}(
-      {%- endif -%}
       {%- for property in command.parameters -%}
-        {%- if not loop.first or not new_style(domain) -%}, {% endif -%}
+        {%- if not loop.first -%}, {% endif -%}
         {%- if "optional" in property -%}
-          {%- if new_style(domain) -%}
         std::move(in_{{property.name}})
-          {%- else -%}
-        in_{{property.name}}
-          {%- endif -%}
         {%- else -%}
         {{resolve_type(property).to_pass_type % ("in_" + property.name)}}
         {%- endif -%}
       {%- endfor %}
       {%- if "returns" in command %}
         {%- for property in command.returns -%}
-          {%- if not loop.first or command.parameters or not new_style(domain) -%}, {% endif -%}
+          {%- if not loop.first or command.parameters -%}, {% endif -%}
           &out_{{property.name}}
         {%- endfor %}
       {% endif %});
-      {% if not new_style(domain) %}
-    DispatchResponse response = error.length() ? DispatchResponse::Error(error) : DispatchResponse::OK();
-      {% endif %}
       {% if "returns" in command %}
     if (response.status() == DispatchResponse::kFallThrough)
         return response.status();
@@ -368,11 +340,7 @@ DispatchResponse::Status DispatcherImpl::{{command.name}}(int callId, std::uniqu
       {%- for property in command.parameters -%}
         {%- if not loop.first -%}, {% endif -%}
         {%- if "optional" in property -%}
-          {%- if new_style(domain) -%}
         std::move(in_{{property.name}})
-          {%- else -%}
-        in_{{property.name}}
-          {%- endif -%}
         {%- else -%}
         {{resolve_type(property).to_pass_type % ("in_" + property.name)}}
         {%- endif -%}
@@ -387,7 +355,7 @@ DispatchResponse::Status DispatcherImpl::{{command.name}}(int callId, std::uniqu
 // static
 void Dispatcher::wire(UberDispatcher* dispatcher, Backend* backend)
 {
-    dispatcher->registerBackend("{{domain.domain}}", wrapUnique(new DispatcherImpl(dispatcher->channel(), backend)));
+    dispatcher->registerBackend("{{domain.domain}}", std::unique_ptr<protocol::DispatcherBase>(new DispatcherImpl(dispatcher->channel(), backend)));
 }
 
 } // {{domain.domain}}

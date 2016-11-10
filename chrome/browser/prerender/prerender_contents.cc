@@ -46,11 +46,9 @@
 #include "ui/gfx/geometry/size.h"
 
 using content::BrowserThread;
-using content::DownloadItem;
 using content::OpenURLParams;
 using content::RenderViewHost;
 using content::ResourceRedirectDetails;
-using content::ResourceType;
 using content::SessionStorageNamespace;
 using content::WebContents;
 

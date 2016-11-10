@@ -14,8 +14,6 @@
 #include "base/logging.h"
 #import "base/mac/foundation_util.h"
 #import "base/mac/scoped_nsobject.h"
-#include "base/metrics/user_metrics.h"
-#include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
 #import "ios/web/history_state_util.h"
 #import "ios/web/navigation/crw_session_certificate_policy_manager.h"
@@ -34,8 +32,6 @@
 #error "This file requires ARC support."
 #endif
 
-using base::UserMetricsAction;
-
 namespace {
 NSString* const kCertificatePolicyManagerKey = @"certificatePolicyManager";
 NSString* const kCurrentNavigationIndexKey = @"currentNavigationIndex";
@@ -47,8 +43,7 @@ NSString* const kOpenerNavigationIndexKey = @"openerNavigationIndex";
 NSString* const kPreviousNavigationIndexKey = @"previousNavigationIndex";
 NSString* const kTabIdKey = @"tabId";
 NSString* const kWindowNameKey = @"windowName";
-NSString* const kXCallbackParametersKey = @"xCallbackParameters";
-}  // anonymous namespace
+}  // namespace
 
 @interface CRWSessionController () {
   // Weak pointer back to the owning NavigationManager. This is to facilitate
@@ -103,9 +98,6 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
   // Time smoother for navigation entry timestamps; see comment in
   // navigation_controller_impl.h
   web::TimeSmoother _timeSmoother;
-
-  // XCallback parameters used to create (or clobber) the tab. Can be nil.
-  XCallbackParameters* _xCallbackParameters;
 }
 
 // Redefine as readwrite.
@@ -129,9 +121,9 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
                              transition:(ui::PageTransition)transition
                     useDesktopUserAgent:(BOOL)useDesktopUserAgent
                       rendererInitiated:(BOOL)rendererInitiated;
-// Return the PageTransition for the underlying navigationItem at |index| in
-// |entries_|
-- (ui::PageTransition)transitionForIndex:(NSUInteger)index;
+// Returns YES if the PageTransition for the underlying navigationItem at
+// |index| in |entries_| has ui::PAGE_TRANSITION_IS_REDIRECT_MASK.
+- (BOOL)isRedirectTransitionForEntryAtIndex:(NSInteger)index;
 @end
 
 @implementation CRWSessionController
@@ -146,7 +138,6 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
 @synthesize openedByDOM = _openedByDOM;
 @synthesize openerNavigationIndex = _openerNavigationIndex;
 @synthesize sessionCertificatePolicyManager = _sessionCertificatePolicyManager;
-@synthesize xCallbackParameters = _xCallbackParameters;
 
 - (id)initWithWindowName:(NSString*)windowName
                 openerId:(NSString*)openerId
@@ -238,9 +229,6 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
       _sessionCertificatePolicyManager =
           [[CRWSessionCertificatePolicyManager alloc] init];
     }
-
-    _xCallbackParameters =
-        [aDecoder decodeObjectForKey:kXCallbackParametersKey];
   }
   return self;
 }
@@ -258,7 +246,6 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
   [aCoder encodeObject:_entries forKey:kEntriesKey];
   [aCoder encodeObject:_sessionCertificatePolicyManager
                 forKey:kCertificatePolicyManagerKey];
-  [aCoder encodeObject:_xCallbackParameters forKey:kXCallbackParametersKey];
   // rendererInitiated is deliberately not preserved, as upstream.
 }
 
@@ -276,8 +263,6 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
       [[NSMutableArray alloc] initWithArray:_entries copyItems:YES];
   copy->_sessionCertificatePolicyManager =
       [_sessionCertificatePolicyManager copy];
-  copy->_xCallbackParameters = [base::mac::ObjCCastStrict<NSObject<NSCopying>>(
-      _xCallbackParameters) copy];
   return copy;
 }
 
@@ -306,11 +291,10 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
   return [NSString
       stringWithFormat:
           @"id: %@\nname: %@\nlast visit: %f\ncurrent index: %" PRIdNS
-          @"\nprevious index: %" PRIdNS "\n%@\npending: %@\ntransient: %@\n"
-          @"xCallback:\n%@\n",
+          @"\nprevious index: %" PRIdNS "\n%@\npending: %@\ntransient: %@\n",
           _tabId, self.windowName, _lastVisitedTimestamp,
           _currentNavigationIndex, _previousNavigationIndex, _entries,
-          _pendingEntry.get(), _transientEntry.get(), _xCallbackParameters];
+          _pendingEntry.get(), _transientEntry.get()];
 }
 
 // Returns the current entry in the session list, or the pending entry if there
@@ -567,8 +551,6 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
     self.currentNavigationIndex = -1;
     _previousNavigationIndex = -1;
   }
-  self.xCallbackParameters = [base::mac::ObjCCastStrict<NSObject<NSCopying>>(
-      otherSession.xCallbackParameters) copy];
   self.windowName = otherSession.windowName;
   NSInteger numInitialEntries = [_entries count];
 
@@ -607,119 +589,53 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
   DCHECK_LT((NSUInteger)_currentNavigationIndex, [_entries count]);
 }
 
-- (ui::PageTransition)transitionForIndex:(NSUInteger)index {
-  return [[_entries objectAtIndex:index] navigationItem]->GetTransitionType();
-}
-
 - (BOOL)canGoBack {
-  if ([_entries count] == 0)
-    return NO;
-
-  // A transient entry behaves from a user perspective in most ways like a
-  // committed entry, so allow going back from a transient entry as long as
-  // there is something to go back to.
-  if (_transientEntry && [_entries count] > 0)
-    return YES;
-
-  NSInteger lastNonRedirectedIndex = _currentNavigationIndex;
-  while (lastNonRedirectedIndex >= 0 &&
-         ui::PageTransitionIsRedirect(
-            [self transitionForIndex:lastNonRedirectedIndex])) {
-    --lastNonRedirectedIndex;
-  }
-
-  return lastNonRedirectedIndex > 0;
+  return [self canGoDelta:-1];
 }
 
 - (BOOL)canGoForward {
-  // In case there are pending entries return no since when the entry will be
-  // committed the history will be cleared from that point forward.
-  if (_pendingEntry)
-    return NO;
-  // If the current index is less than the last element, there are entries to
-  // go forward to.
-  const NSInteger count = [_entries count];
-  return count && _currentNavigationIndex < (count - 1);
+  return [self canGoDelta:1];
+}
+
+- (BOOL)canGoDelta:(int)delta {
+  NSInteger index = [self indexOfEntryForDelta:delta];
+  return 0 <= index && static_cast<NSUInteger>(index) < _entries.count;
 }
 
 - (void)goBack {
-  if (![self canGoBack])
-    return;
-
-  BOOL hadTransientEntry = _transientEntry != nil;
-
-  [self discardNonCommittedEntries];
-
-  // Going back from a transient entry doesn't require anything beyond
-  // discarding the pending entry.
-  if (hadTransientEntry)
-    return;
-
-  base::RecordAction(UserMetricsAction("Back"));
-  _previousNavigationIndex = _currentNavigationIndex;
-  // To stop the user getting 'stuck' on redirecting pages they weren't even
-  // aware existed, it is necessary to pass over pages that would immediately
-  // result in a redirect (the entry *before* the redirected page).
-  while (_currentNavigationIndex &&
-         [self transitionForIndex:_currentNavigationIndex] &
-             ui::PAGE_TRANSITION_IS_REDIRECT_MASK) {
-    --_currentNavigationIndex;
-  }
-
-  if (_currentNavigationIndex)
-    --_currentNavigationIndex;
+  [self goDelta:-1];
 }
 
 - (void)goForward {
-  [self discardTransientEntry];
-
-  base::RecordAction(UserMetricsAction("Forward"));
-  if (_currentNavigationIndex + 1 < static_cast<NSInteger>([_entries count])) {
-    _previousNavigationIndex = _currentNavigationIndex;
-    ++_currentNavigationIndex;
-  }
-  // To reduce the chance of a redirect kicking in (truncating the history
-  // stack) we skip over any pages that might do this; we detect this by
-  // looking for when the *next* page had rediection transition type (was
-  // auto redirected to).
-  while (_currentNavigationIndex + 1 <
-         (static_cast<NSInteger>([_entries count])) &&
-         ([self transitionForIndex:_currentNavigationIndex + 1] &
-          ui::PAGE_TRANSITION_IS_REDIRECT_MASK)) {
-    ++_currentNavigationIndex;
-  }
+  [self goDelta:1];
 }
 
 - (void)goDelta:(int)delta {
-  // Store the navigation index at the start of this function, as |-goForward|
-  // and |-goBack| will incrementally reset |_previousNavigationIndex| each time
-  // they are called.
-  NSInteger previousNavigationIndex = self.currentNavigationIndex;
-  if (delta < 0) {
-    while ([self canGoBack] && delta < 0) {
-      [self goBack];
-      ++delta;
-    }
-  } else {
-    while ([self canGoForward] && delta > 0) {
-      [self goForward];
-      --delta;
-    }
+  if (delta != 0 && [self canGoDelta:delta]) {
+    NSInteger newNavigationIndex = [self indexOfEntryForDelta:delta];
+    [self goToEntry:_entries[newNavigationIndex]];
   }
-  _previousNavigationIndex = previousNavigationIndex;
 }
 
 - (void)goToEntry:(CRWSessionEntry*)entry {
   DCHECK(entry);
+  if (![_entries containsObject:entry])
+    return;
 
-  [self discardTransientEntry];
-
-  // Check that |entries_| still contains |entry|. |entry| could have been
-  // removed by -clearForwardEntries.
-  if ([_entries containsObject:entry]) {
-    _previousNavigationIndex = self.currentNavigationIndex;
-    self.currentNavigationIndex = [_entries indexOfObject:entry];
+  NSInteger newNavigationIndex = [_entries indexOfObject:entry];
+  if (newNavigationIndex < _currentNavigationIndex) {
+    // Going back.
+    [self discardNonCommittedEntries];
+  } else if (_currentNavigationIndex < newNavigationIndex) {
+    // Going forward.
+    [self discardTransientEntry];
+  } else {
+    // |delta| is 0, no need to change current navigation index.
+    return;
   }
+
+  _previousNavigationIndex = _currentNavigationIndex;
+  _currentNavigationIndex = newNavigationIndex;
 }
 
 - (void)removeEntryAtIndex:(NSInteger)index {
@@ -829,9 +745,7 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
   NSInteger index = _currentNavigationIndex;
   // This will return the first session entry if all other entries are
   // redirects, regardless of the transition state of the first entry.
-  while (index > 0 &&
-         [self transitionForIndex:index] &
-         ui::PAGE_TRANSITION_IS_REDIRECT_MASK) {
+  while (index > 0 && [self isRedirectTransitionForEntryAtIndex:index]) {
     --index;
   }
   return [_entries objectAtIndex:index];
@@ -842,6 +756,53 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
     [_pendingEntry navigationItem]->SetIsOverridingUserAgent(true);
   else
     _useDesktopUserAgentForNextPendingEntry = YES;
+}
+
+- (NSInteger)indexOfEntryForDelta:(int)delta {
+  NSInteger result = _currentNavigationIndex;
+  if (delta < 0) {
+    if (_transientEntry) {
+      // Going back from transient entry is a matter of discarding it and there
+      // is no need to move navigation index back.
+      delta++;
+    }
+
+    while (delta < 0) {
+      // To stop the user getting 'stuck' on redirecting pages they weren't
+      // even aware existed, it is necessary to pass over pages that would
+      // immediately result in a redirect (the entry *before* the redirected
+      // page).
+      while (result > 0 && [self isRedirectTransitionForEntryAtIndex:result]) {
+        --result;
+      }
+      --result;
+      ++delta;
+    }
+  } else if (delta > 0) {
+    NSInteger count = static_cast<NSInteger>([_entries count]);
+    if (_pendingEntry) {
+      // Chrome for iOS does not allow forward navigation if there is another
+      // pending navigation in progress. Returning invalid index indicates that
+      // forward navigation will not be allowed (and |NSNotFound| works for
+      // that). This is different from other platforms which allow forward
+      // navigation if pending entry exist.
+      // TODO(crbug.com/661858): Remove this once back-forward navigation uses
+      // pending index.
+      return NSNotFound;
+    }
+
+    while (delta > 0) {
+      ++result;
+      --delta;
+      // As with going back, skip over redirects.
+      while (result + 1 < count &&
+             [self isRedirectTransitionForEntryAtIndex:result + 1]) {
+        ++result;
+      }
+    }
+  }
+
+  return result;
 }
 
 #pragma mark -
@@ -884,6 +845,12 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
   item->SetIsOverridingUserAgent(useDesktopUserAgent);
   item->set_is_renderer_initiated(rendererInitiated);
   return [[CRWSessionEntry alloc] initWithNavigationItem:std::move(item)];
+}
+
+- (BOOL)isRedirectTransitionForEntryAtIndex:(NSInteger)index {
+  ui::PageTransition transition =
+      [_entries[index] navigationItem]->GetTransitionType();
+  return (transition & ui::PAGE_TRANSITION_IS_REDIRECT_MASK) ? YES : NO;
 }
 
 @end

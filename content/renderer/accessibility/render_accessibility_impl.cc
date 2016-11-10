@@ -450,11 +450,17 @@ void RenderAccessibilityImpl::OnPerformAction(
   WebAXObject focus = document.accessibilityObjectFromID(data.focus_node_id);
 
   switch (data.action) {
+    case ui::AX_ACTION_DECREMENT:
+      target.decrement();
+      break;
     case ui::AX_ACTION_DO_DEFAULT:
       target.performDefaultAction();
       break;
     case ui::AX_ACTION_HIT_TEST:
       OnHitTest(data.target_point);
+      break;
+    case ui::AX_ACTION_INCREMENT:
+      target.increment();
       break;
     case ui::AX_ACTION_SCROLL_TO_MAKE_VISIBLE:
       target.scrollToMakeVisibleWithSubFocus(
@@ -494,6 +500,7 @@ void RenderAccessibilityImpl::OnPerformAction(
     case ui::AX_ACTION_SHOW_CONTEXT_MENU:
       target.showContextMenu();
       break;
+    case ui::AX_ACTION_REPLACE_SELECTED_TEXT:
     case ui::AX_ACTION_NONE:
       NOTREACHED();
       break;

@@ -662,6 +662,10 @@ NSError* WKWebViewErrorWithSource(NSError* error, WKWebViewErrorSource source) {
 - (void)loadCompleteWithSuccess:(BOOL)loadSuccess;
 // Called after URL is finished loading and _loadPhase is set to PAGE_LOADED.
 - (void)didFinishWithURL:(const GURL&)currentURL loadSuccess:(BOOL)loadSuccess;
+// Loads a new URL if the current entry is not from a pushState() navigation.
+// |fromEntry| is the CRWSessionEntry that was the current entry prior to the
+// navigation.
+- (void)finishHistoryNavigationFromEntry:(CRWSessionEntry*)fromEntry;
 // Informs the native controller if web usage is allowed or not.
 - (void)setNativeControllerWebUsageEnabled:(BOOL)webUsageEnabled;
 // Called when web controller receives a new message from the web page.
@@ -1135,6 +1139,8 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   DCHECK([NSThread isMainThread]);
   DCHECK(_isBeingDestroyed);  // 'close' must have been called already.
   DCHECK(!_webView);
+  // TODO(crbug.com/662860): Don't set the delegate to nil.
+  [_containerView setDelegate:nil];
   _touchTrackingRecognizer.get().touchTrackingDelegate = nil;
   [[_webViewProxy scrollViewProxy] removeObserver:self];
   [[NSNotificationCenter defaultCenter] removeObserver:self];
@@ -2286,29 +2292,22 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 - (void)goDelta:(int)delta {
   if (delta == 0) {
     [self reload];
-    return;
+  } else if ([self.sessionController canGoDelta:delta]) {
+    [self goToItemAtIndex:[self.sessionController indexOfEntryForDelta:delta]];
   }
+}
 
-  // Abort if there is nothing next in the history.
-  // Note that it is NOT checked that the history depth is at least |delta|.
-  if ((delta < 0 && ![self canGoBack]) || (delta > 0 && ![self canGoForward])) {
-    return;
-  }
+- (void)goToItemAtIndex:(int)index {
+  NSArray* entries = self.sessionController.entries;
+  DCHECK_LT(static_cast<NSUInteger>(index), entries.count);
+  DCHECK_GE(index, 0);
 
-  if (delta >= 0 || !_webStateImpl->IsShowingWebInterstitial()) {
+  if (!_webStateImpl->IsShowingWebInterstitial())
     [self recordStateInHistory];
-  }
-
-  CRWSessionController* sessionController =
-      _webStateImpl->GetNavigationManagerImpl().GetSessionController();
-  // fromEntry is retained because it has the potential to be released
-  // by goDelta: if it has not been committed.
-  base::scoped_nsobject<CRWSessionEntry> fromEntry(
-      [[sessionController currentEntry] retain]);
-  [sessionController goDelta:delta];
-  if (fromEntry) {
+  CRWSessionEntry* fromEntry = self.sessionController.currentEntry;
+  [self.sessionController goToEntry:entries[index]];
+  if (fromEntry)
     [self finishHistoryNavigationFromEntry:fromEntry];
-  }
 }
 
 - (BOOL)isLoaded {
@@ -5384,13 +5383,16 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   GURL webViewURL = net::GURLWithNSURL([_webView URL]);
 
   // For failed navigations, WKWebView will sometimes revert to the previous URL
-  // before resettings its |isLoading| property to NO.  If this is the first
-  // navigation for the web view, this will result in an empty URL.
-  if (webViewURL.is_empty() || webViewURL == _documentURL)
+  // before committing the current navigation or resetting the web view's
+  // |isLoading| property to NO.  If this is the first navigation for the web
+  // view, this will result in an empty URL.
+  BOOL navigationWasCommitted = _loadPhase != web::LOAD_REQUESTED;
+  if (!navigationWasCommitted &&
+      (webViewURL.is_empty() || webViewURL == _documentURL)) {
     return;
+  }
 
-  if (_loadPhase == web::LOAD_REQUESTED &&
-      ![_pendingNavigationInfo cancelled]) {
+  if (!navigationWasCommitted && ![_pendingNavigationInfo cancelled]) {
     // A fast back/forward within the same origin does not call
     // |didCommitNavigation:|, so signal page change explicitly.
     DCHECK_EQ(_documentURL.GetOrigin(), webViewURL.GetOrigin());

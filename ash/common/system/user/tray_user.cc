@@ -58,11 +58,7 @@ TrayUser::TestState TrayUser::GetStateForTest() const {
 }
 
 gfx::Size TrayUser::GetLayoutSizeForTest() const {
-  if (!layout_view_) {
-    return gfx::Size(0, 0);
-  } else {
-    return layout_view_->size();
-  }
+  return layout_view_ ? layout_view_->size() : gfx::Size();
 }
 
 gfx::Rect TrayUser::GetUserPanelBoundsInScreenForTest() const {
@@ -196,7 +192,7 @@ void TrayUser::UpdateAfterShelfAlignmentChange(ShelfAlignment alignment) {
       int height = label_->GetContentsBounds().height();
       int vertical_pad = (kTrayItemSize - height) / 2;
       int remainder = height % 2;
-      label_->SetBorder(views::Border::CreateEmptyBorder(
+      label_->SetBorder(views::CreateEmptyBorder(
           vertical_pad + remainder,
           kTrayLabelItemHorizontalPaddingBottomAlignment, vertical_pad,
           kTrayLabelItemHorizontalPaddingBottomAlignment));
@@ -209,7 +205,7 @@ void TrayUser::UpdateAfterShelfAlignmentChange(ShelfAlignment alignment) {
                               kTrayRoundedBorderRadius);
     }
     if (label_) {
-      label_->SetBorder(views::Border::CreateEmptyBorder(
+      label_->SetBorder(views::CreateEmptyBorder(
           kTrayLabelItemVerticalPaddingVerticalAlignment,
           kTrayLabelItemHorizontalPaddingBottomAlignment,
           kTrayLabelItemVerticalPaddingVerticalAlignment,

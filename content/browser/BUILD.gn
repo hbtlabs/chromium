@@ -5,6 +5,7 @@
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//media/media_options.gni")
+import("//printing/features/features.gni")
 import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
 source_set("browser") {
@@ -22,7 +23,6 @@ source_set("browser") {
   configs += [
     "//build/config:precompiled_headers",
     "//content:content_implementation",
-    "//third_party/WebKit/public:debug_devtools",
     "//v8:external_startup_data",
   ]
   defines = []
@@ -35,14 +35,18 @@ source_set("browser") {
     "//base/third_party/dynamic_annotations",
     "//cc",
     "//cc/surfaces",
+    "//components/discardable_memory/common",
+    "//components/discardable_memory/service",
     "//components/display_compositor",
     "//components/filesystem:lib",
     "//components/leveldb:lib",
     "//components/link_header_util",
     "//components/mime_util",
+    "//components/payments:payment_app",
     "//components/tracing",
     "//components/tracing:startup_tracing",
     "//components/url_formatter",
+    "//components/variations",
     "//content:resources",
     "//content/app/resources",
     "//content/app/strings",
@@ -67,6 +71,7 @@ source_set("browser") {
     "//device/power_save_blocker",
     "//device/sensors/public/cpp",
     "//device/time_zone_monitor",
+    "//device/time_zone_monitor/public/interfaces",
     "//device/vibration",
     "//device/wake_lock",
     "//gin",
@@ -91,6 +96,7 @@ source_set("browser") {
     "//net:extras",
     "//net:http_server",
     "//ppapi/features",
+    "//printing/features",
     "//services/device:lib",
     "//services/device/public/cpp",
     "//services/file:lib",
@@ -646,6 +652,8 @@ source_set("browser") {
     "host_zoom_map_impl.h",
     "host_zoom_map_observer.cc",
     "host_zoom_map_observer.h",
+    "indexed_db/database_impl.cc",
+    "indexed_db/database_impl.h",
     "indexed_db/indexed_db.h",
     "indexed_db/indexed_db_active_blob_registry.cc",
     "indexed_db/indexed_db_active_blob_registry.h",
@@ -803,10 +811,6 @@ source_set("browser") {
     "media/android/media_throttler.h",
     "media/android/media_web_contents_observer_android.cc",
     "media/android/media_web_contents_observer_android.h",
-    "media/android/provision_fetcher_impl.cc",
-    "media/android/provision_fetcher_impl.h",
-    "media/android/url_provision_fetcher.cc",
-    "media/android/url_provision_fetcher.h",
     "media/audible_metrics.cc",
     "media/audible_metrics.h",
     "media/audio_stream_monitor.cc",
@@ -873,6 +877,8 @@ source_set("browser") {
     "media/session/media_session_service_impl.h",
     "media/session/media_session_uma_helper.cc",
     "media/session/media_session_uma_helper.h",
+    "media/url_provision_fetcher.cc",
+    "media/url_provision_fetcher.h",
     "memory/memory_coordinator.cc",
     "memory/memory_coordinator.h",
     "memory/memory_coordinator_impl.cc",
@@ -924,14 +930,16 @@ source_set("browser") {
     "notifications/platform_notification_context_impl.h",
     "notifications/type_converters.cc",
     "notifications/type_converters.h",
+    "payments/payment_app_context.cc",
+    "payments/payment_app_context.h",
+    "payments/payment_app_manager.cc",
+    "payments/payment_app_manager.h",
     "permissions/permission_service_context.cc",
     "permissions/permission_service_context.h",
     "permissions/permission_service_impl.cc",
     "permissions/permission_service_impl.h",
     "power_monitor_message_broadcaster.cc",
     "power_monitor_message_broadcaster.h",
-    "power_usage_monitor_impl.cc",
-    "power_usage_monitor_impl.h",
     "presentation/presentation_service_impl.cc",
     "presentation/presentation_service_impl.h",
     "presentation/presentation_type_converters.cc",
@@ -1727,8 +1735,6 @@ source_set("browser") {
       "media/session/audio_focus_delegate_default.cc",
       "media/session/audio_focus_manager.cc",
       "media/session/audio_focus_manager.h",
-      "power_usage_monitor_impl.cc",
-      "power_usage_monitor_impl.h",
       "tracing/tracing_ui.cc",
       "tracing/tracing_ui.h",
 
@@ -1756,7 +1762,6 @@ source_set("browser") {
       "//media",
       "//media/capture/content/android",
       "//media/capture/video/android",
-      "//media/mojo/interfaces",
       "//mojo/android:libsystem_java",
       "//ui/android",
     ]
@@ -1786,6 +1791,10 @@ source_set("browser") {
       "//chromeos",
       "//chromeos:power_manager_proto",
     ]
+  }
+
+  if (enable_mojo_media) {
+    deps += [ "//media/mojo/interfaces" ]
   }
 
   if (use_aura) {
@@ -1899,10 +1908,6 @@ source_set("browser") {
       ]
     }
     deps += [ "//ui/compositor" ]
-  }
-
-  if (is_android || is_mac) {
-    deps += [ "//gpu/ipc/common:gpu_surface_tracker" ]
   }
 
   if (enable_web_speech) {

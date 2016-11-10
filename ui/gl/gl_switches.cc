@@ -26,6 +26,10 @@ const char kANGLEImplementationNullName[]     = "null";
 
 namespace switches {
 
+// Ask the GLX driver for the default context instead of trying to get the
+// highest version possible.
+const char kCreateDefaultGLContext[] = "create-default-gl-context";
+
 // Disables use of D3D11.
 const char kDisableD3D11[]                  = "disable-d3d11";
 
@@ -84,8 +88,8 @@ const char kTestGLLib[]                     = "test-gl-lib";
 // Use hardware gpu, if available, for tests.
 const char kUseGpuInTests[] = "use-gpu-in-tests";
 
-// Enable OpenGL ES 3 APIs without proper service side validation.
-const char kEnableUnsafeES3APIs[] = "enable-unsafe-es3-apis";
+// Enable OpenGL ES 3 APIs.
+const char kEnableES3APIs[] = "enable-es3-apis";
 
 // Disable OpenGL ES 3 APIs. This in turn will disable WebGL2.
 const char kDisableES3APIs[] = "disable-es3-apis";
@@ -116,8 +120,6 @@ const char* kGLSwitchesCopiedFromGpuProcessHost[] = {
     kDisableD3D11,
     kEnableGPUServiceLogging,
     kEnableGPUServiceTracing,
-    kEnableUnsafeES3APIs,
-    kDisableES3APIs,
     kEnableSgiVideoSync,
     kGpuNoContextLost,
     kDisableGLDrawingForTests,

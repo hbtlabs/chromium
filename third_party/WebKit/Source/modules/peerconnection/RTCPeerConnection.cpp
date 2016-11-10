@@ -306,11 +306,25 @@ WebRTCConfiguration parseConfiguration(ExecutionContext* context,
 
       for (const String& urlString : urlStrings) {
         KURL url(KURL(), urlString);
-        if (!url.isValid() ||
-            !(url.protocolIs("turn") || url.protocolIs("turns") ||
-              url.protocolIs("stun"))) {
-          exceptionState.throwTypeError("Malformed URL");
+        if (!url.isValid()) {
+          exceptionState.throwDOMException(
+              SyntaxError, "'" + urlString + "' is not a valid URL.");
           return WebRTCConfiguration();
+        }
+        if (!(url.protocolIs("turn") || url.protocolIs("turns") ||
+              url.protocolIs("stun"))) {
+          exceptionState.throwDOMException(
+              SyntaxError, "'" + url.protocol() +
+                               "' is not one of the supported URL schemes "
+                               "'stun', 'turn' or 'turns'.");
+          return WebRTCConfiguration();
+        }
+        if ((url.protocolIs("turn") || url.protocolIs("turns")) &&
+            (username.isNull() || credential.isNull())) {
+          exceptionState.throwDOMException(InvalidAccessError,
+                                           "Both username and credential are "
+                                           "required when the URL scheme is "
+                                           "\"turn\" or \"turns\".");
         }
         iceServers.append(WebRTCIceServer{url, username, credential});
       }

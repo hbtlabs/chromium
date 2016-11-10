@@ -422,7 +422,7 @@ InspectorTest.setBreakpoint = function(sourceFrame, lineNumber, condition, enabl
 
 InspectorTest.removeBreakpoint = function(sourceFrame, lineNumber)
 {
-    sourceFrame._breakpointManager.findBreakpointOnLine(sourceFrame._uiSourceCode, lineNumber).remove();
+    sourceFrame._breakpointManager.findBreakpoints(sourceFrame._uiSourceCode, lineNumber)[0].remove();
 };
 
 InspectorTest.dumpBreakpointSidebarPane = function(title)
@@ -593,7 +593,7 @@ InspectorTest.waitForExecutionContextInTarget = function(target, callback)
 InspectorTest.selectThread = function(target)
 {
     var threadsPane = self.runtime.sharedInstance(WebInspector.ThreadsSidebarPane);
-    var listItem = threadsPane._debuggerModelToListItems.get(WebInspector.DebuggerModel.fromTarget(target));
+    var listItem = threadsPane._listItemForTarget(target);
     threadsPane._onListItemClick(listItem);
 }
 

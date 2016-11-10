@@ -48,13 +48,11 @@ class ScopedIPCSupport;
 }  // namespace edk
 }  // namespace mojo
 
-namespace blink {
-class WebFrame;
-}  // namespace blink
+namespace discardable_memory {
+class ClientDiscardableSharedMemoryManager;
+}  // namespace discardable_memory
 
 namespace content {
-class ChildMessageFilter;
-class ChildDiscardableSharedMemoryManager;
 class ChildHistogramMessageFilter;
 class ChildResourceMessageFilter;
 class ChildSharedBitmapManager;
@@ -67,7 +65,6 @@ class QuotaDispatcher;
 class QuotaMessageFilter;
 class ResourceDispatcher;
 class ThreadSafeSender;
-struct RequestInfo;
 
 // The main thread of a child process derives from this class.
 class CONTENT_EXPORT ChildThreadImpl
@@ -142,8 +139,8 @@ class CONTENT_EXPORT ChildThreadImpl
     return shared_bitmap_manager_.get();
   }
 
-  ChildDiscardableSharedMemoryManager* discardable_shared_memory_manager()
-      const {
+  discardable_memory::ClientDiscardableSharedMemoryManager*
+  discardable_shared_memory_manager() const {
     return discardable_shared_memory_manager_.get();
   }
 
@@ -244,6 +241,8 @@ class CONTENT_EXPORT ChildThreadImpl
     IPC::Sender* const sender_;
   };
 
+  class ClientDiscardableSharedMemoryManagerDelegate;
+
   void Init(const Options& options);
 
   // We create the channel first without connecting it so we can add filters
@@ -331,8 +330,11 @@ class CONTENT_EXPORT ChildThreadImpl
 
   std::unique_ptr<ChildSharedBitmapManager> shared_bitmap_manager_;
 
-  std::unique_ptr<ChildDiscardableSharedMemoryManager>
+  std::unique_ptr<discardable_memory::ClientDiscardableSharedMemoryManager>
       discardable_shared_memory_manager_;
+
+  std::unique_ptr<ClientDiscardableSharedMemoryManagerDelegate>
+      client_discardable_shared_memory_manager_delegate_;
 
   std::unique_ptr<base::PowerMonitor> power_monitor_;
 

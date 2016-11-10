@@ -50,7 +50,7 @@
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/layer.h"
@@ -74,6 +74,10 @@ using chromeos::NetworkTypePattern;
 namespace ash {
 namespace tray {
 namespace {
+
+bool UseMd() {
+  return MaterialDesignController::IsSystemTrayMenuMaterial();
+}
 
 // Delay between scan requests.
 const int kRequestScanDelaySeconds = 10;
@@ -183,9 +187,9 @@ class ScanningThrobber : public ThrobberView {
     layer()->SetOpacity(visible ? 1.0 : 0.0);
   }
 
-  void GetAccessibleState(ui::AXViewState* state) override {
-    state->name = accessible_name_;
-    state->role = ui::AX_ROLE_BUSY_INDICATOR;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    node_data->SetName(accessible_name_);
+    node_data->role = ui::AX_ROLE_BUSY_INDICATOR;
   }
 
  private:
@@ -330,7 +334,7 @@ NetworkStateListDetailedView::NetworkStateListDetailedView(
     // TODO(varkha): NetworkListViewMd is a temporary fork of NetworkListView.
     // NetworkListView will go away when Material Design becomes default.
     // See crbug.com/614453.
-    if (MaterialDesignController::IsSystemTrayMenuMaterial())
+    if (UseMd())
       network_list_view_.reset(new NetworkListViewMd(this));
     else
       network_list_view_.reset(new NetworkListView(this));
@@ -367,7 +371,7 @@ void NetworkStateListDetailedView::Init() {
   scanning_throbber_ = nullptr;
 
   CreateScrollableList();
-  if (!MaterialDesignController::IsSystemTrayMenuMaterial())
+  if (!UseMd())
     CreateNetworkExtra();
   CreateTitleRow(IDS_ASH_STATUS_TRAY_NETWORK);
 
@@ -385,7 +389,7 @@ NetworkStateListDetailedView::GetViewType() const {
 
 void NetworkStateListDetailedView::HandleButtonPressed(views::Button* sender,
                                                        const ui::Event& event) {
-  if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
+  if (UseMd()) {
     if (sender == info_button_md_) {
       ToggleInfoBubble();
       return;
@@ -470,7 +474,7 @@ void NetworkStateListDetailedView::HandleViewClicked(views::View* view) {
 }
 
 void NetworkStateListDetailedView::CreateExtraTitleRowButtons() {
-  if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
+  if (UseMd()) {
     if (login_ == LoginStatus::LOCKED)
       return;
 
@@ -568,6 +572,7 @@ void NetworkStateListDetailedView::ShowSettings() {
 }
 
 void NetworkStateListDetailedView::CreateNetworkExtra() {
+  DCHECK(!UseMd());
   if (login_ == LoginStatus::LOCKED)
     return;
 
@@ -628,8 +633,7 @@ void NetworkStateListDetailedView::UpdateHeaderButtons() {
   if (proxy_settings_)
     proxy_settings_->SetEnabled(handler->DefaultNetwork() != nullptr);
 
-  if (list_type_ != LIST_TYPE_VPN &&
-      !MaterialDesignController::IsSystemTrayMenuMaterial()) {
+  if (list_type_ != LIST_TYPE_VPN && !UseMd()) {
     // Update Wifi Scanning throbber.
     bool scanning =
         NetworkHandler::Get()->network_state_handler()->GetScanningByType(
@@ -662,7 +666,7 @@ void NetworkStateListDetailedView::UpdateHeaderButtons() {
 
 void NetworkStateListDetailedView::SetScanningStateForThrobberView(
     bool is_scanning) {
-  if (MaterialDesignController::IsSystemTrayMenuMaterial())
+  if (UseMd())
     return;
 
   // Hide the network info button if the device is scanning for Wi-Fi networks
@@ -782,6 +786,7 @@ void NetworkStateListDetailedView::UpdateNetworkExtra() {
 }
 
 void NetworkStateListDetailedView::CreateSettingsEntry() {
+  DCHECK(!UseMd());
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   bool show_settings =
       WmShell::Get()->system_tray_delegate()->ShouldShowSettings();
@@ -808,10 +813,8 @@ void NetworkStateListDetailedView::ToggleInfoBubble() {
   if (ResetInfoBubble())
     return;
 
-  info_bubble_ = new InfoBubble(
-      MaterialDesignController::IsSystemTrayMenuMaterial() ? info_button_md_
-                                                           : info_icon_,
-      CreateNetworkInfoView(), this);
+  info_bubble_ = new InfoBubble(UseMd() ? info_button_md_ : info_icon_,
+                                CreateNetworkInfoView(), this);
   views::BubbleDialogDelegateView::CreateBubble(info_bubble_)->Show();
   info_bubble_->NotifyAccessibilityEvent(ui::AX_EVENT_ALERT, false);
 }
@@ -845,7 +848,7 @@ views::View* NetworkStateListDetailedView::CreateNetworkInfoView() {
   views::View* container = new views::View;
   container->SetLayoutManager(
       new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 1));
-  container->SetBorder(views::Border::CreateEmptyBorder(0, 5, 0, 5));
+  container->SetBorder(views::CreateEmptyBorder(0, 5, 0, 5));
 
   std::string ethernet_address, wifi_address, vpn_address;
   if (list_type_ != LIST_TYPE_VPN) {
@@ -949,7 +952,7 @@ views::View* NetworkStateListDetailedView::CreateViewForNetwork(
   HoverHighlightView* view = new HoverHighlightView(this);
   view->AddIconAndLabel(info.image, info.label, info.highlight);
   view->SetBorder(
-      views::Border::CreateEmptyBorder(0, kTrayPopupPaddingHorizontal, 0, 0));
+      views::CreateEmptyBorder(0, kTrayPopupPaddingHorizontal, 0, 0));
   views::View* controlled_icon = CreateControlledByExtensionView(info);
   view->set_tooltip(info.tooltip);
   if (controlled_icon)
@@ -979,9 +982,9 @@ void NetworkStateListDetailedView::UpdateViewForNetwork(
 
 views::Label* NetworkStateListDetailedView::CreateInfoLabel() {
   views::Label* label = new views::Label();
-  label->SetBorder(views::Border::CreateEmptyBorder(
-      kTrayPopupPaddingBetweenItems, kTrayPopupPaddingHorizontal,
-      kTrayPopupPaddingBetweenItems, 0));
+  label->SetBorder(views::CreateEmptyBorder(kTrayPopupPaddingBetweenItems,
+                                            kTrayPopupPaddingHorizontal,
+                                            kTrayPopupPaddingBetweenItems, 0));
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   label->SetEnabledColor(SkColorSetARGB(192, 0, 0, 0));
   return label;

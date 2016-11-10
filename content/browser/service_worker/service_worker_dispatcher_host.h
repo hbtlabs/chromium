@@ -39,7 +39,6 @@ class ServiceWorkerRegistration;
 class ServiceWorkerRegistrationHandle;
 class ServiceWorkerVersion;
 struct ServiceWorkerObjectInfo;
-struct ServiceWorkerRegistrationInfo;
 struct ServiceWorkerRegistrationObjectInfo;
 struct ServiceWorkerVersionAttributes;
 
@@ -138,6 +137,11 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost
                                    int request_id,
                                    int provider_id,
                                    int64_t registration_id);
+  void OnSetNavigationPreloadHeader(int thread_id,
+                                    int request_id,
+                                    int provider_id,
+                                    int64_t registration_id,
+                                    const std::string& value);
   void OnProviderDestroyed(int provider_id);
   void OnSetHostedVersionId(int provider_id,
                             int64_t version_id,

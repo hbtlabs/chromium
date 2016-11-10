@@ -15,6 +15,7 @@ static_library("ntp_snippets") {
     "bookmarks/bookmark_last_visit_utils.h",
     "bookmarks/bookmark_suggestions_provider.cc",
     "bookmarks/bookmark_suggestions_provider.h",
+    "callbacks.h",
     "category.cc",
     "category.h",
     "category_factory.cc",
@@ -62,6 +63,8 @@ static_library("ntp_snippets") {
     "sessions/foreign_sessions_suggestions_provider.h",
     "sessions/tab_delegate_sync_adapter.cc",
     "sessions/tab_delegate_sync_adapter.h",
+    "status.cc",
+    "status.h",
     "switches.cc",
     "switches.h",
     "user_classifier.cc",
@@ -116,8 +119,6 @@ source_set("unit_tests") {
     "bookmarks/bookmark_last_visit_utils_unittest.cc",
     "category_factory_unittest.cc",
     "content_suggestions_service_unittest.cc",
-    "mock_content_suggestions_provider_observer.cc",
-    "mock_content_suggestions_provider_observer.h",
     "offline_pages/recent_tab_suggestions_provider_unittest.cc",
     "physical_web_pages/physical_web_page_suggestions_provider_unittest.cc",
     "remote/ntp_snippet_unittest.cc",
@@ -133,6 +134,7 @@ source_set("unit_tests") {
 
   deps = [
     ":ntp_snippets",
+    ":test_support",
     "//base",
     "//base/test:test_support",
     "//components/bookmarks/browser",
@@ -154,5 +156,23 @@ source_set("unit_tests") {
     "//testing/gtest",
     "//third_party/icu/",
     "//ui/gfx:test_support",
+  ]
+}
+
+source_set("test_support") {
+  testonly = true
+  sources = [
+    "mock_content_suggestions_provider_observer.cc",
+    "mock_content_suggestions_provider_observer.h",
+    "offline_pages/offline_pages_test_utils.cc",
+    "offline_pages/offline_pages_test_utils.h",
+  ]
+
+  deps = [
+    ":ntp_snippets",
+    "//base",
+    "//components/offline_pages",
+    "//components/offline_pages:test_support",
+    "//testing/gmock",
   ]
 }

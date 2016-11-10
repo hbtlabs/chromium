@@ -48,8 +48,8 @@
     // TODO(zino): Should implement transformPoint() method (See: crbug.com/645885)
     // TODO(zino): Should remove scaleNonUniform() method (See: crbug.com/645887)
     // Immutable transform methods
-    DOMMatrix translate(unrestricted double tx,
-                        unrestricted double ty,
+    DOMMatrix translate(optional unrestricted double tx = 0,
+                        optional unrestricted double ty = 0,
                         optional unrestricted double tz = 0);
     DOMMatrix scale(optional unrestricted double scaleX = 1,
                     optional unrestricted double scaleY,
@@ -57,7 +57,7 @@
                     optional unrestricted double originX = 0,
                     optional unrestricted double originY = 0,
                     optional unrestricted double originZ = 0);
-    DOMMatrix scale3d(unrestricted double scale,
+    DOMMatrix scale3d(optional unrestricted double scale = 1,
                       optional unrestricted double originX = 0,
                       optional unrestricted double originY = 0,
                       optional unrestricted double originZ = 0);
@@ -80,4 +80,5 @@
     Float32Array toFloat32Array();
     Float64Array toFloat64Array();
     stringifier;
+    serializer = {attribute};
 };

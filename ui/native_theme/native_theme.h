@@ -286,6 +286,8 @@ class NATIVE_THEME_EXPORT NativeTheme {
     // Label
     kColorId_LabelEnabledColor,
     kColorId_LabelDisabledColor,
+    kColorId_LabelTextSelectionColor,
+    kColorId_LabelTextSelectionBackgroundFocused,
     // Link
     kColorId_LinkDisabled,
     kColorId_LinkEnabled,
@@ -362,6 +364,9 @@ class NATIVE_THEME_EXPORT NativeTheme {
   // NativeTheme should provide its own implementation of this function,
   // returning the port's subclass.
   static NativeTheme* GetInstanceForWeb();
+
+  // Returns a shared instance of the default native theme for native UI.
+  static NativeTheme* GetInstanceForNativeUi();
 
   // Add or remove observers to be notified when the native theme changes.
   void AddObserver(NativeThemeObserver* observer);

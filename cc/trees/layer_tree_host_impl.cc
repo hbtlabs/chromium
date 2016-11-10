@@ -24,8 +24,6 @@
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event_argument.h"
-#include "cc/animation/animation_events.h"
-#include "cc/animation/animation_host.h"
 #include "cc/base/histograms.h"
 #include "cc/base/math_util.h"
 #include "cc/debug/benchmark_instrumentation.h"
@@ -78,6 +76,7 @@
 #include "cc/trees/latency_info_swap_promise_monitor.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_impl.h"
+#include "cc/trees/mutator_host.h"
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/single_thread_proxy.h"
 #include "cc/trees/tree_synchronizer.h"
@@ -173,11 +172,11 @@ std::unique_ptr<LayerTreeHostImpl> LayerTreeHostImpl::Create(
     TaskRunnerProvider* task_runner_provider,
     RenderingStatsInstrumentation* rendering_stats_instrumentation,
     TaskGraphRunner* task_graph_runner,
-    std::unique_ptr<AnimationHost> animation_host,
+    std::unique_ptr<MutatorHost> mutator_host,
     int id) {
   return base::WrapUnique(new LayerTreeHostImpl(
       settings, client, task_runner_provider, rendering_stats_instrumentation,
-      task_graph_runner, std::move(animation_host), id));
+      task_graph_runner, std::move(mutator_host), id));
 }
 
 LayerTreeHostImpl::LayerTreeHostImpl(
@@ -186,7 +185,7 @@ LayerTreeHostImpl::LayerTreeHostImpl(
     TaskRunnerProvider* task_runner_provider,
     RenderingStatsInstrumentation* rendering_stats_instrumentation,
     TaskGraphRunner* task_graph_runner,
-    std::unique_ptr<AnimationHost> animation_host,
+    std::unique_ptr<MutatorHost> mutator_host,
     int id)
     : client_(client),
       task_runner_provider_(task_runner_provider),
@@ -225,7 +224,7 @@ LayerTreeHostImpl::LayerTreeHostImpl(
       debug_rect_history_(DebugRectHistory::Create()),
       max_memory_needed_bytes_(0),
       resourceless_software_draw_(false),
-      animation_host_(std::move(animation_host)),
+      mutator_host_(std::move(mutator_host)),
       rendering_stats_instrumentation_(rendering_stats_instrumentation),
       micro_benchmark_controller_(this),
       task_graph_runner_(task_graph_runner),
@@ -234,8 +233,8 @@ LayerTreeHostImpl::LayerTreeHostImpl(
       is_likely_to_require_a_draw_(false),
       has_valid_compositor_frame_sink_(false),
       mutator_(nullptr) {
-  DCHECK(animation_host_);
-  animation_host_->SetMutatorHostClient(this);
+  DCHECK(mutator_host_);
+  mutator_host_->SetMutatorHostClient(this);
 
   DCHECK(task_runner_provider_->IsImplThread());
   DidVisibilityChange(this, visible_);
@@ -279,9 +278,7 @@ LayerTreeHostImpl::~LayerTreeHostImpl() {
   if (scroll_elasticity_helper_)
     scroll_elasticity_helper_.reset();
 
-  // The layer trees must be destroyed before the layer tree host. We've
-  // made a contract with our animation controllers that the animation_host
-  // will outlive them, and we must make good.
+  // The layer trees must be destroyed before the layer tree host.
   if (recycle_tree_)
     recycle_tree_->Shutdown();
   if (pending_tree_)
@@ -291,8 +288,8 @@ LayerTreeHostImpl::~LayerTreeHostImpl() {
   pending_tree_ = nullptr;
   active_tree_ = nullptr;
 
-  animation_host_->ClearTimelines();
-  animation_host_->SetMutatorHostClient(nullptr);
+  mutator_host_->ClearMutators();
+  mutator_host_->SetMutatorHostClient(nullptr);
 }
 
 void LayerTreeHostImpl::BeginMainFrameAborted(
@@ -1359,7 +1356,7 @@ void LayerTreeHostImpl::SetMemoryPolicy(const ManagedMemoryPolicy& policy) {
   // TODO(boliu): crbug.com/499004 to track removing this.
   if (!policy.bytes_limit_when_visible && resource_pool_ &&
       settings_.using_synchronous_renderer_compositor) {
-    ReleaseTreeResources();
+    ReleaseTileResources();
     CleanUpTileManagerAndUIResources();
 
     // Force a call to NotifyAllTileTasks completed - otherwise this logic may
@@ -1368,7 +1365,7 @@ void LayerTreeHostImpl::SetMemoryPolicy(const ManagedMemoryPolicy& policy) {
     NotifyAllTileTasksCompleted();
 
     CreateTileManagerResources();
-    RecreateTreeResources();
+    RecreateTileResources();
   }
 }
 
@@ -1553,7 +1550,7 @@ CompositorFrameMetadata LayerTreeHostImpl::MakeCompositorFrameMetadata() const {
 
   if (GetDrawMode() == DRAW_MODE_RESOURCELESS_SOFTWARE) {
     metadata.is_resourceless_software_draw_with_scroll_or_animation =
-        IsActivelyScrolling() || animation_host_->NeedsAnimateLayers();
+        IsActivelyScrolling() || mutator_host_->NeedsAnimateLayers();
   }
 
   for (LayerImpl* surface_layer : active_tree_->SurfaceLayers()) {
@@ -1807,12 +1804,12 @@ void LayerTreeHostImpl::UpdateTreeResourcesForGpuRasterizationIfNeeded() {
   // appropriate rasterizer. Only do this however if we already have a
   // resource pool, since otherwise we might not be able to create a new
   // one.
-  ReleaseTreeResources();
+  ReleaseTileResources();
   if (resource_pool_) {
     CleanUpTileManagerAndUIResources();
     CreateTileManagerResources();
   }
-  RecreateTreeResources();
+  RecreateTileResources();
 
   // We have released tilings for both active and pending tree.
   // We would not have any content to draw until the pending tree is activated.
@@ -2083,12 +2080,20 @@ void LayerTreeHostImpl::ReleaseTreeResources() {
   EvictAllUIResources();
 }
 
-void LayerTreeHostImpl::RecreateTreeResources() {
-  active_tree_->RecreateResources();
+void LayerTreeHostImpl::ReleaseTileResources() {
+  active_tree_->ReleaseTileResources();
   if (pending_tree_)
-    pending_tree_->RecreateResources();
+    pending_tree_->ReleaseTileResources();
   if (recycle_tree_)
-    recycle_tree_->RecreateResources();
+    recycle_tree_->ReleaseTileResources();
+}
+
+void LayerTreeHostImpl::RecreateTileResources() {
+  active_tree_->RecreateTileResources();
+  if (pending_tree_)
+    pending_tree_->RecreateTileResources();
+  if (recycle_tree_)
+    recycle_tree_->RecreateTileResources();
 }
 
 void LayerTreeHostImpl::CreateTileManagerResources() {
@@ -2332,7 +2337,7 @@ bool LayerTreeHostImpl::InitializeRenderer(
     pending_tree_->set_needs_update_draw_properties();
 
   CreateTileManagerResources();
-  RecreateTreeResources();
+  RecreateTileResources();
 
   client_->OnCanDrawStateChanged(CanDraw());
   SetFullViewportDamage();
@@ -2643,11 +2648,6 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollBegin(
       MainThreadScrollingReason::kNotScrollingOnMain;
   TRACE_EVENT0("cc", "LayerTreeHostImpl::ScrollBegin");
 
-  // On Mac a scroll begin with |inertial_phase| = true happens to handle a
-  // fling.
-  if (scroll_state->is_in_inertial_phase())
-    return FlingScrollBegin();
-
   ClearCurrentlyScrollingLayer();
 
   gfx::Point viewport_point(scroll_state->position_x(),
@@ -2778,7 +2778,7 @@ bool LayerTreeHostImpl::ScrollAnimationCreate(ScrollNode* scroll_node,
       ElementId(active_tree()->LayerById(scroll_node->owner_id)->element_id()),
       scroll_node->element_id);
 
-  animation_host_->ImplOnlyScrollAnimationCreate(
+  mutator_host_->ImplOnlyScrollAnimationCreate(
       scroll_node->element_id, target_offset, current_offset, delayed_by);
 
   SetNeedsOneBeginImplFrame();
@@ -2815,6 +2815,7 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollAnimated(
   ScrollStateData scroll_state_data;
   scroll_state_data.position_x = viewport_point.x();
   scroll_state_data.position_y = viewport_point.y();
+  scroll_state_data.is_in_inertial_phase = true;
   ScrollState scroll_state(scroll_state_data);
 
   // ScrollAnimated is used for animated wheel scrolls. We find the first layer
@@ -2852,12 +2853,7 @@ InputHandler::ScrollStatus LayerTreeHostImpl::ScrollAnimated(
     }
   }
   scroll_state.set_is_ending(true);
-  // TODO(Sahel): Once the touchpad scroll latching for Non-mac devices is
-  // implemented, the current scrolling layer should not get cleared after
-  // each animation (crbug.com/526463).
   ScrollEnd(&scroll_state);
-  ClearCurrentlyScrollingLayer();
-
   return scroll_status;
 }
 
@@ -3177,12 +3173,7 @@ void LayerTreeHostImpl::ScrollEnd(ScrollState* scroll_state) {
 
   DistributeScrollDelta(scroll_state);
   browser_controls_offset_manager_->ScrollEnd();
-
-  if (scroll_state->is_in_inertial_phase()) {
-    // Only clear the currently scrolling layer if we know the scroll is done.
-    // A non-inertial scroll end could be followed by an inertial scroll.
-    ClearCurrentlyScrollingLayer();
-  }
+  ClearCurrentlyScrollingLayer();
 }
 
 InputHandler::ScrollStatus LayerTreeHostImpl::FlingScrollBegin() {
@@ -3440,7 +3431,7 @@ bool LayerTreeHostImpl::AnimateScrollbars(base::TimeTicks monotonic_time) {
 }
 
 bool LayerTreeHostImpl::AnimateLayers(base::TimeTicks monotonic_time) {
-  const bool animated = animation_host_->AnimateLayers(monotonic_time);
+  const bool animated = mutator_host_->AnimateLayers(monotonic_time);
 
   // TODO(crbug.com/551134): Only do this if the animations are on the active
   // tree, or if they are on the pending tree waiting for some future time to
@@ -3457,12 +3448,12 @@ bool LayerTreeHostImpl::AnimateLayers(base::TimeTicks monotonic_time) {
 }
 
 void LayerTreeHostImpl::UpdateAnimationState(bool start_ready_animations) {
-  std::unique_ptr<AnimationEvents> events = animation_host_->CreateEvents();
+  std::unique_ptr<MutatorEvents> events = mutator_host_->CreateEvents();
 
-  const bool has_active_animations = animation_host_->UpdateAnimationState(
-      start_ready_animations, events.get());
+  const bool has_active_animations =
+      mutator_host_->UpdateAnimationState(start_ready_animations, events.get());
 
-  if (!events->events_.empty())
+  if (!events->IsEmpty())
     client_->PostAnimationEventsToMainThreadOnImplThread(std::move(events));
 
   if (has_active_animations)
@@ -3470,7 +3461,7 @@ void LayerTreeHostImpl::UpdateAnimationState(bool start_ready_animations) {
 }
 
 void LayerTreeHostImpl::ActivateAnimations() {
-  const bool activated = animation_host_->ActivateAnimations();
+  const bool activated = mutator_host_->ActivateAnimations();
   if (activated) {
     // Activating an animation changes layer draw properties, such as
     // screen_space_transform_is_animating. So when we see a new animation get
@@ -3841,7 +3832,7 @@ void LayerTreeHostImpl::UpdateRootLayerStateForSynchronousInputHandler() {
 }
 
 void LayerTreeHostImpl::ScrollAnimationAbort(LayerImpl* layer_impl) {
-  return animation_host_->ScrollAnimationAbort(false /* needs_completion */);
+  return mutator_host_->ScrollAnimationAbort(false /* needs_completion */);
 }
 
 bool LayerTreeHostImpl::ScrollAnimationUpdateTarget(
@@ -3852,7 +3843,7 @@ bool LayerTreeHostImpl::ScrollAnimationUpdateTarget(
       ElementId(active_tree()->LayerById(scroll_node->owner_id)->element_id()),
       scroll_node->element_id);
 
-  return animation_host_->ImplOnlyScrollAnimationUpdateTarget(
+  return mutator_host_->ImplOnlyScrollAnimationUpdateTarget(
       scroll_node->element_id, scroll_delta,
       active_tree_->property_trees()->scroll_tree.MaxScrollOffset(
           scroll_node->id),
@@ -3959,7 +3950,7 @@ void LayerTreeHostImpl::SetTreeLayerScrollOffsetMutated(
 
 bool LayerTreeHostImpl::AnimationsPreserveAxisAlignment(
     const LayerImpl* layer) const {
-  return animation_host_->AnimationsPreserveAxisAlignment(layer->element_id());
+  return mutator_host_->AnimationsPreserveAxisAlignment(layer->element_id());
 }
 
 void LayerTreeHostImpl::SetNeedUpdateGpuRasterizationStatus() {
@@ -4031,11 +4022,7 @@ void LayerTreeHostImpl::ScrollOffsetAnimationFinished() {
   // TODO(majidvp): We should pass in the original starting scroll position here
   ScrollStateData scroll_state_data;
   ScrollState scroll_state(scroll_state_data);
-  // TODO(Sahel): Once the touchpad scroll latching for Non-mac devices is
-  // implemented, the current scrolling layer should not get cleared after
-  // each animation (crbug.com/526463).
   ScrollEnd(&scroll_state);
-  ClearCurrentlyScrollingLayer();
 }
 
 gfx::ScrollOffset LayerTreeHostImpl::GetScrollOffsetForAnimation(

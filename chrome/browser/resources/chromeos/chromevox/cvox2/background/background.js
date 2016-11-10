@@ -12,6 +12,7 @@ goog.provide('Background');
 goog.require('AutomationPredicate');
 goog.require('AutomationUtil');
 goog.require('BackgroundKeyboardHandler');
+goog.require('BrailleCommandHandler');
 goog.require('ChromeVoxState');
 goog.require('CommandHandler');
 goog.require('FindHandler');
@@ -175,14 +176,6 @@ Background = function() {
    */
   this.focusRecoveryMap_ = new WeakMap();
 };
-
-/**
- * @const {string}
- */
-Background.ISSUE_URL = 'https://code.google.com/p/chromium/issues/entry?' +
-    'labels=Type-Bug,Pri-2,cvox2,OS-Chrome&' +
-    'components=UI>accessibility&' +
-    'description=';
 
 /**
  * Map from gesture names (AXGesture defined in ui/accessibility/ax_enums.idl)
@@ -427,11 +420,10 @@ Background.prototype = {
   navigateToRange: function(range, opt_focus, opt_speechProps) {
     opt_focus = opt_focus === undefined ? true : opt_focus;
     opt_speechProps = opt_speechProps || {};
-
-    if (opt_focus)
-      this.setFocusToRange_(range);
-
     var prevRange = this.currentRange_;
+    if (opt_focus)
+      this.setFocusToRange_(range, prevRange);
+
     this.setCurrentRange(range);
 
     var o = new Output();
@@ -547,6 +539,14 @@ Background.prototype = {
             content.text,
             // Cast ok since displayPosition is always defined in this case.
             /** @type {number} */ (evt.displayPosition));
+        break;
+      case cvox.BrailleKeyCommand.CHORD:
+        if (!evt.brailleDots)
+          return false;
+
+        var command = BrailleCommandHandler.getCommand(evt.brailleDots);
+        if (command)
+          CommandHandler.onCommand(command);
         break;
       default:
         return false;
@@ -760,9 +760,10 @@ Background.prototype = {
 
   /**
    * @param {!cursors.Range} range
+   * @param {cursors.Range} prevRange
    * @private
    */
-  setFocusToRange_: function(range) {
+  setFocusToRange_: function(range, prevRange) {
     var start = range.start.node;
     var end = range.end.node;
     if (start.state.focused || end.state.focused)
@@ -773,7 +774,18 @@ Background.prototype = {
           AutomationPredicate.linkOrControl(node);
     };
 
-    // First, try to focus the start or end node.
+    // First, see if we've crossed a root. Remove once webview handles focus
+    // correctly.
+    if (prevRange && prevRange.start.node) {
+      var entered = AutomationUtil.getUniqueAncestors(
+          prevRange.start.node, start);
+      var embeddedObject = entered.find(function(f) {
+        return f.role == RoleType.embeddedObject; });
+      if (embeddedObject)
+        embeddedObject.focus();
+    }
+
+    // Next, try to focus the start or end node.
     if (isFocusableLinkOrControl(start)) {
       if (!start.state.focused)
         start.focus();

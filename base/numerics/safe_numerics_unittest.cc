@@ -73,7 +73,7 @@ Dst GetMaxConvertibleToFloat() {
 
 #define TEST_EXPECTED_VALUE(expected, actual)                                \
   EXPECT_EQ(static_cast<Dst>(expected),                                      \
-            CheckedNumeric<Dst>(actual).ValueUnsafe())                       \
+            CheckedNumeric<Dst>(actual).ValueOrDie())                        \
       << "Result test: Value " << +((actual).ValueUnsafe()) << " as " << dst \
       << " on line " << line;
 
@@ -120,6 +120,8 @@ static void TestSpecializedArithmetic(
   TEST_EXPECTED_VALUE(0, CheckedNumeric<Dst>(1) % 1);
   CheckedNumeric<Dst> checked_dst = 1;
   TEST_EXPECTED_VALUE(0, checked_dst %= 1);
+  // Test that div by 0 is avoided but returns invalid result.
+  TEST_EXPECTED_FAILURE(CheckedNumeric<Dst>(1) % 0);
 }
 
 // Unsigned integer arithmetic.
@@ -155,6 +157,8 @@ static void TestSpecializedArithmetic(
   TEST_EXPECTED_VALUE(0, CheckedNumeric<Dst>(1) % 1);
   CheckedNumeric<Dst> checked_dst = 1;
   TEST_EXPECTED_VALUE(0, checked_dst %= 1);
+  // Test that div by 0 is avoided but returns invalid result.
+  TEST_EXPECTED_FAILURE(CheckedNumeric<Dst>(1) % 0);
 }
 
 // Floating point arithmetic.
@@ -240,28 +244,31 @@ static void TestArithmetic(const char* dst, int line) {
   // Generic addition.
   TEST_EXPECTED_VALUE(1, (CheckedNumeric<Dst>() + 1));
   TEST_EXPECTED_VALUE(2, (CheckedNumeric<Dst>(1) + 1));
-  TEST_EXPECTED_VALUE(0, (CheckedNumeric<Dst>(-1) + 1));
+  if (numeric_limits<Dst>::is_signed)
+    TEST_EXPECTED_VALUE(0, (CheckedNumeric<Dst>(-1) + 1));
   TEST_EXPECTED_SUCCESS(CheckedNumeric<Dst>(DstLimits::min()) + 1);
   TEST_EXPECTED_FAILURE(CheckedNumeric<Dst>(DstLimits::max()) +
                         DstLimits::max());
 
   // Generic subtraction.
-  TEST_EXPECTED_VALUE(-1, (CheckedNumeric<Dst>() - 1));
   TEST_EXPECTED_VALUE(0, (CheckedNumeric<Dst>(1) - 1));
-  TEST_EXPECTED_VALUE(-2, (CheckedNumeric<Dst>(-1) - 1));
   TEST_EXPECTED_SUCCESS(CheckedNumeric<Dst>(DstLimits::max()) - 1);
+  if (numeric_limits<Dst>::is_signed) {
+    TEST_EXPECTED_VALUE(-1, (CheckedNumeric<Dst>() - 1));
+    TEST_EXPECTED_VALUE(-2, (CheckedNumeric<Dst>(-1) - 1));
+  }
 
   // Generic multiplication.
   TEST_EXPECTED_VALUE(0, (CheckedNumeric<Dst>() * 1));
   TEST_EXPECTED_VALUE(1, (CheckedNumeric<Dst>(1) * 1));
   TEST_EXPECTED_VALUE(0, (CheckedNumeric<Dst>(0) * 0));
-  TEST_EXPECTED_VALUE(0, (CheckedNumeric<Dst>(-1) * 0));
-  TEST_EXPECTED_VALUE(0, (CheckedNumeric<Dst>(0) * -1));
-  TEST_EXPECTED_FAILURE(CheckedNumeric<Dst>(DstLimits::max()) *
-                        DstLimits::max());
-  if (DstLimits::is_signed) {
+  if (numeric_limits<Dst>::is_signed) {
+    TEST_EXPECTED_VALUE(0, (CheckedNumeric<Dst>(-1) * 0));
+    TEST_EXPECTED_VALUE(0, (CheckedNumeric<Dst>(0) * -1));
     TEST_EXPECTED_VALUE(-2, (CheckedNumeric<Dst>(-1) * 2));
   }
+  TEST_EXPECTED_FAILURE(CheckedNumeric<Dst>(DstLimits::max()) *
+                        DstLimits::max());
 
   // Generic division.
   TEST_EXPECTED_VALUE(0, CheckedNumeric<Dst>() / 1);
@@ -660,7 +667,7 @@ TEST(SafeNumerics, SaturatedCastChecks) {
                        std::numeric_limits<float>::infinity();
   EXPECT_TRUE(std::isnan(not_a_number));
   EXPECT_DEATH_IF_SUPPORTED(
-      (saturated_cast<int, base::SaturatedCastNaNBehaviorCheck>(not_a_number)),
+      (saturated_cast<int, base::CheckOnFailure>(not_a_number)),
       "");
 }
 

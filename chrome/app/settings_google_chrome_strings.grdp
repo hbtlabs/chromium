@@ -10,6 +10,9 @@
       Get help with Chrome
     </message>
     <message name="IDS_SETTINGS_UPGRADE_UPDATING" desc="Status label: Updating Google Chrome">
+      Updating Google Chrome
+    </message>
+    <message name="IDS_SETTINGS_UPGRADE_UPDATING_PERCENT" desc="Status label: Updating Google Chrome (90%)">
       Updating Google Chrome (<ph name="PROGRESS_PERCENT">$1<ex>90%</ex></ph>)
     </message>
     <message name="IDS_SETTINGS_UPGRADE_SUCCESSFUL_RELAUNCH" desc="Status label: Successfully updated Google Chrome">
@@ -46,6 +49,14 @@
     </message>
     <message name="IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY" desc="The text displayed when Chrome is installed in side-by-side mode, which does not support setting as the default browser.">
       This is a secondary installation of Google Chrome, and cannot be made your default browser.
+    </message>
+  </if>
+
+  <!-- Import Settings Dialog -->
+  <!-- Android uses custom UI for Bookmark importing -->
+  <if expr="not is_android">
+    <message name="IDS_SETTINGS_IMPORT_FIND_YOUR_BOOKMARKS" desc="Helpful reminder for where to find imported bookmarks">
+      Find your bookmarks in the Chrome menu or on the bookmarks bar.
     </message>
   </if>
 

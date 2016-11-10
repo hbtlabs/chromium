@@ -95,8 +95,9 @@ class PDFExtensionTest : public ExtensionApiTest,
   void SetUpOnMainThread() override {
     ExtensionApiTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
-    ASSERT_TRUE(embedded_test_server()->Start());
+    ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
     content::SetupCrossSiteRedirector(embedded_test_server());
+    embedded_test_server()->StartAcceptingConnections();
   }
 
   void TearDownOnMainThread() override {
@@ -397,6 +398,10 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, ParamsParser) {
 
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, ZoomManager) {
   RunTestsInFile("zoom_manager_test.js", "test.pdf");
+}
+
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, GestureDetector) {
+  RunTestsInFile("gesture_detector_test.js", "test.pdf");
 }
 
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, Elements) {

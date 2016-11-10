@@ -5,7 +5,7 @@
 #include "google_apis/gcm/engine/gcm_unregistration_request_handler.h"
 
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "google_apis/gcm/base/gcm_util.h"
 #include "net/url_request/url_fetcher.h"
 
@@ -21,8 +21,6 @@ const char kUnregistrationCallerValue[] = "false";
 
 // Response constants.
 const char kDeletedPrefix[] = "deleted=";
-const char kErrorPrefix[] = "Error=";
-const char kInvalidParameters[] = "INVALID_PARAMETERS";
 
 }  // namespace
 
@@ -38,13 +36,7 @@ void GCMUnregistrationRequestHandler::BuildRequestBody(std::string* body){
 }
 
 UnregistrationRequest::Status GCMUnregistrationRequestHandler::ParseResponse(
-    const net::URLFetcher* source) {
-  std::string response;
-  if (!source->GetResponseAsString(&response)) {
-    DVLOG(1) << "Failed to get response body.";
-    return UnregistrationRequest::NO_RESPONSE_BODY;
-  }
-
+    const std::string& response) {
   DVLOG(1) << "Parsing unregistration response.";
   if (response.find(kDeletedPrefix) != std::string::npos) {
     std::string deleted_app_id = response.substr(
@@ -52,14 +44,6 @@ UnregistrationRequest::Status GCMUnregistrationRequestHandler::ParseResponse(
     return deleted_app_id == app_id_ ?
         UnregistrationRequest::SUCCESS :
         UnregistrationRequest::INCORRECT_APP_ID;
-  }
-
-  if (response.find(kErrorPrefix) != std::string::npos) {
-    std::string error = response.substr(
-        response.find(kErrorPrefix) + arraysize(kErrorPrefix) - 1);
-   return error == kInvalidParameters ?
-        UnregistrationRequest::INVALID_PARAMETERS :
-        UnregistrationRequest::UNKNOWN_ERROR;
   }
 
   DVLOG(1) << "Not able to parse a meaningful output from response body."

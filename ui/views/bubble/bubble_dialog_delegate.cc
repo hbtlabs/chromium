@@ -5,7 +5,7 @@
 #include "ui/views/bubble/bubble_dialog_delegate.h"
 
 #include "build/build_config.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_utils.h"
@@ -298,6 +298,12 @@ void BubbleDialogDelegateView::UpdateColorsFromTheme(
   BubbleFrameView* frame_view = GetBubbleFrameView();
   if (frame_view)
     frame_view->bubble_border()->set_background_color(color());
+
+  // When there's an opaque layer, the bubble border background won't show
+  // through, so explicitly paint a background color.
+  set_background(layer() && layer()->fills_bounds_opaquely()
+                     ? Background::CreateSolidBackground(color())
+                     : nullptr);
 }
 
 void BubbleDialogDelegateView::HandleVisibilityChanged(Widget* widget,
@@ -312,9 +318,9 @@ void BubbleDialogDelegateView::HandleVisibilityChanged(Widget* widget,
   // than just its title and initially focused view.  See
   // http://crbug.com/474622 for details.
   if (widget == GetWidget() && visible) {
-    ui::AXViewState state;
-    GetAccessibleState(&state);
-    if (state.role == ui::AX_ROLE_ALERT_DIALOG)
+    ui::AXNodeData node_data;
+    GetAccessibleNodeData(&node_data);
+    if (node_data.role == ui::AX_ROLE_ALERT_DIALOG)
       NotifyAccessibilityEvent(ui::AX_EVENT_ALERT, true);
   }
 }

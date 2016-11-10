@@ -6,6 +6,7 @@
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/DOMWrapperWorld.h"
+#include "bindings/core/v8/ScopedPersistent.h"
 #include "bindings/core/v8/ScriptWrappableVisitorVerifier.h"
 #include "bindings/core/v8/V8AbstractEventListener.h"
 #include "bindings/core/v8/WrapperTypeInfo.h"
@@ -25,8 +26,7 @@ namespace blink {
 
 ScriptWrappableVisitor::~ScriptWrappableVisitor() {}
 
-void ScriptWrappableVisitor::TracePrologue(
-    v8::EmbedderReachableReferenceReporter* reporter) {
+void ScriptWrappableVisitor::TracePrologue() {
   // This CHECK ensures that wrapper tracing is not started from scopes
   // that forbid GC execution, e.g., constructors.
   CHECK(!ThreadState::current()->isGCForbidden());
@@ -37,10 +37,7 @@ void ScriptWrappableVisitor::TracePrologue(
   DCHECK(m_headersToUnmark.isEmpty());
   DCHECK(m_markingDeque.isEmpty());
   DCHECK(m_verifierDeque.isEmpty());
-  DCHECK(!m_reporter);
-  DCHECK(reporter);
   m_tracingInProgress = true;
-  m_reporter = reporter;
 }
 
 void ScriptWrappableVisitor::EnterFinalPause() {
@@ -84,7 +81,6 @@ void ScriptWrappableVisitor::performCleanup() {
   m_headersToUnmark.clear();
   m_markingDeque.clear();
   m_verifierDeque.clear();
-  m_reporter = nullptr;
   m_shouldCleanup = false;
   m_tracingInProgress = false;
 }
@@ -125,7 +121,7 @@ void ScriptWrappableVisitor::performLazyCleanup(double deadlineSeconds) {
       header->unmarkWrapperHeader();
 
     ++it;
-    m_headersToUnmark.removeLast();
+    m_headersToUnmark.pop_back();
 
     processedWrapperCount++;
     if (processedWrapperCount % kDeadlineCheckInterval == 0) {
@@ -140,7 +136,6 @@ void ScriptWrappableVisitor::performLazyCleanup(double deadlineSeconds) {
   CHECK(m_headersToUnmark.isEmpty());
   m_markingDeque.clear();
   m_verifierDeque.clear();
-  m_reporter = nullptr;
   m_shouldCleanup = false;
   m_tracingInProgress = false;
 }
@@ -206,33 +201,39 @@ bool ScriptWrappableVisitor::markWrapperHeader(HeapObjectHeader* header) const {
 
 void ScriptWrappableVisitor::markWrappersInAllWorlds(
     const ScriptWrappable* scriptWrappable) const {
-  DCHECK(m_reporter);
   DOMWrapperWorld::markWrappersInAllWorlds(
-      const_cast<ScriptWrappable*>(scriptWrappable), this, m_reporter);
+      const_cast<ScriptWrappable*>(scriptWrappable), this);
+}
+
+void ScriptWrappableVisitor::writeBarrier(
+    const void* srcObject,
+    const TraceWrapperV8Reference<v8::Value>* dstObject) {
+  if (!RuntimeEnabledFeatures::traceWrappablesEnabled()) {
+    return;
+  }
+  if (!srcObject || !dstObject || dstObject->isEmpty()) {
+    return;
+  }
+  // We only require a write barrier if |srcObject|  is already marked. Note
+  // that this implicitly disables the write barrier when the GC is not
+  // active as object will not be marked in this case.
+  if (!HeapObjectHeader::fromPayload(srcObject)->isWrapperHeaderMarked()) {
+    return;
+  }
+  currentVisitor(ThreadState::current()->isolate())
+      ->markWrapper(
+          &(const_cast<TraceWrapperV8Reference<v8::Value>*>(dstObject)->get()));
 }
 
 void ScriptWrappableVisitor::traceWrappers(
-    const ScopedPersistent<v8::Value>* scopedPersistent) const {
+    const TraceWrapperV8Reference<v8::Value>& tracedWrapper) const {
   markWrapper(
-      &(const_cast<ScopedPersistent<v8::Value>*>(scopedPersistent)->get()));
-}
-
-void ScriptWrappableVisitor::traceWrappers(
-    const ScopedPersistent<v8::Object>* scopedPersistent) const {
-  markWrapper(
-      &(const_cast<ScopedPersistent<v8::Object>*>(scopedPersistent)->get()));
+      &(const_cast<TraceWrapperV8Reference<v8::Value>&>(tracedWrapper).get()));
 }
 
 void ScriptWrappableVisitor::markWrapper(
     const v8::PersistentBase<v8::Value>* handle) const {
-  DCHECK(m_reporter);
-  handle->RegisterExternalReference(m_reporter);
-}
-
-void ScriptWrappableVisitor::markWrapper(
-    const v8::PersistentBase<v8::Object>* handle) const {
-  DCHECK(m_reporter);
-  handle->RegisterExternalReference(m_reporter);
+  handle->RegisterExternalReference(m_isolate);
 }
 
 void ScriptWrappableVisitor::dispatchTraceWrappers(

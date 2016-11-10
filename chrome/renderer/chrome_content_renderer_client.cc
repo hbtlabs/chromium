@@ -12,7 +12,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -46,7 +46,6 @@
 #include "chrome/renderer/media/chrome_key_systems.h"
 #include "chrome/renderer/net/net_error_helper.h"
 #include "chrome/renderer/net_benchmarking_extension.h"
-#include "chrome/renderer/page_load_histograms.h"
 #include "chrome/renderer/page_load_metrics/metrics_render_frame_observer.h"
 #include "chrome/renderer/pepper/pepper_helper.h"
 #include "chrome/renderer/plugins/non_loadable_plugin_placeholder.h"
@@ -97,6 +96,7 @@
 #include "net/base/net_errors.h"
 #include "ppapi/c/private/ppb_pdf.h"
 #include "ppapi/shared_impl/ppapi_switches.h"
+#include "printing/features/features.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebCachePolicy.h"
@@ -139,14 +139,14 @@
 #include "chrome/renderer/plugins/power_saver_info.h"
 #endif
 
-#if defined(ENABLE_PRINTING)
+#if BUILDFLAG(ENABLE_PRINTING)
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/renderer/printing/chrome_print_web_view_helper_delegate.h"
 #include "components/printing/renderer/print_web_view_helper.h"
 #include "printing/print_settings.h"
 #endif
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #include "chrome/renderer/pepper/chrome_pdf_print_client.h"
 #endif
 
@@ -307,7 +307,7 @@ ChromeContentRendererClient::ChromeContentRendererClient()
   for (size_t i = 0; i < arraysize(kPredefinedAllowedCompositorOrigins); ++i)
     allowed_compositor_origins_.insert(kPredefinedAllowedCompositorOrigins[i]);
 #endif
-#if defined(ENABLE_PRINTING)
+#if BUILDFLAG(ENABLE_PRINTING)
   printing::SetAgent(GetUserAgent());
 #endif
 }
@@ -411,7 +411,7 @@ void ChromeContentRendererClient::RenderThreadStarted() {
   // care of in extensions::Dispatcher.
   WebSecurityPolicy::registerURLSchemeAsSecure(chrome_search_scheme);
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   pdf_print_client_.reset(new ChromePDFPrintClient());
   pdf::PepperPDFHost::SetPrintClient(pdf_print_client_.get());
 #endif
@@ -475,12 +475,9 @@ void ChromeContentRendererClient::RenderFrameCreated(
   new NetErrorHelper(render_frame);
 
   if (render_frame->IsMainFrame()) {
-    // Only attach MainRenderFrameObserver to the main frame, since
+    // Only attach MetricsRenderFrameObserver to the main frame, since
     // we only want to log page load metrics for the main frame.
     new page_load_metrics::MetricsRenderFrameObserver(render_frame);
-    // Similarly, PageLoadHistograms are currently only collected for the main
-    // frame.
-    new PageLoadHistograms(render_frame);
   } else {
     // Avoid any race conditions from having the browser tell subframes that
     // they're prerendering.
@@ -523,7 +520,7 @@ void ChromeContentRendererClient::RenderViewCreated(
 #if defined(ENABLE_EXTENSIONS)
   ChromeExtensionsRendererClient::GetInstance()->RenderViewCreated(render_view);
 #endif
-#if defined(ENABLE_PRINTING)
+#if BUILDFLAG(ENABLE_PRINTING)
   new printing::PrintWebViewHelper(
       render_view, std::unique_ptr<printing::PrintWebViewHelper::Delegate>(
                        new ChromePrintWebViewHelperDelegate()));
@@ -1360,7 +1357,7 @@ void ChromeContentRendererClient::AddImageContextMenuProperties(
     std::map<std::string, std::string>* properties) {
   DCHECK(properties);
   WebString header_key(ASCIIToUTF16(
-      data_reduction_proxy::chrome_proxy_header()));
+      data_reduction_proxy::chrome_proxy_content_transform_header()));
   if (!response.httpHeaderField(header_key).isNull() &&
       data_reduction_proxy::IsEmptyImagePreview(
           response.httpHeaderField(header_key).utf8())) {

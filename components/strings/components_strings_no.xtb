@@ -50,6 +50,7 @@
 <translation id="1491663344921578213">Du kan ikke gå til <ph name="SITE" /> akkurat nå, fordi nettstedet bruker sertifikatfesting. Nettverksfeil og -angrep er som regel kortvarige, så denne siden fungerer nok igjen senere. <ph name="BEGIN_LEARN_MORE_LINK" />Finn ut mer<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="1506687042165942984">Vis en lagret kopi av denne siden (dvs. en kopi du vet at er utdatert).</translation>
 <translation id="1519264250979466059">Versjonsdato</translation>
+<translation id="153384715582417236">Det var alt for denne gangen</translation>
 <translation id="1549470594296187301">Denne funksjonen kan ikke brukes når JavaScript er slått av.</translation>
 <translation id="1559528461873125649">Finner ingen slik fil eller katalog</translation>
 <translation id="1559572115229829303">&lt;p&gt;Vi kan ikke opprette noen privat tilkobling til <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" />, fordi datoen og klokkeslettet (<ph name="DATE_AND_TIME" />) på enheten din er feil.&lt;/p&gt;
@@ -350,7 +351,6 @@
 <translation id="4728558894243024398">Plattform</translation>
 <translation id="4744603770635761495">Kjørbar sti</translation>
 <translation id="4756388243121344051">&amp;Logg</translation>
-<translation id="4759238208242260848">Nedlastinger</translation>
 <translation id="4764776831041365478">Det kan hende at nettsiden på <ph name="URL" /> er midlertidig nede eller flyttet permanent til en ny nettadresse.</translation>
 <translation id="4771973620359291008">Det har oppstått en ukjent feil.</translation>
 <translation id="4782449893814226250">Du spurte foreldrene dine om det er greit å besøke denne siden.</translation>
@@ -387,8 +387,10 @@
 <translation id="5171045022955879922">Søk, eller skriv inn en nettadresse</translation>
 <translation id="5172758083709347301">Datamaskin</translation>
 <translation id="5179510805599951267">Er ikke dette <ph name="ORIGINAL_LANGUAGE" />? Rapportér denne feilen</translation>
+<translation id="5181140330217080051">Laster ned</translation>
 <translation id="5190835502935405962">Bokmerkerad</translation>
 <translation id="5199729219167945352">Eksperimenter</translation>
+<translation id="5199841536747119669">Forslagene dine vises her</translation>
 <translation id="5251803541071282808">Nettsky</translation>
 <translation id="5277279256032773186">Bruker du Chrome på jobben? Bedrifter kan administrere Chrome-innstillingene for de ansatte. Finn ut mer</translation>
 <translation id="5299298092464848405">Feil under analysen av enhetsinnstillingene</translation>
@@ -468,6 +470,7 @@
 <translation id="6263376278284652872"><ph name="DOMAIN" />-bokmerker</translation>
 <translation id="6264485186158353794">Tilbake til trygg grunn</translation>
 <translation id="6282194474023008486">Postnummer</translation>
+<translation id="6290238015253830360">De foreslåtte artiklene dine vises her</translation>
 <translation id="6305205051461490394"><ph name="URL" /> er ikke tilgjengelig.</translation>
 <translation id="6321917430147971392">Kontrollér DNS-innstillingene dine</translation>
 <translation id="6328639280570009161">Prøv å slå av nettverksforutsigelse</translation>
@@ -651,6 +654,7 @@ Forresten: Inkognitomodus (<ph name="SHORTCUT_KEY" />) kan være kjekt neste gan
 <translation id="8363502534493474904">Slå av flymodus</translation>
 <translation id="8364627913115013041">Ikke angitt.</translation>
 <translation id="8380941800586852976">Farlig</translation>
+<translation id="8382348898565613901">Bokmerkene du nylig har besøkt, vises her</translation>
 <translation id="8412145213513410671">Kræsj (<ph name="CRASH_COUNT" />)</translation>
 <translation id="8412392972487953978">Du må angi den samme passordfrasen to ganger.</translation>
 <translation id="8428213095426709021">Innstillinger</translation>
@@ -662,7 +666,6 @@ Forresten: Inkognitomodus (<ph name="SHORTCUT_KEY" />) kan være kjekt neste gan
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> brukte for lang tid på å svare.</translation>
 <translation id="852346902619691059">Denne tjeneren kunne ikke bevise at den er <ph name="DOMAIN" />, ettersom sikkerhetssertifikatet ikke er regnet som pålitelig av operativsystemet på enheten din. Dette kan skyldes en feilkonfigurasjon eller at en angriper avskjærer tilkoblingen din. <ph name="BEGIN_LEARN_MORE_LINK" />Finn ut mer<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="8530504477309582336">Denne korttypen støttes ikke av Google Payments. Velg et annet kort.</translation>
-<translation id="8550022383519221471">Synkroniseringstjeneste er ikke tilgjengelig for ditt domene.</translation>
 <translation id="8553075262323480129">Oversettelsen mislyktes fordi sidens språk ikke kunne fastslås.</translation>
 <translation id="8559762987265718583">En privat tilkobling til <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> kunne ikke etableres fordi datoen og klokkeslettet (<ph name="DATE_AND_TIME" />) er feil på enheten.</translation>
 <translation id="856992080682148">Sertifikatet for dette nettstedet utløper i 2017 eller senere, og sertifikatkjeden inneholder et sertifikat som er signert med SHA-1.</translation>
@@ -670,7 +673,6 @@ Forresten: Inkognitomodus (<ph name="SHORTCUT_KEY" />) kan være kjekt neste gan
 <translation id="8591846766485502580">Du ser denne meldingen fordi en av foreldrene dine har blokkert dette nettstedet.</translation>
 <translation id="859285277496340001">Sertifikatet spesifiserer ikke en mekanisme for å kontrollere hvorvidt det har blitt tilbakekalt.</translation>
 <translation id="8647750283161643317">Tilbakestill alle til standard</translation>
-<translation id="8680787084697685621">Kontoens påloggingsdetaljer er utdaterte.</translation>
 <translation id="8703575177326907206">Tilkoblingen til <ph name="DOMAIN" /> er ikke kryptert.</translation>
 <translation id="8725066075913043281">Prøv igjen</translation>
 <translation id="8728672262656704056">Du er nå i inkognitomodus</translation>

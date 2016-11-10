@@ -959,9 +959,9 @@ public class AwSettingsTest extends AwTestBase {
         }
 
         protected String getData() {
-            DisplayAndroid displayAndroid = DisplayAndroid.get(mContext);
+            DisplayAndroid displayAndroid = DisplayAndroid.getNonMultiDisplay(mContext);
             int displayWidth =
-                    (int) (displayAndroid.getDisplayWidth() / displayAndroid.getDIPScale());
+                    (int) (displayAndroid.getDisplayWidth() / displayAndroid.getDipScale());
             int layoutWidth = (int) (displayWidth * 2.5f); // Use 2.5 as autosizing layout tests do.
             StringBuilder sb = new StringBuilder();
             sb.append("<html>"
@@ -1466,10 +1466,10 @@ public class AwSettingsTest extends AwTestBase {
             loadDataSync(getData());
             final int reportedClientWidth = Integer.parseInt(getTitleOnUiThread());
             if (value) {
-                final DisplayAndroid displayAndroid = DisplayAndroid.get(mContext);
+                final DisplayAndroid displayAndroid = DisplayAndroid.getNonMultiDisplay(mContext);
                 // The clientWidth is subject to pixel snapping.
                 final int displayWidth = (int) Math.ceil(
-                        displayAndroid.getDisplayWidth() / displayAndroid.getDIPScale());
+                        displayAndroid.getDisplayWidth() / displayAndroid.getDipScale());
                 assertEquals(displayWidth, reportedClientWidth);
             } else {
                 assertEquals(3000, reportedClientWidth);
@@ -2538,8 +2538,9 @@ public class AwSettingsTest extends AwTestBase {
                 pageTemplate,
                 "<meta name='viewport' content='width=" + viewportTagSpecifiedWidth + "' />");
 
-        DisplayAndroid displayAndroid = DisplayAndroid.get(testContainer.getContext());
-        int displayWidth = (int) (displayAndroid.getDisplayWidth() / displayAndroid.getDIPScale());
+        DisplayAndroid displayAndroid = DisplayAndroid.getNonMultiDisplay(
+                testContainer.getContext());
+        int displayWidth = (int) (displayAndroid.getDisplayWidth() / displayAndroid.getDipScale());
 
         settings.setJavaScriptEnabled(true);
         assertFalse(settings.getUseWideViewPort());
@@ -2607,8 +2608,8 @@ public class AwSettingsTest extends AwTestBase {
         settings.setBuiltInZoomControls(true);
 
         DisplayAndroid displayAndroid =
-                DisplayAndroid.get(testContainerView.getContext());
-        int displayWidth = (int) (displayAndroid.getDisplayWidth() / displayAndroid.getDIPScale());
+                DisplayAndroid.getNonMultiDisplay(testContainerView.getContext());
+        int displayWidth = (int) (displayAndroid.getDisplayWidth() / displayAndroid.getDipScale());
         int layoutWidth = displayWidth * 2;
         final String page = "<html>"
                 + "<head><meta name='viewport' content='width=" + layoutWidth + "'>"

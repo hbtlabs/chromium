@@ -38,6 +38,10 @@ std::string SystemTrayDelegate::GetEnterpriseDomain() const {
   return std::string();
 }
 
+std::string SystemTrayDelegate::GetEnterpriseRealm() const {
+  return std::string();
+}
+
 base::string16 SystemTrayDelegate::GetEnterpriseMessage() const {
   return base::string16();
 }
@@ -79,8 +83,6 @@ void SystemTrayDelegate::ShowUserLogin() {}
 void SystemTrayDelegate::SignOut() {}
 
 void SystemTrayDelegate::RequestRestartForUpdate() {}
-
-void SystemTrayDelegate::RequestShutdown() {}
 
 void SystemTrayDelegate::GetAvailableBluetoothDevices(
     BluetoothDeviceList* list) {}
@@ -138,6 +140,10 @@ bool SystemTrayDelegate::GetSessionStartTime(
 bool SystemTrayDelegate::GetSessionLengthLimit(
     base::TimeDelta* session_length_limit) {
   return false;
+}
+
+int SystemTrayDelegate::GetSystemTrayMenuWidth() {
+  return 0;
 }
 
 void SystemTrayDelegate::ActiveUserWasChanged() {}

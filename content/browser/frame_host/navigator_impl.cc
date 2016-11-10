@@ -511,7 +511,8 @@ bool NavigatorImpl::NavigateNewChildFrame(
 
 void NavigatorImpl::DidNavigate(
     RenderFrameHostImpl* render_frame_host,
-    const FrameHostMsg_DidCommitProvisionalLoad_Params& params) {
+    const FrameHostMsg_DidCommitProvisionalLoad_Params& params,
+    std::unique_ptr<NavigationHandleImpl> navigation_handle) {
   FrameTree* frame_tree = render_frame_host->frame_tree_node()->frame_tree();
   bool oopifs_possible = SiteIsolationPolicy::AreCrossProcessFramesPossible();
 
@@ -618,7 +619,8 @@ void NavigatorImpl::DidNavigate(
   int old_entry_count = controller_->GetEntryCount();
   LoadCommittedDetails details;
   bool did_navigate = controller_->RendererDidNavigate(
-      render_frame_host, params, &details, is_navigation_within_page);
+      render_frame_host, params, &details, is_navigation_within_page,
+      navigation_handle.get());
 
   // If the history length and/or offset changed, update other renderers in the
   // FrameTree.
@@ -667,9 +669,9 @@ void NavigatorImpl::DidNavigate(
     delegate_->DidCommitProvisionalLoad(render_frame_host,
                                         params.url,
                                         transition_type);
-    render_frame_host->navigation_handle()->DidCommitNavigation(
-        params, is_navigation_within_page, render_frame_host);
-    render_frame_host->SetNavigationHandle(nullptr);
+    navigation_handle->DidCommitNavigation(params, is_navigation_within_page,
+                                           render_frame_host);
+    navigation_handle.reset();
   }
 
   if (!did_navigate)
@@ -713,7 +715,6 @@ void NavigatorImpl::RequestOpenURL(
     bool uses_post,
     const scoped_refptr<ResourceRequestBodyImpl>& body,
     const std::string& extra_headers,
-    SiteInstance* source_site_instance,
     const Referrer& referrer,
     WindowOpenDisposition disposition,
     bool should_replace_current_entry,
@@ -735,6 +736,9 @@ void NavigatorImpl::RequestOpenURL(
   // redirects.  http://crbug.com/311721.
   std::vector<GURL> redirect_chain;
 
+  // Note that unlike RequestTransferURL, this uses the navigating
+  // RenderFrameHost's current SiteInstance, as that's where this navigation
+  // originated.
   GURL dest_url(url);
   if (!GetContentClient()->browser()->ShouldAllowOpenURL(
           current_site_instance, url)) {
@@ -759,33 +763,31 @@ void NavigatorImpl::RequestOpenURL(
   params.uses_post = uses_post;
   params.post_data = body;
   params.extra_headers = extra_headers;
-  params.source_site_instance = source_site_instance;
   if (redirect_chain.size() > 0)
     params.redirect_chain = redirect_chain;
   params.should_replace_current_entry = should_replace_current_entry;
   params.user_gesture = user_gesture;
 
-  if (render_frame_host->web_ui()) {
-    // Web UI pages sometimes want to override the page transition type for
-    // link clicks (e.g., so the new tab page can specify AUTO_BOOKMARK for
-    // automatically generated suggestions).  We don't override other types
-    // like TYPED because they have different implications (e.g., autocomplete).
-    if (ui::PageTransitionCoreTypeIs(
-        params.transition, ui::PAGE_TRANSITION_LINK))
-      params.transition = render_frame_host->web_ui()->GetLinkTransitionType();
+  // RequestOpenURL is used only for local frames, so we can get here only if
+  // the navigation is initiated by a frame in the same SiteInstance as this
+  // frame.  Note that navigations on RenderFrameProxies do not use
+  // RequestOpenURL and go through RequestTransferURL instead.
+  params.source_site_instance = current_site_instance;
 
-    // Note also that we hide the referrer for Web UI pages. We don't really
-    // want web sites to see a referrer of "chrome://blah" (and some
-    // chrome: URLs might have search terms or other stuff we don't want to
-    // send to the site), so we send no referrer.
+  if (render_frame_host->web_ui()) {
+    // Note that we hide the referrer for Web UI pages. We don't really want
+    // web sites to see a referrer of "chrome://blah" (and some chrome: URLs
+    // might have search terms or other stuff we don't want to send to the
+    // site), so we send no referrer.
     params.referrer = Referrer();
 
     // Navigations in Web UI pages count as browser-initiated navigations.
     params.is_renderer_initiated = false;
   }
 
-  GetContentClient()->browser()->OverrideOpenURLParams(current_site_instance,
-                                                       &params);
+  GetContentClient()->browser()->OverrideNavigationParams(
+      current_site_instance, &params.transition, &params.is_renderer_initiated,
+      &params.referrer);
 
   if (delegate_)
     delegate_->RequestOpenURL(render_frame_host, params);
@@ -822,31 +824,36 @@ void NavigatorImpl::RequestTransferURL(
   Referrer referrer_to_use(referrer);
   FrameTreeNode* node = render_frame_host->frame_tree_node();
   SiteInstance* current_site_instance = render_frame_host->GetSiteInstance();
-  if (!GetContentClient()->browser()->ShouldAllowOpenURL(current_site_instance,
-                                                         url)) {
-    dest_url = GURL(url::kAboutBlankURL);
+  // It is important to pass in the source_site_instance if it is available
+  // (such as when navigating a proxy).  See https://crbug.com/656752.
+  if (!GetContentClient()->browser()->ShouldAllowOpenURL(
+          source_site_instance ? source_site_instance : current_site_instance,
+          url)) {
+    // It is important to return here, rather than rewrite the dest_url to
+    // about:blank.  The latter won't actually have any effect when
+    // transferring, as NavigateToEntry will think that the transfer is to the
+    // same RFH that started the navigation and let the existing navigation
+    // (for the disallowed URL) proceed.
+    return;
   }
 
   // TODO(creis): Determine if this transfer started as a browser-initiated
   // navigation.  See https://crbug.com/495161.
   bool is_renderer_initiated = true;
   if (render_frame_host->web_ui()) {
-    // Web UI pages sometimes want to override the page transition type for
-    // link clicks (e.g., so the new tab page can specify AUTO_BOOKMARK for
-    // automatically generated suggestions).  We don't override other types
-    // like TYPED because they have different implications (e.g., autocomplete).
-    if (ui::PageTransitionCoreTypeIs(page_transition, ui::PAGE_TRANSITION_LINK))
-      page_transition = render_frame_host->web_ui()->GetLinkTransitionType();
-
-    // Note also that we hide the referrer for Web UI pages. We don't really
-    // want web sites to see a referrer of "chrome://blah" (and some
-    // chrome: URLs might have search terms or other stuff we don't want to
-    // send to the site), so we send no referrer.
+    // Note that we hide the referrer for Web UI pages. We don't really want
+    // web sites to see a referrer of "chrome://blah" (and some chrome: URLs
+    // might have search terms or other stuff we don't want to send to the
+    // site), so we send no referrer.
     referrer_to_use = Referrer();
 
     // Navigations in Web UI pages count as browser-initiated navigations.
     is_renderer_initiated = false;
   }
+
+  GetContentClient()->browser()->OverrideNavigationParams(
+      current_site_instance, &page_transition, &is_renderer_initiated,
+      &referrer_to_use);
 
   // Create a NavigationEntry for the transfer, without making it the pending
   // entry.  Subframe transfers should only be possible in OOPIF-enabled modes,
@@ -1065,11 +1072,6 @@ void NavigatorImpl::LogBeforeUnloadTime(
   }
 }
 
-NavigationHandleImpl* NavigatorImpl::GetNavigationHandleForFrameHost(
-    RenderFrameHostImpl* render_frame_host) {
-  return render_frame_host->navigation_handle();
-}
-
 void NavigatorImpl::DiscardPendingEntryIfNeeded(NavigationHandleImpl* handle) {
   // Racy conditions can cause a fail message to arrive after its corresponding
   // pending entry has been replaced by another navigation. If
@@ -1127,6 +1129,7 @@ void NavigatorImpl::RequestNavigation(FrameTreeNode* frame_tree_node,
   // This value must be set here because creating a NavigationRequest might
   // change the renderer live/non-live status and change this result.
   bool should_dispatch_beforeunload =
+      !is_same_document_history_load &&
       frame_tree_node->current_frame_host()->ShouldDispatchBeforeUnload();
   FrameMsg_Navigate_Type::Value navigation_type =
       GetNavigationType(controller_->GetBrowserContext(), entry, reload_type);

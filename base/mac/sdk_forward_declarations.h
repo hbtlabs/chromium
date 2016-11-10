@@ -276,6 +276,10 @@ BASE_EXPORT extern NSString* const NSAppearanceNameVibrantLight;
 @property(readonly, strong) NSLayoutYAxisAnchor* bottomAnchor;
 @end
 
+@interface NSWindow (ElCapitanSDK)
+- (void)performWindowDragWithEvent:(NSEvent*)event;
+@end
+
 #endif  // MAC_OS_X_VERSION_10_11
 
 // Once Chrome no longer supports OSX 10.11, everything within this
@@ -288,6 +292,20 @@ BASE_EXPORT extern NSString* const NSAppearanceNameVibrantLight;
 @end
 
 #endif  // MAC_OS_X_VERSION_10_12
+
+// Once Chrome no longer supports OSX 10.12.0, everything within this
+// preprocessor block can be removed.
+#if !defined(MAC_OS_X_VERSION_10_12_1) || \
+    MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_12_1
+
+@interface NSButton (SierraPointOneSDK)
+@property(copy) NSColor* bezelColor;
++ (instancetype)buttonWithTitle:(NSString*)title
+                         target:(id)target
+                         action:(SEL)action;
+@end
+
+#endif  // MAC_OS_X_VERSION_10_12_1
 
 // ----------------------------------------------------------------------------
 // The symbol for kCWSSIDDidChangeNotification is available in the

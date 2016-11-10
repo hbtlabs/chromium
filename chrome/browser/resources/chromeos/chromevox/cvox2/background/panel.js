@@ -8,6 +8,7 @@
 
 goog.provide('Panel');
 
+goog.require('BrailleCommandHandler');
 goog.require('ISearchUI');
 goog.require('Msgs');
 goog.require('PanelCommand');
@@ -22,6 +23,16 @@ goog.require('cvox.CommandStore');
  * @constructor
  */
 Panel = function() {
+};
+
+/**
+ * @enum {string}
+ */
+Panel.Mode = {
+  COLLAPSED: 'collapsed',
+  FOCUSED: 'focused',
+  FULLSCREEN_MENUS: 'menus',
+  FULLSCREEN_TUTORIAL: 'tutorial'
 };
 
 /**
@@ -46,6 +57,9 @@ Panel.init = function() {
   /** @type {Element} @private */
   this.brailleTableElement_ = $('braille-table');
   this.brailleTableElement2_ = $('braille-table2');
+
+  /** @type {Panel.Mode} @private */
+  this.mode_ = Panel.Mode.COLLAPSED;
 
   /**
    * The array of top-level menus.
@@ -117,6 +131,12 @@ Panel.init = function() {
 
   document.addEventListener('keydown', Panel.onKeyDown, false);
   document.addEventListener('mouseup', Panel.onMouseUp, false);
+  window.addEventListener('blur', function(evt) {
+    if (evt.target != window || document.activeElement == document.body)
+      return;
+
+    Panel.closeMenusAndRestoreFocus();
+  }, false);
 
   Panel.searchInput_.addEventListener('blur', Panel.onSearchInputBlur, false);
 };
@@ -126,15 +146,15 @@ Panel.init = function() {
  */
 Panel.updateFromPrefs = function() {
   if (Panel.searching_) {
-    this.speechContainer_.style.display = 'none';
-    this.brailleContainer_.style.display = 'none';
-    this.searchContainer_.style.display = 'block';
+    this.speechContainer_.hidden = true;
+    this.brailleContainer_.hidden = true;
+    this.searchContainer_.hidden = false;
     return;
   }
 
-  this.speechContainer_.style.display = 'block';
-  this.brailleContainer_.style.display = 'block';
-  this.searchContainer_.style.display = 'none';
+  this.speechContainer_.hidden = false;
+  this.brailleContainer_.hidden = false;
+  this.searchContainer_.hidden = true;
 
   if (localStorage['brailleCaptions'] === String(true)) {
     this.speechContainer_.style.visibility = 'hidden';
@@ -202,6 +222,9 @@ Panel.exec = function(command) {
     case PanelCommandType.TUTORIAL:
       Panel.onTutorial();
       break;
+    case PanelCommandType.UPDATE_NOTES:
+      Panel.onTutorial('updateNotes');
+      break;
   }
 };
 
@@ -211,7 +234,7 @@ Panel.exec = function(command) {
 Panel.onEnableMenus = function() {
   Panel.menusEnabled_ = true;
   $('menus_button').disabled = false;
-  $('triangle').style.display = '';
+  $('triangle').hidden = false;
 };
 
 /**
@@ -220,7 +243,38 @@ Panel.onEnableMenus = function() {
 Panel.onDisableMenus = function() {
   Panel.menusEnabled_ = false;
   $('menus_button').disabled = true;
-  $('triangle').style.display = 'none';
+  $('triangle').hidden = true;
+};
+
+/**
+ * Sets the mode, which determines the size of the panel and what objects
+ *     are shown or hidden.
+ * @param {Panel.Mode} mode The new mode.
+ */
+Panel.setMode = function(mode) {
+  if (this.mode_ == mode)
+    return;
+
+  this.mode_ = mode;
+
+  if (this.mode_ == Panel.Mode.FULLSCREEN_MENUS ||
+      this.mode_ == Panel.Mode.FULLSCREEN_TUTORIAL) {
+    // Change the url fragment to 'fullscreen', which signals the native
+    // host code to make the window fullscreen and give it focus.
+    window.location = '#fullscreen';
+  } else if (this.mode_ == Panel.Mode.FOCUSED) {
+    // Change the url fragment to 'focus', which signals the native
+    // host code to give the window focus.
+    window.location = '#focus';
+  } else {
+    // Remove the url fragment, which signals the native host code to
+    // collapse the panel to its normal size and cause it to lose focus.
+    window.location = '#';
+  }
+
+  $('main').hidden = (this.mode_ == Panel.Mode.FULLSCREEN_TUTORIAL);
+  $('menus_background').hidden = (this.mode_ != Panel.Mode.FULLSCREEN_MENUS);
+  $('tutorial').hidden = (this.mode_ != Panel.Mode.FULLSCREEN_TUTORIAL);
 };
 
 /**
@@ -241,9 +295,7 @@ Panel.onOpenMenus = function(opt_event, opt_activateMenuTitle) {
     opt_event.preventDefault();
   }
 
-  // Change the url fragment to 'fullscreen', which signals the native
-  // host code to make the window fullscreen, revealing the menus.
-  window.location = '#fullscreen';
+  Panel.setMode(Panel.Mode.FULLSCREEN_MENUS);
 
   // Clear any existing menus and clear the callback.
   Panel.clearMenus();
@@ -311,6 +363,7 @@ Panel.onOpenMenus = function(opt_event, opt_activateMenuTitle) {
       menu.addMenuItem(
           binding.title,
           binding.keySeq,
+          BrailleCommandHandler.getDotShortcut(binding.command, true),
           function() {
             var CommandHandler =
                 chrome.extension.getBackgroundPage()['CommandHandler'];
@@ -328,7 +381,7 @@ Panel.onOpenMenus = function(opt_event, opt_activateMenuTitle) {
           var title = tabs[j].title;
           if (tabs[j].active && windows[i].id == lastFocusedWindow.id)
             title += ' ' + Msgs.getMsg('active_tab');
-          tabsMenu.addMenuItem(title, '', (function(win, tab) {
+          tabsMenu.addMenuItem(title, '', '', (function(win, tab) {
             bkgnd.chrome.windows.update(win.id, {focused: true}, function() {
               bkgnd.chrome.tabs.update(tab.id, {active: true});
             });
@@ -340,17 +393,27 @@ Panel.onOpenMenus = function(opt_event, opt_activateMenuTitle) {
 
   // Add a menu item that disables / closes ChromeVox.
   chromevoxMenu.addMenuItem(
-      Msgs.getMsg('disable_chromevox'), 'Ctrl+Alt+Z', function() {
+      Msgs.getMsg('disable_chromevox'), 'Ctrl+Alt+Z', '', function() {
         Panel.onClose();
       });
 
-  // Add menus for various role types.
+  var roleListMenuMapping = [
+    { menuTitle: 'role_heading', predicate: AutomationPredicate.heading },
+    { menuTitle: 'role_landmark', predicate: AutomationPredicate.landmark },
+    { menuTitle: 'role_link', predicate: AutomationPredicate.link },
+    { menuTitle: 'role_form', predicate: AutomationPredicate.formField },
+    { menuTitle: 'role_table', predicate: AutomationPredicate.table }];
+
   var node = bkgnd.ChromeVoxState.instance.getCurrentRange().start.node;
-  Panel.addNodeMenu('role_heading', node, AutomationPredicate.heading);
-  Panel.addNodeMenu('role_landmark', node, AutomationPredicate.landmark);
-  Panel.addNodeMenu('role_link', node, AutomationPredicate.link);
-  Panel.addNodeMenu('role_form', node, AutomationPredicate.formField);
-  Panel.addNodeMenu('role_table', node, AutomationPredicate.table);
+  for (var i = 0; i < roleListMenuMapping.length; ++i) {
+    var menuTitle = roleListMenuMapping[i].menuTitle;
+    var predicate = roleListMenuMapping[i].predicate;
+    // Create node menus asynchronously (because it may require searching a
+    // long document) unless that's the specific menu the
+    // user requested.
+    var async = (menuTitle != opt_activateMenuTitle);
+    Panel.addNodeMenu(menuTitle, node, predicate, async);
+  }
 
   // Activate either the specified menu or the first menu.
   var selectedMenu = Panel.menus_[0];
@@ -367,8 +430,7 @@ Panel.onSearch = function() {
   Panel.pendingCallback_ = null;
   Panel.searching_ = true;
   Panel.updateFromPrefs();
-
-  window.location = '#focus';
+  Panel.setMode(Panel.Mode.FOCUSED);
 
   ISearchUI.get(Panel.searchInput_);
 };
@@ -483,12 +545,13 @@ Panel.onUpdateBraille = function(data) {
 /**
  * Create a new node menu with the given name and add it to the menu bar.
  * @param {string} menuMsg The msg id of the new menu to add.
- * @param {chrome.automation.AutomationNode} node
+ * @param {!chrome.automation.AutomationNode} node
  * @param {AutomationPredicate.Unary} pred
+ * @param {boolean} defer If true, defers populating the menu.
  * @return {PanelMenu} The menu just created.
  */
-Panel.addNodeMenu = function(menuMsg, node, pred) {
-  var menu = new PanelNodeMenu(menuMsg, node, pred);
+Panel.addNodeMenu = function(menuMsg, node, pred, defer) {
+  var menu = new PanelNodeMenu(menuMsg, node, pred, defer);
   $('menu-bar').appendChild(menu.menuBarItemElement);
   menu.menuBarItemElement.addEventListener('mouseover', function() {
     Panel.activateMenu(menu);
@@ -600,6 +663,11 @@ Panel.onMouseUp = function(event) {
  * @param {Event} event The key event.
  */
 Panel.onKeyDown = function(event) {
+  if (event.key == 'Escape' && Panel.mode_ == Panel.Mode.FULLSCREEN_TUTORIAL) {
+    Panel.setMode(Panel.Mode.COLLAPSED);
+    return;
+  }
+
   if (!Panel.activeMenu_)
     return;
 
@@ -655,8 +723,7 @@ Panel.onSearchInputBlur = function() {
   if (Panel.searching_) {
     if (document.activeElement != Panel.searchInput_ || !document.hasFocus()) {
       Panel.searching_ = false;
-      if (window.location == '#focus')
-        window.location = '#';
+      Panel.setMode(Panel.Mode.COLLAPSED);
       Panel.updateFromPrefs();
       Panel.searchInput_.value = '';
     }
@@ -670,13 +737,15 @@ Panel.onOptions = function() {
   var bkgnd =
       chrome.extension.getBackgroundPage()['ChromeVoxState']['instance'];
   bkgnd['showOptionsPage']();
-  window.location = '#';
+  Panel.setMode(Panel.Mode.COLLAPSED);
 };
 
 /**
  * Exit ChromeVox.
  */
 Panel.onClose = function() {
+  // Change the url fragment to 'close', which signals the native code
+  // to exit ChromeVox.
   window.location = '#close';
 };
 
@@ -698,7 +767,13 @@ Panel.closeMenusAndRestoreFocus = function() {
   // Watch for the next focus event.
   var onFocus = function(desktop, evt) {
     desktop.removeEventListener(chrome.automation.EventType.focus, onFocus);
-    Panel.pendingCallback_ && Panel.pendingCallback_();
+    if (Panel.pendingCallback_) {
+      // Clear it before calling it, in case the callback itself triggers
+      // another pending callback.
+      var pendingCallback = Panel.pendingCallback_;
+      Panel.pendingCallback_ = null;
+      pendingCallback();
+    }
   }.bind(this);
 
   chrome.automation.getDesktop(function(desktop) {
@@ -712,7 +787,7 @@ Panel.closeMenusAndRestoreFocus = function() {
     Panel.clearMenus();
 
     // Make sure we're not in full-screen mode.
-    window.location = '#';
+    Panel.setMode(Panel.Mode.COLLAPSED);
 
     this.activeMenu_ = null;
   });
@@ -720,17 +795,20 @@ Panel.closeMenusAndRestoreFocus = function() {
 
 /**
  * Open the tutorial.
+ * @param {string=} opt_page Show a specific page.
  */
-Panel.onTutorial = function() {
+Panel.onTutorial = function(opt_page) {
   // Change the url fragment to 'fullscreen', which signals the native
   // host code to make the window fullscreen, revealing the menus.
-  window.location = '#fullscreen';
+  Panel.setMode(Panel.Mode.FULLSCREEN_TUTORIAL);
 
-  $('main').style.display = 'none';
-  $('menus_background').style.display = 'none';
-  $('tutorial').style.display = 'block';
-
-  Panel.tutorial_.firstPage();
+  switch (opt_page) {
+    case 'updateNotes':
+      Panel.tutorial_.updateNotes();
+      break;
+    default:
+      Panel.tutorial_.lastViewedPage();
+  }
 };
 
 /**
@@ -751,9 +829,7 @@ Panel.onTutorialPrevious = function() {
  * Close the tutorial.
  */
 Panel.onCloseTutorial = function() {
-  $('main').style.display = 'block';
-  $('tutorial').style.display = 'none';
-  Panel.closeMenusAndRestoreFocus();
+  Panel.setMode(Panel.Mode.COLLAPSED);
 };
 
 window.addEventListener('load', function() {

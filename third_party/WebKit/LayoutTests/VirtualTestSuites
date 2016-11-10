@@ -144,6 +144,11 @@
   },
   {
     "prefix": "rootlayerscrolls",
+    "base": "scrollingcoordinator",
+    "args": ["--root-layer-scrolls"]
+  },
+  {
+    "prefix": "rootlayerscrolls",
     "base": "fast/scrolling",
     "args": ["--root-layer-scrolls"]
   },
@@ -281,7 +286,7 @@
   },
   {
     "prefix": "mojo-loading",
-    "base": "http/tests/xmlhttprequest/web-apps",
+    "base": "http/tests/xmlhttprequest",
     "args": ["--enable-blink-features=LoadingWithMojo"]
   },
   {
@@ -295,9 +300,9 @@
     "args": ["--enable-features=WebAssembly"]
   },
   {
-    "prefix": "mojo-service-worker",
+    "prefix": "disable-mojo-service-worker",
     "base": "http/tests/serviceworker",
-    "args": ["--mojo-service-worker"]
+    "args": ["--disable-mojo-service-worker"]
   },
   {
     "prefix": "service-worker-navigation-preload",

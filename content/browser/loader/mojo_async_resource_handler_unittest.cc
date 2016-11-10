@@ -184,6 +184,10 @@ class TestResourceController : public ResourceController {
   }
 
   void CancelWithError(int error_code) override {
+    // While cancelling more than once is legal, none of these tests should do
+    // it.
+    EXPECT_FALSE(is_cancel_with_error_called_);
+
     is_cancel_with_error_called_ = true;
     error_ = error_code;
     if (quit_closure_)
@@ -223,8 +227,8 @@ class MojoAsyncResourceHandlerWithCustomDataPipeOperations
   MojoAsyncResourceHandlerWithCustomDataPipeOperations(
       net::URLRequest* request,
       ResourceDispatcherHostImpl* rdh,
-      mojo::InterfaceRequest<mojom::URLLoader> mojo_request,
-      mojom::URLLoaderClientPtr url_loader_client)
+      mojom::URLLoaderAssociatedRequest mojo_request,
+      mojom::URLLoaderClientAssociatedPtr url_loader_client)
       : MojoAsyncResourceHandler(request,
                                  rdh,
                                  std::move(mojo_request),
@@ -290,9 +294,12 @@ class MojoAsyncResourceHandlerTestBase {
         true,                                    // is_async
         false                                    // is_using_lofi
         );
+    mojom::URLLoaderClientAssociatedPtrInfo client_ptr_info =
+        url_loader_client_.CreateLocalAssociatedPtrInfo();
+    mojom::URLLoaderClientAssociatedPtr client_ptr;
+    client_ptr.Bind(std::move(client_ptr_info));
     handler_.reset(new MojoAsyncResourceHandlerWithCustomDataPipeOperations(
-        request_.get(), &rdh_, nullptr,
-        url_loader_client_.CreateInterfacePtrAndBind()));
+        request_.get(), &rdh_, nullptr, std::move(client_ptr)));
     handler_->SetController(&resource_controller_);
   }
 

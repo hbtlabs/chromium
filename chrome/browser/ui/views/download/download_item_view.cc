@@ -43,7 +43,7 @@
 #include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "content/public/browser/download_danger_type.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
@@ -59,6 +59,7 @@
 #include "ui/gfx/vector_icons_public.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
+#include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/button/vector_icon_button.h"
@@ -194,8 +195,7 @@ DownloadItemView::DownloadItemView(DownloadItem* download_item,
   set_context_menu_controller(this);
 
   dropdown_button_->SetBorder(
-      views::Border::CreateEmptyBorder(gfx::Insets(kDropdownBorderWidth)));
-  dropdown_button_->set_ink_drop_size(gfx::Size(32, 32));
+      views::CreateEmptyBorder(gfx::Insets(kDropdownBorderWidth)));
   AddChildView(dropdown_button_);
 
   LoadIcon();
@@ -470,13 +470,13 @@ bool DownloadItemView::GetTooltipText(const gfx::Point& p,
   return true;
 }
 
-void DownloadItemView::GetAccessibleState(ui::AXViewState* state) {
-  state->name = accessible_name_;
-  state->role = ui::AX_ROLE_BUTTON;
+void DownloadItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->SetName(accessible_name_);
+  node_data->role = ui::AX_ROLE_BUTTON;
   if (model_.IsDangerous())
-    state->AddStateFlag(ui::AX_STATE_DISABLED);
+    node_data->AddStateFlag(ui::AX_STATE_DISABLED);
   else
-    state->AddStateFlag(ui::AX_STATE_HASPOPUP);
+    node_data->AddStateFlag(ui::AX_STATE_HASPOPUP);
 }
 
 void DownloadItemView::OnThemeChanged() {
@@ -489,6 +489,10 @@ void DownloadItemView::AddInkDropLayer(ui::Layer* ink_drop_layer) {
   // The layer that's added to host the ink drop layer must mask to bounds
   // so the hover effect is clipped while animating open.
   layer()->SetMasksToBounds(true);
+}
+
+std::unique_ptr<views::InkDrop> DownloadItemView::CreateInkDrop() {
+  return CreateDefaultFloodFillInkDropImpl();
 }
 
 std::unique_ptr<views::InkDropRipple> DownloadItemView::CreateInkDropRipple()
@@ -972,7 +976,8 @@ gfx::ImageSkia DownloadItemView::GetWarningIcon() {
     case content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
     case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
     case content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
-      return gfx::CreateVectorIcon(gfx::VectorIconId::REMOVE_CIRCLE,
+    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
+      return gfx::CreateVectorIcon(gfx::VectorIconId::WARNING,
                                    kWarningIconSize, gfx::kGoogleRed700);
 
     case content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
@@ -981,10 +986,6 @@ gfx::ImageSkia DownloadItemView::GetWarningIcon() {
     case content::DOWNLOAD_DANGER_TYPE_MAX:
       NOTREACHED();
       break;
-
-    case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
-      return gfx::CreateVectorIcon(gfx::VectorIconId::WARNING, kWarningIconSize,
-                                   gfx::kGoogleYellow700);
   }
   return gfx::ImageSkia();
 }

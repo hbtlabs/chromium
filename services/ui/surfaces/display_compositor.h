@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "cc/ipc/display_compositor.mojom.h"
 #include "cc/surfaces/surface_manager.h"
 #include "cc/surfaces/surface_observer.h"
 
@@ -29,11 +30,13 @@ class DisplayCompositorClient;
 class DisplayCompositor : public cc::SurfaceObserver,
                           public base::RefCounted<DisplayCompositor> {
  public:
-  explicit DisplayCompositor(DisplayCompositorClient* client);
+  explicit DisplayCompositor(cc::mojom::DisplayCompositorClientPtr client);
 
-  uint32_t GenerateNextClientId();
-
-  void ReturnSurfaceReference(const cc::SurfaceSequence& sequence);
+  // TODO(fsamuel):  These methods should be behind a mojo interface.
+  void AddSurfaceReference(const cc::SurfaceId& surface_id,
+                           const cc::SurfaceSequence& surface_sequence);
+  void ReturnSurfaceReferences(const cc::FrameSinkId& frame_sink_id,
+                               const std::vector<uint32_t>& sequences);
 
   cc::SurfaceManager* manager() { return &manager_; }
 
@@ -48,8 +51,7 @@ class DisplayCompositor : public cc::SurfaceObserver,
   void OnSurfaceDamaged(const cc::SurfaceId& surface_id,
                         bool* changed) override;
 
-  DisplayCompositorClient* const client_;
-  uint32_t next_client_id_;
+  cc::mojom::DisplayCompositorClientPtr client_;
   cc::SurfaceManager manager_;
 
   DISALLOW_COPY_AND_ASSIGN(DisplayCompositor);

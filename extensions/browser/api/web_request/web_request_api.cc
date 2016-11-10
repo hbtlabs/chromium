@@ -16,7 +16,8 @@
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -966,8 +967,13 @@ void ExtensionWebRequestEventRouter::OnErrorOccurred(
     net::URLRequest* request,
     bool started,
     int net_error) {
+  ExtensionsBrowserClient* client = ExtensionsBrowserClient::Get();
+  if (!client) {
+    // |client| could be NULL during shutdown.
+    return;
+  }
   ExtensionNavigationUIData* navigation_ui_data =
-      ExtensionsBrowserClient::Get()->GetExtensionNavigationUIData(request);
+      client->GetExtensionNavigationUIData(request);
   // We hide events from the system context as well as sensitive requests.
   // However, if the request first became sensitive after redirecting we have
   // already signaled it and thus we have to signal the end of it. This is
@@ -2148,12 +2154,6 @@ WebRequestInternalAddEventListenerFunction::Run() {
 
   helpers::ClearCacheOnNavigation();
 
-  if (!extension_id_safe().empty()) {
-    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                            base::Bind(&helpers::NotifyWebRequestAPIUsed,
-                                       profile_id(), extension_id_safe()));
-  }
-
   return RespondNow(NoArguments());
 }
 
@@ -2304,9 +2304,8 @@ void WebRequestHandlerBehaviorChangedFunction::GetQuotaLimitHeuristics(
       base::TimeDelta::FromMinutes(10)};
   QuotaLimitHeuristic::BucketMapper* bucket_mapper =
       new QuotaLimitHeuristic::SingletonBucketMapper();
-  ClearCacheQuotaHeuristic* heuristic =
-      new ClearCacheQuotaHeuristic(config, bucket_mapper);
-  heuristics->push_back(heuristic);
+  heuristics->push_back(
+      base::MakeUnique<ClearCacheQuotaHeuristic>(config, bucket_mapper));
 }
 
 void WebRequestHandlerBehaviorChangedFunction::OnQuotaExceeded(

@@ -8,7 +8,7 @@
 #include "base/macros.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPath.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/default_style.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -40,7 +40,6 @@ const gfx::Font::Weight kHoverWeight = gfx::Font::Weight::NORMAL;
 const gfx::Font::Weight kActiveWeight = gfx::Font::Weight::BOLD;
 const gfx::Font::Weight kInactiveWeight = gfx::Font::Weight::NORMAL;
 
-const int kHarmonyTabStripVerticalPad = 16;
 const int kHarmonyTabStripTabHeight = 40;
 
 }  // namespace
@@ -147,7 +146,7 @@ Tab::Tab(TabbedPane* tabbed_pane, const base::string16& title, View* contents)
   const int kTabVerticalPadding = 5;
   const int kTabHorizontalPadding = 10;
 
-  SetBorder(Border::CreateEmptyBorder(
+  SetBorder(CreateEmptyBorder(
       gfx::Insets(kTabVerticalPadding, kTabHorizontalPadding)));
   SetLayoutManager(new FillLayout);
 
@@ -267,7 +266,7 @@ MdTab::MdTab(TabbedPane* tabbed_pane,
              View* contents)
     : Tab(tabbed_pane, title, contents) {
   const int kBorderThickness = 2;
-  SetBorder(Border::CreateEmptyBorder(gfx::Insets(kBorderThickness)));
+  SetBorder(CreateEmptyBorder(gfx::Insets(kBorderThickness)));
   OnStateChanged();
 }
 
@@ -297,7 +296,7 @@ gfx::Size MdTab::GetPreferredSize() const {
 }
 
 void MdTab::OnFocus() {
-  SetBorder(Border::CreateSolidBorder(
+  SetBorder(CreateSolidBorder(
       GetInsets().top(),
       SkColorSetA(GetNativeTheme()->GetSystemColor(
                       ui::NativeTheme::kColorId_FocusedBorderColor),
@@ -306,7 +305,7 @@ void MdTab::OnFocus() {
 }
 
 void MdTab::OnBlur() {
-  SetBorder(Border::CreateEmptyBorder(GetInsets()));
+  SetBorder(CreateEmptyBorder(GetInsets()));
   SchedulePaint();
 }
 
@@ -387,8 +386,7 @@ Tab* TabStrip::GetTabAtDeltaFromSelected(int delta) const {
 }
 
 MdTabStrip::MdTabStrip() {
-  BoxLayout* layout =
-      new BoxLayout(BoxLayout::kHorizontal, 0, kHarmonyTabStripVerticalPad, 0);
+  BoxLayout* layout = new BoxLayout(BoxLayout::kHorizontal, 0, 0, 0);
   layout->set_main_axis_alignment(BoxLayout::MAIN_AXIS_ALIGNMENT_CENTER);
   layout->set_cross_axis_alignment(BoxLayout::CROSS_AXIS_ALIGNMENT_STRETCH);
   layout->SetDefaultFlex(1);
@@ -623,8 +621,8 @@ View* TabbedPane::GetSelectedTabContentView() {
   return GetSelectedTab() ? GetSelectedTab()->contents() : nullptr;
 }
 
-void TabbedPane::GetAccessibleState(ui::AXViewState* state) {
-  state->role = ui::AX_ROLE_TAB_LIST;
+void TabbedPane::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ui::AX_ROLE_TAB_LIST;
 }
 
 }  // namespace views

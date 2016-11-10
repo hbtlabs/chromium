@@ -8,44 +8,30 @@
 #include "base/memory/ptr_util.h"
 #include "services/service_manager/public/cpp/connection.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/ui/public/cpp/gpu_service.h"
 #include "services/ui/public/interfaces/event_matcher.mojom.h"
 #include "ui/aura/env.h"
+#include "ui/aura/mus/gpu_service.h"
+#include "ui/aura/mus/mus_context_factory.h"
 #include "ui/aura/mus/os_exchange_data_provider_mus.h"
 #include "ui/aura/mus/property_converter.h"
-#include "ui/aura/mus/window_port_mus.h"
 #include "ui/aura/mus/window_tree_client.h"
+#include "ui/aura/mus/window_tree_host_mus.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/views/mus/aura_init.h"
 #include "ui/views/mus/clipboard_mus.h"
+#include "ui/views/mus/desktop_window_tree_host_mus.h"
 #include "ui/views/mus/screen_mus.h"
-#include "ui/views/mus/surface_context_factory.h"
 #include "ui/views/views_delegate.h"
-#include "ui/wm/core/base_focus_rules.h"
+#include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 #include "ui/wm/core/capture_controller.h"
-#include "ui/wm/core/focus_controller.h"
 #include "ui/wm/core/wm_state.h"
 
 namespace views {
 namespace {
 
-// TODO: this is temporary, figure out what the real one should be like.
-class FocusRulesMus : public wm::BaseFocusRules {
- public:
-  FocusRulesMus() {}
-  ~FocusRulesMus() override {}
-
-  // wm::BaseFocusRules::
-  bool SupportsChildActivation(aura::Window* window) const override {
-    NOTIMPLEMENTED();
-    return true;
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(FocusRulesMus);
-};
-
+// TODO: property converter should likely live in aura as it needs to be used
+// by both ash and views. http://crbug.com/663522.
 class PropertyConverterImpl : public aura::PropertyConverter {
  public:
   PropertyConverterImpl() {}
@@ -73,32 +59,67 @@ class PropertyConverterImpl : public aura::PropertyConverter {
 
 }  // namespace
 
+// static
+MusClient* MusClient::instance_ = nullptr;
+
+MusClient::~MusClient() {
+  // ~WindowTreeClient calls back to us (we're its delegate), destroy it while
+  // we are still valid.
+  window_tree_client_.reset();
+  ui::OSExchangeDataProviderFactory::SetFactory(nullptr);
+  ui::Clipboard::DestroyClipboardForCurrentThread();
+  gpu_service_.reset();
+
+  if (ViewsDelegate::GetInstance()) {
+    ViewsDelegate::GetInstance()->set_native_widget_factory(
+        ViewsDelegate::NativeWidgetFactory());
+  }
+
+  DCHECK_EQ(instance_, this);
+  instance_ = nullptr;
+}
+
+NativeWidget* MusClient::CreateNativeWidget(
+    const Widget::InitParams& init_params,
+    internal::NativeWidgetDelegate* delegate) {
+  // TYPE_CONTROL widgets require a NativeWidgetAura. So we let this fall
+  // through, so that the default NativeWidgetPrivate::CreateNativeWidget() is
+  // used instead.
+  if (init_params.type == Widget::InitParams::TYPE_CONTROL)
+    return nullptr;
+
+  DesktopNativeWidgetAura* native_widget =
+      new DesktopNativeWidgetAura(delegate);
+  if (init_params.desktop_window_tree_host) {
+    native_widget->SetDesktopWindowTreeHost(
+        base::WrapUnique(init_params.desktop_window_tree_host));
+  } else {
+    native_widget->SetDesktopWindowTreeHost(
+        base::MakeUnique<DesktopWindowTreeHostMus>(delegate, native_widget));
+  }
+  return native_widget;
+}
+
 MusClient::MusClient(service_manager::Connector* connector,
                      const service_manager::Identity& identity,
-                     const std::string& resource_file,
-                     const std::string& resource_file_200,
                      scoped_refptr<base::SingleThreadTaskRunner> io_task_runner)
     : connector_(connector), identity_(identity) {
-  aura_init_ = base::MakeUnique<AuraInit>(
-      connector, resource_file, resource_file_200,
-      base::Bind(&MusClient::CreateWindowPort, base::Unretained(this)));
-
+  DCHECK(!instance_);
+  instance_ = this;
   property_converter_ = base::MakeUnique<PropertyConverterImpl>();
 
   wm_state_ = base::MakeUnique<wm::WMState>();
 
-  gpu_service_ = ui::GpuService::Create(connector, std::move(io_task_runner));
+  gpu_service_ = aura::GpuService::Create(connector, std::move(io_task_runner));
   compositor_context_factory_ =
-      base::MakeUnique<views::SurfaceContextFactory>(gpu_service_.get());
+      base::MakeUnique<aura::MusContextFactory>(gpu_service_.get());
   aura::Env::GetInstance()->set_context_factory(
       compositor_context_factory_.get());
-  // TODO(sky): need a class similar to DesktopFocusRules.
-  focus_controller_ = base::MakeUnique<wm::FocusController>(new FocusRulesMus);
   window_tree_client_ =
       base::MakeUnique<aura::WindowTreeClient>(this, nullptr, nullptr);
   window_tree_client_->ConnectViaWindowTreeFactory(connector_);
 
-  // TODO(sky): wire up PointerWatcherEventRouter.
+  // TODO: wire up PointerWatcherEventRouter. http://crbug.com/663526.
 
   screen_ = base::MakeUnique<ScreenMus>(this);
   screen_->Init(connector);
@@ -113,37 +134,10 @@ MusClient::MusClient(service_manager::Connector* connector,
       base::Bind(&MusClient::CreateNativeWidget, base::Unretained(this)));
 }
 
-MusClient::~MusClient() {
-  // ~WindowTreeClient calls back to us (we're its delegate), destroy it while
-  // we are still valid.
-  window_tree_client_.reset();
-  ui::OSExchangeDataProviderFactory::SetFactory(nullptr);
-  ui::Clipboard::DestroyClipboardForCurrentThread();
-  gpu_service_.reset();
-
-  if (ViewsDelegate::GetInstance()) {
-    ViewsDelegate::GetInstance()->set_native_widget_factory(
-        ViewsDelegate::NativeWidgetFactory());
-  }
+void MusClient::OnEmbed(
+    std::unique_ptr<aura::WindowTreeHostMus> window_tree_host) {
+  NOTREACHED();
 }
-
-NativeWidget* MusClient::CreateNativeWidget(
-    const Widget::InitParams& init_params,
-    internal::NativeWidgetDelegate* delegate) {
-  // TYPE_CONTROL widgets require a NativeWidgetAura. So we let this fall
-  // through, so that the default NativeWidgetPrivate::CreateNativeWidget() is
-  // used instead.
-  if (init_params.type == Widget::InitParams::TYPE_CONTROL)
-    return nullptr;
-  return nullptr;
-}
-
-std::unique_ptr<aura::WindowPort> MusClient::CreateWindowPort(
-    aura::Window* window) {
-  return base::MakeUnique<aura::WindowPortMus>(window_tree_client_.get());
-}
-
-void MusClient::OnEmbed(aura::Window* root) {}
 
 void MusClient::OnLostConnection(aura::WindowTreeClient* client) {}
 
@@ -155,17 +149,13 @@ void MusClient::OnEmbedRootDestroyed(aura::Window* root) {
 
 void MusClient::OnPointerEventObserved(const ui::PointerEvent& event,
                                        aura::Window* target) {
-  // TODO(sky): wire up pointer events.
+  // TODO: wire up PointerWatcherEventRouter. http://crbug.com/663526.
   NOTIMPLEMENTED();
 }
 
 void MusClient::OnWindowManagerFrameValuesChanged() {
-  // TODO(sky): wire up to DesktopNativeWidgetAura.
+  // TODO: wire up client area. http://crbug.com/663525.
   NOTIMPLEMENTED();
-}
-
-aura::client::FocusClient* MusClient::GetFocusClient() {
-  return focus_controller_.get();
 }
 
 aura::client::CaptureClient* MusClient::GetCaptureClient() {
@@ -185,7 +175,7 @@ aura::Window* MusClient::GetWindowAtScreenPoint(const gfx::Point& point) {
     aura::WindowTreeHost* window_tree_host = root->GetHost();
     if (!window_tree_host)
       continue;
-    // TODO: this likely gets z-order wrong.
+    // TODO: this likely gets z-order wrong. http://crbug.com/663606.
     gfx::Point relative_point(point);
     window_tree_host->ConvertPointFromNativeScreen(&relative_point);
     if (gfx::Rect(root->bounds().size()).Contains(relative_point))

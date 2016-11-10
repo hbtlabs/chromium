@@ -45,7 +45,7 @@
 #endif
 
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
-#include "gin/v8_initializer.h"
+#include "gin/v8_initializer.h"  // nogncheck
 #endif
 
 #if defined(ENABLE_WEBRTC)
@@ -190,14 +190,11 @@ blink::WebIDBFactory* TestBlinkWebUnitTestSupport::idbFactory() {
   return NULL;
 }
 
-blink::WebMimeRegistry* TestBlinkWebUnitTestSupport::mimeRegistry() {
-  return &mime_registry_;
-}
-
 blink::WebURLLoader* TestBlinkWebUnitTestSupport::createURLLoader() {
   // This loader should be used only for process-local resources such as
   // data URLs.
-  blink::WebURLLoader* default_loader = new WebURLLoaderImpl(nullptr, nullptr);
+  blink::WebURLLoader* default_loader =
+      new WebURLLoaderImpl(nullptr, nullptr, nullptr);
   return url_loader_factory_->createURLLoader(default_loader);
 }
 

@@ -28,7 +28,7 @@ import org.chromium.chrome.browser.ntp.snippets.SnippetArticleViewHolder;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsConfig;
 import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
-import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
+import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadBridge;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -50,7 +50,7 @@ public class NewTabPageAdapter
     private final View mAboveTheFoldView;
     private final UiConfig mUiConfig;
     private final ItemTouchCallbacks mItemTouchCallbacks = new ItemTouchCallbacks();
-    private final OfflinePageBridge mOfflineBridge;
+    private final OfflinePageDownloadBridge mOfflinePageDownloadBridge;
     private NewTabPageRecyclerView mRecyclerView;
 
     /**
@@ -131,16 +131,16 @@ public class NewTabPageAdapter
      * @param aboveTheFoldView the layout encapsulating all the above-the-fold elements
      *                         (logo, search box, most visited tiles)
      * @param uiConfig the NTP UI configuration, to be passed to created views.
-     * @param offlineBridge the OfflinePageBridge used to determine if articles are available
-     *                      offline.
+     * @param offlinePageDownloadBridge the OfflinePageDownloadBridge used to determine if articles
+     *                                  are available offline.
      *
      */
     public NewTabPageAdapter(NewTabPageManager manager, View aboveTheFoldView, UiConfig uiConfig,
-            OfflinePageBridge offlineBridge) {
+            OfflinePageDownloadBridge offlinePageDownloadBridge) {
         mNewTabPageManager = manager;
         mAboveTheFoldView = aboveTheFoldView;
         mUiConfig = uiConfig;
-        mOfflineBridge = offlineBridge;
+        mOfflinePageDownloadBridge = offlinePageDownloadBridge;
         mRoot = new InnerNode(this) {
             @Override
             protected List<TreeNode> getChildren() {
@@ -228,7 +228,8 @@ public class NewTabPageAdapter
         // Create the section if needed.
         SuggestionsSection section = mSections.get(category);
         if (section == null) {
-            section = new SuggestionsSection(mRoot, info, mNewTabPageManager, mOfflineBridge);
+            section = new SuggestionsSection(mRoot, info, mNewTabPageManager,
+                    mOfflinePageDownloadBridge);
             mSections.put(category, section);
         }
 
@@ -245,21 +246,13 @@ public class NewTabPageAdapter
 
     @Override
     public void onNewSuggestions(@CategoryInt int category) {
-        // We never want to add suggestions from unknown categories.
-        if (!mSections.containsKey(category)) return;
+        @CategoryStatusEnum
+        int status = mNewTabPageManager.getSuggestionsSource().getCategoryStatus(category);
+
+        if (!canLoadSuggestions(category, status)) return;
 
         // We never want to refresh the suggestions if we already have some content.
         if (mSections.get(category).hasSuggestions()) return;
-
-        // The status may have changed while the suggestions were loading, perhaps they should not
-        // be displayed any more.
-        @CategoryStatusEnum
-        int status = mNewTabPageManager.getSuggestionsSource().getCategoryStatus(category);
-        if (!SnippetsBridge.isCategoryEnabled(status)) {
-            Log.w(TAG, "Received suggestions for a disabled category (id=%d, status=%d)", category,
-                    status);
-            return;
-        }
 
         List<SnippetArticle> suggestions =
                 mNewTabPageManager.getSuggestionsSource().getSuggestionsForCategory(category);
@@ -268,6 +261,15 @@ public class NewTabPageAdapter
 
         // At first, there might be no suggestions available, we wait until they have been fetched.
         if (suggestions.isEmpty()) return;
+
+        setSuggestions(category, suggestions, status);
+    }
+
+    @Override
+    public void onMoreSuggestions(@CategoryInt int category, List<SnippetArticle> suggestions) {
+        @CategoryStatusEnum
+        int status = mNewTabPageManager.getSuggestionsSource().getCategoryStatus(category);
+        if (!canLoadSuggestions(category, status)) return;
 
         setSuggestions(category, suggestions, status);
     }
@@ -355,6 +357,10 @@ public class NewTabPageAdapter
 
     @Override
     public void onBindViewHolder(NewTabPageViewHolder holder, final int position) {
+        if (position == getFirstCardPosition()) {
+            mRecyclerView.onFirstCardShown(holder.itemView);
+        }
+
         mRoot.onBindViewHolder(holder, position);
     }
 
@@ -412,7 +418,7 @@ public class NewTabPageAdapter
             suggestion.mGlobalPosition = globalPositionOffset + suggestion.mPosition;
         }
 
-        mSections.get(category).setSuggestions(suggestions, status);
+        mSections.get(category).addSuggestions(suggestions, status);
     }
 
     private void updateChildren() {
@@ -562,7 +568,22 @@ public class NewTabPageAdapter
     }
 
     private boolean hasAllBeenDismissed() {
-        return mSections.isEmpty() && !mSigninPromo.isShown();
+        return mSections.isEmpty() && !mSigninPromo.isVisible();
+    }
+
+    private boolean canLoadSuggestions(@CategoryInt int category, @CategoryStatusEnum int status) {
+        // We never want to add suggestions from unknown categories.
+        if (!mSections.containsKey(category)) return false;
+
+        // The status may have changed while the suggestions were loading, perhaps they should not
+        // be displayed any more.
+        if (!SnippetsBridge.isCategoryEnabled(status)) {
+            Log.w(TAG, "Received suggestions for a disabled category (id=%d, status=%d)", category,
+                    status);
+            return false;
+        }
+
+        return true;
     }
 
     /**

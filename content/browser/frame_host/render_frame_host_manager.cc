@@ -7,7 +7,9 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
@@ -85,7 +87,8 @@ RenderFrameHostManager::~RenderFrameHostManager() {
 void RenderFrameHostManager::Init(SiteInstance* site_instance,
                                   int32_t view_routing_id,
                                   int32_t frame_routing_id,
-                                  int32_t widget_routing_id) {
+                                  int32_t widget_routing_id,
+                                  bool renderer_initiated_creation) {
   DCHECK(site_instance);
   // TODO(avi): While RenderViewHostImpl is-a RenderWidgetHostImpl, this must
   // hold true to avoid having two RenderWidgetHosts for the top-level frame.
@@ -94,7 +97,8 @@ void RenderFrameHostManager::Init(SiteInstance* site_instance,
          view_routing_id == widget_routing_id);
   SetRenderFrameHost(CreateRenderFrameHost(site_instance, view_routing_id,
                                            frame_routing_id, widget_routing_id,
-                                           delegate_->IsHidden()));
+                                           delegate_->IsHidden(),
+                                           renderer_initiated_creation));
 
   // Notify the delegate of the creation of the current RenderFrameHost.
   // Do this only for subframes, as the main frame case is taken care of by
@@ -282,7 +286,7 @@ RenderFrameHostImpl* RenderFrameHostManager::Navigate(
   // the destination render frame will take ownership, so release ownership of
   // the transferring NavigationHandle.
   if (transfer_navigation_handle_.get() &&
-      transfer_navigation_handle_->request_id() ==
+      transfer_navigation_handle_->GetGlobalRequestID() ==
           entry.transferred_global_request_id()) {
     // The navigating RenderFrameHost should take ownership of the
     // NavigationHandle that came from the transferring RenderFrameHost.
@@ -1641,11 +1645,13 @@ void RenderFrameHostManager::CreateProxiesForNewNamedFrame() {
 }
 
 std::unique_ptr<RenderFrameHostImpl>
-RenderFrameHostManager::CreateRenderFrameHost(SiteInstance* site_instance,
-                                              int32_t view_routing_id,
-                                              int32_t frame_routing_id,
-                                              int32_t widget_routing_id,
-                                              bool hidden) {
+RenderFrameHostManager::CreateRenderFrameHost(
+    SiteInstance* site_instance,
+    int32_t view_routing_id,
+    int32_t frame_routing_id,
+    int32_t widget_routing_id,
+    bool hidden,
+    bool renderer_initiated_creation) {
   if (frame_routing_id == MSG_ROUTING_NONE)
     frame_routing_id = site_instance->GetProcess()->GetNextRoutingID();
 
@@ -1677,7 +1683,7 @@ RenderFrameHostManager::CreateRenderFrameHost(SiteInstance* site_instance,
   return RenderFrameHostFactory::Create(
       site_instance, render_view_host, render_frame_delegate_,
       render_widget_delegate_, frame_tree, frame_tree_node_, frame_routing_id,
-      widget_routing_id, hidden);
+      widget_routing_id, hidden, renderer_initiated_creation);
 }
 
 // PlzNavigate
@@ -1732,7 +1738,8 @@ std::unique_ptr<RenderFrameHostImpl> RenderFrameHostManager::CreateRenderFrame(
   }
 
   new_render_frame_host = CreateRenderFrameHost(
-      instance, MSG_ROUTING_NONE, MSG_ROUTING_NONE, widget_routing_id, hidden);
+      instance, MSG_ROUTING_NONE, MSG_ROUTING_NONE, widget_routing_id, hidden,
+      false);
   RenderViewHostImpl* render_view_host =
       new_render_frame_host->render_view_host();
 
@@ -2271,7 +2278,8 @@ RenderFrameHostImpl* RenderFrameHostManager::UpdateStateForNavigate(
   // This ensures the network request will not be destroyed along the pending
   // RFH but will persist until it is picked up by the new RFH.
   if (transfer_navigation_handle_.get() &&
-      transfer_navigation_handle_->request_id() == transferred_request_id &&
+      transfer_navigation_handle_->GetGlobalRequestID() ==
+          transferred_request_id &&
       new_instance.get() !=
           transfer_navigation_handle_->GetRenderFrameHost()
               ->GetSiteInstance()) {
@@ -2338,7 +2346,7 @@ RenderFrameHostImpl* RenderFrameHostManager::UpdateStateForNavigate(
       // We don't need to stop the old renderer or run beforeunload/unload
       // handlers, because those have already been done.
       DCHECK(transfer_navigation_handle_ &&
-             transfer_navigation_handle_->request_id() ==
+             transfer_navigation_handle_->GetGlobalRequestID() ==
                  transferred_request_id);
     } else if (!pending_render_frame_host_->are_navigations_suspended()) {
       // If the pending RFH hasn't already been suspended from a previous
@@ -2465,7 +2473,7 @@ std::unique_ptr<RenderFrameHostImpl> RenderFrameHostManager::SetRenderFrameHost(
 }
 
 RenderViewHostImpl* RenderFrameHostManager::GetSwappedOutRenderViewHost(
-   SiteInstance* instance) const {
+    SiteInstance* instance) const {
   RenderFrameProxyHost* proxy = GetRenderFrameProxyHost(instance);
   if (proxy)
     return proxy->GetRenderViewHost();

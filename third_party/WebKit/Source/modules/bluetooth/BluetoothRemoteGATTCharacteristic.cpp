@@ -4,7 +4,6 @@
 
 #include "modules/bluetooth/BluetoothRemoteGATTCharacteristic.h"
 
-#include "bindings/core/v8/CallbackPromiseAdapter.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/DOMDataView.h"
@@ -27,6 +26,9 @@ const char kGATTServerDisconnected[] =
     "GATT Server disconnected while performing a GATT operation.";
 const char kGATTServerNotConnected[] =
     "GATT Server is disconnected. Cannot perform GATT operations.";
+const char kInvalidCharacteristic[] =
+    "Characteristic is no longer valid. Remember to retrieve the "
+    "characteristic again after reconnecting.";
 
 DOMDataView* ConvertWebVectorToDataView(const WebVector<uint8_t>& webVector) {
   static_assert(sizeof(*webVector.data()) == 1,
@@ -52,17 +54,15 @@ BluetoothRemoteGATTCharacteristic::BluetoothRemoteGATTCharacteristic(
   ThreadState::current()->registerPreFinalizer(this);
 }
 
-BluetoothRemoteGATTCharacteristic* BluetoothRemoteGATTCharacteristic::take(
-    ScriptPromiseResolver* resolver,
+BluetoothRemoteGATTCharacteristic* BluetoothRemoteGATTCharacteristic::create(
+    ExecutionContext* context,
     std::unique_ptr<WebBluetoothRemoteGATTCharacteristicInit> webCharacteristic,
     BluetoothRemoteGATTService* service) {
-  if (!webCharacteristic) {
-    return nullptr;
-  }
+  DCHECK(webCharacteristic);
+
   BluetoothRemoteGATTCharacteristic* characteristic =
-      new BluetoothRemoteGATTCharacteristic(resolver->getExecutionContext(),
-                                            std::move(webCharacteristic),
-                                            service);
+      new BluetoothRemoteGATTCharacteristic(
+          context, std::move(webCharacteristic), service);
   // See note in ActiveDOMObject about suspendIfNeeded.
   characteristic->suspendIfNeeded();
   return characteristic;
@@ -169,7 +169,7 @@ class ReadValueCallback : public WebBluetoothReadValueCallbacks {
   }
 
  private:
-  WeakPersistent<BluetoothRemoteGATTCharacteristic> m_characteristic;
+  Persistent<BluetoothRemoteGATTCharacteristic> m_characteristic;
   Persistent<ScriptPromiseResolver> m_resolver;
 };
 
@@ -179,6 +179,13 @@ ScriptPromise BluetoothRemoteGATTCharacteristic::readValue(
     return ScriptPromise::rejectWithDOMException(
         scriptState,
         DOMException::create(NetworkError, kGATTServerNotConnected));
+  }
+
+  if (!gatt()->device()->isValidCharacteristic(
+          m_webCharacteristic->characteristicInstanceID)) {
+    return ScriptPromise::rejectWithDOMException(
+        scriptState,
+        DOMException::create(InvalidStateError, kInvalidCharacteristic));
   }
 
   WebBluetooth* webbluetooth =
@@ -240,7 +247,7 @@ class WriteValueCallback : public WebBluetoothWriteValueCallbacks {
   }
 
  private:
-  WeakPersistent<BluetoothRemoteGATTCharacteristic> m_characteristic;
+  Persistent<BluetoothRemoteGATTCharacteristic> m_characteristic;
   Persistent<ScriptPromiseResolver> m_resolver;
 };
 
@@ -251,6 +258,13 @@ ScriptPromise BluetoothRemoteGATTCharacteristic::writeValue(
     return ScriptPromise::rejectWithDOMException(
         scriptState,
         DOMException::create(NetworkError, kGATTServerNotConnected));
+  }
+
+  if (!gatt()->device()->isValidCharacteristic(
+          m_webCharacteristic->characteristicInstanceID)) {
+    return ScriptPromise::rejectWithDOMException(
+        scriptState,
+        DOMException::create(InvalidStateError, kInvalidCharacteristic));
   }
 
   WebBluetooth* webbluetooth =
@@ -335,6 +349,13 @@ ScriptPromise BluetoothRemoteGATTCharacteristic::startNotifications(
         DOMException::create(NetworkError, kGATTServerNotConnected));
   }
 
+  if (!gatt()->device()->isValidCharacteristic(
+          m_webCharacteristic->characteristicInstanceID)) {
+    return ScriptPromise::rejectWithDOMException(
+        scriptState,
+        DOMException::create(InvalidStateError, kInvalidCharacteristic));
+  }
+
   WebBluetooth* webbluetooth =
       BluetoothSupplement::fromScriptState(scriptState);
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
@@ -359,6 +380,13 @@ ScriptPromise BluetoothRemoteGATTCharacteristic::stopNotifications(
     return ScriptPromise::rejectWithDOMException(
         scriptState,
         DOMException::create(NetworkError, kGATTServerNotConnected));
+  }
+
+  if (!gatt()->device()->isValidCharacteristic(
+          m_webCharacteristic->characteristicInstanceID)) {
+    return ScriptPromise::rejectWithDOMException(
+        scriptState,
+        DOMException::create(InvalidStateError, kInvalidCharacteristic));
   }
 
   WebBluetooth* webbluetooth =

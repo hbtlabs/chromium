@@ -12,7 +12,6 @@
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_service.h"
@@ -52,10 +51,6 @@ class ManagedValueStoreCache : public ValueStoreCache,
  private:
   class ExtensionTracker;
 
-  // Maps an extension ID to its PolicyValueStoreMap.
-  typedef std::map<std::string, linked_ptr<PolicyValueStore> >
-      PolicyValueStoreMap;
-
   // ValueStoreCache implementation:
   void ShutdownOnUI() override;
   void RunWithValueStoreForExtension(
@@ -68,6 +63,9 @@ class ManagedValueStoreCache : public ValueStoreCache,
   void OnPolicyUpdated(const policy::PolicyNamespace& ns,
                        const policy::PolicyMap& previous,
                        const policy::PolicyMap& current) override;
+
+  // Returns the policy domain that should be used for the specified profile.
+  static policy::PolicyDomain GetPolicyDomain(Profile* profile);
 
   // Posted by OnPolicyUpdated() to update a PolicyValueStore on the FILE
   // thread.
@@ -101,7 +99,7 @@ class ManagedValueStoreCache : public ValueStoreCache,
 
   // All the PolicyValueStores live on the FILE thread, and |store_map_| can be
   // accessed only on the FILE thread as well.
-  PolicyValueStoreMap store_map_;
+  std::map<std::string, std::unique_ptr<PolicyValueStore>> store_map_;
 
   DISALLOW_COPY_AND_ASSIGN(ManagedValueStoreCache);
 };

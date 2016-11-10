@@ -18,12 +18,13 @@
 #include "base/command_line.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/app_list/app_list_switches.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/square_ink_drop_ripple.h"
 #include "ui/views/painter.h"
 
@@ -243,9 +244,9 @@ void AppListButton::PaintAppListButton(gfx::Canvas* canvas,
                        foreground_bounds.y());
 }
 
-void AppListButton::GetAccessibleState(ui::AXViewState* state) {
-  state->role = ui::AX_ROLE_BUTTON;
-  state->name = shelf_view_->GetTitleForView(this);
+void AppListButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ui::AX_ROLE_BUTTON;
+  node_data->SetName(shelf_view_->GetTitleForView(this));
 }
 
 std::unique_ptr<views::InkDropRipple> AppListButton::CreateInkDropRipple()
@@ -264,7 +265,7 @@ std::unique_ptr<views::InkDropRipple> AppListButton::CreateInkDropRipple()
 void AppListButton::NotifyClick(const ui::Event& event) {
   ImageButton::NotifyClick(event);
   if (listener_)
-    listener_->ButtonPressed(this, event, ink_drop());
+    listener_->ButtonPressed(this, event, GetInkDrop());
 }
 
 bool AppListButton::ShouldEnterPushedState(const ui::Event& event) {
@@ -275,8 +276,11 @@ bool AppListButton::ShouldEnterPushedState(const ui::Event& event) {
   return views::ImageButton::ShouldEnterPushedState(event);
 }
 
-bool AppListButton::ShouldShowInkDropHighlight() const {
-  return false;
+std::unique_ptr<views::InkDrop> AppListButton::CreateInkDrop() {
+  std::unique_ptr<views::InkDropImpl> ink_drop =
+      CustomButton::CreateDefaultInkDropImpl();
+  ink_drop->SetShowHighlightOnHover(false);
+  return std::move(ink_drop);
 }
 
 void AppListButton::SetDrawBackgroundAsActive(bool draw_background_as_active) {

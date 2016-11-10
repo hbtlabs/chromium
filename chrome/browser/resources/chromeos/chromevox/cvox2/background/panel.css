@@ -291,6 +291,10 @@ button {
   font-weight: bold;
 }
 
+#tutorial_main h2:focus {
+  outline: none
+}
+
 #tutorial_main p,
 #tutorial_main a {
   display: block;
@@ -324,4 +328,12 @@ button {
 
 .unhighlighted-cell {
   border: 1px solid black;
+}
+
+/*
+ * The html hidden attribute doesn't make elements not focusable by default.
+ * This rule ensures that elements that are hidden truly don't show up.
+ */
+*[hidden] {
+  display: none !important;
 }

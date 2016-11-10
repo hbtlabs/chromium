@@ -9,12 +9,13 @@
 #include "ash/common/system/tray/fixed_sized_image_view.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/tray_constants.h"
+#include "ash/common/system/tray/tray_popup_utils.h"
 #include "ash/common/wm_shell.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "base/sys_info.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -41,8 +42,8 @@ class CapsLockDefaultView : public ActionableView {
  public:
   CapsLockDefaultView()
       : ActionableView(nullptr),
-        text_label_(new views::Label),
-        shortcut_label_(new views::Label) {
+        text_label_(TrayPopupUtils::CreateDefaultLabel()),
+        shortcut_label_(TrayPopupUtils::CreateDefaultLabel()) {
     SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal,
                                           kTrayPopupPaddingHorizontal, 0,
                                           kTrayPopupPaddingBetweenItems));
@@ -64,6 +65,9 @@ class CapsLockDefaultView : public ActionableView {
 
     shortcut_label_->SetEnabled(false);
     AddChildView(shortcut_label_);
+
+    if (MaterialDesignController::IsSystemTrayMenuMaterial())
+      SetInkDropMode(InkDropHostView::InkDropMode::ON);
   }
 
   ~CapsLockDefaultView() override {}
@@ -110,9 +114,9 @@ class CapsLockDefaultView : public ActionableView {
         gfx::Size(text_size.width() + new_x - old_x, text_size.height()));
   }
 
-  void GetAccessibleState(ui::AXViewState* state) override {
-    state->role = ui::AX_ROLE_BUTTON;
-    state->name = text_label_->text();
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    node_data->role = ui::AX_ROLE_BUTTON;
+    node_data->SetName(text_label_->text());
   }
 
   // Overridden from ActionableView:
@@ -213,7 +217,8 @@ views::View* TrayCapsLock::CreateDetailedView(LoginStatus status) {
       WmShell::Get()->system_tray_delegate()->IsSearchKeyMappedToCapsLock()
           ? IDS_ASH_STATUS_TRAY_CAPS_LOCK_CANCEL_BY_SEARCH
           : IDS_ASH_STATUS_TRAY_CAPS_LOCK_CANCEL_BY_ALT_SEARCH;
-  views::Label* label = new views::Label(bundle.GetLocalizedString(string_id));
+  views::Label* label = TrayPopupUtils::CreateDefaultLabel();
+  label->SetText(bundle.GetLocalizedString(string_id));
   label->SetMultiLine(true);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   detailed_->AddChildView(label);

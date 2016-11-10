@@ -11,9 +11,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/scrollbar/base_scroll_bar_thumb.h"
-#include "ui/views/controls/scrollbar/native_scroll_bar.h"
-#include "ui/views/controls/scrollbar/native_scroll_bar_views.h"
 #include "ui/views/controls/scrollbar/overlay_scroll_bar.h"
+#include "ui/views/controls/scrollbar/scroll_bar_views.h"
 #include "ui/views/test/test_views.h"
 #include "ui/views/test/widget_test.h"
 
@@ -34,10 +33,6 @@ class ScrollViewTestApi {
   BaseScrollBar* GetBaseScrollBar(ScrollBarOrientation orientation) {
     ScrollBar* scroll_bar = orientation == VERTICAL ? scroll_view_->vert_sb_
                                                     : scroll_view_->horiz_sb_;
-    if (scroll_bar->GetClassName() == NativeScrollBar::kViewClassName) {
-      return static_cast<NativeScrollBarViews*>(
-          static_cast<NativeScrollBar*>(scroll_bar)->native_wrapper_);
-    }
     return static_cast<BaseScrollBar*>(scroll_bar);
   }
 
@@ -282,7 +277,7 @@ TEST_F(ScrollViewTest, ViewportSizedToFit) {
 TEST_F(ScrollViewTest, BoundedViewportSizedToFit) {
   View* contents = InstallContents();
   scroll_view_.ClipHeightTo(100, 200);
-  scroll_view_.SetBorder(Border::CreateSolidBorder(2, 0));
+  scroll_view_.SetBorder(CreateSolidBorder(2, 0));
   scroll_view_.Layout();
   EXPECT_EQ("2,2 96x96", contents->parent()->bounds().ToString());
 
@@ -333,8 +328,8 @@ TEST_F(ScrollViewTest, ScrollBars) {
   const int kLeftPadding = 2;
   const int kBottomPadding = 3;
   const int kRightPadding = 4;
-  scroll_view_.SetBorder(Border::CreateEmptyBorder(
-      kTopPadding, kLeftPadding, kBottomPadding, kRightPadding));
+  scroll_view_.SetBorder(CreateEmptyBorder(kTopPadding, kLeftPadding,
+                                           kBottomPadding, kRightPadding));
   contents->SetBounds(0, 0, 50, 400);
   scroll_view_.Layout();
   EXPECT_EQ(

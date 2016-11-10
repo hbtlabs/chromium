@@ -42,9 +42,9 @@
 #include "core/events/PointerEvent.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "core/frame/PerformanceMonitor.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
-#include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/Histogram.h"
@@ -58,6 +58,8 @@ using namespace WTF;
 
 namespace blink {
 namespace {
+
+static const double kBlockedWarningThresholdMillis = 100.0;
 
 enum PassiveForcedListenerResultType {
   PreventDefaultNotCalled,
@@ -94,19 +96,15 @@ bool isScrollBlockingEvent(const AtomicString& eventType) {
          eventType == EventTypeNames::wheel;
 }
 
-double blockedEventsWarningThreshold(const ExecutionContext* context,
-                                     const Event* event) {
+double blockedEventsWarningThreshold(ExecutionContext* context, Event* event) {
   if (!event->cancelable())
     return 0.0;
   if (!isScrollBlockingEvent(event->type()))
     return 0.0;
 
-  if (!context->isDocument())
-    return 0.0;
-  FrameHost* frameHost = toDocument(context)->frameHost();
-  if (!frameHost)
-    return 0.0;
-  return frameHost->settings().blockedMainThreadEventsWarningThreshold();
+  return PerformanceMonitor::enabled(context)
+             ? kBlockedWarningThresholdMillis / 1000
+             : 0;
 }
 
 void reportBlockedEvent(ExecutionContext* context,
@@ -137,9 +135,8 @@ void reportBlockedEvent(ExecutionContext* context,
       eventListenerEffectiveFunction(v8Listener->isolate(), handler);
   std::unique_ptr<SourceLocation> location =
       SourceLocation::fromFunction(function);
-  ConsoleMessage* message = ConsoleMessage::create(
-      JSMessageSource, WarningMessageLevel, messageText, std::move(location));
-  context->addConsoleMessage(message);
+  PerformanceMonitor::logViolation(WarningMessageLevel, context, messageText,
+                                   std::move(location));
   registeredListener->setBlockedEventWarningEmitted();
 }
 
@@ -158,12 +155,7 @@ DEFINE_TRACE_WRAPPERS(EventTarget) {
   while (EventListener* listener = iterator.nextListener()) {
     if (listener->type() != EventListener::JSEventListenerType)
       continue;
-    V8AbstractEventListener* v8listener =
-        static_cast<V8AbstractEventListener*>(listener);
-    if (!v8listener->hasExistingListenerObject())
-      continue;
-
-    visitor->traceWrappers(v8listener);
+    visitor->traceWrappers(static_cast<V8AbstractEventListener*>(listener));
   }
 }
 
@@ -305,10 +297,8 @@ bool EventTarget::addEventListenerInternal(
       eventType, listener, options, &registeredListener);
   if (added) {
     if (listener->type() == EventListener::JSEventListenerType) {
-      V8AbstractEventListener* v8listener =
-          static_cast<V8AbstractEventListener*>(listener);
-      if (v8listener->hasExistingListenerObject())
-        ScriptWrappableVisitor::writeBarrier(this, v8listener);
+      ScriptWrappableVisitor::writeBarrier(
+          this, static_cast<V8AbstractEventListener*>(listener));
     }
     addedEventListener(eventType, registeredListener);
   }
@@ -731,7 +721,7 @@ bool EventTarget::fireEventListeners(Event* event,
 
     CHECK_LE(i, size);
   }
-  d->firingEventIterators->removeLast();
+  d->firingEventIterators->pop_back();
   return firedListener;
 }
 

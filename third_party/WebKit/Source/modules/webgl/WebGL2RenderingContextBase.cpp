@@ -911,8 +911,26 @@ void WebGL2RenderingContextBase::readPixels(GLint x,
     return;
   }
 
-  WebGLRenderingContextBase::readPixels(x, y, width, height, format, type,
-                                        pixels);
+  readPixelsHelper(x, y, width, height, format, type, pixels, 0);
+}
+
+void WebGL2RenderingContextBase::readPixels(GLint x,
+                                            GLint y,
+                                            GLsizei width,
+                                            GLsizei height,
+                                            GLenum format,
+                                            GLenum type,
+                                            DOMArrayBufferView* pixels,
+                                            GLuint offset) {
+  if (isContextLost())
+    return;
+  if (m_boundPixelPackBuffer.get()) {
+    synthesizeGLError(GL_INVALID_OPERATION, "readPixels",
+                      "PIXEL_PACK buffer should not be bound");
+    return;
+  }
+
+  readPixelsHelper(x, y, width, height, format, type, pixels, offset);
 }
 
 void WebGL2RenderingContextBase::readPixels(GLint x,
@@ -1291,8 +1309,13 @@ void WebGL2RenderingContextBase::texImage2D(GLenum target,
                                             GLint border,
                                             GLenum format,
                                             GLenum type,
-                                            ImageData* imageData) {
-  // TODO(zmo): To be implemented.
+                                            ImageData* pixels) {
+  DCHECK(pixels);
+  IntRect sourceImageRect;
+  sourceImageRect.setLocation(IntPoint(m_unpackSkipPixels, m_unpackSkipRows));
+  sourceImageRect.setSize(IntSize(width, height));
+  texImageHelperImageData(TexImage2D, target, level, internalformat, 0, format,
+                          type, 1, 0, 0, 0, pixels, sourceImageRect);
 }
 
 void WebGL2RenderingContextBase::texImage2D(GLenum target,
@@ -1313,7 +1336,7 @@ void WebGL2RenderingContextBase::texImage2D(GLenum target,
 
   texImageHelperHTMLImageElement(TexImage2D, target, level, internalformat,
                                  format, type, 0, 0, 0, image, sourceImageRect,
-                                 exceptionState);
+                                 1, m_unpackImageHeight, exceptionState);
 }
 
 void WebGL2RenderingContextBase::texImage2D(GLenum target,
@@ -1446,7 +1469,12 @@ void WebGL2RenderingContextBase::texSubImage2D(GLenum target,
                                                GLenum format,
                                                GLenum type,
                                                ImageData* pixels) {
-  // TODO(zmo): To be implemented.
+  DCHECK(pixels);
+  IntRect sourceImageRect;
+  sourceImageRect.setLocation(IntPoint(m_unpackSkipPixels, m_unpackSkipRows));
+  sourceImageRect.setSize(IntSize(width, height));
+  texImageHelperImageData(TexSubImage2D, target, level, 0, 0, format, type, 1,
+                          xoffset, yoffset, 0, pixels, sourceImageRect);
 }
 
 void WebGL2RenderingContextBase::texSubImage2D(GLenum target,
@@ -1466,8 +1494,8 @@ void WebGL2RenderingContextBase::texSubImage2D(GLenum target,
   }
 
   texImageHelperHTMLImageElement(TexSubImage2D, target, level, 0, format, type,
-                                 xoffset, yoffset, 0, image, sourceImageRect,
-                                 exceptionState);
+                                 xoffset, yoffset, 0, image, sourceImageRect, 1,
+                                 m_unpackImageHeight, exceptionState);
 }
 
 void WebGL2RenderingContextBase::texSubImage2D(GLenum target,
@@ -1683,7 +1711,15 @@ void WebGL2RenderingContextBase::texImage3D(GLenum target,
                                             GLenum type,
                                             HTMLImageElement* image,
                                             ExceptionState& exceptionState) {
-  // TODO(zmo): To be implemented.
+  IntRect sourceImageRect;
+  if (image) {
+    sourceImageRect.setLocation(IntPoint(m_unpackSkipPixels, m_unpackSkipRows));
+    sourceImageRect.setSize(IntSize(width, height));
+  }
+
+  texImageHelperHTMLImageElement(TexImage3D, target, level, internalformat,
+                                 format, type, 0, 0, 0, image, sourceImageRect,
+                                 depth, m_unpackImageHeight, exceptionState);
 }
 
 void WebGL2RenderingContextBase::texImage3D(GLenum target,
@@ -1803,7 +1839,15 @@ void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
                                                GLenum type,
                                                HTMLImageElement* image,
                                                ExceptionState& exceptionState) {
-  // TODO(zmo): To be implemented.
+  IntRect sourceImageRect;
+  if (image) {
+    sourceImageRect.setLocation(IntPoint(m_unpackSkipPixels, m_unpackSkipRows));
+    sourceImageRect.setSize(IntSize(width, height));
+  }
+
+  texImageHelperHTMLImageElement(
+      TexSubImage3D, target, level, 0, format, type, xoffset, yoffset, zoffset,
+      image, sourceImageRect, depth, m_unpackImageHeight, exceptionState);
 }
 
 void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
@@ -1860,21 +1904,8 @@ void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
                                                GLenum type,
                                                ImageData* pixels) {
   texImageHelperImageData(TexSubImage3D, target, level, 0, 0, format, type, 1,
-                          xoffset, yoffset, zoffset, pixels);
-}
-
-void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
-                                               GLint level,
-                                               GLint xoffset,
-                                               GLint yoffset,
-                                               GLint zoffset,
-                                               GLenum format,
-                                               GLenum type,
-                                               HTMLImageElement* image,
-                                               ExceptionState& exceptionState) {
-  texImageHelperHTMLImageElement(TexSubImage3D, target, level, 0, format, type,
-                                 xoffset, yoffset, zoffset, image,
-                                 sentinelEmptyRect(), exceptionState);
+                          xoffset, yoffset, zoffset, pixels,
+                          getImageDataSize(pixels));
 }
 
 void WebGL2RenderingContextBase::texSubImage3D(GLenum target,
@@ -1941,6 +1972,96 @@ void WebGL2RenderingContextBase::copyTexSubImage3D(GLenum target,
                                  width, height);
 }
 
+void WebGL2RenderingContextBase::compressedTexImage2D(
+    GLenum target,
+    GLint level,
+    GLenum internalformat,
+    GLsizei width,
+    GLsizei height,
+    GLint border,
+    DOMArrayBufferView* data) {
+  WebGLRenderingContextBase::compressedTexImage2D(target, level, internalformat,
+                                                  width, height, border, data);
+}
+
+void WebGL2RenderingContextBase::compressedTexImage2D(
+    GLenum target,
+    GLint level,
+    GLenum internalformat,
+    GLsizei width,
+    GLsizei height,
+    GLint border,
+    DOMArrayBufferView* data,
+    GLuint srcOffset,
+    GLuint srcLengthOverride) {
+  if (isContextLost())
+    return;
+  if (!validateTexture2DBinding("compressedTexImage2D", target))
+    return;
+  if (!validateCompressedTexFormat("compressedTexImage2D", internalformat))
+    return;
+  if (srcOffset > data->byteLength()) {
+    synthesizeGLError(GL_INVALID_VALUE, "compressedTexImage2D",
+                      "srcOffset is out of range");
+    return;
+  }
+  if (srcLengthOverride == 0) {
+    srcLengthOverride = data->byteLength() - srcOffset;
+  } else if (srcLengthOverride > data->byteLength() - srcOffset) {
+    synthesizeGLError(GL_INVALID_VALUE, "compressedTexImage2D",
+                      "srcLengthOverride is out of range");
+  }
+  contextGL()->CompressedTexImage2D(
+      target, level, internalformat, width, height, border, srcLengthOverride,
+      static_cast<uint8_t*>(data->baseAddress()) + srcOffset);
+}
+
+void WebGL2RenderingContextBase::compressedTexSubImage2D(
+    GLenum target,
+    GLint level,
+    GLint xoffset,
+    GLint yoffset,
+    GLsizei width,
+    GLsizei height,
+    GLenum format,
+    DOMArrayBufferView* data) {
+  WebGLRenderingContextBase::compressedTexSubImage2D(
+      target, level, xoffset, yoffset, width, height, format, data);
+}
+
+void WebGL2RenderingContextBase::compressedTexSubImage2D(
+    GLenum target,
+    GLint level,
+    GLint xoffset,
+    GLint yoffset,
+    GLsizei width,
+    GLsizei height,
+    GLenum format,
+    DOMArrayBufferView* data,
+    GLuint srcOffset,
+    GLuint srcLengthOverride) {
+  if (isContextLost())
+    return;
+  if (!validateTexture2DBinding("compressedTexSubImage2D", target))
+    return;
+  if (!validateCompressedTexFormat("compressedTexSubImage2D", format))
+    return;
+  if (srcOffset > data->byteLength()) {
+    synthesizeGLError(GL_INVALID_VALUE, "compressedTexSubImage2D",
+                      "srcOffset is out of range");
+    return;
+  }
+  if (srcLengthOverride == 0) {
+    srcLengthOverride = data->byteLength() - srcOffset;
+  } else if (srcLengthOverride > data->byteLength() - srcOffset) {
+    synthesizeGLError(GL_INVALID_VALUE, "compressedTexImage2D",
+                      "srcLengthOverride is out of range");
+  }
+  contextGL()->CompressedTexSubImage2D(
+      target, level, xoffset, yoffset, width, height, format, srcLengthOverride,
+      static_cast<uint8_t*>(data->baseAddress()) + srcOffset);
+}
+
 void WebGL2RenderingContextBase::compressedTexImage3D(
     GLenum target,
     GLint level,
@@ -1949,16 +2070,30 @@ void WebGL2RenderingContextBase::compressedTexImage3D(
     GLsizei height,
     GLsizei depth,
     GLint border,
-    DOMArrayBufferView* data) {
+    DOMArrayBufferView* data,
+    GLuint srcOffset,
+    GLuint srcLengthOverride) {
   if (isContextLost())
     return;
   if (!validateTexture3DBinding("compressedTexImage3D", target))
     return;
   if (!validateCompressedTexFormat("compressedTexImage3D", internalformat))
     return;
-  contextGL()->CompressedTexImage3D(target, level, internalformat, width,
-                                    height, depth, border, data->byteLength(),
-                                    data->baseAddress());
+  if (srcOffset > data->byteLength()) {
+    synthesizeGLError(GL_INVALID_VALUE, "compressedTexImage3D",
+                      "srcOffset is out of range");
+    return;
+  }
+  if (srcLengthOverride == 0) {
+    srcLengthOverride = data->byteLength() - srcOffset;
+  } else if (srcLengthOverride > data->byteLength() - srcOffset) {
+    synthesizeGLError(GL_INVALID_VALUE, "compressedTexImage3D",
+                      "srcLengthOverride is out of range");
+  }
+  contextGL()->CompressedTexImage3D(
+      target, level, internalformat, width, height, depth, border,
+      srcLengthOverride,
+      static_cast<uint8_t*>(data->baseAddress()) + srcOffset);
 }
 
 void WebGL2RenderingContextBase::compressedTexSubImage3D(
@@ -1971,16 +2106,30 @@ void WebGL2RenderingContextBase::compressedTexSubImage3D(
     GLsizei height,
     GLsizei depth,
     GLenum format,
-    DOMArrayBufferView* data) {
+    DOMArrayBufferView* data,
+    GLuint srcOffset,
+    GLuint srcLengthOverride) {
   if (isContextLost())
     return;
   if (!validateTexture3DBinding("compressedTexSubImage3D", target))
     return;
   if (!validateCompressedTexFormat("compressedTexSubImage3D", format))
     return;
-  contextGL()->CompressedTexSubImage3D(target, level, xoffset, yoffset, zoffset,
-                                       width, height, depth, format,
-                                       data->byteLength(), data->baseAddress());
+  if (srcOffset > data->byteLength()) {
+    synthesizeGLError(GL_INVALID_VALUE, "compressedTexSubImage3D",
+                      "srcOffset is out of range");
+    return;
+  }
+  if (srcLengthOverride == 0) {
+    srcLengthOverride = data->byteLength() - srcOffset;
+  } else if (srcLengthOverride > data->byteLength() - srcOffset) {
+    synthesizeGLError(GL_INVALID_VALUE, "compressedTexSubImage3D",
+                      "srcLengthOverride is out of range");
+  }
+  contextGL()->CompressedTexSubImage3D(
+      target, level, xoffset, yoffset, zoffset, width, height, depth, format,
+      srcLengthOverride,
+      static_cast<uint8_t*>(data->baseAddress()) + srcOffset);
 }
 
 GLint WebGL2RenderingContextBase::getFragDataLocation(WebGLProgram* program,
@@ -2679,12 +2828,7 @@ GLboolean WebGL2RenderingContextBase::isQuery(WebGLQuery* query) {
 
 void WebGL2RenderingContextBase::beginQuery(GLenum target, WebGLQuery* query) {
   bool deleted;
-  if (!query) {
-    synthesizeGLError(GL_INVALID_OPERATION, "beginQuery",
-                      "query object is null");
-    return;
-  }
-
+  DCHECK(query);
   if (!checkObjectToBeBound("beginQuery", query, deleted))
     return;
   if (deleted) {
@@ -2844,12 +2988,8 @@ ScriptValue WebGL2RenderingContextBase::getQueryParameter(
     ScriptState* scriptState,
     WebGLQuery* query,
     GLenum pname) {
+  DCHECK(query);
   bool deleted;
-  if (!query) {
-    synthesizeGLError(GL_INVALID_OPERATION, "getQueryParameter",
-                      "query object is null");
-    return ScriptValue::createNull(scriptState);
-  }
   if (!checkObjectToBeBound("getQueryParameter", query, deleted))
     return ScriptValue::createNull(scriptState);
   if (deleted) {

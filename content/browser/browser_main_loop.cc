@@ -37,6 +37,7 @@
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "components/discardable_memory/service/discardable_shared_memory_manager.h"
 #include "components/tracing/browser/trace_config_file.h"
 #include "components/tracing/common/process_metrics_memory_dump_provider.h"
 #include "components/tracing/common/trace_to_console.h"
@@ -53,6 +54,7 @@
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/gpu/gpu_process_host_ui_shim.h"
+#include "content/browser/gpu/shader_disk_cache.h"
 #include "content/browser/histogram_synchronizer.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/loader_delegate_impl.h"
@@ -68,7 +70,6 @@
 #include "content/browser/webui/content_web_ui_controller_factory.h"
 #include "content/browser/webui/url_data_manager.h"
 #include "content/common/content_switches_internal.h"
-#include "content/common/host_discardable_shared_memory_manager.h"
 #include "content/common/host_shared_bitmap_manager.h"
 #include "content/common/service_manager/service_manager_connection_impl.h"
 #include "content/public/browser/browser_main_parts.h"
@@ -349,12 +350,12 @@ MSVC_ENABLE_OPTIMIZE();
 #if defined(OS_WIN)
 // Creates a memory pressure monitor using automatic thresholds, or those
 // specified on the command-line. Ownership is passed to the caller.
-base::win::MemoryPressureMonitor* CreateWinMemoryPressureMonitor(
-    const base::CommandLine& parsed_command_line) {
-  std::vector<std::string> thresholds = base::SplitString(
-      parsed_command_line.GetSwitchValueASCII(
-          switches::kMemoryPressureThresholdsMb),
-      ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+std::unique_ptr<base::win::MemoryPressureMonitor>
+CreateWinMemoryPressureMonitor(const base::CommandLine& parsed_command_line) {
+  std::vector<std::string> thresholds =
+      base::SplitString(parsed_command_line.GetSwitchValueASCII(
+                            switches::kMemoryPressureThresholdsMb),
+                        ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   int moderate_threshold_mb = 0;
   int critical_threshold_mb = 0;
@@ -363,12 +364,12 @@ base::win::MemoryPressureMonitor* CreateWinMemoryPressureMonitor(
       base::StringToInt(thresholds[1], &critical_threshold_mb) &&
       moderate_threshold_mb >= critical_threshold_mb &&
       critical_threshold_mb >= 0) {
-    return new base::win::MemoryPressureMonitor(moderate_threshold_mb,
-                                                critical_threshold_mb);
+    return base::MakeUnique<base::win::MemoryPressureMonitor>(
+        moderate_threshold_mb, critical_threshold_mb);
   }
 
   // In absence of valid switches use the automatic defaults.
-  return new base::win::MemoryPressureMonitor();
+  return base::MakeUnique<base::win::MemoryPressureMonitor>();
 }
 #endif  // defined(OS_WIN)
 
@@ -634,7 +635,7 @@ void BrowserMainLoop::PostMainMessageLoopStart() {
   // in-process Android WebView. crbug.com/503724 tracks proper fix.
   if (!parsed_command_line_.HasSwitch(switches::kSingleProcess)) {
     base::DiscardableMemoryAllocator::SetInstance(
-        HostDiscardableSharedMemoryManager::current());
+        discardable_memory::DiscardableSharedMemoryManager::current());
   }
 
   if (parts_)
@@ -1227,6 +1228,13 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   }
 #endif
 
+  // Initialize the GPU shader cache. This needs to be initialized before
+  // BrowserGpuChannelHostFactory below, since that depends on an initialized
+  // ShaderCacheFactory.
+  ShaderCacheFactory::InitInstance(
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::CACHE));
+
   bool always_uses_gpu = true;
   bool established_gpu_channel = false;
 #if defined(OS_ANDROID)
@@ -1391,6 +1399,22 @@ bool BrowserMainLoop::UsingInProcessGpu() const {
 }
 
 void BrowserMainLoop::InitializeMemoryManagementComponent() {
+  // TODO(chrisha): Abstract away this construction mess to a helper function,
+  // once MemoryPressureMonitor is made a concrete class.
+#if defined(OS_CHROMEOS)
+  if (chromeos::switches::MemoryPressureHandlingEnabled()) {
+    memory_pressure_monitor_ =
+        base::MakeUnique<base::chromeos::MemoryPressureMonitor>(
+            chromeos::switches::GetMemoryPressureThresholds());
+  }
+#elif defined(OS_MACOSX)
+  memory_pressure_monitor_ =
+    base::MakeUnique<base::mac::MemoryPressureMonitor>();
+#elif defined(OS_WIN)
+  memory_pressure_monitor_ =
+      CreateWinMemoryPressureMonitor(parsed_command_line_);
+#endif
+
   if (base::FeatureList::IsEnabled(features::kMemoryCoordinator)) {
     // Disable MemoryPressureListener when memory coordinator is enabled.
     base::MemoryPressureListener::SetNotificationsSuppressed(true);
@@ -1404,22 +1428,13 @@ void BrowserMainLoop::InitializeMemoryManagementComponent() {
         SetSetCurrentMemoryStateForTestingCallback(base::Bind(
             &MemoryCoordinator::SetCurrentMemoryStateForTesting,
             base::Unretained(MemoryCoordinator::GetInstance())));
-    return;
-  }
 
-  // TODO(chrisha): Abstract away this construction mess to a helper function,
-  // once MemoryPressureMonitor is made a concrete class.
-#if defined(OS_CHROMEOS)
-  if (chromeos::switches::MemoryPressureHandlingEnabled()) {
-    memory_pressure_monitor_.reset(new base::chromeos::MemoryPressureMonitor(
-        chromeos::switches::GetMemoryPressureThresholds()));
+    if (memory_pressure_monitor_) {
+      memory_pressure_monitor_->SetDispatchCallback(
+          base::Bind(&MemoryCoordinator::RecordMemoryPressure,
+                     base::Unretained(MemoryCoordinator::GetInstance())));
+    }
   }
-#elif defined(OS_MACOSX)
-  memory_pressure_monitor_.reset(new base::mac::MemoryPressureMonitor());
-#elif defined(OS_WIN)
-  memory_pressure_monitor_.reset(CreateWinMemoryPressureMonitor(
-      parsed_command_line_));
-#endif
 }
 
 bool BrowserMainLoop::InitializeToolkit() {
@@ -1489,8 +1504,7 @@ void BrowserMainLoop::InitializeMojo() {
   }
 
   mojo_ipc_support_.reset(new mojo::edk::ScopedIPCSupport(
-      BrowserThread::UnsafeGetMessageLoopForThread(BrowserThread::IO)
-          ->task_runner()));
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)));
 
   service_manager_context_.reset(new ServiceManagerContext);
 #if defined(OS_MACOSX)

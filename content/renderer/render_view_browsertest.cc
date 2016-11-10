@@ -84,6 +84,7 @@
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/range/range.h"
+#include "ui/native_theme/native_theme_switches.h"
 
 #if defined(USE_AURA) && defined(USE_X11)
 #include <X11/Xlib.h>
@@ -220,6 +221,8 @@ class RenderViewImplTest : public RenderViewTest {
     // does not have to bother enabling each feature.
     WebRuntimeFeatures::enableExperimentalFeatures(true);
     WebRuntimeFeatures::enableTestOnlyFeatures(true);
+    WebRuntimeFeatures::enableOverlayScrollbars(
+        ui::IsOverlayScrollbarEnabled());
     RenderViewTest::SetUp();
   }
 
@@ -902,30 +905,6 @@ TEST_F(RenderViewImplTest, NavigateProxyAndDetachBeforeOnNavigate) {
   // Detach the provisional frame to clean it up.  Normally, the browser
   // process would trigger this via FrameMsg_Delete.
   provisional_frame->GetWebFrame()->detach();
-}
-
-// Verify that DidFlushPaint doesn't crash if called after a RenderView is
-// swapped out. See https://crbug.com/513552.
-TEST_F(RenderViewImplTest, PaintAfterSwapOut) {
-  // Create a new main frame RenderFrame so that we don't interfere with the
-  // shutdown of frame() in RenderViewTest.TearDown.
-  blink::WebURLRequest popup_request(GURL("http://foo.com"));
-  blink::WebView* new_web_view = view()->createView(
-      GetMainFrame(), popup_request, blink::WebWindowFeatures(), "foo",
-      blink::WebNavigationPolicyNewForegroundTab, false);
-  RenderViewImpl* new_view = RenderViewImpl::FromWebView(new_web_view);
-
-  // Respond to a swap out request.
-  TestRenderFrame* new_main_frame =
-      static_cast<TestRenderFrame*>(new_view->GetMainRenderFrame());
-  new_main_frame->SwapOut(
-      kProxyRoutingId, true,
-      ReconstructReplicationStateForTesting(new_main_frame));
-
-  // Simulate getting painted after swapping out.
-  new_view->DidFlushPaint();
-
-  CloseRenderView(new_view);
 }
 
 // Verify that the renderer process doesn't crash when device scale factor
@@ -1815,9 +1794,9 @@ TEST_F(RendererErrorPageTest, MAYBE_Suppresses) {
   main_frame->didFailProvisionalLoad(web_frame, error,
                                      blink::WebStandardCommit);
   const int kMaxOutputCharacters = 22;
-  EXPECT_EQ("", base::UTF16ToASCII(base::StringPiece16(
-                    WebFrameContentDumper::dumpWebViewAsText(
-                        view()->GetWebView(), kMaxOutputCharacters))));
+  EXPECT_EQ("", WebFrameContentDumper::dumpWebViewAsText(view()->GetWebView(),
+                                                         kMaxOutputCharacters)
+                    .ascii());
 }
 
 #if defined(OS_ANDROID)

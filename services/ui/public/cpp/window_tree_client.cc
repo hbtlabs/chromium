@@ -359,13 +359,6 @@ void WindowTreeClient::AttachCompositorFrameSink(
       window_id, type, std::move(compositor_frame_sink), std::move(client));
 }
 
-void WindowTreeClient::OnWindowSurfaceDetached(
-    Id window_id,
-    const cc::SurfaceSequence& sequence) {
-  DCHECK(tree_);
-  tree_->OnWindowSurfaceDetached(window_id, sequence);
-}
-
 void WindowTreeClient::LocalSetCapture(Window* window) {
   if (capture_window_ == window)
     return;
@@ -473,28 +466,19 @@ bool WindowTreeClient::ApplyServerChangeToExistingInFlightChange(
   return true;
 }
 
-Window* WindowTreeClient::BuildWindowTree(
+void WindowTreeClient::BuildWindowTree(
     const mojo::Array<mojom::WindowDataPtr>& windows,
     Window* initial_parent) {
-  std::vector<Window*> parents;
-  Window* root = nullptr;
-  Window* last_window = nullptr;
-  if (initial_parent)
-    parents.push_back(initial_parent);
-  for (size_t i = 0; i < windows.size(); ++i) {
-    if (last_window && windows[i]->parent_id == server_id(last_window)) {
-      parents.push_back(last_window);
-    } else if (!parents.empty()) {
-      while (server_id(parents.back()) != windows[i]->parent_id)
-        parents.pop_back();
-    }
-    Window* window = AddWindowToClient(
-        this, !parents.empty() ? parents.back() : nullptr, windows[i]);
-    if (!last_window)
-      root = window;
-    last_window = window;
+  for (const auto& window_data : windows) {
+    Window* parent = window_data->parent_id == 0
+                         ? nullptr
+                         : GetWindowByServerId(window_data->parent_id);
+    Window* existing_window = GetWindowByServerId(window_data->window_id);
+    if (!existing_window)
+      AddWindowToClient(this, parent, window_data);
+    else if (parent)
+      WindowPrivate(parent).LocalAddChild(existing_window);
   }
-  return root;
 }
 
 Window* WindowTreeClient::NewWindowImpl(
@@ -659,7 +643,7 @@ void WindowTreeClient::PerformDragDrop(
   DCHECK(!current_drag_state_);
 
   // TODO(erg): Pass |cursor_location| and |bitmap| in PerformDragDrop() when
-  // we start showing an image representation of the drag under he cursor.
+  // we start showing an image representation of the drag under the cursor.
 
   if (window->drop_target()) {
     // To minimize the number of round trips, copy the drag drop data to our
@@ -1105,7 +1089,6 @@ void WindowTreeClient::OnWindowPredefinedCursorChanged(
 void WindowTreeClient::OnWindowSurfaceChanged(
     Id window_id,
     const cc::SurfaceId& surface_id,
-    const cc::SurfaceSequence& surface_sequence,
     const gfx::Size& frame_size,
     float device_scale_factor) {
   Window* window = GetWindowByServerId(window_id);
@@ -1113,7 +1096,6 @@ void WindowTreeClient::OnWindowSurfaceChanged(
     return;
   std::unique_ptr<SurfaceInfo> surface_info(base::MakeUnique<SurfaceInfo>());
   surface_info->surface_id = surface_id;
-  surface_info->surface_sequence = surface_sequence;
   surface_info->frame_size = frame_size;
   surface_info->device_scale_factor = device_scale_factor;
   WindowPrivate(window).LocalSetSurfaceId(std::move(surface_info));

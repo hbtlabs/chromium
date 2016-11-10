@@ -59,7 +59,6 @@ namespace content {
 class BrowserPluginEmbedder;
 class BrowserPluginGuest;
 class DateTimeChooserAndroid;
-class DownloadItem;
 class FindRequestManager;
 class HostZoomMapObserver;
 class InterstitialPageImpl;
@@ -68,7 +67,6 @@ class LoaderIOThreadNotifier;
 class ManifestManagerHost;
 class MediaWebContentsObserver;
 class PluginContentOriginWhitelist;
-class PowerSaveBlocker;
 class RenderViewHost;
 class RenderViewHostDelegateView;
 class RenderWidgetHostImpl;
@@ -324,6 +322,7 @@ class CONTENT_EXPORT WebContentsImpl
   int GetCrashedErrorCode() const override;
   bool IsBeingDestroyed() const override;
   void NotifyNavigationStateChanged(InvalidateTypes changed_flags) override;
+  void OnAudioStateChanged(bool is_audio_playing) override;
   base::TimeTicks GetLastActiveTime() const override;
   void SetLastActiveTime(base::TimeTicks last_active_time) override;
   base::TimeTicks GetLastHiddenTime() const override;
@@ -414,6 +413,7 @@ class CONTENT_EXPORT WebContentsImpl
   void ExitFullscreen(bool will_cause_resize) override;
   void ResumeLoadingCreatedWebContents() override;
   void OnPasswordInputShownOnHttp() override;
+  void OnAllPasswordInputsHiddenOnHttp() override;
   void OnCreditCardInputShownOnHttp() override;
   void SetIsOverlayContent(bool is_overlay_content) override;
 
@@ -698,6 +698,7 @@ class CONTENT_EXPORT WebContentsImpl
   void SetFocusToLocationBar(bool select_all) override;
   bool IsHidden() override;
   int GetOuterDelegateFrameTreeNodeId() override;
+  RenderWidgetHostImpl* GetFullscreenRenderWidgetHost() const override;
 
   // NotificationObserver ------------------------------------------------------
 

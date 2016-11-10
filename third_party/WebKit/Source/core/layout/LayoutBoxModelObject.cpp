@@ -33,7 +33,6 @@
 #include "core/layout/LayoutFlexibleBox.h"
 #include "core/layout/LayoutGeometryMap.h"
 #include "core/layout/LayoutInline.h"
-#include "core/layout/LayoutTheme.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
@@ -297,6 +296,7 @@ void LayoutBoxModelObject::styleDidChange(StyleDifference diff,
     // transforms, so just null out the bit.
     setHasTransformRelatedProperty(false);
     setHasReflection(false);
+    layer()->updateFilters(oldStyle, styleRef());
     // Calls destroyLayer() which clears m_layer.
     layer()->removeOnlyThisLayerAfterStyleChange();
     if (wasFloatingBeforeStyleChanged && isFloating())
@@ -498,24 +498,27 @@ void LayoutBoxModelObject::invalidateTreeIfNeeded(
     newPaintInvalidationState
         .setForceSubtreeInvalidationCheckingWithinContainer();
 
+  ObjectPaintInvalidator paintInvalidator(*this);
   LayoutRect previousVisualRect = this->previousVisualRect();
-  LayoutPoint previousPosition = previousPositionFromPaintInvalidationBacking();
+  LayoutPoint previousLocation = paintInvalidator.previousLocationInBacking();
   PaintInvalidationReason reason =
       invalidatePaintIfNeeded(newPaintInvalidationState);
   clearPaintInvalidationFlags();
 
-  if (previousPosition != previousPositionFromPaintInvalidationBacking())
+  if (previousLocation != paintInvalidator.previousLocationInBacking()) {
     newPaintInvalidationState
         .setForceSubtreeInvalidationCheckingWithinContainer();
+  }
 
   // TODO(wangxianzhu): Combine this function into LayoutObject::
   // invalidateTreeIfNeeded() when removing the following workarounds.
 
   // TODO(wangxianzhu): This is a workaround for crbug.com/533277. Will remove
   // when we enable paint offset caching.
-  if (reason != PaintInvalidationNone && hasPercentageTransform(styleRef()))
+  if (reason != PaintInvalidationNone && hasPercentageTransform(styleRef())) {
     newPaintInvalidationState
         .setForceSubtreeInvalidationCheckingWithinContainer();
+  }
 
   // TODO(wangxianzhu): This is a workaround for crbug.com/490725. We don't have
   // enough saved information to do accurate check of clipping change. Will
@@ -525,9 +528,10 @@ void LayoutBoxModelObject::invalidateTreeIfNeeded(
       !usesCompositedScrolling()
       // Note that isLayoutView() below becomes unnecessary after the launch of
       // root layer scrolling.
-      && (hasOverflowClip() || isLayoutView()))
+      && (hasOverflowClip() || isLayoutView())) {
     newPaintInvalidationState
         .setForceSubtreeInvalidationRectUpdateWithinContainer();
+  }
 
   newPaintInvalidationState.updateForChildren(reason);
   invalidatePaintOfSubtreesIfNeeded(newPaintInvalidationState);
@@ -979,7 +983,7 @@ LayoutSize LayoutBoxModelObject::stickyPositionOffset() const {
 
 LayoutPoint LayoutBoxModelObject::adjustedPositionRelativeTo(
     const LayoutPoint& startPoint,
-    const Element* element) const {
+    const Element* offsetParent) const {
   // If the element is the HTML body element or doesn't have a parent
   // return 0 and stop this algorithm.
   if (isBody() || !parent())
@@ -987,38 +991,56 @@ LayoutPoint LayoutBoxModelObject::adjustedPositionRelativeTo(
 
   LayoutPoint referencePoint = startPoint;
 
-  // If the base element is null, return the distance between the canvas origin
-  // and the left border edge of the element and stop this algorithm.
-  if (!element)
+  // If the offsetParent is null, return the distance between the canvas origin
+  // and the left/top border edge of the element and stop this algorithm.
+  if (!offsetParent)
     return referencePoint;
 
-  if (const LayoutBoxModelObject* offsetParent =
-          element->layoutBoxModelObject()) {
+  if (const LayoutBoxModelObject* offsetParentObject =
+          offsetParent->layoutBoxModelObject()) {
     if (!isOutOfFlowPositioned()) {
       if (isInFlowPositioned())
         referencePoint.move(offsetForInFlowPosition());
 
       // Note that we may fail to find |offsetParent| while walking the
       // container chain, if |offsetParent| is an inline split into
-      // continuations: <body style="display:inline;" id="offsetParent"><div>
-      // </div><span id="this">
+      // continuations: <body style="display:inline;" id="offsetParent">
+      // <div id="this">
       // This is why we have to do a nullptr check here.
-      // offset(Left|Top) is generally broken when offsetParent is inline.
       for (const LayoutObject* current = container();
-           current && current != offsetParent; current = current->container()) {
+           current && current->node() != offsetParent;
+           current = current->container()) {
         // FIXME: What are we supposed to do inside SVG content?
         referencePoint.move(current->columnOffset(referencePoint));
         if (current->isBox() && !current->isTableRow())
           referencePoint.moveBy(toLayoutBox(current)->topLeftLocation());
       }
 
-      if (offsetParent->isBox() && offsetParent->isBody() &&
-          !offsetParent->isPositioned())
-        referencePoint.moveBy(toLayoutBox(offsetParent)->topLeftLocation());
+      if (offsetParentObject->isBox() && offsetParentObject->isBody() &&
+          !offsetParentObject->isPositioned()) {
+        referencePoint.moveBy(
+            toLayoutBox(offsetParentObject)->topLeftLocation());
+      }
     }
-    if (offsetParent->isBox() && !offsetParent->isBody())
-      referencePoint.move(-toLayoutBox(offsetParent)->borderLeft(),
-                          -toLayoutBox(offsetParent)->borderTop());
+
+    if (offsetParentObject->isLayoutInline()) {
+      const LayoutInline* inlineParent = toLayoutInline(offsetParentObject);
+
+      if (isBox() && style()->position() == AbsolutePosition &&
+          inlineParent->isInFlowPositioned()) {
+        // Offset for absolute elements with inline parent is a special
+        // case in the CSS spec
+        referencePoint +=
+            inlineParent->offsetForInFlowPositionedInline(*toLayoutBox(this));
+      }
+
+      referencePoint -= inlineParent->firstLineBoxTopLeft();
+    }
+
+    if (offsetParentObject->isBox() && !offsetParentObject->isBody()) {
+      referencePoint.move(-toLayoutBox(offsetParentObject)->borderLeft(),
+                          -toLayoutBox(offsetParentObject)->borderTop());
+    }
   }
 
   return referencePoint;
@@ -1061,63 +1083,6 @@ LayoutUnit LayoutBoxModelObject::computedCSSPadding(
   if (padding.isPercentOrCalc())
     w = containingBlockLogicalWidthForContent();
   return minimumValueForLength(padding, w);
-}
-
-bool LayoutBoxModelObject::boxShadowShouldBeAppliedToBackground(
-    BackgroundBleedAvoidance bleedAvoidance,
-    const InlineFlowBox* inlineFlowBox) const {
-  if (bleedAvoidance != BackgroundBleedNone)
-    return false;
-
-  if (style()->hasAppearance())
-    return false;
-
-  const ShadowList* shadowList = style()->boxShadow();
-  if (!shadowList)
-    return false;
-
-  bool hasOneNormalBoxShadow = false;
-  size_t shadowCount = shadowList->shadows().size();
-  for (size_t i = 0; i < shadowCount; ++i) {
-    const ShadowData& currentShadow = shadowList->shadows()[i];
-    if (currentShadow.style() != Normal)
-      continue;
-
-    if (hasOneNormalBoxShadow)
-      return false;
-    hasOneNormalBoxShadow = true;
-
-    if (currentShadow.spread())
-      return false;
-  }
-
-  if (!hasOneNormalBoxShadow)
-    return false;
-
-  Color backgroundColor = resolveColor(CSSPropertyBackgroundColor);
-  if (backgroundColor.hasAlpha())
-    return false;
-
-  const FillLayer* lastBackgroundLayer = &style()->backgroundLayers();
-  for (const FillLayer* next = lastBackgroundLayer->next(); next;
-       next = lastBackgroundLayer->next())
-    lastBackgroundLayer = next;
-
-  if (lastBackgroundLayer->clip() != BorderFillBox)
-    return false;
-
-  if (lastBackgroundLayer->image() && style()->hasBorderRadius())
-    return false;
-
-  if (inlineFlowBox &&
-      !inlineFlowBox->boxShadowCanBeAppliedToBackground(*lastBackgroundLayer))
-    return false;
-
-  if (hasOverflowClip() &&
-      lastBackgroundLayer->attachment() == LocalBackgroundAttachment)
-    return false;
-
-  return true;
 }
 
 LayoutUnit LayoutBoxModelObject::containingBlockLogicalWidthForContent() const {

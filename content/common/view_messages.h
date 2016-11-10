@@ -286,7 +286,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::TextInputState)
   IPC_STRUCT_TRAITS_MEMBER(can_compose_inline)
   IPC_STRUCT_TRAITS_MEMBER(show_ime_if_needed)
   IPC_STRUCT_TRAITS_MEMBER(is_non_ime_change)
-  IPC_STRUCT_TRAITS_MEMBER(batch_edit)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_BEGIN(ViewHostMsg_CreateWorker_Params)
@@ -584,8 +583,6 @@ IPC_MESSAGE_ROUTED3(ViewMsg_UpdateBrowserControlsState,
                     bool /* enable_showing */,
                     bool /* animate */)
 
-IPC_MESSAGE_ROUTED0(ViewMsg_ShowImeIfNeeded)
-
 // Extracts the data at the given rect, returning it through the
 // ViewHostMsg_SmartClipDataExtracted IPC.
 IPC_MESSAGE_ROUTED1(ViewMsg_ExtractSmartClipData,
@@ -599,10 +596,6 @@ IPC_MESSAGE_ROUTED3(ViewMsg_ReclaimCompositorResources,
                     uint32_t /* compositor_frame_sink_id */,
                     bool /* is_swap_ack */,
                     cc::ReturnedResourceArray /* resources */)
-
-// Sent by browser to give renderer compositor a new namespace ID for any
-// SurfaceSequences it has to create.
-IPC_MESSAGE_ROUTED1(ViewMsg_SetFrameSinkId, cc::FrameSinkId /* frame_sink_id */)
 
 IPC_MESSAGE_ROUTED0(ViewMsg_SelectWordAroundCaret)
 
@@ -631,12 +624,6 @@ IPC_MESSAGE_ROUTED1(ViewMsg_HandleCompositorProto,
 // to be be delivered until the notification is disabled.
 IPC_MESSAGE_ROUTED1(ViewHostMsg_SetNeedsBeginFrames,
                     bool /* enabled */)
-
-// Similar to ViewHostMsg_CreateWidget except the widget is a full screen
-// window.
-IPC_SYNC_MESSAGE_CONTROL1_1(ViewHostMsg_CreateFullscreenWidget,
-                            int /* opener_id */,
-                            int /* route_id */)
 
 // These three messages are sent to the parent RenderViewHost to display the
 // page/widget that was created by

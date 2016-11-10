@@ -78,7 +78,7 @@ class ReadingListModel {
 
   // Removes an entry. The removal may be asynchronous, and not happen
   // immediately.
-  virtual void RemoveEntryByUrl(const GURL& url) = 0;
+  virtual void RemoveEntryByURL(const GURL& url) = 0;
 
   // If the |url| is in the reading list and unread, mark it read. If it is in
   // the reading list and read, move it to the top of unread if it is not here

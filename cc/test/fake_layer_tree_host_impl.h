@@ -16,6 +16,8 @@ class GpuMemoryBufferManager;
 
 namespace cc {
 
+class AnimationHost;
+
 class FakeLayerTreeHostImpl : public LayerTreeHostImpl {
  public:
   FakeLayerTreeHostImpl(TaskRunnerProvider* task_runner_provider,
@@ -54,6 +56,8 @@ class FakeLayerTreeHostImpl : public LayerTreeHostImpl {
   void set_notify_tile_state_changed_called(bool called) {
     notify_tile_state_changed_called_ = called;
   }
+
+  AnimationHost* animation_host() const;
 
  private:
   FakeLayerTreeHostImplClient client_;

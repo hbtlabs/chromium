@@ -2,8 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
+import("//third_party/WebKit/public/public_features.gni")
 import("//third_party/WebKit/Source/config.gni")
+import("//third_party/WebKit/Source/core/core.gni")
 import("//tools/grit/grit_rule.gni")
 
 if (is_android) {
@@ -65,10 +68,10 @@ config("blink_headers_config") {
   configs = [ "//v8:external_config" ]
 }
 
-config("debug_devtools") {
-  if (debug_devtools) {
-    defines = [ "DEBUG_DEVTOOLS=1" ]
-  }
+# Public feature flags usabout outside of Blink.
+buildflag_header("features") {
+  header = "public_features.h"
+  flags = [ "DEBUG_DEVTOOLS=$debug_devtools" ]
 }
 
 if (is_android) {
@@ -225,7 +228,6 @@ source_set("blink_headers") {
     "platform/WebMemoryState.h",
     "platform/WebMessagePortChannel.h",
     "platform/WebMessagePortChannelClient.h",
-    "platform/WebMimeRegistry.h",
     "platform/WebMixedContent.h",
     "platform/WebMockClipboard.h",
     "platform/WebNativeScrollBehavior.h",
@@ -283,7 +285,6 @@ source_set("blink_headers") {
     "platform/WebSize.h",
     "platform/WebSourceBuffer.h",
     "platform/WebSourceBufferClient.h",
-    "platform/WebSourceInfo.h",
     "platform/WebSpeechSynthesisUtterance.h",
     "platform/WebSpeechSynthesisVoice.h",
     "platform/WebSpeechSynthesizer.h",
@@ -295,7 +296,6 @@ source_set("blink_headers") {
     "platform/WebStorageQuotaType.h",
     "platform/WebString.h",
     "platform/WebSuspendableTask.h",
-    "platform/WebTaskRunner.h",
     "platform/WebTextInputInfo.h",
     "platform/WebTextInputMode.h",
     "platform/WebTextInputType.h",
@@ -616,6 +616,14 @@ grit("resources") {
       "use_concatenated_impulse_responses",
     ]
   }
+  html_min_css = "$blink_core_output_dir/html.css"
+  grit_flags += [
+    "-E",
+    "html_min_css=" + rebase_path(html_min_css),
+  ]
+  deps = [
+    "//third_party/WebKit/Source/core:make_minimized_css",
+  ]
 }
 
 grit("image_resources") {

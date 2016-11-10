@@ -151,38 +151,34 @@ CastDeviceCache* CastConfigDelegateMediaRouter::devices() {
   return devices_.get();
 }
 
-bool CastConfigDelegateMediaRouter::HasCastExtension() const {
-  return true;
-}
-
 void CastConfigDelegateMediaRouter::RequestDeviceRefresh() {
   // The media router component isn't ready yet.
   if (!devices())
     return;
 
-  // Build the old-style ReceiverAndActivity set out of the MediaRouter
+  // Build the old-style SinkAndRoute set out of the MediaRouter
   // source/sink/route setup. We first map the existing sinks, and then we
   // update those sinks with activity information.
 
-  ReceiversAndActivities items;
+  SinksAndRoutes items;
 
   for (const media_router::MediaSink& sink : devices()->sinks()) {
-    ReceiverAndActivity ra;
-    ra.receiver.id = sink.id();
-    ra.receiver.name = base::UTF8ToUTF16(sink.name());
-    items.push_back(ra);
+    SinkAndRoute sr;
+    sr.sink.id = sink.id();
+    sr.sink.name = base::UTF8ToUTF16(sink.name());
+    items.push_back(sr);
   }
 
   for (const media_router::MediaRoute& route : devices()->routes()) {
     if (!route.for_display())
       continue;
 
-    for (ReceiverAndActivity& item : items) {
-      if (item.receiver.id == route.media_sink_id()) {
-        item.activity.id = route.media_route_id();
-        item.activity.title =
+    for (SinkAndRoute& item : items) {
+      if (item.sink.id == route.media_sink_id()) {
+        item.route.id = route.media_route_id();
+        item.route.title =
             base::UTF8ToUTF16(StripEndingTab(route.description()));
-        item.activity.is_local_source = route.is_local();
+        item.route.is_local_source = route.is_local();
 
         if (route.is_local()) {
           // TODO(jdufault): Once the extension backend is removed, we can
@@ -195,9 +191,9 @@ void CastConfigDelegateMediaRouter::RequestDeviceRefresh() {
 
           // Default to a tab/app capture. This will display the media router
           // description. This means we will properly support DIAL casts.
-          item.activity.tab_id = 0;
+          item.route.tab_id = 0;
           if (media_router::IsDesktopMirroringMediaSource(route.media_source()))
-            item.activity.tab_id = Activity::TabId::DESKTOP;
+            item.route.tab_id = Route::TabId::DESKTOP;
         }
 
         break;
@@ -209,11 +205,10 @@ void CastConfigDelegateMediaRouter::RequestDeviceRefresh() {
     observer.OnDevicesUpdated(items);
 }
 
-void CastConfigDelegateMediaRouter::CastToReceiver(
-    const std::string& receiver_id) {
+void CastConfigDelegateMediaRouter::CastToSink(const std::string& sink_id) {
   // TODO(imcheng): Pass in tab casting timeout.
   GetMediaRouter()->CreateRoute(
-      media_router::MediaSourceForDesktop().id(), receiver_id,
+      media_router::MediaSourceForDesktop().id(), sink_id,
       GURL("http://cros-cast-origin/"), nullptr,
       std::vector<media_router::MediaRouteResponseCallback>(),
       base::TimeDelta(), false);
@@ -222,13 +217,6 @@ void CastConfigDelegateMediaRouter::CastToReceiver(
 void CastConfigDelegateMediaRouter::StopCasting(const std::string& route_id) {
   GetMediaRouter()->TerminateRoute(route_id);
 }
-
-bool CastConfigDelegateMediaRouter::HasOptions() const {
-  // There are no plans to have an options page for the MediaRouter.
-  return false;
-}
-
-void CastConfigDelegateMediaRouter::LaunchCastOptions() {}
 
 void CastConfigDelegateMediaRouter::AddObserver(
     ash::CastConfigDelegate::Observer* observer) {

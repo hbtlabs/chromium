@@ -134,7 +134,9 @@ CategoryInfo BookmarkSuggestionsProvider::GetCategoryInfo(Category category) {
   return CategoryInfo(
       l10n_util::GetStringUTF16(IDS_NTP_BOOKMARK_SUGGESTIONS_SECTION_HEADER),
       ContentSuggestionsCardLayout::MINIMAL_CARD,
-      /*has_more_button=*/true,
+      /*has_more_action=*/false,
+      /*has_reload_action=*/false,
+      /*has_view_all_action=*/true,
       /*show_if_empty=*/false,
       l10n_util::GetStringUTF16(IDS_NTP_BOOKMARK_SUGGESTIONS_SECTION_EMPTY));
 }
@@ -151,6 +153,20 @@ void BookmarkSuggestionsProvider::FetchSuggestionImage(
     const ImageFetchedCallback& callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(callback, gfx::Image()));
+}
+
+void BookmarkSuggestionsProvider::Fetch(
+    const Category& category,
+    const std::set<std::string>& known_suggestion_ids,
+    const FetchDoneCallback& callback) {
+  LOG(DFATAL) << "BookmarkSuggestionsProvider has no |Fetch| functionality!";
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::Bind(
+          callback,
+          Status(StatusCode::PERMANENT_ERROR,
+                 "BookmarkSuggestionsProvider has no |Fetch| functionality!"),
+          base::Passed(std::vector<ContentSuggestion>())));
 }
 
 void BookmarkSuggestionsProvider::ClearHistory(

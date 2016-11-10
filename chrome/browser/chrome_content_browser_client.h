@@ -93,8 +93,10 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                     const GURL& url) override;
   bool ShouldAllowOpenURL(content::SiteInstance* site_instance,
                           const GURL& url) override;
-  void OverrideOpenURLParams(content::SiteInstance* site_instance,
-                             content::OpenURLParams* params) override;
+  void OverrideNavigationParams(content::SiteInstance* site_instance,
+                                ui::PageTransition* transition,
+                                bool* is_renderer_initiated,
+                                content::Referrer* referrer) override;
   bool IsSuitableHost(content::RenderProcessHost* process_host,
                       const GURL& site_url) override;
   bool MayReuseHost(content::RenderProcessHost* process_host) override;
@@ -271,7 +273,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       content::FileDescriptorInfo* mappings) override;
 #endif  // defined(OS_ANDROID)
 #if defined(OS_WIN)
-  const wchar_t* GetResourceDllName() override;
   bool PreSpawnRenderer(sandbox::TargetPolicy* policy) override;
   base::string16 GetAppContainerSidForSandboxType(
       int sandbox_type) const override;

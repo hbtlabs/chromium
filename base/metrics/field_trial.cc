@@ -12,7 +12,6 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/pickle.h"
 #include "base/process/memory.h"
 #include "base/rand_util.h"
@@ -42,16 +41,28 @@ const bool kUseSharedMemoryForFieldTrials = true;
 
 // Constants for the field trial allocator.
 const char kAllocatorName[] = "FieldTrialAllocator";
-const uint32_t kFieldTrialType = 0xABA17E13 + 1;  // SHA1(FieldTrialEntry) v1
+const uint32_t kFieldTrialType = 0xABA17E13 + 2;  // SHA1(FieldTrialEntry) v2
+
+// We allocate 64 KiB to hold all the field trial data. This should be enough,
+// as currently we use ~8KiB for the field trials, and ~10KiB for experiment
+// parameters (as of 9/11/2016). This also doesn't allocate all 64 KiB at once
+// -- the pages only get mapped to physical memory when they are touched. If the
+// size of the allocated field trials does get larger than 64 KiB, then we will
+// drop some field trials in child processes, leading to an inconsistent view
+// between browser and child processes and possibly causing crashes (see
+// crbug.com/661617).
 #if !defined(OS_NACL)
-const size_t kFieldTrialAllocationSize = 4 << 10;  // 4 KiB = one page
+const size_t kFieldTrialAllocationSize = 64 << 10;  // 64 KiB
 #endif
 
 // We create one FieldTrialEntry per field trial in shared memory, via
 // AddToAllocatorWhileLocked. The FieldTrialEntry is followed by a base::Pickle
-// object that we unpickle and read from.
+// object that we unpickle and read from. Any changes to this structure requires
+// a bump in kFieldTrialType id defined above.
 struct FieldTrialEntry {
-  bool activated;
+  // Whether or not this field trial is activated. This is really just a boolean
+  // but marked as a uint32_t for portability reasons.
+  uint32_t activated;
 
   // Size of the pickled structure, NOT the total size of this entry.
   uint32_t size;
@@ -728,8 +739,7 @@ void FieldTrialList::CopyFieldTrialStateToFlags(
                                      std::to_string(field_trial_length);
 
     cmd_line->AppendSwitchASCII(field_trial_handle_switch, field_trial_handle);
-    UMA_HISTOGRAM_COUNTS_10000("UMA.FieldTrialAllocator.Size",
-                               field_trial_length);
+    global_->field_trial_allocator_->UpdateTrackingHistograms();
     return;
   }
 #endif
@@ -823,15 +833,17 @@ size_t FieldTrialList::GetFieldTrialCount() {
 // static
 void FieldTrialList::CreateTrialsFromSharedMemory(
     std::unique_ptr<SharedMemory> shm) {
-  const SharedPersistentMemoryAllocator shalloc(std::move(shm), 0,
-                                                kAllocatorName, true);
-  PersistentMemoryAllocator::Iterator mem_iter(&shalloc);
+  global_->field_trial_allocator_.reset(new SharedPersistentMemoryAllocator(
+      std::move(shm), 0, kAllocatorName, true));
+  SharedPersistentMemoryAllocator* shalloc =
+      global_->field_trial_allocator_.get();
+  PersistentMemoryAllocator::Iterator mem_iter(shalloc);
 
   SharedPersistentMemoryAllocator::Reference ref;
   while ((ref = mem_iter.GetNextOfType(kFieldTrialType)) !=
          SharedPersistentMemoryAllocator::kReferenceNull) {
     const FieldTrialEntry* entry =
-        shalloc.GetAsObject<const FieldTrialEntry>(ref, kFieldTrialType);
+        shalloc->GetAsObject<const FieldTrialEntry>(ref, kFieldTrialType);
 
     StringPiece trial_name;
     StringPiece group_name;
@@ -845,6 +857,7 @@ void FieldTrialList::CreateTrialsFromSharedMemory(
     FieldTrial* trial =
         CreateFieldTrial(trial_name.as_string(), group_name.as_string());
 
+    trial->ref_ = ref;
     if (entry->activated) {
       // Call |group()| to mark the trial as "used" and notify observers, if
       // any. This is useful to ensure that field trials created in child
@@ -895,8 +908,13 @@ void FieldTrialList::AddToAllocatorWhileLocked(FieldTrial* field_trial) {
   if (allocator == nullptr)
     return;
 
+  // Or if the allocator is read only, which means we are in a child process and
+  // shouldn't be writing to it.
+  if (allocator->IsReadonly())
+    return;
+
   // Or if we've already added it.
-  if (field_trial->ref_ != SharedPersistentMemoryAllocator::kReferenceNull)
+  if (field_trial->ref_)
     return;
 
   FieldTrial::State trial_state;
@@ -932,6 +950,11 @@ void FieldTrialList::ActivateFieldTrialEntryWhileLocked(
     FieldTrial* field_trial) {
   SharedPersistentMemoryAllocator* allocator =
       global_->field_trial_allocator_.get();
+
+  // Check if we're in the child process and return early if so.
+  if (allocator && allocator->IsReadonly())
+    return;
+
   SharedPersistentMemoryAllocator::Reference ref = field_trial->ref_;
   if (ref == SharedPersistentMemoryAllocator::kReferenceNull) {
     // It's fine to do this even if the allocator hasn't been instantiated

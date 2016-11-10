@@ -39,7 +39,9 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/resource_response.h"
 #include "content/public/common/resource_type.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/associated_binding.h"
+#include "mojo/public/cpp/bindings/associated_group.h"
+#include "mojo/public/cpp/bindings/associated_interface_ptr_info.h"
 #include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_response_headers.h"
@@ -89,8 +91,16 @@ class URLLoaderClientImpl final : public mojom::URLLoaderClient {
   }
 
   void OnReceiveResponse(const ResourceResponseHead& response_head) override {
+    has_received_response_ = true;
+    if (body_consumer_)
+      body_consumer_->Start(task_runner_.get());
     resource_dispatcher_->OnMessageReceived(
         ResourceMsg_ReceivedResponse(request_id_, response_head));
+  }
+
+  void OnDataDownloaded(int64_t data_len, int64_t encoded_data_len) override {
+    resource_dispatcher_->OnMessageReceived(
+        ResourceMsg_DataDownloaded(request_id_, data_len, encoded_data_len));
   }
 
   void OnStartLoadingResponseBody(
@@ -98,6 +108,8 @@ class URLLoaderClientImpl final : public mojom::URLLoaderClient {
     DCHECK(!body_consumer_);
     body_consumer_ = new URLResponseBodyConsumer(
         request_id_, resource_dispatcher_, std::move(body), task_runner_);
+    if (has_received_response_)
+      body_consumer_->Start(task_runner_.get());
   }
 
   void OnComplete(const ResourceRequestCompletionStatus& status) override {
@@ -109,14 +121,16 @@ class URLLoaderClientImpl final : public mojom::URLLoaderClient {
     body_consumer_->OnComplete(status);
   }
 
-  mojom::URLLoaderClientPtr CreateInterfacePtrAndBind() {
-    return binding_.CreateInterfacePtrAndBind();
+  void Bind(mojom::URLLoaderClientAssociatedPtrInfo* client_ptr_info,
+            mojo::AssociatedGroup* associated_group) {
+    binding_.Bind(client_ptr_info, associated_group);
   }
 
  private:
-  mojo::Binding<mojom::URLLoaderClient> binding_;
+  mojo::AssociatedBinding<mojom::URLLoaderClient> binding_;
   scoped_refptr<URLResponseBodyConsumer> body_consumer_;
   const int request_id_;
+  bool has_received_response_ = false;
   ResourceDispatcher* const resource_dispatcher_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 };
@@ -353,9 +367,6 @@ void ResourceDispatcher::OnReceivedData(int request_id,
 void ResourceDispatcher::OnDownloadedData(int request_id,
                                           int data_len,
                                           int encoded_data_length) {
-  // Acknowledge the reception of this message.
-  message_sender_->Send(new ResourceHostMsg_DataDownloaded_ACK(request_id));
-
   PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
   if (!request_info)
     return;
@@ -658,7 +669,8 @@ int ResourceDispatcher::StartAsync(
     const GURL& frame_origin,
     std::unique_ptr<RequestPeer> peer,
     blink::WebURLRequest::LoadingIPCType ipc_type,
-    mojom::URLLoaderFactory* url_loader_factory) {
+    mojom::URLLoaderFactory* url_loader_factory,
+    mojo::AssociatedGroup* associated_group) {
   CheckSchemeForReferrerPolicy(*request);
 
   // Compute a unique request_id for this renderer process.
@@ -675,10 +687,12 @@ int ResourceDispatcher::StartAsync(
   if (ipc_type == blink::WebURLRequest::LoadingIPCType::Mojo) {
     std::unique_ptr<URLLoaderClientImpl> client(
         new URLLoaderClientImpl(request_id, this, main_thread_task_runner_));
-    mojom::URLLoaderPtr url_loader;
+    mojom::URLLoaderAssociatedPtr url_loader;
+    mojom::URLLoaderClientAssociatedPtrInfo client_ptr_info;
+    client->Bind(&client_ptr_info, associated_group);
     url_loader_factory->CreateLoaderAndStart(
-        GetProxy(&url_loader), routing_id, request_id, *request,
-        client->CreateInterfacePtrAndBind());
+        GetProxy(&url_loader, associated_group), routing_id, request_id,
+        *request, std::move(client_ptr_info));
     pending_requests_[request_id]->url_loader = std::move(url_loader);
     pending_requests_[request_id]->url_loader_client = std::move(client);
   } else {

@@ -50,6 +50,7 @@
 <translation id="1491663344921578213"><ph name="SITE" /> web sitesi, sertifika sabitleme yöntemini kullandığı için web sitesini şu anda ziyaret edemezsiniz. Ağ hataları ve saldırılar genellikle geçici olduğundan, bu sayfa muhtemelen daha sonra çalışacaktır. <ph name="BEGIN_LEARN_MORE_LINK" />Daha fazla bilgi edinin<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="1506687042165942984">Bu sayfanın kaydedilmiş (eski olduğu bilinen) bir kopyasını gösterin.</translation>
 <translation id="1519264250979466059">Oluşturma Tarihi</translation>
+<translation id="153384715582417236">Şimdilik hepsi bu</translation>
 <translation id="1549470594296187301">Bu özelliğin kullanılabilmesi için JavaScript etkinleştirilmelidir.</translation>
 <translation id="1559528461873125649">Belirtilen dosya veya dizin yok</translation>
 <translation id="1559572115229829303">&lt;p&gt;Cihazınızın tarih ve saati (<ph name="DATE_AND_TIME" />) yanlış olduğundan <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> alan adına gizli bir bağlantı kurulamadı.&lt;/p&gt;
@@ -350,7 +351,6 @@
 <translation id="4728558894243024398">Platform</translation>
 <translation id="4744603770635761495">Çalıştırılabilir Yol</translation>
 <translation id="4756388243121344051">&amp;Geçmiş</translation>
-<translation id="4759238208242260848">İndirilenler</translation>
 <translation id="4764776831041365478"><ph name="URL" /> adresindeki web sayfası, geçici olarak kullanılamıyor veya kalıcı olarak yeni bir web adresine taşınmış olabilir.</translation>
 <translation id="4771973620359291008">Bilinmeyen bir hata oluştu.</translation>
 <translation id="4782449893814226250">Ebeveynlerinize, bu sayfayı ziyaret etmenizin uygun olup olmadığını sordunuz.</translation>
@@ -387,8 +387,10 @@
 <translation id="5171045022955879922">Arayın veya URL'yi yazın</translation>
 <translation id="5172758083709347301">Makine</translation>
 <translation id="5179510805599951267"><ph name="ORIGINAL_LANGUAGE" /> dilinde değil mi? Bu hatayı bildirin</translation>
+<translation id="5181140330217080051">İndiriliyor</translation>
 <translation id="5190835502935405962">Yer İşareti Çubuğu</translation>
 <translation id="5199729219167945352">Deneyler</translation>
+<translation id="5199841536747119669">Önerileriniz burada görünür</translation>
 <translation id="5251803541071282808">Bulut</translation>
 <translation id="5277279256032773186">Chrome'u işte mi kullanıyorsunuz? İşletmeler, çalışanları için Chrome ayarlarını yönetebilir. Daha fazla bilgi edinin</translation>
 <translation id="5299298092464848405">Politika ayrıştırma hatası</translation>
@@ -468,6 +470,7 @@
 <translation id="6263376278284652872"><ph name="DOMAIN" /> yer işaretleri</translation>
 <translation id="6264485186158353794">Güvenliğe geri dön</translation>
 <translation id="6282194474023008486">Posta kodu</translation>
+<translation id="6290238015253830360">Önerdiğiniz makaleler burada görünür</translation>
 <translation id="6305205051461490394"><ph name="URL" /> adresine ulaşılamıyor.</translation>
 <translation id="6321917430147971392">DNS ayarlarınızı kontrol edin</translation>
 <translation id="6328639280570009161">Ağ tahmin özelliğini devre dışı bırakmayı deneyin</translation>
@@ -651,6 +654,7 @@ Hatırlatma! Bir dahaki sefere Gizli mod <ph name="SHORTCUT_KEY" /> kullanışl�
 <translation id="8363502534493474904">Uçak modunu kapatma</translation>
 <translation id="8364627913115013041">Henüz ayarlanmadı.</translation>
 <translation id="8380941800586852976">Tehlikeli</translation>
+<translation id="8382348898565613901">Son ziyaret ettiğiniz yer işaretleri burada görünür</translation>
 <translation id="8412145213513410671">Kilitlenme Sayısı (<ph name="CRASH_COUNT" />)</translation>
 <translation id="8412392972487953978">Aynı parolayı iki kez girmelisiniz.</translation>
 <translation id="8428213095426709021">Ayarlar</translation>
@@ -662,7 +666,6 @@ Hatırlatma! Bir dahaki sefere Gizli mod <ph name="SHORTCUT_KEY" /> kullanışl�
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> ana makinesinin yanıt vermesi çok uzun sürdü.</translation>
 <translation id="852346902619691059">Bu sunucu <ph name="DOMAIN" /> olduğunu kanıtlayamadı. Cihazınızın işletim sistemi, sunucunun güvenlik sertifikasına güvenmiyor. Bu durum, yanlış yapılandırmadan veya bağlantınıza müdahale eden bir saldırgandan kaynaklanıyor olabilir. <ph name="BEGIN_LEARN_MORE_LINK" />Daha fazla bilgi edinin<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="8530504477309582336">Google Payments, bu kart türünü desteklememektedir. Lütfen farklı bir kart seçin.</translation>
-<translation id="8550022383519221471">Senkronizasyon hizmeti alan adınızda kullanılamıyor.</translation>
 <translation id="8553075262323480129">Sayfanın dili belirlenemediğinden çeviri başarısız oldu.</translation>
 <translation id="8559762987265718583">Cihazınızın tarih ve saati (<ph name="DATE_AND_TIME" />) yanlış olduğundan <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> alan adına gizli bir bağlantı kurulamıyor.</translation>
 <translation id="856992080682148">Bu siteye ilişkin sertifikanın süresi 2017'de veya daha sonra doluyor ve sertifika zinciri, SHA-1 kullanılarak imzalanmış bir sertifika içeriyor.</translation>
@@ -670,7 +673,6 @@ Hatırlatma! Bir dahaki sefere Gizli mod <ph name="SHORTCUT_KEY" /> kullanışl�
 <translation id="8591846766485502580">Bir ebeveyniniz bu siteyi engellediği için bu iletiyi görüyorsunuz.</translation>
 <translation id="859285277496340001">Sertifika, iptal edilip edilmediğinin denetlenebileceği bir mekanizma belirtmiyor.</translation>
 <translation id="8647750283161643317">Tümünü varsayılan değerlere sıfırla</translation>
-<translation id="8680787084697685621">Hesap oturum açma ayrıntıları eski.</translation>
 <translation id="8703575177326907206"><ph name="DOMAIN" /> bağlantınız şifrelenmedi.</translation>
 <translation id="8725066075913043281">Yeniden dene</translation>
 <translation id="8728672262656704056">Gizli moda geçtiniz</translation>

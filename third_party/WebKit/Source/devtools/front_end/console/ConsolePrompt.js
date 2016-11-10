@@ -27,7 +27,7 @@ WebInspector.ConsolePrompt = class extends WebInspector.Widget {
 
       this._editor.configureAutocomplete({
         substituteRangeCallback: this._substituteRange.bind(this),
-        suggestionsCallback: this._wordsWithPrefix.bind(this),
+        suggestionsCallback: this._wordsWithQuery.bind(this),
         captureEnter: true
       });
       this._editor.widget().element.addEventListener('keydown', this._editorKeyDown.bind(this), true);
@@ -163,8 +163,8 @@ WebInspector.ConsolePrompt = class extends WebInspector.Widget {
         str, '', false, currentExecutionContext.id, compileCallback.bind(this));
 
     /**
-     * @param {!RuntimeAgent.ScriptId=} scriptId
-     * @param {?RuntimeAgent.ExceptionDetails=} exceptionDetails
+     * @param {!Protocol.Runtime.ScriptId=} scriptId
+     * @param {?Protocol.Runtime.ExceptionDetails=} exceptionDetails
      * @this {WebInspector.ConsolePrompt}
      */
     function compileCallback(scriptId, exceptionDetails) {
@@ -201,10 +201,11 @@ WebInspector.ConsolePrompt = class extends WebInspector.Widget {
 
   /**
    * @param {string} prefix
+   * @param {boolean=} force
    * @return {!WebInspector.SuggestBox.Suggestions}
    */
-  _historyCompletions(prefix) {
-    if (!this._addCompletionsFromHistory || !this._isCaretAtEndOfPrompt())
+  _historyCompletions(prefix, force) {
+    if (!this._addCompletionsFromHistory || !this._isCaretAtEndOfPrompt() || (!prefix && !force))
       return [];
     var result = [];
     var text = this.text();
@@ -248,22 +249,22 @@ WebInspector.ConsolePrompt = class extends WebInspector.Widget {
   }
 
   /**
-   * @param {!WebInspector.TextRange} prefixRange
+   * @param {!WebInspector.TextRange} queryRange
    * @param {!WebInspector.TextRange} substituteRange
+   * @param {boolean=} force
    * @return {!Promise<!WebInspector.SuggestBox.Suggestions>}
    */
-  _wordsWithPrefix(prefixRange, substituteRange) {
-    var prefix = this._editor.text(prefixRange);
-    var before = this._editor.text(new WebInspector.TextRange(0, 0, prefixRange.startLine, prefixRange.startColumn));
-    var historyWords = this._historyCompletions(prefix);
-    return WebInspector.ExecutionContextSelector.completionsForTextInCurrentContext(before, prefix, true /* force */)
-        .then(innerWordsWithPrefix);
-
+  _wordsWithQuery(queryRange, substituteRange, force) {
+    var query = this._editor.text(queryRange);
+    var before = this._editor.text(new WebInspector.TextRange(0, 0, queryRange.startLine, queryRange.startColumn));
+    var historyWords = this._historyCompletions(query, force);
+    return WebInspector.JavaScriptAutocomplete.completionsForTextInCurrentContext(before, query, force)
+        .then(innerWordsWithQuery);
     /**
      * @param {!Array<string>} words
      * @return {!WebInspector.SuggestBox.Suggestions}
      */
-    function innerWordsWithPrefix(words) {
+    function innerWordsWithQuery(words) {
       return words.map(item => ({title: item})).concat(historyWords);
     }
   }

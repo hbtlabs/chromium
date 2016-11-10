@@ -115,13 +115,15 @@ BlimpEmbedderCompositor::BlimpEmbedderCompositor(
   compositor_dependencies_->GetSurfaceManager()->RegisterFrameSinkId(
       frame_sink_id_);
 
+  animation_host_ = cc::AnimationHost::CreateMainInstance();
+
   cc::LayerTreeHostInProcess::InitParams params;
   params.client = this;
   params.task_graph_runner = g_task_graph_runner.Pointer();
   cc::LayerTreeSettings settings;
   params.settings = &settings;
   params.main_task_runner = base::ThreadTaskRunnerHandle::Get();
-  params.animation_host = cc::AnimationHost::CreateMainInstance();
+  params.mutator_host = animation_host_.get();
   host_ = cc::LayerTreeHostInProcess::CreateSingleThreaded(this, &params);
 
   root_layer_->SetBackgroundColor(SK_ColorWHITE);
@@ -216,8 +218,9 @@ void BlimpEmbedderCompositor::HandlePendingCompositorFrameSinkRequest() {
 
   display_ = base::MakeUnique<cc::Display>(
       shared_bitmap_manager, gpu_memory_buffer_manager,
-      host_->GetSettings().renderer_settings, std::move(begin_frame_source),
-      std::move(display_output_surface), std::move(scheduler),
+      host_->GetSettings().renderer_settings, frame_sink_id_,
+      std::move(begin_frame_source), std::move(display_output_surface),
+      std::move(scheduler),
       base::MakeUnique<cc::TextureMailboxDeleter>(task_runner.get()));
   display_->SetVisible(true);
   display_->Resize(viewport_size_in_px_);

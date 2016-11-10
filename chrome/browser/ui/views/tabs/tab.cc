@@ -32,7 +32,7 @@
 #include "content/public/common/url_constants.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
 #include "third_party/skia/include/pathops/SkPathOps.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/list_selection_model.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -557,7 +557,7 @@ Tab::Tab(TabController* controller, gfx::AnimationContainer* container)
 
   set_id(VIEW_ID_TAB);
 
-  SetBorder(views::Border::CreateEmptyBorder(GetLayoutInsets(TAB)));
+  SetBorder(views::CreateEmptyBorder(GetLayoutInsets(TAB)));
 
   title_->SetHorizontalAlignment(gfx::ALIGN_TO_HEAD);
   title_->SetElideBehavior(gfx::FADE_TAIL);
@@ -886,7 +886,7 @@ void Tab::Layout() {
     // for touch events.
     // TODO(pkasting): The padding should maybe be removed, see comments in
     // TabCloseButton::TargetForRect().
-    close_button_->SetBorder(views::Border::NullBorder());
+    close_button_->SetBorder(views::NullBorder());
     const gfx::Size close_button_size(close_button_->GetPreferredSize());
     const int top = lb.y() + (lb.height() - close_button_size.height() + 1) / 2;
     const int left = kAfterTitleSpacing;
@@ -896,7 +896,7 @@ void Tab::Layout() {
     const int bottom = height() - close_button_size.height() - top;
     const int right = width() - close_button_end;
     close_button_->SetBorder(
-        views::Border::CreateEmptyBorder(top, left, bottom, right));
+        views::CreateEmptyBorder(top, left, bottom, right));
     close_button_->SizeToPreferredSize();
   }
   close_button_->SetVisible(showing_close_button_);
@@ -1098,14 +1098,14 @@ void Tab::OnGestureEvent(ui::GestureEvent* event) {
   event->SetHandled();
 }
 
-void Tab::GetAccessibleState(ui::AXViewState* state) {
-  state->role = ui::AX_ROLE_TAB;
-  state->name = data_.title;
-  state->AddStateFlag(ui::AX_STATE_MULTISELECTABLE);
-  state->AddStateFlag(ui::AX_STATE_SELECTABLE);
-  controller_->UpdateTabAccessibilityState(this, state);
+void Tab::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ui::AX_ROLE_TAB;
+  node_data->SetName(data_.title);
+  node_data->AddStateFlag(ui::AX_STATE_MULTISELECTABLE);
+  node_data->AddStateFlag(ui::AX_STATE_SELECTABLE);
+  controller_->UpdateTabAccessibilityState(this, node_data);
   if (IsSelected())
-    state->AddStateFlag(ui::AX_STATE_SELECTED);
+    node_data->AddStateFlag(ui::AX_STATE_SELECTED);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

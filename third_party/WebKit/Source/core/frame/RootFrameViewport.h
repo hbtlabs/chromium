@@ -89,6 +89,10 @@ class CORE_EXPORT RootFrameViewport final
   GraphicsLayer* layerForHorizontalScrollbar() const override;
   GraphicsLayer* layerForVerticalScrollbar() const override;
   GraphicsLayer* layerForScrollCorner() const override;
+  int horizontalScrollbarHeight(
+      OverlayScrollbarClipBehavior = IgnoreOverlayScrollbarSize) const override;
+  int verticalScrollbarWidth(
+      OverlayScrollbarClipBehavior = IgnoreOverlayScrollbarSize) const override;
   ScrollResult userScroll(ScrollGranularity, const FloatSize&) override;
   bool scrollAnimatorEnabled() const override;
   HostWindow* getHostWindow() const override;
@@ -99,6 +103,9 @@ class CORE_EXPORT RootFrameViewport final
   Widget* getWidget() override;
   void clearScrollAnimators() override;
   LayoutBox* layoutBox() const override;
+  FloatQuad localToVisibleContentQuad(const FloatQuad&,
+                                      const LayoutObject*,
+                                      unsigned = 0) const final;
 
  private:
   RootFrameViewport(ScrollableArea& visualViewport,

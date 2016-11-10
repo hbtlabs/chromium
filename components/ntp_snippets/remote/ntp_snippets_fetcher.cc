@@ -19,6 +19,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/default_tick_clock.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/ntp_snippets/category_factory.h"
@@ -76,6 +77,8 @@ const char kSendUserClassName[] = "send_user_class";
 
 const char kBooleanParameterEnabled[] = "true";
 const char kBooleanParameterDisabled[] = "false";
+
+const int kFetchTimeHistogramResolution = 5;
 
 std::string FetchResultToString(NTPSnippetsFetcher::FetchResult result) {
   switch (result) {
@@ -243,6 +246,17 @@ std::string GetUserClassString(UserClassifier::UserClass user_class) {
   return std::string();
 }
 
+int GetMinuteOfTheDay(bool local_time, bool reduced_resolution) {
+  base::Time now(base::Time::Now());
+  base::Time::Exploded now_exploded{};
+  local_time ? now.LocalExplode(&now_exploded) : now.UTCExplode(&now_exploded);
+  int now_minute = reduced_resolution
+                       ? now_exploded.minute / kFetchTimeHistogramResolution *
+                             kFetchTimeHistogramResolution
+                       : now_exploded.minute;
+  return now_exploded.hour * 60 + now_minute;
+}
+
 }  // namespace
 
 NTPSnippetsFetcher::FetchedCategory::FetchedCategory(Category c)
@@ -316,12 +330,8 @@ NTPSnippetsFetcher::~NTPSnippetsFetcher() {
     token_service_->RemoveObserver(this);
 }
 
-void NTPSnippetsFetcher::SetCallback(
-    const SnippetsAvailableCallback& callback) {
-  snippets_available_callback_ = callback;
-}
-
-void NTPSnippetsFetcher::FetchSnippets(const Params& params) {
+void NTPSnippetsFetcher::FetchSnippets(const Params& params,
+                                       SnippetsAvailableCallback callback) {
   if (!DemandQuotaForRequest(params.interactive_request)) {
     FetchFinished(OptionalFetchedCategories(),
                   params.interactive_request
@@ -331,8 +341,18 @@ void NTPSnippetsFetcher::FetchSnippets(const Params& params) {
     return;
   }
 
+  if (!params.interactive_request) {
+    UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.Snippets.FetchTimeLocal",
+                                GetMinuteOfTheDay(/*local_time=*/true,
+                                                  /*reduced_resolution=*/true));
+    UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.Snippets.FetchTimeUTC",
+                                GetMinuteOfTheDay(/*local_time=*/false,
+                                                  /*reduced_resolution=*/true));
+  }
+
   params_ = params;
   fetch_start_time_ = tick_clock_->NowTicks();
+  snippets_available_callback_ = std::move(callback);
 
   bool use_authentication = UsesAuthentication();
   if (use_authentication && signin_manager_->IsAuthenticated()) {
@@ -738,12 +758,39 @@ void NTPSnippetsFetcher::OnJsonError(const std::string& error) {
       /*extra_message=*/base::StringPrintf(" (error %s)", error.c_str()));
 }
 
+// The response from the backend might include suggestions from multiple
+// categories. If only fetches for a single category were requested, this
+// function filters them out.
+void NTPSnippetsFetcher::FilterCategories(FetchedCategoriesVector* categories) {
+  if (!params_.exclusive_category.has_value())
+    return;
+  Category exclusive = params_.exclusive_category.value();
+  auto category_it =
+      std::find_if(categories->begin(), categories->end(),
+                   [&exclusive](const FetchedCategory& c) -> bool {
+                     return c.category == exclusive;
+                   });
+  if (category_it == categories->end()) {
+    categories->clear();
+    return;
+  }
+  FetchedCategory category = std::move(*category_it);
+  categories->clear();
+  categories->emplace_back(std::move(category));
+}
+
 void NTPSnippetsFetcher::FetchFinished(
     OptionalFetchedCategories fetched_categories,
     FetchResult result,
     const std::string& extra_message) {
   DCHECK(result == FetchResult::SUCCESS || !fetched_categories);
   last_status_ = FetchResultToString(result) + extra_message;
+
+  // Filter out unwanted categories if necessary.
+  // TODO(fhorschig): As soon as the server supports filtering by
+  // that instead of over-fetching and filtering here.
+  if (fetched_categories.has_value())
+    FilterCategories(&fetched_categories.value());
 
   // Don't record FetchTimes if the result indicates that a precondition
   // failed and we never actually sent a network request
@@ -757,7 +804,7 @@ void NTPSnippetsFetcher::FetchFinished(
 
   DVLOG(1) << "Fetch finished: " << last_status_;
   if (!snippets_available_callback_.is_null())
-    snippets_available_callback_.Run(std::move(fetched_categories));
+    std::move(snippets_available_callback_).Run(std::move(fetched_categories));
 }
 
 bool NTPSnippetsFetcher::DemandQuotaForRequest(bool interactive_request) {

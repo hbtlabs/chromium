@@ -50,6 +50,7 @@
 <translation id="1491663344921578213">لا يمكنك زيارة <ph name="SITE" /> الآن نظرًا لأن موقع الويب يستخدم أداة التحقق من صحة الشهادات. أخطاء الشبكة والهجمات عليها عادةً ما تكون مؤقتة، لذا ستعمل هذه الصفحة لاحقًا على الأرجح. <ph name="BEGIN_LEARN_MORE_LINK" />مزيد من المعلومات<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="1506687042165942984">عرض نسخة محفوظة (أي معروف أنها منتهية) من هذه الصفحة.</translation>
 <translation id="1519264250979466059">تاريخ الإصدار</translation>
+<translation id="153384715582417236">هذا كل شيء الآن</translation>
 <translation id="1549470594296187301">‏يجب تمكين JavaScript لاستخدام هذه الميزة.</translation>
 <translation id="1559528461873125649">لا وجود لمثل هذا الملف أو الدليل</translation>
 <translation id="1559572115229829303">‏&lt;p&gt;تعذر إنشاء اتصال خاص بـ <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> نظرًا لأن تاريخ ووقت جهازك (<ph name="DATE_AND_TIME" />) غير صحيحين.&lt;/p&gt;
@@ -350,7 +351,6 @@
 <translation id="4728558894243024398">النظام الأساسي</translation>
 <translation id="4744603770635761495">المسار التنفيذي</translation>
 <translation id="4756388243121344051">ال&amp;سجل</translation>
-<translation id="4759238208242260848">التنزيلات</translation>
 <translation id="4764776831041365478">قد تكون صفحة الويب على العنوان <ph name="URL" /> غير متاحة مؤقتًا أو قد يكون تم نقلها نهائيًا إلى عنوان ويب جديد.</translation>
 <translation id="4771973620359291008">حدث خطأ غير محدّد.</translation>
 <translation id="4782449893814226250">لقد سألت والديك ما إذا كان مناسبًا لك زيارة هذه الصفحة.</translation>
@@ -387,8 +387,10 @@
 <translation id="5171045022955879922">‏البحث أو إدخال عنوان URL</translation>
 <translation id="5172758083709347301">الجهاز</translation>
 <translation id="5179510805599951267">هل الصفحة ليست باللغة <ph name="ORIGINAL_LANGUAGE" />؟ الإبلاغ عن هذا الخطأ</translation>
+<translation id="5181140330217080051">تنزيل</translation>
 <translation id="5190835502935405962">شريط الإشارات</translation>
 <translation id="5199729219167945352">التجارب</translation>
+<translation id="5199841536747119669">تظهر اقتراحاتك هنا</translation>
 <translation id="5251803541071282808">السحاب</translation>
 <translation id="5277279256032773186">‏هل تستخدم Chrome في العمل؟ يمكن للأنشطة التجارية إدارة إعدادات Chrome لموظفيها. تعرَّف على المزيد</translation>
 <translation id="5299298092464848405">خطأ في تحليل السياسة</translation>
@@ -468,6 +470,7 @@
 <translation id="6263376278284652872">إشعارات <ph name="DOMAIN" /></translation>
 <translation id="6264485186158353794">الرجوع إلى وضع الأمان</translation>
 <translation id="6282194474023008486">الرمز البريدي</translation>
+<translation id="6290238015253830360">تظهر مقالاتك المقترحة هنا</translation>
 <translation id="6305205051461490394">يتعذر الوصول إلى <ph name="URL" />.</translation>
 <translation id="6321917430147971392">التحقق من إعدادات نظام أسماء النطاقات</translation>
 <translation id="6328639280570009161">تجربة تعطيل التنبؤ بإجراءات الشبكة</translation>
@@ -651,6 +654,7 @@
 <translation id="8363502534493474904">إيقاف تشغيل وضع الطائرة</translation>
 <translation id="8364627913115013041">لم يتم تعيينها.</translation>
 <translation id="8380941800586852976">ضارة</translation>
+<translation id="8382348898565613901">تظهر الإشارات المرجعية التي زرتها مؤخرًا هنا</translation>
 <translation id="8412145213513410671">الأعطال (<ph name="CRASH_COUNT" />)</translation>
 <translation id="8412392972487953978">يجب إدخال عبارة المرور نفسها مرتين.</translation>
 <translation id="8428213095426709021">إعدادات</translation>
@@ -662,7 +666,6 @@
 <translation id="8498891568109133222">استغرق <ph name="HOST_NAME" /> وقتًا أطول مما يجب للاستجابة.</translation>
 <translation id="852346902619691059">هذا الخادم لم يتمكن من إثبات أن ذلك <ph name="DOMAIN" />؛ بل إن شهادة أمانه غير موثوقة من قِبل نظام تشغيل جهازك. وربما يكون السبب في ذلك خطأً في التهيئة أو مهاجمًا يعترض اتصالك. <ph name="BEGIN_LEARN_MORE_LINK" />مزيد من المعلومات<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="8530504477309582336">‏هذا النوع من البطاقات غير متوافق مع Google Payments. يُرجى تحديد بطاقة مختلفة.</translation>
-<translation id="8550022383519221471">خدمة المزامنة غير متاحة لنطاقك.</translation>
 <translation id="8553075262323480129">أخفقت الترجمة لتعذر تحديد لغة الصفحة.</translation>
 <translation id="8559762987265718583">تعذر إنشاء اتصال خاص بـ <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> نظرًا لأن التاريخ والوقت للجهاز (<ph name="DATE_AND_TIME" />) غير صحيحين.</translation>
 <translation id="856992080682148">‏تنتهي صلاحية شهادة هذا الموقع في 2017 أو بعد ذلك، وتتضمن سلسلة الشهادات شهادة موقعة باستخدام SHA-1.</translation>
@@ -670,7 +673,6 @@
 <translation id="8591846766485502580">ظهرت هذه الرسالة نظرًا لأن أحد والديك حظر هذا الموقع.</translation>
 <translation id="859285277496340001">لا تحدد الشهادة آلية للتحقق مما إذا كانت الشهادة قد تم إبطالها.</translation>
 <translation id="8647750283161643317">إعادة التعيين على الإعدادات الافتراضية</translation>
-<translation id="8680787084697685621">تفاصيل تسجيل الدخول إلى الحساب قديمة.</translation>
 <translation id="8703575177326907206">الاتصال بالموقع <ph name="DOMAIN" /> غير محميّ بنظام تشفير.</translation>
 <translation id="8725066075913043281">أعد المحاولة</translation>
 <translation id="8728672262656704056">لقد انتقلت إلى وضع التصفح المتخفي</translation>

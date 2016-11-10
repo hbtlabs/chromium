@@ -50,6 +50,7 @@
 <translation id="1491663344921578213">Тренутно не можете да посетите <ph name="SITE" /> зато што веб-сајт користи проверу сертификата. Грешке и напади на мрежи су обично привремени, па ће ова страница вероватно функционисати касније. <ph name="BEGIN_LEARN_MORE_LINK" />Сазнајте више<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="1506687042165942984">Прикажите сачувану копију ове странице (тј. копију за коју се зна да је застарела).</translation>
 <translation id="1519264250979466059">Датум верзије</translation>
+<translation id="153384715582417236">То је све за сада</translation>
 <translation id="1549470594296187301">JavaScript мора да буде омогућен да бисте користили ову функцију.</translation>
 <translation id="1559528461873125649">Нема такве датотеке или директоријума</translation>
 <translation id="1559572115229829303">&lt;p&gt;Није могуће успоставити приватну везу са доменом <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> јер датум и време на уређају (<ph name="DATE_AND_TIME" />) нису тачни.&lt;/p&gt;
@@ -350,7 +351,6 @@
 <translation id="4728558894243024398">Платформа</translation>
 <translation id="4744603770635761495">Путања извршне датотеке</translation>
 <translation id="4756388243121344051">&amp;Историја</translation>
-<translation id="4759238208242260848">Преузимања</translation>
 <translation id="4764776831041365478">Могуће је да веб-страница на адреси <ph name="URL" /> привремено не функционише или да је трајно премештена на нову веб адресу.</translation>
 <translation id="4771973620359291008">Дошло је до непознате грешке.</translation>
 <translation id="4782449893814226250">Питао/ла си родитеље да ли смеш да посетиш ову страницу.</translation>
@@ -387,8 +387,10 @@
 <translation id="5171045022955879922">Претражите или унесите URL адресу</translation>
 <translation id="5172758083709347301">Рачунар</translation>
 <translation id="5179510805599951267">Није <ph name="ORIGINAL_LANGUAGE" />? Пријавите ову грешку</translation>
+<translation id="5181140330217080051">Преузимање</translation>
 <translation id="5190835502935405962">Трака са обележивачима</translation>
 <translation id="5199729219167945352">Експерименти</translation>
+<translation id="5199841536747119669">Предлози ће се приказивати овде</translation>
 <translation id="5251803541071282808">Клауд</translation>
 <translation id="5277279256032773186">Да ли користите Chrome на послу? Предузеће може да управља подешавањима Chrome-а за запослене. Сазнајте више</translation>
 <translation id="5299298092464848405">Грешка при рашчлањивању смерница</translation>
@@ -467,6 +469,7 @@
 <translation id="6263376278284652872">Обележивачи домена <ph name="DOMAIN" /></translation>
 <translation id="6264485186158353794">Назад на безбедно</translation>
 <translation id="6282194474023008486">Поштански број</translation>
+<translation id="6290238015253830360">Предложени чланци се приказују овде</translation>
 <translation id="6305205051461490394">URL <ph name="URL" /> није доступан.</translation>
 <translation id="6321917430147971392">Проверите DNS подешавања</translation>
 <translation id="6328639280570009161">Покушајте да онемогућите предвиђање мреже</translation>
@@ -650,6 +653,7 @@
 <translation id="8363502534493474904">да искључите режим рада у авиону</translation>
 <translation id="8364627913115013041">Није подешено.</translation>
 <translation id="8380941800586852976">Опасно</translation>
+<translation id="8382348898565613901">Недавно посећени обележивачи се приказују овде</translation>
 <translation id="8412145213513410671">Отказивања (<ph name="CRASH_COUNT" />)</translation>
 <translation id="8412392972487953978">Потребно је да двапут унесете исту приступну фразу.</translation>
 <translation id="8428213095426709021">Подешавања</translation>
@@ -661,7 +665,6 @@
 <translation id="8498891568109133222">Одговор хоста <ph name="HOST_NAME" /> је трајао предуго.</translation>
 <translation id="852346902619691059">Овај сервер не може да докаже да је <ph name="DOMAIN" />; оперативни систем вашег уређаја нема поверења у његов безбедносни сертификат. Узрок томе је можда погрешна конфигурација или нападач који је прекинуо везу. <ph name="BEGIN_LEARN_MORE_LINK" />Сазнајте више<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="8530504477309582336">Google Payments не подржава овај тип картице. Изаберите неку другу картицу.</translation>
-<translation id="8550022383519221471">Услуга синхронизације није доступна за ваш домен.</translation>
 <translation id="8553075262323480129">Превод није успео јер језик странице није могао да буде утврђен.</translation>
 <translation id="8559762987265718583">Није могуће успоставити приватну везу са доменом <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> јер датум и време на уређају (<ph name="DATE_AND_TIME" />) нису тачни.</translation>
 <translation id="856992080682148">Сертификат за овај сајт истиче 2017, а ланац сертификата садржи сертификат потписан помоћу алгоритма SHA-1.</translation>
@@ -669,7 +672,6 @@
 <translation id="8591846766485502580">Ову поруку видите јер је један од ваших родитеља блокирао овај сајт.</translation>
 <translation id="859285277496340001">Сертификат не наводи механизам којим се проверава да ли је опозван.</translation>
 <translation id="8647750283161643317">Врати све на подразумевано</translation>
-<translation id="8680787084697685621">Детаљи за пријављивање на налог су застарели.</translation>
 <translation id="8703575177326907206">Ваша веза са доменом <ph name="DOMAIN" /> није шифрована.</translation>
 <translation id="8725066075913043281">Пробајте поново</translation>
 <translation id="8728672262656704056">Прешли сте у режим Без архивирања</translation>

@@ -14,7 +14,6 @@
 #include "ash/common/session/session_state_observer.h"
 #include "ash/common/system/chromeos/supervised/custodian_info_tray_observer.h"
 #include "ash/common/system/tray/ime_info.h"
-#include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "base/callback_forward.h"
 #include "base/callback_list.h"
@@ -39,6 +38,7 @@
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_discovery_session.h"
 #include "extensions/browser/app_window/app_window_registry.h"
+#include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/chromeos/ime/input_method_menu_manager.h"
 
@@ -81,6 +81,7 @@ class SystemTrayDelegateChromeOS
   void Initialize() override;
   ash::LoginStatus GetUserLoginStatus() const override;
   std::string GetEnterpriseDomain() const override;
+  std::string GetEnterpriseRealm() const override;
   base::string16 GetEnterpriseMessage() const override;
   std::string GetSupervisedUserManager() const override;
   base::string16 GetSupervisedUserManagerName() const override;
@@ -93,7 +94,6 @@ class SystemTrayDelegateChromeOS
   void ShowUserLogin() override;
   void SignOut() override;
   void RequestRestartForUpdate() override;
-  void RequestShutdown() override;
   void GetAvailableBluetoothDevices(ash::BluetoothDeviceList* list) override;
   void BluetoothStartDiscovering() override;
   void BluetoothStopDiscovering() override;
@@ -113,6 +113,7 @@ class SystemTrayDelegateChromeOS
   ash::NetworkingConfigDelegate* GetNetworkingConfigDelegate() const override;
   bool GetSessionStartTime(base::TimeTicks* session_start_time) override;
   bool GetSessionLengthLimit(base::TimeDelta* session_length_limit) override;
+  int GetSystemTrayMenuWidth() override;
   void ActiveUserWasChanged() override;
   bool IsSearchKeyMappedToCapsLock() override;
   void AddCustodianInfoTrayObserver(
@@ -136,8 +137,6 @@ class SystemTrayDelegateChromeOS
   void UserChangedChildStatus(user_manager::User* user) override;
 
  private:
-  ash::SystemTray* GetPrimarySystemTray();
-
   ash::SystemTrayNotifier* GetSystemTrayNotifier();
 
   void SetProfile(Profile* profile);
@@ -251,15 +250,16 @@ class SystemTrayDelegateChromeOS
   std::unique_ptr<content::NotificationRegistrar> registrar_;
   std::unique_ptr<PrefChangeRegistrar> local_state_registrar_;
   std::unique_ptr<PrefChangeRegistrar> user_pref_registrar_;
-  Profile* user_profile_;
-  int search_key_mapped_to_;
-  bool have_session_start_time_;
+  Profile* user_profile_ = nullptr;
+  int search_key_mapped_to_ = input_method::kSearchKey;
+  bool have_session_start_time_ = false;
   base::TimeTicks session_start_time_;
-  bool have_session_length_limit_;
+  bool have_session_length_limit_ = false;
   base::TimeDelta session_length_limit_;
   std::string enterprise_domain_;
-  bool should_run_bluetooth_discovery_;
-  bool session_started_;
+  std::string enterprise_realm_;
+  bool should_run_bluetooth_discovery_ = false;
+  bool session_started_ = false;
 
   scoped_refptr<device::BluetoothAdapter> bluetooth_adapter_;
   std::unique_ptr<device::BluetoothDiscoverySession>

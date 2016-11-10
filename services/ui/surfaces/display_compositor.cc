@@ -4,24 +4,33 @@
 
 #include "services/ui/surfaces/display_compositor.h"
 
-#include "services/ui/surfaces/display_compositor_client.h"
+#include "cc/surfaces/surface.h"
 
 namespace ui {
 
-DisplayCompositor::DisplayCompositor(DisplayCompositorClient* client)
-    : client_(client), next_client_id_(1u) {
+DisplayCompositor::DisplayCompositor(
+    cc::mojom::DisplayCompositorClientPtr client)
+    : client_(std::move(client)) {
   manager_.AddObserver(this);
 }
 
-uint32_t DisplayCompositor::GenerateNextClientId() {
-  return next_client_id_++;
+void DisplayCompositor::AddSurfaceReference(
+    const cc::SurfaceId& surface_id,
+    const cc::SurfaceSequence& surface_sequence) {
+  cc::Surface* surface = manager_.GetSurfaceForId(surface_id);
+  if (!surface) {
+    LOG(ERROR) << "Attempting to add dependency to nonexistent surface "
+               << surface_id.ToString();
+    return;
+  }
+  surface->AddDestructionDependency(surface_sequence);
 }
 
-void DisplayCompositor::ReturnSurfaceReference(
-    const cc::SurfaceSequence& sequence) {
-  std::vector<uint32_t> sequences;
-  sequences.push_back(sequence.sequence);
-  manager_.DidSatisfySequences(sequence.frame_sink_id, &sequences);
+void DisplayCompositor::ReturnSurfaceReferences(
+    const cc::FrameSinkId& frame_sink_id,
+    const std::vector<uint32_t>& sequences) {
+  std::vector<uint32_t> sequences_copy(sequences);
+  manager_.DidSatisfySequences(frame_sink_id, &sequences_copy);
 }
 
 DisplayCompositor::~DisplayCompositor() {

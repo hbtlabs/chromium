@@ -147,6 +147,7 @@
 #include "core/frame/HostsUsingFeatures.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/PerformanceMonitor.h"
 #include "core/frame/Settings.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/DocumentNameCollection.h"
@@ -166,7 +167,6 @@
 #include "core/html/HTMLLinkElement.h"
 #include "core/html/HTMLMetaElement.h"
 #include "core/html/HTMLScriptElement.h"
-#include "core/html/HTMLStyleElement.h"
 #include "core/html/HTMLTemplateElement.h"
 #include "core/html/HTMLTitleElement.h"
 #include "core/html/PluginDocument.h"
@@ -254,6 +254,7 @@
 #include "wtf/HashFunctions.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
+#include "wtf/text/CharacterNames.h"
 #include "wtf/text/StringBuffer.h"
 #include "wtf/text/TextEncodingRegistry.h"
 #include <memory>
@@ -504,7 +505,8 @@ Document::Document(const DocumentInit& initializer,
       m_hasViewportUnits(false),
       m_parserSyncPolicy(AllowAsynchronousParsing),
       m_nodeCount(0),
-      m_wouldLoadReason(Created) {
+      m_wouldLoadReason(Created),
+      m_passwordCount(0) {
   if (m_frame) {
     DCHECK(m_frame->page());
     provideContextFeaturesToDocumentFrom(*this, *m_frame->page());
@@ -1314,9 +1316,8 @@ static inline String canonicalizedTitle(Document* document,
   bool pendingWhitespace = false;
   for (unsigned i = 0; i < length; ++i) {
     UChar32 c = characters[i];
-    if (c <= 0x20 || c == 0x7F ||
-        (WTF::Unicode::category(c) &
-         (WTF::Unicode::Separator_Line | WTF::Unicode::Separator_Paragraph))) {
+    if ((c <= spaceCharacter && c != lineTabulationCharacter) ||
+        c == deleteCharacter) {
       if (builderIndex != 0)
         pendingWhitespace = true;
     } else {
@@ -1566,8 +1567,6 @@ bool Document::needsFullLayoutTreeUpdate() const {
   if (!isActive() || !view())
     return false;
   if (!m_useElementsNeedingUpdate.isEmpty())
-    return true;
-  if (!m_layerUpdateSVGFilterElements.isEmpty())
     return true;
   if (needsStyleRecalc())
     return true;
@@ -1870,6 +1869,7 @@ void Document::updateStyleAndLayoutTree() {
   unsigned startElementCount = styleEngine().styleForElementCount();
 
   InspectorInstrumentation::willRecalculateStyle(this);
+  PerformanceMonitor::willRecalculateStyle(this);
 
   DocumentAnimations::updateAnimationTimingIfNeeded(*this);
   evaluateMediaQueryListIfNeeded();
@@ -1914,6 +1914,7 @@ void Document::updateStyleAndLayoutTree() {
   assertLayoutTreeUpdated(*this);
 #endif
   InspectorInstrumentation::didRecalculateStyle(this);
+  PerformanceMonitor::didRecalculateStyle(this);
 }
 
 void Document::updateStyle() {
@@ -1959,11 +1960,8 @@ void Document::updateStyle() {
 
   if (Element* documentElement = this->documentElement()) {
     inheritHtmlAndBodyElementStyles(change);
-    dirtyElementsForLayerUpdate();
     if (documentElement->shouldCallRecalcStyle(change))
       documentElement->recalcStyle(change);
-    while (dirtyElementsForLayerUpdate())
-      documentElement->recalcStyle(NoChange);
   }
 
   view()->recalcOverflowAfterStyleChange();
@@ -2239,31 +2237,6 @@ void Document::setIsViewSource(bool isViewSource) {
 
   setSecurityOrigin(SecurityOrigin::createUnique());
   didUpdateSecurityOrigin();
-}
-
-bool Document::dirtyElementsForLayerUpdate() {
-  if (m_layerUpdateSVGFilterElements.isEmpty())
-    return false;
-
-  for (Element* element : m_layerUpdateSVGFilterElements)
-    element->setNeedsStyleRecalc(LocalStyleChange,
-                                 StyleChangeReasonForTracing::create(
-                                     StyleChangeReason::SVGFilterLayerUpdate));
-  m_layerUpdateSVGFilterElements.clear();
-  return true;
-}
-
-void Document::scheduleSVGFilterLayerUpdateHack(Element& element) {
-  if (element.getStyleChangeType() == NeedsReattachStyleChange)
-    return;
-  element.setSVGFilterNeedsLayerUpdate();
-  m_layerUpdateSVGFilterElements.add(&element);
-  scheduleLayoutTreeUpdateIfNeeded();
-}
-
-void Document::unscheduleSVGFilterLayerUpdateHack(Element& element) {
-  element.clearSVGFilterNeedsLayerUpdate();
-  m_layerUpdateSVGFilterElements.remove(&element);
 }
 
 void Document::scheduleUseShadowTreeUpdate(SVGUseElement& element) {
@@ -2819,8 +2792,6 @@ void Document::implicitClose() {
   if (frame() && frame()->script().canExecuteScripts(NotAboutToExecuteScript)) {
     ImageLoader::dispatchPendingLoadEvents();
     ImageLoader::dispatchPendingErrorEvents();
-
-    HTMLStyleElement::dispatchPendingLoadEvents();
   }
 
   // JS running below could remove the frame or destroy the LayoutView so we
@@ -4986,7 +4957,7 @@ void Document::pushCurrentScript(Element* newCurrentScript) {
 
 void Document::popCurrentScript() {
   DCHECK(!m_currentScriptStack.isEmpty());
-  m_currentScriptStack.removeLast();
+  m_currentScriptStack.pop_back();
 }
 
 void Document::setTransformSource(std::unique_ptr<TransformSource> source) {
@@ -5205,17 +5176,7 @@ void Document::beginLifecycleUpdatesIfRenderingReady() {
     return;
   if (!isRenderingReady())
     return;
-  if (LocalFrame* frame = this->frame()) {
-    // Avoid pumping frames for the initially empty document.
-    if (!frame->loader().stateMachine()->committedFirstRealDocumentLoad())
-      return;
-    // The compositor will "defer commits" for the main frame until we
-    // explicitly request them.
-    if (frame->isMainFrame())
-      frame->page()->chromeClient().beginLifecycleUpdates();
-    if (frame->view())
-      frame->view()->setupRenderThrottling();
-  }
+  view()->beginLifecycleUpdates();
 }
 
 Vector<IconURL> Document::iconURLs(int iconTypesMask) {
@@ -6359,6 +6320,19 @@ PropertyRegistry* Document::propertyRegistry() {
   return m_propertyRegistry;
 }
 
+void Document::incrementPasswordCount() {
+  ++m_passwordCount;
+}
+
+void Document::decrementPasswordCount() {
+  DCHECK_GT(m_passwordCount, 0u);
+  --m_passwordCount;
+}
+
+unsigned Document::passwordCount() const {
+  return m_passwordCount;
+}
+
 DEFINE_TRACE(Document) {
   visitor->trace(m_importsController);
   visitor->trace(m_docType);
@@ -6401,7 +6375,6 @@ DEFINE_TRACE(Document) {
   visitor->trace(m_customElementMicrotaskRunQueue);
   visitor->trace(m_elementDataCache);
   visitor->trace(m_useElementsNeedingUpdate);
-  visitor->trace(m_layerUpdateSVGFilterElements);
   visitor->trace(m_timers);
   visitor->trace(m_templateDocument);
   visitor->trace(m_templateDocumentHost);

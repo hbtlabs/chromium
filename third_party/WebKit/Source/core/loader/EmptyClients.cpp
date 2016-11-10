@@ -143,8 +143,10 @@ void EmptyFrameLoaderClient::dispatchWillSubmitForm(HTMLFormElement*) {}
 DocumentLoader* EmptyFrameLoaderClient::createDocumentLoader(
     LocalFrame* frame,
     const ResourceRequest& request,
-    const SubstituteData& substituteData) {
-  return DocumentLoader::create(frame, request, substituteData);
+    const SubstituteData& substituteData,
+    ClientRedirectPolicy clientRedirectPolicy) {
+  return DocumentLoader::create(frame, request, substituteData,
+                                clientRedirectPolicy);
 }
 
 LocalFrame* EmptyFrameLoaderClient::createFrame(const FrameLoadRequest&,
@@ -167,6 +169,11 @@ std::unique_ptr<WebMediaPlayer> EmptyFrameLoaderClient::createWebMediaPlayer(
     HTMLMediaElement&,
     const WebMediaPlayerSource&,
     WebMediaPlayerClient*) {
+  return nullptr;
+}
+
+WebRemotePlaybackClient* EmptyFrameLoaderClient::createWebRemotePlaybackClient(
+    HTMLMediaElement&) {
   return nullptr;
 }
 

@@ -588,16 +588,28 @@ float ScrollableArea::pixelStep(ScrollbarOrientation) const {
   return 1;
 }
 
-int ScrollableArea::verticalScrollbarWidth() const {
+int ScrollableArea::verticalScrollbarWidth(
+    OverlayScrollbarClipBehavior behavior) const {
+  DCHECK_EQ(behavior, IgnoreOverlayScrollbarSize);
   if (Scrollbar* verticalBar = verticalScrollbar())
     return !verticalBar->isOverlayScrollbar() ? verticalBar->width() : 0;
   return 0;
 }
 
-int ScrollableArea::horizontalScrollbarHeight() const {
+int ScrollableArea::horizontalScrollbarHeight(
+    OverlayScrollbarClipBehavior behavior) const {
+  DCHECK_EQ(behavior, IgnoreOverlayScrollbarSize);
   if (Scrollbar* horizontalBar = horizontalScrollbar())
     return !horizontalBar->isOverlayScrollbar() ? horizontalBar->height() : 0;
   return 0;
+}
+
+FloatQuad ScrollableArea::localToVisibleContentQuad(const FloatQuad& quad,
+                                                    const LayoutObject*,
+                                                    unsigned) const {
+  FloatQuad result(quad);
+  result.move(-scrollOffset());
+  return result;
 }
 
 IntSize ScrollableArea::excludeScrollbars(const IntSize& size) const {

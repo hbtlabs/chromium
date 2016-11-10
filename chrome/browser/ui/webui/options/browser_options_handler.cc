@@ -106,6 +106,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/google_service_auth_error.h"
+#include "printing/features/features.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -444,6 +445,8 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
       IDS_OPTIONS_SETTINGS_ACCESSIBILITY_VIRTUAL_KEYBOARD_DESCRIPTION },
     { "accessibilityMonoAudio",
       IDS_OPTIONS_SETTINGS_ACCESSIBILITY_MONO_AUDIO_DESCRIPTION},
+    { "advancedSectionTitleCupsPrint",
+      IDS_OPTIONS_ADVANCED_SECTION_TITLE_CUPS_PRINT },
     { "androidAppsTitle", IDS_OPTIONS_ARC_TITLE },
     { "androidAppsEnabled", IDS_OPTIONS_ARC_ENABLE },
     { "androidAppsSettingsLabel", IDS_OPTIONS_ARC_MANAGE_APPS },
@@ -465,6 +468,9 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
       IDS_OPTIONS_SETTINGS_ACCESSIBILITY_AUTOCLICK_DELAY_VERY_SHORT },
     { "changePicture", IDS_OPTIONS_CHANGE_PICTURE },
     { "changePictureCaption", IDS_OPTIONS_CHANGE_PICTURE_CAPTION },
+    { "cupsPrintOptionLabel", IDS_OPTIONS_ADVANCED_SECTION_CUPS_PRINT_LABEL },
+    { "cupsPrintersManageButton",
+      IDS_OPTIONS_ADVANCED_SECTION_CUPS_PRINT_MANAGE_BUTTON },
     { "datetimeTitle", IDS_OPTIONS_SETTINGS_SECTION_TITLE_DATETIME },
     { "deviceGroupDescription", IDS_OPTIONS_DEVICE_GROUP_DESCRIPTION },
     { "deviceGroupPointer", IDS_OPTIONS_DEVICE_GROUP_POINTER_SECTION },
@@ -516,6 +522,8 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
     { "pinKeyboardPlaceholderPin", IDS_PIN_KEYBOARD_HINT_TEXT_PIN },
     { "pinKeyboardPlaceholderPinPassword",
       IDS_PIN_KEYBOARD_HINT_TEXT_PIN_PASSWORD },
+    { "pinKeyboardDeleteAccessibleName",
+      IDS_LOGIN_POD_PASSWORD_FIELD_ACCESSIBLE_NAME },
     { "powerSettingsButton",
       IDS_OPTIONS_DEVICE_GROUP_POWER_SETTINGS_BUTTON },
     { "resolveTimezoneByGeoLocation",
@@ -570,7 +578,7 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
                 IDS_OPTIONS_ENABLE_DO_NOT_TRACK_BUBBLE_TITLE);
   RegisterTitle(values, "spellingConfirmOverlay",
                 IDS_CONTENT_CONTEXT_SPELLING_ASK_GOOGLE);
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   RegisterCloudPrintValues(values);
 #endif
 
@@ -598,7 +606,7 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
     const user_manager::User* user =
         chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
     if (user && (user->GetType() != user_manager::USER_TYPE_GUEST))
-      username = user->email();
+      username = user->GetAccountId().GetUserEmail();
   }
   if (!username.empty())
     username = gaia::SanitizeEmail(gaia::CanonicalizeEmail(username));
@@ -681,6 +689,14 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
       g_browser_process->gpu_mode_manager()->initial_gpu_mode_pref());
 #endif
 
+#if defined(OS_CHROMEOS)
+  values->SetBoolean("cupsPrintEnabled",
+                     base::CommandLine::ForCurrentProcess()->HasSwitch(
+                         ::switches::kEnableNativeCups));
+  values->SetString("cupsPrintLearnMoreURL",
+                    chrome::kChromeUIMdCupsSettingsURL);
+#endif  // defined(OS_CHROMEOS)
+
 #if BUILDFLAG(ENABLE_SERVICE_DISCOVERY)
   values->SetBoolean("cloudPrintHideNotificationsCheckbox",
                      !cloud_print::PrivetNotificationService::IsEnabled());
@@ -737,8 +753,8 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
   values->SetBoolean("allowBluetooth", allow_bluetooth);
 
   values->SetBoolean("showQuickUnlockSettings",
-                     chromeos::IsQuickUnlockEnabled());
-  if (chromeos::IsQuickUnlockEnabled()) {
+                     chromeos::IsPinUnlockEnabled(profile->GetPrefs()));
+  if (chromeos::IsPinUnlockEnabled(profile->GetPrefs())) {
     values->SetString(
         "enableScreenlock",
         l10n_util::GetStringUTF16(
@@ -756,7 +772,7 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
 #endif
 }
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 void BrowserOptionsHandler::RegisterCloudPrintValues(
     base::DictionaryValue* values) {
   values->SetString("cloudPrintOptionLabel",
@@ -764,7 +780,7 @@ void BrowserOptionsHandler::RegisterCloudPrintValues(
                         IDS_CLOUD_PRINT_CHROMEOS_OPTION_LABEL,
                         l10n_util::GetStringUTF16(IDS_GOOGLE_CLOUD_PRINT)));
 }
-#endif  // defined(ENABLE_PRINT_PREVIEW)
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
 void BrowserOptionsHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
@@ -835,6 +851,10 @@ void BrowserOptionsHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "showAccessibilityTalkBackSettings",
       base::Bind(&BrowserOptionsHandler::ShowAccessibilityTalkBackSettings,
+                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "showCupsPrintDevicesPage",
+      base::Bind(&BrowserOptionsHandler::ShowCupsPrintDevicesPage,
                  base::Unretained(this)));
 #else
   web_ui()->RegisterMessageCallback(
@@ -1461,8 +1481,10 @@ void BrowserOptionsHandler::ThemesSetNative(const base::ListValue* args) {
 
 #if defined(OS_CHROMEOS)
 void BrowserOptionsHandler::UpdateAccountPicture() {
-  std::string email =
-      user_manager::UserManager::Get()->GetLoggedInUser()->email();
+  std::string email = user_manager::UserManager::Get()
+                          ->GetLoggedInUser()
+                          ->GetAccountId()
+                          .GetUserEmail();
   if (!email.empty()) {
     web_ui()->CallJavascriptFunctionUnsafe(
         "BrowserOptions.updateAccountPicture");
@@ -1546,10 +1568,12 @@ BrowserOptionsHandler::GetSyncStateDictionary() {
 
   base::string16 status_label;
   base::string16 link_label;
+  sync_ui_util::ActionType action_type = sync_ui_util::NO_ACTION;
   bool status_has_error =
       sync_ui_util::GetStatusLabels(profile, service, *signin,
                                     sync_ui_util::WITH_HTML, &status_label,
-                                    &link_label) == sync_ui_util::SYNC_ERROR;
+                                    &link_label, &action_type) ==
+      sync_ui_util::SYNC_ERROR;
   sync_status->SetString("statusText", status_label);
   sync_status->SetString("actionLinkText", link_label);
   sync_status->SetBoolean("hasError", status_has_error);
@@ -1704,6 +1728,17 @@ void BrowserOptionsHandler::ShowManageSSLCertificates(
   settings_utils::ShowManageSSLCertificates(web_ui()->GetWebContents());
 }
 #endif
+
+#if defined(OS_CHROMEOS)
+void BrowserOptionsHandler::ShowCupsPrintDevicesPage(
+    const base::ListValue* args) {
+  // Navigate in current tab to CUPS printers management page.
+  OpenURLParams params(GURL(chrome::kChromeUIMdCupsSettingsURL), Referrer(),
+                       WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                       ui::PAGE_TRANSITION_LINK, false);
+  web_ui()->GetWebContents()->OpenURL(params);
+}
+#endif  // defined(OS_CHROMEOS)
 
 #if BUILDFLAG(ENABLE_SERVICE_DISCOVERY)
 void BrowserOptionsHandler::ShowCloudPrintDevicesPage(

@@ -22,16 +22,12 @@
 #include "ash/common/system/chromeos/shutdown_policy_observer.h"
 #include "ash/common/system/date/clock_observer.h"
 #include "ash/common/system/ime/ime_observer.h"
-#include "ash/common/system/tray/system_tray.h"
-#include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/system/tray_accessibility.h"
 #include "ash/common/system/update/update_observer.h"
 #include "ash/common/system/user/user_observer.h"
 #include "ash/common/wm_shell.h"
-#include "ash/shell.h"
 #include "ash/system/chromeos/rotation/tray_rotation_lock.h"
-#include "ash/wm/lock_state_controller.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/logging.h"
@@ -64,7 +60,6 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
-#include "chrome/browser/ui/ash/cast_config_delegate_chromeos.h"
 #include "chrome/browser/ui/ash/cast_config_delegate_media_router.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/networking_config_delegate_chromeos.h"
@@ -100,7 +95,6 @@
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
-#include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
@@ -140,12 +134,6 @@ void BluetoothDeviceConnectError(
     device::BluetoothDevice::ConnectErrorCode error_code) {
 }
 
-std::unique_ptr<ash::CastConfigDelegate> CreateCastConfigDelegate() {
-  if (CastConfigDelegateMediaRouter::IsEnabled())
-    return base::MakeUnique<CastConfigDelegateMediaRouter>();
-  return base::MakeUnique<CastConfigDelegateChromeos>();
-}
-
 void OnAcceptMultiprofilesIntro(bool no_show_again) {
   PrefService* prefs = ProfileManager::GetActiveUserProfile()->GetPrefs();
   prefs->SetBoolean(prefs::kMultiProfileNeverShowIntro, no_show_again);
@@ -155,13 +143,7 @@ void OnAcceptMultiprofilesIntro(bool no_show_again) {
 }  // namespace
 
 SystemTrayDelegateChromeOS::SystemTrayDelegateChromeOS()
-    : user_profile_(NULL),
-      search_key_mapped_to_(input_method::kSearchKey),
-      have_session_start_time_(false),
-      have_session_length_limit_(false),
-      should_run_bluetooth_discovery_(false),
-      session_started_(false),
-      cast_config_delegate_(nullptr),
+    : cast_config_delegate_(base::MakeUnique<CastConfigDelegateMediaRouter>()),
       networking_config_delegate_(new NetworkingConfigDelegateChromeos()),
       vpn_delegate_(new VPNDelegateChromeOS),
       weak_ptr_factory_(this) {
@@ -290,11 +272,21 @@ std::string SystemTrayDelegateChromeOS::GetEnterpriseDomain() const {
   return enterprise_domain_;
 }
 
+std::string SystemTrayDelegateChromeOS::GetEnterpriseRealm() const {
+  return enterprise_realm_;
+}
+
 base::string16 SystemTrayDelegateChromeOS::GetEnterpriseMessage() const {
-  if (GetEnterpriseDomain().empty())
-    return base::string16();
-  return l10n_util::GetStringFUTF16(IDS_DEVICE_OWNED_BY_NOTICE,
-                                    base::UTF8ToUTF16(GetEnterpriseDomain()));
+  if (!GetEnterpriseRealm().empty()) {
+    // TODO(rsorokin): Maybe change a message for the Active Directory devices.
+    return l10n_util::GetStringFUTF16(IDS_DEVICE_OWNED_BY_NOTICE,
+                                      base::UTF8ToUTF16(GetEnterpriseRealm()));
+  }
+  if (!GetEnterpriseDomain().empty()) {
+    return l10n_util::GetStringFUTF16(IDS_DEVICE_OWNED_BY_NOTICE,
+                                      base::UTF8ToUTF16(GetEnterpriseDomain()));
+  }
+  return base::string16();
 }
 
 std::string SystemTrayDelegateChromeOS::GetSupervisedUserManager() const {
@@ -412,10 +404,6 @@ void SystemTrayDelegateChromeOS::SignOut() {
 void SystemTrayDelegateChromeOS::RequestRestartForUpdate() {
   // We expect that UpdateEngine is in "Reboot for update" state now.
   chrome::NotifyAndTerminate(true /* fast path */);
-}
-
-void SystemTrayDelegateChromeOS::RequestShutdown() {
-  ash::Shell::GetInstance()->lock_state_controller()->RequestShutdown();
 }
 
 void SystemTrayDelegateChromeOS::GetAvailableBluetoothDevices(
@@ -567,8 +555,6 @@ bool SystemTrayDelegateChromeOS::GetBluetoothDiscovering() {
 }
 
 ash::CastConfigDelegate* SystemTrayDelegateChromeOS::GetCastConfigDelegate() {
-  if (!cast_config_delegate_)
-    cast_config_delegate_ = CreateCastConfigDelegate();
   return cast_config_delegate_.get();
 }
 
@@ -587,6 +573,11 @@ bool SystemTrayDelegateChromeOS::GetSessionLengthLimit(
     base::TimeDelta* session_length_limit) {
   *session_length_limit = session_length_limit_;
   return have_session_length_limit_;
+}
+
+int SystemTrayDelegateChromeOS::GetSystemTrayMenuWidth() {
+  return l10n_util::GetLocalizedContentsWidthInPixels(
+      IDS_SYSTEM_TRAY_MENU_BUBBLE_WIDTH_PIXELS);
 }
 
 void SystemTrayDelegateChromeOS::ActiveUserWasChanged() {
@@ -648,10 +639,6 @@ void SystemTrayDelegateChromeOS::UserChangedChildStatus(
   // At some point profile is not yet fully initiated.
   if (session_started_ && user_profile && user_profile_ == user_profile)
     ash::WmShell::Get()->UpdateAfterLoginStatusChange(GetUserLoginStatus());
-}
-
-ash::SystemTray* SystemTrayDelegateChromeOS::GetPrimarySystemTray() {
-  return ash::Shell::GetInstance()->GetPrimarySystemTray();
 }
 
 ash::SystemTrayNotifier* SystemTrayDelegateChromeOS::GetSystemTrayNotifier() {
@@ -975,8 +962,11 @@ void SystemTrayDelegateChromeOS::UpdateEnterpriseDomain() {
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
   std::string enterprise_domain = connector->GetEnterpriseDomain();
-  if (enterprise_domain_ != enterprise_domain) {
+  std::string enterprise_realm = connector->GetRealm();
+  if (enterprise_domain_ != enterprise_domain ||
+      enterprise_realm_ != enterprise_realm) {
     enterprise_domain_ = enterprise_domain;
+    enterprise_realm_ = enterprise_realm;
     GetSystemTrayNotifier()->NotifyEnterpriseDomainChanged();
   }
 }

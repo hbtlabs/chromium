@@ -50,6 +50,7 @@
 <translation id="1491663344921578213">તમે અત્યારે <ph name="SITE" /> ની મુલાકાત લઈ શકતાં નથી કારણ કે વેબસાઇટ પ્રમાણપત્ર પિનિંગનો ઉપયોગ કરે છે. નેટવર્ક ભૂલો અને હુમલા સામાન્ય રીતે અસ્થાયી છે, તેથી આ પૃષ્ઠ સંભવિત રૂપે પછીથી કાર્ય કરશે. <ph name="BEGIN_LEARN_MORE_LINK" />વધુ જાણો<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="1506687042165942984">આ પૃષ્ઠની સાચવેલી (એટલે કે જૂની થઈ ગયેલી તરીકે ઓળખાતી) કૉપિ દર્શાવો.</translation>
 <translation id="1519264250979466059">નિર્માણ તારીખ</translation>
+<translation id="153384715582417236">હમણાં માટે બસ આટલું પૂરતું છે</translation>
 <translation id="1549470594296187301">આ સુવિધાનો ઉપયોગ કરવા માટે JavaScript સક્ષમ કરેલ હોવી આવશ્યક છે.</translation>
 <translation id="1559528461873125649">આવી કોઈ ફાઇલ અથવા નિર્દેશિકા નથી</translation>
 <translation id="1559572115229829303">&lt;p&gt;<ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> પર ખાનગી કનેક્શન સ્થાપિત કરી શકાતું નથી કારણ કે તમારા ઉપકરણની તારીખ અને સમય (<ph name="DATE_AND_TIME" />) અયોગ્ય છે.&lt;/p&gt;
@@ -350,7 +351,6 @@
 <translation id="4728558894243024398">પ્લેટફોર્મ</translation>
 <translation id="4744603770635761495">અમલ કરવાયોગ્ય પાથ</translation>
 <translation id="4756388243121344051">&amp;ઇતિહાસ</translation>
-<translation id="4759238208242260848">ડાઉનલોડ્સ</translation>
 <translation id="4764776831041365478"><ph name="URL" /> પરનાં વેબપેજ અસ્થાયી ધોરણે બંધ હોઈ શકે છે અથવા તે કાયમ માટે નવા વેબ સરનામાં પર ખસેડવામાં આવ્યા હોઈ શકે છે.</translation>
 <translation id="4771973620359291008">કોઈ અજ્ઞાત ભૂલ આવી.</translation>
 <translation id="4782449893814226250">તમે આ પૃષ્ઠની મુલાકાત લો તે ઠીક છે કે કેમ તેવું તમે તમારા માતાપિતાને પૂછ્યું.</translation>
@@ -387,8 +387,10 @@
 <translation id="5171045022955879922">URL શોધો અથવા લખો</translation>
 <translation id="5172758083709347301">મશીન</translation>
 <translation id="5179510805599951267"><ph name="ORIGINAL_LANGUAGE" /> માં નથી? આ ભૂલની જાણ કરો </translation>
+<translation id="5181140330217080051">ડાઉનલોડ કરી રહ્યું છે</translation>
 <translation id="5190835502935405962">બુકમાર્ક્સ બાર</translation>
 <translation id="5199729219167945352">પ્રયોગો</translation>
+<translation id="5199841536747119669">તમારા સૂચનો અહીં દેખાય છે</translation>
 <translation id="5251803541071282808">મેઘ</translation>
 <translation id="5277279256032773186">કાર્ય પર Chrome નો ઉપયોગ કરી રહ્યાં છો? વ્યવસાયો તેમના કર્મચારીઓ માટે Chrome સેટિંગ્સને સંચાલિત કરી શકે છે. વધુ જાણો</translation>
 <translation id="5299298092464848405">ભૂલ વિશ્લેષણ નીતિ</translation>
@@ -468,6 +470,7 @@
 <translation id="6263376278284652872"><ph name="DOMAIN" /> બુકમાર્ક્સ</translation>
 <translation id="6264485186158353794">સુરક્ષા પર પાછા</translation>
 <translation id="6282194474023008486">પોસ્ટલ કોડ</translation>
+<translation id="6290238015253830360">તમારા સૂચવેલા લેખ અહીં દેખાય છે</translation>
 <translation id="6305205051461490394"><ph name="URL" />, પહોંચવા યોગ્ય નથી.</translation>
 <translation id="6321917430147971392">તમારી DNS સેટિંગ્સ તપાસો</translation>
 <translation id="6328639280570009161">નેટવર્ક પૂર્વાનુમાનને અક્ષમ કરવાનો પ્રયાસ કરો</translation>
@@ -651,6 +654,7 @@
 <translation id="8363502534493474904">એરપ્લેન મોડ બંધ કરીને</translation>
 <translation id="8364627913115013041">સેટ નથી.</translation>
 <translation id="8380941800586852976">જોખમી</translation>
+<translation id="8382348898565613901">તમારા તાજેતરમાં મુલાકાત લીધેલ બુકમાર્ક્સ અહીં દેખાય છે</translation>
 <translation id="8412145213513410671">ક્રેશેસ (<ph name="CRASH_COUNT" />)</translation>
 <translation id="8412392972487953978">તમારે તે જ પાસફ્રેઝ બે વાર દાખલ કરવો આવશ્યક છે.</translation>
 <translation id="8428213095426709021">સેટિંગ્સ</translation>
@@ -662,7 +666,6 @@
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> એ પ્રતિસાદ આપવા માટે ઘણો સમય લીધો.</translation>
 <translation id="852346902619691059">આ સર્વર એ સાબિત કરી શક્યું નથી કે તે <ph name="DOMAIN" /> છે; તેનું સુરક્ષા પ્રમાણપત્ર તમારા ઉપકરણની ઓપરેટિંગ સિસ્ટમ દ્વારા વિશ્વસનીય નથી. આ કોઈ ખોટી ગોઠવણીને કારણે થયું હશે અથવા કોઈ હુમલાખોર તમારા કનેક્શનને અટકાવી રહ્યો છે. <ph name="BEGIN_LEARN_MORE_LINK" />વધુ જાણો<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="8530504477309582336">Google Payments દ્વારા આ પ્રકારના કાર્ડને સમર્થન નથી. કૃપા કરીને બીજું કાર્ડ પસંદ કરો.</translation>
-<translation id="8550022383519221471">સમન્વયન સેવા તમારા ડોમેન માટે ઉપલબ્ધ નથી.</translation>
 <translation id="8553075262323480129">ભાષાંતર નિષ્ફળ રહ્યું કારણ કે પૃષ્ઠની ભાષા નિર્ધારિત થઈ શકી નથી.</translation>
 <translation id="8559762987265718583"><ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> પર ખાનગી કનેક્શન સ્થાપિત કરી શકાતું નથી કારણ કે તમારા ઉપકરણની તારીખ અને સમય (<ph name="DATE_AND_TIME" />) અયોગ્ય છે.</translation>
 <translation id="856992080682148">આ સાઇટ માટેનું પ્રમાણપત્ર 2017 માં સમાપ્ત થાય છે અને પ્રમાણપત્ર શ્રૃંખલા SHA-1 નો ઉપયોગ કરીને સહી કરેલ પ્રમાણપત્ર ધરાવે છે.</translation>
@@ -670,7 +673,6 @@
 <translation id="8591846766485502580">તમે આ સંદેશ જોઇ રહ્યાં છો કારણ કે તમારા માતાપિતામાંથી કોઇ એક એ આ સાઇટ અવરોધિત કરી છે.</translation>
 <translation id="859285277496340001">પ્રમાણપત્રને રદ કરવામાં આવ્યું છે કે નહિ તે તપાસવા માટે કોઈપણ મેકેનિઝમ નિર્દિષ્ટ કરતું નથી.</translation>
 <translation id="8647750283161643317">બધાને ડિફોલ્ટ પર ફરીથી સેટ કરો</translation>
-<translation id="8680787084697685621">એકાઉન્ટ સાઇન-ઇન વિગતો જૂની થઈ ગઈ છે.</translation>
 <translation id="8703575177326907206"><ph name="DOMAIN" /> સાથેનું તમારું કનેક્શન એન્ક્રિપ્ટેડ નથી.</translation>
 <translation id="8725066075913043281">ફરી પ્રયાસ કરો</translation>
 <translation id="8728672262656704056">તમે છુપા મોડમાં ગયા છો</translation>

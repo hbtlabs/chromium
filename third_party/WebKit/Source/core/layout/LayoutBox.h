@@ -26,7 +26,6 @@
 #include "core/CoreExport.h"
 #include "core/layout/LayoutBoxModelObject.h"
 #include "core/layout/OverflowModel.h"
-#include "core/layout/ScrollEnums.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
@@ -251,7 +250,10 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     return style()->isHorizontalWritingMode() ? m_frameRect.height()
                                               : m_frameRect.width();
   }
-  LayoutUnit logicalHeightIncludingOverflow() const;
+
+  // Logical height of the object, including content overflowing the
+  // border-after edge.
+  virtual LayoutUnit logicalHeightWithVisibleOverflow() const;
 
   LayoutUnit constrainLogicalWidthByMinMax(LayoutUnit,
                                            LayoutUnit,

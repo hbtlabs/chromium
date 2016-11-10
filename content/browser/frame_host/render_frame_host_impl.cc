@@ -110,9 +110,6 @@
 #if defined(OS_ANDROID)
 #include "content/browser/android/app_web_message_port_message_filter.h"
 #include "content/public/browser/android/java_interfaces.h"
-#if defined(ENABLE_MOJO_CDM)
-#include "content/browser/media/android/provision_fetcher_impl.h"
-#endif
 #include "content/browser/media/android/media_player_renderer.h"
 #include "media/base/audio_renderer_sink.h"
 #include "media/base/video_renderer_sink.h"
@@ -121,6 +118,10 @@
 
 #if defined(OS_MACOSX)
 #include "content/browser/frame_host/popup_menu_helper_mac.h"
+#endif
+
+#if defined(ENABLE_MOJO_CDM)
+#include "content/public/browser/provision_fetcher_impl.h"
 #endif
 
 #if defined(ENABLE_WEBVR)
@@ -270,7 +271,8 @@ RenderFrameHostImpl::RenderFrameHostImpl(SiteInstance* site_instance,
                                          FrameTreeNode* frame_tree_node,
                                          int32_t routing_id,
                                          int32_t widget_routing_id,
-                                         bool hidden)
+                                         bool hidden,
+                                         bool renderer_initiated_creation)
     : render_view_host_(render_view_host),
       delegate_(delegate),
       site_instance_(static_cast<SiteInstanceImpl*>(site_instance)),
@@ -299,6 +301,7 @@ RenderFrameHostImpl::RenderFrameHostImpl(SiteInstance* site_instance,
       should_reuse_web_ui_(false),
       last_navigation_lofi_state_(LOFI_UNSPECIFIED),
       frame_host_binding_(this),
+      waiting_for_init_(renderer_initiated_creation),
       weak_ptr_factory_(this) {
   frame_tree_->AddRenderViewHostRef(render_view_host_);
   GetProcess()->AddRoute(routing_id_, this);
@@ -814,10 +817,14 @@ void RenderFrameHostImpl::Create(
     media::mojom::InterfaceFactoryRequest request) {
   auto registry = base::MakeUnique<service_manager::InterfaceRegistry>(
       std::string());
-#if defined(OS_ANDROID) && defined(ENABLE_MOJO_CDM)
+#if defined(ENABLE_MOJO_CDM)
+  net::URLRequestContextGetter* context_getter =
+      BrowserContext::GetDefaultStoragePartition(
+          GetProcess()->GetBrowserContext())
+          ->GetURLRequestContext();
   registry->AddInterface(
-      base::Bind(&ProvisionFetcherImpl::Create, this));
-#endif
+      base::Bind(&ProvisionFetcherImpl::Create, context_getter));
+#endif  // defined(ENABLE_MOJO_CDM)
   GetContentClient()->browser()->ExposeInterfacesToMediaService(registry.get(),
                                                                 this);
   service_manager::mojom::InterfaceProviderPtr interfaces;
@@ -935,6 +942,16 @@ void RenderFrameHostImpl::SetRenderFrameCreated(bool created) {
 
 void RenderFrameHostImpl::Init() {
   ResourceDispatcherHost::ResumeBlockedRequestsForFrameFromUI(this);
+  if (!waiting_for_init_)
+    return;
+
+  waiting_for_init_ = false;
+  if (pendinging_navigate_) {
+    frame_tree_node()->navigator()->OnBeginNavigation(
+        frame_tree_node(), pendinging_navigate_->first,
+        pendinging_navigate_->second);
+    pendinging_navigate_.reset();
+  }
 }
 
 void RenderFrameHostImpl::OnAddMessageToConsole(
@@ -994,17 +1011,27 @@ void RenderFrameHostImpl::OnFrameFocused() {
 }
 
 void RenderFrameHostImpl::OnOpenURL(const FrameHostMsg_OpenURL_Params& params) {
+  GURL validated_url(params.url);
+  GetProcess()->FilterURL(false, &validated_url);
+
   if (params.is_history_navigation_in_new_child) {
     DCHECK(SiteIsolationPolicy::UseSubframeNavigationEntries());
 
     // Try to find a FrameNavigationEntry that matches this frame instead, based
     // on the frame's unique name.  If this can't be found, fall back to the
-    // default params using OpenURL below.
-    if (frame_tree_node_->navigator()->NavigateNewChildFrame(this, params.url))
+    // default params using RequestOpenURL below.
+    if (frame_tree_node_->navigator()->NavigateNewChildFrame(this,
+                                                             validated_url))
       return;
   }
 
-  OpenURL(params, GetSiteInstance());
+  TRACE_EVENT1("navigation", "RenderFrameHostImpl::OpenURL", "url",
+               validated_url.possibly_invalid_spec());
+
+  frame_tree_node_->navigator()->RequestOpenURL(
+      this, validated_url, params.uses_post, params.resource_request_body,
+      params.extra_headers, params.referrer, params.disposition,
+      params.should_replace_current_entry, params.user_gesture);
 }
 
 void RenderFrameHostImpl::OnCancelInitialHistoryLoad() {
@@ -1179,70 +1206,27 @@ void RenderFrameHostImpl::OnDidCommitProvisionalLoad(const IPC::Message& msg) {
     return;
   }
 
-  // If the URL or |was_within_same_page| does not match what the
-  // NavigationHandle expects, treat the commit as a new navigation. This can
-  // happen if an ongoing slow same-process navigation is interwoven with a
-  // synchronous renderer-initiated navigation.
-  // TODO(csharrison): Data navigations loaded with LoadDataWithBaseURL get
-  // reset here, because the NavigationHandle tracks the URL but the
-  // validated_params.url tracks the data. The trick of saving the old entry ids
-  // for these navigations should go away when this is properly handled. See
-  // crbug.com/588317.
-  int entry_id_for_data_nav = 0;
-  bool is_renderer_initiated = true;
-  if (navigation_handle_ &&
-      ((navigation_handle_->GetURL() != validated_params.url) ||
-       navigation_handle_->IsSamePage() !=
-           validated_params.was_within_same_page)) {
-    // Make sure that the pending entry was really loaded via
-    // LoadDataWithBaseURL and that it matches this handle.
-    NavigationEntryImpl* pending_entry =
-        NavigationEntryImpl::FromNavigationEntry(
-            frame_tree_node()->navigator()->GetController()->GetPendingEntry());
-    bool pending_entry_matches_handle =
-        pending_entry &&
-        pending_entry->GetUniqueID() ==
-            navigation_handle_->pending_nav_entry_id();
-    // TODO(csharrison): The pending entry's base url should equal
-    // |validated_params.base_url|. This is not the case for loads with invalid
-    // base urls.
-    if (navigation_handle_->GetURL() == validated_params.base_url &&
-        pending_entry_matches_handle &&
-        !pending_entry->GetBaseURLForDataURL().is_empty()) {
-      entry_id_for_data_nav = navigation_handle_->pending_nav_entry_id();
-      is_renderer_initiated = pending_entry->is_renderer_initiated();
+  // PlzNavigate
+  if (!navigation_handle_ && IsBrowserSideNavigationEnabled()) {
+    // PlzNavigate: the browser has not been notified about the start of the
+    // load in this renderer yet (e.g., for same-page navigations that start in
+    // the renderer). Do it now.
+    if (!is_loading()) {
+      bool was_loading = frame_tree_node()->frame_tree()->IsLoading();
+      is_loading_ = true;
+      frame_tree_node()->DidStartLoading(true, was_loading);
     }
-    navigation_handle_.reset();
+    pending_commit_ = false;
   }
 
-  // Synchronous renderer-initiated navigations will send a
-  // DidCommitProvisionalLoad IPC without a prior DidStartProvisionalLoad
-  // message. Or in addition, the if block above can reset the NavigationHandle
-  // in cases it doesn't match the expected commit.
-  if (!navigation_handle_) {
-    // There is no pending NavigationEntry in these cases, so pass 0 as the
-    // nav_id. If the previous handle was a prematurely aborted navigation
-    // loaded via LoadDataWithBaseURL, propogate the entry id.
-    navigation_handle_ = NavigationHandleImpl::Create(
-        validated_params.url, frame_tree_node_, is_renderer_initiated,
-        validated_params.was_within_same_page, validated_params.is_srcdoc,
-        base::TimeTicks::Now(), entry_id_for_data_nav,
-        false);  // started_from_context_menu
-    // PlzNavigate
-    if (IsBrowserSideNavigationEnabled()) {
-      // PlzNavigate: synchronous loads happen in the renderer, and the browser
-      // has not been notified about the start of the load yet. Do it now.
-      if (!is_loading()) {
-        bool was_loading = frame_tree_node()->frame_tree()->IsLoading();
-        is_loading_ = true;
-        frame_tree_node()->DidStartLoading(true, was_loading);
-      }
-      pending_commit_ = false;
-    }
-  }
+  // Find the appropriate NavigationHandle for this navigation.
+  std::unique_ptr<NavigationHandleImpl> navigation_handle =
+      TakeNavigationHandleForCommit(validated_params);
+  DCHECK(navigation_handle);
 
   accessibility_reset_count_ = 0;
-  frame_tree_node()->navigator()->DidNavigate(this, validated_params);
+  frame_tree_node()->navigator()->DidNavigate(this, validated_params,
+                                              std::move(navigation_handle));
 
   // Since we didn't early return, it's safe to keep the commit state.
   commit_state_resetter.disable();
@@ -1801,6 +1785,13 @@ void RenderFrameHostImpl::OnBeginNavigation(
     return;
   CommonNavigationParams validated_params = common_params;
   GetProcess()->FilterURL(false, &validated_params.url);
+
+  if (waiting_for_init_) {
+    pendinging_navigate_ =
+        base::MakeUnique<PendingNavigation>(validated_params, begin_params);
+    return;
+  }
+
   frame_tree_node()->navigator()->OnBeginNavigation(
       frame_tree_node(), validated_params, begin_params);
 }
@@ -2212,7 +2203,8 @@ void RenderFrameHostImpl::RegisterMojoInterfaces() {
 #endif
   if (base::FeatureList::IsEnabled(features::kGenericSensor)) {
     GetInterfaceRegistry()->AddInterface(
-        base::Bind(&device::SensorProviderImpl::Create),
+        base::Bind(&device::SensorProviderImpl::Create,
+                   BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE)),
         BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
   }
 
@@ -2351,20 +2343,6 @@ void RenderFrameHostImpl::NavigateToInterstitialURL(const GURL& data_url) {
   } else {
     Navigate(common_params, StartNavigationParams(), RequestNavigationParams());
   }
-}
-
-void RenderFrameHostImpl::OpenURL(const FrameHostMsg_OpenURL_Params& params,
-                                  SiteInstance* source_site_instance) {
-  GURL validated_url(params.url);
-  GetProcess()->FilterURL(false, &validated_url);
-
-  TRACE_EVENT1("navigation", "RenderFrameHostImpl::OpenURL", "url",
-               validated_url.possibly_invalid_spec());
-  frame_tree_node_->navigator()->RequestOpenURL(
-      this, validated_url, params.uses_post, params.resource_request_body,
-      params.extra_headers, source_site_instance, params.referrer,
-      params.disposition, params.should_replace_current_entry,
-      params.user_gesture);
 }
 
 void RenderFrameHostImpl::Stop() {
@@ -3187,6 +3165,90 @@ WebBluetoothServiceImpl* RenderFrameHostImpl::CreateWebBluetoothService(
 
 void RenderFrameHostImpl::DeleteWebBluetoothService() {
   web_bluetooth_service_.reset();
+}
+
+std::unique_ptr<NavigationHandleImpl>
+RenderFrameHostImpl::TakeNavigationHandleForCommit(
+    const FrameHostMsg_DidCommitProvisionalLoad_Params& params) {
+  // If this is a same-page navigation, there isn't an existing NavigationHandle
+  // to use for the navigation. Create one, but don't reset any NavigationHandle
+  // tracking an ongoing navigation, since this may lead to the cancellation of
+  // the navigation.
+  if (params.was_within_same_page) {
+    // We don't ever expect navigation_handle_ to match, because handles are not
+    // created for same-page navigations.
+    DCHECK(!navigation_handle_ || !navigation_handle_->IsSamePage());
+
+    // First, determine if the navigation corresponds to the pending navigation
+    // entry. This is the case for a browser-initiated same-page navigation,
+    // which does not cause a NavigationHandle to be created because it does not
+    // go through DidStartProvisionalLoad.
+    bool is_renderer_initiated = true;
+    int pending_nav_entry_id = 0;
+    NavigationEntryImpl* pending_entry =
+        NavigationEntryImpl::FromNavigationEntry(
+            frame_tree_node()->navigator()->GetController()->GetPendingEntry());
+    if (pending_entry && pending_entry->GetUniqueID() == params.nav_entry_id) {
+      pending_nav_entry_id = params.nav_entry_id;
+      is_renderer_initiated = pending_entry->is_renderer_initiated();
+    }
+
+    return NavigationHandleImpl::Create(
+        params.url, frame_tree_node_, is_renderer_initiated,
+        params.was_within_same_page, params.is_srcdoc, base::TimeTicks::Now(),
+        pending_nav_entry_id, false);  // started_from_context_menu
+  }
+
+  // Determine if the current NavigationHandle can be used.
+  if (navigation_handle_ && navigation_handle_->GetURL() == params.url) {
+    return std::move(navigation_handle_);
+  }
+
+  // If the URL does not match what the NavigationHandle expects, treat the
+  // commit as a new navigation. This can happen when loading a Data
+  // navigation with LoadDataWithBaseURL.
+  //
+  // TODO(csharrison): Data navigations loaded with LoadDataWithBaseURL get
+  // reset here, because the NavigationHandle tracks the URL but the params.url
+  // tracks the data. The trick of saving the old entry ids for these
+  // navigations should go away when this is properly handled.
+  // See crbug.com/588317.
+  int entry_id_for_data_nav = 0;
+  bool is_renderer_initiated = true;
+
+  // Make sure that the pending entry was really loaded via LoadDataWithBaseURL
+  // and that it matches this handle.  TODO(csharrison): The pending entry's
+  // base url should equal |params.base_url|. This is not the case for loads
+  // with invalid base urls.
+  if (navigation_handle_) {
+    NavigationEntryImpl* pending_entry =
+        NavigationEntryImpl::FromNavigationEntry(
+            frame_tree_node()->navigator()->GetController()->GetPendingEntry());
+    bool pending_entry_matches_handle =
+        pending_entry &&
+        pending_entry->GetUniqueID() ==
+            navigation_handle_->pending_nav_entry_id();
+    // TODO(csharrison): The pending entry's base url should equal
+    // |validated_params.base_url|. This is not the case for loads with invalid
+    // base urls.
+    if (navigation_handle_->GetURL() == params.base_url &&
+        pending_entry_matches_handle &&
+        !pending_entry->GetBaseURLForDataURL().is_empty()) {
+      entry_id_for_data_nav = navigation_handle_->pending_nav_entry_id();
+      is_renderer_initiated = pending_entry->is_renderer_initiated();
+    }
+
+    // Reset any existing NavigationHandle.
+    navigation_handle_.reset();
+  }
+
+  // There is no pending NavigationEntry in these cases, so pass 0 as the
+  // pending_nav_entry_id. If the previous handle was a prematurely aborted
+  // navigation loaded via LoadDataWithBaseURL, propagate the entry id.
+  return NavigationHandleImpl::Create(
+      params.url, frame_tree_node_, is_renderer_initiated,
+      params.was_within_same_page, params.is_srcdoc, base::TimeTicks::Now(),
+      entry_id_for_data_nav, false);  // started_from_context_menu
 }
 
 }  // namespace content

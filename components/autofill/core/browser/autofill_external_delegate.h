@@ -100,8 +100,12 @@ class AutofillExternalDelegate : public AutofillPopupDelegate {
   // this data.
   void FillAutofillFormData(int unique_id, bool is_preview);
 
-  // Handle applying any Autofill warnings to the Autofill popup.
-  void ApplyAutofillWarnings(std::vector<Suggestion>* suggestions);
+  // Will remove Autofill warnings from |suggestions| if there are also
+  // autocomplete entries in the vector. Note: at this point, it is assumed that
+  // if there are Autofill warnings, they will be at the head of the vector and
+  // any entry that is not an Autofill warning is considered an Autocomplete
+  // entry.
+  void PossiblyRemoveAutofillWarnings(std::vector<Suggestion>* suggestions);
 
   // Handle applying any Autofill option listings to the Autofill popup.
   // This function should only get called when there is at least one
@@ -132,7 +136,7 @@ class AutofillExternalDelegate : public AutofillPopupDelegate {
   gfx::RectF element_bounds_;
 
   // Does the popup include any Autofill profile or credit card suggestions?
-  bool has_suggestion_;
+  bool has_autofill_suggestions_;
 
   // Have we already shown Autofill suggestions for the field the user is
   // currently editing?  Used to keep track of state for metrics logging.

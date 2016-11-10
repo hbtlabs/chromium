@@ -541,7 +541,7 @@ void GLES2DecoderTestBase::ResetDecoder() {
           .Times(1)
           .RetiresOnSaturation();
     }
-    if (group_->feature_info()->IsES3Enabled()) {
+    if (group_->feature_info()->IsWebGL2OrES3Context()) {
       // fake default transform feedback.
       EXPECT_CALL(*gl_, DeleteTransformFeedbacks(1, _))
           .Times(1)
@@ -2065,6 +2065,11 @@ void GLES2DecoderTestBase::SetupInitStateManualExpectations(bool es3_capable) {
         .Times(1)
         .RetiresOnSaturation();
   }
+}
+
+void GLES2DecoderTestBase::SetupInitStateManualExpectationsForDoLineWidth(
+    GLfloat width) {
+  EXPECT_CALL(*gl_, LineWidth(width)).Times(1).RetiresOnSaturation();
 }
 
 GLES2DecoderWithShaderTestBase::MockCommandBufferEngine::

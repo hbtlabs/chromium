@@ -19,6 +19,7 @@
 #include "ash/common/system/tray/tray_item_more.h"
 #include "ash/common/system/tray/tray_item_view.h"
 #include "ash/common/system/tray/tray_popup_item_style.h"
+#include "ash/common/system/tray/tray_popup_utils.h"
 #include "ash/common/system/tray/tray_utils.h"
 #include "ash/common/system/tray_accessibility.h"
 #include "ash/common/wm_shell.h"
@@ -28,7 +29,7 @@
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
 #include "ui/accessibility/ax_enums.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/image/image.h"
@@ -57,11 +58,11 @@ class SelectableHoverHighlightView : public HoverHighlightView {
 
  protected:
   // Overridden from views::View.
-  void GetAccessibleState(ui::AXViewState* state) override {
-    HoverHighlightView::GetAccessibleState(state);
-    state->role = ui::AX_ROLE_CHECK_BOX;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    HoverHighlightView::GetAccessibleNodeData(node_data);
+    node_data->role = ui::AX_ROLE_CHECK_BOX;
     if (selected_)
-      state->AddStateFlag(ui::AX_STATE_CHECKED);
+      node_data->AddStateFlag(ui::AX_STATE_CHECKED);
   }
 
  private:
@@ -134,7 +135,7 @@ class IMEDetailedView : public ImeListView {
     ImeListView::Update(list, property_list, show_keyboard_toggle,
                         single_ime_behavior);
     if (!MaterialDesignController::IsSystemTrayMenuMaterial() &&
-        CanOpenWebUISettings(login_)) {
+        TrayPopupUtils::CanOpenWebUISettings(login_)) {
       AppendSettings();
     }
 

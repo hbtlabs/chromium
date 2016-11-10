@@ -11,6 +11,9 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
+#include "mojo/public/cpp/bindings/binding.h"
+#include "services/service_manager/public/cpp/interface_factory.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 #include "services/service_manager/public/cpp/service_test.h"
 #include "services/ui/public/cpp/tests/window_server_shelltest_base.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
@@ -379,11 +382,10 @@ class TestWindowTreeClient : public mojom::WindowTreeClient,
 
   void OnWindowSurfaceChanged(Id window_id,
                               const cc::SurfaceId& surface_id,
-                              const cc::SurfaceSequence& surface_sequence,
                               const gfx::Size& frame_size,
                               float device_scale_factor) override {
-    tracker_.OnWindowSurfaceChanged(window_id, surface_id, surface_sequence,
-                                    frame_size, device_scale_factor);
+    tracker_.OnWindowSurfaceChanged(window_id, surface_id, frame_size,
+                                    device_scale_factor);
   }
 
   void OnDragEnter(uint32_t window,
@@ -2168,6 +2170,39 @@ TEST_F(WindowTreeClientTest, SurfaceIdPropagation) {
   // Verify that the submitted frame is for |window_2_101|.
   EXPECT_EQ(window_2_101_in_ws1,
             changes1()->back().surface_id.frame_sink_id().client_id());
+}
+
+// Verifies when an unknown window with a known child is added to a hierarchy
+// the known child is identified in the WindowData.
+TEST_F(WindowTreeClientTest, AddUnknownWindowKnownParent) {
+  const Id window_1_100 = wt_client1()->NewWindow(100);
+  ASSERT_TRUE(window_1_100);
+  ASSERT_TRUE(wt_client1()->AddWindow(root_window_id(), window_1_100));
+
+  // Establish the second client at 1,100.
+  ASSERT_NO_FATAL_FAILURE(EstablishSecondClientWithRoot(window_1_100));
+  const Id window_2_1 = wt_client2()->NewWindow(1000);
+  const Id window_2_2 = wt_client2()->NewWindow(2000);
+  // Add 2_1 to the root, remove 2_1, add 2_1 to 2_2 and then 2_2 to the parent.
+  ASSERT_TRUE(
+      wt_client2()->AddWindow(wt_client2()->root_window_id(), window_2_1));
+  ASSERT_TRUE(wt_client2()->RemoveWindowFromParent(window_2_1));
+  ASSERT_TRUE(wt_client2()->AddWindow(window_2_2, window_2_1));
+  wt_client1()->WaitForChangeCount(2);
+  changes1()->clear();
+  ASSERT_TRUE(
+      wt_client2()->AddWindow(wt_client2()->root_window_id(), window_2_2));
+  wt_client1()->WaitForChangeCount(1);
+  const Id window_2_1_in_wm = BuildWindowId(client_id_2(), 1);
+  const Id window_2_2_in_wm = BuildWindowId(client_id_2(), 2);
+  EXPECT_EQ("HierarchyChanged window=" + IdToString(window_2_2_in_wm) +
+                " old_parent=null new_parent=" + IdToString(window_1_100),
+            SingleChangeToDescription(*changes1()));
+  EXPECT_EQ("[window=" + IdToString(window_2_2_in_wm) + " parent=" +
+                IdToString(window_1_100) + "],[window=" +
+                IdToString(window_2_1_in_wm) + " parent=" +
+                IdToString(window_2_2_in_wm) + "]",
+            ChangeWindowDescription(*changes1()));
 }
 
 // TODO(sky): need to better track changes to initial client. For example,

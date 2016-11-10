@@ -5,10 +5,10 @@
 #include "content/browser/memory/memory_coordinator.h"
 
 #include "base/memory/memory_coordinator_client_registry.h"
+#include "base/metrics/histogram_macros.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_client.h"
-#include "content/public/common/content_features.h"
 
 namespace content {
 
@@ -77,8 +77,8 @@ size_t MemoryCoordinator::NumChildrenForTesting() {
   return children_.size();
 }
 
-bool MemoryCoordinator::SetMemoryState(int render_process_id,
-                                       mojom::MemoryState memory_state) {
+bool MemoryCoordinator::SetChildMemoryState(int render_process_id,
+                                            mojom::MemoryState memory_state) {
   // Can't set an invalid memory state.
   if (memory_state == mojom::MemoryState::UNKNOWN)
     return false;
@@ -112,7 +112,7 @@ bool MemoryCoordinator::SetMemoryState(int render_process_id,
   return true;
 }
 
-mojom::MemoryState MemoryCoordinator::GetMemoryState(
+mojom::MemoryState MemoryCoordinator::GetChildMemoryState(
     int render_process_id) const {
   auto iter = children_.find(render_process_id);
   if (iter == children_.end())
@@ -120,12 +120,23 @@ mojom::MemoryState MemoryCoordinator::GetMemoryState(
   return iter->second.memory_state;
 }
 
-void MemoryCoordinator::EnableFeaturesForTesting() {
-  base::FeatureList::ClearInstanceForTesting();
-  std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-  feature_list->InitializeFromCommandLine(features::kMemoryCoordinator.name,
-                                          "");
-  base::FeatureList::SetInstance(std::move(feature_list));
+void MemoryCoordinator::RecordMemoryPressure(
+    base::MemoryPressureMonitor::MemoryPressureLevel level) {
+  int state = static_cast<int>(GetCurrentMemoryState());
+  switch (level) {
+    case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE:
+      UMA_HISTOGRAM_ENUMERATION(
+          "Memory.Coordinator.StateOnModerateNotificationReceived",
+          state, base::kMemoryStateMax);
+      break;
+    case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL:
+      UMA_HISTOGRAM_ENUMERATION(
+          "Memory.Coordinator.StateOnCriticalNotificationReceived",
+          state, base::kMemoryStateMax);
+      break;
+    case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE:
+      NOTREACHED();
+  }
 }
 
 base::MemoryState MemoryCoordinator::GetCurrentMemoryState() const {

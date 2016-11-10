@@ -103,8 +103,8 @@ class MojoAsyncResourceHandler::WriterIOBuffer final
 MojoAsyncResourceHandler::MojoAsyncResourceHandler(
     net::URLRequest* request,
     ResourceDispatcherHostImpl* rdh,
-    mojo::InterfaceRequest<mojom::URLLoader> mojo_request,
-    mojom::URLLoaderClientPtr url_loader_client)
+    mojom::URLLoaderAssociatedRequest mojo_request,
+    mojom::URLLoaderClientAssociatedPtr url_loader_client)
     : ResourceHandler(request),
       rdh_(rdh),
       binding_(this, std::move(mojo_request)),
@@ -230,7 +230,13 @@ bool MojoAsyncResourceHandler::OnReadCompleted(int bytes_read, bool* defer) {
 }
 
 void MojoAsyncResourceHandler::OnDataDownloaded(int bytes_downloaded) {
-  // Not implemented.
+  int64_t total_received_bytes = request()->GetTotalReceivedBytes();
+  int64_t bytes_to_report =
+      total_received_bytes - reported_total_received_bytes_;
+  reported_total_received_bytes_ = total_received_bytes;
+  DCHECK_LE(0, bytes_to_report);
+
+  url_loader_client_->OnDataDownloaded(bytes_downloaded, bytes_to_report);
 }
 
 void MojoAsyncResourceHandler::FollowRedirect() {
@@ -347,28 +353,28 @@ bool MojoAsyncResourceHandler::AllocateWriterIOBuffer(
 void MojoAsyncResourceHandler::Resume() {
   if (!did_defer_)
     return;
-  bool defer = false;
+  did_defer_ = false;
+
   if (is_using_io_buffer_not_from_writer_) {
     // |buffer_| is set to a net::IOBufferWithSize. Write the buffer contents
     // to the data pipe.
     DCHECK_GT(buffer_bytes_read_, 0u);
-    if (!CopyReadDataToDataPipe(&defer)) {
+    if (!CopyReadDataToDataPipe(&did_defer_)) {
       controller()->CancelWithError(net::ERR_FAILED);
       return;
     }
   } else {
     // Allocate a buffer for the next OnWillRead call here.
-    if (!AllocateWriterIOBuffer(&buffer_, &defer)) {
+    if (!AllocateWriterIOBuffer(&buffer_, &did_defer_)) {
       controller()->CancelWithError(net::ERR_FAILED);
       return;
     }
   }
 
-  if (defer) {
+  if (did_defer_) {
     // Continue waiting.
     return;
   }
-  did_defer_ = false;
   request()->LogUnblocked();
   controller()->Resume();
 }

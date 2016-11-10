@@ -870,14 +870,7 @@ const ui::NativeTheme* View::GetNativeTheme() const {
   if (widget)
     return widget->GetNativeTheme();
 
-#if defined(OS_WIN)
-  // On Windows, ui::NativeTheme::GetInstanceForWeb() returns NativeThemeWinAura
-  // because that's what the renderer wants, but Views should default to
-  // NativeThemeWin. TODO(estade): clean this up, see http://crbug.com/558029
-  return ui::NativeThemeWin::instance();
-#else
-  return ui::NativeTheme::GetInstanceForWeb();
-#endif
+  return ui::NativeTheme::GetInstanceForNativeUi();
 }
 
 // RTL painting ----------------------------------------------------------------
@@ -1322,6 +1315,10 @@ bool View::ExceededDragThreshold(const gfx::Vector2d& delta) {
 }
 
 // Accessibility----------------------------------------------------------------
+
+bool View::HandleAccessibleAction(const ui::AXActionData& action_data) {
+  return false;
+}
 
 gfx::NativeViewAccessible View::GetNativeViewAccessible() {
   if (!native_view_accessibility_)

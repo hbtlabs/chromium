@@ -23,9 +23,7 @@ class WebServiceWorkerRegistrationProxy;
 namespace content {
 
 class ServiceWorkerRegistrationHandleReference;
-class ThreadSafeSender;
 class WebServiceWorkerImpl;
-struct ServiceWorkerObjectInfo;
 
 // Each instance corresponds to one ServiceWorkerRegistration object in JS
 // context, and is held by ServiceWorkerRegistration object in Blink's C++ layer
@@ -62,6 +60,11 @@ class CONTENT_EXPORT WebServiceWorkerRegistrationImpl
   void getNavigationPreloadState(
       blink::WebServiceWorkerProvider* provider,
       std::unique_ptr<WebGetNavigationPreloadStateCallbacks> callbacks)
+      override;
+  void setNavigationPreloadHeader(
+      const blink::WebString& value,
+      blink::WebServiceWorkerProvider* provider,
+      std::unique_ptr<WebSetNavigationPreloadHeaderCallbacks> callbacks)
       override;
 
   int64_t registration_id() const;

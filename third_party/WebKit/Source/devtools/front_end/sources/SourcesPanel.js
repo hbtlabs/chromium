@@ -41,8 +41,6 @@ WebInspector.SourcesPanel = class extends WebInspector.Panel {
     this._workspace = WebInspector.workspace;
     this._networkMapping = WebInspector.networkMapping;
 
-    this._runSnippetAction =
-        /** @type {!WebInspector.Action }*/ (WebInspector.actionRegistry.action('debugger.run-snippet'));
     this._togglePauseAction =
         /** @type {!WebInspector.Action }*/ (WebInspector.actionRegistry.action('debugger.toggle-pause'));
     this._stepOverAction =
@@ -84,13 +82,11 @@ WebInspector.SourcesPanel = class extends WebInspector.Panel {
 
     this._sourcesView = new WebInspector.SourcesView();
     this._sourcesView.addEventListener(WebInspector.SourcesView.Events.EditorSelected, this._editorSelected.bind(this));
-    this._sourcesView.addEventListener(WebInspector.SourcesView.Events.EditorClosed, this._editorClosed.bind(this));
     this._sourcesView.registerShortcuts(this.registerShortcuts.bind(this));
 
     this._toggleNavigatorSidebarButton = this.editorView.createShowHideSidebarButton('navigator');
     this._toggleDebuggerSidebarButton = this._splitWidget.createShowHideSidebarButton('debugger');
     this.editorView.setMainWidget(this._sourcesView);
-    this._editorChanged(this._sourcesView.currentUISourceCode());
 
     this._threadsSidebarPane = null;
     this._watchSidebarPane = /** @type {!WebInspector.View} */ (WebInspector.viewManager.view('sources.watch'));
@@ -122,6 +118,8 @@ WebInspector.SourcesPanel = class extends WebInspector.Panel {
         WebInspector.DebuggerModel, WebInspector.DebuggerModel.Events.DebuggerResumed, this._debuggerResumed, this);
     WebInspector.targetManager.addModelListener(
         WebInspector.DebuggerModel, WebInspector.DebuggerModel.Events.GlobalObjectCleared, this._debuggerReset, this);
+    WebInspector.targetManager.addModelListener(
+        WebInspector.SubTargetsManager, WebInspector.SubTargetsManager.Events.PendingTargetAdded, this._pendingTargetAdded, this);
     new WebInspector.WorkspaceMappingTip(this, this._workspace);
     WebInspector.extensionServer.addEventListener(
         WebInspector.ExtensionServer.Events.SidebarPaneAdded, this._extensionSidebarPaneAdded, this);
@@ -165,14 +163,7 @@ WebInspector.SourcesPanel = class extends WebInspector.Panel {
    * @param {!WebInspector.Target} target
    */
   targetAdded(target) {
-    var hasThreads = WebInspector.targetManager.targets(WebInspector.Target.Capability.JS).length > 1;
-    if (hasThreads && !this._threadsSidebarPane) {
-      this._threadsSidebarPane = /** @type {!WebInspector.View} */ (WebInspector.viewManager.view('sources.threads'));
-      if (this._sidebarPaneStack) {
-        this._sidebarPaneStack.showView(
-            this._threadsSidebarPane, this._splitWidget.isVertical() ? this._watchSidebarPane : this._callstackPane);
-      }
-    }
+    this._showThreadsIfNeeded();
   }
 
   /**
@@ -181,6 +172,19 @@ WebInspector.SourcesPanel = class extends WebInspector.Panel {
    */
   targetRemoved(target) {
   }
+
+  _pendingTargetAdded() {
+    this._showThreadsIfNeeded();
+  }
+
+  _showThreadsIfNeeded() {
+    if (WebInspector.ThreadsSidebarPane.shouldBeShown() && !this._threadsSidebarPane) {
+      this._threadsSidebarPane = /** @type {!WebInspector.View} */ (WebInspector.viewManager.view('sources.threads'));
+      if (this._sidebarPaneStack)
+        this._sidebarPaneStack.showView(this._threadsSidebarPane, this._splitWidget.isVertical() ? this._watchSidebarPane : this._callstackPane);
+    }
+  }
+
 
   /**
    * @param {?WebInspector.Target} target
@@ -555,26 +559,8 @@ WebInspector.SourcesPanel = class extends WebInspector.Panel {
    */
   _editorSelected(event) {
     var uiSourceCode = /** @type {!WebInspector.UISourceCode} */ (event.data);
-    this._editorChanged(uiSourceCode);
     if (this.editorView.mainWidget() && WebInspector.moduleSetting('autoRevealInNavigator').get())
       this._revealInNavigator(uiSourceCode, true);
-  }
-
-  /**
-   * @param {!WebInspector.Event} event
-   */
-  _editorClosed(event) {
-    var wasSelected = /** @type {boolean} */ (event.data.wasSelected);
-    if (wasSelected)
-      this._editorChanged(null);
-  }
-
-  /**
-   * @param {?WebInspector.UISourceCode} uiSourceCode
-   */
-  _editorChanged(uiSourceCode) {
-    var isSnippet = uiSourceCode && uiSourceCode.project().type() === WebInspector.projectTypes.Snippets;
-    this._runSnippetButton.setVisible(isSnippet);
   }
 
   /**
@@ -699,12 +685,8 @@ WebInspector.SourcesPanel = class extends WebInspector.Panel {
   _createDebugToolbar() {
     var debugToolbar = new WebInspector.Toolbar('scripts-debug-toolbar');
 
-    this._runSnippetButton = WebInspector.Toolbar.createActionButton(this._runSnippetAction);
-    debugToolbar.appendToolbarItem(this._runSnippetButton);
-    this._runSnippetButton.setVisible(false);
-
     var longResumeButton = new WebInspector.ToolbarButton(
-        WebInspector.UIString('Resume with all pauses blocked for 500 ms'), 'play-toolbar-item');
+        WebInspector.UIString('Resume with all pauses blocked for 500 ms'), 'largeicon-play');
     longResumeButton.addEventListener('click', this._longResume.bind(this), this);
     debugToolbar.appendToolbarItem(
         WebInspector.Toolbar.createActionButton(this._togglePauseAction, [longResumeButton], []));
@@ -715,7 +697,7 @@ WebInspector.SourcesPanel = class extends WebInspector.Panel {
     debugToolbar.appendSeparator();
     debugToolbar.appendToolbarItem(WebInspector.Toolbar.createActionButton(this._toggleBreakpointsActiveAction));
 
-    this._pauseOnExceptionButton = new WebInspector.ToolbarToggle('', 'pause-on-exceptions-toolbar-item');
+    this._pauseOnExceptionButton = new WebInspector.ToolbarToggle('', 'largeicon-pause-on-exceptions');
     this._pauseOnExceptionButton.addEventListener('click', this._togglePauseOnExceptions, this);
     debugToolbar.appendToolbarItem(this._pauseOnExceptionButton);
 
@@ -953,7 +935,7 @@ WebInspector.SourcesPanel = class extends WebInspector.Panel {
     currentExecutionContext.globalObject('', false, didGetGlobalObject);
     /**
      * @param {?WebInspector.RemoteObject} global
-     * @param {!RuntimeAgent.ExceptionDetails=} exceptionDetails
+     * @param {!Protocol.Runtime.ExceptionDetails=} exceptionDetails
      */
     function didGetGlobalObject(global, exceptionDetails) {
       /**

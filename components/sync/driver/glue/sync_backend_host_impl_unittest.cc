@@ -142,11 +142,10 @@ class FakeSyncManagerFactory : public SyncManagerFactory {
 class BackendSyncClient : public FakeSyncClient {
  public:
   scoped_refptr<ModelSafeWorker> CreateModelWorkerForGroup(
-      ModelSafeGroup group,
-      WorkerLoopDestructionObserver* observer) override {
+      ModelSafeGroup group) override {
     switch (group) {
       case GROUP_PASSIVE:
-        return new PassiveModelWorker(observer);
+        return new PassiveModelWorker();
       default:
         return nullptr;
     }
@@ -155,7 +154,8 @@ class BackendSyncClient : public FakeSyncClient {
 
 class SyncBackendHostTest : public testing::Test {
  protected:
-  SyncBackendHostTest() : fake_manager_(nullptr) {}
+  SyncBackendHostTest()
+      : sync_thread_("SyncThreadForTest"), fake_manager_(nullptr) {}
 
   ~SyncBackendHostTest() override {}
 
@@ -165,6 +165,7 @@ class SyncBackendHostTest : public testing::Test {
     SyncPrefs::RegisterProfilePrefs(pref_service_.registry());
 
     sync_prefs_ = base::MakeUnique<SyncPrefs>(&pref_service_);
+    sync_thread_.StartAndWaitForTesting();
     backend_ = base::MakeUnique<SyncBackendHostImpl>(
         "dummyDebugName", &sync_client_, base::ThreadTaskRunnerHandle::Get(),
         nullptr, sync_prefs_->AsWeakPtr(),
@@ -212,11 +213,9 @@ class SyncBackendHostTest : public testing::Test {
                        base::Unretained(network_resources_.get()), nullptr,
                        base::Bind(&EmptyNetworkTimeUpdate));
     backend_->Initialize(
-        &mock_frontend_, std::unique_ptr<base::Thread>(),
-        base::ThreadTaskRunnerHandle::Get(),
-        base::ThreadTaskRunnerHandle::Get(), WeakHandle<JsEventHandler>(),
-        GURL(std::string()), std::string(), credentials_, true,
-        std::move(fake_manager_factory_),
+        &mock_frontend_, &sync_thread_, WeakHandle<JsEventHandler>(),
+        GURL(std::string()), std::string(), credentials_, true, false,
+        base::FilePath(), std::move(fake_manager_factory_),
         MakeWeakHandle(test_unrecoverable_error_handler_.GetWeakPtr()),
         base::Closure(), http_post_provider_factory_getter,
         std::move(saved_nigori_state_));
@@ -268,6 +267,7 @@ class SyncBackendHostTest : public testing::Test {
   base::MessageLoop message_loop_;
   base::ScopedTempDir temp_dir_;
   sync_preferences::TestingPrefServiceSyncable pref_service_;
+  base::Thread sync_thread_;
   StrictMock<MockSyncFrontend> mock_frontend_;
   SyncCredentials credentials_;
   BackendSyncClient sync_client_;

@@ -32,8 +32,8 @@
 #define V8AbstractEventListener_h
 
 #include "bindings/core/v8/DOMWrapperWorld.h"
-#include "bindings/core/v8/ScopedPersistent.h"
 #include "bindings/core/v8/ScriptWrappable.h"
+#include "bindings/core/v8/TraceWrapperV8Reference.h"
 #include "core/CoreExport.h"
 #include "core/events/EventListener.h"
 #include "platform/heap/SelfKeepAlive.h"
@@ -141,7 +141,7 @@ class CORE_EXPORT V8AbstractEventListener : public EventListener,
   static void wrapperCleared(
       const v8::WeakCallbackInfo<V8AbstractEventListener>&);
 
-  ScopedPersistent<v8::Object> m_listener;
+  TraceWrapperV8Reference<v8::Object> m_listener;
 
   // Indicates if this is an HTML type listener.
   bool m_isAttribute;

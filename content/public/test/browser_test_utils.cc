@@ -60,8 +60,9 @@
 #include "content/test/accessibility_browser_test_utils.h"
 #include "net/base/filename_util.h"
 #include "net/cookies/cookie_store.h"
-#include "net/filter/filter.h"
 #include "net/filter/gzip_header.h"
+#include "net/filter/gzip_source_stream.h"
+#include "net/filter/mock_source_stream.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -91,49 +92,6 @@
 
 namespace content {
 namespace {
-
-class DOMOperationObserver : public NotificationObserver,
-                             public WebContentsObserver {
- public:
-  explicit DOMOperationObserver(RenderFrameHost* rfh)
-      : WebContentsObserver(WebContents::FromRenderFrameHost(rfh)),
-        did_respond_(false) {
-    registrar_.Add(this, NOTIFICATION_DOM_OPERATION_RESPONSE,
-                   Source<WebContents>(web_contents()));
-    message_loop_runner_ = new MessageLoopRunner;
-  }
-
-  void Observe(int type,
-               const NotificationSource& source,
-               const NotificationDetails& details) override {
-    DCHECK(type == NOTIFICATION_DOM_OPERATION_RESPONSE);
-    Details<std::string> dom_op_result(details);
-    if (!did_respond_) {
-      response_ = *dom_op_result.ptr();
-      did_respond_ = true;
-      message_loop_runner_->Quit();
-    }
-  }
-
-  // Overridden from WebContentsObserver:
-  void RenderProcessGone(base::TerminationStatus status) override {
-    message_loop_runner_->Quit();
-  }
-
-  bool WaitAndGetResponse(std::string* response) WARN_UNUSED_RESULT {
-    message_loop_runner_->Run();
-    *response = response_;
-    return did_respond_;
-  }
-
- private:
-  NotificationRegistrar registrar_;
-  std::string response_;
-  bool did_respond_;
-  scoped_refptr<MessageLoopRunner> message_loop_runner_;
-
-  DISALLOW_COPY_AND_ASSIGN(DOMOperationObserver);
-};
 
 class InterstitialObserver : public content::WebContentsObserver {
  public:
@@ -173,12 +131,14 @@ bool ExecuteScriptHelper(RenderFrameHost* render_frame_host,
   //                automation id.
   std::string script =
       "window.domAutomationController.setAutomationId(0);" + original_script;
-  DOMOperationObserver dom_op_observer(render_frame_host);
+  // TODO(lukasza): Only get messages from the specific |render_frame_host|.
+  DOMMessageQueue dom_message_queue(
+      WebContents::FromRenderFrameHost(render_frame_host));
   render_frame_host->ExecuteJavaScriptWithUserGestureForTests(
       base::UTF8ToUTF16(script));
   std::string json;
-  if (!dom_op_observer.WaitAndGetResponse(&json)) {
-    DLOG(ERROR) << "Cannot communicate with DOMOperationObserver.";
+  if (!dom_message_queue.WaitForMessage(&json)) {
+    DLOG(ERROR) << "Cannot communicate with DOMMessageQueue.";
     return false;
   }
 
@@ -207,15 +167,19 @@ bool ExecuteScriptInIsolatedWorldHelper(RenderFrameHost* render_frame_host,
                                         const int world_id,
                                         const std::string& original_script,
                                         std::unique_ptr<base::Value>* result) {
+  // TODO(jcampan): we should make the domAutomationController not require an
+  //                automation id.
   std::string script =
       "window.domAutomationController.setAutomationId(0);" + original_script;
-  DOMOperationObserver dom_op_observer(render_frame_host);
+  // TODO(lukasza): Only get messages from the specific |render_frame_host|.
+  DOMMessageQueue dom_message_queue(
+      WebContents::FromRenderFrameHost(render_frame_host));
   render_frame_host->ExecuteJavaScriptInIsolatedWorld(
       base::UTF8ToUTF16(script),
       content::RenderFrameHost::JavaScriptResultCallback(), world_id);
   std::string json;
-  if (!dom_op_observer.WaitAndGetResponse(&json)) {
-    DLOG(ERROR) << "Cannot communicate with DOMOperationObserver.";
+  if (!dom_message_queue.WaitForMessage(&json)) {
+    DLOG(ERROR) << "Cannot communicate with DOMMessageQueue.";
     return false;
   }
 
@@ -402,21 +366,25 @@ bool HasGzipHeader(const base::RefCountedMemory& maybe_gzipped) {
 
 void AppendGzippedResource(const base::RefCountedMemory& encoded,
                            std::string* to_append) {
-  std::unique_ptr<net::Filter> filter = net::Filter::GZipFactory();
-  memcpy(filter->stream_buffer()->data(), encoded.front_as<char>(),
-         encoded.size());
-  filter->FlushStreamBuffer(encoded.size());
-
-  const int kBufferSize = 4096;
-  char dest_buffer[kBufferSize];
-
-  net::Filter::FilterStatus status;
-  do {
-    int read_size = kBufferSize;
-    status = filter->ReadData(dest_buffer, &read_size);
-    ASSERT_NE(status, net::Filter::FILTER_ERROR);
-    to_append->append(dest_buffer, read_size);
-  } while (status != net::Filter::FILTER_DONE);
+  std::unique_ptr<net::MockSourceStream> source_stream(
+      new net::MockSourceStream());
+  source_stream->AddReadResult(encoded.front_as<char>(), encoded.size(),
+                               net::OK, net::MockSourceStream::SYNC);
+  // Add an EOF.
+  source_stream->AddReadResult(encoded.front_as<char>() + encoded.size(), 0,
+                               net::OK, net::MockSourceStream::SYNC);
+  std::unique_ptr<net::GzipSourceStream> filter = net::GzipSourceStream::Create(
+      std::move(source_stream), net::SourceStream::TYPE_GZIP);
+  scoped_refptr<net::IOBufferWithSize> dest_buffer =
+      new net::IOBufferWithSize(4096);
+  net::CompletionCallback callback;
+  while (true) {
+    int rv = filter->Read(dest_buffer.get(), dest_buffer->size(), callback);
+    ASSERT_LE(0, rv);
+    if (rv <= 0)
+      break;
+    to_append->append(dest_buffer->data(), rv);
+  }
 }
 
 // Queries for video input devices on the current system using the getSources
@@ -1184,7 +1152,7 @@ namespace {
 
 bool ContainsSurfaceId(cc::SurfaceId container_surface_id,
                        RenderWidgetHostViewChildFrame* target_view) {
-  if (container_surface_id.is_null())
+  if (!container_surface_id.is_valid())
     return false;
   for (cc::SurfaceId id :
        GetSurfaceManager()->GetSurfaceForId(container_surface_id)
@@ -1312,6 +1280,12 @@ DOMMessageQueue::DOMMessageQueue() {
                  NotificationService::AllSources());
 }
 
+DOMMessageQueue::DOMMessageQueue(WebContents* web_contents)
+    : WebContentsObserver(web_contents) {
+  registrar_.Add(this, NOTIFICATION_DOM_OPERATION_RESPONSE,
+                 Source<WebContents>(web_contents));
+}
+
 DOMMessageQueue::~DOMMessageQueue() {}
 
 void DOMMessageQueue::Observe(int type,
@@ -1321,6 +1295,17 @@ void DOMMessageQueue::Observe(int type,
   message_queue_.push(*dom_op_result.ptr());
   if (message_loop_runner_.get())
     message_loop_runner_->Quit();
+}
+
+void DOMMessageQueue::RenderProcessGone(base::TerminationStatus status) {
+  switch (status) {
+    case base::TERMINATION_STATUS_NORMAL_TERMINATION:
+    case base::TERMINATION_STATUS_STILL_RUNNING:
+      break;
+    default:
+      message_loop_runner_->Quit();
+      break;
+  }
 }
 
 void DOMMessageQueue::ClearQueue() {
@@ -1499,17 +1484,20 @@ InputMsgWatcher::InputMsgWatcher(RenderWidgetHost* render_widget_host,
                                  blink::WebInputEvent::Type type)
     : BrowserMessageFilter(InputMsgStart),
       wait_for_type_(type),
-      ack_result_(INPUT_EVENT_ACK_STATE_UNKNOWN) {
+      ack_result_(INPUT_EVENT_ACK_STATE_UNKNOWN),
+      ack_source_(static_cast<uint32_t>(InputEventAckSource::UNKNOWN)) {
   render_widget_host->GetProcess()->AddFilter(this);
 }
 
 InputMsgWatcher::~InputMsgWatcher() {}
 
 void InputMsgWatcher::ReceivedAck(blink::WebInputEvent::Type ack_type,
-                                  uint32_t ack_state) {
+                                  uint32_t ack_state,
+                                  uint32_t ack_source) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (wait_for_type_ == ack_type) {
     ack_result_ = ack_state;
+    ack_source_ = ack_source;
     if (!quit_.is_null())
       quit_.Run();
   }
@@ -1522,9 +1510,11 @@ bool InputMsgWatcher::OnMessageReceived(const IPC::Message& message) {
     InputHostMsg_HandleInputEvent_ACK::Read(&message, &params);
     blink::WebInputEvent::Type ack_type = std::get<0>(params).type;
     InputEventAckState ack_state = std::get<0>(params).state;
+    InputEventAckSource ack_source = std::get<0>(params).source;
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&InputMsgWatcher::ReceivedAck, this, ack_type, ack_state));
+        base::Bind(&InputMsgWatcher::ReceivedAck, this, ack_type, ack_state,
+                   static_cast<uint32_t>(ack_source)));
   }
   return false;
 }

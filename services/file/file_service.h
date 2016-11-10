@@ -18,8 +18,7 @@ namespace file {
 
 std::unique_ptr<service_manager::Service> CreateFileService(
     scoped_refptr<base::SingleThreadTaskRunner> file_service_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> leveldb_service_runner,
-    const base::Closure& quit_closure);
+    scoped_refptr<base::SingleThreadTaskRunner> leveldb_service_runner);
 
 class FileService
     : public service_manager::Service,
@@ -33,7 +32,7 @@ class FileService
 
  private:
   // |Service| override:
-  void OnStart(const service_manager::ServiceInfo& info) override;
+  void OnStart(service_manager::ServiceContext* context) override;
   bool OnConnect(const service_manager::ServiceInfo& remote_info,
                  service_manager::InterfaceRegistry* registry) override;
 

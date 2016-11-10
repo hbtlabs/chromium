@@ -335,6 +335,10 @@ void WebMediaPlayerAndroid::requestRemotePlaybackControl() {
   player_manager_->RequestRemotePlaybackControl(player_id_);
 }
 
+void WebMediaPlayerAndroid::requestRemotePlaybackStop() {
+  player_manager_->RequestRemotePlaybackStop(player_id_);
+}
+
 void WebMediaPlayerAndroid::seek(double seconds) {
   DCHECK(main_thread_checker_.CalledOnValidThread());
   DVLOG(1) << __FUNCTION__ << "(" << seconds << ")";
@@ -876,6 +880,11 @@ void WebMediaPlayerAndroid::OnCancelledRemotePlaybackRequest() {
   client_->cancelledRemotePlaybackRequest();
 }
 
+void WebMediaPlayerAndroid::OnRemotePlaybackStarted() {
+  DCHECK(main_thread_checker_.CalledOnValidThread());
+  client_->remotePlaybackStarted();
+}
+
 void WebMediaPlayerAndroid::OnDidExitFullscreen() {
   SetNeedsEstablishPeer(true);
   // We had the fullscreen surface connected to Android MediaPlayer,
@@ -1218,11 +1227,11 @@ void WebMediaPlayerAndroid::OnShown() {
     play();
 }
 
-void WebMediaPlayerAndroid::OnSuspendRequested(bool must_suspend) {
+bool WebMediaPlayerAndroid::OnSuspendRequested(bool must_suspend) {
   if (!must_suspend &&
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableMediaSuspend)) {
-    return;
+    return true;
   }
 
   // If we're idle or playing video, pause and release resources; audio only
@@ -1231,6 +1240,8 @@ void WebMediaPlayerAndroid::OnSuspendRequested(bool must_suspend) {
       (hasVideo() && !IsBackgroundVideoCandidate())) {
     SuspendAndReleaseResources();
   }
+
+  return true;
 }
 
 void WebMediaPlayerAndroid::OnPlay() {

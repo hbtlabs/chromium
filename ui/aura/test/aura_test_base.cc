@@ -7,6 +7,7 @@
 #include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/mus/property_converter.h"
 #include "ui/aura/mus/window_tree_client.h"
+#include "ui/aura/mus/window_tree_host_mus.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
 #include "ui/base/ime/input_method_initializer.h"
@@ -109,8 +110,10 @@ void AuraTestBase::SetUp() {
       ui::InitializeContextFactoryForTests(enable_pixel_output);
 
   helper_.reset(new AuraTestHelper(&message_loop_));
-  if (use_mus_)
-    helper_->EnableMus(window_tree_client_delegate_, window_manager_delegate_);
+  if (use_mus_) {
+    helper_->EnableMusWithTestWindowTree(window_tree_client_delegate_,
+                                         window_manager_delegate_);
+  }
   helper_->SetUp(context_factory);
 }
 
@@ -140,14 +143,14 @@ Window* AuraTestBase::CreateNormalWindow(int id, Window* parent,
   return window;
 }
 
-void AuraTestBase::EnableMus() {
+void AuraTestBase::EnableMusWithTestWindowTree() {
   DCHECK(!setup_called_);
   use_mus_ = true;
 }
 
 void AuraTestBase::ConfigureBackend(BackendType type) {
   if (type == BackendType::MUS)
-    EnableMus();
+    EnableMusWithTestWindowTree();
 }
 
 void AuraTestBase::RunAllPendingInMessageLoop() {
@@ -174,7 +177,8 @@ void AuraTestBase::SetPropertyConverter(
   property_converter_ = std::move(helper);
 }
 
-void AuraTestBase::OnEmbed(Window* root) {}
+void AuraTestBase::OnEmbed(
+    std::unique_ptr<WindowTreeHostMus> window_tree_host) {}
 
 void AuraTestBase::OnUnembed(Window* root) {}
 
@@ -207,8 +211,12 @@ void AuraTestBase::OnWmClientJankinessChanged(
     const std::set<Window*>& client_windows,
     bool janky) {}
 
-void AuraTestBase::OnWmNewDisplay(Window* window,
-                                  const display::Display& display) {}
+void AuraTestBase::OnWmNewDisplay(
+    std::unique_ptr<WindowTreeHostMus> window_tree_host,
+    const display::Display& display) {
+  // Take ownership of the WindowTreeHost.
+  window_tree_host_mus_ = std::move(window_tree_host);
+}
 
 void AuraTestBase::OnWmDisplayRemoved(Window* window) {}
 
@@ -226,10 +234,6 @@ void AuraTestBase::OnWmPerformMoveLoop(
     const base::Callback<void(bool)>& on_done) {}
 
 void AuraTestBase::OnWmCancelMoveLoop(Window* window) {}
-
-client::FocusClient* AuraTestBase::GetFocusClient() {
-  return helper_->focus_client();
-}
 
 client::CaptureClient* AuraTestBase::GetCaptureClient() {
   return helper_->capture_client();

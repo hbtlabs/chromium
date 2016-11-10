@@ -15,6 +15,7 @@
 #include "cc/test/remote_client_layer_factory.h"
 #include "cc/trees/layer_tree_host_client.h"
 #include "cc/trees/layer_tree_host_in_process.h"
+#include "cc/trees/mutator_host.h"
 
 namespace cc {
 
@@ -62,9 +63,7 @@ class LayerTreeHostRemoteForTesting::LayerTreeHostInProcessClient
 
   void WillBeginMainFrame() override {}
   void BeginMainFrame(const BeginFrameArgs& args) override {
-    // Send any scroll/scale updates first.
-    layer_tree_host_remote_->ApplyUpdatesFromInProcessHost();
-    layer_tree_host_remote_->BeginMainFrame();
+    layer_tree_host_remote_->BeginRemoteMainFrame();
   }
   void BeginMainFrameNotExpectedSoon() override {}
   void DidBeginMainFrame() override {}
@@ -111,7 +110,7 @@ LayerTreeHostRemoteForTesting::CreateRemoteCompositorBridge(
 std::unique_ptr<LayerTreeHostRemoteForTesting>
 LayerTreeHostRemoteForTesting::Create(
     LayerTreeHostClient* client,
-    std::unique_ptr<AnimationHost> animation_host,
+    MutatorHost* mutator_host,
     LayerTreeSettings const* settings,
     TaskGraphRunner* task_graph_runner,
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
@@ -123,7 +122,7 @@ LayerTreeHostRemoteForTesting::Create(
   LayerTreeHostRemote::InitParams params;
   params.client = client;
   params.main_task_runner = main_task_runner;
-  params.animation_host = std::move(animation_host);
+  params.mutator_host = mutator_host;
   params.remote_compositor_bridge =
       CreateRemoteCompositorBridge(main_task_runner);
   params.engine_picture_cache =
@@ -144,6 +143,7 @@ LayerTreeHostRemoteForTesting::LayerTreeHostRemoteForTesting(InitParams* params)
           base::MakeUnique<LayerTreeHostInProcessClient>(this)) {}
 
 LayerTreeHostRemoteForTesting::~LayerTreeHostRemoteForTesting() {
+  animation_host_->SetMutatorHostClient(nullptr);
   compositor_state_deserializer_ = nullptr;
   layer_tree_host_in_process_ = nullptr;
 }
@@ -201,17 +201,15 @@ void LayerTreeHostRemoteForTesting::Initialize(
       static_cast<RemoteCompositorBridgeImpl*>(remote_compositor_bridge());
   remote_compositor_bridge_impl->SetRemoteHost(this);
 
+  animation_host_ = AnimationHost::CreateForTesting(ThreadInstance::MAIN);
   layer_tree_host_in_process_ = CreateLayerTreeHostInProcess(
       layer_tree_host_in_process_client_.get(), task_graph_runner,
-      GetSettings(), main_task_runner, impl_task_runner);
+      GetSettings(), main_task_runner, impl_task_runner, animation_host_.get());
 
   compositor_state_deserializer_ =
       base::MakeUnique<CompositorStateDeserializer>(
           layer_tree_host_in_process_.get(),
-          image_serialization_processor_->CreateClientPictureCache(),
-          base::Bind(&LayerTreeHostRemoteForTesting::LayerDidScroll,
-                     base::Unretained(this)),
-          this);
+          image_serialization_processor_->CreateClientPictureCache(), this);
 
   // Override the LayerFactory since a lot of tests rely on the fact that Layers
   // and LayerImpls have matching ids.
@@ -230,16 +228,21 @@ LayerTreeHostRemoteForTesting::CreateLayerTreeHostInProcess(
     TaskGraphRunner* task_graph_runner,
     const LayerTreeSettings& settings,
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
-    scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner) {
+    scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner,
+    MutatorHost* mutator_host) {
   LayerTreeHostInProcess::InitParams params;
 
   params.client = client;
   params.task_graph_runner = task_graph_runner;
   params.settings = &settings;
   params.main_task_runner = main_task_runner;
-  params.animation_host = AnimationHost::CreateMainInstance();
+  params.mutator_host = mutator_host;
 
   return LayerTreeHostInProcess::CreateThreaded(impl_task_runner, &params);
+}
+
+void LayerTreeHostRemoteForTesting::DidUpdateLocalState() {
+  client_state_dirty_ = true;
 }
 
 void LayerTreeHostRemoteForTesting::DispatchDrawAndSubmitCallbacks() {
@@ -248,37 +251,30 @@ void LayerTreeHostRemoteForTesting::DispatchDrawAndSubmitCallbacks() {
   // we wait for these callbacks from the LayerTreeHostInProcess.
 }
 
-bool LayerTreeHostRemoteForTesting::ShouldRetainClientScroll(
-    int engine_layer_id,
-    const gfx::ScrollOffset& new_offset) {
-  return false;
-}
-
-bool LayerTreeHostRemoteForTesting::ShouldRetainClientPageScale(
-    float new_page_scale) {
-  return false;
-}
-
-void LayerTreeHostRemoteForTesting::LayerDidScroll(int engine_layer_id) {
-  layers_scrolled_[engine_layer_id] =
-      compositor_state_deserializer_->GetLayerForEngineId(engine_layer_id)
-          ->scroll_offset();
-}
-
-void LayerTreeHostRemoteForTesting::ApplyUpdatesFromInProcessHost() {
-  ApplyScrollAndScaleUpdateFromClient(
-      layers_scrolled_,
-      layer_tree_host_in_process_->GetLayerTree()->page_scale_factor());
-  layers_scrolled_.clear();
-}
-
 void LayerTreeHostRemoteForTesting::RemoteHostNeedsMainFrame() {
   layer_tree_host_in_process_->SetNeedsAnimate();
+}
+
+void LayerTreeHostRemoteForTesting::BeginRemoteMainFrame() {
+  // Send scroll/scale updates first if modified on the impl thread.
+  if (client_state_dirty_) {
+    client_state_dirty_ = false;
+    proto::ClientStateUpdate client_state_update;
+    compositor_state_deserializer_->PullClientStateUpdate(&client_state_update);
+    ApplyStateUpdateFromClient(client_state_update);
+
+    // Tell the host on the client that the updates were applied to the state
+    // on the remote host, in case the main frame on the remote host is aborted.
+    compositor_state_deserializer_->DidApplyStateUpdatesOnEngine();
+  }
+
+  BeginMainFrame();
 }
 
 void LayerTreeHostRemoteForTesting::ProcessRemoteCompositorUpdate(
     std::unique_ptr<CompositorProtoState> compositor_proto_state) {
   DCHECK(layer_tree_host_in_process_->CommitRequested());
+
   // Deserialize the update from the remote host into client side LTH in
   // process. This bypasses the network layer.
   const proto::LayerTreeHost& layer_tree_host_proto =

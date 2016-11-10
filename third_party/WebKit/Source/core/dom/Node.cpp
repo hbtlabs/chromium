@@ -304,7 +304,7 @@ Node* Node::toNode() {
   return this;
 }
 
-short Node::tabIndex() const {
+int Node::tabIndex() const {
   return 0;
 }
 
@@ -747,8 +747,6 @@ void Node::setNeedsStyleRecalc(StyleChangeType changeType,
 
 void Node::clearNeedsStyleRecalc() {
   m_nodeFlags &= ~StyleChangeMask;
-
-  clearSVGFilterNeedsLayerUpdate();
 
   if (isElementNode() && hasRareData())
     toElement(*this).setAnimationStyleChange(false);
@@ -1219,7 +1217,6 @@ const AtomicString& Node::lookupPrefix(const AtomicString& namespaceURI) const {
     case kDocumentTypeNode:
       context = nullptr;
       break;
-    // FIXME: Remove this when Attr no longer extends Node (CR305105)
     case kAttributeNode:
       context = toAttr(this)->ownerElement();
       break;
@@ -1293,6 +1290,10 @@ String Node::textContent(bool convertBRsToNewlines) const {
   if (isCharacterDataNode())
     return toCharacterData(this)->data();
 
+  // Attribute nodes have their attribute values as textContent.
+  if (isAttributeNode())
+    return toAttr(this)->value();
+
   // Documents and non-container nodes (that are not CharacterData)
   // have null textContent.
   if (isDocumentNode() || !isContainerNode())
@@ -1311,6 +1312,7 @@ String Node::textContent(bool convertBRsToNewlines) const {
 
 void Node::setTextContent(const String& text) {
   switch (getNodeType()) {
+    case kAttributeNode:
     case kTextNode:
     case kCdataSectionNode:
     case kCommentNode:
@@ -1341,7 +1343,6 @@ void Node::setTextContent(const String& text) {
       }
       return;
     }
-    case kAttributeNode:
     case kDocumentNode:
     case kDocumentTypeNode:
       // Do nothing.
@@ -2092,14 +2093,15 @@ void Node::dispatchSubtreeModifiedEvent() {
 }
 
 DispatchEventResult Node::dispatchDOMActivateEvent(int detail,
-                                                   Event* underlyingEvent) {
+                                                   Event& underlyingEvent) {
 #if DCHECK_IS_ON()
   DCHECK(!EventDispatchForbiddenScope::isEventDispatchForbidden());
 #endif
   UIEvent* event = UIEvent::create();
   event->initUIEvent(EventTypeNames::DOMActivate, true, true,
                      document().domWindow(), detail);
-  event->setUnderlyingEvent(underlyingEvent);
+  event->setUnderlyingEvent(&underlyingEvent);
+  event->setComposed(underlyingEvent.composed());
   dispatchScopedEvent(event);
 
   // TODO(dtapuska): Dispatching scoped events shouldn't check the return
@@ -2143,7 +2145,7 @@ void Node::defaultEventHandler(Event* event) {
   } else if (eventType == EventTypeNames::click) {
     int detail =
         event->isUIEvent() ? static_cast<UIEvent*>(event)->detail() : 0;
-    if (dispatchDOMActivateEvent(detail, event) !=
+    if (dispatchDOMActivateEvent(detail, *event) !=
         DispatchEventResult::NotCanceled)
       event->setDefaultHandled();
   } else if (eventType == EventTypeNames::contextmenu) {

@@ -110,7 +110,7 @@ DeviceInfoSyncBridge::~DeviceInfoSyncBridge() {}
 
 std::unique_ptr<MetadataChangeList>
 DeviceInfoSyncBridge::CreateMetadataChangeList() {
-  return base::MakeUnique<SimpleMetadataChangeList>();
+  return WriteBatch::CreateMetadataChangeList();
 }
 
 SyncError DeviceInfoSyncBridge::MergeSyncData(
@@ -162,8 +162,8 @@ SyncError DeviceInfoSyncBridge::MergeSyncData(
                             metadata_change_list.get());
   }
 
-  CommitAndNotify(std::move(batch), std::move(metadata_change_list),
-                  has_changes);
+  batch->TransferMetadataChanges(std::move(metadata_change_list));
+  CommitAndNotify(std::move(batch), has_changes);
   return SyncError();
 }
 
@@ -194,8 +194,8 @@ SyncError DeviceInfoSyncBridge::ApplySyncChanges(
     }
   }
 
-  CommitAndNotify(std::move(batch), std::move(metadata_change_list),
-                  has_changes);
+  batch->TransferMetadataChanges(std::move(metadata_change_list));
+  CommitAndNotify(std::move(batch), has_changes);
   return SyncError();
 }
 
@@ -244,7 +244,7 @@ void DeviceInfoSyncBridge::DisableSync() {
   if (!all_data_.empty()) {
     std::unique_ptr<WriteBatch> batch = store_->CreateWriteBatch();
     for (const auto& kv : all_data_) {
-      store_->DeleteData(batch.get(), kv.first);
+      batch->DeleteData(kv.first);
     }
     store_->CommitWriteBatch(
         std::move(batch),
@@ -299,7 +299,7 @@ void DeviceInfoSyncBridge::StoreSpecifics(
     std::unique_ptr<DeviceInfoSpecifics> specifics,
     WriteBatch* batch) {
   const std::string guid = specifics->cache_guid();
-  store_->WriteData(batch, guid, specifics->SerializeAsString());
+  batch->WriteData(guid, specifics->SerializeAsString());
   all_data_[guid] = std::move(specifics);
 }
 
@@ -307,7 +307,7 @@ bool DeviceInfoSyncBridge::DeleteSpecifics(const std::string& guid,
                                            WriteBatch* batch) {
   ClientIdToSpecifics::const_iterator iter = all_data_.find(guid);
   if (iter != all_data_.end()) {
-    store_->DeleteData(batch, guid);
+    batch->DeleteData(guid);
     all_data_.erase(iter);
     return true;
   } else {
@@ -368,33 +368,9 @@ void DeviceInfoSyncBridge::LoadMetadataIfReady() {
 }
 
 void DeviceInfoSyncBridge::OnReadAllMetadata(
-    Result result,
-    std::unique_ptr<RecordList> metadata_records,
-    const std::string& global_metadata) {
-  if (result != Result::SUCCESS) {
-    ReportStartupErrorToSync("Load of metadata completely failed.");
-    return;
-  }
-
-  auto batch = base::MakeUnique<MetadataBatch>();
-  ModelTypeState state;
-  if (state.ParseFromString(global_metadata)) {
-    batch->SetModelTypeState(state);
-  } else {
-    ReportStartupErrorToSync("Failed to deserialize global metadata.");
-    return;
-  }
-
-  for (const Record& r : *metadata_records.get()) {
-    sync_pb::EntityMetadata entity_metadata;
-    if (entity_metadata.ParseFromString(r.value)) {
-      batch->AddMetadata(r.id, entity_metadata);
-    } else {
-      ReportStartupErrorToSync("Failed to deserialize entity metadata.");
-    }
-  }
-
-  change_processor()->OnMetadataLoaded(SyncError(), std::move(batch));
+    SyncError error,
+    std::unique_ptr<MetadataBatch> metadata_batch) {
+  change_processor()->OnMetadataLoaded(error, std::move(metadata_batch));
   ReconcileLocalAndStored();
 }
 
@@ -443,17 +419,16 @@ void DeviceInfoSyncBridge::SendLocalData() {
     std::unique_ptr<DeviceInfoSpecifics> specifics =
         ModelToSpecifics(*local_device_info_provider_->GetLocalDeviceInfo(),
                          TimeToProtoTime(Time::Now()));
-    std::unique_ptr<MetadataChangeList> metadata_change_list =
-        CreateMetadataChangeList();
+    std::unique_ptr<WriteBatch> batch = store_->CreateWriteBatch();
+
     if (change_processor()->IsTrackingMetadata()) {
       change_processor()->Put(specifics->cache_guid(),
                               CopyToEntityData(*specifics),
-                              metadata_change_list.get());
+                              batch->GetMetadataChangeList());
     }
 
-    std::unique_ptr<WriteBatch> batch = store_->CreateWriteBatch();
     StoreSpecifics(std::move(specifics), batch.get());
-    CommitAndNotify(std::move(batch), std::move(metadata_change_list), true);
+    CommitAndNotify(std::move(batch), true);
   }
 
   pulse_timer_.Start(
@@ -461,12 +436,8 @@ void DeviceInfoSyncBridge::SendLocalData() {
       base::Bind(&DeviceInfoSyncBridge::SendLocalData, base::Unretained(this)));
 }
 
-void DeviceInfoSyncBridge::CommitAndNotify(
-    std::unique_ptr<WriteBatch> batch,
-    std::unique_ptr<MetadataChangeList> metadata_change_list,
-    bool should_notify) {
-  static_cast<SimpleMetadataChangeList*>(metadata_change_list.get())
-      ->TransferChanges(store_.get(), batch.get());
+void DeviceInfoSyncBridge::CommitAndNotify(std::unique_ptr<WriteBatch> batch,
+                                           bool should_notify) {
   store_->CommitWriteBatch(
       std::move(batch),
       base::Bind(&DeviceInfoSyncBridge::OnCommit, base::AsWeakPtr(this)));

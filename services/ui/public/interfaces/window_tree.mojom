@@ -144,9 +144,6 @@ interface WindowTree {
       cc.mojom.MojoCompositorFrameSink& compositor_frame_sink,
       cc.mojom.MojoCompositorFrameSinkClient client);
 
-  // Returns surface reference back to window server for reclamation.
-  OnWindowSurfaceDetached(uint32 window_id, cc.mojom.SurfaceSequence sequence);
-
   // Reparents a window.
   // This fails for any of the following reasons:
   // . |parent| or |child| does not identify a valid window.
@@ -357,7 +354,11 @@ interface WindowTreeClient {
   // Invoked when a change is done to the hierarchy. A value of 0 is used to
   // identify a null window. For example, if the old_parent is NULL, 0 is
   // supplied.
-  // |windows| contains any windows that the client has not been told about.
+  // If |window| was not visible to this client, but is visible now because
+  // |new_parent| is visible to this client, then |windows| contains details
+  // about |window|, and all its descendants. |windows| includes any windows
+  // that client may already know about, but did not know the parent because
+  // the parent was previously not visible to this client.
   // This is not sent for hierarchy changes of windows not known to this client
   // or not attached to the tree.
   OnWindowHierarchyChanged(uint32 window,
@@ -429,12 +430,11 @@ interface WindowTreeClient {
   // Invoked when a client window submits a new surface ID. The surface ID and
   // associated information is propagated to the parent connection. The parent
   // compositor can take ownership of this surface ID and embed it along with
-  // the SurfaceSequence, frame_size, and device_scale_factor in a layer.
+  // frame_size and device_scale_factor in a layer.
   // TODO(fsamuel): Surface IDs should be passed to parents directly instead of
   // going through the window server. http://crbug.com/655231
   OnWindowSurfaceChanged(uint32 window_id,
                          cc.mojom.SurfaceId surface_id,
-                         cc.mojom.SurfaceSequence surface_sequence,
                          gfx.mojom.Size frame_size,
                          float device_scale_factor);
                          

@@ -43,6 +43,7 @@ const int kTrayPopupAutoCloseDelayInSeconds = 2;
 const int kTrayPopupAutoCloseDelayForTextInSeconds = 5;
 const int kTrayPopupPaddingHorizontal = 18;
 const int kTrayPopupPaddingBetweenItems = 10;
+const int kTrayPopupButtonEndMargin = 10;
 const int kTrayPopupUserCardVerticalPadding = 10;
 const int kTrayPopupLabelHorizontalPadding = 4;
 const int kTrayPopupSliderPaddingMD = 16;
@@ -77,6 +78,7 @@ const int kTrayNotificationContentsWidth =
                           (kTrayPopupPaddingHorizontal / 2) * 3);
 
 const int kTrayIconSize = 16;
+const int kTrayEdgePadding = 8;
 const SkColor kTrayIconColor = SK_ColorWHITE;
 const int kMenuIconSize = 20;
 const SkColor kMenuIconColor = gfx::kChromeIconGrey;
@@ -84,6 +86,8 @@ const SkColor kMenuIconColorDisabled = SkColorSetA(gfx::kChromeIconGrey, 0x61);
 const int kMenuButtonSize = 48;
 const int kMenuSeparatorVerticalPadding = 4;
 const int kMenuExtraMarginFromLeftEdge = 4;
+const int kMenuEdgeEffectivePadding =
+    kMenuExtraMarginFromLeftEdge + (kMenuButtonSize - kMenuIconSize) / 2;
 
 const int kHitRegionPadding = 4;
 const SkColor kSeparatorColor = SkColorSetA(SK_ColorWHITE, 0x99);

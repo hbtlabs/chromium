@@ -57,7 +57,6 @@ AudioRendererImpl::AudioRendererImpl(
       received_end_of_stream_(false),
       rendered_end_of_stream_(false),
       is_suspending_(false),
-      last_reported_media_time_(kNoTimestamp),
       weak_factory_(this) {
   audio_buffer_stream_->set_splice_observer(base::Bind(
       &AudioRendererImpl::OnNewSpliceBuffer, weak_factory_.GetWeakPtr()));
@@ -176,26 +175,10 @@ void AudioRendererImpl::SetMediaTime(base::TimeDelta time) {
   last_render_time_ = stop_rendering_time_ = base::TimeTicks();
   first_packet_timestamp_ = kNoTimestamp;
   audio_clock_.reset(new AudioClock(time, audio_parameters_.sample_rate()));
-  last_reported_media_time_ = kNoTimestamp;
 }
 
 base::TimeDelta AudioRendererImpl::CurrentMediaTime() {
   base::AutoLock auto_lock(lock_);
-
-  // Re-use last reported time if rendering has stopped to avoid confusing blink
-  // layer (avoid currentTime advancing after signaling buffer underflow).
-  // TODO(chcunningham): Do this in blink instead. Patching it here for now
-  // because HTMLMediaElement's currentTime is a mess.
-  if (!rendering_ && last_reported_media_time_ != kNoTimestamp) {
-    // If rendering stops, be sure to at least report the front time of the most
-    // recently rendered audio buffer.
-    if (last_reported_media_time_ < audio_clock_->front_timestamp())
-      last_reported_media_time_ = audio_clock_->front_timestamp();
-
-    DVLOG(3) << __func__ << " Returning cached time while rendering stopped:"
-             << last_reported_media_time_.InMicroseconds();
-    return last_reported_media_time_;
-  }
 
   // Return the current time based on the known extents of the rendered audio
   // data plus an estimate based on the last time those values were calculated.
@@ -207,7 +190,6 @@ base::TimeDelta AudioRendererImpl::CurrentMediaTime() {
       current_media_time = audio_clock_->back_timestamp();
   }
 
-  last_reported_media_time_ = current_media_time;
   return current_media_time;
 }
 
@@ -452,7 +434,6 @@ void AudioRendererImpl::Initialize(DemuxerStream* stream,
 
   audio_clock_.reset(
       new AudioClock(base::TimeDelta(), audio_parameters_.sample_rate()));
-  last_reported_media_time_ = kNoTimestamp;
 
   audio_buffer_stream_->Initialize(
       stream, base::Bind(&AudioRendererImpl::OnAudioBufferStreamInitialized,
@@ -773,22 +754,18 @@ bool AudioRendererImpl::IsBeforeStartTime(
          (buffer->timestamp() + buffer->duration()) < start_timestamp_;
 }
 
-int AudioRendererImpl::Render(base::TimeDelta delay,
-                              base::TimeTicks delay_timestamp,
-                              int prior_frames_skipped,
-                              AudioBus* audio_bus) {
+int AudioRendererImpl::Render(AudioBus* audio_bus,
+                              uint32_t frames_delayed,
+                              uint32_t frames_skipped) {
   const int frames_requested = audio_bus->frames();
-  DVLOG(4) << __func__ << " delay:" << delay
-           << " prior_frames_skipped:" << prior_frames_skipped
+  DVLOG(4) << __func__ << " frames_delayed:" << frames_delayed
+           << " frames_skipped:" << frames_skipped
            << " frames_requested:" << frames_requested;
 
   int frames_written = 0;
   {
     base::AutoLock auto_lock(lock_);
     last_render_time_ = tick_clock_->NowTicks();
-
-    int64_t frames_delayed = AudioTimestampHelper::TimeToFrames(
-        delay, audio_parameters_.sample_rate());
 
     if (!stop_rendering_time_.is_null()) {
       audio_clock_->CompensateForSuspendedWrites(

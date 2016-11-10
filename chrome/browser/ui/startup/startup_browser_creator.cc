@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <algorithm>  // For max().
+#include <limits>
 #include <memory>
 #include <set>
 
@@ -16,6 +17,7 @@
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/debug/alias.h"
 #include "base/environment.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -77,6 +79,7 @@
 #include "content/public/common/content_switches.h"
 #include "extensions/common/switches.h"
 #include "net/base/port_util.h"
+#include "printing/features/features.h"
 
 #if defined(USE_ASH)
 #include "ash/shell.h"  // nogncheck
@@ -104,7 +107,7 @@
 #include "chrome/browser/metrics/jumplist_metrics_win.h"
 #endif
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #include "chrome/browser/printing/cloud_print/cloud_print_proxy_service.h"
 #include "chrome/browser/printing/cloud_print/cloud_print_proxy_service_factory.h"
 #include "chrome/browser/printing/print_dialog_cloud.h"
@@ -577,7 +580,7 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
 
   bool silent_launch = false;
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   // If we are just displaying a print dialog we shouldn't open browser
   // windows.
   if (command_line.HasSwitch(switches::kCloudPrintFile) &&
@@ -585,7 +588,7 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
                                                            command_line)) {
     silent_launch = true;
   }
-#endif  // defined(ENABLE_PRINT_PREVIEW)
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
   if (command_line.HasSwitch(switches::kExplicitlyAllowedPorts)) {
     std::string allowed_ports =
@@ -762,9 +765,36 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
       command_line_without_urls.AppendSwitchNative(switch_it->first,
                                                    switch_it->second);
     }
+
+    // TODO(scottmg): DEBUG_ variables added for https://crbug.com/614753.
+    size_t DEBUG_num_profiles_on_entry = last_opened_profiles.size();
+    base::debug::Alias(&DEBUG_num_profiles_on_entry);
+    int DEBUG_loop_counter = 0;
+    base::debug::Alias(&DEBUG_loop_counter);
+
+    base::debug::Alias(&last_opened_profiles);
+    const Profile* DEBUG_profile_0 = nullptr;
+    const Profile* DEBUG_profile_1 = nullptr;
+    if (last_opened_profiles.size() > 0)
+      DEBUG_profile_0 = last_opened_profiles[0];
+    if (last_opened_profiles.size() > 1)
+      DEBUG_profile_1 = last_opened_profiles[1];
+    base::debug::Alias(&DEBUG_profile_0);
+    base::debug::Alias(&DEBUG_profile_1);
+
+    size_t DEBUG_num_profiles_at_loop_start =
+        std::numeric_limits<size_t>::max();
+    base::debug::Alias(&DEBUG_num_profiles_at_loop_start);
+
+    Profiles::const_iterator DEBUG_it_begin = last_opened_profiles.begin();
+    base::debug::Alias(&DEBUG_it_begin);
+    Profiles::const_iterator DEBUG_it_end = last_opened_profiles.end();
+    base::debug::Alias(&DEBUG_it_end);
+
     // Launch the profiles in the order they became active.
     for (Profiles::const_iterator it = last_opened_profiles.begin();
-         it != last_opened_profiles.end(); ++it) {
+         it != last_opened_profiles.end(); ++it, ++DEBUG_loop_counter) {
+      DEBUG_num_profiles_at_loop_start = last_opened_profiles.size();
       DCHECK(!(*it)->IsGuestSession());
       // Don't launch additional profiles which would only open a new tab
       // page. When restarting after an update, all profiles will reopen last

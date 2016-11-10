@@ -40,7 +40,6 @@ Still reading?
   </issue>
   <issue id="ContentDescription" severity="Error">
     <ignore regexp="blimp/client/app/android/java/res/layout/blimp_main.xml"/>
-    <ignore regexp="chrome/android/java/res/layout/download_content.xml"/>
     <ignore regexp="chromecast/internal"/>
   </issue>
   <issue id="DefaultLocale">
@@ -166,9 +165,6 @@ Still reading?
   <issue id="LongLogTag" severity="ignore"/>
   <issue id="MissingApplicationIcon" severity="ignore"/>
   <issue id="MissingPermission" severity="ignore"/>
-  <issue id="MissingPrefix" severity="Error">
-    <ignore regexp="chrome/android/java/res/layout/download_content.xml"/>
-  </issue>
   <!--
     TODO(estevenson) remove this once translations are added for
     IDS_ACCESSIBILITY_TOOLBAR_BTN_TABSWITCHER_TOGGLE (http://crbug.com/635677)
@@ -302,6 +298,7 @@ Still reading?
     <ignore regexp="android_webview/test/shell/res/raw/resource_file.html"/>
     <ignore regexp="android_webview/test/shell/res/raw/resource_icon.png"/>
     <ignore regexp="android_webview/tools/automated_ui_tests/java/res/"/>
+    <ignore regexp="blimp/client/app/android/java/res/drawable/dotted_line.xml"/>
     <ignore regexp="blimp/client/app/android/java/res/drawable-hdpi/btn_menu.png"/>
     <ignore regexp="blimp/client/app/android/java/res/drawable-hdpi/btn_reload.png"/>
     <ignore regexp="blimp/client/app/android/java/res/drawable-hdpi/textbox.9.png"/>
@@ -310,6 +307,7 @@ Still reading?
     <ignore regexp="blimp/client/app/android/java/res/layout/debug_stats_overlay.xml"/>
     <ignore regexp="blimp/client/app/android/java/res/layout/text_input_popup.xml"/>
     <ignore regexp="blimp/client/app/android/java/res/layout/toolbar_popup_item.xml"/>
+    <ignore regexp="blimp/client/app/android/java/res/layout/web_input_bottom_panel.xml"/>
     <ignore regexp="blimp/client/app/android/java/res/mipmap-hdpi/app_icon.png"/>
     <ignore regexp="blimp/client/app/android/java/res/values/arrays.xml"/>
     <ignore regexp="blimp/client/app/android/java/res/values/colors.xml"/>
@@ -457,10 +455,6 @@ Still reading?
     <ignore regexp="content/shell/android/linker_test_apk/res/layout/test_activity.xml"/>
     <!-- TODO(crbug.com/635567): Fix this properly. -->
     <ignore regexp="content/shell/android/shell_apk/res/values/strings.xml"/>
-  </issue>
-  <issue id="UseCompoundDrawables">
-    <ignore regexp="chrome/android/java/res/layout/download_content.xml"/>
-    <ignore regexp="chromecast/internal"/>
   </issue>
   <issue id="UselessParent">
     <ignore regexp="android_webview/tools/system_webview_shell/apk/res/layout/activity_webview_browser.xml"/>

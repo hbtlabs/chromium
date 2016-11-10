@@ -12,8 +12,7 @@
 namespace device {
 
 std::unique_ptr<service_manager::Service> CreateDeviceService(
-    scoped_refptr<base::SingleThreadTaskRunner> file_task_runner,
-    const base::Closure& quit_closure) {
+    scoped_refptr<base::SingleThreadTaskRunner> file_task_runner) {
   return base::MakeUnique<DeviceService>(std::move(file_task_runner));
 }
 
@@ -23,7 +22,7 @@ DeviceService::DeviceService(
 
 DeviceService::~DeviceService() {}
 
-void DeviceService::OnStart(const service_manager::ServiceInfo& info) {}
+void DeviceService::OnStart(service_manager::ServiceContext* context) {}
 
 bool DeviceService::OnConnect(const service_manager::ServiceInfo& remote_info,
                               service_manager::InterfaceRegistry* registry) {

@@ -43,7 +43,7 @@
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerInspectorProxy.h"
 #include "core/workers/WorkerThreadStartupData.h"
-#include "public/platform/WebTaskRunner.h"
+#include "platform/WebTaskRunner.h"
 #include "wtf/WTF.h"
 #include <memory>
 
@@ -87,11 +87,14 @@ InProcessWorkerMessagingProxy::InProcessWorkerMessagingProxy(
     InProcessWorkerBase* workerObject,
     WorkerClients* workerClients)
     : ThreadedMessagingProxyBase(executionContext),
-      m_workerObjectProxy(InProcessWorkerObjectProxy::create(this)),
       m_workerObject(workerObject),
       m_workerClients(workerClients),
       m_unconfirmedMessageCount(0),
-      m_workerGlobalScopeMayHavePendingActivity(false) {}
+      m_workerGlobalScopeMayHavePendingActivity(false),
+      m_weakPtrFactory(this) {
+  m_workerObjectProxy =
+      InProcessWorkerObjectProxy::create(m_weakPtrFactory.createWeakPtr());
+}
 
 InProcessWorkerMessagingProxy::~InProcessWorkerMessagingProxy() {
   DCHECK(!m_workerObject);

@@ -275,7 +275,7 @@ public class ContextualSearchPanel extends OverlayPanel {
         if (LocalizationUtils.isLayoutRtl()) {
             return x >= getContentX() + mEndButtonWidthDp;
         } else {
-            return x <= getContentX() + getContentViewWidthDp() - mEndButtonWidthDp;
+            return x <= getContentX() + getWidth() - mEndButtonWidthDp;
         }
     }
 
@@ -284,9 +284,12 @@ public class ContextualSearchPanel extends OverlayPanel {
      */
     @Override
     public void handleBarClick(long time, float x, float y) {
+        getSearchBarControl().onSearchBarClick(x);
+
         if (isPeeking()) {
             if (getSearchBarControl().getQuickActionControl().hasQuickAction()
                     && isCoordinateInsideActionTarget(x)) {
+                mPanelMetrics.setWasQuickActionClicked();
                 getSearchBarControl().getQuickActionControl().sendIntent();
             } else {
                 // super takes care of expanding the Panel when peeking.
@@ -295,7 +298,7 @@ public class ContextualSearchPanel extends OverlayPanel {
         } else if (isExpanded() || isMaximized()) {
             if (isCoordinateInsideCloseButton(x)) {
                 closePanel(StateChangeReason.CLOSE_BUTTON, true);
-            } else if (!mActivity.isCustomTab() && canDisplayContentInPanel()) {
+            } else if (canPromoteToNewTab()) {
                 mManagementDelegate.promoteToTab();
             }
         }
@@ -320,6 +323,12 @@ public class ContextualSearchPanel extends OverlayPanel {
             return true;
         }
         return false;
+    }
+
+    @Override
+    public void onShowPress(float x, float y) {
+        if (isCoordinateInsideBar(x, y)) getSearchBarControl().onShowPress(x);
+        super.onShowPress(x, y);
     }
 
     // ============================================================================================
@@ -596,6 +605,7 @@ public class ContextualSearchPanel extends OverlayPanel {
 
         getPromoControl().onUpdateFromCloseToPeek(percentage);
         getPeekPromoControl().onUpdateFromCloseToPeek(percentage);
+        getSearchBarControl().onUpdateFromCloseToPeek(percentage);
     }
 
     @Override
@@ -670,7 +680,7 @@ public class ContextualSearchPanel extends OverlayPanel {
      * Creates the ContextualSearchBarControl, if needed. The Views are set to INVISIBLE, because
      * they won't actually be displayed on the screen (their snapshots will be displayed instead).
      */
-    protected ContextualSearchBarControl getSearchBarControl() {
+    public ContextualSearchBarControl getSearchBarControl() {
         if (mSearchBarControl == null) {
             mSearchBarControl =
                     new ContextualSearchBarControl(this, mContext, mContainerView, mResourceLoader);
@@ -822,5 +832,39 @@ public class ContextualSearchPanel extends OverlayPanel {
      */
     public void destroyContent() {
         super.destroyOverlayPanelContent();
+    }
+
+    /**
+     * @return Whether the panel content can be displayed in a new tab.
+     */
+    boolean canPromoteToNewTab() {
+        return !mActivity.isCustomTab() && canDisplayContentInPanel();
+    }
+
+    // ============================================================================================
+    // Testing Support
+    // ============================================================================================
+
+    /**
+     * Simulates a tap on the panel's end button.
+     */
+    @VisibleForTesting
+    public void simulateTapOnEndButton() {
+        // Finish all currently running animations.
+        onUpdateAnimation(System.currentTimeMillis(), true);
+
+        // Determine the x-position for the simulated tap.
+        float xPosition;
+        if (LocalizationUtils.isLayoutRtl()) {
+            xPosition = getContentX() + (mEndButtonWidthDp / 2);
+        } else {
+            xPosition = getContentX() + getWidth() - (mEndButtonWidthDp / 2);
+        }
+
+        // Determine the y-position for the simulated tap.
+        float yPosition = getOffsetY() + (getHeight() / 2);
+
+        // Simulate the tap.
+        handleClick(System.currentTimeMillis(), xPosition, yPosition);
     }
 }

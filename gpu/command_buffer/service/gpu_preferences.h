@@ -61,6 +61,9 @@ struct GPU_EXPORT GpuPreferences {
   // Bitmask - 0x1=Microsoft, 0x2=AMD, 0x03=Try all.
   VpxDecodeVendors enable_accelerated_vpx_decode = VPX_VENDOR_MICROSOFT;
 
+  // Enables using CODECAPI_AVLowLatencyMode.
+  bool enable_low_latency_dxva = true;
+
   // Enables support for avoiding copying DXGI NV12 textures.
   bool enable_zero_copy_dxgi_video = false;
 
@@ -94,6 +97,9 @@ struct GPU_EXPORT GpuPreferences {
 
   // Enable GPU service logging.
   bool enable_gpu_service_logging_gpu = false;
+
+  // Enable logging of GPU driver debug messages.
+  bool enable_gpu_driver_debug_logging = false;
 
   // Turn off gpu program caching
   bool disable_gpu_program_cache = false;
@@ -131,8 +137,8 @@ struct GPU_EXPORT GpuPreferences {
   // Turns on calling TRACE for every GL call.
   bool enable_gpu_service_tracing = false;
 
-  // Enable OpenGL ES 3 APIs without proper service side validation.
-  bool enable_unsafe_es3_apis = false;
+  // Enable OpenGL ES 3 APIs.
+  bool enable_es3_apis = true;
 
   // Use the Pass-through command decoder, skipping all validation and state
   // tracking.

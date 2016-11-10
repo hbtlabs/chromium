@@ -80,8 +80,6 @@ class CC_EXPORT BrowserControlsOffsetManager
   void StartAnimationIfNecessary();
   bool IsAnimationComplete(float new_ratio);
   void ResetBaseline();
-  // Offset computation regardless of top or bottom control state.
-  float ContentOffsetInternal() const;
 
   // The client manages the lifecycle of this.
   BrowserControlsOffsetManagerClient* client_;
@@ -97,8 +95,9 @@ class CC_EXPORT BrowserControlsOffsetManager
   // Accumulated scroll delta since last baseline reset
   float accumulated_scroll_delta_;
 
-  // Content offset when last baseline reset occurred
-  float baseline_content_offset_;
+  // Content offset when last baseline reset occurred.
+  float baseline_top_content_offset_;
+  float baseline_bottom_content_offset_;
 
   // The percent height of the visible control such that it must be shown
   // when the user stops the scroll.

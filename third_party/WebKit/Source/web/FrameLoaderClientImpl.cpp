@@ -59,6 +59,8 @@
 #include "modules/device_orientation/DeviceOrientationController.h"
 #include "modules/encryptedmedia/HTMLMediaElementEncryptedMedia.h"
 #include "modules/gamepad/NavigatorGamepad.h"
+#include "modules/remoteplayback/HTMLMediaElementRemotePlayback.h"
+#include "modules/remoteplayback/RemotePlayback.h"
 #include "modules/serviceworkers/NavigatorServiceWorker.h"
 #include "modules/serviceworkers/ServiceWorkerLinkResource.h"
 #include "modules/storage/DOMWindowStorageController.h"
@@ -74,7 +76,6 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebApplicationCacheHost.h"
 #include "public/platform/WebMediaPlayerSource.h"
-#include "public/platform/WebMimeRegistry.h"
 #include "public/platform/WebRTCPeerConnectionHandler.h"
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebURL.h"
@@ -417,11 +418,9 @@ void FrameLoaderClientImpl::dispatchWillCommitProvisionalLoad() {
     m_webFrame->client()->willCommitProvisionalLoad(m_webFrame);
 }
 
-void FrameLoaderClientImpl::dispatchDidStartProvisionalLoad(
-    double triggeringEventTime) {
+void FrameLoaderClientImpl::dispatchDidStartProvisionalLoad() {
   if (m_webFrame->client())
-    m_webFrame->client()->didStartProvisionalLoad(m_webFrame,
-                                                  triggeringEventTime);
+    m_webFrame->client()->didStartProvisionalLoad(m_webFrame);
   if (WebDevToolsAgentImpl* devTools = devToolsAgent())
     devTools->didStartProvisionalLoad(m_webFrame->frame());
 }
@@ -678,8 +677,10 @@ void FrameLoaderClientImpl::selectorMatchChanged(
 DocumentLoader* FrameLoaderClientImpl::createDocumentLoader(
     LocalFrame* frame,
     const ResourceRequest& request,
-    const SubstituteData& data) {
-  WebDataSourceImpl* ds = WebDataSourceImpl::create(frame, request, data);
+    const SubstituteData& data,
+    ClientRedirectPolicy clientRedirectPolicy) {
+  WebDataSourceImpl* ds =
+      WebDataSourceImpl::create(frame, request, data, clientRedirectPolicy);
   if (m_webFrame->client())
     m_webFrame->client()->didCreateDataSource(m_webFrame, ds);
   return ds;
@@ -774,6 +775,11 @@ std::unique_ptr<WebMediaPlayer> FrameLoaderClientImpl::createWebMediaPlayer(
   return wrapUnique(webFrame->client()->createMediaPlayer(
       source, client, &encryptedMedia, encryptedMedia.contentDecryptionModule(),
       sinkId));
+}
+
+WebRemotePlaybackClient* FrameLoaderClientImpl::createWebRemotePlaybackClient(
+    HTMLMediaElement& htmlMediaElement) {
+  return HTMLMediaElementRemotePlayback::remote(htmlMediaElement);
 }
 
 ObjectContentType FrameLoaderClientImpl::getObjectContentType(

@@ -48,7 +48,6 @@ class MediaStreamAudioRenderer;
 class MediaStreamRendererFactory;
 class MediaStreamVideoRenderer;
 class WebMediaPlayerMSCompositor;
-class RenderFrameObserver;
 
 // WebMediaPlayerMS delegates calls from WebCore::MediaPlayerPrivate to
 // Chrome's media player when "src" is from media stream.
@@ -146,7 +145,7 @@ class CONTENT_EXPORT WebMediaPlayerMS
   // WebMediaPlayerDelegate::Observer implementation.
   void OnHidden() override;
   void OnShown() override;
-  void OnSuspendRequested(bool must_suspend) override;
+  bool OnSuspendRequested(bool must_suspend) override;
   void OnPlay() override;
   void OnPause() override;
   void OnVolumeMultiplierUpdate(double multiplier) override;

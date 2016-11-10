@@ -16,7 +16,7 @@
 #include "content/browser/loader/resource_handler.h"
 #include "content/common/content_export.h"
 #include "content/common/url_loader.mojom.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/system/watcher.h"
 #include "net/base/io_buffer.h"
 #include "url/gurl.h"
@@ -27,7 +27,6 @@ class URLRequest;
 
 namespace content {
 class ResourceDispatcherHostImpl;
-class ResourceRequestInfoImpl;
 struct ResourceResponse;
 
 // Used to complete an asynchronous resource request in response to resource
@@ -35,7 +34,6 @@ struct ResourceResponse;
 // when LoadingWithMojo runtime flag is enabled.
 //
 // TODO(yhirano): Implement redirects.
-// TODO(yhirano): Implement downloading to file.
 // TODO(yhirano): Add histograms.
 // TODO(yhirano): Set zoom level.
 // TODO(yhirano): Send cached metadata.
@@ -48,8 +46,8 @@ class CONTENT_EXPORT MojoAsyncResourceHandler
   MojoAsyncResourceHandler(
       net::URLRequest* request,
       ResourceDispatcherHostImpl* rdh,
-      mojo::InterfaceRequest<mojom::URLLoader> mojo_request,
-      mojom::URLLoaderClientPtr url_loader_client);
+      mojom::URLLoaderAssociatedRequest mojo_request,
+      mojom::URLLoaderClientAssociatedPtr url_loader_client);
   ~MojoAsyncResourceHandler() override;
 
   // ResourceHandler implementation:
@@ -98,17 +96,18 @@ class CONTENT_EXPORT MojoAsyncResourceHandler
   void OnWritable(MojoResult result);
 
   ResourceDispatcherHostImpl* rdh_;
-  mojo::Binding<mojom::URLLoader> binding_;
+  mojo::AssociatedBinding<mojom::URLLoader> binding_;
 
   bool has_checked_for_sufficient_resources_ = false;
   bool sent_received_response_message_ = false;
   bool is_using_io_buffer_not_from_writer_ = false;
   bool did_defer_ = false;
   base::TimeTicks response_started_ticks_;
+  int64_t reported_total_received_bytes_ = 0;
 
   mojo::Watcher handle_watcher_;
   std::unique_ptr<mojom::URLLoader> url_loader_;
-  mojom::URLLoaderClientPtr url_loader_client_;
+  mojom::URLLoaderClientAssociatedPtr url_loader_client_;
   scoped_refptr<net::IOBufferWithSize> buffer_;
   size_t buffer_offset_ = 0;
   size_t buffer_bytes_read_ = 0;

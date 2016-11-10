@@ -15,6 +15,8 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/arc/arc_auth_code_fetcher_delegate.h"
 #include "chrome/browser/chromeos/arc/arc_auth_context_delegate.h"
+#include "chrome/browser/chromeos/arc/arc_support_host.h"
+#include "chrome/browser/chromeos/arc/optin/arc_optin_preference_handler_observer.h"
 #include "chrome/browser/chromeos/policy/android_management_client.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service.h"
@@ -36,13 +38,13 @@ namespace user_prefs {
 class PrefRegistrySyncable;
 }
 
-class ArcSupportHost;
-
 namespace arc {
 
 class ArcAndroidManagementChecker;
 class ArcAuthCodeFetcher;
 class ArcAuthContext;
+class ArcOptInPreferenceHandler;
+class ArcRobotAuth;
 enum class ProvisioningResult : int;
 
 // This class proxies the request from the client to fetch an auth code from
@@ -51,6 +53,8 @@ class ArcAuthService : public ArcService,
                        public mojom::AuthHost,
                        public ArcBridgeService::Observer,
                        public InstanceHolder<mojom::AuthInstance>::Observer,
+                       public ArcSupportHost::Observer,
+                       public ArcOptInPreferenceHandlerObserver,
                        public ArcAuthContextDelegate,
                        public ArcAuthCodeFetcherDelegate,
                        public sync_preferences::PrefServiceSyncableObserver,
@@ -63,22 +67,9 @@ class ArcAuthService : public ArcService,
     ACTIVE,           // ARC is running.
   };
 
-  enum class UIPage {
-    NO_PAGE,              // Hide everything.
-    TERMS,                // Terms content page.
-    LSO_PROGRESS,         // LSO loading progress page.
-    LSO,                  // LSO page to enter user's credentials.
-    START_PROGRESS,       // Arc starting progress page.
-    ERROR,                // Arc start error page.
-    ERROR_WITH_FEEDBACK,  // Arc start error page, plus feedback button.
-  };
-
   class Observer {
    public:
     virtual ~Observer() = default;
-
-    // Called whenever Opt-In state of the ARC has been changed.
-    virtual void OnOptInChanged(State state) {}
 
     // Called to notify that ARC bridge is shut down.
     virtual void OnShutdownBridge() {}
@@ -133,19 +124,23 @@ class ArcAuthService : public ArcService,
   void OnInstanceReady() override;
 
   // AuthHost:
-  // For security reason this code can be used only once and exists for specific
-  // period of time.
-  void GetAuthCodeDeprecated(
-      const GetAuthCodeDeprecatedCallback& callback) override;
-  void GetAuthCode(const GetAuthCodeCallback& callback) override;
-  void GetAuthCodeAndAccountType(
-      const GetAuthCodeAndAccountTypeCallback& callback) override;
   void OnSignInComplete() override;
   void OnSignInFailed(mojom::ArcSignInFailureReason reason) override;
+  void RequestAccountInfo() override;
+
+  // Deprecated methods:
+  // For security reason this code can be used only once and exists for specific
+  // period of time.
+  void GetAuthCodeDeprecated0(
+      const GetAuthCodeDeprecated0Callback& callback) override;
+  void GetAuthCodeDeprecated(
+      const GetAuthCodeDeprecatedCallback& callback) override;
+  void GetAuthCodeAndAccountTypeDeprecated(
+      const GetAuthCodeAndAccountTypeDeprecatedCallback& callback) override;
   // Callback is called with a bool that indicates the management status of the
   // user.
-  void GetIsAccountManaged(
-      const GetIsAccountManagedCallback& callback) override;
+  void GetIsAccountManagedDeprecated(
+      const GetIsAccountManagedDeprecatedCallback& callback) override;
 
   void OnSignInFailedInternal(ProvisioningResult result);
 
@@ -165,6 +160,10 @@ class ArcAuthService : public ArcService,
   void EnableArc();
   void DisableArc();
 
+  // Called from the Chrome OS metrics provider to record Arc.State
+  // periodically.
+  void RecordArcState();
+
   // sync_preferences::PrefServiceSyncableObserver
   void OnIsSyncingChanged() override;
 
@@ -179,6 +178,19 @@ class ArcAuthService : public ArcService,
   void OnAuthCodeSuccess(const std::string& auth_code) override;
   void OnAuthCodeFailed() override;
 
+  // ArcSupportHost::Observer:
+  void OnWindowClosed() override;
+  void OnTermsAgreed(bool is_metrics_enabled,
+                     bool is_backup_and_restore_enabled,
+                     bool is_location_service_enabled) override;
+  void OnAuthSucceeded(const std::string& auth_code) override;
+  void OnSendFeedbackClicked() override;
+
+  // arc::ArcOptInPreferenceHandlerObserver:
+  void OnMetricsModeChanged(bool enabled, bool managed) override;
+  void OnBackupAndRestoreModeChanged(bool enabled, bool managed) override;
+  void OnLocationServicesModeChanged(bool enabled, bool managed) override;
+
   // Stops ARC without changing ArcEnabled preference.
   void StopArc();
 
@@ -192,7 +204,7 @@ class ArcAuthService : public ArcService,
   void RemoveArcData();
 
   // Returns current page that has to be shown in OptIn UI.
-  UIPage ui_page() const { return ui_page_; }
+  ArcSupportHost::UIPage ui_page() const { return ui_page_; }
 
   // Returns current page status, relevant to the specific page.
   const base::string16& ui_page_status() const { return ui_page_status_; }
@@ -200,15 +212,19 @@ class ArcAuthService : public ArcService,
   ArcSupportHost* support_host() { return support_host_.get(); }
 
  private:
+  using AccountInfoCallback = base::Callback<void(mojom::AccountInfoPtr)>;
+  class AccountInfoNotifier;
+
   void StartArc();
-  // TODO: move UI methods/fields to ArcSupportHost.
-  void ShowUI(UIPage page, const base::string16& status);
+  // TODO(hidehiko): move UI methods/fields to ArcSupportHost.
+  void ShowUI(ArcSupportHost::UIPage page, const base::string16& status);
   void CloseUI();
-  void SetUIPage(UIPage page, const base::string16& status);
+  void SetUIPage(ArcSupportHost::UIPage page, const base::string16& status);
   void SetState(State state);
   void ShutdownBridge();
   void ShutdownBridgeAndCloseUI();
-  void ShutdownBridgeAndShowUI(UIPage page, const base::string16& status);
+  void ShutdownBridgeAndShowUI(ArcSupportHost::UIPage page,
+                               const base::string16& status);
   void OnOptInPreferenceChanged();
   void StartUI();
   void StartAndroidManagementClient();
@@ -218,6 +234,10 @@ class ArcAuthService : public ArcService,
   bool IsAuthCodeRequest() const;
   void FetchAuthCode();
   void PrepareContextForAuthCodeRequest();
+  void RequestAccountInfoInternal(
+      std::unique_ptr<AccountInfoNotifier> account_info_notifier);
+  void OnAccountInfoReady(mojom::AccountInfoPtr account_info);
+  void OnRobotAuthCodeFetched(const std::string& auth_code);
 
   // Called when the Android management check is done in opt-in flow or
   // re-auth flow.
@@ -240,23 +260,26 @@ class ArcAuthService : public ArcService,
   base::ObserverList<Observer> observer_list_;
   std::unique_ptr<ArcAppLauncher> playstore_launcher_;
   std::string auth_code_;
-  GetAuthCodeCallback auth_callback_;
-  GetAuthCodeAndAccountTypeCallback auth_account_callback_;
-  bool initial_opt_in_ = false;
-  UIPage ui_page_ = UIPage::NO_PAGE;
+  ArcSupportHost::UIPage ui_page_ = ArcSupportHost::UIPage::NO_PAGE;
   base::string16 ui_page_status_;
   bool clear_required_ = false;
   bool reenable_arc_ = false;
   base::OneShotTimer arc_sign_in_timer_;
 
+  // Notifies the correct callback whenever the auth_code is ready.
+  std::unique_ptr<AccountInfoNotifier> account_info_notifier_;
+
   // Temporarily keeps the ArcSupportHost instance.
   // This should be moved to ArcSessionManager when the refactoring is
   // done.
   std::unique_ptr<ArcSupportHost> support_host_;
+  // Handles preferences and metrics mode.
+  std::unique_ptr<arc::ArcOptInPreferenceHandler> preference_handler_;
 
   std::unique_ptr<ArcAuthContext> context_;
   std::unique_ptr<ArcAuthCodeFetcher> auth_code_fetcher_;
   std::unique_ptr<ArcAndroidManagementChecker> android_management_checker_;
+  std::unique_ptr<ArcRobotAuth> arc_robot_auth_;
 
   base::Time sign_in_time_;
 

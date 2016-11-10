@@ -145,6 +145,11 @@ base::TimeDelta GetCurrentTimeInternal(WebMediaPlayerImpl* p_this) {
   return base::TimeDelta::FromSecondsD(p_this->currentTime());
 }
 
+// How much time must have elapsed since loading last progressed before the
+// player is eligible for idle suspension.
+constexpr base::TimeDelta kLoadingToIdleTimeout =
+    base::TimeDelta::FromSeconds(3);
+
 }  // namespace
 
 class BufferedDataSourceHostImpl;
@@ -235,6 +240,8 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
   DCHECK(!adjust_allocated_memory_cb_.is_null());
   DCHECK(renderer_factory_);
   DCHECK(client_);
+
+  tick_clock_.reset(new base::DefaultTickClock());
 
   force_video_overlays_ = base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kForceVideoOverlays);
@@ -336,6 +343,8 @@ void WebMediaPlayerImpl::DisableOverlay() {
 
   if (decoder_requires_restart_for_overlay_)
     ScheduleRestart();
+  else if (!set_surface_cb_.is_null())
+    set_surface_cb_.Run(overlay_surface_id_);
 }
 
 void WebMediaPlayerImpl::enteredFullscreen() {
@@ -547,6 +556,10 @@ void WebMediaPlayerImpl::setVolume(double volume) {
   pipeline_.SetVolume(volume_ * volume_multiplier_);
   if (watch_time_reporter_)
     watch_time_reporter_->OnVolumeChange(volume);
+
+  // The play state is updated because the player might have left the autoplay
+  // muted state.
+  UpdatePlayState();
 }
 
 void WebMediaPlayerImpl::setSinkId(
@@ -781,6 +794,9 @@ bool WebMediaPlayerImpl::didLoadingProgress() {
     is_idle_ = false;
     UpdatePlayState();
   }
+
+  if (did_loading_progress)
+    last_time_loading_progressed_ = tick_clock_->NowTicks();
 
   return did_loading_progress;
 }
@@ -1270,6 +1286,12 @@ void WebMediaPlayerImpl::OnVideoNaturalSizeChange(const gfx::Size& size) {
   if (overlay_enabled_ && surface_manager_)
     surface_manager_->NaturalSizeChanged(rotated_size);
 
+  if (pipeline_metadata_.natural_size.IsEmpty()) {
+    // WatchTimeReporter doesn't report metrics for empty videos. Re-create
+    // |watch_time_reporter_| if we didn't originally know the video size.
+    CreateWatchTimeReporter();
+  }
+
   pipeline_metadata_.natural_size = rotated_size;
   client_->sizeChanged();
 }
@@ -1308,15 +1330,37 @@ void WebMediaPlayerImpl::OnShown() {
   UpdatePlayState();
 }
 
-void WebMediaPlayerImpl::OnSuspendRequested(bool must_suspend) {
+bool WebMediaPlayerImpl::OnSuspendRequested(bool must_suspend) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
-  if (must_suspend)
+  if (must_suspend) {
     must_suspend_ = true;
-  else
-    is_idle_ = true;
+    UpdatePlayState();
+    return true;
+  }
 
-  UpdatePlayState();
+  // If we're beyond HaveFutureData, we can safely suspend at any time.
+  if (highest_ready_state_ >= WebMediaPlayer::ReadyStateHaveFutureData) {
+    is_idle_ = true;
+    UpdatePlayState();
+    return true;
+  }
+
+  // Before HaveFutureData blink will not call play(), so we must be careful to
+  // only suspend if we'll eventually receive an event that will trigger a
+  // resume. If the last time loading progressed was a while ago, and we still
+  // haven't reached HaveFutureData, we assume that we're waiting on more data
+  // to continue pre-rolling. When that data is loaded the pipeline will be
+  // resumed by didLoadingProgress().
+  if (last_time_loading_progressed_.is_null() ||
+      (tick_clock_->NowTicks() - last_time_loading_progressed_) >
+          kLoadingToIdleTimeout) {
+    is_idle_ = true;
+    UpdatePlayState();
+    return true;
+  }
+
+  return false;
 }
 
 void WebMediaPlayerImpl::OnPlay() {
@@ -1358,6 +1402,10 @@ void WebMediaPlayerImpl::requestRemotePlayback() {
 
 void WebMediaPlayerImpl::requestRemotePlaybackControl() {
   cast_impl_.requestRemotePlaybackControl();
+}
+
+void WebMediaPlayerImpl::requestRemotePlaybackStop() {
+  cast_impl_.requestRemotePlaybackStop();
 }
 
 void WebMediaPlayerImpl::OnRemotePlaybackEnded() {
@@ -1455,45 +1503,46 @@ void WebMediaPlayerImpl::NotifyDownloading(bool is_downloading) {
 }
 
 void WebMediaPlayerImpl::OnSurfaceCreated(int surface_id) {
-  if (force_video_overlays_ && surface_id == SurfaceManager::kNoSurfaceID)
-    LOG(ERROR) << "Create surface failed.";
-
   overlay_surface_id_ = surface_id;
-  if (!pending_surface_request_cb_.is_null())
-    base::ResetAndReturn(&pending_surface_request_cb_).Run(surface_id);
+  if (!set_surface_cb_.is_null()) {
+    // If restart is required, the callback is one-shot only.
+    if (decoder_requires_restart_for_overlay_)
+      base::ResetAndReturn(&set_surface_cb_).Run(surface_id);
+    else
+      set_surface_cb_.Run(surface_id);
+  }
 }
 
-// TODO(watk): Move this state management out of WMPI.
 void WebMediaPlayerImpl::OnSurfaceRequested(
-    const SurfaceCreatedCB& surface_created_cb) {
+    bool decoder_requires_restart_for_overlay,
+    const SurfaceCreatedCB& set_surface_cb) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   DCHECK(surface_manager_);
   DCHECK(!use_fallback_path_);
 
   // A null callback indicates that the decoder is going away.
-  if (surface_created_cb.is_null()) {
+  if (set_surface_cb.is_null()) {
     decoder_requires_restart_for_overlay_ = false;
-    pending_surface_request_cb_.Reset();
+    set_surface_cb_.Reset();
     return;
   }
 
-  // If we're getting a surface request it means GVD is initializing, so until
-  // we get a null surface request, GVD is the active decoder. While that's the
-  // case we should restart the pipeline on fullscreen transitions so that when
-  // we create a new GVD it will request a surface again and get the right kind
-  // of surface for the fullscreen state.
-  // TODO(watk): Don't require a pipeline restart to switch surfaces for
-  // cases where it isn't necessary.
-  decoder_requires_restart_for_overlay_ = true;
-  if (overlay_enabled_) {
-    if (overlay_surface_id_ != SurfaceManager::kNoSurfaceID)
-      surface_created_cb.Run(overlay_surface_id_);
-    else
-      pending_surface_request_cb_ = surface_created_cb;
-  } else {
-    // Tell the decoder to create its own surface.
-    surface_created_cb.Run(SurfaceManager::kNoSurfaceID);
-  }
+  // If we get a surface request it means GpuVideoDecoder is initializing, so
+  // until we get a null surface request, GVD is the active decoder.
+  //
+  // If |decoder_requires_restart_for_overlay| is true, we must restart the
+  // pipeline for fullscreen transitions. The decoder is unable to switch
+  // surfaces otherwise. If false, we simply need to tell the decoder about the
+  // new surface and it will handle things seamlessly.
+  decoder_requires_restart_for_overlay_ = decoder_requires_restart_for_overlay;
+  set_surface_cb_ = set_surface_cb;
+
+  // If we're waiting for the surface to arrive, OnSurfaceCreated() will be
+  // called later when it arrives; so do nothing for now.
+  if (overlay_enabled_ && overlay_surface_id_ == SurfaceManager::kNoSurfaceID)
+    return;
+
+  OnSurfaceCreated(overlay_surface_id_);
 }
 
 std::unique_ptr<Renderer> WebMediaPlayerImpl::CreateRenderer() {
@@ -1546,7 +1595,7 @@ void WebMediaPlayerImpl::StartPipeline() {
 
     chunk_demuxer_ = new ChunkDemuxer(
         BIND_TO_RENDER_LOOP(&WebMediaPlayerImpl::OnDemuxerOpened),
-        encrypted_media_init_data_cb, media_log_, true);
+        encrypted_media_init_data_cb, media_log_);
     demuxer_.reset(chunk_demuxer_);
   }
 
@@ -1654,8 +1703,15 @@ void WebMediaPlayerImpl::UpdatePlayState() {
 }
 
 void WebMediaPlayerImpl::SetDelegateState(DelegateState new_state) {
-  if (!delegate_ || delegate_state_ == new_state)
+  if (!delegate_)
     return;
+
+  if (delegate_state_ == new_state) {
+    if (delegate_state_ != DelegateState::PLAYING ||
+        autoplay_muted_ == client_->isAutoplayingMuted()) {
+      return;
+    }
+  }
 
   delegate_state_ = new_state;
 
@@ -1663,11 +1719,14 @@ void WebMediaPlayerImpl::SetDelegateState(DelegateState new_state) {
     case DelegateState::GONE:
       delegate_->PlayerGone(delegate_id_);
       break;
-    case DelegateState::PLAYING:
+    case DelegateState::PLAYING: {
+      autoplay_muted_ = client_->isAutoplayingMuted();
+      bool has_audio = autoplay_muted_ ? false : hasAudio();
       delegate_->DidPlay(
-          delegate_id_, hasVideo(), hasAudio(), false,
+          delegate_id_, hasVideo(), has_audio, false,
           media::DurationToMediaContentType(pipeline_.GetMediaDuration()));
       break;
+    }
     case DelegateState::PAUSED:
       delegate_->DidPause(delegate_id_, false);
       break;

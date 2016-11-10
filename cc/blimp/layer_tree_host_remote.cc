@@ -7,7 +7,6 @@
 #include "base/atomic_sequence_num.h"
 #include "base/auto_reset.h"
 #include "base/memory/ptr_util.h"
-#include "cc/animation/animation_host.h"
 #include "cc/blimp/compositor_proto_state.h"
 #include "cc/blimp/engine_picture_cache.h"
 #include "cc/blimp/picture_data_conversions.h"
@@ -15,10 +14,12 @@
 #include "cc/output/begin_frame_args.h"
 #include "cc/output/compositor_frame_sink.h"
 #include "cc/proto/compositor_message.pb.h"
+#include "cc/proto/gfx_conversions.h"
 #include "cc/proto/layer_tree_host.pb.h"
 #include "cc/trees/layer_tree.h"
 #include "cc/trees/layer_tree_host_client.h"
 #include "cc/trees/layer_tree_host_common.h"
+#include "cc/trees/mutator_host.h"
 #include "cc/trees/task_runner_provider.h"
 #include "ui/gfx/geometry/scroll_offset.h"
 
@@ -63,8 +64,7 @@ LayerTreeHostRemote::InitParams::~InitParams() = default;
 LayerTreeHostRemote::LayerTreeHostRemote(InitParams* params)
     : LayerTreeHostRemote(
           params,
-          base::MakeUnique<LayerTree>(std::move(params->animation_host),
-                                      this)) {}
+          base::MakeUnique<LayerTree>(params->mutator_host, this)) {}
 
 LayerTreeHostRemote::LayerTreeHostRemote(InitParams* params,
                                          std::unique_ptr<LayerTree> layer_tree)
@@ -222,7 +222,7 @@ void LayerTreeHostRemote::SetNextCommitForcesRedraw() {
   // Ideally the engine shouldn't need to care about draw requests at all. The
   // compositor that produces CompositorFrames is on the client and draw
   // requests should be made directly to it on the client itself.
-  NOTREACHED();
+  NOTIMPLEMENTED();
 }
 
 void LayerTreeHostRemote::NotifyInputThrottledUntilCommit() {
@@ -376,7 +376,6 @@ void LayerTreeHostRemote::BeginMainFrame() {
   // We don't run any animations on the layer because threaded animations are
   // disabled.
   // TODO(khushalsagar): Revisit this when adding support for animations.
-  DCHECK(!layer_tree_->animation_host()->needs_push_properties());
   client_->UpdateLayerTreeHost();
 
   current_pipeline_stage_ = FramePipelineStage::UPDATE_LAYERS;
@@ -442,46 +441,52 @@ void LayerTreeHostRemote::BeginMainFrame() {
                  weak_factory_.GetWeakPtr()));
 }
 
-bool LayerTreeHostRemote::ApplyScrollAndScaleUpdateFromClient(
-    const ScrollOffsetMap& client_scroll_map,
-    float client_page_scale) {
+void LayerTreeHostRemote::ApplyStateUpdateFromClient(
+    const proto::ClientStateUpdate& client_state_update) {
   DCHECK(!synchronizing_client_updates_);
-
   base::AutoReset<bool> synchronizing_updates(&synchronizing_client_updates_,
                                               true);
-  bool layer_sync_successful = true;
 
-  gfx::Vector2dF inner_viewport_scroll_delta;
-  Layer* inner_viewport_scroll_layer =
-      layer_tree_->inner_viewport_scroll_layer();
-  for (const auto& client_scroll : client_scroll_map) {
-    Layer* layer = layer_tree_->LayerById(client_scroll.first);
-    const gfx::ScrollOffset& scroll_offset = client_scroll.second;
+  gfx::Vector2dF inner_viewport_delta;
+  for (int i = 0; i < client_state_update.scroll_updates_size(); ++i) {
+    const proto::ScrollUpdate& scroll_update =
+        client_state_update.scroll_updates(i);
+    int layer_id = scroll_update.layer_id();
+    Layer* layer = layer_tree_->LayerById(layer_id);
+    gfx::Vector2dF scroll_delta =
+        ProtoToVector2dF(scroll_update.scroll_delta());
 
-    // Note the inner viewport scroll delta to report separately.
-    if (layer == inner_viewport_scroll_layer) {
-      inner_viewport_scroll_delta =
-          scroll_offset.DeltaFrom(layer->scroll_offset());
+    if (!layer)
+      continue;
+
+    if (layer == layer_tree_->inner_viewport_scroll_layer()) {
+      inner_viewport_delta = scroll_delta;
+    } else {
+      layer->SetScrollOffsetFromImplSide(
+          gfx::ScrollOffsetWithDelta(layer->scroll_offset(), scroll_delta));
+      SetNeedsUpdateLayers();
     }
+  }
 
-    if (layer)
-      layer->SetScrollOffsetFromImplSide(scroll_offset);
-    else
-      layer_sync_successful = false;
+  if (!inner_viewport_delta.IsZero()) {
+    layer_tree_->inner_viewport_scroll_layer()->SetScrollOffsetFromImplSide(
+        gfx::ScrollOffsetWithDelta(
+            layer_tree_->inner_viewport_scroll_layer()->scroll_offset(),
+            inner_viewport_delta));
   }
 
   float page_scale_delta = 1.0f;
-  if (client_page_scale != layer_tree_->page_scale_factor()) {
-    page_scale_delta = client_page_scale / layer_tree_->page_scale_factor();
-    layer_tree_->SetPageScaleFromImplSide(client_page_scale);
+  if (client_state_update.has_page_scale_delta()) {
+    page_scale_delta = client_state_update.page_scale_delta();
+    layer_tree_->SetPageScaleFromImplSide(layer_tree_->page_scale_factor() *
+                                          page_scale_delta);
   }
 
-  if (!inner_viewport_scroll_delta.IsZero() || page_scale_delta != 1.0f) {
-    client_->ApplyViewportDeltas(inner_viewport_scroll_delta, gfx::Vector2dF(),
-                                 gfx::Vector2dF(), page_scale_delta, 1.0f);
+  if (!inner_viewport_delta.IsZero() || page_scale_delta != 1.0f) {
+    client_->ApplyViewportDeltas(inner_viewport_delta, gfx::Vector2dF(),
+                                 gfx::Vector2dF(), page_scale_delta, 0.0f);
+    SetNeedsUpdateLayers();
   }
-
-  return layer_sync_successful;
 }
 
 void LayerTreeHostRemote::MainFrameComplete() {
@@ -515,10 +520,13 @@ void LayerTreeHostRemote::SerializeCurrentState(
                           inputs_only);
 
   // Serialize the dirty layers.
-  for (auto* layer : layer_tree_->LayersThatShouldPushProperties())
+  std::unordered_set<Layer*> layers_need_push_properties;
+  layers_need_push_properties.swap(
+      layer_tree_->LayersThatShouldPushProperties());
+
+  for (auto* layer : layers_need_push_properties)
     layer->ToLayerPropertiesProto(
         layer_tree_host_proto->mutable_layer_updates(), inputs_only);
-  layer_tree_->LayersThatShouldPushProperties().clear();
 
   std::vector<PictureData> pictures =
       engine_picture_cache_->CalculateCacheUpdateAndFlush();

@@ -15,7 +15,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
-#include "cc/animation/animation_host.h"
 #include "cc/animation/mutable_properties.h"
 #include "cc/base/simple_enclosed_region.h"
 #include "cc/debug/frame_viewer_instrumentation.h"
@@ -34,6 +33,7 @@
 #include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_impl.h"
+#include "cc/trees/mutator_host.h"
 #include "cc/trees/transform_node.h"
 #include "third_party/skia/include/core/SkImageFilter.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -157,7 +157,7 @@ void Layer::SetLayerTreeHost(LayerTreeHost* host) {
     inputs_.mask_layer->SetLayerTreeHost(host);
 
   const bool has_any_animation =
-      layer_tree_host_ ? GetAnimationHost()->HasAnyAnimation(element_id())
+      layer_tree_host_ ? GetMutatorHost()->HasAnyAnimation(element_id())
                        : false;
 
   if (host && has_any_animation)
@@ -694,11 +694,11 @@ void Layer::SetTransformOrigin(const gfx::Point3F& transform_origin) {
 }
 
 bool Layer::ScrollOffsetAnimationWasInterrupted() const {
-  return GetAnimationHost()->ScrollOffsetAnimationWasInterrupted(element_id());
+  return GetMutatorHost()->ScrollOffsetAnimationWasInterrupted(element_id());
 }
 
 bool Layer::HasOnlyTranslationTransforms() const {
-  return GetAnimationHost()->HasOnlyTranslationTransforms(
+  return GetMutatorHost()->HasOnlyTranslationTransforms(
       element_id(), GetElementTypeForAnimation());
 }
 
@@ -1620,12 +1620,12 @@ void Layer::SetScrollbarsHiddenFromImplSide(bool hidden) {
 }
 
 bool Layer::FilterIsAnimating() const {
-  return GetAnimationHost()->IsAnimatingFilterProperty(
+  return GetMutatorHost()->IsAnimatingFilterProperty(
       element_id(), GetElementTypeForAnimation());
 }
 
 bool Layer::TransformIsAnimating() const {
-  return GetAnimationHost()->IsAnimatingTransformProperty(
+  return GetMutatorHost()->IsAnimatingTransformProperty(
       element_id(), GetElementTypeForAnimation());
 }
 
@@ -1766,7 +1766,7 @@ void Layer::OnIsAnimatingChanged(const PropertyAnimationState& mask,
 
 bool Layer::HasActiveAnimationForTesting() const {
   return layer_tree_host_
-             ? GetAnimationHost()->HasActiveAnimationForTesting(element_id())
+             ? GetMutatorHost()->HasActiveAnimationForTesting(element_id())
              : false;
 }
 
@@ -1795,8 +1795,8 @@ void Layer::ClearPreferredRasterBounds() {
   SetNeedsCommit();
 }
 
-AnimationHost* Layer::GetAnimationHost() const {
-  return layer_tree_ ? layer_tree_->animation_host() : nullptr;
+MutatorHost* Layer::GetMutatorHost() const {
+  return layer_tree_ ? layer_tree_->mutator_host() : nullptr;
 }
 
 ElementListType Layer::GetElementTypeForAnimation() const {

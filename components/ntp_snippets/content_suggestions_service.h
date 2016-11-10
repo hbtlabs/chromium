@@ -19,6 +19,7 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/ntp_snippets/callbacks.h"
 #include "components/ntp_snippets/category_factory.h"
 #include "components/ntp_snippets/category_status.h"
 #include "components/ntp_snippets/content_suggestions_provider.h"
@@ -26,10 +27,6 @@
 
 class PrefService;
 class PrefRegistrySimple;
-
-namespace gfx {
-class Image;
-}  // namespace gfx
 
 namespace ntp_snippets {
 
@@ -41,10 +38,6 @@ class ContentSuggestionsService : public KeyedService,
                                   public ContentSuggestionsProvider::Observer,
                                   public history::HistoryServiceObserver {
  public:
-  using ImageFetchedCallback = base::Callback<void(const gfx::Image&)>;
-  using DismissedSuggestionsCallback = base::Callback<void(
-      std::vector<ContentSuggestion> dismissed_suggestions)>;
-
   class Observer {
    public:
     // Fired every time the service receives a new set of data for the given
@@ -134,6 +127,13 @@ class ContentSuggestionsService : public KeyedService,
 
   // Returns whether |category| is dismissed.
   bool IsCategoryDismissed(Category category) const;
+
+  // Fetches additional contents for the given |category|. If the fetch was
+  // completed, the given |callback| is called with the updated content.
+  // This includes new and old data.
+  void Fetch(const Category& category,
+             const std::set<std::string>& known_suggestion_ids,
+             const FetchDoneCallback& callback);
 
   // Observer accessors.
   void AddObserver(Observer* observer);

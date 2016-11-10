@@ -61,6 +61,7 @@ test("device_unittests") {
     "bluetooth/test/test_bluetooth_local_gatt_service_delegate.cc",
     "bluetooth/test/test_bluetooth_local_gatt_service_delegate.h",
     "gamepad/gamepad_provider_unittest.cc",
+    "generic_sensor/platform_sensor_and_provider_unittest_win.cc",
     "generic_sensor/platform_sensor_provider_unittest.cc",
     "test/run_all_unittests.cc",
     "wake_lock/wake_lock_service_context_unittest.cc",
@@ -94,6 +95,10 @@ test("device_unittests") {
   if (is_linux && !is_chromeos && use_dbus) {
     sources += [ "battery/battery_status_manager_linux_unittest.cc" ]
     deps += [ "//dbus:test_support" ]
+  }
+
+  if (is_linux) {
+    sources += [ "generic_sensor/linux/sensor_reader_unittest.cc" ]
   }
 
   # HID and Serial:
@@ -220,6 +225,9 @@ test("device_unittests") {
       "bluetooth/bluetooth_low_energy_win_fake.cc",
       "bluetooth/bluetooth_low_energy_win_fake.h",
     ]
+
+    # Needed for "generic_sensor/platform_sensor_and_provider_unittest_win.cc"
+    libs = [ "sensorsapi.lib" ]
   }
 
   if (enable_webvr) {

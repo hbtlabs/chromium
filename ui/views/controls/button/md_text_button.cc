@@ -12,6 +12,7 @@
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
+#include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/ink_drop_painted_layer_delegates.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -121,6 +122,10 @@ SkColor MdTextButton::GetInkDropBaseColor() const {
   return color_utils::DeriveDefaultIconColor(label()->enabled_color());
 }
 
+std::unique_ptr<InkDrop> MdTextButton::CreateInkDrop() {
+  return CreateDefaultFloodFillInkDropImpl();
+}
+
 std::unique_ptr<views::InkDropRipple> MdTextButton::CreateInkDropRipple()
     const {
   return std::unique_ptr<views::InkDropRipple>(
@@ -136,9 +141,6 @@ void MdTextButton::StateChanged() {
 
 std::unique_ptr<views::InkDropHighlight> MdTextButton::CreateInkDropHighlight()
     const {
-  if (!ShouldShowInkDropHighlight())
-    return nullptr;
-
   // The prominent button hover effect is a shadow.
   const int kYOffset = 1;
   const int kSkiaBlurRadius = 2;
@@ -157,11 +159,6 @@ std::unique_ptr<views::InkDropHighlight> MdTextButton::CreateInkDropHighlight()
       gfx::RectF(GetLocalBounds()).CenterPoint(),
       base::WrapUnique(new BorderShadowLayerDelegate(
           shadows, GetLocalBounds(), fill_color, kInkDropSmallCornerRadius)));
-}
-
-bool MdTextButton::ShouldShowInkDropForFocus() const {
-  // These types of button use FocusRing.
-  return false;
 }
 
 void MdTextButton::SetEnabledTextColors(SkColor color) {
@@ -214,7 +211,7 @@ MdTextButton::MdTextButton(ButtonListener* listener)
 void MdTextButton::UpdatePadding() {
   // Don't use font-based padding when there's no text visible.
   if (GetText().empty()) {
-    SetBorder(Border::NullBorder());
+    SetBorder(NullBorder());
     return;
   }
 
@@ -243,8 +240,8 @@ void MdTextButton::UpdatePadding() {
   // TODO(estade): can we get rid of the platform style border hoopla if
   // we apply the MD treatment to all buttons, even GTK buttons?
   const int kHorizontalPadding = 16;
-  SetBorder(Border::CreateEmptyBorder(top_padding, kHorizontalPadding,
-                                      bottom_padding, kHorizontalPadding));
+  SetBorder(CreateEmptyBorder(top_padding, kHorizontalPadding, bottom_padding,
+                              kHorizontalPadding));
 }
 
 void MdTextButton::UpdateColors() {

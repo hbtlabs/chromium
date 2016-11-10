@@ -253,12 +253,6 @@ class TokenPreloadScanner::StartTagScanner {
     request->setDefer(m_defer);
     request->setIntegrityMetadata(m_integrityMetadata);
 
-    // TODO(csharrison): Once this is deprecated, just abort the request here.
-    if (match(m_tagImpl, scriptTag) &&
-        !ScriptLoader::isValidScriptTypeAndLanguage(
-            m_typeAttributeValue, m_languageAttributeValue,
-            ScriptLoader::AllowLegacyTypeInTypeAttribute))
-      request->setScriptHasInvalidTypeOrLanguage();
     return request;
   }
 
@@ -359,6 +353,12 @@ class TokenPreloadScanner::StartTagScanner {
     } else if (match(attributeName, typeAttr)) {
       m_matched &= MIMETypeRegistry::isSupportedStyleSheetMIMEType(
           ContentType(attributeValue).type());
+    } else if (!m_referrerPolicySet &&
+               match(attributeName, referrerpolicyAttr) &&
+               !attributeValue.isNull()) {
+      m_referrerPolicySet = true;
+      SecurityPolicy::referrerPolicyFromString(attributeValue,
+                                               &m_referrerPolicy);
     }
   }
 
@@ -402,6 +402,8 @@ class TokenPreloadScanner::StartTagScanner {
                              const String& attributeValue) {
     if (match(attributeName, posterAttr))
       setUrlToLoad(attributeValue, DisallowURLReplacement);
+    else if (match(attributeName, crossoriginAttr))
+      setCrossOrigin(attributeValue);
   }
 
   template <typename NameType>
@@ -484,6 +486,12 @@ class TokenPreloadScanner::StartTagScanner {
       return false;
     if (match(m_tagImpl, inputTag) && !m_inputIsImage)
       return false;
+    if (match(m_tagImpl, scriptTag) &&
+        !ScriptLoader::isValidScriptTypeAndLanguage(
+            m_typeAttributeValue, m_languageAttributeValue,
+            ScriptLoader::AllowLegacyTypeInTypeAttribute)) {
+      return false;
+    }
     return true;
   }
 

@@ -73,9 +73,14 @@ WebInspector.Main = class {
    */
   _createSettings(prefs) {
     this._initializeExperiments(prefs);
-    WebInspector.settings = new WebInspector.Settings(new WebInspector.SettingsStorage(
+    var storagePrefix = WebInspector.isCustomDevtoolsFrontend() ? '__custom__' : '';
+    var clearLocalStorage = window.localStorage ? window.localStorage.clear.bind(window.localStorage) : undefined;
+    var localStorage =
+        new WebInspector.SettingsStorage(window.localStorage || {}, undefined, undefined, clearLocalStorage, storagePrefix);
+    var globalStorage = new WebInspector.SettingsStorage(
         prefs, InspectorFrontendHost.setPreference, InspectorFrontendHost.removePreference,
-        InspectorFrontendHost.clearPreferences));
+        InspectorFrontendHost.clearPreferences, storagePrefix);
+    WebInspector.settings = new WebInspector.Settings(globalStorage, localStorage);
 
     if (!InspectorFrontendHost.isUnderTest())
       new WebInspector.VersionController().updateVersion();
@@ -90,7 +95,6 @@ WebInspector.Main = class {
     Runtime.experiments.register('audits2', 'Audits 2.0', true);
     Runtime.experiments.register('autoAttachToCrossProcessSubframes', 'Auto-attach to cross-process subframes', true);
     Runtime.experiments.register('blackboxJSFramesOnTimeline', 'Blackbox JavaScript frames on Timeline', true);
-    Runtime.experiments.register('canvasNetworkTimeline', 'Canvas based timeline in Network panel', true);
     Runtime.experiments.register('colorContrastRatio', 'Contrast ratio line in color picker', true);
     Runtime.experiments.register('continueToFirstInvocation', 'Continue to first invocation', true);
     Runtime.experiments.register('emptySourceMapAutoStepping', 'Empty sourcemap auto-stepping');
@@ -114,6 +118,7 @@ WebInspector.Main = class {
     Runtime.experiments.register('timelineRecordingPerspectives', 'Timeline recording perspectives UI');
     Runtime.experiments.register('timelineTracingJSProfile', 'Timeline tracing based JS profiler', true);
     Runtime.experiments.register('timelineV8RuntimeCallStats', 'V8 Runtime Call Stats on Timeline', true);
+    Runtime.experiments.register('timelineRuleUsageRecording', 'Track CSS rules usage while recording Timeline.');
 
     Runtime.experiments.cleanUpStaleExperiments();
 
@@ -518,7 +523,7 @@ WebInspector.Main.InspectorDomainObserver = class {
 };
 
 /**
- * @implements {InspectorAgent.Dispatcher}
+ * @implements {Protocol.InspectorDispatcher}
  * @unrestricted
  */
 WebInspector.Main.InspectorDomainDispatcher = class {
@@ -650,9 +655,9 @@ WebInspector.Main.WarningErrorCounter = class {
     this._toolbarItem = new WebInspector.ToolbarItem(this._counter);
     var shadowRoot = WebInspector.createShadowRootWithCoreStyles(this._counter, 'main/errorWarningCounter.css');
 
-    this._errors = this._createItem(shadowRoot, 'error-icon');
-    this._revokedErrors = this._createItem(shadowRoot, 'revokedError-icon');
-    this._warnings = this._createItem(shadowRoot, 'warning-icon');
+    this._errors = this._createItem(shadowRoot, 'smallicon-error');
+    this._revokedErrors = this._createItem(shadowRoot, 'smallicon-revoked-error');
+    this._warnings = this._createItem(shadowRoot, 'smallicon-warning');
     this._titles = [];
 
     WebInspector.multitargetConsoleModel.addEventListener(
@@ -734,7 +739,7 @@ WebInspector.Main.WarningErrorCounter = class {
 WebInspector.Main.MainMenuItem = class {
   constructor() {
     this._item =
-        new WebInspector.ToolbarButton(WebInspector.UIString('Customize and control DevTools'), 'menu-toolbar-item');
+        new WebInspector.ToolbarButton(WebInspector.UIString('Customize and control DevTools'), 'largeicon-menu');
     this._item.addEventListener('mousedown', this._mouseDown, this);
   }
 
@@ -765,9 +770,9 @@ WebInspector.Main.MainMenuItem = class {
       var dockItemToolbar = new WebInspector.Toolbar('', dockItemElement);
       dockItemToolbar.makeBlueOnHover();
       var undock = new WebInspector.ToolbarToggle(
-          WebInspector.UIString('Undock into separate window'), 'dock-toolbar-item-undock');
-      var bottom = new WebInspector.ToolbarToggle(WebInspector.UIString('Dock to bottom'), 'dock-toolbar-item-bottom');
-      var right = new WebInspector.ToolbarToggle(WebInspector.UIString('Dock to right'), 'dock-toolbar-item-right');
+          WebInspector.UIString('Undock into separate window'), 'largeicon-undock');
+      var bottom = new WebInspector.ToolbarToggle(WebInspector.UIString('Dock to bottom'), 'largeicon-dock-to-bottom');
+      var right = new WebInspector.ToolbarToggle(WebInspector.UIString('Dock to right'), 'largeicon-dock-to-right');
       undock.addEventListener('mouseup', setDockSide.bind(null, WebInspector.DockController.State.Undocked));
       bottom.addEventListener('mouseup', setDockSide.bind(null, WebInspector.DockController.State.DockedToBottom));
       right.addEventListener('mouseup', setDockSide.bind(null, WebInspector.DockController.State.DockedToRight));
@@ -827,10 +832,10 @@ WebInspector.NetworkPanelIndicator = class {
     function updateVisibility() {
       if (manager.isThrottling()) {
         WebInspector.inspectorView.setPanelIcon(
-            'network', 'warning-icon', WebInspector.UIString('Network throttling is enabled'));
+            'network', 'smallicon-warning', WebInspector.UIString('Network throttling is enabled'));
       } else if (blockedURLsSetting.get().length) {
         WebInspector.inspectorView.setPanelIcon(
-            'network', 'warning-icon', WebInspector.UIString('Requests may be blocked'));
+            'network', 'smallicon-warning', WebInspector.UIString('Requests may be blocked'));
       } else {
         WebInspector.inspectorView.setPanelIcon('network', '', '');
       }
@@ -850,7 +855,7 @@ WebInspector.SourcesPanelIndicator = class {
       var javaScriptDisabled = WebInspector.moduleSetting('javaScriptDisabled').get();
       if (javaScriptDisabled) {
         WebInspector.inspectorView.setPanelIcon(
-            'sources', 'warning-icon', WebInspector.UIString('JavaScript is disabled'));
+            'sources', 'smallicon-warning', WebInspector.UIString('JavaScript is disabled'));
       } else {
         WebInspector.inspectorView.setPanelIcon('sources', '', '');
       }
@@ -1001,8 +1006,6 @@ WebInspector.BackendSettingsSync = class {
     this._autoAttachSetting.addChangeListener(this._update, this);
     this._disableJavascriptSetting = WebInspector.settings.moduleSetting('javaScriptDisabled');
     this._disableJavascriptSetting.addChangeListener(this._update, this);
-    this._blockedEventsWarningSetting = WebInspector.settings.moduleSetting('blockedEventsWarningEnabled');
-    this._blockedEventsWarningSetting.addChangeListener(this._update, this);
     WebInspector.targetManager.observeTargets(this, WebInspector.Target.Capability.Browser);
   }
 
@@ -1010,9 +1013,6 @@ WebInspector.BackendSettingsSync = class {
    * @param {!WebInspector.Target} target
    */
   _updateTarget(target) {
-    var blockedEventsWarningThresholdSeconds = 0.1;
-    target.pageAgent().setBlockedEventsWarningThreshold(
-        this._blockedEventsWarningSetting.get() ? blockedEventsWarningThresholdSeconds : 0);
     target.pageAgent().setAutoAttachToCreatedPages(this._autoAttachSetting.get());
     target.emulationAgent().setScriptExecutionDisabled(this._disableJavascriptSetting.get());
   }

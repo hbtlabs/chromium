@@ -12,6 +12,8 @@
 
 namespace views {
 
+class ViewsTestHelper;
+
 class PlatformTestHelper {
  public:
   using Factory = base::Callback<std::unique_ptr<PlatformTestHelper>(void)>;
@@ -25,6 +27,13 @@ class PlatformTestHelper {
   // that they can be called before Create().
   static void SetIsMus();
   static bool IsMus();
+
+  static void SetIsAuraMusClient();
+  static bool IsAuraMusClient();
+
+  // Called once the ViewsTestHelper has been created, but before SetUp() is
+  // called.
+  virtual void OnTestHelperCreated(ViewsTestHelper* helper) {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PlatformTestHelper);

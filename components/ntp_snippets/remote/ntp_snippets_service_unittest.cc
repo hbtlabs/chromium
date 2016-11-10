@@ -68,8 +68,16 @@ MATCHER_P(IdEq, value, "") {
   return arg->id() == value;
 }
 
+MATCHER_P(IdWithinCategoryEq, expected_id, "") {
+  return arg.id().id_within_category() == expected_id;
+}
+
 MATCHER_P(IsCategory, id, "") {
   return arg.id() == static_cast<int>(id);
+}
+
+MATCHER_P(HasCode, code, "") {
+  return arg.status == code;
 }
 
 const base::Time::Exploded kDefaultCreationTime = {2015, 11, 4, 25, 13, 46, 45};
@@ -126,6 +134,10 @@ std::string GetTestJsonWithoutTitle(const std::vector<std::string>& snippets) {
   return GetTestJson(snippets, std::string());
 }
 
+// TODO(tschumann): Remove the default parameter other_id. It makes the tests
+// less explicit and hard to read. Also get rid of the convenience
+// other_category() and unknown_category() helpers -- tests can just define
+// their own.
 std::string GetMultiCategoryJson(const std::vector<std::string>& articles,
                                  const std::vector<std::string>& others,
                                  int other_id = 2) {
@@ -251,6 +263,22 @@ void ServeOneByOneImage(
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(callback, id, gfx::test::CreateImage(1, 1)));
   notify->OnImageDataFetched(id, "1-by-1-image-data");
+}
+
+gfx::Image FetchImage(NTPSnippetsService* service,
+                      const ContentSuggestion::ID& suggestion_id) {
+  gfx::Image result;
+  base::RunLoop run_loop;
+  service->FetchSuggestionImage(suggestion_id,
+                                base::Bind(
+                                    [](base::Closure signal, gfx::Image* output,
+                                       const gfx::Image& loaded) {
+                                      *output = loaded;
+                                      signal.Run();
+                                    },
+                                    run_loop.QuitClosure(), &result));
+  run_loop.Run();
+  return result;
 }
 
 void ParseJson(
@@ -503,6 +531,16 @@ class NTPSnippetsServiceTest : public ::testing::Test {
     base::RunLoop().RunUntilIdle();
   }
 
+  void LoadMoreFromJSONString(NTPSnippetsService* service,
+                              const Category& category,
+                              const std::string& json,
+                              const std::set<std::string>& known_ids,
+                              FetchDoneCallback callback) {
+    SetUpFetchResponse(json);
+    service->Fetch(category, known_ids, callback);
+    base::RunLoop().RunUntilIdle();
+  }
+
  private:
   variations::testing::VariationParamsManager params_manager_;
   test::NTPSnippetsTestUtils utils_;
@@ -746,6 +784,30 @@ TEST_F(NTPSnippetsServiceTest, MultipleCategories) {
   }
 }
 
+TEST_F(NTPSnippetsServiceTest, ArticleCategoryInfo) {
+  auto service = MakeSnippetsService();
+  CategoryInfo article_info = service->GetCategoryInfo(articles_category());
+  EXPECT_THAT(article_info.has_more_action(), Eq(true));
+  EXPECT_THAT(article_info.has_reload_action(), Eq(true));
+  EXPECT_THAT(article_info.has_view_all_action(), Eq(false));
+  EXPECT_THAT(article_info.show_if_empty(), Eq(true));
+}
+
+TEST_F(NTPSnippetsServiceTest, ExperimentalCategoryInfo) {
+  auto service = MakeSnippetsService();
+
+  // Load data with multiple categories so that a new experimental category gets
+  // registered.
+  LoadFromJSONString(service.get(),
+                     GetMultiCategoryJson({GetSnippetN(0)}, {GetSnippetN(1)},
+                                          kUnknownRemoteCategoryId));
+  CategoryInfo info = service->GetCategoryInfo(unknown_category());
+  EXPECT_THAT(info.has_more_action(), Eq(false));
+  EXPECT_THAT(info.has_reload_action(), Eq(false));
+  EXPECT_THAT(info.has_view_all_action(), Eq(false));
+  EXPECT_THAT(info.show_if_empty(), Eq(false));
+}
+
 TEST_F(NTPSnippetsServiceTest, PersistCategoryInfos) {
   auto service = MakeSnippetsService();
 
@@ -830,6 +892,89 @@ TEST_F(NTPSnippetsServiceTest, ReplaceSnippets) {
   // The snippets loaded last replace all that was loaded previously.
   EXPECT_THAT(service->GetSnippetsForTesting(articles_category()),
               ElementsAre(IdEq(second)));
+}
+
+TEST_F(NTPSnippetsServiceTest, LoadsAdditionalSnippets) {
+  auto service = MakeSnippetsService();
+
+  LoadFromJSONString(service.get(),
+                     GetTestJson({GetSnippetWithUrl("http://first")}));
+  EXPECT_THAT(service->GetSnippetsForTesting(articles_category()),
+              ElementsAre(IdEq("http://first")));
+
+  auto expect_only_second_suggestion_received =
+      base::Bind([](Status status, std::vector<ContentSuggestion> suggestions) {
+        EXPECT_THAT(suggestions, SizeIs(1));
+        EXPECT_THAT(suggestions[0].id().id_within_category(),
+                    Eq("http://second"));
+      });
+  LoadMoreFromJSONString(service.get(), articles_category(),
+                         GetTestJson({GetSnippetWithUrl("http://second")}),
+                         /*known_ids=*/std::set<std::string>(),
+                         expect_only_second_suggestion_received);
+
+  ServeImageCallback cb = base::Bind(&ServeOneByOneImage, service.get());
+  EXPECT_CALL(*image_fetcher(), StartOrQueueNetworkRequest(_, _, _))
+      .Times(2)
+      .WillRepeatedly(WithArgs<0, 2>(Invoke(&cb, &ServeImageCallback::Run)));
+  image_decoder()->SetDecodedImage(gfx::test::CreateImage(1, 1));
+  gfx::Image image = FetchImage(service.get(), MakeArticleID("http://first"));
+  EXPECT_FALSE(image.IsEmpty());
+  EXPECT_EQ(1, image.Width());
+
+  image = FetchImage(service.get(), MakeArticleID("http://second"));
+  EXPECT_FALSE(image.IsEmpty());
+  EXPECT_EQ(1, image.Width());
+
+  // Verify that the observer did not get updated about the additional snippets.
+  // Rationale: It's not clear that snippets fetched in one context (i.e. one
+  // potentially old NTP) should be shown in other NTPs as well.
+  // We can revisit this decision, but for now it's easiest to keep them
+  // independent.
+  EXPECT_THAT(observer().SuggestionsForCategory(articles_category()),
+              ElementsAre(IdWithinCategoryEq("http://first")));
+}
+
+// TODO(tschumann): We don't have test making sure the NTPSnippetsFetcher
+// actually gets the proper parameters. Add tests with an injected
+// NTPSnippetsFetcher to verify the parameters, including proper handling of
+// dismissed and known_ids.
+
+namespace {
+
+// Workaround for gMock's lack of support for movable types.
+void SuggestionsLoaded(
+    MockFunction<void(Status, const std::vector<ContentSuggestion>&)>* loaded,
+    Status status,
+    std::vector<ContentSuggestion> suggestions) {
+  loaded->Call(status, suggestions);
+}
+
+}  // namespace
+
+TEST_F(NTPSnippetsServiceTest, InvokesOnlyCallbackOnFetchingMore) {
+  auto service = MakeSnippetsService();
+
+  MockFunction<void(Status, const std::vector<ContentSuggestion>&)> loaded;
+  EXPECT_CALL(loaded, Call(HasCode(StatusCode::SUCCESS), SizeIs(1)));
+
+  LoadMoreFromJSONString(service.get(), articles_category(),
+                         GetTestJson({GetSnippetWithUrl("http://some")}),
+                         std::set<std::string>(),
+                         base::Bind(&SuggestionsLoaded, &loaded));
+
+  // The observer shouldn't have been triggered.
+  EXPECT_THAT(observer().SuggestionsForCategory(articles_category()),
+              IsEmpty());
+}
+
+TEST_F(NTPSnippetsServiceTest, ReturnFetchRequestEmptyBeforeInit) {
+  auto service = MakeSnippetsServiceWithoutInitialization();
+  MockFunction<void(Status, const std::vector<ContentSuggestion>&)> loaded;
+  EXPECT_CALL(loaded, Call(HasCode(StatusCode::TEMPORARY_ERROR), SizeIs(0)));
+  service->Fetch(articles_category(), std::set<std::string>(),
+                 base::Bind(&SuggestionsLoaded, &loaded));
+  base::RunLoop().RunUntilIdle();
 }
 
 TEST_F(NTPSnippetsServiceTest, LoadInvalidJson) {
@@ -1241,26 +1386,6 @@ TEST_F(NTPSnippetsServiceTest, SuggestionsFetchedOnSignInAndSignOut) {
   base::RunLoop().RunUntilIdle();
   EXPECT_THAT(service->GetSnippetsForTesting(articles_category()), SizeIs(2));
 }
-
-namespace {
-
-gfx::Image FetchImage(NTPSnippetsService* service,
-                      const ContentSuggestion::ID& suggestion_id) {
-  gfx::Image result;
-  base::RunLoop run_loop;
-  service->FetchSuggestionImage(suggestion_id,
-                                base::Bind(
-                                    [](base::Closure signal, gfx::Image* output,
-                                       const gfx::Image& loaded) {
-                                      *output = loaded;
-                                      signal.Run();
-                                    },
-                                    run_loop.QuitClosure(), &result));
-  run_loop.Run();
-  return result;
-}
-
-}  // namespace
 
 TEST_F(NTPSnippetsServiceTest, ShouldClearOrphanedImagesOnRestart) {
   auto service = MakeSnippetsService();

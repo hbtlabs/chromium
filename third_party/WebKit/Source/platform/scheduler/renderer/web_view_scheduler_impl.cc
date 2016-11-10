@@ -5,6 +5,7 @@
 #include "platform/scheduler/renderer/web_view_scheduler_impl.h"
 
 #include "base/logging.h"
+#include "base/strings/stringprintf.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/scheduler/base/virtual_time_domain.h"
 #include "platform/scheduler/child/scheduler_tqm_delegate.h"
@@ -19,11 +20,59 @@ namespace scheduler {
 namespace {
 
 const double kBackgroundBudgetAsCPUFraction = .01;
+// Given that we already align timers to 1Hz, do not report throttling if
+// it is under 3s.
+constexpr base::TimeDelta kMinimalBackgroundThrottlingDurationToReport =
+    base::TimeDelta::FromSeconds(3);
+constexpr base::TimeDelta kDefaultMaxBackgroundBudgetLevel =
+    base::TimeDelta::FromSeconds(3);
+constexpr base::TimeDelta kDefaultMaxBackgroundThrottlingDelay =
+    base::TimeDelta::FromMinutes(1);
+
+// Values coming from WebViewSchedulerSettings are interpreted as follows:
+//   -1 is "not set". Scheduler should use a reasonable default.
+//   0 is "none". base::nullopt will be used if value is optional.
+//   other values are left without changes.
+
+double GetBackgroundBudget(
+    WebViewScheduler::WebViewSchedulerSettings* settings) {
+  if (!settings)
+    return kBackgroundBudgetAsCPUFraction;
+  double settings_budget = settings->expensiveBackgroundThrottlingCPUBudget();
+  if (settings_budget == -1.0)
+    return kBackgroundBudgetAsCPUFraction;
+  return settings_budget;
+}
+
+base::Optional<base::TimeDelta> GetMaxBudgetLevel(
+    WebViewScheduler::WebViewSchedulerSettings* settings) {
+  if (!settings)
+    return base::nullopt;
+  double max_budget_level = settings->expensiveBackgroundThrottlingMaxBudget();
+  if (max_budget_level == -1.0)
+    return kDefaultMaxBackgroundBudgetLevel;
+  if (max_budget_level == 0.0)
+    return base::nullopt;
+  return base::TimeDelta::FromSecondsD(max_budget_level);
+}
+
+base::Optional<base::TimeDelta> GetMaxThrottlingDelay(
+    WebViewScheduler::WebViewSchedulerSettings* settings) {
+  if (!settings)
+    return base::nullopt;
+  double max_delay = settings->expensiveBackgroundThrottlingMaxDelay();
+  if (max_delay == -1.0)
+    return kDefaultMaxBackgroundThrottlingDelay;
+  if (max_delay == 0.0)
+    return base::nullopt;
+  return base::TimeDelta::FromSecondsD(max_delay);
+}
 
 }  // namespace
 
 WebViewSchedulerImpl::WebViewSchedulerImpl(
     WebScheduler::InterventionReporter* intervention_reporter,
+    WebViewScheduler::WebViewSchedulerSettings* settings,
     RendererSchedulerImpl* renderer_scheduler,
     bool disable_background_timer_throttling)
     : intervention_reporter_(intervention_reporter),
@@ -36,22 +85,10 @@ WebViewSchedulerImpl::WebViewSchedulerImpl(
       have_seen_loading_task_(false),
       virtual_time_(false),
       is_audio_playing_(false),
-      background_time_budget_pool_(nullptr) {
+      reported_background_throttling_since_navigation_(false),
+      background_time_budget_pool_(nullptr),
+      settings_(settings) {
   renderer_scheduler->AddWebViewScheduler(this);
-
-  if (RuntimeEnabledFeatures::expensiveBackgroundTimerThrottlingEnabled()) {
-    background_time_budget_pool_ =
-        renderer_scheduler_->task_queue_throttler()->CreateTimeBudgetPool(
-            "background");
-
-    LazyNow lazy_now(renderer_scheduler_->tick_clock());
-
-    // Disable throttling because page is visible by default.
-    background_time_budget_pool_->DisableThrottling(&lazy_now);
-
-    background_time_budget_pool_->SetTimeBudget(lazy_now.Now(),
-                                                kBackgroundBudgetAsCPUFraction);
-  }
 }
 
 WebViewSchedulerImpl::~WebViewSchedulerImpl() {
@@ -104,6 +141,10 @@ WebViewSchedulerImpl::createFrameScheduler(blink::BlameContext* blame_context) {
 void WebViewSchedulerImpl::Unregister(WebFrameSchedulerImpl* frame_scheduler) {
   DCHECK(frame_schedulers_.find(frame_scheduler) != frame_schedulers_.end());
   frame_schedulers_.erase(frame_scheduler);
+}
+
+void WebViewSchedulerImpl::OnNavigation() {
+  reported_background_throttling_since_navigation_ = false;
 }
 
 void WebViewSchedulerImpl::ReportIntervention(const std::string& message) {
@@ -176,6 +217,11 @@ void WebViewSchedulerImpl::setVirtualTimePolicy(VirtualTimePolicy policy) {
   }
 }
 
+void WebViewSchedulerImpl::audioStateChanged(bool is_audio_playing) {
+  is_audio_playing_ = is_audio_playing;
+  renderer_scheduler_->OnAudioStateChanged();
+}
+
 void WebViewSchedulerImpl::ApplyVirtualTimePolicy() {
   if (virtual_time_policy_ != VirtualTimePolicy::DETERMINISTIC_LOADING) {
     return;
@@ -187,6 +233,60 @@ void WebViewSchedulerImpl::ApplyVirtualTimePolicy() {
   setAllowVirtualTimeToAdvance(pending_loads_.size() == 0 &&
                                background_parser_count_ == 0 &&
                                have_seen_loading_task_);
+}
+
+bool WebViewSchedulerImpl::IsAudioPlaying() const {
+  return is_audio_playing_;
+}
+
+TaskQueueThrottler::TimeBudgetPool*
+WebViewSchedulerImpl::BackgroundTimeBudgetPool() {
+  MaybeInitializeBackgroundTimeBudgetPool();
+  return background_time_budget_pool_;
+}
+
+void WebViewSchedulerImpl::MaybeInitializeBackgroundTimeBudgetPool() {
+  if (background_time_budget_pool_)
+    return;
+
+  if (!RuntimeEnabledFeatures::expensiveBackgroundTimerThrottlingEnabled())
+    return;
+
+  background_time_budget_pool_ =
+      renderer_scheduler_->task_queue_throttler()->CreateTimeBudgetPool(
+          "background", GetMaxBudgetLevel(settings_),
+          GetMaxThrottlingDelay(settings_));
+
+  LazyNow lazy_now(renderer_scheduler_->tick_clock());
+
+  if (page_visible_) {
+    background_time_budget_pool_->DisableThrottling(&lazy_now);
+  } else {
+    background_time_budget_pool_->EnableThrottling(&lazy_now);
+  }
+
+  background_time_budget_pool_->SetTimeBudget(lazy_now.Now(),
+                                              GetBackgroundBudget(settings_));
+}
+
+void WebViewSchedulerImpl::OnThrottlingReported(
+    base::TimeDelta throttling_duration) {
+  if (throttling_duration < kMinimalBackgroundThrottlingDurationToReport)
+    return;
+
+  if (reported_background_throttling_since_navigation_)
+    return;
+  reported_background_throttling_since_navigation_ = true;
+
+  std::string message = base::StringPrintf(
+      "Timer tasks have taken too much time while the page was in the "
+      "background. "
+      "As a result, they have been deferred for %.3f seconds. "
+      "See https://www.chromestatus.com/feature/6172836527865856 "
+      "for more details",
+      throttling_duration.InSecondsF());
+
+  intervention_reporter_->ReportIntervention(WebString::fromUTF8(message));
 }
 
 }  // namespace scheduler

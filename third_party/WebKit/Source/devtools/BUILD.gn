@@ -3,10 +3,11 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
+import("//third_party/WebKit/public/public_features.gni")
 import("//third_party/WebKit/Source/core/core.gni")
 
 devtools_embedder_scripts = [
-  "front_end/devtools.js",
+  "front_end/devtools_compatibility.js",
   "front_end/Tests.js",
 ]
 devtools_core_base_files = [
@@ -67,6 +68,7 @@ devtools_components_js_files = [
   "front_end/components/DOMPresentationUtils.js",
   "front_end/components/ExecutionContextSelector.js",
   "front_end/components/HandlerRegistry.js",
+  "front_end/components/JavaScriptAutocomplete.js",
   "front_end/components/BreakpointsSidebarPaneBase.js",
   "front_end/components/Linkifier.js",
   "front_end/components/NetworkConditionsSelector.js",
@@ -176,6 +178,7 @@ devtools_persistence_js_files = [
   "front_end/persistence/DefaultMapping.js",
   "front_end/persistence/Automapping.js",
   "front_end/persistence/Persistence.js",
+  "front_end/persistence/PersistenceUtils.js",
 ]
 devtools_platform_js_files = [
   "front_end/platform/DOMExtension.js",
@@ -233,7 +236,6 @@ devtools_ui_js_files = [
   "front_end/ui/slider.css",
   "front_end/ui/softContextMenu.css",
   "front_end/ui/smallBubble.css",
-  "front_end/ui/smallIcon.css",
   "front_end/ui/splitWidget.css",
   "front_end/ui/toolbar.css",
   "front_end/ui/tooltip.css",
@@ -258,6 +260,7 @@ devtools_ui_js_files = [
   "front_end/ui/FilterBar.js",
   "front_end/ui/ForwardedInputEventHandler.js",
   "front_end/ui/HistoryInput.js",
+  "front_end/ui/Icon.js",
   "front_end/ui/Infobar.js",
   "front_end/ui/InplaceEditor.js",
   "front_end/ui/TextEditor.js",
@@ -405,6 +408,7 @@ devtools_components_lazy_js_files = [
   "front_end/components_lazy/FilmStripModel.js",
   "front_end/components_lazy/FilmStripView.js",
   "front_end/components_lazy/LineLevelProfile.js",
+  "front_end/components_lazy/CoverageProfile.js",
 ]
 devtools_console_js_files = [
   "front_end/console/consoleView.css",
@@ -544,7 +548,7 @@ devtools_network_js_files = [
   "front_end/network/NetworkOverview.js",
   "front_end/network/NetworkPanel.js",
   "front_end/network/NetworkTimeCalculator.js",
-  "front_end/network/NetworkTimelineColumn.js",
+  "front_end/network/NetworkWaterfallColumn.js",
   "front_end/network/RequestCookiesView.js",
   "front_end/network/RequestHeadersView.js",
   "front_end/network/RequestHTMLView.js",
@@ -819,8 +823,6 @@ devtools_image_files = [
   "front_end/Images/fileSystem.png",
   "front_end/Images/forward.png",
   "front_end/Images/frame.png",
-  "front_end/Images/graphLabelCalloutLeft.png",
-  "front_end/Images/graphLabelCalloutRight.png",
   "front_end/Images/ic_info_black_18dp.svg",
   "front_end/Images/ic_warning_black_18dp.svg",
   "front_end/Images/navigationControls.png",

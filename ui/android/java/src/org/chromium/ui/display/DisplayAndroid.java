@@ -34,6 +34,13 @@ public class DisplayAndroid {
          * @param orientation One of Surface.ROTATION_* values.
          */
         void onRotationChanged(int rotation);
+
+        /**
+         * Called whenever the screen density changes.
+         *
+         * @param screen density, aka Density Independent Pixel scale.
+         */
+        void onDIPScaleChanged(float dipScale);
     }
 
     private static final String TAG = "DisplayAndroid";
@@ -87,12 +94,22 @@ public class DisplayAndroid {
     }
 
     /**
-     * Get the DisplayAndroid for this context. It's safe to call this with any type of context
-     * including the Application. However to support multi-display, prefer to use the Activity
-     * context if available, or obtain DisplayAndroid from WindowAndroid instead.
+     * Get the non-multi-display DisplayAndroid for the given context. It's safe to call this with
+     * any type of context, including the Application.
+     *
+     * To support multi-display, obtain DisplayAndroid from WindowAndroid instead.
+     *
+     * This function is intended to be analogous to GetPrimaryDisplay() for other platforms.
+     * However, Android has historically had no real concept of a Primary Display, and instead uses
+     * the notion of a default display for an Activity. Under normal circumstances, this function,
+     * called with the correct context, will return the expected display for an Activity. However,
+     * virtual, or "fake", displays that are not associated with any context may be used in special
+     * cases, like Virtual Reality, and will lead to this function returning the incorrect display.
+     *
+     * @return What the Android WindowManager considers to be the default display for this context.
      */
-    public static DisplayAndroid get(Context context) {
-        Display display = DisplayAndroidManager.getDisplayFromContext(context);
+    public static DisplayAndroid getNonMultiDisplay(Context context) {
+        Display display = DisplayAndroidManager.getDefaultDisplayForContext(context);
         return getManager().getDisplayAndroid(display);
     }
 
@@ -134,7 +151,7 @@ public class DisplayAndroid {
     /**
      * @return A scaling factor for the Density Independent Pixel unit.
      */
-    public float getDIPScale() {
+    public float getDipScale() {
         return mDisplayMetrics.density;
     }
 
@@ -180,6 +197,8 @@ public class DisplayAndroid {
 
     @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
     /* package */ void updateFromDisplay(Display display) {
+        float oldDensity = mDisplayMetrics.density;
+
         display.getSize(mSize);
         display.getMetrics(mDisplayMetrics);
 
@@ -197,6 +216,16 @@ public class DisplayAndroid {
             DisplayAndroidObserver[] observers = getObservers();
             for (DisplayAndroidObserver o : observers) {
                 o.onRotationChanged(mRotation);
+            }
+        }
+
+        // Intentional comparison of floats: we assume that if scales differ,
+        // they differ significantly.
+        boolean dipScaleChanged = oldDensity != mDisplayMetrics.density;
+        if (dipScaleChanged) {
+            DisplayAndroidObserver[] observers = getObservers();
+            for (DisplayAndroidObserver o : observers) {
+                o.onDIPScaleChanged(mDisplayMetrics.density);
             }
         }
     }

@@ -16,12 +16,20 @@
 class FullscreenToolbarAnimationController;
 @class FullscreenToolbarMouseTracker;
 @class FullscreenToolbarVisibilityLockController;
+@class ImmersiveFullscreenController;
 
-enum class FullscreenSlidingStyle {
-  OMNIBOX_TABS_PRESENT,  // Tab strip and omnibox both visible.
-  OMNIBOX_TABS_HIDDEN,   // Tab strip and omnibox both hidden.
-  OMNIBOX_TABS_NONE,     // Tab strip and omnibox both hidden and never
-                         // shown.
+// This enum class represents the appearance of the fullscreen toolbar, which
+// includes the tab strip and omnibox.
+enum class FullscreenToolbarStyle {
+  // The toolbar is present. Moving the cursor to the top
+  // causes the menubar to appear and the toolbar to slide down.
+  TOOLBAR_PRESENT,
+  // The toolbar is hidden. Moving cursor to top shows the
+  // toolbar and menubar.
+  TOOLBAR_HIDDEN,
+  // Toolbar is hidden. Moving cursor to top causes the menubar
+  // to appear, but not the toolbar.
+  TOOLBAR_NONE,
 };
 
 // Provides a controller to fullscreen toolbar for a single browser
@@ -44,46 +52,31 @@ enum class FullscreenSlidingStyle {
   // object is only set when the browser is in fullscreen mode.
   base::scoped_nsobject<FullscreenMenubarTracker> menubarTracker_;
 
-  // Maintains the toolbar's visibility locks for the
-  // OMNIBOX_TABS_HIDDEN style.
+  // Maintains the toolbar's visibility locks for the TOOLBAR_HIDDEN style.
   base::scoped_nsobject<FullscreenToolbarVisibilityLockController>
       visibilityLockController_;
 
-  // Manages the toolbar animations for the OMNIBOX_TABS_HIDDEN style.
+  // Manages the toolbar animations for the TOOLBAR_HIDDEN style.
   std::unique_ptr<FullscreenToolbarAnimationController> animationController_;
 
   // Mouse tracker to track the user's interactions with the toolbar. This
   // object is only set when the browser is in fullscreen mode.
   base::scoped_nsobject<FullscreenToolbarMouseTracker> mouseTracker_;
 
-  // Tracks the currently requested system fullscreen mode, used to show or
-  // hide the menubar.  This should be |kFullScreenModeNormal| when the window
-  // is not main or not fullscreen, |kFullScreenModeHideAll| while the overlay
-  // is hidden, and |kFullScreenModeHideDock| while the overlay is shown.  If
-  // the window is not on the primary screen, this should always be
-  // |kFullScreenModeNormal|.  This value can get out of sync with the correct
-  // state if we miss a notification (which can happen when a window is closed).
-  // Used to track the current state and make sure we properly restore the menu
-  // bar when this controller is destroyed.
-  base::mac::FullScreenMode systemFullscreenMode_;
-
-  // Whether the omnibox is hidden in fullscreen.
-  FullscreenSlidingStyle slidingStyle_;
+  // Controller for immersive fullscreen.
+  base::scoped_nsobject<ImmersiveFullscreenController>
+      immersiveFullscreenController_;
 }
 
-@property(nonatomic, assign) FullscreenSlidingStyle slidingStyle;
+@property(nonatomic, assign) FullscreenToolbarStyle toolbarStyle;
 
 // Designated initializer.
-- (id)initWithBrowserController:(BrowserWindowController*)controller
-                          style:(FullscreenSlidingStyle)style;
+- (id)initWithBrowserController:(BrowserWindowController*)controller;
 
 // Informs the controller that the browser has entered or exited fullscreen
-// mode. |-setupFullscreenToolbarForContentView:showDropdown:| should be called
-// after the window is setup, just before it is shown. |-exitFullscreenMode|
-// should be called before any views are moved back to the non-fullscreen
-// window.  If |-setupFullscreenToolbarForContentView:showDropdown:| is called,
-// it must be balanced with a call to |-exitFullscreenMode| before the
-// controller is released.
+// mode. |-enterFullscreenMode| should be called when the window is about to
+// enter fullscreen. |-exitFullscreenMode| should be called before any views
+// are moved back to the non-fullscreen window.
 - (void)enterFullscreenMode;
 - (void)exitFullscreenMode;
 
@@ -107,20 +100,15 @@ enum class FullscreenSlidingStyle {
 // Returns YES if the fullscreen toolbar must be shown.
 - (BOOL)mustShowFullscreenToolbar;
 
-// Returns YES if the mouse is on the window's screen. This is used to check
-// if the menubar events belong to window's screen since the menubar would
-// only be revealed if the mouse is there.
-- (BOOL)isMouseOnScreen;
-
 // Called by the BrowserWindowController to update toolbar frame.
 - (void)updateToolbarFrame:(NSRect)frame;
 
-// Returns YES if the browser is in the process of entering/exiting
-// fullscreen.
-- (BOOL)isFullscreenTransitionInProgress;
-
 // Returns YES if the browser in in fullscreen.
 - (BOOL)isInFullscreen;
+
+// Updates the toolbar style. If the style has changed, then the toolbar will
+// relayout.
+- (void)updateToolbarStyle;
 
 // Updates the toolbar by updating the layout, menubar and dock.
 - (void)updateToolbar;

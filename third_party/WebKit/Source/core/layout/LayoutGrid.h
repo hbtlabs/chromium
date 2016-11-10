@@ -124,6 +124,13 @@ class LayoutGrid final : public LayoutBlock {
       GridSizingData&,
       LayoutUnit& baseSizesWithoutMaximization,
       LayoutUnit& growthLimitsWithoutMaximization) const;
+  void computeFlexSizedTracksGrowth(
+      GridTrackSizingDirection,
+      Vector<GridTrack>&,
+      const Vector<size_t>& flexibleSizedTracksIndex,
+      double flexFraction,
+      Vector<LayoutUnit>& increments,
+      LayoutUnit& totalGrowth) const;
   LayoutUnit computeUsedBreadthOfMinLength(const GridTrackSize&,
                                            LayoutUnit maxBreadth) const;
   LayoutUnit computeUsedBreadthOfMaxLength(const GridTrackSize&,
@@ -176,8 +183,9 @@ class LayoutGrid final : public LayoutBlock {
 
   void layoutGridItems(GridSizingData&);
   void prepareChildForPositionedLayout(LayoutBox&);
-  void layoutPositionedObjects(bool relayoutChildren,
-                               PositionedLayoutBehavior = DefaultLayout);
+  void layoutPositionedObjects(
+      bool relayoutChildren,
+      PositionedLayoutBehavior = DefaultLayout) override;
   void offsetAndBreadthForPositionedChild(const LayoutBox&,
                                           GridTrackSizingDirection,
                                           LayoutUnit& offset,
@@ -300,6 +308,15 @@ class LayoutGrid final : public LayoutBlock {
   bool hasAutoMarginsInRowAxis(const LayoutBox&) const;
   void updateAutoMarginsInColumnAxisIfNeeded(LayoutBox&);
   void updateAutoMarginsInRowAxisIfNeeded(LayoutBox&);
+
+  int baselinePosition(
+      FontBaseline,
+      bool firstLine,
+      LineDirectionMode,
+      LinePositionMode = PositionOnContainingLine) const override;
+  int firstLineBoxBaseline() const override;
+  int inlineBlockBaseline(LineDirectionMode) const override;
+  bool isInlineBaselineAlignedChild(const LayoutBox* child) const;
 
 #if ENABLE(ASSERT)
   bool tracksAreWiderThanMinTrackBreadth(GridTrackSizingDirection,

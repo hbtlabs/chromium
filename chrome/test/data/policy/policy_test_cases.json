@@ -2658,6 +2658,22 @@
     ]
   },
 
+  "QuickUnlockModeWhitelist": {
+    "os": ["chromeos"],
+    "test_policy": { "QuickUnlockModeWhitelist": ["PIN"] },
+    "pref_mappings": [
+      { "pref": "quick_unlock_mode_whitelist"}
+    ]
+  },
+
+  "QuickUnlockTimeout": {
+    "os": ["chromeos"],
+    "test_policy": { "QuickUnlockTimeout": 0 },
+    "pref_mappings": [
+      { "pref": "quick_unlock_timeout"}
+    ]
+  },
+
   "ArcCertificatesSyncMode": {
     "os": ["chromeos"],
     "can_be_recommended": false,
@@ -2945,6 +2961,16 @@
     "pref_mappings": [
       {
         "pref": "task_manager.end_process_enabled",
+        "local_state": true
+      }
+    ]
+  },
+
+  "NetworkThrottlingEnabled": {
+    "os": ["chromeos"],
+    "test_policy": { "NetworkThrottlingEnabled": {"enabled": "true", "upload_rate_kbits": "5600", "download_rate_kbits": "5600"} },
+    "pref_mappings": [
+      { "pref": "net.throttling_enabled",
         "local_state": true
       }
     ]

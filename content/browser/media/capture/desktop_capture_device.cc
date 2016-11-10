@@ -10,7 +10,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -62,6 +62,11 @@ bool IsFrameUnpackedOrInverted(webrtc::DesktopFrame* frame) {
 }
 
 }  // namespace
+
+#if defined(OS_WIN)
+const base::Feature kDirectXCapturer{"DirectXCapturer",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 class DesktopCaptureDevice::Core : public webrtc::DesktopCapturer::Callback {
  public:
@@ -367,8 +372,7 @@ std::unique_ptr<media::VideoCaptureDevice> DesktopCaptureDevice::Create(
   options.set_disable_effects(false);
 
 #if defined(OS_WIN)
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableDirectXScreenCapturer)) {
+  if (!base::FeatureList::IsEnabled(kDirectXCapturer)) {
     options.set_allow_use_magnification_api(true);
   } else {
     options.set_allow_directx_capturer(true);
@@ -380,9 +384,9 @@ std::unique_ptr<media::VideoCaptureDevice> DesktopCaptureDevice::Create(
 
   switch (source.type) {
     case DesktopMediaID::TYPE_SCREEN: {
-      std::unique_ptr<webrtc::ScreenCapturer> screen_capturer(
-          webrtc::ScreenCapturer::Create(options));
-      if (screen_capturer && screen_capturer->SelectScreen(source.id)) {
+      std::unique_ptr<webrtc::DesktopCapturer> screen_capturer(
+          webrtc::DesktopCapturer::CreateScreenCapturer(options));
+      if (screen_capturer && screen_capturer->SelectSource(source.id)) {
         capturer.reset(new webrtc::DesktopAndCursorComposer(
             screen_capturer.release(),
             webrtc::MouseCursorMonitor::CreateForScreen(options, source.id)));
@@ -395,10 +399,10 @@ std::unique_ptr<media::VideoCaptureDevice> DesktopCaptureDevice::Create(
     }
 
     case DesktopMediaID::TYPE_WINDOW: {
-      std::unique_ptr<webrtc::WindowCapturer> window_capturer(
+      std::unique_ptr<webrtc::DesktopCapturer> window_capturer(
           webrtc::CroppingWindowCapturer::Create(options));
-      if (window_capturer && window_capturer->SelectWindow(source.id)) {
-        window_capturer->BringSelectedWindowToFront();
+      if (window_capturer && window_capturer->SelectSource(source.id)) {
+        window_capturer->FocusOnSelectedSource();
         capturer.reset(new webrtc::DesktopAndCursorComposer(
             window_capturer.release(),
             webrtc::MouseCursorMonitor::CreateForWindow(options, source.id)));

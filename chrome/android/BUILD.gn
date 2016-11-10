@@ -24,6 +24,8 @@ chrome_public_jinja_variables = default_chrome_public_jinja_variables +
                                 [ "manifest_package=$manifest_package" ]
 chrome_public_android_manifest =
     "$target_gen_dir/chrome_public_apk/AndroidManifest.xml"
+chrome_modern_public_android_manifest =
+    "$target_gen_dir/chrome_modern_public_apk/AndroidManifest.xml"
 chrome_sync_shell_android_manifest =
     "$target_gen_dir/chrome_sync_shell_apk/AndroidManifest.xml"
 
@@ -42,6 +44,16 @@ jinja_template("chrome_public_android_manifest") {
   variables = chrome_public_jinja_variables
   variables += [
     "min_sdk_version=16",
+    "target_sdk_version=23",
+  ]
+}
+
+jinja_template("chrome_modern_public_android_manifest") {
+  input = "java/AndroidManifest.xml"
+  output = chrome_modern_public_android_manifest
+  variables = chrome_public_jinja_variables
+  variables += [
+    "min_sdk_version=21",
     "target_sdk_version=23",
   ]
 }
@@ -161,14 +173,15 @@ android_library("chrome_java") {
     "//media/capture/content/android:screen_capture_java",
     "//media/capture/video/android:capture_java",
     "//media/midi:midi_java",
-    "//mojo/public/java:bindings",
-    "//mojo/public/java:system",
+    "//mojo/public/java:bindings_java",
+    "//mojo/public/java:system_java",
     "//net/android:net_java",
     "//printing:printing_java",
     "//services/service_manager/public/interfaces:interfaces_java",
     "//services/service_manager/public/java:service_manager_java",
     "//third_party/WebKit/public:android_mojo_bindings_java",
     "//third_party/WebKit/public:blink_headers_java",
+    "//third_party/WebKit/public:new_wrapper_types_mojo_bindings_java",
     "//third_party/android_data_chart:android_data_chart_java",
     "//third_party/android_media:android_media_java",
     "//third_party/android_protobuf:protobuf_nano_javalib",
@@ -279,6 +292,7 @@ java_cpp_enum("chrome_android_java_enums_srcjar") {
     "//chrome/browser/android/policy/policy_auditor.cc",
     "//chrome/browser/android/shortcut_info.h",
     "//chrome/browser/android/tab_android.h",
+    "//chrome/browser/banners/app_banner_settings_helper.h",
     "//chrome/browser/notifications/notification_platform_bridge_android.cc",
     "//chrome/browser/profiles/profile_metrics.h",
     "//chrome/browser/ui/android/infobars/infobar_android.h",
@@ -386,6 +400,7 @@ android_library("chrome_test_java") {
     "//components/invalidation/impl:javatests",
     "//components/location/android:location_java",
     "//components/minidump_uploader:minidump_uploader_java",
+    "//components/minidump_uploader:minidump_uploader_javatests",
     "//components/navigation_interception/android:navigation_interception_java",
     "//components/payments:payment_request_java",
     "//components/policy/android:policy_java",
@@ -404,8 +419,8 @@ android_library("chrome_test_java") {
     "//content/public/test/android:content_java_test_support",
     "//device/geolocation:geolocation_java",
     "//device/geolocation:geolocation_java_test_support",
-    "//mojo/public/java:bindings",
-    "//mojo/public/java:system",
+    "//mojo/public/java:bindings_java",
+    "//mojo/public/java:system_java",
     "//net/android:net_java",
     "//net/android:net_java_test_support",
     "//printing:printing_java",
@@ -645,6 +660,9 @@ shared_library("chrome_sync_shell") {
 template("chrome_public_apk_tmpl_shared") {
   chrome_public_apk_tmpl(target_name) {
     forward_variables_from(invoker, "*")
+    if (!defined(deps)) {
+      deps = []
+    }
 
     native_lib_version_rule = "//build/util:chrome_version_json"
     deps += [
@@ -662,8 +680,16 @@ chrome_public_apk_tmpl_shared("chrome_public_apk") {
   android_manifest_dep = ":chrome_public_android_manifest"
   apk_name = "ChromePublic"
   shared_libraries = [ ":chrome" ]
+}
 
-  deps = []
+chrome_public_apk_tmpl_shared("chrome_modern_public_apk") {
+  android_manifest = chrome_modern_public_android_manifest
+  android_manifest_dep = ":chrome_modern_public_android_manifest"
+  apk_name = "ChromeModernPublic"
+  shared_libraries = [ ":chrome" ]
+
+  # Always enable load_library_from_apk.
+  load_library_from_apk = chromium_linker_supported
 }
 
 chrome_public_apk_tmpl_shared("chrome_sync_shell_apk") {

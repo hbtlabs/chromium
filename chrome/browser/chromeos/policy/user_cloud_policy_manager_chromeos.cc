@@ -137,7 +137,7 @@ void UserCloudPolicyManagerChromeOS::Connect(
       nullptr /* signing_service */));
   CreateComponentCloudPolicyService(
       dm_protocol::kChromeExtensionPolicyType, component_policy_cache_path_,
-      system_request_context, cloud_policy_client.get());
+      system_request_context, cloud_policy_client.get(), schema_registry());
   core()->Connect(std::move(cloud_policy_client));
   client()->AddObserver(this);
 
@@ -416,9 +416,8 @@ void UserCloudPolicyManagerChromeOS::CancelWaitForPolicyFetch(bool success) {
   // initialization will not complete).
   // TODO(atwilson): Add code to retry policy fetching.
   if (!success && !allow_failed_policy_fetches_) {
-    LOG(ERROR) << "Policy fetch failed for "
-               << user_manager::UserManager::Get()->GetActiveUser()->email()
-               << " - aborting profile initialization";
+    LOG(ERROR) << "Policy fetch failed for the user. "
+                  "Aborting profile initialization";
     // Need to exit the current user, because we've already started this user's
     // session.
     chrome::AttemptUserExit();

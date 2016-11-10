@@ -106,8 +106,6 @@ class CONTENT_EXPORT WebContentsAndroid
       bool enable_hiding,
       bool enable_showing,
       bool animate);
-  void ShowImeIfNeeded(JNIEnv* env,
-                       const base::android::JavaParamRef<jobject>& obj);
   void ScrollFocusedEditableNodeIntoView(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
@@ -191,6 +189,8 @@ class CONTENT_EXPORT WebContentsAndroid
                     jint max_bitmap_size,
                     jboolean bypass_cache,
                     const base::android::JavaParamRef<jobject>& jcallback);
+  void DismissTextHandles(JNIEnv* env,
+                          const base::android::JavaParamRef<jobject>& obj);
 
   void SetMediaSession(
       const base::android::ScopedJavaLocalRef<jobject>& j_media_session);

@@ -487,7 +487,6 @@ void ImageResource::finish(double loadFinishTime) {
     // document:
     // https://docs.google.com/document/d/1v0yTAZ6wkqX2U_M6BNIGUJpM1s0TIw1VsqpxoL7aciY/edit?usp=sharing
     clearData();
-    setEncodedSizeMemoryUsage(0);
   }
   Resource::finish(loadFinishTime);
 }
@@ -591,7 +590,9 @@ static bool isLoFiImage(const ImageResource& resource) {
   if (resource.resourceRequest().loFiState() != WebURLRequest::LoFiOn)
     return false;
   return !resource.isLoaded() ||
-         resource.response().httpHeaderField("chrome-proxy").contains("q=low");
+         resource.response()
+             .httpHeaderField("chrome-proxy-content-transform")
+             .contains("empty-image");
 }
 
 void ImageResource::reloadIfLoFiOrPlaceholder(

@@ -4,12 +4,18 @@
 
 #include "cc/blimp/layer_tree_host_remote.h"
 
+#include <memory>
+#include <unordered_set>
+
 #include "base/bind.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/animation/animation_host.h"
 #include "cc/layers/layer.h"
 #include "cc/output/begin_frame_args.h"
+#include "cc/proto/client_state_update.pb.h"
+#include "cc/proto/compositor_message.pb.h"
+#include "cc/proto/gfx_conversions.h"
 #include "cc/test/fake_image_serialization_processor.h"
 #include "cc/test/fake_remote_compositor_bridge.h"
 #include "cc/test/stub_layer_tree_host_client.h"
@@ -37,6 +43,20 @@ using testing::StrictMock;
 namespace cc {
 namespace {
 
+gfx::Vector2dF SerializeScrollUpdate(
+    proto::ClientStateUpdate* client_state_update,
+    Layer* layer,
+    const gfx::ScrollOffset& offset_after_update) {
+  proto::ScrollUpdate* scroll_update =
+      client_state_update->add_scroll_updates();
+  scroll_update->set_layer_id(layer->id());
+  gfx::ScrollOffset scroll_delta = offset_after_update - layer->scroll_offset();
+  gfx::Vector2dF scroll_delta_vector =
+      gfx::ScrollOffsetToVector2dF(scroll_delta);
+  Vector2dFToProto(scroll_delta_vector, scroll_update->mutable_scroll_delta());
+  return scroll_delta_vector;
+}
+
 class UpdateTrackingRemoteCompositorBridge : public FakeRemoteCompositorBridge {
  public:
   UpdateTrackingRemoteCompositorBridge(
@@ -48,17 +68,22 @@ class UpdateTrackingRemoteCompositorBridge : public FakeRemoteCompositorBridge {
   void ProcessCompositorStateUpdate(
       std::unique_ptr<CompositorProtoState> compositor_proto_state) override {
     num_updates_received_++;
+    compositor_proto_state_ = std::move(compositor_proto_state);
   };
 
-  bool SendUpdates(const std::unordered_map<int, gfx::ScrollOffset>& scroll_map,
-                   float page_scale) {
-    return client_->ApplyScrollAndScaleUpdateFromClient(scroll_map, page_scale);
+  void SendUpdates(const proto::ClientStateUpdate& client_state_update) {
+    client_->ApplyStateUpdateFromClient(client_state_update);
   }
 
   int num_updates_received() const { return num_updates_received_; }
 
+  CompositorProtoState* compositor_proto_state() {
+    return compositor_proto_state_.get();
+  }
+
  private:
   int num_updates_received_ = 0;
+  std::unique_ptr<CompositorProtoState> compositor_proto_state_;
 };
 
 class MockLayerTreeHostClient : public StubLayerTreeHostClient {
@@ -119,9 +144,8 @@ class MockLayer : public Layer {
 
 class MockLayerTree : public LayerTree {
  public:
-  MockLayerTree(std::unique_ptr<AnimationHost> animation_host,
-                LayerTreeHost* layer_tree_host)
-      : LayerTree(std::move(animation_host), layer_tree_host) {}
+  MockLayerTree(MutatorHost* mutator_host, LayerTreeHost* layer_tree_host)
+      : LayerTree(mutator_host, layer_tree_host) {}
   ~MockLayerTree() override {}
 
   // We don't want tree sync requests to trigger commits.
@@ -133,8 +157,7 @@ class LayerTreeHostRemoteForTesting : public LayerTreeHostRemote {
   explicit LayerTreeHostRemoteForTesting(InitParams* params)
       : LayerTreeHostRemote(
             params,
-            base::MakeUnique<MockLayerTree>(AnimationHost::CreateMainInstance(),
-                                            this)) {}
+            base::MakeUnique<MockLayerTree>(params->mutator_host, this)) {}
   ~LayerTreeHostRemoteForTesting() override {}
 };
 
@@ -147,6 +170,8 @@ class LayerTreeHostRemoteTest : public testing::Test {
   ~LayerTreeHostRemoteTest() override {}
 
   void SetUp() override {
+    animation_host_ = AnimationHost::CreateForTesting(ThreadInstance::MAIN);
+
     LayerTreeHostRemote::InitParams params;
     params.client = &mock_layer_tree_host_client_;
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner =
@@ -162,7 +187,7 @@ class LayerTreeHostRemoteTest : public testing::Test {
         image_serialization_processor_.CreateEnginePictureCache();
     LayerTreeSettings settings;
     params.settings = &settings;
-
+    params.mutator_host = animation_host_.get();
     layer_tree_host_ = base::MakeUnique<LayerTreeHostRemoteForTesting>(&params);
 
     // Make sure the root layer always updates.
@@ -200,6 +225,7 @@ class LayerTreeHostRemoteTest : public testing::Test {
   }
 
  protected:
+  std::unique_ptr<AnimationHost> animation_host_;
   std::unique_ptr<LayerTreeHostRemote> layer_tree_host_;
   StrictMock<MockLayerTreeHostClient> mock_layer_tree_host_client_;
   UpdateTrackingRemoteCompositorBridge* remote_compositor_bridge_ = nullptr;
@@ -370,6 +396,7 @@ TEST_F(LayerTreeHostRemoteTest, ScrollAndScaleSync) {
 
   scoped_refptr<Layer> child_layer2 = make_scoped_refptr(new MockLayer(false));
   child_layer1->AddChild(child_layer2);
+  child_layer2->SetScrollOffset(gfx::ScrollOffset(3, 9));
 
   scoped_refptr<Layer> inner_viewport_layer =
       make_scoped_refptr(new MockLayer(false));
@@ -378,45 +405,46 @@ TEST_F(LayerTreeHostRemoteTest, ScrollAndScaleSync) {
   layer_tree_host_->GetLayerTree()->RegisterViewportLayers(
       nullptr, nullptr, inner_viewport_layer, nullptr);
 
-  // Send scroll and scale updates from client.
-  std::unordered_map<int, gfx::ScrollOffset> scroll_updates;
-  gfx::ScrollOffset child1_offset(4, 5);
-  gfx::ScrollOffset child2_offset(3, 10);
-  gfx::Vector2dF inner_viewport_delta(-2, 5);
-  gfx::ScrollOffset inner_viewport_offset = gfx::ScrollOffsetWithDelta(
-      inner_viewport_layer->scroll_offset(), inner_viewport_delta);
-  scroll_updates[child_layer1->id()] = child1_offset;
-  scroll_updates[child_layer2->id()] = child2_offset;
-  scroll_updates[inner_viewport_layer->id()] = inner_viewport_offset;
+  // First test case.
+  gfx::ScrollOffset expected_child1_offset(4, 5);
+  gfx::ScrollOffset expected_child2_offset(3, 10);
+  gfx::ScrollOffset expected_inner_viewport_offset(-2, 5);
+  float expected_page_scale = 2.0f;
 
-  float page_scale_delta = 0.3f;
-  float current_scale_factor = 0.5f;
-  layer_tree_host_->GetLayerTree()->SetPageScaleFactorAndLimits(
-      current_scale_factor, 0.0f, 1.0f);
-  float new_scale_factor = current_scale_factor * page_scale_delta;
+  proto::ClientStateUpdate client_state_update;
+  SerializeScrollUpdate(&client_state_update, child_layer1.get(),
+                        expected_child1_offset);
+  SerializeScrollUpdate(&client_state_update, child_layer2.get(),
+                        expected_child2_offset);
+  gfx::Vector2dF inner_viewport_delta =
+      SerializeScrollUpdate(&client_state_update, inner_viewport_layer.get(),
+                            expected_inner_viewport_offset);
+  float page_scale_delta =
+      expected_page_scale /
+      layer_tree_host_->GetLayerTree()->page_scale_factor();
+  client_state_update.set_page_scale_delta(page_scale_delta);
 
   EXPECT_CALL(mock_layer_tree_host_client_,
               ApplyViewportDeltas(inner_viewport_delta, gfx::Vector2dF(),
-                                  gfx::Vector2dF(), page_scale_delta, 1.0f))
+                                  gfx::Vector2dF(), page_scale_delta, 0.0f))
       .Times(1);
-  bool updates_applied =
-      remote_compositor_bridge_->SendUpdates(scroll_updates, new_scale_factor);
-  EXPECT_TRUE(updates_applied);
-  // The host should have pre-emtively applied the changes.
-  EXPECT_EQ(new_scale_factor,
-            layer_tree_host_->GetLayerTree()->page_scale_factor());
-  EXPECT_EQ(child1_offset, child_layer1->scroll_offset());
-  EXPECT_EQ(child2_offset, child_layer2->scroll_offset());
-  EXPECT_EQ(inner_viewport_offset, inner_viewport_layer->scroll_offset());
 
-  // Destroy a layer and send a scroll update for it. We should be informed that
-  // the update could not be applied successfully.
+  remote_compositor_bridge_->SendUpdates(client_state_update);
+
+  // The host should have pre-emtively applied the changes.
+  EXPECT_EQ(expected_page_scale,
+            layer_tree_host_->GetLayerTree()->page_scale_factor());
+  EXPECT_EQ(expected_child1_offset, child_layer1->scroll_offset());
+  EXPECT_EQ(expected_child2_offset, child_layer2->scroll_offset());
+  EXPECT_EQ(expected_inner_viewport_offset,
+            inner_viewport_layer->scroll_offset());
+
+  // Remove a layer from the tree and send a scroll update for it.
   child_layer1->RemoveAllChildren();
-  scroll_updates.clear();
-  scroll_updates[child_layer2->id()] = gfx::ScrollOffset(3, 2);
-  updates_applied =
-      remote_compositor_bridge_->SendUpdates(scroll_updates, new_scale_factor);
-  EXPECT_FALSE(updates_applied);
+  proto::ClientStateUpdate client_state_update2;
+  SerializeScrollUpdate(&client_state_update2, child_layer2.get(),
+                        gfx::ScrollOffset(9, 10));
+  remote_compositor_bridge_->SendUpdates(client_state_update2);
 }
 
 TEST_F(LayerTreeHostRemoteTest, IdentifiedLayersToSkipUpdates) {
@@ -454,6 +482,55 @@ TEST_F(LayerTreeHostRemoteTest, IdentifiedLayersToSkipUpdates) {
   EXPECT_FALSE(empty_bound_layer->did_update());
   EXPECT_FALSE(transparent_layer->did_update());
   EXPECT_TRUE(updated_layer->did_update());
+}
+
+TEST_F(LayerTreeHostRemoteTest, OnlyPushPropertiesOnChangingLayers) {
+  EXPECT_BEGIN_MAIN_FRAME_AND_COMMIT(mock_layer_tree_host_client_, 2);
+
+  // Setup a tree with 3 nodes.
+  scoped_refptr<Layer> child_layer = Layer::Create();
+  scoped_refptr<Layer> grandchild_layer = Layer::Create();
+  root_layer_->AddChild(child_layer);
+  child_layer->AddChild(grandchild_layer);
+  layer_tree_host_->SetNeedsCommit();
+
+  base::RunLoop().RunUntilIdle();
+
+  // Ensure the first proto contains all layer updates.
+  EXPECT_EQ(1, remote_compositor_bridge_->num_updates_received());
+  CompositorProtoState* compositor_proto_state =
+      remote_compositor_bridge_->compositor_proto_state();
+  const proto::LayerUpdate& layer_updates_first_commit =
+      compositor_proto_state->compositor_message->layer_tree_host()
+          .layer_updates();
+
+  std::unordered_set<int> layer_updates_id_set;
+  for (int i = 0; i < layer_updates_first_commit.layers_size(); ++i) {
+    layer_updates_id_set.insert(layer_updates_first_commit.layers(i).id());
+  }
+
+  EXPECT_TRUE(layer_updates_id_set.find(root_layer_->id()) !=
+              layer_updates_id_set.end());
+  EXPECT_TRUE(layer_updates_id_set.find(child_layer->id()) !=
+              layer_updates_id_set.end());
+  EXPECT_TRUE(layer_updates_id_set.find(grandchild_layer->id()) !=
+              layer_updates_id_set.end());
+  EXPECT_EQ(3, layer_updates_first_commit.layers_size());
+
+  // Modify the |child_layer|, and run the second frame.
+  child_layer->SetNeedsPushProperties();
+  layer_tree_host_->SetNeedsCommit();
+  base::RunLoop().RunUntilIdle();
+
+  // Ensure the second proto only contains |child_layer|.
+  EXPECT_EQ(2, remote_compositor_bridge_->num_updates_received());
+  compositor_proto_state = remote_compositor_bridge_->compositor_proto_state();
+  DCHECK(compositor_proto_state);
+  const proto::LayerUpdate& layer_updates_second_commit =
+      compositor_proto_state->compositor_message->layer_tree_host()
+          .layer_updates();
+  EXPECT_EQ(1, layer_updates_second_commit.layers_size());
+  EXPECT_EQ(child_layer->id(), layer_updates_second_commit.layers(0).id());
 }
 
 }  // namespace

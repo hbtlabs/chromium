@@ -69,7 +69,6 @@
 #include "core/layout/HitTestRequest.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutPart.h"
-#include "core/layout/LayoutTextControlSingleLine.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/loader/DocumentLoader.h"
@@ -1967,6 +1966,20 @@ void EventHandler::defaultKeyboardEventHandler(KeyboardEvent* event) {
 
 void EventHandler::dragSourceEndedAt(const PlatformMouseEvent& event,
                                      DragOperation operation) {
+  // Asides from routing the event to the correct frame, the hit test is also an
+  // opportunity for Layer to update the :hover and :active pseudoclasses.
+  HitTestRequest request(HitTestRequest::Release);
+  MouseEventWithHitTestResults mev =
+      EventHandlingUtil::performMouseEventHitTest(m_frame, request, event);
+
+  LocalFrame* targetFrame;
+  if (targetIsFrame(mev.innerNode(), targetFrame)) {
+    if (targetFrame) {
+      targetFrame->eventHandler().dragSourceEndedAt(event, operation);
+      return;
+    }
+  }
+
   m_mouseEventManager->dragSourceEndedAt(event, operation);
 }
 

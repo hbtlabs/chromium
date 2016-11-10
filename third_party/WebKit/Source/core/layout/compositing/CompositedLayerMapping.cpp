@@ -1939,12 +1939,12 @@ void CompositedLayerMapping::updateElementIdAndCompositorMutableProperties() {
     } else if (owningNode->isDocumentNode() &&
                RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
       owningNode = animatingElement = scrollingElement;
-      if (scrollingElement)
+      if (scrollingElement && scrollingElement->layoutObject())
         animatingStyle = scrollingElement->layoutObject()->style();
     }
   }
 
-  if (RuntimeEnabledFeatures::compositorWorkerEnabled() && animatingElement &&
+  if (RuntimeEnabledFeatures::compositorWorkerEnabled() && animatingStyle &&
       animatingStyle->hasCompositorProxy()) {
     uint32_t compositorMutableProperties =
         animatingElement->compositorMutableProperties();
@@ -2610,6 +2610,8 @@ const GraphicsLayerPaintInfo* CompositedLayerMapping::containingSquashedLayer(
     const LayoutObject* layoutObject,
     const Vector<GraphicsLayerPaintInfo>& layers,
     unsigned maxSquashedLayerIndex) {
+  if (!layoutObject)
+    return nullptr;
   for (size_t i = 0; i < layers.size() && i < maxSquashedLayerIndex; ++i) {
     if (layoutObject->isDescendantOf(layers[i].paintLayer->layoutObject()))
       return &layers[i];

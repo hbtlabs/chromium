@@ -19,6 +19,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
+#include "base/task_runner.h"
 #include "base/task_scheduler/delayed_task_manager.h"
 #include "base/task_scheduler/task_tracker.h"
 #include "base/threading/platform_thread.h"
@@ -39,10 +40,6 @@ constexpr char kNumTasksBeforeDetachHistogramPrefix[] =
 constexpr char kNumTasksBetweenWaitsHistogramPrefix[] =
     "TaskScheduler.NumTasksBetweenWaits.";
 constexpr char kTaskLatencyHistogramPrefix[] = "TaskScheduler.TaskLatency.";
-
-// SchedulerWorker that owns the current thread, if any.
-LazyInstance<ThreadLocalPointer<const SchedulerWorker>>::Leaky
-    tls_current_worker = LAZY_INSTANCE_INITIALIZER;
 
 // SchedulerWorkerPool that owns the current thread, if any.
 LazyInstance<ThreadLocalPointer<const SchedulerWorkerPool>>::Leaky
@@ -200,7 +197,10 @@ class SchedulerWorkerPoolImpl::SchedulerSingleThreadTaskRunner :
   }
 
   bool RunsTasksOnCurrentThread() const override {
-    return tls_current_worker.Get().Get() == worker_;
+    // Even though this is a SingleThreadTaskRunner, test the actual sequence
+    // instead of the assigned worker so that another task randomly assigned
+    // to the same worker doesn't return true by happenstance.
+    return sequence_->token() == SequenceToken::GetForCurrentThread();
   }
 
  private:
@@ -341,33 +341,29 @@ void SchedulerWorkerPoolImpl::DisallowWorkerDetachmentForTesting() {
 }
 
 scoped_refptr<TaskRunner> SchedulerWorkerPoolImpl::CreateTaskRunnerWithTraits(
-    const TaskTraits& traits,
-    ExecutionMode execution_mode) {
-  switch (execution_mode) {
-    case ExecutionMode::PARALLEL:
-      return make_scoped_refptr(new SchedulerParallelTaskRunner(traits, this));
+    const TaskTraits& traits) {
+  return make_scoped_refptr(new SchedulerParallelTaskRunner(traits, this));
+}
 
-    case ExecutionMode::SEQUENCED:
-      return make_scoped_refptr(new SchedulerSequencedTaskRunner(traits, this));
+scoped_refptr<SequencedTaskRunner>
+SchedulerWorkerPoolImpl::CreateSequencedTaskRunnerWithTraits(
+    const TaskTraits& traits) {
+  return make_scoped_refptr(new SchedulerSequencedTaskRunner(traits, this));
+}
 
-    case ExecutionMode::SINGLE_THREADED: {
-      // TODO(fdoray): Find a way to take load into account when assigning a
-      // SchedulerWorker to a SingleThreadTaskRunner. Also, this code
-      // assumes that all SchedulerWorkers are alive. Eventually, we might
-      // decide to tear down threads that haven't run tasks for a long time.
-      size_t worker_index;
-      {
-        AutoSchedulerLock auto_lock(next_worker_index_lock_);
-        worker_index = next_worker_index_;
-        next_worker_index_ = (next_worker_index_ + 1) % workers_.size();
-      }
-      return make_scoped_refptr(new SchedulerSingleThreadTaskRunner(
-          traits, this, workers_[worker_index].get()));
-    }
+scoped_refptr<SingleThreadTaskRunner>
+SchedulerWorkerPoolImpl::CreateSingleThreadTaskRunnerWithTraits(
+    const TaskTraits& traits) {
+  // TODO(fdoray): Find a way to take load into account when assigning a
+  // SchedulerWorker to a SingleThreadTaskRunner.
+  size_t worker_index;
+  {
+    AutoSchedulerLock auto_lock(next_worker_index_lock_);
+    worker_index = next_worker_index_;
+    next_worker_index_ = (next_worker_index_ + 1) % workers_.size();
   }
-
-  NOTREACHED();
-  return nullptr;
+  return make_scoped_refptr(new SchedulerSingleThreadTaskRunner(
+      traits, this, workers_[worker_index].get()));
 }
 
 void SchedulerWorkerPoolImpl::ReEnqueueSequence(
@@ -508,9 +504,7 @@ void SchedulerWorkerPoolImpl::SchedulerWorkerDelegateImpl::OnMainEntry(
   PlatformThread::SetName(
       StringPrintf("TaskScheduler%sWorker%d", outer_->name_.c_str(), index_));
 
-  DCHECK(!tls_current_worker.Get().Get());
   DCHECK(!tls_current_worker_pool.Get().Get());
-  tls_current_worker.Get().Set(worker);
   tls_current_worker_pool.Get().Set(outer_);
 
   // New threads haven't run GetWork() yet, so reset the |idle_start_time_|.

@@ -34,6 +34,9 @@
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/trace_util.h"
 
+using base::trace_event::MemoryAllocatorDump;
+using base::trace_event::MemoryDumpLevelOfDetail;
+
 namespace gpu {
 namespace gles2 {
 
@@ -134,33 +137,6 @@ class FormatTypeValidator {
         {GL_LUMINANCE_ALPHA, GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE},
         {GL_LUMINANCE, GL_LUMINANCE, GL_UNSIGNED_BYTE},
         {GL_ALPHA, GL_ALPHA, GL_UNSIGNED_BYTE},
-        // Exposed by GL_OES_texture_float and GL_OES_texture_half_float
-        {GL_RGB, GL_RGB, GL_FLOAT},
-        {GL_RGBA, GL_RGBA, GL_FLOAT},
-        {GL_LUMINANCE_ALPHA, GL_LUMINANCE_ALPHA, GL_FLOAT},
-        {GL_LUMINANCE, GL_LUMINANCE, GL_FLOAT},
-        {GL_ALPHA, GL_ALPHA, GL_FLOAT},
-        {GL_RGB, GL_RGB, GL_HALF_FLOAT_OES},
-        {GL_RGBA, GL_RGBA, GL_HALF_FLOAT_OES},
-        {GL_LUMINANCE_ALPHA, GL_LUMINANCE_ALPHA, GL_HALF_FLOAT_OES},
-        {GL_LUMINANCE, GL_LUMINANCE, GL_HALF_FLOAT_OES},
-        {GL_ALPHA, GL_ALPHA, GL_HALF_FLOAT_OES},
-        // Exposed by GL_ANGLE_depth_texture
-        {GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT},
-        {GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT},
-        {GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8},
-        // Exposed by GL_EXT_sRGB
-        {GL_SRGB, GL_SRGB, GL_UNSIGNED_BYTE},
-        {GL_SRGB_ALPHA, GL_SRGB_ALPHA, GL_UNSIGNED_BYTE},
-        // Exposed by GL_EXT_texture_format_BGRA8888
-        {GL_BGRA_EXT, GL_BGRA_EXT, GL_UNSIGNED_BYTE},
-        // Exposed by GL_EXT_texture_rg
-        {GL_RED, GL_RED, GL_UNSIGNED_BYTE},
-        {GL_RG, GL_RG, GL_UNSIGNED_BYTE},
-        {GL_RED, GL_RED, GL_FLOAT},
-        {GL_RG, GL_RG, GL_FLOAT},
-        {GL_RED, GL_RED, GL_HALF_FLOAT_OES},
-        {GL_RG, GL_RG, GL_HALF_FLOAT_OES},
 
         // ES3.
         {GL_R8, GL_RED, GL_UNSIGNED_BYTE},
@@ -231,19 +207,72 @@ class FormatTypeValidator {
         {GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8},
         {GL_DEPTH32F_STENCIL8, GL_DEPTH_STENCIL,
          GL_FLOAT_32_UNSIGNED_INT_24_8_REV},
-        // Exposed by GL_APPLE_texture_format_BGRA8888
+
+        // Exposed by GL_APPLE_texture_format_BGRA8888 for TexStorage*
+        // TODO(kainino): this actually exposes it for (Copy)TexImage* as well,
+        // which is incorrect. crbug.com/663086
         {GL_BGRA8_EXT, GL_BGRA_EXT, GL_UNSIGNED_BYTE},
+
+        // Exposed by GL_APPLE_texture_format_BGRA8888 and
+        // GL_EXT_texture_format_BGRA8888
+        {GL_BGRA_EXT, GL_BGRA_EXT, GL_UNSIGNED_BYTE},
+    };
+
+    static const FormatType kSupportedFormatTypesES2Only[] = {
+        // Exposed by GL_OES_texture_float and GL_OES_texture_half_float
+        {GL_RGB, GL_RGB, GL_FLOAT},
+        {GL_RGBA, GL_RGBA, GL_FLOAT},
+        {GL_LUMINANCE_ALPHA, GL_LUMINANCE_ALPHA, GL_FLOAT},
+        {GL_LUMINANCE, GL_LUMINANCE, GL_FLOAT},
+        {GL_ALPHA, GL_ALPHA, GL_FLOAT},
+        {GL_RGB, GL_RGB, GL_HALF_FLOAT_OES},
+        {GL_RGBA, GL_RGBA, GL_HALF_FLOAT_OES},
+        {GL_LUMINANCE_ALPHA, GL_LUMINANCE_ALPHA, GL_HALF_FLOAT_OES},
+        {GL_LUMINANCE, GL_LUMINANCE, GL_HALF_FLOAT_OES},
+        {GL_ALPHA, GL_ALPHA, GL_HALF_FLOAT_OES},
+
+        // Exposed by GL_ANGLE_depth_texture
+        {GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT},
+        {GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT},
+        {GL_DEPTH_STENCIL, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8},
+
+        // Exposed by GL_EXT_sRGB
+        {GL_SRGB, GL_SRGB, GL_UNSIGNED_BYTE},
+        {GL_SRGB_ALPHA, GL_SRGB_ALPHA, GL_UNSIGNED_BYTE},
+
+        // Exposed by GL_EXT_texture_rg
+        {GL_RED, GL_RED, GL_UNSIGNED_BYTE},
+        {GL_RG, GL_RG, GL_UNSIGNED_BYTE},
+        {GL_RED, GL_RED, GL_FLOAT},
+        {GL_RG, GL_RG, GL_FLOAT},
+        {GL_RED, GL_RED, GL_HALF_FLOAT_OES},
+        {GL_RG, GL_RG, GL_HALF_FLOAT_OES},
     };
 
     for (size_t ii = 0; ii < arraysize(kSupportedFormatTypes); ++ii) {
       supported_combinations_.insert(kSupportedFormatTypes[ii]);
     }
+
+    for (size_t ii = 0; ii < arraysize(kSupportedFormatTypesES2Only); ++ii) {
+      supported_combinations_es2_only_.insert(kSupportedFormatTypesES2Only[ii]);
+    }
   }
 
   // This may be accessed from multiple threads.
-  bool IsValid(GLenum internal_format, GLenum format, GLenum type) const {
+  bool IsValid(ContextType context_type, GLenum internal_format, GLenum format,
+               GLenum type) const {
     FormatType query = { internal_format, format, type };
-    return supported_combinations_.find(query) != supported_combinations_.end();
+    if (supported_combinations_.find(query) != supported_combinations_.end()) {
+      return true;
+    }
+    if (context_type == CONTEXT_TYPE_OPENGLES2 ||
+        context_type == CONTEXT_TYPE_WEBGL1) {
+      if (supported_combinations_es2_only_.find(query) !=
+          supported_combinations_es2_only_.end()) {
+        return true;
+      }
+    }
+    return false;
   }
 
  private:
@@ -268,6 +297,7 @@ class FormatTypeValidator {
   // This class needs to be thread safe, so once supported_combinations_
   // are initialized in the constructor, it should never be modified later.
   std::set<FormatType, FormatTypeCompare> supported_combinations_;
+  std::set<FormatType, FormatTypeCompare> supported_combinations_es2_only_;
 };
 
 static const Texture::CompatibilitySwizzle kSwizzledFormats[] = {
@@ -332,7 +362,7 @@ bool SizedFormatAvailable(const FeatureInfo* feature_info,
     return true;
   }
 
-  return feature_info->IsES3Enabled();
+  return feature_info->IsWebGL2OrES3Context();
 }
 
 // A 32-bit and 64-bit compatible way of converting a pointer to a GLuint.
@@ -619,7 +649,7 @@ bool Texture::CanRenderWithSampler(const FeatureInfo* feature_info,
          (GLES2Util::kDepth | GLES2Util::kStencil)) != 0) {
       if (sampler_state.compare_mode == GL_NONE) {
         // In ES2 with OES_depth_texture, such limitation isn't specified.
-        if (feature_info->IsES3Enabled()) {
+        if (feature_info->IsWebGL2OrES3Context()) {
           return false;
         }
       }
@@ -635,7 +665,7 @@ bool Texture::CanRenderWithSampler(const FeatureInfo* feature_info,
     }
   }
 
-  if (!feature_info->IsES3Enabled()) {
+  if (!feature_info->IsWebGL2OrES3Context()) {
     bool is_npot_compatible = !needs_mips &&
         sampler_state.wrap_s == GL_CLAMP_TO_EDGE &&
         sampler_state.wrap_t == GL_CLAMP_TO_EDGE;
@@ -1718,12 +1748,10 @@ void Texture::DumpLevelMemory(base::trace_event::ProcessMemoryDump* pmd,
       // texture allocation also as the storage is not provided by the
       // GLImage in that case.
       if (level_infos[level_index].image_state != BOUND) {
-        base::trace_event::MemoryAllocatorDump* dump = pmd->CreateAllocatorDump(
-            base::StringPrintf("%s/face_%d/level_%d", dump_name.c_str(),
-                               face_index, level_index));
+        MemoryAllocatorDump* dump = pmd->CreateAllocatorDump(base::StringPrintf(
+            "%s/face_%d/level_%d", dump_name.c_str(), face_index, level_index));
         dump->AddScalar(
-            base::trace_event::MemoryAllocatorDump::kNameSize,
-            base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+            MemoryAllocatorDump::kNameSize, MemoryAllocatorDump::kUnitsBytes,
             static_cast<uint64_t>(level_infos[level_index].estimated_size));
       }
     }
@@ -1882,7 +1910,7 @@ bool TextureManager::Initialize() {
   default_textures_[kCubeMap] = CreateDefaultAndBlackTextures(
       GL_TEXTURE_CUBE_MAP, &black_texture_ids_[kCubeMap]);
 
-  if (feature_info_->IsES3Enabled()) {
+  if (feature_info_->IsWebGL2OrES3Context()) {
     default_textures_[kTexture3D] = CreateDefaultAndBlackTextures(
         GL_TEXTURE_3D, &black_texture_ids_[kTexture3D]);
     default_textures_[kTexture2DArray] = CreateDefaultAndBlackTextures(
@@ -2303,7 +2331,8 @@ bool TextureManager::ValidateTextureParameters(
                              msg.c_str());
     return false;
   }
-  if (!g_format_type_validator.Get().IsValid(internal_format, format, type)) {
+  if (!g_format_type_validator.Get().IsValid(feature_info_->context_type(),
+                                             internal_format, format, type)) {
     std::string msg = std::string(
         "invalid internalformat/format/type combination ") +
         GLES2Util::GetStringEnum(internal_format) + std::string("/") +
@@ -2313,7 +2342,7 @@ bool TextureManager::ValidateTextureParameters(
                             msg.c_str());
     return false;
   }
-  if (!feature_info_->IsES3Enabled()) {
+  if (!feature_info_->IsWebGL2OrES3Context()) {
     uint32_t channels = GLES2Util::GetChannelsForFormat(format);
     if ((channels & (GLES2Util::kDepth | GLES2Util::kStencil)) != 0 && level) {
       ERRORSTATE_SET_GL_ERROR(
@@ -2411,7 +2440,7 @@ bool TextureManager::ValidateTexImage(
   }
   if ((GLES2Util::GetChannelsForFormat(args.format) &
        (GLES2Util::kDepth | GLES2Util::kStencil)) != 0 && args.pixels
-      && !feature_info_->IsES3Enabled()) {
+      && !feature_info_->IsWebGL2OrES3Context()) {
     ERRORSTATE_SET_GL_ERROR(
         error_state, GL_INVALID_OPERATION,
         function_name, "can not supply data for depth or stencil textures");
@@ -2542,7 +2571,7 @@ void TextureManager::ValidateAndDoTexImage(
   // ValidateTexImage is passed already.
   Texture* texture = texture_ref->texture();
   bool need_cube_map_workaround =
-      !feature_info_->IsES3Enabled() &&
+      !feature_info_->IsWebGL2OrES3Context() &&
       texture->target() == GL_TEXTURE_CUBE_MAP &&
       (texture_state->force_cube_complete ||
        (texture_state->force_cube_map_positive_x_allocation &&
@@ -2694,7 +2723,7 @@ bool TextureManager::ValidateTexSubImage(ContextState* state,
                                  args.type, internal_format, args.level)) {
     return false;
   }
-  if (args.type != current_type && !feature_info_->IsES3Enabled()) {
+  if (args.type != current_type && !feature_info_->IsWebGL2OrES3Context()) {
     // It isn't explicitly required in the ES2 spec, but some drivers generate
     // an error. It is better to be consistent across drivers.
     ERRORSTATE_SET_GL_ERROR(error_state, GL_INVALID_OPERATION, function_name,
@@ -2710,7 +2739,7 @@ bool TextureManager::ValidateTexSubImage(ContextState* state,
   }
   if ((GLES2Util::GetChannelsForFormat(args.format) &
        (GLES2Util::kDepth | GLES2Util::kStencil)) != 0 &&
-      !feature_info_->IsES3Enabled()) {
+      !feature_info_->IsWebGL2OrES3Context()) {
     ERRORSTATE_SET_GL_ERROR(
         error_state, GL_INVALID_OPERATION, function_name,
         "can not supply data for depth or stencil textures");
@@ -3261,8 +3290,21 @@ ScopedTextureUploadTimer::~ScopedTextureUploadTimer() {
 
 bool TextureManager::OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
                                   base::trace_event::ProcessMemoryDump* pmd) {
+  if (args.level_of_detail == MemoryDumpLevelOfDetail::BACKGROUND) {
+    std::string dump_name =
+        base::StringPrintf("gpu/gl/textures/share_group_%" PRIu64 "",
+                           memory_tracker_->ShareGroupTracingGUID());
+    MemoryAllocatorDump* dump = pmd->CreateAllocatorDump(dump_name);
+    dump->AddScalar(MemoryAllocatorDump::kNameSize,
+                    MemoryAllocatorDump::kUnitsBytes, mem_represented());
+
+    // Early out, no need for more detail in a BACKGROUND dump.
+    return true;
+  }
+
   for (const auto& resource : textures_) {
-    // Only dump memory info for textures actually owned by this TextureManager.
+    // Only dump memory info for textures actually owned by this
+    // TextureManager.
     DumpTextureRef(pmd, resource.second.get());
   }
 
@@ -3288,10 +3330,9 @@ void TextureManager::DumpTextureRef(base::trace_event::ProcessMemoryDump* pmd,
       "gpu/gl/textures/share_group_%" PRIu64 "/texture_%d",
       memory_tracker_->ShareGroupTracingGUID(), ref->client_id());
 
-  base::trace_event::MemoryAllocatorDump* dump =
-      pmd->CreateAllocatorDump(dump_name);
-  dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
-                  base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+  MemoryAllocatorDump* dump = pmd->CreateAllocatorDump(dump_name);
+  dump->AddScalar(MemoryAllocatorDump::kNameSize,
+                  MemoryAllocatorDump::kUnitsBytes,
                   static_cast<uint64_t>(size));
 
   // Add the |client_guid| which expresses shared ownership with the client

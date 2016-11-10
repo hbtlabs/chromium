@@ -296,8 +296,7 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
 
                 // Only suggest addresses that have a street address.
                 if (!TextUtils.isEmpty(profile.getStreetAddress())) {
-                    boolean isComplete = mAddressEditor.isProfileComplete(profile);
-                    addresses.add(new AutofillAddress(profile, isComplete));
+                    addresses.add(new AutofillAddress(mContext, profile));
                 }
             }
 
@@ -541,15 +540,8 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
      * @return True if the data is valid. False if the data is invalid.
      */
     private boolean parseAndValidateDetailsOrDisconnectFromClient(PaymentDetails details) {
-        if (details == null) {
-            disconnectFromClientWithDebugMessage("Payment details required");
-            recordAbortReasonHistogram(
-                    PaymentRequestMetrics.ABORT_REASON_INVALID_DATA_FROM_RENDERER);
-            return false;
-        }
-
-        if (!hasAllPaymentItemFields(details.total)) {
-            disconnectFromClientWithDebugMessage("Invalid total");
+        if (!PaymentValidator.validatePaymentDetails(details)) {
+            disconnectFromClientWithDebugMessage("Invalid payment details");
             recordAbortReasonHistogram(
                     PaymentRequestMetrics.ABORT_REASON_INVALID_DATA_FROM_RENDERER);
             return false;
@@ -559,47 +551,18 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
         CurrencyStringFormatter formatter =
                 new CurrencyStringFormatter(totalCurrency, Locale.getDefault());
 
-        if (!formatter.isValidAmountCurrencyCode(details.total.amount.currency)) {
-            disconnectFromClientWithDebugMessage("Invalid total amount currency");
-            recordAbortReasonHistogram(
-                    PaymentRequestMetrics.ABORT_REASON_INVALID_DATA_FROM_RENDERER);
-            return false;
-        }
-
-        if (!formatter.isValidAmountValue(details.total.amount.value)
-                || details.total.amount.value.startsWith("-")) {
-            disconnectFromClientWithDebugMessage("Invalid total amount value");
-            recordAbortReasonHistogram(
-                    PaymentRequestMetrics.ABORT_REASON_INVALID_DATA_FROM_RENDERER);
-            return false;
-        }
-
         // Total is never pending.
         LineItem uiTotal = new LineItem(
                 details.total.label, formatter.getFormattedCurrencyCode(),
                 formatter.format(details.total.amount.value), /* isPending */ false);
 
-        List<LineItem> uiLineItems = getValidatedLineItems(details.displayItems, totalCurrency,
-                formatter);
-        if (uiLineItems == null) {
-            disconnectFromClientWithDebugMessage("Invalid line items");
-            recordAbortReasonHistogram(
-                    PaymentRequestMetrics.ABORT_REASON_INVALID_DATA_FROM_RENDERER);
-            return false;
-        }
+        List<LineItem> uiLineItems = getLineItems(details.displayItems, totalCurrency, formatter);
 
         mUiShoppingCart = new ShoppingCart(uiTotal, uiLineItems);
         mRawTotal = details.total;
         mRawLineItems = Arrays.asList(details.displayItems);
 
-        mUiShippingOptions = getValidatedShippingOptions(details.shippingOptions, totalCurrency,
-                formatter);
-        if (mUiShippingOptions == null) {
-            disconnectFromClientWithDebugMessage("Invalid shipping options");
-            recordAbortReasonHistogram(
-                    PaymentRequestMetrics.ABORT_REASON_INVALID_DATA_FROM_RENDERER);
-            return false;
-        }
+        mUiShippingOptions = getShippingOptions(details.shippingOptions, totalCurrency, formatter);
 
         return true;
     }
@@ -618,14 +581,14 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
     }
 
     /**
-     * Validates a list of payment items and returns their parsed representation or null if invalid.
+     * Converts a list of payment items and returns their parsed representation.
      *
      * @param items The payment items to parse and validate.
      * @param totalCurrency The currency code for the total amount of payment.
      * @param formatter A formatter and validator for the currency amount value.
-     * @return A list of valid line items or null if invalid.
+     * @return A list of valid line items.
      */
-    private static List<LineItem> getValidatedLineItems(
+    private static List<LineItem> getLineItems(
             PaymentItem[] items, String totalCurrency, CurrencyStringFormatter formatter) {
         // Line items are optional.
         if (items == null) return new ArrayList<>();
@@ -633,14 +596,6 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
         List<LineItem> result = new ArrayList<>(items.length);
         for (int i = 0; i < items.length; i++) {
             PaymentItem item = items[i];
-
-            if (!hasAllPaymentItemFields(item)) return null;
-
-            // All currencies must match.
-            if (!item.amount.currency.equals(totalCurrency)) return null;
-
-            // Value should be in correct format.
-            if (!formatter.isValidAmountValue(item.amount.value)) return null;
 
             result.add(new LineItem(
                     item.label, "", formatter.format(item.amount.value), item.pending));
@@ -650,34 +605,18 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
     }
 
     /**
-     * Validates a list of shipping options and returns their parsed representation or null if
-     * invalid.
+     * Converts a list of shipping options and returns their parsed representation.
      *
      * @param options The raw shipping options to parse and validate.
      * @param totalCurrency The currency code for the total amount of payment.
      * @param formatter A formatter and validator for the currency amount value.
-     * @return The UI representation of the shipping options or null if invalid.
+     * @return The UI representation of the shipping options.
      */
-    private static SectionInformation getValidatedShippingOptions(PaymentShippingOption[] options,
+    private static SectionInformation getShippingOptions(PaymentShippingOption[] options,
             String totalCurrency, CurrencyStringFormatter formatter) {
         // Shipping options are optional.
         if (options == null || options.length == 0) {
             return new SectionInformation(PaymentRequestUI.TYPE_SHIPPING_OPTIONS);
-        }
-
-        for (int i = 0; i < options.length; i++) {
-            PaymentShippingOption option = options[i];
-
-            // Each "id", "label", "currency", and "value" should be non-empty.
-            // Each "value" should be a valid amount value.
-            // Each "currency" should match the total currency.
-            if (option == null || TextUtils.isEmpty(option.id) || TextUtils.isEmpty(option.label)
-                    || option.amount == null || TextUtils.isEmpty(option.amount.currency)
-                    || TextUtils.isEmpty(option.amount.value)
-                    || !totalCurrency.equals(option.amount.currency)
-                    || !formatter.isValidAmountValue(option.amount.value)) {
-                return null;
-            }
         }
 
         List<PaymentOption> result = new ArrayList<>();
@@ -846,7 +785,7 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
                     providePaymentInformation();
                 } else {
                     if (toEdit == null) mShippingAddressesSection.addAndSelectItem(completeAddress);
-                    mCardEditor.updateBillingAddress(completeAddress);
+                    mCardEditor.updateBillingAddressIfComplete(completeAddress);
                     mClient.onShippingAddressChange(completeAddress.toPaymentAddress());
                 }
             }
@@ -899,6 +838,8 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
 
     @Override
     public void loadingInstrumentDetails() {
+        if (mClient == null || mUI == null || mPaymentResponseHelper == null) return;
+
         mUI.showProcessingMessage();
         mPaymentResponseHelper.onInstrumentsDetailsLoading();
     }
@@ -1096,18 +1037,10 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
      * Saves the given instrument in either "autofill" or "non-autofill" list. The separation
      * enables placing autofill instruments on the bottom of the list.
      *
-     * Autofill instruments are also checked for completeness. A complete autofill instrument can be
-     * sent to the merchant as-is, without editing first. Such instruments should be displayed
-     * higher in the list.
-     *
      * @param instrument The instrument to add to either "autofill" or "non-autofill" list.
      */
     private void addPendingInstrument(PaymentInstrument instrument) {
         if (instrument instanceof AutofillPaymentInstrument) {
-            AutofillPaymentInstrument autofillInstrument = (AutofillPaymentInstrument) instrument;
-            if (mCardEditor.isCardComplete(autofillInstrument.getCard())) {
-                autofillInstrument.setIsComplete();
-            }
             mPendingAutofillInstruments.add(instrument);
         } else {
             mPendingInstruments.add(instrument);

@@ -11,10 +11,11 @@ import android.view.ViewGroup;
 import android.view.animation.Interpolator;
 import android.widget.TextView;
 
+import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelAnimation;
-import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelInflater;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelTextViewInflater;
 import org.chromium.chrome.browser.compositor.layouts.ChromeAnimation;
 import org.chromium.chrome.browser.compositor.layouts.ChromeAnimation.Animatable;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
@@ -23,12 +24,18 @@ import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
  * Controls the Caption View that is shown at the bottom of the control and used
  * as a dynamic resource.
  */
-public class ContextualSearchCaptionControl extends OverlayPanelInflater
+public class ContextualSearchCaptionControl extends OverlayPanelTextViewInflater
         implements ChromeAnimation.Animatable<ContextualSearchCaptionControl.AnimationType> {
     private static final float ANIMATION_PERCENTAGE_ZERO = 0.f;
     private static final float ANIMATION_PERCENTAGE_COMPLETE = 1.f;
     private static final float EXPANDED_CAPTION_THRESHOLD = 0.5f;
     private static final Interpolator ANIMATION_INTERPOLATOR = new FastOutSlowInInterpolator();
+
+    /**
+     * The resource id for the string to display when the Bar is expanded.
+     */
+    @VisibleForTesting
+    public static final int EXPANED_CAPTION_ID = R.string.contextmenu_open_in_new_tab;
 
     /**
      * Animation properties.
@@ -58,9 +65,9 @@ public class ContextualSearchCaptionControl extends OverlayPanelInflater
     private boolean mShowingExpandedCaption;
 
     /**
-     * The resource id for the string to display when the Bar is expanded.
+     * Whether the expanded caption should be shown.
      */
-    private final int mExpandedCaptionId;
+    private final boolean mShouldShowExpandedCaption;
 
     /**
      * The caption visibility.
@@ -81,16 +88,18 @@ public class ContextualSearchCaptionControl extends OverlayPanelInflater
     private boolean mDidCapture;
 
     /**
-     * @param panel             The panel.
-     * @param context           The Android Context used to inflate the View.
-     * @param container         The container View used to inflate the View.
-     * @param resourceLoader    The resource loader that will handle the snapshot capturing.
+     * @param panel                     The panel.
+     * @param context                   The Android Context used to inflate the View.
+     * @param container                 The container View used to inflate the View.
+     * @param resourceLoader            The resource loader that will handle the snapshot capturing.
+     * @param shouldShowExpandedCaption Whether the "Open in new tab" caption should be shown
+     *                                  when the panel is expanded.
      */
     public ContextualSearchCaptionControl(OverlayPanel panel, Context context, ViewGroup container,
-            DynamicResourceLoader resourceLoader) {
+            DynamicResourceLoader resourceLoader, boolean shouldShowExpandedCaption) {
         super(panel, R.layout.contextual_search_caption_view, R.id.contextual_search_caption_view,
                 context, container, resourceLoader);
-        mExpandedCaptionId = R.string.contextmenu_open_in_new_tab;
+        mShouldShowExpandedCaption = shouldShowExpandedCaption;
     }
 
     /**
@@ -122,6 +131,14 @@ public class ContextualSearchCaptionControl extends OverlayPanelInflater
      * @param percentage The percentage to the more opened state.
      */
     public void onUpdateFromPeekToExpand(float percentage) {
+        if (!mShouldShowExpandedCaption) {
+            if (mHasPeekingCaption) {
+                mOverlayPanel.cancelAnimation(this, AnimationType.APPEARANCE);
+                mAnimationPercentage = 1.f - percentage;
+            }
+            return;
+        }
+
         if (mHasPeekingCaption) {
             if (percentage < EXPANDED_CAPTION_THRESHOLD && mShowingExpandedCaption) {
                 // Start showing the peeking caption again.
@@ -131,7 +148,7 @@ public class ContextualSearchCaptionControl extends OverlayPanelInflater
             } else if (percentage >= EXPANDED_CAPTION_THRESHOLD && !mShowingExpandedCaption) {
                 // Start showing the expanded caption.
                 mShowingExpandedCaption = true;
-                mCaption.setText(mExpandedCaptionId);
+                mCaption.setText(EXPANED_CAPTION_ID);
                 invalidate();
             }
 
@@ -141,14 +158,14 @@ public class ContextualSearchCaptionControl extends OverlayPanelInflater
         } else {
             // If the expanded caption is not showing, set the caption text to the expanded
             // caption.
-            if (!mShowingExpandedCaption) {
+            if (!mShowingExpandedCaption && percentage > 0.f) {
                 mShowingExpandedCaption = true;
                 // Inflate the caption view if it has not already been inflated
                 if (mCaption == null) {
                     inflate();
                 }
 
-                mCaption.setText(mExpandedCaptionId);
+                mCaption.setText(EXPANED_CAPTION_ID);
                 invalidate();
                 show();
             }
@@ -198,6 +215,26 @@ public class ContextualSearchCaptionControl extends OverlayPanelInflater
 
         return mAnimationPercentage;
     }
+
+    /**
+     * @return The text currently showing in the caption view.
+     */
+    public CharSequence getCaptionText() {
+        return mCaption.getText();
+    }
+
+    //========================================================================================
+    // OverlayPanelTextViewInflater overrides
+    //========================================================================================
+
+    @Override
+    protected TextView getTextView() {
+        return mCaption;
+    }
+
+    //========================================================================================
+    // OverlayPanelInflater overrides
+    //========================================================================================
 
     @Override
     protected void onFinishInflate() {

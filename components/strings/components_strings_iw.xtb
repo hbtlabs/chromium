@@ -50,6 +50,7 @@
 <translation id="1491663344921578213">לא ניתן לבקר עכשיו באתר <ph name="SITE" /> מכיוון שהוא משתמש בהצמדת אישורים. שגיאות רשת ותקיפות מתרחשות בדרך כלל לזמן מוגבל, ולכן סביר להניח שדף זה יחזור לפעול מאוחר יותר. <ph name="BEGIN_LEARN_MORE_LINK" />למידע נוסף<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="1506687042165942984">הצג עותק שמור (כלומר, ידוע שהוא עדכני) של הדף הזה.</translation>
 <translation id="1519264250979466059">‏תאריך ה-Build</translation>
+<translation id="153384715582417236">זה הכול בינתיים</translation>
 <translation id="1549470594296187301">‏JavaScript צריך להיות מופעל כדי להשתמש בתכונה זו.</translation>
 <translation id="1559528461873125649">אין קובץ או ספרייה בשם זה</translation>
 <translation id="1559572115229829303">‏&lt;p&gt;לא ניתן ליצור חיבור פרטי אל <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> משום שהתאריך והשעה במכשיר שלך (<ph name="DATE_AND_TIME" />) שגויים.&lt;/p&gt;
@@ -350,7 +351,6 @@
 <translation id="4728558894243024398">פלטפורמה</translation>
 <translation id="4744603770635761495">נתיב להפעלה</translation>
 <translation id="4756388243121344051">&amp;היסטוריה</translation>
-<translation id="4759238208242260848">הורדות</translation>
 <translation id="4764776831041365478">ייתכן שדף האינטרנט בכתובת <ph name="URL" /> אינו פעיל זמנית, או שהועבר לכתובת אינטרנט חדשה לצמיתות.</translation>
 <translation id="4771973620359291008">‏אירעה שגיאה לא מוכרת.
 
@@ -391,8 +391,10 @@ Del</translation>
 <translation id="5171045022955879922">חפש או הקלד כתובת אתר</translation>
 <translation id="5172758083709347301">מכונה</translation>
 <translation id="5179510805599951267">לא ב<ph name="ORIGINAL_LANGUAGE" />? דווח על שגיאה זו</translation>
+<translation id="5181140330217080051">מוריד</translation>
 <translation id="5190835502935405962">סרגל הסימניות</translation>
 <translation id="5199729219167945352">ניסויים</translation>
+<translation id="5199841536747119669">הצעות עבורך מופיעות כאן</translation>
 <translation id="5251803541071282808">ענן</translation>
 <translation id="5277279256032773186">‏משתמש ב-Chrome בעבודה? עסקים יכולים לנהל את ההגדרות של Chrome עבור העובדים. למידע נוסף</translation>
 <translation id="5299298092464848405">שגיאה בניתוח המדיניות</translation>
@@ -473,6 +475,7 @@ Del</translation>
 <translation id="6263376278284652872">סימניות <ph name="DOMAIN" /></translation>
 <translation id="6264485186158353794">חזרה לחוף מבטחים</translation>
 <translation id="6282194474023008486">מיקוד</translation>
+<translation id="6290238015253830360">הצעות של מאמרים עבורך מופיעות כאן</translation>
 <translation id="6305205051461490394">לא ניתן לגשת אל <ph name="URL" />.</translation>
 <translation id="6321917430147971392">‏בדוק את הגדרות ה-DNS</translation>
 <translation id="6328639280570009161">נסה להשבית את חיזוי הרשת</translation>
@@ -656,6 +659,7 @@ Del</translation>
 <translation id="8363502534493474904">לכבות את מצב הטיסה</translation>
 <translation id="8364627913115013041">לא מוגדר.</translation>
 <translation id="8380941800586852976">מסוכן</translation>
+<translation id="8382348898565613901">הסימניות שאליהן נכנסת לאחרונה מופיעות כאן</translation>
 <translation id="8412145213513410671">קריסות (<ph name="CRASH_COUNT" />)</translation>
 <translation id="8412392972487953978">עליך להזין את אותו משפט-סיסמה פעמיים.</translation>
 <translation id="8428213095426709021">הגדרות</translation>
@@ -667,7 +671,6 @@ Del</translation>
 <translation id="8498891568109133222">ל-<ph name="HOST_NAME" /> נדרש זמן רב מדי להגיב.</translation>
 <translation id="852346902619691059">השרת הזה לא הצליח להוכיח שהוא <ph name="DOMAIN" />; מערכת ההפעלה של המכשיר לא סומכת על אישור האבטחה שלו. ייתכן שהסיבה לכך היא הגדרה שגויה או שתוקף מיירט את החיבור שלך. <ph name="BEGIN_LEARN_MORE_LINK" />למידע נוסף<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="8530504477309582336">‏סוג הכרטיס הזה אינו נתמך על ידי Google Payments. בחר כרטיס אחר.</translation>
-<translation id="8550022383519221471">שירות הסינכרון אינו זמין לדומיין שלך.</translation>
 <translation id="8553075262323480129">התרגום נכשל כיוון שלא הייתה אפשרות לקבוע את שפת הדף.</translation>
 <translation id="8559762987265718583">לא ניתן ליצור חיבור פרטי אל <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> מפני שהתאריך והשעה (<ph name="DATE_AND_TIME" />) במכשיר שלך שגויים.</translation>
 <translation id="856992080682148">‏תוקף האישור של האתר הזה יפוג ב-2017 או מאוחר יותר ושרשרת האישורים מכילה אישור שנחתם באמצעות SHA-1.</translation>
@@ -675,7 +678,6 @@ Del</translation>
 <translation id="8591846766485502580">אתה רואה את ההודעה הזו מפני שאחד מההורים שלך חסם את האתר הזה.</translation>
 <translation id="859285277496340001">האישור אינו מציין מנגנון הבודק אם הוא נשלל.</translation>
 <translation id="8647750283161643317">אפס הכל לברירת המחדל</translation>
-<translation id="8680787084697685621">פרטי הכניסה לחשבון אינם מעודכנים.</translation>
 <translation id="8703575177326907206">ההתחברות שלך אל <ph name="DOMAIN" /> אינה מוצפנת.</translation>
 <translation id="8725066075913043281">נסה שוב</translation>
 <translation id="8728672262656704056">עברת למצב גלישה בסתר</translation>

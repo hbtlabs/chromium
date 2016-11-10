@@ -963,15 +963,12 @@ bool ComputedStyle::diffNeedsPaintInvalidationSubtree(
 
 bool ComputedStyle::diffNeedsPaintInvalidationObject(
     const ComputedStyle& other) const {
-  if (!m_background->outline().visuallyEqual(other.m_background->outline()))
-    return true;
-
   if (visibility() != other.visibility() ||
       m_inheritedData.m_printColorAdjust !=
           other.m_inheritedData.m_printColorAdjust ||
       m_inheritedData.m_insideLink != other.m_inheritedData.m_insideLink ||
       !m_surround->border.visuallyEqual(other.m_surround->border) ||
-      !m_background->visuallyEqual(*other.m_background))
+      *m_background != *other.m_background)
     return true;
 
   if (m_rareInheritedData.get() != other.m_rareInheritedData.get()) {
@@ -997,6 +994,8 @@ bool ComputedStyle::diffNeedsPaintInvalidationObject(
             *other.m_rareNonInheritedData.get()) ||
         !m_rareNonInheritedData->clipPathDataEquivalent(
             *other.m_rareNonInheritedData.get()) ||
+        !m_rareNonInheritedData->m_outline.visuallyEqual(
+            other.m_rareNonInheritedData->m_outline) ||
         (visitedLinkBorderLeftColor() != other.visitedLinkBorderLeftColor() &&
          borderLeftWidth()) ||
         (visitedLinkBorderRightColor() != other.visitedLinkBorderRightColor() &&
@@ -1087,10 +1086,13 @@ void ComputedStyle::updatePropertySpecificDifferences(
     if (!m_rareNonInheritedData->reflectionDataEquivalent(
             *other.m_rareNonInheritedData.get()))
       diff.setFilterChanged();
+
+    if (!m_rareNonInheritedData->m_outline.visuallyEqual(
+            other.m_rareNonInheritedData->m_outline))
+      diff.setNeedsRecomputeOverflow();
   }
 
-  if (!m_background->outline().visuallyEqual(other.m_background->outline()) ||
-      !m_surround->border.visualOverflowEqual(other.m_surround->border))
+  if (!m_surround->border.visualOverflowEqual(other.m_surround->border))
     diff.setNeedsRecomputeOverflow();
 
   if (!diff.needsPaintInvalidation()) {
@@ -1250,6 +1252,10 @@ bool ComputedStyle::hasWillChangeTransformHint() const {
     switch (property) {
       case CSSPropertyTransform:
       case CSSPropertyAliasWebkitTransform:
+      case CSSPropertyPerspective:
+      case CSSPropertyTranslate:
+      case CSSPropertyScale:
+      case CSSPropertyRotate:
         return true;
       default:
         break;
@@ -1261,9 +1267,6 @@ bool ComputedStyle::hasWillChangeTransformHint() const {
 bool ComputedStyle::requireTransformOrigin(
     ApplyTransformOrigin applyOrigin,
     ApplyMotionPath applyMotionPath) const {
-  const Vector<RefPtr<TransformOperation>>& transformOperations =
-      transform().operations();
-
   // transform-origin brackets the transform with translate operations.
   // Optimize for the case where the only transform is a translation, since the
   // transform-origin is irrelevant in that case.
@@ -1273,9 +1276,8 @@ bool ComputedStyle::requireTransformOrigin(
   if (applyMotionPath == IncludeMotionPath)
     return true;
 
-  unsigned size = transformOperations.size();
-  for (unsigned i = 0; i < size; ++i) {
-    TransformOperation::OperationType type = transformOperations[i]->type();
+  for (const auto& operation : transform().operations()) {
+    TransformOperation::OperationType type = operation->type();
     if (type != TransformOperation::TranslateX &&
         type != TransformOperation::TranslateY &&
         type != TransformOperation::Translate &&
@@ -1311,20 +1313,20 @@ void ComputedStyle::applyTransform(
   bool applyTransformOrigin =
       requireTransformOrigin(applyOrigin, applyMotionPath);
 
-  float offsetX = transformOriginX().type() == Percent ? boundingBox.x() : 0;
-  float offsetY = transformOriginY().type() == Percent ? boundingBox.y() : 0;
-
   float originX = 0;
   float originY = 0;
   float originZ = 0;
 
+  const FloatSize& boxSize = boundingBox.size();
   if (applyTransformOrigin ||
       // We need to calculate originX and originY for applying motion path.
-      applyMotionPath == ComputedStyle::IncludeMotionPath) {
+      applyMotionPath == IncludeMotionPath) {
+    float offsetX = transformOriginX().type() == Percent ? boundingBox.x() : 0;
     originX =
-        floatValueForLength(transformOriginX(), boundingBox.width()) + offsetX;
+        floatValueForLength(transformOriginX(), boxSize.width()) + offsetX;
+    float offsetY = transformOriginY().type() == Percent ? boundingBox.y() : 0;
     originY =
-        floatValueForLength(transformOriginY(), boundingBox.height()) + offsetY;
+        floatValueForLength(transformOriginY(), boxSize.height()) + offsetY;
     if (applyTransformOrigin) {
       originZ = transformOriginZ();
       result.translate3d(originX, originY, originZ);
@@ -1334,23 +1336,20 @@ void ComputedStyle::applyTransform(
   if (applyIndependentTransformProperties ==
       IncludeIndependentTransformProperties) {
     if (translate())
-      translate()->apply(result, boundingBox.size());
+      translate()->apply(result, boxSize);
 
     if (rotate())
-      rotate()->apply(result, boundingBox.size());
+      rotate()->apply(result, boxSize);
 
     if (scale())
-      scale()->apply(result, boundingBox.size());
+      scale()->apply(result, boxSize);
   }
 
-  if (applyMotionPath == ComputedStyle::IncludeMotionPath)
-    applyMotionPathTransform(originX, originY, result);
+  if (applyMotionPath == IncludeMotionPath)
+    applyMotionPathTransform(originX, originY, boundingBox, result);
 
-  const Vector<RefPtr<TransformOperation>>& transformOperations =
-      transform().operations();
-  unsigned size = transformOperations.size();
-  for (unsigned i = 0; i < size; ++i)
-    transformOperations[i]->apply(result, boundingBox.size());
+  for (const auto& operation : transform().operations())
+    operation->apply(result, boxSize);
 
   if (applyTransformOrigin) {
     result.translate3d(-originX, -originY, -originZ);
@@ -1360,11 +1359,11 @@ void ComputedStyle::applyTransform(
 void ComputedStyle::applyMotionPathTransform(
     float originX,
     float originY,
+    const FloatRect& boundingBox,
     TransformationMatrix& transform) const {
   const StyleMotionData& motionData =
       m_rareNonInheritedData->m_transform->m_motion;
-  // TODO(ericwilligers): crbug.com/638055 Apply offset-position and
-  // offset-anchor.
+  // TODO(ericwilligers): crbug.com/638055 Apply offset-position.
   if (!motionData.m_path) {
     return;
   }
@@ -1387,8 +1386,25 @@ void ComputedStyle::applyMotionPathTransform(
   if (motionData.m_rotation.type == OffsetRotationFixed)
     angle = 0;
 
-  transform.translate(point.x() - originX, point.y() - originY);
+  float originShiftX = 0;
+  float originShiftY = 0;
+  if (RuntimeEnabledFeatures::cssOffsetPositionAnchorEnabled()) {
+    // TODO(ericwilligers): crbug.com/638055 Support offset-anchor: auto.
+    const LengthPoint& anchor = offsetAnchor();
+    originShiftX = floatValueForLength(anchor.x(), boundingBox.width()) -
+                   floatValueForLength(transformOriginX(), boundingBox.width());
+    originShiftY =
+        floatValueForLength(anchor.y(), boundingBox.height()) -
+        floatValueForLength(transformOriginY(), boundingBox.height());
+  }
+
+  transform.translate(point.x() - originX + originShiftX,
+                      point.y() - originY + originShiftY);
   transform.rotate(angle + motionData.m_rotation.angle);
+
+  if (RuntimeEnabledFeatures::cssOffsetPositionAnchorEnabled()) {
+    transform.translate(-originShiftX, -originShiftY);
+  }
 }
 
 void ComputedStyle::setTextShadow(PassRefPtr<ShadowList> s) {

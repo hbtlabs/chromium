@@ -99,11 +99,12 @@ class DownloadItemView : public views::InkDropHostView,
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   bool GetTooltipText(const gfx::Point& p,
                       base::string16* tooltip) const override;
-  void GetAccessibleState(ui::AXViewState* state) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void OnThemeChanged() override;
 
   // Overridden from view::InkDropHostView:
   void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
+  std::unique_ptr<views::InkDrop> CreateInkDrop() override;
   std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
   std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
       const override;

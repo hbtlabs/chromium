@@ -75,9 +75,6 @@ class Display : public PlatformDisplayDelegate,
   // Returns a display::Display corresponding to this ws::Display.
   display::Display ToDisplay() const;
 
-  // Schedules a paint for the specified region in the coordinates of |window|.
-  void SchedulePaint(const ServerWindow* window, const gfx::Rect& bounds);
-
   gfx::Size GetSize() const;
 
   WindowServer* window_server() { return window_server_; }
@@ -140,8 +137,8 @@ class Display : public PlatformDisplayDelegate,
   void SetSize(const gfx::Size& size) override;
   void SetTitle(const mojo::String& title) override;
 
-  // Updates the root window, if necessary, for viewport metric changes.
-  void OnViewportMetricsChanged(const display::ViewportMetrics& new_metrics);
+  // Updates the size of display root ServerWindow and WM root ServerWindow(s).
+  void OnViewportMetricsChanged(const display::ViewportMetrics& metrics);
 
  private:
   friend class test::DisplayTestApi;

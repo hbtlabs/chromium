@@ -59,6 +59,7 @@
 #if defined(USE_AURA)
 #include "content/browser/compositor/mus_browser_compositor_output_surface.h"
 #include "content/public/common/service_manager_connection.h"
+#include "ui/aura/window_tree_host.h"
 #endif
 
 #if defined(OS_WIN)
@@ -452,7 +453,7 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
   if (vulkan_context_provider) {
     vulkan_surface.reset(new VulkanBrowserCompositorOutputSurface(
         vulkan_context_provider, compositor->vsync_manager(),
-        compositor->task_runner().get()));
+        begin_frame_source.get()));
     if (!vulkan_surface->Initialize(compositor.get()->widget())) {
       vulkan_surface->Destroy();
       vulkan_surface.reset();
@@ -511,11 +512,24 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
                   begin_frame_source.get(), std::move(validator));
         } else {
 #if defined(USE_AURA)
-          display_output_surface =
-              base::MakeUnique<MusBrowserCompositorOutputSurface>(
-                  compositor->window(), context_provider,
-                  GetGpuMemoryBufferManager(), compositor->vsync_manager(),
-                  begin_frame_source.get(), std::move(validator));
+          if (compositor->window()) {
+            // TODO(mfomitchev): Remove this clause once we complete the switch
+            // to Aura-Mus.
+            display_output_surface =
+                base::MakeUnique<MusBrowserCompositorOutputSurface>(
+                    compositor->window(), context_provider,
+                    GetGpuMemoryBufferManager(), compositor->vsync_manager(),
+                    begin_frame_source.get(), std::move(validator));
+          } else {
+            aura::WindowTreeHost* host =
+                aura::WindowTreeHost::GetForAcceleratedWidget(
+                    compositor->widget());
+            display_output_surface =
+                base::MakeUnique<MusBrowserCompositorOutputSurface>(
+                    host->window(), context_provider,
+                    GetGpuMemoryBufferManager(), compositor->vsync_manager(),
+                    begin_frame_source.get(), std::move(validator));
+          }
 #else
           NOTREACHED();
 #endif
@@ -540,12 +554,11 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
 
   // The Display owns and uses the |display_output_surface| created above.
   data->display = base::MakeUnique<cc::Display>(
-      HostSharedBitmapManager::current(),
-      GetGpuMemoryBufferManager(),
-      compositor->GetRendererSettings(), std::move(begin_frame_source),
-      std::move(display_output_surface), std::move(scheduler),
-      base::MakeUnique<cc::TextureMailboxDeleter>(
-          compositor->task_runner().get()));
+      HostSharedBitmapManager::current(), GetGpuMemoryBufferManager(),
+      compositor->GetRendererSettings(), compositor->frame_sink_id(),
+      std::move(begin_frame_source), std::move(display_output_surface),
+      std::move(scheduler), base::MakeUnique<cc::TextureMailboxDeleter>(
+                                compositor->task_runner().get()));
 
   // The |delegated_output_surface| is given back to the compositor, it
   // delegates to the Display as its root surface. Importantly, it shares the

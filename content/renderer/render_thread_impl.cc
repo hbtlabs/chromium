@@ -48,10 +48,10 @@
 #include "cc/raster/task_graph_runner.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_settings.h"
+#include "components/discardable_memory/client/client_discardable_shared_memory_manager.h"
 #include "content/child/appcache/appcache_dispatcher.h"
 #include "content/child/appcache/appcache_frontend_impl.h"
 #include "content/child/blob_storage/blob_message_filter.h"
-#include "content/child/child_discardable_shared_memory_manager.h"
 #include "content/child/child_gpu_memory_buffer_manager.h"
 #include "content/child/child_histogram_message_filter.h"
 #include "content/child/child_resource_message_filter.h"
@@ -160,7 +160,6 @@
 #include "third_party/WebKit/public/web/WebScriptController.h"
 #include "third_party/WebKit/public/web/WebSecurityPolicy.h"
 #include "third_party/WebKit/public/web/WebView.h"
-#include "third_party/icu/source/i18n/unicode/timezone.h"
 #include "third_party/skia/include/core/SkGraphics.h"
 #include "ui/base/layout.h"
 #include "ui/base/ui_base_switches.h"
@@ -178,10 +177,6 @@
 #include "base/mac/mac_util.h"
 #include "content/renderer/theme_helper_mac.h"
 #include "content/renderer/webscrollbarbehavior_impl_mac.h"
-#endif
-
-#if defined(OS_POSIX)
-#include "ipc/ipc_channel_posix.h"
 #endif
 
 #if defined(OS_WIN)
@@ -328,13 +323,6 @@ void* CreateHistogram(
 void AddHistogramSample(void* hist, int sample) {
   base::Histogram* histogram = static_cast<base::Histogram*>(hist);
   histogram->Add(sample);
-}
-
-void NotifyTimezoneChangeOnThisThread() {
-  v8::Isolate* isolate = v8::Isolate::GetCurrent();
-  if (!isolate)
-    return;
-  v8::Date::DateTimeConfigurationChangeNotification(isolate);
 }
 
 class FrameFactoryImpl : public mojom::FrameFactory {
@@ -600,6 +588,9 @@ void RenderThreadImpl::SetRenderMessageFilterForTesting(
   g_render_message_filter_for_testing = render_message_filter;
 }
 
+// In single-process mode used for debugging, we don't pass a renderer client
+// ID via command line because RenderThreadImpl lives in the same process as
+// the browser
 RenderThreadImpl::RenderThreadImpl(
     const InProcessChildThreadParams& params,
     std::unique_ptr<blink::scheduler::RendererScheduler> scheduler,
@@ -610,9 +601,9 @@ RenderThreadImpl::RenderThreadImpl(
                           .ConnectToBrowser(true)
                           .Build()),
       renderer_scheduler_(std::move(scheduler)),
-      time_zone_monitor_binding_(this),
       categorized_worker_pool_(new CategorizedWorkerPool()),
-      renderer_binding_(this) {
+      renderer_binding_(this),
+      client_id_(1) {
   Init(resource_task_queue);
 }
 
@@ -626,11 +617,15 @@ RenderThreadImpl::RenderThreadImpl(
                           .ConnectToBrowser(true)
                           .Build()),
       renderer_scheduler_(std::move(scheduler)),
-      time_zone_monitor_binding_(this),
       main_message_loop_(std::move(main_message_loop)),
       categorized_worker_pool_(new CategorizedWorkerPool()),
       renderer_binding_(this) {
   scoped_refptr<base::SingleThreadTaskRunner> test_task_counter;
+  DCHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kRendererClientId));
+  base::StringToInt(base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+                        switches::kRendererClientId),
+                    &client_id_);
   Init(test_task_counter);
 }
 
@@ -847,6 +842,10 @@ void RenderThreadImpl::Init(
                  base::Unretained(this))));
 
   if (base::FeatureList::IsEnabled(features::kMemoryCoordinator)) {
+    // Currently it is not possible to enable both PurgeAndSuspend and
+    // MemoryCoordinator at the same time.
+    DCHECK(!base::FeatureList::IsEnabled(features::kPurgeAndSuspend));
+
     // Disable MemoryPressureListener when memory coordinator is enabled.
     base::MemoryPressureListener::SetNotificationsSuppressed(true);
 
@@ -890,11 +889,6 @@ void RenderThreadImpl::Init(
 
   GetRemoteInterfaces()->GetInterface(
       mojo::GetProxy(&storage_partition_service_));
-
-  device::mojom::TimeZoneMonitorPtr time_zone_monitor;
-  GetRemoteInterfaces()->GetInterface(mojo::GetProxy(&time_zone_monitor));
-  time_zone_monitor->AddClient(
-      time_zone_monitor_binding_.CreateInterfacePtrAndBind());
 
 #if defined(OS_LINUX)
   ChildProcess::current()->SetIOThreadPriority(base::ThreadPriority::DISPLAY);
@@ -1331,7 +1325,7 @@ void RenderThreadImpl::InitializeWebKit(
 
 void RenderThreadImpl::RegisterSchemes() {
   // chrome:
-  WebString chrome_scheme(base::ASCIIToUTF16(kChromeUIScheme));
+  WebString chrome_scheme(WebString::fromASCII(kChromeUIScheme));
   WebSecurityPolicy::registerURLSchemeAsDisplayIsolated(chrome_scheme);
   WebSecurityPolicy::registerURLSchemeAsNotAllowingJavascriptURLs(
       chrome_scheme);
@@ -1339,18 +1333,12 @@ void RenderThreadImpl::RegisterSchemes() {
   WebSecurityPolicy::registerURLSchemeAsCORSEnabled(chrome_scheme);
 
   // chrome-devtools:
-  WebString devtools_scheme(base::ASCIIToUTF16(kChromeDevToolsScheme));
+  WebString devtools_scheme(WebString::fromASCII(kChromeDevToolsScheme));
   WebSecurityPolicy::registerURLSchemeAsDisplayIsolated(devtools_scheme);
 
   // view-source:
-  WebString view_source_scheme(base::ASCIIToUTF16(kViewSourceScheme));
+  WebString view_source_scheme(WebString::fromASCII(kViewSourceScheme));
   WebSecurityPolicy::registerURLSchemeAsDisplayIsolated(view_source_scheme);
-}
-
-void RenderThreadImpl::NotifyTimezoneChange() {
-  NotifyTimezoneChangeOnThisThread();
-  RenderThread::Get()->PostTaskToAllWebWorkers(
-      base::Bind(&NotifyTimezoneChangeOnThisThread));
 }
 
 void RenderThreadImpl::RecordAction(const base::UserMetricsAction& action) {
@@ -1437,10 +1425,6 @@ int64_t RenderThreadImpl::GetIdleNotificationDelayInMs() const {
 void RenderThreadImpl::SetIdleNotificationDelayInMs(
     int64_t idle_notification_delay_in_ms) {
   idle_notification_delay_in_ms_ = idle_notification_delay_in_ms;
-}
-
-void RenderThreadImpl::UpdateHistograms(int sequence_number) {
-  child_histogram_message_filter()->SendHistograms(sequence_number);
 }
 
 int RenderThreadImpl::PostTaskToAllWebWorkers(const base::Closure& closure) {
@@ -1582,6 +1566,10 @@ AudioRendererMixerManager* RenderThreadImpl::GetAudioRendererMixerManager() {
 
 base::WaitableEvent* RenderThreadImpl::GetShutdownEvent() {
   return ChildProcess::current()->GetShutDownEvent();
+}
+
+int32_t RenderThreadImpl::GetClientId() {
+  return client_id_;
 }
 
 void RenderThreadImpl::OnAssociatedInterfaceRequest(
@@ -1756,6 +1744,12 @@ void RenderThreadImpl::OnProcessBackgrounded(bool backgrounded) {
     renderer_scheduler_->OnRendererBackgrounded();
   } else {
     renderer_scheduler_->OnRendererForegrounded();
+    // TODO(tasak): after enabling MemoryCoordinator, remove this Notify
+    // and follow MemoryCoordinator's request.
+    if (base::FeatureList::IsEnabled(features::kPurgeAndSuspend))
+      base::MemoryCoordinatorClientRegistry::GetInstance()->Notify(
+          base::MemoryState::NORMAL);
+
     record_purge_suspend_metric_closure_.Cancel();
     record_purge_suspend_metric_closure_.Reset(
         base::Bind(&RenderThreadImpl::RecordPurgeAndSuspendMetrics,
@@ -1766,11 +1760,17 @@ void RenderThreadImpl::OnProcessBackgrounded(bool backgrounded) {
 
 void RenderThreadImpl::OnProcessPurgeAndSuspend() {
   ChildThreadImpl::OnProcessPurgeAndSuspend();
-  if (is_renderer_suspended_ || !RendererIsHidden())
+  DCHECK(!is_renderer_suspended_);
+  if (!RendererIsHidden())
     return;
-  // TODO(hajimehoshi): Implement purging e.g. cache (crbug/607077)
   is_renderer_suspended_ = true;
-  renderer_scheduler_->SuspendRenderer();
+  if (base::FeatureList::IsEnabled(features::kPurgeAndSuspend)) {
+    // TODO(tasak): After enabling MemoryCoordinator, remove this Notify
+    // and follow MemoryCoordinator's request.
+    base::MemoryCoordinatorClientRegistry::GetInstance()->Notify(
+        base::MemoryState::SUSPENDED);
+    renderer_scheduler_->SuspendRenderer();
+  }
 
   // Since purging is not a synchronous task (e.g. v8 GC, oilpan GC, ...),
   // we need to wait until the task is finished. So wait 15 seconds and
@@ -1852,8 +1852,9 @@ void RenderThreadImpl::RecordPurgeAndSuspendMetrics() const {
   UMA_HISTOGRAM_MEMORY_MB("PurgeAndSuspend.Memory.MallocMB",
                           malloc_usage / 1024 / 1024);
 
-  ChildDiscardableSharedMemoryManager::Statistics discardable_stats =
-      ChildThreadImpl::discardable_shared_memory_manager()->GetStatistics();
+  discardable_memory::ClientDiscardableSharedMemoryManager::Statistics
+      discardable_stats =
+          ChildThreadImpl::discardable_shared_memory_manager()->GetStatistics();
   size_t discardable_usage =
       discardable_stats.total_size - discardable_stats.freelist_size;
   UMA_HISTOGRAM_MEMORY_KB("PurgeAndSuspend.Memory.DiscardableKB",
@@ -1882,7 +1883,13 @@ void RenderThreadImpl::OnProcessResume() {
 
   DCHECK(is_renderer_suspended_);
   is_renderer_suspended_ = false;
-  renderer_scheduler_->ResumeRenderer();
+  if (base::FeatureList::IsEnabled(features::kPurgeAndSuspend)) {
+    // TODO(tasak): after enabling MemoryCoordinator, remove this Notify
+    // and follow MemoryCoordinator's request.
+    base::MemoryCoordinatorClientRegistry::GetInstance()->Notify(
+        base::MemoryState::NORMAL);
+    renderer_scheduler_->ResumeRenderer();
+  }
 }
 
 scoped_refptr<gpu::GpuChannelHost> RenderThreadImpl::EstablishGpuChannelSync() {
@@ -2231,18 +2238,6 @@ void RenderThreadImpl::PurgePluginListCache(bool reload_pages) {
 #else
   NOTREACHED();
 #endif
-}
-
-void RenderThreadImpl::OnTimeZoneChange(const std::string& zone_id) {
-  if (!blink_platform_impl_)
-    return;
-  if (!zone_id.empty()) {
-    icu::TimeZone *new_zone = icu::TimeZone::createTimeZone(
-        icu::UnicodeString::fromUTF8(zone_id));
-    icu::TimeZone::adoptDefault(new_zone);
-    VLOG(1) << "ICU default timezone is set to " << zone_id;
-  }
-  NotifyTimezoneChange();
 }
 
 void RenderThreadImpl::OnCreateNewSharedWorker(

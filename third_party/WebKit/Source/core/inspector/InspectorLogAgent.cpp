@@ -5,6 +5,7 @@
 #include "core/inspector/InspectorLogAgent.h"
 
 #include "bindings/core/v8/SourceLocation.h"
+#include "core/frame/PerformanceMonitor.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/IdentifiersFactory.h"
@@ -13,6 +14,7 @@ namespace blink {
 
 namespace LogAgentState {
 static const char logEnabled[] = "logEnabled";
+static const char logViolationsEnabled[] = "logViolationsEnabled";
 }
 
 namespace {
@@ -40,6 +42,8 @@ String messageSourceValue(MessageSource source) {
       return protocol::Log::LogEntry::SourceEnum::Deprecation;
     case WorkerMessageSource:
       return protocol::Log::LogEntry::SourceEnum::Worker;
+    case ViolationMessageSource:
+      return protocol::Log::LogEntry::SourceEnum::Violation;
     default:
       return protocol::Log::LogEntry::SourceEnum::Other;
   }
@@ -63,21 +67,26 @@ String messageLevelValue(MessageLevel level) {
 
 }  // namespace
 
-InspectorLogAgent::InspectorLogAgent(ConsoleMessageStorage* storage)
-    : m_enabled(false), m_storage(storage) {}
+InspectorLogAgent::InspectorLogAgent(ConsoleMessageStorage* storage,
+                                     PerformanceMonitor* performanceMonitor)
+    : m_enabled(false),
+      m_storage(storage),
+      m_performanceMonitor(performanceMonitor) {}
 
 InspectorLogAgent::~InspectorLogAgent() {}
 
 DEFINE_TRACE(InspectorLogAgent) {
   visitor->trace(m_storage);
+  visitor->trace(m_performanceMonitor);
   InspectorBaseAgent::trace(visitor);
 }
 
 void InspectorLogAgent::restore() {
   if (!m_state->booleanProperty(LogAgentState::logEnabled, false))
     return;
-  ErrorString ignored;
-  enable(&ignored);
+  enable();
+  if (m_state->booleanProperty(LogAgentState::logViolationsEnabled, false))
+    setReportViolationsEnabled(true);
 }
 
 void InspectorLogAgent::consoleMessageAdded(ConsoleMessage* message) {
@@ -109,9 +118,9 @@ void InspectorLogAgent::consoleMessageAdded(ConsoleMessage* message) {
   frontend()->flush();
 }
 
-void InspectorLogAgent::enable(ErrorString*) {
+Response InspectorLogAgent::enable() {
   if (m_enabled)
-    return;
+    return Response::OK();
   m_instrumentingAgents->addInspectorLogAgent(this);
   m_state->setBoolean(LogAgentState::logEnabled, true);
   m_enabled = true;
@@ -130,18 +139,30 @@ void InspectorLogAgent::enable(ErrorString*) {
   }
   for (size_t i = 0; i < m_storage->size(); ++i)
     consoleMessageAdded(m_storage->at(i));
+  return Response::OK();
 }
 
-void InspectorLogAgent::disable(ErrorString*) {
+Response InspectorLogAgent::disable() {
   if (!m_enabled)
-    return;
+    return Response::OK();
   m_state->setBoolean(LogAgentState::logEnabled, false);
   m_enabled = false;
   m_instrumentingAgents->removeInspectorLogAgent(this);
+  return Response::OK();
 }
 
-void InspectorLogAgent::clear(ErrorString*) {
+Response InspectorLogAgent::clear() {
   m_storage->clear();
+  return Response::OK();
+}
+
+Response InspectorLogAgent::setReportViolationsEnabled(bool enabled) {
+  if (!m_enabled)
+    return Response::Error("Log is not enabled");
+  m_state->setBoolean(LogAgentState::logViolationsEnabled, enabled);
+  if (m_performanceMonitor)
+    m_performanceMonitor->setLoggingEnabled(enabled);
+  return Response::OK();
 }
 
 }  // namespace blink

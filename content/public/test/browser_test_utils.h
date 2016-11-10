@@ -417,12 +417,18 @@ class RenderProcessHostWatcher : public RenderProcessHostObserver {
 
 // Watches for responses from the DOMAutomationController and keeps them in a
 // queue. Useful for waiting for a message to be received.
-class DOMMessageQueue : public NotificationObserver {
+class DOMMessageQueue : public NotificationObserver,
+                        public WebContentsObserver {
  public:
   // Constructs a DOMMessageQueue and begins listening for messages from the
   // DOMAutomationController. Do not construct this until the browser has
   // started.
   DOMMessageQueue();
+
+  // Same as the default constructor, but only listens for messages
+  // sent from a particular |web_contents|.
+  explicit DOMMessageQueue(WebContents* web_contents);
+
   ~DOMMessageQueue() override;
 
   // Removes all messages in the message queue.
@@ -436,6 +442,9 @@ class DOMMessageQueue : public NotificationObserver {
   void Observe(int type,
                const NotificationSource& source,
                const NotificationDetails& details) override;
+
+  // Overridden WebContentsObserver methods.
+  void RenderProcessGone(base::TerminationStatus status) override;
 
  private:
   NotificationRegistrar registrar_;
@@ -543,16 +552,21 @@ class InputMsgWatcher : public BrowserMessageFilter {
   // the message.
   uint32_t WaitForAck();
 
+  uint32_t last_event_ack_source() const { return ack_source_; }
+
  private:
   ~InputMsgWatcher() override;
 
   // Overridden BrowserMessageFilter methods.
   bool OnMessageReceived(const IPC::Message& message) override;
 
-  void ReceivedAck(blink::WebInputEvent::Type ack_type, uint32_t ack_state);
+  void ReceivedAck(blink::WebInputEvent::Type ack_type,
+                   uint32_t ack_state,
+                   uint32_t ack_source);
 
   blink::WebInputEvent::Type wait_for_type_;
   uint32_t ack_result_;
+  uint32_t ack_source_;
   base::Closure quit_;
 
   DISALLOW_COPY_AND_ASSIGN(InputMsgWatcher);

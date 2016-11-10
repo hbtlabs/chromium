@@ -28,4 +28,23 @@ Found: textContent
 Checking 'templateString`asdf`should'
 Not Found: shouldNotFindThis
 
+Checking 'window.document.BODY'
+Found: body
+
+Checking 'window.dOcUmE'
+Found: document
+
+Checking 'window.node'
+Found: NodeList
+Found: AudioNode
+Found: GainNode
+
+Checking '32'
+Not Found: Float32Array
+Not Found: Int32Array
+
+Checking 'window.32'
+Found: Float32Array
+Found: Int32Array
+
 

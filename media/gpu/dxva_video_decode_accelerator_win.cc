@@ -501,6 +501,7 @@ DXVAVideoDecodeAccelerator::DXVAVideoDecodeAccelerator(
       codec_(kUnknownVideoCodec),
       decoder_thread_("DXVAVideoDecoderThread"),
       pending_flush_(false),
+      enable_low_latency_(gpu_preferences.enable_low_latency_dxva),
       share_nv12_textures_(gpu_preferences.enable_zero_copy_dxgi_video &&
                            !workarounds.disable_dxgi_zero_copy_video),
       copy_nv12_textures_(gpu_preferences.enable_nv12_dxgi_video &&
@@ -730,16 +731,29 @@ bool DXVAVideoDecodeAccelerator::CreateDX11DevManager() {
 
     UINT flags = D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
 
+    D3D_FEATURE_LEVEL feature_level_out = D3D_FEATURE_LEVEL_11_0;
 #if defined _DEBUG
     flags |= D3D11_CREATE_DEVICE_DEBUG;
-#endif
 
-    D3D_FEATURE_LEVEL feature_level_out = D3D_FEATURE_LEVEL_11_0;
     hr = D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, flags,
                            feature_levels, arraysize(feature_levels),
                            D3D11_SDK_VERSION, d3d11_device_.Receive(),
                            &feature_level_out, d3d11_device_context_.Receive());
-    RETURN_ON_HR_FAILURE(hr, "Failed to create DX11 device", false);
+    if (hr == DXGI_ERROR_SDK_COMPONENT_MISSING) {
+      LOG(ERROR)
+          << "Debug DXGI device creation failed, falling back to release.";
+      flags &= ~D3D11_CREATE_DEVICE_DEBUG;
+    } else {
+      RETURN_ON_HR_FAILURE(hr, "Failed to create debug DX11 device", false);
+    }
+#endif
+    if (!d3d11_device_context_) {
+      hr = D3D11CreateDevice(
+          NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, flags, feature_levels,
+          arraysize(feature_levels), D3D11_SDK_VERSION, d3d11_device_.Receive(),
+          &feature_level_out, d3d11_device_context_.Receive());
+      RETURN_ON_HR_FAILURE(hr, "Failed to create DX11 device", false);
+    }
   }
 
   D3D11_FEATURE_DATA_D3D11_OPTIONS options;
@@ -820,6 +834,12 @@ void DXVAVideoDecodeAccelerator::Decode(
         INVALID_ARGUMENT, );
   }
 
+  if (bitstream_buffer.size() == 0) {
+    if (client_)
+      client_->NotifyEndOfBitstreamBuffer(bitstream_buffer.id());
+    return;
+  }
+
   base::win::ScopedComPtr<IMFSample> sample;
   RETURN_AND_NOTIFY_ON_FAILURE(shm.Map(bitstream_buffer.size()),
                                "Failed in base::SharedMemory::Map",
@@ -860,7 +880,6 @@ void DXVAVideoDecodeAccelerator::AssignPictureBuffers(
   // Copy the picture buffers provided by the client to the available list,
   // and mark these buffers as available for use.
   for (size_t buffer_index = 0; buffer_index < buffers.size(); ++buffer_index) {
-    DCHECK_LE(1u, buffers[buffer_index].client_texture_ids().size());
     linked_ptr<DXVAPictureBuffer> picture_buffer =
         DXVAPictureBuffer::Create(*this, buffers[buffer_index], egl_config_);
     RETURN_AND_NOTIFY_ON_FAILURE(picture_buffer.get(),
@@ -1454,11 +1473,13 @@ bool DXVAVideoDecodeAccelerator::CheckDecoderDxvaSupport() {
     RETURN_ON_HR_FAILURE(hr, "Failed to enable DXVA H/W decoding", false);
   }
 
-  hr = attributes->SetUINT32(CODECAPI_AVLowLatencyMode, TRUE);
-  if (SUCCEEDED(hr)) {
-    DVLOG(1) << "Successfully set Low latency mode on decoder.";
-  } else {
-    DVLOG(1) << "Failed to set Low latency mode on decoder. Error: " << hr;
+  if (enable_low_latency_) {
+    hr = attributes->SetUINT32(CODECAPI_AVLowLatencyMode, TRUE);
+    if (SUCCEEDED(hr)) {
+      DVLOG(1) << "Successfully set Low latency mode on decoder.";
+    } else {
+      DVLOG(1) << "Failed to set Low latency mode on decoder. Error: " << hr;
+    }
   }
 
   auto* gl_context = get_gl_context_cb_.Run();
@@ -1753,7 +1774,19 @@ void DXVAVideoDecodeAccelerator::ProcessPendingSamples() {
 
       pending_sample->picture_buffer_id = index->second->id();
       index->second->set_bound();
-      index->second->set_color_space(pending_sample->color_space);
+
+      // We only propagate the input color space if we can give the raw YUV data
+      // back to the browser process. When we cannot return the YUV data, we
+      // have to do a copy to an RGBA texture, which makes proper color
+      // management difficult as some fidelity is lost. Also, we currently let
+      // the drivers decide how to actually do the YUV to RGB conversion, which
+      // means that even if we wanted to try to color-adjust the RGB output, we
+      // don't actually know exactly what color space it is in anymore.
+      // TODO(hubbe): Figure out a way to always return the raw YUV data.
+      if (share_nv12_textures_ || copy_nv12_textures_) {
+        index->second->set_color_space(pending_sample->color_space);
+      }
+
       if (share_nv12_textures_) {
         main_thread_task_runner_->PostTask(
             FROM_HERE,
@@ -2276,7 +2309,8 @@ void DXVAVideoDecodeAccelerator::CopySurfaceComplete(
   RETURN_AND_NOTIFY_ON_FAILURE(result, "Failed to complete copying surface",
                                PLATFORM_FAILURE, );
 
-  NotifyPictureReady(picture_buffer->id(), input_buffer_id, gfx::ColorSpace());
+  NotifyPictureReady(picture_buffer->id(), input_buffer_id,
+                     picture_buffer->color_space());
 
   {
     base::AutoLock lock(decoder_lock_);

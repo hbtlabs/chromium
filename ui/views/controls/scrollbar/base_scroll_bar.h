@@ -68,8 +68,6 @@ class VIEWS_EXPORT BaseScrollBar : public ScrollBar,
                            CustomButton::ButtonState new_state);
 
   // View overrides:
-  gfx::Size GetPreferredSize() const override = 0;
-  void Layout() override = 0;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
   void OnMouseCaptureLost() override;
@@ -102,9 +100,6 @@ class VIEWS_EXPORT BaseScrollBar : public ScrollBar,
   void ExecuteCommand(int id) override;
 
  protected:
-  // View overrides:
-  void OnPaint(gfx::Canvas* canvas) override = 0;
-
   BaseScrollBarThumb* GetThumb() const;
   CustomButton::ButtonState GetThumbTrackState() const;
 
@@ -119,8 +114,8 @@ class VIEWS_EXPORT BaseScrollBar : public ScrollBar,
  private:
   friend class test::ScrollViewTestApi;
 
-  FRIEND_TEST_ALL_PREFIXES(NativeScrollBarTest, ScrollBarFitsToBottom);
-  FRIEND_TEST_ALL_PREFIXES(NativeScrollBarTest, ThumbFullLengthOfTrack);
+  FRIEND_TEST_ALL_PREFIXES(ScrollBarViewsTest, ScrollBarFitsToBottom);
+  FRIEND_TEST_ALL_PREFIXES(ScrollBarViewsTest, ThumbFullLengthOfTrack);
   int GetThumbSizeForTest();
 
   // Changes to 'pushed' state and starts a timer to scroll repeatedly.

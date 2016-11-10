@@ -72,6 +72,7 @@
 #include "media/audio/audio_features.h"
 #include "media/base/media_switches.h"
 #include "media/midi/midi_switches.h"
+#include "printing/features/features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/display/display_switches.h"
@@ -205,7 +206,11 @@ const FeatureEntry::Choice kMarkHttpAsChoices[] = {
      security_state::switches::kMarkHttpAsDangerous},
     {IDS_MARK_HTTP_WITH_PASSWORDS_OR_CC_WITH_CHIP,
      security_state::switches::kMarkHttpAs,
-     security_state::switches::kMarkHttpWithPasswordsOrCcWithChip}};
+     security_state::switches::kMarkHttpWithPasswordsOrCcWithChip},
+    {IDS_MARK_HTTP_WITH_PASSWORDS_OR_CC_WITH_CHIP_AND_FORM_WARNING,
+     security_state::switches::kMarkHttpAs,
+     security_state::switches::
+         kMarkHttpWithPasswordsOrCcWithChipAndFormWarning}};
 
 const FeatureEntry::Choice kDataReductionProxyLoFiChoices[] = {
     { IDS_GENERIC_EXPERIMENT_CHOICE_DEFAULT, "", "" },
@@ -328,6 +333,12 @@ const FeatureEntry::Choice kEnableGpuRasterizationChoices[] = {
     switches::kDisableGpuRasterization, "" },
   { IDS_FLAGS_FORCE_GPU_RASTERIZATION,
     switches::kForceGpuRasterization, "" },
+};
+
+const FeatureEntry::Choice kEnableWebGL2Choices[] = {
+  { IDS_GENERIC_EXPERIMENT_CHOICE_DEFAULT, "", "" },
+  { IDS_GENERIC_EXPERIMENT_CHOICE_ENABLED, switches::kEnableES3APIs, "" },
+  { IDS_GENERIC_EXPERIMENT_CHOICE_DISABLED, switches::kDisableES3APIs, "" },
 };
 
 #if defined(OS_CHROMEOS)
@@ -1209,11 +1220,6 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_ENABLE_PASSWORD_SEPARATED_SIGNIN_FLOW_DESCRIPTION,
      kOsMac | kOsWin | kOsLinux,
      FEATURE_VALUE_TYPE(switches::kUsePasswordSeparatedSigninFlow)},
-    {"enable-material-design-user-manager",
-     IDS_FLAGS_ENABLE_MATERIAL_DESIGN_USER_MANAGER_NAME,
-     IDS_FLAGS_ENABLE_MATERIAL_DESIGN_USER_MANAGER_DESCRIPTION,
-     kOsMac | kOsWin | kOsLinux,
-     FEATURE_VALUE_TYPE(switches::kMaterialDesignUserManager)},
     {"show-material-design-user-menu",
      IDS_FLAGS_SHOW_MATERIAL_DESIGN_USER_MENU_NAME,
      IDS_FLAGS_SHOW_MATERIAL_DESIGN_USER_MENU_DESCRIPTION,
@@ -1602,6 +1608,11 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-webvr", IDS_FLAGS_WEBVR_NAME, IDS_FLAGS_WEBVR_DESCRIPTION, kOsAll,
      SINGLE_VALUE_TYPE(switches::kEnableWebVR)},
 #endif  // ENABLE_WEBVR
+#if defined(ENABLE_VR_SHELL)
+    {"enable-vr-shell", IDS_FLAGS_ENABLE_VR_SHELL_NAME,
+     IDS_FLAGS_ENABLE_VR_SHELL_DESCRIPTION, kOsAndroid,
+     FEATURE_VALUE_TYPE(features::kVrShell)},
+#endif  // ENABLE_VR_SHELL
 #if defined(OS_CHROMEOS)
     {"disable-accelerated-mjpeg-decode",
      IDS_FLAGS_ACCELERATED_MJPEG_DECODE_NAME,
@@ -1640,10 +1651,10 @@ const FeatureEntry kFeatureEntries[] = {
     {"offline-bookmarks", IDS_FLAGS_OFFLINE_BOOKMARKS_NAME,
      IDS_FLAGS_OFFLINE_BOOKMARKS_DESCRIPTION, kOsAndroid,
      FEATURE_VALUE_TYPE(offline_pages::kOfflineBookmarksFeature)},
-    {"offline-pages-background-loading",
-     IDS_FLAGS_OFFLINE_PAGES_BACKGROUND_LOADING_NAME,
-     IDS_FLAGS_OFFLINE_PAGES_BACKGROUND_LOADING_DESCRIPTION, kOsAndroid,
-     FEATURE_VALUE_TYPE(offline_pages::kOfflinePagesBackgroundLoadingFeature)},
+    {"offline-pages-async-download",
+     IDS_FLAGS_OFFLINE_PAGES_ASYNC_DOWNLOAD_NAME,
+     IDS_FLAGS_OFFLINE_PAGES_ASYNC_DOWNLOAD_DESCRIPTION, kOsAndroid,
+     FEATURE_VALUE_TYPE(offline_pages::kOfflinePagesAsyncDownloadFeature)},
     {"offline-pages-sharing", IDS_FLAGS_OFFLINE_PAGES_SHARING_NAME,
      IDS_FLAGS_OFFLINE_PAGES_SHARING_DESCRIPTION, kOsAndroid,
      FEATURE_VALUE_TYPE(offline_pages::kOfflinePagesSharingFeature)},
@@ -1673,7 +1684,7 @@ const FeatureEntry kFeatureEntries[] = {
      MULTI_VALUE_TYPE(kNtpSwitchToExistingTabChoices)},
     {"use-android-midi-api", IDS_FLAGS_USE_ANDROID_MIDI_API_NAME,
      IDS_FLAGS_USE_ANDROID_MIDI_API_DESCRIPTION, kOsAndroid,
-     SINGLE_VALUE_TYPE(switches::kUseAndroidMidiApi)},
+     FEATURE_VALUE_TYPE(midi::features::kMidiManagerAndroid)},
 #endif  // OS_ANDROID
 #if defined(OS_WIN)
     {"trace-export-events-to-etw", IDS_FLAGS_TRACE_EXPORT_EVENTS_TO_ETW_NAME,
@@ -1793,9 +1804,8 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_AUTOMATIC_TAB_DISCARDING_DESCRIPTION, kOsWin | kOsMac,
      FEATURE_VALUE_TYPE(features::kAutomaticTabDiscarding)},
 #endif  // OS_WIN || OS_MACOSX
-    {"enable-unsafe-es3-apis", IDS_FLAGS_WEBGL2_NAME,
-     IDS_FLAGS_WEBGL2_DESCRIPTION, kOsAll,
-     SINGLE_VALUE_TYPE(switches::kEnableUnsafeES3APIs)},
+    {"enable-es3-apis", IDS_FLAGS_WEBGL2_NAME, IDS_FLAGS_WEBGL2_DESCRIPTION,
+     kOsAll, MULTI_VALUE_TYPE(kEnableWebGL2Choices)},
     {"enable-webfonts-intervention-v2",
      IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_NAME,
      IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_DESCRIPTION, kOsAll,
@@ -1837,6 +1847,10 @@ const FeatureEntry kFeatureEntries[] = {
          ntp_snippets::kContentSuggestionsFeature,
          kNTPSnippetsFeatureVariations,
          ntp_snippets::kStudyName)},
+    {"enable-ntp-snippets-increased-visibility",
+     IDS_FLAGS_ENABLE_NTP_SNIPPETS_VISIBILITY_NAME,
+     IDS_FLAGS_ENABLE_NTP_SNIPPETS_VISIBILITY_DESCRIPTION, kOsAndroid,
+     FEATURE_VALUE_TYPE(ntp_snippets::kIncreasedVisibility)},
     {"enable-ntp-save-to-offline", IDS_FLAGS_ENABLE_NTP_SAVE_TO_OFFLINE_NAME,
      IDS_FLAGS_ENABLE_NTP_SAVE_TO_OFFLINE_DESCRIPTION, kOsAndroid,
      FEATURE_VALUE_TYPE(ntp_snippets::kSaveToOfflineFeature)},
@@ -1970,10 +1984,6 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_FRAMEBUSTING_NAME, IDS_FLAGS_FRAMEBUSTING_DESCRIPTION, kOsAll,
      FEATURE_VALUE_TYPE(features::kFramebustingNeedsSameOriginOrUserGesture)},
 #if defined(OS_ANDROID)
-    {"enable-vr-shell", IDS_FLAGS_ENABLE_VR_SHELL_NAME,
-     IDS_FLAGS_ENABLE_VR_SHELL_DESCRIPTION, kOsAndroid,
-     ENABLE_DISABLE_VALUE_TYPE(switches::kEnableVrShell,
-                               switches::kDisableVrShell)},
     {"enable-android-pay-integration-v1",
      IDS_FLAGS_ENABLE_ANDROID_PAY_INTEGRATION_V1_NAME,
      IDS_FLAGS_ENABLE_ANDROID_PAY_INTEGRATION_V1_DESCRIPTION, kOsAndroid,
@@ -2043,7 +2053,7 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_SAVEAS_MENU_LABEL_EXPERIMENT_DESCRIPTION, kOsDesktop,
      SINGLE_VALUE_TYPE(switches::kEnableSaveAsMenuLabelExperiment)},
     {"enable-generic-sensor", IDS_FLAGS_ENABLE_GENERIC_SENSOR_NAME,
-     IDS_FLAGS_ENABLE_GENERIC_SENSOR_DESCRIPTION, kOsAndroid | kOsMac,
+     IDS_FLAGS_ENABLE_GENERIC_SENSOR_DESCRIPTION, kOsAll,
      FEATURE_VALUE_TYPE(features::kGenericSensor)},
     {"expensive-background-timer-throttling",
      IDS_FLAGS_EXPENSIVE_BACKGROUND_TIMER_THROTTLING_NAME,
@@ -2066,7 +2076,20 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_ENABLE_DEFAULT_MEDIA_SESSION_DESCRIPTION, kOsDesktop,
      MULTI_VALUE_TYPE(kEnableDefaultMediaSessionChoices)},
 #endif  // !OS_ANDROID
-#if defined(ENABLE_PRINT_PREVIEW)
+#if defined(OS_ANDROID)
+    {"modal-permission-prompts", IDS_FLAGS_MODAL_PERMISSION_PROMPTS_NAME,
+     IDS_FLAGS_MODAL_PERMISSION_PROMPTS_DESCRIPTION, kOsAndroid,
+     FEATURE_VALUE_TYPE(features::kModalPermissionPrompts)},
+#endif
+#if !defined(OS_MACOSX)
+    {"permission-prompt-persistence-toggle",
+     IDS_FLAGS_PERMISSION_PROMPT_PERSISTENCE_TOGGLE_NAME,
+     IDS_FLAGS_PERMISSION_PROMPT_PERSISTENCE_TOGGLE_DESCRIPTION,
+     kOsWin | kOsCrOS | kOsLinux | kOsAndroid,
+     FEATURE_VALUE_TYPE(
+         features::kDisplayPersistenceToggleInPermissionPrompts)},
+#endif
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
     {"print-scaling", IDS_FLAGS_PRINT_SCALING_NAME,
      IDS_FLAGS_PRINT_SCALING_DESCRIPTION, kOsDesktop,
      FEATURE_VALUE_TYPE(features::kPrintScaling)},
@@ -2076,6 +2099,11 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_ENABLE_CONSISTENT_OMNIBOX_GEOLOCATION_NAME,
      IDS_FLAGS_ENABLE_CONSISTENT_OMNIBOX_GEOLOCATION_DESCRIPTION, kOsAndroid,
      FEATURE_VALUE_TYPE(features::kConsistentOmniboxGeolocation)},
+    {"concurrent-background-loading-on-svelte",
+     IDS_FLAGS_OFFLINE_PAGES_SVELTE_CONCURRENT_LOADING_NAME,
+     IDS_FLAGS_OFFLINE_PAGES_SVELTE_CONCURRENT_LOADING_DESCRIPTION, kOsAndroid,
+     FEATURE_VALUE_TYPE(
+         offline_pages::kOfflinePagesSvelteConcurrentLoadingFeature)},
 #endif
     // NOTE: Adding new command-line switches requires adding corresponding
     // entries to enum "LoginCustomFlags" in histograms.xml. See note in

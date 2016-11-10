@@ -248,6 +248,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (base::FeatureList::IsEnabled(features::kDocumentWriteEvaluator))
     WebRuntimeFeatures::enableDocumentWriteEvaluator(true);
 
+  if (base::FeatureList::IsEnabled(features::kLazyParseCSS))
+    WebRuntimeFeatures::enableLazyParseCSS(true);
+
   WebRuntimeFeatures::enableMediaDocumentDownloadButton(
       base::FeatureList::IsEnabled(features::kMediaDocumentDownloadButton));
 
@@ -306,12 +309,22 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (base::FeatureList::IsEnabled(features::kGamepadExtensions))
     WebRuntimeFeatures::enableGamepadExtensions(true);
 
+  if (!base::FeatureList::IsEnabled(features::kCompositeOpaqueFixedPosition))
+    WebRuntimeFeatures::enableFeatureFromString("CompositeOpaqueFixedPosition",
+        false);
+
   if (!base::FeatureList::IsEnabled(features::kCompositeOpaqueScrollers))
     WebRuntimeFeatures::enableFeatureFromString("CompositeOpaqueScrollers",
         false);
 
   if (base::FeatureList::IsEnabled(features::kGenericSensor))
     WebRuntimeFeatures::enableGenericSensor(true);
+
+  // Enable features which VrShell depends on.
+  if (base::FeatureList::IsEnabled(features::kVrShell)) {
+    WebRuntimeFeatures::enableGamepadExtensions(true);
+    WebRuntimeFeatures::enableWebVR(true);
+  }
 
   // Enable explicitly enabled features, and then disable explicitly disabled
   // ones.

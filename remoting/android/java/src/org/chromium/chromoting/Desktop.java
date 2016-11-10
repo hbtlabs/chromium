@@ -6,6 +6,8 @@ package org.chromium.chromoting;
 
 import android.annotation.SuppressLint;
 import android.content.res.Configuration;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -93,6 +95,15 @@ public class Desktop
      */
     private boolean mHasPhysicalKeyboard;
 
+    /** Tracks whether the activity is in the resumed (running) state. */
+    private boolean mIsActivityRunning = false;
+
+    /**
+     * Tracks whether the activity is in windowed mode. This mode cannot change during the lifetime
+     * of the activity so it does not receive a value until the first time it is initialized.
+     */
+    private Boolean mIsInWindowedMode = null;
+
     /** Called when the activity is first created. */
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -125,6 +136,12 @@ public class Desktop
         View decorView = getWindow().getDecorView();
         decorView.setOnSystemUiVisibilityChangeListener(this);
 
+        // The background color is displayed when the user resizes the window in split-screen past
+        // the boundaries of the image we render.  The default background is white and we use black
+        // for our canvas, thus there is a visual artifact when we draw the canvas over the
+        // background.  Setting the background color to match our canvas will prevent the flash.
+        getWindow().setBackgroundDrawable(new ColorDrawable(Color.BLACK));
+
         mActivityLifecycleListener = mClient.getCapabilityManager().onActivityAcceptingListener(
                 this, Capabilities.CAST_CAPABILITY);
         mActivityLifecycleListener.onActivityCreated(this, savedInstanceState);
@@ -132,29 +149,7 @@ public class Desktop
         mInputMode = getInitialInputModeValue();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            attachKeyboardVisibilityListener();
-
-            // Only create an Autohide task if the system supports immersive fullscreen mode.  Older
-            // versions of the OS benefit less from this functionality and we don't want to change
-            // the experience for them.
-            mActionBarAutoHideTask = new Runnable() {
-                public void run() {
-                    if (!mToolbar.isOverflowMenuShowing()) {
-                        hideSystemUi();
-                    }
-                }
-            };
-
-            // Suspend the ActionBar timer when the user interacts with the options menu.
-            getSupportActionBar().addOnMenuVisibilityListener(new OnMenuVisibilityListener() {
-                public void onMenuVisibilityChanged(boolean isVisible) {
-                    if (isVisible) {
-                        stopActionBarAutoHideTimer();
-                    } else {
-                        startActionBarAutoHideTimer();
-                    }
-                }
-            });
+            attachSystemUiResizeListener();
         } else {
             mRemoteHostDesktop.setFitsSystemWindows(true);
         }
@@ -169,19 +164,29 @@ public class Desktop
     }
 
     @Override
-    protected void onPause() {
-        if (isFinishing()) mActivityLifecycleListener.onActivityPaused(this);
-        super.onPause();
-        mClient.enableVideoChannel(false);
-        stopActionBarAutoHideTimer();
-    }
-
-    @Override
     public void onResume() {
+        mIsActivityRunning = true;
         super.onResume();
         mActivityLifecycleListener.onActivityResumed(this);
         mClient.enableVideoChannel(true);
-        syncActionBarToSystemUiState();
+        if (!inWindowedMode()) {
+            setUpAutoHideToolbar();
+            syncActionBarToSystemUiState();
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        if (isFinishing()) mActivityLifecycleListener.onActivityPaused(this);
+        super.onPause();
+        // The activity is paused in windowed mode when the user switches to another window.  In
+        // that case we should leave the video channel running so they continue to see updates from
+        // their remote machine.  The video channel will be stopped when onStop() is called.
+        if (!inWindowedMode()) {
+            mClient.enableVideoChannel(false);
+        }
+        stopActionBarAutoHideTimer();
+        mIsActivityRunning = false;
     }
 
     @Override
@@ -341,6 +346,50 @@ public class Desktop
                 }
 
                 return false;
+            }
+        });
+    }
+
+    private boolean inWindowedMode() {
+        if (mIsInWindowedMode == null) {
+            // NOTE: This method should only be called after OnResume() is called, otherwise
+            // isInMultiWindowMode() may not be accurate.  The value returned by this method is
+            // updated on a background thread and there is a race-condition between when the UX
+            // changes and this value is updated.  Hence, calling this method from onCreate() is not
+            // safe and we need to be careful when we query this value.
+            Preconditions.isTrue(mIsActivityRunning);
+
+            mIsInWindowedMode =
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInMultiWindowMode();
+        }
+
+        return mIsInWindowedMode;
+    }
+
+    private void setUpAutoHideToolbar() {
+        // Configure the auto-hiding taskbar if the activity is not in multi-window mode and the
+        // application is run on an OS which supports fullscreen mode (KitKat or higher).
+        Preconditions.isTrue(!inWindowedMode());
+        if (mActionBarAutoHideTask != null || Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
+            return;
+        }
+
+        mActionBarAutoHideTask = new Runnable() {
+            public void run() {
+                if (!mToolbar.isOverflowMenuShowing()) {
+                    hideSystemUi();
+                }
+            }
+        };
+
+        // Suspend the ActionBar timer when the user interacts with the options menu.
+        getSupportActionBar().addOnMenuVisibilityListener(new OnMenuVisibilityListener() {
+            public void onMenuVisibilityChanged(boolean isVisible) {
+                if (isVisible) {
+                    stopActionBarAutoHideTimer();
+                } else {
+                    startActionBarAutoHideTimer();
+                }
             }
         });
     }
@@ -528,9 +577,9 @@ public class Desktop
         return super.onOptionsItemSelected(item);
     }
 
-    private void attachKeyboardVisibilityListener() {
-        View keyboardVisibilityDetector = findViewById(R.id.resize_detector);
-        keyboardVisibilityDetector.addOnLayoutChangeListener(new OnLayoutChangeListener() {
+    private void attachSystemUiResizeListener() {
+        View systemUiResizeDetector = findViewById(R.id.resize_detector);
+        systemUiResizeDetector.addOnLayoutChangeListener(new OnLayoutChangeListener() {
             // Tracks the maximum 'bottom' value seen during layout changes.  This value represents
             // the top of the SystemUI displayed at the bottom of the screen.
             // Note: This value is a screen coordinate so a larger value means lower on the screen.
@@ -559,8 +608,19 @@ public class Desktop
                 // whenever they occur.
                 boolean oldSoftInputVisible = mSoftInputVisible;
                 mSoftInputVisible = (bottom < mMaxBottomValue);
-                mOnSystemUiVisibilityChanged.raise(new SystemUiVisibilityChangedEventParameter(
-                        isSystemUiVisible(), mSoftInputVisible, left, top, right, bottom));
+
+                // Send the System UI sizes if either the Soft Keyboard is displayed or if we are in
+                // windowed mode and there is System UI present.  The user needs to be able to move
+                // the canvas so they can see where they are typing in the first case and in the
+                // second, the System UI is always present so the user needs a way to position the
+                // canvas so all parts of the desktop can be made visible.
+                if (mSoftInputVisible || (inWindowedMode() && isSystemUiVisible())) {
+                    mOnSystemUiVisibilityChanged.raise(
+                            new SystemUiVisibilityChangedEventParameter(left, top, right, bottom));
+                } else {
+                    mOnSystemUiVisibilityChanged.raise(
+                            new SystemUiVisibilityChangedEventParameter(0, 0, 0, 0));
+                }
 
                 boolean softInputVisibilityChanged = oldSoftInputVisible != mSoftInputVisible;
                 if (!mSoftInputVisible && softInputVisibilityChanged && !isActionBarVisible()) {

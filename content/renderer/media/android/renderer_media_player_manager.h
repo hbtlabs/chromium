@@ -15,16 +15,6 @@
 #include "media/blink/renderer_media_player_interface.h"
 #include "url/gurl.h"
 
-namespace blink {
-class WebFrame;
-}
-
-namespace gfx {
-class RectF;
-}
-
-struct MediaPlayerHostMsg_Initialize_Params;
-
 namespace content {
 class WebMediaPlayerAndroid;
 
@@ -81,6 +71,9 @@ class RendererMediaPlayerManager :
   // Requests control of remote playback
   void RequestRemotePlaybackControl(int player_id) override;
 
+  // Requests stopping remote playback
+  void RequestRemotePlaybackStop(int player_id) override;
+
   // Requests the player to enter fullscreen.
   void EnterFullscreen(int player_id);
 
@@ -116,6 +109,7 @@ class RendererMediaPlayerManager :
       const std::string& remote_playback_message);
   void OnDisconnectedFromRemoteDevice(int player_id);
   void OnCancelledRemotePlaybackRequest(int player_id);
+  void OnRemotePlaybackStarted(int player_id);
   void OnDidExitFullscreen(int player_id);
   void OnDidEnterFullscreen(int player_id);
   void OnPlayerPlay(int player_id);

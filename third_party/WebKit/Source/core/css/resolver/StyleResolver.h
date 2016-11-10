@@ -56,6 +56,7 @@ class MatchResult;
 class MediaQueryEvaluator;
 class StylePropertySet;
 class StyleRule;
+class StyleRuleUsageTracker;
 
 enum StyleSharingBehavior {
   AllowStyleSharing,
@@ -177,6 +178,8 @@ class CORE_EXPORT StyleResolver final
 
   DECLARE_TRACE();
 
+  void setRuleUsageTracker(StyleRuleUsageTracker*);
+
  private:
   explicit StyleResolver(Document&);
 
@@ -184,6 +187,8 @@ class CORE_EXPORT StyleResolver final
 
   // FIXME: This should probably go away, folded into FontBuilder.
   void updateFont(StyleResolverState&);
+
+  void addMatchedRulesToTracker(const ElementRuleCollector&);
 
   void loadPendingResources(StyleResolverState&);
   void adjustComputedStyle(StyleResolverState&, Element*);
@@ -210,16 +215,42 @@ class CORE_EXPORT StyleResolver final
                                const Element* animatingElement);
   void applyCallbackSelectors(StyleResolverState&);
 
-  template <CSSPropertyPriority priority>
+  // These flags indicate whether an apply pass for a given CSSPropertyPriority
+  // and isImportant is required.
+  class NeedsApplyPass {
+   public:
+    bool get(CSSPropertyPriority priority, bool isImportant) const {
+      return m_flags[getIndex(priority, isImportant)];
+    }
+    void set(CSSPropertyPriority priority, bool isImportant) {
+      m_flags[getIndex(priority, isImportant)] = true;
+    }
+
+   private:
+    static size_t getIndex(CSSPropertyPriority priority, bool isImportant) {
+      DCHECK(priority >= 0 && priority < PropertyPriorityCount);
+      return priority * 2 + isImportant;
+    }
+    bool m_flags[PropertyPriorityCount * 2] = {0};
+  };
+
+  enum ShouldUpdateNeedsApplyPass {
+    CheckNeedsApplyPass = false,
+    UpdateNeedsApplyPass = true,
+  };
+
+  template <CSSPropertyPriority priority, ShouldUpdateNeedsApplyPass>
   void applyMatchedProperties(StyleResolverState&,
                               const MatchedPropertiesRange&,
                               bool important,
-                              bool inheritedOnly);
-  template <CSSPropertyPriority priority>
+                              bool inheritedOnly,
+                              NeedsApplyPass&);
+  template <CSSPropertyPriority priority, ShouldUpdateNeedsApplyPass>
   void applyProperties(StyleResolverState&,
                        const StylePropertySet* properties,
                        bool isImportant,
                        bool inheritedOnly,
+                       NeedsApplyPass&,
                        PropertyWhitelistType = PropertyWhitelistNone);
   template <CSSPropertyPriority priority>
   void applyAnimatedProperties(StyleResolverState&,
@@ -229,10 +260,11 @@ class CORE_EXPORT StyleResolver final
                         const CSSValue&,
                         bool inheritedOnly,
                         PropertyWhitelistType);
-  template <CSSPropertyPriority priority>
+  template <CSSPropertyPriority priority, ShouldUpdateNeedsApplyPass>
   void applyPropertiesForApplyAtRule(StyleResolverState&,
                                      const CSSValue&,
                                      bool isImportant,
+                                     NeedsApplyPass&,
                                      PropertyWhitelistType);
 
   bool pseudoStyleForElementInternal(Element&,
@@ -258,6 +290,8 @@ class CORE_EXPORT StyleResolver final
   SelectorFilter m_selectorFilter;
 
   HeapListHashSet<Member<CSSStyleSheet>, 16> m_pendingStyleSheets;
+
+  Member<StyleRuleUsageTracker> m_tracker;
 
   bool m_printMediaType;
 

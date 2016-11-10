@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -132,12 +133,10 @@ class PaneView : public View, public FocusTraversable {
 // view hierarchy.
 class BorderView : public NativeViewHost {
  public:
-  explicit BorderView(View* child) : child_(child), widget_(NULL) {
+  explicit BorderView(View* child) : child_(child) {
     DCHECK(child);
     SetFocusBehavior(FocusBehavior::NEVER);
   }
-
-  ~BorderView() override {}
 
   virtual internal::RootView* GetContentsRootView() {
     return static_cast<internal::RootView*>(widget_->GetRootView());
@@ -153,9 +152,10 @@ class BorderView : public NativeViewHost {
 
     if (details.child == this && details.is_add) {
       if (!widget_) {
-        widget_ = new Widget;
+        widget_ = base::MakeUnique<Widget>();
         Widget::InitParams params(Widget::InitParams::TYPE_CONTROL);
         params.parent = details.parent->GetWidget()->GetNativeView();
+        params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
         widget_->Init(params);
         widget_->SetFocusTraversableParentView(this);
         widget_->SetContentsView(child_);
@@ -171,7 +171,7 @@ class BorderView : public NativeViewHost {
 
  private:
   View* child_;
-  Widget* widget_;
+  std::unique_ptr<Widget> widget_;
 
   DISALLOW_COPY_AND_ASSIGN(BorderView);
 };
@@ -310,7 +310,7 @@ void FocusTraversalTest::InitContentView() {
   cb->set_id(TOP_CHECKBOX_ID);
 
   left_container_ = new PaneView();
-  left_container_->SetBorder(Border::CreateSolidBorder(1, SK_ColorBLACK));
+  left_container_->SetBorder(CreateSolidBorder(1, SK_ColorBLACK));
   left_container_->set_background(
       Background::CreateSolidBackground(240, 240, 240));
   left_container_->set_id(LEFT_CONTAINER_ID);
@@ -394,7 +394,7 @@ void FocusTraversalTest::InitContentView() {
   left_container_->AddChildView(combobox);
 
   right_container_ = new PaneView();
-  right_container_->SetBorder(Border::CreateSolidBorder(1, SK_ColorBLACK));
+  right_container_->SetBorder(CreateSolidBorder(1, SK_ColorBLACK));
   right_container_->set_background(
       Background::CreateSolidBackground(240, 240, 240));
   right_container_->set_id(RIGHT_CONTAINER_ID);
@@ -425,7 +425,7 @@ void FocusTraversalTest::InitContentView() {
   y += radio_button_height + gap_between_radio_buttons;
 
   View* inner_container = new View();
-  inner_container->SetBorder(Border::CreateSolidBorder(1, SK_ColorBLACK));
+  inner_container->SetBorder(CreateSolidBorder(1, SK_ColorBLACK));
   inner_container->set_background(
       Background::CreateSolidBackground(230, 230, 230));
   inner_container->set_id(INNER_CONTAINER_ID);

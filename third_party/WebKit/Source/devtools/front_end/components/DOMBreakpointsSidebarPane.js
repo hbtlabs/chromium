@@ -52,9 +52,10 @@ WebInspector.DOMBreakpointsSidebarPane = class extends WebInspector.BreakpointsS
   static createBreakpointHitMessage(details) {
     var messageWrapper = createElement('span');
     var mainElement = messageWrapper.createChild('div', 'status-main');
+    mainElement.appendChild(WebInspector.Icon.create('smallicon-info', 'status-icon'));
     var auxData = /** @type {!Object} */ (details.auxData);
-    mainElement.textContent =
-        String.sprintf('Paused on %s', WebInspector.DOMBreakpointsSidebarPane.BreakpointTypeNouns[auxData['type']]);
+    mainElement.appendChild(createTextNode(
+        String.sprintf('Paused on %s', WebInspector.DOMBreakpointsSidebarPane.BreakpointTypeNouns[auxData['type']])));
 
     var domModel = WebInspector.DOMModel.fromTarget(details.target());
     if (domModel) {
@@ -90,7 +91,7 @@ WebInspector.DOMBreakpointsSidebarPane = class extends WebInspector.BreakpointsS
     var nodeBreakpoints = this._nodeBreakpoints(node);
 
     /**
-     * @param {!DOMDebuggerAgent.DOMBreakpointType} type
+     * @param {!Protocol.DOMDebugger.DOMBreakpointType} type
      * @this {WebInspector.DOMBreakpointsSidebarPane}
      */
     function toggleBreakpoint(type) {
@@ -112,10 +113,10 @@ WebInspector.DOMBreakpointsSidebarPane = class extends WebInspector.BreakpointsS
 
   /**
    * @param {!WebInspector.DOMNode} node
-   * @return {!Set<!DOMDebuggerAgent.DOMBreakpointType>}
+   * @return {!Set<!Protocol.DOMDebugger.DOMBreakpointType>}
    */
   _nodeBreakpoints(node) {
-    /** @type {!Set<!DOMDebuggerAgent.DOMBreakpointType>} */
+    /** @type {!Set<!Protocol.DOMDebugger.DOMBreakpointType>} */
     var nodeBreakpoints = new Set();
     for (var element of this._breakpointElements.values()) {
       if (element._node === node && element._checkboxElement.checked)
@@ -159,7 +160,7 @@ WebInspector.DOMBreakpointsSidebarPane = class extends WebInspector.BreakpointsS
 
   /**
    * @param {!WebInspector.DOMNode} node
-   * @param {!DOMDebuggerAgent.DOMBreakpointType} type
+   * @param {!Protocol.DOMDebugger.DOMBreakpointType} type
    * @param {boolean} enabled
    */
   _setBreakpoint(node, type, enabled) {
@@ -178,7 +179,7 @@ WebInspector.DOMBreakpointsSidebarPane = class extends WebInspector.BreakpointsS
 
   /**
    * @param {!WebInspector.DOMNode} node
-   * @param {!DOMDebuggerAgent.DOMBreakpointType} type
+   * @param {!Protocol.DOMDebugger.DOMBreakpointType} type
    * @param {boolean} enabled
    */
   _createBreakpointElement(node, type, enabled) {
@@ -223,7 +224,7 @@ WebInspector.DOMBreakpointsSidebarPane = class extends WebInspector.BreakpointsS
 
   /**
    * @param {!WebInspector.DOMNode} node
-   * @param {!DOMDebuggerAgent.DOMBreakpointType} type
+   * @param {!Protocol.DOMDebugger.DOMBreakpointType} type
    */
   _removeBreakpoint(node, type) {
     var breakpointId = this._createBreakpointId(node.id, type);
@@ -240,7 +241,7 @@ WebInspector.DOMBreakpointsSidebarPane = class extends WebInspector.BreakpointsS
 
   /**
    * @param {!WebInspector.DOMNode} node
-   * @param {!DOMDebuggerAgent.DOMBreakpointType} type
+   * @param {!Protocol.DOMDebugger.DOMBreakpointType} type
    * @param {!Event} event
    */
   _contextMenu(node, type, event) {
@@ -261,7 +262,7 @@ WebInspector.DOMBreakpointsSidebarPane = class extends WebInspector.BreakpointsS
 
   /**
    * @param {!WebInspector.DOMNode} node
-   * @param {!DOMDebuggerAgent.DOMBreakpointType} type
+   * @param {!Protocol.DOMDebugger.DOMBreakpointType} type
    * @param {!Event} event
    */
   _checkboxClicked(node, type, event) {
@@ -301,7 +302,7 @@ WebInspector.DOMBreakpointsSidebarPane = class extends WebInspector.BreakpointsS
 
   /**
    * @param {number} nodeId
-   * @param {!DOMDebuggerAgent.DOMBreakpointType} type
+   * @param {!Protocol.DOMDebugger.DOMBreakpointType} type
    */
   _createBreakpointId(nodeId, type) {
     return nodeId + ':' + type;
@@ -338,7 +339,7 @@ WebInspector.DOMBreakpointsSidebarPane = class extends WebInspector.BreakpointsS
 
     /**
      * @param {string} path
-     * @param {?DOMAgent.NodeId} nodeId
+     * @param {?Protocol.DOM.NodeId} nodeId
      * @this {WebInspector.DOMBreakpointsSidebarPane}
      */
     function didPushNodeByPathToFrontend(path, nodeId) {

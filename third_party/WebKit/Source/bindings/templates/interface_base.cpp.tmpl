@@ -95,10 +95,14 @@ static void (*{{method.name}}MethodForPartialInterface)(const v8::FunctionCallba
 {% from 'attributes.cpp.tmpl' import constructor_getter_callback,
        attribute_getter, attribute_getter_callback,
        attribute_setter, attribute_setter_callback,
+       attribute_cache_property_callback,
        attribute_getter_implemented_in_private_script,
        attribute_setter_implemented_in_private_script
        with context %}
 {% for attribute in attributes if attribute.should_be_exposed_to_script %}
+{% if attribute.is_cached_accessor %}
+{{attribute_cache_property_callback(attribute)}}
+{% endif %}
 {% for world_suffix in attribute.world_suffixes %}
 {% if not attribute.has_custom_getter and not attribute.constructor_type %}
 {{attribute_getter(attribute, world_suffix)}}
@@ -230,6 +234,27 @@ const V8DOMConfiguration::AttributeConfiguration {{v8_class}}Attributes[] = {
 {% endif %}
 {% endblock %}
 {##############################################################################}
+{% block install_lazy_data_attributes %}
+{% from 'attributes.cpp.tmpl' import attribute_configuration with context %}
+{% if attributes | has_lazy_data_attribute_configuration %}
+// Suppress warning: global constructors, because AttributeConfiguration is trivial
+// and does not depend on another global objects.
+#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wglobal-constructors"
+#endif
+const V8DOMConfiguration::AttributeConfiguration {{v8_class}}LazyDataAttributes[] = {
+    {% for attribute in attributes | has_lazy_data_attribute_configuration %}
+    {{attribute_configuration(attribute)}},
+    {% endfor %}
+};
+#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#pragma clang diagnostic pop
+#endif
+
+{% endif %}
+{% endblock %}
+{##############################################################################}
 {% block install_accessors %}
 {% from 'attributes.cpp.tmpl' import attribute_configuration with context %}
 {% if attributes | has_accessor_configuration %}
@@ -296,6 +321,14 @@ static void install{{v8_class}}Template(v8::Isolate* isolate, const DOMWrapperWo
   {%- if interface_name == 'Window' and not is_partial %}{{newline}}
   prototypeTemplate->SetInternalFieldCount(V8Window::internalFieldCount);
   {% endif %}
+  {% if is_immutable_prototype %}{{newline}}
+  // Global object prototype chain consists of Immutable Prototype Exotic Objects
+  prototypeTemplate->SetImmutableProto();
+  {% endif %}
+  {% if is_global %}{{newline}}
+  // Global objects are Immutable Prototype Exotic Objects
+  instanceTemplate->SetImmutableProto();
+  {% endif %}
 
   // Register DOM constants, attributes and operations.
   {% filter runtime_enabled(runtime_enabled_function) %}
@@ -304,6 +337,9 @@ static void install{{v8_class}}Template(v8::Isolate* isolate, const DOMWrapperWo
   {% endif %}
   {% if attributes | has_attribute_configuration %}
   V8DOMConfiguration::installAttributes(isolate, world, instanceTemplate, prototypeTemplate, {{'%sAttributes' % v8_class}}, {{'WTF_ARRAY_LENGTH(%sAttributes)' % v8_class}});
+  {% endif %}
+  {% if attributes | has_lazy_data_attribute_configuration %}
+  V8DOMConfiguration::installLazyDataAttributes(isolate, world, instanceTemplate, prototypeTemplate, {{'%sLazyDataAttributes' % v8_class}}, {{'WTF_ARRAY_LENGTH(%sLazyDataAttributes)' % v8_class}});
   {% endif %}
   {% if attributes | has_accessor_configuration %}
   V8DOMConfiguration::installAccessors(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, {{'%sAccessors' % v8_class}}, {{'WTF_ARRAY_LENGTH(%sAccessors)' % v8_class}});
@@ -355,7 +391,9 @@ static void install{{v8_class}}Template(v8::Isolate* isolate, const DOMWrapperWo
   {% endfilter %}
   {% endif %}
 
-  {%- if has_custom_legacy_call_as_function and not is_partial %}{{newline}}
+  {%- if legacy_caller and not is_partial %}{{newline}}
+  instanceTemplate->SetCallAsFunctionHandler({{cpp_class_or_partial}}V8Internal::{{legacy_caller.name}}MethodCallback);
+  {%- elif has_custom_legacy_call_as_function and not is_partial %}{{newline}}
   instanceTemplate->SetCallAsFunctionHandler({{v8_class}}::legacyCallCustom);
   {% endif %}
 

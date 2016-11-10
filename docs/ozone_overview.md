@@ -130,7 +130,7 @@ ninja -C out/OzoneChromeOS chrome
 Then to run for example the X11 platform:
 
 ``` shell
-./out/OzoneChromeOS/chrome --ozone-platform=x11 --disable-setuid-sandbox
+./out/OzoneChromeOS/chrome --ozone-platform=x11
 ```
 
 ### Embedded
@@ -155,15 +155,32 @@ ninja -C out/OzoneEmbedded content_shell
 Then to run for example the headless platform:
 
 ``` shell
-./out/OzoneEmbedded/content_shell --disable-setuid-sandbox \
-                                  --ozone-platform=headless \
+./out/OzoneEmbedded/content_shell --ozone-platform=headless \
                                   --ozone-dump-file=/tmp/
 ```
 
-### Linux Desktop - ([bug](http://crbug.com/295089))
+### Linux Desktop - ([waterfall](https://build.chromium.org/p/chromium.fyi/builders/Ozone%20Linux/))
+Support for Linux Desktop is currently [in-progress](http://crbug.com/295089).
 
-This is not supported by any of the in-tree platforms. Please see above and try
-a ChromeOS or embedded build for now.
+The following targets are currently working:
+
+* various unit tests
+* `chrome`
+
+To build `chrome`, do this from the `src` directory:
+
+``` shell
+gn args out/OzoneLinuxDesktop --args="use_ozone=true enable_package_mash_services=true"
+ninja -C out/OzoneLinuxDesktop chrome
+```
+Then to run for example the X11 platform:
+
+``` shell
+./out/OzoneLinuxDesktop/chrome --ozone-platform=x11 \
+                               --mash
+```
+
+Note: You may need to apply [this patch](https://codereview.chromium.org/2485673002/) to avoid missing ash resources during chrome execution.
 
 ### GN Configuration notes
 
@@ -183,12 +200,10 @@ by default.
 ## Running with Ozone
 
 Specify the platform you want to use at runtime using the `--ozone-platform`
-flag. Disabling the setuid sandbox may be required during development.
-
-For example, to run content_shell with the GBM platform:
+flag. For example, to run `content_shell` with the GBM platform:
 
 ``` shell
-content_shell --disable-setuid-sandbox --ozone-platform=gbm
+content_shell --ozone-platform=gbm
 ```
 
 Caveats:
@@ -196,6 +211,8 @@ Caveats:
 * `content_shell` always runs at 800x600 resolution.
 * For the GBM platform, you may need to terminate your X server (or any other
   display server) prior to testing.
+* During development, you may need to configure
+  [sandboxing](linux_sandboxing.md) or to disable it.
 
 ## Ozone Platforms
 
@@ -209,8 +226,7 @@ by specifying `--ozone-dump-file=/path/to/output-directory` on the
 command line:
 
 ``` shell
-content_shell --disable-setuid-sandbox \
-              --ozone-platform=headless \
+content_shell --ozone-platform=headless \
               --ozone-dump-file=/tmp/
 ```
 
@@ -242,19 +258,16 @@ and then partially upstreamed.
 It is still actively being developed in the chromium tree, feel free to discuss
 with us on freenode.net, `#ozone-wayland` channel or on `ozone-dev`.
 
-In order to run an Ozone build of `chrome`, you currently (2016/10/28)
-need to compile it for ChromeOS, where software rendering is not allowed.
-Also, accelerated rendering only works in Ozone/Wayland when the UI and GPU
-components are running in the same process. Below are some quick build & run
-instructions. It is assumed that you are launching `chrome` from a Wayland
-environment such as `weston`.
+Below are some quick build & run instructions. It is assumed that you are
+launching `chrome` from a Wayland environment such as `weston`. Apply
+[this patch](https://codereview.chromium.org/2485673002/) and execute the
+following commands:
 
 ``` shell
-gn args out/OzoneWayland --args="use_ozone=true ozone_platform_wayland=true target_os=\"chromeos\""
+gn args out/OzoneWayland --args="use_ozone=true enable_package_mash_services=true"
 ninja -C out/OzoneWayland chrome
 ./out/OzoneWayland/chrome --ozone-platform=wayland \
-                          --in-process-gpu \
-                          --disable-setuid-sandbox
+                          --mash
 ```
 
 ### Caca
@@ -267,23 +280,25 @@ rendering only). In case you ever wanted to test embedded content shell on
 tty.
 It has been
 [removed from the tree](https://codereview.chromium.org/2445323002/) and is no
-longer maintained but you can try the
-[latest working revision](https://chromium.googlesource.com/chromium/src/+/0e64be9cf335ee3bea7c989702c5a9a0934af037/ui/ozone/platform/caca/).
-You need additional dependencies (libcaca shared library and development files)
-that are not provided in the sysroot. Here are quick instructions to build and
-run it:
+longer maintained but you can
+[build it as an out-of-tree port](https://github.com/fred-wang/ozone-caca).
+
+Alternatively, you can try the latest revision known to work. First, install
+libcaca shared library and development files. Next, move to the git revision
+`0e64be9cf335ee3bea7c989702c5a9a0934af037`
+(you will probably need to synchronize the build dependencies with
+`gclient sync --with_branch_heads`). Finally, build and run the caca platform
+with the following commands:
 
 ``` shell
-# Do this at revision 0e64be9cf335ee3bea7c989702c5a9a0934af037
-gclient sync --with_branch_heads
 gn args out/OzoneCaca \
         --args="use_ozone=true ozone_platform_caca=true use_sysroot=false ozone_auto_platforms=false toolkit_views=false"
 ninja -C out/OzoneCaca content_shell
-./out/OzoneCaca/content_shell --disable-setuid-sandbox
+./out/OzoneCaca/content_shell
 ```
 
   Note: traditional TTYs are not the ideal browsing experience.<br/>
-  [![Picture of a workstation using Ozone/caca to display the Google home page in a text terminal](https://www.chromium.org/_/rsrc/1396307876689/developers/design-documents/ozone/IMG_20140331_151619.jpg?height=240&amp;width=320)](https://www.chromium.org/developers/design-documents/ozone/IMG_20140331_151619.jpg?attredirects=0)
+  ![Picture of a workstation using Ozone/caca to display the Google home page in a text terminal](./images/ozone_caca.jpg)
 
 ## Communication
 

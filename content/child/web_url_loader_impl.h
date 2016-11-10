@@ -14,11 +14,9 @@
 #include "third_party/WebKit/public/platform/WebURLLoader.h"
 #include "url/gurl.h"
 
-namespace base {
-
-class SingleThreadTaskRunner;
-
-}  // namespace base
+namespace mojo {
+class AssociatedGroup;
+}  // namespace mojo
 
 namespace content {
 
@@ -44,7 +42,8 @@ class CONTENT_EXPORT WebURLLoaderImpl
 
   // Takes ownership of |web_task_runner|.
   WebURLLoaderImpl(ResourceDispatcher* resource_dispatcher,
-                   mojom::URLLoaderFactory* url_loader_factory);
+                   mojom::URLLoaderFactory* url_loader_factory,
+                   mojo::AssociatedGroup* associated_group);
   ~WebURLLoaderImpl() override;
 
   static void PopulateURLResponse(const GURL& url,
@@ -70,7 +69,8 @@ class CONTENT_EXPORT WebURLLoaderImpl
   void setDefersLoading(bool value) override;
   void didChangePriority(blink::WebURLRequest::Priority new_priority,
                          int intra_priority_value) override;
-  void setLoadingTaskRunner(blink::WebTaskRunner* loading_task_runner) override;
+  void setLoadingTaskRunner(
+      base::SingleThreadTaskRunner* loading_task_runner) override;
 
  private:
   class Context;

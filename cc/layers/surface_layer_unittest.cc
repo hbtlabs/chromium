@@ -10,6 +10,7 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "cc/animation/animation_host.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/layers/surface_layer.h"
 #include "cc/output/compositor_frame.h"
@@ -32,8 +33,9 @@ static constexpr FrameSinkId kArbitraryFrameSinkId(1, 1);
 class SurfaceLayerTest : public testing::Test {
  protected:
   void SetUp() override {
-    layer_tree_host_ =
-        FakeLayerTreeHost::Create(&fake_client_, &task_graph_runner_);
+    animation_host_ = AnimationHost::CreateForTesting(ThreadInstance::MAIN);
+    layer_tree_host_ = FakeLayerTreeHost::Create(
+        &fake_client_, &task_graph_runner_, animation_host_.get());
     layer_tree_ = layer_tree_host_->GetLayerTree();
     layer_tree_->SetViewportSize(gfx::Size(10, 10));
   }
@@ -47,6 +49,7 @@ class SurfaceLayerTest : public testing::Test {
 
   FakeLayerTreeHostClient fake_client_;
   TestTaskGraphRunner task_graph_runner_;
+  std::unique_ptr<AnimationHost> animation_host_;
   std::unique_ptr<FakeLayerTreeHost> layer_tree_host_;
   LayerTree* layer_tree_;
 };
@@ -79,8 +82,10 @@ TEST_F(SurfaceLayerTest, MultipleFramesOneSurface) {
       FrameSinkId(1, 1));
   layer_tree_->SetRootLayer(layer);
 
+  auto animation_host2 = AnimationHost::CreateForTesting(ThreadInstance::MAIN);
   std::unique_ptr<FakeLayerTreeHost> layer_tree_host2 =
-      FakeLayerTreeHost::Create(&fake_client_, &task_graph_runner_);
+      FakeLayerTreeHost::Create(&fake_client_, &task_graph_runner_,
+                                animation_host2.get());
   scoped_refptr<SurfaceLayer> layer2(SurfaceLayer::Create(
       base::Bind(&SatisfyCallback, &blank_change),
       base::Bind(&RequireCallback, &required_id, &required_seq)));
@@ -91,13 +96,14 @@ TEST_F(SurfaceLayerTest, MultipleFramesOneSurface) {
   layer_tree_host2->SetRootLayer(layer2);
 
   // Layers haven't been removed, so no sequence should be satisfied.
-  EXPECT_TRUE(blank_change.is_null());
+  EXPECT_FALSE(blank_change.is_valid());
 
   SurfaceSequence expected1(FrameSinkId(1, 1), 1u);
   SurfaceSequence expected2(FrameSinkId(2, 2), 1u);
 
   layer_tree_host2->SetRootLayer(nullptr);
   layer_tree_host2.reset();
+  animation_host2 = nullptr;
 
   // Layer was removed so sequence from second LayerTreeHost should be
   // satisfied.
@@ -218,7 +224,7 @@ class SurfaceLayerSwapPromiseWithDraw : public SurfaceLayerSwapPromise {
     EXPECT_EQ(1u, required_set_.size());
     // Sequence should have been satisfied through Swap, not with the
     // callback.
-    EXPECT_TRUE(satisfied_sequence_.is_null());
+    EXPECT_FALSE(satisfied_sequence_.is_valid());
   }
 };
 

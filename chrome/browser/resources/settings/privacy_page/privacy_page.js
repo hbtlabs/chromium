@@ -35,6 +35,8 @@ Polymer({
 <if expr="_google_chrome and not chromeos">
     /** @type {MetricsReporting} */
     metricsReporting_: Object,
+
+    showRestart_: Boolean,
 </if>
 
     /** @private */
@@ -80,6 +82,17 @@ Polymer({
 </if>
   },
 
+  /**
+   * This is a workaround to connect the remove all button to the subpage.
+   * @private
+   */
+  onRemoveAllCookiesFromSite_: function() {
+    var node = /** @type {?SiteDataDetailsSubpageElement} */(this.$$(
+        'site-data-details-subpage'));
+    if (node)
+      node.removeAll();
+  },
+
   /** @private */
   onSiteSettingsTap_: function() {
     settings.navigateTo(settings.Route.SITE_SETTINGS);
@@ -114,7 +127,17 @@ Polymer({
    * @private
    */
   setMetricsReporting_: function(metricsReporting) {
+    if (this.metricsReporting_) {
+      // TODO(dbeam): hide if changed back to the value Chrome started with.
+      var changed = this.metricsReporting_.enabled != metricsReporting.enabled;
+      this.showRestart_ = changed && !this.metricsReporting_.managed;
+    }
     this.metricsReporting_ = metricsReporting;
+  },
+
+  /** @private */
+  onRestartTap_: function() {
+    settings.LifetimeBrowserProxyImpl.getInstance().restart();
   },
 </if>
 

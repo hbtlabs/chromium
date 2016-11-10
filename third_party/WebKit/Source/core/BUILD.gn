@@ -16,7 +16,10 @@ import("//third_party/WebKit/Source/build/scripts/scripts.gni")
 import("//third_party/WebKit/Source/modules/modules_idl_files.gni")
 import("//third_party/WebKit/Source/platform/platform_generated.gni")
 
-visibility = [ "//third_party/WebKit/Source/*" ]
+visibility = [
+  "//third_party/WebKit/Source/*",
+  "//third_party/WebKit/public/*",
+]
 
 rel_blink_core_gen_dir = rebase_path(blink_core_output_dir, root_build_dir)
 
@@ -58,7 +61,6 @@ source_set("generated") {
     "//third_party/libwebp",
     "//third_party/libxml",
     "//third_party/libxslt",
-    "//third_party/qcms",
     "//third_party/sqlite",
 
     # FIXME: don't depend on bindings/modules http://crbug.com/358074
@@ -85,7 +87,6 @@ source_set("prerequisites") {
     "//third_party/libxml",
     "//third_party/libxslt",
     "//third_party/ots",
-    "//third_party/qcms",
     "//third_party/snappy",
     "//third_party/sqlite",
     "//third_party/zlib",
@@ -141,7 +142,6 @@ component("core") {
     "//skia",
     "//third_party/WebKit/Source/platform",
     "//third_party/WebKit/Source/wtf",
-    "//third_party/qcms",
     "//url",
     "//v8",
   ]
@@ -697,6 +697,26 @@ action("make_core_generated_private_script_for_testing") {
   deps = make_core_generated_deps
 }
 
+action("make_minimized_css") {
+  script = "../build/scripts/minimize_css.py"
+
+  inputs = [
+    "css/html.css",
+  ]
+  outputs = [
+    "$blink_core_output_dir/html.css",
+  ]
+
+  args = [
+    "--output_dir",
+    rel_blink_core_gen_dir,
+  ]
+  args += rebase_path(inputs, root_build_dir)
+
+  deps = make_core_generated_deps
+}
+
+# "HTMLEntityTable" in make_core_generated from GYP.
 action("make_core_generated_html_entity_table") {
   visibility = []  # Allow re-assignment of list.
   visibility = [ ":*" ]
@@ -922,7 +942,6 @@ target(core_link_small_target_type, "core_generated") {
     "//third_party/libwebp",
     "//third_party/libxml",
     "//third_party/libxslt",
-    "//third_party/qcms",
     "//third_party/sqlite",
 
     # FIXME: don't depend on bindings/modules http://crbug.com/358074
@@ -1141,6 +1160,7 @@ source_set("unit_tests") {
     "frame/ImageBitmapTest.cpp",
     "frame/LocalFrameTest.cpp",
     "frame/OriginsUsingFeaturesTest.cpp",
+    "frame/PerformanceMonitorTest.cpp",
     "frame/RootFrameViewportTest.cpp",
     "frame/SubresourceIntegrityTest.cpp",
     "frame/UseCounterTest.cpp",
@@ -1191,7 +1211,6 @@ source_set("unit_tests") {
     "html/track/vtt/BufferedLineReaderTest.cpp",
     "html/track/vtt/VTTScannerTest.cpp",
     "input/EventHandlerTest.cpp",
-    "inspector/InspectorWebPerfAgentTest.cpp",
     "inspector/ProtocolParserTest.cpp",
     "layout/ImageQualityControllerTest.cpp",
     "layout/InlineTextBoxTest.cpp",
@@ -1221,7 +1240,9 @@ source_set("unit_tests") {
     "layout/compositing/CompositedLayerMappingTest.cpp",
     "layout/compositing/CompositingReasonFinderTest.cpp",
     "layout/ng/ng_block_layout_algorithm_test.cc",
+    "layout/ng/ng_box_test.cc",
     "layout/ng/ng_constraint_space_test.cc",
+    "layout/ng/ng_inline_box_test.cc",
     "layout/ng/ng_length_utils_test.cc",
     "layout/ng/ng_units_test.cc",
     "layout/shapes/BoxShapeTest.cpp",
@@ -1321,4 +1342,17 @@ fuzzer_test("html_preload_scanner_fuzzer") {
     ":core",
     "../platform:blink_fuzzer_test_support",
   ]
+}
+
+# Fuzzer for blink::ContentSecurityPolicy.
+fuzzer_test("content_security_policy_fuzzer") {
+  sources = [
+    "frame/csp/ContentSecurityPolicyFuzzer.cpp",
+  ]
+  deps = [
+    ":core",
+    "//third_party/WebKit/Source/platform:blink_fuzzer_test_support",
+  ]
+  dict = "//testing/libfuzzer/fuzzers/dicts/content_security_policy.dict"
+  seed_corpus = "//testing/libfuzzer/fuzzers/content_security_policy_corpus"
 }

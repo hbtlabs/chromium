@@ -34,12 +34,6 @@ declare_args() {
   # Non-SFI is not yet supported on mipsel
   enable_nacl_nonsfi = current_cpu != "mipsel"
 
-  # If debug_devtools is set to true, JavaScript files for DevTools are stored
-  # as is and loaded from disk. Otherwise, a concatenated file is stored in
-  # resources.pak. It is still possible to load JS files from disk by passing
-  # --debug-devtools cmdline switch.
-  debug_devtools = false
-
   # Enables WebRTC.
   enable_webrtc = !is_ios
 
@@ -67,8 +61,6 @@ declare_args() {
   # Note: this setting is ignored if is_chrome_branded.
   fieldtrial_testing_like_official_build = is_chrome_branded
 
-  use_cups = (is_desktop_linux || is_mac) && !is_chromecast
-
   # Enables Wi-Fi Display functionality
   # WARNING: This enables MPEG Transport Stream (MPEG-TS) encoding!
   enable_wifi_display = false
@@ -84,19 +76,15 @@ declare_args() {
 
   use_gio = is_linux && !is_chromeos && !is_chromecast
 
-  # Enable basic printing support and UI.
-  enable_basic_printing = !is_chromecast && !is_ios
-
-  # Enable printing with print preview. It does not imply
-  # enable_basic_printing. It's possible to build Chrome with preview only.
-  enable_print_preview = !is_android && !is_chromecast && !is_ios
-
   # Whether or not to use external popup menu.
   use_external_popup_menu = is_android || is_mac
 
   # Enable WebVR support by default on Android
   # Still requires command line flag to access API
-  enable_webvr = is_android && is_component_build && is_debug &&
+  # TODO(bshe): Remove is_component_build once we can statically link gvr
+  # library. Currently gvr library only has a prebuild so file which causes
+  # linking issue for non component build.
+  enable_webvr = is_android && is_component_build &&
                  (current_cpu == "x86" || current_cpu == "x64" ||
                   current_cpu == "arm" || current_cpu == "arm64")
 }

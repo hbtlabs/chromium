@@ -193,6 +193,7 @@ void AddAboutStrings(content::WebUIDataSource* html_source) {
     {"aboutUpgradeCheckStarted", IDS_SETTINGS_ABOUT_UPGRADE_CHECK_STARTED},
     {"aboutUpgradeRelaunch", IDS_SETTINGS_UPGRADE_SUCCESSFUL_RELAUNCH},
     {"aboutUpgradeUpdating", IDS_SETTINGS_UPGRADE_UPDATING},
+    {"aboutUpgradeUpdatingPercent", IDS_SETTINGS_UPGRADE_UPDATING_PERCENT},
 
 #if defined(OS_CHROMEOS)
     {"aboutArcVersionLabel", IDS_SETTINGS_ABOUT_PAGE_ARC_VERSION},
@@ -527,6 +528,7 @@ void AddDeviceStrings(content::WebUIDataSource* html_source) {
       {"keyboardKeyCapsLock", IDS_SETTINGS_KEYBOARD_KEY_CAPS_LOCK},
       {"keyboardKeyDiamond", IDS_SETTINGS_KEYBOARD_KEY_DIAMOND},
       {"keyboardKeyEscape", IDS_SETTINGS_KEYBOARD_KEY_ESCAPE},
+      {"keyboardKeyBackspace", IDS_SETTINGS_KEYBOARD_KEY_BACKSPACE},
       {"keyboardKeyDisabled", IDS_SETTINGS_KEYBOARD_KEY_DISABLED},
       {"keyboardSendFunctionKeys", IDS_SETTINGS_KEYBOARD_SEND_FUNCTION_KEYS},
       {"keyboardSendFunctionKeysDescription",
@@ -681,6 +683,7 @@ void AddDateTimeStrings(content::WebUIDataSource* html_source) {
       {"timeZone", IDS_SETTINGS_TIME_ZONE},
       {"timeZoneGeolocation", IDS_SETTINGS_TIME_ZONE_GEOLOCATION},
       {"use24HourClock", IDS_SETTINGS_USE_24_HOUR_CLOCK},
+      {"setDateTime", IDS_SETTINGS_SET_DATE_TIME},
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
@@ -730,6 +733,26 @@ void AddEasyUnlockStrings(content::WebUIDataSource* html_source) {
 
   html_source->AddString("easyUnlockLearnMoreURL",
                          chrome::kEasyUnlockLearnMoreUrl);
+}
+
+void AddImportDataStrings(content::WebUIDataSource* html_source) {
+  LocalizedString localized_strings[] = {
+    {"importFromLabel", IDS_SETTINGS_IMPORT_FROM_LABEL},
+    {"importDescription", IDS_SETTINGS_IMPORT_ITEMS_LABEL},
+    {"importLoading", IDS_SETTINGS_IMPORT_LOADING_PROFILES},
+    {"importHistory", IDS_SETTINGS_IMPORT_HISTORY_CHECKBOX},
+    {"importFavorites", IDS_SETTINGS_IMPORT_FAVORITES_CHECKBOX},
+    {"importPasswords", IDS_SETTINGS_IMPORT_PASSWORDS_CHECKBOX},
+    {"importSearch", IDS_SETTINGS_IMPORT_SEARCH_ENGINES_CHECKBOX},
+    {"importAutofillFormData", IDS_SETTINGS_IMPORT_AUTOFILL_FORM_DATA_CHECKBOX},
+    {"importSucceeded", IDS_SETTINGS_IMPORT_SUCCEEDED},
+    {"importChooseFile", IDS_SETTINGS_IMPORT_CHOOSE_FILE},
+    {"importCommit", IDS_SETTINGS_IMPORT_COMMIT},
+    {"noProfileFound", IDS_SETTINGS_IMPORT_NO_PROFILE_FOUND},
+    {"findYourImportedBookmarks", IDS_SETTINGS_IMPORT_FIND_YOUR_BOOKMARKS},
+  };
+  AddLocalizedStringsBulk(html_source, localized_strings,
+                          arraysize(localized_strings));
 }
 
 void AddInternetStrings(content::WebUIDataSource* html_source) {
@@ -890,10 +913,12 @@ void AddMultiProfilesStrings(content::WebUIDataSource* html_source,
 
   const user_manager::User* user =
       chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
-  std::string primary_user_email = user_manager->GetPrimaryUser()->email();
-  html_source->AddString("primaryUserEmail", primary_user_email);
-  html_source->AddBoolean("isSecondaryUser",
-                          user && user->email() != primary_user_email);
+  const user_manager::User* primary_user = user_manager->GetPrimaryUser();
+  html_source->AddString("primaryUserEmail",
+                         primary_user->GetAccountId().GetUserEmail());
+  html_source->AddBoolean(
+      "isSecondaryUser",
+      user && user->GetAccountId() != primary_user->GetAccountId());
 }
 #endif
 
@@ -942,6 +967,7 @@ void AddPasswordsAndFormsStrings(content::WebUIDataSource* html_source) {
       {"creditCardNumber", IDS_SETTINGS_CREDIT_CARD_NUMBER},
       {"creditCardExpirationMonth", IDS_SETTINGS_CREDIT_CARD_EXPIRATION_MONTH},
       {"creditCardExpirationYear", IDS_SETTINGS_CREDIT_CARD_EXPIRATION_YEAR},
+      {"creditCardExpired", IDS_SETTINGS_CREDIT_CARD_EXPIRED},
       {"editCreditCardTitle", IDS_SETTINGS_EDIT_CREDIT_CARD_TITLE},
       {"addCreditCardTitle", IDS_SETTINGS_ADD_CREDIT_CARD_TITLE},
       {"autofillDetail", IDS_SETTINGS_AUTOFILL_DETAIL},
@@ -1024,6 +1050,8 @@ void AddPeopleStrings(content::WebUIDataSource* html_source) {
     {"pinKeyboardPlaceholderPin", IDS_PIN_KEYBOARD_HINT_TEXT_PIN},
     {"pinKeyboardPlaceholderPinPassword",
      IDS_PIN_KEYBOARD_HINT_TEXT_PIN_PASSWORD},
+    {"pinKeyboardDeleteAccessibleName",
+     IDS_PIN_KEYBOARD_DELETE_ACCESSIBLE_NAME},
     {"changePictureTitle", IDS_SETTINGS_CHANGE_PICTURE_DIALOG_TITLE},
     {"changePicturePageDescription", IDS_SETTINGS_CHANGE_PICTURE_DIALOG_TEXT},
     {"takePhoto", IDS_SETTINGS_CHANGE_PICTURE_TAKE_PHOTO},
@@ -1489,7 +1517,6 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
       {"siteSettingsBlocked", IDS_SETTINGS_SITE_SETTINGS_BLOCKED},
       {"siteSettingsBlockedRecommended",
        IDS_SETTINGS_SITE_SETTINGS_BLOCKED_RECOMMENDED},
-      {"siteSettingsExceptions", IDS_SETTINGS_SITE_SETTINGS_EXCEPTIONS},
       {"siteSettingsSiteUrl", IDS_SETTINGS_SITE_SETTINGS_SITE_URL},
       {"siteSettingsActionAllow", IDS_SETTINGS_SITE_SETTINGS_ALLOW_MENU},
       {"siteSettingsActionBlock", IDS_SETTINGS_SITE_SETTINGS_BLOCK_MENU},
@@ -1499,8 +1526,6 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
       {"siteSettingsUsage", IDS_SETTINGS_SITE_SETTINGS_USAGE},
       {"siteSettingsPermissions", IDS_SETTINGS_SITE_SETTINGS_PERMISSIONS},
       {"siteSettingsClearAndReset", IDS_SETTINGS_SITE_SETTINGS_CLEAR_BUTTON},
-      {"siteSettingsCookie", IDS_SETTINGS_SITE_SETTINGS_COOKIE},
-      {"siteSettingsCookieDialog", IDS_SETTINGS_SITE_SETTINGS_COOKIE_DIALOG},
       {"siteSettingsCookieHeader", IDS_SETTINGS_SITE_SETTINGS_COOKIE_HEADER},
       {"siteSettingsCookieRemove", IDS_SETTINGS_SITE_SETTINGS_COOKIE_REMOVE},
       {"siteSettingsCookieRemoveAll",
@@ -1514,6 +1539,7 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
       {"siteSettingsCookiesClearAll",
        IDS_SETTINGS_SITE_SETTINGS_COOKIES_CLEAR_ALL},
       {"siteSettingsCookieSearch", IDS_SETTINGS_SITE_SETTINGS_COOKIE_SEARCH},
+      {"siteSettingsCookieSubpage", IDS_SETTINGS_SITE_SETTINGS_COOKIE_SUBPAGE},
       {"siteSettingsDelete", IDS_SETTINGS_SITE_SETTINGS_DELETE},
       {"siteSettingsSiteClearAll", IDS_SETTINGS_SITE_SETTINGS_SITE_CLEAR_ALL},
       {"siteSettingsSiteRemoveConfirmation",
@@ -1534,6 +1560,7 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
       {"incognitoSiteOnly", IDS_SETTINGS_SITE_SETTINGS_INCOGNITO_ONLY},
       {"embeddedIncognitoSite", IDS_SETTINGS_SITE_SETTINGS_INCOGNITO_EMBEDDED},
       {"siteSettingsSiteDetails", IDS_SETTINGS_SITE_DETAILS},
+      {"noSitesAdded", IDS_SETTINGS_SITE_NO_SITES_ADDED},
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
@@ -1744,6 +1771,7 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source,
 
 #if defined(OS_CHROMEOS)
   AddEasyUnlockStrings(html_source);
+  AddImportDataStrings(html_source);
   AddInternetStrings(html_source);
   AddCrNetworkStrings(html_source);
 #endif

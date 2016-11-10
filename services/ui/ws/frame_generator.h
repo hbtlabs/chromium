@@ -22,7 +22,6 @@
 
 namespace cc {
 class CompositorFrame;
-class CopyOutputRequest;
 class RenderPass;
 class SurfaceId;
 }
@@ -34,7 +33,6 @@ class GpuChannelHost;
 namespace ui {
 
 class DisplayCompositor;
-class DisplayCompositorFrameSink;
 
 namespace ws {
 
@@ -44,40 +42,29 @@ class FrameGeneratorTest;
 
 class FrameGeneratorDelegate;
 class ServerWindow;
-class ServerWindowCompositorFrameSink;
 
 // Responsible for redrawing the display in response to the redraw requests by
 // submitting CompositorFrames to the owned CompositorFrameSink.
-class FrameGenerator : public ServerWindowTracker {
+class FrameGenerator : public ServerWindowTracker,
+                       public cc::mojom::MojoCompositorFrameSinkClient {
  public:
-  FrameGenerator(FrameGeneratorDelegate* delegate,
-                 ServerWindow* root_window,
-                 scoped_refptr<DisplayCompositor> display_compositor);
+  FrameGenerator(FrameGeneratorDelegate* delegate, ServerWindow* root_window);
   ~FrameGenerator() override;
 
   void OnGpuChannelEstablished(scoped_refptr<gpu::GpuChannelHost> gpu_channel);
 
   // Schedules a redraw for the provided region.
-  void RequestRedraw(const gfx::Rect& redraw_region);
   void OnAcceleratedWidgetAvailable(gfx::AcceleratedWidget widget);
-
-  bool is_frame_pending() { return frame_pending_; }
 
  private:
   friend class ui::ws::test::FrameGeneratorTest;
 
-  void WantToDraw();
+  // cc::mojom::MojoCompositorFrameSinkClient implementation:
+  void DidReceiveCompositorFrameAck() override;
+  void OnBeginFrame(const cc::BeginFrameArgs& begin_frame_arags) override;
+  void ReclaimResources(const cc::ReturnedResourceArray& resources) override;
 
-  // This method initiates a top level redraw of the display.
-  // TODO(fsamuel): In polliwog, this only gets called when the window manager
-  // changes.
-  void Draw();
-
-  // This is called after the CompositorFrameSink has completed generating a new
-  // frame for the display.
-  void DidDraw();
-
-  // Generates the CompositorFrame for the current |dirty_rect_|.
+  // Generates the CompositorFrame.
   cc::CompositorFrame GenerateCompositorFrame(const gfx::Rect& output_rect);
 
   // DrawWindowTree recursively visits ServerWindows, creating a SurfaceDrawQuad
@@ -109,29 +96,28 @@ class FrameGenerator : public ServerWindowTracker {
   // management.
   void ReleaseAllSurfaceReferences();
 
+  ui::DisplayCompositor* GetDisplayCompositor();
+
   // ServerWindowObserver implementation.
   void OnWindowDestroying(ServerWindow* window) override;
 
   FrameGeneratorDelegate* delegate_;
-  scoped_refptr<DisplayCompositor> display_compositor_;
   cc::FrameSinkId frame_sink_id_;
+  ServerWindow* const root_window_;
   cc::SurfaceSequenceGenerator surface_sequence_generator_;
   scoped_refptr<gpu::GpuChannelHost> gpu_channel_;
 
-  std::unique_ptr<DisplayCompositorFrameSink> compositor_frame_sink_;
+  cc::mojom::MojoCompositorFrameSinkPtr compositor_frame_sink_;
   gfx::AcceleratedWidget widget_ = gfx::kNullAcceleratedWidget;
 
-  // The region that needs to be redrawn next time the compositor frame is
-  // generated.
-  gfx::Rect dirty_rect_;
-  base::Timer draw_timer_;
-  bool frame_pending_ = false;
   struct SurfaceDependency {
     cc::LocalFrameId local_frame_id;
     cc::SurfaceSequence sequence;
   };
   std::unordered_map<cc::FrameSinkId, SurfaceDependency, cc::FrameSinkIdHash>
       dependencies_;
+
+  mojo::Binding<cc::mojom::MojoCompositorFrameSinkClient> binding_;
 
   base::WeakPtrFactory<FrameGenerator> weak_factory_;
 

@@ -50,6 +50,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Location.h"
 #include "core/frame/PageScaleConstraintsSet.h"
+#include "core/frame/PerformanceMonitor.h"
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
 #include "core/html/HTMLFrameElement.h"
@@ -180,6 +181,7 @@ FrameView::FrameView(LocalFrame* frame)
       m_frameTimingRequestsDirty(true),
       m_hiddenForThrottling(false),
       m_subtreeThrottled(false),
+      m_lifecycleUpdatesThrottled(false),
       m_currentUpdateLifecyclePhasesTargetState(
           DocumentLifecycle::Uninitialized),
       m_scrollAnchor(this),
@@ -227,6 +229,12 @@ DEFINE_TRACE(FrameView) {
 }
 
 void FrameView::reset() {
+  // The compositor throttles the main frame using deferred commits, we can't
+  // throttle it here or it seems the root compositor doesn't get setup
+  // properly.
+  if (RuntimeEnabledFeatures::
+          renderingPipelineThrottlingLoadingIframesEnabled())
+    m_lifecycleUpdatesThrottled = !frame().isMainFrame();
   m_hasPendingLayout = false;
   m_layoutSchedulingEnabled = true;
   m_inSynchronousPostLayout = false;
@@ -298,6 +306,7 @@ void FrameView::setupRenderThrottling() {
                          [](FrameView* frameView, bool isVisible) {
                            frameView->updateRenderThrottlingStatus(
                                !isVisible, frameView->m_subtreeThrottled);
+                           frameView->maybeRecordLoadReason();
                          },
                          wrapWeakPersistent(this)));
   m_visibilityObserver->start();
@@ -506,7 +515,7 @@ void FrameView::setFrameRect(const IntRect& newRect) {
 
   frameRectsChanged();
 
-  updateScrollableAreaSet();
+  updateParentScrollableAreaSet();
 
   if (LayoutViewItem layoutView = this->layoutViewItem()) {
     // TODO(majidvp): It seems that this only needs to be called when size
@@ -550,6 +559,19 @@ CompositorAnimationTimeline* FrameView::compositorAnimationTimeline() const {
 
 LayoutBox* FrameView::layoutBox() const {
   return layoutView();
+}
+
+FloatQuad FrameView::localToVisibleContentQuad(
+    const FloatQuad& quad,
+    const LayoutObject* localObject,
+    MapCoordinatesFlags flags) const {
+  LayoutBox* box = layoutBox();
+  if (!box)
+    return quad;
+  DCHECK(localObject);
+  FloatQuad result = localObject->localToAncestorQuad(quad, box, flags);
+  result.move(-scrollOffset());
+  return result;
 }
 
 void FrameView::setCanHaveScrollbars(bool canHaveScrollbars) {
@@ -620,7 +642,7 @@ void FrameView::setContentsSize(const IntSize& size) {
   if (!page)
     return;
 
-  updateScrollableAreaSet();
+  updateParentScrollableAreaSet();
 
   page->chromeClient().contentsSizeChanged(m_frame.get(), size);
   frame().loader().restoreScrollPositionAndViewState();
@@ -1076,12 +1098,12 @@ void FrameView::layout() {
   DocumentLifecycle::Scope lifecycleScope(lifecycle(),
                                           DocumentLifecycle::LayoutClean);
 
+  Document* document = m_frame->document();
   TRACE_EVENT_BEGIN1("devtools.timeline", "Layout", "beginData",
                      InspectorLayoutEvent::beginData(this));
+  PerformanceMonitor::willUpdateLayout(document);
 
   performPreLayoutTasks();
-
-  Document* document = m_frame->document();
 
   // TODO(crbug.com/460956): The notion of a single root for layout is no longer
   // applicable. Remove or update this code.
@@ -1223,6 +1245,7 @@ void FrameView::layout() {
   TRACE_EVENT_END1("devtools.timeline", "Layout", "endData",
                    InspectorLayoutEvent::endData(rootForThisLayout));
   InspectorInstrumentation::didUpdateLayout(m_frame.get());
+  PerformanceMonitor::didUpdateLayout(document);
 
   m_nestedLayoutCount--;
   if (m_nestedLayoutCount)
@@ -1498,6 +1521,23 @@ void FrameView::viewportSizeChanged(bool widthChanged, bool heightChanged) {
     LayoutViewItem lvi = layoutViewItem();
     if (!lvi.isNull())
       lvi.setShouldDoFullPaintInvalidation();
+  }
+
+  if (RuntimeEnabledFeatures::inertTopControlsEnabled() && layoutView() &&
+      layoutView()->style()->hasFixedBackgroundImage()) {
+    // In the case where we don't change layout size from top control resizes,
+    // we wont perform a layout. If we have a fixed background image however,
+    // the background layer needs to get resized so we should request a layout
+    // explicitly.
+    PaintLayer* layer = layoutView()->layer();
+    if (layoutView()->compositor()->needsFixedRootBackgroundLayer(layer)) {
+      setNeedsLayout();
+    } else if (!RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
+      // If root layer scrolls is on, we've already issued a full invalidation
+      // above.
+      layoutView()->setShouldDoFullPaintInvalidationOnResizeIfNeeded(
+          widthChanged, heightChanged);
+    }
   }
 
   if (!hasViewportConstrainedObjects())
@@ -2462,7 +2502,7 @@ FrameView::ScrollingReasons FrameView::getScrollingReasons() {
   return Scrollable;
 }
 
-void FrameView::updateScrollableAreaSet() {
+void FrameView::updateParentScrollableAreaSet() {
   // That ensures that only inner frames are cached.
   FrameView* parentFrameView = this->parentFrameView();
   if (!parentFrameView)
@@ -3002,22 +3042,9 @@ void FrameView::updateStyleAndLayoutIfNeededRecursiveInternal() {
   for (const auto& frameView : frameViews)
     frameView->updateStyleAndLayoutIfNeededRecursiveInternal();
 
-  checkDoesNotNeedLayout();
-
-  // When SVG filters are invalidated using
-  // Document::scheduleSVGFilterLayerUpdateHack() they may trigger an extra
-  // style recalc. See PaintLayer::filterNeedsPaintInvalidation().
-  if (m_frame->document()->hasSVGFilterElementsRequiringLayerUpdate()) {
-    m_frame->document()->updateStyleAndLayoutTree();
-
-    if (needsLayout())
-      layout();
-  }
-
   // These asserts ensure that parent frames are clean, when child frames
   // finished updating layout and style.
   checkDoesNotNeedLayout();
-  ASSERT(!m_frame->document()->hasSVGFilterElementsRequiringLayerUpdate());
 #if ENABLE(ASSERT)
   m_frame->document()->layoutView()->assertLaidOut();
 #endif
@@ -3432,7 +3459,7 @@ void FrameView::setParent(Widget* parentView) {
 
   Widget::setParent(parentView);
 
-  updateScrollableAreaSet();
+  updateParentScrollableAreaSet();
   setNeedsUpdateViewportIntersection();
   setupRenderThrottling();
 
@@ -3635,7 +3662,8 @@ void FrameView::updateScrollOffset(const ScrollOffset& offset,
   if (!scrollbarsSuppressed())
     m_pendingScrollDelta += scrollDelta;
 
-  clearFragmentAnchor();
+  if (scrollTypeClearsFragmentAnchor(scrollType))
+    clearFragmentAnchor();
   updateLayersAndCompositingAfterScrollIfNeeded(scrollDelta);
 
   Document* document = m_frame->document();
@@ -4282,8 +4310,11 @@ void FrameView::setParentVisible(bool visible) {
 void FrameView::show() {
   if (!isSelfVisible()) {
     setSelfVisible(true);
+    if (ScrollingCoordinator* scrollingCoordinator =
+            this->scrollingCoordinator())
+      scrollingCoordinator->frameViewVisibilityDidChange();
     setNeedsCompositingUpdate(layoutViewItem(), CompositingUpdateRebuildTree);
-    updateScrollableAreaSet();
+    updateParentScrollableAreaSet();
     if (isParentVisible()) {
       for (const auto& child : m_children)
         child->setParentVisible(true);
@@ -4300,8 +4331,11 @@ void FrameView::hide() {
         child->setParentVisible(false);
     }
     setSelfVisible(false);
+    if (ScrollingCoordinator* scrollingCoordinator =
+            this->scrollingCoordinator())
+      scrollingCoordinator->frameViewVisibilityDidChange();
     setNeedsCompositingUpdate(layoutViewItem(), CompositingUpdateRebuildTree);
-    updateScrollableAreaSet();
+    updateParentScrollableAreaSet();
   }
 
   Widget::hide();
@@ -4440,6 +4474,19 @@ void FrameView::updateRenderThrottlingStatus(bool hidden,
       hasHandlers)
     scrollingCoordinator->touchEventTargetRectsDidChange();
 
+#if DCHECK_IS_ON()
+  // Make sure we never have an unthrottled frame inside a throttled one.
+  FrameView* parent = parentFrameView();
+  while (parent) {
+    DCHECK(canThrottleRendering() || !parent->canThrottleRendering());
+    parent = parent->parentFrameView();
+  }
+#endif
+}
+
+// TODO(esprehn): Rename this and the method on Document to
+// recordDeferredLoadReason().
+void FrameView::maybeRecordLoadReason() {
   FrameView* parent = parentFrameView();
   if (frame().document()->frame()) {
     if (!parent) {
@@ -4470,14 +4517,6 @@ void FrameView::updateRenderThrottlingStatus(bool hidden,
       }
     }
   }
-
-#if DCHECK_IS_ON()
-  // Make sure we never have an unthrottled frame inside a throttled one.
-  while (parent) {
-    DCHECK(canThrottleRendering() || !parent->canThrottleRendering());
-    parent = parent->parentFrameView();
-  }
-#endif
 }
 
 bool FrameView::shouldThrottleRendering() const {
@@ -4485,16 +4524,32 @@ bool FrameView::shouldThrottleRendering() const {
 }
 
 bool FrameView::canThrottleRendering() const {
+  if (m_lifecycleUpdatesThrottled)
+    return true;
   if (!RuntimeEnabledFeatures::renderingPipelineThrottlingEnabled())
     return false;
-  // We only throttle the rendering pipeline in cross-origin frames. This is
-  // to avoid a situation where an ancestor frame directly depends on the
-  // pipeline timing of a descendant and breaks as a result of throttling.
-  // The rationale is that cross-origin frames must already communicate with
-  // asynchronous messages, so they should be able to tolerate some delay in
-  // receiving replies from a throttled peer.
-  return m_subtreeThrottled ||
-         (m_hiddenForThrottling && m_frame->isCrossOriginSubframe());
+  if (m_subtreeThrottled)
+    return true;
+  // We only throttle hidden cross-origin frames. This is to avoid a situation
+  // where an ancestor frame directly depends on the pipeline timing of a
+  // descendant and breaks as a result of throttling. The rationale is that
+  // cross-origin frames must already communicate with asynchronous messages,
+  // so they should be able to tolerate some delay in receiving replies from a
+  // throttled peer.
+  return m_hiddenForThrottling && m_frame->isCrossOriginSubframe();
+}
+
+void FrameView::beginLifecycleUpdates() {
+  // Avoid pumping frames for the initially empty document.
+  if (!frame().loader().stateMachine()->committedFirstRealDocumentLoad())
+    return;
+  m_lifecycleUpdatesThrottled = false;
+  setupRenderThrottling();
+  updateRenderThrottlingStatus(m_hiddenForThrottling, m_subtreeThrottled);
+  // The compositor will "defer commits" for the main frame until we
+  // explicitly request them.
+  if (frame().isMainFrame())
+    frame().host()->chromeClient().beginLifecycleUpdates();
 }
 
 void FrameView::setInitialViewportSize(const IntSize& viewportSize) {

@@ -88,6 +88,7 @@
 #include "content/browser/mime_registry_impl.h"
 #include "content/browser/notifications/notification_message_filter.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
+#include "content/browser/payments/payment_app_manager.h"
 #include "content/browser/permissions/permission_service_context.h"
 #include "content/browser/permissions/permission_service_impl.h"
 #include "content/browser/power_monitor_message_broadcaster.h"
@@ -256,11 +257,13 @@ const base::FilePath::CharType kAecDumpFileNameAddition[] =
 #endif
 
 void CacheShaderInfo(int32_t id, base::FilePath path) {
-  ShaderCacheFactory::GetInstance()->SetCacheInfo(id, path);
+  if (ShaderCacheFactory::GetInstance())
+    ShaderCacheFactory::GetInstance()->SetCacheInfo(id, path);
 }
 
 void RemoveShaderInfo(int32_t id) {
-  ShaderCacheFactory::GetInstance()->RemoveCacheInfo(id);
+  if (ShaderCacheFactory::GetInstance())
+    ShaderCacheFactory::GetInstance()->RemoveCacheInfo(id);
 }
 
 net::URLRequestContext* GetRequestContext(
@@ -374,12 +377,7 @@ ZygoteHandle g_render_zygote;
 class RendererSandboxedProcessLauncherDelegate
     : public SandboxedProcessLauncherDelegate {
  public:
-  explicit RendererSandboxedProcessLauncherDelegate(IPC::ChannelProxy* channel)
-#if defined(OS_POSIX)
-      : ipc_fd_(channel->TakeClientFileDescriptor())
-#endif  // OS_POSIX
-  {
-  }
+  RendererSandboxedProcessLauncherDelegate() {}
 
   ~RendererSandboxedProcessLauncherDelegate() override {}
 
@@ -396,8 +394,7 @@ class RendererSandboxedProcessLauncherDelegate
     return GetContentClient()->browser()->PreSpawnRenderer(policy);
   }
 
-#elif defined(OS_POSIX)
-#if !defined(OS_MACOSX) && !defined(OS_ANDROID)
+#elif defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
   ZygoteHandle* GetZygote() override {
     const base::CommandLine& browser_command_line =
         *base::CommandLine::ForCurrentProcess();
@@ -407,16 +404,9 @@ class RendererSandboxedProcessLauncherDelegate
       return nullptr;
     return GetGenericZygote();
   }
-#endif  // !defined(OS_MACOSX) && !defined(OS_ANDROID)
-  base::ScopedFD TakeIpcFd() override { return std::move(ipc_fd_); }
 #endif  // OS_WIN
 
   SandboxType GetSandboxType() override { return SANDBOX_TYPE_RENDERER; }
-
- private:
-#if defined(OS_POSIX)
-  base::ScopedFD ipc_fd_;
-#endif  // OS_POSIX
 };
 
 const char kSessionStorageHolderKey[] = "kSessionStorageHolderKey";
@@ -865,7 +855,6 @@ bool RenderProcessHostImpl::Init() {
     // in-process plugins.
     options.message_loop_type = base::MessageLoop::TYPE_DEFAULT;
 #endif
-
     // As for execution sequence, this callback should have no any dependency
     // on starting in-process-render-thread.
     // So put it here to trigger ChannelMojo initialization earlier to enable
@@ -891,9 +880,8 @@ bool RenderProcessHostImpl::Init() {
     // As long as there's no renderer prefix, we can use the zygote process
     // at this stage.
     child_process_launcher_.reset(new ChildProcessLauncher(
-        new RendererSandboxedProcessLauncherDelegate(channel_.get()), cmd_line,
-        GetID(), this, child_token_,
-        base::Bind(&RenderProcessHostImpl::OnMojoError, id_)));
+        new RendererSandboxedProcessLauncherDelegate(), cmd_line, GetID(), this,
+        child_token_, base::Bind(&RenderProcessHostImpl::OnMojoError, id_)));
     channel_->Pause();
 
     fast_shutdown_started_ = false;
@@ -1210,6 +1198,13 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
                  base::Unretained(permission_service_context_.get())));
   // TODO(mcasas): finalize arguments.
   AddUIThreadInterface(registry.get(), base::Bind(&ImageCaptureImpl::Create));
+
+  AddUIThreadInterface(
+      registry.get(),
+      base::Bind(&PaymentAppContext::CreateService,
+                 base::Unretained(
+                     storage_partition_impl_->GetPaymentAppContext())));
+
   AddUIThreadInterface(
       registry.get(),
       base::Bind(&OffscreenCanvasCompositorFrameSinkProviderImpl::Create));
@@ -1594,6 +1589,8 @@ void RenderProcessHostImpl::AppendRendererCommandLine(
 
   command_line->AppendSwitchASCII(switches::kServiceRequestChannelToken,
                                   child_connection_->service_token());
+  command_line->AppendSwitchASCII(switches::kRendererClientId,
+                                  std::to_string(GetID()));
 }
 
 void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
@@ -1633,6 +1630,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kDisableLocalStorage,
     switches::kDisableLogging,
     switches::kDisableMediaSuspend,
+    switches::kDisableMojoServiceWorker,
     switches::kDisableNotifications,
     switches::kDisableOverlayScrollbar,
     switches::kDisablePepper3DImageChromium,
@@ -1708,7 +1706,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kMaxUntiledLayerHeight,
     switches::kMemoryMetrics,
     switches::kMojoLocalStorage,
-    switches::kMojoServiceWorker,
     switches::kMSEAudioBufferSizeLimit,
     switches::kMSEVideoBufferSizeLimit,
     switches::kNoReferrers,
@@ -1731,13 +1728,11 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kTouchTextSelectionStrategy,
     switches::kTraceConfigFile,
     switches::kTraceToConsole,
-    switches::kUseCrossProcessFramesForGuests,
     switches::kUseFakeUIForMediaStream,
     // This flag needs to be propagated to the renderer process for
     // --in-process-webgl.
     switches::kUseGL,
     switches::kUseGpuInTests,
-    switches::kUseLayerTreeHostRemote,
     switches::kUseMobileUserAgent,
     switches::kUseRemoteCompositing,
     switches::kV,
@@ -2802,8 +2797,14 @@ void RenderProcessHostImpl::OnProcessLaunched() {
     // Not all platforms launch processes in the same backgrounded state. Make
     // sure |is_process_backgrounded_| reflects this platform's initial process
     // state.
+#if defined(OS_MACOSX)
+    is_process_backgrounded_ =
+        child_process_launcher_->GetProcess().IsProcessBackgrounded(
+            MachBroker::GetInstance());
+#else
     is_process_backgrounded_ =
         child_process_launcher_->GetProcess().IsProcessBackgrounded();
+#endif  // defined(OS_MACOSX)
 
     // Disable updating process priority on startup for now as it incorrectly
     // results in backgrounding foreground navigations until their first commit

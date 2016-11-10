@@ -38,8 +38,9 @@ extern const int kTrayPopupAutoCloseDelayInSeconds;
 extern const int kTrayPopupAutoCloseDelayForTextInSeconds;
 extern const int kTrayPopupPaddingHorizontal;
 extern const int kTrayPopupPaddingBetweenItems;
+// Used for buttons that have borders.
+extern const int kTrayPopupButtonEndMargin;
 extern const int kTrayPopupUserCardVerticalPadding;
-
 // The padding used on the left and right of labels. This applies to all labels
 // in the system menu.
 extern const int kTrayPopupLabelHorizontalPadding;
@@ -53,6 +54,9 @@ extern const int kTrayPopupDetailsLabelExtraLeftMargin;
 extern const SkColor kTrayPopupHoverBackgroundColor;
 extern const int kTrayPopupScrollSeparatorHeight;
 extern const int kTrayRoundedBorderRadius;
+
+// The padding used on the left and right of labels.
+extern const int kTrayPopupLabelHorizontalPadding;
 
 extern const SkColor kBackgroundColor;
 extern const SkColor kHoverBackgroundColor;
@@ -92,6 +96,10 @@ extern const int kHorizontalSeparatorHeight;
 extern const int kTrayIconSize;
 extern const SkColor kTrayIconColor;
 
+// The total visual padding at the start and end of the icon/label section
+// of the tray.
+extern const int kTrayEdgePadding;
+
 // The size and foreground color of the icons appearing in the material design
 // system menu.
 extern const int kMenuIconSize;
@@ -103,6 +111,8 @@ extern const int kMenuButtonSize;
 extern const int kMenuSeparatorVerticalPadding;
 // The horizontal padding for the system menu separator.
 extern const int kMenuExtraMarginFromLeftEdge;
+// The visual padding to the left of icons in the system menu.
+extern const int kMenuEdgeEffectivePadding;
 
 // The base color used for all ink drops in the system menu.
 extern const SkColor kTrayPopupInkDropBaseColor;

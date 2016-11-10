@@ -12,13 +12,13 @@
 #include <memory>
 
 namespace cc {
+class AnimationHost;
 class LayerTreeHost;
 class LayerTreeSettings;
 }
 
 namespace blink {
 
-class WebCompositorAnimationTimeline;
 class WebLayer;
 
 // Dummy WeblayerTeeView that does not support any actual compositing.
@@ -102,6 +102,7 @@ class WebLayerTreeViewImplForTesting
 
  private:
   cc::TestTaskGraphRunner m_taskGraphRunner;
+  std::unique_ptr<cc::AnimationHost> m_animationHost;
   std::unique_ptr<cc::LayerTreeHost> m_layerTreeHost;
 };
 

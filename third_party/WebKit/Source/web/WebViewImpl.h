@@ -92,7 +92,6 @@ class CompositorMutatorImpl;
 class WebPagePopupImpl;
 class WebPlugin;
 class WebRemoteFrame;
-class WebSelection;
 class WebSettingsImpl;
 class WebViewScheduler;
 
@@ -101,7 +100,8 @@ class WEB_EXPORT WebViewImpl final
       public RefCounted<WebViewImpl>,
       WTF_NON_EXPORTED_BASE(public WebGestureCurveTarget),
       public PageWidgetEventHandler,
-      public WebScheduler::InterventionReporter {
+      public WebScheduler::InterventionReporter,
+      public WebViewScheduler::WebViewSchedulerSettings {
  public:
   static WebViewImpl* create(WebViewClient*, WebPageVisibilityState);
   static HashSet<WebViewImpl*>& allInstances();
@@ -227,6 +227,7 @@ class WEB_EXPORT WebViewImpl final
   void performMediaPlayerAction(const WebMediaPlayerAction& action,
                                 const WebPoint& location) override;
   void performPluginAction(const WebPluginAction&, const WebPoint&) override;
+  void audioStateChanged(bool isAudioPlaying) override;
   WebHitTestResult hitTestResultAt(const WebPoint&) override;
   WebHitTestResult hitTestResultForTap(const WebPoint&,
                                        const WebSize&) override;
@@ -278,6 +279,12 @@ class WEB_EXPORT WebViewImpl final
 
   // WebScheduler::InterventionReporter implementation:
   void ReportIntervention(const WebString& message) override;
+
+  // WebViewScheduler::WebViewSchedulerSettings implementation:
+  float expensiveBackgroundThrottlingCPUBudget() override;
+  float expensiveBackgroundThrottlingInitialBudget() override;
+  float expensiveBackgroundThrottlingMaxBudget() override;
+  float expensiveBackgroundThrottlingMaxDelay() override;
 
   void didUpdateFullscreenSize();
 
@@ -388,13 +395,6 @@ class WEB_EXPORT WebViewImpl final
 
   void updateMainFrameLayoutSize();
   void updatePageDefinedViewportConstraints(const ViewportDescription&);
-
-  // Start a system drag and drop operation.
-  void startDragging(LocalFrame*,
-                     const WebDragData& dragData,
-                     WebDragOperationsMask mask,
-                     const WebImage& dragImage,
-                     const WebPoint& dragImageOffset);
 
   PagePopup* openPagePopup(PagePopupClient*);
   void closePagePopup(PagePopup*);
@@ -510,6 +510,8 @@ class WEB_EXPORT WebViewImpl final
   double lastFrameTimeMonotonic() const { return m_lastFrameTimeMonotonic; }
 
   ChromeClientImpl& chromeClient() const { return *m_chromeClientImpl.get(); }
+
+  void setDoingDragAndDrop(bool doing) { m_doingDragAndDrop = doing; }
 
  private:
   InspectorOverlay* inspectorOverlay();
@@ -669,6 +671,8 @@ class WEB_EXPORT WebViewImpl final
   float m_fakePageScaleAnimationPageScaleFactor;
   bool m_fakePageScaleAnimationUseAnchor;
 
+  // TODO(paulmeyer): Move this to WebWidget once all drag-and-drop functions
+  // are there.
   bool m_doingDragAndDrop;
 
   bool m_ignoreInputEvents;

@@ -6,18 +6,19 @@
 #define CC_TEST_LAYER_TREE_HOST_REMOTE_FOR_TESTING_H_
 
 #include "base/macros.h"
-#include "cc/blimp/compositor_state_deserializer_client.h"
+#include "cc/blimp/compositor_state_deserializer.h"
 #include "cc/blimp/layer_tree_host_remote.h"
-#include "ui/gfx/geometry/scroll_offset.h"
 
 namespace gpu {
 class GpuMemoryBufferManager;
 }  // namespace gpu
 
 namespace cc {
-class CompositorStateDeserializer;
+
+class AnimationHost;
 class FakeImageSerializationProcessor;
 class LayerTreeHostInProcess;
+class MutatorHost;
 class SharedBitmapManager;
 class TaskGraphRunner;
 
@@ -29,7 +30,7 @@ class LayerTreeHostRemoteForTesting : public LayerTreeHostRemote,
  public:
   static std::unique_ptr<LayerTreeHostRemoteForTesting> Create(
       LayerTreeHostClient* client,
-      std::unique_ptr<AnimationHost> animation_host,
+      MutatorHost* mutator_host,
       LayerTreeSettings const* settings,
       TaskGraphRunner* task_graph_runner,
       scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
@@ -68,31 +69,30 @@ class LayerTreeHostRemoteForTesting : public LayerTreeHostRemote,
       TaskGraphRunner* task_graph_runner,
       const LayerTreeSettings& settings,
       scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
-      scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner);
+      scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner,
+      MutatorHost* mutator_host);
 
  private:
   class LayerTreeHostInProcessClient;
   class RemoteCompositorBridgeImpl;
 
   // CompositorStateDeserializerClient implementation.
-  bool ShouldRetainClientScroll(int engine_layer_id,
-                                const gfx::ScrollOffset& new_offset) override;
-  bool ShouldRetainClientPageScale(float new_page_scale) override;
+  void DidUpdateLocalState() override;
 
   // LayerTreeHostRemote interface.
   void DispatchDrawAndSubmitCallbacks() override;
 
-  void LayerDidScroll(int engine_layer_id);
-  void ApplyUpdatesFromInProcessHost();
+  void BeginRemoteMainFrame();
 
   void RemoteHostNeedsMainFrame();
   void ProcessRemoteCompositorUpdate(
       std::unique_ptr<CompositorProtoState> compositor_proto_state);
 
   std::unique_ptr<LayerTreeHostInProcess> layer_tree_host_in_process_;
+  std::unique_ptr<AnimationHost> animation_host_;
   std::unique_ptr<CompositorStateDeserializer> compositor_state_deserializer_;
 
-  ScrollOffsetMap layers_scrolled_;
+  bool client_state_dirty_ = false;
 
   std::unique_ptr<LayerTreeHostInProcessClient>
       layer_tree_host_in_process_client_;

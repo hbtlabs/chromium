@@ -14,12 +14,12 @@ namespace blink {
 namespace {
 
 NGConstraintSpace* ConstructConstraintSpace(NGWritingMode writing_mode,
-                                            NGDirection direction,
+                                            TextDirection direction,
                                             NGPhysicalSize size) {
   return new NGConstraintSpace(
       writing_mode, direction,
       new NGPhysicalConstraintSpace(
-          size, /* fixed_width */ true, /* fixed_height */ false,
+          size, size, /* fixed_width */ true, /* fixed_height */ false,
           /* width_direction_triggers_scrollbar */ true,
           /* height_direction_triggers_scrollbar */ false, FragmentNone,
           FragmentColumn, /* is_new_fc */ false));
@@ -27,22 +27,23 @@ NGConstraintSpace* ConstructConstraintSpace(NGWritingMode writing_mode,
 
 TEST(NGConstraintSpaceTest, WritingMode) {
   NGPhysicalConstraintSpace* phy_space = new NGPhysicalConstraintSpace(
+      NGPhysicalSize(LayoutUnit(200), LayoutUnit(100)),
       NGPhysicalSize(LayoutUnit(200), LayoutUnit(100)), /* fixed_width */ true,
       /* fixed_height */ false, /* width_direction_triggers_scrollbar */ true,
       /* height_direction_triggers_scrollbar */ false, FragmentNone,
       FragmentColumn, /* is_new_fc */ false);
 
   NGConstraintSpace* horz_space =
-      new NGConstraintSpace(HorizontalTopBottom, LeftToRight, phy_space);
+      new NGConstraintSpace(HorizontalTopBottom, LTR, phy_space);
 
   NGConstraintSpace* vert_space =
-      new NGConstraintSpace(VerticalRightLeft, LeftToRight, phy_space);
+      new NGConstraintSpace(VerticalRightLeft, LTR, phy_space);
 
-  EXPECT_EQ(LayoutUnit(200), horz_space->ContainerSize().inline_size);
-  EXPECT_EQ(LayoutUnit(200), vert_space->ContainerSize().block_size);
+  EXPECT_EQ(LayoutUnit(200), horz_space->AvailableSize().inline_size);
+  EXPECT_EQ(LayoutUnit(200), vert_space->AvailableSize().block_size);
 
-  EXPECT_EQ(LayoutUnit(100), horz_space->ContainerSize().block_size);
-  EXPECT_EQ(LayoutUnit(100), vert_space->ContainerSize().inline_size);
+  EXPECT_EQ(LayoutUnit(100), horz_space->AvailableSize().block_size);
+  EXPECT_EQ(LayoutUnit(100), vert_space->AvailableSize().inline_size);
 
   EXPECT_TRUE(horz_space->InlineTriggersScrollbar());
   EXPECT_TRUE(vert_space->BlockTriggersScrollbar());
@@ -70,7 +71,7 @@ TEST(NGConstraintSpaceTest, LayoutOpportunitiesNoExclusions) {
   physical_size.height = LayoutUnit(400);
 
   auto* space =
-      ConstructConstraintSpace(HorizontalTopBottom, LeftToRight, physical_size);
+      ConstructConstraintSpace(HorizontalTopBottom, LTR, physical_size);
   auto* iterator = space->LayoutOpportunities();
 
   EXPECT_EQ("0,0 600x400", OpportunityToString(iterator->Next()));
@@ -84,7 +85,7 @@ TEST(NGConstraintSpaceTest, LayoutOpportunitiesTopRightExclusion) {
 
   // Create a space with a 100x100 exclusion in the top right corner.
   auto* space =
-      ConstructConstraintSpace(HorizontalTopBottom, LeftToRight, physical_size);
+      ConstructConstraintSpace(HorizontalTopBottom, LTR, physical_size);
   NGLogicalRect exclusion;
   exclusion.size = {/* inline_size */ LayoutUnit(100),
                     /* block_size */ LayoutUnit(100)};
@@ -111,7 +112,7 @@ TEST(NGConstraintSpaceTest, LayoutOpportunitiesTopLeftExclusion) {
 
   // Create a space with a 100x100 exclusion in the top left corner.
   auto* space =
-      ConstructConstraintSpace(HorizontalTopBottom, LeftToRight, physical_size);
+      ConstructConstraintSpace(HorizontalTopBottom, LTR, physical_size);
   NGLogicalRect exclusion;
   exclusion.size = {/* inline_size */ LayoutUnit(100),
                     /* block_size */ LayoutUnit(100)};
@@ -160,7 +161,7 @@ TEST(NGConstraintSpaceTest, LayoutOpportunitiesTwoInMiddle) {
   physical_size.height = LayoutUnit(400);
 
   auto* space =
-      ConstructConstraintSpace(HorizontalTopBottom, LeftToRight, physical_size);
+      ConstructConstraintSpace(HorizontalTopBottom, LTR, physical_size);
   // Add exclusions
   NGLogicalRect exclusion1;
   exclusion1.size = {/* inline_size */ LayoutUnit(100),
@@ -197,25 +198,25 @@ TEST(NGConstraintSpaceTest, LayoutOpportunitiesTwoInMiddle) {
 }
 
 // This test is the same as LayoutOpportunitiesTwoInMiddle with the only
-// difference that NGLayoutOpportunityIterator takes the additional argument
-// origin_point that changes the iterator to return Layout Opportunities that
+// difference that NGLayoutOpportunityIterator takes 2 additional arguments:
+// - origin_point that changes the iterator to return Layout Opportunities that
 // lay after the origin point.
+// - leader_point that together with origin_point creates a temporary exclusion
 //
 // Expected:
 //   Layout opportunity iterator generates the next opportunities:
-//   - 1st Start Point (0, 200): 150x200
-//   - 2nd Start Point (250, 200): 350x150, 250x200
+//   - 1st Start Point (0, 200): 350x150, 250x200
 //   - 3rd Start Point (550, 200): 50x200
 //   - 4th Start Point (0, 300): 600x50, 500x100
 //   All other opportunities that are located before the origin point should be
 //   filtered out.
-TEST(NGConstraintSpaceTest, LayoutOpportunitiesTwoInMiddleWithOrigin) {
+TEST(NGConstraintSpaceTest, LayoutOpportunitiesTwoInMiddleWithOriginAndLeader) {
   NGPhysicalSize physical_size;
   physical_size.width = LayoutUnit(600);
   physical_size.height = LayoutUnit(400);
 
   auto* space =
-      ConstructConstraintSpace(HorizontalTopBottom, LeftToRight, physical_size);
+      ConstructConstraintSpace(HorizontalTopBottom, LTR, physical_size);
   // Add exclusions
   NGLogicalRect exclusion1;
   exclusion1.size = {/* inline_size */ LayoutUnit(100),
@@ -231,19 +232,18 @@ TEST(NGConstraintSpaceTest, LayoutOpportunitiesTwoInMiddleWithOrigin) {
   space->AddExclusion(exclusion2);
 
   const NGLogicalOffset origin_point = {LayoutUnit(0), LayoutUnit(200)};
-  auto* iterator = new NGLayoutOpportunityIterator(space, origin_point);
+  const NGLogicalOffset leader_point = {LayoutUnit(250), LayoutUnit(300)};
+  auto* iterator =
+      new NGLayoutOpportunityIterator(space, origin_point, leader_point);
 
   // 1st Start Point
-  EXPECT_EQ("0,200 150x200", OpportunityToString(iterator->Next()));
-
-  // 2nd Start Point
   EXPECT_EQ("250,200 350x150", OpportunityToString(iterator->Next()));
   EXPECT_EQ("250,200 250x200", OpportunityToString(iterator->Next()));
 
-  // 3rd Start Point
+  // 2nd Start Point
   EXPECT_EQ("550,200 50x200", OpportunityToString(iterator->Next()));
 
-  // 4th Start Point
+  // 3rd Start Point
   EXPECT_EQ("0,300 600x50", OpportunityToString(iterator->Next()));
   EXPECT_EQ("0,300 500x100", OpportunityToString(iterator->Next()));
 
@@ -272,7 +272,7 @@ TEST(NGConstraintSpaceTest, LayoutOpportunitiesWithOutOfBoundsExclusions) {
   physical_size.height = LayoutUnit(100);
 
   auto* space =
-      ConstructConstraintSpace(HorizontalTopBottom, LeftToRight, physical_size);
+      ConstructConstraintSpace(HorizontalTopBottom, LTR, physical_size);
   NGLogicalRect exclusion;
   exclusion.size = {/* inline_size */ LayoutUnit(100),
                     /* block_size */ LayoutUnit(100)};

@@ -230,10 +230,6 @@ using blink::WebMouseEvent;
 using blink::WebNavigationPolicy;
 using blink::WebNavigationType;
 using blink::WebNode;
-using blink::WebPeerConnection00Handler;
-using blink::WebPeerConnection00HandlerClient;
-using blink::WebPeerConnectionHandler;
-using blink::WebPeerConnectionHandlerClient;
 using blink::WebPluginAction;
 using blink::WebPoint;
 using blink::WebRect;
@@ -950,7 +946,7 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   settings->setMinimumFontSize(prefs.minimum_font_size);
   settings->setMinimumLogicalFontSize(prefs.minimum_logical_font_size);
   settings->setDefaultTextEncodingName(
-      base::ASCIIToUTF16(prefs.default_encoding));
+      WebString::fromASCII(prefs.default_encoding));
   settings->setJavaScriptEnabled(prefs.javascript_enabled);
   settings->setWebSecurityEnabled(prefs.web_security_enabled);
   settings->setJavaScriptCanOpenWindowsAutomatically(
@@ -1099,6 +1095,15 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
       prefs.default_minimum_page_scale_factor,
       prefs.default_maximum_page_scale_factor);
 
+  settings->setExpensiveBackgroundThrottlingCPUBudget(
+      prefs.expensive_background_throttling_cpu_budget);
+  settings->setExpensiveBackgroundThrottlingInitialBudget(
+      prefs.expensive_background_throttling_initial_budget);
+  settings->setExpensiveBackgroundThrottlingMaxBudget(
+      prefs.expensive_background_throttling_max_budget);
+  settings->setExpensiveBackgroundThrottlingMaxDelay(
+      prefs.expensive_background_throttling_max_delay);
+
 #if defined(OS_ANDROID)
   settings->setAllowCustomScrollbarInMainFrame(false);
   settings->setTextAutosizingEnabled(prefs.text_autosizing_enabled);
@@ -1112,7 +1117,7 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   settings->setMediaPlaybackRequiresUserGesture(
       prefs.user_gesture_required_for_media_playback);
   settings->setDefaultVideoPosterURL(
-      base::ASCIIToUTF16(prefs.default_video_poster_url.spec()));
+      WebString::fromASCII(prefs.default_video_poster_url.spec()));
   settings->setSupportDeprecatedTargetDensityDPI(
       prefs.support_deprecated_target_density_dpi);
   settings->setUseLegacyBackgroundSizeShorthandBehavior(
@@ -1271,22 +1276,8 @@ bool RenderViewImpl::DoesRenderWidgetHaveTouchEventHandlersAt(
   return webview()->hasTouchEventHandlersAt(point);
 }
 
-bool RenderViewImpl::RenderWidgetWillHandleGestureEvent(
-    const blink::WebGestureEvent& event) {
-  possible_drag_event_info_.event_source =
-      ui::DragDropTypes::DRAG_EVENT_SOURCE_TOUCH;
-  possible_drag_event_info_.event_location =
-      gfx::Point(event.globalX, event.globalY);
-  return false;
-}
-
 bool RenderViewImpl::RenderWidgetWillHandleMouseEvent(
     const blink::WebMouseEvent& event) {
-  possible_drag_event_info_.event_source =
-      ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE;
-  possible_drag_event_info_.event_location =
-      gfx::Point(event.globalX, event.globalY);
-
   // If the mouse is locked, only the current owner of the mouse lock can
   // process mouse events.
   return mouse_lock_dispatcher_->WillHandleMouseEvent(event);
@@ -1367,6 +1358,7 @@ bool RenderViewImpl::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(PageMsg_WasShown, OnPageWasShown)
     IPC_MESSAGE_HANDLER(PageMsg_SetHistoryOffsetAndLength,
                         OnSetHistoryOffsetAndLength)
+    IPC_MESSAGE_HANDLER(PageMsg_AudioStateChanged, OnAudioStateChanged)
 
 #if defined(OS_ANDROID)
     IPC_MESSAGE_HANDLER(ViewMsg_UpdateBrowserControlsState,
@@ -1456,6 +1448,10 @@ void RenderViewImpl::OnSetInitialFocus(bool reverse) {
 
 void RenderViewImpl::OnUpdateWindowScreenRect(gfx::Rect window_screen_rect) {
   RenderWidget::OnUpdateWindowScreenRect(window_screen_rect);
+}
+
+void RenderViewImpl::OnAudioStateChanged(bool is_audio_playing) {
+  webview()->audioStateChanged(is_audio_playing);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1822,21 +1818,6 @@ void RenderViewImpl::setKeyboardFocusURL(const WebURL& url) {
   UpdateTargetURL(focus_url_, mouse_over_url_);
 }
 
-void RenderViewImpl::startDragging(WebLocalFrame* frame,
-                                   const WebDragData& data,
-                                   WebDragOperationsMask mask,
-                                   const WebImage& image,
-                                   const WebPoint& webImageOffset) {
-  blink::WebRect offset_in_window(webImageOffset.x, webImageOffset.y, 0, 0);
-  ConvertViewportToWindowViaWidget(&offset_in_window);
-  DropData drop_data(DropDataBuilder::Build(data));
-  drop_data.referrer_policy = frame->document().referrerPolicy();
-  gfx::Vector2d imageOffset(offset_in_window.x, offset_in_window.y);
-  Send(new DragHostMsg_StartDragging(GetRoutingID(), drop_data, mask,
-                                     image.getSkBitmap(), imageOffset,
-                                     possible_drag_event_info_));
-}
-
 bool RenderViewImpl::acceptsLoadDrops() {
   return renderer_preferences_.can_accept_load_drops;
 }
@@ -1990,18 +1971,6 @@ void RenderViewImpl::initializeLayerTreeView() {
   RenderWidget::initializeLayerTreeView();
   RenderWidgetCompositor* rwc = compositor();
   if (!rwc)
-    return;
-
-  bool use_threaded_event_handling = true;
-#if defined(OS_MACOSX)
-  // Disable threaded event handling if content is not handling the elastic
-  // overscroll effect. This includes the cases where the elastic overscroll
-  // effect is being handled by Blink (because of command line flags) and older
-  // operating system versions which do not have an elastic overscroll effect
-  // (SnowLeopard, which has Aqua scrollbars which need synchronous updates).
-  use_threaded_event_handling = compositor_deps_->IsElasticOverscrollEnabled();
-#endif
-  if (!use_threaded_event_handling)
     return;
 
   RenderThreadImpl* render_thread = RenderThreadImpl::current();
@@ -2520,52 +2489,6 @@ void RenderViewImpl::OnResize(const ResizeParams& params) {
     has_scrolled_focused_editable_node_into_rect_ = false;
 }
 
-void RenderViewImpl::RenderWidgetDidFlushPaint() {
-  // If the RenderWidget is closing down then early-exit, otherwise we'll crash.
-  // See crbug.com/112921.
-  if (!webview())
-    return;
-
-  WebFrame* main_frame = webview()->mainFrame();
-  for (WebFrame* frame = main_frame; frame; frame = frame->traverseNext()) {
-    // TODO(nasko): This is a hack for the case in which the top-level
-    // frame is being rendered in another process. It will not
-    // behave correctly for out of process iframes.
-    if (frame->isWebLocalFrame()) {
-      main_frame = frame;
-      break;
-    }
-  }
-
-  // There's nothing to do if there are no local frames in this RenderView's
-  // frame tree. This can happen if DidFlushPaint is called after the
-  // RenderView's local main frame is swapped to a remote frame. See
-  // http://crbug.com/513552.
-  if (main_frame->isWebRemoteFrame())
-    return;
-
-  // If we have a provisional frame we are between the start and commit stages
-  // of loading and we don't want to save stats.
-  if (!main_frame->provisionalDataSource()) {
-    WebDataSource* ds = main_frame->dataSource();
-    if (!ds)
-      return;
-
-    DocumentState* document_state = DocumentState::FromDataSource(ds);
-
-    // TODO(jar): The following code should all be inside a method, probably in
-    // NavigatorState.
-    Time now = Time::Now();
-    if (document_state->first_paint_time().is_null()) {
-      document_state->set_first_paint_time(now);
-    }
-    if (document_state->first_paint_after_load_time().is_null() &&
-        !document_state->finish_load_time().is_null()) {
-      document_state->set_first_paint_after_load_time(now);
-    }
-  }
-}
-
 void RenderViewImpl::OnClearFocusedElement() {
   if (webview())
     webview()->clearFocusedElement();
@@ -3042,7 +2965,8 @@ void RenderViewImpl::OnDiscardInputEvent(
   }
 
   std::unique_ptr<InputEventAck> ack(
-      new InputEventAck(input_event->type, INPUT_EVENT_ACK_STATE_NOT_CONSUMED));
+      new InputEventAck(InputEventAckSource::MAIN_THREAD, input_event->type,
+                        INPUT_EVENT_ACK_STATE_NOT_CONSUMED));
   OnInputEventAck(std::move(ack));
 }
 

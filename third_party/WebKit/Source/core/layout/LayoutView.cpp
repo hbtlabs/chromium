@@ -90,7 +90,6 @@ LayoutView::LayoutView(Document* document)
       m_selectionEnd(nullptr),
       m_selectionStartPos(-1),
       m_selectionEndPos(-1),
-      m_pageLogicalHeightChanged(false),
       m_layoutState(nullptr),
       m_layoutQuoteHead(nullptr),
       m_layoutCounterCount(0),
@@ -205,7 +204,9 @@ void LayoutView::checkLayoutState() {
 }
 #endif
 
-void LayoutView::setShouldDoFullPaintInvalidationOnResizeIfNeeded() {
+void LayoutView::setShouldDoFullPaintInvalidationOnResizeIfNeeded(
+    bool widthChanged,
+    bool heightChanged) {
   // When background-attachment is 'fixed', we treat the viewport (instead of
   // the 'root' i.e. html or body) as the background positioning area, and we
   // should fully invalidate on viewport resize if the background image is not
@@ -214,15 +215,10 @@ void LayoutView::setShouldDoFullPaintInvalidationOnResizeIfNeeded() {
   if (style()->hasFixedBackgroundImage() &&
       (!m_compositor ||
        !m_compositor->needsFixedRootBackgroundLayer(layer()))) {
-    IncludeScrollbarsInRect includeScrollbars =
-        RuntimeEnabledFeatures::rootLayerScrollingEnabled() ? IncludeScrollbars
-                                                            : ExcludeScrollbars;
-    if ((offsetWidth() != viewWidth(includeScrollbars) &&
-         mustInvalidateFillLayersPaintOnWidthChange(
-             style()->backgroundLayers())) ||
-        (offsetHeight() != viewHeight(includeScrollbars) &&
-         mustInvalidateFillLayersPaintOnHeightChange(
-             style()->backgroundLayers())))
+    if ((widthChanged && mustInvalidateFillLayersPaintOnWidthChange(
+                             style()->backgroundLayers())) ||
+        (heightChanged && mustInvalidateFillLayersPaintOnHeightChange(
+                              style()->backgroundLayers())))
       setShouldDoFullPaintInvalidation(PaintInvalidationBoundsChange);
   }
 }
@@ -231,7 +227,12 @@ void LayoutView::layout() {
   if (!document().paginated())
     setPageLogicalHeight(LayoutUnit());
 
-  setShouldDoFullPaintInvalidationOnResizeIfNeeded();
+  IncludeScrollbarsInRect includeScrollbars =
+      RuntimeEnabledFeatures::rootLayerScrollingEnabled() ? IncludeScrollbars
+                                                          : ExcludeScrollbars;
+  FloatSize viewSize(frameView()->visibleContentSize(includeScrollbars));
+  setShouldDoFullPaintInvalidationOnResizeIfNeeded(
+      offsetWidth() != viewSize.width(), offsetHeight() != viewSize.height());
 
   if (pageLogicalHeight() && shouldUsePrintingLayout()) {
     m_minPreferredLogicalWidth = m_maxPreferredLogicalWidth = logicalWidth();
@@ -245,8 +246,6 @@ void LayoutView::layout() {
   }
 
   SubtreeLayoutScope layoutScope(*this);
-
-  LayoutRect oldLayoutOverflowRect = layoutOverflowRect();
 
   // Use calcWidth/Height to get the new width/height, since this will take the
   // full page zoom factor into account.
@@ -278,23 +277,9 @@ void LayoutView::layout() {
   if (!needsLayout())
     return;
 
-  LayoutState rootLayoutState(pageLogicalHeight(), pageLogicalHeightChanged(),
-                              *this);
-
-  m_pageLogicalHeightChanged = false;
+  LayoutState rootLayoutState(pageLogicalHeight(), *this);
 
   layoutContent();
-
-  if (layoutOverflowRect() != oldLayoutOverflowRect) {
-    // The document element paints the viewport background, so we need to
-    // invalidate it when layout overflow changes.
-    // FIXME: Improve viewport background styling/invalidation/painting.
-    // crbug.com/475115
-    if (Element* documentElement = document().documentElement()) {
-      if (LayoutObject* rootObject = documentElement->layoutObject())
-        rootObject->setShouldDoFullPaintInvalidation();
-    }
-  }
 
 #if ENABLE(ASSERT)
   checkLayoutState();
@@ -886,10 +871,6 @@ IntRect LayoutView::documentRect() const {
 
 bool LayoutView::rootBackgroundIsEntirelyFixed() const {
   return style()->hasEntirelyFixedBackground();
-}
-
-LayoutRect LayoutView::backgroundRect(LayoutBox* backgroundLayoutObject) const {
-  return LayoutRect(documentRect());
 }
 
 IntSize LayoutView::layoutSize(

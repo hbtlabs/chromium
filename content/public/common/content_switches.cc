@@ -62,11 +62,6 @@ const char kBrowserCrashTest[]              = "crash-test";
 // Path to the exe to run for the renderer and plugin subprocesses.
 const char kBrowserSubprocessPath[]         = "browser-subprocess-path";
 
-// Causes the implementations of guests (inner WebContents) to use
-// out-of-process iframes.
-const char kUseCrossProcessFramesForGuests[]   =
-    "use-cross-process-frames-for-guests";
-
 // Sets the tile size used by composited layers.
 const char kDefaultTileWidth[]              = "default-tile-width";
 const char kDefaultTileHeight[]             = "default-tile-height";
@@ -215,6 +210,9 @@ const char kDisableLocalStorage[]           = "disable-local-storage";
 // Force logging to be disabled.  Logging is enabled by default in debug
 // builds.
 const char kDisableLogging[]                = "disable-logging";
+
+// Disables using CODECAPI_AVLowLatencyMode when creating DXVA decoders.
+const char kDisableLowLatencyDxva[]         = "disable-low-latency-dxva";
 
 // Disables usage of the namespace sandbox.
 const char kDisableNamespaceSandbox[]       = "disable-namespace-sandbox";
@@ -644,8 +642,8 @@ const char kMHTMLSkipNostoreAll[]           = "skip-nostore-all";
 // Use a Mojo-based LocalStorage implementation.
 const char kMojoLocalStorage[]              = "mojo-local-storage";
 
-// Use a Mojo-based ServiceWorker implementation.
-const char kMojoServiceWorker[]             = "mojo-service-worker";
+// Disables a Mojo-based ServiceWorker implementation.
+const char kDisableMojoServiceWorker[]      = "disable-mojo-service-worker";
 
 // Mutes audio sent to the audio device so it is not audible during
 // automated testing.
@@ -747,6 +745,8 @@ const char kRegisterPepperPlugins[]         = "register-pepper-plugins";
 
 // Enables remote debug over HTTP on the specified port.
 const char kRemoteDebuggingPort[]           = "remote-debugging-port";
+
+const char kRendererClientId[] = "renderer-client-id";
 
 // The contents of this flag are prepended to the renderer command line.
 // Useful values might be "valgrind" or "xterm -e gdb --args".
@@ -862,10 +862,6 @@ const char kContentImageTextureTarget[] = "content-image-texture-target";
 
 // Texture target for CHROMIUM_image backed video frame textures.
 const char kVideoImageTextureTarget[] = "video-image-texture-target";
-
-// Used in conjunction with kUseRemoteCompositing to enable the updated remote
-// compositing path using cc::LayerTreeHostRemote.
-const char kUseLayerTreeHostRemote[] = "use-layer-tree-host-remote";
 
 // Set when Chromium should use a mobile user agent.
 const char kUseMobileUserAgent[] = "use-mobile-user-agent";
@@ -1060,9 +1056,6 @@ const char kPpapiSubpixelRenderingSetting[] =
 // Enables the exporting of the tracing events to ETW. This is only supported on
 // Windows Vista and later.
 const char kTraceExportEventsToETW[] = "trace-export-events-to-etw";
-
-// Disables the DirectX screen capturer, but use GDI screen capturer.
-const char kDisableDirectXScreenCapturer[] = "disable-directx-screen-capturer";
 #endif
 
 #if defined(ENABLE_IPC_FUZZER)

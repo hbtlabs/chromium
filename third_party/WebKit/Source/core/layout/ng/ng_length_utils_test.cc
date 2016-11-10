@@ -5,6 +5,7 @@
 #include "core/layout/ng/ng_length_utils.h"
 
 #include "core/layout/ng/ng_constraint_space.h"
+#include "core/layout/ng/ng_constraint_space_builder.h"
 #include "core/layout/ng/ng_fragment.h"
 #include "core/layout/ng/ng_fragment_builder.h"
 #include "core/layout/ng/ng_physical_fragment.h"
@@ -27,20 +28,26 @@ class NGLengthUtilsTest : public ::testing::Test {
                                                      int block_size,
                                                      bool fixed_inline = false,
                                                      bool fixed_block = false) {
-    return new NGConstraintSpace(
-        HorizontalTopBottom, LeftToRight,
-        new NGPhysicalConstraintSpace(
-            NGPhysicalSize(LayoutUnit(inline_size), LayoutUnit(block_size)),
-            fixed_inline, fixed_block, false, false, FragmentNone, FragmentNone,
-            false));
+    NGConstraintSpaceBuilder builder(HorizontalTopBottom);
+    builder
+        .SetAvailableSize(
+            NGLogicalSize(LayoutUnit(inline_size), LayoutUnit(block_size)))
+        .SetPercentageResolutionSize(
+            NGLogicalSize(LayoutUnit(inline_size), LayoutUnit(block_size)))
+        .SetIsFixedSizeInline(fixed_inline)
+        .SetIsFixedSizeBlock(fixed_block);
+
+    return new NGConstraintSpace(HorizontalTopBottom, LTR,
+                                 builder.ToConstraintSpace());
   }
 
   LayoutUnit ResolveInlineLength(
       const Length& length,
-      LengthResolveType type = LengthResolveType::ContentSize) {
+      LengthResolveType type = LengthResolveType::ContentSize,
+      const WTF::Optional<MinAndMaxContentSizes>& sizes = WTF::nullopt) {
     NGConstraintSpace* constraintSpace = ConstructConstraintSpace(200, 300);
-    return ::blink::ResolveInlineLength(*constraintSpace, *style_, length,
-                                        type);
+    return ::blink::ResolveInlineLength(*constraintSpace, *style_, sizes,
+                                        length, type);
   }
 
   LayoutUnit ResolveBlockLength(
@@ -53,9 +60,11 @@ class NGLengthUtilsTest : public ::testing::Test {
   }
 
   LayoutUnit ComputeInlineSizeForFragment(
-      const NGConstraintSpace* constraintSpace =
-          ConstructConstraintSpace(200, 300)) {
-    return ::blink::ComputeInlineSizeForFragment(*constraintSpace, *style_);
+      const NGConstraintSpace* constraintSpace = ConstructConstraintSpace(200,
+                                                                          300),
+      const MinAndMaxContentSizes& sizes = MinAndMaxContentSizes()) {
+    return ::blink::ComputeInlineSizeForFragment(*constraintSpace, *style_,
+                                                 sizes);
   }
 
   LayoutUnit ComputeBlockSizeForFragment(
@@ -81,6 +90,26 @@ TEST_F(NGLengthUtilsTest, testResolveInlineLength) {
             ResolveInlineLength(Length(Auto), LengthResolveType::MaxSize));
   EXPECT_EQ(LayoutUnit(200), ResolveInlineLength(Length(FillAvailable),
                                                  LengthResolveType::MaxSize));
+  MinAndMaxContentSizes sizes;
+  sizes.min_content = LayoutUnit(30);
+  sizes.max_content = LayoutUnit(40);
+  EXPECT_EQ(LayoutUnit(30),
+            ResolveInlineLength(Length(MinContent),
+                                LengthResolveType::ContentSize, sizes));
+  EXPECT_EQ(LayoutUnit(40),
+            ResolveInlineLength(Length(MaxContent),
+                                LengthResolveType::ContentSize, sizes));
+  EXPECT_EQ(LayoutUnit(40),
+            ResolveInlineLength(Length(FitContent),
+                                LengthResolveType::ContentSize, sizes));
+  sizes.max_content = LayoutUnit(800);
+  EXPECT_EQ(LayoutUnit(200),
+            ResolveInlineLength(Length(FitContent),
+                                LengthResolveType::ContentSize, sizes));
+#ifndef NDEBUG
+  // This should fail a DCHECK.
+  EXPECT_DEATH(ResolveInlineLength(Length(FitContent)), "Check failed");
+#endif
 }
 
 TEST_F(NGLengthUtilsTest, testResolveBlockLength) {
@@ -97,6 +126,10 @@ TEST_F(NGLengthUtilsTest, testResolveBlockLength) {
 }
 
 TEST_F(NGLengthUtilsTest, testComputeInlineSizeForFragment) {
+  MinAndMaxContentSizes sizes;
+  sizes.min_content = LayoutUnit(30);
+  sizes.max_content = LayoutUnit(40);
+
   style_->setLogicalWidth(Length(30, Percent));
   EXPECT_EQ(LayoutUnit(60), ComputeInlineSizeForFragment());
 
@@ -146,7 +179,19 @@ TEST_F(NGLengthUtilsTest, testComputeInlineSizeForFragment) {
   style_->setLogicalWidth(Length(FillAvailable));
   EXPECT_EQ(LayoutUnit(400), ComputeInlineSizeForFragment());
 
-  // TODO(layout-ng): test {min,max}-content on max-width.
+  constraintSpace = ConstructConstraintSpace(120, 140);
+  style_->setLogicalWidth(Length(MinContent));
+  EXPECT_EQ(LayoutUnit(430),
+            ComputeInlineSizeForFragment(constraintSpace, sizes));
+  style_->setLogicalWidth(Length(100, Fixed));
+  style_->setMaxWidth(Length(MaxContent));
+  // Due to padding and box-sizing, width computes to 400px and max-width to
+  // 440px, so the result is 400.
+  EXPECT_EQ(LayoutUnit(400),
+            ComputeInlineSizeForFragment(constraintSpace, sizes));
+  style_->setPaddingLeft(Length(0, Fixed));
+  EXPECT_EQ(LayoutUnit(40),
+            ComputeInlineSizeForFragment(constraintSpace, sizes));
 }
 
 TEST_F(NGLengthUtilsTest, testComputeBlockSizeForFragment) {
@@ -231,8 +276,8 @@ TEST_F(NGLengthUtilsTest, testMargins) {
 
   NGConstraintSpace* constraintSpace(ConstructConstraintSpace(200, 300));
 
-  NGBoxStrut margins = ComputeMargins(*constraintSpace, *style_,
-                                      HorizontalTopBottom, LeftToRight);
+  NGBoxStrut margins =
+      ComputeMargins(*constraintSpace, *style_, HorizontalTopBottom, LTR);
 
   EXPECT_EQ(LayoutUnit(20), margins.block_start);
   EXPECT_EQ(LayoutUnit(52), margins.inline_end);
@@ -284,7 +329,7 @@ TEST_F(NGLengthUtilsTest, testAutoMargins) {
   builder.SetInlineSize(LayoutUnit(150));
   NGPhysicalFragment* physical_fragment = builder.ToFragment();
   NGFragment* fragment =
-      new NGFragment(HorizontalTopBottom, LeftToRight, physical_fragment);
+      new NGFragment(HorizontalTopBottom, LTR, physical_fragment);
 
   NGConstraintSpace* constraint_space(ConstructConstraintSpace(200, 300));
 

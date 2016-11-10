@@ -185,20 +185,21 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
 
   base::TimeTicks before_create = base::TimeTicks::Now();
 
+  animation_host_ = cc::AnimationHost::CreateMainInstance();
+
   cc::LayerTreeHostInProcess::InitParams params;
   params.client = this;
   params.task_graph_runner = context_factory_->GetTaskGraphRunner();
   params.settings = &settings;
   params.main_task_runner = task_runner_;
-  params.animation_host = cc::AnimationHost::CreateMainInstance();
+  params.mutator_host = animation_host_.get();
   host_ = cc::LayerTreeHostInProcess::CreateSingleThreaded(this, &params);
   UMA_HISTOGRAM_TIMES("GPU.CreateBrowserCompositor",
                       base::TimeTicks::Now() - before_create);
 
   animation_timeline_ =
       cc::AnimationTimeline::Create(cc::AnimationIdProvider::NextTimelineId());
-  host_->GetLayerTree()->animation_host()->AddAnimationTimeline(
-      animation_timeline_.get());
+  animation_host_->AddAnimationTimeline(animation_timeline_.get());
 
   host_->GetLayerTree()->SetRootLayer(root_web_layer_);
   host_->SetFrameSinkId(frame_sink_id_);
@@ -221,8 +222,7 @@ Compositor::~Compositor() {
     root_layer_->ResetCompositor();
 
   if (animation_timeline_)
-    host_->GetLayerTree()->animation_host()->RemoveAnimationTimeline(
-        animation_timeline_.get());
+    animation_host_->RemoveAnimationTimeline(animation_timeline_.get());
 
   // Stop all outstanding draws before telling the ContextFactory to tear
   // down any contexts that the |host_| may rely upon.
@@ -231,7 +231,7 @@ Compositor::~Compositor() {
   context_factory_->RemoveCompositor(this);
   auto* manager = context_factory_->GetSurfaceManager();
   for (auto& client : child_frame_sinks_) {
-    DCHECK(!client.is_null());
+    DCHECK(client.is_valid());
     manager->UnregisterFrameSinkHierarchy(frame_sink_id_, client);
   }
   manager->InvalidateFrameSinkId(frame_sink_id_);
@@ -246,7 +246,7 @@ void Compositor::AddFrameSink(const cc::FrameSinkId& frame_sink_id) {
 void Compositor::RemoveFrameSink(const cc::FrameSinkId& frame_sink_id) {
   auto it = child_frame_sinks_.find(frame_sink_id);
   DCHECK(it != child_frame_sinks_.end());
-  DCHECK(!it->is_null());
+  DCHECK(it->is_valid());
   context_factory_->GetSurfaceManager()->UnregisterFrameSinkHierarchy(
       frame_sink_id_, *it);
   child_frame_sinks_.erase(it);
@@ -404,7 +404,6 @@ void Compositor::SetWindow(ui::Window* window) {
 }
 
 ui::Window* Compositor::window() const {
-  DCHECK(window_);
   return window_;
 }
 #endif

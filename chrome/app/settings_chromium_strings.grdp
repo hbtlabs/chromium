@@ -10,6 +10,9 @@
       Get help with Chromium
     </message>
     <message name="IDS_SETTINGS_UPGRADE_UPDATING" desc="Status label: Updating Chromium">
+      Updating Chromium
+    </message>
+    <message name="IDS_SETTINGS_UPGRADE_UPDATING_PERCENT" desc="Status label: Updating Chromium (90%)">
       Updating Chromium (<ph name="PROGRESS_PERCENT">$1<ex>90%</ex></ph>)
     </message>
     <message name="IDS_SETTINGS_UPGRADE_SUCCESSFUL_RELAUNCH" desc="Status label: Successfully updated Chromium">
@@ -46,6 +49,14 @@
     </message>
     <message name="IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY" desc="The text displayed when Chromium is installed in side-by-side mode, which does not support setting as the default browser.">
       This is a secondary installation of Chromium, and cannot be made your default browser.
+    </message>
+  </if>
+
+  <!-- Import Settings Dialog -->
+  <!-- Android uses custom UI for Bookmark importing -->
+  <if expr="not is_android">
+    <message name="IDS_SETTINGS_IMPORT_FIND_YOUR_BOOKMARKS" desc="Helpful reminder for where to find imported bookmarks">
+      Find your bookmarks in the Chromium menu or on the bookmarks bar.
     </message>
   </if>
 

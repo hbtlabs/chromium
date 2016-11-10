@@ -18,7 +18,7 @@
 #include "third_party/icu/source/i18n/unicode/datefmt.h"
 #include "third_party/icu/source/i18n/unicode/dtptngen.h"
 #include "third_party/icu/source/i18n/unicode/smpdtfmt.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -106,9 +106,9 @@ void BaseDateTimeView::UpdateText() {
   SetTimer(now);
 }
 
-void BaseDateTimeView::GetAccessibleState(ui::AXViewState* state) {
-  ActionableView::GetAccessibleState(state);
-  state->role = ui::AX_ROLE_TIME;
+void BaseDateTimeView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  ActionableView::GetAccessibleNodeData(node_data);
+  node_data->role = ui::AX_ROLE_TIME;
 }
 
 BaseDateTimeView::BaseDateTimeView(SystemTrayItem* owner)
@@ -372,11 +372,11 @@ void TimeView::SetBorderFromLayout(ClockLayout clock_layout) {
     return;
 
   if (clock_layout == ClockLayout::HORIZONTAL_CLOCK) {
-    SetBorder(views::Border::CreateEmptyBorder(
+    SetBorder(views::CreateEmptyBorder(
         0, kTrayLabelItemHorizontalPaddingBottomAlignment, 0,
         kTrayLabelItemHorizontalPaddingBottomAlignment));
   } else {
-    SetBorder(views::Border::NullBorder());
+    SetBorder(views::NullBorder());
   }
 }
 
@@ -390,11 +390,11 @@ void TimeView::SetupLabels() {
   // TODO(estade): this should use the NativeTheme's secondary text color.
   vertical_label_minutes_->SetEnabledColor(kVerticalClockMinuteColor);
   // Pull the minutes up closer to the hours by using a negative top border.
-  vertical_label_minutes_->SetBorder(views::Border::CreateEmptyBorder(
-      MaterialDesignController::IsShelfMaterial()
-          ? kVerticalClockMinutesTopOffsetMD
-          : kVerticalClockMinutesTopOffset,
-      0, 0, 0));
+  vertical_label_minutes_->SetBorder(
+      views::CreateEmptyBorder(MaterialDesignController::IsShelfMaterial()
+                                   ? kVerticalClockMinutesTopOffsetMD
+                                   : kVerticalClockMinutesTopOffset,
+                               0, 0, 0));
 }
 
 void TimeView::SetupLabel(views::Label* label) {

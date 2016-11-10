@@ -214,10 +214,10 @@ CHAR-LIMIT guidelines:
       <message name="IDS_MANAGED_BY_YOUR_ADMINISTRATOR" desc="Popup message when the user clicks a UI element that has been disabled by enterprise policy.">
         Managed by your administrator
       </message>
-      <message name="IDS_MANAGED_BY_YOUR_PARENTS" desc="Popup message when the user clicks a UI element that has been disabled by his/her parents.">
+      <message name="IDS_MANAGED_BY_YOUR_PARENTS" desc="Popup message when the user clicks a UI element that has been disabled by their parents.">
         Managed by your parents
       </message>
-      <message name="IDS_MANAGED_BY_YOUR_PARENT" desc="Popup message when the user clicks a UI element that has been disabled by his/her parent.">
+      <message name="IDS_MANAGED_BY_YOUR_PARENT" desc="Popup message when the user clicks a UI element that has been disabled by their parent.">
         Managed by your parent
       </message>
       <message name="IDS_PREFS_SECTION_BASICS" desc='Title of "Basics" section of preferences. [CHAR-LIMIT=32]'>
@@ -644,9 +644,6 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_WEBSITE_SETTINGS_CATEGORY_ALLOWED_EXCEPT_THIRD_PARTY" desc="Summary text for when only third-party cookies are blocked.">
         Allowed, except third-party
       </message>
-      <message name="IDS_WEBSITE_SETTINGS_CATEGORY_ALWAYS_ALLOWED" desc="Summary text explaining that a permission is allowed, and cannot be changed by the user, e.g. JavaScript: always allowed.">
-        Always allowed
-      </message>
       <message name="IDS_WEBSITE_SETTINGS_CATEGORY_ASK" desc="Summary text explaining that Chrome will ask the user before allowing a site to use a certain permission, e.g. JavaScript: ask first.">
         Ask first
       </message>
@@ -812,14 +809,6 @@ To obtain new licenses, connect to the internet and play your downloaded content
         <ph name="STORAGE_AMOUNT">%1$s<ex>2 MB</ex></ph> stored data
       </message>
 
-      <!-- Fullscreen preferences -->
-      <message name="IDS_WEBSITE_SETTINGS_FULLSCREEN" desc="Title for Fullscreen settings, which control which websites can enter fullscreen without popup alert.">
-        Full screen
-      </message>
-      <message name="IDS_FULLSCREEN_PERMISSION_TITLE" desc="Title for the permission of entering fullscreen without popup alert [CHAR-LIMIT=32]">
-        Full screen
-      </message>
-
       <!-- USB preferences -->
       <message name="IDS_WEBSITE_SETTINGS_USB" desc="Title for USB settings, which control which of the user's USB devices can be accessed from websites.">
         USB
@@ -868,13 +857,13 @@ To obtain new licenses, connect to the internet and play your downloaded content
         Spend less on data by using Google to optimize the pages you visit. Pages accessed using private connections (HTTPS) or in Incognito tabs will not be optimized or seen by Google.
       </message>
       <message name="IDS_DATA_REDUCTION_ENABLE_BUTTON" desc="Button the user presses if they want to enable Data Saver" >
-        Enable Data Saver
+        Turn on Data Saver
       </message>
       <message name="IDS_DATA_REDUCTION_ENABLED_SWITCH" desc="Message to show when the Data Saver feature is enabled via the switch on the First Run Experience card" >
-        Data Saver enabled
+        Data Saver is on
       </message>
       <message name="IDS_DATA_REDUCTION_DISABLED_SWITCH" desc="Message to show when the Data Saver feature is disabled via the switch on the First Run Experience card" >
-        Data Saver disabled
+        Data Saver is off
       </message>
       <message name="IDS_DATA_REDUCTION_ENABLED_TOAST" desc="Toast message displayed after the user enables Data Saver from the promo" >
         Data Saver is on. Manage it in Settings.
@@ -1206,22 +1195,22 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_BLUETOOTH_DIALOG_TITLE" desc="The header message shown on top of the dialog that lets the user pick a Bluetooth device for the site to pair with. Shown above a list of Bluetooth devices discovered. ">
         <ph name="SITE">%1$s<ex>https://www.google.com</ex></ph> wants to pair with:</message>
       <message name="IDS_BLUETOOTH_SEARCHING" desc="The message shown in the Bluetooth picker dialog while scanning for devices.">
-        Scanning for devices… <ph name="BEGIN_LINK">&lt;link&gt;</ph>Get help<ph name="END_LINK">&lt;/link&gt;</ph>
+        <ph name="BEGIN_LINK">&lt;link&gt;</ph>Get help<ph name="END_LINK">&lt;/link&gt;</ph> while scanning for devices…
       </message>
       <message name="IDS_BLUETOOTH_CONFIRM_BUTTON" desc="The button to confirm association of a website with a Bluetooth device. Use the same term as in 'Pair this Bluetooth headset with your phone.'">
         Pair
       </message>
       <message name="IDS_BLUETOOTH_NOT_SEEING_IT" desc="The message to show at the bottom of the dialog when Bluetooth scanning has uncovered some items but is still scanning for others.">
-        Not seeing your device? <ph name="BEGIN_LINK">&lt;link&gt;</ph>Get help<ph name="END_LINK">&lt;/link&gt;</ph>.
+        <ph name="BEGIN_LINK">&lt;link&gt;</ph>Get help<ph name="END_LINK">&lt;/link&gt;</ph> while scanning for devices…
       </message>
       <message name="IDS_BLUETOOTH_NOT_SEEING_IT_IDLE_NONE_FOUND" desc="The message to show at the bottom of the dialog when Bluetooth scanning has not uncovered any devices and it is no longer discovering devices.">
-        <ph name="BEGIN_LINK">&lt;link&gt;</ph>Get help<ph name="END_LINK">&lt;/link&gt;</ph>
+        <ph name="BEGIN_LINK1">&lt;link1&gt;</ph>Get help<ph name="END_LINK1">&lt;/link1&gt;</ph> or <ph name="BEGIN_LINK2">&lt;link2&gt;</ph>re-scan<ph name="END_LINK2">&lt;/link2&gt;</ph>
       </message>
       <message name="IDS_BLUETOOTH_NOT_SEEING_IT_IDLE_SOME_FOUND" desc="The message to show at the bottom of the dialog when Bluetooth scanning has uncovered some items but is no longer discovering devices. Allows the user to restart the scan, in case their device is not listed.">
-        Not seeing your device? <ph name="BEGIN_LINK1">&lt;link1&gt;</ph>Get help<ph name="END_LINK1">&lt;/link1&gt;</ph> or <ph name="BEGIN_LINK2">&lt;link2&gt;</ph>re-scan<ph name="END_LINK2">&lt;/link2&gt;</ph>.
+        <ph name="BEGIN_LINK1">&lt;link1&gt;</ph>Get help<ph name="END_LINK1">&lt;/link1&gt;</ph> or <ph name="BEGIN_LINK2">&lt;link2&gt;</ph>re-scan<ph name="END_LINK2">&lt;/link2&gt;</ph>
       </message>
       <message name="IDS_BLUETOOTH_NOT_FOUND" desc="The message to show when no items were found during Bluetooth device scanning.">
-        No Bluetooth devices found. <ph name="BEGIN_LINK">&lt;link&gt;</ph>Re-scan<ph name="END_LINK">&lt;/link&gt;</ph>
+        No Bluetooth devices found
       </message>
       <message name="IDS_BLUETOOTH_ADAPTER_OFF" desc="The message to show when scanning cannot start because the bluetooth adapter is turned off.">
         Turn on Bluetooth in <ph name="BEGIN_LINK">&lt;link&gt;</ph>device settings<ph name="END_LINK">&lt;/link&gt;</ph> to allow pairing
@@ -1459,9 +1448,6 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_CONTEXTMENU_SAVE_LINK" desc="Context sensitive menu item for saving the target of a link [CHAR-LIMIT=30]">
         Download link
       </message>
-      <message name="IDS_CONTEXTMENU_SAVE_OFFLINE" desc="Context sensitive menu item for saving an offline version of the page that this link is targeting [CHAR-LIMIT=30]">
-        Save linked page for later
-      </message>
       <message name="IDS_CONTEXTMENU_SAVE_IMAGE" desc="Context sensitive menu item for saving the selected image. [CHAR-LIMIT=30]">
         Download image
       </message>
@@ -1558,8 +1544,20 @@ To obtain new licenses, connect to the internet and play your downloaded content
       </message>
 
       <!-- Add to Home screen strings -->
-      <message name="IDS_MENU_ADD_TO_HOMESCREEN" desc="Menu item for adding a shortcut to the Home screen. [CHAR-LIMIT=27]">
+      <message name="IDS_MENU_ADD_TO_HOMESCREEN" desc="Menu item for adding a shortcut to the Home screen (default title). [CHAR-LIMIT=27]">
         Add to Home screen
+      </message>
+      <message name="IDS_MENU_ADD_TO_HOMESCREEN_ADD" desc="Menu item for adding a shortcut to the Home screen. [CHAR-LIMIT=27]">
+        Add shortcut
+      </message>
+      <message name="IDS_MENU_ADD_TO_HOMESCREEN_INSTALL" desc="Menu item for adding a shortcut to the Home screen. [CHAR-LIMIT=27]">
+        Install web app
+      </message>
+      <message name="IDS_APP_BANNER_ADD" desc="A button in an app banner to confirm adding a site to homescreen">
+        Add
+      </message>
+      <message name="IDS_APP_BANNER_INSTALL" desc="A button in an app banner to confirm adding a site to homescreen">
+        Install
       </message>
       <message name="IDS_ADDED_TO_HOMESCREEN" desc="Indicates that the website with the specified name was added to the user's Home screen.">
         <ph name="NAME">%1$s<ex>Google</ex></ph> was added to your Home screen
@@ -1589,24 +1587,6 @@ To obtain new licenses, connect to the internet and play your downloaded content
       </message>
       <message name="IDS_PAGE_INFO_DETAILS_LINK" desc="The label of the link to open the detailed connection information popup from the page info bubble.">
         Details
-      </message>
-      <message name="IDS_PAGE_INFO_CONNECTION_HTTPS" desc="Message to display in the page info bubble when the connection is private (HTTPS).">
-        Your connection to this site is private.
-      </message>
-      <message name="IDS_PAGE_INFO_CONNECTION_HTTP" desc="Message to display in the page info bubble when the connection is not private (HTTP).">
-        Your connection to this site is not private.
-      </message>
-      <message name="IDS_PAGE_INFO_CONNECTION_MIXED" desc="Message to display in the page info bubble when the main connection is private, but there is content on the page that is not private.">
-        Your connection to this site is private, but someone on the network might be able to change the look of the page.
-      </message>
-      <message name="IDS_PAGE_INFO_CONNECTION_SHA1" desc="Message to display in the page info bubble when the page is not considered private (because the connection used SHA-1 for certificate signatures, which are not considered secure anymore).">
-        This site uses a weak security configuration (SHA-1 signatures), so your connection may not be private.
-      </message>
-      <message name="IDS_PAGE_INFO_CONNECTION_BROKEN" desc="Message to display in the page info bubble when the connection is insecure because the HTTPS certificate is invalid.">
-        Your connection to this site is not private. Attackers might be trying to steal your information (for example, photos, passwords, messages and credit cards) from <ph name="DOMAIN_NAME">%1$s<ex>google.com</ex></ph>.
-      </message>
-      <message name="IDS_PAGE_INFO_CONNECTION_INTERNAL_PAGE" desc="Message to display in the page info bubble when the page is an internal Chrome page (e.g. the bookmarks page, or about:blank).">
-        You are viewing a secure Google Chrome page.
       </message>
       <message name="IDS_PAGE_INFO_CONNECTION_OFFLINE" desc="Message to display in the page info bubble when viewing and offline page.">
         You are viewing an offline copy of this page from <ph name="CREATION_TIME">%1$s<ex>Feb 9, 2016</ex></ph>
@@ -1909,6 +1889,12 @@ To obtain new licenses, connect to the internet and play your downloaded content
       </message>
       <message name="IDS_ACCESSIBILITY_STOP" desc="Content description for the stop button that stops playing the media.">
         Stop
+      </message>
+      <message name="IDS_ACCESSIBILITY_PREVIOUS_TRACK" desc="Content description for the previous track button that switchs media to the previous track.">
+        Previous track
+      </message>
+      <message name="IDS_ACCESSIBILITY_NEXT_TRACK" desc="Content description for the next track button that switchs media to the next track.">
+        Next track
       </message>
 
       <!-- New Tab Page strings -->
@@ -2325,6 +2311,9 @@ To obtain new licenses, connect to the internet and play your downloaded content
           =1 {Remove 1 selected item}
           other {Remove # selected items}}
       </message>
+      <message name="IDS_SELECTED" desc="A label for the number of items selected.">
+        selected
+      </message>
 
       <message name="IDS_VIDEO_CALL_NOTIFICATION_TEXT_2" desc="Text to be shown as a notification when a WebRTC video call is in progress.">
         Accessing video input
@@ -2545,7 +2534,7 @@ You can control the Physical Web in Chrome Settings.
         <ph name="SITE">%1$s<ex>https://www.google.com</ex></ph> wants to connect to:
       </message>
       <message name="IDS_USB_CHOOSER_DIALOG_NO_DEVICES_FOUND_PROMPT" desc="The text that is used to inform the user that no devices found in the USB chooser dialog.">
-        No devices found.
+        No devices found
       </message>
       <message name="IDS_USB_CHOOSER_DIALOG_CONNECT_BUTTON_TEXT" desc="The text that is shown on the connect button in the USB chooser dialog.">
         Connect
@@ -2576,11 +2565,56 @@ You can control the Physical Web in Chrome Settings.
       <message name="IDS_PAYMENTS_EDIT_CONTACT_DETAILS_LABEL" desc="The title of the dialog for user to edit their contact information, such as the user's full name, an email address or a phone number.">
         Edit contact info
       </message>
-      <message name="IDS_PAYMENTS_CREATE_CARD" desc="The title of the dialog for user to add new payment card.">
+      <message name="IDS_PAYMENTS_ADD_CARD" desc="The title of the dialog for user to add new payment card.">
         Add card
+      </message>
+      <message name="IDS_PAYMENTS_BILLING_ADDRESS_REQUIRED" desc="The label to indicate billing address is required for payment card.">
+        Billing address required
+      </message>
+      <message name="IDS_PAYMENTS_ADD_BILLING_ADDRESS" desc="The title of the dialog for user to add billing address to payment card.">
+        Add billing address
+      </message>
+      <message name="IDS_PAYMENTS_NAME_ON_CARD_REQUIRED" desc="The label to indicate name on card is required for payment card.">
+        Name on card required
+      </message>
+      <message name="IDS_PAYMENTS_ADD_NAME_ON_CARD" desc="The title of the dialog for user to add name on card to payment card.">
+        Add name on card
+      </message>
+      <message name="IDS_PAYMENTS_CARD_NUMBER_INVALID" desc="The label to indicate payment card number is invalid.">
+        Card number invalid
+      </message>
+      <message name="IDS_PAYMENTS_ADD_VALID_CARD_NUMBER" desc="The title of the dialog for user to add valid payment card number.">
+        Add valid card number
+      </message>
+      <message name="IDS_PAYMENTS_MORE_INFORMATION_REQUIRED" desc="The label to indicate more information is required for payment card.">
+        More information required
+      </message>
+      <message name="IDS_PAYMENTS_ADD_MORE_INFORMATION" desc="The title of the dialog for user to add more information to payment card.">
+        Add more information
       </message>
       <message name="IDS_PAYMENTS_EDIT_CARD" desc="The title of the dialog for user to edit payment card.">
         Edit card
+      </message>
+      <message name="IDS_PAYMENTS_CREDIT_CARD_EXPIRATION_DATE_ABBR" desc="Abbreviated label for credit card expiration date. [CHAR-LIMIT=32]">
+        Exp: <ph name="EXPIRATION_MONTH">%1$s<ex>06</ex></ph>/<ph name="EXPIRATION_YEAR">%2$s<ex>17</ex></ph>
+      </message>
+      <message name="IDS_PAYMENTS_PHONE_NUMBER_REQUIRED" desc="The label to indicate phone number is required in the shipping address. This phone number can be used, for example, if there's a problem with shipping a package to its destination.">
+        Phone number required
+      </message>
+      <message name="IDS_PAYMENTS_ADD_PHONE_NUMBER" desc="The title of the dialog for user to add phone number to the shipping address. This phone number can be used, for example, if there's a problem with shipping a package to its destination.">
+        Add phone number
+      </message>
+      <message name="IDS_PAYMENTS_RECIPIENT_REQUIRED" desc="The label to indicate recipient is required in the shipping address. The recipient could be a person or institute name identifies the receiver of the shipping package.">
+        Recipient required
+      </message>
+      <message name="IDS_PAYMENTS_ADD_RECIPIENT" desc="The title of the dialog for user to add recipient in the shipping address. The recipient could be a person or institute name identifies the receiver of the shipping package.">
+        Add recipient
+      </message>
+      <message name="IDS_PAYMENTS_INVALID_ADDRESS" desc="The label to indicate the shipping address is invalid. For example, missing state or city name.">
+        Invalid address
+      </message>
+      <message name="IDS_PAYMENTS_ADD_VALID_ADDRESS" desc="The title of the dialog for user to add valid shipping address. For example, missing state or city name.">
+        Add valid address
       </message>
       <message name="IDS_PAYMENTS_ORDER_SUMMARY_LABEL" desc="The title of the section that shows the summary of the order, including names and prices of individual line items, i.e. the bill.">
         Order summary
@@ -2686,7 +2720,7 @@ You can control the Physical Web in Chrome Settings.
         Search with Sogou
       </message>
       <message name="IDS_SOGOU_EXPLANATION" desc="Text explaining why Sogou should be used as default search engine.">
-        Chrome can use Sogou for search in China. You can change this in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
+        Chrome can use <ph name="BEGIN_BOLD">&lt;b&gt;</ph>Sogou<ph name="END_BOLD">&lt;/b&gt;</ph> for search in China. You can change this in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
       <message name="IDS_KEEP_GOOGLE" desc="Text representing the option that the user wants to keep Google as the default search engine.">
         Keep Google
@@ -2705,6 +2739,19 @@ You can control the Physical Web in Chrome Settings.
 
       <message name="IDS_INSTANT_APPS_OPEN_IN_APP" desc="Button label for the user action that will open an Instant App.">
         Open app
+      </message>
+
+      <!-- WebAPK related strings -->
+      <message name="IDS_WEBAPK_UNKNOWN_SOURCES_DIALOG_TITLE" desc="Title of dialog warning user that installation from Unknown sources is required for WebAPK experiment.">
+        Improved Add to Home screen Experiment
+      </message>
+
+      <message name="IDS_WEBAPK_UNKNOWN_SOURCES_DIALOG_MESSAGE" desc="Text of dialog warning user that installation from Unknown sources is required for WebAPK experiment">
+        Turn on “Unknown sources” in Android security settings to try "Improved Add to Home screen" experiment. Be sure to disable this setting when you’re done trying it out.
+      </message>
+
+      <message name="IDS_WEBAPK_UNKNOWN_SOURCES_SETTINGS_BUTTON" desc="Button label for opening Android Settings from dialog warning user that installation from Unknown sources is required for WebAPK experiment.">
+        Settings
       </message>
     </messages>
   </release>

@@ -69,6 +69,7 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/latency_info.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/native_theme/native_theme_switches.h"
 
 #if defined(USE_AURA)
 #include "content/browser/renderer_host/render_widget_host_view_aura.h"
@@ -552,6 +553,11 @@ std::string SitePerProcessBrowserTest::DepictFrameTree(FrameTreeNode* node) {
 void SitePerProcessBrowserTest::SetUpCommandLine(
     base::CommandLine* command_line) {
   IsolateAllSitesForTesting(command_line);
+#if !defined(OS_ANDROID)
+  // TODO(bokan): Needed for scrollability check in
+  // FrameOwnerPropertiesPropagationScrolling. crbug.com/662196.
+  command_line->AppendSwitch(switches::kDisableOverlayScrollbar);
+#endif
 };
 
 void SitePerProcessBrowserTest::SetUpOnMainThread() {
@@ -626,24 +632,28 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHighDPIBrowserTest,
       "a.com", "/cross_site_iframe_factory.html?a(b)"));
   NavigateToURL(shell(), main_url);
 
-  EXPECT_EQ(SitePerProcessHighDPIBrowserTest::kDeviceScaleFactor,
-            GetFrameDeviceScaleFactor(web_contents()));
+  // On Android forcing device scale factor does not work for tests, therefore
+  // we ensure that make frame and iframe have the same DIP scale there, but
+  // not necessarily kDeviceScaleFactor.
+  const double expected_dip_scale =
+#if defined(OS_ANDROID)
+      GetFrameDeviceScaleFactor(web_contents());
+#else
+      SitePerProcessHighDPIBrowserTest::kDeviceScaleFactor;
+#endif
+
+  EXPECT_EQ(expected_dip_scale, GetFrameDeviceScaleFactor(web_contents()));
 
   FrameTreeNode* root = web_contents()->GetFrameTree()->root();
+  ASSERT_EQ(1U, root->child_count());
+
   FrameTreeNode* child = root->child_at(0);
-  EXPECT_EQ(SitePerProcessHighDPIBrowserTest::kDeviceScaleFactor,
-            GetFrameDeviceScaleFactor(child));
+  EXPECT_EQ(expected_dip_scale, GetFrameDeviceScaleFactor(child));
 }
 
 // Ensure that navigating subframes in --site-per-process mode works and the
 // correct documents are committed.
-#if defined(OS_WIN)
-// This test is flaky on Windows, see https://crbug.com/629419.
-#define MAYBE_CrossSiteIframe DISABLED_CrossSiteIframe
-#else
-#define MAYBE_CrossSiteIframe CrossSiteIframe
-#endif
-IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, MAYBE_CrossSiteIframe) {
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, CrossSiteIframe) {
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(a,a(a,a(a)))"));
   NavigateToURL(shell(), main_url);
@@ -679,7 +689,11 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, MAYBE_CrossSiteIframe) {
 
   // Load cross-site page into iframe.
   GURL url = embedded_test_server()->GetURL("foo.com", "/title2.html");
-  NavigateFrameToURL(root->child_at(0), url);
+  {
+    RenderFrameDeletedObserver deleted_observer(child->current_frame_host());
+    NavigateFrameToURL(root->child_at(0), url);
+    deleted_observer.WaitUntilDeleted();
+  }
   // Verify that the navigation succeeded and the expected URL was loaded.
   EXPECT_TRUE(observer.last_navigation_succeeded());
   EXPECT_EQ(url, observer.last_navigation_url());
@@ -723,7 +737,11 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, MAYBE_CrossSiteIframe) {
 
   // Load another cross-site page into the same iframe.
   url = embedded_test_server()->GetURL("bar.com", "/title3.html");
-  NavigateFrameToURL(root->child_at(0), url);
+  {
+    RenderFrameDeletedObserver deleted_observer(child->current_frame_host());
+    NavigateFrameToURL(root->child_at(0), url);
+    deleted_observer.WaitUntilDeleted();
+  }
   EXPECT_TRUE(observer.last_navigation_succeeded());
   EXPECT_EQ(url, observer.last_navigation_url());
 
@@ -1717,13 +1735,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, RestrictFrameDetach) {
       DepictFrameTree(root));
 }
 
-#if defined(OS_WIN)
-// This test is flaky on Windows, see https://crbug.com/629419.
-#define MAYBE_NavigateRemoteFrame DISABLED_NavigateRemoteFrame
-#else
-#define MAYBE_NavigateRemoteFrame NavigateRemoteFrame
-#endif
-IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, MAYBE_NavigateRemoteFrame) {
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, NavigateRemoteFrame) {
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(a,a(a,a(a)))"));
   NavigateToURL(shell(), main_url);
@@ -1742,7 +1754,11 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, MAYBE_NavigateRemoteFrame) {
 
   // Load cross-site page into iframe.
   GURL url = embedded_test_server()->GetURL("foo.com", "/title2.html");
-  NavigateFrameToURL(root->child_at(0), url);
+  {
+    RenderFrameDeletedObserver deleted_observer(child->current_frame_host());
+    NavigateFrameToURL(root->child_at(0), url);
+    deleted_observer.WaitUntilDeleted();
+  }
   EXPECT_TRUE(observer.last_navigation_succeeded());
   EXPECT_EQ(url, observer.last_navigation_url());
 
@@ -1763,7 +1779,11 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, MAYBE_NavigateRemoteFrame) {
   // Emulate the main frame changing the src of the iframe such that it
   // navigates cross-site.
   url = embedded_test_server()->GetURL("bar.com", "/title3.html");
-  NavigateIframeToURL(shell()->web_contents(), "child-0", url);
+  {
+    RenderFrameDeletedObserver deleted_observer(child->current_frame_host());
+    NavigateIframeToURL(shell()->web_contents(), "child-0", url);
+    deleted_observer.WaitUntilDeleted();
+  }
   EXPECT_TRUE(observer.last_navigation_succeeded());
   EXPECT_EQ(url, observer.last_navigation_url());
 
@@ -1782,7 +1802,11 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, MAYBE_NavigateRemoteFrame) {
 
   // Navigate back to the parent's origin and ensure we return to the
   // parent's process.
-  NavigateFrameToURL(child, http_url);
+  {
+    RenderFrameDeletedObserver deleted_observer(child->current_frame_host());
+    NavigateFrameToURL(child, http_url);
+    deleted_observer.WaitUntilDeleted();
+  }
   EXPECT_EQ(http_url, observer.last_navigation_url());
   EXPECT_TRUE(observer.last_navigation_succeeded());
   EXPECT_EQ(shell()->web_contents()->GetSiteInstance(),
@@ -2966,6 +2990,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
 // Verify that "scrolling" property on frame elements propagates to child frames
 // correctly.
 // Does not work on android since android has scrollbars overlayed.
+// TODO(bokan): Pretty soon most/all platforms will use overlay scrollbars. This
+// test should find a better way to check for scrollability. crbug.com/662196.
 #if defined(OS_ANDROID)
 #define MAYBE_FrameOwnerPropertiesPropagationScrolling \
         DISABLED_FrameOwnerPropertiesPropagationScrolling
@@ -4248,13 +4274,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, IndexedFrameAccess) {
   EXPECT_EQ(1, GetReceivedMessages(child2));
 }
 
-#if defined(OS_WIN)
-// This test is flaky on Windows, see https://crbug.com/629419.
-#define MAYBE_RFPHDestruction DISABLED_RFPHDestruction
-#else
-#define MAYBE_RFPHDestruction RFPHDestruction
-#endif
-IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, MAYBE_RFPHDestruction) {
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, RFPHDestruction) {
   GURL main_url(embedded_test_server()->GetURL("/site_per_process_main.html"));
   NavigateToURL(shell(), main_url);
 
@@ -4266,7 +4286,11 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, MAYBE_RFPHDestruction) {
   // Load cross-site page into iframe.
   FrameTreeNode* child = root->child_at(0);
   GURL url = embedded_test_server()->GetURL("foo.com", "/title2.html");
-  NavigateFrameToURL(root->child_at(0), url);
+  {
+    RenderFrameDeletedObserver deleted_observer(child->current_frame_host());
+    NavigateFrameToURL(root->child_at(0), url);
+    deleted_observer.WaitUntilDeleted();
+  }
   EXPECT_TRUE(observer.last_navigation_succeeded());
   EXPECT_EQ(url, observer.last_navigation_url());
   EXPECT_EQ(
@@ -4282,7 +4306,11 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, MAYBE_RFPHDestruction) {
 
   // Load another cross-site page.
   url = embedded_test_server()->GetURL("bar.com", "/title3.html");
-  NavigateIframeToURL(shell()->web_contents(), "test", url);
+  {
+    RenderFrameDeletedObserver deleted_observer(child->current_frame_host());
+    NavigateIframeToURL(shell()->web_contents(), "test", url);
+    deleted_observer.WaitUntilDeleted();
+  }
   EXPECT_TRUE(observer.last_navigation_succeeded());
   EXPECT_EQ(url, observer.last_navigation_url());
   EXPECT_EQ(
@@ -4297,14 +4325,16 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, MAYBE_RFPHDestruction) {
       DepictFrameTree(root));
 
   // Navigate back to the parent's origin.
-  RenderFrameDeletedObserver deleted_observer(child->current_frame_host());
-  url = embedded_test_server()->GetURL("/title1.html");
-  NavigateFrameToURL(child, url);
+  {
+    RenderFrameDeletedObserver deleted_observer(child->current_frame_host());
+    url = embedded_test_server()->GetURL("/title1.html");
+    NavigateFrameToURL(child, url);
+    // Wait for the old process to exit, to verify that the proxies go away.
+    deleted_observer.WaitUntilDeleted();
+  }
   EXPECT_EQ(url, observer.last_navigation_url());
   EXPECT_TRUE(observer.last_navigation_succeeded());
 
-  // Wait for the old process to exit, to verify that the proxies go away.
-  deleted_observer.WaitUntilDeleted();
   EXPECT_EQ(
       " Site A\n"
       "   |--Site A\n"

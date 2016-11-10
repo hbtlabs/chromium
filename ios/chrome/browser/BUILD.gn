@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
-import("//ios/web/js_compile.gni")
 import("//third_party/protobuf/proto_library.gni")
 
 declare_args() {
@@ -74,11 +73,11 @@ source_set("browser") {
     "xcallback_parameters.mm",
   ]
   deps = [
-    ":injected_js",
     "//base",
     "//components/autofill/core/browser",
     "//components/autofill/core/common",
     "//components/gcm_driver",
+    "//components/handoff",
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
     "//components/metrics",
@@ -114,14 +113,6 @@ source_set("browser") {
   libs = [ "UIKit.framework" ]
 }
 
-# TODO(crbug.com/658242): this target is there to avoid breaking downstream
-# when this CL rolls. It should be removed in favor of browser.
-group("browser_no_public_deps") {
-  public_deps = [
-    ":browser",
-  ]
-}
-
 source_set("browser_impl") {
   sources = [
     "application_context_impl.cc",
@@ -152,6 +143,7 @@ source_set("browser_impl") {
     "//components/translate/core/browser",
     "//components/update_client",
     "//components/variations",
+    "//components/variations/field_trial_config",
     "//components/variations/service",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/browser_state:browser_state_impl",
@@ -215,19 +207,6 @@ source_set("about_flags") {
     "GOOGLE_TEST_OAUTH_CLIENT_SECRET=\"$google_test_oauth_client_secret\"",
     "GOOGLE_TEST_OAUTH_URL=\"$google_test_oauth_url\"",
     "GOOGLE_TEST_SYNC_URL=\"$google_test_sync_url\"",
-  ]
-}
-
-# TODO(crbug.com/487804): use js_compile_checked instead once the errors have
-# been fixed.
-# TODO(crbug.com/658242): this target should be split in individual targets
-# and the correct dependency used.
-js_compile_unchecked("injected_js") {
-  visibility = [ ":browser" ]
-  sources = [
-    "find_in_page/resources/find_in_page.js",
-    "passwords/resources/credential_manager.js",
-    "passwords/resources/password_controller.js",
   ]
 }
 

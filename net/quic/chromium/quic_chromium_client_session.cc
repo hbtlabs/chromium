@@ -546,19 +546,18 @@ bool QuicChromiumClientSession::GetSSLInfo(SSLInfo* ssl_info) const {
   ssl_info->cert_status = cert_verify_result_->cert_status;
   ssl_info->cert = cert_verify_result_->verified_cert;
 
-  // TODO(davidben): Switch these to the TLS 1.3 AEAD-only ciphers. That will
-  // place them in the cache in the default configuration, so do this when we
-  // are comfortable supporting those values long-term.
+  // Map QUIC AEADs to the corresponding TLS 1.3 cipher. OpenSSL's cipher suite
+  // numbers begin with a stray 0x03, so mask them off.
   QuicTag aead = crypto_stream_->crypto_negotiated_params().aead;
   uint16_t cipher_suite;
   int security_bits;
   switch (aead) {
     case kAESG:
-      cipher_suite = 0xc02f;  // TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+      cipher_suite = TLS1_CK_AES_128_GCM_SHA256 & 0xffff;
       security_bits = 128;
       break;
     case kCC20:
-      cipher_suite = 0xcc13;  // TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+      cipher_suite = TLS1_CK_CHACHA20_POLY1305_SHA256 & 0xffff;
       security_bits = 256;
       break;
     default:
@@ -743,7 +742,7 @@ QuicChromiumClientSession::CreateIncomingReliableStreamImpl(QuicStreamId id) {
 }
 
 void QuicChromiumClientSession::CloseStream(QuicStreamId stream_id) {
-  ReliableQuicStream* stream = GetOrCreateStream(stream_id);
+  QuicStream* stream = GetOrCreateStream(stream_id);
   if (stream) {
     logger_->UpdateReceivedFrameCounts(stream_id, stream->num_frames_received(),
                                        stream->num_duplicate_frames_received());
@@ -759,7 +758,7 @@ void QuicChromiumClientSession::CloseStream(QuicStreamId stream_id) {
 void QuicChromiumClientSession::SendRstStream(QuicStreamId id,
                                               QuicRstStreamErrorCode error,
                                               QuicStreamOffset bytes_written) {
-  ReliableQuicStream* stream = GetOrCreateStream(id);
+  QuicStream* stream = GetOrCreateStream(id);
   if (stream) {
     if (id % 2 == 0) {
       // Stream with even stream is initiated by server for PUSH.
@@ -1008,6 +1007,13 @@ void QuicChromiumClientSession::OnSuccessfulVersionNegotiation(
     const QuicVersion& version) {
   logger_->OnSuccessfulVersionNegotiation(version);
   QuicSpdySession::OnSuccessfulVersionNegotiation(version);
+
+  ObserverSet::iterator it = observers_.begin();
+  while (it != observers_.end()) {
+    Observer* observer = *it;
+    ++it;
+    observer->OnSuccessfulVersionNegotiation(version);
+  }
 }
 
 int QuicChromiumClientSession::HandleWriteError(
@@ -1239,7 +1245,7 @@ void QuicChromiumClientSession::CloseSessionOnErrorInner(
 
 void QuicChromiumClientSession::CloseAllStreams(int net_error) {
   while (!dynamic_streams().empty()) {
-    ReliableQuicStream* stream = dynamic_streams().begin()->second.get();
+    QuicStream* stream = dynamic_streams().begin()->second.get();
     QuicStreamId id = stream->id();
     static_cast<QuicChromiumClientStream*>(stream)->OnError(net_error);
     CloseStream(id);
@@ -1459,6 +1465,10 @@ QuicChromiumClientSession::GetConnectTiming() {
   connect_timing_.ssl_start = connect_timing_.connect_start;
   connect_timing_.ssl_end = connect_timing_.connect_end;
   return connect_timing_;
+}
+
+QuicVersion QuicChromiumClientSession::GetQuicVersion() const {
+  return connection()->version();
 }
 
 }  // namespace net

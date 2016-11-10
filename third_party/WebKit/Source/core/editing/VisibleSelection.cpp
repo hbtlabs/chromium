@@ -32,7 +32,6 @@
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/SelectionAdjuster.h"
 #include "core/editing/iterators/CharacterIterator.h"
-#include "core/layout/LayoutObject.h"
 #include "platform/geometry/LayoutPoint.h"
 #include "wtf/Assertions.h"
 #include "wtf/text/CString.h"
@@ -56,6 +55,7 @@ VisibleSelectionTemplate<Strategy>::VisibleSelectionTemplate(
     : m_base(selection.base()),
       m_extent(selection.extent()),
       m_affinity(selection.affinity()),
+      m_selectionType(NoSelection),
       m_isDirectional(selection.isDirectional()),
       m_granularity(selection.granularity()),
       m_hasTrailingWhitespace(selection.hasTrailingWhitespace()) {

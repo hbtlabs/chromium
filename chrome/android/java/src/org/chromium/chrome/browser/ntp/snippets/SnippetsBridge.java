@@ -55,8 +55,8 @@ public class SnippetsBridge implements SuggestionsSource {
     }
 
     /**
-     * Destroys the native service and unregisters observers. This object can't be reused to
-     * communicate with any native service and should be discarded.
+     * Destroys the native bridge. This object can no longer be used to send native commands, and
+     * any observer is nulled out and will stop receiving updates. This object should be discarded.
      */
     public void destroy() {
         assert mNativeSnippetsBridge != 0;
@@ -187,6 +187,14 @@ public class SnippetsBridge implements SuggestionsSource {
         nativeSetObserver(mNativeSnippetsBridge, observer == null ? null : this);
     }
 
+    @Override
+    public void fetchSuggestions(@CategoryInt int category, String[] displayedSuggestionIds) {
+        assert mNativeSnippetsBridge != 0;
+        assert mObserver != null;
+
+        nativeFetch(mNativeSnippetsBridge, category, displayedSuggestionIds);
+    }
+
     @CalledByNative
     private static List<SnippetArticle> createSuggestionList() {
         return new ArrayList<>();
@@ -202,11 +210,18 @@ public class SnippetsBridge implements SuggestionsSource {
     }
 
     @CalledByNative
+    private static void setDownloadAssetDataForLastSuggestion(
+            List<SnippetArticle> suggestions, String filePath, String mimeType) {
+        assert suggestions.size() > 0;
+        suggestions.get(suggestions.size() - 1).setDownloadAsset(filePath, mimeType);
+    }
+
+    @CalledByNative
     private static SuggestionsCategoryInfo createSuggestionsCategoryInfo(int category, String title,
-            int cardLayout, boolean hasMoreButton, boolean showIfEmpty,
-            String noSuggestionsMessage) {
-        return new SuggestionsCategoryInfo(
-                category, title, cardLayout, hasMoreButton, showIfEmpty, noSuggestionsMessage);
+            int cardLayout, boolean hasMoreAction, boolean hasReloadAction,
+            boolean hasViewAllAction, boolean showIfEmpty, String noSuggestionsMessage) {
+        return new SuggestionsCategoryInfo(category, title, cardLayout, hasMoreAction,
+                hasReloadAction, hasViewAllAction, showIfEmpty, noSuggestionsMessage);
     }
 
     @CalledByNative
@@ -217,8 +232,15 @@ public class SnippetsBridge implements SuggestionsSource {
     }
 
     @CalledByNative
-    private void onCategoryStatusChanged(@CategoryInt int category,
-            @CategoryStatusEnum int newStatus) {
+    private void onMoreSuggestions(@CategoryInt int category, List<SnippetArticle> suggestions) {
+        assert mNativeSnippetsBridge != 0;
+        assert mObserver != null;
+        mObserver.onMoreSuggestions(category, suggestions);
+    }
+
+    @CalledByNative
+    private void onCategoryStatusChanged(
+            @CategoryInt int category, @CategoryStatusEnum int newStatus) {
         if (mObserver != null) mObserver.onCategoryStatusChanged(category, newStatus);
     }
 
@@ -239,6 +261,8 @@ public class SnippetsBridge implements SuggestionsSource {
             long nativeNTPSnippetsBridge, int category);
     private native void nativeFetchSuggestionImage(long nativeNTPSnippetsBridge, int category,
             String idWithinCategory, Callback<Bitmap> callback);
+    private native void nativeFetch(
+            long nativeNTPSnippetsBridge, int category, String[] knownSuggestions);
     private native void nativeDismissSuggestion(long nativeNTPSnippetsBridge, String url,
             int globalPosition, int category, int categoryPosition, String idWithinCategory);
     private native void nativeDismissCategory(long nativeNTPSnippetsBridge, int category);

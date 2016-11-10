@@ -211,9 +211,18 @@ void ChannelProxy::Context::OnChannelClosed() {
   if (!channel_)
     return;
 
-  for (size_t i = 0; i < filters_.size(); ++i) {
-    filters_[i]->OnChannelClosing();
-    filters_[i]->OnFilterRemoved();
+  for (auto& filter : pending_filters_) {
+    // OnFilterAdded and OnChannelConnected have not been called on
+    // MessageFilters in |pending_filters_|. Call them here to match
+    // OnChannelClosing and OnFilterRemoved.
+    filter->OnFilterAdded(nullptr);
+    filter->OnChannelConnected(peer_pid_);
+    filter->OnChannelClosing();
+    filter->OnFilterRemoved();
+  }
+  for (auto& filter : filters_) {
+    filter->OnChannelClosing();
+    filter->OnFilterRemoved();
   }
 
   // We don't need the filters anymore.
@@ -624,28 +633,6 @@ void ChannelProxy::OnSetAttachmentBrokerEndpoint() {
   CHECK(!did_init_);
   context()->set_attachment_broker_endpoint(is_attachment_broker_endpoint());
 }
-
-#if defined(OS_POSIX) && !defined(OS_NACL_SFI)
-// See the TODO regarding lazy initialization of the channel in
-// ChannelProxy::Init().
-int ChannelProxy::GetClientFileDescriptor() {
-  DCHECK(CalledOnValidThread());
-
-  Channel* channel = context_.get()->channel_.get();
-  // Channel must have been created first.
-  DCHECK(channel) << context_.get()->channel_id_;
-  return channel->GetClientFileDescriptor();
-}
-
-base::ScopedFD ChannelProxy::TakeClientFileDescriptor() {
-  DCHECK(CalledOnValidThread());
-
-  Channel* channel = context_.get()->channel_.get();
-  // Channel must have been created first.
-  DCHECK(channel) << context_.get()->channel_id_;
-  return channel->TakeClientFileDescriptor();
-}
-#endif
 
 void ChannelProxy::OnChannelInit() {
 }

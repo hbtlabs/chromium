@@ -107,9 +107,11 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "net/http/http_server_properties_manager.h"
+#include "printing/features/features.h"
 
 #if BUILDFLAG(ENABLE_APP_LIST)
 #include "chrome/browser/apps/drive/drive_app_mapping.h"
+#include "chrome/browser/ui/app_list/app_list_syncable_service.h"
 #endif
 
 #if BUILDFLAG(ENABLE_BACKGROUND)
@@ -167,6 +169,7 @@
 #endif
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/app_mode/arc/arc_kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/arc/arc_auth_service.h"
 #include "chrome/browser/chromeos/customization/customization_document.h"
@@ -175,6 +178,7 @@
 #include "chrome/browser/chromeos/file_system_provider/registry.h"
 #include "chrome/browser/chromeos/first_run/first_run.h"
 #include "chrome/browser/chromeos/login/quick_unlock/pin_storage.h"
+#include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/chromeos/login/saml/saml_offline_signin_limiter.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
@@ -183,6 +187,7 @@
 #include "chrome/browser/chromeos/login/users/chrome_user_manager_impl.h"
 #include "chrome/browser/chromeos/login/users/multi_profile_user_controller.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
+#include "chrome/browser/chromeos/net/network_throttling_observer.h"
 #include "chrome/browser/chromeos/platform_keys/key_permissions.h"
 #include "chrome/browser/chromeos/policy/auto_enrollment_client.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
@@ -248,12 +253,6 @@
 #endif
 
 namespace {
-
-#if defined(OS_WIN)
-// Deprecated 11/2015 (M48). TODO(gab): delete in M52+.
-const char kShownAutoLaunchInfobarDeprecated[] =
-    "browser.shown_autolaunch_infobar";
-#endif  // defined(OS_WIN)
 
 // The SessionStartupPref used this pref to store the list of URLs to restore
 // on startup, and then renamed it to "sessions.startup_urls" in M31. Migration
@@ -406,6 +405,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
 
 #if defined(OS_CHROMEOS)
   ChromeOSMetricsProvider::RegisterPrefs(registry);
+  chromeos::ArcKioskAppManager::RegisterPrefs(registry);
   chromeos::AudioDevicesPrefHandlerImpl::RegisterPrefs(registry);
   chromeos::ChromeUserManagerImpl::RegisterPrefs(registry);
   chromeos::DataPromoNotification::RegisterPrefs(registry);
@@ -417,6 +417,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   chromeos::MultiProfileUserController::RegisterPrefs(registry);
   chromeos::HIDDetectionScreenHandler::RegisterPrefs(registry);
   chromeos::DemoModeDetector::RegisterPrefs(registry);
+  chromeos::NetworkThrottlingObserver::RegisterPrefs(registry);
   chromeos::Preferences::RegisterPrefs(registry);
   chromeos::RegisterDisplayLocalStatePrefs(registry);
   chromeos::ResetScreenHandler::RegisterPrefs(registry);
@@ -425,7 +426,6 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   chromeos::SigninScreenHandler::RegisterPrefs(registry);
   chromeos::StartupUtils::RegisterPrefs(registry);
   chromeos::system::AutomaticRebootManager::RegisterPrefs(registry);
-  chromeos::system::InputDeviceSettings::RegisterPrefs(registry);
   chromeos::TimeZoneResolver::RegisterPrefs(registry);
   chromeos::UserImageManager::RegisterPrefs(registry);
   chromeos::UserSessionManager::RegisterPrefs(registry);
@@ -440,6 +440,10 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   policy::DeviceStatusCollector::RegisterPrefs(registry);
   policy::PolicyCertServiceFactory::RegisterPrefs(registry);
   quirks::QuirksManager::RegisterPrefs(registry);
+
+  // Moved to profile prefs, but we still need to register the prefs in local
+  // state until migration is complete (See MigrateObsoleteBrowserPrefs()).
+  chromeos::system::InputDeviceSettings::RegisterProfilePrefs(registry);
 #endif
 
 #if defined(OS_MACOSX)
@@ -536,7 +540,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   PluginsUI::RegisterProfilePrefs(registry);
 #endif
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   printing::StickySettings::RegisterProfilePrefs(registry);
 #endif
 
@@ -566,6 +570,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   DevToolsWindow::RegisterProfilePrefs(registry);
 #if BUILDFLAG(ENABLE_APP_LIST)
   DriveAppMapping::RegisterProfilePrefs(registry);
+  app_list::AppListSyncableService::RegisterProfilePrefs(registry);
 #endif
   extensions::CommandService::RegisterProfilePrefs(registry);
   extensions::ExtensionSettingsHandler::RegisterProfilePrefs(registry);
@@ -596,8 +601,10 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   chromeos::PinStorage::RegisterProfilePrefs(registry);
   chromeos::Preferences::RegisterProfilePrefs(registry);
   chromeos::PrinterPrefManager::RegisterProfilePrefs(registry);
+  chromeos::RegisterQuickUnlockProfilePrefs(registry);
   chromeos::SAMLOfflineSigninLimiter::RegisterProfilePrefs(registry);
   chromeos::ServicesCustomizationDocument::RegisterProfilePrefs(registry);
+  chromeos::system::InputDeviceSettings::RegisterProfilePrefs(registry);
   chromeos::UserImageSyncObserver::RegisterProfilePrefs(registry);
   extensions::EPKPChallengeUserKey::RegisterProfilePrefs(registry);
   flags_ui::PrefServiceFlagsStorage::RegisterProfilePrefs(registry);
@@ -628,10 +635,6 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
 
   // Preferences registered only for migration (clearing or moving to a new key)
   // go here.
-
-#if defined(OS_WIN)
-  registry->RegisterIntegerPref(kShownAutoLaunchInfobarDeprecated, 0);
-#endif  // defined(OS_WIN)
 
 #if defined(USE_AURA)
   registry->RegisterIntegerPref(kFlingMaxCancelToDownTimeInMs, 0);
@@ -697,16 +700,16 @@ void RegisterLoginProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
 
 // This method should be periodically pruned of year+ old migrations.
 void MigrateObsoleteBrowserPrefs(Profile* profile, PrefService* local_state) {
+#if defined(OS_CHROMEOS)
+  // Added 11/2016
+  local_state->ClearPref(prefs::kTouchScreenEnabled);
+  local_state->ClearPref(prefs::kTouchPadEnabled);
+#endif  // defined(OS_CHROMEOS)
 }
 
 // This method should be periodically pruned of year+ old migrations.
 void MigrateObsoleteProfilePrefs(Profile* profile) {
   PrefService* profile_prefs = profile->GetPrefs();
-
-#if defined(OS_WIN)
-  // Added 11/2015.
-  profile_prefs->ClearPref(kShownAutoLaunchInfobarDeprecated);
-#endif
 
 #if defined(OS_MACOSX)
   // Migrate the value of kHideFullscreenToolbar to kShowFullscreenToolbar if

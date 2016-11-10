@@ -5,12 +5,16 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "mash/public/interfaces/launchable.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/service_manager/public/c/main.h"
 #include "services/service_manager/public/cpp/connection.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/interface_factory.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 #include "services/service_manager/public/cpp/service.h"
+#include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/cpp/service_runner.h"
 #include "services/tracing/public/cpp/provider.h"
 #include "ui/views/examples/example_base.h"
@@ -33,12 +37,12 @@ class ViewsExamples
 
  private:
   // service_manager::Service:
-  void OnStart(const service_manager::ServiceInfo& info) override {
-    tracing_.Initialize(connector(), info.identity.name());
-    aura_init_.reset(
-        new views::AuraInit(connector(), "views_mus_resources.pak"));
-    window_manager_connection_ =
-        views::WindowManagerConnection::Create(connector(), info.identity);
+  void OnStart(service_manager::ServiceContext* context) override {
+    tracing_.Initialize(context->connector(), context->identity().name());
+    aura_init_ = base::MakeUnique<views::AuraInit>(
+        context->connector(), context->identity(), "views_mus_resources.pak");
+    window_manager_connection_ = views::WindowManagerConnection::Create(
+        context->connector(), context->identity());
   }
   bool OnConnect(const service_manager::ServiceInfo& remote_info,
                  service_manager::InterfaceRegistry* registry) override {

@@ -6,8 +6,10 @@
 
 #include "ash/public/cpp/shell_window_ids.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/service_context.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "ui/views/mus/aura_init.h"
@@ -75,10 +77,11 @@ AutoclickApplication::AutoclickApplication()
 
 AutoclickApplication::~AutoclickApplication() {}
 
-void AutoclickApplication::OnStart(const service_manager::ServiceInfo& info) {
-  aura_init_.reset(new views::AuraInit(connector(), "views_mus_resources.pak"));
-  window_manager_connection_ =
-      views::WindowManagerConnection::Create(connector(), info.identity);
+void AutoclickApplication::OnStart(service_manager::ServiceContext* context) {
+  aura_init_ = base::MakeUnique<views::AuraInit>(
+      context->connector(), context->identity(), "views_mus_resources.pak");
+  window_manager_connection_ = views::WindowManagerConnection::Create(
+      context->connector(), context->identity());
   autoclick_controller_common_.reset(new AutoclickControllerCommon(
       base::TimeDelta::FromMilliseconds(kDefaultAutoclickDelayMs), this));
 }

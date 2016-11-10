@@ -13,13 +13,13 @@
 #include <utility>
 #include <vector>
 
-#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
 #include "base/message_loop/message_loop.h"
 #include "base/process/process_handle.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_feature_list.h"
 #include "content/child/request_extra_data.h"
 #include "content/common/appcache_interfaces.h"
 #include "content/common/resource_messages.h"
@@ -209,16 +209,6 @@ class ResourceDispatcherTest : public testing::Test, public IPC::Sender {
     message_queue_.erase(message_queue_.begin());
   }
 
-  void ConsumeDataDownloaded_ACK(int expected_request_id) {
-    ASSERT_FALSE(message_queue_.empty());
-    std::tuple<int> args;
-    ASSERT_EQ(ResourceHostMsg_DataDownloaded_ACK::ID, message_queue_[0].type());
-    ASSERT_TRUE(ResourceHostMsg_DataDownloaded_ACK::Read(
-        &message_queue_[0], &args));
-    EXPECT_EQ(expected_request_id, std::get<0>(args));
-    message_queue_.erase(message_queue_.begin());
-  }
-
   void ConsumeReleaseDownloadedFile(int expected_request_id) {
     ASSERT_FALSE(message_queue_.empty());
     std::tuple<int> args;
@@ -340,7 +330,7 @@ class ResourceDispatcherTest : public testing::Test, public IPC::Sender {
         new TestRequestPeer(dispatcher(), peer_context));
     int request_id = dispatcher()->StartAsync(
         std::move(request), 0, nullptr, GURL(), std::move(peer),
-        blink::WebURLRequest::LoadingIPCType::ChromeIPC, nullptr);
+        blink::WebURLRequest::LoadingIPCType::ChromeIPC, nullptr, nullptr);
     peer_context->request_id = request_id;
     return request_id;
   }
@@ -389,11 +379,10 @@ TEST_F(ResourceDispatcherTest, RoundTrip) {
 
 // A simple request with an inline data response.
 TEST_F(ResourceDispatcherTest, ResponseWithInlinedData) {
-  auto feature_list = base::MakeUnique<base::FeatureList>();
-  feature_list->InitializeFromCommandLine(
-      features::kOptimizeLoadingIPCForSmallResources.name, std::string());
-  base::FeatureList::ClearInstanceForTesting();
-  base::FeatureList::SetInstance(std::move(feature_list));
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      features::kOptimizeLoadingIPCForSmallResources);
+
   std::unique_ptr<ResourceRequest> request(CreateResourceRequest(false));
   TestRequestPeer::Context peer_context;
   StartAsync(std::move(request), NULL, &peer_context);
@@ -941,7 +930,6 @@ TEST_F(ResourceDispatcherTest, DownloadToFile) {
   int expected_total_encoded_data_length = 0;
   for (int i = 0; i < 10; ++i) {
     NotifyDataDownloaded(id, kDownloadedIncrement, kEncodedIncrement);
-    ConsumeDataDownloaded_ACK(id);
     expected_total_downloaded_length += kDownloadedIncrement;
     expected_total_encoded_data_length += kEncodedIncrement;
     EXPECT_EQ(expected_total_downloaded_length,

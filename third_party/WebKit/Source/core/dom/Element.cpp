@@ -216,16 +216,18 @@ void Element::clearTabIndexExplicitlyIfNeeded() {
     elementRareData()->clearTabIndexExplicitly();
 }
 
-void Element::setTabIndexExplicitly(short tabIndex) {
-  ensureElementRareData().setTabIndexExplicitly(tabIndex);
+void Element::setTabIndexExplicitly() {
+  ensureElementRareData().setTabIndexExplicitly();
 }
 
 void Element::setTabIndex(int value) {
   setIntegralAttribute(tabindexAttr, value);
 }
 
-short Element::tabIndex() const {
-  return hasRareData() ? elementRareData()->tabIndex() : 0;
+int Element::tabIndex() const {
+  return hasElementFlag(TabIndexWasSetExplicitly)
+             ? getIntegralAttribute(tabindexAttr)
+             : 0;
 }
 
 bool Element::layoutObjectIsFocusable() const {
@@ -1746,9 +1748,6 @@ void Element::detachLayoutTree(const AttachContext& context) {
   if (context.clearInvalidation)
     document().styleEngine().styleInvalidator().clearInvalidation(*this);
 
-  if (svgFilterNeedsLayerUpdate())
-    document().unscheduleSVGFilterLayerUpdateHack(*this);
-
   setNeedsResizeObserverUpdate();
 
   DCHECK(needsAttach());
@@ -1953,8 +1952,7 @@ StyleRecalcChange Element::recalcOwnStyle(StyleRecalcChange change) {
 
   if (LayoutObject* layoutObject = this->layoutObject()) {
     if (localChange != NoChange ||
-        pseudoStyleCacheIsInvalid(oldStyle.get(), newStyle.get()) ||
-        svgFilterNeedsLayerUpdate()) {
+        pseudoStyleCacheIsInvalid(oldStyle.get(), newStyle.get())) {
       layoutObject->setStyle(newStyle.get());
     } else {
       // Although no change occurred, we use the new style so that the cousin
@@ -2437,19 +2435,16 @@ void Element::parseAttribute(const QualifiedName& name,
                              const AtomicString& value) {
   if (name == tabindexAttr) {
     int tabindex = 0;
-    if (value.isEmpty()) {
+    if (value.isEmpty() || !parseHTMLInteger(value, tabindex)) {
       clearTabIndexExplicitlyIfNeeded();
       if (adjustedFocusedElementInTreeScope() == this) {
         // We might want to call blur(), but it's dangerous to dispatch
         // events here.
         document().setNeedsFocusedElementCheck();
       }
-    } else if (parseHTMLInteger(value, tabindex)) {
-      // Clamp tabindex to the range of 'short' to match Firefox's behavior.
-      setTabIndexExplicitly(
-          max(static_cast<int>(std::numeric_limits<short>::min()),
-              std::min(tabindex,
-                       static_cast<int>(std::numeric_limits<short>::max()))));
+    } else {
+      // We only set when value is in integer range.
+      setTabIndexExplicitly();
     }
   } else if (name == XMLNames::langAttr) {
     pseudoStateChanged(CSSSelector::PseudoLang);
@@ -3327,7 +3322,9 @@ KURL Element::getNonEmptyURLAttribute(const QualifiedName& name) const {
 }
 
 int Element::getIntegralAttribute(const QualifiedName& attributeName) const {
-  return getAttribute(attributeName).toInt();
+  int integralValue = 0;
+  parseHTMLInteger(getAttribute(attributeName), integralValue);
+  return integralValue;
 }
 
 void Element::setIntegralAttribute(const QualifiedName& attributeName,
@@ -3616,10 +3613,6 @@ void Element::updateExtraNamedItemRegistration(const AtomicString& oldId,
 
   if (!newId.isEmpty())
     toHTMLDocument(document()).addExtraNamedItem(newId);
-}
-
-void Element::scheduleSVGFilterLayerUpdateHack() {
-  document().scheduleSVGFilterLayerUpdateHack(*this);
 }
 
 ScrollOffset Element::savedLayerScrollOffset() const {

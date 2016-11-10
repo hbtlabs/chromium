@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "android_webview/browser/browser_view_renderer_client.h"
-#include "android_webview/browser/child_frame.h"
 #include "android_webview/browser/compositor_frame_consumer.h"
 #include "android_webview/common/aw_switches.h"
 #include "base/auto_reset.h"
@@ -94,8 +93,8 @@ BrowserViewRenderer::BrowserViewRenderer(
     const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner)
     : client_(client),
       ui_task_runner_(ui_task_runner),
-      async_on_draw_hardware_(base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kAsyncOnDrawHardware)),
+      sync_on_draw_hardware_(base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kSyncOnDrawHardware)),
       current_compositor_frame_consumer_(nullptr),
       compositor_(nullptr),
       is_paused_(false),
@@ -235,7 +234,7 @@ bool BrowserViewRenderer::OnDrawHardware() {
 
   scoped_refptr<content::SynchronousCompositor::FrameFuture> future; // Async.
   content::SynchronousCompositor::Frame frame; // Sync.
-  bool async = async_on_draw_hardware_ && allow_async_draw_;
+  bool async = !sync_on_draw_hardware_ && allow_async_draw_;
   if (async) {
     future = compositor_->DemandDrawHwAsync(
         size_, viewport_rect_for_tile_priority, transform_for_tile_priority);
@@ -252,14 +251,13 @@ bool BrowserViewRenderer::OnDrawHardware() {
 
   allow_async_draw_ = true;
   std::unique_ptr<ChildFrame> child_frame = base::MakeUnique<ChildFrame>(
-      frame.compositor_frame_sink_id, std::move(frame.frame), compositor_id_,
-      viewport_rect_for_tile_priority.IsEmpty(), transform_for_tile_priority,
-      offscreen_pre_raster_, external_draw_constraints_.is_layer);
+      std::move(future), frame.compositor_frame_sink_id, std::move(frame.frame),
+      compositor_id_, viewport_rect_for_tile_priority.IsEmpty(),
+      transform_for_tile_priority, offscreen_pre_raster_,
+      external_draw_constraints_.is_layer);
 
   ReturnUnusedResource(
-      current_compositor_frame_consumer_->PassUncommittedFrameOnUI());
-  current_compositor_frame_consumer_->SetFrameOnUI(std::move(child_frame),
-                                                   std::move(future));
+      current_compositor_frame_consumer_->SetFrameOnUI(std::move(child_frame)));
   return true;
 }
 
@@ -298,9 +296,16 @@ void BrowserViewRenderer::RemoveCompositorFrameConsumer(
   // At this point the compositor frame consumer has to hand back all resources
   // to the child compositor.
   compositor_frame_consumer->DeleteHardwareRendererOnUI();
-  ReturnUnusedResource(compositor_frame_consumer->PassUncommittedFrameOnUI());
+  ReturnUncommittedFrames(
+      compositor_frame_consumer->PassUncommittedFrameOnUI());
   ReturnResourceFromParent(compositor_frame_consumer);
   compositor_frame_consumer->SetCompositorFrameProducer(nullptr);
+}
+
+void BrowserViewRenderer::ReturnUncommittedFrames(
+    ChildFrameQueue child_frames) {
+  for (auto& child_frame : child_frames)
+    ReturnUnusedResource(std::move(child_frame));
 }
 
 void BrowserViewRenderer::ReturnUnusedResource(
@@ -466,7 +471,8 @@ void BrowserViewRenderer::OnComputeScroll(base::TimeTicks animation_time) {
 
 void BrowserViewRenderer::ReleaseHardware() {
   for (auto* compositor_frame_consumer : compositor_frame_consumers_) {
-    ReturnUnusedResource(compositor_frame_consumer->PassUncommittedFrameOnUI());
+    ReturnUncommittedFrames(
+        compositor_frame_consumer->PassUncommittedFrameOnUI());
     ReturnResourceFromParent(compositor_frame_consumer);
     DCHECK(compositor_frame_consumer->ReturnedResourcesEmptyOnUI());
   }

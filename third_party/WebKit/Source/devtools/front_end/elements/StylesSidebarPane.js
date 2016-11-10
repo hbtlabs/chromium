@@ -40,7 +40,7 @@ WebInspector.StylesSidebarPane = class extends WebInspector.ElementsSidebarPane 
 
     this._sectionsContainer = this.element.createChild('div');
     this._swatchPopoverHelper = new WebInspector.SwatchPopoverHelper();
-    this._linkifier = new WebInspector.Linkifier(new WebInspector.Linkifier.DefaultCSSFormatter());
+    this._linkifier = new WebInspector.Linkifier(WebInspector.StylesSidebarPane._maxLinkLength, /* useLinkDecorator */ true);
 
     this.element.classList.add('styles-pane');
 
@@ -61,7 +61,7 @@ WebInspector.StylesSidebarPane = class extends WebInspector.ElementsSidebarPane 
     var exclamationElement = createElement('label', 'dt-icon-label');
     exclamationElement.className = 'exclamation-mark';
     if (!WebInspector.StylesSidebarPane.ignoreErrorsForProperty(property))
-      exclamationElement.type = 'warning-icon';
+      exclamationElement.type = 'smallicon-warning';
     exclamationElement.title = WebInspector.cssMetadata().isCSSPropertyName(property.name) ?
         WebInspector.UIString('Invalid property value') :
         WebInspector.UIString('Unknown property name');
@@ -156,7 +156,7 @@ WebInspector.StylesSidebarPane = class extends WebInspector.ElementsSidebarPane 
   _onLayoutEditorChange(event) {
     var cssModel = /** @type {!WebInspector.CSSModel} */ (event.target);
     var styleSheetId = event.data['id'];
-    var sourceRange = /** @type {!CSSAgent.SourceRange} */ (event.data['range']);
+    var sourceRange = /** @type {!Protocol.CSS.SourceRange} */ (event.data['range']);
     var range = WebInspector.TextRange.fromObject(sourceRange);
     this._decorator = new WebInspector.PropertyChangeHighlighter(this, cssModel, styleSheetId, range);
     this.update();
@@ -329,8 +329,8 @@ WebInspector.StylesSidebarPane = class extends WebInspector.ElementsSidebarPane 
     this._sectionBlocks = this._rebuildSectionsForMatchedStyleRules(matchedStyles);
     var pseudoTypes = [];
     var keys = new Set(matchedStyles.pseudoStyles().keys());
-    if (keys.delete(DOMAgent.PseudoType.Before))
-      pseudoTypes.push(DOMAgent.PseudoType.Before);
+    if (keys.delete(Protocol.DOM.PseudoType.Before))
+      pseudoTypes.push(Protocol.DOM.PseudoType.Before);
     pseudoTypes = pseudoTypes.concat(keys.valuesArray().sort());
     for (var pseudoType of pseudoTypes) {
       var block = WebInspector.SectionBlock.createPseudoTypeBlock(pseudoType);
@@ -502,6 +502,7 @@ WebInspector.StylesSidebarPane = class extends WebInspector.ElementsSidebarPane 
   }
 };
 
+WebInspector.StylesSidebarPane._maxLinkLength = 30;
 
 /**
  * @unrestricted
@@ -516,7 +517,7 @@ WebInspector.SectionBlock = class {
   }
 
   /**
-   * @param {!DOMAgent.PseudoType} pseudoType
+   * @param {!Protocol.DOM.PseudoType} pseudoType
    * @return {!WebInspector.SectionBlock}
    */
   static createPseudoTypeBlock(pseudoType) {
@@ -733,29 +734,29 @@ WebInspector.StylePropertiesSection = class {
     var items = [];
 
     var textShadowButton =
-        new WebInspector.ToolbarButton(WebInspector.UIString('Add text-shadow'), 'text-shadow-toolbar-item');
+        new WebInspector.ToolbarButton(WebInspector.UIString('Add text-shadow'), 'largeicon-text-shadow');
     textShadowButton.addEventListener('click', this._onInsertShadowPropertyClick.bind(this, 'text-shadow'));
     items.push(textShadowButton);
 
     var boxShadowButton =
-        new WebInspector.ToolbarButton(WebInspector.UIString('Add box-shadow'), 'box-shadow-toolbar-item');
+        new WebInspector.ToolbarButton(WebInspector.UIString('Add box-shadow'), 'largeicon-box-shadow');
     boxShadowButton.addEventListener('click', this._onInsertShadowPropertyClick.bind(this, 'box-shadow'));
     items.push(boxShadowButton);
 
     var colorButton =
-        new WebInspector.ToolbarButton(WebInspector.UIString('Add color'), 'foreground-color-toolbar-item');
+        new WebInspector.ToolbarButton(WebInspector.UIString('Add color'), 'largeicon-foreground-color');
     colorButton.addEventListener('click', this._onInsertColorPropertyClick.bind(this));
     items.push(colorButton);
 
     var backgroundButton =
-        new WebInspector.ToolbarButton(WebInspector.UIString('Add background-color'), 'background-color-toolbar-item');
+        new WebInspector.ToolbarButton(WebInspector.UIString('Add background-color'), 'largeicon-background-color');
     backgroundButton.addEventListener('click', this._onInsertBackgroundColorPropertyClick.bind(this));
     items.push(backgroundButton);
 
     var newRuleButton = null;
     if (this._style.parentRule) {
       newRuleButton =
-          new WebInspector.ToolbarButton(WebInspector.UIString('Insert Style Rule Below'), 'add-toolbar-item');
+          new WebInspector.ToolbarButton(WebInspector.UIString('Insert Style Rule Below'), 'largeicon-add');
       newRuleButton.addEventListener('click', this._onNewRuleClick.bind(this));
       items.push(newRuleButton);
     }
@@ -764,7 +765,7 @@ WebInspector.StylePropertiesSection = class {
     for (var i = 0; i < items.length; ++i)
       sectionToolbar.appendToolbarItem(items[i]);
 
-    var menuButton = new WebInspector.ToolbarButton(WebInspector.UIString('More tools\u2026'), 'menu-toolbar-item');
+    var menuButton = new WebInspector.ToolbarButton(WebInspector.UIString('More tools\u2026'), 'largeicon-menu');
     sectionToolbar.appendToolbarItem(menuButton);
     setItemsVisibility.call(this, items, false);
     sectionToolbar.element.addEventListener('mouseenter', setItemsVisibility.bind(this, items, true));
@@ -2888,22 +2889,37 @@ WebInspector.StylesSidebarPane.CSSPropertyPrompt = class extends WebInspector.Te
    * @param {function(!Array.<string>, number=)} completionsReadyCallback
    */
   _buildPropertyCompletions(proxyElement, wordRange, force, completionsReadyCallback) {
-    var prefix = wordRange.toString().toLowerCase();
-    if (!prefix && !force && (this._isEditingName || proxyElement.textContent.length)) {
+    var query = wordRange.toString().toLowerCase();
+    if (!query && !force && (this._isEditingName || proxyElement.textContent.length)) {
       completionsReadyCallback([]);
       return;
     }
 
-    var results = this._cssCompletions.filter(completion => completion.startsWith(prefix));
-    if (!this._isEditingName && !results.length && prefix.length > 1 && '!important'.startsWith(prefix))
+    var prefixResults = [];
+    var anywhereResults = [];
+    this._cssCompletions.forEach(filterCompletions);
+    var results = prefixResults.concat(anywhereResults);
+
+    if (!this._isEditingName && !results.length && query.length > 1 && '!important'.startsWith(query))
       results.push('!important');
     var userEnteredText = wordRange.toString().replace('-', '');
     if (userEnteredText && (userEnteredText === userEnteredText.toUpperCase())) {
       for (var i = 0; i < results.length; ++i)
         results[i] = results[i].toUpperCase();
     }
-    var selectedIndex = this._isEditingName ? WebInspector.cssMetadata().mostUsedProperty(results) : 0;
+    var selectedIndex = this._isEditingName ? WebInspector.cssMetadata().mostUsedProperty(prefixResults) : 0;
     completionsReadyCallback(results, selectedIndex);
+
+    /**
+     * @param {string} completion
+     */
+    function filterCompletions(completion) {
+      var index = completion.indexOf(query);
+      if (index === 0)
+        prefixResults.push(completion);
+      else if (index > -1)
+        anywhereResults.push(completion);
+    }
   }
 };
 
@@ -3024,9 +3040,11 @@ WebInspector.StylesSidebarPropertyRenderer = class {
  */
 WebInspector.StylesSidebarPane.ButtonProvider = class {
   constructor() {
-    this._button = new WebInspector.ToolbarButton(WebInspector.UIString('New Style Rule'), 'add-toolbar-item');
+    this._button = new WebInspector.ToolbarButton(WebInspector.UIString('New Style Rule'), 'largeicon-add');
     this._button.addEventListener('click', this._clicked, this);
-    this._button.element.createChild('div', 'long-click-glyph toolbar-button-theme');
+    var longclickTriangle = WebInspector.Icon.create('largeicon-longclick-triangle', 'long-click-glyph');
+    this._button.element.appendChild(longclickTriangle);
+
     new WebInspector.LongClickController(this._button.element, this._longClicked.bind(this));
     WebInspector.context.addFlavorChangeListener(WebInspector.DOMNode, onNodeChanged.bind(this));
     onNodeChanged.call(this);

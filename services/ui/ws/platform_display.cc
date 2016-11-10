@@ -57,9 +57,7 @@ DefaultPlatformDisplay::DefaultPlatformDisplay(
 #if !defined(OS_ANDROID)
       cursor_loader_(ui::CursorLoader::Create()),
 #endif
-      frame_generator_(new FrameGenerator(this,
-                                          init_params.root_window,
-                                          init_params.display_compositor)),
+      frame_generator_(new FrameGenerator(this, init_params.root_window)),
       metrics_(init_params.metrics) {
 }
 
@@ -75,8 +73,10 @@ void DefaultPlatformDisplay::Init(PlatformDisplayDelegate* delegate) {
   platform_window_ = base::MakeUnique<ui::WinWindow>(this, bounds);
 #elif defined(USE_X11)
   platform_window_ = base::MakeUnique<ui::X11Window>(this);
+  platform_window_->SetBounds(bounds);
 #elif defined(OS_ANDROID)
   platform_window_ = base::MakeUnique<ui::PlatformWindowAndroid>(this);
+  platform_window_->SetBounds(bounds);
 #elif defined(USE_OZONE)
   platform_window_ =
       ui::OzonePlatform::GetInstance()->CreatePlatformWindow(this, bounds);
@@ -84,7 +84,6 @@ void DefaultPlatformDisplay::Init(PlatformDisplayDelegate* delegate) {
   NOTREACHED() << "Unsupported platform";
 #endif
 
-  platform_window_->SetBounds(bounds);
   platform_window_->Show();
 }
 
@@ -101,18 +100,6 @@ DefaultPlatformDisplay::~DefaultPlatformDisplay() {
   // destruction and we want to be in a known state. But destroy the surface
   // first because it can still be using the platform window.
   platform_window_.reset();
-}
-
-void DefaultPlatformDisplay::SchedulePaint(const ServerWindow* window,
-                                           const gfx::Rect& bounds) {
-  DCHECK(window);
-  if (!window->IsDrawn())
-    return;
-  const gfx::Rect root_relative_rect =
-      ConvertRectBetweenWindows(window, delegate_->GetRootWindow(), bounds);
-  if (root_relative_rect.IsEmpty())
-    return;
-  frame_generator_->RequestRedraw(root_relative_rect);
 }
 
 void DefaultPlatformDisplay::SetViewportSize(const gfx::Size& size) {
@@ -155,10 +142,6 @@ void DefaultPlatformDisplay::SetImeVisibility(bool visible) {
   ui::PlatformImeController* ime = platform_window_->GetPlatformImeController();
   if (ime)
     ime->SetImeVisibility(visible);
-}
-
-bool DefaultPlatformDisplay::IsFramePending() const {
-  return frame_generator_->is_frame_pending();
 }
 
 gfx::Rect DefaultPlatformDisplay::GetBounds() const {
@@ -211,7 +194,6 @@ void DefaultPlatformDisplay::OnBoundsChanged(const gfx::Rect& new_bounds) {
 }
 
 void DefaultPlatformDisplay::OnDamageRect(const gfx::Rect& damaged_region) {
-  frame_generator_->RequestRedraw(damaged_region);
 }
 
 void DefaultPlatformDisplay::DispatchEvent(ui::Event* event) {
@@ -282,10 +264,6 @@ void DefaultPlatformDisplay::OnAcceleratedWidgetDestroyed() {
 }
 
 void DefaultPlatformDisplay::OnActivationChanged(bool active) {}
-
-ServerWindow* DefaultPlatformDisplay::GetRootWindow() {
-  return delegate_->GetRootWindow();
-}
 
 bool DefaultPlatformDisplay::IsInHighContrastMode() {
   return delegate_ ? delegate_->IsInHighContrastMode() : false;

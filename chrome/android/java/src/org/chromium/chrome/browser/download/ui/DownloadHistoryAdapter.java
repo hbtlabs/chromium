@@ -8,7 +8,6 @@ import android.content.ComponentName;
 import android.support.v7.widget.RecyclerView.ViewHolder;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
-import android.view.View;
 import android.view.ViewGroup;
 
 import org.chromium.base.metrics.RecordHistogram;
@@ -122,6 +121,9 @@ public class DownloadHistoryAdapter extends DateDividedAdapter implements Downlo
         for (DownloadItem item : result) {
             DownloadItemWrapper wrapper = createDownloadItemWrapper(item, isOffTheRecord);
 
+            // Don't display any incomplete downloads, yet.
+            if (item.getDownloadInfo().state() != DownloadState.COMPLETE) continue;
+
             // TODO(twellington): The native downloads service should remove externally deleted
             //                    downloads rather than passing them to Java.
             if (getExternallyDeletedItemsMap(isOffTheRecord).containsKey(wrapper.getId())) {
@@ -191,9 +193,9 @@ public class DownloadHistoryAdapter extends DateDividedAdapter implements Downlo
 
     @Override
     public ViewHolder createViewHolder(ViewGroup parent) {
-        View v = LayoutInflater.from(parent.getContext()).inflate(
+        DownloadItemView v = (DownloadItemView) LayoutInflater.from(parent.getContext()).inflate(
                 R.layout.download_item_view, parent, false);
-        ((DownloadItemView) v).setSelectionDelegate(getSelectionDelegate());
+        v.setSelectionDelegate(getSelectionDelegate());
         return new DownloadHistoryItemViewHolder(v);
     }
 
@@ -202,17 +204,17 @@ public class DownloadHistoryAdapter extends DateDividedAdapter implements Downlo
         final DownloadHistoryItemWrapper item = (DownloadHistoryItemWrapper) timedItem;
 
         DownloadHistoryItemViewHolder holder = (DownloadHistoryItemViewHolder) current;
-        holder.displayItem(mBackendProvider, item);
+        holder.getItemView().displayItem(mBackendProvider, item);
     }
 
     /**
      * Updates the list when new information about a download comes in.
      */
-    public void onDownloadItemUpdated(DownloadItem item, boolean isOffTheRecord, int state) {
+    public void onDownloadItemUpdated(DownloadItem item, boolean isOffTheRecord) {
         if (isOffTheRecord && !mShowOffTheRecord) return;
 
         // The adapter currently only cares about completion events.
-        if (state != DownloadState.COMPLETE) return;
+        if (item.getDownloadInfo().state() != DownloadState.COMPLETE) return;
 
         List<DownloadItemWrapper> list = getDownloadItemList(isOffTheRecord);
         int index = findItemIndex(list, item.getId());

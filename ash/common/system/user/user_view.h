@@ -66,6 +66,7 @@ class UserView : public views::View,
 
   void AddLogoutButton(LoginStatus login);
   void AddUserCard(LoginStatus login);
+  void AddUserCardMd(LoginStatus login);
 
   // Create the menu option to add another user. If |disabled| is set the user
   // cannot actively click on the item.
@@ -74,8 +75,7 @@ class UserView : public views::View,
   // Removes the add user menu option.
   void RemoveAddUserMenuOption();
 
-  UserIndex user_index_;
-  // The view of the user card.
+  const UserIndex user_index_;
   views::View* user_card_view_;
 
   // This is the owner system tray item of this view.

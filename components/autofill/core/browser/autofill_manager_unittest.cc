@@ -49,6 +49,7 @@
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/prefs/pref_service.h"
 #include "components/rappor/test_rappor_service.h"
+#include "components/security_state/switches.h"
 #include "components/variations/variations_associated_data.h"
 #include "grit/components_strings.h"
 #include "net/url_request/url_request_test_util.h"
@@ -62,6 +63,7 @@ using base::ASCIIToUTF16;
 using base::UTF8ToUTF16;
 using testing::_;
 using testing::AtLeast;
+using testing::Return;
 using testing::SaveArg;
 
 namespace autofill {
@@ -1009,6 +1011,13 @@ class AutofillManagerTest : public testing::Test {
         autofill_manager_->full_card_request_.get());
   }
 
+  void SetHttpWarningEnabled() {
+    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+        security_state::switches::kMarkHttpAs,
+        security_state::switches::
+            kMarkHttpWithPasswordsOrCcWithChipAndFormWarning);
+  }
+
  protected:
   base::MessageLoop message_loop_;
   MockAutofillClient autofill_client_;
@@ -1600,6 +1609,100 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestions_NonSecureContext) {
   EXPECT_FALSE(external_delegate_->on_suggestions_returned_seen());
 }
 
+// Test that we return an extra "Payment not secure" warning when the page and
+// the form target URL are not secure.
+TEST_F(AutofillManagerTest,
+       GetCreditCardSuggestions_NonSecureContextWithHttpBadSwitchOn) {
+  SetHttpWarningEnabled();
+
+  // Set up our form data.
+  FormData form;
+  CreateTestCreditCardFormData(&form, /* is_https */ false, false);
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+
+  const FormFieldData& field = form.fields[0];
+  GetAutofillSuggestions(form, field);
+
+  // Test that we sent the right values to the external delegate.
+  external_delegate_->CheckSuggestions(
+      kDefaultPageID,
+      Suggestion(l10n_util::GetStringUTF8(
+                     IDS_AUTOFILL_CREDIT_CARD_HTTP_WARNING_MESSAGE),
+                 "", "", -1),
+      Suggestion(
+          l10n_util::GetStringUTF8(IDS_AUTOFILL_WARNING_INSECURE_CONNECTION),
+          "", "", -1));
+
+  // Clear the test credit cards and try again -- we shouldn't return a warning.
+  personal_data_.ClearCreditCards();
+  GetAutofillSuggestions(form, field);
+  // Autocomplete suggestions are queried, but not Autofill.
+  EXPECT_FALSE(external_delegate_->on_suggestions_returned_seen());
+}
+
+// Test that we don't show the extra "Payment not secure" warning when the page
+// and the form target URL are secure, even when the switch is on.
+TEST_F(AutofillManagerTest,
+       GetCreditCardSuggestions_SecureContextWithHttpBadSwitchOn) {
+  SetHttpWarningEnabled();
+
+  // Set up our form data.
+  FormData form;
+  CreateTestCreditCardFormData(&form, /* is_https */ true, false);
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+
+  FormFieldData field = form.fields[1];
+  GetAutofillSuggestions(form, field);
+
+  // Test that we sent the right values to the external delegate.
+  external_delegate_->CheckSuggestions(
+      kDefaultPageID, Suggestion("Visa\xC2\xA0\xE2\x8B\xAF"
+                                 "3456",
+                                 "04/99", kVisaCard,
+                                 autofill_manager_->GetPackedCreditCardID(4)),
+      Suggestion("MasterCard\xC2\xA0\xE2\x8B\xAF"
+                 "8765",
+                 "10/98", kMasterCard,
+                 autofill_manager_->GetPackedCreditCardID(5)));
+}
+
+// Test that we will eventually return the credit card signin promo when there
+// are no credit card suggestions and the promo is active. See the tests in
+// AutofillExternalDelegateTest that test whether the promo is added.
+TEST_F(AutofillManagerTest, GetCreditCardSuggestions_OnlySigninPromo) {
+  // Enable the signin promo feature with no impression limit.
+  EnableCreditCardSigninPromoFeatureWithLimit(0);
+
+  // Make sure there are no credit cards.
+  personal_data_.ClearCreditCards();
+
+  // Set up our form data.
+  FormData form;
+  CreateTestCreditCardFormData(&form, true, false);
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+  FormFieldData field = form.fields[1];
+
+  ON_CALL(autofill_client_, ShouldShowSigninPromo())
+      .WillByDefault(Return(true));
+  EXPECT_CALL(autofill_client_, ShouldShowSigninPromo()).Times(2);
+  EXPECT_TRUE(autofill_manager_->ShouldShowCreditCardSigninPromo(form, field));
+
+  // Autocomplete suggestions are not queried.
+  MockAutocompleteHistoryManager* m = RecreateMockAutocompleteHistoryManager();
+  EXPECT_CALL(*m, OnGetAutocompleteSuggestions(_, _, _, _)).Times(0);
+
+  GetAutofillSuggestions(form, field);
+
+  // Test that we sent no values to the external delegate. It will add the promo
+  // before passing along the results.
+  external_delegate_->CheckNoSuggestions(kDefaultPageID);
+
+  EXPECT_TRUE(external_delegate_->on_suggestions_returned_seen());
+}
+
 // Test that we return a warning explaining that credit card profile suggestions
 // are unavailable when the page is secure, but the form action URL is valid but
 // not secure.
@@ -1914,10 +2017,10 @@ TEST_F(AutofillManagerTest, GetProfileSuggestions_ForPhonePrefixOrSuffix) {
                      {"Phone Extension", "ext", 5, "tel-extension"}};
 
   FormFieldData field;
-  for (size_t i = 0; i < arraysize(test_fields); ++i) {
+  for (const auto& test_field : test_fields) {
     test::CreateTestFormField(
-        test_fields[i].label, test_fields[i].name, "", "text", &field);
-    field.max_length = test_fields[i].max_length;
+        test_field.label, test_field.name, "", "text", &field);
+    field.max_length = test_field.max_length;
     field.autocomplete_attribute = std::string();
     form.fields.push_back(field);
   }
@@ -2894,15 +2997,15 @@ TEST_F(AutofillManagerTest, FillPhoneNumber) {
 
   FormFieldData field;
   const size_t default_max_length = field.max_length;
-  for (size_t i = 0; i < arraysize(test_fields); ++i) {
+  for (const auto& test_field : test_fields) {
     test::CreateTestFormField(
-        test_fields[i].label, test_fields[i].name, "", "text", &field);
-    field.max_length = test_fields[i].max_length;
+        test_field.label, test_field.name, "", "text", &field);
+    field.max_length = test_field.max_length;
     field.autocomplete_attribute = std::string();
     form_with_us_number_max_length.fields.push_back(field);
 
     field.max_length = default_max_length;
-    field.autocomplete_attribute = test_fields[i].autocomplete_attribute;
+    field.autocomplete_attribute = test_field.autocomplete_attribute;
     form_with_autocompletetype.fields.push_back(field);
   }
 
@@ -4296,16 +4399,16 @@ TEST_F(AutofillManagerTest, DontSaveCvcInAutocompleteHistory) {
     const char* name;
     const char* value;
     ServerFieldType expected_field_type;
-  } fields[] = {
+  } test_fields[] = {
       {"Card number", "1", "4234-5678-9012-3456", CREDIT_CARD_NUMBER},
       {"Card verification code", "2", "123", CREDIT_CARD_VERIFICATION_CODE},
       {"expiration date", "3", "04/2020", CREDIT_CARD_EXP_4_DIGIT_YEAR},
   };
 
-  for (size_t i = 0; i < arraysize(fields); ++i) {
+  for (const auto& test_field : test_fields) {
     FormFieldData field;
-    test::CreateTestFormField(fields[i].label, fields[i].name, fields[i].value,
-                              "text", &field);
+    test::CreateTestFormField(test_field.label, test_field.name,
+                              test_field.value, "text", &field);
     form.fields.push_back(field);
   }
 
@@ -4314,10 +4417,11 @@ TEST_F(AutofillManagerTest, DontSaveCvcInAutocompleteHistory) {
   FormSubmitted(form);
 
   EXPECT_EQ(form.fields.size(), form_seen_by_ahm.fields.size());
-  ASSERT_EQ(arraysize(fields), form_seen_by_ahm.fields.size());
-  for (size_t i = 0; i < arraysize(fields); ++i) {
-    EXPECT_EQ(form_seen_by_ahm.fields[i].should_autocomplete,
-              fields[i].expected_field_type != CREDIT_CARD_VERIFICATION_CODE);
+  ASSERT_EQ(arraysize(test_fields), form_seen_by_ahm.fields.size());
+  for (size_t i = 0; i < arraysize(test_fields); ++i) {
+    EXPECT_EQ(
+        form_seen_by_ahm.fields[i].should_autocomplete,
+        test_fields[i].expected_field_type != CREDIT_CARD_VERIFICATION_CODE);
   }
 }
 

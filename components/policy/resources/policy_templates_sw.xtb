@@ -19,6 +19,9 @@
       Sera hii ikiwekwa kuwa sivyo au isipowekwa, vidakuzi vilivyowekwa na IdP huhamishiwa kwenye wasifu wa mtumiaji anapoingia katika kifaa kwa mara ya kwanza pekee.
 
       Sera hii inaathiri watumiaji ambao vikoa vyao vinalingana na kikoa cha usajili wa kifaa pekee. Kwa watumiaji wengine wote, vidakuzi vinavyowekwa na IdP huhamishiwa kwenye wasifu wa mtumiaji anapoingia kwa mara ya kwanza kwenye kifaa chake pekee.</translation>
+<translation id="1029536946382325801">Ikiwa ndivyo, mtumiaji anaweza kutumia maunzi kwenye vifaa vya Chrome ili kudhibiti kwa umbali na kuthibitisha utambulisho wake katika CA ya faragha kupitia Enterprise Platform Keys API chrome.enterprise.platformKeysPrivate.challengeUserKey().
+
+          Ikiwa imewekwa kuwa sivyo, au haijawekwa, simu katika API zitashindwa kwa msimbo wa hitilafu.</translation>
 <translation id="1040446814317236570">Washa kipengee cha kuondoa URL ya PAC (kwa https://)</translation>
 <translation id="1044878202534415707">Ripoti takwimu za maunzi kama vile matumizi ya CPU/RAM.
 
@@ -291,7 +294,7 @@ Sera hii ikiondolewa, chaguo-msingi zitatumika kwa mipangilio yote.</translation
       Kipengee cha HardwareAccelerationModeEnabled kikiwekwa kuwa sivyo,  Disable3DAPIs hupuuzwa na ni sawa na Disable3DAPIs kuwekwa kuwa ndivyo.</translation>
 <translation id="2168397434410358693">Kutokuwa na shughuli kunachelewesha wakati wa kuendesha kwenye nishati ya AC</translation>
 <translation id="2170233653554726857">Washa uboreshaji wa WPAD</translation>
-<translation id="2178899310296064282">Tekeleza angalau Hali Yenye Mipaka kwenye YouTube</translation>
+<translation id="2178899310296064282">Tekeleza angalau Hali Yenye Mipaka Wastani kwenye YouTube</translation>
 <translation id="2188979373208322108">Inawezesha upau wa alamisho kwenye <ph name="PRODUCT_NAME" />.
 
       Ukiwezesha mpangilio huu, <ph name="PRODUCT_NAME" /> itaonyesha upau wa alamisho.
@@ -339,13 +342,6 @@ Sera hii ikiondolewa, chaguo-msingi zitatumika kwa mipangilio yote.</translation
 <translation id="2337466621458842053">Inakuruhusu kuweka orodha ya ruwaza za url zinazobainisha tovuti zinazoruhusiwa kuonyesha picha.
 
          Ikiwa sera hii itaachwa bila thamani chaguo-msingi yote itatumiwa kwa tovuti zote kutoka kwenye sera ya 'DefaultImageSetting' ikiwa imewekwa, au vinginevyo usanidi binafsi wa mtumiaji.</translation>
-<translation id="2359612025446382967">Sera hii ikiwekwa kuwa sivyo, <ph name="PRODUCT_OS_NAME" /> itazima Bluetooth na mtumiaji hawezi kuiwasha tena.
-
-     Sera hii ikiwekwa kuwa ndivyo au isipowekwa, mtumiaji ataweza kuwasha au kuzima Bluetooth apendavyo.
-
-      Sera hii ikiwekwa, mtumiaji hawezi kuibadilisha au kuibatilisha.
-
-      Baada ya kuwasha Bluetooth, lazima kifaa kiwashwe tena ili mabadiliko yatekelezwe (hakuna haja ya kuwasha kifaa tena unapozima Bluetooth).</translation>
 <translation id="2366415278352956652">Huwasha kipengele cha kutuma</translation>
 <translation id="2372547058085956601">Ucheleweshwaji wa kuingia kiotomatiki katika kipindi cha umma.
 
@@ -977,6 +973,9 @@ Sera hii inatumika tu kama sera ya 'DefaultSearchProviderEnabled' imewashwa.</tr
 
       Sera hii ikiwekwa kuwa ndivyo, ufuatiliaji wa vifurushi vya mtandao (maarufu kama <ph name="HEARTBEATS_TERM" />) utatumwa.
       Ikiwekwa kuwa sivyo au isipowekwa, hakuna vifurushi vitakavyotumwa.</translation>
+<translation id="3963602271515417124">Ikiwa ndivyo, ushuhuda wa mbali huruhusiwa kwa ajili ya kifaa na cheti kitazalishwa kiotomatiki na kupakiwa kwenye Seva ya Udhibiti wa Kifaa.
+           
+            Ikiwa imewekwa kuwa sivyo, au haijawekwa, hakuna cheti kitakachozalishwa na simu kwa API ya kiendelezi cha enterprise.platformKeys zitashindwa.</translation>
 <translation id="3964909636571393861">Inaruhusu kufikia orodha ya URL</translation>
 <translation id="3965339130942650562">Muda umekwisha mpaka uondokaji wa kuingia kusikotumika kutekelezwe</translation>
 <translation id="3967075520570946456">Washa kipengee cha kuonyesha ukurasa wa kukaribisha unapofungua kivinjari kwa mara ya kwanza baada ya kupata toleo jipya la Mfumo wa Uendeshaji.</translation>
@@ -1036,7 +1035,7 @@ Sera hii inatumika tu kama sera ya 'DefaultSearchProviderEnabled' imewashwa.</tr
 
       Kumbuka kwamba sera hii inaweza kubatilishwa na EnabledPlugins na DisabledPluginsExceptions.
 
-      Sera hii ikiachwa bila kuwekwa mtumiaji anaweza kutumia programu-jalizi yoyote iliyosakinishwa kwenye mfumo isipokuwa programu-jalizi ambazo zimewekwa msimbo dhabiti ambazo hazioani, zilizokwisha muda au ni hatari.</translation>
+      Sera hii ikiachwa bila kuwekwa mtumiaji anaweza kutumia programu-jalizi yoyote iliyosakinishwa kwenye mfumo isipokuwa programu-jalizi ambazo zimewekwa msimbo thabiti ambazo hazioani, zilizokwisha muda au ni hatari.</translation>
 <translation id="410478022164847452">Hubainisha urefu wa muda bila mchango wa mtumiaji ambao baadaye hatua isiyo na shughuli huchukuliwa inapoendeshwa kwenye nishati ya AC.
 
           Sera hii inapowekwa, hubainisha urefu wa muda ambao lazima mtumiaji asalie bila shughuli kabla ya <ph name="PRODUCT_OS_NAME" /> kuchukua hatua ya kutokuwa na shughuli, kinachoweza kusanidiwa tofauti.
@@ -1537,13 +1536,6 @@ Kama sera hii haijawekwa, kishale kikubwa huzimwa wakati skrini ya kuingia katik
 
       Ikiwa sera hii haitawekwa, au ikiwekwa kuwa sivyo, basi <ph name="PRODUCT_NAME" /> haitatekeleza ukaguzi wa ubatilishaji wa mtandaoni katika <ph name="PRODUCT_NAME" /> 19 na matoleo mapya zaidi.</translation>
 <translation id="5966615072639944554">Viendelezi vinaruhusiwa kutumia API ya usahihishaji wa mbali</translation>
-<translation id="5974970919245996815">Ripoti ya maelezo kuhusu hali ya Android imetumwa kwenye
-      seva.
-
-      Sera hii ikiwekwa kuwa sivyo, maelezo hayataripotiwa.
-      Ikiwekwa kuwa ndivyo au iachwe bila kuwekwa, maelezo yataripotiwa.
-
-      Sera hii inatumika tu iwapo progamu za Android zimewashwa.</translation>
 <translation id="5983708779415553259">Tabia chaguo-msingi ya tovuti zisizo katika furushi lolote la maudhui</translation>
 <translation id="5997543603646547632">Tumia saa ya saa 24 kwa chaguo-msingi</translation>
 <translation id="6009903244351574348">Ruhusu <ph name="PRODUCT_FRAME_NAME" /> kushughulikia aina zilizoorodheshwa za maudhui.
@@ -2228,6 +2220,9 @@ Kama sera haitawekwa, kikuza skrini kitazimwa wakati skrini ya kuingia katika ak
           kwenye kikoa cha Saraka Inayotumika.</translation>
 <translation id="7937766917976512374">Ruhusu au ukatae kurekodi video</translation>
 <translation id="7941975817681987555">Usibashiri vitendo vya mtandao kwenye muunganisho wa mtandao wowote</translation>
+<translation id="7942429005743031780">Sera hii hubainisha viendelezi vilivyoruhusiwa ili kutumia Enterprise Platform Keys API chrome.enterprise.platformKeysPrivate.challengeUserKey() kwa uthibitishaji wa mbali. Lazima viendelezi viongezwe kwenye orodha hii ili kutumia API.
+
+          Ikiwa kiendelezi hakipo kwenye orodha, au orodha haijawekwa, upigaji simu kwa API utashindwa kwa msimbo wa hitilafu.</translation>
 <translation id="7953256619080733119">Wapangishi wasiofuata kanuni za mwongozo wa mtumiaji uliodhibitiwa</translation>
 <translation id="7971839631300653352">SSL 3.0</translation>
 <translation id="7974114691960514888">Sera hii haihimiliwi tena.

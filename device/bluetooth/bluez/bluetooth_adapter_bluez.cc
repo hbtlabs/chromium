@@ -52,6 +52,7 @@
 
 using device::BluetoothAdapter;
 using device::BluetoothDevice;
+using UUIDSet = device::BluetoothDevice::UUIDSet;
 using device::BluetoothDiscoveryFilter;
 using device::BluetoothSocket;
 using device::BluetoothUUID;
@@ -398,6 +399,35 @@ bool BluetoothAdapterBlueZ::IsDiscovering() const {
   return properties->discovering.value();
 }
 
+std::unordered_map<BluetoothDevice*, UUIDSet>
+BluetoothAdapterBlueZ::RetrieveGattConnectedDevicesWithDiscoveryFilter(
+    const BluetoothDiscoveryFilter& discovery_filter) {
+  std::unordered_map<BluetoothDevice*, UUIDSet> connected_devices;
+
+  std::set<BluetoothUUID> filter_uuids;
+  discovery_filter.GetUUIDs(filter_uuids);
+
+  for (BluetoothDevice* device : GetDevices()) {
+    if (device->IsGattConnected() &&
+        (device->GetType() & device::BLUETOOTH_TRANSPORT_LE)) {
+      UUIDSet device_uuids = device->GetUUIDs();
+
+      UUIDSet intersection;
+      for (const BluetoothUUID& uuid : filter_uuids) {
+        if (base::ContainsKey(device_uuids, uuid)) {
+          intersection.insert(uuid);
+        }
+      }
+
+      if (filter_uuids.empty() || !intersection.empty()) {
+        connected_devices[device] = std::move(intersection);
+      }
+    }
+  }
+
+  return connected_devices;
+}
+
 BluetoothAdapterBlueZ::UUIDList BluetoothAdapterBlueZ::GetUUIDs() const {
   bluez::BluetoothAdapterClient::Properties* properties =
       bluez::BluezDBusManager::Get()
@@ -592,18 +622,24 @@ void BluetoothAdapterBlueZ::DevicePropertyChanged(
 
   if (property_name == properties->service_data.name())
     device_bluez->UpdateServiceData();
+  else if (property_name == properties->manufacturer_data.name())
+    device_bluez->UpdateManufacturerData();
+  else if (property_name == properties->advertising_data_flags.name())
+    device_bluez->UpdateAdvertisingDataFlags();
 
   if (property_name == properties->bluetooth_class.name() ||
       property_name == properties->appearance.name() ||
       property_name == properties->address.name() ||
-      property_name == properties->alias.name() ||
+      property_name == properties->name.name() ||
       property_name == properties->paired.name() ||
       property_name == properties->trusted.name() ||
       property_name == properties->connected.name() ||
       property_name == properties->uuids.name() ||
       property_name == properties->rssi.name() ||
       property_name == properties->tx_power.name() ||
-      property_name == properties->service_data.name()) {
+      property_name == properties->service_data.name() ||
+      property_name == properties->manufacturer_data.name() ||
+      property_name == properties->advertising_data_flags.name()) {
     NotifyDeviceChanged(device_bluez);
   }
 

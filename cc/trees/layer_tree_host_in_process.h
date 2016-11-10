@@ -46,8 +46,7 @@
 #include "ui/gfx/geometry/rect.h"
 
 namespace cc {
-class AnimationHost;
-class AnimationEvents;
+class MutatorEvents;
 class BeginFrameSource;
 class ClientPictureCache;
 class EnginePictureCache;
@@ -59,6 +58,7 @@ class LayerTreeHostImpl;
 class LayerTreeHostImplClient;
 class LayerTreeHostSingleThreadClient;
 class LayerTreeMutator;
+class MutatorHost;
 class PropertyTrees;
 class Region;
 class RemoteProtoChannel;
@@ -67,6 +67,7 @@ class ResourceProvider;
 class ResourceUpdateQueue;
 class TaskGraphRunner;
 struct PendingPageScaleAnimation;
+struct ReflectedMainFrameState;
 struct RenderingStats;
 struct ScrollAndScaleSet;
 
@@ -84,7 +85,7 @@ class CC_EXPORT LayerTreeHostInProcess : public LayerTreeHost {
     LayerTreeSettings const* settings = nullptr;
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner;
     ImageSerializationProcessor* image_serialization_processor = nullptr;
-    std::unique_ptr<AnimationHost> animation_host;
+    MutatorHost* mutator_host;
 
     InitParams();
     ~InitParams();
@@ -187,6 +188,13 @@ class CC_EXPORT LayerTreeHostInProcess : public LayerTreeHost {
   void DidCompletePageScaleAnimation();
   void ApplyScrollAndScale(ScrollAndScaleSet* info);
 
+  void SetReflectedMainFrameState(
+      std::unique_ptr<ReflectedMainFrameState> reflected_main_frame_state);
+  const ReflectedMainFrameState* reflected_main_frame_state_for_testing()
+      const {
+    return reflected_main_frame_state_.get();
+  }
+
   LayerTreeHostClient* client() { return client_; }
 
   bool gpu_rasterization_histogram_recorded() const {
@@ -199,7 +207,7 @@ class CC_EXPORT LayerTreeHostInProcess : public LayerTreeHost {
     return rendering_stats_instrumentation_.get();
   }
 
-  void SetAnimationEvents(std::unique_ptr<AnimationEvents> events);
+  void SetAnimationEvents(std::unique_ptr<MutatorEvents> events);
 
   bool has_gpu_rasterization_trigger() const {
     return has_gpu_rasterization_trigger_;
@@ -348,6 +356,15 @@ class CC_EXPORT LayerTreeHostInProcess : public LayerTreeHost {
 
   SurfaceSequenceGenerator surface_sequence_generator_;
   uint32_t num_consecutive_frames_suitable_for_gpu_ = 0;
+
+  // The state that was expected to be reflected from the main thread during
+  // BeginMainFrame, but could not be done. The client provides these deltas
+  // to use during the commit instead of applying them at that point because
+  // its necessary for these deltas to be applied *after* PropertyTrees are
+  // built/updated on the main thread.
+  // TODO(khushalsagar): Investigate removing this after SPV2, since then we
+  // should get these PropertyTrees directly from blink?
+  std::unique_ptr<ReflectedMainFrameState> reflected_main_frame_state_;
 
   DISALLOW_COPY_AND_ASSIGN(LayerTreeHostInProcess);
 };

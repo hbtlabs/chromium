@@ -852,6 +852,9 @@ LayoutObject* HTMLInputElement::createLayoutObject(const ComputedStyle& style) {
 
 void HTMLInputElement::attachLayoutTree(const AttachContext& context) {
   HTMLTextFormControlElement::attachLayoutTree(context);
+  if (layoutObject()) {
+    m_inputType->onAttachWithLayoutObject();
+  }
 
   m_inputTypeView->startResourceLoading();
   m_inputType->countUsage();
@@ -861,6 +864,9 @@ void HTMLInputElement::attachLayoutTree(const AttachContext& context) {
 }
 
 void HTMLInputElement::detachLayoutTree(const AttachContext& context) {
+  if (layoutObject()) {
+    m_inputType->onDetachWithLayoutObject();
+  }
   HTMLTextFormControlElement::detachLayoutTree(context);
   m_needsToUpdateViewValue = true;
   m_inputTypeView->closePopupView();
@@ -1100,13 +1106,8 @@ void HTMLInputElement::setValue(const String& value,
   m_inputType->setValue(sanitizedValue, valueChanged, eventBehavior);
   m_inputTypeView->didSetValue(sanitizedValue, valueChanged);
 
-  if (valueChanged && eventBehavior == DispatchNoEvent)
-    setTextAsOfLastFormControlChangeEvent(this->value());
-
-  if (!valueChanged)
-    return;
-
-  notifyFormStateChanged();
+  if (valueChanged)
+    notifyFormStateChanged();
 }
 
 void HTMLInputElement::setNonAttributeValue(const String& sanitizedValue) {

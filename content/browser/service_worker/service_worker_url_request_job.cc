@@ -366,9 +366,7 @@ void ServiceWorkerURLRequestJob::RecordResult(
   }
   did_record_result_ = true;
   ServiceWorkerMetrics::RecordURLRequestJobResult(IsMainResourceLoad(), result);
-  if (request()) {
-    request()->net_log().AddEvent(RequestJobResultToNetEventType(result));
-  }
+  request()->net_log().AddEvent(RequestJobResultToNetEventType(result));
 }
 
 base::WeakPtr<ServiceWorkerURLRequestJob>
@@ -584,12 +582,6 @@ void ServiceWorkerURLRequestJob::DidDispatchFetchEvent(
   fetch_dispatcher_.reset();
   ServiceWorkerMetrics::RecordFetchEventStatus(IsMainResourceLoad(), status);
 
-  // Check if we're not orphaned.
-  if (!request()) {
-    RecordResult(ServiceWorkerMetrics::REQUEST_JOB_ERROR_NO_REQUEST);
-    return;
-  }
-
   ServiceWorkerMetrics::URLRequestJobResult result =
       ServiceWorkerMetrics::REQUEST_JOB_ERROR_BAD_DELEGATE;
   if (!delegate_->RequestStillValid(&result)) {
@@ -776,8 +768,9 @@ bool ServiceWorkerURLRequestJob::IsFallbackToRendererNeeded() const {
          fetch_type_ != ServiceWorkerFetchType::FOREIGN_FETCH &&
          (request_mode_ == FETCH_REQUEST_MODE_CORS ||
           request_mode_ == FETCH_REQUEST_MODE_CORS_WITH_FORCED_PREFLIGHT) &&
-         !request()->initiator().IsSameOriginWith(
-             url::Origin(request()->url()));
+         (!request()->initiator().has_value() ||
+          !request()->initiator()->IsSameOriginWith(
+              url::Origin(request()->url())));
 }
 
 void ServiceWorkerURLRequestJob::SetResponseBodyType(ResponseBodyType type) {

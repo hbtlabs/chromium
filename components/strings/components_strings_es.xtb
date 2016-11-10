@@ -50,6 +50,7 @@
 <translation id="1491663344921578213">No puedes acceder a <ph name="SITE" /> en este momento porque el sitio web utiliza la fijación de certificados. Los ataques y los errores de red suelen ser temporales, por lo que es probable que esta página funcione más tarde. <ph name="BEGIN_LEARN_MORE_LINK" />Más información<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="1506687042165942984">Muestra una copia guardada (es decir, no actualizada) de esta página.</translation>
 <translation id="1519264250979466059">Fecha de compilación</translation>
+<translation id="153384715582417236">Eso es todo por ahora</translation>
 <translation id="1549470594296187301">JavaScript debe estar habilitado para utilizar esta función.</translation>
 <translation id="1559528461873125649">No existe el archivo o el directorio.</translation>
 <translation id="1559572115229829303">&lt;p&gt;No se puede establecer una conexión privada con <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> porque la fecha y la hora de tu dispositivo (<ph name="DATE_AND_TIME" />) no son correctas.&lt;/p&gt;
@@ -350,7 +351,6 @@
 <translation id="4728558894243024398">Plataforma</translation>
 <translation id="4744603770635761495">Ruta del ejecutable</translation>
 <translation id="4756388243121344051">&amp;Historial</translation>
-<translation id="4759238208242260848">Descargas</translation>
 <translation id="4764776831041365478">Es posible que la página web <ph name="URL" /> esté temporalmente inactiva o que se haya trasladado definitivamente a otra dirección.</translation>
 <translation id="4771973620359291008">Se ha producido un error desconocido.</translation>
 <translation id="4782449893814226250">Has solicitado permiso a tus padres para poder acceder a esta página.</translation>
@@ -387,8 +387,10 @@
 <translation id="5171045022955879922">Busca o escribe una URL</translation>
 <translation id="5172758083709347301">Equipo</translation>
 <translation id="5179510805599951267">¿Esta página no está escrita en <ph name="ORIGINAL_LANGUAGE" />? Informa de este error.</translation>
+<translation id="5181140330217080051">Descargando</translation>
 <translation id="5190835502935405962">Barra de marcadores</translation>
 <translation id="5199729219167945352">Experimentos</translation>
+<translation id="5199841536747119669">Las sugerencias aparecen aquí</translation>
 <translation id="5251803541071282808">Nube</translation>
 <translation id="5277279256032773186">¿Usas Chrome en el trabajo? Las empresas pueden administrar la configuración de Chrome de sus empleados. Más información</translation>
 <translation id="5299298092464848405">Error al analizar la política</translation>
@@ -468,6 +470,7 @@
 <translation id="6263376278284652872">Marcadores de <ph name="DOMAIN" /></translation>
 <translation id="6264485186158353794">Volver para estar a salvo</translation>
 <translation id="6282194474023008486">Código postal</translation>
+<translation id="6290238015253830360">Los artículos sugeridos aparecen aquí</translation>
 <translation id="6305205051461490394">No se puede acceder a <ph name="URL" />.</translation>
 <translation id="6321917430147971392">Comprueba tu configuración de DNS</translation>
 <translation id="6328639280570009161">Prueba a inhabilitar la predicción de red</translation>
@@ -651,6 +654,7 @@
 <translation id="8363502534493474904">Desactivar el modo avión</translation>
 <translation id="8364627913115013041">No establecida</translation>
 <translation id="8380941800586852976">Peligroso</translation>
+<translation id="8382348898565613901">Los marcadores a los que hayas accedido recientemente aparecen aquí</translation>
 <translation id="8412145213513410671">Fallos (<ph name="CRASH_COUNT" />)</translation>
 <translation id="8412392972487953978">Debes introducir la misma frase de contraseña dos veces.</translation>
 <translation id="8428213095426709021">Ajustes</translation>
@@ -662,7 +666,6 @@
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> ha tardado demasiado tiempo en responder.</translation>
 <translation id="852346902619691059">Este servidor no ha podido demostrar que es <ph name="DOMAIN" />; el sistema operativo de tu dispositivo no confía en su certificado de seguridad. Este problema puede deberse a una configuración incorrecta o a que un atacante ha interceptado la conexión. <ph name="BEGIN_LEARN_MORE_LINK" />Más información<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="8530504477309582336">Google Payments no admite este tipo de tarjeta. Selecciona otra.</translation>
-<translation id="8550022383519221471">El servicio de sincronización no está disponible en tu dominio.</translation>
 <translation id="8553075262323480129">La traducción no se ha realizado correctamente porque no se ha podido determinar el idioma de la página.</translation>
 <translation id="8559762987265718583">No se puede establecer una conexión privada con <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> porque la fecha y la hora de tu dispositivo (<ph name="DATE_AND_TIME" />) no son correctas.</translation>
 <translation id="856992080682148">El certificado de este sitio web vence en 2017 o más adelante, y la cadena de certificados incluye un certificado firmado con SHA-1.</translation>
@@ -670,7 +673,6 @@
 <translation id="8591846766485502580">Este mensaje aparece porque uno de tus padres ha bloqueado este sitio web.</translation>
 <translation id="859285277496340001">El certificado no especifica ningún mecanismo para comprobar si se ha revocado.</translation>
 <translation id="8647750283161643317">Restablecer todo a su estado predeterminado</translation>
-<translation id="8680787084697685621">La información de inicio de sesión no está actualizada.</translation>
 <translation id="8703575177326907206">Tu conexión a <ph name="DOMAIN" /> no está cifrada.</translation>
 <translation id="8725066075913043281">Volver a intentarlo</translation>
 <translation id="8728672262656704056">Has iniciado una sesión de incógnito</translation>

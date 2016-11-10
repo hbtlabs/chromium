@@ -74,11 +74,12 @@ class POLICY_EXPORT SchemaRegistry : public base::NonThreadSafe {
   // This indicates that the initial components for |domain| have all been
   // registered. It must be invoked at least once for each policy domain;
   // subsequent calls for the same domain are ignored.
-  void SetReady(PolicyDomain domain);
-  // This is equivalent to calling |SetReady| with each of the policy domains.
+  void SetDomainReady(PolicyDomain domain);
+  // This is equivalent to calling |SetDomainReady| with each of the policy
+  // domains.
   void SetAllDomainsReady();
-  // This is equivalent to calling |SetReady| with each of the domains that
-  // correspond to policy for extensions.
+  // This is equivalent to calling |SetDomainReady| with each of the domains
+  // that correspond to policy for extensions.
   void SetExtensionsDomainsReady();
 
   void AddObserver(Observer* observer);
@@ -149,11 +150,14 @@ class POLICY_EXPORT ForwardingSchemaRegistry
 
   // SchemaRegistry::Observer:
   void OnSchemaRegistryUpdated(bool has_new_schemas) override;
+  void OnSchemaRegistryReady() override;
 
   // SchemaRegistry::InternalObserver:
   void OnSchemaRegistryShuttingDown(SchemaRegistry* registry) override;
 
  private:
+  void UpdateReadiness();
+
   SchemaRegistry* wrapped_;
 
   DISALLOW_COPY_AND_ASSIGN(ForwardingSchemaRegistry);

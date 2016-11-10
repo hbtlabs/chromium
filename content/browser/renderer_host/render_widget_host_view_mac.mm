@@ -97,6 +97,7 @@ using content::RenderFrameHost;
 using content::RenderViewHost;
 using content::RenderViewHostImpl;
 using content::RenderWidgetHostImpl;
+using content::RenderWidgetHostView;
 using content::RenderWidgetHostViewMac;
 using content::RenderWidgetHostViewMacEditCommandHelper;
 using content::TextInputClientMac;
@@ -118,7 +119,7 @@ BOOL EventIsReservedBySystem(NSEvent* event) {
   return helper->map()->IsEventReserved(event);
 }
 
-RenderWidgetHostViewMac* GetRenderWidgetHostViewToUse(
+RenderWidgetHostView* GetRenderWidgetHostViewToUse(
     RenderWidgetHostViewMac* render_widget_host_view) {
   WebContents* web_contents = render_widget_host_view->GetWebContents();
   if (!web_contents)
@@ -131,8 +132,7 @@ RenderWidgetHostViewMac* GetRenderWidgetHostViewToUse(
       guest_manager->GetFullPageGuest(web_contents);
   if (!guest)
     return render_widget_host_view;
-  return static_cast<RenderWidgetHostViewMac*>(
-      guest->GetRenderWidgetHostView());
+  return guest->GetRenderWidgetHostView();
 }
 
 }  // namespace
@@ -1517,7 +1517,7 @@ cc::FrameSinkId RenderWidgetHostViewMac::FrameSinkIdAtPoint(
 
   // It is possible that the renderer has not yet produced a surface, in which
   // case we return our current namespace.
-  if (id.is_null())
+  if (!id.is_valid())
     return GetFrameSinkId();
   return id.frame_sink_id();
 }
@@ -3017,6 +3017,12 @@ extern NSString *NSTextInputReplacementRangeAttributeName;
   return rect;
 }
 
+- (NSRange)selectedRange {
+  if (selectedRange_.location == NSNotFound || selectedRange_.length == 0)
+    return NSMakeRange(NSNotFound, 0);
+  return selectedRange_;
+}
+
 - (NSRange)markedRange {
   // An input method calls this method to check if an application really has
   // a text being composed when hasMarkedText call returns true.
@@ -3029,9 +3035,17 @@ extern NSString *NSTextInputReplacementRangeAttributeName;
 
 - (NSAttributedString*)attributedSubstringForProposedRange:(NSRange)range
     actualRange:(NSRangePointer)actualRange {
-  // TODO(thakis): Pipe |actualRange| through TextInputClientMac machinery.
+  // Prepare |actualRange| as if the proposed range is invalid. If it is valid,
+  // then |actualRange| will be updated again.
   if (actualRange)
-    *actualRange = range;
+    *actualRange = NSMakeRange(NSNotFound, 0);
+
+  // The caller of this method is allowed to pass nonsensical ranges. These
+  // can't even be converted into gfx::Ranges.
+  if (range.location == NSNotFound || range.length == 0)
+    return nil;
+  if (range.length >= std::numeric_limits<NSUInteger>::max() - range.location)
+    return nil;
 
   const gfx::Range requested_range(range);
   if (requested_range.is_reversed())
@@ -3049,15 +3063,16 @@ extern NSString *NSTextInputReplacementRangeAttributeName;
     expected_range = gfx::Range(offset, offset + expected_text->size());
   }
 
-  if (!expected_range.Contains(requested_range))
+  gfx::Range actual_range = expected_range.Intersect(requested_range);
+  if (!actual_range.IsValid())
     return nil;
 
   // Gets the raw bytes to avoid unnecessary string copies for generating
   // NSString.
   const base::char16* bytes =
-      &(*expected_text)[requested_range.start() - expected_range.start()];
+      &(*expected_text)[actual_range.start() - expected_range.start()];
   // Avoid integer overflow.
-  base::CheckedNumeric<size_t> requested_len = requested_range.length();
+  base::CheckedNumeric<size_t> requested_len = actual_range.length();
   requested_len *= sizeof(base::char16);
   NSUInteger bytes_len = base::strict_cast<NSUInteger, size_t>(
       requested_len.ValueOrDefault(0));
@@ -3065,6 +3080,9 @@ extern NSString *NSTextInputReplacementRangeAttributeName;
       [[NSString alloc] initWithBytes:bytes
                                length:bytes_len
                              encoding:NSUTF16LittleEndianStringEncoding]);
+  if (actualRange)
+    *actualRange = actual_range.ToNSRange();
+
   return [[[NSAttributedString alloc] initWithString:ns_string] autorelease];
 }
 

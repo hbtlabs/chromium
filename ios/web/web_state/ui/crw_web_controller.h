@@ -198,8 +198,11 @@ class WebStateImpl;
 // Navigate forwards or backwards by one page.
 - (void)goBack;
 - (void)goForward;
-// Navigate forwards or backwards by |delta| pages.
+// Navigates forwards or backwards by |delta| pages. No-op if delta is out of
+// bounds.
 - (void)goDelta:(int)delta;
+// Navigates to the item at the given |index|.
+- (void)goToItemAtIndex:(int)index;
 
 // Executes |script| in the web view, registering user interaction.
 - (void)executeUserJavaScript:(NSString*)script
@@ -275,14 +278,6 @@ class WebStateImpl;
 // from the native provider. Call |loadNativeViewWithSuccess:NO| to load the
 // native controller.
 - (void)loadErrorInNativeView:(NSError*)error;
-
-// Helper method called at the end of history navigation methods goBack,
-// goForward, and goDelta.  Loads a new URL if the current entry is not from a
-// pushState() navigation from |fromEntry|. |fromEntry| is the
-// CRWSessionEntry that was the current entry prior to the navigation.
-// TODO(rohitrao): This is only exposed so Tab can call it temporarily.  Remove
-// as soon as all the Tab calls have moved into CRWWebController.
-- (void)finishHistoryNavigationFromEntry:(CRWSessionEntry*)fromEntry;
 
 // Returns the native controller (if any) current mananging the content.
 - (id<CRWNativeContent>)nativeController;

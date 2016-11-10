@@ -16,7 +16,7 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
-#include "ui/accessibility/ax_view_state.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/image/image_skia_operations.h"
@@ -115,12 +115,13 @@ class VolumeButton : public views::ToggleImageButton {
     return size;
   }
 
-  void GetAccessibleState(ui::AXViewState* state) override {
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
     ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-    state->name = bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_VOLUME_MUTE);
-    state->role = ui::AX_ROLE_TOGGLE_BUTTON;
+    node_data->SetName(
+        bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_VOLUME_MUTE));
+    node_data->role = ui::AX_ROLE_TOGGLE_BUTTON;
     if (audio_delegate_->IsOutputAudioMuted())
-      state->AddStateFlag(ui::AX_STATE_PRESSED);
+      node_data->AddStateFlag(ui::AX_STATE_PRESSED);
   }
 
   // views::CustomButton:
@@ -157,18 +158,18 @@ VolumeView::VolumeView(SystemTrayItem* owner,
   SetLayoutManager(box_layout);
 
   icon_ = new VolumeButton(this, audio_delegate_);
-  icon_->SetBorder(views::Border::CreateEmptyBorder(
-      0, kTrayPopupPaddingHorizontal, 0, kExtraPaddingBetweenIconAndSlider));
+  icon_->SetBorder(views::CreateEmptyBorder(0, kTrayPopupPaddingHorizontal, 0,
+                                            kExtraPaddingBetweenIconAndSlider));
   AddChildView(icon_);
   slider_ = views::Slider::CreateSlider(
       ash::MaterialDesignController::IsSystemTrayMenuMaterial(), this);
 
   if (ash::MaterialDesignController::IsSystemTrayMenuMaterial()) {
-    slider_->SetBorder(views::Border::CreateEmptyBorder(
+    slider_->SetBorder(views::CreateEmptyBorder(
         gfx::Insets(0, kTrayPopupSliderPaddingMD) + slider_->GetInsets()));
   } else {
-    slider_->SetBorder(views::Border::CreateEmptyBorder(
-        0, 0, 0, kTrayPopupPaddingBetweenItems));
+    slider_->SetBorder(
+        views::CreateEmptyBorder(0, 0, 0, kTrayPopupPaddingBetweenItems));
   }
 
   slider_->set_focus_border_color(kFocusBorderColor);
@@ -183,12 +184,12 @@ VolumeView::VolumeView(SystemTrayItem* owner,
   separator_ = new views::Separator(views::Separator::VERTICAL);
   separator_->SetColor(kButtonStrokeColor);
   separator_->SetPreferredSize(kSeparatorSize);
-  separator_->SetBorder(views::Border::CreateEmptyBorder(
+  separator_->SetBorder(views::CreateEmptyBorder(
       kSeparatorVerticalInset, 0, kSeparatorVerticalInset, kBoxLayoutPadding));
 
   more_region_ = new TrayPopupItemContainer(separator_, true);
   more_region_->SetBorder(
-      views::Border::CreateEmptyBorder(0, 0, 0, kTrayPopupPaddingBetweenItems));
+      views::CreateEmptyBorder(0, 0, 0, kTrayPopupPaddingBetweenItems));
   AddChildView(more_region_);
 
   device_type_ = new views::ImageView;
@@ -241,7 +242,7 @@ void VolumeView::UpdateDeviceTypeAndMore() {
   bool show_more = is_default_view_ && TrayAudio::ShowAudioDeviceMenu() &&
                    audio_delegate_->HasAlternativeSources();
   if (!ash::MaterialDesignController::IsSystemTrayMenuMaterial()) {
-    slider_->SetBorder(views::Border::CreateEmptyBorder(
+    slider_->SetBorder(views::CreateEmptyBorder(
         0, 0, 0, show_more ? kTrayPopupPaddingBetweenItems
                            : kSliderRightPaddingToVolumeViewEdge));
   }
@@ -345,7 +346,7 @@ void VolumeView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   separator_->SetSize(gfx::Size(kSeparatorSize, bounds().height()));
 }
 
-void VolumeView::GetAccessibleState(ui::AXViewState* state) {
+void VolumeView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   // Intentionally overrides ActionableView, leaving |state| unset. A slider
   // childview exposes accessibility data.
 }

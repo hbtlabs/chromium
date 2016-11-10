@@ -12,6 +12,9 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "components/sync/base/model_type.h"
+#include "components/sync/model/metadata_batch.h"
+#include "components/sync/model/metadata_change_list.h"
+#include "components/sync/model/sync_error.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -66,11 +69,40 @@ class ModelTypeStore {
   // WriteBatch object is used in all modification operations.
   class WriteBatch {
    public:
+    // Creates a MetadataChangeList that will accumulate metadata changes and
+    // can later be passed to a WriteBatch via TransferChanges. Use this when
+    // you need a MetadataChangeList and do not have a WriteBatch in scope.
+    static std::unique_ptr<MetadataChangeList> CreateMetadataChangeList();
+
     virtual ~WriteBatch();
+
+    // Write the given |value| for data with |id|.
+    void WriteData(const std::string& id, const std::string& value);
+
+    // Delete the record for data with |id|.
+    void DeleteData(const std::string& id);
+
+    // Provides access to a MetadataChangeList that will pass its changes
+    // directly into this WriteBatch. Use this when you need a
+    // MetadataChangeList and already have a WriteBatch in scope.
+    MetadataChangeList* GetMetadataChangeList();
+
+    // Transfers the changes from a MetadataChangeList into this WriteBatch.
+    // |mcl| must have previously been created by CreateMetadataChangeList().
+    void TransferMetadataChanges(std::unique_ptr<MetadataChangeList> mcl);
 
    protected:
     friend class MockModelTypeStore;
-    WriteBatch();
+    explicit WriteBatch(ModelTypeStore* store);
+
+   private:
+    // A pointer to the store that generated this WriteBatch.
+    ModelTypeStore* store_;
+
+    // A MetadataChangeList that is being used to pass changes directly into the
+    // WriteBatch. Only accessible via GetMetadataChangeList(), and not created
+    // unless necessary.
+    std::unique_ptr<MetadataChangeList> metadata_change_list_;
   };
 
   typedef std::vector<Record> RecordList;
@@ -87,9 +119,8 @@ class ModelTypeStore {
   typedef base::Callback<void(Result result,
                               std::unique_ptr<RecordList> data_records)>
       ReadAllDataCallback;
-  typedef base::Callback<void(Result result,
-                              std::unique_ptr<RecordList> metadata_records,
-                              const std::string& global_metadata)>
+  typedef base::Callback<void(SyncError sync_error,
+                              std::unique_ptr<MetadataBatch> metadata_batch)>
       ReadMetadataCallback;
 
   // CreateStore takes |path| and |blocking_task_runner|. Here is how to get
@@ -104,13 +135,14 @@ class ModelTypeStore {
   //
   // In test get task runner from MessageLoop::task_runner().
   static void CreateStore(
-      const ModelType type,
+      ModelType type,
       const std::string& path,
       scoped_refptr<base::SequencedTaskRunner> blocking_task_runner,
       const InitCallback& callback);
   // Creates store object backed by in-memory leveldb database. It is used in
   // tests.
-  static void CreateInMemoryStoreForTest(const InitCallback& callback);
+  static void CreateInMemoryStoreForTest(ModelType type,
+                                         const InitCallback& callback);
 
   virtual ~ModelTypeStore();
 
@@ -138,7 +170,12 @@ class ModelTypeStore {
   virtual void CommitWriteBatch(std::unique_ptr<WriteBatch> write_batch,
                                 const CallbackWithResult& callback) = 0;
 
-  // Write operations.
+ protected:
+  friend class AccumulatingMetadataChangeList;
+  friend class ModelTypeStoreImplTest;
+  friend class PassthroughMetadataChangeList;
+
+  // Write operations; access via WriteBatch.
   virtual void WriteData(WriteBatch* write_batch,
                          const std::string& id,
                          const std::string& value) = 0;

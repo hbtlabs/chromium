@@ -1457,6 +1457,12 @@ def _CheckIpcOwners(input_api, output_api):
       '*TypeConverter*.*',
   ]
 
+  # These third_party directories do not contain IPCs, but contain files
+  # matching the above patterns, which trigger false positives.
+  exclude_paths = [
+      'third_party/crashpad/*',
+  ]
+
   # Dictionary mapping an OWNERS file path to Patterns.
   # Patterns is a dictionary mapping glob patterns (suitable for use in per-file
   # rules ) to a PatternEntry.
@@ -1492,6 +1498,13 @@ def _CheckIpcOwners(input_api, output_api):
     for pattern in file_patterns:
       if input_api.fnmatch.fnmatch(
           input_api.os_path.basename(f.LocalPath()), pattern):
+        skip = False
+        for exclude in exclude_paths:
+          if input_api.fnmatch.fnmatch(f.LocalPath(), exclude):
+            skip = True
+            break
+        if skip:
+          continue
         owners_file = input_api.os_path.join(
             input_api.os_path.dirname(f.LocalPath()), 'OWNERS')
         if owners_file not in to_check:
@@ -1781,12 +1794,15 @@ class PydepsChecker(object):
 
   def DetermineIfStale(self, pydeps_path):
     """Runs print_python_deps.py to see if the files is stale."""
+    import difflib
     old_pydeps_data = self._LoadFile(pydeps_path).splitlines()
     cmd = old_pydeps_data[1][1:].strip()
     new_pydeps_data = self._input_api.subprocess.check_output(
         cmd  + ' --output ""', shell=True)
+    old_contents = old_pydeps_data[2:]
+    new_contents = new_pydeps_data.splitlines()[2:]
     if old_pydeps_data[2:] != new_pydeps_data.splitlines()[2:]:
-      return cmd
+      return cmd, '\n'.join(difflib.context_diff(old_contents, new_contents))
 
 
 def _CheckPydepsNeedsUpdating(input_api, output_api, checker_for_tests=None):
@@ -1819,11 +1835,13 @@ def _CheckPydepsNeedsUpdating(input_api, output_api, checker_for_tests=None):
 
   for pydep_path in checker.ComputeAffectedPydeps():
     try:
-      cmd = checker.DetermineIfStale(pydep_path)
-      if cmd:
+      result = checker.DetermineIfStale(pydep_path)
+      if result:
+        cmd, diff = result
         results.append(output_api.PresubmitError(
-            'File is stale: %s\nTo regenerate, run:\n\n    %s' %
-            (pydep_path, cmd)))
+            'File is stale: %s\nDiff (apply to fix):\n%s\n'
+            'To regenerate, run:\n\n    %s' %
+            (pydep_path, diff, cmd)))
     except input_api.subprocess.CalledProcessError as error:
       return [output_api.PresubmitError('Error running: %s' % error.cmd,
           long_text=error.output)]

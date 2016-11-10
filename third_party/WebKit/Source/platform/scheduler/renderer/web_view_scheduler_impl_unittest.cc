@@ -10,14 +10,14 @@
 #include "base/memory/ptr_util.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "cc/test/ordered_simple_task_runner.h"
+#include "platform/WebTaskRunner.h"
 #include "platform/scheduler/base/test_time_source.h"
 #include "platform/scheduler/child/scheduler_tqm_delegate_for_test.h"
 #include "platform/scheduler/renderer/renderer_scheduler_impl.h"
 #include "platform/scheduler/renderer/web_frame_scheduler_impl.h"
+#include "public/platform/WebTraceLocation.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "public/platform/WebTaskRunner.h"
-#include "public/platform/WebTraceLocation.h"
 
 using testing::ElementsAre;
 using VirtualTimePolicy = blink::WebViewScheduler::VirtualTimePolicy;
@@ -38,8 +38,9 @@ class WebViewSchedulerImplTest : public testing::Test {
     delegate_ = SchedulerTqmDelegateForTest::Create(
         mock_task_runner_, base::MakeUnique<TestTimeSource>(clock_.get()));
     scheduler_.reset(new RendererSchedulerImpl(delegate_));
-    web_view_scheduler_.reset(new WebViewSchedulerImpl(
-        nullptr, scheduler_.get(), DisableBackgroundTimerThrottling()));
+    web_view_scheduler_.reset(
+        new WebViewSchedulerImpl(nullptr, nullptr, scheduler_.get(),
+                                 DisableBackgroundTimerThrottling()));
     web_frame_scheduler_ =
         web_view_scheduler_->createWebFrameSchedulerImpl(nullptr);
   }
@@ -137,7 +138,7 @@ TEST_F(WebViewSchedulerImplTest, RepeatingLoadingTask_PageInBackground) {
 
 TEST_F(WebViewSchedulerImplTest, RepeatingTimers_OneBackgroundOneForeground) {
   std::unique_ptr<WebViewSchedulerImpl> web_view_scheduler2(
-      new WebViewSchedulerImpl(nullptr, scheduler_.get(), false));
+      new WebViewSchedulerImpl(nullptr, nullptr, scheduler_.get(), false));
   std::unique_ptr<WebFrameSchedulerImpl> web_frame_scheduler2 =
       web_view_scheduler2->createWebFrameSchedulerImpl(nullptr);
 

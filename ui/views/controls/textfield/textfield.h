@@ -238,7 +238,8 @@ class VIEWS_EXPORT Textfield : public View,
   void OnDragExited() override;
   int OnPerformDrop(const ui::DropTargetEvent& event) override;
   void OnDragDone() override;
-  void GetAccessibleState(ui::AXViewState* state) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+  bool HandleAccessibleAction(const ui::AXActionData& action_data) override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   bool GetNeedsNotificationWhenVisibleBoundsChange() const override;
   void OnVisibleBoundsChanged() override;
@@ -352,6 +353,7 @@ class VIEWS_EXPORT Textfield : public View,
   // SelectionControllerDelegate overrides:
   gfx::RenderText* GetRenderTextForSelectionController() override;
   bool IsReadOnly() const override;
+  bool SupportsDrag() const override;
   void SetTextBeingDragged(bool value) override;
   int GetViewHeight() const override;
   int GetViewWidth() const override;
@@ -363,14 +365,6 @@ class VIEWS_EXPORT Textfield : public View,
   bool PasteSelectionClipboard() override;
   void UpdateSelectionClipboard() override;
 
-  // Handles a request to change the value of this text field from software
-  // using an accessibility API (typically automation software, screen readers
-  // don't normally use this). If |clear_first| is true, this replaces all text
-  // with the |new_value|. Otherwise this inserts |new_value| at the cursor
-  // position, replacing any selected text. The cursor is placed at the end of
-  // |new_value|.
-  void AccessibilitySetValue(const base::string16& new_value, bool clear_first);
-
   // Updates the painted background color.
   void UpdateBackgroundColor();
 
@@ -380,7 +374,7 @@ class VIEWS_EXPORT Textfield : public View,
   // Does necessary updates when the text and/or cursor position changes.
   void UpdateAfterChange(bool text_changed, bool cursor_changed);
 
-  // A callback function to periodically update the cursor state.
+  // A callback function to periodically update the cursor node_data.
   void UpdateCursor();
 
   // Repaint the cursor.

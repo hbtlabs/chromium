@@ -139,7 +139,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
@@ -1712,7 +1711,8 @@ TEST_F(ExtensionServiceTest, DefaultAppsGrantedPermissions) {
   EXPECT_FALSE(prefs->GetGrantedPermissions(permissions_crx).get());
 
   const Extension* extension = PackAndInstallCRX(
-      path, pem_path, INSTALL_NEW, Extension::WAS_INSTALLED_BY_DEFAULT);
+      path, pem_path, INSTALL_NEW, Extension::WAS_INSTALLED_BY_DEFAULT,
+      Manifest::Location::INTERNAL);
 
   EXPECT_EQ(0u, GetErrors().size());
   ASSERT_EQ(1u, registry()->enabled_extensions().size());
@@ -2136,14 +2136,10 @@ TEST_F(ExtensionServiceTest, LoadLocalizedTheme) {
   EXPECT_EQ("name", theme->name());
   EXPECT_EQ("description", theme->description());
 
-  // Cleanup the "Cached Theme.pak" file (or "Cached Theme Material Design.pak"
-  // when Material Design is enabled). Ideally, this would be installed in a
+  // Cleanup the "Cached Theme.pak" file. Ideally, this would be installed in a
   // temporary directory, but it automatically installs to the extension's
   // directory, and we don't want to copy the whole extension for a unittest.
-  base::FilePath theme_file = extension_path.Append(
-      ui::MaterialDesignController::IsModeMaterial()
-           ? chrome::kThemePackMaterialDesignFilename
-           : chrome::kThemePackFilename);
+  base::FilePath theme_file = extension_path.Append(chrome::kThemePackFilename);
   ASSERT_TRUE(base::PathExists(theme_file));
   ASSERT_TRUE(base::DeleteFile(theme_file, false));  // Not recursive.
 }
@@ -2592,8 +2588,8 @@ TEST_F(ExtensionServiceTest, UpdateExtensionPreservesLocation) {
   InitializeEmptyExtensionService();
   base::FilePath path = data_dir().AppendASCII("good.crx");
 
-  const Extension* good =
-      InstallCRXWithLocation(path, Manifest::EXTERNAL_PREF, INSTALL_NEW);
+  const Extension* good = InstallCRX(path, Manifest::EXTERNAL_PREF, INSTALL_NEW,
+                                     Extension::NO_FLAGS);
 
   ASSERT_EQ("1.0.0.0", good->VersionString());
   ASSERT_EQ(good_crx, good->id());

@@ -20,7 +20,6 @@ namespace base {
 namespace trace_event {
 class BlameContext;
 }  // namespace trace_event
-class SingleThreadTaskRunner;
 }  // namespace base
 
 namespace blink {
@@ -33,6 +32,7 @@ class BLINK_PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
  public:
   WebViewSchedulerImpl(
       WebScheduler::InterventionReporter* intervention_reporter,
+      WebViewScheduler::WebViewSchedulerSettings* settings,
       RendererSchedulerImpl* renderer_scheduler,
       bool disable_background_timer_throttling);
 
@@ -45,6 +45,7 @@ class BLINK_PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
   void enableVirtualTime() override;
   bool virtualTimeAllowedToAdvance() const override;
   void setVirtualTimePolicy(VirtualTimePolicy virtual_time_policy) override;
+  void audioStateChanged(bool is_audio_playing) override;
 
   // Virtual for testing.
   virtual void ReportIntervention(const std::string& message);
@@ -57,19 +58,20 @@ class BLINK_PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
   void IncrementBackgroundParserCount();
   void DecrementBackgroundParserCount();
   void Unregister(WebFrameSchedulerImpl* frame_scheduler);
+  void OnNavigation();
+
+  bool IsAudioPlaying() const;
 
  private:
   friend class WebFrameSchedulerImpl;
 
-  bool IsAudioPlaying() const;
+  TaskQueueThrottler::TimeBudgetPool* BackgroundTimeBudgetPool();
+  void MaybeInitializeBackgroundTimeBudgetPool();
 
-  TaskQueueThrottler::TimeBudgetPool* background_time_budget_pool() const {
-    return background_time_budget_pool_;
-  }
-
- private:
   void setAllowVirtualTimeToAdvance(bool allow_virtual_time_to_advance);
   void ApplyVirtualTimePolicy();
+
+  void OnThrottlingReported(base::TimeDelta throttling_duration);
 
   std::set<WebFrameSchedulerImpl*> frame_schedulers_;
   std::set<unsigned long> pending_loads_;
@@ -83,8 +85,10 @@ class BLINK_PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
   bool have_seen_loading_task_;
   bool virtual_time_;
   bool is_audio_playing_;
+  bool reported_background_throttling_since_navigation_;
   TaskQueueThrottler::TimeBudgetPool*
       background_time_budget_pool_;  // Not owned.
+  WebViewScheduler::WebViewSchedulerSettings* settings_;  // Not owned.
 
   DISALLOW_COPY_AND_ASSIGN(WebViewSchedulerImpl);
 };

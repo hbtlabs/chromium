@@ -34,6 +34,7 @@ import collections
 import cgi
 import difflib
 import errno
+import functools
 import itertools
 import json
 import logging
@@ -758,8 +759,8 @@ class Port(object):
         # When collecting test cases, skip these directories
         skipped_directories = set(['.svn', '_svn', 'platform', 'resources', 'support', 'script-tests', 'reference', 'reftest'])
         files = find_files.find(self._filesystem, self.layout_tests_dir(), paths,
-                                skipped_directories, Port.is_test_file, self.test_key)
-        return [self.relative_test_filename(f) for f in files]
+                                skipped_directories, functools.partial(Port.is_test_file, self), self.test_key)
+        return self._convert_wpt_file_paths_to_url_paths([self.relative_test_filename(f) for f in files])
 
     # When collecting test cases, we include any file with these extensions.
     _supported_file_extensions = set(['.html', '.xml', '.xhtml', '.xht', '.pl',
@@ -782,10 +783,58 @@ class Port(object):
         extension = filesystem.splitext(filename)[1]
         return extension in Port._supported_file_extensions
 
-    @staticmethod
-    def is_test_file(filesystem, dirname, filename):
+    def is_test_file(self, filesystem, dirname, filename):
+        match = re.search(r'[/\\]imported[/\\]wpt([/\\].*)?$', dirname)
+        if match:
+            if match.group(1):
+                path_in_wpt = match.group(1)[1:].replace('\\', '/') + '/' + filename
+            else:
+                path_in_wpt = filename
+            return self._manifest_items_for_path(path_in_wpt) is not None
         return Port._has_supported_extension(
             filesystem, filename) and not Port.is_reference_html_file(filesystem, dirname, filename)
+
+    def _convert_wpt_file_paths_to_url_paths(self, files):
+        tests = []
+        for file_path in files:
+            # Path separators are normalized by relative_test_filename().
+            match = re.search(r'imported/wpt/(.*)$', file_path)
+            if not match:
+                tests.append(file_path)
+                continue
+            path_in_wpt = match.group(1)
+            manifest_items = self._manifest_items_for_path(path_in_wpt)
+            assert manifest_items is not None
+            if len(manifest_items) != 1 or manifest_items[0]['url'][1:] != path_in_wpt:
+                # TODO(tkent): foo.any.js and bar.worker.js should be accessed
+                # as foo.any.html, foo.any.worker, and bar.worker with WPTServe.
+                continue
+            tests.append(file_path)
+        return tests
+
+    @memoized
+    def _wpt_manifest(self):
+        path = self._filesystem.join(self.layout_tests_dir(), 'imported', 'wpt', 'MANIFEST.json')
+        return json.loads(self._filesystem.read_text_file(path))
+
+    def _manifest_items_for_path(self, path_in_wpt):
+        """Returns a list of a dict representing ManifestItem for the specified
+        path, or None if MANIFEST.json has no items for the specified path.
+
+        A ManifestItem has 'path', 'url', and optional 'timeout' fields. Also,
+        it has "references" list for reference tests. It's defined in
+        web-platform-tests/tools/manifest/item.py.
+        """
+        # Because we generate MANIFEST.json before finishing import, all
+        # entries are in 'local_changes'.
+        items = self._wpt_manifest()['local_changes']['items']
+        if path_in_wpt in items['manual']:
+            return items['manual'][path_in_wpt]
+        elif path_in_wpt in items['reftest']:
+            return items['reftest'][path_in_wpt]
+        elif path_in_wpt in items['testharness']:
+            return items['testharness'][path_in_wpt]
+        return None
 
     ALL_TEST_TYPES = ['audio', 'harness', 'pixel', 'ref', 'text', 'unknown']
 
@@ -911,6 +960,9 @@ class Port(object):
         return self._webkit_finder.path_to_script(script_name)
 
     def layout_tests_dir(self):
+        custom_layout_tests_dir = self.get_option('layout_tests_directory')
+        if custom_layout_tests_dir:
+            return custom_layout_tests_dir
         return self._webkit_finder.layout_tests_dir()
 
     def perf_tests_dir(self):
@@ -924,11 +976,12 @@ class Port(object):
         """Checks whether the given test is skipped for this port.
 
         This should return True if the test is skipped because the port
-        runs smoke tests only, or because the
+        runs smoke tests only, or because the test is skipped in a file like
+        NeverFixTests (but not TestExpectations).
         """
         fs = self.host.filesystem
         if self.default_smoke_test_only():
-            smoke_test_filename = fs.join(self.layout_tests_dir(), 'SmokeTests')
+            smoke_test_filename = self.path_to_smoke_tests_file()
             if fs.exists(smoke_test_filename) and test not in fs.read_text_file(smoke_test_filename):
                 return True
 
@@ -940,6 +993,9 @@ class Port(object):
         # two copies of the test expectations.
         return (SKIP in full_expectations.get_expectations(test) and
                 SKIP not in generic_expectations.get_expectations(test))
+
+    def path_to_smoke_tests_file(self):
+        return self.host.filesystem.join(self.layout_tests_dir(), 'SmokeTests')
 
     def _tests_from_skipped_file_contents(self, skipped_file_contents):
         tests_to_skip = []
@@ -1045,6 +1101,9 @@ class Port(object):
 
     def inspector_debug_directory(self):
         return self.path_from_webkit_base('Source', 'devtools', 'front_end')
+
+    def apache_config_directory(self):
+        return self.path_from_webkit_base('Tools', 'Scripts', 'apache_config')
 
     def default_results_directory(self):
         """Absolute path to the default place to store the test results."""
@@ -1467,7 +1526,7 @@ class Port(object):
             return config_file_from_env
 
         config_file_name = self._apache_config_file_name_for_platform()
-        return self._filesystem.join(self.layout_tests_dir(), 'http', 'conf', config_file_name)
+        return self._filesystem.join(self.apache_config_directory(), config_file_name)
 
     #
     # PROTECTED ROUTINES

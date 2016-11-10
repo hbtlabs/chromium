@@ -221,6 +221,7 @@ void CanvasRenderingContext2D::didSetSurfaceSize() {
 
 DEFINE_TRACE(CanvasRenderingContext2D) {
   visitor->trace(m_hitRegionManager);
+  visitor->trace(m_filterOperations);
   CanvasRenderingContext::trace(visitor);
   BaseRenderingContext2D::trace(visitor);
   SVGResourceClient::trace(visitor);
@@ -379,7 +380,7 @@ bool CanvasRenderingContext2D::stateHasFilter() {
   return state().hasFilter(canvas(), canvas()->size(), this);
 }
 
-SkImageFilter* CanvasRenderingContext2D::stateGetFilter() {
+sk_sp<SkImageFilter> CanvasRenderingContext2D::stateGetFilter() {
   return state().getFilter(canvas(), canvas()->size(), this);
 }
 
@@ -565,7 +566,28 @@ void CanvasRenderingContext2D::styleDidChange(const ComputedStyle* oldStyle,
   pruneLocalFontCache(0);
 }
 
-void CanvasRenderingContext2D::filterNeedsInvalidation() {
+TreeScope* CanvasRenderingContext2D::treeScope() {
+  return &canvas()->treeScope();
+}
+
+void CanvasRenderingContext2D::clearFilterReferences() {
+  m_filterOperations.removeClient(this);
+  m_filterOperations.clear();
+}
+
+void CanvasRenderingContext2D::updateFilterReferences(
+    const FilterOperations& filters) {
+  clearFilterReferences();
+  filters.addClient(this);
+  m_filterOperations = filters;
+}
+
+void CanvasRenderingContext2D::resourceContentChanged() {
+  resourceElementChanged();
+}
+
+void CanvasRenderingContext2D::resourceElementChanged() {
+  clearFilterReferences();
   state().clearResolvedFilter();
 }
 

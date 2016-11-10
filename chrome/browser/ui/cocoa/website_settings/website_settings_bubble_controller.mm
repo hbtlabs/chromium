@@ -85,6 +85,9 @@ const CGFloat kPermissionImageSize = 16;
 // Spacing between a permission image and the text.
 const CGFloat kPermissionImageSpacing = 6;
 
+// Minimum distance between the label and its corresponding menu.
+const CGFloat kMinSeparationBetweenLabelAndMenu = 16;
+
 // Square size of the permission delete button image.
 const CGFloat kPermissionDeleteImageSize = 16;
 
@@ -619,16 +622,28 @@ bool IsInternalURL(const GURL& url) {
 }
 
 // Add an image as a subview of the given view, placed at a pre-determined x
-// position and the given y position. Return the new NSImageView.
+// position and the given y position. The image is not in the accessibility
+// order, since the image is always accompanied by text in this bubble. Return
+// the new NSImageView.
 - (NSImageView*)addImageWithSize:(NSSize)size
                           toView:(NSView*)view
                          atPoint:(NSPoint)point {
   NSRect frame = NSMakeRect(point.x, point.y, size.width, size.height);
   base::scoped_nsobject<NSImageView> imageView(
       [[NSImageView alloc] initWithFrame:frame]);
+  [self hideImageFromAccessibilityOrder:imageView];
   [imageView setImageFrameStyle:NSImageFrameNone];
   [view addSubview:imageView.get()];
   return imageView.get();
+}
+
+// Hide the given image view from the accessibility order for VoiceOver.
+- (void)hideImageFromAccessibilityOrder:(NSImageView*)imageView {
+  // This is the minimum change necessary to get VoiceOver to skip the image
+  // (instead of reading the word "image"). Accessibility mechanisms in OSX
+  // change once in a while, so this may be fragile.
+  [[imageView cell] accessibilitySetOverrideValue:@""
+                                     forAttribute:NSAccessibilityRoleAttribute];
 }
 
 // Add a separator as a subview of the given view. Return the new view.
@@ -864,6 +879,7 @@ bool IsInternalURL(const GURL& url) {
                                         toView:view
                                        atPoint:position];
   }
+  [label setToolTip:base::SysUTF16ToNSString(labelText)];
 
   [view setFrameSize:NSMakeSize(viewWidth, NSHeight([view frame]))];
 
@@ -880,6 +896,28 @@ bool IsInternalURL(const GURL& url) {
   }
   position.y -= titleRect.origin.y;
   [button setFrameOrigin:position];
+
+  // Truncate the label if it's too wide.
+  // This is a workaround for https://crbug.com/654268 until MacViews ships.
+  NSRect labelFrame = [label frame];
+  if (isRTL) {
+    CGFloat maxLabelWidth = NSMaxX(labelFrame) - NSMaxX([button frame]) -
+                            kMinSeparationBetweenLabelAndMenu;
+    if (NSWidth(labelFrame) > maxLabelWidth) {
+      labelFrame.origin.x = NSMaxX(labelFrame) - maxLabelWidth;
+      labelFrame.size.width = maxLabelWidth;
+      [label setFrame:labelFrame];
+      [[label cell] setLineBreakMode:NSLineBreakByTruncatingTail];
+    }
+  } else {
+    CGFloat maxLabelWidth = NSMinX([button frame]) - NSMinX(labelFrame) -
+                            kMinSeparationBetweenLabelAndMenu;
+    if (NSWidth(labelFrame) > maxLabelWidth) {
+      labelFrame.size.width = maxLabelWidth;
+      [label setFrame:labelFrame];
+      [[label cell] setLineBreakMode:NSLineBreakByTruncatingTail];
+    }
+  }
 
   // Align the icon with the text.
   [self alignPermissionIcon:imageView withTextField:label];

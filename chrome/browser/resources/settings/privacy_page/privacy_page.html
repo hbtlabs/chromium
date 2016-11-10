@@ -3,10 +3,12 @@
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="/clear_browsing_data_dialog/clear_browsing_data_dialog.html">
 <link rel="import" href="/controls/settings_checkbox.html">
 <link rel="import" href="/controls/settings_toggle_button.html">
+<link rel="import" href="/lifetime_browser_proxy.html">
 <link rel="import" href="/route.html">
 <link rel="import" href="/settings_page/settings_animated_pages.html">
 <link rel="import" href="/settings_page/settings_subpage.html">
@@ -15,6 +17,7 @@
 <link rel="import" href="/site_settings/constants.html">
 <link rel="import" href="/site_settings/media_picker.html">
 <link rel="import" href="/site_settings/protocol_handlers.html">
+<link rel="import" href="/site_settings/site_data_details_subpage.html">
 <link rel="import" href="/site_settings/site_settings_category.html">
 <link rel="import" href="/site_settings/usb_devices.html">
 <link rel="import" href="/site_settings/site_data.html">
@@ -51,6 +54,11 @@
 
       #indicator {
         -webkit-margin-start: var(--checkbox-spacing);
+      }
+
+      #restart {
+        flex: 1;
+        text-align: end;
       }
     </style>
     <template is="dom-if" if="[[showClearBrowsingDataDialog_]]" restamp>
@@ -106,6 +114,13 @@
                   fit-to-visible-bounds>
                 $i18n{controlledSettingPolicy}
               </paper-tooltip>
+            </template>
+            <template is="dom-if" if="[[showRestart_]]" restamp>
+              <div id="restart">
+                <paper-button on-tap="onRestartTap_">
+                  $i18n{restart}
+                </paper-button>
+              </div>
             </template>
           </div>
 </if><!-- not chromeos -->
@@ -347,6 +362,17 @@
       <template is="dom-if" route-path="/content/siteDetails" no-search>
         <settings-subpage page-title="$i18n{siteSettingsSiteDetails}">
           <site-details site="[[selectedSite]]"></site-details>
+        </settings-subpage>
+      </template>
+      <template is="dom-if" route-path="/cookies/detail"
+          no-search>
+        <settings-subpage page-title="[[pageTitle]]">
+          <paper-button class="subpage-title-extra"
+              on-tap="onRemoveAllCookiesFromSite_">
+            $i18n{siteSettingsCookieRemoveAll}
+          </paper-button>
+          <site-data-details-subpage page-title="{{pageTitle}}">
+          </site-data-details-subpage>
         </settings-subpage>
       </template>
     </settings-animated-pages>

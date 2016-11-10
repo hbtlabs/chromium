@@ -56,6 +56,9 @@ crbug.com/414163 [ Debug ] inspector/sources/debugger/promise-tracker.html [ Cra
 
 crbug.com/480769 http/tests/inspector/service-workers/user-agent-override.html [ Crash ]
 
+crbug.com/662477 imported/wpt/html/webappapis/idle-callbacks/cancel-invoked.html [ Leak ]
+crbug.com/662477 imported/wpt/html/webappapis/scripting/events/onerroreventhandler.html [ Leak ]
+
 # -----------------------------------------------------------------
 # Untriaged but known leaks of ActiveDOMObject (fast).
 # -----------------------------------------------------------------
@@ -82,8 +85,8 @@ crbug.com/506754 http/tests/inspector/service-workers/service-worker-agents.html
 crbug.com/506754 http/tests/security/cross-origin-indexeddb-allowed.html [ Leak ]
 crbug.com/506754 http/tests/serviceworker/chromium/resolve-after-window-close.html [ Leak ]
 crbug.com/506754 http/tests/serviceworker/chromium/window-close-during-registration.html [ Leak ]
-crbug.com/506754 virtual/mojo-service-worker/http/tests/serviceworker/chromium/resolve-after-window-close.html [ Leak ]
-crbug.com/506754 virtual/mojo-service-worker/http/tests/serviceworker/chromium/window-close-during-registration.html [ Leak ]
+crbug.com/506754 virtual/disable-mojo-service-worker/http/tests/serviceworker/chromium/resolve-after-window-close.html [ Leak ]
+crbug.com/506754 virtual/disable-mojo-service-worker/http/tests/serviceworker/chromium/window-close-during-registration.html [ Leak ]
 crbug.com/506754 virtual/service-worker-navigation-preload/http/tests/serviceworker/chromium/resolve-after-window-close.html [ Leak ]
 crbug.com/506754 virtual/service-worker-navigation-preload/http/tests/serviceworker/chromium/window-close-during-registration.html [ Leak ]
 
@@ -101,11 +104,11 @@ crbug.com/578297 [ Linux ] http/tests/media/media-source/mediasource-appendstrea
 # -----------------------------------------------------------------
 # Leaks in imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/*
 # -----------------------------------------------------------------
-crbug.com/594603 [ Linux ] imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/flexbox/flexbox-baseline-align-self-baseline-vert-001.html [ Leak ]
-crbug.com/594603 [ Linux ] imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/flexbox/flexbox-baseline-empty-001a.html [ Leak ]
-crbug.com/594603 [ Linux ] imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/flexbox/flexbox-baseline-empty-001b.html [ Leak ]
-crbug.com/594603 [ Linux ] imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/flexbox/flexbox-baseline-multi-item-vert-001.html [ Leak ]
-crbug.com/594603 [ Linux ] imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/flexbox/flexbox-whitespace-handling-002.xhtml [ Leak ]
+crbug.com/594309 [ Linux ] imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/flexbox/flexbox-baseline-align-self-baseline-vert-001.html [ Failure Pass Leak ]
+crbug.com/594309 [ Linux ] imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/flexbox/flexbox-baseline-empty-001a.html [ Leak ]
+crbug.com/594309 [ Linux ] imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/flexbox/flexbox-baseline-empty-001b.html [ Leak ]
+crbug.com/594309 [ Linux ] imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/flexbox/flexbox-baseline-multi-item-vert-001.html [ Leak ]
+crbug.com/594309 [ Linux ] imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/flexbox/flexbox-whitespace-handling-002.xhtml [ Leak ]
 crbug.com/594309 [ Linux ] imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/variables/variable-declaration-15.html [ Leak ]
 crbug.com/594309 [ Linux ] imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/variables/variable-declaration-16.html [ Leak ]
 crbug.com/594309 [ Linux ] imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/variables/variable-declaration-17.html [ Leak ]
@@ -113,11 +116,6 @@ crbug.com/594309 [ Linux ] imported/csswg-test/vendor-imports/mozilla/mozilla-ce
 crbug.com/594309 [ Linux ] imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/variables/variable-external-font-face-01.html [ Pass Leak ]
 crbug.com/594309 [ Linux ] imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/variables/variable-font-face-02.html [ Pass Leak ]
 crbug.com/594309 [ Linux ] imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/writing-modes-3/text-combine-upright-compression-007.html [ Leak ]
-
-# -----------------------------------------------------------------
-# Leaks in virtual/threaded/http/tests/worklet/*
-# -----------------------------------------------------------------
-crbug.com/652535 [ Linux ] virtual/threaded/http/tests/worklet/animation-worklet-import.html [ Leak ]
 
 ###########################################################################
 # WARNING: Memory leaks must be fixed asap. Sheriff is expected to revert #

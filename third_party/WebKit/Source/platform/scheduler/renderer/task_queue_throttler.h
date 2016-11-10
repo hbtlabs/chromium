@@ -21,7 +21,6 @@ namespace scheduler {
 
 class RendererSchedulerImpl;
 class ThrottledTimeDomain;
-class WebFrameSchedulerImpl;
 
 // The job of the TaskQueueThrottler is to control when tasks posted on
 // throttled queues get run. The TaskQueueThrottler:
@@ -86,6 +85,12 @@ class BLINK_PLATFORM_EXPORT TaskQueueThrottler : public TimeDomain::Observer {
 
     const char* Name() const;
 
+    // Set callback which will be called every time when this budget pool
+    // is throttled. Throttling duration (time until the queue is allowed
+    // to run again) is passed as a parameter to callback.
+    void SetReportingCallback(
+        base::Callback<void(base::TimeDelta)> reporting_callback);
+
     // All queues should be removed before calling Close().
     void Close();
 
@@ -142,6 +147,8 @@ class BLINK_PLATFORM_EXPORT TaskQueueThrottler : public TimeDomain::Observer {
 
     std::unordered_set<TaskQueue*> associated_task_queues_;
 
+    base::Callback<void(base::TimeDelta)> reporting_callback_;
+
     DISALLOW_COPY_AND_ASSIGN(TimeBudgetPool);
   };
 
@@ -179,9 +186,13 @@ class BLINK_PLATFORM_EXPORT TaskQueueThrottler : public TimeDomain::Observer {
   // Returns true if the |task_queue| is throttled.
   bool IsThrottled(TaskQueue* task_queue) const;
 
-  // Tells the TaskQueueThrottler we're using virtual time, which disables all
-  // throttling.
-  void EnableVirtualTime();
+  // Disable throttling for all queues, this setting takes precedence over
+  // all other throttling settings. Designed to be used when a global event
+  // disabling throttling happens (e.g. audio is playing).
+  void DisableThrottling();
+
+  // Enable back global throttling.
+  void EnableThrottling();
 
   const ThrottledTimeDomain* time_domain() const { return time_domain_.get(); }
 
@@ -191,7 +202,10 @@ class BLINK_PLATFORM_EXPORT TaskQueueThrottler : public TimeDomain::Observer {
   const scoped_refptr<TaskQueue>& task_runner() const { return task_runner_; }
 
   // Returned object is owned by |TaskQueueThrottler|.
-  TimeBudgetPool* CreateTimeBudgetPool(const char* name);
+  TimeBudgetPool* CreateTimeBudgetPool(
+      const char* name,
+      base::Optional<base::TimeDelta> max_budget_level,
+      base::Optional<base::TimeDelta> max_throttling_duration);
 
   // Accounts for given task for cpu-based throttling needs.
   void OnTaskRunTimeReported(TaskQueue* task_queue,
@@ -255,12 +269,9 @@ class BLINK_PLATFORM_EXPORT TaskQueueThrottler : public TimeDomain::Observer {
   const char* tracing_category_;               // NOT OWNED
   std::unique_ptr<ThrottledTimeDomain> time_domain_;
 
-  base::Optional<base::TimeDelta> max_budget_level_;
-  base::Optional<base::TimeDelta> max_throttling_duration_;
-
   CancelableClosureHolder pump_throttled_tasks_closure_;
   base::Optional<base::TimeTicks> pending_pump_throttled_tasks_runtime_;
-  bool virtual_time_;
+  bool allow_throttling_;
 
   std::unordered_map<TimeBudgetPool*, std::unique_ptr<TimeBudgetPool>>
       time_budget_pools_;

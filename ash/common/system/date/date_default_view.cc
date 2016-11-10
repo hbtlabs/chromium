@@ -49,7 +49,7 @@ DateDefaultView::DateDefaultView(SystemTrayItem* owner, LoginStatus login)
   SetLayoutManager(new views::FillLayout);
 
   date_view_ = new tray::DateView(owner);
-  date_view_->SetBorder(views::Border::CreateEmptyBorder(
+  date_view_->SetBorder(views::CreateEmptyBorder(
       kPaddingVertical, ash::kTrayPopupPaddingHorizontal, 0, 0));
   SpecialPopupRow* view = new SpecialPopupRow();
   view->SetContent(date_view_);
@@ -135,13 +135,12 @@ const tray::DateView* DateDefaultView::GetDateView() const {
 void DateDefaultView::ButtonPressed(views::Button* sender,
                                     const ui::Event& event) {
   WmShell* shell = WmShell::Get();
-  SystemTrayDelegate* tray_delegate = shell->system_tray_delegate();
   if (sender == help_button_) {
     shell->RecordUserMetricsAction(UMA_TRAY_HELP);
     shell->system_tray_controller()->ShowHelp();
   } else if (sender == shutdown_button_) {
     shell->RecordUserMetricsAction(UMA_TRAY_SHUT_DOWN);
-    tray_delegate->RequestShutdown();
+    shell->RequestShutdown();
   } else if (sender == lock_button_) {
     shell->RecordUserMetricsAction(UMA_TRAY_LOCK_SCREEN);
 #if defined(OS_CHROMEOS)

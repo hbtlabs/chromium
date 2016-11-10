@@ -46,7 +46,6 @@
 
 #include "core/CoreExport.h"
 #include "core/layout/ScrollAnchor.h"
-#include "core/layout/ScrollEnums.h"
 #include "core/page/scrolling/StickyPositionScrollingConstraints.h"
 #include "core/paint/PaintInvalidationCapableScrollableArea.h"
 #include "core/paint/PaintLayerFragment.h"
@@ -353,9 +352,9 @@ class CORE_EXPORT PaintLayerScrollableArea final
   int pixelSnappedScrollHeight() const;
 
   int verticalScrollbarWidth(
-      OverlayScrollbarClipBehavior = IgnoreOverlayScrollbarSize) const;
+      OverlayScrollbarClipBehavior = IgnoreOverlayScrollbarSize) const override;
   int horizontalScrollbarHeight(
-      OverlayScrollbarClipBehavior = IgnoreOverlayScrollbarSize) const;
+      OverlayScrollbarClipBehavior = IgnoreOverlayScrollbarSize) const override;
 
   DoubleSize adjustedScrollOffset() const {
     return toDoubleSize(DoublePoint(scrollOrigin()) + m_scrollOffset);
@@ -426,6 +425,10 @@ class CORE_EXPORT PaintLayerScrollableArea final
   bool isPaintLayerScrollableArea() const override { return true; }
 
   LayoutBox* layoutBox() const override { return &box(); }
+
+  FloatQuad localToVisibleContentQuad(const FloatQuad&,
+                                      const LayoutObject*,
+                                      unsigned = 0) const final;
 
   bool shouldRebuildHorizontalScrollbarLayer() const {
     return m_rebuildHorizontalScrollbarLayer;

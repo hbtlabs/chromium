@@ -454,8 +454,8 @@ void PaintLayerScrollableArea::updateScrollOffset(const ScrollOffset& newOffset,
     frameView->didChangeScrollOffset();
   }
 
-  // All scrolls clear the fragment anchor.
-  frameView->clearFragmentAnchor();
+  if (scrollTypeClearsFragmentAnchor(scrollType))
+    frameView->clearFragmentAnchor();
 
   // Clear the scroll anchor, unless it is the reason for this scroll.
   if (RuntimeEnabledFeatures::scrollAnchoringEnabled() &&
@@ -815,6 +815,17 @@ bool PaintLayerScrollableArea::shouldPerformScrollAnchoring() const {
          m_scrollAnchor.hasScroller() &&
          layoutBox()->style()->overflowAnchor() != AnchorNone &&
          !box().document().finishingOrIsPrinting();
+}
+
+FloatQuad PaintLayerScrollableArea::localToVisibleContentQuad(
+    const FloatQuad& quad,
+    const LayoutObject* localObject,
+    MapCoordinatesFlags flags) const {
+  LayoutBox* box = layoutBox();
+  if (!box)
+    return quad;
+  DCHECK(localObject);
+  return localObject->localToAncestorQuad(quad, box, flags);
 }
 
 ScrollBehavior PaintLayerScrollableArea::scrollBehaviorStyle() const {

@@ -33,6 +33,7 @@
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/core/v8/TraceWrapperMember.h"
 #include "core/CoreExport.h"
+#include "core/css/ActiveStyleSheets.h"
 #include "core/css/CSSFontSelectorClient.h"
 #include "core/css/CSSGlobalRuleSet.h"
 #include "core/css/invalidation/StyleInvalidator.h"
@@ -58,6 +59,7 @@ class Node;
 class RuleFeatureSet;
 class ShadowTreeStyleSheetCollection;
 class StyleRuleFontFace;
+class StyleRuleUsageTracker;
 class StyleSheet;
 class StyleSheetContents;
 class ViewportStyleResolver;
@@ -172,6 +174,8 @@ class CORE_EXPORT StyleEngine final
 
   StyleResolver* resolver() const { return m_resolver; }
 
+  void setRuleUsageTracker(StyleRuleUsageTracker*);
+
   StyleResolver& ensureResolver() {
     if (!m_resolver) {
       createResolver();
@@ -243,6 +247,10 @@ class CORE_EXPORT StyleEngine final
   void setStatsEnabled(bool);
 
   PassRefPtr<ComputedStyle> findSharedStyle(const ElementResolveContext&);
+
+  void applyRuleSetChanges(TreeScope&,
+                           const ActiveStyleSheetVector& oldStyleSheets,
+                           const ActiveStyleSheetVector& newStyleSheets);
 
   DECLARE_VIRTUAL_TRACE();
   DECLARE_TRACE_WRAPPERS();
@@ -318,6 +326,8 @@ class CORE_EXPORT StyleEngine final
 
   TraceWrapperMember<DocumentStyleSheetCollection>
       m_documentStyleSheetCollection;
+
+  Member<StyleRuleUsageTracker> m_tracker;
 
   typedef HeapHashMap<WeakMember<TreeScope>,
                       Member<ShadowTreeStyleSheetCollection>>

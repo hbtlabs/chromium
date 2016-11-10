@@ -37,11 +37,11 @@
 #include "core/html/AutoplayExperimentHelper.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/track/TextTrack.h"
+#include "platform/MIMETypeRegistry.h"
 #include "platform/Supplementable.h"
 #include "platform/audio/AudioSourceProvider.h"
 #include "public/platform/WebAudioSourceProviderClient.h"
 #include "public/platform/WebMediaPlayerClient.h"
-#include "public/platform/WebMimeRegistry.h"
 #include <memory>
 
 namespace blink {
@@ -85,7 +85,7 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   USING_PRE_FINALIZER(HTMLMediaElement, dispose);
 
  public:
-  static WebMimeRegistry::SupportsType supportsType(const ContentType&);
+  static MIMETypeRegistry::SupportsType supportsType(const ContentType&);
 
   enum class RecordMetricsBehavior { DoNotRecord, DoRecord };
 
@@ -181,6 +181,7 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   void pause();
   void requestRemotePlayback();
   void requestRemotePlaybackControl();
+  void requestRemotePlaybackStop();
 
   // statistics
   unsigned webkitAudioDecodedByteCount() const;
@@ -307,7 +308,6 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   WebRemotePlaybackClient* remotePlaybackClient() {
     return m_remotePlaybackClient;
   }
-  void setRemotePlaybackClient(WebRemotePlaybackClient*);
 
  protected:
   HTMLMediaElement(const QualifiedName&, Document&);
@@ -390,6 +390,8 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   void connectedToRemoteDevice() final;
   void disconnectedFromRemoteDevice() final;
   void cancelledRemotePlaybackRequest() final;
+  void remotePlaybackStarted() final;
+  bool isAutoplayingMuted() final;
   void requestReload(const WebURL&) final;
 
   void loadTimerFired(TimerBase*);
@@ -465,8 +467,12 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   bool endedPlayback(LoopCondition = LoopCondition::Included) const;
 
   void setShouldDelayLoadEvent(bool);
-  void invalidateCachedTime();
-  void refreshCachedTime() const;
+
+  double earliestPossiblePosition() const;
+  double currentPlaybackPosition() const;
+  double officialPlaybackPosition() const;
+  void setOfficialPlaybackPosition(double) const;
+  void requireOfficialPlaybackPositionUpdate() const;
 
   void ensureMediaControls();
   void configureMediaControls();
@@ -565,7 +571,7 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   double m_lastTimeUpdateEventWallTime;
 
   // The last time a timeupdate event was sent in movie time.
-  double m_lastTimeUpdateEventMovieTime;
+  double m_lastTimeUpdateEventMediaTime;
 
   // The default playback start position.
   double m_defaultPlaybackStartPosition;
@@ -604,9 +610,11 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
 
   Member<HTMLMediaSource> m_mediaSource;
 
-  // Cached time value. Only valid when ready state is kHaveMetadata or
-  // higher, otherwise the current time is assumed to be zero.
-  mutable double m_cachedTime;
+  // Stores "official playback position", updated periodically from "current
+  // playback position". Official playback position should not change while
+  // scripts are running. See setOfficialPlaybackPosition().
+  mutable double m_officialPlaybackPosition;
+  mutable bool m_officialPlaybackPositionNeedsUpdate;
 
   double m_fragmentEndTime;
 

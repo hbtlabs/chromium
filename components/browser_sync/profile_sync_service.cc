@@ -20,6 +20,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram.h"
+#include "base/path_service.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
@@ -151,6 +152,11 @@ static const base::FilePath::CharType kSyncDataFolderName[] =
 static const base::FilePath::CharType kLevelDBFolderName[] =
     FILE_PATH_LITERAL("LevelDB");
 
+#if defined(OS_WIN)
+static const base::FilePath::CharType kLoopbackServerBackendFilename[] =
+    FILE_PATH_LITERAL("profile.pb");
+#endif
+
 namespace {
 
 // Perform the actual sync data folder deletion.
@@ -163,13 +169,6 @@ void DeleteSyncDataFolder(const base::FilePath& directory_path) {
 }
 
 }  // namespace
-
-bool ShouldShowActionOnUI(const syncer::SyncProtocolError& error) {
-  return (error.action != syncer::UNKNOWN_ACTION &&
-          error.action != syncer::DISABLE_SYNC_ON_CLIENT &&
-          error.action != syncer::STOP_SYNC_FOR_DISABLED_ACCOUNT &&
-          error.action != syncer::RESET_LOCAL_SYNC_DATA);
-}
 
 ProfileSyncService::InitParams::InitParams() = default;
 ProfileSyncService::InitParams::~InitParams() = default;
@@ -185,8 +184,6 @@ ProfileSyncService::InitParams::InitParams(InitParams&& other)  // NOLINT
       url_request_context(std::move(other.url_request_context)),
       debug_identifier(std::move(other.debug_identifier)),
       channel(other.channel),
-      db_thread(std::move(other.db_thread)),
-      file_thread(std::move(other.file_thread)),
       blocking_pool(other.blocking_pool) {}
 
 ProfileSyncService::ProfileSyncService(InitParams init_params)
@@ -204,8 +201,6 @@ ProfileSyncService::ProfileSyncService(InitParams init_params)
       url_request_context_(init_params.url_request_context),
       debug_identifier_(std::move(init_params.debug_identifier)),
       channel_(init_params.channel),
-      db_thread_(init_params.db_thread),
-      file_thread_(init_params.file_thread),
       blocking_pool_(init_params.blocking_pool),
       is_first_time_sync_configure_(false),
       backend_initialized_(false),
@@ -497,10 +492,47 @@ void ProfileSyncService::InitializeBackend(bool delete_stale_data) {
     return;
   }
 
+  if (!sync_thread_) {
+    sync_thread_ = base::MakeUnique<base::Thread>("Chrome_SyncThread");
+    base::Thread::Options options;
+    options.timer_slack = base::TIMER_SLACK_MAXIMUM;
+    CHECK(sync_thread_->StartWithOptions(options));
+  }
+
   SyncCredentials credentials = GetCredentials();
 
   if (delete_stale_data)
     ClearStaleErrors();
+
+  bool enable_local_sync_backend = false;
+  base::FilePath local_sync_backend_folder;
+#if defined(OS_WIN)
+  enable_local_sync_backend = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kEnableLocalSyncBackend);
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kLocalSyncBackendDir)) {
+    local_sync_backend_folder =
+        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
+            switches::kLocalSyncBackendDir);
+  } else {
+    // TODO(pastarmovj): Add DIR_ROAMING_USER_DATA to PathService to simplify
+    // this code and move the logic in its right place. See crbug/657810.
+    CHECK(
+        base::PathService::Get(base::DIR_APP_DATA, &local_sync_backend_folder));
+    local_sync_backend_folder =
+        local_sync_backend_folder.Append(FILE_PATH_LITERAL("Chrome/User Data"));
+  }
+  // This code as it is now will assume the same profile order is present on all
+  // machines, which is not a given. It is to be defined if only the Default
+  // profile should get this treatment or all profile as is the case now. The
+  // solution for now will be to assume profiles are created in the same order
+  // on all machines and in the future decide if only the Default one should be
+  // considered roamed.
+  local_sync_backend_folder =
+      local_sync_backend_folder.Append(base_directory_.BaseName());
+  local_sync_backend_folder =
+      local_sync_backend_folder.Append(kLoopbackServerBackendFilename);
+#endif  // defined(OS_WIN)
 
   SyncBackendHost::HttpPostProviderFactoryGetter
       http_post_provider_factory_getter =
@@ -509,11 +541,10 @@ void ProfileSyncService::InitializeBackend(bool delete_stale_data) {
                      url_request_context_, network_time_update_callback_);
 
   backend_->Initialize(
-      this, std::move(sync_thread_), db_thread_, file_thread_,
-      GetJsEventHandler(), sync_service_url_, local_device_->GetSyncUserAgent(),
-      credentials, delete_stale_data,
-      std::unique_ptr<syncer::SyncManagerFactory>(
-          new syncer::SyncManagerFactory()),
+      this, sync_thread_.get(), GetJsEventHandler(), sync_service_url_,
+      local_device_->GetSyncUserAgent(), credentials, delete_stale_data,
+      enable_local_sync_backend, local_sync_backend_folder,
+      base::MakeUnique<syncer::SyncManagerFactory>(),
       MakeWeakHandle(sync_enabled_weak_factory_.GetWeakPtr()),
       base::Bind(syncer::ReportUnrecoverableError, channel_),
       http_post_provider_factory_getter, std::move(saved_nigori_state_));
@@ -757,7 +788,7 @@ void ProfileSyncService::ShutdownImpl(syncer::ShutdownReason reason) {
   // shutting it down.
   std::unique_ptr<SyncBackendHost> doomed_backend(backend_.release());
   if (doomed_backend) {
-    sync_thread_ = doomed_backend->Shutdown(reason);
+    doomed_backend->Shutdown(reason);
     doomed_backend.reset();
   }
   base::TimeDelta shutdown_time = base::Time::Now() - shutdown_start_time;
@@ -2419,8 +2450,6 @@ base::FilePath ProfileSyncService::GetDirectoryPathForTest() const {
 base::MessageLoop* ProfileSyncService::GetSyncLoopForTest() const {
   if (sync_thread_) {
     return sync_thread_->message_loop();
-  } else if (backend_) {
-    return backend_->GetSyncLoopForTesting();
   } else {
     return nullptr;
   }

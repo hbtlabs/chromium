@@ -61,7 +61,8 @@ TestRenderFrameHost::TestRenderFrameHost(SiteInstance* site_instance,
                           frame_tree_node,
                           routing_id,
                           widget_routing_id,
-                          flags),
+                          flags,
+                          false),
       child_creation_observer_(delegate ? delegate->GetAsWebContents() : NULL),
       contents_mime_type_("text/html"),
       simulate_history_list_was_cleared_(false),
@@ -325,8 +326,10 @@ void TestRenderFrameHost::SendNavigateWithParameters(
   params.history_list_was_cleared = simulate_history_list_was_cleared_;
   params.original_request_url = url_copy;
 
-  // Simulate Blink assigning an item sequence number to the navigation.
+  // Simulate Blink assigning an item and document sequence number to the
+  // navigation.
   params.item_sequence_number = base::Time::Now().ToDoubleT() * 1000000;
+  params.document_sequence_number = params.item_sequence_number + 1;
 
   // When the user hits enter in the Omnibox without changing the URL, Blink
   // behaves similarly to a reload and does not change the item and document
@@ -368,7 +371,9 @@ void TestRenderFrameHost::SendNavigateWithParameters(
            GetLastCommittedURL().ReplaceComponents(replacements));
 
   params.page_state =
-      PageState::CreateForTesting(url_copy, false, nullptr, nullptr);
+      PageState::CreateForTestingWithSequenceNumbers(
+          url_copy, params.item_sequence_number,
+          params.document_sequence_number);
 
   if (!callback.is_null())
     callback.Run(&params);

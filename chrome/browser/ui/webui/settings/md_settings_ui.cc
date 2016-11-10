@@ -25,6 +25,7 @@
 #include "chrome/browser/ui/webui/settings/search_engines_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_cookies_view_handler.h"
+#include "chrome/browser/ui/webui/settings/settings_import_data_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_media_devices_selection_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_startup_pages_handler.h"
@@ -74,12 +75,12 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
   AddSettingsPageUIHandler(new NativeCertificatesHandler());
 #endif  // defined(USE_NSS_CERTS)
 
-  AddSettingsPageUIHandler(new ClearBrowsingDataHandler(web_ui));
   AddSettingsPageUIHandler(new BrowserLifetimeHandler());
+  AddSettingsPageUIHandler(new ClearBrowsingDataHandler(web_ui));
   AddSettingsPageUIHandler(new CookiesViewHandler());
   AddSettingsPageUIHandler(new DownloadsHandler());
   AddSettingsPageUIHandler(new FontHandler(web_ui));
-  AddSettingsPageUIHandler(new ProtocolHandlersHandler());
+  AddSettingsPageUIHandler(new ImportDataHandler());
   AddSettingsPageUIHandler(new LanguagesHandler(web_ui));
   AddSettingsPageUIHandler(new MediaDevicesSelectionHandler(profile));
 #if defined(GOOGLE_CHROME_BUILD) && !defined(OS_CHROMEOS)
@@ -87,6 +88,7 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
 #endif
   AddSettingsPageUIHandler(new PeopleHandler(profile));
   AddSettingsPageUIHandler(new ProfileInfoHandler(profile));
+  AddSettingsPageUIHandler(new ProtocolHandlersHandler());
   AddSettingsPageUIHandler(new SearchEnginesHandler(profile));
   AddSettingsPageUIHandler(new SiteSettingsHandler(profile));
   AddSettingsPageUIHandler(new StartupPagesHandler(web_ui));
@@ -125,8 +127,8 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
       chromeos::settings::DateTimeHandler::Create(html_source));
 
   html_source->AddBoolean("stylusAllowed", ash::IsPaletteFeatureEnabled());
-  html_source->AddBoolean("quickUnlockEnabled",
-                          chromeos::IsQuickUnlockEnabled());
+  html_source->AddBoolean("pinUnlockEnabled",
+                          chromeos::IsPinUnlockEnabled(profile->GetPrefs()));
 #endif
 
   AddSettingsPageUIHandler(AboutHandler::Create(html_source, profile));

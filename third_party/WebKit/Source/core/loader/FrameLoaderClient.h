@@ -36,6 +36,7 @@
 #include "core/dom/IconURL.h"
 #include "core/fetch/ResourceLoaderOptions.h"
 #include "core/frame/FrameClient.h"
+#include "core/frame/FrameTypes.h"
 #include "core/html/LinkResource.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoaderTypes.h"
@@ -68,6 +69,7 @@ class LocalFrame;
 class ResourceError;
 class ResourceRequest;
 class ResourceResponse;
+class ScriptState;
 class SecurityOrigin;
 class SharedWorkerRepositoryClient;
 class SubstituteData;
@@ -77,6 +79,7 @@ class WebCookieJar;
 class WebMediaPlayer;
 class WebMediaPlayerClient;
 class WebMediaPlayerSource;
+class WebRemotePlaybackClient;
 class WebRTCPeerConnectionHandler;
 class WebServiceWorkerProvider;
 class Widget;
@@ -99,7 +102,7 @@ class CORE_EXPORT FrameLoaderClient : public FrameClient {
                                              HistoryCommitType,
                                              bool contentInitiated) {}
   virtual void dispatchWillCommitProvisionalLoad() = 0;
-  virtual void dispatchDidStartProvisionalLoad(double triggeringEventTime) = 0;
+  virtual void dispatchDidStartProvisionalLoad() = 0;
   virtual void dispatchDidReceiveTitle(const String&) = 0;
   virtual void dispatchDidChangeIcons(IconType) = 0;
   virtual void dispatchDidCommitLoad(HistoryItem*, HistoryCommitType) = 0;
@@ -167,7 +170,8 @@ class CORE_EXPORT FrameLoaderClient : public FrameClient {
 
   virtual DocumentLoader* createDocumentLoader(LocalFrame*,
                                                const ResourceRequest&,
-                                               const SubstituteData&) = 0;
+                                               const SubstituteData&,
+                                               ClientRedirectPolicy) = 0;
 
   virtual String userAgent() = 0;
 
@@ -197,6 +201,8 @@ class CORE_EXPORT FrameLoaderClient : public FrameClient {
       HTMLMediaElement&,
       const WebMediaPlayerSource&,
       WebMediaPlayerClient*) = 0;
+  virtual WebRemotePlaybackClient* createWebRemotePlaybackClient(
+      HTMLMediaElement&) = 0;
 
   virtual ObjectContentType getObjectContentType(
       const KURL&,

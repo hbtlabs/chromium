@@ -4,27 +4,24 @@
 
 package org.chromium.chrome.browser.download.ui;
 
-import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
-import android.content.Intent;
-import android.net.Uri;
 import android.text.TextUtils;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.download.DownloadItem;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadItem;
 import org.chromium.chrome.browser.widget.DateDividedAdapter.TimedItem;
+import org.chromium.content_public.browser.DownloadState;
 import org.chromium.ui.widget.Toast;
 
 import java.io.File;
 
 /** Wraps different classes that contain information about downloads. */
-public abstract class DownloadHistoryItemWrapper implements TimedItem {
+public abstract class DownloadHistoryItemWrapper extends TimedItem {
     protected final BackendProvider mBackendProvider;
     protected final ComponentName mComponentName;
     private Long mStableId;
@@ -70,6 +67,9 @@ public abstract class DownloadHistoryItemWrapper implements TimedItem {
 
     /** @return The mime type or null if the item doesn't have one. */
     public abstract String getMimeType();
+
+    /** @return How much of the download has completed, or -1 if there is no progress. */
+    public abstract int getDownloadProgress();
 
     /** Called when the user wants to open the file. */
     abstract void open();
@@ -148,7 +148,11 @@ public abstract class DownloadHistoryItemWrapper implements TimedItem {
 
         @Override
         public long getFileSize() {
-            return mItem.getDownloadInfo().getContentLength();
+            if (mItem.getDownloadInfo().state() == DownloadState.COMPLETE) {
+                return mItem.getDownloadInfo().getContentLength();
+            } else {
+                return 0;
+            }
         }
 
         @Override
@@ -167,10 +171,13 @@ public abstract class DownloadHistoryItemWrapper implements TimedItem {
         }
 
         @Override
+        public int getDownloadProgress() {
+            return mItem.getDownloadInfo().getPercentCompleted();
+        }
+
+        @Override
         public void open() {
             Context context = ContextUtils.getApplicationContext();
-            Intent viewIntent = DownloadUtils.createViewIntentForDownloadItem(
-                    Uri.fromFile(getFile()), getMimeType());
 
             if (mItem.hasBeenExternallyRemoved()) {
                 Toast.makeText(context, context.getString(R.string.download_cant_open_file),
@@ -178,30 +185,9 @@ public abstract class DownloadHistoryItemWrapper implements TimedItem {
                 return;
             }
 
-            // Check if Chrome should open the file itself.
-            if (mBackendProvider.getDownloadDelegate().isDownloadOpenableInBrowser(
-                    mItem.getId(), mIsOffTheRecord, getMimeType())) {
-                // Share URIs use the content:// scheme when able, which looks bad when displayed
-                // in the URL bar.
-                Uri fileUri = Uri.fromFile(getFile());
-                Uri shareUri = DownloadUtils.getUriForItem(getFile());
-                String mimeType = Intent.normalizeMimeType(getMimeType());
-
-                Intent intent = DownloadUtils.getMediaViewerIntentForDownloadItem(
-                        fileUri, shareUri, mimeType);
-                IntentHandler.startActivityForTrustedIntent(intent, context);
+            if (DownloadUtils.openFile(getFile(), getMimeType(), mIsOffTheRecord)) {
                 recordOpenSuccess();
-                return;
-            }
-
-            // Check if any apps can open the file.
-            try {
-                context.startActivity(viewIntent);
-                recordOpenSuccess();
-            } catch (ActivityNotFoundException e) {
-                // Can't launch the Intent.
-                Toast.makeText(context, context.getString(R.string.download_cant_open_file),
-                        Toast.LENGTH_SHORT).show();
+            } else {
                 recordOpenFailure();
             }
         }
@@ -290,6 +276,11 @@ public abstract class DownloadHistoryItemWrapper implements TimedItem {
         @Override
         public String getMimeType() {
             return "text/plain";
+        }
+
+        @Override
+        public int getDownloadProgress() {
+            return -1;
         }
 
         @Override

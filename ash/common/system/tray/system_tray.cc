@@ -10,7 +10,6 @@
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shelf/wm_shelf_util.h"
-#include "ash/common/system/cast/tray_cast.h"
 #include "ash/common/system/date/tray_date.h"
 #include "ash/common/system/date/tray_system_info.h"
 #include "ash/common/system/tiles/tray_tiles.h"
@@ -53,6 +52,7 @@
 #include "ash/common/system/chromeos/audio/tray_audio_chromeos.h"
 #include "ash/common/system/chromeos/bluetooth/tray_bluetooth.h"
 #include "ash/common/system/chromeos/brightness/tray_brightness.h"
+#include "ash/common/system/chromeos/cast/tray_cast.h"
 #include "ash/common/system/chromeos/enterprise/tray_enterprise.h"
 #include "ash/common/system/chromeos/media_security/multi_profile_media_tray_item.h"
 #include "ash/common/system/chromeos/network/tray_network.h"
@@ -96,8 +96,11 @@ class PaddingTrayItem : public SystemTrayItem {
 
    private:
     gfx::Size GetPreferredSize() const override {
-      return gfx::Size(GetTrayConstant(TRAY_IMAGE_ITEM_PADDING),
-                       GetTrayConstant(TRAY_IMAGE_ITEM_PADDING));
+      // The other tray items already have some padding baked in so we have to
+      // subtract that off.
+      const int side =
+          kTrayEdgePadding - GetTrayConstant(TRAY_IMAGE_ITEM_PADDING);
+      return gfx::Size(side, side);
     }
 
     DISALLOW_COPY_AND_ASSIGN(PaddingView);
@@ -594,12 +597,11 @@ void SystemTray::ShowItems(const std::vector<SystemTrayItem*>& items,
     // (like network) replaces most of the menu.
     full_system_tray_menu_ = items.size() > 1;
     // The menu width is fixed, and it is a per language setting.
-    int menu_width =
-        std::max(MaterialDesignController::IsSystemTrayMenuMaterial()
-                     ? kMinimumSystemTrayMenuWidthMd
-                     : kMinimumSystemTrayMenuWidth,
-                 l10n_util::GetLocalizedContentsWidthInPixels(
-                     IDS_SYSTEM_TRAY_MENU_BUBBLE_WIDTH_PIXELS));
+    int menu_width = std::max(
+        MaterialDesignController::IsSystemTrayMenuMaterial()
+            ? kMinimumSystemTrayMenuWidthMd
+            : kMinimumSystemTrayMenuWidth,
+        WmShell::Get()->system_tray_delegate()->GetSystemTrayMenuWidth());
 
     TrayBubbleView::InitParams init_params(TrayBubbleView::ANCHOR_TYPE_TRAY,
                                            GetAnchorAlignment(), menu_width,

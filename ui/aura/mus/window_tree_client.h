@@ -22,10 +22,10 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "ui/aura/aura_export.h"
-#include "ui/aura/client/focus_change_observer.h"
 #include "ui/aura/client/transient_window_client_observer.h"
 #include "ui/aura/mus/capture_synchronizer_delegate.h"
 #include "ui/aura/mus/drag_drop_controller_host.h"
+#include "ui/aura/mus/focus_synchronizer_delegate.h"
 #include "ui/aura/mus/mus_types.h"
 #include "ui/aura/mus/window_manager_delegate.h"
 #include "ui/aura/mus/window_tree_host_mus_delegate.h"
@@ -45,6 +45,7 @@ class Connector;
 namespace aura {
 class CaptureSynchronizer;
 class DragDropControllerMus;
+class FocusSynchronizer;
 class InFlightBoundsChange;
 class InFlightChange;
 class InFlightFocusChange;
@@ -58,6 +59,7 @@ class WindowTreeClientDelegate;
 class WindowTreeClientPrivate;
 class WindowTreeClientObserver;
 class WindowTreeHost;
+class WindowTreeHostMus;
 
 namespace client {
 class FocusClient;
@@ -77,10 +79,10 @@ class AURA_EXPORT WindowTreeClient
     : NON_EXPORTED_BASE(public ui::mojom::WindowTreeClient),
       NON_EXPORTED_BASE(public ui::mojom::WindowManager),
       public CaptureSynchronizerDelegate,
+      public FocusSynchronizerDelegate,
       public DragDropControllerHost,
       public WindowManagerClient,
       public WindowTreeHostMusDelegate,
-      public client::FocusChangeObserver,
       public client::TransientWindowClientObserver {
  public:
   explicit WindowTreeClient(
@@ -94,9 +96,6 @@ class AURA_EXPORT WindowTreeClient
 
   // Establishes the connection by way of WindowManagerWindowTreeFactory.
   void ConnectAsWindowManager(service_manager::Connector* connector);
-
-  // Wait for OnEmbed(), returning when done.
-  void WaitForEmbed();
 
   bool connected() const { return tree_ != nullptr; }
   ClientSpecificId client_id() const { return client_id_; }
@@ -137,10 +136,6 @@ class AURA_EXPORT WindowTreeClient
 
   // Returns the root of this connection.
   std::set<Window*> GetRoots();
-
-  // Returns the focused window; null if focus is not yet known or another app
-  // is focused.
-  Window* GetFocusedWindow();
 
   // Returns the current location of the mouse on screen. Note: this method may
   // race the asynchronous initialization; but in that case we return (0, 0).
@@ -186,10 +181,6 @@ class AURA_EXPORT WindowTreeClient
   // Returns true if the specified window was created by this client.
   bool WasCreatedByThisClient(const WindowMus* window) const;
 
-  void SetFocusFromServer(WindowMus* window);
-  void SetFocusFromServerImpl(client::FocusClient* focus_client,
-                              WindowMus* window);
-
   // Returns the oldest InFlightChange that matches |change|.
   InFlightChange* GetOldestInFlightChangeMatching(const InFlightChange& change);
 
@@ -202,29 +193,23 @@ class AURA_EXPORT WindowTreeClient
   // See InFlightChange for details on how InFlightChanges are used.
   bool ApplyServerChangeToExistingInFlightChange(const InFlightChange& change);
 
-  void BuildWindowTree(const mojo::Array<ui::mojom::WindowDataPtr>& windows,
-                       WindowMus* initial_parent);
+  void BuildWindowTree(const mojo::Array<ui::mojom::WindowDataPtr>& windows);
 
   // Creates a WindowPortMus from the server side data.
-  // NOTE: this *must* be followed by SetLocalPropertiesFromServerProperties()
   std::unique_ptr<WindowPortMus> CreateWindowPortMus(
-      const ui::mojom::WindowDataPtr& window_data);
+      const ui::mojom::WindowDataPtr& window_data,
+      WindowMusType window_mus_type);
 
   // Sets local properties on the associated Window from the server properties.
   void SetLocalPropertiesFromServerProperties(
       WindowMus* window,
       const ui::mojom::WindowDataPtr& window_data);
 
-  // Creates a WindowTreeHostMus and returns the window associated with it.
-  // The returned window is either the content window of the WindowTreeHostMus
-  // or the window created by WindowTreeHost. See WindowTreeHostMus for
-  // details.
-  // TODO(sky): it would be nice to always have a single window and not the
-  // two different. That requires ownership changes to WindowTreeHost though.
-  Window* CreateWindowTreeHost(RootWindowType type,
-                               const ui::mojom::WindowDataPtr& window_data,
-                               int64_t display_id,
-                               Window* content_window);
+  // Creates a new WindowTreeHostMus.
+  std::unique_ptr<WindowTreeHostMus> CreateWindowTreeHost(
+      WindowMusType window_mus_type,
+      const ui::mojom::WindowDataPtr& window_data,
+      int64_t display_id);
 
   WindowMus* NewWindowFromWindowData(
       WindowMus* parent,
@@ -267,10 +252,13 @@ class AURA_EXPORT WindowTreeClient
                                  const gfx::Rect& revert_bounds);
   void SetWindowVisibleFromServer(WindowMus* window, bool visible);
 
+  // Called from OnWindowMusBoundsChanged() and SetRootWindowBounds().
+  void ScheduleInFlightBoundsChange(WindowMus* window,
+                                    const gfx::Rect& old_bounds,
+                                    const gfx::Rect& new_bounds);
+
   // Following are called from WindowMus.
-  std::unique_ptr<WindowPortInitData> OnWindowMusCreated(WindowMus* window);
-  void OnWindowMusInitDone(WindowMus* window,
-                           std::unique_ptr<WindowPortInitData> init_data);
+  void OnWindowMusCreated(WindowMus* window);
   void OnWindowMusDestroyed(WindowMus* window);
   void OnWindowMusBoundsChanged(WindowMus* window,
                                 const gfx::Rect& old_bounds,
@@ -287,8 +275,6 @@ class AURA_EXPORT WindowTreeClient
   void OnWindowMusPropertyChanged(WindowMus* window,
                                   const void* key,
                                   std::unique_ptr<WindowPortPropertyData> data);
-  void OnWindowMusSurfaceDetached(WindowMus* window,
-                                  const cc::SurfaceSequence& sequence);
 
   // Callback passed from WmPerformMoveLoop().
   void OnWmMoveLoopCompleted(uint32_t change_id, bool completed);
@@ -348,7 +334,6 @@ class AURA_EXPORT WindowTreeClient
                                        ui::mojom::Cursor cursor) override;
   void OnWindowSurfaceChanged(Id window_id,
                               const cc::SurfaceId& surface_id,
-                              const cc::SurfaceSequence& surface_sequence,
                               const gfx::Size& frame_size,
                               float device_scale_factor) override;
   void OnDragDropStart(
@@ -423,11 +408,11 @@ class AURA_EXPORT WindowTreeClient
       const gfx::Vector2d& offset,
       const gfx::Insets& hit_area) override;
 
-  // Overriden from client::FocusChangeObserver:
-  void OnWindowFocused(Window* gained_focus, Window* lost_focus) override;
-
   // Overriden from WindowTreeHostMusDelegate:
-  void SetRootWindowBounds(Window* window, gfx::Rect* bounds) override;
+  void OnWindowTreeHostBoundsWillChange(WindowTreeHostMus* window_tree_host,
+                                        const gfx::Rect& bounds) override;
+  std::unique_ptr<WindowPortMus> CreateWindowPortForTopLevel() override;
+  void OnWindowTreeHostCreated(WindowTreeHostMus* window_tree_host) override;
 
   // Override from client::TransientWindowClientObserver:
   void OnTransientChildWindowAdded(Window* parent,
@@ -440,6 +425,9 @@ class AURA_EXPORT WindowTreeClient
 
   // Overrided from CaptureSynchronizerDelegate:
   uint32_t CreateChangeIdForCapture(WindowMus* window) override;
+
+  // Overrided from FocusSynchronizerDelegate:
+  uint32_t CreateChangeIdForFocus(WindowMus* window) override;
 
   // The one int in |cursor_location_mapping_|. When we read from this
   // location, we must always read from it atomically.
@@ -470,9 +458,7 @@ class AURA_EXPORT WindowTreeClient
 
   std::unique_ptr<CaptureSynchronizer> capture_synchronizer_;
 
-  bool setting_focus_ = false;
-  WindowMus* window_setting_focus_to_ = nullptr;
-  WindowMus* focused_window_ = nullptr;
+  std::unique_ptr<FocusSynchronizer> focus_synchronizer_;
 
   mojo::Binding<ui::mojom::WindowTreeClient> binding_;
   ui::mojom::WindowTreePtr tree_ptr_;

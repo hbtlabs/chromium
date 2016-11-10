@@ -600,12 +600,6 @@ void RenderWidgetHostViewAndroid::Focus() {
   host_->Focus();
   if (overscroll_controller_)
     overscroll_controller_->Enable();
-  if (content_view_core_) {
-    WebContentsImpl* web_contents_impl =
-        static_cast<WebContentsImpl*>(content_view_core_->GetWebContents());
-    if (web_contents_impl->ShowingInterstitialPage())
-      content_view_core_->ForceUpdateImeAdapter(GetNativeImeAdapter());
-  }
 }
 
 bool RenderWidgetHostViewAndroid::HasFocus() const {
@@ -776,8 +770,7 @@ void RenderWidgetHostViewAndroid::TextInputStateChanged(
       static_cast<int>(params.type), params.flags,
       params.value, params.selection_start, params.selection_end,
       params.composition_start, params.composition_end,
-      params.show_ime_if_needed, params.is_non_ime_change,
-      params.batch_edit);
+      params.show_ime_if_needed, params.is_non_ime_change);
 }
 
 void RenderWidgetHostViewAndroid::UpdateBackgroundColor(SkColor color) {
@@ -1192,17 +1185,11 @@ void RenderWidgetHostViewAndroid::SynchronousFrameMetadata(
   OnFrameMetadataUpdated(frame_metadata.Clone(), false);
 
   // DevTools ScreenCast support for Android WebView.
-  WebContents* web_contents = content_view_core_->GetWebContents();
-  if (DevToolsAgentHost::HasFor(web_contents)) {
-    scoped_refptr<DevToolsAgentHost> dtah =
-        DevToolsAgentHost::GetOrCreateFor(web_contents);
-    // Unblock the compositor.
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(
-            &RenderFrameDevToolsAgentHost::SynchronousSwapCompositorFrame,
-            static_cast<RenderFrameDevToolsAgentHost*>(dtah.get()),
-            base::Passed(&frame_metadata)));
+  RenderFrameHost* frame_host = RenderViewHost::From(host_)->GetMainFrame();
+  if (frame_host) {
+    RenderFrameDevToolsAgentHost::SignalSynchronousSwapCompositorFrame(
+        frame_host,
+        std::move(frame_metadata));
   }
 }
 
@@ -1698,27 +1685,6 @@ void RenderWidgetHostViewAndroid::DismissTextHandles() {
 void RenderWidgetHostViewAndroid::SetTextHandlesTemporarilyHidden(bool hidden) {
   if (selection_controller_)
     selection_controller_->SetTemporarilyHidden(hidden);
-}
-
-void RenderWidgetHostViewAndroid::OnShowingPastePopup(
-    const gfx::PointF& point) {
-  if (!selection_controller_)
-    return;
-
-  // As the paste popup may be triggered *before* the bounds and editability
-  // of the region have been updated, explicitly set the properties now.
-  // TODO(jdduke): Remove this workaround when auxiliary paste popup
-  // notifications are no longer required, crbug.com/398170.
-  gfx::SelectionBound insertion_bound;
-  insertion_bound.set_type(gfx::SelectionBound::CENTER);
-  insertion_bound.set_visible(true);
-  insertion_bound.SetEdge(point, point);
-  selection_controller_->HideAndDisallowShowingAutomatically();
-  selection_controller_->OnSelectionEditable(true);
-  selection_controller_->OnSelectionEmpty(true);
-  selection_controller_->OnSelectionBoundsChanged(insertion_bound,
-                                                  insertion_bound);
-  selection_controller_->AllowShowingFromCurrentSelection();
 }
 
 SkColor RenderWidgetHostViewAndroid::GetCachedBackgroundColor() const {

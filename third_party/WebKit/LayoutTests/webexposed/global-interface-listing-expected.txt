@@ -138,15 +138,11 @@ interface Attr : Node
     getter localName
     getter name
     getter namespaceURI
-    getter nodeValue
     getter ownerElement
     getter prefix
     getter specified
-    getter textContent
     getter value
     method constructor
-    setter nodeValue
-    setter textContent
     setter value
 interface Audio
     method constructor
@@ -181,6 +177,7 @@ interface AudioContext : BaseAudioContext
     attribute @@toStringTag
     method close
     method constructor
+    method suspend
 interface AudioDestinationNode : AudioNode
     attribute @@toStringTag
     getter maxChannelCount
@@ -259,6 +256,39 @@ interface BarProp
     attribute @@toStringTag
     getter visible
     method constructor
+interface BaseAudioContext : EventTarget
+    attribute @@toStringTag
+    getter currentTime
+    getter destination
+    getter listener
+    getter onstatechange
+    getter sampleRate
+    getter state
+    method constructor
+    method createAnalyser
+    method createBiquadFilter
+    method createBuffer
+    method createBufferSource
+    method createChannelMerger
+    method createChannelSplitter
+    method createConstantSource
+    method createConvolver
+    method createDelay
+    method createDynamicsCompressor
+    method createGain
+    method createIIRFilter
+    method createMediaElementSource
+    method createMediaStreamDestination
+    method createMediaStreamSource
+    method createOscillator
+    method createPanner
+    method createPeriodicWave
+    method createScriptProcessor
+    method createStereoPanner
+    method createWaveShaper
+    method decodeAudioData
+    method resume
+    setter onstatechange
 interface BatteryManager : EventTarget
     attribute @@toStringTag
     getter charging
@@ -1062,6 +1092,7 @@ interface DOMMatrixReadOnly
     method skewY
     method toFloat32Array
     method toFloat64Array
+    method toJSON
     method toString
     method translate
 interface DOMParser
@@ -2145,6 +2176,7 @@ interface HTMLElement : Element
     getter draggable
     getter hidden
     getter innerText
+    getter inputMode
     getter isContentEditable
     getter lang
     getter offsetHeight
@@ -2243,6 +2275,7 @@ interface HTMLElement : Element
     setter draggable
     setter hidden
     setter innerText
+    setter inputMode
     setter lang
     setter onabort
     setter onauxclick
@@ -2594,7 +2627,6 @@ interface HTMLInputElement : HTMLElement
     getter height
     getter incremental
     getter indeterminate
-    getter inputMode
     getter labels
     getter list
     getter max
@@ -2653,7 +2685,6 @@ interface HTMLInputElement : HTMLElement
     setter height
     setter incremental
     setter indeterminate
-    setter inputMode
     setter max
     setter maxLength
     setter min
@@ -3300,7 +3331,6 @@ interface HTMLTextAreaElement : HTMLElement
     getter dirName
     getter disabled
     getter form
-    getter inputMode
     getter labels
     getter maxLength
     getter minLength
@@ -3332,7 +3362,6 @@ interface HTMLTextAreaElement : HTMLElement
     setter defaultValue
     setter dirName
     setter disabled
-    setter inputMode
     setter maxLength
     setter minLength
     setter name
@@ -3958,7 +3987,6 @@ interface MediaStreamEvent : Event
     getter stream
     method constructor
 interface MediaStreamTrack : EventTarget
-    static method getSources
     attribute @@toStringTag
     getter enabled
     getter id
@@ -4291,7 +4319,6 @@ interface OfflineAudioContext : BaseAudioContext
     getter length
     getter oncomplete
     method constructor
-    method resume
     method startRendering
     method suspend
     setter oncomplete
@@ -4453,6 +4480,11 @@ interface PaymentAddress
     getter sortingCode
     method constructor
     method toJSON
+interface PaymentAppManager
+    attribute @@toStringTag
+    method constructor
+    method getManifest
+    method setManifest
 interface PaymentRequest : EventTarget
     attribute @@toStringTag
     getter onshippingaddresschange
@@ -6134,10 +6166,6 @@ interface SensorReading
     attribute @@toStringTag
     getter timeStamp
     method constructor
-interface SensorReadingEvent : Event
-    attribute @@toStringTag
-    getter reading
-    method constructor
 interface ServiceWorker : EventTarget
     attribute @@toStringTag
     getter onerror
@@ -6173,6 +6201,7 @@ interface ServiceWorkerRegistration : EventTarget
     getter active
     getter installing
     getter onupdatefound
+    getter paymentAppManager
     getter pushManager
     getter scope
     getter sync
@@ -6230,7 +6259,6 @@ interface SourceBuffer : EventTarget
     getter videoTracks
     method abort
     method appendBuffer
-    method appendStream
     method constructor
     method remove
     setter appendWindowEnd
@@ -6331,10 +6359,6 @@ interface StorageManager
     method estimate
     method persist
     method persisted
-interface Stream
-    attribute @@toStringTag
-    getter type
-    method constructor
 interface StylePropertyMap
     attribute @@toStringTag
     method @@iterator
@@ -8225,6 +8249,11 @@ interface Worklet
     attribute @@toStringTag
     method constructor
     method import
+interface WritableStream
+    getter locked
+    method abort
+    method constructor
+    method getWriter
 interface XMLDocument : Document
     attribute @@toStringTag
     method constructor
@@ -8330,6 +8359,7 @@ interface webkitAudioContext : BaseAudioContext
     attribute @@toStringTag
     method close
     method constructor
+    method suspend
 interface webkitIDBCursor
     attribute @@toStringTag
     getter direction
@@ -8470,7 +8500,6 @@ interface webkitOfflineAudioContext : BaseAudioContext
     getter length
     getter oncomplete
     method constructor
-    method resume
     method startRendering
     method suspend
     setter oncomplete
@@ -8623,7 +8652,6 @@ interface webkitURL
     attribute defaultStatus
     attribute defaultstatus
     attribute devicePixelRatio
-    attribute document
     attribute event
     attribute eventSender
     attribute external
@@ -8776,6 +8804,7 @@ interface webkitURL
     attribute webkitIndexedDB
     attribute webkitStorageInfo
     attribute window
+    getter document
     method alert
     method atob
     method blur

@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.ntp.snippets;
 
 import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 
 /**
  * Provides configuration details for NTP snippets.
@@ -13,14 +12,12 @@ import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 public final class SnippetsConfig {
     private SnippetsConfig() {}
 
-
     public static boolean isEnabled() {
         return ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_SNIPPETS);
     }
 
     public static boolean isSaveToOfflineEnabled() {
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_SNIPPETS_SAVE_TO_OFFLINE)
-                && OfflinePageBridge.isBackgroundLoadingEnabled();
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_SNIPPETS_SAVE_TO_OFFLINE);
     }
 
     public static boolean isOfflineBadgeEnabled() {
@@ -29,5 +26,10 @@ public final class SnippetsConfig {
 
     public static boolean isSectionDismissalEnabled() {
         return ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_SUGGESTIONS_SECTION_DISMISSAL);
+    }
+
+    /** https://crbug.com/660837 */
+    public static boolean isIncreasedCardVisibilityEnabled() {
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_SNIPPETS_INCREASED_VISIBILITY);
     }
 }

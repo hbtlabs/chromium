@@ -9,6 +9,7 @@ extern "C" {
 }
 #include <memory>
 
+#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/trace_event/trace_event.h"
@@ -105,9 +106,8 @@ GLXContext CreateHighestVersionContext(Display* display,
       { GLX_CONTEXT_CORE_PROFILE_BIT_ARB, { GLVersion(4, 1) } },
       { GLX_CONTEXT_CORE_PROFILE_BIT_ARB, { GLVersion(4, 0) } },
       { GLX_CONTEXT_CORE_PROFILE_BIT_ARB, { GLVersion(3, 3) } },
-      { GLX_CONTEXT_CORE_PROFILE_BIT_ARB, { GLVersion(3, 2) } },
-      { 0, { GLVersion(3, 1) } },
-      { 0, { GLVersion(3, 0) } },
+      // Do not try to create OpenGL context versions between 3.0 and
+      // 3.2 because of compatibility problems. crbug.com/659030
       { 0, { GLVersion(2, 0) } },
       { 0, { GLVersion(1, 5) } },
       { 0, { GLVersion(1, 4) } },
@@ -168,9 +168,16 @@ bool GLContextGLX::Initialize(
 
   if (GLSurfaceGLX::IsCreateContextSupported()) {
     DVLOG(1) << "GLX_ARB_create_context supported.";
-    context_ = CreateHighestVersionContext(
-        display_, static_cast<GLXFBConfig>(compatible_surface->GetConfig()),
-        share_handle);
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kCreateDefaultGLContext)) {
+      context_ = CreateContextAttribs(
+          display_, static_cast<GLXFBConfig>(compatible_surface->GetConfig()),
+          share_handle, GLVersion(0, 0), 0);
+    } else {
+      context_ = CreateHighestVersionContext(
+          display_, static_cast<GLXFBConfig>(compatible_surface->GetConfig()),
+          share_handle);
+    }
     if (!context_) {
       LOG(ERROR) << "Failed to create GL context with "
                  << "glXCreateContextAttribsARB.";

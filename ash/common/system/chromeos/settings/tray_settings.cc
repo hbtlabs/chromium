@@ -4,6 +4,7 @@
 
 #include "ash/common/system/chromeos/settings/tray_settings.h"
 
+#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/system/chromeos/power/power_status.h"
 #include "ash/common/system/chromeos/power/power_status_view.h"
@@ -12,6 +13,7 @@
 #include "ash/common/system/tray/system_tray_controller.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/tray_constants.h"
+#include "ash/common/system/tray/tray_popup_utils.h"
 #include "ash/common/wm_shell.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
@@ -60,7 +62,8 @@ class SettingsDefaultView : public ActionableView,
       AddChildView(icon);
 
       base::string16 text = rb.GetLocalizedString(IDS_ASH_STATUS_TRAY_SETTINGS);
-      label_ = new views::Label(text);
+      label_ = TrayPopupUtils::CreateDefaultLabel();
+      label_->SetText(text);
       AddChildView(label_);
       SetAccessibleName(text);
 
@@ -72,6 +75,9 @@ class SettingsDefaultView : public ActionableView,
       AddChildView(power_status_view_);
       OnPowerStatusChanged();
     }
+
+    if (MaterialDesignController::IsSystemTrayMenuMaterial())
+      SetInkDropMode(InkDropHostView::InkDropMode::ON);
   }
 
   ~SettingsDefaultView() override { PowerStatus::Get()->RemoveObserver(this); }

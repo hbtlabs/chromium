@@ -75,7 +75,9 @@ static unsigned prerenderRelTypesFromRelAttribute(
 LinkLoader::LinkLoader(LinkLoaderClient* client)
     : m_client(client),
       m_linkLoadTimer(this, &LinkLoader::linkLoadTimerFired),
-      m_linkLoadingErrorTimer(this, &LinkLoader::linkLoadingErrorTimerFired) {}
+      m_linkLoadingErrorTimer(this, &LinkLoader::linkLoadingErrorTimerFired) {
+  DCHECK(m_client);
+}
 
 LinkLoader::~LinkLoader() {}
 
@@ -268,7 +270,8 @@ static Resource* preloadIfNeeded(const LinkRelAttribute& relAttribute,
                                  CrossOriginAttributeValue crossOrigin,
                                  LinkCaller caller,
                                  bool& errorOccurred,
-                                 ViewportDescription* viewportDescription) {
+                                 ViewportDescription* viewportDescription,
+                                 ReferrerPolicy referrerPolicy) {
   if (!document.loader() || !relAttribute.isLinkPreload())
     return nullptr;
 
@@ -315,6 +318,12 @@ static Resource* preloadIfNeeded(const LinkRelAttribute& relAttribute,
   ResourceRequest resourceRequest(document.completeURL(href));
   ResourceFetcher::determineRequestContext(resourceRequest, resourceType,
                                            false);
+
+  if (referrerPolicy != ReferrerPolicyDefault) {
+    resourceRequest.setHTTPReferrer(SecurityPolicy::generateReferrer(
+        referrerPolicy, href, document.outgoingReferrer()));
+  }
+
   FetchRequest linkRequest(resourceRequest, FetchInitiatorTypeNames::link,
                            document.encodingName());
 
@@ -331,6 +340,30 @@ static Resource* preloadIfNeeded(const LinkRelAttribute& relAttribute,
   linkRequest.setForPreload(true, monotonicallyIncreasingTime());
   linkRequest.setLinkPreload(true);
   return document.loader()->startPreload(resourceType, linkRequest);
+}
+
+void LinkLoader::prefetchIfNeeded(Document& document,
+                                  const KURL& href,
+                                  const LinkRelAttribute& relAttribute,
+                                  CrossOriginAttributeValue crossOrigin,
+                                  ReferrerPolicy referrerPolicy) {
+  if (relAttribute.isLinkPrefetch() && href.isValid() && document.frame()) {
+    UseCounter::count(document, UseCounter::LinkRelPrefetch);
+
+    FetchRequest linkRequest(ResourceRequest(document.completeURL(href)),
+                             FetchInitiatorTypeNames::link);
+    if (referrerPolicy != ReferrerPolicyDefault) {
+      linkRequest.mutableResourceRequest().setHTTPReferrer(
+          SecurityPolicy::generateReferrer(referrerPolicy, href,
+                                           document.outgoingReferrer()));
+    }
+    if (crossOrigin != CrossOriginAttributeNotSet) {
+      linkRequest.setCrossOriginAccessControl(document.getSecurityOrigin(),
+                                              crossOrigin);
+    }
+    setResource(LinkFetchResource::fetch(Resource::LinkPrefetch, linkRequest,
+                                         document.fetcher()));
+  }
 }
 
 void LinkLoader::loadLinksFromHeader(
@@ -372,10 +405,12 @@ void LinkLoader::loadLinksFromHeader(
           (viewportDescriptionWrapper && viewportDescriptionWrapper->set)
               ? &(viewportDescriptionWrapper->description)
               : nullptr;
+
       preloadIfNeeded(relAttribute, url, *document, header.as(),
                       header.mimeType(), header.media(),
                       crossOriginAttributeValue(header.crossOrigin()),
-                      LinkCalledFromHeader, errorOccurred, viewportDescription);
+                      LinkCalledFromHeader, errorOccurred, viewportDescription,
+                      ReferrerPolicyDefault);
     }
     // TODO(yoav): Add more supported headers as needed.
   }
@@ -386,16 +421,13 @@ bool LinkLoader::loadLink(const LinkRelAttribute& relAttribute,
                           const String& type,
                           const String& as,
                           const String& media,
+                          ReferrerPolicy referrerPolicy,
                           const KURL& href,
                           Document& document,
                           const NetworkHintsInterface& networkHintsInterface) {
-  // TODO(yoav): Do all links need to load only after they're in document???
+  if (!m_client->shouldLoadLink())
+    return false;
 
-  // TODO(yoav): Convert all uses of the CrossOriginAttribute to
-  // CrossOriginAttributeValue. crbug.com/486689
-
-  // FIXME(crbug.com/463266): We're ignoring type here, for everything but
-  // preload. Maybe we shouldn't.
   dnsPrefetchIfNeeded(relAttribute, href, document, networkHintsInterface,
                       LinkCalledFromMarkup);
 
@@ -403,32 +435,16 @@ bool LinkLoader::loadLink(const LinkRelAttribute& relAttribute,
                      networkHintsInterface, LinkCalledFromMarkup);
 
   bool errorOccurred = false;
-  if (m_client->shouldLoadLink()) {
-    createLinkPreloadResourceClient(preloadIfNeeded(
-        relAttribute, href, document, as, type, media, crossOrigin,
-        LinkCalledFromMarkup, errorOccurred, nullptr));
-  }
+  createLinkPreloadResourceClient(preloadIfNeeded(
+      relAttribute, href, document, as, type, media, crossOrigin,
+      LinkCalledFromMarkup, errorOccurred, nullptr, referrerPolicy));
   if (errorOccurred)
     m_linkLoadingErrorTimer.startOneShot(0, BLINK_FROM_HERE);
 
   if (href.isEmpty() || !href.isValid())
     released();
 
-  // FIXME(crbug.com/323096): Should take care of import.
-  if (relAttribute.isLinkPrefetch() && href.isValid() && document.frame()) {
-    if (!m_client->shouldLoadLink())
-      return false;
-    UseCounter::count(document, UseCounter::LinkRelPrefetch);
-
-    FetchRequest linkRequest(ResourceRequest(document.completeURL(href)),
-                             FetchInitiatorTypeNames::link);
-    if (crossOrigin != CrossOriginAttributeNotSet) {
-      linkRequest.setCrossOriginAccessControl(document.getSecurityOrigin(),
-                                              crossOrigin);
-    }
-    setResource(LinkFetchResource::fetch(Resource::LinkPrefetch, linkRequest,
-                                         document.fetcher()));
-  }
+  prefetchIfNeeded(document, href, relAttribute, crossOrigin, referrerPolicy);
 
   if (const unsigned prerenderRelTypes =
           prerenderRelTypesFromRelAttribute(relAttribute, document)) {

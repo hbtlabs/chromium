@@ -35,6 +35,7 @@
 
 #if defined(OS_ANDROID)
 #include "blimp/client/core/context/android/blimp_client_context_impl_android.h"
+#include "blimp/client/core/settings/android/settings_android.h"
 #endif  // OS_ANDROID
 
 namespace blimp {
@@ -62,13 +63,15 @@ BlimpClientContext* BlimpClientContext::Create(
     std::unique_ptr<CompositorDependencies> compositor_dependencies,
     PrefService* local_state) {
 #if defined(OS_ANDROID)
+  auto settings = base::MakeUnique<SettingsAndroid>(local_state);
   return new BlimpClientContextImplAndroid(
       io_thread_task_runner, file_thread_task_runner,
-      std::move(compositor_dependencies), local_state);
+      std::move(compositor_dependencies), std::move(settings));
 #else
+  auto settings = base::MakeUnique<Settings>(local_state);
   return new BlimpClientContextImpl(
       io_thread_task_runner, file_thread_task_runner,
-      std::move(compositor_dependencies), local_state);
+      std::move(compositor_dependencies), std::move(settings));
 #endif  // defined(OS_ANDROID)
 }
 
@@ -94,14 +97,14 @@ BlimpClientContextImpl::BlimpClientContextImpl(
     scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> file_thread_task_runner,
     std::unique_ptr<CompositorDependencies> compositor_dependencies,
-    PrefService* local_state)
+    std::unique_ptr<Settings> settings)
     : BlimpClientContext(),
       io_thread_task_runner_(io_thread_task_runner),
       file_thread_task_runner_(file_thread_task_runner),
       blimp_compositor_dependencies_(
           base::MakeUnique<BlimpCompositorDependencies>(
               std::move(compositor_dependencies))),
-      settings_(base::MakeUnique<Settings>(local_state)),
+      settings_(std::move(settings)),
       blob_channel_feature_(new BlobChannelFeature(this)),
       geolocation_feature_(base::MakeUnique<GeolocationFeature>(
           base::MakeUnique<device::LocationArbitrator>(
@@ -148,7 +151,20 @@ BlimpClientContextImpl::~BlimpClientContextImpl() {
 }
 
 void BlimpClientContextImpl::SetDelegate(BlimpClientContextDelegate* delegate) {
+  DCHECK(!delegate_ || !delegate);
   delegate_ = delegate;
+
+  // TODO(xingliu): Pass the IdentityProvider needed by |assignment_fetcher_|
+  // in the constructor, see crbug/661848.
+  if (delegate_) {
+    assignment_fetcher_ = base::MakeUnique<AssignmentFetcher>(
+        io_thread_task_runner_, file_thread_task_runner_,
+        delegate_->CreateIdentityProvider(), GetAssignerURL(),
+        base::Bind(&BlimpClientContextImpl::OnAssignmentReceived,
+                   weak_factory_.GetWeakPtr()),
+        base::Bind(&BlimpClientContextDelegate::OnAuthenticationError,
+                   base::Unretained(delegate_)));
+  }
 }
 
 std::unique_ptr<BlimpContents> BlimpClientContextImpl::CreateBlimpContents(
@@ -161,15 +177,8 @@ std::unique_ptr<BlimpContents> BlimpClientContextImpl::CreateBlimpContents(
 }
 
 void BlimpClientContextImpl::Connect() {
-  if (!assignment_fetcher_) {
-    assignment_fetcher_ = base::MakeUnique<AssignmentFetcher>(
-        io_thread_task_runner_, file_thread_task_runner_,
-        delegate_->CreateIdentityProvider(), GetAssignerURL(),
-        base::Bind(&BlimpClientContextImpl::OnAssignmentReceived,
-                   weak_factory_.GetWeakPtr()),
-        base::Bind(&BlimpClientContextDelegate::OnAuthenticationError,
-                   base::Unretained(delegate_)));
-  }
+  DCHECK(delegate_);
+  DCHECK(assignment_fetcher_);
   assignment_fetcher_->Fetch();
 }
 
@@ -183,10 +192,15 @@ void BlimpClientContextImpl::ConnectWithAssignment(
 
 std::unordered_map<std::string, std::string>
 BlimpClientContextImpl::CreateFeedbackData() {
-  return CreateBlimpFeedbackData(blimp_contents_manager_.get());
+  IdentitySource* identity_source = GetIdentitySource();
+  DCHECK(identity_source);
+  return CreateBlimpFeedbackData(blimp_contents_manager_.get(),
+                                 identity_source->GetActiveUsername());
 }
 
 IdentitySource* BlimpClientContextImpl::GetIdentitySource() {
+  DCHECK(delegate_);
+  DCHECK(assignment_fetcher_);
   return assignment_fetcher_->GetIdentitySource();
 }
 

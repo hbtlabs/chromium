@@ -1,38 +1,15 @@
 -ChromeServiceWorkerTest.FallbackMainResourceRequestWhenJSDisabled
--ErrorPageTest.IFrameDNSError_JavaScript
--ExecuteScriptApiTest.FrameWithHttp204
--ExtensionApiTest.Incognito
--ExtensionApiTest.JavaScriptURLPermissions
--ExtensionApiTest.JavasScriptEncodedURL
--ExtensionBindingsApiTest.ModuleSystem
--ExtensionWebRequestApiTest.WebRequestUnloadImmediately
--LogWebUIUrlTest.TestUberPage
--MediaGalleriesPlatformAppBrowserTest.MediaGalleriesRead
--MediaGalleriesPlatformAppBrowserTest.Scan
--MediaGalleriesPlatformAppBrowserTest.ToURL
--OptionsWebUIExtendedTest.OverlayBackToChild
 -PDFExtensionTest.PdfAccessibilityInOOPIF
 -PlatformAppBrowserTest.ActiveAppsAreRecorded
 -PlatformAppUrlRedirectorBrowserTest.PrerenderedClickInTabIntercepted
 -PredictorBrowserTest.RendererInitiatedNavigationPreconnect
 -PrerenderBrowserTest.PrerenderCrossProcessServerRedirect
 -PrerenderBrowserTest.PrerenderCrossProcessServerRedirectNoHang
--RedirectTest.ClientServerServer
 # TabManagerTest.TabManagerBasics crashes sometimes
 -TabManagerTest.TabManagerBasics
 -TemplateURLScraperTest.ScrapeWithOnSubmit
 -ThreatDOMDetailsTest.Everything
--WebNavigationApiTest.Crash
--WebNavigationApiTest.CrossProcess
--WebNavigationApiTest.CrossProcessAbort
--WebNavigationApiTest.CrossProcessFragment
--WebNavigationApiTest.CrossProcessHistory
--WebNavigationApiTest.CrossProcessIframe
--WebNavigationApiTest.Failures
--WebNavigationApiTest.IFrame
--WebNavigationApiTest.OpenTab
 -WebNavigationApiTest.RequestOpenTab
--WebNavigationApiTest.SrcDoc
 -WebNavigationApiTest.UserAction
 
 # Errors related to forms submission.
@@ -43,3 +20,7 @@
 # returns null for browser-side navigations
 -PageLoadMetricsBrowserTest.Ignore204Pages
 -PageLoadMetricsBrowserTest.IgnoreDownloads
+
+# https://crbug.com/650246: ResourcePrefetchPredictor doesn't work correctly yet
+# with PlzNavigate
+-ResourcePrefetchPredictorBrowserTest.*

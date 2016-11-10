@@ -28,6 +28,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
 /**
  * @implements {WebInspector.TimelineLifecycleDelegate}
  * @implements {WebInspector.TimelineModeViewDelegate}
@@ -79,6 +80,8 @@ WebInspector.TimelinePanel = class extends WebInspector.Panel {
     this._captureLayersAndPicturesSetting =
         WebInspector.settings.createSetting('timelineCaptureLayersAndPictures', false);
     this._captureFilmStripSetting = WebInspector.settings.createSetting('timelineCaptureFilmStrip', false);
+
+    this._markUnusedCSS = WebInspector.settings.createSetting('timelineMarkUnusedCSS', false);
 
     this._panelToolbar = new WebInspector.Toolbar('', this.element);
     this._createToolbarItems();
@@ -323,7 +326,7 @@ WebInspector.TimelinePanel = class extends WebInspector.Panel {
     if (Runtime.experiments.isEnabled('timelineRecordingPerspectives') &&
         perspectiveSetting.get() === WebInspector.TimelinePanel.Perspectives.Load) {
       this._reloadButton =
-          new WebInspector.ToolbarButton(WebInspector.UIString('Record & Reload'), 'refresh-toolbar-item');
+          new WebInspector.ToolbarButton(WebInspector.UIString('Record & Reload'), 'largeicon-refresh');
       this._reloadButton.addEventListener('click', () => WebInspector.targetManager.reloadPage());
       this._panelToolbar.appendToolbarItem(this._reloadButton);
     } else {
@@ -331,7 +334,7 @@ WebInspector.TimelinePanel = class extends WebInspector.Panel {
     }
 
     this._updateTimelineControls();
-    var clearButton = new WebInspector.ToolbarButton(WebInspector.UIString('Clear recording'), 'clear-toolbar-item');
+    var clearButton = new WebInspector.ToolbarButton(WebInspector.UIString('Clear recording'), 'largeicon-clear');
     clearButton.addEventListener('click', this._clear, this);
     this._panelToolbar.appendToolbarItem(clearButton);
 
@@ -363,13 +366,19 @@ WebInspector.TimelinePanel = class extends WebInspector.Panel {
       this._panelToolbar.appendToolbarItem(screenshotCheckbox);
     }
 
+    if (Runtime.experiments.isEnabled('timelineRuleUsageRecording')) {
+      this._panelToolbar.appendToolbarItem(this._createSettingCheckbox(
+          WebInspector.UIString('CSS coverage'), this._markUnusedCSS,
+          WebInspector.UIString('Mark unused CSS in souces.')));
+    }
+
     this._captureNetworkSetting.addChangeListener(this._onNetworkChanged, this);
     this._captureMemorySetting.addChangeListener(this._onModeChanged, this);
     this._captureFilmStripSetting.addChangeListener(this._onModeChanged, this);
 
     this._panelToolbar.appendSeparator();
     var garbageCollectButton =
-        new WebInspector.ToolbarButton(WebInspector.UIString('Collect garbage'), 'garbage-collect-toolbar-item');
+        new WebInspector.ToolbarButton(WebInspector.UIString('Collect garbage'), 'largeicon-trash-bin');
     garbageCollectButton.addEventListener('click', this._garbageCollectButtonClicked, this);
     this._panelToolbar.appendToolbarItem(garbageCollectButton);
 
@@ -573,6 +582,9 @@ WebInspector.TimelinePanel = class extends WebInspector.Panel {
     this._setState(WebInspector.TimelinePanel.State.StartPending);
     this._showRecordingStarted();
 
+    if (Runtime.experiments.isEnabled('timelineRuleUsageRecording') && this._markUnusedCSS.get())
+      WebInspector.CSSModel.fromTarget(mainTarget).startRuleUsageTracking();
+
     this._autoRecordGeneration = userInitiated ? null : Symbol('Generation');
     this._controller = new WebInspector.TimelineController(mainTarget, this, this._tracingModel);
     this._controller.startRecording(
@@ -628,6 +640,9 @@ WebInspector.TimelinePanel = class extends WebInspector.Panel {
   }
 
   _clear() {
+    if (Runtime.experiments.isEnabled('timelineRuleUsageRecording') && this._markUnusedCSS.get())
+      WebInspector.CoverageProfile.instance().reset();
+
     WebInspector.LineLevelProfile.instance().reset();
     this._tracingModel.reset();
     this._model.reset();
@@ -1599,15 +1614,14 @@ WebInspector.TimelineIsLongFilter = class extends WebInspector.TimelineModel.Fil
   }
 };
 
-/**
- * @unrestricted
- */
 WebInspector.TimelineTextFilter = class extends WebInspector.TimelineModel.Filter {
   /**
    * @param {!RegExp=} regExp
    */
   constructor(regExp) {
     super();
+    /** @type {?RegExp} */
+    this._regExp;
     this._setRegExp(regExp || null);
   }
 
@@ -1914,7 +1928,7 @@ WebInspector.CPUThrottlingManager = class extends WebInspector.Object {
     this._targets.forEach(target => target.emulationAgent().setCPUThrottlingRate(value));
     if (value !== 1)
       WebInspector.inspectorView.setPanelIcon(
-          'timeline', 'warning-icon', WebInspector.UIString('CPU throttling is enabled'));
+          'timeline', 'smallicon-warning', WebInspector.UIString('CPU throttling is enabled'));
     else
       WebInspector.inspectorView.setPanelIcon('timeline', '', '');
   }

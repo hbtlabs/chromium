@@ -10,6 +10,7 @@
 #include "build/build_config.h"
 #include "chrome/common/features.h"
 #include "content/public/common/url_constants.h"
+#include "printing/features/features.h"
 #include "url/url_util.h"
 
 namespace chrome {
@@ -76,7 +77,6 @@ const char kChromeUIPluginsURL[] = "chrome://plugins/";
 const char kChromeUIPolicyURL[] = "chrome://policy/";
 const char kChromeUIProfileSigninConfirmationURL[] =
     "chrome://profile-signin-confirmation/";
-const char kChromeUIUserManagerURL[] = "chrome://user-manager/";
 const char kChromeUIMdUserManagerUrl[] = "chrome://md-user-manager/";
 const char kChromeUIPrintURL[] = "chrome://print/";
 const char kChromeUIQuitURL[] = "chrome://quit/";
@@ -129,7 +129,9 @@ const char kChromeUISlowURL[] = "chrome://slow/";
 const char kChromeUISystemInfoURL[] = "chrome://system/";
 const char kChromeUITermsOemURL[] = "chrome://terms/oem";
 const char kChromeUIUserImageURL[] = "chrome://userimage/";
-const char kChromeUIMdCupsSettingsURL[] = "chrome://settings/cupsPrinters";
+// TODO(xdai): Change it to chrome://settings/cupsPrinters after M56 since MD
+// settings is going to launch in Chrome OS in M57.
+const char kChromeUIMdCupsSettingsURL[] = "chrome://md-settings/cupsPrinters";
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
@@ -226,7 +228,6 @@ const char kChromeUIComponentsHost[] = "components";
 const char kChromeUIPolicyHost[] = "policy";
 const char kChromeUIProfileSigninConfirmationHost[] =
     "profile-signin-confirmation";
-const char kChromeUIUserManagerHost[] = "user-manager";
 const char kChromeUIMdUserManagerHost[] = "md-user-manager";
 const char kChromeUIPredictorsHost[] = "predictors";
 const char kChromeUIProfilerHost[] = "profiler";
@@ -266,7 +267,7 @@ const char kChromeUIWelcomeHost[] = "welcome";
 const char kChromeUIWelcomeWin10Host[] = "welcome-win10";
 const char kChromeUIWorkersHost[] = "workers";
 
-#if defined(ENABLE_PRINT_PREVIEW)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 const char kChromeUIPrintHost[] = "print";
 #endif  // ENABLE_PRINT_PREVIEW
 
@@ -616,131 +617,132 @@ const char kNotificationWelcomeLearnMoreURL[] =
 // Add hosts here to be included in chrome://chrome-urls (about:about).
 // These hosts will also be suggested by BuiltinProvider.
 const char* const kChromeHostURLs[] = {
-  kChromeUIBluetoothInternalsHost,
-  kChromeUICacheHost,
-  kChromeUIChromeURLsHost,
-  kChromeUIComponentsHost,
-  kChromeUICrashesHost,
-  kChromeUICreditsHost,
-  kChromeUIDNSHost,
-  kChromeUIDeviceLogHost,
-  kChromeUIFlagsHost,
-  kChromeUIGCMInternalsHost,
-  kChromeUIHistoryHost,
-  kChromeUIInvalidationsHost,
-  kChromeUILocalStateHost,
-  kChromeUINetExportHost,
-  kChromeUINetInternalsHost,
-  kChromeUINewTabHost,
-  kChromeUIOmniboxHost,
-  kChromeUIPasswordManagerInternalsHost,
-  kChromeUIPolicyHost,
-  kChromeUIPredictorsHost,
-  kChromeUIProfilerHost,
-  kChromeUISignInInternalsHost,
-  kChromeUISuggestionsHost,
-  kChromeUISupervisedUserInternalsHost,
-  kChromeUISyncInternalsHost,
-  kChromeUITaskSchedulerInternalsHost,
-  kChromeUITermsHost,
-  kChromeUIThumbnailListHost,
-  kChromeUITranslateInternalsHost,
-  kChromeUIUsbInternalsHost,
-  kChromeUIUserActionsHost,
-  kChromeUIVersionHost,
-  content::kChromeUIAccessibilityHost,
-  content::kChromeUIAppCacheInternalsHost,
-  content::kChromeUIBlobInternalsHost,
-  content::kChromeUIGpuHost,
-  content::kChromeUIHistogramHost,
-  content::kChromeUIIndexedDBInternalsHost,
-  content::kChromeUIMediaInternalsHost,
-  content::kChromeUINetworkErrorHost,
-  content::kChromeUINetworkErrorsListingHost,
-  content::kChromeUINetworkViewCacheHost,
-  content::kChromeUIServiceWorkerInternalsHost,
-  content::kChromeUITracingHost,
-  content::kChromeUIWebRTCInternalsHost,
+    kChromeUIBluetoothInternalsHost,
+    kChromeUICacheHost,
+    kChromeUIChromeURLsHost,
+    kChromeUIComponentsHost,
+    kChromeUICrashesHost,
+    kChromeUICreditsHost,
+    kChromeUIDNSHost,
+#if defined(OS_CHROMEOS) && !defined(OFFICIAL_BUILD)
+    kChromeUIDeviceEmulatorHost,
+#endif
+    kChromeUIDeviceLogHost,
+    kChromeUIFlagsHost,
+    kChromeUIGCMInternalsHost,
+    kChromeUIHistoryHost,
+    kChromeUIInvalidationsHost,
+    kChromeUILocalStateHost,
+    kChromeUINetExportHost,
+    kChromeUINetInternalsHost,
+    kChromeUINewTabHost,
+    kChromeUIOmniboxHost,
+    kChromeUIPasswordManagerInternalsHost,
+    kChromeUIPolicyHost,
+    kChromeUIPredictorsHost,
+    kChromeUIProfilerHost,
+    kChromeUISignInInternalsHost,
+    kChromeUISuggestionsHost,
+    kChromeUISupervisedUserInternalsHost,
+    kChromeUISyncInternalsHost,
+    kChromeUITaskSchedulerInternalsHost,
+    kChromeUITermsHost,
+    kChromeUIThumbnailListHost,
+    kChromeUITranslateInternalsHost,
+    kChromeUIUsbInternalsHost,
+    kChromeUIUserActionsHost,
+    kChromeUIVersionHost,
+    content::kChromeUIAccessibilityHost,
+    content::kChromeUIAppCacheInternalsHost,
+    content::kChromeUIBlobInternalsHost,
+    content::kChromeUIGpuHost,
+    content::kChromeUIHistogramHost,
+    content::kChromeUIIndexedDBInternalsHost,
+    content::kChromeUIMediaInternalsHost,
+    content::kChromeUINetworkErrorHost,
+    content::kChromeUINetworkErrorsListingHost,
+    content::kChromeUINetworkViewCacheHost,
+    content::kChromeUIServiceWorkerInternalsHost,
+    content::kChromeUITracingHost,
+    content::kChromeUIWebRTCInternalsHost,
 #if !defined(OS_ANDROID)
 #if !defined(OS_CHROMEOS)
-  kChromeUIAppLauncherPageHost,
+    kChromeUIAppLauncherPageHost,
 #endif
-  kChromeUIBookmarksHost,
-  kChromeUIDownloadsHost,
-  kChromeUIFlashHost,
-  kChromeUIHelpHost,
-  kChromeUIInspectHost,
-  kChromeUIPluginsHost,
-  kChromeUIQuotaInternalsHost,
-  kChromeUISettingsHost,
-  kChromeUISystemInfoHost,
-  kChromeUIUberHost,
+    kChromeUIBookmarksHost,
+    kChromeUIDownloadsHost,
+    kChromeUIFlashHost,
+    kChromeUIHelpHost,
+    kChromeUIInspectHost,
+    kChromeUIPluginsHost,
+    kChromeUIQuotaInternalsHost,
+    kChromeUISettingsHost,
+    kChromeUISystemInfoHost,
+    kChromeUIUberHost,
 #endif
 #if defined(OS_ANDROID)
-  kChromeUINetExportHost,
-  kChromeUIOfflineInternalsHost,
-  kChromeUIPopularSitesInternalsHost,
-  kChromeUISnippetsInternalsHost,
+    kChromeUINetExportHost,
+    kChromeUIOfflineInternalsHost,
+    kChromeUIPopularSitesInternalsHost,
+    kChromeUISnippetsInternalsHost,
 #endif
 #if defined(OS_CHROMEOS)
-  kChromeUICertificateManagerHost,
-  kChromeUIChooseMobileNetworkHost,
-  kChromeUICryptohomeHost,
-  kChromeUIDriveInternalsHost,
-  kChromeUIFirstRunHost,
-  kChromeUIKeyboardOverlayHost,
-  kChromeUILoginHost,
-  kChromeUINetworkHost,
-  kChromeUIOobeHost,
-  kChromeUIOSCreditsHost,
-  kChromeUIPowerHost,
-  kChromeUIProxySettingsHost,
-  kChromeUIVoiceSearchHost,
+    kChromeUICertificateManagerHost,
+    kChromeUIChooseMobileNetworkHost,
+    kChromeUICryptohomeHost,
+    kChromeUIDriveInternalsHost,
+    kChromeUIFirstRunHost,
+    kChromeUIKeyboardOverlayHost,
+    kChromeUILoginHost,
+    kChromeUINetworkHost,
+    kChromeUIOobeHost,
+    kChromeUIOSCreditsHost,
+    kChromeUIPowerHost,
+    kChromeUIProxySettingsHost,
+    kChromeUIVoiceSearchHost,
 #endif
 #if defined(OS_WIN) || defined(OS_CHROMEOS)
-  kChromeUIDiscardsHost,
+    kChromeUIDiscardsHost,
 #endif
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
-  kChromeUILinuxProxyConfigHost,
-  kChromeUISandboxHost,
+    kChromeUILinuxProxyConfigHost,
+    kChromeUISandboxHost,
 #endif
 #if defined(OS_WIN)
-  kChromeUIConflictsHost,
+    kChromeUIConflictsHost,
 #endif
 #if !defined(DISABLE_NACL)
-  kChromeUINaClHost,
+    kChromeUINaClHost,
 #endif
 #if defined(ENABLE_EXTENSIONS)
-  kChromeUIExtensionsHost,
+    kChromeUIExtensionsHost,
 #endif
-#if defined(ENABLE_PRINT_PREVIEW)
-  kChromeUIPrintHost,
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+    kChromeUIPrintHost,
 #endif
 #if BUILDFLAG(ENABLE_SERVICE_DISCOVERY)
-  kChromeUIDevicesHost,
+    kChromeUIDevicesHost,
 #endif
 #if defined(ENABLE_WEBRTC)
-  kChromeUIWebRtcLogsHost,
+    kChromeUIWebRtcLogsHost,
 #endif
 };
 const size_t kNumberOfChromeHostURLs = arraysize(kChromeHostURLs);
 
-const char* const kChromeDebugURLs[] = {
-  content::kChromeUIBadCastCrashURL,
-  content::kChromeUICrashURL,
-  content::kChromeUIDumpURL,
-  content::kChromeUIKillURL,
-  content::kChromeUIHangURL,
-  content::kChromeUIShorthangURL,
-  content::kChromeUIGpuCleanURL,
-  content::kChromeUIGpuCrashURL,
-  content::kChromeUIGpuHangURL,
-  content::kChromeUIMemoryExhaustURL,
-  content::kChromeUIPpapiFlashCrashURL,
-  content::kChromeUIPpapiFlashHangURL,
-  chrome::kChromeUIQuitURL,
-  chrome::kChromeUIRestartURL
-};
+const char* const kChromeDebugURLs[] = {content::kChromeUIBadCastCrashURL,
+                                        content::kChromeUICrashURL,
+                                        content::kChromeUIDumpURL,
+                                        content::kChromeUIKillURL,
+                                        content::kChromeUIHangURL,
+                                        content::kChromeUIShorthangURL,
+                                        content::kChromeUIGpuCleanURL,
+                                        content::kChromeUIGpuCrashURL,
+                                        content::kChromeUIGpuHangURL,
+                                        content::kChromeUIMemoryExhaustURL,
+                                        content::kChromeUIPpapiFlashCrashURL,
+                                        content::kChromeUIPpapiFlashHangURL,
+                                        chrome::kChromeUIQuitURL,
+                                        chrome::kChromeUIRestartURL};
 const int kNumberOfChromeDebugURLs =
     static_cast<int>(arraysize(kChromeDebugURLs));
 

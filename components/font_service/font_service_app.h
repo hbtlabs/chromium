@@ -28,7 +28,7 @@ class FontServiceApp
 
  private:
   // service_manager::Service:
-  void OnStart(const service_manager::ServiceInfo& info) override;
+  void OnStart(service_manager::ServiceContext* context) override;
   bool OnConnect(const service_manager::ServiceInfo& remote_info,
                  service_manager::InterfaceRegistry* registry) override;
 
@@ -37,7 +37,7 @@ class FontServiceApp
               mojo::InterfaceRequest<mojom::FontService> request) override;
 
   // FontService:
-  void MatchFamilyName(const mojo::String& family_name,
+  void MatchFamilyName(const std::string& family_name,
                        mojom::TypefaceStylePtr requested_style,
                        const MatchFamilyNameCallback& callback) override;
   void OpenStream(uint32_t id_number,

@@ -449,14 +449,6 @@ void WebContentsAndroid::UpdateBrowserControlsState(
       host->GetRoutingID(), enable_hiding, enable_showing, animate));
 }
 
-void WebContentsAndroid::ShowImeIfNeeded(JNIEnv* env,
-                                         const JavaParamRef<jobject>& obj) {
-  RenderViewHost* host = web_contents_->GetRenderViewHost();
-  if (!host)
-    return;
-  host->Send(new ViewMsg_ShowImeIfNeeded(host->GetRoutingID()));
-}
-
 void WebContentsAndroid::ScrollFocusedEditableNodeIntoView(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
@@ -678,6 +670,14 @@ int WebContentsAndroid::DownloadImage(
                      env, obj)),
                  base::Owned(new ScopedJavaGlobalRef<jobject>(
                      env, jcallback))));
+}
+
+void WebContentsAndroid::DismissTextHandles(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj) {
+  RenderWidgetHostViewAndroid* view = GetRenderWidgetHostViewAndroid();
+  if (view)
+    view->DismissTextHandles();
 }
 
 void WebContentsAndroid::OnFinishGetContentBitmap(

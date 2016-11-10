@@ -159,7 +159,11 @@ CommandHandler.onCommand = function(command) {
           cvox.QueueMode.FLUSH);
       return false;
     case 'reportIssue':
-      var url = Background.ISSUE_URL;
+      var url = 'https://code.google.com/p/chromium/issues/entry?' +
+          'labels=Type-Bug,Pri-2,cvox2,OS-Chrome&' +
+          'components=UI>accessibility&' +
+          'description=';
+
       var description = {};
       description['Mode'] = ChromeVoxState.instance.mode;
       description['Version'] = chrome.app.getDetails().version;
@@ -180,8 +184,11 @@ CommandHandler.onCommand = function(command) {
             ChromeVoxState.instance.currentRange);
       }
       break;
-    case 'showNextUpdatePage':
+    case 'help':
       (new PanelCommand(PanelCommandType.TUTORIAL)).send();
+      return false;
+    case 'showNextUpdatePage':
+      (new PanelCommand(PanelCommandType.UPDATE_NOTES)).send();
       return false;
     default:
       break;
@@ -275,6 +282,16 @@ CommandHandler.onCommand = function(command) {
       dir = Dir.BACKWARD;
       pred = AutomationPredicate.formField;
       predErrorMsg = 'no_previous_form_field';
+      break;
+    case 'previousGraphic':
+      dir = Dir.BACKWARD;
+      pred = AutomationPredicate.image;
+      predErrorMsg = 'no_previous_graphic';
+      break;
+    case 'nextGraphic':
+      dir = Dir.FORWARD;
+      pred = AutomationPredicate.image;
+      predErrorMsg = 'no_next_graphic';
       break;
     case 'nextHeading':
       dir = Dir.FORWARD;

@@ -225,6 +225,14 @@ class CHROMEOS_EXPORT NetworkStateHandler
   // only set it.
   void SetWakeOnLanEnabled(bool enabled);
 
+  // Enable or disable network bandwidth throttling, on all interfaces on the
+  // system. If |enabled| is true, |upload_rate_kbits| and |download_rate_kbits|
+  // are the desired rates (in kbits/s) to throttle to. If |enabled| is false,
+  // throttling is off, and the rates are ignored.
+  void SetNetworkThrottlingStatus(bool enabled,
+                                  uint32_t upload_rate_kbits,
+                                  uint32_t download_rate_kbits);
+
   const std::string& GetCheckPortalListForTest() const {
     return check_portal_list_;
   }
@@ -244,7 +252,7 @@ class CHROMEOS_EXPORT NetworkStateHandler
                            const std::string& error);
 
   // Constructs and initializes an instance for testing.
-  static NetworkStateHandler* InitializeForTest();
+  static std::unique_ptr<NetworkStateHandler> InitializeForTest();
 
   // Default set of comma separated interfaces on which to enable
   // portal checking.

@@ -181,7 +181,7 @@ std::unique_ptr<Layer> Layer::Clone() const {
     clone->SetAlphaShape(base::MakeUnique<SkRegion>(*alpha_shape_));
 
   // cc::Layer state.
-  if (surface_layer_ && !surface_layer_->surface_id().is_null()) {
+  if (surface_layer_ && surface_layer_->surface_id().is_valid()) {
     clone->SetShowSurface(
         surface_layer_->surface_id(),
         surface_layer_->satisfy_callback(),
@@ -914,7 +914,9 @@ class LayerDebugInfo : public base::trace_event::ConvertableToTraceFormat {
   void AppendAsTraceFormat(std::string* out) const override {
     base::DictionaryValue dictionary;
     dictionary.SetString("layer_name", name_);
-    base::JSONWriter::Write(dictionary, out);
+    std::string tmp;
+    base::JSONWriter::Write(dictionary, &tmp);
+    out->append(tmp);
   }
 
  private:

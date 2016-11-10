@@ -30,6 +30,7 @@
 
 #include "bindings/core/v8/WindowProxy.h"
 
+#include "bindings/core/v8/ConditionalFeatures.h"
 #include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/V8Binding.h"
@@ -42,6 +43,7 @@
 #include "bindings/core/v8/V8Initializer.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
 #include "bindings/core/v8/V8PagePopupControllerBinding.h"
+#include "bindings/core/v8/V8PrivateProperty.h"
 #include "bindings/core/v8/V8Window.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
@@ -266,11 +268,6 @@ bool WindowProxy::initialize() {
     setSecurityToken(origin);
   }
 
-  // All interfaces must be registered to V8PerContextData.
-  // So we explicitly call constructorForType for the global object.
-  V8PerContextData::from(context)->constructorForType(
-      &V8Window::wrapperTypeInfo);
-
   if (m_frame->isLocalFrame()) {
     LocalFrame* frame = toLocalFrame(m_frame);
     MainThreadDebugger::instance()->contextCreated(m_scriptState.get(), frame,
@@ -278,6 +275,12 @@ bool WindowProxy::initialize() {
     frame->loader().client()->didCreateScriptContext(
         context, m_world->extensionGroup(), m_world->worldId());
   }
+  // If conditional features for window have been queued before the V8 context
+  // was ready, then inject them into the context now
+  if (m_world->isMainWorld()) {
+    installPendingConditionalFeaturesOnWindow(m_scriptState.get());
+  }
+
   return true;
 }
 
@@ -421,12 +424,10 @@ void WindowProxy::updateDocumentProperty() {
   checkDocumentWrapper(m_document.newLocal(m_isolate), frame->document());
 
   ASSERT(documentWrapper->IsObject());
-  // TODO(jochen): Don't replace the accessor with a data value. We need a way
-  // to tell v8 that the accessor's return value won't change after this point.
-  if (!v8CallBoolean(context->Global()->ForceSet(
-          context, v8AtomicString(m_isolate, "document"), documentWrapper,
-          static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete))))
-    return;
+
+  // Update cached accessor.
+  CHECK(V8PrivateProperty::getWindowDocumentCachedAccessor(m_isolate).set(
+      context, context->Global(), documentWrapper));
 }
 
 void WindowProxy::updateActivityLogger() {

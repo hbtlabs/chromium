@@ -9,15 +9,17 @@
 #include "base/command_line.h"
 #import "base/mac/mac_util.h"
 #include "base/mac/sdk_forward_declarations.h"
+#include "chrome/browser/profiles/profile.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/fullscreen/fullscreen_menubar_tracker.h"
 #import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_animation_controller.h"
 #import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_mouse_tracker.h"
 #import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_visibility_lock_controller.h"
+#import "chrome/browser/ui/cocoa/fullscreen/immersive_fullscreen_controller.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/pref_names.h"
 #include "ui/base/cocoa/appkit_utils.h"
 #import "ui/base/cocoa/nsview_additions.h"
-#import "ui/base/cocoa/tracking_area.h"
 
 namespace {
 
@@ -26,47 +28,19 @@ const CGFloat kHideFraction = 0.0;
 const CGFloat kShowFraction = 1.0;
 
 // The amount by which the toolbar is offset downwards (to avoid the menu)
-// when the toolbar style is OMNIBOX_TABS_HIDDEN. (We can't use
+// when the toolbar style is TOOLBAR_HIDDEN. (We can't use
 // |-[NSMenu menuBarHeight]| since it returns 0 when the menu bar is hidden.)
 const CGFloat kToolbarVerticalOffset = 22;
 
 }  // end namespace
 
-@interface FullscreenToolbarController (PrivateMethods)
-
-// Updates the visibility of the menu bar and the dock.
-- (void)updateMenuBarAndDockVisibility;
-
-// Whether the current screen is expected to have a menu bar, regardless of
-// current visibility of the menu bar.
-- (BOOL)doesScreenHaveMenuBar;
-
-// Returns YES if the window is on the primary screen.
-- (BOOL)isWindowOnPrimaryScreen;
-
-// Returns |kFullScreenModeHideAll| when the overlay is hidden and
-// |kFullScreenModeHideDock| when the overlay is shown.
-- (base::mac::FullScreenMode)desiredSystemFullscreenMode;
-
-// Stops any running animations, etc.
-- (void)cleanup;
-
-// Whether the menu bar should be shown in immersive fullscreen for the screen
-// that contains the window.
-- (BOOL)shouldShowMenubarInImmersiveFullscreen;
-
-@end
-
 @implementation FullscreenToolbarController
 
-@synthesize slidingStyle = slidingStyle_;
+@synthesize toolbarStyle = toolbarStyle_;
 
-- (id)initWithBrowserController:(BrowserWindowController*)controller
-                          style:(FullscreenSlidingStyle)style {
+- (id)initWithBrowserController:(BrowserWindowController*)controller {
   if ((self = [super init])) {
     browserController_ = controller;
-    systemFullscreenMode_ = base::mac::kFullScreenModeNormal;
-    slidingStyle_ = style;
     animationController_.reset(new FullscreenToolbarAnimationController(self));
     visibilityLockController_.reset(
         [[FullscreenToolbarVisibilityLockController alloc]
@@ -86,50 +60,34 @@ const CGFloat kToolbarVerticalOffset = 22;
   DCHECK(!inFullscreenMode_);
   inFullscreenMode_ = YES;
 
-  menubarTracker_.reset([[FullscreenMenubarTracker alloc]
-      initWithFullscreenToolbarController:self]);
-  mouseTracker_.reset([[FullscreenToolbarMouseTracker alloc]
-      initWithFullscreenToolbarController:self
-                      animationController:animationController_.get()]);
+  [self updateToolbarStyle];
 
-  [self updateMenuBarAndDockVisibility];
-
-  // Register for notifications.  Self is removed as an observer in |-cleanup|.
-  NSNotificationCenter* nc = [NSNotificationCenter defaultCenter];
-  NSWindow* window = [browserController_ window];
-
-  [nc addObserver:self
-         selector:@selector(windowDidBecomeMain:)
-             name:NSWindowDidBecomeMainNotification
-           object:window];
-
-  [nc addObserver:self
-         selector:@selector(windowDidResignMain:)
-             name:NSWindowDidResignMainNotification
-           object:window];
+  if ([browserController_ isInImmersiveFullscreen]) {
+    immersiveFullscreenController_.reset([[ImmersiveFullscreenController alloc]
+        initWithBrowserController:browserController_]);
+    [immersiveFullscreenController_ updateMenuBarAndDockVisibility];
+  } else {
+    menubarTracker_.reset([[FullscreenMenubarTracker alloc]
+        initWithFullscreenToolbarController:self]);
+    mouseTracker_.reset([[FullscreenToolbarMouseTracker alloc]
+        initWithFullscreenToolbarController:self
+                        animationController:animationController_.get()]);
+  }
 }
 
 - (void)exitFullscreenMode {
   DCHECK(inFullscreenMode_);
   inFullscreenMode_ = NO;
 
-  [self cleanup];
-}
+  animationController_->StopAnimationAndTimer();
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
 
-- (void)windowDidChangeScreen:(NSNotification*)notification {
-  [browserController_ resizeFullscreenWindow];
-}
+  menubarTracker_.reset();
+  mouseTracker_.reset();
+  immersiveFullscreenController_.reset();
 
-- (void)windowDidMove:(NSNotification*)notification {
-  [browserController_ resizeFullscreenWindow];
-}
-
-- (void)windowDidBecomeMain:(NSNotification*)notification {
-  [self updateMenuBarAndDockVisibility];
-}
-
-- (void)windowDidResignMain:(NSNotification*)notification {
-  [self updateMenuBarAndDockVisibility];
+  // No more calls back up to the BWC.
+  browserController_ = nil;
 }
 
 // Cancels any running animation and timers.
@@ -146,27 +104,26 @@ const CGFloat kToolbarVerticalOffset = 22;
   animationController_->AnimateToolbarForTabstripChanges();
 }
 
-- (void)setSystemFullscreenModeTo:(base::mac::FullScreenMode)mode {
-  if (mode == systemFullscreenMode_)
-    return;
-  if (systemFullscreenMode_ == base::mac::kFullScreenModeNormal)
-    base::mac::RequestFullScreen(mode);
-  else if (mode == base::mac::kFullScreenModeNormal)
-    base::mac::ReleaseFullScreen(systemFullscreenMode_);
-  else
-    base::mac::SwitchFullScreenModes(systemFullscreenMode_, mode);
-  systemFullscreenMode_ = mode;
+- (void)updateToolbarStyle {
+  FullscreenToolbarStyle oldStyle = toolbarStyle_;
+
+  if ([browserController_ isFullscreenForTabContentOrExtension]) {
+    toolbarStyle_ = FullscreenToolbarStyle::TOOLBAR_NONE;
+  } else {
+    PrefService* prefs = [browserController_ profile]->GetPrefs();
+    toolbarStyle_ = prefs->GetBoolean(prefs::kShowFullscreenToolbar)
+                        ? FullscreenToolbarStyle::TOOLBAR_PRESENT
+                        : FullscreenToolbarStyle::TOOLBAR_HIDDEN;
+  }
+
+  if (oldStyle != toolbarStyle_)
+    [self updateToolbar];
 }
 
 - (void)updateToolbar {
   [browserController_ layoutSubviews];
   animationController_->ToolbarDidUpdate();
   [mouseTracker_ updateTrackingArea];
-
-  // In AppKit fullscreen, moving the mouse to the top of the screen toggles
-  // menu visibility. Replicate the same effect for immersive fullscreen.
-  if ([browserController_ isInImmersiveFullscreen])
-    [self updateMenuBarAndDockVisibility];
 }
 
 - (BrowserWindowController*)browserWindowController {
@@ -194,20 +151,21 @@ const CGFloat kToolbarVerticalOffset = 22;
                        kToolbarVerticalOffset);
   }
 
-  return [self shouldShowMenubarInImmersiveFullscreen] ? -kToolbarVerticalOffset
-                                                       : 0;
+  return [immersiveFullscreenController_ shouldShowMenubar]
+             ? -kToolbarVerticalOffset
+             : 0;
 }
 
 - (CGFloat)toolbarFraction {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kKioskMode))
     return kHideFraction;
 
-  switch (slidingStyle_) {
-    case FullscreenSlidingStyle::OMNIBOX_TABS_PRESENT:
+  switch (toolbarStyle_) {
+    case FullscreenToolbarStyle::TOOLBAR_PRESENT:
       return kShowFraction;
-    case FullscreenSlidingStyle::OMNIBOX_TABS_NONE:
+    case FullscreenToolbarStyle::TOOLBAR_NONE:
       return kHideFraction;
-    case FullscreenSlidingStyle::OMNIBOX_TABS_HIDDEN:
+    case FullscreenToolbarStyle::TOOLBAR_HIDDEN:
       if ([self mustShowFullscreenToolbar])
         return kShowFraction;
 
@@ -222,10 +180,10 @@ const CGFloat kToolbarVerticalOffset = 22;
   if (!inFullscreenMode_)
     return NO;
 
-  if (slidingStyle_ == FullscreenSlidingStyle::OMNIBOX_TABS_PRESENT)
+  if (toolbarStyle_ == FullscreenToolbarStyle::TOOLBAR_PRESENT)
     return YES;
 
-  if (slidingStyle_ == FullscreenSlidingStyle::OMNIBOX_TABS_NONE)
+  if (toolbarStyle_ == FullscreenToolbarStyle::TOOLBAR_NONE)
     return NO;
 
   FullscreenMenubarState menubarState = [menubarTracker_ state];
@@ -234,17 +192,8 @@ const CGFloat kToolbarVerticalOffset = 22;
          [visibilityLockController_ isToolbarVisibilityLocked];
 }
 
-- (BOOL)isFullscreenTransitionInProgress {
-  return [browserController_ isFullscreenTransitionInProgress];
-}
-
 - (BOOL)isInFullscreen {
   return inFullscreenMode_;
-}
-
-- (BOOL)isMouseOnScreen {
-  return NSMouseInRect([NSEvent mouseLocation],
-                       [[browserController_ window] screen].frame, false);
 }
 
 - (void)updateToolbarFrame:(NSRect)frame {
@@ -254,63 +203,3 @@ const CGFloat kToolbarVerticalOffset = 22;
 
 @end
 
-@implementation FullscreenToolbarController (PrivateMethods)
-
-- (void)updateMenuBarAndDockVisibility {
-  if (![self isMouseOnScreen] ||
-      ![browserController_ isInImmersiveFullscreen]) {
-    [self setSystemFullscreenModeTo:base::mac::kFullScreenModeNormal];
-    return;
-  }
-
-  // The screen does not have a menu bar, so there's no need to hide it.
-  if (![self doesScreenHaveMenuBar]) {
-    [self setSystemFullscreenModeTo:base::mac::kFullScreenModeHideDock];
-    return;
-  }
-
-  [self setSystemFullscreenModeTo:[self desiredSystemFullscreenMode]];
-}
-
-- (BOOL)doesScreenHaveMenuBar {
-  if (![[NSScreen class]
-          respondsToSelector:@selector(screensHaveSeparateSpaces)])
-    return [self isWindowOnPrimaryScreen];
-
-  BOOL eachScreenShouldHaveMenuBar = [NSScreen screensHaveSeparateSpaces];
-  return eachScreenShouldHaveMenuBar ?: [self isWindowOnPrimaryScreen];
-}
-
-- (BOOL)isWindowOnPrimaryScreen {
-  NSScreen* screen = [[browserController_ window] screen];
-  NSScreen* primaryScreen = [[NSScreen screens] firstObject];
-  return (screen == primaryScreen);
-}
-
-- (base::mac::FullScreenMode)desiredSystemFullscreenMode {
-  if ([self shouldShowMenubarInImmersiveFullscreen])
-    return base::mac::kFullScreenModeHideDock;
-  return base::mac::kFullScreenModeHideAll;
-}
-
-- (void)cleanup {
-  animationController_->StopAnimationAndTimer();
-  [[NSNotificationCenter defaultCenter] removeObserver:self];
-
-  // Call the main status resignation code to perform the associated cleanup,
-  // since we will no longer be receiving actual status resignation
-  // notifications.
-  [self setSystemFullscreenModeTo:base::mac::kFullScreenModeNormal];
-
-  menubarTracker_.reset();
-  mouseTracker_.reset();
-
-  // No more calls back up to the BWC.
-  browserController_ = nil;
-}
-
-- (BOOL)shouldShowMenubarInImmersiveFullscreen {
-  return [self doesScreenHaveMenuBar] && [self toolbarFraction] > 0.99;
-}
-
-@end

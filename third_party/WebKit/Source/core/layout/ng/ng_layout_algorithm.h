@@ -6,13 +6,15 @@
 #define NGLayoutAlgorithm_h
 
 #include "core/CoreExport.h"
+#include "platform/heap/Handle.h"
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
 
 namespace blink {
 
+struct MinAndMaxContentSizes;
 class NGConstraintSpace;
-class NGPhysicalFragment;
+class NGPhysicalFragmentBase;
 
 // Base class for all LayoutNG algorithms.
 class CORE_EXPORT NGLayoutAlgorithm
@@ -31,7 +33,21 @@ class CORE_EXPORT NGLayoutAlgorithm
   // Returns true when done; when this function returns false, it has to be
   // called again. The out parameter will only be set when this function
   // returns true.
-  virtual bool Layout(NGPhysicalFragment**) = 0;
+  virtual bool Layout(NGPhysicalFragmentBase**) = 0;
+
+  enum MinAndMaxState { Success, Pending, NotImplemented };
+
+  // Computes the min-content and max-content intrinsic sizes for the given box.
+  // The result will not take any min-width. max-width or width properties into
+  // account. Implementations can return NotImpplemented in which case the
+  // caller is expected ot synthesize this value from the overflow rect returned
+  // from Layout called with a available width of 0 and LayoutUnit::max(),
+  // respectively.
+  // A Pending return value has the same meaning as a false return from layout,
+  // i.e. it is a request to call this function again.
+  virtual MinAndMaxState ComputeMinAndMaxContentSizes(MinAndMaxContentSizes*) {
+    return NotImplemented;
+  }
 
   DEFINE_INLINE_VIRTUAL_TRACE() {}
 };

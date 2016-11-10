@@ -28,10 +28,11 @@
 #include "third_party/WebKit/public/platform/WebMediaStream.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
-#include "third_party/WebKit/public/platform/WebMediaStreamTrackSourcesRequest.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/web/WebHeap.h"
+
+using testing::_;
 
 namespace content {
 
@@ -50,7 +51,7 @@ class MockMediaStreamVideoCapturerSource : public MockMediaStreamVideoSource {
 class MockMediaDevicesDispatcherHost
     : public ::mojom::MediaDevicesDispatcherHost {
  public:
-  MockMediaDevicesDispatcherHost() : binding_(this) {}
+  MockMediaDevicesDispatcherHost() {}
   void EnumerateDevices(bool request_audio_input,
                         bool request_video_input,
                         bool request_audio_output,
@@ -76,12 +77,12 @@ class MockMediaDevicesDispatcherHost
     callback.Run(result);
   }
 
-  ::mojom::MediaDevicesDispatcherHostPtr CreateInterfacePtrAndBind() {
-    return binding_.CreateInterfacePtrAndBind();
-  }
-
- private:
-  mojo::Binding<::mojom::MediaDevicesDispatcherHost> binding_;
+  MOCK_METHOD3(SubscribeDeviceChangeNotifications,
+               void(MediaDeviceType type,
+                    uint32_t subscription_id,
+                    const url::Origin& security_origin));
+  MOCK_METHOD2(UnsubscribeDeviceChangeNotifications,
+               void(MediaDeviceType type, uint32_t subscription_id));
 };
 
 class UserMediaClientImplUnderTest : public UserMediaClientImpl {
@@ -122,12 +123,6 @@ class UserMediaClientImplUnderTest : public UserMediaClientImpl {
     requestMediaDevices(media_devices_request);
   }
 
-  void RequestSources() {
-    blink::WebMediaStreamTrackSourcesRequest sources_request;
-    state_ = REQUEST_NOT_COMPLETE;
-    requestSources(sources_request);
-  }
-
   void SetMediaDeviceChangeObserver() {
     blink::WebMediaDeviceChangeObserver observer(true);
     setMediaDeviceChangeObserver(observer);
@@ -159,13 +154,6 @@ class UserMediaClientImplUnderTest : public UserMediaClientImpl {
       blink::WebVector<blink::WebMediaDeviceInfo>& devices) override {
     state_ = REQUEST_SUCCEEDED;
     last_devices_ = devices;
-  }
-
-  void EnumerateSourcesSucceded(
-      blink::WebMediaStreamTrackSourcesRequest* request,
-      blink::WebVector<blink::WebSourceInfo>& sources) override {
-    state_ = REQUEST_SUCCEEDED;
-    last_sources_ = sources;
   }
 
   void SetCreateSourceThatFails(bool should_fail) {
@@ -211,10 +199,6 @@ class UserMediaClientImplUnderTest : public UserMediaClientImpl {
     return last_devices_;
   }
 
-  const blink::WebVector<blink::WebSourceInfo>& last_sources() {
-    return last_sources_;
-  }
-
   void ClearLastGeneratedStream() {
     last_generated_stream_.reset();
   }
@@ -245,7 +229,6 @@ class UserMediaClientImplUnderTest : public UserMediaClientImpl {
   content::MediaStreamRequestResult result_;
   blink::WebString result_name_;
   blink::WebVector<blink::WebMediaDeviceInfo> last_devices_;
-  blink::WebVector<blink::WebSourceInfo> last_sources_;
   PeerConnectionDependencyFactory* factory_;
   bool create_source_that_fails_;
   MockMediaStreamVideoCapturerSource* video_source_;
@@ -253,6 +236,10 @@ class UserMediaClientImplUnderTest : public UserMediaClientImpl {
 
 class UserMediaClientImplTest : public ::testing::Test {
  public:
+  UserMediaClientImplTest()
+      : binding_user_media(&media_devices_dispatcher_),
+        binding_event_dispatcher_(&media_devices_dispatcher_) {}
+
   void SetUp() override {
     // Create our test object.
     child_process_.reset(new ChildProcess());
@@ -262,10 +249,15 @@ class UserMediaClientImplTest : public ::testing::Test {
         dependency_factory_.get(),
         std::unique_ptr<MediaStreamDispatcher>(ms_dispatcher_)));
     used_media_impl_->SetMediaDevicesDispatcherForTesting(
-        media_devices_dispatcher_.CreateInterfacePtrAndBind());
+        binding_user_media.CreateInterfacePtrAndBind());
+    base::WeakPtr<MediaDevicesEventDispatcher> event_dispatcher =
+        MediaDevicesEventDispatcher::GetForRenderFrame(nullptr);
+    event_dispatcher->SetMediaDevicesDispatcherForTesting(
+        binding_event_dispatcher_.CreateInterfacePtrAndBind());
   }
 
   void TearDown() override {
+    MediaDevicesEventDispatcher::GetForRenderFrame(nullptr)->OnDestruct();
     used_media_impl_.reset();
     blink::WebHeap::collectAllGarbageForTesting();
   }
@@ -343,6 +335,9 @@ class UserMediaClientImplTest : public ::testing::Test {
   std::unique_ptr<ChildProcess> child_process_;
   MockMediaStreamDispatcher* ms_dispatcher_;  // Owned by |used_media_impl_|.
   MockMediaDevicesDispatcherHost media_devices_dispatcher_;
+  mojo::Binding<::mojom::MediaDevicesDispatcherHost> binding_user_media;
+  mojo::Binding<::mojom::MediaDevicesDispatcherHost> binding_event_dispatcher_;
+
   std::unique_ptr<UserMediaClientImplUnderTest> used_media_impl_;
   std::unique_ptr<MockPeerConnectionDependencyFactory> dependency_factory_;
 };
@@ -630,42 +625,6 @@ TEST_F(UserMediaClientImplTest, EnumerateMediaDevices) {
                    used_media_impl_->last_devices()[4].groupId()));
 }
 
-TEST_F(UserMediaClientImplTest, EnumerateSources) {
-  used_media_impl_->RequestSources();
-  base::RunLoop().RunUntilIdle();
-
-  EXPECT_EQ(UserMediaClientImplUnderTest::REQUEST_SUCCEEDED,
-            used_media_impl_->request_state());
-  EXPECT_EQ(static_cast<size_t>(4), used_media_impl_->last_sources().size());
-
-  // Audio input devices.
-  const blink::WebSourceInfo* source = &used_media_impl_->last_sources()[0];
-  EXPECT_FALSE(source->id().isEmpty());
-  EXPECT_EQ(blink::WebSourceInfo::SourceKindAudio, source->kind());
-  EXPECT_FALSE(source->label().isEmpty());
-  EXPECT_EQ(blink::WebSourceInfo::VideoFacingModeNone, source->facing());
-
-  source = &used_media_impl_->last_sources()[1];
-  EXPECT_FALSE(source->id().isEmpty());
-  EXPECT_EQ(blink::WebSourceInfo::SourceKindAudio, source->kind());
-  EXPECT_FALSE(source->label().isEmpty());
-  EXPECT_EQ(blink::WebSourceInfo::VideoFacingModeNone, source->facing());
-
-  // Video input device user facing.
-  source = &used_media_impl_->last_sources()[2];
-  EXPECT_FALSE(source->id().isEmpty());
-  EXPECT_EQ(blink::WebSourceInfo::SourceKindVideo, source->kind());
-  EXPECT_FALSE(source->label().isEmpty());
-  EXPECT_EQ(blink::WebSourceInfo::VideoFacingModeNone, source->facing());
-
-  // Video input device environment facing.
-  source = &used_media_impl_->last_sources()[3];
-  EXPECT_FALSE(source->id().isEmpty());
-  EXPECT_EQ(blink::WebSourceInfo::SourceKindVideo, source->kind());
-  EXPECT_FALSE(source->label().isEmpty());
-  EXPECT_EQ(blink::WebSourceInfo::VideoFacingModeNone, source->facing());
-}
-
 TEST_F(UserMediaClientImplTest, RenderToAssociatedSinkConstraint) {
   // For a null UserMediaRequest (no audio requested), we expect false.
   used_media_impl_->RequestUserMedia();
@@ -701,14 +660,37 @@ TEST_F(UserMediaClientImplTest, RenderToAssociatedSinkConstraint) {
 }
 
 TEST_F(UserMediaClientImplTest, ObserveMediaDeviceChanges) {
-  // For a null UserMediaRequest (no audio requested), we expect false.
-  EXPECT_EQ(0U, ms_dispatcher_->NumDeviceChangeSubscribers());
+  EXPECT_CALL(
+      media_devices_dispatcher_,
+      SubscribeDeviceChangeNotifications(MEDIA_DEVICE_TYPE_AUDIO_INPUT, _, _));
+  EXPECT_CALL(
+      media_devices_dispatcher_,
+      SubscribeDeviceChangeNotifications(MEDIA_DEVICE_TYPE_VIDEO_INPUT, _, _));
+  EXPECT_CALL(
+      media_devices_dispatcher_,
+      SubscribeDeviceChangeNotifications(MEDIA_DEVICE_TYPE_AUDIO_OUTPUT, _, _));
   used_media_impl_->SetMediaDeviceChangeObserver();
-  EXPECT_EQ(1U, ms_dispatcher_->NumDeviceChangeSubscribers());
-  used_media_impl_->OnDevicesChanged();
+  base::RunLoop().RunUntilIdle();
+
+  base::WeakPtr<MediaDevicesEventDispatcher> event_dispatcher =
+      MediaDevicesEventDispatcher::GetForRenderFrame(nullptr);
+  event_dispatcher->DispatchDevicesChangedEvent(MEDIA_DEVICE_TYPE_AUDIO_INPUT,
+                                                MediaDeviceInfoArray());
+  event_dispatcher->DispatchDevicesChangedEvent(MEDIA_DEVICE_TYPE_VIDEO_INPUT,
+                                                MediaDeviceInfoArray());
+  event_dispatcher->DispatchDevicesChangedEvent(MEDIA_DEVICE_TYPE_AUDIO_OUTPUT,
+                                                MediaDeviceInfoArray());
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_CALL(media_devices_dispatcher_, UnsubscribeDeviceChangeNotifications(
+                                             MEDIA_DEVICE_TYPE_AUDIO_INPUT, _));
+  EXPECT_CALL(media_devices_dispatcher_, UnsubscribeDeviceChangeNotifications(
+                                             MEDIA_DEVICE_TYPE_VIDEO_INPUT, _));
+  EXPECT_CALL(
+      media_devices_dispatcher_,
+      UnsubscribeDeviceChangeNotifications(MEDIA_DEVICE_TYPE_AUDIO_OUTPUT, _));
   used_media_impl_->RemoveMediaDeviceChangeObserver();
-  EXPECT_EQ(0U, ms_dispatcher_->NumDeviceChangeSubscribers());
-  used_media_impl_->OnDevicesChanged();
+  base::RunLoop().RunUntilIdle();
 }
 
 // This test what happens if the audio stream has same id with video stream.

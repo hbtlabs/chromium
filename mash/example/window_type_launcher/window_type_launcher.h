@@ -10,12 +10,16 @@
 #include "base/macros.h"
 #include "mash/public/interfaces/launchable.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/service.h"
+
+namespace service_manager {
+class ServiceContext;
+}
 
 namespace views {
 class AuraInit;
 class Widget;
-class WindowManagerConnection;
 }
 
 class WindowTypeLauncher
@@ -30,7 +34,7 @@ class WindowTypeLauncher
 
  private:
   // service_manager::Service:
-  void OnStart(const service_manager::ServiceInfo& info) override;
+  void OnStart(service_manager::ServiceContext* context) override;
   bool OnConnect(const service_manager::ServiceInfo& remote_info,
                  service_manager::InterfaceRegistry* registry) override;
 
@@ -41,11 +45,12 @@ class WindowTypeLauncher
   void Create(const service_manager::Identity& remote_identity,
               mash::mojom::LaunchableRequest request) override;
 
+  service_manager::ServiceContext* context_ = nullptr;
+
   mojo::BindingSet<mash::mojom::Launchable> bindings_;
   std::vector<views::Widget*> windows_;
 
   std::unique_ptr<views::AuraInit> aura_init_;
-  std::unique_ptr<views::WindowManagerConnection> window_manager_connection_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowTypeLauncher);
 };

@@ -85,10 +85,14 @@ bool ServerWindow::HasObserver(ServerWindowObserver* observer) {
 
 void ServerWindow::CreateCompositorFrameSink(
     mojom::CompositorFrameSinkType compositor_frame_sink_type,
+    gfx::AcceleratedWidget widget,
+    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
+    scoped_refptr<SurfacesContextProvider> context_provider,
     cc::mojom::MojoCompositorFrameSinkRequest request,
     cc::mojom::MojoCompositorFrameSinkClientPtr client) {
   GetOrCreateCompositorFrameSinkManager()->CreateCompositorFrameSink(
-      compositor_frame_sink_type, std::move(request), std::move(client));
+      compositor_frame_sink_type, widget, gpu_memory_buffer_manager,
+      std::move(context_provider), std::move(request), std::move(client));
 }
 
 void ServerWindow::Add(ServerWindow* child) {
@@ -284,7 +288,6 @@ void ServerWindow::SetOpacity(float value) {
     return;
   float old_opacity = opacity_;
   opacity_ = value;
-  delegate_->OnScheduleWindowPaint(this);
   for (auto& observer : observers_)
     observer.OnWindowOpacityChanged(this, old_opacity, opacity_);
 }
@@ -310,7 +313,6 @@ void ServerWindow::SetTransform(const gfx::Transform& transform) {
     return;
 
   transform_ = transform;
-  delegate_->OnScheduleWindowPaint(this);
 }
 
 void ServerWindow::SetProperty(const std::string& name,
@@ -377,7 +379,6 @@ void ServerWindow::SetUnderlayOffset(const gfx::Vector2d& offset) {
     return;
 
   underlay_offset_ = offset;
-  delegate_->OnScheduleWindowPaint(this);
 }
 
 void ServerWindow::OnEmbeddedAppDisconnected() {

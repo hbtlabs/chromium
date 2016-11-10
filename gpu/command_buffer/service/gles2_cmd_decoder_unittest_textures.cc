@@ -741,8 +741,6 @@ TEST_P(GLES2DecoderTest, CopyTexImage2DGLError) {
 }
 
 TEST_P(GLES2DecoderManualInitTest, CopyTexImage2DUnsizedInternalFormat) {
-  base::CommandLine command_line(0, NULL);
-  command_line.AppendSwitch(switches::kEnableUnsafeES3APIs);
   InitState init;
   init.gl_version = "OpenGL ES 3.0";
   init.extensions = "GL_APPLE_texture_format_BGRA8888 GL_EXT_sRGB";
@@ -750,7 +748,7 @@ TEST_P(GLES2DecoderManualInitTest, CopyTexImage2DUnsizedInternalFormat) {
   init.request_alpha = true;
   init.bind_generates_resource = true;
   init.context_type = CONTEXT_TYPE_OPENGLES2;
-  InitDecoderWithCommandLine(init, &command_line);
+  InitDecoder(init);
 
   GLenum kUnsizedInternalFormats[] = {
     GL_RED,
@@ -832,8 +830,6 @@ TEST_P(GLES2DecoderManualInitTest, CopyTexImage2DUnsizedInternalFormat) {
 }
 
 TEST_P(GLES2DecoderManualInitTest, CopyTexImage2DUnsizedInternalFormatES3) {
-  base::CommandLine command_line(0, NULL);
-  command_line.AppendSwitch(switches::kEnableUnsafeES3APIs);
   InitState init;
   init.gl_version = "OpenGL ES 3.0";
   init.extensions = "GL_APPLE_texture_format_BGRA8888";
@@ -841,15 +837,14 @@ TEST_P(GLES2DecoderManualInitTest, CopyTexImage2DUnsizedInternalFormatES3) {
   init.request_alpha = true;
   init.bind_generates_resource = true;
   init.context_type = CONTEXT_TYPE_OPENGLES3;
-  InitDecoderWithCommandLine(init, &command_line);
+  InitDecoder(init);
 
   struct UnsizedSizedInternalFormat {
     GLenum unsized;
     GLenum sized;
   };
   UnsizedSizedInternalFormat kUnsizedInternalFormats[] = {
-    {GL_RED, GL_R8},
-    {GL_RG, GL_RG8},
+    // GL_RED and GL_RG should not work.
     {GL_RGB, GL_RGB8},
     {GL_RGBA, GL_RGBA8},
     {GL_BGRA_EXT, GL_RGBA8},
@@ -4334,6 +4329,55 @@ TEST_P(GLES2DecoderManualInitTest, TexStorageInvalidLevels) {
   cmd.Init(GL_TEXTURE_RECTANGLE_ARB, 2, GL_RGBA8, 4, 4);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_INVALID_VALUE, GetGLError());
+}
+
+TEST_P(GLES2DecoderManualInitTest, TexStorageFormatAndTypeES2) {
+  InitState init;
+  init.gl_version = "OpenGL ES 2.0";
+  init.extensions = "GL_ARB_texture_storage";
+  init.bind_generates_resource = true;
+  init.context_type = CONTEXT_TYPE_OPENGLES2;
+  InitDecoder(init);
+  DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
+  EXPECT_CALL(*gl_, TexStorage2DEXT(GL_TEXTURE_2D, 2, GL_RGBA8_OES, 2, 2))
+      .Times(1)
+      .RetiresOnSaturation();
+  TexStorage2DEXT cmd;
+  cmd.Init(GL_TEXTURE_2D, 2, GL_RGBA8_OES, 2, 2);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+  TextureRef* texture_ref =
+      group().texture_manager()->GetTexture(client_texture_id_);
+  Texture* texture = texture_ref->texture();
+  GLenum type;
+  GLenum internal_format;
+  EXPECT_TRUE(texture->GetLevelType(GL_TEXTURE_2D, 0, &type, &internal_format));
+  EXPECT_EQ(static_cast<GLenum>(GL_RGBA), internal_format);
+  EXPECT_EQ(static_cast<GLenum>(GL_UNSIGNED_BYTE), type);
+}
+
+TEST_P(GLES2DecoderManualInitTest, TexStorageFormatAndTypeES3) {
+  InitState init;
+  init.gl_version = "OpenGL ES 3.0";
+  init.bind_generates_resource = true;
+  init.context_type = CONTEXT_TYPE_OPENGLES3;
+  InitDecoder(init);
+  DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
+  EXPECT_CALL(*gl_, TexStorage2DEXT(GL_TEXTURE_2D, 2, GL_RGBA8, 2, 2))
+      .Times(1)
+      .RetiresOnSaturation();
+  TexStorage2DEXT cmd;
+  cmd.Init(GL_TEXTURE_2D, 2, GL_RGBA8, 2, 2);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+  TextureRef* texture_ref =
+      group().texture_manager()->GetTexture(client_texture_id_);
+  Texture* texture = texture_ref->texture();
+  GLenum type;
+  GLenum internal_format;
+  EXPECT_TRUE(texture->GetLevelType(GL_TEXTURE_2D, 0, &type, &internal_format));
+  EXPECT_EQ(static_cast<GLenum>(GL_RGBA8), internal_format);
+  EXPECT_EQ(static_cast<GLenum>(GL_UNSIGNED_BYTE), type);
 }
 
 TEST_P(GLES3DecoderTest, TexStorage3DValidArgs) {

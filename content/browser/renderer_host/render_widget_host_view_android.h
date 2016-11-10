@@ -38,11 +38,10 @@
 #include "ui/gfx/selection_bound.h"
 #include "ui/touch_selection/touch_selection_controller.h"
 
+class GURL;
+
 namespace cc {
-class CopyOutputResult;
 class Layer;
-class SurfaceFactory;
-class SurfaceIdAllocator;
 }
 
 namespace ui {
@@ -50,8 +49,6 @@ struct DidOverscrollParams;
 }
 
 namespace blink {
-class WebExternalTextureLayer;
-class WebTouchEvent;
 class WebMouseEvent;
 }
 
@@ -61,7 +58,6 @@ class DelegatedFrameHostAndroid;
 
 namespace content {
 class ContentViewCoreImpl;
-class ContentViewCoreObserver;
 class OverscrollControllerAndroid;
 class RenderWidgetHost;
 class RenderWidgetHostImpl;
@@ -237,7 +233,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void MoveCaret(const gfx::Point& point);
   void DismissTextHandles();
   void SetTextHandlesTemporarilyHidden(bool hidden);
-  void OnShowingPastePopup(const gfx::PointF& point);
   void OnShowUnhandledTapUIIfNeeded(int x_dip, int y_dip);
 
   void SynchronousFrameMetadata(cc::CompositorFrameMetadata frame_metadata);

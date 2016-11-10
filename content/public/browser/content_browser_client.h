@@ -30,6 +30,7 @@
 #include "net/cookies/canonical_cookie.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
+#include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX)
@@ -44,7 +45,6 @@ class GURL;
 
 namespace base {
 class CommandLine;
-class DictionaryValue;
 class FilePath;
 }
 
@@ -76,8 +76,6 @@ class SSLCertRequestInfo;
 class SSLInfo;
 class URLRequest;
 class URLRequestContext;
-class URLRequestContextGetter;
-class X509Certificate;
 }
 
 namespace sandbox {
@@ -93,7 +91,6 @@ class Origin;
 }
 
 namespace storage {
-class ExternalMountPoints;
 class FileSystemBackend;
 class QuotaEvictionPolicy;
 }
@@ -101,18 +98,14 @@ class QuotaEvictionPolicy;
 namespace content {
 
 enum class PermissionType;
-class AccessTokenStore;
 class BrowserChildProcessHost;
 class BrowserContext;
 class BrowserMainParts;
-class BrowserPluginGuestDelegate;
 class BrowserPpapiHost;
 class BrowserURLHandler;
 class ClientCertificateDelegate;
 class DevToolsManagerDelegate;
-class ExternalVideoSurfaceContainer;
 class GpuProcessHost;
-class LocationProvider;
 class MediaObserver;
 class MemoryCoordinatorDelegate;
 class NavigationHandle;
@@ -242,9 +235,12 @@ class CONTENT_EXPORT ContentBrowserClient {
   // This also applies in cases where the new URL will open in another process.
   virtual bool ShouldAllowOpenURL(SiteInstance* site_instance, const GURL& url);
 
-  // Allows the embedder to override OpenURLParams.
-  virtual void OverrideOpenURLParams(SiteInstance* site_instance,
-                                     OpenURLParams* params) {}
+  // Allows the embedder to override parameters when navigating. Called for both
+  // opening new URLs and when transferring URLs across processes.
+  virtual void OverrideNavigationParams(SiteInstance* site_instance,
+                                        ui::PageTransition* transition,
+                                        bool* is_renderer_initiated,
+                                        content::Referrer* referrer) {}
 
   // Returns whether a new view for a given |site_url| can be launched in a
   // given |process_host|.
@@ -762,9 +758,6 @@ class CONTENT_EXPORT ContentBrowserClient {
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_WIN)
-  // Returns the name of the dll that contains cursors and other resources.
-  virtual const wchar_t* GetResourceDllName();
-
   // This is called on the PROCESS_LAUNCHER thread before the renderer process
   // is launched. It gives the embedder a chance to add loosen the sandbox
   // policy.

@@ -43,7 +43,8 @@ BrowserControlsOffsetManager::BrowserControlsOffsetManager(
       animation_direction_(NO_ANIMATION),
       permitted_state_(BOTH),
       accumulated_scroll_delta_(0.f),
-      baseline_content_offset_(0.f),
+      baseline_top_content_offset_(0.f),
+      baseline_bottom_content_offset_(0.f),
       controls_show_threshold_(controls_hide_threshold),
       controls_hide_threshold_(controls_show_threshold),
       pinch_gesture_active_(false) {
@@ -57,13 +58,8 @@ float BrowserControlsOffsetManager::ControlsTopOffset() const {
 }
 
 float BrowserControlsOffsetManager::ContentTopOffset() const {
-  return TopControlsShownRatio() * TopControlsHeight();
-}
-
-float BrowserControlsOffsetManager::ContentOffsetInternal() const {
-  if (!TopControlsHeight())
-    return BottomControlsShownRatio() * BottomControlsHeight();
-  return ContentTopOffset();
+  return TopControlsHeight() > 0
+      ? TopControlsShownRatio() * TopControlsHeight() : 0.0f;
 }
 
 float BrowserControlsOffsetManager::TopControlsShownRatio() const {
@@ -79,7 +75,8 @@ float BrowserControlsOffsetManager::BottomControlsHeight() const {
 }
 
 float BrowserControlsOffsetManager::ContentBottomOffset() const {
-  return BottomControlsShownRatio() * BottomControlsHeight();
+  return BottomControlsHeight() > 0
+      ? BottomControlsShownRatio() * BottomControlsHeight() : 0.0f;
 }
 
 float BrowserControlsOffsetManager::BottomControlsShownRatio() const {
@@ -144,9 +141,11 @@ gfx::Vector2dF BrowserControlsOffsetManager::ScrollBy(
 
   accumulated_scroll_delta_ += pending_delta.y();
 
-  float old_offset = ContentOffsetInternal();
+  float old_top_offset = ContentTopOffset();
+  float baseline_content_offset = TopControlsHeight()
+      ? baseline_top_content_offset_ : baseline_bottom_content_offset_;
   client_->SetCurrentBrowserControlsShownRatio(
-      (baseline_content_offset_ - accumulated_scroll_delta_) / controls_height);
+      (baseline_content_offset - accumulated_scroll_delta_) / controls_height);
 
   // If the controls are fully visible, treat the current position as the
   // new baseline even if the gesture didn't end.
@@ -155,7 +154,11 @@ gfx::Vector2dF BrowserControlsOffsetManager::ScrollBy(
 
   ResetAnimations();
 
-  gfx::Vector2dF applied_delta(0.f, old_offset - ContentOffsetInternal());
+  // applied_delta will negate any scroll on the content if the top browser
+  // controls are showing in favor of hiding the controls and resizing the
+  // content. If the top controls have no height, the content should scroll
+  // immediately.
+  gfx::Vector2dF applied_delta(0.f, old_top_offset - ContentTopOffset());
   return pending_delta - applied_delta;
 }
 
@@ -189,7 +192,7 @@ gfx::Vector2dF BrowserControlsOffsetManager::Animate(
   if (!has_animation() || !client_->HaveRootScrollLayer())
     return gfx::Vector2dF();
 
-  float old_offset = ContentOffsetInternal();
+  float old_offset = ContentTopOffset();
   float new_ratio = gfx::Tween::ClampedFloatValueBetween(
       monotonic_time, animation_start_time_, animation_start_value_,
       animation_stop_time_, animation_stop_value_);
@@ -198,7 +201,7 @@ gfx::Vector2dF BrowserControlsOffsetManager::Animate(
   if (IsAnimationComplete(new_ratio))
     ResetAnimations();
 
-  gfx::Vector2dF scroll_delta(0.f, ContentOffsetInternal() - old_offset);
+  gfx::Vector2dF scroll_delta(0.f, ContentTopOffset() - old_offset);
   return scroll_delta;
 }
 
@@ -220,7 +223,7 @@ void BrowserControlsOffsetManager::SetupAnimation(
   if (has_animation() && animation_direction_ == direction)
     return;
 
-  if (!TopControlsHeight() && !BottomControlsHeight()) {
+  if (!TopControlsHeight()) {
     client_->SetCurrentBrowserControlsShownRatio(
         direction == HIDING_CONTROLS ? 0.f : 1.f);
     return;
@@ -265,7 +268,8 @@ bool BrowserControlsOffsetManager::IsAnimationComplete(float new_ratio) {
 
 void BrowserControlsOffsetManager::ResetBaseline() {
   accumulated_scroll_delta_ = 0.f;
-  baseline_content_offset_ = ContentOffsetInternal();
+  baseline_top_content_offset_ = ContentTopOffset();
+  baseline_bottom_content_offset_ = ContentBottomOffset();
 }
 
 }  // namespace cc

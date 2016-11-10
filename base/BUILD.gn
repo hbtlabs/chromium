@@ -652,6 +652,7 @@ component("base") {
     #"process/process_iterator_openbsd.cc",  # Unused in Chromium build.
     "process/process_iterator_win.cc",
     "process/process_linux.cc",
+    "process/process_mac.cc",
     "process/process_metrics.cc",
     "process/process_metrics.h",
 
@@ -898,6 +899,8 @@ component("base") {
     "trace_event/auto_open_close_event.h",
     "trace_event/blame_context.cc",
     "trace_event/blame_context.h",
+    "trace_event/category_registry.cc",
+    "trace_event/category_registry.h",
     "trace_event/common/trace_event_common.h",
     "trace_event/heap_profiler.h",
     "trace_event/heap_profiler_allocation_context.cc",
@@ -939,6 +942,7 @@ component("base") {
     "trace_event/process_memory_totals.h",
     "trace_event/trace_buffer.cc",
     "trace_event/trace_buffer.h",
+    "trace_event/trace_category.h",
     "trace_event/trace_config.cc",
     "trace_event/trace_config.h",
     "trace_event/trace_event.h",
@@ -1842,6 +1846,7 @@ test("base_unittests") {
     "memory/memory_pressure_listener_unittest.cc",
     "memory/memory_pressure_monitor_chromeos_unittest.cc",
     "memory/memory_pressure_monitor_mac_unittest.cc",
+    "memory/memory_pressure_monitor_unittest.cc",
     "memory/memory_pressure_monitor_win_unittest.cc",
     "memory/ptr_util_unittest.cc",
     "memory/ref_counted_memory_unittest.cc",
@@ -1943,6 +1948,7 @@ test("base_unittests") {
     "task_scheduler/task_unittest.cc",
     "task_scheduler/test_task_factory.cc",
     "task_scheduler/test_task_factory.h",
+    "task_scheduler/test_utils.h",
     "template_util_unittest.cc",
     "test/histogram_tester_unittest.cc",
     "test/test_pending_task_unittest.cc",
@@ -1981,6 +1987,7 @@ test("base_unittests") {
     "trace_event/memory_allocator_dump_unittest.cc",
     "trace_event/memory_dump_manager_unittest.cc",
     "trace_event/process_memory_dump_unittest.cc",
+    "trace_event/trace_category_unittest.cc",
     "trace_event/trace_config_unittest.cc",
     "trace_event/trace_event_argument_unittest.cc",
     "trace_event/trace_event_synthetic_delay_unittest.cc",
@@ -2288,6 +2295,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/LocaleUtils.java",
       "android/java/src/org/chromium/base/Log.java",
       "android/java/src/org/chromium/base/MemoryPressureListener.java",
+      "android/java/src/org/chromium/base/NonThreadSafe.java",
       "android/java/src/org/chromium/base/ObserverList.java",
       "android/java/src/org/chromium/base/PackageUtils.java",
       "android/java/src/org/chromium/base/PathService.java",
@@ -2349,6 +2357,9 @@ if (is_android) {
       "android/javatests/src/org/chromium/base/ApiCompatibilityUtilsTest.java",
       "android/javatests/src/org/chromium/base/CommandLineInitUtilTest.java",
       "android/javatests/src/org/chromium/base/CommandLineTest.java",
+
+      # TODO(nona): move to Junit once that is built for Android N.
+      "android/javatests/src/org/chromium/base/LocaleUtilsTest.java",
       "android/javatests/src/org/chromium/base/ObserverListTest.java",
       "android/javatests/src/org/chromium/base/metrics/RecordHistogramTest.java",
     ]
@@ -2409,8 +2420,8 @@ if (is_android) {
     java_files = [
       "android/junit/src/org/chromium/base/BaseChromiumApplicationTest.java",
       "android/junit/src/org/chromium/base/LogTest.java",
+      "android/junit/src/org/chromium/base/NonThreadSafeTest.java",
       "android/junit/src/org/chromium/base/PromiseTest.java",
-      "android/junit/src/org/chromium/base/LocaleUtilsTest.java",
       "test/android/junit/src/org/chromium/base/test/util/DisableIfTest.java",
       "test/android/junit/src/org/chromium/base/test/util/MinAndroidSdkLevelSkipCheckTest.java",
       "test/android/junit/src/org/chromium/base/test/util/RestrictionSkipCheckTest.java",

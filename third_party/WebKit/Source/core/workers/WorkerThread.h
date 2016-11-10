@@ -122,7 +122,6 @@ class CORE_EXPORT WorkerThread : public WebThread::TaskObserver {
   ConsoleMessageStorage* consoleMessageStorage() const {
     return m_consoleMessageStorage.get();
   }
-  virtual bool shouldAttachThreadDebugger() const { return true; }
   v8::Isolate* isolate();
 
   bool isCurrentThread();
@@ -158,6 +157,12 @@ class CORE_EXPORT WorkerThread : public WebThread::TaskObserver {
 
   // Number of active worker threads.
   static unsigned workerThreadCount();
+
+  // Returns a set of all worker threads. This must be called only on the main
+  // thread and the returned set must not be stored for future use.
+  static HashSet<WorkerThread*>& workerThreads();
+
+  int getWorkerThreadId() const { return m_workerThreadId; }
 
   PlatformThreadId platformThreadId();
 
@@ -252,6 +257,9 @@ class CORE_EXPORT WorkerThread : public WebThread::TaskObserver {
   bool checkRequestedToTerminateOnWorkerThread();
 
   ExitCode getExitCodeForTesting();
+
+  // A unique identifier among all WorkerThreads.
+  const int m_workerThreadId;
 
   // Accessed only on the main thread.
   bool m_requestedToStart = false;

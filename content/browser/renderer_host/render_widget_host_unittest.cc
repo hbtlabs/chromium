@@ -17,7 +17,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
-#include "content/browser/browser_thread_impl.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/renderer_host/input/input_router_impl.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
@@ -29,6 +28,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "content/test/test_render_view_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/screen.h"
@@ -528,7 +528,7 @@ class RenderWidgetHostTest : public testing::Test {
   void SendInputEventACK(WebInputEvent::Type type,
                          InputEventAckState ack_result) {
     DCHECK(!WebInputEvent::isTouchEventType(type));
-    InputEventAck ack(type, ack_result);
+    InputEventAck ack(InputEventAckSource::COMPOSITOR_THREAD, type, ack_result);
     host_->OnMessageReceived(InputHostMsg_HandleInputEvent_ACK(0, ack));
   }
 
@@ -641,8 +641,6 @@ class RenderWidgetHostTest : public testing::Test {
     return reinterpret_cast<const WebInputEvent*>(data);
   }
 
-  base::MessageLoopForUI message_loop_;
-
   std::unique_ptr<TestBrowserContext> browser_context_;
   RenderWidgetHostProcess* process_;  // Deleted automatically by the widget.
   std::unique_ptr<MockRenderWidgetHostDelegate> delegate_;
@@ -660,6 +658,8 @@ class RenderWidgetHostTest : public testing::Test {
 
  private:
   SyntheticWebTouchEvent touch_event_;
+
+  TestBrowserThreadBundle thread_bundle_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostTest);
 };
@@ -896,7 +896,6 @@ TEST_F(RenderWidgetHostTest, Background) {
 // Test that we don't paint when we're hidden, but we still send the ACK. Most
 // of the rest of the painting is tested in the GetBackingStore* ones.
 TEST_F(RenderWidgetHostTest, HiddenPaint) {
-  BrowserThreadImpl ui_thread(BrowserThread::UI, base::MessageLoop::current());
   // Hide the widget, it should have sent out a message to the renderer.
   EXPECT_FALSE(host_->is_hidden_);
   host_->WasHidden();
@@ -966,18 +965,23 @@ TEST_F(RenderWidgetHostTest, PreHandleRawKeyDownEvent) {
   // Forward the KeyUp event.
   SimulateKeyboardEvent(WebInputEvent::KeyUp);
 
-  // Make sure only KeyUp was sent to the renderer.
+  // Make sure the KeyUp event is suppressed.
+  EXPECT_EQ(0U, process_->sink().message_count());
+
+  // Simulate a new RawKeyDown event.
+  SimulateKeyboardEvent(WebInputEvent::RawKeyDown);
   EXPECT_EQ(1U, process_->sink().message_count());
   EXPECT_EQ(InputMsg_HandleInputEvent::ID,
             process_->sink().GetMessageAt(0)->type());
   process_->sink().ClearMessages();
 
   // Send the simulated response from the renderer back.
-  SendInputEventACK(WebInputEvent::KeyUp,
+  SendInputEventACK(WebInputEvent::RawKeyDown,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
 
   EXPECT_TRUE(delegate_->unhandled_keyboard_event_called());
-  EXPECT_EQ(WebInputEvent::KeyUp, delegate_->unhandled_keyboard_event_type());
+  EXPECT_EQ(WebInputEvent::RawKeyDown,
+            delegate_->unhandled_keyboard_event_type());
 }
 
 TEST_F(RenderWidgetHostTest, RawKeyDownShortcutEvent) {
@@ -1628,7 +1632,8 @@ TEST_F(RenderWidgetHostTest, InputEventRWHLatencyComponent) {
   // Tests RWHI::ForwardTouchEventWithLatencyInfo().
   PressTouchPoint(0, 1);
   uint32_t touch_event_id = SendTouchEvent();
-  InputEventAck ack(WebInputEvent::TouchStart, INPUT_EVENT_ACK_STATE_CONSUMED,
+  InputEventAck ack(InputEventAckSource::COMPOSITOR_THREAD,
+                    WebInputEvent::TouchStart, INPUT_EVENT_ACK_STATE_CONSUMED,
                     touch_event_id);
   host_->OnMessageReceived(InputHostMsg_HandleInputEvent_ACK(0, ack));
   CheckLatencyInfoComponentInMessage(

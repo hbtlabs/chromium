@@ -144,8 +144,8 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
         mAddressEditor = addressEditor;
         mObserverForTest = observerForTest;
 
-        List<AutofillProfile> profiles = PersonalDataManager.getInstance().getProfilesToSuggest(
-                true /* includeNameInLabel */);
+        List<AutofillProfile> profiles =
+                PersonalDataManager.getInstance().getBillingAddressesToSuggest();
         mProfilesForBillingAddress = new HashMap<>();
         for (int i = 0; i < profiles.size(); i++) {
             AutofillProfile profile = profiles.get(i);
@@ -153,7 +153,9 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
             //    browser restart. Server profiles are not supported as billing addresses.
             // 2) Include only complete profiles, so that user launches the editor only when
             //    explicitly selecting [+ ADD ADDRESS] in the dropdown.
-            if (profile.getIsLocal() && mAddressEditor.isProfileComplete(profile)) {
+            if (profile.getIsLocal()
+                    && AutofillAddress.checkAddressCompletionStatus(profile)
+                            == AutofillAddress.COMPLETE) {
                 mProfilesForBillingAddress.put(profile.getGUID(), profile);
             }
         }
@@ -210,33 +212,6 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
     }
 
     /**
-     * Returns whether the given credit card is complete, i.e., can be sent to the merchant as-is
-     * without editing first.
-     *
-     * For both local and server cards, verifies that the billing address is complete. For local
-     * cards also verifies that the card number is valid and the name on card is not empty.
-     *
-     * Does not check the expiration date. If the card is expired, the user has the opportunity
-     * update the expiration date when providing their CVC in the card unmask dialog.
-     *
-     * Does not check that the card type is accepted by the merchant. This is done elsewhere to
-     * filter out such cards from view entirely. Cards that are not accepted by the merchant should
-     * not be edited.
-     *
-     * @param card The card to check.
-     * @return Whether the card is complete.
-     */
-    public boolean isCardComplete(CreditCard card) {
-        if (card == null || !mProfilesForBillingAddress.containsKey(card.getBillingAddressId())) {
-            return false;
-        }
-
-        if (!card.getIsLocal()) return true;
-
-        return !TextUtils.isEmpty(card.getName()) && mCardNumberValidator.isValid(card.getNumber());
-    }
-
-    /**
      * Adds accepted payment methods to the editor, if they are recognized credit card types.
      *
      * @param acceptedMethods The accepted method payments.
@@ -282,10 +257,8 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
                 : toEdit;
         final CreditCard card = instrument.getCard();
 
-        // The title of the editor depends on whether we're adding a new card or editing an existing
-        // card.
-        final EditorModel editor = new EditorModel(mContext.getString(
-                isNewCard ? R.string.payments_create_card : R.string.payments_edit_card));
+        final EditorModel editor = new EditorModel(
+                isNewCard ? mContext.getString(R.string.payments_add_card) : toEdit.getEditTitle());
 
         if (card.getIsLocal()) {
             Calendar calendar = null;
@@ -307,7 +280,9 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
         } else {
             // Display some information about the server card.
             editor.addField(EditorFieldModel.createLabel(card.getObfuscatedNumber(), card.getName(),
-                    card.getFormattedExpirationDate(mContext), card.getIssuerIconDrawableId()));
+                    mContext.getString(R.string.payments_credit_card_expiration_date_abbr,
+                            card.getMonth(), card.getYear()),
+                    card.getIssuerIconDrawableId()));
         }
 
         // Always show the billing address dropdown.
@@ -340,13 +315,14 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
     }
 
     /**
-     * Adds the given billing address to the list of billing addresses. If the address is already
-     * known, then updates the existing address. Should be called before opening the card editor.
+     * Adds the given billing address to the list of billing addresses, if it's complete. If the
+     * address is already known, then updates the existing address. Should be called before opening
+     * the card editor.
      *
-     * @param billingAddress The billing address to add or update. Should not be null. Should be
-     *                       complete.
+     * @param billingAddress The billing address to add or update. Should not be null.
      */
-    public void updateBillingAddress(AutofillAddress billingAddress) {
+    public void updateBillingAddressIfComplete(AutofillAddress billingAddress) {
+        if (!billingAddress.isComplete()) return;
         mProfilesForBillingAddress.put(billingAddress.getIdentifier(), billingAddress.getProfile());
     }
 

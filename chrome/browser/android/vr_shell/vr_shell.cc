@@ -21,11 +21,12 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/referrer.h"
-#include "content/public/common/screen_info.h"
 #include "jni/VrShellImpl_jni.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
 #include "ui/base/page_transition_types.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/init/gl_factory.h"
 
@@ -270,16 +271,7 @@ void VrShell::InitializeGl(JNIEnv* env,
 
 void VrShell::UpdateController(const gvr::Vec3f& forward_vector) {
   controller_->UpdateState();
-  std::unique_ptr<WebGestureEvent> gesture = controller_->DetectGesture();
 
-  // TODO(asimjour) for now, scroll is sent to the main content.
-  if (gesture->type == WebInputEvent::GestureScrollBegin ||
-      gesture->type == WebInputEvent::GestureScrollUpdate ||
-      gesture->type == WebInputEvent::GestureScrollEnd) {
-    content_input_manager_->ProcessUpdatedGesture(*gesture.get());
-  }
-
-  WebInputEvent::Type original_type = gesture->type;
   gvr::Vec3f ergo_neutral_pose;
   if (!controller_->IsConnected()) {
     // No controller detected, set up a gaze cursor that tracks the
@@ -370,6 +362,32 @@ void VrShell::UpdateController(const gvr::Vec3f& forward_vector) {
                                          : ui_input_manager_.get();
     }
   }
+  SendEventsToTarget(input_target, pixel_x, pixel_y);
+}
+
+void VrShell::SendEventsToTarget(VrInputManager* input_target,
+                                 int pixel_x,
+                                 int pixel_y) {
+  std::vector<std::unique_ptr<WebGestureEvent>> gesture_list =
+      controller_->DetectGestures();
+  std::unique_ptr<WebGestureEvent> gesture = std::move(gesture_list.front());
+
+  // TODO(asimjour) for now, scroll is sent to the main content.
+  if (gesture->type == WebInputEvent::GestureScrollBegin ||
+      gesture->type == WebInputEvent::GestureScrollUpdate ||
+      gesture->type == WebInputEvent::GestureScrollEnd) {
+    content_input_manager_->ProcessUpdatedGesture(*gesture.get());
+  }
+
+  if (gesture->type == WebInputEvent::GestureScrollEnd) {
+    CHECK(gesture_list.size() == 2);
+    std::unique_ptr<WebGestureEvent> fling_gesture =
+        std::move(gesture_list.back());
+    content_input_manager_->ProcessUpdatedGesture(*fling_gesture.get());
+  }
+
+  WebInputEvent::Type original_type = gesture->type;
+
   bool new_target = input_target != current_input_target_;
   if (new_target && current_input_target_ != nullptr) {
     // Send a move event indicating that the pointer moved off of an element.
@@ -732,11 +750,10 @@ void VrShell::ContentSurfaceChanged(JNIEnv* env,
                                     jint height,
                                     const JavaParamRef<jobject>& surface) {
   content_compositor_->SurfaceChanged((int)width, (int)height, surface);
-  content::ScreenInfo result;
-  main_contents_->GetRenderWidgetHostView()->GetRenderWidgetHost()
-      ->GetScreenInfo(&result);
-  content_tex_width_ = width / result.device_scale_factor;
-  content_tex_height_ = height / result.device_scale_factor;
+  float scale_factor = display::Screen::GetScreen()
+      ->GetPrimaryDisplay().device_scale_factor();
+  content_tex_width_ = width / scale_factor;
+  content_tex_height_ = height / scale_factor;
 }
 
 void VrShell::UiSurfaceChanged(JNIEnv* env,
@@ -745,11 +762,10 @@ void VrShell::UiSurfaceChanged(JNIEnv* env,
                                jint height,
                                const JavaParamRef<jobject>& surface) {
   ui_compositor_->SurfaceChanged((int)width, (int)height, surface);
-  content::ScreenInfo result;
-  ui_contents_->GetRenderWidgetHostView()->GetRenderWidgetHost()->GetScreenInfo(
-      &result);
-  ui_tex_width_ = width / result.device_scale_factor;
-  ui_tex_height_ = height / result.device_scale_factor;
+  float scale_factor = display::Screen::GetScreen()
+      ->GetPrimaryDisplay().device_scale_factor();
+  ui_tex_width_ = width / scale_factor;
+  ui_tex_height_ = height / scale_factor;
 }
 
 UiScene* VrShell::GetScene() {
