@@ -169,6 +169,8 @@ const char kDiagnosticsFormat[]             = "diagnostics-format";
 
 // Tells the diagnostics mode to do the requested recovery step(s).
 const char kDiagnosticsRecovery[]           = "diagnostics-recovery";
+    
+const char kDisableBlackBackground[] = "disable-black-bg";    
 
 // When kEnableSettingsWindow is used, About is shown as an overlay in Settings
 // instead of as a separate page, unless this flag is specified.

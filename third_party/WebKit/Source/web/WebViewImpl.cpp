@@ -28,6 +28,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "base/command_line.h"
+
 #include "web/WebViewImpl.h"
 
 #include "core/CSSValueKeywords.h"
@@ -439,6 +441,15 @@ WebViewImpl::WebViewImpl(WebViewClient* client,
                                  .release())),
       m_lastFrameTimeMonotonic(0),
       m_overrideCompositorVisibility(false) {
+      
+
+  if(base::CommandLine::ForCurrentProcess()->HasSwitch("disable-black-bg"))
+  {
+    m_baseBackgroundColor = Color::white;
+  }
+
+  
+      
   Page::PageClients pageClients;
   pageClients.chromeClient = m_chromeClientImpl.get();
   pageClients.contextMenuClient = &m_contextMenuClientImpl;
