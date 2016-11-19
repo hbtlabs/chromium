@@ -4,6 +4,8 @@
 
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 
+#include "base/command_line.h"
+
 #include "base/logging.h"
 #include "build/build_config.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
@@ -34,7 +36,7 @@ const int kFlushInputRateInUs = 16666;
 RenderWidgetHostViewBase::RenderWidgetHostViewBase()
     : is_fullscreen_(false),
       popup_type_(blink::WebPopupTypeNone),
-      background_color_(SK_ColorWHITE),
+      background_color_(SK_ColorBLACK),
       mouse_locked_(false),
       showing_context_menu_(false),
 #if !defined(USE_AURA)
@@ -46,6 +48,10 @@ RenderWidgetHostViewBase::RenderWidgetHostViewBase()
       text_input_manager_(nullptr),
       renderer_frame_number_(0),
       weak_factory_(this) {
+  if(base::CommandLine::ForCurrentProcess()->HasSwitch("disable-black-bg"))
+  {
+    background_color_ = SK_ColorWHITE;
+  }
 }
 
 RenderWidgetHostViewBase::~RenderWidgetHostViewBase() {

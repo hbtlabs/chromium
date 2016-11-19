@@ -1760,6 +1760,7 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
       switches::kReaderModeHeuristics,
       switches::kUnsafelyTreatInsecureOriginAsSecure,
       translate::switches::kTranslateSecurityOrigin,
+      switches::kDisableBlackBackground,
     };
 
     command_line->CopySwitchesFrom(browser_command_line, kSwitchNames,

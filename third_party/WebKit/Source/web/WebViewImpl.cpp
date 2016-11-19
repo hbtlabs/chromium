@@ -28,6 +28,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "base/command_line.h"
+
 #include "web/WebViewImpl.h"
 
 #include "core/CSSValueKeywords.h"
@@ -374,7 +376,7 @@ WebViewImpl::WebViewImpl(WebViewClient* client,
       m_flingModifier(0),
       m_flingSourceDevice(WebGestureDeviceUninitialized),
       m_fullscreenController(FullscreenController::create(this)),
-      m_baseBackgroundColor(Color::white),
+      m_baseBackgroundColor(Color::black),
       m_backgroundColorOverride(Color::transparent),
       m_zoomFactorOverride(0),
       m_userGestureObserved(false),
@@ -391,6 +393,15 @@ WebViewImpl::WebViewImpl(WebViewClient* client,
                                  .release())),
       m_lastFrameTimeMonotonic(0),
       m_overrideCompositorVisibility(false) {
+      
+
+  if(base::CommandLine::ForCurrentProcess()->HasSwitch("disable-black-bg"))
+  {
+    m_baseBackgroundColor = Color::white;
+  }
+
+  
+      
   Page::PageClients pageClients;
   pageClients.chromeClient = m_chromeClientImpl.get();
   pageClients.contextMenuClient = &m_contextMenuClientImpl;
