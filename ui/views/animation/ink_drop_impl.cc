@@ -62,6 +62,27 @@ InkDropImpl* InkDropImpl::HighlightState::GetInkDrop() {
   return state_factory_->ink_drop();
 }
 
+// A HighlightState to be used during InkDropImpl destruction. All event
+// handlers are no-ops so as to avoid triggering animations during tear down.
+class InkDropImpl::DestroyingHighlightState
+    : public InkDropImpl::HighlightState {
+ public:
+  DestroyingHighlightState() : HighlightState(nullptr) {}
+
+  // InkDropImpl::HighlightState:
+  void Enter() override {}
+  void ShowOnHoverChanged() override {}
+  void OnHoverChanged() override {}
+  void ShowOnFocusChanged() override {}
+  void OnFocusChanged() override {}
+  void AnimationStarted(InkDropState ink_drop_state) override {}
+  void AnimationEnded(InkDropState ink_drop_state,
+                      InkDropAnimationEndedReason reason) override {}
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(DestroyingHighlightState);
+};
+
 //
 // AutoHighlightMode::NONE states
 //
@@ -554,7 +575,7 @@ InkDropImpl::HighlightStateFactory::CreateVisibleState(
   return nullptr;
 }
 
-InkDropImpl::InkDropImpl(InkDropHost* ink_drop_host)
+InkDropImpl::InkDropImpl(InkDropHost* ink_drop_host, const gfx::Size& host_size)
     : ink_drop_host_(ink_drop_host),
       root_layer_(new ui::Layer(ui::LAYER_NOT_DRAWN)),
       root_layer_added_to_host_(false),
@@ -562,12 +583,19 @@ InkDropImpl::InkDropImpl(InkDropHost* ink_drop_host)
       show_highlight_on_focus_(false),
       is_hovered_(false),
       is_focused_(false),
-      exiting_highlight_state_(false) {
+      exiting_highlight_state_(false),
+      destroying_(false) {
+  root_layer_->SetBounds(gfx::Rect(host_size));
   SetAutoHighlightMode(AutoHighlightMode::NONE);
   root_layer_->set_name("InkDropImpl:RootLayer");
 }
 
 InkDropImpl::~InkDropImpl() {
+  destroying_ = true;
+  // Setting a no-op state prevents animations from being triggered on a null
+  // |ink_drop_ripple_| as a side effect of the tear down.
+  SetHighlightState(base::MakeUnique<DestroyingHighlightState>());
+
   // Explicitly destroy the InkDropRipple so that this still exists if
   // views::InkDropRippleObserver methods are called on this.
   DestroyInkDropRipple();
@@ -591,6 +619,13 @@ void InkDropImpl::SetAutoHighlightMode(AutoHighlightMode auto_highlight_mode) {
   highlight_state_factory_ =
       base::MakeUnique<HighlightStateFactory>(auto_highlight_mode, this);
   SetHighlightState(highlight_state_factory_->CreateStartState());
+}
+
+void InkDropImpl::HostSizeChanged(const gfx::Size& new_size) {
+  // |root_layer_| should fill the entire host because it affects the clipping
+  // when a mask layer is applied to it. This will not affect clipping if no
+  // mask layer is set.
+  root_layer_->SetBounds(gfx::Rect(new_size));
 }
 
 InkDropState InkDropImpl::GetTargetInkDropState() const {
@@ -638,6 +673,8 @@ void InkDropImpl::DestroyHiddenTargetedAnimations() {
 }
 
 void InkDropImpl::CreateInkDropRipple() {
+  DCHECK(!destroying_);
+
   DestroyInkDropRipple();
   ink_drop_ripple_ = ink_drop_host_->CreateInkDropRipple();
   ink_drop_ripple_->set_observer(this);
@@ -654,6 +691,8 @@ void InkDropImpl::DestroyInkDropRipple() {
 }
 
 void InkDropImpl::CreateInkDropHighlight() {
+  DCHECK(!destroying_);
+
   DestroyInkDropHighlight();
 
   highlight_ = ink_drop_host_->CreateInkDropHighlight();
@@ -706,6 +745,9 @@ void InkDropImpl::AnimationEnded(InkDropState ink_drop_state,
                                  InkDropAnimationEndedReason reason) {
   highlight_state_->AnimationEnded(ink_drop_state, reason);
   if (reason != InkDropAnimationEndedReason::SUCCESS)
+    return;
+  // |ink_drop_ripple_| might be null during destruction.
+  if (!ink_drop_ripple_)
     return;
   if (ShouldAnimateToHidden(ink_drop_state)) {
     ink_drop_ripple_->AnimateToState(views::InkDropState::HIDDEN);

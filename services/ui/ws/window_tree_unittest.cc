@@ -18,6 +18,7 @@
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "services/ui/surfaces/display_compositor.h"
 #include "services/ui/ws/default_access_policy.h"
+#include "services/ui/ws/display_manager.h"
 #include "services/ui/ws/ids.h"
 #include "services/ui/ws/platform_display.h"
 #include "services/ui/ws/platform_display_factory.h"
@@ -1355,14 +1356,12 @@ TEST_F(WindowTreeShutdownTest, DontSendMessagesDuringShutdown) {
     // Create a tree with one window.
     WindowServerTestHelper ws_test_helper;
     WindowServer* window_server = ws_test_helper.window_server();
+    TestPlatformScreen platform_screen;
+    platform_screen.Init(window_server->display_manager());
     window_server->user_id_tracker()->AddUserId(kTestUserId1);
-    const int kNumHostsToCreate = 1;
-    ws_test_helper.window_server_delegate()->set_num_displays_to_create(
-        kNumHostsToCreate);
+    platform_screen.AddDisplay();
 
-    WindowManagerWindowTreeFactorySetTestApi(
-        window_server->window_manager_window_tree_factory_set())
-        .Add(kTestUserId1);
+    AddWindowManager(window_server, kTestUserId1);
     window_server->user_id_tracker()->SetActiveUserId(kTestUserId1);
     TestWindowTreeBinding* test_binding =
         ws_test_helper.window_server_delegate()->last_binding();

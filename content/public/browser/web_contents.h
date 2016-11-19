@@ -59,6 +59,7 @@ class PageState;
 class RenderFrameHost;
 class RenderProcessHost;
 class RenderViewHost;
+class RenderWidgetHost;
 class RenderWidgetHostView;
 class WebContentsDelegate;
 struct CustomContextMenuContext;
@@ -589,7 +590,7 @@ class WebContents : public PageNavigator,
 
   // A render view-originated drag has ended. Informs the render view host and
   // WebContentsDelegate.
-  virtual void SystemDragEnded() = 0;
+  virtual void SystemDragEnded(RenderWidgetHost* source_rwh) = 0;
 
   // Notification the user has made a gesture while focus was on the
   // page. This is used to avoid uninitiated user downloads (aka carpet
@@ -730,6 +731,9 @@ class WebContents : public PageNavigator,
 
   // Sets whether the WebContents is for overlaying content on a page.
   virtual void SetIsOverlayContent(bool is_overlay_content) = 0;
+
+  virtual int GetCurrentlyPlayingVideoCount() = 0;
+  virtual bool IsFullscreen() = 0;
 
 #if defined(OS_ANDROID)
   CONTENT_EXPORT static WebContents* FromJavaWebContents(

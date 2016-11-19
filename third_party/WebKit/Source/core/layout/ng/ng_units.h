@@ -16,10 +16,12 @@ namespace blink {
 class LayoutUnit;
 struct NGPhysicalOffset;
 struct NGPhysicalSize;
+struct NGBoxStrut;
 
 struct MinAndMaxContentSizes {
   LayoutUnit min_content;
   LayoutUnit max_content;
+  LayoutUnit ShrinkToFit(LayoutUnit available_size) const;
 };
 
 struct NGLogicalSize {
@@ -37,6 +39,11 @@ struct NGLogicalSize {
     return inline_size == LayoutUnit() || block_size == LayoutUnit();
   }
 };
+
+inline std::ostream& operator<<(std::ostream& stream,
+                                const NGLogicalSize& value) {
+  return stream << value.inline_size << "x" << value.block_size;
+}
 
 // NGLogicalOffset is the position of a rect (typically a fragment) relative to
 // its parent rect in the logical coordinate system.
@@ -157,6 +164,26 @@ inline std::ostream& operator<<(std::ostream& stream,
   return stream << value.ToString();
 }
 
+// Struct that represents NG exclusion.
+struct CORE_EXPORT NGExclusion {
+  // Type of NG exclusion.
+  enum Type {
+    // Undefined exclusion type.
+    // At this moment it's also used to represent CSS3 exclusion.
+    NG_EXCLUSION_TYPE_UNDEFINED = 0,
+    // Exclusion that is created by LEFT float.
+    NG_FLOAT_LEFT = 1,
+    // Exclusion that is created by RIGHT float.
+    NG_FLOAT_RIGHT = 2
+  };
+
+  // Rectangle in logical coordinates the represents this exclusion.
+  NGLogicalRect rect;
+
+  // Type of this exclusion.
+  Type type;
+};
+
 struct NGPixelSnappedPhysicalRect {
   int top;
   int left;
@@ -167,16 +194,17 @@ struct NGPixelSnappedPhysicalRect {
 // Struct to store physical dimensions, independent of writing mode and
 // direction.
 // See https://drafts.csswg.org/css-writing-modes-3/#abstract-box
-struct NGPhysicalBoxStrut {
+struct CORE_EXPORT NGPhysicalBoxStrut {
   LayoutUnit left;
   LayoutUnit right;
   LayoutUnit top;
   LayoutUnit bottom;
+  NGBoxStrut ConvertToLogical(NGWritingMode, TextDirection) const;
 };
 
 // This struct is used for storing margins, borders or padding of a box on all
 // four edges.
-struct NGBoxStrut {
+struct CORE_EXPORT NGBoxStrut {
   LayoutUnit inline_start;
   LayoutUnit inline_end;
   LayoutUnit block_start;

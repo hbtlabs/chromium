@@ -214,13 +214,12 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
     }
 
     inline bool compareEqualNonIndependent(const InheritedData& other) const {
-      return (m_emptyCells == other.m_emptyCells) &&
-             (m_captionSide == other.m_captionSide) &&
+      return (m_captionSide == other.m_captionSide) &&
              (m_listStyleType == other.m_listStyleType) &&
              (m_listStylePosition == other.m_listStylePosition) &&
              (m_textAlign == other.m_textAlign) &&
              (m_textTransform == other.m_textTransform) &&
-             (m_textUnderline == other.m_textUnderline) &&
+             (m_hasSimpleUnderline == other.m_hasSimpleUnderline) &&
              (m_cursorStyle == other.m_cursorStyle) &&
              (m_direction == other.m_direction) &&
              (m_whiteSpace == other.m_whiteSpace) &&
@@ -232,13 +231,13 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
              (m_writingMode == other.m_writingMode);
     }
 
-    unsigned m_emptyCells : 1;         // EEmptyCells
     unsigned m_captionSide : 2;        // ECaptionSide
     unsigned m_listStyleType : 7;      // EListStyleType
     unsigned m_listStylePosition : 1;  // EListStylePosition
     unsigned m_textAlign : 4;          // ETextAlign
     unsigned m_textTransform : 2;      // ETextTransform
-    unsigned m_textUnderline : 1;
+    unsigned m_hasSimpleUnderline : 1;  // True if 'underline solid' is the only
+                                        // text decoration on this element.
     unsigned m_cursorStyle : 6;     // ECursor
     unsigned m_direction : 1;       // TextDirection
     unsigned m_whiteSpace : 3;      // EWhiteSpace
@@ -364,15 +363,16 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
 
   void setBitDefaults() {
     ComputedStyleBase::setBitDefaults();
-    m_inheritedData.m_emptyCells = static_cast<unsigned>(initialEmptyCells());
     m_inheritedData.m_captionSide = static_cast<unsigned>(initialCaptionSide());
-    m_inheritedData.m_listStyleType = initialListStyleType();
+    m_inheritedData.m_listStyleType =
+        static_cast<unsigned>(initialListStyleType());
     m_inheritedData.m_listStylePosition =
         static_cast<unsigned>(initialListStylePosition());
-    m_inheritedData.m_textAlign = initialTextAlign();
+    m_inheritedData.m_textAlign = static_cast<unsigned>(initialTextAlign());
     m_inheritedData.m_textTransform = initialTextTransform();
-    m_inheritedData.m_textUnderline = false;
-    m_inheritedData.m_cursorStyle = initialCursor();
+    m_inheritedData.m_cursorStyle = static_cast<unsigned>(initialCursor());
+    m_inheritedData.m_hasSimpleUnderline = false;
+    m_inheritedData.m_cursorStyle = static_cast<unsigned>(initialCursor());
     m_inheritedData.m_direction = initialDirection();
     m_inheritedData.m_whiteSpace = initialWhiteSpace();
     m_inheritedData.m_borderCollapse = initialBorderCollapse();
@@ -2089,11 +2089,13 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   }
 
   // cursor
-  static ECursor initialCursor() { return CURSOR_AUTO; }
+  static ECursor initialCursor() { return ECursor::Auto; }
   ECursor cursor() const {
     return static_cast<ECursor>(m_inheritedData.m_cursorStyle);
   }
-  void setCursor(ECursor c) { m_inheritedData.m_cursorStyle = c; }
+  void setCursor(ECursor c) {
+    m_inheritedData.m_cursorStyle = static_cast<unsigned>(c);
+  }
 
   // direction
   static TextDirection initialDirection() { return LTR; }
@@ -2101,15 +2103,6 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
     return static_cast<TextDirection>(m_inheritedData.m_direction);
   }
   void setDirection(TextDirection v) { m_inheritedData.m_direction = v; }
-
-  // empty-cells
-  static EEmptyCells initialEmptyCells() { return EEmptyCells::Show; }
-  EEmptyCells emptyCells() const {
-    return static_cast<EEmptyCells>(m_inheritedData.m_emptyCells);
-  }
-  void setEmptyCells(EEmptyCells v) {
-    m_inheritedData.m_emptyCells = static_cast<unsigned>(v);
-  }
 
   // color
   static Color initialColor() { return Color::black; }
@@ -2138,12 +2131,12 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
 
   // List style properties.
   // list-style-type
-  static EListStyleType initialListStyleType() { return Disc; }
+  static EListStyleType initialListStyleType() { return EListStyleType::Disc; }
   EListStyleType listStyleType() const {
     return static_cast<EListStyleType>(m_inheritedData.m_listStyleType);
   }
   void setListStyleType(EListStyleType v) {
-    m_inheritedData.m_listStyleType = v;
+    m_inheritedData.m_listStyleType = static_cast<unsigned>(v);
   }
 
   // list-style-position
@@ -2227,11 +2220,13 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   }
 
   // text-align
-  static ETextAlign initialTextAlign() { return TASTART; }
+  static ETextAlign initialTextAlign() { return ETextAlign::Start; }
   ETextAlign textAlign() const {
     return static_cast<ETextAlign>(m_inheritedData.m_textAlign);
   }
-  void setTextAlign(ETextAlign v) { m_inheritedData.m_textAlign = v; }
+  void setTextAlign(ETextAlign v) {
+    m_inheritedData.m_textAlign = static_cast<unsigned>(v);
+  }
 
   // text-align-last
   static TextAlignLast initialTextAlignLast() { return TextAlignLastAuto; }
@@ -3572,7 +3567,8 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   void clearCursorList();
 
   // Text decoration utility functions.
-  void applyTextDecorations();
+  void applyTextDecorations(const Color& parentTextDecorationColor,
+                            bool overrideExistingColors);
   void clearAppliedTextDecorations();
   void restoreParentTextDecorations(const ComputedStyle& parentStyle);
   const Vector<AppliedTextDecoration>& appliedTextDecorations() const;
@@ -4004,6 +4000,7 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   Color lightingColor() const { return svgStyle().lightingColor(); }
 
   void addAppliedTextDecoration(const AppliedTextDecoration&);
+  void overrideTextDecorationColors(Color propagatedColor);
   void applyMotionPathTransform(float originX,
                                 float originY,
                                 const FloatRect& boundingBox,

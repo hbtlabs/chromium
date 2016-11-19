@@ -30,21 +30,21 @@
 /**
  * @interface
  */
-WebInspector.HistoryEntry = function() {};
+Sources.HistoryEntry = function() {};
 
-WebInspector.HistoryEntry.prototype = {
+Sources.HistoryEntry.prototype = {
   /**
    * @return {boolean}
    */
-  valid: function() {},
+  valid() {},
 
-  reveal: function() {}
+  reveal() {}
 };
 
 /**
  * @unrestricted
  */
-WebInspector.SimpleHistoryManager = class {
+Sources.SimpleHistoryManager = class {
   /**
    * @param {number} historyDepth
    */
@@ -71,7 +71,7 @@ WebInspector.SimpleHistoryManager = class {
   }
 
   /**
-   * @param {function(!WebInspector.HistoryEntry):boolean} filterOutCallback
+   * @param {function(!Sources.HistoryEntry):boolean} filterOutCallback
    */
   filterOut(filterOutCallback) {
     if (this.readOnly())
@@ -79,9 +79,9 @@ WebInspector.SimpleHistoryManager = class {
     var filteredEntries = [];
     var removedBeforeActiveEntry = 0;
     for (var i = 0; i < this._entries.length; ++i) {
-      if (!filterOutCallback(this._entries[i])) {
+      if (!filterOutCallback(this._entries[i]))
         filteredEntries.push(this._entries[i]);
-      } else if (i <= this._activeEntryIndex)
+      else if (i <= this._activeEntryIndex)
         ++removedBeforeActiveEntry;
     }
     this._entries = filteredEntries;
@@ -96,14 +96,14 @@ WebInspector.SimpleHistoryManager = class {
   }
 
   /**
-   * @return {?WebInspector.HistoryEntry}
+   * @return {?Sources.HistoryEntry}
    */
   active() {
     return this.empty() ? null : this._entries[this._activeEntryIndex];
   }
 
   /**
-   * @param {!WebInspector.HistoryEntry} entry
+   * @param {!Sources.HistoryEntry} entry
    */
   push(entry) {
     if (this.readOnly())

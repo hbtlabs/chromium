@@ -54,7 +54,7 @@ public class VrShellImpl extends GvrLayout implements GLSurfaceView.Renderer, Vr
     private static final String TAG = "VrShellImpl";
 
     @UsedByReflection("VrShellDelegate.java")
-    public static final String VR_EXTRA = com.google.vr.sdk.base.Constants.EXTRA_VR_LAUNCH;
+    public static final String VR_EXTRA = "android.intent.extra.VR_LAUNCH";
 
     private Activity mActivity;
 
@@ -279,6 +279,7 @@ public class VrShellImpl extends GvrLayout implements GLSurfaceView.Renderer, Vr
     @Override
     public void onResume() {
         super.onResume();
+        mGlSurfaceView.onResume();
         if (mNativeVrShell != 0) {
             // Refreshing the viewer profile accesses disk, so we need to temporarily allow disk
             // reads. The GVR team promises this will be fixed when they launch.
@@ -294,6 +295,7 @@ public class VrShellImpl extends GvrLayout implements GLSurfaceView.Renderer, Vr
     @Override
     public void onPause() {
         super.onPause();
+        mGlSurfaceView.onPause();
         if (mNativeVrShell != 0) {
             nativeOnPause(mNativeVrShell);
         }
@@ -303,6 +305,8 @@ public class VrShellImpl extends GvrLayout implements GLSurfaceView.Renderer, Vr
     public void shutdown() {
         super.shutdown();
         if (mNativeVrShell != 0) {
+            // Ensure our GL thread is stopped before we destroy the native VR Shell.
+            mGlSurfaceView.onPause();
             nativeDestroy(mNativeVrShell);
             mNativeVrShell = 0;
         }
@@ -331,11 +335,6 @@ public class VrShellImpl extends GvrLayout implements GLSurfaceView.Renderer, Vr
     }
 
     @Override
-    public void setVrModeEnabled(boolean enabled) {
-        AndroidCompat.setVrModeEnabled(mActivity, enabled);
-    }
-
-    @Override
     public void setWebVrModeEnabled(boolean enabled) {
         nativeSetWebVrMode(mNativeVrShell, enabled);
     }
@@ -343,6 +342,11 @@ public class VrShellImpl extends GvrLayout implements GLSurfaceView.Renderer, Vr
     @Override
     public FrameLayout getContainer() {
         return this;
+    }
+
+    @Override
+    public void setCloseButtonListener(Runnable runner) {
+        getUiLayout().setCloseButtonListener(runner);
     }
 
     /**

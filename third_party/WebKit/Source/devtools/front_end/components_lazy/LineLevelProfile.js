@@ -4,23 +4,23 @@
 /**
  * @unrestricted
  */
-WebInspector.LineLevelProfile = class {
+Components.LineLevelProfile = class {
   constructor() {
-    this._locationPool = new WebInspector.LiveLocationPool();
+    this._locationPool = new Bindings.LiveLocationPool();
     this.reset();
   }
 
   /**
-   * @return {!WebInspector.LineLevelProfile}
+   * @return {!Components.LineLevelProfile}
    */
   static instance() {
-    if (!WebInspector.LineLevelProfile._instance)
-      WebInspector.LineLevelProfile._instance = new WebInspector.LineLevelProfile();
-    return WebInspector.LineLevelProfile._instance;
+    if (!Components.LineLevelProfile._instance)
+      Components.LineLevelProfile._instance = new Components.LineLevelProfile();
+    return Components.LineLevelProfile._instance;
   }
 
   /**
-   * @param {!WebInspector.CPUProfileDataModel} profile
+   * @param {!SDK.CPUProfileDataModel} profile
    */
   appendCPUProfile(profile) {
     var nodesToGo = [profile.profileHead];
@@ -66,16 +66,15 @@ WebInspector.LineLevelProfile = class {
   _doUpdate() {
     // TODO(alph): use scriptId instead of urls for the target.
     this._locationPool.disposeAll();
-    WebInspector.workspace.uiSourceCodes().forEach(
-        uiSourceCode => uiSourceCode.removeAllLineDecorations(WebInspector.LineLevelProfile.LineDecorator.type));
+    Workspace.workspace.uiSourceCodes().forEach(
+        uiSourceCode => uiSourceCode.removeDecorationsForType(Components.LineLevelProfile.LineDecorator.type));
     for (var fileInfo of this._files) {
       var url = /** @type {string} */ (fileInfo[0]);
-      var uiSourceCode = WebInspector.workspace.uiSourceCodeForURL(url);
+      var uiSourceCode = Workspace.workspace.uiSourceCodeForURL(url);
       if (!uiSourceCode)
         continue;
-      var target =
-          WebInspector.NetworkProject.targetForUISourceCode(uiSourceCode) || WebInspector.targetManager.mainTarget();
-      var debuggerModel = target ? WebInspector.DebuggerModel.fromTarget(target) : null;
+      var target = Bindings.NetworkProject.targetForUISourceCode(uiSourceCode) || SDK.targetManager.mainTarget();
+      var debuggerModel = target ? SDK.DebuggerModel.fromTarget(target) : null;
       if (!debuggerModel)
         continue;
       for (var lineInfo of fileInfo[1]) {
@@ -83,9 +82,9 @@ WebInspector.LineLevelProfile = class {
         var time = lineInfo[1];
         var rawLocation = debuggerModel.createRawLocationByURL(url, line, 0);
         if (rawLocation)
-          new WebInspector.LineLevelProfile.Presentation(rawLocation, time, this._locationPool);
+          new Components.LineLevelProfile.Presentation(rawLocation, time, this._locationPool);
         else if (uiSourceCode)
-          uiSourceCode.addLineDecoration(line, WebInspector.LineLevelProfile.LineDecorator.type, time);
+          uiSourceCode.addLineDecoration(line, Components.LineLevelProfile.LineDecorator.type, time);
       }
     }
   }
@@ -95,58 +94,58 @@ WebInspector.LineLevelProfile = class {
 /**
  * @unrestricted
  */
-WebInspector.LineLevelProfile.Presentation = class {
+Components.LineLevelProfile.Presentation = class {
   /**
-   * @param {!WebInspector.DebuggerModel.Location} rawLocation
+   * @param {!SDK.DebuggerModel.Location} rawLocation
    * @param {number} time
-   * @param {!WebInspector.LiveLocationPool} locationPool
+   * @param {!Bindings.LiveLocationPool} locationPool
    */
   constructor(rawLocation, time, locationPool) {
     this._time = time;
-    WebInspector.debuggerWorkspaceBinding.createLiveLocation(rawLocation, this.updateLocation.bind(this), locationPool);
+    Bindings.debuggerWorkspaceBinding.createLiveLocation(rawLocation, this.updateLocation.bind(this), locationPool);
   }
 
   /**
-   * @param {!WebInspector.LiveLocation} liveLocation
+   * @param {!Bindings.LiveLocation} liveLocation
    */
   updateLocation(liveLocation) {
     if (this._uiLocation)
-      this._uiLocation.uiSourceCode.removeLineDecoration(
-          this._uiLocation.lineNumber, WebInspector.LineLevelProfile.LineDecorator.type);
+      this._uiLocation.uiSourceCode.removeDecorationsForType(Components.LineLevelProfile.LineDecorator.type);
     this._uiLocation = liveLocation.uiLocation();
-    if (this._uiLocation)
+    if (this._uiLocation) {
       this._uiLocation.uiSourceCode.addLineDecoration(
-          this._uiLocation.lineNumber, WebInspector.LineLevelProfile.LineDecorator.type, this._time);
-  }
-};
-
-/**
- * @implements {WebInspector.UISourceCodeFrame.LineDecorator}
- * @unrestricted
- */
-WebInspector.LineLevelProfile.LineDecorator = class {
-  /**
-   * @override
-   * @param {!WebInspector.UISourceCode} uiSourceCode
-   * @param {!WebInspector.CodeMirrorTextEditor} textEditor
-   */
-  decorate(uiSourceCode, textEditor) {
-    var gutterType = 'CodeMirror-gutter-performance';
-    var decorations = uiSourceCode.lineDecorations(WebInspector.LineLevelProfile.LineDecorator.type);
-    textEditor.uninstallGutter(gutterType);
-    if (!decorations)
-      return;
-    textEditor.installGutter(gutterType, false);
-    for (var decoration of decorations.values()) {
-      var time = /** @type {number} */ (decoration.data());
-      var text = WebInspector.UIString('%.1f\xa0ms', time);
-      var intensity = Number.constrain(Math.log10(1 + 2 * time) / 5, 0.02, 1);
-      var element = createElementWithClass('div', 'text-editor-line-marker-performance');
-      element.textContent = text;
-      element.style.backgroundColor = `hsla(44, 100%, 50%, ${intensity.toFixed(3)})`;
-      textEditor.setGutterDecoration(decoration.line(), gutterType, element);
+          this._uiLocation.lineNumber, Components.LineLevelProfile.LineDecorator.type, this._time);
     }
   }
 };
 
-WebInspector.LineLevelProfile.LineDecorator.type = 'performance';
+/**
+ * @implements {Sources.UISourceCodeFrame.LineDecorator}
+ * @unrestricted
+ */
+Components.LineLevelProfile.LineDecorator = class {
+  /**
+   * @override
+   * @param {!Workspace.UISourceCode} uiSourceCode
+   * @param {!TextEditor.CodeMirrorTextEditor} textEditor
+   */
+  decorate(uiSourceCode, textEditor) {
+    var gutterType = 'CodeMirror-gutter-performance';
+    var decorations = uiSourceCode.decorationsForType(Components.LineLevelProfile.LineDecorator.type);
+    textEditor.uninstallGutter(gutterType);
+    if (!decorations.size)
+      return;
+    textEditor.installGutter(gutterType, false);
+    for (var decoration of decorations) {
+      var time = /** @type {number} */ (decoration.data());
+      var text = Common.UIString('%.1f\xa0ms', time);
+      var intensity = Number.constrain(Math.log10(1 + 2 * time) / 5, 0.02, 1);
+      var element = createElementWithClass('div', 'text-editor-line-marker-performance');
+      element.textContent = text;
+      element.style.backgroundColor = `hsla(44, 100%, 50%, ${intensity.toFixed(3)})`;
+      textEditor.setGutterDecoration(decoration.range().startLine, gutterType, element);
+    }
+  }
+};
+
+Components.LineLevelProfile.LineDecorator.type = 'performance';

@@ -91,7 +91,6 @@
 #include "content/browser/payments/payment_app_manager.h"
 #include "content/browser/permissions/permission_service_context.h"
 #include "content/browser/permissions/permission_service_impl.h"
-#include "content/browser/power_monitor_message_broadcaster.h"
 #include "content/browser/profiler_message_filter.h"
 #include "content/browser/push_messaging/push_messaging_message_filter.h"
 #include "content/browser/quota_dispatcher_host.h"
@@ -160,9 +159,10 @@
 #include "content/public/common/resource_type.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
-#include "content/public/common/service_names.h"
+#include "content/public/common/service_names.mojom.h"
 #include "content/public/common/url_constants.h"
 #include "device/battery/battery_monitor_impl.h"
+#include "device/power_monitor/power_monitor_message_broadcaster.h"
 #include "device/time_zone_monitor/time_zone_monitor.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gpu_switches.h"
@@ -182,6 +182,7 @@
 #include "services/service_manager/public/cpp/interface_registry.h"
 #include "services/service_manager/runner/common/switches.h"
 #include "storage/browser/fileapi/sandbox_file_system_backend.h"
+#include "third_party/WebKit/public/public_features.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/display/display_switches.h"
@@ -236,7 +237,7 @@
 #include "content/common/media/media_stream_messages.h"
 #endif
 
-#if defined(USE_MINIKIN_HYPHENATION)
+#if BUILDFLAG(USE_MINIKIN_HYPHENATION)
 #include "content/browser/hyphenation/hyphenation_impl.h"
 #endif
 
@@ -802,6 +803,12 @@ bool RenderProcessHostImpl::Init() {
 
   sent_render_process_ready_ = false;
 
+  // We may reach Init() during process death notification (e.g.
+  // RenderProcessExited on some observer). In this case the Channel may be
+  // null, so we re-initialize it here.
+  if (!channel_)
+    InitializeChannelProxy();
+
   // Unpause the Channel briefly. This will be paused again below if we launch a
   // real child process. Note that messages may be sent in the short window
   // between now and then (e.g. in response to RenderProcessWillLaunch) and we
@@ -809,7 +816,6 @@ bool RenderProcessHostImpl::Init() {
   //
   // |channel_| must always be non-null here: either it was initialized in
   // the constructor, or in the most recent call to ProcessDied().
-  DCHECK(channel_);
   channel_->Unpause(false /* flush */);
 
   // Call the embedder first so that their IPC filters have priority.
@@ -932,7 +938,7 @@ void RenderProcessHostImpl::InitializeChannelProxy() {
 
   // Establish a ServiceManager connection for the new render service instance.
   child_connection_.reset(new ChildConnection(
-      kRendererServiceName,
+      mojom::kRendererServiceName,
       base::StringPrintf("%d_%d", id_, instance_id_++), child_token_, connector,
       io_task_runner));
 
@@ -1245,23 +1251,36 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
                  base::Unretained(
                      BrowserMainLoop::GetInstance()->time_zone_monitor())));
 
-  AddUIThreadInterface(registry.get(),
-                       base::Bind(&PowerMonitorMessageBroadcaster::Create));
+  AddUIThreadInterface(
+      registry.get(),
+      base::Bind(&device::PowerMonitorMessageBroadcaster::Create));
 
   scoped_refptr<base::SingleThreadTaskRunner> file_task_runner =
       BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE);
   registry->AddInterface(base::Bind(&MimeRegistryImpl::Create),
                          file_task_runner);
-#if defined(USE_MINIKIN_HYPHENATION)
+#if BUILDFLAG(USE_MINIKIN_HYPHENATION)
   registry->AddInterface(base::Bind(&hyphenation::HyphenationImpl::Create),
                          file_task_runner);
 #endif
 
-  // These callbacks will be run immediately on the IO thread.
+#if defined(OS_ANDROID)
+  // On Android the device sensors implementations need to run on the UI thread
+  // to communicate to Java.
+  AddUIThreadInterface(registry.get(), base::Bind(&DeviceLightHost::Create));
+  AddUIThreadInterface(registry.get(), base::Bind(&DeviceMotionHost::Create));
+  AddUIThreadInterface(registry.get(),
+                       base::Bind(&DeviceOrientationHost::Create));
+  AddUIThreadInterface(registry.get(),
+                       base::Bind(&DeviceOrientationAbsoluteHost::Create));
+#else
+  // On platforms other than Android the device sensors implementations run on
+  // the IO thread.
   registry->AddInterface(base::Bind(&DeviceLightHost::Create));
   registry->AddInterface(base::Bind(&DeviceMotionHost::Create));
   registry->AddInterface(base::Bind(&DeviceOrientationHost::Create));
   registry->AddInterface(base::Bind(&DeviceOrientationAbsoluteHost::Create));
+#endif  // defined(OS_ANDROID)
 
   registry->AddInterface(
       base::Bind(&VideoCaptureHost::Create,
@@ -1774,6 +1793,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kDisableLowEndDeviceMode,
 #if defined(OS_ANDROID)
     switches::kDisableUnifiedMediaPipeline,
+    switches::kEnableContentIntentDetection,
     switches::kRendererWaitForJavaDebugger,
 #endif
 #if defined(OS_MACOSX)

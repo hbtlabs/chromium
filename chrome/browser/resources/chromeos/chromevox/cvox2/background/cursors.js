@@ -34,6 +34,9 @@ cursors.Unit = {
   /** A range of characters (given by attributes on automation nodes). */
   WORD: 'word',
 
+  /** A text node. */
+  TEXT: 'text',
+
   /** A leaf node. */
   NODE: 'node',
 
@@ -236,16 +239,10 @@ cursors.Cursor.prototype = {
 
   /**
    * Gets the accessible text of the node associated with this cursor.
-   *
-   * @param {!AutomationNode=} opt_node Use this node rather than this cursor's
-   * node.
    * @return {string}
    */
-  getText: function(opt_node) {
-    var node = opt_node || this.node;
-    if (node.role === RoleType.textField)
-      return node.value;
-    return node.name || '';
+  getText: function() {
+    return AutomationUtil.getText(this.node);
   },
 
   /**
@@ -278,7 +275,7 @@ cursors.Cursor.prototype = {
           newNode = AutomationUtil.findNextNode(
               newNode, dir, AutomationPredicate.leafWithText);
           if (newNode) {
-            var newText = this.getText(newNode);
+            var newText = AutomationUtil.getText(newNode);
             newIndex =
                 dir == Dir.FORWARD ? 0 :
                 StringUtil.previousCodePointOffset(newText, newText.length);
@@ -351,14 +348,17 @@ cursors.Cursor.prototype = {
             }
         }
         break;
+      case Unit.TEXT:
       case Unit.NODE:
         switch (movement) {
           case Movement.BOUND:
             newIndex = dir == Dir.FORWARD ? this.getText().length - 1 : 0;
             break;
           case Movement.DIRECTIONAL:
-            newNode = AutomationUtil.findNextNode(
-                newNode, dir, AutomationPredicate.object) || originalNode;
+            var pred = unit == Unit.TEXT ?
+                AutomationPredicate.leaf : AutomationPredicate.object;
+            newNode = AutomationUtil.findNextNode(newNode, dir, pred) ||
+                originalNode;
             newIndex = cursors.NODE_INDEX;
             break;
         }
@@ -371,7 +371,7 @@ cursors.Cursor.prototype = {
                 AutomationPredicate.linebreak, true);
             newNode = newNode || originalNode;
             newIndex =
-                dir == Dir.FORWARD ? this.getText(newNode).length : 0;
+                dir == Dir.FORWARD ? AutomationUtil.getText(newNode).length : 0;
             break;
           case Movement.DIRECTIONAL:
             newNode = AutomationUtil.findNodeUntil(
@@ -563,16 +563,12 @@ cursors.Range.prototype = {
   },
 
   /**
-   * Gets a cursor bounding this range.
+   * Gets the directed end cursor of this range.
    * @param {Dir} dir Which endpoint cursor to return; Dir.FORWARD for end,
    * Dir.BACKWARD for start.
-   * @param {boolean=} opt_reverse Specify to have Dir.BACKWARD return end,
-   * Dir.FORWARD return start.
    * @return {!cursors.Cursor}
    */
-  getBound: function(dir, opt_reverse) {
-    if (opt_reverse)
-      return dir == Dir.BACKWARD ? this.end_ : this.start_;
+  getBound: function(dir) {
     return dir == Dir.FORWARD ? this.end_ : this.start_;
   },
 
@@ -591,13 +587,25 @@ cursors.Range.prototype = {
   },
 
   /**
-   * Returns true if this range covers less than a node.
+   * Returns true if this range covers a single node's text content or less.
    * @return {boolean}
    */
   isSubNode: function() {
     return this.start.node === this.end.node &&
         this.start.index > -1 &&
         this.end.index > -1;
+  },
+
+  /**
+   * Returns true if this range covers inline text (i.e. each end points to an
+   * inlineTextBox).
+   * @return {boolean?}
+   */
+  isInlineText: function() {
+    return this.start.node &&
+        this.end.node &&
+        this.start.node.role == this.end.node.role &&
+        this.start.node.role == RoleType.inlineTextBox;
   },
 
   /**

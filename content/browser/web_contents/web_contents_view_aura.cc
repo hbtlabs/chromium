@@ -23,6 +23,7 @@
 #include "content/browser/renderer_host/render_view_host_factory.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_aura.h"
 #include "content/browser/web_contents/aura/gesture_nav_simple.h"
 #include "content/browser/web_contents/aura/overscroll_navigation_overlay.h"
@@ -44,7 +45,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/drop_data.h"
 #include "net/base/filename_util.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/client/drag_drop_delegate.h"
@@ -513,8 +514,8 @@ WebContentsViewAura::WebContentsViewAura(WebContentsImpl* web_contents,
     : web_contents_(web_contents),
       delegate_(delegate),
       current_drag_op_(blink::WebDragOperationNone),
-      drag_dest_delegate_(NULL),
-      current_rvh_for_drag_(NULL),
+      drag_dest_delegate_(nullptr),
+      current_rvh_for_drag_(nullptr),
       current_overscroll_gesture_(OVERSCROLL_NONE),
       completed_overscroll_gesture_(OVERSCROLL_NONE),
       navigation_overlay_(nullptr),
@@ -559,10 +560,13 @@ void WebContentsViewAura::EndDrag(blink::WebDragOperationsMask ops) {
   aura::client::ScreenPositionClient* screen_position_client =
       aura::client::GetScreenPositionClient(window->GetRootWindow());
   if (screen_position_client)
-      screen_position_client->ConvertPointFromScreen(window, &client_loc);
+    screen_position_client->ConvertPointFromScreen(window, &client_loc);
 
-  web_contents_->DragSourceEndedAt(client_loc.x(), client_loc.y(),
-      screen_loc.x(), screen_loc.y(), ops);
+  // TODO(paulmeyer): In the OOPIF case, should |client_loc| be converted to
+  // the coordinates local to |drag_start_rwh_|? See crbug.com/647249.
+  web_contents_->DragSourceEndedAt(client_loc.x(), client_loc.x(),
+                                   screen_loc.x(), screen_loc.y(), ops,
+                                   drag_start_rwh_.get());
 }
 
 void WebContentsViewAura::InstallOverscrollControllerDelegate(
@@ -654,6 +658,11 @@ void GetScreenInfoForWindow(ScreenInfo* results,
   results->depth_per_component = 8;
   results->is_monochrome = false;
   results->device_scale_factor = display.device_scale_factor();
+  results->icc_profile = gfx::ICCProfile::FromBestMonitor();
+  if (results->icc_profile == gfx::ICCProfile()) {
+    results->icc_profile =
+        gfx::ICCProfile::FromColorSpace(gfx::ColorSpace::CreateSRGB());
+  }
 
   // The Display rotation and the ScreenInfo orientation are not the same
   // angle. The former is the physical display rotation while the later is the
@@ -879,12 +888,15 @@ void WebContentsViewAura::StartDragging(
     blink::WebDragOperationsMask operations,
     const gfx::ImageSkia& image,
     const gfx::Vector2d& image_offset,
-    const DragEventSourceInfo& event_info) {
+    const DragEventSourceInfo& event_info,
+    RenderWidgetHostImpl* source_rwh) {
   aura::Window* root_window = GetNativeView()->GetRootWindow();
   if (!aura::client::GetDragDropClient(root_window)) {
-    web_contents_->SystemDragEnded();
+    web_contents_->SystemDragEnded(source_rwh);
     return;
   }
+
+  drag_start_rwh_ = source_rwh->GetWeakPtr();
 
   ui::TouchSelectionController* selection_controller = GetSelectionController();
   if (selection_controller)
@@ -929,7 +941,7 @@ void WebContentsViewAura::StartDragging(
   }
 
   EndDrag(ConvertToWeb(result_op));
-  web_contents_->SystemDragEnded();
+  web_contents_->SystemDragEnded(source_rwh);
 }
 
 void WebContentsViewAura::UpdateDragCursor(blink::WebDragOperation operation) {
@@ -1109,12 +1121,16 @@ void WebContentsViewAura::OnMouseEvent(ui::MouseEvent* event) {
 // WebContentsViewAura, aura::client::DragDropDelegate implementation:
 
 void WebContentsViewAura::OnDragEntered(const ui::DropTargetEvent& event) {
+  gfx::Point transformed_pt;
+  current_rwh_for_drag_ =
+      web_contents_->GetInputEventRouter()->GetRenderWidgetHostAtPoint(
+          web_contents_->GetRenderViewHost()->GetWidget()->GetView(),
+          event.location(), &transformed_pt)->GetWeakPtr();
   current_rvh_for_drag_ = web_contents_->GetRenderViewHost();
+
   current_drop_data_.reset(new DropData());
-
   PrepareDropData(current_drop_data_.get(), event.data());
-
-  web_contents_->GetRenderViewHost()->FilterDropData(current_drop_data_.get());
+  current_rwh_for_drag_->FilterDropData(current_drop_data_.get());
 
   blink::WebDragOperationsMask op = ConvertToWeb(event.source_operations());
 
@@ -1130,8 +1146,8 @@ void WebContentsViewAura::OnDragEntered(const ui::DropTargetEvent& event) {
     drag_dest_delegate_->DragInitialize(web_contents_);
 
   gfx::Point screen_pt = display::Screen::GetScreen()->GetCursorScreenPoint();
-  web_contents_->GetRenderViewHost()->DragTargetDragEnter(
-      *current_drop_data_, event.location(), screen_pt, op,
+  current_rwh_for_drag_->DragTargetDragEnter(
+      *current_drop_data_, transformed_pt, screen_pt, op,
       ConvertAuraEventFlagsToWebInputEventModifiers(event.flags()));
 
   if (drag_dest_delegate_) {
@@ -1141,17 +1157,25 @@ void WebContentsViewAura::OnDragEntered(const ui::DropTargetEvent& event) {
 }
 
 int WebContentsViewAura::OnDragUpdated(const ui::DropTargetEvent& event) {
-  DCHECK(current_rvh_for_drag_);
-  if (current_rvh_for_drag_ != web_contents_->GetRenderViewHost())
+  gfx::Point transformed_pt;
+  RenderWidgetHostImpl* target_rwh =
+      web_contents_->GetInputEventRouter()->GetRenderWidgetHostAtPoint(
+          web_contents_->GetRenderViewHost()->GetWidget()->GetView(),
+          event.location(), &transformed_pt);
+
+  if (target_rwh != current_rwh_for_drag_.get()) {
+    if (current_rwh_for_drag_)
+      current_rwh_for_drag_->DragTargetDragLeave();
     OnDragEntered(event);
+  }
 
   if (!current_drop_data_)
     return ui::DragDropTypes::DRAG_NONE;
 
   blink::WebDragOperationsMask op = ConvertToWeb(event.source_operations());
   gfx::Point screen_pt = event.root_location();
-  web_contents_->GetRenderViewHost()->DragTargetDragOver(
-      event.location(), screen_pt, op,
+  target_rwh->DragTargetDragOver(
+      transformed_pt, screen_pt, op,
       ConvertAuraEventFlagsToWebInputEventModifiers(event.flags()));
 
   if (drag_dest_delegate_)
@@ -1161,14 +1185,16 @@ int WebContentsViewAura::OnDragUpdated(const ui::DropTargetEvent& event) {
 }
 
 void WebContentsViewAura::OnDragExited() {
-  DCHECK(current_rvh_for_drag_);
-  if (current_rvh_for_drag_ != web_contents_->GetRenderViewHost())
+  if (current_rvh_for_drag_ != web_contents_->GetRenderViewHost() ||
+      !current_drop_data_) {
     return;
+  }
 
-  if (!current_drop_data_)
-    return;
+  if (current_rwh_for_drag_) {
+    current_rwh_for_drag_->DragTargetDragLeave();
+    current_rwh_for_drag_.reset();
+  }
 
-  web_contents_->GetRenderViewHost()->DragTargetDragLeave();
   if (drag_dest_delegate_)
     drag_dest_delegate_->OnDragLeave();
 
@@ -1176,15 +1202,23 @@ void WebContentsViewAura::OnDragExited() {
 }
 
 int WebContentsViewAura::OnPerformDrop(const ui::DropTargetEvent& event) {
-  DCHECK(current_rvh_for_drag_);
-  if (current_rvh_for_drag_ != web_contents_->GetRenderViewHost())
+  gfx::Point transformed_pt;
+  RenderWidgetHostImpl* target_rwh =
+      web_contents_->GetInputEventRouter()->GetRenderWidgetHostAtPoint(
+          web_contents_->GetRenderViewHost()->GetWidget()->GetView(),
+          event.location(), &transformed_pt);
+
+  if (target_rwh != current_rwh_for_drag_.get()) {
+    if (current_rwh_for_drag_)
+      current_rwh_for_drag_->DragTargetDragLeave();
     OnDragEntered(event);
+  }
 
   if (!current_drop_data_)
     return ui::DragDropTypes::DRAG_NONE;
 
-  web_contents_->GetRenderViewHost()->DragTargetDrop(
-      *current_drop_data_, event.location(),
+  target_rwh->DragTargetDrop(
+      *current_drop_data_, transformed_pt,
       display::Screen::GetScreen()->GetCursorScreenPoint(),
       ConvertAuraEventFlagsToWebInputEventModifiers(event.flags()));
   if (drag_dest_delegate_)

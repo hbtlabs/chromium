@@ -17,12 +17,12 @@
 #include "content/public/renderer/render_view.h"
 #include "gin/converter.h"
 #include "skia/ext/platform_canvas.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
 #include "third_party/WebKit/public/web/WebFrameWidget.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebPluginContainer.h"
 #include "third_party/WebKit/public/web/WebView.h"
@@ -245,7 +245,9 @@ void WebViewPlugin::startDragging(blink::WebReferrerPolicy,
                                   const WebImage&,
                                   const WebPoint&) {
   // Immediately stop dragging.
-  web_view_->dragSourceSystemDragEnded();
+  DCHECK(web_view_->mainFrame()->isWebLocalFrame());
+  web_view_->mainFrame()->toWebLocalFrame()->frameWidget()->
+      dragSourceSystemDragEnded();
 }
 
 bool WebViewPlugin::allowsBrokenNullLayerTreeView() const {

@@ -20,9 +20,10 @@
 #include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/platform/WebGestureDevice.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
+#include "third_party/WebKit/public/public_features.h"
 #include "ui/base/layout.h"
 
-#if defined(USE_DEFAULT_RENDER_THEME)
+#if BUILDFLAG(USE_DEFAULT_RENDER_THEME)
 #include "content/child/webthemeengine_impl_default.h"
 #elif defined(OS_WIN)
 #include "content/child/webthemeengine_impl_win.h"
@@ -43,7 +44,7 @@ class WebThreadBase;
 }
 
 namespace content {
-class BackgroundSyncProvider;
+
 class NotificationDispatcher;
 class PushDispatcher;
 class ThreadSafeSender;
@@ -113,7 +114,6 @@ class CONTENT_EXPORT BlinkPlatformImpl
   blink::WebCrypto* crypto() override;
   blink::WebNotificationManager* notificationManager() override;
   blink::WebPushProvider* pushProvider() override;
-  blink::WebSyncProvider* backgroundSyncProvider() override;
 
   blink::WebString domCodeStringFromEnum(int dom_code) override;
   int domEnumFromCodeString(const blink::WebString& codeString) override;
@@ -141,7 +141,6 @@ class CONTENT_EXPORT BlinkPlatformImpl
   scoped_refptr<ThreadSafeSender> thread_safe_sender_;
   scoped_refptr<NotificationDispatcher> notification_dispatcher_;
   scoped_refptr<PushDispatcher> push_dispatcher_;
-  std::unique_ptr<BackgroundSyncProvider> main_thread_sync_provider_;
 
   blink::scheduler::WebThreadBase* compositor_thread_;
 };

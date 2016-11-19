@@ -175,6 +175,16 @@ Background = function() {
    * @private
    */
   this.focusRecoveryMap_ = new WeakMap();
+
+  // Record a metric with the mode we're in on startup.
+  var useNext = localStorage['useNext'] !== 'false';
+  chrome.metricsPrivate.recordValue(
+      { metricName: 'Accessibility.CrosChromeVoxNext',
+        type: chrome.metricsPrivate.MetricTypeType.HISTOGRAM_LINEAR,
+        min: 1,  // According to histogram.h, this should be 1 for enums.
+        max: 2,  // Maximum should be exclusive.
+        buckets: 3 },  // Number of buckets: 0, 1 and overflowing 2.
+      useNext ? 1 : 0);
 };
 
 /**
@@ -348,6 +358,14 @@ Background.prototype = {
       useNext = opt_setValue;
     else
       useNext = localStorage['useNext'] !== 'true';
+
+    if (useNext) {
+      chrome.metricsPrivate.recordUserAction(
+          'Accessibility.ChromeVox.ToggleNextOn');
+    } else {
+      chrome.metricsPrivate.recordUserAction(
+          'Accessibility.ChromeVox.ToggleNextOff');
+    }
 
     localStorage['useNext'] = useNext;
     if (useNext)
@@ -658,7 +676,7 @@ Background.prototype = {
     actionNode.doDefault();
     if (selectionSpan) {
       var start = text.getSpanStart(selectionSpan);
-      var targetPosition = position - start + selectionSpan.offset;
+      var targetPosition = position - start;
       actionNode.setSelection(targetPosition, targetPosition);
     }
   },
@@ -766,6 +784,18 @@ Background.prototype = {
   setFocusToRange_: function(range, prevRange) {
     var start = range.start.node;
     var end = range.end.node;
+
+    // First, see if we've crossed a root. Remove once webview handles focus
+    // correctly.
+    if (prevRange && prevRange.start.node && start) {
+      var entered = AutomationUtil.getUniqueAncestors(
+          prevRange.start.node, start);
+      var embeddedObject = entered.find(function(f) {
+        return f.role == RoleType.embeddedObject; });
+      if (embeddedObject && !embeddedObject.state.focused)
+        embeddedObject.focus();
+    }
+
     if (start.state.focused || end.state.focused)
       return;
 
@@ -774,23 +804,14 @@ Background.prototype = {
           AutomationPredicate.linkOrControl(node);
     };
 
-    // First, see if we've crossed a root. Remove once webview handles focus
-    // correctly.
-    if (prevRange && prevRange.start.node) {
-      var entered = AutomationUtil.getUniqueAncestors(
-          prevRange.start.node, start);
-      var embeddedObject = entered.find(function(f) {
-        return f.role == RoleType.embeddedObject; });
-      if (embeddedObject)
-        embeddedObject.focus();
-    }
-
     // Next, try to focus the start or end node.
-    if (isFocusableLinkOrControl(start)) {
+    if (!AutomationPredicate.structuralContainer(start) &&
+        start.state.focusable) {
       if (!start.state.focused)
         start.focus();
       return;
-    } else if (isFocusableLinkOrControl(end)) {
+    } else if (!AutomationPredicate.structuralContainer(end) &&
+        end.state.focusable) {
       if (!end.state.focused)
         end.focus();
       return;
@@ -810,7 +831,8 @@ Background.prototype = {
     // If nothing is focusable, set the sequential focus navigation starting
     // point, which ensures that the next time you press Tab, you'll reach
     // the next or previous focusable node from |start|.
-    start.setSequentialFocusNavigationStartingPoint();
+    if (!start.state.offscreen)
+      start.setSequentialFocusNavigationStartingPoint();
   }
 };
 

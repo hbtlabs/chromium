@@ -185,8 +185,7 @@ TabHelper::TabHelper(content::WebContents* web_contents)
   ExtensionWebContentsObserver::GetForWebContents(web_contents)->dispatcher()->
       set_delegate(this);
 
-  BookmarkManagerPrivateDragEventRouter::MaybeCreateForWebContents(
-      web_contents);
+  BookmarkManagerPrivateDragEventRouter::CreateForWebContents(web_contents);
 
   registrar_.Add(this,
                  content::NOTIFICATION_LOAD_STOP,
@@ -445,7 +444,7 @@ void TabHelper::OnInlineWebstoreInstall(content::RenderFrameHost* host,
   // child frames from sending the IPC.
   if ((listeners_mask & ~(api::webstore::INSTALL_STAGE_LISTENER |
                           api::webstore::DOWNLOAD_PROGRESS_LISTENER)) != 0 ||
-      !requestor_url.is_valid() || requestor_url == GURL(url::kAboutBlankURL) ||
+      !requestor_url.is_valid() || requestor_url == url::kAboutBlankURL ||
       host->GetParent()) {
     NOTREACHED();
     return;

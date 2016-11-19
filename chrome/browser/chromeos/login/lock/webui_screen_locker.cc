@@ -103,8 +103,7 @@ void WebUIScreenLocker::LockScreen() {
   gfx::Rect bounds = display::Screen::GetScreen()->GetPrimaryDisplay().bounds();
 
   lock_time_ = base::TimeTicks::Now();
-  lock_window_ = new LockWindow();
-  lock_window_->set_initially_focused_view(this);
+  lock_window_ = new LockWindow(this);
   lock_window_->AddObserver(this);
 
   Init();
@@ -237,6 +236,10 @@ void WebUIScreenLocker::OnSigninScreenReady() {
   VLOG(2) << "Lock screen signin screen is ready";
 }
 
+void WebUIScreenLocker::OnGaiaScreenReady() {
+  VLOG(2) << "Lock screen gaia screen is ready";
+}
+
 void WebUIScreenLocker::OnStartEnterpriseEnrollment() {
   NOTREACHED();
 }
@@ -257,8 +260,7 @@ void WebUIScreenLocker::ShowWrongHWIDScreen() {
   NOTREACHED();
 }
 
-void WebUIScreenLocker::ResetPublicSessionAutoLoginTimer() {
-}
+void WebUIScreenLocker::ResetAutoLoginTimer() {}
 
 void WebUIScreenLocker::ResyncUserData() {
   NOTREACHED();

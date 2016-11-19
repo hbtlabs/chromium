@@ -12,6 +12,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "mash/public/interfaces/launchable.mojom.h"
 #include "services/catalog/public/interfaces/catalog.mojom.h"
+#include "services/catalog/public/interfaces/constants.mojom.h"
 #include "services/service_manager/public/c/main.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_registry.h"
@@ -96,6 +97,9 @@ class QuickLaunchUI : public views::WidgetDelegateView,
     if (suggestion_rejected_)
       return;
 
+    if (new_contents.empty())
+      return;
+
     // TODO(beng): it'd be nice if we persisted some history/scoring here.
     for (const auto& name : app_names_) {
       if (base::StartsWith(name, new_contents,
@@ -117,7 +121,7 @@ class QuickLaunchUI : public views::WidgetDelegateView,
     base::TrimWhitespace(input, base::TRIM_ALL, &working);
     GURL url(working);
     if (url.scheme() != "service" && url.scheme() != "exe")
-      working = base::ASCIIToUTF16("service:") + working;
+      working = base::ASCIIToUTF16("") + working;
     return base::UTF16ToUTF8(working);
   }
 
@@ -166,14 +170,13 @@ void QuickLaunch::RemoveWindow(views::Widget* window) {
     base::MessageLoop::current()->QuitWhenIdle();
 }
 
-void QuickLaunch::OnStart(service_manager::ServiceContext* context) {
-  context_ = context;
-  tracing_.Initialize(context->connector(), context->identity().name());
+void QuickLaunch::OnStart() {
+  tracing_.Initialize(context()->connector(), context()->identity().name());
 
   aura_init_ = base::MakeUnique<views::AuraInit>(
-      context->connector(), context->identity(), "views_mus_resources.pak");
+      context()->connector(), context()->identity(), "views_mus_resources.pak");
   window_manager_connection_ = views::WindowManagerConnection::Create(
-      context->connector(), context->identity());
+      context()->connector(), context()->identity());
 
   Launch(mojom::kWindow, mojom::LaunchMode::MAKE_NEW);
 }
@@ -192,10 +195,11 @@ void QuickLaunch::Launch(uint32_t what, mojom::LaunchMode how) {
     return;
   }
   catalog::mojom::CatalogPtr catalog;
-  context_->connector()->ConnectToInterface("service:catalog", &catalog);
+  context()->connector()->ConnectToInterface(catalog::mojom::kServiceName,
+                                             &catalog);
 
   views::Widget* window = views::Widget::CreateWindowWithContextAndBounds(
-      new QuickLaunchUI(this, context_->connector(), std::move(catalog)),
+      new QuickLaunchUI(this, context()->connector(), std::move(catalog)),
       nullptr, gfx::Rect(10, 640, 0, 0));
   window->Show();
   windows_.push_back(window);

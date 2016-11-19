@@ -31,6 +31,7 @@
 #include "services/ui/public/cpp/window.h"
 #include "services/ui/public/cpp/window_property.h"
 #include "services/ui/public/cpp/window_tree_client.h"
+#include "services/ui/public/interfaces/constants.mojom.h"
 #include "services/ui/public/interfaces/mus_constants.mojom.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "ui/base/hit_test.h"
@@ -56,8 +57,10 @@ void WindowManager::Init(
   window_tree_client_ = std::move(window_tree_client);
 
   // |connector_| will be null in some tests.
-  if (connector_)
-    connector_->ConnectToInterface("service:ui", &display_controller_);
+  if (connector_) {
+    connector_->ConnectToInterface(ui::mojom::kServiceName,
+                                   &display_controller_);
+  }
 
   screen_ = base::MakeUnique<display::ScreenBase>();
   display::Screen::SetScreenInstance(screen_.get());
@@ -317,7 +320,6 @@ bool WindowManager::OnWmSetProperty(
   return name == ui::mojom::WindowManager::kShowState_Property ||
          name == ui::mojom::WindowManager::kPreferredSize_Property ||
          name == ui::mojom::WindowManager::kResizeBehavior_Property ||
-         name == ui::mojom::WindowManager::kShelfIconResourceId_Property ||
          name == ui::mojom::WindowManager::kShelfItemType_Property ||
          name == ui::mojom::WindowManager::kWindowAppIcon_Property ||
          name == ui::mojom::WindowManager::kWindowTitle_Property;

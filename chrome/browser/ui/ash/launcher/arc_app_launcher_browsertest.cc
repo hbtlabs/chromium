@@ -57,25 +57,26 @@ std::string GetTestApp2Id() {
   return ArcAppListPrefs::GetAppId(kTestAppPackage, kTestAppActivity2);
 }
 
-mojo::Array<arc::mojom::AppInfoPtr> GetTestAppsList(bool multi_app) {
-  std::vector<arc::mojom::AppInfo> apps;
+std::vector<arc::mojom::AppInfoPtr> GetTestAppsList(bool multi_app) {
+  std::vector<arc::mojom::AppInfoPtr> apps;
 
-  arc::mojom::AppInfo app;
-  app.name = kTestAppName;
-  app.package_name = kTestAppPackage;
-  app.activity = kTestAppActivity;
-  app.sticky = false;
-  apps.push_back(app);
+  arc::mojom::AppInfoPtr app(arc::mojom::AppInfo::New());
+  app->name = kTestAppName;
+  app->package_name = kTestAppPackage;
+  app->activity = kTestAppActivity;
+  app->sticky = false;
+  apps.push_back(std::move(app));
 
   if (multi_app) {
-    app.name = kTestAppName2;
-    app.package_name = kTestAppPackage;
-    app.activity = kTestAppActivity2;
-    app.sticky = false;
-    apps.push_back(app);
+    app = arc::mojom::AppInfo::New();
+    app->name = kTestAppName2;
+    app->package_name = kTestAppPackage;
+    app->activity = kTestAppActivity2;
+    app->sticky = false;
+    apps.push_back(std::move(app));
   }
 
-  return mojo::Array<arc::mojom::AppInfoPtr>::From(apps);
+  return apps;
 }
 
 ChromeLauncherController* chrome_controller() {
@@ -136,10 +137,12 @@ class ArcAppLauncherBrowserTest : public ExtensionBrowserTest {
 
   void SetUpInProcessBrowserTestFixture() override {
     ExtensionBrowserTest::SetUpInProcessBrowserTestFixture();
-    arc::ArcAuthService::DisableUIForTesting();
+    arc::ArcSessionManager::DisableUIForTesting();
   }
 
-  void SetUpOnMainThread() override { arc::ArcAuthService::Get()->EnableArc(); }
+  void SetUpOnMainThread() override {
+    arc::ArcSessionManager::Get()->EnableArc();
+  }
 
   void InstallTestApps(bool multi_app) {
     app_host()->OnAppListRefreshed(GetTestAppsList(multi_app));
@@ -177,13 +180,13 @@ class ArcAppLauncherBrowserTest : public ExtensionBrowserTest {
   void SendPackageRemoved() { app_host()->OnPackageRemoved(kTestAppPackage); }
 
   void StartInstance() {
-    if (auth_service()->profile() != profile())
-      auth_service()->OnPrimaryUserProfilePrepared(profile());
+    if (arc_session_manager()->profile() != profile())
+      arc_session_manager()->OnPrimaryUserProfilePrepared(profile());
     app_instance_observer()->OnInstanceReady();
   }
 
   void StopInstance() {
-    auth_service()->Shutdown();
+    arc_session_manager()->Shutdown();
     app_instance_observer()->OnInstanceClosed();
   }
 
@@ -200,7 +203,9 @@ class ArcAppLauncherBrowserTest : public ExtensionBrowserTest {
     return app_prefs();
   }
 
-  arc::ArcAuthService* auth_service() { return arc::ArcAuthService::Get(); }
+  arc::ArcSessionManager* arc_session_manager() {
+    return arc::ArcSessionManager::Get();
+  }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ArcAppLauncherBrowserTest);

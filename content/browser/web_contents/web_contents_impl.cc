@@ -80,6 +80,7 @@
 #include "content/browser/webui/web_ui_impl.h"
 #include "content/common/browser_plugin/browser_plugin_constants.h"
 #include "content/common/browser_plugin/browser_plugin_messages.h"
+#include "content/common/drag_messages.h"
 #include "content/common/frame_messages.h"
 #include "content/common/input_messages.h"
 #include "content/common/page_messages.h"
@@ -482,9 +483,9 @@ WebContentsImpl::~WebContentsImpl() {
     entry.second->CloseAllBindings();
 
   WebContentsImpl* outermost = GetOutermostWebContents();
-  if (GetFocusedWebContents() == this && this != outermost) {
+  if (this != outermost && ContainsOrIsFocusedWebContents()) {
     // If the current WebContents is in focus, unset it.
-    outermost->node_->SetFocusedWebContents(outermost);
+    outermost->SetAsFocusedWebContentsIfNecessary();
   }
 
   for (FrameTreeNode* node : frame_tree_.Nodes()) {
@@ -1318,11 +1319,10 @@ void WebContentsImpl::NotifyNavigationStateChanged(
     GetOuterWebContents()->NotifyNavigationStateChanged(changed_flags);
 }
 
-void WebContentsImpl::OnAudioStateChanged(bool is_audio_playing) {
-  SendPageMessage(
-      new PageMsg_AudioStateChanged(MSG_ROUTING_NONE, is_audio_playing));
+void WebContentsImpl::OnAudioStateChanged(bool is_audible) {
+  SendPageMessage(new PageMsg_AudioStateChanged(MSG_ROUTING_NONE, is_audible));
 
-  // Notification for UI updates in response to the changed muting state.
+  // Notification for UI updates in response to the changed audio state.
   NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB);
 }
 
@@ -1870,6 +1870,10 @@ RenderWidgetHostImpl* WebContentsImpl::GetFocusedRenderWidgetHost(
   return RenderWidgetHostImpl::From(view->GetRenderWidgetHost());
 }
 
+RenderWidgetHostImpl* WebContentsImpl::GetRenderWidgetHostWithPageFocus() {
+  return GetFocusedWebContents()->GetMainFrame()->GetRenderWidgetHost();
+}
+
 void WebContentsImpl::EnterFullscreenMode(const GURL& origin) {
   // This method is being called to enter renderer-initiated fullscreen mode.
   // Make sure any existing fullscreen widget is shut down first.
@@ -1927,6 +1931,10 @@ void WebContentsImpl::ExitFullscreenMode(bool will_cause_resize) {
 
 bool WebContentsImpl::IsFullscreenForCurrentTab() const {
   return delegate_ ? delegate_->IsFullscreenForTabOrPending(this) : false;
+}
+
+bool WebContentsImpl::IsFullscreen() {
+  return IsFullscreenForCurrentTab();
 }
 
 blink::WebDisplayMode WebContentsImpl::GetDisplayMode(
@@ -2488,6 +2496,12 @@ TextInputManager* WebContentsImpl::GetTextInputManager() {
   return text_input_manager_.get();
 }
 
+bool WebContentsImpl::OnUpdateDragCursor() {
+  if (browser_plugin_embedder_)
+    return browser_plugin_embedder_->OnUpdateDragCursor();
+  return false;
+}
+
 BrowserAccessibilityManager*
     WebContentsImpl::GetRootBrowserAccessibilityManager() {
   RenderFrameHostImpl* rfh = GetMainFrame();
@@ -2953,14 +2967,20 @@ void WebContentsImpl::Close() {
   Close(GetRenderViewHost());
 }
 
-void WebContentsImpl::DragSourceEndedAt(int client_x, int client_y,
-    int screen_x, int screen_y, blink::WebDragOperation operation) {
+void WebContentsImpl::DragSourceEndedAt(int client_x,
+                                        int client_y,
+                                        int screen_x,
+                                        int screen_y,
+                                        blink::WebDragOperation operation,
+                                        RenderWidgetHost* source_rwh) {
   if (browser_plugin_embedder_.get())
-    browser_plugin_embedder_->DragSourceEndedAt(client_x, client_y,
-        screen_x, screen_y, operation);
-  if (GetRenderViewHost())
-    GetRenderViewHost()->DragSourceEndedAt(client_x, client_y, screen_x,
-                                           screen_y, operation);
+    browser_plugin_embedder_->DragSourceEndedAt(
+        client_x, client_y, screen_x, screen_y, operation);
+  if (source_rwh) {
+    source_rwh->DragSourceEndedAt(gfx::Point(client_x, client_y),
+                                  gfx::Point(screen_x, screen_y),
+                                  operation);
+  }
 }
 
 void WebContentsImpl::LoadStateChanged(
@@ -3011,9 +3031,9 @@ void WebContentsImpl::NotifyWebContentsFocused() {
     observer.OnWebContentsFocused();
 }
 
-void WebContentsImpl::SystemDragEnded() {
-  if (GetRenderViewHost())
-    GetRenderViewHost()->DragSourceSystemDragEnded();
+void WebContentsImpl::SystemDragEnded(RenderWidgetHost* source_rwh) {
+  if (source_rwh)
+    source_rwh->DragSourceSystemDragEnded();
   if (browser_plugin_embedder_.get())
     browser_plugin_embedder_->SystemDragEnded();
 }
@@ -4210,6 +4230,17 @@ WebContentsImpl* WebContentsImpl::GetFocusedWebContents() {
   return outermost->node_->focused_web_contents();
 }
 
+bool WebContentsImpl::ContainsOrIsFocusedWebContents() {
+  for (WebContentsImpl* focused_contents = GetFocusedWebContents();
+       focused_contents;
+       focused_contents = focused_contents->GetOuterWebContents()) {
+    if (focused_contents == this)
+      return true;
+  }
+
+  return false;
+}
+
 WebContentsImpl* WebContentsImpl::GetOutermostWebContents() {
   WebContentsImpl* root = this;
   while (root->GetOuterWebContents())
@@ -4629,39 +4660,42 @@ void WebContentsImpl::EnsureOpenerProxiesExist(RenderFrameHost* source_rfh) {
   }
 }
 
+void WebContentsImpl::SetAsFocusedWebContentsIfNecessary() {
+  // Only change focus if we are not currently focused.
+  WebContentsImpl* old_contents = GetFocusedWebContents();
+  if (old_contents == this)
+    return;
+
+  // Send a page level blur to the old contents so that it displays inactive UI
+  // and focus this contents to activate it.
+  if (old_contents)
+    old_contents->GetMainFrame()->GetRenderWidgetHost()->SetPageFocus(false);
+  GetMainFrame()->GetRenderWidgetHost()->SetPageFocus(true);
+  GetOutermostWebContents()->node_->SetFocusedWebContents(this);
+}
+
 void WebContentsImpl::SetFocusedFrame(FrameTreeNode* node,
                                       SiteInstance* source) {
+  // The PDF plugin still runs as a BrowserPlugin and must go through the
+  // input redirection mechanism. It must not become focused direcly.
   if (!GuestMode::IsCrossProcessFrameGuest(this) && browser_plugin_guest_) {
     frame_tree_.SetFocusedFrame(node, source);
     return;
   }
 
-  // 1. Find old focused frame and unfocus it.
-  // 2. Focus the new frame in the current FrameTree.
-  // 3. Set current WebContents as focused.
-  WebContentsImpl* old_focused_contents = GetFocusedWebContents();
-  if (old_focused_contents != this) {
-    // Focus is moving between frame trees, unfocus the frame in the old tree.
-    old_focused_contents->frame_tree_.SetFocusedFrame(nullptr, source);
-    GetOutermostWebContents()->node_->SetFocusedWebContents(this);
-  }
+  SetAsFocusedWebContentsIfNecessary();
 
   frame_tree_.SetFocusedFrame(node, source);
-
-  // TODO(avallee): Remove this once page focus is fixed.
-  RenderWidgetHostImpl* rwh = node->current_frame_host()->GetRenderWidgetHost();
-  if (rwh && old_focused_contents != this)
-    rwh->Focus();
 }
 
-bool WebContentsImpl::AddMessageToConsole(int32_t level,
-                                          const base::string16& message,
-                                          int32_t line_no,
-                                          const base::string16& source_id) {
+bool WebContentsImpl::DidAddMessageToConsole(int32_t level,
+                                             const base::string16& message,
+                                             int32_t line_no,
+                                             const base::string16& source_id) {
   if (!delegate_)
     return false;
-  return delegate_->AddMessageToConsole(this, level, message, line_no,
-                                        source_id);
+  return delegate_->DidAddMessageToConsole(this, level, message, line_no,
+                                           source_id);
 }
 
 void WebContentsImpl::OnUserInteraction(
@@ -4679,6 +4713,23 @@ void WebContentsImpl::OnUserInteraction(
   // rdh is NULL in unittests.
   if (rdh && type != blink::WebInputEvent::MouseWheel)
     rdh->OnUserGesture();
+}
+
+void WebContentsImpl::FocusOwningWebContents(
+    RenderWidgetHostImpl* render_widget_host) {
+  // The PDF plugin still runs as a BrowserPlugin and must go through the
+  // input redirection mechanism. It must not become focused direcly.
+  if (!GuestMode::IsCrossProcessFrameGuest(this) && browser_plugin_guest_)
+    return;
+
+  RenderWidgetHostImpl* focused_widget =
+      GetFocusedRenderWidgetHost(render_widget_host);
+
+  if (focused_widget != render_widget_host &&
+      (!focused_widget ||
+       focused_widget->delegate() != render_widget_host->delegate())) {
+    SetAsFocusedWebContentsIfNecessary();
+  }
 }
 
 void WebContentsImpl::OnIgnoredUIEvent() {
@@ -5159,15 +5210,27 @@ void WebContentsImpl::SetForceDisableOverscrollContent(bool force_disable) {
 }
 
 void WebContentsImpl::MediaStartedPlaying(
+    const WebContentsObserver::MediaPlayerInfo& media_info,
     const WebContentsObserver::MediaPlayerId& id) {
+  if (media_info.has_video)
+    currently_playing_video_count_++;
+
   for (auto& observer : observers_)
-    observer.MediaStartedPlaying(id);
+    observer.MediaStartedPlaying(media_info, id);
 }
 
 void WebContentsImpl::MediaStoppedPlaying(
+    const WebContentsObserver::MediaPlayerInfo& media_info,
     const WebContentsObserver::MediaPlayerId& id) {
+  if (media_info.has_video)
+    currently_playing_video_count_--;
+
   for (auto& observer : observers_)
-    observer.MediaStoppedPlaying(id);
+    observer.MediaStoppedPlaying(media_info, id);
+}
+
+int WebContentsImpl::GetCurrentlyPlayingVideoCount() {
+  return currently_playing_video_count_;
 }
 
 void WebContentsImpl::UpdateWebContentsVisibility(bool visible) {

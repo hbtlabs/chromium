@@ -42,36 +42,7 @@ inline WEBP_CSP_MODE outputMode(bool hasAlpha) {
 }
 #endif
 
-inline uint8_t blendChannel(uint8_t src,
-                            uint8_t srcA,
-                            uint8_t dst,
-                            uint8_t dstA,
-                            unsigned scale) {
-  unsigned blendUnscaled = src * srcA + dst * dstA;
-  ASSERT(blendUnscaled < (1ULL << 32) / scale);
-  return (blendUnscaled * scale) >> 24;
-}
-
-inline uint32_t blendSrcOverDstNonPremultiplied(uint32_t src, uint32_t dst) {
-  uint8_t srcA = SkGetPackedA32(src);
-  if (srcA == 0)
-    return dst;
-
-  uint8_t dstA = SkGetPackedA32(dst);
-  uint8_t dstFactorA = (dstA * SkAlpha255To256(255 - srcA)) >> 8;
-  ASSERT(srcA + dstFactorA < (1U << 8));
-  uint8_t blendA = srcA + dstFactorA;
-  unsigned scale = (1UL << 24) / blendA;
-
-  uint8_t blendR = blendChannel(SkGetPackedR32(src), srcA, SkGetPackedR32(dst),
-                                dstFactorA, scale);
-  uint8_t blendG = blendChannel(SkGetPackedG32(src), srcA, SkGetPackedG32(dst),
-                                dstFactorA, scale);
-  uint8_t blendB = blendChannel(SkGetPackedB32(src), srcA, SkGetPackedB32(dst),
-                                dstFactorA, scale);
-
-  return SkPackARGB32NoCheck(blendA, blendR, blendG, blendB);
-}
+namespace {
 
 // Returns two point ranges (<left, width> pairs) at row |canvasY| which belong
 // to |src| but not |dst|. A range is empty if its width is 0.
@@ -106,6 +77,11 @@ inline void findBlendRangeAtRow(const blink::IntRect& src,
   }
 }
 
+// alphaBlendPremultiplied and alphaBlendNonPremultiplied are separate methods,
+// even though they only differ by one line. This is done so that the compiler
+// can inline blendSrcOverDstPremultiplied() and blensSrcOverDstRaw() calls.
+// For GIF images, this optimization reduces decoding time by 15% for 3MB
+// images.
 void alphaBlendPremultiplied(blink::ImageFrame& src,
                              blink::ImageFrame& dst,
                              int canvasY,
@@ -113,10 +89,10 @@ void alphaBlendPremultiplied(blink::ImageFrame& src,
                              int width) {
   for (int x = 0; x < width; ++x) {
     int canvasX = left + x;
-    blink::ImageFrame::PixelData& pixel = *src.getAddr(canvasX, canvasY);
-    if (SkGetPackedA32(pixel) != 0xff) {
+    blink::ImageFrame::PixelData* pixel = src.getAddr(canvasX, canvasY);
+    if (SkGetPackedA32(*pixel) != 0xff) {
       blink::ImageFrame::PixelData prevPixel = *dst.getAddr(canvasX, canvasY);
-      pixel = SkPMSrcOver(pixel, prevPixel);
+      blink::ImageFrame::blendSrcOverDstPremultiplied(pixel, prevPixel);
     }
   }
 }
@@ -128,13 +104,15 @@ void alphaBlendNonPremultiplied(blink::ImageFrame& src,
                                 int width) {
   for (int x = 0; x < width; ++x) {
     int canvasX = left + x;
-    blink::ImageFrame::PixelData& pixel = *src.getAddr(canvasX, canvasY);
-    if (SkGetPackedA32(pixel) != 0xff) {
+    blink::ImageFrame::PixelData* pixel = src.getAddr(canvasX, canvasY);
+    if (SkGetPackedA32(*pixel) != 0xff) {
       blink::ImageFrame::PixelData prevPixel = *dst.getAddr(canvasX, canvasY);
-      pixel = blendSrcOverDstNonPremultiplied(pixel, prevPixel);
+      blink::ImageFrame::blendSrcOverDstRaw(pixel, prevPixel);
     }
   }
 }
+
+}  // namespace
 
 namespace blink {
 
@@ -259,66 +237,61 @@ bool WEBPImageDecoder::updateDemuxer() {
   return true;
 }
 
-bool WEBPImageDecoder::initFrameBuffer(size_t frameIndex) {
+void WEBPImageDecoder::onInitFrameBuffer(size_t frameIndex) {
+  // ImageDecoder::initFrameBuffer does a DCHECK if |frameIndex| exists.
   ImageFrame& buffer = m_frameBufferCache[frameIndex];
-  if (buffer.getStatus() != ImageFrame::FrameEmpty)  // Already initialized.
-    return true;
 
   const size_t requiredPreviousFrameIndex = buffer.requiredPreviousFrameIndex();
   if (requiredPreviousFrameIndex == kNotFound) {
-    // This frame doesn't rely on any previous data.
-    if (!buffer.setSizeAndColorSpace(size().width(), size().height(),
-                                     colorSpace()))
-      return setFailed();
     m_frameBackgroundHasAlpha =
         !buffer.originalFrameRect().contains(IntRect(IntPoint(), size()));
   } else {
-    ImageFrame& prevBuffer = m_frameBufferCache[requiredPreviousFrameIndex];
-    ASSERT(prevBuffer.getStatus() == ImageFrame::FrameComplete);
-
-    // Preserve the last frame as the starting state for this frame. We try
-    // to reuse |prevBuffer| as starting state to avoid copying.
-    // For BlendAtopPreviousFrame, both frames are required, so we can't
-    // take over its image data using takeBitmapDataIfWritable.
-    if ((buffer.getAlphaBlendSource() == ImageFrame::BlendAtopPreviousFrame ||
-         !buffer.takeBitmapDataIfWritable(&prevBuffer)) &&
-        !buffer.copyBitmapData(prevBuffer))
-      return setFailed();
-
-    if (prevBuffer.getDisposalMethod() == ImageFrame::DisposeOverwriteBgcolor) {
-      // We want to clear the previous frame to transparent, without
-      // affecting pixels in the image outside of the frame.
-      const IntRect& prevRect = prevBuffer.originalFrameRect();
-      ASSERT(!prevRect.contains(IntRect(IntPoint(), size())));
-      buffer.zeroFillFrameRect(prevRect);
-    }
-
+    const ImageFrame& prevBuffer =
+        m_frameBufferCache[requiredPreviousFrameIndex];
     m_frameBackgroundHasAlpha =
         prevBuffer.hasAlpha() ||
         (prevBuffer.getDisposalMethod() == ImageFrame::DisposeOverwriteBgcolor);
   }
 
-  buffer.setStatus(ImageFrame::FramePartial);
   // The buffer is transparent outside the decoded area while the image is
   // loading. The correct alpha value for the frame will be set when it is fully
   // decoded.
   buffer.setHasAlpha(true);
-  return true;
+}
+
+bool WEBPImageDecoder::canReusePreviousFrameBuffer(size_t frameIndex) const {
+  DCHECK(frameIndex < m_frameBufferCache.size());
+  return m_frameBufferCache[frameIndex].getAlphaBlendSource() !=
+         ImageFrame::BlendAtopPreviousFrame;
 }
 
 size_t WEBPImageDecoder::clearCacheExceptFrame(size_t clearExceptFrame) {
-  // If |clearExceptFrame| has status FrameComplete, we preserve that frame.
-  // Otherwise, we preserve the most recent previous frame with status
-  // FrameComplete whose data will be required to decode |clearExceptFrame|,
-  // either in initFrameBuffer() or ApplyPostProcessing(). All other frames can
-  // be cleared.
-  while ((clearExceptFrame < m_frameBufferCache.size()) &&
-         (m_frameBufferCache[clearExceptFrame].getStatus() !=
-          ImageFrame::FrameComplete))
-    clearExceptFrame =
-        m_frameBufferCache[clearExceptFrame].requiredPreviousFrameIndex();
+  // Don't clear if there are no frames, or only one.
+  if (m_frameBufferCache.size() <= 1)
+    return 0;
 
-  return ImageDecoder::clearCacheExceptFrame(clearExceptFrame);
+  // If |clearExceptFrame| has status FrameComplete, we only preserve that
+  // frame.  Otherwise, we *also* preserve the most recent previous frame with
+  // status FrameComplete whose data will be required to decode
+  // |clearExceptFrame|, either in initFrameBuffer() or ApplyPostProcessing().
+  // This frame index is stored in |clearExceptFrame2|.  All other frames can
+  // be cleared.
+  size_t clearExceptFrame2 = kNotFound;
+  if (clearExceptFrame < m_frameBufferCache.size() &&
+      m_frameBufferCache[clearExceptFrame].getStatus() !=
+          ImageFrame::FrameComplete) {
+    clearExceptFrame2 =
+        m_frameBufferCache[clearExceptFrame].requiredPreviousFrameIndex();
+  }
+
+  while ((clearExceptFrame2 < m_frameBufferCache.size()) &&
+         (m_frameBufferCache[clearExceptFrame2].getStatus() !=
+          ImageFrame::FrameComplete)) {
+    clearExceptFrame2 =
+        m_frameBufferCache[clearExceptFrame2].requiredPreviousFrameIndex();
+  }
+
+  return clearCacheExceptTwoFrames(clearExceptFrame, clearExceptFrame2);
 }
 
 void WEBPImageDecoder::clearFrameBuffer(size_t frameIndex) {
@@ -469,15 +442,7 @@ void WEBPImageDecoder::decode(size_t index) {
   if (failed())
     return;
 
-  Vector<size_t> framesToDecode;
-  size_t frameToDecode = index;
-  do {
-    framesToDecode.append(frameToDecode);
-    frameToDecode =
-        m_frameBufferCache[frameToDecode].requiredPreviousFrameIndex();
-  } while (frameToDecode != kNotFound &&
-           m_frameBufferCache[frameToDecode].getStatus() !=
-               ImageFrame::FrameComplete);
+  Vector<size_t> framesToDecode = findFramesToDecode(index);
 
   ASSERT(m_demux);
   for (auto i = framesToDecode.rbegin(); i != framesToDecode.rend(); ++i) {
@@ -493,12 +458,9 @@ void WEBPImageDecoder::decode(size_t index) {
     if (failed())
       return;
 
-    // We need more data to continue decoding.
-    if (m_frameBufferCache[*i].getStatus() != ImageFrame::FrameComplete)
+    // If this returns false, we need more data to continue decoding.
+    if (!postDecodeProcessing(*i))
       break;
-
-    if (m_purgeAggressively)
-      clearCacheExceptFrame(*i);
   }
 
   // It is also a fatal error if all data is received and we have decoded all

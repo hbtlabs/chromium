@@ -2,14 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// https://html.spec.whatwg.org/multipage/scripting.html#the-offscreencanvas-interface
+
 [
     Constructor([EnforceRange] unsigned long width, [EnforceRange] unsigned long height),
     Exposed=(Window,Worker),
     RuntimeEnabled=ExperimentalCanvasFeatures,
     MeasureAs=OffscreenCanvas,
-] interface OffscreenCanvas {
-    [RaisesException=Setter, EnforceRange] attribute unsigned long width;
-    [RaisesException=Setter, EnforceRange] attribute unsigned long height;
+] interface OffscreenCanvas : EventTarget {
+    [EnforceRange] attribute unsigned long width;
+    [EnforceRange] attribute unsigned long height;
 
     [CallWith=ScriptState, RaisesException] ImageBitmap transferToImageBitmap();
     [RaisesException, CallWith=ScriptState] Promise<Blob> convertToBlob(optional ImageEncodeOptions options);

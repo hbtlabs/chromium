@@ -1,5 +1,5 @@
 {
-  "name": "service:ash",
+  "name": "ash",
   "display_name": "Ash Window Manager and Shell",
   "interface_provider_specs": {
     "service_manager:connector": {
@@ -7,6 +7,7 @@
         "ash": [
           "ash::mojom::LocaleNotificationController",
           "ash::mojom::ShelfController",
+          "ash::mojom::ShutdownController",
           "ash::mojom::SystemTray",
           "ash::mojom::WallpaperController"
         ],
@@ -14,10 +15,10 @@
       },
       "requires": {
         "*": [ "accessibility", "app" ],
-        "service:content_browser": [ "ash" ],
-        "service:mash_session": [ "mash_session:session" ],
-        "service:ui": [ "ui:window_manager" ],
-        "service:touch_hud": [ "mash:launchable" ]
+        "content_browser": [ "ash" ],
+        "mash_session": [ "mash_session:session" ],
+        "ui": [ "ui:window_manager" ],
+        "touch_hud": [ "mash:launchable" ]
       }
     }
   }

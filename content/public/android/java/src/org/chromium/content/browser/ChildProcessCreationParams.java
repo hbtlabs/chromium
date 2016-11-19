@@ -11,10 +11,12 @@ import org.chromium.base.library_loader.LibraryProcessType;
 /**
  * Allows specifying the package name for looking up child services
  * configuration and classes into (if it differs from the application
- * package name, like in the case of Android WebView).
+ * package name, like in the case of Android WebView). Also allows
+ * specifying additional child service binging flags.
  */
 public class ChildProcessCreationParams {
     private final String mPackageName;
+    private final boolean mIsExternalService;
     private final int mLibraryProcessType;
     private static final String EXTRA_LIBRARY_PROCESS_TYPE =
             "org.chromium.content.common.child_service_params.library_process_type";
@@ -29,17 +31,24 @@ public class ChildProcessCreationParams {
         return sChildProcessCreationParams;
     }
 
-    public ChildProcessCreationParams(String packageName, int libraryProcessType) {
+    public ChildProcessCreationParams(String packageName, boolean isExternalService,
+            int libraryProcessType) {
         mPackageName = packageName;
+        mIsExternalService = isExternalService;
         mLibraryProcessType = libraryProcessType;
     }
 
     public ChildProcessCreationParams copy() {
-        return new ChildProcessCreationParams(mPackageName, mLibraryProcessType);
+        return new ChildProcessCreationParams(mPackageName, mIsExternalService,
+                mLibraryProcessType);
     }
 
     public String getPackageName() {
         return mPackageName;
+    }
+
+    public boolean getIsExternalService() {
+        return mIsExternalService;
     }
 
     public int getLibraryProcessType() {

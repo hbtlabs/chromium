@@ -316,6 +316,7 @@ void NetworkQualityEstimator::ObtainOperatingParams(
                                            default_observations_);
   nqe::internal::ObtainEffectiveConnectionTypeModelParams(
       variation_params, connection_thresholds_);
+  nqe::internal::ObtainTypicalNetworkQuality(typical_network_quality_);
 }
 
 void NetworkQualityEstimator::AddDefaultEstimates() {
@@ -1147,7 +1148,15 @@ NetworkQualityEstimator::GetRecentEffectiveConnectionTypeUsingMetrics(
 void NetworkQualityEstimator::AddEffectiveConnectionTypeObserver(
     EffectiveConnectionTypeObserver* observer) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(observer);
   effective_connection_type_observer_list_.AddObserver(observer);
+
+  // Notify the |observer| on the next message pump since |observer| may not
+  // be completely set up for receiving the callbacks.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(&NetworkQualityEstimator::
+                                NotifyEffectiveConnectionTypeObserverIfPresent,
+                            weak_ptr_factory_.GetWeakPtr(), observer));
 }
 
 void NetworkQualityEstimator::RemoveEffectiveConnectionTypeObserver(
@@ -1159,7 +1168,16 @@ void NetworkQualityEstimator::RemoveEffectiveConnectionTypeObserver(
 void NetworkQualityEstimator::AddRTTAndThroughputEstimatesObserver(
     RTTAndThroughputEstimatesObserver* observer) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(observer);
   rtt_and_throughput_estimates_observer_list_.AddObserver(observer);
+
+  // Notify the |observer| on the next message pump since |observer| may not
+  // be completely set up for receiving the callbacks.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::Bind(&NetworkQualityEstimator::
+                     NotifyRTTAndThroughputEstimatesObserverIfPresent,
+                 weak_ptr_factory_.GetWeakPtr(), observer));
 }
 
 void NetworkQualityEstimator::RemoveRTTAndThroughputEstimatesObserver(
@@ -1499,6 +1517,28 @@ void NetworkQualityEstimator::NotifyObserversOfRTTOrThroughputComputed() const {
         network_quality_.http_rtt(), network_quality_.transport_rtt(),
         network_quality_.downstream_throughput_kbps());
   }
+}
+
+void NetworkQualityEstimator::NotifyEffectiveConnectionTypeObserverIfPresent(
+    EffectiveConnectionTypeObserver* observer) const {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  if (!effective_connection_type_observer_list_.HasObserver(observer))
+    return;
+  if (effective_connection_type_ == EFFECTIVE_CONNECTION_TYPE_UNKNOWN)
+    return;
+  observer->OnEffectiveConnectionTypeChanged(effective_connection_type_);
+}
+
+void NetworkQualityEstimator::NotifyRTTAndThroughputEstimatesObserverIfPresent(
+    RTTAndThroughputEstimatesObserver* observer) const {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  if (!rtt_and_throughput_estimates_observer_list_.HasObserver(observer))
+    return;
+  observer->OnRTTOrThroughputEstimatesComputed(
+      network_quality_.http_rtt(), network_quality_.transport_rtt(),
+      network_quality_.downstream_throughput_kbps());
 }
 
 void NetworkQualityEstimator::AddNetworkQualitiesCacheObserver(

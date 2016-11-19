@@ -5,7 +5,6 @@
 #include "ash/common/system/tray/system_tray_notifier.h"
 
 #include "ash/common/system/accessibility_observer.h"
-#include "ash/common/system/audio/audio_observer.h"
 #include "ash/common/system/date/clock_observer.h"
 #include "ash/common/system/ime/ime_observer.h"
 #include "ash/common/system/update/update_observer.h"
@@ -46,41 +45,6 @@ void SystemTrayNotifier::NotifyAccessibilityModeChanged(
     AccessibilityNotificationVisibility notify) {
   for (auto& observer : accessibility_observers_)
     observer.OnAccessibilityModeChanged(notify);
-}
-
-void SystemTrayNotifier::AddAudioObserver(AudioObserver* observer) {
-  audio_observers_.AddObserver(observer);
-}
-
-void SystemTrayNotifier::RemoveAudioObserver(AudioObserver* observer) {
-  audio_observers_.RemoveObserver(observer);
-}
-
-void SystemTrayNotifier::NotifyAudioOutputVolumeChanged(uint64_t node_id,
-                                                        double volume) {
-  for (auto& observer : audio_observers_)
-    observer.OnOutputNodeVolumeChanged(node_id, volume);
-}
-
-void SystemTrayNotifier::NotifyAudioOutputMuteChanged(bool mute_on,
-                                                      bool system_adjust) {
-  for (auto& observer : audio_observers_)
-    observer.OnOutputMuteChanged(mute_on, system_adjust);
-}
-
-void SystemTrayNotifier::NotifyAudioNodesChanged() {
-  for (auto& observer : audio_observers_)
-    observer.OnAudioNodesChanged();
-}
-
-void SystemTrayNotifier::NotifyAudioActiveOutputNodeChanged() {
-  for (auto& observer : audio_observers_)
-    observer.OnActiveOutputNodeChanged();
-}
-
-void SystemTrayNotifier::NotifyAudioActiveInputNodeChanged() {
-  for (auto& observer : audio_observers_)
-    observer.OnActiveInputNodeChanged();
 }
 
 void SystemTrayNotifier::AddClockObserver(ClockObserver* observer) {
@@ -159,6 +123,8 @@ void SystemTrayNotifier::NotifyUserAddedToSession() {
   for (auto& observer : user_observers_)
     observer.OnUserAddedToSession();
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 #if defined(OS_CHROMEOS)
 

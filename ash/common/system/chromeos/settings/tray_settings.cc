@@ -37,7 +37,7 @@ class SettingsDefaultView : public ActionableView,
                             public PowerStatus::Observer {
  public:
   SettingsDefaultView(SystemTrayItem* owner, LoginStatus status)
-      : ActionableView(owner),
+      : ActionableView(owner, TrayPopupInkDropStyle::FILL_BOUNDS),
         login_status_(status),
         label_(nullptr),
         power_status_view_(nullptr) {
@@ -53,8 +53,7 @@ class SettingsDefaultView : public ActionableView,
              ->GetSessionStateDelegate()
              ->IsInSecondaryLoginScreen()) {
       ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-      views::ImageView* icon = new ash::FixedSizedImageView(
-          0, GetTrayConstant(TRAY_POPUP_ITEM_HEIGHT));
+      views::ImageView* icon = TrayPopupUtils::CreateMainImageView();
 
       icon->SetImage(
           rb.GetImageNamed(IDR_AURA_UBER_TRAY_SETTINGS).ToImageSkia());

@@ -81,7 +81,8 @@ void AppBannerManager::SetEngagementWeights(double direct_engagement,
 bool AppBannerManager::URLsAreForTheSamePage(const GURL& first,
                                              const GURL& second) {
   return first.GetWithEmptyPath() == second.GetWithEmptyPath() &&
-         first.path() == second.path() && first.query() == second.query();
+         first.path_piece() == second.path_piece() &&
+         first.query_piece() == second.query_piece();
 }
 
 void AppBannerManager::RequestAppBanner(const GURL& validated_url,
@@ -357,7 +358,7 @@ void AppBannerManager::SendBannerPromptRequest() {
 }
 
 void AppBannerManager::DidStartNavigation(content::NavigationHandle* handle) {
-  if (!handle->IsInMainFrame())
+  if (!handle->IsInMainFrame() || handle->IsSamePage())
     return;
 
   load_finished_ = false;
@@ -372,7 +373,8 @@ void AppBannerManager::DidStartNavigation(content::NavigationHandle* handle) {
 }
 
 void AppBannerManager::DidFinishNavigation(content::NavigationHandle* handle) {
-  if (handle->IsInMainFrame() && handle->HasCommitted()) {
+  if (handle->IsInMainFrame() && handle->HasCommitted() &&
+      !handle->IsSamePage()) {
     last_transition_type_ = handle->GetPageTransition();
     active_media_players_.clear();
     if (is_active_)
@@ -401,11 +403,13 @@ void AppBannerManager::DidFinishLoad(
   }
 }
 
-void AppBannerManager::MediaStartedPlaying(const MediaPlayerId& id) {
+void AppBannerManager::MediaStartedPlaying(const MediaPlayerInfo& media_info,
+                                           const MediaPlayerId& id) {
   active_media_players_.push_back(id);
 }
 
-void AppBannerManager::MediaStoppedPlaying(const MediaPlayerId& id) {
+void AppBannerManager::MediaStoppedPlaying(const MediaPlayerInfo& media_info,
+                                           const MediaPlayerId& id) {
   active_media_players_.erase(std::remove(active_media_players_.begin(),
                                           active_media_players_.end(), id),
                               active_media_players_.end());

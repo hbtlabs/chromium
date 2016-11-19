@@ -137,6 +137,7 @@
 #include "platform/heap/Handle.h"
 #include "platform/network/ResourceLoadPriority.h"
 #include "platform/scroll/ProgrammaticScrollAnimator.h"
+#include "platform/scroll/ScrollbarTheme.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/tracing/TraceEvent.h"
 #include "platform/weborigin/SchemeRegistry.h"
@@ -144,7 +145,9 @@
 #include "public/platform/WebConnectionType.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "public/platform/WebLayer.h"
+#include "public/platform/modules/remoteplayback/WebRemotePlaybackAvailability.h"
 #include "wtf/InstanceCounter.h"
+#include "wtf/Optional.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/dtoa.h"
 #include "wtf/text/StringBuffer.h"
@@ -171,20 +174,25 @@ class InternalsIterationSource final
 
 }  // namespace
 
-static bool markerTypesFrom(const String& markerType,
-                            DocumentMarker::MarkerTypes& result) {
-  if (markerType.isEmpty() || equalIgnoringCase(markerType, "all"))
-    result = DocumentMarker::AllMarkers();
-  else if (equalIgnoringCase(markerType, "Spelling"))
-    result = DocumentMarker::Spelling;
-  else if (equalIgnoringCase(markerType, "Grammar"))
-    result = DocumentMarker::Grammar;
-  else if (equalIgnoringCase(markerType, "TextMatch"))
-    result = DocumentMarker::TextMatch;
-  else
-    return false;
+static WTF::Optional<DocumentMarker::MarkerType> markerTypeFrom(
+    const String& markerType) {
+  if (equalIgnoringCase(markerType, "Spelling"))
+    return DocumentMarker::Spelling;
+  if (equalIgnoringCase(markerType, "Grammar"))
+    return DocumentMarker::Grammar;
+  if (equalIgnoringCase(markerType, "TextMatch"))
+    return DocumentMarker::TextMatch;
+  return WTF::nullopt;
+}
 
-  return true;
+static WTF::Optional<DocumentMarker::MarkerTypes> markerTypesFrom(
+    const String& markerType) {
+  if (markerType.isEmpty() || equalIgnoringCase(markerType, "all"))
+    return DocumentMarker::AllMarkers();
+  WTF::Optional<DocumentMarker::MarkerType> type = markerTypeFrom(markerType);
+  if (!type)
+    return WTF::nullopt;
+  return DocumentMarker::MarkerTypes(type.value());
 }
 
 static SpellCheckRequester* spellCheckRequester(Document* document) {
@@ -808,13 +816,13 @@ const AtomicString& Internals::shadowPseudoId(Element* element) {
 }
 
 String Internals::visiblePlaceholder(Element* element) {
-  if (element && isHTMLTextFormControlElement(*element)) {
-    const HTMLTextFormControlElement& textFormControlElement =
-        toHTMLTextFormControlElement(*element);
-    if (!textFormControlElement.isPlaceholderVisible())
+  if (element && isTextControlElement(*element)) {
+    const TextControlElement& textControlElement =
+        toTextControlElement(*element);
+    if (!textControlElement.isPlaceholderVisible())
       return String();
     if (HTMLElement* placeholderElement =
-            textFormControlElement.placeholderElement())
+            textControlElement.placeholderElement())
       return placeholderElement->textContent();
   }
 
@@ -912,19 +920,46 @@ ClientRect* Internals::boundingBox(Element* element) {
       layoutObject->absoluteBoundingBoxRectIgnoringTransforms());
 }
 
+void Internals::setMarker(Document* document,
+                          const Range* range,
+                          const String& markerType,
+                          ExceptionState& exceptionState) {
+  if (!document) {
+    exceptionState.throwDOMException(InvalidAccessError,
+                                     "No context document is available.");
+    return;
+  }
+
+  WTF::Optional<DocumentMarker::MarkerType> type = markerTypeFrom(markerType);
+  if (!type) {
+    exceptionState.throwDOMException(
+        SyntaxError,
+        "The marker type provided ('" + markerType + "') is invalid.");
+    return;
+  }
+
+  document->updateStyleAndLayoutIgnorePendingStylesheets();
+  document->markers().addMarker(range->startPosition(), range->endPosition(),
+                                type.value());
+}
+
 unsigned Internals::markerCountForNode(Node* node,
                                        const String& markerType,
                                        ExceptionState& exceptionState) {
   ASSERT(node);
-  DocumentMarker::MarkerTypes markerTypes = 0;
-  if (!markerTypesFrom(markerType, markerTypes)) {
+  WTF::Optional<DocumentMarker::MarkerTypes> markerTypes =
+      markerTypesFrom(markerType);
+  if (!markerTypes) {
     exceptionState.throwDOMException(
         SyntaxError,
         "The marker type provided ('" + markerType + "') is invalid.");
     return 0;
   }
 
-  return node->document().markers().markersFor(node, markerTypes).size();
+  return node->document()
+      .markers()
+      .markersFor(node, markerTypes.value())
+      .size();
 }
 
 unsigned Internals::activeMarkerCountForNode(Node* node) {
@@ -949,8 +984,9 @@ DocumentMarker* Internals::markerAt(Node* node,
                                     unsigned index,
                                     ExceptionState& exceptionState) {
   ASSERT(node);
-  DocumentMarker::MarkerTypes markerTypes = 0;
-  if (!markerTypesFrom(markerType, markerTypes)) {
+  WTF::Optional<DocumentMarker::MarkerTypes> markerTypes =
+      markerTypesFrom(markerType);
+  if (!markerTypes) {
     exceptionState.throwDOMException(
         SyntaxError,
         "The marker type provided ('" + markerType + "') is invalid.");
@@ -958,7 +994,7 @@ DocumentMarker* Internals::markerAt(Node* node,
   }
 
   DocumentMarkerVector markers =
-      node->document().markers().markersFor(node, markerTypes);
+      node->document().markers().markersFor(node, markerTypes.value());
   if (markers.size() <= index)
     return 0;
   return markers[index];
@@ -1765,9 +1801,9 @@ StaticNodeList* Internals::nodesFromRect(Document* document,
     return nullptr;
 
   float zoomFactor = frame->pageZoomFactor();
-  LayoutPoint point = roundedLayoutPoint(
-      FloatPoint(centerX * zoomFactor + frameView->scrollX(),
-                 centerY * zoomFactor + frameView->scrollY()));
+  LayoutPoint point =
+      LayoutPoint(FloatPoint(centerX * zoomFactor + frameView->scrollX(),
+                             centerY * zoomFactor + frameView->scrollY()));
 
   HitTestRequest::HitTestRequestType hitType = HitTestRequest::ReadOnly |
                                                HitTestRequest::Active |
@@ -1795,23 +1831,48 @@ StaticNodeList* Internals::nodesFromRect(Document* document,
   return StaticNodeList::adopt(matches);
 }
 
-bool Internals::hasSpellingMarker(Document* document, int from, int length) {
-  ASSERT(document);
-  if (!document->frame())
+bool Internals::hasSpellingMarker(Document* document,
+                                  int from,
+                                  int length,
+                                  ExceptionState& exceptionState) {
+  if (!document || !document->frame()) {
+    exceptionState.throwDOMException(
+        InvalidAccessError,
+        "No frame can be obtained from the provided document.");
     return false;
+  }
 
   document->updateStyleAndLayoutIgnorePendingStylesheets();
   return document->frame()->spellChecker().selectionStartHasMarkerFor(
       DocumentMarker::Spelling, from, length);
 }
 
-void Internals::setSpellCheckingEnabled(bool enabled) {
-  if (!contextDocument() || !contextDocument()->frame())
+void Internals::setSpellCheckingEnabled(bool enabled,
+                                        ExceptionState& exceptionState) {
+  if (!contextDocument() || !contextDocument()->frame()) {
+    exceptionState.throwDOMException(
+        InvalidAccessError,
+        "No frame can be obtained from the provided document.");
     return;
+  }
 
   if (enabled !=
       contextDocument()->frame()->spellChecker().isSpellCheckingEnabled())
     contextDocument()->frame()->spellChecker().toggleSpellCheckingEnabled();
+}
+
+void Internals::replaceMisspelled(Document* document,
+                                  const String& replacement,
+                                  ExceptionState& exceptionState) {
+  if (!document || !document->frame()) {
+    exceptionState.throwDOMException(
+        InvalidAccessError,
+        "No frame can be obtained from the provided document.");
+    return;
+  }
+
+  document->updateStyleAndLayoutIgnorePendingStylesheets();
+  document->frame()->spellChecker().replaceMisspelledRange(replacement);
 }
 
 bool Internals::canHyphenate(const AtomicString& locale) {
@@ -1851,10 +1912,16 @@ String Internals::dumpRefCountedInstanceCounts() const {
   return WTF::dumpRefCountedInstanceCounts();
 }
 
-bool Internals::hasGrammarMarker(Document* document, int from, int length) {
-  ASSERT(document);
-  if (!document->frame())
+bool Internals::hasGrammarMarker(Document* document,
+                                 int from,
+                                 int length,
+                                 ExceptionState& exceptionState) {
+  if (!document || !document->frame()) {
+    exceptionState.throwDOMException(
+        InvalidAccessError,
+        "No frame can be obtained from the provided document.");
     return false;
+  }
 
   document->updateStyleAndLayoutIgnorePendingStylesheets();
   return document->frame()->spellChecker().selectionStartHasMarkerFor(
@@ -2180,11 +2247,6 @@ void Internals::setIsCursorVisible(Document* document,
   document->page()->setIsCursorVisible(isVisible);
 }
 
-double Internals::effectiveMediaVolume(HTMLMediaElement* mediaElement) {
-  ASSERT(mediaElement);
-  return mediaElement->effectiveMediaVolume();
-}
-
 String Internals::effectivePreload(HTMLMediaElement* mediaElement) {
   ASSERT(mediaElement);
   return mediaElement->effectivePreload();
@@ -2194,7 +2256,9 @@ void Internals::mediaPlayerRemoteRouteAvailabilityChanged(
     HTMLMediaElement* mediaElement,
     bool available) {
   ASSERT(mediaElement);
-  mediaElement->remoteRouteAvailabilityChanged(available);
+  mediaElement->remoteRouteAvailabilityChanged(
+      available ? WebRemotePlaybackAvailability::DeviceAvailable
+                : WebRemotePlaybackAvailability::SourceNotSupported);
 }
 
 void Internals::mediaPlayerPlayingRemotelyChanged(
@@ -2744,8 +2808,9 @@ DEFINE_TRACE(Internals) {
   ContextLifecycleObserver::trace(visitor);
 }
 
-void Internals::setValueForUser(Element* element, const String& value) {
-  toHTMLInputElement(element)->setValueForUser(value);
+void Internals::setValueForUser(HTMLInputElement* element,
+                                const String& value) {
+  element->setValueForUser(value);
 }
 
 String Internals::textSurroundingNode(Node* node,
@@ -2964,9 +3029,11 @@ void Internals::setCapsLockState(bool enabled) {
 
 bool Internals::setScrollbarVisibilityInScrollableArea(Node* node,
                                                        bool visible) {
-  if (ScrollableArea* scrollableArea = scrollableAreaForNode(node))
-    return scrollableArea->scrollAnimator().setScrollbarsVisibleForTesting(
-        visible);
+  if (ScrollableArea* scrollableArea = scrollableAreaForNode(node)) {
+    scrollableArea->setScrollbarsHidden(!visible);
+    scrollableArea->scrollAnimator().setScrollbarsVisibleForTesting(visible);
+    return ScrollbarTheme::theme().usesOverlayScrollbars();
+  }
   return false;
 }
 

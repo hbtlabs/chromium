@@ -104,12 +104,15 @@ void MouseEventManager::clear() {
   m_fakeMouseMoveEventTimer.stop();
 }
 
+MouseEventManager::~MouseEventManager() = default;
+
 DEFINE_TRACE(MouseEventManager) {
   visitor->trace(m_frame);
   visitor->trace(m_scrollManager);
   visitor->trace(m_nodeUnderMouse);
   visitor->trace(m_mousePressNode);
   visitor->trace(m_clickNode);
+  SynchronousMutationObserver::trace(visitor);
 }
 
 MouseEventManager::MouseEventBoundaryEventDispatcher::
@@ -362,6 +365,14 @@ void MouseEventManager::setNodeUnderMouse(
   }
 
   sendBoundaryEvents(lastNodeUnderMouse, m_nodeUnderMouse, platformMouseEvent);
+}
+
+void MouseEventManager::nodeChildrenWillBeRemoved(ContainerNode& container) {
+  if (container == m_clickNode)
+    return;
+  if (!container.isShadowIncludingInclusiveAncestorOf(m_clickNode.get()))
+    return;
+  m_clickNode = nullptr;
 }
 
 void MouseEventManager::nodeWillBeRemoved(Node& nodeToBeRemoved) {
@@ -811,23 +822,6 @@ bool MouseEventManager::tryStartDrag(
 
   dragState().m_dragDataTransfer = createDraggingDataTransfer();
 
-  // Check to see if this a DOM based drag, if it is get the DOM specified drag
-  // image and offset
-  if (dragState().m_dragType == DragSourceActionDHTML) {
-    if (LayoutObject* layoutObject = dragState().m_dragSrc->layoutObject()) {
-      IntRect boundingIncludingDescendants =
-          layoutObject->absoluteBoundingBoxRectIncludingDescendants();
-      IntSize delta = m_mouseDownPos - boundingIncludingDescendants.location();
-      dragState().m_dragDataTransfer->setDragImageElement(
-          dragState().m_dragSrc.get(), IntPoint(delta));
-    } else {
-      // The layoutObject has disappeared, this can happen if the onStartDrag
-      // handler has hidden the element in some way. In this case we just kill
-      // the drag.
-      return false;
-    }
-  }
-
   DragController& dragController = m_frame->page()->dragController();
   if (!dragController.populateDragDataTransfer(m_frame, dragState(),
                                                m_mouseDownPos))
@@ -989,6 +983,7 @@ void MouseEventManager::setMousePressNode(Node* node) {
 }
 
 void MouseEventManager::setClickNode(Node* node) {
+  setContext(node ? node->ownerDocument() : nullptr);
   m_clickNode = node;
 }
 

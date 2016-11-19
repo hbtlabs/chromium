@@ -72,7 +72,6 @@ extern const char kDisableBlackBackground[];
 extern const char kDisableBackgroundNetworking[];
 extern const char kDisableBundledPpapiFlash[];
 extern const char kDisableCastStreamingHWEncoding[];
-extern const char kDisableChildAccountDetection[];
 extern const char kDisableClearBrowsingDataCounters[];
 extern const char kDisableClientSidePhishingDetection[];
 extern const char kDisableComponentExtensionsWithBackgroundPages[];
@@ -113,7 +112,6 @@ extern const char kEnableAppsFileAssociations[];
 extern const char kEnableAudioDebugRecordingsFromExtension[];
 extern const char kEnableBenchmarking[];
 extern const char kEnableBookmarkUndo[];
-extern const char kEnableChildAccountDetection[];
 extern const char kEnableClearBrowsingDataCounters[];
 extern const char kEnableCloudPrintProxy[];
 extern const char kEnableDeviceDiscoveryNotifications[];
@@ -161,6 +159,7 @@ extern const char kExtensionsInstallVerification[];
 extern const char kExtensionsNotWebstore[];
 extern const char kExtensionsUpdateFrequency[];
 extern const char kFastStart[];
+extern const char kForceAndroidAppMode[];
 extern const char kForceAppMode[];
 extern const char kForceFirstRun[];
 extern const char kForceLocalNtp[];
@@ -358,6 +357,7 @@ extern const char kMakeChromeDefault[];
 extern const char kDisableGDITextPrinting[];
 extern const char kDisablePerMonitorDpi[];
 extern const char kEnableCloudPrintXps[];
+extern const char kEnableGDITextPrinting[];
 extern const char kEnablePerMonitorDpi[];
 extern const char kEnableProfileShortcutManager[];
 extern const char kHideIcons[];
@@ -395,11 +395,14 @@ bool AboutInSettingsEnabled();
 bool ExtensionsDisabled(const base::CommandLine& command_line);
 bool MdFeedbackEnabled();
 bool MdPolicyPageEnabled();
-bool PdfMaterialUIEnabled();
 bool SettingsWindowEnabled();
 
 #if defined(OS_CHROMEOS)
 bool PowerOverlayEnabled();
+#endif
+
+#if defined(OS_WIN)
+bool GDITextPrintingEnabled();
 #endif
 
 // DON'T ADD RANDOM STUFF HERE. Put it in the main section above in

@@ -55,8 +55,9 @@ class DocumentMarker;
 class Element;
 class ExceptionState;
 class GCObservation;
-class HTMLSelectElement;
+class HTMLInputElement;
 class HTMLMediaElement;
+class HTMLSelectElement;
 class InternalRuntimeFlags;
 class InternalSettings;
 class LayerRectList;
@@ -184,6 +185,7 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
 
   ClientRect* boundingBox(Element*);
 
+  void setMarker(Document*, const Range*, const String&, ExceptionState&);
   unsigned markerCountForNode(Node*, const String&, ExceptionState&);
   unsigned activeMarkerCountForNode(Node*);
   Range* markerRangeForNode(Node*,
@@ -290,9 +292,10 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
                                 bool allowChildFrameContent,
                                 ExceptionState&) const;
 
-  bool hasSpellingMarker(Document*, int from, int length);
-  bool hasGrammarMarker(Document*, int from, int length);
-  void setSpellCheckingEnabled(bool);
+  bool hasSpellingMarker(Document*, int from, int length, ExceptionState&);
+  bool hasGrammarMarker(Document*, int from, int length, ExceptionState&);
+  void setSpellCheckingEnabled(bool, ExceptionState&);
+  void replaceMisspelled(Document*, const String&, ExceptionState&);
 
   bool canHyphenate(const AtomicString& locale);
   void setMockHyphenation(const AtomicString& locale);
@@ -366,7 +369,6 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
 
   void setIsCursorVisible(Document*, bool, ExceptionState&);
 
-  double effectiveMediaVolume(HTMLMediaElement*);
   String effectivePreload(HTMLMediaElement*);
 
   void mediaPlayerRemoteRouteAvailabilityChanged(HTMLMediaElement*, bool);
@@ -448,7 +450,7 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
 
   DECLARE_TRACE();
 
-  void setValueForUser(Element*, const String&);
+  void setValueForUser(HTMLInputElement*, const String&);
 
   String textSurroundingNode(Node*, int x, int y, unsigned long maxLength);
 

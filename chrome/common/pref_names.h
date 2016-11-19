@@ -11,6 +11,7 @@
 
 #include "build/build_config.h"
 #include "chrome/common/features.h"
+#include "extensions/features/features.h"
 
 namespace prefs {
 
@@ -19,6 +20,7 @@ namespace prefs {
 extern const char kArcApps[];
 extern const char kArcBackupRestoreEnabled[];
 extern const char kArcEnabled[];
+extern const char kArcPolicyCompliant[];
 extern const char kArcTermsAccepted[];
 extern const char kArcLocationServiceEnabled[];
 extern const char kArcPackages[];
@@ -433,7 +435,7 @@ extern const char kEasyUnlockEnabled[];
 extern const char kEasyUnlockPairing[];
 extern const char kEasyUnlockProximityRequired[];
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 extern const char kToolbarIconSurfacingBubbleAcknowledged[];
 extern const char kToolbarIconSurfacingBubbleLastShowTime[];
 extern const char kToolbarMigratedComponentActionStatus[];
@@ -817,7 +819,7 @@ extern const char kRegisteredSupervisedUserWhitelists[];
 extern const char kRestartInBackground[];
 #endif
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 extern const char kAnimationPolicy[];
 #endif
 
@@ -840,6 +842,12 @@ extern const char kOriginTrialPublicKey[];
 extern const char kOriginTrialDisabledFeatures[];
 
 extern const char kComponentUpdatesEnabled[];
+
+#if defined(OS_ANDROID)
+extern const char kSearchGeolocationDisclosureDismissed[];
+extern const char kSearchGeolocationDisclosureShownCount[];
+extern const char kSearchGeolocationDisclosureLastShowDate[];
+#endif
 
 }  // namespace prefs
 

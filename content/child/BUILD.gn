@@ -4,6 +4,7 @@
 
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
+import("//third_party/WebKit/public/public_features.gni")
 
 if (is_component_build) {
   link_target_type = "source_set"
@@ -39,8 +40,6 @@ target(link_target_type, "child") {
     "appcache/web_application_cache_host_impl.cc",
     "appcache/web_application_cache_host_impl.h",
     "assert_matching_enums.cc",
-    "background_sync/background_sync_provider.cc",
-    "background_sync/background_sync_provider.h",
     "background_sync/background_sync_type_converters.cc",
     "background_sync/background_sync_type_converters.h",
     "blink_platform_impl.cc",
@@ -128,8 +127,6 @@ target(link_target_type, "child") {
     "notifications/notification_dispatcher.h",
     "notifications/notification_manager.cc",
     "notifications/notification_manager.h",
-    "power_monitor_broadcast_source.cc",
-    "power_monitor_broadcast_source.h",
     "push_messaging/push_dispatcher.cc",
     "push_messaging/push_dispatcher.h",
     "push_messaging/push_provider.cc",
@@ -232,6 +229,7 @@ target(link_target_type, "child") {
     "//content/common",
     "//content/public/common:common_sources",
     "//crypto:platform",
+    "//device/power_monitor/public/cpp",
     "//gpu/command_buffer/client",
     "//ipc",
     "//ipc:mojom",
@@ -245,6 +243,7 @@ target(link_target_type, "child") {
     "//skia",
     "//storage/common",
     "//third_party/WebKit/public:blink_headers",
+    "//third_party/WebKit/public:features",
     "//third_party/WebKit/public:image_resources",
     "//third_party/WebKit/public:resources",
     "//third_party/ced",

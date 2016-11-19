@@ -201,7 +201,7 @@ std::unique_ptr<FontPlatformData> FontCache::scaleFontPlatformData(
 #if OS(MACOSX)
   return createFontPlatformData(fontDescription, creationParams, fontSize);
 #else
-  return wrapUnique(new FontPlatformData(fontPlatformData, fontSize));
+  return makeUnique<FontPlatformData>(fontPlatformData, fontSize);
 #endif
 }
 
@@ -260,6 +260,7 @@ PassRefPtr<OpenTypeVerticalData> FontCache::getVerticalData(
 
 void FontCache::acceptLanguagesChanged(const String& acceptLanguages) {
   AcceptLanguagesResolver::acceptLanguagesChanged(acceptLanguages);
+  fontCache()->invalidateShapeCache();
 }
 
 static FontDataCache* gFontDataCache = 0;

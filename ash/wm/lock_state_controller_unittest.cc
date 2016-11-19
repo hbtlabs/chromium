@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shutdown_controller.h"
 #include "ash/common/test/test_session_state_delegate.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm_shell.h"
@@ -17,7 +18,6 @@
 #include "ash/test/test_screenshot_delegate.h"
 #include "ash/test/test_session_state_animator.h"
 #include "ash/test/test_shell_delegate.h"
-#include "ash/test/test_shutdown_client.h"
 #include "ash/wm/power_button_controller.h"
 #include "ash/wm/session_state_animator.h"
 #include "base/memory/scoped_vector.h"
@@ -43,6 +43,23 @@ void CheckCalledCallback(bool* flag) {
     (*flag) = true;
 }
 
+// ShutdownController that tracks how many shutdown requests have been made.
+class TestShutdownController : public ShutdownController {
+ public:
+  TestShutdownController() {}
+  ~TestShutdownController() override {}
+
+  int num_shutdown_requests() const { return num_shutdown_requests_; }
+
+ private:
+  // ShutdownController:
+  void ShutDownOrReboot() override { num_shutdown_requests_++; }
+
+  int num_shutdown_requests_ = 0;
+
+  DISALLOW_COPY_AND_ASSIGN(TestShutdownController);
+};
+
 }  // namespace
 
 class LockStateControllerTest : public AshTestBase {
@@ -50,7 +67,6 @@ class LockStateControllerTest : public AshTestBase {
   LockStateControllerTest()
       : power_button_controller_(nullptr),
         lock_state_controller_(nullptr),
-        shutdown_client_(nullptr),
         session_manager_client_(nullptr),
         test_animator_(nullptr) {}
   ~LockStateControllerTest() override {}
@@ -61,16 +77,13 @@ class LockStateControllerTest : public AshTestBase {
         base::WrapUnique(session_manager_client_));
     AshTestBase::SetUp();
 
-    shutdown_client_ = new TestShutdownClient;
-    std::unique_ptr<TestShutdownClient> shutdown_client(shutdown_client_);
-
     test_animator_ = new TestSessionStateAnimator;
 
     lock_state_controller_ = Shell::GetInstance()->lock_state_controller();
     lock_state_controller_->set_animator_for_test(test_animator_);
 
     test_api_.reset(new LockStateControllerTestApi(lock_state_controller_));
-    test_api_->SetShutdownClient(std::move(shutdown_client));
+    test_api_->set_shutdown_controller(&test_shutdown_controller_);
 
     power_button_controller_ = Shell::GetInstance()->power_button_controller();
 
@@ -90,7 +103,7 @@ class LockStateControllerTest : public AshTestBase {
   }
 
   int NumShutdownRequests() {
-    return shutdown_client_->num_shutdown_requests() +
+    return test_shutdown_controller_.num_shutdown_requests() +
            shell_delegate_->num_exit_requests();
   }
 
@@ -327,7 +340,7 @@ class LockStateControllerTest : public AshTestBase {
 
   PowerButtonController* power_button_controller_;  // not owned
   LockStateController* lock_state_controller_;      // not owned
-  TestShutdownClient* shutdown_client_;             // not owned
+  TestShutdownController test_shutdown_controller_;
   // Ownership is passed on to chromeos::DBusThreadManager.
   chromeos::FakeSessionManagerClient* session_manager_client_;
   TestSessionStateAnimator* test_animator_;       // not owned
@@ -1052,45 +1065,6 @@ TEST_F(LockStateControllerTest, Screenshot) {
   ReleasePowerButton();
   ReleaseVolumeDown();
   EXPECT_EQ(1, delegate->handle_take_screenshot_count());
-}
-
-// Tests that a lock action is cancellable when quick lock is turned on and
-// maximize mode is not active.
-TEST_F(LockStateControllerTest, QuickLockWhileNotInMaximizeMode) {
-  Initialize(false, LoginStatus::USER);
-  power_button_controller_->set_enable_quick_lock_for_test(true);
-  EnableMaximizeMode(false);
-
-  PressPowerButton();
-
-  ExpectPreLockAnimationStarted();
-  EXPECT_TRUE(test_api_->is_animating_lock());
-  EXPECT_TRUE(lock_state_controller_->CanCancelLockAnimation());
-
-  ReleasePowerButton();
-
-  EXPECT_EQ(0, session_manager_client_->request_lock_screen_call_count());
-}
-
-// Tests that a lock action is not cancellable when quick lock is turned on and
-// maximize mode is active.
-TEST_F(LockStateControllerTest, QuickLockWhileInMaximizeMode) {
-  Initialize(false, LoginStatus::USER);
-  power_button_controller_->set_enable_quick_lock_for_test(true);
-  EnableMaximizeMode(true);
-
-  PressPowerButton();
-
-  ExpectPreLockAnimationStarted();
-  EXPECT_TRUE(test_api_->is_animating_lock());
-  EXPECT_FALSE(lock_state_controller_->CanCancelLockAnimation());
-
-  ReleasePowerButton();
-
-  ExpectPreLockAnimationStarted();
-
-  test_animator_->CompleteAllAnimations(true);
-  EXPECT_EQ(1, session_manager_client_->request_lock_screen_call_count());
 }
 
 }  // namespace test

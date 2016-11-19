@@ -75,7 +75,7 @@ GraphicsContext::GraphicsContext(PaintController& paintController,
   // FIXME: Do some tests to determine how many states are typically used, and
   // allocate several here.
   m_paintStateStack.append(GraphicsContextState::create());
-  m_paintState = m_paintStateStack.last().get();
+  m_paintState = m_paintStateStack.back().get();
 
   if (contextDisabled()) {
     DEFINE_STATIC_LOCAL(SkCanvas*, nullCanvas, (SkCreateNullCanvas()));
@@ -173,34 +173,30 @@ void GraphicsContext::setShadow(
   if (contextDisabled())
     return;
 
-  std::unique_ptr<DrawLooperBuilder> drawLooperBuilder =
-      DrawLooperBuilder::create();
+  DrawLooperBuilder drawLooperBuilder;
   if (!color.alpha()) {
     // When shadow-only but there is no shadow, we use an empty draw looper
     // to disable rendering of the source primitive.  When not shadow-only, we
     // clear the looper.
-    if (shadowMode != DrawShadowOnly)
-      drawLooperBuilder.reset();
-
-    setDrawLooper(std::move(drawLooperBuilder));
+    setDrawLooper(shadowMode != DrawShadowOnly
+                      ? nullptr
+                      : drawLooperBuilder.detachDrawLooper());
     return;
   }
 
-  drawLooperBuilder->addShadow(offset, blur, color, shadowTransformMode,
-                               shadowAlphaMode);
+  drawLooperBuilder.addShadow(offset, blur, color, shadowTransformMode,
+                              shadowAlphaMode);
   if (shadowMode == DrawShadowAndForeground) {
-    drawLooperBuilder->addUnmodifiedContent();
+    drawLooperBuilder.addUnmodifiedContent();
   }
-  setDrawLooper(std::move(drawLooperBuilder));
+  setDrawLooper(drawLooperBuilder.detachDrawLooper());
 }
 
-void GraphicsContext::setDrawLooper(
-    std::unique_ptr<DrawLooperBuilder> drawLooperBuilder) {
+void GraphicsContext::setDrawLooper(sk_sp<SkDrawLooper> drawLooper) {
   if (contextDisabled())
     return;
 
-  mutableState()->setDrawLooper(
-      drawLooperBuilder ? drawLooperBuilder->detachDrawLooper() : nullptr);
+  mutableState()->setDrawLooper(std::move(drawLooper));
 }
 
 SkColorFilter* GraphicsContext::getColorFilter() const {
@@ -451,12 +447,11 @@ void GraphicsContext::drawInnerShadow(const FloatRoundedRect& rect,
     clip(rect.rect());
   }
 
-  std::unique_ptr<DrawLooperBuilder> drawLooperBuilder =
-      DrawLooperBuilder::create();
-  drawLooperBuilder->addShadow(FloatSize(shadowOffset), shadowBlur, shadowColor,
-                               DrawLooperBuilder::ShadowRespectsTransforms,
-                               DrawLooperBuilder::ShadowIgnoresAlpha);
-  setDrawLooper(std::move(drawLooperBuilder));
+  DrawLooperBuilder drawLooperBuilder;
+  drawLooperBuilder.addShadow(FloatSize(shadowOffset), shadowBlur, shadowColor,
+                              DrawLooperBuilder::ShadowRespectsTransforms,
+                              DrawLooperBuilder::ShadowIgnoresAlpha);
+  setDrawLooper(drawLooperBuilder.detachDrawLooper());
   fillRectWithRoundedHole(outerRect, roundedHole, fillColor);
 }
 
@@ -900,6 +895,7 @@ void GraphicsContext::drawTiledImage(Image* image,
   if (contextDisabled() || !image)
     return;
   image->drawTiled(*this, destRect, srcPoint, tileSize, op, repeatSpacing);
+  m_paintController.setImagePainted();
 }
 
 void GraphicsContext::drawTiledImage(Image* image,
@@ -919,6 +915,7 @@ void GraphicsContext::drawTiledImage(Image* image,
   }
 
   image->drawTiled(*this, dest, srcRect, tileScaleFactor, hRule, vRule, op);
+  m_paintController.setImagePainted();
 }
 
 void GraphicsContext::drawOval(const SkRect& oval, const SkPaint& paint) {

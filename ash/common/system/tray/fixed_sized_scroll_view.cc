@@ -5,7 +5,6 @@
 #include "ash/common/system/tray/fixed_sized_scroll_view.h"
 
 #include "ash/common/material_design/material_design_controller.h"
-#include "ui/views/background.h"
 #include "ui/views/controls/scrollbar/overlay_scroll_bar.h"
 
 namespace ash {
@@ -28,7 +27,8 @@ FixedSizedScrollView::~FixedSizedScrollView() {}
 
 void FixedSizedScrollView::SetContentsView(views::View* view) {
   SetContents(view);
-  view->SetBoundsRect(gfx::Rect(view->GetPreferredSize()));
+  if (!UseMd())
+    view->SetBoundsRect(gfx::Rect(view->GetPreferredSize()));
 }
 
 void FixedSizedScrollView::SetFixedSize(const gfx::Size& size) {
@@ -45,6 +45,9 @@ void FixedSizedScrollView::set_fixed_size(const gfx::Size& size) {
 }
 
 gfx::Size FixedSizedScrollView::GetPreferredSize() const {
+  if (UseMd())
+    return views::View::GetPreferredSize();
+
   gfx::Size size =
       fixed_size_.IsEmpty() ? contents()->GetPreferredSize() : fixed_size_;
   gfx::Insets insets = GetInsets();
@@ -53,10 +56,8 @@ gfx::Size FixedSizedScrollView::GetPreferredSize() const {
 }
 
 void FixedSizedScrollView::Layout() {
-  if (UseMd()) {
-    views::ScrollView::Layout();
-    return;
-  }
+  if (UseMd())
+    return views::ScrollView::Layout();
 
   gfx::Rect bounds = gfx::Rect(contents()->GetPreferredSize());
   bounds.set_width(std::max(0, width() - GetScrollBarWidth()));

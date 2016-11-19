@@ -32,7 +32,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
-#include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "content/browser/appcache/appcache_interceptor.h"
 #include "content/browser/appcache/chrome_appcache_service.h"
 #include "content/browser/bad_message.h"
@@ -54,8 +54,10 @@
 #include "content/browser/loader/navigation_url_loader_impl_core.h"
 #include "content/browser/loader/power_save_block_resource_throttle.h"
 #include "content/browser/loader/redirect_to_file_resource_handler.h"
+#include "content/browser/loader/resource_loader.h"
 #include "content/browser/loader/resource_message_filter.h"
 #include "content/browser/loader/resource_request_info_impl.h"
+#include "content/browser/loader/resource_scheduler.h"
 #include "content/browser/loader/stream_resource_handler.h"
 #include "content/browser/loader/sync_resource_handler.h"
 #include "content/browser/loader/throttling_resource_handler.h"
@@ -96,10 +98,10 @@
 #include "net/base/mime_util.h"
 #include "net/base/net_errors.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
-#include "net/base/request_priority.h"
 #include "net/base/upload_data_stream.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cookies/cookie_monster.h"
+#include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
 #include "net/ssl/client_cert_store.h"
@@ -113,6 +115,7 @@
 #include "storage/browser/blob/shareable_file_reference.h"
 #include "storage/browser/fileapi/file_permission_policy.h"
 #include "storage/browser/fileapi/file_system_context.h"
+#include "url/third_party/mozilla/url_parse.h"
 #include "url/url_constants.h"
 
 using base::Time;
@@ -928,7 +931,7 @@ void ResourceDispatcherHostImpl::DidFinishLoading(ResourceLoader* loader) {
     }
 
     if (loader->request()->url().SchemeIsCryptographic()) {
-      if (loader->request()->url().host() == "www.google.com") {
+      if (loader->request()->url().host_piece() == "www.google.com") {
         UMA_HISTOGRAM_SPARSE_SLOWLY("Net.ErrorCodesForHTTPSGoogleMainFrame2",
                                     -loader->request()->status().error());
       }
@@ -1806,26 +1809,8 @@ bool ResourceDispatcherHostImpl::Send(IPC::Message* message) {
   return false;
 }
 
-// Note that this cancel is subtly different from the other
-// CancelRequest methods in this file, which also tear down the loader.
 void ResourceDispatcherHostImpl::OnCancelRequest(int request_id) {
-  int child_id = filter_->child_id();
-
-  // When the old renderer dies, it sends a message to us to cancel its
-  // requests.
-  if (IsTransferredNavigation(GlobalRequestID(child_id, request_id)))
-    return;
-
-  ResourceLoader* loader = GetLoader(child_id, request_id);
-
-  // It is possible that the request has been completed and removed from the
-  // loader queue but the client has not processed the request completed message
-  // before issuing a cancel. This happens frequently for beacons which are
-  // canceled in the response received handler.
-  if (!loader)
-    return;
-
-  loader->CancelRequest(true);
+  CancelRequestFromRenderer(GlobalRequestID(filter_->child_id(), request_id));
 }
 
 ResourceRequestInfoImpl* ResourceDispatcherHostImpl::CreateRequestInfo(
@@ -2330,10 +2315,14 @@ int ResourceDispatcherHostImpl::CalculateApproximateMemoryCost(
   // The following fields should be a minor size contribution (experimentally
   // on the order of 100). However since they are variable length, it could
   // in theory be a sizeable contribution.
-  int strings_cost = request->extra_request_headers().ToString().size() +
-                     request->original_url().spec().size() +
-                     request->referrer().size() +
-                     request->method().size();
+  int strings_cost = 0;
+  for (net::HttpRequestHeaders::Iterator it(request->extra_request_headers());
+       it.GetNext();) {
+    strings_cost += it.name().length() + it.value().length();
+  }
+  strings_cost +=
+      request->original_url().parsed_for_possibly_invalid_spec().Length() +
+      request->referrer().size() + request->method().size();
 
   // Note that this expression will typically be dominated by:
   // |kAvgBytesPerOutstandingRequest|.
@@ -2452,6 +2441,25 @@ void ResourceDispatcherHostImpl::BeginURLRequest(
 int ResourceDispatcherHostImpl::MakeRequestID() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   return --request_id_;
+}
+
+void ResourceDispatcherHostImpl::CancelRequestFromRenderer(
+    GlobalRequestID request_id) {
+  // When the old renderer dies, it sends a message to us to cancel its
+  // requests.
+  if (IsTransferredNavigation(request_id))
+    return;
+
+  ResourceLoader* loader = GetLoader(request_id);
+
+  // It is possible that the request has been completed and removed from the
+  // loader queue but the client has not processed the request completed message
+  // before issuing a cancel. This happens frequently for beacons which are
+  // canceled in the response received handler.
+  if (!loader)
+    return;
+
+  loader->CancelRequest(true);
 }
 
 void ResourceDispatcherHostImpl::StartLoading(

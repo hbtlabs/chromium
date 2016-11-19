@@ -27,8 +27,33 @@ cr.define('adapter_broker', function() {
     __proto__: cr.EventTarget.prototype,
 
     /**
+     * Creates a GATT connection to the device with |address|.
+     * @param {string} address
+     * @return {!Promise<!interfaces.BluetoothDevice.Device.proxyClass>}
+     */
+    connectToDevice: function(address) {
+      return this.adapter_.connectToDevice(address).then(function(response) {
+        if (response.result !=
+            interfaces.BluetoothAdapter.ConnectResult.SUCCESS) {
+          // TODO(crbug.com/663394): Replace with more descriptive error
+          // messages.
+          var ConnectResult = interfaces.BluetoothAdapter.ConnectResult;
+          var errorString = Object.keys(ConnectResult).find(function(key) {
+            return ConnectResult[key] === response.result;
+          });
+
+          throw new Error(errorString);
+        }
+
+        return interfaces.Connection.bindHandleToProxy(
+            response.device,
+            interfaces.BluetoothDevice.Device);
+      });
+    },
+
+    /**
      * Sets client of Adapter service.
-     * @param {interfaces.BluetoothAdapter.AdapterClient} adapterClient
+     * @param {!interfaces.BluetoothAdapter.AdapterClient} adapterClient
      */
     setClient: function(adapterClient) {
       this.adapter_.setClient(interfaces.Connection.bindStubDerivedImpl(
@@ -37,7 +62,7 @@ cr.define('adapter_broker', function() {
 
     /**
      * Gets an array of currently detectable devices from the Adapter service.
-     * @return {Array<interfaces.BluetoothDevice.DeviceInfo>}
+     * @return {!Array<!interfaces.BluetoothDevice.DeviceInfo>}
      */
     getDevices: function() {
       return this.adapter_.getDevices();
@@ -45,7 +70,7 @@ cr.define('adapter_broker', function() {
 
     /**
      * Gets the current state of the Adapter.
-     * @return {interfaces.BluetoothAdapter.AdapterInfo}
+     * @return {!interfaces.BluetoothAdapter.AdapterInfo}
      */
     getInfo: function() {
       return this.adapter_.getInfo();
@@ -109,15 +134,13 @@ cr.define('adapter_broker', function() {
 
   /**
    * Initializes an AdapterBroker if one doesn't exist.
-   * @return {Promise<AdapterBroker>} resolves with AdapterBroker,
+   * @return {!Promise<!AdapterBroker>} resolves with AdapterBroker,
    *     rejects if Bluetooth is not supported.
    */
   function getAdapterBroker() {
-    if (adapterBroker) {
-      return Promise.resolve(adapterBroker);
-    }
+    if (adapterBroker) return Promise.resolve(adapterBroker);
 
-    return interfaces.importInterfaces().then(function(adapter) {
+    return interfaces.setupInterfaces().then(function(adapter) {
       // Hook up the instance properties.
       AdapterClient.prototype.__proto__ =
           interfaces.BluetoothAdapter.AdapterClient.stubClass.prototype;

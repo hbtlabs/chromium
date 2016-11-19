@@ -78,11 +78,13 @@
 #include "core/events/MouseEvent.h"
 #include "core/events/MutationEvent.h"
 #include "core/events/PointerEvent.h"
+#include "core/events/PointerEventFactory.h"
 #include "core/events/TextEvent.h"
 #include "core/events/TouchEvent.h"
 #include "core/events/UIEvent.h"
 #include "core/events/WheelEvent.h"
 #include "core/frame/EventHandlerRegistry.h"
+#include "core/frame/FrameView.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLDialogElement.h"
@@ -388,18 +390,6 @@ Node& Node::treeRoot() const {
 Node* Node::getRootNode(const GetRootNodeOptions& options) const {
   return (options.hasComposed() && options.composed()) ? &shadowIncludingRoot()
                                                        : &treeRoot();
-}
-
-Text* Node::nextTextSibling() const {
-  for (Node* sibling = nextSibling();
-       sibling &&
-       (!sibling->isElementNode() || !toElement(sibling)->layoutObject());
-       sibling = sibling->nextSibling()) {
-    if (sibling->isTextNode()) {
-      return toText(sibling);
-    }
-  }
-  return nullptr;
 }
 
 Node* Node::insertBefore(Node* newChild,
@@ -2109,14 +2099,74 @@ DispatchEventResult Node::dispatchDOMActivateEvent(int detail,
   return EventTarget::dispatchEventResult(*event);
 }
 
-DispatchEventResult Node::dispatchMouseEvent(
-    const PlatformMouseEvent& nativeEvent,
-    const AtomicString& eventType,
-    int detail,
-    Node* relatedTarget) {
-  MouseEvent* event = MouseEvent::create(eventType, document().domWindow(),
-                                         nativeEvent, detail, relatedTarget);
-  return dispatchEvent(event);
+void Node::createAndDispatchPointerEvent(const AtomicString& mouseEventName,
+                                         const PlatformMouseEvent& mouseEvent,
+                                         LocalDOMWindow* view) {
+  AtomicString pointerEventName;
+  if (mouseEventName == EventTypeNames::mousemove)
+    pointerEventName = EventTypeNames::pointermove;
+  else if (mouseEventName == EventTypeNames::mousedown)
+    pointerEventName = EventTypeNames::pointerdown;
+  else if (mouseEventName == EventTypeNames::mouseup)
+    pointerEventName = EventTypeNames::pointerup;
+  else
+    return;
+
+  PointerEventInit pointerEventInit;
+
+  pointerEventInit.setPointerId(PointerEventFactory::s_mouseId);
+  pointerEventInit.setPointerType("mouse");
+  pointerEventInit.setIsPrimary(true);
+  pointerEventInit.setButtons(
+      MouseEvent::platformModifiersToButtons(mouseEvent.getModifiers()));
+
+  pointerEventInit.setBubbles(true);
+  pointerEventInit.setCancelable(true);
+  pointerEventInit.setComposed(true);
+  pointerEventInit.setDetail(0);
+
+  pointerEventInit.setScreenX(mouseEvent.globalPosition().x());
+  pointerEventInit.setScreenY(mouseEvent.globalPosition().y());
+
+  IntPoint locationInFrameZoomed;
+  if (view && view->frame() && view->frame()->view()) {
+    LocalFrame* frame = view->frame();
+    FrameView* frameView = frame->view();
+    IntPoint locationInContents =
+        frameView->rootFrameToContents(mouseEvent.position());
+    locationInFrameZoomed = frameView->contentsToFrame(locationInContents);
+    float scaleFactor = 1 / frame->pageZoomFactor();
+    locationInFrameZoomed.scale(scaleFactor, scaleFactor);
+  }
+
+  // Set up initial values for coordinates.
+  pointerEventInit.setClientX(locationInFrameZoomed.x());
+  pointerEventInit.setClientY(locationInFrameZoomed.y());
+
+  if (pointerEventName == EventTypeNames::pointerdown ||
+      pointerEventName == EventTypeNames::pointerup) {
+    pointerEventInit.setButton(
+        static_cast<int>(mouseEvent.pointerProperties().button));
+  } else {
+    pointerEventInit.setButton(
+        static_cast<int>(WebPointerProperties::Button::NoButton));
+  }
+
+  UIEventWithKeyState::setFromPlatformModifiers(pointerEventInit,
+                                                mouseEvent.getModifiers());
+  pointerEventInit.setView(view);
+
+  dispatchEvent(PointerEvent::create(pointerEventName, pointerEventInit));
+}
+
+void Node::dispatchMouseEvent(const PlatformMouseEvent& nativeEvent,
+                              const AtomicString& mouseEventType,
+                              int detail,
+                              Node* relatedTarget) {
+  createAndDispatchPointerEvent(mouseEventType, nativeEvent,
+                                document().domWindow());
+  dispatchEvent(MouseEvent::create(mouseEventType, document().domWindow(),
+                                   nativeEvent, detail, relatedTarget));
 }
 
 void Node::dispatchSimulatedClick(Event* underlyingEvent,
@@ -2171,11 +2221,17 @@ void Node::defaultEventHandler(Event* event) {
       // LayoutTextControlSingleLine::scrollHeight
       document().updateStyleAndLayoutIgnorePendingStylesheets();
       LayoutObject* layoutObject = this->layoutObject();
-      while (layoutObject &&
-             (!layoutObject->isBox() ||
-              !toLayoutBox(layoutObject)->canBeScrolledAndHasScrollableArea()))
-        layoutObject = layoutObject->parent();
-
+      while (
+          layoutObject &&
+          (!layoutObject->isBox() ||
+           !toLayoutBox(layoutObject)->canBeScrolledAndHasScrollableArea())) {
+        if (layoutObject->node() && layoutObject->node()->isDocumentNode()) {
+          Element* owner = toDocument(layoutObject->node())->localOwner();
+          layoutObject = owner ? owner->layoutObject() : nullptr;
+        } else {
+          layoutObject = layoutObject->parent();
+        }
+      }
       if (layoutObject) {
         if (LocalFrame* frame = document().frame())
           frame->eventHandler().startMiddleClickAutoscroll(layoutObject);

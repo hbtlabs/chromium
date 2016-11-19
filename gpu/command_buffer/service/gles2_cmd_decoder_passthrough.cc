@@ -25,6 +25,18 @@ void DeleteServiceObjects(ClientServiceMap<ClientType, ServiceType>* id_map,
   id_map->Clear();
 }
 
+template <typename ClientType, typename ServiceType, typename ResultType>
+bool GetClientID(const ClientServiceMap<ClientType, ServiceType>* map,
+                 ResultType service_id,
+                 ResultType* result) {
+  ClientType client_id = 0;
+  if (!map->GetClientID(static_cast<ServiceType>(service_id), &client_id)) {
+    return false;
+  }
+  *result = static_cast<ResultType>(client_id);
+  return true;
+};
+
 }  // anonymous namespace
 
 PassthroughResources::PassthroughResources() {}
@@ -158,7 +170,10 @@ bool GLES2DecoderPassthroughImpl::Initialize(
   }
 
   // Check for required extensions
-  if (!feature_info_->feature_flags().angle_robust_client_memory) {
+  if (!feature_info_->feature_flags().angle_robust_client_memory ||
+      !feature_info_->feature_flags().chromium_bind_generates_resource ||
+      (feature_info_->IsWebGLContext() !=
+       feature_info_->feature_flags().angle_webgl_compatibility)) {
     Destroy(true);
     return false;
   }
@@ -182,6 +197,14 @@ bool GLES2DecoderPassthroughImpl::Initialize(
       feature_info_->feature_flags().khr_debug) {
     InitializeGLDebugLogging();
   }
+
+  emulated_extensions_.push_back("GL_CHROMIUM_lose_context");
+  emulated_extensions_.push_back("GL_CHROMIUM_pixel_transfer_buffer_object");
+  emulated_extensions_.push_back("GL_CHROMIUM_resource_safe");
+  emulated_extensions_.push_back("GL_CHROMIUM_strict_attribs");
+  emulated_extensions_.push_back("GL_CHROMIUM_texture_mailbox");
+  emulated_extensions_.push_back("GL_CHROMIUM_trace_marker");
+  BuildExtensionsString();
 
   set_initialized();
   return true;
@@ -273,7 +296,11 @@ gpu::Capabilities GLES2DecoderPassthroughImpl::GetCapabilities() {
 
   PopulateNumericCapabilities(&caps, feature_info_.get());
 
-  caps.bind_generates_resource_chromium = group_->bind_generates_resource();
+  glGetIntegerv(GL_BIND_GENERATES_RESOURCE_CHROMIUM,
+                &caps.bind_generates_resource_chromium);
+  DCHECK_EQ(caps.bind_generates_resource_chromium != GL_FALSE,
+            group_->bind_generates_resource());
+
   caps.egl_image_external =
       feature_info_->feature_flags().oes_egl_image_external;
   caps.texture_format_astc =
@@ -522,6 +549,164 @@ const gpu::gles2::ContextState* GLES2DecoderPassthroughImpl::GetContextState() {
 scoped_refptr<ShaderTranslatorInterface>
 GLES2DecoderPassthroughImpl::GetTranslator(GLenum type) {
   return nullptr;
+}
+
+void* GLES2DecoderPassthroughImpl::GetScratchMemory(size_t size) {
+  if (scratch_memory_.size() < size) {
+    scratch_memory_.resize(size, 0);
+  }
+  return scratch_memory_.data();
+}
+
+template <typename T>
+error::Error GLES2DecoderPassthroughImpl::PatchGetNumericResults(GLenum pname,
+                                                                 GLsizei length,
+                                                                 T* params) {
+  // Likely a gl error if no parameters were returned
+  if (length < 1) {
+    return error::kNoError;
+  }
+
+  switch (pname) {
+    case GL_NUM_EXTENSIONS:
+      *params = *params + static_cast<T>(emulated_extensions_.size());
+      break;
+
+    case GL_TEXTURE_BINDING_2D:
+    case GL_TEXTURE_BINDING_CUBE_MAP:
+    case GL_TEXTURE_BINDING_2D_ARRAY:
+    case GL_TEXTURE_BINDING_3D:
+      if (!GetClientID(&resources_->texture_id_map, *params, params)) {
+        return error::kInvalidArguments;
+      }
+      break;
+
+    case GL_ARRAY_BUFFER_BINDING:
+    case GL_ELEMENT_ARRAY_BUFFER_BINDING:
+    case GL_PIXEL_PACK_BUFFER_BINDING:
+    case GL_PIXEL_UNPACK_BUFFER_BINDING:
+    case GL_TRANSFORM_FEEDBACK_BUFFER_BINDING:
+    case GL_COPY_READ_BUFFER_BINDING:
+    case GL_COPY_WRITE_BUFFER_BINDING:
+    case GL_UNIFORM_BUFFER_BINDING:
+      if (!GetClientID(&resources_->buffer_id_map, *params, params)) {
+        return error::kInvalidArguments;
+      }
+      break;
+
+    case GL_RENDERBUFFER_BINDING:
+      if (!GetClientID(&resources_->renderbuffer_id_map, *params, params)) {
+        return error::kInvalidArguments;
+      }
+      break;
+
+    case GL_SAMPLER_BINDING:
+      if (!GetClientID(&resources_->sampler_id_map, *params, params)) {
+        return error::kInvalidArguments;
+      }
+      break;
+
+    case GL_ACTIVE_PROGRAM:
+      if (!GetClientID(&resources_->program_id_map, *params, params)) {
+        return error::kInvalidArguments;
+      }
+      break;
+
+    case GL_FRAMEBUFFER_BINDING:
+    case GL_READ_FRAMEBUFFER_BINDING:
+      if (!GetClientID(&framebuffer_id_map_, *params, params)) {
+        return error::kInvalidArguments;
+      }
+      break;
+
+    case GL_TRANSFORM_FEEDBACK_BINDING:
+      if (!GetClientID(&transform_feedback_id_map_, *params, params)) {
+        return error::kInvalidArguments;
+      }
+      break;
+
+    case GL_VERTEX_ARRAY_BINDING:
+      if (!GetClientID(&vertex_array_id_map_, *params, params)) {
+        return error::kInvalidArguments;
+      }
+      break;
+
+    default:
+      break;
+  }
+
+  return error::kNoError;
+}
+
+// Instantiate templated functions
+#define INSTANTIATE_PATCH_NUMERIC_RESULTS(type)                              \
+  template error::Error GLES2DecoderPassthroughImpl::PatchGetNumericResults( \
+      GLenum, GLsizei, type*)
+INSTANTIATE_PATCH_NUMERIC_RESULTS(GLint);
+INSTANTIATE_PATCH_NUMERIC_RESULTS(GLint64);
+INSTANTIATE_PATCH_NUMERIC_RESULTS(GLfloat);
+INSTANTIATE_PATCH_NUMERIC_RESULTS(GLboolean);
+#undef INSTANTIATE_PATCH_NUMERIC_RESULTS
+
+error::Error
+GLES2DecoderPassthroughImpl::PatchGetFramebufferAttachmentParameter(
+    GLenum target,
+    GLenum attachment,
+    GLenum pname,
+    GLsizei length,
+    GLint* params) {
+  // Likely a gl error if no parameters were returned
+  if (length < 1) {
+    return error::kNoError;
+  }
+
+  switch (pname) {
+    // If the attached object name was requested, it needs to be converted back
+    // to a client id.
+    case GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME: {
+      GLint object_type = GL_NONE;
+      glGetFramebufferAttachmentParameterivEXT(
+          target, attachment, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE,
+          &object_type);
+
+      switch (object_type) {
+        case GL_TEXTURE:
+          if (!GetClientID(&resources_->texture_id_map, *params, params)) {
+            return error::kInvalidArguments;
+          }
+          break;
+
+        case GL_RENDERBUFFER:
+          if (!GetClientID(&resources_->renderbuffer_id_map, *params, params)) {
+            return error::kInvalidArguments;
+          }
+          break;
+
+        case GL_NONE:
+          // Default framebuffer, don't transform the result
+          break;
+
+        default:
+          NOTREACHED();
+          break;
+      }
+    } break;
+
+    default:
+      break;
+  }
+
+  return error::kNoError;
+}
+
+void GLES2DecoderPassthroughImpl::BuildExtensionsString() {
+  std::ostringstream combined_string_stream;
+  combined_string_stream << reinterpret_cast<const char*>(
+                                glGetString(GL_EXTENSIONS))
+                         << " ";
+  std::copy(emulated_extensions_.begin(), emulated_extensions_.end(),
+            std::ostream_iterator<std::string>(combined_string_stream, " "));
+  extension_string_ = combined_string_stream.str();
 }
 
 #define GLES2_CMD_OP(name)                                               \

@@ -18,6 +18,7 @@
 #include "services/ui/public/cpp/window_manager_delegate.h"
 #include "services/ui/public/cpp/window_tree_client_delegate.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/display/screen_base.h"
 
 namespace ui {
 class BitmapUploader;
@@ -37,7 +38,7 @@ class MusDemo : public service_manager::Service,
 
  private:
   // service_manager::Service:
-  void OnStart(service_manager::ServiceContext* context) override;
+  void OnStart() override;
   bool OnConnect(const service_manager::ServiceInfo& remote_info,
                  service_manager::InterfaceRegistry* registry) override;
 
@@ -77,6 +78,9 @@ class MusDemo : public service_manager::Service,
   Window* window_ = nullptr;
   std::unique_ptr<WindowTreeClient> window_tree_client_;
   std::unique_ptr<GpuService> gpu_service_;
+
+  // Dummy screen required to be the screen instance.
+  std::unique_ptr<display::ScreenBase> screen_;
 
   // Used to send frames to mus.
   std::unique_ptr<BitmapUploader> uploader_;

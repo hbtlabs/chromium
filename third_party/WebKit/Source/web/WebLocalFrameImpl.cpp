@@ -203,6 +203,7 @@
 #include "public/web/WebHistoryItem.h"
 #include "public/web/WebIconURL.h"
 #include "public/web/WebInputElement.h"
+#include "public/web/WebInputMethodController.h"
 #include "public/web/WebKit.h"
 #include "public/web/WebNode.h"
 #include "public/web/WebPerformance.h"
@@ -1098,21 +1099,6 @@ bool WebLocalFrameImpl::isSpellCheckingEnabled() const {
   return frame()->spellChecker().isSpellCheckingEnabled();
 }
 
-void WebLocalFrameImpl::requestTextChecking(const WebElement& webElement) {
-  if (webElement.isNull())
-    return;
-
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
-  // needs to be audited.  see http://crbug.com/590369 for more details.
-  frame()->document()->updateStyleAndLayoutIgnorePendingStylesheets();
-
-  DocumentLifecycle::DisallowTransitionScope disallowTransition(
-      frame()->document()->lifecycle());
-
-  frame()->spellChecker().requestTextChecking(
-      *webElement.constUnwrap<Element>());
-}
-
 void WebLocalFrameImpl::replaceMisspelledRange(const WebString& text) {
   // If this caret selection has two or more markers, this function replace the
   // range covered by the first marker with the specified word as Microsoft Word
@@ -1474,19 +1460,6 @@ WebRect WebLocalFrameImpl::selectionBoundsRect() const {
                         : WebRect();
 }
 
-bool WebLocalFrameImpl::selectionStartHasSpellingMarkerFor(int from,
-                                                           int length) const {
-  if (!frame())
-    return false;
-
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
-  // needs to be audited.  See http://crbug.com/590369 for more details.
-  frame()->document()->updateStyleAndLayoutIgnorePendingStylesheets();
-
-  return frame()->spellChecker().selectionStartHasSpellingMarkerFor(from,
-                                                                    length);
-}
-
 WebString WebLocalFrameImpl::layerTreeAsText(bool showDebugInfo) const {
   if (!frame())
     return WebString();
@@ -1566,6 +1539,7 @@ WebLocalFrameImpl::WebLocalFrameImpl(WebTreeScopeType scope,
       m_contentSettingsClient(0),
       m_inputEventsScaleFactorForEmulation(1),
       m_webDevToolsFrontend(0),
+      m_inputMethodController(new WebInputMethodControllerImpl(this)),
       m_selfKeepAlive(this) {
   DCHECK(m_client);
   frameCount++;
@@ -2404,6 +2378,10 @@ void WebLocalFrameImpl::usageCountChromeLoadTimes(const WebString& metric) {
     feature = UseCounter::ChromeLoadTimesConnectionInfo;
   }
   UseCounter::count(frame(), feature);
+}
+
+WebInputMethodControllerImpl* WebLocalFrameImpl::inputMethodController() const {
+  return m_inputMethodController.get();
 }
 
 }  // namespace blink

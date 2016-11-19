@@ -19,6 +19,7 @@ import org.chromium.base.metrics.CachedMetrics.TimesHistogramSample;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.util.IntentUtils;
@@ -51,6 +52,9 @@ public class InstantAppsHandler {
 
     protected static final String TRUSTED_REFERRER_PKG_EXTRA =
             "com.google.android.gms.instantapps.TRUSTED_REFERRER_PKG";
+
+    public static final String IS_GOOGLE_SEARCH_REFERRER =
+            "com.google.android.gms.instantapps.IS_GOOGLE_SEARCH_REFERRER";
 
     /** Finch experiment name. */
     private static final String INSTANT_APPS_EXPERIMENT_NAME = "InstantApps";
@@ -90,7 +94,7 @@ public class InstantAppsHandler {
      * @param context The application context.
      * @return Whether the feature is enabled.
      */
-    private boolean isEnabled(Context context) {
+    protected boolean isEnabled(Context context) {
         // Will go away once the feature is enabled for everyone by default.
         StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
         try {
@@ -173,6 +177,7 @@ public class InstantAppsHandler {
                 || IntentUtils.safeGetBooleanExtra(intent, DO_NOT_LAUNCH_EXTRA, false)
                 || IntentUtils.safeGetBooleanExtra(
                         intent, IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, false)
+                || IntentUtils.safeHasExtra(intent, ShortcutHelper.EXTRA_SOURCE)
                 || (isCustomTabsIntent && !IntentUtils.safeGetBooleanExtra(
                         intent, CUSTOM_APPS_INSTANT_APP_EXTRA, false))
                 || isIntentFromChrome(context, intent)

@@ -16,9 +16,9 @@ namespace {
 // Creates an array with |num_elements| handlers and makes |chrome_index|-th
 // handler "Chrome". If Chrome is not necessary, set |chrome_index| to
 // |num_elements|.
-mojo::Array<mojom::IntentHandlerInfoPtr> CreateArray(size_t num_elements,
+std::vector<mojom::IntentHandlerInfoPtr> CreateArray(size_t num_elements,
                                                      size_t chrome_index) {
-  mojo::Array<mojom::IntentHandlerInfoPtr> handlers;
+  std::vector<mojom::IntentHandlerInfoPtr> handlers;
   for (size_t i = 0; i < num_elements; ++i) {
     mojom::IntentHandlerInfoPtr handler = mojom::IntentHandlerInfo::New();
     handler->name = "Name";
@@ -109,7 +109,7 @@ TEST(ArcNavigationThrottleTest, TestFindPreferredApp) {
       3u, ArcNavigationThrottle::FindPreferredAppForTesting(CreateArray(3, 2)));
   // Add a preferred app and call the function.
   for (size_t i = 0; i < 3; ++i) {
-    mojo::Array<mojom::IntentHandlerInfoPtr> handlers = CreateArray(3, 0);
+    std::vector<mojom::IntentHandlerInfoPtr> handlers = CreateArray(3, 0);
     handlers[i]->is_preferred = true;
     EXPECT_EQ(i, ArcNavigationThrottle::FindPreferredAppForTesting(handlers))
         << i;
@@ -199,16 +199,16 @@ TEST(ArcNavigationThrottleTest, TestIsSwapElementsNeeded) {
   std::pair<size_t, size_t> indices;
   for (size_t i = 1; i <= ArcNavigationThrottle::kMaxAppResults; ++i) {
     // When Chrome is the first element, swap is unnecessary.
-    mojo::Array<mojom::IntentHandlerInfoPtr> handlers = CreateArray(i, 0);
-    EXPECT_FALSE(ArcNavigationThrottle::IsSwapElementsNeededForTesting(
-        handlers, &indices))
+    std::vector<mojom::IntentHandlerInfoPtr> handlers = CreateArray(i, 0);
+    EXPECT_FALSE(
+        ArcNavigationThrottle::IsSwapElementsNeeded(handlers, &indices))
         << i;
 
     // When Chrome is within the first |kMaxAppResults| elements, swap is
     // unnecessary.
     handlers = CreateArray(i, i - 1);
-    EXPECT_FALSE(ArcNavigationThrottle::IsSwapElementsNeededForTesting(
-        handlers, &indices))
+    EXPECT_FALSE(
+        ArcNavigationThrottle::IsSwapElementsNeeded(handlers, &indices))
         << i;
   }
 
@@ -216,23 +216,22 @@ TEST(ArcNavigationThrottleTest, TestIsSwapElementsNeeded) {
        i < ArcNavigationThrottle::kMaxAppResults * 2; ++i) {
     // When Chrome is within the first |kMaxAppResults| elements, swap is
     // unnecessary.
-    mojo::Array<mojom::IntentHandlerInfoPtr> handlers = CreateArray(i, 0);
-    EXPECT_FALSE(ArcNavigationThrottle::IsSwapElementsNeededForTesting(
-        handlers, &indices))
+    std::vector<mojom::IntentHandlerInfoPtr> handlers = CreateArray(i, 0);
+    EXPECT_FALSE(
+        ArcNavigationThrottle::IsSwapElementsNeeded(handlers, &indices))
         << i;
 
     // When Chrome is the |kMaxAppResults|-th element, swap is unnecessary.
     handlers = CreateArray(i, ArcNavigationThrottle::kMaxAppResults - 1);
-    EXPECT_FALSE(ArcNavigationThrottle::IsSwapElementsNeededForTesting(
-        handlers, &indices))
+    EXPECT_FALSE(
+        ArcNavigationThrottle::IsSwapElementsNeeded(handlers, &indices))
         << i;
 
     // When Chrome is not within the first |kMaxAppResults| elements, swap is
     // necessary.
     handlers = CreateArray(i, i - 1);
     indices.first = indices.second = 0;
-    EXPECT_TRUE(ArcNavigationThrottle::IsSwapElementsNeededForTesting(handlers,
-                                                                      &indices))
+    EXPECT_TRUE(ArcNavigationThrottle::IsSwapElementsNeeded(handlers, &indices))
         << i;
     EXPECT_EQ(ArcNavigationThrottle::kMaxAppResults - 1u, indices.first) << i;
     EXPECT_EQ(i - 1, indices.second) << i;
@@ -240,9 +239,9 @@ TEST(ArcNavigationThrottleTest, TestIsSwapElementsNeeded) {
 
   for (size_t i = 0; i <= ArcNavigationThrottle::kMaxAppResults * 2; ++i) {
     // When Chrome does not exist in |handlers|, swap is unnecessary.
-    mojo::Array<mojom::IntentHandlerInfoPtr> handlers = CreateArray(i, i);
-    EXPECT_FALSE(ArcNavigationThrottle::IsSwapElementsNeededForTesting(
-        handlers, &indices))
+    std::vector<mojom::IntentHandlerInfoPtr> handlers = CreateArray(i, i);
+    EXPECT_FALSE(
+        ArcNavigationThrottle::IsSwapElementsNeeded(handlers, &indices))
         << i;
   }
 }

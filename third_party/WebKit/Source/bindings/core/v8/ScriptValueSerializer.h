@@ -167,7 +167,8 @@ class CORE_EXPORT SerializedScriptValueWriter {
                                        uint32_t clientId,
                                        uint32_t sinkId,
                                        uint32_t localId,
-                                       uint64_t nonce);
+                                       uint64_t nonceHigh,
+                                       uint64_t nonceLow);
   void writeTransferredSharedArrayBuffer(uint32_t index);
   void writeObjectReference(uint32_t reference);
   void writeObject(uint32_t numProperties);
@@ -478,11 +479,6 @@ class CORE_EXPORT ScriptValueSerializer {
   uint32_t m_nextObjectReference;
   WebBlobInfoArray* m_blobInfo;
   BlobDataHandleMap* m_blobDataHandles;
-
-  // Counts of object types encountered while serializing the object graph.
-  int m_primitiveCount = 0;
-  int m_jsObjectCount = 0;
-  int m_domWrapperCount = 0;
 };
 
 class ScriptValueDeserializer;
@@ -643,7 +639,8 @@ class CORE_EXPORT ScriptValueDeserializer {
                                         uint32_t clientId,
                                         uint32_t sinkId,
                                         uint32_t localId,
-                                        uint64_t nonce,
+                                        uint64_t nonceHigh,
+                                        uint64_t nonceLow,
                                         v8::Local<v8::Value>*);
   bool tryGetTransferredSharedArrayBuffer(uint32_t index,
                                           v8::Local<v8::Value>*);

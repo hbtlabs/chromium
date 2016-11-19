@@ -24,6 +24,7 @@ const char kChromeUIIndexedDBInternalsHost[] = "indexeddb-internals";
 const char kChromeUIAccessibilityHost[] = "accessibility";
 const char kChromeUIBlobInternalsHost[] = "blob-internals";
 const char kChromeUIBrowserCrashHost[] = "inducebrowsercrashforrealz";
+const char kChromeUIDinoHost[] = "dino";
 const char kChromeUIGpuHost[] = "gpu";
 const char kChromeUIHistogramHost[] = "histograms";
 const char kChromeUIHistoryHost[] = "history";
@@ -61,6 +62,6 @@ const char kUnreachableWebDataURL[] = "data:text/html,chromewebdata";
 
 const char kChromeUINetworkViewCacheURL[] = "chrome://view-http-cache/";
 const char kChromeUIResourcesURL[] = "chrome://resources/";
-const char kChromeUIShorthangURL[] = "chrome://shorthang";
+const char kChromeUIShorthangURL[] = "chrome://shorthang/";
 
 }  // namespace content

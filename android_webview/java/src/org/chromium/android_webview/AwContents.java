@@ -694,11 +694,7 @@ public class AwContents implements SmartClipProvider, PostMessageSender.PostMess
 
         @Override
         public void onConfigurationChanged(Configuration configuration) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                setLocale(LocaleUtils.toLanguageTags(configuration.getLocales()));
-            } else {
-                setLocale(LocaleUtils.toLanguageTag(configuration.locale));
-            }
+            updateDefaultLocale();
             mSettings.updateAcceptLanguages();
         }
     };
@@ -749,7 +745,7 @@ public class AwContents implements SmartClipProvider, PostMessageSender.PostMess
             InternalAccessDelegate internalAccessAdapter,
             NativeDrawGLFunctorFactory nativeDrawGLFunctorFactory, AwContentsClient contentsClient,
             AwSettings settings, DependencyFactory dependencyFactory) {
-        setLocale(LocaleUtils.getDefaultLocaleString());
+        updateDefaultLocale();
         settings.updateAcceptLanguages();
 
         mBrowserContext = browserContext;
@@ -1025,12 +1021,18 @@ public class AwContents implements SmartClipProvider, PostMessageSender.PostMess
         return wrapper;
     }
 
-    // Deal with a string that represents either a single locale or a locale list.
+    // Set current locales to native.
     @VisibleForTesting
-    public static void setLocale(String locales) {
+    public static void updateDefaultLocale() {
+        String locales = LocaleUtils.getDefaultLocaleListString();
         if (!sCurrentLocales.equals(locales)) {
             sCurrentLocales = locales;
-            nativeSetLocale(sCurrentLocales);
+
+            // We cannot use the first language in sCurrentLocales for the UI language even on
+            // Android N. LocaleUtils.getDefaultLocaleString() is capable for UI language but
+            // it is not guaranteed to be listed at the first of sCurrentLocales. Therefore,
+            // both values are passed to native.
+            nativeUpdateDefaultLocale(LocaleUtils.getDefaultLocaleString(), sCurrentLocales);
         }
     }
 
@@ -3162,7 +3164,7 @@ public class AwContents implements SmartClipProvider, PostMessageSender.PostMess
             postUpdateContentViewCoreVisibility();
             mCurrentFunctor.onAttachedToWindow();
 
-            setLocale(LocaleUtils.getDefaultLocaleString());
+            updateDefaultLocale();
             mSettings.updateAcceptLanguages();
 
             if (mComponentCallbacks != null) return;
@@ -3314,7 +3316,7 @@ public class AwContents implements SmartClipProvider, PostMessageSender.PostMess
     private static native void nativeSetAwDrawGLFunctionTable(long functionTablePointer);
     private static native int nativeGetNativeInstanceCount();
     private static native void nativeSetShouldDownloadFavicons();
-    private static native void nativeSetLocale(String locale);
+    private static native void nativeUpdateDefaultLocale(String locale, String localeList);
 
     private native void nativeSetJavaPeers(long nativeAwContents, AwContents awContents,
             AwWebContentsDelegate webViewWebContentsDelegate,

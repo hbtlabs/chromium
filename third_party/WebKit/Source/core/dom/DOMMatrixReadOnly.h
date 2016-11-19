@@ -16,6 +16,8 @@ namespace blink {
 
 class DOMMatrix;
 class DOMMatrixInit;
+class DOMPoint;
+class DOMPointInit;
 
 class CORE_EXPORT DOMMatrixReadOnly
     : public GarbageCollectedFinalized<DOMMatrixReadOnly>,
@@ -23,6 +25,7 @@ class CORE_EXPORT DOMMatrixReadOnly
   DEFINE_WRAPPERTYPEINFO();
 
  public:
+  static DOMMatrixReadOnly* create(ExceptionState&);
   static DOMMatrixReadOnly* create(Vector<double>, ExceptionState&);
   static DOMMatrixReadOnly* fromFloat32Array(DOMFloat32Array*, ExceptionState&);
   static DOMMatrixReadOnly* fromFloat64Array(DOMFloat64Array*, ExceptionState&);
@@ -83,6 +86,8 @@ class CORE_EXPORT DOMMatrixReadOnly
   DOMMatrix* flipY();
   DOMMatrix* inverse();
 
+  DOMPoint* transformPoint(const DOMPointInit&);
+
   DOMFloat32Array* toFloat32Array() const;
   DOMFloat64Array* toFloat64Array() const;
 
@@ -96,6 +101,7 @@ class CORE_EXPORT DOMMatrixReadOnly
 
  protected:
   DOMMatrixReadOnly() {}
+  DOMMatrixReadOnly(const TransformationMatrix&, bool is2D = true);
 
   template <typename T>
   DOMMatrixReadOnly(T sequence, int size) {

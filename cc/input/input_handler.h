@@ -18,10 +18,8 @@
 
 namespace gfx {
 class Point;
-class PointF;
 class ScrollOffset;
 class SizeF;
-class Vector2d;
 class Vector2dF;
 }
 
@@ -63,6 +61,7 @@ class CC_EXPORT InputHandlerClient {
       float page_scale_factor,
       float min_page_scale_factor,
       float max_page_scale_factor) = 0;
+  virtual void DeliverInputForBeginFrame() = 0;
 
  protected:
   InputHandlerClient() {}

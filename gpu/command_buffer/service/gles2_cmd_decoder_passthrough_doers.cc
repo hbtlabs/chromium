@@ -136,23 +136,13 @@ GLuint GetFramebufferServiceID(GLuint client_id,
 }
 
 GLuint GetTransformFeedbackServiceID(GLuint client_id,
-                                     ClientServiceMap<GLuint, GLuint>* id_map,
-                                     bool create_if_missing) {
-  return GetServiceID(client_id, id_map, create_if_missing, []() {
-    GLuint service_id = 0;
-    glGenTransformFeedbacks(1, &service_id);
-    return service_id;
-  });
+                                     ClientServiceMap<GLuint, GLuint>* id_map) {
+  return id_map->GetServiceIDOrInvalid(client_id);
 }
 
 GLuint GetVertexArrayServiceID(GLuint client_id,
-                               ClientServiceMap<GLuint, GLuint>* id_map,
-                               bool create_if_missing) {
-  return GetServiceID(client_id, id_map, create_if_missing, []() {
-    GLuint service_id = 0;
-    glGenVertexArraysOES(1, &service_id);
-    return service_id;
-  });
+                               ClientServiceMap<GLuint, GLuint>* id_map) {
+  return id_map->GetServiceIDOrInvalid(client_id);
 }
 
 GLuint GetProgramServiceID(GLuint client_id, PassthroughResources* resources) {
@@ -290,8 +280,7 @@ error::Error GLES2DecoderPassthroughImpl::DoBindTransformFeedback(
     GLuint transformfeedback) {
   glBindTransformFeedback(
       target, GetTransformFeedbackServiceID(transformfeedback,
-                                            &transform_feedback_id_map_,
-                                            bind_generates_resource_));
+                                            &transform_feedback_id_map_));
   return error::kNoError;
 }
 
@@ -437,7 +426,8 @@ error::Error GLES2DecoderPassthroughImpl::DoCompressedTexImage2D(
     GLint border,
     GLsizei imageSize,
     const void* data) {
-  NOTIMPLEMENTED();
+  glCompressedTexImage2D(target, level, internalformat, width, height, border,
+                         imageSize, data);
   return error::kNoError;
 }
 
@@ -451,7 +441,8 @@ error::Error GLES2DecoderPassthroughImpl::DoCompressedTexSubImage2D(
     GLenum format,
     GLsizei imageSize,
     const void* data) {
-  NOTIMPLEMENTED();
+  glCompressedTexSubImage2D(target, level, xoffset, yoffset, width, height,
+                            format, imageSize, data);
   return error::kNoError;
 }
 
@@ -465,7 +456,8 @@ error::Error GLES2DecoderPassthroughImpl::DoCompressedTexImage3D(
     GLint border,
     GLsizei imageSize,
     const void* data) {
-  NOTIMPLEMENTED();
+  glCompressedTexImage3D(target, level, internalformat, width, height, depth,
+                         border, imageSize, data);
   return error::kNoError;
 }
 
@@ -481,7 +473,8 @@ error::Error GLES2DecoderPassthroughImpl::DoCompressedTexSubImage3D(
     GLenum format,
     GLsizei imageSize,
     const void* data) {
-  NOTIMPLEMENTED();
+  glCompressedTexSubImage3D(target, level, xoffset, yoffset, zoffset, width,
+                            height, depth, format, imageSize, data);
   return error::kNoError;
 }
 
@@ -723,20 +716,9 @@ error::Error GLES2DecoderPassthroughImpl::DoFramebufferRenderbuffer(
     GLenum attachment,
     GLenum renderbuffertarget,
     GLuint renderbuffer) {
-  // TODO(geofflang): Handle this case in ANGLE by adding a WebGL validation
-  // mode.
-  if (attachment == GL_DEPTH_STENCIL_ATTACHMENT) {
-    glFramebufferRenderbufferEXT(
-        target, GL_DEPTH_ATTACHMENT, renderbuffertarget,
-        GetRenderbufferServiceID(renderbuffer, resources_, false));
-    glFramebufferRenderbufferEXT(
-        target, GL_STENCIL_ATTACHMENT, renderbuffertarget,
-        GetRenderbufferServiceID(renderbuffer, resources_, false));
-  } else {
-    glFramebufferRenderbufferEXT(
-        target, attachment, renderbuffertarget,
-        GetRenderbufferServiceID(renderbuffer, resources_, false));
-  }
+  glFramebufferRenderbufferEXT(
+      target, attachment, renderbuffertarget,
+      GetRenderbufferServiceID(renderbuffer, resources_, false));
   return error::kNoError;
 }
 
@@ -888,7 +870,7 @@ error::Error GLES2DecoderPassthroughImpl::DoGetAttachedShaders(
 error::Error GLES2DecoderPassthroughImpl::DoGetAttribLocation(GLuint program,
                                                               const char* name,
                                                               GLint* result) {
-  NOTIMPLEMENTED();
+  *result = glGetAttribLocation(GetProgramServiceID(program, resources_), name);
   return error::kNoError;
 }
 
@@ -896,8 +878,11 @@ error::Error GLES2DecoderPassthroughImpl::DoGetBooleanv(GLenum pname,
                                                         GLsizei bufsize,
                                                         GLsizei* length,
                                                         GLboolean* params) {
-  glGetBooleanvRobustANGLE(pname, bufsize, length, params);
-  return error::kNoError;
+  return GetNumericHelper(
+      pname, bufsize, length, params,
+      [](GLenum pname, GLsizei bufsize, GLsizei* length, GLboolean* params) {
+        glGetBooleanvRobustANGLE(pname, bufsize, length, params);
+      });
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoGetBufferParameteri64v(
@@ -929,15 +914,19 @@ error::Error GLES2DecoderPassthroughImpl::DoGetFloatv(GLenum pname,
                                                       GLsizei bufsize,
                                                       GLsizei* length,
                                                       GLfloat* params) {
-  glGetFloatvRobustANGLE(pname, bufsize, length, params);
-  return error::kNoError;
+  return GetNumericHelper(
+      pname, bufsize, length, params,
+      [](GLenum pname, GLsizei bufsize, GLsizei* length, GLfloat* params) {
+        glGetFloatvRobustANGLE(pname, bufsize, length, params);
+      });
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoGetFragDataLocation(
     GLuint program,
     const char* name,
     GLint* result) {
-  NOTIMPLEMENTED();
+  *result =
+      glGetFragDataLocation(GetProgramServiceID(program, resources_), name);
   return error::kNoError;
 }
 
@@ -948,8 +937,23 @@ error::Error GLES2DecoderPassthroughImpl::DoGetFramebufferAttachmentParameteriv(
     GLsizei bufsize,
     GLsizei* length,
     GLint* params) {
-  glGetFramebufferAttachmentParameterivRobustANGLE(target, attachment, pname,
-                                                   bufsize, length, params);
+  // Get a scratch buffer to hold the result of the query
+  GLint* scratch_params = GetTypedScratchMemory<GLint>(bufsize);
+  glGetFramebufferAttachmentParameterivRobustANGLE(
+      target, attachment, pname, bufsize, length, scratch_params);
+
+  // Update the results of the query, if needed
+  error::Error error = PatchGetFramebufferAttachmentParameter(
+      target, attachment, pname, *length, scratch_params);
+  if (error != error::kNoError) {
+    *length = 0;
+    return error;
+  }
+
+  // Copy into the destination
+  DCHECK(*length < bufsize);
+  std::copy(scratch_params, scratch_params + *length, params);
+
   return error::kNoError;
 }
 
@@ -957,8 +961,11 @@ error::Error GLES2DecoderPassthroughImpl::DoGetInteger64v(GLenum pname,
                                                           GLsizei bufsize,
                                                           GLsizei* length,
                                                           GLint64* params) {
-  glGetInteger64vRobustANGLE(pname, bufsize, length, params);
-  return error::kNoError;
+  return GetNumericHelper(
+      pname, bufsize, length, params,
+      [](GLenum pname, GLsizei bufsize, GLsizei* length, GLint64* params) {
+        glGetInteger64vRobustANGLE(pname, bufsize, length, params);
+      });
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoGetIntegeri_v(GLenum pname,
@@ -983,8 +990,11 @@ error::Error GLES2DecoderPassthroughImpl::DoGetIntegerv(GLenum pname,
                                                         GLsizei bufsize,
                                                         GLsizei* length,
                                                         GLint* params) {
-  glGetIntegervRobustANGLE(pname, bufsize, length, params);
-  return error::kNoError;
+  return GetNumericHelper(
+      pname, bufsize, length, params,
+      [](GLenum pname, GLsizei bufsize, GLsizei* length, GLint* params) {
+        glGetIntegervRobustANGLE(pname, bufsize, length, params);
+      });
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoGetInternalformativ(GLenum target,
@@ -1094,8 +1104,27 @@ error::Error GLES2DecoderPassthroughImpl::DoGetShaderSource(
 
 error::Error GLES2DecoderPassthroughImpl::DoGetString(GLenum name,
                                                       const char** result) {
-  // TODO(geofflang): Append additional CHROMIUM extension strings?
-  *result = reinterpret_cast<const char*>(glGetString(name));
+  switch (name) {
+    case GL_VERSION:
+      *result = GetServiceVersionString(feature_info_.get());
+      break;
+    case GL_SHADING_LANGUAGE_VERSION:
+      *result = GetServiceShadingLanguageVersionString(feature_info_.get());
+      break;
+    case GL_RENDERER:
+      *result = GetServiceRendererString(feature_info_.get());
+      break;
+    case GL_VENDOR:
+      *result = GetServiceVendorString(feature_info_.get());
+      break;
+    case GL_EXTENSIONS:
+      *result = extension_string_.c_str();
+      break;
+    default:
+      *result = reinterpret_cast<const char*>(glGetString(name));
+      break;
+  }
+
   return error::kNoError;
 }
 
@@ -1150,8 +1179,10 @@ error::Error GLES2DecoderPassthroughImpl::DoGetUniformfv(GLuint program,
                                                          GLsizei bufsize,
                                                          GLsizei* length,
                                                          GLfloat* params) {
+  // GetUniform*RobustANGLE entry points expect bufsize in bytes like the entry
+  // points in GL_EXT_robustness
   glGetUniformfvRobustANGLE(GetProgramServiceID(program, resources_), location,
-                            bufsize, length, params);
+                            bufsize * sizeof(*params), length, params);
   return error::kNoError;
 }
 
@@ -1160,8 +1191,10 @@ error::Error GLES2DecoderPassthroughImpl::DoGetUniformiv(GLuint program,
                                                          GLsizei bufsize,
                                                          GLsizei* length,
                                                          GLint* params) {
+  // GetUniform*RobustANGLE entry points expect bufsize in bytes like the entry
+  // points in GL_EXT_robustness
   glGetUniformivRobustANGLE(GetProgramServiceID(program, resources_), location,
-                            bufsize, length, params);
+                            bufsize * sizeof(*params), length, params);
   return error::kNoError;
 }
 
@@ -1170,8 +1203,10 @@ error::Error GLES2DecoderPassthroughImpl::DoGetUniformuiv(GLuint program,
                                                           GLsizei bufsize,
                                                           GLsizei* length,
                                                           GLuint* params) {
+  // GetUniform*RobustANGLE entry points expect bufsize in bytes like the entry
+  // points in GL_EXT_robustness
   glGetUniformuivRobustANGLE(GetProgramServiceID(program, resources_), location,
-                             bufsize, length, params);
+                             bufsize * sizeof(*params), length, params);
   return error::kNoError;
 }
 
@@ -1344,7 +1379,7 @@ error::Error GLES2DecoderPassthroughImpl::DoIsTransformFeedback(
     GLuint transformfeedback,
     uint32_t* result) {
   *result = glIsTransformFeedback(GetTransformFeedbackServiceID(
-      transformfeedback, &transform_feedback_id_map_, false));
+      transformfeedback, &transform_feedback_id_map_));
   return error::kNoError;
 }
 
@@ -2209,14 +2244,13 @@ error::Error GLES2DecoderPassthroughImpl::DoDeleteVertexArraysOES(
 
 error::Error GLES2DecoderPassthroughImpl::DoIsVertexArrayOES(GLuint array,
                                                              uint32_t* result) {
-  *result = glIsVertexArrayOES(
-      GetVertexArrayServiceID(array, &vertex_array_id_map_, false));
+  *result =
+      glIsVertexArrayOES(GetVertexArrayServiceID(array, &vertex_array_id_map_));
   return error::kNoError;
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoBindVertexArrayOES(GLuint array) {
-  glBindVertexArrayOES(GetVertexArrayServiceID(array, &vertex_array_id_map_,
-                                               bind_generates_resource_));
+  glBindVertexArrayOES(GetVertexArrayServiceID(array, &vertex_array_id_map_));
   return error::kNoError;
 }
 

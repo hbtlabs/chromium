@@ -372,15 +372,15 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
       NOTIMPLEMENTED();
     } else if (sender == lock_button_) {
       mash::session::mojom::SessionPtr session;
-      connector_->ConnectToInterface("service:mash_session", &session);
+      connector_->ConnectToInterface("mash_session", &session);
       session->LockScreen();
     } else if (sender == logout_button_) {
       mash::session::mojom::SessionPtr session;
-      connector_->ConnectToInterface("service:mash_session", &session);
+      connector_->ConnectToInterface("mash_session", &session);
       session->Logout();
     } else if (sender == switch_user_button_) {
       mash::session::mojom::SessionPtr session;
-      connector_->ConnectToInterface("service:mash_session", &session);
+      connector_->ConnectToInterface("mash_session", &session);
       session->SwitchUser();
     } else if (sender == widgets_button_) {
       NOTIMPLEMENTED();
@@ -473,9 +473,9 @@ void WindowTypeLauncher::RemoveWindow(views::Widget* window) {
     base::MessageLoop::current()->QuitWhenIdle();
 }
 
-void WindowTypeLauncher::OnStart(service_manager::ServiceContext* context) {
+void WindowTypeLauncher::OnStart() {
   aura_init_ = base::MakeUnique<views::AuraInit>(
-      context->connector(), context->identity(), "views_mus_resources.pak",
+      context()->connector(), context()->identity(), "views_mus_resources.pak",
       std::string(), nullptr, views::AuraInit::Mode::AURA_MUS);
 }
 
@@ -495,7 +495,7 @@ void WindowTypeLauncher::Launch(uint32_t what, mash::mojom::LaunchMode how) {
   }
   views::Widget* window = new views::Widget;
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
-  params.delegate = new WindowTypeLauncherView(this, context_->connector());
+  params.delegate = new WindowTypeLauncherView(this, context()->connector());
   window->Init(params);
   window->Show();
   windows_.push_back(window);

@@ -348,14 +348,24 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
 
   FloatingObject* insertFloatingObject(LayoutBox&);
 
-  // Position all floats that have not yet been positioned.
+  // Position and lay out all floats that have not yet been positioned.
   //
-  // |logicalTop| is the minimum logical top for the floats. The final logical
-  // top of the floats will also be affected by clearance and space available
-  // after having positioned earlier floats.
+  // This will mark them as "placed", which means that they have found their
+  // final location in this layout pass.
   //
-  // Returns true if and only if it has positioned any floats.
-  bool positionNewFloats(LayoutUnit logicalTop, LineWidth* = nullptr);
+  // |logicalTopMarginEdge| is the minimum logical top for the floats. The
+  // final logical top of the floats will also be affected by clearance and
+  // space available after having positioned earlier floats.
+  //
+  // Returns true if and only if it has placed any floats.
+  bool placeNewFloats(LayoutUnit logicalTopMarginEdge, LineWidth* = nullptr);
+
+  // Position and lay out the float, if it needs layout.
+  // |logicalTopMarginEdge| is the minimum logical top offset for the float.
+  // The value returned is the minimum logical top offset for subsequent
+  // floats.
+  LayoutUnit positionAndLayoutFloat(FloatingObject&,
+                                    LayoutUnit logicalTopMarginEdge);
 
   LayoutUnit nextFloatLogicalBottomBelow(LayoutUnit) const;
   LayoutUnit nextFloatLogicalBottomBelowForBlock(LayoutUnit) const;
@@ -371,8 +381,7 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
 
   PositionWithAffinity positionForPoint(const LayoutPoint&) override;
 
-  LayoutUnit lowestFloatLogicalBottom(
-      FloatingObject::Type = FloatingObject::FloatLeftRight) const;
+  LayoutUnit lowestFloatLogicalBottom(EClear = ClearBoth) const;
 
   bool hasOverhangingFloats() const {
     return parent() && containsFloats() &&
@@ -810,9 +819,18 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
                                            LayoutBox& child,
                                            BlockChildrenLayoutInfo&,
                                            bool atBeforeSideOfBlock);
+
+  // If a float cannot fit in the current fragmentainer, return the logical top
+  // margin edge that the float needs to have in order to be pushed to the top
+  // of the next fragmentainer. Otherwise, just return |logicalTopMarginEdge|.
+  LayoutUnit adjustFloatLogicalTopForPagination(
+      LayoutBox&,
+      LayoutUnit logicalTopMarginEdge);
+
   // Computes a deltaOffset value that put a line at the top of the next page if
   // it doesn't fit on the current page.
   void adjustLinePositionForPagination(RootInlineBox&, LayoutUnit& deltaOffset);
+
   // If the child is unsplittable and can't fit on the current page, return the
   // top of the next page/column.
   LayoutUnit adjustForUnsplittableChild(LayoutBox&,

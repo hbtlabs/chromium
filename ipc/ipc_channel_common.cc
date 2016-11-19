@@ -57,17 +57,6 @@ std::unique_ptr<Channel> Channel::CreateServer(
 #endif
 }
 
-// static
-void Channel::GenerateMojoChannelHandlePair(
-    const std::string& name_postfix,
-    IPC::ChannelHandle* handle0,
-    IPC::ChannelHandle* handle1) {
-  DCHECK_NE(handle0, handle1);
-  mojo::MessagePipe message_pipe;
-  *handle0 = ChannelHandle(message_pipe.handle0.release());
-  *handle1 = ChannelHandle(message_pipe.handle1.release());
-}
-
 Channel::~Channel() {
 }
 
@@ -80,10 +69,6 @@ void Channel::Pause() { NOTREACHED(); }
 void Channel::Unpause(bool flush) { NOTREACHED(); }
 
 void Channel::Flush() { NOTREACHED(); }
-
-void Channel::OnSetAttachmentBrokerEndpoint() {
-  CHECK(!did_start_connect_);
-}
 
 void Channel::WillConnect() {
   did_start_connect_ = true;

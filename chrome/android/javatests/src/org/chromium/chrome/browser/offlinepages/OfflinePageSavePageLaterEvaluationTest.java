@@ -35,6 +35,7 @@ import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
@@ -77,6 +78,7 @@ public class OfflinePageSavePageLaterEvaluationTest
     private static final String NEW_LINE = System.getProperty("line.separator");
     private static final String DELIMITER = ";";
     private static final String CONFIG_FILE_PATH = "paquete/test_config";
+    private static final String SAVED_PAGES_EXTERNAL_PATH = "paquete/archives";
     private static final String INPUT_FILE_PATH = "paquete/offline_eval_urls.txt";
     private static final String LOG_OUTPUT_FILE_PATH = "paquete/offline_eval_logs.txt";
     private static final String RESULT_OUTPUT_FILE_PATH = "paquete/offline_eval_results.txt";
@@ -87,15 +89,13 @@ public class OfflinePageSavePageLaterEvaluationTest
     private OfflinePageEvaluationBridge mBridge;
     private OfflinePageEvaluationObserver mObserver;
 
-    private Semaphore mDoneSemaphore;
+    private CountDownLatch mCompletionLatch;
     private List<String> mUrls;
     private int mCount;
     private boolean mIsUserRequested;
     private boolean mUseTestScheduler;
 
     private LongSparseArray<RequestMetadata> mRequestMetadata;
-    // TODO(romax): Use actual policy to determine the timeout.
-    private Long mTimeoutPerUrlInSeconds = 0L;
     private OutputStreamWriter mLogOutput;
 
     public OfflinePageSavePageLaterEvaluationTest() {
@@ -165,6 +165,33 @@ public class OfflinePageSavePageLaterEvaluationTest
     }
 
     /**
+     * Get the directory on external storage for storing saved pages.
+     */
+    private File getExternalArchiveDir() {
+        File externalArchiveDir =
+                new File(Environment.getExternalStorageDirectory(), SAVED_PAGES_EXTERNAL_PATH);
+        try {
+            // Clear the old archive folder.
+            if (externalArchiveDir.exists()) {
+                String[] files = externalArchiveDir.list();
+                if (files != null) {
+                    for (String file : files) {
+                        File currentFile = new File(externalArchiveDir.getPath(), file);
+                        if (!currentFile.delete()) {
+                            logError(file + " cannot be deleted when clearing previous archives.");
+                        }
+                    }
+                }
+            } else if (!externalArchiveDir.mkdir()) {
+                logError("Cannot create directory on external storage to store saved pages.");
+            }
+        } catch (SecurityException e) {
+            logError("Failed to delete or create external archive folder!");
+        }
+        return externalArchiveDir;
+    }
+
+    /**
      * Logs error in both console and output file.
      */
     private void logError(String error) {
@@ -172,6 +199,7 @@ public class OfflinePageSavePageLaterEvaluationTest
         if (mLogOutput != null) {
             try {
                 mLogOutput.write(error + NEW_LINE);
+                mLogOutput.flush();
             } catch (Exception e) {
                 Log.e(TAG, e.getMessage(), e);
             }
@@ -250,6 +278,8 @@ public class OfflinePageSavePageLaterEvaluationTest
         checkTrue(mUrls != null, "URLs weren't loaded.");
         checkTrue(mUrls.size() > 0, "No valid URLs in the input file.");
 
+        mCompletionLatch = new CountDownLatch(1);
+
         initializeBridgeForProfile(useCustomScheduler);
         mObserver = new OfflinePageEvaluationObserver() {
             public void savePageRequestAdded(SavePageRequest request) {
@@ -270,7 +300,7 @@ public class OfflinePageSavePageLaterEvaluationTest
                 }
                 metadata.mStatus = status;
                 if (mCount == mUrls.size()) {
-                    mDoneSemaphore.release();
+                    mCompletionLatch.countDown();
                     return;
                 }
             }
@@ -299,16 +329,12 @@ public class OfflinePageSavePageLaterEvaluationTest
             logError("Test initialization error, aborting. No results would be written.");
             return;
         }
-        mDoneSemaphore = new Semaphore(0);
         for (String url : mUrls) {
             savePageLater(url, NAMESPACE);
         }
 
-        if (!mDoneSemaphore.tryAcquire(urls.size() * mTimeoutPerUrlInSeconds, TimeUnit.SECONDS)) {
-            writeResults(false);
-        } else {
-            writeResults(true);
-        }
+        mCompletionLatch.await();
+        writeResults();
     }
 
     private void getUrlListFromInputFile(String inputFilePath)
@@ -396,14 +422,15 @@ public class OfflinePageSavePageLaterEvaluationTest
      * At the end of the file there will be a summary:
      * Total requested URLs: XX, Completed: XX, Failed: XX, Failure Rate: XX.XX%
      */
-    private void writeResults(boolean completed) throws IOException, InterruptedException {
+    private void writeResults() throws IOException, InterruptedException {
         loadSavedPages();
         OutputStreamWriter output = getOutputStream(RESULT_OUTPUT_FILE_PATH);
         try {
             int failedCount = 0;
-            if (!completed) {
+            if (mCount < mUrls.size()) {
                 logError("Test terminated before all requests completed.");
             }
+            File externalArchiveDir = getExternalArchiveDir();
             for (int i = 0; i < mRequestMetadata.size(); i++) {
                 RequestMetadata metadata = mRequestMetadata.valueAt(i);
                 long requestId = metadata.mId;
@@ -420,6 +447,12 @@ public class OfflinePageSavePageLaterEvaluationTest
                 output.write(metadata.mUrl + DELIMITER + statusToString(status) + DELIMITER
                         + page.getFileSize() / 1000 + " KB" + DELIMITER
                         + metadata.mTimeDelta.getTimeDelta() + NEW_LINE);
+                // Move the page to external storage if external archive exists.
+                File originalPage = new File(page.getFilePath());
+                File externalPage = new File(externalArchiveDir, originalPage.getName());
+                if (!OfflinePageUtils.copyToShareableLocation(originalPage, externalPage)) {
+                    logError("Saved page for url " + page.getUrl() + " cannot be moved.");
+                }
             }
             output.write(String.format(
                     "Total requested URLs: %d, Completed: %d, Failed: %d, Failure Rate: %.2f%%"
@@ -448,8 +481,6 @@ public class OfflinePageSavePageLaterEvaluationTest
             inputStream = new FileInputStream(configFile);
             properties.load(inputStream);
             mIsUserRequested = Boolean.parseBoolean(properties.getProperty("IsUserRequested"));
-            mTimeoutPerUrlInSeconds =
-                    Long.parseLong(properties.getProperty("TimeoutPerUrlInSeconds"));
             mUseTestScheduler = Boolean.parseBoolean(properties.getProperty("UseTestScheduler"));
         } catch (FileNotFoundException e) {
             Log.e(TAG, e.getMessage(), e);
@@ -467,7 +498,7 @@ public class OfflinePageSavePageLaterEvaluationTest
      * It is encouraged to use run_offline_page_evaluation_test.py to run this test.
      */
     @Manual
-    public void testFailureRateWithTimeout() throws IOException, InterruptedException {
+    public void testFailureRate() throws IOException, InterruptedException {
         parseConfigFile();
         setUpIOAndBridge(mUseTestScheduler);
         processUrls(mUrls);

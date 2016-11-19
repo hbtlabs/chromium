@@ -103,6 +103,16 @@ void SystemTrayController::ShowProxySettings() {
     system_tray_client_->ShowProxySettings();
 }
 
+void SystemTrayController::SignOut() {
+  if (ConnectToSystemTrayClient())
+    system_tray_client_->SignOut();
+}
+
+void SystemTrayController::RequestRestartForUpdate() {
+  if (ConnectToSystemTrayClient())
+    system_tray_client_->RequestRestartForUpdate();
+}
+
 void SystemTrayController::BindRequest(mojom::SystemTrayRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }
@@ -118,8 +128,7 @@ bool SystemTrayController::ConnectToSystemTrayClient() {
     return true;
 
   // Connect (or reconnect) to the interface.
-  connector_->ConnectToInterface("service:content_browser",
-                                 &system_tray_client_);
+  connector_->ConnectToInterface("content_browser", &system_tray_client_);
 
   // Handle chrome crashes by forcing a reconnect on the next request.
   system_tray_client_.set_connection_error_handler(base::Bind(

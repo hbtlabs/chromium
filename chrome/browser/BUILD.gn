@@ -9,6 +9,8 @@ import("//build/config/ui.gni")
 import("//build/split_static_library.gni")
 import("//chrome/common/features.gni")
 import("//components/os_crypt/features.gni")
+import("//components/spellcheck/spellcheck_build_features.gni")
+import("//extensions/features/features.gni")
 import("//media/media_options.gni")
 import("//net/features.gni")
 import("//ppapi/features/features.gni")
@@ -422,6 +424,9 @@ split_static_library("browser") {
     "gpu/three_d_api_observer.h",
     "hang_monitor/hang_crash_dump_win.cc",
     "hang_monitor/hang_crash_dump_win.h",
+    "history/browsing_history_service.cc",
+    "history/browsing_history_service.h",
+    "history/browsing_history_service_handler.h",
     "history/chrome_history_backend_client.cc",
     "history/chrome_history_backend_client.h",
     "history/chrome_history_client.cc",
@@ -606,8 +611,6 @@ split_static_library("browser") {
     "metrics/time_ticks_experiment_win.h",
     "metrics/variations/chrome_variations_service_client.cc",
     "metrics/variations/chrome_variations_service_client.h",
-    "metrics/variations/variations_registry_syncer_win.cc",
-    "metrics/variations/variations_registry_syncer_win.h",
     "mod_pagespeed/mod_pagespeed_metrics.cc",
     "mod_pagespeed/mod_pagespeed_metrics.h",
     "native_window_notification_source.h",
@@ -1129,14 +1132,14 @@ split_static_library("browser") {
     "ssl/cert_report_helper.h",
     "ssl/chrome_expect_ct_reporter.cc",
     "ssl/chrome_expect_ct_reporter.h",
-    "ssl/chrome_security_state_model_client.cc",
-    "ssl/chrome_security_state_model_client.h",
     "ssl/chrome_ssl_host_state_delegate.cc",
     "ssl/chrome_ssl_host_state_delegate.h",
     "ssl/chrome_ssl_host_state_delegate_factory.cc",
     "ssl/chrome_ssl_host_state_delegate_factory.h",
     "ssl/common_name_mismatch_handler.cc",
     "ssl/common_name_mismatch_handler.h",
+    "ssl/security_state_tab_helper.cc",
+    "ssl/security_state_tab_helper.h",
     "ssl/ssl_blocking_page.cc",
     "ssl/ssl_blocking_page.h",
     "ssl/ssl_cert_reporter.h",
@@ -1314,7 +1317,7 @@ split_static_library("browser") {
     "//components/data_reduction_proxy/core/browser",
     "//components/data_usage/core",
     "//components/data_use_measurement/content",
-    "//components/data_use_measurement/core",
+    "//components/data_use_measurement/core:ascriber",
     "//components/device_event_log",
     "//components/dom_distiller/content/browser",
     "//components/domain_reliability",
@@ -1361,6 +1364,7 @@ split_static_library("browser") {
     "//components/password_manager/core/browser",
     "//components/password_manager/core/common",
     "//components/password_manager/sync/browser",
+    "//components/payments:payment_request",
     "//components/policy:generated",
     "//components/policy/core/browser",
     "//components/policy/proto",
@@ -1379,9 +1383,11 @@ split_static_library("browser") {
     "//components/search_engines",
     "//components/search_provider_logos",
     "//components/security_interstitials/core",
-    "//components/security_state",
+    "//components/security_state/content",
+    "//components/security_state/core",
     "//components/sessions",
     "//components/signin/core/browser",
+    "//components/spellcheck:build_features",
     "//components/ssl_config",
     "//components/ssl_errors",
     "//components/startup_metric_utils/browser:host",
@@ -1424,6 +1430,7 @@ split_static_library("browser") {
     "//content/public/common",
     "//content/public/common:feature_h264_with_openh264_ffmpeg",
     "//content/public/common:features",
+    "//content/public/common:service_names",
     "//courgette:courgette_lib",
     "//crypto",
     "//crypto:platform",
@@ -1432,6 +1439,7 @@ split_static_library("browser") {
     "//device/power_save_blocker",
     "//device/usb/mojo",
     "//device/usb/public/interfaces",
+    "//extensions/features",
     "//google_apis",
     "//gpu/config",
     "//media",
@@ -1443,6 +1451,7 @@ split_static_library("browser") {
     "//net:extras",
     "//net:net_with_v8",
     "//printing/features",
+    "//services/image_decoder/public/cpp",
     "//services/service_manager/public/cpp",
     "//skia",
     "//sql",
@@ -1732,9 +1741,9 @@ split_static_library("browser") {
       "//chrome/common/extensions/api",
       "//chrome/common/extensions/api:api_registration",
       "//chrome/common/extensions/api:extensions_features",
+      "//components/cryptauth",
       "//components/drive",
       "//components/proximity_auth/ble",
-      "//components/proximity_auth/cryptauth",
       "//extensions/components/javascript_dialog_extensions_client",
       "//media/cast:net",
     ]
@@ -2214,6 +2223,7 @@ split_static_library("browser") {
       "//services/ui/public/cpp/input_devices",
       "//ui/aura",
       "//ui/compositor",
+      "//ui/snapshot",
       "//ui/views/mus",
     ]
   }
@@ -2928,6 +2938,9 @@ split_static_library("browser") {
       "android/browsing_data/url_filter_bridge.h",
       "android/chrome_application.cc",
       "android/chrome_application.h",
+      "android/chrome_backup_agent.cc",
+      "android/chrome_backup_agent.h",
+      "android/chrome_backup_watcher.cc",
       "android/chrome_feature_list.cc",
       "android/chrome_feature_list.h",
       "android/chrome_jni_registrar.cc",
@@ -3018,12 +3031,12 @@ split_static_library("browser") {
       "android/document/document_web_contents_delegate.cc",
       "android/dom_distiller/distiller_ui_handle_android.cc",
       "android/dom_distiller/distiller_ui_handle_android.h",
-      "android/download/android_download_manager_overwrite_infobar_delegate.cc",
-      "android/download/android_download_manager_overwrite_infobar_delegate.h",
+      "android/download/android_download_manager_duplicate_infobar_delegate.cc",
+      "android/download/android_download_manager_duplicate_infobar_delegate.h",
       "android/download/chrome_download_delegate.cc",
       "android/download/chrome_download_delegate.h",
-      "android/download/chrome_download_manager_overwrite_infobar_delegate.cc",
-      "android/download/chrome_download_manager_overwrite_infobar_delegate.h",
+      "android/download/chrome_duplicate_download_infobar_delegate.cc",
+      "android/download/chrome_duplicate_download_infobar_delegate.h",
       "android/download/dangerous_download_infobar_delegate.cc",
       "android/download/dangerous_download_infobar_delegate.h",
       "android/download/download_controller.cc",
@@ -3032,8 +3045,8 @@ split_static_library("browser") {
       "android/download/download_controller_base.h",
       "android/download/download_manager_service.cc",
       "android/download/download_manager_service.h",
-      "android/download/download_overwrite_infobar_delegate.cc",
-      "android/download/download_overwrite_infobar_delegate.h",
+      "android/download/duplicate_download_infobar_delegate.cc",
+      "android/download/duplicate_download_infobar_delegate.h",
       "android/download/mock_download_controller.cc",
       "android/download/mock_download_controller.h",
       "android/download/ui/thumbnail_provider.cc",
@@ -3516,6 +3529,7 @@ split_static_library("browser") {
       "renderer_context_menu/spelling_options_submenu_observer.cc",
       "renderer_context_menu/spelling_options_submenu_observer.h",
     ]
+    deps += [ "//chrome/browser/payments:payments" ]
   }
 
   if (is_desktop_linux) {
@@ -3811,6 +3825,8 @@ if (android_java_ui) {
       "../android/java/src/org/chromium/chrome/browser/BackgroundSyncLauncher.java",
       "../android/java/src/org/chromium/chrome/browser/BluetoothChooserDialog.java",
       "../android/java/src/org/chromium/chrome/browser/ChromeApplication.java",
+      "../android/java/src/org/chromium/chrome/browser/ChromeBackupAgent.java",
+      "../android/java/src/org/chromium/chrome/browser/ChromeBackupWatcher.java",
       "../android/java/src/org/chromium/chrome/browser/ChromeFeatureList.java",
       "../android/java/src/org/chromium/chrome/browser/ChromeHttpAuthHandler.java",
       "../android/java/src/org/chromium/chrome/browser/DevToolsServer.java",
@@ -3884,7 +3900,7 @@ if (android_java_ui) {
       "../android/java/src/org/chromium/chrome/browser/infobar/AutofillSaveCardInfoBar.java",
       "../android/java/src/org/chromium/chrome/browser/infobar/ConfirmInfoBar.java",
       "../android/java/src/org/chromium/chrome/browser/infobar/DataReductionPromoInfoBarDelegate.java",
-      "../android/java/src/org/chromium/chrome/browser/infobar/DownloadOverwriteInfoBar.java",
+      "../android/java/src/org/chromium/chrome/browser/infobar/DuplicateDownloadInfoBar.java",
       "../android/java/src/org/chromium/chrome/browser/infobar/GeneratedPasswordSavedInfoBarDelegate.java",
       "../android/java/src/org/chromium/chrome/browser/infobar/GroupedPermissionInfoBar.java",
       "../android/java/src/org/chromium/chrome/browser/infobar/InfoBar.java",
@@ -4066,6 +4082,7 @@ grit("resources") {
 
     # Depend only on the generated mojo bindings since we read the .mojom.js
     # file, rather than the whole mojo target which will link the C++ bindings.
+    "//chrome/app:chrome_content_browser_manifest_overlay",
     "//chrome/browser/ui/webui/engagement:mojo_bindings__generator",
     "//chrome/browser/ui/webui/omnibox:mojo_bindings__generator",
     "//chrome/browser/ui/webui/plugins:mojo_bindings__generator",
@@ -4134,6 +4151,8 @@ static_library("test_support") {
     "browsing_data/mock_browsing_data_service_worker_helper.h",
     "download/download_test_file_activity_observer.cc",
     "download/download_test_file_activity_observer.h",
+    "history/history_test_utils.cc",
+    "history/history_test_utils.h",
     "media/webrtc/fake_desktop_media_list.cc",
     "media/webrtc/fake_desktop_media_list.h",
     "net/dns_probe_test_util.cc",

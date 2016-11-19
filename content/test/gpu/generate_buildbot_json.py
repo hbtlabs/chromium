@@ -18,14 +18,14 @@ THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.dirname(os.path.dirname(os.path.dirname(THIS_DIR)))
 
 WATERFALL = {
-  'builders': [
-    'GPU Win Builder',
-    'GPU Win Builder (dbg)',
-    'GPU Mac Builder',
-    'GPU Mac Builder (dbg)',
-    'GPU Linux Builder',
-    'GPU Linux Builder (dbg)',
-   ],
+  'builders': {
+    'GPU Win Builder' : {},
+    'GPU Win Builder (dbg)' : {},
+    'GPU Mac Builder' : {},
+    'GPU Mac Builder (dbg)' : {},
+    'GPU Linux Builder' : {},
+    'GPU Linux Builder (dbg)' : {},
+   },
 
   'testers': {
     'Win7 Release (NVIDIA)': {
@@ -122,17 +122,19 @@ WATERFALL = {
 }
 
 FYI_WATERFALL = {
-  'builders': [
-    'GPU Win Builder',
-    'GPU Win Builder (dbg)',
-    'GPU Win x64 Builder',
-    'GPU Win x64 Builder (dbg)',
-    'GPU Mac Builder',
-    'GPU Mac Builder (dbg)',
-    'GPU Linux Builder',
-    'GPU Linux Builder (dbg)',
-    'Linux ChromiumOS Builder',
-   ],
+  'builders': {
+    'GPU Win Builder' : {},
+    'GPU Win Builder (dbg)' : {},
+    'GPU Win x64 Builder' : {},
+    'GPU Win x64 Builder (dbg)' : {},
+    'GPU Mac Builder' : {},
+    'GPU Mac Builder (dbg)' : {},
+    'GPU Linux Builder' : {},
+    'GPU Linux Builder (dbg)' : {},
+    'Linux ChromiumOS Builder' : {
+      'additional_compile_targets' : [ "All" ]
+    },
+  },
 
   'testers': {
     'Win7 Release (NVIDIA)': {
@@ -179,19 +181,6 @@ FYI_WATERFALL = {
       'swarming': True,
       'os_type': 'win',
     },
-    'Win7 Release (ATI)': {
-      'swarming_dimensions': [
-        {
-          # TODO(kbr): add device PCI ID 6613 once deployed
-          # http://crbug.com/639353
-          'gpu': '1002',
-          'os': 'Windows-2008ServerR2-SP1'
-        },
-      ],
-      'build_config': 'Release',
-      'swarming': True,
-      'os_type': 'win',
-    },
     'Win7 Release (AMD)': {
       'swarming_dimensions': [
         {
@@ -200,19 +189,6 @@ FYI_WATERFALL = {
         },
       ],
       'build_config': 'Release',
-      'swarming': True,
-      'os_type': 'win',
-    },
-    'Win7 Debug (ATI)': {
-      'swarming_dimensions': [
-        {
-          # TODO(kbr): add device PCI ID 6613 once deployed
-          # http://crbug.com/639353
-          'gpu': '1002',
-          'os': 'Windows-2008ServerR2-SP1'
-        },
-      ],
-      'build_config': 'Debug',
       'swarming': True,
       'os_type': 'win',
     },
@@ -349,19 +325,6 @@ FYI_WATERFALL = {
       'swarming': True,
       'os_type': 'mac',
     },
-    'Mac 10.10 Release (ATI)': {
-      'swarming_dimensions': [
-        {
-          'gpu': '1002:679e',
-          'os': 'Mac-10.10'
-        },
-      ],
-      'build_config': 'Release',
-      # This bot is a one-off and doesn't have similar slaves in the
-      # swarming pool.
-      'swarming': False,
-      'os_type': 'mac',
-    },
     'Mac 10.10 Release (AMD)': {
       'swarming_dimensions': [
         {
@@ -370,19 +333,6 @@ FYI_WATERFALL = {
         },
       ],
       'build_config': 'Release',
-      # This bot is a one-off and doesn't have similar slaves in the
-      # swarming pool.
-      'swarming': False,
-      'os_type': 'mac',
-    },
-    'Mac 10.10 Debug (ATI)': {
-      'swarming_dimensions': [
-        {
-          'gpu': '1002:679e',
-          'os': 'Mac-10.10'
-        },
-      ],
-      'build_config': 'Debug',
       # This bot is a one-off and doesn't have similar slaves in the
       # swarming pool.
       'swarming': False,
@@ -494,19 +444,6 @@ FYI_WATERFALL = {
       'swarming_dimensions': [
         {
           'gpu': '8086:041a',
-          'os': 'Linux'
-        },
-      ],
-      'build_config': 'Release',
-      # This bot is a one-off and doesn't have similar slaves in the
-      # swarming pool.
-      'swarming': False,
-      'os_type': 'linux',
-    },
-    'Linux Release (ATI)': {
-      'swarming_dimensions': [
-        {
-          'gpu': '1002:6779',
           'os': 'Linux'
         },
       ],
@@ -689,19 +626,6 @@ FYI_WATERFALL = {
       'swarming_dimensions': [
         {
           'gpu': '10de:104a',
-          'os': 'Windows-2008ServerR2-SP1'
-        },
-      ],
-      'build_config': 'Release',
-      'swarming': True,
-      'os_type': 'win',
-    },
-    'Optional Win7 Release (ATI)': {
-      'swarming_dimensions': [
-        {
-          # TODO(kbr): add device PCI ID 6613 once deployed
-          # http://crbug.com/639353
-          'gpu': '1002',
           'os': 'Windows-2008ServerR2-SP1'
         },
       ],
@@ -1135,12 +1059,16 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
       {
         'swarming_dimension_sets': [
           # crbug.com/555545 and crbug.com/649824:
-          # Disable webgl_conformance_gl_tests on older Win/AMD cards.
-          # (They seem to be running fine on newer cards.)
+          # Disable webgl_conformance_gl_tests on some Win/AMD cards.
+          # Always fails on older cards, flaky on newer cards.
           # Note that these must match the GPUs exactly; wildcard
           # matches (i.e., only device ID) aren't supported!
           {
             'gpu': '1002:6779',
+            'os': 'Windows-2008ServerR2-SP1'
+          },
+          {
+            'gpu': '1002:6613',
             'os': 'Windows-2008ServerR2-SP1'
           },
           # BUG 590951: Disable webgl_conformance_gl_tests on Win/Intel
@@ -1488,8 +1416,8 @@ def generate_telemetry_tests(tester_name, tester_config,
 
 def generate_all_tests(waterfall, is_fyi):
   tests = {}
-  for builder in waterfall['builders']:
-    tests[builder] = {}
+  for builder, config in waterfall['builders'].iteritems():
+    tests[builder] = config
   for name, config in waterfall['testers'].iteritems():
     gtests = generate_gtests(name, config, COMMON_GTESTS, is_fyi)
     isolated_scripts = \

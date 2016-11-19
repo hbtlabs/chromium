@@ -112,12 +112,6 @@ bool LayoutBoxModelObject::usesCompositedScrolling() const {
 }
 
 bool LayoutBoxModelObject::hasLocalEquivalentBackground() const {
-  int minBorderWidth = std::min(
-      style()->borderTopWidth(),
-      std::min(
-          style()->borderLeftWidth(),
-          std::min(style()->borderRightWidth(), style()->borderBottomWidth())));
-  bool outlineOverlapsPaddingBox = style()->outlineOffset() < -minBorderWidth;
   bool hasCustomScrollbars = false;
   // TODO(flackr): Detect opaque custom scrollbars which would cover up a
   // border-box background.
@@ -145,15 +139,6 @@ bool LayoutBoxModelObject::hasLocalEquivalentBackground() const {
   for (; layer; layer = layer->next()) {
     if (layer->attachment() == LocalBackgroundAttachment)
       continue;
-
-    // If the outline draws inside the border, it intends to draw on top of the
-    // scroller's background, however because it is painted into a layer behind
-    // the scrolling contents layer we avoid auto promoting in this case to
-    // avoid obscuring the outline.
-    // TODO(flackr): Outlines should be drawn on top of the scrolling contents
-    // layer so that they cannot be covered up by composited scrolling contents.
-    if (outlineOverlapsPaddingBox)
-      return false;
 
     // Solid color layers with an effective background clip of the padding box
     // can be treated as local.
@@ -297,6 +282,7 @@ void LayoutBoxModelObject::styleDidChange(StyleDifference diff,
     setHasTransformRelatedProperty(false);
     setHasReflection(false);
     layer()->updateFilters(oldStyle, styleRef());
+    layer()->updateClipPath(oldStyle, styleRef());
     // Calls destroyLayer() which clears m_layer.
     layer()->removeOnlyThisLayerAfterStyleChange();
     if (wasFloatingBeforeStyleChanged && isFloating())
@@ -429,7 +415,7 @@ void LayoutBoxModelObject::invalidateStickyConstraints() {
 
 void LayoutBoxModelObject::createLayer() {
   ASSERT(!m_layer);
-  m_layer = wrapUnique(new PaintLayer(this));
+  m_layer = makeUnique<PaintLayer>(this);
   setHasLayer(true);
   m_layer->insertOnlyThisLayerAfterStyleChange();
 }
@@ -471,18 +457,6 @@ void LayoutBoxModelObject::addLayerHitTestRects(
   }
 }
 
-static bool hasPercentageTransform(const ComputedStyle& style) {
-  if (TransformOperation* translate = style.translate()) {
-    if (translate->dependsOnBoxSize())
-      return true;
-  }
-  return style.transform().dependsOnBoxSize() ||
-         (style.transformOriginX() != Length(50, Percent) &&
-          style.transformOriginX().isPercentOrCalc()) ||
-         (style.transformOriginY() != Length(50, Percent) &&
-          style.transformOriginY().isPercentOrCalc());
-}
-
 DISABLE_CFI_PERF
 void LayoutBoxModelObject::invalidateTreeIfNeeded(
     const PaintInvalidationState& paintInvalidationState) {
@@ -503,19 +477,8 @@ void LayoutBoxModelObject::invalidateTreeIfNeeded(
   LayoutPoint previousLocation = paintInvalidator.previousLocationInBacking();
   PaintInvalidationReason reason =
       invalidatePaintIfNeeded(newPaintInvalidationState);
-  clearPaintInvalidationFlags();
 
   if (previousLocation != paintInvalidator.previousLocationInBacking()) {
-    newPaintInvalidationState
-        .setForceSubtreeInvalidationCheckingWithinContainer();
-  }
-
-  // TODO(wangxianzhu): Combine this function into LayoutObject::
-  // invalidateTreeIfNeeded() when removing the following workarounds.
-
-  // TODO(wangxianzhu): This is a workaround for crbug.com/533277. Will remove
-  // when we enable paint offset caching.
-  if (reason != PaintInvalidationNone && hasPercentageTransform(styleRef())) {
     newPaintInvalidationState
         .setForceSubtreeInvalidationCheckingWithinContainer();
   }
@@ -535,6 +498,8 @@ void LayoutBoxModelObject::invalidateTreeIfNeeded(
 
   newPaintInvalidationState.updateForChildren(reason);
   invalidatePaintOfSubtreesIfNeeded(newPaintInvalidationState);
+
+  clearPaintInvalidationFlags();
 }
 
 void LayoutBoxModelObject::addOutlineRectsForNormalChildren(
@@ -805,9 +770,15 @@ void LayoutBoxModelObject::updateStickyPositionConstraints() const {
   // allowed to move.
   LayoutUnit maxWidth = containingBlock->availableLogicalWidth();
 
-  // Map the containing block to the scroll ancestor without transforms.
+  // Map the containing block to the inner corner of the scroll ancestor without
+  // transforms.
   FloatRect scrollContainerRelativePaddingBoxRect(
       containingBlock->layoutOverflowRect());
+  FloatSize scrollContainerBorderOffset;
+  if (scrollAncestor) {
+    scrollContainerBorderOffset =
+        FloatSize(scrollAncestor->borderLeft(), scrollAncestor->borderTop());
+  }
   if (containingBlock != scrollAncestor) {
     FloatQuad localQuad(FloatRect(containingBlock->paddingBoxRect()));
     TransformState transformState(TransformState::ApplyTransformDirection,
@@ -828,6 +799,8 @@ void LayoutBoxModelObject::updateStickyPositionConstraints() const {
             : FloatSize());
     scrollContainerRelativePaddingBoxRect.move(scrollOffset);
   }
+  // Remove top-left border offset from overflow scroller.
+  scrollContainerRelativePaddingBoxRect.move(-scrollContainerBorderOffset);
 
   LayoutRect scrollContainerRelativeContainingBlockRect(
       scrollContainerRelativePaddingBoxRect);
@@ -863,12 +836,12 @@ void LayoutBoxModelObject::updateStickyPositionConstraints() const {
 
   // The scrollContainerRelativePaddingBoxRect's position is the padding box so
   // we need to remove the border when finding the position of the sticky box
-  // within the scroll ancestor if the container is not our scroll ancestor.
-  if (containingBlock != scrollAncestor) {
-    FloatSize containerBorderOffset(containingBlock->borderLeft(),
-                                    containingBlock->borderTop());
-    stickyLocation -= containerBorderOffset;
-  }
+  // within the scroll ancestor if the container is not our scroll ancestor. If
+  // the container is our scroll ancestor, we also need to remove the border
+  // box because we want the position from within the scroller border.
+  FloatSize containerBorderOffset(containingBlock->borderLeft(),
+                                  containingBlock->borderTop());
+  stickyLocation -= containerBorderOffset;
   constraints.setScrollContainerRelativeStickyBoxRect(
       FloatRect(scrollContainerRelativePaddingBoxRect.location() +
                     toFloatSize(stickyLocation),
@@ -950,8 +923,9 @@ FloatRect LayoutBoxModelObject::computeStickyConstrainingRect() const {
   constrainingRect =
       FloatRect(enclosingClippingBox->overflowClipRect(LayoutPoint(DoublePoint(
           enclosingClippingBox->getScrollableArea()->scrollPosition()))));
-  constrainingRect.move(enclosingClippingBox->paddingLeft(),
-                        enclosingClippingBox->paddingTop());
+  constrainingRect.move(
+      -enclosingClippingBox->borderLeft() + enclosingClippingBox->paddingLeft(),
+      -enclosingClippingBox->borderTop() + enclosingClippingBox->paddingTop());
   constrainingRect.contract(
       FloatSize(enclosingClippingBox->paddingLeft() +
                     enclosingClippingBox->paddingRight(),
@@ -1133,23 +1107,23 @@ LayoutRect LayoutBoxModelObject::localCaretRectForEmptyElement(
   CaretAlignment alignment = AlignLeft;
 
   switch (currentStyle.textAlign()) {
-    case LEFT:
-    case WEBKIT_LEFT:
+    case ETextAlign::Left:
+    case ETextAlign::WebkitLeft:
       break;
-    case CENTER:
-    case WEBKIT_CENTER:
+    case ETextAlign::Center:
+    case ETextAlign::WebkitCenter:
       alignment = AlignCenter;
       break;
-    case RIGHT:
-    case WEBKIT_RIGHT:
+    case ETextAlign::Right:
+    case ETextAlign::WebkitRight:
       alignment = AlignRight;
       break;
-    case JUSTIFY:
-    case TASTART:
+    case ETextAlign::Justify:
+    case ETextAlign::Start:
       if (!currentStyle.isLeftToRightDirection())
         alignment = AlignRight;
       break;
-    case TAEND:
+    case ETextAlign::End:
       if (currentStyle.isLeftToRightDirection())
         alignment = AlignRight;
       break;

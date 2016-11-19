@@ -40,6 +40,9 @@ class RenderViewHost;
 class RenderWidgetHostView;
 class SiteInstance;
 struct FileChooserFileInfo;
+struct FormFieldData;
+
+using FormFieldDataCallback = base::Callback<void(const FormFieldData&)>;
 
 // The interface provides a communication conduit with a frame in the renderer.
 class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
@@ -211,6 +214,9 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
       const std::vector<content::FileChooserFileInfo>& files,
       FileChooserParams::Mode permissions) = 0;
 
+  // Returns true if the frame has a selection.
+  virtual bool HasSelection() = 0;
+
   // Text surrounding selection.
   typedef base::Callback<
       void(const base::string16& content, int start_offset, int end_offset)>
@@ -218,6 +224,9 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   virtual void RequestTextSurroundingSelection(
       const TextSurroundingSelectionCallback& callback,
       int max_length) = 0;
+
+  // Retrieves the text input info associated with the current form field.
+  virtual void RequestFocusedFormFieldData(FormFieldDataCallback& callback) = 0;
 
  private:
   // This interface should only be implemented inside content.

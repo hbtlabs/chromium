@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chrome_build.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//printing/features/features.gni")
@@ -81,6 +82,7 @@ test("components_unittests") {
     "//components/gcm_driver:unit_tests",
     "//components/gcm_driver/crypto:unit_tests",
     "//components/google/core/browser:unit_tests",
+    "//components/grpc_support/test:unit_tests",
     "//components/history/core/browser:unit_tests",
     "//components/history/core/common:unit_tests",
     "//components/image_fetcher:unit_tests",
@@ -119,7 +121,7 @@ test("components_unittests") {
     "//components/search:unit_tests",
     "//components/search_engines:unit_tests",
     "//components/search_provider_logos:unit_tests",
-    "//components/security_state:unit_tests",
+    "//components/security_state/core:unit_tests",
     "//components/sessions:unit_tests",
     "//components/signin/core/browser:unit_tests",
     "//components/ssl_config:unit_tests",
@@ -171,7 +173,7 @@ test("components_unittests") {
       "//components/data_reduction_proxy/content/browser:unit_tests",
       "//components/data_reduction_proxy/core/browser:unit_tests",
       "//components/data_reduction_proxy/core/common:unit_tests",
-      "//components/data_use_measurement/content:unit_tests",
+      "//components/data_use_measurement/core:unit_tests",
       "//components/discardable_memory/common:unit_tests",
       "//components/discardable_memory/service:unit_tests",
       "//components/display_compositor:unit_tests",
@@ -193,6 +195,7 @@ test("components_unittests") {
       "//components/precache/content:unit_tests",
       "//components/safe_browsing_db:unit_tests",
       "//components/safe_json:unit_tests",
+      "//components/security_state/content:unit_tests",
       "//components/spellcheck/browser:unit_tests",
       "//components/spellcheck/renderer:unit_tests",
       "//components/subresource_filter/content/browser:unit_tests",
@@ -253,6 +256,7 @@ test("components_unittests") {
   # Desktop-only deps.
   if (!is_android && !is_ios) {
     deps += [
+      "//components/cryptauth:unit_tests",
       "//components/feedback:unit_tests",
       "//components/proximity_auth:unit_tests",
       "//components/storage_monitor:unit_tests",
@@ -318,6 +322,12 @@ repack("components_tests_pak") {
     "//components/resources",
     "//components/strings",
   ]
+
+  if (is_chrome_branded) {
+    sources += [ "${root_gen_dir}/components/strings/components_google_chrome_strings_en-US.pak" ]
+  } else {
+    sources += [ "${root_gen_dir}/components/strings/components_chromium_strings_en-US.pak" ]
+  }
 }
 
 if (is_android) {
@@ -382,6 +392,7 @@ if (!is_ios) {
       "dom_distiller/content/browser/distiller_page_web_contents_browsertest.cc",
       "dom_distiller/content/browser/test/dom_distiller_js_browsertest.cc",
       "password_manager/content/renderer/credential_manager_client_browsertest.cc",
+      "security_state/content/content_utils_browsertest.cc",
       "tracing/child/child_trace_message_filter_browsertest.cc",
     ]
 
@@ -405,8 +416,11 @@ if (!is_ios) {
       "//components/dom_distiller/core:test_support",
       "//components/password_manager/content/browser",
       "//components/password_manager/content/renderer",
+      "//components/security_state/content",
+      "//components/security_state/core",
       "//components/strings",
       "//components/tracing",
+      "//content/public/browser",
       "//content/shell:content_shell_lib",
       "//content/test:browsertest_support",
       "//content/test:test_support",
@@ -419,6 +433,7 @@ if (!is_ios) {
       "//testing/gmock",
       "//testing/gtest",
       "//ui/base",
+      "//url",
     ]
 
     data_deps = [

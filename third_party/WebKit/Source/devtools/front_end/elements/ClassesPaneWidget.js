@@ -4,28 +4,27 @@
 /**
  * @unrestricted
  */
-WebInspector.ClassesPaneWidget = class extends WebInspector.Widget {
+Elements.ClassesPaneWidget = class extends UI.Widget {
   constructor() {
     super();
     this.element.className = 'styles-element-classes-pane';
     var container = this.element.createChild('div', 'title-container');
     this._input = container.createChild('div', 'new-class-input monospace');
-    this._input.setAttribute('placeholder', WebInspector.UIString('Add new class'));
+    this._input.setAttribute('placeholder', Common.UIString('Add new class'));
     this.setDefaultFocusedElement(this._input);
     this._classesContainer = this.element.createChild('div', 'source-code');
     this._classesContainer.classList.add('styles-element-classes-container');
-    this._prompt = new WebInspector.ClassesPaneWidget.ClassNamePrompt();
+    this._prompt = new Elements.ClassesPaneWidget.ClassNamePrompt();
     this._prompt.setAutocompletionTimeout(0);
     this._prompt.renderAsBlock();
 
     var proxyElement = this._prompt.attach(this._input);
     proxyElement.addEventListener('keydown', this._onKeyDown.bind(this), false);
 
-    WebInspector.targetManager.addModelListener(
-        WebInspector.DOMModel, WebInspector.DOMModel.Events.DOMMutated, this._onDOMMutated, this);
-    /** @type {!Set<!WebInspector.DOMNode>} */
+    SDK.targetManager.addModelListener(SDK.DOMModel, SDK.DOMModel.Events.DOMMutated, this._onDOMMutated, this);
+    /** @type {!Set<!SDK.DOMNode>} */
     this._mutatingNodes = new Set();
-    WebInspector.context.addFlavorChangeListener(WebInspector.DOMNode, this._update, this);
+    UI.context.addFlavorChangeListener(SDK.DOMNode, this._update, this);
   }
 
   /**
@@ -42,7 +41,7 @@ WebInspector.ClassesPaneWidget = class extends WebInspector.Widget {
 
     if (!isEnterKey(event))
       return;
-    var node = WebInspector.context.flavor(WebInspector.DOMNode);
+    var node = UI.context.flavor(SDK.DOMNode);
     if (!node)
       return;
 
@@ -61,13 +60,13 @@ WebInspector.ClassesPaneWidget = class extends WebInspector.Widget {
   }
 
   /**
-   * @param {!WebInspector.Event} event
+   * @param {!Common.Event} event
    */
   _onDOMMutated(event) {
-    var node = /** @type {!WebInspector.DOMNode} */ (event.data);
+    var node = /** @type {!SDK.DOMNode} */ (event.data);
     if (this._mutatingNodes.has(node))
       return;
-    delete node[WebInspector.ClassesPaneWidget._classesSymbol];
+    delete node[Elements.ClassesPaneWidget._classesSymbol];
     this._update();
   }
 
@@ -82,7 +81,7 @@ WebInspector.ClassesPaneWidget = class extends WebInspector.Widget {
     if (!this.isShowing())
       return;
 
-    var node = WebInspector.context.flavor(WebInspector.DOMNode);
+    var node = UI.context.flavor(SDK.DOMNode);
     if (node)
       node = node.enclosingElementOrSelf();
 
@@ -110,7 +109,7 @@ WebInspector.ClassesPaneWidget = class extends WebInspector.Widget {
    * @param {!Event} event
    */
   _onClick(className, event) {
-    var node = WebInspector.context.flavor(WebInspector.DOMNode);
+    var node = UI.context.flavor(SDK.DOMNode);
     if (!node)
       return;
     var enabled = event.target.checked;
@@ -119,11 +118,11 @@ WebInspector.ClassesPaneWidget = class extends WebInspector.Widget {
   }
 
   /**
-   * @param {!WebInspector.DOMNode} node
+   * @param {!SDK.DOMNode} node
    * @return {!Map<string, boolean>}
    */
   _nodeClasses(node) {
-    var result = node[WebInspector.ClassesPaneWidget._classesSymbol];
+    var result = node[Elements.ClassesPaneWidget._classesSymbol];
     if (!result) {
       var classAttribute = node.getAttribute('class') || '';
       var classes = classAttribute.split(/\s/);
@@ -134,13 +133,13 @@ WebInspector.ClassesPaneWidget = class extends WebInspector.Widget {
           continue;
         result.set(className, true);
       }
-      node[WebInspector.ClassesPaneWidget._classesSymbol] = result;
+      node[Elements.ClassesPaneWidget._classesSymbol] = result;
     }
     return result;
   }
 
   /**
-   * @param {!WebInspector.DOMNode} node
+   * @param {!SDK.DOMNode} node
    * @param {string} className
    * @param {boolean} enabled
    */
@@ -150,7 +149,7 @@ WebInspector.ClassesPaneWidget = class extends WebInspector.Widget {
   }
 
   /**
-   * @param {!WebInspector.DOMNode} node
+   * @param {!SDK.DOMNode} node
    */
   _installNodeClasses(node) {
     var classes = this._nodeClasses(node);
@@ -166,7 +165,7 @@ WebInspector.ClassesPaneWidget = class extends WebInspector.Widget {
     node.setAttributeValue('class', newClasses.join(' '), onClassNameUpdated.bind(this));
 
     /**
-     * @this {WebInspector.ClassesPaneWidget}
+     * @this {Elements.ClassesPaneWidget}
      */
     function onClassNameUpdated() {
       this._mutatingNodes.delete(node);
@@ -174,28 +173,28 @@ WebInspector.ClassesPaneWidget = class extends WebInspector.Widget {
   }
 };
 
-WebInspector.ClassesPaneWidget._classesSymbol = Symbol('WebInspector.ClassesPaneWidget._classesSymbol');
+Elements.ClassesPaneWidget._classesSymbol = Symbol('Elements.ClassesPaneWidget._classesSymbol');
 
 /**
- * @implements {WebInspector.ToolbarItem.Provider}
+ * @implements {UI.ToolbarItem.Provider}
  * @unrestricted
  */
-WebInspector.ClassesPaneWidget.ButtonProvider = class {
+Elements.ClassesPaneWidget.ButtonProvider = class {
   constructor() {
-    this._button = new WebInspector.ToolbarToggle(WebInspector.UIString('Element Classes'), '');
+    this._button = new UI.ToolbarToggle(Common.UIString('Element Classes'), '');
     this._button.setText('.cls');
     this._button.element.classList.add('monospace');
     this._button.addEventListener('click', this._clicked, this);
-    this._view = new WebInspector.ClassesPaneWidget();
+    this._view = new Elements.ClassesPaneWidget();
   }
 
   _clicked() {
-    WebInspector.ElementsPanel.instance().showToolbarPane(!this._view.isShowing() ? this._view : null, this._button);
+    Elements.ElementsPanel.instance().showToolbarPane(!this._view.isShowing() ? this._view : null, this._button);
   }
 
   /**
    * @override
-   * @return {!WebInspector.ToolbarItem}
+   * @return {!UI.ToolbarItem}
    */
   item() {
     return this._button;
@@ -205,18 +204,17 @@ WebInspector.ClassesPaneWidget.ButtonProvider = class {
 /**
  * @unrestricted
  */
-WebInspector.ClassesPaneWidget.ClassNamePrompt = class extends WebInspector.TextPrompt {
+Elements.ClassesPaneWidget.ClassNamePrompt = class extends UI.TextPrompt {
   constructor() {
     super();
     this.initialize(this._buildClassNameCompletions.bind(this), ' ');
-    this.setSuggestBoxEnabled(true);
     this.disableDefaultSuggestionForEmptyInput();
     this._selectedFrameId = '';
     this._classNamesPromise = null;
   }
 
   /**
-   * @param {!WebInspector.DOMNode} selectedNode
+   * @param {!SDK.DOMNode} selectedNode
    * @return {!Promise.<!Array.<string>>}
    */
   _getClassNames(selectedNode) {
@@ -224,7 +222,7 @@ WebInspector.ClassesPaneWidget.ClassNamePrompt = class extends WebInspector.Text
     var completions = new Set();
     this._selectedFrameId = selectedNode.frameId();
 
-    var cssModel = WebInspector.CSSModel.fromTarget(selectedNode.target());
+    var cssModel = SDK.CSSModel.fromTarget(selectedNode.target());
     var allStyleSheets = cssModel.allStyleSheets();
     for (var stylesheet of allStyleSheets) {
       if (stylesheet.frameId !== this._selectedFrameId)
@@ -241,30 +239,26 @@ WebInspector.ClassesPaneWidget.ClassNamePrompt = class extends WebInspector.Text
   }
 
   /**
-   * @param {!Element} proxyElement
-   * @param {!Range} wordRange
-   * @param {boolean} force
-   * @param {function(!Array.<string>, number=)} completionsReadyCallback
+   * @param {string} expression
+   * @param {string} prefix
+   * @param {boolean=} force
+   * @return {!Promise<!UI.SuggestBox.Suggestions>}
    */
-  _buildClassNameCompletions(proxyElement, wordRange, force, completionsReadyCallback) {
-    var prefix = wordRange.toString();
+  _buildClassNameCompletions(expression, prefix, force) {
     if (!prefix || force)
       this._classNamesPromise = null;
 
-    var selectedNode = WebInspector.context.flavor(WebInspector.DOMNode);
-    if (!selectedNode || (!prefix && !force && !proxyElement.textContent.length)) {
-      completionsReadyCallback([]);
-      return;
-    }
+    var selectedNode = UI.context.flavor(SDK.DOMNode);
+    if (!selectedNode || (!prefix && !force && !expression))
+      return Promise.resolve([]);
 
     if (!this._classNamesPromise || this._selectedFrameId !== selectedNode.frameId())
       this._classNamesPromise = this._getClassNames(selectedNode);
 
-    this._classNamesPromise.then(completions => {
+    return this._classNamesPromise.then(completions => {
       if (prefix[0] === '.')
         completions = completions.map(value => '.' + value);
-      var results = completions.filter(value => value.startsWith(prefix));
-      completionsReadyCallback(results, 0);
+      return completions.filter(value => value.startsWith(prefix)).map(completion => ({title: completion}));
     });
   }
 };

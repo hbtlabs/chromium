@@ -887,9 +887,11 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         boolean isOffline = getCurrentTab() != null && getCurrentTab().isOfflinePage();
         boolean isTablet = DeviceFormFactor.isTablet(getContext());
 
-        if (mUrlHasFocus) {
-            return isTablet ? BUTTON_TYPE_NAVIGATION_ICON : BUTTON_TYPE_NONE;
-        }
+        // The navigation icon type is only applicable on tablets.  While smaller form factors do
+        // not have an icon visible to the user when the URL is focused, BUTTON_TYPE_NONE is not
+        // returned as it will trigger an undesired jump during the animation as it attempts to
+        // hide the icon.
+        if (mUrlHasFocus && isTablet) return BUTTON_TYPE_NAVIGATION_ICON;
 
         return getSecurityIconResource(getSecurityLevel(), !isTablet, isOffline) != 0
                 ? BUTTON_TYPE_SECURITY_ICON
@@ -1274,7 +1276,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
             int securityLevel, boolean isSmallDevice, boolean isOfflinePage) {
         // Both conditions should be met, because isOfflinePage might take longer to be cleared.
         if (securityLevel == ConnectionSecurityLevel.NONE && isOfflinePage) {
-            return R.drawable.offline_pin;
+            return R.drawable.offline_pin_round;
         }
         switch (securityLevel) {
             case ConnectionSecurityLevel.NONE:

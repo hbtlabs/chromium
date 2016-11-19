@@ -34,11 +34,6 @@ public interface VrShell {
     void teardown();
 
     /**
-     * Sets Android VR Mode to |enabled|.
-     */
-    void setVrModeEnabled(boolean enabled);
-
-    /**
      * Sets whether we're presenting WebVR content or not.
      */
     void setWebVrModeEnabled(boolean enabled);
@@ -47,4 +42,9 @@ public interface VrShell {
      * Returns the GVRLayout as a FrameLayout.
      */
     FrameLayout getContainer();
+
+    /**
+     * Sets a callback to be run when the close button is tapped.
+     */
+    void setCloseButtonListener(Runnable runner);
 }

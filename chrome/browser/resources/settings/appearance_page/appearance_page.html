@@ -1,4 +1,5 @@
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
+<link rel="import" href="chrome://resources/html/md_select_css.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
@@ -6,14 +7,15 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="/appearance_page/appearance_browser_proxy.html">
 <link rel="import" href="/controls/controlled_radio_button.html">
+<link rel="import" href="/controls/extension_controlled_indicator.html">
 <link rel="import" href="/controls/settings_dropdown_menu.html">
 <link rel="import" href="/controls/settings_input.html">
 <link rel="import" href="/controls/settings_radio_group.html">
-<link rel="import" href="/md_select_css.html">
 <link rel="import" href="/route.html">
 <link rel="import" href="/settings_page/settings_animated_pages.html">
 <link rel="import" href="/settings_page/settings_subpage.html">
 <link rel="import" href="/settings_shared_css.html">
+<link rel="import" href="/settings_vars_css.html">
 <link rel="import" href="appearance_fonts_page.html">
 
 <dom-module id="settings-appearance-page">
@@ -89,7 +91,8 @@
         <div class="settings-box"
             hidden="[[!pageVisibility.homeButton]]">
           <settings-checkbox class="start" label="$i18n{showHomeButton}"
-              sub-label="[[getShowHomeSubLabel_(prefs.homepage_is_newtabpage.value, prefs.homepage.value)]]"
+              sub-label="[[getShowHomeSubLabel_(
+                  prefs.homepage_is_newtabpage.value, prefs.homepage.value)]]"
               pref="{{prefs.browser.show_home_button}}">
           </settings-checkbox>
         </div>
@@ -113,6 +116,15 @@
                     stop-keyboard-event-propagation>
                 </settings-input>
               </controlled-radio-button>
+              <template is="dom-if" if="[[prefs.homepage.extensionId]]">
+                <extension-controlled-indicator
+                    extension-id="[[prefs.homepage.extensionId]]"
+                    extension-can-be-disabled="[[
+                        prefs.homepage.extensionCanBeDisabled]]"
+                    extension-name="[[prefs.homepage.controlledByName]]"
+                    on-disable-extension="onDisableExtension_">
+                </extension-controlled-indicator>
+              </template>
             </settings-radio-group>
           </div>
         </template>

@@ -8,10 +8,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import static org.chromium.chrome.browser.webapps.ManifestUpgradeDetector.FetchedManifestData;
-
 import android.graphics.Bitmap;
 import android.os.Bundle;
+import android.provider.Settings;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -26,6 +25,7 @@ import org.chromium.blink_public.platform.WebDisplayMode;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.ShortcutSource;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.webapps.ManifestUpgradeDetectorFetcher.FetchedManifestData;
 import org.chromium.content_public.common.ScreenOrientationValues;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
 import org.chromium.webapk.lib.client.WebApkVersion;
@@ -137,8 +137,9 @@ public class WebApkUpdateManagerTest {
 
         @Override
         protected void updateAsync(String startUrl, String scopeUrl, String name, String shortName,
-                String iconUrl, String iconMurmur2Hash, Bitmap icon, int displayMode,
-                int orientation, long themeColor, long backgroundColor) {
+                String bestIconUrl, String bestIconMurmur2Hash, Bitmap bestIcon,
+                String[] iconUrls, int displayMode, int orientation, long themeColor,
+                long backgroundColor) {
             ++mNumUpdatesRequested;
             mUpdateName = name;
         }
@@ -201,6 +202,9 @@ public class WebApkUpdateManagerTest {
     public void setUp() {
         ContextUtils.initApplicationContextForTests(RuntimeEnvironment.application);
         CommandLine.init(null);
+
+        Settings.Secure.putInt(RuntimeEnvironment.application.getContentResolver(),
+                Settings.Secure.INSTALL_NON_MARKET_APPS, 1);
 
         mClock = new MockClock();
         WebappDataStorage.setClockForTests(mClock);

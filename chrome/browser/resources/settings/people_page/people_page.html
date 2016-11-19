@@ -26,6 +26,7 @@
 <link rel="import" href="/people_page/users_page.html">
 </if>
 <if expr="not chromeos">
+<link rel="import" href="/people_page/import_data_dialog.html">
 <link rel="import" href="/people_page/manage_profile.html">
 </if>
 
@@ -200,13 +201,14 @@
         <template is="dom-if" if="[[quickUnlockEnabled_]]">
           <div class="settings-box two-line" actionable
                on-tap="onConfigureLockTap_">
-            <div class="middle">
-              <div>$i18n{lockScreenTitle}</div>
+            <div class="start">
+              $i18n{lockScreenTitle}
               <div class="secondary">
                 [[getPasswordState_(hasPin,
                                     prefs.settings.enable_screen_lock.value)]]
               </div>
             </div>
+            <button class="subpage-arrow" is="paper-icon-button-light"></button>
           </div>
         </template>
 
@@ -254,14 +256,17 @@
 </if>
 
         <div id="manage-other-people-subpage-trigger"
-            class="settings-box two-line" on-tap="onManageOtherPeople_"
-            actionable>
-          <div class="start">
-            $i18n{manageOtherPeople}
-            <div class="secondary">$i18n{manageOtherPeopleDescription}</div>
-          </div>
+            class="settings-box" on-tap="onManageOtherPeople_" actionable>
+          <div class="start">$i18n{manageOtherPeople}</div>
           <button class="subpage-arrow" is="paper-icon-button-light"></button>
         </div>
+
+<if expr="not chromeos">
+        <div class="settings-box" on-tap="onImportDataTap_" actionable>
+          <div class="start">$i18n{importTitle}</div>
+          <button class="subpage-arrow" is="paper-icon-button-light"></button>
+        </div>
+</if>
 
         <template is="dom-if" if=[[profileManagesSupervisedUsers_]]>
           <div id="manageSupervisedUsersContainer" class="settings-box two-line"
@@ -349,6 +354,12 @@
         </paper-button>
       </div>
     </dialog>
+
+    <template is="dom-if" if="[[showImportDataDialog_]]" restamp>
+      <settings-import-data-dialog prefs="{{prefs}}"
+          on-close="onImportDataDialogClosed_">
+      </settings-import-data-dialog>
+    </template>
 
 <if expr="chromeos">
     <template is="dom-if" if="[[easyUnlockEnabled_]]">

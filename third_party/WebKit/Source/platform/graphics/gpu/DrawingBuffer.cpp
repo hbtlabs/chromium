@@ -230,7 +230,7 @@ std::unique_ptr<cc::SharedBitmap> DrawingBuffer::createOrRecycleBitmap() {
   m_recycledBitmaps.shrink(it - m_recycledBitmaps.begin());
 
   if (!m_recycledBitmaps.isEmpty()) {
-    RecycledBitmap recycled = std::move(m_recycledBitmaps.last());
+    RecycledBitmap recycled = std::move(m_recycledBitmaps.back());
     m_recycledBitmaps.pop_back();
     DCHECK(recycled.size == m_size);
     return std::move(recycled.bitmap);
@@ -674,6 +674,8 @@ bool DrawingBuffer::copyToPlatformTexture(gpu::gles2::GLES2Interface* gl,
                                           GLint level,
                                           bool premultiplyAlpha,
                                           bool flipY,
+                                          const IntPoint& destTextureOffset,
+                                          const IntRect& sourceSubRectangle,
                                           SourceDrawingBuffer sourceBuffer) {
   ScopedStateRestorer scopedStateRestorer(this);
 
@@ -719,9 +721,11 @@ bool DrawingBuffer::copyToPlatformTexture(gpu::gles2::GLES2Interface* gl,
   else if (m_wantAlphaChannel && !m_premultipliedAlpha && premultiplyAlpha)
     unpackPremultiplyAlphaNeeded = GL_TRUE;
 
-  gl->CopyTextureCHROMIUM(sourceTexture, texture, internalFormat, destType,
-                          flipY, unpackPremultiplyAlphaNeeded,
-                          unpackUnpremultiplyAlphaNeeded);
+  gl->CopySubTextureCHROMIUM(
+      sourceTexture, texture, destTextureOffset.x(), destTextureOffset.y(),
+      sourceSubRectangle.x(), sourceSubRectangle.y(),
+      sourceSubRectangle.width(), sourceSubRectangle.height(), flipY,
+      unpackPremultiplyAlphaNeeded, unpackUnpremultiplyAlphaNeeded);
 
   gl->DeleteTextures(1, &sourceTexture);
 

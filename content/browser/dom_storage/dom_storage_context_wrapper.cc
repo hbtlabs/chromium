@@ -30,7 +30,7 @@
 #include "content/public/browser/session_storage_usage_info.h"
 #include "content/public/common/content_features.h"
 #include "mojo/common/common_type_converters.h"
-#include "services/file/public/cpp/constants.h"
+#include "services/file/public/interfaces/constants.mojom.h"
 #include "services/file/public/interfaces/file_system.mojom.h"
 #include "services/service_manager/public/cpp/connection.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -154,7 +154,7 @@ void DOMStorageContextWrapper::MojoState::OpenLocalStorage(
   if (connection_state_ == NO_CONNECTION) {
     CHECK(connector_);
     file_service_connection_ =
-        connector_->Connect(file::kFileServiceName);
+        connector_->Connect(file::mojom::kServiceName);
     connection_state_ = CONNECTION_IN_PROGRESS;
     file_service_connection_->AddConnectionCompletedClosure(
         base::Bind(&MojoState::OnUserServiceConnectionComplete,
@@ -167,11 +167,10 @@ void DOMStorageContextWrapper::MojoState::OpenLocalStorage(
       // We were given a subdirectory to write to. Get it and use a disk backed
       // database.
       file_service_connection_->GetInterface(&file_system_);
-      file_system_->GetSubDirectory(
-          mojo::String::From(subdirectory_.AsUTF8Unsafe()),
-          GetProxy(&directory_),
-          base::Bind(&MojoState::OnDirectoryOpened,
-                     weak_ptr_factory_.GetWeakPtr()));
+      file_system_->GetSubDirectory(subdirectory_.AsUTF8Unsafe(),
+                                    GetProxy(&directory_),
+                                    base::Bind(&MojoState::OnDirectoryOpened,
+                                               weak_ptr_factory_.GetWeakPtr()));
     } else {
       // We were not given a subdirectory. Use a memory backed database.
       file_service_connection_->GetInterface(&leveldb_service_);

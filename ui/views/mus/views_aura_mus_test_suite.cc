@@ -19,11 +19,14 @@
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/ui/common/switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/aura/test/env_test_helper.h"
+#include "ui/views/mus/desktop_window_tree_host_mus.h"
 #include "ui/views/mus/mus_client.h"
 #include "ui/views/mus/test_utils.h"
 #include "ui/views/test/platform_test_helper.h"
 #include "ui/views/test/views_test_helper_aura.h"
 #include "ui/views/views_delegate.h"
+#include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 
 namespace views {
 namespace {
@@ -53,16 +56,24 @@ class PlatformTestHelperMus : public PlatformTestHelper {
  public:
   PlatformTestHelperMus(service_manager::Connector* connector,
                         const service_manager::Identity& identity) {
+    aura::test::EnvTestHelper().SetWindowTreeClient(nullptr);
     // It is necessary to recreate the MusClient for each test,
     // since a new MessageLoop is created for each test.
     mus_client_ = test::MusClientTestApi::Create(connector, identity);
   }
-  ~PlatformTestHelperMus() override {}
+  ~PlatformTestHelperMus() override {
+    aura::test::EnvTestHelper().SetWindowTreeClient(nullptr);
+  }
 
   // PlatformTestHelper:
   void OnTestHelperCreated(ViewsTestHelper* helper) override {
     static_cast<ViewsTestHelperAura*>(helper)->EnableMusWithWindowTreeClient(
         mus_client_->window_tree_client());
+  }
+  void SimulateNativeDestroy(Widget* widget) override {
+    // TODO: this should call through to a WindowTreeClientDelegate
+    // function that destroys the WindowTreeHost. http://crbug.com/663868.
+    widget->CloseNow();
   }
 
  private:
@@ -141,7 +152,7 @@ class ServiceManagerConnection {
 
     // ui/views/mus requires a WindowManager running, so launch test_wm.
     service_manager::Connector* connector = context_->connector();
-    connector->Connect("service:test_wm");
+    connector->Connect("test_wm");
     service_manager_connector_ = connector->Clone();
     service_manager_identity_ = context_->identity();
     wait->Signal();
@@ -152,13 +163,14 @@ class ServiceManagerConnection {
     wait->Signal();
   }
 
-  // Returns the name of the test executable, e.g. "exe:views_mus_unittests".
+  // Returns the name of the test executable, e.g.
+  // "views_mus_unittests".
   std::string GetTestName() {
     base::FilePath executable = base::CommandLine::ForCurrentProcess()
                                     ->GetProgram()
                                     .BaseName()
                                     .RemoveExtension();
-    return std::string("exe:") + executable.MaybeAsASCII();
+    return std::string("") + executable.MaybeAsASCII();
   }
 
   base::Thread thread_;

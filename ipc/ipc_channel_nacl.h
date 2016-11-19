@@ -42,7 +42,6 @@ class ChannelNacl : public Channel,
   ~ChannelNacl() override;
 
   // Channel implementation.
-  base::ProcessId GetPeerPID() const override;
   bool Connect() override;
   void Close() override;
   bool Send(Message* message) override;
@@ -66,19 +65,12 @@ class ChannelNacl : public Channel,
   bool GetNonBrokeredAttachments(Message* msg) override;
   bool DidEmptyInputBuffers() override;
   void HandleInternalMessage(const Message& msg) override;
-  base::ProcessId GetSenderPID() override;
 
   Mode mode_;
   bool waiting_connect_;
 
   // The pipe used for communication.
   int pipe_;
-
-  // The "name" of our pipe.  On Windows this is the global identifier for
-  // the pipe.  On POSIX it's used as a key in a local map of file descriptors.
-  // For NaCl, we don't actually support looking up file descriptors by name,
-  // and it's only used for debug information.
-  std::string pipe_name_;
 
   // We use a thread for reading, so that we can simply block on reading and
   // post the received data back to the main thread to be properly interleaved

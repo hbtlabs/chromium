@@ -126,20 +126,31 @@ int BrowserPluginGuest::GetGuestProxyRoutingID() {
   if (guest_proxy_routing_id_ != MSG_ROUTING_NONE)
     return guest_proxy_routing_id_;
 
-  // Create a RenderFrameProxyHost for the guest in the embedder renderer
-  // process, so that the embedder can access the guest's window object.
-  // On reattachment, we can reuse the same RenderFrameProxyHost because
-  // the embedder process will always be the same even if the embedder
-  // WebContents changes.
+  // In order to enable the embedder to post messages to the
+  // guest, we need to create a RenderFrameProxyHost in root node of guest
+  // WebContents' frame tree (i.e., create a RenderFrameProxy in the embedder
+  // process which can be used by the embedder to post messages to the guest).
+  // The creation of RFPH for the reverse path, which enables the guest to post
+  // messages to the embedder, will be postponed to when the embedder posts its
+  // first message to the guest.
   //
   // TODO(fsamuel): Make sure this works for transferring guests across
   // owners in different processes. We probably need to clear the
   // |guest_proxy_routing_id_| and perform any necessary cleanup on Detach
   // to enable this.
-  SiteInstance* owner_site_instance = owner_web_contents_->GetSiteInstance();
-  int proxy_routing_id =
-      GetWebContents()->GetFrameTree()->root()->render_manager()->
-          CreateRenderFrameProxy(owner_site_instance);
+  //
+  // TODO(ekaramad): If the guest is embedded inside a cross-process <iframe>
+  // (e.g., <embed>-ed PDF), the reverse proxy will not be created and the
+  // posted message's source attribute will be null which in turn breaks the
+  // two-way messaging between the guest and the embedder. We should either
+  // create a RenderFrameProxyHost for the reverse path, or implement
+  // MimeHandlerViewGuest using OOPIF (https://crbug.com/659750).
+  SiteInstance* owner_site_instance = delegate_->GetOwnerSiteInstance();
+  int proxy_routing_id = GetWebContents()
+                             ->GetFrameTree()
+                             ->root()
+                             ->render_manager()
+                             ->CreateRenderFrameProxy(owner_site_instance);
   guest_proxy_routing_id_ = RenderFrameProxyHost::FromID(
       owner_site_instance->GetProcess()->GetID(), proxy_routing_id)
           ->GetRenderViewHost()->GetRoutingID();
@@ -168,6 +179,11 @@ void BrowserPluginGuest::WillDestroy() {
   is_in_destruction_ = true;
   owner_web_contents_ = nullptr;
   attached_ = false;
+}
+
+RenderWidgetHostImpl* BrowserPluginGuest::GetOwnerRenderWidgetHost() const {
+  return static_cast<RenderWidgetHostImpl*>(
+      delegate_->GetOwnerRenderWidgetHost());
 }
 
 void BrowserPluginGuest::Init() {
@@ -241,12 +257,11 @@ bool BrowserPluginGuest::OnMessageReceivedFromEmbedder(
     const IPC::Message& message) {
   RenderWidgetHostViewGuest* rwhv = static_cast<RenderWidgetHostViewGuest*>(
       web_contents()->GetRenderWidgetHostView());
+
   // Until the guest is attached, it should not be handling input events.
   if (attached() && rwhv &&
-      rwhv->OnMessageReceivedFromEmbedder(
-          message,
-          RenderWidgetHostImpl::From(
-              embedder_web_contents()->GetRenderViewHost()->GetWidget()))) {
+      rwhv->OnMessageReceivedFromEmbedder(message,
+                                          GetOwnerRenderWidgetHost())) {
     return true;
   }
 
@@ -374,9 +389,9 @@ bool BrowserPluginGuest::IsGuest(RenderViewHostImpl* render_view_host) {
 }
 
 RenderWidgetHostView* BrowserPluginGuest::GetOwnerRenderWidgetHostView() {
-  if (!owner_web_contents_)
-    return nullptr;
-  return owner_web_contents_->GetRenderWidgetHostView();
+  if (RenderWidgetHostImpl* owner = GetOwnerRenderWidgetHost())
+    return owner->GetView();
+  return nullptr;
 }
 
 void BrowserPluginGuest::UpdateVisibility() {
@@ -448,8 +463,8 @@ void BrowserPluginGuest::ResendEventToEmbedder(
     return;
 
   DCHECK(browser_plugin_instance_id_);
-  RenderWidgetHostViewBase* view = static_cast<RenderWidgetHostViewBase*>(
-      embedder_web_contents()->GetMainFrame()->GetView());
+  RenderWidgetHostViewBase* view =
+      static_cast<RenderWidgetHostViewBase*>(GetOwnerRenderWidgetHostView());
 
   gfx::Vector2d offset_from_embedder = guest_window_rect_.OffsetFromOrigin();
   if (event.type == blink::WebInputEvent::GestureScrollUpdate) {
@@ -506,13 +521,23 @@ void BrowserPluginGuest::SendMessageToEmbedder(
     pending_messages_.push_back(std::move(msg));
     return;
   }
-  owner_web_contents_->Send(msg.release());
+
+  // If the guest is inside a cross-process frame, it is possible to get here
+  // after the owner frame is detached. Then, the owner RenderWidgetHost will
+  // be null and the message is dropped.
+  if (auto* rwh = GetOwnerRenderWidgetHost())
+    rwh->Send(msg.release());
 }
 
-void BrowserPluginGuest::DragSourceEndedAt(int client_x, int client_y,
-    int screen_x, int screen_y, blink::WebDragOperation operation) {
-  web_contents()->GetRenderViewHost()->DragSourceEndedAt(client_x, client_y,
-      screen_x, screen_y, operation);
+void BrowserPluginGuest::DragSourceEndedAt(int client_x,
+                                           int client_y,
+                                           int screen_x,
+                                           int screen_y,
+                                           blink::WebDragOperation operation) {
+  web_contents()->GetRenderViewHost()->GetWidget()->DragSourceEndedAt(
+      gfx::Point(client_x, client_y),
+      gfx::Point(screen_x, screen_y),
+      operation);
   seen_embedder_drag_source_ended_at_ = true;
   EndSystemDragIfApplicable();
 }
@@ -541,7 +566,7 @@ void BrowserPluginGuest::EndSystemDragIfApplicable() {
       seen_embedder_drag_source_ended_at_ && seen_embedder_system_drag_ended_) {
     RenderViewHostImpl* guest_rvh = static_cast<RenderViewHostImpl*>(
         GetWebContents()->GetRenderViewHost());
-    guest_rvh->DragSourceSystemDragEnded();
+    guest_rvh->GetWidget()->DragSourceSystemDragEnded();
     last_drag_status_ = blink::WebDragStatusUnknown;
     seen_embedder_system_drag_ended_ = false;
     seen_embedder_drag_source_ended_at_ = false;
@@ -821,28 +846,31 @@ void BrowserPluginGuest::OnDragStatusUpdate(int browser_plugin_instance_id,
   RenderViewHost* host = GetWebContents()->GetRenderViewHost();
   auto* embedder = owner_web_contents_->GetBrowserPluginEmbedder();
   DropData filtered_data(drop_data);
-  host->FilterDropData(&filtered_data);
+  // TODO(paulmeyer): This will need to target the correct specific
+  // RenderWidgetHost to work with OOPIFs. See crbug.com/647249.
+  RenderWidgetHost* widget = host->GetWidget();
+  widget->FilterDropData(&filtered_data);
   switch (drag_status) {
     case blink::WebDragStatusEnter:
-      host->DragTargetDragEnter(filtered_data, location, location, mask,
-                                drop_data.key_modifiers);
+      widget->DragTargetDragEnter(filtered_data, location, location, mask,
+                                  drop_data.key_modifiers);
       // Only track the URL being dragged over the guest if the link isn't
       // coming from the guest.
       if (!embedder->DragEnteredGuest(this))
         ignore_dragged_url_ = false;
       break;
     case blink::WebDragStatusOver:
-      host->DragTargetDragOver(location, location, mask,
-                               drop_data.key_modifiers);
+      widget->DragTargetDragOver(location, location, mask,
+                                 drop_data.key_modifiers);
       break;
     case blink::WebDragStatusLeave:
       embedder->DragLeftGuest(this);
-      host->DragTargetDragLeave();
+      widget->DragTargetDragLeave();
       ignore_dragged_url_ = true;
       break;
     case blink::WebDragStatusDrop:
-      host->DragTargetDrop(filtered_data, location, location,
-                           drop_data.key_modifiers);
+      widget->DragTargetDrop(filtered_data, location, location,
+                             drop_data.key_modifiers);
 
       if (!ignore_dragged_url_ && filtered_data.url.is_valid())
         delegate_->DidDropLink(filtered_data.url);

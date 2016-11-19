@@ -9,10 +9,10 @@
 #include "base/lazy_instance.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/output/context_cache_controller.h"
-#include "gpu/command_buffer/client/gl_in_process_context.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
 #include "gpu/command_buffer/client/gles2_lib.h"
 #include "gpu/command_buffer/client/shared_memory_limits.h"
+#include "gpu/ipc/gl_in_process_context.h"
 #include "gpu/skia_bindings/grcontext_for_gles2_interface.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
@@ -22,13 +22,13 @@ namespace client {
 
 // static
 scoped_refptr<BlimpContextProvider> BlimpContextProvider::Create(
-    gfx::AcceleratedWidget widget,
+    gpu::SurfaceHandle widget,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager) {
   return new BlimpContextProvider(widget, gpu_memory_buffer_manager);
 }
 
 BlimpContextProvider::BlimpContextProvider(
-    gfx::AcceleratedWidget widget,
+    gpu::SurfaceHandle widget,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager) {
   context_thread_checker_.DetachFromThread();
 
@@ -45,7 +45,7 @@ BlimpContextProvider::BlimpContextProvider(
 
   context_.reset(gpu::GLInProcessContext::Create(
       nullptr /* service */, nullptr /* surface */,
-      widget == gfx::kNullAcceleratedWidget /* is_offscreen */, widget,
+      widget == gpu::kNullSurfaceHandle /* is_offscreen */, widget,
       nullptr /* share_context */, attribs_for_gles2, gpu::SharedMemoryLimits(),
       gpu_memory_buffer_manager, nullptr /* memory_limits */,
       base::ThreadTaskRunnerHandle::Get()));

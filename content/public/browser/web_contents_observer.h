@@ -18,8 +18,8 @@
 #include "content/public/common/resource_type.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebSecurityStyle.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
@@ -463,9 +463,15 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   // and subsequently within a WebContents.  MediaStartedPlaying() will always
   // be followed by MediaStoppedPlaying() after player teardown.  Observers must
   // release all stored copies of |id| when MediaStoppedPlaying() is received.
+  struct MediaPlayerInfo {
+    explicit MediaPlayerInfo(bool in_has_video) : has_video(in_has_video) {}
+    bool has_video;
+  };
   using MediaPlayerId = std::pair<RenderFrameHost*, int>;
-  virtual void MediaStartedPlaying(const MediaPlayerId& id) {}
-  virtual void MediaStoppedPlaying(const MediaPlayerId& id) {}
+  virtual void MediaStartedPlaying(const MediaPlayerInfo& video_type,
+                                   const MediaPlayerId& id) {}
+  virtual void MediaStoppedPlaying(const MediaPlayerInfo& video_type,
+                                   const MediaPlayerId& id) {}
 
   // Invoked when the renderer process changes the page scale factor.
   virtual void OnPageScaleFactorChanged(float page_scale_factor) {}

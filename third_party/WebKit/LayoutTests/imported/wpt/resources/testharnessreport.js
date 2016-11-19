@@ -20,13 +20,20 @@
         testRunner.waitUntilDone();
         testRunner.setCanOpenWindows();
         testRunner.setCloseRemainingWindowsWhenComplete(true);
+        testRunner.setDumpJavaScriptDialogs(false);
     }
 
     // Disable the default output of testharness.js.  The default output formats
     // test results into an HTML table.  When that table is dumped as text, no
     // spacing between cells is preserved, and it is therefore not readable. By
     // setting output to false, the HTML table will not be created.
-    setup({"output":false});
+    // Also, disable timeout (except for explicit timeout), since the Blink
+    // layout test runner has its own timeout mechanism.
+    // See: https://github.com/w3c/testharness.js/blob/master/docs/api.md#setup
+    setup({
+        "output": false,
+        "explicit_timeout": true
+    });
 
     // Function used to convert the test status code into the corresponding
     // string
@@ -200,6 +207,11 @@
 
         function done() {
             if (self.testRunner) {
+                // The following DOM operations may show console messages.  We
+                // suppress them because they are not related to the running
+                // test.
+                testRunner.setDumpConsoleMessages(false);
+
                 if (isCSSWGTest() || isJSTest()) {
                     // Anything isn't material to the testrunner output, so
                     // should be hidden from the text dump.

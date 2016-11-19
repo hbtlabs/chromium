@@ -61,10 +61,6 @@ const char kAppOemManifestFile[] = "app-mode-oem-manifest";
 // Signals the availability of the ARC instance on this device.
 const char kArcAvailable[] = "arc-available";
 
-// Specifies ARC authorization endpoint to enable automatic sign-in in OptIn
-// flow.
-const char kArcUseAuthEndpoint[] = "arc-use-auth-endpoint";
-
 // Screenshot testing: specifies the directoru where artifacts will be stored.
 const char kArtifactsDir[] = "artifacts-dir";
 
@@ -217,6 +213,9 @@ const char kEnableAd[] = "enable-ad";
 
 // Enables starting the ARC instance upon session start.
 const char kEnableArc[] = "enable-arc";
+
+// Enables ARC OptIn flow in OOBE.
+const char kEnableArcOOBEOptIn[] = "enable-arc-oobe-optin";
 
 // Enables Data Saver prompt on cellular networks.
 const char kEnableDataSaverPrompt[] = "enable-datasaver-prompt";

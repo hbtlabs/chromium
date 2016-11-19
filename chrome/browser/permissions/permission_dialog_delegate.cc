@@ -7,10 +7,12 @@
 #include <utility>
 
 #include "base/android/jni_android.h"
+#include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/android/resource_mapper.h"
+#include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/geolocation/geolocation_infobar_delegate_android.h"
 #include "chrome/browser/media/midi_permission_infobar_delegate_android.h"
 #include "chrome/browser/media/protected_media_identifier_infobar_delegate_android.h"
@@ -20,7 +22,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
 #include "components/variations/variations_associated_data.h"
-#include "content/public/browser/android/content_view_core.h"
 #include "content/public/browser/web_contents.h"
 #include "jni/PermissionDialogController_jni.h"
 #include "jni/PermissionDialogDelegate_jni.h"
@@ -56,11 +57,13 @@ void PermissionDialogDelegate::Create(
 // static
 void PermissionDialogDelegate::CreateMediaStreamDialog(
     content::WebContents* web_contents,
+    bool user_gesture,
     std::unique_ptr<MediaStreamDevicesController> controller) {
   // Called this way because the infobar delegate has a private destructor.
   std::unique_ptr<PermissionInfoBarDelegate> infobar_delegate;
   infobar_delegate.reset(new MediaStreamInfoBarDelegateAndroid(
       Profile::FromBrowserContext(web_contents->GetBrowserContext()),
+      user_gesture,
       std::move(controller)));
 
   // Dispatch the dialog to Java, which manages the lifetime of this object.
@@ -88,13 +91,16 @@ bool PermissionDialogDelegate::RegisterPermissionDialogDelegate(JNIEnv* env) {
 
 ScopedJavaLocalRef<jobject> PermissionDialogDelegate::CreateJavaDelegate(
     JNIEnv* env) {
-  content::ContentViewCore* cvc =
-      content::ContentViewCore::FromWebContents(web_contents());
-  DCHECK(cvc);
+  TabAndroid* tab = TabAndroid::FromWebContents(web_contents());
+  DCHECK(tab);
+
+  std::vector<int> content_settings_types{
+      infobar_delegate_->content_settings_types()};
 
   return Java_PermissionDialogDelegate_create(
       env, reinterpret_cast<uintptr_t>(this),
-      cvc->GetWindowAndroid()->GetJavaObject(),
+      tab->GetJavaObject(),
+      base::android::ToJavaIntArray(env, content_settings_types).obj(),
       ResourceMapper::MapFromChromiumId(infobar_delegate_->GetIconId()),
       ConvertUTF16ToJavaString(env, infobar_delegate_->GetMessageText()),
       ConvertUTF16ToJavaString(env, infobar_delegate_->GetLinkText()),

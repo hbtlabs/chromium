@@ -609,6 +609,22 @@ void CryptohomeAuthenticator::LoginAsKioskAccount(
   }
 }
 
+void CryptohomeAuthenticator::LoginAsArcKioskAccount(
+    const AccountId& app_account_id) {
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+
+  current_state_.reset(new AuthAttemptState(
+      UserContext(user_manager::USER_TYPE_ARC_KIOSK_APP, app_account_id),
+      false,    // unlock
+      false,    // online_complete
+      false));  // user_is_new
+
+  remove_user_data_on_failure_ = true;
+  MountPublic(current_state_->AsWeakPtr(),
+              scoped_refptr<CryptohomeAuthenticator>(this),
+              cryptohome::CREATE_IF_MISSING);
+}
+
 void CryptohomeAuthenticator::OnAuthSuccess() {
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
   VLOG(1) << "Login success";
@@ -723,7 +739,7 @@ void CryptohomeAuthenticator::Resolve() {
                      AuthFailure(AuthFailure::COULD_NOT_MOUNT_CRYPTOHOME)));
       break;
     case FAILED_REMOVE:
-      // In this case, we tried to remove the user's old cryptohome at her
+      // In this case, we tried to remove the user's old cryptohome at their
       // request, and the remove failed.
       remove_user_data_on_failure_ = false;
       task_runner_->PostTask(
@@ -912,7 +928,7 @@ CryptohomeAuthenticator::ResolveCryptohomeFailureState() {
     if (current_state_->cryptohome_code() ==
         cryptohome::MOUNT_ERROR_KEY_FAILURE) {
       // If we tried a mount but they used the wrong key, we may need to
-      // ask the user for her old password.  We'll only know once we've
+      // ask the user for their old password.  We'll only know once we've
       // done the online check.
       return POSSIBLE_PW_CHANGE;
     }

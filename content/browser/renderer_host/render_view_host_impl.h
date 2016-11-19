@@ -101,37 +101,6 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
       int request_id,
       const std::vector<base::FilePath>& files) override;
   void DisableScrollbarsForThreshold(const gfx::Size& size) override;
-  void DragSourceEndedAt(int client_x,
-                         int client_y,
-                         int screen_x,
-                         int screen_y,
-                         blink::WebDragOperation operation) override;
-  void DragSourceSystemDragEnded() override;
-  // |drop_data| must have been filtered. The embedder should call
-  // FilterDropData before passing the drop data to RVHI.
-  void DragTargetDragEnter(const DropData& drop_data,
-                           const gfx::Point& client_pt,
-                           const gfx::Point& screen_pt,
-                           blink::WebDragOperationsMask operations_allowed,
-                           int key_modifiers) override;
-  void DragTargetDragEnterWithMetaData(
-      const std::vector<DropData::Metadata>& metadata,
-      const gfx::Point& client_pt,
-      const gfx::Point& screen_pt,
-      blink::WebDragOperationsMask operations_allowed,
-      int key_modifiers) override;
-  void DragTargetDragOver(const gfx::Point& client_pt,
-                          const gfx::Point& screen_pt,
-                          blink::WebDragOperationsMask operations_allowed,
-                          int key_modifiers) override;
-  void DragTargetDragLeave() override;
-  // |drop_data| must have been filtered. The embedder should call
-  // FilterDropData before passing the drop data to RVHI.
-  void DragTargetDrop(const DropData& drop_data,
-                      const gfx::Point& client_pt,
-                      const gfx::Point& screen_pt,
-                      int key_modifiers) override;
-  void FilterDropData(DropData* drop_data) override;
   void EnableAutoResize(const gfx::Size& min_size,
                         const gfx::Size& max_size) override;
   void DisableAutoResize(const gfx::Size& new_size) override;
@@ -290,7 +259,6 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   void OnDidContentsPreferredSizeChange(const gfx::Size& new_size);
   void OnPasteFromSelectionClipboard();
   void OnRouteCloseEvent();
-  void OnUpdateDragCursor(blink::WebDragOperation drag_operation);
   void OnTakeFocus(bool reverse);
   void OnFocusedNodeChanged(bool is_editable_node,
                             const gfx::Rect& node_bounds_in_viewport);
@@ -324,12 +292,6 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   // mostly the same across all RVHs in a process.  Move the rest to RFH.
   // See https://crbug.com/304341.
   WebPreferences ComputeWebkitPrefs();
-
-  // 1. Grants permissions to URL (if any)
-  // 2. Grants permissions to filenames
-  // 3. Grants permissions to file system files.
-  // 4. Register the files with the IsolatedContext.
-  void GrantFileAccessFromDropData(DropData* drop_data);
 
   // The RenderWidgetHost.
   std::unique_ptr<RenderWidgetHostImpl> render_widget_host_;

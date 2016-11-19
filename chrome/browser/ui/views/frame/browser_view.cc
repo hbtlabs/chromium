@@ -138,6 +138,7 @@
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/scoped_canvas.h"
+#include "ui/native_theme/native_theme_dark_aura.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -169,7 +170,7 @@
 #include "chrome/browser/win/jumplist.h"
 #include "chrome/browser/win/jumplist_factory.h"
 #include "ui/gfx/color_palette.h"
-#include "ui/native_theme/native_theme_dark_win.h"
+#include "ui/native_theme/native_theme_win.h"
 #include "ui/views/win/scoped_fullscreen_visibility.h"
 #endif
 
@@ -179,7 +180,6 @@
 #endif
 
 #if defined(OS_LINUX)
-#include "ui/native_theme/native_theme_dark_aura.h"
 #endif
 
 using base::TimeDelta;
@@ -1206,7 +1206,7 @@ autofill::SaveCardBubbleView* BrowserView::ShowSaveCreditCardBubble(
                                             is_user_gesture);
 }
 
-void BrowserView::ShowTranslateBubble(
+ShowTranslateBubbleResult BrowserView::ShowTranslateBubble(
     content::WebContents* web_contents,
     translate::TranslateStep step,
     translate::TranslateErrors::Type error_type,
@@ -1215,17 +1215,19 @@ void BrowserView::ShowTranslateBubble(
       !GetLocationBarView()->IsMouseHovered()) {
     content::RenderViewHost* rvh = web_contents->GetRenderViewHost();
     if (rvh->IsFocusedElementEditable())
-      return;
+      return ShowTranslateBubbleResult::EDITABLE_FIELD_IS_ACTIVE;
   }
 
   translate::LanguageState& language_state =
       ChromeTranslateClient::FromWebContents(web_contents)->GetLanguageState();
   language_state.SetTranslateEnabled(true);
 
-  if (!IsMinimized()) {
-    toolbar_->ShowTranslateBubble(web_contents, step, error_type,
-                                  is_user_gesture);
-  }
+  if (IsMinimized())
+    return ShowTranslateBubbleResult::BROWSER_WINDOW_MINIMIZED;
+
+  toolbar_->ShowTranslateBubble(web_contents, step, error_type,
+                                is_user_gesture);
+  return ShowTranslateBubbleResult::SUCCESS;
 }
 
 #if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
@@ -1280,7 +1282,7 @@ void BrowserView::ShowWebsiteSettings(
     Profile* profile,
     content::WebContents* web_contents,
     const GURL& virtual_url,
-    const security_state::SecurityStateModel::SecurityInfo& security_info) {
+    const security_state::SecurityInfo& security_info) {
   // Some browser windows have a location icon embedded in the frame. Try to
   // use that if it exists. If it doesn't exist, use the location icon from
   // the location bar.
@@ -1906,11 +1908,12 @@ void BrowserView::OnThemeChanged() {
     // the usage of dark or normal hinges on the browser theme), so we have to
     // propagate both kinds of change.
     base::AutoReset<bool> reset(&handling_theme_changed_, true);
+#if defined(USE_AURA)
+    ui::NativeThemeDarkAura::instance()->NotifyObservers();
+#endif
 #if defined(OS_WIN)
-    ui::NativeThemeDarkWin::instance()->NotifyObservers();
     ui::NativeThemeWin::instance()->NotifyObservers();
 #elif defined(OS_LINUX)
-    ui::NativeThemeDarkAura::instance()->NotifyObservers();
     ui::NativeThemeAura::instance()->NotifyObservers();
 #endif
   }

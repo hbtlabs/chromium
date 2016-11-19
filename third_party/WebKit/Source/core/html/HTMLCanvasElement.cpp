@@ -145,6 +145,8 @@ HTMLCanvasElement::~HTMLCanvasElement() {
 }
 
 void HTMLCanvasElement::dispose() {
+  releasePlaceholderFrame();
+
   if (m_context) {
     m_context->detachCanvas();
     m_context = nullptr;
@@ -175,27 +177,10 @@ Node::InsertionNotificationRequest HTMLCanvasElement::insertedInto(
 }
 
 void HTMLCanvasElement::setHeight(int value, ExceptionState& exceptionState) {
-  if (surfaceLayerBridge()) {
-    // The existence of surfaceLayerBridge indicates that
-    // canvas.transferControlToOffscreen has been called.
-    exceptionState.throwDOMException(InvalidStateError,
-                                     "Resizing is not allowed for a canvas "
-                                     "that has transferred its control to "
-                                     "offscreen.");
-    return;
-  }
   setIntegralAttribute(heightAttr, value);
 }
 
 void HTMLCanvasElement::setWidth(int value, ExceptionState& exceptionState) {
-  if (surfaceLayerBridge()) {
-    // Same comment as above.
-    exceptionState.throwDOMException(InvalidStateError,
-                                     "Resizing is not allowed for a canvas "
-                                     "that has transferred its control to "
-                                     "offscreen.");
-    return;
-  }
   setIntegralAttribute(widthAttr, value);
 }
 
@@ -470,8 +455,9 @@ void HTMLCanvasElement::reset() {
 }
 
 bool HTMLCanvasElement::paintsIntoCanvasBuffer() const {
+  if (placeholderFrame())
+    return false;
   DCHECK(m_context);
-
   if (!m_context->isAccelerated())
     return true;
   if (layoutBox() && layoutBox()->hasAcceleratedCompositing())
@@ -515,7 +501,7 @@ void HTMLCanvasElement::notifyListenersCanvasChanged() {
 void HTMLCanvasElement::paint(GraphicsContext& context, const LayoutRect& r) {
   // FIXME: crbug.com/438240; there is a bug with the new CSS blending and
   // compositing feature.
-  if (!m_context)
+  if (!m_context && !placeholderFrame())
     return;
 
   const ComputedStyle* style = ensureComputedStyle();
@@ -535,6 +521,12 @@ void HTMLCanvasElement::paint(GraphicsContext& context, const LayoutRect& r) {
 
   if (!paintsIntoCanvasBuffer() && !document().printing())
     return;
+
+  if (placeholderFrame()) {
+    DCHECK(document().printing());
+    context.drawImage(placeholderFrame().get(), pixelSnappedIntRect(r));
+    return;
+  }
 
   // TODO(junov): Paint is currently only implemented by ImageBitmap contexts.
   // We could improve the abstraction by making all context types paint
@@ -619,19 +611,22 @@ ImageData* HTMLCanvasElement::toImageData(SourceDrawingBuffer sourceBuffer,
 
   imageData = ImageData::create(m_size);
 
-  if (!m_context || !imageData)
+  if ((!m_context || !imageData) && !placeholderFrame())
     return imageData;
 
-  DCHECK(m_context->is2d());
+  DCHECK((m_context && m_context->is2d()) || placeholderFrame());
+  sk_sp<SkImage> snapshot;
   if (hasImageBuffer()) {
-    sk_sp<SkImage> snapshot =
-        buffer()->newSkImageSnapshot(PreferNoAcceleration, reason);
-    if (snapshot) {
-      SkImageInfo imageInfo = SkImageInfo::Make(
-          width(), height(), kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
-      snapshot->readPixels(imageInfo, imageData->data()->data(),
-                           imageInfo.minRowBytes(), 0, 0);
-    }
+    snapshot = buffer()->newSkImageSnapshot(PreferNoAcceleration, reason);
+  } else if (placeholderFrame()) {
+    snapshot = placeholderFrame()->imageForCurrentFrame();
+  }
+
+  if (snapshot) {
+    SkImageInfo imageInfo = SkImageInfo::Make(
+        width(), height(), kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
+    snapshot->readPixels(imageInfo, imageData->data()->data(),
+                         imageInfo.minRowBytes(), 0, 0);
   }
 
   return imageData;
@@ -683,13 +678,6 @@ String HTMLCanvasElement::toDataURLInternal(
 String HTMLCanvasElement::toDataURL(const String& mimeType,
                                     const ScriptValue& qualityArgument,
                                     ExceptionState& exceptionState) const {
-  if (surfaceLayerBridge()) {
-    exceptionState.throwDOMException(InvalidStateError,
-                                     "canvas.toDataURL is not allowed for a "
-                                     "canvas that has transferred its control "
-                                     "to offscreen.");
-    return String();
-  }
   if (!originClean()) {
     exceptionState.throwSecurityError("Tainted canvases may not be exported.");
     return String();
@@ -709,14 +697,6 @@ void HTMLCanvasElement::toBlob(BlobCallback* callback,
                                const String& mimeType,
                                const ScriptValue& qualityArgument,
                                ExceptionState& exceptionState) {
-  if (surfaceLayerBridge()) {
-    exceptionState.throwDOMException(InvalidStateError,
-                                     "canvas.toBlob is not allowed for a "
-                                     "canvas that has transferred its control "
-                                     "to offscreen.");
-    return;
-  }
-
   if (!originClean()) {
     exceptionState.throwSecurityError("Tainted canvases may not be exported.");
     return;
@@ -942,7 +922,7 @@ HTMLCanvasElement::createUnacceleratedImageBufferSurface(
     // here.
   }
 
-  auto surfaceFactory = wrapUnique(new UnacceleratedSurfaceFactory());
+  auto surfaceFactory = makeUnique<UnacceleratedSurfaceFactory>();
   auto surface = surfaceFactory->createSurface(deviceSize, opacityMode,
                                                m_context->skColorSpace(),
                                                m_context->colorType());
@@ -1124,6 +1104,18 @@ PassRefPtr<Image> HTMLCanvasElement::copiedImage(
   if (!m_context)
     return createTransparentImage(size());
 
+  if (m_context->getContextType() ==
+      CanvasRenderingContext::ContextImageBitmap) {
+    RefPtr<Image> image =
+        m_context->getImage(hint, SnapshotReasonGetCopiedImage);
+    if (image)
+      return m_context->getImage(hint, SnapshotReasonGetCopiedImage);
+    // Special case: transferFromImageBitmap is not yet called.
+    sk_sp<SkSurface> surface =
+        SkSurface::MakeRasterN32Premul(width(), height());
+    return StaticBitmapImage::create(surface->makeImageSnapshot());
+  }
+
   bool needToUpdate = !m_copiedImage;
   // The concept of SourceDrawingBuffer is valid on only WebGL.
   if (m_context->is3d())
@@ -1200,10 +1192,18 @@ PassRefPtr<Image> HTMLCanvasElement::getSourceImageForCanvas(
     return nullptr;
   }
 
+  if (placeholderFrame()) {
+    *status = NormalSourceImageStatus;
+    return placeholderFrame();
+  }
+
   if (!m_context) {
     *status = NormalSourceImageStatus;
     return createTransparentImage(size());
   }
+
+  if (m_context->getContextType() == CanvasRenderingContext::ContextImageBitmap)
+    return m_context->getImage(hint, reason);
 
   sk_sp<SkImage> skImage;
   if (m_context->is3d()) {
@@ -1240,6 +1240,17 @@ bool HTMLCanvasElement::wouldTaintOrigin(SecurityOrigin*) const {
 }
 
 FloatSize HTMLCanvasElement::elementSize(const FloatSize&) const {
+  if (m_context &&
+      m_context->getContextType() ==
+          CanvasRenderingContext::ContextImageBitmap) {
+    RefPtr<Image> image =
+        m_context->getImage(PreferNoAcceleration, SnapshotReasonDrawImage);
+    if (image)
+      return FloatSize(image->width(), image->height());
+    return FloatSize(0, 0);
+  }
+  if (placeholderFrame())
+    return FloatSize(placeholderFrame()->size());
   return FloatSize(width(), height());
 }
 

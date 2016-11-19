@@ -346,7 +346,7 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
         // Verify that the HTTP RTT, transport RTT and downstream throughput
         // estimates are available.
         if (testFramework.mCronetEngine.getEffectiveConnectionType()
-                != EffectiveConnectionType.TYPE_OFFLINE) {
+                != ExperimentalCronetEngine.EFFECTIVE_CONNECTION_TYPE_OFFLINE) {
             assertTrue(testFramework.mCronetEngine.getHttpRttMs() > 0);
             assertTrue(testFramework.mCronetEngine.getTransportRttMs() > 0);
             assertTrue(testFramework.mCronetEngine.getDownstreamThroughputKbps() > 0);
@@ -1222,7 +1222,7 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
         urlRequestBuilder.build().start();
         callback.blockForDone();
         assertNotNull(callback.mError);
-        assertEquals("Exception in CronetUrlRequest: net::ERR_CONNECTION_REFUSED",
+        assertContains("Exception in CronetUrlRequest: net::ERR_CONNECTION_REFUSED",
                 callback.mError.getMessage());
     }
 
@@ -1430,7 +1430,7 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
         try {
             // ensureInitialized() calls native code to check the version right after library load
             // and will error with the message below if library loading was skipped
-            CronetLibraryLoader.ensureInitialized(getContext(), builder);
+            CronetLibraryLoader.ensureInitialized(getContext().getApplicationContext(), builder);
             fail("Native library should not be loaded");
         } catch (UnsatisfiedLinkError e) {
             assertTrue(loader.wasCalled());

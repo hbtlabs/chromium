@@ -17,7 +17,9 @@
 #include "base/gtest_prod_util.h"
 #include "base/strings/string16.h"
 #include "components/rappor/public/interfaces/rappor_recorder.mojom.h"
+#include "components/spellcheck/spellcheck_build_features.h"
 #include "content/public/renderer/content_renderer_client.h"
+#include "extensions/features/features.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "printing/features/features.h"
 #include "v8/include/v8.h"
@@ -31,7 +33,7 @@ class ChromeRenderThreadObserver;
 class ChromePDFPrintClient;
 #endif
 class PrescientNetworkingDispatcher;
-#if defined(ENABLE_SPELLCHECK)
+#if BUILDFLAG(ENABLE_SPELLCHECK)
 class SpellCheck;
 class SpellCheckProvider;
 #endif
@@ -185,7 +187,7 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
   bool ShouldEnforceWebRTCRoutingPreferences() override;
   GURL OverrideFlashEmbedWithHTML(const GURL& url) override;
 
-#if defined(ENABLE_SPELLCHECK)
+#if BUILDFLAG(ENABLE_SPELLCHECK)
   // Sets a new |spellcheck|. Used for testing only.
   // Takes ownership of |spellcheck|.
   void SetSpellcheck(SpellCheck* spellcheck);
@@ -199,7 +201,7 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
       const ChromeViewHostMsg_GetPluginInfo_Output& output);
 #endif
 
-#if defined(ENABLE_PLUGINS) && defined(ENABLE_EXTENSIONS)
+#if defined(ENABLE_PLUGINS) && BUILDFLAG(ENABLE_EXTENSIONS)
   static bool IsExtensionOrSharedModuleWhitelisted(
       const GURL& url, const std::set<std::string>& whitelist);
 #endif
@@ -234,7 +236,7 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
   std::unique_ptr<network_hints::PrescientNetworkingDispatcher>
       prescient_networking_dispatcher_;
 
-#if defined(ENABLE_SPELLCHECK)
+#if BUILDFLAG(ENABLE_SPELLCHECK)
   std::unique_ptr<SpellCheck> spellcheck_;
 #endif
   std::unique_ptr<safe_browsing::PhishingClassifierFilter> phishing_classifier_;

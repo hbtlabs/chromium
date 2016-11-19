@@ -34,6 +34,7 @@ class OfflinerPolicy;
 class OfflinerFactory;
 class Offliner;
 class RequestPicker;
+class RequestQueue;
 class SavePageRequest;
 class Scheduler;
 class ClientPolicyController;
@@ -62,13 +63,6 @@ class RequestCoordinator : public KeyedService,
     ENABLED_FOR_OFFLINER,
     DISABLED_FOR_OFFLINER,
   };
-
-  // Callback to report when a request was available.
-  typedef base::Callback<void(const SavePageRequest& request)>
-      RequestPickedCallback;
-
-  // Callback to report when no request was available.
-  typedef base::Callback<void(bool)> RequestNotPickedCallback;
 
   // Callback specifying which request IDs were actually removed.
   typedef base::Callback<void(const MultipleItemStatuses&)>
@@ -192,9 +186,7 @@ class RequestCoordinator : public KeyedService,
     return processing_state_ == ProcessingWindowState::STOPPED;
   }
 
-  OfflineEventLogger* GetLogger() {
-    return &event_logger_;
-  }
+  RequestCoordinatorEventLogger* GetLogger() { return &event_logger_; }
 
  private:
   // Immediate start attempt status code for UMA.
@@ -229,17 +221,17 @@ class RequestCoordinator : public KeyedService,
   // SavePageRequest objects for the caller of GetQueuedRequests.
   void GetQueuedRequestsCallback(
       const GetRequestsCallback& callback,
-      RequestQueue::GetRequestsResult result,
+      GetRequestsResult result,
       std::vector<std::unique_ptr<SavePageRequest>> requests);
 
   // Receives the results of a get from the request queue, and turns that into
   // SavePageRequest objects for the caller of GetQueuedRequests.
   void GetRequestsForSchedulingCallback(
-      RequestQueue::GetRequestsResult result,
+      GetRequestsResult result,
       std::vector<std::unique_ptr<SavePageRequest>> requests);
 
   // Receives the result of add requests to the request queue.
-  void AddRequestResultCallback(RequestQueue::AddRequestResult result,
+  void AddRequestResultCallback(AddRequestResult result,
                                 const SavePageRequest& request);
 
   // Receives the result of mark attempt completed requests.
@@ -255,10 +247,10 @@ class RequestCoordinator : public KeyedService,
 
   void HandleRemovedRequestsAndCallback(
       const RemoveRequestsCallback& callback,
-      BackgroundSavePageResult status,
+      RequestNotifier::BackgroundSavePageResult status,
       std::unique_ptr<UpdateRequestsResult> result);
 
-  void HandleRemovedRequests(BackgroundSavePageResult status,
+  void HandleRemovedRequests(RequestNotifier::BackgroundSavePageResult status,
                              std::unique_ptr<UpdateRequestsResult> result);
 
   bool StartProcessingInternal(const ProcessingWindowState processing_state,
@@ -283,6 +275,15 @@ class RequestCoordinator : public KeyedService,
   // processing for.
   void RequestNotPicked(bool non_user_requested_tasks_remaining);
 
+  // Callback from request picker that receives the current available queued
+  // request count as well as the total queued request count (which may be
+  // different if unavailable requests are queued such as paused requests).
+  // It also receives a flag as to whether this request picking is due to the
+  // start of a request processing window.
+  void RequestCounts(bool is_start_of_processing,
+                     size_t total_requests,
+                     size_t available_requests);
+
   void HandleWatchdogTimeout();
 
   // Cancels an in progress pre-rendering, and updates state appropriately.
@@ -302,14 +303,26 @@ class RequestCoordinator : public KeyedService,
   void OfflinerDoneCallback(const SavePageRequest& request,
                             Offliner::RequestStatus status);
 
-  void TryNextRequest();
+  // Records a completed attempt for the request and update it in the queue
+  // (possibly removing it).
+  void UpdateRequestForCompletedAttempt(const SavePageRequest& request,
+                                        Offliner::RequestStatus status);
+
+  // Returns whether we should try another request based on the outcome
+  // of the previous one.
+  bool ShouldTryNextRequest(Offliner::RequestStatus previous_request_status);
+
+  // Try to find and start offlining an available request.
+  // |is_start_of_processing| identifies if this is the beginning of a
+  // processing window (vs. continuing within a current processing window).
+  void TryNextRequest(bool is_start_of_processing);
 
   // If there is an active request in the list, cancel that request.
   bool CancelActiveRequestIfItMatches(const std::vector<int64_t>& request_ids);
 
   // Records an aborted attempt for the request and update it in the queue
-  // (possibly removing it). Returns the updated copy.
-  void AbortRequestAttempt(const SavePageRequest& request);
+  // (possibly removing it).
+  void UpdateRequestForAbortedAttempt(const SavePageRequest& request);
 
   // Remove the attempted request from the queue with status to pass through to
   // any observers and UMA histogram.
@@ -384,8 +397,6 @@ class RequestCoordinator : public KeyedService,
   std::unique_ptr<SavePageRequest> active_request_;
   // Status of the most recent offlining.
   Offliner::RequestStatus last_offlining_status_;
-  // Class to choose which request to schedule next
-  std::unique_ptr<RequestPicker> picker_;
   // A set of request_ids that we are holding off until the download manager is
   // done with them.
   std::set<int64_t> disabled_requests_;

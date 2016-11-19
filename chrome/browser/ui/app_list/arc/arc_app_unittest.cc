@@ -661,12 +661,12 @@ TEST_F(ArcAppModelBuilderTest, LaunchShortcuts) {
   item_last->Activate(0);
   item_first->Activate(0);
 
-  const std::vector<std::unique_ptr<mojo::String>>& launch_intents =
+  const std::vector<std::string>& launch_intents =
       app_instance()->launch_intents();
   ASSERT_EQ(3u, launch_intents.size());
-  EXPECT_EQ(app_first.intent_uri, *launch_intents[0]);
-  EXPECT_EQ(app_last.intent_uri, *launch_intents[1]);
-  EXPECT_EQ(app_first.intent_uri, *launch_intents[2]);
+  EXPECT_EQ(app_first.intent_uri, launch_intents[0]);
+  EXPECT_EQ(app_last.intent_uri, launch_intents[1]);
+  EXPECT_EQ(app_first.intent_uri, launch_intents[2]);
 
   // Test an attempt to launch of a not-ready shortcut.
   arc_test()->StopArcInstance();
@@ -941,14 +941,14 @@ TEST_F(ArcPlayStoreAppTest, PlayStore) {
   ASSERT_TRUE(app_info);
   EXPECT_TRUE(app_info->ready);
 
-  arc_test()->arc_auth_service()->DisableArc();
+  arc_test()->arc_session_manager()->DisableArc();
 
   app_info = prefs->GetApp(arc::kPlayStoreAppId);
   ASSERT_TRUE(app_info);
   EXPECT_FALSE(app_info->ready);
 
   arc::LaunchApp(profile(), arc::kPlayStoreAppId);
-  EXPECT_TRUE(arc_test()->arc_auth_service()->IsArcEnabled());
+  EXPECT_TRUE(arc_test()->arc_session_manager()->IsArcEnabled());
 }
 
 // TODO(crbug.com/628425) -- reenable once this test is less flaky.
@@ -1138,7 +1138,7 @@ TEST_F(ArcDefaulAppTest, DefaultApps) {
   ValidateHaveApps(all_apps);
 
   // OptOut and default apps should exist minus first.
-  arc_test()->arc_auth_service()->DisableArc();
+  arc_test()->arc_session_manager()->DisableArc();
   all_apps = fake_default_apps();
   all_apps.erase(all_apps.begin());
   ValidateHaveApps(all_apps);

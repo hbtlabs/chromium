@@ -70,6 +70,7 @@
 #include "core/paint/ObjectPainter.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/PaintLayer.h"
+#include "core/paint/PaintLayerPainter.h"
 #include "core/paint/TransformRecorder.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/timing/Performance.h"
@@ -289,12 +290,12 @@ void LocalFrame::createView(const IntSize& viewportSize,
 
   FrameView* frameView = nullptr;
   if (isLocalRoot) {
-    frameView = FrameView::create(this, viewportSize);
+    frameView = FrameView::create(*this, viewportSize);
 
     // The layout size is set by WebViewImpl to support @viewport
     frameView->setLayoutSizeFixedToFrameSize(false);
   } else {
-    frameView = FrameView::create(this);
+    frameView = FrameView::create(*this);
   }
 
   frameView->setScrollbarModes(horizontalScrollbarMode, verticalScrollbarMode,
@@ -488,6 +489,11 @@ void LocalFrame::detachChildren() {
 
   if (Document* document = this->document())
     ChildFrameDisconnector(*document).disconnect();
+}
+
+void LocalFrame::documentAttached() {
+  DCHECK(document());
+  selection().documentAttached(document());
 }
 
 void LocalFrame::setDOMWindow(LocalDOMWindow* domWindow) {

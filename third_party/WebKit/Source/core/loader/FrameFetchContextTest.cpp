@@ -109,7 +109,7 @@ class FrameFetchContextTest : public ::testing::Test {
     childClient = StubFrameLoaderClientWithParent::create(document->frame());
     childFrame = LocalFrame::create(childClient.get(),
                                     document->frame()->host(), owner.get());
-    childFrame->setView(FrameView::create(childFrame.get(), IntSize(500, 500)));
+    childFrame->setView(FrameView::create(*childFrame, IntSize(500, 500)));
     childFrame->init();
     childDocumentLoader = DocumentLoader::create(
         childFrame.get(), ResourceRequest("http://www.example.com"),
@@ -609,9 +609,7 @@ TEST_F(FrameFetchContextTest, PopulateRequestData) {
 
     ResourceRequest request("http://example.test/");
     request.setFrameType(test.frameType);
-    if (strlen(test.requestorOrigin) == 0) {
-      request.setRequestorOrigin(SecurityOrigin::createUnique());
-    } else {
+    if (strlen(test.requestorOrigin) > 0) {
       request.setRequestorOrigin(
           SecurityOrigin::create(KURL(ParsedURLString, test.requestorOrigin)));
     }

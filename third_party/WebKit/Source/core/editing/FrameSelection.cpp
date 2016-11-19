@@ -457,7 +457,7 @@ void FrameSelection::respondToNodeModification(Node& node,
     selection().start().document()->layoutViewItem().clearSelection();
 
   if (clearDOMTreeSelection)
-    setSelection(SelectionInDOMTree(), DoNotSetFocus);
+    setSelection(VisibleSelection(), DoNotSetFocus);
   m_frameCaret->setCaretRectNeedsUpdate();
 
   // TODO(yosin): We should move to call |TypingCommand::closeTyping()| to
@@ -693,13 +693,14 @@ void FrameSelection::clear() {
   m_granularity = CharacterGranularity;
   if (m_granularityStrategy)
     m_granularityStrategy->Clear();
-  setSelection(SelectionInDOMTree());
+  setSelection(VisibleSelection());
 }
 
 void FrameSelection::documentAttached(Document* document) {
   DCHECK(document);
   DCHECK(!m_document) << "FrameSelection is already attached to " << m_document;
   m_document = document;
+  m_useSecureKeyboardEntryWhenActive = false;
   m_selectionEditor->documentAttached(document);
 }
 
@@ -715,7 +716,6 @@ void FrameSelection::documentDetached(const Document& document) {
   clearTypingStyle();
   m_selectionEditor->documentDetached(document);
   m_frameCaret->documentDetached();
-  m_frame->eventHandler().selectionController().documentDetached();
 }
 
 LayoutBlock* FrameSelection::caretLayoutObject() const {
@@ -847,8 +847,6 @@ void FrameSelection::selectFrameElementInParentIfFullySelected() {
   // Focus on the parent frame, and then select from before this element to
   // after.
   VisibleSelection newSelection = createVisibleSelection(builder.build());
-  // TODO(yosin): We should call |FocusController::setFocusedFrame()| before
-  // |createVisibleSelection()|.
   page->focusController().setFocusedFrame(parent);
   // setFocusedFrame can dispatch synchronous focus/blur events.  The document
   // tree might be modified.
@@ -936,7 +934,7 @@ Range* FrameSelection::firstRange() const {
 }
 
 bool FrameSelection::isInPasswordField() const {
-  HTMLTextFormControlElement* textControl = enclosingTextFormControl(start());
+  TextControlElement* textControl = enclosingTextControl(start());
   return isHTMLInputElement(textControl) &&
          toHTMLInputElement(textControl)->type() == InputTypeNames::password;
 }
@@ -989,7 +987,7 @@ void FrameSelection::focusedOrActiveStateChanged() {
   m_frame->eventHandler().capsLockStateMayHaveChanged();
 
   // Secure keyboard entry is set by the active frame.
-  if (document().useSecureKeyboardEntryWhenActive())
+  if (m_useSecureKeyboardEntryWhenActive)
     setUseSecureKeyboardEntry(activeAndFocused);
 }
 
@@ -998,8 +996,17 @@ void FrameSelection::pageActivationChanged() {
 }
 
 void FrameSelection::updateSecureKeyboardEntryIfActive() {
-  if (isFocusedAndActive())
-    setUseSecureKeyboardEntry(document().useSecureKeyboardEntryWhenActive());
+  if (!isFocusedAndActive())
+    return;
+  setUseSecureKeyboardEntry(m_useSecureKeyboardEntryWhenActive);
+}
+
+void FrameSelection::setUseSecureKeyboardEntryWhenActive(
+    bool usesSecureKeyboard) {
+  if (m_useSecureKeyboardEntryWhenActive == usesSecureKeyboard)
+    return;
+  m_useSecureKeyboardEntryWhenActive = usesSecureKeyboard;
+  updateSecureKeyboardEntryIfActive();
 }
 
 void FrameSelection::setUseSecureKeyboardEntry(bool enable) {
@@ -1040,8 +1047,7 @@ void FrameSelection::updateAppearance() {
 
 void FrameSelection::notifyLayoutObjectOfSelectionChange(
     EUserTriggered userTriggered) {
-  if (HTMLTextFormControlElement* textControl =
-          enclosingTextFormControl(start()))
+  if (TextControlElement* textControl = enclosingTextControl(start()))
     textControl->selectionChanged(userTriggered == UserTriggered);
 }
 
@@ -1290,12 +1296,13 @@ bool FrameSelection::selectWordAroundPosition(const VisiblePosition& position) {
     String text =
         plainText(EphemeralRange(start.deepEquivalent(), end.deepEquivalent()));
     if (!text.isEmpty() && !isSeparator(text.characterStartingAt(0))) {
-      setSelection(SelectionInDOMTree::Builder()
-                       .collapse(start.toPositionWithAffinity())
-                       .extend(end.deepEquivalent())
-                       .build(),
-                   CloseTyping | ClearTypingStyle,
-                   CursorAlignOnScroll::IfNeeded, WordGranularity);
+      setSelection(
+          createVisibleSelection(SelectionInDOMTree::Builder()
+                                     .collapse(start.toPositionWithAffinity())
+                                     .extend(end.deepEquivalent())
+                                     .build()),
+          CloseTyping | ClearTypingStyle, CursorAlignOnScroll::IfNeeded,
+          WordGranularity);
       return true;
     }
   }
@@ -1316,9 +1323,9 @@ GranularityStrategy* FrameSelection::granularityStrategy() {
     return m_granularityStrategy.get();
 
   if (strategyType == SelectionStrategy::Direction)
-    m_granularityStrategy = wrapUnique(new DirectionGranularityStrategy());
+    m_granularityStrategy = makeUnique<DirectionGranularityStrategy>();
   else
-    m_granularityStrategy = wrapUnique(new CharacterGranularityStrategy());
+    m_granularityStrategy = makeUnique<CharacterGranularityStrategy>();
   return m_granularityStrategy.get();
 }
 

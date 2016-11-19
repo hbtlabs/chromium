@@ -40,6 +40,7 @@
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/mhtml/ArchiveResource.h"
 #include "platform/mhtml/MHTMLArchive.h"
+#include "platform/network/NetworkInstrumentation.h"
 #include "platform/network/NetworkUtils.h"
 #include "platform/network/ResourceTimingInfo.h"
 #include "platform/tracing/TraceEvent.h"
@@ -484,6 +485,9 @@ Resource* ResourceFetcher::requestResource(
     FetchRequest& request,
     const ResourceFactory& factory,
     const SubstituteData& substituteData) {
+  unsigned long identifier = createUniqueIdentifier();
+  network_instrumentation::ScopedResourceLoadTracker scopedResourceLoadTracker(
+      identifier, request.resourceRequest());
   SCOPED_BLINK_UMA_HISTOGRAM_TIMER("Blink.Fetch.RequestResourceTime");
   DCHECK(request.options().synchronousPolicy == RequestAsynchronously ||
          factory.type() == Resource::Raw ||
@@ -494,17 +498,19 @@ Resource* ResourceFetcher::requestResource(
   context().addClientHintsIfNecessary(request);
   context().addCSPHeaderIfNecessary(factory.type(), request);
 
+  // TODO(dproy): Remove this. http://crbug.com/659666
   TRACE_EVENT1("blink", "ResourceFetcher::requestResource", "url",
                urlForTraceEvent(request.url()));
 
   if (!request.url().isValid())
     return nullptr;
 
-  unsigned long identifier = createUniqueIdentifier();
   request.mutableResourceRequest().setPriority(computeLoadPriority(
       factory.type(), request, ResourcePriority::NotVisible));
   initializeResourceRequest(request.mutableResourceRequest(), factory.type(),
                             request.defer());
+  network_instrumentation::resourcePrioritySet(
+      identifier, request.resourceRequest().priority());
 
   if (!context().canRequest(
           factory.type(), request.resourceRequest(),
@@ -584,7 +590,6 @@ Resource* ResourceFetcher::requestResource(
     case Use:
       if (resource->isLinkPreload() && !request.isLinkPreload())
         resource->setLinkPreload(false);
-      memoryCache()->updateForAccess(resource);
       break;
   }
 
@@ -631,6 +636,9 @@ Resource* ResourceFetcher::requestResource(
 
   if (!startLoad(resource))
     return nullptr;
+
+  scopedResourceLoadTracker.resourceLoadContinuesBeyondScope();
+
   DCHECK(!resource->errorOccurred() ||
          request.options().synchronousPolicy == RequestSynchronously);
   return resource;
@@ -735,9 +743,12 @@ Resource* ResourceFetcher::createResourceForLoading(
   }
   resource->setCacheIdentifier(cacheIdentifier);
 
-  // Don't add main resource to cache to prevent reuse.
-  if (factory.type() != Resource::MainResource)
+  // - Don't add main resource to cache to prevent reuse.
+  // - Don't add the resource if its body will not be stored.
+  if (factory.type() != Resource::MainResource &&
+      request.options().dataBufferingPolicy != DoNotBufferData) {
     memoryCache()->add(resource);
+  }
   return resource;
 }
 
@@ -1041,8 +1052,6 @@ bool ResourceFetcher::hasPendingRequest() const {
 void ResourceFetcher::preloadStarted(Resource* resource) {
   if (m_preloads && m_preloads->contains(resource))
     return;
-  TRACE_EVENT_ASYNC_STEP_INTO0("blink.net", "Resource", resource->identifier(),
-                               "Preload");
   resource->increasePreloadCount();
 
   if (!m_preloads)
@@ -1073,7 +1082,7 @@ void ResourceFetcher::clearPreloads(ClearPreloadsPolicy policy) {
   if (!m_preloads)
     return;
 
-  logPreloadStats();
+  logPreloadStats(policy);
 
   for (const auto& resource : *m_preloads) {
     if (policy == ClearAllPreloads || !resource->isLinkPreload()) {
@@ -1115,7 +1124,8 @@ void ResourceFetcher::didFinishLoading(Resource* resource,
                                        double finishTime,
                                        int64_t encodedDataLength,
                                        DidFinishLoadingReason finishReason) {
-  TRACE_EVENT_ASYNC_END0("blink.net", "Resource", resource->identifier());
+  network_instrumentation::endResourceLoad(
+      resource->identifier(), network_instrumentation::RequestOutcome::Success);
   DCHECK(resource);
 
   // When loading a multipart resource, make the loader non-block when finishing
@@ -1170,7 +1180,8 @@ void ResourceFetcher::didFinishLoading(Resource* resource,
 
 void ResourceFetcher::didFailLoading(Resource* resource,
                                      const ResourceError& error) {
-  TRACE_EVENT_ASYNC_END0("blink.net", "Resource", resource->identifier());
+  network_instrumentation::endResourceLoad(
+      resource->identifier(), network_instrumentation::RequestOutcome::Fail);
   removeResourceLoader(resource->loader());
   m_resourceTimingInfoMap.take(const_cast<Resource*>(resource));
   bool isInternalRequest = resource->options().initiatorInfo.name ==
@@ -1185,12 +1196,10 @@ void ResourceFetcher::didFailLoading(Resource* resource,
   }
 }
 
-void ResourceFetcher::didReceiveResponse(Resource* resource,
-                                         const ResourceResponse& response,
-                                         WebDataConsumerHandle* rawHandle) {
-  // |rawHandle|'s ownership is transferred to the callee.
-  std::unique_ptr<WebDataConsumerHandle> handle = wrapUnique(rawHandle);
-
+void ResourceFetcher::didReceiveResponse(
+    Resource* resource,
+    const ResourceResponse& response,
+    std::unique_ptr<WebDataConsumerHandle> handle) {
   if (response.wasFetchedViaServiceWorker()) {
     if (resource->options().corsEnabled == IsCORSEnabled &&
         response.wasFallbackRequiredByServiceWorker()) {
@@ -1428,9 +1437,8 @@ void ResourceFetcher::updateAllImageResourcePriorities() {
 
     resource->didChangePriority(resourceLoadPriority,
                                 resourcePriority.intraPriorityValue);
-    TRACE_EVENT_ASYNC_STEP_INTO1("blink.net", "Resource",
-                                 resource->identifier(), "ChangePriority",
-                                 "priority", resourceLoadPriority);
+    network_instrumentation::resourcePrioritySet(resource->identifier(),
+                                                 resourceLoadPriority);
     context().dispatchDidChangeResourcePriority(
         resource->identifier(), resourceLoadPriority,
         resourcePriority.intraPriorityValue);
@@ -1447,7 +1455,7 @@ void ResourceFetcher::reloadLoFiImages() {
   }
 }
 
-void ResourceFetcher::logPreloadStats() {
+void ResourceFetcher::logPreloadStats(ClearPreloadsPolicy policy) {
   if (!m_preloads)
     return;
   unsigned scripts = 0;
@@ -1467,6 +1475,11 @@ void ResourceFetcher::logPreloadStats() {
   unsigned raws = 0;
   unsigned rawMisses = 0;
   for (const auto& resource : *m_preloads) {
+    // Do not double count link rel preloads. These do not get cleared if the
+    // ClearPreloadsPolicy is only clearing speculative markup preloads.
+    if (resource->isLinkPreload() && policy == ClearSpeculativeMarkupPreloads) {
+      continue;
+    }
     int missCount =
         resource->getPreloadResult() == Resource::PreloadNotReferenced ? 1 : 0;
     switch (resource->getType()) {
@@ -1506,9 +1519,6 @@ void ResourceFetcher::logPreloadStats() {
         NOTREACHED();
     }
   }
-  // TODO(csharrison): These can falsely attribute link rel="preload" requests
-  // as misses if they are referenced after parsing completes. Migrate this
-  // logic to the memory cache / individual resources to prevent this.
   DEFINE_STATIC_LOCAL(CustomCountHistogram, imagePreloads,
                       ("PreloadScanner.Counts2.Image", 0, 100, 25));
   DEFINE_STATIC_LOCAL(CustomCountHistogram, imagePreloadMisses,

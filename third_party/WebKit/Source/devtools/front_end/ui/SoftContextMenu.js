@@ -26,11 +26,11 @@
 /**
  * @unrestricted
  */
-WebInspector.SoftContextMenu = class {
+UI.SoftContextMenu = class {
   /**
    * @param {!Array.<!InspectorFrontendHostAPI.ContextMenuDescriptor>} items
    * @param {function(string)} itemSelectedCallback
-   * @param {!WebInspector.SoftContextMenu=} parentMenu
+   * @param {!UI.SoftContextMenu=} parentMenu
    */
   constructor(items, itemSelectedCallback, parentMenu) {
     this._items = items;
@@ -54,7 +54,7 @@ WebInspector.SoftContextMenu = class {
 
     // Create context menu.
     this.element = createElementWithClass('div', 'soft-context-menu');
-    var root = WebInspector.createShadowRootWithCoreStyles(this.element, 'ui/softContextMenu.css');
+    var root = UI.createShadowRootWithCoreStyles(this.element, 'ui/softContextMenu.css');
     this._contextMenuElement = root.createChild('div');
     this.element.style.top = y + 'px';
     var subMenuOverlap = 3;
@@ -85,7 +85,7 @@ WebInspector.SoftContextMenu = class {
     if (document.body.offsetWidth < this.element.offsetLeft + this.element.offsetWidth) {
       this.element.style.left =
           Math.max(
-              WebInspector.Dialog.modalHostView().element.totalOffsetLeft(), this._parentMenu ?
+              UI.Dialog.modalHostView().element.totalOffsetLeft(), this._parentMenu ?
                   this._parentMenu.element.offsetLeft - this.element.offsetWidth + subMenuOverlap :
                   document.body.offsetWidth - this.element.offsetWidth) +
           'px';
@@ -94,13 +94,12 @@ WebInspector.SoftContextMenu = class {
     // Move submenus upwards if it does not fit.
     if (this._parentMenu && document.body.offsetHeight < this.element.offsetTop + this.element.offsetHeight) {
       y = Math.max(
-          WebInspector.Dialog.modalHostView().element.totalOffsetTop(),
-          document.body.offsetHeight - this.element.offsetHeight);
+          UI.Dialog.modalHostView().element.totalOffsetTop(), document.body.offsetHeight - this.element.offsetHeight);
       this.element.style.top = y + 'px';
     }
 
-    var maxHeight = WebInspector.Dialog.modalHostView().element.offsetHeight;
-    maxHeight -= y - WebInspector.Dialog.modalHostView().element.totalOffsetTop();
+    var maxHeight = UI.Dialog.modalHostView().element.offsetHeight;
+    maxHeight -= y - UI.Dialog.modalHostView().element.totalOffsetTop();
     this.element.style.maxHeight = maxHeight + 'px';
 
     this._focus();
@@ -220,7 +219,7 @@ WebInspector.SoftContextMenu = class {
     if (this._subMenu)
       return;
 
-    this._subMenu = new WebInspector.SoftContextMenu(menuItemElement._subItems, this._itemSelectedCallback, this);
+    this._subMenu = new UI.SoftContextMenu(menuItemElement._subItems, this._itemSelectedCallback, this);
     var topPadding = 4;
     this._subMenu.show(
         this._document, menuItemElement.totalOffsetLeft() + menuItemElement.offsetWidth,
@@ -270,9 +269,10 @@ WebInspector.SoftContextMenu = class {
       this._highlightedMenuItemElement.classList.add('soft-context-menu-item-mouse-over');
       this._contextMenuElement.focus();
       if (scheduleSubMenu && this._highlightedMenuItemElement._subItems &&
-          !this._highlightedMenuItemElement._subMenuTimer)
+          !this._highlightedMenuItemElement._subMenuTimer) {
         this._highlightedMenuItemElement._subMenuTimer =
             setTimeout(this._showSubMenu.bind(this, this._highlightedMenuItemElement), 150);
+      }
     }
   }
 

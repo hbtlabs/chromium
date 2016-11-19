@@ -12,9 +12,7 @@ StubOfflinePageModel::~StubOfflinePageModel() {}
 void StubOfflinePageModel::AddObserver(Observer* observer) {}
 void StubOfflinePageModel::RemoveObserver(Observer* observer) {}
 void StubOfflinePageModel::SavePage(
-    const GURL& url,
-    const ClientId& client_id,
-    int64_t proposed_offline_id,
+    const SavePageParams& save_page_params,
     std::unique_ptr<OfflinePageArchiver> archiver,
     const SavePageCallback& callback) {}
 void StubOfflinePageModel::MarkPageAccessed(int64_t offline_id) {}
@@ -24,6 +22,9 @@ void StubOfflinePageModel::DeletePagesByOfflineId(
 void StubOfflinePageModel::DeletePagesByClientIds(
     const std::vector<ClientId>& client_ids,
     const DeletePageCallback& callback) {}
+void StubOfflinePageModel::GetPagesMatchingQuery(
+    std::unique_ptr<OfflinePageModelQuery> query,
+    const MultipleOfflinePageItemCallback& callback) {}
 void StubOfflinePageModel::GetPagesByClientIds(
     const std::vector<ClientId>& client_ids,
     const MultipleOfflinePageItemCallback& callback) {}
@@ -43,15 +44,16 @@ void StubOfflinePageModel::GetOfflineIdsForClientId(
 void StubOfflinePageModel::GetPageByOfflineId(
     int64_t offline_id,
     const SingleOfflinePageItemCallback& callback) {}
-void StubOfflinePageModel::GetPagesByOnlineURL(
-    const GURL& online_url,
+void StubOfflinePageModel::GetPagesByURL(
+    const GURL& url,
+    URLSearchMode url_search_mode,
     const MultipleOfflinePageItemCallback& callback) {}
 void StubOfflinePageModel::ExpirePages(
     const std::vector<int64_t>& offline_ids,
     const base::Time& expiration_time,
     const base::Callback<void(bool)>& callback) {}
 ClientPolicyController* StubOfflinePageModel::GetPolicyController() {
-  return nullptr;
+  return &policy_controller_;
 }
 bool StubOfflinePageModel::is_loaded() const {
   return true;

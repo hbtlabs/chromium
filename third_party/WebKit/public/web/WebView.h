@@ -97,9 +97,6 @@ class WebView : protected WebWidget {
   using WebWidget::applyViewportDeltas;
   using WebWidget::mouseCaptureLost;
   using WebWidget::setFocus;
-  using WebWidget::setComposition;
-  using WebWidget::commitText;
-  using WebWidget::finishComposingText;
   using WebWidget::compositionRange;
   using WebWidget::textInputInfo;
   using WebWidget::textInputType;
@@ -196,10 +193,6 @@ class WebView : protected WebWidget {
   // is different from setFocusedFrame, which does not fire events on focused
   // elements.
   virtual void focusDocumentView(WebFrame*) = 0;
-
-  // Sets no frame as focused and fires blur events on any currently focused
-  // element.
-  virtual void unfocusDocumentView() = 0;
 
   // Focus the first (last if reverse is true) focusable node.
   virtual void setInitialFocus(bool reverse) = 0;
@@ -370,33 +363,6 @@ class WebView : protected WebWidget {
   // that has width/height corresponding to the supplied |tapArea|.
   virtual WebHitTestResult hitTestResultForTap(const WebPoint& tapPoint,
                                                const WebSize& tapArea) = 0;
-
-  // Notifies the WebView that a drag has terminated.
-  virtual void dragSourceEndedAt(const WebPoint& pointInViewport,
-                                 const WebPoint& screenPoint,
-                                 WebDragOperation operation) = 0;
-
-  // Notfies the WebView that the system drag and drop operation has ended.
-  virtual void dragSourceSystemDragEnded() = 0;
-
-  // Callback methods when a drag-and-drop operation is trying to drop
-  // something on the WebView.
-  virtual WebDragOperation dragTargetDragEnter(
-      const WebDragData&,
-      const WebPoint& pointInViewport,
-      const WebPoint& screenPoint,
-      WebDragOperationsMask operationsAllowed,
-      int modifiers) = 0;
-  virtual WebDragOperation dragTargetDragOver(
-      const WebPoint& pointInViewport,
-      const WebPoint& screenPoint,
-      WebDragOperationsMask operationsAllowed,
-      int modifiers) = 0;
-  virtual void dragTargetDragLeave() = 0;
-  virtual void dragTargetDrop(const WebDragData&,
-                              const WebPoint& pointInViewport,
-                              const WebPoint& screenPoint,
-                              int modifiers) = 0;
 
   // Retrieves a list of spelling markers.
   virtual void spellingMarkers(WebVector<uint32_t>* markers) = 0;

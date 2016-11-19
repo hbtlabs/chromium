@@ -94,7 +94,8 @@ static void applyClipRects(const ClipRectsContext& context,
     if (layoutObject.isPositioned())
       clipRects.setPosClipRect(
           intersection(newOverflowClip, clipRects.posClipRect()));
-    if (layoutObject.isLayoutView())
+    if (layoutObject.isLayoutView() ||
+        layoutObject.hasTransformRelatedProperty())
       clipRects.setFixedClipRect(
           intersection(newOverflowClip, clipRects.fixedClipRect()));
     if (layoutObject.styleRef().containsPaint()) {
@@ -412,7 +413,7 @@ void PaintLayerClipper::calculateClipRects(const ClipRectsContext& context,
     // the PaintLayerCompositor overlapMap, where clipRects are needed in view
     // space.
     applyClipRects(context, layoutObject,
-                   roundedLayoutPoint(layoutObject.localToAncestorPoint(
+                   LayoutPoint(layoutObject.localToAncestorPoint(
                        FloatPoint(), context.rootLayer->layoutObject())),
                    clipRects);
   }

@@ -11,31 +11,29 @@
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
+#include "modules/background_sync/BackgroundSyncProvider.h"
 #include "modules/background_sync/SyncCallbacks.h"
 #include "modules/serviceworkers/ServiceWorkerRegistration.h"
 #include "public/platform/Platform.h"
-#include "public/platform/modules/background_sync/WebSyncProvider.h"
-#include "public/platform/modules/background_sync/WebSyncRegistration.h"
-#include "wtf/RefPtr.h"
+#include "wtf/PtrUtil.h"
+#include "wtf/ThreadSpecific.h"
 
 namespace blink {
-namespace {
 
-WebSyncProvider* backgroundSyncProvider() {
-  WebSyncProvider* webSyncProvider =
-      Platform::current()->backgroundSyncProvider();
-  ASSERT(webSyncProvider);
-  return webSyncProvider;
-}
+// static
+BackgroundSyncProvider* SyncManager::backgroundSyncProvider() {
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<BackgroundSyncProvider>,
+                                  syncProvider,
+                                  new ThreadSpecific<BackgroundSyncProvider>);
+  return syncProvider;
 }
 
 SyncManager::SyncManager(ServiceWorkerRegistration* registration)
     : m_registration(registration) {
-  ASSERT(registration);
+  DCHECK(registration);
 }
 
 ScriptPromise SyncManager::registerFunction(ScriptState* scriptState,
-                                            ExecutionContext* context,
                                             const String& tag) {
   // TODO(jkarlin): Wait for the registration to become active instead of
   // rejecting. See crbug.com/542437.
@@ -48,13 +46,16 @@ ScriptPromise SyncManager::registerFunction(ScriptState* scriptState,
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
   ScriptPromise promise = resolver->promise();
 
-  WebSyncRegistration* webSyncRegistration = new WebSyncRegistration(
-      WebSyncRegistration::UNREGISTERED_SYNC_ID /* id */, tag,
-      WebSyncRegistration::NetworkStateOnline /* networkState */
-      );
+  mojom::blink::SyncRegistrationPtr syncRegistration =
+      mojom::blink::SyncRegistration::New();
+  syncRegistration->id = SyncManager::kUnregisteredSyncID;
+  syncRegistration->tag = tag;
+  syncRegistration->network_state =
+      blink::mojom::BackgroundSyncNetworkState::ONLINE;
+
   backgroundSyncProvider()->registerBackgroundSync(
-      webSyncRegistration, m_registration->webRegistration(),
-      new SyncRegistrationCallbacks(resolver, m_registration));
+      std::move(syncRegistration), m_registration->webRegistration(),
+      makeUnique<SyncRegistrationCallbacks>(resolver, m_registration));
 
   return promise;
 }
@@ -65,7 +66,7 @@ ScriptPromise SyncManager::getTags(ScriptState* scriptState) {
 
   backgroundSyncProvider()->getRegistrations(
       m_registration->webRegistration(),
-      new SyncGetRegistrationsCallbacks(resolver, m_registration));
+      makeUnique<SyncGetRegistrationsCallbacks>(resolver, m_registration));
 
   return promise;
 }

@@ -3,27 +3,22 @@
 //
 // The resulting manifest is output to
 // ${out}/Packages/chrome_mash_content_browser/manifest.json and is used as the
-// manifest for "service:content_browser" (i.e. the browser process) when Chrome
+// manifest for "content_browser" (i.e. the browser process) when Chrome
 // is run in a Mash environment.
 {
   "interface_provider_specs": {
     "service_manager:connector": {
       "provides": {
-        "content_browser:ash": [
-          "ash::mojom::NewWindowClient",
-          "ash::mojom::ShutdownClient",
-          "ash::mojom::SystemTrayClient",
-          "ash::mojom::VolumeController",
-          "ash::mojom::WallpaperManager",
-          "app_list::mojom::AppListPresenter",
-          "keyboard::mojom::Keyboard"
-        ]
+        "ash": [
+          "app_list::mojom::AppListPresenter"
+        ],
+        "ime:ime_driver": [ "ui::mojom::IMEDriver" ]
       },
       "requires": {
-        "service:ash": [ "ash" ],
-        "service:accessibility_autoclick": [ "ash:autoclick" ],
-        "service:mash_session": [ "app" ],
-        "service:task_viewer": [ "mash:launchable" ]
+        "accessibility_autoclick": [ "ash:autoclick" ],
+        "mash_session": [ "app" ],
+        "task_viewer": [ "mash:launchable" ],
+        "ui": [ "ui:ime_registrar" ]
       }
     }
   }

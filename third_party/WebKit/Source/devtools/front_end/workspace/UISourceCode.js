@@ -28,14 +28,14 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /**
- * @implements {WebInspector.ContentProvider}
+ * @implements {Common.ContentProvider}
  * @unrestricted
  */
-WebInspector.UISourceCode = class extends WebInspector.Object {
+Workspace.UISourceCode = class extends Common.Object {
   /**
-   * @param {!WebInspector.Project} project
+   * @param {!Workspace.Project} project
    * @param {string} url
-   * @param {!WebInspector.ResourceType} contentType
+   * @param {!Common.ResourceType} contentType
    */
   constructor(project, url, contentType) {
     super();
@@ -60,18 +60,18 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
     this._requestContentCallback = null;
     /** @type {?Promise<?string>} */
     this._requestContentPromise = null;
-    /** @type {!Map<string, !Map<number, !WebInspector.UISourceCode.LineMarker>>} */
-    this._lineDecorations = new Map();
+    /** @type {!Multimap<string, !Workspace.UISourceCode.LineMarker>} */
+    this._decorations = new Multimap();
 
-    /** @type {!Array.<!WebInspector.Revision>} */
+    /** @type {!Array.<!Workspace.Revision>} */
     this.history = [];
 
-    /** @type {!Array<!WebInspector.UISourceCode.Message>} */
+    /** @type {!Array<!Workspace.UISourceCode.Message>} */
     this._messages = [];
   }
 
   /**
-   * @return {!Promise<?WebInspector.UISourceCodeMetadata>}
+   * @return {!Promise<?Workspace.UISourceCodeMetadata>}
    */
   requestMetadata() {
     return this._project.requestMetadata(this);
@@ -123,7 +123,7 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
    */
   displayName(skipTrim) {
     if (!this._name)
-      return WebInspector.UIString('(index)');
+      return Common.UIString('(index)');
     var name = this._name;
     try {
       name = decodeURI(name);
@@ -136,7 +136,7 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
    * @return {boolean}
    */
   isFromServiceProject() {
-    return WebInspector.Project.isServiceProject(this._project);
+    return Workspace.Project.isServiceProject(this._project);
   }
 
   /**
@@ -157,14 +157,15 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
      * @param {boolean} success
      * @param {string=} newName
      * @param {string=} newURL
-     * @param {!WebInspector.ResourceType=} newContentType
-     * @this {WebInspector.UISourceCode}
+     * @param {!Common.ResourceType=} newContentType
+     * @this {Workspace.UISourceCode}
      */
     function innerCallback(success, newName, newURL, newContentType) {
-      if (success)
+      if (success) {
         this._updateName(
             /** @type {string} */ (newName), /** @type {string} */ (newURL),
-            /** @type {!WebInspector.ResourceType} */ (newContentType));
+            /** @type {!Common.ResourceType} */ (newContentType));
+      }
       callback(success);
     }
   }
@@ -176,7 +177,7 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
   /**
    * @param {string} name
    * @param {string} url
-   * @param {!WebInspector.ResourceType=} contentType
+   * @param {!Common.ResourceType=} contentType
    */
   _updateName(name, url, contentType) {
     var oldURL = this.url();
@@ -186,7 +187,7 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
       this._url = url;
     if (contentType)
       this._contentType = contentType;
-    this.dispatchEventToListeners(WebInspector.UISourceCode.Events.TitleChanged, oldURL);
+    this.dispatchEventToListeners(Workspace.UISourceCode.Events.TitleChanged, oldURL);
   }
 
   /**
@@ -199,14 +200,14 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
 
   /**
    * @override
-   * @return {!WebInspector.ResourceType}
+   * @return {!Common.ResourceType}
    */
   contentType() {
     return this._contentType;
   }
 
   /**
-   * @return {!WebInspector.Project}
+   * @return {!Workspace.Project}
    */
   project() {
     return this._project;
@@ -273,7 +274,7 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
 
     /**
      * @param {?string} updatedContent
-     * @this {WebInspector.UISourceCode}
+     * @this {Workspace.UISourceCode}
      */
     function contentLoaded(updatedContent) {
       if (updatedContent === null) {
@@ -301,7 +302,7 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
       }
 
       var shouldUpdate =
-          window.confirm(WebInspector.UIString('This file was changed externally. Would you like to reload it?'));
+          window.confirm(Common.UIString('This file was changed externally. Would you like to reload it?'));
       if (shouldUpdate)
         this._contentCommitted(updatedContent, false);
       else
@@ -330,9 +331,9 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
   _commitContent(content) {
     if (this._project.canSetFileContent()) {
       this._project.setFileContent(this, content, function() {});
-    } else if (this._url && WebInspector.fileManager.isURLSaved(this._url)) {
-      WebInspector.fileManager.save(this._url, content, false, function() {});
-      WebInspector.fileManager.close(this._url);
+    } else if (this._url && Workspace.fileManager.isURLSaved(this._url)) {
+      Workspace.fileManager.save(this._url, content, false, function() {});
+      Workspace.fileManager.close(this._url);
     }
     this._contentCommitted(content, true);
   }
@@ -348,26 +349,27 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
 
     var lastRevision = this.history.length ? this.history[this.history.length - 1] : null;
     if (!lastRevision || lastRevision._content !== this._content) {
-      var revision = new WebInspector.Revision(this, this._content, new Date());
+      var revision = new Workspace.Revision(this, this._content, new Date());
       this.history.push(revision);
     }
 
     this._innerResetWorkingCopy();
-    this.dispatchEventToListeners(WebInspector.UISourceCode.Events.WorkingCopyCommitted, {content: content});
+    this.dispatchEventToListeners(Workspace.UISourceCode.Events.WorkingCopyCommitted, {content: content});
     this._project.workspace().dispatchEventToListeners(
-        WebInspector.Workspace.Events.WorkingCopyCommitted, {uiSourceCode: this, content: content});
-    if (committedByUser)
+        Workspace.Workspace.Events.WorkingCopyCommitted, {uiSourceCode: this, content: content});
+    if (committedByUser) {
       this._project.workspace().dispatchEventToListeners(
-          WebInspector.Workspace.Events.WorkingCopyCommittedByUser, {uiSourceCode: this, content: content});
+          Workspace.Workspace.Events.WorkingCopyCommittedByUser, {uiSourceCode: this, content: content});
+    }
   }
 
   saveAs() {
-    WebInspector.fileManager.save(this._url, this.workingCopy(), true, callback.bind(this));
-    WebInspector.fileManager.close(this._url);
+    Workspace.fileManager.save(this._url, this.workingCopy(), true, callback.bind(this));
+    Workspace.fileManager.close(this._url);
 
     /**
      * @param {boolean} accepted
-     * @this {WebInspector.UISourceCode}
+     * @this {Workspace.UISourceCode}
      */
     function callback(accepted) {
       if (accepted)
@@ -387,7 +389,7 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
    */
   revertToOriginal() {
     /**
-     * @this {WebInspector.UISourceCode}
+     * @this {Workspace.UISourceCode}
      * @param {?string} content
      */
     function callback(content) {
@@ -397,16 +399,16 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
       this.addRevision(content);
     }
 
-    WebInspector.userMetrics.actionTaken(WebInspector.UserMetrics.Action.RevisionApplied);
+    Host.userMetrics.actionTaken(Host.UserMetrics.Action.RevisionApplied);
     return this.requestOriginalContent().then(callback.bind(this));
   }
 
   /**
-   * @param {function(!WebInspector.UISourceCode)} callback
+   * @param {function(!Workspace.UISourceCode)} callback
    */
   revertAndClearHistory(callback) {
     /**
-     * @this {WebInspector.UISourceCode}
+     * @this {Workspace.UISourceCode}
      * @param {?string} content
      */
     function revert(content) {
@@ -418,7 +420,7 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
       callback(this);
     }
 
-    WebInspector.userMetrics.actionTaken(WebInspector.UserMetrics.Action.RevisionApplied);
+    Host.userMetrics.actionTaken(Host.UserMetrics.Action.RevisionApplied);
     this.requestOriginalContent().then(revert.bind(this));
   }
 
@@ -437,7 +439,7 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
 
   resetWorkingCopy() {
     this._innerResetWorkingCopy();
-    this.dispatchEventToListeners(WebInspector.UISourceCode.Events.WorkingCopyChanged);
+    this.dispatchEventToListeners(Workspace.UISourceCode.Events.WorkingCopyChanged);
   }
 
   _innerResetWorkingCopy() {
@@ -451,16 +453,16 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
   setWorkingCopy(newWorkingCopy) {
     this._workingCopy = newWorkingCopy;
     delete this._workingCopyGetter;
-    this.dispatchEventToListeners(WebInspector.UISourceCode.Events.WorkingCopyChanged);
+    this.dispatchEventToListeners(Workspace.UISourceCode.Events.WorkingCopyChanged);
     this._project.workspace().dispatchEventToListeners(
-        WebInspector.Workspace.Events.WorkingCopyChanged, {uiSourceCode: this});
+        Workspace.Workspace.Events.WorkingCopyChanged, {uiSourceCode: this});
   }
 
   setWorkingCopyGetter(workingCopyGetter) {
     this._workingCopyGetter = workingCopyGetter;
-    this.dispatchEventToListeners(WebInspector.UISourceCode.Events.WorkingCopyChanged);
+    this.dispatchEventToListeners(Workspace.UISourceCode.Events.WorkingCopyChanged);
     this._project.workspace().dispatchEventToListeners(
-        WebInspector.Workspace.Events.WorkingCopyChanged, {uiSourceCode: this});
+        Workspace.Workspace.Events.WorkingCopyChanged, {uiSourceCode: this});
   }
 
   removeWorkingCopyGetter() {
@@ -486,7 +488,7 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
    * @return {string}
    */
   extension() {
-    return WebInspector.ParsedURL.extractExtension(this._name);
+    return Common.ParsedURL.extractExtension(this._name);
   }
 
   /**
@@ -501,7 +503,7 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
    * @param {string} query
    * @param {boolean} caseSensitive
    * @param {boolean} isRegex
-   * @param {function(!Array.<!WebInspector.ContentProvider.SearchMatch>)} callback
+   * @param {function(!Array.<!Common.ContentProvider.SearchMatch>)} callback
    */
   searchInContent(query, caseSensitive, isRegex, callback) {
     var content = this.content();
@@ -517,7 +519,7 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
      * @param {string} content
      */
     function doSearch(content) {
-      callback(WebInspector.ContentProvider.performSearchInContent(content, query, caseSensitive, isRegex));
+      callback(Common.ContentProvider.performSearchInContent(content, query, caseSensitive, isRegex));
     }
   }
 
@@ -545,59 +547,59 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
   /**
    * @param {number} lineNumber
    * @param {number=} columnNumber
-   * @return {!WebInspector.UILocation}
+   * @return {!Workspace.UILocation}
    */
   uiLocation(lineNumber, columnNumber) {
     if (typeof columnNumber === 'undefined')
       columnNumber = 0;
-    return new WebInspector.UILocation(this, lineNumber, columnNumber);
+    return new Workspace.UILocation(this, lineNumber, columnNumber);
   }
 
   /**
-   * @return {!Array<!WebInspector.UISourceCode.Message>}
+   * @return {!Array<!Workspace.UISourceCode.Message>}
    */
   messages() {
     return this._messages.slice();
   }
 
   /**
-   * @param {!WebInspector.UISourceCode.Message.Level} level
+   * @param {!Workspace.UISourceCode.Message.Level} level
    * @param {string} text
    * @param {number} lineNumber
    * @param {number=} columnNumber
-   * @return {!WebInspector.UISourceCode.Message} message
+   * @return {!Workspace.UISourceCode.Message} message
    */
   addLineMessage(level, text, lineNumber, columnNumber) {
     return this.addMessage(
-        level, text, new WebInspector.TextRange(lineNumber, columnNumber || 0, lineNumber, columnNumber || 0));
+        level, text, new Common.TextRange(lineNumber, columnNumber || 0, lineNumber, columnNumber || 0));
   }
 
   /**
-   * @param {!WebInspector.UISourceCode.Message.Level} level
+   * @param {!Workspace.UISourceCode.Message.Level} level
    * @param {string} text
-   * @param {!WebInspector.TextRange} range
-   * @return {!WebInspector.UISourceCode.Message} message
+   * @param {!Common.TextRange} range
+   * @return {!Workspace.UISourceCode.Message} message
    */
   addMessage(level, text, range) {
-    var message = new WebInspector.UISourceCode.Message(this, level, text, range);
+    var message = new Workspace.UISourceCode.Message(this, level, text, range);
     this._messages.push(message);
-    this.dispatchEventToListeners(WebInspector.UISourceCode.Events.MessageAdded, message);
+    this.dispatchEventToListeners(Workspace.UISourceCode.Events.MessageAdded, message);
     return message;
   }
 
   /**
-   * @param {!WebInspector.UISourceCode.Message} message
+   * @param {!Workspace.UISourceCode.Message} message
    */
   removeMessage(message) {
     if (this._messages.remove(message))
-      this.dispatchEventToListeners(WebInspector.UISourceCode.Events.MessageRemoved, message);
+      this.dispatchEventToListeners(Workspace.UISourceCode.Events.MessageRemoved, message);
   }
 
   removeAllMessages() {
     var messages = this._messages;
     this._messages = [];
     for (var message of messages)
-      this.dispatchEventToListeners(WebInspector.UISourceCode.Events.MessageRemoved, message);
+      this.dispatchEventToListeners(Workspace.UISourceCode.Events.MessageRemoved, message);
   }
 
   /**
@@ -606,57 +608,56 @@ WebInspector.UISourceCode = class extends WebInspector.Object {
    * @param {?} data
    */
   addLineDecoration(lineNumber, type, data) {
-    var markers = this._lineDecorations.get(type);
-    if (!markers) {
-      markers = new Map();
-      this._lineDecorations.set(type, markers);
-    }
-    var marker = new WebInspector.UISourceCode.LineMarker(lineNumber, type, data);
-    markers.set(lineNumber, marker);
-    this.dispatchEventToListeners(WebInspector.UISourceCode.Events.LineDecorationAdded, marker);
+    this.addDecoration(Common.TextRange.createFromLocation(lineNumber, 0), type, data);
   }
 
   /**
-   * @param {number} lineNumber
+   * @param {!Common.TextRange} range
    * @param {string} type
+   * @param {?} data
    */
-  removeLineDecoration(lineNumber, type) {
-    var markers = this._lineDecorations.get(type);
-    if (!markers)
-      return;
-    var marker = markers.get(lineNumber);
-    if (!marker)
-      return;
-    markers.delete(lineNumber);
-    this.dispatchEventToListeners(WebInspector.UISourceCode.Events.LineDecorationRemoved, marker);
-    if (!markers.size)
-      this._lineDecorations.delete(type);
+  addDecoration(range, type, data) {
+    var marker = new Workspace.UISourceCode.LineMarker(range, type, data);
+    this._decorations.set(type, marker);
+    this.dispatchEventToListeners(Workspace.UISourceCode.Events.LineDecorationAdded, marker);
   }
 
   /**
    * @param {string} type
    */
-  removeAllLineDecorations(type) {
-    var markers = this._lineDecorations.get(type);
-    if (!markers)
-      return;
-    this._lineDecorations.delete(type);
+  removeDecorationsForType(type) {
+    var markers = this._decorations.get(type);
+    this._decorations.removeAll(type);
     markers.forEach(marker => {
-      this.dispatchEventToListeners(WebInspector.UISourceCode.Events.LineDecorationRemoved, marker);
+      this.dispatchEventToListeners(Workspace.UISourceCode.Events.LineDecorationRemoved, marker);
     });
   }
 
   /**
-   * @param {string} type
-   * @return {?Map<number, !WebInspector.UISourceCode.LineMarker>}
+   * @return {!Array<!Workspace.UISourceCode.LineMarker>}
    */
-  lineDecorations(type) {
-    return this._lineDecorations.get(type) || null;
+  allDecorations() {
+    return this._decorations.valuesArray();
+  }
+
+  removeAllDecorations() {
+    var decorationList = this._decorations.valuesArray();
+    this._decorations.clear();
+    decorationList.forEach(
+        marker => this.dispatchEventToListeners(Workspace.UISourceCode.Events.LineDecorationRemoved, marker));
+  }
+
+  /**
+   * @param {string} type
+   * @return {!Set<!Workspace.UISourceCode.LineMarker>}
+   */
+  decorationsForType(type) {
+    return this._decorations.get(type);
   }
 };
 
 /** @enum {symbol} */
-WebInspector.UISourceCode.Events = {
+Workspace.UISourceCode.Events = {
   WorkingCopyChanged: Symbol('WorkingCopyChanged'),
   WorkingCopyCommitted: Symbol('WorkingCopyCommitted'),
   TitleChanged: Symbol('TitleChanged'),
@@ -670,9 +671,9 @@ WebInspector.UISourceCode.Events = {
 /**
  * @unrestricted
  */
-WebInspector.UILocation = class {
+Workspace.UILocation = class {
   /**
-   * @param {!WebInspector.UISourceCode} uiSourceCode
+   * @param {!Workspace.UISourceCode} uiSourceCode
    * @param {number} lineNumber
    * @param {number} columnNumber
    */
@@ -706,15 +707,36 @@ WebInspector.UILocation = class {
   toUIString() {
     return this.uiSourceCode.url() + ':' + (this.lineNumber + 1);
   }
+
+  /**
+   * @param {!Workspace.UILocation} location1
+   * @param {!Workspace.UILocation} location2
+   * @return {number}
+   */
+  static comparator(location1, location2) {
+    return location1.compareTo(location2);
+  }
+
+  /**
+   * @param {!Workspace.UILocation} other
+   * @return {number}
+   */
+  compareTo(other) {
+    if (this.uiSourceCode.url() !== other.uiSourceCode.url())
+      return this.uiSourceCode.url() > other.uiSourceCode.url() ? 1 : -1;
+    if (this.lineNumber !== other.lineNumber)
+      return this.lineNumber - other.lineNumber;
+    return this.columnNumber - other.columnNumber;
+  }
 };
 
 /**
- * @implements {WebInspector.ContentProvider}
+ * @implements {Common.ContentProvider}
  * @unrestricted
  */
-WebInspector.Revision = class {
+Workspace.Revision = class {
   /**
-   * @param {!WebInspector.UISourceCode} uiSourceCode
+   * @param {!Workspace.UISourceCode} uiSourceCode
    * @param {?string|undefined} content
    * @param {!Date} timestamp
    */
@@ -725,7 +747,7 @@ WebInspector.Revision = class {
   }
 
   /**
-   * @return {!WebInspector.UISourceCode}
+   * @return {!Workspace.UISourceCode}
    */
   get uiSourceCode() {
     return this._uiSourceCode;
@@ -751,13 +773,13 @@ WebInspector.Revision = class {
   revertToThis() {
     /**
      * @param {?string} content
-     * @this {WebInspector.Revision}
+     * @this {Workspace.Revision}
      */
     function revert(content) {
       if (content && this._uiSourceCode._content !== content)
         this._uiSourceCode.addRevision(content);
     }
-    WebInspector.userMetrics.actionTaken(WebInspector.UserMetrics.Action.RevisionApplied);
+    Host.userMetrics.actionTaken(Host.UserMetrics.Action.RevisionApplied);
     return this.requestContent().then(revert.bind(this));
   }
 
@@ -771,7 +793,7 @@ WebInspector.Revision = class {
 
   /**
    * @override
-   * @return {!WebInspector.ResourceType}
+   * @return {!Common.ResourceType}
    */
   contentType() {
     return this._uiSourceCode.contentType();
@@ -790,7 +812,7 @@ WebInspector.Revision = class {
    * @param {string} query
    * @param {boolean} caseSensitive
    * @param {boolean} isRegex
-   * @param {function(!Array.<!WebInspector.ContentProvider.SearchMatch>)} callback
+   * @param {function(!Array.<!Common.ContentProvider.SearchMatch>)} callback
    */
   searchInContent(query, caseSensitive, isRegex, callback) {
     callback([]);
@@ -800,12 +822,12 @@ WebInspector.Revision = class {
 /**
  * @unrestricted
  */
-WebInspector.UISourceCode.Message = class {
+Workspace.UISourceCode.Message = class {
   /**
-   * @param {!WebInspector.UISourceCode} uiSourceCode
-   * @param {!WebInspector.UISourceCode.Message.Level} level
+   * @param {!Workspace.UISourceCode} uiSourceCode
+   * @param {!Workspace.UISourceCode.Message.Level} level
    * @param {string} text
-   * @param {!WebInspector.TextRange} range
+   * @param {!Common.TextRange} range
    */
   constructor(uiSourceCode, level, text, range) {
     this._uiSourceCode = uiSourceCode;
@@ -815,14 +837,14 @@ WebInspector.UISourceCode.Message = class {
   }
 
   /**
-   * @return {!WebInspector.UISourceCode}
+   * @return {!Workspace.UISourceCode}
    */
   uiSourceCode() {
     return this._uiSourceCode;
   }
 
   /**
-   * @return {!WebInspector.UISourceCode.Message.Level}
+   * @return {!Workspace.UISourceCode.Message.Level}
    */
   level() {
     return this._level;
@@ -836,7 +858,7 @@ WebInspector.UISourceCode.Message = class {
   }
 
   /**
-   * @return {!WebInspector.TextRange}
+   * @return {!Common.TextRange}
    */
   range() {
     return this._range;
@@ -857,7 +879,7 @@ WebInspector.UISourceCode.Message = class {
   }
 
   /**
-   * @param {!WebInspector.UISourceCode.Message} another
+   * @param {!Workspace.UISourceCode.Message} another
    * @return {boolean}
    */
   isEqual(another) {
@@ -873,7 +895,7 @@ WebInspector.UISourceCode.Message = class {
 /**
  * @enum {string}
  */
-WebInspector.UISourceCode.Message.Level = {
+Workspace.UISourceCode.Message.Level = {
   Error: 'Error',
   Warning: 'Warning'
 };
@@ -881,23 +903,23 @@ WebInspector.UISourceCode.Message.Level = {
 /**
  * @unrestricted
  */
-WebInspector.UISourceCode.LineMarker = class {
+Workspace.UISourceCode.LineMarker = class {
   /**
-   * @param {number} line
+   * @param {!Common.TextRange} range
    * @param {string} type
    * @param {?} data
    */
-  constructor(line, type, data) {
-    this._line = line;
+  constructor(range, type, data) {
+    this._range = range;
     this._type = type;
     this._data = data;
   }
 
   /**
-   * @return {number}
+   * @return {!Common.TextRange}
    */
-  line() {
-    return this._line;
+  range() {
+    return this._range;
   }
 
   /**
@@ -918,7 +940,7 @@ WebInspector.UISourceCode.LineMarker = class {
 /**
  * @unrestricted
  */
-WebInspector.UISourceCodeMetadata = class {
+Workspace.UISourceCodeMetadata = class {
   /**
    * @param {?Date} modificationTime
    * @param {?number} contentSize

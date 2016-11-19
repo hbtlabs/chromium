@@ -48,6 +48,14 @@ Polymer({
      */
     profileManagesSupervisedUsers_: Boolean,
 
+<if expr="not chromeos">
+    /** @private */
+    showImportDataDialog_: {
+      type: Boolean,
+      value: false,
+    },
+</if>
+
     /** @private {!settings.SyncBrowserProxy} */
     syncBrowserProxy_: {
       type: Object,
@@ -142,10 +150,20 @@ Polymer({
 
   /** @protected */
   currentRouteChanged: function() {
-    if (settings.getCurrentRoute() == settings.Route.SIGN_OUT)
-      this.$.disconnectDialog.showModal();
-    else if (this.$.disconnectDialog.open)
+    this.showImportDataDialog_ =
+        settings.getCurrentRoute() == settings.Route.IMPORT_DATA;
+
+    if (settings.getCurrentRoute() == settings.Route.SIGN_OUT) {
+      // If the sync status has not been fetched yet, optimistically display
+      // the disconnect dialog. There is another check when the sync status is
+      // fetched. The dialog will be closed then the user is not signed in.
+      if (this.syncStatus && !this.syncStatus.signedIn)
+        settings.navigateToPreviousRoute();
+      else
+        this.$.disconnectDialog.showModal();
+    } else if (this.$.disconnectDialog.open) {
       this.$.disconnectDialog.close();
+    }
   },
 
 <if expr="chromeos">
@@ -184,9 +202,12 @@ Polymer({
    * @private
    */
   handleSyncStatus_: function(syncStatus) {
-    if (!this.syncStatus && syncStatus && !syncStatus.signedIn) {
+    if (!this.syncStatus && syncStatus && !syncStatus.signedIn)
       chrome.metricsPrivate.recordUserAction('Signin_Impression_FromSettings');
-    }
+
+    if (!syncStatus.signedIn && this.$.disconnectDialog.open)
+      this.$.disconnectDialog.close();
+
     this.syncStatus = syncStatus;
   },
 
@@ -231,6 +252,7 @@ Polymer({
   onDisconnectClosed_: function() {
     if (settings.getCurrentRoute() == settings.Route.SIGN_OUT)
       settings.navigateToPreviousRoute();
+    this.fire('signout-dialog-closed');
   },
 
   /** @private */
@@ -247,7 +269,15 @@ Polymer({
   onDisconnectConfirm_: function() {
     var deleteProfile = !!this.syncStatus.domain ||
         (this.$.deleteProfile && this.$.deleteProfile.checked);
-    this.syncBrowserProxy_.signOut(deleteProfile);
+    // Trigger the sign out event after the navigateToPreviousRoute().
+    // So that the navigation to the setting page could be finished before the
+    // sign out if navigateToPreviousRoute() returns synchronously even the
+    // browser is closed after the sign out. Otherwise, the navigation will be
+    // finshed during session restore if the browser is closed before the async
+    // callback executed.
+    listenOnce(this, 'signout-dialog-closed', function() {
+      this.syncBrowserProxy_.signOut(deleteProfile);
+    }.bind(this));
 
     this.$.disconnectDialog.close();
   },
@@ -328,6 +358,16 @@ Polymer({
     var innerSpan =
         '<span id="managed-by-domain-name">' + domain + '</span>';
     return loadTimeData.getStringF('domainManagedProfile', innerSpan);
+  },
+
+  /** @private */
+  onImportDataTap_: function() {
+    settings.navigateTo(settings.Route.IMPORT_DATA);
+  },
+
+  /** @private */
+  onImportDataDialogClosed_: function() {
+    settings.navigateToPreviousRoute();
   },
 </if>
 

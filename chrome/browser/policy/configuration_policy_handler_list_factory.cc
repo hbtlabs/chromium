@@ -45,10 +45,12 @@
 #include "components/prefs/pref_value_map.h"
 #include "components/search_engines/default_search_policy_handler.h"
 #include "components/signin/core/common/signin_pref_names.h"
+#include "components/spellcheck/spellcheck_build_features.h"
 #include "components/ssl_config/ssl_config_prefs.h"
 #include "components/sync/driver/sync_policy_handler.h"
 #include "components/translate/core/common/translate_pref_names.h"
 #include "components/variations/pref_names.h"
+#include "extensions/features/features.h"
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
 #include "chrome/browser/search/contextual_search_policy_handler_android.h"
@@ -70,7 +72,7 @@
 #include "chrome/browser/download/download_dir_policy_handler.h"
 #endif
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/api/messaging/native_messaging_policy_handler.h"
 #include "chrome/browser/extensions/extension_management_constants.h"
 #include "chrome/browser/extensions/policy_handlers.h"
@@ -82,7 +84,7 @@
 #include "chrome/browser/plugins/plugin_policy_handler.h"
 #endif
 
-#if defined(ENABLE_SPELLCHECK)
+#if BUILDFLAG(ENABLE_SPELLCHECK)
 #include "components/spellcheck/browser/pref_names.h"
 #endif
 
@@ -364,11 +366,11 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     prefs::kComponentUpdatesEnabled,
     base::Value::TYPE_BOOLEAN },
 
-#if defined(ENABLE_SPELLCHECK)
+#if BUILDFLAG(ENABLE_SPELLCHECK)
   { key::kSpellCheckServiceEnabled,
     spellcheck::prefs::kSpellCheckUseSpellingService,
     base::Value::TYPE_BOOLEAN },
-#endif  // defined(ENABLE_SPELLCHECK)
+#endif  // BUILDFLAG(ENABLE_SPELLCHECK)
 
   { key::kDisableScreenshots,
     prefs::kDisableScreenshots,
@@ -417,11 +419,11 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kFullscreenAllowed,
     prefs::kFullscreenAllowed,
     base::Value::TYPE_BOOLEAN },
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   { key::kFullscreenAllowed,
     extensions::pref_names::kAppFullscreenAllowed,
     base::Value::TYPE_BOOLEAN },
-#endif  // defined(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 #endif  // !defined(OS_MACOSX)
 
 #if defined(OS_CHROMEOS)
@@ -689,7 +691,7 @@ class ForceYouTubeSafetyModePolicyHandler : public TypeCheckingPolicyHandler {
   DISALLOW_COPY_AND_ASSIGN(ForceYouTubeSafetyModePolicyHandler);
 };
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 void GetExtensionAllowedTypesMap(
     std::vector<std::unique_ptr<StringMappingListPolicyHandler::MappingEntry>>*
         result) {
@@ -771,7 +773,7 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       prefs::kEnableDeprecatedWebPlatformFeatures,
       base::Bind(GetDeprecatedFeaturesMap)));
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   handlers->AddHandler(base::MakeUnique<extensions::ExtensionListPolicyHandler>(
       key::kExtensionInstallWhitelist,
       extensions::pref_names::kInstallAllowList, false));

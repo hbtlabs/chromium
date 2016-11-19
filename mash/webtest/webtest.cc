@@ -103,10 +103,10 @@ class UI : public views::WidgetDelegateView,
   void OpenURL(navigation::mojom::OpenURLParamsPtr params) override {}
   void LoadingStateChanged(bool is_loading) override {}
   void NavigationStateChanged(const GURL& url,
-                              const mojo::String& title,
+                              const std::string& title,
                               bool can_go_back,
                               bool can_go_forward) override {
-    current_title_ = base::UTF8ToUTF16(title.get());
+    current_title_ = base::UTF8ToUTF16(title);
     GetWidget()->UpdateWindowTitle();
   }
   void LoadProgressChanged(double progress) override {}
@@ -158,14 +158,12 @@ void Webtest::RemoveWindow(views::Widget* window) {
     base::MessageLoop::current()->QuitWhenIdle();
 }
 
-void Webtest::OnStart(service_manager::ServiceContext* context) {
-  context_ = context;
-
-  tracing_.Initialize(context->connector(), context->identity().name());
+void Webtest::OnStart() {
+  tracing_.Initialize(context()->connector(), context()->identity().name());
   aura_init_ = base::MakeUnique<views::AuraInit>(
-      context->connector(), context->identity(), "views_mus_resources.pak");
+      context()->connector(), context()->identity(), "views_mus_resources.pak");
   window_manager_connection_ = views::WindowManagerConnection::Create(
-      context->connector(), context->identity());
+      context()->connector(), context()->identity());
 }
 
 bool Webtest::OnConnect(const service_manager::ServiceInfo& remote_info,
@@ -183,7 +181,7 @@ void Webtest::Launch(uint32_t what, mojom::LaunchMode how) {
   }
 
   navigation::mojom::ViewFactoryPtr view_factory;
-  context_->connector()->ConnectToInterface("exe:navigation", &view_factory);
+  context()->connector()->ConnectToInterface("navigation", &view_factory);
   navigation::mojom::ViewPtr view;
   navigation::mojom::ViewClientPtr view_client;
   navigation::mojom::ViewClientRequest view_client_request =

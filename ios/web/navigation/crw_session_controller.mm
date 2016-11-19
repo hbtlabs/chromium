@@ -131,6 +131,7 @@ NSString* const kWindowNameKey = @"windowName";
 @synthesize tabId = _tabId;
 @synthesize currentNavigationIndex = _currentNavigationIndex;
 @synthesize previousNavigationIndex = _previousNavigationIndex;
+@synthesize pendingEntryIndex = _pendingEntryIndex;
 @synthesize entries = _entries;
 @synthesize windowName = _windowName;
 @synthesize lastVisitedTimestamp = _lastVisitedTimestamp;
@@ -156,6 +157,7 @@ NSString* const kWindowNameKey = @"windowName";
     _lastVisitedTimestamp = [[NSDate date] timeIntervalSince1970];
     _currentNavigationIndex = -1;
     _previousNavigationIndex = -1;
+    _pendingEntryIndex = -1;
     _sessionCertificatePolicyManager =
         [[CRWSessionCertificatePolicyManager alloc] init];
   }
@@ -190,6 +192,7 @@ NSString* const kWindowNameKey = @"windowName";
       self.currentNavigationIndex = static_cast<NSInteger>(items.size()) - 1;
     }
     _previousNavigationIndex = -1;
+    _pendingEntryIndex = -1;
     _lastVisitedTimestamp = [[NSDate date] timeIntervalSince1970];
     _sessionCertificatePolicyManager =
         [[CRWSessionCertificatePolicyManager alloc] init];
@@ -214,6 +217,7 @@ NSString* const kWindowNameKey = @"windowName";
         [aDecoder decodeIntForKey:kCurrentNavigationIndexKey];
     _previousNavigationIndex =
         [aDecoder decodeIntForKey:kPreviousNavigationIndexKey];
+    _pendingEntryIndex = -1;
     _lastVisitedTimestamp =
        [aDecoder decodeDoubleForKey:kLastVisitedTimestampKey];
     NSMutableArray* temp =
@@ -258,6 +262,7 @@ NSString* const kWindowNameKey = @"windowName";
   copy.windowName = self.windowName;
   copy->_currentNavigationIndex = _currentNavigationIndex;
   copy->_previousNavigationIndex = _previousNavigationIndex;
+  copy->_pendingEntryIndex = _pendingEntryIndex;
   copy->_lastVisitedTimestamp = _lastVisitedTimestamp;
   copy->_entries =
       [[NSMutableArray alloc] initWithArray:_entries copyItems:YES];
@@ -272,6 +277,15 @@ NSString* const kWindowNameKey = @"windowName";
     if (_navigationManager)
       _navigationManager->RemoveTransientURLRewriters();
   }
+}
+
+- (void)setPendingEntryIndex:(NSInteger)index {
+  DCHECK_GE(index, -1);
+  DCHECK_LT(index, static_cast<NSInteger>(_entries.count));
+  _pendingEntryIndex = index;
+  CRWSessionEntry* entry = index != -1 ? _entries[index] : nil;
+  _pendingEntry.reset(entry);
+  DCHECK(_pendingEntryIndex == -1 || _pendingEntry);
 }
 
 - (void)setNavigationManager:(web::NavigationManagerImpl*)navigationManager {
@@ -291,10 +305,11 @@ NSString* const kWindowNameKey = @"windowName";
   return [NSString
       stringWithFormat:
           @"id: %@\nname: %@\nlast visit: %f\ncurrent index: %" PRIdNS
-          @"\nprevious index: %" PRIdNS "\n%@\npending: %@\ntransient: %@\n",
+          @"\nprevious index: %" PRIdNS @"\npending index: %" PRIdNS
+                                        @"\n%@\npending: %@\ntransient: %@\n",
           _tabId, self.windowName, _lastVisitedTimestamp,
-          _currentNavigationIndex, _previousNavigationIndex, _entries,
-          _pendingEntry.get(), _transientEntry.get()];
+          _currentNavigationIndex, _previousNavigationIndex, _pendingEntryIndex,
+          _entries, _pendingEntry.get(), _transientEntry.get()];
 }
 
 // Returns the current entry in the session list, or the pending entry if there
@@ -315,7 +330,10 @@ NSString* const kWindowNameKey = @"windowName";
   // Only return the pending_entry for new (non-history), browser-initiated
   // navigations in order to prevent URL spoof attacks.
   web::NavigationItemImpl* pendingItem = [_pendingEntry navigationItemImpl];
-  if (pendingItem && !pendingItem->is_renderer_initiated()) {
+  bool safeToShowPending = pendingItem &&
+                           !pendingItem->is_renderer_initiated() &&
+                           _pendingEntryIndex == -1;
+  if (safeToShowPending) {
     return _pendingEntry.get();
   }
   return [self lastCommittedEntry];
@@ -347,6 +365,7 @@ NSString* const kWindowNameKey = @"windowName";
              transition:(ui::PageTransition)trans
       rendererInitiated:(BOOL)rendererInitiated {
   [self discardTransientEntry];
+  _pendingEntryIndex = -1;
 
   // Don't create a new entry if it's already the same as the current entry,
   // allowing this routine to be called multiple times in a row without issue.
@@ -420,6 +439,7 @@ NSString* const kWindowNameKey = @"windowName";
 }
 
 - (void)clearForwardEntries {
+  DCHECK_EQ(_pendingEntryIndex, -1);
   [self discardTransientEntry];
 
   NSInteger forwardEntryStartIndex = _currentNavigationIndex + 1;
@@ -444,15 +464,20 @@ NSString* const kWindowNameKey = @"windowName";
 
 - (void)commitPendingEntry {
   if (_pendingEntry) {
-    [self clearForwardEntries];
-    // Add the new entry at the end.
-    [_entries addObject:_pendingEntry];
+    NSInteger newNavigationIndex = _pendingEntryIndex;
+    if (_pendingEntryIndex == -1) {
+      [self clearForwardEntries];
+      // Add the new entry at the end.
+      [_entries addObject:_pendingEntry];
+      newNavigationIndex = [_entries count] - 1;
+    }
     _previousNavigationIndex = _currentNavigationIndex;
-    self.currentNavigationIndex = [_entries count] - 1;
+    self.currentNavigationIndex = newNavigationIndex;
     // Once an entry is committed it's not renderer-initiated any more. (Matches
     // the implementation in NavigationController.)
     [_pendingEntry navigationItemImpl]->ResetForCommit();
     _pendingEntry.reset();
+    _pendingEntryIndex = -1;
   }
 
   CRWSessionEntry* currentEntry = self.currentEntry;
@@ -463,6 +488,7 @@ NSString* const kWindowNameKey = @"windowName";
 
   if (_navigationManager && item)
     _navigationManager->OnNavigationItemCommitted();
+  DCHECK_EQ(_pendingEntryIndex, -1);
 }
 
 - (void)addTransientEntryWithURL:(const GURL&)URL {
@@ -482,6 +508,7 @@ NSString* const kWindowNameKey = @"windowName";
 - (void)pushNewEntryWithURL:(const GURL&)URL
                 stateObject:(NSString*)stateObject
                  transition:(ui::PageTransition)transition {
+  DCHECK(![self pendingEntry]);
   DCHECK([self currentEntry]);
   web::NavigationItem* item = [self currentEntry].navigationItem;
   CHECK(
@@ -528,6 +555,7 @@ NSString* const kWindowNameKey = @"windowName";
 - (void)discardNonCommittedEntries {
   [self discardTransientEntry];
   _pendingEntry.reset();
+  _pendingEntryIndex = -1;
 }
 
 - (void)discardTransientEntry {
@@ -543,58 +571,32 @@ NSString* const kWindowNameKey = @"windowName";
   return _pendingEntry != nil;
 }
 
-- (void)copyStateFromAndPrune:(CRWSessionController*)otherSession
-                 replaceState:(BOOL)replaceState {
-  DCHECK(otherSession);
-  if (replaceState) {
-    [_entries removeAllObjects];
-    self.currentNavigationIndex = -1;
-    _previousNavigationIndex = -1;
-  }
-  self.windowName = otherSession.windowName;
-  NSInteger numInitialEntries = [_entries count];
+- (void)insertStateFromSessionController:(CRWSessionController*)sourceSession {
+  DCHECK(sourceSession);
+  self.windowName = sourceSession.windowName;
+
+  // The other session may not have any entries, in which case there is nothing
+  // to insert.  The other session's currentNavigationEntry will be bogus
+  // in such cases, so ignore it and return early.
+  NSArray* sourceEntries = sourceSession.entries;
+  if (!sourceEntries.count)
+    return;
 
   // Cycle through the entries from the other session and insert them before any
   // entries from this session.  Do not copy anything that comes after the other
-  // session's current entry unless replaceState is true.
-  NSArray* otherEntries = [otherSession entries];
-
-  // The other session may not have any entries, in which case there is nothing
-  // to copy or prune.  The other session's currentNavigationEntry will be bogus
-  // in such cases, so ignore it and return early.
-  // TODO(rohitrao): Do we need to copy over any pending entries?  We might not
-  // add the prerendered page into the back/forward history if we don't copy
-  // pending entries.
-  if (![otherEntries count])
-    return;
-
-  NSInteger maxCopyIndex = replaceState ? [otherEntries count] - 1 :
-                                          [otherSession currentNavigationIndex];
-  for (NSInteger i = 0; i <= maxCopyIndex; ++i) {
-    [_entries insertObject:[otherEntries objectAtIndex:i] atIndex:i];
-    ++_currentNavigationIndex;
-    _previousNavigationIndex = -1;
+  // session's current entry.
+  NSInteger lastIndexToCopy = sourceSession.currentNavigationIndex;
+  for (NSInteger i = 0; i <= lastIndexToCopy; ++i) {
+    [_entries insertObject:sourceEntries[i] atIndex:i];
   }
 
-  // If this CRWSessionController has no entries initially, reset
-  // |currentNavigationIndex_| to be in bounds.
-  if (!numInitialEntries) {
-    if (replaceState) {
-      self.currentNavigationIndex = [otherSession currentNavigationIndex];
-      _previousNavigationIndex = [otherSession previousNavigationIndex];
-    } else {
-      self.currentNavigationIndex = maxCopyIndex;
-    }
-  }
-  DCHECK_LT((NSUInteger)_currentNavigationIndex, [_entries count]);
-}
+  _previousNavigationIndex = -1;
+  _currentNavigationIndex += lastIndexToCopy + 1;
+  if (_pendingEntryIndex != -1)
+    _pendingEntryIndex += lastIndexToCopy + 1;
 
-- (BOOL)canGoBack {
-  return [self canGoDelta:-1];
-}
-
-- (BOOL)canGoForward {
-  return [self canGoDelta:1];
+  DCHECK_LT(static_cast<NSUInteger>(_currentNavigationIndex), _entries.count);
+  DCHECK(_pendingEntryIndex == -1 || _pendingEntry);
 }
 
 - (BOOL)canGoDelta:(int)delta {
@@ -602,31 +604,14 @@ NSString* const kWindowNameKey = @"windowName";
   return 0 <= index && static_cast<NSUInteger>(index) < _entries.count;
 }
 
-- (void)goBack {
-  [self goDelta:-1];
-}
-
-- (void)goForward {
-  [self goDelta:1];
-}
-
-- (void)goDelta:(int)delta {
-  if (delta != 0 && [self canGoDelta:delta]) {
-    NSInteger newNavigationIndex = [self indexOfEntryForDelta:delta];
-    [self goToEntry:_entries[newNavigationIndex]];
-  }
-}
-
-- (void)goToEntry:(CRWSessionEntry*)entry {
-  DCHECK(entry);
-  if (![_entries containsObject:entry])
+- (void)goToEntryAtIndex:(NSInteger)index {
+  if (index < 0 || static_cast<NSUInteger>(index) >= _entries.count)
     return;
 
-  NSInteger newNavigationIndex = [_entries indexOfObject:entry];
-  if (newNavigationIndex < _currentNavigationIndex) {
+  if (index < _currentNavigationIndex) {
     // Going back.
     [self discardNonCommittedEntries];
-  } else if (_currentNavigationIndex < newNavigationIndex) {
+  } else if (_currentNavigationIndex < index) {
     // Going forward.
     [self discardTransientEntry];
   } else {
@@ -635,7 +620,7 @@ NSString* const kWindowNameKey = @"windowName";
   }
 
   _previousNavigationIndex = _currentNavigationIndex;
-  _currentNavigationIndex = newNavigationIndex;
+  _currentNavigationIndex = index;
 }
 
 - (void)removeEntryAtIndex:(NSInteger)index {
@@ -654,17 +639,10 @@ NSString* const kWindowNameKey = @"windowName";
 
 - (NSArray*)backwardEntries {
   NSMutableArray* entries = [NSMutableArray array];
-  NSInteger lastNonRedirectedIndex = _currentNavigationIndex;
-  while (lastNonRedirectedIndex >= 0) {
-    CRWSessionEntry* entry = [_entries objectAtIndex:lastNonRedirectedIndex];
-    if (!ui::PageTransitionIsRedirect(
-            entry.navigationItem->GetTransitionType())) {
-      [entries addObject:entry];
-    }
-    --lastNonRedirectedIndex;
+  for (NSInteger index = _currentNavigationIndex; index > 0; --index) {
+    if (![self isRedirectTransitionForEntryAtIndex:index])
+      [entries addObject:_entries[index - 1]];
   }
-  // Remove the currently displayed entry.
-  [entries removeObjectAtIndex:0];
   return entries;
 }
 
@@ -759,7 +737,9 @@ NSString* const kWindowNameKey = @"windowName";
 }
 
 - (NSInteger)indexOfEntryForDelta:(int)delta {
-  NSInteger result = _currentNavigationIndex;
+  NSInteger result =
+      _pendingEntryIndex == -1 ? _currentNavigationIndex : _pendingEntryIndex;
+
   if (delta < 0) {
     if (_transientEntry) {
       // Going back from transient entry is a matter of discarding it and there
@@ -780,7 +760,7 @@ NSString* const kWindowNameKey = @"windowName";
     }
   } else if (delta > 0) {
     NSInteger count = static_cast<NSInteger>([_entries count]);
-    if (_pendingEntry) {
+    if (_pendingEntry && _pendingEntryIndex == -1) {
       // Chrome for iOS does not allow forward navigation if there is another
       // pending navigation in progress. Returning invalid index indicates that
       // forward navigation will not be allowed (and |NSNotFound| works for

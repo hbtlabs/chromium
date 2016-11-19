@@ -335,29 +335,25 @@ class PrintPreviewPdfGeneratedBrowserTest : public InProcessBrowserTest {
   // Converts the PDF to a PNG file so that the layout test can do an image
   // diff on this image and a reference image.
   void PdfToPng() {
+    std::string pdf_data;
+    ASSERT_TRUE(base::ReadFileToString(pdf_file_save_path_, &pdf_data));
+
     int num_pages;
     double max_width_in_points = 0;
-    std::vector<uint8_t> bitmap_data;
-    double total_height_in_pixels = 0;
-    std::string pdf_data;
-
-    ASSERT_TRUE(base::ReadFileToString(pdf_file_save_path_, &pdf_data));
-    ASSERT_TRUE(chrome_pdf::GetPDFDocInfo(pdf_data.data(),
-                                          pdf_data.size(),
-                                          &num_pages,
-                                          &max_width_in_points));
-
+    void* pdf_handle = nullptr;
+    ASSERT_TRUE(chrome_pdf::GetPDFDocInfo(pdf_data.data(), pdf_data.size(),
+                                          &num_pages, &max_width_in_points,
+                                          &pdf_handle));
     ASSERT_GT(num_pages, 0);
     double max_width_in_pixels =
         ConvertUnitDouble(max_width_in_points, kPointsPerInch, kDpi);
 
+    std::vector<uint8_t> bitmap_data;
+    double total_height_in_pixels = 0;
     for (int i = 0; i < num_pages; ++i) {
       double width_in_points, height_in_points;
-      ASSERT_TRUE(chrome_pdf::GetPDFPageSizeByIndex(pdf_data.data(),
-                                                    pdf_data.size(),
-                                                    i,
-                                                    &width_in_points,
-                                                    &height_in_points));
+      ASSERT_TRUE(chrome_pdf::GetPDFPageSizeByIndex(
+          pdf_handle, i, &width_in_points, &height_in_points));
 
       double width_in_pixels = ConvertUnitDouble(
           width_in_points, kPointsPerInch, kDpi);
@@ -377,34 +373,27 @@ class PrintPreviewPdfGeneratedBrowserTest : public InProcessBrowserTest {
       PdfRenderSettings settings(rect, kDpi, true);
 
       int int_max = std::numeric_limits<int>::max();
-      if (settings.area().width() > int_max / kColorChannels ||
-          settings.area().height() > int_max / (kColorChannels *
-              settings.area().width())) {
+      if (settings.area.width() > int_max / kColorChannels ||
+          settings.area.height() >
+              int_max / (kColorChannels * settings.area.width())) {
         FAIL() << "The dimensions of the image are too large."
                << "Decrease the DPI or the dimensions of the image.";
       }
 
-      std::vector<uint8_t> page_bitmap_data(
-          kColorChannels * settings.area().size().GetArea());
+      std::vector<uint8_t> page_bitmap_data(kColorChannels *
+                                            settings.area.size().GetArea());
 
       ASSERT_TRUE(chrome_pdf::RenderPDFPageToBitmap(
-          pdf_data.data(),
-          pdf_data.size(),
-          i,
-          page_bitmap_data.data(),
-          settings.area().size().width(),
-          settings.area().size().height(),
-          settings.dpi(),
-          true));
-      FillPng(&page_bitmap_data,
-              width_in_pixels,
-              max_width_in_pixels,
-              settings.area().size().height());
+          pdf_handle, i, page_bitmap_data.data(), settings.area.size().width(),
+          settings.area.size().height(), settings.dpi, settings.autorotate));
+      FillPng(&page_bitmap_data, width_in_pixels, max_width_in_pixels,
+              settings.area.size().height());
       bitmap_data.insert(bitmap_data.end(),
                          page_bitmap_data.begin(),
                          page_bitmap_data.end());
     }
 
+    chrome_pdf::ReleasePDFHandle(pdf_handle);
     CreatePng(bitmap_data, max_width_in_pixels, total_height_in_pixels);
   }
 

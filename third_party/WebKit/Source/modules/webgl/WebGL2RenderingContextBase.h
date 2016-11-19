@@ -465,7 +465,6 @@ class WebGL2RenderingContextBase : public WebGLRenderingContextBase {
                      ImageBitmap*,
                      ExceptionState&);
 
-  // TODO(zmo): Obsolete, remove after WebGL2 conformance tests are updated.
   void texImage2D(GLenum,
                   GLint,
                   GLint,
@@ -484,35 +483,6 @@ class WebGL2RenderingContextBase : public WebGLRenderingContextBase {
                      GLenum,
                      GLenum,
                      DOMArrayBufferView*);
-  void
-  texSubImage3D(GLenum, GLint, GLint, GLint, GLint, GLenum, GLenum, ImageData*);
-  void texSubImage3D(GLenum,
-                     GLint,
-                     GLint,
-                     GLint,
-                     GLint,
-                     GLenum,
-                     GLenum,
-                     HTMLCanvasElement*,
-                     ExceptionState&);
-  void texSubImage3D(GLenum,
-                     GLint,
-                     GLint,
-                     GLint,
-                     GLint,
-                     GLenum,
-                     GLenum,
-                     HTMLVideoElement*,
-                     ExceptionState&);
-  void texSubImage3D(GLenum,
-                     GLint,
-                     GLint,
-                     GLint,
-                     GLint,
-                     GLenum,
-                     GLenum,
-                     ImageBitmap*,
-                     ExceptionState&);
 
   void copyTexSubImage3D(GLenum,
                          GLint,
@@ -836,6 +806,8 @@ class WebGL2RenderingContextBase : public WebGLRenderingContextBase {
   bool checkAndTranslateAttachments(const char* functionName,
                                     GLenum,
                                     Vector<GLenum>&);
+
+  IntRect getTextureSourceSubRectangle(GLsizei width, GLsizei height);
 
   /* WebGLRenderingContextBase overrides */
   unsigned getMaxWebGLLocationLength() const override { return 1024; };

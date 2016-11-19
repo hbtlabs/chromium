@@ -8,6 +8,7 @@
 #include "ash/common/metrics/user_metrics_action.h"
 #include "ash/common/system/tray/fixed_sized_image_view.h"
 #include "ash/common/system/tray/system_tray.h"
+#include "ash/common/system/tray/system_tray_controller.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/system/tray/tray_constants.h"
@@ -23,7 +24,7 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
-#include "ui/views/layout/box_layout.h"
+#include "ui/views/layout/fill_layout.h"
 
 namespace ash {
 namespace {
@@ -83,14 +84,14 @@ SkColor IconColorForUpdateSeverity(UpdateInfo::UpdateSeverity severity,
 class UpdateView : public ActionableView {
  public:
   UpdateView(SystemTrayItem* owner, const UpdateInfo& info)
-      : ActionableView(owner), label_(nullptr) {
-    SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal,
-                                          kTrayPopupPaddingHorizontal, 0,
-                                          kTrayPopupPaddingBetweenItems));
+      : ActionableView(owner, TrayPopupInkDropStyle::FILL_BOUNDS),
+        label_(nullptr) {
+    SetLayoutManager(new views::FillLayout);
 
     ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-    views::ImageView* image =
-        new FixedSizedImageView(0, GetTrayConstant(TRAY_POPUP_ITEM_HEIGHT));
+    TriView* tri_view = TrayPopupUtils::CreateDefaultRowView();
+    AddChildView(tri_view);
+    views::ImageView* image = TrayPopupUtils::CreateMainImageView();
     if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
       image->SetImage(gfx::CreateVectorIcon(
           kSystemMenuUpdateIcon,
@@ -99,7 +100,7 @@ class UpdateView : public ActionableView {
       image->SetImage(bundle.GetImageNamed(DecideResource(info.severity, true))
                           .ToImageSkia());
     }
-    AddChildView(image);
+    tri_view->AddView(TriView::Container::START, image);
 
     base::string16 label_text =
         info.factory_reset_required
@@ -108,19 +109,27 @@ class UpdateView : public ActionableView {
             : bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_UPDATE);
     label_ = TrayPopupUtils::CreateDefaultLabel();
     label_->SetText(label_text);
-    AddChildView(label_);
     SetAccessibleName(label_text);
+    tri_view->AddView(TriView::Container::CENTER, label_);
 
-    if (MaterialDesignController::IsSystemTrayMenuMaterial())
+    if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
+      UpdateStyle();
       SetInkDropMode(InkDropHostView::InkDropMode::ON);
+    }
   }
 
   ~UpdateView() override {}
 
  private:
+  void UpdateStyle() {
+    TrayPopupItemStyle style(GetNativeTheme(),
+                             TrayPopupItemStyle::FontStyle::DEFAULT_VIEW_LABEL);
+    style.SetupLabel(label_);
+  }
+
   // Overridden from ActionableView.
   bool PerformAction(const ui::Event& event) override {
-    WmShell::Get()->system_tray_delegate()->RequestRestartForUpdate();
+    WmShell::Get()->system_tray_controller()->RequestRestartForUpdate();
     WmShell::Get()->RecordUserMetricsAction(
         UMA_STATUS_AREA_OS_UPDATE_DEFAULT_SELECTED);
     CloseSystemBubble();
@@ -132,10 +141,7 @@ class UpdateView : public ActionableView {
 
     if (!MaterialDesignController::IsSystemTrayMenuMaterial())
       return;
-
-    TrayPopupItemStyle style(GetNativeTheme(),
-                             TrayPopupItemStyle::FontStyle::DEFAULT_VIEW_LABEL);
-    style.SetupLabel(label_);
+    UpdateStyle();
   }
 
   views::Label* label_;

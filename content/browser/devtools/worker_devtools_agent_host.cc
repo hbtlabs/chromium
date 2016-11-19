@@ -5,7 +5,9 @@
 #include "content/browser/devtools/worker_devtools_agent_host.h"
 
 #include "base/guid.h"
+#include "base/json/json_reader.h"
 #include "content/browser/devtools/devtools_protocol_handler.h"
+#include "content/browser/devtools/devtools_session.h"
 #include "content/browser/devtools/protocol/schema_handler.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
@@ -22,9 +24,10 @@ void WorkerDevToolsAgentHost::Attach() {
     state_ = WORKER_INSPECTED;
     AttachToWorker();
   }
-  if (RenderProcessHost* host = RenderProcessHost::FromID(worker_id_.first))
-    host->Send(
-        new DevToolsAgentMsg_Attach(worker_id_.second, GetId(), session_id()));
+  if (RenderProcessHost* host = RenderProcessHost::FromID(worker_id_.first)) {
+    host->Send(new DevToolsAgentMsg_Attach(
+        worker_id_.second, GetId(), session()->session_id()));
+  }
   OnAttachedStateChanged(true);
 }
 
@@ -45,15 +48,17 @@ bool WorkerDevToolsAgentHost::DispatchProtocolMessage(
   if (state_ != WORKER_INSPECTED)
     return true;
 
+  std::unique_ptr<base::Value> value = base::JSONReader::Read(message);
   int call_id;
   std::string method;
-  if (protocol_handler_->HandleOptionalMessage(session_id(), message, &call_id,
-                                               &method))
+  if (protocol_handler_->HandleOptionalMessage(
+          session()->session_id(), std::move(value), &call_id, &method)) {
     return true;
+  }
 
   if (RenderProcessHost* host = RenderProcessHost::FromID(worker_id_.first)) {
     host->Send(new DevToolsAgentMsg_DispatchOnInspectorBackend(
-        worker_id_.second, session_id(), call_id, method, message));
+        worker_id_.second, session()->session_id(), call_id, method, message));
   }
   return true;
 }
@@ -86,7 +91,7 @@ void WorkerDevToolsAgentHost::WorkerReadyForInspection() {
     AttachToWorker();
     if (RenderProcessHost* host = RenderProcessHost::FromID(worker_id_.first)) {
       host->Send(new DevToolsAgentMsg_Reattach(
-          worker_id_.second, GetId(), session_id(),
+          worker_id_.second, GetId(), session()->session_id(),
           chunk_processor_.state_cookie()));
     }
     OnAttachedStateChanged(true);

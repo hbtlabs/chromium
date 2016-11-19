@@ -14,14 +14,17 @@
 #include "chrome/browser/ui/webui/settings/appearance_handler.h"
 #include "chrome/browser/ui/webui/settings/browser_lifetime_handler.h"
 #include "chrome/browser/ui/webui/settings/downloads_handler.h"
+#include "chrome/browser/ui/webui/settings/extension_control_handler.h"
 #include "chrome/browser/ui/webui/settings/font_handler.h"
 #include "chrome/browser/ui/webui/settings/languages_handler.h"
 #include "chrome/browser/ui/webui/settings/md_settings_localized_strings_provider.h"
 #include "chrome/browser/ui/webui/settings/metrics_reporting_handler.h"
+#include "chrome/browser/ui/webui/settings/on_startup_handler.h"
 #include "chrome/browser/ui/webui/settings/people_handler.h"
 #include "chrome/browser/ui/webui/settings/profile_info_handler.h"
 #include "chrome/browser/ui/webui/settings/protocol_handlers_handler.h"
 #include "chrome/browser/ui/webui/settings/reset_settings_handler.h"
+#include "chrome/browser/ui/webui/settings/safe_browsing_handler.h"
 #include "chrome/browser/ui/webui/settings/search_engines_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_cookies_view_handler.h"
@@ -79,6 +82,7 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
   AddSettingsPageUIHandler(new ClearBrowsingDataHandler(web_ui));
   AddSettingsPageUIHandler(new CookiesViewHandler());
   AddSettingsPageUIHandler(new DownloadsHandler());
+  AddSettingsPageUIHandler(new ExtensionControlHandler());
   AddSettingsPageUIHandler(new FontHandler(web_ui));
   AddSettingsPageUIHandler(new ImportDataHandler());
   AddSettingsPageUIHandler(new LanguagesHandler(web_ui));
@@ -86,9 +90,11 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
 #if defined(GOOGLE_CHROME_BUILD) && !defined(OS_CHROMEOS)
   AddSettingsPageUIHandler(new MetricsReportingHandler());
 #endif
+  AddSettingsPageUIHandler(new OnStartupHandler());
   AddSettingsPageUIHandler(new PeopleHandler(profile));
   AddSettingsPageUIHandler(new ProfileInfoHandler(profile));
   AddSettingsPageUIHandler(new ProtocolHandlersHandler());
+  AddSettingsPageUIHandler(new SafeBrowsingHandler(profile->GetPrefs()));
   AddSettingsPageUIHandler(new SearchEnginesHandler(profile));
   AddSettingsPageUIHandler(new SiteSettingsHandler(profile));
   AddSettingsPageUIHandler(new StartupPagesHandler(web_ui));

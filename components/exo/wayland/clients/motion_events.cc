@@ -11,7 +11,10 @@
 #include <wayland-client-core.h>
 #include <wayland-client-protocol.h>
 
+#include <cmath>
+#include <deque>
 #include <iostream>
+#include <string>
 #include <vector>
 
 #include "base/at_exit.h"
@@ -21,6 +24,7 @@
 #include "base/memory/shared_memory.h"
 #include "base/scoped_generic.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
@@ -39,6 +43,7 @@
 #if defined(OZONE_PLATFORM_GBM)
 #include <drm_fourcc.h>
 #include <gbm.h>
+#include <xf86drm.h>
 #endif
 
 // Convenient macro that is used to define default deleters for object
@@ -90,18 +95,18 @@ const int32_t kDrmFormat = DRM_FORMAT_ABGR8888;
 const size_t kBytesPerPixel = 4;
 
 #if defined(OZONE_PLATFORM_GBM)
-// DRI render node path.
-const char kDriRenderNode[] = "/dev/dri/renderD128";
+// DRI render node path template.
+const char kDriRenderNodeTemplate[] = "/dev/dri/renderD%u";
 #endif
 
 // Number of buffers.
-const size_t kBuffers = 3;
+const size_t kBuffers = 8;
 
 // Rotation speed (degrees/second).
 const double kRotationSpeed = 360.0;
 
-// Benchmark interval in seconds.
-const int kBenchmarkInterval = 5;
+// Benchmark warmup frames before starting measurement.
+const int kBenchmarkWarmupFrames = 10;
 
 struct Globals {
   std::unique_ptr<wl_compositor> compositor;
@@ -297,29 +302,39 @@ class MotionEvents {
                size_t height,
                int scale,
                size_t num_rects,
-               bool use_drm,
-               bool fullscreen)
+               size_t max_frames_pending,
+               bool fullscreen,
+               bool show_fps_counter,
+               size_t num_benchmark_runs,
+               base::TimeDelta benchmark_interval,
+               const std::string* use_drm)
       : width_(width),
         height_(height),
         scale_(scale),
         num_rects_(num_rects),
-        use_drm_(use_drm),
-        fullscreen_(fullscreen) {}
+        max_frames_pending_(max_frames_pending),
+        fullscreen_(fullscreen),
+        show_fps_counter_(show_fps_counter),
+        num_benchmark_runs_(num_benchmark_runs),
+        benchmark_interval_(benchmark_interval),
+        use_drm_(use_drm) {}
 
   // Initialize and run client main loop.
   int Run();
 
  private:
   bool CreateBuffer(Buffer* buffer);
-  size_t stride() const { return width_ * kBytesPerPixel; }
-  size_t buffer_size() const { return stride() * height_; }
 
   const size_t width_;
   const size_t height_;
   const int scale_;
   const size_t num_rects_;
-  const bool use_drm_;
+  const size_t max_frames_pending_;
   const bool fullscreen_;
+  const bool show_fps_counter_;
+  const size_t num_benchmark_runs_;
+  const base::TimeDelta benchmark_interval_;
+  const std::string* use_drm_;
 
   Globals globals_;
   std::unique_ptr<wl_display> display_;
@@ -351,10 +366,11 @@ int MotionEvents::Run() {
   gl_surface_ = gl::init::CreateOffscreenGLSurface(gfx::Size());
   gl_context_ =
       gl::init::CreateGLContext(nullptr,  // share_group
-                                gl_surface_.get(), gl::PreferIntegratedGpu);
+                                gl_surface_.get(), gl::GLContextAttribs());
 
   make_current_.reset(
       new ui::ScopedMakeCurrent(gl_context_.get(), gl_surface_.get()));
+
   wl_registry_listener registry_listener = {RegistryHandler, RegistryRemover};
 
   wl_registry* registry = wl_display_get_registry(display_.get());
@@ -383,24 +399,59 @@ int MotionEvents::Run() {
     return 1;
   }
 
+  EGLenum egl_sync_type = 0;
 #if defined(OZONE_PLATFORM_GBM)
-  drm_fd_.reset(open(kDriRenderNode, O_RDWR));
-  if (drm_fd_.get() < 0) {
-    LOG(ERROR) << "Can't open drm device '" << kDriRenderNode << "'";
-    return 1;
+  if (use_drm_) {
+    // Number of files to look for when discovering DRM devices.
+    const uint32_t kDrmMaxMinor = 15;
+    const uint32_t kRenderNodeStart = 128;
+    const uint32_t kRenderNodeEnd = kRenderNodeStart + kDrmMaxMinor;
+
+    for (uint32_t i = kRenderNodeStart; i < kRenderNodeEnd; i++) {
+      std::string dri_render_node(
+          base::StringPrintf(kDriRenderNodeTemplate, i));
+      base::ScopedFD drm_fd(open(dri_render_node.c_str(), O_RDWR));
+      if (drm_fd.get() < 0)
+        continue;
+      drmVersionPtr drm_version = drmGetVersion(drm_fd.get());
+      if (!drm_version) {
+        LOG(ERROR) << "Can't get version for device: '" << dri_render_node
+                   << "'";
+        return 1;
+      }
+      if (strstr(drm_version->name, use_drm_->c_str())) {
+        drm_fd_ = std::move(drm_fd);
+        break;
+      }
+    }
+
+    if (drm_fd_.get() < 0) {
+      LOG_IF(ERROR, use_drm_) << "Can't find drm device: '" << *use_drm_ << "'";
+      LOG_IF(ERROR, !use_drm_) << "Can't find drm device";
+      return 1;
+    }
+
+    device_.reset(gbm_create_device(drm_fd_.get()));
+    if (!device_) {
+      LOG(ERROR) << "Can't create gbm device";
+      return 1;
+    }
   }
 
-  device_.reset(gbm_create_device(drm_fd_.get()));
-  if (!device_) {
-    LOG(ERROR) << "Can't create gbm device";
-    return 1;
-  }
   sk_sp<const GrGLInterface> native_interface(GrGLCreateNativeInterface());
   DCHECK(native_interface);
   gr_context_ = sk_sp<GrContext>(GrContext::Create(
       kOpenGL_GrBackend,
       reinterpret_cast<GrBackendContext>(native_interface.get())));
   DCHECK(gr_context_);
+
+  if (gl::GLSurfaceEGL::HasEGLExtension("EGL_EXT_image_flush_external") ||
+      gl::GLSurfaceEGL::HasEGLExtension("EGL_ARM_implicit_external_sync")) {
+    egl_sync_type = EGL_SYNC_FENCE_KHR;
+  }
+  if (gl::GLSurfaceEGL::HasEGLExtension("EGL_ANDROID_native_fence_sync")) {
+    egl_sync_type = EGL_SYNC_NATIVE_FENCE_ANDROID;
+  }
 #endif
 
   wl_buffer_listener buffer_listener = {BufferRelease};
@@ -482,89 +533,159 @@ int MotionEvents::Run() {
   Frame frame;
   std::unique_ptr<wl_callback> frame_callback;
   wl_callback_listener frame_listener = {FrameCallback};
+  std::deque<wl_buffer*> pending_frames;
 
   uint32_t frames = 0;
-  base::TimeTicks benchmark_time = base::TimeTicks::Now();
-  base::TimeDelta benchmark_interval =
-      base::TimeDelta::FromSeconds(kBenchmarkInterval);
+  size_t num_benchmark_runs_left = num_benchmark_runs_;
+  base::TimeTicks benchmark_time;
+  base::TimeDelta benchmark_wall_time;
+  base::TimeDelta benchmark_cpu_time;
+  std::string fps_counter_text("??");
 
+  SkPaint text_paint;
+  text_paint.setTextSize(32.0f);
+  text_paint.setColor(SK_ColorWHITE);
+  text_paint.setStyle(SkPaint::kFill_Style);
+
+  int dispatch_status = 0;
   do {
-    if (frame.callback_pending)
-      continue;
-
-    Buffer* buffer =
-        std::find_if(std::begin(buffers_), std::end(buffers_),
-                     [](const Buffer& buffer) { return !buffer.busy; });
-    if (buffer == std::end(buffers_))
-      continue;
-
-    base::TimeTicks current_time = base::TimeTicks::Now();
-    if ((current_time - benchmark_time) > benchmark_interval) {
-      std::cout << frames << " frames in " << benchmark_interval.InSeconds()
-                << " seconds: "
-                << static_cast<double>(frames) / benchmark_interval.InSeconds()
-                << " fps" << std::endl;
-      benchmark_time = current_time;
-      frames = 0;
-    }
-
-    SkCanvas* canvas = buffer->sk_surface->getCanvas();
-    canvas->save();
-
-    if (event_times.empty()) {
-      canvas->clear(SK_ColorBLACK);
-    } else {
-      // Split buffer into one horizontal rectangle for each event received
-      // since last frame. Latest event at the top.
-      int y = 0;
-      // Note: Rounding up to ensure we cover the whole canvas.
-      int h = (height_ + (event_times.size() / 2)) / event_times.size();
-      while (!event_times.empty()) {
-        SkIRect rect = SkIRect::MakeXYWH(0, y, width_, h);
-        SkPaint paint;
-        paint.setColor(SkColorSetRGB((event_times.back() & 0x0000ff) >> 0,
-                                     (event_times.back() & 0x00ff00) >> 8,
-                                     (event_times.back() & 0xff0000) >> 16));
-        canvas->drawIRect(rect, paint);
-        event_times.pop_back();
-        y += h;
+    bool enqueue_frame = frame.callback_pending
+                             ? pending_frames.size() < max_frames_pending_
+                             : pending_frames.empty();
+    if (enqueue_frame) {
+      Buffer* buffer =
+          std::find_if(std::begin(buffers_), std::end(buffers_),
+                       [](const Buffer& buffer) { return !buffer.busy; });
+      if (buffer == std::end(buffers_)) {
+        LOG(ERROR) << "Can't find free buffer";
+        return 1;
       }
+
+      base::TimeTicks wall_time_start;
+      base::ThreadTicks cpu_time_start;
+      if (num_benchmark_runs_ || show_fps_counter_) {
+        wall_time_start = base::TimeTicks::Now();
+        if (frames <= kBenchmarkWarmupFrames)
+          benchmark_time = wall_time_start;
+
+        if ((wall_time_start - benchmark_time) > benchmark_interval_) {
+          uint32_t benchmark_frames = frames - kBenchmarkWarmupFrames;
+          if (num_benchmark_runs_left) {
+            // Print benchmark statistics for the frames produced and exit.
+            // Note: frames produced is not necessarily the same as frames
+            // displayed.
+            std::cout << benchmark_frames << '\t'
+                      << benchmark_wall_time.InMilliseconds() << '\t'
+                      << benchmark_cpu_time.InMilliseconds() << '\t'
+                      << std::endl;
+            if (!--num_benchmark_runs_left)
+              return 0;
+          }
+
+          // Set FPS counter text in case it's being shown.
+          fps_counter_text = base::UintToString(
+              std::round(benchmark_frames / benchmark_interval_.InSecondsF()));
+
+          frames = kBenchmarkWarmupFrames;
+          benchmark_time = wall_time_start;
+          benchmark_wall_time = base::TimeDelta();
+          benchmark_cpu_time = base::TimeDelta();
+        }
+
+        cpu_time_start = base::ThreadTicks::Now();
+      }
+
+      SkCanvas* canvas = buffer->sk_surface->getCanvas();
+      if (event_times.empty()) {
+        canvas->clear(SK_ColorBLACK);
+      } else {
+        // Split buffer into one horizontal rectangle for each event received
+        // since last frame. Latest event at the top.
+        int y = 0;
+        // Note: Rounding up to ensure we cover the whole canvas.
+        int h = (height_ + (event_times.size() / 2)) / event_times.size();
+        while (!event_times.empty()) {
+          SkIRect rect = SkIRect::MakeXYWH(0, y, width_, h);
+          SkPaint paint;
+          paint.setColor(SkColorSetRGB((event_times.back() & 0x0000ff) >> 0,
+                                       (event_times.back() & 0x00ff00) >> 8,
+                                       (event_times.back() & 0xff0000) >> 16));
+          canvas->drawIRect(rect, paint);
+          std::string text = base::UintToString(event_times.back());
+          canvas->drawText(text.c_str(), text.length(), 8, y + 32, text_paint);
+          event_times.pop_back();
+          y += h;
+        }
+      }
+
+      // Draw rotating rects.
+      SkScalar half_width = SkScalarHalf(width_);
+      SkScalar half_height = SkScalarHalf(height_);
+      SkIRect rect = SkIRect::MakeXYWH(-SkScalarHalf(half_width),
+                                       -SkScalarHalf(half_height), half_width,
+                                       half_height);
+      SkScalar rotation = SkScalarMulDiv(frame.time, kRotationSpeed, 1000);
+      canvas->save();
+      canvas->translate(half_width, half_height);
+      for (size_t i = 0; i < num_rects_; ++i) {
+        const SkColor kColors[] = {SK_ColorBLUE, SK_ColorGREEN,
+                                   SK_ColorRED,  SK_ColorYELLOW,
+                                   SK_ColorCYAN, SK_ColorMAGENTA};
+        SkPaint paint;
+        paint.setColor(SkColorSetA(kColors[i % arraysize(kColors)], 0xA0));
+        canvas->rotate(rotation / num_rects_);
+        canvas->drawIRect(rect, paint);
+      }
+      canvas->restore();
+
+      // Draw FPS counter.
+      if (show_fps_counter_) {
+        canvas->drawText(fps_counter_text.c_str(), fps_counter_text.length(),
+                         width_ - 48, 32, text_paint);
+      }
+
+      if (gr_context_) {
+        gr_context_->flush();
+        glFlush();
+
+        if (egl_sync_type) {
+          EGLSyncKHR sync =
+              eglCreateSyncKHR(eglGetCurrentDisplay(), egl_sync_type, nullptr);
+          DCHECK(sync != EGL_NO_SYNC_KHR);
+          eglClientWaitSyncKHR(eglGetCurrentDisplay(), sync,
+                               EGL_SYNC_FLUSH_COMMANDS_BIT_KHR,
+                               EGL_FOREVER_KHR);
+          eglDestroySyncKHR(eglGetCurrentDisplay(), sync);
+        }
+      }
+
+      buffer->busy = true;
+      pending_frames.push_back(buffer->buffer.get());
+
+      if (num_benchmark_runs_ || show_fps_counter_) {
+        ++frames;
+        benchmark_wall_time += base::TimeTicks::Now() - wall_time_start;
+        benchmark_cpu_time += base::ThreadTicks::Now() - cpu_time_start;
+      }
+      continue;
     }
 
-    // Draw rotating rects.
-    SkScalar half_width = SkScalarHalf(width_);
-    SkScalar half_height = SkScalarHalf(height_);
-    SkIRect rect =
-        SkIRect::MakeXYWH(-SkScalarHalf(half_width), -SkScalarHalf(half_height),
-                          half_width, half_height);
-    SkScalar rotation = SkScalarMulDiv(frame.time, kRotationSpeed, 1000);
-    SkPaint paint;
-    canvas->translate(half_width, half_height);
-    for (size_t i = 0; i < num_rects_; ++i) {
-      const SkColor kColors[] = {SK_ColorBLUE, SK_ColorGREEN,
-                                 SK_ColorRED,  SK_ColorYELLOW,
-                                 SK_ColorCYAN, SK_ColorMAGENTA};
-      paint.setColor(SkColorSetA(kColors[i % arraysize(kColors)], 0xA0));
-      canvas->rotate(rotation / num_rects_);
-      canvas->drawIRect(rect, paint);
+    if (!frame.callback_pending) {
+      DCHECK_GT(pending_frames.size(), 0u);
+      wl_surface_set_buffer_scale(surface.get(), scale_);
+      wl_surface_attach(surface.get(), pending_frames.front(), 0, 0);
+      pending_frames.pop_front();
+
+      frame_callback.reset(wl_surface_frame(surface.get()));
+      wl_callback_add_listener(frame_callback.get(), &frame_listener, &frame);
+      frame.callback_pending = true;
+      wl_surface_commit(surface.get());
+      wl_display_flush(display_.get());
+      continue;
     }
-    canvas->restore();
-    if (gr_context_) {
-      gr_context_->flush();
-      glFinish();
-    }
-    wl_surface_set_buffer_scale(surface.get(), scale_);
-    wl_surface_attach(surface.get(), buffer->buffer.get(), 0, 0);
-    buffer->busy = true;
 
-    frame_callback.reset(wl_surface_frame(surface.get()));
-    wl_callback_add_listener(frame_callback.get(), &frame_listener, &frame);
-    frame.callback_pending = true;
-
-    ++frames;
-
-    wl_surface_commit(surface.get());
-  } while (wl_display_dispatch(display_.get()) != -1);
+    dispatch_status = wl_display_dispatch(display_.get());
+  } while (dispatch_status != -1);
 
   return 0;
 }
@@ -586,8 +707,9 @@ bool MotionEvents::CreateBuffer(Buffer* buffer) {
         zwp_linux_dmabuf_v1_create_params(globals_.linux_dmabuf.get()));
     zwp_linux_buffer_params_v1_add_listener(buffer->params.get(),
                                             &params_listener, buffer);
-    zwp_linux_buffer_params_v1_add(buffer->params.get(), fd.get(), 0, 0,
-                                   stride(), 0, 0);
+    uint32_t stride = gbm_bo_get_stride(buffer->bo.get());
+    zwp_linux_buffer_params_v1_add(buffer->params.get(), fd.get(), 0, 0, stride,
+                                   0, 0);
     zwp_linux_buffer_params_v1_create(buffer->params.get(), width_, height_,
                                       kDrmFormat, 0);
 
@@ -600,7 +722,7 @@ bool MotionEvents::CreateBuffer(Buffer* buffer) {
                                 EGL_LINUX_DRM_FOURCC_EXT,
                                 kDrmFormat,
                                 EGL_DMA_BUF_PLANE0_PITCH_EXT,
-                                stride(),
+                                stride,
                                 EGL_DMA_BUF_PLANE0_OFFSET_EXT,
                                 0,
                                 EGL_NONE};
@@ -634,13 +756,15 @@ bool MotionEvents::CreateBuffer(Buffer* buffer) {
     return true;
   }
 #endif
-  buffer->shared_memory.CreateAndMapAnonymous(buffer_size());
+
+  size_t stride = width_ * kBytesPerPixel;
+  buffer->shared_memory.CreateAndMapAnonymous(stride * height_);
   buffer->shm_pool.reset(
       wl_shm_create_pool(globals_.shm.get(), buffer->shared_memory.handle().fd,
                          buffer->shared_memory.requested_size()));
 
   buffer->buffer.reset(static_cast<wl_buffer*>(wl_shm_pool_create_buffer(
-      buffer->shm_pool.get(), 0, width_, height_, stride(), kShmFormat)));
+      buffer->shm_pool.get(), 0, width_, height_, stride, kShmFormat)));
   if (!buffer->buffer) {
     LOG(ERROR) << "Can't create buffer";
     return false;
@@ -648,7 +772,7 @@ bool MotionEvents::CreateBuffer(Buffer* buffer) {
 
   buffer->sk_surface = SkSurface::MakeRasterDirect(
       SkImageInfo::Make(width_, height_, kColorType, kOpaque_SkAlphaType),
-      static_cast<uint8_t*>(buffer->shared_memory.memory()), stride());
+      static_cast<uint8_t*>(buffer->shared_memory.memory()), stride);
   DCHECK(buffer->sk_surface);
   return true;
 }
@@ -668,11 +792,28 @@ const char kScale[] = "scale";
 // Specifies the number of rotating rects to draw.
 const char kNumRects[] = "num-rects";
 
-// Use drm buffer instead of shared memory.
-const char kUseDrm[] = "use-drm";
+// Specifies the maximum number of pending frames.
+const char kMaxFramesPending[] = "max-frames-pending";
 
 // Specifies if client should be fullscreen.
 const char kFullscreen[] = "fullscreen";
+
+// Specifies if FPS counter should be shown.
+const char kShowFpsCounter[] = "show-fps-counter";
+
+// Enables benchmark mode and specifies the number of benchmark runs to
+// perform before client will exit. Client will print the results to
+// standard output as a tab seperated list.
+//
+//  The output format is:
+//   "frames wall-time-ms cpu-time-ms"
+const char kBenchmark[] = "benchmark";
+
+// Specifies the number of milliseconds to use as benchmark interval.
+const char kBenchmarkInterval[] = "benchmark-interval";
+
+// Use drm buffer instead of shared memory.
+const char kUseDrm[] = "use-drm";
 
 }  // namespace switches
 
@@ -707,10 +848,43 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  bool use_drm = command_line->HasSwitch(switches::kUseDrm);
-  bool fullscreen = command_line->HasSwitch(switches::kFullscreen);
+  size_t max_frames_pending = 0;
+  if (command_line->HasSwitch(switches::kMaxFramesPending) &&
+      (!base::StringToSizeT(
+          command_line->GetSwitchValueASCII(switches::kMaxFramesPending),
+          &max_frames_pending))) {
+    LOG(ERROR) << "Invalid value for " << switches::kMaxFramesPending;
+    return 1;
+  }
 
-  exo::wayland::clients::MotionEvents client(width, height, scale, num_rects,
-                                             use_drm, fullscreen);
+  size_t num_benchmark_runs = 0;
+  if (command_line->HasSwitch(switches::kBenchmark) &&
+      (!base::StringToSizeT(
+          command_line->GetSwitchValueASCII(switches::kBenchmark),
+          &num_benchmark_runs))) {
+    LOG(ERROR) << "Invalid value for " << switches::kBenchmark;
+    return 1;
+  }
+
+  size_t benchmark_interval_ms = 5000;  // 5 seconds.
+  if (command_line->HasSwitch(switches::kBenchmarkInterval) &&
+      (!base::StringToSizeT(
+          command_line->GetSwitchValueASCII(switches::kBenchmarkInterval),
+          &benchmark_interval_ms))) {
+    LOG(ERROR) << "Invalid value for " << switches::kBenchmarkInterval;
+    return 1;
+  }
+
+  std::unique_ptr<std::string> use_drm;
+  if (command_line->HasSwitch(switches::kUseDrm)) {
+    use_drm.reset(
+        new std::string(command_line->GetSwitchValueASCII(switches::kUseDrm)));
+  }
+
+  exo::wayland::clients::MotionEvents client(
+      width, height, scale, num_rects, max_frames_pending,
+      command_line->HasSwitch(switches::kFullscreen),
+      command_line->HasSwitch(switches::kShowFpsCounter), num_benchmark_runs,
+      base::TimeDelta::FromMilliseconds(benchmark_interval_ms), use_drm.get());
   return client.Run();
 }

@@ -16,7 +16,6 @@
 #include "chrome/browser/ui/sync/one_click_signin_sync_starter.h"
 #include "chrome/common/features.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "components/security_state/security_state_model.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/translate/core/common/translate_errors.h"
 #include "ui/base/base_window.h"
@@ -58,6 +57,10 @@ class Rect;
 class Size;
 }
 
+namespace security_state {
+struct SecurityInfo;
+}  // namespace security_state
+
 namespace signin_metrics {
 enum class AccessPoint;
 }
@@ -67,6 +70,18 @@ class WebContentsModalDialogHost;
 }
 
 enum class ImeWarningBubblePermissionStatus;
+
+enum class ShowTranslateBubbleResult {
+  // The translate bubble was successfully shown.
+  SUCCESS,
+
+  // The various reasons for which the translate bubble could fail to be shown.
+  BROWSER_WINDOW_NOT_VALID,
+  BROWSER_WINDOW_MINIMIZED,
+  BROWSER_WINDOW_NOT_ACTIVE,
+  WEB_CONTENTS_NOT_ACTIVE,
+  EDITABLE_FIELD_IS_ACTIVE,
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 // BrowserWindow interface
@@ -242,7 +257,7 @@ class BrowserWindow : public ui::BaseWindow {
   //
   // |is_user_gesture| is true when the bubble is shown on the user's deliberate
   // action.
-  virtual void ShowTranslateBubble(
+  virtual ShowTranslateBubbleResult ShowTranslateBubble(
       content::WebContents* contents,
       translate::TranslateStep step,
       translate::TranslateErrors::Type error_type,
@@ -289,8 +304,7 @@ class BrowserWindow : public ui::BaseWindow {
       Profile* profile,
       content::WebContents* web_contents,
       const GURL& virtual_url,
-      const security_state::SecurityStateModel::SecurityInfo&
-          security_info) = 0;
+      const security_state::SecurityInfo& security_info) = 0;
 
   // Shows the app menu (for accessibility).
   virtual void ShowAppMenu() = 0;

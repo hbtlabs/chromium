@@ -48,6 +48,9 @@ void DownloadFeedbackDialogView::Show(
   // This dialog should only be shown if it hasn't been shown before.
   DCHECK(!safe_browsing::ExtendedReportingPrefExists(*profile->GetPrefs()));
 
+  // Determine if any prefs need to be updated prior to showing the dialog.
+  safe_browsing::UpdatePrefsBeforeSecurityInterstitial(profile->GetPrefs());
+
   // Only one dialog should be shown at a time, so check to see if another one
   // is open. If another one is open, treat this parallel call as if reporting
   // is disabled (to be conservative).
@@ -75,11 +78,14 @@ DownloadFeedbackDialogView::DownloadFeedbackDialogView(
     : profile_(profile),
       navigator_(navigator),
       callback_(callback),
-      explanation_box_view_(new views::MessageBoxView(
-          views::MessageBoxView::InitParams(l10n_util::GetStringUTF16(
-              IDS_FEEDBACK_SERVICE_DIALOG_EXPLANATION)))),
-      link_view_(new views::Link(l10n_util::GetStringUTF16(
-          IDS_SAFE_BROWSING_PRIVACY_POLICY_PAGE))),
+      explanation_box_view_(
+          new views::MessageBoxView(views::MessageBoxView::InitParams(
+              l10n_util::GetStringUTF16(safe_browsing::ChooseOptInTextResource(
+                  *profile->GetPrefs(),
+                  IDS_FEEDBACK_SERVICE_DIALOG_EXPLANATION,
+                  IDS_FEEDBACK_SERVICE_DIALOG_EXPLANATION_SCOUT))))),
+      link_view_(new views::Link(
+          l10n_util::GetStringUTF16(IDS_SAFE_BROWSING_PRIVACY_POLICY_PAGE))),
       title_text_(l10n_util::GetStringUTF16(IDS_FEEDBACK_SERVICE_DIALOG_TITLE)),
       ok_button_text_(l10n_util::GetStringUTF16(
           IDS_FEEDBACK_SERVICE_DIALOG_OK_BUTTON_LABEL)),

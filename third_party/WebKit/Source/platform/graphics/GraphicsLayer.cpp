@@ -116,7 +116,7 @@ GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
     m_client->verifyNotPainting();
 #endif
 
-  m_contentLayerDelegate = wrapUnique(new ContentLayerDelegate(this));
+  m_contentLayerDelegate = makeUnique<ContentLayerDelegate>(this);
   m_layer = Platform::current()->compositorSupport()->createContentLayer(
       m_contentLayerDelegate.get());
   m_layer->layer()->setDrawsContent(m_drawsContent && m_contentsVisible);
@@ -238,7 +238,7 @@ void GraphicsLayer::addChildBelow(GraphicsLayer* childLayer,
 
 void GraphicsLayer::removeAllChildren() {
   while (!m_children.isEmpty()) {
-    GraphicsLayer* curLayer = m_children.last();
+    GraphicsLayer* curLayer = m_children.back();
     ASSERT(curLayer->parent());
     curLayer->removeFromParent();
   }
@@ -339,8 +339,11 @@ void GraphicsLayer::notifyFirstPaintToClient() {
     DisplayItemList& itemList = m_paintController->newDisplayItemList();
     for (DisplayItem& item : itemList) {
       DisplayItem::Type type = item.getType();
+      if (type == DisplayItem::kDocumentBackground &&
+          !m_paintController->nonDefaultBackgroundColorPainted()) {
+        continue;
+      }
       if (DisplayItem::isDrawingType(type) &&
-          type != DisplayItem::kDocumentBackground &&
           static_cast<const DrawingDisplayItem&>(item).picture()) {
         m_painted = true;
         isFirstPaint = true;
@@ -721,6 +724,8 @@ std::unique_ptr<JSONObject> GraphicsLayer::layerAsJSONInternal(
       paintingPhasesJSON->pushString("GraphicsLayerPaintOverflowContents");
     if (m_paintingPhase & GraphicsLayerPaintCompositedScroll)
       paintingPhasesJSON->pushString("GraphicsLayerPaintCompositedScroll");
+    if (m_paintingPhase & GraphicsLayerPaintDecoration)
+      paintingPhasesJSON->pushString("GraphicsLayerPaintDecoration");
     json->setArray("paintingPhases", std::move(paintingPhasesJSON));
   }
 
@@ -1020,6 +1025,7 @@ void GraphicsLayer::setNeedsDisplay() {
                           PaintInvalidationFull);
 }
 
+DISABLE_CFI_PERF
 void GraphicsLayer::setNeedsDisplayInRect(
     const IntRect& rect,
     PaintInvalidationReason invalidationReason,
@@ -1304,11 +1310,11 @@ void GraphicsLayer::checkPaintUnderInvalidations(const SkPicture& newPicture) {
 #ifndef NDEBUG
 void showGraphicsLayerTree(const blink::GraphicsLayer* layer) {
   if (!layer) {
-    fprintf(stderr, "Cannot showGraphicsLayerTree for (nil).\n");
+    LOG(INFO) << "Cannot showGraphicsLayerTree for (nil).";
     return;
   }
 
   String output = layer->layerTreeAsText(blink::LayerTreeIncludesDebugInfo);
-  fprintf(stderr, "%s\n", output.utf8().data());
+  LOG(INFO) << output.utf8().data();
 }
 #endif

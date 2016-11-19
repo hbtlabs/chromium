@@ -220,12 +220,20 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #   define SK_IGNORE_ETC1_SUPPORT
 #endif
 
+#ifndef    SK_SUPPORT_LEGACY_XFERMODE_IS_PUBLIC
+#   define SK_SUPPORT_LEGACY_XFERMODE_IS_PUBLIC
+#endif
+
 #ifndef    SK_IGNORE_GPU_DITHER
 #   define SK_IGNORE_GPU_DITHER
 #endif
 
 #ifndef    SK_SUPPORT_LEGACY_EVAL_CUBIC
 #   define SK_SUPPORT_LEGACY_EVAL_CUBIC
+#endif
+
+#ifndef    SK_SUPPORT_LEGACY_IMAGE_ENCODER_CLASS
+#   define SK_SUPPORT_LEGACY_IMAGE_ENCODER_CLASS
 #endif
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi

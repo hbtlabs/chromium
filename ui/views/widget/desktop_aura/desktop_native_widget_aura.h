@@ -24,7 +24,6 @@ class WindowEventDispatcher;
 class WindowTreeHost;
 namespace client {
 class DragDropClient;
-class FocusClient;
 class ScreenPositionClient;
 class WindowParentingClient;
 }
@@ -89,6 +88,8 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
   aura::WindowTreeHost* host() {
     return host_.get();
   }
+
+  aura::Window* content_window() { return content_window_; }
 
   // Ensures that the correct window is activated/deactivated based on whether
   // we are being activated/deactivated.

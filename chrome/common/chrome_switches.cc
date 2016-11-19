@@ -192,10 +192,6 @@ const char kDisableBundledPpapiFlash[]      = "disable-bundled-ppapi-flash";
 const char kDisableCastStreamingHWEncoding[] =
     "disable-cast-streaming-hw-encoding";
 
-// Disables detection of child accounts.
-const char kDisableChildAccountDetection[] =
-    "disable-child-account-detection";
-
 // Disables data volume counters in the Clear Browsing Data dialog.
 const char kDisableClearBrowsingDataCounters[] =
     "disable-clear-browsing-data-counters";
@@ -347,10 +343,6 @@ const char kEnableBenchmarking[]            = "enable-benchmarking";
 
 // Enables the multi-level undo system for bookmarks.
 const char kEnableBookmarkUndo[]            = "enable-bookmark-undo";
-
-// Enables detection of child accounts.
-const char kEnableChildAccountDetection[] =
-    "enable-child-account-detection";
 
 // Enables data volume counters in the Clear Browsing Data dialog.
 const char kEnableClearBrowsingDataCounters[] =
@@ -530,6 +522,10 @@ const char kExtensionsUpdateFrequency[]     = "extensions-update-frequency";
 // already running chrome process via the fast path, ie: before chrome.dll is
 // loaded. It is useful to tell the difference for tracking purposes.
 const char kFastStart[]            = "fast-start";
+
+// Forces Android application mode. This hides certain system UI elements and
+// forces the app to be installed if it hasn't been already.
+const char kForceAndroidAppMode[] = "force-android-app-mode";
 
 // Forces application mode. This hides certain system UI elements and forces
 // the app to be installed if it hasn't been already.
@@ -1043,7 +1039,7 @@ const char kEnableHostedMode[] = "enable-hosted-mode";
 const char kEnableHungRendererInfoBar[] = "enable-hung-renderer-infobar";
 
 // Enables "Add to Home screen" in the app menu to generate WebAPKs.
-const char kEnableWebApk[] = "enable-webapk";
+const char kEnableWebApk[] = "enable-improved-a2hs";
 
 // Forces the update menu badge to show.
 const char kForceShowUpdateMenuBadge[] = "force-show-update-menu-badge";
@@ -1185,7 +1181,7 @@ const char kMakeChromeDefault[] = "make-chrome-default";
 
 #if defined(OS_WIN)
 // Disables using GDI to print text as simply text. Fallback to printing text
-// as paths.
+// as paths. Overrides --enable-gdi-text-printing.
 const char kDisableGDITextPrinting[] = "disable-gdi-text-printing";
 
 // Disables per monitor DPI for supported Windows versions.
@@ -1194,6 +1190,9 @@ const char kDisablePerMonitorDpi[]          = "disable-per-monitor-dpi";
 
 // Fallback to XPS. By default connector uses CDD.
 const char kEnableCloudPrintXps[]           = "enable-cloud-print-xps";
+
+// Enables using GDI to print text as simply text.
+const char kEnableGDITextPrinting[] = "enable-gdi-text-printing";
 
 // Enables per monitor DPI for supported Windows versions.
 const char kEnablePerMonitorDpi[]           = "enable-per-monitor-dpi";
@@ -1306,6 +1305,15 @@ bool SettingsWindowEnabled() {
 bool PowerOverlayEnabled() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       ::switches::kEnablePowerOverlay);
+}
+#endif
+
+#if defined(OS_WIN)
+bool GDITextPrintingEnabled() {
+  const auto& command_line = *base::CommandLine::ForCurrentProcess();
+  if (command_line.HasSwitch(kDisableGDITextPrinting))
+    return false;
+  return command_line.HasSwitch(kEnableGDITextPrinting);
 }
 #endif
 

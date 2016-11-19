@@ -126,22 +126,15 @@ struct SameSizeAsLayoutObject : DisplayItemClient {
 #endif
   unsigned m_bitfields;
   unsigned m_bitfields2;
-  LayoutRect m_previousVisualRect;
+  LayoutRect m_visualRect;
+  LayoutPoint m_paintOffset;
+  std::unique_ptr<void*> m_paintProperties;
 };
 
 static_assert(sizeof(LayoutObject) == sizeof(SameSizeAsLayoutObject),
               "LayoutObject should stay small");
 
 bool LayoutObject::s_affectsParentBlock = false;
-
-// The pointer to paint properties is implemented as a global hash map
-// temporarily, to avoid memory regression during the transition towards SPv2.
-typedef HashMap<const LayoutObject*, std::unique_ptr<ObjectPaintProperties>>
-    PaintPropertiesMap;
-static PaintPropertiesMap& paintPropertiesMap() {
-  DEFINE_STATIC_LOCAL(PaintPropertiesMap, staticPaintPropertiesMap, ());
-  return staticPaintPropertiesMap;
-}
 
 void* LayoutObject::operator new(size_t sz) {
   ASSERT(isMainThread());
@@ -1149,16 +1142,17 @@ void LayoutObject::invalidateTreeIfNeeded(
   PaintInvalidationState newPaintInvalidationState(paintInvalidationState,
                                                    *this);
 
-  if (mayNeedPaintInvalidationSubtree())
+  if (mayNeedPaintInvalidationSubtree()) {
     newPaintInvalidationState
         .setForceSubtreeInvalidationCheckingWithinContainer();
+  }
 
   PaintInvalidationReason reason =
       invalidatePaintIfNeeded(newPaintInvalidationState);
-  clearPaintInvalidationFlags();
-
   newPaintInvalidationState.updateForChildren(reason);
   invalidatePaintOfSubtreesIfNeeded(newPaintInvalidationState);
+
+  clearPaintInvalidationFlags();
 }
 
 DISABLE_CFI_PERF
@@ -1475,6 +1469,11 @@ StyleDifference LayoutObject::adjustStyleDifference(
       // for changed paint property or paint order. Raster invalidation will be
       // issued if needed during paint.
       ObjectPaintInvalidator(*this).slowSetPaintingLayerNeedsRepaint();
+
+      // When transform, opacity, etc. change, paint properties will also change
+      // so we need to mark this object as needing an update.
+      // TODO(pdr): Also update in the non-spv2 codepath?
+      getMutableForPainting().setNeedsPaintPropertyUpdate();
     }
   } else {
     // If transform changed, and the layer does not paint into its own separate
@@ -1892,6 +1891,13 @@ void LayoutObject::styleDidChange(StyleDifference diff,
       frame->localFrameRoot()->eventHandler().scheduleCursorUpdate();
     }
   }
+
+  if (diff.needsPaintInvalidation() && oldStyle) {
+    if (resolveColor(*oldStyle, CSSPropertyBackgroundColor) !=
+            resolveColor(CSSPropertyBackgroundColor) ||
+        oldStyle->backgroundLayers() != styleRef().backgroundLayers())
+      setBackgroundChangedSinceLastPaintInvalidation();
+  }
 }
 
 void LayoutObject::propagateStyleToAnonymousChildren() {
@@ -2061,8 +2067,7 @@ void LayoutObject::mapLocalToAncestor(const LayoutBoxModelObject* ancestor,
     // everything in the fragmentation context lived in one tall single column).
     // Convert it to a visual point now, since we're about to escape the flow
     // thread.
-    containerOffset +=
-        columnOffset(roundedLayoutPoint(transformState.mappedPoint()));
+    containerOffset += columnOffset(LayoutPoint(transformState.mappedPoint()));
   }
 
   // Text objects just copy their parent's computed style, so we need to ignore
@@ -2577,9 +2582,6 @@ void LayoutObject::willBeDestroyed() {
 
   ObjectPaintInvalidator::objectWillBeDestroyed(*this);
 
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
-    paintPropertiesMap().remove(this);
-
   clearLayoutRootIfNeeded();
 
   if (m_style) {
@@ -3052,74 +3054,6 @@ LayoutObject::getUncachedPseudoStyleFromParentOrShadowHost() const {
   return getUncachedPseudoStyle(PseudoStyleRequest(PseudoIdSelection));
 }
 
-void LayoutObject::getTextDecorations(unsigned decorations,
-                                      AppliedTextDecoration& underline,
-                                      AppliedTextDecoration& overline,
-                                      AppliedTextDecoration& linethrough,
-                                      bool quirksMode,
-                                      bool firstlineStyle) {
-  LayoutObject* curr = this;
-  const ComputedStyle* styleToUse = nullptr;
-  unsigned currDecs = TextDecorationNone;
-  Color resultColor;
-  TextDecorationStyle resultStyle;
-  do {
-    styleToUse = curr->style(firstlineStyle);
-    currDecs = styleToUse->getTextDecoration();
-    currDecs &= decorations;
-    resultColor =
-        styleToUse->visitedDependentColor(CSSPropertyTextDecorationColor);
-    resultStyle = styleToUse->getTextDecorationStyle();
-    // Parameter 'decorations' is cast as an int to enable the bitwise
-    // operations below.
-    if (currDecs) {
-      if (currDecs & TextDecorationUnderline) {
-        decorations &= ~TextDecorationUnderline;
-        underline.color = resultColor;
-        underline.style = resultStyle;
-      }
-      if (currDecs & TextDecorationOverline) {
-        decorations &= ~TextDecorationOverline;
-        overline.color = resultColor;
-        overline.style = resultStyle;
-      }
-      if (currDecs & TextDecorationLineThrough) {
-        decorations &= ~TextDecorationLineThrough;
-        linethrough.color = resultColor;
-        linethrough.style = resultStyle;
-      }
-    }
-    if (curr->isRubyText())
-      return;
-    curr = curr->parent();
-    if (curr && curr->isAnonymousBlock() && curr->isLayoutBlockFlow() &&
-        toLayoutBlockFlow(curr)->continuation())
-      curr = toLayoutBlockFlow(curr)->continuation();
-  } while (curr && decorations && (!quirksMode || !curr->node() ||
-                                   (!isHTMLAnchorElement(*curr->node()) &&
-                                    !isHTMLFontElement(*curr->node()))));
-
-  // If we bailed out, use the element we bailed out at (typically a <font> or
-  // <a> element).
-  if (decorations && curr) {
-    styleToUse = curr->style(firstlineStyle);
-    resultColor =
-        styleToUse->visitedDependentColor(CSSPropertyTextDecorationColor);
-    if (decorations & TextDecorationUnderline) {
-      underline.color = resultColor;
-      underline.style = resultStyle;
-    }
-    if (decorations & TextDecorationOverline) {
-      overline.color = resultColor;
-      overline.style = resultStyle;
-    }
-    if (decorations & TextDecorationLineThrough) {
-      linethrough.color = resultColor;
-      linethrough.style = resultStyle;
-    }
-  }
-}
-
 void LayoutObject::addAnnotatedRegions(Vector<AnnotatedRegionValue>& regions) {
   // Convert the style regions to absolute coordinates.
   if (style()->visibility() != EVisibility::Visible || !isBox())
@@ -3346,13 +3280,7 @@ FloatRect LayoutObject::visualRectInLocalSVGCoordinates() const {
 }
 
 AffineTransform LayoutObject::localSVGTransform() const {
-  static const AffineTransform identity;
-  return identity;
-}
-
-const AffineTransform& LayoutObject::localToSVGParentTransform() const {
-  static const AffineTransform identity;
-  return identity;
+  return AffineTransform();
 }
 
 bool LayoutObject::nodeAtFloatPoint(HitTestResult&,
@@ -3456,6 +3384,7 @@ void LayoutObject::clearPaintInvalidationFlags() {
   m_bitfields.setMayNeedPaintInvalidationSubtree(false);
   m_bitfields.setMayNeedPaintInvalidationAnimatedBackgroundImage(false);
   m_bitfields.setShouldInvalidateSelection(false);
+  m_bitfields.setBackgroundChangedSinceLastPaintInvalidation(false);
 }
 
 bool LayoutObject::isAllowedToModifyLayoutTreeStructure(Document& document) {
@@ -3497,16 +3426,14 @@ void LayoutObject::setIsBackgroundAttachmentFixedObject(
 
 const ObjectPaintProperties* LayoutObject::paintProperties() const {
   DCHECK(RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled());
-  return paintPropertiesMap().get(this);
+  return m_paintProperties.get();
 }
 
 ObjectPaintProperties& LayoutObject::ensurePaintProperties() {
   DCHECK(RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled());
-  auto addResult = paintPropertiesMap().add(this, nullptr);
-  if (addResult.isNewEntry)
-    addResult.storedValue->value = ObjectPaintProperties::create();
-
-  return *addResult.storedValue->value;
+  if (!m_paintProperties)
+    m_paintProperties = ObjectPaintProperties::create();
+  return *m_paintProperties;
 }
 
 LayoutRect LayoutObject::debugRect() const {

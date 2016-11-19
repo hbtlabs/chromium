@@ -10,7 +10,9 @@ option optimize_for = LITE_RUNTIME;
 
 package sync_pb;
 
-// Properties of Reading list items.
+// Sync Reading list entry. This proto contains the fields synced for a reading
+// list entry. It must be kept synced with the reading_list.ReadingListLocal
+// protobuf.
 message ReadingListSpecifics {
   optional string entry_id = 1;
 

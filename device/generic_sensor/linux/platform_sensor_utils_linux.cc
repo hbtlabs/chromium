@@ -9,7 +9,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_restrictions.h"
-#include "device/generic_sensor/linux/sensor_data_linux.h"
 #include "device/generic_sensor/public/cpp/sensor_reading.h"
 
 namespace device {
@@ -52,6 +51,20 @@ bool GetSensorFilePaths(const SensorDataLinux& data,
   return true;
 }
 
+// Returns -1 if unable to read a scaling value.
+// Otherwise, returns a scaling value read from a file.
+double ReadSensorScalingValue(const base::FilePath& scale_file_path) {
+  std::string value;
+  if (!base::ReadFileToString(scale_file_path, &value))
+    return -1;
+
+  double scaling_value;
+  base::TrimWhitespaceASCII(value, base::TRIM_ALL, &value);
+  if (!base::StringToDouble(value, &scaling_value))
+    return -1;
+  return scaling_value;
+}
+
 }  // namespace
 
 // static
@@ -61,11 +74,33 @@ std::unique_ptr<SensorReader> SensorReader::Create(
   std::vector<base::FilePath> sensor_paths;
   if (!GetSensorFilePaths(data, &sensor_paths))
     return nullptr;
-  return base::WrapUnique(new SensorReader(std::move(sensor_paths)));
+
+  DCHECK(!sensor_paths.empty());
+  // Scaling value is 1 if scaling file is not specified is |data| or scaling
+  // file is not found.
+  double scaling_value = 1;
+  if (!data.sensor_scale_name.empty()) {
+    const base::FilePath scale_file_path =
+        sensor_paths.back().DirName().Append(data.sensor_scale_name);
+    if (base::PathExists(scale_file_path))
+      scaling_value = ReadSensorScalingValue(scale_file_path);
+  }
+
+  // A file with a scaling value is found, but couldn't be read.
+  if (scaling_value == -1)
+    return nullptr;
+
+  return base::WrapUnique(new SensorReader(
+      std::move(sensor_paths), scaling_value, data.apply_scaling_func));
 }
 
-SensorReader::SensorReader(std::vector<base::FilePath> sensor_paths)
-    : sensor_paths_(std::move(sensor_paths)) {
+SensorReader::SensorReader(
+    std::vector<base::FilePath> sensor_paths,
+    double scaling_value,
+    const SensorDataLinux::ReaderFunctor& apply_scaling_func)
+    : sensor_paths_(std::move(sensor_paths)),
+      scaling_value_(scaling_value),
+      apply_scaling_func_(apply_scaling_func) {
   DCHECK(!sensor_paths_.empty());
 }
 
@@ -87,6 +122,8 @@ bool SensorReader::ReadSensorReading(SensorReading* reading) {
       return false;
     readings.values[i++] = new_value;
   }
+  if (!apply_scaling_func_.is_null())
+    apply_scaling_func_.Run(scaling_value_, readings);
   *reading = readings;
   return true;
 }

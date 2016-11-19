@@ -29,6 +29,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
+#include "chrome/browser/chromeos/arc/fileapi/arc_content_file_system_url_util.h"
 #include "chrome/browser/chromeos/background/ash_wallpaper_delegate.h"
 #include "chrome/browser/chromeos/display/display_configuration_observer.h"
 #include "chrome/browser/chromeos/display/display_preferences.h"
@@ -281,26 +282,39 @@ class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
   void TriggerAccessibilityAlert(ash::AccessibilityAlert alert) override {
     Profile* profile = ProfileManager::GetActiveUserProfile();
     if (profile) {
+      int msg = 0;
       switch (alert) {
-        case ash::A11Y_ALERT_WINDOW_NEEDED: {
-          AutomationManagerAura::GetInstance()->HandleAlert(
-              profile, l10n_util::GetStringUTF8(IDS_A11Y_ALERT_WINDOW_NEEDED));
+        case ash::A11Y_ALERT_CAPS_ON:
+          msg = IDS_A11Y_ALERT_CAPS_ON;
           break;
-        }
-        case ash::A11Y_ALERT_WINDOW_OVERVIEW_MODE_ENTERED: {
-          AutomationManagerAura::GetInstance()->HandleAlert(
-              profile, l10n_util::GetStringUTF8(
-                           IDS_A11Y_ALERT_WINDOW_OVERVIEW_MODE_ENTERED));
+        case ash::A11Y_ALERT_CAPS_OFF:
+          msg = IDS_A11Y_ALERT_CAPS_OFF;
           break;
-        }
+        case ash::A11Y_ALERT_WINDOW_NEEDED:
+          msg = IDS_A11Y_ALERT_WINDOW_NEEDED;
+          break;
+        case ash::A11Y_ALERT_WINDOW_OVERVIEW_MODE_ENTERED:
+          msg = IDS_A11Y_ALERT_WINDOW_OVERVIEW_MODE_ENTERED;
+          break;
         case ash::A11Y_ALERT_NONE:
+          msg = 0;
           break;
+      }
+
+      if (msg) {
+        AutomationManagerAura::GetInstance()->HandleAlert(
+            profile, l10n_util::GetStringUTF8(msg));
       }
     }
   }
 
   ash::AccessibilityAlert GetLastAccessibilityAlert() override {
     return ash::A11Y_ALERT_NONE;
+  }
+
+  void PlaySpokenFeedbackToggleCountdown(int tick_count) override {
+    DCHECK(AccessibilityManager::Get());
+    AccessibilityManager::Get()->PlaySpokenFeedbackToggleCountdown(tick_count);
   }
 
   void PlayEarcon(int sound_key) override {
@@ -409,10 +423,17 @@ void ChromeShellDelegate::OpenUrlFromArc(const GURL& url) {
   if (!url.is_valid())
     return;
 
+  GURL url_to_open = url;
+  if (url.SchemeIs(url::kFileScheme) || url.SchemeIs(url::kContentScheme)) {
+    // Chrome cannot open this URL. Read the contents via ARC content file
+    // system with an external file URL.
+    url_to_open = arc::ArcUrlToExternalFileUrl(url_to_open);
+  }
+
   chrome::ScopedTabbedBrowserDisplayer displayer(
       ProfileManager::GetActiveUserProfile());
   chrome::AddSelectedTabWithURL(
-      displayer.browser(), url,
+      displayer.browser(), url_to_open,
       ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK |
                                 ui::PAGE_TRANSITION_FROM_API));
 

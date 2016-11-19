@@ -16,7 +16,6 @@
 
 namespace gfx {
 class Rect;
-class Vector2d;
 }
 
 namespace ui {
@@ -82,6 +81,9 @@ class AURA_EXPORT WindowMus {
                                      const std::vector<uint8_t>* data) = 0;
   virtual void SetSurfaceIdFromServer(
       std::unique_ptr<SurfaceInfo> surface_info) = 0;
+  // The window was deleted on the server side. DestroyFromServer() should
+  // result in deleting |this|.
+  virtual void DestroyFromServer() = 0;
   virtual void AddTransientChildFromServer(WindowMus* child) = 0;
   virtual void RemoveTransientChildFromServer(WindowMus* child) = 0;
   // Called when a window was added/removed as a transient child.

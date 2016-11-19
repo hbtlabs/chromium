@@ -11,6 +11,7 @@
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/views/animation/test/ink_drop_impl_test_api.h"
 #include "ui/views/animation/test/test_ink_drop_host.h"
 
@@ -37,7 +38,7 @@ class InkDropImplTest : public testing::Test {
   // Returns true if the ink drop layers have been added to |ink_drop_host_|.
   bool AreLayersAddedToHost() const;
 
-  // Destroyes the |ink_drop_| and assocated |test_api_|.
+  // Destroys the |ink_drop_| and associated |test_api_|.
   void DestroyInkDrop();
 
   // Used to control the tasks scheduled by the InkDropImpl's Timer.
@@ -63,7 +64,8 @@ InkDropImplTest::InkDropImplTest()
       thread_task_runner_handle_(
           new base::ThreadTaskRunnerHandle(task_runner_)),
       ink_drop_host_(base::MakeUnique<TestInkDropHost>()),
-      ink_drop_(base::MakeUnique<InkDropImpl>(ink_drop_host_.get())),
+      ink_drop_(
+          base::MakeUnique<InkDropImpl>(ink_drop_host_.get(), gfx::Size())),
       test_api_(base::MakeUnique<test::InkDropImplTestApi>(ink_drop_.get())) {
   ink_drop_host_->set_disable_timers_for_test(true);
 }
@@ -238,6 +240,10 @@ TEST_F(InkDropImplTest, SettingHighlightStateDuringStateExitIsntAllowed) {
           test_api()->state_factory()),
       ".*HighlightStates should not be changed within a call to "
       "HighlightState::Exit\\(\\)\\..*");
+  // Need to set the |highlight_state_| directly because the
+  // SetStateOnExitHighlightState will recursively try to set it during tear
+  // down and cause a stack overflow.
+  test_api()->SetHighlightState(nullptr);
 }
 #endif
 
@@ -248,6 +254,23 @@ TEST_F(InkDropImplTest,
       test_api()->state_factory());
   test::InkDropImplTestApi::AccessFactoryOnExitHighlightState::Install(
       test_api()->state_factory());
+}
+
+// Tests that if during destruction, a rippl animation is successfully ended, no
+// crash happens (see https://crbug.com/663579).
+TEST_F(InkDropImplTest, SuccessfulAnimationEndedDuringDestruction) {
+  // Start a ripple animation with non-zero duration.
+  ink_drop()->AnimateToState(InkDropState::ACTION_PENDING);
+  {
+    // Start another ripple animation with zero duration that would be queued
+    // until the previous one is finished/aborted.
+    ui::ScopedAnimationDurationScaleMode duration_mode(
+        ui::ScopedAnimationDurationScaleMode::ZERO_DURATION);
+    ink_drop()->AnimateToState(InkDropState::ACTION_TRIGGERED);
+  }
+  // Abort the first animation, so that the queued animation is started (and
+  // finished immediately since it has zero duration). No crash should happen.
+  DestroyInkDrop();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

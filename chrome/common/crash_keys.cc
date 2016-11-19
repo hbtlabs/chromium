@@ -60,6 +60,8 @@ const char kThirdPartyModulesLoaded[] = "third-party-modules-loaded";
 const char kThirdPartyModulesNotLoaded[] = "third-party-modules-not-loaded";
 #endif
 
+const char kInputEventFilterSendFailure[] = "input-event-filter-send-failure";
+
 const char kPrinterInfo[] = "prn-info-%" PRIuS;
 
 #if defined(OS_CHROMEOS)
@@ -142,6 +144,7 @@ size_t RegisterChromeCrashKeys() {
     { kThirdPartyModulesLoaded, kSmallSize },
     { kThirdPartyModulesNotLoaded, kSmallSize },
 #endif
+    { kInputEventFilterSendFailure, kSmallSize },
 #if defined(OS_CHROMEOS)
     { kNumberOfUsers, kSmallSize },
 #endif
@@ -243,10 +246,6 @@ size_t RegisterChromeCrashKeys() {
     // Temporary for https://crbug.com/630496.
     { "swdh_get_registration_cannot_host_url", crash_keys::kLargeSize },
     { "swdh_get_registration_cannot_document_url", crash_keys::kLargeSize },
-
-    // Temporary for https://crbug.com/660427.
-    { "blink_scheduler_task_function_name", kMediumSize },
-    { "blink_scheduler_task_file_name", kMediumSize },
   };
 
   // This dynamic set of keys is used for sets of key value pairs when gathering

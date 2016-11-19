@@ -16,7 +16,6 @@ namespace web {
 namespace {
 // Stub class for NavigationManagerDelegate.
 class TestNavigationManagerDelegate : public NavigationManagerDelegate {
-  void GoToOffset(int offset) override {}
   void GoToIndex(int index) override {}
   void LoadURLWithParams(const NavigationManager::WebLoadParams&) override {}
   void OnNavigationItemsPruned(size_t pruned_item_count) override {}
@@ -72,6 +71,184 @@ TEST_F(NavigationManagerTest, GetPendingItemIndexWithPendingEntry) {
                              transition:ui::PAGE_TRANSITION_TYPED
                       rendererInitiated:NO];
   EXPECT_EQ(0, navigation_manager()->GetPendingItemIndex());
+}
+
+// Tests that GetPendingItemIndex() returns same index as was set by
+// -[CRWSessionController setPendingEntryIndex:].
+TEST_F(NavigationManagerTest, GetPendingItemIndexWithIndexedPendingEntry) {
+  [session_controller() addPendingEntry:GURL("http://www.url.com")
+                               referrer:Referrer()
+                             transition:ui::PAGE_TRANSITION_TYPED
+                      rendererInitiated:NO];
+  [session_controller() commitPendingEntry];
+  [session_controller() addPendingEntry:GURL("http://www.url.com/0")
+                               referrer:Referrer()
+                             transition:ui::PAGE_TRANSITION_TYPED
+                      rendererInitiated:NO];
+  [session_controller() commitPendingEntry];
+
+  EXPECT_EQ(-1, navigation_manager()->GetPendingItemIndex());
+  [session_controller() setPendingEntryIndex:0];
+  EXPECT_EQ(0, navigation_manager()->GetPendingItemIndex());
+}
+
+// Tests that going back or negative offset is not possible without a committed
+// item.
+TEST_F(NavigationManagerTest, CanGoBackWithoutCommitedItem) {
+  EXPECT_FALSE(navigation_manager()->CanGoBack());
+  EXPECT_FALSE(navigation_manager()->CanGoToOffset(-1));
+}
+
+// Tests that going back or negative offset is not possible if there is a
+// transient item, but not committed items.
+TEST_F(NavigationManagerTest, CanGoBackWithTransientItem) {
+  [session_controller() addTransientEntryWithURL:GURL("http://www.url.com")];
+
+  EXPECT_FALSE(navigation_manager()->CanGoBack());
+  EXPECT_FALSE(navigation_manager()->CanGoToOffset(-1));
+}
+
+// Tests that going back or negative offset is possible if there is a transient
+// item and at least one committed item.
+TEST_F(NavigationManagerTest, CanGoBackWithTransientItemAndCommittedItem) {
+  [session_controller() addPendingEntry:GURL("http://www.url.com")
+                               referrer:Referrer()
+                             transition:ui::PAGE_TRANSITION_TYPED
+                      rendererInitiated:NO];
+  [session_controller() commitPendingEntry];
+  [session_controller() addTransientEntryWithURL:GURL("http://www.url.com/0")];
+
+  EXPECT_TRUE(navigation_manager()->CanGoBack());
+  EXPECT_TRUE(navigation_manager()->CanGoToOffset(-1));
+}
+
+// Tests that going back or negative offset is not possible if there is ony one
+// committed item and no transient item.
+TEST_F(NavigationManagerTest, CanGoBackWithSingleCommitedItem) {
+  [session_controller() addPendingEntry:GURL("http://www.url.com")
+                               referrer:Referrer()
+                             transition:ui::PAGE_TRANSITION_TYPED
+                      rendererInitiated:NO];
+  [session_controller() commitPendingEntry];
+
+  EXPECT_FALSE(navigation_manager()->CanGoBack());
+  EXPECT_FALSE(navigation_manager()->CanGoToOffset(-1));
+}
+
+// Tests going back possibility with multiple committed items.
+TEST_F(NavigationManagerTest, CanGoBackWithMultipleCommitedItems) {
+  [session_controller() addPendingEntry:GURL("http://www.url.com")
+                               referrer:Referrer()
+                             transition:ui::PAGE_TRANSITION_TYPED
+                      rendererInitiated:NO];
+  [session_controller() commitPendingEntry];
+  [session_controller() addPendingEntry:GURL("http://www.url.com/0")
+                               referrer:Referrer()
+                             transition:ui::PAGE_TRANSITION_TYPED
+                      rendererInitiated:NO];
+  [session_controller() commitPendingEntry];
+  [session_controller() addPendingEntry:GURL("http://www.url.com/1")
+                               referrer:Referrer()
+                             transition:ui::PAGE_TRANSITION_TYPED
+                      rendererInitiated:NO];
+  [session_controller() commitPendingEntry];
+
+  EXPECT_TRUE(navigation_manager()->CanGoBack());
+  EXPECT_TRUE(navigation_manager()->CanGoToOffset(-1));
+
+  [session_controller() goToEntryAtIndex:1];
+  EXPECT_TRUE(navigation_manager()->CanGoBack());
+  EXPECT_TRUE(navigation_manager()->CanGoToOffset(-1));
+
+  [session_controller() goToEntryAtIndex:0];
+  EXPECT_FALSE(navigation_manager()->CanGoBack());
+  EXPECT_FALSE(navigation_manager()->CanGoToOffset(-1));
+
+  [session_controller() goToEntryAtIndex:1];
+  EXPECT_TRUE(navigation_manager()->CanGoBack());
+  EXPECT_TRUE(navigation_manager()->CanGoToOffset(-1));
+}
+
+// Tests that going forward or positive offset is not possible if there is a
+// pending entry.
+TEST_F(NavigationManagerTest, CanGoForwardWithPendingItem) {
+  [session_controller() addPendingEntry:GURL("http://www.url.com")
+                               referrer:Referrer()
+                             transition:ui::PAGE_TRANSITION_TYPED
+                      rendererInitiated:NO];
+  [session_controller() commitPendingEntry];
+  [session_controller() addPendingEntry:GURL("http://www.url.com/0")
+                               referrer:Referrer()
+                             transition:ui::PAGE_TRANSITION_TYPED
+                      rendererInitiated:NO];
+  [session_controller() commitPendingEntry];
+  [session_controller() goToEntryAtIndex:0];
+  [session_controller() addPendingEntry:GURL("http://www.url.com/1")
+                               referrer:Referrer()
+                             transition:ui::PAGE_TRANSITION_TYPED
+                      rendererInitiated:NO];
+
+  // Pending entry should not allow going forward.
+  EXPECT_FALSE(navigation_manager()->CanGoForward());
+  EXPECT_FALSE(navigation_manager()->CanGoToOffset(1));
+}
+
+// Tests that going forward or positive offset is not possible without a
+// committed item.
+TEST_F(NavigationManagerTest, CanGoForwardWithoutCommitedItem) {
+  EXPECT_FALSE(navigation_manager()->CanGoForward());
+  EXPECT_FALSE(navigation_manager()->CanGoToOffset(1));
+}
+
+// Tests that going forward or positive offset is not possible if there is ony
+// one committed item and no transient item.
+TEST_F(NavigationManagerTest, CanGoForwardWithSingleCommitedItem) {
+  [session_controller() addPendingEntry:GURL("http://www.url.com")
+                               referrer:Referrer()
+                             transition:ui::PAGE_TRANSITION_TYPED
+                      rendererInitiated:NO];
+  [session_controller() commitPendingEntry];
+
+  EXPECT_FALSE(navigation_manager()->CanGoForward());
+  EXPECT_FALSE(navigation_manager()->CanGoToOffset(1));
+}
+
+// Tests going forward possibility with multiple committed items.
+TEST_F(NavigationManagerTest, CanGoForwardWithMultipleCommitedEntries) {
+  [session_controller() addPendingEntry:GURL("http://www.url.com")
+                               referrer:Referrer()
+                             transition:ui::PAGE_TRANSITION_TYPED
+                      rendererInitiated:NO];
+  [session_controller() commitPendingEntry];
+  [session_controller() addPendingEntry:GURL("http://www.url.com/0")
+                               referrer:Referrer()
+                             transition:ui::PAGE_TRANSITION_TYPED
+                      rendererInitiated:NO];
+  [session_controller() commitPendingEntry];
+  [session_controller() addPendingEntry:GURL("http://www.url.com/1")
+                               referrer:Referrer()
+                             transition:ui::PAGE_TRANSITION_TYPED
+                      rendererInitiated:NO];
+  [session_controller() commitPendingEntry];
+
+  EXPECT_FALSE(navigation_manager()->CanGoForward());
+  EXPECT_FALSE(navigation_manager()->CanGoToOffset(1));
+
+  [session_controller() goToEntryAtIndex:1];
+  EXPECT_TRUE(navigation_manager()->CanGoForward());
+  EXPECT_TRUE(navigation_manager()->CanGoToOffset(1));
+
+  [session_controller() goToEntryAtIndex:0];
+  EXPECT_TRUE(navigation_manager()->CanGoForward());
+  EXPECT_TRUE(navigation_manager()->CanGoToOffset(1));
+
+  [session_controller() goToEntryAtIndex:1];
+  EXPECT_TRUE(navigation_manager()->CanGoForward());
+  EXPECT_TRUE(navigation_manager()->CanGoToOffset(1));
+
+  [session_controller() goToEntryAtIndex:2];
+  EXPECT_FALSE(navigation_manager()->CanGoForward());
+  EXPECT_FALSE(navigation_manager()->CanGoToOffset(1));
 }
 
 }  // namespace web

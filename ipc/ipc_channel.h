@@ -19,8 +19,8 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "ipc/ipc_channel_handle.h"
-#include "ipc/ipc_endpoint.h"
 #include "ipc/ipc_message.h"
+#include "ipc/ipc_sender.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/associated_interface_request.h"
@@ -42,7 +42,7 @@ class Listener;
 // Channels are implemented using mojo message pipes on all platforms other
 // than NaCl.
 
-class IPC_EXPORT Channel : public Endpoint {
+class IPC_EXPORT Channel : public Sender {
   // Security tests need access to the pipe handle.
   friend class ChannelTest;
 
@@ -245,16 +245,6 @@ class IPC_EXPORT Channel : public Endpoint {
   static std::string GenerateUniqueRandomChannelID();
 #endif
 
-  // Deprecated: Create a mojo::MessagePipe directly and release() its handles
-  // instead.
-  //
-  // Generates a pair of channel handles that can be used as the client and
-  // server ends of a ChannelMojo. |name_postfix| is ignored.
-  static void GenerateMojoChannelHandlePair(
-      const std::string& name_postfix,
-      IPC::ChannelHandle* handle0,
-      IPC::ChannelHandle* handle1);
-
 #if defined(OS_LINUX)
   // Sandboxed processes live in a PID namespace, so when sending the IPC hello
   // message from client to server we need to send the PID from the global
@@ -283,9 +273,6 @@ class IPC_EXPORT Channel : public Endpoint {
     void* buffer_;
     size_t length_;
   };
-
-  // Endpoint overrides.
-  void OnSetAttachmentBrokerEndpoint() override;
 
   // Subclasses must call this method at the beginning of their implementation
   // of Connect().

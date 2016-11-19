@@ -20,6 +20,7 @@
 
 namespace net {
 class HttpRequestHeaders;
+class IPAddress;
 }  // namespace net
 
 namespace safe_browsing {
@@ -49,23 +50,33 @@ struct V4ProtocolConfig {
   // The safe browsing client name sent in each request.
   std::string client_name;
 
-  // Current product version sent in each request.
-  std::string version;
+  // Disable auto-updates using a command line switch.
+  bool disable_auto_update;
 
   // The Google API key.
   std::string key_param;
 
-  // Disable auto-updates using a command line switch?
-  bool disable_auto_update;
+  // Current product version sent in each request.
+  std::string version;
 
-  V4ProtocolConfig();
+  V4ProtocolConfig(const std::string& client_name,
+                   bool disable_auto_update,
+                   const std::string& key_param,
+                   const std::string& version);
   V4ProtocolConfig(const V4ProtocolConfig& other);
   ~V4ProtocolConfig();
+
+ private:
+  V4ProtocolConfig();
 };
 
 // Different types of threats that SafeBrowsing protects against. This is the
 // type that's returned to the clients of SafeBrowsing in Chromium.
 enum SBThreatType {
+  // This type can be used for lists that can be checked synchronously so a
+  // client callback isn't required, or for whitelists.
+  SB_THREAT_TYPE_UNUSED,
+
   // No threat at all.
   SB_THREAT_TYPE_SAFE,
 
@@ -130,9 +141,14 @@ struct ListIdentifier {
 std::ostream& operator<<(std::ostream& os, const ListIdentifier& id);
 
 PlatformType GetCurrentPlatformType();
+const ListIdentifier GetCertCsdDownloadWhitelistId();
+const ListIdentifier GetChromeExtensionMalwareId();
 const ListIdentifier GetChromeUrlApiId();
+const ListIdentifier GetChromeFilenameClientIncidentId();
 const ListIdentifier GetChromeUrlClientIncidentId();
-const ListIdentifier GetChromeUrlMalwareId();
+const ListIdentifier GetIpMalwareId();
+const ListIdentifier GetUrlCsdDownloadWhitelistId();
+const ListIdentifier GetUrlCsdWhitelistId();
 const ListIdentifier GetUrlMalwareId();
 const ListIdentifier GetUrlMalBinId();
 const ListIdentifier GetUrlSocEngId();
@@ -265,6 +281,16 @@ class V4ProtocolManagerUtil {
 
   static void SetClientInfoFromConfig(ClientInfo* client_info,
                                       const V4ProtocolConfig& config);
+
+  static bool GetIPV6AddressFromString(const std::string& ip_address,
+                                       net::IPAddress* address);
+
+  // Converts a IPV4 or IPV6 address in |ip_address| to the SHA1 hash of the
+  // corresponding packed IPV6 address in |hashed_encoded_ip|, and adds an
+  // extra byte containing the value 128 at the end. This is done to match the
+  // server implementation for calculating the hash prefix of an IP address.
+  static bool IPAddressToEncodedIPV6Hash(const std::string& ip_address,
+                                         FullHash* hashed_encoded_ip);
 
  private:
   V4ProtocolManagerUtil(){};

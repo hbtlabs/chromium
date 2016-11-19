@@ -23,7 +23,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
 #include "components/offline_pages/background/request_coordinator.h"
-#include "components/offline_pages/background/request_queue.h"
+#include "components/offline_pages/background/request_queue_results.h"
 #include "components/offline_pages/background/save_page_request.h"
 #include "components/offline_pages/offline_page_feature.h"
 #include "components/offline_pages/offline_page_item.h"
@@ -167,20 +167,19 @@ void OnGetAllRequestsDone(
   base::android::RunCallbackAndroid(j_callback_obj, j_result_obj);
 }
 
-RequestQueue::UpdateRequestResult ToUpdateRequestResult(
-    ItemActionStatus status) {
+UpdateRequestResult ToUpdateRequestResult(ItemActionStatus status) {
   switch (status) {
     case ItemActionStatus::SUCCESS:
-      return RequestQueue::UpdateRequestResult::SUCCESS;
+      return UpdateRequestResult::SUCCESS;
     case ItemActionStatus::NOT_FOUND:
-      return RequestQueue::UpdateRequestResult::REQUEST_DOES_NOT_EXIST;
+      return UpdateRequestResult::REQUEST_DOES_NOT_EXIST;
     case ItemActionStatus::STORE_ERROR:
-      return RequestQueue::UpdateRequestResult::STORE_FAILURE;
+      return UpdateRequestResult::STORE_FAILURE;
     case ItemActionStatus::ALREADY_EXISTS:
     default:
       NOTREACHED();
   }
-  return RequestQueue::UpdateRequestResult::STORE_FAILURE;
+  return UpdateRequestResult::STORE_FAILURE;
 }
 
 void OnRemoveRequestsDone(const ScopedJavaGlobalRef<jobject>& j_callback_obj,
@@ -409,9 +408,10 @@ void OfflinePageBridge::SelectPageForOnlineUrl(
   ScopedJavaGlobalRef<jobject> j_callback_ref;
   j_callback_ref.Reset(env, j_callback_obj);
 
-  OfflinePageUtils::SelectPageForOnlineURL(
+  OfflinePageUtils::SelectPageForURL(
       browser_context_,
       GURL(ConvertJavaStringToUTF8(env, j_online_url)),
+      OfflinePageModel::URLSearchMode::SEARCH_BY_ALL_URLS,
       tab_id,
       base::Bind(&SingleOfflinePageItemCallback, j_callback_ref));
 }
@@ -429,23 +429,23 @@ void OfflinePageBridge::SavePage(
   ScopedJavaGlobalRef<jobject> j_callback_ref;
   j_callback_ref.Reset(env, j_callback_obj);
 
-  GURL url;
+  OfflinePageModel::SavePageParams save_page_params;
   std::unique_ptr<OfflinePageArchiver> archiver;
 
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(j_web_contents);
   if (web_contents) {
-    url = web_contents->GetLastCommittedURL();
+    save_page_params.url = web_contents->GetLastCommittedURL();
     archiver.reset(new OfflinePageMHTMLArchiver(web_contents));
   }
 
-  offline_pages::ClientId client_id;
-  client_id.name_space = ConvertJavaStringToUTF8(env, j_namespace);
-  client_id.id = ConvertJavaStringToUTF8(env, j_client_id);
+  save_page_params.client_id.name_space =
+      ConvertJavaStringToUTF8(env, j_namespace);
+  save_page_params.client_id.id = ConvertJavaStringToUTF8(env, j_client_id);
 
   offline_page_model_->SavePage(
-      url, client_id, 0l, std::move(archiver),
-      base::Bind(&SavePageCallback, j_callback_ref, url));
+      save_page_params, std::move(archiver),
+      base::Bind(&SavePageCallback, j_callback_ref, save_page_params.url));
 }
 
 void OfflinePageBridge::SavePageLater(JNIEnv* env,

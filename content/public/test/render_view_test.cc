@@ -37,13 +37,13 @@
 #include "content/test/mock_render_process.h"
 #include "content/test/test_content_client.h"
 #include "content/test/test_render_frame.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
+#include "third_party/WebKit/public/platform/WebGestureEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebHistoryItem.h"
 #include "third_party/WebKit/public/web/WebInputElement.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebKit.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebScriptSource.h"
@@ -186,7 +186,6 @@ void RenderViewTest::LoadHTML(const char* html) {
   url_string.append(html);
   GURL url(url_string);
   WebURLRequest request(url);
-  request.setRequestorOrigin(blink::WebSecurityOrigin::createUnique());
   request.setCheckForBrowserSideNavigation(false);
   GetMainFrame()->loadRequest(request);
   // The load actually happens asynchronously, so we pump messages to process

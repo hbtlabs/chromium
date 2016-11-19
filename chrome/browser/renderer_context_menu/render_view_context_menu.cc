@@ -80,6 +80,7 @@
 #include "components/spellcheck/browser/pref_names.h"
 #include "components/spellcheck/browser/spellcheck_host_metrics.h"
 #include "components/spellcheck/common/spellcheck_common.h"
+#include "components/spellcheck/spellcheck_build_features.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/browser/translate_prefs.h"
@@ -104,6 +105,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/menu_item.h"
 #include "content/public/common/url_utils.h"
+#include "extensions/features/features.h"
 #include "net/base/escape.h"
 #include "printing/features/features.h"
 #include "third_party/WebKit/public/public_features.h"
@@ -120,11 +122,11 @@
 #include "ui/gfx/path.h"
 #include "ui/gfx/text_elider.h"
 
-#if !defined(USE_BROWSER_SPELLCHECKER)
+#if !BUILDFLAG(USE_BROWSER_SPELLCHECKER)
 #include "chrome/browser/renderer_context_menu/spelling_options_submenu_observer.h"
 #endif
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/devtools_util.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "extensions/browser/extension_host.h"
@@ -407,7 +409,7 @@ content::Referrer CreateReferrer(const GURL& url,
 }
 
 content::WebContents* GetWebContentsToUse(content::WebContents* web_contents) {
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // If we're viewing in a MimeHandlerViewGuest, use its embedder WebContents.
   if (extensions::MimeHandlerViewGuest::FromWebContents(web_contents)) {
     WebContents* top_level_web_contents =
@@ -502,7 +504,7 @@ void OnProfileCreated(const GURL& link_url,
 gfx::Vector2d RenderViewContextMenu::GetOffset(
     RenderFrameHost* render_frame_host) {
   gfx::Vector2d offset;
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // When --use-cross-process-frames-for-guests is enabled, the position is
   // transformed in the browser process hittesting code.
   WebContents* web_contents =
@@ -520,7 +522,7 @@ gfx::Vector2d RenderViewContextMenu::GetOffset(
       offset = bounds.origin() - top_level_bounds.origin();
     }
   }
-#endif  // defined(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
   return offset;
 }
 
@@ -533,7 +535,7 @@ bool RenderViewContextMenu::IsDevToolsURL(const GURL& url) {
 bool RenderViewContextMenu::IsInternalResourcesURL(const GURL& url) {
   if (!url.SchemeIs(content::kChromeUIScheme))
     return false;
-  return url.host() == chrome::kChromeUISyncResourcesHost;
+  return url.host_piece() == chrome::kChromeUISyncResourcesHost;
 }
 
 // static
@@ -590,7 +592,7 @@ RenderViewContextMenu::~RenderViewContextMenu() {
 
 // Menu construction functions -------------------------------------------------
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 // static
 bool RenderViewContextMenu::ExtensionContextAndPatternMatch(
     const content::ContextMenuParams& params,
@@ -738,7 +740,7 @@ void RenderViewContextMenu::AppendCurrentExtensionItems() {
   extension_items_.AppendExtensionItems(key, PrintableSelectionText(), &index,
                                         false /* is_action_menu */);
 }
-#endif  // defined(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 void RenderViewContextMenu::InitMenu() {
   RenderViewContextMenuBase::InitMenu();

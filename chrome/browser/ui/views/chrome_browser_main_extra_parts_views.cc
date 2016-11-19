@@ -14,8 +14,9 @@
 #include "content/public/common/service_manager_connection.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/runner/common/client_util.h"
-#include "services/ui/public/cpp/gpu_service.h"
+#include "services/ui/public/cpp/gpu/gpu_service.h"
 #include "services/ui/public/cpp/input_devices/input_device_client.h"
+#include "services/ui/public/interfaces/constants.mojom.h"
 #include "services/ui/public/interfaces/input_devices/input_device_server.mojom.h"
 #include "ui/display/screen.h"
 #include "ui/views/mus/window_manager_connection.h"
@@ -101,7 +102,8 @@ void ChromeBrowserMainExtraPartsViews::ServiceManagerConnectionStarted(
 
     input_device_client_.reset(new ui::InputDeviceClient());
     ui::mojom::InputDeviceServerPtr server;
-    connection->GetConnector()->ConnectToInterface("service:ui", &server);
+    connection->GetConnector()->ConnectToInterface(ui::mojom::kServiceName,
+                                                   &server);
     input_device_client_->Connect(std::move(server));
 
     window_manager_connection_ = views::WindowManagerConnection::Create(

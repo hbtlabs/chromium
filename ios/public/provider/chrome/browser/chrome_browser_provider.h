@@ -51,6 +51,7 @@ class PrefRegistrySyncable;
 @protocol InfoBarViewProtocol;
 @protocol LogoVendor;
 @protocol TextFieldStyling;
+@protocol NativeAppWhitelistManager;
 @class UITextField;
 @class UIView;
 @protocol UrlLoader;
@@ -75,8 +76,12 @@ ChromeBrowserProvider* GetChromeBrowserProvider();
 // ios_chrome_browser target.
 class ChromeBrowserProvider {
  public:
+  // The constructor is called before web startup.
   ChromeBrowserProvider();
   virtual ~ChromeBrowserProvider();
+
+  // This is called after web startup.
+  virtual void Initialize() const;
 
   // Asserts all iOS-specific |BrowserContextKeyedServiceFactory| are built.
   virtual void AssertBrowserContextKeyedFactoriesBuilt();
@@ -171,6 +176,16 @@ class ChromeBrowserProvider {
   // TODO(rohitrao): This is a temporary method, used to prevent the tree from
   // breaking due to duplicate prefs registration.
   virtual bool ShouldEmbedderRegisterVoiceSearchPrefs() const;
+
+  // Returns the NativeAppWhitelistManager implementation.
+  virtual id<NativeAppWhitelistManager> GetNativeAppWhitelistManager() const;
+
+  // Hides immediately the modals related to this provider.
+  virtual void HideModalViewStack() const;
+
+  // Logs if any modals created by this provider are still presented. It does
+  // not dismiss them.
+  virtual void LogIfModalViewsArePresented() const;
 };
 
 }  // namespace ios

@@ -4,7 +4,7 @@
 package org.chromium.chrome.browser.ntp.snippets;
 
 import android.graphics.Bitmap;
-import android.text.TextUtils;
+import android.support.annotation.Nullable;
 
 import org.chromium.chrome.browser.ntp.snippets.ContentSuggestionsCardLayout.ContentSuggestionsCardLayoutEnum;
 
@@ -72,8 +72,11 @@ public class SnippetArticle {
     /** The mime type of the downloaded asset (only for download asset articles). */
     private String mDownloadAssetMimeType;
 
-    /** The path to the offline page, if any. */
-    private String mOfflinePagePath;
+    /** The tab id of the corresponding tab (only for recent tab articles). */
+    private String mRecentTabId;
+
+    /** The offline id of the corresponding offline page, if any. */
+    private Long mOfflinePageOfflineId;
 
     /**
      * Creates a SnippetArticleListItem object that will hold the data.
@@ -135,45 +138,101 @@ public class SnippetArticle {
         mOfflineStatusChangeRunnable = runnable;
     }
 
+    /** @return whether a snippet is either offline page or asset download. */
+    public boolean isDownload() {
+        return mCategory == KnownCategories.DOWNLOADS;
+    }
+
     /**
-     * @return the downloaded asset. May only be called if mIsDownloadedAsset is {@code true}.
+     * @return the downloaded asset. May only be called if mIsDownloadedAsset is {@code true} and
+     * this snippet belongs to DOWNLOADS category.
      */
     public File getDownloadAssetFile() {
-        assert mIsDownloadedAsset;
+        assert isDownload();
         if (mFile == null) mFile = new File(mDownloadAssetPath);
         return mFile;
     }
 
-    /** Returns the mime type of the download asset. May only be called if mIsDownloadAsset is true.
+    /**
+     * @return the mime type of the download asset. May only be called if mIsDownloadAsset is
+     * {@code true} and this snippet belongs to DOWNLOADS category.
      */
     public String getDownloadAssetMimeType() {
-        assert mIsDownloadedAsset;
+        assert isDownload();
         return mDownloadAssetMimeType;
     }
 
-    /** Marks the article suggestion as a download asset with the given path and mime type. */
-    public void setDownloadAsset(String filePath, String mimeType) {
+    /**
+     * Marks the article suggestion as a download asset with the given path and mime type. May only
+     * be called if this snippet belongs to DOWNLOADS category.
+     */
+    public void setDownloadAssetData(String filePath, String mimeType) {
+        assert isDownload();
         mIsDownloadedAsset = true;
         mDownloadAssetPath = filePath;
         mDownloadAssetMimeType = mimeType;
     }
 
-    /** Sets OfflinePageDownloads guid for the offline version of the snippet. Null to clear.*/
-    public void setOfflinePageDownloadGuid(String path) {
-        String previous = mOfflinePagePath;
-        mOfflinePagePath = path;
+    /**
+     * Marks the article suggestion as a download offline page with the given id. May only be called
+     * if this snippet belongs to DOWNLOADS category.
+     */
+    public void setDownloadOfflinePageData(long offlinePageId) {
+        assert isDownload();
+        mIsDownloadedAsset = false;
+        setOfflinePageOfflineId(offlinePageId);
+    }
 
-        if (mOfflineStatusChangeRunnable != null && !TextUtils.equals(previous, mOfflinePagePath)) {
+    /**
+    * @return whether a snippet has to be matched with the exact offline page or with the most
+    * recent offline page found by the snippet's URL.
+    */
+    public boolean requiresExactOfflinePage() {
+        return isDownload() || isRecentTab();
+    }
+
+    public boolean isRecentTab() {
+        return mCategory == KnownCategories.RECENT_TABS;
+    }
+
+    /**
+     * @return the corresponding recent tab id. May only be called if this snippet is a recent tab
+     * article.
+     */
+    public String getRecentTabId() {
+        assert isRecentTab();
+        return mRecentTabId;
+    }
+
+    /**
+     * Sets tab id and offline page id for recent tab articles. May only be called if this snippet
+     * is a recent tab article.
+     */
+    public void setRecentTabData(String tabId, long offlinePageId) {
+        assert isRecentTab();
+        mRecentTabId = tabId;
+        setOfflinePageOfflineId(offlinePageId);
+    }
+
+    /** Sets offline id of the corresponding to the snippet offline page. Null to clear.*/
+    public void setOfflinePageOfflineId(@Nullable Long offlineId) {
+        Long previous = mOfflinePageOfflineId;
+        mOfflinePageOfflineId = offlineId;
+
+        if (mOfflineStatusChangeRunnable == null) return;
+        if ((previous == null) ? (mOfflinePageOfflineId != null)
+                               : !previous.equals(mOfflinePageOfflineId)) {
             mOfflineStatusChangeRunnable.run();
         }
     }
 
     /**
-     * Gets the OfflinePageDownloads guid for the offline version of the snippet.
-     * Null if page is not available offline.
+     * Gets offline id of the corresponding to the snippet offline page.
+     * Null if there is no corresponding offline page.
      */
-    public String getOfflinePageDownloadGuid() {
-        return mOfflinePagePath;
+    @Nullable
+    public Long getOfflinePageOfflineId() {
+        return mOfflinePageOfflineId;
     }
 
     @Override

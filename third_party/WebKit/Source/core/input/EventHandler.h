@@ -53,6 +53,7 @@
 
 namespace blink {
 
+class ContainerNode;
 class DataTransfer;
 class PaintLayer;
 class Element;
@@ -87,7 +88,6 @@ class CORE_EXPORT EventHandler final
   DECLARE_TRACE();
 
   void clear();
-  void nodeWillBeRemoved(Node&);
 
   void updateSelectionForMouseDrag();
   void startMiddleClickAutoscroll(LayoutObject*);

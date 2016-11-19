@@ -82,6 +82,7 @@
 #include "ui/base/layout.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/events/base_event_utils.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/blink/did_overscroll_params.h"
 #include "ui/events/blink/web_input_event_traits.h"
@@ -450,6 +451,7 @@ RenderWidgetHostViewAndroid::RenderWidgetHostViewAndroid(
                         this),
       stylus_text_selector_(this),
       using_browser_compositor_(CompositorImpl::IsInitialized()),
+      synchronous_compositor_client_(nullptr),
       frame_evictor_(new DelegatedFrameEvictor(this)),
       locks_on_frame_count_(0),
       observing_root_window_(false),
@@ -1193,6 +1195,14 @@ void RenderWidgetHostViewAndroid::SynchronousFrameMetadata(
   }
 }
 
+void RenderWidgetHostViewAndroid::SetSynchronousCompositorClient(
+      SynchronousCompositorClient* client) {
+  synchronous_compositor_client_ = client;
+  if (!sync_compositor_ && synchronous_compositor_client_) {
+    sync_compositor_ = SynchronousCompositorHost::Create(this);
+  }
+}
+
 bool RenderWidgetHostViewAndroid::SupportsAnimation() const {
   // The synchronous (WebView) compositor does not have a proper browser
   // compositor with which to drive animations.
@@ -1645,9 +1655,27 @@ void RenderWidgetHostViewAndroid::SendKeyEvent(
 }
 
 void RenderWidgetHostViewAndroid::SendMouseEvent(
-    const blink::WebMouseEvent& event) {
+    const ui::MotionEventAndroid& motion_event,
+    int changed_button) {
+  blink::WebInputEvent::Type webMouseEventType =
+      ui::ToWebMouseEventType(motion_event.GetAction());
+
+  blink::WebMouseEvent mouse_event = WebMouseEventBuilder::Build(
+      webMouseEventType,
+      ui::EventTimeStampToSeconds(motion_event.GetEventTime()),
+      motion_event.GetX(0),
+      motion_event.GetY(0),
+      motion_event.GetFlags(),
+      motion_event.GetButtonState() ? 1 : 0 /* click count */,
+      motion_event.GetPointerId(0),
+      motion_event.GetPressure(0),
+      motion_event.GetOrientation(0),
+      motion_event.GetTilt(0),
+      changed_button,
+      motion_event.GetToolType(0));
+
   if (host_)
-    host_->ForwardMouseEvent(event);
+    host_->ForwardMouseEvent(mouse_event);
 }
 
 void RenderWidgetHostViewAndroid::SendMouseWheelEvent(
@@ -1775,11 +1803,6 @@ void RenderWidgetHostViewAndroid::SetContentViewCore(
       view_.GetWindowAndroid()->GetCompositor()) {
     overscroll_controller_ = CreateOverscrollController(
         content_view_core_, ui::GetScaleFactorForNativeView(GetNativeView()));
-  }
-
-  if (!sync_compositor_) {
-    sync_compositor_ = SynchronousCompositorHost::Create(
-        this, content_view_core_->GetWebContents());
   }
 }
 

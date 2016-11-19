@@ -38,6 +38,7 @@ BroadcastChannel status=stable
 Budget status=experimental
 Canvas2dFixedRenderingMode status=test
 EnableCanvas2dDynamicRenderingModeSwitching status=experimental
+CanMakeActivePayment status=experimental
 Canvas2dImageChromium status=experimental
 ClientHints status=stable
 CompositeOpaqueFixedPosition status=stable, settable_from_internals=True
@@ -122,7 +123,7 @@ InputMultipleFieldsUI status=stable
 InstalledApp status=experimental
 IntersectionObserver status=stable
 LangAttributeAwareFormControlUI
-LayoutNG depends_on=LayoutNGInline
+LayoutNG
 LayoutNGInline
 LinkServiceWorker status=experimental, origin_trial_feature_name=ForeignFetch
 LongTaskObserver status=experimental, origin_trial_feature_name=LongTaskObserver
@@ -150,7 +151,7 @@ NetworkInformation status=stable
 NetInfoDownlinkMax status=stable
 NotificationConstructor status=stable
 NotificationBadge status=stable
-NotificationImage status=experimental
+NotificationContentImage status=stable
 NotificationInlineReplies status=experimental
 Notifications status=stable
 OnDeviceChange status=experimental
@@ -166,10 +167,11 @@ ForceOverlayFullscreenVideo
 OverlayScrollbars
 PagePopup status=stable
 PaintUnderInvalidationChecking settable_from_internals=True
-PassiveDocumentEventListeners status=experimental
+PassiveDocumentEventListeners status=stable
 PassiveEventListenersDueToFling status=experimental
 PassPaintVisualRectToCompositor
 PaymentApp status=experimental
+// PaymentRequest is enabled by default on Android
 PaymentRequest status=experimental
 PaymentRequestPayerName status=stable
 PerformanceObserver status=stable
@@ -192,7 +194,7 @@ ReducedReferrerGranularity
 ReloadwithoutSubResourceCacheRevalidation
 RemotePlayback status=experimental
 RenderingPipelineThrottling status=stable
-RenderingPipelineThrottlingLoadingIframes status=experimental
+RenderingPipelineThrottlingLoadingIframes status=stable
 RenderUnicodeControlCharacters status=stable
 ResizeObserver status=experimental
 // Handles frame scrolling via the root PaintLayer instead of the FrameView.
@@ -209,6 +211,7 @@ Sensor status=experimental
 ServiceWorkerNavigationPreload
 SetRootScroller status=experimental
 ShadowDOMV1 status=stable
+ShadowPiercingDescendantCombinator status=test
 ShapeDetection status=experimental
 SharedArrayBuffer
 SharedWorker status=stable
@@ -249,7 +252,7 @@ WebVR origin_trial_feature_name=WebVR
 WebVTTRegions status=experimental
 V8BasedStructuredClone
 V8IdleTasks
-VisibilityChangeOnUnload status=experimental
+VisibilityChangeOnUnload status=stable
 XSLT status=stable
 smil status=stable
 ScrollCustomization

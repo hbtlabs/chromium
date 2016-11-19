@@ -80,7 +80,8 @@ TypeConverter<media_router::MediaRoute, MediaRoutePtr>::Convert(
       input->media_sink_id, input->description, input->is_local,
       input->custom_controller_path.value_or(std::string()),
       input->for_display);
-  media_route.set_incognito(input->incognito);
+  media_route.set_incognito(input->is_incognito);
+  media_route.set_offscreen_presentation(input->is_offscreen_presentation);
   return media_route;
 }
 
@@ -96,7 +97,8 @@ TypeConverter<std::unique_ptr<media_router::MediaRoute>,
           input->media_sink_id, input->description, input->is_local,
           input->custom_controller_path.value_or(std::string()),
           input->for_display));
-  media_route->set_incognito(input->incognito);
+  media_route->set_incognito(input->is_incognito);
+  media_route->set_offscreen_presentation(input->is_offscreen_presentation);
   return media_route;
 }
 

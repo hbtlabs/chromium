@@ -62,6 +62,7 @@ class WebDataSourceImpl;
 class WebDevToolsAgentImpl;
 class WebDevToolsFrontendImpl;
 class WebFrameClient;
+class WebInputMethodControllerImpl;
 class WebNode;
 class WebPerformance;
 class WebPlugin;
@@ -181,7 +182,6 @@ class WEB_EXPORT WebLocalFrameImpl final
   bool isCommandEnabled(const WebString&) const override;
   void enableSpellChecking(bool) override;
   bool isSpellCheckingEnabled() const override;
-  void requestTextChecking(const WebElement&) override;
   void replaceMisspelledRange(const WebString&) override;
   void removeSpellingMarkers() override;
   bool hasSelection() const override;
@@ -231,7 +231,6 @@ class WEB_EXPORT WebLocalFrameImpl final
 
   WebRect selectionBoundsRect() const override;
 
-  bool selectionStartHasSpellingMarkerFor(int from, int length) const override;
   WebString layerTreeAsText(bool showDebugInfo = false) const override;
 
   WebFrameImplBase* toImplBase() override { return this; }
@@ -404,6 +403,8 @@ class WEB_EXPORT WebLocalFrameImpl final
   void setContextMenuNode(Node* node) { m_contextMenuNode = node; }
   void clearContextMenuNode() { m_contextMenuNode.clear(); }
 
+  WebInputMethodControllerImpl* inputMethodController() const;
+
   DECLARE_TRACE();
 
  private:
@@ -467,6 +468,8 @@ class WEB_EXPORT WebLocalFrameImpl final
   WebDevToolsFrontendImpl* m_webDevToolsFrontend;
 
   Member<Node> m_contextMenuNode;
+
+  std::unique_ptr<WebInputMethodControllerImpl> m_inputMethodController;
 
   // Oilpan: WebLocalFrameImpl must remain alive until close() is called.
   // Accomplish that by keeping a self-referential Persistent<>. It is

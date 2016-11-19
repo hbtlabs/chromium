@@ -25,6 +25,7 @@
 #include "content/common/drag_event_source_info.h"
 #include "content/common/edit_command.h"
 #include "content/common/input/synthetic_gesture_params.h"
+#include "content/public/common/drop_data.h"
 #include "content/public/common/screen_info.h"
 #include "content/renderer/devtools/render_widget_screen_metrics_emulator_delegate.h"
 #include "content/renderer/gpu/render_widget_compositor_delegate.h"
@@ -34,6 +35,7 @@
 #include "content/renderer/mouse_lock_dispatcher.h"
 #include "content/renderer/render_widget_mouse_lock_dispatcher.h"
 #include "ipc/ipc_listener.h"
+#include "ipc/ipc_message.h"
 #include "ipc/ipc_sender.h"
 #include "third_party/WebKit/public/platform/WebDisplayMode.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
@@ -71,6 +73,7 @@ class WebDragData;
 class WebFrameWidget;
 class WebGestureEvent;
 class WebImage;
+class WebInputMethodController;
 class WebLocalFrame;
 class WebMouseEvent;
 class WebNode;
@@ -132,7 +135,7 @@ class CONTENT_EXPORT RenderWidget
                               const ScreenInfo& screen_info);
 
   // Creates a new RenderWidget that will be attached to a RenderFrame.
-  static RenderWidget* CreateForFrame(int routing_id,
+  static RenderWidget* CreateForFrame(int widget_routing_id,
                                       bool hidden,
                                       const ScreenInfo& screen_info,
                                       CompositorDependencies* compositor_deps,
@@ -140,13 +143,13 @@ class CONTENT_EXPORT RenderWidget
 
   // Used by content_layouttest_support to hook into the creation of
   // RenderWidgets.
-  using CreateRenderWidgetFunction =
-      RenderWidget* (*)(CompositorDependencies*,
-                        blink::WebPopupType,
-                        const ScreenInfo&,
-                        bool,
-                        bool,
-                        bool);
+  using CreateRenderWidgetFunction = RenderWidget* (*)(int32_t,
+                                                       CompositorDependencies*,
+                                                       blink::WebPopupType,
+                                                       const ScreenInfo&,
+                                                       bool,
+                                                       bool,
+                                                       bool);
   using RenderWidgetInitializedCallback = void (*)(RenderWidget*);
   static void InstallCreateHook(
       CreateRenderWidgetFunction create_render_widget,
@@ -158,10 +161,15 @@ class CONTENT_EXPORT RenderWidget
   virtual void CloseForFrame();
 
   int32_t routing_id() const { return routing_id_; }
-  void SetRoutingID(int32_t routing_id);
 
   CompositorDependencies* compositor_deps() const { return compositor_deps_; }
   virtual blink::WebWidget* GetWebWidget() const;
+
+  // Returns the current instance of WebInputMethodController which is to be
+  // used for IME related tasks. This instance corresponds to the one from
+  // focused frame and can be nullptr.
+  blink::WebInputMethodController* GetInputMethodController() const;
+
   const gfx::Size& size() const { return size_; }
   bool is_fullscreen_granted() const { return is_fullscreen_granted_; }
   blink::WebDisplayMode display_mode() const { return display_mode_; }
@@ -404,6 +412,9 @@ class CONTENT_EXPORT RenderWidget
   // When emulated, this returns original device scale factor.
   float GetOriginalDeviceScaleFactor() const;
 
+  // Helper to convert |point| using ConvertWindowToViewport().
+  gfx::Point ConvertWindowPointToViewport(const gfx::Point& point);
+
  protected:
   // Friend RefCounted so that the dtor can be non-public. Using this class
   // without ref-counting is an error.
@@ -412,14 +423,13 @@ class CONTENT_EXPORT RenderWidget
   // For unit tests.
   friend class RenderWidgetTest;
 
-  using CreateWidgetCallback = base::OnceCallback<bool()>;
-
   enum ResizeAck {
     SEND_RESIZE_ACK,
     NO_RESIZE_ACK,
   };
 
-  RenderWidget(CompositorDependencies* compositor_deps,
+  RenderWidget(int32_t widget_routing_id,
+               CompositorDependencies* compositor_deps,
                blink::WebPopupType popup_type,
                const ScreenInfo& screen_info,
                bool swapped_out,
@@ -435,13 +445,8 @@ class CONTENT_EXPORT RenderWidget
   // Creates a WebWidget based on the popup type.
   static blink::WebWidget* CreateWebWidget(RenderWidget* render_widget);
 
-  // Initializes this view with the given opener.
-  bool Init(int32_t opener_id);
-
-  // Called by Init and subclasses to perform initialization.
-  bool DoInit(int32_t opener_id,
-              blink::WebWidget* web_widget,
-              CreateWidgetCallback create_widget_callback);
+  // Called by Create() functions and subclasses to finish initialization.
+  void Init(int32_t opener_id, blink::WebWidget* web_widget);
 
   // Allows the process to exit once the unload handler has finished, if there
   // are no other active RenderWidgets.
@@ -506,6 +511,26 @@ class CONTENT_EXPORT RenderWidget
                            const gfx::Rect& window_screen_rect);
   void OnUpdateWindowScreenRect(const gfx::Rect& window_screen_rect);
   void OnHandleCompositorProto(const std::vector<uint8_t>& proto);
+  // Real data that is dragged is not included at DragEnter time.
+  void OnDragTargetDragEnter(
+      const std::vector<DropData::Metadata>& drop_meta_data,
+      const gfx::Point& client_pt,
+      const gfx::Point& screen_pt,
+      blink::WebDragOperationsMask operations_allowed,
+      int key_modifiers);
+  void OnDragTargetDragOver(const gfx::Point& client_pt,
+                            const gfx::Point& screen_pt,
+                            blink::WebDragOperationsMask operations_allowed,
+                            int key_modifiers);
+  void OnDragTargetDragLeave();
+  void OnDragTargetDrop(const DropData& drop_data,
+                        const gfx::Point& client_pt,
+                        const gfx::Point& screen_pt,
+                        int key_modifiers);
+  void OnDragSourceEnded(const gfx::Point& client_point,
+                         const gfx::Point& screen_point,
+                         blink::WebDragOperation drag_operation);
+  void OnDragSourceSystemDragEnded();
 
 #if defined(OS_ANDROID)
   // Called when we send IME event that expects an ACK.
@@ -602,8 +627,8 @@ class CONTENT_EXPORT RenderWidget
   void OnWaitNextFrameForTests(int routing_id);
 
   // Routing ID that allows us to communicate to the parent browser process
-  // RenderWidgetHost. When MSG_ROUTING_NONE, no messages may be sent.
-  int32_t routing_id_;
+  // RenderWidgetHost.
+  const int32_t routing_id_;
 
   // Dependencies for initializing a compositor, including flags for optional
   // features.
@@ -804,6 +829,13 @@ class CONTENT_EXPORT RenderWidget
   bool CreateWidget(int32_t opener_id,
                     blink::WebPopupType popup_type,
                     int32_t* routing_id);
+
+  // A variant of Send but is fatal if it fails. The browser may
+  // be waiting for this IPC Message and if the send fails the browser will
+  // be left in a state waiting for something that never comes. And if it
+  // never comes then it may later determine this is a hung renderer; so
+  // instead fail right away.
+  void SendOrCrash(IPC::Message* msg);
 
   // Indicates whether this widget has focus.
   bool has_focus_;

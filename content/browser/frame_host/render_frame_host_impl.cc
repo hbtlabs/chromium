@@ -86,9 +86,10 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/file_chooser_file_info.h"
 #include "content/public/common/file_chooser_params.h"
+#include "content/public/common/form_field_data.h"
 #include "content/public/common/isolated_world_ids.h"
 #include "content/public/common/service_manager_connection.h"
-#include "content/public/common/service_names.h"
+#include "content/public/common/service_names.mojom.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
 #include "device/generic_sensor/sensor_provider_impl.h"
@@ -96,7 +97,9 @@
 #include "device/vibration/vibration_manager_impl.h"
 #include "device/wake_lock/wake_lock_service_context.h"
 #include "media/base/media_switches.h"
+#include "media/media_features.h"
 #include "media/mojo/interfaces/media_service.mojom.h"
+#include "media/mojo/interfaces/remoting.mojom.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -204,6 +207,40 @@ void NotifyRenderFrameDetachedOnIO(int render_process_id, int render_frame_id) {
                                                               render_frame_id);
 }
 
+#if BUILDFLAG(ENABLE_MEDIA_REMOTING)
+// RemoterFactory that delegates Create() calls to the ContentBrowserClient.
+//
+// Since Create() could be called at any time, perhaps by a stray task being run
+// after a RenderFrameHost has been destroyed, the RemoterFactoryImpl uses the
+// process/routing IDs as a weak reference to the RenderFrameHostImpl.
+class RemoterFactoryImpl final : public media::mojom::RemoterFactory {
+ public:
+  RemoterFactoryImpl(int process_id, int routing_id)
+      : process_id_(process_id), routing_id_(routing_id) {}
+
+  static void Bind(int process_id, int routing_id,
+                   media::mojom::RemoterFactoryRequest request) {
+    mojo::MakeStrongBinding(
+        base::MakeUnique<RemoterFactoryImpl>(process_id, routing_id),
+        std::move(request));
+  }
+
+ private:
+  void Create(media::mojom::RemotingSourcePtr source,
+              media::mojom::RemoterRequest request) final {
+    if (auto* host = RenderFrameHostImpl::FromID(process_id_, routing_id_)) {
+      GetContentClient()->browser()->CreateMediaRemoter(
+          host, std::move(source), std::move(request));
+    }
+  }
+
+  const int process_id_;
+  const int routing_id_;
+
+  DISALLOW_COPY_AND_ASSIGN(RemoterFactoryImpl);
+};
+#endif  // BUILDFLAG(ENABLE_MEDIA_REMOTING)
+
 }  // namespace
 
 // static
@@ -299,6 +336,7 @@ RenderFrameHostImpl::RenderFrameHostImpl(SiteInstance* site_instance,
       web_ui_type_(WebUI::kNoWebUI),
       pending_web_ui_type_(WebUI::kNoWebUI),
       should_reuse_web_ui_(false),
+      has_selection_(false),
       last_navigation_lofi_state_(LOFI_UNSPECIFIED),
       frame_host_binding_(this),
       waiting_for_init_(renderer_initiated_creation),
@@ -387,6 +425,8 @@ RenderFrameHostImpl::~RenderFrameHostImpl() {
 
   for (const auto& iter : visual_state_callbacks_)
     iter.second.Run(false);
+
+  form_field_data_callbacks_.clear();
 
   if (render_widget_host_ &&
       render_widget_host_->owned_by_render_frame_host()) {
@@ -643,7 +683,8 @@ bool RenderFrameHostImpl::OnMessageReceived(const IPC::Message &msg) {
 
   handled = true;
   IPC_BEGIN_MESSAGE_MAP(RenderFrameHostImpl, msg)
-    IPC_MESSAGE_HANDLER(FrameHostMsg_AddMessageToConsole, OnAddMessageToConsole)
+    IPC_MESSAGE_HANDLER(FrameHostMsg_DidAddMessageToConsole,
+                        OnDidAddMessageToConsole)
     IPC_MESSAGE_HANDLER(FrameHostMsg_Detach, OnDetach)
     IPC_MESSAGE_HANDLER(FrameHostMsg_FrameFocused, OnFrameFocused)
     IPC_MESSAGE_HANDLER(FrameHostMsg_DidStartProvisionalLoad,
@@ -693,6 +734,8 @@ bool RenderFrameHostImpl::OnMessageReceived(const IPC::Message &msg) {
     IPC_MESSAGE_HANDLER(FrameHostMsg_DispatchLoad, OnDispatchLoad)
     IPC_MESSAGE_HANDLER(FrameHostMsg_TextSurroundingSelectionResponse,
                         OnTextSurroundingSelectionResponse)
+    IPC_MESSAGE_HANDLER(FrameHostMsg_FocusedFormFieldDataResponse,
+                        OnFocusedFormFieldDataResponse)
     IPC_MESSAGE_HANDLER(AccessibilityHostMsg_Events, OnAccessibilityEvents)
     IPC_MESSAGE_HANDLER(AccessibilityHostMsg_LocationChanges,
                         OnAccessibilityLocationChanges)
@@ -770,7 +813,6 @@ void RenderFrameHostImpl::AccessibilityFatalError() {
     Send(new AccessibilityMsg_FatalError(routing_id_));
   } else {
     accessibility_reset_token_ = g_next_accessibility_reset_token++;
-    UMA_HISTOGRAM_COUNTS("Accessibility.FrameResetCount", 1);
     Send(new AccessibilityMsg_Reset(routing_id_, accessibility_reset_token_));
   }
 }
@@ -839,7 +881,7 @@ void RenderFrameHostImpl::Create(
   media::mojom::MediaServicePtr media_service;
   service_manager::Connector* connector =
       ServiceManagerConnection::GetForProcess()->GetConnector();
-  connector->ConnectToInterface("service:media", &media_service);
+  connector->ConnectToInterface("media", &media_service);
   media_service->CreateInterfaceFactory(std::move(request),
                                         std::move(interfaces));
 }
@@ -954,12 +996,12 @@ void RenderFrameHostImpl::Init() {
   }
 }
 
-void RenderFrameHostImpl::OnAddMessageToConsole(
+void RenderFrameHostImpl::OnDidAddMessageToConsole(
     int32_t level,
     const base::string16& message,
     int32_t line_no,
     const base::string16& source_id) {
-  if (delegate_->AddMessageToConsole(level, message, line_no, source_id))
+  if (delegate_->DidAddMessageToConsole(level, message, line_no, source_id))
     return;
 
   // Pass through log level only on WebUI pages to limit console spew.
@@ -1224,6 +1266,23 @@ void RenderFrameHostImpl::OnDidCommitProvisionalLoad(const IPC::Message& msg) {
       TakeNavigationHandleForCommit(validated_params);
   DCHECK(navigation_handle);
 
+  // PlzNavigate sends searchable form data in the BeginNavigation message
+  // while non-PlzNavigate sends it in the DidCommitProvisionalLoad message.
+  // Update |navigation_handle| if necessary.
+  if (!IsBrowserSideNavigationEnabled() &&
+      !validated_params.searchable_form_url.is_empty()) {
+    navigation_handle->set_searchable_form_url(
+        validated_params.searchable_form_url);
+    navigation_handle->set_searchable_form_encoding(
+        validated_params.searchable_form_encoding);
+
+    // Reset them so that they are consistent in both the PlzNavigate and
+    // non-PlzNavigate case. Users should use those values from
+    // NavigationHandle.
+    validated_params.searchable_form_url = GURL();
+    validated_params.searchable_form_encoding = std::string();
+  }
+
   accessibility_reset_count_ = 0;
   frame_tree_node()->navigator()->DidNavigate(this, validated_params,
                                               std::move(navigation_handle));
@@ -1474,7 +1533,11 @@ void RenderFrameHostImpl::OnRenderProcessGone(int status, int exit_code) {
   // since we're never going to get a response from this renderer.
   for (const auto& iter : ax_tree_snapshot_callbacks_)
     iter.second.Run(ui::AXTreeUpdate());
+
   ax_tree_snapshot_callbacks_.clear();
+  javascript_callbacks_.clear();
+  visual_state_callbacks_.clear();
+  form_field_data_callbacks_.clear();
 
   // Ensure that future remote interface requests are associated with the new
   // process's channel.
@@ -1526,7 +1589,7 @@ void RenderFrameHostImpl::DisableSwapOutTimerForTesting() {
 void RenderFrameHostImpl::OnRendererConnect(
     const service_manager::ServiceInfo& local_info,
     const service_manager::ServiceInfo& remote_info) {
-  if (remote_info.identity.name() != kRendererServiceName)
+  if (remote_info.identity.name() != mojom::kRendererServiceName)
     return;
   browser_info_ = local_info;
   renderer_info_ = remote_info;
@@ -1662,6 +1725,24 @@ void RenderFrameHostImpl::OnTextSurroundingSelectionResponse(
   text_surrounding_selection_callback_.Reset();
 }
 
+void RenderFrameHostImpl::RequestFocusedFormFieldData(
+    FormFieldDataCallback& callback) {
+  static int next_id = 1;
+  int request_id = ++next_id;
+  form_field_data_callbacks_[request_id] = callback;
+  Send(new FrameMsg_FocusedFormFieldDataRequest(GetRoutingID(), request_id));
+}
+
+void RenderFrameHostImpl::OnFocusedFormFieldDataResponse(
+    int request_id,
+    const FormFieldData& field_data) {
+  auto it = form_field_data_callbacks_.find(request_id);
+  if (it != form_field_data_callbacks_.end()) {
+    it->second.Run(field_data);
+    form_field_data_callbacks_.erase(it);
+  }
+}
+
 void RenderFrameHostImpl::OnDidAccessInitialDocument() {
   delegate_->DidAccessInitialDocument();
 }
@@ -1786,14 +1867,17 @@ void RenderFrameHostImpl::OnBeginNavigation(
   CommonNavigationParams validated_params = common_params;
   GetProcess()->FilterURL(false, &validated_params.url);
 
+  BeginNavigationParams validated_begin_params = begin_params;
+  GetProcess()->FilterURL(true, &validated_begin_params.searchable_form_url);
+
   if (waiting_for_init_) {
-    pendinging_navigate_ =
-        base::MakeUnique<PendingNavigation>(validated_params, begin_params);
+    pendinging_navigate_ = base::MakeUnique<PendingNavigation>(
+        validated_params, validated_begin_params);
     return;
   }
 
   frame_tree_node()->navigator()->OnBeginNavigation(
-      frame_tree_node(), validated_params, begin_params);
+      frame_tree_node(), validated_params, validated_begin_params);
 }
 
 void RenderFrameHostImpl::OnDispatchLoad() {
@@ -2090,6 +2174,7 @@ void RenderFrameHostImpl::OnSerializeAsMHTMLResponse(
 void RenderFrameHostImpl::OnSelectionChanged(const base::string16& text,
                                              uint32_t offset,
                                              const gfx::Range& range) {
+  has_selection_ = !text.empty();
   GetRenderWidgetHost()->SelectionChanged(text, offset, range);
 }
 
@@ -2198,7 +2283,7 @@ void RenderFrameHostImpl::RegisterMojoInterfaces() {
                  routing_id_));
 
 #if defined(ENABLE_WEBVR)
-  GetInterfaceRegistry()->AddInterface<device::VRService>(
+  GetInterfaceRegistry()->AddInterface<device::mojom::VRService>(
       base::Bind(&device::VRServiceImpl::BindRequest));
 #endif
   if (base::FeatureList::IsEnabled(features::kGenericSensor)) {
@@ -2227,6 +2312,11 @@ void RenderFrameHostImpl::RegisterMojoInterfaces() {
         BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
   }
 #endif
+
+#if BUILDFLAG(ENABLE_MEDIA_REMOTING)
+  GetInterfaceRegistry()->AddInterface(base::Bind(
+      &RemoterFactoryImpl::Bind, GetProcess()->GetID(), GetRoutingID()));
+#endif  // BUILDFLAG(ENABLE_MEDIA_REMOTING)
 
   GetContentClient()->browser()->RegisterRenderFrameMojoInterfaces(
       GetInterfaceRegistry(), this);
@@ -2433,10 +2523,6 @@ void RenderFrameHostImpl::UpdateOpener() {
 
 void RenderFrameHostImpl::SetFocusedFrame() {
   Send(new FrameMsg_SetFocusedFrame(routing_id_));
-}
-
-void RenderFrameHostImpl::ClearFocusedFrame() {
-  Send(new FrameMsg_ClearFocusedFrame(routing_id_));
 }
 
 void RenderFrameHostImpl::ExtendSelectionAndDelete(size_t before,
@@ -2806,10 +2892,6 @@ BrowserAccessibilityManager*
     bool is_root_frame = !frame_tree_node()->parent();
     browser_accessibility_manager_.reset(
         view->CreateBrowserAccessibilityManager(this, is_root_frame));
-    if (browser_accessibility_manager_)
-      UMA_HISTOGRAM_COUNTS("Accessibility.FrameEnabledCount", 1);
-    else
-      UMA_HISTOGRAM_COUNTS("Accessibility.FrameDidNotEnableCount", 1);
   }
   return browser_accessibility_manager_.get();
 }
@@ -2873,6 +2955,10 @@ void RenderFrameHostImpl::FilesSelectedInChooser(
   }
 
   Send(new FrameMsg_RunFileChooserResponse(routing_id_, files));
+}
+
+bool RenderFrameHostImpl::HasSelection() {
+  return has_selection_;
 }
 
 void RenderFrameHostImpl::GetInterfaceProvider(

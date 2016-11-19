@@ -65,6 +65,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/user_agent.h"
+#include "extensions/features/features.h"
 #include "net/base/host_mapping_rules.h"
 #include "net/base/logging_network_change_observer.h"
 #include "net/base/sdch_manager.h"
@@ -109,7 +110,7 @@
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "url/url_constants.h"
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/event_router_forwarder.h"
 #endif
 
@@ -317,7 +318,7 @@ IOThread::IOThread(
     net_log::ChromeNetLog* net_log,
     extensions::EventRouterForwarder* extension_event_router_forwarder)
     : net_log_(net_log),
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
       extension_event_router_forwarder_(extension_event_router_forwarder),
 #endif
       globals_(nullptr),
@@ -494,7 +495,7 @@ void IOThread::Init() {
   // Setup the HistogramWatcher to run on the IO thread.
   net::NetworkChangeNotifier::InitHistogramWatcher();
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   globals_->extension_event_router_forwarder =
       extension_event_router_forwarder_;
 #endif
@@ -514,8 +515,7 @@ void IOThread::Init() {
 
   std::unique_ptr<ChromeNetworkDelegate> chrome_network_delegate(
       new ChromeNetworkDelegate(extension_event_router_forwarder(),
-                                &system_enable_referrers_,
-                                metrics_data_use_forwarder_));
+                                &system_enable_referrers_));
   // By default, data usage is considered off the record.
   chrome_network_delegate->set_data_use_aggregator(
       globals_->data_use_aggregator.get(),
@@ -531,7 +531,7 @@ void IOThread::Init() {
 
   globals_->system_network_delegate =
       globals_->data_use_ascriber->CreateNetworkDelegate(
-          std::move(chrome_network_delegate));
+          std::move(chrome_network_delegate), metrics_data_use_forwarder_);
 
   globals_->host_resolver = CreateGlobalHostResolver(net_log_);
 

@@ -49,7 +49,10 @@ component("ui_data_pack") {
 
 buildflag_header("ui_features") {
   header = "ui_features.h"
-  flags = [ "ENABLE_HIDPI=$enable_hidpi" ]
+  flags = [
+    "ENABLE_HIDPI=$enable_hidpi",
+    "USE_XKBCOMMON=$use_xkbcommon",
+  ]
 }
 
 component("base") {
@@ -116,8 +119,6 @@ component("base") {
     "cocoa/menu_controller.mm",
     "cocoa/nib_loading.h",
     "cocoa/nib_loading.mm",
-    "cocoa/nscolor_additions.h",
-    "cocoa/nscolor_additions.mm",
     "cocoa/nsgraphics_context_additions.h",
     "cocoa/nsgraphics_context_additions.mm",
     "cocoa/nsview_additions.h",
@@ -598,7 +599,7 @@ component("base") {
 
   # Aura clipboard.
   if (use_aura) {
-    if (use_clipboard_aurax11) {
+    if (use_x11 && is_desktop_linux) {
       sources += [
         "clipboard/clipboard_aurax11.cc",
         "clipboard/clipboard_aurax11.h",
@@ -780,7 +781,6 @@ test("ui_base_unittests") {
       "cocoa/fullscreen_window_manager_unittest.mm",
       "cocoa/hover_image_button_unittest.mm",
       "cocoa/menu_controller_unittest.mm",
-      "cocoa/nscolor_additions_unittest.mm",
       "cocoa/nsgraphics_context_additions_unittest.mm",
       "cocoa/nsview_additions_unittest.mm",
       "cocoa/three_part_image_unittest.mm",

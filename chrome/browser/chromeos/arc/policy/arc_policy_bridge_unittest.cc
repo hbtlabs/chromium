@@ -23,7 +23,7 @@
 
 namespace {
 
-char kFakeONC[] =
+constexpr char kFakeONC[] =
     "{\"NetworkConfigurations\":["
     "{\"GUID\":\"{485d6076-dd44-6b6d-69787465725f5040}\","
     "\"Type\":\"WiFi\","
@@ -51,7 +51,10 @@ char kFakeONC[] =
     "\"GUID\":\"{00f79111-51e0-e6e0-76b3b55450d80a1b}\"}"
     "]}";
 
-// Helper class to define a PolicyStringCallback which verifies that it was run.
+constexpr char kPolicyCompliantResponse[] = "{ \"policyCompliant\": true }";
+constexpr char kPolicyNonCompliantResponse[] = "{ \"policyCompliant\": false }";
+
+// Helper class to define callbacks that verify that they were run.
 // Wraps a bool initially set to |false| and verifies that it's been set to
 // |true| before destruction.
 class CheckedBoolean {
@@ -67,18 +70,23 @@ class CheckedBoolean {
   DISALLOW_COPY_AND_ASSIGN(CheckedBoolean);
 };
 
-void ExpectPolicyString(std::unique_ptr<CheckedBoolean> was_run,
-                        mojo::String expected,
-                        mojo::String policies) {
-  EXPECT_EQ(expected, policies);
+void ExpectString(std::unique_ptr<CheckedBoolean> was_run,
+                  const std::string& expected,
+                  const std::string& received) {
+  EXPECT_EQ(expected, received);
   was_run->set_value(true);
 }
 
 arc::ArcPolicyBridge::GetPoliciesCallback PolicyStringCallback(
-    mojo::String expected) {
+    const std::string& expected) {
+  std::unique_ptr<CheckedBoolean> was_run(new CheckedBoolean());
+  return base::Bind(&ExpectString, base::Passed(&was_run), expected);
+}
+
+arc::ArcPolicyBridge::ReportComplianceCallback PolicyComplianceCallback(
+    const std::string& expected) {
   std::unique_ptr<CheckedBoolean> was_run(new CheckedBoolean);
-  return base::Bind(&ExpectPolicyString, base::Passed(&was_run),
-                    base::Passed(&expected));
+  return base::Bind(&ExpectString, base::Passed(&was_run), expected);
 }
 
 }  // namespace
@@ -331,6 +339,29 @@ TEST_F(ArcPolicyBridgeTest, MultiplePoliciesTest) {
       "\"cameraDisabled\":true,"
       "\"defaultPermissionPolicy\":\"GRANT\""
       "}"));
+}
+
+// Disabled due to memory leak https://crbug.com/666371.
+// TODO(poromov): Fix leak and re-enable.
+TEST_F(ArcPolicyBridgeTest, DISABLED_EmptyReportComplianceTest) {
+  policy_bridge()->ReportCompliance(
+      "", PolicyComplianceCallback(kPolicyCompliantResponse));
+}
+
+// Disabled due to memory leak https://crbug.com/666371.
+// TODO(poromov): Fix leak and re-enable.
+TEST_F(ArcPolicyBridgeTest, DISABLED_ParsableReportComplianceTest) {
+  policy_bridge()->ReportCompliance(
+      "{\"nonComplianceDetails\" : []}",
+      PolicyComplianceCallback(kPolicyCompliantResponse));
+}
+
+// Disabled due to memory leak https://crbug.com/666371.
+// TODO(poromov): Fix leak and re-enable.
+TEST_F(ArcPolicyBridgeTest, DISABLED_NonParsableReportComplianceTest) {
+  policy_bridge()->ReportCompliance(
+      "\"nonComplianceDetails\" : [}",
+      PolicyComplianceCallback(kPolicyNonCompliantResponse));
 }
 
 // This and the following test send the policies through a mojo connection

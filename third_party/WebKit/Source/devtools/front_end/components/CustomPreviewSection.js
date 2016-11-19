@@ -4,9 +4,9 @@
 /**
  * @unrestricted
  */
-WebInspector.CustomPreviewSection = class {
+Components.CustomPreviewSection = class {
   /**
-   * @param {!WebInspector.RemoteObject} object
+   * @param {!SDK.RemoteObject} object
    */
   constructor(object) {
     this._sectionElement = createElementWithClass('span', 'custom-expandable-section');
@@ -18,18 +18,20 @@ WebInspector.CustomPreviewSection = class {
     try {
       var headerJSON = JSON.parse(customPreview.header);
     } catch (e) {
-      WebInspector.console.error('Broken formatter: header is invalid json ' + e);
+      Common.console.error('Broken formatter: header is invalid json ' + e);
       return;
     }
     this._header = this._renderJSONMLTag(headerJSON);
     if (this._header.nodeType === Node.TEXT_NODE) {
-      WebInspector.console.error('Broken formatter: header should be an element node.');
+      Common.console.error('Broken formatter: header should be an element node.');
       return;
     }
 
     if (customPreview.hasBody) {
       this._header.classList.add('custom-expandable-section-header');
       this._header.addEventListener('click', this._onClick.bind(this), false);
+      this._expandIcon = UI.Icon.create('smallicon-triangle-right', 'custom-expand-icon');
+      this._header.insertBefore(this._expandIcon, this._header.firstChild);
     }
 
     this._sectionElement.appendChild(this._header);
@@ -51,10 +53,7 @@ WebInspector.CustomPreviewSection = class {
       return createTextNode(jsonML + '');
 
     var array = /** @type {!Array.<*>} */ (jsonML);
-    if (array[0] === 'object')
-      return this._layoutObjectTag(array);
-    else
-      return this._renderElement(array);
+    return array[0] === 'object' ? this._layoutObjectTag(array) : this._renderElement(array);
   }
 
   /**
@@ -64,8 +63,8 @@ WebInspector.CustomPreviewSection = class {
    */
   _renderElement(object) {
     var tagName = object.shift();
-    if (!WebInspector.CustomPreviewSection._tagsWhiteList.has(tagName)) {
-      WebInspector.console.error('Broken formatter: element ' + tagName + ' is not allowed!');
+    if (!Components.CustomPreviewSection._tagsWhiteList.has(tagName)) {
+      Common.console.error('Broken formatter: element ' + tagName + ' is not allowed!');
       return createElement('span');
     }
     var element = createElement(/** @type {string} */ (tagName));
@@ -91,12 +90,12 @@ WebInspector.CustomPreviewSection = class {
   _layoutObjectTag(objectTag) {
     objectTag.shift();
     var attributes = objectTag.shift();
-    var remoteObject =
-        this._object.target().runtimeModel.createRemoteObject(/** @type {!Protocol.Runtime.RemoteObject} */ (attributes));
+    var remoteObject = this._object.target().runtimeModel.createRemoteObject(
+        /** @type {!Protocol.Runtime.RemoteObject} */ (attributes));
     if (remoteObject.customPreview())
-      return (new WebInspector.CustomPreviewSection(remoteObject)).element();
+      return (new Components.CustomPreviewSection(remoteObject)).element();
 
-    var sectionElement = WebInspector.ObjectPropertiesSection.defaultObjectPresentation(remoteObject);
+    var sectionElement = Components.ObjectPropertiesSection.defaultObjectPresentation(remoteObject);
     sectionElement.classList.toggle('custom-expandable-section-standard-section', remoteObject.hasChildren);
     return sectionElement;
   }
@@ -125,6 +124,10 @@ WebInspector.CustomPreviewSection = class {
     this._expanded = !this._expanded;
     this._header.classList.toggle('expanded', this._expanded);
     this._cachedContent.classList.toggle('hidden', !this._expanded);
+    if (this._expanded)
+      this._expandIcon.setIconType('smallicon-triangle-bottom');
+    else
+      this._expandIcon.setIconType('smallicon-triangle-right');
   }
 
   _loadBody() {
@@ -183,7 +186,7 @@ WebInspector.CustomPreviewSection = class {
 
     /**
      * @param {*} bodyJsonML
-     * @this {WebInspector.CustomPreviewSection}
+     * @this {Components.CustomPreviewSection}
      */
     function onBodyLoaded(bodyJsonML) {
       if (!bodyJsonML)
@@ -199,15 +202,15 @@ WebInspector.CustomPreviewSection = class {
 /**
  * @unrestricted
  */
-WebInspector.CustomPreviewComponent = class {
+Components.CustomPreviewComponent = class {
   /**
-   * @param {!WebInspector.RemoteObject} object
+   * @param {!SDK.RemoteObject} object
    */
   constructor(object) {
     this._object = object;
-    this._customPreviewSection = new WebInspector.CustomPreviewSection(object);
+    this._customPreviewSection = new Components.CustomPreviewSection(object);
     this.element = createElementWithClass('span', 'source-code');
-    var shadowRoot = WebInspector.createShadowRootWithCoreStyles(this.element, 'components/customPreviewSection.css');
+    var shadowRoot = UI.createShadowRootWithCoreStyles(this.element, 'components/customPreviewSection.css');
     this.element.addEventListener('contextmenu', this._contextMenuEventFired.bind(this), false);
     shadowRoot.appendChild(this._customPreviewSection.element());
   }
@@ -221,10 +224,9 @@ WebInspector.CustomPreviewComponent = class {
    * @param {!Event} event
    */
   _contextMenuEventFired(event) {
-    var contextMenu = new WebInspector.ContextMenu(event);
+    var contextMenu = new UI.ContextMenu(event);
     if (this._customPreviewSection)
-      contextMenu.appendItem(
-          WebInspector.UIString.capitalize('Show as Javascript ^object'), this._disassemble.bind(this));
+      contextMenu.appendItem(Common.UIString.capitalize('Show as Javascript ^object'), this._disassemble.bind(this));
     contextMenu.appendApplicableItems(this._object);
     contextMenu.show();
   }
@@ -232,8 +234,8 @@ WebInspector.CustomPreviewComponent = class {
   _disassemble() {
     this.element.shadowRoot.textContent = '';
     this._customPreviewSection = null;
-    this.element.shadowRoot.appendChild(WebInspector.ObjectPropertiesSection.defaultObjectPresentation(this._object));
+    this.element.shadowRoot.appendChild(Components.ObjectPropertiesSection.defaultObjectPresentation(this._object));
   }
 };
 
-WebInspector.CustomPreviewSection._tagsWhiteList = new Set(['span', 'div', 'ol', 'li', 'table', 'tr', 'td']);
+Components.CustomPreviewSection._tagsWhiteList = new Set(['span', 'div', 'ol', 'li', 'table', 'tr', 'td']);

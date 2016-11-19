@@ -9,6 +9,7 @@
 #define CHROME_COMMON_CHROME_FEATURES_H_
 
 #include "base/feature_list.h"
+#include "extensions/features/features.h"
 #include "printing/features/features.h"
 
 namespace features {
@@ -23,6 +24,8 @@ extern const base::Feature kAppleScriptExecuteJavaScript;
 #if defined(OS_CHROMEOS)
 extern const base::Feature kArcMemoryManagement;
 #endif  // defined(OS_CHROMEOS)
+
+extern const base::Feature kAssetDownloadSuggestionsFeature;
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
 extern const base::Feature kAutoDismissingDialogs;
@@ -68,7 +71,7 @@ extern const base::Feature kLinuxObsoleteSystemIsEndOfTheLine;
 
 extern const base::Feature kMaterialDesignBookmarks;
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 extern const base::Feature kMaterialDesignExtensions;
 #endif
 
@@ -76,11 +79,18 @@ extern const base::Feature kMaterialDesignHistory;
 
 extern const base::Feature kMaterialDesignSettings;
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+extern const base::Feature kMediaRemoting;
+extern const base::Feature kMediaRemotingEncrypted;
+#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
+
 extern const base::Feature kModalPermissionPrompts;
 
 #if defined(OS_MACOSX)
 extern const base::Feature kNativeNotifications;
 #endif  // defined(OS_MACOSX)
+
+extern const base::Feature kOfflinePageDownloadSuggestionsFeature;
 
 extern const base::Feature kOverrideYouTubeFlashEmbed;
 

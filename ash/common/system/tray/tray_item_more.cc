@@ -25,7 +25,7 @@
 namespace ash {
 
 TrayItemMore::TrayItemMore(SystemTrayItem* owner, bool show_more)
-    : ActionableView(owner),
+    : ActionableView(owner, TrayPopupInkDropStyle::FILL_BOUNDS),
       show_more_(show_more),
       icon_(nullptr),
       label_(nullptr),
@@ -86,8 +86,8 @@ void TrayItemMore::UpdateStyle() {
   style->SetupLabel(label_);
 
   if (more_) {
-    more_->SetImage(gfx::CreateVectorIcon(kSystemMenuArrowRightIcon,
-                                          style->GetForegroundColor()));
+    more_->SetImage(
+        gfx::CreateVectorIcon(kSystemMenuArrowRightIcon, kMenuIconColor));
   }
 }
 

@@ -43,6 +43,7 @@ const CGFloat kRetinaBaselineOffset = 0.5;
 
 // The info-bubble point should look like it points to the bottom of the lock
 // icon. Determined with Pixie.app.
+const CGFloat kPageInfoBubblePointXOffset = 5.0;
 const CGFloat kPageInfoBubblePointYOffset = 6.0;
 
 // Minimum acceptable width for the ev bubble.
@@ -227,19 +228,21 @@ void SecurityStateBubbleDecoration::DrawInFrame(NSRect frame,
     [text drawInRect:text_rect];
 
     // Draw the divider.
-    NSBezierPath* line = [NSBezierPath bezierPath];
-    [line setLineWidth:line_width];
-    [line moveToPoint:NSMakePoint(NSMaxX(decoration_frame) - DividerPadding(),
-                                  NSMinY(decoration_frame))];
-    [line lineToPoint:NSMakePoint(NSMaxX(decoration_frame) - DividerPadding(),
-                                  NSMaxY(decoration_frame))];
+    if (state() == LocationBarDecorationState::NORMAL) {
+      NSBezierPath* line = [NSBezierPath bezierPath];
+      [line setLineWidth:line_width];
+      [line moveToPoint:NSMakePoint(NSMaxX(decoration_frame) - DividerPadding(),
+                                    NSMinY(decoration_frame))];
+      [line lineToPoint:NSMakePoint(NSMaxX(decoration_frame) - DividerPadding(),
+                                    NSMaxY(decoration_frame))];
 
-    NSColor* divider_color = GetDividerColor(in_dark_mode);
-    CGFloat divider_alpha =
-        [divider_color alphaComponent] * GetAnimationProgress();
-    divider_color = [divider_color colorWithAlphaComponent:divider_alpha];
-    [divider_color set];
-    [line stroke];
+      NSColor* divider_color = GetDividerColor(in_dark_mode);
+      CGFloat divider_alpha =
+          [divider_color alphaComponent] * GetAnimationProgress();
+      divider_color = [divider_color colorWithAlphaComponent:divider_alpha];
+      [divider_color set];
+      [line stroke];
+    }
   }
 }
 
@@ -271,7 +274,7 @@ bool SecurityStateBubbleDecoration::AcceptsMousePress() {
 
 NSPoint SecurityStateBubbleDecoration::GetBubblePointInFrame(NSRect frame) {
   NSRect image_rect = GetImageRectInFrame(frame);
-  return NSMakePoint(NSMidX(image_rect),
+  return NSMakePoint(NSMidX(image_rect) + kPageInfoBubblePointXOffset,
                      NSMaxY(image_rect) - kPageInfoBubblePointYOffset);
 }
 

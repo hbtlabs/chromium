@@ -219,20 +219,23 @@ ChromeUserManagerImpl::ChromeUserManagerImpl()
   multi_profile_user_controller_.reset(
       new MultiProfileUserController(this, GetLocalState()));
 
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  avatar_policy_observer_.reset(new policy::CloudExternalDataPolicyObserver(
-      cros_settings_,
-      connector->GetDeviceLocalAccountPolicyService(),
-      policy::key::kUserAvatarImage,
-      this));
-  avatar_policy_observer_->Init();
+  policy::DeviceLocalAccountPolicyService* device_local_account_policy_service =
+      g_browser_process->platform_part()
+          ->browser_policy_connector_chromeos()
+          ->GetDeviceLocalAccountPolicyService();
+  if (!device_local_account_policy_service) {
+    return;
+  }
 
-  wallpaper_policy_observer_.reset(new policy::CloudExternalDataPolicyObserver(
-      cros_settings_,
-      connector->GetDeviceLocalAccountPolicyService(),
-      policy::key::kWallpaperImage,
-      this));
+  avatar_policy_observer_ =
+      base::MakeUnique<policy::CloudExternalDataPolicyObserver>(
+          cros_settings_, device_local_account_policy_service,
+          policy::key::kUserAvatarImage, this);
+  avatar_policy_observer_->Init();
+  wallpaper_policy_observer_ =
+      base::MakeUnique<policy::CloudExternalDataPolicyObserver>(
+          cros_settings_, device_local_account_policy_service,
+          policy::key::kWallpaperImage, this);
   wallpaper_policy_observer_->Init();
 }
 
@@ -448,7 +451,8 @@ void ChromeUserManagerImpl::Observe(
       break;
     case chrome::NOTIFICATION_LOGIN_USER_PROFILE_PREPARED: {
       Profile* profile = content::Details<Profile>(details).ptr();
-      if (IsUserLoggedIn() && !IsLoggedInAsGuest() && !IsLoggedInAsKioskApp()) {
+      if (IsUserLoggedIn() && !IsLoggedInAsGuest() && !IsLoggedInAsKioskApp() &&
+          !IsLoggedInAsArcKioskApp()) {
         if (IsLoggedInAsSupervisedUser())
           SupervisedUserPasswordServiceFactory::GetForProfile(profile);
         if (IsLoggedInAsUserWithGaiaAccount())
@@ -866,6 +870,25 @@ void ChromeUserManagerImpl::KioskAppLoggedIn(user_manager::User* user) {
   command_line->AppendSwitch(wm::switches::kWindowAnimationsDisabled);
 }
 
+void ChromeUserManagerImpl::ArcKioskAppLoggedIn(user_manager::User* user) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  active_user_ = user;
+  active_user_->SetStubImage(
+      base::MakeUnique<user_manager::UserImage>(
+          *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+              IDR_PROFILE_PICTURE_LOADING)),
+      user_manager::User::USER_IMAGE_INVALID, false);
+
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  command_line->AppendSwitch(chromeos::switches::kEnableArc);
+  command_line->AppendSwitch(::switches::kForceAndroidAppMode);
+
+  // Disable window animation since kiosk app runs in a single full screen
+  // window and window animation causes start-up janks.
+  command_line->AppendSwitch(wm::switches::kWindowAnimationsDisabled);
+}
+
 void ChromeUserManagerImpl::DemoAccountLoggedIn() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   active_user_ =
@@ -1013,7 +1036,7 @@ bool ChromeUserManagerImpl::UpdateAndCleanUpDeviceLocalAccounts(
   for (user_manager::UserList::iterator it = users_.begin();
        it != users_.end();) {
     if ((*it)->IsDeviceLocalAccount()) {
-      if (*it != GetLoggedInUser())
+      if (*it != GetActiveUser())
         DeleteUser(*it);
       it = users_.erase(it);
     } else {
@@ -1075,7 +1098,7 @@ UserFlow* ChromeUserManagerImpl::GetCurrentUserFlow() const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!IsUserLoggedIn())
     return GetDefaultUserFlow();
-  return GetUserFlow(GetLoggedInUser()->GetAccountId());
+  return GetUserFlow(GetActiveUser()->GetAccountId());
 }
 
 UserFlow* ChromeUserManagerImpl::GetUserFlow(

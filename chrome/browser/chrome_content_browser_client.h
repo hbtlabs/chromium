@@ -17,6 +17,8 @@
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "content/public/browser/content_browser_client.h"
+#include "extensions/features/features.h"
+#include "media/media_features.h"
 
 class ChromeContentBrowserClientParts;
 
@@ -97,6 +99,9 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                                 ui::PageTransition* transition,
                                 bool* is_renderer_initiated,
                                 content::Referrer* referrer) override;
+  bool ShouldFrameShareParentSiteInstanceDespiteTopDocumentIsolation(
+      const GURL& url,
+      content::SiteInstance* parent_site_instance) override;
   bool IsSuitableHost(content::RenderProcessHost* process_host,
                       const GURL& site_url) override;
   bool MayReuseHost(content::RenderProcessHost* process_host) override;
@@ -300,7 +305,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       override;
   content::PresentationServiceDelegate* GetPresentationServiceDelegate(
       content::WebContents* web_contents) override;
-
   void RecordURLMetric(const std::string& metric, const GURL& url) override;
   ScopedVector<content::NavigationThrottle> CreateThrottlesForNavigation(
       content::NavigationHandle* handle) override;
@@ -308,6 +312,12 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       content::NavigationHandle* navigation_handle) override;
   std::unique_ptr<content::MemoryCoordinatorDelegate>
   GetMemoryCoordinatorDelegate() override;
+
+#if BUILDFLAG(ENABLE_MEDIA_REMOTING)
+  void CreateMediaRemoter(content::RenderFrameHost* render_frame_host,
+                          media::mojom::RemotingSourcePtr source,
+                          media::mojom::RemoterRequest request) final;
+#endif  // BUILDFLAG(ENABLE_MEDIA_REMOTING)
 
  private:
   friend class DisableWebRtcEncryptionFlagTest;
@@ -326,7 +336,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       base::Callback<void(bool)> callback,
       bool allow);
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   void GuestPermissionRequestHelper(
       const GURL& url,
       const std::vector<std::pair<int, int> >& render_frames,

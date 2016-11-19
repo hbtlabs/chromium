@@ -72,8 +72,8 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
-#include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "google_apis/gaia/oauth2_token_service.h"
@@ -81,7 +81,6 @@
 #include "printing/backend/print_backend.h"
 #include "printing/backend/print_backend_consts.h"
 #include "printing/features/features.h"
-#include "printing/pdf_render_settings.h"
 #include "printing/print_settings.h"
 #include "printing/printing_context.h"
 #include "printing/units.h"
@@ -101,7 +100,7 @@
 #endif
 
 using content::BrowserThread;
-using content::RenderViewHost;
+using content::RenderFrameHost;
 using content::WebContents;
 using printing::PrintViewManager;
 
@@ -141,6 +140,7 @@ enum PrintSettingsBuckets {
   COPIES,
   NON_DEFAULT_MARGINS,
   DISTILL_PAGE_UNUSED,
+  SCALING,
   PRINT_SETTINGS_BUCKET_BOUNDARY
 };
 
@@ -238,6 +238,12 @@ void ReportPrintSettingsStats(const base::DictionaryValue& settings) {
   int copies = 1;
   if (settings.GetInteger(printing::kSettingCopies, &copies) && copies > 1)
     ReportPrintSettingHistogram(COPIES);
+
+  int scaling = 100;
+  if (settings.GetInteger(printing::kSettingScaleFactor, &scaling) &&
+      scaling != 100) {
+    ReportPrintSettingHistogram(SCALING);
+  }
 
   bool collate = false;
   if (settings.GetBoolean(printing::kSettingCollate, &collate) && collate)
@@ -701,7 +707,11 @@ void PrintPreviewHandler::HandleGetPreview(const base::ListValue* args) {
   ++regenerate_preview_request_count_;
 
   WebContents* initiator = GetInitiator();
-  if (!initiator) {
+  content::RenderFrameHost* rfh =
+      initiator
+          ? PrintViewManager::FromWebContents(initiator)->print_preview_rfh()
+          : nullptr;
+  if (!rfh) {
     ReportUserActionHistogram(INITIATOR_CLOSED);
     print_preview_ui()->OnClosePrintPreviewDialog();
     return;
@@ -759,8 +769,7 @@ void PrintPreviewHandler::HandleGetPreview(const base::ListValue* args) {
     NOTREACHED();
   }
 
-  RenderViewHost* rvh = initiator->GetRenderViewHost();
-  rvh->Send(new PrintMsg_PrintPreview(rvh->GetRoutingID(), *settings));
+  rfh->Send(new PrintMsg_PrintPreview(rfh->GetRoutingID(), *settings));
 }
 
 void PrintPreviewHandler::HandlePrint(const base::ListValue* args) {
@@ -926,9 +935,9 @@ void PrintPreviewHandler::HandlePrint(const base::ListValue* args) {
     // Set ID to know whether printing is for preview.
     settings->SetInteger(printing::kPreviewUIID,
                          print_preview_ui()->GetIDForPrintPreviewUI());
-    RenderViewHost* rvh = preview_web_contents()->GetRenderViewHost();
-    rvh->Send(new PrintMsg_PrintForPrintPreview(rvh->GetRoutingID(),
-                                                *settings));
+    RenderFrameHost* rfh = preview_web_contents()->GetMainFrame();
+    rfh->Send(
+        new PrintMsg_PrintForPrintPreview(rfh->GetRoutingID(), *settings));
 
     // For all other cases above, the preview dialog will stay open until the
     // printing has finished. Then the dialog closes and PrintPreviewDone() gets

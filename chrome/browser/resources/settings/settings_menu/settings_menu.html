@@ -38,7 +38,7 @@
           background: none;
         };
         color: var(--settings-nav-grey);
-        font-size: 13px;
+        font-size: 100%;
         padding: 0;
       }
 
@@ -80,7 +80,7 @@
         -webkit-padding-start: 24px;
         align-items: center;
         display: flex;
-        font-size: 13px;
+        font-size: 100%;
         font-weight: 500;
         min-height: 40px;
       }
@@ -170,7 +170,7 @@
             <iron-icon icon="settings:language"></iron-icon>
             $i18n{languagesPageTitle}
           </div>
-          <div data-path="/downloadsDirectory" on-tap="openPage_">
+          <div data-path="/downloads" on-tap="openPage_">
             <iron-icon icon="cr:file-download"></iron-icon>
             $i18n{downloadsPageTitle}
           </div>

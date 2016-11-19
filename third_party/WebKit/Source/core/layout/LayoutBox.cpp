@@ -1043,57 +1043,6 @@ LayoutBox* LayoutBox::findAutoscrollable(LayoutObject* layoutObject) {
                                                : nullptr;
 }
 
-static inline int adjustedScrollDelta(int beginningDelta) {
-  // This implemention matches Firefox's.
-  // http://mxr.mozilla.org/firefox/source/toolkit/content/widgets/browser.xml#856.
-  const int speedReducer = 12;
-
-  int adjustedDelta = beginningDelta / speedReducer;
-  if (adjustedDelta > 1)
-    adjustedDelta = static_cast<int>(adjustedDelta *
-                                     sqrt(static_cast<double>(adjustedDelta))) -
-                    1;
-  else if (adjustedDelta < -1)
-    adjustedDelta =
-        static_cast<int>(adjustedDelta *
-                         sqrt(static_cast<double>(-adjustedDelta))) +
-        1;
-
-  return adjustedDelta;
-}
-
-static inline IntSize adjustedScrollDelta(const IntSize& delta) {
-  return IntSize(adjustedScrollDelta(delta.width()),
-                 adjustedScrollDelta(delta.height()));
-}
-
-void LayoutBox::middleClickAutoscroll(const IntPoint& sourcePoint) {
-  LocalFrame* frame = this->frame();
-  if (!frame)
-    return;
-
-  IntPoint lastKnownMousePosition =
-      frame->eventHandler().lastKnownMousePosition();
-
-  // We need to check if the last known mouse position is out of the window.
-  // When the mouse is out of the window, the position is incoherent
-  static IntPoint previousMousePosition;
-  if (lastKnownMousePosition.x() < 0 || lastKnownMousePosition.y() < 0)
-    lastKnownMousePosition = previousMousePosition;
-  else
-    previousMousePosition = lastKnownMousePosition;
-
-  IntSize delta = lastKnownMousePosition - sourcePoint;
-
-  // at the center we let the space for the icon.
-  if (abs(delta.width()) <= AutoscrollController::noMiddleClickAutoscrollRadius)
-    delta.setWidth(0);
-  if (abs(delta.height()) <=
-      AutoscrollController::noMiddleClickAutoscrollRadius)
-    delta.setHeight(0);
-  scroll(ScrollByPixel, FloatSize(adjustedScrollDelta(delta)));
-}
-
 void LayoutBox::scrollByRecursively(const ScrollOffset& delta) {
   if (delta.isZero())
     return;
@@ -1685,10 +1634,12 @@ void LayoutBox::imageChanged(WrappedImagePtr image, const IntRect*) {
             layer->image()->cachedImage() &&
             layer->image()->cachedImage()->getImage() &&
             layer->image()->cachedImage()->getImage()->maybeAnimated();
-        if (maybeAnimated)
+        if (maybeAnimated) {
           setMayNeedPaintInvalidationAnimatedBackgroundImage();
-        else
+        } else {
           setShouldDoFullPaintInvalidation();
+          setBackgroundChangedSinceLastPaintInvalidation();
+        }
         break;
       }
     }
@@ -1753,6 +1704,27 @@ bool LayoutBox::intersectsVisibleViewport() const {
   mapToVisualRectInAncestorSpace(layoutView, rect);
   return rect.intersects(LayoutRect(
       layoutView->frameView()->getScrollableArea()->visibleContentRect()));
+}
+
+void LayoutBox::ensureIsReadyForPaintInvalidation() {
+  LayoutBoxModelObject::ensureIsReadyForPaintInvalidation();
+
+  if (mayNeedPaintInvalidationAnimatedBackgroundImage() &&
+      !backgroundIsKnownToBeObscured())
+    setShouldDoFullPaintInvalidation(PaintInvalidationDelayedFull);
+
+  if (fullPaintInvalidationReason() != PaintInvalidationDelayedFull ||
+      !intersectsVisibleViewport())
+    return;
+
+  // Do regular full paint invalidation if the object with
+  // PaintInvalidationDelayedFull is onscreen.
+  if (intersectsVisibleViewport()) {
+    // Conservatively assume the delayed paint invalidation was caused by
+    // background image change.
+    setBackgroundChangedSinceLastPaintInvalidation();
+    setShouldDoFullPaintInvalidation(PaintInvalidationFull);
+  }
 }
 
 PaintInvalidationReason LayoutBox::invalidatePaintIfNeeded(
@@ -2053,9 +2025,6 @@ void LayoutBox::positionLineBox(InlineBox* box) {
     box->remove(DontMarkLineBoxes);
     box->destroy();
   } else if (isAtomicInlineLevel()) {
-    // FIXME: the call to roundedLayoutPoint() below is temporary and should be
-    // removed once the transition to LayoutUnit-based types is complete
-    // (crbug.com/321237).
     setLocationAndUpdateOverflowControlsIfNeeded(box->topLeft());
     setInlineBoxWrapper(box);
   }
@@ -2843,7 +2812,7 @@ void LayoutBox::computeMarginsForDirection(MarginDirection flowDirection,
     const ComputedStyle& containingBlockStyle = containingBlock->styleRef();
     if ((marginStartLength.isAuto() && marginEndLength.isAuto()) ||
         (!marginStartLength.isAuto() && !marginEndLength.isAuto() &&
-         containingBlockStyle.textAlign() == WEBKIT_CENTER)) {
+         containingBlockStyle.textAlign() == ETextAlign::WebkitCenter)) {
       // Other browsers center the margin box for align=center elements so we
       // match them here.
       LayoutUnit centeredMarginBoxStart = std::max(
@@ -2857,9 +2826,9 @@ void LayoutBox::computeMarginsForDirection(MarginDirection flowDirection,
 
     // Adjust margins for the align attribute
     if ((!containingBlockStyle.isLeftToRightDirection() &&
-         containingBlockStyle.textAlign() == WEBKIT_LEFT) ||
+         containingBlockStyle.textAlign() == ETextAlign::WebkitLeft) ||
         (containingBlockStyle.isLeftToRightDirection() &&
-         containingBlockStyle.textAlign() == WEBKIT_RIGHT)) {
+         containingBlockStyle.textAlign() == ETextAlign::WebkitRight)) {
       if (containingBlockStyle.isLeftToRightDirection() !=
           styleRef().isLeftToRightDirection()) {
         if (!marginStartLength.isAuto())
@@ -4684,6 +4653,7 @@ bool LayoutBox::shrinkToAvoidFloats() const {
   return style()->width().isAuto();
 }
 
+DISABLE_CFI_PERF
 static bool shouldBeConsideredAsReplaced(Node* node) {
   // Checkboxes and radioboxes are not isAtomicInlineLevel() nor do they have
   // their own layoutObject in which to override avoidFloats().

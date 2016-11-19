@@ -116,6 +116,10 @@ const base::Feature kMemoryCoordinator {
 const base::Feature kNonValidatingReloadOnNormalReload{
     "NonValidatingReloadOnNormalReload", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Kill switch for Web Notification content images.
+const base::Feature kNotificationContentImage{"NotificationContentImage",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
+
 // An experiment to optimize resource loading IPC for small resources.
 // http://crbug.com/580928
 const base::Feature kOptimizeLoadingIPCForSmallResources{
@@ -132,7 +136,7 @@ const base::Feature kParseHTMLOnMainThread{"ParseHTMLOnMainThread",
 
 // Whether document level event listeners should default 'passive' to true.
 const base::Feature kPassiveDocumentEventListeners{
-    "PassiveDocumentEventListeners", base::FEATURE_DISABLED_BY_DEFAULT};
+    "PassiveDocumentEventListeners", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Whether we should force a touchstart and first touchmove per scroll event
 // listeners to be 'passive' during fling.
@@ -239,10 +243,6 @@ const base::Feature kSendBeaconThrowForBlobWithNonSimpleType{
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
-// Allow videos to autoplay without a user gesture if muted.
-const base::Feature kAutoplayMutedVideos{"AutoplayMutedVideos",
-                                         base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Use IME's own thread instead of using main UI thread. It also means that
 // we will not use replica editor and do a round trip to renderer to synchronize
 // with Blink data.

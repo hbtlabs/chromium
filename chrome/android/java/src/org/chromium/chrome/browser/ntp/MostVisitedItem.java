@@ -10,7 +10,7 @@ import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.View.OnCreateContextMenuListener;
 
-import org.chromium.chrome.browser.ntp.ContextMenuHandler.TouchDisableableView;
+import org.chromium.chrome.browser.ntp.ContextMenuManager.ContextMenuItemId;
 import org.chromium.chrome.browser.ntp.NewTabPageView.NewTabPageManager;
 import org.chromium.ui.mojom.WindowOpenDisposition;
 
@@ -19,8 +19,7 @@ import org.chromium.ui.mojom.WindowOpenDisposition;
  * long-pressed to trigger a context menu with options to "open in new tab", "open in incognito
  * tab", or "remove".
  */
-public class MostVisitedItem
-        implements OnCreateContextMenuListener, OnClickListener, ContextMenuHandler.Delegate {
+public class MostVisitedItem implements OnCreateContextMenuListener, OnClickListener {
     /**
      * Interface for an object that handles callbacks from a MostVisitedItem.
      */
@@ -39,7 +38,6 @@ public class MostVisitedItem
     private int mTileType;
     private int mSource;
     private View mView;
-    private TouchDisableableView mWrapperView;
 
     /**
      * Constructs a MostVisitedItem with the given manager, title, URL, whitelist icon path, index,
@@ -70,10 +68,9 @@ public class MostVisitedItem
      * Sets the view that will display this item. MostVisitedItem will handle clicks on the view.
      * This should be called exactly once.
      */
-    public void initView(View view, TouchDisableableView parent) {
+    public void initView(View view) {
         assert mView == null;
         mView = view;
-        mWrapperView = parent;
         mView.setOnClickListener(this);
         mView.setOnCreateContextMenuListener(this);
     }
@@ -153,27 +150,32 @@ public class MostVisitedItem
 
     @Override
     public void onCreateContextMenu(ContextMenu menu, View v, ContextMenuInfo menuInfo) {
-        new ContextMenuHandler(mManager, mWrapperView, this)
-                .onCreateContextMenu(menu);
+        mManager.getContextMenuManager().createContextMenu(
+                menu, v, new ContextMenuManager.Delegate() {
+                    @Override
+                    public void openItem(int windowDisposition) {
+                        mManager.openMostVisitedItem(windowDisposition, MostVisitedItem.this);
+                    }
+
+                    @Override
+                    public void removeItem() {
+                        mManager.removeMostVisitedItem(MostVisitedItem.this);
+                    }
+
+                    @Override
+                    public String getUrl() {
+                        return MostVisitedItem.this.getUrl();
+                    }
+
+                    @Override
+                    public boolean isItemSupported(@ContextMenuItemId int menuItemId) {
+                        return true;
+                    }
+                });
     }
 
     @Override
     public void onClick(View v) {
         mManager.openMostVisitedItem(WindowOpenDisposition.CURRENT_TAB, MostVisitedItem.this);
-    }
-
-    @Override
-    public void openItem(int windowDisposition) {
-        mManager.openMostVisitedItem(windowDisposition, MostVisitedItem.this);
-    }
-
-    @Override
-    public void removeItem() {
-        mManager.removeMostVisitedItem(MostVisitedItem.this);
-    }
-
-    @Override
-    public boolean canBeSavedOffline() {
-        return false;
     }
 }

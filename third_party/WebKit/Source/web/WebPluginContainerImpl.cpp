@@ -87,6 +87,7 @@
 #include "public/platform/WebCursorInfo.h"
 #include "public/platform/WebDragData.h"
 #include "public/platform/WebExternalTextureLayer.h"
+#include "public/platform/WebInputEvent.h"
 #include "public/platform/WebRect.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
@@ -96,7 +97,6 @@
 #include "public/web/WebDocument.h"
 #include "public/web/WebElement.h"
 #include "public/web/WebFrameClient.h"
-#include "public/web/WebInputEvent.h"
 #include "public/web/WebPlugin.h"
 #include "public/web/WebPrintParams.h"
 #include "public/web/WebPrintPresetOptions.h"
@@ -753,9 +753,8 @@ void WebPluginContainerImpl::handleDragEvent(MouseEvent* event) {
   WebDragOperationsMask dragOperationMask =
       static_cast<WebDragOperationsMask>(dataTransfer->sourceOperation());
   WebPoint dragScreenLocation(event->screenX(), event->screenY());
-  WebPoint dragLocation(
-      (event->absoluteLocation().x() - location().x()).toInt(),
-      (event->absoluteLocation().y() - location().y()).toInt());
+  WebPoint dragLocation(event->absoluteLocation().x() - location().x(),
+                        event->absoluteLocation().y() - location().y());
 
   m_webPlugin->handleDragStatusUpdate(dragStatus, dragData, dragOperationMask,
                                       dragLocation, dragScreenLocation);

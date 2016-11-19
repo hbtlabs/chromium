@@ -96,6 +96,11 @@ class CONTENT_EXPORT NavigationHandle {
   // Whether or not the navigation was started within a context menu.
   virtual bool WasStartedFromContextMenu() const = 0;
 
+  // Returns the URL and encoding of an INPUT field that corresponds to a
+  // searchable form request.
+  virtual const GURL& GetSearchableFormURL() = 0;
+  virtual const std::string& GetSearchableFormEncoding() = 0;
+
   // Parameters available at network request start time ------------------------
   //
   // The following parameters are only available when the network request is
@@ -177,11 +182,15 @@ class CONTENT_EXPORT NavigationHandle {
   virtual net::HttpResponseInfo::ConnectionInfo GetConnectionInfo() = 0;
 
   // Resumes a navigation that was previously deferred by a NavigationThrottle.
+  // Note: this may lead to the deletion of the NavigationHandle and its
+  // associated NavigationThrottles.
   virtual void Resume() = 0;
 
   // Cancels a navigation that was previously deferred by a NavigationThrottle.
   // |result| should be equal to NavigationThrottle::CANCEL or
   // NavigationThrottle::CANCEL_AND_IGNORE.
+  // Note: this may lead to the deletion of the NavigationHandle and its
+  // associated NavigationThrottles.
   virtual void CancelDeferredNavigation(
       NavigationThrottle::ThrottleCheckResult result) = 0;
 

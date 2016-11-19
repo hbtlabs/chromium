@@ -6,6 +6,7 @@ import("//build/buildflag_header.gni")
 import("//build/util/process_version.gni")
 import("//chrome/common/features.gni")
 import("//chrome/process_version_rc_template.gni")  # For branding_file_path.
+import("//extensions/features/features.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//tools/grit/grit_rule.gni")
 
@@ -209,6 +210,7 @@ static_library("common") {
     "//content/public/common",
     "//crypto",
     "//extensions/common:common_constants",
+    "//extensions/features",
     "//gin",
     "//google_apis",
     "//gpu/command_buffer/service",
@@ -568,6 +570,7 @@ static_library("constants") {
   public_deps = [
     ":features",
     "//content/public/common:result_codes",
+    "//extensions/features",
     "//printing/features",
   ]
   deps = [
@@ -662,14 +665,12 @@ source_set("app_mode_app_support") {
 
 mojom("mojo_bindings") {
   sources = [
-    "image_decoder.mojom",
     "network_diagnostics.mojom",
     "resource_usage_reporter.mojom",
     "shell_handler_win.mojom",
   ]
 
   public_deps = [
-    "//skia/public/interfaces",
     "//url/mojo:url_mojom_gurl",
   ]
 }

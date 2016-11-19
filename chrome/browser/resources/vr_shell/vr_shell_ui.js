@@ -30,9 +30,9 @@ var vrShellUi = (function() {
       this.elementId = scene.addElement(element);
     }
 
-    show(visible) {
+    setEnabled(enabled) {
       let update = new api.UiElementUpdate();
-      update.setVisible(visible);
+      update.setVisible(enabled);
       scene.updateElement(this.elementId, update);
     }
 
@@ -44,21 +44,20 @@ var vrShellUi = (function() {
   class DomUiElement {
     constructor(domId) {
       let domElement = document.querySelector(domId);
-      let style = window.getComputedStyle(domElement);
 
-      // Pull copy rectangle from DOM element properties.
-      let pixelX = Math.round(domElement.offsetLeft / scaleFactor);
-      let pixelY = Math.round(domElement.offsetTop / scaleFactor);
-      let pixelWidth = Math.round(
-          parseInt(style.getPropertyValue('width')) / scaleFactor);
-      let pixelHeight = Math.round(
-          parseInt(style.getPropertyValue('height')) / scaleFactor);
+      // Pull copy rectangle from the position of the element.
+      let rect = domElement.getBoundingClientRect();
+      let pixelX = Math.floor(rect.left);
+      let pixelY = Math.floor(rect.top);
+      let pixelWidth = Math.ceil(rect.right) - pixelX;
+      let pixelHeight = Math.ceil(rect.bottom) - pixelY;
 
       let element = new api.UiElement(pixelX, pixelY, pixelWidth, pixelHeight);
       element.setSize(scaleFactor * pixelWidth / 1000,
           scaleFactor * pixelHeight / 1000);
 
       // Pull additional custom properties from CSS.
+      let style = window.getComputedStyle(domElement);
       element.setTranslation(
           getStyleFloat(style, '--tranX'),
           getStyleFloat(style, '--tranY'),
@@ -154,8 +153,8 @@ var vrShellUi = (function() {
       scene.updateElement(this.reloadUiButton.uiElementId, update);
     }
 
-    show(visible) {
-      this.enabled = visible;
+    setEnabled(enabled) {
+      this.enabled = enabled;
       this.configure();
     }
 
@@ -207,8 +206,8 @@ var vrShellUi = (function() {
       scene.updateElement(this.transientWarning.uiElementId, update);
     }
 
-    show(visible) {
-      this.enabled = visible;
+    setEnabled(enabled) {
+      this.enabled = enabled;
       this.updateState();
     }
 
@@ -252,33 +251,114 @@ var vrShellUi = (function() {
 
   class Omnibox {
     constructor(contentQuadId) {
-      this.setSecure(false);
-      this.domUiElement = new DomUiElement('#omni');
+      /** @const */ var VISIBILITY_TIMEOUT_MS = 3000;
+
+      this.domUiElement = new DomUiElement('#omni-container');
+      this.enabled = false;
+      this.secure = false;
+      this.visibilityTimeout = VISIBILITY_TIMEOUT_MS;
+      this.visibilityTimer = null;
+      this.nativeState = {};
+
+      // Initially invisible.
       let update = new api.UiElementUpdate();
       update.setVisible(false);
       scene.updateElement(this.domUiElement.uiElementId, update);
+      this.nativeState.visible = false;
+
+      // Listen to the end of transitions, so that the box can be natively
+      // hidden after it finishes hiding itself.
+      document.querySelector('#omni').addEventListener('transitionend',
+          this.onAnimationDone.bind(this));
     }
 
-    show(visible) {
-      let update = new api.UiElementUpdate();
-      update.setVisible(visible);
-      scene.updateElement(this.domUiElement.uiElementId, update);
+    setEnabled(enabled) {
+      this.enabled = enabled;
+      this.resetVisibilityTimer();
+      this.updateState();
     }
 
     setLoading(loading) {
-      this.domUiElement.domElement.className = loading ? 'loading' : 'idle';
+      this.loading = loading;
+      this.resetVisibilityTimer();
+      this.updateState();
     }
 
     setURL(host, path) {
       let omnibox = this.domUiElement.domElement;
       omnibox.querySelector('#domain').innerHTML = host;
       omnibox.querySelector('#path').innerHTML = path;
+      this.resetVisibilityTimer();
+      this.updateState();
     }
 
-    setSecure(secure) {
-      let image = secure ? 'lock.svg' : 'i_circle.svg';
-      let path = '../../../../ui/webui/resources/images/' + image;
-      document.querySelector('#connection-security').src = path;
+    setSecureOrigin(secure) {
+      this.secure = secure;
+      this.resetVisibilityTimer();
+      this.updateState();
+    }
+
+    setVisibilityTimeout(milliseconds) {
+      this.visibilityTimeout = milliseconds;
+      this.resetVisibilityTimer();
+      this.updateState();
+    }
+
+    resetVisibilityTimer() {
+      if (this.visibilityTimer) {
+        clearInterval(this.visibilityTimer);
+        this.visibilityTimer = null;
+      }
+      if (this.enabled && this.visibilityTimeout > 0) {
+        this.visibilityTimer = setTimeout(
+          this.onVisibilityTimer.bind(this), this.visibilityTimeout);
+      }
+    }
+
+    onVisibilityTimer() {
+      this.visibilityTimer = null;
+      this.updateState();
+    }
+
+    onAnimationDone(e) {
+      if (e.propertyName == 'opacity' && !this.visibleAfterTransition) {
+        this.setNativeVisibility(false);
+      }
+    }
+
+    updateState() {
+      if (!this.enabled) {
+        this.setNativeVisibility(false);
+        return;
+      }
+
+      document.querySelector('#omni-secure-icon').style.display =
+          (this.secure ? 'block' : 'none');
+      document.querySelector('#omni-insecure-icon').style.display =
+          (this.secure ? 'none' : 'block');
+
+      let state = 'idle';
+      this.visibleAfterTransition = true;
+      if (this.visibilityTimeout > 0 && !this.visibilityTimer) {
+        state = 'hide';
+        this.visibleAfterTransition = false;
+      } else if (this.loading) {
+        state = 'loading';
+      }
+      document.querySelector('#omni').className = state;
+
+      this.setNativeVisibility(true);
+    }
+
+    setNativeVisibility(visible) {
+      if (visible == this.nativeState.visible) {
+        return;
+      }
+      this.nativeState.visible = visible;
+      let update = new api.UiElementUpdate();
+      update.setVisible(visible);
+      scene.updateElement(this.domUiElement.uiElementId, update);
+      scene.flush();
     }
   };
 
@@ -296,14 +376,15 @@ var vrShellUi = (function() {
 
     setMode(mode) {
       this.mode = mode;
-      this.contentQuad.show(mode == api.Mode.STANDARD);
-      this.controls.show(mode == api.Mode.STANDARD);
-      this.omnibox.show(mode == api.Mode.STANDARD);
-      this.secureOriginWarnings.show(mode == api.Mode.WEB_VR);
+      this.contentQuad.setEnabled(mode == api.Mode.STANDARD);
+      this.controls.setEnabled(mode == api.Mode.STANDARD);
+      this.omnibox.setEnabled(mode == api.Mode.STANDARD);
+      this.secureOriginWarnings.setEnabled(mode == api.Mode.WEB_VR);
     }
 
     setSecureOrigin(secure) {
       this.secureOriginWarnings.setSecureOrigin(secure);
+      this.omnibox.setSecureOrigin(secure);
     }
 
     setReloadUiEnabled(enabled) {

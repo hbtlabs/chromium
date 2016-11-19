@@ -9,7 +9,7 @@
 #include "chrome/browser/ui/cocoa/accelerators_cocoa.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
-#import "chrome/browser/ui/cocoa/fullscreen_toolbar_controller.h"
+#import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_controller.h"
 #include "chrome/browser/ui/status_bubble.h"
 #include "chrome/browser/ui/views/exclusive_access_bubble_views.h"
 #include "chrome/browser/ui/views/new_back_shortcut_bubble.h"
@@ -95,7 +95,8 @@ void ExclusiveAccessController::UpdateUIForTabFullscreen(
 }
 
 void ExclusiveAccessController::UpdateFullscreenToolbar() {
-  [[controller_ fullscreenToolbarController] updateToolbarStyle];
+  [[controller_ fullscreenToolbarController]
+      updateToolbarStyleExitingTabFullscreen:NO];
 }
 
 // See the Fullscreen terminology section and the (Fullscreen) interface

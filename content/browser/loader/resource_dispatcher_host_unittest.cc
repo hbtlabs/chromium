@@ -203,6 +203,9 @@ class ResourceIPCAccumulator {
   typedef std::vector< std::vector<IPC::Message> > ClassifiedMessages;
   void GetClassifiedMessages(ClassifiedMessages* msgs);
 
+  // Returns the reply of |msg|, which is a synchronous IPC message.
+  const IPC::Message* GetReply(const IPC::Message& msg);
+
  private:
   std::vector<IPC::Message> messages_;
 };
@@ -230,6 +233,17 @@ void ResourceIPCAccumulator::GetClassifiedMessages(ClassifiedMessages* msgs) {
     }
     messages_.erase(messages_.begin());
   }
+}
+
+const IPC::Message* ResourceIPCAccumulator::GetReply(const IPC::Message& msg) {
+  for (auto& reply : messages_) {
+    if (!reply.is_reply())
+      continue;
+    if (IPC::SyncMessage::GetMessageId(reply) ==
+        IPC::SyncMessage::GetMessageId(msg))
+      return &reply;
+  }
+  return nullptr;
 }
 
 // This is used to create a filter matching a specified child id.
@@ -861,6 +875,10 @@ class ResourceDispatcherHostTest : public testing::TestWithParam<TestConfig>,
     request_context->set_network_delegate(&network_delegate_);
   }
 
+  ~ResourceDispatcherHostTest() override {
+    filter_->OnChannelClosing();
+  }
+
   // IPC::Sender implementation
   bool Send(IPC::Message* msg) override {
     accum_.AddMessage(*msg);
@@ -912,6 +930,7 @@ class ResourceDispatcherHostTest : public testing::TestWithParam<TestConfig>,
   }
 
   void TearDown() override {
+    web_contents_filter_->OnChannelClosing();
     web_contents_observer_.reset();
     web_contents_.reset();
 
@@ -1551,6 +1570,60 @@ TEST_P(ResourceDispatcherHostTest, DetachedResourceTimesOut) {
   EXPECT_EQ(0, network_delegate()->error_count());
 }
 
+TEST_P(ResourceDispatcherHostTest, SyncLoadSuccess) {
+  ResourceRequest request = CreateResourceRequest(
+      "GET", RESOURCE_TYPE_XHR, net::URLRequestTestJob::test_url_1());
+  request.priority = net::MAXIMUM_PRIORITY;
+
+  // Successful sync load.
+  std::tuple<SyncLoadResult> result;
+  ResourceHostMsg_SyncLoad sync_load_msg(0, 1, request, &std::get<0>(result));
+  host_.OnMessageReceived(sync_load_msg, filter_.get());
+  base::RunLoop().RunUntilIdle();
+
+  const IPC::Message* reply = accum_.GetReply(sync_load_msg);
+  ASSERT_TRUE(reply);
+
+  ASSERT_TRUE(ResourceHostMsg_SyncLoad::ReadReplyParam(reply, &result));
+  EXPECT_EQ(net::OK, std::get<0>(result).error_code);
+}
+
+TEST_P(ResourceDispatcherHostTest, SyncLoadError) {
+  ResourceRequest request = CreateResourceRequest(
+      "GET", RESOURCE_TYPE_XHR, net::URLRequestTestJob::test_url_error());
+  request.priority = net::MAXIMUM_PRIORITY;
+
+  // Failued sync load.
+  std::tuple<SyncLoadResult> result;
+  ResourceHostMsg_SyncLoad sync_load_msg(0, 1, request, &std::get<0>(result));
+  host_.OnMessageReceived(sync_load_msg, filter_.get());
+  base::RunLoop().RunUntilIdle();
+
+  const IPC::Message* reply = accum_.GetReply(sync_load_msg);
+  ASSERT_TRUE(reply);
+
+  ASSERT_TRUE(ResourceHostMsg_SyncLoad::ReadReplyParam(reply, &result));
+  EXPECT_EQ(net::ERR_INVALID_URL, std::get<0>(result).error_code);
+}
+
+TEST_P(ResourceDispatcherHostTest, SyncLoadCancel) {
+  ResourceRequest request = CreateResourceRequest(
+      "GET", RESOURCE_TYPE_XHR, net::URLRequestTestJob::test_url_1());
+  request.priority = net::MAXIMUM_PRIORITY;
+
+  // Cancelled sync load.
+  SyncLoadResult result;
+  ResourceHostMsg_SyncLoad sync_load_msg(0, 1, request, &result);
+
+  host_.OnMessageReceived(sync_load_msg, filter_.get());
+  host_.CancelRequestsForProcess(filter_->child_id());
+  base::RunLoop().RunUntilIdle();
+
+  const IPC::Message* reply = accum_.GetReply(sync_load_msg);
+  ASSERT_TRUE(reply);
+  ASSERT_TRUE(reply->is_reply_error());
+}
+
 // If the filter has disappeared then detachable resources should continue to
 // load.
 TEST_P(ResourceDispatcherHostTest, DeletedFilterDetached) {
@@ -1892,6 +1965,8 @@ TEST_P(ResourceDispatcherHostTest, TestProcessCancel) {
   EXPECT_EQ(4, network_delegate()->completed_requests());
   EXPECT_EQ(0, network_delegate()->canceled_requests());
   EXPECT_EQ(0, network_delegate()->error_count());
+
+  test_filter->OnChannelClosing();
 }
 
 // Tests whether the correct requests get canceled when a RenderViewHost is
@@ -2142,6 +2217,7 @@ TEST_P(ResourceDispatcherHostTest, TestBlockedRequestsProcessDies) {
   CheckSuccessfulRequest(msgs[1], net::URLRequestTestJob::test_data_3());
 
   EXPECT_TRUE(host_.blocked_loaders_map_.empty());
+  second_filter->OnChannelClosing();
 }
 
 // Tests that blocked requests don't leak when the ResourceDispatcherHost goes
@@ -2187,6 +2263,8 @@ TEST_P(ResourceDispatcherHostTest, TestBlockedRequestsDontLeak) {
 
   // Flush all the pending requests.
   while (net::URLRequestTestJob::ProcessOnePendingMessage()) {}
+
+  second_filter->OnChannelClosing();
 }
 
 // Test the private helper method "CalculateApproximateMemoryCost()".
@@ -2194,15 +2272,13 @@ TEST_P(ResourceDispatcherHostTest, CalculateApproximateMemoryCost) {
   net::URLRequestContext context;
   std::unique_ptr<net::URLRequest> req(context.CreateRequest(
       GURL("http://www.google.com"), net::DEFAULT_PRIORITY, NULL));
-  EXPECT_EQ(
-      4427,
-      ResourceDispatcherHostImpl::CalculateApproximateMemoryCost(req.get()));
+  EXPECT_EQ(4425, ResourceDispatcherHostImpl::CalculateApproximateMemoryCost(
+                      req.get()));
 
   // Add 9 bytes of referrer.
   req->SetReferrer("123456789");
-  EXPECT_EQ(
-      4436,
-      ResourceDispatcherHostImpl::CalculateApproximateMemoryCost(req.get()));
+  EXPECT_EQ(4434, ResourceDispatcherHostImpl::CalculateApproximateMemoryCost(
+                      req.get()));
 
   // Add 33 bytes of upload content.
   std::string upload_content;
@@ -2215,9 +2291,8 @@ TEST_P(ResourceDispatcherHostTest, CalculateApproximateMemoryCost) {
       net::ElementsUploadDataStream::CreateWithReader(std::move(reader), 0));
 
   // Since the upload throttling is disabled, this has no effect on the cost.
-  EXPECT_EQ(
-      4436,
-      ResourceDispatcherHostImpl::CalculateApproximateMemoryCost(req.get()));
+  EXPECT_EQ(4434, ResourceDispatcherHostImpl::CalculateApproximateMemoryCost(
+                      req.get()));
 }
 
 // Test that too much memory for outstanding requests for a particular
@@ -2293,6 +2368,8 @@ TEST_P(ResourceDispatcherHostTest, TooMuchOutstandingRequestsMemory) {
                          net::URLRequestTestJob::test_data_2());
   CheckSuccessfulRequest(msgs[kMaxRequests + 3],
                          net::URLRequestTestJob::test_data_2());
+
+  second_filter->OnChannelClosing();
 }
 
 // Test that when too many requests are outstanding for a particular
@@ -2358,6 +2435,9 @@ TEST_P(ResourceDispatcherHostTest, TooManyOutstandingRequests) {
   CheckFailedRequest(msgs[kMaxRequestsPerProcess + 2],
                      net::URLRequestTestJob::test_data_2(),
                      net::ERR_INSUFFICIENT_RESOURCES);
+
+  second_filter->OnChannelClosing();
+  third_filter->OnChannelClosing();
 }
 
 // Tests that we sniff the mime type for a simple request.
@@ -2757,6 +2837,8 @@ TEST_P(ResourceDispatcherHostTest, TransferNavigationHtml) {
   ASSERT_EQ(2U, msgs.size());
   EXPECT_EQ(ResourceMsg_ReceivedRedirect::ID, msgs[0][0].type());
   CheckSuccessfulRequest(msgs[1], kResponseBody);
+
+  second_filter->OnChannelClosing();
 }
 
 // Test transferring two navigations with text/html, to ensure the resource
@@ -2835,6 +2917,8 @@ TEST_P(ResourceDispatcherHostTest, TransferTwoNavigationsHtml) {
 
   ASSERT_EQ(2U, msgs.size());
   CheckSuccessfulRequest(msgs[0], kResponseBody);
+
+  second_filter->OnChannelClosing();
 }
 
 // Test transferred navigations with text/plain, which causes
@@ -2904,6 +2988,8 @@ TEST_P(ResourceDispatcherHostTest, TransferNavigationText) {
   ASSERT_EQ(2U, msgs.size());
   EXPECT_EQ(ResourceMsg_ReceivedRedirect::ID, msgs[0][0].type());
   CheckSuccessfulRequest(msgs[1], kResponseBody);
+
+  second_filter->OnChannelClosing();
 }
 
 TEST_P(ResourceDispatcherHostTest, TransferNavigationWithProcessCrash) {
@@ -2953,6 +3039,8 @@ TEST_P(ResourceDispatcherHostTest, TransferNavigationWithProcessCrash) {
     // Flush all the pending requests to get the response through the
     // MimeTypeResourceHandler.
     while (net::URLRequestTestJob::ProcessOnePendingMessage()) {}
+
+    first_filter->OnChannelClosing();
   }
   // The first filter is now deleted, as if the child process died.
 
@@ -2984,6 +3072,8 @@ TEST_P(ResourceDispatcherHostTest, TransferNavigationWithProcessCrash) {
   ASSERT_EQ(2U, msgs.size());
   EXPECT_EQ(ResourceMsg_ReceivedRedirect::ID, msgs[0][0].type());
   CheckSuccessfulRequest(msgs[1], kResponseBody);
+
+  second_filter->OnChannelClosing();
 }
 
 TEST_P(ResourceDispatcherHostTest, TransferNavigationWithTwoRedirects) {
@@ -3070,6 +3160,8 @@ TEST_P(ResourceDispatcherHostTest, TransferNavigationWithTwoRedirects) {
   ASSERT_EQ(2U, msgs.size());
   EXPECT_EQ(ResourceMsg_ReceivedRedirect::ID, msgs[0][0].type());
   CheckSuccessfulRequest(msgs[1], kResponseBody);
+
+  second_filter->OnChannelClosing();
 }
 
 TEST_P(ResourceDispatcherHostTest, UnknownURLScheme) {

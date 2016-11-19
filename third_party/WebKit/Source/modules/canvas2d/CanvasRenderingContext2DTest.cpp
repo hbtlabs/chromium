@@ -171,7 +171,7 @@ void CanvasRenderingContext2DTest::SetUp() {
   m_dummyPageHolder = DummyPageHolder::create(IntSize(800, 600), &pageClients);
   m_document = &m_dummyPageHolder->document();
   m_document->documentElement()->setInnerHTML(
-      "<body><canvas id='c'></canvas></body>", ASSERT_NO_EXCEPTION);
+      "<body><canvas id='c'></canvas></body>");
   m_document->view()->updateAllLifecyclePhases();
   m_canvasElement = toHTMLCanvasElement(m_document->getElementById("c"));
 
@@ -588,7 +588,7 @@ TEST_F(CanvasRenderingContext2DTest, NoLayerPromotionUnderImageSizeRatioLimit) {
   IntSize sourceSize(
       10, 10 * ExpensiveCanvasHeuristicParameters::ExpensiveImageSizeRatio);
   std::unique_ptr<UnacceleratedImageBufferSurface> sourceSurface =
-      wrapUnique(new UnacceleratedImageBufferSurface(sourceSize, NonOpaque));
+      makeUnique<UnacceleratedImageBufferSurface>(sourceSize, NonOpaque);
   sourceCanvas->createImageBufferUsingSurfaceForTesting(
       std::move(sourceSurface));
 
@@ -624,7 +624,7 @@ TEST_F(CanvasRenderingContext2DTest, LayerPromotionOverImageSizeRatioLimit) {
   IntSize sourceSize(
       10, 10 * ExpensiveCanvasHeuristicParameters::ExpensiveImageSizeRatio + 1);
   std::unique_ptr<UnacceleratedImageBufferSurface> sourceSurface =
-      wrapUnique(new UnacceleratedImageBufferSurface(sourceSize, NonOpaque));
+      makeUnique<UnacceleratedImageBufferSurface>(sourceSize, NonOpaque);
   sourceCanvas->createImageBufferUsingSurfaceForTesting(
       std::move(sourceSurface));
 

@@ -3,16 +3,16 @@
 // found in the LICENSE file.
 // This should be executed immediately after InspectorBackend and InspectorBackendCommands
 
-WebInspector.InspectorBackendHostedMode = {};
+SDK.InspectorBackendHostedMode = {};
 
-WebInspector.InspectorBackendHostedMode.loadFromJSONIfNeeded = function() {
+SDK.InspectorBackendHostedMode.loadFromJSONIfNeeded = function() {
   if (InspectorBackend.isInitialized())
     return;
 
   for (var url of Object.keys(Runtime.cachedResources)) {
     if (url.indexOf('protocol.json') !== -1) {
       var protocol = Runtime.cachedResources[url];
-      var code = WebInspector.InspectorBackendHostedMode.generateCommands(JSON.parse(protocol));
+      var code = SDK.InspectorBackendHostedMode.generateCommands(JSON.parse(protocol));
       eval(code);
     }
   }
@@ -22,7 +22,7 @@ WebInspector.InspectorBackendHostedMode.loadFromJSONIfNeeded = function() {
  * @param {*} schema
  * @return {string}
  */
-WebInspector.InspectorBackendHostedMode.generateCommands = function(schema) {
+SDK.InspectorBackendHostedMode.generateCommands = function(schema) {
   var jsTypes = {integer: 'number', array: 'object'};
   var rawTypes = {};
   var result = [];
@@ -62,9 +62,9 @@ WebInspector.InspectorBackendHostedMode.generateCommands = function(schema) {
     var types = domain['types'] || [];
     for (var j = 0; j < types.length; ++j) {
       var type = types[j];
-      if ((type['type'] === 'string') && type['enum'])
+      if ((type['type'] === 'string') && type['enum']) {
         result.push(generateEnum(domain.domain + '.' + type.id, type['enum']));
-      else if (type['type'] === 'object') {
+      } else if (type['type'] === 'object') {
         var properties = type['properties'] || [];
         for (var k = 0; k < properties.length; ++k) {
           var property = properties[k];
@@ -83,9 +83,9 @@ WebInspector.InspectorBackendHostedMode.generateCommands = function(schema) {
         var parameter = parameters[k];
 
         var type;
-        if (parameter.type)
+        if (parameter.type) {
           type = jsTypes[parameter.type] || parameter.type;
-        else {
+        } else {
           var ref = parameter['$ref'];
           if (ref.indexOf('.') !== -1)
             type = rawTypes[ref];
@@ -125,4 +125,4 @@ WebInspector.InspectorBackendHostedMode.generateCommands = function(schema) {
   return result.join('\n');
 };
 
-WebInspector.InspectorBackendHostedMode.loadFromJSONIfNeeded();
+SDK.InspectorBackendHostedMode.loadFromJSONIfNeeded();

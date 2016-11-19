@@ -33,6 +33,7 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "mojo/public/c/system/data_pipe.h"
 #include "mojo/public/c/system/types.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/base/auth.h"
 #include "net/base/net_errors.h"
@@ -245,6 +246,7 @@ class MojoAsyncResourceHandlerWithCustomDataPipeOperations
     is_end_write_expectation_set_ = true;
     end_write_expectation_ = end_write_expectation;
   }
+  bool has_received_bad_message() const { return has_received_bad_message_; }
 
  private:
   MojoResult BeginWrite(void** data, uint32_t* available) override {
@@ -257,14 +259,55 @@ class MojoAsyncResourceHandlerWithCustomDataPipeOperations
       return end_write_expectation_;
     return MojoAsyncResourceHandler::EndWrite(written);
   }
+  void ReportBadMessage(const std::string& error) override {
+    has_received_bad_message_ = true;
+  }
 
   bool is_begin_write_expectation_set_ = false;
   bool is_end_write_expectation_set_ = false;
+  bool has_received_bad_message_ = false;
   MojoResult begin_write_expectation_ = MOJO_RESULT_UNKNOWN;
   MojoResult end_write_expectation_ = MOJO_RESULT_UNKNOWN;
 
   DISALLOW_COPY_AND_ASSIGN(
       MojoAsyncResourceHandlerWithCustomDataPipeOperations);
+};
+
+class TestURLLoaderFactory final : public mojom::URLLoaderFactory {
+ public:
+  TestURLLoaderFactory() {}
+  ~TestURLLoaderFactory() override {}
+
+  void CreateLoaderAndStart(
+      mojom::URLLoaderAssociatedRequest request,
+      int32_t routing_id,
+      int32_t request_id,
+      const ResourceRequest& url_request,
+      mojom::URLLoaderClientAssociatedPtrInfo client_ptr_info) override {
+    loader_request_ = std::move(request);
+    client_ptr_info_ = std::move(client_ptr_info);
+  }
+
+  mojom::URLLoaderAssociatedRequest PassLoaderRequest() {
+    return std::move(loader_request_);
+  }
+
+  mojom::URLLoaderClientAssociatedPtrInfo PassClientPtrInfo() {
+    return std::move(client_ptr_info_);
+  }
+
+  void SyncLoad(int32_t routing_id,
+                int32_t request_id,
+                const ResourceRequest& url_request,
+                const SyncLoadCallback& callback) override {
+    NOTREACHED();
+  }
+
+ private:
+  mojom::URLLoaderAssociatedRequest loader_request_;
+  mojom::URLLoaderClientAssociatedPtrInfo client_ptr_info_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestURLLoaderFactory);
 };
 
 class MojoAsyncResourceHandlerTestBase {
@@ -294,12 +337,28 @@ class MojoAsyncResourceHandlerTestBase {
         true,                                    // is_async
         false                                    // is_using_lofi
         );
-    mojom::URLLoaderClientAssociatedPtrInfo client_ptr_info =
-        url_loader_client_.CreateLocalAssociatedPtrInfo();
+
+    ResourceRequest request;
+    base::WeakPtr<mojo::StrongBinding<mojom::URLLoaderFactory>> weak_binding =
+        mojo::MakeStrongBinding(base::MakeUnique<TestURLLoaderFactory>(),
+                                mojo::GetProxy(&url_loader_factory_));
+
+    url_loader_factory_->CreateLoaderAndStart(
+        mojo::GetProxy(&url_loader_proxy_,
+                       url_loader_factory_.associated_group()),
+        0, 0, request, url_loader_client_.CreateRemoteAssociatedPtrInfo(
+                           url_loader_factory_.associated_group()));
+
+    url_loader_factory_.FlushForTesting();
+    DCHECK(weak_binding);
+    TestURLLoaderFactory* factory_impl =
+        static_cast<TestURLLoaderFactory*>(weak_binding->impl());
+
     mojom::URLLoaderClientAssociatedPtr client_ptr;
-    client_ptr.Bind(std::move(client_ptr_info));
+    client_ptr.Bind(factory_impl->PassClientPtrInfo());
     handler_.reset(new MojoAsyncResourceHandlerWithCustomDataPipeOperations(
-        request_.get(), &rdh_, nullptr, std::move(client_ptr)));
+        request_.get(), &rdh_, factory_impl->PassLoaderRequest(),
+        std::move(client_ptr)));
     handler_->SetController(&resource_controller_);
   }
 
@@ -351,6 +410,8 @@ class MojoAsyncResourceHandlerTestBase {
   TestBrowserThreadBundle thread_bundle_;
   TestResourceDispatcherHostDelegate rdh_delegate_;
   ResourceDispatcherHostImpl rdh_;
+  mojom::URLLoaderFactoryPtr url_loader_factory_;
+  mojom::URLLoaderAssociatedPtr url_loader_proxy_;
   TestURLLoaderClient url_loader_client_;
   TestResourceController resource_controller_;
   std::unique_ptr<TestBrowserContext> browser_context_;
@@ -783,7 +844,7 @@ TEST_F(MojoAsyncResourceHandlerTest,
   url_loader_client_.RunUntilResponseBodyArrived();
   ASSERT_TRUE(url_loader_client_.response_body().is_valid());
   handler_->ResetBeginWriteExpectation();
-  handler_->ResumeForTesting();
+  handler_->OnWritableForTesting();
 
   std::string actual;
   while (actual.size() < written) {
@@ -1019,6 +1080,76 @@ TEST_P(MojoAsyncResourceHandlerWithAllocationSizeTest, CancelWhileWaiting) {
   }
 
   base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(0, resource_controller_.num_resume_calls());
+}
+
+TEST_P(MojoAsyncResourceHandlerWithAllocationSizeTest, RedirectHandling) {
+  rdh_delegate_.set_num_on_response_started_calls_expectation(1);
+  bool defer = false;
+
+  ASSERT_TRUE(handler_->OnWillStart(request_->url(), &defer));
+  ASSERT_FALSE(defer);
+  scoped_refptr<ResourceResponse> response = new ResourceResponse();
+  net::RedirectInfo redirect_info;
+  redirect_info.status_code = 301;
+  ASSERT_TRUE(
+      handler_->OnRequestRedirected(redirect_info, response.get(), &defer));
+  ASSERT_TRUE(defer);
+
+  ASSERT_FALSE(url_loader_client_.has_received_response());
+  ASSERT_FALSE(url_loader_client_.has_received_redirect());
+  url_loader_client_.RunUntilRedirectReceived();
+
+  ASSERT_FALSE(url_loader_client_.has_received_response());
+  ASSERT_TRUE(url_loader_client_.has_received_redirect());
+  EXPECT_EQ(301, url_loader_client_.redirect_info().status_code);
+
+  EXPECT_EQ(0, resource_controller_.num_resume_calls());
+  handler_->FollowRedirect();
+  EXPECT_EQ(1, resource_controller_.num_resume_calls());
+
+  url_loader_client_.ClearHasReceivedRedirect();
+  // Redirect once more.
+  defer = false;
+  redirect_info.status_code = 302;
+  ASSERT_TRUE(
+      handler_->OnRequestRedirected(redirect_info, response.get(), &defer));
+  ASSERT_TRUE(defer);
+
+  ASSERT_FALSE(url_loader_client_.has_received_response());
+  ASSERT_FALSE(url_loader_client_.has_received_redirect());
+  url_loader_client_.RunUntilRedirectReceived();
+
+  ASSERT_FALSE(url_loader_client_.has_received_response());
+  ASSERT_TRUE(url_loader_client_.has_received_redirect());
+  EXPECT_EQ(302, url_loader_client_.redirect_info().status_code);
+
+  EXPECT_EQ(1, resource_controller_.num_resume_calls());
+  handler_->FollowRedirect();
+  EXPECT_EQ(2, resource_controller_.num_resume_calls());
+
+  // Give the final response.
+  defer = false;
+  ASSERT_TRUE(handler_->OnResponseStarted(response.get(), &defer));
+  ASSERT_FALSE(defer);
+
+  net::URLRequestStatus status(net::URLRequestStatus::SUCCESS, net::OK);
+  handler_->OnResponseCompleted(status, &defer);
+  ASSERT_FALSE(defer);
+
+  ASSERT_FALSE(url_loader_client_.has_received_completion());
+  url_loader_client_.RunUntilComplete();
+
+  ASSERT_TRUE(url_loader_client_.has_received_response());
+  ASSERT_TRUE(url_loader_client_.has_received_completion());
+  EXPECT_EQ(net::OK, url_loader_client_.completion_status().error_code);
+}
+
+TEST_P(MojoAsyncResourceHandlerWithAllocationSizeTest,
+       MalformedFollowRedirectRequest) {
+  handler_->FollowRedirect();
+
+  EXPECT_TRUE(handler_->has_received_bad_message());
   EXPECT_EQ(0, resource_controller_.num_resume_calls());
 }
 

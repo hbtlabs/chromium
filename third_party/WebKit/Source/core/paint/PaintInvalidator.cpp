@@ -332,6 +332,8 @@ void PaintInvalidator::updateContext(const LayoutObject& object,
   context.oldLocation = objectPaintInvalidator.previousLocationInBacking();
   context.newVisualRect = computeVisualRectInBacking(object, context);
   context.newLocation = computeLocationInBacking(object, context);
+  context.oldPaintOffset = object.previousPaintOffset();
+  context.newPaintOffset = context.treeBuilderContext.current.paintOffset;
 
   IntSize adjustment = object.scrollAdjustmentForPaintInvalidation(
       *context.paintInvalidationContainer);
@@ -340,6 +342,7 @@ void PaintInvalidator::updateContext(const LayoutObject& object,
 
   object.getMutableForPainting().setPreviousVisualRect(context.newVisualRect);
   objectPaintInvalidator.setPreviousLocationInBacking(context.newLocation);
+  object.getMutableForPainting().setPreviousPaintOffset(context.newPaintOffset);
 }
 
 void PaintInvalidator::invalidatePaintIfNeeded(
@@ -367,18 +370,6 @@ void PaintInvalidator::invalidatePaintIfNeeded(
   IntRect visibleRect =
       frameView.rootFrameToContents(frameView.computeVisibleArea());
   layoutView->sendMediaPositionChangeNotifications(visibleRect);
-}
-
-static bool hasPercentageTransform(const ComputedStyle& style) {
-  if (TransformOperation* translate = style.translate()) {
-    if (translate->dependsOnBoxSize())
-      return true;
-  }
-  return style.transform().dependsOnBoxSize() ||
-         (style.transformOriginX() != Length(50, Percent) &&
-          style.transformOriginX().isPercentOrCalc()) ||
-         (style.transformOriginY() != Length(50, Percent) &&
-          style.transformOriginY().isPercentOrCalc());
 }
 
 void PaintInvalidator::invalidatePaintIfNeeded(
@@ -430,16 +421,12 @@ void PaintInvalidator::invalidatePaintIfNeeded(
       break;
   }
 
-  if (context.oldLocation != context.newLocation)
+  if (context.oldLocation != context.newLocation ||
+      (RuntimeEnabledFeatures::slimmingPaintV2Enabled() &&
+       context.oldPaintOffset != context.newPaintOffset)) {
     context.forcedSubtreeInvalidationFlags |=
         PaintInvalidatorContext::ForcedSubtreeInvalidationChecking;
-
-  // TODO(crbug.com/533277): This is a workaround for the bug. Remove when we
-  // detect paint offset change.
-  if (reason != PaintInvalidationNone &&
-      hasPercentageTransform(object.styleRef()))
-    context.forcedSubtreeInvalidationFlags |=
-        PaintInvalidatorContext::ForcedSubtreeInvalidationChecking;
+  }
 
   // TODO(crbug.com/490725): This is a workaround for the bug, to force
   // descendant to update visual rects on clipping change.
@@ -451,8 +438,6 @@ void PaintInvalidator::invalidatePaintIfNeeded(
       !toLayoutBox(object).usesCompositedScrolling())
     context.forcedSubtreeInvalidationFlags |=
         PaintInvalidatorContext::ForcedSubtreeInvalidationRectUpdate;
-
-  object.getMutableForPainting().clearPaintInvalidationFlags();
 }
 
 void PaintInvalidator::processPendingDelayedPaintInvalidations() {

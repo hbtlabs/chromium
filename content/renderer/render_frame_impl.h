@@ -380,6 +380,8 @@ class CONTENT_EXPORT RenderFrameImpl
   // NULL.
   MediaStreamDispatcher* GetMediaStreamDispatcher();
 
+  void ScriptedPrint(bool user_initiated);
+
 #if defined(USE_EXTERNAL_POPUP_MENU)
   void DidHideExternalPopupMenu();
 #endif
@@ -827,6 +829,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void OnReload(bool bypass_cache);
   void OnReloadLoFiImages();
   void OnTextSurroundingSelectionRequest(uint32_t max_length);
+  void OnFocusedFormFieldDataRequest(int request_id);
   void OnSetAccessibilityMode(AccessibilityMode new_mode);
   void OnSnapshotAccessibilityTree(int callback_id);
   void OnUpdateOpener(int opener_routing_id);
@@ -835,7 +838,6 @@ class CONTENT_EXPORT RenderFrameImpl
       const FrameOwnerProperties& frame_owner_properties);
   void OnAdvanceFocus(blink::WebFocusType type, int32_t source_routing_id);
   void OnSetFocusedFrame();
-  void OnClearFocusedFrame();
   void OnTextTrackSettingsChanged(
       const FrameMsg_TextTrackSettings_Params& params);
   void OnPostMessageEvent(const FrameMsg_PostMessage_Params& params);
@@ -1037,6 +1039,10 @@ class CONTENT_EXPORT RenderFrameImpl
 
   media::CdmFactory* GetCdmFactory();
   media::DecoderFactory* GetDecoderFactory();
+
+#if defined(ENABLE_PLUGINS)
+  void HandlePepperImeCommit(const base::string16& text);
+#endif  // ENABLE_PLUGINS
 
   void RegisterMojoInterfaces();
 

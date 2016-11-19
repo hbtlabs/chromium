@@ -702,12 +702,10 @@ TEST_P(CompositedLayerMappingTest, InterestRectOfIframeInScrolledDiv) {
   setBodyInnerHTML(
       "<style>body { margin: 0; }</style>"
       "<div style='width: 200; height: 8000px'></div>"
-      "<iframe id=frame src='http://test.com' width='500' height='500' "
+      "<iframe src='http://test.com' width='500' height='500' "
       "frameBorder='0'>"
       "</iframe>");
-
-  Document& frameDocument = setupChildIframe(
-      "frame",
+  setChildFrameHTML(
       "<style>body { margin: 0; } #target { width: 200px; height: 200px; "
       "will-change: transform}</style><div id=target></div>");
 
@@ -716,7 +714,7 @@ TEST_P(CompositedLayerMappingTest, InterestRectOfIframeInScrolledDiv) {
       ScrollOffset(0.0, 8000.0), ProgrammaticScroll);
   document().view()->updateAllLifecyclePhases();
 
-  Element* target = frameDocument.getElementById("target");
+  Element* target = childDocument().getElementById("target");
   ASSERT_TRUE(target);
 
   EXPECT_RECT_EQ(
@@ -731,26 +729,25 @@ TEST_P(CompositedLayerMappingTest, InterestRectOfScrolledIframe) {
   setBodyInnerHTML(
       "<style>body { margin: 0; } ::-webkit-scrollbar { display: none; "
       "}</style>"
-      "<iframe id=frame src='http://test.com' width='500' height='500' "
+      "<iframe src='http://test.com' width='500' height='500' "
       "frameBorder='0'>"
       "</iframe>");
-
-  Document& frameDocument =
-      setupChildIframe("frame",
-                       "<style>body { margin: 0; } #target { width: 200px; "
-                       "height: 8000px;}</style><div id=target></div>");
+  setChildFrameHTML(
+      "<style>body { margin: 0; } #target { width: 200px; "
+      "height: 8000px;}</style><div id=target></div>");
 
   document().view()->updateAllLifecyclePhases();
 
   // Scroll 7500 pixels down to bring the scrollable area to the bottom.
-  frameDocument.view()->layoutViewportScrollableArea()->setScrollOffset(
+  childDocument().view()->layoutViewportScrollableArea()->setScrollOffset(
       ScrollOffset(0.0, 7500.0), ProgrammaticScroll);
   document().view()->updateAllLifecyclePhases();
 
-  ASSERT_TRUE(frameDocument.view()->layoutViewItem().hasLayer());
+  ASSERT_TRUE(childDocument().view()->layoutViewItem().hasLayer());
   EXPECT_RECT_EQ(
       IntRect(0, 3500, 500, 4500),
-      recomputeInterestRect(frameDocument.view()
+      recomputeInterestRect(childDocument()
+                                .view()
                                 ->layoutViewItem()
                                 .enclosingLayer()
                                 ->graphicsLayerBackingForScrolling()));
@@ -764,28 +761,27 @@ TEST_P(CompositedLayerMappingTest, InterestRectOfIframeWithContentBoxOffset) {
   setBodyInnerHTML(
       "<style>body { margin: 0; } #frame { border: 10px solid black; } "
       "::-webkit-scrollbar { display: none; }</style>"
-      "<iframe id=frame src='http://test.com' width='500' height='500' "
+      "<iframe src='http://test.com' width='500' height='500' "
       "frameBorder='0'>"
       "</iframe>");
-
-  Document& frameDocument =
-      setupChildIframe("frame",
-                       "<style>body { margin: 0; } #target { width: 200px; "
-                       "height: 8000px;}</style> <div id=target></div>");
+  setChildFrameHTML(
+      "<style>body { margin: 0; } #target { width: 200px; "
+      "height: 8000px;}</style> <div id=target></div>");
 
   document().view()->updateAllLifecyclePhases();
 
   // Scroll 3000 pixels down to bring the scrollable area to somewhere in the
   // middle.
-  frameDocument.view()->layoutViewportScrollableArea()->setScrollOffset(
+  childDocument().view()->layoutViewportScrollableArea()->setScrollOffset(
       ScrollOffset(0.0, 3000.0), ProgrammaticScroll);
   document().view()->updateAllLifecyclePhases();
 
-  ASSERT_TRUE(frameDocument.view()->layoutViewItem().hasLayer());
+  ASSERT_TRUE(childDocument().view()->layoutViewItem().hasLayer());
   // The width is 485 pixels due to the size of the scrollbar.
   EXPECT_RECT_EQ(
       IntRect(0, 0, 500, 7500),
-      recomputeInterestRect(frameDocument.view()
+      recomputeInterestRect(childDocument()
+                                .view()
                                 ->layoutViewItem()
                                 .enclosingLayer()
                                 ->graphicsLayerBackingForScrolling()));
@@ -834,6 +830,86 @@ TEST_P(CompositedLayerMappingTest,
           GraphicsLayerPaintCompositedScroll | GraphicsLayerPaintForeground),
       mapping->scrollingContentsLayer()->paintingPhase());
   EXPECT_FALSE(mapping->foregroundLayer());
+}
+
+TEST_P(CompositedLayerMappingTest,
+       DecorationOutlineLayerOnlyCreatedInCompositedScrolling) {
+  setBodyInnerHTML(
+      "<style>"
+      "#target { overflow: scroll; height: 200px; width: 200px; will-change: "
+      "transform; background: white local content-box; "
+      "outline: 1px solid blue; outline-offset: -2px;}"
+      "#scrolled { height: 300px; }"
+      "</style>"
+      "<div id=\"parent\">"
+      "  <div id=\"target\"><div id=\"scrolled\"></div></div>"
+      "</div>");
+  document().view()->updateAllLifecyclePhases();
+
+  Element* element = document().getElementById("target");
+  PaintLayer* paintLayer =
+      toLayoutBoxModelObject(element->layoutObject())->layer();
+  ASSERT_TRUE(paintLayer);
+
+  // Decoration outline layer is created when composited scrolling.
+  EXPECT_TRUE(paintLayer->hasCompositedLayerMapping());
+  EXPECT_TRUE(paintLayer->needsCompositedScrolling());
+
+  CompositedLayerMapping* mapping = paintLayer->compositedLayerMapping();
+  EXPECT_TRUE(mapping->decorationOutlineLayer());
+
+  // No decoration outline layer is created when not composited scrolling.
+  element->setAttribute(HTMLNames::styleAttr, "overflow: visible;");
+  document().view()->updateAllLifecyclePhases();
+  paintLayer = toLayoutBoxModelObject(element->layoutObject())->layer();
+  ASSERT_TRUE(paintLayer);
+
+  mapping = paintLayer->compositedLayerMapping();
+  EXPECT_FALSE(paintLayer->needsCompositedScrolling());
+  EXPECT_FALSE(mapping->decorationOutlineLayer());
+}
+
+TEST_P(CompositedLayerMappingTest,
+       DecorationOutlineLayerCreatedAndDestroyedInCompositedScrolling) {
+  setBodyInnerHTML(
+      "<style>"
+      "#scroller { overflow: scroll; height: 200px; width: 200px; background: "
+      "white local content-box; outline: 1px solid blue;}"
+      "#scrolled { height: 300px; }"
+      "</style>"
+      "<div id=\"parent\">"
+      "  <div id=\"scroller\"><div id=\"scrolled\"></div></div>"
+      "</div>");
+  document().view()->updateAllLifecyclePhases();
+
+  Element* scroller = document().getElementById("scroller");
+  PaintLayer* paintLayer =
+      toLayoutBoxModelObject(scroller->layoutObject())->layer();
+  ASSERT_TRUE(paintLayer);
+
+  CompositedLayerMapping* mapping = paintLayer->compositedLayerMapping();
+  EXPECT_FALSE(mapping->decorationOutlineLayer());
+
+  // The decoration outline layer is created when composited scrolling
+  // with an outline drawn over the composited scrolling region.
+  scroller->setAttribute(HTMLNames::styleAttr, "outline-offset: -2px;");
+  document().view()->updateAllLifecyclePhases();
+  paintLayer = toLayoutBoxModelObject(scroller->layoutObject())->layer();
+  ASSERT_TRUE(paintLayer);
+
+  mapping = paintLayer->compositedLayerMapping();
+  EXPECT_TRUE(paintLayer->needsCompositedScrolling());
+  EXPECT_TRUE(mapping->decorationOutlineLayer());
+
+  // The decoration outline layer is destroyed when the scrolling region
+  // will not be covered up by the outline.
+  scroller->removeAttribute(HTMLNames::styleAttr);
+  document().view()->updateAllLifecyclePhases();
+  paintLayer = toLayoutBoxModelObject(scroller->layoutObject())->layer();
+  ASSERT_TRUE(paintLayer);
+
+  mapping = paintLayer->compositedLayerMapping();
+  EXPECT_FALSE(mapping->decorationOutlineLayer());
 }
 
 TEST_P(CompositedLayerMappingTest,

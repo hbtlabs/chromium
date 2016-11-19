@@ -10,6 +10,7 @@
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/cpp/service_test.h"
+#include "services/ui/public/interfaces/constants.mojom.h"
 #include "services/ui/public/interfaces/ime.mojom.h"
 #include "ui/events/event.h"
 
@@ -44,15 +45,15 @@ class TestTextInputClient : public ui::mojom::TextInputClient {
 
 class IMEAppTest : public service_manager::test::ServiceTest {
  public:
-  IMEAppTest() : ServiceTest("exe:mus_ime_unittests") {}
+  IMEAppTest() : ServiceTest("mus_ime_unittests") {}
   ~IMEAppTest() override {}
 
   // service_manager::test::ServiceTest:
   void SetUp() override {
     ServiceTest::SetUp();
     // test_ime_driver will register itself as the current IMEDriver.
-    connector()->Connect("service:test_ime_driver");
-    connector()->ConnectToInterface("service:ui", &ime_server_);
+    connector()->Connect("test_ime_driver");
+    connector()->ConnectToInterface(ui::mojom::kServiceName, &ime_server_);
   }
 
   bool ProcessKeyEvent(ui::mojom::InputMethodPtr* input_method,

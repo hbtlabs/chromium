@@ -8,9 +8,11 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/printing/printer_pref_manager_factory.h"
@@ -78,11 +80,12 @@ CupsPrintersHandler::CupsPrintersHandler(content::WebUI* webui)
     : printer_discoverer_(nullptr),
       profile_(Profile::FromWebUI(webui)),
       weak_factory_(this) {
-  base::FilePath ppd_cache_path;
-  CHECK(
-      base::PathService::Get(chrome::DIR_CHROMEOS_PPD_CACHE, &ppd_cache_path));
+  base::FilePath ppd_cache_path =
+      profile_->GetPath().Append(FILE_PATH_LITERAL("PPDCache"));
   ppd_provider_ = chromeos::printing::PpdProvider::Create(
       google_apis::GetAPIKey(), g_browser_process->system_request_context(),
+      content::BrowserThread::GetTaskRunnerForThread(
+          content::BrowserThread::FILE),
       chromeos::printing::PpdCache::Create(ppd_cache_path));
 }
 
@@ -268,9 +271,20 @@ void CupsPrintersHandler::HandleGetCupsPrinterModels(
   CHECK_EQ(2U, args->GetSize());
   CHECK(args->GetString(0, &js_callback));
   CHECK(args->GetString(1, &manufacturer));
-  ppd_provider_->QueryAvailable(
-      base::Bind(&CupsPrintersHandler::QueryAvailableModelsDone,
-                 weak_factory_.GetWeakPtr(), js_callback, manufacturer));
+  // Special case the "asked with no manufacturer case" since the UI sometimes
+  // triggers this and it should yield a trivial (empty) result
+  if (manufacturer.empty()) {
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::Bind(&CupsPrintersHandler::QueryAvailableModelsDone,
+                   weak_factory_.GetWeakPtr(), js_callback, manufacturer,
+                   chromeos::printing::PpdProvider::SUCCESS,
+                   chromeos::printing::PpdProvider::AvailablePrintersMap()));
+  } else {
+    ppd_provider_->QueryAvailable(
+        base::Bind(&CupsPrintersHandler::QueryAvailableModelsDone,
+                   weak_factory_.GetWeakPtr(), js_callback, manufacturer));
+  }
 }
 
 void CupsPrintersHandler::HandleSelectPPDFile(const base::ListValue* args) {

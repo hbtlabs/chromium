@@ -94,10 +94,12 @@ void ReadingListModelBridge::ReadingListModelCompletedBatchUpdates(
 
 void ReadingListModelBridge::ReadingListWillMoveEntry(
     const ReadingListModel* model,
-    size_t index) {
-  if ([observer_
-          respondsToSelector:@selector(readingListModel:willMoveEntry:)]) {
-    [observer_ readingListModel:model willMoveEntry:index];
+    size_t index,
+    bool read) {
+  if ([observer_ respondsToSelector:@selector(readingListModel:
+                                                 willMoveEntry:
+                                                        isRead:)]) {
+    [observer_ readingListModel:model willMoveEntry:index isRead:read];
   }
 }
 
@@ -105,7 +107,7 @@ void ReadingListModelBridge::ReadingListWillUpdateUnreadEntry(
     const ReadingListModel* model,
     size_t index) {
   if ([observer_ respondsToSelector:@selector(readingListModel:
-                                        willRemoveUnreadEntryAtIndex:)]) {
+                                        willUpdateUnreadEntryAtIndex:)]) {
     [observer_ readingListModel:model willUpdateUnreadEntryAtIndex:index];
   }
 }
@@ -114,7 +116,7 @@ void ReadingListModelBridge::ReadingListWillUpdateReadEntry(
     const ReadingListModel* model,
     size_t index) {
   if ([observer_ respondsToSelector:@selector(readingListModel:
-                                        willRemoveReadEntryAtIndex:)]) {
+                                        willUpdateReadEntryAtIndex:)]) {
     [observer_ readingListModel:model willUpdateReadEntryAtIndex:index];
   }
 }

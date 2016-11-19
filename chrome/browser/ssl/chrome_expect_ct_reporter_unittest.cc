@@ -9,6 +9,7 @@
 #include "base/base64.h"
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -38,19 +39,24 @@ class TestCertificateReportSender : public net::ReportSender {
       : ReportSender(nullptr, net::ReportSender::DO_NOT_SEND_COOKIES) {}
   ~TestCertificateReportSender() override {}
 
-  void Send(const GURL& report_uri,
-            base::StringPiece content_type,
-            base::StringPiece serialized_report) override {
+  void Send(
+      const GURL& report_uri,
+      base::StringPiece content_type,
+      base::StringPiece serialized_report,
+      const base::Callback<void()>& success_callback,
+      const base::Callback<void(const GURL&, int)>& error_callback) override {
     latest_report_uri_ = report_uri;
     serialized_report.CopyToString(&latest_serialized_report_);
     content_type.CopyToString(&latest_content_type_);
   }
 
-  const GURL& latest_report_uri() { return latest_report_uri_; }
+  const GURL& latest_report_uri() const { return latest_report_uri_; }
 
-  const std::string& latest_content_type() { return latest_content_type_; }
+  const std::string& latest_content_type() const {
+    return latest_content_type_;
+  }
 
-  const std::string& latest_serialized_report() {
+  const std::string& latest_serialized_report() const {
     return latest_serialized_report_;
   }
 
@@ -333,6 +339,7 @@ class ChromeExpectCTReporterWaitTest : public ::testing::Test {
 
 // Test that no report is sent when the feature is not enabled.
 TEST(ChromeExpectCTReporterTest, FeatureDisabled) {
+  base::MessageLoop message_loop;
   base::HistogramTester histograms;
   histograms.ExpectTotalCount(kSendHistogramName, 0);
 
@@ -361,6 +368,7 @@ TEST(ChromeExpectCTReporterTest, FeatureDisabled) {
 
 // Test that no report is sent if the report URI is empty.
 TEST(ChromeExpectCTReporterTest, EmptyReportURI) {
+  base::MessageLoop message_loop;
   base::HistogramTester histograms;
   histograms.ExpectTotalCount(kSendHistogramName, 0);
 
@@ -414,6 +422,7 @@ TEST_F(ChromeExpectCTReporterWaitTest, SendReportFailure) {
 
 // Test that a sent report has the right format.
 TEST(ChromeExpectCTReporterTest, SendReport) {
+  base::MessageLoop message_loop;
   base::HistogramTester histograms;
   histograms.ExpectTotalCount(kFailureHistogramName, 0);
   histograms.ExpectTotalCount(kSendHistogramName, 0);

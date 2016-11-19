@@ -13,6 +13,7 @@
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/service_manager/public/cpp/identity.h"
 #include "services/service_manager/public/cpp/service_test.h"
+#include "services/service_manager/public/interfaces/constants.mojom.h"
 #include "services/service_manager/public/interfaces/service_manager.mojom.h"
 #include "services/service_manager/tests/lifecycle/lifecycle_unittest.mojom.h"
 #include "services/service_manager/tests/util.h"
@@ -21,13 +22,13 @@ namespace service_manager {
 
 namespace {
 
-const char kTestAppName[] = "service:lifecycle_unittest_app";
-const char kTestParentName[] = "service:lifecycle_unittest_parent";
-const char kTestExeName[] = "exe:lifecycle_unittest_exe";
-const char kTestPackageName[] = "service:lifecycle_unittest_package";
-const char kTestPackageAppNameA[] = "service:lifecycle_unittest_package_app_a";
-const char kTestPackageAppNameB[] = "service:lifecycle_unittest_package_app_b";
-const char kTestName[] = "service:lifecycle_unittest";
+const char kTestAppName[] = "lifecycle_unittest_app";
+const char kTestParentName[] = "lifecycle_unittest_parent";
+const char kTestExeName[] = "lifecycle_unittest_exe";
+const char kTestPackageName[] = "lifecycle_unittest_package";
+const char kTestPackageAppNameA[] = "lifecycle_unittest_package_app_a";
+const char kTestPackageAppNameB[] = "lifecycle_unittest_package_app_b";
+const char kTestName[] = "lifecycle_unittest";
 
 void QuitLoop(base::RunLoop* loop) {
   loop->Quit();
@@ -195,7 +196,7 @@ class LifecycleTest : public test::ServiceTest {
  private:
   std::unique_ptr<InstanceState> TrackInstances() {
     mojom::ServiceManagerPtr service_manager;
-    connector()->ConnectToInterface("service:service_manager",
+    connector()->ConnectToInterface(service_manager::mojom::kServiceName,
                                     &service_manager);
     mojom::ServiceManagerListenerPtr listener;
     base::RunLoop loop;

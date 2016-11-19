@@ -23,7 +23,6 @@
 #include "core/fileapi/Blob.h"
 #include "core/fileapi/File.h"
 #include "core/fileapi/FileList.h"
-#include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebBlobInfo.h"
@@ -370,7 +369,8 @@ void SerializedScriptValueWriter::writeTransferredOffscreenCanvas(
     uint32_t clientId,
     uint32_t sinkId,
     uint32_t localId,
-    uint64_t nonce) {
+    uint64_t nonceHigh,
+    uint64_t nonceLow) {
   append(OffscreenCanvasTransferTag);
   doWriteUint32(width);
   doWriteUint32(height);
@@ -378,7 +378,8 @@ void SerializedScriptValueWriter::writeTransferredOffscreenCanvas(
   doWriteUint32(clientId);
   doWriteUint32(sinkId);
   doWriteUint32(localId);
-  doWriteUint64(nonce);
+  doWriteUint64(nonceHigh);
+  doWriteUint64(nonceLow);
 }
 
 void SerializedScriptValueWriter::writeTransferredSharedArrayBuffer(
@@ -748,30 +749,10 @@ void ScriptValueSerializer::copyTransferables(
   }
 }
 
-static void recordValueCounts(int primitiveCount,
-                              int jsObjectCount,
-                              int domWrapperCount) {
-  struct ObjectCountHistograms {
-    CustomCountHistogram primitiveCount{
-        "Blink.ScriptValueSerializer.PrimitiveCount", 0, 100000, 50};
-    CustomCountHistogram jsObjectCount{
-        "Blink.ScriptValueSerializer.JSObjectCount", 0, 100000, 50};
-    CustomCountHistogram domWrapperCount{
-        "Blink.ScriptValueSerializer.DOMWrapperCount", 0, 100000, 50};
-  };
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(ObjectCountHistograms, histograms,
-                                  new ObjectCountHistograms);
-  histograms.primitiveCount.count(primitiveCount);
-  histograms.jsObjectCount.count(jsObjectCount);
-  histograms.domWrapperCount.count(domWrapperCount);
-}
-
 PassRefPtr<SerializedScriptValue> ScriptValueSerializer::serialize(
     v8::Local<v8::Value> value,
     Transferables* transferables,
     ExceptionState& exceptionState) {
-  m_primitiveCount = m_jsObjectCount = m_domWrapperCount = 0;
-
   DCHECK(!m_blobDataHandles);
 
   RefPtr<SerializedScriptValue> serializedValue =
@@ -789,7 +770,6 @@ PassRefPtr<SerializedScriptValue> ScriptValueSerializer::serialize(
 
   switch (m_status) {
     case Status::Success:
-      recordValueCounts(m_primitiveCount, m_jsObjectCount, m_domWrapperCount);
       transferData(transferables, exceptionState, serializedValue.get());
       break;
     case Status::InputError:
@@ -811,7 +791,7 @@ void ScriptValueSerializer::transferData(
     ExceptionState& exceptionState,
     SerializedScriptValue* serializedValue) {
   serializedValue->setData(m_writer.takeWireString());
-  DCHECK(serializedValue->data().impl()->hasOneRef());
+  DCHECK(serializedValue->dataHasOneRef());
   if (!transferables)
     return;
 
@@ -859,15 +839,9 @@ ScriptValueSerializer::StateBase* ScriptValueSerializer::doSerialize(
     m_writer.writeObjectReference(objectReference);
     return nullptr;
   }
-  if (value->IsObject()) {
-    if (V8DOMWrapper::isWrapper(isolate(), value))
-      m_domWrapperCount++;
-    else
-      m_jsObjectCount++;
+  if (value->IsObject())
     return doSerializeObject(value.As<v8::Object>(), next);
-  }
 
-  m_primitiveCount++;
   if (value->IsUndefined()) {
     m_writer.writeUndefined();
   } else if (value->IsNull()) {
@@ -1327,9 +1301,9 @@ ScriptValueSerializer::writeTransferredOffscreenCanvas(
                        next);
   m_writer.writeTransferredOffscreenCanvas(
       offscreenCanvas->width(), offscreenCanvas->height(),
-      offscreenCanvas->getAssociatedCanvasId(), offscreenCanvas->clientId(),
+      offscreenCanvas->placeholderCanvasId(), offscreenCanvas->clientId(),
       offscreenCanvas->sinkId(), offscreenCanvas->localId(),
-      offscreenCanvas->nonce());
+      offscreenCanvas->nonceHigh(), offscreenCanvas->nonceLow());
   return nullptr;
 }
 
@@ -1710,7 +1684,7 @@ bool SerializedScriptValueReader::readWithTag(
       if (!m_version)
         return false;
       uint32_t width, height, canvasId, clientId, sinkId, localId;
-      uint64_t nonce;
+      uint64_t nonceHigh, nonceLow;
       if (!doReadUint32(&width))
         return false;
       if (!doReadUint32(&height))
@@ -1723,10 +1697,11 @@ bool SerializedScriptValueReader::readWithTag(
         return false;
       if (!doReadUint32(&localId))
         return false;
-      if (!doReadUint64(&nonce))
+      if (!doReadUint64(&nonceHigh) || !doReadUint64(&nonceLow))
         return false;
       if (!deserializer.tryGetTransferredOffscreenCanvas(
-              width, height, canvasId, clientId, sinkId, localId, nonce, value))
+              width, height, canvasId, clientId, sinkId, localId, nonceHigh,
+              nonceLow, value))
         return false;
       break;
     }
@@ -2593,11 +2568,12 @@ bool ScriptValueDeserializer::tryGetTransferredOffscreenCanvas(
     uint32_t clientId,
     uint32_t sinkId,
     uint32_t localId,
-    uint64_t nonce,
+    uint64_t nonceHigh,
+    uint64_t nonceLow,
     v8::Local<v8::Value>* object) {
   OffscreenCanvas* offscreenCanvas = OffscreenCanvas::create(width, height);
-  offscreenCanvas->setAssociatedCanvasId(canvasId);
-  offscreenCanvas->setSurfaceId(clientId, sinkId, localId, nonce);
+  offscreenCanvas->setPlaceholderCanvasId(canvasId);
+  offscreenCanvas->setSurfaceId(clientId, sinkId, localId, nonceHigh, nonceLow);
   *object = toV8(offscreenCanvas, m_reader.getScriptState());
   if ((*object).IsEmpty())
     return false;

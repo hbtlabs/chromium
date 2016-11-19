@@ -9,11 +9,9 @@
   <link rel="stylesheet" href="chrome://resources/css/text_defaults_md.css">
   <link rel="stylesheet" href="bluetooth_internals.css">
   <link rel="import" href="chrome://resources/html/cr/ui.html">
-
-  <script src="chrome://resources/js/assert.js"></script>
-  <script src="chrome://resources/js/cr/event_target.js"></script>
-  <script src="chrome://resources/js/cr/ui/array_data_model.js"></script>
-  <script src="chrome://resources/js/util.js"></script>
+  <link rel="import" href="chrome://resources/html/cr/event_target.html">
+  <link rel="import" href="chrome://resources/html/cr/ui/array_data_model.html">
+  <link rel="import" href="chrome://resources/html/util.html">
 
   <script src="interfaces.js"></script>
   <script src="adapter_broker.js"></script>
@@ -37,6 +35,8 @@
         <th data-field="name_for_display">Name</th>
         <th data-field="address">Address</th>
         <th data-field="rssi.value">Latest RSSI</th>
+        <th data-field="services.length">Services</th>
+        <th data-field="is_gatt_connected">GATT Connection State</th>
       </tr>
     </thead>
     <tbody class="table-body">

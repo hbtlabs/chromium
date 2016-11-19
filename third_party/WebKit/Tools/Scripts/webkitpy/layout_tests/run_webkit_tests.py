@@ -34,13 +34,12 @@ import sys
 import traceback
 
 from webkitpy.common.host import Host
-from webkitpy.common.system.executive import Executive
 from webkitpy.layout_tests.controllers.manager import Manager
+from webkitpy.layout_tests.generate_results_dashboard import DashBoardGenerator
 from webkitpy.layout_tests.models import test_run_results
 from webkitpy.layout_tests.port.factory import configuration_options, platform_options
 from webkitpy.layout_tests.views import buildbot_results
 from webkitpy.layout_tests.views import printing
-from webkitpy.layout_tests.generate_results_dashboard import DashBoardGenerator
 
 _log = logging.getLogger(__name__)
 
@@ -265,11 +264,12 @@ def parse_args(args):
             optparse.make_option(
                 "--child-processes",
                 help="Number of drivers to run in parallel."),
+            # TODO(tkent): Remove --enable-wptserve.
             optparse.make_option(
                 "--enable-wptserve",
                 dest="enable_wptserve",
                 action="store_true",
-                default=False,
+                default=True,
                 help="Enable running web-platform-tests using WPTserve instead of Apache."),
             optparse.make_option(
                 "--disable-breakpad",

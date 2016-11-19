@@ -41,6 +41,10 @@
 #include "core/dom/DocumentTiming.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/MutationObserver.h"
+#include "core/dom/StyleReattachData.h"
+#include "core/dom/SynchronousMutationNotifier.h"
+#include "core/dom/SynchronousMutationObserver.h"
+#include "core/dom/Text.h"
 #include "core/dom/TextLinkColors.h"
 #include "core/dom/TreeScope.h"
 #include "core/dom/UserActionElementSet.h"
@@ -51,6 +55,7 @@
 #include "core/frame/HostsUsingFeatures.h"
 #include "core/html/parser/ParserSynchronizationPolicy.h"
 #include "core/page/PageVisibilityState.h"
+#include "core/style/ComputedStyle.h"
 #include "platform/Length.h"
 #include "platform/Timer.h"
 #include "platform/weborigin/KURL.h"
@@ -159,7 +164,6 @@ class StringOrDictionary;
 class StyleEngine;
 class StyleResolver;
 class StyleSheetList;
-class Text;
 class TextAutosizer;
 class Touch;
 class TouchList;
@@ -257,6 +261,7 @@ class CORE_EXPORT Document : public ContainerNode,
                              public TreeScope,
                              public SecurityContext,
                              public ExecutionContext,
+                             public SynchronousMutationNotifier,
                              public Supplementable<Document> {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(Document);
@@ -321,7 +326,8 @@ class CORE_EXPORT Document : public ContainerNode,
 
   Location* location() const;
 
-  Element* createElement(const AtomicString& name, ExceptionState&);
+  Element* createElement(const AtomicString& name,
+                         ExceptionState& = ASSERT_NO_EXCEPTION);
   DocumentFragment* createDocumentFragment();
   Text* createTextNode(const String& data);
   Comment* createComment(const String& data);
@@ -345,8 +351,8 @@ class CORE_EXPORT Document : public ContainerNode,
   Range* caretRangeFromPoint(int x, int y);
   Element* scrollingElement();
 
-  void addNonAttachedStyle(Element&, RefPtr<ComputedStyle>);
-  ComputedStyle* getNonAttachedStyle(Element&);
+  void addStyleReattachData(Element&, StyleReattachData&);
+  StyleReattachData getStyleReattachData(Element&);
 
   String readyState() const;
 
@@ -719,7 +725,9 @@ class CORE_EXPORT Document : public ContainerNode,
   void hoveredNodeDetached(Element&);
   void activeChainNodeDetached(Element&);
 
-  void updateHoverActiveState(const HitTestRequest&, Element*);
+  void updateHoverActiveState(const HitTestRequest&,
+                              Element*,
+                              bool hitScrollbar);
 
   // Updates for :target (CSS3 selector).
   void setCSSTarget(Element*);
@@ -925,7 +933,7 @@ class CORE_EXPORT Document : public ContainerNode,
   ScriptRunner* scriptRunner() { return m_scriptRunner.get(); }
 
   Element* currentScript() const {
-    return !m_currentScriptStack.isEmpty() ? m_currentScriptStack.last().get()
+    return !m_currentScriptStack.isEmpty() ? m_currentScriptStack.back().get()
                                            : nullptr;
   }
   void currentScriptForBinding(HTMLScriptElementOrSVGScriptElement&) const;
@@ -970,9 +978,6 @@ class CORE_EXPORT Document : public ContainerNode,
   // Returns the HTMLLinkElement currently in use for the Web Manifest.
   // Returns null if there is no such element.
   HTMLLinkElement* linkManifest() const;
-
-  void setUseSecureKeyboardEntryWhenActive(bool);
-  bool useSecureKeyboardEntryWhenActive() const;
 
   void updateFocusAppearanceSoon(SelectionBehaviorOnFocus);
   void cancelFocusAppearanceUpdate();
@@ -1132,7 +1137,7 @@ class CORE_EXPORT Document : public ContainerNode,
 
   Element* createElement(const AtomicString& localName,
                          const StringOrDictionary&,
-                         ExceptionState&);
+                         ExceptionState& = ASSERT_NO_EXCEPTION);
   Element* createElementNS(const AtomicString& namespaceURI,
                            const AtomicString& qualifiedName,
                            const StringOrDictionary&,
@@ -1222,6 +1227,7 @@ class CORE_EXPORT Document : public ContainerNode,
   bool hasViewportUnits() const { return m_hasViewportUnits; }
   void notifyResizeForViewportUnits();
 
+  void updateActiveStyle();
   void updateStyleInvalidationIfNeeded();
 
   DECLARE_VIRTUAL_TRACE();
@@ -1437,7 +1443,7 @@ class CORE_EXPORT Document : public ContainerNode,
   Member<DocumentParser> m_parser;
   Member<ContextFeatures> m_contextFeatures;
 
-  HeapHashMap<Member<Element>, RefPtr<ComputedStyle>> m_nonAttachedStyle;
+  HeapHashMap<Member<Element>, StyleReattachData> m_styleReattachDataMap;
 
   bool m_wellFormed;
 
@@ -1574,8 +1580,6 @@ class CORE_EXPORT Document : public ContainerNode,
   // the cache object's references will be traced by a stack walk.
   GC_PLUGIN_IGNORE("461878")
   NthIndexCache* m_nthIndexCache = nullptr;
-
-  bool m_useSecureKeyboardEntryWhenActive;
 
   DocumentClassFlags m_documentClasses;
 

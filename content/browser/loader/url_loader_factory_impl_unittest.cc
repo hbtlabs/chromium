@@ -110,6 +110,7 @@ class URLLoaderFactoryImplTest : public ::testing::TestWithParam<size_t> {
     rdh_.SetDelegate(nullptr);
     net::URLRequestFilter::GetInstance()->ClearHandlers();
 
+    resource_message_filter_->OnChannelClosing();
     rdh_.CancelRequestsForProcess(resource_message_filter_->child_id());
     base::RunLoop().RunUntilIdle();
     MojoAsyncResourceHandler::SetAllocationSizeForTesting(
@@ -386,6 +387,37 @@ TEST_P(URLLoaderFactoryImplTest, DownloadToFileFailure) {
 
   EXPECT_EQ(200, client.response_head().headers->response_code());
   EXPECT_EQ(net::ERR_ABORTED, client.completion_status().error_code);
+}
+
+// Removing the loader in the remote side will cancel the request.
+TEST_P(URLLoaderFactoryImplTest, CancelFromRenderer) {
+  constexpr int32_t kRoutingId = 81;
+  constexpr int32_t kRequestId = 28;
+  NavigationResourceThrottle::set_ui_checks_always_succeed_for_testing(true);
+  mojom::URLLoaderAssociatedPtr loader;
+  base::FilePath root;
+  PathService::Get(DIR_TEST_DATA, &root);
+  net::URLRequestFailedJob::AddUrlHandler();
+  ResourceRequest request;
+  TestURLLoaderClient client;
+  // Assume the file contents is small enough to be stored in the data pipe.
+  request.url = net::URLRequestFailedJob::GetMockHttpUrl(net::ERR_IO_PENDING);
+  request.method = "GET";
+  request.is_main_frame = true;
+  factory_->CreateLoaderAndStart(
+      mojo::GetProxy(&loader, factory_.associated_group()), kRoutingId,
+      kRequestId, request,
+      client.CreateRemoteAssociatedPtrInfo(factory_.associated_group()));
+
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(rdh_.GetURLRequest(GlobalRequestID(kChildId, kRequestId)));
+  ASSERT_FALSE(client.has_received_response());
+  ASSERT_FALSE(client.response_body().is_valid());
+  ASSERT_FALSE(client.has_received_completion());
+
+  loader = nullptr;
+  base::RunLoop().RunUntilIdle();
+  ASSERT_FALSE(rdh_.GetURLRequest(GlobalRequestID(kChildId, kRequestId)));
 }
 
 INSTANTIATE_TEST_CASE_P(URLLoaderFactoryImplTest,

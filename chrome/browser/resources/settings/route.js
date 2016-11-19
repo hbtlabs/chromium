@@ -93,6 +93,7 @@ cr.define('settings', function() {
 
   // Navigable dialogs. These are the only non-section children of root pages.
   // These are disfavored. If we add anymore, we should add explicit support.
+  r.IMPORT_DATA = r.BASIC.createChild('/importData');
   r.SIGN_OUT = r.BASIC.createChild('/signOut');
   r.CLEAR_BROWSER_DATA = r.ADVANCED.createChild('/clearBrowserData');
   r.RESET_DIALOG = r.ADVANCED.createChild('/resetProfileSettings');
@@ -165,6 +166,7 @@ cr.define('settings', function() {
       r.SITE_SETTINGS.createChild('unsandboxedPlugins');
   r.SITE_SETTINGS_USB_DEVICES = r.SITE_SETTINGS.createChild('usbDevices');
   r.SITE_SETTINGS_ZOOM_LEVELS = r.SITE_SETTINGS.createChild('zoomLevels');
+  r.SITE_SETTINGS_PDF_DOCUMENTS = r.SITE_SETTINGS.createChild('pdfDocuments');
 
 <if expr="chromeos">
   r.DATETIME = r.ADVANCED.createSection('/dateTime', 'dateTime');
@@ -184,7 +186,7 @@ cr.define('settings', function() {
   r.EDIT_DICTIONARY = r.LANGUAGES.createChild('/editDictionary');
 </if>
 
-  r.DOWNLOADS = r.ADVANCED.createSection('/downloadsDirectory', 'downloads');
+  r.DOWNLOADS = r.ADVANCED.createSection('/downloads', 'downloads');
 
   r.PRINTING = r.ADVANCED.createSection('/printing', 'printing');
   r.CLOUD_PRINTERS = r.PRINTING.createChild('/cloudPrinters');

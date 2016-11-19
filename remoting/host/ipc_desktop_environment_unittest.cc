@@ -40,9 +40,9 @@
 #include "remoting/protocol/test_event_matchers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_region.h"
-#include "third_party/webrtc/modules/desktop_capture/screen_capturer.h"
 
 using testing::_;
 using testing::AnyNumber;
@@ -61,7 +61,7 @@ using protocol::test::EqualsTouchEventTypeAndId;
 
 namespace {
 
-class MockScreenCapturerCallback : public webrtc::ScreenCapturer::Callback {
+class MockScreenCapturerCallback : public webrtc::DesktopCapturer::Callback {
  public:
   MockScreenCapturerCallback() {}
   virtual ~MockScreenCapturerCallback() {}
@@ -310,7 +310,8 @@ void IpcDesktopEnvironmentTest::SetUp() {
   desktop_environment_factory_.reset(new IpcDesktopEnvironmentFactory(
       task_runner_, task_runner_, io_task_runner_, &daemon_channel_));
   desktop_environment_ = desktop_environment_factory_->Create(
-      client_session_control_factory_.GetWeakPtr());
+      client_session_control_factory_.GetWeakPtr(),
+      DesktopEnvironmentOptions());
 
   screen_controls_ = desktop_environment_->CreateScreenControls();
 
@@ -482,7 +483,8 @@ TEST_F(IpcDesktopEnvironmentTest, Basic) {
 TEST_F(IpcDesktopEnvironmentTest, TouchEventsCapabilities) {
   // Create an environment with multi touch enabled.
   desktop_environment_ = desktop_environment_factory_->Create(
-      client_session_control_factory_.GetWeakPtr());
+      client_session_control_factory_.GetWeakPtr(),
+      DesktopEnvironmentOptions());
 
   std::unique_ptr<protocol::MockClipboardStub> clipboard_stub(
       new protocol::MockClipboardStub());

@@ -9,7 +9,9 @@
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_shortcut_manager.h"
 #include "chrome/browser/ui/webui/signin/signin_create_profile_handler.h"
+#include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/browser/ui/webui/signin/user_manager_screen_handler.h"
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/common/features.h"
@@ -60,6 +62,10 @@ content::WebUIDataSource* MDUserManagerUI::CreateUIDataSource(
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIMdUserManagerHost);
   source->AddLocalizedStrings(localized_strings);
+  source->AddBoolean("profileShortcutsEnabled",
+                     ProfileShortcutManager::IsFeatureEnabled());
+  source->AddBoolean("isForceSigninEnabled", signin::IsForceSigninEnabled());
+
   source->SetJsonPath("strings.js");
 
   source->AddResourcePath("control_bar.html", IDR_MD_CONTROL_BAR_HTML);

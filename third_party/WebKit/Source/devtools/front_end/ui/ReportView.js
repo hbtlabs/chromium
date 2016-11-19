@@ -4,7 +4,7 @@
 /**
  * @unrestricted
  */
-WebInspector.ReportView = class extends WebInspector.VBox {
+UI.ReportView = class extends UI.VBox {
   /**
    * @param {string} title
    */
@@ -31,25 +31,21 @@ WebInspector.ReportView = class extends WebInspector.VBox {
   }
 
   /**
-   * @param {?string} url
+   * @param {?Element} link
    */
-  setURL(url) {
-    if (this._url === url)
-      return;
+  setURL(link) {
     if (!this._urlElement)
       this._urlElement = this._headerElement.createChild('div', 'report-url link');
-
-    this._url = url;
     this._urlElement.removeChildren();
-    if (url)
-      this._urlElement.appendChild(WebInspector.linkifyURLAsNode(url));
+    if (link)
+      this._urlElement.appendChild(link);
   }
 
   /**
-   * @return {!WebInspector.Toolbar}
+   * @return {!UI.Toolbar}
    */
   createToolbar() {
-    var toolbar = new WebInspector.Toolbar('');
+    var toolbar = new UI.Toolbar('');
     this._headerElement.appendChild(toolbar.element);
     return toolbar;
   }
@@ -57,10 +53,10 @@ WebInspector.ReportView = class extends WebInspector.VBox {
   /**
    * @param {string} title
    * @param {string=} className
-   * @return {!WebInspector.ReportView.Section}
+   * @return {!UI.ReportView.Section}
    */
   appendSection(title, className) {
-    var section = new WebInspector.ReportView.Section(title, className);
+    var section = new UI.ReportView.Section(title, className);
     section.show(this._sectionList);
     return section;
   }
@@ -73,7 +69,7 @@ WebInspector.ReportView = class extends WebInspector.VBox {
 /**
  * @unrestricted
  */
-WebInspector.ReportView.Section = class extends WebInspector.VBox {
+UI.ReportView.Section = class extends UI.VBox {
   /**
    * @param {string} title
    * @param {string=} className
@@ -100,10 +96,10 @@ WebInspector.ReportView.Section = class extends WebInspector.VBox {
   }
 
   /**
-   * @return {!WebInspector.Toolbar}
+   * @return {!UI.Toolbar}
    */
   createToolbar() {
-    var toolbar = new WebInspector.Toolbar('');
+    var toolbar = new UI.Toolbar('');
     this._headerElement.appendChild(toolbar.element);
     return toolbar;
   }

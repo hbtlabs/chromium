@@ -26,10 +26,17 @@ static SelectionVisualRectMap& selectionVisualRectMap() {
 
 static void setPreviousSelectionVisualRect(const LayoutObject& object,
                                            const LayoutRect& rect) {
-  if (rect.isEmpty())
-    selectionVisualRectMap().remove(&object);
-  else
+  DCHECK(object.hasPreviousSelectionVisualRect() ==
+         selectionVisualRectMap().contains(&object));
+  if (rect.isEmpty()) {
+    if (object.hasPreviousSelectionVisualRect()) {
+      selectionVisualRectMap().remove(&object);
+      object.getMutableForPainting().setHasPreviousSelectionVisualRect(false);
+    }
+  } else {
     selectionVisualRectMap().set(&object, rect);
+    object.getMutableForPainting().setHasPreviousSelectionVisualRect(true);
+  }
 }
 
 typedef HashMap<const LayoutObject*, LayoutPoint> LocationInBackingMap;
@@ -39,8 +46,10 @@ static LocationInBackingMap& locationInBackingMap() {
 }
 
 void ObjectPaintInvalidator::objectWillBeDestroyed(const LayoutObject& object) {
-  // TODO(wangxianzhu): Use the same mechanism as for locatinInBackingMap().
-  selectionVisualRectMap().remove(&object);
+  DCHECK(object.hasPreviousSelectionVisualRect() ==
+         selectionVisualRectMap().contains(&object));
+  if (object.hasPreviousSelectionVisualRect())
+    selectionVisualRectMap().remove(&object);
 
   DCHECK(object.hasPreviousLocationInBacking() ==
          locationInBackingMap().contains(&object));
@@ -277,20 +286,14 @@ void ObjectPaintInvalidator::setBackingNeedsPaintInvalidationInRect(
     layer.compositedLayerMapping()->setScrollingContentsNeedDisplayInRect(
         rect, reason, m_object);
   } else if (paintInvalidationContainer.usesCompositedScrolling()) {
-    if (layer.compositedLayerMapping()
-            ->backgroundPaintsOntoScrollingContentsLayer()) {
-      // TODO(flackr): Get a correct rect in the context of the scrolling
-      // contents layer to update rather than updating the entire rect.
-      const LayoutRect& scrollingContentsRect =
-          toLayoutBox(m_object).layoutOverflowRect();
+    DCHECK(m_object == paintInvalidationContainer);
+    if (reason == PaintInvalidationBackgroundOnScrollingContentsLayer) {
       layer.compositedLayerMapping()->setScrollingContentsNeedDisplayInRect(
-          scrollingContentsRect, reason, m_object);
-      layer.setNeedsRepaint();
-      invalidateDisplayItemClient(
-          *layer.compositedLayerMapping()->scrollingContentsLayer(), reason);
+          rect, reason, m_object);
+    } else {
+      layer.compositedLayerMapping()->setNonScrollingContentsNeedDisplayInRect(
+          rect, reason, m_object);
     }
-    layer.compositedLayerMapping()->setNonScrollingContentsNeedDisplayInRect(
-        rect, reason, m_object);
   } else {
     // Otherwise invalidate everything.
     layer.compositedLayerMapping()->setContentsNeedDisplayInRect(rect, reason,
@@ -336,14 +339,16 @@ void ObjectPaintInvalidator::invalidatePaintUsingContainer(
 
   // This conditional handles situations where non-rooted (and hence
   // non-composited) frames are painted, such as SVG images.
-  if (!paintInvalidationContainer.isPaintInvalidationContainer())
+  if (!paintInvalidationContainer.isPaintInvalidationContainer()) {
     invalidatePaintRectangleOnWindow(paintInvalidationContainer,
                                      enclosingIntRect(dirtyRect));
+  }
 
   if (paintInvalidationContainer.view()->usesCompositing() &&
-      paintInvalidationContainer.isPaintInvalidationContainer())
+      paintInvalidationContainer.isPaintInvalidationContainer()) {
     setBackingNeedsPaintInvalidationInRect(paintInvalidationContainer,
                                            dirtyRect, invalidationReason);
+  }
 }
 
 LayoutRect ObjectPaintInvalidator::invalidatePaintRectangle(
@@ -423,6 +428,7 @@ void ObjectPaintInvalidatorWithContext::fullyInvalidatePaint(
                                 newVisualRect, reason);
 }
 
+DISABLE_CFI_PERF
 PaintInvalidationReason
 ObjectPaintInvalidatorWithContext::computePaintInvalidationReason() {
   // This is before any early return to ensure the background obscuration status
@@ -479,8 +485,9 @@ ObjectPaintInvalidatorWithContext::computePaintInvalidationReason() {
 
   // Incremental invalidation is only applicable to LayoutBoxes. Return
   // PaintInvalidationIncremental no matter if oldVisualRect and newVisualRect
-  // are equal
-  // because a LayoutBox may need paint invalidation if its border box changes.
+  // are equal because a LayoutBox may need paint invalidation if its border box
+  // changes. BoxPaintInvalidator may also override this reason with a full
+  // paint invalidation reason if needed.
   if (m_object.isBox())
     return PaintInvalidationIncremental;
 
@@ -490,6 +497,7 @@ ObjectPaintInvalidatorWithContext::computePaintInvalidationReason() {
   return PaintInvalidationNone;
 }
 
+DISABLE_CFI_PERF
 void ObjectPaintInvalidatorWithContext::invalidateSelectionIfNeeded(
     PaintInvalidationReason reason) {
   // Update selection rect when we are doing full invalidation (in case that the
@@ -500,7 +508,11 @@ void ObjectPaintInvalidatorWithContext::invalidateSelectionIfNeeded(
   if (!fullInvalidation && !m_object.shouldInvalidateSelection())
     return;
 
-  LayoutRect oldSelectionRect = selectionVisualRectMap().get(&m_object);
+  DCHECK(m_object.hasPreviousSelectionVisualRect() ==
+         selectionVisualRectMap().contains(&m_object));
+  LayoutRect oldSelectionRect;
+  if (m_object.hasPreviousSelectionVisualRect())
+    oldSelectionRect = selectionVisualRectMap().get(&m_object);
   LayoutRect newSelectionRect = m_object.localSelectionRect();
   if (!newSelectionRect.isEmpty()) {
     m_context.mapLocalRectToPaintInvalidationBacking(m_object,
@@ -519,6 +531,7 @@ void ObjectPaintInvalidatorWithContext::invalidateSelectionIfNeeded(
   }
 }
 
+DISABLE_CFI_PERF
 PaintInvalidationReason
 ObjectPaintInvalidatorWithContext::invalidatePaintIfNeededWithComputedReason(
     PaintInvalidationReason reason) {
@@ -529,19 +542,27 @@ ObjectPaintInvalidatorWithContext::invalidatePaintIfNeededWithComputedReason(
 
   switch (reason) {
     case PaintInvalidationNone:
-      // TODO(trchen): Currently we don't keep track of paint offset of layout
-      // objects.  There are corner cases that the display items need to be
-      // invalidated for paint offset mutation, but incurs no pixel difference
-      // (i.e. bounds stay the same) so no rect-based invalidation is issued.
-      // See crbug.com/508383 and crbug.com/515977.  This is a workaround to
-      // force display items to update paint offset. Exclude non-root SVG whose
-      // paint offset is always zero.
-      if ((!m_object.isSVG() || m_object.isSVGRoot()) &&
-          (m_context.forcedSubtreeInvalidationFlags &
-           PaintInvalidatorContext::ForcedSubtreeInvalidationChecking)) {
-        reason = PaintInvalidationLocationChange;
-        break;
+      // There are corner cases that the display items need to be invalidated
+      // for paint offset mutation, but incurs no pixel difference (i.e. bounds
+      // stay the same) so no rect-based invalidation is issued. See
+      // crbug.com/508383 and crbug.com/515977.
+      if (m_context.forcedSubtreeInvalidationFlags &
+          PaintInvalidatorContext::ForcedSubtreeInvalidationChecking) {
+        if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+          if (m_context.oldPaintOffset != m_context.newPaintOffset) {
+            reason = PaintInvalidationLocationChange;
+            break;
+          }
+        } else {
+          // For SPv1, we conservatively assume the object changed paint offset
+          // except for non-root SVG whose paint offset is always zero.
+          if (!m_object.isSVG() || m_object.isSVGRoot()) {
+            reason = PaintInvalidationLocationChange;
+            break;
+          }
+        }
       }
+
       if (m_object.isSVG() &&
           (m_context.forcedSubtreeInvalidationFlags &
            PaintInvalidatorContext::ForcedSubtreeSVGResourceChange)) {

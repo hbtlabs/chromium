@@ -14,6 +14,7 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "services/ui/public/interfaces/constants.mojom.h"
 #include "services/ui/public/interfaces/window_manager_window_tree_factory.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/drag_drop_client.h"
@@ -38,6 +39,7 @@
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
+#include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -117,6 +119,16 @@ bool IsInternalProperty(const void* key) {
   return key == client::kModalKey;
 }
 
+// Helper function to get the device_scale_factor() of the display::Display
+// with |display_id|.
+float ScaleFactorForDisplay(Window* window) {
+  // TODO(riajiang): Change to use display::GetDisplayWithDisplayId() after
+  // https://codereview.chromium.org/2361283002/ is landed.
+  return display::Screen::GetScreen()
+      ->GetDisplayNearestWindow(window)
+      .device_scale_factor();
+}
+
 }  // namespace
 
 WindowTreeClient::WindowTreeClient(
@@ -180,7 +192,7 @@ void WindowTreeClient::ConnectViaWindowTreeFactory(
   client_id_ = 101;
 
   ui::mojom::WindowTreeFactoryPtr factory;
-  connector->ConnectToInterface("service:ui", &factory);
+  connector->ConnectToInterface(ui::mojom::kServiceName, &factory);
   ui::mojom::WindowTreePtr window_tree;
   factory->CreateWindowTree(GetProxy(&window_tree),
                             binding_.CreateInterfacePtrAndBind());
@@ -192,7 +204,7 @@ void WindowTreeClient::ConnectAsWindowManager(
   DCHECK(window_manager_delegate_);
 
   ui::mojom::WindowManagerWindowTreeFactoryPtr factory;
-  connector->ConnectToInterface("service:ui", &factory);
+  connector->ConnectToInterface(ui::mojom::kServiceName, &factory);
   ui::mojom::WindowTreePtr window_tree;
   factory->CreateWindowTree(GetProxy(&window_tree),
                             binding_.CreateInterfacePtrAndBind());
@@ -204,13 +216,23 @@ void WindowTreeClient::SetClientArea(
     const gfx::Insets& client_area,
     const std::vector<gfx::Rect>& additional_client_areas) {
   DCHECK(tree_);
-  tree_->SetClientArea(WindowMus::Get(window)->server_id(), client_area,
-                       additional_client_areas);
+  float device_scale_factor = ScaleFactorForDisplay(window);
+  std::vector<gfx::Rect> additional_client_areas_in_pixel;
+  for (const gfx::Rect& area : additional_client_areas) {
+    additional_client_areas_in_pixel.push_back(
+        gfx::ConvertRectToPixel(device_scale_factor, area));
+  }
+  tree_->SetClientArea(
+      WindowMus::Get(window)->server_id(),
+      gfx::ConvertInsetsToPixel(device_scale_factor, client_area),
+      additional_client_areas_in_pixel);
 }
 
 void WindowTreeClient::SetHitTestMask(Window* window, const gfx::Rect& mask) {
   DCHECK(tree_);
-  tree_->SetHitTestMask(WindowMus::Get(window)->server_id(), mask);
+  tree_->SetHitTestMask(
+      WindowMus::Get(window)->server_id(),
+      gfx::ConvertRectToPixel(ScaleFactorForDisplay(window), mask));
 }
 
 void WindowTreeClient::ClearHitTestMask(Window* window) {
@@ -570,12 +592,13 @@ void WindowTreeClient::OnWindowMusCreated(WindowMus* window) {
   }
 }
 
-void WindowTreeClient::OnWindowMusDestroyed(WindowMus* window) {
+void WindowTreeClient::OnWindowMusDestroyed(WindowMus* window, Origin origin) {
   if (focus_synchronizer_->focused_window() == window)
     focus_synchronizer_->OnFocusedWindowDestroyed();
 
   // TODO: decide how to deal with windows not owned by this client.
-  if (WasCreatedByThisClient(window) || IsRoot(window)) {
+  if (origin == Origin::CLIENT &&
+      (WasCreatedByThisClient(window) || IsRoot(window))) {
     const uint32_t change_id =
         ScheduleInFlightChange(base::MakeUnique<CrashInFlightChange>(
             window, ChangeType::DELETE_WINDOW));
@@ -941,6 +964,7 @@ void WindowTreeClient::OnClientAreaChanged(
     const gfx::Insets& new_client_area,
     mojo::Array<gfx::Rect> new_additional_client_areas) {
   // TODO: client area.
+  // TODO(riajiang): Convert from pixel to DIP. (http://crbug.com/600815)
   /*
   Window* window = GetWindowByServerId(window_id);
   if (window) {
@@ -1007,9 +1031,9 @@ void WindowTreeClient::OnWindowReordered(Id window_id,
 }
 
 void WindowTreeClient::OnWindowDeleted(Id window_id) {
-  // TODO(sky): decide how best to deal with this. It seems we should let the
-  // delegate do the actualy deletion.
-  delete GetWindowByServerId(window_id)->GetWindow();
+  WindowMus* window = GetWindowByServerId(window_id);
+  if (window)
+    window->DestroyFromServer();
 }
 
 void WindowTreeClient::OnWindowVisibilityChanged(Id window_id, bool visible) {
@@ -1297,6 +1321,8 @@ void WindowTreeClient::WmDisplayModified(const display::Display& display) {
   window_manager_delegate_->OnWmDisplayModified(display);
 }
 
+// TODO(riajiang): Convert between pixel and DIP for window bounds properly.
+// (http://crbug.com/646942)
 void WindowTreeClient::WmSetBounds(uint32_t change_id,
                                    Id window_id,
                                    const gfx::Rect& transit_bounds) {
@@ -1463,8 +1489,11 @@ void WindowTreeClient::SetUnderlaySurfaceOffsetAndExtendedHitArea(
     const gfx::Vector2d& offset,
     const gfx::Insets& hit_area) {
   if (window_manager_internal_client_) {
+    // TODO(riajiang): Figure out if |offset| needs to be converted.
+    // (http://crbugs.com/646932)
     window_manager_internal_client_->SetUnderlaySurfaceOffsetAndExtendedHitArea(
-        WindowMus::Get(window)->server_id(), offset.x(), offset.y(), hit_area);
+        WindowMus::Get(window)->server_id(), offset.x(), offset.y(),
+        gfx::ConvertInsetsToDIP(ScaleFactorForDisplay(window), hit_area));
   }
 }
 

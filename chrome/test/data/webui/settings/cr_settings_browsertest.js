@@ -498,6 +498,31 @@ TEST_F('CrSettingsDefaultBrowserTest', 'DefaultBrowserPage', function() {
   settings_default_browser.registerTests();
   mocha.run();
 });
+
+/**
+ * Test fixture for
+ * chrome/browser/resources/settings/people_page/import_data_dialog.html
+ * @constructor
+ * @extends {CrSettingsBrowserTest}
+ */
+function CrSettingsImportDataDialogTest() {}
+
+CrSettingsImportDataDialogTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload: 'chrome://md-settings/people_page/import_data_dialog.html',
+
+  /** @override */
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    'test_browser_proxy.js',
+    'import_data_dialog_test.js',
+  ]),
+};
+
+TEST_F('CrSettingsImportDataDialogTest', 'All', function() {
+  mocha.run();
+});
 GEN('#endif');
 
 /**
@@ -543,6 +568,7 @@ CrSettingsSearchEnginesTest.prototype = {
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     'test_browser_proxy.js',
+    'test_extension_control_browser_proxy.js',
     'test_search_engines_browser_proxy.js',
     'search_engines_page_test.js',
   ]),
@@ -632,6 +658,8 @@ CrSettingsSiteSettingsTest.prototype = {
     'test_browser_proxy.js',
     'test_site_settings_prefs_browser_proxy.js',
     'zoom_levels_tests.js',
+    'usb_devices_tests.js',
+    'protocol_handlers_tests.js'
   ]),
 };
 
@@ -641,6 +669,8 @@ TEST_F('CrSettingsSiteSettingsTest', 'SiteSettings', function() {
   site_list.registerTests();
   site_settings_category.registerTests();
   zoom_levels.registerTests();
+  usb_devices.registerTests();
+  protocol_handlers.registerTests();
 
   mocha.run();
 });

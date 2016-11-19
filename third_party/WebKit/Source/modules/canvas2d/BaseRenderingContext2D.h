@@ -36,6 +36,8 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
  public:
   ~BaseRenderingContext2D() override;
 
+  void reset();
+
   void strokeStyle(StringOrCanvasGradientOrCanvasPattern&) const;
   void setStrokeStyle(const StringOrCanvasGradientOrCanvasPattern&);
 
@@ -294,7 +296,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   CanvasRenderingContext2DState& modifiableState();
   const CanvasRenderingContext2DState& state() const {
-    return *m_stateStack.last();
+    return *m_stateStack.back();
   }
 
   bool computeDirtyRect(const FloatRect& localBounds, SkIRect*);
@@ -311,6 +313,8 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
                 CanvasRenderingContext2DState::NoImage);
 
   void inflateStrokeRect(FloatRect&) const;
+
+  void unwindStateStack();
 
   enum DrawType {
     ClipFill,  // Fill that is already known to cover the current clip

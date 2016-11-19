@@ -115,8 +115,7 @@ Text* GranularityStrategyTest::appendTextNode(const String& data) {
 }
 
 void GranularityStrategyTest::setInnerHTML(const char* htmlContent) {
-  document().documentElement()->setInnerHTML(String::fromUTF8(htmlContent),
-                                             ASSERT_NO_EXCEPTION);
+  document().documentElement()->setInnerHTML(String::fromUTF8(htmlContent));
   document().view()->updateAllLifecyclePhases();
 }
 
@@ -150,7 +149,7 @@ void GranularityStrategyTest::parseText(const TextNodeVector& textNodes) {
     }
   }
   if (wordStarted) {
-    const auto& lastNode = textNodes.last();
+    const auto& lastNode = textNodes.back();
     int xEnd = visiblePositionToContentsPoint(
                    createVisiblePosition(
                        Position(lastNode, lastNode->wholeText().length())))

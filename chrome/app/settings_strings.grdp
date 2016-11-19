@@ -98,11 +98,6 @@
     Checking for updates
   </message>
 
-  <!-- Policy Indicators -->
-  <message name="IDS_SETTINGS_CONTROLLED_SETTING_EXTENSION" desc="Text displayed in the controlled settings indicator tooltip when a setting's value is enforced by an extension.">
-    This setting is controlled by extension <ph name="NAME">$1<ex>Settings Extension</ex></ph>
-  </message>
-
   <!-- Accessibility Page -->
   <message name="IDS_SETTINGS_ACCESSIBILITY" desc="Name of the settings page which displays accessibility preferences.">
     Accessibility
@@ -259,6 +254,9 @@
       Restart
     </message>
   </if>
+  <message name="IDS_SETTINGS_CONTROLLED_BY_EXTENSION" desc="Label text of an indicator that a setting's value is being controlled by an extension.">
+    <ph name="NAME">$1<ex>Adblocker plusplus</ex></ph> is controlling this setting
+  </message>
 
   <!-- Passwords and Autofill Page -->
   <message name="IDS_SETTINGS_OVERFLOW_MENU" desc="Alt text for the overflow button on a list item. Triggers a context menu when clicked.">
@@ -466,9 +464,6 @@
     <message name="IDS_SETTINGS_BLUETOOTH_START_CONNECTING">
       Connecting to "<ph name="DEVICE_NAME">$1<ex>Nexus S</ex></ph>".
     </message>
-    <message name="IDS_SETTINGS_BLUETOOTH_CONNECT_UNKNOWN_ERROR">
-      An unknown error occurred trying to connect to "<ph name="DEVICE_NAME">$1<ex>Nexus 4</ex></ph>".
-    </message>
     <message name="IDS_SETTINGS_BLUETOOTH_CONNECT_IN_PROGRESS">
       Connection to "<ph name="DEVICE_NAME">$1<ex>Nexus 4</ex></ph>" still in progress.
     </message>
@@ -510,12 +505,6 @@
     </message>
     <message name="IDS_SETTINGS_BLUETOOTH_CONNECT_WRITE_NOT_PERMITTED">
       Write operation is not permitted on: "<ph name="DEVICE_NAME">$1<ex>Nexus 4</ex></ph>".
-    </message>
-    <message name="IDS_SETTINGS_BLUETOOTH_DISCONNECT_FAILED">
-      Failed to disconnect from "<ph name="DEVICE_NAME">$1<ex>Nexus S</ex></ph>".
-    </message>
-    <message name="IDS_SETTINGS_BLUETOOTH_FORGET_FAILED">
-      Failed to disconnect and unpair from "<ph name="DEVICE_NAME">$1<ex>Nexus S</ex></ph>".
     </message>
   </if>
 
@@ -1031,125 +1020,149 @@
     <message name="IDS_SETTINGS_INTERNET_NETWORK_SECTION_WPAD" desc="Settings > Internet > Network details: Web Proxy Auto Discovery (WPAD) section label.">
       Web Proxy Auto Discovery URL:
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_SHARED" desc="Settings > Internet > Netwok details: Text to show when a network is shared.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SHARED" desc="Settings > Internet > Network details: Text to show when a network is shared.">
       This network is shared with other users.
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_ENFORCED" desc="Settings > Internet > Netwok details: Text to show when a network proxy is policy enforced.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_CONTROLLED_EXTENSION" desc="Settings > Internet > Network details: Text to show when a network proxy is controlled by an extension.">
+      The network proxy is controlled by an extension.
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_ENFORCED_POLICY" desc="Settings > Internet > Network details: Text to show when a network proxy is policy enforced.">
       This proxy is enforced by your administrator.
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_USE_SAME" desc="Settings > Internet > Netwok details: Label for checkbox indicating that a network proxy uses the same value for all protocols.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_ALLOW_SHARED" desc="Settings > Internet > Network details: Text next to the checkbox for allowing proxy settings for shared networks.">
+      Allow proxies for shared networks
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_ALLOW_SHARED_WARNING_TITLE" desc="Settings > Internet > Network details: Title for warning dialog when changing the allow shared proxies setting.">
+      Confirm change to allow proxies for shared networks
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_ALLOW_SHARED_WARNING_MESSAGE" desc="Settings > Internet > Network details: Warning message when changing the allow shared proxies setting.">
+      Changing this setting will affect all shared networks.
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_TYPE_DIRECT" desc="Radio used to tell it to just connect directly, not use a proxy.">
+      Direct Internet connection
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_TYPE_MANUAL" desc="Radio used to tell it to configure manually.">
+      Manual proxy configuration
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_TYPE_PAC" desc="Radio to select configuring from a URL.">
+      Automatic proxy configuration
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_TYPE_WPAD" desc="Label for the checkbox that controls whether to use an autoconfiguration URL.">
+      Web proxy autodiscovery
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_USE_SAME" desc="Settings > Internet > Network details: Label for checkbox indicating that a network proxy uses the same value for all protocols.">
       Use the same proxy for all protocols
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_EXCEPTION_LIST" desc="Settings > Internet > Netwok details: Label for list of network proxy exceptions.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_EXCEPTION_LIST" desc="Settings > Internet > Network details: Label for list of network proxy exceptions.">
       Do not use the proxy settings for these hosts and domains:
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_ADD_EXCEPTION" desc="Settings > Internet > Netwok details: Label for button to add a network proxy exception.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_ADD_EXCEPTION" desc="Settings > Internet > Network details: Label for button to add a network proxy exception.">
       Add exception
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_CONNECTION_TYPE" desc="Settings > Internet > Netwok details: Label for proxy connection type dropdown.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_CONNECTION_TYPE" desc="Settings > Internet > Network details: Label for proxy connection type dropdown.">
       Connection type
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_AUTO_CONFIG" desc="Settings > Internet > Netwok details: Label for proxy autoconfiguration URL input.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_AUTO_CONFIG" desc="Settings > Internet > Network details: Label for proxy autoconfiguration URL input.">
       Autoconfiguration URL:
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_PROXY" desc="Settings > Internet > Netwok details: Label for all proxies.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_PROXY" desc="Settings > Internet > Network details: Label for all proxies.">
       Proxy
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_HTTP_PROXY" desc="Settings > Internet > Netwok details: Label for HTTP proxy.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_HTTP_PROXY" desc="Settings > Internet > Network details: Label for HTTP proxy.">
       HTTP Proxy
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_SHTTP_PROXY" desc="Settings > Internet > Netwok details: Label for SHTTP proxy.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_SHTTP_PROXY" desc="Settings > Internet > Network details: Label for SHTTP proxy.">
       Secure HTTP Proxy
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_FTP_PROXY" desc="Settings > Internet > Netwok details: Label for FTP proxy.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_FTP_PROXY" desc="Settings > Internet > Network details: Label for FTP proxy.">
       FTP Proxy
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_SOCKS_HOST" desc="Settings > Internet > Netwok details: Label for SOCKS host proxy.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_SOCKS_HOST" desc="Settings > Internet > Network details: Label for SOCKS host proxy.">
       SOCKS Host
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_PORT" desc="Settings > Internet > Netwok details: Label for proxy port input.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_PORT" desc="Settings > Internet > Network details: Label for proxy port input.">
       Port
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_CHANGE_PIN" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for buton to change the PIN.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_CHANGE_PIN" desc="Settings > Internet > Network details > Lock/unlock SIM card: Label for buton to change the PIN.">
       Change PIN
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_CARD_MISSING" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Message when SIM card is missing.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_CARD_MISSING" desc="Settings > Internet > Network details > Lock/unlock SIM card: Message when SIM card is missing.">
       Missing SIM card
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_CARD_LOCKED" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Message when SIM card is locked.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_CARD_LOCKED" desc="Settings > Internet > Network details > Lock/unlock SIM card: Message when SIM card is locked.">
       SIM card is locked
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_LOCK_ENABLE" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for checkbox to enable SIM card locking.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_LOCK_ENABLE" desc="Settings > Internet > Network details > Lock/unlock SIM card: Label for checkbox to enable SIM card locking.">
       Enable SIM card locking (require PIN to use mobile data)
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_BUTTON_CHANGE" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for dialog button to change a PIN.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_BUTTON_CHANGE" desc="Settings > Internet > Network details > Lock/unlock SIM card: Label for dialog button to change a PIN.">
       Change
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_BUTTON_ENTER" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for dialog button to enter a PIN.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_BUTTON_ENTER" desc="Settings > Internet > Network details > Lock/unlock SIM card: Label for dialog button to enter a PIN.">
       Enter
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_BUTTON_UNLOCK" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for button to unlock the SIM card.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_BUTTON_UNLOCK" desc="Settings > Internet > Network details > Lock/unlock SIM card: Label for button to unlock the SIM card.">
       Unlock
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_PIN_TITLE" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Title for enter PIN dialog.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_PIN_TITLE" desc="Settings > Internet > Network details > Lock/unlock SIM card: Title for enter PIN dialog.">
       Enter SIM PIN
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_CHANGE_PIN_TITLE" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Title for change PIN dialog.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_CHANGE_PIN_TITLE" desc="Settings > Internet > Network details > Lock/unlock SIM card: Title for change PIN dialog.">
       Change SIM PIN
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_LOCKED_TITLE" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Title for SIM locked dialog.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_LOCKED_TITLE" desc="Settings > Internet > Network details > Lock/unlock SIM card: Title for SIM locked dialog.">
       SIM Card is locked
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_LOCKED_WARNING" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Warning for SIM locked dialog when PUK is required.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_LOCKED_WARNING" desc="Settings > Internet > Network details > Lock/unlock SIM card: Warning for SIM locked dialog when PUK is required.">
       Your SIM card will be permanently disabled if you cannot enter
       the correct PIN Unlock Key.
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_PIN" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for entering a PIN.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_PIN" desc="Settings > Internet > Network details > Lock/unlock SIM card: Label for entering a PIN.">
       Enter PIN
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_OLD_PIN" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for entering an old (current) PIN.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_OLD_PIN" desc="Settings > Internet > Network details > Lock/unlock SIM card: Label for entering an old (current) PIN.">
       Enter old PIN
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_NEW_PIN" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for entering a new PIN.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_NEW_PIN" desc="Settings > Internet > Network details > Lock/unlock SIM card: Label for entering a new PIN.">
       Enter new PIN
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_RE_ENTER_NEW_PIN" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for re-entering a new PIN.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_RE_ENTER_NEW_PIN" desc="Settings > Internet > Network details > Lock/unlock SIM card: Label for re-entering a new PIN.">
       Re-enter new PIN
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_PUK" desc="Settings > Internet > Netwok details > Lock/unlock SIM card: Label for entering a PUK.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SIM_ENTER_PUK" desc="Settings > Internet > Network details > Lock/unlock SIM card: Label for entering a PUK.">
       Enter PIN Unlock Key
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_PREFER" desc="Settings > Internet > Netwok details: Label for the checkbox determining whether a network is preferred over other networks.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PREFER" desc="Settings > Internet > Network details: Label for the checkbox determining whether a network is preferred over other networks.">
       Prefer this network
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_AUTO_CONNECT" desc="Settings > Internet > Netwok details: Label for the checkbox determining whether to automatically connect to the network.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_AUTO_CONNECT" desc="Settings > Internet > Network details: Label for the checkbox determining whether to automatically connect to the network.">
       Automatically connect to this network
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_IP_CONFIG_AUTO" desc="Settings > Internet > Netwok details: Label for the checkbox determining whether to automatically configure the network IP config.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_IP_CONFIG_AUTO" desc="Settings > Internet > Network details: Label for the checkbox determining whether to automatically configure the network IP config.">
       Configure IP address automatically
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_IP_ADDRESS" desc="Settings > Internet > Netwok details: Label for the network IP Address.">
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_IP_ADDRESS" desc="Settings > Internet > Network details: Label for the network IP Address.">
       IP Address
     </message>
-    <message name="IDS_SETTINGS_INTERNET_BUTTON_FORGET" desc="Settings > Internet > Netwok details: The label for the button to forget a network (remove from the list of known networks).">
+    <message name="IDS_SETTINGS_INTERNET_BUTTON_FORGET" desc="Settings > Internet > Network details: The label for the button to forget a network (remove from the list of known networks).">
       Forget
     </message>
-    <message name="IDS_SETTINGS_INTERNET_BUTTON_VIEW_ACCOUNT" desc="Settings > Internet > Netwok details: The label for the button to view the account details for a Cellular network.">
+    <message name="IDS_SETTINGS_INTERNET_BUTTON_VIEW_ACCOUNT" desc="Settings > Internet > Network details: The label for the button to view the account details for a Cellular network.">
       View Account
     </message>
-    <message name="IDS_SETTINGS_INTERNET_BUTTON_ACTIVATE" desc="Settings > Internet > Netwok details: The label for the button to activate a Cellular network.">
+    <message name="IDS_SETTINGS_INTERNET_BUTTON_ACTIVATE" desc="Settings > Internet > Network details: The label for the button to activate a Cellular network.">
       Activate
     </message>
-    <message name="IDS_SETTINGS_INTERNET_BUTTON_CONFIGURE" desc="Settings > Internet > Netwok details: The label for the button to configure a network (change its settings).">
+    <message name="IDS_SETTINGS_INTERNET_BUTTON_CONFIGURE" desc="Settings > Internet > Network details: The label for the button to configure a network (change its settings).">
       Configure
     </message>
-    <message name="IDS_SETTINGS_INTERNET_BUTTON_CONNECT" desc="Settings > Internet > Netwok details: The label for the button to connect to a network.">
+    <message name="IDS_SETTINGS_INTERNET_BUTTON_CONNECT" desc="Settings > Internet > Network details: The label for the button to connect to a network.">
       Connect
     </message>
-    <message name="IDS_SETTINGS_INTERNET_BUTTON_DISCONNECT" desc="Settings > Internet > Netwok details: The label for the button to disconnect from a network.">
+    <message name="IDS_SETTINGS_INTERNET_BUTTON_DISCONNECT" desc="Settings > Internet > Network details: The label for the button to disconnect from a network.">
       Disconnect
     </message>
-    <message name="IDS_SETTINGS_INTERNET_BUTTON_SAVE_APN" desc="Settings > Internet > Netwok details: The label for the button to save an APN configuration.">
+    <message name="IDS_SETTINGS_INTERNET_BUTTON_SAVE_APN" desc="Settings > Internet > Network details: The label for the button to save an APN configuration.">
       Save
     </message>
     <message name="IDS_SETTINGS_NETWORK_TYPE_ETHERNET" desc="The ethernet network type.">
@@ -1160,9 +1173,6 @@
     </message>
     <message name="IDS_SETTINGS_NETWORK_TYPE_WIMAX" desc="The wimax network type.">
       WiMAX
-    </message>
-    <message name="IDS_SETTINGS_NETWORK_TYPE_BLUETOOTH" desc="The bluetooth network type.">
-      Bluetooth
     </message>
     <message name="IDS_SETTINGS_NETWORK_TYPE_CELLULAR" desc="The cellular network type.">
       Cellular
@@ -1664,6 +1674,12 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_FLASH" desc="Label for the Flash site settings.">
     Flash
   </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_PDF_DOCUMENTS" desc="Label for the PDF documents site settings.">
+    PDF documents
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_PDF_DIFFERENT_APPLICATION" desc="Label for opening PDF documents in a different application.">
+    Open PDFs using a different application
+  </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_POPUPS" desc="Label for the popups site settings.">
     Popups
   </message>
@@ -1672,9 +1688,6 @@
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_USB_DEVICES" desc="Label for the USB devices in site settings.">
     USB devices
-  </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_FULLSCREEN" desc="Label for the fullscreen site settings.">
-    Fullscreen
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_ZOOM_LEVELS" desc="Label for the Zoom levels category in site settings.">
     Zoom levels
@@ -1685,7 +1698,7 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_ASK_FIRST" desc="Label for ask first option in site settings.">
     Ask first
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_ASK_FIRST_RECOMMENDED" desc="The 'ask first' label in site settings -- a recommended setting for some categories, such as when sites want to use Full Screen.">
+  <message name="IDS_SETTINGS_SITE_SETTINGS_ASK_FIRST_RECOMMENDED" desc="The 'ask first' label in site settings -- a recommended setting for some categories, such as when sites want to use Geolocation.">
     Ask first (recommended)
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_ASK_BEFORE_ACCESSING" desc="The 'ask before accessing' label in site settings.">
@@ -1905,15 +1918,121 @@
     No sites added
   </message>
 
+  <message name="IDS_SETTINGS_ADD_SITE_LINK" desc="Link text to show (to open the Add Site dialog)">
+    Add site exception
+  </message>
+  <message name="IDS_SETTINGS_ADD_SITE_HEADER" desc="Header for the Add Site dialog">
+    Add an exception for a site
+  </message>
+  <message name="IDS_SETTINGS_ADD_SITE" desc="The label for the input box for adding a site">
+    Site
+  </message>
+
+  <!-- Cookies Window -->
+  <message name="IDS_SETTINGS_COOKIES_COOKIE_NAME_LABEL" desc="The Cookie Name label">
+    Name
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_COOKIE_CONTENT_LABEL" desc="The Cookie Content label">
+    Content
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_COOKIE_DOMAIN_LABEL" desc="The Cookie Domain label">
+    Domain
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_COOKIE_PATH_LABEL" desc="The Cookie Path label">
+    Path
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_COOKIE_SENDFOR_LABEL" desc="The Cookie Send For label">
+    Send for
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_COOKIE_ACCESSIBLE_TO_SCRIPT_LABEL" desc="The Cookie Accessible to Script label">
+    Accessible to script
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_COOKIE_CREATED_LABEL" desc="The Cookie Created label">
+    Created
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_COOKIE_EXPIRES_LABEL" desc="The Cookie Expires label">
+    Expires
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_APPLICATION_CACHE" desc="The text shown when there is an Application Cache (name of an HTML standard) in the Cookies table">
+    Application cache
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_FLASH_LSO" desc="The text shown when Flash has Local Shared Objects (informally known as 'Flash cookies') stored">
+    Flash data
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_APPLICATION_CACHE_MANIFEST_LABEL" desc="The Manifest label (manifest is a URL specified by the application cache)">
+    Manifest
+  </message>
+
+  <message name="IDS_SETTINGS_COOKIES_SINGLE_COOKIE" desc="The text displayed when there is one cookie in the Cookies table">
+    1 cookie
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_PLURAL_COOKIES" desc="The text displayed when there are two or more cookies in the Cookies table">
+    <ph name="COOKIES">$1<ex>42</ex></ph> cookies
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_WEB_DATABASE_DESCRIPTION_LABEL" desc="The Database Description label">
+    Description
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_LOCAL_STORAGE_ORIGIN_LABEL" desc="The Local Storage Origin label">
+    Origin
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_LOCAL_STORAGE_SIZE_ON_DISK_LABEL" desc="The Local Storage Size on disk label">
+    Size on disk
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_LOCAL_STORAGE_LAST_MODIFIED_LABEL" desc="The Local Storage Last modified label">
+    Last modified
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_DATABASE_STORAGE" desc="The text shown when there is either Web Database or Indexed Database Storage (names of HTML standards) in the Cookies table">
+    Database storage
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_LOCAL_STORAGE" desc="Label for local storage (name of an HTML standard)">
+    Local storage
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_MEDIA_LICENSE" desc="The text shown when there is an Media License in the Cookies table">
+    Media license
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_FILE_SYSTEM" desc="The text shown when there is a file system (name of an HTML standard) in the Cookies table">
+    File system
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_FILE_SYSTEM_TEMPORARY_USAGE_LABEL" desc="Label for a temporary file system's disk usage.">
+    Temporary storage
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_FILE_SYSTEM_PERSISTENT_USAGE_LABEL" desc="Label for a persistent file system's disk usage.">
+    Persistent storage
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_LAST_ACCESSED_LABEL" desc="The last access date label">
+    Last accessed
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_CHANNEL_ID" desc="The text shown when there is a channel id in the Cookies table">
+    Channel ID
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_CHANNEL_ID_ORIGIN_LABEL" desc="The channel id label for the server domain">
+    Domain
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_CHANNEL_ID_TYPE_LABEL" desc="The channel id Type label">
+    Certificate Type
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_CHANNEL_ID_CREATED_LABEL" desc="The channel id Created label">
+    Created
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_CHANNEL_ID_EXPIRES_LABEL" desc="The channel id Expires label">
+    Expires
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_SERVICE_WORKER" desc="The text shown when there is data for Service Workers within an origin (name of a Web standard) in the Cookies table">
+    Service Workers
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_SERVICE_WORKER_SCOPES_LABEL" desc="Label for list of Service Worker (name of an HTML standard) patterns">
+    Scopes
+  </message>
+  <message name="IDS_SETTINGS_COOKIES_CACHE_STORAGE" desc="The text shown when there is Cache Storage (name of a Web standard) in the Cookies table">
+    Cache Storage
+  </message>
+
   <!-- Sync / People Page -->
   <message name="IDS_SETTINGS_PEOPLE" desc="Name of the settings page which manages Chrome's signed-in Google profile.">
     People
   </message>
   <message name="IDS_SETTINGS_PEOPLE_MANAGE_OTHER_PEOPLE" desc="Label for the button that opens the multi-profile user manager.">
     Manage other people
-  </message>
-  <message name="IDS_SETTINGS_PEOPLE_MANAGE_OTHER_PEOPLE_DESCRIPTION" desc="Description for the button that opens the multi-profile user manager.">
-    Enable guest browsing
   </message>
   <message name="IDS_SETTINGS_PEOPLE_MANAGE_SUPERVISED_USERS" desc="Label for the button that opens the supervised users dashboard.">
     Manage supervised users
@@ -2034,6 +2153,9 @@
     <message name="IDS_SETTINGS_EDIT_PERSON" desc="Title of the edit person subpage. This is a subpage to edit the name and icon of a Chrome Profile.">
       Edit person
     </message>
+    <message name="IDS_SETTINGS_PROFILE_SHORTCUT_TOGGLE_LABEL" desc="Label of the toggle that creates or removes a desktop shortcut for the profile.">
+      Show desktop shortcut
+    </message>
   </if>
 
   <message name="IDS_SETTINGS_SYNC_OVERVIEW" desc="The message that appears in the options dialog when sync has not been set up by the user.">
@@ -2149,9 +2271,11 @@
     Control how Google uses your browsing history to personalize Search, ads, and other Google services
   </message>
 
-  <!-- Import Settings Dialog -->
-  <!-- Android uses custom UI for Bookmark importing -->
-  <if expr="not is_android">
+  <if expr="not chromeos">
+    <!-- Import Settings Dialog -->
+    <message name="IDS_SETTINGS_IMPORT_SETTINGS_TITLE" desc="Dialog title for import dialog.">
+      Import bookmarks and settings
+    </message>
     <message name="IDS_SETTINGS_IMPORT_FROM_LABEL" desc="Label before profile select combo box">
       From:
     </message>
@@ -2178,16 +2302,15 @@
       Autofill form data
     </message>
 
-    <message name="IDS_SETTINGS_IMPORT_SUCCEEDED" desc="Status text to notify the user that the import succeeded">
-      Success!
-    </message>
     <message name="IDS_SETTINGS_IMPORT_CHOOSE_FILE" desc="Text for the Choose File on dialog">
       Choose File
     </message>
     <message name="IDS_SETTINGS_IMPORT_COMMIT" desc="Text for OK button on dialog">
       Import
     </message>
-
+    <message name="IDS_SETTINGS_IMPORT_SUCCESS" desc="Message displayed after settings and bookmarks have been imported">
+      Your bookmarks and settings are ready.
+    </message>
     <message name="IDS_SETTINGS_IMPORT_NO_PROFILE_FOUND" desc="Message displayed when we do not find any supported browser to import from.">
       No supported browser found
     </message>
@@ -2215,6 +2338,9 @@
     </message>
     <message name="IDS_SETTINGS_USERS_RESTRICT_SIGNIN_LABEL" desc="Label for the setting for restricting sign in to specific users.">
       Restrict sign-in to the following users:
+    </message>
+    <message name="IDS_SETTINGS_USERS_DEVICE_OWNER_LABEL" desc="Label for the device owner.">
+      (owner)
     </message>
     <message name="IDS_SETTINGS_USERS_ADD_USERS" desc="Label the dialog for adding users.">
       Add person
@@ -2272,9 +2398,6 @@
   </message>
   <message name="IDS_SETTINGS_MINIMUM_FONT_SIZE_LABEL" desc="Label for the minimum font size slider in settings.">
     Minimum font size
-  </message>
-  <message name="IDS_SETTINGS_ENCODING_LABEL" desc="Label for the text encoding in settings.">
-    Encoding
   </message>
   <message name="IDS_SETTINGS_TINY_FONT_SIZE" desc="The small end of the minimum font size slider in settings.">
     Tiny

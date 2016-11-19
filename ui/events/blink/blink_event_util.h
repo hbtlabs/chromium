@@ -10,10 +10,6 @@
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/events/gesture_detection/motion_event.h"
 
-namespace base {
-class TimeDelta;
-}
-
 namespace blink {
 class WebGestureEvent;
 class WebInputEvent;
@@ -30,6 +26,12 @@ enum class DomCode;
 struct GestureEventData;
 struct GestureEventDetails;
 class MotionEvent;
+
+bool CanCoalesce(const blink::WebInputEvent& event_to_coalesce,
+                 const blink::WebInputEvent& event);
+
+void Coalesce(const blink::WebInputEvent& event_to_coalesce,
+              blink::WebInputEvent* event);
 
 blink::WebTouchEvent CreateWebTouchEventFromMotionEvent(
     const MotionEvent& event,
@@ -62,13 +64,25 @@ std::unique_ptr<blink::WebInputEvent> TranslateAndScaleWebInputEvent(
     const gfx::Vector2d& delta,
     float scale);
 
-blink::WebPointerProperties::PointerType ToWebPointerType(
-    MotionEvent::ToolType tool_type);
+blink::WebInputEvent::Type ToWebMouseEventType(MotionEvent::Action action);
+
+void SetWebPointerPropertiesFromMotionEventData(
+    blink::WebPointerProperties& webPointerProperties,
+    int pointer_id,
+    float pressure,
+    float orientation_rad,
+    float tilt_rad,
+    int android_buttons_changed,
+    int tool_type);
 
 int WebEventModifiersToEventFlags(int modifiers);
 
 blink::WebInputEvent::Modifiers DomCodeToWebInputEventModifiers(
     ui::DomCode code);
+
+bool IsGestureScollOrPinch(blink::WebInputEvent::Type);
+
+bool IsContinuousGestureEvent(blink::WebInputEvent::Type);
 
 }  // namespace ui
 

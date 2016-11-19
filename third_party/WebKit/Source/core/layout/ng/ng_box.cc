@@ -5,28 +5,33 @@
 #include "core/layout/ng/ng_box.h"
 
 #include "core/layout/LayoutBlockFlow.h"
+#include "core/layout/api/LineLayoutAPIShim.h"
 #include "core/layout/line/InlineIterator.h"
 #include "core/layout/ng/layout_ng_block_flow.h"
 #include "core/layout/ng/ng_block_layout_algorithm.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
 #include "core/layout/ng/ng_constraint_space.h"
-#include "platform/text/TextDirection.h"
 #include "core/layout/ng/ng_inline_layout_algorithm.h"
 #include "core/layout/ng/ng_fragment.h"
 #include "core/layout/ng/ng_fragment_builder.h"
+#include "core/layout/ng/ng_layout_coordinator.h"
 #include "core/layout/ng/ng_length_utils.h"
 #include "core/layout/ng/ng_writing_mode.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "core/layout/api/LineLayoutAPIShim.h"
+#include "platform/text/TextDirection.h"
 
 namespace blink {
 
 NGBox::NGBox(LayoutObject* layout_object)
-    : layout_box_(toLayoutBox(layout_object)) {
+    : NGLayoutInputNode(NGLayoutInputNodeType::LegacyBlock),
+      layout_box_(toLayoutBox(layout_object)) {
   DCHECK(layout_box_);
 }
 
-NGBox::NGBox(ComputedStyle* style) : layout_box_(nullptr), style_(style) {
+NGBox::NGBox(ComputedStyle* style)
+    : NGLayoutInputNode(NGLayoutInputNodeType::LegacyBlock),
+      layout_box_(nullptr),
+      style_(style) {
   DCHECK(style_);
 }
 
@@ -40,26 +45,16 @@ bool NGBox::Layout(const NGConstraintSpace* constraint_space,
   // resulting size to the LayoutObject, or use the old layout code and
   // synthesize a fragment.
   if (CanUseNewLayout()) {
-    if (!layout_algorithm_) {
-      // Change the coordinate system of the constraint space.
-      NGConstraintSpace* child_constraint_space = new NGConstraintSpace(
-          FromPlatformWritingMode(Style()->getWritingMode()),
-          Style()->direction(), constraint_space->MutablePhysicalSpace());
+    NGPhysicalFragmentBase* fragment;
 
-      if (HasInlineChildren()) {
-        layout_algorithm_ = new NGInlineLayoutAlgorithm(
-            Style(),
-            new NGInlineBox(layout_box_->slowFirstChild(), MutableStyle()),
-            child_constraint_space);
-      } else {
-        layout_algorithm_ = new NGBlockLayoutAlgorithm(Style(), FirstChild(),
-                                                       child_constraint_space);
-      }
-    }
+    // Store a coordinator so Layout can preserve its existing semantic
+    // of returning false until completed.
+    if (!layout_coordinator_)
+      layout_coordinator_ = new NGLayoutCoordinator(this, constraint_space);
 
-    NGPhysicalFragmentBase* fragment = nullptr;
-    if (!layout_algorithm_->Layout(&fragment))
+    if (!layout_coordinator_->Tick(&fragment))
       return false;
+
     fragment_ = toNGPhysicalFragment(fragment);
 
     if (layout_box_) {
@@ -71,8 +66,8 @@ bool NGBox::Layout(const NGConstraintSpace* constraint_space,
   }
   *out = new NGFragment(constraint_space->WritingMode(), Style()->direction(),
                         fragment_.get());
-  // Reset algorithm for future use
-  layout_algorithm_ = nullptr;
+  // Reset coordinator for future use
+  layout_coordinator_ = nullptr;
   return true;
 }
 
@@ -93,7 +88,7 @@ bool NGBox::ComputeMinAndMaxContentSizes(MinAndMaxContentSizes* sizes) {
                          borderAndPadding;
     return true;
   }
-  DCHECK(!layout_algorithm_)
+  DCHECK(!layout_coordinator_)
       << "Can't interleave Layout and ComputeMinAndMaxContentSizes";
   if (!minmax_algorithm_) {
     NGConstraintSpaceBuilder builder(
@@ -109,8 +104,8 @@ bool NGBox::ComputeMinAndMaxContentSizes(MinAndMaxContentSizes* sizes) {
         FromPlatformWritingMode(Style()->getWritingMode()),
         Style()->direction(), builder.ToConstraintSpace());
 
-    minmax_algorithm_ =
-        new NGBlockLayoutAlgorithm(Style(), FirstChild(), constraint_space);
+    minmax_algorithm_ = new NGBlockLayoutAlgorithm(
+        Style(), toNGBox(FirstChild()), constraint_space);
   }
   // TODO(cbiesinger): For orthogonal children, we need to always synthesize.
   NGLayoutAlgorithm::MinAndMaxState state =
@@ -126,7 +121,7 @@ bool NGBox::ComputeMinAndMaxContentSizes(MinAndMaxContentSizes* sizes) {
 
   // Have to synthesize this value.
   NGPhysicalFragmentBase* physical_fragment;
-  while (!minmax_algorithm_->Layout(&physical_fragment))
+  while (!minmax_algorithm_->Layout(nullptr, &physical_fragment, nullptr))
     continue;
   NGFragment* fragment = new NGFragment(
       FromPlatformWritingMode(Style()->getWritingMode()), Style()->direction(),
@@ -144,9 +139,9 @@ bool NGBox::ComputeMinAndMaxContentSizes(MinAndMaxContentSizes* sizes) {
       new NGConstraintSpace(FromPlatformWritingMode(Style()->getWritingMode()),
                             Style()->direction(), builder.ToConstraintSpace());
 
-  minmax_algorithm_ =
-      new NGBlockLayoutAlgorithm(Style(), FirstChild(), constraint_space);
-  while (!minmax_algorithm_->Layout(&physical_fragment))
+  minmax_algorithm_ = new NGBlockLayoutAlgorithm(Style(), toNGBox(FirstChild()),
+                                                 constraint_space);
+  while (!minmax_algorithm_->Layout(nullptr, &physical_fragment, nullptr))
     continue;
 
   fragment = new NGFragment(FromPlatformWritingMode(Style()->getWritingMode()),
@@ -181,11 +176,16 @@ NGBox* NGBox::NextSibling() {
   return next_sibling_;
 }
 
-NGBox* NGBox::FirstChild() {
+NGLayoutInputNode* NGBox::FirstChild() {
   if (!first_child_) {
     LayoutObject* child = layout_box_ ? layout_box_->slowFirstChild() : nullptr;
-    NGBox* box = child ? new NGBox(child) : nullptr;
-    SetFirstChild(box);
+    if (child) {
+      if (child->isInline()) {
+        SetFirstChild(new NGInlineBox(child, MutableStyle()));
+      } else {
+        SetFirstChild(new NGBox(child));
+      }
+    }
   }
   return first_child_;
 }
@@ -194,16 +194,17 @@ void NGBox::SetNextSibling(NGBox* sibling) {
   next_sibling_ = sibling;
 }
 
-void NGBox::SetFirstChild(NGBox* child) {
+void NGBox::SetFirstChild(NGLayoutInputNode* child) {
   first_child_ = child;
 }
 
 DEFINE_TRACE(NGBox) {
-  visitor->trace(layout_algorithm_);
+  visitor->trace(layout_coordinator_);
   visitor->trace(minmax_algorithm_);
   visitor->trace(fragment_);
   visitor->trace(next_sibling_);
   visitor->trace(first_child_);
+  NGLayoutInputNode::trace(visitor);
 }
 
 void NGBox::PositionUpdated() {
@@ -267,7 +268,7 @@ void NGBox::CopyFragmentDataToLayoutBox(
   // TODO(layout-dev): Currently we are not actually performing layout on
   // inline children. For now just clear the needsLayout bit so that we can
   // run unittests.
-  if (HasInlineChildren() && RuntimeEnabledFeatures::layoutNGInlineEnabled()) {
+  if (HasInlineChildren()) {
     for (InlineWalker walker(
              LineLayoutBlockFlow(toLayoutBlockFlow(layout_box_)));
          !walker.atEnd(); walker.advance()) {
@@ -278,7 +279,7 @@ void NGBox::CopyFragmentDataToLayoutBox(
     // Ensure the position of the children are copied across to the
     // LayoutObject tree.
   } else {
-    for (NGBox* box = FirstChild(); box; box = box->NextSibling()) {
+    for (NGBox* box = toNGBox(FirstChild()); box; box = box->NextSibling()) {
       if (box->fragment_)
         box->PositionUpdated();
     }

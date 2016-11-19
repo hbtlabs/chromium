@@ -9,6 +9,7 @@
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
+#include "base/debug/crash_logging.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
@@ -178,9 +179,10 @@ bool InputEventFilter::OnMessageReceived(const IPC::Message& message) {
       return false;
   }
 
-  target_task_runner_->PostTask(
+  CHECK(target_task_runner_->PostTask(
       FROM_HERE, base::Bind(&InputEventFilter::ForwardToHandler, this, message,
-                            received_time));
+                            received_time)))
+      << "PostTask failed";
   return true;
 }
 
@@ -198,7 +200,9 @@ void InputEventFilter::ForwardToHandler(const IPC::Message& message,
         "input",
         "InputEventFilter::ForwardToHandler::ForwardToMainListener",
         TRACE_EVENT_SCOPE_THREAD);
-    main_task_runner_->PostTask(FROM_HERE, base::Bind(main_listener_, message));
+    CHECK(main_task_runner_->PostTask(FROM_HERE,
+                                      base::Bind(main_listener_, message)))
+        << "PostTask failed";
     return;
   }
 
@@ -259,9 +263,10 @@ void InputEventFilter::DidForwardToHandlerAndOverscroll(
 }
 
 void InputEventFilter::SendMessage(std::unique_ptr<IPC::Message> message) {
-  io_task_runner_->PostTask(
+  CHECK(io_task_runner_->PostTask(
       FROM_HERE, base::Bind(&InputEventFilter::SendMessageOnIOThread, this,
-                            base::Passed(&message)));
+                            base::Passed(&message))))
+      << "PostTask failed";
 }
 
 void InputEventFilter::SendMessageOnIOThread(
@@ -271,7 +276,13 @@ void InputEventFilter::SendMessageOnIOThread(
   if (!sender_)
     return;  // Filter was removed.
 
-  sender_->Send(message.release());
+  bool success = sender_->Send(message.release());
+  if (success)
+    return;
+  static size_t s_send_failure_count_ = 0;
+  s_send_failure_count_++;
+  base::debug::SetCrashKeyValue("input-event-filter-send-failure",
+                                base::IntToString(s_send_failure_count_));
 }
 
 void InputEventFilter::HandleEventOnMainThread(
@@ -303,9 +314,10 @@ void InputEventFilter::NeedsMainFrame(int routing_id) {
     return;
   }
 
-  target_task_runner_->PostTask(
+  CHECK(target_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&InputEventFilter::NeedsMainFrame, this, routing_id));
+      base::Bind(&InputEventFilter::NeedsMainFrame, this, routing_id)))
+      << "PostTask failed";
 }
 
 }  // namespace content

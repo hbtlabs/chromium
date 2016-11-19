@@ -26,7 +26,7 @@
 /**
  * @unrestricted
  */
-WebInspector.DatabaseQueryView = class extends WebInspector.VBox {
+Resources.DatabaseQueryView = class extends UI.VBox {
   constructor(database) {
     super();
 
@@ -41,7 +41,7 @@ WebInspector.DatabaseQueryView = class extends WebInspector.VBox {
     this._promptElement.addEventListener('keydown', this._promptKeyDown.bind(this), true);
     this.element.appendChild(this._promptElement);
 
-    this._prompt = new WebInspector.TextPrompt();
+    this._prompt = new UI.TextPrompt();
     this._prompt.initialize(this.completions.bind(this), ' ');
     this._proxyElement = this._prompt.attach(this._promptElement);
 
@@ -54,16 +54,19 @@ WebInspector.DatabaseQueryView = class extends WebInspector.VBox {
   }
 
   /**
-   * @param {!Element} proxyElement
-   * @param {!Range} wordRange
-   * @param {boolean} force
-   * @param {function(!Array.<string>, number=)} completionsReadyCallback
+   * @param {string} expression
+   * @param {string} prefix
+   * @param {boolean=} force
+   * @return {!Promise<!UI.SuggestBox.Suggestions>}
    */
-  completions(proxyElement, wordRange, force, completionsReadyCallback) {
-    var prefix = wordRange.toString().toLowerCase();
+  completions(expression, prefix, force) {
     if (!prefix)
-      return;
+      return Promise.resolve([]);
+    var fulfill;
+    var promise = new Promise(x => fulfill = x);
     var results = [];
+
+    prefix = prefix.toLowerCase();
 
     function accumulateMatches(textArray) {
       for (var i = 0; i < textArray.length; ++i) {
@@ -75,7 +78,6 @@ WebInspector.DatabaseQueryView = class extends WebInspector.VBox {
         results.push(textArray[i]);
       }
     }
-
     function tableNamesCallback(tableNames) {
       accumulateMatches(tableNames.map(function(name) {
         return name + ' ';
@@ -85,9 +87,10 @@ WebInspector.DatabaseQueryView = class extends WebInspector.VBox {
         'INSERT INTO ', 'VALUES ('
       ]);
 
-      completionsReadyCallback(results);
+      fulfill(results.map(completion => ({title: completion})));
     }
     this.database.getTableNames(tableNamesCallback);
+    return promise;
   }
 
   _selectStart(event) {
@@ -97,7 +100,7 @@ WebInspector.DatabaseQueryView = class extends WebInspector.VBox {
     this._prompt.clearAutocomplete();
 
     /**
-     * @this {WebInspector.DatabaseQueryView}
+     * @this {Resources.DatabaseQueryView}
      */
     function moveBackIfOutside() {
       delete this._selectionTimeout;
@@ -131,7 +134,7 @@ WebInspector.DatabaseQueryView = class extends WebInspector.VBox {
   }
 
   _queryFinished(query, columnNames, values) {
-    var dataGrid = WebInspector.SortableDataGrid.create(columnNames, values);
+    var dataGrid = UI.SortableDataGrid.create(columnNames, values);
     var trimmedQuery = query.trim();
 
     if (dataGrid) {
@@ -141,7 +144,7 @@ WebInspector.DatabaseQueryView = class extends WebInspector.VBox {
     }
 
     if (trimmedQuery.match(/^create /i) || trimmedQuery.match(/^drop table /i))
-      this.dispatchEventToListeners(WebInspector.DatabaseQueryView.Events.SchemaUpdated, this.database);
+      this.dispatchEventToListeners(Resources.DatabaseQueryView.Events.SchemaUpdated, this.database);
   }
 
   _queryError(query, errorMessage) {
@@ -150,7 +153,7 @@ WebInspector.DatabaseQueryView = class extends WebInspector.VBox {
 
   /**
    * @param {string} query
-   * @param {!WebInspector.Widget} view
+   * @param {!UI.Widget} view
    */
   _appendViewQueryResult(query, view) {
     var resultElement = this._appendQueryResult(query);
@@ -188,6 +191,6 @@ WebInspector.DatabaseQueryView = class extends WebInspector.VBox {
 };
 
 /** @enum {symbol} */
-WebInspector.DatabaseQueryView.Events = {
+Resources.DatabaseQueryView.Events = {
   SchemaUpdated: Symbol('SchemaUpdated')
 };

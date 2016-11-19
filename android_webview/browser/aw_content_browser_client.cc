@@ -36,6 +36,7 @@
 #include "components/cdm/browser/cdm_message_filter_android.h"
 #include "components/crash/content/browser/crash_micro_dump_manager_android.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
+#include "components/spellcheck/spellcheck_build_features.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_security_policy.h"
@@ -47,7 +48,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/service_names.h"
+#include "content/public/common/service_names.mojom.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/web_preferences.h"
 #include "device/geolocation/access_token_store.h"
@@ -59,7 +60,7 @@
 #include "ui/base/resource/resource_bundle_android.h"
 #include "ui/resources/grit/ui_resources.h"
 
-#if defined(ENABLE_SPELLCHECK)
+#if BUILDFLAG(ENABLE_SPELLCHECK)
 #include "components/spellcheck/browser/spellcheck_message_filter_platform.h"
 #include "components/spellcheck/common/spellcheck_switches.h"
 #endif
@@ -157,17 +158,18 @@ AwLocaleManager* g_locale_manager = NULL;
 
 }  // anonymous namespace
 
+// TODO(yirui): can use similar logic as in PrependToAcceptLanguagesIfNecessary
+// in chrome/browser/android/preferences/pref_service_bridge.cc
 // static
 std::string AwContentBrowserClient::GetAcceptLangsImpl() {
-  // Start with the current locale.
-  std::string langs = g_locale_manager->GetLocale();
+  // Start with the current locale(s) in BCP47 format.
+  std::string locales_string = g_locale_manager->GetLocaleList();
 
-  // If we're not en-US, add in en-US which will be
+  // If accept languages do not contain en-US, add in en-US which will be
   // used with a lower q-value.
-  if (base::ToLowerASCII(langs) != "en-us") {
-    langs += ",en-US";
-  }
-  return langs;
+  if (locales_string.find("en-US") == std::string::npos)
+    locales_string += ",en-US";
+  return locales_string;
 }
 
 // static
@@ -219,7 +221,7 @@ void AwContentBrowserClient::RenderProcessWillLaunch(
   host->AddFilter(new cdm::CdmMessageFilterAndroid());
   host->AddFilter(new AwPrintingMessageFilter(host->GetID()));
 
-#if defined(ENABLE_SPELLCHECK)
+#if BUILDFLAG(ENABLE_SPELLCHECK)
   host->AddFilter(new SpellCheckMessageFilterPlatform(host->GetID()));
 #endif
 }
@@ -528,7 +530,7 @@ AwContentBrowserClient::GetDevToolsManagerDelegate() {
 std::unique_ptr<base::Value>
 AwContentBrowserClient::GetServiceManifestOverlay(const std::string& name) {
   int id = -1;
-  if (name == content::kBrowserServiceName)
+  if (name == content::mojom::kBrowserServiceName)
     id = IDR_AW_BROWSER_MANIFEST_OVERLAY;
   if (id == -1)
     return nullptr;

@@ -5,7 +5,7 @@
 #ifndef SVGElementProxy_h
 #define SVGElementProxy_h
 
-#include "core/fetch/DocumentResource.h"
+#include "core/loader/resource/DocumentResource.h"
 #include "platform/heap/Handle.h"
 #include "wtf/text/AtomicString.h"
 #include "wtf/text/WTFString.h"
@@ -115,7 +115,7 @@ class SVGElementProxy : public GarbageCollectedFinalized<SVGElementProxy> {
 };
 
 // Collection of SVGElementProxys. This is hosted by elements that can be
-// subject to proxies (currently only SVGFilterElement), and is mainly a helper
+// subject to proxies (see SVGElement::elementProxySet), and is mainly a helper
 // for dealing with the many-to-one structure of SVGElementProxy.
 class SVGElementProxySet : public GarbageCollected<SVGElementProxySet> {
  public:

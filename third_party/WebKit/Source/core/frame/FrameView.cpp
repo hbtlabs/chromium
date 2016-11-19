@@ -38,6 +38,7 @@
 #include "core/dom/IntersectionObserverCallback.h"
 #include "core/dom/IntersectionObserverController.h"
 #include "core/dom/IntersectionObserverInit.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/RenderedPosition.h"
@@ -55,7 +56,7 @@
 #include "core/frame/VisualViewport.h"
 #include "core/html/HTMLFrameElement.h"
 #include "core/html/HTMLPlugInElement.h"
-#include "core/html/HTMLTextFormControlElement.h"
+#include "core/html/TextControlElement.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/input/EventHandler.h"
 #include "core/inspector/InspectorInstrumentation.h"
@@ -88,6 +89,7 @@
 #include "core/page/FocusController.h"
 #include "core/page/FrameTree.h"
 #include "core/page/Page.h"
+#include "core/page/scrolling/RootScrollerUtil.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/page/scrolling/TopDocumentRootScrollerController.h"
 #include "core/paint/FramePainter.h"
@@ -149,14 +151,18 @@ static const double resourcePriorityUpdateDelayAfterScroll = 0.250;
 
 static bool s_initialTrackAllPaintInvalidations = false;
 
-FrameView::FrameView(LocalFrame* frame)
+FrameView::FrameView(LocalFrame& frame)
     : m_frame(frame),
       m_displayMode(WebDisplayModeBrowser),
       m_canHaveScrollbars(true),
       m_hasPendingLayout(false),
       m_inSynchronousPostLayout(false),
-      m_postLayoutTasksTimer(this, &FrameView::postLayoutTimerFired),
-      m_updateWidgetsTimer(this, &FrameView::updateWidgetsTimerFired),
+      m_postLayoutTasksTimer(TaskRunnerHelper::get(TaskType::Internal, &frame),
+                             this,
+                             &FrameView::postLayoutTimerFired),
+      m_updateWidgetsTimer(TaskRunnerHelper::get(TaskType::Internal, &frame),
+                           this,
+                           &FrameView::updateWidgetsTimerFired),
       m_isTransparent(false),
       m_baseBackgroundColor(Color::white),
       m_mediaType(MediaTypeNames::screen),
@@ -182,6 +188,7 @@ FrameView::FrameView(LocalFrame* frame)
       m_hiddenForThrottling(false),
       m_subtreeThrottled(false),
       m_lifecycleUpdatesThrottled(false),
+      m_needsPaintPropertyUpdate(true),
       m_currentUpdateLifecyclePhasesTargetState(
           DocumentLifecycle::Uninitialized),
       m_scrollAnchor(this),
@@ -189,17 +196,16 @@ FrameView::FrameView(LocalFrame* frame)
       m_needsScrollbarsUpdate(false),
       m_suppressAdjustViewSize(false),
       m_allowsLayoutInvalidationAfterLayoutClean(true) {
-  ASSERT(m_frame);
   init();
 }
 
-FrameView* FrameView::create(LocalFrame* frame) {
+FrameView* FrameView::create(LocalFrame& frame) {
   FrameView* view = new FrameView(frame);
   view->show();
   return view;
 }
 
-FrameView* FrameView::create(LocalFrame* frame, const IntSize& initialSize) {
+FrameView* FrameView::create(LocalFrame& frame, const IntSize& initialSize) {
   FrameView* view = new FrameView(frame);
   view->Widget::setFrameRect(IntRect(view->location(), initialSize));
   view->setLayoutSizeInternal(initialSize);
@@ -328,9 +334,9 @@ void FrameView::dispose() {
   // from non-GC'd objects and RootFrameViewport will still have a pointer to
   // this class.
   if (m_viewportScrollableArea)
-    m_viewportScrollableArea->clearScrollAnimators();
+    m_viewportScrollableArea->clearScrollableArea();
 
-  clearScrollAnimators();
+  clearScrollableArea();
 
   // Destroy |m_autoSizeInfo| as early as possible, to avoid dereferencing
   // partially destroyed |this| via |m_autoSizeInfo->m_frameView|.
@@ -646,6 +652,12 @@ void FrameView::setContentsSize(const IntSize& size) {
 
   page->chromeClient().contentsSizeChanged(m_frame.get(), size);
   frame().loader().restoreScrollPositionAndViewState();
+
+  if (!RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
+    // The presence of overflow depends on the contents size. The scroll
+    // properties can change depending on whether overflow scrolling occurs.
+    setNeedsPaintPropertyUpdate();
+  }
 }
 
 void FrameView::adjustViewSize() {
@@ -974,7 +986,7 @@ void FrameView::prepareLayoutAnalyzer() {
     return;
   }
   if (!m_analyzer)
-    m_analyzer = wrapUnique(new LayoutAnalyzer());
+    m_analyzer = makeUnique<LayoutAnalyzer>();
   m_analyzer->reset();
 }
 
@@ -1468,8 +1480,12 @@ void FrameView::addBackgroundAttachmentFixedObject(LayoutObject* object) {
     scrollingCoordinator->frameViewHasBackgroundAttachmentFixedObjectsDidChange(
         this);
 
-  // TODO(pdr): When slimming paint v2 is enabled, invalidate the scroll paint
-  // property subtree for this so main thread scroll reasons are recomputed.
+  // Ensure main thread scrolling reasons are recomputed.
+  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+    setNeedsPaintPropertyUpdate();
+    // The object's scroll properties are not affected by its own background.
+    object->setAllAncestorsNeedPaintPropertyUpdate();
+  }
 }
 
 void FrameView::removeBackgroundAttachmentFixedObject(LayoutObject* object) {
@@ -1480,8 +1496,12 @@ void FrameView::removeBackgroundAttachmentFixedObject(LayoutObject* object) {
     scrollingCoordinator->frameViewHasBackgroundAttachmentFixedObjectsDidChange(
         this);
 
-  // TODO(pdr): When slimming paint v2 is enabled, invalidate the scroll paint
-  // property subtree for this so main thread scroll reasons are recomputed.
+  // Ensure main thread scrolling reasons are recomputed.
+  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+    setNeedsPaintPropertyUpdate();
+    // The object's scroll properties are not affected by its own background.
+    object->setAllAncestorsNeedPaintPropertyUpdate();
+  }
 }
 
 void FrameView::addViewportConstrainedObject(LayoutObject* object) {
@@ -1511,6 +1531,7 @@ void FrameView::removeViewportConstrainedObject(LayoutObject* object) {
 void FrameView::viewportSizeChanged(bool widthChanged, bool heightChanged) {
   DCHECK(widthChanged || heightChanged);
 
+  showOverlayScrollbars();
   if (RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
     // The background must be repainted when the FrameView is resized, even if
     // the initial containing block does not change (so we can't rely on layout
@@ -1584,6 +1605,17 @@ void FrameView::scrollContentsIfNeededRecursive() {
 void FrameView::invalidateBackgroundAttachmentFixedObjects() {
   for (const auto& layoutObject : m_backgroundAttachmentFixedObjects)
     layoutObject->setShouldDoFullPaintInvalidation();
+}
+
+bool FrameView::hasBackgroundAttachmentFixedDescendants(
+    const LayoutObject& object) const {
+  for (const auto* potentialDescendant : m_backgroundAttachmentFixedObjects) {
+    if (potentialDescendant == &object)
+      continue;
+    if (potentialDescendant->isDescendantOf(&object))
+      return true;
+  }
+  return false;
 }
 
 bool FrameView::invalidateViewportConstrainedObjects() {
@@ -1881,10 +1913,11 @@ bool FrameView::computeCompositedSelection(LocalFrame& frame,
   selection.type = visibleSelection.getSelectionType();
   selection.isEditable = visibleSelection.isContentEditable();
   if (selection.isEditable) {
-    if (HTMLTextFormControlElement* enclosingTextFormControlElement =
-            enclosingTextFormControl(visibleSelection.rootEditableElement()))
-      selection.isEmptyTextFormControl =
-          enclosingTextFormControlElement->value().isEmpty();
+    if (TextControlElement* enclosingTextControlElement =
+            enclosingTextControl(visibleSelection.rootEditableElement())) {
+      selection.isEmptyTextControl =
+          enclosingTextControlElement->value().isEmpty();
+    }
   }
   selection.start.isTextDirectionRTL |=
       primaryDirectionOf(*visibleSelection.start().anchorNode()) == RTL;
@@ -1954,18 +1987,18 @@ void FrameView::scrollbarExistenceDidChange() {
   if (!frame().view())
     return;
 
-  bool hasOverlayScrollbars = this->hasOverlayScrollbars();
+  bool usesOverlayScrollbars = ScrollbarTheme::theme().usesOverlayScrollbars();
 
   // FIXME: this call to layout() could be called within FrameView::layout(),
   // but before performLayout(), causing double-layout. See also
   // crbug.com/429242.
-  if (!hasOverlayScrollbars && needsLayout())
+  if (!usesOverlayScrollbars && needsLayout())
     layout();
 
   if (!layoutViewItem().isNull() && layoutViewItem().usesCompositing()) {
     layoutViewItem().compositor()->frameViewScrollbarsExistenceDidChange();
 
-    if (!hasOverlayScrollbars)
+    if (!usesOverlayScrollbars)
       layoutViewItem().compositor()->frameViewDidChangeSize();
   }
 }
@@ -2286,7 +2319,6 @@ bool FrameView::updateWidgets() {
 
 void FrameView::updateWidgetsTimerFired(TimerBase*) {
   ASSERT(!isInPerformLayout());
-  m_updateWidgetsTimer.stop();
   for (unsigned i = 0; i < maxUpdateWidgetsIterations; ++i) {
     if (updateWidgets())
       return;
@@ -2297,8 +2329,10 @@ void FrameView::flushAnyPendingPostLayoutTasks() {
   ASSERT(!isInPerformLayout());
   if (m_postLayoutTasksTimer.isActive())
     performPostLayoutTasks();
-  if (m_updateWidgetsTimer.isActive())
-    updateWidgetsTimerFired(0);
+  if (m_updateWidgetsTimer.isActive()) {
+    m_updateWidgetsTimer.stop();
+    updateWidgetsTimerFired(nullptr);
+  }
 }
 
 void FrameView::scheduleUpdateWidgetsIfNecessary() {
@@ -2448,6 +2482,7 @@ bool FrameView::scrollbarsCanBeActive() const {
 }
 
 void FrameView::scrollbarVisibilityChanged() {
+  updateScrollbarEnabledState();
   LayoutViewItem viewItem = layoutViewItem();
   if (!viewItem.isNull())
     viewItem.clearHitTestCache();
@@ -2651,6 +2686,25 @@ FrameView* FrameView::parentFrameView() const {
     return toLocalFrame(parentFrame)->view();
 
   return nullptr;
+}
+
+void FrameView::didChangeGlobalRootScroller() {
+  if (!m_frame->settings() || !m_frame->settings()->viewportEnabled())
+    return;
+
+  // Avoid drawing two sets of scrollbars when visual viewport is enabled.
+  bool hasHorizontalScrollbar = horizontalScrollbar();
+  bool hasVerticalScrollbar = verticalScrollbar();
+  bool shouldHaveHorizontalScrollbar = false;
+  bool shouldHaveVerticalScrollbar = false;
+  computeScrollbarExistence(shouldHaveHorizontalScrollbar,
+                            shouldHaveVerticalScrollbar, contentsSize());
+  m_scrollbarManager.setHasHorizontalScrollbar(shouldHaveHorizontalScrollbar);
+  m_scrollbarManager.setHasVerticalScrollbar(shouldHaveVerticalScrollbar);
+
+  if (hasHorizontalScrollbar != shouldHaveHorizontalScrollbar ||
+      hasVerticalScrollbar != shouldHaveVerticalScrollbar)
+    scrollbarExistenceDidChange();
 }
 
 void FrameView::updateWidgetGeometriesIfNeeded() {
@@ -3477,9 +3531,21 @@ void FrameView::removeChild(Widget* child) {
   m_children.remove(child);
 }
 
-bool FrameView::visualViewportSuppliesScrollbars() const {
-  return m_frame->isMainFrame() && m_frame->settings() &&
-         m_frame->settings()->viewportEnabled();
+bool FrameView::visualViewportSuppliesScrollbars() {
+  // On desktop, we always use the layout viewport's scrollbars.
+  if (!m_frame->settings() || !m_frame->settings()->viewportEnabled() ||
+      !m_frame->document() || !m_frame->host())
+    return false;
+
+  const TopDocumentRootScrollerController& controller =
+      m_frame->host()->globalRootScrollerController();
+
+  if (!controller.globalRootScroller())
+    return false;
+
+  return RootScrollerUtil::scrollableAreaFor(
+             *controller.globalRootScroller()) ==
+         layoutViewportScrollableArea();
 }
 
 AXObjectCache* FrameView::axObjectCache() const {
@@ -3652,6 +3718,8 @@ void FrameView::updateScrollOffset(const ScrollOffset& offset,
   if (scrollDelta.isZero())
     return;
 
+  showOverlayScrollbars();
+
   if (RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
     // Don't scroll the FrameView!
     ASSERT_NOT_REACHED();
@@ -3703,6 +3771,11 @@ void FrameView::didChangeScrollOffset() {
   frame().loader().client()->didChangeScrollOffset();
   if (frame().isMainFrame())
     frame().host()->chromeClient().mainFrameScrollOffsetChanged();
+
+  if (!RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
+    // The scroll translation paint property depends on scroll offset.
+    setNeedsPaintPropertyUpdate();
+  }
 }
 
 void FrameView::clearScrollAnchor() {
@@ -3721,8 +3794,9 @@ void FrameView::computeScrollbarExistence(
     bool& newHasHorizontalScrollbar,
     bool& newHasVerticalScrollbar,
     const IntSize& docSize,
-    ComputeScrollbarExistenceOption option) const {
-  if (m_frame->settings() && m_frame->settings()->hideScrollbars()) {
+    ComputeScrollbarExistenceOption option) {
+  if ((m_frame->settings() && m_frame->settings()->hideScrollbars()) ||
+      visualViewportSuppliesScrollbars()) {
     newHasHorizontalScrollbar = false;
     newHasVerticalScrollbar = false;
     return;
@@ -3770,10 +3844,25 @@ void FrameView::computeScrollbarExistence(
   }
 }
 
+void FrameView::updateScrollbarEnabledState() {
+  bool forceDisabled =
+      ScrollbarTheme::theme().shouldDisableInvisibleScrollbars() &&
+      scrollbarsHidden();
+
+  if (horizontalScrollbar()) {
+    horizontalScrollbar()->setEnabled(contentsWidth() > visibleWidth() &&
+                                      !forceDisabled);
+  }
+  if (verticalScrollbar()) {
+    verticalScrollbar()->setEnabled(contentsHeight() > visibleHeight() &&
+                                    !forceDisabled);
+  }
+}
+
 void FrameView::updateScrollbarGeometry() {
+  updateScrollbarEnabledState();
   if (horizontalScrollbar()) {
     int thickness = horizontalScrollbar()->scrollbarThickness();
-    int clientWidth = visibleWidth();
     IntRect oldRect(horizontalScrollbar()->frameRect());
     IntRect hBarRect(
         (shouldPlaceVerticalScrollbarOnLeft() && verticalScrollbar())
@@ -3786,15 +3875,12 @@ void FrameView::updateScrollbarGeometry() {
     if (oldRect != horizontalScrollbar()->frameRect())
       setScrollbarNeedsPaintInvalidation(HorizontalScrollbar);
 
-    horizontalScrollbar()->setEnabled(contentsWidth() > clientWidth &&
-                                      !scrollbarsHidden());
-    horizontalScrollbar()->setProportion(clientWidth, contentsWidth());
+    horizontalScrollbar()->setProportion(visibleWidth(), contentsWidth());
     horizontalScrollbar()->offsetDidChange();
   }
 
   if (verticalScrollbar()) {
     int thickness = verticalScrollbar()->scrollbarThickness();
-    int clientHeight = visibleHeight();
     IntRect oldRect(verticalScrollbar()->frameRect());
     IntRect vBarRect(
         shouldPlaceVerticalScrollbarOnLeft() ? 0 : (width() - thickness), 0,
@@ -3805,9 +3891,7 @@ void FrameView::updateScrollbarGeometry() {
     if (oldRect != verticalScrollbar()->frameRect())
       setScrollbarNeedsPaintInvalidation(VerticalScrollbar);
 
-    verticalScrollbar()->setEnabled(contentsHeight() > clientHeight &&
-                                    !scrollbarsHidden());
-    verticalScrollbar()->setProportion(clientHeight, contentsHeight());
+    verticalScrollbar()->setProportion(visibleHeight(), contentsHeight());
     verticalScrollbar()->offsetDidChange();
   }
 }
@@ -3872,10 +3956,6 @@ void FrameView::updateScrollbarsIfNeeded() {
   if (m_needsScrollbarsUpdate || needsScrollbarReconstruction() ||
       scrollOriginChanged())
     updateScrollbars();
-}
-
-void FrameView::didChangeScrollbarsHidden() {
-  updateScrollbars();
 }
 
 void FrameView::updateScrollbars() {

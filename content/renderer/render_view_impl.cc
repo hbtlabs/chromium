@@ -60,7 +60,6 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/drop_data.h"
 #include "content/public/common/favicon_url.h"
 #include "content/public/common/page_importance_signals.h"
 #include "content/public/common/page_state.h"
@@ -111,9 +110,9 @@
 #include "third_party/WebKit/public/platform/FilePathConversion.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebConnectionType.h"
-#include "third_party/WebKit/public/platform/WebDragData.h"
 #include "third_party/WebKit/public/platform/WebHTTPBody.h"
 #include "third_party/WebKit/public/platform/WebImage.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebMessagePortChannel.h"
 #include "third_party/WebKit/public/platform/WebPoint.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
@@ -125,6 +124,7 @@
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
+#include "third_party/WebKit/public/public_features.h"
 #include "third_party/WebKit/public/web/WebAXObject.h"
 #include "third_party/WebKit/public/web/WebColorSuggestion.h"
 #include "third_party/WebKit/public/web/WebDOMEvent.h"
@@ -143,7 +143,6 @@
 #include "third_party/WebKit/public/web/WebHistoryItem.h"
 #include "third_party/WebKit/public/web/WebHitTestResult.h"
 #include "third_party/WebKit/public/web/WebInputElement.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebMediaPlayerAction.h"
 #include "third_party/WebKit/public/web/WebNavigationPolicy.h"
@@ -162,7 +161,6 @@
 #include "third_party/WebKit/public/web/WebWindowFeatures.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "third_party/icu/source/common/unicode/uscript.h"
-#include "ui/base/clipboard/clipboard.h"
 #include "ui/base/ui_base_switches_util.h"
 #include "ui/events/latency_info.h"
 #include "ui/gfx/geometry/point.h"
@@ -207,9 +205,7 @@ using blink::WebConsoleMessage;
 using blink::WebData;
 using blink::WebDataSource;
 using blink::WebDocument;
-using blink::WebDragData;
 using blink::WebDragOperation;
-using blink::WebDragOperationsMask;
 using blink::WebElement;
 using blink::WebFileChooserCompletion;
 using blink::WebFormControlElement;
@@ -379,128 +375,6 @@ static void ConvertToFaviconSizes(
 
 namespace {
 
-WebDragData DropMetaDataToWebDragData(
-    const std::vector<DropData::Metadata>& drop_meta_data) {
-  std::vector<WebDragData::Item> item_list;
-  for (const auto& meta_data_item : drop_meta_data) {
-    if (meta_data_item.kind == DropData::Kind::STRING) {
-      WebDragData::Item item;
-      item.storageType = WebDragData::Item::StorageTypeString;
-      item.stringType = meta_data_item.mime_type;
-      // Have to pass a dummy URL here instead of an empty URL because the
-      // DropData received by browser_plugins goes through a round trip:
-      // DropData::MetaData --> WebDragData-->DropData. In the end, DropData
-      // will contain an empty URL (which means no URL is dragged) if the URL in
-      // WebDragData is empty.
-      if (base::EqualsASCII(meta_data_item.mime_type,
-                            ui::Clipboard::kMimeTypeURIList)) {
-        item.stringData = WebString::fromUTF8("about:dragdrop-placeholder");
-      }
-      item_list.push_back(item);
-      continue;
-    }
-
-    // TODO(hush): crbug.com/584789. Blink needs to support creating a file with
-    // just the mimetype. This is needed to drag files to WebView on Android
-    // platform.
-    if ((meta_data_item.kind == DropData::Kind::FILENAME) &&
-        !meta_data_item.filename.empty()) {
-      WebDragData::Item item;
-      item.storageType = WebDragData::Item::StorageTypeFilename;
-      item.filenameData = meta_data_item.filename.AsUTF16Unsafe();
-      item_list.push_back(item);
-      continue;
-    }
-
-    if (meta_data_item.kind == DropData::Kind::FILESYSTEMFILE) {
-      WebDragData::Item item;
-      item.storageType = WebDragData::Item::StorageTypeFileSystemFile;
-      item.fileSystemURL = meta_data_item.file_system_url;
-      item_list.push_back(item);
-      continue;
-    }
-  }
-
-  WebDragData result;
-  result.initialize();
-  result.setItems(item_list);
-  return result;
-}
-
-WebDragData DropDataToWebDragData(const DropData& drop_data) {
-  std::vector<WebDragData::Item> item_list;
-
-  // These fields are currently unused when dragging into WebKit.
-  DCHECK(drop_data.download_metadata.empty());
-  DCHECK(drop_data.file_contents.empty());
-  DCHECK(drop_data.file_description_filename.empty());
-
-  if (!drop_data.text.is_null()) {
-    WebDragData::Item item;
-    item.storageType = WebDragData::Item::StorageTypeString;
-    item.stringType = WebString::fromUTF8(ui::Clipboard::kMimeTypeText);
-    item.stringData = drop_data.text.string();
-    item_list.push_back(item);
-  }
-
-  if (!drop_data.url.is_empty()) {
-    WebDragData::Item item;
-    item.storageType = WebDragData::Item::StorageTypeString;
-    item.stringType = WebString::fromUTF8(ui::Clipboard::kMimeTypeURIList);
-    item.stringData = WebString::fromUTF8(drop_data.url.spec());
-    item.title = drop_data.url_title;
-    item_list.push_back(item);
-  }
-
-  if (!drop_data.html.is_null()) {
-    WebDragData::Item item;
-    item.storageType = WebDragData::Item::StorageTypeString;
-    item.stringType = WebString::fromUTF8(ui::Clipboard::kMimeTypeHTML);
-    item.stringData = drop_data.html.string();
-    item.baseURL = drop_data.html_base_url;
-    item_list.push_back(item);
-  }
-
-  for (std::vector<ui::FileInfo>::const_iterator it =
-           drop_data.filenames.begin();
-       it != drop_data.filenames.end();
-       ++it) {
-    WebDragData::Item item;
-    item.storageType = WebDragData::Item::StorageTypeFilename;
-    item.filenameData = it->path.AsUTF16Unsafe();
-    item.displayNameData = it->display_name.AsUTF16Unsafe();
-    item_list.push_back(item);
-  }
-
-  for (std::vector<DropData::FileSystemFileInfo>::const_iterator it =
-           drop_data.file_system_files.begin();
-       it != drop_data.file_system_files.end();
-       ++it) {
-    WebDragData::Item item;
-    item.storageType = WebDragData::Item::StorageTypeFileSystemFile;
-    item.fileSystemURL = it->url;
-    item.fileSystemFileSize = it->size;
-    item_list.push_back(item);
-  }
-
-  for (std::map<base::string16, base::string16>::const_iterator it =
-           drop_data.custom_data.begin();
-       it != drop_data.custom_data.end();
-       ++it) {
-    WebDragData::Item item;
-    item.storageType = WebDragData::Item::StorageTypeString;
-    item.stringType = it->first;
-    item.stringData = it->second;
-    item_list.push_back(item);
-  }
-
-  WebDragData result;
-  result.initialize();
-  result.setItems(item_list);
-  result.setFilesystemId(drop_data.filesystem_id);
-  return result;
-}
-
 typedef void (*SetFontFamilyWrapper)(blink::WebSettings*,
                                      const base::string16&,
                                      UScriptCode);
@@ -658,7 +532,8 @@ class AlwaysDrawSwapPromise : public cc::SwapPromise {
 
 RenderViewImpl::RenderViewImpl(CompositorDependencies* compositor_deps,
                                const mojom::CreateViewParams& params)
-    : RenderWidget(compositor_deps,
+    : RenderWidget(params.view_id,
+                   compositor_deps,
                    blink::WebPopupTypeNone,
                    params.initial_size.screen_info,
                    params.swapped_out,
@@ -697,21 +572,18 @@ RenderViewImpl::RenderViewImpl(CompositorDependencies* compositor_deps,
 
 void RenderViewImpl::Initialize(const mojom::CreateViewParams& params,
                                 bool was_created_by_renderer) {
-  SetRoutingID(params.view_id);
-
-  int opener_view_routing_id;
+  int opener_view_routing_id = MSG_ROUTING_NONE;
   WebFrame* opener_frame = RenderFrameImpl::ResolveOpener(
       params.opener_frame_route_id, &opener_view_routing_id);
-  if (opener_view_routing_id != MSG_ROUTING_NONE && was_created_by_renderer)
-    opener_id_ = opener_view_routing_id;
+  if (!was_created_by_renderer)
+    opener_view_routing_id = MSG_ROUTING_NONE;
 
   display_mode_ = params.initial_size.display_mode;
 
   webview_ =
       WebView::create(this, is_hidden() ? blink::WebPageVisibilityStateHidden
                                         : blink::WebPageVisibilityStateVisible);
-  RenderWidget::DoInit(MSG_ROUTING_NONE, webview_->widget(),
-                       CreateWidgetCallback());
+  RenderWidget::Init(opener_view_routing_id, webview_->widget());
 
   g_view_map.Get().insert(std::make_pair(webview(), this));
   g_routing_id_view_map.Get().insert(std::make_pair(GetRoutingID(), this));
@@ -1019,6 +891,10 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   settings->setAccelerated2dCanvasMSAASampleCount(
       prefs.accelerated_2d_canvas_msaa_sample_count);
 
+  // Force readback from 2D canvas to use software code path. crbug.com/665656
+  settings->setForceSoftwareReadbackFrom2DCanvas(
+      prefs.force_software_readback_from_2d_canvas);
+
   // Tabs to link is not part of the settings. WebCore calls
   // ChromeClient::tabsToLinks which is part of the glue code.
   web_view->setTabsToLinks(prefs.tabs_to_links);
@@ -1145,6 +1021,7 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
       static_cast<WebSettings::ProgressBarCompletion>(
           prefs.progress_bar_completion));
   settings->setPreferHiddenVolumeControls(true);
+  settings->setSpellCheckEnabledByDefault(prefs.spellcheck_enabled_by_default);
 
   // Force preload=none and disable autoplay on older or low end Android
   // platforms because their media pipelines are not stable enough to handle
@@ -1153,10 +1030,8 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
       base::android::BuildInfo::GetInstance()->sdk_int() <=
           base::android::SDK_VERSION_JELLY_BEAN_MR2 ||
       base::SysInfo::IsLowEndDevice();
+  // TODO(mlamouri): rename this setting "isLowEndDevice".
   settings->setForcePreloadNoneForMediaElements(is_low_end_device);
-  WebRuntimeFeatures::enableAutoplayMutedVideos(
-      prefs.autoplay_muted_videos_enabled && !is_low_end_device);
-  settings->setSpellCheckEnabledByDefault(prefs.spellcheck_enabled_by_default);
 #endif
 
   settings->setAutoplayExperimentMode(
@@ -1316,13 +1191,6 @@ bool RenderViewImpl::OnMessageReceived(const IPC::Message& message) {
                         OnScrollFocusedEditableNodeIntoRect)
     IPC_MESSAGE_HANDLER(ViewMsg_SetPageScale, OnSetPageScale)
     IPC_MESSAGE_HANDLER(ViewMsg_Zoom, OnZoom)
-    IPC_MESSAGE_HANDLER(DragMsg_TargetDragEnter, OnDragTargetDragEnter)
-    IPC_MESSAGE_HANDLER(DragMsg_TargetDragOver, OnDragTargetDragOver)
-    IPC_MESSAGE_HANDLER(DragMsg_TargetDragLeave, OnDragTargetDragLeave)
-    IPC_MESSAGE_HANDLER(DragMsg_TargetDrop, OnDragTargetDrop)
-    IPC_MESSAGE_HANDLER(DragMsg_SourceEnded, OnDragSourceEnded)
-    IPC_MESSAGE_HANDLER(DragMsg_SourceSystemDragEnded,
-                        OnDragSourceSystemDragEnded)
     IPC_MESSAGE_HANDLER(ViewMsg_AllowBindings, OnAllowBindings)
     IPC_MESSAGE_HANDLER(ViewMsg_SetInitialFocus, OnSetInitialFocus)
     IPC_MESSAGE_HANDLER(ViewMsg_UpdateTargetURL_ACK, OnUpdateTargetURLAck)
@@ -1635,8 +1503,8 @@ void RenderViewImpl::printPage(WebLocalFrame* frame) {
   UMA_HISTOGRAM_BOOLEAN("PrintPreview.OutOfProcessSubframe",
                         frame->top()->isWebRemoteFrame());
 
-  for (auto& observer : observers_)
-    observer.PrintPage(frame, input_handler().handling_input_event());
+  RenderFrameImpl::FromWebFrame(frame)->ScriptedPrint(
+      input_handler().handling_input_event());
 }
 
 bool RenderViewImpl::enumerateChosenDirectory(
@@ -2085,13 +1953,6 @@ bool RenderViewImpl::HasAddedInputHandler() const {
   return has_added_input_handler_;
 }
 
-gfx::Point RenderViewImpl::ConvertWindowPointToViewport(
-    const gfx::Point& point) {
-  blink::WebFloatRect point_in_viewport(point.x(), point.y(), 0, 0);
-  convertWindowToViewport(&point_in_viewport);
-  return gfx::Point(point_in_viewport.x, point_in_viewport.y);
-}
-
 void RenderViewImpl::didChangeIcon(WebLocalFrame* frame,
                                    WebIconURL::Type icon_type) {
   if (frame->parent())
@@ -2258,56 +2119,6 @@ void RenderViewImpl::OnAllowBindings(int enabled_bindings_flags) {
     main_render_frame_->MaybeEnableMojoBindings();
 }
 
-void RenderViewImpl::OnDragTargetDragEnter(
-    const std::vector<DropData::Metadata>& drop_meta_data,
-    const gfx::Point& client_point,
-    const gfx::Point& screen_point,
-    WebDragOperationsMask ops,
-    int key_modifiers) {
-  WebDragOperation operation = webview()->dragTargetDragEnter(
-      DropMetaDataToWebDragData(drop_meta_data), client_point, screen_point,
-      ops, key_modifiers);
-
-  Send(new DragHostMsg_UpdateDragCursor(GetRoutingID(), operation));
-}
-
-void RenderViewImpl::OnDragTargetDragOver(const gfx::Point& client_point,
-                                          const gfx::Point& screen_point,
-                                          WebDragOperationsMask ops,
-                                          int key_modifiers) {
-  WebDragOperation operation = webview()->dragTargetDragOver(
-      ConvertWindowPointToViewport(client_point),
-      screen_point,
-      ops,
-      key_modifiers);
-
-  Send(new DragHostMsg_UpdateDragCursor(GetRoutingID(), operation));
-}
-
-void RenderViewImpl::OnDragTargetDragLeave() {
-  webview()->dragTargetDragLeave();
-}
-
-void RenderViewImpl::OnDragTargetDrop(const DropData& drop_data,
-                                      const gfx::Point& client_point,
-                                      const gfx::Point& screen_point,
-                                      int key_modifiers) {
-  webview()->dragTargetDrop(DropDataToWebDragData(drop_data),
-                            ConvertWindowPointToViewport(client_point),
-                            screen_point, key_modifiers);
-}
-
-void RenderViewImpl::OnDragSourceEnded(const gfx::Point& client_point,
-                                       const gfx::Point& screen_point,
-                                       WebDragOperation op) {
-  webview()->dragSourceEndedAt(
-      ConvertWindowPointToViewport(client_point), screen_point, op);
-}
-
-void RenderViewImpl::OnDragSourceSystemDragEnded() {
-  webview()->dragSourceSystemDragEnded();
-}
-
 void RenderViewImpl::OnUpdateWebPreferences(const WebPreferences& prefs) {
   webkit_preferences_ = prefs;
   ApplyWebPreferencesInternal(webkit_preferences_, webview(), compositor_deps_);
@@ -2391,7 +2202,7 @@ void RenderViewImpl::OnSetRendererPrefs(
   UpdateThemePrefs();
   blink::setCaretBlinkInterval(renderer_prefs.caret_blink_interval);
 
-#if defined(USE_DEFAULT_RENDER_THEME)
+#if BUILDFLAG(USE_DEFAULT_RENDER_THEME)
   if (renderer_prefs.use_custom_colors) {
     blink::setFocusRingColor(renderer_prefs.focus_ring_color);
 
@@ -2404,7 +2215,7 @@ void RenderViewImpl::OnSetRendererPrefs(
       webview()->themeChanged();
     }
   }
-#endif  // defined(USE_DEFAULT_RENDER_THEME)
+#endif  // BUILDFLAG(USE_DEFAULT_RENDER_THEME)
 
   if (webview() &&
       old_accept_languages != renderer_preferences_.accept_languages) {
@@ -2689,6 +2500,12 @@ void RenderViewImpl::pageImportanceSignalsChanged() {
 #if defined(OS_ANDROID)
 WebURL RenderViewImpl::detectContentIntentAt(
     const WebHitTestResult& touch_hit) {
+  // TODO(twellington): Remove content detection entirely. It is
+  // currently only enabled for tests. crbug.com/664307.
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kEnableContentIntentDetection)) {
+    return WebURL();
+  }
   DCHECK(touch_hit.node().isTextNode());
 
   // Process the position with all the registered content detectors until

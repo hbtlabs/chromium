@@ -6,10 +6,11 @@
 #define PerformanceMonitor_h
 
 #include "core/CoreExport.h"
-#include "core/inspector/ConsoleTypes.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/scheduler/base/task_time_observer.h"
+#include "wtf/text/AtomicString.h"
+#include <v8.h>
 
 namespace blink {
 
@@ -32,28 +33,65 @@ class CORE_EXPORT PerformanceMonitor final
   WTF_MAKE_NONCOPYABLE(PerformanceMonitor);
 
  public:
-  // Instrumenting methods, TODO: codegen those.
-  static void performanceObserverAdded(Performance*);
-  static void performanceObserverRemoved(Performance*);
+  enum Violation : size_t {
+    kLongTask,
+    kLongLayout,
+    kBlockedEvent,
+    kBlockedParser,
+    kHandler,
+    kRecurringHandler,
+    kAfterLast
+  };
+
+  class CORE_EXPORT HandlerCall {
+    STACK_ALLOCATED();
+   public:
+    HandlerCall(ExecutionContext*, bool recurring);
+    HandlerCall(ExecutionContext*, const char* name, bool recurring);
+    HandlerCall(ExecutionContext*, const AtomicString& name, bool recurring);
+    ~HandlerCall();
+
+   private:
+    Member<PerformanceMonitor> m_performanceMonitor;
+  };
+
+  class CORE_EXPORT Client : public GarbageCollectedMixin {
+   public:
+    virtual void reportLongTask(
+        double startTime,
+        double endTime,
+        const HeapHashSet<Member<Frame>>& contextFrames){};
+    virtual void reportLongLayout(double duration){};
+    virtual void reportGenericViolation(Violation,
+                                        const String& text,
+                                        double time,
+                                        SourceLocation*){};
+    DEFINE_INLINE_VIRTUAL_TRACE() {}
+  };
+
+  // Instrumenting methods.
   static void willExecuteScript(ExecutionContext*);
   static void didExecuteScript(ExecutionContext*);
+  static void willCallFunction(ExecutionContext*);
+  static void didCallFunction(ExecutionContext*, v8::Local<v8::Function>);
   static void willUpdateLayout(Document*);
   static void didUpdateLayout(Document*);
   static void willRecalculateStyle(Document*);
   static void didRecalculateStyle(Document*);
+  static void documentWriteFetchScript(Document*);
+  static void reportGenericViolation(ExecutionContext*,
+                                     Violation,
+                                     const String& text,
+                                     double time,
+                                     SourceLocation*);
+  static double threshold(ExecutionContext*, Violation);
 
-  // Direct logging API for core.
-  static bool enabled(ExecutionContext*);
-  static void logViolation(MessageLevel, ExecutionContext*, const String&);
-  static void logViolation(MessageLevel,
-                           ExecutionContext*,
-                           const String&,
-                           std::unique_ptr<SourceLocation>);
+  // Direct API for core.
+  void subscribe(Violation, double threshold, Client*);
+  void unsubscribeAll(Client*);
 
   explicit PerformanceMonitor(LocalFrame*);
   ~PerformanceMonitor();
-
-  void setLoggingEnabled(bool);
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -61,21 +99,23 @@ class CORE_EXPORT PerformanceMonitor final
   friend class PerformanceMonitorTest;
   friend class PerformanceTest;
 
-  static PerformanceMonitor* instrumentingMonitor(ExecutionContext*);
+  static PerformanceMonitor* monitor(const ExecutionContext*);
+  static PerformanceMonitor* instrumentingMonitor(const ExecutionContext*);
 
   void updateInstrumentation();
 
   void innerWillExecuteScript(ExecutionContext*);
   void didExecuteScript();
+  void innerWillCallFunction(ExecutionContext*);
+  void didCallFunction(v8::Local<v8::Function>);
   void willUpdateLayout();
   void didUpdateLayout();
   void willRecalculateStyle();
   void didRecalculateStyle();
-
-  void logViolation(MessageLevel, const String&);
-  void logViolation(MessageLevel,
-                    const String&,
-                    std::unique_ptr<SourceLocation>);
+  void reportGenericViolation(Violation,
+                              const String& text,
+                              double time,
+                              SourceLocation*);
 
   // WebThread::TaskObserver implementation.
   void willProcessTask() override;
@@ -91,14 +131,28 @@ class CORE_EXPORT PerformanceMonitor final
       Frame* observerFrame);
 
   bool m_enabled = false;
-  bool m_loggingEnabled = false;
-  bool m_isExecutingScript = false;
+  double m_scriptStartTime = 0;
   double m_layoutStartTime = 0;
   double m_styleStartTime = 0;
   double m_perTaskStyleAndLayoutTime = 0;
+  unsigned m_scriptDepth = 0;
+  unsigned m_layoutDepth = 0;
+  unsigned m_handlerDepth = 0;
+  Violation m_handlerType = Violation::kAfterLast;
+
+  const char* m_handlerName = nullptr;
+  AtomicString m_handlerAtomicName;
+
+  double m_thresholds[kAfterLast];
+
   Member<LocalFrame> m_localRoot;
   HeapHashSet<Member<Frame>> m_frameContexts;
-  HeapHashSet<Member<Performance>> m_webPerformanceObservers;
+  using ClientThresholds = HeapHashMap<Member<Client>, double>;
+  HeapHashMap<Violation,
+              Member<ClientThresholds>,
+              typename DefaultHash<size_t>::Hash,
+              WTF::UnsignedWithZeroKeyHashTraits<size_t>>
+      m_subscriptions;
 };
 
 }  // namespace blink

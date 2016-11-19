@@ -24,10 +24,12 @@ class MediaStreamInfoBarDelegateAndroid : public PermissionInfoBarDelegate {
   // found, or just adds the new infobar otherwise.  Returns whether an infobar
   // was created.
   static bool Create(content::WebContents* web_contents,
+                     bool user_gesture,
                      std::unique_ptr<MediaStreamDevicesController> controller);
 
   MediaStreamInfoBarDelegateAndroid(
       Profile* profile,
+      bool user_gesture,
       std::unique_ptr<MediaStreamDevicesController> controller);
  private:
   friend class WebRtcTestBase;
@@ -48,7 +50,7 @@ class MediaStreamInfoBarDelegateAndroid : public PermissionInfoBarDelegate {
   base::string16 GetLinkText() const override;
   GURL GetLinkURL() const override;
   int GetMessageResourceId() const override;
-  std::vector<int> content_settings() const override;
+  std::vector<int> content_settings_types() const override;
 
   std::unique_ptr<MediaStreamDevicesController> controller_;
 

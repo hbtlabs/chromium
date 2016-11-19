@@ -6,10 +6,9 @@ import json
 import optparse
 
 from webkitpy.common.net.buildbot import Build
+from webkitpy.common.net.git_cl import GitCL
 from webkitpy.common.net.rietveld import Rietveld
 from webkitpy.common.net.web_mock import MockWeb
-from webkitpy.common.net.git_cl import GitCL
-from webkitpy.common.system.executive_mock import MockExecutive2
 from webkitpy.common.system.logtesting import LoggingTestCase
 from webkitpy.layout_tests.builder_list import BuilderList
 from webkitpy.tool.commands.rebaseline_cl import RebaselineCL
@@ -167,13 +166,6 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             'INFO: Rebaselining fast/dom/prototype-newtest.html\n',
             'INFO: Rebaselining fast/dom/prototype-taco.html\n',
             'INFO: Rebaselining svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html\n',
-        ])
-
-    def test_execute_with_nonexistent_test(self):
-        self.command.execute(self.command_options(issue=11112222), ['some/non/existent/test.html'], self.tool)
-        self.assertLog([
-            'WARNING: /test.checkout/LayoutTests/some/non/existent/test.html not found, removing from list.\n',
-            'INFO: No tests to rebaseline; exiting.\n',
         ])
 
     def test_execute_with_trigger_jobs_option(self):

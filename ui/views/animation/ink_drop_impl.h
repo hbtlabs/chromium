@@ -23,7 +23,6 @@ class InkDropImplTestApi;
 class InkDropRipple;
 class InkDropHost;
 class InkDropHighlight;
-class InkDropFactoryTest;
 
 // A functional implementation of an InkDrop.
 class VIEWS_EXPORT InkDropImpl : public InkDrop,
@@ -46,11 +45,11 @@ class VIEWS_EXPORT InkDropImpl : public InkDrop,
   };
 
   // Constructs an ink drop that will attach the ink drop to the given
-  // |ink_drop_host|.
+  // |ink_drop_host|. |host_size| is used to set the size of the ink drop layer.
   //
   // By default the highlight will be made visible while |this| is hovered but
   // not focused and the NONE AutoHighlightMode will be used.
-  explicit InkDropImpl(InkDropHost* ink_drop_host);
+  InkDropImpl(InkDropHost* ink_drop_host, const gfx::Size& host_size);
   ~InkDropImpl() override;
 
   void SetShowHighlightOnHover(bool show_highlight_on_hover);
@@ -67,6 +66,7 @@ class VIEWS_EXPORT InkDropImpl : public InkDrop,
   void SetAutoHighlightMode(AutoHighlightMode auto_highlight_mode);
 
   // InkDrop:
+  void HostSizeChanged(const gfx::Size& new_size) override;
   InkDropState GetTargetInkDropState() const override;
   void AnimateToState(InkDropState ink_drop_state) override;
   void SnapToActivated() override;
@@ -109,7 +109,9 @@ class VIEWS_EXPORT InkDropImpl : public InkDrop,
     // but is required before exiting |this| state (e.g. releasing resources).
     //
     // Subclass implementations should NOT do any work that may trigger another
-    // state change since a state change is already in progress.
+    // state change since a state change is already in progress. They must also
+    // avoid triggering any animations since Exit() will be called during
+    // InkDropImpl destruction.
     virtual void Exit() {}
 
     // Input state change handlers.
@@ -178,6 +180,8 @@ class VIEWS_EXPORT InkDropImpl : public InkDrop,
 
     DISALLOW_COPY_AND_ASSIGN(HighlightStateFactory);
   };
+
+  class DestroyingHighlightState;
 
   // AutoHighlightMode::NONE
   class NoAutoHighlightHiddenState;
@@ -304,6 +308,9 @@ class VIEWS_EXPORT InkDropImpl : public InkDrop,
   // Used to ensure highlight state transitions are not triggered when exiting
   // the current state.
   bool exiting_highlight_state_;
+
+  // Used to fail DCHECKS to catch unexpected behavior during tear down.
+  bool destroying_;
 
   DISALLOW_COPY_AND_ASSIGN(InkDropImpl);
 };

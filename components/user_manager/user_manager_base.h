@@ -64,8 +64,6 @@ class USER_MANAGER_EXPORT UserManagerBase : public UserManager {
   bool IsKnownUser(const AccountId& account_id) const override;
   const User* FindUser(const AccountId& account_id) const override;
   User* FindUserAndModify(const AccountId& account_id) override;
-  const User* GetLoggedInUser() const override;
-  User* GetLoggedInUser() override;
   const User* GetActiveUser() const override;
   User* GetActiveUser() override;
   const User* GetPrimaryUser() const override;
@@ -223,6 +221,9 @@ class USER_MANAGER_EXPORT UserManagerBase : public UserManager {
 
   // Indicates that a kiosk app robot just logged in.
   virtual void KioskAppLoggedIn(User* user) = 0;
+
+  // Indicates that an ARC kiosk app robot just logged in.
+  virtual void ArcKioskAppLoggedIn(User* user) = 0;
 
   // Indicates that a user just logged into a public session.
   virtual void PublicAccountUserLoggedIn(User* user) = 0;

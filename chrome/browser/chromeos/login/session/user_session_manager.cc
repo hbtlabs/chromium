@@ -32,7 +32,7 @@
 #include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
-#include "chrome/browser/chromeos/arc/arc_auth_service.h"
+#include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/base/locale_util.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chrome/browser/chromeos/first_run/first_run.h"
@@ -788,7 +788,7 @@ void UserSessionManager::OnSessionRestoreStateChanged(
   if (!connection_error) {
     // We are in one of "done" states here.
     user_manager::UserManager::Get()->SaveUserOAuthStatus(
-        user_manager::UserManager::Get()->GetLoggedInUser()->GetAccountId(),
+        user_manager::UserManager::Get()->GetActiveUser()->GetAccountId(),
         user_status);
   }
 
@@ -1156,9 +1156,10 @@ void UserSessionManager::FinalizePrepareProfile(Profile* profile) {
       DCHECK(arc::ArcServiceManager::Get());
       arc::ArcServiceManager::Get()->OnPrimaryUserProfilePrepared(
           account_id, std::move(arc_enabled_pref));
-      arc::ArcAuthService* arc_auth_service = arc::ArcAuthService::Get();
-      DCHECK(arc_auth_service);
-      arc_auth_service->OnPrimaryUserProfilePrepared(profile);
+      arc::ArcSessionManager* arc_session_manager =
+          arc::ArcSessionManager::Get();
+      DCHECK(arc_session_manager);
+      arc_session_manager->OnPrimaryUserProfilePrepared(profile);
     }
   }
 
@@ -1327,7 +1328,6 @@ void UserSessionManager::RestoreAuthSessionImpl(
     bool restore_from_auth_cookies) {
   CHECK((authenticator_.get() && authenticator_->authentication_context()) ||
         !restore_from_auth_cookies);
-
   if (chrome::IsRunningInForcedAppMode() ||
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           chromeos::switches::kDisableGaiaServices)) {
@@ -1845,9 +1845,9 @@ void UserSessionManager::Shutdown() {
   if (arc::ArcBridgeService::GetEnabled(
           base::CommandLine::ForCurrentProcess())) {
     DCHECK(arc::ArcServiceManager::Get());
-    arc::ArcAuthService* arc_auth_service = arc::ArcAuthService::Get();
-    if (arc_auth_service)
-      arc_auth_service->Shutdown();
+    arc::ArcSessionManager* arc_session_manager = arc::ArcSessionManager::Get();
+    if (arc_session_manager)
+      arc_session_manager->Shutdown();
   }
   token_handle_fetcher_.reset();
   token_handle_util_.reset();

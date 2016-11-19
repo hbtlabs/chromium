@@ -816,6 +816,13 @@ Signing in anyway will merge Chrome information like bookmarks, history, and oth
         </message>
       </if>
 
+      <!-- Signin Email Confirmation tab modal dialog -->
+      <if expr="not chromeos">
+        <message name="IDS_SIGNIN_EMAIL_CONFIRMATION_TITLE" desc="Title of the signin email confirmation tab modal dialog.">
+          <ph name="USER_EMAIL_ADDRESS">$1<ex>foo@gmail.com</ex></ph> was previously using Chrome
+        </message>
+      </if>
+
       <!-- SRT bubble messages -->
       <if expr="is_win">
         <message name="IDS_SRT_BUBBLE_TITLE" desc="Text for the title of the software removal tool bubble view.">
@@ -1207,17 +1214,8 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
       </message>
 
       <!-- Page Information Window -->
-      <message name="IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_NO_CT" desc="The text of the identity section when the page is secure and no Certificate Transparency information is present.">
-        Chrome verified that <ph name="ISSUER">$1<ex>VeriSign</ex></ph> issued this website's certificate. The server did not supply any Certificate Transparency information.
-      </message>
-      <message name="IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_CT_VERIFIED" desc="The text of the identity section when the page is secure and a Signed Certificate Timestamp from a known Certificate Transparency log is present and valid.">
-        Chrome verified that <ph name="ISSUER">$1<ex>VeriSign</ex></ph> issued this website's certificate. The server supplied valid Certificate Transparency information.
-      </message>
-      <message name="IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_CT_UNVERIFIED" desc="The text of the identity section when the page is secure and contains a Signed Certificate Timestamp from an unknown Certificate Transparency log.">
-        Chrome verified that <ph name="ISSUER">$1<ex>VeriSign</ex></ph> issued this website's certificate. The server supplied Certificate Transparency information, but Chrome did not recognize any of the Certificate Transparency logs.
-      </message>
-      <message name="IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_CT_INVALID" desc="The text of the identity section when the page is secure, but it contains a Signed Certificate Timestamp from a known Certificate Transparency log that failed to verify.">
-        Chrome verified that <ph name="ISSUER">$1<ex>VeriSign</ex></ph> issued this website's certificate. The server supplied Certificate Transparency information, but it was invalid.
+      <message name="IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_VERIFIED" desc="The text of the identity section when the page is secure and uses a valid certificate.">
+        Chrome verified that <ph name="ISSUER">$1<ex>VeriSign</ex></ph> issued this website's certificate.
       </message>
 
       <!-- Desktop Capture -->
@@ -1309,15 +1307,6 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
           Select <ph name="SMALL_PRODUCT_LOGO">&lt;div class="logo-small"&gt;&lt;/div&gt;</ph> <ph name="BEGIN_BOLD">&lt;strong&gt;</ph>Google Chrome<ph name="END_BOLD">&lt;/strong&gt;</ph>
         </message>
       </if>
-
-      <!-- Strings describing Chrome security policy for DevTools security panel -->
-      <message name="IDS_PRIVATE_USER_DATA_INPUT_FUTURE_DESCRIPTION" desc="Description of a security problem where the site collects private user data on an insecure page, which will result in an omnibox warning in future versions of Chrome." translateable="false">
-        This page includes a password or credit card input over HTTP. A warning will appear in the URL bar starting in Chrome 56 (Jan 2017).
-      </message>
-      <message name="IDS_PRIVATE_USER_DATA_INPUT_DESCRIPTION" desc="Description of a security problem where the site collects private user data on an insecure page, which results in an omnibox warning." translateable="false">
-        This page includes a password or credit card input over HTTP. A warning has been added the URL bar.
-      </message>
-
     </messages>
   </release>
 </grit>

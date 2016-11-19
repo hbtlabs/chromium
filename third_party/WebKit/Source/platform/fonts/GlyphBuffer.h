@@ -136,7 +136,7 @@ class GlyphBuffer {
     SECURITY_DCHECK(!m_offsets.isEmpty());
     for (unsigned i = 0; i + 1 < m_offsets.size(); ++i)
       m_offsets[i] = totalWidth - m_offsets[i + 1];
-    m_offsets.last() = totalWidth - afterOffset;
+    m_offsets.back() = totalWidth - afterOffset;
 
     m_offsets.reverse();
   }

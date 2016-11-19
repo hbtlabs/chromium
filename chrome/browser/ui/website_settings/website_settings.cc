@@ -82,7 +82,6 @@ using base::ASCIIToUTF16;
 using base::UTF8ToUTF16;
 using base::UTF16ToUTF8;
 using content::BrowserThread;
-using security_state::SecurityStateModel;
 
 namespace {
 
@@ -110,10 +109,6 @@ ContentSettingsType kPermissionType[] = {
     CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC,
     CONTENT_SETTINGS_TYPE_KEYGEN,
     CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
-#if !defined(OS_ANDROID)
-    CONTENT_SETTINGS_TYPE_MOUSELOCK,
-#endif
-    CONTENT_SETTINGS_TYPE_FULLSCREEN,
     CONTENT_SETTINGS_TYPE_AUTOPLAY,
     CONTENT_SETTINGS_TYPE_MIDI_SYSEX,
 };
@@ -121,44 +116,37 @@ ContentSettingsType kPermissionType[] = {
 // Determines whether to show permission |type| in the Website Settings UI. Only
 // applies to permissions listed in |kPermissionType|.
 bool ShouldShowPermission(ContentSettingsType type) {
-  // TODO(mgiuca): When simplified-fullscreen-ui is enabled permanently on
-  // Android, remove these from kPermissionType, rather than having this check
-  // (http://crbug.com/577396).
 #if !defined(OS_ANDROID)
-  // Fullscreen and mouselock settings are no longer shown (always allow).
   // Autoplay is Android-only at the moment.
-  if (type == CONTENT_SETTINGS_TYPE_AUTOPLAY ||
-      type == CONTENT_SETTINGS_TYPE_FULLSCREEN ||
-      type == CONTENT_SETTINGS_TYPE_MOUSELOCK) {
+  if (type == CONTENT_SETTINGS_TYPE_AUTOPLAY)
     return false;
-  }
 #endif
 
   return true;
 }
 
-void CheckContentStatus(SecurityStateModel::ContentStatus content_status,
+void CheckContentStatus(security_state::ContentStatus content_status,
                         bool* displayed,
                         bool* ran) {
   switch (content_status) {
-    case SecurityStateModel::CONTENT_STATUS_DISPLAYED:
+    case security_state::CONTENT_STATUS_DISPLAYED:
       *displayed = true;
       break;
-    case SecurityStateModel::CONTENT_STATUS_RAN:
+    case security_state::CONTENT_STATUS_RAN:
       *ran = true;
       break;
-    case SecurityStateModel::CONTENT_STATUS_DISPLAYED_AND_RAN:
+    case security_state::CONTENT_STATUS_DISPLAYED_AND_RAN:
       *displayed = true;
       *ran = true;
       break;
-    case SecurityStateModel::CONTENT_STATUS_UNKNOWN:
-    case SecurityStateModel::CONTENT_STATUS_NONE:
+    case security_state::CONTENT_STATUS_UNKNOWN:
+    case security_state::CONTENT_STATUS_NONE:
       break;
   }
 }
 
 void CheckForInsecureContent(
-    const SecurityStateModel::SecurityInfo& security_info,
+    const security_state::SecurityInfo& security_info,
     bool* displayed,
     bool* ran) {
   CheckContentStatus(security_info.mixed_content_status, displayed, ran);
@@ -175,58 +163,30 @@ void CheckForInsecureContent(
                      ran);
 }
 
-// Returns true if any of the given statuses match |status|.
-bool CertificateTransparencyStatusMatchAny(
-    const std::vector<net::ct::SCTVerifyStatus>& sct_verify_statuses,
-    net::ct::SCTVerifyStatus status) {
-  for (const auto& verify_status : sct_verify_statuses) {
-    if (verify_status == status)
-      return true;
+void GetSiteIdentityByMaliciousContentStatus(
+    security_state::MaliciousContentStatus malicious_content_status,
+    WebsiteSettings::SiteIdentityStatus* status,
+    base::string16* details) {
+  switch (malicious_content_status) {
+    case security_state::MALICIOUS_CONTENT_STATUS_NONE:
+      NOTREACHED();
+      break;
+    case security_state::MALICIOUS_CONTENT_STATUS_MALWARE:
+      *status = WebsiteSettings::SITE_IDENTITY_STATUS_MALWARE;
+      *details =
+          l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_MALWARE_DETAILS);
+      break;
+    case security_state::MALICIOUS_CONTENT_STATUS_SOCIAL_ENGINEERING:
+      *status = WebsiteSettings::SITE_IDENTITY_STATUS_SOCIAL_ENGINEERING;
+      *details = l10n_util::GetStringUTF16(
+          IDS_WEBSITE_SETTINGS_SOCIAL_ENGINEERING_DETAILS);
+      break;
+    case security_state::MALICIOUS_CONTENT_STATUS_UNWANTED_SOFTWARE:
+      *status = WebsiteSettings::SITE_IDENTITY_STATUS_UNWANTED_SOFTWARE;
+      *details = l10n_util::GetStringUTF16(
+          IDS_WEBSITE_SETTINGS_UNWANTED_SOFTWARE_DETAILS);
+      break;
   }
-  return false;
-}
-
-int GetSiteIdentityDetailsMessageByCTInfo(
-    const std::vector<net::ct::SCTVerifyStatus>& sct_verify_statuses,
-    bool is_ev) {
-  // No SCTs - no CT information.
-  if (sct_verify_statuses.empty())
-    return (is_ev ? IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_EV_NO_CT
-                  : IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_NO_CT);
-
-  // Any valid SCT.
-  if (CertificateTransparencyStatusMatchAny(sct_verify_statuses,
-                                            net::ct::SCT_STATUS_OK))
-    return (is_ev ? IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_EV_CT_VERIFIED
-                  : IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_CT_VERIFIED);
-
-  // Any invalid SCT.
-  if (CertificateTransparencyStatusMatchAny(
-          sct_verify_statuses, net::ct::SCT_STATUS_INVALID_TIMESTAMP) ||
-      CertificateTransparencyStatusMatchAny(
-          sct_verify_statuses, net::ct::SCT_STATUS_INVALID_SIGNATURE))
-    return (is_ev ? IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_EV_CT_INVALID
-                  : IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_CT_INVALID);
-
-  // All SCTs are from unknown logs.
-  return (is_ev ? IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_EV_CT_UNVERIFIED
-                : IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_CT_UNVERIFIED);
-}
-
-// This function will return SITE_IDENTITY_STATUS_CERT or
-// SITE_IDENTITY_STATUS_EV_CERT depending on |is_ev| unless all SCTs
-// failed verification, in which case it will return
-// SITE_IDENTITY_STATUS_ERROR.
-WebsiteSettings::SiteIdentityStatus GetSiteIdentityStatusByCTInfo(
-    const std::vector<net::ct::SCTVerifyStatus>& sct_verify_statuses,
-    bool is_ev) {
-  if (sct_verify_statuses.empty() ||
-      CertificateTransparencyStatusMatchAny(sct_verify_statuses,
-                                            net::ct::SCT_STATUS_OK))
-    return is_ev ? WebsiteSettings::SITE_IDENTITY_STATUS_EV_CERT
-                 : WebsiteSettings::SITE_IDENTITY_STATUS_CERT;
-
-  return WebsiteSettings::SITE_IDENTITY_STATUS_CT_ERROR;
 }
 
 base::string16 GetSimpleSiteName(const GURL& url) {
@@ -255,7 +215,7 @@ WebsiteSettings::WebsiteSettings(
     TabSpecificContentSettings* tab_specific_content_settings,
     content::WebContents* web_contents,
     const GURL& url,
-    const SecurityStateModel::SecurityInfo& security_info)
+    const security_state::SecurityInfo& security_info)
     : TabSpecificContentSettings::SiteDataObserver(
           tab_specific_content_settings),
       content::WebContentsObserver(web_contents),
@@ -270,7 +230,7 @@ WebsiteSettings::WebsiteSettings(
           ChromeSSLHostStateDelegateFactory::GetForProfile(profile)),
       did_revoke_user_ssl_decisions_(false),
       profile_(profile),
-      security_level_(security_state::SecurityStateModel::NONE) {
+      security_level_(security_state::NONE) {
   Init(url, security_info);
 
   PresentSitePermissions();
@@ -294,26 +254,24 @@ void WebsiteSettings::RecordWebsiteSettingsAction(
   std::string histogram_name;
 
   if (site_url_.SchemeIsCryptographic()) {
-    if (security_level_ == security_state::SecurityStateModel::SECURE ||
-        security_level_ == security_state::SecurityStateModel::EV_SECURE) {
+    if (security_level_ == security_state::SECURE ||
+        security_level_ == security_state::EV_SECURE) {
       UMA_HISTOGRAM_ENUMERATION("Security.PageInfo.Action.HttpsUrl.Valid",
                                 action, WEBSITE_SETTINGS_COUNT);
-    } else if (security_level_ == security_state::SecurityStateModel::NONE) {
+    } else if (security_level_ == security_state::NONE) {
       UMA_HISTOGRAM_ENUMERATION("Security.PageInfo.Action.HttpsUrl.Downgraded",
                                 action, WEBSITE_SETTINGS_COUNT);
-    } else if (security_level_ ==
-               security_state::SecurityStateModel::DANGEROUS) {
+    } else if (security_level_ == security_state::DANGEROUS) {
       UMA_HISTOGRAM_ENUMERATION("Security.PageInfo.Action.HttpsUrl.Dangerous",
                                 action, WEBSITE_SETTINGS_COUNT);
     }
     return;
   }
 
-  if (security_level_ ==
-      security_state::SecurityStateModel::HTTP_SHOW_WARNING) {
+  if (security_level_ == security_state::HTTP_SHOW_WARNING) {
     UMA_HISTOGRAM_ENUMERATION("Security.PageInfo.Action.HttpUrl.Warning",
                               action, WEBSITE_SETTINGS_COUNT);
-  } else if (security_level_ == security_state::SecurityStateModel::DANGEROUS) {
+  } else if (security_level_ == security_state::DANGEROUS) {
     UMA_HISTOGRAM_ENUMERATION("Security.PageInfo.Action.HttpUrl.Dangerous",
                               action, WEBSITE_SETTINGS_COUNT);
   } else {
@@ -411,9 +369,8 @@ void WebsiteSettings::OnRevokeSSLErrorBypassButtonPressed() {
   did_revoke_user_ssl_decisions_ = true;
 }
 
-void WebsiteSettings::Init(
-    const GURL& url,
-    const SecurityStateModel::SecurityInfo& security_info) {
+void WebsiteSettings::Init(const GURL& url,
+                           const security_state::SecurityInfo& security_info) {
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
   // On desktop, internal URLs aren't handled by this class. Instead, a
   // custom and simpler popup is shown.
@@ -454,13 +411,18 @@ void WebsiteSettings::Init(
   // Identity section.
   certificate_ = security_info.certificate;
 
-  // HTTPS with no or minor errors.
-  if (certificate_ &&
-      (!net::IsCertStatusError(security_info.cert_status) ||
-       net::IsCertStatusMinorError(security_info.cert_status))) {
-    // There are no major errors. Check for minor errors.
+  if (security_info.malicious_content_status !=
+      security_state::MALICIOUS_CONTENT_STATUS_NONE) {
+    // The site has been flagged by Safe Browsing as dangerous.
+    GetSiteIdentityByMaliciousContentStatus(
+        security_info.malicious_content_status, &site_identity_status_,
+        &site_identity_details_);
+  } else if (certificate_ &&
+             (!net::IsCertStatusError(security_info.cert_status) ||
+              net::IsCertStatusMinorError(security_info.cert_status))) {
+    // HTTPS with no or minor errors.
     if (security_info.security_level ==
-        SecurityStateModel::SECURE_WITH_POLICY_INSTALLED_CERT) {
+        security_state::SECURE_WITH_POLICY_INSTALLED_CERT) {
       site_identity_status_ = SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT;
       site_identity_details_ = l10n_util::GetStringFUTF16(
           IDS_CERT_POLICY_PROVIDED_CERT_MESSAGE, UTF8ToUTF16(url.host()));
@@ -474,9 +436,7 @@ void WebsiteSettings::Init(
       }
 
       site_identity_details_.assign(l10n_util::GetStringFUTF16(
-          GetSiteIdentityDetailsMessageByCTInfo(
-              security_info.sct_verify_statuses, false /* not EV */),
-          issuer_name));
+          IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_VERIFIED, issuer_name));
 
       site_identity_details_ += ASCIIToUTF16("\n\n");
       if (security_info.cert_status &
@@ -491,10 +451,10 @@ void WebsiteSettings::Init(
         NOTREACHED() << "Need to specify string for this warning";
       }
     } else {
+      // No major or minor errors.
       if (security_info.cert_status & net::CERT_STATUS_IS_EV) {
         // EV HTTPS page.
-        site_identity_status_ = GetSiteIdentityStatusByCTInfo(
-            security_info.sct_verify_statuses, true);
+        site_identity_status_ = SITE_IDENTITY_STATUS_EV_CERT;
         DCHECK(!certificate_->subject().organization_names.empty());
         organization_name_ =
             UTF8ToUTF16(certificate_->subject().organization_names[0]);
@@ -517,15 +477,12 @@ void WebsiteSettings::Init(
         }
         DCHECK(!certificate_->subject().organization_names.empty());
         site_identity_details_.assign(l10n_util::GetStringFUTF16(
-            GetSiteIdentityDetailsMessageByCTInfo(
-                security_info.sct_verify_statuses, true /* is EV */),
+            IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_EV_VERIFIED,
             UTF8ToUTF16(certificate_->subject().organization_names[0]),
-            locality,
-            UTF8ToUTF16(certificate_->issuer().GetDisplayName())));
+            locality, UTF8ToUTF16(certificate_->issuer().GetDisplayName())));
       } else {
         // Non-EV OK HTTPS page.
-        site_identity_status_ = GetSiteIdentityStatusByCTInfo(
-            security_info.sct_verify_statuses, false);
+        site_identity_status_ = SITE_IDENTITY_STATUS_CERT;
         base::string16 issuer_name(
             UTF8ToUTF16(certificate_->issuer().GetDisplayName()));
         if (issuer_name.empty()) {
@@ -534,12 +491,10 @@ void WebsiteSettings::Init(
         }
 
         site_identity_details_.assign(l10n_util::GetStringFUTF16(
-            GetSiteIdentityDetailsMessageByCTInfo(
-                security_info.sct_verify_statuses, false /* not EV */),
-            issuer_name));
+            IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_VERIFIED, issuer_name));
       }
       switch (security_info.sha1_deprecation_status) {
-        case SecurityStateModel::DEPRECATED_SHA1_MINOR:
+        case security_state::DEPRECATED_SHA1_MINOR:
           site_identity_status_ =
               SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MINOR;
           site_identity_details_ +=
@@ -547,7 +502,7 @@ void WebsiteSettings::Init(
               l10n_util::GetStringUTF16(
                   IDS_PAGE_INFO_SECURITY_TAB_DEPRECATED_SIGNATURE_ALGORITHM_MINOR);
           break;
-        case SecurityStateModel::DEPRECATED_SHA1_MAJOR:
+        case security_state::DEPRECATED_SHA1_MAJOR:
           site_identity_status_ =
               SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MAJOR;
           site_identity_details_ +=
@@ -555,10 +510,10 @@ void WebsiteSettings::Init(
               l10n_util::GetStringUTF16(
                   IDS_PAGE_INFO_SECURITY_TAB_DEPRECATED_SIGNATURE_ALGORITHM_MAJOR);
           break;
-        case SecurityStateModel::NO_DEPRECATED_SHA1:
+        case security_state::NO_DEPRECATED_SHA1:
           // Nothing to do.
           break;
-        case SecurityStateModel::UNKNOWN_SHA1:
+        case security_state::UNKNOWN_SHA1:
           // UNKNOWN_SHA1 should only appear when certificate info has not been
           // initialized, in which case this if-statement should not be running
           // because there is no other cert info.
@@ -614,7 +569,7 @@ void WebsiteSettings::Init(
     // Security strength is unknown.  Say nothing.
     site_connection_status_ = SITE_CONNECTION_STATUS_ENCRYPTED_ERROR;
   } else if (security_info.security_bits == 0) {
-    DCHECK_NE(security_info.security_level, SecurityStateModel::NONE);
+    DCHECK_NE(security_info.security_level, security_state::NONE);
     site_connection_status_ = SITE_CONNECTION_STATUS_ENCRYPTED_ERROR;
     site_connection_details_.assign(l10n_util::GetStringFUTF16(
         IDS_PAGE_INFO_SECURITY_TAB_NOT_ENCRYPTED_CONNECTION_TEXT,
@@ -726,7 +681,6 @@ void WebsiteSettings::Init(
       site_connection_status_ ==
           SITE_CONNECTION_STATUS_INSECURE_ACTIVE_SUBRESOURCE ||
       site_identity_status_ == SITE_IDENTITY_STATUS_ERROR ||
-      site_identity_status_ == SITE_IDENTITY_STATUS_CT_ERROR ||
       site_identity_status_ == SITE_IDENTITY_STATUS_CERT_REVOCATION_UNKNOWN ||
       site_identity_status_ == SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT ||
       site_identity_status_ ==

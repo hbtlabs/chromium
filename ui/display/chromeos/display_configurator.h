@@ -29,12 +29,10 @@
 #include "ui/gfx/geometry/size.h"
 
 namespace gfx {
-class Point;
 class Size;
 }
 
 namespace ui {
-struct DisplayConfigureRequest;
 struct GammaRampRGBEntry;
 class DisplayLayoutManager;
 class DisplayMode;
@@ -381,6 +379,13 @@ class DISPLAY_EXPORT DisplayConfigurator : public NativeDisplayObserver {
   void OnDisplayControlTaken(const DisplayControlCallback& callback,
                              bool success);
   void OnDisplayControlRelinquished(const DisplayControlCallback& callback,
+                                    bool success);
+
+  // Helper function that sends the actual command.
+  // |callback| is called upon completion of the relinquish command.
+  // |success| is the result from calling SetDisplayPowerInternal() in
+  // RelinquishDisplay().
+  void SendRelinquishDisplayControl(const DisplayControlCallback& callback,
                                     bool success);
 
   StateController* state_controller_;

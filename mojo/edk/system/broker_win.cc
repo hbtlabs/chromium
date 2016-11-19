@@ -7,6 +7,7 @@
 #include <limits>
 #include <utility>
 
+#include "base/debug/alias.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_piece.h"
 #include "mojo/edk/embedder/named_platform_handle.h"
@@ -52,6 +53,9 @@ Channel::MessagePtr WaitForBrokerMessage(PlatformHandle platform_handle,
   BOOL result = ::ReadFile(platform_handle.handle, buffer,
                            kMaxBrokerMessageSize, &bytes_read, nullptr);
   if (!result) {
+    // The pipe may be broken if the browser side has been closed, e.g. during
+    // browser shutdown. In that case the ReadFile call will fail and we
+    // shouldn't continue waiting.
     PLOG(ERROR) << "Error reading broker pipe";
     return nullptr;
   }
@@ -60,6 +64,11 @@ Channel::MessagePtr WaitForBrokerMessage(PlatformHandle platform_handle,
       Channel::Message::Deserialize(buffer, static_cast<size_t>(bytes_read));
   if (!message || message->payload_size() < sizeof(BrokerMessageHeader)) {
     LOG(ERROR) << "Invalid broker message";
+
+    base::debug::Alias(&buffer[0]);
+    base::debug::Alias(&bytes_read);
+    base::debug::Alias(message.get());
+    CHECK(false);
     return nullptr;
   }
 
@@ -67,6 +76,11 @@ Channel::MessagePtr WaitForBrokerMessage(PlatformHandle platform_handle,
       reinterpret_cast<const BrokerMessageHeader*>(message->payload());
   if (header->type != expected_type) {
     LOG(ERROR) << "Unexpected broker message type";
+
+    base::debug::Alias(&buffer[0]);
+    base::debug::Alias(&bytes_read);
+    base::debug::Alias(message.get());
+    CHECK(false);
     return nullptr;
   }
 
@@ -79,7 +93,11 @@ Broker::Broker(ScopedPlatformHandle handle) : sync_channel_(std::move(handle)) {
   CHECK(sync_channel_.is_valid());
   Channel::MessagePtr message =
       WaitForBrokerMessage(sync_channel_.get(), BrokerMessageType::INIT);
-  CHECK(message);
+
+  // If we fail to read a message (broken pipe), just return early. The parent
+  // handle will be null and callers must handle this gracefully.
+  if (!message)
+    return;
 
   if (!TakeHandlesFromBrokerMessage(message.get(), 1, &parent_channel_)) {
     // If the message has no handles, we expect it to carry pipe name instead.

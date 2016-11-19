@@ -4,8 +4,10 @@
 
 #include "extensions/browser/api/web_request/web_request_permissions.h"
 
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "chromeos/login/login_state.h"
 #include "content/public/browser/resource_request_info.h"
 #include "extensions/browser/extension_navigation_ui_data.h"
 #include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
@@ -23,52 +25,6 @@ using extensions::PermissionsData;
 
 namespace {
 
-// Returns true if the URL is sensitive and requests to this URL must not be
-// modified/canceled by extensions, e.g. because it is targeted to the webstore
-// to check for updates, extension blacklisting, etc.
-bool IsSensitiveURL(const GURL& url) {
-  // TODO(battre) Merge this, CanExtensionAccessURL and
-  // PermissionsData::CanAccessPage into one function.
-  bool sensitive_chrome_url = false;
-  const std::string host = url.host();
-  const char kGoogleCom[] = ".google.com";
-  const char kClient[] = "clients";
-  if (base::EndsWith(host, kGoogleCom, base::CompareCase::SENSITIVE)) {
-    // Check for "clients[0-9]*.google.com" hosts.
-    // This protects requests to several internal services such as sync,
-    // extension update pings, captive portal detection, fraudulent certificate
-    // reporting, autofill and others.
-    if (base::StartsWith(host, kClient, base::CompareCase::SENSITIVE)) {
-      bool match = true;
-      for (std::string::const_iterator i = host.begin() + strlen(kClient),
-               end = host.end() - strlen(kGoogleCom); i != end; ++i) {
-        if (!isdigit(*i)) {
-          match = false;
-          break;
-        }
-      }
-      sensitive_chrome_url = sensitive_chrome_url || match;
-    }
-    // This protects requests to safe browsing, link doctor, and possibly
-    // others.
-    sensitive_chrome_url =
-        sensitive_chrome_url ||
-        base::EndsWith(url.host(), ".clients.google.com",
-                       base::CompareCase::SENSITIVE) ||
-        url.host() == "sb-ssl.google.com" ||
-        (url.host() == "chrome.google.com" &&
-         base::StartsWith(url.path(), "/webstore",
-                          base::CompareCase::SENSITIVE));
-  }
-  GURL::Replacements replacements;
-  replacements.ClearQuery();
-  replacements.ClearRef();
-  GURL url_without_query = url.ReplaceComponents(replacements);
-  return sensitive_chrome_url ||
-      extension_urls::IsWebstoreUpdateUrl(url_without_query) ||
-      extension_urls::IsBlacklistUpdateUrl(url);
-}
-
 // Returns true if the scheme is one we want to allow extensions to have access
 // to. Extensions still need specific permissions for a given URL, which is
 // covered by CanExtensionAccessURL.
@@ -80,7 +36,50 @@ bool HasWebRequestScheme(const GURL& url) {
           url.SchemeIs(extensions::kExtensionScheme));
 }
 
+bool g_allow_all_extension_locations_in_public_session = false;
+
 }  // namespace
+
+// Returns true if the URL is sensitive and requests to this URL must not be
+// modified/canceled by extensions, e.g. because it is targeted to the webstore
+// to check for updates, extension blacklisting, etc.
+bool IsSensitiveURL(const GURL& url) {
+  // TODO(battre) Merge this, CanExtensionAccessURL and
+  // PermissionsData::CanAccessPage into one function.
+  bool sensitive_chrome_url = false;
+  const base::StringPiece& host = url.host_piece();
+  const char kGoogleCom[] = "google.com";
+  const char kClient[] = "clients";
+  if (url.DomainIs(kGoogleCom)) {
+    // Check for "clients[0-9]*.google.com" hosts.
+    // This protects requests to several internal services such as sync,
+    // extension update pings, captive portal detection, fraudulent certificate
+    // reporting, autofill and others.
+    if (base::StartsWith(host, kClient, base::CompareCase::SENSITIVE)) {
+      bool match = true;
+      for (base::StringPiece::const_iterator
+               i = host.begin() + strlen(kClient),
+               end = host.end() - (strlen(kGoogleCom) + 1);
+           i != end; ++i) {
+        if (!isdigit(*i)) {
+          match = false;
+          break;
+        }
+      }
+      sensitive_chrome_url = sensitive_chrome_url || match;
+    }
+    // This protects requests to safe browsing, link doctor, and possibly
+    // others.
+    sensitive_chrome_url = sensitive_chrome_url ||
+                           url.DomainIs("clients.google.com") ||
+                           url.DomainIs("sb-ssl.google.com") ||
+                           (url.DomainIs("chrome.google.com") &&
+                            base::StartsWith(url.path_piece(), "/webstore",
+                                             base::CompareCase::SENSITIVE));
+  }
+  return sensitive_chrome_url || extension_urls::IsWebstoreUpdateUrl(url) ||
+         extension_urls::IsBlacklistUpdateUrl(url);
+}
 
 // static
 bool WebRequestPermissions::HideRequest(
@@ -109,6 +108,12 @@ bool WebRequestPermissions::HideRequest(
 }
 
 // static
+void WebRequestPermissions::
+     AllowAllExtensionLocationsInPublicSessionForTesting(bool value) {
+  g_allow_all_extension_locations_in_public_session = value;
+}
+
+// static
 PermissionsData::AccessType WebRequestPermissions::CanExtensionAccessURL(
     const extensions::InfoMap* extension_info_map,
     const std::string& extension_id,
@@ -124,6 +129,21 @@ PermissionsData::AccessType WebRequestPermissions::CanExtensionAccessURL(
       extension_info_map->extensions().GetByID(extension_id);
   if (!extension)
     return PermissionsData::ACCESS_DENIED;
+
+  // When we are in a Public Session, allow all URLs for webRequests initiated
+  // by a regular extension (but don't allow chrome:// URLs).
+#if defined(OS_CHROMEOS)
+  if (chromeos::LoginState::IsInitialized() &&
+      chromeos::LoginState::Get()->IsPublicSessionUser() &&
+      extension->is_extension() &&
+      !url.SchemeIs("chrome")) {
+    // Make sure that the extension is truly installed by policy (the assumption
+    // in Public Session is that all extensions are installed by policy).
+    CHECK(g_allow_all_extension_locations_in_public_session ||
+          extensions::Manifest::IsPolicyLocation(extension->location()));
+    return PermissionsData::ACCESS_ALLOWED;
+  }
+#endif
 
   // Check if this event crosses incognito boundaries when it shouldn't.
   if (crosses_incognito && !extension_info_map->CanCrossIncognito(extension))

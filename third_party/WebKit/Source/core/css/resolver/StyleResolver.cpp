@@ -522,6 +522,7 @@ void StyleResolver::matchRuleSet(ElementRuleCollector& collector,
   collector.sortAndTransferMatchedRules();
 }
 
+DISABLE_CFI_PERF
 void StyleResolver::matchAllRules(StyleResolverState& state,
                                   ElementRuleCollector& collector,
                                   bool includeSMILProperties) {
@@ -1021,7 +1022,9 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForPage(int pageIndex) {
 
   NeedsApplyPass needsApplyPass;
   const MatchResult& result = collector.matchedResult();
-  applyMatchedProperties<HighPropertyPriority, UpdateNeedsApplyPass>(
+  applyMatchedProperties<AnimationPropertyPriority, UpdateNeedsApplyPass>(
+      state, result.allRules(), false, inheritedOnly, needsApplyPass);
+  applyMatchedProperties<HighPropertyPriority, CheckNeedsApplyPass>(
       state, result.allRules(), false, inheritedOnly, needsApplyPass);
 
   // If our font got dirtied, go ahead and update it now.
@@ -1512,6 +1515,7 @@ void StyleResolver::applyProperties(
 
     if (property == CSSPropertyAll && isImportant == current.isImportant()) {
       if (shouldUpdateNeedsApplyPass) {
+        needsApplyPass.set(AnimationPropertyPriority, isImportant);
         needsApplyPass.set(HighPropertyPriority, isImportant);
         needsApplyPass.set(LowPropertyPriority, isImportant);
       }
@@ -1541,7 +1545,7 @@ void StyleResolver::applyProperties(
     if (!CSSPropertyPriorityData<priority>::propertyHasPriority(property))
       continue;
 
-    StyleBuilder::applyProperty(current.id(), state, current.value());
+    StyleBuilder::applyProperty(property, state, current.value());
   }
 }
 
@@ -1680,12 +1684,18 @@ void StyleResolver::applyMatchedProperties(StyleResolverState& state,
     }
   }
 
+  // Apply animation affecting properties.
+  applyMatchedProperties<AnimationPropertyPriority, UpdateNeedsApplyPass>(
+      state, matchResult.allRules(), false, applyInheritedOnly, needsApplyPass);
+  applyMatchedProperties<AnimationPropertyPriority, CheckNeedsApplyPass>(
+      state, matchResult.allRules(), true, applyInheritedOnly, needsApplyPass);
+
   // Now we have all of the matched rules in the appropriate order. Walk the
   // rules and apply high-priority properties first, i.e., those properties that
   // other properties depend on.  The order is (1) high-priority not important,
   // (2) high-priority important, (3) normal not important and (4) normal
   // important.
-  applyMatchedProperties<HighPropertyPriority, UpdateNeedsApplyPass>(
+  applyMatchedProperties<HighPropertyPriority, CheckNeedsApplyPass>(
       state, matchResult.allRules(), false, applyInheritedOnly, needsApplyPass);
   for (auto range : ImportantAuthorRanges(matchResult)) {
     applyMatchedProperties<HighPropertyPriority, CheckNeedsApplyPass>(

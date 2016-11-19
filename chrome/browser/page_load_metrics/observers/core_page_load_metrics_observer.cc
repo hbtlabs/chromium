@@ -103,6 +103,12 @@ const char kBackgroundHistogramFirstContentfulPaint[] =
     "PageLoad.PaintTiming.NavigationToFirstContentfulPaint.Background";
 const char kHistogramFirstMeaningfulPaint[] =
     "PageLoad.Experimental.PaintTiming.NavigationToFirstMeaningfulPaint";
+const char kHistogramFirstMeaningfulPaintNoUserInput[] =
+    "PageLoad.Experimental.PaintTiming.NavigationToFirstMeaningfulPaint."
+    "NoUserInput";
+const char kHistogramFirstMeaningfulPaintHadUserInput[] =
+    "PageLoad.Experimental.PaintTiming.NavigationToFirstMeaningfulPaint."
+    "HadUserInput";
 const char kHistogramParseStartToFirstMeaningfulPaint[] =
     "PageLoad.Experimental.PaintTiming.ParseStartToFirstMeaningfulPaint";
 const char kHistogramParseStartToFirstContentfulPaint[] =
@@ -189,6 +195,8 @@ const char kHistogramFirstContentfulPaintUserInitiated[] =
 
 const char kHistogramFirstMeaningfulPaintStatus[] =
     "PageLoad.Experimental.PaintTiming.FirstMeaningfulPaintStatus";
+const char kHistogramFirstMeaningfulPaintSignalStatus[] =
+    "PageLoad.Experimental.PaintTiming.FirstMeaningfulPaintSignalStatus";
 
 const char kHistogramFirstNonScrollInputAfterFirstPaint[] =
     "PageLoad.InputTiming.NavigationToFirstNonScroll.AfterPaint";
@@ -199,7 +207,6 @@ const char kHistogramFirstScrollInputAfterFirstPaint[] =
 
 CorePageLoadMetricsObserver::CorePageLoadMetricsObserver()
     : transition_(ui::PAGE_TRANSITION_LINK),
-      initiated_by_user_gesture_(false),
       was_no_store_main_resource_(false) {}
 
 CorePageLoadMetricsObserver::~CorePageLoadMetricsObserver() {}
@@ -208,7 +215,6 @@ page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 CorePageLoadMetricsObserver::OnCommit(
     content::NavigationHandle* navigation_handle) {
   transition_ = navigation_handle->GetPageTransition();
-  initiated_by_user_gesture_ = navigation_handle->HasUserGesture();
   navigation_start_ = navigation_handle->NavigationStart();
   const net::HttpResponseHeaders* headers =
       navigation_handle->GetResponseHeaders();
@@ -327,9 +333,17 @@ void CorePageLoadMetricsObserver::OnFirstContentfulPaint(
                           timing.first_contentful_paint.value());
     }
 
-    if (info.user_gesture) {
+    if (info.user_initiated) {
       PAGE_LOAD_HISTOGRAM(internal::kHistogramFirstContentfulPaintUserInitiated,
                           timing.first_contentful_paint.value());
+    }
+
+    if (timing.style_sheet_timing
+            .author_style_sheet_parse_duration_before_fcp) {
+      PAGE_LOAD_HISTOGRAM(
+          "PageLoad.CSSTiming.Parse.BeforeFirstContentfulPaint",
+          timing.style_sheet_timing.author_style_sheet_parse_duration_before_fcp
+              .value());
     }
 
     switch (GetPageLoadType(transition_)) {
@@ -337,7 +351,7 @@ void CorePageLoadMetricsObserver::OnFirstContentfulPaint(
         PAGE_LOAD_HISTOGRAM(
             internal::kHistogramLoadTypeFirstContentfulPaintReload,
             timing.first_contentful_paint.value());
-        if (initiated_by_user_gesture_) {
+        if (info.user_initiated) {
           PAGE_LOAD_HISTOGRAM(
               internal::kHistogramLoadTypeFirstContentfulPaintReloadByGesture,
               timing.first_contentful_paint.value());
@@ -566,6 +580,28 @@ void CorePageLoadMetricsObserver::RecordTimingHistograms(
         timing.first_contentful_paint ?
         internal::FIRST_MEANINGFUL_PAINT_DID_NOT_REACH_NETWORK_STABLE :
         internal::FIRST_MEANINGFUL_PAINT_DID_NOT_REACH_FIRST_CONTENTFUL_PAINT);
+  }
+
+  enum FirstMeaningfulPaintSignalStatus {
+    HAD_USER_INPUT = 1 << 0,
+    NETWORK_STABLE = 1 << 1,
+    FIRST_MEANINGFUL_PAINT_SIGNAL_STATUS_LAST_ENTRY = 1 << 2
+  };
+  int signal_status =
+      (first_user_interaction_after_first_paint_.is_null() ?
+       0 : HAD_USER_INPUT) +
+      (timing.first_meaningful_paint ? NETWORK_STABLE : 0);
+  UMA_HISTOGRAM_ENUMERATION(
+      internal::kHistogramFirstMeaningfulPaintSignalStatus,
+      signal_status, FIRST_MEANINGFUL_PAINT_SIGNAL_STATUS_LAST_ENTRY);
+  if (timing.first_meaningful_paint) {
+    if (first_user_interaction_after_first_paint_.is_null()) {
+      PAGE_LOAD_HISTOGRAM(internal::kHistogramFirstMeaningfulPaintNoUserInput,
+                          timing.first_meaningful_paint.value());
+    } else {
+      PAGE_LOAD_HISTOGRAM(internal::kHistogramFirstMeaningfulPaintHadUserInput,
+                          timing.first_meaningful_paint.value());
+    }
   }
 }
 

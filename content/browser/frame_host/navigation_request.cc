@@ -127,6 +127,11 @@ void AddAdditionalRequestHeaders(net::HttpRequestHeaders* headers,
 
   headers->SetHeaderIfMissing(net::HttpRequestHeaders::kUserAgent,
                               GetContentClient()->GetUserAgent());
+
+  // Tack an 'Upgrade-Insecure-Requests' header to outgoing navigational
+  // requests, as described in
+  // https://w3c.github.io/webappsec/specs/upgrade/#feature-detect
+  headers->AddHeaderFromString("Upgrade-Insecure-Requests: 1");
 }
 
 }  // namespace
@@ -306,6 +311,13 @@ void NavigationRequest::CreateNavigationHandle(int pending_nav_entry_id) {
       false,  // is_srcdoc
       common_params_.navigation_start, pending_nav_entry_id,
       false);  // started_in_context_menu
+
+  if (!begin_params_.searchable_form_url.is_empty()) {
+    navigation_handle_->set_searchable_form_url(
+        begin_params_.searchable_form_url);
+    navigation_handle_->set_searchable_form_encoding(
+        begin_params_.searchable_form_encoding);
+  }
 }
 
 void NavigationRequest::TransferNavigationHandleOwnership(

@@ -29,12 +29,12 @@
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/sync/base/extensions_activity.h"
 #include "components/sync/base/report_unrecoverable_error.h"
-#include "components/sync/driver/glue/browser_thread_model_worker.h"
-#include "components/sync/driver/glue/ui_model_worker.h"
 #include "components/sync/driver/sync_api_component_factory.h"
 #include "components/sync/driver/sync_util.h"
 #include "components/sync/driver/ui_data_type_controller.h"
+#include "components/sync/engine/browser_thread_model_worker.h"
 #include "components/sync/engine/passive_model_worker.h"
+#include "components/sync/engine/ui_model_worker.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_sessions/favicon_cache.h"
 #include "components/sync_sessions/local_session_event_router.h"
@@ -52,6 +52,8 @@
 #include "ios/chrome/browser/invalidation/ios_chrome_profile_invalidation_provider_factory.h"
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #include "ios/chrome/browser/pref_names.h"
+#include "ios/chrome/browser/reading_list/reading_list_model.h"
+#include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #include "ios/chrome/browser/signin/oauth2_token_service_factory.h"
 #include "ios/chrome/browser/sync/glue/sync_start_util.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
@@ -335,6 +337,13 @@ IOSChromeSyncClient::GetSyncBridgeForModelType(syncer::ModelType type) {
                  browser_state_)
           ->GetDeviceInfoSyncBridge()
           ->AsWeakPtr();
+    case syncer::READING_LIST: {
+      ReadingListModel* reading_list_model =
+          ReadingListModelFactory::GetForBrowserState(browser_state_);
+      if (reading_list_model)
+        return reading_list_model->GetModelTypeSyncBridge()->AsWeakPtr();
+      return base::WeakPtr<syncer::ModelTypeSyncBridge>();
+    }
     default:
       NOTREACHED();
       return base::WeakPtr<syncer::ModelTypeSyncBridge>();

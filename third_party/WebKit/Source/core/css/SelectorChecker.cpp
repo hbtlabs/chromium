@@ -397,6 +397,7 @@ SelectorChecker::Match SelectorChecker::matchForRelation(
       return matchSelector(nextContext, result);
     }
 
+    case CSSSelector::ShadowPiercingDescendant:
     case CSSSelector::ShadowDeep: {
       if (!m_isUARule && !m_isQuerySelector)
         Deprecation::countDeprecation(context.element->document(),
@@ -559,8 +560,17 @@ static bool anyAttributeMatches(Element& element,
 
   AttributeCollection attributes = element.attributesWithoutUpdate();
   for (const auto& attributeItem : attributes) {
-    if (!attributeItem.matches(selectorAttr))
-      continue;
+    if (!attributeItem.matches(selectorAttr)) {
+      if (element.isHTMLElement() || !element.document().isHTMLDocument())
+        continue;
+      // Non-html attributes in html documents are normalized to their camel-
+      // cased version during parsing if applicable. Yet, attribute selectors
+      // are lower-cased for selectors in html documents. Compare the selector
+      // and the attribute local name insensitively to e.g. allow matching SVG
+      // attributes like viewBox.
+      if (!attributeItem.matchesCaseInsensitive(selectorAttr))
+        continue;
+    }
 
     if (attributeValueMatches(attributeItem, match, selectorValue,
                               caseSensitivity))
@@ -745,7 +755,7 @@ bool SelectorChecker::checkPseudoClass(const SelectorCheckingContext& context,
           parent->setChildrenAffectedByLastChildRules();
           element.setAffectedByLastChildRules();
         }
-        if (!parent->isFinishedParsingChildren())
+        if (!m_isQuerySelector && !parent->isFinishedParsingChildren())
           return false;
         return isLastChild(element);
       }
@@ -754,7 +764,7 @@ bool SelectorChecker::checkPseudoClass(const SelectorCheckingContext& context,
       if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
         if (m_mode == ResolvingStyle)
           parent->setChildrenAffectedByBackwardPositionalRules();
-        if (!parent->isFinishedParsingChildren())
+        if (!m_isQuerySelector && !parent->isFinishedParsingChildren())
           return false;
         return isLastOfType(element, element.tagQName());
       }
@@ -767,7 +777,7 @@ bool SelectorChecker::checkPseudoClass(const SelectorCheckingContext& context,
           element.setAffectedByFirstChildRules();
           element.setAffectedByLastChildRules();
         }
-        if (!parent->isFinishedParsingChildren())
+        if (!m_isQuerySelector && !parent->isFinishedParsingChildren())
           return false;
         return isFirstChild(element) && isLastChild(element);
       }
@@ -779,15 +789,15 @@ bool SelectorChecker::checkPseudoClass(const SelectorCheckingContext& context,
           parent->setChildrenAffectedByForwardPositionalRules();
           parent->setChildrenAffectedByBackwardPositionalRules();
         }
-        if (!parent->isFinishedParsingChildren())
+        if (!m_isQuerySelector && !parent->isFinishedParsingChildren())
           return false;
         return isFirstOfType(element, element.tagQName()) &&
                isLastOfType(element, element.tagQName());
       }
       break;
     case CSSSelector::PseudoPlaceholderShown:
-      if (isHTMLTextFormControlElement(element))
-        return toHTMLTextFormControlElement(element).isPlaceholderVisible();
+      if (isTextControlElement(element))
+        return toTextControlElement(element).isPlaceholderVisible();
       break;
     case CSSSelector::PseudoNthChild:
       if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
@@ -807,7 +817,7 @@ bool SelectorChecker::checkPseudoClass(const SelectorCheckingContext& context,
       if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
         if (m_mode == ResolvingStyle)
           parent->setChildrenAffectedByBackwardPositionalRules();
-        if (!parent->isFinishedParsingChildren())
+        if (!m_isQuerySelector && !parent->isFinishedParsingChildren())
           return false;
         return selector.matchNth(NthIndexCache::nthLastChildIndex(element));
       }
@@ -816,7 +826,7 @@ bool SelectorChecker::checkPseudoClass(const SelectorCheckingContext& context,
       if (ContainerNode* parent = element.parentElementOrDocumentFragment()) {
         if (m_mode == ResolvingStyle)
           parent->setChildrenAffectedByBackwardPositionalRules();
-        if (!parent->isFinishedParsingChildren())
+        if (!m_isQuerySelector && !parent->isFinishedParsingChildren())
           return false;
         return selector.matchNth(NthIndexCache::nthLastOfTypeIndex(element));
       }

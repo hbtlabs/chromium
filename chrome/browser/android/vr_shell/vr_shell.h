@@ -12,11 +12,12 @@
 #include "base/android/jni_weak_ref.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "chrome/browser/android/vr_shell/vr_math.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "device/vr/android/gvr/gvr_delegate.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/gvr-android-sdk/src/ndk/include/vr/gvr/capi/include/gvr.h"
 #include "third_party/gvr-android-sdk/src/ndk/include/vr/gvr/capi/include/gvr_types.h"
 
@@ -37,6 +38,7 @@ class UiScene;
 class VrCompositor;
 class VrController;
 class VrInputManager;
+class VrMetricsHelper;
 class VrShellDelegate;
 class VrShellRenderer;
 class VrWebContentsObserver;
@@ -50,6 +52,8 @@ enum UiAction {
   ZOOM_IN,
   RELOAD_UI
 };
+
+class VrMetricsHelper;
 
 class VrShell : public device::GvrDelegate, content::WebContentsObserver {
  public:
@@ -91,10 +95,12 @@ class VrShell : public device::GvrDelegate, content::WebContentsObserver {
   // device::GvrDelegate implementation
   void SetWebVRSecureOrigin(bool secure_origin) override;
   void SubmitWebVRFrame() override;
-  void UpdateWebVRTextureBounds(
-      int eye, float left, float top, float width, float height) override;
+  void UpdateWebVRTextureBounds(const gvr::Rectf& left_bounds,
+                                const gvr::Rectf& right_bounds) override;
   gvr::GvrApi* gvr_api() override;
   void SetGvrPoseForWebVr(const gvr::Mat4f& pose, uint32_t pose_num) override;
+  void SetWebVRRenderSurfaceSize(int width, int height) override;
+  gvr::Sizei GetWebVRCompositorSurfaceSize() override;
 
   void ContentSurfaceChanged(
       JNIEnv* env,
@@ -121,7 +127,8 @@ class VrShell : public device::GvrDelegate, content::WebContentsObserver {
   void LoadUIContent();
   void DrawVrShell(const gvr::Mat4f& head_pose, gvr::Frame &frame);
   void DrawUiView(const gvr::Mat4f* head_pose,
-                  const std::vector<const ContentRectangle*>& elements);
+                  const std::vector<const ContentRectangle*>& elements,
+                  const gvr::Sizei& render_size, int viewport_offset);
   void DrawElements(const gvr::Mat4f& render_matrix,
                     const std::vector<const ContentRectangle*>& elements);
   void DrawCursor(const gvr::Mat4f& render_matrix);
@@ -151,12 +158,21 @@ class VrShell : public device::GvrDelegate, content::WebContentsObserver {
   std::unique_ptr<gvr::BufferViewport> buffer_viewport_;
   std::unique_ptr<gvr::BufferViewport> headlocked_left_viewport_;
   std::unique_ptr<gvr::BufferViewport> headlocked_right_viewport_;
+  std::unique_ptr<gvr::BufferViewport> webvr_left_viewport_;
+  std::unique_ptr<gvr::BufferViewport> webvr_right_viewport_;
   std::unique_ptr<gvr::SwapChain> swap_chain_;
 
-  gvr::Sizei render_size_;
+  // Current sizes for the render buffers.
+  gvr::Sizei render_size_primary_;
+  gvr::Sizei render_size_headlocked_;
+
+  // Intended size for the primary render buffer by UI mode.
+  gvr::Sizei render_size_primary_webvr_ = device::kFallbackRenderTargetSize;
+  gvr::Sizei render_size_primary_vrshell_;
 
   std::queue<base::Callback<void()>> task_queue_;
   base::Lock task_queue_lock_;
+  base::Lock gvr_init_lock_;
 
   std::unique_ptr<VrCompositor> content_compositor_;
   content::WebContents* main_contents_;
@@ -178,6 +194,7 @@ class VrShell : public device::GvrDelegate, content::WebContentsObserver {
   int ui_tex_height_ = 0;
   int content_tex_width_ = 0;
   int content_tex_height_ = 0;
+  gvr::Sizei content_tex_pixels_for_webvr_ = {0, 0};
 
   bool webvr_mode_ = false;
 
@@ -186,10 +203,14 @@ class VrShell : public device::GvrDelegate, content::WebContentsObserver {
   // current backlog of poses which is 2-3 frames.
   static constexpr int kPoseRingBufferSize = 8;
   std::vector<gvr::Mat4f> webvr_head_pose_;
+  jint webvr_texture_id_ = 0;
 
   std::unique_ptr<VrController> controller_;
   scoped_refptr<VrInputManager> content_input_manager_;
   scoped_refptr<VrInputManager> ui_input_manager_;
+  scoped_refptr<VrMetricsHelper> metrics_helper_;
+
+  scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
 
   base::WeakPtrFactory<VrShell> weak_ptr_factory_;
 

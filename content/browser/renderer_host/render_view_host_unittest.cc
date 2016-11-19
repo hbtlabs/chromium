@@ -100,7 +100,8 @@ class MockDraggingRenderViewHostDelegateView
                      blink::WebDragOperationsMask allowed_ops,
                      const gfx::ImageSkia& image,
                      const gfx::Vector2d& image_offset,
-                     const DragEventSourceInfo& event_info) override {
+                     const DragEventSourceInfo& event_info,
+                     RenderWidgetHostImpl* source_rwh) override {
     drag_url_ = drop_data.url;
     html_base_url_ = drop_data.html_base_url;
   }
@@ -173,9 +174,11 @@ TEST_F(RenderViewHostTest, DragEnteredFileURLsStillBlocked) {
   dropped_data.filenames.push_back(
       ui::FileInfo(dragged_file_path, base::FilePath()));
 
-  rvh()->FilterDropData(&dropped_data);
-  rvh()->DragTargetDragEnter(dropped_data, client_point, screen_point,
-                              blink::WebDragOperationNone, 0);
+  // TODO(paulmeyer): These will need to target the correct specific
+  // RenderWidgetHost to work with OOPIFs. See crbug.com/647249.
+  rvh()->GetWidget()->FilterDropData(&dropped_data);
+  rvh()->GetWidget()->DragTargetDragEnter(
+      dropped_data, client_point, screen_point, blink::WebDragOperationNone, 0);
 
   int id = process()->GetID();
   ChildProcessSecurityPolicyImpl* policy =

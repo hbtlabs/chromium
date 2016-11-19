@@ -25,6 +25,8 @@ class RenderFrameHost;
 
 namespace data_use_measurement {
 
+class URLRequestClassifier;
+
 // Browser implementation of DataUseAscriber. Maintains a list of
 // DataUseRecorder instances, one for each source of data, such as a page
 // load.
@@ -56,8 +58,11 @@ class ChromeDataUseAscriber : public DataUseAscriber {
   // Called before a request is sent.
   void OnBeforeUrlRequest(net::URLRequest* request) override;
 
-  // Called when a URLRequest completes.
-  void OnUrlRequestCompleted(net::URLRequest* request, bool started) override;
+  // Called when a URLRequest is being destroyed.
+  void OnUrlRequestDestroyed(net::URLRequest* request) override;
+
+  std::unique_ptr<URLRequestClassifier> CreateURLRequestClassifier()
+      const override;
 
   // Called when a render frame host is created.
   void RenderFrameCreated(int render_process_id,

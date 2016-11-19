@@ -66,8 +66,7 @@ class CONTENT_EXPORT WebServiceWorkerRegistrationImpl
       blink::WebServiceWorkerProvider* provider,
       std::unique_ptr<WebSetNavigationPreloadHeaderCallbacks> callbacks)
       override;
-
-  int64_t registration_id() const;
+  int64_t registrationId() const override;
 
   using WebServiceWorkerRegistrationHandle =
       blink::WebServiceWorkerRegistration::Handle;

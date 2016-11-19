@@ -20,7 +20,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "cc/animation/target_property.h"
 #include "cc/base/cc_export.h"
 #include "cc/debug/micro_benchmark.h"
 #include "cc/debug/micro_benchmark_controller.h"
@@ -42,15 +41,14 @@
 #include "cc/trees/layer_tree_settings.h"
 #include "cc/trees/proxy.h"
 #include "cc/trees/swap_promise_manager.h"
+#include "cc/trees/target_property.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace cc {
 class MutatorEvents;
-class BeginFrameSource;
 class ClientPictureCache;
 class EnginePictureCache;
-class HeadsUpDisplayLayer;
 class ImageSerializationProcessor;
 class Layer;
 class LayerTreeHostClient;
@@ -60,20 +58,11 @@ class LayerTreeHostSingleThreadClient;
 class LayerTreeMutator;
 class MutatorHost;
 class PropertyTrees;
-class Region;
-class RemoteProtoChannel;
 class RenderingStatsInstrumentation;
-class ResourceProvider;
-class ResourceUpdateQueue;
 class TaskGraphRunner;
-struct PendingPageScaleAnimation;
 struct ReflectedMainFrameState;
 struct RenderingStats;
 struct ScrollAndScaleSet;
-
-namespace proto {
-class LayerTreeHost;
-}
 
 class CC_EXPORT LayerTreeHostInProcess : public LayerTreeHost {
  public:
@@ -97,21 +86,6 @@ class CC_EXPORT LayerTreeHostInProcess : public LayerTreeHost {
 
   static std::unique_ptr<LayerTreeHostInProcess> CreateSingleThreaded(
       LayerTreeHostSingleThreadClient* single_thread_client,
-      InitParams* params);
-
-  static std::unique_ptr<LayerTreeHostInProcess> CreateRemoteServer(
-      RemoteProtoChannel* remote_proto_channel,
-      InitParams* params);
-
-  // The lifetime of this LayerTreeHostInProcess is tied to the lifetime of the
-  // remote server LayerTreeHostInProcess. It should be created on receiving
-  // CompositorMessageToImpl::InitializeImpl message and destroyed on receiving
-  // a CompositorMessageToImpl::CloseImpl message from the server. This ensures
-  // that the client will not send any compositor messages once the
-  // LayerTreeHostInProcess on the server is destroyed.
-  static std::unique_ptr<LayerTreeHostInProcess> CreateRemoteClient(
-      RemoteProtoChannel* remote_proto_channel,
-      scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner,
       InitParams* params);
 
   ~LayerTreeHostInProcess() override;
@@ -215,24 +189,8 @@ class CC_EXPORT LayerTreeHostInProcess : public LayerTreeHost {
 
   Proxy* proxy() const { return proxy_.get(); }
 
-  // Serializes the parts of this LayerTreeHostInProcess that is needed for a
-  // commit to a protobuf message. Not all members are serialized as they are
-  // not helpful for remote usage.
-  // The |swap_promise_list_| is transferred to the serializer in
-  // |swap_promises|.
-  void ToProtobufForCommit(
-      proto::LayerTreeHost* proto,
-      std::vector<std::unique_ptr<SwapPromise>>* swap_promises);
-
-  // Deserializes the protobuf into this LayerTreeHostInProcess before a commit.
-  // The expected input is a serialized remote LayerTreeHost. After
-  // deserializing the protobuf, the normal commit-flow should continue.
-  void FromProtobufForCommit(const proto::LayerTreeHost& proto);
-
   bool IsSingleThreaded() const;
   bool IsThreaded() const;
-  bool IsRemoteServer() const;
-  bool IsRemoteClient() const;
 
   ImageSerializationProcessor* image_serialization_processor() const {
     return image_serialization_processor_;
@@ -259,13 +217,6 @@ class CC_EXPORT LayerTreeHostInProcess : public LayerTreeHost {
   void InitializeSingleThreaded(
       LayerTreeHostSingleThreadClient* single_thread_client,
       scoped_refptr<base::SingleThreadTaskRunner> main_task_runner);
-  void InitializeRemoteServer(
-      RemoteProtoChannel* remote_proto_channel,
-      scoped_refptr<base::SingleThreadTaskRunner> main_task_runner);
-  void InitializeRemoteClient(
-      RemoteProtoChannel* remote_proto_channel,
-      scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
-      scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner);
   void InitializeForTesting(
       std::unique_ptr<TaskRunnerProvider> task_runner_provider,
       std::unique_ptr<Proxy> proxy_for_testing);

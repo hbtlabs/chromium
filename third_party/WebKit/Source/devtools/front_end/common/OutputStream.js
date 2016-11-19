@@ -4,23 +4,23 @@
 /**
  * @interface
  */
-WebInspector.OutputStream = function() {};
+Common.OutputStream = function() {};
 
-WebInspector.OutputStream.prototype = {
+Common.OutputStream.prototype = {
   /**
    * @param {string} data
-   * @param {function(!WebInspector.OutputStream)=} callback
+   * @param {function(!Common.OutputStream)=} callback
    */
-  write: function(data, callback) {},
+  write(data, callback) {},
 
-  close: function() {}
+  close() {}
 };
 
 /**
- * @implements {WebInspector.OutputStream}
+ * @implements {Common.OutputStream}
  * @unrestricted
  */
-WebInspector.StringOutputStream = class {
+Common.StringOutputStream = class {
   constructor() {
     this._data = '';
   }
@@ -28,7 +28,7 @@ WebInspector.StringOutputStream = class {
   /**
    * @override
    * @param {string} chunk
-   * @param {function(!WebInspector.OutputStream)=} callback
+   * @param {function(!Common.OutputStream)=} callback
    */
   write(chunk, callback) {
     this._data += chunk;

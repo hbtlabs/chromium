@@ -214,7 +214,7 @@ void StyleBuilderFunctions::applyValueCSSPropertyCursor(
   if (value.isValueList()) {
     const CSSValueList& list = toCSSValueList(value);
     int len = list.length();
-    state.style()->setCursor(CURSOR_AUTO);
+    state.style()->setCursor(ECursor::Auto);
     for (int i = 0; i < len; i++) {
       const CSSValue& item = list.item(i);
       if (item.isCursorImageValue()) {
@@ -509,14 +509,17 @@ void StyleBuilderFunctions::applyValueCSSPropertyTextAlign(
       state.style()->setTextAlign(state.parentStyle()->textAlign());
     else
       state.style()->setTextAlign(identValue.convertTo<ETextAlign>());
-  } else if (state.parentStyle()->textAlign() == TASTART)
-    state.style()->setTextAlign(
-        state.parentStyle()->isLeftToRightDirection() ? LEFT : RIGHT);
-  else if (state.parentStyle()->textAlign() == TAEND)
-    state.style()->setTextAlign(
-        state.parentStyle()->isLeftToRightDirection() ? RIGHT : LEFT);
-  else
+  } else if (state.parentStyle()->textAlign() == ETextAlign::Start) {
+    state.style()->setTextAlign(state.parentStyle()->isLeftToRightDirection()
+                                    ? ETextAlign::Left
+                                    : ETextAlign::Right);
+  } else if (state.parentStyle()->textAlign() == ETextAlign::End) {
+    state.style()->setTextAlign(state.parentStyle()->isLeftToRightDirection()
+                                    ? ETextAlign::Right
+                                    : ETextAlign::Left);
+  } else {
     state.style()->setTextAlign(state.parentStyle()->textAlign());
+  }
 }
 
 void StyleBuilderFunctions::applyInheritCSSPropertyTextIndent(
@@ -789,7 +792,7 @@ void StyleBuilderFunctions::applyValueCSSPropertyContent(
           ContentData::create(state.styleImage(CSSPropertyContent, *item));
     } else if (item->isCounterValue()) {
       const CSSCounterValue* counterValue = toCSSCounterValue(item.get());
-      EListStyleType listStyleType = NoneListStyle;
+      EListStyleType listStyleType = EListStyleType::NoneListStyle;
       CSSValueID listStyleIdent = counterValue->listStyle();
       if (listStyleIdent != CSSValueNone)
         listStyleType =

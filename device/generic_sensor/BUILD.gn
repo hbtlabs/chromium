@@ -11,6 +11,7 @@ if (is_android) {
 component("generic_sensor") {
   output_name = "generic_sensor"
   sources = [
+    "generic_sensor_consts.h",
     "linux/platform_sensor_utils_linux.cc",
     "linux/platform_sensor_utils_linux.h",
     "linux/sensor_data_linux.cc",

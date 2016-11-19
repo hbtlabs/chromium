@@ -294,6 +294,8 @@ class CORE_EXPORT PaintLayerScrollableArea final
   ScrollBehavior scrollBehaviorStyle() const override;
   CompositorAnimationTimeline* compositorAnimationTimeline() const override;
 
+  void visibleSizeChanged();
+
   // FIXME: We shouldn't allow access to m_overflowRect outside this class.
   LayoutRect overflowRect() const { return m_overflowRect; }
 
@@ -320,7 +322,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   void updateAfterLayout();
   void clampScrollOffsetsAfterLayout();
 
-  void didChangeScrollbarsHidden() override;
+  void didChangeGlobalRootScroller() override;
 
   void updateAfterStyleChange(const ComputedStyle*);
   void updateAfterOverflowRecalc();
@@ -480,8 +482,6 @@ class CORE_EXPORT PaintLayerScrollableArea final
  private:
   explicit PaintLayerScrollableArea(PaintLayer&);
 
-  void updateScrollbarsEnabledState();
-
   bool hasHorizontalOverflow() const;
   bool hasVerticalOverflow() const;
   bool hasScrollableHorizontalOverflow() const;
@@ -492,6 +492,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   void updateScrollOrigin();
   void updateScrollDimensions();
+  void updateScrollbarEnabledState();
 
   void updateScrollOffset(const ScrollOffset&, ScrollType) override;
 
@@ -522,7 +523,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   PaintLayerScrollableAreaRareData& ensureRareData() {
     if (!m_rareData)
-      m_rareData = wrapUnique(new PaintLayerScrollableAreaRareData());
+      m_rareData = makeUnique<PaintLayerScrollableAreaRareData>();
     return *m_rareData.get();
   }
 

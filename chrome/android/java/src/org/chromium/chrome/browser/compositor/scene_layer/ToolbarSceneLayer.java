@@ -88,8 +88,9 @@ public class ToolbarSceneLayer extends SceneOverlayLayer implements SceneOverlay
 
         mLayoutProvider.getViewportPixel(mViewport);
 
-        float offset = fullscreenManager.getControlOffset();
-        boolean useTexture = fullscreenManager.drawControlsAsTexture() || offset == 0
+        // Texture is always used unless it is completely off-screen.
+        boolean useTexture = !fullscreenManager.areBrowserControlsOffScreen();
+        boolean showShadow = fullscreenManager.drawControlsAsTexture()
                 || forceHideAndroidBrowserControls;
 
         fullscreenManager.setHideBrowserControlsAndroidView(forceHideAndroidBrowserControls);
@@ -100,9 +101,13 @@ public class ToolbarSceneLayer extends SceneOverlayLayer implements SceneOverlay
             useTexture = false;
         }
 
+        // Note that the bottom controls offset is not passed here. Conveniently, the viewport
+        // size changes will push the controls off screen when they are at the bottom; see
+        // mViewport.height().
         nativeUpdateToolbarLayer(mNativePtr, resourceManager, R.id.control_container,
                 browserControlsBackgroundColor, R.drawable.textbox, browserControlsUrlBarAlpha,
-                offset, mViewport.height(), useTexture, forceHideAndroidBrowserControls);
+                fullscreenManager.getTopControlOffset(), mViewport.height(), useTexture,
+                showShadow, fullscreenManager.areBrowserControlsAtBottom());
 
         if (mProgressBarDrawingInfo == null) return;
         nativeUpdateProgressBar(mNativePtr,
@@ -247,7 +252,8 @@ public class ToolbarSceneLayer extends SceneOverlayLayer implements SceneOverlay
             float topOffset,
             float viewHeight,
             boolean visible,
-            boolean showShadow);
+            boolean showShadow,
+            boolean browserControlsAtBottom);
     private native void nativeUpdateProgressBar(
             long nativeToolbarSceneLayer,
             int progressBarX,

@@ -9,7 +9,8 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebGestureEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/gvr-android-sdk/src/ndk/include/vr/gvr/capi/include/gvr_types.h"
 
 using blink::WebGestureEvent;
@@ -90,7 +91,7 @@ class VrController {
   bool GetButtonLongPressFromButtonInfo();
 
   // Handle the waiting state.
-  void HandleWaitingState();
+  void HandleWaitingState(WebGestureEvent* gesture);
 
   // Handle the detecting state.
   void HandleDetectingState(WebGestureEvent* gesture);
@@ -102,6 +103,9 @@ class VrController {
   // Returns true if the touch position is within the slop of the initial touch
   // point, false otherwise.
   bool InSlop(const gvr::Vec2f touch_position);
+
+  // Returns true if the gesture is in horizontal direction.
+  bool IsHorizontalGesture();
 
   void Reset();
 

@@ -28,8 +28,18 @@ if (is_component_build) {
   link_target_type = "static_library"
 }
 target(link_target_type, "base") {
-  # This is part of the media component.
-  visibility = [ "//media/*" ]
+  # This should only be depended on by "media" target. Other targets should
+  # depend on "media" target directly.
+  visibility = [
+    "//media",
+
+    # TODO(xhwang): Clean up the dependency graph within "media" target.
+    "//media/audio",
+    "//media/ffmpeg",
+
+    # TODO(xhwang): Remove this dependency.
+    "//media/capture",
+  ]
   sources = [
     "audio_block_fifo.cc",
     "audio_block_fifo.h",
@@ -68,8 +78,6 @@ target(link_target_type, "base") {
     "audio_renderer_sink.h",
     "audio_shifter.cc",
     "audio_shifter.h",
-    "audio_splicer.cc",
-    "audio_splicer.h",
     "audio_timestamp_helper.cc",
     "audio_timestamp_helper.h",
     "bind_to_current_loop.h",
@@ -97,6 +105,8 @@ target(link_target_type, "base") {
     "cdm_promise.h",
     "cdm_promise_adapter.cc",
     "cdm_promise_adapter.h",
+    "cdm_session_tracker.cc",
+    "cdm_session_tracker.h",
     "channel_mixer.cc",
     "channel_mixer.h",
     "channel_mixing_matrix.cc",
@@ -407,7 +417,6 @@ source_set("unit_tests") {
     "audio_renderer_mixer_unittest.cc",
     "audio_sample_types_unittest.cc",
     "audio_shifter_unittest.cc",
-    "audio_splicer_unittest.cc",
     "audio_timestamp_helper_unittest.cc",
     "bind_to_current_loop_unittest.cc",
     "bit_reader_unittest.cc",

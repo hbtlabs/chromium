@@ -55,7 +55,7 @@ class PermissionInfoBarDelegate : public ConfirmInfoBarDelegate {
       const PermissionSetCallback& callback);
 
   ~PermissionInfoBarDelegate() override;
-  virtual std::vector<int> content_settings() const;
+  virtual std::vector<int> content_settings_types() const;
 
   // Returns true if the infobar should display a toggle to allow users to
   // opt-out of persisting their accept/deny decision.
@@ -65,6 +65,8 @@ class PermissionInfoBarDelegate : public ConfirmInfoBarDelegate {
   // settings.
   void set_persist(bool persist) { persist_ = persist; }
   bool persist() const { return persist_; }
+
+  bool user_gesture() const { return user_gesture_; }
 
   // ConfirmInfoBarDelegate:
   bool Accept() override;

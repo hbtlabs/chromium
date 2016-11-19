@@ -10,6 +10,7 @@
 #include "build/build_config.h"
 #include "chrome/common/features.h"
 #include "content/public/common/url_constants.h"
+#include "extensions/features/features.h"
 #include "printing/features/features.h"
 #include "url/url_util.h"
 
@@ -84,6 +85,8 @@ const char kChromeUIRestartURL[] = "chrome://restart/";
 const char kChromeUISettingsURL[] = "chrome://settings/";
 const char kChromeUIContentSettingsURL[] = "chrome://settings/content";
 const char kChromeUISettingsFrameURL[] = "chrome://settings-frame/";
+const char kChromeUISigninEmailConfirmationURL[] =
+    "chrome://signin-email-confirmation";
 const char kChromeUISigninErrorURL[] = "chrome://signin-error/";
 const char kChromeUISuggestionsURL[] = "chrome://suggestions/";
 const char kChromeUISupervisedUserPassphrasePageURL[] =
@@ -237,6 +240,7 @@ const char kChromeUIRestartHost[] = "restart";
 const char kChromeUISettingsHost[] = "settings";
 const char kChromeUISettingsFrameHost[] = "settings-frame";
 const char kChromeUIShorthangHost[] = "shorthang";
+const char kChromeUISigninEmailConfirmationHost[] = "signin-email-confirmation";
 const char kChromeUISigninErrorHost[] = "signin-error";
 const char kChromeUISignInInternalsHost[] = "signin-internals";
 const char kChromeUISiteEngagementHost[] = "site-engagement";
@@ -655,6 +659,7 @@ const char* const kChromeHostURLs[] = {
     content::kChromeUIAccessibilityHost,
     content::kChromeUIAppCacheInternalsHost,
     content::kChromeUIBlobInternalsHost,
+    content::kChromeUIDinoHost,
     content::kChromeUIGpuHost,
     content::kChromeUIHistogramHost,
     content::kChromeUIIndexedDBInternalsHost,
@@ -714,7 +719,7 @@ const char* const kChromeHostURLs[] = {
 #if !defined(DISABLE_NACL)
     kChromeUINaClHost,
 #endif
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     kChromeUIExtensionsHost,
 #endif
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)

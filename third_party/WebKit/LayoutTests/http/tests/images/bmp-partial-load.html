@@ -12,7 +12,7 @@ function loadAndStall()
 
 function bmpImage()
 {
-    return "?name=../../../fast/images/resources/lenna.bmp&mimeType=image%2Fbmp";
+    return "?name=../../../images/resources/lenna.bmp&mimeType=image%2Fbmp";
 }
 
 function testDone()
@@ -23,7 +23,7 @@ function testDone()
 function runTest()
 {
     document.querySelector("img").src = loadAndStall() + bmpImage() + "&stallAt=104000&stallFor=60";
-    setTimeout(testDone, 500);
+    setTimeout(testDone, 1500);
 }
 
 window.onload = function() {

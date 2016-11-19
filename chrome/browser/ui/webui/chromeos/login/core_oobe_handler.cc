@@ -141,6 +141,8 @@ void CoreOobeHandler::RegisterMessages() {
               &CoreOobeHandler::HandleEnableLargeCursor);
   AddCallback("enableVirtualKeyboard",
               &CoreOobeHandler::HandleEnableVirtualKeyboard);
+  AddCallback("setForceDisableVirtualKeyboard",
+              &CoreOobeHandler::HandleSetForceDisableVirtualKeyboard);
   AddCallback("enableScreenMagnifier",
               &CoreOobeHandler::HandleEnableScreenMagnifier);
   AddCallback("enableSpokenFeedback",
@@ -324,6 +326,10 @@ void CoreOobeHandler::HandleEnableVirtualKeyboard(bool enabled) {
   AccessibilityManager::Get()->EnableVirtualKeyboard(enabled);
 }
 
+void CoreOobeHandler::HandleSetForceDisableVirtualKeyboard(bool disable) {
+  scoped_keyboard_disabler_.SetForceDisableVirtualKeyboard(disable);
+}
+
 void CoreOobeHandler::HandleEnableScreenMagnifier(bool enabled) {
   // TODO(nkostylev): Add support for partial screen magnifier.
   DCHECK(MagnificationManager::Get());
@@ -446,10 +452,14 @@ void CoreOobeHandler::UpdateLabel(const std::string& id,
 }
 
 void CoreOobeHandler::UpdateDeviceRequisition() {
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  CallJSOrDefer("updateDeviceRequisition",
-         connector->GetDeviceCloudPolicyManager()->GetDeviceRequisition());
+  policy::DeviceCloudPolicyManagerChromeOS* policy_manager =
+      g_browser_process->platform_part()
+          ->browser_policy_connector_chromeos()
+          ->GetDeviceCloudPolicyManager();
+  if (policy_manager) {
+    CallJSOrDefer("updateDeviceRequisition",
+                  policy_manager->GetDeviceRequisition());
+  }
 }
 
 void CoreOobeHandler::UpdateKeyboardState() {

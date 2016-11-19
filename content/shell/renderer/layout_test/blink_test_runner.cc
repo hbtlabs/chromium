@@ -67,7 +67,6 @@
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebPoint.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
-#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebThread.h"
@@ -745,6 +744,10 @@ void BlinkTestRunner::RunIdleTasks(const base::Closure& callback) {
     SchedulerRunIdleTasks(callback);
 }
 
+void BlinkTestRunner::ForceTextInputStateUpdate(WebFrame* frame) {
+  ForceTextInputStateUpdateForRenderFrame(RenderFrame::FromWebFrame(frame));
+}
+
 bool BlinkTestRunner::AddMediaStreamVideoSourceAndTrack(
     blink::WebMediaStream* stream) {
   DCHECK(stream);
@@ -997,7 +1000,6 @@ void BlinkTestRunner::OnReset() {
   // Navigating to about:blank will make sure that no new loads are initiated
   // by the renderer.
   WebURLRequest request = WebURLRequest(GURL(url::kAboutBlankURL));
-  request.setRequestorOrigin(blink::WebSecurityOrigin::createUnique());
   render_view()->GetWebView()->mainFrame()->loadRequest(request);
   Send(new ShellViewHostMsg_ResetDone(routing_id()));
 }

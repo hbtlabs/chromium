@@ -36,9 +36,6 @@ public abstract class ContentSwitches {
     // How much of the browser controls need to be hidden before they will auto hide.
     public static final String TOP_CONTROLS_HIDE_THRESHOLD = "top-controls-hide-threshold";
 
-    // Native switch - chrome_switches::kEnableInstantExtendedAPI
-    public static final String ENABLE_INSTANT_EXTENDED_API = "enable-instant-extended-api";
-
     // Native switch - shell_switches::kRunLayoutTest
     public static final String RUN_LAYOUT_TEST = "run-layout-test";
 
@@ -76,6 +73,9 @@ public abstract class ContentSwitches {
 
     // Native switch kGPUProcess
     public static final String SWITCH_GPU_PROCESS = "gpu-process";
+
+    // Enable content intent detection in the renderer
+    public static final String ENABLE_CONTENT_INTENT_DETECTION = "enable-content-intent-detection";
 
     // Prevent instantiation.
     private ContentSwitches() {}

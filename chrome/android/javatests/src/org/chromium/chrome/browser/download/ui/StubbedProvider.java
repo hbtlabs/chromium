@@ -196,8 +196,14 @@ public class StubbedProvider implements BackendProvider {
     @Override
     public void destroy() {}
 
-    /** Creates a new DownloadItem with pre-defined values. */
+    /** See {@link #createDownloadItem(int, String, boolean)}. */
     public static DownloadItem createDownloadItem(int which, String date) throws Exception {
+        return createDownloadItem(which, date, false, DownloadState.COMPLETE);
+    }
+
+    /** Creates a new DownloadItem with pre-defined values. */
+    public static DownloadItem createDownloadItem(
+            int which, String date, boolean isIncognito, int state) throws Exception {
         DownloadItem item = null;
         if (which == 0) {
             item = new DownloadItem(false, new DownloadInfo.Builder()
@@ -207,7 +213,8 @@ public class StubbedProvider implements BackendProvider {
                     .setFilePath("/storage/fake_path/Downloads/first_file.jpg")
                     .setDownloadGuid("first_guid")
                     .setMimeType("image/jpeg")
-                    .setState(DownloadState.COMPLETE)
+                    .setState(state)
+                    .setIsOffTheRecord(isIncognito)
                     .build());
         } else if (which == 1) {
             item = new DownloadItem(false, new DownloadInfo.Builder()
@@ -217,7 +224,8 @@ public class StubbedProvider implements BackendProvider {
                     .setFilePath("/storage/fake_path/Downloads/second_file.gif")
                     .setDownloadGuid("second_guid")
                     .setMimeType("image/gif")
-                    .setState(DownloadState.COMPLETE)
+                    .setState(state)
+                    .setIsOffTheRecord(isIncognito)
                     .build());
         } else if (which == 2) {
             item = new DownloadItem(false, new DownloadInfo.Builder()
@@ -227,7 +235,8 @@ public class StubbedProvider implements BackendProvider {
                     .setFilePath("/storage/fake_path/Downloads/third_file")
                     .setDownloadGuid("third_guid")
                     .setMimeType("text/plain")
-                    .setState(DownloadState.COMPLETE)
+                    .setState(state)
+                    .setIsOffTheRecord(isIncognito)
                     .build());
         } else if (which == 3) {
             item = new DownloadItem(false, new DownloadInfo.Builder()
@@ -237,7 +246,8 @@ public class StubbedProvider implements BackendProvider {
                     .setFilePath("/storage/fake_path/Downloads/four.webm")
                     .setDownloadGuid("fourth_guid")
                     .setMimeType("video/webm")
-                    .setState(DownloadState.COMPLETE)
+                    .setState(state)
+                    .setIsOffTheRecord(isIncognito)
                     .build());
         } else if (which == 4) {
             item = new DownloadItem(false, new DownloadInfo.Builder()
@@ -247,7 +257,8 @@ public class StubbedProvider implements BackendProvider {
                     .setFilePath("/storage/fake_path/Downloads/five.mp3")
                     .setDownloadGuid("fifth_guid")
                     .setMimeType("audio/mp3")
-                    .setState(DownloadState.COMPLETE)
+                    .setState(state)
+                    .setIsOffTheRecord(isIncognito)
                     .build());
         } else if (which == 5) {
             item = new DownloadItem(false, new DownloadInfo.Builder()
@@ -257,7 +268,8 @@ public class StubbedProvider implements BackendProvider {
                     .setFilePath("/storage/fake_path/Downloads/six.mp3")
                     .setDownloadGuid("sixth_guid")
                     .setMimeType("audio/mp3")
-                    .setState(DownloadState.COMPLETE)
+                    .setState(state)
+                    .setIsOffTheRecord(isIncognito)
                     .build());
         } else if (which == 6) {
             item = new DownloadItem(false, new DownloadInfo.Builder()
@@ -267,7 +279,7 @@ public class StubbedProvider implements BackendProvider {
                     .setFilePath("/storage/fake_path/Downloads/huge_image.png")
                     .setDownloadGuid("seventh_guid")
                     .setMimeType("image/png")
-                    .setState(DownloadState.COMPLETE)
+                    .setState(state)
                     .build());
         } else if (which == 7) {
             item = new DownloadItem(false, new DownloadInfo.Builder()
@@ -277,7 +289,8 @@ public class StubbedProvider implements BackendProvider {
                     .setFilePath("/storage/fake_path/Downloads/sleep.pdf")
                     .setDownloadGuid("eighth_guid")
                     .setMimeType("application/pdf")
-                    .setState(DownloadState.COMPLETE)
+                    .setState(state)
+                    .setIsOffTheRecord(isIncognito)
                     .build());
         } else if (which == 8) {
             // This is a duplicate of item 7 above.
@@ -288,7 +301,8 @@ public class StubbedProvider implements BackendProvider {
                     .setFilePath("/storage/fake_path/Downloads/sleep.pdf")
                     .setDownloadGuid("ninth_guid")
                     .setMimeType("application/pdf")
-                    .setState(DownloadState.COMPLETE)
+                    .setState(state)
+                    .setIsOffTheRecord(isIncognito)
                     .build());
         } else {
             return null;

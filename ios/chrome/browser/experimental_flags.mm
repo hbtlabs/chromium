@@ -26,9 +26,10 @@ NSString* const kEnableAlertOnBackgroundUpload =
 NSString* const kEnableViewCopyPasswords = @"EnableViewCopyPasswords";
 NSString* const kHeuristicsForPasswordGeneration =
     @"HeuristicsForPasswordGeneration";
-NSString* const kEnableReadingList = @"EnableReadingList";
 NSString* const kEnableNewClearBrowsingDataUI = @"EnableNewClearBrowsingDataUI";
 NSString* const kMDMIntegrationDisabled = @"MDMIntegrationDisabled";
+NSString* const kPendingIndexNavigationEnabled =
+    @"PendingIndexNavigationEnabled";
 }  // namespace
 
 namespace experimental_flags {
@@ -101,7 +102,12 @@ bool IsTabSwitcherEnabled() {
 }
 
 bool IsReadingListEnabled() {
-  return [[NSUserDefaults standardUserDefaults] boolForKey:kEnableReadingList];
+  // Check if the experimental flag is forced on or off.
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kEnableReadingList)) {
+    return true;
+  }
+  return false;
 }
 
 bool IsAllBookmarksEnabled() {
@@ -178,6 +184,11 @@ bool IsSpotlightActionsEnabled() {
 bool IsMDMIntegrationEnabled() {
   return ![[NSUserDefaults standardUserDefaults]
       boolForKey:kMDMIntegrationDisabled];
+}
+
+bool IsPendingIndexNavigationEnabled() {
+  return [[NSUserDefaults standardUserDefaults]
+      boolForKey:kPendingIndexNavigationEnabled];
 }
 
 }  // namespace experimental_flags

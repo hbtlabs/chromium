@@ -32,6 +32,7 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android_observer.h"
+#include "ui/events/android/motion_event_android.h"
 #include "ui/events/gesture_detection/filtered_gesture_provider.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d_f.h"
@@ -62,6 +63,7 @@ class OverscrollControllerAndroid;
 class RenderWidgetHost;
 class RenderWidgetHostImpl;
 class SynchronousCompositorHost;
+class SynchronousCompositorClient;
 struct NativeWebKeyboardEvent;
 struct TextInputState;
 
@@ -204,7 +206,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void SetContentViewCore(ContentViewCoreImpl* content_view_core);
   SkColor GetCachedBackgroundColor() const;
   void SendKeyEvent(const NativeWebKeyboardEvent& event);
-  void SendMouseEvent(const blink::WebMouseEvent& event);
+  void SendMouseEvent(const ui::MotionEventAndroid&, int changed_button);
   void SendMouseWheelEvent(const blink::WebMouseWheelEvent& event);
   void SendGestureEvent(const blink::WebGestureEvent& event);
 
@@ -236,6 +238,12 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnShowUnhandledTapUIIfNeeded(int x_dip, int y_dip);
 
   void SynchronousFrameMetadata(cc::CompositorFrameMetadata frame_metadata);
+
+  void SetSynchronousCompositorClient(SynchronousCompositorClient* client);
+
+  SynchronousCompositorClient* synchronous_compositor_client() const {
+    return synchronous_compositor_client_;
+  }
 
   static void OnContextLost();
 
@@ -350,6 +358,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   const bool using_browser_compositor_;
   std::unique_ptr<SynchronousCompositorHost> sync_compositor_;
+
+  SynchronousCompositorClient* synchronous_compositor_client_;
 
   std::unique_ptr<DelegatedFrameEvictor> frame_evictor_;
 

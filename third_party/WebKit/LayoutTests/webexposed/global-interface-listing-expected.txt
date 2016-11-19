@@ -1,15 +1,15 @@
 CONSOLE WARNING: line 94: 'webkitOfflineAudioContext' is deprecated. Please use 'OfflineAudioContext' instead.
 CONSOLE WARNING: line 94: 'webkitAudioContext' is deprecated. Please use 'AudioContext' instead.
 CONSOLE WARNING: line 94: 'window.webkitStorageInfo' is deprecated. Please use 'navigator.webkitTemporaryStorage' or 'navigator.webkitPersistentStorage' instead.
-CONSOLE WARNING: line 94: 'webkitIDBTransaction' is deprecated. Please use 'IDBTransaction' instead.
-CONSOLE WARNING: line 94: 'webkitIDBRequest' is deprecated. Please use 'IDBRequest' instead.
-CONSOLE WARNING: line 94: 'webkitIDBObjectStore' is deprecated. Please use 'IDBObjectStore' instead.
-CONSOLE WARNING: line 94: 'webkitIDBKeyRange' is deprecated. Please use 'IDBKeyRange' instead.
-CONSOLE WARNING: line 94: 'webkitIDBIndex' is deprecated. Please use 'IDBIndex' instead.
-CONSOLE WARNING: line 94: 'webkitIDBFactory' is deprecated. Please use 'IDBFactory' instead.
-CONSOLE WARNING: line 94: 'webkitIDBDatabase' is deprecated. Please use 'IDBDatabase' instead.
-CONSOLE WARNING: line 94: 'webkitIDBCursor' is deprecated. Please use 'IDBCursor' instead.
-CONSOLE WARNING: line 94: 'webkitIndexedDB' is deprecated. Please use 'indexedDB' instead.
+CONSOLE WARNING: line 94: 'webkitIDBTransaction' is deprecated and will be removed in M57, around March 2017. Please use 'IDBTransaction' instead. See https://www.chromestatus.com/features/5775330191081472 for more details.
+CONSOLE WARNING: line 94: 'webkitIDBRequest' is deprecated and will be removed in M57, around March 2017. Please use 'IDBRequest' instead. See https://www.chromestatus.com/features/5775330191081472 for more details.
+CONSOLE WARNING: line 94: 'webkitIDBObjectStore' is deprecated and will be removed in M57, around March 2017. Please use 'IDBObjectStore' instead. See https://www.chromestatus.com/features/5775330191081472 for more details.
+CONSOLE WARNING: line 94: 'webkitIDBKeyRange' is deprecated and will be removed in M57, around March 2017. Please use 'IDBKeyRange' instead. See https://www.chromestatus.com/features/5775330191081472 for more details.
+CONSOLE WARNING: line 94: 'webkitIDBIndex' is deprecated and will be removed in M57, around March 2017. Please use 'IDBIndex' instead. See https://www.chromestatus.com/features/5775330191081472 for more details.
+CONSOLE WARNING: line 94: 'webkitIDBFactory' is deprecated and will be removed in M57, around March 2017. Please use 'IDBFactory' instead. See https://www.chromestatus.com/features/5775330191081472 for more details.
+CONSOLE WARNING: line 94: 'webkitIDBDatabase' is deprecated and will be removed in M57, around March 2017. Please use 'IDBDatabase' instead. See https://www.chromestatus.com/features/5775330191081472 for more details.
+CONSOLE WARNING: line 94: 'webkitIDBCursor' is deprecated and will be removed in M57, around March 2017. Please use 'IDBCursor' instead. See https://www.chromestatus.com/features/5775330191081472 for more details.
+CONSOLE WARNING: line 94: 'webkitIndexedDB' is deprecated and will be removed in M57, around March 2017. Please use 'indexedDB' instead. See https://www.chromestatus.com/features/5775330191081472 for more details.
 CONSOLE WARNING: line 94: 'webkitURL' is deprecated. Please use 'URL' instead.
 This test documents all interface attributes and methods on the global window object and element instances.
 
@@ -17,6 +17,17 @@ On success, you will see a series of "PASS" messages, followed by "TEST COMPLETE
 
 
 [INTERFACES]
+interface Accelerometer : Sensor
+    attribute @@toStringTag
+    getter includesGravity
+    getter reading
+    method constructor
+interface AccelerometerReading : SensorReading
+    attribute @@toStringTag
+    getter x
+    getter y
+    getter z
+    method constructor
 interface AmbientLightSensor : Sensor
     attribute @@toStringTag
     getter reading
@@ -256,6 +267,10 @@ interface BarProp
     attribute @@toStringTag
     getter visible
     method constructor
+interface BarcodeDetector
+    attribute @@toStringTag
+    method constructor
+    method detect
 interface BaseAudioContext : EventTarget
     attribute @@toStringTag
     getter currentTime
@@ -1094,6 +1109,7 @@ interface DOMMatrixReadOnly
     method toFloat64Array
     method toJSON
     method toString
+    method transformPoint
     method translate
 interface DOMParser
     attribute @@toStringTag
@@ -1222,6 +1238,11 @@ interface DataView
 interface DelayNode : AudioNode
     attribute @@toStringTag
     getter delayTime
+    method constructor
+interface DetectedBarcode
+    attribute @@toStringTag
+    getter boundingBox
+    getter rawValue
     method constructor
 interface DetectedFace
     attribute @@toStringTag
@@ -1888,6 +1909,16 @@ interface GamepadButton
 interface GamepadEvent : Event
     attribute @@toStringTag
     getter gamepad
+    method constructor
+interface Gyroscope : Sensor
+    attribute @@toStringTag
+    getter reading
+    method constructor
+interface GyroscopeReading : SensorReading
+    attribute @@toStringTag
+    getter x
+    getter y
+    getter z
     method constructor
 interface HTMLAllCollection
     attribute @@toStringTag
@@ -3736,7 +3767,6 @@ interface MIDIInputMap
 interface MIDIMessageEvent : Event
     attribute @@toStringTag
     getter data
-    getter receivedTime
     method constructor
 interface MIDIOutput : MIDIPort
     attribute @@toStringTag
@@ -3767,6 +3797,16 @@ interface MIDIPort : EventTarget
     method constructor
     method open
     setter onstatechange
+interface Magnetometer : Sensor
+    attribute @@toStringTag
+    getter reading
+    method constructor
+interface MagnetometerReading : SensorReading
+    attribute @@toStringTag
+    getter x
+    getter y
+    getter z
+    method constructor
 interface MediaDeviceInfo
     attribute @@toStringTag
     getter deviceId
@@ -4322,7 +4362,7 @@ interface OfflineAudioContext : BaseAudioContext
     method startRendering
     method suspend
     setter oncomplete
-interface OffscreenCanvas
+interface OffscreenCanvas : EventTarget
     attribute @@toStringTag
     getter height
     getter width
@@ -4337,6 +4377,7 @@ interface OffscreenCanvasRenderingContext2D
     getter canvas
     getter fillStyle
     getter filter
+    getter globalCompositeOperation
     getter imageSmoothingEnabled
     getter imageSmoothingQuality
     getter lineCap
@@ -4386,6 +4427,7 @@ interface OffscreenCanvasRenderingContext2D
     method translate
     setter fillStyle
     setter filter
+    setter globalCompositeOperation
     setter imageSmoothingEnabled
     setter imageSmoothingQuality
     setter lineCap
@@ -4493,6 +4535,7 @@ interface PaymentRequest : EventTarget
     getter shippingOption
     getter shippingType
     method abort
+    method canMakeActivePayment
     method constructor
     method show
     setter onshippingaddresschange
@@ -4782,6 +4825,39 @@ interface RTCCertificate
     attribute @@toStringTag
     getter expires
     method constructor
+interface RTCDataChannel : EventTarget
+    attribute @@toStringTag
+    getter binaryType
+    getter bufferedAmount
+    getter bufferedAmountLowThreshold
+    getter id
+    getter label
+    getter maxRetransmitTime
+    getter maxRetransmits
+    getter negotiated
+    getter onbufferedamountlow
+    getter onclose
+    getter onerror
+    getter onmessage
+    getter onopen
+    getter ordered
+    getter protocol
+    getter readyState
+    getter reliable
+    method close
+    method constructor
+    method send
+    setter binaryType
+    setter bufferedAmountLowThreshold
+    setter onbufferedamountlow
+    setter onclose
+    setter onerror
+    setter onmessage
+    setter onopen
+interface RTCDataChannelEvent : Event
+    attribute @@toStringTag
+    getter channel
+    method constructor
 interface RTCIceCandidate
     attribute @@toStringTag
     getter candidate
@@ -4830,6 +4906,10 @@ interface RTCPeerConnection : EventTarget
     setter onnegotiationneeded
     setter onremovestream
     setter onsignalingstatechange
+interface RTCPeerConnectionIceEvent : Event
+    attribute @@toStringTag
+    getter candidate
+    method constructor
 interface RTCSessionDescription
     attribute @@toStringTag
     getter sdp
@@ -5870,10 +5950,8 @@ interface SVGSVGElement : SVGGraphicsElement
     attribute SVG_ZOOMANDPAN_UNKNOWN
     getter currentScale
     getter currentTranslate
-    getter currentView
     getter height
     getter preserveAspectRatio
-    getter useCurrentView
     getter viewBox
     getter width
     getter x
@@ -6053,23 +6131,6 @@ interface SVGViewElement : SVGElement
     attribute SVG_ZOOMANDPAN_UNKNOWN
     getter preserveAspectRatio
     getter viewBox
-    getter viewTarget
-    getter zoomAndPan
-    method constructor
-    setter zoomAndPan
-interface SVGViewSpec
-    attribute @@toStringTag
-    attribute SVG_ZOOMANDPAN_DISABLE
-    attribute SVG_ZOOMANDPAN_MAGNIFY
-    attribute SVG_ZOOMANDPAN_UNKNOWN
-    getter preserveAspectRatio
-    getter preserveAspectRatioString
-    getter transform
-    getter transformString
-    getter viewBox
-    getter viewBoxString
-    getter viewTarget
-    getter viewTargetString
     getter zoomAndPan
     method constructor
     setter zoomAndPan
@@ -6147,17 +6208,17 @@ interface Selection
     method toString
 interface Sensor : EventTarget
     attribute @@toStringTag
+    getter onactivate
     getter onchange
     getter onerror
-    getter onstatechange
     getter reading
     getter state
     method constructor
     method start
     method stop
+    setter onactivate
     setter onchange
     setter onerror
-    setter onstatechange
 interface SensorErrorEvent : Event
     attribute @@toStringTag
     getter error
@@ -7500,7 +7561,6 @@ interface WebGL2RenderingContext
     method getAttribLocation
     method getBufferParameter
     method getBufferSubData
-    method getBufferSubDataAsync
     method getContextAttributes
     method getError
     method getExtension

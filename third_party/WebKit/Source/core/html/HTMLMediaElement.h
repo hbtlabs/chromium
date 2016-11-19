@@ -117,7 +117,7 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   };
   void scheduleTextTrackResourceLoad();
 
-  bool hasRemoteRoutes() const { return m_remoteRoutesAvailable; }
+  bool hasRemoteRoutes() const;
   bool isPlayingRemotely() const { return m_playingRemotely; }
 
   // error state
@@ -195,7 +195,7 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   bool shouldShowControls(
       const RecordMetricsBehavior = RecordMetricsBehavior::DoNotRecord) const;
   double volume() const;
-  void setVolume(double, ExceptionState&);
+  void setVolume(double, ExceptionState& = ASSERT_NO_EXCEPTION);
   bool muted() const;
   void setMuted(bool);
 
@@ -308,6 +308,9 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   WebRemotePlaybackClient* remotePlaybackClient() {
     return m_remotePlaybackClient;
   }
+  const WebRemotePlaybackClient* remotePlaybackClient() const {
+    return m_remotePlaybackClient;
+  }
 
  protected:
   HTMLMediaElement(const QualifiedName&, Document&);
@@ -350,7 +353,6 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   void didBecomeFullscreenElement() final;
   void willStopBeingFullscreenElement() final;
   bool isInteractiveContent() const final;
-  void defaultEventHandler(Event*) final;
 
   // ActiveDOMObject functions.
   void contextDestroyed() final;
@@ -386,7 +388,7 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   void removeTextTrack(WebInbandTextTrack*) final;
   void mediaSourceOpened(WebMediaSource*) final;
   void requestSeek(double) final;
-  void remoteRouteAvailabilityChanged(bool) final;
+  void remoteRouteAvailabilityChanged(WebRemotePlaybackAvailability) final;
   void connectedToRemoteDevice() final;
   void disconnectedFromRemoteDevice() final;
   void cancelledRemotePlaybackRequest() final;
@@ -641,7 +643,6 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
 
   bool m_tracksAreReady : 1;
   bool m_processingPreferenceChange : 1;
-  bool m_remoteRoutesAvailable : 1;
   bool m_playingRemotely : 1;
   // Whether this element is in overlay fullscreen mode.
   bool m_inOverlayFullscreenVideo : 1;

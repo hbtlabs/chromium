@@ -27,6 +27,7 @@ class WaitableEvent;
 }  // namespace base
 
 namespace net {
+class CookieStore;
 class HttpCache;
 class NetworkChangeNotifier;
 class NetLog;
@@ -44,8 +45,8 @@ class CronetEnvironment {
   static void Initialize();
 
   // |user_agent| will be used to generate the user-agent if
-  // |user_agent_partial|
-  // is true, or will be used as complete user-agent otherwise.
+  // |user_agent_partial| is true, or will be used as the complete user-agent
+  // otherwise.
   CronetEnvironment(const std::string& user_agent, bool user_agent_partial);
   ~CronetEnvironment();
 
@@ -84,27 +85,25 @@ class CronetEnvironment {
     cert_verifier_ = std::move(cert_verifier);
   }
 
-  void set_host_resolver_rules(const std::string& host_resolver_rules) {
-    host_resolver_rules_ = host_resolver_rules;
-  }
+  void SetHostResolverRules(const std::string& host_resolver_rules);
 
   void set_ssl_key_log_file_name(const std::string& ssl_key_log_file_name) {
     ssl_key_log_file_name_ = ssl_key_log_file_name;
   }
 
+  // Returns the URLRequestContext associated with this object.
   net::URLRequestContext* GetURLRequestContext() const;
 
+  // Return the URLRequestContextGetter associated with this object.
   net::URLRequestContextGetter* GetURLRequestContextGetter() const;
-
-  bool IsOnNetworkThread();
-
-  // Runs a closure on the network thread.
-  void PostToNetworkThread(const tracked_objects::Location& from_here,
-                           const base::Closure& task);
 
  private:
   // Performs initialization tasks that must happen on the network thread.
   void InitializeOnNetworkThread();
+
+  // Runs a closure on the network thread.
+  void PostToNetworkThread(const tracked_objects::Location& from_here,
+                           const base::Closure& task);
 
   // Runs a closure on the file user blocking thread.
   void PostToFileUserBlockingThread(const tracked_objects::Location& from_here,
@@ -120,10 +119,13 @@ class CronetEnvironment {
   net::HttpNetworkSession* GetHttpNetworkSession(
       net::URLRequestContext* context);
 
+  // Sets host resolver rules on the network_io_thread_.
+  void SetHostResolverRulesOnNetworkThread(const std::string& rules,
+                                           base::WaitableEvent* event);
+
   bool http2_enabled_;
   bool quic_enabled_;
   std::string accept_language_;
-  std::string host_resolver_rules_;
   std::string ssl_key_log_file_name_;
 
   std::list<net::HostPortPair> quic_hints_;
@@ -137,6 +139,7 @@ class CronetEnvironment {
   std::unique_ptr<net::CertVerifier> cert_verifier_;
   std::unique_ptr<net::ProxyConfigService> proxy_config_service_;
   std::unique_ptr<net::HttpServerProperties> http_server_properties_;
+  std::unique_ptr<net::CookieStore> cookie_store_;
   std::unique_ptr<net::URLRequestContext> main_context_;
   scoped_refptr<net::URLRequestContextGetter> main_context_getter_;
   std::string user_agent_;

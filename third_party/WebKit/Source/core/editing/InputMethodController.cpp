@@ -170,6 +170,15 @@ InputMethodController* InputMethodController::create(LocalFrame& frame) {
 InputMethodController::InputMethodController(LocalFrame& frame)
     : m_frame(&frame), m_isDirty(false), m_hasComposition(false) {}
 
+bool InputMethodController::isAvailable() const {
+  return frame().document();
+}
+
+Document& InputMethodController::document() const {
+  DCHECK(isAvailable());
+  return *frame().document();
+}
+
 bool InputMethodController::hasComposition() const {
   return m_hasComposition;
 }
@@ -181,10 +190,10 @@ inline Editor& InputMethodController::editor() const {
 void InputMethodController::clear() {
   m_hasComposition = false;
   if (m_compositionRange) {
-    m_compositionRange->setStart(frame().document(), 0);
+    m_compositionRange->setStart(&document(), 0);
     m_compositionRange->collapse(true);
   }
-  frame().document()->markers().removeMarkers(DocumentMarker::Composition);
+  document().markers().removeMarkers(DocumentMarker::Composition);
   m_isDirty = false;
 }
 
@@ -200,8 +209,9 @@ void InputMethodController::selectComposition() const {
 
   // The composition can start inside a composed character sequence, so we have
   // to override checks. See <http://bugs.webkit.org/show_bug.cgi?id=15781>
-  frame().selection().setSelection(
-      SelectionInDOMTree::Builder().setBaseAndExtent(range).build(), 0);
+  VisibleSelection selection;
+  selection.setWithoutValidation(range.startPosition(), range.endPosition());
+  frame().selection().setSelection(selection, 0);
 }
 
 bool InputMethodController::finishComposingText(
@@ -213,13 +223,18 @@ bool InputMethodController::finishComposingText(
     PlainTextRange oldOffsets = getSelectionOffsets();
     Editor::RevealSelectionScope revealSelectionScope(&editor());
 
-    bool result = replaceComposition(composingText());
+    const String& composing = composingText();
+    const bool result = replaceComposition(composing);
 
     // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
     // needs to be audited. see http://crbug.com/590369 for more details.
-    frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
 
     setSelectionOffsets(oldOffsets);
+
+    // No DOM update after 'compositionend'.
+    dispatchCompositionEndEvent(frame(), composing);
+
     return result;
   }
 
@@ -258,14 +273,14 @@ bool InputMethodController::replaceComposition(const String& text) {
   if (frame().selection().isNone())
     return false;
 
-  if (!frame().document())
+  if (!isAvailable())
     return false;
 
   // If text is empty, then delete the old composition here. If text is
   // non-empty, InsertTextCommand::input will delete the old composition with
   // an optimized replace operation.
   if (text.isEmpty())
-    TypingCommand::deleteSelection(*frame().document(), 0);
+    TypingCommand::deleteSelection(document(), 0);
 
   clear();
 
@@ -273,11 +288,8 @@ bool InputMethodController::replaceComposition(const String& text) {
       frame(), text, 0,
       TypingCommand::TextCompositionType::TextCompositionConfirm);
   // Event handler might destroy document.
-  if (!frame().document())
+  if (!isAvailable())
     return false;
-
-  // No DOM update after 'compositionend'.
-  dispatchCompositionEndEvent(frame(), text);
 
   return true;
 }
@@ -306,12 +318,18 @@ bool InputMethodController::replaceCompositionAndMoveCaret(
 
   int absoluteCaretPosition = computeAbsoluteCaretPosition(
       textStart, text.length(), relativeCaretPosition);
-  return moveCaret(absoluteCaretPosition);
+  if (!moveCaret(absoluteCaretPosition))
+    return false;
+
+  // No DOM update after 'compositionend'.
+  dispatchCompositionEndEvent(frame(), text);
+
+  return true;
 }
 
 bool InputMethodController::insertText(const String& text) {
-  if (dispatchBeforeInputInsertText(frame().document()->focusedElement(),
-                                    text) != DispatchEventResult::NotCanceled)
+  if (dispatchBeforeInputInsertText(document().focusedElement(), text) !=
+      DispatchEventResult::NotCanceled)
     return false;
   editor().insertText(text, 0);
   return true;
@@ -347,7 +365,7 @@ void InputMethodController::cancelComposition() {
 
   // TODO(chongz): Figure out which InputType should we use here.
   dispatchBeforeInputFromComposition(
-      frame().document()->focusedElement(),
+      document().focusedElement(),
       InputEvent::InputType::DeleteComposedCharacterBackward, nullAtom,
       InputEvent::EventCancelable::NotCancelable);
   dispatchCompositionUpdateEvent(frame(), emptyString());
@@ -355,7 +373,7 @@ void InputMethodController::cancelComposition() {
       frame(), emptyString(), 0,
       TypingCommand::TextCompositionType::TextCompositionConfirm);
   // Event handler might destroy document.
-  if (!frame().document())
+  if (!isAvailable())
     return;
 
   // An open typing command that disagrees about current selection would cause
@@ -500,16 +518,17 @@ void InputMethodController::setCompositionWithIncrementalText(
         compositionStart + composing.length() - commonSuffixLength;
     const EphemeralRange& deletionRange =
         PlainTextRange(deletionStart, deletionEnd).createRange(*editable);
-    Document* const currentDocument = frame().document();
-    frame().selection().setSelection(
-        SelectionInDOMTree::Builder().setBaseAndExtent(deletionRange).build(),
-        0);
+    VisibleSelection selection;
+    selection.setWithoutValidation(deletionRange.startPosition(),
+                                   deletionRange.endPosition());
+    Document& currentDocument = document();
+    frame().selection().setSelection(selection, 0);
     clear();
 
     // FrameSeleciton::setSelection() can change document associate to |frame|.
-    if (currentDocument != frame().document())
+    if (!isAvailable() || currentDocument != document())
       return;
-    if (!currentDocument->focusedElement())
+    if (!currentDocument.focusedElement())
       return;
 
     // Insert the incremental text.
@@ -522,12 +541,12 @@ void InputMethodController::setCompositionWithIncrementalText(
                                           TypingCommand::TextCompositionUpdate);
 
     // Event handlers might destroy document.
-    if (currentDocument != frame().document())
+    if (!isAvailable() || currentDocument != document())
       return;
 
     // TODO(yosin): The use of updateStyleAndLayoutIgnorePendingStylesheets
     // needs to be audited. see http://crbug.com/590369 for more details.
-    frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
 
     // Now recreate the composition starting at its original start, and
     // apply the specified final selection offsets.
@@ -539,7 +558,7 @@ void InputMethodController::setCompositionWithIncrementalText(
 
   // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited. see http://crbug.com/590369 for more details.
-  frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
 
   const PlainTextRange& selectedRange = createSelectionRangeForSetComposition(
       selectionStart, selectionEnd, text.length());
@@ -558,7 +577,7 @@ void InputMethodController::setComposition(
   // Updates styles before setting selection for composition to prevent
   // inserting the previous composition text into text nodes oddly.
   // See https://bugs.webkit.org/show_bug.cgi?id=46868
-  frame().document()->updateStyleAndLayoutTree();
+  document().updateStyleAndLayoutTree();
 
   // When the IME only wants to change a few characters at the end of the
   // composition, only touch those characters in order to preserve rich text
@@ -573,13 +592,13 @@ void InputMethodController::setComposition(
   if (frame().selection().isNone())
     return;
 
-  Element* target = frame().document()->focusedElement();
+  Element* target = document().focusedElement();
   if (!target)
     return;
 
   // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited. see http://crbug.com/590369 for more details.
-  frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
 
   PlainTextRange selectedRange = createSelectionRangeForSetComposition(
       selectionStart, selectionEnd, text.length());
@@ -607,16 +626,18 @@ void InputMethodController::setComposition(
       // It's weird to call |setComposition()| with empty text outside
       // composition, however some IME (e.g. Japanese IBus-Anthy) did this, so
       // we simply delete selection without sending extra events.
-      TypingCommand::deleteSelection(*frame().document(),
+      TypingCommand::deleteSelection(document(),
                                      TypingCommand::PreventSpellChecking);
     }
 
     // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
     // needs to be audited. see http://crbug.com/590369 for more details.
-    frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
 
     setEditableSelectionOffsets(selectedRange);
-    return;
+
+    // No DOM update after 'compositionend'.
+    return dispatchCompositionEndEvent(frame(), text);
   }
 
   // We should send a 'compositionstart' event only when the given text is not
@@ -626,7 +647,7 @@ void InputMethodController::setComposition(
     target->dispatchEvent(
         CompositionEvent::create(EventTypeNames::compositionstart,
                                  frame().domWindow(), frame().selectedText()));
-    if (!frame().document())
+    if (!isAvailable())
       return;
   }
 
@@ -639,12 +660,12 @@ void InputMethodController::setComposition(
       TypingCommand::SelectInsertedText | TypingCommand::PreventSpellChecking,
       TypingCommand::TextCompositionUpdate);
   // Event handlers might destroy document.
-  if (!frame().document())
+  if (!isAvailable())
     return;
 
   // TODO(yosin): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited. see http://crbug.com/590369 for more details.
-  frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
 
   // Find out what node has the composition now.
   Position base = mostForwardCaretPosition(frame().selection().base());
@@ -665,7 +686,7 @@ void InputMethodController::setComposition(
   m_isDirty = true;
   m_hasComposition = true;
   if (!m_compositionRange)
-    m_compositionRange = Range::create(baseNode->document());
+    m_compositionRange = Range::create(document());
   m_compositionRange->setStart(baseNode, baseOffset);
   m_compositionRange->setEnd(baseNode, extentOffset);
 
@@ -674,13 +695,13 @@ void InputMethodController::setComposition(
 
   // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited. see http://crbug.com/590369 for more details.
-  frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
 
   // We shouldn't close typing in the middle of setComposition.
   setEditableSelectionOffsets(selectedRange, NotUserTriggered);
 
   if (underlines.isEmpty()) {
-    frame().document()->markers().addCompositionMarker(
+    document().markers().addCompositionMarker(
         m_compositionRange->startPosition(), m_compositionRange->endPosition(),
         Color::black, false,
         LayoutTheme::theme().platformDefaultCompositionBackgroundColor());
@@ -693,7 +714,7 @@ void InputMethodController::setComposition(
         Position(baseNode, underlineStart), Position(baseNode, underlineEnd));
     if (ephemeralLineRange.isNull())
       continue;
-    frame().document()->markers().addCompositionMarker(
+    document().markers().addCompositionMarker(
         ephemeralLineRange.startPosition(), ephemeralLineRange.endPosition(),
         underline.color(), underline.thick(), underline.backgroundColor());
   }
@@ -718,7 +739,7 @@ void InputMethodController::setCompositionFromExistingText(
   if (!editable)
     return;
 
-  DCHECK(!editable->document().needsLayoutTreeUpdate());
+  DCHECK(!document().needsLayoutTreeUpdate());
 
   const EphemeralRange range =
       PlainTextRange(compositionStart, compositionEnd).createRange(*editable);
@@ -742,14 +763,14 @@ void InputMethodController::setCompositionFromExistingText(
         PlainTextRange(underlineStart, underlineEnd).createRange(*editable);
     if (ephemeralLineRange.isNull())
       continue;
-    frame().document()->markers().addCompositionMarker(
+    document().markers().addCompositionMarker(
         ephemeralLineRange.startPosition(), ephemeralLineRange.endPosition(),
         underline.color(), underline.thick(), underline.backgroundColor());
   }
 
   m_hasComposition = true;
   if (!m_compositionRange)
-    m_compositionRange = Range::create(range.document());
+    m_compositionRange = Range::create(document());
   m_compositionRange->setStart(range.startPosition());
   m_compositionRange->setEnd(range.endPosition());
 }
@@ -766,7 +787,7 @@ Range* InputMethodController::compositionRange() const {
 
 String InputMethodController::composingText() const {
   DocumentLifecycle::DisallowTransitionScope disallowTransition(
-      frame().document()->lifecycle());
+      document().lifecycle());
   return plainText(compositionEphemeralRange(), TextIteratorEmitsOriginalText);
 }
 
@@ -789,7 +810,7 @@ bool InputMethodController::setSelectionOffsets(
   if (!rootEditableElement)
     return false;
 
-  DCHECK(!rootEditableElement->document().needsLayoutTreeUpdate());
+  DCHECK(!document().needsLayoutTreeUpdate());
 
   const EphemeralRange range =
       selectionOffsets.createRange(*rootEditableElement);
@@ -847,7 +868,7 @@ PlainTextRange InputMethodController::createRangeForSelection(
 }
 
 bool InputMethodController::moveCaret(int newCaretPosition) {
-  frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
   PlainTextRange selectedRange =
       createRangeForSelection(newCaretPosition, newCaretPosition, 0);
   if (selectedRange.isNull())
@@ -886,10 +907,9 @@ void InputMethodController::extendSelectionAndDelete(int before, int after) {
            before <= static_cast<int>(selectionOffsets.start()));
   // TODO(chongz): Find a way to distinguish Forward and Backward.
   dispatchBeforeInputEditorCommand(
-      m_frame->document()->focusedElement(),
-      InputEvent::InputType::DeleteContentBackward,
+      document().focusedElement(), InputEvent::InputType::DeleteContentBackward,
       new RangeVector(1, m_frame->selection().firstRange()));
-  TypingCommand::deleteSelection(*frame().document());
+  TypingCommand::deleteSelection(document());
 }
 
 // TODO(yabinh): We should reduce the number of selectionchange events.
@@ -924,7 +944,7 @@ void InputMethodController::deleteSurroundingText(int before, int after) {
     const int adjustedStart = start - static_cast<int>(diff);
     if (!setSelectionOffsets(PlainTextRange(adjustedStart, selectionStart)))
       return;
-    TypingCommand::deleteSelection(*frame().document());
+    TypingCommand::deleteSelection(document());
 
     selectionEnd = selectionEnd - (selectionStart - adjustedStart);
     selectionStart = adjustedStart;
@@ -949,7 +969,7 @@ void InputMethodController::deleteSurroundingText(int before, int after) {
     const int adjustedEnd = end + static_cast<int>(diff);
     if (!setSelectionOffsets(PlainTextRange(selectionEnd, adjustedEnd)))
       return;
-    TypingCommand::deleteSelection(*frame().document());
+    TypingCommand::deleteSelection(document());
   }
 
   setSelectionOffsets(PlainTextRange(selectionStart, selectionEnd));
@@ -957,7 +977,7 @@ void InputMethodController::deleteSurroundingText(int before, int after) {
 
 WebTextInputInfo InputMethodController::textInputInfo() const {
   WebTextInputInfo info;
-  if (!frame().document())
+  if (!isAvailable())
     return info;
 
   if (!frame().selection().isAvailable()) {
@@ -979,10 +999,10 @@ WebTextInputInfo InputMethodController::textInputInfo() const {
 
   // TODO(dglazkov): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  see http://crbug.com/590369 for more details.
-  frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
 
   DocumentLifecycle::DisallowTransitionScope disallowTransition(
-      frame().document()->lifecycle());
+      document().lifecycle());
 
   // Emits an object replacement character for each replaced element so that
   // it is exposed to IME and thus could be deleted by IME on android.
@@ -1015,7 +1035,7 @@ WebTextInputInfo InputMethodController::textInputInfo() const {
 }
 
 int InputMethodController::textInputFlags() const {
-  Element* element = frame().document()->focusedElement();
+  Element* element = document().focusedElement();
   if (!element)
     return WebTextInputFlagNone;
 
@@ -1041,16 +1061,15 @@ int InputMethodController::textInputFlags() const {
   else if (spellcheck == SpellcheckAttributeFalse)
     flags |= WebTextInputFlagSpellcheckOff;
 
-  if (isHTMLTextFormControlElement(element)) {
-    HTMLTextFormControlElement* formElement =
-        static_cast<HTMLTextFormControlElement*>(element);
-    if (formElement->supportsAutocapitalize()) {
+  if (isTextControlElement(element)) {
+    TextControlElement* textControl = toTextControlElement(element);
+    if (textControl->supportsAutocapitalize()) {
       DEFINE_STATIC_LOCAL(const AtomicString, none, ("none"));
       DEFINE_STATIC_LOCAL(const AtomicString, characters, ("characters"));
       DEFINE_STATIC_LOCAL(const AtomicString, words, ("words"));
       DEFINE_STATIC_LOCAL(const AtomicString, sentences, ("sentences"));
 
-      const AtomicString& autocapitalize = formElement->autocapitalize();
+      const AtomicString& autocapitalize = textControl->autocapitalize();
       if (autocapitalize == none)
         flags |= WebTextInputFlagAutocapitalizeNone;
       else if (autocapitalize == characters)
@@ -1071,8 +1090,7 @@ WebTextInputMode InputMethodController::inputModeOfFocusedElement() const {
   if (!RuntimeEnabledFeatures::inputModeAttributeEnabled())
     return kWebTextInputModeDefault;
 
-  AtomicString mode =
-      getInputModeAttribute(frame().document()->focusedElement());
+  AtomicString mode = getInputModeAttribute(document().focusedElement());
 
   if (mode.isEmpty())
     return kWebTextInputModeDefault;
@@ -1115,11 +1133,10 @@ WebTextInputType InputMethodController::textInputType() const {
   if (!frame().selection().selection().rootEditableElement())
     return WebTextInputTypeNone;
 
-  Document* document = frame().document();
-  if (!document)
+  if (!isAvailable())
     return WebTextInputTypeNone;
 
-  Element* element = document->focusedElement();
+  Element* element = document().focusedElement();
   if (!element)
     return WebTextInputTypeNone;
 
@@ -1159,7 +1176,7 @@ WebTextInputType InputMethodController::textInputType() const {
       return WebTextInputTypeDateTimeField;
   }
 
-  document->updateStyleAndLayoutTree();
+  document().updateStyleAndLayoutTree();
   if (hasEditableStyle(*element))
     return WebTextInputTypeContentEditable;
 

@@ -26,7 +26,7 @@
 #define HTMLInputElement_h
 
 #include "core/CoreExport.h"
-#include "core/html/HTMLTextFormControlElement.h"
+#include "core/html/TextControlElement.h"
 #include "core/html/forms/StepRange.h"
 #include "platform/FileChooser.h"
 
@@ -45,7 +45,7 @@ class ListAttributeTargetObserver;
 class RadioButtonGroupScope;
 struct DateTimeChooserParameters;
 
-class CORE_EXPORT HTMLInputElement : public HTMLTextFormControlElement {
+class CORE_EXPORT HTMLInputElement : public TextControlElement {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -193,12 +193,6 @@ class CORE_EXPORT HTMLInputElement : public HTMLTextFormControlElement {
   void setSize(unsigned, ExceptionState&);
 
   KURL src() const;
-
-  int maxLength() const;
-  int minLength() const;
-  void setMaxLength(int, ExceptionState&);
-  void setMinLength(int, ExceptionState&);
-
   bool multiple() const;
 
   FileList* files() const;
@@ -246,8 +240,6 @@ class CORE_EXPORT HTMLInputElement : public HTMLTextFormControlElement {
   void endColorChooser();
 
   String defaultToolTip() const override;
-
-  static const int maximumLength;
 
   unsigned height() const;
   unsigned width() const;
@@ -319,7 +311,7 @@ class CORE_EXPORT HTMLInputElement : public HTMLTextFormControlElement {
   bool supportLabels() const final;
   bool matchesDefaultPseudoClass() const override;
 
-  bool isTextFormControl() const final { return isTextField(); }
+  bool isTextControl() const final { return isTextField(); }
 
   bool canTriggerImplicitSubmission() const final { return isTextField(); }
 
@@ -411,8 +403,6 @@ class CORE_EXPORT HTMLInputElement : public HTMLTextFormControlElement {
   String m_nonAttributeValue;
   String m_suggestedValue;
   int m_size;
-  int m_maxLength;
-  int m_minLength;
   // https://html.spec.whatwg.org/multipage/forms.html#concept-input-value-dirty-flag
   unsigned m_hasDirtyValue : 1;
   // https://html.spec.whatwg.org/multipage/forms.html#concept-fe-checked

@@ -31,7 +31,7 @@
 /**
  * @unrestricted
  */
-WebInspector.ExtensionAuditCategory = class {
+Extensions.ExtensionAuditCategory = class {
   /**
    * @param {string} extensionOrigin
    * @param {string} id
@@ -49,13 +49,13 @@ WebInspector.ExtensionAuditCategory = class {
 /**
  * @interface
  */
-WebInspector.ExtensionAuditCategoryResults = function() {};
+Extensions.ExtensionAuditCategoryResults = function() {};
 
-WebInspector.ExtensionAuditCategoryResults.prototype = {
+Extensions.ExtensionAuditCategoryResults.prototype = {
   /**
    * @return {string}
    */
-  id: function() {},
+  id() {},
 
   /**
    * @param {string} displayName
@@ -63,12 +63,12 @@ WebInspector.ExtensionAuditCategoryResults.prototype = {
    * @param {string} severity
    * @param {!Object} details
    */
-  addResult: function(displayName, description, severity, details) {},
+  addResult(displayName, description, severity, details) {},
 
   /**
    * @param {number} progress
    */
-  updateProgress: function(progress) {},
+  updateProgress(progress) {},
 
-  done: function() {}
+  done() {}
 };

@@ -48,6 +48,7 @@
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/process_type.h"
+#include "extensions/features/features.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
@@ -71,7 +72,7 @@
 #include "chrome/common/chrome_switches.h"
 #endif
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/common/constants.h"
 #endif
 
@@ -143,8 +144,7 @@ void RecordNetworkErrorHistograms(const net::URLRequest* request,
 
 ChromeNetworkDelegate::ChromeNetworkDelegate(
     extensions::EventRouterForwarder* event_router,
-    BooleanPrefMember* enable_referrers,
-    const metrics::UpdateUsagePrefCallbackType& metrics_data_use_forwarder)
+    BooleanPrefMember* enable_referrers)
     : profile_(nullptr),
       enable_referrers_(enable_referrers),
       enable_do_not_track_(nullptr),
@@ -153,7 +153,6 @@ ChromeNetworkDelegate::ChromeNetworkDelegate(
       allowed_domains_for_apps_(nullptr),
       url_blacklist_manager_(nullptr),
       domain_reliability_monitor_(nullptr),
-      data_use_measurement_(metrics_data_use_forwarder),
       experimental_web_platform_features_enabled_(
           base::CommandLine::ForCurrentProcess()->HasSwitch(
               switches::kEnableExperimentalWebPlatformFeatures)),
@@ -235,8 +234,6 @@ int ChromeNetworkDelegate::OnBeforeURLRequest(
   tracked_objects::ScopedTracker tracking_profile1(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "456327 URLRequest::ChromeNetworkDelegate::OnBeforeURLRequest"));
-
-  data_use_measurement_.OnBeforeURLRequest(request);
 
   // TODO(joaodasilva): This prevents extensions from seeing URLs that are
   // blocked. However, an extension might redirect the request to another URL,
@@ -352,7 +349,6 @@ int ChromeNetworkDelegate::OnHeadersReceived(
 
 void ChromeNetworkDelegate::OnBeforeRedirect(net::URLRequest* request,
                                              const GURL& new_location) {
-  data_use_measurement_.OnBeforeRedirect(*request, new_location);
   if (domain_reliability_monitor_)
     domain_reliability_monitor_->OnBeforeRedirect(request);
   extensions_delegate_->OnBeforeRedirect(request, new_location);
@@ -372,13 +368,11 @@ void ChromeNetworkDelegate::OnNetworkBytesReceived(net::URLRequest* request,
 #endif  // defined(ENABLE_TASK_MANAGER)
 
   ReportDataUsageStats(request, 0 /* tx_bytes */, bytes_received);
-  data_use_measurement_.OnNetworkBytesReceived(*request, bytes_received);
 }
 
 void ChromeNetworkDelegate::OnNetworkBytesSent(net::URLRequest* request,
                                                int64_t bytes_sent) {
   ReportDataUsageStats(request, bytes_sent, 0 /* rx_bytes */);
-  data_use_measurement_.OnNetworkBytesSent(*request, bytes_sent);
 }
 
 void ChromeNetworkDelegate::OnCompleted(net::URLRequest* request,
@@ -388,7 +382,6 @@ void ChromeNetworkDelegate::OnCompleted(net::URLRequest* request,
 
   // TODO(amohammadkhan): Verify that there is no double recording in data use
   // of redirected requests.
-  data_use_measurement_.OnCompleted(*request, started);
   RecordNetworkErrorHistograms(request, net_error);
 
   if (net_error == net::OK) {

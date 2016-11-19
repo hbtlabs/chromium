@@ -32,7 +32,6 @@ namespace {
 // in other locations in the code base (e.g. chrome/, components/, etc).
 const base::Feature* kFeaturesExposedToJava[] = {
     &autofill::kAutofillScanCardholderName,
-    &features::kAutoplayMutedVideos,
     &features::kConsistentOmniboxGeolocation,
     &features::kCredentialManagementAPI,
     &features::kSimplifiedFullscreenUI,
@@ -40,6 +39,7 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &features::kWebPayments,
     &kAndroidPayIntegrationV1,
     &kCCTExternalLinkHandling,
+    &kCCTPostMessageAPI,
     &kChromeHomeFeature,
     &kContextualSearchSingleActions,
     &kDownloadsUiFeature,
@@ -74,6 +74,9 @@ const base::Feature kAndroidPayIntegrationV1{"AndroidPayIntegrationV1",
 const base::Feature kCCTExternalLinkHandling{"CCTExternalLinkHandling",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
+const base::Feature kCCTPostMessageAPI{"CCTPostMessageAPI",
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
+
 const base::Feature kChromeHomeFeature{"ChromeHome",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -90,7 +93,7 @@ const base::Feature kNoCreditCardAbort{"NoCreditCardAbort",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kNTPOfflinePagesFeature{"NTPOfflinePages",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kNTPFakeOmniboxTextFeature{
     "NTPFakeOmniboxText", base::FEATURE_DISABLED_BY_DEFAULT};

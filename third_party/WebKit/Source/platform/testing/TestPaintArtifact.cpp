@@ -63,7 +63,7 @@ TestPaintArtifact& TestPaintArtifact::chunk(
 TestPaintArtifact& TestPaintArtifact::chunk(
     const PaintChunkProperties& properties) {
   if (!m_paintChunks.isEmpty())
-    m_paintChunks.last().endIndex = m_displayItemList.size();
+    m_paintChunks.back().endIndex = m_displayItemList.size();
   PaintChunk chunk;
   chunk.beginIndex = m_displayItemList.size();
   chunk.properties = properties;
@@ -74,7 +74,7 @@ TestPaintArtifact& TestPaintArtifact::chunk(
 TestPaintArtifact& TestPaintArtifact::rectDrawing(const FloatRect& bounds,
                                                   Color color) {
   std::unique_ptr<DummyRectClient> client =
-      wrapUnique(new DummyRectClient(bounds, color));
+      makeUnique<DummyRectClient>(bounds, color);
   m_displayItemList.allocateAndConstruct<DrawingDisplayItem>(
       *client, DisplayItem::kDrawingFirst, client->makePicture());
   m_dummyClients.append(std::move(client));
@@ -100,7 +100,7 @@ const PaintArtifact& TestPaintArtifact::build() {
     return m_paintArtifact;
 
   if (!m_paintChunks.isEmpty())
-    m_paintChunks.last().endIndex = m_displayItemList.size();
+    m_paintChunks.back().endIndex = m_displayItemList.size();
   m_paintArtifact = PaintArtifact(std::move(m_displayItemList),
                                   std::move(m_paintChunks), true);
   m_built = true;

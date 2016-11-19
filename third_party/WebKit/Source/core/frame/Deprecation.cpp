@@ -208,6 +208,11 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
              "deprecated. Please pass the index argument as well: "
              "insertRule(x, 0).";
 
+    case UseCounter::MapNameMatchingASCIICaseless:
+    case UseCounter::MapNameMatchingUnicodeLower:
+      return willBeRemoved("Case-insensitive matching for usemap attribute",
+                           M58, "5760965337415680");
+
     case UseCounter::PrefixedVideoSupportsFullscreen:
       return replacedBy("'HTMLVideoElement.webkitSupportsFullscreen'",
                         "'Document.fullscreenEnabled'");
@@ -233,31 +238,40 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
                         "'Document.exitFullscreen()'");
 
     case UseCounter::PrefixedIndexedDB:
-      return replacedBy("'webkitIndexedDB'", "'indexedDB'");
+      return replacedWillBeRemoved("'webkitIndexedDB'", "'indexedDB'", M57,
+                                   "5775330191081472");
 
     case UseCounter::PrefixedIDBCursorConstructor:
-      return replacedBy("'webkitIDBCursor'", "'IDBCursor'");
+      return replacedWillBeRemoved("'webkitIDBCursor'", "'IDBCursor'", M57,
+                                   "5775330191081472");
 
     case UseCounter::PrefixedIDBDatabaseConstructor:
-      return replacedBy("'webkitIDBDatabase'", "'IDBDatabase'");
+      return replacedWillBeRemoved("'webkitIDBDatabase'", "'IDBDatabase'", M57,
+                                   "5775330191081472");
 
     case UseCounter::PrefixedIDBFactoryConstructor:
-      return replacedBy("'webkitIDBFactory'", "'IDBFactory'");
+      return replacedWillBeRemoved("'webkitIDBFactory'", "'IDBFactory'", M57,
+                                   "5775330191081472");
 
     case UseCounter::PrefixedIDBIndexConstructor:
-      return replacedBy("'webkitIDBIndex'", "'IDBIndex'");
+      return replacedWillBeRemoved("'webkitIDBIndex'", "'IDBIndex'", M57,
+                                   "5775330191081472");
 
     case UseCounter::PrefixedIDBKeyRangeConstructor:
-      return replacedBy("'webkitIDBKeyRange'", "'IDBKeyRange'");
+      return replacedWillBeRemoved("'webkitIDBKeyRange'", "'IDBKeyRange'", M57,
+                                   "5775330191081472");
 
     case UseCounter::PrefixedIDBObjectStoreConstructor:
-      return replacedBy("'webkitIDBObjectStore'", "'IDBObjectStore'");
+      return replacedWillBeRemoved("'webkitIDBObjectStore'", "'IDBObjectStore'",
+                                   M57, "5775330191081472");
 
     case UseCounter::PrefixedIDBRequestConstructor:
-      return replacedBy("'webkitIDBRequest'", "'IDBRequest'");
+      return replacedWillBeRemoved("'webkitIDBRequest'", "'IDBRequest'", M57,
+                                   "5775330191081472");
 
     case UseCounter::PrefixedIDBTransactionConstructor:
-      return replacedBy("'webkitIDBTransaction'", "'IDBTransaction'");
+      return replacedWillBeRemoved("'webkitIDBTransaction'", "'IDBTransaction'",
+                                   M57, "5775330191081472");
 
     case UseCounter::PrefixedRequestAnimationFrame:
       return "'webkitRequestAnimationFrame' is vendor-specific. Please use the "
@@ -275,6 +289,12 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
     case UseCounter::PictureSourceSrc:
       return "<source src> with a <picture> parent is invalid and therefore "
              "ignored. Please use <source srcset> instead.";
+
+    case UseCounter::RadioNameMatchingASCIICaseless:
+    case UseCounter::RadioNameMatchingCaseFolding:
+      return willBeRemoved(
+          "Case-insensitive matching for <input type=radio name=...>", M57,
+          "6165799291060224");
 
     case UseCounter::ConsoleTimeline:
       return replacedBy("'console.timeline'", "'console.time'");
@@ -407,7 +427,7 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
              "invalid and therefore ignored. Please use camelCase instead.";
 
     case UseCounter::HTMLKeygenElement:
-      return willBeRemoved("The <keygen> element", M56, "5716060992962560");
+      return willBeRemoved("The <keygen> element", M57, "5716060992962560");
 
     case UseCounter::EncryptedMediaAllSelectedContentTypesMissingCodecs:
       return String::format(
@@ -417,28 +437,20 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
           "Please specify the desired codec(s) as part of the contentType.",
           milestoneString(M56));
 
-    case UseCounter::MIDIMessageEventReceivedTime:
-      return willBeRemoved("MIDIMessageEvent.receivedTime", M56,
-                           "5665772797952000");
-
-    case UseCounter::V8SVGSVGElement_UseCurrentView_AttributeGetter:
-      return willBeRemoved("SVGSVGElement.useCurrentView", M56,
-                           "4511711998509056");
-
-    case UseCounter::V8SVGSVGElement_CurrentView_AttributeGetter:
-      return willBeRemoved("SVGSVGElement.currentView", M56,
-                           "4511711998509056");
-
-    case UseCounter::V8SVGViewElement_ViewTarget_AttributeGetter:
-      return willBeRemoved("SVGViewElement.viewTarget", M56,
-                           "5665473114931200");
-
     case UseCounter::VRDeprecatedFieldOfView:
       return replacedBy("VREyeParameters.fieldOfView",
                         "projection matrices provided by VRFrameData");
 
     case UseCounter::VRDeprecatedGetPose:
       return replacedBy("VRDisplay.getPose()", "VRDisplay.getFrameData()");
+
+    case UseCounter::HTMLEmbedElementLegacyCall:
+      return willBeRemoved("HTMLEmbedElement legacy caller", M58,
+                           "5715026367217664");
+
+    case UseCounter::HTMLObjectElementLegacyCall:
+      return willBeRemoved("HTMLObjectElement legacy caller", M58,
+                           "5715026367217664");
 
     // Features that aren't deprecated don't have a deprecation message.
     default:

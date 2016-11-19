@@ -65,11 +65,6 @@ class FakeGpuProcess : public IPC::Channel {
 
   void Close() override { NOTREACHED(); }
 
-  base::ProcessId GetPeerPID() const override {
-    NOTREACHED();
-    return base::kNullProcessId;
-  }
-
  private:
   scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner_;
 };
@@ -83,14 +78,16 @@ class FakeGpuProcessHost {
         gpu_io_task_runner_(gpu_io_task_runner) {}
   ~FakeGpuProcessHost() {}
 
-  void Init() {
+  void InitOnIO() {
     base::Callback<void(IPC::Message*)> sender =
         base::Bind(&DispatchToGpuPlatformSupportTaskOnIO);
 
     ui::OzonePlatform::GetInstance()
         ->GetGpuPlatformSupportHost()
         ->OnGpuProcessLaunched(kGpuProcessHostId, gpu_io_task_runner_, sender);
+  }
 
+  void InitOnUI() {
     ui::OzonePlatform::GetInstance()
         ->GetGpuPlatformSupportHost()
         ->OnChannelEstablished();
@@ -123,9 +120,11 @@ bool OzoneGpuTestHelper::Initialize(
   fake_gpu_process_host_.reset(new FakeGpuProcessHost(
       gpu_task_runner, io_helper_thread_->task_runner()));
   io_helper_thread_->task_runner()->PostTask(
-      FROM_HERE, base::Bind(&FakeGpuProcessHost::Init,
+      FROM_HERE, base::Bind(&FakeGpuProcessHost::InitOnIO,
                             base::Unretained(fake_gpu_process_host_.get())));
+  io_helper_thread_->FlushForTesting();
 
+  fake_gpu_process_host_->InitOnUI();
   return true;
 }
 

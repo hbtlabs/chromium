@@ -178,9 +178,7 @@ void TestCompositorFrameSink::DidDrawCallback() {
 void TestCompositorFrameSink::ForceReclaimResources() {
   if (capabilities_.can_force_reclaim_resources &&
       delegated_local_frame_id_.is_valid()) {
-    surface_factory_->SubmitCompositorFrame(delegated_local_frame_id_,
-                                            CompositorFrame(),
-                                            SurfaceFactory::DrawCallback());
+    surface_factory_->ClearSurface(delegated_local_frame_id_);
   }
 }
 

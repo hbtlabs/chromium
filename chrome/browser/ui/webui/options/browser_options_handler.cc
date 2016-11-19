@@ -83,6 +83,7 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/proximity_auth/switches.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
+#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/signin/core/browser/signin_manager.h"
@@ -122,7 +123,7 @@
 #include "ash/shell.h"  // nogncheck
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_util.h"
-#include "chrome/browser/chromeos/arc/arc_auth_service.h"
+#include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/chromeos/net/wake_on_wifi_manager.h"
@@ -178,6 +179,19 @@ bool IsDisabledByPolicy(const BooleanPrefMember& pref) {
   return pref.IsManaged() && !pref.GetValue();
 }
 #endif  // !defined(OS_CHROMEOS)
+
+std::string GetSyncErrorAction(sync_ui_util::ActionType action_type) {
+  switch (action_type) {
+    case sync_ui_util::REAUTHENTICATE:
+      return "reauthenticate";
+    case sync_ui_util::UPGRADE_CLIENT:
+      return "upgradeClient";
+    case sync_ui_util::ENTER_PASSPHRASE:
+      return "enterPassphrase";
+    default:
+      return "noAction";
+  }
+}
 
 }  // namespace
 
@@ -362,8 +376,6 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
       IDS_RESET_PROFILE_SETTINGS_DESCRIPTION },
     { "resetProfileSettingsSectionTitle",
       IDS_RESET_PROFILE_SETTINGS_SECTION_TITLE },
-    { "safeBrowsingEnableExtendedReporting",
-      IDS_OPTIONS_SAFEBROWSING_ENABLE_EXTENDED_REPORTING },
     { "safeBrowsingEnableProtection",
       IDS_OPTIONS_SAFEBROWSING_ENABLEPROTECTION },
     { "sectionTitleAppearance", IDS_APPEARANCE_GROUP_NAME },
@@ -582,6 +594,13 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
   RegisterCloudPrintValues(values);
 #endif
 
+  Profile* profile = Profile::FromWebUI(web_ui());
+  values->SetString(
+      "safeBrowsingEnableExtendedReporting",
+      l10n_util::GetStringUTF16(safe_browsing::ChooseOptInTextResource(
+          *profile->GetPrefs(),
+          IDS_OPTIONS_SAFEBROWSING_ENABLE_EXTENDED_REPORTING,
+          IDS_OPTIONS_SAFEBROWSING_ENABLE_SCOUT_REPORTING)));
   values->SetString("syncLearnMoreURL", chrome::kSyncLearnMoreURL);
   base::string16 omnibox_url = base::ASCIIToUTF16(chrome::kOmniboxLearnMoreURL);
   values->SetString(
@@ -600,7 +619,6 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
           supervised_user_dashboard));
 
 #if defined(OS_CHROMEOS)
-  Profile* profile = Profile::FromWebUI(web_ui());
   std::string username = profile->GetProfileUserName();
   if (username.empty()) {
     const user_manager::User* user =
@@ -676,12 +694,8 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
   allow_deletion = allow_deletion && !ash::WmShell::HasInstance();
 #endif
   values->SetBoolean("allowProfileDeletion", allow_deletion);
-
-  values->SetBoolean("profileIsGuest",
-                     Profile::FromWebUI(web_ui())->IsOffTheRecord());
-
-  values->SetBoolean("profileIsSupervised",
-                     Profile::FromWebUI(web_ui())->IsSupervised());
+  values->SetBoolean("profileIsGuest", profile->IsOffTheRecord());
+  values->SetBoolean("profileIsSupervised", profile->IsSupervised());
 
 #if !defined(OS_CHROMEOS)
   values->SetBoolean(
@@ -711,8 +725,7 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
                     chrome::kLanguageSettingsLearnMoreUrl);
 
   values->SetBoolean(
-      "easyUnlockAllowed",
-      EasyUnlockService::Get(Profile::FromWebUI(web_ui()))->IsAllowed());
+      "easyUnlockAllowed", EasyUnlockService::Get(profile)->IsAllowed());
   values->SetString("easyUnlockLearnMoreURL", chrome::kEasyUnlockLearnMoreUrl);
   values->SetBoolean("easyUnlockProximityDetectionAllowed",
                      base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -738,8 +751,7 @@ void BrowserOptionsHandler::GetLocalizedValues(base::DictionaryValue* values) {
   values->SetBoolean("enableTimeZoneTrackingOption",
                      !chromeos::system::HasSystemTimezonePolicy());
   values->SetBoolean("resolveTimezoneByGeolocationInitialValue",
-                     Profile::FromWebUI(web_ui())->GetPrefs()->GetBoolean(
-                         prefs::kResolveTimezoneByGeolocation));
+      profile->GetPrefs()->GetBoolean(prefs::kResolveTimezoneByGeolocation));
   values->SetBoolean("enableLanguageOptionsImeMenu",
                      base::FeatureList::IsEnabled(features::kOptInImeMenu));
   values->SetBoolean(
@@ -909,6 +921,11 @@ void BrowserOptionsHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback("metricsReportingCheckboxChanged",
       base::Bind(&BrowserOptionsHandler::HandleMetricsReportingChange,
                  base::Unretained(this)));
+
+  web_ui()->RegisterMessageCallback(
+      "safeBrowsingExtendedReportingAction",
+      base::Bind(&BrowserOptionsHandler::HandleSafeBrowsingExtendedReporting,
+                 base::Unretained(this)));
 }
 
 void BrowserOptionsHandler::Uninitialize() {
@@ -1003,11 +1020,11 @@ void BrowserOptionsHandler::InitializeHandler() {
   AddTemplateUrlServiceObserver();
 
 #if defined(OS_WIN)
-  ExtensionRegistry::Get(Profile::FromWebUI(web_ui()))->AddObserver(this);
+  ExtensionRegistry::Get(profile)->AddObserver(this);
 #endif
 
   // No preferences below this point may be modified by guest profiles.
-  if (Profile::FromWebUI(web_ui())->IsGuestSession())
+  if (profile->IsGuestSession())
     return;
 
   auto_open_files_.Init(
@@ -1085,6 +1102,15 @@ void BrowserOptionsHandler::InitializeHandler() {
       base::Bind(&BrowserOptionsHandler::SetupProxySettingsSection,
                  base::Unretained(this)));
 #endif  // !defined(OS_CHROMEOS)
+
+  profile_pref_registrar_.Add(
+      prefs::kSafeBrowsingExtendedReportingEnabled,
+      base::Bind(&BrowserOptionsHandler::SetupSafeBrowsingExtendedReporting,
+                 base::Unretained(this)));
+  profile_pref_registrar_.Add(
+      prefs::kSafeBrowsingScoutReportingEnabled,
+      base::Bind(&BrowserOptionsHandler::SetupSafeBrowsingExtendedReporting,
+                 base::Unretained(this)));
 }
 
 void BrowserOptionsHandler::InitializePage() {
@@ -1108,6 +1134,7 @@ void BrowserOptionsHandler::InitializePage() {
   SetupManagingSupervisedUsers();
   SetupEasyUnlock();
   SetupExtensionControlledIndicators();
+  SetupSafeBrowsingExtendedReporting();
 
 #if defined(OS_CHROMEOS)
   SetupAccessibilityFeatures();
@@ -1136,10 +1163,10 @@ void BrowserOptionsHandler::InitializePage() {
       chromeos::WallpaperManager::Get()->IsPolicyControlled(
           user->GetAccountId()));
 
-  if (arc::ArcAuthService::IsAllowedForProfile(profile) &&
-      !arc::ArcAuthService::IsOptInVerificationDisabled()) {
+  if (arc::ArcSessionManager::IsAllowedForProfile(profile) &&
+      !arc::ArcSessionManager::IsOptInVerificationDisabled()) {
     base::FundamentalValue is_arc_enabled(
-        arc::ArcAuthService::Get()->IsArcEnabled());
+        arc::ArcSessionManager::Get()->IsArcEnabled());
     web_ui()->CallJavascriptFunctionUnsafe(
         "BrowserOptions.showAndroidAppsSection",
         is_arc_enabled);
@@ -1159,8 +1186,7 @@ bool BrowserOptionsHandler::ShouldShowSetDefaultBrowser() {
   // We're always the default browser on ChromeOS.
   return false;
 #else
-  Profile* profile = Profile::FromWebUI(web_ui());
-  return !profile->IsGuestSession();
+  return !Profile::FromWebUI(web_ui())->IsGuestSession();
 #endif
 }
 
@@ -1169,8 +1195,7 @@ bool BrowserOptionsHandler::ShouldShowMultiProfilesUserList() {
   // On Chrome OS we use different UI for multi-profiles.
   return false;
 #else
-  Profile* profile = Profile::FromWebUI(web_ui());
-  if (profile->IsGuestSession())
+  if (Profile::FromWebUI(web_ui())->IsGuestSession())
     return false;
   return profiles::IsMultipleProfilesEnabled();
 #endif
@@ -1264,15 +1289,15 @@ void BrowserOptionsHandler::OnTemplateURLServiceChanged() {
   TemplateURLService::TemplateURLVector model_urls(
       template_url_service_->GetTemplateURLs());
   for (size_t i = 0; i < model_urls.size(); ++i) {
-    if (!model_urls[i]->ShowInDefaultList(
-            template_url_service_->search_terms_data()))
+    TemplateURL* t_url = model_urls[i];
+    if (!template_url_service_->ShowInDefaultList(t_url))
       continue;
 
     std::unique_ptr<base::DictionaryValue> entry(new base::DictionaryValue());
-    entry->SetString("name", model_urls[i]->short_name());
+    entry->SetString("name", t_url->short_name());
     entry->SetInteger("index", i);
     search_engines.Append(std::move(entry));
-    if (model_urls[i] == default_url)
+    if (t_url == default_url)
       default_index = i;
   }
 
@@ -1482,7 +1507,7 @@ void BrowserOptionsHandler::ThemesSetNative(const base::ListValue* args) {
 #if defined(OS_CHROMEOS)
 void BrowserOptionsHandler::UpdateAccountPicture() {
   std::string email = user_manager::UserManager::Get()
-                          ->GetLoggedInUser()
+                          ->GetActiveUser()
                           ->GetAccountId()
                           .GetUserEmail();
   if (!email.empty()) {
@@ -1577,7 +1602,7 @@ BrowserOptionsHandler::GetSyncStateDictionary() {
   sync_status->SetString("statusText", status_label);
   sync_status->SetString("actionLinkText", link_label);
   sync_status->SetBoolean("hasError", status_has_error);
-
+  sync_status->SetString("statusAction", GetSyncErrorAction(action_type));
   sync_status->SetBoolean("managed", service && service->IsManaged());
   sync_status->SetBoolean("signedIn", signin->IsAuthenticated());
   sync_status->SetString("accountInfo",
@@ -1978,7 +2003,7 @@ void BrowserOptionsHandler::ShowAndroidAppsSettings(
     const base::ListValue* args) {
   Profile* profile = Profile::FromWebUI(web_ui());
   // Settings in secondary profile cannot access ARC.
-  if (!arc::ArcAuthService::IsAllowedForProfile(profile)) {
+  if (!arc::ArcSessionManager::IsAllowedForProfile(profile)) {
     LOG(ERROR) << "Settings can't be invoked for non-primary profile";
     return;
   }
@@ -1990,7 +2015,7 @@ void BrowserOptionsHandler::ShowAccessibilityTalkBackSettings(
     const base::ListValue *args) {
   Profile* profile = Profile::FromWebUI(web_ui());
   // Settings in secondary profile cannot access ARC.
-  if (!arc::ArcAuthService::IsAllowedForProfile(profile)) {
+  if (!arc::ArcSessionManager::IsAllowedForProfile(profile)) {
     LOG(WARNING) << "Settings can't be invoked for non-primary profile";
     return;
   }
@@ -2152,42 +2177,27 @@ void BrowserOptionsHandler::SetupEasyUnlock() {
 void BrowserOptionsHandler::SetupExtensionControlledIndicators() {
   base::DictionaryValue extension_controlled;
 
+  Profile* profile = Profile::FromWebUI(web_ui());
+
   // Check if an extension is overriding the Search Engine.
   const extensions::Extension* extension =
-      extensions::GetExtensionOverridingSearchEngine(
-          Profile::FromWebUI(web_ui()));
+      extensions::GetExtensionOverridingSearchEngine(profile);
   AppendExtensionData("searchEngine", extension, &extension_controlled);
 
   // Check if an extension is overriding the Home page.
-  extension = extensions::GetExtensionOverridingHomepage(
-      Profile::FromWebUI(web_ui()));
+  extension = extensions::GetExtensionOverridingHomepage(profile);
   AppendExtensionData("homePage", extension, &extension_controlled);
 
   // Check if an extension is overriding the Startup pages.
-  extension = extensions::GetExtensionOverridingStartupPages(
-      Profile::FromWebUI(web_ui()));
+  extension = extensions::GetExtensionOverridingStartupPages(profile);
   AppendExtensionData("startUpPage", extension, &extension_controlled);
 
   // Check if an extension is overriding the NTP page.
-  GURL ntp_url(chrome::kChromeUINewTabURL);
-  bool ignored_param;
-  extension = NULL;
-  content::BrowserURLHandler::GetInstance()->RewriteURLIfNecessary(
-      &ntp_url,
-      web_ui()->GetWebContents()->GetBrowserContext(),
-      &ignored_param);
-  if (ntp_url.SchemeIs("chrome-extension")) {
-    using extensions::ExtensionRegistry;
-    ExtensionRegistry* registry = ExtensionRegistry::Get(
-        Profile::FromWebUI(web_ui()));
-    extension = registry->GetExtensionById(ntp_url.host(),
-                                           ExtensionRegistry::ENABLED);
-  }
+  extension = extensions::GetExtensionOverridingNewTabPage(profile);
   AppendExtensionData("newTabPage", extension, &extension_controlled);
 
   // Check if an extension is overwriting the proxy setting.
-  extension = extensions::GetExtensionOverridingProxy(
-      Profile::FromWebUI(web_ui()));
+  extension = extensions::GetExtensionOverridingProxy(profile);
   AppendExtensionData("proxy", extension, &extension_controlled);
 
   web_ui()->CallJavascriptFunctionUnsafe(
@@ -2251,6 +2261,22 @@ void BrowserOptionsHandler::SetMetricsReportingCheckbox(bool checked,
       "BrowserOptions.setMetricsReportingCheckboxState",
       base::FundamentalValue(checked), base::FundamentalValue(policy_managed),
       base::FundamentalValue(owner_managed));
+}
+
+void BrowserOptionsHandler::SetupSafeBrowsingExtendedReporting() {
+  base::FundamentalValue is_enabled(safe_browsing::IsExtendedReportingEnabled(
+      *Profile::FromWebUI(web_ui())->GetPrefs()));
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "BrowserOptions.setExtendedReportingEnabledCheckboxState", is_enabled);
+}
+
+void BrowserOptionsHandler::HandleSafeBrowsingExtendedReporting(
+    const base::ListValue* args) {
+  bool checked;
+  if (args->GetBoolean(0, &checked)) {
+    safe_browsing::SetExtendedReportingPref(
+        Profile::FromWebUI(web_ui())->GetPrefs(), checked);
+  }
 }
 
 void BrowserOptionsHandler::OnPolicyUpdated(const policy::PolicyNamespace& ns,

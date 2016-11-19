@@ -166,7 +166,7 @@ TEST(VectorTest, OwnPtr) {
 
   std::unique_ptr<DestructCounter>& counter0 = vector.first();
   ASSERT_EQ(0, counter0->get());
-  int counter1 = vector.last()->get();
+  int counter1 = vector.back()->get();
   ASSERT_EQ(1, counter1);
   ASSERT_EQ(0, destructNumber);
 
@@ -249,7 +249,7 @@ TEST(VectorTest, MoveOnlyType) {
   EXPECT_EQ(2u, vector.size());
 
   ASSERT_EQ(1, vector.first().value());
-  ASSERT_EQ(2, vector.last().value());
+  ASSERT_EQ(2, vector.back().value());
 
   vector.remove(0);
   EXPECT_EQ(2, vector[0].value());
@@ -672,7 +672,7 @@ TEST(VectorTest, Optional) {
   EXPECT_EQ(3u, vector->size());
 }
 
-TEST(VectorTest, emplaceAppend) {
+TEST(VectorTest, emplace_back) {
   struct Item {
     Item(int value1, int value2) : value1(value1), value2(value2) {}
     int value1;
@@ -680,8 +680,8 @@ TEST(VectorTest, emplaceAppend) {
   };
 
   Vector<Item> vector;
-  vector.emplaceAppend(1, 2);
-  vector.emplaceAppend(3, 4);
+  vector.emplace_back(1, 2);
+  vector.emplace_back(3, 4);
 
   EXPECT_EQ(2u, vector.size());
   EXPECT_EQ(1, vector[0].value1);

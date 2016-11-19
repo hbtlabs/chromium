@@ -1,3 +1,4 @@
+-NavigationControllerBrowserTest.EnsureSamePageNavigationUpdatesFrameNavigationEntry
 -NavigationControllerBrowserTest.FrameNavigationEntry_RecreatedInjectedSrcdocSubframe
 -RenderFrameHostManagerTest.RestoreSubframeFileAccessForHistoryNavigation
 -RequestDataResourceDispatcherHostBrowserTest.*
@@ -9,6 +10,4 @@
 -NavigationControllerBrowserTest.SamePageBrowserInitiated
 
 # Fail in Debug
--DevToolsProtocolTest.ControlNavigationsMainFrame
--IsolatedDevToolsProtocolTest.ControlNavigationsChildFrames
 -NavigationControllerBrowserTest.RaceCrossOriginNavigationAndSamePageHistoryNavigation

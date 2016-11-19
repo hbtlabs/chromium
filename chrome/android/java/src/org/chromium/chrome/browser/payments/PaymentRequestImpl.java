@@ -7,10 +7,8 @@ package org.chromium.chrome.browser.payments;
 import android.app.Activity;
 import android.graphics.Bitmap;
 import android.os.Handler;
+import android.support.v4.util.ArrayMap;
 import android.text.TextUtils;
-
-import org.json.JSONException;
-import org.json.JSONObject;
 
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
@@ -37,10 +35,10 @@ import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
-import org.chromium.components.safejson.JsonSanitizer;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.mojo.system.MojoException;
+import org.chromium.payments.mojom.ActivePaymentQueryResult;
 import org.chromium.payments.mojom.PaymentComplete;
 import org.chromium.payments.mojom.PaymentDetails;
 import org.chromium.payments.mojom.PaymentErrorReason;
@@ -53,12 +51,10 @@ import org.chromium.payments.mojom.PaymentResponse;
 import org.chromium.payments.mojom.PaymentShippingOption;
 import org.chromium.payments.mojom.PaymentShippingType;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -72,16 +68,6 @@ import java.util.Set;
 public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Client,
         PaymentApp.InstrumentsCallback, PaymentInstrument.InstrumentDetailsCallback,
         PaymentResponseHelper.PaymentResponseRequesterDelegate {
-    /**
-     * Observer to be notified when PaymentRequest UI has been dismissed.
-     */
-    public interface PaymentRequestDismissObserver {
-        /**
-         * Called when PaymentRequest UI has been dismissed.
-         */
-        void onPaymentRequestDismissed();
-    }
-
     /**
      * A test-only observer for the PaymentRequest service implementation.
      */
@@ -111,6 +97,11 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
          * </ul>
          */
         void onPaymentRequestServiceShowFailed();
+
+        /**
+         * Called when the canMakeActivePayment() request has been responded.
+         */
+        void onPaymentRequestServiceActivePaymentQueryResponded();
     }
 
     private static final String TAG = "cr_PaymentRequest";
@@ -124,7 +115,20 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
                 }
             };
 
+    /** Every origin can call canMakeActivePayment() every 30 minutes. */
+    private static final int CAN_MAKE_ACTIVE_PAYMENT_QUERY_PERIOD_MS = 30 * 60 * 1000;
+
     private static PaymentRequestServiceObserverForTest sObserverForTest;
+
+    /** True if show() was called in any PaymentRequestImpl object. */
+    private static boolean sIsShowing;
+
+    /**
+     * In-memory mapping of the origins of websites that have recently called canMakeActivePayment()
+     * to the list of the payment methods that were been queried. Used for throttling the usage of
+     * this call. The user can clear the list by restarting the browser.
+     */
+    private static Map<String, Set<String>> sCanMakeActivePaymentQueries;
 
     /** Monitors changes in the TabModelSelector. */
     private final TabModelSelectorObserver mSelectorObserver = new EmptyTabModelSelectorObserver() {
@@ -144,7 +148,6 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
 
     private final Handler mHandler = new Handler();
     private final ChromeActivity mContext;
-    private final PaymentRequestDismissObserver mDismissObserver;
     private final String mMerchantName;
     private final String mOrigin;
     private final List<PaymentApp> mApps;
@@ -179,7 +182,7 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
      */
     private SectionInformation mUiShippingOptions;
 
-    private Map<String, JSONObject> mMethodData;
+    private Map<String, PaymentMethodData> mMethodData;
     private SectionInformation mShippingAddressesSection;
     private SectionInformation mContactSection;
     private List<PaymentApp> mPendingApps;
@@ -192,12 +195,10 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
     private boolean mMerchantSupportsAutofillPaymentInstruments;
     private ContactEditor mContactEditor;
     private boolean mHasRecordedAbortReason;
+    private boolean mQueriedCanMakeActivePayment;
 
     /** True if any of the requested payment methods are supported. */
     private boolean mArePaymentMethodsSupported;
-
-    /** True if show() was called. */
-    private boolean mIsShowing;
 
     /** The helper to create and fill the response to send to the merchant. */
     private PaymentResponseHelper mPaymentResponseHelper;
@@ -207,21 +208,18 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
      *
      * @param context         The context where PaymentRequest has been invoked.
      * @param webContents     The web contents that have invoked the PaymentRequest API.
-     * @param dismissObserver The observer to notify when PaymentRequest UI has been dismissed.
      */
-    public PaymentRequestImpl(Activity context, WebContents webContents,
-            PaymentRequestDismissObserver dismissObserver) {
+    public PaymentRequestImpl(Activity context, WebContents webContents) {
         assert context != null;
         assert webContents != null;
-        assert dismissObserver != null;
 
         assert context instanceof ChromeActivity;
         mContext = (ChromeActivity) context;
 
-        mDismissObserver = dismissObserver;
         mMerchantName = webContents.getTitle();
         // The feature is available only in secure context, so it's OK to not show HTTPS.
-        mOrigin = UrlFormatter.formatUrlForSecurityDisplay(webContents.getVisibleUrl(), false);
+        mOrigin = UrlFormatter.formatUrlForSecurityDisplay(
+                webContents.getLastCommittedUrl(), false);
 
         final FaviconHelper faviconHelper = new FaviconHelper();
         faviconHelper.getLocalFaviconImageForURL(Profile.getLastUsedProfile(),
@@ -407,9 +405,16 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
      */
     @Override
     public void show() {
-        if (mClient == null || mIsShowing) return;
+        if (mClient == null) return;
 
-        mIsShowing = true;
+        if (getIsShowing()) {
+            disconnectFromClientWithDebugMessage("A PaymentRequest UI is already showing");
+            recordAbortReasonHistogram(
+                    PaymentRequestMetrics.ABORT_REASON_INVALID_DATA_FROM_RENDERER);
+            return;
+        }
+
+        setIsShowing(true);
         if (disconnectIfNoPaymentMethodsSupported()) return;
 
         // Catch any time the user switches tabs.  Because the dialog is modal, a user shouldn't be
@@ -421,27 +426,12 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
         recordSuccessFunnelHistograms("Shown");
     }
 
-    private static Map<String, JSONObject> getValidatedMethodData(
+    private static Map<String, PaymentMethodData> getValidatedMethodData(
             PaymentMethodData[] methodData, CardEditor paymentMethodsCollector) {
         // Payment methodData are required.
         if (methodData == null || methodData.length == 0) return null;
-        Map<String, JSONObject> result = new HashMap<>();
+        Map<String, PaymentMethodData> result = new ArrayMap<>();
         for (int i = 0; i < methodData.length; i++) {
-            JSONObject data = null;
-            if (!TextUtils.isEmpty(methodData[i].stringifiedData)) {
-                try {
-                    data = new JSONObject(JsonSanitizer.sanitize(methodData[i].stringifiedData));
-                } catch (JSONException | IOException | IllegalStateException e) {
-                    // Payment method specific data should be a JSON object.
-                    // According to the payment request spec[1], for each method data,
-                    // if the data field is supplied but is not a JSON-serializable object,
-                    // then should throw a TypeError. So, we should return null here even if
-                    // only one is bad.
-                    // [1] https://w3c.github.io/browser-payment-api/
-                    return null;
-                }
-            }
-
             String[] methods = methodData[i].supportedMethods;
 
             // Payment methods are required.
@@ -450,7 +440,7 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
             for (int j = 0; j < methods.length; j++) {
                 // Payment methods should be non-empty.
                 if (TextUtils.isEmpty(methods[j])) return null;
-                result.put(methods[j], data);
+                result.put(methods[j], methodData[i]);
             }
 
             paymentMethodsCollector.addAcceptedPaymentMethodsIfRecognized(methods);
@@ -464,10 +454,10 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
         mPendingInstruments = new ArrayList<>();
         mPendingAutofillInstruments = new ArrayList<>();
 
-        Map<PaymentApp, Map<String, JSONObject>> queryApps = new HashMap<>();
+        Map<PaymentApp, Map<String, PaymentMethodData>> queryApps = new ArrayMap<>();
         for (int i = 0; i < mApps.size(); i++) {
             PaymentApp app = mApps.get(i);
-            Map<String, JSONObject> appMethods =
+            Map<String, PaymentMethodData> appMethods =
                     filterMerchantMethodData(mMethodData, app.getAppMethodNames());
             if (appMethods == null) {
                 mPendingApps.remove(app);
@@ -481,18 +471,18 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
         // Query instruments after mMerchantSupportsAutofillPaymentInstruments has been initialized,
         // so a fast response from a non-autofill payment app at the front of the app list does not
         // cause NOT_SUPPORTED payment rejection.
-        for (Map.Entry<PaymentApp, Map<String, JSONObject>> q : queryApps.entrySet()) {
+        for (Map.Entry<PaymentApp, Map<String, PaymentMethodData>> q : queryApps.entrySet()) {
             q.getKey().getInstruments(q.getValue(), this);
         }
     }
 
     /** Filter out merchant method data that's not relevant to a payment app. Can return null. */
-    private static Map<String, JSONObject> filterMerchantMethodData(
-            Map<String, JSONObject> merchantMethodData, Set<String> appMethods) {
-        Map<String, JSONObject> result = null;
+    private static Map<String, PaymentMethodData> filterMerchantMethodData(
+            Map<String, PaymentMethodData> merchantMethodData, Set<String> appMethods) {
+        Map<String, PaymentMethodData> result = null;
         for (String method : appMethods) {
             if (merchantMethodData.containsKey(method)) {
-                if (result == null) result = new HashMap<>();
+                if (result == null) result = new ArrayMap<>();
                 result.put(method, merchantMethodData.get(method));
             }
         }
@@ -687,9 +677,9 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
     }
 
     @Override
-    @PaymentRequestUI.SelectionResult public int onSectionOptionSelected(
-            @PaymentRequestUI.DataType int optionType, PaymentOption option,
-            Callback<PaymentInformation> callback) {
+    @PaymentRequestUI.SelectionResult
+    public int onSectionOptionSelected(@PaymentRequestUI.DataType int optionType,
+            PaymentOption option, Callback<PaymentInformation> callback) {
         if (optionType == PaymentRequestUI.TYPE_SHIPPING_ADDRESSES) {
             assert option instanceof AutofillAddress;
             // Log the change of shipping address.
@@ -745,7 +735,35 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
     }
 
     @Override
-    @PaymentRequestUI.SelectionResult public int onSectionAddOption(
+    @PaymentRequestUI.SelectionResult
+    public int onSectionEditOption(@PaymentRequestUI.DataType int optionType, PaymentOption option,
+            Callback<PaymentInformation> callback) {
+        if (optionType == PaymentRequestUI.TYPE_SHIPPING_ADDRESSES) {
+            assert option instanceof AutofillAddress;
+            editAddress((AutofillAddress) option);
+            mPaymentInformationCallback = callback;
+            return PaymentRequestUI.SELECTION_RESULT_ASYNCHRONOUS_VALIDATION;
+        }
+
+        if (optionType == PaymentRequestUI.TYPE_CONTACT_DETAILS) {
+            assert option instanceof AutofillContact;
+            editContact((AutofillContact) option);
+            return PaymentRequestUI.SELECTION_RESULT_EDITOR_LAUNCH;
+        }
+
+        if (optionType == PaymentRequestUI.TYPE_PAYMENT_METHODS) {
+            assert option instanceof AutofillPaymentInstrument;
+            editCard((AutofillPaymentInstrument) option);
+            return PaymentRequestUI.SELECTION_RESULT_EDITOR_LAUNCH;
+        }
+
+        assert false;
+        return PaymentRequestUI.SELECTION_RESULT_NONE;
+    }
+
+    @Override
+    @PaymentRequestUI.SelectionResult
+    public int onSectionAddOption(
             @PaymentRequestUI.DataType int optionType, Callback<PaymentInformation> callback) {
         if (optionType == PaymentRequestUI.TYPE_SHIPPING_ADDRESSES) {
             editAddress(null);
@@ -907,6 +925,46 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
     }
 
     /**
+     * Called by the merchant website to check if the user has complete payment instruments.
+     */
+    @Override
+    public void canMakeActivePayment() {
+        if (mClient == null) return;
+
+        if (sCanMakeActivePaymentQueries == null) sCanMakeActivePaymentQueries = new ArrayMap<>();
+
+        if (sCanMakeActivePaymentQueries.containsKey(mOrigin)) {
+            if (!mMethodData.keySet().equals(sCanMakeActivePaymentQueries.get(mOrigin))) {
+                mClient.onCanMakeActivePayment(ActivePaymentQueryResult.QUERY_QUOTA_EXCEEDED);
+                if (sObserverForTest != null) {
+                    sObserverForTest.onPaymentRequestServiceActivePaymentQueryResponded();
+                }
+                return;
+            }
+        } else {
+            sCanMakeActivePaymentQueries.put(mOrigin, mMethodData.keySet());
+            mHandler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    sCanMakeActivePaymentQueries.remove(mOrigin);
+                }
+            }, CAN_MAKE_ACTIVE_PAYMENT_QUERY_PERIOD_MS);
+        }
+
+        if (!mPendingApps.isEmpty() || !mPendingInstruments.isEmpty()) {
+            mQueriedCanMakeActivePayment = true;
+        } else {
+            mClient.onCanMakeActivePayment(mPaymentMethodsSection == null
+                    || mPaymentMethodsSection.getSelectedItem() == null
+                            ? ActivePaymentQueryResult.CANNOT_MAKE_ACTIVE_PAYMENT
+                            : ActivePaymentQueryResult.CAN_MAKE_ACTIVE_PAYMENT);
+            if (sObserverForTest != null) {
+                sObserverForTest.onPaymentRequestServiceActivePaymentQueryResponded();
+            }
+        }
+    }
+
+    /**
      * Called when the renderer closes the Mojo connection.
      */
     @Override
@@ -993,6 +1051,16 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
             }
         }
 
+        if (mQueriedCanMakeActivePayment) {
+            mQueriedCanMakeActivePayment = false;
+            mClient.onCanMakeActivePayment(selection == 0
+                            ? ActivePaymentQueryResult.CAN_MAKE_ACTIVE_PAYMENT
+                            : ActivePaymentQueryResult.CANNOT_MAKE_ACTIVE_PAYMENT);
+            if (sObserverForTest != null) {
+                sObserverForTest.onPaymentRequestServiceActivePaymentQueryResponded();
+            }
+        }
+
         // The list of payment instruments is ready to display.
         mPaymentMethodsSection = new SectionInformation(PaymentRequestUI.TYPE_PAYMENT_METHODS,
                 selection, mPendingInstruments);
@@ -1016,7 +1084,7 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
                 && !ChromeFeatureList.isEnabled(ChromeFeatureList.NO_CREDIT_CARD_ABORT);
 
         if (!mArePaymentMethodsSupported
-                || (mIsShowing && !waitingForPaymentApps && !foundPaymentMethods
+                || (getIsShowing() && !waitingForPaymentApps && !foundPaymentMethods
                            && !userCanAddCreditCard)) {
             // All payment apps have responded, but none of them have instruments. It's possible to
             // add credit cards, but the merchant does not support them either. The payment request
@@ -1133,7 +1201,15 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
     private void closeClient() {
         if (mClient != null) mClient.close();
         mClient = null;
-        mDismissObserver.onPaymentRequestDismissed();
+        setIsShowing(false);
+    }
+
+    private static boolean getIsShowing() {
+        return sIsShowing;
+    }
+
+    private static void setIsShowing(boolean isShowing) {
+        sIsShowing = isShowing;
     }
 
     @VisibleForTesting

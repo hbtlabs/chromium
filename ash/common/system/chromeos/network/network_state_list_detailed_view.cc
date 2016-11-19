@@ -30,6 +30,7 @@
 #include "ash/common/system/tray/tray_details_view.h"
 #include "ash/common/system/tray/tray_popup_header_button.h"
 #include "ash/common/system/tray/tray_popup_label_button.h"
+#include "ash/common/system/tray/tri_view.h"
 #include "ash/common/wm_lookup.h"
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
@@ -225,7 +226,7 @@ class InfoIcon : public views::ImageButton {
 
   // views::View
   gfx::Size GetPreferredSize() const override {
-    int size = GetTrayConstant(TRAY_POPUP_ITEM_HEIGHT);
+    int size = GetTrayConstant(TRAY_POPUP_ITEM_MIN_HEIGHT);
     return gfx::Size(size, size);
   }
 
@@ -373,7 +374,9 @@ void NetworkStateListDetailedView::Init() {
   CreateScrollableList();
   if (!UseMd())
     CreateNetworkExtra();
-  CreateTitleRow(IDS_ASH_STATUS_TRAY_NETWORK);
+  CreateTitleRow(list_type_ == ListType::LIST_TYPE_NETWORK
+                     ? IDS_ASH_STATUS_TRAY_NETWORK
+                     : IDS_ASH_STATUS_TRAY_VPN);
 
   network_list_view_->set_container(scroll_content());
   Update();
@@ -478,14 +481,18 @@ void NetworkStateListDetailedView::CreateExtraTitleRowButtons() {
     if (login_ == LoginStatus::LOCKED)
       return;
 
+    DCHECK(!info_button_md_);
+    tri_view()->SetContainerVisible(TriView::Container::END, true);
+
     info_button_md_ = new SystemMenuButton(
-        this, SystemMenuButton::InkDropStyle::SQUARE, kSystemMenuInfoIcon,
+        this, TrayPopupInkDropStyle::HOST_CENTERED, kSystemMenuInfoIcon,
         IDS_ASH_STATUS_TRAY_NETWORK_INFO);
-    title_row()->AddViewToTitleRow(info_button_md_);
+    tri_view()->AddView(TriView::Container::END, info_button_md_);
 
     if (login_ != LoginStatus::NOT_LOGGED_IN) {
+      DCHECK(!settings_button_md_);
       settings_button_md_ = new SystemMenuButton(
-          this, SystemMenuButton::InkDropStyle::SQUARE, kSystemMenuSettingsIcon,
+          this, TrayPopupInkDropStyle::HOST_CENTERED, kSystemMenuSettingsIcon,
           IDS_ASH_STATUS_TRAY_NETWORK_SETTINGS);
 
       // Allow the user to access settings only if user is logged in
@@ -495,10 +502,10 @@ void NetworkStateListDetailedView::CreateExtraTitleRowButtons() {
       if (!WmShell::Get()->system_tray_delegate()->ShouldShowSettings())
         settings_button_md_->SetState(views::Button::STATE_DISABLED);
 
-      title_row()->AddViewToTitleRow(settings_button_md_);
+      tri_view()->AddView(TriView::Container::END, settings_button_md_);
     } else {
       proxy_settings_button_md_ = new SystemMenuButton(
-          this, SystemMenuButton::InkDropStyle::SQUARE, kSystemMenuSettingsIcon,
+          this, TrayPopupInkDropStyle::HOST_CENTERED, kSystemMenuSettingsIcon,
           IDS_ASH_STATUS_TRAY_NETWORK_PROXY_SETTINGS);
       title_row()->AddViewToTitleRow(proxy_settings_button_md_);
     }
@@ -661,7 +668,8 @@ void NetworkStateListDetailedView::UpdateHeaderButtons() {
     }
   }
 
-  static_cast<views::View*>(title_row())->Layout();
+  if (!UseMd())
+    static_cast<views::View*>(title_row())->Layout();
 }
 
 void NetworkStateListDetailedView::SetScanningStateForThrobberView(
@@ -951,10 +959,12 @@ views::View* NetworkStateListDetailedView::CreateViewForNetwork(
     const NetworkInfo& info) {
   HoverHighlightView* view = new HoverHighlightView(this);
   view->AddIconAndLabel(info.image, info.label, info.highlight);
-  view->SetBorder(
-      views::CreateEmptyBorder(0, kTrayPopupPaddingHorizontal, 0, 0));
-  views::View* controlled_icon = CreateControlledByExtensionView(info);
   view->set_tooltip(info.tooltip);
+  if (!UseMd()) {
+    view->SetBorder(
+        views::CreateEmptyBorder(0, kTrayPopupPaddingHorizontal, 0, 0));
+  }
+  views::View* controlled_icon = CreateControlledByExtensionView(info);
   if (controlled_icon)
     view->AddChildView(controlled_icon);
   return view;

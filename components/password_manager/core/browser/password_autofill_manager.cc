@@ -26,7 +26,7 @@
 #include "components/password_manager/core/browser/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
-#include "components/security_state/switches.h"
+#include "components/security_state/core/switches.h"
 #include "components/strings/grit/components_strings.h"
 #include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -222,7 +222,7 @@ void PasswordAutofillManager::OnShowPasswordSuggestions(
           l10n_util::GetStringUTF16(
               IDS_AUTOFILL_PASSWORD_HTTP_WARNING_MESSAGE));
       password_field_http_warning_suggestion.frontend_id =
-          autofill::POPUP_ITEM_ID_WARNING_MESSAGE;
+          autofill::POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE;
       suggestions.insert(suggestions.begin(),
                          password_field_http_warning_suggestion);
     }

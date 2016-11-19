@@ -46,11 +46,11 @@ void LayoutSVGForeignObject::paint(const PaintInfo& paintInfo,
   SVGForeignObjectPainter(*this).paint(paintInfo);
 }
 
-const AffineTransform& LayoutSVGForeignObject::localToSVGParentTransform()
-    const {
-  m_localToParentTransform = localSVGTransform();
-  m_localToParentTransform.translate(m_viewport.x(), m_viewport.y());
-  return m_localToParentTransform;
+AffineTransform LayoutSVGForeignObject::localToSVGParentTransform() const {
+  // Unlike other viewport-defining SVG objects, here localSVGTransform applies
+  // to the viewport offset.
+  return localSVGTransform() *
+         AffineTransform::translation(m_viewport.x(), m_viewport.y());
 }
 
 void LayoutSVGForeignObject::updateLogicalWidth() {
@@ -90,10 +90,10 @@ void LayoutSVGForeignObject::layout() {
   // Cache viewport boundaries
   SVGLengthContext lengthContext(foreign);
   FloatPoint viewportLocation(
-      lengthContext.valueForLength(styleRef().svgStyle().x(), styleRef(),
-                                   SVGLengthMode::Width),
-      lengthContext.valueForLength(styleRef().svgStyle().y(), styleRef(),
-                                   SVGLengthMode::Height));
+      roundf(lengthContext.valueForLength(styleRef().svgStyle().x(), styleRef(),
+                                          SVGLengthMode::Width)),
+      roundf(lengthContext.valueForLength(styleRef().svgStyle().y(), styleRef(),
+                                          SVGLengthMode::Height)));
   m_viewport = FloatRect(
       viewportLocation,
       FloatSize(lengthContext.valueForLength(styleRef().width(), styleRef(),
@@ -108,10 +108,7 @@ void LayoutSVGForeignObject::layout() {
   // would pull this information from ComputedStyle - in SVG those properties
   // are ignored for non <svg> elements, so we mimic what happens when
   // specifying them through CSS.
-
-  // FIXME: Investigate in location rounding issues - only affects
-  // LayoutSVGForeignObject & LayoutSVGText
-  setLocation(roundedIntPoint(viewportLocation));
+  setLocation(LayoutPoint(viewportLocation));
 
   bool layoutChanged = everHadLayout() && selfNeedsLayout();
   LayoutBlock::layout();

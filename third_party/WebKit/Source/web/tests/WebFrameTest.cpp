@@ -79,13 +79,19 @@
 #include "core/testing/NullExecutionContext.h"
 #include "modules/mediastream/MediaStream.h"
 #include "modules/mediastream/MediaStreamRegistry.h"
+#include "platform/Cursor.h"
 #include "platform/DragImage.h"
+#include "platform/PlatformMouseEvent.h"
 #include "platform/PlatformResourceLoader.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/network/ResourceError.h"
+#include "platform/scroll/Scrollbar.h"
+#include "platform/scroll/ScrollbarTestSuite.h"
 #include "platform/scroll/ScrollbarTheme.h"
+#include "platform/scroll/ScrollbarThemeMock.h"
+#include "platform/scroll/ScrollbarThemeOverlayMock.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
@@ -277,7 +283,7 @@ class WebFrameTest : public ::testing::Test {
 
   // Both sets the inner html and runs the document lifecycle.
   void initializeWithHTML(LocalFrame& frame, const String& htmlContent) {
-    frame.document()->body()->setInnerHTML(htmlContent, ASSERT_NO_EXCEPTION);
+    frame.document()->body()->setInnerHTML(htmlContent);
     frame.document()->view()->updateAllLifecyclePhases();
   }
 
@@ -3102,7 +3108,7 @@ TEST_F(WebFrameTest, updateOverlayScrollbarLayers)
   int viewHeight = 500;
 
   std::unique_ptr<FakeCompositingWebViewClient> fakeCompositingWebViewClient =
-      wrapUnique(new FakeCompositingWebViewClient());
+      makeUnique<FakeCompositingWebViewClient>();
   FrameTestHelpers::WebViewHelper webViewHelper;
   webViewHelper.initialize(true, nullptr, fakeCompositingWebViewClient.get(),
                            nullptr, &configureCompositingWebView);
@@ -4156,9 +4162,7 @@ TEST_P(ParameterizedWebFrameTest, ReloadWhileProvisional) {
 
   FrameTestHelpers::WebViewHelper webViewHelper;
   webViewHelper.initialize();
-  WebURLRequest request;
-  request.setURL(toKURL(m_baseURL + "fixed_layout.html"));
-  request.setRequestorOrigin(WebSecurityOrigin::createUnique());
+  WebURLRequest request(toKURL(m_baseURL + "fixed_layout.html"));
   webViewHelper.webView()->mainFrame()->loadRequest(request);
   // start reload before first request is delivered.
   FrameTestHelpers::reloadFrameIgnoringCache(
@@ -4271,14 +4275,14 @@ class ContextLifetimeTestWebFrameClient
                               int extensionGroup,
                               int worldId) override {
     createNotifications.append(
-        wrapUnique(new Notification(frame, context, worldId)));
+        makeUnique<Notification>(frame, context, worldId));
   }
 
   void willReleaseScriptContext(WebLocalFrame* frame,
                                 v8::Local<v8::Context> context,
                                 int worldId) override {
     releaseNotifications.append(
-        wrapUnique(new Notification(frame, context, worldId)));
+        makeUnique<Notification>(frame, context, worldId));
   }
 };
 
@@ -5458,7 +5462,7 @@ class CompositedSelectionBoundsTestLayerTreeView : public WebLayerTreeView {
   ~CompositedSelectionBoundsTestLayerTreeView() override {}
 
   void registerSelection(const WebSelection& selection) override {
-    m_selection = wrapUnique(new WebSelection(selection));
+    m_selection = makeUnique<WebSelection>(selection);
   }
 
   void clearSelection() override {
@@ -7357,7 +7361,7 @@ TEST_P(ParameterizedWebFrameTest, FirstNonBlankSubframeNavigation) {
 TEST_F(WebFrameTest, overflowHiddenRewrite) {
   registerMockedHttpURLLoad("non-scrollable.html");
   std::unique_ptr<FakeCompositingWebViewClient> fakeCompositingWebViewClient =
-      wrapUnique(new FakeCompositingWebViewClient());
+      makeUnique<FakeCompositingWebViewClient>();
   FrameTestHelpers::WebViewHelper webViewHelper;
   webViewHelper.initialize(true, nullptr, fakeCompositingWebViewClient.get(),
                            nullptr, &configureCompositingWebView);
@@ -7395,9 +7399,7 @@ TEST_P(ParameterizedWebFrameTest, CurrentHistoryItem) {
   WebFrame* frame = webViewHelper.webView()->mainFrame();
   const FrameLoader& mainFrameLoader =
       webViewHelper.webView()->mainFrameImpl()->frame()->loader();
-  WebURLRequest request;
-  request.setURL(toKURL(url));
-  request.setRequestorOrigin(WebSecurityOrigin::createUnique());
+  WebURLRequest request(toKURL(url));
   frame->loadRequest(request);
 
   // Before commit, there is no history item.
@@ -10215,11 +10217,9 @@ TEST_F(WebFrameTest, LoadJavascriptURLInNewFrame) {
   FrameTestHelpers::WebViewHelper helper;
   helper.initialize(true);
 
-  WebURLRequest request;
   std::string redirectURL = m_baseURL + "foo.html";
   URLTestHelpers::registerMockedURLLoad(toKURL(redirectURL), "foo.html");
-  request.setURL(toKURL("javascript:location='" + redirectURL + "'"));
-  request.setRequestorOrigin(WebSecurityOrigin::createUnique());
+  WebURLRequest request(toKURL("javascript:location='" + redirectURL + "'"));
   helper.webView()->mainFrameImpl()->loadRequest(request);
 
   // Normally, the result of the JS url replaces the existing contents on the
@@ -10254,7 +10254,7 @@ class TestResourcePriorityWebFrameClient
   }
 
   void addExpectedRequest(const KURL& url, WebURLRequest::Priority priority) {
-    m_expectedRequests.add(url, wrapUnique(new ExpectedRequest(url, priority)));
+    m_expectedRequests.add(url, makeUnique<ExpectedRequest>(url, priority));
   }
 
   void verifyAllRequests() {
@@ -10429,26 +10429,216 @@ TEST_F(WebFrameTest, HidingScrollbarsOnScrollableAreaDisablesScrollbars) {
   ASSERT_TRUE(frameView->verticalScrollbar());
 
   EXPECT_FALSE(frameView->scrollbarsHidden());
-  EXPECT_TRUE(frameView->horizontalScrollbar()->enabled());
-  EXPECT_TRUE(frameView->verticalScrollbar()->enabled());
+  EXPECT_TRUE(
+      frameView->horizontalScrollbar()->shouldParticipateInHitTesting());
+  EXPECT_TRUE(frameView->verticalScrollbar()->shouldParticipateInHitTesting());
 
   EXPECT_FALSE(scrollerArea->scrollbarsHidden());
-  EXPECT_TRUE(scrollerArea->horizontalScrollbar()->enabled());
-  EXPECT_TRUE(scrollerArea->verticalScrollbar()->enabled());
+  EXPECT_TRUE(
+      scrollerArea->horizontalScrollbar()->shouldParticipateInHitTesting());
+  EXPECT_TRUE(
+      scrollerArea->verticalScrollbar()->shouldParticipateInHitTesting());
 
   frameView->setScrollbarsHidden(true);
-  EXPECT_FALSE(frameView->horizontalScrollbar()->enabled());
-  EXPECT_FALSE(frameView->verticalScrollbar()->enabled());
+  EXPECT_FALSE(
+      frameView->horizontalScrollbar()->shouldParticipateInHitTesting());
+  EXPECT_FALSE(frameView->verticalScrollbar()->shouldParticipateInHitTesting());
   frameView->setScrollbarsHidden(false);
-  EXPECT_TRUE(frameView->horizontalScrollbar()->enabled());
-  EXPECT_TRUE(frameView->verticalScrollbar()->enabled());
+  EXPECT_TRUE(
+      frameView->horizontalScrollbar()->shouldParticipateInHitTesting());
+  EXPECT_TRUE(frameView->verticalScrollbar()->shouldParticipateInHitTesting());
 
   scrollerArea->setScrollbarsHidden(true);
-  EXPECT_FALSE(scrollerArea->horizontalScrollbar()->enabled());
-  EXPECT_FALSE(scrollerArea->verticalScrollbar()->enabled());
+  EXPECT_FALSE(
+      scrollerArea->horizontalScrollbar()->shouldParticipateInHitTesting());
+  EXPECT_FALSE(
+      scrollerArea->verticalScrollbar()->shouldParticipateInHitTesting());
   scrollerArea->setScrollbarsHidden(false);
-  EXPECT_TRUE(scrollerArea->horizontalScrollbar()->enabled());
-  EXPECT_TRUE(scrollerArea->verticalScrollbar()->enabled());
+  EXPECT_TRUE(
+      scrollerArea->horizontalScrollbar()->shouldParticipateInHitTesting());
+  EXPECT_TRUE(
+      scrollerArea->verticalScrollbar()->shouldParticipateInHitTesting());
+}
+
+// Makes sure that mouse hover over an overlay scrollbar doesn't activate
+// elements below unless the scrollbar is faded out.
+TEST_F(WebFrameTest, MouseOverLinkAndOverlayScrollbar) {
+  FrameTestHelpers::WebViewHelper webViewHelper;
+  webViewHelper.initialize(
+      true, nullptr, nullptr, nullptr,
+      [](WebSettings* settings) { settings->setDeviceSupportsMouse(true); });
+  webViewHelper.resize(WebSize(20, 20));
+  WebViewImpl* webView = webViewHelper.webView();
+
+  initializeWithHTML(*webView->mainFrameImpl()->frame(),
+                     "<!DOCTYPE html>"
+                     "<a id='a' href='javascript:void(0);'>"
+                     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                     "</a>"
+                     "<div style='position: absolute; top: 1000px'>end</div>");
+
+  webView->updateAllLifecyclePhases();
+
+  Document* document = webView->mainFrameImpl()->frame()->document();
+  Element* aTag = document->getElementById("a");
+
+  // Ensure hittest has scrollbar and link
+  HitTestResult hitTestResult =
+      webView->coreHitTestResultAt(WebPoint(18, aTag->offsetTop()));
+
+  EXPECT_TRUE(hitTestResult.URLElement());
+  EXPECT_TRUE(hitTestResult.innerElement());
+  EXPECT_TRUE(hitTestResult.scrollbar());
+
+  // Mouse over link. Mouse cursor should be hand.
+  PlatformMouseEvent mouseMoveOverLinkEvent(
+      IntPoint(aTag->offsetLeft(), aTag->offsetTop()),
+      IntPoint(aTag->offsetLeft(), aTag->offsetTop()),
+      WebPointerProperties::Button::NoButton, PlatformEvent::MouseMoved, 0,
+      PlatformEvent::NoModifiers, WTF::monotonicallyIncreasingTime());
+  document->frame()->eventHandler().handleMouseMoveEvent(
+      mouseMoveOverLinkEvent);
+
+  EXPECT_EQ(
+      Cursor::Type::Hand,
+      document->frame()->chromeClient().lastSetCursorForTesting().getType());
+
+  // Mouse over enabled overlay scrollbar. Mouse cursor should be pointer and no
+  // active hover element.
+  PlatformMouseEvent mouseMoveEvent(
+      IntPoint(18, aTag->offsetTop()), IntPoint(18, aTag->offsetTop()),
+      WebPointerProperties::Button::NoButton, PlatformEvent::MouseMoved, 0,
+      PlatformEvent::NoModifiers, WTF::monotonicallyIncreasingTime());
+  document->frame()->eventHandler().handleMouseMoveEvent(mouseMoveEvent);
+
+  EXPECT_EQ(
+      Cursor::Type::Pointer,
+      document->frame()->chromeClient().lastSetCursorForTesting().getType());
+
+  PlatformMouseEvent mousePressEvent(
+      IntPoint(18, aTag->offsetTop()), IntPoint(18, aTag->offsetTop()),
+      WebPointerProperties::Button::Left, PlatformEvent::MousePressed, 0,
+      PlatformEvent::Modifiers::LeftButtonDown,
+      WTF::monotonicallyIncreasingTime());
+  document->frame()->eventHandler().handleMousePressEvent(mousePressEvent);
+
+  EXPECT_FALSE(document->activeHoverElement());
+  EXPECT_FALSE(document->hoverNode());
+
+  PlatformMouseEvent MouseReleaseEvent(
+      IntPoint(18, aTag->offsetTop()), IntPoint(18, aTag->offsetTop()),
+      WebPointerProperties::Button::Left, PlatformEvent::MouseReleased, 0,
+      PlatformEvent::Modifiers::LeftButtonDown,
+      WTF::monotonicallyIncreasingTime());
+  document->frame()->eventHandler().handleMouseReleaseEvent(MouseReleaseEvent);
+
+  // Mouse over disabled overlay scrollbar. Mouse cursor should be hand and has
+  // active hover element.
+  webView->mainFrameImpl()->frameView()->setScrollbarsHidden(true);
+
+  // Ensure hittest only has link
+  hitTestResult = webView->coreHitTestResultAt(WebPoint(18, aTag->offsetTop()));
+
+  EXPECT_TRUE(hitTestResult.URLElement());
+  EXPECT_TRUE(hitTestResult.innerElement());
+  EXPECT_FALSE(hitTestResult.scrollbar());
+
+  document->frame()->eventHandler().handleMouseMoveEvent(mouseMoveEvent);
+
+  EXPECT_EQ(
+      Cursor::Type::Hand,
+      document->frame()->chromeClient().lastSetCursorForTesting().getType());
+
+  document->frame()->eventHandler().handleMousePressEvent(mousePressEvent);
+
+  EXPECT_TRUE(document->activeHoverElement());
+  EXPECT_TRUE(document->hoverNode());
+
+  document->frame()->eventHandler().handleMouseReleaseEvent(MouseReleaseEvent);
+}
+static void disableCompositing(WebSettings* settings) {
+  settings->setAcceleratedCompositingEnabled(false);
+  settings->setPreferCompositingToLCDTextEnabled(false);
+}
+
+// Make sure overlay scrollbars on non-composited scrollers fade out and set
+// the hidden bit as needed.
+TEST_F(WebFrameTest, TestNonCompositedOverlayScrollbarsFade) {
+  FrameTestHelpers::WebViewHelper webViewHelper;
+  WebViewImpl* webViewImpl = webViewHelper.initialize(
+      true, nullptr, nullptr, nullptr, &disableCompositing);
+
+  constexpr double kMockOverlayFadeOutDelayMs = 5.0;
+
+  ScrollbarTheme& theme = ScrollbarTheme::theme();
+  // This test relies on mock overlay scrollbars.
+  ASSERT_TRUE(theme.isMockTheme());
+  ASSERT_TRUE(theme.usesOverlayScrollbars());
+  ScrollbarThemeOverlayMock& mockOverlayTheme =
+      (ScrollbarThemeOverlayMock&)theme;
+  mockOverlayTheme.setOverlayScrollbarFadeOutDelay(kMockOverlayFadeOutDelayMs /
+                                                   1000.0);
+
+  webViewImpl->resizeWithBrowserControls(WebSize(640, 480), 0, false);
+
+  WebURL baseURL = URLTestHelpers::toKURL("http://example.com/");
+  FrameTestHelpers::loadHTMLString(webViewImpl->mainFrame(),
+                                   "<!DOCTYPE html>"
+                                   "<style>"
+                                   "  #space {"
+                                   "    width: 1000px;"
+                                   "    height: 1000px;"
+                                   "  }"
+                                   "  #container {"
+                                   "    width: 200px;"
+                                   "    height: 200px;"
+                                   "    overflow: scroll;"
+                                   "  }"
+                                   "  div { height:1000px; width: 200px; }"
+                                   "</style>"
+                                   "<div id='container'>"
+                                   "  <div id='space'></div>"
+                                   "</div>",
+                                   baseURL);
+  webViewImpl->updateAllLifecyclePhases();
+
+  WebLocalFrameImpl* frame = webViewHelper.webView()->mainFrameImpl();
+  Document* document =
+      toLocalFrame(webViewImpl->page()->mainFrame())->document();
+  Element* container = document->getElementById("container");
+  ScrollableArea* scrollableArea =
+      toLayoutBox(container->layoutObject())->getScrollableArea();
+
+  EXPECT_FALSE(scrollableArea->scrollbarsHidden());
+  testing::runDelayedTasks(kMockOverlayFadeOutDelayMs);
+  EXPECT_TRUE(scrollableArea->scrollbarsHidden());
+
+  scrollableArea->setScrollOffset(ScrollOffset(10, 10), ProgrammaticScroll,
+                                  ScrollBehaviorInstant);
+
+  EXPECT_FALSE(scrollableArea->scrollbarsHidden());
+  testing::runDelayedTasks(kMockOverlayFadeOutDelayMs);
+  EXPECT_TRUE(scrollableArea->scrollbarsHidden());
+
+  frame->executeScript(WebScriptSource(
+      "document.getElementById('space').style.height = '500px';"));
+  frame->view()->updateAllLifecyclePhases();
+
+  EXPECT_FALSE(scrollableArea->scrollbarsHidden());
+  testing::runDelayedTasks(kMockOverlayFadeOutDelayMs);
+  EXPECT_TRUE(scrollableArea->scrollbarsHidden());
+
+  frame->executeScript(WebScriptSource(
+      "document.getElementById('container').style.height = '300px';"));
+  frame->view()->updateAllLifecyclePhases();
+
+  EXPECT_FALSE(scrollableArea->scrollbarsHidden());
+  testing::runDelayedTasks(kMockOverlayFadeOutDelayMs);
+  EXPECT_TRUE(scrollableArea->scrollbarsHidden());
+
+  mockOverlayTheme.setOverlayScrollbarFadeOutDelay(0.0);
 }
 
 TEST_F(WebFrameTest, UniqueNames) {

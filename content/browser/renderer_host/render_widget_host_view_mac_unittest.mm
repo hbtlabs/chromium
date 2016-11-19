@@ -34,6 +34,7 @@
 #include "content/public/test/test_utils.h"
 #include "content/test/test_render_view_host.h"
 #include "gpu/ipc/common/gpu_messages.h"
+#include "gpu/ipc/service/image_transport_surface.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gtest_mac.h"
@@ -254,6 +255,8 @@ class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
 
   void SetUp() override {
     RenderViewHostImplTestHarness::SetUp();
+    gpu::ImageTransportSurface::SetAllowOSMesaForTesting(true);
+
     // TestRenderViewHost's destruction assumes that its view is a
     // TestRenderWidgetHostView, so store its view and reset it back to the
     // stored view in |TearDown()|.
@@ -321,7 +324,7 @@ TEST_F(RenderWidgetHostViewMacTest, AcceptsFirstResponder) {
 // NSTextInputClientConformance conforms to requirements.
 TEST_F(RenderWidgetHostViewMacTest, NSTextInputClientConformance) {
   NSRange selectedRange = [rwhv_cocoa_ selectedRange];
-  EXPECT_EQ(NSNotFound, selectedRange.location);
+  EXPECT_EQ(0u, selectedRange.location);
   EXPECT_EQ(0u, selectedRange.length);
 
   NSRange actualRange = NSMakeRange(1u, 2u);
@@ -329,14 +332,14 @@ TEST_F(RenderWidgetHostViewMacTest, NSTextInputClientConformance) {
       attributedSubstringForProposedRange:NSMakeRange(NSNotFound, 0u)
                               actualRange:&actualRange];
   EXPECT_EQ(nil, actualString);
-  EXPECT_EQ(NSNotFound, actualRange.location);
+  EXPECT_EQ(static_cast<NSUInteger>(NSNotFound), actualRange.location);
   EXPECT_EQ(0u, actualRange.length);
 
   actualString = [rwhv_cocoa_
       attributedSubstringForProposedRange:NSMakeRange(NSNotFound, 15u)
                               actualRange:&actualRange];
   EXPECT_EQ(nil, actualString);
-  EXPECT_EQ(NSNotFound, actualRange.location);
+  EXPECT_EQ(static_cast<NSUInteger>(NSNotFound), actualRange.location);
   EXPECT_EQ(0u, actualRange.length);
 }
 

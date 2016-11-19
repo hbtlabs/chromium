@@ -270,7 +270,7 @@ enum EResize { RESIZE_NONE, RESIZE_BOTH, RESIZE_HORIZONTAL, RESIZE_VERTICAL };
 
 // The order of this enum must match the order of the list style types in
 // CSSValueKeywords.in.
-enum EListStyleType {
+enum class EListStyleType : unsigned {
   Disc,
   Circle,
   Square,
@@ -337,16 +337,16 @@ enum EWhiteSpace { NORMAL, PRE, PRE_WRAP, PRE_LINE, NOWRAP, KHTML_NOWRAP };
 
 // The order of this enum must match the order of the text align values in
 // CSSValueKeywords.in.
-enum ETextAlign {
-  LEFT,
-  RIGHT,
-  CENTER,
-  JUSTIFY,
-  WEBKIT_LEFT,
-  WEBKIT_RIGHT,
-  WEBKIT_CENTER,
-  TASTART,
-  TAEND,
+enum class ETextAlign : unsigned {
+  Left,
+  Right,
+  Center,
+  Justify,
+  WebkitLeft,
+  WebkitRight,
+  WebkitCenter,
+  Start,
+  End,
 };
 
 enum ETextTransform { CAPITALIZE, UPPERCASE, LOWERCASE, TTNONE };
@@ -426,52 +426,50 @@ enum EBreak {
                // shorthands.
 };
 
-enum class EEmptyCells : unsigned { Show, Hide };
-
 enum class ECaptionSide : unsigned { Top, Bottom, Left, Right };
 
 enum class EListStylePosition : unsigned { Outside, Inside };
 
-enum ECursor {
+enum class ECursor : unsigned {
   // The following must match the order in CSSValueKeywords.in.
-  CURSOR_AUTO,
-  CURSOR_CROSS,
-  CURSOR_DEFAULT,
-  CURSOR_POINTER,
-  CURSOR_MOVE,
-  CURSOR_VERTICAL_TEXT,
-  CURSOR_CELL,
-  CURSOR_CONTEXT_MENU,
-  CURSOR_ALIAS,
-  CURSOR_PROGRESS,
-  CURSOR_NO_DROP,
-  CURSOR_NOT_ALLOWED,
-  CURSOR_ZOOM_IN,
-  CURSOR_ZOOM_OUT,
-  CURSOR_E_RESIZE,
-  CURSOR_NE_RESIZE,
-  CURSOR_NW_RESIZE,
-  CURSOR_N_RESIZE,
-  CURSOR_SE_RESIZE,
-  CURSOR_SW_RESIZE,
-  CURSOR_S_RESIZE,
-  CURSOR_W_RESIZE,
-  CURSOR_EW_RESIZE,
-  CURSOR_NS_RESIZE,
-  CURSOR_NESW_RESIZE,
-  CURSOR_NWSE_RESIZE,
-  CURSOR_COL_RESIZE,
-  CURSOR_ROW_RESIZE,
-  CURSOR_TEXT,
-  CURSOR_WAIT,
-  CURSOR_HELP,
-  CURSOR_ALL_SCROLL,
-  CURSOR_WEBKIT_GRAB,
-  CURSOR_WEBKIT_GRABBING,
+  Auto,
+  Cross,
+  Default,
+  Pointer,
+  Move,
+  VerticalText,
+  Cell,
+  ContextMenu,
+  Alias,
+  Progress,
+  NoDrop,
+  NotAllowed,
+  ZoomIn,
+  ZoomOut,
+  EResize,
+  NeResize,
+  NwResize,
+  NResize,
+  SeResize,
+  SwResize,
+  SResize,
+  WResize,
+  EwResize,
+  NsResize,
+  NeswResize,
+  NwseResize,
+  ColResize,
+  RowResize,
+  Text,
+  Wait,
+  Help,
+  AllScroll,
+  WebkitGrab,
+  WebkitGrabbing,
 
   // The following are handled as exceptions so don't need to match.
-  CURSOR_COPY,
-  CURSOR_NONE
+  Copy,
+  None
 };
 
 // The order of this enum must match the order of the display values in

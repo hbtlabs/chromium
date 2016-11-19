@@ -37,6 +37,7 @@
 #include "platform/InstanceCounters.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
+#include "platform/WebTaskRunner.h"
 #include "platform/network/HTTPParsers.h"
 #include "platform/tracing/TraceEvent.h"
 #include "platform/weborigin/KURL.h"
@@ -92,7 +93,7 @@ static inline bool shouldUpdateHeaderAfterRevalidation(
   for (size_t i = 0;
        i < WTF_ARRAY_LENGTH(headerPrefixesToIgnoreAfterRevalidation); i++) {
     if (header.startsWith(headerPrefixesToIgnoreAfterRevalidation[i],
-                          TextCaseInsensitive))
+                          TextCaseASCIIInsensitive))
       return false;
   }
   return true;
@@ -253,7 +254,7 @@ class Resource::ResourceCallback final {
   ResourceCallback();
 
   void runTask();
-  std::unique_ptr<CancellableTaskFactory> m_callbackTaskFactory;
+  TaskHandle m_taskHandle;
   HashSet<Persistent<Resource>> m_resourcesWithPendingClients;
 };
 
@@ -262,26 +263,28 @@ Resource::ResourceCallback& Resource::ResourceCallback::callbackHandler() {
   return callbackHandler;
 }
 
-Resource::ResourceCallback::ResourceCallback()
-    : m_callbackTaskFactory(
-          CancellableTaskFactory::create(this, &ResourceCallback::runTask)) {}
+Resource::ResourceCallback::ResourceCallback() {}
 
 void Resource::ResourceCallback::schedule(Resource* resource) {
-  if (!m_callbackTaskFactory->isPending()) {
-    Platform::current()
-        ->currentThread()
-        ->scheduler()
-        ->loadingTaskRunner()
-        ->postTask(BLINK_FROM_HERE, m_callbackTaskFactory->cancelAndCreate());
+  if (!m_taskHandle.isActive()) {
+    // unretained(this) is safe because a posted task is canceled when
+    // |m_taskHandle| is destroyed on the dtor of this ResourceCallback.
+    m_taskHandle =
+        Platform::current()
+            ->currentThread()
+            ->scheduler()
+            ->loadingTaskRunner()
+            ->postCancellableTask(
+                BLINK_FROM_HERE,
+                WTF::bind(&ResourceCallback::runTask, WTF::unretained(this)));
   }
   m_resourcesWithPendingClients.add(resource);
 }
 
 void Resource::ResourceCallback::cancel(Resource* resource) {
   m_resourcesWithPendingClients.remove(resource);
-  if (m_callbackTaskFactory->isPending() &&
-      m_resourcesWithPendingClients.isEmpty())
-    m_callbackTaskFactory->cancel();
+  if (m_taskHandle.isActive() && m_resourcesWithPendingClients.isEmpty())
+    m_taskHandle.cancel();
 }
 
 bool Resource::ResourceCallback::isScheduled(Resource* resource) const {
@@ -563,7 +566,7 @@ static bool canUseResponse(ResourceResponse& response,
 const ResourceRequest& Resource::lastResourceRequest() const {
   if (!m_redirectChain.size())
     return m_resourceRequest;
-  return m_redirectChain.last().m_request;
+  return m_redirectChain.back().m_request;
 }
 
 void Resource::setRevalidatingRequest(const ResourceRequest& request) {
@@ -708,7 +711,6 @@ void Resource::willAddClientOrObserver(PreloadReferencePolicy policy) {
   }
   if (!hasClientsOrObservers()) {
     m_isAlive = true;
-    memoryCache()->makeLive(this);
   }
 }
 
@@ -759,7 +761,6 @@ void Resource::removeClient(ResourceClient* client) {
 void Resource::didRemoveClientOrObserver() {
   if (!hasClientsOrObservers() && m_isAlive) {
     m_isAlive = false;
-    memoryCache()->makeDead(this);
     allClientsAndObserversRemoved();
 
     // RFC2616 14.9.2:
@@ -793,7 +794,6 @@ void Resource::setDecodedSize(size_t decodedSize) {
   size_t oldSize = size();
   m_decodedSize = decodedSize;
   memoryCache()->update(this, oldSize, size());
-  memoryCache()->updateDecodedResource(this, UpdateForPropertyChange);
 }
 
 void Resource::setEncodedSize(size_t encodedSize) {
@@ -803,10 +803,6 @@ void Resource::setEncodedSize(size_t encodedSize) {
   m_encodedSize = encodedSize;
   m_encodedSizeMemoryUsage = encodedSize;
   memoryCache()->update(this, oldSize, size());
-}
-
-void Resource::didAccessDecodedData() {
-  memoryCache()->updateDecodedResource(this, UpdateForAccess);
 }
 
 void Resource::finishPendingClients() {

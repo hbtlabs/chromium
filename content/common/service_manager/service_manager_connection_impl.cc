@@ -22,6 +22,7 @@
 #include "services/service_manager/public/cpp/interface_registry.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
+#include "services/service_manager/public/interfaces/constants.mojom.h"
 #include "services/service_manager/public/interfaces/service_factory.mojom.h"
 #include "services/service_manager/runner/common/client_util.h"
 
@@ -127,34 +128,6 @@ class ServiceManagerConnectionImpl::IOThreadContext
  private:
   friend class base::RefCountedThreadSafe<IOThreadContext>;
 
-  // A forwarding service_manager::Service implementation to account for the
-  // fact that IOThreadContext is a Service which owns its ServiceContext, but
-  // ServiceContext should own its Service.
-  //
-  // TODO(rockot): Clean this up.
-  class ForwardingServiceImpl : public service_manager::Service {
-   public:
-    explicit ForwardingServiceImpl(service_manager::Service* service)
-        : service_(service) {}
-    ~ForwardingServiceImpl() override {}
-
-    // service_manager::Service:
-    void OnStart(service_manager::ServiceContext* context) override {
-      service_->OnStart(context);
-    }
-
-    bool OnConnect(const service_manager::ServiceInfo& remote_info,
-                   service_manager::InterfaceRegistry* registry) override {
-      return service_->OnConnect(remote_info, registry);
-    }
-
-    bool OnStop() override { return service_->OnStop(); }
-
-   private:
-    service_manager::Service* const service_;
-    DISALLOW_COPY_AND_ASSIGN(ForwardingServiceImpl);
-  };
-
   class MessageLoopObserver : public base::MessageLoop::DestructionObserver {
    public:
     explicit MessageLoopObserver(base::WeakPtr<IOThreadContext> context)
@@ -197,7 +170,7 @@ class ServiceManagerConnectionImpl::IOThreadContext
     // Should bind |io_thread_checker_| to the context's thread.
     DCHECK(io_thread_checker_.CalledOnValidThread());
     service_context_.reset(new service_manager::ServiceContext(
-        base::MakeUnique<ForwardingServiceImpl>(this),
+        base::MakeUnique<service_manager::ForwardingService>(this),
         std::move(pending_service_request_),
         std::move(io_thread_connector_),
         std::move(pending_connector_request_)));
@@ -251,10 +224,10 @@ class ServiceManagerConnectionImpl::IOThreadContext
   /////////////////////////////////////////////////////////////////////////////
   // service_manager::Service implementation
 
-  void OnStart(service_manager::ServiceContext* context) override {
+  void OnStart() override {
     DCHECK(io_thread_checker_.CalledOnValidThread());
     DCHECK(!initialize_handler_.is_null());
-    local_info_ = context->local_info();
+    local_info_ = context()->local_info();
 
     InitializeCallback handler = base::ResetAndReturn(&initialize_handler_);
     callback_task_runner_->PostTask(FROM_HERE,
@@ -269,7 +242,7 @@ class ServiceManagerConnectionImpl::IOThreadContext
         FROM_HERE, base::Bind(on_connect_callback_, local_info_, remote_info));
 
     std::string remote_service = remote_info.identity.name();
-    if (remote_service == "service:service_manager") {
+    if (remote_service == service_manager::mojom::kServiceName) {
       // Only expose the ServiceFactory interface to the Service Manager.
       registry->AddInterface<service_manager::mojom::ServiceFactory>(this);
       return true;
@@ -284,7 +257,7 @@ class ServiceManagerConnectionImpl::IOThreadContext
       }
     }
 
-    if (remote_service == "service:content_browser" &&
+    if (remote_service == "content_browser" &&
         !has_browser_connection_) {
       has_browser_connection_ = true;
       registry->set_default_binder(default_browser_binder_);

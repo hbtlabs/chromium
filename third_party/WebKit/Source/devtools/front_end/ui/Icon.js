@@ -6,7 +6,7 @@
  * @constructor
  * @extends {HTMLSpanElement}
  */
-WebInspector.Icon = class extends HTMLSpanElement {
+UI.Icon = class extends HTMLSpanElement {
   constructor() {
     super();
     throw new Error('icon must be created via factory method.');
@@ -15,13 +15,13 @@ WebInspector.Icon = class extends HTMLSpanElement {
   /**
    * @param {string=} iconType
    * @param {string=} className
-   * @return {!WebInspector.Icon}
+   * @return {!UI.Icon}
    */
   static create(iconType, className) {
-    if (!WebInspector.Icon._constructor)
-      WebInspector.Icon._constructor = registerCustomElement('span', 'ui-icon', WebInspector.Icon.prototype);
+    if (!UI.Icon._constructor)
+      UI.Icon._constructor = registerCustomElement('span', 'ui-icon', UI.Icon.prototype);
 
-    var icon = /** @type {!WebInspector.Icon} */ (new WebInspector.Icon._constructor());
+    var icon = /** @type {!UI.Icon} */ (new UI.Icon._constructor());
     if (className)
       icon.className = className;
     if (iconType)
@@ -33,7 +33,7 @@ WebInspector.Icon = class extends HTMLSpanElement {
    * @override
    */
   createdCallback() {
-    /** @type {?WebInspector.Icon.Descriptor} */
+    /** @type {?UI.Icon.Descriptor} */
     this._descriptor = null;
     /** @type {string} */
     this._iconType = '';
@@ -53,7 +53,7 @@ WebInspector.Icon = class extends HTMLSpanElement {
       this._iconType = '';
       this._descriptor = null;
     }
-    var descriptor = WebInspector.Icon.Descriptors[iconType] || null;
+    var descriptor = UI.Icon.Descriptors[iconType] || null;
     if (descriptor) {
       this._iconType = iconType;
       this._descriptor = descriptor;
@@ -92,10 +92,10 @@ WebInspector.Icon = class extends HTMLSpanElement {
 };
 
 /** @typedef {{x: number, y: number, width: number, height: number, spritesheet: string, isMask: (boolean|undefined)}} */
-WebInspector.Icon.Descriptor;
+UI.Icon.Descriptor;
 
-/** @enum {!WebInspector.Icon.Descriptor} */
-WebInspector.Icon.Descriptors = {
+/** @enum {!UI.Icon.Descriptor} */
+UI.Icon.Descriptors = {
   'smallicon-error': {x: -20, y: 0, width: 10, height: 10, spritesheet: 'smallicons'},
   'smallicon-revoked-error': {x: -40, y: 0, width: 10, height: 10, spritesheet: 'smallicons'},
   'smallicon-warning': {x: -60, y: 0, width: 10, height: 10, spritesheet: 'smallicons'},
@@ -113,58 +113,96 @@ WebInspector.Icon.Descriptors = {
   'smallicon-dropdown-arrow': {x: -18, y: -96, width: 12, height: 12, spritesheet: 'largeicons', isMask: true},
   'smallicon-checkmark': {x: -100, y: -20, width: 10, height: 10, spritesheet: 'smallicons', isMask: true},
   'smallicon-green-checkmark': {x: -120, y: -20, width: 10, height: 10, spritesheet: 'smallicons'},
+  'smallicon-triangle-right': {x: -4, y: -98, width: 10, height: 8, spritesheet: 'largeicons', isMask: true},
+  'smallicon-triangle-bottom': {x: -20, y: -98, width: 10, height: 8, spritesheet: 'largeicons', isMask: true},
+  'smallicon-arrow-in-circle': {x: -10, y: -127, width: 11, height: 11, spritesheet: 'largeicons', isMask: true},
 
   'largeicon-longclick-triangle': {x: -290, y: -46, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
   'largeicon-menu': {x: -192, y: -24, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
   'largeicon-delete': {x: -128, y: -0, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
   'largeicon-node-search': {x: -320, y: -120, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
   'largeicon-add': {x: -224, y: -120, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-clear': {x: -64,  y: 0, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-rotate-screen': {x: -192,  y: -144, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-phone': {x: -320,  y: -96, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-block': {x: -32,  y: -144, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-layout-editor': {x: 0,  y: -144, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-foreground-color': {x: -128,  y: -144, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-background-color': {x: -96,  y: -144, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-text-shadow': {x: -192,  y: -48, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-box-shadow': {x: -160,  y: -48, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-pause-animation': {x: -320,  y: 0, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-replay-animation': {x: -320,  y: -24, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-play-animation': {x: -320,  y: -48, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-eyedropper': {x: -288,  y: -120, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-rotate': {x: -160,  y: -120, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-center': {x: -128,  y: -120, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-pan': {x: -98,  y: -120, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-waterfall': {x: -128,  y: -48, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-filter': {x: -32,  y: -48, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-trash-bin': {x: -128,  y: -24, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-pretty-print': {x: -256,  y: -24, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-deactivate-breakpoints': {x: 0,  y: -24, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-activate-breakpoints': {x: -32,  y: 0, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-resume': {x: 0,  y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-pause': {x: -32,  y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-pause-on-exceptions': {x: -256,  y: 0, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-play-back': {x: -64,  y: -48, width: 28, height: 24, spritesheet: 'largeicons', isMask: true, transform: 'scaleX(-1)'},
-  'largeicon-play': {x: -64,  y: -48, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-step-over': {x: -128,  y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-step-out': {x: -96,  y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-step-in': {x: -64,  y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-camera': {x: -96,  y: -24, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-stop-recording': {x: -288,  y: -24, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-start-recording': {x: -288,  y: 0, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-large-list': {x: -224,  y: 0, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-visibility': {x: -96,  y: 0, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-refresh': {x: 0,  y: 0, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-dock-to-right': {x: -256,  y: -48, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-dock-to-bottom': {x: -32,  y: -24, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-undock': {x: 0,  y: -48, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-clear': {x: -64, y: 0, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-rotate-screen': {x: -192, y: -144, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-phone': {x: -320, y: -96, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-block': {x: -32, y: -144, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-layout-editor': {x: 0, y: -144, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-foreground-color': {x: -128, y: -144, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-background-color': {x: -96, y: -144, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-text-shadow': {x: -192, y: -48, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-box-shadow': {x: -160, y: -48, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-pause-animation': {x: -320, y: 0, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-replay-animation': {x: -320, y: -24, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-play-animation': {x: -320, y: -48, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-eyedropper': {x: -288, y: -120, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-rotate': {x: -160, y: -120, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-center': {x: -128, y: -120, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-pan': {x: -98, y: -120, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-waterfall': {x: -128, y: -48, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-filter': {x: -32, y: -48, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-trash-bin': {x: -128, y: -24, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-pretty-print': {x: -256, y: -24, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-deactivate-breakpoints': {x: 0, y: -24, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-activate-breakpoints': {x: -32, y: 0, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-resume': {x: 0, y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-pause': {x: -32, y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-pause-on-exceptions': {x: -256, y: 0, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-play-back':
+      {x: -64, y: -48, width: 28, height: 24, spritesheet: 'largeicons', isMask: true, transform: 'scaleX(-1)'},
+  'largeicon-play': {x: -64, y: -48, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-step-over': {x: -128, y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-step-out': {x: -96, y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-step-in': {x: -64, y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-camera': {x: -96, y: -24, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-stop-recording': {x: -288, y: -24, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-start-recording': {x: -288, y: 0, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-large-list': {x: -224, y: 0, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-visibility': {x: -96, y: 0, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-refresh': {x: 0, y: 0, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-dock-to-right': {x: -256, y: -48, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-dock-to-bottom': {x: -32, y: -24, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-undock': {x: 0, y: -48, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
 
-  'largeicon-show-left-sidebar': {x: -160,  y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-hide-left-sidebar': {x: -192,  y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
-  'largeicon-show-right-sidebar': {x: -160,  y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true, transform: 'rotate(180deg)'},
-  'largeicon-hide-right-sidebar': {x: -192,  y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true, transform: 'rotate(180deg)'},
-  'largeicon-show-top-sidebar': {x: -160,  y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true, transform: 'translate(4px, 0) rotate(90deg)'},
-  'largeicon-hide-top-sidebar': {x: -192,  y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true, transform: 'translate(4px, 1px) rotate(90deg)'},
-  'largeicon-show-bottom-sidebar': {x: -160,  y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true, transform: 'translate(4px, 0) rotate(-90deg)'},
-  'largeicon-hide-bottom-sidebar': {x: -192,  y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true, transform: 'translate(4px, 1px) rotate(-90deg)'},
+  'largeicon-show-left-sidebar': {x: -160, y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-hide-left-sidebar': {x: -192, y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true},
+  'largeicon-show-right-sidebar':
+      {x: -160, y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true, transform: 'rotate(180deg)'},
+  'largeicon-hide-right-sidebar':
+      {x: -192, y: -72, width: 28, height: 24, spritesheet: 'largeicons', isMask: true, transform: 'rotate(180deg)'},
+  'largeicon-show-top-sidebar': {
+    x: -160,
+    y: -72,
+    width: 28,
+    height: 24,
+    spritesheet: 'largeicons',
+    isMask: true,
+    transform: 'translate(4px, 0) rotate(90deg)'
+  },
+  'largeicon-hide-top-sidebar': {
+    x: -192,
+    y: -72,
+    width: 28,
+    height: 24,
+    spritesheet: 'largeicons',
+    isMask: true,
+    transform: 'translate(4px, 1px) rotate(90deg)'
+  },
+  'largeicon-show-bottom-sidebar': {
+    x: -160,
+    y: -72,
+    width: 28,
+    height: 24,
+    spritesheet: 'largeicons',
+    isMask: true,
+    transform: 'translate(4px, 0) rotate(-90deg)'
+  },
+  'largeicon-hide-bottom-sidebar': {
+    x: -192,
+    y: -72,
+    width: 28,
+    height: 24,
+    spritesheet: 'largeicons',
+    isMask: true,
+    transform: 'translate(4px, 1px) rotate(-90deg)'
+  },
 };

@@ -50,7 +50,7 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/renderer_preferences.h"
 #include "extensions/browser/view_type_utils.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/controls/webview/webview.h"
@@ -70,6 +70,8 @@ namespace {
 const char kAccelNameCancel[] = "cancel";
 const char kAccelNameEnableDebugging[] = "debugging";
 const char kAccelNameEnrollment[] = "enrollment";
+// TODO(rsorokin): Remove custom Active Directory shortcut for the launch.
+const char kAccelNameEnrollmentAd[] = "enrollment_ad";
 const char kAccelNameKioskEnable[] = "kiosk_enable";
 const char kAccelNameVersion[] = "version";
 const char kAccelNameReset[] = "reset";
@@ -185,6 +187,9 @@ WebUILoginView::WebUILoginView() {
   accel_map_[ui::Accelerator(ui::VKEY_E,
                              ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN)] =
       kAccelNameEnrollment;
+  accel_map_[ui::Accelerator(
+      ui::VKEY_A, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN)] =
+      kAccelNameEnrollmentAd;
   accel_map_[ui::Accelerator(ui::VKEY_K,
                              ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN)] =
       kAccelNameKioskEnable;

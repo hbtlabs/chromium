@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.ntp.cards;
 
 import android.annotation.SuppressLint;
 import android.graphics.Canvas;
+import android.support.annotation.StringRes;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.RecyclerView.Adapter;
 import android.support.v7.widget.RecyclerView.ViewHolder;
@@ -28,7 +29,7 @@ import org.chromium.chrome.browser.ntp.snippets.SnippetArticleViewHolder;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsConfig;
 import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
-import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadBridge;
+import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -50,7 +51,7 @@ public class NewTabPageAdapter
     private final View mAboveTheFoldView;
     private final UiConfig mUiConfig;
     private final ItemTouchCallbacks mItemTouchCallbacks = new ItemTouchCallbacks();
-    private final OfflinePageDownloadBridge mOfflinePageDownloadBridge;
+    private final OfflinePageBridge mOfflinePageBridge;
     private NewTabPageRecyclerView mRecyclerView;
 
     /**
@@ -110,6 +111,9 @@ public class NewTabPageAdapter
             assert viewHolder instanceof NewTabPageViewHolder;
 
             // The item has already been removed. We have nothing more to do.
+            // In some cases a removed children may call this method when unrelated items are
+            // interacted with, but this check also covers the case.
+            // See https://crbug.com/664466, b/32900699
             if (viewHolder.getAdapterPosition() == RecyclerView.NO_POSITION) return;
 
             // We use our own implementation of the dismissal animation, so we don't call the
@@ -131,16 +135,16 @@ public class NewTabPageAdapter
      * @param aboveTheFoldView the layout encapsulating all the above-the-fold elements
      *                         (logo, search box, most visited tiles)
      * @param uiConfig the NTP UI configuration, to be passed to created views.
-     * @param offlinePageDownloadBridge the OfflinePageDownloadBridge used to determine if articles
-     *                                  are available offline.
+     * @param offlinePageBridge the OfflinePageBridge used to determine if articles are available
+     *                              offline.
      *
      */
     public NewTabPageAdapter(NewTabPageManager manager, View aboveTheFoldView, UiConfig uiConfig,
-            OfflinePageDownloadBridge offlinePageDownloadBridge) {
+            OfflinePageBridge offlinePageBridge) {
         mNewTabPageManager = manager;
         mAboveTheFoldView = aboveTheFoldView;
         mUiConfig = uiConfig;
-        mOfflinePageDownloadBridge = offlinePageDownloadBridge;
+        mOfflinePageBridge = offlinePageBridge;
         mRoot = new InnerNode(this) {
             @Override
             protected List<TreeNode> getChildren() {
@@ -228,8 +232,7 @@ public class NewTabPageAdapter
         // Create the section if needed.
         SuggestionsSection section = mSections.get(category);
         if (section == null) {
-            section = new SuggestionsSection(mRoot, info, mNewTabPageManager,
-                    mOfflinePageDownloadBridge);
+            section = new SuggestionsSection(mRoot, info, mNewTabPageManager, mOfflinePageBridge);
             mSections.put(category, section);
         }
 
@@ -333,7 +336,7 @@ public class NewTabPageAdapter
                 return new NewTabPageViewHolder(SpacingItem.createView(parent));
 
             case ItemViewType.STATUS:
-                return new StatusCardViewHolder(mRecyclerView, mUiConfig);
+                return new StatusCardViewHolder(mRecyclerView, mNewTabPageManager, mUiConfig);
 
             case ItemViewType.PROGRESS:
                 return new ProgressViewHolder(mRecyclerView);
@@ -342,7 +345,7 @@ public class NewTabPageAdapter
                 return new ActionItem.ViewHolder(mRecyclerView, mNewTabPageManager, mUiConfig);
 
             case ItemViewType.PROMO:
-                return new SignInPromo.ViewHolder(mRecyclerView, mUiConfig);
+                return new SignInPromo.ViewHolder(mRecyclerView, mNewTabPageManager, mUiConfig);
 
             case ItemViewType.FOOTER:
                 return new Footer.ViewHolder(mRecyclerView, mNewTabPageManager);
@@ -357,10 +360,6 @@ public class NewTabPageAdapter
 
     @Override
     public void onBindViewHolder(NewTabPageViewHolder holder, final int position) {
-        if (position == getFirstCardPosition()) {
-            mRecyclerView.onFirstCardShown(holder.itemView);
-        }
-
         mRoot.onBindViewHolder(holder, position);
     }
 
@@ -382,6 +381,10 @@ public class NewTabPageAdapter
             if (CardViewHolder.isCard(getItemViewType(i))) return i;
         }
         return RecyclerView.NO_POSITION;
+    }
+
+    public int getSignInPromoPosition() {
+        return getChildPositionOffset(mSigninPromo);
     }
 
     public int getBottomSpacerPosition() {
@@ -529,6 +532,9 @@ public class NewTabPageAdapter
 
     private void dismissSection(SuggestionsSection section) {
         assert SnippetsConfig.isSectionDismissalEnabled();
+
+        announceItemRemoved(section.getHeaderText());
+
         mNewTabPageManager.getSuggestionsSource().dismissCategory(section.getCategory());
         removeSection(section);
     }
@@ -552,7 +558,7 @@ public class NewTabPageAdapter
     }
 
     private void dismissPromo() {
-        // TODO(dgn): accessibility announcement.
+        announceItemRemoved(mSigninPromo.getHeader());
         mSigninPromo.dismiss();
     }
 
@@ -567,7 +573,8 @@ public class NewTabPageAdapter
         return mRecyclerView.findViewHolderForAdapterPosition(siblingPosDelta + swipePos);
     }
 
-    private boolean hasAllBeenDismissed() {
+    @VisibleForTesting
+    public boolean hasAllBeenDismissed() {
         return mSections.isEmpty() && !mSigninPromo.isVisible();
     }
 
@@ -628,5 +635,12 @@ public class NewTabPageAdapter
 
         mRecyclerView.announceForAccessibility(mRecyclerView.getResources().getString(
                 R.string.ntp_accessibility_item_removed, suggestionTitle));
+    }
+
+    private void announceItemRemoved(@StringRes int stringToAnnounce) {
+        // In tests the RecyclerView can be null.
+        if (mRecyclerView == null) return;
+
+        announceItemRemoved(mRecyclerView.getResources().getString(stringToAnnounce));
     }
 }

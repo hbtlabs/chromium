@@ -474,7 +474,7 @@ interface NotificationEvent : ExtendableEvent
     getter notification
     getter reply
     method constructor
-interface OffscreenCanvas
+interface OffscreenCanvas : EventTarget
     getter height
     getter width
     method constructor
@@ -486,6 +486,7 @@ interface OffscreenCanvas
 interface OffscreenCanvasRenderingContext2D
     getter canvas
     getter fillStyle
+    getter globalCompositeOperation
     getter imageSmoothingEnabled
     getter imageSmoothingQuality
     getter lineCap
@@ -534,6 +535,7 @@ interface OffscreenCanvasRenderingContext2D
     method transform
     method translate
     setter fillStyle
+    setter globalCompositeOperation
     setter imageSmoothingEnabled
     setter imageSmoothingQuality
     setter lineCap

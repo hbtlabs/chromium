@@ -116,6 +116,22 @@ bool matches(const String& url, const String& pattern) {
   return true;
 }
 
+bool LoadsFromCacheOnly(const ResourceRequest& request) {
+  switch (request.getCachePolicy()) {
+    case WebCachePolicy::UseProtocolCachePolicy:
+    case WebCachePolicy::ValidatingCacheData:
+    case WebCachePolicy::BypassingCache:
+    case WebCachePolicy::ReturnCacheDataElseLoad:
+      return false;
+    case WebCachePolicy::ReturnCacheDataDontLoad:
+    case WebCachePolicy::ReturnCacheDataIfValid:
+    case WebCachePolicy::BypassCacheLoadOnlyFromCache:
+      return true;
+  }
+  NOTREACHED();
+  return false;
+}
+
 static std::unique_ptr<protocol::Network::Headers> buildObjectForHeaders(
     const HTTPHeaderMap& headers) {
   std::unique_ptr<protocol::DictionaryValue> headersObject =
@@ -509,13 +525,6 @@ DEFINE_TRACE(InspectorNetworkAgent) {
 }
 
 bool InspectorNetworkAgent::shouldBlockRequest(const ResourceRequest& request) {
-  if (m_state->booleanProperty(NetworkAgentState::cacheDisabled, false) &&
-      request.requestContext() != WebURLRequest::RequestContextInternal &&
-      (request.getCachePolicy() == WebCachePolicy::ReturnCacheDataDontLoad ||
-       request.getCachePolicy() == WebCachePolicy::ReturnCacheDataIfValid)) {
-    return true;
-  }
-
   protocol::DictionaryValue* blockedURLs =
       m_state->getObject(NetworkAgentState::blockedURLs);
   if (!blockedURLs)
@@ -635,12 +644,12 @@ void InspectorNetworkAgent::willSendRequest(
   request.setReportRawHeaders(true);
 
   if (m_state->booleanProperty(NetworkAgentState::cacheDisabled, false)) {
-    // It shouldn't be a ReturnCacheDataDontLoad request as those are blocked
-    // in shouldBlockRequest unless it's from an internal source.
-    DCHECK(WebCachePolicy::ReturnCacheDataDontLoad !=
-               request.getCachePolicy() ||
-           request.requestContext() == WebURLRequest::RequestContextInternal);
-    request.setCachePolicy(WebCachePolicy::BypassingCache);
+    if (LoadsFromCacheOnly(request) &&
+        request.requestContext() != WebURLRequest::RequestContextInternal) {
+      request.setCachePolicy(WebCachePolicy::BypassCacheLoadOnlyFromCache);
+    } else {
+      request.setCachePolicy(WebCachePolicy::BypassingCache);
+    }
     request.setShouldResetAppCache(true);
   }
   if (m_state->booleanProperty(NetworkAgentState::bypassServiceWorker, false))
@@ -752,6 +761,16 @@ void InspectorNetworkAgent::didFinishLoading(unsigned long identifier,
                                              double monotonicFinishTime,
                                              int64_t encodedDataLength) {
   String requestId = IdentifiersFactory::requestId(identifier);
+  NetworkResourcesData::ResourceData const* resourceData =
+      m_resourcesData->data(requestId);
+  if (resourceData &&
+      (!resourceData->cachedResource() ||
+       resourceData->cachedResource()->getDataBufferingPolicy() ==
+           DoNotBufferData ||
+       isErrorStatusCode(resourceData->httpStatusCode()))) {
+    m_resourcesData->maybeAddResourceData(requestId, "", 0);
+  }
+
   m_resourcesData->maybeDecodeDataToContent(requestId);
   if (!monotonicFinishTime)
     monotonicFinishTime = monotonicallyIncreasingTime();

@@ -31,9 +31,9 @@
 /**
  * @unrestricted
  */
-WebInspector.ViewportControl = class {
+UI.ViewportControl = class {
   /**
-   * @param {!WebInspector.ViewportControl.Provider} provider
+   * @param {!UI.ViewportControl.Provider} provider
    */
   constructor(provider) {
     this.element = createElement('div');
@@ -128,7 +128,7 @@ WebInspector.ViewportControl = class {
 
   /**
    * @param {number} index
-   * @return {?WebInspector.ViewportElement}
+   * @return {?UI.ViewportElement}
    */
   _providerElement(index) {
     if (!this._cachedProviderElements)
@@ -243,10 +243,11 @@ WebInspector.ViewportControl = class {
     } else if (!hasVisibleSelection) {
       firstSelected = startSelection;
       lastSelected = endSelection;
-    } else if (topOverlap)
+    } else if (topOverlap) {
       firstSelected = isBackward ? this._headSelection : this._anchorSelection;
-    else if (bottomOverlap)
+    } else if (bottomOverlap) {
       lastSelected = isBackward ? this._anchorSelection : this._headSelection;
+    }
 
     if (isBackward) {
       this._anchorSelection = lastSelected;
@@ -355,7 +356,7 @@ WebInspector.ViewportControl = class {
         this._cumulativeHeights[this._cumulativeHeights.length - 1] - this._cumulativeHeights[this._lastActiveIndex];
 
     /**
-     * @this {WebInspector.ViewportControl}
+     * @this {UI.ViewportControl}
      */
     function prepare() {
       this._topGapElement.style.height = topGapHeight + 'px';
@@ -503,11 +504,12 @@ WebInspector.ViewportControl = class {
    */
   lastVisibleIndex() {
     var lastVisibleIndex;
-    if (this._stickToBottom)
+    if (this._stickToBottom) {
       lastVisibleIndex = this._itemCount - 1;
-    else
+    } else {
       lastVisibleIndex =
           this.firstVisibleIndex() + Math.ceil(this._visibleHeight() / this._provider.minimumRowHeight()) - 1;
+    }
     return Math.min(lastVisibleIndex, this._lastActiveIndex);
   }
 
@@ -575,36 +577,36 @@ WebInspector.ViewportControl = class {
 /**
  * @interface
  */
-WebInspector.ViewportControl.Provider = function() {};
+UI.ViewportControl.Provider = function() {};
 
-WebInspector.ViewportControl.Provider.prototype = {
+UI.ViewportControl.Provider.prototype = {
   /**
    * @param {number} index
    * @return {number}
    */
-  fastHeight: function(index) {
+  fastHeight(index) {
     return 0;
   },
 
   /**
    * @return {number}
    */
-  itemCount: function() {
+  itemCount() {
     return 0;
   },
 
   /**
    * @return {number}
    */
-  minimumRowHeight: function() {
+  minimumRowHeight() {
     return 0;
   },
 
   /**
    * @param {number} index
-   * @return {?WebInspector.ViewportElement}
+   * @return {?UI.ViewportElement}
    */
-  itemElement: function(index) {
+  itemElement(index) {
     return null;
   }
 };
@@ -612,23 +614,23 @@ WebInspector.ViewportControl.Provider.prototype = {
 /**
  * @interface
  */
-WebInspector.ViewportElement = function() {};
-WebInspector.ViewportElement.prototype = {
-  willHide: function() {},
+UI.ViewportElement = function() {};
+UI.ViewportElement.prototype = {
+  willHide() {},
 
-  wasShown: function() {},
+  wasShown() {},
 
   /**
    * @return {!Element}
    */
-  element: function() {},
+  element() {},
 };
 
 /**
- * @implements {WebInspector.ViewportElement}
+ * @implements {UI.ViewportElement}
  * @unrestricted
  */
-WebInspector.StaticViewportElement = class {
+UI.StaticViewportElement = class {
   /**
    * @param {!Element} element
    */

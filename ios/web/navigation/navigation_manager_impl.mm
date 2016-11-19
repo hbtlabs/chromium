@@ -256,8 +256,14 @@ int NavigationManagerImpl::GetCurrentItemIndex() const {
 }
 
 int NavigationManagerImpl::GetPendingItemIndex() const {
-  if ([session_controller_ hasPendingEntry])
+  if ([session_controller_ hasPendingEntry]) {
+    if ([session_controller_ pendingEntryIndex] != -1) {
+      return [session_controller_ pendingEntryIndex];
+    }
+    // TODO(crbug.com/665189): understand why current item index is
+    // returned here.
     return GetCurrentItemIndex();
+  }
   return -1;
 }
 
@@ -281,19 +287,23 @@ bool NavigationManagerImpl::RemoveItemAtIndex(int index) {
 }
 
 bool NavigationManagerImpl::CanGoBack() const {
-  return [session_controller_ canGoBack];
+  return CanGoToOffset(-1);
 }
 
 bool NavigationManagerImpl::CanGoForward() const {
-  return [session_controller_ canGoForward];
+  return CanGoToOffset(1);
+}
+
+bool NavigationManagerImpl::CanGoToOffset(int offset) const {
+  return [session_controller_ canGoDelta:offset];
 }
 
 void NavigationManagerImpl::GoBack() {
-  delegate_->GoToOffset(-1);
+  delegate_->GoToIndex(GetIndexForOffset(-1));
 }
 
 void NavigationManagerImpl::GoForward() {
-  delegate_->GoToOffset(1);
+  delegate_->GoToIndex(GetIndexForOffset(1));
 }
 
 void NavigationManagerImpl::GoToIndex(int index) {
@@ -325,6 +335,10 @@ void NavigationManagerImpl::RemoveTransientURLRewriters() {
 void NavigationManagerImpl::CopyState(
     NavigationManagerImpl* navigation_manager) {
   SetSessionController([navigation_manager->GetSessionController() copy]);
+}
+
+int NavigationManagerImpl::GetIndexForOffset(int offset) const {
+  return [session_controller_ indexOfEntryForDelta:offset];
 }
 
 }  // namespace web

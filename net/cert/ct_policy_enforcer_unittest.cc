@@ -137,8 +137,15 @@ class CTPolicyEnforcerTest : public ::testing::Test {
   std::string non_google_log_id_;
 };
 
+#if defined(OS_ANDROID)
+#define MAYBE_DoesNotConformToCTEVPolicyNotEnoughDiverseSCTsAllGoogle \
+  DISABLED_DoesNotConformToCTEVPolicyNotEnoughDiverseSCTsAllGoogle
+#else
+#define MAYBE_DoesNotConformToCTEVPolicyNotEnoughDiverseSCTsAllGoogle \
+  DoesNotConformToCTEVPolicyNotEnoughDiverseSCTsAllGoogle
+#endif
 TEST_F(CTPolicyEnforcerTest,
-       DoesNotConformToCTEVPolicyNotEnoughDiverseSCTsAllGoogle) {
+       MAYBE_DoesNotConformToCTEVPolicyNotEnoughDiverseSCTsAllGoogle) {
   ct::SCTList scts;
   std::vector<std::string> desired_log_ids(2, google_log_id_);
 
@@ -239,7 +246,14 @@ TEST_F(CTPolicyEnforcerTest, ConformsToCTEVPolicyWithPooledNonEmbeddedSCTs) {
                 chain_.get(), nullptr, scts, NetLogWithSource()));
 }
 
-TEST_F(CTPolicyEnforcerTest, ConformsToCTEVPolicyWithPooledEmbeddedSCTs) {
+#if defined(OS_ANDROID)
+#define MAYBE_ConformsToCTEVPolicyWithPooledEmbeddedSCTs \
+  DISABLED_ConformsToCTEVPolicyWithPooledEmbeddedSCTs
+#else
+#define MAYBE_ConformsToCTEVPolicyWithPooledEmbeddedSCTs \
+  ConformsToCTEVPolicyWithPooledEmbeddedSCTs
+#endif
+TEST_F(CTPolicyEnforcerTest, MAYBE_ConformsToCTEVPolicyWithPooledEmbeddedSCTs) {
   ct::SCTList scts;
   std::vector<std::string> desired_logs;
 

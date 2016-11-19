@@ -359,9 +359,6 @@ are declared in build/common.gypi.
       <message name="IDS_WEBSITE_SETTINGS_TAB_LABEL_PERMISSIONS" desc="The label of the permissions tab of the Website Settings popup.">
         Permissions
       </message>
-      <message name="IDS_WEBSITE_SETTINGS_SECURE_TRANSPORT" desc="Text that is displayed in the header of the Website Settings popup if the website uses secure transport.">
-        Your connection to this site is private.
-      </message>
       <message name="IDS_WEBSITE_DEPRECATED_SIGNATURE_ALGORITHM" desc="Text that is displayed in the header of the Website Settings popup if the website uses SHA-1 for certificate signatures, which are no longer considered secure.">
         This site uses a weak security configuration (SHA-1 signatures), so your connection may not be private.
       </message>
@@ -370,9 +367,6 @@ are declared in build/common.gypi.
       </message>
       <message name="IDS_WEBSITE_SETTINGS_DETAILS_LINK" desc="Link in the Website Settings that opens up additional security details about the current page in the DevTools Security panel.">
         Details
-      </message>
-      <message name="IDS_WEBSITE_SETTINGS_CT_ERROR" desc="Text that is displayed in the header of the Website Settings popup if the website has provided Signed Certificate Timestamps but none are valid.">
-        This site supplied invalid Certificate Transparency information.
       </message>
       <message name="IDS_WEBSITE_SETTINGS_BROKEN_TRANSPORT" desc="Text that is displayed in the header of the Website Settings popup if the website uses nominally secure transport that had authentication or other cryptpgraphic errors.">
         Your connection to this site is not private. Attackers might be trying to steal your information (for example, photos, passwords, messages and credit cards) from <ph name="DOMAIN">$1<ex>www.example.com</ex></ph>.
@@ -3661,6 +3655,14 @@ From <ph name="DOWNLOAD_DOMAIN">$3<ex>example.com</ex></ph>
         Undo
       </message>
 
+      <!-- ARC app force stop -->
+      <message name="IDS_ARC_APP_FORCE_STOP_PROMPT_TITLE" desc="Titlebar of the ARC(App Runtime for Chrome) app force stop prompt window">
+        Force stop?
+      </message>
+      <message name="IDS_ARC_APP_FORCE_STOP_PROMPT_HEADING" desc="First bold line in the content area of the ARC(App Runtime for Chrome) app force stop prompt. Tells the user the app may mishehave if confirmed.">
+        If you force stop an app, it may misbehave.
+      </message>
+
       <!-- Extension/App disabled notification -->
       <message name="IDS_EXTENSION_DISABLED_ERROR_LABEL" desc="Text displayed when an extension was disabled due to a new upgrade requiring an explicit permission check from the user.">
         The newest version of the extension "<ph name="EXTENSION_NAME">$1<ex>Flashblock</ex></ph>" requires more permissions, so it has been disabled.
@@ -3694,7 +3696,17 @@ From <ph name="DOWNLOAD_DOMAIN">$3<ex>example.com</ex></ph>
         </message>
       </if>
 
-      <!-- Extension install prompt -->
+      <!-- Extension/App install prompt -->
+      <message name="IDS_APP_UNINSTALL_PROMPT_TITLE" desc="Titlebar of the non-platform app and ARC(App Runtime for Chrome) app uninstallation prompt window">
+        Uninstall app?
+      </message>
+      <message name="IDS_NON_PLATFORM_APP_UNINSTALL_PROMPT_HEADING" desc="First bold line in the content area of the non-platform app uninstallation prompt. Tells the user the app will be uninstalled if confirmed.">
+        "<ph name="APP_NAME">$1<ex>Gmail Checker</ex></ph>" will be uninstalled.
+      </message>
+      <message name="IDS_ARC_APP_UNINSTALL_PROMPT_HEADING" desc="Bold line in the content area of the ARC(App Runtime for Chrome) app uninstallation prompt. Tells the user that local data associated with the app will be removed from this device.">
+        "<ph name="APP_NAME">$1<ex>Gmail Checker</ex></ph>" will be uninstalled.
+Data associated with this app will be removed from this device.
+      </message>
       <message name="IDS_EXTENSION_UNINSTALL_PROMPT_TITLE" desc="Titlebar of the extension or app uninstallation prompt window">
         Confirm Removal
       </message>
@@ -3751,6 +3763,7 @@ From <ph name="DOWNLOAD_DOMAIN">$3<ex>example.com</ex></ph>
       </message>
       <message name="IDS_EXTENSION_EXTERNAL_INSTALL_PROMPT_TITLE_APP" desc="Titlebar of the prompt window for an externally installed app">
         Another program on your computer added an app that may change the way Chrome works.
+
 
 <ph name="EXTENSION_NAME">$1<ex>Babylon Toolbar</ex></ph>
       </message>
@@ -4202,6 +4215,9 @@ From <ph name="DOWNLOAD_DOMAIN">$3<ex>example.com</ex></ph>
       <if expr="chromeos">
         <message name="IDS_EXTENSION_CANT_INSTALL_IN_DEVICE_LOCAL_ACCOUNT" desc="Error message when a user tries to install or the administrator tries to force-install through policy an extension that is not allowed in a device-local account.">
           <ph name="EXTENSION_NAME">$1<ex>Google Talk</ex></ph> (extension ID "<ph name="EXTENSION_ID">$2<ex>nckgahadagoaajjgafhacjanaoiihapd</ex></ph>") is not allowed in this type of session.
+        </message>
+        <message name="IDS_EXTENSION_CANT_INSTALL_ON_SIGNIN_SCREEN" desc="Error message when the administrator tries to force-install through policy an extension that is not allowed on a login screen.">
+          <ph name="EXTENSION_NAME">$1<ex>Google Talk</ex></ph> (extension ID "<ph name="EXTENSION_ID">$2<ex>abacabadabacabaeabacabadabacabaf</ex></ph>") is not allowed on a login screen.
         </message>
       </if>
       <message name="IDS_EXTENSION_MOVE_DIRECTORY_TO_PROFILE_FAILED" desc="">
@@ -4822,6 +4838,9 @@ Keep your key file in a safe place. You will need it to create new versions of y
       </message>
       <message name="IDS_EXTENSION_PROMPT_UNINSTALL_REPORT_ABUSE" desc="Message to indicate the user can report abuse for the extension about to be uninstalled.">
         Report abuse
+      </message>
+      <message name="IDS_EXTENSION_PROMPT_UNINSTALL_APP_BUTTON" desc="Text for the uninstall button on the non-platform app and ARC(App Runtime for Chrome) app uninstall prompt">
+        Uninstall
       </message>
       <message name="IDS_EXTENSION_PROMPT_RE_ENABLE_BUTTON" desc="Text for the enable button on the extension re-enable prompt">
         Re-enable
@@ -5872,12 +5891,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
           <message name="IDS_FLAGS_IMPORTANT_SITES_IN_CBD_DESCRIPTION" desc="Description for the flag for using important sites whitelisting in the clear browsing dialog.">
               Include the option to whitelist important sites in the clear browsing data dialog.
           </message>
-          <message name="IDS_FLAGS_ENABLE_AUTOPLAY_MUTED_VIDEOS_NAME" desc="Title for the flag to enable autoplay of muted videos.">
-              Autoplay muted videos
-          </message>
-          <message name="IDS_FLAGS_ENABLE_AUTOPLAY_MUTED_VIDEOS_DESCRIPTION" desc="Description for the flag to enable autoplay of muted videos.">
-              Allow muted videos to autoplay.
-          </message>
       </if>
       <if expr="use_ash">
         <message name="IDS_FLAGS_ASH_MD" desc="Title of the flag which enables or disables material design in Chrome OS system UI.">
@@ -6151,12 +6164,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
           Wallpaper boot animation (except for OOBE case).
         </message>
       </if>
-      <message name="IDS_FLAGS_CHILD_ACCOUNT_DETECTION_NAME" desc="Name of the flag to enable detection of child accounts.">
-        Child account detection
-      </message>
-      <message name="IDS_FLAGS_CHILD_ACCOUNT_DETECTION_DESCRIPTION" desc="Description for the flag to enable detection of child accounts.">
-        Enable detection of child accounts on sign-in and startup, as well as periodically.
-      </message>
       <message name="IDS_FLAGS_ACCELERATED_VIDEO_DECODE_NAME" desc="Name of the flag for accelerated video decode where available.">
         Hardware-accelerated video decode
       </message>
@@ -6426,12 +6433,18 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLAGS_SPECULATIVE_LAUNCH_SERVICE_WORKER_DESCRIPTION" desc="Description of the about::flags setting for speculative launch of service workers.">
         Speculatively launch service workers using touch and mouse events.
       </message>
+      <message name="IDS_FLAGS_MEMORY_COORDINATOR_NAME" desc="An about::flags experiment title to enable/disable memory coordinator">
+        Memory coordinator
+      </message>
+      <message name="IDS_FLAGS_MEMORY_COORDINATOR_DESCRIPTION" desc="Description of an about::flags to enable/disable memory coordinator">
+        Enable memory coordinator instead of memory pressure listeners.
+      </message>
 
       <!-- Data Reduction Proxy -->
-      <message name="IDS_FLAGS_DATA_REDUCTION_PROXY_LO_FI_NAME" desc="An about::flags experiment title to enable/disable Data Saver Lo-Fi" translateable="false">
+      <message name="IDS_FLAGS_DATA_REDUCTION_PROXY_LO_FI_NAME" desc="An about:flags experiment title to enable/disable Data Saver Lo-Fi" translateable="false">
          Data Saver Lo-Fi mode
       </message>
-      <message name="IDS_FLAGS_DATA_REDUCTION_PROXY_LO_FI_DESCRIPTION" desc="Describes an about::flags experiment to enable/disable Data Saver Lo-Fi" translateable="false">
+      <message name="IDS_FLAGS_DATA_REDUCTION_PROXY_LO_FI_DESCRIPTION" desc="Describes an about:flags experiment to enable/disable Data Saver Lo-Fi" translateable="false">
          Forces Data Saver Lo-Fi mode to be always enabled, enabled only on cellular connections, or disabled. Data Saver must be enabled for Lo-Fi mode to be used.
       </message>
       <message name="IDS_FLAGS_DATA_REDUCTION_PROXY_LO_FI_ALWAYS_ON" desc="Option for IDS_FLAGS_DATA_REDUCTION_PROXY_LO_FI_NAME to enable Lo-Fi always on" translateable="false">
@@ -6446,29 +6459,35 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLAGS_DATA_REDUCTION_PROXY_LO_FI_SLOW_CONNECTIONS_ONLY" desc="Option for IDS_FLAGS_ENABLE_DATA_REDUCTION_PROXY_LO_FI_NAME to enable Lo-Fi only on slow connections" translateable="false">
          Slow connections only
       </message>
-      <message name="IDS_FLAGS_ENABLE_DATA_REDUCTION_PROXY_LITE_PAGE_NAME" desc="An about::flags experiment title to enable Data Saver lite pages" translateable="false">
+      <message name="IDS_FLAGS_ENABLE_DATA_REDUCTION_PROXY_LITE_PAGE_NAME" desc="An about:flags experiment title to enable Data Saver lite pages" translateable="false">
          Lite pages for Data Saver Lo-Fi mode
       </message>
-      <message name="IDS_FLAGS_ENABLE_DATA_REDUCTION_PROXY_LITE_PAGE_DESCRIPTION" desc="Describes an about::flags experiment to enable Data Saver lite pages" translateable="false">
+      <message name="IDS_FLAGS_ENABLE_DATA_REDUCTION_PROXY_LITE_PAGE_DESCRIPTION" desc="Describes an about:flags experiment to enable Data Saver lite pages" translateable="false">
          Enable lite pages in Data Saver Lo-Fi mode. Previews of pages will be shown instead of image placeholders when Lo-Fi is on. Data Saver and Lo-Fi must be enabled for lite pages to be shown.
       </message>
-      <message name="IDS_FLAGS_DATA_REDUCTION_PROXY_RESET_SAVINGS_NAME" desc="Title in about::flags to clear data savings obtained with data reduction proxy when Chrome restarts" translateable="false">
+      <message name="IDS_FLAGS_DATA_REDUCTION_PROXY_RESET_SAVINGS_NAME" desc="Title in about:flags to clear data savings obtained with data reduction proxy when Chrome restarts" translateable="false">
          Clear data savings on startup
       </message>
-      <message name="IDS_FLAGS_DATA_REDUCTION_PROXY_RESET_SAVINGS_DESCRIPTION" desc="Description in about::flags to clear data savings obtained with data reduction proxy when Chrome restarts" translateable="false">
+      <message name="IDS_FLAGS_DATA_REDUCTION_PROXY_RESET_SAVINGS_DESCRIPTION" desc="Description in about:flags to clear data savings obtained with data reduction proxy when Chrome restarts" translateable="false">
          Clears data savings obtained by using data reduction proxy when chrome starts.
       </message>
-      <message name="IDS_FLAGS_DATA_REDUCTION_PROXY_CARRIER_TEST_NAME" desc="An about::flags experiment title to enable using the carrier test data reduction proxy" translateable="false">
+      <message name="IDS_FLAGS_DATA_REDUCTION_PROXY_CARRIER_TEST_NAME" desc="An about:flags experiment title to enable using the carrier test data reduction proxy" translateable="false">
         Enable a carrier-specific Data Reduction Proxy for testing.
       </message>
       <message name="IDS_FLAGS_DATA_REDUCTION_PROXY_CARRIER_TEST_DESCRIPTION" desc="Describes an about:flags experiment to enable using the carrier test data reduction proxy" translateable="false">
         Use a carrier-specific Data Reduction Proxy for testing.
       </message>
-      <message name="IDS_FLAGS_DATA_REDUCTION_PROXY_CONFIG_CLIENT_NAME" desc="Title in about::flags to use the Data Reduction Proxy configuration service" translateable="false">
+      <message name="IDS_FLAGS_DATA_REDUCTION_PROXY_CONFIG_CLIENT_NAME" desc="Title in about:flags to use the Data Reduction Proxy configuration service" translateable="false">
          Enable Data Reduction Proxy configuration service client.
       </message>
-      <message name="IDS_FLAGS_DATA_REDUCTION_PROXY_CONFIG_CLIENT_DESCRIPTION" desc="Description in about::flags to use the Data Reduction Proxy configuration service" translateable="false">
+      <message name="IDS_FLAGS_DATA_REDUCTION_PROXY_CONFIG_CLIENT_DESCRIPTION" desc="Description in about:flags to use the Data Reduction Proxy configuration service" translateable="false">
          Uses the Data Reduction Proxy configuration service for authentication and proxy configuration.
+      </message>
+      <message name="IDS_FLAGS_ENABLE_DATA_REDUCTION_PROXY_SAVINGS_PROMO_NAME" desc="An about:flags experiment title to enable a Data Saver snackbar promo for 1 MB of savings" translateable="false">
+        Data Saver 1 MB Savings Promo
+      </message>
+      <message name="IDS_FLAGS_ENABLE_DATA_REDUCTION_PROXY_SAVINGS_PROMO_DESCRIPTION" desc="Describes an about:flags experiment to enable a Data Saver snackbar promo for 1 MB of savings" translateable="false">
+        Enable a Data Saver promo for 1 MB of savings. If Data Saver has already saved 1 MB of data, then the promo will not be shown. Data Saver must be enabled for the promo to be shown.
       </message>
 
       <!-- Preview InfoBar -->
@@ -8168,15 +8187,6 @@ I don't think this site should be blocked!
       <message name="IDS_CONTENT_SETTING_CHANGED_INFOBAR_BUTTON" desc="The string used in the infobar button allowing the user to reload the page directly from the infobar.">
         Reload
       </message>
-      <message name="IDS_SETTINGS_ADD_SITE_LINK" desc="Link text to show (to open the Add Site dialog)">
-        Add site exception
-      </message>
-      <message name="IDS_SETTINGS_ADD_SITE_HEADER" desc="Header for the Add Site dialog">
-        Add an exception for a site
-      </message>
-      <message name="IDS_SETTINGS_ADD_SITE" desc="The label for the input box for adding a site">
-        Site
-      </message>
 
       <message name="IDS_IMAGES_TAB_LABEL" desc="Label for Images tab on Content Settings dialog">
         Images
@@ -9081,6 +9091,16 @@ I don't think this site should be blocked!
       <message name="IDS_WEBSITE_SETTINGS_NOT_SECURE_SUMMARY" desc="A one-line summary at the top of the Page Info bubble (which shows when you click the security indicator) if the connection to the current website is secure.">
         Your connection to this site is not secure
       </message>
+      <message name="IDS_WEBSITE_SETTINGS_MALWARE_SUMMARY" desc="A one-line summary at the top of the Page Info bubble (which shows when you click the security indicator) if the current website has been flagged as containing malware.">
+        This site contains malware
+      </message>
+      <message name="IDS_WEBSITE_SETTINGS_SOCIAL_ENGINEERING_SUMMARY" desc="A one-line summary at the top of the Page Info bubble (which shows when you click the security indicator) if the current website has been flagged as social engineering.">
+        This site is deceptive
+      </message>
+      <message name="IDS_WEBSITE_SETTINGS_UNWANTED_SOFTWARE_SUMMARY" desc="A one-line summary at the top of the Page Info bubble (which shows when you click the security indicator) if the current website has been flagged as containing unwanted software.">
+        This site contains harmful programs
+      </message>
+
       <message name="IDS_WEBSITE_SETTINGS_SECURE_DETAILS" desc="A short paragraph explaining a secure site to the user.">
         Your information (for example, passwords or credit card numbers) is private when it is sent to this site.
       </message>
@@ -9092,6 +9112,15 @@ I don't think this site should be blocked!
       </message>
       <message name="IDS_PAGEINFO_INVALID_CERTIFICATE_DESCRIPTION" desc="A short paragraph to the user that security warnings are disabled. This is the case when the user has encountered a certificate error for the current site and chosen to override it.">
         You have chosen to disable security warnings for this site.
+      </message>
+      <message name="IDS_WEBSITE_SETTINGS_MALWARE_DETAILS" desc="A short paragraph explaining to the user that the current website has been flagged as containing malware.">
+        Attackers on this site might attempt to install dangerous programs on your computer that steal or delete your information (for example, photos, passwords, messages, and credit cards).
+      </message>
+      <message name="IDS_WEBSITE_SETTINGS_SOCIAL_ENGINEERING_DETAILS" desc="A short paragraph explaining to the user that the current website has been flagged as social engineering.">
+        Attackers on this site may trick you into doing something dangerous like installing software or revealing your personal information (for example, passwords, phone numbers, or credit cards).
+      </message>
+      <message name="IDS_WEBSITE_SETTINGS_UNWANTED_SOFTWARE_DETAILS" desc="A short paragraph explaining to the user that the current website has been flagged as containing unwanted software.">
+        Attackers on this site might try to trick you into installing programs that harm your browsing experience (for example, by changing your homepage or showing extra ads on sites you visit).
       </message>
       <if expr="is_android">
         <message name="IDS_PAGEINFO_RESET_INVALID_CERTIFICATE_DECISIONS_BUTTON" desc="Text of button in the page info that resets allow/deny decisions of invalid certificates, which will start showing security warnings for the page again.">
@@ -9121,14 +9150,8 @@ I don't think this site should be blocked!
       <message name="IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_EV_NO_CT" desc="The text of the identity section when the page is secured with an EV cert and no Certificate Transparency information is present.">
         The identity of <ph name="ORGANIZATION">$1<ex>Google</ex></ph> at <ph name="LOCALITY">$2<ex>Mountain View, CA US</ex></ph> has been verified by <ph name="ISSUER">$3<ex>VeriSign</ex></ph>. No Certificate Transparency information was supplied by the server.
       </message>
-      <message name="IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_EV_CT_VERIFIED" desc="The text of the identity section when the page is secured with an EV cert and a Signed Certificate Timestamp from a known Certificate Transparency log is present and valid.">
-        The identity of <ph name="ORGANIZATION">$1<ex>Google</ex></ph> at <ph name="LOCALITY">$2<ex>Mountain View, CA US</ex></ph> has been verified by <ph name="ISSUER">$3<ex>VeriSign</ex></ph>. Valid Certificate Transparency information was supplied by the server.
-      </message>
-      <message name="IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_EV_CT_UNVERIFIED" desc="The text of the identity section when the page is secured with an EV cert and contains a Signed Certificate Timestamp from an unknown Certificate Transparency log.">
-        The identity of <ph name="ORGANIZATION">$1<ex>Google</ex></ph> at <ph name="LOCALITY">$2<ex>Mountain View, CA US</ex></ph> has been verified by <ph name="ISSUER">$3<ex>VeriSign</ex></ph>. Certificate Transparency information was supplied by the server, but one or more of the Certificate Transparency logs were not recognized.
-      </message>
-      <message name="IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_EV_CT_INVALID" desc="The text of the identity section when the page is secured with an EV cert, but it contains a Signed Certificate Timestamp from a known Certificate Transparency log that failed to verify.">
-        The identity of <ph name="ORGANIZATION">$1<ex>Google</ex></ph> at <ph name="LOCALITY">$2<ex>Mountain View, CA US</ex></ph> has been verified by <ph name="ISSUER">$3<ex>VeriSign</ex></ph>. Certificate Transparency information was supplied by the server, but it was invalid.
+      <message name="IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_EV_VERIFIED" desc="The text of the identity section when the page is secured with a valid EV cert.">
+        The identity of <ph name="ORGANIZATION">$1<ex>Google</ex></ph> at <ph name="LOCALITY">$2<ex>Mountain View, CA US</ex></ph> has been verified by <ph name="ISSUER">$3<ex>VeriSign</ex></ph>.
       </message>
 
       <!-- Screen Capture strings -->
@@ -9922,13 +9945,13 @@ I don't think this site should be blocked!
         <message name="IDS_OPTIONS_EXTENSION_PROXIES_LABEL" desc="The info label for the 'Proxy settings' button when managed by an extension.">
           Your network proxy settings are being managed by an extension.
         </message>
-        
+
         <if expr="chromeos">
           <message name="IDS_OPTIONS_ADVANCED_SECTION_TITLE_CUPS_PRINT" desc="The title for the section of CUPS Print in Chrome OS advanced settings.">
             Printers
           </message>
           <message name="IDS_OPTIONS_ADVANCED_SECTION_CUPS_PRINT_LABEL" desc="Label for the CUPS Print section in Chrome OS advanced settings.">
-            Set up or manage local printers. 
+            Set up or manage local printers.
           </message>
           <message name="IDS_OPTIONS_ADVANCED_SECTION_CUPS_PRINT_MANAGE_BUTTON" desc="Text on the button to take the user to Chrome settings page of CUPS printers.">
             Manage
@@ -9993,9 +10016,6 @@ I don't think this site should be blocked!
         </message>
         <message name="IDS_OPTIONS_CONTROLLED_SETTING_EXTENSION_WITH_NAME" desc="Text displayed in the controlled settings bubble when a setting's value is enforced by an extension. The name of the extension would be displayed on the following line, thus the ending with ':'.">
           This setting is controlled by:
-        </message>
-        <message name="IDS_SETTINGS_CONTROLLED_SETTING_NAMED_EXTENSION" desc="Text displayed in the controlled settings indicator tooltip when a setting's value is enforced by an extension.">
-          This setting is controlled by extension <ph name="NAME">$1<ex>Adblocker plusplus</ex></ph>
         </message>
         <message name="IDS_OPTIONS_CONTROLLED_SETTING_MANAGE_EXTENSION" desc="Text displayed for a link to manage extension from the controlled settings bubble.">
           Manage extension
@@ -11302,7 +11322,7 @@ I don't think this site should be blocked!
       </message>
 
 
-      <!-- Signin Error tab modal dialogue -->
+      <!-- Signin Error tab modal dialog -->
       <message name="IDS_SIGNIN_ERROR_TITLE" desc="Title of the signin error tab modal dialog.">
         Can't sign in
       </message>
@@ -11328,6 +11348,20 @@ I don't think this site should be blocked!
       </message>
       <message name="IDS_SIGNIN_ACCESSIBLE_BACK_BUTTON" desc="Accessibility label for the back button of the tab modal signin flow">
         Back
+      </message>
+
+      <!-- Signin Email Confirmation tab modal dialog -->
+      <message name="IDS_SIGNIN_EMAIL_CONFIRMATION_CREATE_PROFILE_RADIO_BUTTON_TITLE" desc="Title of radio button to create a new profile.">
+        <ph name="BEGIN_BOLD">&lt;strong&gt;</ph>This wasn't me.<ph name="END_BOLD">&lt;/strong&gt;</ph> Create a new profile for <ph name="USER_EMAIL_ADDRESS">$1<ex>foo@gmail.com</ex></ph>
+      </message>
+      <message name="IDS_SIGNIN_EMAIL_CONFIRMATION_START_SYNC_RADIO_BUTTON_TITLE" desc="Title of radio button to create a new profile.">
+        <ph name="BEGIN_BOLD">&lt;strong&gt;</ph>This was me.<ph name="END_BOLD">&lt;/strong&gt;</ph> Add my bookmarks, history, passwords, and other settings to <ph name="USER_EMAIL_ADDRESS">$1<ex>foo@gmail.com</ex></ph>
+      </message>
+      <message name="IDS_SIGNIN_EMAIL_CONFIRMATION_CLOSE_BUTTON_LABEL" desc="Label of the close button in the signin email confirmation dialog.">
+        Cancel
+      </message>
+      <message name="IDS_SIGNIN_EMAIL_CONFIRMATION_CONFIRM_BUTTON_LABEL" desc="Label of the confirmation button in the signin email confirmation dialog.">
+        Continue
       </message>
 
       <message name="IDS_PLUGIN_OUTDATED_PROMPT" desc="Info Bar message when an outdated plugin was disabled">
@@ -13208,6 +13242,9 @@ Tell us what happened exactly before you got the profile error message:
         <message name="IDS_PROFILES_CREATE_SUPERVISED_SIGNED_IN_LABEL" desc="Label for the 'Supervised user' checkbox in the create-profile dialog when the current user is signed in.">
           Control and view the websites this person visits from <ph name="CUSTODIAN_EMAIL">$1<ex>user@gmail.com</ex></ph>.
         </message>
+        <message name="IDS_PROFILES_CREATE_DESKTOP_SHORTCUT_LABEL" desc="Label for the checkbox that controls whether a desktop shortcut should be created for the new profile.">
+          Create a desktop shortcut for this user
+        </message>
         <message name="IDS_PROFILES_CREATE_SUPERVISED_MULTI_SIGNED_IN_LABEL" desc="Label for the 'Supervised user' checkbox in the create-profile dialog when user can choose from a list of signed in users.">
           Supervise this person to control and view the websites they visit from your Google Account.
         </message>
@@ -13760,16 +13797,26 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
         Highly experimental performance mode where cross-site iframes are kept in a separate process from the top document. In this mode, iframes from different third-party sites will be allowed to share a process.
       </message>
 
-      <!-- Browser Task Scheduler -->
+      <!-- Cross process guest frames isolation mode -->
+      <message name="IDS_FLAGS_CROSS_PROCESS_GUEST_VIEW_ISOLATION_NAME"
+               desc="Name of about:flag option to turn on experimental guests using out-of-process iframes">
+        Cross process frames for guests
+      </message>
+      <message name="IDS_FLAGS_CROSS_PROCESS_GUEST_VIEW_ISOLATION_DESCRIPTION"
+               desc="Description of about:flag option to turn on experimental guests using out-of-process iframes">
+               Highly experimental where guests such as &amp;lt;webview> are implemented on the out-of-process iframe infrastructure.
+      </message>
+
+      <!-- Task Scheduler -->
       <message name="IDS_FLAGS_BROWSER_TASK_SCHEDULER_NAME"
-               desc="Name of about:flag option to control the availability of the browser task scheduler."
+               desc="Name of about:flag option to control redirection to the task scheduler."
                translateable="false">
-        Browser Task Scheduler
+        Task Scheduler
       </message>
       <message name="IDS_FLAGS_BROWSER_TASK_SCHEDULER_DESCRIPTION"
-               desc="Description of about:flag option to control the availability of the browser task scheduler."
+               desc="Description of about:flag option to control redirection to the task scheduler."
                translateable="false">
-        Enables the browser task scheduler to dispatch tasks instead of the existing worker pools. The browser task scheduler will only be used if variation parameters are available.
+        Enables redirection of some task posting APIs to the task scheduler.
       </message>
 
       <!-- Arc authorization -->
@@ -14278,6 +14325,12 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
         </message>
         <message name="IDS_A11Y_ALERT_WINDOW_OVERVIEW_MODE_ENTERED" desc="The accessible text read when the user enters window overview mode in Ash.">
           Entered window overview mode
+        </message>
+        <message name="IDS_A11Y_ALERT_CAPS_OFF" desc="Alert sent to the accessibility api when caps lock is turned off.">
+          caps lock off
+        </message>
+        <message name="IDS_A11Y_ALERT_CAPS_ON" desc="Alert sent to the accessibility api when caps lock is turned on.">
+          caps lock on
         </message>
       </if>
 
@@ -14901,7 +14954,7 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
         </message>
         <message name="IDS_PRINTER_DETECTED_NOTIFICATION_SET_UP_GET_HELP_BUTTON" desc="Content for the notification button to direct the user to the chrome://setting CUPS printers subpage if the setup process is failed.">
           Get help
-        </message> 
+        </message>
       </if>
 
       <!-- Strings for ARC intent picker -->
@@ -14917,70 +14970,6 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
         </message>
       </if>
 
-      <!-- Strings describing Chrome security policy for DevTools security panel -->
-      <message name="IDS_PRIVATE_USER_DATA_INPUT" desc="Summary phrase for a security problem where the site collects private user data on an insecure page." translateable="false">
-        Private User Data Input
-      </message>
-      <message name="IDS_MAJOR_SHA1" desc="Summary phrase for a security problem where the site's certificate expires in 2017 or later and contains a SHA1 signature in the chain." translateable="false">
-        SHA-1 Certificate
-      </message>
-      <message name="IDS_MAJOR_SHA1_DESCRIPTION" desc="Description of a security problem where the site's certificate expires in 2017 or later and contains a SHA1 signature in the chain." translateable="false">
-        The certificate for this site expires in 2017 or later, and the certificate chain contains a certificate signed using SHA-1.
-      </message>
-      <message name="IDS_MINOR_SHA1" desc="Summary phrase for a security problem where the site's certificate expires in 2016 and contains a SHA1 signature in the chain." translateable="false">
-        SHA-1 Certificate
-      </message>
-      <message name="IDS_MINOR_SHA1_DESCRIPTION" desc="Description of a security problem where the site's certificate expires in 2016 and contains a SHA1 signature in the chain." translateable="false">
-        The certificate for this site expires in 2016, and the certificate chain contains a certificate signed using SHA-1.
-      </message>
-      <message name="IDS_CERTIFICATE_CHAIN_ERROR" desc="Summary phrase for a security problem with the site's certificate." translateable="false">
-        Certificate Error
-      </message>
-      <message name="IDS_CERTIFICATE_CHAIN_ERROR_DESCRIPTION_FORMAT" desc="Description of a security problem with the site's certificate." translateable="false">
-        There are issues with the site's certificate chain (<ph name="CERT_ERROR_DESCRIPTION">$1<ex>net::ERR_CERT_AUTHORITY_INVALID</ex></ph>).
-      </message>
-      <message name="IDS_VALID_SERVER_CERTIFICATE" desc="Summary phrase for a site that has a valid server certificate." translateable="false">
-        Valid Certificate
-      </message>
-      <message name="IDS_VALID_SERVER_CERTIFICATE_DESCRIPTION" desc="Description of a site that has a valid server certificate." translateable="false">
-        The connection to this site is using a valid, trusted server certificate.
-      </message>
-      <message name="IDS_STRONG_SSL_SUMMARY" desc="Summary phrase for a site that uses a modern, secure TLS protocol and cipher." translateable="false">
-        Secure Connection
-      </message>
-      <message name="IDS_STRONG_SSL_DESCRIPTION" desc="Description of a site that uses a modern, secure TLS protocol and cipher." translateable="false">
-        The connection to this site is encrypted and authenticated using a strong protocol (<ph name="PROTOCOL_VERSION">$1<ex>TLS 1.2</ex></ph>), a strong key exchange (<ph name="KEY_EXCHANGE">$2<ex>ECDHE_RSA</ex></ph>), and a strong cipher (<ph name="CIPHER_SUTE">$3<ex>AES_128_GCM</ex></ph>).
-      </message>
-      <message name="IDS_OBSOLETE_SSL_SUMMARY" desc="Summary phrase for a site that uses an outdated SSL settings (protocol, key exchange, or cipher)." translateable="false">
-        Obsolete Connection Settings
-      </message>
-      <message name="IDS_OBSOLETE_SSL_DESCRIPTION" desc="Description of a site that uses an outdated TLS protocol or cipher." translateable="false">
-        The connection to this site uses <ph name="A_PROTOCOL">$1<ex>an obsolete protocol</ex></ph> (<ph name="PROTOCOL">$2<ex>TLS 1.0</ex></ph>), <ph name="A_KEY_EXCHANGE">$3<ex>an obsolete key exchange</ex></ph> (<ph name="KEY_EXCHANGE">$4<ex>ECDHE_RSA</ex></ph>), and <ph name="A_CIPHER">$5<ex>an obsolete cipher</ex></ph> (<ph name="CIPHER">$6<ex>AES_256_CBC with HMAC-SHA1</ex></ph>).
-      </message>
-      <message name="IDS_CIPHER_WITH_MAC" desc="Description of an SSL cipher that contains a separate (bulk) cipher and MAC." translateable="false">
-        <ph name="CIPHER">$1<ex>AES_256_CBC</ex></ph> with <ph name="MAC">$2<ex>HMAC-SHA1</ex></ph>
-      </message>
-      <message name="IDS_SSL_AN_OBSOLETE_PROTOCOL" desc="A phrase to describe an SSL/TLS protocol (usually an older version like TLS 1.0) that is old and insecure" translateable="false">
-        an obsolete protocol
-      </message>
-      <message name="IDS_SSL_A_STRONG_PROTOCOL" desc="A phrase to describe an SSL/TLS protocol (e.g. TLS 1.2 or QUIC) that is modern and secure." translateable="false">
-        a strong protocol
-      </message>
-      <message name="IDS_SSL_AN_OBSOLETE_KEY_EXCHANGE" desc="A phrase to describe an SSL/TLS key exchange (e.g. ECDHE) that is old and insecure." translateable="false">
-        an obsolete key exchange
-      </message>
-      <message name="IDS_SSL_A_STRONG_KEY_EXCHANGE" desc="A phrase to describe an SSL/TLS key exchange (e.g. RSA) that is modern and secure." translateable="false">
-        a strong key exchange
-      </message>
-      <message name="IDS_SSL_AN_OBSOLETE_CIPHER" desc="A phrase to describe an SSL/TLS cipher (e.g. AES_256_CBC) that is old and insecure." translateable="false">
-        an obsolete cipher
-      </message>
-      <message name="IDS_SSL_A_STRONG_CIPHER" desc="A phrase to describe an SSL/TLS cipher (e.g. AES_128_GCM or ChaCha20 with Poly1305) that is modern and secure." translateable="false">
-        a strong cipher
-      </message>
-      <message name="IDS_SSL_KEY_EXCHANGE_WITH_GROUP" desc="A phrase to describe an SSL/TLS ECDHE-based key exchange with a group." translateable="false">
-        <ph name="A_KEY_EXCHANGE">$1<ex>ECDHE_RSA</ex></ph> with <ph name="A_GROUP">$2<ex>X25519</ex></ph>
-      </message>
       <message name="IDS_SAVE_PASSWORD_DIFFERENT_DOMAINS_TITLE" desc="The title of the save password bubble when the submitted form origin isn't equal to the page origin.">
         Do you want <ph name="PASSWORD_MANAGER_BRAND">$1<ex>Google Chrome</ex></ph> to save your password for <ph name="ORIGIN">$2<ex>example.com</ex></ph>?
       </message>
@@ -15015,7 +15004,7 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
         Enables badging of offline pages on the New Tab page. Only relevant if offline pages are enabled.
       </message>
       <message name="IDS_FLAGS_OFFLINE_PAGES_ASYNC_DOWNLOAD_NAME" desc="Name for the flag to enable offline pages for async download.">
-        Enables showing "DOWNLOAD PAGE LATER" button in error pages. 
+        Enables showing "DOWNLOAD PAGE LATER" button in error pages.
       </message>
       <message name="IDS_FLAGS_OFFLINE_PAGES_ASYNC_DOWNLOAD_DESCRIPTION" desc="Description for the flag to enable offline pages.">
         Enables showing "DOWNLOAD PAGE LATER" button in error pages such that the user can click on it to download the page later.
@@ -15037,6 +15026,12 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       </message>
       <message name="IDS_FLAGS_BACKGROUND_LOADER_FOR_DOWNLOADS_DESCRIPTION" desc="Description for the flag to enable offline pages for downloads.">
         Enables downloading pages in the background in case page is not yet loaded in current tab.
+      </message>
+      <message name="IDS_FLAGS_NEW_BACKGROUND_LOADER_NAME" desc="Name for the flag to use background loader to offline and download pages">
+        Use background loader instead of prerenderer to load pages.
+      </message>
+      <message name="IDS_FLAGS_NEW_BACKGROUND_LOADER_DESCRIPTION" desc="Description for the flag to enable background offlining of pages to use background loader rather than prerenderer.">
+        Use background loader instead of prerenderer to asynchronously download pages.
       </message>
       <message name="IDS_FLAGS_NTP_POPULAR_SITES_NAME" desc="Name for the flag to enable showing non-personalized popular suggestions on the New Tab Page, when no personal suggestions are available yet.">
         Show popular sites on the New Tab page
@@ -15193,16 +15188,16 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
     <if expr="not is_android and not is_ios">
       <!-- Device Chooser Prompt -->
       <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_PROMPT_ORIGIN" desc="The label that is used to introduce Bluetooth chooser details to the user in a popup when it is from a website.">
-        <ph name="Origin">$1<ex>www.google.com</ex></ph> wants to pair with:
+        <ph name="Origin">$1<ex>www.google.com</ex></ph> wants to pair
       </message>
       <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_PROMPT_EXTENSION_NAME" desc="The label that is used to introduce Bluetooth chooser details to the user in a popup when it is from a Chrome extension.">
-        "<ph name="CHROME_EXTENSION_NAME">$1<ex>Chrome extension name</ex></ph>" wants to pair with:
+        "<ph name="CHROME_EXTENSION_NAME">$1<ex>Chrome extension name</ex></ph>" wants to pair
       </message>
       <message name="IDS_USB_DEVICE_CHOOSER_PROMPT_ORIGIN" desc="The label that is used to introduce USB chooser details to the user in a popup when it is from a website.">
-        <ph name="Origin">$1<ex>www.google.com</ex></ph> wants to connect to:
+        <ph name="Origin">$1<ex>www.google.com</ex></ph> wants to connect
       </message>
       <message name="IDS_USB_DEVICE_CHOOSER_PROMPT_EXTENSION_NAME" desc="The label that is used to introduce USB chooser details to the user in a popup when it is from a Chrome extension.">
-        "<ph name="CHROME_EXTENSION_NAME">$1<ex>Chrome extension name</ex></ph>" wants to connect to:
+        "<ph name="CHROME_EXTENSION_NAME">$1<ex>Chrome extension name</ex></ph>" wants to connect
       </message>
       <message name="IDS_DEVICE_CHOOSER_NO_DEVICES_FOUND_PROMPT" desc="The label that is used to inform the user that no devices were found in the chooser popup.">
         No devices found
@@ -15379,10 +15374,16 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       <message name="IDS_FLAGS_ENABLE_NTP_OFFLINE_BADGE_DESCRIPTION" desc="Description for the flag to enable offline badges for snippets on the New Tab page." translateable="false">
         If enabled, Snippets that are available offline will have an offline badge.
       </message>
-      <message name="IDS_FLAGS_ENABLE_NTP_DOWNLOAD_SUGGESTIONS_NAME" desc="Name for the flag to enable downloads suggestions on the New Tab page." translateable="false">
-        Show downloads on the New Tab page
+      <message name="IDS_FLAGS_ENABLE_NTP_ASSET_DOWNLOAD_SUGGESTIONS_NAME" desc="Name for the flag to enable asset downloads suggestions (e.g. books, pictures, audio) on the New Tab page." translateable="false">
+        Show asset downloads on the New Tab page
       </message>
-      <message name="IDS_FLAGS_ENABLE_NTP_DOWNLOAD_SUGGESTIONS_DESCRIPTION" desc="Description for the flag to enable downloads suggestions on the New Tab page." translateable="false">
+      <message name="IDS_FLAGS_ENABLE_NTP_ASSET_DOWNLOAD_SUGGESTIONS_DESCRIPTION" desc="Description for the flag to enable asset downloads suggestions (e.g. books, pictures, audio) on the New Tab page." translateable="false">
+        If enabled, the list of content suggestions on the New Tab page (see #enable-ntp-snippets) will contain assets (e.g. books, pictures, audio) that the user downloaded for later use.
+      </message>
+      <message name="IDS_FLAGS_ENABLE_NTP_OFFLINE_PAGE_DOWNLOAD_SUGGESTIONS_NAME" desc="Name for the flag to enable offline page downloads suggestions on the New Tab page." translateable="false">
+        Show offline page downloads on the New Tab page
+      </message>
+      <message name="IDS_FLAGS_ENABLE_NTP_OFFLINE_PAGE_DOWNLOAD_SUGGESTIONS_DESCRIPTION" desc="Description for the flag to enable offline page downloads suggestions on the New Tab page." translateable="false">
         If enabled, the list of content suggestions on the New Tab page (see #enable-ntp-snippets) will contain pages that the user downloaded for later use.
       </message>
       <message name="IDS_FLAGS_ENABLE_NTP_BOOKMARK_SUGGESTIONS_NAME" desc="Name for the flag to enable bookmark suggestions on the New Tab page." translateable="false">
@@ -15713,7 +15714,7 @@ read aloud to screenreader users to announce that a completion is available.">
             Have consistent geolocation access between the omnibox and default search engine.
         </message>
         <message name="IDS_SEARCH_GEOLOCATION_DISCLOSURE_INFOBAR_TEXT" desc="Text to put in the infobar disclosing Google Search's usage of location. The message contains a link to a settings page. The link text is a separate string in the translation console and appears here as a placeholder text.">
-          Google Search uses your location to show local search results. You can change this in <ph name="SETTINGS_LINK">$1<ex>Link to Settings page</ex></ph>.
+          Google uses your location to provide a better local experience. You can change this in <ph name="SETTINGS_LINK">$1<ex>Link to Settings page</ex></ph>.
         </message>
         <message name="IDS_SEARCH_GEOLOCATION_DISCLOSURE_INFOBAR_SETTINGS_LINK_TEXT" desc="Text to put in the link to the Settings page in the search geolocation disclosure UI.">
           Settings
@@ -15727,6 +15728,20 @@ read aloud to screenreader users to announce that a completion is available.">
 
     <message name="IDS_NTP_DOWNLOADS_SUGGESTIONS_SECTION_EMPTY" desc="On the New Tab Page, text of card explaining to the user that they can expect to see some download related content suggestions in this section in the future.">
       Your downloads appear here
+    </message>
+
+    <!-- Media Remoting chrome://flags strings -->
+    <message name="IDS_FLAGS_MEDIA_REMOTING_NAME" desc="Name for the flag to enable Media Remoting" translateable="false">
+      Media Remoting during Cast Tab Mirroring
+    </message>
+    <message name="IDS_FLAGS_MEDIA_REMOTING_DESCRIPTION" desc="Desciption for the flag to enable Media Remoting" translateable="false">
+      When Casting a tab to a remote device, enabling this turns on an optimization that forwards the content bitstream directly to the remote device when a video is fullscreened.
+    </message>
+    <message name="IDS_FLAGS_MEDIA_REMOTING_ENCRYPTED_NAME" desc="Name for the flag to enable Media Remoting of encrypted content" translateable="false">
+      Media Remoting during Cast Tab Mirroring: Encrypted content too
+    </message>
+    <message name="IDS_FLAGS_MEDIA_REMOTING_ENCRYPTED_DESCRIPTION" desc="Desciption for the flag to enable Media Remoting of encrypted content" translateable="false">
+      When Media Remoting is enabled, this flag must be enabled to allow the remoting of encrypted content. When disabled, only non-encrypted content can be remoted.
     </message>
   </messages>
  </release>

@@ -8,7 +8,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread.h"
 #include "cc/animation/animation_delegate.h"
-#include "cc/test/remote_proto_channel_bridge.h"
 #include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "cc/test/test_hooks.h"
 #include "cc/test/test_task_graph_runner.h"
@@ -21,20 +20,14 @@ namespace cc {
 
 class AnimationHost;
 class AnimationPlayer;
-class FakeLayerTreeHostClient;
 class LayerImpl;
 class LayerTreeHost;
 class LayerTreeHostForTesting;
-class LayerTreeHostClient;
-class LayerTreeHostImpl;
 class LayerTreeTestCompositorFrameSinkClient;
 class Proxy;
-class ProxyImpl;
-class ProxyMain;
 class TestContextProvider;
 class TestCompositorFrameSink;
 class TestTaskGraphRunner;
-class TestWebGraphicsContext3D;
 
 // Creates the virtual viewport layer hierarchy under the given root_layer.
 // Convenient overload of the method below that creates a scrolling layer as
@@ -53,9 +46,7 @@ void CreateVirtualViewportLayers(Layer* root_layer,
                                  const gfx::Size& scroll_bounds,
                                  LayerTreeHost* host);
 
-class BeginTask;
 class LayerTreeHostClientForTesting;
-class TimeoutTask;
 
 // The LayerTreeTests runs with the main loop running. It instantiates a single
 // LayerTreeHostForTesting and associated LayerTreeHostImplForTesting and

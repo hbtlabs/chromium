@@ -53,17 +53,12 @@ class InFlightPropertyChange;
 class InFlightVisibleChange;
 class WindowMus;
 class WindowPortMus;
-struct WindowPortInitData;
 struct WindowPortPropertyData;
 class WindowTreeClientDelegate;
 class WindowTreeClientPrivate;
 class WindowTreeClientObserver;
 class WindowTreeHost;
 class WindowTreeHostMus;
-
-namespace client {
-class FocusClient;
-}
 
 using EventResultCallback = base::Callback<void(ui::mojom::EventResult)>;
 
@@ -169,6 +164,11 @@ class AURA_EXPORT WindowTreeClient
   friend class WindowPortMus;
   friend class WindowTreeClientPrivate;
 
+  enum class Origin {
+    CLIENT,
+    SERVER,
+  };
+
   using IdToWindowMap = std::map<Id, WindowMus*>;
 
   // TODO(sky): this assumes change_ids never wrap, which is a bad assumption.
@@ -259,7 +259,7 @@ class AURA_EXPORT WindowTreeClient
 
   // Following are called from WindowMus.
   void OnWindowMusCreated(WindowMus* window);
-  void OnWindowMusDestroyed(WindowMus* window);
+  void OnWindowMusDestroyed(WindowMus* window, Origin origin);
   void OnWindowMusBoundsChanged(WindowMus* window,
                                 const gfx::Rect& old_bounds,
                                 const gfx::Rect& new_bounds);

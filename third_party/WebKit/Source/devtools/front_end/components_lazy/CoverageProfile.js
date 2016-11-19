@@ -2,68 +2,71 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-WebInspector.CoverageProfile = class {
+Components.CoverageProfile = class {
   constructor() {
     this._updateTimer = null;
     this.reset();
   }
 
   /**
-   * @return {!WebInspector.CoverageProfile}
+   * @return {!Components.CoverageProfile}
    */
   static instance() {
-    if (!WebInspector.CoverageProfile._instance)
-      WebInspector.CoverageProfile._instance = new WebInspector.CoverageProfile();
+    if (!Components.CoverageProfile._instance)
+      Components.CoverageProfile._instance = new Components.CoverageProfile();
 
-    return WebInspector.CoverageProfile._instance;
+    return Components.CoverageProfile._instance;
   }
 
   /**
    * @param {string} url
-   * @param {!Protocol.CSS.SourceRange} range
+   * @param {!Common.TextRange} range
    */
   appendUnusedRule(url, range) {
     if (!url)
       return;
 
-    var uiSourceCode = WebInspector.workspace.uiSourceCodeForURL(url);
+    var uiSourceCode = Workspace.workspace.uiSourceCodeForURL(url);
     if (!uiSourceCode)
       return;
 
-    for (var line = range.startLine; line <= range.endLine; ++line)
-      uiSourceCode.addLineDecoration(line, WebInspector.CoverageProfile.LineDecorator.type, range.startColumn);
+    if (range.startColumn)
+      range.startColumn--;
+    uiSourceCode.addDecoration(range, Components.CoverageProfile.LineDecorator.type, 0);
   }
 
   reset() {
-    WebInspector.workspace.uiSourceCodes().forEach(
-        uiSourceCode => uiSourceCode.removeAllLineDecorations(WebInspector.CoverageProfile.LineDecorator.type));
+    Workspace.workspace.uiSourceCodes().forEach(
+        uiSourceCode => uiSourceCode.removeDecorationsForType(Components.CoverageProfile.LineDecorator.type));
   }
 };
 
 /**
- * @implements {WebInspector.UISourceCodeFrame.LineDecorator}
+ * @implements {Sources.UISourceCodeFrame.LineDecorator}
  */
-WebInspector.CoverageProfile.LineDecorator = class {
+Components.CoverageProfile.LineDecorator = class {
   /**
    * @override
-   * @param {!WebInspector.UISourceCode} uiSourceCode
-   * @param {!WebInspector.CodeMirrorTextEditor} textEditor
+   * @param {!Workspace.UISourceCode} uiSourceCode
+   * @param {!TextEditor.CodeMirrorTextEditor} textEditor
    */
   decorate(uiSourceCode, textEditor) {
     var gutterType = 'CodeMirror-gutter-coverage';
 
-    var decorations = uiSourceCode.lineDecorations(WebInspector.CoverageProfile.LineDecorator.type);
+    var decorations = uiSourceCode.decorationsForType(Components.CoverageProfile.LineDecorator.type);
     textEditor.uninstallGutter(gutterType);
-    if (!decorations)
+    if (!decorations.size)
       return;
 
     textEditor.installGutter(gutterType, false);
 
-    for (var decoration of decorations.values()) {
-      var element = createElementWithClass('div', 'text-editor-line-marker-coverage');
-      textEditor.setGutterDecoration(decoration.line(), gutterType, element);
+    for (var decoration of decorations) {
+      for (var line = decoration.range().startLine; line <= decoration.range().endLine; ++line) {
+        var element = createElementWithClass('div', 'text-editor-line-marker-coverage');
+        textEditor.setGutterDecoration(line, gutterType, element);
+      }
     }
   }
 };
 
-WebInspector.CoverageProfile.LineDecorator.type = 'coverage';
+Components.CoverageProfile.LineDecorator.type = 'coverage';

@@ -43,6 +43,7 @@
 #include "content/renderer/render_widget_owner_delegate.h"
 #include "content/renderer/stats_collection_observer.h"
 #include "ipc/ipc_platform_file.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/web/WebAXObject.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
@@ -51,7 +52,6 @@
 #include "third_party/WebKit/public/web/WebFrameWidget.h"
 #include "third_party/WebKit/public/web/WebHistoryItem.h"
 #include "third_party/WebKit/public/web/WebIconURL.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebNavigationType.h"
 #include "third_party/WebKit/public/web/WebNode.h"
 #include "third_party/WebKit/public/web/WebViewClient.h"
@@ -381,8 +381,6 @@ class CONTENT_EXPORT RenderViewImpl
   gfx::RectF ElementBoundsInWindow(const blink::WebElement& element) override;
   bool HasAddedInputHandler() const override;
 
-  gfx::Point ConvertWindowPointToViewport(const gfx::Point& point);
-
   bool uses_temporary_zoom_level() const { return uses_temporary_zoom_level_; }
 
   // Please do not add your stuff randomly to the end here. If there is an
@@ -532,26 +530,6 @@ class CONTENT_EXPORT RenderViewImpl
   void OnDeterminePageLanguage();
   void OnDisableScrollbarsForSmallWindows(
       const gfx::Size& disable_scrollbars_size_limit);
-  void OnDragSourceEnded(const gfx::Point& client_point,
-                         const gfx::Point& screen_point,
-                         blink::WebDragOperation drag_operation);
-  void OnDragSourceSystemDragEnded();
-  void OnDragTargetDrop(const DropData& drop_data,
-                        const gfx::Point& client_pt,
-                        const gfx::Point& screen_pt,
-                        int key_modifiers);
-  // Real data that is dragged is not included at DragEnter time.
-  void OnDragTargetDragEnter(
-      const std::vector<DropData::Metadata>& drop_meta_data,
-      const gfx::Point& client_pt,
-      const gfx::Point& screen_pt,
-      blink::WebDragOperationsMask operations_allowed,
-      int key_modifiers);
-  void OnDragTargetDragLeave();
-  void OnDragTargetDragOver(const gfx::Point& client_pt,
-                            const gfx::Point& screen_pt,
-                            blink::WebDragOperationsMask operations_allowed,
-                            int key_modifiers);
   void OnEnablePreferredSizeChangedMode();
   void OnEnableAutoResize(const gfx::Size& min_size, const gfx::Size& max_size);
   void OnDisableAutoResize(const gfx::Size& new_size);

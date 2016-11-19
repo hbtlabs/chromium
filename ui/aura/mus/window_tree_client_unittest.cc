@@ -8,7 +8,9 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/strings/utf_string_conversions.h"
 #include "mojo/common/common_type_converters.h"
+#include "services/ui/public/cpp/property_type_converters.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
@@ -32,14 +34,17 @@
 #include "ui/events/event_utils.h"
 #include "ui/gfx/geometry/rect.h"
 
-DECLARE_WINDOW_PROPERTY_TYPE(uint8_t)
-
 namespace aura {
 
 namespace {
 
 DEFINE_WINDOW_PROPERTY_KEY(uint8_t, kTestPropertyKey1, 0);
-DEFINE_WINDOW_PROPERTY_KEY(uint8_t, kTestPropertyKey2, 0);
+DEFINE_WINDOW_PROPERTY_KEY(uint16_t, kTestPropertyKey2, 0);
+DEFINE_WINDOW_PROPERTY_KEY(bool, kTestPropertyKey3, false);
+
+const char kTestPropertyServerKey1[] = "test-property-server1";
+const char kTestPropertyServerKey2[] = "test-property-server2";
+const char kTestPropertyServerKey3[] = "test-property-server3";
 
 Id server_id(Window* window) {
   return WindowMus::Get(window)->server_id();
@@ -60,80 +65,20 @@ bool IsWindowHostVisible(Window* window) {
   return window->GetRootWindow()->GetHost()->compositor()->IsVisible();
 }
 
-const char kAlwaysOnTopServerKey[] = "always-on-top-server";
-const char kTestPropertyServerKey1[] = "test-property-server1";
-const char kTestPropertyServerKey2[] = "test-property-server2";
+// Register some test window properties for aura/mus conversion.
+void RegisterTestProperties(PropertyConverter* converter) {
+  converter->RegisterProperty(kTestPropertyKey1, kTestPropertyServerKey1);
+  converter->RegisterProperty(kTestPropertyKey2, kTestPropertyServerKey2);
+  converter->RegisterProperty(kTestPropertyKey3, kTestPropertyServerKey3);
+}
 
-class TestPropertyConverter : public PropertyConverter {
- public:
-  TestPropertyConverter() {}
-  ~TestPropertyConverter() override {}
-
-  // PropertyConverter:
-  bool ConvertPropertyForTransport(
-      Window* window,
-      const void* key,
-      std::string* server_property_name,
-      std::unique_ptr<std::vector<uint8_t>>* server_property_value) override {
-    if (key == client::kAlwaysOnTopKey) {
-      *server_property_name = kAlwaysOnTopServerKey;
-      *server_property_value = base::MakeUnique<std::vector<uint8_t>>(1);
-      (*server_property_value->get())[0] =
-          window->GetProperty(client::kAlwaysOnTopKey);
-      return true;
-    }
-    if (key == kTestPropertyKey1) {
-      *server_property_name = kTestPropertyServerKey1;
-      *server_property_value = base::MakeUnique<std::vector<uint8_t>>(1);
-      (*server_property_value->get())[0] =
-          window->GetProperty(kTestPropertyKey1);
-      return true;
-    }
-    if (key == kTestPropertyKey2) {
-      *server_property_name = kTestPropertyServerKey2;
-      *server_property_value = base::MakeUnique<std::vector<uint8_t>>(1);
-      (*server_property_value->get())[0] =
-          window->GetProperty(kTestPropertyKey2);
-      return true;
-    }
-    return false;
-  }
-
-  std::string GetTransportNameForPropertyKey(const void* key) override {
-    if (key == client::kAlwaysOnTopKey)
-      return kAlwaysOnTopServerKey;
-    if (key == kTestPropertyKey1)
-      return kTestPropertyServerKey1;
-    if (key == kTestPropertyKey2)
-      return kTestPropertyServerKey2;
-    return std::string();
-  }
-
-  void SetPropertyFromTransportValue(
-      Window* window,
-      const std::string& server_property_name,
-      const std::vector<uint8_t>* data) override {
-    if (server_property_name == kAlwaysOnTopServerKey) {
-      window->SetProperty(client::kAlwaysOnTopKey,
-                          static_cast<bool>((*data)[0]));
-    } else if (server_property_name == kTestPropertyServerKey1) {
-      window->SetProperty(kTestPropertyKey1, (*data)[0]);
-    } else if (server_property_name == kTestPropertyServerKey2) {
-      window->SetProperty(kTestPropertyKey2, (*data)[0]);
-    }
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestPropertyConverter);
-};
+// Convert a primitive aura property value to a mus transport value.
+// Note that this implicitly casts arguments to the aura storage type, int64_t.
+mojo::Array<uint8_t> ConvertToPropertyTransportValue(int64_t value) {
+  return mojo::Array<uint8_t>(mojo::ConvertTo<std::vector<uint8_t>>(value));
+}
 
 }  // namespace
-
-mojo::Array<uint8_t> Uint8ToPropertyTransportValue(uint8_t value) {
-  mojo::Array<uint8_t> transport_value(1);
-  transport_value[0] = value;
-  return transport_value;
-}
 
 using WindowTreeClientWmTest = test::AuraMusWmTestBase;
 using WindowTreeClientClientTest = test::AuraMusClientTestBase;
@@ -195,13 +140,13 @@ TEST_F(WindowTreeClientWmTest, ReparentFromServerDoesntAddAgain) {
 // Verifies properties passed in OnWindowHierarchyChanged() make there way to
 // the new window.
 TEST_F(WindowTreeClientWmTest, OnWindowHierarchyChangedWithProperties) {
-  SetPropertyConverter(base::MakeUnique<TestPropertyConverter>());
+  RegisterTestProperties(GetPropertyConverter());
   window_tree()->AckAllChanges();
   const Id child_window_id = server_id(root_window()) + 11;
   ui::mojom::WindowDataPtr data = ui::mojom::WindowData::New();
   const uint8_t server_test_property1_value = 91;
   data->properties[kTestPropertyServerKey1] =
-      Uint8ToPropertyTransportValue(server_test_property1_value);
+      ConvertToPropertyTransportValue(server_test_property1_value);
   data->parent_id = server_id(root_window());
   data->window_id = child_window_id;
   data->bounds = gfx::Rect(1, 2, 3, 4);
@@ -307,17 +252,32 @@ TEST_F(WindowTreeClientWmTest, TwoInFlightBoundsChangesBothCanceled) {
   EXPECT_EQ(original_bounds, root_window()->bounds());
 }
 
-// Verifies properties are reverted if the server replied that the change
-// failed.
-TEST_F(WindowTreeClientWmTest, SetPropertyFailed) {
-  SetPropertyConverter(base::MakeUnique<TestPropertyConverter>());
+// Verifies properties are set if the server replied that the change succeeded.
+TEST_F(WindowTreeClientWmTest, SetPropertySucceeded) {
   ASSERT_FALSE(root_window()->GetProperty(client::kAlwaysOnTopKey));
   root_window()->SetProperty(client::kAlwaysOnTopKey, true);
   EXPECT_TRUE(root_window()->GetProperty(client::kAlwaysOnTopKey));
-  mojo::Array<uint8_t> transport_value = window_tree()->GetLastPropertyValue();
-  ASSERT_FALSE(transport_value.is_null());
-  ASSERT_EQ(1u, transport_value.size());
-  EXPECT_EQ(1, transport_value[0]);
+  mojo::Array<uint8_t> value = window_tree()->GetLastPropertyValue();
+  ASSERT_FALSE(value.is_null());
+  // PropertyConverter uses int64_t values, even for smaller types, like bool.
+  ASSERT_EQ(8u, value.size());
+  EXPECT_EQ(1, mojo::ConvertTo<int64_t>(value.PassStorage()));
+  ASSERT_TRUE(window_tree()->AckSingleChangeOfType(
+      WindowTreeChangeType::PROPERTY, true));
+  EXPECT_TRUE(root_window()->GetProperty(client::kAlwaysOnTopKey));
+}
+
+// Verifies properties are reverted if the server replied that the change
+// failed.
+TEST_F(WindowTreeClientWmTest, SetPropertyFailed) {
+  ASSERT_FALSE(root_window()->GetProperty(client::kAlwaysOnTopKey));
+  root_window()->SetProperty(client::kAlwaysOnTopKey, true);
+  EXPECT_TRUE(root_window()->GetProperty(client::kAlwaysOnTopKey));
+  mojo::Array<uint8_t> value = window_tree()->GetLastPropertyValue();
+  ASSERT_FALSE(value.is_null());
+  // PropertyConverter uses int64_t values, even for smaller types, like bool.
+  ASSERT_EQ(8u, value.size());
+  EXPECT_EQ(1, mojo::ConvertTo<int64_t>(value.PassStorage()));
   ASSERT_TRUE(window_tree()->AckSingleChangeOfType(
       WindowTreeChangeType::PROPERTY, false));
   EXPECT_FALSE(root_window()->GetProperty(client::kAlwaysOnTopKey));
@@ -326,7 +286,7 @@ TEST_F(WindowTreeClientWmTest, SetPropertyFailed) {
 // Simulates a property change, and while the property change is in flight the
 // server replies with a new property and the original property change fails.
 TEST_F(WindowTreeClientWmTest, SetPropertyFailedWithPendingChange) {
-  SetPropertyConverter(base::MakeUnique<TestPropertyConverter>());
+  RegisterTestProperties(GetPropertyConverter());
   const uint8_t value1 = 11;
   root_window()->SetProperty(kTestPropertyKey1, value1);
   EXPECT_EQ(value1, root_window()->GetProperty(kTestPropertyKey1));
@@ -335,7 +295,7 @@ TEST_F(WindowTreeClientWmTest, SetPropertyFailedWithPendingChange) {
   const uint8_t server_value = 12;
   window_tree_client()->OnWindowSharedPropertyChanged(
       server_id(root_window()), kTestPropertyServerKey1,
-      Uint8ToPropertyTransportValue(server_value));
+      ConvertToPropertyTransportValue(server_value));
 
   // This shouldn't trigger the property changing yet.
   EXPECT_EQ(value1, root_window()->GetProperty(kTestPropertyKey1));
@@ -349,8 +309,87 @@ TEST_F(WindowTreeClientWmTest, SetPropertyFailedWithPendingChange) {
   // Simulate server changing back to value1. Should take immediately.
   window_tree_client()->OnWindowSharedPropertyChanged(
       server_id(root_window()), kTestPropertyServerKey1,
-      Uint8ToPropertyTransportValue(value1));
+      ConvertToPropertyTransportValue(value1));
   EXPECT_EQ(value1, root_window()->GetProperty(kTestPropertyKey1));
+}
+
+// Verifies property setting behavior with failures for primitive properties.
+TEST_F(WindowTreeClientWmTest, SetPrimitiveProperties) {
+  PropertyConverter* property_converter = GetPropertyConverter();
+  RegisterTestProperties(property_converter);
+
+  const uint8_t value1_local = UINT8_MAX / 2;
+  const uint8_t value1_server = UINT8_MAX / 3;
+  root_window()->SetProperty(kTestPropertyKey1, value1_local);
+  EXPECT_EQ(value1_local, root_window()->GetProperty(kTestPropertyKey1));
+  window_tree_client()->OnWindowSharedPropertyChanged(
+      server_id(root_window()), kTestPropertyServerKey1,
+      ConvertToPropertyTransportValue(value1_server));
+  ASSERT_TRUE(window_tree()->AckSingleChangeOfType(
+      WindowTreeChangeType::PROPERTY, false));
+  EXPECT_EQ(value1_server, root_window()->GetProperty(kTestPropertyKey1));
+
+  const uint16_t value2_local = UINT16_MAX / 3;
+  const uint16_t value2_server = UINT16_MAX / 4;
+  root_window()->SetProperty(kTestPropertyKey2, value2_local);
+  EXPECT_EQ(value2_local, root_window()->GetProperty(kTestPropertyKey2));
+  window_tree_client()->OnWindowSharedPropertyChanged(
+      server_id(root_window()), kTestPropertyServerKey2,
+      ConvertToPropertyTransportValue(value2_server));
+  ASSERT_TRUE(window_tree()->AckSingleChangeOfType(
+      WindowTreeChangeType::PROPERTY, false));
+  EXPECT_EQ(value2_server, root_window()->GetProperty(kTestPropertyKey2));
+
+  EXPECT_FALSE(root_window()->GetProperty(kTestPropertyKey3));
+  root_window()->SetProperty(kTestPropertyKey3, true);
+  EXPECT_TRUE(root_window()->GetProperty(kTestPropertyKey3));
+  window_tree_client()->OnWindowSharedPropertyChanged(
+      server_id(root_window()), kTestPropertyServerKey3,
+      ConvertToPropertyTransportValue(false));
+  ASSERT_TRUE(window_tree()->AckSingleChangeOfType(
+      WindowTreeChangeType::PROPERTY, false));
+  EXPECT_FALSE(root_window()->GetProperty(kTestPropertyKey3));
+}
+
+// Verifies property setting behavior for a gfx::Rect* property.
+TEST_F(WindowTreeClientWmTest, SetRectProperty) {
+  gfx::Rect example(1, 2, 3, 4);
+  ASSERT_EQ(nullptr, root_window()->GetProperty(client::kRestoreBoundsKey));
+  root_window()->SetProperty(client::kRestoreBoundsKey, new gfx::Rect(example));
+  EXPECT_TRUE(root_window()->GetProperty(client::kRestoreBoundsKey));
+  mojo::Array<uint8_t> value = window_tree()->GetLastPropertyValue();
+  ASSERT_FALSE(value.is_null());
+  EXPECT_EQ(example, mojo::ConvertTo<gfx::Rect>(value.PassStorage()));
+  ASSERT_TRUE(window_tree()->AckSingleChangeOfType(
+      WindowTreeChangeType::PROPERTY, true));
+  EXPECT_EQ(example, *root_window()->GetProperty(client::kRestoreBoundsKey));
+
+  root_window()->SetProperty(client::kRestoreBoundsKey, new gfx::Rect());
+  EXPECT_EQ(gfx::Rect(),
+            *root_window()->GetProperty(client::kRestoreBoundsKey));
+  ASSERT_TRUE(window_tree()->AckSingleChangeOfType(
+      WindowTreeChangeType::PROPERTY, false));
+  EXPECT_EQ(example, *root_window()->GetProperty(client::kRestoreBoundsKey));
+}
+
+// Verifies property setting behavior for a std::string* property.
+TEST_F(WindowTreeClientWmTest, SetStringProperty) {
+  std::string example = "123";
+  ASSERT_EQ(nullptr, root_window()->GetProperty(client::kAppIdKey));
+  root_window()->SetProperty(client::kAppIdKey, new std::string(example));
+  EXPECT_TRUE(root_window()->GetProperty(client::kAppIdKey));
+  mojo::Array<uint8_t> value = window_tree()->GetLastPropertyValue();
+  ASSERT_FALSE(value.is_null());
+  EXPECT_EQ(example, mojo::ConvertTo<std::string>(value.PassStorage()));
+  ASSERT_TRUE(window_tree()->AckSingleChangeOfType(
+      WindowTreeChangeType::PROPERTY, true));
+  EXPECT_EQ(example, *root_window()->GetProperty(client::kAppIdKey));
+
+  root_window()->SetProperty(client::kAppIdKey, new std::string());
+  EXPECT_EQ(std::string(), *root_window()->GetProperty(client::kAppIdKey));
+  ASSERT_TRUE(window_tree()->AckSingleChangeOfType(
+      WindowTreeChangeType::PROPERTY, false));
+  EXPECT_EQ(example, *root_window()->GetProperty(client::kAppIdKey));
 }
 
 // Verifies visible is reverted if the server replied that the change failed.
@@ -743,7 +782,7 @@ TEST_F(WindowTreeClientClientTest, NewTopLevelWindowGetsPropertiesFromData) {
 }
 
 TEST_F(WindowTreeClientClientTest, NewWindowGetsAllChangesInFlight) {
-  SetPropertyConverter(base::MakeUnique<TestPropertyConverter>());
+  RegisterTestProperties(GetPropertyConverter());
 
   WindowTreeHostMus window_tree_host(window_tree_client_impl());
   Window* top_level = window_tree_host.window();
@@ -770,10 +809,10 @@ TEST_F(WindowTreeClientClientTest, NewWindowGetsAllChangesInFlight) {
   data->visible = true;
   const uint8_t server_test_property1_value = 3;
   data->properties[kTestPropertyServerKey1] =
-      Uint8ToPropertyTransportValue(server_test_property1_value);
+      ConvertToPropertyTransportValue(server_test_property1_value);
   const uint8_t server_test_property2_value = 4;
   data->properties[kTestPropertyServerKey2] =
-      Uint8ToPropertyTransportValue(server_test_property2_value);
+      ConvertToPropertyTransportValue(server_test_property2_value);
   const int64_t display_id = 1;
   // Get the id of the in flight change for creating the new top_level.
   uint32_t new_window_in_flight_change_id;
@@ -815,7 +854,7 @@ TEST_F(WindowTreeClientClientTest, NewWindowGetsAllChangesInFlight) {
 }
 
 TEST_F(WindowTreeClientClientTest, NewWindowGetsProperties) {
-  SetPropertyConverter(base::MakeUnique<TestPropertyConverter>());
+  RegisterTestProperties(GetPropertyConverter());
   Window window(nullptr);
   const uint8_t explicitly_set_test_property1_value = 29;
   window.SetProperty(kTestPropertyKey1, explicitly_set_test_property1_value);
@@ -826,9 +865,10 @@ TEST_F(WindowTreeClientClientTest, NewWindowGetsProperties) {
   std::map<std::string, std::vector<uint8_t>> properties =
       transport_properties.To<std::map<std::string, std::vector<uint8_t>>>();
   ASSERT_EQ(1u, properties.count(kTestPropertyServerKey1));
-  ASSERT_EQ(1u, properties[kTestPropertyServerKey1].size());
-  EXPECT_EQ(explicitly_set_test_property1_value,
-            properties[kTestPropertyServerKey1][0]);
+  // PropertyConverter uses int64_t values, even for smaller types like uint8_t.
+  ASSERT_EQ(8u, properties[kTestPropertyServerKey1].size());
+  EXPECT_EQ(static_cast<int64_t>(explicitly_set_test_property1_value),
+            mojo::ConvertTo<int64_t>(properties[kTestPropertyServerKey1]));
   ASSERT_EQ(0u, properties.count(kTestPropertyServerKey2));
 }
 
@@ -893,6 +933,37 @@ TEST_F(WindowTreeClientClientTest,
   window_tree_client()->OnTopLevelCreated(change_id, std::move(data),
                                           display_id, true);
   EXPECT_EQ(initial_root_count, window_tree_client_impl()->GetRoots().size());
+}
+
+TEST_F(WindowTreeClientClientTest, NewTopLevelWindowGetsProperties) {
+  RegisterTestProperties(GetPropertyConverter());
+  const uint8_t property_value = 11;
+  std::map<std::string, std::vector<uint8_t>> properties;
+  properties[kTestPropertyServerKey1] =
+      ConvertToPropertyTransportValue(property_value);
+  std::unique_ptr<WindowTreeHostMus> window_tree_host =
+      base::MakeUnique<WindowTreeHostMus>(window_tree_client_impl(),
+                                          &properties);
+  // Verify the property made it to the window.
+  EXPECT_EQ(property_value,
+            window_tree_host->window()->GetProperty(kTestPropertyKey1));
+
+  // Get the id of the in flight change for creating the new top level window.
+  uint32_t change_id;
+  ASSERT_TRUE(window_tree()->GetAndRemoveFirstChangeOfType(
+      WindowTreeChangeType::NEW_TOP_LEVEL, &change_id));
+
+  // Verify the property was sent to the server.
+  mojo::Map<mojo::String, mojo::Array<uint8_t>> transport_properties =
+      window_tree()->GetLastNewWindowProperties();
+  ASSERT_FALSE(transport_properties.is_null());
+  std::map<std::string, std::vector<uint8_t>> properties2 =
+      transport_properties.To<std::map<std::string, std::vector<uint8_t>>>();
+  ASSERT_EQ(1u, properties2.count(kTestPropertyServerKey1));
+  // PropertyConverter uses int64_t values, even for smaller types like uint8_t.
+  ASSERT_EQ(8u, properties2[kTestPropertyServerKey1].size());
+  EXPECT_EQ(static_cast<int64_t>(property_value),
+            mojo::ConvertTo<int64_t>(properties2[kTestPropertyServerKey1]));
 }
 
 // Tests both SetCapture and ReleaseCapture, to ensure that Window is properly
@@ -1154,6 +1225,19 @@ TEST_F(WindowTreeClientWmTest, OnWindowHierarchyChangedWithExistingWindow) {
   ASSERT_EQ(2u, server_window->children().size());
   EXPECT_EQ(window1, server_window->children()[0]);
   EXPECT_EQ(window2, server_window->children()[1]);
+}
+
+// Ensures when WindowTreeClient::OnWindowDeleted() is called nothing is
+// scheduled on the server side.
+TEST_F(WindowTreeClientClientTest, OnWindowDeletedDoesntNotifyServer) {
+  Window window1(nullptr);
+  window1.Init(ui::LAYER_NOT_DRAWN);
+  Window* window2 = new Window(nullptr);
+  window2->Init(ui::LAYER_NOT_DRAWN);
+  window1.AddChild(window2);
+  window_tree()->AckAllChanges();
+  window_tree_client()->OnWindowDeleted(server_id(window2));
+  EXPECT_FALSE(window_tree()->has_change());
 }
 
 }  // namespace aura

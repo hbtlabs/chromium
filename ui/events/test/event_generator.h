@@ -27,13 +27,9 @@ class PointF;
 
 namespace ui {
 class Event;
-class EventProcessor;
 class EventSource;
 class EventTarget;
 class KeyEvent;
-class MouseEvent;
-class ScrollEvent;
-class TouchEvent;
 
 namespace test {
 
@@ -353,6 +349,15 @@ class EventGenerator {
                       const base::TimeDelta& step_delay,
                       const std::vector<gfx::PointF>& offsets,
                       int num_fingers);
+
+  // Generate a TrackPad "rest" event. That is, a user resting fingers on the
+  // trackpad without moving. This may then be followed by a ScrollSequence(),
+  // or a CancelTrackpadRest().
+  void GenerateTrackpadRest();
+
+  // Cancels a previous GenerateTrackpadRest(). That is, a user lifting fingers
+  // from the trackpad without having moved them in any direction.
+  void CancelTrackpadRest();
 
   // Generates a key press event. On platforms except Windows and X11, a key
   // event without native_event() is generated. Note that ui::EF_ flags should

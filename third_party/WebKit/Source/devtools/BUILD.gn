@@ -49,7 +49,6 @@ devtools_common_js_files = [
   "front_end/common/Throttler.js",
   "front_end/common/Trie.js",
   "front_end/common/UIString.js",
-  "front_end/common/WebInspector.js",
   "front_end/common/Worker.js",
 ]
 devtools_components_js_files = [
@@ -162,10 +161,8 @@ devtools_bindings_js_files = [
   "front_end/bindings/CSSWorkspaceBinding.js",
   "front_end/bindings/DebuggerWorkspaceBinding.js",
   "front_end/bindings/DefaultScriptMapping.js",
-  "front_end/bindings/FileSystemWorkspaceBinding.js",
   "front_end/bindings/FileUtils.js",
   "front_end/bindings/LiveLocation.js",
-  "front_end/bindings/NetworkMapping.js",
   "front_end/bindings/NetworkProject.js",
   "front_end/bindings/PresentationConsoleMessageHelper.js",
   "front_end/bindings/ResourceScriptMapping.js",
@@ -175,6 +172,7 @@ devtools_bindings_js_files = [
   "front_end/bindings/TempFile.js",
 ]
 devtools_persistence_js_files = [
+  "front_end/persistence/FileSystemWorkspaceBinding.js",
   "front_end/persistence/DefaultMapping.js",
   "front_end/persistence/Automapping.js",
   "front_end/persistence/Persistence.js",
@@ -744,6 +742,8 @@ devtools_timeline_js_files = [
   "front_end/timeline/TimelineController.js",
   "front_end/timeline/TimelineEventOverview.js",
   "front_end/timeline/TimelineFlameChart.js",
+  "front_end/timeline/TimelineFlameChartView.js",
+  "front_end/timeline/TimelineNetworkFlameChart.js",
   "front_end/timeline/TimelineLayersView.js",
   "front_end/timeline/TimelineLoader.js",
   "front_end/timeline/TimelinePaintProfilerView.js",

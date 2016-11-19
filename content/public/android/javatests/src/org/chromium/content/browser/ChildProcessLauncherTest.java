@@ -336,7 +336,8 @@ public class ChildProcessLauncherTest extends InstrumentationTestCase {
     }
 
     private ChildProcessCreationParams getDefaultChildProcessCreationParams(String packageName) {
-        return new ChildProcessCreationParams(packageName, LibraryProcessType.PROCESS_CHILD);
+        return new ChildProcessCreationParams(packageName, false /* isExternalService */,
+                LibraryProcessType.PROCESS_CHILD);
     }
 
     private void triggerConnectionSetup(ChildProcessConnectionImpl connection) {

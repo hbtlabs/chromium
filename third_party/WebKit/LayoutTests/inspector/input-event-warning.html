@@ -42,7 +42,7 @@ function dispatchEvents()
        target.addEventListener(type, eventListener1);
        target.addEventListener(type, eventListener2);
     }
-    var deadline = performance.now() + 110;
+    var deadline = performance.now() + 100;
     while (performance.now() < deadline) {};
     if (window.testRunner)
         window.testRunner.setDumpConsoleMessages(false);
@@ -62,18 +62,20 @@ function dispatchEvents()
 
 function test()
 {
-    WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.MessageAdded, InspectorTest.safeWrap(onConsoleMessage));
+    SDK.multitargetConsoleModel.addEventListener(SDK.ConsoleModel.Events.MessageAdded, InspectorTest.safeWrap(onConsoleMessage));
     step1();
 
     function step1()
     {
-        InspectorTest.mainTarget.logAgent().setReportViolationsEnabled(false);
+        InspectorTest.mainTarget.logAgent().startViolationsReport([
+            {name: 'blockedEvent', threshold: 30000}]);
         InspectorTest.evaluateInPage("dispatchEvents()", step2);
     }
 
     function step2()
     {
-        InspectorTest.mainTarget.logAgent().setReportViolationsEnabled(true);
+        InspectorTest.mainTarget.logAgent().startViolationsReport([
+            {name: 'blockedEvent', threshold: 0.001}]);
         InspectorTest.addResult("There should be no warnings above this line");
         InspectorTest.evaluateInPage("dispatchEvents()", () => InspectorTest.completeTest());
     }

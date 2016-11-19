@@ -476,7 +476,7 @@ Response InspectorDOMAgent::disable() {
 
 Response InspectorDOMAgent::getDocument(
     Maybe<int> depth,
-    Maybe<bool> traverseFrames,
+    Maybe<bool> pierce,
     std::unique_ptr<protocol::DOM::Node>* root) {
   // Backward compatibility. Mark agent as enabled when it requests document.
   if (!enabled())
@@ -491,15 +491,15 @@ Response InspectorDOMAgent::getDocument(
   if (sanitizedDepth == -1)
     sanitizedDepth = INT_MAX;
 
-  *root = buildObjectForNode(m_document.get(), sanitizedDepth,
-                             traverseFrames.fromMaybe(false),
-                             m_documentNodeToIdMap.get());
+  *root =
+      buildObjectForNode(m_document.get(), sanitizedDepth,
+                         pierce.fromMaybe(false), m_documentNodeToIdMap.get());
   return Response::OK();
 }
 
 void InspectorDOMAgent::pushChildNodesToFrontend(int nodeId,
                                                  int depth,
-                                                 bool traverseFrames) {
+                                                 bool pierce) {
   Node* node = nodeForId(nodeId);
   if (!node || (!node->isElementNode() && !node->isDocumentNode() &&
                 !node->isDocumentFragment()))
@@ -516,14 +516,14 @@ void InspectorDOMAgent::pushChildNodesToFrontend(int nodeId,
     for (node = innerFirstChild(node); node; node = innerNextSibling(node)) {
       int childNodeId = nodeMap->get(node);
       ASSERT(childNodeId);
-      pushChildNodesToFrontend(childNodeId, depth, traverseFrames);
+      pushChildNodesToFrontend(childNodeId, depth, pierce);
     }
 
     return;
   }
 
   std::unique_ptr<protocol::Array<protocol::DOM::Node>> children =
-      buildArrayForContainerChildren(node, depth, traverseFrames, nodeMap);
+      buildArrayForContainerChildren(node, depth, pierce, nodeMap);
   frontend()->setChildNodes(nodeId, std::move(children));
 }
 
@@ -994,9 +994,10 @@ Response InspectorDOMAgent::performSearch(
                equalIgnoringCase(node->nodeName(), tagNameQuery)) ||
               (startTagFound && !endTagFound &&
                node->nodeName().startsWith(tagNameQuery,
-                                           TextCaseInsensitive)) ||
+                                           TextCaseUnicodeInsensitive)) ||
               (!startTagFound && endTagFound &&
-               node->nodeName().endsWith(tagNameQuery, TextCaseInsensitive))) {
+               node->nodeName().endsWith(tagNameQuery,
+                                         TextCaseUnicodeInsensitive))) {
             resultCollector.add(node);
             break;
           }
@@ -1006,12 +1007,13 @@ Response InspectorDOMAgent::performSearch(
           for (auto& attribute : attributes) {
             // Add attribute pair
             if (attribute.localName().find(whitespaceTrimmedQuery, 0,
-                                           TextCaseInsensitive) != kNotFound) {
+                                           TextCaseUnicodeInsensitive) !=
+                kNotFound) {
               resultCollector.add(node);
               break;
             }
-            size_t foundPosition =
-                attribute.value().find(attributeQuery, 0, TextCaseInsensitive);
+            size_t foundPosition = attribute.value().find(
+                attributeQuery, 0, TextCaseUnicodeInsensitive);
             if (foundPosition != kNotFound) {
               if (!exactAttributeMatch ||
                   (!foundPosition &&
@@ -1164,7 +1166,7 @@ Response InspectorDOMAgent::highlightConfigFromInspectorObject(
 
   protocol::DOM::HighlightConfig* config = highlightInspectorObject.fromJust();
   std::unique_ptr<InspectorHighlightConfig> highlightConfig =
-      wrapUnique(new InspectorHighlightConfig());
+      makeUnique<InspectorHighlightConfig>();
   highlightConfig->showInfo = config->getShowInfo(false);
   highlightConfig->showRulers = config->getShowRulers(false);
   highlightConfig->showExtensionLines = config->getShowExtensionLines(false);
@@ -1228,7 +1230,7 @@ Response InspectorDOMAgent::highlightQuad(
     std::unique_ptr<protocol::Array<double>> quadArray,
     Maybe<protocol::DOM::RGBA> color,
     Maybe<protocol::DOM::RGBA> outlineColor) {
-  std::unique_ptr<FloatQuad> quad = wrapUnique(new FloatQuad());
+  std::unique_ptr<FloatQuad> quad = makeUnique<FloatQuad>();
   if (!parseQuad(std::move(quadArray), quad.get()))
     return Response::Error("Invalid Quad format");
   innerHighlightQuad(std::move(quad), std::move(color),
@@ -1241,7 +1243,7 @@ void InspectorDOMAgent::innerHighlightQuad(
     Maybe<protocol::DOM::RGBA> color,
     Maybe<protocol::DOM::RGBA> outlineColor) {
   std::unique_ptr<InspectorHighlightConfig> highlightConfig =
-      wrapUnique(new InspectorHighlightConfig());
+      makeUnique<InspectorHighlightConfig>();
   highlightConfig->content = parseColor(color.fromMaybe(nullptr));
   highlightConfig->contentOutline = parseColor(outlineColor.fromMaybe(nullptr));
   if (m_client)
@@ -1308,7 +1310,7 @@ Response InspectorDOMAgent::highlightFrame(
   // FIXME: Inspector doesn't currently work cross process.
   if (frame && frame->deprecatedLocalOwner()) {
     std::unique_ptr<InspectorHighlightConfig> highlightConfig =
-        wrapUnique(new InspectorHighlightConfig());
+        makeUnique<InspectorHighlightConfig>();
     highlightConfig->showInfo = true;  // Always show tooltips for frames.
     highlightConfig->content = parseColor(color.fromMaybe(nullptr));
     highlightConfig->contentOutline =
@@ -1542,7 +1544,7 @@ static protocol::DOM::ShadowRootType shadowRootType(ShadowRoot* shadowRoot) {
 std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::buildObjectForNode(
     Node* node,
     int depth,
-    bool traverseFrames,
+    bool pierce,
     NodeToIdMap* nodesMap) {
   int id = bind(node, nodesMap);
   String localName;
@@ -1589,8 +1591,8 @@ std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::buildObjectForNode(
                                   : nullptr)
         value->setFrameId(IdentifiersFactory::frameId(frame));
       if (Document* doc = frameOwner->contentDocument()) {
-        value->setContentDocument(buildObjectForNode(
-            doc, traverseFrames ? depth : 0, traverseFrames, nodesMap));
+        value->setContentDocument(
+            buildObjectForNode(doc, pierce ? depth : 0, pierce, nodesMap));
       }
     }
 
@@ -1607,7 +1609,7 @@ std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::buildObjectForNode(
       for (ShadowRoot* root = &shadow->youngestShadowRoot(); root;
            root = root->olderShadowRoot()) {
         shadowRoots->addItem(
-            buildObjectForNode(root, 0, traverseFrames, nodesMap));
+            buildObjectForNode(root, pierce ? depth : 0, pierce, nodesMap));
       }
       value->setShadowRoots(std::move(shadowRoots));
       forcePushChildren = true;
@@ -1617,16 +1619,15 @@ std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::buildObjectForNode(
       HTMLLinkElement& linkElement = toHTMLLinkElement(*element);
       if (linkElement.isImport() && linkElement.import() &&
           innerParentNode(linkElement.import()) == linkElement) {
-        value->setImportedDocument(buildObjectForNode(
-            linkElement.import(), 0, traverseFrames, nodesMap));
+        value->setImportedDocument(
+            buildObjectForNode(linkElement.import(), 0, pierce, nodesMap));
       }
       forcePushChildren = true;
     }
 
     if (isHTMLTemplateElement(*element)) {
-      value->setTemplateContent(
-          buildObjectForNode(toHTMLTemplateElement(*element).content(), 0,
-                             traverseFrames, nodesMap));
+      value->setTemplateContent(buildObjectForNode(
+          toHTMLTemplateElement(*element).content(), 0, pierce, nodesMap));
       forcePushChildren = true;
     }
 
@@ -1681,7 +1682,7 @@ std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::buildObjectForNode(
     if (forcePushChildren && !depth)
       depth = 1;
     std::unique_ptr<protocol::Array<protocol::DOM::Node>> children =
-        buildArrayForContainerChildren(node, depth, traverseFrames, nodesMap);
+        buildArrayForContainerChildren(node, depth, pierce, nodesMap);
     if (children->length() > 0 ||
         depth)  // Push children along with shadow in any case.
       value->setChildren(std::move(children));
@@ -1707,7 +1708,7 @@ InspectorDOMAgent::buildArrayForElementAttributes(Element* element) {
 std::unique_ptr<protocol::Array<protocol::DOM::Node>>
 InspectorDOMAgent::buildArrayForContainerChildren(Node* container,
                                                   int depth,
-                                                  bool traverseFrames,
+                                                  bool pierce,
                                                   NodeToIdMap* nodesMap) {
   std::unique_ptr<protocol::Array<protocol::DOM::Node>> children =
       protocol::Array<protocol::DOM::Node>::create();
@@ -1717,8 +1718,7 @@ InspectorDOMAgent::buildArrayForContainerChildren(Node* container,
     Node* firstChild = container->firstChild();
     if (firstChild && firstChild->getNodeType() == Node::kTextNode &&
         !firstChild->nextSibling()) {
-      children->addItem(
-          buildObjectForNode(firstChild, 0, traverseFrames, nodesMap));
+      children->addItem(buildObjectForNode(firstChild, 0, pierce, nodesMap));
       m_childrenRequested.add(bind(container, nodesMap));
     }
     return children;
@@ -1729,8 +1729,7 @@ InspectorDOMAgent::buildArrayForContainerChildren(Node* container,
   m_childrenRequested.add(bind(container, nodesMap));
 
   while (child) {
-    children->addItem(
-        buildObjectForNode(child, depth, traverseFrames, nodesMap));
+    children->addItem(buildObjectForNode(child, depth, pierce, nodesMap));
     child = innerNextSibling(child);
   }
   return children;
@@ -2208,7 +2207,7 @@ Response InspectorDOMAgent::setInspectedNode(int nodeId) {
   Response response = assertNode(nodeId, node);
   if (!response.isSuccess())
     return response;
-  m_v8Session->addInspectedObject(wrapUnique(new InspectableNode(node)));
+  m_v8Session->addInspectedObject(makeUnique<InspectableNode>(node));
   if (m_client)
     m_client->setInspectedNode(node);
   return Response::OK();

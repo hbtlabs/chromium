@@ -31,8 +31,6 @@ component("ipc") {
     "ipc_channel_reader.cc",
     "ipc_channel_reader.h",
     "ipc_descriptors.h",
-    "ipc_endpoint.cc",
-    "ipc_endpoint.h",
     "ipc_export.h",
     "ipc_listener.h",
     "ipc_logging.cc",
@@ -246,8 +244,6 @@ if (!is_ios) {
       "ipc_test_channel_listener.h",
       "ipc_test_sink.cc",
       "ipc_test_sink.h",
-      "test_util_mac.cc",
-      "test_util_mac.h",
     ]
     public_deps = [
       ":ipc",

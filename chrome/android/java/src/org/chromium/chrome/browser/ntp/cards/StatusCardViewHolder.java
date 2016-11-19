@@ -12,19 +12,24 @@ import android.widget.Button;
 import android.widget.TextView;
 
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ntp.ContextMenuManager;
+import org.chromium.chrome.browser.ntp.ContextMenuManager.ContextMenuItemId;
+import org.chromium.chrome.browser.ntp.ContextMenuManager.Delegate;
+import org.chromium.chrome.browser.ntp.NewTabPageView.NewTabPageManager;
 import org.chromium.chrome.browser.ntp.UiConfig;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsConfig;
 
 /**
  * ViewHolder for Status and Promo cards.
  */
-public class StatusCardViewHolder extends CardViewHolder {
+public class StatusCardViewHolder extends CardViewHolder implements ContextMenuManager.Delegate {
     private final TextView mTitleView;
     private final TextView mBodyView;
     private final Button mActionView;
 
-    public StatusCardViewHolder(NewTabPageRecyclerView parent, UiConfig config) {
-        super(R.layout.new_tab_page_status_card, parent, config);
+    public StatusCardViewHolder(
+            NewTabPageRecyclerView parent, NewTabPageManager newTabPageManager, UiConfig config) {
+        super(R.layout.new_tab_page_status_card, parent, config, newTabPageManager);
         mTitleView = (TextView) itemView.findViewById(R.id.status_title);
         mBodyView = (TextView) itemView.findViewById(R.id.status_body);
         mActionView = (Button) itemView.findViewById(R.id.status_action_button);
@@ -80,6 +85,31 @@ public class StatusCardViewHolder extends CardViewHolder {
         } else {
             mActionView.setVisibility(View.GONE);
         }
+    }
+
+    @Override
+    protected Delegate getContextMenuDelegate() {
+        return this;
+    }
+
+    @Override
+    public void openItem(int windowDisposition) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void removeItem() {
+        getRecyclerView().dismissItemWithAnimation(this);
+    }
+
+    @Override
+    public String getUrl() {
+        return null;
+    }
+
+    @Override
+    public boolean isItemSupported(@ContextMenuItemId int menuItemId) {
+        return menuItemId == ContextMenuManager.ID_REMOVE && isDismissable();
     }
 
     @Override

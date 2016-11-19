@@ -15,6 +15,7 @@
 #include "content/public/common/resource_response.h"
 #include "mojo/public/c/system/data_pipe.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
+#include "net/url_request/redirect_info.h"
 
 namespace content {
 
@@ -28,29 +29,29 @@ class TestURLLoaderClient final : public mojom::URLLoaderClient {
   ~TestURLLoaderClient() override;
 
   void OnReceiveResponse(const ResourceResponseHead& response_head) override;
+  void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
+                         const ResourceResponseHead& response_head) override;
   void OnDataDownloaded(int64_t data_length, int64_t encoded_length) override;
   void OnStartLoadingResponseBody(
       mojo::ScopedDataPipeConsumerHandle body) override;
   void OnComplete(const ResourceRequestCompletionStatus& status) override;
 
   bool has_received_response() const { return has_received_response_; }
+  bool has_received_redirect() const { return has_received_redirect_; }
   bool has_data_downloaded() const { return has_data_downloaded_; }
   bool has_received_completion() const { return has_received_completion_; }
   const ResourceResponseHead& response_head() const { return response_head_; }
+  const net::RedirectInfo& redirect_info() const { return redirect_info_; }
   mojo::DataPipeConsumerHandle response_body() { return response_body_.get(); }
   const ResourceRequestCompletionStatus& completion_status() const {
     return completion_status_;
   }
-  // Creates an AssociatedPtrInfo which is a proxy for |*this| and returns it.
-  // The returned PtrInfo is marked as local, i.e., expected to be bound
-  // locally.
-  mojom::URLLoaderClientAssociatedPtrInfo CreateLocalAssociatedPtrInfo();
-
   int64_t download_data_length() const { return download_data_length_; }
   int64_t encoded_download_data_length() const {
     return encoded_download_data_length_;
   }
 
+  void ClearHasReceivedRedirect();
   // Creates an AssociatedPtrInfo, binds it to |*this| and returns it. The
   // returned PtrInfo is marked as remote, i.e., expected to be passed to the
   // remote endpoint.
@@ -60,6 +61,7 @@ class TestURLLoaderClient final : public mojom::URLLoaderClient {
   void Unbind();
 
   void RunUntilResponseReceived();
+  void RunUntilRedirectReceived();
   void RunUntilDataDownloaded();
   void RunUntilResponseBodyArrived();
   void RunUntilComplete();
@@ -67,12 +69,15 @@ class TestURLLoaderClient final : public mojom::URLLoaderClient {
  private:
   mojo::AssociatedBinding<mojom::URLLoaderClient> binding_;
   ResourceResponseHead response_head_;
+  net::RedirectInfo redirect_info_;
   mojo::ScopedDataPipeConsumerHandle response_body_;
   ResourceRequestCompletionStatus completion_status_;
   bool has_received_response_ = false;
+  bool has_received_redirect_ = false;
   bool has_data_downloaded_ = false;
   bool has_received_completion_ = false;
-  base::Closure quit_closure_for_on_received_response_;
+  base::Closure quit_closure_for_on_receive_response_;
+  base::Closure quit_closure_for_on_receive_redirect_;
   base::Closure quit_closure_for_on_data_downloaded_;
   base::Closure quit_closure_for_on_start_loading_response_body_;
   base::Closure quit_closure_for_on_complete_;

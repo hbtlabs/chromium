@@ -223,6 +223,7 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   UIView* GetView() override;
   BrowserState* GetBrowserState() const override;
   void OpenURL(const WebState::OpenURLParams& params) override;
+  void Stop() override;
   const NavigationManager* GetNavigationManager() const override;
   NavigationManager* GetNavigationManager() override;
   CRWJSInjectionReceiver* GetJSInjectionReceiver() const override;
@@ -276,7 +277,6 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   void CancelDialogs();
 
   // NavigationManagerDelegate:
-  void GoToOffset(int offset) override;
   void GoToIndex(int index) override;
   void LoadURLWithParams(const NavigationManager::WebLoadParams&) override;
   void OnNavigationItemsPruned(size_t pruned_item_count) override;

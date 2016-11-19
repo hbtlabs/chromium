@@ -6,12 +6,12 @@
 
 #include <stddef.h>
 
-#include "ash/common/ash_view_ids.h"
 #include "ash/common/system/chromeos/network/network_icon.h"
 #include "ash/common/system/chromeos/network/network_icon_animation.h"
 #include "ash/common/system/chromeos/network/network_list_delegate.h"
 #include "ash/common/system/tray/system_menu_button.h"
 #include "ash/common/system/tray/tray_constants.h"
+#include "ash/common/system/tray/tray_popup_utils.h"
 #include "base/memory/ptr_util.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager/power_supply_properties.pb.h"
@@ -29,7 +29,6 @@
 #include "ui/gfx/font.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icons_public.h"
-#include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/toggle_button.h"
 #include "ui/views/controls/label.h"
@@ -52,8 +51,6 @@ namespace {
 const int kSectionHeaderRowSize = 48;
 const int kSectionHeaderRowVerticalInset = 4;
 const int kSectionHeaderRowLeftInset = 18;
-const int kSectionHeaderRowRightInset = 14;
-const int kSectionHeaderRowChildSpacing = 14;
 
 bool IsProhibitedByPolicy(const chromeos::NetworkState* network) {
   if (!NetworkTypePattern::WiFi().MatchesType(network->type()))
@@ -85,11 +82,8 @@ bool IsProhibitedByPolicy(const chromeos::NetworkState* network) {
 class NetworkListViewMd::SectionHeaderRowView : public views::View,
                                                 public views::ButtonListener {
  public:
-  SectionHeaderRowView(int title_id, int toggle_accessible_name_id)
-      : title_id_(title_id),
-        toggle_accessible_name_id_(toggle_accessible_name_id),
-        container_(nullptr),
-        toggle_(nullptr) {}
+  explicit SectionHeaderRowView(int title_id)
+      : title_id_(title_id), container_(nullptr), toggle_(nullptr) {}
 
   ~SectionHeaderRowView() override {}
 
@@ -136,17 +130,16 @@ class NetworkListViewMd::SectionHeaderRowView : public views::View,
     // TODO(mohsen): Consider using TriView class and adding a utility function
     // to TrayPopupUtils to simplify creation of the following layout. See
     // https://crbug.com/614453.
-    set_id(VIEW_ID_STICKY_HEADER);
-    set_background(views::Background::CreateSolidBackground(kBackgroundColor));
+    TrayPopupUtils::ConfigureAsStickyHeader(this);
     container_ = new views::View;
-    container_->SetBorder(views::CreateEmptyBorder(
-        0, kSectionHeaderRowLeftInset, 0, kSectionHeaderRowRightInset));
+    container_->SetBorder(
+        views::CreateEmptyBorder(0, kSectionHeaderRowLeftInset, 0, 0));
     views::FillLayout* layout = new views::FillLayout;
     SetLayoutManager(layout);
     AddChildView(container_);
 
-    views::BoxLayout* container_layout = new views::BoxLayout(
-        views::BoxLayout::kHorizontal, 0, 0, kSectionHeaderRowChildSpacing);
+    views::BoxLayout* container_layout =
+        new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 0);
     container_layout->set_cross_axis_alignment(
         views::BoxLayout::CROSS_AXIS_ALIGNMENT_CENTER);
     container_->SetLayoutManager(container_layout);
@@ -165,21 +158,14 @@ class NetworkListViewMd::SectionHeaderRowView : public views::View,
   }
 
   void AddToggleButton(bool enabled) {
-    toggle_ = new views::ToggleButton(this);
-    toggle_->SetAccessibleName(
-        l10n_util::GetStringUTF16(toggle_accessible_name_id_));
+    toggle_ = TrayPopupUtils::CreateToggleButton(this, title_id_);
     toggle_->SetIsOn(enabled, false);
-    // TODO(varkha): Implement focus painter and spoken feedback for toggle. See
-    // https://crbug.com/652677 for context.
-    toggle_->SetFocusForPlatform();
     container_->AddChildView(toggle_);
   }
 
-  // Resource ID for the string to use as the title of the section.
+  // Resource ID for the string to use as the title of the section and for the
+  // accessible text on the section header toggle button.
   const int title_id_;
-
-  // Resource ID for the string to use as the accessible name for the toggle.
-  const int toggle_accessible_name_id_;
 
   // View containing header row views, including title, toggle, and extra
   // buttons.
@@ -196,8 +182,7 @@ namespace {
 class CellularHeaderRowView : public NetworkListViewMd::SectionHeaderRowView {
  public:
   CellularHeaderRowView()
-      : SectionHeaderRowView(IDS_ASH_STATUS_TRAY_NETWORK_CELLULAR,
-                             IDS_ASH_STATUS_TRAY_ENABLE_MOBILE) {}
+      : SectionHeaderRowView(IDS_ASH_STATUS_TRAY_NETWORK_CELLULAR) {}
 
   ~CellularHeaderRowView() override {}
 
@@ -218,8 +203,7 @@ class CellularHeaderRowView : public NetworkListViewMd::SectionHeaderRowView {
 class WifiHeaderRowView : public NetworkListViewMd::SectionHeaderRowView {
  public:
   explicit WifiHeaderRowView(NetworkListDelegate* network_list_delegate)
-      : SectionHeaderRowView(IDS_ASH_STATUS_TRAY_NETWORK_WIFI,
-                             IDS_ASH_STATUS_TRAY_ENABLE_WIFI),
+      : SectionHeaderRowView(IDS_ASH_STATUS_TRAY_NETWORK_WIFI),
         network_list_delegate_(network_list_delegate),
         join_(nullptr) {}
 
@@ -252,7 +236,7 @@ class WifiHeaderRowView : public NetworkListViewMd::SectionHeaderRowView {
     gfx::ImageSkia disabled_image = network_icon::GetImageForNewWifiNetwork(
         SkColorSetA(prominent_color, kDisabledJoinIconAlpha),
         SkColorSetA(prominent_color, kDisabledJoinBadgeAlpha));
-    join_ = new SystemMenuButton(this, SystemMenuButton::InkDropStyle::SQUARE,
+    join_ = new SystemMenuButton(this, TrayPopupInkDropStyle::HOST_CENTERED,
                                  normal_image, disabled_image,
                                  IDS_ASH_STATUS_TRAY_OTHER_WIFI);
     join_->set_ink_drop_base_color(prominent_color);

@@ -30,7 +30,6 @@ namespace cc {
 
 namespace proto {
 class LayerTree;
-class LayerUpdate;
 }  // namespace proto
 
 class ClientPictureCache;
@@ -42,9 +41,6 @@ class LayerTreeImpl;
 class LayerTreeSettings;
 class MutatorHost;
 struct PendingPageScaleAnimation;
-class UIResourceManager;
-class SwapPromiseManager;
-class SurfaceSequenceGenerator;
 
 class CC_EXPORT LayerTree : public MutatorHostClient {
  public:
@@ -75,6 +71,7 @@ class CC_EXPORT LayerTree : public MutatorHostClient {
   }
 
   void RegisterSelection(const LayerSelection& selection);
+  const LayerSelection& selection() const { return inputs_.selection; }
 
   void SetHaveScrollEventHandlers(bool have_event_handlers);
   bool have_scroll_event_handlers() const {
@@ -110,6 +107,9 @@ class CC_EXPORT LayerTree : public MutatorHostClient {
   void set_has_transparent_background(bool transparent) {
     inputs_.has_transparent_background = transparent;
   }
+  bool has_transparent_background() const {
+    return inputs_.has_transparent_background;
+  }
 
   void StartPageScaleAnimation(const gfx::Vector2d& target_offset,
                                bool use_anchor,
@@ -121,6 +121,9 @@ class CC_EXPORT LayerTree : public MutatorHostClient {
   float device_scale_factor() const { return inputs_.device_scale_factor; }
 
   void SetPaintedDeviceScaleFactor(float painted_device_scale_factor);
+  float painted_device_scale_factor() const {
+    return inputs_.painted_device_scale_factor;
+  }
 
   void SetDeviceColorSpace(const gfx::ColorSpace& device_color_space);
   const gfx::ColorSpace& device_color_space() const {
@@ -185,8 +188,7 @@ class CC_EXPORT LayerTree : public MutatorHostClient {
   void PushPropertiesTo(LayerTreeImpl* tree_impl,
                         float unapplied_page_scale_delta);
 
-  void ToProtobuf(proto::LayerTree* proto, bool inputs_only);
-  void FromProtobuf(const proto::LayerTree& proto);
+  void ToProtobuf(proto::LayerTree* proto);
 
   MutatorHost* mutator_host() const { return mutator_host_; }
 
@@ -209,8 +211,6 @@ class CC_EXPORT LayerTree : public MutatorHostClient {
   // ---------------------------------------------------------------------
 
  private:
-  friend class LayerTreeHostSerializationTest;
-
   // MutatorHostClient implementation.
   bool IsElementInList(ElementId element_id,
                        ElementListType list_type) const override;

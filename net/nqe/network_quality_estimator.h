@@ -214,7 +214,8 @@ class NET_EXPORT NetworkQualityEstimator
       const base::TimeTicks& start_time) const;
 
   // Adds |observer| to the list of effective connection type observers. Must be
-  // called on the IO thread.
+  // called on the IO thread. |observer| would be notified of the current
+  // effective connection type in the next message pump.
   void AddEffectiveConnectionTypeObserver(
       EffectiveConnectionTypeObserver* observer);
 
@@ -224,7 +225,8 @@ class NET_EXPORT NetworkQualityEstimator
       EffectiveConnectionTypeObserver* observer);
 
   // Adds |observer| to the list of RTT and throughput estimate observers. Must
-  // be called on the IO thread.
+  // be called on the IO thread. |observer| would be notified of the current RTT
+  // and throughput estimates in the next message pump.
   void AddRTTAndThroughputEstimatesObserver(
       RTTAndThroughputEstimatesObserver* observer);
 
@@ -371,6 +373,8 @@ class NET_EXPORT NetworkQualityEstimator
                            TestExternalEstimateProviderMergeEstimates);
   FRIEND_TEST_ALL_PREFIXES(NetworkQualityEstimatorTest,
                            UnknownEffectiveConnectionType);
+  FRIEND_TEST_ALL_PREFIXES(NetworkQualityEstimatorTest,
+                           TypicalNetworkQualities);
 
   // Value of round trip time observations is in base::TimeDelta.
   typedef nqe::internal::Observation<base::TimeDelta> RttObservation;
@@ -492,6 +496,16 @@ class NET_EXPORT NetworkQualityEstimator
   // Notifies the observers of RTT or throughput estimates computation.
   void NotifyObserversOfRTTOrThroughputComputed() const;
 
+  // Notifies |observer| of the current effective connection type if |observer|
+  // is still registered as an observer.
+  void NotifyEffectiveConnectionTypeObserverIfPresent(
+      EffectiveConnectionTypeObserver* observer) const;
+
+  // Notifies |observer| of the current RTT and throughput if |observer| is
+  // still registered as an observer.
+  void NotifyRTTAndThroughputEstimatesObserverIfPresent(
+      RTTAndThroughputEstimatesObserver* observer) const;
+
   // Records NQE accuracy metrics. |measuring_duration| should belong to the
   // vector returned by AccuracyRecordingIntervals().
   // RecordAccuracyAfterMainFrame should be called |measuring_duration| after a
@@ -612,6 +626,10 @@ class NET_EXPORT NetworkQualityEstimator
   // types behave in general. In future, complex encodings (e.g., curve
   // fitting) may be used.
   nqe::internal::NetworkQuality connection_thresholds_
+      [EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_LAST];
+
+  // Typical network quality for different effective connection types.
+  nqe::internal::NetworkQuality typical_network_quality_
       [EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_LAST];
 
   // Latest time when the headers for a main frame request were received.

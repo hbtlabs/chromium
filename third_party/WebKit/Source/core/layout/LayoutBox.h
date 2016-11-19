@@ -998,7 +998,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   IntSize calculateAutoscrollDirection(const IntPoint& pointInRootFrame) const;
   static LayoutBox* findAutoscrollable(LayoutObject*);
   virtual void stopAutoscroll() {}
-  virtual void middleClickAutoscroll(const IntPoint&);
 
   DISABLE_CFI_PERF bool hasAutoVerticalScrollbar() const {
     return hasOverflowClip() && (style()->overflowY() == OverflowAuto ||
@@ -1304,6 +1303,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   bool hasNonCompositedScrollbars() const final;
 
+  void ensureIsReadyForPaintInvalidation() override;
+
  protected:
   void willBeDestroyed() override;
 
@@ -1481,7 +1482,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   LayoutBoxRareData& ensureRareData() {
     if (!m_rareData)
-      m_rareData = wrapUnique(new LayoutBoxRareData());
+      m_rareData = makeUnique<LayoutBoxRareData>();
     return *m_rareData.get();
   }
 

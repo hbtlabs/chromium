@@ -10,9 +10,11 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/ink_drop_ripple.h"
 #include "ui/views/border.h"
+#include "ui/views/painter.h"
 
 namespace views {
 
@@ -24,11 +26,8 @@ const int kTrackWidth = 28;
 // Margins from edge of track to edge of view.
 const int kTrackVerticalMargin = 5;
 const int kTrackHorizontalMargin = 6;
-// Margin from edge of thumb to closest edge of view. Note that the thumb
-// margins must be sufficiently large to allow space for the shadow.
-const int kThumbHorizontalMargin = 4;
-// Margin from top/bottom edge of thumb to top/bottom edge of view.
-const int kThumbVerticalMargin = 3;
+// Inset from the rounded edge of the thumb to the rounded edge of the track.
+const int kThumbInset = 2;
 
 }  // namespace
 
@@ -49,6 +48,13 @@ class ToggleButton::ThumbView : public InkDropHostView {
   static gfx::Insets GetShadowOutsets() {
     return gfx::Insets(-kShadowBlur)
         .Offset(gfx::Vector2d(kShadowOffsetX, kShadowOffsetY));
+  }
+
+ protected:
+  // views::View:
+  bool CanProcessEventsWithinSubtree() const override {
+    // Make the thumb behave as part of the parent for event handling.
+    return false;
   }
 
  private:
@@ -108,10 +114,9 @@ ToggleButton::ToggleButton(ButtonListener* listener)
       thumb_view_(new ThumbView()) {
   slide_animation_.SetSlideDuration(80 /* ms */);
   slide_animation_.SetTweenType(gfx::Tween::LINEAR);
-  SetBorder(CreateEmptyBorder(
-      gfx::Insets(kTrackVerticalMargin, kTrackHorizontalMargin)));
   AddChildView(thumb_view_);
   SetInkDropMode(InkDropMode::ON);
+  SetFocusForPlatform();
   set_has_ink_drop_action_on_click(true);
 }
 
@@ -136,15 +141,32 @@ void ToggleButton::SetIsOn(bool is_on, bool animate) {
   }
 }
 
+void ToggleButton::SetFocusPainter(std::unique_ptr<Painter> focus_painter) {
+  focus_painter_ = std::move(focus_painter);
+}
+
+gfx::Size ToggleButton::GetPreferredSize() const {
+  gfx::Rect rect(kTrackWidth, kTrackHeight);
+  rect.Inset(gfx::Insets(-kTrackVerticalMargin, -kTrackHorizontalMargin));
+  if (border())
+    rect.Inset(-border()->GetInsets());
+  return rect.size();
+}
+
+gfx::Rect ToggleButton::GetTrackBounds() const {
+  gfx::Rect track_bounds(GetContentsBounds());
+  track_bounds.ClampToCenteredSize(gfx::Size(kTrackWidth, kTrackHeight));
+  return track_bounds;
+}
+
 gfx::Rect ToggleButton::GetThumbBounds() const {
-  gfx::Rect thumb_bounds = GetLocalBounds();
-  thumb_bounds.Inset(gfx::Insets(kThumbVerticalMargin, kThumbHorizontalMargin));
+  gfx::Rect thumb_bounds(GetTrackBounds());
+  thumb_bounds.Inset(gfx::Insets(-kThumbInset));
   thumb_bounds.set_x(thumb_bounds.x() +
                      slide_animation_.GetCurrentValue() *
                          (thumb_bounds.width() - thumb_bounds.height()));
   // The thumb is a circle, so the width should match the height.
   thumb_bounds.set_width(thumb_bounds.height());
-  thumb_bounds.set_x(GetMirroredXForRect(thumb_bounds));
   thumb_bounds.Inset(ThumbView::GetShadowOutsets());
   return thumb_bounds;
 }
@@ -154,20 +176,11 @@ void ToggleButton::UpdateThumb() {
 }
 
 SkColor ToggleButton::GetTrackColor(bool is_on) const {
-  const SkAlpha kOffTrackAlpha = 0x29;
-  const SkAlpha kOnTrackAlpha = kOffTrackAlpha * 2;
+  const SkAlpha kTrackAlpha = 0x66;
   ui::NativeTheme::ColorId color_id =
       is_on ? ui::NativeTheme::kColorId_ProminentButtonColor
             : ui::NativeTheme::kColorId_LabelEnabledColor;
-  return SkColorSetA(GetNativeTheme()->GetSystemColor(color_id),
-                     is_on ? kOnTrackAlpha : kOffTrackAlpha);
-}
-
-gfx::Size ToggleButton::GetPreferredSize() const {
-  gfx::Rect rect(0, 0, kTrackWidth, kTrackHeight);
-  if (border())
-    rect.Inset(-border()->GetInsets());
-  return rect.size();
+  return SkColorSetA(GetNativeTheme()->GetSystemColor(color_id), kTrackAlpha);
 }
 
 const char* ToggleButton::GetClassName() const {
@@ -177,8 +190,9 @@ const char* ToggleButton::GetClassName() const {
 void ToggleButton::OnPaint(gfx::Canvas* canvas) {
   // Paint the toggle track. To look sharp even at fractional scale factors,
   // round up to pixel boundaries.
+  canvas->Save();
   float dsf = canvas->UndoDeviceScaleFactor();
-  gfx::RectF track_rect(GetContentsBounds());
+  gfx::RectF track_rect(GetTrackBounds());
   track_rect.Scale(dsf);
   track_rect = gfx::RectF(gfx::ToEnclosingRect(track_rect));
   SkPaint track_paint;
@@ -188,11 +202,21 @@ void ToggleButton::OnPaint(gfx::Canvas* canvas) {
       GetTrackColor(true), GetTrackColor(false),
       static_cast<SkAlpha>(SK_AlphaOPAQUE * color_ratio)));
   canvas->DrawRoundRect(track_rect, track_rect.height() / 2, track_paint);
+  canvas->Restore();
+
+  Painter::PaintFocusPainter(this, canvas, focus_painter_.get());
 }
 
-void ToggleButton::NotifyClick(const ui::Event& event) {
-  SetIsOn(!is_on(), true);
-  CustomButton::NotifyClick(event);
+void ToggleButton::OnFocus() {
+  CustomButton::OnFocus();
+  if (focus_painter_)
+    SchedulePaint();
+}
+
+void ToggleButton::OnBlur() {
+  CustomButton::OnBlur();
+  if (focus_painter_)
+    SchedulePaint();
 }
 
 void ToggleButton::OnBoundsChanged(const gfx::Rect& previous_bounds) {
@@ -209,6 +233,11 @@ void ToggleButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ui::AX_ROLE_SWITCH;
   if (is_on_)
     node_data->AddStateFlag(ui::AX_STATE_CHECKED);
+}
+
+void ToggleButton::NotifyClick(const ui::Event& event) {
+  SetIsOn(!is_on(), true);
+  CustomButton::NotifyClick(event);
 }
 
 void ToggleButton::AddInkDropLayer(ui::Layer* ink_drop_layer) {

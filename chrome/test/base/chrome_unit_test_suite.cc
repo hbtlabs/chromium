@@ -19,6 +19,8 @@
 #include "components/component_updater/component_updater_paths.h"
 #include "components/update_client/update_query_params.h"
 #include "content/public/common/content_paths.h"
+#include "extensions/features/features.h"
+#include "gpu/ipc/service/image_transport_surface.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/resource/resource_handle.h"
@@ -29,7 +31,7 @@
 #include "chromeos/chromeos_paths.h"
 #endif
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/common/extensions/chrome_extensions_client.h"
 #include "extensions/common/extension_paths.h"
 #endif
@@ -134,7 +136,7 @@ void ChromeUnitTestSuite::InitializeProviders() {
   chromeos::RegisterPathProvider();
 #endif
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::RegisterPathProvider();
 
   extensions::ExtensionsClient::Set(
@@ -145,6 +147,10 @@ void ChromeUnitTestSuite::InitializeProviders() {
       ChromeWebUIControllerFactory::GetInstance());
 
   gl::GLSurfaceTestSupport::InitializeOneOff();
+
+#if defined(OS_MACOSX)
+  gpu::ImageTransportSurface::SetAllowOSMesaForTesting(true);
+#endif
 
   update_client::UpdateQueryParams::SetDelegate(
       ChromeUpdateQueryParamsDelegate::GetInstance());

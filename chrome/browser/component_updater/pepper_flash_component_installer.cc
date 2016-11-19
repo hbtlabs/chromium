@@ -26,6 +26,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/version.h"
 #include "build/build_config.h"
+#include "chrome/browser/component_updater/component_installer_errors.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_content_client.h"
@@ -44,6 +45,7 @@
 #include "ppapi/shared_impl/ppapi_permissions.h"
 
 #if defined(OS_CHROMEOS)
+#include "base/feature_list.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/image_loader_client.h"
@@ -225,8 +227,7 @@ FlashComponentInstallerTraits::OnCustomInstall(
     const base::FilePath& install_dir) {
   std::string version;
   if (!manifest.GetString("version", &version)) {
-    return update_client::CrxInstaller::Result(
-        update_client::InstallError::GENERIC_ERROR);
+    return ToInstallerResult(FlashError::MISSING_VERSION_IN_MANIFEST);
   }
 
 #if defined(OS_CHROMEOS)
@@ -240,8 +241,7 @@ FlashComponentInstallerTraits::OnCustomInstall(
   // locate and preload the latest version of flash.
   if (!component_flash_hint_file::RecordFlashUpdate(flash_path, flash_path,
                                                     version)) {
-    return update_client::CrxInstaller::Result(
-        update_client::InstallError::GENERIC_ERROR);
+    return ToInstallerResult(FlashError::HINT_FILE_RECORD_ERROR);
   }
 #endif  // defined(OS_LINUX)
   return update_client::CrxInstaller::Result(update_client::InstallError::NONE);
@@ -305,6 +305,14 @@ void RegisterPepperFlashComponent(ComponentUpdateService* cus) {
   base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
   if (cmd_line->HasSwitch(switches::kDisableBundledPpapiFlash))
     return;
+
+#if defined(OS_CHROMEOS)
+   const base::Feature kCrosCompUpdates {
+     "CrosCompUpdates", base::FEATURE_DISABLED_BY_DEFAULT
+   };
+   if (!base::FeatureList::IsEnabled(kCrosCompUpdates))
+     return;
+#endif  // defined(OS_CHROMEOS)
 
   std::unique_ptr<ComponentInstallerTraits> traits(
       new FlashComponentInstallerTraits);

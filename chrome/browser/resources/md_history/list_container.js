@@ -136,6 +136,9 @@ Polymer({
     if (this.queryState.searchTerm != '')
       browserService.recordAction('SearchResultRemove');
     this.$.dialog.get().showModal();
+
+    // TODO(dbeam): remove focus flicker caused by showModal() + focus().
+    this.$$('.action-button').focus();
   },
 
   /**
@@ -276,4 +279,9 @@ Polymer({
    * @private
    */
   getSelectedList_: function() { return this.$.content.selectedItem; },
+
+  /** @private */
+  canDeleteHistory_: function() {
+    return loadTimeData.getBoolean('allowDeletingHistory');
+  }
 });

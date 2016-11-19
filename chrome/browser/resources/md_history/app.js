@@ -107,13 +107,28 @@ Polymer({
     'unselect-all': 'unselectAll',
   },
 
+  /** @private {?function(!Event)} */
+  boundOnCanExecute_: null,
+
+  /** @private {?function(!Event)} */
+  boundOnCommand_: null,
+
   /** @override */
-  ready: function() {
+  attached: function() {
     this.grouped_ = loadTimeData.getBoolean('groupByDomain');
 
     cr.ui.decorate('command', cr.ui.Command);
-    document.addEventListener('canExecute', this.onCanExecute_.bind(this));
-    document.addEventListener('command', this.onCommand_.bind(this));
+    this.boundOnCanExecute_ = this.onCanExecute_.bind(this);
+    this.boundOnCommand_ = this.onCommand_.bind(this);
+
+    document.addEventListener('canExecute', this.boundOnCanExecute_);
+    document.addEventListener('command', this.boundOnCommand_);
+  },
+
+  /** @override */
+  detached: function() {
+    document.removeEventListener('canExecute', this.boundOnCanExecute_);
+    document.removeEventListener('command', this.boundOnCommand_);
   },
 
   onFirstRender: function() {
@@ -132,7 +147,11 @@ Polymer({
     }
 
     // Lazily load the remainder of the UI.
-    md_history.ensureLazyLoaded();
+    md_history.ensureLazyLoaded().then(function() {
+      window.requestIdleCallback(function() {
+        document.fonts.load('bold 12px Roboto');
+      });
+    });
   },
 
   /** Overridden from IronScrollTargetBehavior */

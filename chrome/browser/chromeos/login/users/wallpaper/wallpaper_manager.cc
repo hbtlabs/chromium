@@ -182,7 +182,7 @@ void SetWallpaper(const gfx::ImageSkia& image,
       return;
 
     ash::mojom::WallpaperControllerPtr wallpaper_controller;
-    connector->ConnectToInterface("service:ash", &wallpaper_controller);
+    connector->ConnectToInterface("ash", &wallpaper_controller);
     // TODO(crbug.com/655875): Optimize ash wallpaper transport; avoid sending
     // large bitmaps over Mojo; use shared memory like BitmapUploader, etc.
     wallpaper_controller->SetWallpaper(*image.bitmap(), layout);
@@ -401,7 +401,7 @@ void WallpaperManager::EnsureLoggedInUserWallpaperLoaded() {
       return;
   }
   SetUserWallpaperNow(
-      user_manager::UserManager::Get()->GetLoggedInUser()->GetAccountId());
+      user_manager::UserManager::Get()->GetActiveUser()->GetAccountId());
 }
 
 void WallpaperManager::InitializeWallpaper() {
@@ -443,7 +443,7 @@ void WallpaperManager::InitializeWallpaper() {
       InitializeRegisteredDeviceWallpaper();
     return;
   }
-  SetUserWallpaperDelayed(user_manager->GetLoggedInUser()->GetAccountId());
+  SetUserWallpaperDelayed(user_manager->GetActiveUser()->GetAccountId());
 }
 
 void WallpaperManager::Open() {
@@ -696,8 +696,10 @@ void WallpaperManager::ScheduleSetUserWallpaper(const AccountId& account_id,
       user_manager::UserManager::Get()->FindUser(account_id);
 
   // User is unknown or there is no visible wallpaper in kiosk mode.
-  if (!user || user->GetType() == user_manager::USER_TYPE_KIOSK_APP)
+  if (!user || user->GetType() == user_manager::USER_TYPE_KIOSK_APP ||
+      user->GetType() == user_manager::USER_TYPE_ARC_KIOSK_APP) {
     return;
+  }
 
   // Guest user or regular user in ephemeral mode.
   if ((user_manager::UserManager::Get()->IsUserNonCryptohomeDataEphemeral(

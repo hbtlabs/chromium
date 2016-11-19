@@ -108,10 +108,8 @@ void DirectCompositorFrameSink::SubmitCompositorFrame(CompositorFrame frame) {
 }
 
 void DirectCompositorFrameSink::ForceReclaimResources() {
-  if (delegated_local_frame_id_.is_valid()) {
-    factory_.SubmitCompositorFrame(delegated_local_frame_id_, CompositorFrame(),
-                                   SurfaceFactory::DrawCallback());
-  }
+  if (delegated_local_frame_id_.is_valid())
+    factory_.ClearSurface(delegated_local_frame_id_);
 }
 
 void DirectCompositorFrameSink::ReturnResources(

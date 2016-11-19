@@ -400,7 +400,8 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
         setUpResources(webViewPackageName, context);
         initPlatSupportLibrary();
         initNetworkChangeNotifier(context);
-        AwBrowserProcess.configureChildProcessLauncher(webViewPackageName);
+        final boolean isExternalService = true;
+        AwBrowserProcess.configureChildProcessLauncher(webViewPackageName, isExternalService);
         AwBrowserProcess.start();
 
         if (isBuildDebuggable()) {

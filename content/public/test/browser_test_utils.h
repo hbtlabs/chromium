@@ -26,7 +26,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/page_type.h"
 #include "ipc/message_filter.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_tree_update.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -270,6 +270,9 @@ void FetchHistogramsFromChildProcesses();
 // prescribed by https://tools.ietf.org/html/rfc7231#section-6.4.7) a test might
 // want to use HTTP 307 response instead.  This can be accomplished by replacing
 // "/cross-site/" URL substring above with "/cross-site-307/".
+//
+// |embedded_test_server| should not be running when passing it to this function
+// because adding the request handler won't be thread safe.
 void SetupCrossSiteRedirector(net::EmbeddedTestServer* embedded_test_server);
 
 // Waits for an interstitial page to attach to given web contents.
@@ -690,11 +693,11 @@ class ConsoleObserverDelegate : public WebContentsDelegate {
   ~ConsoleObserverDelegate() override;
 
   // WebContentsDelegate method:
-  bool AddMessageToConsole(WebContents* source,
-                           int32_t level,
-                           const base::string16& message,
-                           int32_t line_no,
-                           const base::string16& source_id) override;
+  bool DidAddMessageToConsole(WebContents* source,
+                              int32_t level,
+                              const base::string16& message,
+                              int32_t line_no,
+                              const base::string16& source_id) override;
 
   // Returns the most recent message sent to the console.
   std::string message() { return message_; }

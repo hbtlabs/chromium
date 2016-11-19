@@ -31,6 +31,7 @@
 #include "content/renderer/gpu/render_widget_compositor.h"
 #include "content/renderer/history_entry.h"
 #include "content/renderer/history_serialization.h"
+#include "content/renderer/input/render_widget_input_handler_delegate.h"
 #include "content/renderer/layout_test_dependencies.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
@@ -88,6 +89,7 @@ using WebViewTestProxyType =
                                   const mojom::CreateViewParams&>;
 using WebWidgetTestProxyType =
     test_runner::WebWidgetTestProxy<RenderWidget,
+                                    int32_t,
                                     CompositorDependencies*,
                                     blink::WebPopupType,
                                     const ScreenInfo&,
@@ -108,15 +110,16 @@ RenderViewImpl* CreateWebViewTestProxy(CompositorDependencies* compositor_deps,
   return render_view_proxy;
 }
 
-RenderWidget* CreateWebWidgetTestProxy(CompositorDependencies* compositor_deps,
+RenderWidget* CreateWebWidgetTestProxy(int32_t routing_id,
+                                       CompositorDependencies* compositor_deps,
                                        blink::WebPopupType popup_type,
                                        const ScreenInfo& screen_info,
                                        bool swapped_out,
                                        bool hidden,
                                        bool never_visible) {
-  WebWidgetTestProxyType* render_widget_proxy =
-      new WebWidgetTestProxyType(compositor_deps, popup_type, screen_info,
-                                 swapped_out, hidden, never_visible);
+  WebWidgetTestProxyType* render_widget_proxy = new WebWidgetTestProxyType(
+      routing_id, compositor_deps, popup_type, screen_info, swapped_out, hidden,
+      never_visible);
   return render_widget_proxy;
 }
 
@@ -1127,6 +1130,14 @@ void SchedulerRunIdleTasks(const base::Closure& callback) {
   blink::scheduler::RendererScheduler* scheduler =
       content::RenderThreadImpl::current()->GetRendererScheduler();
   blink::scheduler::RunIdleTasksForTesting(scheduler, callback);
+}
+
+void ForceTextInputStateUpdateForRenderFrame(RenderFrame* frame) {
+  if (auto* render_widget =
+          static_cast<RenderFrameImpl*>(frame)->GetRenderWidget()) {
+    render_widget->UpdateTextInputState(ShowIme::IF_NEEDED,
+                                        ChangeSource::FROM_NON_IME);
+  }
 }
 
 }  // namespace content

@@ -64,8 +64,8 @@ bool PrintingHandler::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(PrintingHandler, message)
 #if defined(OS_WIN)
-    IPC_MESSAGE_HANDLER(ChromeUtilityMsg_RenderPDFPagesToMetafiles,
-                        OnRenderPDFPagesToMetafile)
+    IPC_MESSAGE_HANDLER(ChromeUtilityMsg_RenderPDFPagesToMetafiles_Start,
+                        OnRenderPDFPagesToMetafileStart)
     IPC_MESSAGE_HANDLER(ChromeUtilityMsg_RenderPDFPagesToMetafiles_GetPage,
                         OnRenderPDFPagesToMetafileGetPage)
     IPC_MESSAGE_HANDLER(ChromeUtilityMsg_RenderPDFPagesToMetafiles_Stop,
@@ -85,7 +85,7 @@ bool PrintingHandler::OnMessageReceived(const IPC::Message& message) {
 }
 
 #if defined(OS_WIN)
-void PrintingHandler::OnRenderPDFPagesToMetafile(
+void PrintingHandler::OnRenderPDFPagesToMetafileStart(
     IPC::PlatformFileForTransit pdf_transit,
     const PdfRenderSettings& settings,
     bool print_text_with_gdi) {
@@ -109,6 +109,8 @@ void PrintingHandler::OnRenderPDFPagesToMetafileGetPage(
 }
 
 void PrintingHandler::OnRenderPDFPagesToMetafileStop() {
+  chrome_pdf::ReleasePDFHandle(pdf_handle_);
+  pdf_handle_ = nullptr;
   ReleaseProcessIfNeeded();
 }
 
@@ -134,6 +136,8 @@ void PrintingHandler::OnRenderPDFPagesToPWGRaster(
 
 #if defined(OS_WIN)
 int PrintingHandler::LoadPDF(base::File pdf_file) {
+  DCHECK(!pdf_handle_);
+
   int64_t length64 = pdf_file.GetLength();
   if (length64 <= 0 || length64 > std::numeric_limits<int>::max())
     return 0;
@@ -145,7 +149,7 @@ int PrintingHandler::LoadPDF(base::File pdf_file) {
 
   int total_page_count = 0;
   if (!chrome_pdf::GetPDFDocInfo(&pdf_data_.front(), pdf_data_.size(),
-                                 &total_page_count, nullptr)) {
+                                 &total_page_count, nullptr, &pdf_handle_)) {
     return 0;
   }
   return total_page_count;
@@ -164,38 +168,28 @@ bool PrintingHandler::RenderPdfPageToMetafile(int page_number,
   // original coordinates and we'll be able to print in full resolution.
   // Before playback we'll need to counter the scaling up that will happen
   // in the service (print_system_win.cc).
-  *scale_factor =
-      gfx::CalculatePageScale(metafile.context(),
-                              pdf_rendering_settings_.area().right(),
-                              pdf_rendering_settings_.area().bottom());
+  *scale_factor = gfx::CalculatePageScale(
+      metafile.context(), pdf_rendering_settings_.area.right(),
+      pdf_rendering_settings_.area.bottom());
   gfx::ScaleDC(metafile.context(), *scale_factor);
 
   // The underlying metafile is of type Emf and ignores the arguments passed
   // to StartPage.
   metafile.StartPage(gfx::Size(), gfx::Rect(), 1);
   if (!chrome_pdf::RenderPDFPageToDC(
-          &pdf_data_.front(),
-          pdf_data_.size(),
-          page_number,
-          metafile.context(),
-          pdf_rendering_settings_.dpi(),
-          pdf_rendering_settings_.area().x(),
-          pdf_rendering_settings_.area().y(),
-          pdf_rendering_settings_.area().width(),
-          pdf_rendering_settings_.area().height(),
-          true,
-          false,
-          true,
-          true,
-          pdf_rendering_settings_.autorotate())) {
+          pdf_handle_, page_number, metafile.context(),
+          pdf_rendering_settings_.dpi, pdf_rendering_settings_.area.x(),
+          pdf_rendering_settings_.area.y(),
+          pdf_rendering_settings_.area.width(),
+          pdf_rendering_settings_.area.height(), true, false, true, true,
+          pdf_rendering_settings_.autorotate)) {
     return false;
   }
   metafile.FinishPage();
   metafile.FinishDocument();
   return metafile.SaveTo(&output_file);
 }
-
-#endif  // OS_WIN
+#endif  // defined(OS_WIN)
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 bool PrintingHandler::RenderPDFPagesToPWGRaster(
@@ -203,7 +197,6 @@ bool PrintingHandler::RenderPDFPagesToPWGRaster(
     const PdfRenderSettings& settings,
     const PwgRasterSettings& bitmap_settings,
     base::File bitmap_file) {
-  bool autoupdate = true;
   base::File::Info info;
   if (!pdf_file.GetInfo(&info) || info.size <= 0 ||
       info.size > std::numeric_limits<int>::max())
@@ -215,8 +208,9 @@ bool PrintingHandler::RenderPDFPagesToPWGRaster(
     return false;
 
   int total_page_count = 0;
+  void* pdf_handle = nullptr;
   if (!chrome_pdf::GetPDFDocInfo(data.data(), data_size, &total_page_count,
-                                 nullptr)) {
+                                 nullptr, &pdf_handle)) {
     return false;
   }
 
@@ -225,11 +219,14 @@ bool PrintingHandler::RenderPDFPagesToPWGRaster(
   encoder.EncodeDocumentHeader(&pwg_header);
   int bytes_written = bitmap_file.WriteAtCurrentPos(pwg_header.data(),
                                                     pwg_header.size());
-  if (bytes_written != static_cast<int>(pwg_header.size()))
+  if (bytes_written != static_cast<int>(pwg_header.size())) {
+    chrome_pdf::ReleasePDFHandle(pdf_handle);
     return false;
+  }
 
-  cloud_print::BitmapImage image(settings.area().size(),
+  cloud_print::BitmapImage image(settings.area.size(),
                                  cloud_print::BitmapImage::BGRA);
+  bool ret = true;
   for (int i = 0; i < total_page_count; ++i) {
     int page_number = i;
 
@@ -237,19 +234,14 @@ bool PrintingHandler::RenderPDFPagesToPWGRaster(
       page_number = total_page_count - 1 - page_number;
     }
 
-    if (!chrome_pdf::RenderPDFPageToBitmap(data.data(),
-                                           data_size,
-                                           page_number,
-                                           image.pixel_data(),
-                                           image.size().width(),
-                                           image.size().height(),
-                                           settings.dpi(),
-                                           autoupdate)) {
+    if (!chrome_pdf::RenderPDFPageToBitmap(
+            pdf_handle, page_number, image.pixel_data(), image.size().width(),
+            image.size().height(), settings.dpi, settings.autorotate)) {
       return false;
     }
 
     cloud_print::PwgHeaderInfo header_info;
-    header_info.dpi = settings.dpi();
+    header_info.dpi = settings.dpi;
     header_info.total_pages = total_page_count;
 
     // Transform odd pages.
@@ -276,14 +268,19 @@ bool PrintingHandler::RenderPDFPagesToPWGRaster(
     }
 
     std::string pwg_page;
-    if (!encoder.EncodePage(image, header_info, &pwg_page))
-      return false;
+    if (!encoder.EncodePage(image, header_info, &pwg_page)) {
+      ret = false;
+      break;
+    }
     bytes_written = bitmap_file.WriteAtCurrentPos(pwg_page.data(),
                                                   pwg_page.size());
-    if (bytes_written != static_cast<int>(pwg_page.size()))
-      return false;
+    if (bytes_written != static_cast<int>(pwg_page.size())) {
+      ret = false;
+      break;
+    }
   }
-  return true;
+  chrome_pdf::ReleasePDFHandle(pdf_handle);
+  return ret;
 }
 
 void PrintingHandler::OnGetPrinterCapsAndDefaults(

@@ -23,6 +23,7 @@
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/tracing/public/cpp/provider.h"
 #include "services/ui/public/cpp/property_type_converters.h"
+#include "services/ui/public/interfaces/constants.mojom.h"
 #include "services/ui/public/interfaces/user_access_manager.mojom.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "ui/views/background.h"
@@ -115,7 +116,7 @@ class UI : public views::WidgetDelegateView,
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
   void StartWindowManager(const service_manager::Identity& identity) {
-    mash_wm_connection_ = connector_->Connect("service:ash");
+    mash_wm_connection_ = connector_->Connect("ash");
     mash_wm_connection_->SetConnectionLostClosure(
         base::Bind(&UI::StartWindowManager, base::Unretained(this), identity));
     window_manager_connection_ =
@@ -144,22 +145,22 @@ class Login : public service_manager::Service,
   void LoginAs(const std::string& user_id) {
     user_access_manager_->SetActiveUser(user_id);
     mash::init::mojom::InitPtr init;
-    context_->connector()->ConnectToInterface("service:mash_init", &init);
-    init->StartService("service:mash_session", user_id);
+    context()->connector()->ConnectToInterface("mash_init", &init);
+    init->StartService("mash_session", user_id);
   }
 
  private:
   // service_manager::Service:
-  void OnStart(service_manager::ServiceContext* context) override {
-    context_ = context;
-    tracing_.Initialize(context->connector(), context->identity().name());
+  void OnStart() override {
+    tracing_.Initialize(context()->connector(), context()->identity().name());
 
     aura_init_ = base::MakeUnique<views::AuraInit>(
-        context->connector(), context->identity(), "views_mus_resources.pak");
+        context()->connector(), context()->identity(),
+        "views_mus_resources.pak");
 
-    context->connector()->ConnectToInterface(
-        "service:ui", &user_access_manager_);
-    user_access_manager_->SetActiveUser(context->identity().user_id());
+    context()->connector()->ConnectToInterface(ui::mojom::kServiceName,
+                                               &user_access_manager_);
+    user_access_manager_->SetActiveUser(context()->identity().user_id());
   }
 
   bool OnConnect(const service_manager::ServiceInfo& remote_info,
@@ -176,15 +177,13 @@ class Login : public service_manager::Service,
 
   // mojom::Login:
   void ShowLoginUI() override {
-    UI::Show(context_->connector(), context_->identity(), this);
+    UI::Show(context()->connector(), context()->identity(), this);
   }
   void SwitchUser() override {
-    UI::Show(context_->connector(), context_->identity(), this);
+    UI::Show(context()->connector(), context()->identity(), this);
   }
 
   void StartWindowManager();
-
-  service_manager::ServiceContext* context_ = nullptr;
 
   tracing::Provider tracing_;
   std::unique_ptr<views::AuraInit> aura_init_;

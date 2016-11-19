@@ -292,6 +292,9 @@ class PLATFORM_EXPORT ImageDecoder {
   // ImageFrame::m_requiredPreviousFrameIndex.
   size_t findRequiredPreviousFrame(size_t frameIndex, bool frameRectIsOpaque);
 
+  // This is called by clearCacheExceptFrame() if that method decides it wants
+  // to preserve another frame, to avoid unnecessary redecoding.
+  size_t clearCacheExceptTwoFrames(size_t, size_t);
   virtual void clearFrameBuffer(size_t frameIndex);
 
   // Decodes the image sufficiently to determine the image size.
@@ -301,12 +304,31 @@ class PLATFORM_EXPORT ImageDecoder {
   // returns that number.
   virtual size_t decodeFrameCount() { return 1; }
 
+  // Called to initialize the frame buffer with the given index, based on the
+  // provided and previous frame's characteristics. Returns true on success. On
+  // failure, this will mark the image as failed. Before calling this method,
+  // the caller must verify that the frame exists.
+  bool initFrameBuffer(size_t);
+
   // Performs any additional setup of the requested frame after it has been
   // initially created, e.g. setting a duration or disposal method.
   virtual void initializeNewFrame(size_t) {}
 
   // Decodes the requested frame.
   virtual void decode(size_t) = 0;
+
+  // This method is only required for animated images. It returns a vector with
+  // all frame indices that need to be decoded in order to succesfully decode
+  // the provided frame.  The indices are returned in reverse order, so the
+  // last frame needs to be decoded first.  Before calling this method, the
+  // caller must verify that the frame exists.
+  Vector<size_t> findFramesToDecode(size_t) const;
+
+  // This is called by decode() after decoding a frame in an animated image.
+  // Before calling this method, the caller must verify that the frame exists.
+  // @return true  if the frame was fully decoded,
+  //         false otherwise.
+  bool postDecodeProcessing(size_t);
 
   RefPtr<SegmentReader> m_data;  // The encoded data.
   Vector<ImageFrame, 1> m_frameBufferCache;
@@ -326,7 +348,6 @@ class PLATFORM_EXPORT ImageDecoder {
   // If that happens, m_purgeAggressively is set to true. This signals
   // future decodes to purge old frames as it goes.
   void updateAggressivePurging(size_t index);
-  bool m_purgeAggressively;
 
  private:
   enum class SniffResult { JPEG, PNG, GIF, WEBP, ICO, BMP, Invalid };
@@ -341,10 +362,21 @@ class PLATFORM_EXPORT ImageDecoder {
     return total_size > ((1 << 29) - 1);
   }
 
+  bool m_purgeAggressively;
+
+  // This methods gets called at the end of initFrameBuffer. Subclasses can do
+  // format specific initialization, for e.g. alpha settings, here.
+  virtual void onInitFrameBuffer(size_t){};
+
+  // Called by initFrameBuffer to determine if it can take the bitmap of the
+  // previous frame. This condition is different for GIF and WEBP.
+  virtual bool canReusePreviousFrameBuffer(size_t) const { return false; }
+
   IntSize m_size;
   bool m_sizeAvailable = false;
   bool m_isAllDataReceived = false;
   bool m_failed = false;
+  bool m_hasHistogrammedColorSpace = false;
 
   sk_sp<SkColorSpace> m_embeddedColorSpace = nullptr;
   std::unique_ptr<SkColorSpaceXform> m_sourceToOutputDeviceColorTransform;

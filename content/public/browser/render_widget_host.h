@@ -15,7 +15,8 @@
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_sender.h"
 #include "third_party/WebKit/public/platform/WebDragOperation.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebGestureEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/gfx/geometry/size.h"
@@ -259,6 +260,43 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
 
   // Sends a compositor proto to the render widget.
   virtual void HandleCompositorProto(const std::vector<uint8_t>& proto) = 0;
+
+  // Drag-and-drop drop target messages that get sent to Blink.
+  virtual void DragTargetDragEnter(
+      const DropData& drop_data,
+      const gfx::Point& client_pt,
+      const gfx::Point& screen_pt,
+      blink::WebDragOperationsMask operations_allowed,
+      int key_modifiers) {}
+  virtual void DragTargetDragEnterWithMetaData(
+      const std::vector<DropData::Metadata>& metadata,
+      const gfx::Point& client_pt,
+      const gfx::Point& screen_pt,
+      blink::WebDragOperationsMask operations_allowed,
+      int key_modifiers) {};
+  virtual void DragTargetDragOver(
+      const gfx::Point& client_pt,
+      const gfx::Point& screen_pt,
+      blink::WebDragOperationsMask operations_allowed,
+      int key_modifiers) {}
+  virtual void DragTargetDragLeave() {}
+  virtual void DragTargetDrop(const DropData& drop_data,
+                              const gfx::Point& client_pt,
+                              const gfx::Point& screen_pt,
+                              int key_modifiers) {}
+
+  // Notifies the renderer that a drag operation that it started has ended,
+  // either in a drop or by being cancelled.
+  virtual void DragSourceEndedAt(const gfx::Point& client_pt,
+                                 const gfx::Point& screen_pt,
+                                 blink::WebDragOperation operation) {};
+
+  // Notifies the renderer that we're done with the drag and drop operation.
+  // This allows the renderer to reset some state.
+  virtual void DragSourceSystemDragEnded() {};
+
+  // Filters drop data before it is passed to RenderWidgetHost.
+  virtual void FilterDropData(DropData* drop_data) {}
 };
 
 }  // namespace content

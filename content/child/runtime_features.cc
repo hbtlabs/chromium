@@ -41,6 +41,7 @@ static void SetRuntimeFeatureDefaultsForPlatform() {
   WebRuntimeFeatures::enableNotificationConstructor(false);
   // Android does not yet support switching of audio output devices
   WebRuntimeFeatures::enableAudioOutputDevices(false);
+  WebRuntimeFeatures::enableAutoplayMutedVideos(true);
 #else
   WebRuntimeFeatures::enableNavigatorContentUtils(true);
 #endif  // defined(OS_ANDROID)
@@ -88,6 +89,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
     // Chrome's Push Messaging implementation relies on Web Notifications.
     WebRuntimeFeatures::enablePushMessaging(false);
   }
+
+  if (!base::FeatureList::IsEnabled(features::kNotificationContentImage))
+    WebRuntimeFeatures::enableNotificationContentImage(false);
 
   // For the time being, enable wasm serialization when wasm is enabled,
   // since the whole wasm space is experimental. We have the flexibility
@@ -260,8 +264,8 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (base::FeatureList::IsEnabled(features::kPointerEventV1SpecCapturing))
     WebRuntimeFeatures::enablePointerEventV1SpecCapturing(true);
 
-  if (base::FeatureList::IsEnabled(features::kPassiveDocumentEventListeners))
-    WebRuntimeFeatures::enablePassiveDocumentEventListeners(true);
+  WebRuntimeFeatures::enablePassiveDocumentEventListeners(
+      base::FeatureList::IsEnabled(features::kPassiveDocumentEventListeners));
 
   if (base::FeatureList::IsEnabled(features::kPassiveEventListenersDueToFling))
     WebRuntimeFeatures::enablePassiveEventListenersDueToFling(true);

@@ -681,7 +681,7 @@ public class ChildProcessLauncher {
                 // package name. Make a copy of the WebAPK's params, but replace the package with
                 // Chrome's package to use when initializing a non-renderer processes.
                 params = new ChildProcessCreationParams(context.getPackageName(),
-                        params.getLibraryProcessType());
+                        params.getIsExternalService(), params.getLibraryProcessType());
             }
             if (ContentSwitches.SWITCH_GPU_PROCESS.equals(processType)) {
                 callbackType = CALLBACK_FOR_GPU_PROCESS;

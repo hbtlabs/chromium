@@ -86,6 +86,27 @@ std::string ColorToString(int64_t color) {
   return base::StringPrintf("rgba(%d,%d,%d,%.2f)", r, g, b, a);
 }
 
+// Get Chrome's current ABI. It depends on whether Chrome is running as a 32 bit
+// app or 64 bit, and the device's cpu architecture as well. Note: please keep
+// this function stay in sync with |chromium_android_linker::GetCpuAbi()|.
+std::string getCurrentAbi() {
+#if defined(__arm__) && defined(__ARM_ARCH_7A__)
+  return "armeabi-v7a";
+#elif defined(__arm__)
+  return "armeabi";
+#elif defined(__i386__)
+  return  "x86";
+#elif defined(__mips__)
+  return "mips";
+#elif defined(__x86_64__)
+  return "x86_64";
+#elif defined(__aarch64__)
+  return "arm64-v8a";
+#else
+#error "Unsupported target abi"
+#endif
+}
+
 // Populates webapk::WebApk and returns it.
 // Must be called on a worker thread because it encodes an SkBitmap.
 std::unique_ptr<webapk::WebApk> BuildWebApkProtoInBackground(
@@ -99,6 +120,12 @@ std::unique_ptr<webapk::WebApk> BuildWebApkProtoInBackground(
   webapk->set_requester_application_package(
       base::android::BuildInfo::GetInstance()->package_name());
   webapk->set_requester_application_version(version_info::GetVersionNumber());
+  webapk->set_android_abi(getCurrentAbi());
+
+  // TODO(hanxi): crbug.com/665078. Add a flag in WebAPK's proto to indicate
+  // that the Web Manifest data in the proto might be stale.
+  if (shortcut_icon_murmur2_hash.empty())
+    return webapk;
 
   webapk::WebAppManifest* web_app_manifest = webapk->mutable_manifest();
   web_app_manifest->set_name(base::UTF16ToUTF8(shortcut_info.name));
@@ -116,12 +143,20 @@ std::unique_ptr<webapk::WebApk> BuildWebApkProtoInBackground(
 
   std::string* scope = web_app_manifest->add_scopes();
   scope->assign(GetScope(shortcut_info).spec());
-  webapk::Image* image = web_app_manifest->add_icons();
-  image->set_src(shortcut_info.icon_url.spec());
-  image->set_hash(shortcut_icon_murmur2_hash);
+
+  webapk::Image* best_image = web_app_manifest->add_icons();
+  best_image->set_src(shortcut_info.best_icon_url.spec());
+  best_image->set_hash(shortcut_icon_murmur2_hash);
   std::vector<unsigned char> png_bytes;
   gfx::PNGCodec::EncodeBGRASkBitmap(shortcut_icon, false, &png_bytes);
-  image->set_image_data(&png_bytes.front(), png_bytes.size());
+  best_image->set_image_data(&png_bytes.front(), png_bytes.size());
+
+  for (const std::string& icon_url : shortcut_info.icon_urls) {
+    if (icon_url == shortcut_info.best_icon_url.spec())
+      continue;
+    webapk::Image* image = web_app_manifest->add_icons();
+    image->set_src(icon_url);
+  }
 
   return webapk;
 }
@@ -311,7 +346,7 @@ void WebApkInstaller::OnURLFetchComplete(const net::URLFetcher* source) {
 
 void WebApkInstaller::DownloadAppIconAndComputeMurmur2Hash() {
   // Safeguard. WebApkIconHasher crashes if asked to fetch an invalid URL.
-  if (!shortcut_info_.icon_url.is_valid()) {
+  if (!shortcut_info_.best_icon_url.is_valid()) {
     OnFailure();
     return;
   }
@@ -322,7 +357,7 @@ void WebApkInstaller::DownloadAppIconAndComputeMurmur2Hash() {
 
   icon_hasher_.reset(new WebApkIconHasher());
   icon_hasher_->DownloadAndComputeMurmur2Hash(
-      request_context_getter_, shortcut_info_.icon_url,
+      request_context_getter_, shortcut_info_.best_icon_url,
       base::Bind(&WebApkInstaller::OnGotIconMurmur2Hash,
                  weak_ptr_factory_.GetWeakPtr()));
 }
@@ -397,7 +432,8 @@ void WebApkInstaller::OnCreatedSubDirAndSetPermissions(
     return;
   }
 
-  DownloadWebApk(output_dir.AppendASCII(webapk_package_), download_url, true);
+  DownloadWebApk(output_dir.AppendASCII(webapk_package_ + ".apk"),
+                 download_url, true);
 }
 
 void WebApkInstaller::DownloadWebApk(const base::FilePath& output_path,

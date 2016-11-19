@@ -12,8 +12,6 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.Spinner;
 
-import org.json.JSONObject;
-
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.RetryOnFailure;
@@ -36,6 +34,7 @@ import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.payments.mojom.PaymentItem;
+import org.chromium.payments.mojom.PaymentMethodData;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -66,6 +65,15 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
     /** Flag for installing a slow payment app. */
     protected static final int DELAYED_RESPONSE = 1;
 
+    /** The expiration month dropdown index for December. */
+    protected static final int DECEMBER = 11;
+
+    /** The expiration year dropdown index for the next year. */
+    protected static final int NEXT_YEAR = 1;
+
+    /** The billing address dropdown index for the first billing address. */
+    protected static final int FIRST_BILLING_ADDRESS = 0;
+
     protected final PaymentsCallbackHelper<PaymentRequestUI> mReadyForInput;
     protected final PaymentsCallbackHelper<PaymentRequestUI> mReadyToPay;
     protected final PaymentsCallbackHelper<PaymentRequestUI> mSelectionChecked;
@@ -79,6 +87,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
     protected final CallbackHelper mUnableToAbort;
     protected final CallbackHelper mBillingAddressChangeProcessed;
     protected final CallbackHelper mShowFailed;
+    protected final CallbackHelper mActivePaymentQueryResponded;
     protected final CallbackHelper mExpirationMonthChange;
     protected PaymentRequestUI mUI;
 
@@ -103,6 +112,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         mBillingAddressChangeProcessed = new CallbackHelper();
         mExpirationMonthChange = new CallbackHelper();
         mShowFailed = new CallbackHelper();
+        mActivePaymentQueryResponded = new CallbackHelper();
         mViewCoreRef = new AtomicReference<>();
         mWebContentsRef = new AtomicReference<>();
         mTestFilePath = UrlUtils.getIsolatedTestFilePath(
@@ -117,22 +127,22 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
 
     protected void triggerUIAndWait(PaymentsCallbackHelper<PaymentRequestUI> helper)
             throws InterruptedException, ExecutionException, TimeoutException {
-        triggerUIAndWait("buy", (CallbackHelper) helper);
+        openPageAndClickNodeAndWait("buy", helper);
         mUI = helper.getTarget();
     }
 
-    protected void triggerUIAndWait(CallbackHelper helper)
+    protected void openPageAndClickBuyAndWait(CallbackHelper helper)
             throws InterruptedException, ExecutionException, TimeoutException {
-        triggerUIAndWait("buy", helper);
+        openPageAndClickNodeAndWait("buy", helper);
     }
 
     protected void triggerUIAndWait(String nodeId, PaymentsCallbackHelper<PaymentRequestUI> helper)
             throws InterruptedException, ExecutionException, TimeoutException {
-        triggerUIAndWait(nodeId, (CallbackHelper) helper);
+        openPageAndClickNodeAndWait(nodeId, helper);
         mUI = helper.getTarget();
     }
 
-    protected void triggerUIAndWait(String nodeId, CallbackHelper helper)
+    protected void openPageAndClickNodeAndWait(String nodeId, CallbackHelper helper)
             throws InterruptedException, ExecutionException, TimeoutException {
         startMainActivityWithURL(mTestFilePath);
         onMainActivityStarted();
@@ -406,6 +416,21 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         });
     }
 
+    /** Returns the spinner value at the specified position in the editor UI for credit cards. */
+    protected String getSpinnerTextAtPositionInCardEditor(
+            final int dropdownIndex, final int itemPosition) throws ExecutionException {
+        return ThreadUtils.runOnUiThreadBlocking(new Callable<String>() {
+            @Override
+            public String call() {
+                return mUI.getCardEditorView()
+                        .getDropdownFieldsForTest()
+                        .get(dropdownIndex)
+                        .getItemAtPosition(itemPosition)
+                        .toString();
+            }
+        });
+    }
+
     /** Returns the number of items offered by the spinner in the editor UI for credit cards. */
     protected int getSpinnerItemCountInCardEditor(final int dropdownIndex)
             throws ExecutionException {
@@ -632,6 +657,12 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
     }
 
     @Override
+    public void onPaymentRequestServiceActivePaymentQueryResponded() {
+        ThreadUtils.assertOnUiThread();
+        mActivePaymentQueryResponded.notifyCalled();
+    }
+
+    @Override
     public void onCardUnmaskPromptReadyForInput(CardUnmaskPrompt prompt) {
         ThreadUtils.assertOnUiThread();
         mReadyForUnmaskInput.notifyCalled(prompt);
@@ -722,8 +753,8 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         }
 
         @Override
-        public void getInstruments(
-                Map<String, JSONObject> methodData, final InstrumentsCallback instrumentsCallback) {
+        public void getInstruments(Map<String, PaymentMethodData> methodData,
+                InstrumentsCallback instrumentsCallback) {
             mCallback = instrumentsCallback;
             respond();
         }
@@ -776,7 +807,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
 
         @Override
         public void getInstrumentDetails(String merchantName, String origin, PaymentItem total,
-                List<PaymentItem> cart, JSONObject details,
+                List<PaymentItem> cart, PaymentMethodData details,
                 InstrumentDetailsCallback detailsCallback) {
             detailsCallback.onInstrumentDetailsReady(
                     mMethodName, "{\"transaction\": 1337}");

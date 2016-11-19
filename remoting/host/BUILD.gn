@@ -147,6 +147,8 @@ static_library("host") {
     "gcd_state_updater.h",
     "heartbeat_sender.cc",
     "heartbeat_sender.h",
+    "host_attributes.cc",
+    "host_attributes.h",
     "host_change_notification_listener.cc",
     "host_change_notification_listener.h",
     "host_config.cc",
@@ -168,6 +170,8 @@ static_library("host") {
     "host_power_save_blocker.h",
     "host_secret.cc",
     "host_secret.h",
+    "host_session_options.cc",
+    "host_session_options.h",
     "host_status_logger.cc",
     "host_status_logger.h",
     "host_status_monitor.h",
@@ -471,7 +475,7 @@ static_library("test_support") {
 
   if (enable_webrtc) {
     public_deps += [
-      "//third_party/libjingle:libjingle_webrtc",
+      "//third_party/libjingle/webrtc:libjingle_webrtc",
       "//third_party/webrtc/libjingle/xmllite",
       "//third_party/webrtc/libjingle/xmpp",
       "//third_party/webrtc/modules/desktop_capture",
@@ -497,10 +501,12 @@ source_set("unit_tests") {
     "gcd_rest_client_unittest.cc",
     "gcd_state_updater_unittest.cc",
     "heartbeat_sender_unittest.cc",
+    "host_attributes_unittest.cc",
     "host_change_notification_listener_unittest.cc",
     "host_config_unittest.cc",
     "host_extension_session_manager_unittest.cc",
     "host_power_save_blocker_unittest.cc",
+    "host_session_options_unittest.cc",
     "host_status_logger_unittest.cc",
     "ipc_desktop_environment_unittest.cc",
     "it2me/it2me_confirmation_dialog_proxy_unittest.cc",
@@ -622,7 +628,7 @@ if (enable_remoting_host) {
 
     if (enable_webrtc) {
       deps += [
-        "//third_party/libjingle:libjingle_webrtc",
+        "//third_party/libjingle/webrtc:libjingle_webrtc",
         "//third_party/webrtc/libjingle/xmllite",
         "//third_party/webrtc/libjingle/xmpp",
       ]
@@ -739,7 +745,7 @@ if (enable_me2me_host) {
 
     if (enable_webrtc) {
       deps += [
-        "//third_party/libjingle:libjingle_webrtc",
+        "//third_party/libjingle/webrtc:libjingle_webrtc",
         "//third_party/webrtc/libjingle/xmllite",
         "//third_party/webrtc/libjingle/xmpp",
       ]

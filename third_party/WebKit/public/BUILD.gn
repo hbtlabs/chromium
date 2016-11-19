@@ -68,10 +68,14 @@ config("blink_headers_config") {
   configs = [ "//v8:external_config" ]
 }
 
-# Public feature flags usabout outside of Blink.
+# Public feature flags used outside of Blink.
 buildflag_header("features") {
   header = "public_features.h"
-  flags = [ "DEBUG_DEVTOOLS=$debug_devtools" ]
+  flags = [
+    "DEBUG_DEVTOOLS=$debug_devtools",
+    "USE_DEFAULT_RENDER_THEME=$use_default_render_theme",
+    "USE_MINIKIN_HYPHENATION=$use_minikin_hyphenation",
+  ]
 }
 
 if (is_android) {
@@ -80,6 +84,7 @@ if (is_android) {
       "./platform/WebDisplayMode.h",
       "./platform/WebInputEvent.h",
       "./platform/WebTextInputType.h",
+      "./platform/modules/remoteplayback/WebRemotePlaybackAvailability.h",
     ]
   }
 
@@ -186,6 +191,7 @@ source_set("blink_headers") {
     "platform/WebGestureCurve.h",
     "platform/WebGestureCurveTarget.h",
     "platform/WebGestureDevice.h",
+    "platform/WebGestureEvent.h",
     "platform/WebGraphicsContext3DProvider.h",
     "platform/WebHTTPBody.h",
     "platform/WebHTTPHeaderVisitor.h",
@@ -323,8 +329,6 @@ source_set("blink_headers") {
     "platform/mac/WebSandboxSupport.h",
     "platform/modules/background_sync/WebSyncClient.h",
     "platform/modules/background_sync/WebSyncError.h",
-    "platform/modules/background_sync/WebSyncProvider.h",
-    "platform/modules/background_sync/WebSyncRegistration.h",
     "platform/modules/bluetooth/WebBluetooth.h",
     "platform/modules/bluetooth/WebBluetoothDevice.h",
     "platform/modules/bluetooth/WebBluetoothError.h",
@@ -367,6 +371,7 @@ source_set("blink_headers") {
     "platform/modules/push_messaging/WebPushProvider.h",
     "platform/modules/push_messaging/WebPushSubscription.h",
     "platform/modules/push_messaging/WebPushSubscriptionOptions.h",
+    "platform/modules/remoteplayback/WebRemotePlaybackAvailability.h",
     "platform/modules/remoteplayback/WebRemotePlaybackClient.h",
     "platform/modules/remoteplayback/WebRemotePlaybackState.h",
     "platform/modules/screen_orientation/WebLockOrientationCallback.h",
@@ -484,7 +489,7 @@ source_set("blink_headers") {
     "web/WebImageCache.h",
     "web/WebImageDecoder.h",
     "web/WebInputElement.h",
-    "web/WebInputEvent.h",
+    "web/WebInputMethodController.h",
     "web/WebKit.h",
     "web/WebLabelElement.h",
     "web/WebLeakDetector.h",
@@ -741,6 +746,7 @@ mojom("offscreen_canvas_mojo_bindings") {
   export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
   export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
   export_header_blink = "third_party/WebKit/public/platform/WebCommon.h"
+  use_once_callback = true
 }
 
 group("generate_mojo_bindings") {

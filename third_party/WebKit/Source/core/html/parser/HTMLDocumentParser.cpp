@@ -523,7 +523,7 @@ size_t HTMLDocumentParser::processTokenizedChunkFromBackgroundParser(
       // To match main-thread parser behavior (which never checks
       // locationChangePending on the EOF path) we peek to see if this chunk has
       // an EOF and process it anyway.
-      if (tokens->last().type() == HTMLToken::EndOfFile) {
+      if (tokens->back().type() == HTMLToken::EndOfFile) {
         ASSERT(
             m_speculations
                 .isEmpty());  // There should never be any chunks after the EOF.
@@ -1142,7 +1142,7 @@ void HTMLDocumentParser::appendBytes(const char* data, size_t length) {
     if (!m_haveBackgroundParser)
       startBackgroundParser();
 
-    std::unique_ptr<Vector<char>> buffer = wrapUnique(new Vector<char>(length));
+    std::unique_ptr<Vector<char>> buffer = makeUnique<Vector<char>>(length);
     memcpy(buffer->data(), data, length);
     TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("blink.debug"),
                  "HTMLDocumentParser::appendBytes", "size", (unsigned)length);

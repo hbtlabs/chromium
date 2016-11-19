@@ -4,7 +4,7 @@
 /**
  * @param {string} content
  */
-WebInspector.javaScriptOutline = function(content) {
+FormatterWorker.javaScriptOutline = function(content) {
   var chunkSize = 100000;  // characters per data chunk
   var outlineChunk = [];
   var previousIdentifier = null;
@@ -14,8 +14,8 @@ WebInspector.javaScriptOutline = function(content) {
   var isReadingArguments = false;
   var argumentsText = '';
   var currentFunction = null;
-  var tokenizer = new WebInspector.AcornTokenizer(content);
-  var AT = WebInspector.AcornTokenizer;
+  var tokenizer = new FormatterWorker.AcornTokenizer(content);
+  var AT = FormatterWorker.AcornTokenizer;
 
   while (tokenizer.peekToken()) {
     var token = /** @type {!Acorn.TokenOrComment} */ (tokenizer.nextToken());
@@ -52,10 +52,11 @@ WebInspector.javaScriptOutline = function(content) {
       };
       addedFunction = true;
       previousIdentifier = null;
-    } else if (AT.punctuator(token, '.') && previousToken && AT.identifier(previousToken))
+    } else if (AT.punctuator(token, '.') && previousToken && AT.identifier(previousToken)) {
       previousIdentifier += '.';
-    else if (AT.punctuator(token, '(') && addedFunction)
+    } else if (AT.punctuator(token, '(') && addedFunction) {
       isReadingArguments = true;
+    }
     if (isReadingArguments && tokenValue)
       argumentsText += tokenValue;
 

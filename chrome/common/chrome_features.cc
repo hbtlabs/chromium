@@ -4,6 +4,8 @@
 
 #include "chrome/common/chrome_features.h"
 
+#include "extensions/features/features.h"
+
 namespace features {
 
 // All features in alphabetical order.
@@ -19,6 +21,11 @@ const base::Feature kAppleScriptExecuteJavaScript{
 const base::Feature kArcMemoryManagement{
     "ArcMemoryManagement", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // defined(OS_CHROMEOS)
+
+// If enabled, the list of content suggestions on the New Tab page will contain
+// assets (e.g. books, pictures, audio) that the user downloaded for later use.
+const base::Feature kAssetDownloadSuggestionsFeature{
+    "NTPAssetDownloadSuggestions", base::FEATURE_ENABLED_BY_DEFAULT};
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
 // Enables auto-dismissing JavaScript dialogs.
@@ -107,7 +114,7 @@ const base::Feature kLinuxObsoleteSystemIsEndOfTheLine{
 const base::Feature kMaterialDesignBookmarks{"MaterialDesignBookmarks",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 // Enabled or disabled the Material Design version of chrome://extensions.
 const base::Feature kMaterialDesignExtensions{
     "MaterialDesignExtensions", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -122,6 +129,16 @@ const base::Feature kMaterialDesignHistory{"MaterialDesignHistory",
 const base::Feature kMaterialDesignSettings{"MaterialDesignSettings",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+// Enables media content bitstream remoting, an optimization that can activate
+// during Cast Tab Mirroring. When kMediaRemotingEncrypted is disabled, the
+// feature will not activate for encrypted content.
+const base::Feature kMediaRemoting{"MediaRemoting",
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kMediaRemotingEncrypted{"MediaRemotingEncrypted",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
+
 // Enables or disables modal permission prompts.
 const base::Feature kModalPermissionPrompts{"ModalPermissionPrompts",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
@@ -132,6 +149,11 @@ const base::Feature kModalPermissionPrompts{"ModalPermissionPrompts",
 const base::Feature kNativeNotifications{"NativeNotifications",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_MACOSX)
+
+// If enabled, the list of content suggestions on the New Tab page will contain
+// pages that the user downloaded for later use.
+const base::Feature kOfflinePageDownloadSuggestionsFeature{
+    "NTPOfflinePageDownloadSuggestions", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables YouTube Flash videos to be overridden.
 const base::Feature kOverrideYouTubeFlashEmbed{

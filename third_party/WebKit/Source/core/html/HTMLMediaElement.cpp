@@ -82,6 +82,7 @@
 #include "platform/audio/AudioSourceProviderClient.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/mediastream/MediaStreamDescriptor.h"
+#include "platform/scheduler/CancellableTaskFactory.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebAudioSourceProvider.h"
@@ -89,8 +90,10 @@
 #include "public/platform/WebInbandTextTrack.h"
 #include "public/platform/WebMediaPlayerSource.h"
 #include "public/platform/WebMediaStream.h"
+#include "public/platform/modules/remoteplayback/WebRemotePlaybackAvailability.h"
 #include "public/platform/modules/remoteplayback/WebRemotePlaybackClient.h"
 #include "public/platform/modules/remoteplayback/WebRemotePlaybackState.h"
+#include "wtf/AutoReset.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/MathExtras.h"
 #include "wtf/PtrUtil.h"
@@ -444,7 +447,6 @@ HTMLMediaElement::HTMLMediaElement(const QualifiedName& tagName,
       m_shouldPerformAutomaticTrackSelection(true),
       m_tracksAreReady(true),
       m_processingPreferenceChange(false),
-      m_remoteRoutesAvailable(false),
       m_playingRemotely(false),
       m_inOverlayFullscreenVideo(false),
       m_audioTracks(this, AudioTrackList::create(*this)),
@@ -1091,7 +1093,6 @@ void HTMLMediaElement::loadResource(const WebMediaPlayerSource& source,
 
   if (fastHasAttribute(mutedAttr))
     m_muted = true;
-  updateVolume();
 
   DCHECK(!m_mediaSource);
 
@@ -2427,7 +2428,9 @@ void HTMLMediaElement::setVolume(double vol, ExceptionState& exceptionState) {
   }
 
   m_volume = vol;
-  updateVolume();
+
+  if (webMediaPlayer())
+    webMediaPlayer()->setVolume(effectiveMediaVolume());
   scheduleEvent(EventTypeNames::volumechange);
 }
 
@@ -2469,7 +2472,8 @@ void HTMLMediaElement::setMuted(bool muted) {
 
   // This is called after the volumechange event to make sure isAutoplayingMuted
   // returns the right value when webMediaPlayer receives the volume update.
-  updateVolume();
+  if (webMediaPlayer())
+    webMediaPlayer()->setVolume(effectiveMediaVolume());
 
   // If an element was a candidate for autoplay muted but not visible, it will
   // have a visibility observer ready to start its playback.
@@ -2477,14 +2481,6 @@ void HTMLMediaElement::setMuted(bool muted) {
     m_autoplayVisibilityObserver->stop();
     m_autoplayVisibilityObserver = nullptr;
   }
-}
-
-void HTMLMediaElement::updateVolume() {
-  if (webMediaPlayer())
-    webMediaPlayer()->setVolume(effectiveMediaVolume());
-
-  if (mediaControls())
-    mediaControls()->updateVolume();
 }
 
 double HTMLMediaElement::effectiveMediaVolume() const {
@@ -3168,12 +3164,17 @@ void HTMLMediaElement::requestSeek(double time) {
   setCurrentTime(time);
 }
 
-void HTMLMediaElement::remoteRouteAvailabilityChanged(bool routesAvailable) {
-  m_remoteRoutesAvailable = routesAvailable;
+void HTMLMediaElement::remoteRouteAvailabilityChanged(
+    WebRemotePlaybackAvailability availability) {
+  if (remotePlaybackClient())
+    remotePlaybackClient()->availabilityChanged(availability);
   if (mediaControls())
     mediaControls()->refreshCastButtonVisibility();
-  if (remotePlaybackClient())
-    remotePlaybackClient()->availabilityChanged(routesAvailable);
+}
+
+bool HTMLMediaElement::hasRemoteRoutes() const {
+  return remotePlaybackClient() &&
+         remotePlaybackClient()->remotePlaybackAvailable();
 }
 
 void HTMLMediaElement::connectedToRemoteDevice() {
@@ -3340,7 +3341,7 @@ void HTMLMediaElement::updatePlayState() {
       // media engine was setup.  The media engine should just stash the rate
       // and muted values since it isn't already playing.
       webMediaPlayer()->setRate(playbackRate());
-      updateVolume();
+      webMediaPlayer()->setVolume(effectiveMediaVolume());
       webMediaPlayer()->play();
       m_autoplayHelper->playbackStarted();
     }
@@ -3403,10 +3404,8 @@ void HTMLMediaElement::clearMediaPlayer() {
   m_loadState = WaitingForSource;
 
   // We can't cast if we don't have a media player.
-  m_remoteRoutesAvailable = false;
   m_playingRemotely = false;
-  if (mediaControls())
-    mediaControls()->refreshCastButtonVisibilityWithoutUpdate();
+  remoteRouteAvailabilityChanged(WebRemotePlaybackAvailability::Unknown);
 
   if (layoutObject())
     layoutObject()->setShouldDoFullPaintInvalidation();
@@ -3455,9 +3454,16 @@ bool HTMLMediaElement::hasPendingActivity() const {
   if (m_networkState == kNetworkLoading)
     return true;
 
-  // When playing or if playback may continue, timeupdate events may be fired.
-  if (couldPlayIfEnoughData())
-    return true;
+  {
+    // Disable potential updating of playback position, as that will
+    // require v8 allocations; not allowed while GCing
+    // (hasPendingActivity() is called during a v8 GC.)
+    AutoReset<bool> scope(&m_officialPlaybackPositionNeedsUpdate, false);
+
+    // When playing or if playback may continue, timeupdate events may be fired.
+    if (couldPlayIfEnoughData())
+      return true;
+  }
 
   // When the seek finishes timeupdate and seeked events will be fired.
   if (m_seeking)
@@ -3764,8 +3770,8 @@ void HTMLMediaElement::resetMediaPlayerAndMediaSource() {
   }
 
   // We haven't yet found out if any remote routes are available.
-  m_remoteRoutesAvailable = false;
   m_playingRemotely = false;
+  remoteRouteAvailabilityChanged(WebRemotePlaybackAvailability::Unknown);
 
   if (m_audioSourceNode)
     getAudioSourceProvider().setClient(m_audioSourceNode);
@@ -3812,14 +3818,6 @@ void HTMLMediaElement::mediaSourceOpened(WebMediaSource* webMediaSource) {
 
 bool HTMLMediaElement::isInteractiveContent() const {
   return fastHasAttribute(controlsAttr);
-}
-
-void HTMLMediaElement::defaultEventHandler(Event* event) {
-  if (event->type() == EventTypeNames::focusin) {
-    if (mediaControls())
-      mediaControls()->mediaElementFocused();
-  }
-  HTMLElement::defaultEventHandler(event);
 }
 
 DEFINE_TRACE(HTMLMediaElement) {

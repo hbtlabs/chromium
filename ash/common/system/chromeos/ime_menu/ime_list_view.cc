@@ -4,7 +4,6 @@
 
 #include "ash/common/system/chromeos/ime_menu/ime_list_view.h"
 
-#include "ash/common/ash_view_ids.h"
 #include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/system/tray/hover_highlight_view.h"
 #include "ash/common/system/tray/ime_info.h"
@@ -43,19 +42,6 @@ namespace {
 const int kMinFontSizeDelta = -10;
 
 const SkColor kKeyboardRowSeparatorColor = SkColorSetA(SK_ColorBLACK, 0x1F);
-
-// Creates a separator that will be used between the IME list items.
-views::Separator* CreateListItemSeparator() {
-  views::Separator* separator =
-      new views::Separator(views::Separator::HORIZONTAL);
-  separator->SetColor(kBorderLightColor);
-  separator->SetPreferredSize(kSeparatorWidth);
-  separator->SetBorder(
-      views::CreateEmptyBorder(kMenuSeparatorVerticalPadding,
-                               kMenuExtraMarginFromLeftEdge + kMenuButtonSize,
-                               kMenuSeparatorVerticalPadding, 0));
-  return separator;
-}
 
 // A |HoverHighlightView| that uses bold or normal font depending on whether it
 // is selected.  This view exposes itself as a checkbox to the accessibility
@@ -97,7 +83,11 @@ class ImeListItemView : public ActionableView {
                   const base::string16& label,
                   bool selected,
                   const SkColor button_color)
-      : ActionableView(owner), ime_list_view_(list_view) {
+      : ActionableView(owner, TrayPopupInkDropStyle::FILL_BOUNDS),
+        ime_list_view_(list_view) {
+    if (MaterialDesignController::IsSystemTrayMenuMaterial())
+      SetInkDropMode(InkDropHostView::InkDropMode::ON);
+
     TriView* tri_view = TrayPopupUtils::CreateDefaultRowView();
     AddChildView(tri_view);
     SetLayoutManager(new views::FillLayout);
@@ -108,6 +98,14 @@ class ImeListItemView : public ActionableView {
     const gfx::FontList& base_font_list =
         rb.GetFontList(ui::ResourceBundle::MediumBoldFont);
     id_label->SetFontList(base_font_list);
+
+    // TODO(bruthig): Fix this so that |label| uses the kBackgroundColor to
+    // perform subpixel rendering instead of disabling subpixel rendering.
+    //
+    // Text rendered on a non-opaque background looks ugly and it is possible
+    // for labels to given a a clear canvas at paint time when an ink drop is
+    // visible. See http://crbug.com/661714.
+    id_label->SetSubpixelRenderingEnabled(false);
 
     // For IMEs whose short name are more than 2 characters (INTL, EXTD, etc.),
     // |kMenuIconSize| is not enough. The label will trigger eliding as "I..."
@@ -121,7 +119,8 @@ class ImeListItemView : public ActionableView {
     tri_view->AddView(TriView::Container::START, id_label);
 
     // The label shows the IME name.
-    label_ = new views::Label(label);
+    label_ = TrayPopupUtils::CreateDefaultLabel();
+    label_->SetText(label);
     UpdateStyle();
     label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     tri_view->AddView(TriView::Container::CENTER, label_);
@@ -191,8 +190,8 @@ class MaterialKeyboardStatusRowView : public views::View {
 
  private:
   void Init() {
+    TrayPopupUtils::ConfigureAsStickyHeader(this);
     SetLayoutManager(new views::FillLayout);
-    set_background(views::Background::CreateSolidBackground(kBackgroundColor));
 
     TriView* tri_view = TrayPopupUtils::CreateDefaultRowView();
     AddChildView(tri_view);
@@ -204,22 +203,16 @@ class MaterialKeyboardStatusRowView : public views::View {
     tri_view->AddView(TriView::Container::START, keyboard_image);
 
     // The on-screen keyboard label.
-    label_ = new views::Label(
-        ui::ResourceBundle::GetSharedInstance().GetLocalizedString(
-            IDS_ASH_STATUS_TRAY_ACCESSIBILITY_VIRTUAL_KEYBOARD));
+    label_ = TrayPopupUtils::CreateDefaultLabel();
+    label_->SetText(ui::ResourceBundle::GetSharedInstance().GetLocalizedString(
+        IDS_ASH_STATUS_TRAY_ACCESSIBILITY_VIRTUAL_KEYBOARD));
     UpdateStyle();
-    label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     tri_view->AddView(TriView::Container::CENTER, label_);
 
     // The on-screen keyboard toggle button.
-    toggle_ = new views::ToggleButton(listener_);
-    toggle_->SetFocusForPlatform();
-    toggle_->SetTooltipText(
-        ui::ResourceBundle::GetSharedInstance().GetLocalizedString(
-            IDS_ASH_STATUS_TRAY_ACCESSIBILITY_VIRTUAL_KEYBOARD));
+    toggle_ = TrayPopupUtils::CreateToggleButton(
+        listener_, IDS_ASH_STATUS_TRAY_ACCESSIBILITY_VIRTUAL_KEYBOARD);
     tri_view->AddView(TriView::Container::END, toggle_);
-
-    set_id(VIEW_ID_STICKY_HEADER);
   }
 
   // Updates the style of |label_| based on the current native theme.
@@ -335,7 +328,8 @@ void ImeListView::AppendImeListAndProperties(
     // selected IME item.
     if (list[i].selected && !property_list.empty()) {
       // Adds a separator on the top of property items.
-      scroll_content()->AddChildView(CreateListItemSeparator());
+      scroll_content()->AddChildView(
+          TrayPopupUtils::CreateListItemSeparator(true));
 
       // Adds the property items.
       for (size_t i = 0; i < property_list.size(); i++) {
@@ -349,7 +343,8 @@ void ImeListView::AppendImeListAndProperties(
       // Adds a separator on the bottom of property items if there are still
       // other IMEs under the current one.
       if (i < list.size() - 1)
-        scroll_content()->AddChildView(CreateListItemSeparator());
+        scroll_content()->AddChildView(
+            TrayPopupUtils::CreateListItemSeparator(true));
     }
   }
 }
@@ -401,9 +396,10 @@ void ImeListView::HandleViewClicked(views::View* view) {
 
 void ImeListView::HandleButtonPressed(views::Button* sender,
                                       const ui::Event& event) {
-  DCHECK(material_keyboard_status_view_);
-  DCHECK_EQ(sender, material_keyboard_status_view_->toggle());
-  WmShell::Get()->ToggleIgnoreExternalKeyboard();
+  if (material_keyboard_status_view_ &&
+      sender == material_keyboard_status_view_->toggle()) {
+    WmShell::Get()->ToggleIgnoreExternalKeyboard();
+  }
 }
 
 }  // namespace ash

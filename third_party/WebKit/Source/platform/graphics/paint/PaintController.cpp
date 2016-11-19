@@ -144,7 +144,7 @@ void PaintController::removeLastDisplayItem() {
   if (it != m_newDisplayItemIndicesByClient.end()) {
     Vector<size_t>& indices = it->value;
     if (!indices.isEmpty() &&
-        indices.last() == (m_newDisplayItemList.size() - 1))
+        indices.back() == (m_newDisplayItemList.size() - 1))
       indices.pop_back();
   }
 #endif
@@ -185,14 +185,14 @@ void PaintController::processNewItem(DisplayItem& displayItem) {
         // The status will end when the subsequence owner is invalidated or
         // deleted.
         displayItem.client().beginShouldKeepAlive(
-            m_currentSubsequenceClients.last());
+            m_currentSubsequenceClients.back());
       }
     }
 
     if (displayItem.getType() == DisplayItem::kSubsequence) {
       m_currentSubsequenceClients.append(&displayItem.client());
     } else if (displayItem.getType() == DisplayItem::kEndSubsequence) {
-      CHECK(m_currentSubsequenceClients.last() == &displayItem.client());
+      CHECK(m_currentSubsequenceClients.back() == &displayItem.client());
       m_currentSubsequenceClients.pop_back();
     }
   }
@@ -465,6 +465,7 @@ void PaintController::copyCachedSubsequence(size_t& cachedItemIndex) {
   }
 }
 
+DISABLE_CFI_PERF
 static IntRect visualRectForDisplayItem(
     const DisplayItem& displayItem,
     const LayoutSize& offsetFromLayoutObject) {
@@ -482,6 +483,7 @@ void PaintController::resetCurrentListIndices() {
   m_skippedProbableUnderInvalidationCount = 0;
 }
 
+DISABLE_CFI_PERF
 void PaintController::commitNewDisplayItems(
     const LayoutSize& offsetFromLayoutObject) {
   TRACE_EVENT2("blink,benchmark", "PaintController::commitNewDisplayItems",

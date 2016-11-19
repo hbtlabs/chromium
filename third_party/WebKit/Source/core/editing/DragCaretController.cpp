@@ -34,6 +34,8 @@ namespace blink {
 
 DragCaretController::DragCaretController() : m_caretBase(new CaretBase()) {}
 
+DragCaretController::~DragCaretController() = default;
+
 DragCaretController* DragCaretController::create() {
   return new DragCaretController;
 }
@@ -65,6 +67,7 @@ void DragCaretController::setCaretPosition(
   if (Node* node = m_position.anchorNode()) {
     m_caretBase->invalidateCaretRect(node);
     document = &node->document();
+    setContext(document);
   }
   if (m_position.isNull()) {
     m_caretBase->clearCaretRect();
@@ -75,27 +78,26 @@ void DragCaretController::setCaretPosition(
   }
 }
 
-static bool removingNodeRemovesPosition(Node& node, const Position& position) {
-  if (!position.anchorNode())
-    return false;
-
-  if (position.anchorNode() == node)
-    return true;
-
-  if (!node.isElementNode())
-    return false;
-
-  Element& element = toElement(node);
-  return element.isShadowIncludingInclusiveAncestorOf(position.anchorNode());
+void DragCaretController::nodeChildrenWillBeRemoved(ContainerNode& container) {
+  if (!hasCaret() || !container.inActiveDocument())
+    return;
+  Node* const anchorNode = m_position.position().anchorNode();
+  if (!anchorNode || anchorNode == container)
+    return;
+  if (!container.isShadowIncludingInclusiveAncestorOf(anchorNode))
+    return;
+  m_position.document()->layoutViewItem().clearSelection();
+  clear();
 }
 
 void DragCaretController::nodeWillBeRemoved(Node& node) {
   if (!hasCaret() || !node.inActiveDocument())
     return;
-
-  if (!removingNodeRemovesPosition(node, m_position.position()))
+  Node* const anchorNode = m_position.position().anchorNode();
+  if (!anchorNode)
     return;
-
+  if (!node.isShadowIncludingInclusiveAncestorOf(anchorNode))
+    return;
   m_position.document()->layoutViewItem().clearSelection();
   clear();
 }
@@ -103,6 +105,7 @@ void DragCaretController::nodeWillBeRemoved(Node& node) {
 DEFINE_TRACE(DragCaretController) {
   visitor->trace(m_position);
   visitor->trace(m_caretBase);
+  SynchronousMutationObserver::trace(visitor);
 }
 
 void DragCaretController::paintDragCaret(LocalFrame* frame,

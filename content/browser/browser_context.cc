@@ -33,7 +33,7 @@
 #include "content/public/browser/site_instance.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_manager_connection.h"
-#include "content/public/common/service_names.h"
+#include "content/public/common/service_names.mojom.h"
 #include "net/cookies/cookie_store.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/channel_id_store.h"
@@ -42,7 +42,7 @@
 #include "services/device/device_service.h"
 #include "services/device/public/cpp/constants.h"
 #include "services/file/file_service.h"
-#include "services/file/public/cpp/constants.h"
+#include "services/file/public/interfaces/constants.mojom.h"
 #include "services/file/user_id_map.h"
 #include "services/service_manager/public/cpp/connection.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -443,7 +443,7 @@ void BrowserContext::Initialize(
 
     service_manager::mojom::PIDReceiverPtr pid_receiver;
     service_manager::Connector::ConnectParams params(
-        service_manager::Identity(kBrowserServiceName, new_id));
+        service_manager::Identity(mojom::kBrowserServiceName, new_id));
     params.set_client_process_connection(std::move(service),
                                          mojo::GetProxy(&pid_receiver));
     pid_receiver->SetPID(base::GetCurrentProcId());
@@ -474,7 +474,7 @@ void BrowserContext::Initialize(
           base::Bind(&file::CreateFileService,
                      BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE),
                      BrowserThread::GetTaskRunnerForThread(BrowserThread::DB));
-      connection->AddEmbeddedService(file::kFileServiceName, info);
+      connection->AddEmbeddedService(file::mojom::kServiceName, info);
     }
   }
 }

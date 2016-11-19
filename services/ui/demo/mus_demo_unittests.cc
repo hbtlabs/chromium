@@ -7,6 +7,7 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "services/service_manager/public/cpp/service_test.h"
+#include "services/ui/public/interfaces/constants.mojom.h"
 #include "services/ui/public/interfaces/window_server_test.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -15,7 +16,7 @@ namespace demo {
 
 namespace {
 
-const char kTestAppName[] = "exe:mus_demo_unittests";
+const char kTestAppName[] = "mus_demo_unittests";
 
 void RunCallback(bool* success, const base::Closure& callback, bool result) {
   *success = result;
@@ -39,10 +40,10 @@ class MusDemoTest : public service_manager::test::ServiceTest {
 }  // namespace
 
 TEST_F(MusDemoTest, CheckMusDemoDraws) {
-  connector()->Connect("service:mus_demo");
+  connector()->Connect("mus_demo");
 
   ::ui::mojom::WindowServerTestPtr test_interface;
-  connector()->ConnectToInterface("service:ui", &test_interface);
+  connector()->ConnectToInterface(ui::mojom::kServiceName, &test_interface);
 
   base::RunLoop run_loop;
   bool success = false;

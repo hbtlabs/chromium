@@ -232,7 +232,7 @@ bool ChromeExtensionsClient::IsScriptableURL(
   // TODO(erikkay): This seems like the wrong test.  Shouldn't we we testing
   // against the store app extent?
   GURL store_url(extension_urls::GetWebstoreLaunchURL());
-  if (url.host() == store_url.host()) {
+  if (url.DomainIs(store_url.host())) {
     if (error)
       *error = manifest_errors::kCannotScriptGallery;
     return false;
@@ -281,12 +281,20 @@ std::string ChromeExtensionsClient::GetWebstoreBaseURL() const {
   return gallery_prefix;
 }
 
-std::string ChromeExtensionsClient::GetWebstoreUpdateURL() const {
+const GURL& ChromeExtensionsClient::GetWebstoreUpdateURL() const {
+  // Browser tests like to alter the command line at runtime with new update
+  // URLs. Just update the cached value of the update url (to avoid reparsing
+  // it) if the value has changed.
   base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
-  if (cmdline->HasSwitch(switches::kAppsGalleryUpdateURL))
-    return cmdline->GetSwitchValueASCII(switches::kAppsGalleryUpdateURL);
-  else
-    return extension_urls::GetDefaultWebstoreUpdateUrl().spec();
+  if (cmdline->HasSwitch(switches::kAppsGalleryUpdateURL)) {
+    std::string url =
+        cmdline->GetSwitchValueASCII(switches::kAppsGalleryUpdateURL);
+    if (webstore_update_url_ != url)
+      webstore_update_url_ = GURL(url);
+  } else if (webstore_update_url_.is_empty()) {
+    webstore_update_url_ = GURL(extension_urls::GetDefaultWebstoreUpdateUrl());
+  }
+  return webstore_update_url_;
 }
 
 bool ChromeExtensionsClient::IsBlacklistUpdateURL(const GURL& url) const {

@@ -50,7 +50,6 @@
 #include "components/sync/device_info/device_info_sync_service.h"
 #include "components/sync/device_info/device_info_tracker.h"
 #include "components/sync/driver/backend_migrator.h"
-#include "components/sync/driver/change_processor.h"
 #include "components/sync/driver/directory_data_type_controller.h"
 #include "components/sync/driver/glue/sync_backend_host_impl.h"
 #include "components/sync/driver/signin_manager_wrapper.h"
@@ -68,6 +67,7 @@
 #include "components/sync/engine/sync_encryption_handler.h"
 #include "components/sync/engine/sync_string_conversions.h"
 #include "components/sync/js/js_event_details.h"
+#include "components/sync/model/change_processor.h"
 #include "components/sync/model/model_type_change_processor.h"
 #include "components/sync/model/model_type_store.h"
 #include "components/sync/model/sync_error.h"
@@ -424,9 +424,11 @@ bool ProfileSyncService::IsDataTypeControllerRunning(
 }
 
 sync_sessions::OpenTabsUIDelegate* ProfileSyncService::GetOpenTabsUIDelegate() {
-  if (!IsDataTypeControllerRunning(syncer::SESSIONS))
-    return nullptr;
-  return sessions_sync_manager_.get();
+  // Although the backing data actually is of type |SESSIONS|, the desire to use
+  // open tabs functionality is tracked by the state of the |PROXY_TABS| type.
+  return IsDataTypeControllerRunning(syncer::PROXY_TABS)
+             ? sessions_sync_manager_.get()
+             : nullptr;
 }
 
 sync_sessions::FaviconCache* ProfileSyncService::GetFaviconCache() {
@@ -1866,6 +1868,7 @@ base::Value* ProfileSyncService::GetTypeStatusMap() {
 
   SyncBackendHost::Status detailed_status = backend_->GetDetailedStatus();
   ModelTypeSet& throttled_types(detailed_status.throttled_types);
+  ModelTypeSet& backed_off_types(detailed_status.backed_off_types);
   ModelTypeSet registered = GetRegisteredDataTypes();
   std::unique_ptr<base::DictionaryValue> type_status_header(
       new base::DictionaryValue());
@@ -1910,12 +1913,18 @@ base::Value* ProfileSyncService::GetTypeStatusMap() {
     } else if (throttled_types.Has(type) && passive_types.Has(type)) {
       type_status->SetString("status", "warning");
       type_status->SetString("value", "Passive, Throttled");
+    } else if (backed_off_types.Has(type) && passive_types.Has(type)) {
+      type_status->SetString("status", "warning");
+      type_status->SetString("value", "Passive, Backed off");
     } else if (passive_types.Has(type)) {
       type_status->SetString("status", "warning");
       type_status->SetString("value", "Passive");
     } else if (throttled_types.Has(type)) {
       type_status->SetString("status", "warning");
       type_status->SetString("value", "Throttled");
+    } else if (backed_off_types.Has(type)) {
+      type_status->SetString("status", "warning");
+      type_status->SetString("value", "Backed off");
     } else if (active_types.Has(type)) {
       type_status->SetString("status", "ok");
       type_status->SetString(

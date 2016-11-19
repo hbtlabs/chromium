@@ -1227,11 +1227,7 @@ void KeyEvent::ApplyLayout() const {
 // so this is a synthetic or native keystroke event.
 // Therefore, perform only the fallback action.
 #elif defined(USE_X11)
-  // When a control key is held, prefer ASCII characters to non ASCII
-  // characters in order to use it for shortcut keys.  GetCharacterFromKeyCode
-  // returns 'a' for VKEY_A even if the key is actually bound to 'à' in X11.
-  // GetCharacterFromXEvent returns 'à' in that case.
-  if (!IsControlDown() && native_event()) {
+  if (native_event()) {
     key_ = GetDomKeyFromXEvent(native_event());
     return;
   }
@@ -1392,13 +1388,15 @@ ScrollEvent::ScrollEvent(EventType type,
                          float y_offset,
                          float x_offset_ordinal,
                          float y_offset_ordinal,
-                         int finger_count)
+                         int finger_count,
+                         EventMomentumPhase momentum_phase)
     : MouseEvent(type, location, location, time_stamp, flags, 0),
       x_offset_(x_offset),
       y_offset_(y_offset),
       x_offset_ordinal_(x_offset_ordinal),
       y_offset_ordinal_(y_offset_ordinal),
-      finger_count_(finger_count) {
+      finger_count_(finger_count),
+      momentum_phase_(momentum_phase) {
   CHECK(IsScrollEvent());
   latency()->set_source_event_type(ui::SourceEventType::WHEEL);
 }

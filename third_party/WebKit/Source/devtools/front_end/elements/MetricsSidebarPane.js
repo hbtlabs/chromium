@@ -29,7 +29,7 @@
 /**
  * @unrestricted
  */
-WebInspector.MetricsSidebarPane = class extends WebInspector.ElementsSidebarPane {
+Elements.MetricsSidebarPane = class extends Elements.ElementsSidebarPane {
   constructor() {
     super();
   }
@@ -55,7 +55,7 @@ WebInspector.MetricsSidebarPane = class extends WebInspector.ElementsSidebarPane
 
     /**
      * @param {?Map.<string, string>} style
-     * @this {WebInspector.MetricsSidebarPane}
+     * @this {Elements.MetricsSidebarPane}
      */
     function callback(style) {
       if (!style || this.node() !== node)
@@ -63,8 +63,8 @@ WebInspector.MetricsSidebarPane = class extends WebInspector.ElementsSidebarPane
       this._updateMetrics(style);
     }
     /**
-     * @param {?WebInspector.CSSModel.InlineStyleResult} inlineStyleResult
-     * @this {WebInspector.MetricsSidebarPane}
+     * @param {?SDK.CSSModel.InlineStyleResult} inlineStyleResult
+     * @this {Elements.MetricsSidebarPane}
      */
     function inlineStyleCallback(inlineStyleResult) {
       if (inlineStyleResult && this.node() === node)
@@ -121,7 +121,7 @@ WebInspector.MetricsSidebarPane = class extends WebInspector.ElementsSidebarPane
       this.node().highlight(mode);
     } else {
       delete this._highlightMode;
-      WebInspector.DOMModel.hideDOMNodeHighlight();
+      SDK.DOMModel.hideDOMNodeHighlight();
     }
 
     for (var i = 0; this._boxElements && i < this._boxElements.length; ++i) {
@@ -147,7 +147,7 @@ WebInspector.MetricsSidebarPane = class extends WebInspector.ElementsSidebarPane
      * @param {string} name
      * @param {string} side
      * @param {string} suffix
-     * @this {WebInspector.MetricsSidebarPane}
+     * @this {Elements.MetricsSidebarPane}
      */
     function createBoxPartElement(style, name, side, suffix) {
       var propertyName = (name !== 'position' ? name + '-' : '') + side + suffix;
@@ -224,13 +224,12 @@ WebInspector.MetricsSidebarPane = class extends WebInspector.ElementsSidebarPane
 
     var boxes = ['content', 'padding', 'border', 'margin', 'position'];
     var boxColors = [
-      WebInspector.Color.PageHighlight.Content, WebInspector.Color.PageHighlight.Padding,
-      WebInspector.Color.PageHighlight.Border, WebInspector.Color.PageHighlight.Margin,
-      WebInspector.Color.fromRGBA([0, 0, 0, 0])
+      Common.Color.PageHighlight.Content, Common.Color.PageHighlight.Padding, Common.Color.PageHighlight.Border,
+      Common.Color.PageHighlight.Margin, Common.Color.fromRGBA([0, 0, 0, 0])
     ];
     var boxLabels = [
-      WebInspector.UIString('content'), WebInspector.UIString('padding'), WebInspector.UIString('border'),
-      WebInspector.UIString('margin'), WebInspector.UIString('position')
+      Common.UIString('content'), Common.UIString('padding'), Common.UIString('border'), Common.UIString('margin'),
+      Common.UIString('position')
     ];
     var previousBox = null;
     this._boxElements = [];
@@ -246,7 +245,7 @@ WebInspector.MetricsSidebarPane = class extends WebInspector.ElementsSidebarPane
 
       var boxElement = createElement('div');
       boxElement.className = name;
-      boxElement._backgroundColor = boxColors[i].asString(WebInspector.Color.Format.RGBA);
+      boxElement._backgroundColor = boxColors[i].asString(Common.Color.Format.RGBA);
       boxElement._name = name;
       boxElement.style.backgroundColor = boxElement._backgroundColor;
       boxElement.addEventListener(
@@ -303,7 +302,7 @@ WebInspector.MetricsSidebarPane = class extends WebInspector.ElementsSidebarPane
    * @param {!Map.<string, string>} computedStyle
    */
   startEditing(targetElement, box, styleProperty, computedStyle) {
-    if (WebInspector.isBeingEdited(targetElement))
+    if (UI.isBeingEdited(targetElement))
       return;
 
     var context = {box: box, styleProperty: styleProperty, computedStyle: computedStyle};
@@ -313,9 +312,9 @@ WebInspector.MetricsSidebarPane = class extends WebInspector.ElementsSidebarPane
 
     this._isEditingMetrics = true;
 
-    var config = new WebInspector.InplaceEditor.Config(
-        this._editingCommitted.bind(this), this.editingCancelled.bind(this), context);
-    WebInspector.InplaceEditor.startEditing(targetElement, config);
+    var config =
+        new UI.InplaceEditor.Config(this._editingCommitted.bind(this), this.editingCancelled.bind(this), context);
+    UI.InplaceEditor.startEditing(targetElement, config);
 
     targetElement.getComponentSelection().setBaseAndExtent(targetElement, 0, targetElement, 1);
   }
@@ -326,7 +325,7 @@ WebInspector.MetricsSidebarPane = class extends WebInspector.ElementsSidebarPane
     /**
      * @param {string} originalValue
      * @param {string} replacementString
-     * @this {WebInspector.MetricsSidebarPane}
+     * @this {Elements.MetricsSidebarPane}
      */
     function finishHandler(originalValue, replacementString) {
       this._applyUserInput(element, replacementString, originalValue, context, false);
@@ -344,8 +343,7 @@ WebInspector.MetricsSidebarPane = class extends WebInspector.ElementsSidebarPane
       return prefix + number + suffix;
     }
 
-    WebInspector.handleElementValueModifications(
-        event, element, finishHandler.bind(this), undefined, customNumberHandler);
+    UI.handleElementValueModifications(event, element, finishHandler.bind(this), undefined, customNumberHandler);
   }
 
   editingEnded(element, context) {
@@ -362,9 +360,10 @@ WebInspector.MetricsSidebarPane = class extends WebInspector.ElementsSidebarPane
         var pastLastSourcePropertyIndex = this.inlineStyle.pastLastSourcePropertyIndex();
         if (pastLastSourcePropertyIndex)
           this.inlineStyle.allProperties[pastLastSourcePropertyIndex - 1].setText('', false);
-      } else
+      } else {
         this.inlineStyle.allProperties[this.originalPropertyData.index].setText(
             this.originalPropertyData.propertyText, false);
+      }
     }
     this.editingEnded(element, context);
     this.update();
@@ -394,7 +393,7 @@ WebInspector.MetricsSidebarPane = class extends WebInspector.ElementsSidebarPane
 
     if (computedStyle.get('box-sizing') === 'border-box' && (styleProperty === 'width' || styleProperty === 'height')) {
       if (!userInput.match(/px$/)) {
-        WebInspector.console.error(
+        Common.console.error(
             'For elements with box-sizing: border-box, only absolute content area dimensions can be applied');
         return;
       }
@@ -429,7 +428,7 @@ WebInspector.MetricsSidebarPane = class extends WebInspector.ElementsSidebarPane
 
     /**
      * @param {boolean} success
-     * @this {WebInspector.MetricsSidebarPane}
+     * @this {Elements.MetricsSidebarPane}
      */
     function callback(success) {
       if (!success)

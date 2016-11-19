@@ -19,12 +19,7 @@
 #include "cc/surfaces/surface_sequence.h"
 #include "cc/surfaces/surfaces_export.h"
 
-namespace gfx {
-class Size;
-}
-
 namespace cc {
-class BeginFrameSource;
 class CopyOutputRequest;
 class Surface;
 class SurfaceFactoryClient;
@@ -70,6 +65,10 @@ class CC_SURFACES_EXPORT SurfaceFactory {
                              const DrawCallback& callback);
   void RequestCopyOfSurface(const LocalFrameId& local_frame_id,
                             std::unique_ptr<CopyOutputRequest> copy_request);
+
+  // Evicts the current frame on the surface. All the resources
+  // will be released and Surface::HasFrame will return false.
+  void ClearSurface(const LocalFrameId& local_frame_id);
 
   void WillDrawSurface(const LocalFrameId& id, const gfx::Rect& damage_rect);
 

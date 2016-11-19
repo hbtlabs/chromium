@@ -22,6 +22,7 @@
 #include "chrome/browser/android/browsing_data/browsing_data_counter_bridge.h"
 #include "chrome/browser/android/browsing_data/url_filter_bridge.h"
 #include "chrome/browser/android/chrome_application.h"
+#include "chrome/browser/android/chrome_backup_agent.h"
 #include "chrome/browser/android/chrome_feature_list.h"
 #include "chrome/browser/android/compositor/compositor_view.h"
 #include "chrome/browser/android/compositor/layer_title_cache.h"
@@ -169,6 +170,7 @@
 #include "components/safe_json/android/component_jni_registrar.h"
 #include "components/signin/core/browser/android/component_jni_registrar.h"
 #include "components/spellcheck/browser/android/component_jni_registrar.h"
+#include "components/spellcheck/spellcheck_build_features.h"
 #include "components/sync/android/sync_jni_registrar.h"
 #include "components/url_formatter/android/component_jni_registrar.h"
 #include "components/variations/android/component_jni_registrar.h"
@@ -182,6 +184,9 @@
 #if defined(ENABLE_VR_SHELL) || defined(ENABLE_WEBVR)
 #include "chrome/browser/android/vr_shell/vr_shell.h"
 #include "chrome/browser/android/vr_shell/vr_shell_delegate.h"
+#include "third_party/gvr-android-sdk/display_synchronizer_jni.h"
+#include "third_party/gvr-android-sdk/gvr_api_jni.h"
+#include "third_party/gvr-android-sdk/native_callbacks_jni.h"
 #endif
 
 #if !defined(OFFICIAL_BUILD)
@@ -236,6 +241,7 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"CertificateViewer", RegisterCertificateViewer},
     {"ChildAccountService", RegisterChildAccountService},
     {"ChromeApplication", chrome::android::ChromeApplication::RegisterBindings},
+    {"ChromeBackupAgent", chrome::android::RegisterBackupAgent},
     {"ChromeBlimpClientContextDelegate",
      ChromeBlimpClientContextDelegateAndroid::RegisterJni},
     {"ChromeBrowserProvider",
@@ -366,7 +372,7 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"SigninInvestigator", SigninInvestigatorAndroid::Register},
     {"SigninManager", SigninManagerAndroid::Register},
     {"SingleTabModel", RegisterSingleTabModel},
-#if defined(ENABLE_SPELLCHECK)
+#if BUILDFLAG(ENABLE_SPELLCHECK)
     {"SpellCheckerSessionBridge", spellcheck::android::RegisterSpellcheckJni},
 #endif
     {"SqliteCursor", SQLiteCursor::RegisterSqliteCursor},
@@ -399,6 +405,11 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
 #if defined(ENABLE_VR_SHELL) || defined(ENABLE_WEBVR)
     {"VrShell", vr_shell::RegisterVrShell},
     {"VrShellDelegate", vr_shell::RegisterVrShellDelegate},
+    {"DisplaySynchronizer",
+     DisplaySynchronizer::RegisterDisplaySynchronizerNatives},
+    {"GvrApi", GvrApi::RegisterGvrApiNatives},
+    {"NativeCallbacks",
+     NativeCallbacks::RegisterNativeCallbacksNatives},
 #endif
     {"WarmupManager", RegisterWarmupManager},
     {"WebApkInstaller", WebApkInstaller::Register},

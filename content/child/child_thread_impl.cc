@@ -42,7 +42,6 @@
 #include "content/child/fileapi/webfilesystem_impl.h"
 #include "content/child/memory/child_memory_message_filter.h"
 #include "content/child/notifications/notification_dispatcher.h"
-#include "content/child/power_monitor_broadcast_source.h"
 #include "content/child/push_messaging/push_dispatcher.h"
 #include "content/child/quota_dispatcher.h"
 #include "content/child/quota_message_filter.h"
@@ -55,7 +54,8 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/mojo_channel_switches.h"
 #include "content/public/common/service_manager_connection.h"
-#include "content/public/common/service_names.h"
+#include "content/public/common/service_names.mojom.h"
+#include "device/power_monitor/public/cpp/power_monitor_broadcast_source.h"
 #include "ipc/ipc_channel_mojo.h"
 #include "ipc/ipc_logging.h"
 #include "ipc/ipc_platform_file.h"
@@ -65,6 +65,8 @@
 #include "mojo/edk/embedder/named_platform_channel_pair.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
 #include "mojo/edk/embedder/scoped_ipc_support.h"
+#include "mojo/public/cpp/system/buffer.h"
+#include "mojo/public/cpp/system/platform_handle.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
@@ -264,7 +266,7 @@ class ChannelBootstrapFilter : public ConnectionFilter {
   bool OnConnect(const service_manager::Identity& remote_identity,
                  service_manager::InterfaceRegistry* registry,
                  service_manager::Connector* connector) override {
-    if (remote_identity.name() != kBrowserServiceName)
+    if (remote_identity.name() != mojom::kBrowserServiceName)
       return false;
 
     registry->AddInterface(base::Bind(&ChannelBootstrapFilter::CreateBootstrap,
@@ -485,7 +487,7 @@ void ChildThreadImpl::Init(const Options& options) {
     if (options.connect_to_browser) {
       browser_connection_ =
           service_manager_connection_->GetConnector()->Connect(
-              kBrowserServiceName);
+              mojom::kBrowserServiceName);
     } else {
       remote_interfaces = GetRemoteInterfaces();
     }
@@ -538,8 +540,9 @@ void ChildThreadImpl::Init(const Options& options) {
 
   // In single process mode we may already have a power monitor
   if (!base::PowerMonitor::Get()) {
-    std::unique_ptr<PowerMonitorBroadcastSource> power_monitor_source(
-        new PowerMonitorBroadcastSource());
+    std::unique_ptr<device::PowerMonitorBroadcastSource> power_monitor_source(
+        new device::PowerMonitorBroadcastSource(GetRemoteInterfaces()));
+
     power_monitor_.reset(
         new base::PowerMonitor(std::move(power_monitor_source)));
   }
@@ -729,27 +732,23 @@ std::unique_ptr<base::SharedMemory> ChildThreadImpl::AllocateSharedMemory(
     size_t buf_size,
     IPC::Sender* sender,
     bool* out_of_memory) {
-  std::unique_ptr<base::SharedMemory> shared_buf;
-  // Ask the browser to create the shared memory, since this is blocked by the
-  // sandbox on most platforms.
-  base::SharedMemoryHandle shared_mem_handle;
-  if (sender->Send(new ChildProcessHostMsg_SyncAllocateSharedMemory(
-          buf_size, &shared_mem_handle))) {
-    if (base::SharedMemory::IsHandleValid(shared_mem_handle)) {
-      shared_buf.reset(new base::SharedMemory(shared_mem_handle, false));
-    } else {
-      LOG(WARNING) << "Browser failed to allocate shared memory";
-      if (out_of_memory)
-        *out_of_memory = true;
-      return nullptr;
-    }
-  } else {
-    // Send is allowed to fail during shutdown. Return null in this case.
+  mojo::ScopedSharedBufferHandle mojo_buf =
+      mojo::SharedBufferHandle::Create(buf_size);
+  if (!mojo_buf->is_valid()) {
+    LOG(WARNING) << "Browser failed to allocate shared memory";
     if (out_of_memory)
-      *out_of_memory = false;
+      *out_of_memory = true;
     return nullptr;
   }
-  return shared_buf;
+
+  base::SharedMemoryHandle shared_buf;
+  if (mojo::UnwrapSharedMemoryHandle(std::move(mojo_buf), &shared_buf,
+                                     nullptr, nullptr) != MOJO_RESULT_OK) {
+    LOG(WARNING) << "Browser failed to allocate shared memory";
+    return nullptr;
+  }
+
+  return base::MakeUnique<base::SharedMemory>(shared_buf, false);
 }
 
 #if defined(OS_LINUX)
@@ -911,7 +910,7 @@ void ChildThreadImpl::GetAssociatedInterface(
 void ChildThreadImpl::OnServiceConnect(
     const service_manager::ServiceInfo& local_info,
     const service_manager::ServiceInfo& remote_info) {
-  if (remote_info.identity.name() != kBrowserServiceName)
+  if (remote_info.identity.name() != mojom::kBrowserServiceName)
     return;
   DCHECK(!connected_to_browser_);
   connected_to_browser_ = true;

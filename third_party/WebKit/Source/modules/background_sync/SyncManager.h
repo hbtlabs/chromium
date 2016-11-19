@@ -11,6 +11,7 @@
 
 namespace blink {
 
+class BackgroundSyncProvider;
 class ExecutionContext;
 class ScriptPromise;
 class ScriptState;
@@ -25,15 +26,17 @@ class SyncManager final : public GarbageCollected<SyncManager>,
     return new SyncManager(registration);
   }
 
-  ScriptPromise registerFunction(ScriptState*,
-                                 ExecutionContext*,
-                                 const String&);
+  ScriptPromise registerFunction(ScriptState*, const String& tag);
   ScriptPromise getTags(ScriptState*);
 
   DECLARE_TRACE();
 
+  enum { kUnregisteredSyncID = -1 };
+
  private:
   explicit SyncManager(ServiceWorkerRegistration*);
+
+  static BackgroundSyncProvider* backgroundSyncProvider();
 
   Member<ServiceWorkerRegistration> m_registration;
 };

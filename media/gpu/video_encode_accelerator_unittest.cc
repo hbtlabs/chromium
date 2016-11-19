@@ -358,7 +358,7 @@ static void CreateAlignedInputStreamFile(const gfx::Size& coded_size,
     const char* src_ptr = &src_data[0];
     for (size_t i = 0; i < num_planes; i++) {
       // Assert that each plane of frame starts at required byte boundary.
-      ASSERT_EQ(dest_offset & (kPlatformBufferAlignment - 1), 0u)
+      ASSERT_EQ(0u, dest_offset & (kPlatformBufferAlignment - 1))
           << "Planes of frame should be mapped per platform requirements";
       for (size_t j = 0; j < visible_plane_rows[i]; j++) {
         memcpy(&test_stream->aligned_in_file_data[dest_offset], src_ptr,
@@ -555,7 +555,6 @@ class VideoEncodeAcceleratorTestEnvironment : public ::testing::Environment {
 
 enum ClientState {
   CS_CREATED,
-  CS_ENCODER_SET,
   CS_INITIALIZED,
   CS_ENCODING,
   // Encoding has finished.
@@ -1203,7 +1202,6 @@ void VEAClient::CreateEncoder() {
     if (!encoders[i])
       continue;
     encoder_ = std::move(encoders[i]);
-    SetState(CS_ENCODER_SET);
     if (encoder_->Initialize(kInputFormat, test_stream_->visible_size,
                              test_stream_->requested_profile,
                              requested_bitrate_, this)) {
@@ -1333,7 +1331,7 @@ void VEAClient::RequireBitstreamBuffers(unsigned int input_count,
                                         const gfx::Size& input_coded_size,
                                         size_t output_size) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  ASSERT_EQ(state_, CS_INITIALIZED);
+  ASSERT_EQ(CS_INITIALIZED, state_);
   SetState(CS_ENCODING);
 
   if (quality_validator_)
@@ -1726,7 +1724,7 @@ void VEAClient::VerifyStreamProperties() {
   if (num_encoded_frames_ < next_keyframe_at_ + kMaxKeyframeDelay)
     EXPECT_LE(num_keyframes_requested_, 1UL);
   else
-    EXPECT_EQ(num_keyframes_requested_, 0UL);
+    EXPECT_EQ(0UL, num_keyframes_requested_);
 }
 
 void VEAClient::WriteIvfFileHeader() {
@@ -1806,7 +1804,9 @@ class VEANoInputClient : public VideoEncodeAccelerator::Client {
 };
 
 VEANoInputClient::VEANoInputClient(ClientStateNotification<ClientState>* note)
-    : note_(note), next_output_buffer_id_(0) {}
+    : note_(note), next_output_buffer_id_(0) {
+  thread_checker_.DetachFromThread();
+}
 
 VEANoInputClient::~VEANoInputClient() {
   LOG_ASSERT(!has_encoder());
@@ -1815,6 +1815,7 @@ VEANoInputClient::~VEANoInputClient() {
 void VEANoInputClient::CreateEncoder() {
   DCHECK(thread_checker_.CalledOnValidThread());
   LOG_ASSERT(!has_encoder());
+  LOG_ASSERT(g_env->test_streams_.size());
 
   const int kDefaultWidth = 320;
   const int kDefaultHeight = 240;
@@ -1831,7 +1832,8 @@ void VEANoInputClient::CreateEncoder() {
     if (!encoder)
       continue;
     encoder_ = std::move(encoder);
-    if (encoder_->Initialize(kInputFormat, visible_size, VP8PROFILE_ANY,
+    if (encoder_->Initialize(kInputFormat, visible_size,
+                             g_env->test_streams_[0]->requested_profile,
                              kDefaultBitrate, this)) {
       encoder_->RequestEncodingParametersChange(kDefaultBitrate, kDefaultFps);
       SetState(CS_INITIALIZED);
@@ -1964,8 +1966,8 @@ TEST_P(VideoEncodeAcceleratorTest, TestSimpleEncode) {
   }
 
   // All encoders must pass through states in this order.
-  enum ClientState state_transitions[] = {
-      CS_ENCODER_SET, CS_INITIALIZED, CS_ENCODING, CS_FINISHED, CS_VALIDATED};
+  enum ClientState state_transitions[] = {CS_INITIALIZED, CS_ENCODING,
+                                          CS_FINISHED, CS_VALIDATED};
 
   // Wait for all encoders to go through all states and finish.
   // Do this by waiting for all encoders to advance to state n before checking
@@ -1976,7 +1978,7 @@ TEST_P(VideoEncodeAcceleratorTest, TestSimpleEncode) {
   // hard to debug issues there, if there were multiple "ChildThreads".
   for (const auto& state : state_transitions) {
     for (size_t i = 0; i < num_concurrent_encoders; i++)
-      ASSERT_EQ(notes[i]->Wait(), state);
+      ASSERT_EQ(state, notes[i]->Wait());
   }
 
   for (size_t i = 0; i < num_concurrent_encoders; ++i) {
@@ -2063,7 +2065,7 @@ TEST(VEANoInputTest, CheckOutput) {
                                           CS_FINISHED};
 
   for (const auto& state : state_transitions) {
-    ASSERT_EQ(note->Wait(), state);
+    ASSERT_EQ(state, note->Wait());
   }
 
   encoder_thread.task_runner()->PostTask(

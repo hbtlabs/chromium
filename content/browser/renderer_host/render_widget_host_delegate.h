@@ -16,7 +16,7 @@
 #include "content/public/common/drop_data.h"
 #include "third_party/WebKit/public/platform/WebDisplayMode.h"
 #include "third_party/WebKit/public/platform/WebDragOperation.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/gfx/native_widget_types.h"
 
 namespace blink {
@@ -215,6 +215,26 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // not intended for use with other types of fullscreen, such as HTML
   // fullscreen, and will return nullptr for those cases.
   virtual RenderWidgetHostImpl* GetFullscreenRenderWidgetHost() const;
+
+  // Allow the delegate to handle the cursor update. Returns true if handled.
+  virtual bool OnUpdateDragCursor();
+
+  // Inner WebContents Helpers -------------------------------------------------
+  //
+  // These functions are helpers in managing a hierharchy of WebContents
+  // involved in rendering inner WebContents.
+
+  // Get the RenderWidgetHost that should receive page level focus events. This
+  // will be the widget that is rendering the main frame of the currently
+  // focused WebContents.
+  virtual RenderWidgetHostImpl* GetRenderWidgetHostWithPageFocus();
+
+  // In cases with multiple RenderWidgetHosts involved in rendering a page, only
+  // one widget should be focused and active. This ensures that
+  // |render_widget_host| is focused and that its owning WebContents is also
+  // the focused WebContents.
+  virtual void FocusOwningWebContents(
+      RenderWidgetHostImpl* render_widget_host) {}
 
  protected:
   virtual ~RenderWidgetHostDelegate() {}

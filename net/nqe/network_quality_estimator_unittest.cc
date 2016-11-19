@@ -351,8 +351,9 @@ TEST(NetworkQualityEstimatorTest, Caching) {
   base::RunLoop().RunUntilIdle();
 
   // Verify that the cached network quality was read, and observers were
-  // notified.
-  EXPECT_EQ(1U, observer.effective_connection_types().size());
+  // notified. |observer| must be notified once right after it was added, and
+  // once again after the cached network quality was read.
+  EXPECT_EQ(2U, observer.effective_connection_types().size());
   EXPECT_EQ(1U, rtt_observer.observations().size());
   EXPECT_EQ(1U, throughput_observer.observations().size());
 }
@@ -591,7 +592,6 @@ TEST(NetworkQualityEstimatorTest, ObtainThresholdsOnlyRTT) {
   variation_params["Slow2G.ThresholdMedianHttpRTTMsec"] = "2000";
   variation_params["2G.ThresholdMedianHttpRTTMsec"] = "1000";
   variation_params["3G.ThresholdMedianHttpRTTMsec"] = "500";
-  variation_params["4G.ThresholdMedianHttpRTTMsec"] = "300";
 
   TestNetworkQualityEstimator estimator(variation_params);
 
@@ -758,7 +758,6 @@ TEST(NetworkQualityEstimatorTest, ObtainThresholdsOnlyTransportRTT) {
   variation_params["Slow2G.ThresholdMedianTransportRTTMsec"] = "2000";
   variation_params["2G.ThresholdMedianTransportRTTMsec"] = "1000";
   variation_params["3G.ThresholdMedianTransportRTTMsec"] = "500";
-  variation_params["4G.ThresholdMedianTransportRTTMsec"] = "300";
 
   TestNetworkQualityEstimator estimator(variation_params);
 
@@ -810,13 +809,11 @@ TEST(NetworkQualityEstimatorTest, ObtainThresholdsHttpRTTandThroughput) {
   variation_params["Slow2G.ThresholdMedianHttpRTTMsec"] = "2000";
   variation_params["2G.ThresholdMedianHttpRTTMsec"] = "1000";
   variation_params["3G.ThresholdMedianHttpRTTMsec"] = "500";
-  variation_params["4G.ThresholdMedianHttpRTTMsec"] = "300";
 
   variation_params["Offline.ThresholdMedianKbps"] = "10";
   variation_params["Slow2G.ThresholdMedianKbps"] = "100";
   variation_params["2G.ThresholdMedianKbps"] = "300";
   variation_params["3G.ThresholdMedianKbps"] = "500";
-  variation_params["4G.ThresholdMedianKbps"] = "1000";
 
   TestNetworkQualityEstimator estimator(variation_params);
 
@@ -877,13 +874,11 @@ TEST(NetworkQualityEstimatorTest, ObtainThresholdsTransportRTTandThroughput) {
   variation_params["Slow2G.ThresholdMedianTransportRTTMsec"] = "2000";
   variation_params["2G.ThresholdMedianTransportRTTMsec"] = "1000";
   variation_params["3G.ThresholdMedianTransportRTTMsec"] = "500";
-  variation_params["4G.ThresholdMedianTransportRTTMsec"] = "300";
 
   variation_params["Offline.ThresholdMedianKbps"] = "10";
   variation_params["Slow2G.ThresholdMedianKbps"] = "100";
   variation_params["2G.ThresholdMedianKbps"] = "300";
   variation_params["3G.ThresholdMedianKbps"] = "500";
-  variation_params["4G.ThresholdMedianKbps"] = "1000";
 
   TestNetworkQualityEstimator estimator(variation_params);
 
@@ -969,8 +964,6 @@ TEST(NetworkQualityEstimatorTest, TestGetMetricsSince) {
 
   variation_params["3G.ThresholdMedianHttpRTTMsec"] =
       base::IntToString(rtt_threshold_3g.InMilliseconds());
-  variation_params["4G.ThresholdMedianHttpRTTMsec"] =
-      base::IntToString(rtt_threshold_4g.InMilliseconds());
   variation_params["HalfLifeSeconds"] = "300000";
 
   TestNetworkQualityEstimator estimator(variation_params);
@@ -1434,6 +1427,22 @@ TEST(NetworkQualityEstimatorTest, TestEffectiveConnectionTypeObserver) {
   estimator.set_start_time_null_http_rtt(
       base::TimeDelta::FromMilliseconds(100));
   EXPECT_EQ(2U, observer.effective_connection_types().size());
+
+  TestEffectiveConnectionTypeObserver observer_2;
+  estimator.AddEffectiveConnectionTypeObserver(&observer_2);
+  EXPECT_EQ(0U, observer_2.effective_connection_types().size());
+  base::RunLoop().RunUntilIdle();
+  // |observer_2| must be notified as soon as it is added.
+  EXPECT_EQ(1U, observer_2.effective_connection_types().size());
+
+  // |observer_3| should not be notified since it unregisters before the
+  // message loop is run.
+  TestEffectiveConnectionTypeObserver observer_3;
+  estimator.AddEffectiveConnectionTypeObserver(&observer_3);
+  EXPECT_EQ(0U, observer_3.effective_connection_types().size());
+  estimator.RemoveEffectiveConnectionTypeObserver(&observer_3);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(0U, observer_3.effective_connection_types().size());
 }
 
 // Tests that the network quality is computed at the specified interval, and
@@ -1507,6 +1516,33 @@ TEST(NetworkQualityEstimatorTest, TestRTTAndThroughputEstimatesObserver) {
       base::TimeDelta::FromMilliseconds(10000));
   estimator.set_start_time_null_http_rtt(base::TimeDelta::FromMilliseconds(1));
   EXPECT_EQ(0, observer.notifications_received() - notifications_received);
+
+  TestRTTAndThroughputEstimatesObserver observer_2;
+  estimator.AddRTTAndThroughputEstimatesObserver(&observer_2);
+  EXPECT_EQ(nqe::internal::InvalidRTT(), observer_2.http_rtt());
+  EXPECT_EQ(nqe::internal::InvalidRTT(), observer_2.transport_rtt());
+  EXPECT_EQ(nqe::internal::kInvalidThroughput,
+            observer_2.downstream_throughput_kbps());
+  base::RunLoop().RunUntilIdle();
+  EXPECT_NE(nqe::internal::InvalidRTT(), observer_2.http_rtt());
+  EXPECT_NE(nqe::internal::InvalidRTT(), observer_2.transport_rtt());
+  EXPECT_NE(nqe::internal::kInvalidThroughput,
+            observer_2.downstream_throughput_kbps());
+
+  // |observer_3| should not be notified because it is unregisters before the
+  // message loop is run.
+  TestRTTAndThroughputEstimatesObserver observer_3;
+  estimator.AddRTTAndThroughputEstimatesObserver(&observer_3);
+  EXPECT_EQ(nqe::internal::InvalidRTT(), observer_3.http_rtt());
+  EXPECT_EQ(nqe::internal::InvalidRTT(), observer_3.transport_rtt());
+  EXPECT_EQ(nqe::internal::kInvalidThroughput,
+            observer_3.downstream_throughput_kbps());
+  estimator.RemoveRTTAndThroughputEstimatesObserver(&observer_3);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(nqe::internal::InvalidRTT(), observer_3.http_rtt());
+  EXPECT_EQ(nqe::internal::InvalidRTT(), observer_3.transport_rtt());
+  EXPECT_EQ(nqe::internal::kInvalidThroughput,
+            observer_3.downstream_throughput_kbps());
 }
 
 // Tests that the effective connection type is computed on every RTT
@@ -2322,6 +2358,116 @@ TEST(NetworkQualityEstimatorTest,
           observer.effective_connection_types().at(
               observer.effective_connection_types().size() - 1);
       EXPECT_EQ(i, last_notified_type);
+    }
+  }
+}
+
+// Test that the typical network qualities are set correctly.
+TEST(NetworkQualityEstimatorTest, TypicalNetworkQualities) {
+  const struct {
+    bool use_transport_rtt;
+  } tests[] = {
+      {
+          false,
+      },
+      {
+          true,
+      },
+  };
+
+  for (const auto& test : tests) {
+    TestNetworkQualitiesCacheObserver observer;
+    std::map<std::string, std::string> variation_params;
+    if (test.use_transport_rtt) {
+      variation_params["effective_connection_type_algorithm"] =
+          "TransportRTTOrDownstreamThroughput";
+    }
+    TestNetworkQualityEstimator estimator(variation_params);
+
+    // Typical network quality should not be set for Unknown and Offline.
+    for (size_t i = EFFECTIVE_CONNECTION_TYPE_UNKNOWN;
+         i <= EFFECTIVE_CONNECTION_TYPE_OFFLINE; ++i) {
+      EXPECT_EQ(nqe::internal::InvalidRTT(),
+                estimator.typical_network_quality_[i].http_rtt());
+
+      EXPECT_EQ(nqe::internal::InvalidRTT(),
+                estimator.typical_network_quality_[i].transport_rtt());
+    }
+
+    // Typical network quality should be set for other effective connection
+    // types.
+    for (size_t i = EFFECTIVE_CONNECTION_TYPE_SLOW_2G;
+         i <= EFFECTIVE_CONNECTION_TYPE_3G; ++i) {
+      // The typical RTT for an effective connection type should be at least as
+      // much as the threshold RTT.
+      EXPECT_NE(nqe::internal::InvalidRTT(),
+                estimator.typical_network_quality_[i].http_rtt());
+      EXPECT_GT(estimator.typical_network_quality_[i].http_rtt(),
+                estimator.connection_thresholds_[i].http_rtt());
+
+      EXPECT_NE(nqe::internal::InvalidRTT(),
+                estimator.typical_network_quality_[i].transport_rtt());
+      EXPECT_GT(estimator.typical_network_quality_[i].transport_rtt(),
+                estimator.connection_thresholds_[i].transport_rtt());
+
+      // The typical throughput for an effective connection type should not be
+      // more than the threshold throughput.
+      if (estimator.connection_thresholds_[i].downstream_throughput_kbps() !=
+          nqe::internal::kInvalidThroughput) {
+        EXPECT_LT(
+            estimator.typical_network_quality_[i].downstream_throughput_kbps(),
+            estimator.connection_thresholds_[i].downstream_throughput_kbps());
+      }
+    }
+
+    // The typical network quality of 4G connection should be at least as fast
+    // as the threshold for 3G connection.
+    EXPECT_LT(estimator.typical_network_quality_[EFFECTIVE_CONNECTION_TYPE_4G]
+                  .http_rtt(),
+              estimator.connection_thresholds_[EFFECTIVE_CONNECTION_TYPE_3G]
+                  .http_rtt());
+    EXPECT_LT(estimator.typical_network_quality_[EFFECTIVE_CONNECTION_TYPE_4G]
+                  .transport_rtt(),
+              estimator.connection_thresholds_[EFFECTIVE_CONNECTION_TYPE_3G]
+                  .transport_rtt());
+    if (estimator.connection_thresholds_[EFFECTIVE_CONNECTION_TYPE_3G]
+            .downstream_throughput_kbps() !=
+        nqe::internal::kInvalidThroughput) {
+      EXPECT_GT(estimator.typical_network_quality_[EFFECTIVE_CONNECTION_TYPE_4G]
+                    .downstream_throughput_kbps(),
+                estimator.connection_thresholds_[EFFECTIVE_CONNECTION_TYPE_3G]
+                    .downstream_throughput_kbps());
+    }
+
+    TestDelegate test_delegate;
+    TestURLRequestContext context(true);
+    context.set_network_quality_estimator(&estimator);
+    context.Init();
+
+    for (size_t effective_connection_type = EFFECTIVE_CONNECTION_TYPE_SLOW_2G;
+         effective_connection_type <= EFFECTIVE_CONNECTION_TYPE_4G;
+         ++effective_connection_type) {
+      // Set the RTT and throughput values to the typical values for
+      // |effective_connection_type|. The effective connection type should be
+      // computed as |effective_connection_type|.
+      estimator.set_start_time_null_http_rtt(
+          estimator.typical_network_quality_[effective_connection_type]
+              .http_rtt());
+      estimator.set_start_time_null_transport_rtt(
+          estimator.typical_network_quality_[effective_connection_type]
+              .transport_rtt());
+      estimator.set_start_time_null_downlink_throughput_kbps(INT32_MAX);
+
+      // Force recomputation of effective connection type by starting  a main
+      // frame request.
+      std::unique_ptr<URLRequest> request(context.CreateRequest(
+          estimator.GetEchoURL(), DEFAULT_PRIORITY, &test_delegate));
+      request->SetLoadFlags(request->load_flags() | LOAD_MAIN_FRAME_DEPRECATED);
+      request->Start();
+      base::RunLoop().Run();
+
+      EXPECT_EQ(effective_connection_type,
+                estimator.GetEffectiveConnectionType());
     }
   }
 }

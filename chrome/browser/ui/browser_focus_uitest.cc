@@ -331,9 +331,6 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, DISABLED_TabsRememberFocus) {
 
 // Tabs remember focus with find-in-page box.
 IN_PROC_BROWSER_TEST_F(BrowserFocusTest, TabsRememberFocusFindInPage) {
-  ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
-  ui_test_utils::BrowserActivationWaiter waiter(browser());
-  waiter.WaitForActivation();
   const GURL url = embedded_test_server()->GetURL(kSimplePage);
   ui_test_utils::NavigateToURL(browser(), url);
 
@@ -417,17 +414,8 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest,
   EXPECT_TRUE(focused_browser->window()->IsActive());
 }
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_AURA)
-// TODO(erg): http://crbug.com/163931
-#define MAYBE_LocationBarLockFocus DISABLED_LocationBarLockFocus
-#else
-#define MAYBE_LocationBarLockFocus LocationBarLockFocus
-#endif
-
 // Page cannot steal focus when focus is on location bar.
-IN_PROC_BROWSER_TEST_F(BrowserFocusTest, MAYBE_LocationBarLockFocus) {
-  ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
-
+IN_PROC_BROWSER_TEST_F(BrowserFocusTest, LocationBarLockFocus) {
   // Open the page that steals focus.
   const GURL url = embedded_test_server()->GetURL(kStealFocusPage);
   ui_test_utils::NavigateToURL(browser(), url);
@@ -565,17 +553,8 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, DISABLED_TabInitialFocus) {
   EXPECT_TRUE(IsViewFocused(VIEW_ID_OMNIBOX));
 }
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_AURA)
-// TODO(erg): http://crbug.com/163931
-#define MAYBE_FocusOnReload DISABLED_FocusOnReload
-#else
-#define MAYBE_FocusOnReload FocusOnReload
-#endif
-
 // Tests that focus goes where expected when using reload.
-IN_PROC_BROWSER_TEST_F(BrowserFocusTest, MAYBE_FocusOnReload) {
-  ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
-
+IN_PROC_BROWSER_TEST_F(BrowserFocusTest, FocusOnReload) {
   // Open the new tab, reload.
   {
     content::WindowedNotificationObserver observer(
@@ -688,17 +667,15 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, NavigateFromOmniboxIntoNewTab) {
   EXPECT_FALSE(IsViewFocused(VIEW_ID_OMNIBOX));
 }
 
-// This functionality is currently broken. http://crbug.com/304865.
-//
-// #if defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_AURA)
-// // TODO(erg): http://crbug.com/163931
-// #define MAYBE_FocusOnNavigate DISABLED_FocusOnNavigate
-// #else
-// #define MAYBE_FocusOnNavigate FocusOnNavigate
-// #endif
-
-IN_PROC_BROWSER_TEST_F(BrowserFocusTest, DISABLED_FocusOnNavigate) {
+// Flaky on Windows (http://crbug.com/665296).
+#if defined(OS_WIN)
+#define MAYBE_FocusOnNavigate DISABLED_FocusOnNavigate
+#else
+#define MAYBE_FocusOnNavigate FocusOnNavigate
+#endif
+IN_PROC_BROWSER_TEST_F(BrowserFocusTest, MAYBE_FocusOnNavigate) {
   // Needed on Mac.
+  // TODO(warx): check why it is needed on Mac.
   ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
   // Load the NTP.
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));

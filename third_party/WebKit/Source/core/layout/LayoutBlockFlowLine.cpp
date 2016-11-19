@@ -71,9 +71,9 @@ class ExpansionOpportunities {
     m_totalOpportunities += opportunitiesInRun;
   }
   void removeTrailingExpansion() {
-    if (!m_totalOpportunities || !m_runsWithExpansions.last())
+    if (!m_totalOpportunities || !m_runsWithExpansions.back())
       return;
-    m_runsWithExpansions.last()--;
+    m_runsWithExpansions.back()--;
     m_totalOpportunities--;
   }
 
@@ -363,20 +363,20 @@ ETextAlign LayoutBlockFlow::textAlignmentForLine(bool endsWithSoftBreak) const {
   TextAlignLast alignmentLast = style()->getTextAlignLast();
   switch (alignmentLast) {
     case TextAlignLastStart:
-      return TASTART;
+      return ETextAlign::Start;
     case TextAlignLastEnd:
-      return TAEND;
+      return ETextAlign::End;
     case TextAlignLastLeft:
-      return LEFT;
+      return ETextAlign::Left;
     case TextAlignLastRight:
-      return RIGHT;
+      return ETextAlign::Right;
     case TextAlignLastCenter:
-      return CENTER;
+      return ETextAlign::Center;
     case TextAlignLastJustify:
-      return JUSTIFY;
+      return ETextAlign::Justify;
     case TextAlignLastAuto:
-      if (alignment == JUSTIFY)
-        return TASTART;
+      if (alignment == ETextAlign::Justify)
+        return ETextAlign::Start;
       return alignment;
   }
 
@@ -670,25 +670,25 @@ void LayoutBlockFlow::updateLogicalWidthForAlignment(
   // position the objects horizontally. The total width of the line can be
   // increased if we end up justifying text.
   switch (textAlign) {
-    case LEFT:
-    case WEBKIT_LEFT:
+    case ETextAlign::Left:
+    case ETextAlign::WebkitLeft:
       updateLogicalWidthForLeftAlignedBlock(
           style()->isLeftToRightDirection(), trailingSpaceRun, logicalLeft,
           totalLogicalWidth, availableLogicalWidth);
       break;
-    case RIGHT:
-    case WEBKIT_RIGHT:
+    case ETextAlign::Right:
+    case ETextAlign::WebkitRight:
       updateLogicalWidthForRightAlignedBlock(
           style()->isLeftToRightDirection(), trailingSpaceRun, logicalLeft,
           totalLogicalWidth, availableLogicalWidth);
       break;
-    case CENTER:
-    case WEBKIT_CENTER:
+    case ETextAlign::Center:
+    case ETextAlign::WebkitCenter:
       updateLogicalWidthForCenterAlignedBlock(
           style()->isLeftToRightDirection(), trailingSpaceRun, logicalLeft,
           totalLogicalWidth, availableLogicalWidth);
       break;
-    case JUSTIFY:
+    case ETextAlign::Justify:
       adjustInlineDirectionLineBounds(expansionOpportunityCount, logicalLeft,
                                       availableLogicalWidth);
       if (expansionOpportunityCount) {
@@ -699,7 +699,7 @@ void LayoutBlockFlow::updateLogicalWidthForAlignment(
         break;
       }
     // Fall through
-    case TASTART:
+    case ETextAlign::Start:
       if (direction == LTR)
         updateLogicalWidthForLeftAlignedBlock(
             style()->isLeftToRightDirection(), trailingSpaceRun, logicalLeft,
@@ -709,7 +709,7 @@ void LayoutBlockFlow::updateLogicalWidthForAlignment(
             style()->isLeftToRightDirection(), trailingSpaceRun, logicalLeft,
             totalLogicalWidth, availableLogicalWidth);
       break;
-    case TAEND:
+    case ETextAlign::End:
       if (direction == LTR)
         updateLogicalWidthForRightAlignedBlock(
             style()->isLeftToRightDirection(), trailingSpaceRun, logicalLeft,
@@ -820,7 +820,7 @@ BidiRun* LayoutBlockFlow::computeInlineDirectionPositionsForSegment(
     }
     if (r->m_lineLayoutItem.isText()) {
       LineLayoutText rt(r->m_lineLayoutItem);
-      if (textAlign == JUSTIFY && r != trailingSpaceRun &&
+      if (textAlign == ETextAlign::Justify && r != trailingSpaceRun &&
           textJustify != TextJustifyNone) {
         if (!isAfterExpansion)
           toInlineTextBox(r->m_box)->setCanHaveLeadingExpansion(true);
@@ -1364,7 +1364,7 @@ void LayoutBlockFlow::linkToEndLineIfNeeded(LineLayoutState& layoutState) {
             floatingObject->setOriginatingLine(line);
             LayoutUnit logicalTop =
                 logicalTopForChild(*box) - marginBeforeForChild(*box) + delta;
-            positionNewFloats(logicalTop);
+            placeNewFloats(logicalTop);
           }
         }
       }
@@ -1379,7 +1379,7 @@ void LayoutBlockFlow::linkToEndLineIfNeeded(LineLayoutState& layoutState) {
   // now. This has to be done before adding in the bottom border/padding, or the
   // float will
   // include the padding incorrectly. -dwh
-  if (positionNewFloats(logicalHeight()) && lastRootBox())
+  if (placeNewFloats(logicalHeight()) && lastRootBox())
     appendFloatsToLastLine(layoutState, InlineIterator(), InlineBidiResolver(),
                            BidiStatus());
 }
@@ -1398,7 +1398,7 @@ void LayoutBlockFlow::markDirtyFloatsForPaintInvalidation(
     }
     insertFloatingObject(*f);
   }
-  positionNewFloats(logicalHeight());
+  placeNewFloats(logicalHeight());
 }
 
 // InlineMinMaxIterator is a class that will iterate over all layout objects
@@ -2088,7 +2088,7 @@ RootInlineBox* LayoutBlockFlow::determineStartPosition(
           floatingObject->setOriginatingLine(line);
           LayoutUnit logicalTop =
               logicalTopForChild(*box) - marginBeforeForChild(*box);
-          positionNewFloats(logicalTop);
+          placeNewFloats(logicalTop);
           ASSERT(layoutState.floats()[numCleanFloats].object == box);
           numCleanFloats++;
         }
@@ -2470,15 +2470,15 @@ LayoutUnit LayoutBlockFlow::startAlignedOffsetForLine(
 
   bool applyIndentText;
   switch (textAlign) {  // FIXME: Handle TAEND here
-    case LEFT:
-    case WEBKIT_LEFT:
+    case ETextAlign::Left:
+    case ETextAlign::WebkitLeft:
       applyIndentText = style()->isLeftToRightDirection();
       break;
-    case RIGHT:
-    case WEBKIT_RIGHT:
+    case ETextAlign::Right:
+    case ETextAlign::WebkitRight:
       applyIndentText = !style()->isLeftToRightDirection();
       break;
-    case TASTART:
+    case ETextAlign::Start:
       applyIndentText = true;
       break;
     default:

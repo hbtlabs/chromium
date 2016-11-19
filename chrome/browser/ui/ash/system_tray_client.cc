@@ -20,6 +20,7 @@
 #include "chrome/browser/chromeos/set_time_dialog.h"
 #include "chrome/browser/chromeos/system/system_clock.h"
 #include "chrome/browser/chromeos/ui/choose_mobile_network_dialog.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/chrome_pages.h"
@@ -277,6 +278,15 @@ void SystemTrayClient::ShowProxySettings() {
   chromeos::LoginDisplayHost::default_host()->OpenProxySettings();
 }
 
+void SystemTrayClient::SignOut() {
+  chrome::AttemptUserExit();
+}
+
+void SystemTrayClient::RequestRestartForUpdate() {
+  // We expect that UpdateEngine is in "Reboot for update" state now.
+  chrome::NotifyAndTerminate(true /* fast_path */);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // chromeos::system::SystemClockObserver:
 
@@ -295,9 +305,9 @@ void SystemTrayClient::ConnectToSystemTray() {
   // Under mash the SystemTray interface is in the ash process. In classic ash
   // we provide it to ourself.
   if (chrome::IsRunningInMash())
-    connector->ConnectToInterface("service:ash", &system_tray_);
+    connector->ConnectToInterface("ash", &system_tray_);
   else
-    connector->ConnectToInterface("service:content_browser", &system_tray_);
+    connector->ConnectToInterface("content_browser", &system_tray_);
 
   // Tolerate ash crashing and coming back up.
   system_tray_.set_connection_error_handler(base::Bind(

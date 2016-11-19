@@ -60,6 +60,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "extensions/browser/extension_protocols.h"
 #include "extensions/common/constants.h"
+#include "extensions/features/features.h"
 #include "net/base/cache_type.h"
 #include "net/base/sdch_manager.h"
 #include "net/cookies/cookie_store.h"
@@ -484,7 +485,8 @@ void ProfileImplIOData::InitializeInternal(
   main_context_storage->set_network_delegate(
       data_reduction_proxy_io_data()->CreateNetworkDelegate(
           io_thread_globals->data_use_ascriber->CreateNetworkDelegate(
-              std::move(chrome_network_delegate)),
+              std::move(chrome_network_delegate),
+              io_thread->GetMetricsDataUseForwarder()),
           true));
 
   main_context->set_host_resolver(
@@ -556,7 +558,7 @@ void ProfileImplIOData::InitializeInternal(
   main_context->set_network_quality_estimator(
       io_thread_globals->network_quality_estimator.get());
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   InitializeExtensionsRequestContext(profile_params);
 #endif
 

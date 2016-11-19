@@ -15,6 +15,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_macros.h"
 #include "components/safe_browsing_db/v4_feature_list.h"
+#include "components/safe_browsing_db/v4_protocol_manager_util.h"
 #include "content/public/browser/browser_thread.h"
 
 using content::BrowserThread;
@@ -30,14 +31,38 @@ const ThreatSeverity kLeastSeverity =
 ListInfos GetListInfos() {
   // NOTE(vakh): When adding a store here, add the corresponding store-specific
   // histograms also.
-  return ListInfos(
-      {ListInfo(true, "UrlMalware.store", GetUrlMalwareId(),
-                SB_THREAT_TYPE_URL_MALWARE),
-       ListInfo(true, "UrlSoceng.store", GetUrlSocEngId(),
-                SB_THREAT_TYPE_URL_PHISHING),
-       ListInfo(false, "", GetChromeUrlApiId(), SB_THREAT_TYPE_API_ABUSE),
-       ListInfo(true, "UrlUws.store", GetUrlUwsId(),
-                SB_THREAT_TYPE_URL_UNWANTED)});
+  // The first argument to ListInfo specifies whether to sync hash prefixes for
+  // that list. This can be false for two reasons:
+  // - The server doesn't support that list yet. Once the server adds support
+  //   for it, it can be changed to true.
+  // - The list doesn't have hash prefixes to match. All requests lead to full
+  //   hash checks. For instance: GetChromeUrlApiId()
+  return ListInfos({
+      ListInfo(false, "CertCsdDownloadWhitelist.store",
+               GetCertCsdDownloadWhitelistId(), SB_THREAT_TYPE_UNUSED),
+      ListInfo(false, "ChromeFilenameClientIncident.store",
+               GetChromeFilenameClientIncidentId(), SB_THREAT_TYPE_UNUSED),
+      ListInfo(true, "IpMalware.store", GetIpMalwareId(),
+               SB_THREAT_TYPE_UNUSED),
+      ListInfo(false, "UrlCsdDownloadWhitelist.store",
+               GetUrlCsdDownloadWhitelistId(), SB_THREAT_TYPE_UNUSED),
+      ListInfo(false, "UrlCsdWhitelist.store", GetUrlCsdWhitelistId(),
+               SB_THREAT_TYPE_UNUSED),
+      ListInfo(true, "UrlSoceng.store", GetUrlSocEngId(),
+               SB_THREAT_TYPE_URL_PHISHING),
+      ListInfo(true, "UrlMalware.store", GetUrlMalwareId(),
+               SB_THREAT_TYPE_URL_MALWARE),
+      ListInfo(true, "UrlUws.store", GetUrlUwsId(),
+               SB_THREAT_TYPE_URL_UNWANTED),
+      ListInfo(true, "UrlMalBin.store", GetUrlMalBinId(),
+               SB_THREAT_TYPE_BINARY_MALWARE_URL),
+      ListInfo(true, "ChromeExtMalware.store", GetChromeExtensionMalwareId(),
+               SB_THREAT_TYPE_EXTENSION),
+      ListInfo(false, "ChromeUrlClientIncident.store",
+               GetChromeUrlClientIncidentId(),
+               SB_THREAT_TYPE_BLACKLISTED_RESOURCE),
+      ListInfo(false, "", GetChromeUrlApiId(), SB_THREAT_TYPE_API_ABUSE),
+  });
 }
 
 // Returns the severity information about a given SafeBrowsing list. The lowest
@@ -194,7 +219,7 @@ bool V4LocalDatabaseManager::CheckExtensionIDs(
 
   std::unique_ptr<PendingCheck> check = base::MakeUnique<PendingCheck>(
       client, ClientCallbackType::CHECK_EXTENSION_IDS,
-      StoresToCheck({GetChromeUrlMalwareId()}), extension_ids);
+      StoresToCheck({GetChromeExtensionMalwareId()}), extension_ids);
 
   return HandleCheck(std::move(check));
 }
@@ -216,6 +241,7 @@ bool V4LocalDatabaseManager::CheckResourceUrl(const GURL& url, Client* client) {
 
 bool V4LocalDatabaseManager::MatchCsdWhitelistUrl(const GURL& url) {
   // TODO(vakh): Implement this skeleton.
+  // Use: GetUrlCsdWhitelistId()
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   return true;
 }
@@ -223,25 +249,42 @@ bool V4LocalDatabaseManager::MatchCsdWhitelistUrl(const GURL& url) {
 bool V4LocalDatabaseManager::MatchDownloadWhitelistString(
     const std::string& str) {
   // TODO(vakh): Implement this skeleton.
+  // Use: GetCertCsdDownloadWhitelistId()
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   return true;
 }
 
 bool V4LocalDatabaseManager::MatchDownloadWhitelistUrl(const GURL& url) {
   // TODO(vakh): Implement this skeleton.
+  // Use: GetUrlCsdDownloadWhitelistId()
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   return true;
 }
 
 bool V4LocalDatabaseManager::MatchMalwareIP(const std::string& ip_address) {
-  // TODO(vakh): Implement this skeleton.
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  return false;
+  if (!enabled_) {
+    return false;
+  }
+  FullHash hashed_encoded_ip;
+  if (!V4ProtocolManagerUtil::IPAddressToEncodedIPV6Hash(ip_address,
+                                                         &hashed_encoded_ip)) {
+    return false;
+  }
+
+  std::set<FullHash> hashed_encoded_ips{hashed_encoded_ip};
+  std::unique_ptr<PendingCheck> check = base::MakeUnique<PendingCheck>(
+      nullptr, ClientCallbackType::CHECK_MALWARE_IP,
+      StoresToCheck({GetIpMalwareId()}), hashed_encoded_ips);
+
+  // HandleCheckSynchronously() tells us whether the resource is safe.
+  return !HandleCheckSynchronously(std::move(check));
 }
 
 bool V4LocalDatabaseManager::MatchModuleWhitelistString(
     const std::string& str) {
   // TODO(vakh): Implement this skeleton.
+  // Use: GetChromeFilenameClientIncidentId()
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   return true;
 }
@@ -369,7 +412,8 @@ bool V4LocalDatabaseManager::GetPrefixMatches(
   const base::TimeTicks before = TimeTicks::Now();
   if (check->client_callback_type == ClientCallbackType::CHECK_BROWSE_URL ||
       check->client_callback_type == ClientCallbackType::CHECK_DOWNLOAD_URLS ||
-      check->client_callback_type == ClientCallbackType::CHECK_EXTENSION_IDS) {
+      check->client_callback_type == ClientCallbackType::CHECK_EXTENSION_IDS ||
+      check->client_callback_type == ClientCallbackType::CHECK_MALWARE_IP) {
     DCHECK(!check->full_hashes.empty());
 
     full_hash_to_store_and_hash_prefixes->clear();
@@ -433,6 +477,7 @@ SBThreatType V4LocalDatabaseManager::GetSBThreatTypeForList(
       [&list_id](ListInfo const& li) { return li.list_id() == list_id; });
   DCHECK(list_infos_.end() != it);
   DCHECK_NE(SB_THREAT_TYPE_SAFE, it->sb_threat_type());
+  DCHECK_NE(SB_THREAT_TYPE_UNUSED, it->sb_threat_type());
   return it->sb_threat_type();
 }
 
@@ -453,7 +498,18 @@ bool V4LocalDatabaseManager::HandleCheck(std::unique_ptr<PendingCheck> check) {
       base::Bind(&V4LocalDatabaseManager::PerformFullHashCheck, this,
                  base::Passed(std::move(check)),
                  full_hash_to_store_and_hash_prefixes));
+
   return false;
+}
+
+bool V4LocalDatabaseManager::HandleCheckSynchronously(
+    std::unique_ptr<PendingCheck> check) {
+  if (!v4_database_) {
+    return true;
+  }
+
+  FullHashToStoreAndHashPrefixesMap full_hash_to_store_and_hash_prefixes;
+  return !GetPrefixMatches(check, &full_hash_to_store_and_hash_prefixes);
 }
 
 void V4LocalDatabaseManager::OnFullHashResponse(

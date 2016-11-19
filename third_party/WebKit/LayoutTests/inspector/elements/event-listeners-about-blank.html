@@ -12,14 +12,14 @@ function setupEventListeners()
     body.addEventListener("click", f, true);
     var div = frame.contentDocument.createElement("div");
     div.id = "div-in-iframe";
-    div.addEventListener("hover", f, true);
+    div.addEventListener("hover", f, {capture: true, once: true});
     body.appendChild(div);
     body.addEventListener("wheel", f, {"passive": true});
 }
 
 function test()
 {
-    WebInspector.settingForTest("showEventListenersForAncestors").set(true);
+    Common.settingForTest("showEventListenersForAncestors").set(true);
     InspectorTest.evaluateInPage("setupEventListeners()", step1);
 
     function step1()

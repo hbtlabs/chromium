@@ -5,11 +5,14 @@
 #ifndef CHROME_BROWSER_CHROMEOS_ARC_POLICY_ARC_POLICY_BRIDGE_H_
 #define CHROME_BROWSER_CHROMEOS_ARC_POLICY_ARC_POLICY_BRIDGE_H_
 
+#include <string>
+
 #include "base/macros.h"
 #include "components/arc/arc_service.h"
 #include "components/arc/common/policy.mojom.h"
 #include "components/arc/instance_holder.h"
 #include "components/policy/core/common/policy_service.h"
+#include "components/pref_registry/pref_registry_syncable.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
 namespace policy {
@@ -39,6 +42,8 @@ class ArcPolicyBridge : public ArcService,
                   policy::PolicyService* policy_service);
   ~ArcPolicyBridge() override;
 
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
   void OverrideIsManagedForTesting(bool is_managed);
 
   // InstanceHolder<mojom::PolicyInstance>::Observer overrides.
@@ -47,7 +52,7 @@ class ArcPolicyBridge : public ArcService,
 
   // PolicyHost overrides.
   void GetPolicies(const GetPoliciesCallback& callback) override;
-  void ReportCompliance(const mojo::String& request,
+  void ReportCompliance(const std::string& request,
                         const ReportComplianceCallback& callback) override;
 
   // PolicyService::Observer overrides.

@@ -35,11 +35,7 @@ int ScrollBar::GetContentOverlapSize() const {
   return 0;
 }
 
-void ScrollBar::OnMouseEnteredScrollView(const ui::MouseEvent& event) {
-}
-
-void ScrollBar::OnMouseExitedScrollView(const ui::MouseEvent& event) {
-}
+void ScrollBar::ObserveScrollEvent(const ui::ScrollEvent& event) {}
 
 ScrollBar::ScrollBar(bool is_horiz)
     : is_horiz_(is_horiz),

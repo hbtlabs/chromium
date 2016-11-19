@@ -144,7 +144,7 @@ PendingInvalidations& StyleInvalidator::ensurePendingInvalidations(
   PendingInvalidationMap::AddResult addResult =
       m_pendingInvalidationMap.add(&node, nullptr);
   if (addResult.isNewEntry)
-    addResult.storedValue->value = wrapUnique(new PendingInvalidations());
+    addResult.storedValue->value = makeUnique<PendingInvalidations>();
   return *addResult.storedValue->value;
 }
 
@@ -227,7 +227,7 @@ bool StyleInvalidator::SiblingData::matchCurrentInvalidationSets(
     if (m_elementIndex > m_invalidationEntries[index].m_invalidationLimit) {
       // m_invalidationEntries[index] only applies to earlier siblings. Remove
       // it.
-      m_invalidationEntries[index] = m_invalidationEntries.last();
+      m_invalidationEntries[index] = m_invalidationEntries.back();
       m_invalidationEntries.pop_back();
       continue;
     }

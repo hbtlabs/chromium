@@ -94,7 +94,7 @@ class EmptyDataHandle final : public WebDataConsumerHandle {
   };
 
   std::unique_ptr<Reader> obtainReader(Client* client) override {
-    return WTF::wrapUnique(new EmptyDataReader(client));
+    return makeUnique<EmptyDataReader>(client);
   }
   const char* debugName() const override { return "EmptyDataHandle"; }
 };
@@ -527,8 +527,7 @@ bool DocumentThreadableLoader::redirectReceived(
     // TODO(horo): If we support any API which expose the internal body, we will
     // have to read the body. And also HTTPCache changes will be needed because
     // it doesn't store the body of redirect responses.
-    responseReceived(resource, redirectResponse,
-                     wrapUnique(new EmptyDataHandle()));
+    responseReceived(resource, redirectResponse, makeUnique<EmptyDataHandle>());
 
     if (m_client) {
       DCHECK(m_actualRequest.isNull());
@@ -768,10 +767,10 @@ void DocumentThreadableLoader::reportResponseReceived(
   DCHECK(frame);
   if (!frame)
     return;
+  TRACE_EVENT1(
+      "devtools.timeline", "ResourceReceiveResponse", "data",
+      InspectorReceiveResponseEvent::data(identifier, frame, response));
   DocumentLoader* loader = frame->loader().documentLoader();
-  TRACE_EVENT_INSTANT1(
-      "devtools.timeline", "ResourceReceiveResponse", TRACE_EVENT_SCOPE_THREAD,
-      "data", InspectorReceiveResponseEvent::data(identifier, frame, response));
   InspectorInstrumentation::didReceiveResourceResponse(
       frame, identifier, loader, response, resource());
   frame->console().reportResourceResponseReceived(loader, identifier, response);

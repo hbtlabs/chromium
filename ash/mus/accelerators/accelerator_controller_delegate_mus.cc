@@ -8,6 +8,7 @@
 #include "base/logging.h"
 #include "mash/public/interfaces/launchable.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "services/ui/public/interfaces/constants.mojom.h"
 #include "services/ui/public/interfaces/display/display_controller.mojom.h"
 #include "services/ui/public/interfaces/display/test_display_controller.mojom.h"
 
@@ -102,7 +103,7 @@ void AcceleratorControllerDelegateMus::PerformAction(
     case DEV_ADD_REMOVE_DISPLAY: {
       display::mojom::TestDisplayControllerPtr test_display_controller;
       window_manager_->connector()->ConnectToInterface(
-          "service:ui", &test_display_controller);
+          ui::mojom::kServiceName, &test_display_controller);
       test_display_controller->ToggleAddRemoveDisplay();
       break;
     }
@@ -111,7 +112,7 @@ void AcceleratorControllerDelegateMus::PerformAction(
       // key to toggle display size in mus. This should be removed by launch.
       display::mojom::TestDisplayControllerPtr test_display_controller;
       window_manager_->connector()->ConnectToInterface(
-          "service:ui", &test_display_controller);
+          ui::mojom::kServiceName, &test_display_controller);
       test_display_controller->ToggleDisplayResolution();
       break;
     }
@@ -121,7 +122,7 @@ void AcceleratorControllerDelegateMus::PerformAction(
     }
     case TOUCH_HUD_PROJECTION_TOGGLE: {
       mash::mojom::LaunchablePtr launchable;
-      window_manager_->connector()->ConnectToInterface("service:touch_hud",
+      window_manager_->connector()->ConnectToInterface("touch_hud",
                                                        &launchable);
       launchable->Launch(mash::mojom::kWindow,
                          mash::mojom::LaunchMode::DEFAULT);

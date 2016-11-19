@@ -209,6 +209,7 @@ component("skia") {
     "ext/benchmarking_canvas.cc",
     "ext/convolver.cc",
     "ext/event_tracer_impl.cc",
+    "ext/fontmgr_default_linux.cc",
     "ext/fontmgr_default_win.cc",
     "ext/google_logging.cc",
     "ext/image_operations.cc",
@@ -222,6 +223,7 @@ component("skia") {
     "ext/skia_memory_dump_provider.cc",
     "ext/skia_trace_memory_dump_impl.cc",
     "ext/skia_utils_base.cc",
+    "ext/skia_utils_ios.h",
     "ext/skia_utils_ios.mm",
     "ext/skia_utils_mac.mm",
     "ext/skia_utils_win.cc",
@@ -251,7 +253,6 @@ component("skia") {
     "//third_party/skia/src/ports/SkFontHost_mac.cpp",
     "//third_party/skia/src/ports/SkFontHost_win.cpp",
     "//third_party/skia/src/ports/SkFontMgr_FontConfigInterface.cpp",
-    "//third_party/skia/src/ports/SkFontMgr_FontConfigInterface_factory.cpp",
     "//third_party/skia/src/ports/SkFontMgr_android.cpp",
     "//third_party/skia/src/ports/SkFontMgr_android_factory.cpp",
     "//third_party/skia/src/ports/SkFontMgr_android_parser.cpp",
@@ -301,7 +302,7 @@ component("skia") {
     "//third_party/skia/src/utils/SkInterpolator.cpp",
     "//third_party/skia/src/utils/SkLayer.cpp",
     "//third_party/skia/src/utils/SkMeshUtils.cpp",
-    "//third_party/skia/src/utils/SkOSFile.cpp",
+    "//third_party/skia/src/utils/SkOSPath.cpp",
     "//third_party/skia/src/utils/SkParsePath.cpp",
 
     # Testing.
@@ -368,7 +369,6 @@ component("skia") {
       "//third_party/skia/src/ports/SkFontConfigInterface_direct.cpp",
       "//third_party/skia/src/ports/SkFontConfigInterface_direct_factory.cpp",
       "//third_party/skia/src/ports/SkFontMgr_FontConfigInterface.cpp",
-      "//third_party/skia/src/ports/SkFontMgr_FontConfigInterface_factory.cpp",
     ]
   }
 

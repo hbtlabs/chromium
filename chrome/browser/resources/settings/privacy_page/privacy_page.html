@@ -16,6 +16,7 @@
 <link rel="import" href="/site_settings/all_sites.html">
 <link rel="import" href="/site_settings/constants.html">
 <link rel="import" href="/site_settings/media_picker.html">
+<link rel="import" href="/site_settings/pdf_documents.html">
 <link rel="import" href="/site_settings/protocol_handlers.html">
 <link rel="import" href="/site_settings/site_data_details_subpage.html">
 <link rel="import" href="/site_settings/site_settings_category.html">
@@ -38,13 +39,15 @@
 
       /* TODO(dbeam): this is similar to a 1 line checkbox. Worth somehow
        * combining? */
-      #metricsReporting {
+      #metricsReporting,
+      #safeBrowsingExtendedReporting {
         align-items: center;
         display: flex;
-        min-height: var(--settings-row-min-height);
+        min-height: var(--settings-row-min-height);       
       }
 
-      #metricsReportingCheckbox {
+      #metricsReportingCheckbox,
+      #safeBrowsingExtendedReportingCheckbox {
         display: inline-block;
       }
 
@@ -59,7 +62,7 @@
       #restart {
         flex: 1;
         text-align: end;
-      }
+      }      
     </style>
     <template is="dom-if" if="[[showClearBrowsingDataDialog_]]" restamp>
       <settings-clear-browsing-data-dialog prefs="{{prefs}}"
@@ -86,10 +89,13 @@
               label="$i18n{networkPredictionEnabled}"
               hidden="[[!pageVisibility.networkPrediction]]">
           </settings-checkbox>
-          <settings-checkbox
-              pref="{{prefs.safebrowsing.extended_reporting_enabled}}"
-              label="$i18n{safeBrowsingEnableExtendedReporting}">
-          </settings-checkbox>
+          <div id="safeBrowsingExtendedReporting">
+            <paper-checkbox id="safeBrowsingExtendedReportingCheckbox"
+                on-tap="onSafeBrowsingExtendedReportingCheckboxTap_"
+                checked="[[safeBrowsingExtendedReportingEnabled_]]">
+              $i18n{safeBrowsingEnableExtendedReporting}
+            </paper-checkbox>
+          </div>
           <settings-checkbox pref="{{prefs.safebrowsing.enabled}}"
               label="$i18n{safeBrowsingEnableProtection}">
           </settings-checkbox>
@@ -281,6 +287,11 @@
       <template is="dom-if" route-path="/content/zoomLevels" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryZoomLevels}">
           <zoom-levels></zoom-levels>
+        </settings-subpage>
+      </template>
+      <template is="dom-if" route-path="/content/pdfDocuments" no-search>
+        <settings-subpage page-title="$i18n{siteSettingsPdfDocuments}">
+          <settings-pdf-documents prefs="{{prefs}}"></settings-pdf-documents>
         </settings-subpage>
       </template>
       <template is="dom-if" route-path="/content/javascript" no-search>

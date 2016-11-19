@@ -26,6 +26,7 @@
 #include "content/public/common/socket_permission_request.h"
 #include "content/public/common/window_container_type.h"
 #include "media/audio/audio_manager.h"
+#include "media/mojo/interfaces/remoting.mojom.h"
 #include "net/base/mime_util.h"
 #include "net/cookies/canonical_cookie.h"
 #include "storage/browser/fileapi/file_system_context.h"
@@ -241,6 +242,14 @@ class CONTENT_EXPORT ContentBrowserClient {
                                         ui::PageTransition* transition,
                                         bool* is_renderer_initiated,
                                         content::Referrer* referrer) {}
+
+  // Allows the embedder to override top document isolation for specific frames.
+  // |url| is the URL being loaded in the subframe, and |parent_site_instance|
+  // is the SiteInstance of the parent frame. Called only for subframes and only
+  // when top document isolation mode is enabled.
+  virtual bool ShouldFrameShareParentSiteInstanceDespiteTopDocumentIsolation(
+      const GURL& url,
+      SiteInstance* parent_site_instance);
 
   // Returns whether a new view for a given |site_url| can be launched in a
   // given |process_host|.
@@ -773,6 +782,14 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Returns an instance of MemoryCoordinatorDelegate.
   virtual std::unique_ptr<MemoryCoordinatorDelegate>
   GetMemoryCoordinatorDelegate();
+
+  // Binds a new media remoter service to |request|, if supported by the
+  // embedder, for the |source| that lives in the render frame represented
+  // by |render_frame_host|. This may be called multiple times if there is more
+  // than one source candidate in the same render frame.
+  virtual void CreateMediaRemoter(RenderFrameHost* render_frame_host,
+                                  media::mojom::RemotingSourcePtr source,
+                                  media::mojom::RemoterRequest request) {}
 };
 
 }  // namespace content

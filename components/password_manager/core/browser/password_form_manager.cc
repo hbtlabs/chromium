@@ -180,8 +180,8 @@ PasswordFormManager::PasswordFormManager(
 }
 
 PasswordFormManager::~PasswordFormManager() {
-  UMA_HISTOGRAM_ENUMERATION(
-      "PasswordManager.ActionsTakenV3", GetActionsTaken(), kMaxNumActionsTaken);
+  UMA_HISTOGRAM_ENUMERATION("PasswordManager.ActionsTakenV3", GetActionsTaken(),
+                            kMaxNumActionsTaken);
   if (submit_result_ == kSubmitResultNotSubmitted) {
     if (has_generated_password_)
       metrics_util::LogPasswordGenerationSubmissionEvent(
@@ -236,10 +236,10 @@ PasswordFormManager::MatchResultMask PasswordFormManager::DoesManage(
   // redirects to HTTPS (as in http://example.org -> https://example.org/auth).
   if (!origins_match && !observed_form_.origin.SchemeIsCryptographic() &&
       form.origin.SchemeIsCryptographic()) {
-    const std::string& old_path = observed_form_.origin.path();
-    const std::string& new_path = form.origin.path();
+    const base::StringPiece& old_path = observed_form_.origin.path_piece();
+    const base::StringPiece& new_path = form.origin.path_piece();
     origins_match =
-        observed_form_.origin.host() == form.origin.host() &&
+        observed_form_.origin.host_piece() == form.origin.host_piece() &&
         observed_form_.origin.port() == form.origin.port() &&
         base::StartsWith(new_path, old_path, base::CompareCase::SENSITIVE);
   }
@@ -676,9 +676,8 @@ bool PasswordFormManager::UpdatePendingCredentialsIfOtherPossibleUsername(
   return false;
 }
 
-void PasswordFormManager::SendAutofillVotes(
-    const PasswordForm& observed,
-    PasswordForm* pending) {
+void PasswordFormManager::SendAutofillVotes(const PasswordForm& observed,
+                                            PasswordForm* pending) {
   if (pending->form_data.fields.empty())
     return;
 
@@ -778,6 +777,11 @@ bool PasswordFormManager::UploadPasswordForm(
   // sure to receive them.
   form_structure.set_upload_required(UPLOAD_REQUIRED);
 
+  if (password_manager_util::IsLoggingActive(client_)) {
+    BrowserSavePasswordProgressLogger logger(client_->GetLogManager());
+    logger.LogFormStructure(Logger::STRING_FORM_VOTES, form_structure);
+  }
+
   bool success = autofill_manager->download_manager()->StartUploadRequest(
       form_structure, false /* was_autofilled */, available_field_types,
       login_form_signature, true /* observed_submission */);
@@ -860,6 +864,11 @@ bool PasswordFormManager::UploadChangePasswordForm(
   // sure to receive them. It also makes testing easier if these requests
   // always pass.
   form_structure.set_upload_required(UPLOAD_REQUIRED);
+
+  if (password_manager_util::IsLoggingActive(client_)) {
+    BrowserSavePasswordProgressLogger logger(client_->GetLogManager());
+    logger.LogFormStructure(Logger::STRING_FORM_VOTES, form_structure);
+  }
 
   return autofill_manager->download_manager()->StartUploadRequest(
       form_structure, false /* was_autofilled */, available_field_types,
@@ -1162,7 +1171,8 @@ bool PasswordFormManager::IsBlacklistMatch(
   }
 
   if (observed_form_.scheme == PasswordForm::SCHEME_HTML) {
-    return (blacklisted_form.origin.path() == observed_form_.origin.path()) ||
+    return (blacklisted_form.origin.path_piece() ==
+            observed_form_.origin.path_piece()) ||
            (AreStringsEqualOrEmpty(blacklisted_form.submit_element,
                                    observed_form_.submit_element) &&
             AreStringsEqualOrEmpty(blacklisted_form.password_element,

@@ -31,13 +31,67 @@
 /**
  * @unrestricted
  */
-WebInspector.FileSystemMapping = class extends WebInspector.Object {
-  constructor() {
+Workspace.FileSystemMapping = class extends Common.Object {
+  /**
+   * @param {!Workspace.IsolatedFileSystemManager} fileSystemManager
+   */
+  constructor(fileSystemManager) {
     super();
-    this._fileSystemMappingSetting = WebInspector.settings.createLocalSetting('fileSystemMapping', {});
-    /** @type {!Object.<string, !Array.<!WebInspector.FileSystemMapping.Entry>>} */
+    this._fileSystemMappingSetting = Common.settings.createLocalSetting('fileSystemMapping', {});
+    /** @type {!Object.<string, !Array.<!Workspace.FileSystemMapping.Entry>>} */
     this._fileSystemMappings = {};
     this._loadFromSettings();
+
+    this._eventListeners = [
+      fileSystemManager.addEventListener(
+          Workspace.IsolatedFileSystemManager.Events.FileSystemAdded, this._fileSystemAdded, this),
+      fileSystemManager.addEventListener(
+          Workspace.IsolatedFileSystemManager.Events.FileSystemRemoved, this._fileSystemRemoved, this),
+    ];
+    fileSystemManager.waitForFileSystems().then(this._fileSystemsLoaded.bind(this));
+  }
+
+  /**
+   * @param {!Array<!Workspace.IsolatedFileSystem>} fileSystems
+   */
+  _fileSystemsLoaded(fileSystems) {
+    for (var fileSystem of fileSystems)
+      this._addMappingsForFilesystem(fileSystem);
+  }
+
+  /**
+   * @param {!Common.Event} event
+   */
+  _fileSystemAdded(event) {
+    var fileSystem = /** @type {!Workspace.IsolatedFileSystem} */ (event.data);
+    this._addMappingsForFilesystem(fileSystem);
+  }
+
+  /**
+   * @param {!Workspace.IsolatedFileSystem} fileSystem
+   */
+  _addMappingsForFilesystem(fileSystem) {
+    this.addFileSystem(fileSystem.path());
+
+    var mappings = fileSystem.projectProperty('mappings');
+    for (var i = 0; Array.isArray(mappings) && i < mappings.length; ++i) {
+      var mapping = mappings[i];
+      if (!mapping || typeof mapping !== 'object')
+        continue;
+      var folder = mapping['folder'];
+      var url = mapping['url'];
+      if (typeof folder !== 'string' || typeof url !== 'string')
+        continue;
+      this.addNonConfigurableFileMapping(fileSystem.path(), url, folder);
+    }
+  }
+
+  /**
+   * @param {!Common.Event} event
+   */
+  _fileSystemRemoved(event) {
+    var fileSystem = /** @type {!Workspace.IsolatedFileSystem} */ (event.data);
+    this.removeFileSystem(fileSystem.path());
   }
 
   _loadFromSettings() {
@@ -45,14 +99,14 @@ WebInspector.FileSystemMapping = class extends WebInspector.Object {
     this._fileSystemMappings = {};
     for (var fileSystemPath in savedMapping) {
       var savedFileSystemMappings = savedMapping[fileSystemPath];
-      fileSystemPath = WebInspector.ParsedURL.platformPathToURL(fileSystemPath);
+      fileSystemPath = Common.ParsedURL.platformPathToURL(fileSystemPath);
       this._fileSystemMappings[fileSystemPath] = [];
       var fileSystemMappings = this._fileSystemMappings[fileSystemPath];
 
       for (var i = 0; i < savedFileSystemMappings.length; ++i) {
         var savedEntry = savedFileSystemMappings[i];
         var entry =
-            new WebInspector.FileSystemMapping.Entry(fileSystemPath, savedEntry.urlPrefix, savedEntry.pathPrefix, true);
+            new Workspace.FileSystemMapping.Entry(fileSystemPath, savedEntry.urlPrefix, savedEntry.pathPrefix, true);
         fileSystemMappings.push(entry);
       }
     }
@@ -146,10 +200,10 @@ WebInspector.FileSystemMapping = class extends WebInspector.Object {
    * @param {boolean} configurable
    */
   _innerAddFileMapping(fileSystemPath, urlPrefix, pathPrefix, configurable) {
-    var entry = new WebInspector.FileSystemMapping.Entry(fileSystemPath, urlPrefix, pathPrefix, configurable);
+    var entry = new Workspace.FileSystemMapping.Entry(fileSystemPath, urlPrefix, pathPrefix, configurable);
     this._fileSystemMappings[fileSystemPath].push(entry);
     this._rebuildIndexes();
-    this.dispatchEventToListeners(WebInspector.FileSystemMapping.Events.FileMappingAdded, entry);
+    this.dispatchEventToListeners(Workspace.FileSystemMapping.Events.FileMappingAdded, entry);
   }
 
   /**
@@ -164,12 +218,12 @@ WebInspector.FileSystemMapping = class extends WebInspector.Object {
     this._fileSystemMappings[fileSystemPath].remove(entry);
     this._rebuildIndexes();
     this._saveToSettings();
-    this.dispatchEventToListeners(WebInspector.FileSystemMapping.Events.FileMappingRemoved, entry);
+    this.dispatchEventToListeners(Workspace.FileSystemMapping.Events.FileMappingRemoved, entry);
   }
 
   /**
    * @param {string} url
-   * @return {?WebInspector.FileSystemMapping.Entry}
+   * @return {?Workspace.FileSystemMapping.Entry}
    */
   _mappingEntryForURL(url) {
     for (var i = this._urlPrefixes.length - 1; i >= 0; --i) {
@@ -183,7 +237,7 @@ WebInspector.FileSystemMapping = class extends WebInspector.Object {
   /**
    * @param {string} fileSystemPath
    * @param {string} filePath
-   * @return {?WebInspector.FileSystemMapping.Entry}
+   * @return {?Workspace.FileSystemMapping.Entry}
    */
   _mappingEntryForPath(fileSystemPath, filePath) {
     var entries = this._fileSystemMappings[fileSystemPath];
@@ -207,7 +261,7 @@ WebInspector.FileSystemMapping = class extends WebInspector.Object {
   /**
    * @param {string} fileSystemPath
    * @param {string} pathPrefix
-   * @return {?WebInspector.FileSystemMapping.Entry}
+   * @return {?Workspace.FileSystemMapping.Entry}
    */
   _configurableMappingEntryForPathPrefix(fileSystemPath, pathPrefix) {
     var entries = this._fileSystemMappings[fileSystemPath];
@@ -220,7 +274,7 @@ WebInspector.FileSystemMapping = class extends WebInspector.Object {
 
   /**
    * @param {string} fileSystemPath
-   * @return {!Array.<!WebInspector.FileSystemMapping.Entry>}
+   * @return {!Array.<!Workspace.FileSystemMapping.Entry>}
    */
   mappingEntries(fileSystemPath) {
     return this._fileSystemMappings[fileSystemPath].slice();
@@ -300,10 +354,14 @@ WebInspector.FileSystemMapping = class extends WebInspector.Object {
   resetForTesting() {
     this._fileSystemMappings = {};
   }
+
+  dispose() {
+    Common.EventTarget.removeEventListeners(this._eventListeners);
+  }
 };
 
 /** @enum {symbol} */
-WebInspector.FileSystemMapping.Events = {
+Workspace.FileSystemMapping.Events = {
   FileMappingAdded: Symbol('FileMappingAdded'),
   FileMappingRemoved: Symbol('FileMappingRemoved')
 };
@@ -311,7 +369,7 @@ WebInspector.FileSystemMapping.Events = {
 /**
  * @unrestricted
  */
-WebInspector.FileSystemMapping.Entry = class {
+Workspace.FileSystemMapping.Entry = class {
   /**
    * @param {string} fileSystemPath
    * @param {string} urlPrefix
@@ -327,6 +385,6 @@ WebInspector.FileSystemMapping.Entry = class {
 };
 
 /**
- * @type {!WebInspector.FileSystemMapping}
+ * @type {!Workspace.FileSystemMapping}
  */
-WebInspector.fileSystemMapping;
+Workspace.fileSystemMapping;

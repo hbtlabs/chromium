@@ -52,6 +52,8 @@ static_library("arc") {
     "intent_helper/local_activity_resolver.h",
     "intent_helper/page_transition_util.cc",
     "intent_helper/page_transition_util.h",
+    "kiosk/arc_kiosk_bridge.cc",
+    "kiosk/arc_kiosk_bridge.h",
     "metrics/arc_metrics_service.cc",
     "metrics/arc_metrics_service.h",
     "metrics/oom_kills_histogram.h",
@@ -71,7 +73,6 @@ static_library("arc") {
 
   public_deps = [
     ":arc_base",
-    ":arc_bindings",
   ]
 
   deps = [
@@ -123,6 +124,20 @@ static_library("arc_base") {
   ]
 }
 
+# TODO(crbug.com/662510): Remove this altogether.
+mojom("arc_bindings_old_types") {
+  sources = [
+    "common/net.mojom",
+  ]
+
+  public_deps = [
+    "//mojo/common:common_custom_types",
+    "//ui/gfx/geometry/mojo",
+  ]
+
+  use_new_wrapper_types = false
+}
+
 mojom("arc_bindings") {
   sources = [
     "common/app.mojom",
@@ -138,8 +153,8 @@ mojom("arc_bindings") {
     "common/file_system.mojom",
     "common/ime.mojom",
     "common/intent_helper.mojom",
+    "common/kiosk.mojom",
     "common/metrics.mojom",
-    "common/net.mojom",
     "common/notifications.mojom",
     "common/obb_mounter.mojom",
     "common/policy.mojom",
@@ -156,11 +171,9 @@ mojom("arc_bindings") {
   ]
 
   public_deps = [
+    ":arc_bindings_old_types",
     "//mojo/common:common_custom_types",
-    "//ui/gfx/geometry/mojo",
   ]
-
-  use_new_wrapper_types = false
 }
 
 static_library("arc_test_support") {
@@ -182,10 +195,11 @@ static_library("arc_test_support") {
     "test/fake_policy_instance.h",
   ]
 
-  deps = [
+  public_deps = [
     ":arc",
-    ":arc_base",
-    ":arc_bindings",
+  ]
+
+  deps = [
     "//base",
     "//mojo/common:common_base",
   ]
@@ -209,8 +223,6 @@ source_set("unit_tests") {
   ]
 
   deps = [
-    ":arc",
-    ":arc_bindings",
     ":arc_test_support",
     "//base",
     "//chromeos",

@@ -51,7 +51,7 @@ namespace {
 gfx::Range GetImeListViewRange() {
   const int max_items = 5;
   const int min_items = 2;
-  const int tray_item_height = GetTrayConstant(TRAY_POPUP_ITEM_HEIGHT);
+  const int tray_item_height = GetTrayConstant(TRAY_POPUP_ITEM_MIN_HEIGHT);
   return gfx::Range(tray_item_height * min_items, tray_item_height * max_items);
 }
 
@@ -90,9 +90,8 @@ SystemMenuButton* CreateImeMenuButton(views::ButtonListener* listener,
                                       const gfx::VectorIcon& icon,
                                       int accessible_name_id,
                                       int right_border) {
-  SystemMenuButton* button =
-      new SystemMenuButton(listener, SystemMenuButton::InkDropStyle::SQUARE,
-                           icon, accessible_name_id);
+  SystemMenuButton* button = new SystemMenuButton(
+      listener, TrayPopupInkDropStyle::HOST_CENTERED, icon, accessible_name_id);
   if (!MaterialDesignController::IsShelfMaterial()) {
     button->SetBorder(
         views::CreateSolidSidedBorder(0, 0, 0, right_border, kBorderDarkColor));
@@ -111,7 +110,7 @@ class ImeTitleView : public views::View, public views::ButtonListener {
     auto* box_layout =
         new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 0);
     box_layout->set_minimum_cross_axis_size(
-        GetTrayConstant(TRAY_POPUP_ITEM_HEIGHT));
+        GetTrayConstant(TRAY_POPUP_ITEM_MIN_HEIGHT));
     SetLayoutManager(box_layout);
     title_label_ =
         new views::Label(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_IME));
@@ -302,9 +301,14 @@ ImeMenuTray::ImeMenuTray(WmShelf* wm_shelf)
       show_keyboard_(false),
       force_show_keyboard_(false),
       should_block_shelf_auto_hide_(false) {
+  if (MaterialDesignController::IsShelfMaterial()) {
+    SetInkDropMode(InkDropMode::ON);
+    SetContentsBackground(false);
+  } else {
+    SetContentsBackground(true);
+  }
   SetupLabelForTray(label_);
   tray_container()->AddChildView(label_);
-  SetContentsBackground();
   WmShell::Get()->system_tray_notifier()->AddIMEObserver(this);
 }
 
@@ -317,15 +321,13 @@ ImeMenuTray::~ImeMenuTray() {
 void ImeMenuTray::ShowImeMenuBubble() {
   should_block_shelf_auto_hide_ = true;
   views::TrayBubbleView::InitParams init_params(
-      views::TrayBubbleView::ANCHOR_TYPE_TRAY, GetAnchorAlignment(),
-      kTrayPopupMinWidth, kTrayPopupMaxWidth);
-  init_params.first_item_has_no_margin = true;
+      GetAnchorAlignment(), kTrayPopupMinWidth, kTrayPopupMaxWidth);
   init_params.can_activate = true;
   init_params.close_on_deactivate = true;
 
   views::TrayBubbleView* bubble_view =
-      views::TrayBubbleView::Create(tray_container(), this, &init_params);
-  bubble_view->SetArrowPaintType(views::BubbleBorder::PAINT_NONE);
+      views::TrayBubbleView::Create(GetBubbleAnchor(), this, &init_params);
+  bubble_view->set_anchor_view_insets(GetBubbleAnchorInsets());
 
   // In the material design, we will add a title item with a separator on the
   // top of the IME menu.
@@ -372,13 +374,13 @@ void ImeMenuTray::ShowImeMenuBubble() {
   }
 
   bubble_.reset(new TrayBubbleWrapper(this, bubble_view));
-  SetDrawBackgroundAsActive(true);
+  SetIsActive(true);
 }
 
 void ImeMenuTray::HideImeMenuBubble() {
   bubble_.reset();
   ime_list_view_ = nullptr;
-  SetDrawBackgroundAsActive(false);
+  SetIsActive(false);
   should_block_shelf_auto_hide_ = false;
   shelf()->UpdateAutoHideState();
 }
@@ -488,26 +490,6 @@ void ImeMenuTray::OnMouseExitedView() {}
 
 base::string16 ImeMenuTray::GetAccessibleNameForBubble() {
   return l10n_util::GetStringUTF16(IDS_ASH_IME_MENU_ACCESSIBLE_NAME);
-}
-
-gfx::Rect ImeMenuTray::GetAnchorRect(views::Widget* anchor_widget,
-                                     AnchorType anchor_type,
-                                     AnchorAlignment anchor_alignment) const {
-  gfx::Rect rect =
-      GetBubbleAnchorRect(anchor_widget, anchor_type, anchor_alignment);
-
-  if (IsHorizontalAlignment(shelf_alignment())) {
-    // Moves the bubble to make its center aligns the center of the tray.
-    int horizontal_offset =
-        -rect.width() + (tray_container()->width() + kTrayPopupMinWidth) / 2;
-    rect.Offset(horizontal_offset, 0);
-  } else {
-    // For vertical alignment, sets the bubble's bottom aligned to the bottom
-    // of the icon for now.
-    int vertical_offset = -rect.height() + tray_container()->height();
-    rect.Offset(0, vertical_offset);
-  }
-  return rect;
 }
 
 void ImeMenuTray::OnBeforeBubbleWidgetInit(

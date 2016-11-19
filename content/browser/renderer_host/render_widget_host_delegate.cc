@@ -52,6 +52,11 @@ RenderWidgetHostImpl* RenderWidgetHostDelegate::GetFocusedRenderWidgetHost(
   return receiving_widget;
 }
 
+RenderWidgetHostImpl*
+RenderWidgetHostDelegate::GetRenderWidgetHostWithPageFocus() {
+  return nullptr;
+}
+
 bool RenderWidgetHostDelegate::IsFullscreenForCurrentTab() const {
   return false;
 }
@@ -81,6 +86,10 @@ RenderViewHostDelegateView* RenderWidgetHostDelegate::GetDelegateView() {
 RenderWidgetHostImpl* RenderWidgetHostDelegate::GetFullscreenRenderWidgetHost()
     const {
   return nullptr;
+}
+
+bool RenderWidgetHostDelegate::OnUpdateDragCursor() {
+  return false;
 }
 
 }  // namespace content

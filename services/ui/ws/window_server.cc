@@ -234,16 +234,6 @@ const WindowTree* WindowServer::GetTreeWithRoot(
   return nullptr;
 }
 
-void WindowServer::OnFirstWindowManagerWindowTreeFactoryReady() {
-  if (display_manager_->has_active_or_pending_displays())
-    return;
-
-  // We've been supplied a WindowManagerFactory and no displays have been
-  // created yet. Treat this as a signal to create a Display.
-  // TODO(sky): we need a better way to determine this, most likely a switch.
-  delegate_->CreateDefaultDisplays();
-}
-
 UserActivityMonitor* WindowServer::GetUserActivityMonitorForUser(
     const UserId& user_id) {
   DCHECK_GT(activity_monitor_map_.count(user_id), 0u);
@@ -760,6 +750,9 @@ void WindowServer::OnGpuChannelEstablished(
   const std::set<Display*>& displays = display_manager()->displays();
   for (auto* display : displays)
     display->platform_display()->OnGpuChannelEstablished(gpu_channel_);
+  // TODO(kylechar): When gpu channel is removed, this can instead happen
+  // earlier, after GpuServiceProxy::OnInitialized().
+  delegate_->StartDisplayInit();
 }
 
 void WindowServer::OnSurfaceCreated(const cc::SurfaceId& surface_id,

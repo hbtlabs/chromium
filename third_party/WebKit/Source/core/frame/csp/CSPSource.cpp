@@ -57,7 +57,7 @@ bool CSPSource::hostMatches(const String& host) const {
 
   bool equalHosts = m_host == host;
   if (m_hostWildcard == HasWildcard) {
-    match = host.endsWith(String("." + m_host), TextCaseInsensitive);
+    match = host.endsWith(String("." + m_host), TextCaseUnicodeInsensitive);
 
     // Chrome used to, incorrectly, match *.x.y to x.y. This was fixed, but
     // the following count measures when a match fails that would have
@@ -160,6 +160,27 @@ CSPSource* CSPSource::intersect(CSPSource* other) {
 
 bool CSPSource::isSchemeOnly() const {
   return m_host.isEmpty();
+}
+
+bool CSPSource::firstSubsumesSecond(HeapVector<Member<CSPSource>> listA,
+                                    HeapVector<Member<CSPSource>> listB) {
+  // Empty vector of CSPSources has an effect of 'none'.
+  if (!listA.size() || !listB.size())
+    return !listB.size();
+
+  // Walk through all the items in |listB|, ensuring that each is subsumed by at
+  // least one item in |listA|. If any item in |listB| is not subsumed, return
+  // false.
+  for (const auto& sourceB : listB) {
+    bool foundMatch = false;
+    for (const auto& sourceA : listA) {
+      if ((foundMatch = sourceA->subsumes(sourceB)))
+        break;
+    }
+    if (!foundMatch)
+      return false;
+  }
+  return true;
 }
 
 DEFINE_TRACE(CSPSource) {

@@ -206,6 +206,19 @@ PP_DecryptedFrameFormat MediaVideoFormatToPpDecryptedFrameFormat(
   }
 }
 
+media::VideoPixelFormat PpDecryptedFrameFormatToMediaVideoFormat(
+    PP_DecryptedFrameFormat format) {
+  switch (format) {
+    case PP_DECRYPTEDFRAMEFORMAT_YV12:
+      return media::PIXEL_FORMAT_YV12;
+    case PP_DECRYPTEDFRAMEFORMAT_I420:
+      return media::PIXEL_FORMAT_I420;
+    default:
+      NOTREACHED() << "Unknown decrypted frame format: " << format;
+      return media::PIXEL_FORMAT_UNKNOWN;
+  }
+}
+
 Decryptor::Status PpDecryptResultToMediaDecryptorStatus(
     PP_DecryptResult result) {
   switch (result) {
@@ -742,6 +755,7 @@ void ContentDecryptorDelegate::OnPromiseResolvedWithSession(uint32_t promise_id,
                                                             PP_Var session_id) {
   StringVar* session_id_string = StringVar::FromPPVar(session_id);
   DCHECK(session_id_string);
+  cdm_session_tracker_.AddSession(session_id_string->value());
   cdm_promise_adapter_.ResolvePromise(promise_id, session_id_string->value());
 }
 
@@ -821,13 +835,12 @@ void ContentDecryptorDelegate::OnSessionExpirationChange(
 }
 
 void ContentDecryptorDelegate::OnSessionClosed(PP_Var session_id) {
-  if (session_closed_cb_.is_null())
-    return;
-
   StringVar* session_id_string = StringVar::FromPPVar(session_id);
   DCHECK(session_id_string);
 
-  session_closed_cb_.Run(session_id_string->value());
+  cdm_session_tracker_.RemoveSession(session_id_string->value());
+  if (!session_closed_cb_.is_null())
+    session_closed_cb_.Run(session_id_string->value());
 }
 
 void ContentDecryptorDelegate::DecoderInitializeDone(
@@ -989,11 +1002,18 @@ void ContentDecryptorDelegate::DeliverFrame(
   }
 
   gfx::Size frame_size(frame_info->width, frame_info->height);
-  DCHECK_EQ(frame_info->format, PP_DECRYPTEDFRAMEFORMAT_YV12);
+
+  media::VideoPixelFormat video_pixel_format =
+      PpDecryptedFrameFormatToMediaVideoFormat(frame_info->format);
+  if (video_pixel_format == media::PIXEL_FORMAT_UNKNOWN) {
+    FreeBuffer(frame_info->tracking_info.buffer_id);
+    video_decode_cb.Run(Decryptor::kError, NULL);
+    return;
+  }
 
   scoped_refptr<media::VideoFrame> decoded_frame =
       media::VideoFrame::WrapExternalYuvData(
-          media::PIXEL_FORMAT_YV12, frame_size, gfx::Rect(frame_size),
+          video_pixel_format, frame_size, gfx::Rect(frame_size),
           natural_size_, frame_info->strides[PP_DECRYPTEDFRAMEPLANES_Y],
           frame_info->strides[PP_DECRYPTEDFRAMEPLANES_U],
           frame_info->strides[PP_DECRYPTEDFRAMEPLANES_V],
@@ -1257,6 +1277,8 @@ void ContentDecryptorDelegate::SatisfyAllPendingCallbacksOnError() {
     video_decode_cb_.ResetAndReturn().Run(media::Decryptor::kError, NULL);
 
   cdm_promise_adapter_.Clear();
+
+  cdm_session_tracker_.CloseRemainingSessions(session_closed_cb_);
 }
 
 }  // namespace content

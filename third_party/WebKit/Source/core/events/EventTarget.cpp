@@ -59,8 +59,6 @@ using namespace WTF;
 namespace blink {
 namespace {
 
-static const double kBlockedWarningThresholdMillis = 100.0;
-
 enum PassiveForcedListenerResultType {
   PreventDefaultNotCalled,
   DocumentLevelTouchPreventDefaultCalled,
@@ -69,11 +67,16 @@ enum PassiveForcedListenerResultType {
 
 Event::PassiveMode eventPassiveMode(
     const RegisteredEventListener& eventListener) {
-  if (!eventListener.passive())
-    return Event::PassiveMode::NotPassive;
+  if (!eventListener.passive()) {
+    if (eventListener.passiveSpecified())
+      return Event::PassiveMode::NotPassive;
+    return Event::PassiveMode::NotPassiveDefault;
+  }
   if (eventListener.passiveForcedForDocumentTarget())
     return Event::PassiveMode::PassiveForcedDocumentLevel;
-  return Event::PassiveMode::Passive;
+  if (eventListener.passiveSpecified())
+    return Event::PassiveMode::Passive;
+  return Event::PassiveMode::PassiveDefault;
 }
 
 Settings* windowSettings(LocalDOMWindow* executingWindow) {
@@ -96,15 +99,14 @@ bool isScrollBlockingEvent(const AtomicString& eventType) {
          eventType == EventTypeNames::wheel;
 }
 
-double blockedEventsWarningThreshold(ExecutionContext* context, Event* event) {
+double blockedEventsWarningThreshold(ExecutionContext* context,
+                                     const Event* event) {
   if (!event->cancelable())
     return 0.0;
   if (!isScrollBlockingEvent(event->type()))
     return 0.0;
-
-  return PerformanceMonitor::enabled(context)
-             ? kBlockedWarningThresholdMillis / 1000
-             : 0;
+  return PerformanceMonitor::threshold(context,
+                                       PerformanceMonitor::kBlockedEvent);
 }
 
 void reportBlockedEvent(ExecutionContext* context,
@@ -115,15 +117,6 @@ void reportBlockedEvent(ExecutionContext* context,
       EventListener::JSEventListenerType)
     return;
 
-  V8AbstractEventListener* v8Listener =
-      V8AbstractEventListener::cast(registeredListener->listener());
-  v8::HandleScope handles(v8Listener->isolate());
-  v8::Local<v8::Context> v8Context = toV8Context(context, v8Listener->world());
-  if (v8Context.IsEmpty())
-    return;
-  v8::Context::Scope contextScope(v8Context);
-  v8::Local<v8::Object> handler = v8Listener->getListenerObject(context);
-
   String messageText = String::format(
       "Handling of '%s' input event was delayed for %ld ms due to main thread "
       "being busy. "
@@ -131,12 +124,9 @@ void reportBlockedEvent(ExecutionContext* context,
       "responsive.",
       event->type().getString().utf8().data(), lround(delayedSeconds * 1000));
 
-  v8::Local<v8::Function> function =
-      eventListenerEffectiveFunction(v8Listener->isolate(), handler);
-  std::unique_ptr<SourceLocation> location =
-      SourceLocation::fromFunction(function);
-  PerformanceMonitor::logViolation(WarningMessageLevel, context, messageText,
-                                   std::move(location));
+  PerformanceMonitor::reportGenericViolation(
+      context, PerformanceMonitor::kBlockedEvent, messageText, delayedSeconds,
+      getFunctionLocation(context, registeredListener->listener()).get());
   registeredListener->setBlockedEventWarningEmitted();
 }
 
@@ -192,6 +182,8 @@ inline LocalDOMWindow* EventTarget::executingWindow() {
 void EventTarget::setDefaultAddEventListenerOptions(
     const AtomicString& eventType,
     AddEventListenerOptionsResolved& options) {
+  options.setPassiveSpecified(options.hasPassive());
+
   if (!isScrollBlockingEvent(eventType)) {
     if (!options.hasPassive())
       options.setPassive(false);
@@ -413,9 +405,11 @@ EventListener* EventTarget::getAttributeEventListener(
   EventListenerVector* listenerVector = getEventListeners(eventType);
   if (!listenerVector)
     return nullptr;
+
   for (auto& eventListener : *listenerVector) {
     EventListener* listener = eventListener.listener();
-    if (listener->isAttribute() && listener->belongsToTheCurrentWorld())
+    if (listener->isAttribute() &&
+        listener->belongsToTheCurrentWorld(getExecutionContext()))
       return listener;
   }
   return nullptr;
@@ -690,6 +684,7 @@ bool EventTarget::fireEventListeners(Event* event,
 
     InspectorInstrumentation::NativeBreakpoint nativeBreakpoint(context, this,
                                                                 event);
+    PerformanceMonitor::HandlerCall handlerCall(context, event->type(), false);
 
     // To match Mozilla, the AT_TARGET phase fires both capturing and bubbling
     // event listeners, even though that violates some versions of the DOM spec.

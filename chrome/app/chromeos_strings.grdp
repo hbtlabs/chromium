@@ -5545,7 +5545,7 @@ Battery full
     Managed by <ph name="DOMAIN">$1<ex>yourdomain.com</ex></ph>
   </message>
   <message name="IDS_LOGIN_PUBLIC_ACCOUNT_SIGNOUT_REMINDER" desc="Text shown in the public account user pod, reminding the user to log out.">
-    Your information will be removed when you sign out.
+    Your information will be removed from the device when you sign out.
   </message>
   <message name="IDS_LOGIN_PUBLIC_SESSION_LANGUAGE_AND_INPUT" desc="Link in public session pod that shows a section which allows the user to change the UI language and keyboard layout.">
     Language and input
@@ -5555,6 +5555,27 @@ Battery full
   </message>
   <message name="IDS_LOGIN_PUBLIC_ACCOUNT_ENTER_ACCESSIBLE_NAME" desc="Text to be spoken when focus is set to the sign-in button in the public account user pod.">
     Enter public session
+  </message>
+  <message name="IDS_LOGIN_PUBLIC_ACCOUNT_MONITORING_WARNING" desc="Text shown in the public account user pod, warning the user about potential admin monitoring.">
+    The device admin may monitor your browsing activity.
+  </message>
+  <message name="IDS_LOGIN_PUBLIC_ACCOUNT_LEARN_MORE" desc="Link shown in the public account user pod, showing the user more information about the monitoring.">
+    Learn more
+  </message>
+  <message name="IDS_LOGIN_PUBLIC_ACCOUNT_MONITORING_INFO" desc="Text shown in the warning dialog after user clicks on the learn more link, notifying the user of potential security and privacy implications of using the device">
+    The device admin may monitor the following:
+  </message>
+  <message name="IDS_LOGIN_PUBLIC_ACCOUNT_MONITORING_INFO_ITEM_1" desc="Text shown in the warning dialog after user clicks on the learn more link, notifying the user of potential security and privacy implications of using the device">
+    Access your browsing activity
+  </message>
+  <message name="IDS_LOGIN_PUBLIC_ACCOUNT_MONITORING_INFO_ITEM_2" desc="Text shown in the warning dialog after user clicks on the learn more link, notifying the user of potential security and privacy implications of using the device">
+    Manipulate settings that specify whether websites can use features such as geolocation, microphone, camera, etc.
+  </message>
+  <message name="IDS_LOGIN_PUBLIC_ACCOUNT_MONITORING_INFO_ITEM_3" desc="Text shown in the warning dialog after user clicks on the learn more link, notifying the user of potential security and privacy implications of using the device">
+    Manage your apps, extensions, and themes
+  </message>
+  <message name="IDS_LOGIN_PUBLIC_ACCOUNT_MONITORING_INFO_ITEM_4" desc="Text shown in the warning dialog after user clicks on the learn more link, notifying the user of potential security and privacy implications of using the device">
+    Manipulate privacy-related settings
   </message>
   <message name="IDS_LOGIN_CONFIRM_KIOSK_DIAGNOSTIC_FORMAT" desc="Text to be shown on a dialog to confirm launching kiosk app in diagnostic mode.">
     Are you sure you want to launch "<ph name="APP_NAME">$1<ex>Kiosk App</ex></ph>" in diagnostic mode?
@@ -6174,7 +6195,7 @@ All users must sign out to continue.
     Device Location
   </message>
   <message name="IDS_AD_MACHINE_NAME_INPUT_LABEL" desc="Label for machine name input field on the AD domain join screen. User should tell us the name of his machine.">
-    Computer name
+    Chromebook machine name
   </message>
   <message name="IDS_AD_DOMAIN_JOIN_WELCOME_MESSAGE" desc="Welcome message on the AD domain join screen.">
     Join AD domain
@@ -6393,6 +6414,12 @@ All users must sign out to continue.
   <message name="IDS_ARC_OPT_IN_DIALOG_BACKUP_RESTORE" desc="Message in the opt-in dialog for users to enable Backup and Restore for Android apps.">
     Automatically back up and restore Play app data to Google Drive. <ph name="BEGIN_LINK1">&lt;a href="#" id="learn-more-link-backup-restore"&gt;</ph>Learn More<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
   </message>
+  <message name="IDS_ARC_OOBE_TERMS_DIALOG_METRICS_MANAGED_ENABLED" desc="Message in the Arc Terms OOBE dialog in case metrics are managed on the device and on.">
+    This device currently sends diagnostic and usage data to Google. This setting is enforced by the owner. <ph name="BEGIN_LINK1">&lt;a href="#" id="learn-more-link-metrics"&gt;</ph>Learn More<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
+  </message>
+  <message name="IDS_ARC_OOBE_TERMS_DIALOG_METRICS_MANAGED_DISABLED" desc="Message in the Arc Terms OOBE dialog in case metrics are enabled on the device and off.">
+    The owner may choose to send diagnostic and usage data for this device to Google. <ph name="BEGIN_LINK1">&lt;a href="#" id="learn-more-link-metrics"&gt;</ph>Learn More<ph name="END_LINK1">&lt;a&gt;<ex>&lt;/a&gt;</ex></ph>
+  </message>
   <message name="IDS_ARC_OPT_IN_LOCATION_SETTING" desc="Message in the opt-in dialog for Android apps for the user to turn on Google location services">
     Let Google’s location service help apps find your location quickly and accurately, which can reduce battery consumption. Anonymous location data will be sent to Google, even when no apps are running. <ph name="BEGIN_LINK1">&lt;a href="#" id="learn-more-link-location-service"&gt;</ph>Learn More<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
   </message>
@@ -6464,6 +6491,30 @@ All users must sign out to continue.
   </message>
   <message name="IDS_ARC_CRITICALLY_LOW_DISK_NOTIFICATION_MESSAGE" desc="Notification text warning users that they are critically low on disk space and Android apps can not be launched.">
     Free up disk space to launch Android apps.
+  </message>
+  <message name="IDS_ARC_OOBE_TERMS_HEADING" desc="Heading of the Arc Terms OOBE dialog.">
+    Google Play Terms of Service
+  </message>
+  <message name="IDS_ARC_OOBE_TERMS_DESCRIPTION" desc="Description of the Arc Terms OOBE dialog.">
+    Use Google Play to install Android apps
+  </message>
+  <message name="IDS_ARC_OOBE_TERMS_LOADING" desc="Loading message of the Arc Terms OOBE dialog.">
+    Loading...
+  </message>
+  <message name="IDS_ARC_OOBE_TERMS_LOAD_ERROR" desc="Load error message of the Arc Terms OOBE dialog.">
+    Google Play Terms of Service cannot be loaded. Please retry.
+  </message>
+  <message name="IDS_ARC_OOBE_TERMS_BUTTON_ACCEPT" desc="Accept button of the Arc Terms OOBE dialog.">
+    Agree
+  </message>
+  <message name="IDS_ARC_OOBE_TERMS_BUTTON_SKIP" desc="Skip button of the Arc Terms OOBE dialog.">
+    Skip
+  </message>
+  <message name="IDS_ARC_OOBE_TERMS_BUTTON_RETRY" desc="Retry button of the Arc Terms OOBE dialog that reloads Play Store terms.">
+    Retry
+  </message>
+  <message name="IDS_ARC_OOBE_TERMS_POPUP_HELP_CLOSE_BUTTON" desc="Close button of the popup local help of Arc Play Store Terms OOBE dialog.">
+    Close
   </message>
   <message name="IDS_FLAGS_ARC_BOOT_COMPLETED" desc="Name of the flag for blocking the ACTION_BOOT_COMPLETED broadcast for third-party apps on ARC.">
     Load Android apps automatically

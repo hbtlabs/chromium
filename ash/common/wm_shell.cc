@@ -9,6 +9,7 @@
 #include "ash/common/accelerators/accelerator_controller.h"
 #include "ash/common/accelerators/ash_focus_manager_factory.h"
 #include "ash/common/accessibility_delegate.h"
+#include "ash/common/devtools/ash_devtools_css_agent.h"
 #include "ash/common/devtools/ash_devtools_dom_agent.h"
 #include "ash/common/focus_cycler.h"
 #include "ash/common/keyboard/keyboard_ui.h"
@@ -21,6 +22,7 @@
 #include "ash/common/shelf/shelf_model.h"
 #include "ash/common/shelf/shelf_window_watcher.h"
 #include "ash/common/shell_delegate.h"
+#include "ash/common/shutdown_controller.h"
 #include "ash/common/system/brightness_control_delegate.h"
 #include "ash/common/system/keyboard_brightness_control_delegate.h"
 #include "ash/common/system/locale/locale_notification_controller.h"
@@ -91,9 +93,12 @@ void WmShell::Initialize(const scoped_refptr<base::SequencedWorkerPool>& pool) {
   devtools_server_ = ui::devtools::UiDevToolsServer::Create(nullptr);
   if (devtools_server_) {
     auto dom_backend = base::MakeUnique<devtools::AshDevToolsDOMAgent>(this);
+    auto css_backend =
+        base::MakeUnique<devtools::AshDevToolsCSSAgent>(dom_backend.get());
     auto devtools_client = base::MakeUnique<ui::devtools::UiDevToolsClient>(
         "Ash", devtools_server_.get());
     devtools_client->AddAgent(std::move(dom_backend));
+    devtools_client->AddAgent(std::move(css_backend));
     devtools_server_->AttachClient(std::move(devtools_client));
   }
 }
@@ -248,6 +253,7 @@ WmShell::WmShell(std::unique_ptr<ShellDelegate> shell_delegate)
       new_window_client_(base::MakeUnique<NewWindowClientProxy>(
           delegate_->GetShellConnector())),
       shelf_controller_(base::MakeUnique<ShelfController>()),
+      shutdown_controller_(base::MakeUnique<ShutdownController>()),
       system_tray_controller_(base::MakeUnique<SystemTrayController>(
           delegate_->GetShellConnector())),
       system_tray_notifier_(base::MakeUnique<SystemTrayNotifier>()),
@@ -353,15 +359,17 @@ void WmShell::SetSystemTrayDelegate(
   system_tray_delegate_ = std::move(delegate);
   system_tray_delegate_->Initialize();
 #if defined(OS_CHROMEOS)
+  // Accesses WmShell in its constructor.
   logout_confirmation_controller_.reset(new LogoutConfirmationController(
-      base::Bind(&SystemTrayDelegate::SignOut,
-                 base::Unretained(system_tray_delegate_.get()))));
+      base::Bind(&SystemTrayController::SignOut,
+                 base::Unretained(system_tray_controller_.get()))));
 #endif
 }
 
 void WmShell::DeleteSystemTrayDelegate() {
   DCHECK(system_tray_delegate_);
 #if defined(OS_CHROMEOS)
+  // Accesses WmShell in its destructor.
   logout_confirmation_controller_.reset();
 #endif
   system_tray_delegate_.reset();

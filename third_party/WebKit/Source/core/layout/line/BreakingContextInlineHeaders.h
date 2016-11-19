@@ -496,7 +496,7 @@ inline void BreakingContext::handleFloat() {
       m_width.fitsOnLine(
           m_block.logicalWidthForFloat(*floatingObject).toFloat(),
           ExcludeWhitespace)) {
-    m_block.positionNewFloats(m_block.logicalHeight(), &m_width);
+    m_block.placeNewFloats(m_block.logicalHeight(), &m_width);
     if (m_lineBreak.getLineLayoutItem() == m_current.getLineLayoutItem()) {
       ASSERT(!m_lineBreak.offset());
       m_lineBreak.increment();
@@ -999,7 +999,7 @@ inline bool BreakingContext::handleText(WordMeasurements& wordMeasurements,
         // new point.
         lastSpaceWordSpacing = applyWordSpacing ? wordSpacing : 0;
         wordSpacingForWordMeasurement =
-            (applyWordSpacing && wordMeasurements.last().width) ? wordSpacing
+            (applyWordSpacing && wordMeasurements.back().width) ? wordSpacing
                                                                 : 0;
         stopIgnoringSpaces(lastSpace);
       }
@@ -1168,7 +1168,7 @@ inline bool BreakingContext::handleText(WordMeasurements& wordMeasurements,
                                                        secondToLastCharacter);
 
   wordMeasurements.grow(wordMeasurements.size() + 1);
-  WordMeasurement& wordMeasurement = wordMeasurements.last();
+  WordMeasurement& wordMeasurement = wordMeasurements.back();
   wordMeasurement.layoutText = layoutText;
 
   // IMPORTANT: current.offset() is > layoutText.textLength() here!
@@ -1283,7 +1283,7 @@ inline WordMeasurement& BreakingContext::calculateWordWidth(
     float wordTrailingSpaceWidth,
     UChar c) {
   wordMeasurements.grow(wordMeasurements.size() + 1);
-  WordMeasurement& wordMeasurement = wordMeasurements.last();
+  WordMeasurement& wordMeasurement = wordMeasurements.back();
   wordMeasurement.layoutText = layoutText;
   wordMeasurement.endOffset = m_current.offset();
   wordMeasurement.startOffset = lastSpace;

@@ -116,6 +116,14 @@ void SurfaceFactory::RequestCopyOfSurface(
   manager_->SurfaceModified(SurfaceId(frame_sink_id_, local_frame_id));
 }
 
+void SurfaceFactory::ClearSurface(const LocalFrameId& local_frame_id) {
+  OwningSurfaceMap::iterator it = surface_map_.find(local_frame_id);
+  DCHECK(it != surface_map_.end());
+  DCHECK(it->second->factory().get() == this);
+  it->second->EvictFrame();
+  manager_->SurfaceModified(SurfaceId(frame_sink_id_, local_frame_id));
+}
+
 void SurfaceFactory::WillDrawSurface(const LocalFrameId& id,
                                      const gfx::Rect& damage_rect) {
   client_->WillDrawSurface(id, damage_rect);

@@ -66,6 +66,7 @@ component("mus") {
     "//mojo/public/cpp/bindings",
     "//net",
     "//services/catalog/public/cpp",
+    "//services/catalog/public/interfaces:constants",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/interfaces",
     "//services/ui/public/cpp",
@@ -254,6 +255,7 @@ static_library("test_support_aura_mus") {
     "//services/ui/common:mus_common",
     "//testing/gtest",
     "//ui/aura",
+    "//ui/aura:test_support",
     "//ui/gl:test_support",
     "//ui/resources",
     "//ui/resources:ui_test_pak",
@@ -394,19 +396,16 @@ test("views_mus_interactive_ui_tests") {
 }
 
 service_manifest("unittests_manifest") {
-  type = "exe"
   name = "views_mus_unittests"
   source = "unittests_manifest.json"
 }
 
 service_manifest("unittests_aura_manifest") {
-  type = "exe"
   name = "views_aura_mus_unittests"
   source = "unittests_aura_manifest.json"
 }
 
 service_manifest("interactive_ui_tests_manifest") {
-  type = "exe"
   name = "views_mus_interactive_ui_tests"
   source = "interactive_ui_tests_manifest.json"
 }

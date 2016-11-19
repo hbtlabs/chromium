@@ -183,8 +183,12 @@ class CONTENT_EXPORT WebContentsImpl
 
   // Informs the render view host and the BrowserPluginEmbedder, if present, of
   // a Drag Source End.
-  void DragSourceEndedAt(int client_x, int client_y, int screen_x,
-      int screen_y, blink::WebDragOperation operation);
+  void DragSourceEndedAt(int client_x,
+                         int client_y,
+                         int screen_x,
+                         int screen_y,
+                         blink::WebDragOperation operation,
+                         RenderWidgetHost* source_rwh);
 
   // Notification that the RenderViewHost's load state changed.
   void LoadStateChanged(const GURL& url,
@@ -322,7 +326,7 @@ class CONTENT_EXPORT WebContentsImpl
   int GetCrashedErrorCode() const override;
   bool IsBeingDestroyed() const override;
   void NotifyNavigationStateChanged(InvalidateTypes changed_flags) override;
-  void OnAudioStateChanged(bool is_audio_playing) override;
+  void OnAudioStateChanged(bool is_audible) override;
   base::TimeTicks GetLastActiveTime() const override;
   void SetLastActiveTime(base::TimeTicks last_active_time) override;
   base::TimeTicks GetLastHiddenTime() const override;
@@ -383,7 +387,7 @@ class CONTENT_EXPORT WebContentsImpl
   bool WillNotifyDisconnection() const override;
   RendererPreferences* GetMutableRendererPrefs() override;
   void Close() override;
-  void SystemDragEnded() override;
+  void SystemDragEnded(RenderWidgetHost* source_rwh) override;
   void UserGestureDone() override;
   void SetClosedByUserGesture(bool value) override;
   bool GetClosedByUserGesture() const override;
@@ -512,10 +516,10 @@ class CONTENT_EXPORT WebContentsImpl
   void DidCancelLoading() override;
   void DocumentAvailableInMainFrame(RenderViewHost* render_view_host) override;
   void RouteCloseEvent(RenderViewHost* rvh) override;
-  bool AddMessageToConsole(int32_t level,
-                           const base::string16& message,
-                           int32_t line_no,
-                           const base::string16& source_id) override;
+  bool DidAddMessageToConsole(int32_t level,
+                              const base::string16& message,
+                              int32_t line_no,
+                              const base::string16& source_id) override;
   RendererPreferences GetRendererPrefs(
       BrowserContext* browser_context) const override;
   void OnUserInteraction(RenderWidgetHostImpl* render_widget_host,
@@ -643,6 +647,9 @@ class CONTENT_EXPORT WebContentsImpl
   void ReplicatePageFocus(bool is_focused) override;
   RenderWidgetHostImpl* GetFocusedRenderWidgetHost(
       RenderWidgetHostImpl* receiving_widget) override;
+  RenderWidgetHostImpl* GetRenderWidgetHostWithPageFocus() override;
+  void FocusOwningWebContents(
+      RenderWidgetHostImpl* render_widget_host) override;
   void RendererUnresponsive(RenderWidgetHostImpl* render_widget_host,
                             RendererUnresponsiveType type) override;
   void RendererResponsive(RenderWidgetHostImpl* render_widget_host) override;
@@ -662,6 +669,7 @@ class CONTENT_EXPORT WebContentsImpl
   void SendScreenRects() override;
   void OnFirstPaintAfterLoad(RenderWidgetHostImpl* render_widget_host) override;
   TextInputManager* GetTextInputManager() override;
+  bool OnUpdateDragCursor() override;
 
   // RenderFrameHostManager::Delegate ------------------------------------------
 
@@ -756,8 +764,15 @@ class CONTENT_EXPORT WebContentsImpl
 
   // Called by MediaWebContentsObserver when playback starts or stops.  See the
   // WebContentsObserver function stubs for more details.
-  void MediaStartedPlaying(const WebContentsObserver::MediaPlayerId& id);
-  void MediaStoppedPlaying(const WebContentsObserver::MediaPlayerId& id);
+  void MediaStartedPlaying(
+      const WebContentsObserver::MediaPlayerInfo& media_info,
+      const WebContentsObserver::MediaPlayerId& id);
+  void MediaStoppedPlaying(
+      const WebContentsObserver::MediaPlayerInfo& media_info,
+      const WebContentsObserver::MediaPlayerId& id);
+  int GetCurrentlyPlayingVideoCount() override;
+
+  bool IsFullscreen() override;
 
   MediaWebContentsObserver* media_web_contents_observer() {
     return media_web_contents_observer_.get();
@@ -998,11 +1013,34 @@ class CONTENT_EXPORT WebContentsImpl
   // up at the next animation step if the throbber is going.
   void SetNotWaitingForResponse() { waiting_for_response_ = false; }
 
+  // Inner WebContents Helpers -------------------------------------------------
+  //
+  // These functions are helpers in managing a hierarchy of WebContents
+  // involved in rendering inner WebContents.
+
+  // When multiple WebContents are present within a tab or window, a single one
+  // is focused and will route keyboard events in most cases to a RenderWidget
+  // contained within it. |GetFocusedWebContents()|'s main frame widget will
+  // receive page focus and blur events when the containing window changes focus
+  // state.
+
   // Returns the focused WebContents.
   // If there are multiple inner/outer WebContents (when embedding <webview>,
   // <guestview>, ...) returns the single one containing the currently focused
   // frame. Otherwise, returns this WebContents.
   WebContentsImpl* GetFocusedWebContents();
+
+  // Returns true if |this| is the focused WebContents or an ancestor of the
+  // focused WebContents.
+  bool ContainsOrIsFocusedWebContents();
+
+  // When inner or outer WebContents are present, become the focused
+  // WebContentsImpl. This will activate this content's main frame RenderWidget
+  // and indirectly all its subframe widgets.  GetFocusedRenderWidgetHost will
+  // search this WebContentsImpl for a focused RenderWidgetHost. The previously
+  // focused WebContentsImpl, if any, will have its RenderWidgetHosts
+  // deactivated.
+  void SetAsFocusedWebContentsIfNecessary();
 
   // Returns the root of the WebContents tree.
   WebContentsImpl* GetOutermostWebContents();
@@ -1433,6 +1471,8 @@ class CONTENT_EXPORT WebContentsImpl
 
   // Whether this WebContents is for content overlay.
   bool is_overlay_content_;
+
+  int currently_playing_video_count_ = 0;
 
   base::WeakPtrFactory<WebContentsImpl> loading_weak_factory_;
   base::WeakPtrFactory<WebContentsImpl> weak_factory_;

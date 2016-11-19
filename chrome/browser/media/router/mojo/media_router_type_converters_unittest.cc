@@ -77,6 +77,7 @@ TEST(MediaRouterTypeConvertersTest, ConvertMediaRoute) {
   MediaRoute expected_media_route("routeId1", expected_source, "sinkId",
                                   "Description", false, "cast_view.html", true);
   expected_media_route.set_incognito(true);
+  expected_media_route.set_offscreen_presentation(true);
   mojom::MediaRoutePtr mojo_route(mojom::MediaRoute::New());
   mojo_route->media_route_id = "routeId1";
   mojo_route->media_source = expected_source.id();
@@ -85,7 +86,8 @@ TEST(MediaRouterTypeConvertersTest, ConvertMediaRoute) {
   mojo_route->is_local = false;
   mojo_route->custom_controller_path = std::string("cast_view.html");
   mojo_route->for_display = true;
-  mojo_route->incognito = true;
+  mojo_route->is_incognito = true;
+  mojo_route->is_offscreen_presentation = true;
 
   MediaRoute media_route = mojo_route.To<MediaRoute>();
   EXPECT_TRUE(expected_media_route.Equals(media_route));
@@ -98,7 +100,9 @@ TEST(MediaRouterTypeConvertersTest, ConvertMediaRoute) {
   EXPECT_EQ(expected_media_route.custom_controller_path(),
             media_route.custom_controller_path());
   EXPECT_EQ(expected_media_route.for_display(), media_route.for_display());
-  EXPECT_EQ(expected_media_route.incognito(), media_route.incognito());
+  EXPECT_EQ(expected_media_route.is_incognito(), media_route.is_incognito());
+  EXPECT_EQ(expected_media_route.is_offscreen_presentation(),
+            media_route.is_offscreen_presentation());
 }
 
 TEST(MediaRouterTypeConvertersTest, ConvertMediaRouteWithoutOptionalFields) {
@@ -111,7 +115,7 @@ TEST(MediaRouterTypeConvertersTest, ConvertMediaRouteWithoutOptionalFields) {
   mojo_route->description = "Description";
   mojo_route->is_local = false;
   mojo_route->for_display = false;
-  mojo_route->incognito = false;
+  mojo_route->is_incognito = false;
 
   MediaRoute media_route = mojo_route.To<MediaRoute>();
   EXPECT_TRUE(expected_media_route.Equals(media_route));

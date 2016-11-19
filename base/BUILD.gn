@@ -214,6 +214,8 @@ component("base") {
     "android/sys_utils.h",
     "android/trace_event_binding.cc",
     "android/trace_event_binding.h",
+    "android/unguessable_token_android.cc",
+    "android/unguessable_token_android.h",
     "at_exit.cc",
     "at_exit.h",
     "atomic_ref_count.h",
@@ -364,6 +366,7 @@ component("base") {
     "hash.cc",
     "hash.h",
     "id_map.h",
+    "ios/block_types.h",
     "ios/crb_protocol_observers.h",
     "ios/crb_protocol_observers.mm",
     "ios/device_util.h",
@@ -542,6 +545,8 @@ component("base") {
     "metrics/histogram_delta_serialization.cc",
     "metrics/histogram_delta_serialization.h",
     "metrics/histogram_flattener.h",
+    "metrics/histogram_functions.cc",
+    "metrics/histogram_functions.h",
     "metrics/histogram_macros.h",
     "metrics/histogram_samples.cc",
     "metrics/histogram_samples.h",
@@ -630,6 +635,7 @@ component("base") {
     "process/port_provider_mac.h",
     "process/process.h",
     "process/process_handle.cc",
+    "process/process_handle.h",
 
     #"process/process_handle_freebsd.cc",  # Unused in Chromium build.
     "process/process_handle_linux.cc",
@@ -788,6 +794,8 @@ component("base") {
     "task_runner_util.h",
     "task_scheduler/delayed_task_manager.cc",
     "task_scheduler/delayed_task_manager.h",
+    "task_scheduler/initialization_util.cc",
+    "task_scheduler/initialization_util.h",
     "task_scheduler/post_task.cc",
     "task_scheduler/post_task.h",
     "task_scheduler/priority_queue.cc",
@@ -934,6 +942,8 @@ component("base") {
     "trace_event/memory_dump_session_state.h",
     "trace_event/memory_infra_background_whitelist.cc",
     "trace_event/memory_infra_background_whitelist.h",
+    "trace_event/memory_usage_estimator.cc",
+    "trace_event/memory_usage_estimator.h",
     "trace_event/process_memory_dump.cc",
     "trace_event/process_memory_dump.h",
     "trace_event/process_memory_maps.cc",
@@ -1159,6 +1169,8 @@ component("base") {
       "synchronization/read_write_lock_posix.cc",
       "sys_info.cc",
       "sys_info_posix.cc",
+      "task_scheduler/initialization_util.cc",
+      "task_scheduler/initialization_util.h",
       "trace_event/trace_event_system_stats_monitor.cc",
     ]
 
@@ -1197,6 +1209,14 @@ component("base") {
       "rand_util_nacl.cc",
       "synchronization/read_write_lock_nacl.cc",
     ]
+
+    # Add stuff that doesn't work in NaCl.
+    sources += [
+      # SpinLock uses GNU-style inline assembly, which the pnacl-clang++
+      # compiler doesn't allow.
+      "synchronization/spin_lock.cc",
+      "synchronization/spin_lock.h",
+    ]
   }
 
   # Windows.
@@ -1215,6 +1235,7 @@ component("base") {
     deps += [
       "//base/trace_event/etw_manifest:chrome_events_win",
       "//base/win:base_win_features",
+      "//base/win:eventlog_messages",
     ]
 
     if (is_component_build) {
@@ -1754,6 +1775,7 @@ test("base_unittests") {
     "android/path_utils_unittest.cc",
     "android/scoped_java_ref_unittest.cc",
     "android/sys_utils_unittest.cc",
+    "android/unguessable_token_android_unittest.cc",
     "at_exit_unittest.cc",
     "atomicops_unittest.cc",
     "barrier_closure_unittest.cc",
@@ -1865,6 +1887,7 @@ test("base_unittests") {
     "metrics/field_trial_unittest.cc",
     "metrics/histogram_base_unittest.cc",
     "metrics/histogram_delta_serialization_unittest.cc",
+    "metrics/histogram_functions_unittest.cc",
     "metrics/histogram_macros_unittest.cc",
     "metrics/histogram_snapshot_manager_unittest.cc",
     "metrics/histogram_unittest.cc",
@@ -1951,6 +1974,7 @@ test("base_unittests") {
     "task_scheduler/test_utils.h",
     "template_util_unittest.cc",
     "test/histogram_tester_unittest.cc",
+    "test/scoped_mock_time_message_loop_task_runner_unittest.cc",
     "test/test_pending_task_unittest.cc",
     "test/test_reg_util_win_unittest.cc",
     "test/trace_event_analyzer_unittest.cc",
@@ -1986,6 +2010,7 @@ test("base_unittests") {
     "trace_event/java_heap_dump_provider_android_unittest.cc",
     "trace_event/memory_allocator_dump_unittest.cc",
     "trace_event/memory_dump_manager_unittest.cc",
+    "trace_event/memory_usage_estimator_unittest.cc",
     "trace_event/process_memory_dump_unittest.cc",
     "trace_event/trace_category_unittest.cc",
     "trace_event/trace_config_unittest.cc",
@@ -2201,6 +2226,7 @@ if (enable_nocompile_tests) {
       "callback_list_unittest.nc",
       "callback_unittest.nc",
       "memory/weak_ptr_unittest.nc",
+      "metrics/histogram_unittest.nc",
     ]
 
     deps = [
@@ -2238,6 +2264,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/SystemMessageHandler.java",
       "android/java/src/org/chromium/base/ThreadUtils.java",
       "android/java/src/org/chromium/base/TraceEvent.java",
+      "android/java/src/org/chromium/base/UnguessableToken.java",
       "android/java/src/org/chromium/base/library_loader/LibraryLoader.java",
       "android/java/src/org/chromium/base/metrics/RecordHistogram.java",
       "android/java/src/org/chromium/base/metrics/RecordUserAction.java",
@@ -2311,6 +2338,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/SystemMessageHandler.java",
       "android/java/src/org/chromium/base/ThreadUtils.java",
       "android/java/src/org/chromium/base/TraceEvent.java",
+      "android/java/src/org/chromium/base/UnguessableToken.java",
       "android/java/src/org/chromium/base/VisibleForTesting.java",
       "android/java/src/org/chromium/base/annotations/AccessedByNative.java",
       "android/java/src/org/chromium/base/annotations/CalledByNative.java",

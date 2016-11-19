@@ -24,6 +24,7 @@ include_rules = [
   "+extensions/browser",
   "+extensions/common",
   "+extensions/components/javascript_dialog_extensions_client",
+  "+extensions/features",
   "+extensions/grit",
   "+extensions/test",
   "+gin",
@@ -35,8 +36,10 @@ include_rules = [
   "+media/audio", # For media audio hang monitor.
   "+media/base",  # For media switches
   "+media/cdm/cdm_paths.h",
+  "+media/media_features.h",
   "+media/midi",  # For midi switches
   "+media/mojo",  # For mojo media services.
+  "+services/image_decoder/public/cpp",
   "+services/service_manager/public/cpp",
   "+services/ui/public",
   "+ppapi/c",  # For various types.
@@ -45,6 +48,7 @@ include_rules = [
   "+ppapi/shared_impl",
   "+rlz",
   "+sandbox/win/src",  # The path doesn't say it, but this is the Windows sandbox.
+  "+services/image_decoder/public/interfaces",
   "+services/service_manager",
   "+skia/ext",
   "+syzygy/kasko",
@@ -93,12 +97,15 @@ include_rules = [
   "-third_party/WebKit",
   "+third_party/WebKit/public/platform/WebDisplayMode.h",
   "+third_party/WebKit/public/platform/WebLoadingBehaviorFlag.h",
+  "+third_party/WebKit/public/platform/WebGestureEvent.h",
+  "+third_party/WebKit/public/platform/WebInputEvent.h",
   "+third_party/WebKit/public/platform/WebReferrerPolicy.h",
   "+third_party/WebKit/public/platform/WebSecurityStyle.h",
   "+third_party/WebKit/public/platform/modules/app_banner/app_banner.mojom.h",
   "+third_party/WebKit/public/platform/modules/budget_service/budget_service.mojom.h",
   "+third_party/WebKit/public/platform/modules/notifications/WebNotificationConstants.h",
   "+third_party/WebKit/public/platform/modules/push_messaging/WebPushPermissionStatus.h",
+  "+third_party/WebKit/public/platform/modules/remoteplayback/WebRemotePlaybackAvailability.h",
   "+third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationLockType.h",
   "+third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h",
   "+third_party/WebKit/public/platform/modules/webshare/webshare.mojom.h",
@@ -106,7 +113,6 @@ include_rules = [
   "+third_party/WebKit/public/web/WebCache.h",
   "+third_party/WebKit/public/web/WebContextMenuData.h",
   "+third_party/WebKit/public/web/WebFindOptions.h",
-  "+third_party/WebKit/public/web/WebInputEvent.h",
   "+third_party/WebKit/public/web/WebMediaPlayerAction.h",
   "+third_party/WebKit/public/web/WebPluginAction.h",
   "+third_party/WebKit/public/web/WebTextDirection.h",

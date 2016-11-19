@@ -13,6 +13,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "components/security_state/content/content_utils.h"
+#include "components/security_state/core/security_state.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/navigation_handle.h"
@@ -23,6 +25,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/bindings_policy.h"
+#include "content/public/common/origin_util.h"
 #include "content/public/renderer/render_frame.h"
 #include "headless/lib/browser/headless_browser_context_impl.h"
 #include "headless/lib/browser/headless_browser_impl.h"
@@ -54,6 +57,8 @@ class WebContentsObserverAdapter : public content::WebContentsObserver {
     observer_->DevToolsTargetReady();
   }
 
+  HeadlessWebContents::Observer* observer() { return observer_; }
+
  private:
   HeadlessWebContents::Observer* observer_;  // Not owned.
 
@@ -78,6 +83,21 @@ class HeadlessWebContentsImpl::Delegate : public content::WebContentsDelegate {
     DCHECK(new_contents->GetBrowserContext() == browser_context_);
 
     browser_context_->RegisterWebContents(std::move(web_contents));
+  }
+
+  // Return the security style of the given |web_contents|, populating
+  // |security_style_explanations| to explain why the SecurityStyle was chosen.
+  blink::WebSecurityStyle GetSecurityStyle(
+      content::WebContents* web_contents,
+      content::SecurityStyleExplanations* security_style_explanations)
+      override {
+    security_state::SecurityInfo security_info;
+    security_state::GetSecurityInfo(
+        security_state::GetVisibleSecurityState(web_contents),
+        false /* used_policy_installed_certificate */,
+        base::Bind(&content::IsOriginSecure), &security_info);
+    return security_state::GetSecurityStyle(security_info,
+                                            security_style_explanations);
   }
 
  private:
@@ -139,12 +159,16 @@ HeadlessWebContentsImpl::HeadlessWebContentsImpl(
           new HeadlessWebContentsImpl::Delegate(browser_context)),
       web_contents_(web_contents),
       agent_host_(content::DevToolsAgentHost::GetOrCreateFor(web_contents)),
-      browser_context_(browser_context) {
+      browser_context_(browser_context),
+      render_process_host_(web_contents->GetRenderProcessHost()) {
   web_contents_->SetDelegate(web_contents_delegate_.get());
+  render_process_host_->AddObserver(this);
 }
 
 HeadlessWebContentsImpl::~HeadlessWebContentsImpl() {
   web_contents_->Close();
+  if (render_process_host_)
+    render_process_host_->RemoveObserver(this);
 }
 
 void HeadlessWebContentsImpl::RenderFrameCreated(
@@ -194,6 +218,22 @@ void HeadlessWebContentsImpl::RemoveObserver(Observer* observer) {
   ObserverMap::iterator it = observer_map_.find(observer);
   DCHECK(it != observer_map_.end());
   observer_map_.erase(it);
+}
+
+void HeadlessWebContentsImpl::RenderProcessExited(
+    content::RenderProcessHost* host,
+    base::TerminationStatus status,
+    int exit_code) {
+  DCHECK_EQ(render_process_host_, host);
+  for (const auto& pair : observer_map_) {
+    pair.second->observer()->RenderProcessExited(status, exit_code);
+  }
+}
+
+void HeadlessWebContentsImpl::RenderProcessHostDestroyed(
+    content::RenderProcessHost* host) {
+  DCHECK_EQ(render_process_host_, host);
+  render_process_host_ = nullptr;
 }
 
 HeadlessDevToolsTarget* HeadlessWebContentsImpl::GetDevToolsTarget() {

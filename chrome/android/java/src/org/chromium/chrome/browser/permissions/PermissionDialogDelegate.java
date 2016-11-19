@@ -4,11 +4,9 @@
 
 package org.chromium.chrome.browser.permissions;
 
-import android.app.Activity;
-
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.browser.ResourceId;
-import org.chromium.ui.base.WindowAndroid;
+import org.chromium.chrome.browser.tab.Tab;
 
 /**
  * Delegate class for modal permission dialogs. Contains all of the data displayed in a prompt,
@@ -23,8 +21,8 @@ public class PermissionDialogDelegate {
     /** The native-side counterpart of this class */
     private long mNativeDelegatePtr;
 
-    /** The activity for which to create the dialog. */
-    private Activity mActivity;
+    /** The tab for which to create the dialog. */
+    private Tab mTab;
 
     /** The icon to display in the dialog. */
     private int mDrawableId;
@@ -41,14 +39,18 @@ public class PermissionDialogDelegate {
     /** Text shown on the secondary button, e.g. "Block". */
     private String mSecondaryButtonText;
 
+    /** The {@link ContentSettingsType}s requested in this dialog.  */
+    private int[] mContentSettingsTypes;
+
     /** Whether or not to show a toggle for opting out of persisting the decision. */
     private boolean mShowPersistenceToggle;
 
-    /** Whether or not a decision has been made for this delegate */
-    private boolean mDecided;
+    public Tab getTab() {
+        return mTab;
+    }
 
-    public Activity getActivity() {
-        return mActivity;
+    public int[] getContentSettingsTypes() {
+        return mContentSettingsTypes.clone();
     }
 
     public int getDrawableId() {
@@ -77,21 +79,21 @@ public class PermissionDialogDelegate {
 
     public void onAccept(boolean persist) {
         assert mNativeDelegatePtr != 0;
-        mDecided = true;
         nativeAccept(mNativeDelegatePtr, persist);
     }
 
     public void onCancel(boolean persist) {
         assert mNativeDelegatePtr != 0;
-        mDecided = true;
         nativeCancel(mNativeDelegatePtr, persist);
     }
 
     public void onDismiss() {
         assert mNativeDelegatePtr != 0;
+        nativeDismissed(mNativeDelegatePtr);
+    }
 
-        // Do not call the native dismiss handler if an accept or cancel action is already recorded.
-        if (!mDecided) nativeDismissed(mNativeDelegatePtr);
+    public void destroy() {
+        assert mNativeDelegatePtr != 0;
         nativeDestroy(mNativeDelegatePtr);
         mNativeDelegatePtr = 0;
     }
@@ -105,7 +107,8 @@ public class PermissionDialogDelegate {
      * Called from C++ by |nativeDelegatePtr| to instantiate this class.
      *
      * @param nativeDelegatePtr     The native counterpart that this object owns.
-     * @param window                The window to create the dialog for.
+     * @param tab                   The tab to create the dialog for.
+     * @param contentSettingsTypes  The content settings types requested by this dialog.
      * @param iconResourceId        The id of the icon to display in the dialog.
      * @param message               The message to display in the dialog.
      * @param linkText              The text to display in the link (if any).
@@ -114,21 +117,23 @@ public class PermissionDialogDelegate {
      * @param showPersistenceToggle Whether or not to display a persistence toggle.
      */
     @CalledByNative
-    private static PermissionDialogDelegate create(long nativeDelegatePtr, WindowAndroid window,
-            int enumeratedIconId, String message, String linkText, String primaryButtonText,
-            String secondaryButtonText, boolean showPersistenceToggle) {
-        return new PermissionDialogDelegate(nativeDelegatePtr, window, enumeratedIconId, message,
-                linkText, primaryButtonText, secondaryButtonText, showPersistenceToggle);
+    private static PermissionDialogDelegate create(long nativeDelegatePtr, Tab tab,
+            int[] contentSettingsTypes, int enumeratedIconId, String message, String linkText,
+            String primaryButtonText, String secondaryButtonText, boolean showPersistenceToggle) {
+        return new PermissionDialogDelegate(nativeDelegatePtr, tab, contentSettingsTypes,
+                enumeratedIconId, message, linkText, primaryButtonText, secondaryButtonText,
+                showPersistenceToggle);
     }
 
     /**
      * Upon construction, this class takes ownership of the passed in native delegate.
      */
-    private PermissionDialogDelegate(long nativeDelegatePtr, WindowAndroid window,
+    private PermissionDialogDelegate(long nativeDelegatePtr, Tab tab, int[] contentSettingsTypes,
             int enumeratedIconId, String message, String linkText, String primaryButtonText,
             String secondaryButtonText, boolean showPersistenceToggle) {
         mNativeDelegatePtr = nativeDelegatePtr;
-        mActivity = window.getActivity().get();
+        mTab = tab;
+        mContentSettingsTypes = contentSettingsTypes;
         mDrawableId = ResourceId.mapToDrawableId(enumeratedIconId);
         mMessageText = message;
         mLinkText = linkText;

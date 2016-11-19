@@ -620,11 +620,11 @@ void NetErrorHelperCore::OnCommitLoad(FrameType frame_type, const GURL& url) {
     const GURL& error_url = error.unreachableURL;
     if (url == error_url)
       ReportAutoReloadSuccess(error, auto_reload_count_);
-    else if (url != GURL(content::kUnreachableWebDataURL))
+    else if (url != content::kUnreachableWebDataURL)
       ReportAutoReloadFailure(error, auto_reload_count_);
   }
 
-  committed_error_page_info_.reset(pending_error_page_info_.release());
+  committed_error_page_info_ = std::move(pending_error_page_info_);
 }
 
 void NetErrorHelperCore::OnFinishLoad(FrameType frame_type) {

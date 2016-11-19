@@ -13,7 +13,7 @@
 #include "base/threading/thread_local.h"
 #include "services/service_manager/public/cpp/connection.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/ui/public/cpp/gpu_service.h"
+#include "services/ui/public/cpp/gpu/gpu_service.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/cpp/window.h"
 #include "services/ui/public/cpp/window_property.h"
@@ -184,7 +184,8 @@ WindowManagerConnection::WindowManagerConnection(
 ui::Window* WindowManagerConnection::GetUiWindowAtScreenPoint(
     const gfx::Point& point) {
   std::map<int64_t, gfx::Point> display_origins;
-  for (display::Display& d : display::Screen::GetScreen()->GetAllDisplays())
+  for (const display::Display& d :
+       display::Screen::GetScreen()->GetAllDisplays())
     display_origins[d.id()] = d.bounds().origin();
 
   const std::set<ui::Window*>& roots = GetRoots();

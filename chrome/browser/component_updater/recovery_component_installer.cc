@@ -26,9 +26,6 @@
 #include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
-#if defined(OS_WIN)
-#include "chrome/installer/util/install_util.h"
-#endif  // OS_WIN
 #include "components/component_updater/component_updater_paths.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/component_updater/pref_names.h"
@@ -85,14 +82,14 @@ void RecordRecoveryComponentUMAEvent(RecoveryComponentEvent event) {
   UMA_HISTOGRAM_ENUMERATION("RecoveryComponent.Event", event, RCE_COUNT);
 }
 
-#if !defined(OS_CHROMEOS)
+#if !defined(OS_CHROMEOS) && defined(GOOGLE_CHROME_BUILD)
 // Checks if elevated recovery simulation switch was present on the command
 // line. This is for testing purpose.
 bool SimulatingElevatedRecovery() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kSimulateElevatedRecovery);
 }
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !defined(OS_CHROMEOS) && defined(GOOGLE_CHROME_BUILD)
 
 base::CommandLine GetRecoveryInstallCommandLine(
     const base::FilePath& command,
@@ -235,15 +232,6 @@ void RecoveryRegisterHelper(ComponentUpdateService* cus, PrefService* prefs) {
     NOTREACHED();
     return;
   }
-
-  update_client::InstallerAttributes installer_attributes;
-#if defined(OS_WIN)
-  base::FilePath exe_path;
-  PathService::Get(base::FILE_EXE, &exe_path);
-  installer_attributes["ismachine"] =
-      InstallUtil::IsPerUserInstall(exe_path) ? "0" : "1";
-#endif  // OS_WIN
-
   update_client::CrxComponent recovery;
   recovery.name = "recovery";
   recovery.installer = new RecoveryComponentInstaller(version, prefs);
@@ -251,7 +239,6 @@ void RecoveryRegisterHelper(ComponentUpdateService* cus, PrefService* prefs) {
   recovery.pk_hash.assign(kSha2Hash, &kSha2Hash[sizeof(kSha2Hash)]);
   recovery.supports_group_policy_enable_component_updates = true;
   recovery.requires_network_encryption = false;
-  recovery.installer_attributes = installer_attributes;
   if (!cus->RegisterComponent(recovery)) {
     NOTREACHED() << "Recovery component registration failed.";
   }
@@ -436,7 +423,7 @@ bool RecoveryComponentInstaller::Uninstall() {
 
 void RegisterRecoveryComponent(ComponentUpdateService* cus,
                                PrefService* prefs) {
-#if !defined(OS_CHROMEOS)
+#if !defined(OS_CHROMEOS) && defined(GOOGLE_CHROME_BUILD)
   if (SimulatingElevatedRecovery()) {
     BrowserThread::PostTask(
         BrowserThread::UI,
@@ -451,7 +438,7 @@ void RegisterRecoveryComponent(ComponentUpdateService* cus,
       FROM_HERE,
       base::Bind(&RecoveryRegisterHelper, cus, prefs),
       base::TimeDelta::FromSeconds(6));
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !defined(OS_CHROMEOS) && defined(GOOGLE_CHROME_BUILD)
 }
 
 void RegisterPrefsForRecoveryComponent(PrefRegistrySimple* registry) {

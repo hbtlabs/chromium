@@ -62,7 +62,9 @@
 namespace blink {
 
 SVGImage::SVGImage(ImageObserver* observer)
-    : Image(observer), m_hasPendingTimelineRewind(false) {}
+    : Image(observer),
+      m_paintController(PaintController::create()),
+      m_hasPendingTimelineRewind(false) {}
 
 SVGImage::~SVGImage() {
   if (m_page) {
@@ -369,8 +371,8 @@ void SVGImage::drawInternal(SkCanvas* canvas,
   // time=0.) The reason we do this here and not in resetAnimation() is to
   // avoid setting timers from the latter.
   flushPendingTimelineRewind();
-
-  SkPictureBuilder imagePicture(dstRect);
+  SkPictureBuilder imagePicture(dstRect, nullptr, nullptr,
+                                m_paintController.get());
   {
     ClipRecorder clipRecorder(imagePicture.context(), imagePicture,
                               DisplayItem::kClipNodeImage,
@@ -489,8 +491,13 @@ void SVGImage::serviceAnimations(double monotonicAnimationStartTime) {
   // that will keep the associated SVGImageChromeClient object alive.
   Persistent<ImageObserver> protect(getImageObserver());
   m_page->animator().serviceScriptedAnimations(monotonicAnimationStartTime);
-  m_page->animator().updateAllLifecyclePhases(
-      *toLocalFrame(m_page->mainFrame()));
+  // Do *not* update the paint phase. It's critical to paint only when
+  // actually generating painted output, not only for performance reasons,
+  // but to preserve correct coherence of the cache of the output with
+  // the needsRepaint bits of the PaintLayers in the image.
+  toLocalFrame(m_page->mainFrame())
+      ->view()
+      ->updateAllLifecyclePhasesExceptPaint();
 }
 
 void SVGImage::advanceAnimationForTesting() {
@@ -587,7 +594,7 @@ Image::SizeAvailability SVGImage::dataChanged(bool allDataReceived) {
       TRACE_EVENT0("blink", "SVGImage::dataChanged::createFrame");
       frame =
           LocalFrame::create(&dummyFrameLoaderClient, &page->frameHost(), 0);
-      frame->setView(FrameView::create(frame));
+      frame->setView(FrameView::create(*frame));
       frame->init();
     }
 

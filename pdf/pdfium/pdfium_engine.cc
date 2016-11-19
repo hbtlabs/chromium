@@ -1214,12 +1214,15 @@ void PDFiumEngine::OnPendingRequestComplete() {
 }
 
 void PDFiumEngine::OnNewDataAvailable() {
-  const float progress = doc_loader_->GetProgress();
-  if (progress < 0.001) {
-    client_->DocumentLoadProgress(0, 0);
-  } else {
-    client_->DocumentLoadProgress(progress * 10000, 10000);
+  if (!doc_loader_->GetDocumentSize()) {
+    client_->DocumentLoadProgress(doc_loader_->count_of_bytes_received(), 0);
+    return;
   }
+
+  const float progress = doc_loader_->GetProgress();
+  DCHECK_GE(progress, 0.0);
+  DCHECK_LE(progress, 1.0);
+  client_->DocumentLoadProgress(progress * 10000, 10000);
 }
 
 void PDFiumEngine::OnDocumentComplete() {
@@ -1235,7 +1238,10 @@ void PDFiumEngine::OnDocumentComplete() {
 }
 
 void PDFiumEngine::OnDocumentCanceled() {
-  OnDocumentComplete();
+  if (visible_pages_.empty())
+    client_->DocumentLoadFailed();
+  else
+    OnDocumentComplete();
 }
 
 void PDFiumEngine::CancelBrowserDownload() {
@@ -4001,19 +4007,17 @@ PDFEngineExports* PDFEngineExports::Get() {
 }
 
 #if defined(OS_WIN)
-bool PDFiumEngineExports::RenderPDFPageToDC(const void* pdf_buffer,
-                                            int buffer_size,
+bool PDFiumEngineExports::RenderPDFPageToDC(void* pdf_handle,
                                             int page_number,
                                             const RenderingSettings& settings,
                                             HDC dc) {
-  FPDF_DOCUMENT doc = FPDF_LoadMemDocument(pdf_buffer, buffer_size, nullptr);
+  FPDF_DOCUMENT doc = pdf_handle;
   if (!doc)
     return false;
   FPDF_PAGE page = FPDF_LoadPage(doc, page_number);
-  if (!page) {
-    FPDF_CloseDocument(doc);
+  if (!page)
     return false;
-  }
+
   RenderingSettings new_settings = settings;
   // calculate the page size
   if (new_settings.dpi_x == -1)
@@ -4067,7 +4071,6 @@ bool PDFiumEngineExports::RenderPDFPageToDC(const void* pdf_buffer,
   }
   RestoreDC(dc, save_state);
   FPDF_ClosePage(page);
-  FPDF_CloseDocument(doc);
   return true;
 }
 
@@ -4083,20 +4086,16 @@ void PDFiumEngineExports::SetPDFUseGDIPrinting(bool enable) {
 #endif  // defined(OS_WIN)
 
 bool PDFiumEngineExports::RenderPDFPageToBitmap(
-    const void* pdf_buffer,
-    int pdf_buffer_size,
+    void* pdf_handle,
     int page_number,
     const RenderingSettings& settings,
     void* bitmap_buffer) {
-  FPDF_DOCUMENT doc =
-      FPDF_LoadMemDocument(pdf_buffer, pdf_buffer_size, nullptr);
+  FPDF_DOCUMENT doc = pdf_handle;
   if (!doc)
     return false;
   FPDF_PAGE page = FPDF_LoadPage(doc, page_number);
-  if (!page) {
-    FPDF_CloseDocument(doc);
+  if (!page)
     return false;
-  }
 
   pp::Rect dest;
   int rotate = CalculatePosition(page, settings, &dest);
@@ -4115,49 +4114,49 @@ bool PDFiumEngineExports::RenderPDFPageToBitmap(
       FPDF_ANNOT | FPDF_PRINTING | FPDF_NO_CATCH);
   FPDFBitmap_Destroy(bitmap);
   FPDF_ClosePage(page);
-  FPDF_CloseDocument(doc);
   return true;
 }
 
 bool PDFiumEngineExports::GetPDFDocInfo(const void* pdf_buffer,
                                         int buffer_size,
                                         int* page_count,
-                                        double* max_page_width) {
+                                        double* max_page_width,
+                                        void** pdf_handle) {
   FPDF_DOCUMENT doc = FPDF_LoadMemDocument(pdf_buffer, buffer_size, nullptr);
   if (!doc)
     return false;
+
   int page_count_local = FPDF_GetPageCount(doc);
-  if (page_count) {
+  if (page_count)
     *page_count = page_count_local;
-  }
+
   if (max_page_width) {
     *max_page_width = 0;
     for (int page_number = 0; page_number < page_count_local; page_number++) {
       double page_width = 0;
       double page_height = 0;
       FPDF_GetPageSizeByIndex(doc, page_number, &page_width, &page_height);
-      if (page_width > *max_page_width) {
-        *max_page_width = page_width;
-      }
+      *max_page_width = std::max(*max_page_width, page_width);
     }
   }
-  FPDF_CloseDocument(doc);
+
+  if (pdf_handle)
+    *pdf_handle = doc;  // Caller takes ownership.
+  else
+    FPDF_CloseDocument(pdf_handle);
   return true;
 }
 
-bool PDFiumEngineExports::GetPDFPageSizeByIndex(
-    const void* pdf_buffer,
-    int pdf_buffer_size,
-    int page_number,
-    double* width,
-    double* height) {
-  FPDF_DOCUMENT doc =
-      FPDF_LoadMemDocument(pdf_buffer, pdf_buffer_size, nullptr);
-  if (!doc)
-    return false;
-  bool success = FPDF_GetPageSizeByIndex(doc, page_number, width, height) != 0;
-  FPDF_CloseDocument(doc);
-  return success;
+void PDFiumEngineExports::ReleasePDFHandle(void* pdf_handle) {
+  FPDF_CloseDocument(pdf_handle);
+}
+
+bool PDFiumEngineExports::GetPDFPageSizeByIndex(void* pdf_handle,
+                                                int page_number,
+                                                double* width,
+                                                double* height) {
+  FPDF_DOCUMENT doc = pdf_handle;
+  return doc && FPDF_GetPageSizeByIndex(doc, page_number, width, height) != 0;
 }
 
 }  // namespace chrome_pdf

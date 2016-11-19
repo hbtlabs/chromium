@@ -1,5 +1,5 @@
 {
-  "name": "service:content_browser",
+  "name": "content_browser",
   "display_name": "Chrome",
   "interface_provider_specs": {
     "service_manager:connector": {
@@ -17,10 +17,12 @@
           "metrics::mojom::CallStackProfileCollector"
         ],
         "ash": [
+          // Under classic ash the browser provides some of the ash interfaces
+          // to itself.
           "ash::mojom::LocaleNotificationController",
           "ash::mojom::NewWindowClient",
           "ash::mojom::ShelfController",
-          "ash::mojom::ShutdownClient",
+          "ash::mojom::ShutdownController",
           "ash::mojom::SystemTray",
           "ash::mojom::SystemTrayClient",
           "ash::mojom::WallpaperController",
@@ -33,7 +35,8 @@
         ]
       },
       "requires": {
-        "service:ash": [ "ash" ]
+        "ash": [ "ash" ],
+        "image_decoder": [ "decode" ]
       }
     },
     "navigation:frame": {
@@ -45,6 +48,7 @@
           "bluetooth::mojom::AdapterFactory",
           "device::usb::ChooserService",
           "device::usb::DeviceManager",
+          "contextual_search::mojom::ContextualSearchJsApiService",
           "dom_distiller::mojom::DistillabilityService",
           "dom_distiller::mojom::DistillerJavaScriptService",
           "extensions::KeepAlive",

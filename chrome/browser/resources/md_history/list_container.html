@@ -50,8 +50,7 @@
           <paper-button class="cancel-button" on-tap="onDialogCancelTap_">
             $i18n{cancel}
           </paper-button>
-          <paper-button class="action-button" on-tap="onDialogConfirmTap_"
-              autofocus>
+          <paper-button class="action-button" on-tap="onDialogConfirmTap_">
             $i18n{deleteConfirm}
           </paper-button>
         </div>
@@ -65,6 +64,7 @@
           $i18n{moreFromSite}
         </paper-item>
         <paper-item id="menuRemoveButton" class="menu-item"
+            disabled="[[!canDeleteHistory_()]]"
             on-tap="onRemoveFromHistoryTap_">
           $i18n{removeFromHistory}
         </paper-item>

@@ -121,9 +121,15 @@ TEST_F(SystemTrayTest, NotRecordedtemsAreNotRecorded) {
   RunAllPendingInMessageLoop();
 }
 
+// TODO(bruthig): Re-enable.  See https://crbug.com/665960.
+#if defined(OS_WIN)
+#define MAYBE_NullDefaultViewIsNotRecorded DISABLED_NullDefaultViewIsNotRecorded
+#else
+#define MAYBE_NullDefaultViewIsNotRecorded NullDefaultViewIsNotRecorded
+#endif
 // Verifies null default views are not recorded in the
 // "Ash.SystemMenu.DefaultView.VisibleItems" histogram.
-TEST_F(SystemTrayTest, NullDefaultViewIsNotRecorded) {
+TEST_F(SystemTrayTest, MAYBE_NullDefaultViewIsNotRecorded) {
   SystemTray* tray = GetPrimarySystemTray();
   ASSERT_TRUE(tray->GetWidget());
 
@@ -236,16 +242,16 @@ TEST_F(SystemTrayTest, SystemTrayColoring) {
   SystemTray* tray = GetPrimarySystemTray();
   ASSERT_TRUE(tray->GetWidget());
   // At the beginning the tray coloring is not active.
-  ASSERT_FALSE(tray->draw_background_as_active());
+  ASSERT_FALSE(tray->is_active());
 
   // Showing the system bubble should show the background as active.
   tray->ShowDefaultView(BUBBLE_CREATE_NEW);
-  ASSERT_TRUE(tray->draw_background_as_active());
+  ASSERT_TRUE(tray->is_active());
 
   // Closing the system menu should change the coloring back to normal.
   ASSERT_TRUE(tray->CloseSystemBubble());
   RunAllPendingInMessageLoop();
-  ASSERT_FALSE(tray->draw_background_as_active());
+  ASSERT_FALSE(tray->is_active());
 }
 
 // Closing the system bubble through an alignment change should change the
@@ -256,16 +262,16 @@ TEST_F(SystemTrayTest, SystemTrayColoringAfterAlignmentChange) {
   WmShelf* shelf = GetPrimaryShelf();
   shelf->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
   // At the beginning the tray coloring is not active.
-  ASSERT_FALSE(tray->draw_background_as_active());
+  ASSERT_FALSE(tray->is_active());
 
   // Showing the system bubble should show the background as active.
   tray->ShowDefaultView(BUBBLE_CREATE_NEW);
-  ASSERT_TRUE(tray->draw_background_as_active());
+  ASSERT_TRUE(tray->is_active());
 
   // Changing the alignment should close the system bubble and change the
   // background color.
   shelf->SetAlignment(SHELF_ALIGNMENT_LEFT);
-  ASSERT_FALSE(tray->draw_background_as_active());
+  ASSERT_FALSE(tray->is_active());
   RunAllPendingInMessageLoop();
   // The bubble should already be closed by now.
   ASSERT_FALSE(tray->CloseSystemBubble());

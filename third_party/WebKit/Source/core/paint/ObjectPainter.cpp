@@ -135,7 +135,7 @@ void paintComplexOutline(GraphicsContext& graphicsContext,
       continue;
 
     edges.grow(++count);
-    OutlineEdgeInfo& edge = edges.last();
+    OutlineEdgeInfo& edge = edges.back();
     edge.x1 = SkScalarTruncToInt(points[0].x());
     edge.y1 = SkScalarTruncToInt(points[0].y());
     edge.x2 = SkScalarTruncToInt(points[1].x());
@@ -174,7 +174,7 @@ void paintComplexOutline(GraphicsContext& graphicsContext,
   }
 
   DCHECK(count >= 4 && edges.size() == count);
-  int firstAdjacentWidth = adjustJoint(width, edges.last(), edges.first());
+  int firstAdjacentWidth = adjustJoint(width, edges.back(), edges.first());
 
   // The width of the angled part of starting and ending joint of the current
   // edge.
@@ -693,5 +693,33 @@ void ObjectPainter::paintAllPhasesAtomically(const PaintInfo& paintInfo,
   info.phase = PaintPhaseOutline;
   m_layoutObject.paint(info, paintOffset);
 }
+
+#if DCHECK_IS_ON()
+void ObjectPainter::doCheckPaintOffset(const PaintInfo& paintInfo,
+                                       const LayoutPoint& paintOffset) {
+  DCHECK(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
+
+  // Actual paint offsets of SVGInline and SVGInlineText include location()
+  // of the containing SVGText, but PaintPropertyTreeBuilder doesn't output
+  // the paint offsets. TODO(wangxianzhu): Avoid the special treatment.
+  if (m_layoutObject.isSVGInline() || m_layoutObject.isSVGInlineText())
+    return;
+
+  // TODO(pdr): Let painter and paint property tree builder generate the same
+  // paint offset for LayoutScrollbarPart. crbug.com/664249.
+  if (m_layoutObject.isLayoutScrollbarPart())
+    return;
+
+  LayoutPoint adjustedPaintOffset = paintOffset;
+  // TODO(wangxianzhu): Avoid the special treatment for SVGText.
+  if (m_layoutObject.isBox() && !m_layoutObject.isSVGText())
+    adjustedPaintOffset += toLayoutBox(m_layoutObject).location();
+  DCHECK(m_layoutObject.previousPaintOffset() == adjustedPaintOffset)
+      << " Paint offset mismatch: " << m_layoutObject.debugName()
+      << " from PaintPropertyTreeBuilder: "
+      << m_layoutObject.previousPaintOffset().toString()
+      << " from painter: " << adjustedPaintOffset.toString();
+}
+#endif
 
 }  // namespace blink

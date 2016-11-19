@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef UI_VIEWS_MUS_MUS_CLIENT_INIT_H_
-#define UI_VIEWS_MUS_MUS_CLIENT_INIT_H_
+#ifndef UI_VIEWS_MUS_MUS_CLIENT_H_
+#define UI_VIEWS_MUS_MUS_CLIENT_H_
 
 #include <string>
 
@@ -15,8 +15,6 @@
 #include "ui/views/widget/widget.h"
 
 namespace aura {
-class Env;
-class GpuService;
 class PropertyConverter;
 class MusContextFactory;
 class Window;
@@ -30,6 +28,10 @@ class SingleThreadTaskRunner;
 namespace service_manager {
 class Connector;
 class Identity;
+}
+
+namespace ui {
+class GpuService;
 }
 
 namespace wm {
@@ -61,6 +63,12 @@ class VIEWS_MUS_EXPORT MusClient
   ~MusClient() override;
 
   static MusClient* Get() { return instance_; }
+
+  // Returns true if a DesktopNativeWidgetAura should be created given the
+  // specified params. If this returns false a NativeWidgetAura should be
+  // created.
+  static bool ShouldCreateDesktopNativeWidgetAura(
+      const Widget::InitParams& init_params);
 
   service_manager::Connector* connector() { return connector_; }
 
@@ -114,7 +122,7 @@ class VIEWS_MUS_EXPORT MusClient
 
   std::unique_ptr<aura::WindowTreeClient> window_tree_client_;
 
-  std::unique_ptr<aura::GpuService> gpu_service_;
+  std::unique_ptr<ui::GpuService> gpu_service_;
 
   std::unique_ptr<aura::MusContextFactory> compositor_context_factory_;
 
@@ -123,4 +131,4 @@ class VIEWS_MUS_EXPORT MusClient
 
 }  // namespace views
 
-#endif  // UI_VIEWS_MUS_MUS_CLIENT_INIT_H_
+#endif  // UI_VIEWS_MUS_MUS_CLIENT_H_

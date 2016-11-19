@@ -313,8 +313,10 @@ android_library("cronet_impl_common_java") {
     "java/src/org/chromium/net/impl/CronetEngineBase.java",
     "java/src/org/chromium/net/impl/CronetEngineBuilderImpl.java",
     "java/src/org/chromium/net/impl/Preconditions.java",
+    "java/src/org/chromium/net/impl/RequestFinishedInfoImpl.java",
     "java/src/org/chromium/net/impl/UrlRequestBase.java",
     "java/src/org/chromium/net/impl/UrlRequestBuilderImpl.java",
+    "java/src/org/chromium/net/impl/UrlResponseInfoImpl.java",
     "java/src/org/chromium/net/impl/UserAgent.java",
   ]
 
@@ -569,8 +571,8 @@ android_library("cronet_test_apk_java") {
     "//base:base_java",
     "//base:base_java_test_support",
     "//net/android:net_java_test_support",
-    "//third_party/netty-tcnative:netty-tcnative",
-    "//third_party/netty4:netty_all",
+    "//third_party/netty-tcnative:netty-tcnative_java",
+    "//third_party/netty4:netty_all_java",
   ]
 
   run_findbugs_override = true
@@ -628,7 +630,7 @@ android_apk("cronet_test_apk") {
     ":cronet_test_apk_java",
     ":cronet_test_apk_resources",
     "//base:base_java",
-    "//third_party/netty-tcnative:netty-tcnative_all",
+    "//third_party/netty-tcnative:netty-tcnative-so",
   ]
 
   run_findbugs_override = true

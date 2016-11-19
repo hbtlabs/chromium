@@ -217,7 +217,10 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     private ProfileSyncService.SyncStateChangedListener mSyncStateChangedListener;
 
     private ActivityWindowAndroid mWindowAndroid;
+
     private ChromeFullscreenManager mFullscreenManager;
+    private boolean mCreatedFullscreenManager;
+
     private CompositorViewHolder mCompositorViewHolder;
     private InsetObserverView mInsetObserverView;
     private ContextualSearchManager mContextualSearchManager;
@@ -275,6 +278,9 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         getWindow().setBackgroundDrawable(getBackgroundDrawable());
         mWindowAndroid = new ChromeWindow(this);
         mWindowAndroid.restoreInstanceState(getSavedInstanceState());
+
+        mFullscreenManager = createFullscreenManager();
+        mCreatedFullscreenManager = true;
     }
 
     @SuppressLint("NewApi")
@@ -325,7 +331,12 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         mWindowAndroid.setKeyboardAccessoryView((ViewGroup) findViewById(R.id.keyboard_accessory));
         initializeToolbar();
         initializeTabModels();
-        if (!isFinishing()) mFullscreenManager = createFullscreenManager();
+        if (!isFinishing() && getFullscreenManager() != null) {
+            getFullscreenManager().initialize(
+                    (ControlContainer) findViewById(R.id.control_container),
+                    getTabModelSelector(),
+                    getControlContainerHeightResource());
+        }
     }
 
     @Override
@@ -1137,7 +1148,14 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         ContentBitmapCallback callback = new ContentBitmapCallback() {
             @Override
             public void onFinishGetBitmap(Bitmap bitmap, int response) {
-                ShareHelper.onScreenshotReady(blockingUri, bitmap, mainActivity);
+                ShareHelper.saveScreenshotToDisk(bitmap, mainActivity,
+                        new Callback<Uri>() {
+                            @Override
+                            public void onResult(Uri result) {
+                                // Unblock the file once it is saved to disk.
+                                ChromeFileProvider.notifyFileReady(blockingUri, result);
+                            }
+                        });
             }
         };
         if (!mScreenshotCaptureSkippedForTesting) {
@@ -1378,6 +1396,10 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
      * @return The fullscreen manager, possibly null
      */
     public ChromeFullscreenManager getFullscreenManager() {
+        if (!mCreatedFullscreenManager) {
+            throw new IllegalStateException(
+                    "Attempting to access FullscreenManager before it has been created.");
+        }
         return mFullscreenManager;
     }
 
@@ -1385,7 +1407,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
      * @return The content offset provider, may be null.
      */
     public ContentOffsetProvider getContentOffsetProvider() {
-        return mCompositorViewHolder.getContentOffsetProvider();
+        return mCompositorViewHolder;
     }
 
     /**
@@ -1409,7 +1431,9 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
      * initialized, but Android Views will have been.
      * @return A {@link ChromeFullscreenManager} instance that's been created.
      */
-    protected abstract ChromeFullscreenManager createFullscreenManager();
+    protected ChromeFullscreenManager createFullscreenManager() {
+        return new ChromeFullscreenManager(this, false);
+    }
 
     /**
      * Exits the fullscreen mode, if any. Does nothing if no fullscreen is present.
@@ -1453,7 +1477,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         mCompositorViewHolder.setLayoutManager(layoutManager);
         mCompositorViewHolder.setFocusable(false);
         mCompositorViewHolder.setControlContainer(controlContainer);
-        mCompositorViewHolder.setFullscreenHandler(mFullscreenManager);
+        mCompositorViewHolder.setFullscreenHandler(getFullscreenManager());
         mCompositorViewHolder.setUrlBar(urlBar);
         mCompositorViewHolder.onFinishNativeInitialization(getTabModelSelector(), this,
                 getTabContentManager(), contentContainer, mContextualSearchManager,

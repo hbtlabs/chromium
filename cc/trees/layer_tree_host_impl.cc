@@ -1222,10 +1222,10 @@ void LayerTreeHostImpl::UpdateTileManagerMemoryPolicy(
 
   if (global_tile_state_.hard_memory_limit_in_bytes > 0) {
     // If |global_tile_state_.hard_memory_limit_in_bytes| is greater than 0, we
-    // are visible. Notify the worker context here. We handle becoming
-    // invisible in NotifyAllTileTasksComplete to avoid interrupting running
-    // work.
-    SetWorkerContextVisibility(true);
+    // consider our contexts visible. Notify the contexts here. We handle
+    // becoming invisible in NotifyAllTileTasksComplete to avoid interrupting
+    // running work.
+    SetContextVisibility(true);
 
     // If |global_tile_state_.hard_memory_limit_in_bytes| is greater than 0, we
     // allow the image decode controller to retain resources. We handle the
@@ -1311,13 +1311,13 @@ void LayerTreeHostImpl::NotifyAllTileTasksCompleted() {
   // The tile tasks started by the most recent call to PrepareTiles have
   // completed. Now is a good time to free resources if necessary.
   if (global_tile_state_.hard_memory_limit_in_bytes == 0) {
-    // Free image decode controller resources before notifying the worker
-    // context of visibility change. This ensures that the imaged decode
+    // Free image decode controller resources before notifying the
+    // contexts of visibility change. This ensures that the imaged decode
     // controller has released all Skia refs at the time Skia's cleanup
     // executes (within worker context's cleanup).
     if (image_decode_controller_)
       image_decode_controller_->SetShouldAggressivelyFreeResources(true);
-    SetWorkerContextVisibility(false);
+    SetContextVisibility(false);
   }
 }
 
@@ -1828,6 +1828,9 @@ void LayerTreeHostImpl::WillBeginImplFrame(const BeginFrameArgs& args) {
     SetNeedsRedraw();
   }
 
+  if (input_handler_client_)
+    input_handler_client_->DeliverInputForBeginFrame();
+
   Animate();
 
   for (auto* it : video_frame_controllers_)
@@ -2040,9 +2043,6 @@ void LayerTreeHostImpl::SetVisible(bool visible) {
     // Call PrepareTiles to evict tiles when we become invisible.
     PrepareTiles();
   }
-
-  // Update visibility for the compositor context provider.
-  SetCompositorContextVisibility(visible);
 }
 
 void LayerTreeHostImpl::SetNeedsOneBeginImplFrame() {
@@ -2265,13 +2265,7 @@ void LayerTreeHostImpl::ReleaseCompositorFrameSink() {
   resource_provider_ = nullptr;
 
   // Release any context visibility before we destroy the CompositorFrameSink.
-  if (visible_)
-    SetCompositorContextVisibility(false);
-  // Worker context visibility is based on both LTHI visibility as well as
-  // memory policy, so we directly check |worker_context_visibility_| here,
-  // rather than just relying on |visibility_|.
-  if (worker_context_visibility_)
-    SetWorkerContextVisibility(false);
+  SetContextVisibility(false);
 
   // Detach from the old CompositorFrameSink and reset |compositor_frame_sink_|
   // pointer as this surface is going to be destroyed independent of if binding
@@ -2316,12 +2310,6 @@ bool LayerTreeHostImpl::InitializeRenderer(
       settings_.renderer_settings.use_gpu_memory_buffer_resources,
       settings_.enable_color_correct_rendering,
       settings_.renderer_settings.buffer_to_texture_target_map);
-
-  // Make sure the main context visibility is restored. Worker context
-  // visibility will be set via the memory policy update in
-  // CreateTileManagerResources below.
-  if (visible_)
-    SetCompositorContextVisibility(true);
 
   // Since the new context may be capable of MSAA, update status here. We don't
   // need to check the return value since we are recreating all resources
@@ -2974,6 +2962,7 @@ void LayerTreeHostImpl::ApplyScroll(ScrollNode* scroll_node,
                             scroll_state->position_y());
   const gfx::Vector2dF delta(scroll_state->delta_x(), scroll_state->delta_y());
   gfx::Vector2dF applied_delta;
+  gfx::Vector2dF delta_applied_to_content;
   // TODO(tdresser): Use a more rational epsilon. See crbug.com/510550 for
   // details.
   const float kEpsilon = 0.1f;
@@ -2982,16 +2971,21 @@ void LayerTreeHostImpl::ApplyScroll(ScrollNode* scroll_node,
       viewport()->MainScrollLayer() &&
       scroll_node->owner_id == viewport()->MainScrollLayer()->id();
 
-  if (is_viewport_scroll_layer) {
-    bool affect_top_controls = !wheel_scrolling_;
+  // This is needed if the scroll chains up to the viewport without going
+  // through the outer viewport scroll layer. This can happen if we scroll an
+  // element that's not a descendant of the document.rootScroller. In that case
+  // we want to scroll the inner viewport -- to allow panning while zoomed --
+  // but also move browser controls if needed.
+  bool is_inner_viewport_scroll_layer =
+      scroll_node->owner_id == InnerViewportScrollLayer()->id();
+
+  if (is_viewport_scroll_layer || is_inner_viewport_scroll_layer) {
     Viewport::ScrollResult result = viewport()->ScrollBy(
         delta, viewport_point, scroll_state->is_direct_manipulation(),
-        affect_top_controls);
+        !wheel_scrolling_, is_viewport_scroll_layer);
+
     applied_delta = result.consumed_delta;
-    scroll_state->set_caused_scroll(
-        std::abs(result.content_scrolled_delta.x()) > kEpsilon,
-        std::abs(result.content_scrolled_delta.y()) > kEpsilon);
-    scroll_state->ConsumeDelta(applied_delta.x(), applied_delta.y());
+    delta_applied_to_content = result.content_scrolled_delta;
   } else {
     applied_delta = ScrollSingleNode(
         scroll_node, delta, viewport_point,
@@ -3002,8 +2996,16 @@ void LayerTreeHostImpl::ApplyScroll(ScrollNode* scroll_node,
   // If the layer wasn't able to move, try the next one in the hierarchy.
   bool scrolled = std::abs(applied_delta.x()) > kEpsilon;
   scrolled = scrolled || std::abs(applied_delta.y()) > kEpsilon;
+  if (!scrolled) {
+    // TODO(bokan): This preserves existing behavior by not allowing tiny
+    // scrolls to produce overscroll but is inconsistent in how delta gets
+    // chained up. We need to clean this up.
+    if (is_viewport_scroll_layer)
+      scroll_state->ConsumeDelta(applied_delta.x(), applied_delta.y());
+    return;
+  }
 
-  if (scrolled && !is_viewport_scroll_layer) {
+  if (!is_viewport_scroll_layer && !is_inner_viewport_scroll_layer) {
     // If the applied delta is within 45 degrees of the input
     // delta, bail out to make it easier to scroll just one layer
     // in one direction without affecting any of its parents.
@@ -3016,13 +3018,13 @@ void LayerTreeHostImpl::ApplyScroll(ScrollNode* scroll_node,
       // in which the layer moved.
       applied_delta = MathUtil::ProjectVector(delta, applied_delta);
     }
-    scroll_state->set_caused_scroll(std::abs(applied_delta.x()) > kEpsilon,
-                                    std::abs(applied_delta.y()) > kEpsilon);
-    scroll_state->ConsumeDelta(applied_delta.x(), applied_delta.y());
+    delta_applied_to_content = applied_delta;
   }
 
-  if (!scrolled)
-    return;
+  scroll_state->set_caused_scroll(
+      std::abs(delta_applied_to_content.x()) > kEpsilon,
+      std::abs(delta_applied_to_content.y()) > kEpsilon);
+  scroll_state->ConsumeDelta(applied_delta.x(), applied_delta.y());
 
   scroll_state->set_current_native_scrolling_node(scroll_node);
 }
@@ -3417,7 +3419,7 @@ bool LayerTreeHostImpl::AnimateBrowserControls(base::TimeTicks time) {
     return false;
 
   DCHECK(viewport());
-  viewport()->ScrollBy(scroll, gfx::Point(), false, false);
+  viewport()->ScrollBy(scroll, gfx::Point(), false, false, true);
   client_->SetNeedsCommitOnImplThread();
   client_->RenewTreePriority();
   return true;
@@ -4047,46 +4049,37 @@ bool LayerTreeHostImpl::CommitToActiveTree() const {
   return !task_runner_provider_->HasImplThread();
 }
 
-void LayerTreeHostImpl::SetCompositorContextVisibility(bool is_visible) {
+void LayerTreeHostImpl::SetContextVisibility(bool is_visible) {
   if (!compositor_frame_sink_)
     return;
 
+  // Update the compositor context. If we are already in the correct visibility
+  // state, skip. This can happen if we transition invisible/visible rapidly,
+  // before we get a chance to go invisible in NotifyAllTileTasksComplete.
   auto* compositor_context = compositor_frame_sink_->context_provider();
-  if (!compositor_context)
-    return;
-
-  DCHECK_NE(is_visible, !!compositor_context_visibility_);
-
-  if (is_visible) {
-    compositor_context_visibility_ =
-        compositor_context->CacheController()->ClientBecameVisible();
-  } else {
-    compositor_context->CacheController()->ClientBecameNotVisible(
-        std::move(compositor_context_visibility_));
+  if (compositor_context && is_visible != !!compositor_context_visibility_) {
+    if (is_visible) {
+      compositor_context_visibility_ =
+          compositor_context->CacheController()->ClientBecameVisible();
+    } else {
+      compositor_context->CacheController()->ClientBecameNotVisible(
+          std::move(compositor_context_visibility_));
+    }
   }
-}
 
-void LayerTreeHostImpl::SetWorkerContextVisibility(bool is_visible) {
-  if (!compositor_frame_sink_)
-    return;
-
+  // Update the worker context. If we are already in the correct visibility
+  // state, skip. This can happen if we transition invisible/visible rapidly,
+  // before we get a chance to go invisible in NotifyAllTileTasksComplete.
   auto* worker_context = compositor_frame_sink_->worker_context_provider();
-  if (!worker_context)
-    return;
-
-  // TODO(ericrk): This check is here because worker context visibility is a
-  // bit less controlled, being settable both by memory policy changes as well
-  // as direct visibility changes. We should simplify this. crbug.com/642154
-  if (is_visible == !!worker_context_visibility_)
-    return;
-
-  ContextProvider::ScopedContextLock hold(worker_context);
-  if (is_visible) {
-    worker_context_visibility_ =
-        worker_context->CacheController()->ClientBecameVisible();
-  } else {
-    worker_context->CacheController()->ClientBecameNotVisible(
-        std::move(worker_context_visibility_));
+  if (worker_context && is_visible != !!worker_context_visibility_) {
+    ContextProvider::ScopedContextLock hold(worker_context);
+    if (is_visible) {
+      worker_context_visibility_ =
+          worker_context->CacheController()->ClientBecameVisible();
+    } else {
+      worker_context->CacheController()->ClientBecameNotVisible(
+          std::move(worker_context_visibility_));
+    }
   }
 }
 

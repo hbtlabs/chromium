@@ -26,13 +26,14 @@
 #include "components/url_formatter/url_fixer.h"
 #include "components/url_matcher/url_matcher.h"
 #include "content/public/browser/browser_thread.h"
+#include "extensions/features/features.h"
 #include "net/base/escape.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/url_util.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/common/extension_urls.h"
 #endif
 
@@ -92,7 +93,7 @@ const char* kFilteredSchemes[] = {
   "wss"
 };
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 const char* kCrxDownloadUrls[] = {
     "https://clients2.googleusercontent.com/crx/blobs/",
     "https://chrome.google.com/webstore/download/"
@@ -218,6 +219,9 @@ const char kGoogleWebCacheHost[] = "webcache.googleusercontent.com";
 const char kGoogleWebCachePathPrefix[] = "/search";
 const char kGoogleWebCacheQueryPattern[] =
     "cache:(.{12}:)?(https?://)?([^ :]*)( [^:]*)?";
+
+const char kGoogleTranslateSubdomain[] = "translate.";
+const char kAlternateGoogleTranslateHost[] = "translate.googleusercontent.com";
 
 GURL BuildURL(bool is_https, const std::string& host_and_path) {
   std::string scheme = is_https ? url::kHttpsScheme : url::kHttpScheme;
@@ -349,7 +353,7 @@ SupervisedUserURLFilter::GetFilteringBehaviorForURL(
   if (!HasFilteredScheme(effective_url))
     return ALLOW;
 
-#if defined(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // Allow webstore crx downloads. This applies to both extension installation
   // and updates.
   if (extension_urls::GetWebstoreUpdateUrl() == Normalize(effective_url))
@@ -601,6 +605,37 @@ GURL SupervisedUserURLFilter::GetEmbeddedURL(const GURL& url) const {
     if (re2::RE2::FullMatch(query, google_web_cache_query_regex_, &fingerprint,
                             &scheme, &embedded)) {
       return BuildURL(scheme == "https://", embedded);
+    }
+  }
+
+  // Check for Google translate URLs ("translate.google.TLD/...?...&u=URL" or
+  // "translate.googleusercontent.com/...?...&u=URL").
+  bool is_translate = false;
+  if (base::StartsWith(url.host_piece(), kGoogleTranslateSubdomain,
+                       base::CompareCase::SENSITIVE)) {
+    // Remove the "translate." prefix.
+    GURL::Replacements replace;
+    replace.SetHostStr(
+        url.host_piece().substr(strlen(kGoogleTranslateSubdomain)));
+    GURL trimmed = url.ReplaceComponents(replace);
+    // Check that the remainder is a Google URL. Note: IsGoogleDomainUrl checks
+    // for [www.]google.TLD, but we don't want the "www.", so explicitly exclude
+    // that.
+    // TODO(treib,pam): Instead of excluding "www." manually, teach
+    // IsGoogleDomainUrl a mode that doesn't allow it.
+    is_translate = google_util::IsGoogleDomainUrl(
+                       trimmed, google_util::DISALLOW_SUBDOMAIN,
+                       google_util::DISALLOW_NON_STANDARD_PORTS) &&
+                   !base::StartsWith(trimmed.host_piece(), "www.",
+                                     base::CompareCase::SENSITIVE);
+  }
+  bool is_alternate_translate =
+      url.host_piece() == kAlternateGoogleTranslateHost;
+  if (is_translate || is_alternate_translate) {
+    std::string embedded;
+    if (net::GetValueForKeyInQuery(url, "u", &embedded)) {
+      // The embedded URL may or may not include a scheme. Fix it if necessary.
+      return url_formatter::FixupURL(embedded, /*desired_tld=*/std::string());
     }
   }
 

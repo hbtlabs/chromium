@@ -142,7 +142,7 @@ std::unique_ptr<Vector<char>> PictureSnapshot::replay(unsigned fromStep,
     canvas.resetStepCount();
     m_picture->playback(&canvas, &canvas);
   }
-  std::unique_ptr<Vector<char>> base64Data = wrapUnique(new Vector<char>());
+  std::unique_ptr<Vector<char>> base64Data = makeUnique<Vector<char>>();
   Vector<char> encodedImage;
 
   sk_sp<SkImage> image = SkImage::MakeFromBitmap(bitmap);
@@ -167,7 +167,7 @@ std::unique_ptr<PictureSnapshot::Timings> PictureSnapshot::profile(
     double minDuration,
     const FloatRect* clipRect) const {
   std::unique_ptr<PictureSnapshot::Timings> timings =
-      wrapUnique(new PictureSnapshot::Timings());
+      makeUnique<PictureSnapshot::Timings>();
   timings->reserveCapacity(minRepeatCount);
   const SkIRect bounds = m_picture->cullRect().roundOut();
   SkBitmap bitmap;
@@ -179,7 +179,7 @@ std::unique_ptr<PictureSnapshot::Timings> PictureSnapshot::profile(
   double stopTime = now + minDuration;
   for (unsigned step = 0; step < minRepeatCount || now < stopTime; ++step) {
     timings->append(Vector<double>());
-    Vector<double>* currentTimings = &timings->last();
+    Vector<double>* currentTimings = &timings->back();
     if (timings->size() > 1)
       currentTimings->reserveCapacity(timings->begin()->size());
     ProfilingCanvas canvas(bitmap);

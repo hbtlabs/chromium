@@ -161,6 +161,8 @@ void UserManagerBase::UserLoggedIn(const AccountId& account_id,
       PublicAccountUserLoggedIn(user);
     } else if (user && user->GetType() == USER_TYPE_KIOSK_APP) {
       KioskAppLoggedIn(user);
+    } else if (user && user->GetType() == USER_TYPE_ARC_KIOSK_APP) {
+      ArcKioskAppLoggedIn(user);
     } else if ((user && user->GetType() == USER_TYPE_SUPERVISED) ||
                (!user && IsSupervisedAccountId(account_id))) {
       SupervisedUserLoggedIn(account_id);
@@ -321,16 +323,6 @@ User* UserManagerBase::FindUserAndModify(const AccountId& account_id) {
   if (active_user_ && active_user_->GetAccountId() == account_id)
     return active_user_;
   return FindUserInListAndModify(account_id);
-}
-
-const User* UserManagerBase::GetLoggedInUser() const {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
-  return active_user_;
-}
-
-User* UserManagerBase::GetLoggedInUser() {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
-  return active_user_;
 }
 
 const User* UserManagerBase::GetActiveUser() const {
@@ -532,7 +524,7 @@ bool UserManagerBase::IsCurrentUserNew() const {
 bool UserManagerBase::IsCurrentUserNonCryptohomeDataEphemeral() const {
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
   return IsUserLoggedIn() &&
-         IsUserNonCryptohomeDataEphemeral(GetLoggedInUser()->GetAccountId());
+         IsUserNonCryptohomeDataEphemeral(GetActiveUser()->GetAccountId());
 }
 
 bool UserManagerBase::IsCurrentUserCryptohomeDataEphemeral() const {
@@ -610,7 +602,7 @@ bool UserManagerBase::IsUserNonCryptohomeDataEphemeral(
   //    policy was enabled.
   //    - or -
   // b) The user logged into any other account type.
-  if (IsUserLoggedIn() && (account_id == GetLoggedInUser()->GetAccountId()) &&
+  if (IsUserLoggedIn() && (account_id == GetActiveUser()->GetAccountId()) &&
       (is_current_user_ephemeral_regular_user_ ||
        !IsLoggedInAsUserWithGaiaAccount())) {
     return true;

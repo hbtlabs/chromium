@@ -6,6 +6,7 @@
 #define NGInlineBox_h
 
 #include "core/CoreExport.h"
+#include "core/layout/ng/ng_layout_input_node.h"
 #include "platform/fonts/FontFallbackPriority.h"
 #include "platform/fonts/shaping/ShapeResult.h"
 #include "platform/heap/Handle.h"
@@ -23,35 +24,24 @@ class NGConstraintSpace;
 class NGFragmentBase;
 class NGLayoutAlgorithm;
 class NGLayoutInlineItem;
+class NGLayoutInlineItemsBuilder;
 class NGPhysicalFragment;
 struct MinAndMaxContentSizes;
 
 // Represents an inline node to be laid out.
 // TODO(layout-dev): Make this and NGBox inherit from a common class.
-class CORE_EXPORT NGInlineBox : public GarbageCollectedFinalized<NGInlineBox> {
+class CORE_EXPORT NGInlineBox : public NGLayoutInputNode {
  public:
-  using const_iterator = Vector<NGLayoutInlineItem>::const_iterator;
-
   NGInlineBox(LayoutObject* start_inline, ComputedStyle* block_style);
-  virtual ~NGInlineBox();
+  ~NGInlineBox() override;
+
+  bool Layout(const NGConstraintSpace*, NGFragmentBase**) override;
+  NGInlineBox* NextSibling() override;
 
   // Prepare inline and text content for layout. Must be called before
   // calling the Layout method.
   void PrepareLayout();
 
-  // Returns true when done; when this function returns false, it has to be
-  // called again. The out parameter will only be set when this function
-  // returns true. The same constraint space has to be passed each time.
-  // TODO(layout-ng): Should we have a StartLayout function to avoid passing
-  // the same space for each Layout iteration?
-  bool Layout(const NGConstraintSpace*, NGFragmentBase**);
-
-  NGInlineBox* NextSibling();
-
-  // Iterator for the individual NGLayoutInlineItem objects that make up the
-  // inline children of a NGInlineBox instance.
-  const_iterator begin() const { return items_.begin(); }
-  const_iterator end() const { return items_.end(); }
   String Text(unsigned start_offset, unsigned end_offset) const {
     return text_content_.substring(start_offset, end_offset);
   }
@@ -60,8 +50,10 @@ class CORE_EXPORT NGInlineBox : public GarbageCollectedFinalized<NGInlineBox> {
 
  protected:
   NGInlineBox();  // This constructor is only for testing.
-  void CollectNode(LayoutObject*, unsigned* offset);
   void CollectInlines(LayoutObject* start, LayoutObject* last);
+  void CollectInlines(LayoutObject* start,
+                      LayoutObject* last,
+                      NGLayoutInlineItemsBuilder*);
   void CollapseWhiteSpace();
   void SegmentText();
   void ShapeText();
@@ -86,11 +78,14 @@ class CORE_EXPORT NGInlineBox : public GarbageCollectedFinalized<NGInlineBox> {
 // element where possible.
 class NGLayoutInlineItem {
  public:
-  NGLayoutInlineItem(unsigned start, unsigned end)
+  NGLayoutInlineItem(unsigned start, unsigned end, const ComputedStyle* style)
       : start_offset_(start),
         end_offset_(end),
         bidi_level_(UBIDI_LTR),
-        script_(USCRIPT_INVALID_CODE) {
+        script_(USCRIPT_INVALID_CODE),
+        fallback_priority_(FontFallbackPriority::Invalid),
+        rotate_sideways_(false),
+        style_(style) {
     DCHECK(end >= start);
   }
 
@@ -98,6 +93,7 @@ class NGLayoutInlineItem {
   unsigned EndOffset() const { return end_offset_; }
   TextDirection Direction() const { return bidi_level_ & 1 ? RTL : LTR; }
   UScriptCode Script() const { return script_; }
+  const ComputedStyle* Style() const { return style_; }
 
   static void Split(Vector<NGLayoutInlineItem>&,
                     unsigned index,
@@ -112,12 +108,19 @@ class NGLayoutInlineItem {
   unsigned end_offset_;
   UBiDiLevel bidi_level_;
   UScriptCode script_;
-  // FontFallbackPriority fallback_priority_;
-  // bool rotate_sideways_;
-  RefPtr<ShapeResult> shape_result_;
+  FontFallbackPriority fallback_priority_;
+  bool rotate_sideways_;
+  const ComputedStyle* style_;
+  Vector<RefPtr<const ShapeResult>> shape_results_;
 
   friend class NGInlineBox;
 };
+
+DEFINE_TYPE_CASTS(NGInlineBox,
+                  NGLayoutInputNode,
+                  node,
+                  node->Type() == NGLayoutInputNode::LegacyInline,
+                  node.Type() == NGLayoutInputNode::LegacyInline);
 
 }  // namespace blink
 

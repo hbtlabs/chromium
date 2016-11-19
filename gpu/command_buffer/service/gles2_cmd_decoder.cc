@@ -1898,21 +1898,34 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
                               GLsizei primcount);
 
   GLenum GetBindTargetForSamplerType(GLenum type) {
-    DCHECK(type == GL_SAMPLER_2D || type == GL_SAMPLER_CUBE ||
-           type == GL_SAMPLER_EXTERNAL_OES || type == GL_SAMPLER_2D_RECT_ARB);
     switch (type) {
       case GL_SAMPLER_2D:
+      case GL_SAMPLER_2D_SHADOW:
+      case GL_INT_SAMPLER_2D:
+      case GL_UNSIGNED_INT_SAMPLER_2D:
         return GL_TEXTURE_2D;
       case GL_SAMPLER_CUBE:
+      case GL_SAMPLER_CUBE_SHADOW:
+      case GL_INT_SAMPLER_CUBE:
+      case GL_UNSIGNED_INT_SAMPLER_CUBE:
         return GL_TEXTURE_CUBE_MAP;
       case GL_SAMPLER_EXTERNAL_OES:
         return GL_TEXTURE_EXTERNAL_OES;
       case GL_SAMPLER_2D_RECT_ARB:
         return GL_TEXTURE_RECTANGLE_ARB;
+      case GL_SAMPLER_3D:
+      case GL_INT_SAMPLER_3D:
+      case GL_UNSIGNED_INT_SAMPLER_3D:
+        return GL_TEXTURE_3D;
+      case GL_SAMPLER_2D_ARRAY:
+      case GL_SAMPLER_2D_ARRAY_SHADOW:
+      case GL_INT_SAMPLER_2D_ARRAY:
+      case GL_UNSIGNED_INT_SAMPLER_2D_ARRAY:
+        return GL_TEXTURE_2D_ARRAY;
+      default:
+        NOTREACHED();
+        return 0;
     }
-
-    NOTREACHED();
-    return 0;
   }
 
   // Gets the framebuffer info for a particular target.
@@ -2637,17 +2650,22 @@ bool BackTexture::AllocateStorage(
     DestroyNativeGpuMemoryBuffer(true);
     success = AllocateNativeGpuMemoryBuffer(size, format, zero);
   } else {
-    std::unique_ptr<char[]> zero_data;
-    if (zero) {
-      zero_data.reset(new char[image_size]);
-      memset(zero_data.get(), 0, image_size);
+    {
+      // Add extra scope to destroy zero_data and the object it owns right
+      // after its usage.
+      std::unique_ptr<char[]> zero_data;
+      if (zero) {
+        zero_data.reset(new char[image_size]);
+        memset(zero_data.get(), 0, image_size);
+      }
+
+      glTexImage2D(Target(),
+        0,  // mip level
+        format, size.width(), size.height(),
+        0,  // border
+        format, GL_UNSIGNED_BYTE, zero_data.get());
     }
 
-    glTexImage2D(Target(),
-                 0,  // mip level
-                 format, size.width(), size.height(),
-                 0,  // border
-                 format, GL_UNSIGNED_BYTE, zero_data.get());
     decoder_->texture_manager()->SetLevelInfo(
         texture_ref_.get(), Target(),
         0,  // level
@@ -3806,6 +3824,8 @@ bool GLES2DecoderImpl::InitializeShaderTranslator() {
     driver_bug_workarounds |= SH_USE_UNUSED_STANDARD_SHARED_BLOCKS;
   if (workarounds().dont_remove_invariant_for_fragment_input)
     driver_bug_workarounds |= SH_DONT_REMOVE_INVARIANT_FOR_FRAGMENT_INPUT;
+  if (workarounds().remove_invariant_and_centroid_for_essl3)
+    driver_bug_workarounds |= SH_REMOVE_INVARIANT_AND_CENTROID_FOR_ESSL3;
 
   resources.WEBGL_debug_shader_precision =
       group_->gpu_preferences().emulate_shader_precision;
@@ -12076,25 +12096,17 @@ error::Error GLES2DecoderImpl::HandleGetString(uint32_t immediate_data_size,
   std::string extensions;
   switch (name) {
     case GL_VERSION:
-      if (feature_info_->IsWebGL2OrES3Context())
-        str = "OpenGL ES 3.0 Chromium";
-      else
-        str = "OpenGL ES 2.0 Chromium";
+      str = GetServiceVersionString(feature_info_.get());
       break;
     case GL_SHADING_LANGUAGE_VERSION:
-      if (feature_info_->IsWebGL2OrES3Context())
-        str = "OpenGL ES GLSL ES 3.0 Chromium";
-      else
-        str = "OpenGL ES GLSL ES 1.0 Chromium";
+      str = GetServiceShadingLanguageVersionString(feature_info_.get());
       break;
     case GL_RENDERER:
+      str = GetServiceRendererString(feature_info_.get());
+      break;
     case GL_VENDOR:
-      // Return the unmasked VENDOR/RENDERER string for WebGL contexts.
-      // They are used by WEBGL_debug_renderer_info.
-      if (!feature_info_->IsWebGLContext())
-        str = "Chromium";
-      else
-        str = reinterpret_cast<const char*>(glGetString(name));
+      str = GetServiceVendorString(feature_info_.get());
+      break;
       break;
     case GL_EXTENSIONS:
       {
@@ -12187,11 +12199,11 @@ bool GLES2DecoderImpl::ClearLevel(Texture* texture,
   DCHECK(target != GL_TEXTURE_3D && target != GL_TEXTURE_2D_ARRAY &&
          target != GL_TEXTURE_EXTERNAL_OES);
   uint32_t channels = GLES2Util::GetChannelsForFormat(format);
-  if ((feature_info_->feature_flags().angle_depth_texture ||
-       feature_info_->IsWebGL2OrES3Context())
-      && (channels & GLES2Util::kDepth) != 0) {
+  if ((channels & GLES2Util::kDepth) != 0 &&
+      feature_info_->feature_flags().angle_depth_texture &&
+      feature_info_->gl_version_info().is_es2) {
     // It's a depth format and ANGLE doesn't allow texImage2D or texSubImage2D
-    // on depth formats.
+    // on depth formats in ES2.
     GLuint fb = 0;
     glGenFramebuffersEXT(1, &fb);
     glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, fb);
@@ -12260,20 +12272,24 @@ bool GLES2DecoderImpl::ClearLevel(Texture* texture,
     tile_height = height;
   }
 
-  // Assumes the size has already been checked.
-  std::unique_ptr<char[]> zero(new char[size]);
-  memset(zero.get(), 0, size);
-  glBindTexture(texture->target(), texture->service_id());
+  {
+    // Add extra scope to destroy zero and the object it owns right
+    // after its usage.
+    // Assumes the size has already been checked.
+    std::unique_ptr<char[]> zero(new char[size]);
+    memset(zero.get(), 0, size);
+    glBindTexture(texture->target(), texture->service_id());
 
-  GLint y = 0;
-  while (y < height) {
-    GLint h = y + tile_height > height ? height - y : tile_height;
-    glTexSubImage2D(
+    GLint y = 0;
+    while (y < height) {
+      GLint h = y + tile_height > height ? height - y : tile_height;
+      glTexSubImage2D(
         target, level, xoffset, yoffset + y, width, h,
         TextureManager::AdjustTexFormat(feature_info_.get(), format),
         type,
         zero.get());
-    y += tile_height;
+      y += tile_height;
+    }
   }
   TextureRef* bound_texture =
       texture_manager()->GetTextureInfoForTarget(&state_, texture->target());
@@ -12306,11 +12322,15 @@ bool GLES2DecoderImpl::ClearCompressedTextureLevel(Texture* texture,
                "bytes_required", bytes_required);
 
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-  std::unique_ptr<char[]> zero(new char[bytes_required]);
-  memset(zero.get(), 0, bytes_required);
-  glBindTexture(texture->target(), texture->service_id());
-  glCompressedTexSubImage2D(
+  {
+    // Add extra scope to destroy zero and the object it owns right
+    // after its usage.
+    std::unique_ptr<char[]> zero(new char[bytes_required]);
+    memset(zero.get(), 0, bytes_required);
+    glBindTexture(texture->target(), texture->service_id());
+    glCompressedTexSubImage2D(
       target, level, 0, 0, width, height, format, bytes_required, zero.get());
+  }
   TextureRef* bound_texture =
       texture_manager()->GetTextureInfoForTarget(&state_, texture->target());
   glBindTexture(texture->target(),
@@ -13662,11 +13682,24 @@ error::Error GLES2DecoderImpl::DoCompressedTexSubImage(
     return error::kNoError;
   }
 
-  // Note: There is no need to deal with texture cleared tracking here
-  // because the validation above means you can only get here if the level
-  // is already a matching compressed format and in that case
-  // CompressedTexImage{2|3}D already cleared the texture.
-  DCHECK(texture->IsLevelCleared(target, level));
+  if (!texture->IsLevelCleared(target, level)) {
+    // This can only happen if the compressed texture was allocated
+    // using TexStorage{2|3}D.
+    DCHECK(texture->IsImmutable());
+    GLsizei level_width = 0, level_height = 0, level_depth = 0;
+    bool success = texture->GetLevelSize(
+        target, level, &level_width, &level_height, &level_depth);
+    DCHECK(success);
+    if (xoffset == 0 && width == level_width &&
+        yoffset == 0 && height == level_height &&
+        zoffset == 0 && depth == level_depth) {
+      // We can skip the clear if we're uploading the entire level.
+      texture_manager()->SetLevelCleared(texture_ref, target, level, true);
+    } else {
+      texture_manager()->ClearTextureLevel(this, texture_ref, target, level);
+    }
+    DCHECK(texture->IsLevelCleared(target, level));
+  }
 
   const CompressedFormatInfo* format_info =
       GetCompressedFormatInfo(internal_format);
@@ -13724,7 +13757,7 @@ bool GLES2DecoderImpl::ValidateCopyTexFormat(
   }
   if (feature_info_->IsWebGL2OrES3Context()) {
     GLint color_encoding = GetColorEncodingFromInternalFormat(read_format);
-    bool float_mismatch= feature_info_->ext_color_buffer_float_available() ?
+    bool float_mismatch = feature_info_->ext_color_buffer_float_available() ?
         (GLES2Util::IsIntegerFormat(internal_format) !=
          GLES2Util::IsIntegerFormat(read_format)) :
         GLES2Util::IsFloatFormat(internal_format);
@@ -13819,6 +13852,29 @@ void GLES2DecoderImpl::DoCopyTexImage2D(
   GLenum format =
       TextureManager::ExtractFormatFromStorageFormat(internal_format);
   GLenum type = TextureManager::ExtractTypeFromStorageFormat(internal_format);
+  bool internal_format_unsized = internal_format == format;
+  // The picks made by the temporary logic above may not be valid on ES3.
+  // This if-block checks the temporary logic and should be removed with it.
+  if (internal_format_unsized && feature_info_->IsWebGL2OrES3Context()) {
+    // While there are other possible types for unsized formats (cf. OpenGL ES
+    // 3.0.5, section 3.7, table 3.3, page 113), they won't appear here.
+    // ExtractTypeFromStorageFormat will always return UNSIGNED_BYTE for
+    // unsized formats.
+    DCHECK(type == GL_UNSIGNED_BYTE);
+    switch (internal_format) {
+      case GL_RGB:
+      case GL_RGBA:
+      case GL_LUMINANCE_ALPHA:
+      case GL_LUMINANCE:
+      case GL_ALPHA:
+      case GL_BGRA_EXT:
+        break;
+      default:
+        // Other unsized internal_formats are invalid in ES3.
+        format = GL_NONE;
+        break;
+    }
+  }
   if (!format || !type) {
     LOCAL_SET_GL_ERROR(
         GL_INVALID_OPERATION,
@@ -13872,12 +13928,18 @@ void GLES2DecoderImpl::DoCopyTexImage2D(
 
   if (src.x() != x || src.y() != y ||
       src.width() != width || src.height() != height) {
-    // some part was clipped so clear the rect.
-    std::unique_ptr<char[]> zero(new char[pixels_size]);
-    memset(zero.get(), 0, pixels_size);
-    glTexImage2D(target, level, TextureManager::AdjustTexInternalFormat(
-                                    feature_info_.get(), internal_format),
-                 width, height, border, format, type, zero.get());
+    {
+      // Add extra scope to destroy zero and the object it owns right
+      // after its usage.
+      // some part was clipped so clear the rect.
+
+      std::unique_ptr<char[]> zero(new char[pixels_size]);
+      memset(zero.get(), 0, pixels_size);
+      glTexImage2D(target, level, TextureManager::AdjustTexInternalFormat(
+        feature_info_.get(), internal_format),
+        width, height, border, format, type, zero.get());
+    }
+
     if (!src.IsEmpty()) {
       GLint destX = src.x() - x;
       GLint destY = src.y() - y;
@@ -17481,29 +17543,31 @@ error::Error GLES2DecoderImpl::HandleMapBufferRange(
         "MAP_FLUSH_EXPLICIT_BIT set without MAP_WRITE_BIT");
     return error::kNoError;
   }
-  if (AllBitsSet(access, GL_MAP_INVALIDATE_BUFFER_BIT)) {
+  GLbitfield filtered_access = access;
+  if (AllBitsSet(filtered_access, GL_MAP_INVALIDATE_BUFFER_BIT)) {
     // To be on the safe side, always map GL_MAP_INVALIDATE_BUFFER_BIT to
     // GL_MAP_INVALIDATE_RANGE_BIT.
-    access = (access & ~GL_MAP_INVALIDATE_BUFFER_BIT);
-    access = (access | GL_MAP_INVALIDATE_RANGE_BIT);
+    filtered_access = (filtered_access & ~GL_MAP_INVALIDATE_BUFFER_BIT);
+    filtered_access = (filtered_access | GL_MAP_INVALIDATE_RANGE_BIT);
   }
   // Always filter out GL_MAP_UNSYNCHRONIZED_BIT to get rid of undefined
   // behaviors.
-  access = (access & ~GL_MAP_UNSYNCHRONIZED_BIT);
-  if (AllBitsSet(access, GL_MAP_WRITE_BIT) &&
-      !AllBitsSet(access, GL_MAP_INVALIDATE_RANGE_BIT)) {
-    access = (access | GL_MAP_READ_BIT);
+  filtered_access = (filtered_access & ~GL_MAP_UNSYNCHRONIZED_BIT);
+  if (AllBitsSet(filtered_access, GL_MAP_WRITE_BIT) &&
+      !AllBitsSet(filtered_access, GL_MAP_INVALIDATE_RANGE_BIT)) {
+    filtered_access = (filtered_access | GL_MAP_READ_BIT);
   }
-  void* ptr = glMapBufferRange(target, offset, size, access);
+  void* ptr = glMapBufferRange(target, offset, size, filtered_access);
   if (ptr == nullptr) {
     // This should mean GL_OUT_OF_MEMORY (or context loss).
     LOCAL_COPY_REAL_GL_ERRORS_TO_WRAPPER(func_name);
     return error::kNoError;
   }
+  // The un-filtered bits in |access| are deliberately used here.
   buffer->SetMappedRange(offset, size, access, ptr,
                          GetSharedMemoryBuffer(data_shm_id),
                          static_cast<unsigned int>(data_shm_offset));
-  if ((access & GL_MAP_INVALIDATE_RANGE_BIT) == 0) {
+  if ((filtered_access & GL_MAP_INVALIDATE_RANGE_BIT) == 0) {
     memcpy(mem, ptr, size);
   }
   *result = 1;

@@ -547,7 +547,7 @@ struct ContextProviderCreationInfo {
   // Inputs.
   Platform::ContextAttributes contextAttributes;
   Platform::GraphicsInfo* glInfo;
-  ScriptState* scriptState;
+  KURL url;
   // Outputs.
   std::unique_ptr<WebGraphicsContext3DProvider> createdContextProvider;
 };
@@ -558,8 +558,7 @@ static void createContextProviderOnMainThread(
   ASSERT(isMainThread());
   creationInfo->createdContextProvider =
       wrapUnique(Platform::current()->createOffscreenGraphicsContext3DProvider(
-          creationInfo->contextAttributes,
-          creationInfo->scriptState->getExecutionContext()->url(), 0,
+          creationInfo->contextAttributes, creationInfo->url, 0,
           creationInfo->glInfo));
   waitableEvent->signal();
 }
@@ -568,12 +567,12 @@ static std::unique_ptr<WebGraphicsContext3DProvider>
 createContextProviderOnWorkerThread(
     Platform::ContextAttributes contextAttributes,
     Platform::GraphicsInfo* glInfo,
-    ScriptState* scriptState) {
+    const KURL& url) {
   WaitableEvent waitableEvent;
   ContextProviderCreationInfo creationInfo;
   creationInfo.contextAttributes = contextAttributes;
   creationInfo.glInfo = glInfo;
-  creationInfo.scriptState = scriptState;
+  creationInfo.url = url;
   WebTaskRunner* taskRunner =
       Platform::current()->mainThread()->getWebTaskRunner();
   taskRunner->postTask(BLINK_FROM_HERE,
@@ -599,15 +598,15 @@ WebGLRenderingContextBase::createContextProviderInternal(
       toPlatformContextAttributes(attributes, webGLVersion);
   Platform::GraphicsInfo glInfo;
   std::unique_ptr<WebGraphicsContext3DProvider> contextProvider;
+  const auto& url = canvas ? canvas->document().topDocument().url()
+                           : scriptState->getExecutionContext()->url();
   if (isMainThread()) {
-    const auto& url = canvas ? canvas->document().topDocument().url()
-                             : scriptState->getExecutionContext()->url();
     contextProvider = wrapUnique(
         Platform::current()->createOffscreenGraphicsContext3DProvider(
             contextAttributes, url, 0, &glInfo));
   } else {
-    contextProvider = createContextProviderOnWorkerThread(contextAttributes,
-                                                          &glInfo, scriptState);
+    contextProvider =
+        createContextProviderOnWorkerThread(contextAttributes, &glInfo, url);
   }
   if (contextProvider && !contextProvider->bindToCurrentThread()) {
     contextProvider = nullptr;
@@ -700,7 +699,7 @@ void WebGLRenderingContextBase::commit(ScriptState* scriptState,
     return;
   }
   // no HTMLCanvas associated, thrown InvalidStateError
-  if (getOffscreenCanvas()->getAssociatedCanvasId() == -1) {
+  if (!getOffscreenCanvas()->hasPlaceholderCanvas()) {
     exceptionState.throwDOMException(InvalidStateError,
                                      "Commit() was called on a context whose "
                                      "OffscreenCanvas is not associated with a "
@@ -729,7 +728,7 @@ PassRefPtr<Image> WebGLRenderingContextBase::getImage(
   OpacityMode opacityMode =
       creationAttributes().hasAlpha() ? NonOpaque : Opaque;
   std::unique_ptr<AcceleratedImageBufferSurface> surface =
-      wrapUnique(new AcceleratedImageBufferSurface(size, opacityMode));
+      makeUnique<AcceleratedImageBufferSurface>(size, opacityMode);
   if (!surface->isValid())
     return nullptr;
   std::unique_ptr<ImageBuffer> buffer = ImageBuffer::create(std::move(surface));
@@ -1034,6 +1033,14 @@ WebGLRenderingContextBase::WebGLRenderingContextBase(
                                             m_maxViewportDims);
 
   RefPtr<DrawingBuffer> buffer;
+  // On Mac OS, DrawingBuffer is using an IOSurface as its backing storage, this
+  // allows WebGL-rendered canvases to be composited by the OS rather than
+  // Chrome.
+  // IOSurfaces are only compatible with the GL_TEXTURE_RECTANGLE_ARB binding
+  // target. So to avoid the knowledge of GL_TEXTURE_RECTANGLE_ARB type textures
+  // being introduced into more areas of the code, we use the code path of
+  // non-WebGLImageChromium for OffscreenCanvas.
+  // See detailed discussion in crbug.com/649668.
   if (passedOffscreenCanvas)
     buffer = createDrawingBuffer(std::move(contextProvider),
                                  DrawingBuffer::DisallowChromiumImage);
@@ -4366,31 +4373,10 @@ void WebGLRenderingContextBase::texImageImpl(
   }
 
   bool selectingSubRectangle = false;
-  if (!validateTexImageSubRectangle(funcName, image, subRect,
+  if (!validateTexImageSubRectangle(funcName, functionID, image, subRect, depth,
+                                    unpackImageHeight,
                                     &selectingSubRectangle)) {
     return;
-  }
-
-  if (functionID == TexImage3D || functionID == TexSubImage3D) {
-    DCHECK_GE(unpackImageHeight, 0);
-
-    // Verify that the image data can cover the required depth.
-    CheckedNumeric<GLint> maxDepthSupported = 1;
-    if (unpackImageHeight) {
-      maxDepthSupported = subRect.height();
-      maxDepthSupported /= unpackImageHeight;
-    }
-
-    if (!maxDepthSupported.IsValid() ||
-        maxDepthSupported.ValueOrDie() < depth) {
-      synthesizeGLError(
-          GL_INVALID_OPERATION, funcName,
-          "Not enough data supplied to upload to a 3D texture with depth > 1");
-      return;
-    }
-  } else {
-    DCHECK_EQ(depth, 1);
-    DCHECK_EQ(unpackImageHeight, 0);
   }
 
   // Adjust the source image rectangle if doing a y-flip.
@@ -4417,14 +4403,15 @@ void WebGLRenderingContextBase::texImageImpl(
   if (type == GL_UNSIGNED_BYTE &&
       sourceDataFormat == WebGLImageConversion::DataFormatRGBA8 &&
       format == GL_RGBA && alphaOp == WebGLImageConversion::AlphaDoNothing &&
-      !flipY && !selectingSubRectangle) {
+      !flipY && !selectingSubRectangle && depth == 1) {
     needConversion = false;
   } else {
     if (!WebGLImageConversion::packImageData(
             image, imagePixelData, format, type, flipY, alphaOp,
             sourceDataFormat, imageExtractor.imageWidth(),
-            imageExtractor.imageHeight(), adjustedSourceImageRect,
-            imageExtractor.imageSourceUnpackAlignment(), data)) {
+            imageExtractor.imageHeight(), adjustedSourceImageRect, depth,
+            imageExtractor.imageSourceUnpackAlignment(), unpackImageHeight,
+            data)) {
       synthesizeGLError(GL_INVALID_VALUE, funcName, "packImage error");
       return;
     }
@@ -4443,22 +4430,17 @@ void WebGLRenderingContextBase::texImageImpl(
                                needConversion ? data.data() : imagePixelData);
   } else {
     // 3D functions.
-    GLint uploadHeight = adjustedSourceImageRect.height();
-    if (unpackImageHeight) {
-      // GL_UNPACK_IMAGE_HEIGHT overrides the passed-in height.
-      uploadHeight = unpackImageHeight;
-    }
     if (functionID == TexImage3D) {
-      contextGL()->TexImage3D(target, level, internalformat,
-                              adjustedSourceImageRect.width(), uploadHeight,
-                              depth, 0, format, type,
-                              needConversion ? data.data() : imagePixelData);
+      contextGL()->TexImage3D(
+          target, level, internalformat, adjustedSourceImageRect.width(),
+          adjustedSourceImageRect.height(), depth, 0, format, type,
+          needConversion ? data.data() : imagePixelData);
     } else {
       DCHECK_EQ(functionID, TexSubImage3D);
-      contextGL()->TexSubImage3D(target, level, xoffset, yoffset, zoffset,
-                                 adjustedSourceImageRect.width(), uploadHeight,
-                                 depth, format, type,
-                                 needConversion ? data.data() : imagePixelData);
+      contextGL()->TexSubImage3D(
+          target, level, xoffset, yoffset, zoffset,
+          adjustedSourceImageRect.width(), adjustedSourceImageRect.height(),
+          depth, format, type, needConversion ? data.data() : imagePixelData);
     }
   }
   restoreUnpackParameters();
@@ -4588,12 +4570,12 @@ IntRect WebGLRenderingContextBase::safeGetImageSize(Image* image) {
   if (!image)
     return IntRect();
 
-  return IntRect(0, 0, image->width(), image->height());
+  return getTextureSourceSize(image);
 }
 
 IntRect WebGLRenderingContextBase::getImageDataSize(ImageData* pixels) {
   DCHECK(pixels);
-  return IntRect(0, 0, pixels->width(), pixels->height());
+  return getTextureSourceSize(pixels);
 }
 
 void WebGLRenderingContextBase::texImageHelperDOMArrayBufferView(
@@ -4654,7 +4636,8 @@ void WebGLRenderingContextBase::texImageHelperDOMArrayBufferView(
     }
     changeUnpackAlignment = true;
   }
-  // FIXME: implement flipY and premultiplyAlpha for tex(Sub)3D.
+  // TODO(crbug.com/666064): implement flipY and premultiplyAlpha for
+  // tex(Sub)3D.
   if (functionID == TexImage3D) {
     contextGL()->TexImage3D(target, level,
                             convertTexInternalFormat(internalformat, type),
@@ -4706,7 +4689,8 @@ void WebGLRenderingContextBase::texImageHelperImageData(
     GLint yoffset,
     GLint zoffset,
     ImageData* pixels,
-    const IntRect& sourceImageRect) {
+    const IntRect& sourceImageRect,
+    GLint unpackImageHeight) {
   const char* funcName = getTexImageFunctionName(functionID);
   if (isContextLost())
     return;
@@ -4719,7 +4703,7 @@ void WebGLRenderingContextBase::texImageHelperImageData(
   if (!validateTexImageBinding(funcName, functionID, target))
     return;
   TexImageFunctionType functionType;
-  if (functionID == TexImage2D)
+  if (functionID == TexImage2D || functionID == TexImage3D)
     functionType = TexImage;
   else
     functionType = TexSubImage;
@@ -4729,7 +4713,8 @@ void WebGLRenderingContextBase::texImageHelperImageData(
     return;
 
   bool selectingSubRectangle = false;
-  if (!validateTexImageSubRectangle(funcName, pixels, sourceImageRect,
+  if (!validateTexImageSubRectangle(funcName, functionID, pixels,
+                                    sourceImageRect, depth, unpackImageHeight,
                                     &selectingSubRectangle)) {
     return;
   }
@@ -4746,7 +4731,7 @@ void WebGLRenderingContextBase::texImageHelperImageData(
   // No conversion is needed if destination format is RGBA and type is
   // UNSIGNED_BYTE and no Flip or Premultiply operation is required.
   if (!m_unpackFlipY && !m_unpackPremultiplyAlpha && format == GL_RGBA &&
-      type == GL_UNSIGNED_BYTE && !selectingSubRectangle) {
+      type == GL_UNSIGNED_BYTE && !selectingSubRectangle && depth == 1) {
     needConversion = false;
   } else {
     if (type == GL_UNSIGNED_INT_10F_11F_11F_REV) {
@@ -4756,30 +4741,40 @@ void WebGLRenderingContextBase::texImageHelperImageData(
     if (!WebGLImageConversion::extractImageData(
             pixels->data()->data(),
             WebGLImageConversion::DataFormat::DataFormatRGBA8, pixels->size(),
-            adjustedSourceImageRect, format, type, m_unpackFlipY,
-            m_unpackPremultiplyAlpha, data)) {
+            adjustedSourceImageRect, depth, unpackImageHeight, format, type,
+            m_unpackFlipY, m_unpackPremultiplyAlpha, data)) {
       synthesizeGLError(GL_INVALID_VALUE, funcName, "bad image data");
       return;
     }
   }
   resetUnpackParameters();
+  const uint8_t* bytes = needConversion ? data.data() : pixels->data()->data();
   if (functionID == TexImage2D) {
-    texImage2DBase(target, level, internalformat,
-                   adjustedSourceImageRect.width(),
-                   adjustedSourceImageRect.height(), border, format, type,
-                   needConversion ? data.data() : pixels->data()->data());
+    DCHECK_EQ(unpackImageHeight, 0);
+    texImage2DBase(
+        target, level, internalformat, adjustedSourceImageRect.width(),
+        adjustedSourceImageRect.height(), border, format, type, bytes);
   } else if (functionID == TexSubImage2D) {
+    DCHECK_EQ(unpackImageHeight, 0);
     contextGL()->TexSubImage2D(
         target, level, xoffset, yoffset, adjustedSourceImageRect.width(),
-        adjustedSourceImageRect.height(), format, type,
-        needConversion ? data.data() : pixels->data()->data());
+        adjustedSourceImageRect.height(), format, type, bytes);
   } else {
-    DCHECK_EQ(functionID, TexSubImage3D);
-    contextGL()->TexSubImage3D(
-        target, level, xoffset, yoffset, zoffset,
-        adjustedSourceImageRect.width(), adjustedSourceImageRect.height(),
-        depth, format, type,
-        needConversion ? data.data() : pixels->data()->data());
+    GLint uploadHeight = adjustedSourceImageRect.height();
+    if (unpackImageHeight) {
+      // GL_UNPACK_IMAGE_HEIGHT overrides the passed-in height.
+      uploadHeight = unpackImageHeight;
+    }
+    if (functionID == TexImage3D) {
+      contextGL()->TexImage3D(target, level, internalformat,
+                              adjustedSourceImageRect.width(), uploadHeight,
+                              depth, border, format, type, bytes);
+    } else {
+      DCHECK_EQ(functionID, TexSubImage3D);
+      contextGL()->TexSubImage3D(target, level, xoffset, yoffset, zoffset,
+                                 adjustedSourceImageRect.width(), uploadHeight,
+                                 depth, format, type, bytes);
+    }
   }
   restoreUnpackParameters();
 }
@@ -4791,7 +4786,8 @@ void WebGLRenderingContextBase::texImage2D(GLenum target,
                                            GLenum type,
                                            ImageData* pixels) {
   texImageHelperImageData(TexImage2D, target, level, internalformat, 0, format,
-                          type, 1, 0, 0, 0, pixels, getImageDataSize(pixels));
+                          type, 1, 0, 0, 0, pixels, getImageDataSize(pixels),
+                          0);
 }
 
 void WebGLRenderingContextBase::texImageHelperHTMLImageElement(
@@ -4823,7 +4819,7 @@ void WebGLRenderingContextBase::texImageHelperHTMLImageElement(
         imageForRender.release(), image->width(), image->height(), funcName);
 
   TexImageFunctionType functionType;
-  if (functionID == TexImage2D)
+  if (functionID == TexImage2D || functionID == TexImage3D)
     functionType = TexImage;
   else
     functionType = TexSubImage;
@@ -4871,17 +4867,22 @@ bool WebGLRenderingContextBase::canUseTexImageByGPU(
   return true;
 }
 
-void WebGLRenderingContextBase::texImageCanvasByGPU(HTMLCanvasElement* canvas,
-                                                    GLuint targetTexture,
-                                                    GLenum targetInternalformat,
-                                                    GLenum targetType,
-                                                    GLint targetLevel) {
+void WebGLRenderingContextBase::texImageCanvasByGPU(
+    HTMLCanvasElement* canvas,
+    GLuint targetTexture,
+    GLenum targetInternalformat,
+    GLenum targetType,
+    GLint targetLevel,
+    GLint xoffset,
+    GLint yoffset,
+    const IntRect& sourceSubRectangle) {
   if (!canvas->is3D()) {
     ImageBuffer* buffer = canvas->buffer();
     if (buffer &&
         !buffer->copyToPlatformTexture(
             contextGL(), targetTexture, targetInternalformat, targetType,
-            targetLevel, m_unpackPremultiplyAlpha, m_unpackFlipY)) {
+            targetLevel, m_unpackPremultiplyAlpha, m_unpackFlipY,
+            IntPoint(xoffset, yoffset), sourceSubRectangle)) {
       NOTREACHED();
     }
   } else {
@@ -4891,25 +4892,27 @@ void WebGLRenderingContextBase::texImageCanvasByGPU(HTMLCanvasElement* canvas,
     if (!gl->drawingBuffer()->copyToPlatformTexture(
             contextGL(), targetTexture, targetInternalformat, targetType,
             targetLevel, m_unpackPremultiplyAlpha, !m_unpackFlipY,
-            BackBuffer)) {
+            IntPoint(xoffset, yoffset), sourceSubRectangle, BackBuffer)) {
       NOTREACHED();
     }
   }
 }
 
-void WebGLRenderingContextBase::texImageByGPU(TexImageByGPUType functionType,
-                                              WebGLTexture* texture,
-                                              GLenum target,
-                                              GLint level,
-                                              GLint internalformat,
-                                              GLenum type,
-                                              GLint xoffset,
-                                              GLint yoffset,
-                                              GLint zoffset,
-                                              CanvasImageSource* image) {
+void WebGLRenderingContextBase::texImageByGPU(
+    TexImageByGPUType functionType,
+    WebGLTexture* texture,
+    GLenum target,
+    GLint level,
+    GLint internalformat,
+    GLenum type,
+    GLint xoffset,
+    GLint yoffset,
+    GLint zoffset,
+    CanvasImageSource* image,
+    const IntRect& sourceSubRectangle) {
   DCHECK(image->isCanvasElement() || image->isImageBitmap());
-  int width = image->sourceWidth();
-  int height = image->sourceHeight();
+  int width = sourceSubRectangle.width();
+  int height = sourceSubRectangle.height();
 
   ScopedTexture2DRestorer restorer(this);
 
@@ -4922,6 +4925,9 @@ void WebGLRenderingContextBase::texImageByGPU(TexImageByGPUType functionType,
     possibleDirectCopy = Extensions3DUtil::canUseCopyTextureCHROMIUM(
         target, internalformat, type, level);
   }
+
+  GLint copyXOffset = xoffset;
+  GLint copyYOffset = yoffset;
 
   // if direct copy is not possible, create a temporary texture and then copy
   // from canvas to temporary texture to target texture.
@@ -4941,15 +4947,19 @@ void WebGLRenderingContextBase::texImageByGPU(TexImageByGPUType functionType,
                                GL_CLAMP_TO_EDGE);
     contextGL()->TexImage2D(GL_TEXTURE_2D, 0, targetInternalformat, width,
                             height, 0, GL_RGBA, targetType, 0);
+    copyXOffset = 0;
+    copyYOffset = 0;
   }
 
-  if (image->isCanvasElement())
+  if (image->isCanvasElement()) {
     texImageCanvasByGPU(static_cast<HTMLCanvasElement*>(image), targetTexture,
-                        targetInternalformat, targetType, targetLevel);
-  else
+                        targetInternalformat, targetType, targetLevel,
+                        copyXOffset, copyYOffset, sourceSubRectangle);
+  } else {
     texImageBitmapByGPU(static_cast<ImageBitmap*>(image), targetTexture,
                         targetInternalformat, targetType, targetLevel,
                         !m_unpackFlipY);
+  }
 
   if (!possibleDirectCopy) {
     GLuint tmpFBO;
@@ -4986,6 +4996,9 @@ void WebGLRenderingContextBase::texImageHelperHTMLCanvasElement(
     GLint yoffset,
     GLint zoffset,
     HTMLCanvasElement* canvas,
+    const IntRect& sourceSubRectangle,
+    GLsizei depth,
+    GLint unpackImageHeight,
     ExceptionState& exceptionState) {
   const char* funcName = getTexImageFunctionName(functionID);
   if (isContextLost())
@@ -5002,44 +5015,71 @@ void WebGLRenderingContextBase::texImageHelperHTMLCanvasElement(
     functionType = TexSubImage;
   if (!validateTexFunc(funcName, functionType, SourceHTMLCanvasElement, target,
                        level, internalformat, canvas->width(), canvas->height(),
-                       1, 0, format, type, xoffset, yoffset, zoffset))
+                       depth, 0, format, type, xoffset, yoffset, zoffset))
     return;
+
+  // Note that the sub-rectangle validation is needed for the GPU-GPU
+  // copy case, but is redundant for the software upload case
+  // (texImageImpl).
+  bool selectingSubRectangle = false;
+  if (!validateTexImageSubRectangle(
+          funcName, functionID, canvas, sourceSubRectangle, depth,
+          unpackImageHeight, &selectingSubRectangle)) {
+    return;
+  }
+
   if (functionID == TexImage2D || functionID == TexSubImage2D) {
     // texImageByGPU relies on copyTextureCHROMIUM which doesn't support
     // float/integer/sRGB internal format.
     // TODO(crbug.com/622958): relax the constrains if copyTextureCHROMIUM is
     // upgraded to handle more formats.
-    if (!canvas->renderingContext() ||
-        !canvas->renderingContext()->isAccelerated() ||
-        !canUseTexImageByGPU(functionID, internalformat, type)) {
+    bool forceSoftwareReadbackFrom2DCanvas =
+        this->canvas() && this->canvas()->document().settings() &&
+        this->canvas()
+            ->document()
+            .settings()
+            ->forceSoftwareReadbackFrom2DCanvas();
+    CanvasRenderingContext* sourceContext = canvas->renderingContext();
+    if (!sourceContext || !sourceContext->isAccelerated() ||
+        !canUseTexImageByGPU(functionID, internalformat, type) ||
+        (forceSoftwareReadbackFrom2DCanvas && sourceContext->is2d())) {
       // 2D canvas has only FrontBuffer.
       texImageImpl(functionID, target, level, internalformat, xoffset, yoffset,
                    zoffset, format, type,
                    canvas->copiedImage(FrontBuffer, PreferAcceleration).get(),
                    WebGLImageConversion::HtmlDomCanvas, m_unpackFlipY,
-                   m_unpackPremultiplyAlpha,
-                   IntRect(0, 0, canvas->width(), canvas->height()), 1, 0);
+                   m_unpackPremultiplyAlpha, sourceSubRectangle, 1, 0);
       return;
     }
 
+    // The GPU-GPU copy path uses the Y-up coordinate system.
+    IntRect adjustedSourceSubRectangle = sourceSubRectangle;
+    if (!m_unpackFlipY) {
+      adjustedSourceSubRectangle.setY(canvas->height() -
+                                      adjustedSourceSubRectangle.maxY());
+    }
+
     if (functionID == TexImage2D) {
-      texImage2DBase(target, level, internalformat, canvas->width(),
-                     canvas->height(), 0, format, type, 0);
+      texImage2DBase(target, level, internalformat, sourceSubRectangle.width(),
+                     sourceSubRectangle.height(), 0, format, type, 0);
       texImageByGPU(TexImage2DByGPU, texture, target, level, internalformat,
-                    type, 0, 0, 0, canvas);
+                    type, 0, 0, 0, canvas, adjustedSourceSubRectangle);
     } else {
       texImageByGPU(TexSubImage2DByGPU, texture, target, level, GL_RGBA, type,
-                    xoffset, yoffset, 0, canvas);
+                    xoffset, yoffset, 0, canvas, adjustedSourceSubRectangle);
     }
   } else {
-    DCHECK_EQ(functionID, TexSubImage3D);
-    // FIXME: Implement GPU-to-GPU copy path (crbug.com/586269).
-    texImageImpl(TexSubImage3D, target, level, 0, xoffset, yoffset, zoffset,
-                 format, type,
+    // 3D functions.
+
+    // TODO(zmo): Implement GPU-to-GPU copy path (crbug.com/612542).
+    // Note that code will also be needed to copy to layers of 3D
+    // textures, and elements of 2D texture arrays.
+    texImageImpl(functionID, target, level, internalformat, xoffset, yoffset,
+                 zoffset, format, type,
                  canvas->copiedImage(FrontBuffer, PreferAcceleration).get(),
                  WebGLImageConversion::HtmlDomCanvas, m_unpackFlipY,
-                 m_unpackPremultiplyAlpha,
-                 IntRect(0, 0, canvas->width(), canvas->height()), 1, 0);
+                 m_unpackPremultiplyAlpha, sourceSubRectangle, depth,
+                 unpackImageHeight);
   }
 }
 
@@ -5050,9 +5090,9 @@ void WebGLRenderingContextBase::texImage2D(GLenum target,
                                            GLenum type,
                                            HTMLCanvasElement* canvas,
                                            ExceptionState& exceptionState) {
-  texImageHelperHTMLCanvasElement(TexImage2D, target, level, internalformat,
-                                  format, type, 0, 0, 0, canvas,
-                                  exceptionState);
+  texImageHelperHTMLCanvasElement(
+      TexImage2D, target, level, internalformat, format, type, 0, 0, 0, canvas,
+      getTextureSourceSize(canvas), 1, 0, exceptionState);
 }
 
 PassRefPtr<Image> WebGLRenderingContextBase::videoFrameToImage(
@@ -5079,6 +5119,9 @@ void WebGLRenderingContextBase::texImageHelperHTMLVideoElement(
     GLint yoffset,
     GLint zoffset,
     HTMLVideoElement* video,
+    const IntRect& sourceImageRect,
+    GLsizei depth,
+    GLint unpackImageHeight,
     ExceptionState& exceptionState) {
   const char* funcName = getTexImageFunctionName(functionID);
   if (isContextLost())
@@ -5089,7 +5132,7 @@ void WebGLRenderingContextBase::texImageHelperHTMLVideoElement(
   if (!texture)
     return;
   TexImageFunctionType functionType;
-  if (functionID == TexImage2D)
+  if (functionID == TexImage2D || functionID == TexImage3D)
     functionType = TexImage;
   else
     functionType = TexSubImage;
@@ -5099,7 +5142,14 @@ void WebGLRenderingContextBase::texImageHelperHTMLVideoElement(
                        yoffset, zoffset))
     return;
 
-  if (functionID == TexImage2D) {
+  bool sourceImageRectIsDefault =
+      sourceImageRect == sentinelEmptyRect() ||
+      sourceImageRect ==
+          IntRect(0, 0, video->videoWidth(), video->videoHeight());
+  if (functionID == TexImage2D && sourceImageRectIsDefault && depth == 1) {
+    DCHECK_EQ(xoffset, 0);
+    DCHECK_EQ(yoffset, 0);
+    DCHECK_EQ(zoffset, 0);
     // Go through the fast path doing a GPU-GPU textures copy without a readback
     // to system memory if possible.  Otherwise, it will fall back to the normal
     // SW path.
@@ -5133,9 +5183,16 @@ void WebGLRenderingContextBase::texImageHelperHTMLVideoElement(
 
           // This is a straight GPU-GPU copy, any necessary color space
           // conversion was handled in the paintCurrentFrameInContext() call.
+
+          // Note that copyToPlatformTexture no longer allocates the
+          // destination texture.
+          texImage2DBase(target, level, internalformat, video->videoWidth(),
+                         video->videoHeight(), 0, format, type, nullptr);
+
           if (imageBuffer->copyToPlatformTexture(
                   contextGL(), texture->object(), internalformat, type, level,
-                  m_unpackPremultiplyAlpha, m_unpackFlipY)) {
+                  m_unpackPremultiplyAlpha, m_unpackFlipY, IntPoint(0, 0),
+                  IntRect(0, 0, video->videoWidth(), video->videoHeight()))) {
             return;
           }
         }
@@ -5149,8 +5206,8 @@ void WebGLRenderingContextBase::texImageHelperHTMLVideoElement(
   texImageImpl(functionID, target, level, internalformat, xoffset, yoffset,
                zoffset, format, type, image.get(),
                WebGLImageConversion::HtmlDomVideo, m_unpackFlipY,
-               m_unpackPremultiplyAlpha,
-               IntRect(0, 0, video->videoWidth(), video->videoHeight()), 1, 0);
+               m_unpackPremultiplyAlpha, sourceImageRect, depth,
+               unpackImageHeight);
 }
 
 void WebGLRenderingContextBase::texImageBitmapByGPU(ImageBitmap* bitmap,
@@ -5172,7 +5229,8 @@ void WebGLRenderingContextBase::texImage2D(GLenum target,
                                            HTMLVideoElement* video,
                                            ExceptionState& exceptionState) {
   texImageHelperHTMLVideoElement(TexImage2D, target, level, internalformat,
-                                 format, type, 0, 0, 0, video, exceptionState);
+                                 format, type, 0, 0, 0, video,
+                                 sentinelEmptyRect(), 1, 0, exceptionState);
 }
 
 void WebGLRenderingContextBase::texImageHelperImageBitmap(
@@ -5186,6 +5244,9 @@ void WebGLRenderingContextBase::texImageHelperImageBitmap(
     GLint yoffset,
     GLint zoffset,
     ImageBitmap* bitmap,
+    const IntRect& sourceSubRect,
+    GLsizei depth,
+    GLint unpackImageHeight,
     ExceptionState& exceptionState) {
   const char* funcName = getTexImageFunctionName(functionID);
   if (isContextLost())
@@ -5195,27 +5256,41 @@ void WebGLRenderingContextBase::texImageHelperImageBitmap(
   WebGLTexture* texture = validateTexImageBinding(funcName, functionID, target);
   if (!texture)
     return;
+
+  bool selectingSubRectangle = false;
+  if (!validateTexImageSubRectangle(funcName, functionID, bitmap, sourceSubRect,
+                                    depth, unpackImageHeight,
+                                    &selectingSubRectangle)) {
+    return;
+  }
+
   TexImageFunctionType functionType;
   if (functionID == TexImage2D)
     functionType = TexImage;
   else
     functionType = TexSubImage;
+
+  GLsizei width = sourceSubRect.width();
+  GLsizei height = sourceSubRect.height();
   if (!validateTexFunc(funcName, functionType, SourceImageBitmap, target, level,
-                       internalformat, bitmap->width(), bitmap->height(), 1, 0,
-                       format, type, xoffset, yoffset, zoffset))
+                       internalformat, width, height, depth, 0, format, type,
+                       xoffset, yoffset, zoffset))
     return;
   ASSERT(bitmap->bitmapImage());
 
-  if (functionID != TexSubImage3D && bitmap->isAccelerated() &&
-      canUseTexImageByGPU(functionID, internalformat, type)) {
+  // TODO(kbr): make this work for sub-rectangles of ImageBitmaps.
+  if (functionID != TexSubImage3D && functionID != TexImage3D &&
+      bitmap->isAccelerated() &&
+      canUseTexImageByGPU(functionID, internalformat, type) &&
+      !selectingSubRectangle) {
     if (functionID == TexImage2D) {
-      texImage2DBase(target, level, internalformat, bitmap->width(),
-                     bitmap->height(), 0, format, type, 0);
+      texImage2DBase(target, level, internalformat, width, height, 0, format,
+                     type, 0);
       texImageByGPU(TexImage2DByGPU, texture, target, level, internalformat,
-                    type, 0, 0, 0, bitmap);
+                    type, 0, 0, 0, bitmap, sourceSubRect);
     } else if (functionID == TexSubImage2D) {
       texImageByGPU(TexSubImage2DByGPU, texture, target, level, GL_RGBA, type,
-                    xoffset, yoffset, 0, bitmap);
+                    xoffset, yoffset, 0, bitmap, sourceSubRect);
     }
     return;
   }
@@ -5240,14 +5315,14 @@ void WebGLRenderingContextBase::texImageHelperImageBitmap(
       (peekSucceed &&
        pixmap.colorType() == SkColorType::kRGBA_8888_SkColorType);
   bool isPixelDataRGBA = (havePeekableRGBA || !peekSucceed);
-  if (isPixelDataRGBA && format == GL_RGBA && type == GL_UNSIGNED_BYTE) {
+  if (isPixelDataRGBA && format == GL_RGBA && type == GL_UNSIGNED_BYTE &&
+      !selectingSubRectangle && depth == 1) {
     needConversion = false;
   } else {
     if (type == GL_UNSIGNED_INT_10F_11F_11F_REV) {
       // The UNSIGNED_INT_10F_11F_11F_REV type pack/unpack isn't implemented.
       type = GL_FLOAT;
     }
-    IntRect sourceImageRect(0, 0, bitmap->width(), bitmap->height());
     // In the case of ImageBitmap, we do not need to apply flipY or
     // premultiplyAlpha.
     bool isPixelDataBGRA =
@@ -5255,31 +5330,33 @@ void WebGLRenderingContextBase::texImageHelperImageBitmap(
     if ((isPixelDataBGRA &&
          !WebGLImageConversion::extractImageData(
              pixelDataPtr, WebGLImageConversion::DataFormat::DataFormatBGRA8,
-             bitmap->size(), sourceImageRect, format, type, false, false,
-             data)) ||
+             bitmap->size(), sourceSubRect, depth, unpackImageHeight, format,
+             type, false, false, data)) ||
         (isPixelDataRGBA &&
          !WebGLImageConversion::extractImageData(
              pixelDataPtr, WebGLImageConversion::DataFormat::DataFormatRGBA8,
-             bitmap->size(), sourceImageRect, format, type, false, false,
-             data))) {
+             bitmap->size(), sourceSubRect, depth, unpackImageHeight, format,
+             type, false, false, data))) {
       synthesizeGLError(GL_INVALID_VALUE, funcName, "bad image data");
       return;
     }
   }
   resetUnpackParameters();
   if (functionID == TexImage2D) {
-    texImage2DBase(target, level, internalformat, bitmap->width(),
-                   bitmap->height(), 0, format, type,
-                   needConversion ? data.data() : pixelDataPtr);
+    texImage2DBase(target, level, internalformat, width, height, 0, format,
+                   type, needConversion ? data.data() : pixelDataPtr);
   } else if (functionID == TexSubImage2D) {
-    contextGL()->TexSubImage2D(target, level, xoffset, yoffset, bitmap->width(),
-                               bitmap->height(), format, type,
+    contextGL()->TexSubImage2D(target, level, xoffset, yoffset, width, height,
+                               format, type,
                                needConversion ? data.data() : pixelDataPtr);
+  } else if (functionID == TexImage3D) {
+    contextGL()->TexImage3D(target, level, internalformat, width, height, depth,
+                            0, format, type,
+                            needConversion ? data.data() : pixelDataPtr);
   } else {
     DCHECK_EQ(functionID, TexSubImage3D);
-    contextGL()->TexSubImage3D(target, level, xoffset, yoffset, zoffset,
-                               bitmap->width(), bitmap->height(), 1, format,
-                               type,
+    contextGL()->TexSubImage3D(target, level, xoffset, yoffset, zoffset, width,
+                               height, depth, format, type,
                                needConversion ? data.data() : pixelDataPtr);
   }
   restoreUnpackParameters();
@@ -5293,7 +5370,8 @@ void WebGLRenderingContextBase::texImage2D(GLenum target,
                                            ImageBitmap* bitmap,
                                            ExceptionState& exceptionState) {
   texImageHelperImageBitmap(TexImage2D, target, level, internalformat, format,
-                            type, 0, 0, 0, bitmap, exceptionState);
+                            type, 0, 0, 0, bitmap, getTextureSourceSize(bitmap),
+                            1, 0, exceptionState);
 }
 
 void WebGLRenderingContextBase::texParameter(GLenum target,
@@ -5392,8 +5470,8 @@ void WebGLRenderingContextBase::texSubImage2D(GLenum target,
                                               GLenum type,
                                               ImageData* pixels) {
   texImageHelperImageData(TexSubImage2D, target, level, 0, 0, format, type, 1,
-                          xoffset, yoffset, 0, pixels,
-                          getImageDataSize(pixels));
+                          xoffset, yoffset, 0, pixels, getImageDataSize(pixels),
+                          0);
 }
 
 void WebGLRenderingContextBase::texSubImage2D(GLenum target,
@@ -5417,8 +5495,9 @@ void WebGLRenderingContextBase::texSubImage2D(GLenum target,
                                               GLenum type,
                                               HTMLCanvasElement* canvas,
                                               ExceptionState& exceptionState) {
-  texImageHelperHTMLCanvasElement(TexSubImage2D, target, level, 0, format, type,
-                                  xoffset, yoffset, 0, canvas, exceptionState);
+  texImageHelperHTMLCanvasElement(
+      TexSubImage2D, target, level, 0, format, type, xoffset, yoffset, 0,
+      canvas, getTextureSourceSize(canvas), 1, 0, exceptionState);
 }
 
 void WebGLRenderingContextBase::texSubImage2D(GLenum target,
@@ -5430,7 +5509,8 @@ void WebGLRenderingContextBase::texSubImage2D(GLenum target,
                                               HTMLVideoElement* video,
                                               ExceptionState& exceptionState) {
   texImageHelperHTMLVideoElement(TexSubImage2D, target, level, 0, format, type,
-                                 xoffset, yoffset, 0, video, exceptionState);
+                                 xoffset, yoffset, 0, video,
+                                 sentinelEmptyRect(), 1, 0, exceptionState);
 }
 
 void WebGLRenderingContextBase::texSubImage2D(GLenum target,
@@ -5442,7 +5522,8 @@ void WebGLRenderingContextBase::texSubImage2D(GLenum target,
                                               ImageBitmap* bitmap,
                                               ExceptionState& exceptionState) {
   texImageHelperImageBitmap(TexSubImage2D, target, level, 0, format, type,
-                            xoffset, yoffset, 0, bitmap, exceptionState);
+                            xoffset, yoffset, 0, bitmap,
+                            getTextureSourceSize(bitmap), 1, 0, exceptionState);
 }
 
 void WebGLRenderingContextBase::uniform1f(const WebGLUniformLocation* location,
@@ -7297,7 +7378,10 @@ bool WebGLRenderingContextBase::validateDrawElements(const char* functionName,
 void WebGLRenderingContextBase::dispatchContextLostEvent(TimerBase*) {
   WebGLContextEvent* event = WebGLContextEvent::create(
       EventTypeNames::webglcontextlost, false, true, "");
-  canvas()->dispatchEvent(event);
+  if (getOffscreenCanvas())
+    getOffscreenCanvas()->dispatchEvent(event);
+  else
+    canvas()->dispatchEvent(event);
   m_restoreAllowed = event->defaultPrevented();
   if (m_restoreAllowed && !m_isHidden) {
     if (m_autoRecoveryMethod == Auto)
@@ -7317,15 +7401,17 @@ void WebGLRenderingContextBase::maybeRestoreContext(TimerBase*) {
   if (!m_restoreAllowed)
     return;
 
-  LocalFrame* frame = canvas()->document().frame();
-  if (!frame)
-    return;
+  if (canvas()) {
+    LocalFrame* frame = canvas()->document().frame();
+    if (!frame)
+      return;
 
-  Settings* settings = frame->settings();
+    Settings* settings = frame->settings();
 
-  if (!frame->loader().client()->allowWebGL(settings &&
-                                            settings->webGLEnabled()))
-    return;
+    if (!frame->loader().client()->allowWebGL(settings &&
+                                              settings->webGLEnabled()))
+      return;
+  }
 
   // If the context was lost due to RealLostContext, we need to destroy the old
   // DrawingBuffer before creating new DrawingBuffer to ensure resource budget
@@ -7338,16 +7424,29 @@ void WebGLRenderingContextBase::maybeRestoreContext(TimerBase*) {
   Platform::ContextAttributes attributes =
       toPlatformContextAttributes(creationAttributes(), version());
   Platform::GraphicsInfo glInfo;
-  std::unique_ptr<WebGraphicsContext3DProvider> contextProvider =
-      wrapUnique(Platform::current()->createOffscreenGraphicsContext3DProvider(
-          attributes, canvas()->document().topDocument().url(), 0, &glInfo));
+  std::unique_ptr<WebGraphicsContext3DProvider> contextProvider;
+  const auto& url = canvas()
+                        ? canvas()->document().topDocument().url()
+                        : getOffscreenCanvas()->getExecutionContext()->url();
+  if (isMainThread()) {
+    contextProvider = wrapUnique(
+        Platform::current()->createOffscreenGraphicsContext3DProvider(
+            attributes, url, 0, &glInfo));
+  } else {
+    contextProvider =
+        createContextProviderOnWorkerThread(attributes, &glInfo, url);
+  }
   RefPtr<DrawingBuffer> buffer;
   if (contextProvider && contextProvider->bindToCurrentThread()) {
     // Construct a new drawing buffer with the new GL context.
-    // TODO(xidachen): make sure that the second parameter is correct for
-    // OffscreenCanvas.
-    buffer = createDrawingBuffer(std::move(contextProvider),
-                                 DrawingBuffer::AllowChromiumImage);
+    if (canvas()) {
+      buffer = createDrawingBuffer(std::move(contextProvider),
+                                   DrawingBuffer::AllowChromiumImage);
+    } else {
+      // Please refer to comment at Line 1040 in this file.
+      buffer = createDrawingBuffer(std::move(contextProvider),
+                                   DrawingBuffer::DisallowChromiumImage);
+    }
     // If DrawingBuffer::create() fails to allocate a fbo, |drawingBuffer| is
     // set to null.
   }
@@ -7378,8 +7477,12 @@ void WebGLRenderingContextBase::maybeRestoreContext(TimerBase*) {
   setupFlags();
   initializeNewContext();
   markContextChanged(CanvasContextChanged);
-  canvas()->dispatchEvent(WebGLContextEvent::create(
-      EventTypeNames::webglcontextrestored, false, true, ""));
+  WebGLContextEvent* event = WebGLContextEvent::create(
+      EventTypeNames::webglcontextrestored, false, true, "");
+  if (canvas())
+    canvas()->dispatchEvent(event);
+  else
+    getOffscreenCanvas()->dispatchEvent(event);
 }
 
 String WebGLRenderingContextBase::ensureNotNull(const String& text) const {

@@ -58,7 +58,8 @@ static bool MakeDecoderContextCurrent(
   return true;
 }
 
-#if (defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)) || defined(OS_MACOSX)
+#if (defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)) || \
+    defined(OS_MACOSX) || defined(OS_WIN)
 static bool BindImage(const base::WeakPtr<gpu::GpuCommandBufferStub>& stub,
                       uint32_t client_texture_id,
                       uint32_t texture_target,
@@ -171,7 +172,8 @@ GpuVideoDecodeAccelerator::GpuVideoDecodeAccelerator(
   get_gl_context_cb_ = base::Bind(&GetGLContext, stub_->AsWeakPtr());
   make_context_current_cb_ =
       base::Bind(&MakeDecoderContextCurrent, stub_->AsWeakPtr());
-#if (defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)) || defined(OS_MACOSX)
+#if (defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)) || \
+    defined(OS_MACOSX) || defined(OS_WIN)
   bind_image_cb_ = base::Bind(&BindImage, stub_->AsWeakPtr());
 #endif
   get_gles2_decoder_cb_ = base::Bind(&GetGLES2Decoder, stub_->AsWeakPtr());
@@ -525,14 +527,7 @@ void GpuVideoDecodeAccelerator::SetTextureCleared(const Picture& picture) {
     GLenum target = texture_ref->texture()->target();
     gpu::gles2::TextureManager* texture_manager =
         stub_->decoder()->GetContextGroup()->texture_manager();
-
-    // External textures are a special case and expected to already be cleared.
-    if (target == GL_TEXTURE_EXTERNAL_OES) {
-      DCHECK(texture_ref->texture()->IsLevelCleared(target, 0));
-    } else {
-      DCHECK(!texture_ref->texture()->IsLevelCleared(target, 0));
-      texture_manager->SetLevelCleared(texture_ref.get(), target, 0, true);
-    }
+    texture_manager->SetLevelCleared(texture_ref.get(), target, 0, true);
   }
   uncleared_textures_.erase(it);
 }

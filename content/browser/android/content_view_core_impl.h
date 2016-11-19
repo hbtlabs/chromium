@@ -22,7 +22,7 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/android/content_view_core.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/android/overscroll_refresh.h"
 #include "ui/android/view_android.h"
 #include "ui/gfx/geometry/rect.h"
@@ -122,12 +122,20 @@ class ContentViewCoreImpl : public ContentViewCore,
       jint android_button_state,
       jint android_meta_state,
       jboolean is_touch_handle_event);
-  jboolean SendMouseMoveEvent(JNIEnv* env,
-                              const base::android::JavaParamRef<jobject>& obj,
-                              jlong time_ms,
-                              jfloat x,
-                              jfloat y,
-                              jint tool_type);
+  jboolean SendMouseEvent(JNIEnv* env,
+                          const base::android::JavaParamRef<jobject>& obj,
+                          jlong time_ms,
+                          jint android_action,
+                          jfloat x,
+                          jfloat y,
+                          jint pointer_id,
+                          jfloat pressure,
+                          jfloat orientation,
+                          jfloat tilt,
+                          jint android_changed_button,
+                          jint android_button_state,
+                          jint android_meta_state,
+                          jint tool_type);
   jboolean SendMouseWheelEvent(JNIEnv* env,
                                const base::android::JavaParamRef<jobject>& obj,
                                jlong time_ms,

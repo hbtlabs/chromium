@@ -237,10 +237,10 @@ CHAR-LIMIT guidelines:
       <message name="IDS_SIGN_IN_TO_CHROME_SUMMARY" desc="Summary for the button to sign in to Chrome, explaining benefits of signing in.">
         Sign in to get your bookmarks, history, passwords, and other settings on all your devices
       </message>
-      <message name="IDS_SIGN_IN_GOOGLE_ACTIVITY_CONTROLS" desc="Title of Google activity controls preference in signed in accouts settings screen">
+      <message name="IDS_SIGN_IN_GOOGLE_ACTIVITY_CONTROLS" desc="Title of Google activity controls preference in signed in accounts settings screen">
         Google Activity Controls
       </message>
-      <message name="IDS_SIGN_IN_GOOGLE_ACTIVITY_CONTROLS_MESSAGE" desc="Message of Google activity controls preference in signed in accouts settings screen">
+      <message name="IDS_SIGN_IN_GOOGLE_ACTIVITY_CONTROLS_MESSAGE" desc="Message of Google activity controls preference in signed in accounts settings screen">
         Control how Google uses your browsing history to personalize Search, ads, and other Google services.
       </message>
       <message name="IDS_SIGN_IN_SYNC_ERROR_WIDGET" desc="Accessibility description of the sync error widget in settings screen">
@@ -1193,7 +1193,7 @@ To obtain new licenses, connect to the internet and play your downloaded content
 
       <!-- Bluetooth Picker UI strings -->
       <message name="IDS_BLUETOOTH_DIALOG_TITLE" desc="The header message shown on top of the dialog that lets the user pick a Bluetooth device for the site to pair with. Shown above a list of Bluetooth devices discovered. ">
-        <ph name="SITE">%1$s<ex>https://www.google.com</ex></ph> wants to pair with:</message>
+        <ph name="SITE">%1$s<ex>https://www.google.com</ex></ph> wants to pair</message>
       <message name="IDS_BLUETOOTH_SEARCHING" desc="The message shown in the Bluetooth picker dialog while scanning for devices.">
         <ph name="BEGIN_LINK">&lt;link&gt;</ph>Get help<ph name="END_LINK">&lt;/link&gt;</ph> while scanning for devices…
       </message>
@@ -1311,15 +1311,12 @@ To obtain new licenses, connect to the internet and play your downloaded content
         Options available near bottom of the screen
       </message>
 
-      <!-- DownloadOverwriteInfoBar -->
-      <message name="IDS_DOWNLOAD_OVERWRITE_INFOBAR_TEXT" desc="Prompt text for the confirmation dialog asking whether the user really wants to replace a file when there already exists a file with the same name">
-        Do you want to replace the existing <ph name="FILE_NAME">^1<ex>specialfile.pdf</ex></ph> in <ph name="DIRECTORY_NAME">^2<ex>Downloads</ex></ph>?
+      <!-- DuplicateDownloadInfoBar -->
+      <message name="IDS_DUPLICATE_DOWNLOAD_INFOBAR_TEXT" desc="Prompt text for the confirmation dialog asking whether the user really wants to download a file when there already exists a file with the same name">
+        Do you want to download <ph name="FILE_NAME">^1<ex>specialfile.pdf</ex></ph> again?
       </message>
-      <message name="IDS_DOWNLOAD_OVERWRITE_INFOBAR_REPLACE_FILE_BUTTON" desc="Label for choosing 'Replace file' in the prompt for replacing a file.[CHAR-LIMIT=32]">
-        Replace file
-      </message>
-      <message name="IDS_DOWNLOAD_OVERWRITE_INFOBAR_CREATE_NEW_FILE_BUTTON" desc="Label for choosing 'Create new file' in the prompt for replacing a file. [CHAR-LIMIT=32]">
-        Create new file
+      <message name="IDS_DUPLICATE_DOWNLOAD_INFOBAR_DOWNLOAD_BUTTON" desc="Label for the button that confirms that a user wants to download the file again. [CHAR-LIMIT=32]">
+        Download
       </message>
 
       <!-- PermissionInfoBar -->
@@ -1490,14 +1487,14 @@ To obtain new licenses, connect to the internet and play your downloaded content
       </message>
 
       <!-- App banner accessibility strings, used for touch exploration -->
-      <message name="IDS_APP_BANNER_VIEW_NATIVE_APP_ACCESSIBILITY" desc="Accessibililty text: Describes a prompt promoting the installation of an app related to the current page, including the app's name and its rating.">
+      <message name="IDS_APP_BANNER_VIEW_NATIVE_APP_ACCESSIBILITY" desc="Accessibility text: Describes a prompt promoting the installation of an app related to the current page, including the app's name and its rating.">
         View app <ph name="APP_NAME">%1$s<ex>Gmail</ex></ph> on the Play Store.  Rating: <ph name="APP_RATING">%2$.1f<ex>4.2</ex></ph>.
       </message>
       <message name="IDS_APP_BANNER_VIEW_NATIVE_APP_INSTALL_ACCESSIBILITY" desc="Accessibility text: Indicates that clicking on the button will either purchase the app or install it.">
         Get the app from the Google Play Store: <ph name="APP_ACTION">%s<ex>Install</ex></ph>
       </message>
 
-      <message name="IDS_APP_BANNER_VIEW_WEB_APP_ACCESSIBILITY" desc="Accessibililty text: Details the web app being promoted by the current page, including the app name and its URL.">
+      <message name="IDS_APP_BANNER_VIEW_WEB_APP_ACCESSIBILITY" desc="Accessibility text: Details the web app being promoted by the current page, including the app name and its URL.">
         <ph name="APP_NAME">%1$s<ex>Gmail</ex></ph>, web app. <ph name="APP_URL">%2$s<ex>google.com</ex></ph>
       </message>
 
@@ -1636,6 +1633,9 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_DOWNLOAD_NOTIFICATION_PAUSED" desc="Download notification to be displayed when a download pauses.">
         Download paused
       </message>
+      <message name="IDS_DOWNLOAD_NOTIFICATION_PENDING" desc="Download notification to be displayed when a download has been scheduled but has not started being fetched from the network.">
+        Download pending...
+      </message>
       <message name="IDS_DOWNLOAD_CANT_OPEN_FILE" desc="Toast that appears when a downloaded file can't be opened.">
         Can't open file
       </message>
@@ -1666,7 +1666,7 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_DOWNLOAD_FAILED_REASON_UNKNOWN_ERROR" desc="Message to explain that the download failed because unkown error.">
         <ph name="FILE_NAME">%1$s<ex>http://abc.com/test.pdf</ex></ph> download failed due to an unknown error.
       </message>
-      <message name="IDS_DOWNLOAD_PENDING" desc="Message in the list of items which have received download requests telling their status. This message states that the download has not yet begun [CHAR LIMIT=30]">
+      <message name="IDS_DOWNLOAD_STARTED" desc="Message to show when download has started [CHAR LIMIT=30]">
         Downloading…
       </message>
       <message name="IDS_DOWNLOAD_SUCCEEDED_MESSAGE" desc="Transient message shown when a file download has succeeded." meaning="Android">
@@ -1850,7 +1850,7 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_SIGNIN_ADD_ACCOUNT" desc="Text for adding another Google Account">
         Add account
       </message>
-      <message name="IDS_SIGNIN_OPEN_ADD_GOOGLE_ACCOUNT_PAGE_FAILED" desc="Message for openning add Google Account page in device's Settings app failed">
+      <message name="IDS_SIGNIN_OPEN_ADD_GOOGLE_ACCOUNT_PAGE_FAILED" desc="Message for opening add Google Account page in device's Settings app failed">
         Add a Google Account from the Accounts page in your device's Settings app.
       </message>
       <message name="IDS_SIGNIN_OPEN_SETTINGS_ACCOUNTS" desc="Text for button to open Accounts page in device's Settings app">
@@ -1890,10 +1890,10 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_ACCESSIBILITY_STOP" desc="Content description for the stop button that stops playing the media.">
         Stop
       </message>
-      <message name="IDS_ACCESSIBILITY_PREVIOUS_TRACK" desc="Content description for the previous track button that switchs media to the previous track.">
+      <message name="IDS_ACCESSIBILITY_PREVIOUS_TRACK" desc="Content description for the previous track button that switches media to the previous track.">
         Previous track
       </message>
-      <message name="IDS_ACCESSIBILITY_NEXT_TRACK" desc="Content description for the next track button that switchs media to the next track.">
+      <message name="IDS_ACCESSIBILITY_NEXT_TRACK" desc="Content description for the next track button that switches media to the next track.">
         Next track
       </message>
 
@@ -1964,7 +1964,7 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_REMOVE_ALL" desc="Context menu option to clear the list of recently closed tabs">
         Remove all
       </message>
-      <message name="IDS_ACCESSIBILITY_NTP_OFFLINE_BADGE" desc="Content description for the badge that indicates offline availability of a most visited item on the new tab page.">
+      <message name="IDS_ACCESSIBILITY_NTP_OFFLINE_BADGE" desc="Content description for the badge that indicates offline availability of a most visited item or content suggestion on the new tab page.">
         Available offline
       </message>
       <message name="IDS_NTP_LEARN_MORE_ABOUT_SUGGESTED_CONTENT" desc="Text in the footer of the New Tab Page. Part of the text is a link to a help center page where the user can learn more about suggested content.">
@@ -2531,7 +2531,7 @@ You can control the Physical Web in Chrome Settings.
 
       <!-- WebUsb Picker UI strings -->
       <message name="IDS_USB_CHOOSER_DIALOG_PROMPT" desc="The text that is used to introduce the USB chooser dialog to the user.">
-        <ph name="SITE">%1$s<ex>https://www.google.com</ex></ph> wants to connect to:
+        <ph name="SITE">%1$s<ex>https://www.google.com</ex></ph> wants to connect
       </message>
       <message name="IDS_USB_CHOOSER_DIALOG_NO_DEVICES_FOUND_PROMPT" desc="The text that is used to inform the user that no devices found in the USB chooser dialog.">
         No devices found
@@ -2540,7 +2540,7 @@ You can control the Physical Web in Chrome Settings.
         Connect
       </message>
       <message name="IDS_USB_CHOOSER_DIALOG_FOOTNOTE_TEXT" desc="This text is shown at the bottom of the USB chooser dialog with a link to part of its text.">
-        Not seeing your device? <ph name="BEGIN_LINK">&lt;link&gt;</ph>Get help<ph name="END_LINK">&lt;/link&gt;</ph>
+        <ph name="BEGIN_LINK">&lt;link&gt;</ph>Get help<ph name="END_LINK">&lt;/link&gt;</ph>
       </message>
 
       <!-- Payments -->
@@ -2654,6 +2654,9 @@ You can control the Physical Web in Chrome Settings.
       </message>
       <message name="IDS_PAYMENTS_CHECKING_OPTION" desc="Text explaining that the option the user selected is being checked and verified.">
         Checking
+      </message>
+      <message name="IDS_PAYMENTS_UPDATED_LABEL" desc="The text that informs the user that the total value of their cart has been updated.">
+        Updated
       </message>
 
       <!-- Shipping address in web payments API -->

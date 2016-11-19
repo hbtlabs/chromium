@@ -6,8 +6,8 @@
 <script>
 var test = function()
 {
-    WebInspector.breakpointManager._storage._breakpoints = {};
-    var panel = WebInspector.panels.sources;
+    Bindings.breakpointManager._storage._breakpoints = {};
+    var panel = UI.panels.sources;
     var scriptFormatter;
     var formattedSourceFrame;
 
@@ -26,7 +26,7 @@ var test = function()
 
             function didShowScriptSource(frame)
             {
-                InspectorTest.addSniffer(WebInspector.ScriptFormatterEditorAction.prototype, "_updateButton", uiSourceCodeScriptFormatted);
+                InspectorTest.addSniffer(Sources.ScriptFormatterEditorAction.prototype, "_updateButton", uiSourceCodeScriptFormatted);
                 scriptFormatter._toggleFormatScriptSource();
             }
                 
@@ -34,6 +34,10 @@ var test = function()
             {
                 formattedSourceFrame = panel.visibleView;
                 InspectorTest.setBreakpoint(formattedSourceFrame, 3, "", true);
+                InspectorTest.waitBreakpointSidebarPane().then(evaluateF2);
+            }
+
+            function evaluateF2() {
                 InspectorTest.waitUntilPaused(pausedInF2);
                 InspectorTest.evaluateInPageWithTimeout("f2()");
             }
@@ -41,10 +45,11 @@ var test = function()
             function pausedInF2(callFrames)
             {
                 InspectorTest.dumpBreakpointSidebarPane("while paused in pretty printed");
+                InspectorTest.waitBreakpointSidebarPane()
+                    .then(() => InspectorTest.dumpBreakpointSidebarPane("while paused in raw"))
+                    .then(() => InspectorTest.resumeExecution(next));
                 InspectorTest.removeBreakpoint(formattedSourceFrame, 3);
                 scriptFormatter._discardFormattedUISourceCodeScript(panel.visibleView.uiSourceCode());
-                InspectorTest.dumpBreakpointSidebarPane("while paused in raw");
-                InspectorTest.resumeExecution(next);
             }
         }
     ]);

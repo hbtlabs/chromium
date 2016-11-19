@@ -49,6 +49,7 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "third_party/khronos/GLES2/gl2.h"
+#include "wtf/CheckedNumeric.h"
 #include "wtf/text/WTFString.h"
 #include <memory>
 #include <set>
@@ -1022,15 +1023,28 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                     const IntRect&,
                     GLsizei depth,
                     GLint unpackImageHeight);
+
+  template <typename T>
+  IntRect getTextureSourceSize(T* textureSource) {
+    return IntRect(0, 0, textureSource->width(), textureSource->height());
+  }
+
   template <typename T>
   bool validateTexImageSubRectangle(const char* functionName,
+                                    TexImageFunctionID functionID,
                                     T* image,
                                     const IntRect& subRect,
+                                    GLsizei depth,
+                                    GLint unpackImageHeight,
                                     bool* selectingSubRectangle) {
-    *selectingSubRectangle = image &&
-                             !(subRect.x() == 0 && subRect.y() == 0 &&
-                               subRect.width() == image->width() &&
-                               subRect.height() == image->height());
+    DCHECK(functionName);
+    DCHECK(selectingSubRectangle);
+    DCHECK(image);
+    int imageWidth = static_cast<int>(image->width());
+    int imageHeight = static_cast<int>(image->height());
+    *selectingSubRectangle =
+        !(subRect.x() == 0 && subRect.y() == 0 &&
+          subRect.width() == imageWidth && subRect.height() == imageHeight);
     // If the source image rect selects anything except the entire
     // contents of the image, assert that we're running WebGL 2.0 or
     // higher, since this should never happen for WebGL 1.0 (even though
@@ -1039,22 +1053,60 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
     DCHECK(!*selectingSubRectangle || isWebGL2OrHigher())
         << "subRect = (" << subRect.width() << " x " << subRect.height()
         << ") @ (" << subRect.x() << ", " << subRect.y() << "), image = ("
-        << (image ? image->width() : -1) << " x "
-        << (image ? image->height() : -1) << ")";
+        << imageWidth << " x " << imageHeight << ")";
 
-    if (subRect.x() < 0 || subRect.y() < 0 || subRect.maxX() > image->width() ||
-        subRect.maxY() > image->height() || subRect.width() < 0 ||
+    if (subRect.x() < 0 || subRect.y() < 0 || subRect.maxX() > imageWidth ||
+        subRect.maxY() > imageHeight || subRect.width() < 0 ||
         subRect.height() < 0) {
       synthesizeGLError(GL_INVALID_OPERATION, functionName,
                         "source sub-rectangle specified via pixel unpack "
                         "parameters is invalid");
       return false;
     }
+
+    if (functionID == TexImage3D || functionID == TexSubImage3D) {
+      DCHECK_GE(unpackImageHeight, 0);
+
+      if (depth < 1) {
+        synthesizeGLError(GL_INVALID_OPERATION, functionName,
+                          "Can't define a 3D texture with depth < 1");
+        return false;
+      }
+
+      // According to the WebGL 2.0 spec, specifying depth > 1 means
+      // to select multiple rectangles stacked vertically.
+      WTF::CheckedNumeric<GLint> maxYAccessed;
+      if (unpackImageHeight) {
+        maxYAccessed = unpackImageHeight;
+      } else {
+        maxYAccessed = subRect.height();
+      }
+      maxYAccessed *= depth - 1;
+      maxYAccessed += subRect.height();
+      maxYAccessed += subRect.y();
+
+      if (!maxYAccessed.IsValid()) {
+        synthesizeGLError(GL_INVALID_OPERATION, functionName,
+                          "Out-of-range parameters passed for 3D texture "
+                          "upload");
+        return false;
+      }
+
+      if (maxYAccessed.ValueOrDie() > imageHeight) {
+        synthesizeGLError(GL_INVALID_OPERATION, functionName,
+                          "Not enough data supplied to upload to a 3D texture "
+                          "with depth > 1");
+        return false;
+      }
+    } else {
+      DCHECK_EQ(depth, 1);
+      DCHECK_EQ(unpackImageHeight, 0);
+    }
     return true;
   }
 
   // Copy from the source directly to the texture via the gpu, without a
-  // read-back to system memory.  Souce could be canvas or imageBitmap.
+  // read-back to system memory.  Source could be canvas or imageBitmap.
   void texImageByGPU(TexImageByGPUType,
                      WebGLTexture*,
                      GLenum target,
@@ -1064,7 +1116,8 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                      GLint xoffset,
                      GLint yoffset,
                      GLint zoffset,
-                     CanvasImageSource*);
+                     CanvasImageSource*,
+                     const IntRect& sourceSubRectangle);
   virtual bool canUseTexImageByGPU(TexImageFunctionID,
                                    GLint internalformat,
                                    GLenum type);
@@ -1511,7 +1564,8 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                                GLint,
                                GLint,
                                ImageData*,
-                               const IntRect&);
+                               const IntRect&,
+                               GLint);
   void texImageHelperHTMLImageElement(TexImageFunctionID,
                                       GLenum,
                                       GLint,
@@ -1536,6 +1590,9 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                                        GLint,
                                        GLint,
                                        HTMLCanvasElement*,
+                                       const IntRect&,
+                                       GLsizei,
+                                       GLint,
                                        ExceptionState&);
   void texImageHelperHTMLVideoElement(TexImageFunctionID,
                                       GLenum,
@@ -1547,6 +1604,9 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                                       GLint,
                                       GLint,
                                       HTMLVideoElement*,
+                                      const IntRect&,
+                                      GLsizei,
+                                      GLint,
                                       ExceptionState&);
   void texImageHelperImageBitmap(TexImageFunctionID,
                                  GLenum,
@@ -1558,6 +1618,9 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                                  GLint,
                                  GLint,
                                  ImageBitmap*,
+                                 const IntRect&,
+                                 GLsizei,
+                                 GLint,
                                  ExceptionState&);
   static const char* getTexImageFunctionName(TexImageFunctionID);
   IntRect sentinelEmptyRect();
@@ -1585,7 +1648,14 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                                 ScriptState*,
                                 const CanvasContextCreationAttributes&,
                                 unsigned);
-  void texImageCanvasByGPU(HTMLCanvasElement*, GLuint, GLenum, GLenum, GLint);
+  void texImageCanvasByGPU(HTMLCanvasElement*,
+                           GLuint,
+                           GLenum,
+                           GLenum,
+                           GLint,
+                           GLint,
+                           GLint,
+                           const IntRect& sourceSubRectangle);
   void texImageBitmapByGPU(ImageBitmap*, GLuint, GLenum, GLenum, GLint, bool);
 
   const unsigned m_version;

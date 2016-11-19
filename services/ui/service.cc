@@ -15,6 +15,7 @@
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/catalog/public/cpp/resource_loader.h"
+#include "services/catalog/public/interfaces/constants.mojom.h"
 #include "services/service_manager/public/c/main.h"
 #include "services/service_manager/public/cpp/connection.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -106,7 +107,7 @@ void Service::InitializeResources(service_manager::Connector* connector) {
 
   catalog::ResourceLoader loader;
   filesystem::mojom::DirectoryPtr directory;
-  connector->ConnectToInterface("service:catalog", &directory);
+  connector->ConnectToInterface(catalog::mojom::kServiceName, &directory);
   CHECK(loader.OpenFiles(std::move(directory), resource_paths));
 
   ui::RegisterPathProvider();
@@ -137,9 +138,9 @@ void Service::AddUserIfNecessary(
   window_server_->user_id_tracker()->AddUserId(remote_identity.user_id());
 }
 
-void Service::OnStart(service_manager::ServiceContext* context) {
+void Service::OnStart() {
   base::PlatformThread::SetName("mus");
-  tracing_.Initialize(context->connector(), context->identity().name());
+  tracing_.Initialize(context()->connector(), context()->identity().name());
   TRACE_EVENT0("mus", "Service::Initialize started");
 
   test_config_ = base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -150,7 +151,7 @@ void Service::OnStart(service_manager::ServiceContext* context) {
     ui::test::SetUseOverrideRedirectWindowByDefault(true);
 #endif
 
-  InitializeResources(context->connector());
+  InitializeResources(context()->connector());
 
 #if defined(USE_OZONE)
   // The ozone platform can provide its own event source. So initialize the
@@ -158,7 +159,7 @@ void Service::OnStart(service_manager::ServiceContext* context) {
   // Because GL libraries need to be initialized before entering the sandbox,
   // in MUS, |InitializeForUI| will load the GL libraries.
   ui::OzonePlatform::InitParams params;
-  params.connector = context->connector();
+  params.connector = context()->connector();
   params.single_process = false;
   ui::OzonePlatform::InitializeForUI(params);
 
@@ -193,7 +194,7 @@ void Service::OnStart(service_manager::ServiceContext* context) {
     touch_controller_.reset(
         new ws::TouchController(window_server_->display_manager()));
 
-  ime_server_.Init(context->connector());
+  ime_server_.Init(context()->connector(), test_config_);
 }
 
 bool Service::OnConnect(const service_manager::ServiceInfo& remote_info,
@@ -226,6 +227,10 @@ bool Service::OnConnect(const service_manager::ServiceInfo& remote_info,
   return true;
 }
 
+void Service::StartDisplayInit() {
+  platform_screen_->Init(window_server_->display_manager());
+}
+
 void Service::OnFirstDisplayReady() {
   PendingRequests requests;
   requests.swap(pending_requests_);
@@ -252,12 +257,6 @@ bool Service::IsTestConfig() const {
 void Service::UpdateTouchTransforms() {
   if (touch_controller_)
     touch_controller_->UpdateTouchTransforms();
-}
-
-void Service::CreateDefaultDisplays() {
-  // The display manager will create Displays once hardware or virtual displays
-  // are ready.
-  platform_screen_->Init(window_server_->display_manager());
 }
 
 void Service::Create(const service_manager::Identity& remote_identity,

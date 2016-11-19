@@ -482,12 +482,11 @@ SafeBrowsingProtocolConfig SafeBrowsingService::GetProtocolConfig() const {
 
 V4ProtocolConfig
 SafeBrowsingService::GetV4ProtocolConfig() const {
-  V4ProtocolConfig config;
-  config.client_name = GetProtocolConfigClientName();
-  config.version = SafeBrowsingProtocolManagerHelper::Version();
-  config.key_param = google_apis::GetAPIKey();;
-
-  return config;
+  base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
+  return V4ProtocolConfig(
+      GetProtocolConfigClientName(),
+      cmdline->HasSwitch(switches::kDisableBackgroundNetworking),
+      google_apis::GetAPIKey(), SafeBrowsingProtocolManagerHelper::Version());
 }
 
 std::string SafeBrowsingService::GetProtocolConfigClientName() const {
@@ -639,6 +638,9 @@ void SafeBrowsingService::AddPrefService(PrefService* pref_service) {
       base::Bind(&SafeBrowsingService::RefreshState, base::Unretained(this)));
   prefs_map_[pref_service] = std::move(registrar);
   RefreshState();
+
+  // Initialize SafeBrowsing prefs on startup.
+  InitializeSafeBrowsingPrefs(pref_service);
 
   // Record the current pref state.
   UMA_HISTOGRAM_BOOLEAN("SafeBrowsing.Pref.General",

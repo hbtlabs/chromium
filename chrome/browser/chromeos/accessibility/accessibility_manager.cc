@@ -295,6 +295,12 @@ AccessibilityManager::AccessibilityManager()
                       bundle.GetRawDataResource(IDR_SOUND_EXIT_SCREEN_WAV));
   manager->Initialize(SOUND_ENTER_SCREEN,
                       bundle.GetRawDataResource(IDR_SOUND_ENTER_SCREEN_WAV));
+  manager->Initialize(SOUND_SPOKEN_FEEDBACK_TOGGLE_COUNTDOWN_HIGH,
+                      bundle.GetRawDataResource(
+                          IDR_SOUND_SPOKEN_FEEDBACK_TOGGLE_COUNTDOWN_HIGH_WAV));
+  manager->Initialize(SOUND_SPOKEN_FEEDBACK_TOGGLE_COUNTDOWN_LOW,
+                      bundle.GetRawDataResource(
+                          IDR_SOUND_SPOKEN_FEEDBACK_TOGGLE_COUNTDOWN_LOW_WAV));
 
   base::FilePath resources_path;
   if (!PathService::Get(chrome::DIR_RESOURCES, &resources_path))
@@ -551,6 +557,12 @@ bool AccessibilityManager::PlayEarcon(int sound_key, PlaySoundOption option) {
   return media::SoundsManager::Get()->Play(sound_key);
 }
 
+bool AccessibilityManager::PlaySpokenFeedbackToggleCountdown(int tick_count) {
+  return media::SoundsManager::Get()->Play(
+      tick_count % 2 ? SOUND_SPOKEN_FEEDBACK_TOGGLE_COUNTDOWN_HIGH
+                     : SOUND_SPOKEN_FEEDBACK_TOGGLE_COUNTDOWN_LOW);
+}
+
 void AccessibilityManager::HandleAccessibilityGesture(ui::AXGesture gesture) {
   extensions::EventRouter* event_router =
       extensions::EventRouter::Get(profile());
@@ -606,8 +618,7 @@ void AccessibilityManager::UpdateAutoclickFromPref() {
     service_manager::Connector* connector =
         content::ServiceManagerConnection::GetForProcess()->GetConnector();
     mash::mojom::LaunchablePtr launchable;
-    connector->ConnectToInterface("service:accessibility_autoclick",
-                                  &launchable);
+    connector->ConnectToInterface("accessibility_autoclick", &launchable);
     launchable->Launch(mash::mojom::kWindow, mash::mojom::LaunchMode::DEFAULT);
     return;
   }
@@ -644,7 +655,7 @@ void AccessibilityManager::UpdateAutoclickDelayFromPref() {
     service_manager::Connector* connector =
         content::ServiceManagerConnection::GetForProcess()->GetConnector();
     ash::autoclick::mojom::AutoclickControllerPtr autoclick_controller;
-    connector->ConnectToInterface("service:accessibility_autoclick",
+    connector->ConnectToInterface("accessibility_autoclick",
                                   &autoclick_controller);
     autoclick_controller->SetAutoclickDelay(
         autoclick_delay_ms_.InMilliseconds());

@@ -75,11 +75,11 @@
 #include "content/public/common/context_menu_params.h"
 #include "content/public/common/file_chooser_file_info.h"
 #include "content/public/common/file_chooser_params.h"
+#include "content/public/common/form_field_data.h"
 #include "content/public/common/isolated_world_ids.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/resource_response.h"
 #include "content/public/common/service_manager_connection.h"
-#include "content/public/common/service_names.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
 #include "content/public/renderer/browser_plugin_delegate.h"
@@ -1342,11 +1342,21 @@ void RenderFrameImpl::PepperSelectionChanged(
 RenderWidgetFullscreenPepper* RenderFrameImpl::CreatePepperFullscreenContainer(
     PepperPluginInstanceImpl* plugin) {
   GURL active_url;
-  if (render_view_->webview())
+  if (render_view()->webview())
     active_url = render_view()->GetURLForGraphicsContext3D();
+
+  // Synchronous IPC to obtain a routing id for the fullscreen widget.
+  int32_t fullscreen_widget_routing_id = MSG_ROUTING_NONE;
+  if (!RenderThreadImpl::current_render_message_filter()
+           ->CreateFullscreenWidget(render_view()->routing_id(),
+                                    &fullscreen_widget_routing_id)) {
+    return nullptr;
+  }
+
   RenderWidgetFullscreenPepper* widget = RenderWidgetFullscreenPepper::Create(
-      render_view()->routing_id(), GetRenderWidget()->compositor_deps(),
-      plugin, active_url, GetRenderWidget()->screen_info());
+      fullscreen_widget_routing_id, render_view()->routing_id(),
+      GetRenderWidget()->compositor_deps(), plugin, active_url,
+      GetRenderWidget()->screen_info());
   widget->show(blink::WebNavigationPolicyIgnore);
   return widget;
 }
@@ -1418,71 +1428,12 @@ void RenderFrameImpl::OnImeSetComposition(
 void RenderFrameImpl::OnImeCommitText(const base::string16& text,
                                       const gfx::Range& replacement_range,
                                       int relative_cursor_pos) {
-  if (text.empty())
-    return;
-
-  if (!IsPepperAcceptingCompositionEvents()) {
-    base::i18n::UTF16CharIterator iterator(&text);
-    int32_t i = 0;
-    while (iterator.Advance()) {
-      blink::WebKeyboardEvent char_event;
-      char_event.type = blink::WebInputEvent::Char;
-      char_event.timeStampSeconds = base::Time::Now().ToDoubleT();
-      char_event.modifiers = 0;
-      char_event.windowsKeyCode = text[i];
-      char_event.nativeKeyCode = text[i];
-
-      const int32_t char_start = i;
-      for (; i < iterator.array_pos(); ++i) {
-        char_event.text[i - char_start] = text[i];
-        char_event.unmodifiedText[i - char_start] = text[i];
-      }
-
-      if (GetRenderWidget()->GetWebWidget())
-        GetRenderWidget()->GetWebWidget()->handleInputEvent(char_event);
-    }
-  } else {
-    // Mimics the order of events sent by WebKit.
-    // See WebCore::Editor::setComposition() for the corresponding code.
-    focused_pepper_plugin_->HandleCompositionEnd(text);
-    focused_pepper_plugin_->HandleTextInput(text);
-  }
-  pepper_composition_text_.clear();
+  HandlePepperImeCommit(text);
 }
 
 void RenderFrameImpl::OnImeFinishComposingText(bool keep_selection) {
   const base::string16& text = pepper_composition_text_;
-
-  if (text.empty())
-    return;
-
-  if (!IsPepperAcceptingCompositionEvents()) {
-    base::i18n::UTF16CharIterator iterator(&text);
-    int32_t i = 0;
-    while (iterator.Advance()) {
-      blink::WebKeyboardEvent char_event;
-      char_event.type = blink::WebInputEvent::Char;
-      char_event.timeStampSeconds = base::Time::Now().ToDoubleT();
-      char_event.modifiers = 0;
-      char_event.windowsKeyCode = text[i];
-      char_event.nativeKeyCode = text[i];
-
-      const int32_t char_start = i;
-      for (; i < iterator.array_pos(); ++i) {
-        char_event.text[i - char_start] = text[i];
-        char_event.unmodifiedText[i - char_start] = text[i];
-      }
-
-      if (GetRenderWidget()->GetWebWidget())
-        GetRenderWidget()->GetWebWidget()->handleInputEvent(char_event);
-    }
-  } else {
-    // Mimics the order of events sent by WebKit.
-    // See WebCore::Editor::setComposition() for the corresponding code.
-    focused_pepper_plugin_->HandleCompositionEnd(text);
-    focused_pepper_plugin_->HandleTextInput(text);
-  }
-  pepper_composition_text_.clear();
+  HandlePepperImeCommit(text);
 }
 #endif  // defined(ENABLE_PLUGINS)
 
@@ -1492,6 +1443,11 @@ MediaStreamDispatcher* RenderFrameImpl::GetMediaStreamDispatcher() {
   return web_user_media_client_
              ? web_user_media_client_->media_stream_dispatcher()
              : nullptr;
+}
+
+void RenderFrameImpl::ScriptedPrint(bool user_initiated) {
+  for (auto& observer : observers_)
+    observer.ScriptedPrint(user_initiated);
 }
 
 bool RenderFrameImpl::Send(IPC::Message* message) {
@@ -1586,6 +1542,8 @@ bool RenderFrameImpl::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(FrameMsg_ReloadLoFiImages, OnReloadLoFiImages)
     IPC_MESSAGE_HANDLER(FrameMsg_TextSurroundingSelectionRequest,
                         OnTextSurroundingSelectionRequest)
+    IPC_MESSAGE_HANDLER(FrameMsg_FocusedFormFieldDataRequest,
+                        OnFocusedFormFieldDataRequest)
     IPC_MESSAGE_HANDLER(FrameMsg_SetAccessibilityMode,
                         OnSetAccessibilityMode)
     IPC_MESSAGE_HANDLER(AccessibilityMsg_SnapshotTree,
@@ -1597,7 +1555,6 @@ bool RenderFrameImpl::OnMessageReceived(const IPC::Message& msg) {
                         OnSetFrameOwnerProperties)
     IPC_MESSAGE_HANDLER(FrameMsg_AdvanceFocus, OnAdvanceFocus)
     IPC_MESSAGE_HANDLER(FrameMsg_SetFocusedFrame, OnSetFocusedFrame)
-    IPC_MESSAGE_HANDLER(FrameMsg_ClearFocusedFrame, OnClearFocusedFrame)
     IPC_MESSAGE_HANDLER(FrameMsg_SetTextTrackSettings,
                         OnTextTrackSettingsChanged)
     IPC_MESSAGE_HANDLER(FrameMsg_PostMessageEvent, OnPostMessageEvent)
@@ -2204,10 +2161,6 @@ void RenderFrameImpl::OnSetFocusedFrame() {
   render_view_->webview()->focusDocumentView(frame_);
 }
 
-void RenderFrameImpl::OnClearFocusedFrame() {
-  render_view_->webview()->unfocusDocumentView();
-}
-
 void RenderFrameImpl::OnTextTrackSettingsChanged(
     const FrameMsg_TextTrackSettings_Params& params) {
   DCHECK(!frame_->parent());
@@ -2314,6 +2267,32 @@ void RenderFrameImpl::OnTextSurroundingSelectionRequest(uint32_t max_length) {
       surroundingText.textContent(),
       surroundingText.startOffsetInTextContent(),
       surroundingText.endOffsetInTextContent()));
+}
+
+void RenderFrameImpl::OnFocusedFormFieldDataRequest(int request_id) {
+  DCHECK(frame_);
+
+  // In case of early return, the IPC response message is always needed in
+  // order to avoid leaks in the browser for unacknowledged requests.
+  if (frame_ != render_view_->GetWebView()->focusedFrame() ||
+      frame_->document().focusedElement().isNull()) {
+    Send(new FrameHostMsg_FocusedFormFieldDataResponse(routing_id_, request_id,
+                                                       FormFieldData()));
+    return;
+  }
+
+  WebElement element = frame_->document().focusedElement();
+
+  DCHECK(GetRenderWidget()->GetWebWidget());
+  blink::WebTextInputInfo info =
+      GetRenderWidget()->GetWebWidget()->textInputInfo();
+  FormFieldData field;
+  field.text = info.value.utf8();
+  field.placeholder = element.getAttribute("placeholder").utf8();
+  field.text_input_type = GetRenderWidget()->GetTextInputType();
+
+  Send(new FrameHostMsg_FocusedFormFieldDataResponse(routing_id_, request_id,
+                                                     field));
 }
 
 bool RenderFrameImpl::RunJavaScriptMessage(JavaScriptMessageType type,
@@ -3203,7 +3182,7 @@ void RenderFrameImpl::didAddMessageToConsole(
     }
   }
 
-  Send(new FrameHostMsg_AddMessageToConsole(
+  Send(new FrameHostMsg_DidAddMessageToConsole(
       routing_id_, static_cast<int32_t>(log_severity), message.text,
       static_cast<int32_t>(source_line), source_name));
 }
@@ -5152,7 +5131,7 @@ WebNavigationPolicy RenderFrameImpl::decidePolicyForNavigation(
     if (iter != parent->history_subframe_unique_names_.end()) {
       bool history_item_is_about_blank = iter->second;
       should_ask_browser =
-          !history_item_is_about_blank || url != GURL(url::kAboutBlankURL);
+          !history_item_is_about_blank || url != url::kAboutBlankURL;
       parent->history_subframe_unique_names_.erase(frame_->uniqueName().utf8());
     }
 
@@ -6105,15 +6084,24 @@ void RenderFrameImpl::BeginNavigation(const NavigationPolicyInfo& info) {
          GetRequestContextFrameTypeForWebURLRequest(info.urlRequest) ==
              REQUEST_CONTEXT_FRAME_TYPE_NESTED);
 
+  BeginNavigationParams begin_navigation_params(
+      GetWebURLRequestHeaders(info.urlRequest),
+      GetLoadFlagsForWebURLRequest(info.urlRequest),
+      info.urlRequest.hasUserGesture(),
+      info.urlRequest.skipServiceWorker() !=
+          blink::WebURLRequest::SkipServiceWorker::None,
+      GetRequestContextTypeForWebURLRequest(info.urlRequest));
+
+  if (!info.form.isNull()) {
+    WebSearchableFormData web_searchable_form_data(info.form);
+    begin_navigation_params.searchable_form_url =
+        web_searchable_form_data.url();
+    begin_navigation_params.searchable_form_encoding =
+        web_searchable_form_data.encoding().utf8();
+  }
+
   Send(new FrameHostMsg_BeginNavigation(
-      routing_id_, MakeCommonNavigationParams(info),
-      BeginNavigationParams(
-          GetWebURLRequestHeaders(info.urlRequest),
-          GetLoadFlagsForWebURLRequest(info.urlRequest),
-          info.urlRequest.hasUserGesture(),
-          info.urlRequest.skipServiceWorker() !=
-              blink::WebURLRequest::SkipServiceWorker::None,
-          GetRequestContextTypeForWebURLRequest(info.urlRequest))));
+      routing_id_, MakeCommonNavigationParams(info), begin_navigation_params));
 }
 
 void RenderFrameImpl::LoadDataURL(
@@ -6428,6 +6416,43 @@ media::DecoderFactory* RenderFrameImpl::GetDecoderFactory() {
 #endif
   return decoder_factory_.get();
 }
+
+#if defined(ENABLE_PLUGINS)
+void RenderFrameImpl::HandlePepperImeCommit(const base::string16& text) {
+  if (text.empty())
+    return;
+
+  if (!IsPepperAcceptingCompositionEvents()) {
+    // For pepper plugins unable to handle IME events, send the plugin a
+    // sequence of characters instead.
+    base::i18n::UTF16CharIterator iterator(&text);
+    int32_t i = 0;
+    while (iterator.Advance()) {
+      blink::WebKeyboardEvent char_event;
+      char_event.type = blink::WebInputEvent::Char;
+      char_event.timeStampSeconds = base::Time::Now().ToDoubleT();
+      char_event.modifiers = 0;
+      char_event.windowsKeyCode = text[i];
+      char_event.nativeKeyCode = text[i];
+
+      const int32_t char_start = i;
+      for (; i < iterator.array_pos(); ++i) {
+        char_event.text[i - char_start] = text[i];
+        char_event.unmodifiedText[i - char_start] = text[i];
+      }
+
+      if (GetRenderWidget()->GetWebWidget())
+        GetRenderWidget()->GetWebWidget()->handleInputEvent(char_event);
+    }
+  } else {
+    // Mimics the order of events sent by WebKit.
+    // See WebCore::Editor::setComposition() for the corresponding code.
+    focused_pepper_plugin_->HandleCompositionEnd(text);
+    focused_pepper_plugin_->HandleTextInput(text);
+  }
+  pepper_composition_text_.clear();
+}
+#endif  // ENABLE_PLUGINS
 
 void RenderFrameImpl::RegisterMojoInterfaces() {
   if (!frame_->parent()) {

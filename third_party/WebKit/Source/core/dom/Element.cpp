@@ -1833,7 +1833,7 @@ PassRefPtr<ComputedStyle> Element::originalStyleForLayoutObject() {
   return document().ensureStyleResolver().styleForElement(this);
 }
 
-void Element::recalcStyle(StyleRecalcChange change) {
+void Element::recalcStyle(StyleRecalcChange change, Text* nextTextSibling) {
   DCHECK(document().inStyleRecalc());
   DCHECK(!document().lifecycle().inDetach());
   DCHECK(!parentOrShadowHostNode()->needsStyleRecalc());
@@ -1854,7 +1854,7 @@ void Element::recalcStyle(StyleRecalcChange change) {
       }
     }
     if (parentComputedStyle())
-      change = recalcOwnStyle(change);
+      change = recalcOwnStyle(change, nextTextSibling);
     clearNeedsStyleRecalc();
     clearNeedsReattachLayoutTree();
   }
@@ -1899,6 +1899,8 @@ PassRefPtr<ComputedStyle> Element::propagateInheritedProperties(
     StyleRecalcChange change) {
   if (change != IndependentInherit)
     return nullptr;
+  if (isPseudoElement())
+    return nullptr;
   if (needsStyleRecalc())
     return nullptr;
   if (hasAnimations())
@@ -1915,7 +1917,8 @@ PassRefPtr<ComputedStyle> Element::propagateInheritedProperties(
   return newStyle;
 }
 
-StyleRecalcChange Element::recalcOwnStyle(StyleRecalcChange change) {
+StyleRecalcChange Element::recalcOwnStyle(StyleRecalcChange change,
+                                          Text* nextTextSibling) {
   DCHECK(document().inStyleRecalc());
   DCHECK(!parentOrShadowHostNode()->needsStyleRecalc());
   DCHECK(change >= IndependentInherit || needsStyleRecalc());
@@ -1940,7 +1943,10 @@ StyleRecalcChange Element::recalcOwnStyle(StyleRecalcChange change) {
   }
 
   if (localChange == Reattach) {
-    document().addNonAttachedStyle(*this, std::move(newStyle));
+    StyleReattachData styleReattachData;
+    styleReattachData.computedStyle = std::move(newStyle);
+    styleReattachData.nextTextSibling = nextTextSibling;
+    document().addStyleReattachData(*this, styleReattachData);
     setNeedsReattachLayoutTree();
     return rebuildLayoutTree();
   }
@@ -1985,8 +1991,9 @@ StyleRecalcChange Element::recalcOwnStyle(StyleRecalcChange change) {
 
 StyleRecalcChange Element::rebuildLayoutTree() {
   DCHECK(inActiveDocument());
+  StyleReattachData styleReattachData = document().getStyleReattachData(*this);
   AttachContext reattachContext;
-  reattachContext.resolvedStyle = document().getNonAttachedStyle(*this);
+  reattachContext.resolvedStyle = styleReattachData.computedStyle.get();
   bool layoutObjectWillChange = needsAttach() || layoutObject();
 
   // We are calling Element::rebuildLayoutTree() from inside
@@ -2006,7 +2013,7 @@ StyleRecalcChange Element::rebuildLayoutTree() {
     // we can either traverse the current subtree from this node onwards
     // or store it.
     // The choice is between increased time and increased memory complexity.
-    reattachWhitespaceSiblingsIfNeeded(nextTextSibling());
+    reattachWhitespaceSiblingsIfNeeded(styleReattachData.nextTextSibling);
     return Reattach;
   }
   return ReattachNoLayoutObject;

@@ -587,6 +587,10 @@ void WebStateImpl::OpenURL(const WebState::OpenURLParams& params) {
   [[web_controller_ delegate] openURLWithParams:params];
 }
 
+void WebStateImpl::Stop() {
+  [web_controller_ stopLoading];
+}
+
 const NavigationManager* WebStateImpl::GetNavigationManager() const {
   return &GetNavigationManagerImpl();
 }
@@ -677,10 +681,6 @@ void WebStateImpl::OnProvisionalNavigationStarted(const GURL& url) {
 }
 
 #pragma mark - NavigationManagerDelegate implementation
-
-void WebStateImpl::GoToOffset(int offset) {
-  [web_controller_ goDelta:offset];
-}
 
 void WebStateImpl::GoToIndex(int index) {
   [web_controller_ goToItemAtIndex:index];

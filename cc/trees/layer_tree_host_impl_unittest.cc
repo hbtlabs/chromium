@@ -4840,26 +4840,23 @@ TEST_F(LayerTreeHostImplTest, ScrollNonCompositedRoot) {
   gfx::Size contents_size(20, 20);
 
   std::unique_ptr<LayerImpl> content_layer =
-      LayerImpl::Create(host_impl_->active_tree(), 1);
+      LayerImpl::Create(host_impl_->active_tree(), 11);
   content_layer->SetDrawsContent(true);
   content_layer->SetPosition(gfx::PointF());
   content_layer->SetBounds(contents_size);
 
-  std::unique_ptr<LayerImpl> scroll_clip_layer =
-      LayerImpl::Create(host_impl_->active_tree(), 3);
-  scroll_clip_layer->SetBounds(surface_size);
+  LayerImpl* scroll_clip_layer =
+      CreateBasicVirtualViewportLayers(surface_size, surface_size);
 
   std::unique_ptr<LayerImpl> scroll_layer =
-      LayerImpl::Create(host_impl_->active_tree(), 2);
-  scroll_layer->SetScrollClipLayer(3);
+      LayerImpl::Create(host_impl_->active_tree(), 12);
+  scroll_layer->SetScrollClipLayer(scroll_clip_layer->id());
   scroll_layer->SetBounds(contents_size);
   scroll_layer->SetPosition(gfx::PointF());
   scroll_layer->test_properties()->AddChild(std::move(content_layer));
   scroll_clip_layer->test_properties()->AddChild(std::move(scroll_layer));
 
   scroll_clip_layer->test_properties()->force_render_surface = true;
-  host_impl_->active_tree()->SetRootLayerForTesting(
-      std::move(scroll_clip_layer));
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
 
   host_impl_->SetViewportSize(surface_size);
@@ -4878,13 +4875,13 @@ TEST_F(LayerTreeHostImplTest, ScrollNonCompositedRoot) {
 TEST_F(LayerTreeHostImplTest, ScrollChildCallsCommitAndRedraw) {
   gfx::Size surface_size(10, 10);
   gfx::Size contents_size(20, 20);
-  std::unique_ptr<LayerImpl> root =
-      LayerImpl::Create(host_impl_->active_tree(), 1);
-  root->SetBounds(surface_size);
+
+  LayerImpl* root =
+      CreateBasicVirtualViewportLayers(surface_size, surface_size);
+
   root->test_properties()->AddChild(
-      CreateScrollableLayer(2, contents_size, root.get()));
+      CreateScrollableLayer(12, contents_size, root));
   root->test_properties()->force_render_surface = true;
-  host_impl_->active_tree()->SetRootLayerForTesting(std::move(root));
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
 
   host_impl_->SetViewportSize(surface_size);
@@ -5199,21 +5196,21 @@ TEST_F(LayerTreeHostImplTest, ScrollChildBeyondLimit) {
   // parent layer isn't scrolled.
   gfx::Size surface_size(10, 10);
   gfx::Size content_size(20, 20);
-  std::unique_ptr<LayerImpl> root =
-      LayerImpl::Create(host_impl_->active_tree(), 1);
-  root->SetBounds(surface_size);
+
+  LayerImpl* root =
+      CreateBasicVirtualViewportLayers(surface_size, surface_size);
+
   root->test_properties()->force_render_surface = true;
   std::unique_ptr<LayerImpl> grand_child =
-      CreateScrollableLayer(3, content_size, root.get());
+      CreateScrollableLayer(13, content_size, root);
 
   std::unique_ptr<LayerImpl> child =
-      CreateScrollableLayer(2, content_size, root.get());
+      CreateScrollableLayer(12, content_size, root);
   LayerImpl* grand_child_layer = grand_child.get();
   child->test_properties()->AddChild(std::move(grand_child));
 
   LayerImpl* child_layer = child.get();
   root->test_properties()->AddChild(std::move(child));
-  host_impl_->active_tree()->SetRootLayerForTesting(std::move(root));
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
   host_impl_->active_tree()->DidBecomeActive();
 
@@ -5245,8 +5242,7 @@ TEST_F(LayerTreeHostImplTest, ScrollChildBeyondLimit) {
                            ->root_layer_for_testing()
                            ->test_properties()
                            ->children[0];
-    LayerImpl* grand_child = child->test_properties()->children[0];
-    EXPECT_TRUE(ScrollInfoContains(*scroll_info.get(), grand_child->id(),
+    EXPECT_TRUE(ScrollInfoContains(*scroll_info.get(), grand_child_layer->id(),
                                    gfx::Vector2d(0, -5)));
 
     // The child should not have scrolled.
@@ -5816,6 +5812,7 @@ class TestInputHandlerClient : public InputHandlerClient {
     min_page_scale_factor_ = min_page_scale_factor;
     max_page_scale_factor_ = max_page_scale_factor;
   }
+  void DeliverInputForBeginFrame() override {}
 
   gfx::ScrollOffset last_set_scroll_offset() {
     return last_set_scroll_offset_;
@@ -6119,7 +6116,6 @@ TEST_F(LayerTreeHostImplTest, OverscrollRoot) {
   host_impl_->ScrollEnd(EndState().get());
 }
 
-
 TEST_F(LayerTreeHostImplTest, OverscrollChildWithoutBubbling) {
   // Scroll child layers beyond their maximum scroll range and make sure root
   // overscroll does not accumulate.
@@ -6139,6 +6135,9 @@ TEST_F(LayerTreeHostImplTest, OverscrollChildWithoutBubbling) {
       CreateScrollableLayer(2, surface_size, root_clip.get());
   LayerImpl* grand_child_layer = grand_child.get();
   child->test_properties()->AddChild(std::move(grand_child));
+
+  host_impl_->active_tree()->SetViewportLayersFromIds(
+      Layer::INVALID_ID, Layer::INVALID_ID, root->id(), Layer::INVALID_ID);
 
   LayerImpl* child_layer = child.get();
   root->test_properties()->AddChild(std::move(child));
@@ -6180,11 +6179,17 @@ TEST_F(LayerTreeHostImplTest, OverscrollChildWithoutBubbling) {
                   .thread);
     EXPECT_EQ(host_impl_->CurrentlyScrollingLayer(), grand_child_layer);
     EXPECT_EQ(gfx::Vector2dF(), host_impl_->accumulated_root_overscroll());
+    host_impl_->ScrollEnd(EndState().get());
+    EXPECT_EQ(InputHandler::SCROLL_ON_IMPL_THREAD,
+              host_impl_
+                  ->ScrollBegin(BeginState(gfx::Point(5, 5)).get(),
+                                InputHandler::NON_BUBBLING_GESTURE)
+                  .thread);
     scroll_result =
         host_impl_->ScrollBy(UpdateState(gfx::Point(), scroll_delta).get());
     EXPECT_TRUE(scroll_result.did_scroll);
     EXPECT_FALSE(scroll_result.did_overscroll_root);
-    EXPECT_EQ(host_impl_->CurrentlyScrollingLayer(), child_layer);
+    EXPECT_EQ(host_impl_->CurrentlyScrollingLayer()->id(), child_layer->id());
     EXPECT_EQ(gfx::Vector2dF(), host_impl_->accumulated_root_overscroll());
     host_impl_->ScrollEnd(EndState().get());
 
@@ -6271,7 +6276,13 @@ TEST_F(LayerTreeHostImplTest, OverscrollAlways) {
 
 TEST_F(LayerTreeHostImplTest, NoOverscrollWhenNotAtEdge) {
   InputHandlerScrollResult scroll_result;
-  SetupScrollAndContentsLayers(gfx::Size(200, 200));
+  gfx::Size viewport_size(100, 100);
+  gfx::Size content_size(200, 200);
+  LayerImpl* root_scroll_layer =
+      CreateBasicVirtualViewportLayers(viewport_size, viewport_size);
+  host_impl_->active_tree()->OuterViewportScrollLayer()->SetBounds(
+      content_size);
+  root_scroll_layer->SetBounds(content_size);
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
 
   DrawFrame();
@@ -6373,6 +6384,97 @@ TEST_F(LayerTreeHostImplTest, OverscrollOnMainThread) {
       host_impl_
           ->ScrollBegin(BeginState(gfx::Point(0, 0)).get(), InputHandler::WHEEL)
           .thread);
+}
+
+// Test that scrolling the inner viewport directly works, as can happen when the
+// scroll chains up to it from an sibling of the outer viewport.
+TEST_F(LayerTreeHostImplTest, ScrollFromOuterViewportSibling) {
+  const gfx::Size content_size(200, 200);
+  const gfx::Size viewport_size(100, 100);
+
+  LayerTreeImpl* layer_tree_impl = host_impl_->active_tree();
+
+  CreateBasicVirtualViewportLayers(viewport_size, viewport_size);
+  host_impl_->active_tree()->set_top_controls_height(10);
+  host_impl_->active_tree()->SetCurrentBrowserControlsShownRatio(1.f);
+
+  LayerImpl* outer_scroll_layer = host_impl_->OuterViewportScrollLayer();
+  LayerImpl* inner_scroll_layer = host_impl_->InnerViewportScrollLayer();
+
+  LayerImpl* scroll_layer = nullptr;
+
+  // Create a scrolling layer that's parented directly to the inner viewport.
+  // This will test that scrolls that chain up to the inner viewport without
+  // passing through the outer viewport still scroll correctly and affect
+  // browser controls.
+  {
+    std::unique_ptr<LayerImpl> clip = LayerImpl::Create(layer_tree_impl, 10);
+    clip->SetBounds(viewport_size);
+    clip->SetPosition(gfx::PointF());
+
+    std::unique_ptr<LayerImpl> scroll = LayerImpl::Create(layer_tree_impl, 11);
+    scroll->SetBounds(gfx::Size(400, 400));
+    scroll->SetScrollClipLayer(clip->id());
+    scroll->SetDrawsContent(true);
+
+    scroll_layer = scroll.get();
+
+    clip->test_properties()->AddChild(std::move(scroll));
+    inner_scroll_layer->test_properties()->AddChild(std::move(clip));
+
+    // Move the outer viewport layer away so that scrolls won't target it.
+    host_impl_->active_tree()->OuterViewportContainerLayer()->SetPosition(
+        gfx::PointF(400, 400));
+
+    layer_tree_impl->BuildPropertyTreesForTesting();
+
+    float min_page_scale = 1.f, max_page_scale = 4.f;
+    float page_scale_factor = 2.f;
+    host_impl_->active_tree()->PushPageScaleFromMainThread(
+        page_scale_factor, min_page_scale, max_page_scale);
+    host_impl_->active_tree()->SetPageScaleOnActiveTree(page_scale_factor);
+  }
+
+  // Fully scroll the child.
+  {
+    host_impl_->ScrollBegin(BeginState(gfx::Point(0, 0)).get(),
+                            InputHandler::TOUCHSCREEN);
+    host_impl_->ScrollBy(
+        UpdateState(gfx::Point(0, 0), gfx::Vector2dF(1000.f, 1000.f)).get());
+    host_impl_->ScrollEnd(EndState().get());
+
+    EXPECT_EQ(1.f,
+              host_impl_->active_tree()->CurrentBrowserControlsShownRatio());
+    EXPECT_VECTOR_EQ(gfx::Vector2dF(300.f, 300.f),
+                     scroll_layer->CurrentScrollOffset());
+    EXPECT_VECTOR_EQ(gfx::Vector2dF(),
+                     inner_scroll_layer->CurrentScrollOffset());
+    EXPECT_VECTOR_EQ(gfx::Vector2dF(),
+                     outer_scroll_layer->CurrentScrollOffset());
+  }
+
+  // Scrolling on the child now should chain up directly to the inner viewport.
+  // Scrolling it should cause browser controls to hide. The outer viewport
+  // should not be affected.
+  {
+    host_impl_->ScrollBegin(BeginState(gfx::Point(0, 0)).get(),
+                            InputHandler::TOUCHSCREEN);
+    gfx::Vector2d scroll_delta(0, 10);
+    host_impl_->ScrollBy(UpdateState(gfx::Point(), scroll_delta).get());
+    EXPECT_EQ(0.f,
+              host_impl_->active_tree()->CurrentBrowserControlsShownRatio());
+    EXPECT_VECTOR_EQ(gfx::Vector2dF(),
+                     inner_scroll_layer->CurrentScrollOffset());
+
+    host_impl_->ScrollBy(UpdateState(gfx::Point(), scroll_delta).get());
+    host_impl_->ScrollBy(UpdateState(gfx::Point(), scroll_delta).get());
+
+    EXPECT_VECTOR_EQ(gfx::Vector2dF(0, 10.f),
+                     inner_scroll_layer->CurrentScrollOffset());
+    EXPECT_VECTOR_EQ(gfx::Vector2dF(),
+                     outer_scroll_layer->CurrentScrollOffset());
+    host_impl_->ScrollEnd(EndState().get());
+  }
 }
 
 // Test that scrolls chain correctly when a child scroller on the page (e.g. a
@@ -8349,26 +8451,25 @@ TEST_F(LayerTreeHostImplTest, TouchFlingShouldContinueScrollingCurrentLayer) {
   // Scroll a child layer beyond its maximum scroll range and make sure the
   // the scroll doesn't bubble up to the parent layer.
   gfx::Size surface_size(10, 10);
-  std::unique_ptr<LayerImpl> root =
-      LayerImpl::Create(host_impl_->active_tree(), 1);
+  LayerImpl* root =
+      CreateBasicVirtualViewportLayers(surface_size, surface_size);
   root->test_properties()->force_render_surface = true;
 
   std::unique_ptr<LayerImpl> root_scrolling_owned =
-      CreateScrollableLayer(2, surface_size, root.get());
+      CreateScrollableLayer(12, surface_size, root);
   auto* root_scrolling = root_scrolling_owned.get();
   root->test_properties()->AddChild(std::move(root_scrolling_owned));
 
   std::unique_ptr<LayerImpl> child_owned =
-      CreateScrollableLayer(3, surface_size, root.get());
+      CreateScrollableLayer(13, surface_size, root);
   auto* child = child_owned.get();
   root_scrolling->test_properties()->AddChild(std::move(child_owned));
 
   std::unique_ptr<LayerImpl> grand_child_owned =
-      CreateScrollableLayer(4, surface_size, root.get());
+      CreateScrollableLayer(14, surface_size, root);
   auto* grand_child = grand_child_owned.get();
   child->test_properties()->AddChild(std::move(grand_child_owned));
 
-  host_impl_->active_tree()->SetRootLayerForTesting(std::move(root));
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
   host_impl_->active_tree()->DidBecomeActive();
 
@@ -8385,13 +8486,6 @@ TEST_F(LayerTreeHostImplTest, TouchFlingShouldContinueScrollingCurrentLayer) {
   DrawFrame();
   {
     std::unique_ptr<ScrollAndScaleSet> scroll_info;
-    LayerImpl* child = host_impl_->active_tree()
-                           ->root_layer_for_testing()
-                           ->test_properties()
-                           ->children[0]
-                           ->test_properties()
-                           ->children[0];
-    LayerImpl* grand_child = child->test_properties()->children[0];
 
     gfx::Vector2d scroll_delta(0, -2);
     EXPECT_EQ(InputHandler::SCROLL_ON_IMPL_THREAD,
@@ -8448,19 +8542,18 @@ TEST_F(LayerTreeHostImplTest, WheelFlingShouldntBubble) {
   // When flinging via wheel, we shouldn't bubble.
   gfx::Size surface_size(10, 10);
   gfx::Size content_size(20, 20);
-  std::unique_ptr<LayerImpl> root_clip =
-      LayerImpl::Create(host_impl_->active_tree(), 3);
+  LayerImpl* root_clip =
+      CreateBasicVirtualViewportLayers(surface_size, surface_size);
   root_clip->test_properties()->force_render_surface = true;
   std::unique_ptr<LayerImpl> root_scroll =
-      CreateScrollableLayer(1, content_size, root_clip.get());
+      CreateScrollableLayer(11, content_size, root_clip);
   int root_scroll_id = root_scroll->id();
   std::unique_ptr<LayerImpl> child =
-      CreateScrollableLayer(2, content_size, root_clip.get());
+      CreateScrollableLayer(12, content_size, root_clip);
 
   root_scroll->test_properties()->AddChild(std::move(child));
   root_clip->test_properties()->AddChild(std::move(root_scroll));
 
-  host_impl_->active_tree()->SetRootLayerForTesting(std::move(root_clip));
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
   host_impl_->active_tree()->DidBecomeActive();
 
@@ -8568,7 +8661,7 @@ TEST_F(LayerTreeHostImplTest, ScrollUnknownScrollAncestorMismatch) {
             status.main_thread_scrolling_reasons);
 }
 
-TEST_F(LayerTreeHostImplTest, NotScrollInvisibleScroller) {
+TEST_F(LayerTreeHostImplTest, ScrollInvisibleScroller) {
   gfx::Size content_size(100, 100);
   SetupScrollAndContentsLayers(content_size);
 
@@ -8588,110 +8681,8 @@ TEST_F(LayerTreeHostImplTest, NotScrollInvisibleScroller) {
 
   DrawFrame();
 
-  // We should not have scrolled |child_scroll| even though we technically "hit"
-  // it. The reason for this is that if the scrolling the scroll would not move
-  // any layer that is a drawn RSLL member, then we can ignore the hit.
-  //
-  // Why SCROLL_STARTED? In this case, it's because we've bubbled out and
-  // started scrolling the viewport.
-  EXPECT_EQ(InputHandler::SCROLL_ON_IMPL_THREAD,
-            host_impl_->ScrollBegin(BeginState(gfx::Point()).get(),
-                                    InputHandler::WHEEL)
-                .thread);
-
-  EXPECT_EQ(117, host_impl_->CurrentlyScrollingLayer()->id());
-}
-
-TEST_F(LayerTreeHostImplTest, ScrollInvisibleScrollerWithVisibleDescendent) {
-  gfx::Size content_size(100, 100);
-  SetupScrollAndContentsLayers(content_size);
-
-  LayerImpl* root = host_impl_->active_tree()->LayerById(1);
-  LayerImpl* root_scroll_layer = host_impl_->active_tree()->LayerById(2);
-
-  std::unique_ptr<LayerImpl> invisible_scroll_layer =
-      CreateScrollableLayer(7, content_size, root);
-  invisible_scroll_layer->SetDrawsContent(false);
-
-  std::unique_ptr<LayerImpl> child_layer =
-      LayerImpl::Create(host_impl_->active_tree(), 8);
-  child_layer->SetDrawsContent(false);
-
-  std::unique_ptr<LayerImpl> grand_child_layer =
-      LayerImpl::Create(host_impl_->active_tree(), 9);
-  grand_child_layer->SetDrawsContent(true);
-  grand_child_layer->SetBounds(content_size);
-  // Move the grand child so it's not hit by our test point.
-  grand_child_layer->SetPosition(gfx::PointF(10.f, 10.f));
-
-  child_layer->test_properties()->AddChild(std::move(grand_child_layer));
-  invisible_scroll_layer->test_properties()->AddChild(std::move(child_layer));
-  root_scroll_layer->test_properties()->AddChild(
-      std::move(invisible_scroll_layer));
-  host_impl_->active_tree()->BuildPropertyTreesForTesting();
-
-  DrawFrame();
-
-  // We should have scrolled |invisible_scroll_layer| as it was hit and it has
-  // a descendant which is a drawn RSLL member.
-  EXPECT_EQ(InputHandler::SCROLL_ON_IMPL_THREAD,
-            host_impl_->ScrollBegin(BeginState(gfx::Point()).get(),
-                                    InputHandler::WHEEL)
-                .thread);
-
-  EXPECT_EQ(7, host_impl_->CurrentlyScrollingLayer()->id());
-}
-
-TEST_F(LayerTreeHostImplTest, ScrollInvisibleScrollerWithVisibleScrollChild) {
-  // This test case is very similar to the one above with one key difference:
-  // the invisible scroller has a scroll child that is indeed draw contents.
-  // If we attempt to initiate a gesture scroll off of the visible scroll child
-  // we should still start the scroll child.
-  gfx::Size content_size(100, 100);
-  SetupScrollAndContentsLayers(content_size);
-
-  LayerImpl* root = host_impl_->active_tree()->LayerById(1);
-
-  int scroll_layer_id = 2;
-  LayerImpl* scroll_layer =
-      host_impl_->active_tree()->LayerById(scroll_layer_id);
-
-  int scroll_child_id = 6;
-  std::unique_ptr<LayerImpl> scroll_child =
-      LayerImpl::Create(host_impl_->active_tree(), scroll_child_id);
-  scroll_child->SetDrawsContent(true);
-  scroll_child->SetBounds(content_size);
-  // Move the scroll child so it's not hit by our test point.
-  scroll_child->SetPosition(gfx::PointF(10.f, 10.f));
-
-  int invisible_scroll_layer_id = 7;
-  std::unique_ptr<LayerImpl> invisible_scroll =
-      CreateScrollableLayer(invisible_scroll_layer_id, content_size, root);
-  invisible_scroll->SetDrawsContent(false);
-
-  int container_id = 8;
-  std::unique_ptr<LayerImpl> container =
-      LayerImpl::Create(host_impl_->active_tree(), container_id);
-
-  std::unique_ptr<std::set<LayerImpl*>> scroll_children(
-      new std::set<LayerImpl*>);
-  scroll_children->insert(scroll_child.get());
-  invisible_scroll->test_properties()->scroll_children.reset(
-      scroll_children.release());
-
-  scroll_child->test_properties()->scroll_parent = invisible_scroll.get();
-
-  container->test_properties()->AddChild(std::move(invisible_scroll));
-  container->test_properties()->AddChild(std::move(scroll_child));
-
-  scroll_layer->test_properties()->AddChild(std::move(container));
-  host_impl_->active_tree()->BuildPropertyTreesForTesting();
-
-  DrawFrame();
-
-  // We should have scrolled |child_scroll| even though it is invisible.
-  // The reason for this is that if the scrolling the scroll would move a layer
-  // that is a drawn RSLL member, then we should accept this hit.
+  // We should have scrolled |child_scroll| even though it does not move
+  // any layer that is a drawn RSLL member.
   EXPECT_EQ(InputHandler::SCROLL_ON_IMPL_THREAD,
             host_impl_->ScrollBegin(BeginState(gfx::Point()).get(),
                                     InputHandler::WHEEL)

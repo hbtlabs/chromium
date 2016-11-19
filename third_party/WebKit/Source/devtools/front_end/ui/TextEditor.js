@@ -4,92 +4,92 @@
 /**
  * @interface
  */
-WebInspector.TextEditorFactory = function() {};
+UI.TextEditorFactory = function() {};
 
-WebInspector.TextEditorFactory.prototype = {
+UI.TextEditorFactory.prototype = {
   /**
-   * @param {!WebInspector.TextEditor.Options} options
-   * @return {!WebInspector.TextEditor}
+   * @param {!UI.TextEditor.Options} options
+   * @return {!UI.TextEditor}
    */
-  createEditor: function(options) {}
+  createEditor(options) {}
 };
 
 /**
  * @interface
  */
-WebInspector.TextEditor = function() {};
+UI.TextEditor = function() {};
 
-WebInspector.TextEditor.prototype = {
+UI.TextEditor.prototype = {
 
   /**
-   * @return {!WebInspector.Widget}
+   * @return {!UI.Widget}
    */
-  widget: function() {},
+  widget() {},
 
   /**
-   * @return {!WebInspector.TextRange}
+   * @return {!Common.TextRange}
    */
-  fullRange: function() {},
+  fullRange() {},
 
   /**
-   * @return {!WebInspector.TextRange}
+   * @return {!Common.TextRange}
    */
-  selection: function() {},
+  selection() {},
 
   /**
-   * @param {!WebInspector.TextRange} selection
+   * @param {!Common.TextRange} selection
    */
-  setSelection: function(selection) {},
+  setSelection(selection) {},
 
   /**
-   * @param {!WebInspector.TextRange=} textRange
+   * @param {!Common.TextRange=} textRange
    * @return {string}
    */
-  text: function(textRange) {},
+  text(textRange) {},
 
   /**
    * @param {string} text
    */
-  setText: function(text) {},
+  setText(text) {},
 
   /**
    * @param {number} lineNumber
    * @return {string}
    */
-  line: function(lineNumber) {},
+  line(lineNumber) {},
 
-  newlineAndIndent: function() {},
+  newlineAndIndent() {},
 
   /**
    * @param {function(!KeyboardEvent)} handler
    */
-  addKeyDownHandler: function(handler) {},
+  addKeyDownHandler(handler) {},
 
   /**
-   * @param {?WebInspector.AutocompleteConfig} config
+   * @param {?UI.AutocompleteConfig} config
    */
-  configureAutocomplete: function(config) {},
+  configureAutocomplete(config) {},
 
-  clearAutocomplete: function() {}
+  clearAutocomplete() {}
 };
 
 /**
  * @typedef {{
- *  bracketMatchingSetting: (!WebInspector.Setting|undefined),
+ *  bracketMatchingSetting: (!Common.Setting|undefined),
  *  lineNumbers: boolean,
  *  lineWrapping: boolean,
  *  mimeType: (string|undefined),
  *  autoHeight: (boolean|undefined)
  * }}
  */
-WebInspector.TextEditor.Options;
+UI.TextEditor.Options;
 
 /**
  * @typedef {{
- *     substituteRangeCallback: ((function(number, number):?WebInspector.TextRange)|undefined),
- *     suggestionsCallback: ((function(!WebInspector.TextRange, !WebInspector.TextRange, boolean=):?Promise.<!WebInspector.SuggestBox.Suggestions>)|undefined),
+ *     substituteRangeCallback: ((function(number, number):?Common.TextRange)|undefined),
+ *     suggestionsCallback: ((function(!Common.TextRange, !Common.TextRange, boolean=, string=):?Promise.<!UI.SuggestBox.Suggestions>)|undefined),
  *     isWordChar: ((function(string):boolean)|undefined),
  *     captureEnter: (boolean|undefined)
  * }}
  */
-WebInspector.AutocompleteConfig;
+UI.AutocompleteConfig;

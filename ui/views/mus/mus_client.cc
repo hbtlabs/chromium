@@ -8,9 +8,9 @@
 #include "base/memory/ptr_util.h"
 #include "services/service_manager/public/cpp/connection.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "services/ui/public/cpp/gpu/gpu_service.h"
 #include "services/ui/public/interfaces/event_matcher.mojom.h"
 #include "ui/aura/env.h"
-#include "ui/aura/mus/gpu_service.h"
 #include "ui/aura/mus/mus_context_factory.h"
 #include "ui/aura/mus/os_exchange_data_provider_mus.h"
 #include "ui/aura/mus/property_converter.h"
@@ -28,36 +28,6 @@
 #include "ui/wm/core/wm_state.h"
 
 namespace views {
-namespace {
-
-// TODO: property converter should likely live in aura as it needs to be used
-// by both ash and views. http://crbug.com/663522.
-class PropertyConverterImpl : public aura::PropertyConverter {
- public:
-  PropertyConverterImpl() {}
-  ~PropertyConverterImpl() override {}
-
-  // aura::PropertyConverter:
-  bool ConvertPropertyForTransport(
-      aura::Window* window,
-      const void* key,
-      std::string* transport_name,
-      std::unique_ptr<std::vector<uint8_t>>* transport_value) override {
-    return false;
-  }
-  std::string GetTransportNameForPropertyKey(const void* key) override {
-    return std::string();
-  }
-  void SetPropertyFromTransportValue(
-      aura::Window* window,
-      const std::string& transport_name,
-      const std::vector<uint8_t>* transport_data) override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(PropertyConverterImpl);
-};
-
-}  // namespace
 
 // static
 MusClient* MusClient::instance_ = nullptr;
@@ -79,14 +49,21 @@ MusClient::~MusClient() {
   instance_ = nullptr;
 }
 
+// static
+bool MusClient::ShouldCreateDesktopNativeWidgetAura(
+    const Widget::InitParams& init_params) {
+  // TYPE_CONTROL and child widgets require a NativeWidgetAura.
+  return init_params.type != Widget::InitParams::TYPE_CONTROL &&
+         !init_params.child;
+}
+
 NativeWidget* MusClient::CreateNativeWidget(
     const Widget::InitParams& init_params,
     internal::NativeWidgetDelegate* delegate) {
-  // TYPE_CONTROL widgets require a NativeWidgetAura. So we let this fall
-  // through, so that the default NativeWidgetPrivate::CreateNativeWidget() is
-  // used instead.
-  if (init_params.type == Widget::InitParams::TYPE_CONTROL)
+  if (!ShouldCreateDesktopNativeWidgetAura(init_params)) {
+    // A null return value results in creating NativeWidgetAura.
     return nullptr;
+  }
 
   DesktopNativeWidgetAura* native_widget =
       new DesktopNativeWidgetAura(delegate);
@@ -95,7 +72,8 @@ NativeWidget* MusClient::CreateNativeWidget(
         base::WrapUnique(init_params.desktop_window_tree_host));
   } else {
     native_widget->SetDesktopWindowTreeHost(
-        base::MakeUnique<DesktopWindowTreeHostMus>(delegate, native_widget));
+        base::MakeUnique<DesktopWindowTreeHostMus>(delegate, native_widget,
+                                                   init_params));
   }
   return native_widget;
 }
@@ -106,17 +84,19 @@ MusClient::MusClient(service_manager::Connector* connector,
     : connector_(connector), identity_(identity) {
   DCHECK(!instance_);
   instance_ = this;
-  property_converter_ = base::MakeUnique<PropertyConverterImpl>();
+  // TODO(msw): Avoid this... use some default value? Allow clients to extend?
+  property_converter_ = base::MakeUnique<aura::PropertyConverter>();
 
   wm_state_ = base::MakeUnique<wm::WMState>();
 
-  gpu_service_ = aura::GpuService::Create(connector, std::move(io_task_runner));
+  gpu_service_ = ui::GpuService::Create(connector, std::move(io_task_runner));
   compositor_context_factory_ =
       base::MakeUnique<aura::MusContextFactory>(gpu_service_.get());
   aura::Env::GetInstance()->set_context_factory(
       compositor_context_factory_.get());
   window_tree_client_ =
       base::MakeUnique<aura::WindowTreeClient>(this, nullptr, nullptr);
+  aura::Env::GetInstance()->SetWindowTreeClient(window_tree_client_.get());
   window_tree_client_->ConnectViaWindowTreeFactory(connector_);
 
   // TODO: wire up PointerWatcherEventRouter. http://crbug.com/663526.

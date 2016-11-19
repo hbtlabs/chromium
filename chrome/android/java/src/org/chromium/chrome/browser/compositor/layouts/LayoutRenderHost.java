@@ -58,13 +58,6 @@ public interface LayoutRenderHost {
     void loadPersitentTextureDataIfNeeded();
 
     /**
-     * @param rect Rect instance to be used to store the result and return. If null, it uses a new
-     *             Rect instance.
-     * @return The current visible viewport of the host (takes fullscreen into account).
-     */
-    Rect getVisibleViewport(Rect rect);
-
-    /**
      * @return The background color of the toolbar.
      */
     int getBrowserControlsBackgroundColor();
@@ -80,9 +73,9 @@ public interface LayoutRenderHost {
     boolean areBrowserControlsPermanentlyHidden();
 
     /**
-     * @return The height of the browser controls in pixels.
+     * @return The height of the top controls in pixels.
      */
-    int getBrowserControlsHeightPixels();
+    int getTopControlsHeightPixels();
 
     /**
      * @return The {@link ResourceManager}.

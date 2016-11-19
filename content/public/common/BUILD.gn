@@ -132,6 +132,8 @@ source_set("common_sources") {
     "file_chooser_file_info.h",
     "file_chooser_params.cc",
     "file_chooser_params.h",
+    "form_field_data.cc",
+    "form_field_data.h",
     "frame_navigate_params.cc",
     "frame_navigate_params.h",
     "injection_test_mac.h",
@@ -198,8 +200,6 @@ source_set("common_sources") {
     "service_info.cc",
     "service_info.h",
     "service_manager_connection.h",
-    "service_names.cc",
-    "service_names.h",
     "speech_recognition_error.h",
     "speech_recognition_grammar.h",
     "speech_recognition_result.cc",
@@ -232,6 +232,7 @@ source_set("common_sources") {
   public_configs = [ "//v8:external_startup_data" ]
 
   public_deps = [
+    ":service_names",
     "//content/common",
     "//content/public/common:interfaces",
     "//mojo/public/cpp/bindings",
@@ -305,5 +306,11 @@ source_set("feature_h264_with_openh264_ffmpeg") {
 mojom("interfaces") {
   sources = [
     "window_container_type.mojom",
+  ]
+}
+
+mojom("service_names") {
+  sources = [
+    "service_names.mojom",
   ]
 }
