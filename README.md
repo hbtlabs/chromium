@@ -135,7 +135,7 @@ copies libs manually due to warning issues when producing deb
 
 Package is for ubuntu64 precise and would install as chromium-beta 
 
-[deb package](chromium-browser-beta_57.0.2925.0-1_amd64.deb)
+[deb package](http://hbtlabs.com/chromium-browser-beta_57.0.2925.0-1_amd64.deb)
 [libs to be unpacked](http://hbtlabs.com/chromium-libs.tar.bz2)
 
 sudo dpkg -i package.deb
