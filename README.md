@@ -32,7 +32,6 @@ Algorithmic fix: determining what's the background color of the current page or 
 
 ## How to build and update codebase?
 
-// TODO(hbt) NEXT add build instruction link
 [chromium build instruction] (https://www.chromium.org/developers/how-tos/get-the-code)
 
 
@@ -65,7 +64,7 @@ is_debug = false
 symbol_level = 0
 enable_nacl = true
 remove_webcore_debug_symbols = true
-#enable_linux_installer = true
+enable_linux_installer = true
 #is_chrome_branded = true
 
 gn gen out/Release
@@ -108,16 +107,39 @@ git push gh_origin white-flash-fix
 
 ## How to build deb files and install?
 
-// TODO(hbt) NEXT add instructions from howto
-// TODO(hbt) NEXT document libs issue + ld_config fix -- view howto
+```
+export IGNORE_DEPS_CHANGES=1
+ninja -C out/Release  "chrome/installer/linux:beta_deb"
+sudo dpkg -i chromium-browser-beta_57.0.2925.0-1_amd64.deb
+
+# copy the libs manually
+sudo -s
+cd /opt/chromium.org/chromium-beta
+mkdir libs
+cp -R /media/hassen/linux-tmp/chromium/src/out/Release/*.so . 
+
+# fix the path 
+echo "/opt/chromium.org/chromium-beta/libs" > /etc/ld.so.conf.d/chrome_beta.conf
+
+sudo ldconfig
+
+# run browser
+chromium-browser-beta
+
+```
+
+copies libs manually due to warning issues when producing deb
 
 
 ## Where can I download the binaries?
 
-// TODO(hbt) NEXT release deb files
-// TODO(hbt) NEXT measure dlds
-
 Package is for ubuntu64 precise and would install as chromium-beta 
+
+[deb package](chromium-browser-beta_57.0.2925.0-1_amd64.deb)
+[libs to be unpacked](http://hbtlabs.com/chromium-libs.tar.bz2)
+
+sudo dpkg -i package.deb
+copy the libs manually (view instructions above)
 
 ## What's next?
 
