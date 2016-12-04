@@ -131,7 +131,7 @@ chromium-browser-beta
 copies libs manually due to warning issues when producing deb
 
 
-## Where can I download the binaries?
+## Where to download the binaries?
 
 Package is for ubuntu64 precise and would install as chromium-beta 
 
@@ -141,11 +141,17 @@ Package is for ubuntu64 precise and would install as chromium-beta
 sudo dpkg -i package.deb
 copy the libs manually (view instructions above)
 
+
+## How to disable black background?
+
+chrome --disable-black-bg
+
 ## What's next?
 
 This fork will be flagged as deprecated the moment those bugs are solved. 
 
-// TODO(hbt) NEXT list of improvements to be made and ideas
+[list of improvements to be made -- improvements.php](https://gist.github.com/hbt/94e527e6aba99baffba27259a98198b1)
+
 
 
 ## What about other platforms?
