@@ -150,7 +150,7 @@ chrome --disable-black-bg
 
 This fork will be flagged as deprecated the moment those bugs are solved. 
 
-[list of improvements to be made -- improvements.php](https://gist.github.com/hbt/94e527e6aba99baffba27259a98198b1)
+[list of improvements to be made](https://gist.github.com/hbt/94e527e6aba99baffba27259a98198b1#file-improvements-php)
 
 
 
