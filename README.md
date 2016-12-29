@@ -30,6 +30,36 @@ The issue has been broken down since they are attempting an algorithmic fix http
 Algorithmic fix: determining what's the background color of the current page or theme page then applying it during rendering instead of choosing white by default. 
 
 
+## Where to download the binaries?
+
+Package is for ubuntu64 precise and would install as chromium-beta 
+
+[deb package](http://hbtlabs.com/chromium-browser-beta_57.0.2925.0-1_amd64.deb)
+[libs to be unpacked](http://hbtlabs.com/chromium-libs.tar.bz2)
+
+sudo dpkg -i package.deb
+copy the libs manually and use ldconfig (view instructions below)
+
+
+## How to disable black background?
+
+chrome --disable-black-bg
+
+
+## Windows Platform support
+
+Windows binaries with this fix have been built. (Thanks to Jonathan)
+
+[Instructions here](https://bugs.chromium.org/p/chromium/issues/detail?id=470669#c211)
+[Binaries here](https://www.dropbox.com/sh/7hjv18bo571kifm/AAD7wMz-cPLphfG1jBMKEzFIa?dl=0)
+[MIRROR](http://hbtlabs.com/windows-chrome-white-flash.zip)
+
+## What about other platforms?
+
+If there is demand, I will compile for other platforms. Since compiling for other platforms that I don't use requires installing mac/windows + building the project and its deps, it's not worth doing.
+Feel free to do it and share the binaries. 
+
+
 ## How to build and update codebase?
 
 [chromium build instruction] (https://www.chromium.org/developers/how-tos/get-the-code)
@@ -131,20 +161,6 @@ chromium-browser-beta
 copies libs manually due to warning issues when producing deb
 
 
-## Where to download the binaries?
-
-Package is for ubuntu64 precise and would install as chromium-beta 
-
-[deb package](http://hbtlabs.com/chromium-browser-beta_57.0.2925.0-1_amd64.deb)
-[libs to be unpacked](http://hbtlabs.com/chromium-libs.tar.bz2)
-
-sudo dpkg -i package.deb
-copy the libs manually (view instructions above)
-
-
-## How to disable black background?
-
-chrome --disable-black-bg
 
 ## What's next?
 
@@ -154,7 +170,3 @@ This fork will be flagged as deprecated the moment those bugs are solved.
 
 
 
-## What about other platforms?
-
-If there is demand, I will compile for other platforms. Since compiling for other platforms that I don't use requires installing mac/windows + building the project and its deps, it's not worth doing.
-Feel free to do it and share the binaries. 
