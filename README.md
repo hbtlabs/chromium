@@ -51,8 +51,8 @@ chrome --disable-black-bg
 Windows binaries with this fix have been built. (Thanks to Jonathan)
 
 [Instructions here](https://bugs.chromium.org/p/chromium/issues/detail?id=470669#c211)
-[Binaries here](https://www.dropbox.com/sh/7hjv18bo571kifm/AAD7wMz-cPLphfG1jBMKEzFIa?dl=0)
-[MIRROR](http://hbtlabs.com/windows-chrome-white-flash.zip)
+[Binaries here (updated weekly)](https://www.dropbox.com/sh/7hjv18bo571kifm/AAD7wMz-cPLphfG1jBMKEzFIa?dl=0)
+[MIRROR of chrome version 57](http://hbtlabs.com/windows-chrome-white-flash.zip)
 
 ## What about other platforms?
 
