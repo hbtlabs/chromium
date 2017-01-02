@@ -45,6 +45,9 @@ copy the libs manually and use ldconfig (view instructions below)
 
 chrome --disable-black-bg
 
+Better alternative is to use a chrome extension that has access to the chrome:// pages and inject whatever stylesheet you want.
+Example: [https://github.com/hbt/chromedotfiles](https://github.com/hbt/chromedotfiles)
+
 
 ## Windows Platform support
 
@@ -58,6 +61,46 @@ Windows binaries with this fix have been built. (Thanks to Jonathan)
 
 If there is demand, I will compile for other platforms. Since compiling for other platforms that I don't use requires installing mac/windows + building the project and its deps, it's not worth doing.
 Feel free to do it and share the binaries. 
+
+
+## How to build code base for windows?
+
+[Instructions](https://github.com/henrypp/chromium/blob/master/building_chromium_gn.md)
+
+## Why is flash player not working?
+
+[download flash player](https://get.adobe.com/flashplayer/?no_redirect) and load it manually
+
+Example: 
+`nohup /opt/chromium.org/chromium-beta/chrome  --new-window $1 --ppapi-flash-path=/home/hassen/Downloads/flash_player_ppapi_linux.x86_64/libpepflashplayer.so --allow-file-access %U  --disk-cache-dir="/tmp/ram" &> /dev/null &
+`
+
+
+## Why is netflix not working?
+
+Chromium is not google chrome. It doesnt have the widevie plugin.
+Check in chrome://plugins
+
+## Why is the browser not syncing my bookmarks, extensions etc.?
+
+Chromium doesnt come with google features. You can include them by create API keys on your google account.
+[Instructions](https://www.chromium.org/developers/how-tos/api-keys)
+
+## Where is the latest browser version and auto-updating?
+
+The links enclosed point to chrome 57 binaries. The browser does not auto-update. 
+You can compile the branch to the latest version or wait until binaries are released and linked on this README.
+
+Main reasons this is not done frequently are:
+
+- build instructions change 
+- it takes time to compile + release
+- this process is not automated
+
+
+## Where are the macosx binaries?
+
+None at the moment. Compile them and send them to me like Jonathan did.
 
 
 ## How to build and update codebase?
