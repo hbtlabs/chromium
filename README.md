@@ -67,6 +67,11 @@ Feel free to do it and share the binaries.
 
 [Instructions](https://github.com/henrypp/chromium/blob/master/building_chromium_gn.md)
 
+
+## Why is the fix not working?
+
+Try disabling your theme. Some themes e.g https://chrome.google.com/webstore/detail/developer-edition-dark/lglfmldlfmbbehalkgiglehhjblbfcjo are known to create a micro white flash
+
 ## Why is flash player not working?
 
 [download flash player](https://get.adobe.com/flashplayer/?no_redirect) and load it manually
