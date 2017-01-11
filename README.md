@@ -48,6 +48,8 @@ chrome --disable-black-bg
 Better alternative is to use a chrome extension that has access to the chrome:// pages and inject whatever stylesheet you want.
 Example: [https://github.com/hbt/chromedotfiles](https://github.com/hbt/chromedotfiles)
 
+Jonathan Timbaldi is working on turning all chrome pages dark [here](https://github.com/imatimba/darker-chromium)
+
 
 ## Windows Platform support
 
