@@ -19,6 +19,7 @@
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/ui/app_list/arc/arc_default_app_list.h"
 #include "components/arc/common/app.mojom.h"
@@ -33,10 +34,6 @@ class Profile;
 namespace arc {
 class ArcPackageSyncableService;
 }  // namespace arc
-
-namespace chromeos {
-class ArcKioskAppService;
-}  // namespace chromeos
 
 namespace content {
 class BrowserContext;
@@ -126,7 +123,8 @@ class ArcAppListPrefs
     // initial activity.
     virtual void OnTaskCreated(int32_t task_id,
                                const std::string& package_name,
-                               const std::string& activity) {}
+                               const std::string& activity,
+                               const std::string& intent) {}
     // Notifies that task has been destroyed.
     virtual void OnTaskDestroyed(int32_t task_id) {}
     // Notifies that task has been activated and moved to the front.
@@ -201,13 +199,13 @@ class ArcAppListPrefs
   // Sets last launched time for the requested app.
   void SetLastLaunchTime(const std::string& app_id, const base::Time& time);
 
-  // Requests to load an app icon for specific scale factor. If the app or Arc
+  // Requests to load an app icon for specific scale factor. If the app or ARC
   // bridge service is not ready, then defer this request until the app gets
   // available. Once new icon is installed notifies an observer
   // OnAppIconUpdated.
   void RequestIcon(const std::string& app_id, ui::ScaleFactor scale_factor);
 
-  // Sets notification enabled flag for given value. If the app or Arc bridge
+  // Sets notification enabled flag for given value. If the app or ARC bridge
   // service is not ready, then defer this request until the app gets
   // available. Once new value is set notifies an observer
   // OnNotificationsEnabledChanged.
@@ -227,7 +225,7 @@ class ArcAppListPrefs
   bool HasObserver(Observer* observer);
 
   // arc::ArcSessionManager::Observer:
-  void OnOptInEnabled(bool enabled) override;
+  void OnArcPlayStoreEnabledChanged(bool enabled) override;
 
   // ArcDefaultAppList::Delegate:
   void OnDefaultAppsReady() override;
@@ -247,6 +245,7 @@ class ArcAppListPrefs
       const std::string& package_name) const;
 
   void SetDefaltAppsReadyCallback(base::Closure callback);
+  void SimulateDefaultAppAvailabilityTimeoutForTesting();
 
  private:
   friend class ChromeLauncherControllerImplTest;
@@ -278,7 +277,8 @@ class ArcAppListPrefs
   void OnTaskCreated(int32_t task_id,
                      const std::string& package_name,
                      const std::string& activity,
-                     const base::Optional<std::string>& name) override;
+                     const base::Optional<std::string>& name,
+                     const base::Optional<std::string>& intent) override;
   void OnTaskDestroyed(int32_t task_id) override;
   void OnTaskSetActive(int32_t task_id) override;
   void OnNotificationsEnabledChanged(const std::string& package_name,
@@ -290,6 +290,10 @@ class ArcAppListPrefs
   void OnTaskOrientationLockRequested(
       int32_t task_id,
       const arc::mojom::OrientationLock orientation_lock) override;
+  void OnInstallationStarted(
+      const base::Optional<std::string>& package_name) override;
+  void OnInstallationFinished(
+      arc::mojom::InstallationResultPtr result) override;
 
   void StartPrefs();
 
@@ -325,7 +329,7 @@ class ArcAppListPrefs
   void RemoveAllApps();
   std::vector<std::string> GetAppIdsNoArcEnabledCheck() const;
   // Enumerates apps from preferences and notifies listeners about available
-  // apps while Arc is not started yet. All apps in this case have disabled
+  // apps while ARC is not started yet. All apps in this case have disabled
   // state.
   void NotifyRegisteredApps();
   base::Time GetInstallTime(const std::string& app_id) const;
@@ -351,6 +355,20 @@ class ArcAppListPrefs
   void MaybeShowPackageInAppLauncher(
       const arc::mojom::ArcPackageInfo& package_info);
 
+  // Returns true is specified package is new in the system, was not installed
+  // and it is not scheduled to install by sync.
+  bool IsUnknownPackage(const std::string& package_name) const;
+
+  // Detects that default apps either exist or installation session is started.
+  void DetectDefaultAppAvailability();
+
+  // Performs data clean up for removed package.
+  void HandlePackageRemoved(const std::string& package_name);
+
+  // Sets timeout to wait for default app installed or installation started if
+  // some default app is not available yet.
+  void MaybeSetDefaultAppLoadingTimeout();
+
   Profile* const profile_;
 
   // Owned by the BrowserContext.
@@ -367,6 +385,8 @@ class ArcAppListPrefs
   std::unordered_set<std::string> ready_apps_;
   // Contains set of ARC apps that are currently tracked.
   std::unordered_set<std::string> tracked_apps_;
+  // Contains number of ARC packages that are currently installing.
+  int installing_packages_count_ = 0;
   // Keeps deferred icon load requests. Each app may contain several requests
   // for different scale factor. Scale factor is defined by specific bit
   // position.
@@ -375,18 +395,25 @@ class ArcAppListPrefs
   bool is_initialized_ = false;
   // True if apps were restored.
   bool apps_restored_ = false;
-  // True is Arc package list has been refreshed once.
+  // True is ARC package list has been refreshed once.
   bool package_list_initial_refreshed_ = false;
+  // Play Store does not have publicly available observers for default app
+  // installations. This timeout is for validating default app availability.
+  // Default apps should be either already installed or their installations
+  // should be started soon after initial app list refresh.
+  base::OneShotTimer detect_default_app_availability_timeout_;
+  // Set of currently installing default apps_.
+  std::unordered_set<std::string> default_apps_installations_;
 
   arc::ArcPackageSyncableService* sync_service_ = nullptr;
-  // Track ARC kiosk app and auto-launches it if needed.
-  chromeos::ArcKioskAppService* kiosk_app_service_ = nullptr;
 
   mojo::Binding<arc::mojom::AppHost> binding_;
 
   bool default_apps_ready_ = false;
   ArcDefaultAppList default_apps_;
   base::Closure default_apps_ready_callback_;
+  int last_shown_batch_installation_revision_ = -1;
+  int current_batch_installation_revision_ = 0;
 
   base::WeakPtrFactory<ArcAppListPrefs> weak_ptr_factory_;
 

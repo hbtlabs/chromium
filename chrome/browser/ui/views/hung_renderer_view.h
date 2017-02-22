@@ -6,7 +6,6 @@
 #define CHROME_BROWSER_UI_VIEWS_HUNG_RENDERER_VIEW_H_
 
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -23,7 +22,6 @@ class WebContents;
 
 namespace views {
 class Label;
-class LabelButton;
 }
 
 // Provides functionality to display information about a hung renderer.
@@ -86,8 +84,7 @@ class HungPagesTableModel : public ui::TableModel, public views::TableGrouper {
   // notifies the observer and delegate.
   void TabDestroyed(WebContentsObserverImpl* tab);
 
-  typedef ScopedVector<WebContentsObserverImpl> TabObservers;
-  TabObservers tab_observers_;
+  std::vector<std::unique_ptr<WebContentsObserverImpl>> tab_observers_;
 
   ui::TableModelObserver* observer_;
   Delegate* delegate_;
@@ -98,7 +95,6 @@ class HungPagesTableModel : public ui::TableModel, public views::TableGrouper {
 // This class displays a dialog which contains information about a hung
 // renderer process.
 class HungRendererDialogView : public views::DialogDelegateView,
-                               public views::ButtonListener,
                                public HungPagesTableModel::Delegate {
  public:
   // Factory function for creating an instance of the HungRendererDialogView
@@ -127,12 +123,10 @@ class HungRendererDialogView : public views::DialogDelegateView,
   void WindowClosing() override;
   int GetDialogButtons() const override;
   base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
-  views::View* CreateExtraView() override;
   bool Cancel() override;
+  bool Accept() override;
+  bool Close() override;
   bool ShouldUseCustomFrame() const override;
-
-  // views::ButtonListener overrides:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
   // HungPagesTableModel::Delegate overrides:
   void TabDestroyed() override;
@@ -162,17 +156,12 @@ class HungRendererDialogView : public views::DialogDelegateView,
   // Controls within the dialog box.
   views::TableView* hung_pages_table_;
 
-  // The extra button inserted into the ClientView to kill the errant process.
-  views::LabelButton* kill_button_;
-
   // The model that provides the contents of the table that shows a list of
   // pages affected by the hang.
   std::unique_ptr<HungPagesTableModel> hung_pages_table_model_;
 
   // Whether or not we've created controls for ourself.
   bool initialized_;
-
-  bool kill_button_clicked_;
 
   // A copy of the unresponsive state which ShowForWebContents was
   // called with.

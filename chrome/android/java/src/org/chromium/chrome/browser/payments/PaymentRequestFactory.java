@@ -4,13 +4,10 @@
 
 package org.chromium.chrome.browser.payments;
 
-import android.app.Activity;
-
 import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.mojo.system.MojoException;
-import org.chromium.payments.mojom.ActivePaymentQueryResult;
+import org.chromium.payments.mojom.CanMakePaymentQueryResult;
 import org.chromium.payments.mojom.PaymentDetails;
 import org.chromium.payments.mojom.PaymentErrorReason;
 import org.chromium.payments.mojom.PaymentMethodData;
@@ -18,7 +15,6 @@ import org.chromium.payments.mojom.PaymentOptions;
 import org.chromium.payments.mojom.PaymentRequest;
 import org.chromium.payments.mojom.PaymentRequestClient;
 import org.chromium.services.service_manager.InterfaceFactory;
-import org.chromium.ui.base.WindowAndroid;
 
 /**
  * Creates instances of PaymentRequest.
@@ -57,9 +53,9 @@ public class PaymentRequestFactory implements InterfaceFactory<PaymentRequest> {
         public void complete(int result) {}
 
         @Override
-        public void canMakeActivePayment() {
+        public void canMakePayment() {
             if (mClient != null) {
-                mClient.onCanMakeActivePayment(ActivePaymentQueryResult.CANNOT_MAKE_ACTIVE_PAYMENT);
+                mClient.onCanMakePayment(CanMakePaymentQueryResult.CANNOT_MAKE_PAYMENT);
             }
         }
 
@@ -87,15 +83,6 @@ public class PaymentRequestFactory implements InterfaceFactory<PaymentRequest> {
 
         if (mWebContents == null) return new InvalidPaymentRequest();
 
-        ContentViewCore contentViewCore = ContentViewCore.fromWebContents(mWebContents);
-        if (contentViewCore == null) return new InvalidPaymentRequest();
-
-        WindowAndroid window = contentViewCore.getWindowAndroid();
-        if (window == null) return new InvalidPaymentRequest();
-
-        Activity context = window.getActivity().get();
-        if (context == null) return new InvalidPaymentRequest();
-
-        return new PaymentRequestImpl(context, mWebContents);
+        return new PaymentRequestImpl(mWebContents);
     }
 }

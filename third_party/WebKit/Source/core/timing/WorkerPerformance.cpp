@@ -33,21 +33,22 @@
 #include "core/timing/MemoryInfo.h"
 #include "core/workers/DedicatedWorkerGlobalScope.h"
 #include "core/workers/WorkerGlobalScope.h"
+#include "public/platform/Platform.h"
+#include "public/platform/WebScheduler.h"
+#include "public/platform/WebThread.h"
 #include "wtf/CurrentTime.h"
 
 namespace blink {
 
 WorkerPerformance::WorkerPerformance(WorkerGlobalScope* context)
-    : PerformanceBase(context->timeOrigin()),
-      ContextLifecycleObserver(context) {}
-
-ExecutionContext* WorkerPerformance::getExecutionContext() const {
-  return ContextLifecycleObserver::getExecutionContext();
-}
+    : PerformanceBase(
+          context->timeOrigin(),
+          Platform::current()->currentThread()->scheduler()->timerTaskRunner()),
+      m_executionContext(context) {}
 
 DEFINE_TRACE(WorkerPerformance) {
+  visitor->trace(m_executionContext);
   PerformanceBase::trace(visitor);
-  ContextLifecycleObserver::trace(visitor);
 }
 
 MemoryInfo* WorkerPerformance::memory() {

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_SPDY_HPACK_ENTRY_H_
-#define NET_SPDY_HPACK_ENTRY_H_
+#ifndef NET_SPDY_HPACK_HPACK_ENTRY_H_
+#define NET_SPDY_HPACK_HPACK_ENTRY_H_
 
 #include <stddef.h>
 
@@ -76,6 +76,9 @@ class NET_EXPORT_PRIVATE HpackEntry {
   int64_t time_added() const { return time_added_; }
   void set_time_added(int64_t now) { time_added_ = now; }
 
+  // Returns the estimate of dynamically allocated memory in bytes.
+  size_t EstimateMemoryUsage() const;
+
  private:
   enum EntryType {
     LOOKUP,
@@ -104,4 +107,4 @@ class NET_EXPORT_PRIVATE HpackEntry {
 
 }  // namespace net
 
-#endif  // NET_SPDY_HPACK_ENTRY_H_
+#endif  // NET_SPDY_HPACK_HPACK_ENTRY_H_

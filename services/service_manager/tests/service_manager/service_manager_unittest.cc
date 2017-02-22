@@ -20,6 +20,7 @@
 #include "base/process/process_handle.h"
 #include "base/run_loop.h"
 #include "mojo/edk/embedder/embedder.h"
+#include "mojo/edk/embedder/pending_process_connection.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
 #include "mojo/edk/embedder/scoped_platform_handle.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
@@ -105,8 +106,8 @@ class ServiceManagerTest : public test::ServiceTest,
 
   void AddListenerAndWaitForApplications() {
     mojom::ServiceManagerPtr service_manager;
-    connector()->ConnectToInterface(service_manager::mojom::kServiceName,
-                                    &service_manager);
+    connector()->BindInterface(service_manager::mojom::kServiceName,
+                               &service_manager);
 
     service_manager->AddListener(binding_.CreateInterfacePtrAndBind());
 
@@ -176,19 +177,18 @@ class ServiceManagerTest : public test::ServiceTest,
     platform_channel_pair.PrepareToPassClientHandleToChildProcess(
         &child_command_line, &handle_passing_info);
 
-    std::string child_token = mojo::edk::GenerateRandomToken();
+    mojo::edk::PendingProcessConnection process_connection;
     service_manager::mojom::ServicePtr client =
-        service_manager::PassServiceRequestOnCommandLine(&child_command_line,
-                                                         child_token);
+        service_manager::PassServiceRequestOnCommandLine(&process_connection,
+                                                         &child_command_line);
     service_manager::mojom::PIDReceiverPtr receiver;
 
     service_manager::Identity target("service_manager_unittest_target",
                                      service_manager::mojom::kInheritUserID);
-    service_manager::Connector::ConnectParams params(target);
-    params.set_client_process_connection(std::move(client),
-                                         GetProxy(&receiver));
+    connector()->StartService(target, std::move(client),
+                              MakeRequest(&receiver));
     std::unique_ptr<service_manager::Connection> connection =
-        connector()->Connect(&params);
+        connector()->Connect(target);
     connection->AddConnectionCompletedClosure(
         base::Bind(&ServiceManagerTest::OnConnectionCompleted,
                    base::Unretained(this)));
@@ -202,9 +202,8 @@ class ServiceManagerTest : public test::ServiceTest,
     target_ = base::LaunchProcess(child_command_line, options);
     DCHECK(target_.IsValid());
     receiver->SetPID(target_.Pid());
-    mojo::edk::ChildProcessLaunched(target_.Handle(),
-                                    platform_channel_pair.PassServerHandle(),
-                                    child_token);
+    process_connection.Connect(target_.Handle(),
+                               platform_channel_pair.PassServerHandle());
   }
 
   void KillTarget() {

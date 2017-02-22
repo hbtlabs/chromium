@@ -11,6 +11,7 @@
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_platform_file.h"
 #include "remoting/host/chromoting_param_traits.h"
+#include "remoting/host/desktop_environment_options.h"
 #include "remoting/host/screen_resolution.h"
 #include "remoting/protocol/errors.h"
 #include "remoting/protocol/transport.h"
@@ -205,7 +206,7 @@ IPC_MESSAGE_CONTROL1(ChromotingDesktopNetworkMsg_AudioPacket,
 IPC_MESSAGE_CONTROL3(ChromotingNetworkDesktopMsg_StartSessionAgent,
                      std::string /* authenticated_jid */,
                      remoting::ScreenResolution /* resolution */,
-                     bool /* virtual_terminal */)
+                     remoting::DesktopEnvironmentOptions /* options */)
 
 IPC_MESSAGE_CONTROL0(ChromotingNetworkDesktopMsg_CaptureFrame)
 
@@ -251,7 +252,13 @@ IPC_MESSAGE_CONTROL1(ChromotingRemoteSecurityKeyToNetworkMsg_Request,
 // Chromoting messages sent from the network process to the remote_security_key
 // process.
 
-// The array of bytes representing a security key response from the remote
-// client.  This message is sent over the per-client IPC channel.
+// The array of bytes representing the security key response from the client.
 IPC_MESSAGE_CONTROL1(ChromotingNetworkToRemoteSecurityKeyMsg_Response,
                      std::string /* response bytes */)
+
+// Indicates the channel used for security key message passing is ready for use.
+IPC_MESSAGE_CONTROL0(ChromotingNetworkToRemoteSecurityKeyMsg_ConnectionReady)
+
+// Error indicating the request originated from outside the remoted session.
+// The IPC channel will be disconnected after this message has been sent.
+IPC_MESSAGE_CONTROL0(ChromotingNetworkToRemoteSecurityKeyMsg_InvalidSession)

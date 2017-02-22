@@ -81,7 +81,20 @@ void AutofillCounter::OnWebDataServiceRequestDone(
     WebDataServiceBase::Handle handle,
     std::unique_ptr<WDTypedResult> result) {
   DCHECK(thread_checker_.CalledOnValidThread());
+
   if (!result) {
+    // CancelAllRequests will cancel all queries that are active; the query that
+    // just failed is complete and cannot be canceled so zero it out.
+    if (handle == suggestions_query_) {
+      suggestions_query_ = 0;
+    } else if (handle == credit_cards_query_) {
+      credit_cards_query_ = 0;
+    } else if (handle == addresses_query_) {
+      addresses_query_ = 0;
+    } else {
+      NOTREACHED();
+    }
+
     CancelAllRequests();
     return;
   }
@@ -134,7 +147,7 @@ void AutofillCounter::OnWebDataServiceRequestDone(
   }
 
   // If we still have pending queries, do not report data yet.
-  if (HasPendingQuery())
+  if (suggestions_query_ || credit_cards_query_ || addresses_query_)
     return;
 
   std::unique_ptr<Result> reported_result(new AutofillResult(

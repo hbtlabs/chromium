@@ -66,12 +66,12 @@ class DeathAwareScriptWrappable
   }
 
   void addWrappedVectorDependency(DeathAwareScriptWrappable* dependency) {
-    m_wrappedVectorDependency.append(Wrapper(this, dependency));
+    m_wrappedVectorDependency.push_back(Wrapper(this, dependency));
   }
 
   void addWrappedHashMapDependency(DeathAwareScriptWrappable* key,
                                    DeathAwareScriptWrappable* value) {
-    m_wrappedHashMapDependency.add(Wrapper(this, key), Wrapper(this, value));
+    m_wrappedHashMapDependency.insert(Wrapper(this, key), Wrapper(this, value));
   }
 
  private:

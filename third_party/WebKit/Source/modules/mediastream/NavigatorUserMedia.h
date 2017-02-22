@@ -5,12 +5,12 @@
 #ifndef NavigatorUserMedia_h
 #define NavigatorUserMedia_h
 
+#include "core/frame/Navigator.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
 
-class ExecutionContext;
 class Navigator;
 class MediaDevices;
 
@@ -22,7 +22,7 @@ class NavigatorUserMedia final : public GarbageCollected<NavigatorUserMedia>,
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  explicit NavigatorUserMedia(ExecutionContext*);
+  explicit NavigatorUserMedia(Navigator&);
   MediaDevices* getMediaDevices();
   static const char* supplementName();
   static NavigatorUserMedia& from(Navigator&);

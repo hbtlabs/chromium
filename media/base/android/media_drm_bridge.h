@@ -17,17 +17,16 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/sequenced_task_runner_helpers.h"
 #include "media/base/android/media_drm_bridge_cdm_context.h"
 #include "media/base/cdm_promise.h"
 #include "media/base/cdm_promise_adapter.h"
+#include "media/base/content_decryption_module.h"
 #include "media/base/media_export.h"
-#include "media/base/media_keys.h"
 #include "media/base/player_tracker.h"
 #include "media/base/provision_fetcher.h"
 #include "media/cdm/player_tracker_impl.h"
 #include "url/gurl.h"
-
-class GURL;
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -43,7 +42,8 @@ namespace media {
 // called on the |task_runner_| except for the PlayerTracker methods and
 // SetMediaCryptoReadyCB(), which can be called on any thread.
 
-class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
+class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
+                                    public PlayerTracker {
  public:
   // TODO(ddorwin): These are specific to Widevine. http://crbug.com/459400
   enum SecurityLevel {
@@ -80,6 +80,8 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
       const std::string& key_system,
       const std::string& container_mime_type);
 
+  static bool IsPersistentLicenseTypeSupported(const std::string& key_system);
+
   // Returns the list of the platform-supported key system names that
   // are not handled by Chrome explicitly.
   static std::vector<std::string> GetPlatformKeySystemNames();
@@ -103,17 +105,17 @@ class MEDIA_EXPORT MediaDrmBridge : public MediaKeys, public PlayerTracker {
       SecurityLevel security_level,
       const CreateFetcherCB& create_fetcher_cb);
 
-  // MediaKeys implementation.
+  // ContentDecryptionModule implementation.
   void SetServerCertificate(
       const std::vector<uint8_t>& certificate,
       std::unique_ptr<media::SimpleCdmPromise> promise) override;
   void CreateSessionAndGenerateRequest(
-      SessionType session_type,
+      CdmSessionType session_type,
       media::EmeInitDataType init_data_type,
       const std::vector<uint8_t>& init_data,
       std::unique_ptr<media::NewSessionCdmPromise> promise) override;
   void LoadSession(
-      SessionType session_type,
+      CdmSessionType session_type,
       const std::string& session_id,
       std::unique_ptr<media::NewSessionCdmPromise> promise) override;
   void UpdateSession(const std::string& session_id,

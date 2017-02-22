@@ -5,11 +5,13 @@
 #include "ui/gfx/win/direct_write.h"
 
 #include "base/command_line.h"
+#include "base/debug/alias.h"
 #include "base/metrics/field_trial.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_comptr.h"
 #include "base/win/windows_version.h"
 #include "skia/ext/fontmgr_default_win.h"
+#include "third_party/skia/include/ports/SkFontMgr.h"
 #include "third_party/skia/include/ports/SkTypeface_win.h"
 #include "ui/gfx/platform_font_win.h"
 #include "ui/gfx/switches.h"
@@ -52,10 +54,11 @@ void MaybeInitializeDirectWrite() {
   // factory. The GetSystemFontCollection method in the IDWriteFactory
   // interface fails with E_INVALIDARG on certain Windows 7 gold versions
   // (6.1.7600.*). We should just use GDI in these cases.
-  SkFontMgr* direct_write_font_mgr = SkFontMgr_New_DirectWrite(factory.get());
+  sk_sp<SkFontMgr> direct_write_font_mgr =
+      SkFontMgr_New_DirectWrite(factory.get());
   if (!direct_write_font_mgr)
     return;
-  SetDefaultSkiaFactory(direct_write_font_mgr);
+  SetDefaultSkiaFactory(std::move(direct_write_font_mgr));
   gfx::PlatformFontWin::SetDirectWriteFactory(factory.get());
 }
 

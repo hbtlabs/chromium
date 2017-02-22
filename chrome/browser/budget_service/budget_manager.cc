@@ -9,30 +9,17 @@
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/engagement/site_engagement_score.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/pref_names.h"
-#include "components/pref_registry/pref_registry_syncable.h"
-#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/origin_util.h"
 #include "third_party/WebKit/public/platform/modules/budget_service/budget_service.mojom.h"
 #include "url/origin.h"
 
 using content::BrowserThread;
-
-namespace {
-
-// Previously, budget information was stored in the prefs. If there is any old
-// information still there, clear it.
-// TODO(harkness): Remove once Chrome 56 has branched.
-void ClearBudgetDataFromPrefs(Profile* profile) {
-  profile->GetPrefs()->ClearPref(prefs::kBackgroundBudgetMap);
-}
-
-}  // namespace
 
 BudgetManager::BudgetManager(Profile* profile)
     : profile_(profile),
@@ -43,16 +30,9 @@ BudgetManager::BudgetManager(Profile* profile)
                   base::SequencedWorkerPool::GetSequenceToken(),
                   base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN)),
       weak_ptr_factory_(this) {
-  ClearBudgetDataFromPrefs(profile);
 }
 
 BudgetManager::~BudgetManager() {}
-
-// static
-void BudgetManager::RegisterProfilePrefs(
-    user_prefs::PrefRegistrySyncable* registry) {
-  registry->RegisterDictionaryPref(prefs::kBackgroundBudgetMap);
-}
 
 // static
 double BudgetManager::GetCost(blink::mojom::BudgetOperationType type) {
@@ -71,10 +51,12 @@ void BudgetManager::GetBudget(const url::Origin& origin,
                               const GetBudgetCallback& callback) {
   if (origin.unique() || !content::IsOriginSecure(origin.GetURL())) {
     callback.Run(blink::mojom::BudgetServiceErrorType::NOT_SUPPORTED,
-                 mojo::Array<blink::mojom::BudgetStatePtr>());
+                 std::vector<blink::mojom::BudgetStatePtr>());
     return;
   }
-  db_.GetBudgetDetails(origin, callback);
+  db_.GetBudgetDetails(origin,
+                       base::Bind(&BudgetManager::DidGetBudget,
+                                  weak_ptr_factory_.GetWeakPtr(), callback));
 }
 
 void BudgetManager::Reserve(const url::Origin& origin,
@@ -122,6 +104,20 @@ void BudgetManager::Consume(const url::Origin& origin,
                              weak_ptr_factory_.GetWeakPtr(), callback));
 }
 
+void BudgetManager::DidGetBudget(
+    const GetBudgetCallback& callback,
+    const blink::mojom::BudgetServiceErrorType error,
+    std::vector<blink::mojom::BudgetStatePtr> budget) {
+  // If there was an error, just record a budget of 0, so the API query is still
+  // counted.
+  double budget_at = 0;
+  if (error == blink::mojom::BudgetServiceErrorType::NONE)
+    budget_at = budget[0]->budget_at;
+  UMA_HISTOGRAM_COUNTS_100("Blink.BudgetAPI.QueryBudget", budget_at);
+
+  callback.Run(error, std::move(budget));
+}
+
 void BudgetManager::DidConsume(const ConsumeCallback& callback,
                                blink::mojom::BudgetServiceErrorType error,
                                bool success) {
@@ -141,6 +137,8 @@ void BudgetManager::DidReserve(const url::Origin& origin,
   // If the call succeeded, write the new reservation into the map.
   if (success && error == blink::mojom::BudgetServiceErrorType::NONE)
     reservation_map_[origin]++;
+
+  UMA_HISTOGRAM_BOOLEAN("Blink.BudgetAPI.Reserve", success);
 
   callback.Run(error, success);
 }

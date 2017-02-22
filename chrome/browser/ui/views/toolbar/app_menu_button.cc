@@ -9,6 +9,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_otr_state.h"
@@ -16,14 +17,13 @@
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
 #include "chrome/browser/ui/views/extensions/browser_action_drag_data.h"
 #include "chrome/browser/ui/views/toolbar/app_menu.h"
+#include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/grit/theme_resources.h"
-#include "extensions/common/feature_switch.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/controls/menu/menu_listener.h"
@@ -37,8 +37,6 @@ AppMenuButton::AppMenuButton(ToolbarView* toolbar_view)
       severity_(AppMenuIconController::Severity::NONE),
       type_(AppMenuIconController::IconType::NONE),
       toolbar_view_(toolbar_view),
-      allow_extension_dragging_(
-          extensions::FeatureSwitch::extension_action_redesign()->IsEnabled()),
       margin_trailing_(0),
       weak_factory_(this) {
   SetInkDropMode(InkDropMode::ON);
@@ -108,10 +106,9 @@ void AppMenuButton::RemoveMenuListener(views::MenuListener* listener) {
 }
 
 gfx::Size AppMenuButton::GetPreferredSize() const {
-  gfx::Size size(image()->GetPreferredSize());
-  gfx::Insets insets(GetLayoutInsets(TOOLBAR_BUTTON));
-  size.Enlarge(insets.width(), insets.height());
-  return size;
+  gfx::Rect rect(image()->GetPreferredSize());
+  rect.Inset(gfx::Insets(-ToolbarButton::kInteriorPadding));
+  return rect.size();
 }
 
 void AppMenuButton::UpdateIcon() {
@@ -136,22 +133,22 @@ void AppMenuButton::UpdateIcon() {
       break;
   }
 
-  gfx::VectorIconId icon_id = gfx::VectorIconId::VECTOR_ICON_NONE;
+  const gfx::VectorIcon* icon_id = nullptr;
   switch (type_) {
     case AppMenuIconController::IconType::NONE:
-      icon_id = gfx::VectorIconId::BROWSER_TOOLS;
+      icon_id = &kBrowserToolsIcon;
       DCHECK_EQ(AppMenuIconController::Severity::NONE, severity_);
       break;
     case AppMenuIconController::IconType::UPGRADE_NOTIFICATION:
-      icon_id = gfx::VectorIconId::BROWSER_TOOLS_UPDATE;
+      icon_id = &kBrowserToolsUpdateIcon;
       break;
     case AppMenuIconController::IconType::GLOBAL_ERROR:
     case AppMenuIconController::IconType::INCOMPATIBILITY_WARNING:
-      icon_id = gfx::VectorIconId::BROWSER_TOOLS_ERROR;
+      icon_id = &kBrowserToolsErrorIcon;
       break;
   }
 
-  SetImage(views::Button::STATE_NORMAL, gfx::CreateVectorIcon(icon_id, color));
+  SetImage(views::Button::STATE_NORMAL, gfx::CreateVectorIcon(*icon_id, color));
 }
 
 void AppMenuButton::SetTrailingMargin(int margin) {
@@ -188,26 +185,19 @@ gfx::Rect AppMenuButton::GetThemePaintRect() const {
 bool AppMenuButton::GetDropFormats(
     int* formats,
     std::set<ui::Clipboard::FormatType>* format_types) {
-  return allow_extension_dragging_ ?
-      BrowserActionDragData::GetDropFormats(format_types) :
-      views::View::GetDropFormats(formats, format_types);
+  return BrowserActionDragData::GetDropFormats(format_types);
 }
 
 bool AppMenuButton::AreDropTypesRequired() {
-  return allow_extension_dragging_ ?
-      BrowserActionDragData::AreDropTypesRequired() :
-      views::View::AreDropTypesRequired();
+  return BrowserActionDragData::AreDropTypesRequired();
 }
 
 bool AppMenuButton::CanDrop(const ui::OSExchangeData& data) {
-  return allow_extension_dragging_ ?
-      BrowserActionDragData::CanDrop(data,
-                                     toolbar_view_->browser()->profile()) :
-      views::View::CanDrop(data);
+  return BrowserActionDragData::CanDrop(data,
+                                        toolbar_view_->browser()->profile());
 }
 
 void AppMenuButton::OnDragEntered(const ui::DropTargetEvent& event) {
-  DCHECK(allow_extension_dragging_);
   DCHECK(!weak_factory_.HasWeakPtrs());
   if (!g_open_app_immediately_for_testing) {
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
@@ -220,16 +210,13 @@ void AppMenuButton::OnDragEntered(const ui::DropTargetEvent& event) {
 }
 
 int AppMenuButton::OnDragUpdated(const ui::DropTargetEvent& event) {
-  DCHECK(allow_extension_dragging_);
   return ui::DragDropTypes::DRAG_MOVE;
 }
 
 void AppMenuButton::OnDragExited() {
-  DCHECK(allow_extension_dragging_);
   weak_factory_.InvalidateWeakPtrs();
 }
 
 int AppMenuButton::OnPerformDrop(const ui::DropTargetEvent& event) {
-  DCHECK(allow_extension_dragging_);
   return ui::DragDropTypes::DRAG_MOVE;
 }

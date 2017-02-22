@@ -11,10 +11,7 @@
 #include "ash/common/login_status.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "base/macros.h"
-
-namespace base {
-class OneShotTimer;
-}  // namespace base
+#include "base/timer/timer.h"
 
 namespace views {
 class View;
@@ -25,6 +22,10 @@ class SystemTray;
 class SystemTrayBubble;
 class TrayItemView;
 
+// Controller for an item in the system tray. Each item can create these views:
+// Tray view - The icon in the status area in the shelf.
+// Default view - The row in the top-level menu.
+// Detailed view - The submenu shown when the top-level menu row is clicked.
 class ASH_EXPORT SystemTrayItem {
  public:
   // The different types of SystemTrayItems.
@@ -87,6 +88,7 @@ class ASH_EXPORT SystemTrayItem {
 
   // Returns a notification view for the item. This view is displayed with
   // other notifications and should be the same size as default views.
+  // DEPRECATED. Use the message center instead.
   virtual views::View* CreateNotificationView(LoginStatus status);
 
   // These functions are called when the corresponding view item is about to be
@@ -149,9 +151,6 @@ class ASH_EXPORT SystemTrayItem {
   void set_restore_focus(bool restore_focus) { restore_focus_ = restore_focus; }
 
  private:
-  // Actually transitions to the detailed view.
-  void DoTransitionToDetailedView();
-
   // Accesses uma_type().
   friend class SystemTrayBubble;
 
@@ -162,7 +161,7 @@ class ASH_EXPORT SystemTrayItem {
   bool restore_focus_;
 
   // Used to delay the transition to the detailed view.
-  std::unique_ptr<base::OneShotTimer> transition_delay_timer_;
+  base::OneShotTimer transition_delay_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(SystemTrayItem);
 };

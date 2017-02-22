@@ -18,7 +18,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
-#include "media/base/android/sdk_media_codec_bridge.h"
+#include "media/base/android/media_codec_bridge_impl.h"
 #include "media/gpu/media_gpu_export.h"
 #include "media/video/video_encode_accelerator.h"
 
@@ -103,6 +103,9 @@ class MEDIA_GPU_EXPORT AndroidVideoEncodeAccelerator
   gfx::Size frame_size_;
 
   uint32_t last_set_bitrate_;  // In bps.
+
+  // True if there is encoder error.
+  bool error_occurred_;
 
   DISALLOW_COPY_AND_ASSIGN(AndroidVideoEncodeAccelerator);
 };

@@ -25,13 +25,24 @@ FakeLayerTreeHostImpl::FakeLayerTreeHostImpl(
     const LayerTreeSettings& settings,
     TaskRunnerProvider* task_runner_provider,
     TaskGraphRunner* task_graph_runner)
+    : FakeLayerTreeHostImpl(settings,
+                            task_runner_provider,
+                            task_graph_runner,
+                            nullptr) {}
+
+FakeLayerTreeHostImpl::FakeLayerTreeHostImpl(
+    const LayerTreeSettings& settings,
+    TaskRunnerProvider* task_runner_provider,
+    TaskGraphRunner* task_graph_runner,
+    scoped_refptr<base::SequencedTaskRunner> image_worker_task_runner)
     : LayerTreeHostImpl(settings,
                         &client_,
                         task_runner_provider,
                         &stats_instrumentation_,
                         task_graph_runner,
                         AnimationHost::CreateForTesting(ThreadInstance::IMPL),
-                        0),
+                        0,
+                        std::move(image_worker_task_runner)),
       notify_tile_state_changed_called_(false) {
   // Explicitly clear all debug settings.
   SetDebugState(LayerTreeDebugState());
@@ -40,7 +51,7 @@ FakeLayerTreeHostImpl::FakeLayerTreeHostImpl(
   // Start an impl frame so tests have a valid frame_time to work with.
   base::TimeTicks time_ticks = base::TimeTicks::FromInternalValue(1);
   WillBeginImplFrame(
-      CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, time_ticks));
+      CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, 0, 1, time_ticks));
 }
 
 FakeLayerTreeHostImpl::~FakeLayerTreeHostImpl() {

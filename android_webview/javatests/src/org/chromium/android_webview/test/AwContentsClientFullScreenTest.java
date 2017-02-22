@@ -4,7 +4,7 @@
 
 package org.chromium.android_webview.test;
 
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.MediumTest;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -309,12 +309,11 @@ public class AwContentsClientFullScreenTest extends AwTestBase {
         // still there.
         DOMUtils.clickNode(this, mContentViewCore, CUSTOM_FULLSCREEN_CONTROL_ID);
         mContentsClient.waitForCustomViewShown();
-        View customView = mContentsClient.getCustomView();
-        assertKeepScreenOnActive(customView, true);
+        assertKeepScreenOnActive(mTestContainerView, true);
 
         // Pause the video and the power save blocker is gone.
         DOMUtils.pauseMedia(getWebContentsOnUiThread(), VIDEO_ID);
-        assertWaitForKeepScreenOnActive(customView, false);
+        assertWaitForKeepScreenOnActive(mTestContainerView, false);
 
         // Exit fullscreen and the power save blocker is still gone.
         DOMUtils.exitFullscreen(getWebContentsOnUiThread());
@@ -340,7 +339,7 @@ public class AwContentsClientFullScreenTest extends AwTestBase {
         // still there.
         DOMUtils.exitFullscreen(getWebContentsOnUiThread());
         mContentsClient.waitForCustomViewHidden();
-        assertKeepScreenOnActive(mTestContainerView, true);
+        assertKeepScreenOnActive(customView, true);
     }
 
     private void tapPlayButton() throws Exception {
@@ -363,8 +362,7 @@ public class AwContentsClientFullScreenTest extends AwTestBase {
      * Asserts that the keep screen on property in the given {@code view} is active as
      * {@code expected}. It also verifies that it is only active when the video is playing.
      */
-    private void assertWaitForKeepScreenOnActive(final View view, final boolean expected)
-            throws InterruptedException {
+    private void assertWaitForKeepScreenOnActive(final View view, final boolean expected) {
         // We need to poll because it takes time to synchronize the state between the android
         // views and Javascript.
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
@@ -403,8 +401,8 @@ public class AwContentsClientFullScreenTest extends AwTestBase {
     }
 
     private boolean getKeepScreenOnOnUiThread(View view) {
-        // The power save blocker is added to a child anchor view,
-        // so we need to traverse the hierarchy.
+        // The power save blocker is added to the container view.
+        // Search the view hierarchy for it.
         if (view instanceof ViewGroup) {
             ViewGroup viewGroup = (ViewGroup) view;
             for (int i = 0; i < viewGroup.getChildCount(); i++) {
@@ -416,7 +414,7 @@ public class AwContentsClientFullScreenTest extends AwTestBase {
         return view.getKeepScreenOn();
     }
 
-    private void assertWaitForIsFullscreen() throws InterruptedException {
+    private void assertWaitForIsFullscreen() {
         // We need to poll because the Javascript state is updated asynchronously
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
@@ -431,7 +429,7 @@ public class AwContentsClientFullScreenTest extends AwTestBase {
         });
     }
 
-    private void assertWaitForIsEmbedded() throws InterruptedException {
+    private void assertWaitForIsEmbedded() {
         // We need to poll because the Javascript state is updated asynchronously
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override

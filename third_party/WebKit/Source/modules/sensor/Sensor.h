@@ -7,10 +7,11 @@
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptWrappable.h"
-#include "core/dom/ActiveDOMObject.h"
 #include "core/dom/ContextLifecycleObserver.h"
+#include "core/dom/DOMHighResTimeStamp.h"
+#include "core/dom/DOMTimeStamp.h"
+#include "core/dom/SuspendableObject.h"
 #include "core/frame/PlatformEventController.h"
-#include "core/page/PageVisibilityObserver.h"
 #include "modules/EventTargetModules.h"
 #include "modules/sensor/SensorOptions.h"
 #include "modules/sensor/SensorProxy.h"
@@ -19,25 +20,23 @@
 namespace blink {
 
 class ExceptionState;
-class ScriptState;
+class ExecutionContext;
 class SensorReading;
-class SensorPollingStrategy;
 
 class Sensor : public EventTargetWithInlineData,
-               public ActiveScriptWrappable,
+               public ActiveScriptWrappable<Sensor>,
                public ContextLifecycleObserver,
-               public PageVisibilityObserver,
                public SensorProxy::Observer {
   USING_GARBAGE_COLLECTED_MIXIN(Sensor);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  enum class SensorState { Idle, Activating, Active, Errored };
+  enum class SensorState { Unconnected, Activating, Activated, Idle, Errored };
 
   ~Sensor() override;
 
-  void start(ScriptState*, ExceptionState&);
-  void stop(ScriptState*, ExceptionState&);
+  void start();
+  void stop();
 
   // EventTarget overrides.
   const AtomicString& interfaceName() const override {
@@ -49,8 +48,7 @@ class Sensor : public EventTargetWithInlineData,
 
   // Getters
   String state() const;
-  // TODO(riju): crbug.com/614797 .
-  SensorReading* reading() const;
+  DOMHighResTimeStamp timestamp(ScriptState*, bool& isNull) const;
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(error);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(change);
@@ -62,12 +60,10 @@ class Sensor : public EventTargetWithInlineData,
   DECLARE_VIRTUAL_TRACE();
 
  protected:
-  Sensor(ScriptState*,
+  Sensor(ExecutionContext*,
          const SensorOptions&,
          ExceptionState&,
          device::mojom::blink::SensorType);
-  virtual std::unique_ptr<SensorReadingFactory>
-  createSensorReadingFactory() = 0;
 
   using SensorConfigurationPtr = device::mojom::blink::SensorConfigurationPtr;
   using SensorConfiguration = device::mojom::blink::SensorConfiguration;
@@ -76,16 +72,17 @@ class Sensor : public EventTargetWithInlineData,
   // concrete sensor implementations can override this method to handle other
   // parameters if needed.
   virtual SensorConfigurationPtr createSensorConfig();
+  double readingValue(int index, bool& isNull) const;
 
  private:
   void initSensorProxyIfNeeded();
 
   // ContextLifecycleObserver overrides.
-  void contextDestroyed() override;
+  void contextDestroyed(ExecutionContext*) override;
 
   // SensorController::Observer overrides.
   void onSensorInitialized() override;
-  void onSensorReadingChanged() override;
+  void onSensorReadingChanged(double timestamp) override;
   void onSensorError(ExceptionCode,
                      const String& sanitizedMessage,
                      const String& unsanitizedMessage) override;
@@ -93,34 +90,28 @@ class Sensor : public EventTargetWithInlineData,
   void onStartRequestCompleted(bool);
   void onStopRequestCompleted(bool);
 
-  // PageVisibilityObserver overrides.
-  void pageVisibilityChanged() override;
-
   void startListening();
   void stopListening();
-
-  // Makes sensor reading refresh its values from the shared buffer.
-  void pollForData();
 
   void updateState(SensorState newState);
   void reportError(ExceptionCode = UnknownError,
                    const String& sanitizedMessage = String(),
                    const String& unsanitizedMessage = String());
 
-  void updatePollingStatus();
-
   void notifySensorReadingChanged();
   void notifyOnActivate();
   void notifyError(DOMException* error);
+
+  bool canReturnReadings() const;
 
  private:
   SensorOptions m_sensorOptions;
   device::mojom::blink::SensorType m_type;
   SensorState m_state;
   Member<SensorProxy> m_sensorProxy;
-  std::unique_ptr<SensorPollingStrategy> m_polling;
   device::SensorReading m_storedData;
   SensorConfigurationPtr m_configuration;
+  double m_lastUpdateTimestamp;
 };
 
 }  // namespace blink

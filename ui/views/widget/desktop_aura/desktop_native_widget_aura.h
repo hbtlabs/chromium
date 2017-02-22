@@ -91,9 +91,14 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
 
   aura::Window* content_window() { return content_window_; }
 
+  Widget::InitParams::Type widget_type() const { return widget_type_; }
+
   // Ensures that the correct window is activated/deactivated based on whether
   // we are being activated/deactivated.
   void HandleActivationChanged(bool active);
+
+  // Overridden from internal::NativeWidgetPrivate:
+  gfx::NativeWindow GetNativeWindow() const override;
 
  protected:
   // Overridden from internal::NativeWidgetPrivate:
@@ -106,7 +111,6 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
   Widget* GetWidget() override;
   const Widget* GetWidget() const override;
   gfx::NativeView GetNativeView() const override;
-  gfx::NativeWindow GetNativeWindow() const override;
   Widget* GetTopLevelWidget() override;
   const ui::Compositor* GetCompositor() const override;
   const ui::Layer* GetLayer() const override;
@@ -177,8 +181,6 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
   void SetVisibilityAnimationDuration(const base::TimeDelta& duration) override;
   void SetVisibilityAnimationTransition(
       Widget::VisibilityTransition transition) override;
-  ui::NativeTheme* GetNativeTheme() const override;
-  void OnRootViewLayout() override;
   bool IsTranslucentWindowOpacitySupported() const override;
   void OnSizeConstraintsChanged() override;
   void RepostNativeEvent(gfx::NativeEvent native_event) override;
@@ -233,8 +235,8 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
   void OnHostCloseRequested(const aura::WindowTreeHost* host) override;
   void OnHostResized(const aura::WindowTreeHost* host) override;
   void OnHostWorkspaceChanged(const aura::WindowTreeHost* host) override;
-  void OnHostMoved(const aura::WindowTreeHost* host,
-                   const gfx::Point& new_origin) override;
+  void OnHostMovedInPixels(const aura::WindowTreeHost* host,
+                           const gfx::Point& new_origin_in_pixels) override;
 
  private:
   friend class RootWindowDestructionObserver;
@@ -256,11 +258,7 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
 
   std::unique_ptr<DesktopCaptureClient> capture_client_;
 
-  // Child of the root, contains |content_window_|.
-  aura::Window* content_window_container_;
-
-  // Child of |content_window_container_|. This is the return value from
-  // GetNativeView().
+  // This is the return value from GetNativeView().
   // WARNING: this may be NULL, in particular during shutdown it becomes NULL.
   aura::Window* content_window_;
 
@@ -286,6 +284,8 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
 
   std::unique_ptr<wm::WindowModalityController> window_modality_controller_;
 
+  bool restore_focus_on_activate_;
+
   gfx::NativeCursor cursor_;
   // We must manually reference count the number of users of |cursor_manager_|
   // because the cursors created by |cursor_manager_| are shared among the
@@ -305,6 +305,9 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
 
   // See class documentation for Widget in widget.h for a note about type.
   Widget::InitParams::Type widget_type_;
+
+  // See DesktopWindowTreeHost::ShouldUseDesktopNativeCursorManager().
+  bool use_desktop_native_cursor_manager_ = false;
 
   // The following factory is used for calls to close the NativeWidgetAura
   // instance.

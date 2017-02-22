@@ -35,16 +35,13 @@ class ExternalDataUseObserverBridge;
 }
 }
 
-namespace component_updater {
-class ComponentUpdateService;
-}
-
 namespace domain_reliability {
 class DomainReliabilityServiceFactory;
 }
 
 namespace extensions {
 class ChromeExtensionWebContentsObserver;
+class ChromeGuestViewManagerDelegate;
 class ChromeMetricsPrivateDelegate;
 class FileManagerPrivateIsUMAEnabledFunction;
 }
@@ -53,12 +50,16 @@ namespace options {
 class BrowserOptionsHandler;
 }
 
+namespace precache {
+void RegisterPrecacheSyntheticFieldTrial(base::Time);
+}
+
 namespace prerender {
 bool IsOmniboxEnabled(Profile* profile);
 }
 
 namespace safe_browsing {
-class DownloadSBClient;
+class DownloadUrlSBClient;
 class IncidentReportingService;
 class ReporterRunner;
 class SafeBrowsingService;
@@ -105,18 +106,20 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class DataReductionProxyChromeSettings;
   friend class domain_reliability::DomainReliabilityServiceFactory;
   friend class extensions::ChromeExtensionWebContentsObserver;
+  friend class extensions::ChromeGuestViewManagerDelegate;
   friend class extensions::ChromeMetricsPrivateDelegate;
   friend class extensions::FileManagerPrivateIsUMAEnabledFunction;
   friend void ChangeMetricsReportingStateWithReply(
       bool,
       const OnMetricsReportingCallbackType&);
   friend class options::BrowserOptionsHandler;
+  friend void precache::RegisterPrecacheSyntheticFieldTrial(base::Time);
   friend bool prerender::IsOmniboxEnabled(Profile* profile);
   friend class settings::MetricsReportingHandler;
   friend class speech::ChromeSpeechRecognitionManagerDelegate;
   friend class system_logs::ChromeInternalLogSource;
   friend class UmaSessionStats;
-  friend class safe_browsing::DownloadSBClient;
+  friend class safe_browsing::DownloadUrlSBClient;
   friend class safe_browsing::IncidentReportingService;
   friend class safe_browsing::ReporterRunner;
   friend class safe_browsing::SRTFetcher;

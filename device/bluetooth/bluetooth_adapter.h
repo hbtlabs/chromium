@@ -16,7 +16,6 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
@@ -36,7 +35,6 @@ class BluetoothRemoteGattDescriptor;
 class BluetoothRemoteGattService;
 class BluetoothSocket;
 class BluetoothUUID;
-struct BluetoothAdapterDeleter;
 enum class UMABluetoothDiscoverySessionOutcome;
 
 // BluetoothAdapter represents a local Bluetooth adapter which may be used to
@@ -502,12 +500,12 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
   friend class BluetoothDiscoverySession;
   friend class BluetoothTestBase;
 
-  typedef base::ScopedPtrHashMap<std::string, std::unique_ptr<BluetoothDevice>>
-      DevicesMap;
-  typedef std::pair<BluetoothDevice::PairingDelegate*, PairingDelegatePriority>
-      PairingDelegatePair;
-  typedef base::Callback<void(UMABluetoothDiscoverySessionOutcome)>
-      DiscoverySessionErrorCallback;
+  using DevicesMap =
+      std::unordered_map<std::string, std::unique_ptr<BluetoothDevice>>;
+  using PairingDelegatePair =
+      std::pair<BluetoothDevice::PairingDelegate*, PairingDelegatePriority>;
+  using DiscoverySessionErrorCallback =
+      base::Callback<void(UMABluetoothDiscoverySessionOutcome)>;
 
   BluetoothAdapter();
   virtual ~BluetoothAdapter();

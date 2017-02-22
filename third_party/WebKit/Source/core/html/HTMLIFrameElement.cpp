@@ -40,6 +40,7 @@ inline HTMLIFrameElement::HTMLIFrameElement(Document& document)
     : HTMLFrameElementBase(iframeTag, document),
       m_didLoadNonEmptyDocument(false),
       m_sandbox(HTMLIFrameElementSandbox::create(this)),
+      m_allow(HTMLIFrameElementAllow::create(this)),
       m_referrerPolicy(ReferrerPolicyDefault) {}
 
 DEFINE_NODE_FACTORY(HTMLIFrameElement)
@@ -47,6 +48,7 @@ DEFINE_NODE_FACTORY(HTMLIFrameElement)
 DEFINE_TRACE(HTMLIFrameElement) {
   visitor->trace(m_sandbox);
   visitor->trace(m_permissions);
+  visitor->trace(m_allow);
   HTMLFrameElementBase::trace(visitor);
   Supplementable<HTMLIFrameElement>::trace(visitor);
 }
@@ -61,6 +63,10 @@ DOMTokenList* HTMLIFrameElement::permissions() const {
   if (!const_cast<HTMLIFrameElement*>(this)->initializePermissionsAttribute())
     return nullptr;
   return m_permissions.get();
+}
+
+DOMTokenList* HTMLIFrameElement::allow() const {
+  return m_allow.get();
 }
 
 bool HTMLIFrameElement::isPresentationAttribute(
@@ -97,28 +103,49 @@ void HTMLIFrameElement::collectStyleForPresentationAttribute(
   }
 }
 
-void HTMLIFrameElement::parseAttribute(const QualifiedName& name,
-                                       const AtomicString& oldValue,
-                                       const AtomicString& value) {
+void HTMLIFrameElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  const QualifiedName& name = params.name;
+  const AtomicString& value = params.newValue;
   if (name == nameAttr) {
     if (isInDocumentTree() && document().isHTMLDocument()) {
       HTMLDocument& document = toHTMLDocument(this->document());
       document.removeExtraNamedItem(m_name);
       document.addExtraNamedItem(value);
     }
+    AtomicString oldName = m_name;
     m_name = value;
+    if (m_name != oldName)
+      frameOwnerPropertiesChanged();
   } else if (name == sandboxAttr) {
     m_sandbox->setValue(value);
     UseCounter::count(document(), UseCounter::SandboxViaIFrame);
   } else if (name == referrerpolicyAttr) {
     m_referrerPolicy = ReferrerPolicyDefault;
-    if (!value.isNull())
-      SecurityPolicy::referrerPolicyFromStringWithLegacyKeywords(
-          value, &m_referrerPolicy);
+    if (!value.isNull()) {
+      SecurityPolicy::referrerPolicyFromString(
+          value, SupportReferrerPolicyLegacyKeywords, &m_referrerPolicy);
+      UseCounter::count(document(),
+                        UseCounter::HTMLIFrameElementReferrerPolicyAttribute);
+    }
   } else if (name == allowfullscreenAttr) {
     bool oldAllowFullscreen = m_allowFullscreen;
     m_allowFullscreen = !value.isNull();
-    if (m_allowFullscreen != oldAllowFullscreen)
+    if (m_allowFullscreen != oldAllowFullscreen) {
+      // TODO(iclelland): Remove this use counter when the allowfullscreen
+      // attribute state is snapshotted on document creation. crbug.com/682282
+      if (m_allowFullscreen && contentFrame()) {
+        UseCounter::count(
+            document(),
+            UseCounter::
+                HTMLIFrameElementAllowfullscreenAttributeSetAfterContentLoad);
+      }
+      frameOwnerPropertiesChanged();
+    }
+  } else if (name == allowpaymentrequestAttr) {
+    bool oldAllowPaymentRequest = m_allowPaymentRequest;
+    m_allowPaymentRequest = !value.isNull();
+    if (m_allowPaymentRequest != oldAllowPaymentRequest)
       frameOwnerPropertiesChanged();
   } else if (name == permissionsAttr) {
     if (initializePermissionsAttribute())
@@ -137,11 +164,13 @@ void HTMLIFrameElement::parseAttribute(const QualifiedName& name,
     m_csp = value;
     if (m_csp != oldCSP)
       frameOwnerPropertiesChanged();
+  } else if (RuntimeEnabledFeatures::featurePolicyEnabled() &&
+             name == allowAttr) {
+    m_allow->setValue(value);
   } else {
     if (name == srcAttr)
-      logUpdateAttributeIfIsolatedWorldAndInDocument("iframe", srcAttr,
-                                                     oldValue, value);
-    HTMLFrameElementBase::parseAttribute(name, oldValue, value);
+      logUpdateAttributeIfIsolatedWorldAndInDocument("iframe", params);
+    HTMLFrameElementBase::parseAttribute(params);
   }
 }
 
@@ -198,6 +227,19 @@ void HTMLIFrameElement::sandboxValueWasSet() {
         OtherMessageSource, ErrorMessageLevel,
         "Error while parsing the 'sandbox' attribute: " + invalidTokens));
   setSynchronizedLazyAttribute(sandboxAttr, m_sandbox->value());
+}
+
+void HTMLIFrameElement::allowValueWasSet() {
+  String invalidTokens;
+  m_allowedFeatureNames = m_allow->parseAllowedFeatureNames(invalidTokens);
+  if (!invalidTokens.isNull()) {
+    document().addConsoleMessage(ConsoleMessage::create(
+        OtherMessageSource, ErrorMessageLevel,
+        "Error while parsing the 'allow' attribute: " + invalidTokens));
+  }
+  setSynchronizedLazyAttribute(allowAttr, m_allow->value());
+  // TODO(lunalu): Once allowedFeatureNames is passed to frame owner, call
+  // frameOwnerPropertiesChanged.
 }
 
 ReferrerPolicy HTMLIFrameElement::referrerPolicyAttribute() {

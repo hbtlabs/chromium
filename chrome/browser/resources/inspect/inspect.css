@@ -34,9 +34,13 @@ img {
 #infobar {
   background: rgb(255, 212, 0);
   height: 20px;
+  left: 0;
   line-height: 20px;
+  position: fixed;
+  right: 0;
   text-align: center;
   visibility: hidden;
+  z-index: 1;
 }
 
 #infobar.show {
@@ -143,8 +147,8 @@ img {
 }
 
 .port-icon.transient {
-  -webkit-transform: scale(1.2);
   background-color: orange;
+  transform: scale(1.2);
 }
 
 .port-number {
@@ -274,9 +278,9 @@ img {
 }
 
 .open > input:focus {
-  -webkit-transition: border-color 200ms;
   border-color: rgb(77, 144, 254);
   outline: none;
+  transition: border-color 200ms;
 }
 
 .open > button {
@@ -294,7 +298,11 @@ img {
 
 .settings-bar label {
   display: inline-block;
-  width: 30ex;
+  width: 35ex;
+}
+
+.node-frontend-action {
+  margin: 6px 4px;
 }
 
 dialog.config::backdrop {

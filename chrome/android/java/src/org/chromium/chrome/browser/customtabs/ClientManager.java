@@ -36,6 +36,13 @@ import java.util.concurrent.TimeUnit;
 /** Manages the clients' state for Custom Tabs. This class is threadsafe. */
 @SuppressFBWarnings("CHROMIUM_SYNCHRONIZED_METHOD")
 class ClientManager {
+    // Values for the "CustomTabs.MayLaunchUrlType" UMA histogram. Append-only.
+    @VisibleForTesting static final int NO_MAY_LAUNCH_URL = 0;
+    @VisibleForTesting static final int LOW_CONFIDENCE = 1;
+    @VisibleForTesting static final int HIGH_CONFIDENCE = 2;
+    @VisibleForTesting static final int BOTH = 3;  // LOW + HIGH.
+    private static final int MAY_LAUNCH_URL_TYPE_COUNT = 4;
+
     // Values for the "CustomTabs.PredictionStatus" UMA histogram. Append-only.
     @VisibleForTesting static final int NO_PREDICTION = 0;
     @VisibleForTesting static final int GOOD_PREDICTION = 1;
@@ -52,6 +59,63 @@ class ClientManager {
     /** To be called when a client gets disconnected. */
     public interface DisconnectCallback { public void run(CustomTabsSessionToken session); }
 
+    private static class KeepAliveServiceConnection implements ServiceConnection {
+        private final Context mContext;
+        private final Intent mServiceIntent;
+        private boolean mHasDied;
+        private boolean mIsBound;
+
+        public KeepAliveServiceConnection(Context context, Intent serviceIntent) {
+            mContext = context;
+            mServiceIntent = serviceIntent;
+        }
+
+        /**
+         * Connects to the service identified by |serviceIntent|. Does not reconnect if the service
+         * got disconnected at some point from the other end (remote process death).
+         */
+        public boolean connect() {
+            if (mIsBound) return true;
+            // If the remote process died at some point, it doesn't make sense to resurrect it.
+            if (mHasDied) return false;
+
+            boolean ok;
+            try {
+                ok = mContext.bindService(mServiceIntent, this, Context.BIND_AUTO_CREATE);
+            } catch (SecurityException e) {
+                return false;
+            }
+            mIsBound = ok;
+            return ok;
+        }
+
+        /**
+         * Disconnects from the remote process. Safe to call even if {@link connect()} returned
+         * false, or if the remote service died.
+         */
+        public void disconnect() {
+            if (mIsBound) {
+                mContext.unbindService(this);
+                mIsBound = false;
+            }
+        }
+
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {}
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            if (mIsBound) {
+                // The remote process has died. This typically happens if the system is low enough
+                // on memory to kill one of the last process on the "kill list". In this case, we
+                // shouldn't resurrect the process (which happens with BIND_AUTO_CREATE) because
+                // that could create a "restart/kill" loop.
+                mHasDied = true;
+                disconnect();
+            }
+        }
+    }
+
     /** Per-session values. */
     private static class SessionParams {
         public final int uid;
@@ -59,10 +123,12 @@ class ClientManager {
         public final String packageName;
         public final PostMessageHandler postMessageHandler;
         public boolean mIgnoreFragments;
+        public boolean lowConfidencePrediction;
+        public boolean highConfidencePrediction;
         private boolean mShouldHideDomain;
         private boolean mShouldPrerenderOnCellular;
         private boolean mShouldSendNavigationInfo;
-        private ServiceConnection mKeepAliveConnection;
+        private KeepAliveServiceConnection mKeepAliveConnection;
         private String mPredictedUrl;
         private long mLastMayLaunchUrlTimestamp;
 
@@ -81,17 +147,31 @@ class ClientManager {
             return packageList[0];
         }
 
-        public ServiceConnection getKeepAliveConnection() {
+        public KeepAliveServiceConnection getKeepAliveConnection() {
             return mKeepAliveConnection;
         }
 
-        public void setKeepAliveConnection(ServiceConnection serviceConnection) {
+        public void setKeepAliveConnection(KeepAliveServiceConnection serviceConnection) {
             mKeepAliveConnection = serviceConnection;
         }
 
-        public void setPredictionMetrics(String predictedUrl, long lastMayLaunchUrlTimestamp) {
+        public void setPredictionMetrics(
+                String predictedUrl, long lastMayLaunchUrlTimestamp, boolean lowConfidence) {
             mPredictedUrl = predictedUrl;
             mLastMayLaunchUrlTimestamp = lastMayLaunchUrlTimestamp;
+            highConfidencePrediction |= !TextUtils.isEmpty(predictedUrl);
+            lowConfidencePrediction |= lowConfidence;
+        }
+
+        /**
+         * Resets the prediction metrics. This clears the predicted URL, last prediction time,
+         * and whether a low and/or high confidence prediction has been done.
+         */
+        public void resetPredictionMetrics() {
+            mPredictedUrl = null;
+            mLastMayLaunchUrlTimestamp = 0;
+            highConfidencePrediction = false;
+            lowConfidencePrediction = false;
         }
 
         public String getPredictedUrl() {
@@ -113,7 +193,7 @@ class ClientManager {
     private final Context mContext;
     private final Map<CustomTabsSessionToken, SessionParams> mSessionParams = new HashMap<>();
     private final SparseBooleanArray mUidHasCalledWarmup = new SparseBooleanArray();
-    private boolean mWarmupHasBeenCalled = false;
+    private boolean mWarmupHasBeenCalled;
 
     public ClientManager(Context context) {
         mContext = context.getApplicationContext();
@@ -142,7 +222,7 @@ class ClientManager {
     public synchronized int postMessage(CustomTabsSessionToken session, String message) {
         SessionParams params = mSessionParams.get(session);
         if (params == null) return CustomTabsService.RESULT_FAILURE_MESSAGING_ERROR;
-        return params.postMessageHandler.postMessage(message);
+        return params.postMessageHandler.postMessageFromClientApp(message);
     }
 
     /**
@@ -155,16 +235,22 @@ class ClientManager {
 
     /** Updates the client behavior stats and returns whether speculation is allowed.
      *
+     * The first call to the "low priority" mode is not throttled. Subsequent ones are.
+     *
      * @param session Client session.
      * @param uid As returned by Binder.getCallingUid().
      * @param url Predicted URL.
+     * @param lowConfidence whether the request contains some "low confidence" URLs.
      * @return true if speculation is allowed.
      */
     public synchronized boolean updateStatsAndReturnWhetherAllowed(
-            CustomTabsSessionToken session, int uid, String url) {
+            CustomTabsSessionToken session, int uid, String url, boolean lowConfidence) {
         SessionParams params = mSessionParams.get(session);
         if (params == null || params.uid != uid) return false;
-        params.setPredictionMetrics(url, SystemClock.elapsedRealtime());
+        boolean firstLowConfidencePrediction =
+                TextUtils.isEmpty(url) && lowConfidence && !params.lowConfidencePrediction;
+        params.setPredictionMetrics(url, SystemClock.elapsedRealtime(), lowConfidence);
+        if (firstLowConfidencePrediction) return true;
         RequestThrottler throttler = RequestThrottler.getForUid(mContext, uid);
         return throttler.updateStatsAndReturnWhetherAllowed();
     }
@@ -186,6 +272,9 @@ class ClientManager {
         return result;
     }
 
+    /**
+     * @return the prediction outcome. NO_PREDICTION if mSessionParams.get(session) returns null.
+     */
     @VisibleForTesting
     synchronized int getPredictionOutcome(CustomTabsSessionToken session, String url) {
         SessionParams params = mSessionParams.get(session);
@@ -219,17 +308,34 @@ class ClientManager {
         }
         RecordHistogram.recordEnumeratedHistogram(
                 "CustomTabs.WarmupStateOnLaunch", getWarmupState(session), SESSION_WARMUP_COUNT);
-        if (params != null) params.setPredictionMetrics(null, 0);
+
+        if (params == null) return;
+
+        int value = (params.lowConfidencePrediction ? LOW_CONFIDENCE : 0)
+                + (params.highConfidencePrediction ? HIGH_CONFIDENCE : 0);
+        RecordHistogram.recordEnumeratedHistogram(
+                "CustomTabs.MayLaunchUrlType", value, MAY_LAUNCH_URL_TYPE_COUNT);
+        params.resetPredictionMetrics();
     }
 
     /**
-     * See {@link PostMessageHandler#setPostMessageOrigin(Uri)}.
+     * See {@link PostMessageHandler#bindSessionToPostMessageService(Context, String)}.
      */
-    public synchronized void setPostMessageOriginForSession(
+    public synchronized boolean bindToPostMessageServiceForSession(CustomTabsSessionToken session) {
+        SessionParams params = mSessionParams.get(session);
+        if (params == null) return false;
+        return params.postMessageHandler.bindSessionToPostMessageService(
+                mContext, params.packageName);
+    }
+
+    /**
+     * See {@link PostMessageHandler#initializeWithOrigin(Uri)}.
+     */
+    public synchronized void initializeWithPostMessageOriginForSession(
             CustomTabsSessionToken session, Uri origin) {
         SessionParams params = mSessionParams.get(session);
         if (params == null) return;
-        params.postMessageHandler.setPostMessageOrigin(origin);
+        params.postMessageHandler.initializeWithOrigin(origin);
     }
 
     /**
@@ -293,12 +399,13 @@ class ClientManager {
     }
 
     /**
-     * Sets whether navigation info should be recorded and shared for the session.
+     * Sets whether navigation info should be recorded and shared for the current navigation in this
+     * session.
      */
     public synchronized void setSendNavigationInfoForSession(
-            CustomTabsSessionToken session, boolean save) {
+            CustomTabsSessionToken session, boolean send) {
         SessionParams params = mSessionParams.get(session);
-        if (params != null) params.mShouldSendNavigationInfo = save;
+        if (params != null) params.mShouldSendNavigationInfo = send;
     }
 
     /**
@@ -352,28 +459,20 @@ class ClientManager {
         SessionParams params = mSessionParams.get(session);
         if (params == null) return false;
 
-        String packageName = intent.getComponent().getPackageName();
-        PackageManager pm = mContext.getApplicationContext().getPackageManager();
-        // Only binds to the application associated to this session.
-        if (!Arrays.asList(pm.getPackagesForUid(params.uid)).contains(packageName)) return false;
-        Intent serviceIntent = new Intent().setComponent(intent.getComponent());
-        // This ServiceConnection doesn't handle disconnects. This is on
-        // purpose, as it occurs when the remote process has died. Since the
-        // only use of this connection is to keep the application alive,
-        // re-connecting would just re-create the process, but the application
-        // state has been lost at that point, the callbacks invalidated, etc.
-        ServiceConnection connection = new ServiceConnection() {
-            @Override
-            public void onServiceConnected(ComponentName name, IBinder service) {}
-            @Override
-            public void onServiceDisconnected(ComponentName name) {}
-        };
-        boolean ok;
-        try {
-            ok = mContext.bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE);
-        } catch (SecurityException e) {
-            return false;
+        KeepAliveServiceConnection connection = params.getKeepAliveConnection();
+
+        if (connection == null) {
+            String packageName = intent.getComponent().getPackageName();
+            PackageManager pm = mContext.getApplicationContext().getPackageManager();
+            // Only binds to the application associated to this session.
+            if (!Arrays.asList(pm.getPackagesForUid(params.uid)).contains(packageName)) {
+                return false;
+            }
+            Intent serviceIntent = new Intent().setComponent(intent.getComponent());
+            connection = new KeepAliveServiceConnection(mContext, serviceIntent);
         }
+
+        boolean ok = connection.connect();
         if (ok) params.setKeepAliveConnection(connection);
         return ok;
     }
@@ -382,9 +481,8 @@ class ClientManager {
     public synchronized void dontKeepAliveForSession(CustomTabsSessionToken session) {
         SessionParams params = mSessionParams.get(session);
         if (params == null || params.getKeepAliveConnection() == null) return;
-        ServiceConnection connection = params.getKeepAliveConnection();
-        params.setKeepAliveConnection(null);
-        mContext.unbindService(connection);
+        KeepAliveServiceConnection connection = params.getKeepAliveConnection();
+        connection.disconnect();
     }
 
     /** See {@link RequestThrottler#isPrerenderingAllowed()} */
@@ -423,6 +521,9 @@ class ClientManager {
         SessionParams params = mSessionParams.get(session);
         if (params == null) return;
         mSessionParams.remove(session);
+        if (params.postMessageHandler != null) {
+            params.postMessageHandler.unbindFromContext(mContext);
+        }
         if (params.disconnectCallback != null) params.disconnectCallback.run(session);
         mUidHasCalledWarmup.delete(params.uid);
     }

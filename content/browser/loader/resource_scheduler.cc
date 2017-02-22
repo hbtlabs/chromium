@@ -16,8 +16,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/supports_user_data.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/common/resource_messages.h"
-#include "content/public/browser/resource_controller.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/resource_throttle.h"
 #include "net/base/host_port_pair.h"
@@ -51,6 +51,38 @@ const RequestAttributes kAttributeNone = 0x00;
 const RequestAttributes kAttributeInFlight = 0x01;
 const RequestAttributes kAttributeDelayable = 0x02;
 const RequestAttributes kAttributeLayoutBlocking = 0x04;
+
+// Reasons why pending requests may be started.  For logging only.
+enum class RequestStartTrigger {
+  NONE,
+  COMPLETION_PRE_BODY,
+  COMPLETION_POST_BODY,
+  BODY_REACHED,
+  CLIENT_KILL,
+  SPDY_PROXY_DETECTED,
+  REQUEST_REPRIORITIZED,
+};
+
+const char* RequestStartTriggerString(RequestStartTrigger trigger) {
+  switch (trigger) {
+    case RequestStartTrigger::NONE:
+      return "NONE";
+    case RequestStartTrigger::COMPLETION_PRE_BODY:
+      return "COMPLETION_PRE_BODY";
+    case RequestStartTrigger::COMPLETION_POST_BODY:
+      return "COMPLETION_POST_BODY";
+    case RequestStartTrigger::BODY_REACHED:
+      return "BODY_REACHED";
+    case RequestStartTrigger::CLIENT_KILL:
+      return "CLIENT_KILL";
+    case RequestStartTrigger::SPDY_PROXY_DETECTED:
+      return "SPDY_PROXY_DETECTED";
+    case RequestStartTrigger::REQUEST_REPRIORITIZED:
+      return "REQUEST_REPRIORITIZED";
+  }
+  NOTREACHED();
+  return "Unknown";
+}
 
 }  // namespace
 
@@ -218,7 +250,7 @@ class ResourceScheduler::ScheduledResourceRequest : public ResourceThrottle {
         return;
       }
       deferred_ = false;
-      controller()->Resume();
+      Resume();
     }
 
     ready_ = true;
@@ -322,7 +354,9 @@ class ResourceScheduler::Client {
         using_spdy_proxy_(false),
         in_flight_delayable_count_(0),
         total_layout_blocking_count_(0),
-        priority_requests_delayable_(priority_requests_delayable) {}
+        priority_requests_delayable_(priority_requests_delayable),
+        has_pending_start_task_(false),
+        weak_ptr_factory_(this) {}
 
   ~Client() {}
 
@@ -331,7 +365,7 @@ class ResourceScheduler::Client {
     SetRequestAttributes(request, DetermineRequestAttributes(request));
     if (ShouldStartRequest(request) == START_REQUEST) {
       // New requests can be started synchronously without issue.
-      StartRequest(request, START_SYNC);
+      StartRequest(request, START_SYNC, RequestStartTrigger::NONE);
     } else {
       pending_requests_.Insert(request);
     }
@@ -345,7 +379,9 @@ class ResourceScheduler::Client {
       EraseInFlightRequest(request);
 
       // Removing this request may have freed up another to load.
-      LoadAnyStartablePendingRequests();
+      ScheduleLoadAnyStartablePendingRequests(
+          has_html_body_ ? RequestStartTrigger::COMPLETION_POST_BODY
+                         : RequestStartTrigger::COMPLETION_PRE_BODY);
     }
   }
 
@@ -362,7 +398,7 @@ class ResourceScheduler::Client {
       pending_requests_.Erase(request);
       // Starting requests asynchronously ensures no side effects, and avoids
       // starting a bunch of requests that may be about to be deleted.
-      StartRequest(request, START_ASYNC);
+      StartRequest(request, START_ASYNC, RequestStartTrigger::CLIENT_KILL);
     }
     RequestSet unowned_requests;
     for (RequestSet::iterator it = in_flight_requests_.begin();
@@ -386,14 +422,18 @@ class ResourceScheduler::Client {
   }
 
   void OnWillInsertBody() {
+    // Can be called multiple times per RVH in the case of out-of-process
+    // iframes.
+    if (has_html_body_)
+      return;
     has_html_body_ = true;
-    LoadAnyStartablePendingRequests();
+    LoadAnyStartablePendingRequests(RequestStartTrigger::BODY_REACHED);
   }
 
   void OnReceivedSpdyProxiedHttpResponse() {
     if (!using_spdy_proxy_) {
       using_spdy_proxy_ = true;
-      LoadAnyStartablePendingRequests();
+      LoadAnyStartablePendingRequests(RequestStartTrigger::SPDY_PROXY_DETECTED);
     }
   }
 
@@ -414,7 +454,8 @@ class ResourceScheduler::Client {
 
     if (new_priority_params.priority > old_priority_params.priority) {
       // Check if this request is now able to load at its new priority.
-      LoadAnyStartablePendingRequests();
+      ScheduleLoadAnyStartablePendingRequests(
+          RequestStartTrigger::REQUEST_REPRIORITIZED);
     }
   }
 
@@ -560,7 +601,16 @@ class ResourceScheduler::Client {
   }
 
   void StartRequest(ScheduledResourceRequest* request,
-                    StartMode start_mode) {
+                    StartMode start_mode,
+                    RequestStartTrigger trigger) {
+    // Only log on requests that were blocked by the ResourceScheduler.
+    if (start_mode == START_ASYNC) {
+      DCHECK_NE(RequestStartTrigger::NONE, trigger);
+      request->url_request()->net_log().AddEvent(
+          net::NetLogEventType::RESOURCE_SCHEDULER_REQUEST_STARTED,
+          net::NetLog::StringCallback(
+              "trigger", RequestStartTriggerString(trigger)));
+    }
     InsertInFlightRequest(request);
     request->Start(start_mode);
   }
@@ -670,7 +720,25 @@ class ResourceScheduler::Client {
     return START_REQUEST;
   }
 
-  void LoadAnyStartablePendingRequests() {
+  // It is common for a burst of messages to come from the renderer which
+  // trigger starting pending requests. Naively, this would result in O(n*m)
+  // behavior for n pending requests and m <= n messages, as
+  // LoadAnyStartablePendingRequest is O(n) for n pending requests. To solve
+  // this, just post a task to the end of the queue to call the method,
+  // coalescing the m messages into a single call to
+  // LoadAnyStartablePendingRequests.
+  // TODO(csharrison): Reconsider this if IPC batching becomes an easy to use
+  // pattern.
+  void ScheduleLoadAnyStartablePendingRequests(RequestStartTrigger trigger) {
+    if (has_pending_start_task_)
+      return;
+    has_pending_start_task_ = true;
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&Client::LoadAnyStartablePendingRequests,
+                              weak_ptr_factory_.GetWeakPtr(), trigger));
+  }
+
+  void LoadAnyStartablePendingRequests(RequestStartTrigger trigger) {
     // We iterate through all the pending requests, starting with the highest
     // priority one. For each entry, one of three things can happen:
     // 1) We start the request, remove it from the list, and keep checking.
@@ -679,6 +747,7 @@ class ResourceScheduler::Client {
     //     the previous request still in the list.
     // 3) We do not start the request, same as above, but StartRequest() tells
     //     us there's no point in checking any further requests.
+    has_pending_start_task_ = false;
     RequestQueue::NetQueue::iterator request_iter =
         pending_requests_.GetNextHighestIterator();
 
@@ -688,7 +757,7 @@ class ResourceScheduler::Client {
 
       if (query_result == START_REQUEST) {
         pending_requests_.Erase(request);
-        StartRequest(request, START_ASYNC);
+        StartRequest(request, START_ASYNC, trigger);
 
         // StartRequest can modify the pending list, so we (re)start evaluation
         // from the currently highest priority request. Avoid copying a singular
@@ -722,6 +791,10 @@ class ResourceScheduler::Client {
   // True if requests to servers that support priorities (e.g., H2/QUIC) can
   // be delayed.
   bool priority_requests_delayable_;
+
+  bool has_pending_start_task_;
+
+  base::WeakPtrFactory<ResourceScheduler::Client> weak_ptr_factory_;
 };
 
 ResourceScheduler::ResourceScheduler()

@@ -16,11 +16,13 @@
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/test/scoped_command_line.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_browsertest.h"
 #include "chrome/browser/loader/chrome_navigation_data.h"
@@ -96,12 +98,12 @@ class TestDispatcherHostDelegate : public ChromeResourceDispatcherHostDelegate {
   ~TestDispatcherHostDelegate() override {}
 
   // ResourceDispatcherHostDelegate implementation:
-  void RequestBeginning(
-      net::URLRequest* request,
-      content::ResourceContext* resource_context,
-      content::AppCacheService* appcache_service,
-      ResourceType resource_type,
-      ScopedVector<content::ResourceThrottle>* throttles) override {
+  void RequestBeginning(net::URLRequest* request,
+                        content::ResourceContext* resource_context,
+                        content::AppCacheService* appcache_service,
+                        ResourceType resource_type,
+                        std::vector<std::unique_ptr<content::ResourceThrottle>>*
+                            throttles) override {
     ChromeResourceDispatcherHostDelegate::RequestBeginning(
         request,
         resource_context,
@@ -138,8 +140,9 @@ class TestDispatcherHostDelegate : public ChromeResourceDispatcherHostDelegate {
   void AppendStandardResourceThrottles(
       net::URLRequest* request,
       content::ResourceContext* resource_context,
-      content::ResourceType resource_type,
-      ScopedVector<content::ResourceThrottle>* throttles) override {
+      ResourceType resource_type,
+      std::vector<std::unique_ptr<content::ResourceThrottle>>* throttles)
+      override {
     ++times_stardard_throttles_added_for_url_[request->url()];
     ChromeResourceDispatcherHostDelegate::AppendStandardResourceThrottles(
         request, resource_context, resource_type, throttles);
@@ -442,12 +445,12 @@ class HeaderTestDispatcherHostDelegate
       : watch_url_(watch_url) {}
   ~HeaderTestDispatcherHostDelegate() override {}
 
-  void RequestBeginning(
-      net::URLRequest* request,
-      content::ResourceContext* resource_context,
-      content::AppCacheService* appcache_service,
-      ResourceType resource_type,
-      ScopedVector<content::ResourceThrottle>* throttles) override {
+  void RequestBeginning(net::URLRequest* request,
+                        content::ResourceContext* resource_context,
+                        content::AppCacheService* appcache_service,
+                        ResourceType resource_type,
+                        std::vector<std::unique_ptr<content::ResourceThrottle>>*
+                            throttles) override {
     ChromeResourceDispatcherHostDelegate::RequestBeginning(
         request, resource_context, appcache_service, resource_type, throttles);
     if (request->url() == watch_url_) {

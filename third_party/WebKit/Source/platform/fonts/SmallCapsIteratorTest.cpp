@@ -26,11 +26,11 @@ struct ExpectedRun {
 class SmallCapsIteratorTest : public testing::Test {
  protected:
   void CheckRuns(const Vector<TestRun>& runs) {
-    String text(emptyString16Bit());
+    String text(emptyString16Bit);
     Vector<ExpectedRun> expect;
     for (auto& run : runs) {
       text.append(String::fromUTF8(run.text.c_str()));
-      expect.append(ExpectedRun(text.length(), run.code));
+      expect.push_back(ExpectedRun(text.length(), run.code));
     }
     SmallCapsIterator smallCapsIterator(text.characters16(), text.length());
     VerifyRuns(&smallCapsIterator, expect);
@@ -62,7 +62,7 @@ class SmallCapsIteratorTest : public testing::Test {
   CheckRuns(runs);
 
 TEST_F(SmallCapsIteratorTest, Empty) {
-  String empty(emptyString16Bit());
+  String empty(emptyString16Bit);
   SmallCapsIterator smallCapsIterator(empty.characters16(), empty.length());
   unsigned limit = 0;
   SmallCapsIterator::SmallCapsBehavior smallCapsBehavior =

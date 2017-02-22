@@ -8,26 +8,28 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
+#include "base/unguessable_token.h"
 #include "components/exo/surface_delegate.h"
 #include "components/exo/surface_observer.h"
 #include "components/exo/wm_helper.h"
+#include "ui/base/cursor/cursor.h"
 #include "ui/events/event_handler.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/native_widget_types.h"
+
+namespace cc {
+class CopyOutputResult;
+}
 
 namespace ui {
 class Event;
 class MouseEvent;
-class MouseWheelEvent;
-}
-
-namespace views {
-class Widget;
 }
 
 namespace exo {
 class PointerDelegate;
-class PointerStylusDelegate;
 class Surface;
 
 // This class implements a client pointer that represents one or more input
@@ -47,8 +49,8 @@ class Pointer : public ui::EventHandler,
   // pointer location, in surface local coordinates.
   void SetCursor(Surface* surface, const gfx::Point& hotspot);
 
-  // Set delegate for stylus events.
-  void SetStylusDelegate(PointerStylusDelegate* delegate);
+  // Returns the current cursor for the pointer.
+  gfx::NativeCursor GetCursor();
 
   // Overridden from ui::EventHandler:
   void OnMouseEvent(ui::MouseEvent* event) override;
@@ -65,23 +67,24 @@ class Pointer : public ui::EventHandler,
   void OnSurfaceDestroying(Surface* surface) override;
 
  private:
-  // Creates the |widget_| for pointer.
-  void CreatePointerWidget();
-
-  // Updates the scale of the cursor with the latest state.
-  void UpdateCursorScale();
-
   // Returns the effective target for |event|.
   Surface* GetEffectiveTargetForEvent(ui::Event* event) const;
 
+  // Recompute cursor scale and update cursor if scale changed.
+  void UpdateCursorScale();
+
+  // Asynchronously update the cursor by capturing a snapshot of |surface_|.
+  void CaptureCursor();
+
+  // Called when cursor snapshot has been captured.
+  void OnCursorCaptured(const gfx::Point& hotspot,
+                        std::unique_ptr<cc::CopyOutputResult> result);
+
+  // Update cursor to reflect the current value of |cursor_|.
+  void UpdateCursor();
+
   // The delegate instance that all events are dispatched to.
   PointerDelegate* const delegate_;
-
-  // The delegate instance that all stylus related events are dispatched to.
-  PointerStylusDelegate* stylus_delegate_ = nullptr;
-
-  // The widget for the pointer cursor.
-  std::unique_ptr<views::Widget> widget_;
 
   // The current pointer surface.
   Surface* surface_ = nullptr;
@@ -98,17 +101,14 @@ class Pointer : public ui::EventHandler,
   // The position of the pointer surface relative to the pointer location.
   gfx::Point hotspot_;
 
-  // The current pointer type.
-  ui::EventPointerType pointer_type_;
+  // The current cursor.
+  ui::Cursor cursor_;
 
-  // The current pointer tilt.
-  gfx::Vector2dF tilt_;
+  // Source used for cursor capture copy output requests.
+  const base::UnguessableToken cursor_capture_source_id_;
 
-  // The current pointer force.
-  float force_;
-
-  // True if the pointer is controlled via direct input.
-  bool is_direct_input_ = false;
+  // Weak pointer factory used for cursor capture callbacks.
+  base::WeakPtrFactory<Pointer> cursor_capture_weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(Pointer);
 };

@@ -188,7 +188,13 @@ class NotificationsApiTest : public ExtensionApiTest {
 
 }  // namespace
 
-IN_PROC_BROWSER_TEST_F(NotificationsApiTest, TestBasicUsage) {
+// http://crbug.com/691913
+#if defined(OS_LINUX) && !defined(NDEBUG)
+#define MAYBE_TestBasicUsage DISABLED_TestBasicUsage
+#else
+#define MAYBE_TestBasicUsage TestBasicUsage
+#endif
+IN_PROC_BROWSER_TEST_F(NotificationsApiTest, MAYBE_TestBasicUsage) {
   ASSERT_TRUE(RunExtensionTest("notifications/api/basic_usage")) << message_;
 }
 
@@ -278,7 +284,7 @@ IN_PROC_BROWSER_TEST_F(NotificationsApiTest, TestGetPermissionLevel) {
     std::unique_ptr<base::Value> result(utils::RunFunctionAndReturnSingleResult(
         notification_function.get(), "[]", browser(), utils::NONE));
 
-    EXPECT_EQ(base::Value::TYPE_STRING, result->GetType());
+    EXPECT_EQ(base::Value::Type::STRING, result->GetType());
     std::string permission_level;
     EXPECT_TRUE(result->GetAsString(&permission_level));
     EXPECT_EQ("granted", permission_level);
@@ -303,7 +309,7 @@ IN_PROC_BROWSER_TEST_F(NotificationsApiTest, TestGetPermissionLevel) {
     std::unique_ptr<base::Value> result(utils::RunFunctionAndReturnSingleResult(
         notification_function.get(), "[]", browser(), utils::NONE));
 
-    EXPECT_EQ(base::Value::TYPE_STRING, result->GetType());
+    EXPECT_EQ(base::Value::Type::STRING, result->GetType());
     std::string permission_level;
     EXPECT_TRUE(result->GetAsString(&permission_level));
     EXPECT_EQ("denied", permission_level);

@@ -22,7 +22,7 @@ struct WebRect;
 }
 
 namespace cc {
-class SurfaceId;
+class SurfaceInfo;
 struct SurfaceSequence;
 }
 
@@ -77,10 +77,9 @@ class CONTENT_EXPORT RenderFrameProxy
   // for example, after a cross-process navigation or after the addition of a
   // new frame local to some other process. |routing_id| will be the ID of the
   // newly created RenderFrameProxy. |render_view_routing_id| identifies the
-  // RenderView to be associated with this frame.  |opener_routing_id|, if
-  // valid, is the routing ID of the new frame's opener.  |parent_routing_id|
-  // is the routing ID of the RenderFrameProxy to which the new frame is
-  // parented.
+  // RenderView to be associated with this frame.  |opener|, if supplied, is the
+  // new frame's opener.  |parent_routing_id| is the routing ID of the
+  // RenderFrameProxy to which the new frame is parented.
   //
   // |parent_routing_id| always identifies a RenderFrameProxy (never a
   // RenderFrame) because a new child of a local frame should always start out
@@ -88,7 +87,7 @@ class CONTENT_EXPORT RenderFrameProxy
   static RenderFrameProxy* CreateFrameProxy(
       int routing_id,
       int render_view_routing_id,
-      int opener_routing_id,
+      blink::WebFrame* opener,
       int parent_routing_id,
       const FrameReplicationState& replicated_state);
 
@@ -119,6 +118,12 @@ class CONTENT_EXPORT RenderFrameProxy
   RenderViewImpl* render_view() { return render_view_; }
   blink::WebRemoteFrame* web_frame() { return web_frame_; }
 
+  void set_provisional_frame_routing_id(int routing_id) {
+    provisional_frame_routing_id_ = routing_id;
+  }
+
+  int provisional_frame_routing_id() { return provisional_frame_routing_id_; }
+
   // Returns the widget used for the local frame root.
   RenderWidget* render_widget() { return render_widget_; }
 
@@ -132,8 +137,9 @@ class CONTENT_EXPORT RenderFrameProxy
                 bool should_replace_current_entry) override;
   void forwardInputEvent(const blink::WebInputEvent* event) override;
   void frameRectsChanged(const blink::WebRect& frame_rect) override;
+  void updateRemoteViewportIntersection(
+      const blink::WebRect& viewportIntersection) override;
   void visibilityChanged(bool visible) override;
-  void setHasReceivedUserGesture() override;
   void didChangeOpener(blink::WebFrame* opener) override;
   void advanceFocus(blink::WebFocusType type,
                     blink::WebLocalFrame* source) override;
@@ -143,7 +149,7 @@ class CONTENT_EXPORT RenderFrameProxy
   void OnDidStartLoading();
 
  private:
-  RenderFrameProxy(int routing_id, int frame_routing_id);
+  RenderFrameProxy(int routing_id);
 
   void Init(blink::WebRemoteFrame* frame,
             RenderViewImpl* render_view,
@@ -156,9 +162,7 @@ class CONTENT_EXPORT RenderFrameProxy
   void OnDeleteProxy();
   void OnChildFrameProcessGone();
   void OnCompositorFrameSwapped(const IPC::Message& message);
-  void OnSetChildFrameSurface(const cc::SurfaceId& surface_id,
-                              const gfx::Size& frame_size,
-                              float scale_factor,
+  void OnSetChildFrameSurface(const cc::SurfaceInfo& surface_info,
                               const cc::SurfaceSequence& sequence);
   void OnUpdateOpener(int opener_routing_id);
   void OnDidStopLoading();
@@ -174,13 +178,14 @@ class CONTENT_EXPORT RenderFrameProxy
   void OnSetPageFocus(bool is_focused);
   void OnSetFocusedFrame();
   void OnWillEnterFullscreen();
+  void OnSetHasReceivedUserGesture();
 
   // The routing ID by which this RenderFrameProxy is known.
   const int routing_id_;
 
-  // The routing ID of the local RenderFrame (if any) which this
-  // RenderFrameProxy is meant to replace in the frame tree.
-  const int frame_routing_id_;
+  // The routing ID of the provisional RenderFrame (if any) that is meant to
+  // replace this RenderFrameProxy in the frame tree.
+  int provisional_frame_routing_id_;
 
   // Stores the WebRemoteFrame we are associated with.
   blink::WebRemoteFrame* web_frame_;

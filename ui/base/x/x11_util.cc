@@ -28,7 +28,7 @@
 #include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -288,7 +288,9 @@ void UnrefCustomXCursor(::Cursor cursor) {
 
 XcursorImage* SkBitmapToXcursorImage(const SkBitmap* cursor_image,
                                      const gfx::Point& hotspot) {
-  DCHECK(cursor_image->colorType() == kN32_SkColorType);
+  // TODO(crbug.com/596782): It is possible for cursor_image to be zeroed out
+  // at this point, which leads to benign debug errors. Once this is fixed, we
+  // should  DCHECK_EQ(cursor_image->colorType(), kN32_SkColorType).
   gfx::Point hotspot_point = hotspot;
   SkBitmap scaled;
 

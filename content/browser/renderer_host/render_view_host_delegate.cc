@@ -13,8 +13,9 @@ RenderViewHostDelegateView* RenderViewHostDelegate::GetDelegateView() {
   return NULL;
 }
 
-bool RenderViewHostDelegate::OnMessageReceived(RenderViewHost* render_view_host,
-                                               const IPC::Message& message) {
+bool RenderViewHostDelegate::OnMessageReceived(
+    RenderViewHostImpl* render_view_host,
+    const IPC::Message& message) {
   return false;
 }
 
@@ -57,6 +58,10 @@ bool RenderViewHostDelegate::IsJavaScriptDialogShowing() const {
 }
 
 bool RenderViewHostDelegate::HideDownloadUI() const {
+  return false;
+}
+
+bool RenderViewHostDelegate::HasPersistentVideo() const {
   return false;
 }
 

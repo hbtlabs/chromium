@@ -7,6 +7,8 @@
 #include <Sensors.h>
 
 #include "base/callback.h"
+#include "base/memory/ptr_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/win/iunknown_impl.h"
 #include "device/generic_sensor/generic_sensor_consts.h"
@@ -107,23 +109,23 @@ std::unique_ptr<ReaderInitParams> CreateGyroscopeReaderInitParams() {
     double y = 0.0;
     double z = 0.0;
     if (!GetReadingValueForProperty(
-            SENSOR_DATA_TYPE_ANGULAR_ACCELERATION_X_DEGREES_PER_SECOND_SQUARED,
-            report, &x) ||
+            SENSOR_DATA_TYPE_ANGULAR_VELOCITY_X_DEGREES_PER_SECOND, report,
+            &x) ||
         !GetReadingValueForProperty(
-            SENSOR_DATA_TYPE_ANGULAR_ACCELERATION_Y_DEGREES_PER_SECOND_SQUARED,
-            report, &y) ||
+            SENSOR_DATA_TYPE_ANGULAR_VELOCITY_Y_DEGREES_PER_SECOND, report,
+            &y) ||
         !GetReadingValueForProperty(
-            SENSOR_DATA_TYPE_ANGULAR_ACCELERATION_Z_DEGREES_PER_SECOND_SQUARED,
-            report, &z)) {
+            SENSOR_DATA_TYPE_ANGULAR_VELOCITY_Z_DEGREES_PER_SECOND, report,
+            &z)) {
       return E_FAIL;
     }
 
     // Windows uses coordinate system where Z axis points down from device
     // screen, therefore, using right hand notation, we have to reverse
-    // sign for each axis. Values are converted from deg/s^2 to rad/s^2.
-    reading.values[0] = -x * kRadiansInDegreesPerSecond;
-    reading.values[1] = -y * kRadiansInDegreesPerSecond;
-    reading.values[2] = -z * kRadiansInDegreesPerSecond;
+    // sign for each axis. Values are converted from deg to rad.
+    reading.values[0] = -x * kRadiansInDegrees;
+    reading.values[1] = -y * kRadiansInDegrees;
+    reading.values[2] = -z * kRadiansInDegrees;
     return S_OK;
   });
   return params;
@@ -344,7 +346,8 @@ PlatformSensorReaderWin::PlatformSensorReaderWin(
       sensor_active_(false),
       client_(nullptr),
       sensor_(sensor),
-      event_listener_(new EventListener(this)) {
+      event_listener_(new EventListener(this)),
+      weak_factory_(this) {
   DCHECK(init_params_);
   DCHECK(!init_params_->reader_func.is_null());
   DCHECK(sensor_);
@@ -375,22 +378,22 @@ bool PlatformSensorReaderWin::StartSensor(
   if (!SetReportingInterval(configuration))
     return false;
 
-  // Set event listener.
   if (!sensor_active_) {
-    base::win::ScopedComPtr<ISensorEvents> sensor_events;
-    HRESULT hr = event_listener_->QueryInterface(__uuidof(ISensorEvents),
-                                                 sensor_events.ReceiveVoid());
-
-    if (FAILED(hr) || !sensor_events)
-      return false;
-
-    if (FAILED(sensor_->SetEventSink(sensor_events.get())))
-      return false;
-
+    task_runner_->PostTask(
+        FROM_HERE, base::Bind(&PlatformSensorReaderWin::ListenSensorEvent,
+                              weak_factory_.GetWeakPtr()));
     sensor_active_ = true;
   }
 
   return true;
+}
+
+void PlatformSensorReaderWin::ListenSensorEvent() {
+  // Set event listener.
+  if (FAILED(sensor_->SetEventSink(event_listener_.get()))) {
+    SensorError();
+    StopSensor();
+  }
 }
 
 bool PlatformSensorReaderWin::SetReportingInterval(

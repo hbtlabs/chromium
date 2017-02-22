@@ -14,6 +14,8 @@ NFCHWStatus.ENABLED = 1;
 NFCHWStatus.NOT_SUPPORTED = NFCHWStatus.ENABLED + 1;
 NFCHWStatus.DISABLED = NFCHWStatus.NOT_SUPPORTED + 1;
 
+function noop() {}
+
 function assertRejectsWithError(promise, name) {
   return promise.then(() => {
     assert_unreached('expected promise to reject with ' + name);
@@ -45,6 +47,10 @@ function createNFCPushOptions(target, timeout, ignoreRead) {
   return { target, timeout, ignoreRead };
 }
 
+function createNFCWatchOptions(url, recordType, mediaType, mode) {
+  return { url, recordType, mediaType, mode};
+}
+
 function createTextRecord(text) {
   return createRecord('text', 'text/plain', text);
 }
@@ -64,9 +70,8 @@ function createUrlRecord(url) {
 function nfc_mocks(mojo) {
   return define('NFC mocks', [
     'mojo/public/js/bindings',
-    'mojo/public/js/connection',
     'device/nfc/nfc.mojom',
-  ], (bindings, connection, nfc) => {
+  ], (bindings, nfc) => {
 
     function toMojoNFCRecordType(type) {
       switch (type) {
@@ -94,6 +99,31 @@ function nfc_mocks(mojo) {
       }
 
       return nfc.NFCPushTarget.ANY;
+    }
+
+    function toMojoNFCWatchMode(mode) {
+      if (mode === 'web-nfc-only')
+        return nfc.NFCWatchMode.WEBNFC_ONLY;
+      return nfc.NFCWatchMode.ANY;
+    }
+
+    // Converts between NFCMessage https://w3c.github.io/web-nfc/#dom-nfcmessage
+    // and mojo::NFCMessage structure, so that nfc.watch function can be tested.
+    function toMojoNFCMessage(message) {
+      let nfcMessage = new nfc.NFCMessage();
+      nfcMessage.url = message.url;
+      nfcMessage.data = [];
+      for (let record of message.data)
+        nfcMessage.data.push(toMojoNFCRecord(record));
+      return nfcMessage;
+    }
+
+    function toMojoNFCRecord(record) {
+      let nfcRecord = new nfc.NFCRecord();
+      nfcRecord.record_type = toMojoNFCRecordType(record.recordType);
+      nfcRecord.media_type = record.mediaType;
+      nfcRecord.data = toByteArray(record.data);
+      return nfcRecord;
     }
 
     function toByteArray(data) {
@@ -133,6 +163,32 @@ function nfc_mocks(mojo) {
         compareNFCRecords(provided.data[i], receivedMessage.data[i]);
     }
 
+    // Used to compare two WebNFC messages, one that is provided to mock NFC
+    // service through triggerWatchCallback and another that is received by
+    // callback that is provided to navigator.nfc.watch function.
+    function assertWebNFCMessagesEqual(a, b) {
+      assert_equals(a.url, b.url);
+      assert_equals(a.data.length, b.data.length);
+      for(let i in a.data) {
+        let recordA = a.data[i];
+        let recordB = b.data[i];
+        assert_equals(recordA.recordType, recordB.recordType);
+        assert_equals(recordA.mediaType, recordB.mediaType);
+
+        if (recordA.data instanceof ArrayBuffer) {
+          assert_array_equals(new Uint8Array(recordA.data),
+              new Uint8Array(recordB.data));
+        } else if (typeof recordA.data === 'object') {
+          assert_object_equals(recordA.data, recordB.data);
+        }
+
+        if (typeof recordA.data === 'number'
+            || typeof recordA.data === 'string') {
+          assert_true(recordA.data == recordB.data);
+        }
+      }
+    }
+
     // Compares NFCRecords that were provided / received by the mock service.
     function compareNFCRecords(providedRecord, receivedRecord) {
       assert_equals(toMojoNFCRecordType(providedRecord.recordType),
@@ -170,6 +226,31 @@ function nfc_mocks(mojo) {
         assert_equals(received.target, nfc.NFCPushTarget.ANY);
     }
 
+    // Compares NFCWatchOptions structures that were provided to API and
+    // received by the mock mojo service.
+    function assertNFCWatchOptionsEqual(provided, received) {
+      if (provided.url !== undefined)
+        assert_equals(provided.url, received.url);
+      else
+        assert_equals(received.url, '');
+
+      if (provided.mediaType !== undefined)
+        assert_equals(provided.mediaType, received.media_type);
+      else
+        assert_equals(received.media_type, '');
+
+      if (provided.mode !== undefined)
+        assert_equals(toMojoNFCWatchMode(provided.mode), received.mode);
+      else
+        assert_equals(received.mode, nfc.NFCWatchMode.WEBNFC_ONLY);
+
+      if (provided.recordType !== undefined) {
+        assert_equals(!+received.record_filter, true);
+        assert_equals(toMojoNFCRecordType(provided.recordType),
+            received.record_filter.record_type);
+      }
+    }
+
     function createNFCError(type) {
       return { error: type ?
           new nfc.NFCError({ error_type: type }) : null };
@@ -177,15 +258,20 @@ function nfc_mocks(mojo) {
 
     class MockNFC {
       constructor() {
+        this.bindingSet = new bindings.BindingSet(nfc.NFC);
+
         this.hw_status_ = NFCHWStatus.ENABLED;
         this.pushed_message_ = null;
         this.push_options_ = null;
         this.pending_promise_func_ = null;
         this.push_timeout_id_ = null;
         this.push_completed_ = true;
+        this.client_ = null;
+        this.watch_id_ = 0;
+        this.watchers_ = [];
       }
 
-      // NFC.stubClass delegate functions
+      // NFC delegate functions
       push(message, options) {
         let error = this.isReady();
         if (error)
@@ -217,11 +303,40 @@ function nfc_mocks(mojo) {
         return Promise.resolve(createNFCError(null));
       }
 
-      // Mock utility functions
-      bindToPipe(pipe) {
-        this.stub_ = connection.bindHandleToStub(
-            pipe, nfc.NFC);
-        bindings.StubBindings(this.stub_).delegate = this;
+      setClient(client) {
+        this.client_ = client;
+      }
+
+      watch(options) {
+        let error = this.isReady();
+        if (error) {
+          error.id = 0;
+          return Promise.resolve(error);
+        }
+
+        let retVal = createNFCError(null);
+        retVal.id = ++this.watch_id_;
+        this.watchers_.push({id: this.watch_id_, options: options});
+        return Promise.resolve(retVal);
+      }
+
+      cancelWatch(id) {
+        let index = this.watchers_.findIndex(value => value.id === id);
+        if (index === -1) {
+          return Promise.resolve(createNFCError(nfc.NFCErrorType.NOT_FOUND));
+        }
+
+        this.watchers_.splice(index, 1);
+        return Promise.resolve(createNFCError(null));
+      }
+
+      cancelAllWatches() {
+        if (this.watchers_.length === 0) {
+          return Promise.resolve(createNFCError(nfc.NFCErrorType.NOT_FOUND));
+        }
+
+        this.watchers_.splice(0, this.watchers_.length);
+        return Promise.resolve(createNFCError(null));
       }
 
       isReady() {
@@ -244,6 +359,11 @@ function nfc_mocks(mojo) {
         return this.push_options_;
       }
 
+      watchOptions() {
+        assert_not_equals(this.watchers_.length, 0);
+        return this.watchers_[this.watchers_.length - 1].options;
+      }
+
       setPendingPushCompleted(result) {
         this.push_completed_ = result;
       }
@@ -251,6 +371,8 @@ function nfc_mocks(mojo) {
       reset() {
         this.hw_status_ = NFCHWStatus.ENABLED;
         this.push_completed_ = true;
+        this.watch_id_ = 0;
+        this.watchers_ = [];
         this.cancelPendingPushOperation();
       }
 
@@ -267,19 +389,34 @@ function nfc_mocks(mojo) {
         this.push_options_ = null;
         this.pending_promise_func_ = null;
       }
+
+      triggerWatchCallback(id, message) {
+        assert_true(this.client_ !== null);
+        if (this.watchers_.length > 0) {
+          this.client_.onWatch([id], toMojoNFCMessage(message));
+        }
+      }
     }
 
     let mockNFC = new MockNFC;
     mojo.frameInterfaces.addInterfaceOverrideForTesting(
         nfc.NFC.name,
-        pipe => {
-          mockNFC.bindToPipe(pipe);
+        handle => {
+          mockNFC.bindingSet.addBinding(mockNFC, handle);
         });
 
     return Promise.resolve({
+      // Interface instance bound to main frame.
       mockNFC: mockNFC,
+      // Constructor for mock NFC class.
+      MockNFC: MockNFC,
+      // Loaded mojom interface.
+      NFC: nfc.NFC,
+      // Helper functions for comparing WebNFC structures.
       assertNFCMessagesEqual: assertNFCMessagesEqual,
       assertNFCPushOptionsEqual: assertNFCPushOptionsEqual,
+      assertWebNFCMessagesEqual: assertWebNFCMessagesEqual,
+      assertNFCWatchOptionsEqual: assertNFCWatchOptionsEqual,
     });
   });
 }

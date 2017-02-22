@@ -15,12 +15,7 @@
 #include "headless/public/headless_devtools_target.h"
 #include "headless/public/headless_web_contents.h"
 
-namespace aura {
-class Window;
-}
-
 namespace content {
-class BrowserContext;
 class DevToolsAgentHost;
 class WebContents;
 }
@@ -30,7 +25,6 @@ class Size;
 }
 
 namespace headless {
-class HeadlessDevToolsHostImpl;
 class HeadlessBrowserImpl;
 class WebContentsObserverAdapter;
 
@@ -44,8 +38,7 @@ class HeadlessWebContentsImpl : public HeadlessWebContents,
   static HeadlessWebContentsImpl* From(HeadlessWebContents* web_contents);
 
   static std::unique_ptr<HeadlessWebContentsImpl> Create(
-      HeadlessWebContents::Builder* builder,
-      aura::Window* parent_window);
+      HeadlessWebContents::Builder* builder);
 
   // Takes ownership of |web_contents|.
   static std::unique_ptr<HeadlessWebContentsImpl> CreateFromWebContents(
@@ -58,8 +51,10 @@ class HeadlessWebContentsImpl : public HeadlessWebContents,
   HeadlessDevToolsTarget* GetDevToolsTarget() override;
 
   // HeadlessDevToolsTarget implementation:
-  void AttachClient(HeadlessDevToolsClient* client) override;
+  bool AttachClient(HeadlessDevToolsClient* client) override;
+  void ForceAttachClient(HeadlessDevToolsClient* client) override;
   void DetachClient(HeadlessDevToolsClient* client) override;
+  bool IsAttached() override;
 
   // RenderProcessHostObserver implementation:
   void RenderProcessExited(content::RenderProcessHost* host,
@@ -85,8 +80,7 @@ class HeadlessWebContentsImpl : public HeadlessWebContents,
   HeadlessWebContentsImpl(content::WebContents* web_contents,
                           HeadlessBrowserContextImpl* browser_context);
 
-  void InitializeScreen(aura::Window* parent_window,
-                        const gfx::Size& initial_size);
+  void InitializeScreen(const gfx::Size& initial_size);
 
   using MojoService = HeadlessWebContents::Builder::MojoService;
 

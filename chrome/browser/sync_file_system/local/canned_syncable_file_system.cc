@@ -242,7 +242,8 @@ void CannedSyncableFileSystem::SetUp(QuotaMode quota_mode) {
   if (quota_mode == QUOTA_ENABLED) {
     quota_manager_ = new QuotaManager(
         false /* is_incognito */, data_dir_.GetPath(), io_task_runner_.get(),
-        base::ThreadTaskRunnerHandle::Get().get(), storage_policy.get());
+        base::ThreadTaskRunnerHandle::Get().get(), storage_policy.get(),
+        storage::GetQuotaSettingsFunc());
   }
 
   std::vector<std::string> additional_allowed_schemes;
@@ -252,7 +253,7 @@ void CannedSyncableFileSystem::SetUp(QuotaMode quota_mode) {
       additional_allowed_schemes,
       env_override_);
 
-  ScopedVector<storage::FileSystemBackend> additional_backends;
+  std::vector<std::unique_ptr<storage::FileSystemBackend>> additional_backends;
   additional_backends.push_back(SyncFileSystemBackend::CreateForTesting());
 
   file_system_context_ = new FileSystemContext(

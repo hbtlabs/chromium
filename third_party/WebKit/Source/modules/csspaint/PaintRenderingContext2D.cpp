@@ -5,6 +5,7 @@
 #include "modules/csspaint/PaintRenderingContext2D.h"
 
 #include "platform/graphics/ImageBuffer.h"
+#include "platform/graphics/paint/PaintCanvas.h"
 #include <memory>
 
 namespace blink {
@@ -47,11 +48,15 @@ bool PaintRenderingContext2D::parseColorOrCurrentColor(
   return ::blink::parseColorOrCurrentColor(color, colorString, nullptr);
 }
 
-SkCanvas* PaintRenderingContext2D::drawingCanvas() const {
+ColorBehavior PaintRenderingContext2D::drawImageColorBehavior() const {
+  return ColorBehavior::transformToGlobalTarget();
+}
+
+PaintCanvas* PaintRenderingContext2D::drawingCanvas() const {
   return m_imageBuffer->canvas();
 }
 
-SkCanvas* PaintRenderingContext2D::existingDrawingCanvas() const {
+PaintCanvas* PaintRenderingContext2D::existingDrawingCanvas() const {
   ASSERT(m_imageBuffer);
   return m_imageBuffer->canvas();
 }
@@ -68,7 +73,7 @@ void PaintRenderingContext2D::didDraw(const SkIRect& dirtyRect) {
 
 void PaintRenderingContext2D::validateStateStack() const {
 #if DCHECK_IS_ON()
-  if (SkCanvas* skCanvas = existingDrawingCanvas()) {
+  if (PaintCanvas* skCanvas = existingDrawingCanvas()) {
     DCHECK_EQ(static_cast<size_t>(skCanvas->getSaveCount()),
               m_stateStack.size() + 1);
   }

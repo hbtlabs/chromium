@@ -107,6 +107,7 @@
 #include "content/public/common/url_utils.h"
 #include "extensions/features/features.h"
 #include "net/base/escape.h"
+#include "ppapi/features/features.h"
 #include "printing/features/features.h"
 #include "third_party/WebKit/public/public_features.h"
 #include "third_party/WebKit/public/web/WebContextMenuData.h"
@@ -265,9 +266,9 @@ const struct UmaEnumCommandIdPair {
     {35, -1, IDC_CONTENT_CONTEXT_VIEWFRAMEINFO},
     {36, -1, IDC_CONTENT_CONTEXT_UNDO},
     {37, -1, IDC_CONTENT_CONTEXT_REDO},
-    {38, -1, IDC_CONTENT_CONTEXT_CUT},
+    {38, 28, IDC_CONTENT_CONTEXT_CUT},
     {39, 4, IDC_CONTENT_CONTEXT_COPY},
-    {40, -1, IDC_CONTENT_CONTEXT_PASTE},
+    {40, 29, IDC_CONTENT_CONTEXT_PASTE},
     {41, -1, IDC_CONTENT_CONTEXT_PASTE_AND_MATCH_STYLE},
     {42, -1, IDC_CONTENT_CONTEXT_DELETE},
     {43, -1, IDC_CONTENT_CONTEXT_SELECTALL},
@@ -278,11 +279,11 @@ const struct UmaEnumCommandIdPair {
     {52, -1, IDC_CONTENT_CONTEXT_OPENLINKWITH},
     {53, -1, IDC_CHECK_SPELLING_WHILE_TYPING},
     {54, -1, IDC_SPELLCHECK_MENU},
-    {55, -1, IDC_CONTENT_CONTEXT_SPELLING_TOGGLE},
+    {55, 27, IDC_CONTENT_CONTEXT_SPELLING_TOGGLE},
     {56, -1, IDC_SPELLCHECK_LANGUAGES_FIRST},
     {57, 11, IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE},
-    {58, -1, IDC_SPELLCHECK_SUGGESTION_0},
-    {59, -1, IDC_SPELLCHECK_ADD_TO_DICTIONARY},
+    {58, 25, IDC_SPELLCHECK_SUGGESTION_0},
+    {59, 26, IDC_SPELLCHECK_ADD_TO_DICTIONARY},
     {60, -1, IDC_SPELLPANEL_TOGGLE},
     {61, -1, IDC_CONTENT_CONTEXT_OPEN_ORIGINAL_IMAGE_NEW_TAB},
     {62, -1, IDC_WRITING_DIRECTION_MENU},
@@ -454,7 +455,7 @@ void AddAvatarToLastMenuItem(gfx::Image icon, ui::SimpleMenuModel* menu) {
   gfx::Path circular_mask;
   gfx::Canvas canvas(icon.Size(), 1.0f, true);
   canvas.FillRect(gfx::Rect(icon.Size()), SK_ColorTRANSPARENT,
-                  SkXfermode::kClear_Mode);
+                  SkBlendMode::kClear);
   circular_mask.addCircle(SkIntToScalar(width) / 2, SkIntToScalar(height) / 2,
                           SkIntToScalar(std::min(width, height)) / 2);
   canvas.ClipPath(circular_mask, true);
@@ -745,6 +746,11 @@ void RenderViewContextMenu::AppendCurrentExtensionItems() {
 void RenderViewContextMenu::InitMenu() {
   RenderViewContextMenuBase::InitMenu();
 
+  if (content_type_->SupportsGroup(
+          ContextMenuContentType::ITEM_GROUP_PASSWORD)) {
+    AppendPasswordItems();
+  }
+
   if (content_type_->SupportsGroup(ContextMenuContentType::ITEM_GROUP_PAGE))
     AppendPageItems();
 
@@ -796,7 +802,8 @@ void RenderViewContextMenu::InitMenu() {
   }
 
   if (content_type_->SupportsGroup(
-          ContextMenuContentType::ITEM_GROUP_SEARCH_PROVIDER)) {
+          ContextMenuContentType::ITEM_GROUP_SEARCH_PROVIDER) &&
+      params_.misspelled_word.empty()) {
     AppendSearchProvider();
   }
 
@@ -807,7 +814,8 @@ void RenderViewContextMenu::InitMenu() {
   }
 
   if (content_type_->SupportsGroup(
-          ContextMenuContentType::ITEM_GROUP_EDITABLE)) {
+          ContextMenuContentType::ITEM_GROUP_EDITABLE) &&
+      params_.misspelled_word.empty()) {
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
     AppendLanguageSettings();
     AppendPlatformEditableItems();
@@ -846,11 +854,6 @@ void RenderViewContextMenu::InitMenu() {
           ContextMenuContentType::ITEM_GROUP_PRINT_PREVIEW)) {
     AppendPrintPreviewItems();
   }
-
-  if (content_type_->SupportsGroup(
-          ContextMenuContentType::ITEM_GROUP_PASSWORD)) {
-    AppendPasswordItems();
-  }
 }
 
 Profile* RenderViewContextMenu::GetProfile() {
@@ -882,6 +885,12 @@ void RenderViewContextMenu::RecordUsedItem(int id) {
                                 enum_id,
                                 kUmaEnumToControlId[kMappingSize - 1].enum_id);
     }
+    // Misspelled word context.
+    if (!params_.misspelled_word.empty()) {
+      UMA_HISTOGRAM_ENUMERATION("ContextMenu.SelectedOption.MisspelledWord",
+                                enum_id,
+                                kUmaEnumToControlId[kMappingSize - 1].enum_id);
+    }
   } else {
     NOTREACHED() << "Update kUmaEnumToControlId. Unhanded IDC: " << id;
   }
@@ -910,7 +919,7 @@ bool RenderViewContextMenu::IsHTML5Fullscreen() const {
   return controller->IsTabFullscreen();
 }
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 void RenderViewContextMenu::HandleAuthorizeAllPlugins() {
   ChromePluginServiceFilter::GetInstance()->AuthorizeAllPlugins(
       source_web_contents_, false, std::string());
@@ -1282,7 +1291,8 @@ void RenderViewContextMenu::AppendCopyItem() {
 void RenderViewContextMenu::AppendPrintItem() {
   if (GetPrefs(browser_context_)->GetBoolean(prefs::kPrintingEnabled) &&
       (params_.media_type == WebContextMenuData::MediaTypeNone ||
-       params_.media_flags & WebContextMenuData::MediaCanPrint)) {
+       params_.media_flags & WebContextMenuData::MediaCanPrint) &&
+      params_.misspelled_word.empty()) {
     menu_model_.AddItemWithStringId(IDC_PRINT, IDS_CONTENT_CONTEXT_PRINT);
   }
 }
@@ -1364,6 +1374,11 @@ void RenderViewContextMenu::AppendEditableItems() {
   if (use_spelling)
     AppendSpellingSuggestionItems();
 
+  if (!params_.misspelled_word.empty()) {
+    AppendSearchProvider();
+    menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
+  }
+
 // 'Undo' and 'Redo' for text input with no suggestions and no text selected.
 // We make an exception for OS X as context clicking will select the closest
 // word. In this case both items are always shown.
@@ -1390,10 +1405,12 @@ void RenderViewContextMenu::AppendEditableItems() {
                                   IDS_CONTENT_CONTEXT_COPY);
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_PASTE,
                                   IDS_CONTENT_CONTEXT_PASTE);
-  menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_PASTE_AND_MATCH_STYLE,
-                                  IDS_CONTENT_CONTEXT_PASTE_AND_MATCH_STYLE);
-  menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SELECTALL,
-                                  IDS_CONTENT_CONTEXT_SELECTALL);
+  if (params_.misspelled_word.empty()) {
+    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_PASTE_AND_MATCH_STYLE,
+                                    IDS_CONTENT_CONTEXT_PASTE_AND_MATCH_STYLE);
+    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SELECTALL,
+                                    IDS_CONTENT_CONTEXT_SELECTALL);
+  }
 
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
 }
@@ -1449,19 +1466,19 @@ void RenderViewContextMenu::AppendProtocolHandlerSubMenu() {
 }
 
 void RenderViewContextMenu::AppendPasswordItems() {
-  bool separator_added = false;
+  bool add_separator = false;
   if (password_manager::ForceSavingExperimentEnabled()) {
-    menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
-    separator_added = true;
     menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_FORCESAVEPASSWORD,
                                     IDS_CONTENT_CONTEXT_FORCESAVEPASSWORD);
+    add_separator = true;
   }
   if (password_manager::ManualPasswordGenerationEnabled()) {
-    if (!separator_added)
-      menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
     menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_GENERATEPASSWORD,
                                     IDS_CONTENT_CONTEXT_GENERATEPASSWORD);
+    add_separator = true;
   }
+  if (add_separator)
+    menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
 }
 
 // Menu delegate functions -----------------------------------------------------
@@ -1508,8 +1525,6 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
     return params_.link_url.is_valid();
   }
 
-  IncognitoModePrefs::Availability incognito_avail =
-      IncognitoModePrefs::GetAvailability(prefs);
   switch (id) {
     case IDC_BACK:
       return embedder_web_contents_->GetController().CanGoBack();
@@ -1630,9 +1645,7 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
       return !!(params_.edit_flags & WebContextMenuData::CanSelectAll);
 
     case IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD:
-      return !browser_context_->IsOffTheRecord() &&
-             params_.link_url.is_valid() &&
-             incognito_avail != IncognitoModePrefs::DISABLED;
+      return IsOpenLinkOTREnabled();
 
     case IDC_PRINT:
       return IsPrintPreviewEnabled();
@@ -1819,7 +1832,8 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
       break;
 
     case IDC_RELOAD:
-      embedder_web_contents_->GetController().Reload(true);
+      embedder_web_contents_->GetController().Reload(
+          content::ReloadType::NORMAL, true);
       break;
 
     case IDC_CONTENT_CONTEXT_RELOAD_PACKAGED_APP:
@@ -2166,6 +2180,15 @@ bool RenderViewContextMenu::IsRouteMediaEnabled() const {
   const web_modal::WebContentsModalDialogManager* manager =
       web_modal::WebContentsModalDialogManager::FromWebContents(web_contents);
   return !manager || !manager->IsDialogActive();
+}
+
+bool RenderViewContextMenu::IsOpenLinkOTREnabled() const {
+  if (browser_context_->IsOffTheRecord() || !params_.link_url.is_valid())
+    return false;
+
+  IncognitoModePrefs::Availability incognito_avail =
+      IncognitoModePrefs::GetAvailability(GetPrefs(browser_context_));
+  return incognito_avail != IncognitoModePrefs::DISABLED;
 }
 
 void RenderViewContextMenu::ExecOpenLinkNewTab() {

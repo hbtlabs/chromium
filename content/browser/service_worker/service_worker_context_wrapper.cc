@@ -570,7 +570,7 @@ void ServiceWorkerContextWrapper::CheckHasServiceWorker(
     return;
   }
   if (!context_core_) {
-    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
                             base::Bind(callback, false));
     return;
   }
@@ -707,6 +707,21 @@ void ServiceWorkerContextWrapper::FindReadyRegistrationForId(
   }
   context_core_->storage()->FindRegistrationForId(
       registration_id, origin.GetOrigin(),
+      base::Bind(&ServiceWorkerContextWrapper::DidFindRegistrationForFindReady,
+                 this, callback));
+}
+
+void ServiceWorkerContextWrapper::FindReadyRegistrationForIdOnly(
+    int64_t registration_id,
+    const FindRegistrationCallback& callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  if (!context_core_) {
+    // FindRegistrationForIdOnly() can run the callback synchronously.
+    callback.Run(SERVICE_WORKER_ERROR_ABORT, nullptr);
+    return;
+  }
+  context_core_->storage()->FindRegistrationForIdOnly(
+      registration_id,
       base::Bind(&ServiceWorkerContextWrapper::DidFindRegistrationForFindReady,
                  this, callback));
 }

@@ -15,16 +15,13 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <memory>
 #include <set>
 #include <utility>
-#include <vector>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/lazy_instance.h"
-#include "base/memory/scoped_vector.h"
 #include "base/native_library.h"
 #include "base/pickle.h"
 #include "base/posix/eintr_wrapper.h"
@@ -34,7 +31,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/sys_info.h"
 #include "build/build_config.h"
-#include "content/common/child_process_sandbox_support_impl_linux.h"
 #include "content/common/font_config_ipc_linux.h"
 #include "content/common/sandbox_linux/sandbox_debug_handling_linux.h"
 #include "content/common/sandbox_linux/sandbox_linux.h"
@@ -44,6 +40,8 @@
 #include "content/public/common/sandbox_linux.h"
 #include "content/public/common/zygote_fork_delegate_linux.h"
 #include "content/zygote/zygote_linux.h"
+#include "media/media_features.h"
+#include "ppapi/features/features.h"
 #include "sandbox/linux/services/credentials.h"
 #include "sandbox/linux/services/init_process_reaper.h"
 #include "sandbox/linux/services/namespace_sandbox.h"
@@ -60,18 +58,22 @@
 #include <sys/prctl.h>
 #endif
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 #include "content/common/pepper_plugin_list.h"
 #include "content/public/common/pepper_plugin_info.h"
 #endif
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
 #include "third_party/webrtc_overrides/init_webrtc.h"
 #endif
 
 #if defined(SANITIZER_COVERAGE)
 #include <sanitizer/common_interface_defs.h>
 #include <sanitizer/coverage_interface.h>
+#endif
+
+#if BUILDFLAG(ENABLE_PEPPER_CDMS)
+#include "content/common/media/cdm_host_files.h"
 #endif
 
 namespace content {
@@ -311,7 +313,7 @@ struct tm* localtime64_r_override(const time_t* timep, struct tm* result) {
   return res;
 }
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 // Loads the (native) libraries but does not initialize them (i.e., does not
 // call PPP_InitializeModule). This is needed by the zygote on Linux to get
 // access to the plugins before entering the sandbox.
@@ -357,12 +359,16 @@ static void ZygotePreSandboxInit() {
   // will work inside the sandbox.
   RAND_set_urandom_fd(base::GetUrandomFD());
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   // Ensure access to the Pepper plugins before the sandbox is turned on.
   PreloadPepperPlugins();
 #endif
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   InitializeWebRtcModule();
+#endif
+
+#if BUILDFLAG(ENABLE_PEPPER_CDMS)
+  CdmHostFiles::CreateGlobalInstance();
 #endif
 
   SkFontConfigInterface::SetGlobal(
@@ -564,8 +570,9 @@ static void EnterLayerOneSandbox(LinuxSandbox* linux_sandbox,
   }
 }
 
-bool ZygoteMain(const MainFunctionParams& params,
-                ScopedVector<ZygoteForkDelegate> fork_delegates) {
+bool ZygoteMain(
+    const MainFunctionParams& params,
+    std::vector<std::unique_ptr<ZygoteForkDelegate>> fork_delegates) {
   g_am_zygote_or_renderer = true;
 
   std::vector<int> fds_to_close_post_fork;
@@ -618,7 +625,7 @@ bool ZygoteMain(const MainFunctionParams& params,
 
   VLOG(1) << "ZygoteMain: initializing " << fork_delegates.size()
           << " fork delegates";
-  for (ZygoteForkDelegate* fork_delegate : fork_delegates) {
+  for (const auto& fork_delegate : fork_delegates) {
     fork_delegate->Init(GetSandboxFD(), using_layer1_sandbox);
   }
 

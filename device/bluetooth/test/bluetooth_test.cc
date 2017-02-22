@@ -25,11 +25,16 @@ const std::string BluetoothTestBase::kTestDeviceAddress1 = "01:00:00:90:1E:BE";
 const std::string BluetoothTestBase::kTestDeviceAddress2 = "02:00:00:8B:74:63";
 const std::string BluetoothTestBase::kTestDeviceAddress3 = "03:00:00:17:C0:57";
 
-const std::string BluetoothTestBase::kTestUUIDGenericAccess = "1800";
-const std::string BluetoothTestBase::kTestUUIDGenericAttribute = "1801";
-const std::string BluetoothTestBase::kTestUUIDImmediateAlert = "1802";
-const std::string BluetoothTestBase::kTestUUIDLinkLoss = "1803";
-const std::string BluetoothTestBase::kTestUUIDHeartRate = "180d";
+const std::string BluetoothTestBase::kTestUUIDGenericAccess =
+    "00001800-0000-1000-8000-00805f9b34fb";
+const std::string BluetoothTestBase::kTestUUIDGenericAttribute =
+    "00001801-0000-1000-8000-00805f9b34fb";
+const std::string BluetoothTestBase::kTestUUIDImmediateAlert =
+    "00001802-0000-1000-8000-00805f9b34fb";
+const std::string BluetoothTestBase::kTestUUIDLinkLoss =
+    "00001803-0000-1000-8000-00805f9b34fb";
+const std::string BluetoothTestBase::kTestUUIDHeartRate =
+    "0000180d-0000-1000-8000-00805f9b34fb";
 
 BluetoothTestBase::BluetoothTestBase() : weak_factory_(this) {}
 
@@ -110,7 +115,7 @@ void BluetoothTestBase::DiscoverySessionCallback(
     Call expected,
     std::unique_ptr<BluetoothDiscoverySession> discovery_session) {
   ++callback_count_;
-  discovery_sessions_.push_back(discovery_session.release());
+  discovery_sessions_.push_back(std::move(discovery_session));
 
   if (expected == Call::EXPECTED)
     ++actual_success_callback_calls_;
@@ -122,7 +127,7 @@ void BluetoothTestBase::GattConnectionCallback(
     Call expected,
     std::unique_ptr<BluetoothGattConnection> connection) {
   ++callback_count_;
-  gatt_connections_.push_back(connection.release());
+  gatt_connections_.push_back(std::move(connection));
 
   if (expected == Call::EXPECTED)
     ++actual_success_callback_calls_;
@@ -133,7 +138,7 @@ void BluetoothTestBase::GattConnectionCallback(
 void BluetoothTestBase::NotifyCallback(
     Call expected,
     std::unique_ptr<BluetoothGattNotifySession> notify_session) {
-  notify_sessions_.push_back(notify_session.release());
+  notify_sessions_.push_back(std::move(notify_session));
 
   ++callback_count_;
   if (expected == Call::EXPECTED)
@@ -147,7 +152,7 @@ void BluetoothTestBase::NotifyCheckForPrecedingCalls(
     std::unique_ptr<BluetoothGattNotifySession> notify_session) {
   EXPECT_EQ(num_of_preceding_calls, callback_count_);
 
-  notify_sessions_.push_back(notify_session.release());
+  notify_sessions_.push_back(std::move(notify_session));
 
   ++callback_count_;
   ++actual_success_callback_calls_;

@@ -16,11 +16,10 @@
 #include "extensions/common/api/cast_channel.h"
 #include "extensions/common/api/cast_channel/logging.pb.h"
 #include "net/base/completion_callback.h"
+#include "net/base/ip_endpoint.h"
 
 namespace net {
 class DrainableIOBuffer;
-class IPEndPoint;
-class IOBuffer;
 class DrainableIOBuffer;
 class GrowableIOBuffer;
 class Socket;
@@ -30,8 +29,6 @@ namespace extensions {
 namespace api {
 namespace cast_channel {
 class CastMessage;
-struct LastErrors;
-class Logger;
 class MessageFramer;
 
 class CastTransport {

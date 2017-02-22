@@ -7,6 +7,7 @@
 
 #include "remoting/host/win/wts_session_process_delegate.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -14,6 +15,7 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/process/process_handle.h"
 #include "base/single_thread_task_runner.h"
@@ -26,6 +28,7 @@
 #include "ipc/ipc_message.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/embedder/named_platform_channel_pair.h"
+#include "mojo/edk/embedder/pending_process_connection.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
 #include "mojo/edk/embedder/platform_handle_utils.h"
 #include "mojo/edk/embedder/scoped_platform_handle.h"
@@ -56,8 +59,7 @@ class WtsSessionProcessDelegate::Core
   Core(scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
        std::unique_ptr<base::CommandLine> target,
        bool launch_elevated,
-       const std::string& channel_security,
-       const std::string& new_process_security);
+       const std::string& channel_security);
 
   // Initializes the object returning true on success.
   bool Initialize(uint32_t session_id);
@@ -125,9 +127,6 @@ class WtsSessionProcessDelegate::Core
   // Security descriptor (as SDDL) to be applied to |channel_|.
   std::string channel_security_;
 
-  // Security descriptor (as SDDL) to be applied to the newly created process.
-  std::string new_process_security_;
-
   WorkerProcessLauncher* event_handler_;
 
   // The job object used to control the lifetime of child processes.
@@ -155,8 +154,11 @@ class WtsSessionProcessDelegate::Core
   // If launching elevated, this is the pid of the launcher process.
   base::ProcessId elevated_launcher_pid_ = base::kNullProcessId;
 
-  // The mojo child token for the process being launched.
-  std::string mojo_child_token_;
+  // Tracks the id of the worker process.
+  base::ProcessId worker_process_pid_ = base::kNullProcessId;
+
+  // The pending process connection for the process being launched.
+  std::unique_ptr<mojo::edk::PendingProcessConnection> process_connection_;
 
   DISALLOW_COPY_AND_ASSIGN(Core);
 };
@@ -165,12 +167,10 @@ WtsSessionProcessDelegate::Core::Core(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     std::unique_ptr<base::CommandLine> target_command,
     bool launch_elevated,
-    const std::string& channel_security,
-    const std::string& new_process_security)
+    const std::string& channel_security)
     : caller_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       io_task_runner_(io_task_runner),
       channel_security_(channel_security),
-      new_process_security_(new_process_security),
       event_handler_(nullptr),
       launch_elevated_(launch_elevated),
       launch_pending_(false),
@@ -252,16 +252,14 @@ void WtsSessionProcessDelegate::Core::Send(IPC::Message* message) {
 void WtsSessionProcessDelegate::Core::CloseChannel() {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
-  if (!channel_)
+  if (!channel_) {
     return;
+  }
 
   channel_.reset();
   elevated_server_handle_.reset();
   elevated_launcher_pid_ = base::kNullProcessId;
-  if (!mojo_child_token_.empty()) {
-    mojo::edk::ChildProcessLaunchFailed(mojo_child_token_);
-    mojo_child_token_.clear();
-  }
+  process_connection_.reset();
 }
 
 void WtsSessionProcessDelegate::Core::KillProcess() {
@@ -273,11 +271,13 @@ void WtsSessionProcessDelegate::Core::KillProcess() {
   launch_pending_ = false;
 
   if (launch_elevated_) {
-    if (job_.IsValid())
+    if (job_.IsValid()) {
       TerminateJobObject(job_.Get(), CONTROL_C_EXIT);
+    }
   } else {
-    if (worker_process_.IsValid())
+    if (worker_process_.IsValid()) {
       TerminateProcess(worker_process_.Get(), CONTROL_C_EXIT);
+    }
   }
 
   worker_process_.Close();
@@ -296,7 +296,9 @@ void WtsSessionProcessDelegate::Core::OnIOCompleted(
   DCHECK(io_task_runner_->BelongsToCurrentThread());
 
   // |bytes_transferred| is used in job object notifications to supply
-  // the message ID; |context| carries process ID.
+  // the message ID; |context| carries process ID for the events we listen for.
+  base::ProcessId process_id =
+      static_cast<base::ProcessId>(reinterpret_cast<uintptr_t>(context));
   switch (bytes_transferred) {
     case JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO: {
       caller_task_runner_->PostTask(
@@ -304,10 +306,38 @@ void WtsSessionProcessDelegate::Core::OnIOCompleted(
       break;
     }
     case JOB_OBJECT_MSG_NEW_PROCESS: {
-      caller_task_runner_->PostTask(
-          FROM_HERE, base::Bind(&Core::OnProcessLaunchDetected, this,
-                                static_cast<base::ProcessId>(
-                                    reinterpret_cast<uintptr_t>(context))));
+      if (elevated_launcher_pid_ == base::kNullProcessId) {
+        // Ignore process launch events when we don't have a valid launcher pid.
+        return;
+      }
+
+      if (process_id != elevated_launcher_pid_) {
+        DCHECK_EQ(worker_process_pid_, base::kNullProcessId);
+        worker_process_pid_ = process_id;
+      }
+      break;
+    }
+    case JOB_OBJECT_MSG_EXIT_PROCESS: {
+      if (process_id == worker_process_pid_) {
+        // In official builds the first launch of a UiAccess enabled binary
+        // will fail due to 'STATUS_ELEVATION_REQUIRED'.  This is an artifact of
+        // using ShellExecuteEx() to launch the process.  In this scenario, we
+        // will clear out the previously stored value for |worker_process_pid_|
+        // and retry after the subsequent relaunch of the worker process.
+        worker_process_pid_ = base::kNullProcessId;
+      } else if (process_id == elevated_launcher_pid_) {
+        if (worker_process_pid_ == base::kNullProcessId) {
+          // The elevated launcher process can fail to launch without attemping
+          // to launch the worker.  In this scenario, the failure will be
+          // detected outside this method and the elevated launcher will be
+          // launched again.
+          return;
+        }
+
+        caller_task_runner_->PostTask(
+            FROM_HERE, base::Bind(&Core::OnProcessLaunchDetected, this,
+                                  worker_process_pid_));
+      }
       break;
     }
   }
@@ -360,14 +390,12 @@ void WtsSessionProcessDelegate::Core::DoLaunchProcess() {
                                   target_command_->GetProgram());
   }
 
-  const std::string mojo_message_pipe_token = mojo::edk::GenerateRandomToken();
-  mojo_child_token_ = mojo::edk::GenerateRandomToken();
+  std::string mojo_pipe_token;
+  process_connection_ = base::MakeUnique<mojo::edk::PendingProcessConnection>();
   std::unique_ptr<IPC::ChannelProxy> channel = IPC::ChannelProxy::Create(
-      mojo::edk::CreateParentMessagePipe(mojo_message_pipe_token,
-                                         mojo_child_token_)
-          .release(),
+      process_connection_->CreateMessagePipe(&mojo_pipe_token).release(),
       IPC::Channel::MODE_SERVER, this, io_task_runner_);
-  command_line.AppendSwitchASCII(kMojoPipeToken, mojo_message_pipe_token);
+  command_line.AppendSwitchASCII(kMojoPipeToken, mojo_pipe_token);
 
   std::unique_ptr<mojo::edk::PlatformChannelPair> normal_mojo_channel;
   std::unique_ptr<mojo::edk::NamedPlatformChannelPair> elevated_mojo_channel;
@@ -386,28 +414,12 @@ void WtsSessionProcessDelegate::Core::DoLaunchProcess() {
         &command_line, &handles_to_inherit);
   }
 
-  ScopedSd security_descriptor;
-  std::unique_ptr<SECURITY_ATTRIBUTES> security_attributes;
-  if (!new_process_security_.empty()) {
-    security_descriptor = ConvertSddlToSd(new_process_security_);
-    if (!security_descriptor) {
-      PLOG(ERROR) << "ConvertSddlToSd() failed.";
-      ReportFatalError();
-      return;
-    }
-
-    security_attributes.reset(new SECURITY_ATTRIBUTES());
-    security_attributes->nLength = sizeof(SECURITY_ATTRIBUTES);
-    security_attributes->lpSecurityDescriptor = security_descriptor.get();
-    security_attributes->bInheritHandle = FALSE;
-  }
-
   // Try to launch the process.
   ScopedHandle worker_process;
   ScopedHandle worker_thread;
   if (!LaunchProcessWithToken(
           command_line.GetProgram(), command_line.GetCommandLineString(),
-          session_token_.Get(), security_attributes.get(),
+          session_token_.Get(), /*security_attributes=*/nullptr,
           /* thread_attributes= */ nullptr, handles_to_inherit,
           /* creation_flags= */ CREATE_SUSPENDED | CREATE_BREAKAWAY_FROM_JOB,
           base::UTF8ToUTF16(kDefaultDesktopName).c_str(), &worker_process,
@@ -489,8 +501,9 @@ void WtsSessionProcessDelegate::Core::InitializeJobCompleted(ScopedHandle job) {
 
   job_ = std::move(job);
 
-  if (launch_pending_)
+  if (launch_pending_) {
     DoLaunchProcess();
+  }
 }
 
 void WtsSessionProcessDelegate::Core::OnActiveProcessZero() {
@@ -506,11 +519,11 @@ void WtsSessionProcessDelegate::Core::OnActiveProcessZero() {
 void WtsSessionProcessDelegate::Core::OnProcessLaunchDetected(
     base::ProcessId pid) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
-  if (!elevated_server_handle_.is_valid())
-    return;
+  DCHECK_NE(pid, elevated_launcher_pid_);
 
-  if (pid == elevated_launcher_pid_)
+  if (!elevated_server_handle_.is_valid()) {
     return;
+  }
 
   DWORD desired_access =
       SYNCHRONIZE | PROCESS_DUP_HANDLE | PROCESS_QUERY_INFORMATION;
@@ -542,10 +555,8 @@ void WtsSessionProcessDelegate::Core::ReportProcessLaunched(
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
   DCHECK(!worker_process_.IsValid());
 
-  mojo::edk::ChildProcessLaunched(worker_process.Get(),
-                                  std::move(server_handle),
-                                  mojo_child_token_);
-  mojo_child_token_.clear();
+  process_connection_->Connect(worker_process.Get(), std::move(server_handle));
+  process_connection_.reset();
   worker_process_ = std::move(worker_process);
 
   // Report a handle that can be used to wait for the worker process completion,
@@ -569,10 +580,9 @@ WtsSessionProcessDelegate::WtsSessionProcessDelegate(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     std::unique_ptr<base::CommandLine> target_command,
     bool launch_elevated,
-    const std::string& channel_security,
-    const std::string& new_process_security_descriptor) {
+    const std::string& channel_security) {
   core_ = new Core(io_task_runner, std::move(target_command), launch_elevated,
-                   channel_security, new_process_security_descriptor);
+                   channel_security);
 }
 
 WtsSessionProcessDelegate::~WtsSessionProcessDelegate() {

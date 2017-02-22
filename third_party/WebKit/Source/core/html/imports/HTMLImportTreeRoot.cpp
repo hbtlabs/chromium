@@ -18,15 +18,18 @@ HTMLImportTreeRoot* HTMLImportTreeRoot::create(Document* document) {
 HTMLImportTreeRoot::HTMLImportTreeRoot(Document* document)
     : HTMLImport(HTMLImport::Sync),
       m_document(document),
-      m_recalcTimer(this, &HTMLImportTreeRoot::recalcTimerFired) {
+      m_recalcTimer(
+          TaskRunnerHelper::get(TaskType::UnspecedTimer, document->frame()),
+          this,
+          &HTMLImportTreeRoot::recalcTimerFired) {
   scheduleRecalcState();  // This recomputes initial state.
 }
 
 HTMLImportTreeRoot::~HTMLImportTreeRoot() {}
 
 void HTMLImportTreeRoot::dispose() {
-  for (size_t i = 0; i < m_imports.size(); ++i)
-    m_imports[i]->dispose();
+  for (const auto& importChild : m_imports)
+    importChild->dispose();
   m_imports.clear();
   m_document = nullptr;
   m_recalcTimer.stop();
@@ -62,13 +65,12 @@ void HTMLImportTreeRoot::scheduleRecalcState() {
 }
 
 HTMLImportChild* HTMLImportTreeRoot::add(HTMLImportChild* child) {
-  m_imports.append(child);
+  m_imports.push_back(child);
   return m_imports.back().get();
 }
 
 HTMLImportChild* HTMLImportTreeRoot::find(const KURL& url) const {
-  for (size_t i = 0; i < m_imports.size(); ++i) {
-    HTMLImportChild* candidate = m_imports[i].get();
+  for (const auto& candidate : m_imports) {
     if (equalIgnoringFragmentIdentifier(candidate->url(), url))
       return candidate;
   }

@@ -152,6 +152,11 @@ bool ChildAccountService::SetActive(bool active) {
         supervised_users::kSigninAllowed,
         base::MakeUnique<base::FundamentalValue>(true));
 
+    // Always allow cookies, to avoid website compatibility issues.
+    settings_service->SetLocalSetting(
+        supervised_users::kCookiesAlwaysAllowed,
+        base::MakeUnique<base::FundamentalValue>(true));
+
     // SafeSearch is controlled at the account level, so don't override it
     // client-side.
     settings_service->SetLocalSetting(
@@ -180,8 +185,15 @@ bool ChildAccountService::SetActive(bool active) {
   } else {
     SupervisedUserSettingsService* settings_service =
         SupervisedUserSettingsServiceFactory::GetForProfile(profile_);
+    settings_service->SetLocalSetting(
+        supervised_users::kRecordHistoryIncludesSessionSync, nullptr);
     settings_service->SetLocalSetting(supervised_users::kSigninAllowed,
-                                      std::unique_ptr<base::Value>());
+                                      nullptr);
+    settings_service->SetLocalSetting(supervised_users::kCookiesAlwaysAllowed,
+                                      nullptr);
+    settings_service->SetLocalSetting(supervised_users::kForceSafeSearch,
+                                      nullptr);
+
 #if !defined(OS_CHROMEOS)
     SigninManagerFactory::GetForProfile(profile_)->ProhibitSignout(false);
 #endif
@@ -220,6 +232,10 @@ void ChildAccountService::SetIsChildAccount(bool is_child_account) {
 }
 
 void ChildAccountService::OnAccountUpdated(const AccountInfo& info) {
+  // This method may get called when the account info isn't complete yet.
+  // We deliberately don't check for that, as we are only interested in the
+  // child account status.
+
   if (!IsChildAccountDetectionEnabled()) {
     SetIsChildAccount(false);
     return;

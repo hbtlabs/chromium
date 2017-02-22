@@ -6,6 +6,8 @@ import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//chrome/common/features.gni")
 import("//extensions/features/features.gni")
+import("//media/media_options.gni")
+import("//rlz/features/features.gni")
 
 assert(enable_extensions)
 
@@ -174,6 +176,8 @@ static_library("extensions") {
     "api/developer_private/inspectable_views_finder.h",
     "api/developer_private/show_permissions_dialog_helper.cc",
     "api/developer_private/show_permissions_dialog_helper.h",
+    "api/dial/device_description_fetcher.cc",
+    "api/dial/device_description_fetcher.h ",
     "api/dial/dial_api.cc",
     "api/dial/dial_api.h",
     "api/dial/dial_api_factory.cc",
@@ -208,12 +212,8 @@ static_library("extensions") {
     "api/feedback_private/feedback_private_api.h",
     "api/feedback_private/feedback_service.cc",
     "api/feedback_private/feedback_service.h",
-    "api/file_handlers/app_file_handler_util.cc",
-    "api/file_handlers/app_file_handler_util.h",
-    "api/file_handlers/directory_util.cc",
-    "api/file_handlers/directory_util.h",
-    "api/file_handlers/mime_util.cc",
-    "api/file_handlers/mime_util.h",
+    "api/file_handlers/non_native_file_system_delegate_chromeos.cc",
+    "api/file_handlers/non_native_file_system_delegate_chromeos.h",
     "api/file_system/file_system_api.cc",
     "api/file_system/file_system_api.h",
     "api/font_settings/font_settings_api.cc",
@@ -232,8 +232,20 @@ static_library("extensions") {
     "api/identity/gaia_web_auth_flow.h",
     "api/identity/identity_api.cc",
     "api/identity/identity_api.h",
+    "api/identity/identity_constants.cc",
+    "api/identity/identity_constants.h",
+    "api/identity/identity_get_accounts_function.cc",
+    "api/identity/identity_get_accounts_function.h",
+    "api/identity/identity_get_auth_token_function.cc",
+    "api/identity/identity_get_auth_token_function.h",
+    "api/identity/identity_get_profile_user_info_function.cc",
+    "api/identity/identity_get_profile_user_info_function.h",
+    "api/identity/identity_launch_web_auth_flow_function.cc",
+    "api/identity/identity_launch_web_auth_flow_function.h",
     "api/identity/identity_mint_queue.cc",
     "api/identity/identity_mint_queue.h",
+    "api/identity/identity_remove_cached_auth_token_function.cc",
+    "api/identity/identity_remove_cached_auth_token_function.h",
     "api/identity/identity_signin_flow.cc",
     "api/identity/identity_signin_flow.h",
     "api/identity/web_auth_flow.cc",
@@ -309,8 +321,6 @@ static_library("extensions") {
     "api/networking_private/networking_private_ui_delegate_factory_impl.h",
     "api/networking_private/networking_private_verify_delegate_factory_impl.cc",
     "api/networking_private/networking_private_verify_delegate_factory_impl.h",
-    "api/notification_provider/notification_provider_api.cc",
-    "api/notification_provider/notification_provider_api.h",
     "api/notifications/notifications_api.cc",
     "api/notifications/notifications_api.h",
     "api/omnibox/omnibox_api.cc",
@@ -502,12 +512,12 @@ static_library("extensions") {
     "chrome_requirements_checker.h",
     "chrome_url_request_util.cc",
     "chrome_url_request_util.h",
+    "clipboard_extension_helper_chromeos.cc",
+    "clipboard_extension_helper_chromeos.h",
     "component_extensions_whitelist/whitelist.cc",
     "component_extensions_whitelist/whitelist.h",
     "component_loader.cc",
     "component_loader.h",
-    "component_migration_helper.cc",
-    "component_migration_helper.h",
     "context_menu_matcher.cc",
     "context_menu_matcher.h",
     "convert_user_script.cc",
@@ -520,6 +530,8 @@ static_library("extensions") {
     "data_deleter.h",
     "dev_mode_bubble_delegate.cc",
     "dev_mode_bubble_delegate.h",
+    "device_permissions_dialog_controller.cc",
+    "device_permissions_dialog_controller.h",
     "devtools_util.cc",
     "devtools_util.h",
     "display_info_provider_chromeos.cc",
@@ -604,8 +616,6 @@ static_library("extensions") {
     "extension_migrator.h",
     "extension_reenabler.cc",
     "extension_reenabler.h",
-    "extension_resource_protocols.cc",
-    "extension_resource_protocols.h",
     "extension_service.cc",
     "extension_service.h",
     "extension_special_storage_policy.cc",
@@ -824,7 +834,6 @@ static_library("extensions") {
     "//chrome/common/extensions/api:api_registration",
     "//chrome/common/extensions/api:extensions_features",
     "//chrome/common/safe_browsing:proto",
-    "//chrome/installer/util:with_no_strings",
     "//components/app_modal",
     "//components/autofill/content/browser",
     "//components/bookmarks/browser",
@@ -890,8 +899,11 @@ static_library("extensions") {
     "//extensions/common/api",
     "//extensions/features",
     "//extensions/strings",
+    "//media:media_features",
     "//net",
+    "//ppapi/features",
     "//printing/features",
+    "//rlz/features",
     "//skia",
     "//sql",
     "//storage/browser",
@@ -907,6 +919,7 @@ static_library("extensions") {
     "//ui/accessibility:ax_gen",
     "//ui/base",
     "//ui/base/ime",
+    "//ui/display/manager",
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/native_theme",
@@ -1044,9 +1057,11 @@ static_library("extensions") {
     }
   }
 
-  if (!is_android && !is_ios) {
-    # Non-mobile.
-    #deps += [ "//apps" ]
+  if (!is_android) {
+    sources += [
+      "api/processes/processes_api.cc",
+      "api/processes/processes_api.h",
+    ]
   }
 
   if (is_win || is_mac) {
@@ -1131,13 +1146,6 @@ static_library("extensions") {
       "api/mdns/dns_sd_registry.h",
       "api/mdns/mdns_api.cc",
       "api/mdns/mdns_api.h",
-    ]
-  }
-
-  if (enable_task_manager) {
-    sources += [
-      "api/processes/processes_api.cc",
-      "api/processes/processes_api.h",
     ]
   }
 

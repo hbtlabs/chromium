@@ -4,7 +4,6 @@
 
 #include "ash/common/shelf/shelf_constants.h"
 
-#include "ash/common/material_design/material_design_controller.h"
 #include "base/logging.h"
 #include "third_party/skia/include/core/SkColor.h"
 
@@ -21,24 +20,21 @@ const SkColor kShelfButtonActivatedHighlightColor =
 const SkColor kShelfInkDropBaseColor = SK_ColorWHITE;
 const float kShelfInkDropVisibleOpacity = 0.2f;
 const SkColor kShelfIconColor = SK_ColorWHITE;
+const int kShelfTranslucentAlpha = 153;
 const int kOverflowButtonSize = 32;
 const int kOverflowButtonCornerRadius = 2;
 const int kAppListButtonRadius = kOverflowButtonSize / 2;
 
 int GetShelfConstant(ShelfConstant shelf_constant) {
-  const int kShelfBackgroundAlpha[] = {204, 153, 153};
   const int kShelfSize[] = {47, 48, 48};
   const int kShelfButtonSpacing[] = {10, 16, 16};
   const int kShelfButtonSize[] = {44, 48, 48};
   const int kShelfInsetsForAutoHide[] = {3, 0, 0};
 
-  const int mode = MaterialDesignController::GetMode();
-  DCHECK(mode >= MaterialDesignController::NON_MATERIAL &&
-         mode <= MaterialDesignController::MATERIAL_EXPERIMENTAL);
-
+  // TODO(estade): clean this up --- remove unneeded constants and reduce
+  // remaining arrays to a single constant.
+  const int mode = 1;
   switch (shelf_constant) {
-    case SHELF_BACKGROUND_ALPHA:
-      return kShelfBackgroundAlpha[mode];
     case SHELF_SIZE:
       return kShelfSize[mode];
     case SHELF_BUTTON_SPACING:

@@ -7,11 +7,12 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/metrics/field_trial.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/string_number_conversions.h"
@@ -78,8 +79,9 @@
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/spellcheck/spellcheck_build_features.h"
 #include "components/startup_metric_utils/common/startup_metric.mojom.h"
-#include "components/subresource_filter/content/renderer/ruleset_dealer.h"
 #include "components/subresource_filter/content/renderer/subresource_filter_agent.h"
+#include "components/subresource_filter/content/renderer/unverified_ruleset_dealer.h"
+#include "components/task_scheduler_util/renderer/initialization.h"
 #include "components/version_info/version_info.h"
 #include "components/visitedlink/renderer/visitedlink_slave.h"
 #include "components/web_cache/renderer/web_cache_impl.h"
@@ -94,19 +96,21 @@
 #include "extensions/common/constants.h"
 #include "extensions/features/features.h"
 #include "ipc/ipc_sync_channel.h"
+#include "media/media_features.h"
 #include "net/base/net_errors.h"
 #include "ppapi/c/private/ppb_pdf.h"
+#include "ppapi/features/features.h"
 #include "ppapi/shared_impl/ppapi_switches.h"
 #include "printing/features/features.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
+#include "third_party/WebKit/public/platform/WebCache.h"
 #include "third_party/WebKit/public/platform/WebCachePolicy.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
-#include "third_party/WebKit/public/web/WebCache.h"
 #include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
@@ -134,7 +138,7 @@
 #include "extensions/renderer/renderer_extension_registry.h"
 #endif
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 #include "chrome/common/plugin_utils.h"
 #include "chrome/renderer/plugins/chrome_plugin_placeholder.h"
 #include "chrome/renderer/plugins/power_saver_info.h"
@@ -158,7 +162,7 @@
 #include "components/spellcheck/renderer/spellcheck_provider.h"
 #endif
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
 #include "chrome/renderer/media/webrtc_logging_message_filter.h"
 #endif
 
@@ -202,7 +206,7 @@ void RecordYouTubeRewriteUMA(internal::YouTubeRewriteStatus status) {
 }
 
 // Whitelist PPAPI for Android Runtime for Chromium. (See crbug.com/383937)
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 const char* const kPredefinedAllowedCameraDeviceOrigins[] = {
   "6EAED1924DB611B6EEF2A664BD077BE7EAD33B8F",
   "4EB74897CB187C7633357C2FE832E0AD6A44883A"
@@ -214,7 +218,7 @@ const char* const kPredefinedAllowedCompositorOrigins[] = {
 };
 #endif
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 void AppendParams(const std::vector<base::string16>& additional_names,
                   const std::vector<base::string16>& additional_values,
                   WebVector<WebString>* existing_names,
@@ -234,14 +238,14 @@ void AppendParams(const std::vector<base::string16>& additional_names,
   }
 
   for (size_t i = 0; i < additional_names.size(); ++i) {
-    names[existing_size + i] = additional_names[i];
-    values[existing_size + i] = additional_values[i];
+    names[existing_size + i] = WebString::fromUTF16(additional_names[i]);
+    values[existing_size + i] = WebString::fromUTF16(additional_values[i]);
   }
 
   existing_names->swap(names);
   existing_values->swap(values);
 }
-#endif  // defined(ENABLE_PLUGINS)
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
 class SpellCheckReplacer : public content::RenderViewVisitor {
@@ -293,6 +297,37 @@ class MediaLoadDeferrer : public content::RenderFrameObserver {
   DISALLOW_COPY_AND_ASSIGN(MediaLoadDeferrer);
 };
 
+#if defined(OS_WIN)
+// Dispatches a module |event| to the provided |module_event_sink| interface.
+// It is expected that this only be called from the IO thread. This is only
+// safe because the underlying |module_event_sink| object is never deleted,
+// being owned by the leaked ChromeContentRendererClient object. If this ever
+// changes then a WeakPtr mechanism would have to be used.
+void HandleModuleEventOnIOThread(mojom::ModuleEventSinkPtr* module_event_sink,
+                                 const ModuleWatcher::ModuleEvent& event) {
+  // Simply send the module load address. The browser can validate this and look
+  // up the module details on its own.
+  (*module_event_sink)
+      ->OnModuleEvent(event.event_type,
+                      reinterpret_cast<uintptr_t>(event.module_load_address));
+}
+
+// Receives notifications from the ModuleWatcher on any thread. Bounces these
+// over to the provided |io_task_runner| where they are subsequently dispatched
+// to the |module_event_sink| interface.
+void OnModuleEvent(scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
+                   mojom::ModuleEventSinkPtr* module_event_sink,
+                   const ModuleWatcher::ModuleEvent& event) {
+  // The Mojo interface can only be used from a single thread. Bounce tasks
+  // over to it. It is safe to pass an unretained pointer to
+  // |module_event_sink|: it is owned by a ChromeContentRendererClient, which is
+  // a leaked singleton in the process.
+  io_task_runner->PostTask(
+      FROM_HERE, base::Bind(&HandleModuleEventOnIOThread,
+                            base::Unretained(module_event_sink), event));
+}
+#endif
+
 }  // namespace
 
 ChromeContentRendererClient::ChromeContentRendererClient()
@@ -303,7 +338,7 @@ ChromeContentRendererClient::ChromeContentRendererClient()
   extensions::ExtensionsRendererClient::Set(
       ChromeExtensionsRendererClient::GetInstance());
 #endif
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   for (size_t i = 0; i < arraysize(kPredefinedAllowedCameraDeviceOrigins); ++i)
     allowed_camera_device_origins_.insert(
         kPredefinedAllowedCameraDeviceOrigins[i]);
@@ -327,6 +362,19 @@ void ChromeContentRendererClient::RenderThreadStarted() {
     startup_metric_host->RecordRendererMainEntryTime(main_entry_time_);
   }
 
+#if defined(OS_WIN)
+  if (base::FeatureList::IsEnabled(features::kModuleDatabase)) {
+    thread->GetRemoteInterfaces()->GetInterface(&module_event_sink_);
+
+    // It is safe to pass an unretained pointer to |module_event_sink_|, as it
+    // is owned by the process singleton ChromeContentRendererClient, which is
+    // leaked.
+    module_watcher_ = ModuleWatcher::Create(
+        base::Bind(&OnModuleEvent, thread->GetIOTaskRunner(),
+                   base::Unretained(&module_event_sink_)));
+  }
+#endif
+
   chrome_observer_.reset(new ChromeRenderThreadObserver());
   web_cache_impl_.reset(new web_cache::WebCacheImpl());
 
@@ -349,8 +397,8 @@ void ChromeContentRendererClient::RenderThreadStarted() {
 #endif
   prerender_dispatcher_.reset(new prerender::PrerenderDispatcher());
   subresource_filter_ruleset_dealer_.reset(
-      new subresource_filter::RulesetDealer());
-#if defined(ENABLE_WEBRTC)
+      new subresource_filter::UnverifiedRulesetDealer());
+#if BUILDFLAG(ENABLE_WEBRTC)
   webrtc_logging_message_filter_ =
       new WebRtcLoggingMessageFilter(thread->GetIOTaskRunner());
 #endif
@@ -363,7 +411,7 @@ void ChromeContentRendererClient::RenderThreadStarted() {
   thread->AddObserver(subresource_filter_ruleset_dealer_.get());
   thread->AddObserver(SearchBouncer::GetInstance());
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   thread->AddFilter(webrtc_logging_message_filter_.get());
 #endif
 
@@ -380,7 +428,8 @@ void ChromeContentRendererClient::RenderThreadStarted() {
   // chrome-search: and chrome-distiller: pages  should not be accessible by
   // normal content, and should also be unable to script anything but themselves
   // (to help limit the damage that a corrupt page could cause).
-  WebString chrome_search_scheme(ASCIIToUTF16(chrome::kChromeSearchScheme));
+  WebString chrome_search_scheme(
+      WebString::fromASCII(chrome::kChromeSearchScheme));
 
   // The Instant process can only display the content but not read it.  Other
   // processes can't display it or read it.
@@ -388,20 +437,13 @@ void ChromeContentRendererClient::RenderThreadStarted() {
     WebSecurityPolicy::registerURLSchemeAsDisplayIsolated(chrome_search_scheme);
 
   WebString dom_distiller_scheme(
-      ASCIIToUTF16(dom_distiller::kDomDistillerScheme));
+      WebString::fromASCII(dom_distiller::kDomDistillerScheme));
   // TODO(nyquist): Add test to ensure this happens when the flag is set.
   WebSecurityPolicy::registerURLSchemeAsDisplayIsolated(dom_distiller_scheme);
-
-#if defined(OS_CHROMEOS)
-  WebSecurityPolicy::registerURLSchemeAsLocal(
-      WebString::fromUTF8(content::kExternalFileScheme));
-#endif
 
 #if defined(OS_ANDROID)
   WebSecurityPolicy::registerURLSchemeAsAllowedForReferrer(
       WebString::fromUTF8(chrome::kAndroidAppScheme));
-  WebSecurityPolicy::registerURLSchemeAsLocal(
-      WebString::fromUTF8(url::kContentScheme));
 #endif
 
   // chrome-search: pages should not be accessible by bookmarklets
@@ -409,28 +451,19 @@ void ChromeContentRendererClient::RenderThreadStarted() {
   WebSecurityPolicy::registerURLSchemeAsNotAllowingJavascriptURLs(
       chrome_search_scheme);
 
-  // chrome-search: resources shouldn't trigger insecure content warnings. Note
-  // that chrome-extension: and chrome-extension-resource: schemes are taken
-  // care of in extensions::Dispatcher.
-  WebSecurityPolicy::registerURLSchemeAsSecure(chrome_search_scheme);
-
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   pdf_print_client_.reset(new ChromePDFPrintClient());
   pdf::PepperPDFHost::SetPrintClient(pdf_print_client_.get());
 #endif
 
-  std::set<GURL> origins;
-  GetSecureOriginWhitelist(&origins);
-  for (const GURL& origin : origins) {
+  for (auto& origin : GetSecureOriginWhitelist()) {
     WebSecurityPolicy::addOriginTrustworthyWhiteList(
         WebSecurityOrigin::create(origin));
   }
 
-  std::set<std::string> schemes;
-  GetSchemesBypassingSecureContextCheckWhitelist(&schemes);
-  for (const std::string& scheme : schemes) {
+  for (auto& scheme : GetSchemesBypassingSecureContextCheckWhitelist()) {
     WebSecurityPolicy::addSchemeToBypassSecureContextWhitelist(
-        WebString::fromUTF8(scheme));
+        WebString::fromASCII(scheme));
   }
 
 #if defined(OS_CHROMEOS)
@@ -463,7 +496,7 @@ void ChromeContentRendererClient::RenderFrameCreated(
       render_frame);
 #endif
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   new PepperHelper(render_frame);
 #endif
 
@@ -516,10 +549,16 @@ void ChromeContentRendererClient::RenderFrameCreated(
   new AutofillAgent(render_frame, password_autofill_agent,
                     password_generation_agent);
 
-  // There is no render thread, thus no RulesetDealer in ChromeRenderViewTests.
+  // There is no render thread, thus no UnverifiedRulesetDealer in
+  // ChromeRenderViewTests.
   if (subresource_filter_ruleset_dealer_) {
     new subresource_filter::SubresourceFilterAgent(
         render_frame, subresource_filter_ruleset_dealer_.get());
+  }
+
+  if (command_line->HasSwitch(switches::kInstantProcess) &&
+      render_frame->IsMainFrame()) {
+    new SearchBox(render_frame);
   }
 }
 
@@ -532,10 +571,6 @@ void ChromeContentRendererClient::RenderViewCreated(
   new SpellCheckProvider(render_view, spellcheck_.get());
 #endif
   new prerender::PrerendererClient(render_view);
-
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kInstantProcess))
-    new SearchBox(render_view);
 
   new ChromeRenderViewObserver(render_view, web_cache_impl_.get());
 
@@ -567,18 +602,18 @@ bool ChromeContentRendererClient::OverrideCreatePlugin(
 #endif
 
   GURL url(params.url);
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   ChromeViewHostMsg_GetPluginInfo_Output output;
   render_frame->Send(new ChromeViewHostMsg_GetPluginInfo(
       render_frame->GetRoutingID(), url, frame->top()->getSecurityOrigin(),
       orig_mime_type, &output));
   *plugin = CreatePlugin(render_frame, frame, params, output);
-#else  // !defined(ENABLE_PLUGINS)
+#else  // !BUILDFLAG(ENABLE_PLUGINS)
   PluginUMAReporter::GetInstance()->ReportPluginMissing(orig_mime_type, url);
   *plugin = NonLoadablePluginPlaceholder::CreateNotSupportedPlugin(
                 render_frame, frame, params)->plugin();
 
-#endif  // defined(ENABLE_PLUGINS)
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
   return true;
 }
 
@@ -612,7 +647,7 @@ void ChromeContentRendererClient::DeferMediaLoad(
   closure.Run();
 }
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 WebPlugin* ChromeContentRendererClient::CreatePlugin(
     content::RenderFrame* render_frame,
     WebLocalFrame* frame,
@@ -756,15 +791,9 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
         PowerSaverInfo power_saver_info =
             PowerSaverInfo::Get(render_frame, power_saver_setting_on, params,
                                 info, frame->document().url());
-        // Prevent small plugins from loading by using a placeholder until
-        // we can determine the unobscured size of the object.
-        bool blocked_for_tinyness =
-            ChromePluginPlaceholder::IsSmallContentFilterEnabled() &&
-            power_saver_info.power_saver_enabled;
-
         if (power_saver_info.blocked_for_background_tab || is_prerendering ||
             !power_saver_info.poster_attribute.empty() ||
-            blocked_for_tinyness) {
+            power_saver_info.power_saver_enabled) {
           placeholder = ChromePluginPlaceholder::CreateBlockedPlugin(
               render_frame, frame, params, info, identifier, group_name,
               power_saver_info.poster_attribute.empty()
@@ -773,24 +802,18 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
               l10n_util::GetStringFUTF16(IDS_PLUGIN_BLOCKED, group_name),
               power_saver_info);
           placeholder->set_blocked_for_prerendering(is_prerendering);
-          placeholder->set_blocked_for_tinyness(blocked_for_tinyness);
+
+          // Because we can't determine the size of a plugin until it loads,
+          // all plugins are treated as tiny until proven otherwise.
+          placeholder->set_blocked_for_tinyness(
+              power_saver_info.power_saver_enabled);
+
           placeholder->AllowLoading();
           break;
         }
 
-        std::unique_ptr<content::PluginInstanceThrottler> throttler;
-        if (power_saver_info.power_saver_enabled) {
-          throttler =
-              PluginInstanceThrottler::Create(RenderFrame::RECORD_DECISION);
-          // PluginPreroller manages its own lifetime.
-          new PluginPreroller(
-              render_frame, frame, params, info, identifier, group_name,
-              l10n_util::GetStringFUTF16(IDS_PLUGIN_BLOCKED, group_name),
-              throttler.get());
-        }
-
-        return render_frame->CreatePlugin(frame, info, params,
-                                          std::move(throttler));
+        // Same-origin and whitelisted-origin plugins skip the placeholder.
+        return render_frame->CreatePlugin(frame, info, params, nullptr);
       }
       case ChromeViewHostMsg_GetPluginInfo_Status::kDisabled: {
         PluginUMAReporter::GetInstance()->ReportPluginDisabled(orig_mime_type,
@@ -856,6 +879,14 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
         observer->DidBlockContentType(content_type, group_name);
         break;
       }
+      case ChromeViewHostMsg_GetPluginInfo_Status::kBlockedNoLoading: {
+        placeholder = create_blocked_plugin(
+            IDR_BLOCKED_PLUGIN_HTML,
+            l10n_util::GetStringFUTF16(IDS_PLUGIN_BLOCKED_NO_LOADING,
+                                       group_name));
+        observer->DidBlockContentType(content_type, group_name);
+        break;
+      }
       case ChromeViewHostMsg_GetPluginInfo_Status::kComponentUpdateRequired: {
         placeholder = create_blocked_plugin(
             IDR_BLOCKED_PLUGIN_HTML,
@@ -878,7 +909,7 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
   placeholder->SetStatus(status);
   return placeholder->plugin();
 }
-#endif  // defined(ENABLE_PLUGINS)
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 // For NaCl content handling plugins, the NaCl manifest is stored in an
 // additonal 'nacl' param associated with the MIME type.
@@ -956,14 +987,14 @@ bool ChromeContentRendererClient::IsNaClAllowed(
     // and component extensions.  Also allow dev interfaces when --enable-nacl
     // is set, but do not allow --enable-nacl to provide dev interfaces to
     // webstore installed and other normally allowed URLs.
-    WebString dev_attribute = WebString::fromUTF8("@dev");
+    std::string dev_attribute("@dev");
     if (is_extension_unrestricted ||
         (is_nacl_unrestricted && !is_nacl_allowed_by_location)) {
       // Add the special '@dev' attribute.
       std::vector<base::string16> param_names;
       std::vector<base::string16> param_values;
-      param_names.push_back(dev_attribute);
-      param_values.push_back(WebString());
+      param_names.push_back(base::ASCIIToUTF16(dev_attribute));
+      param_values.push_back(base::string16());
       AppendParams(
           param_names,
           param_values,
@@ -973,8 +1004,10 @@ bool ChromeContentRendererClient::IsNaClAllowed(
       // If the params somehow contain '@dev', remove it.
       size_t attribute_count = params->attributeNames.size();
       for (size_t i = 0; i < attribute_count; ++i) {
-        if (params->attributeNames[i].equals(dev_attribute))
+        if (params->attributeNames[i].equals(dev_attribute.data(),
+                                             dev_attribute.length())) {
           params->attributeNames[i] = WebString();
+        }
       }
     }
   }
@@ -1016,8 +1049,7 @@ void ChromeContentRendererClient::GetNavigationErrorStrings(
     base::string16* error_description) {
   const GURL failed_url = error.unreachableURL;
 
-  bool is_post = base::EqualsASCII(
-      base::StringPiece16(failed_request.httpMethod()), "POST");
+  bool is_post = failed_request.httpMethod().ascii() == "POST";
   bool is_ignoring_cache =
       failed_request.getCachePolicy() == WebCachePolicy::BypassingCache;
   if (error_html) {
@@ -1107,7 +1139,7 @@ bool ChromeContentRendererClient::ShouldFork(WebLocalFrame* frame,
 }
 
 bool ChromeContentRendererClient::WillSendRequest(
-    WebFrame* frame,
+    WebLocalFrame* frame,
     ui::PageTransition transition_type,
     const blink::WebURL& url,
     GURL* new_url) {
@@ -1123,9 +1155,8 @@ bool ChromeContentRendererClient::WillSendRequest(
   if (!url.protocolIs(chrome::kChromeSearchScheme))
     return false;
 
-  const content::RenderView* render_view =
-      content::RenderView::FromWebView(frame->view());
-  SearchBox* search_box = SearchBox::Get(render_view);
+  SearchBox* search_box =
+      SearchBox::Get(content::RenderFrame::FromWebFrame(frame->localRoot()));
   if (search_box) {
     // Note: this GURL copy could be avoided if host() were added to WebURL.
     GURL gurl(url);
@@ -1199,7 +1230,7 @@ bool ChromeContentRendererClient::IsExternalPepperPlugin(
   return module_name == "Native Client";
 }
 
-#if defined(ENABLE_PLUGINS) && BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_PLUGINS) && BUILDFLAG(ENABLE_EXTENSIONS)
 bool ChromeContentRendererClient::IsExtensionOrSharedModuleWhitelisted(
     const GURL& url, const std::set<std::string>& whitelist) {
   const extensions::ExtensionSet* extension_set =
@@ -1269,7 +1300,7 @@ ChromeContentRendererClient::CreateWorkerContentSettingsClientProxy(
 }
 
 bool ChromeContentRendererClient::IsPluginAllowedToUseDevChannelAPIs() {
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   // Allow access for tests.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnablePepperTesting)) {
@@ -1288,7 +1319,7 @@ bool ChromeContentRendererClient::IsPluginAllowedToUseDevChannelAPIs() {
 
 bool ChromeContentRendererClient::IsPluginAllowedToUseCameraDeviceAPI(
     const GURL& url) {
-#if defined(ENABLE_PLUGINS) && BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_PLUGINS) && BUILDFLAG(ENABLE_EXTENSIONS)
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnablePepperTesting))
     return true;
@@ -1302,7 +1333,7 @@ bool ChromeContentRendererClient::IsPluginAllowedToUseCameraDeviceAPI(
 
 bool ChromeContentRendererClient::IsPluginAllowedToUseCompositorAPI(
     const GURL& url) {
-#if defined(ENABLE_PLUGINS) && BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_PLUGINS) && BUILDFLAG(ENABLE_EXTENSIONS)
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnablePepperTesting))
     return true;
@@ -1347,7 +1378,7 @@ void ChromeContentRendererClient::AddImageContextMenuProperties(
     const WebURLResponse& response,
     std::map<std::string, std::string>* properties) {
   DCHECK(properties);
-  WebString header_key(ASCIIToUTF16(
+  WebString header_key(WebString::fromASCII(
       data_reduction_proxy::chrome_proxy_content_transform_header()));
   if (!response.httpHeaderField(header_key).isNull() &&
       data_reduction_proxy::IsEmptyImagePreview(
@@ -1412,9 +1443,6 @@ bool ChromeContentRendererClient::ShouldEnforceWebRTCRoutingPreferences() {
 }
 
 GURL ChromeContentRendererClient::OverrideFlashEmbedWithHTML(const GURL& url) {
-  if (!base::FeatureList::IsEnabled(features::kOverrideYouTubeFlashEmbed))
-    return GURL();
-
   if (!url.is_valid())
     return GURL();
 
@@ -1476,4 +1504,16 @@ GURL ChromeContentRendererClient::OverrideFlashEmbedWithHTML(const GURL& url) {
 
   RecordYouTubeRewriteUMA(result);
   return corrected_url.ReplaceComponents(r);
+}
+
+void ChromeContentRendererClient::GetTaskSchedulerInitializationParams(
+    std::vector<base::SchedulerWorkerPoolParams>* params_vector,
+    base::TaskScheduler::WorkerPoolIndexForTraitsCallback*
+        index_to_traits_callback) {
+  DCHECK(params_vector);
+  DCHECK(index_to_traits_callback);
+  // If this call fails, content will fall back to the default params.
+  *params_vector = task_scheduler_util::GetRendererWorkerPoolParams();
+  *index_to_traits_callback =
+      base::Bind(&task_scheduler_util::RendererWorkerPoolIndexForTraits);
 }

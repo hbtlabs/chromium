@@ -4,35 +4,39 @@
 
 #include "modules/sensor/Gyroscope.h"
 
-#include "modules/sensor/GyroscopeReading.h"
 
 using device::mojom::blink::SensorType;
 
 namespace blink {
 
-Gyroscope* Gyroscope::create(ScriptState* scriptState,
+Gyroscope* Gyroscope::create(ExecutionContext* executionContext,
                              const SensorOptions& options,
                              ExceptionState& exceptionState) {
-  return new Gyroscope(scriptState, options, exceptionState);
+  return new Gyroscope(executionContext, options, exceptionState);
 }
 
 // static
-Gyroscope* Gyroscope::create(ScriptState* scriptState,
+Gyroscope* Gyroscope::create(ExecutionContext* executionContext,
                              ExceptionState& exceptionState) {
-  return create(scriptState, SensorOptions(), exceptionState);
+  return create(executionContext, SensorOptions(), exceptionState);
 }
 
-Gyroscope::Gyroscope(ScriptState* scriptState,
+Gyroscope::Gyroscope(ExecutionContext* executionContext,
                      const SensorOptions& options,
                      ExceptionState& exceptionState)
-    : Sensor(scriptState, options, exceptionState, SensorType::GYROSCOPE) {}
-
-GyroscopeReading* Gyroscope::reading() const {
-  return static_cast<GyroscopeReading*>(Sensor::reading());
+    : Sensor(executionContext, options, exceptionState, SensorType::GYROSCOPE) {
 }
 
-std::unique_ptr<SensorReadingFactory> Gyroscope::createSensorReadingFactory() {
-  return makeUnique<SensorReadingFactoryImpl<GyroscopeReading>>();
+double Gyroscope::x(bool& isNull) const {
+  return readingValue(0, isNull);
+}
+
+double Gyroscope::y(bool& isNull) const {
+  return readingValue(1, isNull);
+}
+
+double Gyroscope::z(bool& isNull) const {
+  return readingValue(2, isNull);
 }
 
 DEFINE_TRACE(Gyroscope) {

@@ -6,28 +6,63 @@
 #define NGPhysicalTextFragment_h
 
 #include "core/CoreExport.h"
-#include "core/layout/ng/ng_physical_fragment_base.h"
-#include "platform/LayoutUnit.h"
+#include "core/layout/ng/ng_block_node.h"
+#include "core/layout/ng/ng_inline_node.h"
+#include "core/layout/ng/ng_floating_object.h"
+#include "core/layout/ng/ng_physical_fragment.h"
 #include "platform/heap/Handle.h"
-#include "wtf/text/WTFString.h"
 
 namespace blink {
 
-class CORE_EXPORT NGPhysicalTextFragment final : public NGPhysicalFragmentBase {
+class CORE_EXPORT NGPhysicalTextFragment final : public NGPhysicalFragment {
  public:
-  NGPhysicalTextFragment(NGPhysicalSize size, NGPhysicalSize overflow)
-      : NGPhysicalFragmentBase(size, overflow, FragmentText) {}
+  NGPhysicalTextFragment(
+      LayoutObject* layout_object,
+      const NGInlineNode* node,
+      unsigned item_index,
+      unsigned start_offset,
+      unsigned end_offset,
+      NGPhysicalSize size,
+      NGPhysicalSize overflow,
+      PersistentHeapLinkedHashSet<WeakMember<NGBlockNode>>&
+          out_of_flow_descendants,
+      Vector<NGStaticPosition> out_of_flow_positions,
+      Vector<Persistent<NGFloatingObject>>& unpositioned_floats,
+      Vector<Persistent<NGFloatingObject>>& positioned_floats)
+      : NGPhysicalFragment(layout_object,
+                           size,
+                           overflow,
+                           kFragmentText,
+                           out_of_flow_descendants,
+                           out_of_flow_positions,
+                           unpositioned_floats,
+                           positioned_floats),
+        node_(node),
+        item_index_(item_index),
+        start_offset_(start_offset),
+        end_offset_(end_offset) {}
 
-  DEFINE_INLINE_TRACE_AFTER_DISPATCH() {
-    NGPhysicalFragmentBase::traceAfterDispatch(visitor);
-  }
+  const NGInlineNode* Node() const { return node_; }
+
+  // The range of NGLayoutInlineItem.
+  unsigned ItemIndex() const { return item_index_; }
+  unsigned StartOffset() const { return start_offset_; }
+  unsigned EndOffset() const { return end_offset_; }
+
+ private:
+  // TODO(kojii): NGInlineNode is to access text content and NGLayoutInlineItem.
+  // Review if it's better to point them.
+  Persistent<const NGInlineNode> node_;
+  unsigned item_index_;
+  unsigned start_offset_;
+  unsigned end_offset_;
 };
 
 DEFINE_TYPE_CASTS(NGPhysicalTextFragment,
-                  NGPhysicalFragmentBase,
+                  NGPhysicalFragment,
                   text,
-                  text->Type() == NGPhysicalFragmentBase::FragmentText,
-                  text.Type() == NGPhysicalFragmentBase::FragmentText);
+                  text->Type() == NGPhysicalFragment::kFragmentText,
+                  text.Type() == NGPhysicalFragment::kFragmentText);
 
 }  // namespace blink
 

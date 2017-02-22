@@ -43,6 +43,7 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
       const std::string& gpu_blacklist_json,
       const gpu::GPUInfo& gpu_info);
   bool IsFeatureBlacklisted(int feature) const;
+  bool IsFeatureEnabled(int feature) const;
   bool IsDriverBugWorkaroundActive(int feature) const;
   gpu::GPUInfo GetGPUInfo() const;
   void GetGpuProcessHandles(
@@ -69,6 +70,7 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
   void Initialize();
 
   void UpdateGpuInfo(const gpu::GPUInfo& gpu_info);
+  void UpdateGpuFeatureInfo(const gpu::GpuFeatureInfo& gpu_feature_info);
 
   void UpdateVideoMemoryUsageStats(
       const gpu::VideoMemoryUsageStats& video_memory_usage_stats);
@@ -231,6 +233,8 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
 
   std::set<int> blacklisted_features_;
   std::set<int> preliminary_blacklisted_features_;
+  // Eventually |blacklisted_features_| should be folded in to this.
+  gpu::GpuFeatureInfo gpu_feature_info_;
 
   std::set<int> gpu_driver_bugs_;
 
@@ -268,6 +272,9 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
 
   // True if all future Initialize calls should be ignored.
   bool finalized_;
+
+  // True if --single-process or --in-process-gpu is passed in.
+  bool in_process_gpu_;
 
   std::string disabled_extensions_;
 

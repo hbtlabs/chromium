@@ -10,6 +10,8 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/optional.h"
+#include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/bookmarks/bookmark_editor.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -24,10 +26,6 @@ class ContentSettingBubbleModel;
 class GURL;
 class LoginHandler;
 class Profile;
-
-namespace base {
-struct Feature;
-}
 
 namespace bookmarks {
 class BookmarkBubbleObserver;
@@ -44,13 +42,17 @@ class Extension;
 }
 
 namespace gfx {
-class Image;
 class Point;
 }
 
 namespace net {
 class AuthChallengeInfo;
 class URLRequest;
+}
+
+namespace payments {
+class PaymentRequest;
+class PaymentRequestDialog;
 }
 
 namespace security_state {
@@ -66,14 +68,6 @@ class WebDialogDelegate;
 }
 
 namespace chrome {
-
-#if defined(OS_MACOSX)
-// Makes ToolkitViewsDialogsEnabled() available to chrome://flags.
-extern const base::Feature kMacViewsNativeDialogs;
-
-// Makes ToolkitViewsWebUIDialogsEnabled() available to chrome://flags.
-extern const base::Feature kMacViewsWebUIDialogs;
-#endif  // OS_MACOSX
 
 // Shows or hides the Task Manager. |browser| can be NULL when called from Ash.
 // Returns a pointer to the underlying TableModel, which can be ignored, or used
@@ -123,14 +117,6 @@ content::ColorChooser* ShowColorChooser(content::WebContents* web_contents,
 
 #if defined(OS_MACOSX)
 
-// For Mac, returns true if Chrome should show an equivalent toolkit-views based
-// dialog instead of a native-looking Cocoa dialog.
-bool ToolkitViewsDialogsEnabled();
-
-// For Mac, returns true if Chrome should show an equivalent toolkit-views based
-// dialog instead of a WebUI-styled Cocoa dialog.
-bool ToolkitViewsWebUIDialogsEnabled();
-
 // Shows a Views website settings bubble at the given anchor point.
 void ShowWebsiteSettingsBubbleViewsAtPoint(
     const gfx::Point& anchor_point,
@@ -153,6 +139,9 @@ void ShowBookmarkBubbleViewsAtPoint(const gfx::Point& anchor_point,
 task_manager::TaskManagerTableModel* ShowTaskManagerViews(Browser* browser);
 void HideTaskManagerViews();
 
+// Show the Views "Chrome Update" dialog.
+void ShowUpdateChromeDialogViews(gfx::NativeWindow parent);
+
 #endif  // OS_MACOSX
 
 #if defined(TOOLKIT_VIEWS)
@@ -166,6 +155,18 @@ void ShowBookmarkEditorViews(gfx::NativeWindow parent_window,
                              Profile* profile,
                              const BookmarkEditor::EditDetails& details,
                              BookmarkEditor::Configuration configuration);
+
+payments::PaymentRequestDialog* CreatePaymentRequestDialog(
+    payments::PaymentRequest* request);
+
+// Shows the dialog to choose a share target app. |targets| is a list of app
+// title and manifest URL pairs that will be shown in a list. If the user picks
+// a target, this calls |callback| with the manifest URL of the chosen target,
+// or supplies null if the user cancelled the share.
+void ShowWebShareTargetPickerDialog(
+    gfx::NativeWindow parent_window,
+    const std::vector<std::pair<base::string16, GURL>>& targets,
+    const base::Callback<void(base::Optional<std::string>)>& callback);
 
 #if defined(OS_MACOSX)
 

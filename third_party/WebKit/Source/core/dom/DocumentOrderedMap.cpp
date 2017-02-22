@@ -75,17 +75,11 @@ inline bool keyMatchesSlotName(const AtomicString& key,
   return isHTMLSlotElement(element) && toHTMLSlotElement(element).name() == key;
 }
 
-inline bool keyMatchesLowercasedMapName(const AtomicString& key,
-                                        const Element& element) {
-  return isHTMLMapElement(element) &&
-         toHTMLMapElement(element).getName().lower() == key;
-}
-
 void DocumentOrderedMap::add(const AtomicString& key, Element* element) {
   DCHECK(key);
   DCHECK(element);
 
-  Map::AddResult addResult = m_map.add(key, new MapEntry(element));
+  Map::AddResult addResult = m_map.insert(key, new MapEntry(element));
   if (addResult.isNewEntry)
     return;
 
@@ -112,7 +106,7 @@ void DocumentOrderedMap::remove(const AtomicString& key, Element* element) {
   } else {
     if (entry->element == element) {
       DCHECK(entry->orderedList.isEmpty() ||
-             entry->orderedList.first() == element);
+             entry->orderedList.front() == element);
       entry->element =
           entry->orderedList.size() > 1 ? entry->orderedList[1] : nullptr;
     }
@@ -186,7 +180,7 @@ const HeapVector<Member<Element>>& DocumentOrderedMap::getAllElementsById(
       entry->orderedList.uncheckedAppend(element);
     }
     if (!entry->element)
-      entry->element = entry->orderedList.first();
+      entry->element = entry->orderedList.front();
   }
 
   return entry->orderedList;
@@ -206,12 +200,6 @@ HTMLSlotElement* DocumentOrderedMap::getSlotByName(
     return toHTMLSlotElement(slot);
   }
   return nullptr;
-}
-
-Element* DocumentOrderedMap::getElementByLowercasedMapName(
-    const AtomicString& key,
-    const TreeScope* scope) const {
-  return get<keyMatchesLowercasedMapName>(key, scope);
 }
 
 DEFINE_TRACE(DocumentOrderedMap) {

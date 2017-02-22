@@ -10,14 +10,16 @@
 #include <cstdint>
 #include <ostream>
 
+#include "base/macros.h"
 #include "net/quic/core/congestion_control/bandwidth_sampler.h"
 #include "net/quic/core/congestion_control/send_algorithm_interface.h"
 #include "net/quic/core/congestion_control/windowed_filter.h"
 #include "net/quic/core/crypto/quic_random.h"
 #include "net/quic/core/quic_bandwidth.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_time.h"
 #include "net/quic/core/quic_unacked_packet_map.h"
+#include "net/quic/platform/api/quic_export.h"
 
 namespace net {
 
@@ -36,7 +38,7 @@ typedef uint64_t QuicRoundTripCount;
 // TODO(vasilvv): implement traffic policer (long-term sampling) mode.
 //
 // TODO(vasilvv): implement packet conservation.
-class NET_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
+class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
  public:
   enum Mode {
     // Startup phase of the connection.
@@ -85,10 +87,10 @@ class NET_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
     QuicByteCount recovery_window;
 
     bool last_sample_is_app_limited;
+    QuicPacketNumber end_of_app_limited_phase;
   };
 
-  BbrSender(const QuicClock* clock,
-            const RttStats* rtt_stats,
+  BbrSender(const RttStats* rtt_stats,
             const QuicUnackedPacketMap* unacked_packets,
             QuicPacketCount initial_tcp_congestion_window,
             QuicPacketCount max_tcp_congestion_window,
@@ -188,7 +190,6 @@ class NET_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   // recovery.
   void CalculateRecoveryWindow(QuicByteCount bytes_acked);
 
-  const QuicClock* clock_;
   const RttStats* rtt_stats_;
   const QuicUnackedPacketMap* unacked_packets_;
   QuicRandom* random_;
@@ -235,6 +236,13 @@ class NET_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   // The gain currently applied to the congestion window.
   float congestion_window_gain_;
 
+  // The gain used for the congestion window during PROBE_BW.  Latched from
+  // quic_bbr_cwnd_gain flag.
+  const float congestion_window_gain_constant_;
+  // The coefficient by which mean RTT variance is added to the congestion
+  // window.  Latched from quic_bbr_rtt_variation_weight flag.
+  const float rtt_variance_weight_;
+
   // Number of round-trips in PROBE_BW mode, used for determining the current
   // pacing gain cycle.
   int cycle_current_offset_;
@@ -273,10 +281,11 @@ class NET_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   DISALLOW_COPY_AND_ASSIGN(BbrSender);
 };
 
-NET_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& os,
-                                            const BbrSender::Mode& mode);
-NET_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& os,
-                                            const BbrSender::DebugState& state);
+QUIC_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& os,
+                                             const BbrSender::Mode& mode);
+QUIC_EXPORT_PRIVATE std::ostream& operator<<(
+    std::ostream& os,
+    const BbrSender::DebugState& state);
 
 }  // namespace net
 

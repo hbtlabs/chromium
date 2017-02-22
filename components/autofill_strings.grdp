@@ -14,11 +14,14 @@
   <message name="IDS_AUTOFILL_CLEAR_LOCAL_COPY_BUTTON" desc="The label of the button that clears the local copy of a Wallet Credit Card." formatter_data="android_java">
     Clear copy
   </message>
-  <message name="IDS_AUTOFILL_WARNING_FORM_DISABLED" desc="Warning text to show when autofill is disabled by the website for a given form.">
-    This webpage has disabled automatic filling for this form.
+  <message name="IDS_AUTOFILL_WARNING_PAYMENT_DISABLED" desc="Warning text to show when credit card autofill is disabled because the website is not using a secure connection. This warning text is shown below a separate warning indicating that the form is not secure, so this message indicates just that payment autofilling has been disabled (not why).">
+    Payment autofilling disabled
   </message>
   <message name="IDS_AUTOFILL_WARNING_INSECURE_CONNECTION" desc="Warning text to show when credit card autofill is disabled because the website is not using a secure connection.">
     Automatic credit card filling is disabled because this form does not use a secure connection.
+  </message>
+  <message name="IDS_AUTOFILL_HTTP_WARNING_LEARN_MORE" desc="The text displayed with http bad warning message in the Autofill popup to direct the user to the Chrome security connection help center page.">
+    Learn more
   </message>
   <message name="IDS_AUTOFILL_CREDIT_CARD_HTTP_WARNING_MESSAGE" desc="Chrome can help the user fill credit card web forms by showing a pop-up with text suggestions next to a focused credit card text field. If the form is on an insecure site (e.g., http://), this text is shown on top of those suggestions.">
     Payment not secure
@@ -66,6 +69,9 @@
   <message name="IDS_AUTOFILL_CC_MASTERCARD" desc="MasterCard credit card name." formatter_data="android_java">
     MasterCard
   </message>
+  <message name="IDS_AUTOFILL_CC_MIR" desc="Mir credit card name." formatter_data="android_java">
+    Mir
+  </message>
   <message name="IDS_AUTOFILL_CC_UNION_PAY" desc="China UnionPay credit card name." formatter_data="android_java">
     China UnionPay
   </message>
@@ -74,9 +80,6 @@
   </message>
   <message name="IDS_AUTOFILL_CC_GENERIC" desc="Generic credit card name.">
     Card
-  </message>
-  <message name="IDS_AUTOFILL_ADDRESS_LINE_SEPARATOR" desc="The separator character used to join multi-line addresses.">
-    , '''
   </message>
   <message name="IDS_AUTOFILL_ADDRESS_SUMMARY_SEPARATOR" desc="The separator character used in the summary of an address." formatter_data="android_java">
     , '''
@@ -121,9 +124,6 @@
   <message name="IDS_AUTOFILL_FIELD_LABEL_POSTAL_CODE" desc="The label of the Postal code entry.">
     Postal code
   </message>
-  <message name="IDS_AUTOFILL_FIELD_LABEL_COUNTRY" desc="The label of the Country entry.">
-    Country
-  </message>
 
   <message translateable="false" name="IDS_AUTOFILL_SHOW_PREDICTIONS_TITLE" desc="The title for form elements when annotated with Autofill predictions.">
     overall type: <ph name="OVERALL_TYPE">$1<ex>NAME_FIRST</ex></ph>
@@ -133,11 +133,6 @@
     parseable name: <ph name="PARSEABLE_NAME">$5<ex>SOME_NAME</ex></ph>
     field signature: <ph name="FIELD_SIGNATURE">$6<ex>12345678</ex></ph>
     form signature: <ph name="FORM_SIGNATURE">$7<ex>1234567812345678</ex></ph>
-  </message>
-
-  <!-- Autofill dialog: legal documents -->
-  <message name="IDS_AUTOFILL_DIALOG_PRIVACY_POLICY_LINK" desc="The text of an extra link that is appended to the end of whatever other legal documents need to be accepted or updated.">
-    Privacy Policy
   </message>
 
   <if expr="_google_chrome">
@@ -151,23 +146,20 @@
     </message>
   </if>
 
+  <if expr="_google_chrome">
+    <message name="IDS_AUTOFILL_CREDIT_CARD_OPTIONS_POPUP" desc="The label of the text displayed in the Autofill Credit Card popup to direct the user to the Autofill settings UI.">
+     Chrome Autofill settings...
+    </message>
+  </if>
+  <if expr="not _google_chrome">
+    <message name="IDS_AUTOFILL_CREDIT_CARD_OPTIONS_POPUP" desc="The label of the text displayed in the Autofill Credit Card popup to direct the user to the Autofill settings UI.">
+      Chromium Autofill settings...
+    </message>
+  </if>
+
   <message name="IDS_AUTOFILL_OPTIONS_CONTENT_DESCRIPTION" desc="The text verbalised by a screen reader for the button that directs the user to the Autofill settings UI. This string is not displayed.">
     settings
   </message>
-
-  <message name="IDS_AUTOFILL_CREDIT_CARD_NOT_SUPPORTED_BY_WALLET" desc="Message displayed to user when user entered a credit card number that is not supported by Google Payments.">
-    This type of card is not supported by Google Payments. Please select a different card.
-  </message>
-  <message name="IDS_AUTOFILL_CREDIT_CARD_NOT_SUPPORTED_BY_WALLET_FOR_MERCHANT" desc="Message displayed to user when user entered a credit card number that is not supported by Google Payments for the particular merchant site the user is on.">
-    This type of card is not supported by Google Payments for this merchant. Please select a different card.
-  </message>
-
-  <!-- Autofill on OSX -->
-  <if expr="is_macosx">
-    <message name="IDS_AUTOFILL_ACCESS_MAC_CONTACTS" desc="When the user selects this Autofill entry, the browser prompts the user for access to the user's OSX contacts.">
-      Enable Autofill using Contacts…
-    </message>
-  </if>
 
   <message name="IDS_AUTOFILL_SCAN_CREDIT_CARD" desc="An item in the autofill popup that triggers a new credit card to be scanned using the camera on the device." formatter_data="android_java">
     Scan new card
@@ -177,7 +169,7 @@
     Use password for:
   </message>
 
-  <message name="IDS_AUTOFILL_PASSWORD_HTTP_WARNING_MESSAGE" desc="Chrome can help the user fill password web forms by showing a pop-up with text suggestions next to a focused password text field. If the form is on an insecure site (e.g., http://), this text is shown on top of those suggestions.">
+  <message name="IDS_AUTOFILL_LOGIN_HTTP_WARNING_MESSAGE" desc="Chrome can help the user fill login web forms by showing a pop-up with text suggestions next to a focused text field. If the form is on an insecure site (e.g., http://), this text is shown on top of those suggestions.">
     Login not secure
   </message>
 
@@ -219,16 +211,54 @@
     Pay quickly on sites and apps across devices using cards you have saved with Google.
   </message>
 
+  <!-- Autofill credit card suggestion popup -->
   <message name="IDS_AUTOFILL_CREDIT_CARD_EXPIRATION_DATE_ABBR" desc="Abbreviated label for credit card expiration date. [CHAR-LIMIT=32]">
     Exp: <ph name="EXPIRATION_MONTH">$1<ex>06</ex></ph>/<ph name="EXPIRATION_YEAR">$2<ex>17</ex></ph>
   </message>
 
+  <message name="IDS_AUTOFILL_CREDIT_CARD_EXPIRATION_DATE_LABEL_AND_ABBR" desc="Text displayed in the Autofill Credit Card popup before the credit card expiration date and the abbreviated expiration date.">
+    , exp <ph name="EXPIRATION_DATE_ABBR">$1<ex>06/17</ex></ph>
+  </message>
+
+  <message name="IDS_AUTOFILL_CREDIT_CARD_EXP_AND_LAST_USED_DATE" desc="Text displayed in the Autofill Credit Card popup to indicate the credit card expiration date and the date when this card was last used.">
+    Exp: <ph name="EXPIRATION_DATE_ABBR">$1<ex>06/17</ex></ph>, last used: <ph name="LAST_USED_DATE_NO_DETAIL">$2<ex>Jan 10</ex></ph>
+  </message>
+
+  <message name="IDS_AUTOFILL_CREDIT_CARD_LAST_USED_DATE" desc="Text displayed in the Autofill Credit Card popup to indicate the date when this card was last used.">
+    Last used: <ph name="LAST_USED_MONTH">$1<ex>Jan 10</ex></ph>
+  </message>
+
+  <message name="IDS_AUTOFILL_CREDIT_CARD_EXP_AND_ADDED_DATE" desc="Text displayed in the Autofill Credit Card popup to indicate the credit card expiration date and the date when this card was added to autofill.">
+    Exp: <ph name="EXPIRATION_DATE_ABBR">$1<ex>06/17</ex></ph>, added: <ph name="ADDED_TO_AUTOFILL_MONTH">$2<ex>Jan 10</ex></ph>
+  </message>
+
+  <message name="IDS_AUTOFILL_CREDIT_CARD_ADDED_DATE" desc="Text displayed in the Autofill Credit Card popup to indicate the date when this card was added to autofill.">
+    Added: <ph name="ADDED_TO_AUTOFILL_MONTH">$1<ex>Jan 10</ex></ph>
+  </message>
+
+  <message name="IDS_AUTOFILL_CREDIT_CARD_EXP_AND_LAST_USED_YEAR_AGO" desc="Text displayed in the Autofill Credit Card popup to indicate the credit card expiration date and this card was used in autofill more than a year ago.">
+    Exp: <ph name="EXPIRATION_DATE_ABBR">$1<ex>06/17</ex></ph>, last used over a year ago
+  </message>
+
+  <message name="IDS_AUTOFILL_CREDIT_CARD_LAST_USED_YEAR_AGO" desc="Text displayed in the Autofill Credit Card popup to indicate this card was used in autofill more than a year ago.">
+    Last used over a year ago
+  </message>
+
   <!-- Autofill credit card unmask prompt -->
-  <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_ERROR_TRY_AGAIN" desc="Error message that encourages the user to try to re-enter their credit card CVC after a previous failed attempt.">
+  <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_ERROR_TRY_AGAIN_CVC" desc="Error message that encourages the user to try to re-enter their credit card CVC after a previous failed attempt." formatter_data="android_java">
     Check your CVC and try again
   </message>
-  <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_ERROR_TRY_AGAIN_WITH_EXPIRATION" desc="Error message that encourages the user to try to re-enter their credit card expiration date and CVC after a previous failed attempt.">
+  <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_ERROR_TRY_AGAIN_EXPIRATION_DATE" desc="Error message that encourages the user to try to re-enter their credit card expiration date after a previous failed attempt." formatter_data="android_java">
+    Check your expiration date and try again
+  </message>
+  <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_ERROR_TRY_AGAIN_CVC_AND_EXPIRATION" desc="Error message that encourages the user to try to re-enter their credit card expiration date and CVC after a previous failed attempt." formatter_data="android_java">
     Check your expiration date and CVC and try again
+  </message>
+  <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_ERROR_TRY_AGAIN_EXPIRATION_MONTH" desc="Error message that encourages the user to try to re-enter their credit card expiration month after a previous failed attempt." formatter_data="android_java">
+    Check your expiration month and try again
+  </message>
+  <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_ERROR_TRY_AGAIN_EXPIRATION_YEAR" desc="Error message that encourages the user to try to re-enter their credit card expiration year after a previous failed attempt." formatter_data="android_java">
+    Check your expiration year and try again
   </message>
   <if expr="_google_chrome">
     <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_ERROR_PERMANENT" desc="Error message to show when a credit card cannot be verified and the user isn't allowed to retry.">
@@ -247,8 +277,8 @@
     <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_TITLE" desc="Title for the credit card unmasking dialog.">
       Enter the CVC for <ph name="CREDIT_CARD">$1<ex>Visa - 5679</ex></ph>
     </message>
-    <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_UPDATE_TITLE" desc="Title for the credit card unmasking dialog when the credit card is expired.">
-      Enter the expiration date and CVC for <ph name="CREDIT_CARD">$1<ex>Visa - 5679</ex></ph> to update your card details
+    <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_EXPIRED_TITLE" desc="Title for the credit card unmasking dialog when the credit card is expired.">
+      Enter the expiration date and CVC for <ph name="CREDIT_CARD">$1<ex>Visa - 5679</ex></ph>
     </message>
     <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_INSTRUCTIONS" desc="Text explaining what the user should do in the card unmasking dialog.">
       Once you confirm, your card details will be shared with this site
@@ -313,5 +343,4 @@
   <message name="IDS_AUTOFILL_DIALOG_PLACEHOLDER_CVC" desc="The placeholder/label text for credit card verification code in the requestAutocomplete dialog.">
     CVC
   </message>
-
 </grit-part>

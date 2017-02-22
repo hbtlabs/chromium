@@ -7,17 +7,22 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/arc/policy/arc_policy_bridge.h"
-#include "components/arc/test/fake_arc_bridge_service.h"
+#include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
+#include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
+#include "chrome/test/base/testing_browser_process.h"
+#include "chrome/test/base/testing_profile_manager.h"
+#include "components/arc/arc_bridge_service.h"
 #include "components/arc/test/fake_policy_instance.h"
 #include "components/policy/core/common/mock_policy_service.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/policy_constants.h"
-#include "mojo/public/cpp/bindings/string.h"
+#include "components/safe_json/testing_json_parser.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -77,16 +82,27 @@ void ExpectString(std::unique_ptr<CheckedBoolean> was_run,
   was_run->set_value(true);
 }
 
+void ExpectStringWithClosure(base::Closure quit_closure,
+                             std::unique_ptr<CheckedBoolean> was_run,
+                             const std::string& expected,
+                             const std::string& received) {
+  EXPECT_EQ(expected, received);
+  was_run->set_value(true);
+  quit_closure.Run();
+}
+
 arc::ArcPolicyBridge::GetPoliciesCallback PolicyStringCallback(
     const std::string& expected) {
-  std::unique_ptr<CheckedBoolean> was_run(new CheckedBoolean());
+  auto was_run = base::MakeUnique<CheckedBoolean>();
   return base::Bind(&ExpectString, base::Passed(&was_run), expected);
 }
 
 arc::ArcPolicyBridge::ReportComplianceCallback PolicyComplianceCallback(
+    base::Closure quit_closure,
     const std::string& expected) {
-  std::unique_ptr<CheckedBoolean> was_run(new CheckedBoolean);
-  return base::Bind(&ExpectString, base::Passed(&was_run), expected);
+  auto was_run = base::MakeUnique<CheckedBoolean>();
+  return base::Bind(&ExpectStringWithClosure, quit_closure,
+                    base::Passed(&was_run), expected);
 }
 
 }  // namespace
@@ -101,9 +117,9 @@ class ArcPolicyBridgeTest : public testing::Test {
   ArcPolicyBridgeTest() {}
 
   void SetUp() override {
-    bridge_service_.reset(new FakeArcBridgeService());
-    policy_bridge_.reset(
-        new ArcPolicyBridge(bridge_service_.get(), &policy_service_));
+    bridge_service_ = base::MakeUnique<ArcBridgeService>();
+    policy_bridge_ = base::MakeUnique<ArcPolicyBridge>(bridge_service_.get(),
+                                                       &policy_service_);
     policy_bridge_->OverrideIsManagedForTesting(true);
 
     EXPECT_CALL(policy_service_,
@@ -113,20 +129,39 @@ class ArcPolicyBridgeTest : public testing::Test {
     EXPECT_CALL(policy_service_, AddObserver(policy::POLICY_DOMAIN_CHROME, _))
         .Times(1);
 
-    policy_instance_.reset(new FakePolicyInstance);
+    policy_instance_ = base::MakeUnique<FakePolicyInstance>();
     bridge_service_->policy()->SetInstance(policy_instance_.get());
+
+    // Setting up user profile for ReportCompliance() tests.
+    chromeos::FakeChromeUserManager* const fake_user_manager =
+        new chromeos::FakeChromeUserManager();
+    user_manager_enabler_ =
+        base::MakeUnique<chromeos::ScopedUserManagerEnabler>(fake_user_manager);
+    const AccountId account_id(
+        AccountId::FromUserEmailGaiaId("user@gmail.com", "1111111111"));
+    fake_user_manager->AddUser(account_id);
+    fake_user_manager->LoginUser(account_id);
+    testing_profile_manager_ = base::MakeUnique<TestingProfileManager>(
+        TestingBrowserProcess::GetGlobal());
+    ASSERT_TRUE(testing_profile_manager_->SetUp());
+    ASSERT_TRUE(
+        testing_profile_manager_->CreateTestingProfile("user@gmail.com"));
   }
 
  protected:
   ArcPolicyBridge* policy_bridge() { return policy_bridge_.get(); }
   FakePolicyInstance* policy_instance() { return policy_instance_.get(); }
   policy::PolicyMap& policy_map() { return policy_map_; }
+  base::RunLoop& run_loop() { return run_loop_; }
 
  private:
-  // Not an unused variable. Unit tests do not have a message loop by themselves
-  // and mojo needs a message loop for communication.
-  base::MessageLoop loop_;
-  std::unique_ptr<FakeArcBridgeService> bridge_service_;
+  safe_json::TestingJsonParser::ScopedFactoryOverride factory_override_;
+  content::TestBrowserThreadBundle thread_bundle_;
+  std::unique_ptr<chromeos::ScopedUserManagerEnabler> user_manager_enabler_;
+  std::unique_ptr<TestingProfileManager> testing_profile_manager_;
+  base::RunLoop run_loop_;
+
+  std::unique_ptr<ArcBridgeService> bridge_service_;
   std::unique_ptr<ArcPolicyBridge> policy_bridge_;
   // Always keep policy_instance_ below bridge_service_, so that
   // policy_instance_ is destructed first. It needs to remove itself as
@@ -239,6 +274,27 @@ TEST_F(ArcPolicyBridgeTest, ExternalStorageDisabledTest) {
       PolicyStringCallback("{\"mountPhysicalMediaDisabled\":true}"));
 }
 
+TEST_F(ArcPolicyBridgeTest, WallpaperImageSetTest) {
+  base::DictionaryValue dict;
+  dict.SetString("url", "https://example.com/wallpaper.jpg");
+  dict.SetString("hash", "somehash");
+  policy_map().Set(policy::key::kWallpaperImage, policy::POLICY_LEVEL_MANDATORY,
+                   policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
+                   dict.CreateDeepCopy(), nullptr);
+  policy_bridge()->GetPolicies(
+      PolicyStringCallback("{\"setWallpaperDisabled\":true}"));
+}
+
+TEST_F(ArcPolicyBridgeTest, WallpaperImageSet_NotCompletePolicyTest) {
+  base::DictionaryValue dict;
+  dict.SetString("url", "https://example.com/wallpaper.jpg");
+  // "hash" attribute is missing, so the policy shouldn't be set
+  policy_map().Set(policy::key::kWallpaperImage, policy::POLICY_LEVEL_MANDATORY,
+                   policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
+                   dict.CreateDeepCopy(), nullptr);
+  policy_bridge()->GetPolicies(PolicyStringCallback("{}"));
+}
+
 TEST_F(ArcPolicyBridgeTest, URLBlacklistTest) {
   base::ListValue blacklist;
   blacklist.AppendString("www.blacklist1.com");
@@ -341,27 +397,47 @@ TEST_F(ArcPolicyBridgeTest, MultiplePoliciesTest) {
       "}"));
 }
 
-// Disabled due to memory leak https://crbug.com/666371.
-// TODO(poromov): Fix leak and re-enable.
-TEST_F(ArcPolicyBridgeTest, DISABLED_EmptyReportComplianceTest) {
+TEST_F(ArcPolicyBridgeTest, EmptyReportComplianceTest) {
   policy_bridge()->ReportCompliance(
-      "", PolicyComplianceCallback(kPolicyCompliantResponse));
+      "{}", PolicyComplianceCallback(run_loop().QuitClosure(),
+                                     kPolicyCompliantResponse));
+  run_loop().Run();
 }
 
-// Disabled due to memory leak https://crbug.com/666371.
-// TODO(poromov): Fix leak and re-enable.
-TEST_F(ArcPolicyBridgeTest, DISABLED_ParsableReportComplianceTest) {
+TEST_F(ArcPolicyBridgeTest, ParsableReportComplianceTest) {
   policy_bridge()->ReportCompliance(
       "{\"nonComplianceDetails\" : []}",
-      PolicyComplianceCallback(kPolicyCompliantResponse));
+      PolicyComplianceCallback(run_loop().QuitClosure(),
+                               kPolicyCompliantResponse));
+  run_loop().Run();
 }
 
-// Disabled due to memory leak https://crbug.com/666371.
-// TODO(poromov): Fix leak and re-enable.
-TEST_F(ArcPolicyBridgeTest, DISABLED_NonParsableReportComplianceTest) {
+TEST_F(ArcPolicyBridgeTest, NonParsableReportComplianceTest) {
   policy_bridge()->ReportCompliance(
       "\"nonComplianceDetails\" : [}",
-      PolicyComplianceCallback(kPolicyNonCompliantResponse));
+      PolicyComplianceCallback(run_loop().QuitClosure(),
+                               kPolicyNonCompliantResponse));
+  run_loop().Run();
+}
+
+TEST_F(ArcPolicyBridgeTest, ReportComplianceTest_NonCompliantReasons) {
+  policy_bridge()->ReportCompliance(
+      "{\"nonComplianceDetails\" : "
+      "[{\"fieldPath\":\"\",\"nonComplianceReason\":0,\"packageName\":\"\","
+      "\"settingName\":\"someSetting\",\"cachedSize\":-1}]}",
+      PolicyComplianceCallback(run_loop().QuitClosure(),
+                               kPolicyNonCompliantResponse));
+  run_loop().Run();
+}
+
+TEST_F(ArcPolicyBridgeTest, ReportComplianceTest_CompliantReasons) {
+  policy_bridge()->ReportCompliance(
+      "{\"nonComplianceDetails\" : "
+      "[{\"fieldPath\":\"\",\"nonComplianceReason\":1,\"packageName\":\"\","
+      "\"settingName\":\"someSetting\",\"cachedSize\":-1}]}",
+      PolicyComplianceCallback(run_loop().QuitClosure(),
+                               kPolicyCompliantResponse));
+  run_loop().Run();
 }
 
 // This and the following test send the policies through a mojo connection

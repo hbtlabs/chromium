@@ -1,7 +1,9 @@
+alexmos@chromium.org
 avi@chromium.org
 clamy@chromium.org
 creis@chromium.org
 darin@chromium.org
+dgozman@chromium.org
 jam@chromium.org
 jochen@chromium.org
 kinuko@chromium.org
@@ -23,3 +25,5 @@ per-file *.sb=rsesek@chromium.org
 per-file *.isolate=maruel@chromium.org
 per-file *.isolate=tandrii@chromium.org
 per-file *.isolate=vadimsh@chromium.org
+
+# COMPONENT: Internals>Core

@@ -17,6 +17,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "cc/paint/paint_canvas.h"
+#include "cc/paint/paint_shader.h"
 #include "third_party/icu/source/common/unicode/rbbi.h"
 #include "third_party/icu/source/common/unicode/utf16.h"
 #include "third_party/skia/include/core/SkDrawLooper.h"
@@ -30,6 +32,7 @@
 #include "ui/gfx/platform_font.h"
 #include "ui/gfx/render_text_harfbuzz.h"
 #include "ui/gfx/scoped_canvas.h"
+#include "ui/gfx/skia_paint_util.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/gfx/switches.h"
 #include "ui/gfx/text_elider.h"
@@ -171,16 +174,20 @@ sk_sp<SkShader> CreateFadeShader(const FontList& font_list,
 }
 
 // Converts a FontRenderParams::Hinting value to the corresponding
-// SkPaint::Hinting value.
-SkPaint::Hinting FontRenderParamsHintingToSkPaintHinting(
+// cc::PaintFlags::Hinting value.
+cc::PaintFlags::Hinting FontRenderParamsHintingToPaintFlagsHinting(
     FontRenderParams::Hinting params_hinting) {
   switch (params_hinting) {
-    case FontRenderParams::HINTING_NONE:   return SkPaint::kNo_Hinting;
-    case FontRenderParams::HINTING_SLIGHT: return SkPaint::kSlight_Hinting;
-    case FontRenderParams::HINTING_MEDIUM: return SkPaint::kNormal_Hinting;
-    case FontRenderParams::HINTING_FULL:   return SkPaint::kFull_Hinting;
+    case FontRenderParams::HINTING_NONE:
+      return cc::PaintFlags::kNo_Hinting;
+    case FontRenderParams::HINTING_SLIGHT:
+      return cc::PaintFlags::kSlight_Hinting;
+    case FontRenderParams::HINTING_MEDIUM:
+      return cc::PaintFlags::kNormal_Hinting;
+    case FontRenderParams::HINTING_FULL:
+      return cc::PaintFlags::kFull_Hinting;
   }
-  return SkPaint::kNo_Hinting;
+  return cc::PaintFlags::kNo_Hinting;
 }
 
 // Make sure ranges don't break text graphemes.  If a range in |break_list|
@@ -216,44 +223,44 @@ SkiaTextRenderer::SkiaTextRenderer(Canvas* canvas)
       underline_thickness_(kUnderlineMetricsNotSet),
       underline_position_(0.0f) {
   DCHECK(canvas_skia_);
-  paint_.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
-  paint_.setStyle(SkPaint::kFill_Style);
-  paint_.setAntiAlias(true);
-  paint_.setSubpixelText(true);
-  paint_.setLCDRenderText(true);
-  paint_.setHinting(SkPaint::kNormal_Hinting);
+  flags_.setTextEncoding(cc::PaintFlags::kGlyphID_TextEncoding);
+  flags_.setStyle(cc::PaintFlags::kFill_Style);
+  flags_.setAntiAlias(true);
+  flags_.setSubpixelText(true);
+  flags_.setLCDRenderText(true);
+  flags_.setHinting(cc::PaintFlags::kNormal_Hinting);
 }
 
 SkiaTextRenderer::~SkiaTextRenderer() {
 }
 
 void SkiaTextRenderer::SetDrawLooper(sk_sp<SkDrawLooper> draw_looper) {
-  paint_.setLooper(std::move(draw_looper));
+  flags_.setLooper(std::move(draw_looper));
 }
 
 void SkiaTextRenderer::SetFontRenderParams(const FontRenderParams& params,
                                            bool subpixel_rendering_suppressed) {
-  ApplyRenderParams(params, subpixel_rendering_suppressed, &paint_);
+  ApplyRenderParams(params, subpixel_rendering_suppressed, &flags_);
 }
 
 void SkiaTextRenderer::SetTypeface(sk_sp<SkTypeface> typeface) {
-  paint_.setTypeface(std::move(typeface));
+  flags_.setTypeface(std::move(typeface));
 }
 
 void SkiaTextRenderer::SetTextSize(SkScalar size) {
-  paint_.setTextSize(size);
+  flags_.setTextSize(size);
 }
 
 void SkiaTextRenderer::SetForegroundColor(SkColor foreground) {
-  paint_.setColor(foreground);
+  flags_.setColor(foreground);
 }
 
 void SkiaTextRenderer::SetShader(sk_sp<SkShader> shader) {
-  paint_.setShader(std::move(shader));
+  flags_.setShader(cc::WrapSkShader(std::move(shader)));
 }
 
 void SkiaTextRenderer::SetHaloEffect() {
-  paint_.setImageFilter(SkDilateImageFilter::Make(1, 1, nullptr));
+  flags_.setImageFilter(SkDilateImageFilter::Make(1, 1, nullptr));
 }
 
 void SkiaTextRenderer::SetUnderlineMetrics(SkScalar thickness,
@@ -266,7 +273,7 @@ void SkiaTextRenderer::DrawPosText(const SkPoint* pos,
                                    const uint16_t* glyphs,
                                    size_t glyph_count) {
   const size_t byte_length = glyph_count * sizeof(glyphs[0]);
-  canvas_skia_->drawPosText(&glyphs[0], byte_length, &pos[0], paint_);
+  canvas_skia_->drawPosText(&glyphs[0], byte_length, &pos[0], flags_);
 }
 
 void SkiaTextRenderer::DrawDecorations(int x, int y, int width, bool underline,
@@ -277,8 +284,8 @@ void SkiaTextRenderer::DrawDecorations(int x, int y, int width, bool underline,
     DrawStrike(x, y, width);
   if (diagonal_strike) {
     if (!diagonal_)
-      diagonal_.reset(new DiagonalStrike(canvas_, Point(x, y), paint_));
-    diagonal_->AddPiece(width, paint_.getColor());
+      diagonal_.reset(new DiagonalStrike(canvas_, Point(x, y), flags_));
+    diagonal_->AddPiece(width, flags_.getColor());
   } else if (diagonal_) {
     EndDiagonalStrike();
   }
@@ -297,31 +304,27 @@ void SkiaTextRenderer::DrawUnderline(int x, int y, int width) {
       x_scalar, y + underline_position_, x_scalar + width,
       y + underline_position_ + underline_thickness_);
   if (underline_thickness_ == kUnderlineMetricsNotSet) {
-    const SkScalar text_size = paint_.getTextSize();
-    r.fTop = SkScalarMulAdd(text_size, kUnderlineOffset, y);
-    r.fBottom = r.fTop + SkScalarMul(text_size, kLineThickness);
+    const SkScalar text_size = flags_.getTextSize();
+    r.fTop = text_size * kUnderlineOffset + y;
+    r.fBottom = r.fTop + text_size * kLineThickness;
   }
-  canvas_skia_->drawRect(r, paint_);
+  canvas_skia_->drawRect(r, flags_);
 }
 
 void SkiaTextRenderer::DrawStrike(int x, int y, int width) const {
-  const SkScalar text_size = paint_.getTextSize();
-  const SkScalar height = SkScalarMul(text_size, kLineThickness);
-  const SkScalar offset = SkScalarMulAdd(text_size, kStrikeThroughOffset, y);
+  const SkScalar text_size = flags_.getTextSize();
+  const SkScalar height = text_size * kLineThickness;
+  const SkScalar offset = text_size * kStrikeThroughOffset + y;
   SkScalar x_scalar = SkIntToScalar(x);
   const SkRect r =
       SkRect::MakeLTRB(x_scalar, offset, x_scalar + width, offset + height);
-  canvas_skia_->drawRect(r, paint_);
+  canvas_skia_->drawRect(r, flags_);
 }
 
 SkiaTextRenderer::DiagonalStrike::DiagonalStrike(Canvas* canvas,
                                                  Point start,
-                                                 const SkPaint& paint)
-    : canvas_(canvas),
-      start_(start),
-      paint_(paint),
-      total_length_(0) {
-}
+                                                 const cc::PaintFlags& flags)
+    : canvas_(canvas), start_(start), flags_(flags), total_length_(0) {}
 
 SkiaTextRenderer::DiagonalStrike::~DiagonalStrike() {
 }
@@ -332,22 +335,21 @@ void SkiaTextRenderer::DiagonalStrike::AddPiece(int length, SkColor color) {
 }
 
 void SkiaTextRenderer::DiagonalStrike::Draw() {
-  const SkScalar text_size = paint_.getTextSize();
-  const SkScalar offset = SkScalarMul(text_size, kDiagonalStrikeMarginOffset);
-  const int thickness =
-      SkScalarCeilToInt(SkScalarMul(text_size, kLineThickness) * 2);
+  const SkScalar text_size = flags_.getTextSize();
+  const SkScalar offset = text_size * kDiagonalStrikeMarginOffset;
+  const int thickness = SkScalarCeilToInt(text_size * kLineThickness * 2);
   const int height = SkScalarCeilToInt(text_size - offset);
   const Point end = start_ + Vector2d(total_length_, -height);
   const int clip_height = height + 2 * thickness;
 
-  paint_.setAntiAlias(true);
-  paint_.setStrokeWidth(SkIntToScalar(thickness));
+  flags_.setAntiAlias(true);
+  flags_.setStrokeWidth(SkIntToScalar(thickness));
 
   const bool clipped = pieces_.size() > 1;
   int x = start_.x();
 
   for (size_t i = 0; i < pieces_.size(); ++i) {
-    paint_.setColor(pieces_[i].second);
+    flags_.setColor(pieces_[i].second);
 
     if (clipped) {
       canvas_->Save();
@@ -355,7 +357,7 @@ void SkiaTextRenderer::DiagonalStrike::Draw() {
           Rect(x, end.y() - thickness, pieces_[i].first, clip_height));
     }
 
-    canvas_->DrawLine(start_, end, paint_);
+    canvas_->DrawLine(start_, end, flags_);
 
     if (clipped)
       canvas_->Restore();
@@ -410,19 +412,21 @@ Line::~Line() {}
 
 void ApplyRenderParams(const FontRenderParams& params,
                        bool subpixel_rendering_suppressed,
-                       SkPaint* paint) {
-  paint->setAntiAlias(params.antialiasing);
-  paint->setLCDRenderText(!subpixel_rendering_suppressed &&
-      params.subpixel_rendering != FontRenderParams::SUBPIXEL_RENDERING_NONE);
-  paint->setSubpixelText(params.subpixel_positioning);
-  paint->setAutohinted(params.autohinter);
-  paint->setHinting(FontRenderParamsHintingToSkPaintHinting(params.hinting));
+                       cc::PaintFlags* flags) {
+  flags->setAntiAlias(params.antialiasing);
+  flags->setLCDRenderText(!subpixel_rendering_suppressed &&
+                          params.subpixel_rendering !=
+                              FontRenderParams::SUBPIXEL_RENDERING_NONE);
+  flags->setSubpixelText(params.subpixel_positioning);
+  flags->setAutohinted(params.autohinter);
+  flags->setHinting(FontRenderParamsHintingToPaintFlagsHinting(params.hinting));
 }
 
 }  // namespace internal
 
 // static
 constexpr base::char16 RenderText::kPasswordReplacementChar;
+constexpr bool RenderText::kDragToEndIfOutsideVerticalBounds;
 
 RenderText::~RenderText() {
 }
@@ -815,8 +819,13 @@ base::i18n::TextDirection RenderText::GetDisplayTextDirection() {
 }
 
 VisualCursorDirection RenderText::GetVisualDirectionOfLogicalEnd() {
-  return GetDisplayTextDirection() == base::i18n::LEFT_TO_RIGHT ?
-      CURSOR_RIGHT : CURSOR_LEFT;
+  return GetDisplayTextDirection() == base::i18n::LEFT_TO_RIGHT ? CURSOR_RIGHT
+                                                                : CURSOR_LEFT;
+}
+
+VisualCursorDirection RenderText::GetVisualDirectionOfLogicalBeginning() {
+  return GetDisplayTextDirection() == base::i18n::RIGHT_TO_LEFT ? CURSOR_RIGHT
+                                                                : CURSOR_LEFT;
 }
 
 SizeF RenderText::GetStringSizeF() {
@@ -854,9 +863,6 @@ void RenderText::Draw(Canvas* canvas) {
   if (!text().empty() && focused())
     DrawSelection(canvas);
 
-  if (cursor_enabled() && cursor_visible() && focused())
-    DrawCursor(canvas, selection_model_);
-
   if (!text().empty()) {
     internal::SkiaTextRenderer renderer(canvas);
     if (halo_effect())
@@ -866,12 +872,6 @@ void RenderText::Draw(Canvas* canvas) {
 
   if (clip_to_display_rect())
     canvas->Restore();
-}
-
-void RenderText::DrawCursor(Canvas* canvas, const SelectionModel& position) {
-  // Paint cursor. Replace cursor is drawn as rectangle for now.
-  // TODO(msw): Draw a better cursor with a better indication of association.
-  canvas->FillRect(GetCursorBounds(position, true), cursor_color_);
 }
 
 bool RenderText::IsValidLogicalIndex(size_t index) const {
@@ -894,7 +894,7 @@ Rect RenderText::GetCursorBounds(const SelectionModel& caret,
   // TODO(ckocagil): Support multiline. This function should return the height
   //                 of the line the cursor is on. |GetStringSize()| now returns
   //                 the multiline size, eliminate its use here.
-
+  DCHECK(!multiline_);
   EnsureLayout();
   size_t caret_pos = caret.caret_pos();
   DCHECK(IsValidLogicalIndex(caret_pos));
@@ -962,6 +962,11 @@ SelectionModel RenderText::GetSelectionModelForSelectionStart() const {
                         sel.is_reversed() ? CURSOR_BACKWARD : CURSOR_FORWARD);
 }
 
+std::vector<Rect> RenderText::GetSubstringBoundsForTesting(
+    const gfx::Range& range) {
+  return GetSubstringBounds(range);
+}
+
 const Vector2d& RenderText::GetUpdatedDisplayOffset() {
   UpdateCachedBoundsAndOffset();
   return display_offset_;
@@ -1004,12 +1009,15 @@ void RenderText::SetDisplayOffset(int horizontal_offset) {
 }
 
 Vector2d RenderText::GetLineOffset(size_t line_number) {
+  EnsureLayout();
   Vector2d offset = display_rect().OffsetFromOrigin();
   // TODO(ckocagil): Apply the display offset for multiline scrolling.
-  if (!multiline())
+  if (!multiline()) {
     offset.Add(GetUpdatedDisplayOffset());
-  else
+  } else {
+    DCHECK_LT(line_number, lines().size());
     offset.Add(Vector2d(0, lines_[line_number].preceding_heights));
+  }
   offset.Add(GetAlignmentOffset(line_number));
   return offset;
 }
@@ -1017,12 +1025,10 @@ Vector2d RenderText::GetLineOffset(size_t line_number) {
 bool RenderText::GetDecoratedWordAtPoint(const Point& point,
                                          DecoratedText* decorated_word,
                                          Point* baseline_point) {
-  // FindCursorPosition doesn't currently support multiline. See
-  // http://crbug.com/650120.
-  if (multiline() || obscured())
+  if (obscured())
     return false;
 
-  // Note: FindCursorPosition will trigger a layout via EnsureLayout.
+  EnsureLayout();
   const SelectionModel model_at_point = FindCursorPosition(point);
   const size_t word_index =
       GetNearestWordStartBoundary(model_at_point.caret_pos());
@@ -1043,7 +1049,12 @@ bool RenderText::GetDecoratedWordAtPoint(const Point& point,
   const auto left_rect = std::min_element(
       word_bounds.begin(), word_bounds.end(),
       [](const Rect& lhs, const Rect& rhs) { return lhs.x() < rhs.x(); });
-  *baseline_point = left_rect->origin() + Vector2d(0, GetDisplayTextBaseline());
+  const int line_index = GetLineContainingYCoord(left_rect->CenterPoint().y() -
+                                                 GetLineOffset(0).y());
+  if (line_index < 0 || line_index >= static_cast<int>(lines().size()))
+    return false;
+  *baseline_point =
+      left_rect->origin() + Vector2d(0, lines()[line_index].baseline);
   return true;
 }
 
@@ -1058,8 +1069,6 @@ RenderText::RenderText()
       directionality_mode_(DIRECTIONALITY_FROM_TEXT),
       text_direction_(base::i18n::UNKNOWN_DIRECTION),
       cursor_enabled_(true),
-      cursor_visible_(false),
-      cursor_color_(kDefaultColor),
       selection_color_(kDefaultColor),
       selection_background_focused_color_(kDefaultSelectionBackgroundColor),
       focused_(false),
@@ -1103,6 +1112,29 @@ SelectionModel RenderText::EdgeSelectionModel(
   if (direction == GetVisualDirectionOfLogicalEnd())
     return SelectionModel(text().length(), CURSOR_FORWARD);
   return SelectionModel(0, CURSOR_BACKWARD);
+}
+
+SelectionModel RenderText::LineSelectionModel(size_t line_index,
+                                              VisualCursorDirection direction) {
+  const internal::Line& line = lines()[line_index];
+  if (line.segments.empty()) {
+    // Only the last line can be empty.
+    DCHECK_EQ(lines().size() - 1, line_index);
+    return EdgeSelectionModel(GetVisualDirectionOfLogicalEnd());
+  }
+
+  size_t max_index = 0;
+  size_t min_index = text().length();
+  for (const auto& segment : line.segments) {
+    min_index = std::min<size_t>(min_index, segment.char_range.GetMin());
+    max_index = std::max<size_t>(max_index, segment.char_range.GetMax());
+  }
+
+  return direction == GetVisualDirectionOfLogicalEnd()
+             ? SelectionModel(DisplayIndexToTextIndex(max_index),
+                              CURSOR_FORWARD)
+             : SelectionModel(DisplayIndexToTextIndex(min_index),
+                              CURSOR_BACKWARD);
 }
 
 void RenderText::SetSelectionModel(const SelectionModel& model) {
@@ -1213,11 +1245,6 @@ void RenderText::UndoCompositionAndSelectionStyles() {
   composition_and_selection_styles_applied_ = false;
 }
 
-Point RenderText::ToTextPoint(const Point& point) {
-  return point - GetLineOffset(0);
-  // TODO(ckocagil): Convert multiline view space points to text space.
-}
-
 Point RenderText::ToViewPoint(const Point& point) {
   if (!multiline())
     return point + GetLineOffset(0);
@@ -1228,39 +1255,11 @@ Point RenderText::ToViewPoint(const Point& point) {
   size_t line = 0;
   for (; line < lines_.size() && x > lines_[line].size.width(); ++line)
     x -= lines_[line].size.width();
+
+  // If |point| is outside the text space, clip it to the end of the last line.
+  if (line == lines_.size())
+    x = lines_[--line].size.width();
   return Point(x, point.y()) + GetLineOffset(line);
-}
-
-std::vector<Rect> RenderText::TextBoundsToViewBounds(const Range& x) {
-  std::vector<Rect> rects;
-
-  if (!multiline()) {
-    rects.push_back(Rect(ToViewPoint(Point(x.GetMin(), 0)),
-                         Size(x.length(), GetStringSize().height())));
-    return rects;
-  }
-
-  EnsureLayout();
-
-  // Each line segment keeps its position in text coordinates. Traverse all line
-  // segments and if the segment intersects with the given range, add the view
-  // rect corresponding to the intersection to |rects|.
-  for (size_t line = 0; line < lines_.size(); ++line) {
-    int line_x = 0;
-    const Vector2d offset = GetLineOffset(line);
-    for (size_t i = 0; i < lines_[line].segments.size(); ++i) {
-      const internal::LineSegment* segment = &lines_[line].segments[i];
-      const Range intersection = segment->x_range.Intersect(x).Ceil();
-      if (!intersection.is_empty()) {
-        Rect rect(line_x + intersection.start() - segment->x_range.start(),
-                  0, intersection.length(), lines_[line].size.height());
-        rects.push_back(rect + offset);
-      }
-      line_x += segment->x_range.length();
-    }
-  }
-
-  return rects;
 }
 
 HorizontalAlignment RenderText::GetCurrentHorizontalAlignment() {
@@ -1333,7 +1332,7 @@ void RenderText::ApplyFadeEffects(internal::SkiaTextRenderer* renderer) {
 }
 
 void RenderText::ApplyTextShadows(internal::SkiaTextRenderer* renderer) {
-  renderer->SetDrawLooper(CreateShadowDrawLooper(shadows_));
+  renderer->SetDrawLooper(CreateShadowDrawLooperCorrectBlur(shadows_));
 }
 
 base::i18n::TextDirection RenderText::GetTextDirection(
@@ -1381,6 +1380,21 @@ void RenderText::UpdateStyleLengths() {
   weights_.SetMax(text_length);
   for (size_t style = 0; style < NUM_TEXT_STYLES; ++style)
     styles_[style].SetMax(text_length);
+}
+
+int RenderText::GetLineContainingYCoord(float text_y) {
+  if (text_y < 0)
+    return -1;
+
+  for (size_t i = 0; i < lines().size(); i++) {
+    const internal::Line& line = lines()[i];
+
+    if (text_y <= line.size.height())
+      return i;
+    text_y -= line.size.height();
+  }
+
+  return lines().size();
 }
 
 // static
@@ -1505,7 +1519,6 @@ base::string16 RenderText::Elide(const base::string16& text,
     render_text->colors_ = colors_;
     base::string16 new_text =
         slicer.CutString(guess, insert_ellipsis && behavior != ELIDE_TAIL);
-    render_text->SetText(new_text);
 
     // This has to be an additional step so that the ellipsis is rendered with
     // same style as trailing part of the text.
@@ -1524,8 +1537,8 @@ base::string16 RenderText::Elide(const base::string16& text,
         else
           new_text += base::i18n::kRightToLeftMark;
       }
-      render_text->SetText(new_text);
     }
+    render_text->SetText(new_text);
 
     // Restore styles and baselines without breaking multi-character graphemes.
     render_text->styles_ = styles_;

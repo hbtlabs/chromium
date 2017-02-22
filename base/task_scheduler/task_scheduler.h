@@ -15,6 +15,11 @@
 #include "base/single_thread_task_runner.h"
 #include "base/task_runner.h"
 #include "base/task_scheduler/task_traits.h"
+#include "base/time/time.h"
+
+namespace gin {
+class V8Platform;
+}
 
 namespace tracked_objects {
 class Location;
@@ -37,13 +42,18 @@ class BASE_EXPORT TaskScheduler {
   using WorkerPoolIndexForTraitsCallback =
       Callback<size_t(const TaskTraits& traits)>;
 
+  // Destroying a TaskScheduler is not allowed in production; it is always
+  // leaked. In tests, it should only be destroyed after JoinForTesting() has
+  // returned.
   virtual ~TaskScheduler() = default;
 
-  // Posts |task| with specific |traits|.
+  // Posts |task| with a |delay| and specific |traits|. |delay| can be zero.
   // For one off tasks that don't require a TaskRunner.
-  virtual void PostTaskWithTraits(const tracked_objects::Location& from_here,
-                                  const TaskTraits& traits,
-                                  const Closure& task) = 0;
+  virtual void PostDelayedTaskWithTraits(
+      const tracked_objects::Location& from_here,
+      const TaskTraits& traits,
+      const Closure& task,
+      TimeDelta delay) = 0;
 
   // Returns a TaskRunner whose PostTask invocations result in scheduling tasks
   // using |traits|. Tasks may run in any order and in parallel.
@@ -82,6 +92,12 @@ class BASE_EXPORT TaskScheduler {
   // other threads during the call. Returns immediately when shutdown completes.
   virtual void FlushForTesting() = 0;
 
+  // Joins all threads. Tasks that are already running are allowed to complete
+  // their execution. This can only be called once. Using this task scheduler
+  // instance to create task runners or post tasks is not permitted during or
+  // after this call.
+  virtual void JoinForTesting() = 0;
+
   // CreateAndSetSimpleTaskScheduler(), CreateAndSetDefaultTaskScheduler(), and
   // SetInstance() register a TaskScheduler to handle tasks posted through the
   // post_task.h API for this process. The registered TaskScheduler will only be
@@ -112,6 +128,20 @@ class BASE_EXPORT TaskScheduler {
   // SetInstance(). This should be used very rarely; most users of TaskScheduler
   // should use the post_task.h API.
   static TaskScheduler* GetInstance();
+
+ private:
+  friend class gin::V8Platform;
+
+  // Returns the maximum number of non-single-threaded tasks posted with
+  // |traits| that can run concurrently in this TaskScheduler.
+  //
+  // Do not use this method. To process n items, post n tasks that each process
+  // 1 item rather than GetMaxConcurrentTasksWithTraitsDeprecated() tasks that
+  // each process n/GetMaxConcurrentTasksWithTraitsDeprecated() items.
+  //
+  // TODO(fdoray): Remove this method. https://crbug.com/687264
+  virtual int GetMaxConcurrentTasksWithTraitsDeprecated(
+      const TaskTraits& traits) const = 0;
 };
 
 }  // namespace base

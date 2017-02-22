@@ -2,13 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef EXTENSIONS_BROWSER_API_RUNTIME_RUNTIME_API_DELEGATE_H
-#define EXTENSIONS_BROWSER_API_RUNTIME_RUNTIME_API_DELEGATE_H
+#ifndef EXTENSIONS_BROWSER_API_RUNTIME_RUNTIME_API_DELEGATE_H_
+#define EXTENSIONS_BROWSER_API_RUNTIME_RUNTIME_API_DELEGATE_H_
 
 #include "base/callback.h"
 #include "base/version.h"
 
 class GURL;
+
+namespace content {
+class BrowserContext;
+}
 
 namespace extensions {
 
@@ -74,9 +78,10 @@ class RuntimeAPIDelegate {
   // Open |extension|'s options page, if it has one. Returns true if an
   // options page was opened, false otherwise. See the docs of the
   // chrome.runtime.openOptionsPage function for the gritty details.
-  virtual bool OpenOptionsPage(const Extension* extension);
+  virtual bool OpenOptionsPage(const Extension* extension,
+                               content::BrowserContext* browser_context);
 };
 
 }  // namespace extensions
 
-#endif  // EXTENSIONS_BROWSER_API_RUNTIME_RUNTIME_API_DELEGATE_H
+#endif  // EXTENSIONS_BROWSER_API_RUNTIME_RUNTIME_API_DELEGATE_H_

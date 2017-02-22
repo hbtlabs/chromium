@@ -34,9 +34,9 @@ class MediaStreamVideoTrackTest : public ::testing::Test {
       : child_process_(new ChildProcess()),
         mock_source_(new MockMediaStreamVideoSource(false)),
         source_started_(false) {
-    blink_source_.initialize(base::UTF8ToUTF16("dummy_source_id"),
+    blink_source_.initialize(blink::WebString::fromASCII("dummy_source_id"),
                              blink::WebMediaStreamSource::TypeVideo,
-                             base::UTF8ToUTF16("dummy_source_name"),
+                             blink::WebString::fromASCII("dummy_source_name"),
                              false /* remote */);
     blink_source_.setExtraData(mock_source_);
   }
@@ -85,9 +85,9 @@ class MediaStreamVideoTrackTest : public ::testing::Test {
   void UpdateVideoSourceToRespondToRequestRefreshFrame() {
     blink_source_.reset();
     mock_source_ = new MockMediaStreamVideoSource(false, true);
-    blink_source_.initialize(base::UTF8ToUTF16("dummy_source_id"),
+    blink_source_.initialize(blink::WebString::fromASCII("dummy_source_id"),
                              blink::WebMediaStreamSource::TypeVideo,
-                             base::UTF8ToUTF16("dummy_source_name"),
+                             blink::WebString::fromASCII("dummy_source_name"),
                              false /* remote */);
     blink_source_.setExtraData(mock_source_);
   }
@@ -253,6 +253,19 @@ TEST_F(MediaStreamVideoTrackTest, CheckTrackRequestsFrame) {
   EXPECT_EQ(1, sink.number_of_frames());
 
   sink.DisconnectFromTrack();
+}
+
+TEST_F(MediaStreamVideoTrackTest, GetSettings) {
+  blink::WebMediaStreamTrack track = CreateTrack();
+  MediaStreamVideoTrack* const native_track =
+      MediaStreamVideoTrack::GetVideoTrack(track);
+  blink::WebMediaStreamTrack::Settings settings;
+  native_track->getSettings(settings);
+  // These values come straight from the mock video track implementation.
+  EXPECT_EQ(640, settings.width);
+  EXPECT_EQ(480, settings.height);
+  EXPECT_EQ(30.0, settings.frameRate);
+  EXPECT_EQ(blink::WebMediaStreamTrack::FacingMode::None, settings.facingMode);
 }
 
 }  // namespace content

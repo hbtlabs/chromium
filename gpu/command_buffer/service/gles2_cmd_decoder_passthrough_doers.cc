@@ -5,6 +5,7 @@
 #include "gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h"
 
 #include "base/strings/string_number_conversions.h"
+#include "ui/gl/gl_version_info.h"
 
 namespace gpu {
 namespace gles2 {
@@ -16,6 +17,7 @@ error::Error GenHelper(GLsizei n,
                        const volatile ClientType* client_ids,
                        ClientServiceMap<ClientType, ServiceType>* id_map,
                        GenFunction gen_function) {
+  DCHECK(n >= 0);
   std::vector<ClientType> client_ids_copy(client_ids, client_ids + n);
   for (GLsizei ii = 0; ii < n; ++ii) {
     if (id_map->GetServiceID(client_ids_copy[ii], nullptr)) {
@@ -52,6 +54,7 @@ error::Error DeleteHelper(GLsizei n,
                           const volatile ClientType* client_ids,
                           ClientServiceMap<ClientType, ServiceType>* id_map,
                           DeleteFunction delete_function) {
+  DCHECK(n >= 0);
   std::vector<ServiceType> service_ids(n, 0);
   for (GLsizei ii = 0; ii < n; ++ii) {
     ClientType client_id = client_ids[ii];
@@ -194,7 +197,12 @@ void AppendStringToBuffer(std::vector<uint8_t>* data,
 
 // Implementations of commands
 error::Error GLES2DecoderPassthroughImpl::DoActiveTexture(GLenum texture) {
+  FlushErrors();
   glActiveTexture(texture);
+  if (FlushErrors()) {
+    return error::kNoError;
+  }
+
   active_texture_unit_ = static_cast<size_t>(texture) - GL_TEXTURE0;
   return error::kNoError;
 }
@@ -266,12 +274,36 @@ error::Error GLES2DecoderPassthroughImpl::DoBindSampler(GLuint unit,
 
 error::Error GLES2DecoderPassthroughImpl::DoBindTexture(GLenum target,
                                                         GLuint texture) {
-  glBindTexture(target, GetTextureServiceID(texture, resources_,
-                                            bind_generates_resource_));
-  if (target == GL_TEXTURE_2D &&
-      active_texture_unit_ < bound_textures_.size()) {
-    bound_textures_[active_texture_unit_] = texture;
+  GLuint service_id =
+      GetTextureServiceID(texture, resources_, bind_generates_resource_);
+
+  FlushErrors();
+
+  glBindTexture(target, service_id);
+
+  // Only update tracking if no error was generated in the bind call
+  if (FlushErrors()) {
+    return error::kNoError;
   }
+
+  // Track the currently bound textures
+  DCHECK(bound_textures_.find(target) != bound_textures_.end());
+  DCHECK(bound_textures_[target].size() > active_texture_unit_);
+  bound_textures_[target][active_texture_unit_] = texture;
+
+  if (service_id != 0) {
+    // Create a new texture object to track this texture
+    auto texture_object_iter = resources_->texture_object_map.find(texture);
+    if (texture_object_iter == resources_->texture_object_map.end()) {
+      resources_->texture_object_map.insert(
+          std::make_pair(texture, new TexturePassthrough(service_id, target)));
+    } else {
+      // Shouldn't be possible to get here if this texture has a different
+      // target than the one it was just bound to
+      DCHECK(texture_object_iter->second->target() == target);
+    }
+  }
+
   return error::kNoError;
 }
 
@@ -546,6 +578,12 @@ error::Error GLES2DecoderPassthroughImpl::DoCullFace(GLenum mode) {
 error::Error GLES2DecoderPassthroughImpl::DoDeleteBuffers(
     GLsizei n,
     const volatile GLuint* buffers) {
+  // DeleteHelper requires that n is non-negative because it allocates a copy of
+  // the IDs
+  if (n < 0) {
+    InsertError(GL_INVALID_VALUE, "n cannot be negative.");
+    return error::kNoError;
+  }
   return DeleteHelper(
       n, buffers, &resources_->buffer_id_map,
       [](GLsizei n, GLuint* buffers) { glDeleteBuffersARB(n, buffers); });
@@ -554,6 +592,12 @@ error::Error GLES2DecoderPassthroughImpl::DoDeleteBuffers(
 error::Error GLES2DecoderPassthroughImpl::DoDeleteFramebuffers(
     GLsizei n,
     const volatile GLuint* framebuffers) {
+  // DeleteHelper requires that n is non-negative because it allocates a copy of
+  // the IDs
+  if (n < 0) {
+    InsertError(GL_INVALID_VALUE, "n cannot be negative.");
+    return error::kNoError;
+  }
   return DeleteHelper(n, framebuffers, &framebuffer_id_map_,
                       [](GLsizei n, GLuint* framebuffers) {
                         glDeleteFramebuffersEXT(n, framebuffers);
@@ -568,6 +612,12 @@ error::Error GLES2DecoderPassthroughImpl::DoDeleteProgram(GLuint program) {
 error::Error GLES2DecoderPassthroughImpl::DoDeleteRenderbuffers(
     GLsizei n,
     const volatile GLuint* renderbuffers) {
+  // DeleteHelper requires that n is non-negative because it allocates a copy of
+  // the IDs
+  if (n < 0) {
+    InsertError(GL_INVALID_VALUE, "n cannot be negative.");
+    return error::kNoError;
+  }
   return DeleteHelper(n, renderbuffers, &resources_->renderbuffer_id_map,
                       [](GLsizei n, GLuint* renderbuffers) {
                         glDeleteRenderbuffersEXT(n, renderbuffers);
@@ -577,6 +627,12 @@ error::Error GLES2DecoderPassthroughImpl::DoDeleteRenderbuffers(
 error::Error GLES2DecoderPassthroughImpl::DoDeleteSamplers(
     GLsizei n,
     const volatile GLuint* samplers) {
+  // DeleteHelper requires that n is non-negative because it allocates a copy of
+  // the IDs
+  if (n < 0) {
+    InsertError(GL_INVALID_VALUE, "n cannot be negative.");
+    return error::kNoError;
+  }
   return DeleteHelper(
       n, samplers, &resources_->sampler_id_map,
       [](GLsizei n, GLuint* samplers) { glDeleteSamplers(n, samplers); });
@@ -596,6 +652,13 @@ error::Error GLES2DecoderPassthroughImpl::DoDeleteShader(GLuint shader) {
 error::Error GLES2DecoderPassthroughImpl::DoDeleteTextures(
     GLsizei n,
     const volatile GLuint* textures) {
+  // DeleteHelper requires that n is non-negative because it allocates a copy of
+  // the IDs
+  if (n < 0) {
+    InsertError(GL_INVALID_VALUE, "n cannot be negative.");
+    return error::kNoError;
+  }
+
   // Textures that are currently associated with a mailbox are stored in the
   // texture_object_map_ and are deleted automatically when they are
   // unreferenced.  Only delete textures that are not in this map.
@@ -621,6 +684,12 @@ error::Error GLES2DecoderPassthroughImpl::DoDeleteTextures(
 error::Error GLES2DecoderPassthroughImpl::DoDeleteTransformFeedbacks(
     GLsizei n,
     const volatile GLuint* ids) {
+  // DeleteHelper requires that n is non-negative because it allocates a copy of
+  // the IDs
+  if (n < 0) {
+    InsertError(GL_INVALID_VALUE, "n cannot be negative.");
+    return error::kNoError;
+  }
   return DeleteHelper(n, ids, &transform_feedback_id_map_,
                       [](GLsizei n, GLuint* transform_feedbacks) {
                         glDeleteTransformFeedbacks(n, transform_feedbacks);
@@ -696,12 +765,12 @@ error::Error GLES2DecoderPassthroughImpl::DoFenceSync(GLenum condition,
 
 error::Error GLES2DecoderPassthroughImpl::DoFinish() {
   glFinish();
-  return error::kNoError;
+  return ProcessQueries(true);
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoFlush() {
   glFlush();
-  return error::kNoError;
+  return ProcessQueries(false);
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoFlushMappedBufferRange(
@@ -811,18 +880,49 @@ error::Error GLES2DecoderPassthroughImpl::DoGetActiveAttrib(GLuint program,
                                                             GLuint index,
                                                             GLint* size,
                                                             GLenum* type,
-                                                            std::string* name) {
-  NOTIMPLEMENTED();
+                                                            std::string* name,
+                                                            int32_t* success) {
+  FlushErrors();
+
+  GLuint service_id = GetProgramServiceID(program, resources_);
+  GLint active_attribute_max_length = 0;
+  glGetProgramiv(service_id, GL_ACTIVE_ATTRIBUTE_MAX_LENGTH,
+                 &active_attribute_max_length);
+  if (FlushErrors()) {
+    *success = 0;
+    return error::kNoError;
+  }
+
+  std::vector<char> name_buffer(active_attribute_max_length, 0);
+  glGetActiveAttrib(service_id, index, name_buffer.size(), nullptr, size, type,
+                    name_buffer.data());
+  *name = std::string(name_buffer.data());
+  *success = FlushErrors() ? 0 : 1;
   return error::kNoError;
 }
 
-error::Error GLES2DecoderPassthroughImpl::DoGetActiveUniform(
-    GLuint program,
-    GLuint index,
-    GLint* size,
-    GLenum* type,
-    std::string* name) {
-  NOTIMPLEMENTED();
+error::Error GLES2DecoderPassthroughImpl::DoGetActiveUniform(GLuint program,
+                                                             GLuint index,
+                                                             GLint* size,
+                                                             GLenum* type,
+                                                             std::string* name,
+                                                             int32_t* success) {
+  FlushErrors();
+
+  GLuint service_id = GetProgramServiceID(program, resources_);
+  GLint active_uniform_max_length = 0;
+  glGetProgramiv(service_id, GL_ACTIVE_UNIFORM_MAX_LENGTH,
+                 &active_uniform_max_length);
+  if (FlushErrors()) {
+    *success = 0;
+    return error::kNoError;
+  }
+
+  std::vector<char> name_buffer(active_uniform_max_length, 0);
+  glGetActiveUniform(service_id, index, name_buffer.size(), nullptr, size, type,
+                     name_buffer.data());
+  *name = std::string(name_buffer.data());
+  *success = FlushErrors() ? 0 : 1;
   return error::kNoError;
 }
 
@@ -906,7 +1006,8 @@ error::Error GLES2DecoderPassthroughImpl::DoGetBufferParameteriv(
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoGetError(uint32_t* result) {
-  *result = glGetError();
+  FlushErrors();
+  *result = PopError();
   return error::kNoError;
 }
 
@@ -1028,7 +1129,7 @@ error::Error GLES2DecoderPassthroughImpl::DoGetProgramInfoLog(
   std::vector<char> buffer(info_log_len, 0);
   glGetProgramInfoLog(GetProgramServiceID(program, resources_), info_log_len,
                       nullptr, buffer.data());
-  *infolog = std::string(buffer.data());
+  *infolog = info_log_len > 0 ? std::string(buffer.data()) : std::string();
   return error::kNoError;
 }
 
@@ -1082,7 +1183,7 @@ error::Error GLES2DecoderPassthroughImpl::DoGetShaderInfoLog(
   glGetShaderiv(service_id, GL_INFO_LOG_LENGTH, &info_log_len);
   std::vector<char> buffer(info_log_len, 0);
   glGetShaderInfoLog(service_id, info_log_len, nullptr, buffer.data());
-  *infolog = std::string(buffer.data());
+  *infolog = info_log_len > 0 ? std::string(buffer.data()) : std::string();
   return error::kNoError;
 }
 
@@ -1090,8 +1191,11 @@ error::Error GLES2DecoderPassthroughImpl::DoGetShaderPrecisionFormat(
     GLenum shadertype,
     GLenum precisiontype,
     GLint* range,
-    GLint* precision) {
+    GLint* precision,
+    int32_t* success) {
+  FlushErrors();
   glGetShaderPrecisionFormat(shadertype, precisiontype, range, precision);
+  *success = FlushErrors() ? 0 : 1;
   return error::kNoError;
 }
 
@@ -1118,7 +1222,7 @@ error::Error GLES2DecoderPassthroughImpl::DoGetString(GLenum name,
       *result = GetServiceVendorString(feature_info_.get());
       break;
     case GL_EXTENSIONS:
-      *result = extension_string_.c_str();
+      *result = feature_info_->extensions().c_str();
       break;
     default:
       *result = reinterpret_cast<const char*>(glGetString(name));
@@ -1161,8 +1265,24 @@ error::Error GLES2DecoderPassthroughImpl::DoGetTransformFeedbackVarying(
     GLuint index,
     GLsizei* size,
     GLenum* type,
-    std::string* name) {
-  NOTIMPLEMENTED();
+    std::string* name,
+    int32_t* success) {
+  FlushErrors();
+
+  GLuint service_id = GetProgramServiceID(program, resources_);
+  GLint transform_feedback_varying_max_length = 0;
+  glGetProgramiv(service_id, GL_TRANSFORM_FEEDBACK_VARYING_MAX_LENGTH,
+                 &transform_feedback_varying_max_length);
+  if (FlushErrors()) {
+    *success = 0;
+    return error::kNoError;
+  }
+
+  std::vector<char> name_buffer(transform_feedback_varying_max_length, 0);
+  glGetTransformFeedbackVarying(service_id, index, name_buffer.size(), nullptr,
+                                size, type, name_buffer.data());
+  *name = std::string(name_buffer.data());
+  *success = FlushErrors() ? 0 : 1;
   return error::kNoError;
 }
 
@@ -1298,6 +1418,11 @@ error::Error GLES2DecoderPassthroughImpl::DoInvalidateFramebuffer(
     GLenum target,
     GLsizei count,
     const volatile GLenum* attachments) {
+  // Validate that count is non-negative before allocating a vector
+  if (count < 0) {
+    InsertError(GL_INVALID_VALUE, "count cannot be negative.");
+    return error::kNoError;
+  }
   std::vector<GLenum> attachments_copy(attachments, attachments + count);
   glInvalidateFramebuffer(target, count, attachments_copy.data());
   return error::kNoError;
@@ -1311,6 +1436,11 @@ error::Error GLES2DecoderPassthroughImpl::DoInvalidateSubFramebuffer(
     GLint y,
     GLsizei width,
     GLsizei height) {
+  // Validate that count is non-negative before allocating a vector
+  if (count < 0) {
+    InsertError(GL_INVALID_VALUE, "count cannot be negative.");
+    return error::kNoError;
+  }
   std::vector<GLenum> attachments_copy(attachments, attachments + count);
   glInvalidateSubFramebuffer(target, count, attachments_copy.data(), x, y,
                              width, height);
@@ -1423,9 +1553,12 @@ error::Error GLES2DecoderPassthroughImpl::DoReadPixels(GLint x,
                                                        GLenum type,
                                                        GLsizei bufsize,
                                                        GLsizei* length,
-                                                       void* pixels) {
+                                                       void* pixels,
+                                                       int32_t* success) {
+  FlushErrors();
   glReadPixelsRobustANGLE(x, y, width, height, format, type, bufsize, length,
                           pixels);
+  *success = FlushErrors() ? 0 : 1;
   return error::kNoError;
 }
 
@@ -2118,8 +2251,18 @@ GLES2DecoderPassthroughImpl::DoRenderbufferStorageMultisampleCHROMIUM(
     GLenum internalformat,
     GLsizei width,
     GLsizei height) {
-  glRenderbufferStorageMultisampleANGLE(target, samples, internalformat, width,
-                                        height);
+  if (!feature_info_->feature_flags().chromium_framebuffer_multisample) {
+    return error::kUnknownCommand;
+  }
+
+  if (feature_info_->feature_flags().angle_framebuffer_multisample) {
+    glRenderbufferStorageMultisampleANGLE(target, samples, internalformat,
+                                          width, height);
+  } else {
+    DCHECK(feature_info_->gl_version_info().is_es3);
+    glRenderbufferStorageMultisample(target, samples, internalformat, width,
+                                     height);
+  }
   return error::kNoError;
 }
 
@@ -2129,8 +2272,18 @@ error::Error GLES2DecoderPassthroughImpl::DoRenderbufferStorageMultisampleEXT(
     GLenum internalformat,
     GLsizei width,
     GLsizei height) {
-  glRenderbufferStorageMultisampleANGLE(target, samples, internalformat, width,
-                                        height);
+  if (!feature_info_->feature_flags().chromium_framebuffer_multisample) {
+    return error::kUnknownCommand;
+  }
+
+  if (feature_info_->feature_flags().angle_framebuffer_multisample) {
+    glRenderbufferStorageMultisampleANGLE(target, samples, internalformat,
+                                          width, height);
+  } else {
+    DCHECK(feature_info_->gl_version_info().is_es3);
+    glRenderbufferStorageMultisample(target, samples, internalformat, width,
+                                     height);
+  }
   return error::kNoError;
 }
 
@@ -2166,21 +2319,128 @@ error::Error GLES2DecoderPassthroughImpl::DoGenQueriesEXT(
 error::Error GLES2DecoderPassthroughImpl::DoDeleteQueriesEXT(
     GLsizei n,
     const volatile GLuint* queries) {
+  // Validate n is non-negative before allcoating a vector of size n
+  if (n < 0) {
+    InsertError(GL_INVALID_VALUE, "count cannot be negative.");
+    return error::kNoError;
+  }
+
+  std::vector<GLuint> queries_copy(queries, queries + n);
+  // If any of these queries are pending or active, remove them from the lists
+  for (GLuint query_client_id : queries_copy) {
+    GLuint query_service_id = 0;
+    if (!query_id_map_.GetServiceID(query_client_id, &query_service_id) ||
+        query_service_id == 0) {
+      continue;
+    }
+
+    QueryInfo query_info = query_info_map_[query_service_id];
+    query_info_map_.erase(query_service_id);
+
+    if (query_info.type == GL_NONE) {
+      // Query was never started
+      continue;
+    }
+
+    auto active_queries_iter = active_queries_.find(query_info.type);
+    if (active_queries_iter != active_queries_.end()) {
+      active_queries_.erase(active_queries_iter);
+    }
+
+    auto pending_iter =
+        std::find_if(pending_queries_.begin(), pending_queries_.end(),
+                     [query_service_id](const PendingQuery& pending_query) {
+                       return pending_query.service_id == query_service_id;
+                     });
+    if (pending_iter != pending_queries_.end()) {
+      pending_queries_.erase(pending_iter);
+    }
+  }
   return DeleteHelper(
-      n, queries, &query_id_map_,
+      queries_copy.size(), queries_copy.data(), &query_id_map_,
       [](GLsizei n, GLuint* queries) { glDeleteQueries(n, queries); });
 }
 
-error::Error GLES2DecoderPassthroughImpl::DoQueryCounterEXT(GLuint id,
-                                                            GLenum target) {
-  glQueryCounter(GetQueryServiceID(id, &query_id_map_), target);
-  return error::kNoError;
+error::Error GLES2DecoderPassthroughImpl::DoQueryCounterEXT(
+    GLuint id,
+    GLenum target,
+    int32_t sync_shm_id,
+    uint32_t sync_shm_offset,
+    uint32_t submit_count) {
+  if (!feature_info_->feature_flags().ext_disjoint_timer_query) {
+    return error::kUnknownCommand;
+  }
+
+  GLuint service_id = GetQueryServiceID(id, &query_id_map_);
+
+  // Flush all previous errors
+  FlushErrors();
+
+  glQueryCounter(service_id, target);
+
+  // Check if a new error was generated
+  if (FlushErrors()) {
+    return error::kNoError;
+  }
+
+  QueryInfo* query_info = &query_info_map_[service_id];
+  query_info->type = target;
+
+  PendingQuery pending_query;
+  pending_query.target = target;
+  pending_query.service_id = service_id;
+  pending_query.shm_id = sync_shm_id;
+  pending_query.shm_offset = sync_shm_offset;
+  pending_query.submit_count = submit_count;
+  pending_queries_.push_back(pending_query);
+
+  return ProcessQueries(false);
 }
 
-error::Error GLES2DecoderPassthroughImpl::DoBeginQueryEXT(GLenum target,
-                                                          GLuint id) {
-  // TODO(geofflang): Track active queries
-  glBeginQuery(target, GetQueryServiceID(id, &query_id_map_));
+error::Error GLES2DecoderPassthroughImpl::DoBeginQueryEXT(
+    GLenum target,
+    GLuint id,
+    int32_t sync_shm_id,
+    uint32_t sync_shm_offset) {
+  GLuint service_id = GetQueryServiceID(id, &query_id_map_);
+  QueryInfo* query_info = &query_info_map_[service_id];
+
+  if (IsEmulatedQueryTarget(target)) {
+    if (active_queries_.find(target) != active_queries_.end()) {
+      InsertError(GL_INVALID_OPERATION, "Query already active on target.");
+      return error::kNoError;
+    }
+
+    if (id == 0) {
+      InsertError(GL_INVALID_OPERATION, "Query id is 0.");
+      return error::kNoError;
+    }
+
+    if (query_info->type != GL_NONE && query_info->type != target) {
+      InsertError(GL_INVALID_OPERATION,
+                  "Query type does not match the target.");
+      return error::kNoError;
+    }
+  } else {
+    // Flush all previous errors
+    FlushErrors();
+
+    glBeginQuery(target, service_id);
+
+    // Check if a new error was generated
+    if (FlushErrors()) {
+      return error::kNoError;
+    }
+  }
+
+  query_info->type = target;
+
+  ActiveQuery query;
+  query.service_id = service_id;
+  query.shm_id = sync_shm_id;
+  query.shm_offset = sync_shm_offset;
+  active_queries_[target] = query;
+
   return error::kNoError;
 }
 
@@ -2190,10 +2450,38 @@ error::Error GLES2DecoderPassthroughImpl::DoBeginTransformFeedback(
   return error::kNoError;
 }
 
-error::Error GLES2DecoderPassthroughImpl::DoEndQueryEXT(GLenum target) {
-  // TODO(geofflang): Track active queries
-  glEndQuery(target);
-  return error::kNoError;
+error::Error GLES2DecoderPassthroughImpl::DoEndQueryEXT(GLenum target,
+                                                        uint32_t submit_count) {
+  if (IsEmulatedQueryTarget(target)) {
+    if (active_queries_.find(target) == active_queries_.end()) {
+      InsertError(GL_INVALID_OPERATION, "No active query on target.");
+      return error::kNoError;
+    }
+  } else {
+    // Flush all previous errors
+    FlushErrors();
+
+    glEndQuery(target);
+
+    // Check if a new error was generated
+    if (FlushErrors()) {
+      return error::kNoError;
+    }
+  }
+
+  DCHECK(active_queries_.find(target) != active_queries_.end());
+  ActiveQuery active_query = active_queries_[target];
+  active_queries_.erase(target);
+
+  PendingQuery pending_query;
+  pending_query.target = target;
+  pending_query.service_id = active_query.service_id;
+  pending_query.shm_id = active_query.shm_id;
+  pending_query.shm_offset = active_query.shm_offset;
+  pending_query.submit_count = submit_count;
+  pending_queries_.push_back(pending_query);
+
+  return ProcessQueries(false);
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoEndTransformFeedback() {
@@ -2255,6 +2543,11 @@ error::Error GLES2DecoderPassthroughImpl::DoBindVertexArrayOES(GLuint array) {
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoSwapBuffers() {
+  if (offscreen_) {
+    NOTIMPLEMENTED();
+    return error::kNoError;
+  }
+
   gfx::SwapResult result = surface_->SwapBuffers();
   if (result == gfx::SwapResult::SWAP_FAILED) {
     LOG(ERROR) << "Context lost because SwapBuffers failed.";
@@ -2441,18 +2734,40 @@ error::Error GLES2DecoderPassthroughImpl::DoGetUniformsES3CHROMIUM(
 error::Error GLES2DecoderPassthroughImpl::DoGetTranslatedShaderSourceANGLE(
     GLuint shader,
     std::string* source) {
-  NOTIMPLEMENTED();
+  FlushErrors();
+  GLuint service_id = GetShaderServiceID(shader, resources_);
+  GLint translated_source_length = 0;
+  glGetShaderiv(service_id, GL_TRANSLATED_SHADER_SOURCE_LENGTH_ANGLE,
+                &translated_source_length);
+  if (FlushErrors()) {
+    return error::kNoError;
+  }
+
+  if (translated_source_length > 0) {
+    std::vector<char> buffer(translated_source_length, 0);
+    glGetTranslatedShaderSourceANGLE(service_id, translated_source_length,
+                                     nullptr, buffer.data());
+    *source = std::string(buffer.data());
+  }
   return error::kNoError;
 }
 
-error::Error GLES2DecoderPassthroughImpl::DoSwapBuffersWithDamageCHROMIUM(
-    GLint x,
-    GLint y,
-    GLint width,
-    GLint height) {
-  gfx::SwapResult result = surface_->PostSubBuffer(x, y, width, height);
+error::Error GLES2DecoderPassthroughImpl::DoSwapBuffersWithBoundsCHROMIUM(
+    GLsizei count,
+    const volatile GLint* rects) {
+  if (count < 0) {
+    InsertError(GL_INVALID_VALUE, "count cannot be negative.");
+    return error::kNoError;
+  }
+
+  std::vector<gfx::Rect> bounds(count);
+  for (GLsizei i = 0; i < count; ++i) {
+    bounds[i] = gfx::Rect(rects[i * 4 + 0], rects[i * 4 + 1], rects[i * 4 + 2],
+                          rects[i * 4 + 3]);
+  }
+  gfx::SwapResult result = surface_->SwapBuffersWithBounds(bounds);
   if (result == gfx::SwapResult::SWAP_FAILED) {
-    LOG(ERROR) << "Context lost because PostSubBuffer failed.";
+    LOG(ERROR) << "Context lost because SwapBuffersWithBounds failed.";
   }
   // TODO(geofflang): force the context loss?
   return error::kNoError;
@@ -2468,7 +2783,10 @@ error::Error GLES2DecoderPassthroughImpl::DoPostSubBufferCHROMIUM(
 
 error::Error GLES2DecoderPassthroughImpl::DoCopyTextureCHROMIUM(
     GLenum source_id,
+    GLint source_level,
+    GLenum dest_target,
     GLenum dest_id,
+    GLint dest_level,
     GLint internalformat,
     GLenum dest_type,
     GLboolean unpack_flip_y,
@@ -2483,7 +2801,10 @@ error::Error GLES2DecoderPassthroughImpl::DoCopyTextureCHROMIUM(
 
 error::Error GLES2DecoderPassthroughImpl::DoCopySubTextureCHROMIUM(
     GLenum source_id,
+    GLint source_level,
+    GLenum dest_target,
     GLenum dest_id,
+    GLint dest_level,
     GLint xoffset,
     GLint yoffset,
     GLint x,
@@ -2538,26 +2859,23 @@ error::Error GLES2DecoderPassthroughImpl::DoVertexAttribDivisorANGLE(
 error::Error GLES2DecoderPassthroughImpl::DoProduceTextureCHROMIUM(
     GLenum target,
     const volatile GLbyte* mailbox) {
-  // TODO(geofflang): validation
+  auto bound_textures_iter = bound_textures_.find(target);
+  if (bound_textures_iter == bound_textures_.end()) {
+    InsertError(GL_INVALID_OPERATION, "Invalid texture target.");
+    return error::kNoError;
+  }
 
-  GLuint texture_client_id = bound_textures_[active_texture_unit_];
-  scoped_refptr<TexturePassthrough> texture;
-
+  GLuint texture_client_id = bound_textures_iter->second[active_texture_unit_];
   auto texture_object_iter =
       resources_->texture_object_map.find(texture_client_id);
-  if (texture_object_iter != resources_->texture_object_map.end()) {
-    texture = texture_object_iter->second.get();
-  } else {
-    GLuint service_id =
-        GetTextureServiceID(texture_client_id, resources_, false);
-    texture = new TexturePassthrough(service_id);
-    resources_->texture_object_map.insert(
-        std::make_pair(texture_client_id, texture));
+  if (texture_object_iter == resources_->texture_object_map.end()) {
+    InsertError(GL_INVALID_OPERATION, "Unknown texture for target.");
+    return error::kNoError;
   }
 
   const Mailbox& mb = Mailbox::FromVolatile(
       *reinterpret_cast<const volatile Mailbox*>(mailbox));
-  mailbox_manager_->ProduceTexture(mb, texture.get());
+  mailbox_manager_->ProduceTexture(mb, texture_object_iter->second.get());
   return error::kNoError;
 }
 
@@ -2565,19 +2883,17 @@ error::Error GLES2DecoderPassthroughImpl::DoProduceTextureDirectCHROMIUM(
     GLuint texture_client_id,
     GLenum target,
     const volatile GLbyte* mailbox) {
-  // TODO(geofflang): validation
-
-  scoped_refptr<TexturePassthrough> texture;
   auto texture_object_iter =
       resources_->texture_object_map.find(texture_client_id);
-  if (texture_object_iter != resources_->texture_object_map.end()) {
-    texture = texture_object_iter->second.get();
-  } else {
-    GLuint service_id =
-        GetTextureServiceID(texture_client_id, resources_, false);
-    texture = new TexturePassthrough(service_id);
-    resources_->texture_object_map.insert(
-        std::make_pair(texture_client_id, texture));
+  if (texture_object_iter == resources_->texture_object_map.end()) {
+    InsertError(GL_INVALID_OPERATION, "Unknown texture for target.");
+    return error::kNoError;
+  }
+
+  scoped_refptr<TexturePassthrough> texture = texture_object_iter->second;
+  if (texture->target() != target) {
+    InsertError(GL_INVALID_OPERATION, "Texture target does not match.");
+    return error::kNoError;
   }
 
   const Mailbox& mb = Mailbox::FromVolatile(
@@ -2589,21 +2905,41 @@ error::Error GLES2DecoderPassthroughImpl::DoProduceTextureDirectCHROMIUM(
 error::Error GLES2DecoderPassthroughImpl::DoConsumeTextureCHROMIUM(
     GLenum target,
     const volatile GLbyte* mailbox) {
-  // TODO(geofflang): validation
+  auto bound_textures_iter = bound_textures_.find(target);
+  if (bound_textures_iter == bound_textures_.end()) {
+    InsertError(GL_INVALID_OPERATION, "Invalid texture target.");
+    return error::kNoError;
+  }
+
+  GLuint client_id = bound_textures_iter->second[active_texture_unit_];
+  if (client_id == 0) {
+    InsertError(GL_INVALID_OPERATION, "Unknown texture for target.");
+    return error::kNoError;
+  }
 
   const Mailbox& mb = Mailbox::FromVolatile(
       *reinterpret_cast<const volatile Mailbox*>(mailbox));
   scoped_refptr<TexturePassthrough> texture = static_cast<TexturePassthrough*>(
       group_->mailbox_manager()->ConsumeTexture(mb));
   if (texture == nullptr) {
-    // TODO(geofflang): error, missing mailbox
+    InsertError(GL_INVALID_OPERATION, "Invalid mailbox name.");
     return error::kNoError;
   }
 
-  GLuint client_id = bound_textures_[active_texture_unit_];
+  if (texture->target() != target) {
+    InsertError(GL_INVALID_OPERATION, "Texture target does not match.");
+    return error::kNoError;
+  }
+
+  // Update id mappings
+  resources_->texture_id_map.RemoveClientID(client_id);
   resources_->texture_id_map.SetIDMapping(client_id, texture->service_id());
   resources_->texture_object_map.erase(client_id);
   resources_->texture_object_map.insert(std::make_pair(client_id, texture));
+
+  // Bind the service id that now represents this texture
+  UpdateTextureBinding(target, client_id, texture->service_id());
+
   return error::kNoError;
 }
 
@@ -2611,25 +2947,35 @@ error::Error GLES2DecoderPassthroughImpl::DoCreateAndConsumeTextureINTERNAL(
     GLenum target,
     GLuint texture_client_id,
     const volatile GLbyte* mailbox) {
-  // TODO(geofflang): validation
-
   if (resources_->texture_id_map.GetServiceID(texture_client_id, nullptr)) {
     return error::kInvalidArguments;
   }
+
   const Mailbox& mb = Mailbox::FromVolatile(
       *reinterpret_cast<const volatile Mailbox*>(mailbox));
   scoped_refptr<TexturePassthrough> texture = static_cast<TexturePassthrough*>(
       group_->mailbox_manager()->ConsumeTexture(mb));
   if (texture == nullptr) {
-    // TODO(geofflang): error, missing mailbox
+    InsertError(GL_INVALID_OPERATION, "Invalid mailbox name.");
     return error::kNoError;
   }
 
+  if (texture->target() != target) {
+    InsertError(GL_INVALID_OPERATION, "Texture target does not match.");
+    return error::kNoError;
+  }
+
+  // Update id mappings
+  resources_->texture_id_map.RemoveClientID(texture_client_id);
   resources_->texture_id_map.SetIDMapping(texture_client_id,
                                           texture->service_id());
   resources_->texture_object_map.erase(texture_client_id);
   resources_->texture_object_map.insert(
       std::make_pair(texture_client_id, texture));
+
+  // Bind the service id that now represents this texture
+  UpdateTextureBinding(target, texture_client_id, texture->service_id());
+
   return error::kNoError;
 }
 
@@ -2645,19 +2991,38 @@ error::Error GLES2DecoderPassthroughImpl::DoBindUniformLocationCHROMIUM(
 error::Error GLES2DecoderPassthroughImpl::DoBindTexImage2DCHROMIUM(
     GLenum target,
     GLint imageId) {
-  // TODO(geofflang): error handling
+  if (target != GL_TEXTURE_2D) {
+    InsertError(GL_INVALID_ENUM, "Invalid target");
+    return error::kNoError;
+  }
+
   gl::GLImage* image = image_manager_->LookupImage(imageId);
+  if (image == nullptr) {
+    InsertError(GL_INVALID_OPERATION, "No image found with the given ID");
+    return error::kNoError;
+  }
+
   if (!image->BindTexImage(target)) {
     image->CopyTexImage(target);
   }
+
   return error::kNoError;
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoReleaseTexImage2DCHROMIUM(
     GLenum target,
     GLint imageId) {
-  // TODO(geofflang): error handling
+  if (target != GL_TEXTURE_2D) {
+    InsertError(GL_INVALID_ENUM, "Invalid target");
+    return error::kNoError;
+  }
+
   gl::GLImage* image = image_manager_->LookupImage(imageId);
+  if (image == nullptr) {
+    InsertError(GL_INVALID_OPERATION, "No image found with the given ID");
+    return error::kNoError;
+  }
+
   image->ReleaseTexImage(target);
   return error::kNoError;
 }
@@ -2678,8 +3043,23 @@ error::Error GLES2DecoderPassthroughImpl::DoDiscardFramebufferEXT(
     GLenum target,
     GLsizei count,
     const volatile GLenum* attachments) {
+  if (!feature_info_->feature_flags().ext_discard_framebuffer) {
+    return error::kUnknownCommand;
+  }
+
+  // Validate that count is non-negative before allocating a vector
+  if (count < 0) {
+    InsertError(GL_INVALID_VALUE, "count cannot be negative.");
+    return error::kNoError;
+  }
   std::vector<GLenum> attachments_copy(attachments, attachments + count);
-  glDiscardFramebufferEXT(target, count, attachments_copy.data());
+
+  if (feature_info_->gl_version_info().is_es3) {
+    glInvalidateFramebuffer(target, count, attachments_copy.data());
+  } else {
+    glDiscardFramebufferEXT(target, count, attachments_copy.data());
+  }
+
   return error::kNoError;
 }
 
@@ -2717,6 +3097,11 @@ error::Error GLES2DecoderPassthroughImpl::DoWaitSyncTokenCHROMIUM(
 error::Error GLES2DecoderPassthroughImpl::DoDrawBuffersEXT(
     GLsizei count,
     const volatile GLenum* bufs) {
+  // Validate that count is non-negative before allocating a vector
+  if (count < 0) {
+    InsertError(GL_INVALID_VALUE, "count cannot be negative.");
+    return error::kNoError;
+  }
   std::vector<GLenum> bufs_copy(bufs, bufs + count);
   glDrawBuffersARB(count, bufs_copy.data());
   return error::kNoError;
@@ -3058,6 +3443,15 @@ GLES2DecoderPassthroughImpl::DoUniformMatrix4fvStreamTextureMatrixCHROMIUM(
     GLint location,
     GLboolean transpose,
     const volatile GLfloat* defaultValue) {
+  NOTIMPLEMENTED();
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoOverlayPromotionHintCHROMIUM(
+    GLuint texture,
+    GLboolean promotion_hint,
+    GLint display_x,
+    GLint display_y) {
   NOTIMPLEMENTED();
   return error::kNoError;
 }

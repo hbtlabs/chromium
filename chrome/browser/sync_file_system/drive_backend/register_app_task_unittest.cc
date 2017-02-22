@@ -17,6 +17,7 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_constants.h"
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_util.h"
@@ -205,7 +206,7 @@ class RegisterAppTaskTest : public testing::Test {
   }
 
   size_t CountRemoteFileInSyncRoot() {
-    ScopedVector<google_apis::FileResource> files;
+    std::vector<std::unique_ptr<google_apis::FileResource>> files;
     EXPECT_EQ(google_apis::HTTP_SUCCESS,
               fake_drive_service_helper_->ListFilesInFolder(
                   sync_root_folder_id_, &files));

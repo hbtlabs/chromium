@@ -43,8 +43,7 @@ class DefaultAccessPolicy : public AccessPolicy {
   bool CanChangeWindowVisibility(const ServerWindow* window) const override;
   bool CanChangeWindowOpacity(const ServerWindow* window) const override;
   bool CanSetWindowCompositorFrameSink(
-      const ServerWindow* window,
-      ui::mojom::CompositorFrameSinkType surface_type) const override;
+      const ServerWindow* window) const override;
   bool CanSetWindowBounds(const ServerWindow* window) const override;
   bool CanSetWindowProperties(const ServerWindow* window) const override;
   bool CanSetWindowTextInputState(const ServerWindow* window) const override;
@@ -53,7 +52,10 @@ class DefaultAccessPolicy : public AccessPolicy {
   bool CanSetClientArea(const ServerWindow* window) const override;
   bool CanSetHitTestMask(const ServerWindow* window) const override;
   bool CanSetAcceptDrops(const ServerWindow* window) const override;
-  bool CanSetAcceptEvents(const ServerWindow* window) const override;
+  bool CanSetEventTargetingPolicy(const ServerWindow* window) const override;
+  bool CanStackAbove(const ServerWindow* above,
+                     const ServerWindow* below) const override;
+  bool CanStackAtTop(const ServerWindow* window) const override;
   bool CanSetCursorProperties(const ServerWindow* window) const override;
   bool CanInitiateDragLoop(const ServerWindow* window) const override;
   bool CanInitiateMoveLoop(const ServerWindow* window) const override;

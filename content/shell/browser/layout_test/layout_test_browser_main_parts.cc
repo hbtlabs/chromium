@@ -26,11 +26,11 @@
 #include "net/base/filename_util.h"
 #include "net/base/net_module.h"
 #include "net/grit/net_resources.h"
-#include "storage/browser/quota/quota_manager.h"
+#include "ppapi/features/features.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 #include "content/public/browser/plugin_service.h"
 #include "content/shell/browser/shell_plugin_service_filter.h"
 #endif
@@ -50,13 +50,6 @@
 
 namespace content {
 
-namespace {
-
-// Default quota for each origin is 5MB.
-const int kDefaultLayoutTestQuotaBytes = 5 * 1024 * 1024;
-
-}  // namespace
-
 LayoutTestBrowserMainParts::LayoutTestBrowserMainParts(
     const MainFunctionParams& parameters)
     : ShellBrowserMainParts(parameters) {
@@ -71,19 +64,7 @@ void LayoutTestBrowserMainParts::InitializeBrowserContexts() {
 }
 
 void LayoutTestBrowserMainParts::InitializeMessageLoopContext() {
-  storage::QuotaManager* quota_manager =
-      BrowserContext::GetDefaultStoragePartition(browser_context())
-          ->GetQuotaManager();
-  BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(&storage::QuotaManager::SetTemporaryGlobalOverrideQuota,
-                 quota_manager,
-                 kDefaultLayoutTestQuotaBytes *
-                     storage::QuotaManager::kPerHostTemporaryPortion,
-                 storage::QuotaCallback()));
-
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   PluginService* plugin_service = PluginService::GetInstance();
   plugin_service_filter_.reset(new ShellPluginServiceFilter);
   plugin_service->SetFilter(plugin_service_filter_.get());

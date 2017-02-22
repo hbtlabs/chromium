@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.compositor.bottombar.contextualsearch;
 
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.RectF;
 import android.os.Handler;
 
 import org.chromium.base.ActivityState;
@@ -146,8 +147,8 @@ public class ContextualSearchPanel extends OverlayPanel {
     }
 
     @Override
-    public SceneOverlayLayer getUpdatedSceneOverlayTree(LayerTitleCache layerTitleCache,
-            ResourceManager resourceManager, float yOffset) {
+    public SceneOverlayLayer getUpdatedSceneOverlayTree(RectF viewport, RectF visibleViewport,
+            LayerTitleCache layerTitleCache, ResourceManager resourceManager, float yOffset) {
         mSceneLayer.update(resourceManager, this,
                 getSearchBarControl(),
                 getPeekPromoControl(),
@@ -290,7 +291,8 @@ public class ContextualSearchPanel extends OverlayPanel {
             if (getSearchBarControl().getQuickActionControl().hasQuickAction()
                     && isCoordinateInsideActionTarget(x)) {
                 mPanelMetrics.setWasQuickActionClicked();
-                getSearchBarControl().getQuickActionControl().sendIntent();
+                getSearchBarControl().getQuickActionControl().sendIntent(
+                        mActivity.getActivityTab());
             } else {
                 // super takes care of expanding the Panel when peeking.
                 super.handleBarClick(time, x, y);
@@ -396,6 +398,16 @@ public class ContextualSearchPanel extends OverlayPanel {
         return barShadowOpacity;
     }
 
+    @Override
+    public boolean shouldHideAndroidBrowserControls() {
+        // Account for the Chrome Home bottom sheet when making this decision. If the bottom sheet
+        // is being used, Contextual Search will show in place of the toolbar. This means that the
+        // Android view needs to be hidden immediately when the Contextual Search bar starts
+        // peeking.
+        return (mActivity != null && mActivity.getBottomSheet() != null && isShowing())
+                || super.shouldHideAndroidBrowserControls();
+    }
+
     // ============================================================================================
     // Animation Handling
     // ============================================================================================
@@ -496,7 +508,10 @@ public class ContextualSearchPanel extends OverlayPanel {
             mHasContentBeenTouched = false;
         }
 
-        if (getPanelState() == PanelState.CLOSED) mPanelMetrics.onPanelTriggered();
+        if ((getPanelState() == PanelState.UNDEFINED || getPanelState() == PanelState.CLOSED)
+                && reason == StateChangeReason.TEXT_SELECT_TAP) {
+            mPanelMetrics.onPanelTriggeredFromTap();
+        }
     }
 
     @Override
@@ -562,7 +577,8 @@ public class ContextualSearchPanel extends OverlayPanel {
         mPanelMetrics.onSearchTermResolved();
         getSearchBarControl().setSearchTerm(searchTerm);
         getSearchBarControl().animateSearchTermResolution();
-        getSearchBarControl().setQuickAction(quickActionUri, quickActionCategory);
+        getSearchBarControl().setQuickAction(quickActionUri, quickActionCategory,
+                mActivity.getToolbarManager().getPrimaryColor());
         getImageControl().setThumbnailUrl(thumbnailUrl);
     }
 

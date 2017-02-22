@@ -11,6 +11,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.support.v4.view.animation.LinearOutSlowInInterpolator;
+import android.support.v7.widget.GridLayout;
 import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
 import android.text.TextUtils.TruncateAt;
@@ -25,7 +26,6 @@ import android.view.ViewGroup;
 import android.view.animation.AlphaAnimation;
 import android.view.animation.Animation;
 import android.widget.Button;
-import android.widget.GridLayout;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -173,7 +173,7 @@ public abstract class PaymentRequestSection extends LinearLayout implements View
 
         // Create the main content.
         mMainSection = prepareMainSection(sectionName);
-        mLogoView = isLogoNecessary() ? createAndAddLogoView(this, 0, mLargeSpacing) : null;
+        mLogoView = isLogoNecessary() ? createAndAddLogoView(this, mLargeSpacing) : null;
         mEditButtonView = createAndAddEditButton(this);
         mChevronView = createAndAddChevron(this);
         mIsLayoutInitialized = true;
@@ -183,11 +183,18 @@ public abstract class PaymentRequestSection extends LinearLayout implements View
     /**
      * Sets what logo should be displayed.
      *
-     * @param logo The logo to display.
+     * @param logo       The logo to display.
+     * @param drawBorder Whether draw border background for the logo.
      */
-    protected void setLogoDrawable(Drawable logo) {
+    protected void setLogoDrawable(Drawable logo, boolean drawBorder) {
         assert isLogoNecessary();
         mLogo = logo;
+
+        if (drawBorder) {
+            mLogoView.setBackgroundResource(R.drawable.payments_ui_logo_bg);
+        } else {
+            mLogoView.setBackgroundResource(0);
+        }
         mLogoView.setImageDrawable(mLogo);
     }
 
@@ -374,16 +381,15 @@ public abstract class PaymentRequestSection extends LinearLayout implements View
         return mainSectionLayout;
     }
 
-    private static ImageView createAndAddLogoView(
-            ViewGroup parent, int resourceId, int startMargin) {
+    private static ImageView createAndAddLogoView(ViewGroup parent, int startMargin) {
         ImageView view = new ImageView(parent.getContext());
-        view.setBackgroundResource(R.drawable.payments_ui_logo_bg);
-        if (resourceId != 0) view.setImageResource(resourceId);
+        view.setMaxWidth(parent.getContext().getResources().getDimensionPixelSize(
+                R.dimen.payments_section_logo_width));
+        view.setAdjustViewBounds(true);
 
         // The logo has a pre-defined height and width.
-        LayoutParams params = new LayoutParams(
-                parent.getResources().getDimensionPixelSize(R.dimen.payments_section_logo_width),
-                parent.getResources().getDimensionPixelSize(R.dimen.payments_section_logo_height));
+        LayoutParams params =
+                new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
         ApiCompatibilityUtils.setMarginStart(params, startMargin);
         parent.addView(view, params);
         return view;
@@ -833,6 +839,19 @@ public abstract class PaymentRequestSection extends LinearLayout implements View
         private boolean mCanAddItems = true;
 
         /**
+         * Observer to be notified when the OptionSection changes focus state.
+         */
+        public interface FocusChangedObserver {
+            /*
+             * Called when the OptionSection view gets or loses focus.
+             *
+             * @param dataType  The type of the data contained in the section.
+             * @param willFocus Whether the section is getting the focus.
+             */
+            void onFocusChanged(@PaymentRequestUI.DataType int dataType, boolean willFocus);
+        }
+
+        /**
          * Displays a row representing either a selectable option or some flavor text.
          *
          * + The "button" is on the left and shows either an icon or a radio button to represent th
@@ -878,6 +897,11 @@ public abstract class PaymentRequestSection extends LinearLayout implements View
                     updateSelectedItem(mOption);
                     mDelegate.onPaymentOptionChanged(OptionSection.this, mOption);
                 }
+            }
+
+            /** Returns whether this OptionRow's RadioButton is checked. */
+            public boolean isChecked() {
+                return ((RadioButton) mButton).isChecked();
             }
 
             /** Change the label for the row. */
@@ -1001,9 +1025,9 @@ public abstract class PaymentRequestSection extends LinearLayout implements View
 
                 // The label spans two columns if no option or edit icon, or spans three columns if
                 // no option and edit icons. Setting the view width to 0 forces it to stretch.
-                GridLayout.LayoutParams labelParams = new GridLayout.LayoutParams(
-                        GridLayout.spec(rowIndex, 1, GridLayout.CENTER),
-                        GridLayout.spec(columnStart, columnSpan, GridLayout.FILL));
+                GridLayout.LayoutParams labelParams =
+                        new GridLayout.LayoutParams(GridLayout.spec(rowIndex, 1, GridLayout.CENTER),
+                                GridLayout.spec(columnStart, columnSpan, GridLayout.FILL, 1f));
                 labelParams.topMargin = mVerticalMargin;
                 labelParams.width = 0;
                 if (optionIconExists) {
@@ -1024,15 +1048,21 @@ public abstract class PaymentRequestSection extends LinearLayout implements View
                 // The icon has a pre-defined width.
                 ImageView optionIcon = new ImageView(parent.getContext());
                 optionIcon.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-                optionIcon.setBackgroundResource(R.drawable.payments_ui_logo_bg);
+                if (mOption.isEditable()) {
+                    // Draw border background for the icon if the option is editable.
+                    optionIcon.setBackgroundResource(R.drawable.payments_ui_logo_bg);
+                    optionIcon.setMaxWidth(mEditableOptionIconMaxWidth);
+                } else {
+                    optionIcon.setMaxWidth(mNonEditableOptionIconMaxWidth);
+                }
+                optionIcon.setAdjustViewBounds(true);
                 optionIcon.setImageDrawable(mOption.getDrawableIcon());
-                optionIcon.setMaxWidth(mIconMaxWidth);
 
                 // Place option icon at column three if no edit icon.
                 int columnStart = editIconExists ? 2 : 3;
-                GridLayout.LayoutParams iconParams = new GridLayout.LayoutParams(
-                        GridLayout.spec(rowIndex, 1, GridLayout.CENTER),
-                        GridLayout.spec(columnStart, 1));
+                GridLayout.LayoutParams iconParams =
+                        new GridLayout.LayoutParams(GridLayout.spec(rowIndex, 1, GridLayout.CENTER),
+                                GridLayout.spec(columnStart, 1, GridLayout.CENTER));
                 iconParams.topMargin = mVerticalMargin;
                 parent.addView(optionIcon, iconParams);
 
@@ -1045,8 +1075,9 @@ public abstract class PaymentRequestSection extends LinearLayout implements View
                                           .inflate(R.layout.payment_option_edit_icon, null);
 
                 // The icon floats to the right of everything.
-                GridLayout.LayoutParams iconParams = new GridLayout.LayoutParams(
-                        GridLayout.spec(rowIndex, 1, GridLayout.CENTER), GridLayout.spec(3, 1));
+                GridLayout.LayoutParams iconParams =
+                        new GridLayout.LayoutParams(GridLayout.spec(rowIndex, 1, GridLayout.CENTER),
+                                GridLayout.spec(3, 1, GridLayout.CENTER));
                 iconParams.topMargin = mVerticalMargin;
                 parent.addView(editorIcon, iconParams);
 
@@ -1061,8 +1092,11 @@ public abstract class PaymentRequestSection extends LinearLayout implements View
         /** All the possible PaymentOptions in Layout form, then one row for adding new options. */
         private final ArrayList<OptionRow> mOptionRows = new ArrayList<>();
 
-        /** Width that the icon takes. */
-        private final int mIconMaxWidth;
+        /** Width that the editable option icon takes. */
+        private final int mEditableOptionIconMaxWidth;
+
+        /** Width that the non editable option icon takes. */
+        private final int mNonEditableOptionIconMaxWidth;
 
         /** Layout containing all the {@link OptionRow}s. */
         private GridLayout mOptionLayout;
@@ -1074,7 +1108,9 @@ public abstract class PaymentRequestSection extends LinearLayout implements View
         private SectionInformation mSectionInformation;
 
         /** Indicates whether the summary should be a single line. */
-        private boolean mSummaryInSingleLine = false;
+        private boolean mSummaryInSingleLine;
+
+        private FocusChangedObserver mFocusChangedObserver;
 
         /**
          * Constructs an OptionSection.
@@ -1087,9 +1123,20 @@ public abstract class PaymentRequestSection extends LinearLayout implements View
             super(context, sectionName, delegate);
             mVerticalMargin = context.getResources().getDimensionPixelSize(
                     R.dimen.payments_section_small_spacing);
-            mIconMaxWidth = context.getResources().getDimensionPixelSize(
+            mEditableOptionIconMaxWidth = context.getResources().getDimensionPixelSize(
                     R.dimen.payments_section_logo_width);
+            mNonEditableOptionIconMaxWidth =
+                    context.getResources().getDimensionPixelSize(R.dimen.payments_favicon_size);
             setSummaryText(null, null);
+        }
+
+        /**
+         * Registers the delegate to be notified when this OptionSection gains or loses focus.
+         *
+         * @param delegate The delegate to notify.
+         */
+        public void setOptionSectionFocusChangedObserver(FocusChangedObserver observer) {
+            mFocusChangedObserver = observer;
         }
 
         @Override
@@ -1125,6 +1172,12 @@ public abstract class PaymentRequestSection extends LinearLayout implements View
             if (!mayFocus && shouldFocus) {
                 setDisplayMode(PaymentRequestSection.DISPLAY_MODE_NORMAL);
                 return;
+            }
+
+            // Notify the observer that the focus is going to change.
+            if (mFocusChangedObserver != null) {
+                mFocusChangedObserver.onFocusChanged(
+                        mSectionInformation.getDataType(), shouldFocus);
             }
 
             super.focusSection(shouldFocus);
@@ -1245,11 +1298,11 @@ public abstract class PaymentRequestSection extends LinearLayout implements View
 
         private void updateSelectedItem(PaymentOption selectedItem) {
             if (selectedItem == null) {
-                setLogoDrawable(null);
+                setLogoDrawable(null, false);
                 setIsSummaryAllowed(false);
                 setSummaryText(null, null);
             } else {
-                setLogoDrawable(selectedItem.getDrawableIcon());
+                setLogoDrawable(selectedItem.getDrawableIcon(), selectedItem.isEditable());
                 setSummaryText(
                         convertOptionToString(selectedItem, false /* useBoldLabel */,
                                 mSummaryInSingleLine),

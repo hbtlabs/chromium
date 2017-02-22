@@ -147,6 +147,13 @@ const char kBaseClassMustDeclareVirtualTrace[] =
     "[blink-gc] Left-most base class %0 of derived class %1"
     " must define a virtual trace method.";
 
+const char kIteratorToGCManagedCollectionNote[] =
+    "[blink-gc] Iterator field %0 to a GC managed collection declared here:";
+
+const char kTraceMethodOfStackAllocatedParentNote[] =
+    "[blink-gc] The stack allocated class %0 provides an unnecessary "
+    "trace method:";
+
 } // namespace
 
 DiagnosticBuilder DiagnosticsReporter::ReportDiagnostic(
@@ -207,6 +214,10 @@ DiagnosticsReporter::DiagnosticsReporter(
       getErrorLevel(), kLeftMostBaseMustBePolymorphic);
   diag_base_class_must_declare_virtual_trace_ = diagnostic_.getCustomDiagID(
       getErrorLevel(), kBaseClassMustDeclareVirtualTrace);
+  diag_iterator_to_gc_managed_collection_note_ = diagnostic_.getCustomDiagID(
+      getErrorLevel(), kIteratorToGCManagedCollectionNote);
+  diag_trace_method_of_stack_allocated_parent_ = diagnostic_.getCustomDiagID(
+      getErrorLevel(), kTraceMethodOfStackAllocatedParentNote);
 
   // Register note messages.
   diag_base_requires_tracing_note_ = diagnostic_.getCustomDiagID(
@@ -343,6 +354,8 @@ void DiagnosticsReporter::ClassContainsInvalidFields(
       note = diag_stack_allocated_field_note_;
     } else if (error.second == CheckFieldsVisitor::kGCDerivedPartObject) {
       note = diag_part_object_to_gc_derived_class_note_;
+    } else if (error.second == CheckFieldsVisitor::kIteratorToGCManaged) {
+      note = diag_iterator_to_gc_managed_collection_note_;
     } else {
       assert(false && "Unknown field error");
     }
@@ -490,6 +503,14 @@ void DiagnosticsReporter::BaseClassMustDeclareVirtualTrace(
   ReportDiagnostic(base->getLocStart(),
                    diag_base_class_must_declare_virtual_trace_)
       << base << derived->record();
+}
+
+void DiagnosticsReporter::TraceMethodForStackAllocatedClass(
+    RecordInfo* info,
+    CXXMethodDecl* trace) {
+  ReportDiagnostic(trace->getLocStart(),
+                   diag_trace_method_of_stack_allocated_parent_)
+      << info->record();
 }
 
 void DiagnosticsReporter::NoteManualDispatchMethod(CXXMethodDecl* dispatch) {

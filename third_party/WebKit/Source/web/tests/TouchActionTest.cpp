@@ -44,9 +44,8 @@
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebInputEvent.h"
+#include "public/platform/WebTouchEvent.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
-#include "public/web/WebCache.h"
 #include "public/web/WebDocument.h"
 #include "public/web/WebFrame.h"
 #include "public/web/WebHitTestResult.h"
@@ -63,10 +62,10 @@ using blink::testing::runPendingTasks;
 
 namespace blink {
 
-class TouchActionTrackingWebViewClient
-    : public FrameTestHelpers::TestWebViewClient {
+class TouchActionTrackingWebWidgetClient
+    : public FrameTestHelpers::TestWebWidgetClient {
  public:
-  TouchActionTrackingWebViewClient()
+  TouchActionTrackingWebWidgetClient()
       : m_actionSetCount(0), m_action(WebTouchActionAuto) {}
 
   // WebWidgetClient methods
@@ -95,17 +94,21 @@ const int kfakeTouchId = 7;
 class TouchActionTest : public ::testing::Test {
  public:
   TouchActionTest() : m_baseURL("http://www.test.com/") {
-    URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(m_baseURL),
-                                                 "touch-action-tests.css");
-    URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(m_baseURL),
-                                                 "touch-action-tests.js");
-    URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(m_baseURL),
-                                                 "white-1x1.png");
+    URLTestHelpers::registerMockedURLLoadFromBase(
+        WebString::fromUTF8(m_baseURL), testing::webTestDataPath(),
+        "touch-action-tests.css");
+    URLTestHelpers::registerMockedURLLoadFromBase(
+        WebString::fromUTF8(m_baseURL), testing::webTestDataPath(),
+        "touch-action-tests.js");
+    URLTestHelpers::registerMockedURLLoadFromBase(
+        WebString::fromUTF8(m_baseURL), testing::webTestDataPath(),
+        "white-1x1.png");
   }
 
   void TearDown() override {
-    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
-    WebCache::clear();
+    Platform::current()
+        ->getURLLoaderMockFactory()
+        ->unregisterAllURLsAndClearMemoryCache();
   }
 
  protected:
@@ -113,17 +116,17 @@ class TouchActionTest : public ::testing::Test {
   void runShadowDOMTest(std::string file);
   void runIFrameTest(std::string file);
   void sendTouchEvent(WebView*, WebInputEvent::Type, IntPoint clientPoint);
-  WebView* setupTest(std::string file, TouchActionTrackingWebViewClient&);
+  WebView* setupTest(std::string file, TouchActionTrackingWebWidgetClient&);
   void runTestOnTree(ContainerNode* root,
                      WebView*,
-                     TouchActionTrackingWebViewClient&);
+                     TouchActionTrackingWebWidgetClient&);
 
   std::string m_baseURL;
   FrameTestHelpers::WebViewHelper m_webViewHelper;
 };
 
 void TouchActionTest::runTouchActionTest(std::string file) {
-  TouchActionTrackingWebViewClient client;
+  TouchActionTrackingWebWidgetClient client;
 
   // runTouchActionTest() loads a document in a frame, setting up a
   // nested message loop. Should any Oilpan GC happen while it is in
@@ -146,11 +149,11 @@ void TouchActionTest::runTouchActionTest(std::string file) {
 }
 
 void TouchActionTest::runShadowDOMTest(std::string file) {
-  TouchActionTrackingWebViewClient client;
+  TouchActionTrackingWebWidgetClient client;
 
   WebView* webView = setupTest(file, client);
 
-  TrackExceptionState es;
+  DummyExceptionStateForTesting es;
 
   // Oilpan: see runTouchActionTest() comment why these are persistent
   // references.
@@ -174,7 +177,7 @@ void TouchActionTest::runShadowDOMTest(std::string file) {
 }
 
 void TouchActionTest::runIFrameTest(std::string file) {
-  TouchActionTrackingWebViewClient client;
+  TouchActionTrackingWebWidgetClient client;
 
   WebView* webView = setupTest(file, client);
   WebFrame* curFrame = webView->mainFrame()->firstChild();
@@ -192,13 +195,15 @@ void TouchActionTest::runIFrameTest(std::string file) {
   m_webViewHelper.reset();
 }
 
-WebView* TouchActionTest::setupTest(std::string file,
-                                    TouchActionTrackingWebViewClient& client) {
-  URLTestHelpers::registerMockedURLFromBaseURL(WebString::fromUTF8(m_baseURL),
-                                               WebString::fromUTF8(file));
+WebView* TouchActionTest::setupTest(
+    std::string file,
+    TouchActionTrackingWebWidgetClient& client) {
+  URLTestHelpers::registerMockedURLLoadFromBase(WebString::fromUTF8(m_baseURL),
+                                                testing::webTestDataPath(),
+                                                WebString::fromUTF8(file));
   // Note that JavaScript must be enabled for shadow DOM tests.
   WebView* webView =
-      m_webViewHelper.initializeAndLoad(m_baseURL + file, true, 0, &client);
+      m_webViewHelper.initializeAndLoad(m_baseURL + file, true, 0, 0, &client);
 
   // Set size to enable hit testing, and avoid line wrapping for consistency
   // with browser.
@@ -222,11 +227,12 @@ IntRect windowClipRect(const FrameView& frameView) {
   return enclosingIntRect(clipRect);
 }
 
-void TouchActionTest::runTestOnTree(ContainerNode* root,
-                                    WebView* webView,
-                                    TouchActionTrackingWebViewClient& client) {
+void TouchActionTest::runTestOnTree(
+    ContainerNode* root,
+    WebView* webView,
+    TouchActionTrackingWebWidgetClient& client) {
   // Find all elements to test the touch-action of in the document.
-  TrackExceptionState es;
+  DummyExceptionStateForTesting es;
 
   // Oilpan: see runTouchActionTest() comment why these are persistent
   // references.
@@ -370,8 +376,8 @@ void TouchActionTest::sendTouchEvent(WebView* webView,
   ASSERT_TRUE(type == WebInputEvent::TouchStart ||
               type == WebInputEvent::TouchCancel);
 
-  WebTouchEvent webTouchEvent;
-  webTouchEvent.type = type;
+  WebTouchEvent webTouchEvent(type, WebInputEvent::NoModifiers,
+                              WebInputEvent::TimeStampForTesting);
   if (type == WebInputEvent::TouchCancel)
     webTouchEvent.dispatchType = WebInputEvent::EventNonBlocking;
   webTouchEvent.touchesLength = 1;
@@ -387,7 +393,7 @@ void TouchActionTest::sendTouchEvent(WebView* webView,
   webTouchEvent.touches[0].radiusY = 10;
   webTouchEvent.touches[0].force = 1.0;
 
-  webView->handleInputEvent(webTouchEvent);
+  webView->handleInputEvent(WebCoalescedInputEvent(webTouchEvent));
   runPendingTasks();
 }
 

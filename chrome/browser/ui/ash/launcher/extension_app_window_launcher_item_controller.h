@@ -21,7 +21,6 @@ class ExtensionAppWindowLauncherItemController
     : public AppWindowLauncherItemController {
  public:
   ExtensionAppWindowLauncherItemController(
-      Type type,
       const std::string& app_id,
       const std::string& launch_id,
       ChromeLauncherController* controller);
@@ -31,10 +30,7 @@ class ExtensionAppWindowLauncherItemController
   void AddAppWindow(extensions::AppWindow* app_window);
 
   // LauncherItemController overrides:
-  ChromeLauncherAppMenuItems GetApplicationList(int event_flags) override;
-  ash::ShelfItemDelegate::PerformedAction ItemSelected(
-      const ui::Event& event) override;
-  ash::ShelfMenuModel* CreateApplicationMenu(int event_flags) override;
+  ash::ShelfAppMenuItemList GetAppMenuItems(int event_flags) override;
 
  protected:
   // AppWindowLauncherItemController:

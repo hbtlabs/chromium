@@ -4,11 +4,13 @@
 
 #include "ui/views/widget/widget.h"
 
+#include "base/auto_reset.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "ui/aura/window.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/default_style.h"
 #include "ui/base/default_theme_provider.h"
@@ -46,12 +48,12 @@ namespace {
 // If |view| has a layer the layer is added to |layers|. Else this recurses
 // through the children. This is used to build a list of the layers created by
 // views that are direct children of the Widgets layer.
-void BuildRootLayers(View* view, std::vector<ui::Layer*>* layers) {
+void BuildViewsWithLayers(View* view, View::Views* views) {
   if (view->layer()) {
-    layers->push_back(view->layer());
+    views->push_back(view);
   } else {
     for (int i = 0; i < view->child_count(); ++i)
-      BuildRootLayers(view->child_at(i), layers);
+      BuildViewsWithLayers(view->child_at(i), views);
   }
 }
 
@@ -141,6 +143,14 @@ Widget::InitParams::InitParams(const InitParams& other) = default;
 Widget::InitParams::~InitParams() {
 }
 
+bool Widget::InitParams::CanActivate() const {
+  if (activatable != InitParams::ACTIVATABLE_DEFAULT)
+    return activatable == InitParams::ACTIVATABLE_YES;
+  return type != InitParams::TYPE_CONTROL && type != InitParams::TYPE_POPUP &&
+         type != InitParams::TYPE_MENU && type != InitParams::TYPE_TOOLTIP &&
+         type != InitParams::TYPE_DRAG;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Widget, public:
 
@@ -163,10 +173,10 @@ Widget::Widget()
       ignore_capture_loss_(false),
       last_mouse_event_was_move_(false),
       auto_release_capture_(true),
-      root_layers_dirty_(false),
+      views_with_layers_dirty_(false),
       movement_disabled_(false),
-      observer_manager_(this) {
-}
+      observer_manager_(this),
+      processing_theme_changed_(false) {}
 
 Widget::~Widget() {
   DestroyRootView();
@@ -309,20 +319,9 @@ void Widget::Init(const InitParams& in_params) {
   if (params.opacity == views::Widget::InitParams::INFER_OPACITY)
     params.opacity = views::Widget::InitParams::OPAQUE_WINDOW;
 
-  bool can_activate = false;
-  if (params.activatable != InitParams::ACTIVATABLE_DEFAULT) {
-    can_activate = (params.activatable == InitParams::ACTIVATABLE_YES);
-  } else if (params.type != InitParams::TYPE_CONTROL &&
-             params.type != InitParams::TYPE_POPUP &&
-             params.type != InitParams::TYPE_MENU &&
-             params.type != InitParams::TYPE_TOOLTIP &&
-             params.type != InitParams::TYPE_DRAG) {
-    can_activate = true;
-    params.activatable = InitParams::ACTIVATABLE_YES;
-  } else {
-    can_activate = false;
-    params.activatable = InitParams::ACTIVATABLE_NO;
-  }
+  bool can_activate = params.CanActivate();
+  params.activatable =
+      can_activate ? InitParams::ACTIVATABLE_YES : InitParams::ACTIVATABLE_NO;
 
   widget_delegate_ = params.delegate ?
       params.delegate : new DefaultWidgetDelegate(this);
@@ -703,6 +702,8 @@ bool Widget::IsFullscreen() const {
 }
 
 void Widget::SetOpacity(float opacity) {
+  DCHECK(opacity >= 0.0f);
+  DCHECK(opacity <= 1.0f);
   native_widget_->SetOpacity(opacity);
 }
 
@@ -736,10 +737,6 @@ const ui::ThemeProvider* Widget::GetThemeProvider() const {
       return provider;
   }
   return default_theme_provider_.get();
-}
-
-const ui::NativeTheme* Widget::GetNativeTheme() const {
-  return native_widget_->GetNativeTheme();
 }
 
 FocusManager* Widget::GetFocusManager() {
@@ -903,6 +900,8 @@ void Widget::DebugToggleFrameType() {
 }
 
 void Widget::FrameTypeChanged() {
+  if (processing_theme_changed_)
+    return;
   native_widget_->FrameTypeChanged();
 }
 
@@ -918,11 +917,11 @@ void Widget::ReorderNativeViews() {
   native_widget_->ReorderNativeViews();
 }
 
-void Widget::UpdateRootLayers() {
+void Widget::LayerTreeChanged() {
   // Calculate the layers requires traversing the tree, and since nearly any
   // mutation of the tree can trigger this call we delay until absolutely
   // necessary.
-  root_layers_dirty_ = true;
+  views_with_layers_dirty_ = true;
 }
 
 const NativeWidget* Widget::native_widget() const {
@@ -981,10 +980,6 @@ void Widget::SynthesizeMouseMoveEvent() {
                              mouse_location, ui::EventTimeForNow(),
                              ui::EF_IS_SYNTHESIZED, 0);
   root_view_->OnMouseMoved(mouse_event);
-}
-
-void Widget::OnRootViewLayout() {
-  native_widget_->OnRootViewLayout();
 }
 
 bool Widget::IsTranslucentWindowOpacitySupported() const {
@@ -1284,15 +1279,6 @@ bool Widget::ExecuteCommand(int command_id) {
   return widget_delegate_->ExecuteWindowsCommand(command_id);
 }
 
-const std::vector<ui::Layer*>& Widget::GetRootLayers() {
-  if (root_layers_dirty_) {
-    root_layers_dirty_ = false;
-    root_layers_.clear();
-    BuildRootLayers(GetRootView(), &root_layers_);
-  }
-  return root_layers_;
-}
-
 bool Widget::HasHitTestMask() const {
   return widget_delegate_->WidgetHasHitTestMask();
 }
@@ -1311,18 +1297,76 @@ const Widget* Widget::AsWidget() const {
 }
 
 bool Widget::SetInitialFocus(ui::WindowShowState show_state) {
+  FocusManager* focus_manager = GetFocusManager();
   View* v = widget_delegate_->GetInitiallyFocusedView();
   if (!focus_on_creation_ || show_state == ui::SHOW_STATE_INACTIVE ||
       show_state == ui::SHOW_STATE_MINIMIZED) {
     // If not focusing the window now, tell the focus manager which view to
     // focus when the window is restored.
-    if (v && focus_manager_.get())
-      focus_manager_->SetStoredFocusView(v);
+    if (v && focus_manager)
+      focus_manager->SetStoredFocusView(v);
     return true;
   }
-  if (v)
+  if (v) {
     v->RequestFocus();
-  return !!v;
+    // If the Widget is active (thus allowing its child Views to receive focus),
+    // but the request for focus was unsuccessful, fall back to using the first
+    // focusable View instead.
+    if (focus_manager && focus_manager->GetFocusedView() == nullptr &&
+        IsActive()) {
+      focus_manager->AdvanceFocus(false);
+    }
+  }
+  return !!focus_manager->GetFocusedView();
+}
+
+bool Widget::ShouldDescendIntoChildForEventHandling(
+    ui::Layer* root_layer,
+    gfx::NativeView child,
+    ui::Layer* child_layer,
+    const gfx::Point& location) {
+  if (widget_delegate_ &&
+      !widget_delegate_->ShouldDescendIntoChildForEventHandling(child,
+                                                                location)) {
+    return false;
+  }
+
+  const View::Views& views_with_layers = GetViewsWithLayers();
+  if (views_with_layers.empty())
+    return true;
+
+  // Don't descend into |child| if there is a view with a Layer that contains
+  // the point and is stacked above |child_layer|.
+  auto child_layer_iter = std::find(root_layer->children().begin(),
+                                    root_layer->children().end(), child_layer);
+  if (child_layer_iter == root_layer->children().end())
+    return true;
+
+  for (auto iter = views_with_layers.rbegin(); iter != views_with_layers.rend();
+       ++iter) {
+    ui::Layer* layer = (*iter)->layer();
+    DCHECK(layer);
+    if (layer->visible() && layer->bounds().Contains(location)) {
+      auto root_layer_iter = std::find(root_layer->children().begin(),
+                                       root_layer->children().end(), layer);
+      if (child_layer_iter > root_layer_iter) {
+        // |child| is on top of the remaining layers, no need to continue.
+        return true;
+      }
+
+      // Event targeting uses the visible bounds of the View, which may differ
+      // from the bounds of the layer. Verify the view hosting the layer
+      // actually contains |location|. Use GetVisibleBounds(), which is
+      // effectively what event targetting uses.
+      View* view = *iter;
+      gfx::Rect vis_bounds = view->GetVisibleBounds();
+      gfx::Point point_in_view = location;
+      View::ConvertPointToTarget(GetRootView(), view, &point_in_view);
+      if (vis_bounds.Contains(point_in_view))
+        return false;
+    }
+  }
+  return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1364,6 +1408,10 @@ void Widget::OnNativeThemeUpdated(ui::NativeTheme* observed_theme) {
     observer_manager_.Add(current_native_theme);
   }
 
+  DCHECK_EQ(processing_theme_changed_, false);
+
+  base::AutoReset<bool> auto_theme_changed_recursion_break(
+      &processing_theme_changed_, true);
   root_view_->PropagateNativeThemeChanged(current_native_theme);
 }
 
@@ -1375,6 +1423,7 @@ internal::RootView* Widget::CreateRootView() {
 }
 
 void Widget::DestroyRootView() {
+  NotifyWillRemoveView(root_view_.get());
   non_client_view_ = NULL;
   root_view_.reset();
 }
@@ -1491,6 +1540,15 @@ bool Widget::GetSavedWindowPlacement(gfx::Rect* bounds,
     return true;
   }
   return false;
+}
+
+const View::Views& Widget::GetViewsWithLayers() {
+  if (views_with_layers_dirty_) {
+    views_with_layers_dirty_ = false;
+    views_with_layers_.clear();
+    BuildViewsWithLayers(GetRootView(), &views_with_layers_);
+  }
+  return views_with_layers_;
 }
 
 namespace internal {

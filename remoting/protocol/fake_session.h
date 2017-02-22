@@ -14,6 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "remoting/protocol/fake_stream_socket.h"
+#include "remoting/protocol/jingle_messages.h"
 #include "remoting/protocol/session.h"
 #include "remoting/protocol/transport.h"
 
@@ -40,6 +41,11 @@ class FakeSession : public Session {
     signaling_delay_ = signaling_delay;
   }
 
+  // Adds an |attachment| to |round|, which will be sent to plugins added by
+  // AddPlugin() function.
+  void SetAttachment(size_t round,
+                     std::unique_ptr<buzz::XmlElement> attachment);
+
   // Session interface.
   void SetEventHandler(EventHandler* event_handler) override;
   ErrorCode error() override;
@@ -47,6 +53,7 @@ class FakeSession : public Session {
   const SessionConfig& config() override;
   void SetTransport(Transport* transport) override;
   void Close(ErrorCode error) override;
+  void AddPlugin(SessionPlugin* plugin) override;
 
  private:
   // Callback provided to the |transport_|.
@@ -68,6 +75,8 @@ class FakeSession : public Session {
 
   base::WeakPtr<FakeSession> peer_;
   base::TimeDelta signaling_delay_;
+
+  std::vector<std::unique_ptr<buzz::XmlElement>> attachments_;
 
   base::WeakPtrFactory<FakeSession> weak_factory_;
 

@@ -10,113 +10,32 @@
 #include <algorithm>
 
 #include "base/bind.h"
+#include "base/bit_cast.h"
 #include "base/command_line.h"
 #include "base/path_service.h"
 #include "base/time/time.h"
+#include "chrome/browser/task_manager/sampling/shared_sampler_win_defines.h"
 #include "chrome/browser/task_manager/task_manager_observer.h"
 #include "chrome/common/chrome_constants.h"
 #include "content/public/browser/browser_thread.h"
 
+// ntstatus.h conflicts with windows.h so define this locally.
+#define STATUS_SUCCESS ((NTSTATUS)0x00000000L)
+#define STATUS_BUFFER_TOO_SMALL ((NTSTATUS)0xC0000023L)
+#define STATUS_INFO_LENGTH_MISMATCH ((NTSTATUS)0xC0000004L)
+
 namespace task_manager {
 
+static SharedSampler::QuerySystemInformationForTest
+    g_query_system_information_for_test = nullptr;
+
+// static
+void SharedSampler::SetQuerySystemInformationForTest(
+    QuerySystemInformationForTest query_system_information) {
+  g_query_system_information_for_test = query_system_information;
+}
+
 namespace {
-
-// From <wdm.h>
-typedef LONG KPRIORITY;
-typedef LONG KWAIT_REASON;  // Full definition is in wdm.h
-
-// From ntddk.h
-typedef struct _VM_COUNTERS {
-  SIZE_T PeakVirtualSize;
-  SIZE_T VirtualSize;
-  ULONG PageFaultCount;
-  // Padding here in 64-bit
-  SIZE_T PeakWorkingSetSize;
-  SIZE_T WorkingSetSize;
-  SIZE_T QuotaPeakPagedPoolUsage;
-  SIZE_T QuotaPagedPoolUsage;
-  SIZE_T QuotaPeakNonPagedPoolUsage;
-  SIZE_T QuotaNonPagedPoolUsage;
-  SIZE_T PagefileUsage;
-  SIZE_T PeakPagefileUsage;
-} VM_COUNTERS;
-
-// Two possibilities available from here:
-// http://stackoverflow.com/questions/28858849/where-is-system-information-class-defined
-
-typedef enum _SYSTEM_INFORMATION_CLASS {
-  SystemProcessInformation = 5,  // This is the number that we need.
-} SYSTEM_INFORMATION_CLASS;
-
-// https://msdn.microsoft.com/en-us/library/gg750647.aspx?f=255&MSPPError=-2147217396
-typedef struct {
-  HANDLE UniqueProcess;  // Actually process ID
-  HANDLE UniqueThread;   // Actually thread ID
-} CLIENT_ID;
-
-// From http://alax.info/blog/1182, with corrections and modifications
-// Originally from
-// http://undocumented.ntinternals.net/index.html?page=UserMode%2FUndocumented%20Functions%2FSystem%20Information%2FStructures%2FSYSTEM_THREAD.html
-struct SYSTEM_THREAD_INFORMATION {
-  ULONGLONG KernelTime;
-  ULONGLONG UserTime;
-  ULONGLONG CreateTime;
-  ULONG WaitTime;
-  // Padding here in 64-bit
-  PVOID StartAddress;
-  CLIENT_ID ClientId;
-  KPRIORITY Priority;
-  LONG BasePriority;
-  ULONG ContextSwitchCount;
-  ULONG State;
-  KWAIT_REASON WaitReason;
-};
-#if _M_X64
-static_assert(sizeof(SYSTEM_THREAD_INFORMATION) == 80,
-              "Structure size mismatch");
-#else
-static_assert(sizeof(SYSTEM_THREAD_INFORMATION) == 64,
-              "Structure size mismatch");
-#endif
-
-// From http://alax.info/blog/1182, with corrections and modifications
-// Originally from
-// http://undocumented.ntinternals.net/index.html?page=UserMode%2FUndocumented%20Functions%2FSystem%20Information%2FStructures%2FSYSTEM_THREAD.html
-struct SYSTEM_PROCESS_INFORMATION {
-  ULONG NextEntryOffset;
-  ULONG NumberOfThreads;
-  // http://processhacker.sourceforge.net/doc/struct___s_y_s_t_e_m___p_r_o_c_e_s_s___i_n_f_o_r_m_a_t_i_o_n.html
-  ULONGLONG WorkingSetPrivateSize;
-  ULONG HardFaultCount;
-  ULONG Reserved1;
-  ULONGLONG CycleTime;
-  ULONGLONG CreateTime;
-  ULONGLONG UserTime;
-  ULONGLONG KernelTime;
-  UNICODE_STRING ImageName;
-  KPRIORITY BasePriority;
-  HANDLE ProcessId;
-  HANDLE ParentProcessId;
-  ULONG HandleCount;
-  ULONG Reserved2[2];
-  // Padding here in 64-bit
-  VM_COUNTERS VirtualMemoryCounters;
-  size_t Reserved3;
-  IO_COUNTERS IoCounters;
-  SYSTEM_THREAD_INFORMATION Threads[1];
-};
-#if _M_X64
-static_assert(sizeof(SYSTEM_PROCESS_INFORMATION) == 336,
-              "Structure size mismatch");
-#else
-static_assert(sizeof(SYSTEM_PROCESS_INFORMATION) == 248,
-              "Structure size mismatch");
-#endif
-
-// ntstatus.h conflicts with windows.h so define this locally.
-#define STATUS_SUCCESS              ((NTSTATUS)0x00000000L)
-#define STATUS_BUFFER_TOO_SMALL     ((NTSTATUS)0xC0000023L)
-#define STATUS_INFO_LENGTH_MISMATCH ((NTSTATUS)0xC0000004L)
 
 // Simple memory buffer wrapper for passing the data out of
 // QuerySystemProcessInformation.
@@ -157,10 +76,6 @@ class ByteBuffer {
 
 // Wrapper for NtQuerySystemProcessInformation with buffer reallocation logic.
 bool QuerySystemProcessInformation(ByteBuffer* buffer) {
-  typedef NTSTATUS(WINAPI * NTQUERYSYSTEMINFORMATION)(
-      SYSTEM_INFORMATION_CLASS SystemInformationClass, PVOID SystemInformation,
-      ULONG SystemInformationLength, PULONG ReturnLength);
-
   HMODULE ntdll = ::GetModuleHandle(L"ntdll.dll");
   if (!ntdll) {
     NOTREACHED();
@@ -182,9 +97,16 @@ bool QuerySystemProcessInformation(ByteBuffer* buffer) {
   for (int i = 0; i < 10; i++) {
     ULONG data_size = 0;
     ULONG buffer_size = static_cast<ULONG>(buffer->capacity());
-    result = nt_query_system_information_ptr(
-        SystemProcessInformation,
-        buffer->data(), buffer_size, &data_size);
+
+    if (g_query_system_information_for_test) {
+      data_size =
+          g_query_system_information_for_test(buffer->data(), buffer_size);
+      result =
+          (data_size > buffer_size) ? STATUS_BUFFER_TOO_SMALL : STATUS_SUCCESS;
+    } else {
+      result = nt_query_system_information_ptr(
+          SystemProcessInformation, buffer->data(), buffer_size, &data_size);
+    }
 
     if (result == STATUS_SUCCESS) {
       buffer->set_size(data_size);
@@ -220,6 +142,8 @@ struct ProcessData {
   ProcessData(ProcessData&&) = default;
 
   int64_t physical_bytes;
+  base::Time start_time;
+  base::TimeDelta cpu_time;
   std::vector<ThreadData> threads;
 
  private:
@@ -284,6 +208,17 @@ const ProcessData* SeekInPreviousSnapshot(
   return nullptr;
 }
 
+// A wrapper function converting ticks (in units of 100 ns) to Time.
+base::Time ConvertTicksToTime(uint64_t ticks) {
+  FILETIME ft = bit_cast<FILETIME, uint64_t>(ticks);
+  return base::Time::FromFileTime(ft);
+}
+
+// A wrapper function converting ticks (in units of 100 ns) to TimeDelta.
+base::TimeDelta ConvertTicksToTimeDelta(uint64_t ticks) {
+  return base::TimeDelta::FromMicroseconds(ticks / 10);
+}
+
 }  // namespace
 
 // ProcessDataSnapshot gets created and accessed only on the worker thread.
@@ -313,7 +248,8 @@ SharedSampler::SharedSampler(
 SharedSampler::~SharedSampler() {}
 
 int64_t SharedSampler::GetSupportedFlags() const {
-  return REFRESH_TYPE_IDLE_WAKEUPS | REFRESH_TYPE_PHYSICAL_MEMORY;
+  return REFRESH_TYPE_IDLE_WAKEUPS | REFRESH_TYPE_PHYSICAL_MEMORY |
+         REFRESH_TYPE_START_TIME | REFRESH_TYPE_CPU_TIME;
 }
 
 SharedSampler::Callbacks::Callbacks() {}
@@ -323,12 +259,16 @@ SharedSampler::Callbacks::~Callbacks() {}
 SharedSampler::Callbacks::Callbacks(Callbacks&& other) {
   on_idle_wakeups = std::move(other.on_idle_wakeups);
   on_physical_memory = std::move(other.on_physical_memory);
+  on_start_time = std::move(other.on_start_time);
+  on_cpu_time = std::move(other.on_cpu_time);
 }
 
 void SharedSampler::RegisterCallbacks(
     base::ProcessId process_id,
     const OnIdleWakeupsCallback& on_idle_wakeups,
-    const OnPhysicalMemoryCallback& on_physical_memory) {
+    const OnPhysicalMemoryCallback& on_physical_memory,
+    const OnStartTimeCallback& on_start_time,
+    const OnCpuTimeCallback& on_cpu_time) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   if (process_id == 0)
@@ -337,6 +277,8 @@ void SharedSampler::RegisterCallbacks(
   Callbacks callbacks;
   callbacks.on_idle_wakeups = on_idle_wakeups;
   callbacks.on_physical_memory = on_physical_memory;
+  callbacks.on_start_time = on_start_time;
+  callbacks.on_cpu_time = on_cpu_time;
   bool result = callbacks_map_.insert(
       std::make_pair(process_id, std::move(callbacks))).second;
   DCHECK(result);
@@ -369,9 +311,15 @@ void SharedSampler::Refresh(base::ProcessId process_id, int64_t refresh_flags) {
         base::Bind(&SharedSampler::RefreshOnWorkerThread, this),
         base::Bind(&SharedSampler::OnRefreshDone, this));
   } else {
+    // http://crbug.com/678471
     // A group of consecutive Refresh calls should all specify the same refresh
-    // flags.
-    DCHECK_EQ(refresh_flags, refresh_flags_);
+    // flags. Rarely RefreshOnWorkerThread could take a long time (> 1 sec),
+    // long enough for a next refresh cycle to start before results are ready
+    // from a previous cycle. In that case refresh_flags_ would still remain
+    // set to the previous cycle refresh flags which might be different than
+    // this cycle refresh flags if a column was added or removed between the two
+    // cycles. The worst that could happen in that condition is that results for
+    // a newly added column would be missing for one extra refresh cycle.
   }
 
   refresh_flags_ |= refresh_flags;
@@ -457,10 +405,12 @@ std::unique_ptr<ProcessDataSnapshot> SharedSampler::CaptureSnapshot() {
     // the buffer boundary.
     if (offset + sizeof(SYSTEM_PROCESS_INFORMATION) > data_buffer.size())
       break;
-    if (offset + sizeof(SYSTEM_PROCESS_INFORMATION) +
-            (pi->NumberOfThreads - 1) * sizeof(SYSTEM_THREAD_INFORMATION) >
-      data_buffer.size())
+    if (pi->NumberOfThreads > 0 &&
+        (offset + sizeof(SYSTEM_PROCESS_INFORMATION) +
+             (pi->NumberOfThreads - 1) * sizeof(SYSTEM_THREAD_INFORMATION) >
+         data_buffer.size())) {
       break;
+    }
 
     if (pi->ImageName.Buffer) {
       // Validate that the image name is within the buffer boundary.
@@ -481,9 +431,11 @@ std::unique_ptr<ProcessDataSnapshot> SharedSampler::CaptureSnapshot() {
         // not count context switches for threads that are missing in the most
         // recent snapshot.
         ProcessData process_data;
-
         process_data.physical_bytes =
             static_cast<int64_t>(pi->WorkingSetPrivateSize);
+        process_data.start_time = ConvertTicksToTime(pi->CreateTime);
+        process_data.cpu_time =
+            ConvertTicksToTimeDelta(pi->KernelTime + pi->UserTime);
 
         // Iterate over threads and store each thread's ID and number of context
         // switches.
@@ -562,6 +514,8 @@ void SharedSampler::MakeResultsFromTwoSnapshots(
     result.idle_wakeups_per_second =
         static_cast<int>(round(idle_wakeups_delta / time_delta));
     result.physical_bytes = process.physical_bytes;
+    result.start_time = process.start_time;
+    result.cpu_time = process.cpu_time;
     results->push_back(result);
   }
 }
@@ -575,6 +529,8 @@ void SharedSampler::MakeResultsFromSnapshot(const ProcessDataSnapshot& snapshot,
     // ProcessMetrics::CalculateIdleWakeupsPerSecond implementation.
     result.idle_wakeups_per_second = 0;
     result.physical_bytes = pair.second.physical_bytes;
+    result.start_time = pair.second.start_time;
+    result.cpu_time = pair.second.cpu_time;
     results->push_back(result);
   }
 }
@@ -589,9 +545,11 @@ void SharedSampler::OnRefreshDone(
   for (const auto& callback_entry : callbacks_map_) {
     base::ProcessId process_id = callback_entry.first;
     // A sentinel value of -1 is used when the result isn't available.
-    // Task manager will use this to display 'N/A'.
+    // Task manager will use this to display '-'.
     int idle_wakeups_per_second = -1;
     int64_t physical_bytes = -1;
+    base::Time start_time;
+    base::TimeDelta cpu_time;
 
     // Match refresh result by |process_id|.
     // This relies on refresh results being ordered by Process ID.
@@ -606,6 +564,8 @@ void SharedSampler::OnRefreshDone(
         // Data matched in |refresh_results|.
         idle_wakeups_per_second = result.idle_wakeups_per_second;
         physical_bytes = result.physical_bytes;
+        start_time = result.start_time;
+        cpu_time = result.cpu_time;
         ++result_index;
         break;
       }
@@ -626,6 +586,18 @@ void SharedSampler::OnRefreshDone(
         REFRESH_TYPE_PHYSICAL_MEMORY, refresh_flags_)) {
       DCHECK(callback_entry.second.on_physical_memory);
       callback_entry.second.on_physical_memory.Run(physical_bytes);
+    }
+
+    if (TaskManagerObserver::IsResourceRefreshEnabled(REFRESH_TYPE_START_TIME,
+                                                      refresh_flags_)) {
+      DCHECK(callback_entry.second.on_start_time);
+      callback_entry.second.on_start_time.Run(start_time);
+    }
+
+    if (TaskManagerObserver::IsResourceRefreshEnabled(REFRESH_TYPE_CPU_TIME,
+                                                      refresh_flags_)) {
+      DCHECK(callback_entry.second.on_cpu_time);
+      callback_entry.second.on_cpu_time.Run(cpu_time);
     }
   }
 

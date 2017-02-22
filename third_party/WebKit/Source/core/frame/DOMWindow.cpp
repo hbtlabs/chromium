@@ -4,25 +4,21 @@
 
 #include "core/frame/DOMWindow.h"
 
+#include <memory>
 #include "core/dom/Document.h"
-#include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/SecurityContext.h"
 #include "core/events/MessageEvent.h"
-#include "core/frame/External.h"
 #include "core/frame/Frame.h"
 #include "core/frame/FrameClient.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/Location.h"
-#include "core/frame/RemoteDOMWindow.h"
-#include "core/frame/RemoteFrame.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
-#include "core/input/EventHandler.h"
+#include "core/input/InputDeviceCapabilities.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
-#include "core/loader/FrameLoaderClient.h"
 #include "core/loader/MixedContentChecker.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/FocusController.h"
@@ -30,19 +26,21 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/Suborigin.h"
-#include <memory>
 
 namespace blink {
 
-DOMWindow::DOMWindow() : m_windowIsClosing(false) {}
+DOMWindow::DOMWindow(Frame& frame) : m_frame(frame), m_windowIsClosing(false) {}
 
-DOMWindow::~DOMWindow() {}
+DOMWindow::~DOMWindow() {
+  // The frame must be disconnected before finalization.
+  DCHECK(!m_frame);
+}
 
 v8::Local<v8::Object> DOMWindow::wrap(v8::Isolate*,
                                       v8::Local<v8::Object> creationContext) {
-  // DOMWindow must never be wrapped with wrap method.  The wrappers must be
-  // created at WindowProxy::createContext() and setupWindowPrototypeChain().
-  RELEASE_NOTREACHED();
+  LOG(FATAL) << "DOMWindow must never be wrapped with wrap method.  The "
+                "wrappers must be created at WindowProxy::createContext() and "
+                "setupWindowPrototypeChain().";
   return v8::Local<v8::Object>();
 }
 
@@ -50,7 +48,9 @@ v8::Local<v8::Object> DOMWindow::associateWithWrapper(
     v8::Isolate*,
     const WrapperTypeInfo*,
     v8::Local<v8::Object> wrapper) {
-  RELEASE_NOTREACHED();  // same as wrap method
+  LOG(FATAL) << "DOMWindow must never be wrapped with wrap method.  The "
+                "wrappers must be created at WindowProxy::createContext() and "
+                "setupWindowPrototypeChain().";
   return v8::Local<v8::Object>();
 }
 
@@ -64,7 +64,7 @@ const DOMWindow* DOMWindow::toDOMWindow() const {
 
 Location* DOMWindow::location() const {
   if (!m_location)
-    m_location = Location::create(frame());
+    m_location = Location::create(const_cast<DOMWindow*>(this));
   return m_location.get();
 }
 
@@ -76,8 +76,11 @@ unsigned DOMWindow::length() const {
   return frame() ? frame()->tree().scopedChildCount() : 0;
 }
 
-v8::Local<v8::Object> DOMWindow::self(ScriptState* scriptState) const {
-  return scriptState->context()->Global();
+DOMWindow* DOMWindow::self() const {
+  if (!frame())
+    return nullptr;
+
+  return frame()->domWindow();
 }
 
 DOMWindow* DOMWindow::opener() const {
@@ -104,11 +107,6 @@ DOMWindow* DOMWindow::top() const {
   return frame()->tree().top()->domWindow();
 }
 
-External* DOMWindow::external() const {
-  DEFINE_STATIC_LOCAL(Persistent<External>, external, (new External));
-  return external;
-}
-
 DOMWindow* DOMWindow::anonymousIndexedGetter(uint32_t index) const {
   if (!frame())
     return nullptr;
@@ -124,8 +122,8 @@ bool DOMWindow::isCurrentlyDisplayedInFrame() const {
 }
 
 bool DOMWindow::isInsecureScriptAccess(LocalDOMWindow& callingWindow,
-                                       const String& urlString) {
-  if (!protocolIsJavaScript(urlString))
+                                       const KURL& url) {
+  if (!url.protocolIsJavaScript())
     return false;
 
   // If this DOMWindow isn't currently active in the Frame, then there's no
@@ -147,24 +145,6 @@ bool DOMWindow::isInsecureScriptAccess(LocalDOMWindow& callingWindow,
   callingWindow.printErrorMessage(
       crossDomainAccessErrorMessage(&callingWindow));
   return true;
-}
-
-void DOMWindow::resetLocation() {
-  // Location needs to be reset manually because it doesn't inherit from
-  // DOMWindowProperty.  DOMWindowProperty is local-only, and Location needs to
-  // support remote windows, too.
-  if (m_location) {
-    m_location->reset();
-    m_location = nullptr;
-  }
-}
-
-bool DOMWindow::isSecureContext() const {
-  if (!frame())
-    return false;
-
-  return document()->isSecureContext(
-      ExecutionContext::StandardSecureContextCheck);
 }
 
 void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message,
@@ -196,9 +176,8 @@ void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message,
     }
   }
 
-  std::unique_ptr<MessagePortChannelArray> channels =
-      MessagePort::disentanglePorts(getExecutionContext(), ports,
-                                    exceptionState);
+  MessagePortChannelArray channels = MessagePort::disentanglePorts(
+      getExecutionContext(), ports, exceptionState);
   if (exceptionState.hadException())
     return;
 
@@ -222,16 +201,23 @@ void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message,
 
   KURL targetUrl =
       isLocalDOMWindow()
-          ? document()->url()
+          ? blink::toLocalDOMWindow(this)->document()->url()
           : KURL(KURL(),
                  frame()->securityContext()->getSecurityOrigin()->toString());
   if (MixedContentChecker::isMixedContent(sourceDocument->getSecurityOrigin(),
-                                          targetUrl))
+                                          targetUrl)) {
     UseCounter::count(frame(), UseCounter::PostMessageFromSecureToInsecure);
-  else if (MixedContentChecker::isMixedContent(
-               frame()->securityContext()->getSecurityOrigin(),
-               sourceDocument->url()))
+  } else if (MixedContentChecker::isMixedContent(
+                 frame()->securityContext()->getSecurityOrigin(),
+                 sourceDocument->url())) {
     UseCounter::count(frame(), UseCounter::PostMessageFromInsecureToSecure);
+    if (MixedContentChecker::isMixedContent(
+            frame()->tree().top()->securityContext()->getSecurityOrigin(),
+            sourceDocument->url())) {
+      UseCounter::count(frame(),
+                        UseCounter::PostMessageFromInsecureToSecureToplevel);
+    }
+  }
 
   MessageEvent* event =
       MessageEvent::create(std::move(channels), std::move(message),
@@ -298,8 +284,9 @@ String DOMWindow::crossDomainAccessErrorMessage(
   // aren't replicated.  For now, construct the URL using the replicated
   // origin for RemoteFrames. If the target frame is remote and sandboxed,
   // there isn't anything else to show other than "null" for its origin.
-  KURL targetURL = isLocalDOMWindow() ? document()->url()
-                                      : KURL(KURL(), targetOrigin->toString());
+  KURL targetURL = isLocalDOMWindow()
+                       ? blink::toLocalDOMWindow(this)->document()->url()
+                       : KURL(KURL(), targetOrigin->toString());
   if (frame()->securityContext()->isSandboxed(SandboxOrigin) ||
       callingWindow->document()->isSandboxed(SandboxOrigin)) {
     message = "Blocked a frame at \"" +
@@ -375,7 +362,7 @@ void DOMWindow::close(ExecutionContext* context) {
 
   Settings* settings = frame()->settings();
   bool allowScriptsToCloseWindows =
-      settings && settings->allowScriptsToCloseWindows();
+      settings && settings->getAllowScriptsToCloseWindows();
 
   if (!page->openedByDOM() && frame()->client()->backForwardLength() > 1 &&
       !allowScriptsToCloseWindows) {
@@ -394,7 +381,7 @@ void DOMWindow::close(ExecutionContext* context) {
   InspectorInstrumentation::NativeBreakpoint nativeBreakpoint(context, "close",
                                                               true);
 
-  page->chromeClient().closeWindowSoon();
+  page->closeSoon();
 
   // So as to make window.closed return the expected result
   // after window.close(), separately record the to-be-closed
@@ -429,7 +416,15 @@ void DOMWindow::focus(ExecutionContext* context) {
   page->focusController().focusDocumentView(frame(), true /* notifyEmbedder */);
 }
 
+InputDeviceCapabilitiesConstants* DOMWindow::getInputDeviceCapabilities() {
+  if (!m_inputCapabilities)
+    m_inputCapabilities = new InputDeviceCapabilitiesConstants;
+  return m_inputCapabilities;
+}
+
 DEFINE_TRACE(DOMWindow) {
+  visitor->trace(m_frame);
+  visitor->trace(m_inputCapabilities);
   visitor->trace(m_location);
   EventTargetWithInlineData::trace(visitor);
 }

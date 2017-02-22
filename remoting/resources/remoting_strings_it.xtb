@@ -27,9 +27,6 @@ Per informazioni sulla privacy, leggi le Norme sulla privacy di Google (http://g
 <translation id="1654128982815600832">Attivazione connessioni remote per questo computer in corso…</translation>
 <translation id="170207782578677537">Impossibile registrare il computer.</translation>
 <translation id="1704090719919187045">Preferenze host Chromoting</translation>
-<translation id="1730409684442507495">• Qualità dell'immagine desktop, reattività e consumo della batteria migliorati.
-• Reattività delle operazioni di clic e trascinamento migliorata.
-• Numerosi effetti dell'animazione dell'interfaccia utente migliorati.</translation>
 <translation id="174018511426417793">Non sono presenti computer registrati. Per attivare le connessioni remote su un computer, installa Chrome Remote Desktop sul computer e fai clic su "<ph name="BUTTON_NAME" />".</translation>
 <translation id="1742469581923031760">Connessione in corso...</translation>
 <translation id="1770394049404108959">Non riesco ad aprire l'applicazione.</translation>
@@ -44,6 +41,10 @@ Per informazioni sulla privacy, leggi le Norme sulla privacy di Google (http://g
 <translation id="2013996867038862849">Tutti i client accoppiati sono stati eliminati.</translation>
 <translation id="2038229918502634450">L'host si sta riavviando per applicare una modifica alle norme.</translation>
 <translation id="2046651113449445291">I client seguenti sono stati accoppiati con questo computer e possono connettersi senza fornire un PIN. Puoi revocare questa autorizzazione in qualsiasi momento per ogni client o per tutti i client.</translation>
+<translation id="2053901200959289492">• Aggiunto supporto Multi-finestra per Android Nougat.
+• Qualità dell'immagine desktop, reattività e consumo della batteria migliorati.
+• Reattività delle operazioni di clic e trascinamento migliorata.
+• Numerosi effetti dell'animazione dell'interfaccia utente migliorati.</translation>
 <translation id="2078880767960296260">Processo host</translation>
 <translation id="20876857123010370">Modalità trackpad</translation>
 <translation id="2089514346391228378">Le connessioni remote per questo computer sono state attivate.</translation>
@@ -223,6 +224,7 @@ Remote Desktop</translation>
 <translation id="6640610550128933069">ultimo colleg. online: <ph name="DATE" /></translation>
 <translation id="6668065415969892472">Il PIN è stato aggiornato.</translation>
 <translation id="6681800064886881394">Copyright 2013 Google Inc. Tutti i diritti riservati.</translation>
+<translation id="6705482892455291412">Dopo l'inserimento del codice, ti verrà chiesto di accettare la connessione e di avviare la sessione di condivisione.</translation>
 <translation id="6746493157771801606">Cancella cronologia</translation>
 <translation id="6748108480210050150">Da</translation>
 <translation id="677755392401385740">Host avviato per utente: <ph name="HOST_USERNAME" />.</translation>
@@ -299,6 +301,7 @@ Remote Desktop</translation>
 <translation id="9188433529406846933">Autorizza</translation>
 <translation id="9213184081240281106">Configurazione host non valida.</translation>
 <translation id="951991426597076286">Rifiuta</translation>
+<translation id="962733587145768554">Seleziona "<ph name="SHARE" />" nella finestra di dialogo di connessione per completare la procedura.</translation>
 <translation id="979100198331752041">Chrome Remote Desktop su <ph name="HOSTNAME" /> è obsoleto e deve essere aggiornato.</translation>
 <translation id="985602178874221306">The Chromium Authors</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" /> (ultima connessione: <ph name="DATE_OR_TIME" />)</translation>

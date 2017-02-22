@@ -17,25 +17,29 @@ const char* ThrottledTimeDomain::GetName() const {
   return "ThrottledTimeDomain";
 }
 
-void ThrottledTimeDomain::RequestWakeup(base::TimeTicks now,
-                                        base::TimeDelta delay) {
+void ThrottledTimeDomain::RequestWakeupAt(base::TimeTicks now,
+                                          base::TimeTicks run_time) {
   // We assume the owner (i.e. TaskQueueThrottler) will manage wakeups on our
   // behalf.
 }
 
-bool ThrottledTimeDomain::MaybeAdvanceTime() {
+void ThrottledTimeDomain::CancelWakeupAt(base::TimeTicks run_time) {
+  // We ignore this because RequestWakeupAt is a NOP.
+}
+
+base::Optional<base::TimeDelta> ThrottledTimeDomain::DelayTillNextTask(
+    LazyNow* lazy_now) {
   base::TimeTicks next_run_time;
   if (!NextScheduledRunTime(&next_run_time))
-    return false;
+    return base::nullopt;
 
-  base::TimeTicks now = Now();
+  base::TimeTicks now = lazy_now->Now();
   if (now >= next_run_time)
-    return true;  // Causes DoWork to post a continuation.
+    return base::TimeDelta();  // Makes DoWork post an immediate continuation.
 
-  // Unlike RealTimeDomain::MaybeAdvanceTime we don't request a wake up here, we
-  // assume the owner (i.e. TaskQueueThrottler) will manage wakeups on our
+  // We assume the owner (i.e. TaskQueueThrottler) will manage wakeups on our
   // behalf.
-  return false;
+  return base::nullopt;
 }
 
 }  // namespace scheduler

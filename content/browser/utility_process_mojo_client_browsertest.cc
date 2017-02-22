@@ -20,17 +20,27 @@ namespace content {
 // Test fixture used to make different Mojo calls to the utility process.
 class UtilityProcessMojoClientBrowserTest : public ContentBrowserTest {
  public:
-  void StartMojoService(bool disable_sandbox) {
+  enum RunOption {
+    SANDBOXED, UNSANDBOXED, ELEVATED
+  };
+
+  void StartMojoService(RunOption option = SANDBOXED) {
     mojo_client_.reset(new UtilityProcessMojoClient<mojom::TestService>(
-        base::ASCIIToUTF16("TestMojoProcess")));
+        base::ASCIIToUTF16("TestUtilityProcessMojoClient")));
 
     mojo_client_->set_error_callback(
         base::Bind(&UtilityProcessMojoClientBrowserTest::OnConnectionError,
                    base::Unretained(this)));
 
     // This test case needs to have the sandbox disabled.
-    if (disable_sandbox)
+    if (option == UNSANDBOXED)
       mojo_client_->set_disable_sandbox();
+#if defined(OS_WIN)
+    // This test case needs utility process UAC privilege elevation.
+    if (option == ELEVATED)
+      mojo_client_->set_run_elevated();
+#endif  // defined(OS_WIN)
+
     mojo_client_->Start();
   }
 
@@ -71,7 +81,7 @@ IN_PROC_BROWSER_TEST_F(UtilityProcessMojoClientBrowserTest, CallService) {
   base::RunLoop run_loop;
   done_closure_ = run_loop.QuitClosure();
 
-  StartMojoService(false);
+  StartMojoService();
 
   mojo_client_->service()->DoSomething(
       base::Bind(&UtilityProcessMojoClientBrowserTest::OnResponseReceived,
@@ -88,7 +98,7 @@ IN_PROC_BROWSER_TEST_F(UtilityProcessMojoClientBrowserTest, ConnectionError) {
   base::RunLoop run_loop;
   done_closure_ = run_loop.QuitClosure();
 
-  StartMojoService(false);
+  StartMojoService();
 
   mojo_client_->service()->DoTerminateProcess(
       base::Bind(&UtilityProcessMojoClientBrowserTest::OnResponseReceived,
@@ -106,7 +116,7 @@ IN_PROC_BROWSER_TEST_F(UtilityProcessMojoClientBrowserTest, SandboxFailure) {
   base::RunLoop run_loop;
   done_closure_ = run_loop.QuitClosure();
 
-  StartMojoService(false);
+  StartMojoService();
 
   mojo_client_->service()->CreateFolder(
       base::Bind(&UtilityProcessMojoClientBrowserTest::OnCreateFolderFinished,
@@ -125,7 +135,7 @@ IN_PROC_BROWSER_TEST_F(UtilityProcessMojoClientBrowserTest, SandboxSuccess) {
   base::RunLoop run_loop;
   done_closure_ = run_loop.QuitClosure();
 
-  StartMojoService(true);
+  StartMojoService(UNSANDBOXED);
 
   mojo_client_->service()->CreateFolder(
       base::Bind(&UtilityProcessMojoClientBrowserTest::OnCreateFolderFinished,
@@ -136,6 +146,27 @@ IN_PROC_BROWSER_TEST_F(UtilityProcessMojoClientBrowserTest, SandboxSuccess) {
   EXPECT_TRUE(sandbox_succeeded_);
   EXPECT_FALSE(error_happened_);
 }
-#endif
+#endif  // !defined(OS_ANDROID)
+
+#if defined(OS_WIN)
+// Call a function that succeeds with process elevation. Elevation is only
+// available on WIN, and is used to permit UAC prompts for operations that
+// need user approval before proceeding.
+IN_PROC_BROWSER_TEST_F(UtilityProcessMojoClientBrowserTest, ElevatedSuccess) {
+  base::RunLoop run_loop;
+  done_closure_ = run_loop.QuitClosure();
+
+  StartMojoService(ELEVATED);
+
+  mojo_client_->service()->CreateFolder(
+      base::Bind(&UtilityProcessMojoClientBrowserTest::OnCreateFolderFinished,
+                 base::Unretained(this)));
+
+  run_loop.Run();
+  EXPECT_TRUE(response_received_);
+  EXPECT_TRUE(sandbox_succeeded_);
+  EXPECT_FALSE(error_happened_);
+}
+#endif  // defined(OS_WIN)
 
 }  // namespace content

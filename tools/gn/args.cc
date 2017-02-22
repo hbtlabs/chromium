@@ -6,6 +6,7 @@
 
 #include "base/sys_info.h"
 #include "build/build_config.h"
+#include "tools/gn/string_utils.h"
 #include "tools/gn/variables.h"
 
 const char kBuildArgs_Help[] =
@@ -24,6 +25,9 @@ How build arguments are set
    - current_os
    - target_cpu
    - target_os
+
+  Next, project-specific overrides are applied. These are specified inside
+  the default_args variable of //.gn. See "gn help dotfile" for more.
 
   If specified, arguments from the --args command line flag are used. If that
   flag is not specified, args from previous builds in the build directory will
@@ -80,6 +84,21 @@ void RemoveDeclaredOverrides(const Scope::KeyValueMap& declared_arguments,
 
 }  // namespace
 
+Args::ValueWithOverride::ValueWithOverride()
+    : default_value(),
+      has_override(false),
+      override_value() {
+}
+
+Args::ValueWithOverride::ValueWithOverride(const Value& def_val)
+    : default_value(def_val),
+      has_override(false),
+      override_value() {
+}
+
+Args::ValueWithOverride::~ValueWithOverride() {
+}
+
 Args::Args() {
 }
 
@@ -118,11 +137,6 @@ const Value* Args::GetArgOverride(const char* name) const {
   if (found == all_overrides_.end())
     return nullptr;
   return &found->second;
-}
-
-Scope::KeyValueMap Args::GetAllOverrides() const {
-  base::AutoLock lock(lock_);
-  return all_overrides_;
 }
 
 void Args::SetupRootScope(Scope* dest,
@@ -219,28 +233,58 @@ bool Args::DeclareArgs(const Scope::KeyValueMap& args,
 
 bool Args::VerifyAllOverridesUsed(Err* err) const {
   base::AutoLock lock(lock_);
-  Scope::KeyValueMap all_overrides(all_overrides_);
+  Scope::KeyValueMap unused_overrides(all_overrides_);
   for (const auto& map_pair : declared_arguments_per_toolchain_)
-    RemoveDeclaredOverrides(map_pair.second, &all_overrides);
+    RemoveDeclaredOverrides(map_pair.second, &unused_overrides);
 
-  if (all_overrides.empty())
+  if (unused_overrides.empty())
     return true;
 
-  *err = Err(
-      all_overrides.begin()->second.origin(), "Build argument has no effect.",
-      "The variable \"" + all_overrides.begin()->first.as_string() +
-          "\" was set as a build argument\nbut never appeared in a " +
-          "declare_args() block in any buildfile.\n\n"
-          "To view possible args, run \"gn args --list <builddir>\"");
+  // Some assignments in args.gn had no effect.  Show an error for the first
+  // unused assignment.
+  base::StringPiece name = unused_overrides.begin()->first;
+  const Value& value = unused_overrides.begin()->second;
+
+  std::string err_help(
+      "The variable \"" + name + "\" was set as a build argument\n"
+      "but never appeared in a declare_args() block in any buildfile.\n\n"
+      "To view all possible args, run \"gn args --list <builddir>\"");
+
+  // Use all declare_args for a spelling suggestion.
+  std::vector<base::StringPiece> candidates;
+  for (const auto& map_pair : declared_arguments_per_toolchain_) {
+    for (const auto& declared_arg : map_pair.second)
+      candidates.push_back(declared_arg.first);
+  }
+  base::StringPiece suggestion = SpellcheckString(name, candidates);
+  if (!suggestion.empty())
+    err_help = "Did you mean \"" + suggestion + "\"?\n\n" + err_help;
+
+  *err = Err(value.origin(), "Build argument has no effect.", err_help);
   return false;
 }
 
-void Args::MergeDeclaredArguments(Scope::KeyValueMap* dest) const {
+Args::ValueWithOverrideMap Args::GetAllArguments() const {
+  ValueWithOverrideMap result;
+
   base::AutoLock lock(lock_);
+
+  // Default values.
   for (const auto& map_pair : declared_arguments_per_toolchain_) {
     for (const auto& arg : map_pair.second)
-      (*dest)[arg.first] = arg.second;
+      result.insert(std::make_pair(arg.first, ValueWithOverride(arg.second)));
   }
+
+  // Merge in overrides.
+  for (const auto& over : overrides_) {
+    auto found = result.find(over.first);
+    if (found != result.end()) {
+      found->second.has_override = true;
+      found->second.override_value = over.second;
+    }
+  }
+
+  return result;
 }
 
 void Args::SetSystemVarsLocked(Scope* dest) const {
@@ -266,6 +310,7 @@ void Args::SetSystemVarsLocked(Scope* dest) const {
   static const char kX86[] = "x86";
   static const char kX64[] = "x64";
   static const char kArm[] = "arm";
+  static const char kArm64[] = "arm64";
   static const char kMips[] = "mipsel";
   static const char kS390X[] = "s390x";
   static const char kPPC64[] = "ppc64";
@@ -280,6 +325,8 @@ void Args::SetSystemVarsLocked(Scope* dest) const {
     arch = kX64;
   else if (os_arch.substr(0, 3) == "arm")
     arch = kArm;
+  else if (os_arch == "aarch64")
+    arch = kArm64;
   else if (os_arch == "mips")
     arch = kMips;
   else if (os_arch == "s390x")

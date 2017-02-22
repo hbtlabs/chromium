@@ -11,8 +11,10 @@
 #include "base/hash.h"
 #include "base/json/json_writer.h"
 #include "base/macros.h"
+#include "base/memory/memory_pressure_listener.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -54,6 +56,27 @@
 #include "gpu/ipc/service/stream_texture_android.h"
 #endif
 
+// Macro to reduce code duplication when logging memory in
+// GpuCommandBufferMemoryTracker. This is needed as the UMA_HISTOGRAM_* macros
+// require a unique call-site per histogram (you can't funnel multiple strings
+// into the same call-site).
+#define GPU_COMMAND_BUFFER_MEMORY_BLOCK(category)                          \
+  do {                                                                     \
+    uint64_t mb_used = tracking_group_->GetSize() / (1024 * 1024);         \
+    switch (context_type_) {                                               \
+      case gles2::CONTEXT_TYPE_WEBGL1:                                     \
+      case gles2::CONTEXT_TYPE_WEBGL2:                                     \
+        UMA_HISTOGRAM_MEMORY_LARGE_MB("GPU.ContextMemory.WebGL." category, \
+                                      mb_used);                            \
+        break;                                                             \
+      case gles2::CONTEXT_TYPE_OPENGLES2:                                  \
+      case gles2::CONTEXT_TYPE_OPENGLES3:                                  \
+        UMA_HISTOGRAM_MEMORY_LARGE_MB("GPU.ContextMemory.GLES." category,  \
+                                      mb_used);                            \
+        break;                                                             \
+    }                                                                      \
+  } while (false)
+
 namespace gpu {
 struct WaitForCommandState {
   WaitForCommandState(int32_t start, int32_t end, IPC::Message* reply)
@@ -70,15 +93,29 @@ namespace {
 // ContextGroup's memory type managers and the GpuMemoryManager class.
 class GpuCommandBufferMemoryTracker : public gles2::MemoryTracker {
  public:
-  explicit GpuCommandBufferMemoryTracker(GpuChannel* channel,
-                                         uint64_t share_group_tracing_guid)
+  explicit GpuCommandBufferMemoryTracker(
+      GpuChannel* channel,
+      uint64_t share_group_tracing_guid,
+      gles2::ContextType context_type,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner)
       : tracking_group_(
             channel->gpu_channel_manager()
                 ->gpu_memory_manager()
                 ->CreateTrackingGroup(channel->GetClientPID(), this)),
         client_tracing_id_(channel->client_tracing_id()),
         client_id_(channel->client_id()),
-        share_group_tracing_guid_(share_group_tracing_guid) {}
+        share_group_tracing_guid_(share_group_tracing_guid),
+        context_type_(context_type),
+        memory_pressure_listener_(new base::MemoryPressureListener(
+            base::Bind(&GpuCommandBufferMemoryTracker::LogMemoryStatsPressure,
+                       base::Unretained(this)))) {
+    // Set up |memory_stats_timer_| to call LogMemoryPeriodic periodically
+    // via the provided |task_runner|.
+    memory_stats_timer_.SetTaskRunner(std::move(task_runner));
+    memory_stats_timer_.Start(
+        FROM_HERE, base::TimeDelta::FromSeconds(30), this,
+        &GpuCommandBufferMemoryTracker::LogMemoryStatsPeriodic);
+  }
 
   void TrackMemoryAllocatedChange(
       size_t old_size, size_t new_size) override {
@@ -88,7 +125,7 @@ class GpuCommandBufferMemoryTracker : public gles2::MemoryTracker {
 
   bool EnsureGPUMemoryAvailable(size_t size_needed) override {
     return tracking_group_->EnsureGPUMemoryAvailable(size_needed);
-  };
+  }
 
   uint64_t ClientTracingId() const override { return client_tracing_id_; }
   int ClientId() const override { return client_id_; }
@@ -97,11 +134,28 @@ class GpuCommandBufferMemoryTracker : public gles2::MemoryTracker {
   }
 
  private:
-  ~GpuCommandBufferMemoryTracker() override {}
+  ~GpuCommandBufferMemoryTracker() override { LogMemoryStatsShutdown(); }
+
+  void LogMemoryStatsPeriodic() { GPU_COMMAND_BUFFER_MEMORY_BLOCK("Periodic"); }
+  void LogMemoryStatsShutdown() { GPU_COMMAND_BUFFER_MEMORY_BLOCK("Shutdown"); }
+  void LogMemoryStatsPressure(
+      base::MemoryPressureListener::MemoryPressureLevel pressure_level) {
+    // Only log on CRITICAL memory pressure.
+    if (pressure_level ==
+        base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL) {
+      GPU_COMMAND_BUFFER_MEMORY_BLOCK("Pressure");
+    }
+  }
+
   std::unique_ptr<GpuMemoryTrackingGroup> tracking_group_;
   const uint64_t client_tracing_id_;
   const int client_id_;
   const uint64_t share_group_tracing_guid_;
+
+  // Variables used in memory stat histogram logging.
+  const gles2::ContextType context_type_;
+  base::RepeatingTimer memory_stats_timer_;
+  std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;
 
   DISALLOW_COPY_AND_ASSIGN(GpuCommandBufferMemoryTracker);
 };
@@ -320,6 +374,14 @@ void GpuCommandBufferStub::UpdateVSyncParameters(base::TimeTicks timebase,
                                                      interval));
 }
 
+void GpuCommandBufferStub::AddFilter(IPC::MessageFilter* message_filter) {
+  return channel_->AddFilter(message_filter);
+}
+
+int32_t GpuCommandBufferStub::GetRouteID() const {
+  return route_id_;
+}
+
 bool GpuCommandBufferStub::IsScheduled() {
   return (!executor_.get() || executor_->scheduled());
 }
@@ -476,15 +538,17 @@ void GpuCommandBufferStub::Destroy() {
   for (auto& observer : destruction_observers_)
     observer.OnWillDestroyStub();
 
+  // Remove this after crbug.com/248395 is sorted out.
+  // Destroy the surface before the context, some surface destructors make GL
+  // calls.
+  surface_ = nullptr;
+
   if (decoder_) {
     decoder_->Destroy(have_context);
     decoder_.reset();
   }
 
   command_buffer_.reset();
-
-  // Remove this after crbug.com/248395 is sorted out.
-  surface_ = NULL;
 }
 
 bool GpuCommandBufferStub::Initialize(
@@ -508,13 +572,15 @@ bool GpuCommandBufferStub::Initialize(
         channel_->gpu_channel_manager()->gpu_memory_buffer_factory();
     context_group_ = new gles2::ContextGroup(
         manager->gpu_preferences(), channel_->mailbox_manager(),
-        new GpuCommandBufferMemoryTracker(channel_,
-                                          command_buffer_id_.GetUnsafeValue()),
+        new GpuCommandBufferMemoryTracker(
+            channel_, command_buffer_id_.GetUnsafeValue(),
+            init_params.attribs.context_type, channel_->task_runner()),
         manager->shader_translator_cache(),
         manager->framebuffer_completeness_cache(), feature_info,
         init_params.attribs.bind_generates_resource,
         gmb_factory ? gmb_factory->AsImageFactory() : nullptr,
-        channel_->watchdog() /* progress_reporter */);
+        channel_->watchdog() /* progress_reporter */,
+        manager->gpu_feature_info());
   }
 
 #if defined(OS_MACOSX)
@@ -532,7 +598,7 @@ bool GpuCommandBufferStub::Initialize(
   // only a single context. See crbug.com/510243 for details.
   use_virtualized_gl_context_ |= channel_->mailbox_manager()->UsesSync();
 
-  gl::GLSurface::Format surface_format = gl::GLSurface::SURFACE_DEFAULT;
+  gl::GLSurfaceFormat surface_format = gl::GLSurfaceFormat();
   bool offscreen = (surface_handle_ == kNullSurfaceHandle);
   gl::GLSurface* default_surface = manager->GetDefaultOffscreenSurface();
   if (!default_surface) {
@@ -544,10 +610,12 @@ bool GpuCommandBufferStub::Initialize(
       init_params.attribs.green_size <= 6 &&
       init_params.attribs.blue_size <= 5 &&
       init_params.attribs.alpha_size == 0)
-    surface_format = gl::GLSurface::SURFACE_RGB565;
+    surface_format.SetRGB565();
+  // TODO(klausw): explicitly copy rgba sizes?
+
   // We can only use virtualized contexts for onscreen command buffers if their
   // config is compatible with the offscreen ones - otherwise MakeCurrent fails.
-  if (surface_format != default_surface->GetFormat() && !offscreen)
+  if (!surface_format.IsCompatible(default_surface->GetFormat()) && !offscreen)
     use_virtualized_gl_context_ = false;
 #endif
 
@@ -566,7 +634,32 @@ bool GpuCommandBufferStub::Initialize(
   decoder_->set_engine(executor_.get());
 
   if (offscreen) {
-    surface_ = default_surface;
+    if (init_params.attribs.depth_size > 0) {
+      surface_format.SetDepthBits(init_params.attribs.depth_size);
+    }
+    if (init_params.attribs.samples > 0) {
+      surface_format.SetSamples(init_params.attribs.samples);
+    }
+    if (init_params.attribs.stencil_size > 0) {
+      surface_format.SetStencilBits(init_params.attribs.stencil_size);
+    }
+    // Currently, we can't separately control alpha channel for surfaces,
+    // it's generally enabled by default except for RGB565 and (on desktop)
+    // smaller-than-32bit formats.
+    //
+    // TODO(klausw): use init_params.attribs.alpha_size here if possible.
+    if (!surface_format.IsCompatible(default_surface->GetFormat())) {
+      DVLOG(1) << __FUNCTION__ << ": Hit the OwnOffscreenSurface path";
+      use_virtualized_gl_context_ = false;
+      surface_ = gl::init::CreateOffscreenGLSurfaceWithFormat(gfx::Size(),
+                                                              surface_format);
+      if (!surface_) {
+        DLOG(ERROR) << "Failed to create surface.";
+        return false;
+      }
+    } else {
+      surface_ = default_surface;
+    }
   } else {
     surface_ = ImageTransportSurface::CreateNativeSurface(
         AsWeakPtr(), surface_handle_, surface_format);
@@ -597,9 +690,10 @@ bool GpuCommandBufferStub::Initialize(
     }
     // This should be either:
     // (1) a non-virtual GL context, or
-    // (2) a mock context.
+    // (2) a mock/stub context.
     DCHECK(context->GetHandle() ||
-           gl::GetGLImplementation() == gl::kGLImplementationMockGL);
+           gl::GetGLImplementation() == gl::kGLImplementationMockGL ||
+           gl::GetGLImplementation() == gl::kGLImplementationStubGL);
     context = new GLContextVirtual(
         gl_share_group, context.get(), decoder_->AsWeakPtr());
     if (!context->Initialize(
@@ -947,6 +1041,7 @@ void GpuCommandBufferStub::OnFenceSyncRelease(uint64_t release) {
     mailbox_manager->PushTextureUpdates(sync_token);
   }
 
+  command_buffer_->SetReleaseCount(release);
   sync_point_client_->ReleaseFenceSync(release);
 }
 

@@ -7,11 +7,11 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
@@ -41,7 +41,8 @@ class COMPOSITOR_EXPORT LayerAnimationSequence
  public:
   LayerAnimationSequence();
   // Takes ownership of the given element and adds it to the sequence.
-  explicit LayerAnimationSequence(LayerAnimationElement* element);
+  explicit LayerAnimationSequence(
+      std::unique_ptr<LayerAnimationElement> element);
   virtual ~LayerAnimationSequence();
 
   // Sets the start time for the animation. This must be called before the
@@ -90,7 +91,7 @@ class COMPOSITOR_EXPORT LayerAnimationSequence
 
   // Adds an element to the sequence. The sequences takes ownership of this
   // element.
-  void AddElement(LayerAnimationElement* element);
+  void AddElement(std::unique_ptr<LayerAnimationElement> element);
 
   // Sequences can be looped indefinitely.
   void set_is_cyclic(bool is_cyclic) { is_cyclic_ = is_cyclic; }
@@ -126,6 +127,9 @@ class COMPOSITOR_EXPORT LayerAnimationSequence
   // Called when the animator is destroyed.
   void OnAnimatorDestroyed();
 
+  // Sets |animation_metrics_reporter_| and passes it to all |elements_|.
+  void SetAnimationMetricsReporter(AnimationMetricsReporter* reporter);
+
   // The last_progressed_fraction of the element most recently progressed by
   // by this sequence. Returns 0.0 if no elements have been progressed.
   double last_progressed_fraction() const { return last_progressed_fraction_; }
@@ -137,7 +141,7 @@ class COMPOSITOR_EXPORT LayerAnimationSequence
  private:
   friend class LayerAnimatorTestController;
 
-  typedef std::vector<linked_ptr<LayerAnimationElement> > Elements;
+  using Elements = std::vector<std::unique_ptr<LayerAnimationElement>>;
 
   FRIEND_TEST_ALL_PREFIXES(LayerAnimatorTest,
                            ObserverReleasedBeforeAnimationSequenceEnds);
@@ -189,6 +193,9 @@ class COMPOSITOR_EXPORT LayerAnimationSequence
   // Tracks the last_progressed_fraction() of the most recently progressed
   // element.
   double last_progressed_fraction_;
+
+  // Used to tag animation elements to obtain metrics of animation performance.
+  AnimationMetricsReporter* animation_metrics_reporter_;
 
   base::WeakPtrFactory<LayerAnimationSequence> weak_ptr_factory_;
 

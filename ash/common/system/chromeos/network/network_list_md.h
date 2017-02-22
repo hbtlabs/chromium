@@ -21,6 +21,7 @@
 
 namespace views {
 class Label;
+class Separator;
 class View;
 }
 
@@ -41,8 +42,7 @@ class NetworkListViewMd : public NetworkListViewBase,
 
   // NetworkListViewBase:
   void Update() override;
-  bool IsNetworkEntry(views::View* view,
-                      std::string* service_path) const override;
+  bool IsNetworkEntry(views::View* view, std::string* guid) const override;
 
  private:
   // Clears |network_list_| and adds to it |networks| that match |delegate_|'s
@@ -59,17 +59,17 @@ class NetworkListViewMd : public NetworkListViewBase,
   void OrderNetworks();
 
   // Refreshes a list of child views, updates |network_map_| and
-  // |service_path_map_| and performs layout making sure selected view if any is
+  // |network_guid_map_| and performs layout making sure selected view if any is
   // scrolled into view.
   void UpdateNetworkListInternal();
 
   // Adds new or updates existing child views including header row and messages.
-  // Returns a set of service paths for the added network connections.
+  // Returns a set of guids for the added network connections.
   std::unique_ptr<std::set<std::string>> UpdateNetworkListEntries();
 
   // Adds or updates child views representing the network connections when
   // |is_wifi| is matching the attribute of a network connection starting at
-  // |child_index|. Returns a set of service paths for the added network
+  // |child_index|. Returns a set of guids for the added network
   // connections.
   std::unique_ptr<std::set<std::string>> UpdateNetworkChildren(
       NetworkInfo::Type type,
@@ -91,11 +91,13 @@ class NetworkListViewMd : public NetworkListViewBase,
 
   // Creates a cellular/Wi-Fi header row |view| and adds it to |container()| if
   // necessary and reorders the |container()| placing the |view| at
-  // |child_index|.
-  void UpdateSectionHeaderRow(chromeos::NetworkTypePattern pattern,
-                              bool enabled,
-                              int child_index,
-                              SectionHeaderRowView** view);
+  // |child_index|. Returns the index where the next child should be inserted,
+  // i.e., the index directly after the last inserted child.
+  int UpdateSectionHeaderRow(chromeos::NetworkTypePattern pattern,
+                             bool enabled,
+                             int child_index,
+                             SectionHeaderRowView** view,
+                             views::Separator** separator_view);
 
   // network_icon::AnimationObserver:
   void NetworkIconChanged() override;
@@ -107,6 +109,8 @@ class NetworkListViewMd : public NetworkListViewBase,
   views::Label* no_cellular_networks_view_;
   SectionHeaderRowView* cellular_header_view_;
   SectionHeaderRowView* wifi_header_view_;
+  views::Separator* cellular_separator_view_;
+  views::Separator* wifi_separator_view_;
 
   // An owned list of network info.
   std::vector<std::unique_ptr<NetworkInfo>> network_list_;
@@ -114,9 +118,9 @@ class NetworkListViewMd : public NetworkListViewBase,
   using NetworkMap = std::map<views::View*, std::string>;
   NetworkMap network_map_;
 
-  // A map of network service paths to their view.
-  typedef std::map<std::string, views::View*> ServicePathMap;
-  ServicePathMap service_path_map_;
+  // A map of network guids to their view.
+  typedef std::map<std::string, views::View*> NetworkGuidMap;
+  NetworkGuidMap network_guid_map_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkListViewMd);
 };

@@ -1,18 +1,20 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="chrome://resources/html/action_link.html">
+<link rel="import" href="chrome://resources/html/action_link_css.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
-<link rel="import" href="/route.html">
-<link rel="import" href="/settings_shared_css.html">
-<link rel="import" href="/site_settings/constants.html">
-<link rel="import" href="/site_settings/site_details_permission.html">
-<link rel="import" href="/site_settings/site_settings_behavior.html">
-<link rel="import" href="/site_settings/website_usage_private_api.html">
+<link rel="import" href="../route.html">
+<link rel="import" href="../settings_shared_css.html">
+<link rel="import" href="constants.html">
+<link rel="import" href="site_details_permission.html">
+<link rel="import" href="site_settings_behavior.html">
+<link rel="import" href="website_usage_private_api.html">
 
 <dom-module id="site-details">
   <template>
-    <style include="settings-shared">
+    <style include="settings-shared action-link">
       .favicon-image {
         margin: 2px;
       }
@@ -37,9 +39,9 @@
 
     <div class="settings-box first">
       <div class="favicon-image"
-          style$="[[computeSiteIcon(site.originForDisplay)]]">
+          style$="[[computeSiteIcon(site.origin)]]">
       </div>
-      <div class="middle">[[site.originForDisplay]]</div>
+      <div class="middle">[[site.displayName]]</div>
     </div>
     <template is="dom-if" if="[[storedData_]]">
       <div id="usage">
@@ -97,10 +99,6 @@
           icon="settings:sync" id="backgroundSync"
           label="$i18n{siteSettingsBackgroundSync}" site="[[site]]">
       </site-details-permission>
-      <site-details-permission category="{{ContentSettingsTypes.KEYGEN}}"
-          icon="settings:code" id="keygen"label="$i18n{siteSettingsKeygen}"
-          site="[[site]]">
-      </site-details-permission>
       <site-details-permission
           category="{{ContentSettingsTypes.AUTOMATIC_DOWNLOADS}}"
           icon="cr:file-download" id="automaticDownloads"
@@ -112,8 +110,10 @@
           label="$i18n{siteSettingsUnsandboxedPlugins}" site="[[site]]">
       </site-details-permission>
 
-      <div on-tap="onClearAndReset_" raised class="list-item list-button">
-        $i18n{siteSettingsClearAndReset}
+      <div class="list-item">
+        <a is="action-link" class="list-button" on-tap="onClearAndReset_" >
+          $i18n{siteSettingsClearAndReset}
+        </a>
       </div>
     </div>
     <website-usage-private-api id="usageApi"

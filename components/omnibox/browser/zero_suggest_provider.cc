@@ -110,8 +110,15 @@ void ZeroSuggestProvider::Start(const AutocompleteInput& input,
 
   base::string16 prefix;
   TemplateURLRef::SearchTermsArgs search_term_args(prefix);
-  GURL suggest_url(default_provider->suggestions_url_ref().ReplaceSearchTerms(
-      search_term_args, template_url_service->search_terms_data()));
+  std::string url_string;
+  if (OmniboxFieldTrial::InZeroSuggestRedirectToChromeFieldTrial()) {
+    url_string = OmniboxFieldTrial::ZeroSuggestRedirectToChromeServerAddress();
+  } else {
+    url_string = default_provider->suggestions_url_ref().ReplaceSearchTerms(
+        search_term_args, template_url_service->search_terms_data());
+  }
+  GURL suggest_url(url_string);
+
   if (!suggest_url.is_valid())
     return;
 
@@ -123,10 +130,17 @@ void ZeroSuggestProvider::Start(const AutocompleteInput& input,
       !OmniboxFieldTrial::InZeroSuggestPersonalizedFieldTrial() &&
       !OmniboxFieldTrial::InZeroSuggestMostVisitedFieldTrial()) {
     // Update suggest_url to include the current_page_url.
-    search_term_args.current_page_url = current_query_;
-    suggest_url =
-        GURL(default_provider->suggestions_url_ref().ReplaceSearchTerms(
-            search_term_args, template_url_service->search_terms_data()));
+    if (OmniboxFieldTrial::InZeroSuggestRedirectToChromeFieldTrial()) {
+      url_string +=
+          "/url=" + net::EscapePath(current_query_) +
+          OmniboxFieldTrial::ZeroSuggestRedirectToChromeAdditionalFields();
+      suggest_url = GURL(url_string);
+    } else {
+      search_term_args.current_page_url = current_query_;
+      suggest_url =
+          GURL(default_provider->suggestions_url_ref().ReplaceSearchTerms(
+              search_term_args, template_url_service->search_terms_data()));
+    }
   } else if (!ShouldShowNonContextualZeroSuggest(suggest_url,
                                                  input.current_url())) {
     return;
@@ -333,9 +347,12 @@ void ZeroSuggestProvider::Run(const GURL& suggest_url) {
     fetcher_->SetLoadFlags(net::LOAD_DO_NOT_SAVE_COOKIES);
     // Add Chrome experiment state to the request headers.
     net::HttpRequestHeaders headers;
+    // Note: It's OK to pass |is_signed_in| false if it's unknown, as it does
+    // not affect transmission of experiments coming from the variations server.
+    bool is_signed_in = false;
     variations::AppendVariationHeaders(fetcher_->GetOriginalURL(),
                                        client()->IsOffTheRecord(), false,
-                                       &headers);
+                                       is_signed_in, &headers);
     fetcher_->SetExtraRequestHeaders(headers.ToString());
     fetcher_->Start();
     LogOmniboxZeroSuggestRequest(ZERO_SUGGEST_REQUEST_SENT);

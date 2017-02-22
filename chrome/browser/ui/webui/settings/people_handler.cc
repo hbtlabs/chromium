@@ -156,6 +156,8 @@ std::string GetSyncErrorAction(sync_ui_util::ActionType action_type) {
   switch (action_type) {
     case sync_ui_util::REAUTHENTICATE:
       return "reauthenticate";
+    case sync_ui_util::SIGNOUT_AND_SIGNIN:
+      return "signOutAndSignIn";
     case sync_ui_util::UPGRADE_CLIENT:
       return "upgradeClient";
     case sync_ui_util::ENTER_PASSPHRASE:
@@ -315,22 +317,20 @@ void PeopleHandler::DisplaySpinner() {
   configuring_sync_ = true;
 
   const int kTimeoutSec = 30;
-  DCHECK(!backend_start_timer_);
-  backend_start_timer_.reset(new base::OneShotTimer());
-  backend_start_timer_->Start(FROM_HERE,
-                              base::TimeDelta::FromSeconds(kTimeoutSec), this,
-                              &PeopleHandler::DisplayTimeout);
+  DCHECK(!engine_start_timer_);
+  engine_start_timer_.reset(new base::OneShotTimer());
+  engine_start_timer_->Start(FROM_HERE,
+                             base::TimeDelta::FromSeconds(kTimeoutSec), this,
+                             &PeopleHandler::DisplayTimeout);
 
   CallJavascriptFunction("cr.webUIListenerCallback",
                          base::StringValue("page-status-changed"),
                          base::StringValue(kSpinnerPageStatus));
 }
 
-// TODO(kochi): Handle error conditions other than timeout.
-// http://crbug.com/128692
 void PeopleHandler::DisplayTimeout() {
   // Stop a timer to handle timeout in waiting for checking network connection.
-  backend_start_timer_.reset();
+  engine_start_timer_.reset();
 
   // Do not listen to sync startup events.
   sync_startup_tracker_.reset();
@@ -347,7 +347,7 @@ void PeopleHandler::OnDidClosePage(const base::ListValue* args) {
 
 void PeopleHandler::SyncStartupFailed() {
   // Stop a timer to handle timeout in waiting for checking network connection.
-  backend_start_timer_.reset();
+  engine_start_timer_.reset();
 
   // Just close the sync overlay (the idea is that the base settings page will
   // display the current error.)
@@ -356,10 +356,10 @@ void PeopleHandler::SyncStartupFailed() {
 
 void PeopleHandler::SyncStartupCompleted() {
   ProfileSyncService* service = GetSyncService();
-  DCHECK(service->IsBackendInitialized());
+  DCHECK(service->IsEngineInitialized());
 
   // Stop a timer to handle timeout in waiting for checking network connection.
-  backend_start_timer_.reset();
+  engine_start_timer_.reset();
 
   sync_startup_tracker_.reset();
 
@@ -389,7 +389,7 @@ void PeopleHandler::HandleSetDatatypes(const base::ListValue* args) {
 
   // If the sync engine has shutdown for some reason, just close the sync
   // dialog.
-  if (!service || !service->IsBackendInitialized()) {
+  if (!service || !service->IsEngineInitialized()) {
     CloseSyncSetup();
     ResolveJavascriptCallback(*callback_id, base::StringValue(kDonePageStatus));
     return;
@@ -420,7 +420,7 @@ void PeopleHandler::HandleSetEncryption(const base::ListValue* args) {
 
   // If the sync engine has shutdown for some reason, just close the sync
   // dialog.
-  if (!service || !service->IsBackendInitialized()) {
+  if (!service || !service->IsEngineInitialized()) {
     CloseSyncSetup();
     ResolveJavascriptCallback(*callback_id, base::StringValue(kDonePageStatus));
     return;
@@ -434,7 +434,7 @@ void PeopleHandler::HandleSetEncryption(const base::ListValue* args) {
 
   // Note: Data encryption will not occur until configuration is complete
   // (when the PSS receives its CONFIGURE_DONE notification from the sync
-  // backend), so the user still has a chance to cancel out of the operation
+  // engine), so the user still has a chance to cancel out of the operation
   // if (for example) some kind of passphrase error is encountered.
   if (configuration.encrypt_all)
     service->EnableEncryptEverything();
@@ -505,7 +505,7 @@ void PeopleHandler::HandleShowSetupUI(const base::ListValue* args) {
     return;
   }
 
-  OpenSyncSetup(false /* creating_supervised_user */);
+  OpenSyncSetup();
 }
 
 #if defined(OS_CHROMEOS)
@@ -521,11 +521,12 @@ void PeopleHandler::HandleAttemptUserExit(const base::ListValue* args) {
 void PeopleHandler::HandleStartSignin(const base::ListValue* args) {
   AllowJavascript();
 
-  // Should only be called if the user is not already signed in.
-  DCHECK(!SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated());
-  bool creating_supervised_user = false;
-  args->GetBoolean(0, &creating_supervised_user);
-  OpenSyncSetup(creating_supervised_user);
+  // Should only be called if the user is not already signed in or has an auth
+  // error.
+  DCHECK(!SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated() ||
+         SigninErrorControllerFactory::GetForProfile(profile_)->HasError());
+
+  OpenSyncSetup();
 }
 
 void PeopleHandler::HandleStopSyncing(const base::ListValue* args) {
@@ -568,7 +569,7 @@ void PeopleHandler::HandleManageOtherPeople(const base::ListValue* /* args */) {
 
 void PeopleHandler::CloseSyncSetup() {
   // Stop a timer to handle timeout in waiting for checking network connection.
-  backend_start_timer_.reset();
+  engine_start_timer_.reset();
 
   // Clear the sync startup tracker, since the setup wizard is being closed.
   sync_startup_tracker_.reset();
@@ -590,7 +591,7 @@ void PeopleHandler::CloseSyncSetup() {
             ProfileSyncService::CANCEL_DURING_CONFIGURE);
 
         // If the user clicked "Cancel" while setting up sync, disable sync
-        // because we don't want the sync backend to remain in the
+        // because we don't want the sync engine to remain in the
         // first-setup-incomplete state.
         // Note: In order to disable sync across restarts on Chrome OS,
         // we must call RequestStop(CLEAR_DATA), which suppresses sync startup
@@ -623,7 +624,7 @@ void PeopleHandler::CloseSyncSetup() {
   configuring_sync_ = false;
 }
 
-void PeopleHandler::OpenSyncSetup(bool creating_supervised_user) {
+void PeopleHandler::OpenSyncSetup() {
   // Notify services that login UI is now active.
   GetLoginUIService()->SetLoginUI(this);
 
@@ -643,18 +644,14 @@ void PeopleHandler::OpenSyncSetup(bool creating_supervised_user) {
   //    sync configure UI, not login UI).
   // 7) User re-enables sync after disabling it via advanced settings.
 #if !defined(OS_CHROMEOS)
-  SigninManagerBase* signin = SigninManagerFactory::GetForProfile(profile_);
-  if (!signin->IsAuthenticated() ||
+  if (!SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated() ||
       SigninErrorControllerFactory::GetForProfile(profile_)->HasError()) {
     // User is not logged in (cases 1-2), or login has been specially requested
     // because previously working credentials have expired (case 3). Close sync
     // setup including any visible overlays, and display the gaia auth page.
     // Control will be returned to the sync settings page once auth is complete.
     CloseUI();
-    DisplayGaiaLogin(
-        creating_supervised_user ?
-            signin_metrics::AccessPoint::ACCESS_POINT_SUPERVISED_USER :
-            signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS);
+    DisplayGaiaLogin(signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS);
     return;
   }
 #endif
@@ -694,7 +691,7 @@ void PeopleHandler::GoogleSignedOut(const std::string& /* account_id */,
   UpdateSyncStatus();
 }
 
-void PeopleHandler::OnStateChanged() {
+void PeopleHandler::OnStateChanged(syncer::SyncService* sync) {
   UpdateSyncStatus();
 
   // When the SyncService changes its state, we should also push the updated
@@ -778,11 +775,18 @@ void PeopleHandler::PushSyncPrefs() {
     return;
 
   ProfileSyncService* service = GetSyncService();
-  DCHECK(service);
-  if (!service->IsBackendInitialized()) {
+  // The sync service may be nullptr if it has been just disabled by policy.
+  if (!service)
+    return;
+
+  if (!service->IsEngineInitialized()) {
+    // Requesting the sync service to start may trigger another reentrant call
+    // to PushSyncPrefs. Setting up the startup tracker beforehand correctly
+    // signals the re-entrant call to early exit.
+    sync_startup_tracker_.reset(new SyncStartupTracker(profile_, this));
     service->RequestStart();
 
-    // See if it's even possible to bring up the sync backend - if not
+    // See if it's even possible to bring up the sync engine - if not
     // (unrecoverable error?), don't bother displaying a spinner that will be
     // immediately closed because this leads to some ugly infinite UI loop (see
     // http://crbug.com/244769).
@@ -790,15 +794,12 @@ void PeopleHandler::PushSyncPrefs() {
         SyncStartupTracker::SYNC_STARTUP_ERROR) {
       DisplaySpinner();
     }
-
-    // Start SyncSetupTracker to wait for sync to initialize.
-    sync_startup_tracker_.reset(new SyncStartupTracker(profile_, this));
     return;
   }
 
   configuring_sync_ = true;
-  DCHECK(service->IsBackendInitialized())
-      << "Cannot configure sync until the sync backend is initialized";
+  DCHECK(service->IsEngineInitialized())
+      << "Cannot configure sync until the sync engine is initialized";
 
   // Setup args for the sync configure screen:
   //   syncAllDataTypes: true if the user wants to sync everything
@@ -905,8 +906,8 @@ void PeopleHandler::MarkFirstSetupComplete() {
   signin::SetUserSkippedPromo(profile_);
 
   ProfileSyncService* service = GetSyncService();
-  DCHECK(service);
-  if (service->IsFirstSetupComplete())
+  // The sync service may be nullptr if it has been just disabled by policy.
+  if (!service || service->IsFirstSetupComplete())
     return;
 
   // This is the first time configuring sync, so log it.

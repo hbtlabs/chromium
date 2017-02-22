@@ -14,10 +14,12 @@ WebStateDelegateBridge::WebStateDelegateBridge(id<CRWWebStateDelegate> delegate)
 
 WebStateDelegateBridge::~WebStateDelegateBridge() {}
 
-void WebStateDelegateBridge::LoadProgressChanged(WebState* source,
-                                                 double progress) {
-  if ([delegate_ respondsToSelector:@selector(webState:didChangeProgress:)])
-    [delegate_ webState:source didChangeProgress:progress];
+WebState* WebStateDelegateBridge::OpenURLFromWebState(
+    WebState* source,
+    const WebState::OpenURLParams& params) {
+  if ([delegate_ respondsToSelector:@selector(webState:openURLWithParams:)])
+    return [delegate_ webState:source openURLWithParams:params];
+  return nullptr;
 }
 
 bool WebStateDelegateBridge::HandleContextMenu(
@@ -29,6 +31,21 @@ bool WebStateDelegateBridge::HandleContextMenu(
   return NO;
 }
 
+void WebStateDelegateBridge::ShowRepostFormWarningDialog(
+    WebState* source,
+    const base::Callback<void(bool)>& callback) {
+  base::Callback<void(bool)> local_callback(callback);
+  SEL selector = @selector(webState:runRepostFormDialogWithCompletionHandler:);
+  if ([delegate_ respondsToSelector:selector]) {
+    [delegate_ webState:source
+        runRepostFormDialogWithCompletionHandler:^(BOOL should_continue) {
+          local_callback.Run(should_continue);
+        }];
+  } else {
+    local_callback.Run(true);
+  }
+}
+
 JavaScriptDialogPresenter* WebStateDelegateBridge::GetJavaScriptDialogPresenter(
     WebState* source) {
   SEL selector = @selector(javaScriptDialogPresenterForWebState:);
@@ -36,6 +53,29 @@ JavaScriptDialogPresenter* WebStateDelegateBridge::GetJavaScriptDialogPresenter(
     return [delegate_ javaScriptDialogPresenterForWebState:source];
   }
   return nullptr;
+}
+
+void WebStateDelegateBridge::OnAuthRequired(
+    WebState* source,
+    NSURLProtectionSpace* protection_space,
+    NSURLCredential* proposed_credential,
+    const AuthCallback& callback) {
+  AuthCallback local_callback(callback);
+  if ([delegate_
+          respondsToSelector:@selector(webState:
+                                 didRequestHTTPAuthForProtectionSpace:
+                                                   proposedCredential:
+                                                    completionHandler:)]) {
+    [delegate_ webState:source
+        didRequestHTTPAuthForProtectionSpace:protection_space
+                          proposedCredential:proposed_credential
+                           completionHandler:^(NSString* username,
+                                               NSString* password) {
+                             local_callback.Run(username, password);
+                           }];
+  } else {
+    local_callback.Run(nil, nil);
+  }
 }
 
 }  // web

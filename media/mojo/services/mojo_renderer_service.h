@@ -16,7 +16,7 @@
 #include "base/timer/timer.h"
 #include "base/unguessable_token.h"
 #include "media/base/buffering_state.h"
-#include "media/base/demuxer_stream_provider.h"
+#include "media/base/media_resource.h"
 #include "media/base/pipeline_status.h"
 #include "media/base/renderer_client.h"
 #include "media/mojo/interfaces/renderer.mojom.h"
@@ -26,8 +26,8 @@
 namespace media {
 
 class AudioRendererSink;
-class DemuxerStreamProviderShim;
-class MediaKeys;
+class MediaResourceShim;
+class ContentDecryptionModule;
 class MojoCdmServiceContext;
 class Renderer;
 class VideoRendererSink;
@@ -40,9 +40,7 @@ class MEDIA_MOJO_EXPORT MojoRendererService
  public:
   using InitiateSurfaceRequestCB = base::Callback<base::UnguessableToken()>;
 
-  // |mojo_cdm_service_context| can be used to find the CDM to support
-  // encrypted media. If null, encrypted media is not supported.
-  // NOTE: The MojoRendererService will be uniquely owned by a StrongBinding,
+  // Helper function to bind MojoRendererService with a StrongBinding,
   // which is safely accessible via the returned StrongBindingPtr.
   static mojo::StrongBindingPtr<mojom::Renderer> Create(
       base::WeakPtr<MojoCdmServiceContext> mojo_cdm_service_context,
@@ -52,12 +50,20 @@ class MEDIA_MOJO_EXPORT MojoRendererService
       InitiateSurfaceRequestCB initiate_surface_request_cb,
       mojo::InterfaceRequest<mojom::Renderer> request);
 
+  // |mojo_cdm_service_context| can be used to find the CDM to support
+  // encrypted media. If null, encrypted media is not supported.
+  MojoRendererService(
+      base::WeakPtr<MojoCdmServiceContext> mojo_cdm_service_context,
+      scoped_refptr<AudioRendererSink> audio_sink,
+      std::unique_ptr<VideoRendererSink> video_sink,
+      std::unique_ptr<media::Renderer> renderer,
+      InitiateSurfaceRequestCB initiate_surface_request_cb);
+
   ~MojoRendererService() final;
 
   // mojom::Renderer implementation.
   void Initialize(mojom::RendererClientAssociatedPtrInfo client,
-                  mojom::DemuxerStreamPtr audio,
-                  mojom::DemuxerStreamPtr video,
+                  base::Optional<std::vector<mojom::DemuxerStreamPtr>> streams,
                   const base::Optional<GURL>& media_url,
                   const base::Optional<GURL>& first_party_for_cookies,
                   const InitializeCallback& callback) final;
@@ -69,6 +75,10 @@ class MEDIA_MOJO_EXPORT MojoRendererService
   void InitiateScopedSurfaceRequest(
       const InitiateScopedSurfaceRequestCallback& callback) final;
 
+  void set_bad_message_cb(base::Closure bad_message_cb) {
+    bad_message_cb_ = bad_message_cb;
+  }
+
  private:
   enum State {
     STATE_UNINITIALIZED,
@@ -77,13 +87,6 @@ class MEDIA_MOJO_EXPORT MojoRendererService
     STATE_PLAYING,
     STATE_ERROR
   };
-
-  MojoRendererService(
-      base::WeakPtr<MojoCdmServiceContext> mojo_cdm_service_context,
-      scoped_refptr<AudioRendererSink> audio_sink,
-      std::unique_ptr<VideoRendererSink> video_sink,
-      std::unique_ptr<media::Renderer> renderer,
-      InitiateSurfaceRequestCB initiate_surface_request_cb);
 
   // RendererClient implementation.
   void OnError(PipelineStatus status) final;
@@ -95,7 +98,7 @@ class MEDIA_MOJO_EXPORT MojoRendererService
   void OnVideoOpacityChange(bool opaque) final;
   void OnDurationChange(base::TimeDelta duration) final;
 
-  // Called when the DemuxerStreamProviderShim is ready to go (has a config,
+  // Called when the MediaResourceShim is ready to go (has a config,
   // pipe handle, etc) and can be handed off to a renderer for use.
   void OnStreamReady(const base::Callback<void(bool)>& callback);
 
@@ -115,7 +118,7 @@ class MEDIA_MOJO_EXPORT MojoRendererService
   void OnFlushCompleted(const FlushCallback& callback);
 
   // Callback executed once SetCdm() completes.
-  void OnCdmAttached(scoped_refptr<MediaKeys> cdm,
+  void OnCdmAttached(scoped_refptr<ContentDecryptionModule> cdm,
                      const base::Callback<void(bool)>& callback,
                      bool success);
 
@@ -124,7 +127,7 @@ class MEDIA_MOJO_EXPORT MojoRendererService
   State state_;
   double playback_rate_;
 
-  std::unique_ptr<DemuxerStreamProvider> stream_provider_;
+  std::unique_ptr<MediaResource> media_resource_;
 
   base::RepeatingTimer time_update_timer_;
   base::TimeDelta last_media_time_;
@@ -133,7 +136,7 @@ class MEDIA_MOJO_EXPORT MojoRendererService
 
   // Hold a reference to the CDM set on the |renderer_| so that the CDM won't be
   // destructed while the |renderer_| is still using it.
-  scoped_refptr<MediaKeys> cdm_;
+  scoped_refptr<ContentDecryptionModule> cdm_;
 
   // Audio and Video sinks.
   // May be null if underlying |renderer_| does not use them.
@@ -141,7 +144,7 @@ class MEDIA_MOJO_EXPORT MojoRendererService
   std::unique_ptr<VideoRendererSink> video_sink_;
 
   // Note: Destroy |renderer_| first to avoid access violation into other
-  // members, e.g. |stream_provider_|, |cdm_|, |audio_sink_|, and
+  // members, e.g. |media_resource_|, |cdm_|, |audio_sink_|, and
   // |video_sink_|.
   // Must use "media::" because "Renderer" is ambiguous.
   std::unique_ptr<media::Renderer> renderer_;
@@ -150,9 +153,10 @@ class MEDIA_MOJO_EXPORT MojoRendererService
   // Returns the token to be used to fulfill the request.
   InitiateSurfaceRequestCB initiate_surface_request_cb_;
 
-  // WeakPtr to the binding that owns |this|.
-  // Used to forcefully close the connection (which also safely destroy |this|).
-  mojo::StrongBindingPtr<mojom::Renderer> binding_;
+  // Callback to be called when an invalid or unexpected message is received.
+  // TODO(tguilbert): Revisit how to do InitiateScopedSurfaceRequest() so that
+  // we can eliminate this callback. See http://crbug.com/669606
+  base::Closure bad_message_cb_;
 
   base::WeakPtr<MojoRendererService> weak_this_;
   base::WeakPtrFactory<MojoRendererService> weak_factory_;

@@ -31,6 +31,10 @@
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#if defined(OS_WIN)
+#include "chrome/browser/ui/desktop_ios_promotion/desktop_ios_promotion_util.h"
+#endif
+
 namespace metrics_util = password_manager::metrics_util;
 
 namespace {
@@ -61,11 +65,10 @@ std::vector<autofill::PasswordForm> DeepCopyForms(
   return result;
 }
 
-password_bubble_experiment::SmartLockBranding GetSmartLockBrandingState(
-    Profile* profile) {
+bool IsSmartLockUser(Profile* profile) {
   const browser_sync::ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(profile);
-  return password_bubble_experiment::GetSmartLockBrandingState(sync_service);
+  return password_bubble_experiment::IsSmartLockUser(sync_service);
 }
 
 }  // namespace
@@ -80,8 +83,8 @@ class ManagePasswordsBubbleModel::InteractionKeeper {
 
   ~InteractionKeeper() = default;
 
-  // Records UMA events and updates the interaction statistics when the bubble
-  // is closed.
+  // Records UMA events, updates the interaction statistics and sends
+  // notifications to the delegate when the bubble is closed.
   void ReportInteractions(const ManagePasswordsBubbleModel* model);
 
   void set_dismissal_reason(
@@ -151,11 +154,6 @@ void ManagePasswordsBubbleModel::InteractionKeeper::ReportInteractions(
   if (model->state() == password_manager::ui::PENDING_PASSWORD_STATE) {
     Profile* profile = model->GetProfile();
     if (profile) {
-      if (GetSmartLockBrandingState(profile) ==
-          password_bubble_experiment::SmartLockBranding::FULL) {
-        password_bubble_experiment::RecordSavePromptFirstRunExperienceWasShown(
-            profile->GetPrefs());
-      }
       if (dismissal_reason_ == metrics_util::NO_DIRECT_INTERACTION &&
           display_disposition_ ==
               metrics_util::AUTOMATIC_WITH_PASSWORD_PENDING) {
@@ -173,16 +171,23 @@ void ManagePasswordsBubbleModel::InteractionKeeper::ReportInteractions(
   }
 
   if (model->state() == password_manager::ui::CHROME_SIGN_IN_PROMO_STATE) {
-    metrics_util::LogAutoSigninPromoUserAction(sign_in_promo_dismissal_reason_);
-    if (sign_in_promo_dismissal_reason_ ==
-            password_manager::metrics_util::CHROME_SIGNIN_OK ||
-        sign_in_promo_dismissal_reason_ ==
-            password_manager::metrics_util::CHROME_SIGNIN_CANCEL) {
-      UMA_HISTOGRAM_COUNTS_100("PasswordManager.SignInPromoCountTilClick",
-                               sign_in_promo_shown_count);
-    } else {
-      UMA_HISTOGRAM_COUNTS_100("PasswordManager.SignInPromoDismissalCount",
-                               sign_in_promo_shown_count);
+    metrics_util::LogSyncSigninPromoUserAction(sign_in_promo_dismissal_reason_);
+    switch (sign_in_promo_dismissal_reason_) {
+      case password_manager::metrics_util::CHROME_SIGNIN_OK:
+        UMA_HISTOGRAM_COUNTS_100("PasswordManager.SignInPromoCountTilSignIn",
+                                 sign_in_promo_shown_count);
+        break;
+      case password_manager::metrics_util::CHROME_SIGNIN_CANCEL:
+        UMA_HISTOGRAM_COUNTS_100("PasswordManager.SignInPromoCountTilNoThanks",
+                                 sign_in_promo_shown_count);
+        break;
+      case password_manager::metrics_util::CHROME_SIGNIN_DISMISSED:
+        UMA_HISTOGRAM_COUNTS_100("PasswordManager.SignInPromoDismissalCount",
+                                 sign_in_promo_shown_count);
+        break;
+      case password_manager::metrics_util::CHROME_SIGNIN_ACTION_COUNT:
+        NOTREACHED();
+        break;
     }
   } else if (model->state() !=
              password_manager::ui::PENDING_PASSWORD_UPDATE_STATE) {
@@ -193,15 +198,22 @@ void ManagePasswordsBubbleModel::InteractionKeeper::ReportInteractions(
 
   if (model->state() == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE ||
       model->state() == password_manager::ui::PENDING_PASSWORD_STATE) {
+    // Send a notification if there was no interaction with the bubble.
+    bool no_interaction =
+        model->state() == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE
+            ? update_password_submission_event_ ==
+                  metrics_util::NO_UPDATE_SUBMISSION
+            : dismissal_reason_ == metrics_util::NO_DIRECT_INTERACTION;
+    if (no_interaction && model->delegate_) {
+      model->delegate_->OnNoInteraction();
+    }
+
+    // Send UMA.
     if (update_password_submission_event_ ==
         metrics_util::NO_UPDATE_SUBMISSION) {
       update_password_submission_event_ =
           model->GetUpdateDismissalReason(NO_INTERACTION);
-      if (model->delegate_ &&
-          model->state() == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE)
-        model->delegate_->OnNoInteractionOnUpdate();
     }
-
     if (update_password_submission_event_ != metrics_util::NO_UPDATE_SUBMISSION)
       LogUpdatePasswordSubmissionEvent(update_password_submission_event_);
   }
@@ -248,20 +260,10 @@ ManagePasswordsBubbleModel::ManagePasswordsBubbleModel(
   if (state_ == password_manager::ui::CONFIRMATION_STATE) {
     base::string16 save_confirmation_link =
         l10n_util::GetStringUTF16(IDS_MANAGE_PASSWORDS_LINK);
-    int confirmation_text_id = IDS_MANAGE_PASSWORDS_CONFIRM_GENERATED_TEXT;
-    if (GetSmartLockBrandingState(GetProfile()) ==
-        password_bubble_experiment::SmartLockBranding::FULL) {
-      std::string management_hostname =
-          GURL(password_manager::kPasswordManagerAccountDashboardURL).host();
-      save_confirmation_link = base::UTF8ToUTF16(management_hostname);
-      confirmation_text_id =
-          IDS_MANAGE_PASSWORDS_CONFIRM_GENERATED_SMART_LOCK_TEXT;
-    }
-
     size_t offset;
     save_confirmation_text_ =
-        l10n_util::GetStringFUTF16(
-            confirmation_text_id, save_confirmation_link, &offset);
+        l10n_util::GetStringFUTF16(IDS_MANAGE_PASSWORDS_CONFIRM_GENERATED_TEXT,
+                                   save_confirmation_link, &offset);
     save_confirmation_link_range_ =
         gfx::Range(offset, offset + save_confirmation_link.length());
   }
@@ -284,6 +286,7 @@ ManagePasswordsBubbleModel::ManagePasswordsBubbleModel(
       case password_manager::ui::CREDENTIAL_REQUEST_STATE:
       case password_manager::ui::AUTO_SIGNIN_STATE:
       case password_manager::ui::CHROME_SIGN_IN_PROMO_STATE:
+      case password_manager::ui::CHROME_DESKTOP_IOS_PROMO_STATE:
       case password_manager::ui::INACTIVE_STATE:
         NOTREACHED();
         break;
@@ -307,6 +310,7 @@ ManagePasswordsBubbleModel::ManagePasswordsBubbleModel(
       case password_manager::ui::MANAGE_STATE:
       case password_manager::ui::CREDENTIAL_REQUEST_STATE:
       case password_manager::ui::CHROME_SIGN_IN_PROMO_STATE:
+      case password_manager::ui::CHROME_DESKTOP_IOS_PROMO_STATE:
       case password_manager::ui::INACTIVE_STATE:
         NOTREACHED();
         break;
@@ -368,12 +372,7 @@ void ManagePasswordsBubbleModel::OnOKClicked() {
 
 void ManagePasswordsBubbleModel::OnManageLinkClicked() {
   interaction_keeper_->set_dismissal_reason(metrics_util::CLICKED_MANAGE);
-  if (GetSmartLockBrandingState(GetProfile()) ==
-      password_bubble_experiment::SmartLockBranding::FULL) {
-    delegate_->NavigateToExternalPasswordManager();
-  } else {
-    delegate_->NavigateToPasswordManagerSettingsPage();
-  }
+  delegate_->NavigateToPasswordManagerSettingsPage();
 }
 
 void ManagePasswordsBubbleModel::OnBrandLinkClicked() {
@@ -430,22 +429,12 @@ bool ManagePasswordsBubbleModel::ShouldShowMultipleAccountUpdateUI() const {
          local_credentials_.size() > 1 && !password_overridden_;
 }
 
-bool ManagePasswordsBubbleModel::ShouldShowGoogleSmartLockWelcome() const {
-  Profile* profile = GetProfile();
-  if (GetSmartLockBrandingState(profile) ==
-      password_bubble_experiment::SmartLockBranding::FULL) {
-    PrefService* prefs = profile->GetPrefs();
-    return !prefs->GetBoolean(
-        password_manager::prefs::kWasSavePrompFirstRunExperienceShown);
-  }
-  return false;
-}
-
-bool ManagePasswordsBubbleModel::ReplaceToShowSignInPromoIfNeeded() {
+bool ManagePasswordsBubbleModel::ReplaceToShowPromotionIfNeeded() {
   DCHECK_EQ(password_manager::ui::PENDING_PASSWORD_STATE, state_);
   PrefService* prefs = GetProfile()->GetPrefs();
   const browser_sync::ProfileSyncService* sync_service =
       ProfileSyncServiceFactory::GetForProfile(GetProfile());
+  // Signin promotion.
   if (password_bubble_experiment::ShouldShowChromeSignInPasswordPromo(
           prefs, sync_service)) {
     interaction_keeper_->ReportInteractions(this);
@@ -460,6 +449,19 @@ bool ManagePasswordsBubbleModel::ReplaceToShowSignInPromoIfNeeded() {
     interaction_keeper_->set_sign_in_promo_shown_count(show_count);
     return true;
   }
+#if defined(OS_WIN)
+  // Desktop to mobile promotion only enabled on windows.
+  if (desktop_ios_promotion::IsEligibleForIOSPromotion(
+          prefs, sync_service,
+          desktop_ios_promotion::PromotionEntryPoint::SAVE_PASSWORD_BUBBLE)) {
+    interaction_keeper_->ReportInteractions(this);
+    title_brand_link_range_ = gfx::Range();
+    title_ = l10n_util::GetStringUTF16(
+        IDS_PASSWORD_MANAGER_DESKTOP_TO_IOS_PROMO_TITLE);
+    state_ = password_manager::ui::CHROME_DESKTOP_IOS_PROMO_STATE;
+    return true;
+  }
+#endif
   return false;
 }
 
@@ -477,9 +479,7 @@ void ManagePasswordsBubbleModel::UpdatePendingStateTitle() {
                  ? PasswordTitleType::SAVE_PASSWORD
                  : PasswordTitleType::SAVE_ACCOUNT);
   GetSavePasswordDialogTitleTextAndLinkRange(
-      GetWebContents()->GetVisibleURL(), origin_,
-      GetSmartLockBrandingState(GetProfile()) !=
-          password_bubble_experiment::SmartLockBranding::NONE,
+      GetWebContents()->GetVisibleURL(), origin_, IsSmartLockUser(GetProfile()),
       type, &title_, &title_brand_link_range_);
 }
 

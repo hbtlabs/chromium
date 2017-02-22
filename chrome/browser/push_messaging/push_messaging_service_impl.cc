@@ -16,18 +16,19 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/gcm/gcm_profile_service_factory.h"
+#include "chrome/browser/gcm/instance_id/instance_id_profile_service.h"
+#include "chrome/browser/gcm/instance_id/instance_id_profile_service_factory.h"
 #include "chrome/browser/permissions/permission_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/push_messaging/push_messaging_app_identifier.h"
 #include "chrome/browser/push_messaging/push_messaging_constants.h"
 #include "chrome/browser/push_messaging/push_messaging_service_factory.h"
 #include "chrome/browser/push_messaging/push_messaging_service_observer.h"
-#include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
-#include "chrome/browser/services/gcm/instance_id/instance_id_profile_service.h"
-#include "chrome/browser/services/gcm/instance_id/instance_id_profile_service_factory.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
@@ -41,9 +42,9 @@
 #include "components/gcm_driver/instance_id/instance_id_driver.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
-#include "components/rappor/rappor_utils.h"
+#include "components/rappor/public/rappor_utils.h"
+#include "components/rappor/rappor_service_impl.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/permission_type.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
@@ -88,6 +89,16 @@ void RecordUnsubscribeReason(content::PushUnregistrationReason reason) {
                             content::PUSH_UNREGISTRATION_REASON_LAST + 1);
 }
 
+void RecordUnsubscribeGCMResult(gcm::GCMClient::Result result) {
+  UMA_HISTOGRAM_ENUMERATION("PushMessaging.UnregistrationGCMResult", result,
+                            gcm::GCMClient::LAST_RESULT + 1);
+}
+
+void RecordUnsubscribeIIDResult(InstanceID::Result result) {
+  UMA_HISTOGRAM_ENUMERATION("PushMessaging.UnregistrationIIDResult", result,
+                            InstanceID::LAST_RESULT + 1);
+}
+
 blink::WebPushPermissionStatus ToPushPermission(
     blink::mojom::PermissionStatus permission_status) {
   switch (permission_status) {
@@ -100,50 +111,6 @@ blink::WebPushPermissionStatus ToPushPermission(
   }
   NOTREACHED();
   return blink::WebPushPermissionStatusDenied;
-}
-
-content::PushUnregistrationStatus ToUnregisterStatus(
-    InstanceID::Result result) {
-  switch (result) {
-    case InstanceID::SUCCESS:
-      return content::PUSH_UNREGISTRATION_STATUS_SUCCESS_UNREGISTERED;
-    case InstanceID::INVALID_PARAMETER:
-    case InstanceID::DISABLED:
-    case InstanceID::SERVER_ERROR:
-    case InstanceID::UNKNOWN_ERROR:
-      return content::PUSH_UNREGISTRATION_STATUS_PENDING_SERVICE_ERROR;
-    case InstanceID::ASYNC_OPERATION_PENDING:
-    case InstanceID::NETWORK_ERROR:
-      return content::PUSH_UNREGISTRATION_STATUS_PENDING_NETWORK_ERROR;
-  }
-  NOTREACHED();
-  return content::PUSH_UNREGISTRATION_STATUS_SERVICE_NOT_AVAILABLE;
-}
-
-content::PushUnregistrationStatus ToUnregisterStatus(
-    gcm::GCMClient::Result gcm_result) {
-  switch (gcm_result) {
-    case gcm::GCMClient::SUCCESS:
-      return content::PUSH_UNREGISTRATION_STATUS_SUCCESS_UNREGISTERED;
-    case gcm::GCMClient::INVALID_PARAMETER:
-    case gcm::GCMClient::GCM_DISABLED:
-    case gcm::GCMClient::SERVER_ERROR:
-    case gcm::GCMClient::UNKNOWN_ERROR:
-      return content::PUSH_UNREGISTRATION_STATUS_PENDING_SERVICE_ERROR;
-    case gcm::GCMClient::ASYNC_OPERATION_PENDING:
-    case gcm::GCMClient::NETWORK_ERROR:
-    case gcm::GCMClient::TTL_EXCEEDED:
-      return content::PUSH_UNREGISTRATION_STATUS_PENDING_NETWORK_ERROR;
-  }
-  NOTREACHED();
-  return content::PUSH_UNREGISTRATION_STATUS_SERVICE_NOT_AVAILABLE;
-}
-
-void GCMCallbackToUnregisterCallback(
-    const content::PushMessagingService::UnregisterCallback& callback,
-    gcm::GCMClient::Result result) {
-  DCHECK(!callback.is_null());
-  callback.Run(ToUnregisterStatus(result));
 }
 
 void UnregisterCallbackToClosure(const base::Closure& closure,
@@ -186,9 +153,7 @@ PushMessagingServiceImpl::PushMessagingServiceImpl(Profile* profile)
     : profile_(profile),
       push_subscription_count_(0),
       pending_push_subscription_count_(0),
-#if defined(ENABLE_NOTIFICATIONS)
       notification_manager_(profile),
-#endif
       push_messaging_service_observer_(PushMessagingServiceObserver::Create()),
       weak_factory_(this) {
   DCHECK(profile);
@@ -255,6 +220,8 @@ void PushMessagingServiceImpl::ShutdownHandler() {
 void PushMessagingServiceImpl::OnStoreReset() {
   // Delete all cached subscriptions, since they are now invalid.
   for (const auto& identifier : PushMessagingAppIdentifier::GetAll(profile_)) {
+    RecordUnsubscribeReason(
+        content::PUSH_UNREGISTRATION_REASON_GCM_STORE_RESET);
     // Clear all the subscriptions in parallel, to reduce risk that shutdown
     // occurs before we finish clearing them.
     ClearPushSubscriptionId(profile_, identifier.origin(),
@@ -373,7 +340,7 @@ void PushMessagingServiceImpl::DeliverMessageCallback(
     // notifications).
     case content::PUSH_DELIVERY_STATUS_SUCCESS:
     case content::PUSH_DELIVERY_STATUS_EVENT_WAITUNTIL_REJECTED:
-#if defined(ENABLE_NOTIFICATIONS)
+    case content::PUSH_DELIVERY_STATUS_TIMEOUT:
       // Only enforce the user visible requirements if this is currently running
       // as the delivery callback for the last in-flight message, and silent
       // push has not been enabled through a command line flag.
@@ -384,7 +351,6 @@ void PushMessagingServiceImpl::DeliverMessageCallback(
             requesting_origin, service_worker_registration_id,
             completion_closure_runner.Release());
       }
-#endif
       break;
     case content::PUSH_DELIVERY_STATUS_SERVICE_WORKER_ERROR:
       // Do nothing, and hope the error is transient.
@@ -507,8 +473,8 @@ void PushMessagingServiceImpl::SubscribeFromDocument(
   }
 
   // Push does not allow permission requests from iframes.
-  profile_->GetPermissionManager()->RequestPermission(
-      content::PermissionType::PUSH_MESSAGING, web_contents->GetMainFrame(),
+  PermissionManager::Get(profile_)->RequestPermission(
+      CONTENT_SETTINGS_TYPE_PUSH_MESSAGING, web_contents->GetMainFrame(),
       requesting_origin, true /* user_gesture */,
       base::Bind(&PushMessagingServiceImpl::DoSubscribe,
                  weak_factory_.GetWeakPtr(), app_identifier, options,
@@ -553,8 +519,8 @@ blink::WebPushPermissionStatus PushMessagingServiceImpl::GetPermissionStatus(
   // Because the Push API is tied to Service Workers, many usages of the API
   // won't have an embedding origin at all. Only consider the requesting
   // |origin| when checking whether permission to use the API has been granted.
-  return ToPushPermission(profile_->GetPermissionManager()->GetPermissionStatus(
-      content::PermissionType::PUSH_MESSAGING, origin, origin));
+  return ToPushPermission(PermissionManager::Get(profile_)->GetPermissionStatus(
+      CONTENT_SETTINGS_TYPE_PUSH_MESSAGING, origin, origin));
 }
 
 bool PushMessagingServiceImpl::SupportNonVisibleMessages() {
@@ -760,21 +726,31 @@ void PushMessagingServiceImpl::DidClearPushSubscriptionId(
   if (was_subscribed)
     app_identifier.DeleteFromPrefs(profile_);
 
+  // Run the unsubscribe callback *before* asking the InstanceIDDriver/GCMDriver
+  // to unsubscribe, since that's a slow process involving network retries, and
+  // by this point enough local state has been deleted that the subscription is
+  // inactive. Note that DeliverMessageCallback automatically unsubscribes if
+  // messages are later received for a subscription that was locally deleted,
+  // so as long as messages keep getting sent to it, the unsubscription should
+  // eventually reach GCM servers even if this particular attempt fails.
+  callback.Run(
+      was_subscribed
+          ? content::PUSH_UNREGISTRATION_STATUS_SUCCESS_UNREGISTERED
+          : content::PUSH_UNREGISTRATION_STATUS_SUCCESS_WAS_NOT_REGISTERED);
+
   if (PushMessagingAppIdentifier::UseInstanceID(app_id)) {
-    GetInstanceIDDriver()->GetInstanceID(app_id)->DeleteID(base::Bind(
-        &PushMessagingServiceImpl::DidDeleteID, weak_factory_.GetWeakPtr(),
-        app_id, was_subscribed, callback));
+    GetInstanceIDDriver()->GetInstanceID(app_id)->DeleteID(
+        base::Bind(&PushMessagingServiceImpl::DidDeleteID,
+                   weak_factory_.GetWeakPtr(), app_id, was_subscribed));
 
   } else {
     auto unregister_callback =
-        base::Bind(&GCMCallbackToUnregisterCallback,
-                   base::Bind(&PushMessagingServiceImpl::DidUnsubscribe,
-                              weak_factory_.GetWeakPtr(),
-                              std::string() /* app_id_when_instance_id */,
-                              was_subscribed, callback));
+        base::Bind(&PushMessagingServiceImpl::DidUnregister,
+                   weak_factory_.GetWeakPtr(), was_subscribed);
 #if defined(OS_ANDROID)
     // On Android the backend is different, and requires the original sender_id.
-    // UnsubscribeBecausePermissionRevoked sometimes calls us with an empty one.
+    // UnsubscribeBecausePermissionRevoked and
+    // DidDeleteServiceWorkerRegistration sometimes call us with an empty one.
     if (sender_id.empty()) {
       unregister_callback.Run(gcm::GCMClient::INVALID_PARAMETER);
     } else {
@@ -787,38 +763,73 @@ void PushMessagingServiceImpl::DidClearPushSubscriptionId(
   }
 }
 
+void PushMessagingServiceImpl::DidUnregister(bool was_subscribed,
+                                             gcm::GCMClient::Result result) {
+  RecordUnsubscribeGCMResult(result);
+  DidUnsubscribe(std::string() /* app_id_when_instance_id */, was_subscribed);
+}
+
 void PushMessagingServiceImpl::DidDeleteID(const std::string& app_id,
                                            bool was_subscribed,
-                                           const UnregisterCallback& callback,
                                            InstanceID::Result result) {
+  RecordUnsubscribeIIDResult(result);
   // DidUnsubscribe must be run asynchronously when passing a non-empty
   // |app_id_when_instance_id|, since it calls
   // InstanceIDDriver::RemoveInstanceID which deletes the InstanceID itself.
   // Calling that immediately would cause a use-after-free in our caller.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&PushMessagingServiceImpl::DidUnsubscribe,
-                            weak_factory_.GetWeakPtr(), app_id, was_subscribed,
-                            callback, ToUnregisterStatus(result)));
+      FROM_HERE,
+      base::Bind(&PushMessagingServiceImpl::DidUnsubscribe,
+                 weak_factory_.GetWeakPtr(), app_id, was_subscribed));
 }
 
 void PushMessagingServiceImpl::DidUnsubscribe(
     const std::string& app_id_when_instance_id,
-    bool was_subscribed,
-    const UnregisterCallback& callback,
-    content::PushUnregistrationStatus status) {
+    bool was_subscribed) {
   if (!app_id_when_instance_id.empty())
     GetInstanceIDDriver()->RemoveInstanceID(app_id_when_instance_id);
 
-  DCHECK(!callback.is_null());
-
-  if (was_subscribed) {
+  if (was_subscribed)
     DecreasePushSubscriptionCount(1, false /* was_pending */);
-    callback.Run(status);
-  } else {
-    // Override status since there was no record of an existing subscription.
-    callback.Run(
-        content::PUSH_UNREGISTRATION_STATUS_SUCCESS_WAS_NOT_REGISTERED);
+
+  if (!unsubscribe_callback_for_testing_.is_null())
+    unsubscribe_callback_for_testing_.Run();
+}
+
+void PushMessagingServiceImpl::SetUnsubscribeCallbackForTesting(
+    const base::Closure& callback) {
+  unsubscribe_callback_for_testing_ = callback;
+}
+
+// DidDeleteServiceWorkerRegistration methods ----------------------------------
+
+void PushMessagingServiceImpl::DidDeleteServiceWorkerRegistration(
+    const GURL& origin,
+    int64_t service_worker_registration_id) {
+  const PushMessagingAppIdentifier& app_identifier =
+      PushMessagingAppIdentifier::FindByServiceWorker(
+          profile_, origin, service_worker_registration_id);
+  if (app_identifier.is_null()) {
+    if (!service_worker_unregistered_callback_for_testing_.is_null())
+      service_worker_unregistered_callback_for_testing_.Run();
+    return;
   }
+  // Note this will not fully unsubscribe pre-InstanceID subscriptions on
+  // Android from GCM, as that requires a sender_id. (Ideally we'd fetch it
+  // from the SWDB in some "before_unregistered" SWObserver event.)
+  UnsubscribeInternal(
+      content::PUSH_UNREGISTRATION_REASON_SERVICE_WORKER_UNREGISTERED, origin,
+      service_worker_registration_id, app_identifier.app_id(),
+      std::string() /* sender_id */,
+      base::Bind(&UnregisterCallbackToClosure,
+                 service_worker_unregistered_callback_for_testing_.is_null()
+                     ? base::Bind(&base::DoNothing)
+                     : service_worker_unregistered_callback_for_testing_));
+}
+
+void PushMessagingServiceImpl::SetServiceWorkerUnregisteredCallbackForTesting(
+    const base::Closure& callback) {
+  service_worker_unregistered_callback_for_testing_ = callback;
 }
 
 // OnContentSettingChanged methods ---------------------------------------------

@@ -137,50 +137,41 @@ InterfaceEndpointClient::InterfaceEndpointClient(
     bool expect_sync_requests,
     scoped_refptr<base::SingleThreadTaskRunner> runner,
     uint32_t interface_version)
-    : handle_(std::move(handle)),
+    : expect_sync_requests_(expect_sync_requests),
+      handle_(std::move(handle)),
       incoming_receiver_(receiver),
       thunk_(this),
       filters_(&thunk_),
-      next_request_id_(1),
-      encountered_error_(false),
       task_runner_(std::move(runner)),
       control_message_proxy_(this),
       control_message_handler_(interface_version),
       weak_ptr_factory_(this) {
   DCHECK(handle_.is_valid());
-  DCHECK(handle_.is_local());
 
   // TODO(yzshen): the way to use validator (or message filter in general)
   // directly is a little awkward.
   if (payload_validator)
     filters_.Append(std::move(payload_validator));
 
-  controller_ = handle_.group_controller()->AttachEndpointClient(
-      handle_, this, task_runner_);
-  if (expect_sync_requests)
-    controller_->AllowWokenUpBySyncWatchOnSameThread();
-
-  base::MessageLoop::current()->AddDestructionObserver(this);
+  if (handle_.pending_association()) {
+    handle_.SetAssociationEventHandler(base::Bind(
+        &InterfaceEndpointClient::OnAssociationEvent, base::Unretained(this)));
+  } else {
+    InitControllerIfNecessary();
+  }
 }
 
 InterfaceEndpointClient::~InterfaceEndpointClient() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  StopObservingIfNecessary();
-
-  if (handle_.is_valid())
+  if (controller_)
     handle_.group_controller()->DetachEndpointClient(handle_);
 }
 
 AssociatedGroup* InterfaceEndpointClient::associated_group() {
   if (!associated_group_)
-    associated_group_ = handle_.group_controller()->CreateAssociatedGroup();
+    associated_group_ = base::MakeUnique<AssociatedGroup>(handle_);
   return associated_group_.get();
-}
-
-uint32_t InterfaceEndpointClient::interface_id() const {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  return handle_.id();
 }
 
 ScopedInterfaceEndpointHandle InterfaceEndpointClient::PassHandle() {
@@ -190,8 +181,13 @@ ScopedInterfaceEndpointHandle InterfaceEndpointClient::PassHandle() {
   if (!handle_.is_valid())
     return ScopedInterfaceEndpointHandle();
 
-  controller_ = nullptr;
-  handle_.group_controller()->DetachEndpointClient(handle_);
+  handle_.SetAssociationEventHandler(
+      ScopedInterfaceEndpointHandle::AssociationEventCallback());
+
+  if (controller_) {
+    controller_ = nullptr;
+    handle_.group_controller()->DetachEndpointClient(handle_);
+  }
 
   return std::move(handle_);
 }
@@ -204,16 +200,35 @@ void InterfaceEndpointClient::AddFilter(
 void InterfaceEndpointClient::RaiseError() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  handle_.group_controller()->RaiseError();
+  if (!handle_.pending_association())
+    handle_.group_controller()->RaiseError();
+}
+
+void InterfaceEndpointClient::CloseWithReason(uint32_t custom_reason,
+                                              const std::string& description) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  auto handle = PassHandle();
+  handle.ResetWithReason(custom_reason, description);
 }
 
 bool InterfaceEndpointClient::Accept(Message* message) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(controller_);
   DCHECK(!message->has_flag(Message::kFlagExpectsResponse));
+  DCHECK(!handle_.pending_association());
+
+  // This has to been done even if connection error has occurred. For example,
+  // the message contains a pending associated request. The user may try to use
+  // the corresponding associated interface pointer after sending this message.
+  // That associated interface pointer has to join an associated group in order
+  // to work properly.
+  if (!message->associated_endpoint_handles()->empty())
+    message->SerializeAssociatedEndpointHandles(handle_.group_controller());
 
   if (encountered_error_)
     return false;
+
+  InitControllerIfNecessary();
 
   return controller_->SendMessage(message);
 }
@@ -221,11 +236,17 @@ bool InterfaceEndpointClient::Accept(Message* message) {
 bool InterfaceEndpointClient::AcceptWithResponder(Message* message,
                                                   MessageReceiver* responder) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(controller_);
   DCHECK(message->has_flag(Message::kFlagExpectsResponse));
+  DCHECK(!handle_.pending_association());
+
+  // Please see comments in Accept().
+  if (!message->associated_endpoint_handles()->empty())
+    message->SerializeAssociatedEndpointHandles(handle_.group_controller());
 
   if (encountered_error_)
     return false;
+
+  InitControllerIfNecessary();
 
   // Reserve 0 in case we want it to convey special meaning in the future.
   uint64_t request_id = next_request_id_++;
@@ -273,7 +294,8 @@ bool InterfaceEndpointClient::HandleIncomingMessage(Message* message) {
   return filters_.Accept(message);
 }
 
-void InterfaceEndpointClient::NotifyError() {
+void InterfaceEndpointClient::NotifyError(
+    const base::Optional<DisconnectReason>& reason) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (encountered_error_)
@@ -291,12 +313,48 @@ void InterfaceEndpointClient::NotifyError() {
   if (!error_handler_.is_null()) {
     error_handler_.Run();
   } else if (!error_with_reason_handler_.is_null()) {
-    // Make a copy on the stack. If we directly pass a reference to a member of
-    // |control_message_handler_|, that reference will be invalidated as soon as
-    // the user destroys the interface endpoint.
-    std::string description = control_message_handler_.disconnect_description();
-    error_with_reason_handler_.Run(
-        control_message_handler_.disconnect_custom_reason(), description);
+    if (reason) {
+      error_with_reason_handler_.Run(reason->custom_reason,
+                                     reason->description);
+    } else {
+      error_with_reason_handler_.Run(0, std::string());
+    }
+  }
+}
+
+void InterfaceEndpointClient::QueryVersion(
+    const base::Callback<void(uint32_t)>& callback) {
+  control_message_proxy_.QueryVersion(callback);
+}
+
+void InterfaceEndpointClient::RequireVersion(uint32_t version) {
+  control_message_proxy_.RequireVersion(version);
+}
+
+void InterfaceEndpointClient::FlushForTesting() {
+  control_message_proxy_.FlushForTesting();
+}
+
+void InterfaceEndpointClient::InitControllerIfNecessary() {
+  if (controller_ || handle_.pending_association())
+    return;
+
+  controller_ = handle_.group_controller()->AttachEndpointClient(handle_, this,
+                                                                 task_runner_);
+  if (expect_sync_requests_)
+    controller_->AllowWokenUpBySyncWatchOnSameThread();
+}
+
+void InterfaceEndpointClient::OnAssociationEvent(
+    ScopedInterfaceEndpointHandle::AssociationEvent event) {
+  if (event == ScopedInterfaceEndpointHandle::ASSOCIATED) {
+    InitControllerIfNecessary();
+  } else if (event ==
+             ScopedInterfaceEndpointHandle::PEER_CLOSED_BEFORE_ASSOCIATION) {
+    task_runner_->PostTask(FROM_HERE,
+                           base::Bind(&InterfaceEndpointClient::NotifyError,
+                                      weak_ptr_factory_.GetWeakPtr(),
+                                      handle_.disconnect_reason()));
   }
 }
 
@@ -340,19 +398,6 @@ bool InterfaceEndpointClient::HandleValidatedMessage(Message* message) {
 
     return incoming_receiver_->Accept(message);
   }
-}
-
-void InterfaceEndpointClient::StopObservingIfNecessary() {
-  if (!observing_message_loop_destruction_)
-    return;
-
-  observing_message_loop_destruction_ = false;
-  base::MessageLoop::current()->RemoveDestructionObserver(this);
-}
-
-void InterfaceEndpointClient::WillDestroyCurrentMessageLoop() {
-  StopObservingIfNecessary();
-  NotifyError();
 }
 
 }  // namespace mojo

@@ -28,7 +28,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /**
- * @implements {UI.ViewportElement}
+ * @implements {Console.ConsoleViewportElement}
  * @unrestricted
  */
 Console.ConsoleViewMessage = class {
@@ -44,10 +44,12 @@ Console.ConsoleViewMessage = class {
     this._closeGroupDecorationCount = 0;
     this._nestingLevel = nestingLevel;
 
-    /** @type {?UI.DataGrid} */
+    /** @type {?DataGrid.DataGrid} */
     this._dataGrid = null;
-    this._previewFormatter = new Components.RemoteObjectPreviewFormatter();
+    this._previewFormatter = new ObjectUI.RemoteObjectPreviewFormatter();
     this._searchRegex = null;
+    /** @type {?UI.Icon} */
+    this._messageLevelIcon = null;
   }
 
   /**
@@ -119,7 +121,7 @@ Console.ConsoleViewMessage = class {
    */
   _buildTableMessage(consoleMessage) {
     var formattedMessage = createElement('span');
-    UI.appendStyle(formattedMessage, 'components/objectValue.css');
+    UI.appendStyle(formattedMessage, 'object_ui/objectValue.css');
     formattedMessage.className = 'source-code';
     var anchorElement = this._buildMessageAnchor(consoleMessage);
     if (anchorElement)
@@ -172,7 +174,7 @@ Console.ConsoleViewMessage = class {
     columnNames.unshift(Common.UIString('(index)'));
 
     if (flatValues.length) {
-      this._dataGrid = UI.SortableDataGrid.create(columnNames, flatValues);
+      this._dataGrid = DataGrid.SortableDataGrid.create(columnNames, flatValues);
 
       var formattedResult = createElementWithClass('span', 'console-message-text');
       var tableElement = formattedResult.createChild('div', 'console-message-formatted-table');
@@ -226,11 +228,10 @@ Console.ConsoleViewMessage = class {
     } else if (consoleMessage.source === SDK.ConsoleMessage.MessageSource.Network) {
       if (consoleMessage.request) {
         messageElement = createElement('span');
-        if (consoleMessage.level === SDK.ConsoleMessage.MessageLevel.Error ||
-            consoleMessage.level === SDK.ConsoleMessage.MessageLevel.RevokedError) {
+        if (consoleMessage.level === SDK.ConsoleMessage.MessageLevel.Error) {
           messageElement.createTextChild(consoleMessage.request.requestMethod + ' ');
-          messageElement.appendChild(Components.Linkifier.linkifyUsingRevealer(
-              consoleMessage.request, consoleMessage.request.url, consoleMessage.request.url));
+          messageElement.appendChild(Components.Linkifier.linkifyRevealable(
+              consoleMessage.request, consoleMessage.request.url(), consoleMessage.request.url()));
           if (consoleMessage.request.failed) {
             messageElement.createTextChildren(' ', consoleMessage.request.localizedFailDescription);
           } else {
@@ -248,13 +249,17 @@ Console.ConsoleViewMessage = class {
     } else {
       if (consoleMessage.source === SDK.ConsoleMessage.MessageSource.Violation)
         messageText = Common.UIString('[Violation] %s', messageText);
+      else if (consoleMessage.source === SDK.ConsoleMessage.MessageSource.Intervention)
+        messageText = Common.UIString('[Intervention] %s', messageText);
+      if (consoleMessage.source === SDK.ConsoleMessage.MessageSource.Deprecation)
+        messageText = Common.UIString('[Deprecation] %s', messageText);
       var args = consoleMessage.parameters || [messageText];
       messageElement = this._format(args);
     }
     messageElement.classList.add('console-message-text');
 
     var formattedMessage = createElement('span');
-    UI.appendStyle(formattedMessage, 'components/objectValue.css');
+    UI.appendStyle(formattedMessage, 'object_ui/objectValue.css');
     formattedMessage.className = 'source-code';
 
     var anchorElement = this._buildMessageAnchor(consoleMessage);
@@ -269,8 +274,8 @@ Console.ConsoleViewMessage = class {
      * @this {SDK.ConsoleMessage}
      */
     function linkifyRequest(title) {
-      return Components.Linkifier.linkifyUsingRevealer(
-          /** @type {!SDK.NetworkRequest} */ (this.request), title, this.request.url);
+      return Components.Linkifier.linkifyRevealable(
+          /** @type {!SDK.NetworkRequest} */ (this.request), title, this.request.url());
     }
   }
 
@@ -290,13 +295,17 @@ Console.ConsoleViewMessage = class {
         anchorElement = this._linkifyLocation(consoleMessage.url, consoleMessage.line, consoleMessage.column);
       }
     } else if (consoleMessage.url) {
-      anchorElement = Components.Linkifier.linkifyURLAsNode(consoleMessage.url, undefined, 'console-message-url');
+      anchorElement = Components.Linkifier.linkifyURL(consoleMessage.url, undefined);
     }
 
     // Append a space to prevent the anchor text from being glued to the console message when the user selects and copies the console messages.
-    if (anchorElement)
-      anchorElement.appendChild(createTextNode(' '));
-    return anchorElement;
+    if (anchorElement) {
+      var anchorWrapperElement = createElementWithClass('span', 'console-message-anchor');
+      anchorWrapperElement.appendChild(anchorElement);
+      anchorWrapperElement.createTextChild(' ');
+      return anchorWrapperElement;
+    }
+    return null;
   }
 
   /**
@@ -310,7 +319,10 @@ Console.ConsoleViewMessage = class {
     var contentElement = toggleElement.createChild('div', 'console-message-stack-trace-wrapper');
 
     var messageElement = this._buildMessage(consoleMessage);
+    var icon = UI.Icon.create('smallicon-triangle-right');
     var clickableElement = contentElement.createChild('div');
+    clickableElement.appendChild(icon);
+
     clickableElement.appendChild(messageElement);
     var stackTraceElement = contentElement.createChild('div');
     var stackTracePreview =
@@ -322,16 +334,15 @@ Console.ConsoleViewMessage = class {
      * @param {boolean} expand
      */
     function expandStackTrace(expand) {
+      icon.setIconType(expand ? 'smallicon-triangle-down' : 'smallicon-triangle-right');
       stackTraceElement.classList.toggle('hidden', !expand);
-      toggleElement.classList.toggle('expanded', expand);
     }
 
     /**
      * @param {?Event} event
      */
     function toggleStackTrace(event) {
-      var linkClicked = event.target && event.target.enclosingNodeOrSelfWithNodeName('a');
-      if (event.target.hasSelection() || linkClicked)
+      if (event.target.hasSelection())
         return;
       expandStackTrace(stackTraceElement.classList.contains('hidden'));
       event.consume();
@@ -355,7 +366,7 @@ Console.ConsoleViewMessage = class {
     var target = this._target();
     if (!target)
       return null;
-    return this._linkifier.linkifyScriptLocation(target, null, url, lineNumber, columnNumber, 'console-message-url');
+    return this._linkifier.linkifyScriptLocation(target, null, url, lineNumber, columnNumber);
   }
 
   /**
@@ -366,7 +377,7 @@ Console.ConsoleViewMessage = class {
     var target = this._target();
     if (!target)
       return null;
-    return this._linkifier.linkifyStackTraceTopFrame(target, stackTrace, 'console-message-url');
+    return this._linkifier.linkifyStackTraceTopFrame(target, stackTrace);
   }
 
   /**
@@ -380,8 +391,7 @@ Console.ConsoleViewMessage = class {
     var target = this._target();
     if (!target)
       return null;
-    return this._linkifier.linkifyScriptLocation(
-        target, scriptId, url, lineNumber, columnNumber, 'console-message-url');
+    return this._linkifier.linkifyScriptLocation(target, scriptId, url, lineNumber, columnNumber);
   }
 
   /**
@@ -419,8 +429,7 @@ Console.ConsoleViewMessage = class {
     var shouldFormatMessage =
         SDK.RemoteObject.type((/** @type {!Array.<!SDK.RemoteObject>} **/ (parameters))[0]) === 'string' &&
         (this._message.type !== SDK.ConsoleMessage.MessageType.Result ||
-         this._message.level === SDK.ConsoleMessage.MessageLevel.Error ||
-         this._message.level === SDK.ConsoleMessage.MessageLevel.RevokedError);
+         this._message.level === SDK.ConsoleMessage.MessageLevel.Error);
 
     // Multiple parameters with the first being a format string. Save unused substitutions.
     if (shouldFormatMessage) {
@@ -452,14 +461,14 @@ Console.ConsoleViewMessage = class {
    */
   _formatParameter(output, forceObjectFormat, includePreview) {
     if (output.customPreview())
-      return (new Components.CustomPreviewComponent(output)).element;
+      return (new ObjectUI.CustomPreviewComponent(output)).element;
 
     var type = forceObjectFormat ? 'object' : (output.subtype || output.type);
     var element;
     switch (type) {
       case 'array':
       case 'typedarray':
-        element = this._formatParameterAsArray(output);
+        element = this._formatParameterAsObject(output, includePreview);
         break;
       case 'error':
         element = this._formatParameterAsError(output);
@@ -521,15 +530,19 @@ Console.ConsoleViewMessage = class {
     var titleElement = createElement('span');
     if (includePreview && obj.preview) {
       titleElement.classList.add('console-object-preview');
-      this._previewFormatter.appendObjectPreview(titleElement, obj.preview);
+      this._previewFormatter.appendObjectPreview(titleElement, obj.preview, false /* isEntry */);
     } else if (obj.type === 'function') {
-      Components.ObjectPropertiesSection.formatObjectAsFunction(obj, titleElement, false);
+      ObjectUI.ObjectPropertiesSection.formatObjectAsFunction(obj, titleElement, false);
       titleElement.classList.add('object-value-function');
     } else {
       titleElement.createTextChild(obj.description || '');
     }
 
-    var section = new Components.ObjectPropertiesSection(obj, titleElement, this._linkifier);
+    var note = titleElement.createChild('span', 'object-state-note');
+    note.classList.add('info-note');
+    note.title = Common.UIString('Value below was evaluated just now.');
+
+    var section = new ObjectUI.ObjectPropertiesSection(obj, titleElement, this._linkifier);
     section.element.classList.add('console-view-object-properties-section');
     section.enableContextMenu();
     return section.element;
@@ -551,7 +564,7 @@ Console.ConsoleViewMessage = class {
      */
     function formatTargetFunction(targetFunction) {
       var functionElement = createElement('span');
-      Components.ObjectPropertiesSection.formatObjectAsFunction(targetFunction, functionElement, true, includePreview);
+      ObjectUI.ObjectPropertiesSection.formatObjectAsFunction(targetFunction, functionElement, true, includePreview);
       result.appendChild(functionElement);
       if (targetFunction !== func) {
         var note = result.createChild('span', 'object-info-state-note');
@@ -614,80 +627,6 @@ Console.ConsoleViewMessage = class {
   }
 
   /**
-   * @param {!SDK.RemoteObject} array
-   * @return {!Element}
-   */
-  _formatParameterAsArray(array) {
-    var usePrintedArrayFormat = this._message.type !== SDK.ConsoleMessage.MessageType.DirXML &&
-        this._message.type !== SDK.ConsoleMessage.MessageType.Result;
-    var isLongArray = array.arrayLength() > 100;
-    if (usePrintedArrayFormat || isLongArray)
-      return this._formatParameterAsObject(array, usePrintedArrayFormat || !isLongArray);
-    var result = createElement('span');
-    array.getAllProperties(false, printArrayResult.bind(this));
-    return result;
-
-    /**
-     * @param {?Array.<!SDK.RemoteObjectProperty>} properties
-     * @this {!Console.ConsoleViewMessage}
-     */
-    function printArrayResult(properties) {
-      if (!properties) {
-        result.appendChild(this._formatParameterAsObject(array, false));
-        return;
-      }
-
-      var titleElement = createElement('span');
-      var elements = {};
-      for (var i = 0; i < properties.length; ++i) {
-        var property = properties[i];
-        var name = property.name;
-        if (isNaN(name))
-          continue;
-        if (property.getter)
-          elements[name] = this._formatAsAccessorProperty(array, [name], true);
-        else if (property.value)
-          elements[name] = this._formatAsArrayEntry(property.value);
-      }
-
-      titleElement.createTextChild('[');
-      var lastNonEmptyIndex = -1;
-
-      function appendUndefined(titleElement, index) {
-        if (index - lastNonEmptyIndex <= 1)
-          return;
-        var span = titleElement.createChild('span', 'object-value-undefined');
-        span.textContent = Common.UIString('undefined × %d', index - lastNonEmptyIndex - 1);
-      }
-
-      var length = array.arrayLength();
-      for (var i = 0; i < length; ++i) {
-        var element = elements[i];
-        if (!element)
-          continue;
-
-        if (i - lastNonEmptyIndex > 1) {
-          appendUndefined(titleElement, i);
-          titleElement.createTextChild(', ');
-        }
-
-        titleElement.appendChild(element);
-        lastNonEmptyIndex = i;
-        if (i < length - 1)
-          titleElement.createTextChild(', ');
-      }
-      appendUndefined(titleElement, length);
-
-      titleElement.createTextChild(']');
-
-      var section = new Components.ObjectPropertiesSection(array, titleElement, this._linkifier);
-      section.element.classList.add('console-view-object-properties-section');
-      section.enableContextMenu();
-      result.appendChild(section.element);
-    }
-  }
-
-  /**
    * @param {!SDK.RemoteObject} output
    * @return {!Element}
    */
@@ -728,7 +667,7 @@ Console.ConsoleViewMessage = class {
    * @return {!Element}
    */
   _formatAsAccessorProperty(object, propertyPath, isArrayEntry) {
-    var rootElement = Components.ObjectPropertyTreeElement.createRemoteObjectAccessorPropertySpan(
+    var rootElement = ObjectUI.ObjectPropertyTreeElement.createRemoteObjectAccessorPropertySpan(
         object, propertyPath, onInvokeGetterClick.bind(this));
 
     /**
@@ -883,22 +822,51 @@ Console.ConsoleViewMessage = class {
   }
 
   /**
-   * @param {boolean} show
+   * @param {string} filter
+   * @return {boolean}
    */
-  updateTimestamp(show) {
+  matchesFilterText(filter) {
+    var text = this.contentElement().deepTextContent();
+    return text.toLowerCase().includes(filter.toLowerCase());
+  }
+
+  updateTimestamp() {
     if (!this._contentElement)
       return;
 
-    if (show && !this.timestampElement) {
-      this.timestampElement = createElementWithClass('span', 'console-timestamp');
-      this.timestampElement.textContent = (new Date(this._message.timestamp)).toConsoleTime() + ' ';
-      this._contentElement.insertBefore(this.timestampElement, this._contentElement.firstChild);
-      return;
+    if (Common.moduleSetting('consoleTimestampsEnabled').get()) {
+      if (!this._timestampElement)
+        this._timestampElement = createElementWithClass('span', 'console-timestamp');
+      this._timestampElement.textContent = formatTimestamp(this._message.timestamp, false) + ' ';
+      this._timestampElement.title = formatTimestamp(this._message.timestamp, true);
+      this._contentElement.insertBefore(this._timestampElement, this._contentElement.firstChild);
+    } else if (this._timestampElement) {
+      this._timestampElement.remove();
+      delete this._timestampElement;
     }
 
-    if (!show && this.timestampElement) {
-      this.timestampElement.remove();
-      delete this.timestampElement;
+    /**
+     * @param {number} timestamp
+     * @param {boolean} full
+     * @return {string}
+     */
+    function formatTimestamp(timestamp, full) {
+      var date = new Date(timestamp);
+      var yymmdd = date.getFullYear() + '-' + leadZero(date.getMonth() + 1, 2) + '-' + leadZero(date.getDate(), 2);
+      var hhmmssfff = leadZero(date.getHours(), 2) + ':' + leadZero(date.getMinutes(), 2) + ':' +
+          leadZero(date.getSeconds(), 2) + '.' + leadZero(date.getMilliseconds(), 3);
+      return full ? (yymmdd + ' ' + hhmmssfff) : hhmmssfff;
+
+      /**
+       * @param {number} value
+       * @param {number} length
+       * @return {string}
+       */
+      function leadZero(value, length) {
+        var valueString = value.toString();
+        var padding = length - valueString.length;
+        return padding <= 0 ? valueString : '0'.repeat(padding) + valueString;
+      }
     }
   }
 
@@ -938,6 +906,8 @@ Console.ConsoleViewMessage = class {
       return this._contentElement;
 
     var contentElement = createElementWithClass('div', 'console-message');
+    if (this._messageLevelIcon)
+      contentElement.appendChild(this._messageLevelIcon);
     this._contentElement = contentElement;
     if (this._message.type === SDK.ConsoleMessage.MessageType.StartGroup ||
         this._message.type === SDK.ConsoleMessage.MessageType.StartGroupCollapsed)
@@ -949,7 +919,6 @@ Console.ConsoleViewMessage = class {
     var shouldIncludeTrace =
         !!consoleMessage.stackTrace && (consoleMessage.source === SDK.ConsoleMessage.MessageSource.Network ||
                                         consoleMessage.level === SDK.ConsoleMessage.MessageLevel.Error ||
-                                        consoleMessage.level === SDK.ConsoleMessage.MessageLevel.RevokedError ||
                                         consoleMessage.type === SDK.ConsoleMessage.MessageType.Trace ||
                                         consoleMessage.level === SDK.ConsoleMessage.MessageLevel.Warning);
     if (target && shouldIncludeTrace)
@@ -960,7 +929,7 @@ Console.ConsoleViewMessage = class {
       formattedMessage = this._buildMessage(consoleMessage);
     contentElement.appendChild(formattedMessage);
 
-    this.updateTimestamp(Common.moduleSetting('consoleTimestampsEnabled').get());
+    this.updateTimestamp();
     return this._contentElement;
   }
 
@@ -990,29 +959,52 @@ Console.ConsoleViewMessage = class {
     this._element.message = this;
 
     switch (this._message.level) {
-      case SDK.ConsoleMessage.MessageLevel.Log:
-        this._element.classList.add('console-log-level');
-        break;
-      case SDK.ConsoleMessage.MessageLevel.Debug:
-        this._element.classList.add('console-debug-level');
-        break;
-      case SDK.ConsoleMessage.MessageLevel.Warning:
-        this._element.classList.add('console-warning-level');
-        break;
-      case SDK.ConsoleMessage.MessageLevel.Error:
-        this._element.classList.add('console-error-level');
-        break;
-      case SDK.ConsoleMessage.MessageLevel.RevokedError:
-        this._element.classList.add('console-revokedError-level');
+      case SDK.ConsoleMessage.MessageLevel.Verbose:
+        this._element.classList.add('console-verbose-level');
+        this._updateMessageLevelIcon('');
         break;
       case SDK.ConsoleMessage.MessageLevel.Info:
         this._element.classList.add('console-info-level');
         break;
+      case SDK.ConsoleMessage.MessageLevel.Warning:
+        this._element.classList.add('console-warning-level');
+        this._updateMessageLevelIcon('smallicon-warning');
+        break;
+      case SDK.ConsoleMessage.MessageLevel.Error:
+        this._element.classList.add('console-error-level');
+        this._updateMessageLevelIcon('smallicon-error');
+        break;
+    }
+
+    // Render verbose and info deprecations, interventions and violations with warning background.
+    if (this._message.level === SDK.ConsoleMessage.MessageLevel.Verbose ||
+        this._message.level === SDK.ConsoleMessage.MessageLevel.Info) {
+      switch (this._message.source) {
+        case SDK.ConsoleMessage.MessageSource.Violation:
+        case SDK.ConsoleMessage.MessageSource.Deprecation:
+        case SDK.ConsoleMessage.MessageSource.Intervention:
+          this._element.classList.add('console-warning-level');
+          break;
+      }
     }
 
     this._element.appendChild(this.contentElement());
     if (this._repeatCount > 1)
       this._showRepeatCountElement();
+  }
+
+  /**
+   * @param {string} iconType
+   */
+  _updateMessageLevelIcon(iconType) {
+    if (!iconType && !this._messageLevelIcon)
+      return;
+    if (iconType && !this._messageLevelIcon) {
+      this._messageLevelIcon = UI.Icon.create('', 'message-level-icon');
+      if (this._contentElement)
+        this._contentElement.insertBefore(this._messageLevelIcon, this._contentElement.firstChild);
+    }
+    this._messageLevelIcon.setIconType(iconType);
   }
 
   /**
@@ -1028,6 +1020,8 @@ Console.ConsoleViewMessage = class {
       return;
 
     this._repeatCountElement.remove();
+    if (this._contentElement)
+      this._contentElement.classList.remove('repeated-message');
     delete this._repeatCountElement;
   }
 
@@ -1037,7 +1031,7 @@ Console.ConsoleViewMessage = class {
   }
 
   _showRepeatCountElement() {
-    if (!this._contentElement)
+    if (!this._element)
       return;
 
     if (!this._repeatCountElement) {
@@ -1049,8 +1043,8 @@ Console.ConsoleViewMessage = class {
         case SDK.ConsoleMessage.MessageLevel.Error:
           this._repeatCountElement.type = 'error';
           break;
-        case SDK.ConsoleMessage.MessageLevel.Debug:
-          this._repeatCountElement.type = 'debug';
+        case SDK.ConsoleMessage.MessageLevel.Verbose:
+          this._repeatCountElement.type = 'verbose';
           break;
         default:
           this._repeatCountElement.type = 'info';
@@ -1063,6 +1057,22 @@ Console.ConsoleViewMessage = class {
 
   get text() {
     return this._message.messageText;
+  }
+
+  /**
+   * @return {string}
+   */
+  toExportString() {
+    var lines = [];
+    var nodes = this.contentElement().childTextNodes();
+    var messageContent = '';
+    for (var i = 0; i < nodes.length; ++i) {
+      var originalLinkText = Components.Linkifier.originalLinkText(nodes[i].parentElement);
+      messageContent += typeof originalLinkText === 'string' ? originalLinkText : nodes[i].textContent;
+    }
+    for (var i = 0; i < this.repeatCount(); ++i)
+      lines.push(messageContent);
+    return lines.join('\n');
   }
 
   /**
@@ -1209,7 +1219,9 @@ Console.ConsoleGroupViewMessage = class extends Console.ConsoleViewMessage {
   constructor(consoleMessage, linkifier, nestingLevel) {
     console.assert(consoleMessage.isGroupStartMessage());
     super(consoleMessage, linkifier, nestingLevel);
-    this.setCollapsed(consoleMessage.type === SDK.ConsoleMessage.MessageType.StartGroupCollapsed);
+    this._collapsed = consoleMessage.type === SDK.ConsoleMessage.MessageType.StartGroupCollapsed;
+    /** @type {?UI.Icon} */
+    this._expandGroupIcon = null;
   }
 
   /**
@@ -1217,8 +1229,8 @@ Console.ConsoleGroupViewMessage = class extends Console.ConsoleViewMessage {
    */
   setCollapsed(collapsed) {
     this._collapsed = collapsed;
-    if (this._element)
-      this._element.classList.toggle('collapsed', this._collapsed);
+    if (this._expandGroupIcon)
+      this._expandGroupIcon.setIconType(this._collapsed ? 'smallicon-triangle-right' : 'smallicon-triangle-down');
   }
 
   /**
@@ -1235,7 +1247,9 @@ Console.ConsoleGroupViewMessage = class extends Console.ConsoleViewMessage {
   toMessageElement() {
     if (!this._element) {
       super.toMessageElement();
-      this._element.classList.toggle('collapsed', this._collapsed);
+      this._expandGroupIcon = UI.Icon.create('', 'expand-group-icon');
+      this._contentElement.insertBefore(this._expandGroupIcon, this._contentElement.firstChild);
+      this.setCollapsed(this._collapsed);
     }
     return this._element;
   }

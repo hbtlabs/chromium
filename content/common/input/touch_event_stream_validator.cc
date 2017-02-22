@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "content/common/input/web_touch_event_traits.h"
+#include "third_party/WebKit/public/platform/WebTouchEvent.h"
 #include "ui/events/blink/web_input_event_traits.h"
 
 using base::StringPrintf;
@@ -49,7 +50,7 @@ bool TouchEventStreamValidator::Validate(const WebTouchEvent& event,
   error_msg->clear();
 
   // TouchScrollStarted is not part of a regular touch event stream.
-  if (event.type == WebInputEvent::TouchScrollStarted)
+  if (event.type() == WebInputEvent::TouchScrollStarted)
     return true;
 
   WebTouchEvent previous_event = previous_event_;
@@ -60,9 +61,9 @@ bool TouchEventStreamValidator::Validate(const WebTouchEvent& event,
     return false;
   }
 
-  if (!WebInputEvent::isTouchEventType(event.type)) {
+  if (!WebInputEvent::isTouchEventType(event.type())) {
     error_msg->append(StringPrintf("Touch event has invalid type: %s\n",
-                                   WebInputEvent::GetName(event.type)));
+                                   WebInputEvent::GetName(event.type())));
   }
 
   // Allow "hard" restarting of touch stream validation. This is necessary
@@ -116,7 +117,7 @@ bool TouchEventStreamValidator::Validate(const WebTouchEvent& event,
         break;
 
       case WebTouchPoint::StateReleased:
-        if (event.type != WebInputEvent::TouchEnd) {
+        if (event.type() != WebInputEvent::TouchEnd) {
           error_msg->append(StringPrintf(
               "Released touch point (id=%d) outside touchend.\n", point.id));
         } else {
@@ -125,7 +126,7 @@ bool TouchEventStreamValidator::Validate(const WebTouchEvent& event,
         break;
 
       case WebTouchPoint::StatePressed:
-        if (event.type != WebInputEvent::TouchStart) {
+        if (event.type() != WebInputEvent::TouchStart) {
           error_msg->append(StringPrintf(
               "Pressed touch point (id=%d) outside touchstart.\n", point.id));
         } else {
@@ -134,7 +135,7 @@ bool TouchEventStreamValidator::Validate(const WebTouchEvent& event,
         break;
 
       case WebTouchPoint::StateMoved:
-        if (event.type != WebInputEvent::TouchMove) {
+        if (event.type() != WebInputEvent::TouchMove) {
           error_msg->append(StringPrintf(
               "Moved touch point (id=%d) outside touchmove.\n", point.id));
         } else {
@@ -146,7 +147,7 @@ bool TouchEventStreamValidator::Validate(const WebTouchEvent& event,
         break;
 
       case WebTouchPoint::StateCancelled:
-        if (event.type != WebInputEvent::TouchCancel) {
+        if (event.type() != WebInputEvent::TouchCancel) {
           error_msg->append(StringPrintf(
               "Cancelled touch point (id=%d) outside touchcancel.\n",
               point.id));
@@ -160,7 +161,7 @@ bool TouchEventStreamValidator::Validate(const WebTouchEvent& event,
   if (!found_valid_state_for_type) {
     error_msg->append(
         StringPrintf("No valid touch point corresponding to event type: %s\n",
-                     WebInputEvent::GetName(event.type)));
+                     WebInputEvent::GetName(event.type())));
   }
 
   return error_msg->empty();

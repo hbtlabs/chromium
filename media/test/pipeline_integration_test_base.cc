@@ -23,7 +23,6 @@
 #endif
 #include "media/filters/file_data_source.h"
 #include "media/filters/memory_data_source.h"
-#include "media/filters/opus_audio_decoder.h"
 #include "media/renderers/audio_renderer_impl.h"
 #include "media/renderers/renderer_impl.h"
 #if !defined(MEDIA_DISABLE_LIBVPX)
@@ -36,6 +35,7 @@ using ::testing::AtLeast;
 using ::testing::AtMost;
 using ::testing::Invoke;
 using ::testing::InvokeWithoutArgs;
+using ::testing::Return;
 using ::testing::SaveArg;
 
 namespace media {
@@ -144,15 +144,24 @@ PipelineStatus PipelineIntegrationTestBase::StartInternal(
       .Times(AnyNumber());
   EXPECT_CALL(*this, OnBufferingStateChange(BUFFERING_HAVE_NOTHING))
       .Times(AnyNumber());
-  // Permit at most two calls to OnDurationChange.  CheckDuration will make sure
-  // that no more than one of them is a finite duration.  This allows the
-  // pipeline to call back at the end of the media with the known duration.
-  EXPECT_CALL(*this, OnDurationChange())
-      .Times(AtMost(2))
-      .WillRepeatedly(
-          Invoke(this, &PipelineIntegrationTestBase::CheckDuration));
+  // If the test is expected to have reliable duration information, permit at
+  // most two calls to OnDurationChange.  CheckDuration will make sure that no
+  // more than one of them is a finite duration.  This allows the pipeline to
+  // call back at the end of the media with the known duration.
+  //
+  // In the event of unreliable duration information, just set the expectation
+  // that it's called at least once. Such streams may repeatedly update their
+  // duration as new packets are demuxed.
+  if (test_type & kUnreliableDuration) {
+    EXPECT_CALL(*this, OnDurationChange()).Times(AtLeast(1));
+  } else {
+    EXPECT_CALL(*this, OnDurationChange())
+        .Times(AtMost(2))
+        .WillRepeatedly(
+            Invoke(this, &PipelineIntegrationTestBase::CheckDuration));
+  }
   EXPECT_CALL(*this, OnVideoNaturalSizeChange(_)).Times(AtMost(1));
-  EXPECT_CALL(*this, OnVideoOpacityChange(_)).Times(AtMost(1));
+  EXPECT_CALL(*this, OnVideoOpacityChange(_)).WillRepeatedly(Return());
   CreateDemuxer(std::move(data_source));
 
   if (cdm_context) {
@@ -344,8 +353,6 @@ std::unique_ptr<Renderer> PipelineIntegrationTestBase::CreateRenderer(
       new FFmpegAudioDecoder(message_loop_.task_runner(), new MediaLog()));
 #endif
 
-  audio_decoders.push_back(new OpusAudioDecoder(message_loop_.task_runner()));
-
   if (!clockless_playback_) {
     audio_sink_ = new NullAudioSink(message_loop_.task_runner());
   } else {
@@ -395,7 +402,7 @@ void PipelineIntegrationTestBase::OnVideoFramePaint(
   if (!hashing_enabled_ || last_frame_ == frame)
     return;
   last_frame_ = frame;
-  DVLOG(3) << __FUNCTION__ << " pts=" << frame->timestamp().InSecondsF();
+  DVLOG(3) << __func__ << " pts=" << frame->timestamp().InSecondsF();
   VideoFrame::HashFrameForTesting(&md5_context_, frame);
 }
 
@@ -412,7 +419,7 @@ base::TimeDelta PipelineIntegrationTestBase::GetStartTime() {
 }
 
 void PipelineIntegrationTestBase::ResetVideoHash() {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   base::MD5Init(&md5_context_);
 }
 

@@ -27,8 +27,10 @@
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "rlz/features/features.h"
 
-#if defined(ENABLE_RLZ)
+#if BUILDFLAG(ENABLE_RLZ)
+#include "base/task_scheduler/post_task.h"
 #include "components/rlz/rlz_tracker.h"
 #endif
 
@@ -36,7 +38,7 @@ namespace chromeos {
 
 namespace {
 
-#if defined(ENABLE_RLZ)
+#if BUILDFLAG(ENABLE_RLZ)
 void GetAccessPointRlzInBackgroundThread(rlz_lib::AccessPoint point,
                                          base::string16* rlz) {
   ASSERT_FALSE(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
@@ -81,7 +83,7 @@ class LoginUtilsTest : public OobeBaseTest {
   DISALLOW_COPY_AND_ASSIGN(LoginUtilsTest);
 };
 
-#if defined(ENABLE_RLZ)
+#if BUILDFLAG(ENABLE_RLZ)
 IN_PROC_BROWSER_TEST_F(LoginUtilsTest, RlzInitialized) {
   WaitForSigninScreen();
 
@@ -107,9 +109,11 @@ IN_PROC_BROWSER_TEST_F(LoginUtilsTest, RlzInitialized) {
   {
     base::RunLoop loop;
     base::string16 rlz_string;
-    content::BrowserThread::PostBlockingPoolTaskAndReply(
-        FROM_HERE, base::Bind(&GetAccessPointRlzInBackgroundThread,
-                              rlz::RLZTracker::ChromeHomePage(), &rlz_string),
+    base::PostTaskWithTraitsAndReply(
+        FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
+                       base::TaskPriority::BACKGROUND),
+        base::Bind(&GetAccessPointRlzInBackgroundThread,
+                   rlz::RLZTracker::ChromeHomePage(), &rlz_string),
         loop.QuitClosure());
     loop.Run();
     EXPECT_EQ(base::string16(), rlz_string);

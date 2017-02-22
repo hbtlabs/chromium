@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.tab;
 
 import android.graphics.Bitmap;
+import android.support.annotation.Nullable;
 import android.view.ContextMenu;
 
 import org.chromium.chrome.browser.TabLoadStatus;
@@ -148,11 +149,6 @@ public interface TabObserver {
      */
     void onContextualActionBarVisibilityChanged(Tab tab, boolean visible);
 
-    /**
-     * Called when the WebContents Instant support is disabled.
-     */
-    void onWebContentsInstantSupportDisabled();
-
     // WebContentsDelegateAndroid methods ---------------------------------------------------------
 
     /**
@@ -205,46 +201,43 @@ public interface TabObserver {
      * @param failingUrl        The url that was loading when the error occurred.
      */
     void onDidFailLoad(
-            Tab tab, boolean isProvisionalLoad, boolean isMainFrame, int errorCode,
-            String description, String failingUrl);
+            Tab tab, boolean isMainFrame, int errorCode, String description, String failingUrl);
 
     /**
-     * Called when load is started for a given frame.
-     * @param tab            The notifying {@link Tab}.
-     * @param isMainFrame    Whether the load is happening for the main frame.
-     * @param validatedUrl   The validated URL that is being navigated to.
+     * Called when a navigation is started in the WebContents.
+     * @param tab The notifying {@link Tab}.
+     * @param url The validated URL for the loading page.
+     * @param isInMainFrame Whether the navigation is for the main frame.
+     * @param isSamePage Whether the main frame navigation did not cause changes to the
+     *                   document (for example scrolling to a named anchor or PopState).
+     * @param isErrorPage Whether the navigation shows an error page.
      */
-    public void onDidStartProvisionalLoadForFrame(
-            Tab tab, boolean isMainFrame, String validatedUrl);
+    public void onDidStartNavigation(
+            Tab tab, String url, boolean isInMainFrame, boolean isSamePage, boolean isErrorPage);
 
     /**
-     * Notifies that the provisional load was successfully committed. The RenderViewHost is now
-     * the current RenderViewHost of the WebContents.
-     *
-     * @param tab            The notifying {@link Tab}.
-     * @param frameId        A positive, non-zero integer identifying the navigating frame.
-     * @param isMainFrame    Whether the load is happening for the main frame.
-     * @param url            The committed URL being navigated to.
-     * @param transitionType The transition type as defined in
-     *                       {@link org.chromium.ui.base.PageTransitionTypes} for the load.
+     * Called when a navigation is finished i.e. committed, aborted or replaced by a new one.
+     * @param tab The notifying {@link Tab}.
+     * @param url The validated URL for the loading page.
+     * @param isInMainFrame Whether the navigation is for the main frame.
+     * @param isErrorPage Whether the navigation shows an error page.
+     * @param hasCommitted Whether the navigation has committed. This returns true for either
+     *                     successful commits or error pages that replace the previous page
+     *                     (distinguished by |isErrorPage|), and false for errors that leave the
+     *                     user on the previous page.
+     * @param isSamePage Whether the main frame navigation did not cause changes to the
+     *                   document (for example scrolling to a named anchor or PopState).
+     * @param isFragmentNavigation Whether the main frame navigation did not cause changes
+     *                             to the document (for example scrolling to a named anchor
+     *                             or PopState).
+     * @param pageTransition The page transition type associated with this navigation.
+     * @param errorCode The net error code if an error occurred prior to commit, otherwise net::OK.
+     * @param httpStatusCode The HTTP status code of the navigation.
      */
-    public void onDidCommitProvisionalLoadForFrame(
-            Tab tab, long frameId, boolean isMainFrame, String url, int transitionType);
-
-    /**
-     * Called when the main frame of the page has committed.
-     *
-     * @param tab                         The notifying {@link Tab}.
-     * @param url                         The validated url for the page.
-     * @param baseUrl                     The validated base url for the page.
-     * @param isNavigationToDifferentPage Whether the main frame navigated to a different page.
-     * @param isFragmentNavigation        Whether the main frame navigation did not cause changes
-     *                                    to the document (for example scrolling to a named anchor
-     *                                    or PopState).
-     * @param statusCode                  The HTTP status code of the navigation.
-     */
-    public void onDidNavigateMainFrame(Tab tab, String url, String baseUrl,
-            boolean isNavigationToDifferentPage, boolean isFragmentNavigation, int statusCode);
+    public void onDidFinishNavigation(Tab tab, String url, boolean isInMainFrame,
+            boolean isErrorPage, boolean hasCommitted, boolean isSamePage,
+            boolean isFragmentNavigation, @Nullable Integer pageTransition, int errorCode,
+            int httpStatusCode);
 
     /**
      * Called when the page has painted something non-empty.
@@ -270,13 +263,6 @@ public interface TabObserver {
      * @param tab The notifying {@link Tab}.
      */
     public void onDidDetachInterstitialPage(Tab tab);
-
-    /**
-     * Called when a navigation is started to a pending entry.
-     * @param tab The notifying {@link Tab}.
-     * @param url The url being navigated to.
-     */
-    public void onDidStartNavigationToPendingEntry(Tab tab, String url);
 
     /**
      * Called when the background color for the tab has changed.

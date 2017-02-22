@@ -818,6 +818,8 @@ void DeleteSelectionCommand::mergeParagraphs(EditingState* editingState) {
     return;
   }
 
+  RelocatablePosition relocatableStart(startOfParagraphToMove.deepEquivalent());
+
   // We need to merge into m_upstreamStart's block, but it's been emptied out
   // and collapsed by deletion.
   if (!mergeDestination.deepEquivalent().anchorNode() ||
@@ -828,16 +830,13 @@ void DeleteSelectionCommand::mergeParagraphs(EditingState* editingState) {
       (m_startsAtEmptyLine &&
        mergeDestination.deepEquivalent() !=
            startOfParagraphToMove.deepEquivalent())) {
-    PositionWithAffinity storedStartOfParagraphToMove =
-        startOfParagraphToMove.toPositionWithAffinity();
     insertNodeAt(HTMLBRElement::create(document()), m_upstreamStart,
                  editingState);
     if (editingState->isAborted())
       return;
     document().updateStyleAndLayoutIgnorePendingStylesheets();
     mergeDestination = createVisiblePosition(m_upstreamStart);
-    startOfParagraphToMove =
-        createVisiblePosition(storedStartOfParagraphToMove);
+    startOfParagraphToMove = createVisiblePosition(relocatableStart.position());
   }
 
   if (mergeDestination.deepEquivalent() ==
@@ -886,7 +885,7 @@ void DeleteSelectionCommand::mergeParagraphs(EditingState* editingState) {
           editingState);
       if (editingState->isAborted())
         return;
-      m_endingPosition = startOfParagraphToMove.deepEquivalent();
+      m_endingPosition = relocatableStart.position();
       return;
     }
   }
@@ -975,7 +974,7 @@ void DeleteSelectionCommand::removePreviouslySelectedEmptyTableRows(
 void DeleteSelectionCommand::calculateTypingStyleAfterDelete() {
   // Clearing any previously set typing style and doing an early return.
   if (!m_typingStyle) {
-    document().frame()->selection().clearTypingStyle();
+    document().frame()->editor().clearTypingStyle();
     return;
   }
 
@@ -1001,7 +1000,7 @@ void DeleteSelectionCommand::calculateTypingStyleAfterDelete() {
   // should have the same style as the just deleted ones, but, if we change the
   // selection, come back and start typing that style should be lost.  Also see
   // preserveTypingStyle() below.
-  document().frame()->selection().setTypingStyle(m_typingStyle);
+  document().frame()->editor().setTypingStyle(m_typingStyle);
 }
 
 void DeleteSelectionCommand::clearTransientState() {
@@ -1023,6 +1022,7 @@ void DeleteSelectionCommand::removeRedundantBlocks(EditingState* editingState) {
   Element* rootElement = rootEditableElement(*node);
 
   while (node != rootElement) {
+    ABORT_EDITING_COMMAND_IF(!node);
     if (isRemovableBlock(node)) {
       if (node == m_endingPosition.anchorNode())
         updatePositionForNodeRemovalPreservingChildren(m_endingPosition, *node);

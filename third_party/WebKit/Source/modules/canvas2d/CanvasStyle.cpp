@@ -32,8 +32,10 @@
 #include "core/css/StylePropertySet.h"
 #include "core/css/parser/CSSParser.h"
 #include "core/html/HTMLCanvasElement.h"
+#include "core/html/parser/HTMLParserIdioms.h"
 #include "modules/canvas2d/CanvasGradient.h"
 #include "modules/canvas2d/CanvasPattern.h"
+#include "platform/graphics/paint/PaintFlags.h"
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "third_party/skia/include/core/SkShader.h"
 #include "wtf/PassRefPtr.h"
@@ -71,7 +73,8 @@ static Color currentColor(HTMLCanvasElement* canvas) {
 bool parseColorOrCurrentColor(Color& parsedColor,
                               const String& colorString,
                               HTMLCanvasElement* canvas) {
-  ColorParseResult parseResult = parseColor(parsedColor, colorString);
+  ColorParseResult parseResult =
+      parseColor(parsedColor, colorString.stripWhiteSpace(isHTMLSpace<UChar>));
   switch (parseResult) {
     case ParsedRGBA:
     case ParsedSystemColor:
@@ -105,17 +108,17 @@ CanvasStyle* CanvasStyle::createFromPattern(CanvasPattern* pattern) {
   return new CanvasStyle(pattern);
 }
 
-void CanvasStyle::applyToPaint(SkPaint& paint) const {
+void CanvasStyle::applyToFlags(PaintFlags& flags) const {
   switch (m_type) {
     case ColorRGBA:
-      paint.setShader(nullptr);
+      flags.setShader(nullptr);
       break;
     case Gradient:
-      getCanvasGradient()->getGradient()->applyToPaint(paint, SkMatrix::I());
+      getCanvasGradient()->getGradient()->applyToFlags(flags, SkMatrix::I());
       break;
     case ImagePattern:
-      getCanvasPattern()->getPattern()->applyToPaint(
-          paint, affineTransformToSkMatrix(getCanvasPattern()->getTransform()));
+      getCanvasPattern()->getPattern()->applyToFlags(
+          flags, affineTransformToSkMatrix(getCanvasPattern()->getTransform()));
       break;
     default:
       ASSERT_NOT_REACHED();

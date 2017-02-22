@@ -53,6 +53,7 @@ const char kKeyShowPin[] = "showPin";
 const char kKeySignedIn[] = "signedIn";
 const char kKeyCanRemove[] = "canRemove";
 const char kKeyIsOwner[] = "isOwner";
+const char kKeyIsActiveDirectory[] = "isActiveDirectory";
 const char kKeyInitialAuthType[] = "initialAuthType";
 const char kKeyMultiProfilesAllowed[] = "isMultiProfilesAllowed";
 const char kKeyMultiProfilesPolicy[] = "multiProfilesPolicy";
@@ -74,7 +75,7 @@ void AddPublicSessionDetailsToUserDictionaryEntry(
   policy::BrowserPolicyConnectorChromeOS* policy_connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
 
-  if (policy_connector->IsEnterpriseManaged()) {
+  if (policy_connector->IsCloudManaged()) {
     user_dict->SetString(kKeyEnterpriseDomain,
                          policy_connector->GetEnterpriseDomain());
   }
@@ -122,7 +123,8 @@ bool CanShowPinForUser(user_manager::User* user) {
   if (!user->is_logged_in())
     return false;
 
-  PinStorage* pin_storage = PinStorageFactory::GetForUser(user);
+  quick_unlock::PinStorage* pin_storage =
+      quick_unlock::PinStorageFactory::GetForUser(user);
   if (!pin_storage)
     return false;
 
@@ -132,12 +134,9 @@ bool CanShowPinForUser(user_manager::User* user) {
 }  // namespace
 
 UserSelectionScreen::UserSelectionScreen(const std::string& display_type)
-    : handler_(nullptr),
-      login_display_delegate_(nullptr),
-      view_(nullptr),
+    : BaseScreen(nullptr, OobeScreen::SCREEN_USER_SELECTION),
       display_type_(display_type),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 UserSelectionScreen::~UserSelectionScreen() {
   proximity_auth::ScreenlockBridge::Get()->SetLockHandler(nullptr);
@@ -180,6 +179,7 @@ void UserSelectionScreen::FillUserDictionary(
   user_dict->SetBoolean(kKeyShowPin, CanShowPinForUser(user));
   user_dict->SetBoolean(kKeySignedIn, user->is_logged_in());
   user_dict->SetBoolean(kKeyIsOwner, is_owner);
+  user_dict->SetBoolean(kKeyIsActiveDirectory, user->IsActiveDirectoryUser());
 
   FillMultiProfileUserPrefs(user, user_dict, is_signin_to_add);
   FillKnownUserPrefs(user, user_dict);
@@ -232,13 +232,10 @@ void UserSelectionScreen::FillMultiProfileUserPrefs(
 bool UserSelectionScreen::ShouldForceOnlineSignIn(
     const user_manager::User* user) {
   // Public sessions are always allowed to log in offline.
-  // Supervised user are allowed to log in offline if their OAuth token status
-  // is unknown or valid.
+  // Supervised users are always allowed to log in offline.
   // For all other users, force online sign in if:
   // * The flag to force online sign-in is set for the user.
-  // * The user's OAuth token is invalid.
-  // * The user's OAuth token status is unknown (except supervised users,
-  //   see above).
+  // * The user's OAuth token is invalid or unknown.
   if (user->is_logged_in())
     return false;
 
@@ -249,13 +246,15 @@ bool UserSelectionScreen::ShouldForceOnlineSignIn(
   const bool is_public_session =
       user->GetType() == user_manager::USER_TYPE_PUBLIC_ACCOUNT;
 
-  if (is_supervised_user &&
-      token_status == user_manager::User::OAUTH_TOKEN_STATUS_UNKNOWN) {
+  if (is_supervised_user)
     return false;
-  }
 
   if (is_public_session)
     return false;
+
+  if (user->GetType() == user_manager::USER_TYPE_ACTIVE_DIRECTORY) {
+    return true;
+  }
 
   // At this point the reason for invalid token should be already set. If not,
   // this might be a leftover from an old version.
@@ -269,6 +268,13 @@ bool UserSelectionScreen::ShouldForceOnlineSignIn(
 
 void UserSelectionScreen::SetHandler(LoginDisplayWebUIHandler* handler) {
   handler_ = handler;
+
+  if (handler_) {
+    // Forcibly refresh all of the user images, as the |handler_| instance may
+    // have been reused.
+    for (user_manager::User* user : users_)
+      handler_->OnUserImageChanged(*user);
+  }
 }
 
 void UserSelectionScreen::SetView(UserBoardView* view) {
@@ -370,8 +376,8 @@ void UserSelectionScreen::SendUserList() {
   std::string owner_email;
   chromeos::CrosSettings::Get()->GetString(chromeos::kDeviceOwner,
                                            &owner_email);
-  const AccountId owner =
-      user_manager::known_user::GetAccountId(owner_email, std::string());
+  const AccountId owner = user_manager::known_user::GetAccountId(
+      owner_email, std::string() /* id */, AccountType::UNKNOWN);
 
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
@@ -524,6 +530,10 @@ void UserSelectionScreen::AttemptEasySignin(const AccountId& account_id,
 
   login_display_delegate_->Login(user_context, SigninSpecifics());
 }
+
+void UserSelectionScreen::Show() {}
+
+void UserSelectionScreen::Hide() {}
 
 void UserSelectionScreen::HardLockPod(const AccountId& account_id) {
   view_->SetAuthType(account_id, OFFLINE_PASSWORD, base::string16());

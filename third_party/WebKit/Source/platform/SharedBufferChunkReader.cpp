@@ -83,7 +83,7 @@ bool SharedBufferChunkReader::nextChunk(Vector<char>& chunk,
           chunk.append(m_separator.data(), m_separatorIndex);
           m_separatorIndex = 0;
         }
-        chunk.append(currentCharacter);
+        chunk.push_back(currentCharacter);
         continue;
       }
       m_separatorIndex++;
@@ -118,7 +118,7 @@ String SharedBufferChunkReader::nextChunkAsUTF8StringWithLatin1Fallback(
 
   return data.size()
              ? String::fromUTF8WithLatin1Fallback(data.data(), data.size())
-             : emptyString();
+             : emptyString;
 }
 
 size_t SharedBufferChunkReader::peek(Vector<char>& data, size_t requestedSize) {

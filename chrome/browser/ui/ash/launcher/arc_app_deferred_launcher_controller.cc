@@ -4,7 +4,8 @@
 
 #include "chrome/browser/ui/ash/launcher/arc_app_deferred_launcher_controller.h"
 
-#include "chrome/browser/chromeos/arc/arc_support_host.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/ash/launcher/arc_app_deferred_launcher_item_controller.h"
@@ -59,7 +60,7 @@ class SpinningEffectSource : public gfx::CanvasImageSource {
 ArcAppDeferredLauncherController::ArcAppDeferredLauncherController(
     ChromeLauncherControllerImpl* owner)
     : owner_(owner), weak_ptr_factory_(this) {
-  if (arc::ArcSessionManager::IsAllowedForProfile(owner->profile())) {
+  if (arc::IsArcAllowedForProfile(owner->profile())) {
     observed_profile_ = owner->profile();
     ArcAppListPrefs::Get(observed_profile_)->AddObserver(this);
   }
@@ -129,20 +130,23 @@ void ArcAppDeferredLauncherController::OnAppReadyChanged(
   if (it == app_controller_map_.end())
     return;
 
+  // Preserve the event flags before |it| is invalidated in Close().
+  int event_flags = it->second->event_flags();
   Close(app_id);
 
-  arc::LaunchApp(observed_profile_, app_id);
+  arc::LaunchApp(observed_profile_, app_id, event_flags);
 }
 
 void ArcAppDeferredLauncherController::OnAppRemoved(const std::string& app_id) {
   Close(app_id);
 }
 
-void ArcAppDeferredLauncherController::OnOptInEnabled(bool enabled) {
+void ArcAppDeferredLauncherController::OnArcPlayStoreEnabledChanged(
+    bool enabled) {
   if (enabled)
     return;
 
-  // If Arc was disabled, remove all deferred launch requests.
+  // If ARC was disabled, remove all deferred launch requests.
   while (!app_controller_map_.empty())
     Close(app_controller_map_.begin()->first);
 }
@@ -179,7 +183,8 @@ void ArcAppDeferredLauncherController::RegisterNextUpdate() {
 }
 
 void ArcAppDeferredLauncherController::RegisterDeferredLaunch(
-    const std::string& app_id) {
+    const std::string& app_id,
+    int event_flags) {
   const arc::ArcSessionManager* arc_session_manager =
       arc::ArcSessionManager::Get();
   DCHECK(arc_session_manager);
@@ -192,19 +197,14 @@ void ArcAppDeferredLauncherController::RegisterDeferredLaunch(
       ArcAppWindowLauncherController::GetShelfAppIdFromArcAppId(app_id);
   const ash::ShelfID shelf_id = owner_->GetShelfIDForAppID(shelf_app_id);
 
-  if (shelf_id) {
-    LauncherItemController* controller =
-        owner_->GetLauncherItemController(shelf_id);
-    if (controller &&
-        controller->type() != LauncherItemController::TYPE_SHORTCUT) {
-      // We are allowed to apply new deferred controller only over shortcut.
-      return;
-    }
-  }
+  // We are allowed to apply new deferred controller only over shortcut.
+  const ash::ShelfItem* item = owner_->GetItem(shelf_id);
+  if (item && item->type != ash::TYPE_APP_SHORTCUT)
+    return;
 
   ArcAppDeferredLauncherItemController* controller =
-      new ArcAppDeferredLauncherItemController(shelf_app_id, owner_,
-                                               weak_ptr_factory_.GetWeakPtr());
+      new ArcAppDeferredLauncherItemController(
+          shelf_app_id, owner_, event_flags, weak_ptr_factory_.GetWeakPtr());
   if (shelf_id == 0) {
     owner_->CreateAppLauncherItem(controller, shelf_app_id,
                                   ash::STATUS_RUNNING);

@@ -10,9 +10,9 @@
 
 namespace blink {
 
+class LayoutObject;
 class NGConstraintSpace;
-class NGFragmentBase;
-class NGLayoutAlgorithm;
+class NGPhysicalFragment;
 
 // Represents the input to a layout algorithm for a given node. The layout
 // engine should use the style, node type to determine which type of layout
@@ -20,24 +20,22 @@ class NGLayoutAlgorithm;
 class CORE_EXPORT NGLayoutInputNode
     : public GarbageCollectedFinalized<NGLayoutInputNode> {
  public:
-  enum NGLayoutInputNodeType { LegacyBlock = 0, LegacyInline = 1 };
+  enum NGLayoutInputNodeType { kLegacyBlock = 0, kLegacyInline = 1 };
 
   virtual ~NGLayoutInputNode(){};
 
-  // Returns true when done; when this function returns false, it has to be
-  // called again. The out parameter will only be set when this function
-  // returns true. The same constraint space has to be passed each time.
-  virtual bool Layout(const NGConstraintSpace*, NGFragmentBase**) = 0;
+  // Performs layout on this input node, will return a new fragment.
+  virtual RefPtr<NGPhysicalFragment> Layout(NGConstraintSpace*) = 0;
 
   // Returns the next sibling.
   virtual NGLayoutInputNode* NextSibling() = 0;
 
+  // Returns the LayoutObject which is associated with this node.
+  virtual LayoutObject* GetLayoutObject() = 0;
+
   NGLayoutInputNodeType Type() const {
     return static_cast<NGLayoutInputNodeType>(type_);
   }
-
-  static NGLayoutAlgorithm* AlgorithmForInputNode(NGLayoutInputNode*,
-                                                  const NGConstraintSpace*);
 
   DEFINE_INLINE_VIRTUAL_TRACE() {}
 
@@ -50,4 +48,4 @@ class CORE_EXPORT NGLayoutInputNode
 
 }  // namespace blink
 
-#endif  // NGInlineBox_h
+#endif  // NGLayoutInputNode_h

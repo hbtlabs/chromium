@@ -12,6 +12,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
@@ -39,11 +40,17 @@
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/url_constants.h"
 #include "content/public/test/web_contents_tester.h"
+#include "extensions/features/features.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/common/constants.h"
+#endif
 
 using browser_sync::ProfileSyncServiceMock;
 using content::BrowserContext;
@@ -193,7 +200,7 @@ void ChromePasswordManagerClientTest::SetUp() {
                                        base::Unretained(&fake_agent_)));
 
   prefs_.registry()->RegisterBooleanPref(
-      password_manager::prefs::kPasswordManagerSavingEnabled, true);
+      password_manager::prefs::kCredentialsEnableService, true);
   ChromePasswordManagerClient::CreateForWebContentsWithAutofillClient(
       web_contents(), nullptr);
 
@@ -319,10 +326,10 @@ TEST_F(ChromePasswordManagerClientTest,
   // Test that saving passwords depends on the password manager enabled
   // preference.
   ChromePasswordManagerClient* client = GetClient();
-  prefs()->SetUserPref(password_manager::prefs::kPasswordManagerSavingEnabled,
+  prefs()->SetUserPref(password_manager::prefs::kCredentialsEnableService,
                        new base::FundamentalValue(true));
   EXPECT_TRUE(client->IsSavingAndFillingEnabledForCurrentPage());
-  prefs()->SetUserPref(password_manager::prefs::kPasswordManagerSavingEnabled,
+  prefs()->SetUserPref(password_manager::prefs::kCredentialsEnableService,
                        new base::FundamentalValue(false));
   EXPECT_FALSE(client->IsSavingAndFillingEnabledForCurrentPage());
 }
@@ -341,7 +348,7 @@ TEST_F(ChromePasswordManagerClientTest, SavingAndFillingEnabledConditionsTest) {
 
   // Functionality disabled if there are SSL errors and the manager itself is
   // disabled.
-  prefs()->SetUserPref(password_manager::prefs::kPasswordManagerSavingEnabled,
+  prefs()->SetUserPref(password_manager::prefs::kCredentialsEnableService,
                        new base::FundamentalValue(false));
   EXPECT_FALSE(client->IsSavingAndFillingEnabledForCurrentPage());
   EXPECT_FALSE(client->IsFillingEnabledForCurrentPage());
@@ -350,7 +357,7 @@ TEST_F(ChromePasswordManagerClientTest, SavingAndFillingEnabledConditionsTest) {
   // is disabled.
   EXPECT_CALL(*client, DidLastPageLoadEncounterSSLErrors())
       .WillRepeatedly(Return(false));
-  prefs()->SetUserPref(password_manager::prefs::kPasswordManagerSavingEnabled,
+  prefs()->SetUserPref(password_manager::prefs::kCredentialsEnableService,
                        new base::FundamentalValue(false));
   EXPECT_FALSE(client->IsSavingAndFillingEnabledForCurrentPage());
   EXPECT_TRUE(client->IsFillingEnabledForCurrentPage());
@@ -359,7 +366,7 @@ TEST_F(ChromePasswordManagerClientTest, SavingAndFillingEnabledConditionsTest) {
   // enabled.
   EXPECT_CALL(*client, DidLastPageLoadEncounterSSLErrors())
       .WillRepeatedly(Return(false));
-  prefs()->SetUserPref(password_manager::prefs::kPasswordManagerSavingEnabled,
+  prefs()->SetUserPref(password_manager::prefs::kCredentialsEnableService,
                        new base::FundamentalValue(true));
   EXPECT_TRUE(client->IsSavingAndFillingEnabledForCurrentPage());
   EXPECT_TRUE(client->IsFillingEnabledForCurrentPage());
@@ -371,7 +378,7 @@ TEST_F(ChromePasswordManagerClientTest, SavingAndFillingEnabledConditionsTest) {
 
   // Functionality disabled in Incognito mode also when manager itself is
   // enabled.
-  prefs()->SetUserPref(password_manager::prefs::kPasswordManagerSavingEnabled,
+  prefs()->SetUserPref(password_manager::prefs::kCredentialsEnableService,
                        new base::FundamentalValue(true));
   EXPECT_FALSE(client->IsSavingAndFillingEnabledForCurrentPage());
   EXPECT_TRUE(client->IsFillingEnabledForCurrentPage());
@@ -525,4 +532,38 @@ TEST_F(ChromePasswordManagerClientTest, BindCredentialManager_MissingInstance) {
   ChromePasswordManagerClient::BindCredentialManager(
       web_contents->GetMainFrame(),
       password_manager::mojom::CredentialManagerRequest());
+}
+
+TEST_F(ChromePasswordManagerClientTest, CanShowBubbleOnURL) {
+  struct TestCase {
+    const char* scheme;
+    bool can_show_bubble;
+  } kTestCases[] = {
+      {url::kHttpScheme, true},
+      {url::kHttpsScheme, true},
+      {url::kFtpScheme, true},
+      {url::kDataScheme, true},
+      {"feed", true},
+      {url::kBlobScheme, true},
+      {url::kFileSystemScheme, true},
+
+      {"invalid-scheme-i-just-made-up", false},
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+      {extensions::kExtensionScheme, false},
+#endif
+      {url::kAboutScheme, false},
+      {content::kChromeDevToolsScheme, false},
+      {content::kChromeUIScheme, false},
+      {url::kJavaScriptScheme, false},
+      {url::kMailToScheme, false},
+      {content::kViewSourceScheme, false},
+  };
+
+  for (const TestCase& test_case : kTestCases) {
+    // CanShowBubbleOnURL currently only depends on the scheme.
+    GURL url(base::StringPrintf("%s://example.org", test_case.scheme));
+    SCOPED_TRACE(url.possibly_invalid_spec());
+    EXPECT_EQ(test_case.can_show_bubble,
+              ChromePasswordManagerClient::CanShowBubbleOnURL(url));
+  }
 }

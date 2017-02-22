@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "chrome/browser/ui/webui/print_preview/printer_capabilities.h"
 #include "content/public/browser/browser_thread.h"
 #include "printing/backend/print_backend.h"
@@ -52,8 +53,6 @@ std::unique_ptr<base::DictionaryValue> FetchCapabilitiesOnBlockingPool(
   return GetSettingsOnBlockingPool(device_name, basic_info);
 }
 
-}  // namespace
-
 std::string GetDefaultPrinterOnBlockingPoolThread() {
   DCHECK(content::BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
 
@@ -65,21 +64,50 @@ std::string GetDefaultPrinterOnBlockingPoolThread() {
   return default_printer;
 }
 
-void EnumeratePrinters(Profile* /* profile */,
-                       const EnumeratePrintersCallback& cb) {
-  base::PostTaskAndReplyWithResult(
-      content::BrowserThread::GetBlockingPool(), FROM_HERE,
-      base::Bind(&EnumeratePrintersOnBlockingPoolThread), cb);
-}
+// Default implementation of PrinterBackendProxy.  Makes calls directly to
+// the print backend on the appropriate thread.
+class PrinterBackendProxyDefault : public PrinterBackendProxy {
+ public:
+  PrinterBackendProxyDefault() {}
 
-void ConfigurePrinterAndFetchCapabilities(Profile* /* profile */,
-                                          const std::string& device_name,
-                                          const PrinterSetupCallback& cb) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  ~PrinterBackendProxyDefault() override {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  }
 
-  base::PostTaskAndReplyWithResult(
-      content::BrowserThread::GetBlockingPool(), FROM_HERE,
-      base::Bind(&FetchCapabilitiesOnBlockingPool, device_name), cb);
+  void GetDefaultPrinter(const DefaultPrinterCallback& cb) override {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+    base::PostTaskAndReplyWithResult(
+        content::BrowserThread::GetBlockingPool(), FROM_HERE,
+        base::Bind(&GetDefaultPrinterOnBlockingPoolThread), cb);
+  }
+
+  void EnumeratePrinters(const EnumeratePrintersCallback& cb) override {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+    base::PostTaskAndReplyWithResult(
+        content::BrowserThread::GetBlockingPool(), FROM_HERE,
+        base::Bind(&EnumeratePrintersOnBlockingPoolThread), cb);
+  }
+
+  void ConfigurePrinterAndFetchCapabilities(
+      const std::string& device_name,
+      const PrinterSetupCallback& cb) override {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+    base::PostTaskAndReplyWithResult(
+        content::BrowserThread::GetBlockingPool(), FROM_HERE,
+        base::Bind(&FetchCapabilitiesOnBlockingPool, device_name), cb);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(PrinterBackendProxyDefault);
+};
+
+}  // namespace
+
+std::unique_ptr<PrinterBackendProxy> PrinterBackendProxy::Create() {
+  return base::MakeUnique<PrinterBackendProxyDefault>();
 }
 
 }  // namespace printing

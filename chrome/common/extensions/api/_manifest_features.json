@@ -4,7 +4,7 @@
 
 // This features file defines manifest keys implemented under src/chrome.
 // See chrome/common/extensions/api/_features.md to understand this file, as
-// well as feature.h, simple_feature.h, and base_feature_provider.h.
+// well as feature.h, simple_feature.h, and feature_provider.h.
 
 {
   "about_page": {
@@ -145,10 +145,18 @@
       "location": "component"
     }
   ],
-  "file_system_provider_capabilities": {
+  "file_system_provider_capabilities": [{
     "channel": "stable",
     "extension_types": ["extension", "platform_app"]
-  },
+  }, {
+    "channel": "stable",
+    "extension_types": ["legacy_packaged_app"],
+    "platforms": ["chromeos"],
+    "whitelist": [
+      "0EA6B717932AD64C469C1CCB6911457733295907",  // http://crbug.com/673004
+      "58B0C2968C335964D5433E89CA4D86628A0E3D4B"   // http://crbug.com/673004
+    ]
+  }],
   "homepage_url": {
     "channel": "stable",
     "extension_types": ["extension", "legacy_packaged_app"]

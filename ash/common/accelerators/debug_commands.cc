@@ -12,14 +12,16 @@
 #include "ash/common/wallpaper/wallpaper_controller.h"
 #include "ash/common/wallpaper/wallpaper_delegate.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "ash/common/wm_window_property.h"
+#include "ash/root_window_controller.h"
 #include "base/command_line.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/compositor/debug_utils.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/debug_utils.h"
@@ -60,7 +62,13 @@ void PrintWindowHierarchy(const WmWindow* active_window,
        << " type=" << window->GetType()
        << ((window == active_window) ? " [active] " : " ")
        << (window->IsVisible() ? " visible " : " ")
-       << window->GetBounds().ToString() << '\n';
+       << window->GetBounds().ToString()
+       << (window->GetBoolProperty(
+               WmWindowProperty::SNAP_CHILDREN_TO_PIXEL_BOUNDARY)
+               ? " [snapped] "
+               : "")
+       << ", subpixel offset="
+       << window->GetLayer()->subpixel_position_offset().ToString() << '\n';
 
   for (WmWindow* child : window->GetChildren())
     PrintWindowHierarchy(active_window, child, indent + 3, out);
@@ -84,12 +92,12 @@ gfx::ImageSkia CreateWallpaperImage(SkColor fill, SkColor rect) {
   gfx::Size image_size(1366, 768);
   gfx::Canvas canvas(image_size, 1.0f, true);
   canvas.DrawColor(fill);
-  SkPaint paint;
-  paint.setColor(rect);
-  paint.setStrokeWidth(10);
-  paint.setStyle(SkPaint::kStroke_Style);
-  paint.setBlendMode(SkBlendMode::kSrcOver);
-  canvas.DrawRoundRect(gfx::Rect(image_size), 100, paint);
+  cc::PaintFlags flags;
+  flags.setColor(rect);
+  flags.setStrokeWidth(10);
+  flags.setStyle(cc::PaintFlags::kStroke_Style);
+  flags.setBlendMode(SkBlendMode::kSrcOver);
+  canvas.DrawRoundRect(gfx::Rect(image_size), 100, flags);
   return gfx::ImageSkia(canvas.ExtractImageRep());
 }
 
@@ -119,8 +127,6 @@ void HandleToggleWallpaperMode() {
   }
 }
 
-#if defined(OS_CHROMEOS)
-
 void HandleToggleTouchpad() {
   base::RecordAction(base::UserMetricsAction("Accel_Toggle_Touchpad"));
   ash::WmShell::Get()->delegate()->ToggleTouchpad();
@@ -128,7 +134,11 @@ void HandleToggleTouchpad() {
 
 void HandleToggleTouchscreen() {
   base::RecordAction(base::UserMetricsAction("Accel_Toggle_Touchscreen"));
-  ash::WmShell::Get()->delegate()->ToggleTouchscreen();
+  ShellDelegate* delegate = WmShell::Get()->delegate();
+  delegate->SetTouchscreenEnabledInPrefs(
+      !delegate->IsTouchscreenEnabledInPrefs(false /* use_local_state */),
+      false /* use_local_state */);
+  delegate->UpdateTouchscreenStatusFromPrefs();
 }
 
 void HandleToggleTouchView() {
@@ -138,7 +148,9 @@ void HandleToggleTouchView() {
       !controller->IsMaximizeModeWindowManagerEnabled());
 }
 
-#endif  // defined(OS_CHROMEOS)
+void HandleTriggerCrash() {
+  CHECK(false) << "Intentional crash via debug accelerator.";
+}
 
 }  // namespace
 
@@ -166,7 +178,15 @@ void PerformDebugActionIfEnabled(AcceleratorAction action) {
     return;
 
   switch (action) {
-#if defined(OS_CHROMEOS)
+    case DEBUG_PRINT_LAYER_HIERARCHY:
+      HandlePrintLayerHierarchy();
+      break;
+    case DEBUG_PRINT_VIEW_HIERARCHY:
+      HandlePrintViewHierarchy();
+      break;
+    case DEBUG_PRINT_WINDOW_HIERARCHY:
+      HandlePrintWindowHierarchy();
+      break;
     case DEBUG_SHOW_TOAST:
       WmShell::Get()->toast_manager()->Show(
           ToastData("id", base::ASCIIToUTF16("Toast"), 5000 /* duration_ms */,
@@ -181,18 +201,11 @@ void PerformDebugActionIfEnabled(AcceleratorAction action) {
     case DEBUG_TOGGLE_TOUCH_VIEW:
       HandleToggleTouchView();
       break;
-#endif
     case DEBUG_TOGGLE_WALLPAPER_MODE:
       HandleToggleWallpaperMode();
       break;
-    case DEBUG_PRINT_LAYER_HIERARCHY:
-      HandlePrintLayerHierarchy();
-      break;
-    case DEBUG_PRINT_VIEW_HIERARCHY:
-      HandlePrintViewHierarchy();
-      break;
-    case DEBUG_PRINT_WINDOW_HIERARCHY:
-      HandlePrintWindowHierarchy();
+    case DEBUG_TRIGGER_CRASH:
+      HandleTriggerCrash();
       break;
     default:
       break;

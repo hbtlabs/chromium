@@ -23,16 +23,18 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/threading/worker_pool.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/histogram_internals_request_job.h"
 #include "content/browser/net/view_blob_internals_job_factory.h"
 #include "content/browser/net/view_http_cache_job_factory.h"
 #include "content/browser/resource_context_impl.h"
+#include "content/browser/webui/i18n_source_stream.h"
 #include "content/browser/webui/shared_resources_data_source.h"
 #include "content/browser/webui/url_data_source_impl.h"
+#include "content/browser/webui/web_ui_data_source_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -51,6 +53,7 @@
 #include "net/url_request/url_request_error_job.h"
 #include "net/url_request/url_request_job.h"
 #include "net/url_request/url_request_job_factory.h"
+#include "ui/base/template_expressions.h"
 #include "url/url_util.h"
 
 namespace content {
@@ -209,6 +212,10 @@ class URLRequestChromeJob : public net::URLRequestJob {
     is_gzipped_ = is_gzipped;
   }
 
+  void SetReplacements(const ui::TemplateReplacements* replacements) {
+    replacements_ = replacements;
+  }
+
   // Returns true when job was generated from an incognito profile.
   bool is_incognito() const {
     return is_incognito_;
@@ -279,6 +286,9 @@ class URLRequestChromeJob : public net::URLRequestJob {
   // resources in resources.pak use compress="gzip".
   bool is_gzipped_;
 
+  // Replacement dictionary for i18n.
+  const ui::TemplateReplacements* replacements_;
+
   // The backend is owned by net::URLRequestContext and always outlives us.
   URLDataManagerBackend* const backend_;
 
@@ -301,6 +311,7 @@ URLRequestChromeJob::URLRequestChromeJob(net::URLRequest* request,
       send_content_type_header_(false),
       is_incognito_(is_incognito),
       is_gzipped_(false),
+      replacements_(nullptr),
       backend_(backend),
       weak_factory_(this) {
   DCHECK(backend);
@@ -395,11 +406,20 @@ void URLRequestChromeJob::GetResponseInfo(net::HttpResponseInfo* info) {
 }
 
 std::unique_ptr<net::SourceStream> URLRequestChromeJob::SetUpSourceStream() {
-  std::unique_ptr<net::SourceStream> source =
+  std::unique_ptr<net::SourceStream> source_stream =
       net::URLRequestJob::SetUpSourceStream();
-  return is_gzipped_ ? net::GzipSourceStream::Create(
-                           std::move(source), net::SourceStream::TYPE_GZIP)
-                     : std::move(source);
+
+  if (is_gzipped_) {
+    source_stream = net::GzipSourceStream::Create(std::move(source_stream),
+                                                  net::SourceStream::TYPE_GZIP);
+  }
+
+  if (replacements_) {
+    source_stream = content::I18nSourceStream::Create(
+        std::move(source_stream), net::SourceStream::TYPE_NONE, replacements_);
+  }
+
+  return source_stream;
 }
 
 void URLRequestChromeJob::MimeTypeAvailable(const std::string& mime_type) {
@@ -458,9 +478,11 @@ int URLRequestChromeJob::PostReadTask(scoped_refptr<net::IOBuffer> buf,
   if (buf_size == 0)
     return 0;
 
-  base::WorkerPool::GetTaskRunner(false)->PostTaskAndReply(
-      FROM_HERE, base::Bind(&CopyData, base::RetainedRef(buf), buf_size, data_,
-                            data_offset_),
+  base::PostTaskWithTraitsAndReply(
+      FROM_HERE, base::TaskTraits().WithShutdownBehavior(
+                     base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN),
+      base::Bind(&CopyData, base::RetainedRef(buf), buf_size, data_,
+                 data_offset_),
       base::Bind(&URLRequestChromeJob::ReadRawDataComplete, AsWeakPtr(),
                  buf_size));
   data_offset_ += buf_size;
@@ -485,24 +507,6 @@ void URLRequestChromeJob::StartAsync() {
                                            net::ERR_INVALID_URL));
   }
 }
-
-namespace {
-
-// Gets mime type for data that is available from |source| by |path|.
-// After that, notifies |job| that mime type is available. This method
-// should be called on the UI thread, but notification is performed on
-// the IO thread.
-void GetMimeTypeOnUI(URLDataSourceImpl* source,
-                     const std::string& path,
-                     const base::WeakPtr<URLRequestChromeJob>& job) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  std::string mime_type = source->source()->GetMimeType(path);
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::Bind(&URLRequestChromeJob::MimeTypeAvailable, job, mime_type));
-}
-
-}  // namespace
 
 namespace {
 
@@ -650,6 +654,18 @@ void URLDataManagerBackend::AddDataSource(
   source->backend_ = this;
 }
 
+void URLDataManagerBackend::UpdateWebUIDataSource(
+    const std::string& source_name,
+    const base::DictionaryValue& update) {
+  DataSourceMap::iterator it = data_sources_.find(source_name);
+  if (it == data_sources_.end() || !it->second->IsWebUIDataSourceImpl()) {
+    NOTREACHED();
+    return;
+  }
+  static_cast<WebUIDataSourceImpl*>(it->second.get())
+      ->AddLocalizedStrings(update);
+}
+
 bool URLDataManagerBackend::HasPendingJob(
     URLRequestChromeJob* job) const {
   for (PendingRequestMap::const_iterator i = pending_requests_.begin();
@@ -699,6 +715,12 @@ bool URLDataManagerBackend::StartRequest(const net::URLRequest* request,
       source->source()->ShouldServeMimeTypeAsContentTypeHeader());
   job->set_is_gzipped(source->source()->IsGzipped(path));
 
+  // TODO(dschuyler): improve filtering of which resource to run template
+  // replacements upon.
+  std::string mime_type = source->source()->GetMimeType(path);
+  if (mime_type == "text/html")
+    job->SetReplacements(source->GetReplacements());
+
   std::string origin = GetOriginHeaderValue(request);
   if (!origin.empty()) {
     std::string header =
@@ -708,23 +730,19 @@ bool URLDataManagerBackend::StartRequest(const net::URLRequest* request,
     job->set_access_control_allow_origin(header);
   }
 
+  // Also notifies that the headers are complete.
+  job->MimeTypeAvailable(mime_type);
+
   // Look up additional request info to pass down.
-  int child_id = -1;
   ResourceRequestInfo::WebContentsGetter wc_getter;
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
-  if (info) {
-    child_id = info->GetChildID();
+  if (info)
     wc_getter = info->GetWebContentsGetterForRequest();
-  }
 
   // Forward along the request to the data source.
   scoped_refptr<base::SingleThreadTaskRunner> target_runner =
       source->source()->TaskRunnerForRequestPath(path);
   if (!target_runner) {
-    job->MimeTypeAvailable(source->source()->GetMimeType(path));
-    // Eliminate potentially dangling pointer to avoid future use.
-    job = nullptr;
-
     // The DataSource is agnostic to which thread StartDataRequest is called
     // on for this path.  Call directly into it from this thread, the IO
     // thread.
@@ -732,20 +750,12 @@ bool URLDataManagerBackend::StartRequest(const net::URLRequest* request,
         path, wc_getter,
         base::Bind(&URLDataSourceImpl::SendResponse, source, request_id));
   } else {
-    // URLRequestChromeJob should receive mime type before data. This
-    // is guaranteed because request for mime type is placed in the
-    // message loop before request for data. And correspondingly their
-    // replies are put on the IO thread in the same order.
-    target_runner->PostTask(
-        FROM_HERE, base::Bind(&GetMimeTypeOnUI, base::RetainedRef(source), path,
-                              job->AsWeakPtr()));
-
     // The DataSource wants StartDataRequest to be called on a specific thread,
     // usually the UI thread, for this path.
     target_runner->PostTask(
-        FROM_HERE, base::Bind(&URLDataManagerBackend::CallStartRequest,
-                              base::RetainedRef(source), path, child_id,
-                              wc_getter, request_id));
+        FROM_HERE,
+        base::Bind(&URLDataManagerBackend::CallStartRequest,
+                   base::RetainedRef(source), path, wc_getter, request_id));
   }
   return true;
 }
@@ -771,19 +781,8 @@ URLDataSourceImpl* URLDataManagerBackend::GetDataSourceFromURL(
 void URLDataManagerBackend::CallStartRequest(
     scoped_refptr<URLDataSourceImpl> source,
     const std::string& path,
-    int child_id,
     const ResourceRequestInfo::WebContentsGetter& wc_getter,
     int request_id) {
-  if (BrowserThread::CurrentlyOn(BrowserThread::UI) && child_id != -1 &&
-      !RenderProcessHost::FromID(child_id)) {
-    // Make the request fail if its initiating renderer is no longer valid.
-    // This can happen when the IO thread posts this task just before the
-    // renderer shuts down.
-    // Note we check the process id instead of wc_getter because requests from
-    // workers wouldn't have a WebContents.
-    source->SendResponse(request_id, nullptr);
-    return;
-  }
   source->source()->StartDataRequest(
       path,
       wc_getter,

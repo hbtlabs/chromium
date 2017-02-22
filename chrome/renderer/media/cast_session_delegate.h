@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread.h"
@@ -21,17 +20,16 @@
 #include "media/cast/logging/logging_defines.h"
 
 namespace base {
-class BinaryValue;
 class DictionaryValue;
 class SingleThreadTaskRunner;
+class Value;
+using BinaryValue = Value;
 }  // namespace base
 
 namespace media {
-class VideoFrame;
 
 namespace cast {
 class CastEnvironment;
-class FrameInput;
 class RawEventSubscriberBundle;
 
 namespace transport {

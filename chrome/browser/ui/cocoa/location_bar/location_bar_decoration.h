@@ -10,10 +10,13 @@
 #include "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "ui/gfx/vector_icons_public.h"
 
 @class DecorationMouseTrackingDelegate;
 @class CrTrackingArea;
+
+namespace gfx {
+struct VectorIcon;
+}
 
 // Base class for decorations at the left and right of the location
 // bar.  For instance, the location icon.
@@ -25,7 +28,9 @@
 // Decorations are more like Cocoa cells, except implemented in C++ to
 // allow more similarity to the other platform implementations.
 
-enum class LocationBarDecorationState { NORMAL, HOVER, PRESSED };
+// This enum class represents the state of the decoration's interactions
+// with the mouse.
+enum class DecorationMouseState { NONE, HOVER, PRESSED };
 
 class LocationBarDecoration {
  public:
@@ -102,6 +107,10 @@ class LocationBarDecoration {
   void OnMouseEntered();
   void OnMouseExited();
 
+  // Sets the active state of the decoration. If the state has changed, call
+  // UpdateDecorationState().
+  void SetActive(bool active);
+
   // Called to get the right-click menu, return |nil| for no menu.
   virtual NSMenu* GetMenu();
 
@@ -134,7 +143,9 @@ class LocationBarDecoration {
   // to the private DecorationAccessibilityView helper class.
   void OnAccessibilityViewAction();
 
-  LocationBarDecorationState state() { return state_; }
+  DecorationMouseState state() const { return state_; }
+
+  bool active() const { return active_; }
 
   // Width returned by |GetWidthForSpace()| when the item should be
   // omitted for this width;
@@ -149,10 +160,10 @@ class LocationBarDecoration {
   // override.
   virtual SkColor GetMaterialIconColor(bool location_bar_is_dark) const;
 
-  // Gets the id of the decoration's Material Design vector icon. Subclasses
-  // should override to return the correct id. Not an abstract method because
-  // some decorations are assigned their icon (vs. creating it themselves).
-  virtual gfx::VectorIconId GetMaterialVectorIconId() const;
+  // Gets the decoration's Material Design vector icon. Subclasses should
+  // override to return the correct icon. Not an abstract method because some
+  // decorations are assigned their icon (vs. creating it themselves).
+  virtual const gfx::VectorIcon* GetMaterialVectorIcon() const;
 
   // Gets the color used for the divider. Only used in Material design.
   NSColor* GetDividerColor(bool location_bar_is_dark) const;
@@ -162,6 +173,10 @@ class LocationBarDecoration {
   void UpdateDecorationState();
 
   bool visible_ = false;
+
+  // True if the decoration is active.
+  bool active_ = false;
+
   base::scoped_nsobject<NSView> accessibility_view_;
 
   // The decoration's tracking area. Only set if the decoration accepts a mouse
@@ -169,14 +184,14 @@ class LocationBarDecoration {
   base::scoped_nsobject<CrTrackingArea> tracking_area_;
 
   // The view that |tracking_area_| is added to.
-  NSView* tracking_area_owner_;
+  NSView* tracking_area_owner_ = nullptr;
 
   // Delegate object that handles mouseEntered: and mouseExited: events from
   // the tracking area.
   base::scoped_nsobject<DecorationMouseTrackingDelegate> tracking_delegate_;
 
   // The state of the decoration.
-  LocationBarDecorationState state_;
+  DecorationMouseState state_ = DecorationMouseState::NONE;
 
   DISALLOW_COPY_AND_ASSIGN(LocationBarDecoration);
 };

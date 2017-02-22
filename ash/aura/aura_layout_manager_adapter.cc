@@ -4,20 +4,21 @@
 
 #include "ash/aura/aura_layout_manager_adapter.h"
 
-#include "ash/aura/wm_window_aura.h"
 #include "ash/common/wm_layout_manager.h"
-#include "ui/aura/window_property.h"
+#include "ash/common/wm_window.h"
+#include "ui/aura/window.h"
+#include "ui/base/class_property.h"
 
-DECLARE_WINDOW_PROPERTY_TYPE(ash::AuraLayoutManagerAdapter*);
+DECLARE_UI_CLASS_PROPERTY_TYPE(ash::AuraLayoutManagerAdapter*);
 
 namespace ash {
 namespace {
 // AuraLayoutManagerAdapter is an aura::LayoutManager, so it's owned by the
 // aura::Window it is installed on. This property is used to lookup the
 // AuraLayoutManagerAdapter given only an aura::Window.
-DEFINE_WINDOW_PROPERTY_KEY(AuraLayoutManagerAdapter*,
-                           kAuraLayoutManagerAdapter,
-                           nullptr);
+DEFINE_UI_CLASS_PROPERTY_KEY(AuraLayoutManagerAdapter*,
+                             kAuraLayoutManagerAdapter,
+                             nullptr);
 }  // namespace
 
 AuraLayoutManagerAdapter::AuraLayoutManagerAdapter(
@@ -44,30 +45,29 @@ void AuraLayoutManagerAdapter::OnWindowResized() {
 }
 
 void AuraLayoutManagerAdapter::OnWindowAddedToLayout(aura::Window* child) {
-  wm_layout_manager_->OnWindowAddedToLayout(WmWindowAura::Get(child));
+  wm_layout_manager_->OnWindowAddedToLayout(WmWindow::Get(child));
 }
 
 void AuraLayoutManagerAdapter::OnWillRemoveWindowFromLayout(
     aura::Window* child) {
-  wm_layout_manager_->OnWillRemoveWindowFromLayout(WmWindowAura::Get(child));
+  wm_layout_manager_->OnWillRemoveWindowFromLayout(WmWindow::Get(child));
 }
 
 void AuraLayoutManagerAdapter::OnWindowRemovedFromLayout(aura::Window* child) {
-  wm_layout_manager_->OnWindowRemovedFromLayout(WmWindowAura::Get(child));
+  wm_layout_manager_->OnWindowRemovedFromLayout(WmWindow::Get(child));
 }
 
 void AuraLayoutManagerAdapter::OnChildWindowVisibilityChanged(
     aura::Window* child,
     bool visible) {
-  wm_layout_manager_->OnChildWindowVisibilityChanged(WmWindowAura::Get(child),
+  wm_layout_manager_->OnChildWindowVisibilityChanged(WmWindow::Get(child),
                                                      visible);
 }
 
 void AuraLayoutManagerAdapter::SetChildBounds(
     aura::Window* child,
     const gfx::Rect& requested_bounds) {
-  wm_layout_manager_->SetChildBounds(WmWindowAura::Get(child),
-                                     requested_bounds);
+  wm_layout_manager_->SetChildBounds(WmWindow::Get(child), requested_bounds);
 }
 
 }  // namespace ash

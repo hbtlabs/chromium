@@ -224,9 +224,15 @@ var GetIntListAttribute =
  */
 var GetHtmlAttribute = requireNative('automationInternal').GetHtmlAttribute;
 
+/**
+ * @param {number} axTreeID The id of the accessibility tree.
+ * @param {number} nodeID The id of a node.
+ * @return {automation.NameFromType} The source of the node's name.
+ */
+var GetNameFrom = requireNative('automationInternal').GetNameFrom;
+
 var lastError = require('lastError');
 var logging = requireNative('logging');
-var schema = requireNative('automationInternal').GetSchemaAdditions();
 var utils = require('utils');
 
 /**
@@ -359,6 +365,10 @@ AutomationNodeImpl.prototype = {
         GetChildIDAtIndex(parent.treeID, parent.id, indexInParent + 1));
   },
 
+  get nameFrom() {
+    return GetNameFrom(this.treeID, this.id);
+  },
+
   doDefault: function() {
     this.performAction_('doDefault');
   },
@@ -367,8 +377,18 @@ AutomationNodeImpl.prototype = {
     this.performAction_('focus');
   },
 
+  getImageData: function(maxWidth, maxHeight) {
+    this.performAction_('getImageData',
+                        { maxWidth: maxWidth,
+                          maxHeight: maxHeight });
+  },
+
   makeVisible: function() {
     this.performAction_('makeVisible');
+  },
+
+    resumeMedia: function() {
+    this.performAction_('resumeMedia');
   },
 
   setSelection: function(startIndex, endIndex) {
@@ -386,6 +406,18 @@ AutomationNodeImpl.prototype = {
 
   showContextMenu: function() {
     this.performAction_('showContextMenu');
+  },
+
+  startDuckingMedia: function() {
+    this.performAction_('startDuckingMedia');
+  },
+
+  stopDuckingMedia: function() {
+    this.performAction_('stopDuckingMedia');
+  },
+
+  suspendMedia: function() {
+    this.performAction_('suspendMedia');
   },
 
   domQuerySelector: function(selector, callback) {
@@ -647,22 +679,17 @@ AutomationNodeImpl.prototype = {
 
 var stringAttributes = [
     'accessKey',
-    'action',
     'ariaInvalidValue',
-    'autoComplete',
     'containerLiveRelevant',
     'containerLiveStatus',
     'description',
     'display',
-    'dropeffect',
-    'help',
-    'htmlTag',
+    'imageDataUrl',
     'language',
     'liveRelevant',
     'liveStatus',
     'name',
     'placeholder',
-    'shortcut',
     'textInputType',
     'url',
     'value'];
@@ -670,24 +697,16 @@ var stringAttributes = [
 var boolAttributes = [
     'ariaReadonly',
     'buttonMixed',
-    'canSetValue',
-    'canvasHasFallback',
     'containerLiveAtomic',
     'containerLiveBusy',
-    'grabbed',
-    'isAxTreeHost',
     'liveAtomic',
-    'liveBusy',
-    'updateLocationOnly'];
+    'liveBusy'];
 
 var intAttributes = [
     'backgroundColor',
     'color',
     'colorValue',
-    'descriptionFrom',
     'hierarchicalLevel',
-    'invalidState',
-    'nameFrom',
     'posInSet',
     'scrollX',
     'scrollXMax',
@@ -696,7 +715,6 @@ var intAttributes = [
     'scrollYMax',
     'scrollYMin',
     'setSize',
-    'sortDirection',
     'tableCellColumnIndex',
     'tableCellColumnSpan',
     'tableCellRowIndex',
@@ -705,10 +723,8 @@ var intAttributes = [
     'tableColumnIndex',
     'tableRowCount',
     'tableRowIndex',
-    'textDirection',
     'textSelEnd',
-    'textSelStart',
-    'textStyle'];
+    'textSelStart'];
 
 var nodeRefAttributes = [
     ['activedescendantId', 'activeDescendant'],
@@ -716,11 +732,10 @@ var nodeRefAttributes = [
     ['previousOnLineId', 'previousOnLine'],
     ['tableColumnHeaderId', 'tableColumnHeader'],
     ['tableHeaderId', 'tableHeader'],
-    ['tableRowHeaderId', 'tableRowHeader'],
-    ['titleUiElement', 'titleUIElement']];
+    ['tableRowHeaderId', 'tableRowHeader']];
 
 var intListAttributes = [
-    'characterOffsets',
+    'lineBreaks',
     'markerEnds',
     'markerStarts',
     'markerTypes',
@@ -728,18 +743,15 @@ var intListAttributes = [
     'wordStarts'];
 
 var nodeRefListAttributes = [
-    ['cellIds', 'cells'],
     ['controlsIds', 'controls'],
     ['describedbyIds', 'describedBy'],
     ['flowtoIds', 'flowTo'],
-    ['labelledbyIds', 'labelledBy'],
-    ['uniqueCellIds', 'uniqueCells']];
+    ['labelledbyIds', 'labelledBy']];
 
 var floatAttributes = [
     'valueForRange',
     'minValueForRange',
-    'maxValueForRange',
-    'fontSize'];
+    'maxValueForRange'];
 
 var htmlAttributes = [
     ['type', 'inputType']];
@@ -926,6 +938,10 @@ AutomationRootNodeImpl.prototype = {
     return result;
   },
 
+  get chromeChannel() {
+    return GetStringAttribute(this.treeID, this.id, 'chromeChannel');
+  },
+
   get docUrl() {
     return GetDocURL(this.treeID);
   },
@@ -1008,7 +1024,7 @@ AutomationRootNodeImpl.prototype = {
   },
 
   destroy: function() {
-    this.dispatchEvent(schema.EventType.destroyed, 'none');
+    this.dispatchEvent('destroyed', 'none');
     for (var id in this.axNodeDataCache_)
       this.remove(id);
     this.detach();
@@ -1061,11 +1077,16 @@ utils.expose(AutomationNode, AutomationNodeImpl, {
     'find',
     'findAll',
     'focus',
+    'getImageData',
     'makeVisible',
     'matches',
+    'resumeMedia',
     'setSelection',
     'setSequentialFocusNavigationStartingPoint',
     'showContextMenu',
+    'startDuckingMedia',
+    'stopDuckingMedia',
+    'suspendMedia',
     'addEventListener',
     'removeEventListener',
     'domQuerySelector',
@@ -1087,6 +1108,7 @@ utils.expose(AutomationNode, AutomationNodeImpl, {
       'lineStartOffsets',
       'root',
       'htmlAttributes',
+      'nameFrom',
   ]),
 });
 
@@ -1096,6 +1118,7 @@ function AutomationRootNode() {
 utils.expose(AutomationRootNode, AutomationRootNodeImpl, {
   superclass: AutomationNode,
   readonly: [
+    'chromeChannel',
     'docTitle',
     'docUrl',
     'docLoaded',

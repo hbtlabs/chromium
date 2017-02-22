@@ -51,24 +51,9 @@ IPC_STRUCT_BEGIN(EmbeddedWorkerHostMsg_ReportConsoleMessage_Params)
   IPC_STRUCT_MEMBER(GURL, source_url)
 IPC_STRUCT_END()
 
-// Browser -> Renderer message to create a new embedded worker context.
-IPC_MESSAGE_CONTROL1(EmbeddedWorkerMsg_StartWorker,
-                     content::EmbeddedWorkerStartParams /* params */)
-
-// Browser -> Renderer message to resume a worker that has been started
-// with the pause_after_download option.
-IPC_MESSAGE_CONTROL1(EmbeddedWorkerMsg_ResumeAfterDownload,
-                     int /* embedded_worker_id */)
-
 // Browser -> Renderer message to stop (terminate) the embedded worker.
 IPC_MESSAGE_CONTROL1(EmbeddedWorkerMsg_StopWorker,
                      int /* embedded_worker_id */)
-
-// Browser -> Renderer message to add message to the devtools console.
-IPC_MESSAGE_CONTROL3(EmbeddedWorkerMsg_AddMessageToConsole,
-                     int /* embedded_worker_id */,
-                     content::ConsoleMessageLevel /* level */,
-                     std::string /* message */)
 
 // Renderer -> Browser message to indicate that the worker is ready for
 // inspection.
@@ -104,6 +89,12 @@ IPC_MESSAGE_CONTROL1(EmbeddedWorkerHostMsg_WorkerStarted,
 // Renderer -> Browser message to indicate that the worker is stopped.
 IPC_MESSAGE_CONTROL1(EmbeddedWorkerHostMsg_WorkerStopped,
                      int /* embedded_worker_id */)
+
+// Renderer -> Browser message to count an API use. |feature| must be one of the
+// values from blink::UseCounter::Feature enum.
+IPC_MESSAGE_CONTROL2(EmbeddedWorkerHostMsg_CountFeature,
+                     int64_t /* service_worker_version_id */,
+                     uint32_t /* feature */)
 
 // Renderer -> Browser message to report an exception.
 IPC_MESSAGE_CONTROL5(EmbeddedWorkerHostMsg_ReportException,

@@ -12445,7 +12445,10 @@ struct CopyTextureCHROMIUM {
   void SetHeader() { header.SetCmd<ValueType>(); }
 
   void Init(GLenum _source_id,
+            GLint _source_level,
+            GLenum _dest_target,
             GLenum _dest_id,
+            GLint _dest_level,
             GLint _internalformat,
             GLenum _dest_type,
             GLboolean _unpack_flip_y,
@@ -12453,7 +12456,10 @@ struct CopyTextureCHROMIUM {
             GLboolean _unpack_unmultiply_alpha) {
     SetHeader();
     source_id = _source_id;
+    source_level = _source_level;
+    dest_target = _dest_target;
     dest_id = _dest_id;
+    dest_level = _dest_level;
     internalformat = _internalformat;
     dest_type = _dest_type;
     unpack_flip_y = _unpack_flip_y;
@@ -12463,21 +12469,28 @@ struct CopyTextureCHROMIUM {
 
   void* Set(void* cmd,
             GLenum _source_id,
+            GLint _source_level,
+            GLenum _dest_target,
             GLenum _dest_id,
+            GLint _dest_level,
             GLint _internalformat,
             GLenum _dest_type,
             GLboolean _unpack_flip_y,
             GLboolean _unpack_premultiply_alpha,
             GLboolean _unpack_unmultiply_alpha) {
     static_cast<ValueType*>(cmd)->Init(
-        _source_id, _dest_id, _internalformat, _dest_type, _unpack_flip_y,
-        _unpack_premultiply_alpha, _unpack_unmultiply_alpha);
+        _source_id, _source_level, _dest_target, _dest_id, _dest_level,
+        _internalformat, _dest_type, _unpack_flip_y, _unpack_premultiply_alpha,
+        _unpack_unmultiply_alpha);
     return NextCmdAddress<ValueType>(cmd);
   }
 
   gpu::CommandHeader header;
   uint32_t source_id;
+  int32_t source_level;
+  uint32_t dest_target;
   uint32_t dest_id;
+  int32_t dest_level;
   int32_t internalformat;
   uint32_t dest_type;
   uint32_t unpack_flip_y;
@@ -12485,26 +12498,32 @@ struct CopyTextureCHROMIUM {
   uint32_t unpack_unmultiply_alpha;
 };
 
-static_assert(sizeof(CopyTextureCHROMIUM) == 32,
-              "size of CopyTextureCHROMIUM should be 32");
+static_assert(sizeof(CopyTextureCHROMIUM) == 44,
+              "size of CopyTextureCHROMIUM should be 44");
 static_assert(offsetof(CopyTextureCHROMIUM, header) == 0,
               "offset of CopyTextureCHROMIUM header should be 0");
 static_assert(offsetof(CopyTextureCHROMIUM, source_id) == 4,
               "offset of CopyTextureCHROMIUM source_id should be 4");
-static_assert(offsetof(CopyTextureCHROMIUM, dest_id) == 8,
-              "offset of CopyTextureCHROMIUM dest_id should be 8");
-static_assert(offsetof(CopyTextureCHROMIUM, internalformat) == 12,
-              "offset of CopyTextureCHROMIUM internalformat should be 12");
-static_assert(offsetof(CopyTextureCHROMIUM, dest_type) == 16,
-              "offset of CopyTextureCHROMIUM dest_type should be 16");
-static_assert(offsetof(CopyTextureCHROMIUM, unpack_flip_y) == 20,
-              "offset of CopyTextureCHROMIUM unpack_flip_y should be 20");
+static_assert(offsetof(CopyTextureCHROMIUM, source_level) == 8,
+              "offset of CopyTextureCHROMIUM source_level should be 8");
+static_assert(offsetof(CopyTextureCHROMIUM, dest_target) == 12,
+              "offset of CopyTextureCHROMIUM dest_target should be 12");
+static_assert(offsetof(CopyTextureCHROMIUM, dest_id) == 16,
+              "offset of CopyTextureCHROMIUM dest_id should be 16");
+static_assert(offsetof(CopyTextureCHROMIUM, dest_level) == 20,
+              "offset of CopyTextureCHROMIUM dest_level should be 20");
+static_assert(offsetof(CopyTextureCHROMIUM, internalformat) == 24,
+              "offset of CopyTextureCHROMIUM internalformat should be 24");
+static_assert(offsetof(CopyTextureCHROMIUM, dest_type) == 28,
+              "offset of CopyTextureCHROMIUM dest_type should be 28");
+static_assert(offsetof(CopyTextureCHROMIUM, unpack_flip_y) == 32,
+              "offset of CopyTextureCHROMIUM unpack_flip_y should be 32");
 static_assert(
-    offsetof(CopyTextureCHROMIUM, unpack_premultiply_alpha) == 24,
-    "offset of CopyTextureCHROMIUM unpack_premultiply_alpha should be 24");
+    offsetof(CopyTextureCHROMIUM, unpack_premultiply_alpha) == 36,
+    "offset of CopyTextureCHROMIUM unpack_premultiply_alpha should be 36");
 static_assert(
-    offsetof(CopyTextureCHROMIUM, unpack_unmultiply_alpha) == 28,
-    "offset of CopyTextureCHROMIUM unpack_unmultiply_alpha should be 28");
+    offsetof(CopyTextureCHROMIUM, unpack_unmultiply_alpha) == 40,
+    "offset of CopyTextureCHROMIUM unpack_unmultiply_alpha should be 40");
 
 struct CopySubTextureCHROMIUM {
   typedef CopySubTextureCHROMIUM ValueType;
@@ -12519,7 +12538,10 @@ struct CopySubTextureCHROMIUM {
   void SetHeader() { header.SetCmd<ValueType>(); }
 
   void Init(GLenum _source_id,
+            GLint _source_level,
+            GLenum _dest_target,
             GLenum _dest_id,
+            GLint _dest_level,
             GLint _xoffset,
             GLint _yoffset,
             GLint _x,
@@ -12531,7 +12553,10 @@ struct CopySubTextureCHROMIUM {
             GLboolean _unpack_unmultiply_alpha) {
     SetHeader();
     source_id = _source_id;
+    source_level = _source_level;
+    dest_target = _dest_target;
     dest_id = _dest_id;
+    dest_level = _dest_level;
     xoffset = _xoffset;
     yoffset = _yoffset;
     x = _x;
@@ -12545,7 +12570,10 @@ struct CopySubTextureCHROMIUM {
 
   void* Set(void* cmd,
             GLenum _source_id,
+            GLint _source_level,
+            GLenum _dest_target,
             GLenum _dest_id,
+            GLint _dest_level,
             GLint _xoffset,
             GLint _yoffset,
             GLint _x,
@@ -12556,14 +12584,18 @@ struct CopySubTextureCHROMIUM {
             GLboolean _unpack_premultiply_alpha,
             GLboolean _unpack_unmultiply_alpha) {
     static_cast<ValueType*>(cmd)->Init(
-        _source_id, _dest_id, _xoffset, _yoffset, _x, _y, _width, _height,
-        _unpack_flip_y, _unpack_premultiply_alpha, _unpack_unmultiply_alpha);
+        _source_id, _source_level, _dest_target, _dest_id, _dest_level,
+        _xoffset, _yoffset, _x, _y, _width, _height, _unpack_flip_y,
+        _unpack_premultiply_alpha, _unpack_unmultiply_alpha);
     return NextCmdAddress<ValueType>(cmd);
   }
 
   gpu::CommandHeader header;
   uint32_t source_id;
+  int32_t source_level;
+  uint32_t dest_target;
   uint32_t dest_id;
+  int32_t dest_level;
   int32_t xoffset;
   int32_t yoffset;
   int32_t x;
@@ -12575,34 +12607,40 @@ struct CopySubTextureCHROMIUM {
   uint32_t unpack_unmultiply_alpha;
 };
 
-static_assert(sizeof(CopySubTextureCHROMIUM) == 48,
-              "size of CopySubTextureCHROMIUM should be 48");
+static_assert(sizeof(CopySubTextureCHROMIUM) == 60,
+              "size of CopySubTextureCHROMIUM should be 60");
 static_assert(offsetof(CopySubTextureCHROMIUM, header) == 0,
               "offset of CopySubTextureCHROMIUM header should be 0");
 static_assert(offsetof(CopySubTextureCHROMIUM, source_id) == 4,
               "offset of CopySubTextureCHROMIUM source_id should be 4");
-static_assert(offsetof(CopySubTextureCHROMIUM, dest_id) == 8,
-              "offset of CopySubTextureCHROMIUM dest_id should be 8");
-static_assert(offsetof(CopySubTextureCHROMIUM, xoffset) == 12,
-              "offset of CopySubTextureCHROMIUM xoffset should be 12");
-static_assert(offsetof(CopySubTextureCHROMIUM, yoffset) == 16,
-              "offset of CopySubTextureCHROMIUM yoffset should be 16");
-static_assert(offsetof(CopySubTextureCHROMIUM, x) == 20,
-              "offset of CopySubTextureCHROMIUM x should be 20");
-static_assert(offsetof(CopySubTextureCHROMIUM, y) == 24,
-              "offset of CopySubTextureCHROMIUM y should be 24");
-static_assert(offsetof(CopySubTextureCHROMIUM, width) == 28,
-              "offset of CopySubTextureCHROMIUM width should be 28");
-static_assert(offsetof(CopySubTextureCHROMIUM, height) == 32,
-              "offset of CopySubTextureCHROMIUM height should be 32");
-static_assert(offsetof(CopySubTextureCHROMIUM, unpack_flip_y) == 36,
-              "offset of CopySubTextureCHROMIUM unpack_flip_y should be 36");
+static_assert(offsetof(CopySubTextureCHROMIUM, source_level) == 8,
+              "offset of CopySubTextureCHROMIUM source_level should be 8");
+static_assert(offsetof(CopySubTextureCHROMIUM, dest_target) == 12,
+              "offset of CopySubTextureCHROMIUM dest_target should be 12");
+static_assert(offsetof(CopySubTextureCHROMIUM, dest_id) == 16,
+              "offset of CopySubTextureCHROMIUM dest_id should be 16");
+static_assert(offsetof(CopySubTextureCHROMIUM, dest_level) == 20,
+              "offset of CopySubTextureCHROMIUM dest_level should be 20");
+static_assert(offsetof(CopySubTextureCHROMIUM, xoffset) == 24,
+              "offset of CopySubTextureCHROMIUM xoffset should be 24");
+static_assert(offsetof(CopySubTextureCHROMIUM, yoffset) == 28,
+              "offset of CopySubTextureCHROMIUM yoffset should be 28");
+static_assert(offsetof(CopySubTextureCHROMIUM, x) == 32,
+              "offset of CopySubTextureCHROMIUM x should be 32");
+static_assert(offsetof(CopySubTextureCHROMIUM, y) == 36,
+              "offset of CopySubTextureCHROMIUM y should be 36");
+static_assert(offsetof(CopySubTextureCHROMIUM, width) == 40,
+              "offset of CopySubTextureCHROMIUM width should be 40");
+static_assert(offsetof(CopySubTextureCHROMIUM, height) == 44,
+              "offset of CopySubTextureCHROMIUM height should be 44");
+static_assert(offsetof(CopySubTextureCHROMIUM, unpack_flip_y) == 48,
+              "offset of CopySubTextureCHROMIUM unpack_flip_y should be 48");
 static_assert(
-    offsetof(CopySubTextureCHROMIUM, unpack_premultiply_alpha) == 40,
-    "offset of CopySubTextureCHROMIUM unpack_premultiply_alpha should be 40");
+    offsetof(CopySubTextureCHROMIUM, unpack_premultiply_alpha) == 52,
+    "offset of CopySubTextureCHROMIUM unpack_premultiply_alpha should be 52");
 static_assert(
-    offsetof(CopySubTextureCHROMIUM, unpack_unmultiply_alpha) == 44,
-    "offset of CopySubTextureCHROMIUM unpack_unmultiply_alpha should be 44");
+    offsetof(CopySubTextureCHROMIUM, unpack_unmultiply_alpha) == 56,
+    "offset of CopySubTextureCHROMIUM unpack_unmultiply_alpha should be 56");
 
 struct CompressedCopyTextureCHROMIUM {
   typedef CompressedCopyTextureCHROMIUM ValueType;
@@ -15553,9 +15591,9 @@ static_assert(offsetof(UniformMatrix4fvStreamTextureMatrixCHROMIUMImmediate,
               "offset of UniformMatrix4fvStreamTextureMatrixCHROMIUMImmediate "
               "transpose should be 8");
 
-struct SwapBuffersWithDamageCHROMIUM {
-  typedef SwapBuffersWithDamageCHROMIUM ValueType;
-  static const CommandId kCmdId = kSwapBuffersWithDamageCHROMIUM;
+struct OverlayPromotionHintCHROMIUM {
+  typedef OverlayPromotionHintCHROMIUM ValueType;
+  static const CommandId kCmdId = kOverlayPromotionHintCHROMIUM;
   static const cmd::ArgFlags kArgFlags = cmd::kFixed;
   static const uint8_t cmd_flags = CMD_FLAG_SET_TRACE_LEVEL(3);
 
@@ -15565,37 +15603,90 @@ struct SwapBuffersWithDamageCHROMIUM {
 
   void SetHeader() { header.SetCmd<ValueType>(); }
 
-  void Init(GLint _x, GLint _y, GLint _width, GLint _height) {
+  void Init(GLuint _texture,
+            GLboolean _promotion_hint,
+            GLint _display_x,
+            GLint _display_y) {
     SetHeader();
-    x = _x;
-    y = _y;
-    width = _width;
-    height = _height;
+    texture = _texture;
+    promotion_hint = _promotion_hint;
+    display_x = _display_x;
+    display_y = _display_y;
   }
 
-  void* Set(void* cmd, GLint _x, GLint _y, GLint _width, GLint _height) {
-    static_cast<ValueType*>(cmd)->Init(_x, _y, _width, _height);
+  void* Set(void* cmd,
+            GLuint _texture,
+            GLboolean _promotion_hint,
+            GLint _display_x,
+            GLint _display_y) {
+    static_cast<ValueType*>(cmd)->Init(_texture, _promotion_hint, _display_x,
+                                       _display_y);
     return NextCmdAddress<ValueType>(cmd);
   }
 
   gpu::CommandHeader header;
-  int32_t x;
-  int32_t y;
-  int32_t width;
-  int32_t height;
+  uint32_t texture;
+  uint32_t promotion_hint;
+  int32_t display_x;
+  int32_t display_y;
 };
 
-static_assert(sizeof(SwapBuffersWithDamageCHROMIUM) == 20,
-              "size of SwapBuffersWithDamageCHROMIUM should be 20");
-static_assert(offsetof(SwapBuffersWithDamageCHROMIUM, header) == 0,
-              "offset of SwapBuffersWithDamageCHROMIUM header should be 0");
-static_assert(offsetof(SwapBuffersWithDamageCHROMIUM, x) == 4,
-              "offset of SwapBuffersWithDamageCHROMIUM x should be 4");
-static_assert(offsetof(SwapBuffersWithDamageCHROMIUM, y) == 8,
-              "offset of SwapBuffersWithDamageCHROMIUM y should be 8");
-static_assert(offsetof(SwapBuffersWithDamageCHROMIUM, width) == 12,
-              "offset of SwapBuffersWithDamageCHROMIUM width should be 12");
-static_assert(offsetof(SwapBuffersWithDamageCHROMIUM, height) == 16,
-              "offset of SwapBuffersWithDamageCHROMIUM height should be 16");
+static_assert(sizeof(OverlayPromotionHintCHROMIUM) == 20,
+              "size of OverlayPromotionHintCHROMIUM should be 20");
+static_assert(offsetof(OverlayPromotionHintCHROMIUM, header) == 0,
+              "offset of OverlayPromotionHintCHROMIUM header should be 0");
+static_assert(offsetof(OverlayPromotionHintCHROMIUM, texture) == 4,
+              "offset of OverlayPromotionHintCHROMIUM texture should be 4");
+static_assert(
+    offsetof(OverlayPromotionHintCHROMIUM, promotion_hint) == 8,
+    "offset of OverlayPromotionHintCHROMIUM promotion_hint should be 8");
+static_assert(offsetof(OverlayPromotionHintCHROMIUM, display_x) == 12,
+              "offset of OverlayPromotionHintCHROMIUM display_x should be 12");
+static_assert(offsetof(OverlayPromotionHintCHROMIUM, display_y) == 16,
+              "offset of OverlayPromotionHintCHROMIUM display_y should be 16");
+
+struct SwapBuffersWithBoundsCHROMIUMImmediate {
+  typedef SwapBuffersWithBoundsCHROMIUMImmediate ValueType;
+  static const CommandId kCmdId = kSwapBuffersWithBoundsCHROMIUMImmediate;
+  static const cmd::ArgFlags kArgFlags = cmd::kAtLeastN;
+  static const uint8_t cmd_flags = CMD_FLAG_SET_TRACE_LEVEL(3);
+
+  static uint32_t ComputeDataSize(GLsizei count) {
+    return static_cast<uint32_t>(sizeof(GLint) * 4 * count);  // NOLINT
+  }
+
+  static uint32_t ComputeSize(GLsizei count) {
+    return static_cast<uint32_t>(sizeof(ValueType) +
+                                 ComputeDataSize(count));  // NOLINT
+  }
+
+  void SetHeader(GLsizei count) {
+    header.SetCmdByTotalSize<ValueType>(ComputeSize(count));
+  }
+
+  void Init(GLsizei _count, const GLint* _rects) {
+    SetHeader(_count);
+    count = _count;
+    memcpy(ImmediateDataAddress(this), _rects, ComputeDataSize(_count));
+  }
+
+  void* Set(void* cmd, GLsizei _count, const GLint* _rects) {
+    static_cast<ValueType*>(cmd)->Init(_count, _rects);
+    const uint32_t size = ComputeSize(_count);
+    return NextImmediateCmdAddressTotalSize<ValueType>(cmd, size);
+  }
+
+  gpu::CommandHeader header;
+  int32_t count;
+};
+
+static_assert(sizeof(SwapBuffersWithBoundsCHROMIUMImmediate) == 8,
+              "size of SwapBuffersWithBoundsCHROMIUMImmediate should be 8");
+static_assert(
+    offsetof(SwapBuffersWithBoundsCHROMIUMImmediate, header) == 0,
+    "offset of SwapBuffersWithBoundsCHROMIUMImmediate header should be 0");
+static_assert(
+    offsetof(SwapBuffersWithBoundsCHROMIUMImmediate, count) == 4,
+    "offset of SwapBuffersWithBoundsCHROMIUMImmediate count should be 4");
 
 #endif  // GPU_COMMAND_BUFFER_COMMON_GLES2_CMD_FORMAT_AUTOGEN_H_

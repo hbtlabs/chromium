@@ -1,33 +1,36 @@
+<link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_expand_button/cr_expand_button.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/icon.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-collapse/iron-collapse.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-checkbox/paper-checkbox.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
-<link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
-<link rel="import" href="/controls/settings_checkbox.html">
-<link rel="import" href="/people_page/sync_page.html">
-<link rel="import" href="/people_page/profile_info_browser_proxy.html">
-<link rel="import" href="/people_page/sync_browser_proxy.html">
-<link rel="import" href="/route.html">
-<link rel="import" href="/settings_page/settings_animated_pages.html">
-<link rel="import" href="/settings_page/settings_subpage.html">
-<link rel="import" href="/settings_shared_css.html">
+<link rel="import" href="../controls/settings_toggle_button.html">
+<link rel="import" href="sync_page.html">
+<link rel="import" href="profile_info_browser_proxy.html">
+<link rel="import" href="sync_browser_proxy.html">
+<link rel="import" href="../route.html">
+<link rel="import" href="../settings_page/settings_animated_pages.html">
+<link rel="import" href="../settings_page/settings_subpage.html">
+<link rel="import" href="../settings_shared_css.html">
 
 <if expr="chromeos">
-<link rel="import" href="/people_page/change_picture.html">
-<link rel="import" href="/people_page/easy_unlock_browser_proxy.html">
-<link rel="import" href="/people_page/easy_unlock_turn_off_dialog.html">
-<link rel="import" href="/people_page/lock_screen.html">
-<link rel="import" href="/people_page/lock_state_behavior.html">
-<link rel="import" href="/people_page/users_page.html">
+<link rel="import" href="change_picture.html">
+<link rel="import" href="easy_unlock_browser_proxy.html">
+<link rel="import" href="easy_unlock_turn_off_dialog.html">
+<link rel="import" href="fingerprint_list.html">
+<link rel="import" href="lock_screen.html">
+<link rel="import" href="lock_state_behavior.html">
+<link rel="import" href="users_page.html">
 </if>
 <if expr="not chromeos">
-<link rel="import" href="/people_page/import_data_dialog.html">
-<link rel="import" href="/people_page/manage_profile.html">
+<link rel="import" href="import_data_dialog.html">
+<link rel="import" href="manage_profile.html">
 </if>
 
 <dom-module id="settings-people-page">
@@ -80,6 +83,11 @@
         width: 40px;
       }
 
+      /* Avoid orphaned english text (as requested by bettes@) */
+      #activity-controls .secondary {
+        max-width: 90%;
+      }
+
       #googleg-logo {
         background-image: url(../../../../../ui/webui/resources/images/200-logo_googleg.png);
         background-size: cover;
@@ -87,8 +95,15 @@
         width: var(--iron-icon-width);
       }
 
-      paper-checkbox {
-        margin: 16px 0 2px;
+      #disconnectDialog .footer .settings-box {
+        --settings-box-row-padding: 0;
+      }
+
+      .delete-profile-warning {
+        /* In order to line up with the checkbox text. */
+        -webkit-padding-start: 36px;
+        padding-bottom: 10px;
+        padding-top: 10px;
       }
     </style>
     <settings-animated-pages id="pages" section="people">
@@ -99,19 +114,23 @@
                 style="background-image: [[getIconImageset_(profileIconUrl_)]]">
             </div>
 <if expr="not chromeos">
-            <div class="middle two-line" on-tap="onProfileNameTap_" actionable>
+            <div class="middle two-line no-min-width"
+                on-tap="onProfileNameTap_" actionable>
 </if>
 <if expr="chromeos">
-            <div class="middle two-line" on-tap="onPictureTap_" actionable>
+            <div class="middle two-line no-min-width" on-tap="onPictureTap_"
+                actionable>
 </if>
-              <div class="flex">
+              <div class="flex text-elide">
                 <span id="profile-name">[[profileName_]]</span>
-                <div class="secondary" hidden="[[!syncStatus.signedIn]]">
+                <div class="secondary" hidden="[[!syncStatus.signedIn]]"
+                    id="profileNameSecondary">
                   [[syncStatus.signedInUsername]]
                 </div>
               </div>
-              <button class="subpage-arrow" is="paper-icon-button-light">
-              </button>
+              <button class="subpage-arrow" is="paper-icon-button-light"
+                  aria-labelledby="profile-name"
+                  aria-describedby="profileNameSecondary"></button>
             </div>
 <if expr="not chromeos">
             <template is="dom-if" if="[[showSignin_(syncStatus)]]">
@@ -148,7 +167,7 @@
         <template is="dom-if" if="[[syncStatus.domain]]">
           <div class="settings-box">
             <div class="icon-container">
-              <iron-icon icon="cr:domain"></iron-icon>
+              <iron-icon icon="cr20:domain"></iron-icon>
             </div>
             <div class="middle"
                 inner-h-t-m-l="[[getDomainHtml_(syncStatus.domain)]]">
@@ -167,34 +186,42 @@
               </iron-icon>
             </div>
             <div class="middle">
-              <div>$i18n{sync}</div>
-              <div class$="secondary [[getSyncStatusTextClass_(syncStatus)]]">
+              $i18n{sync}
+              <div class$="secondary [[getSyncStatusTextClass_(syncStatus)]]"
+                  id="syncSecondary">
                 [[syncStatus.statusText]]
               </div>
             </div>
-            <button class="subpage-arrow" is="paper-icon-button-light"></button>
+            <button class="subpage-arrow" is="paper-icon-button-light"
+                aria-label="$i18n{sync}"
+                aria-describedby="syncSecondary"></button>
           </div>
         </template>
 
-        <div class="settings-box two-line" id="activity-controls"
+        <div class="settings-box three-line" id="activity-controls"
             on-tap="onActivityControlsTap_" actionable
             hidden="[[!syncStatus.signedIn]]">
           <div class="icon-container">
             <div id="googleg-logo"></div>
           </div>
           <div class="middle">
-            <div>$i18n{personalizeGoogleServicesTitle}</div>
-            <div class="secondary">$i18n{personalizeGoogleServicesText}</div>
+            $i18n{personalizeGoogleServicesTitle}
+            <div class="secondary" id="personalizeGoogleServicesSecondary">
+              $i18n{personalizeGoogleServicesText}
+            </div>
           </div>
-          <button class="icon-external" is="paper-icon-button-light"></button>
+          <button class="icon-external" is="paper-icon-button-light"
+              aria-label="$i18n{personalizeGoogleServicesTitle}"
+              aria-describedby="personalizeGoogleServicesSecondary"></button>
         </div>
 
 <if expr="chromeos">
         <template is="dom-if" if="[[!quickUnlockEnabled_]]">
-          <div class="settings-box single-column">
-            <settings-checkbox pref="{{prefs.settings.enable_screen_lock}}"
+          <div class="settings-box">
+            <settings-toggle-button class="start"
+                pref="{{prefs.settings.enable_screen_lock}}"
                 label="$i18n{enableScreenlock}">
-            </settings-checkbox>
+            </settings-toggle-button>
           </div>
         </template>
 
@@ -203,12 +230,14 @@
                on-tap="onConfigureLockTap_">
             <div class="start">
               $i18n{lockScreenTitle}
-              <div class="secondary">
+              <div class="secondary" id="lockScreenSecondary">
                 [[getPasswordState_(hasPin,
                                     prefs.settings.enable_screen_lock.value)]]
               </div>
             </div>
-            <button class="subpage-arrow" is="paper-icon-button-light"></button>
+            <button class="subpage-arrow" is="paper-icon-button-light"
+                aria-label="$i18n{lockScreenTitle}"
+                aria-describedby="lockScrenSecondary"></button>
           </div>
         </template>
 
@@ -226,13 +255,15 @@
                 <a target="_blank" href="$i18n{easyUnlockLearnMoreURL}">
                   $i18n{learnMore}
                 </a>
+                <!-- TODO(dbeam): this should be 1 dom-if with a method instead
+                     of 2 nested dom-ifs. -->
                 <template is="dom-if" if="[[easyUnlockEnabled_]]">
                   <template is="dom-if"
                       if="[[easyUnlockProximityDetectionAllowed_]]">
-                    <settings-checkbox
+                    <settings-toggle-button
                         pref="{{prefs.easy_unlock.proximity_required}}"
                         label="$i18n{easyUnlockRequireProximityLabel}">
-                    </settings-checkbox>
+                    </settings-toggle-button>
                   </template>
                 </template>
               </div>
@@ -258,26 +289,30 @@
         <div id="manage-other-people-subpage-trigger"
             class="settings-box" on-tap="onManageOtherPeople_" actionable>
           <div class="start">$i18n{manageOtherPeople}</div>
-          <button class="subpage-arrow" is="paper-icon-button-light"></button>
+          <button class="subpage-arrow" is="paper-icon-button-light"
+              aria-label="$i18n{manageOtherPeople}"></button>
         </div>
 
 <if expr="not chromeos">
         <div class="settings-box" on-tap="onImportDataTap_" actionable>
           <div class="start">$i18n{importTitle}</div>
-          <button class="subpage-arrow" is="paper-icon-button-light"></button>
+          <button class="subpage-arrow" is="paper-icon-button-light"
+              aria-label="$i18n{importTitle}"></button>
         </div>
 </if>
 
-        <template is="dom-if" if=[[profileManagesSupervisedUsers_]]>
+        <template is="dom-if" if="[[profileManagesSupervisedUsers_]]">
           <div id="manageSupervisedUsersContainer" class="settings-box two-line"
               on-tap="onManageSupervisedUsers_" actionable>
             <div class="start">
               $i18n{manageSupervisedUsers}
-              <div class="secondary">
+              <div class="secondary" id="manageSupervisedUsersSecondary">
                 $i18n{manageSupervisedUsersDescription}
               </div>
             </div>
-            <button class="icon-external" is="paper-icon-button-light"></button>
+            <button class="icon-external" is="paper-icon-button-light"
+                aria-label="$i18n{manageSupervisedUsers}"
+                aria-describedby="manageSupervisedUsersSecondary"></button>
           </div>
         </template>
       </neon-animatable>
@@ -299,6 +334,11 @@
             </settings-lock-screen>
           </settings-subpage>
         </template>
+      </template>
+      <template is="dom-if" route-path="/lockScreen/fingerprint">
+        <settings-subpage page-title="$i18n{lockScreenFingerprintTitle}">
+          <settings-fingerprint-list></settings-fingerprint-list>
+        </settings-subpage>
       </template>
       <template is="dom-if" route-path="/accounts">
         <settings-subpage
@@ -334,25 +374,38 @@
       <div class="body">
         <div inner-h-t-m-l="[[getDisconnectExplanationHtml_(syncStatus.domain)]]">
         </div>
-  <if expr="(not chromeos and is_posix) or is_win or is_macosx">
-        <paper-checkbox id="deleteProfile" hidden=[[syncStatus.domain]]>
-          $i18n{syncDisconnectDeleteProfile}
-        </paper-checkbox>
-  </if>
       </div>
       <div class="button-container">
         <paper-button on-tap="onDisconnectCancel_" class="cancel-button">
           $i18n{cancel}
         </paper-button>
         <paper-button id="disconnectConfirm" class="action-button"
-            hidden=[[syncStatus.domain]] on-tap="onDisconnectConfirm_">
+            hidden="[[syncStatus.domain]]" on-tap="onDisconnectConfirm_">
           $i18n{syncDisconnect}
         </paper-button>
         <paper-button id="disconnectManagedProfileConfirm" class="action-button"
-            hidden=[[!syncStatus.domain]] on-tap="onDisconnectConfirm_">
+            hidden="[[!syncStatus.domain]]" on-tap="onDisconnectConfirm_">
           $i18n{syncDisconnectConfirm}
         </paper-button>
       </div>
+<if expr="(not chromeos and is_posix) or is_win or is_macosx">
+      <template is="dom-if" if="[[!syncStatus.domain]]">
+        <div class="footer border-top-divider">
+          <div class="settings-box first">
+            <paper-checkbox id="deleteProfile" class="start"
+                checked="{{deleteProfile_}}">
+              $i18n{syncDisconnectDeleteProfile}
+            </paper-checkbox>
+            <cr-expand-button expanded="{{deleteProfileWarningVisible_}}"
+                alt="$i18n{deleteProfileWarningExpandA11yLabel}">
+            </cr-expand-button>
+          </div>
+          <iron-collapse opened="[[deleteProfileWarningVisible_]]">
+            <div class="delete-profile-warning">[[deleteProfileWarning_]]</div>
+          </iron-collapse>
+        </div>
+      </template>
+</if>
     </dialog>
 
     <template is="dom-if" if="[[showImportDataDialog_]]" restamp>
@@ -362,8 +415,9 @@
     </template>
 
 <if expr="chromeos">
-    <template is="dom-if" if="[[easyUnlockEnabled_]]">
-      <easy-unlock-turn-off-dialog id="easyUnlockTurnOffDialog">
+    <template is="dom-if" if="[[showEasyUnlockTurnOffDialog_]]">
+      <easy-unlock-turn-off-dialog id="easyUnlockTurnOffDialog"
+          on-close="onEasyUnlockTurnOffDialogClose_">
       </easy-unlock-turn-off-dialog>
     </template>
 </if>

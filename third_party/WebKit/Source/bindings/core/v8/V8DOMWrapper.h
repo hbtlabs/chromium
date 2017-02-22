@@ -36,7 +36,7 @@
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "core/CoreExport.h"
-#include "wtf/PassRefPtr.h"
+#include "wtf/Compiler.h"
 #include "wtf/text/AtomicString.h"
 #include <v8.h>
 
@@ -59,16 +59,16 @@ class V8DOMWrapper {
   // ScriptWrappable is not yet associated with any wrapper.  Returns the
   // wrapper already associated or |wrapper| if not yet associated.
   // The caller should always use the returned value rather than |wrapper|.
-  static v8::Local<v8::Object> associateObjectWithWrapper(
+  WARN_UNUSED_RESULT static v8::Local<v8::Object> associateObjectWithWrapper(
       v8::Isolate*,
       ScriptWrappable*,
       const WrapperTypeInfo*,
-      v8::Local<v8::Object> wrapper) WARN_UNUSED_RETURN;
-  static v8::Local<v8::Object> associateObjectWithWrapper(
+      v8::Local<v8::Object> wrapper);
+  WARN_UNUSED_RESULT static v8::Local<v8::Object> associateObjectWithWrapper(
       v8::Isolate*,
       Node*,
       const WrapperTypeInfo*,
-      v8::Local<v8::Object> wrapper) WARN_UNUSED_RETURN;
+      v8::Local<v8::Object> wrapper);
   static void setNativeInfo(v8::Isolate*,
                             v8::Local<v8::Object>,
                             const WrapperTypeInfo*,
@@ -94,16 +94,13 @@ inline void V8DOMWrapper::setNativeInfo(v8::Isolate* isolate,
                     const_cast<WrapperTypeInfo*>(wrapperTypeInfo)};
   wrapper->SetAlignedPointerInInternalFields(WTF_ARRAY_LENGTH(indices), indices,
                                              values);
-  if (RuntimeEnabledFeatures::traceWrappablesEnabled()) {
-    auto perIsolateData = V8PerIsolateData::from(isolate);
-    // We notify ScriptWrappableVisitor about the new wrapper association,
-    // so the visitor can make sure to trace the association (in case it is
-    // currently tracing).  Because of some optimizations, V8 will not
-    // necessarily detect wrappers created during its incremental marking.
-    perIsolateData->scriptWrappableVisitor()->RegisterV8Reference(
-        std::make_pair(const_cast<WrapperTypeInfo*>(wrapperTypeInfo),
-                       scriptWrappable));
-  }
+  auto perIsolateData = V8PerIsolateData::from(isolate);
+  // We notify ScriptWrappableVisitor about the new wrapper association,
+  // so the visitor can make sure to trace the association (in case it is
+  // currently tracing).  Because of some optimizations, V8 will not
+  // necessarily detect wrappers created during its incremental marking.
+  perIsolateData->scriptWrappableVisitor()->RegisterV8Reference(std::make_pair(
+      const_cast<WrapperTypeInfo*>(wrapperTypeInfo), scriptWrappable));
 }
 
 inline void V8DOMWrapper::clearNativeInfo(v8::Isolate* isolate,

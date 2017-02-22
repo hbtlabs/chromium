@@ -7,8 +7,8 @@
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/CoreExport.h"
-#include "core/dom/ActiveDOMObject.h"
 #include "core/dom/MessagePort.h"
+#include "core/dom/SuspendableObject.h"
 #include "core/events/EventListener.h"
 #include "core/events/EventTarget.h"
 #include "core/workers/AbstractWorker.h"
@@ -21,24 +21,26 @@ namespace blink {
 class ExceptionState;
 class ExecutionContext;
 class InProcessWorkerMessagingProxy;
+class ScriptState;
 class WorkerScriptLoader;
 
 // Base class for workers that operate in the same process as the document that
 // creates them.
-class CORE_EXPORT InProcessWorkerBase : public AbstractWorker,
-                                        public ActiveScriptWrappable {
+class CORE_EXPORT InProcessWorkerBase
+    : public AbstractWorker,
+      public ActiveScriptWrappable<InProcessWorkerBase> {
  public:
   ~InProcessWorkerBase() override;
 
-  void postMessage(ExecutionContext*,
+  void postMessage(ScriptState*,
                    PassRefPtr<SerializedScriptValue> message,
                    const MessagePortArray&,
                    ExceptionState&);
-  static bool canTransferArrayBuffer() { return true; }
+  static bool canTransferArrayBuffersAndImageBitmaps() { return true; }
   void terminate();
 
-  // ActiveDOMObject
-  void contextDestroyed() override;
+  // SuspendableObject
+  void contextDestroyed(ExecutionContext*) override;
 
   // ScriptWrappable
   bool hasPendingActivity() const final;

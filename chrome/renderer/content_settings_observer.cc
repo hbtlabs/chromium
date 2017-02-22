@@ -11,6 +11,7 @@
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
 #include "extensions/features/features.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebContentSettingCallbacks.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
@@ -57,10 +58,13 @@ GURL GetOriginOrURL(const WebFrame* frame) {
   return top_origin.GetURL();
 }
 
+// Allow passing both WebURL and GURL here, so that we can early return without
+// allocating a new backing string if only the default rule matches.
+template <typename URL>
 ContentSetting GetContentSettingFromRules(
     const ContentSettingsForOneType& rules,
     const WebFrame* frame,
-    const GURL& secondary_url) {
+    const URL& secondary_url) {
   ContentSettingsForOneType::const_iterator it;
   // If there is only one rule, it's the default rule and we don't need to match
   // the patterns.
@@ -70,9 +74,10 @@ ContentSetting GetContentSettingFromRules(
     return rules[0].setting;
   }
   const GURL& primary_url = GetOriginOrURL(frame);
+  const GURL& secondary_gurl = secondary_url;
   for (it = rules.begin(); it != rules.end(); ++it) {
     if (it->primary_pattern.Matches(primary_url) &&
-        it->secondary_pattern.Matches(secondary_url)) {
+        it->secondary_pattern.Matches(secondary_gurl)) {
       return it->setting;
     }
   }
@@ -99,6 +104,10 @@ ContentSettingsObserver::ContentSettingsObserver(
       should_whitelist_(should_whitelist) {
   ClearBlockedContentSettings();
   render_frame->GetWebFrame()->setContentSettingsClient(this);
+
+  render_frame->GetInterfaceRegistry()->AddInterface(
+      base::Bind(&ContentSettingsObserver::OnInsecureContentRendererRequest,
+                 base::Unretained(this)));
 
   content::RenderFrame* main_frame =
       render_frame->GetRenderView()->GetMainRenderFrame();
@@ -154,9 +163,6 @@ bool ContentSettingsObserver::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(ContentSettingsObserver, message)
     IPC_MESSAGE_HANDLER(ChromeViewMsg_SetAsInterstitial, OnSetAsInterstitial)
-    IPC_MESSAGE_HANDLER(ChromeViewMsg_SetAllowRunningInsecureContent,
-                        OnSetAllowRunningInsecureContent)
-    IPC_MESSAGE_HANDLER(ChromeViewMsg_ReloadFrame, OnReloadFrame);
     IPC_MESSAGE_HANDLER(ChromeViewMsg_RequestFileSystemAccessAsyncResponse,
                         OnRequestFileSystemAccessAsyncResponse)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -201,6 +207,20 @@ void ContentSettingsObserver::OnDestruct() {
   delete this;
 }
 
+void ContentSettingsObserver::SetAllowRunningInsecureContent() {
+  allow_running_insecure_content_ = true;
+
+  // Reload if we are the main frame.
+  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
+  if (!frame->parent())
+    frame->reload(blink::WebFrameLoadType::ReloadMainResource);
+}
+
+void ContentSettingsObserver::OnInsecureContentRendererRequest(
+    chrome::mojom::InsecureContentRendererRequest request) {
+  insecure_content_renderer_bindings_.AddBinding(this, std::move(request));
+}
+
 bool ContentSettingsObserver::allowDatabase(const WebString& name,
                                             const WebString& display_name,
                                             unsigned estimated_size) {
@@ -212,8 +232,8 @@ bool ContentSettingsObserver::allowDatabase(const WebString& name,
   bool result = false;
   Send(new ChromeViewHostMsg_AllowDatabase(
       routing_id(), url::Origin(frame->getSecurityOrigin()).GetURL(),
-      url::Origin(frame->top()->getSecurityOrigin()).GetURL(), name,
-      display_name, &result));
+      url::Origin(frame->top()->getSecurityOrigin()).GetURL(), name.utf16(),
+      display_name.utf16(), &result));
   return result;
 }
 
@@ -251,11 +271,9 @@ bool ContentSettingsObserver::allowImage(bool enabled_per_settings,
       return true;
 
     if (content_setting_rules_) {
-      GURL secondary_url(image_url);
-      allow =
-          GetContentSettingFromRules(content_setting_rules_->image_rules,
-                                     render_frame()->GetWebFrame(),
-                                     secondary_url) != CONTENT_SETTING_BLOCK;
+      allow = GetContentSettingFromRules(content_setting_rules_->image_rules,
+                                         render_frame()->GetWebFrame(),
+                                         image_url) != CONTENT_SETTING_BLOCK;
     }
   }
   if (!allow)
@@ -273,7 +291,8 @@ bool ContentSettingsObserver::allowIndexedDB(const WebString& name,
   bool result = false;
   Send(new ChromeViewHostMsg_AllowIndexedDB(
       routing_id(), url::Origin(frame->getSecurityOrigin()).GetURL(),
-      url::Origin(frame->top()->getSecurityOrigin()).GetURL(), name, &result));
+      url::Origin(frame->top()->getSecurityOrigin()).GetURL(), name.utf16(),
+      &result));
   return result;
 }
 
@@ -320,8 +339,7 @@ bool ContentSettingsObserver::allowScriptFromSource(
   if (content_setting_rules_) {
     ContentSetting setting =
         GetContentSettingFromRules(content_setting_rules_->script_rules,
-                                   render_frame()->GetWebFrame(),
-                                   GURL(script_url));
+                                   render_frame()->GetWebFrame(), script_url);
     allow = setting != CONTENT_SETTING_BLOCK;
   }
   return allow || IsWhitelistedForContentSettings();
@@ -388,6 +406,8 @@ bool ContentSettingsObserver::allowRunningInsecureContent(
     bool allowed_per_settings,
     const blink::WebSecurityOrigin& origin,
     const blink::WebURL& resource_url) {
+  // Note: this implementation is a mirror of
+  // Browser::ShouldAllowRunningInsecureContent.
   FilteredReportInsecureContentRan(GURL(resource_url));
 
   if (!allow_running_insecure_content_ && !allowed_per_settings) {
@@ -411,14 +431,10 @@ bool ContentSettingsObserver::allowAutoplay(bool default_value) {
 
 void ContentSettingsObserver::passiveInsecureContentFound(
     const blink::WebURL& resource_url) {
+  // Note: this implementation is a mirror of
+  // Browser::PassiveInsecureContentFound.
   ReportInsecureContent(SslInsecureContentType::DISPLAY);
   FilteredReportInsecureContentDisplayed(GURL(resource_url));
-}
-
-void ContentSettingsObserver::didUseKeygen() {
-  WebFrame* frame = render_frame()->GetWebFrame();
-  Send(new ChromeViewHostMsg_DidUseKeygen(
-      routing_id(), url::Origin(frame->getSecurityOrigin()).GetURL()));
 }
 
 void ContentSettingsObserver::didNotAllowPlugins() {
@@ -436,16 +452,6 @@ void ContentSettingsObserver::OnLoadBlockedPlugins(
 
 void ContentSettingsObserver::OnSetAsInterstitial() {
   is_interstitial_page_ = true;
-}
-
-void ContentSettingsObserver::OnSetAllowRunningInsecureContent(bool allow) {
-  allow_running_insecure_content_ = allow;
-}
-
-void ContentSettingsObserver::OnReloadFrame() {
-  DCHECK(!render_frame()->GetWebFrame()->parent()) <<
-      "Should only be called on the main frame";
-  render_frame()->GetWebFrame()->reload();
 }
 
 void ContentSettingsObserver::OnRequestFileSystemAccessAsyncResponse(
@@ -485,8 +491,7 @@ bool ContentSettingsObserver::IsPlatformApp() {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 const extensions::Extension* ContentSettingsObserver::GetExtension(
     const WebSecurityOrigin& origin) const {
-  if (!base::EqualsASCII(base::StringPiece16(origin.protocol()),
-                         extensions::kExtensionScheme))
+  if (origin.protocol().ascii() != extensions::kExtensionScheme)
     return NULL;
 
   const std::string extension_id = origin.host().utf8().data();
@@ -506,38 +511,38 @@ bool ContentSettingsObserver::IsWhitelistedForContentSettings() const {
   if (render_frame()->IsFTPDirectoryListing())
     return true;
 
-  WebFrame* web_frame = render_frame()->GetWebFrame();
-  return IsWhitelistedForContentSettings(
-      web_frame->document().getSecurityOrigin(), web_frame->document().url());
+  const WebDocument& document = render_frame()->GetWebFrame()->document();
+  return IsWhitelistedForContentSettings(document.getSecurityOrigin(),
+                                         document.url());
 }
 
 bool ContentSettingsObserver::IsWhitelistedForContentSettings(
     const WebSecurityOrigin& origin,
-    const GURL& document_url) {
-  if (document_url == content::kUnreachableWebDataURL)
+    const WebURL& document_url) {
+  if (document_url.string() == content::kUnreachableWebDataURL)
     return true;
 
   if (origin.isUnique())
     return false;  // Uninitialized document?
 
-  base::string16 protocol = origin.protocol();
-  if (base::EqualsASCII(protocol, content::kChromeUIScheme))
+  blink::WebString protocol = origin.protocol();
+
+  if (protocol == content::kChromeUIScheme)
     return true;  // Browser UI elements should still work.
 
-  if (base::EqualsASCII(protocol, content::kChromeDevToolsScheme))
+  if (protocol == content::kChromeDevToolsScheme)
     return true;  // DevTools UI elements should still work.
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  if (base::EqualsASCII(protocol, extensions::kExtensionScheme))
+  if (protocol == extensions::kExtensionScheme)
     return true;
 #endif
 
   // If the scheme is file:, an empty file name indicates a directory listing,
   // which requires JavaScript to function properly.
-  if (base::EqualsASCII(protocol, url::kFileScheme)) {
-    return document_url.SchemeIs(url::kFileScheme) &&
-           document_url.ExtractFileName().empty();
+  if (protocol == url::kFileScheme &&
+      document_url.protocolIs(url::kFileScheme)) {
+    return GURL(document_url).ExtractFileName().empty();
   }
-
   return false;
 }

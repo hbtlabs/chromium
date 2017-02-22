@@ -14,11 +14,11 @@
 #include "ash/common/wm/window_state_observer.h"
 #include "ash/common/wm/wm_snap_to_pixel_layout_manager.h"
 #include "ash/common/wm_activation_observer.h"
-#include "ash/common/wm_window_observer.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
+#include "ui/aura/window_observer.h"
 #include "ui/display/display_observer.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/keyboard/keyboard_controller_observer.h"
@@ -27,7 +27,7 @@ namespace ash {
 class DockedBackgroundWidget;
 class DockedWindowLayoutManagerObserver;
 class DockedWindowResizerTest;
-class WmRootWindowController;
+class RootWindowController;
 class WmShelf;
 
 // DockedWindowLayoutManager is responsible for organizing windows when they are
@@ -45,7 +45,7 @@ class WmShelf;
 class ASH_EXPORT DockedWindowLayoutManager
     : public wm::WmSnapToPixelLayoutManager,
       public display::DisplayObserver,
-      public WmWindowObserver,
+      public aura::WindowObserver,
       public WmActivationObserver,
       public ShellObserver,
       public keyboard::KeyboardControllerObserver,
@@ -143,12 +143,12 @@ class ASH_EXPORT DockedWindowLayoutManager
   void OnPreWindowStateTypeChange(wm::WindowState* window_state,
                                   wm::WindowStateType old_type) override;
 
-  // WmWindowObserver:
-  void OnWindowBoundsChanged(WmWindow* window,
+  // aura::WindowObserver:
+  void OnWindowBoundsChanged(aura::Window* window,
                              const gfx::Rect& old_bounds,
                              const gfx::Rect& new_bounds) override;
-  void OnWindowVisibilityChanging(WmWindow* window, bool visible) override;
-  void OnWindowDestroying(WmWindow* window) override;
+  void OnWindowVisibilityChanging(aura::Window* window, bool visible) override;
+  void OnWindowDestroying(aura::Window* window) override;
 
   // WmActivationObserver:
   void OnWindowActivated(WmWindow* gained_active,
@@ -252,7 +252,7 @@ class ASH_EXPORT DockedWindowLayoutManager
   // Parent window associated with this layout manager.
   WmWindow* dock_container_;
 
-  WmRootWindowController* root_window_controller_;
+  RootWindowController* root_window_controller_;
 
   // Protect against recursive calls to Relayout().
   bool in_layout_;

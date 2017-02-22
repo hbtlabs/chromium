@@ -10,6 +10,7 @@
 
 #include "content/common/content_export.h"
 #include "content/common/content_security_policy_header.h"
+#include "content/common/feature_policy/feature_policy.h"
 #include "third_party/WebKit/public/platform/WebInsecureRequestPolicy.h"
 #include "url/origin.h"
 
@@ -29,7 +30,8 @@ struct CONTENT_EXPORT FrameReplicationState {
                         const std::string& unique_name,
                         blink::WebSandboxFlags sandbox_flags,
                         blink::WebInsecureRequestPolicy insecure_request_policy,
-                        bool has_potentially_trustworthy_unique_origin);
+                        bool has_potentially_trustworthy_unique_origin,
+                        bool has_received_user_gesture);
   FrameReplicationState(const FrameReplicationState& other);
   ~FrameReplicationState();
 
@@ -84,6 +86,10 @@ struct CONTENT_EXPORT FrameReplicationState {
   // scratch.
   std::string unique_name;
 
+  // Parsed feature policy header. May be empty if no header was sent with the
+  // document.
+  ParsedFeaturePolicyHeader feature_policy_header;
+
   // Accumulated CSP headers - gathered from http headers, <meta> elements,
   // parent frames (in case of about:blank frames).
   std::vector<ContentSecurityPolicyHeader> accumulated_csp_headers;
@@ -105,8 +111,8 @@ struct CONTENT_EXPORT FrameReplicationState {
   // trustworthy.
   bool has_potentially_trustworthy_unique_origin;
 
-  // TODO(alexmos): Eventually, this structure can also hold other state that
-  // needs to be replicated, such as frame sizing info.
+  // Whether the frame has ever received a user gesture anywhere.
+  bool has_received_user_gesture;
 };
 
 }  // namespace content

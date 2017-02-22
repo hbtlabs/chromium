@@ -30,7 +30,7 @@ Elements.ElementStatePaneWidget = class extends UI.Widget {
      */
     function createCheckbox(state) {
       var td = createElement('td');
-      var label = createCheckboxLabel(':' + state);
+      var label = UI.createCheckboxLabel(':' + state);
       var input = label.checkboxElement;
       input.state = state;
       input.addEventListener('click', clickListener, false);
@@ -52,21 +52,16 @@ Elements.ElementStatePaneWidget = class extends UI.Widget {
   }
 
   /**
-   * @param {?SDK.Target} target
+   * @param {?SDK.CSSModel} cssModel
    */
-  _updateTarget(target) {
-    if (this._target === target)
+  _updateModel(cssModel) {
+    if (this._cssModel === cssModel)
       return;
-
-    if (this._target) {
-      var cssModel = SDK.CSSModel.fromTarget(this._target);
-      cssModel.removeEventListener(SDK.CSSModel.Events.PseudoStateForced, this._update, this);
-    }
-    this._target = target;
-    if (target) {
-      var cssModel = SDK.CSSModel.fromTarget(target);
-      cssModel.addEventListener(SDK.CSSModel.Events.PseudoStateForced, this._update, this);
-    }
+    if (this._cssModel)
+      this._cssModel.removeEventListener(SDK.CSSModel.Events.PseudoStateForced, this._update, this);
+    this._cssModel = cssModel;
+    if (this._cssModel)
+      this._cssModel.addEventListener(SDK.CSSModel.Events.PseudoStateForced, this._update, this);
   }
 
   /**
@@ -84,7 +79,7 @@ Elements.ElementStatePaneWidget = class extends UI.Widget {
     if (node)
       node = node.enclosingElementOrSelf();
 
-    this._updateTarget(node ? node.target() : null);
+    this._updateModel(node ? SDK.CSSModel.fromNode(node) : null);
     if (node) {
       var nodePseudoState = SDK.CSSModel.fromNode(node).pseudoState(node);
       for (var input of this._inputs) {
@@ -108,7 +103,7 @@ Elements.ElementStatePaneWidget.ButtonProvider = class {
   constructor() {
     this._button = new UI.ToolbarToggle(Common.UIString('Toggle Element State'), '');
     this._button.setText(Common.UIString(':hov'));
-    this._button.addEventListener('click', this._clicked, this);
+    this._button.addEventListener(UI.ToolbarButton.Events.Click, this._clicked, this);
     this._button.element.classList.add('monospace');
     this._view = new Elements.ElementStatePaneWidget();
   }

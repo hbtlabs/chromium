@@ -8,6 +8,7 @@
 
 #include "base/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_ripple_observer.h"
@@ -67,7 +68,7 @@ InkDropRippleTest::InkDropRippleTest() {
     }
     case FLOOD_FILL_INK_DROP_RIPPLE: {
       FloodFillInkDropRipple* flood_fill_ink_drop_ripple =
-          new FloodFillInkDropRipple(gfx::Rect(0, 0, 10, 10), gfx::Point(),
+          new FloodFillInkDropRipple(gfx::Size(10, 10), gfx::Point(),
                                      SK_ColorBLACK, kVisibleOpacity);
       ink_drop_ripple_.reset(flood_fill_ink_drop_ripple);
       test_api_.reset(
@@ -355,6 +356,19 @@ TEST_P(InkDropRippleTest, TargetInkDropStateOnAnimationEnded) {
   EXPECT_TRUE(observer_.AnimationHasEnded());
   EXPECT_EQ(views::InkDropState::HIDDEN,
             observer_.target_state_at_last_animation_ended());
+}
+
+// Verifies that when an we ink drop transitions from ACTION_PENDING to
+// ACTIVATED state, animation observers are called in order.
+TEST_P(InkDropRippleTest, RipplePendingToActivatedObserverOrder) {
+  ink_drop_ripple_->AnimateToState(InkDropState::ACTION_PENDING);
+  ink_drop_ripple_->AnimateToState(InkDropState::ACTIVATED);
+  test_api_->CompleteAnimations();
+
+  EXPECT_TRUE(observer_.AnimationStartedContextsMatch(
+      {InkDropState::ACTION_PENDING, InkDropState::ACTIVATED}));
+  EXPECT_TRUE(observer_.AnimationEndedContextsMatch(
+      {InkDropState::ACTION_PENDING, InkDropState::ACTIVATED}));
 }
 
 }  // namespace test

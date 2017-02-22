@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_crx_util.h"
@@ -37,7 +38,7 @@
 #endif
 
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/note_taking_app_utils.h"
+#include "chrome/browser/chromeos/note_taking_helper.h"
 #endif  // defined(OS_CHROMEOS)
 
 namespace {
@@ -191,6 +192,7 @@ bool DownloadCommands::IsCommandEnabled(Command command) const {
       return !download_item_->IsDone();
     case PAUSE:
       return !download_item_->IsDone() && !download_item_->IsPaused() &&
+             !download_item_->IsSavePackageDownload() &&
              download_item_->GetState() == content::DownloadItem::IN_PROGRESS;
     case RESUME:
       return download_item_->CanResume() &&
@@ -357,7 +359,7 @@ void DownloadCommands::ExecuteCommand(Command command) {
     case ANNOTATE:
 #if defined(OS_CHROMEOS)
       if (DownloadItemModel(download_item_).HasSupportedImageMimeType()) {
-        chromeos::LaunchNoteTakingAppForNewNote(
+        chromeos::NoteTakingHelper::Get()->LaunchAppForNewNote(
             Profile::FromBrowserContext(download_item_->GetBrowserContext()),
             download_item_->GetTargetFilePath());
       }

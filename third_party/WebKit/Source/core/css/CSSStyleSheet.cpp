@@ -31,6 +31,7 @@
 #include "core/css/StyleRule.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/css/parser/CSSParser.h"
+#include "core/css/parser/CSSParserContext.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/Node.h"
@@ -79,6 +80,14 @@ static bool isAcceptableCSSStyleSheetParent(const Node& parentNode) {
 }
 #endif
 
+// static
+const Document* CSSStyleSheet::singleOwnerDocument(
+    const CSSStyleSheet* styleSheet) {
+  if (styleSheet)
+    return StyleSheetContents::singleOwnerDocument(styleSheet->contents());
+  return nullptr;
+}
+
 CSSStyleSheet* CSSStyleSheet::create(StyleSheetContents* sheet,
                                      CSSImportRule* ownerRule) {
   return new CSSStyleSheet(sheet, ownerRule);
@@ -101,8 +110,8 @@ CSSStyleSheet* CSSStyleSheet::createInline(Node& ownerNode,
                                            const KURL& baseURL,
                                            const TextPosition& startPosition,
                                            const String& encoding) {
-  CSSParserContext parserContext(ownerNode.document(), nullptr, baseURL,
-                                 encoding);
+  CSSParserContext* parserContext =
+      CSSParserContext::create(ownerNode.document(), baseURL, encoding);
   StyleSheetContents* sheet =
       StyleSheetContents::create(baseURL.getString(), parserContext);
   return new CSSStyleSheet(sheet, ownerNode, true, startPosition);
@@ -159,20 +168,22 @@ void CSSStyleSheet::didMutateRules() {
   DCHECK(m_contents->isMutable());
   DCHECK_LE(m_contents->clientSize(), 1u);
 
-  didMutate(PartialRuleUpdate);
-}
-
-void CSSStyleSheet::didMutate(StyleSheetUpdateType updateType) {
   Document* owner = ownerDocument();
   if (!owner)
     return;
+  if (ownerNode() && ownerNode()->isConnected()) {
+    owner->styleEngine().setNeedsActiveStyleUpdate(ownerNode()->treeScope());
+    if (StyleResolver* resolver = owner->styleEngine().resolver())
+      resolver->invalidateMatchedPropertiesCache();
+  }
+}
 
-  // Need FullStyleUpdate when insertRule or deleteRule,
-  // because StyleSheetCollection::analyzeStyleSheetChange cannot detect partial
-  // rule update.
-  StyleResolverUpdateMode updateMode =
-      updateType != PartialRuleUpdate ? AnalyzedStyleUpdate : FullStyleUpdate;
-  owner->styleEngine().setNeedsActiveStyleUpdate(this, updateMode);
+void CSSStyleSheet::didMutate() {
+  Document* owner = ownerDocument();
+  if (!owner)
+    return;
+  if (ownerNode() && ownerNode()->isConnected())
+    owner->styleEngine().setNeedsActiveStyleUpdate(ownerNode()->treeScope());
 }
 
 void CSSStyleSheet::reattachChildRuleCSSOMWrappers() {
@@ -197,6 +208,16 @@ void CSSStyleSheet::setMediaQueries(MediaQuerySet* mediaQueries) {
     m_mediaCSSOMWrapper->reattach(m_mediaQueries.get());
 }
 
+bool CSSStyleSheet::matchesMediaQueries(const MediaQueryEvaluator& evaluator) {
+  m_viewportDependentMediaQueryResults.clear();
+  m_deviceDependentMediaQueryResults.clear();
+
+  if (!m_mediaQueries)
+    return true;
+  return evaluator.eval(m_mediaQueries, &m_viewportDependentMediaQueryResults,
+                        &m_deviceDependentMediaQueryResults);
+}
+
 unsigned CSSStyleSheet::length() const {
   return m_contents->ruleCount();
 }
@@ -217,7 +238,7 @@ CSSRule* CSSStyleSheet::item(unsigned index) {
 }
 
 void CSSStyleSheet::clearOwnerNode() {
-  didMutate(EntireStyleSheetUpdate);
+  didMutate();
   if (m_ownerNode)
     m_contents->unregisterClient(this);
   m_ownerNode = nullptr;
@@ -258,8 +279,8 @@ unsigned CSSStyleSheet::insertRule(const String& ruleString,
                             String::number(length()) + ").");
     return 0;
   }
-  CSSParserContext context(m_contents->parserContext(),
-                           UseCounter::getFrom(this));
+  const CSSParserContext* context =
+      CSSParserContext::createWithStyleSheet(m_contents->parserContext(), this);
   StyleRuleBase* rule =
       CSSParser::parseRule(context, m_contents.get(), ruleString);
 
@@ -424,6 +445,8 @@ void CSSStyleSheet::setText(const String& text) {
 DEFINE_TRACE(CSSStyleSheet) {
   visitor->trace(m_contents);
   visitor->trace(m_mediaQueries);
+  visitor->trace(m_viewportDependentMediaQueryResults);
+  visitor->trace(m_deviceDependentMediaQueryResults);
   visitor->trace(m_ownerNode);
   visitor->trace(m_ownerRule);
   visitor->trace(m_mediaCSSOMWrapper);

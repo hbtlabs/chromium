@@ -13,6 +13,7 @@
 #include "bindings/core/v8/V8ImageData.h"
 #include "bindings/core/v8/V8MessagePort.h"
 #include "bindings/core/v8/V8OffscreenCanvas.h"
+#include "bindings/core/v8/V8SharedArrayBuffer.h"
 #include "core/dom/DOMArrayBufferBase.h"
 #include "core/html/ImageData.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -29,7 +30,6 @@ V8ScriptValueSerializer::V8ScriptValueSerializer(
     : m_scriptState(std::move(scriptState)),
       m_serializedScriptValue(SerializedScriptValue::create()),
       m_serializer(m_scriptState->isolate(), this) {
-  DCHECK(RuntimeEnabledFeatures::v8BasedStructuredCloneEnabled());
 }
 
 RefPtr<SerializedScriptValue> V8ScriptValueSerializer::serialize(
@@ -44,7 +44,9 @@ RefPtr<SerializedScriptValue> V8ScriptValueSerializer::serialize(
   AutoReset<const ExceptionState*> reset(&m_exceptionState, &exceptionState);
 
   // Prepare to transfer the provided transferables.
-  prepareTransfer(transferables);
+  prepareTransfer(transferables, exceptionState);
+  if (exceptionState.hadException())
+    return nullptr;
 
   // Serialize the value and handle errors.
   v8::TryCatch tryCatch(m_scriptState->isolate());
@@ -70,7 +72,8 @@ RefPtr<SerializedScriptValue> V8ScriptValueSerializer::serialize(
   return std::move(m_serializedScriptValue);
 }
 
-void V8ScriptValueSerializer::prepareTransfer(Transferables* transferables) {
+void V8ScriptValueSerializer::prepareTransfer(Transferables* transferables,
+                                              ExceptionState& exceptionState) {
   if (!transferables)
     return;
   m_transferables = transferables;
@@ -78,30 +81,33 @@ void V8ScriptValueSerializer::prepareTransfer(Transferables* transferables) {
   // Transfer array buffers.
   for (uint32_t i = 0; i < transferables->arrayBuffers.size(); i++) {
     DOMArrayBufferBase* arrayBuffer = transferables->arrayBuffers[i].get();
-    v8::Local<v8::Value> wrapper = toV8(arrayBuffer, m_scriptState.get());
-    if (wrapper->IsArrayBuffer()) {
+    if (!arrayBuffer->isShared()) {
+      v8::Local<v8::Value> wrapper = ToV8(arrayBuffer, m_scriptState.get());
       m_serializer.TransferArrayBuffer(
           i, v8::Local<v8::ArrayBuffer>::Cast(wrapper));
-    } else if (wrapper->IsSharedArrayBuffer()) {
-      m_serializer.TransferSharedArrayBuffer(
-          i, v8::Local<v8::SharedArrayBuffer>::Cast(wrapper));
     } else {
-      NOTREACHED() << "Unknown type of array buffer in transfer list.";
+      exceptionState.throwDOMException(
+          DataCloneError, "SharedArrayBuffer can not be in transfer list.");
+      return;
     }
   }
 }
 
 void V8ScriptValueSerializer::finalizeTransfer(ExceptionState& exceptionState) {
-  if (!m_transferables)
+  if (!m_transferables && m_sharedArrayBuffers.isEmpty())
     return;
 
   // TODO(jbroman): Strictly speaking, this is not correct; transfer should
   // occur in the order of the transfer list.
   // https://html.spec.whatwg.org/multipage/infrastructure.html#structuredclonewithtransfer
 
+  ArrayBufferArray arrayBuffers;
+  arrayBuffers.appendVector(m_transferables->arrayBuffers);
+  arrayBuffers.appendVector(m_sharedArrayBuffers);
+
   v8::Isolate* isolate = m_scriptState->isolate();
-  m_serializedScriptValue->transferArrayBuffers(
-      isolate, m_transferables->arrayBuffers, exceptionState);
+  m_serializedScriptValue->transferArrayBuffers(isolate, arrayBuffers,
+                                                exceptionState);
   if (exceptionState.hadException())
     return;
 
@@ -278,9 +284,6 @@ bool V8ScriptValueSerializer::writeDOMObject(ScriptWrappable* wrappable,
     writeUint32(canvas->placeholderCanvasId());
     writeUint32(canvas->clientId());
     writeUint32(canvas->sinkId());
-    writeUint32(canvas->localId());
-    writeUint64(canvas->nonceHigh());
-    writeUint64(canvas->nonceLow());
     return true;
   }
   return false;
@@ -308,7 +311,7 @@ bool V8ScriptValueSerializer::writeFile(File* file,
                                   file->type(), lastModified, size);
     writeUint32(static_cast<uint32_t>(index));
   } else {
-    writeUTF8String(file->hasBackingFile() ? file->path() : emptyString());
+    writeUTF8String(file->hasBackingFile() ? file->path() : emptyString);
     writeUTF8String(file->name());
     writeUTF8String(file->webkitRelativePath());
     writeUTF8String(file->uuid());
@@ -369,11 +372,39 @@ v8::Maybe<bool> V8ScriptValueSerializer::WriteHostObject(
   return v8::Nothing<bool>();
 }
 
+v8::Maybe<uint32_t> V8ScriptValueSerializer::GetSharedArrayBufferId(
+    v8::Isolate* isolate,
+    v8::Local<v8::SharedArrayBuffer> v8SharedArrayBuffer) {
+  DOMSharedArrayBuffer* sharedArrayBuffer =
+      V8SharedArrayBuffer::toImpl(v8SharedArrayBuffer);
+
+  // The index returned from this function will be serialized into the data
+  // stream. When deserializing, this will be used to index into the
+  // arrayBufferContents array of the SerializedScriptValue.
+  //
+  // The v8::ValueSerializer will use the same index space for transferred
+  // ArrayBuffers, but those will all occur first, because their indexes are
+  // generated in order via v8::ValueSerializer::TransferArrayBuffer (see
+  // prepareTransfer above).
+  //
+  // So we offset all SharedArrayBuffer indexes by the number of transferred
+  // ArrayBuffers.
+  size_t index = m_sharedArrayBuffers.find(sharedArrayBuffer);
+  if (index == kNotFound) {
+    m_sharedArrayBuffers.push_back(sharedArrayBuffer);
+    index = m_sharedArrayBuffers.size() - 1;
+  }
+  if (m_transferables) {
+    index += m_transferables->arrayBuffers.size();
+  }
+  return v8::Just<uint32_t>(index);
+}
+
 void* V8ScriptValueSerializer::ReallocateBufferMemory(void* oldBuffer,
                                                       size_t size,
                                                       size_t* actualSize) {
   *actualSize = WTF::Partitions::bufferActualSize(size);
-  return WTF::Partitions::bufferRealloc(oldBuffer, size,
+  return WTF::Partitions::bufferRealloc(oldBuffer, *actualSize,
                                         "SerializedScriptValue buffer");
 }
 

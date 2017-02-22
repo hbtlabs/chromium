@@ -34,8 +34,14 @@ DEFINE_TRACE(CustomElementReactionStack) {
   visitor->trace(m_backupQueue);
 }
 
+DEFINE_TRACE_WRAPPERS(CustomElementReactionStack) {
+  for (auto key : m_map.keys()) {
+    visitor->traceWrappers(key);
+  }
+}
+
 void CustomElementReactionStack::push() {
-  m_stack.append(nullptr);
+  m_stack.push_back(nullptr);
 }
 
 void CustomElementReactionStack::popInvokingReactions() {
@@ -51,7 +57,7 @@ void CustomElementReactionStack::invokeReactions(ElementQueue& queue) {
     if (CustomElementReactionQueue* reactions = m_map.get(element)) {
       reactions->invokeReactions(element);
       CHECK(reactions->isEmpty());
-      m_map.remove(element);
+      m_map.erase(element);
     }
   }
 }
@@ -67,12 +73,12 @@ void CustomElementReactionStack::enqueue(Member<ElementQueue>& queue,
                                          CustomElementReaction* reaction) {
   if (!queue)
     queue = new ElementQueue();
-  queue->append(element);
+  queue->push_back(element);
 
   CustomElementReactionQueue* reactions = m_map.get(element);
   if (!reactions) {
     reactions = new CustomElementReactionQueue();
-    m_map.add(element, reactions);
+    m_map.insert(TraceWrapperMember<Element>(this, element), reactions);
   }
 
   reactions->add(reaction);

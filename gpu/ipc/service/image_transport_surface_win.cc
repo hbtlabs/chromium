@@ -7,7 +7,9 @@
 #include <memory>
 
 #include "gpu/ipc/service/child_window_surface_win.h"
+#include "gpu/ipc/service/direct_composition_surface_win.h"
 #include "gpu/ipc/service/pass_through_image_transport_surface.h"
+#include "gpu/ipc/service/switches.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_implementation.h"
@@ -21,26 +23,28 @@ namespace gpu {
 scoped_refptr<gl::GLSurface> ImageTransportSurface::CreateNativeSurface(
     base::WeakPtr<ImageTransportSurfaceDelegate> delegate,
     SurfaceHandle surface_handle,
-    gl::GLSurface::Format format) {
+    gl::GLSurfaceFormat format) {
   DCHECK_NE(surface_handle, kNullSurfaceHandle);
 
   scoped_refptr<gl::GLSurface> surface;
   if (gl::GetGLImplementation() == gl::kGLImplementationEGLGLES2 &&
       gl::GLSurfaceEGL::IsDirectCompositionSupported()) {
-    scoped_refptr<ChildWindowSurfaceWin> egl_surface(
-        new ChildWindowSurfaceWin(delegate, surface_handle));
-    surface = egl_surface;
-
-    // TODO(stanisc): http://crbug.com/659844:
-    // Force DWM based gl::VSyncProviderWin provider to avoid video playback
-    // smoothness issues. Once that issue is fixed, passing a nullptr
-    // vsync_provider would result in assigning a default VSyncProvider inside
-    // the Initialize call.
     std::unique_ptr<gfx::VSyncProvider> vsync_provider(
         new gl::VSyncProviderWin(surface_handle));
-
-    if (!egl_surface->Initialize(std::move(vsync_provider)))
-      return nullptr;
+    if (base::FeatureList::IsEnabled(switches::kDirectCompositionOverlays)) {
+      scoped_refptr<DirectCompositionSurfaceWin> egl_surface =
+          make_scoped_refptr(
+              new DirectCompositionSurfaceWin(delegate, surface_handle));
+      if (!egl_surface->Initialize(std::move(vsync_provider)))
+        return nullptr;
+      surface = egl_surface;
+    } else {
+      scoped_refptr<ChildWindowSurfaceWin> egl_surface = make_scoped_refptr(
+          new ChildWindowSurfaceWin(delegate, surface_handle));
+      if (!egl_surface->Initialize(std::move(vsync_provider)))
+        return nullptr;
+      surface = egl_surface;
+    }
   } else {
     surface = gl::init::CreateViewGLSurface(surface_handle);
     if (!surface)

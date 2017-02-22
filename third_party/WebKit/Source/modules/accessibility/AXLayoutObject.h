@@ -102,6 +102,7 @@ class MODULES_EXPORT AXLayoutObject : public AXNodeObject {
   String fontFamily() const final;
   // Font size is in pixels.
   float fontSize() const final;
+  String imageDataUrl(const IntSize& maxSize) const final;
   String text() const override;
   AccessibilityTextDirection textDirection() const final;
   int textLength() const override;
@@ -117,8 +118,6 @@ class MODULES_EXPORT AXLayoutObject : public AXNodeObject {
   String stringValue() const override;
 
   // ARIA attributes.
-  void ariaFlowToElements(AXObjectVector&) const override;
-  void ariaControlsElements(AXObjectVector&) const override;
   void ariaDescribedbyElements(AXObjectVector&) const override;
   void ariaLabelledbyElements(AXObjectVector&) const override;
   void ariaOwnsElements(AXObjectVector&) const override;

@@ -7,17 +7,15 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
-#include "base/timer/timer.h"
 #include "third_party/webrtc/modules/audio_device/include/audio_device.h"
 
 namespace base {
+class RepeatingTimer;
 class SingleThreadTaskRunner;
 }  // namespace base
 
 namespace remoting {
 namespace protocol {
-
-class AudioStub;
 
 // Audio module passed to WebRTC. It doesn't access actual audio devices, but it
 // provides all functionality we need to ensure that audio streaming works
@@ -157,7 +155,7 @@ class WebrtcAudioModule : public webrtc::AudioDeviceModule {
 
   // Timer running on the |audio_task_runner_| that polls audio from
   // |audio_transport_|.
-  base::RepeatingTimer poll_timer_;
+  std::unique_ptr<base::RepeatingTimer> poll_timer_;
 };
 
 }  // namespace protocol

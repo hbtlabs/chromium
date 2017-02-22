@@ -12,7 +12,7 @@ Sources.EventListenerBreakpointsSidebarPane = class extends UI.VBox {
 
     this._eventListenerBreakpointsSetting = Common.settings.createLocalSetting('eventListenerBreakpoints', []);
 
-    this._categoriesTreeOutline = new TreeOutlineInShadow();
+    this._categoriesTreeOutline = new UI.TreeOutlineInShadow();
     this._categoriesTreeOutline.element.tabIndex = 0;
     this._categoriesTreeOutline.element.classList.add('event-listener-breakpoints');
     this._categoriesTreeOutline.registerRequiredCSS('sources/eventListenerBreakpoints.css');
@@ -24,6 +24,8 @@ Sources.EventListenerBreakpointsSidebarPane = class extends UI.VBox {
     // this._createCategory(Common.UIString("Drag"), ["drag", "drop", "dragstart", "dragend", "dragenter", "dragleave", "dragover"]);
     this._createCategory(
         Common.UIString('Animation'), ['requestAnimationFrame', 'cancelAnimationFrame', 'animationFrameFired'], true);
+    this._createCategory(Common.UIString('Canvas'), ['canvasContextCreated', 'webglErrorFired', 'webglWarningFired'],
+        true);
     this._createCategory(
         Common.UIString('Clipboard'), ['copy', 'cut', 'paste', 'beforecopy', 'beforecut', 'beforepaste']);
     this._createCategory(
@@ -35,6 +37,7 @@ Sources.EventListenerBreakpointsSidebarPane = class extends UI.VBox {
       'DOMNodeInsertedIntoDocument', 'DOMNodeRemoved', 'DOMNodeRemovedFromDocument', 'DOMSubtreeModified',
       'DOMContentLoaded'
     ]);
+    this._createCategory(Common.UIString('Geolocation'), ['navigator.geolocation.getCurrentPosition', 'navigator.geolocation.watchPosition'], true);
     this._createCategory(Common.UIString('Drag / drop'), ['dragenter', 'dragover', 'dragleave', 'drop']);
     this._createCategory(Common.UIString('Keyboard'), ['keydown', 'keyup', 'keypress', 'input']);
     this._createCategory(
@@ -52,6 +55,7 @@ Sources.EventListenerBreakpointsSidebarPane = class extends UI.VBox {
       'auxclick', 'click', 'dblclick', 'mousedown', 'mouseup', 'mouseover', 'mousemove', 'mouseout', 'mouseenter',
       'mouseleave', 'mousewheel', 'wheel', 'contextmenu'
     ]);
+    this._createCategory(Common.UIString('Notification'), ['Notification.requestPermission'], true);
     this._createCategory(Common.UIString('Parse'), ['setInnerHTML', 'document.write'], true);
     this._createCategory(Common.UIString('Pointer'), [
       'pointerover', 'pointerout', 'pointerenter', 'pointerleave', 'pointerdown', 'pointerup', 'pointermove',
@@ -60,7 +64,6 @@ Sources.EventListenerBreakpointsSidebarPane = class extends UI.VBox {
     this._createCategory(Common.UIString('Script'), ['scriptFirstStatement', 'scriptBlockedByCSP'], true);
     this._createCategory(Common.UIString('Timer'), ['setTimer', 'clearTimer', 'timerFired'], true);
     this._createCategory(Common.UIString('Touch'), ['touchstart', 'touchmove', 'touchend', 'touchcancel']);
-    this._createCategory(Common.UIString('WebGL'), ['webglErrorFired', 'webglWarningFired'], true);
     this._createCategory(Common.UIString('Window'), ['close'], true);
     this._createCategory(
         Common.UIString('XHR'),
@@ -92,6 +95,10 @@ Sources.EventListenerBreakpointsSidebarPane = class extends UI.VBox {
         'instrumentation:webglErrorFired': Common.UIString('WebGL Error Fired'),
         'instrumentation:webglWarningFired': Common.UIString('WebGL Warning Fired'),
         'instrumentation:setInnerHTML': Common.UIString('Set innerHTML'),
+        'instrumentation:canvasContextCreated': Common.UIString('Create canvas context'),
+        'instrumentation:navigator.geolocation.getCurrentPosition': 'getCurrentPosition',
+        'instrumentation:navigator.geolocation.watchPosition': 'watchPosition',
+        'instrumentation:Notification.requestPermission': 'requestPermission',
       };
     }
     if (auxData) {
@@ -130,10 +137,10 @@ Sources.EventListenerBreakpointsSidebarPane = class extends UI.VBox {
    * @param {!Array.<string>=} targetNames
    */
   _createCategory(name, eventNames, isInstrumentationEvent, targetNames) {
-    var labelNode = createCheckboxLabel(name);
+    var labelNode = UI.createCheckboxLabel(name);
 
     var categoryItem = {};
-    categoryItem.element = new TreeElement(labelNode);
+    categoryItem.element = new UI.TreeElement(labelNode);
     this._categoriesTreeOutline.appendChild(categoryItem.element);
     categoryItem.element.selectable = false;
 
@@ -152,10 +159,10 @@ Sources.EventListenerBreakpointsSidebarPane = class extends UI.VBox {
       var breakpointItem = {};
       var title = Sources.EventListenerBreakpointsSidebarPane.eventNameForUI(eventName);
 
-      labelNode = createCheckboxLabel(title);
+      labelNode = UI.createCheckboxLabel(title);
       labelNode.classList.add('source-code');
 
-      breakpointItem.element = new TreeElement(labelNode);
+      breakpointItem.element = new UI.TreeElement(labelNode);
       categoryItem.element.appendChild(breakpointItem.element);
 
       breakpointItem.element.listItemElement.createChild('div', 'breakpoint-hit-marker');

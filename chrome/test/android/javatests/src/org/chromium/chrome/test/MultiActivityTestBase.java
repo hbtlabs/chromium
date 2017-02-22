@@ -136,7 +136,7 @@ public abstract class MultiActivityTestBase extends InstrumentationTestCase
     @Override
     public void setUp() throws Exception {
         super.setUp();
-        RecordHistogram.disableForTests();
+        RecordHistogram.setDisabledForTests(true);
         mContext = getInstrumentation().getTargetContext();
         CommandLineFlags.setUp(mContext, getClass().getMethod(getName()));
         ApplicationTestUtils.setUp(mContext, true);
@@ -152,13 +152,13 @@ public abstract class MultiActivityTestBase extends InstrumentationTestCase
         super.tearDown();
         mStorageDelegate.ensureDirectoryDestroyed();
         ApplicationTestUtils.tearDown(mContext);
+        RecordHistogram.setDisabledForTests(false);
     }
 
     /**
      * See {@link #waitForFullLoad(ChromeActivity,String,boolean)}.
      */
-    protected void waitForFullLoad(final ChromeActivity activity, final String expectedTitle)
-            throws Exception {
+    protected void waitForFullLoad(final ChromeActivity activity, final String expectedTitle) {
         waitForFullLoad(activity, expectedTitle, false);
     }
 
@@ -167,7 +167,7 @@ public abstract class MultiActivityTestBase extends InstrumentationTestCase
      * because Android's Activity transition animations are not monitorable.
      */
     protected void waitForFullLoad(final ChromeActivity activity, final String expectedTitle,
-            boolean waitLongerForLoad) throws Exception {
+            boolean waitLongerForLoad) {
         ApplicationTestUtils.assertWaitForPageScaleFactorMatch(activity, 0.5f, waitLongerForLoad);
         final Tab tab = activity.getActivityTab();
         assert tab != null;

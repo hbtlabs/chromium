@@ -636,9 +636,15 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, Disposition_NewWindow) {
   EXPECT_EQ(1, params.browser->tab_strip_model()->count());
 }
 
+#if defined(OS_MACOSX) && defined(ADDRESS_SANITIZER)
+// Flaky on ASAN on Mac. See https://crbug.com/674497.
+#define MAYBE_Disposition_Incognito DISABLED_Disposition_Incognito
+#else
+#define MAYBE_Disposition_Incognito Disposition_Incognito
+#endif
 // This test verifies that navigating with WindowOpenDisposition = INCOGNITO
 // opens a new incognito window if no existing incognito window is present.
-IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, Disposition_Incognito) {
+IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, MAYBE_Disposition_Incognito) {
   chrome::NavigateParams params(MakeNavigateParams());
   params.disposition = WindowOpenDisposition::OFF_THE_RECORD;
   chrome::Navigate(&params);
@@ -1480,7 +1486,8 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, ReuseRVHWithWebUI) {
   ASSERT_TRUE(popup);
   EXPECT_EQ(2, browser()->tab_strip_model()->count());
   content::RenderViewHost* webui_rvh = popup->GetRenderViewHost();
-  EXPECT_EQ(content::BINDINGS_POLICY_WEB_UI, webui_rvh->GetEnabledBindings());
+  content::RenderFrameHost* webui_rfh = popup->GetMainFrame();
+  EXPECT_EQ(content::BINDINGS_POLICY_WEB_UI, webui_rfh->GetEnabledBindings());
 
   // Navigate to another page in the popup.
   GURL nonwebui_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
@@ -1494,7 +1501,8 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, ReuseRVHWithWebUI) {
   back_load_observer.Wait();
   EXPECT_EQ(webui_rvh, popup->GetRenderViewHost());
   EXPECT_TRUE(webui_rvh->IsRenderViewLive());
-  EXPECT_EQ(content::BINDINGS_POLICY_WEB_UI, webui_rvh->GetEnabledBindings());
+  EXPECT_EQ(content::BINDINGS_POLICY_WEB_UI,
+            webui_rvh->GetMainFrame()->GetEnabledBindings());
 }
 
 }  // namespace

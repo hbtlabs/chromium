@@ -10,7 +10,7 @@
 #include <set>
 
 #include "base/macros.h"
-#include "services/ui/display/platform_screen_delegate.h"
+#include "services/ui/display/screen_manager_delegate.h"
 #include "services/ui/ws/ids.h"
 #include "services/ui/ws/user_id.h"
 #include "services/ui/ws/user_id_tracker_observer.h"
@@ -18,6 +18,7 @@
 namespace ui {
 namespace ws {
 
+class CursorLocationManager;
 class Display;
 class ServerWindow;
 class UserDisplayManager;
@@ -29,7 +30,7 @@ class WindowServer;
 // between displays that do yet have an accelerated widget (pending), vs
 // those that do.
 class DisplayManager : public UserIdTrackerObserver,
-                       public display::PlatformScreenDelegate {
+                       public display::ScreenManagerDelegate {
  public:
   DisplayManager(WindowServer* window_server, UserIdTracker* user_id_tracker);
   ~DisplayManager() override;
@@ -37,6 +38,9 @@ class DisplayManager : public UserIdTrackerObserver,
   // Returns the UserDisplayManager for |user_id|. DisplayManager owns the
   // return value.
   UserDisplayManager* GetUserDisplayManager(const UserId& user_id);
+
+  // Returns the CursorLocationManager for |user_id|.
+  CursorLocationManager* GetCursorLocationManager(const UserId& user_id);
 
   // Adds/removes a Display. DisplayManager owns the Displays.
   // TODO(sky): make add take a scoped_ptr.
@@ -81,7 +85,7 @@ class DisplayManager : public UserIdTrackerObserver,
   void OnActiveUserIdChanged(const UserId& previously_active_id,
                              const UserId& active_id) override;
 
-  // display::PlatformScreenDelegate:
+  // display::ScreenManagerDelegate:
   void OnDisplayAdded(int64_t id,
                       const display::ViewportMetrics& metrics) override;
   void OnDisplayRemoved(int64_t id) override;
@@ -98,6 +102,9 @@ class DisplayManager : public UserIdTrackerObserver,
   std::set<Display*> displays_;
 
   std::map<UserId, std::unique_ptr<UserDisplayManager>> user_display_managers_;
+
+  std::map<UserId, std::unique_ptr<CursorLocationManager>>
+      cursor_location_managers_;
 
   // ID to use for next root node.
   ClientSpecificId next_root_id_;

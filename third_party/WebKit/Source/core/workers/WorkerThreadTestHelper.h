@@ -5,8 +5,10 @@
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V8CacheOptions.h"
 #include "bindings/core/v8/V8GCController.h"
+#include "core/dom/ExecutionContextTask.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/WorkerBackingThread.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerGlobalScope.h"
@@ -45,7 +47,7 @@ class MockWorkerLoaderProxyProvider : public WorkerLoaderProxyProvider {
 
   void postTaskToWorkerGlobalScope(
       const WebTraceLocation&,
-      std::unique_ptr<ExecutionContextTask>) override {
+      std::unique_ptr<WTF::CrossThreadClosure>) override {
     NOTIMPLEMENTED();
   }
 };
@@ -55,6 +57,8 @@ class MockWorkerReportingProxy : public WorkerReportingProxy {
   MockWorkerReportingProxy() {}
   ~MockWorkerReportingProxy() override {}
 
+  MOCK_METHOD1(countFeature, void(UseCounter::Feature));
+  MOCK_METHOD1(countDeprecation, void(UseCounter::Feature));
   MOCK_METHOD3(reportExceptionMock,
                void(const String& errorMessage,
                     SourceLocation*,
@@ -104,19 +108,19 @@ class MockWorkerThreadLifecycleObserver final
       WorkerThreadLifecycleContext* context)
       : WorkerThreadLifecycleObserver(context) {}
 
-  MOCK_METHOD0(contextDestroyed, void());
+  MOCK_METHOD1(contextDestroyed, void(WorkerThreadLifecycleContext*));
 };
 
 class WorkerThreadForTest : public WorkerThread {
  public:
   WorkerThreadForTest(WorkerLoaderProxyProvider* mockWorkerLoaderProxyProvider,
                       WorkerReportingProxy& mockWorkerReportingProxy,
-                      BlinkGC::ThreadHeapMode threadHeapMode)
+                      ParentFrameTaskRunners* parentFrameTaskRunners)
       : WorkerThread(WorkerLoaderProxy::create(mockWorkerLoaderProxyProvider),
-                     mockWorkerReportingProxy),
+                     mockWorkerReportingProxy,
+                     parentFrameTaskRunners),
         m_workerBackingThread(
-            WorkerBackingThread::createForTest("Test thread", threadHeapMode)) {
-  }
+            WorkerBackingThread::createForTest("Test thread")) {}
 
   ~WorkerThreadForTest() override {}
 
@@ -131,10 +135,10 @@ class WorkerThreadForTest : public WorkerThread {
   void startWithSourceCode(SecurityOrigin* securityOrigin,
                            const String& source) {
     std::unique_ptr<Vector<CSPHeaderAndType>> headers =
-        makeUnique<Vector<CSPHeaderAndType>>();
+        WTF::makeUnique<Vector<CSPHeaderAndType>>();
     CSPHeaderAndType headerAndType("contentSecurityPolicy",
                                    ContentSecurityPolicyHeaderTypeReport);
-    headers->append(headerAndType);
+    headers->push_back(headerAndType);
 
     WorkerClients* clients = nullptr;
 
@@ -142,12 +146,12 @@ class WorkerThreadForTest : public WorkerThread {
         KURL(ParsedURLString, "http://fake.url/"), "fake user agent", source,
         nullptr, DontPauseWorkerGlobalScopeOnStart, headers.get(), "",
         securityOrigin, clients, WebAddressSpaceLocal, nullptr, nullptr,
-        V8CacheOptionsDefault));
+        WorkerV8Settings::Default()));
   }
 
   void waitForInit() {
     std::unique_ptr<WaitableEvent> completionEvent =
-        makeUnique<WaitableEvent>();
+        WTF::makeUnique<WaitableEvent>();
     workerBackingThread().backingThread().postTask(
         BLINK_FROM_HERE,
         crossThreadBind(&WaitableEvent::signal,

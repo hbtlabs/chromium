@@ -36,7 +36,8 @@
 namespace blink {
 
 static inline bool isValidSource(EventTarget* source) {
-  return !source || source->toLocalDOMWindow() || source->toMessagePort();
+  return !source || source->toLocalDOMWindow() || source->toMessagePort() ||
+         source->toServiceWorker();
 }
 
 MessageEvent::MessageEvent() : m_dataType(DataTypeScriptValue) {}
@@ -96,7 +97,7 @@ MessageEvent::MessageEvent(PassRefPtr<SerializedScriptValue> data,
                            const String& origin,
                            const String& lastEventId,
                            EventTarget* source,
-                           std::unique_ptr<MessagePortChannelArray> channels,
+                           MessagePortChannelArray channels,
                            const String& suborigin)
     : Event(EventTypeNames::message, false, false),
       m_dataType(DataTypeSerializedScriptValue),
@@ -155,7 +156,7 @@ void MessageEvent::initMessageEvent(const AtomicString& type,
                                     ScriptValue data,
                                     const String& origin,
                                     const String& lastEventId,
-                                    DOMWindow* source,
+                                    EventTarget* source,
                                     MessagePortArray* ports) {
   if (isBeingDispatched())
     return;
@@ -177,7 +178,7 @@ void MessageEvent::initMessageEvent(const AtomicString& type,
                                     PassRefPtr<SerializedScriptValue> data,
                                     const String& origin,
                                     const String& lastEventId,
-                                    DOMWindow* source,
+                                    EventTarget* source,
                                     MessagePortArray* ports) {
   if (isBeingDispatched())
     return;
@@ -195,6 +196,28 @@ void MessageEvent::initMessageEvent(const AtomicString& type,
   if (m_dataAsSerializedScriptValue)
     m_dataAsSerializedScriptValue
         ->registerMemoryAllocatedWithCurrentScriptContext();
+}
+
+void MessageEvent::initMessageEvent(const AtomicString& type,
+                                    bool canBubble,
+                                    bool cancelable,
+                                    const String& data,
+                                    const String& origin,
+                                    const String& lastEventId,
+                                    EventTarget* source,
+                                    MessagePortArray* ports) {
+  if (isBeingDispatched())
+    return;
+
+  initEvent(type, canBubble, cancelable);
+
+  m_dataType = DataTypeString;
+  m_dataAsString = data;
+  m_origin = origin;
+  m_lastEventId = lastEventId;
+  m_source = source;
+  m_ports = ports;
+  m_suborigin = "";
 }
 
 const AtomicString& MessageEvent::interfaceName() const {
@@ -254,7 +277,7 @@ v8::Local<v8::Object> MessageEvent::associateWithWrapper(
     case MessageEvent::DataTypeArrayBuffer:
       V8PrivateProperty::getMessageEventCachedData(isolate).set(
           isolate->GetCurrentContext(), wrapper,
-          toV8(dataAsArrayBuffer(), wrapper, isolate));
+          ToV8(dataAsArrayBuffer(), wrapper, isolate));
       break;
   }
 

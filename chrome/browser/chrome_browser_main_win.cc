@@ -6,6 +6,7 @@
 
 #include <shellapi.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <windows.h>
 
 #include <algorithm>
@@ -25,10 +26,14 @@
 #include "base/scoped_native_library.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/sequenced_worker_pool.h"
+#include "base/win/pe_image.h"
 #include "base/win/registry.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
 #include "base/win/wrapped_window_proc.h"
+#include "chrome/browser/conflicts/module_database_win.h"
+#include "chrome/browser/conflicts/module_event_sink_impl_win.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/install_verification/win/install_verification.h"
 #include "chrome/browser/profiles/profile_shortcut_manager.h"
@@ -39,10 +44,13 @@
 #include "chrome/browser/win/chrome_elf_init.h"
 #include "chrome/chrome_watcher/chrome_watcher_main_api.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_result_codes.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/chrome_utility_messages.h"
+#include "chrome/common/conflicts/module_watcher_win.h"
+#include "chrome/common/crash_keys.h"
 #include "chrome/common/env_vars.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -68,10 +76,6 @@
 
 #if defined(GOOGLE_CHROME_BUILD)
 #include "chrome/browser/google/did_run_updater_win.h"
-#endif
-
-#if BUILDFLAG(ENABLE_KASKO)
-#include "syzygy/kasko/api/reporter.h"
 #endif
 
 namespace {
@@ -106,41 +110,6 @@ class TranslationDelegate : public installer::TranslationDelegate {
  public:
   base::string16 GetLocalizedString(int installer_string_id) override;
 };
-
-#if BUILDFLAG(ENABLE_KASKO)
-void ObserveFailedCrashReportDirectory(const base::FilePath& path, bool error) {
-  DCHECK(!error);
-  if (error)
-    return;
-  base::FileEnumerator enumerator(path, true, base::FileEnumerator::FILES);
-  for (base::FilePath report_file = enumerator.Next(); !report_file.empty();
-       report_file = enumerator.Next()) {
-    if (report_file.Extension() ==
-        kasko::api::kPermanentFailureMinidumpExtension) {
-      UMA_HISTOGRAM_BOOLEAN("CrashReport.PermanentUploadFailure", true);
-    }
-    bool result = base::DeleteFile(report_file, false);
-    DCHECK(result);
-  }
-}
-
-void StartFailedKaskoCrashReportWatcher(base::FilePathWatcher* watcher) {
-  base::FilePath watcher_data_directory;
-  if (!PathService::Get(chrome::DIR_WATCHER_DATA, &watcher_data_directory)) {
-    NOTREACHED();
-  } else {
-    base::FilePath permanent_failure_directory =
-        watcher_data_directory.Append(kPermanentlyFailedReportsSubdir);
-    if (!watcher->Watch(permanent_failure_directory, true,
-                        base::Bind(&ObserveFailedCrashReportDirectory))) {
-      NOTREACHED();
-    }
-
-    // Call it once to observe any files present prior to the Watch() call.
-    ObserveFailedCrashReportDirectory(permanent_failure_directory, false);
-  }
-}
-#endif  // BUILDFLAG(ENABLE_KASKO)
 
 void DetectFaultTolerantHeap() {
   enum FTHFlags {
@@ -199,6 +168,60 @@ void DetectFaultTolerantHeap() {
     detected = static_cast<FTHFlags>(detected | FTH_ACXTRNAL_LOADED);
 
   UMA_HISTOGRAM_ENUMERATION("FaultTolerantHeap", detected, FTH_FLAGS_COUNT);
+}
+
+// Helper function for getting the time date stamp associated with a module in
+// this process.
+uint32_t GetModuleTimeDateStamp(const void* module_load_address) {
+  base::win::PEImage pe_image(module_load_address);
+  return pe_image.GetNTHeaders()->FileHeader.TimeDateStamp;
+}
+
+// Used as the callback for ModuleWatcher events in this process. Dispatches
+// them to the ModuleDatabase.
+void OnModuleEvent(uint32_t process_id,
+                   uint64_t creation_time,
+                   const ModuleWatcher::ModuleEvent& event) {
+  auto* module_database = ModuleDatabase::GetInstance();
+  uintptr_t load_address =
+      reinterpret_cast<uintptr_t>(event.module_load_address);
+
+  switch (event.event_type) {
+    case mojom::ModuleEventType::MODULE_ALREADY_LOADED:
+    case mojom::ModuleEventType::MODULE_LOADED: {
+      module_database->OnModuleLoad(
+          process_id, creation_time, event.module_path, event.module_size,
+          GetModuleTimeDateStamp(event.module_load_address), load_address);
+      return;
+    }
+
+    case mojom::ModuleEventType::MODULE_UNLOADED: {
+      module_database->OnModuleUnload(process_id, creation_time, load_address);
+      return;
+    }
+  }
+}
+
+// Helper function for initializing the module database subsystem. Populates
+// the provided |module_watcher|.
+void SetupModuleDatabase(std::unique_ptr<ModuleWatcher>* module_watcher) {
+  uint64_t creation_time = 0;
+  ModuleEventSinkImpl::GetProcessCreationTime(::GetCurrentProcess(),
+                                              &creation_time);
+  ModuleDatabase::SetInstance(base::MakeUnique<ModuleDatabase>(
+      content::BrowserThread::GetTaskRunnerForThread(
+          content::BrowserThread::UI)));
+  auto* module_database = ModuleDatabase::GetInstance();
+  uint32_t process_id = ::GetCurrentProcessId();
+
+  // The ModuleWatcher will immediately start emitting module events, but the
+  // ModuleDatabase expects an OnProcessStarted event prior to that. For child
+  // processes this is handled via the ModuleEventSinkImpl. For the browser
+  // process a manual notification is sent before wiring up the ModuleWatcher.
+  module_database->OnProcessStarted(process_id, creation_time,
+                                    content::PROCESS_TYPE_BROWSER);
+  *module_watcher = ModuleWatcher::Create(
+      base::Bind(&OnModuleEvent, process_id, creation_time));
 }
 
 }  // namespace
@@ -289,6 +312,12 @@ void ChromeBrowserMainPartsWin::PreMainMessageLoopStart() {
 }
 
 int ChromeBrowserMainPartsWin::PreCreateThreads() {
+  // Record whether the machine is enterprise managed in a crash key. This will
+  // be used to better identify whether crashes are from enterprise users.
+  base::debug::SetCrashKeyValue(
+      crash_keys::kIsEnterpriseManaged,
+      base::win::IsEnterpriseManaged() ? "yes" : "no");
+
   int rv = ChromeBrowserMainParts::PreCreateThreads();
 
   // TODO(viettrungluu): why don't we run this earlier?
@@ -320,6 +349,12 @@ void ChromeBrowserMainPartsWin::PostProfileInit() {
       FROM_HERE, content::BrowserThread::GetTaskRunnerForThread(
                      content::BrowserThread::FILE),
       base::Bind(base::IgnoreResult(&base::DeleteFile), path, false));
+
+  // Create the module database and hook up the in-process module watcher. This
+  // needs to be done before any child processes are initialized as the
+  // ModuleDatabase is an endpoint for IPC from child processes.
+  if (base::FeatureList::IsEnabled(features::kModuleDatabase))
+    SetupModuleDatabase(&module_watcher_);
 }
 
 void ChromeBrowserMainPartsWin::PostBrowserStart() {
@@ -333,18 +368,6 @@ void ChromeBrowserMainPartsWin::PostBrowserStart() {
       base::Bind(&VerifyInstallation));
 
   InitializeChromeElf();
-
-#if BUILDFLAG(ENABLE_KASKO)
-  content::BrowserThread::PostDelayedTask(
-      content::BrowserThread::FILE, FROM_HERE,
-      base::Bind(&StartFailedKaskoCrashReportWatcher,
-                 base::Unretained(&failed_kasko_crash_report_watcher_)),
-      base::TimeDelta::FromMinutes(5));
-#endif  // BUILDFLAG(ENABLE_KASKO)
-
-#if defined(GOOGLE_CHROME_BUILD)
-  did_run_updater_.reset(new DidRunUpdater);
-#endif
 
   // Record UMA data about whether the fault-tolerant heap is enabled.
   // Use a delayed task to minimize the impact on startup time.
@@ -454,8 +477,6 @@ int ChromeBrowserMainPartsWin::HandleIconsCommands(
 
 // static
 bool ChromeBrowserMainPartsWin::CheckMachineLevelInstall() {
-  // TODO(tommi): Check if using the default distribution is always the right
-  // thing to do.
   BrowserDistribution* dist = BrowserDistribution::GetDistribution();
   base::Version version;
   InstallUtil::GetChromeVersion(dist, true, &version);
@@ -466,7 +487,7 @@ bool ChromeBrowserMainPartsWin::CheckMachineLevelInstall() {
     base::FilePath user_exe_path(installer::GetChromeInstallPath(false, dist));
     if (base::FilePath::CompareEqualIgnoreCase(exe, user_exe_path.value())) {
       base::CommandLine uninstall_cmd(
-          InstallUtil::GetChromeUninstallCmd(false, dist->GetType()));
+          InstallUtil::GetChromeUninstallCmd(false));
       if (!uninstall_cmd.GetProgram().empty()) {
         uninstall_cmd.AppendSwitch(installer::switches::kSelfDestruct);
         uninstall_cmd.AppendSwitch(installer::switches::kForceUninstall);

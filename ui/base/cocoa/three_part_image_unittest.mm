@@ -7,7 +7,12 @@
 #include <memory>
 
 #include "testing/gtest_mac.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "third_party/skia/include/core/SkRect.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/image/image.h"
+#include "ui/gfx/image/image_unittest_util.h"
 #import "ui/gfx/test/ui_cocoa_test_helper.h"
 #include "ui/resources/grit/ui_resources.h"
 
@@ -15,54 +20,65 @@ namespace ui {
 namespace test {
 
 TEST(ThreePartImageTest, GetRects) {
-  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
+  const int kHeight = 11;
+  const int kLeftWidth = 3;
+  const int kMiddleWidth = 5;
+  const int kRightWidth = 7;
   base::scoped_nsobject<NSImage> leftImage(
-      rb.GetNativeImageNamed(IDR_BROWSER_ACTION_BADGE_LEFT).CopyNSImage());
+      gfx::test::CreateImage(kLeftWidth, kHeight).CopyNSImage());
   base::scoped_nsobject<NSImage> middleImage(
-      rb.GetNativeImageNamed(IDR_BROWSER_ACTION_BADGE_CENTER).CopyNSImage());
+      gfx::test::CreateImage(kMiddleWidth, kHeight).CopyNSImage());
   base::scoped_nsobject<NSImage> rightImage(
-      rb.GetNativeImageNamed(IDR_BROWSER_ACTION_BADGE_RIGHT).CopyNSImage());
+      gfx::test::CreateImage(kRightWidth, kHeight).CopyNSImage());
   ThreePartImage image(leftImage, middleImage, rightImage);
-  NSRect bounds = NSMakeRect(0, 0, 20, 11);
-  EXPECT_NSRECT_EQ(NSMakeRect(0, 0, 4, 11), image.GetLeftRect(bounds));
-  EXPECT_NSRECT_EQ(NSMakeRect(4, 0, 12, 11), image.GetMiddleRect(bounds));
-  EXPECT_NSRECT_EQ(NSMakeRect(16, 0, 4, 11), image.GetRightRect(bounds));
-}
+  NSRect bounds =
+      NSMakeRect(0, 0, kLeftWidth + kMiddleWidth + kRightWidth, kHeight);
+  EXPECT_NSRECT_EQ(NSMakeRect(0, 0, kLeftWidth, kHeight),
+                   image.GetLeftRect(bounds));
+  EXPECT_NSRECT_EQ(NSMakeRect(kLeftWidth, 0, kMiddleWidth, kHeight),
+                   image.GetMiddleRect(bounds));
+  EXPECT_NSRECT_EQ(
+      NSMakeRect(kLeftWidth + kMiddleWidth, 0, kRightWidth, kHeight),
+      image.GetRightRect(bounds));
 
-TEST(ThreePartImageTest, GetRectsWithoutMiddle) {
-  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  base::scoped_nsobject<NSImage> leftImage(
-      rb.GetNativeImageNamed(IDR_BROWSER_ACTION_BADGE_LEFT).CopyNSImage());
-  base::scoped_nsobject<NSImage> rightImage(
-      rb.GetNativeImageNamed(IDR_BROWSER_ACTION_BADGE_RIGHT).CopyNSImage());
-  ThreePartImage image(leftImage, nullptr, rightImage);
-  NSRect bounds = NSMakeRect(0, 0, 20, 11);
-  EXPECT_NSRECT_EQ(NSMakeRect(0, 0, 4, 11), image.GetLeftRect(bounds));
-  EXPECT_NSRECT_EQ(NSMakeRect(4, 0, 12, 11), image.GetMiddleRect(bounds));
-  EXPECT_NSRECT_EQ(NSMakeRect(16, 0, 4, 11), image.GetRightRect(bounds));
+  ThreePartImage image2(leftImage, nullptr, rightImage);
+  EXPECT_NSRECT_EQ(NSMakeRect(0, 0, kLeftWidth, kHeight),
+                   image.GetLeftRect(bounds));
+  EXPECT_NSRECT_EQ(NSMakeRect(kLeftWidth, 0, kMiddleWidth, kHeight),
+                   image.GetMiddleRect(bounds));
+  EXPECT_NSRECT_EQ(
+      NSMakeRect(kLeftWidth + kMiddleWidth, 0, kRightWidth, kHeight),
+      image.GetRightRect(bounds));
 }
 
 TEST(ThreePartImageTest, HitTest) {
-  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  base::scoped_nsobject<NSImage> leftImage(
-      rb.GetNativeImageNamed(IDR_BACK_ARROW).CopyNSImage());
-  base::scoped_nsobject<NSImage> rightImage(
-      rb.GetNativeImageNamed(IDR_FORWARD_ARROW).CopyNSImage());
-  ThreePartImage image(leftImage, nullptr, rightImage);
-  NSRect bounds = NSMakeRect(0, 0, 512, 128);
+  // Create a bitmap with transparent top and bottom.
+  const int size = 128;
+  const int corner_size = 8;
+  SkBitmap bitmap = gfx::test::CreateBitmap(size, size);
+  // Clear top and bottom.
+  bitmap.erase(SK_ColorTRANSPARENT, SkIRect::MakeXYWH(0, 0, size, corner_size));
+  bitmap.erase(SK_ColorTRANSPARENT,
+               SkIRect::MakeXYWH(0, size - corner_size, size, corner_size));
+  gfx::Image part_image = gfx::Image::CreateFrom1xBitmap(bitmap);
 
-  // The middle of the arrows are hits.
-  EXPECT_TRUE(image.HitTest(NSMakePoint(64, 64), bounds));
-  EXPECT_TRUE(image.HitTest(NSMakePoint(448, 64), bounds));
+  // Create a three-part image.
+  base::scoped_nsobject<NSImage> ns_image(part_image.CopyNSImage());
+  ThreePartImage image(ns_image, nullptr, ns_image);
+  NSRect bounds = NSMakeRect(0, 0, 4 * size, size);
+
+  // The middle of the left and right parts are hits.
+  EXPECT_TRUE(image.HitTest(NSMakePoint(size / 2, size / 2), bounds));
+  EXPECT_TRUE(image.HitTest(NSMakePoint(7 * size / 2, size / 2), bounds));
 
   // No middle image means the middle rect is a hit.
-  EXPECT_TRUE(image.HitTest(NSMakePoint(256, 64), bounds));
+  EXPECT_TRUE(image.HitTest(NSMakePoint(2 * size, size / 2), bounds));
 
   // The corners are transparent.
   EXPECT_FALSE(image.HitTest(NSMakePoint(0, 0), bounds));
-  EXPECT_FALSE(image.HitTest(NSMakePoint(0, 127), bounds));
-  EXPECT_FALSE(image.HitTest(NSMakePoint(511, 0), bounds));
-  EXPECT_FALSE(image.HitTest(NSMakePoint(511, 127), bounds));
+  EXPECT_FALSE(image.HitTest(NSMakePoint(0, size - 1), bounds));
+  EXPECT_FALSE(image.HitTest(NSMakePoint(4 * size - 1, 0), bounds));
+  EXPECT_FALSE(image.HitTest(NSMakePoint(4 * size - 1, size - 1), bounds));
 }
 
 }  // namespace test

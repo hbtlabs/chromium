@@ -8,7 +8,6 @@
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/ExecutionContextTask.h"
 #include "core/dom/SecurityContext.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
@@ -74,12 +73,6 @@ class CORE_EXPORT WorkletGlobalScope
     NOTREACHED();
     return nullptr;
   }  // WorkletGlobalScopes don't have timers.
-  void postTask(const WebTraceLocation&,
-                std::unique_ptr<ExecutionContextTask>,
-                const String&) override {
-    // TODO(ikilpatrick): implement.
-    NOTREACHED();
-  }
 
   DECLARE_VIRTUAL_TRACE();
 

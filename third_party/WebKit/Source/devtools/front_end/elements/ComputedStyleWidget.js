@@ -51,13 +51,14 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
     var filterContainerElement = hbox.createChild('div', 'styles-sidebar-pane-filter-box');
     var filterInput = Elements.StylesSidebarPane.createPropertyFilterElement(
         Common.UIString('Filter'), hbox, filterCallback.bind(this));
+    UI.ARIAUtils.setAccessibleName(filterInput, Common.UIString('Filter Computed Styles'));
     filterContainerElement.appendChild(filterInput);
 
     var toolbar = new UI.Toolbar('styles-pane-toolbar', hbox);
-    toolbar.appendToolbarItem(new UI.ToolbarCheckbox(
-        Common.UIString('Show all'), undefined, this._showInheritedComputedStylePropertiesSetting));
+    toolbar.appendToolbarItem(new UI.ToolbarSettingCheckbox(
+        this._showInheritedComputedStylePropertiesSetting, undefined, Common.UIString('Show all')));
 
-    this._propertiesOutline = new TreeOutlineInShadow();
+    this._propertiesOutline = new UI.TreeOutlineInShadow();
     this._propertiesOutline.hideOverflow();
     this._propertiesOutline.registerRequiredCSS('elements/computedStyleSidebarPane.css');
     this._propertiesOutline.element.classList.add('monospace', 'computed-properties');
@@ -119,7 +120,7 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
     var color = Common.Color.parse(text);
     if (!color)
       return createTextNode(text);
-    var swatch = UI.ColorSwatch.create();
+    var swatch = InlineEditor.ColorSwatch.create();
     swatch.setColor(color);
     swatch.setFormat(Common.Color.detectColorFormat(color));
     return swatch;
@@ -184,7 +185,7 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
       semicolon.textContent = ';';
       propertyValueElement.appendChild(semicolon);
 
-      var treeElement = new TreeElement();
+      var treeElement = new UI.TreeElement();
       treeElement.selectable = false;
       treeElement.title = propertyElement;
       treeElement[Elements.ComputedStyleWidget._propertySymbol] = {name: propertyName, value: propertyValue};
@@ -214,6 +215,8 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
      * @return {number}
      */
     function propertySorter(a, b) {
+      if (a.startsWith('--') ^ b.startsWith('--'))
+        return a.startsWith('--') ? 1 : -1;
       if (a.startsWith('-webkit') ^ b.startsWith('-webkit'))
         return a.startsWith('-webkit') ? 1 : -1;
       var canonical1 = SDK.cssMetadata().canonicalPropertyName(a);
@@ -222,7 +225,7 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
     }
 
     /**
-     * @param {!TreeElement} treeElement
+     * @param {!UI.TreeElement} treeElement
      * @param {!Event} event
      */
     function handleClick(treeElement, event) {
@@ -247,7 +250,7 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
    * @param {!SDK.CSSModel} cssModel
    * @param {!SDK.CSSMatchedStyles} matchedStyles
    * @param {!SDK.DOMNode} node
-   * @param {!TreeElement} rootTreeElement
+   * @param {!UI.TreeElement} rootTreeElement
    * @param {!Array<!SDK.CSSProperty>} tracedProperties
    * @return {!SDK.CSSProperty}
    */
@@ -284,7 +287,7 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
       selectorElement.textContent = rule ? rule.selectorText() : 'element.style';
       selectorElement.title = selectorElement.textContent;
 
-      var traceTreeElement = new TreeElement();
+      var traceTreeElement = new UI.TreeElement();
       traceTreeElement.title = trace;
       traceTreeElement.selectable = false;
       rootTreeElement.appendChild(traceTreeElement);
@@ -299,7 +302,7 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
   _computePropertyTraces(matchedStyles) {
     var result = new Map();
     for (var style of matchedStyles.nodeStyles()) {
-      var allProperties = style.allProperties;
+      var allProperties = style.allProperties();
       for (var property of allProperties) {
         if (!property.activeInStyle() || !matchedStyles.propertyState(property))
           continue;
@@ -318,7 +321,7 @@ Elements.ComputedStyleWidget = class extends UI.ThrottledWidget {
   _computeInheritedProperties(matchedStyles) {
     var result = new Set();
     for (var style of matchedStyles.nodeStyles()) {
-      for (var property of style.allProperties) {
+      for (var property of style.allProperties()) {
         if (!matchedStyles.propertyState(property))
           continue;
         result.add(SDK.cssMetadata().canonicalPropertyName(property.name));

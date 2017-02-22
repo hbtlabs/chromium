@@ -11,36 +11,22 @@ namespace blink {
 
 class X : public GarbageCollected<X> {
  public:
-  void trace(Visitor*) {}
-  void trace(InlinedGlobalMarkingVisitor) {}
+  void Trace(Visitor*) {}
 };
 
 class InlinedBase : public GarbageCollected<InlinedBase> {
  public:
-  virtual void trace(Visitor* visitor) { traceImpl(visitor); }
-  virtual void trace(InlinedGlobalMarkingVisitor visitor) {
-    traceImpl(visitor);
-  }
+  virtual void Trace(Visitor* visitor) { visitor->Trace(x_base_); }
 
  private:
-  template <typename VisitorDispatcher>
-  void traceImpl(VisitorDispatcher visitor) { visitor->trace(x_base_); }
-
   Member<X> x_base_;
 };
 
 class InlinedDerived : public InlinedBase {
  public:
-  void trace(Visitor* visitor) override { traceImpl(visitor); }
-  void trace(InlinedGlobalMarkingVisitor visitor) override {
-    traceImpl(visitor);
-  }
-
- private:
-  template <typename VisitorDispatcher>
-  void traceImpl(VisitorDispatcher visitor) {
-    visitor->trace(x_derived_);
-    InlinedBase::trace(visitor);
+  void Trace(Visitor* visitor) override {
+    visitor->Trace(x_derived_);
+    InlinedBase::Trace(visitor);
   }
 
   Member<X> x_derived_;
@@ -48,25 +34,17 @@ class InlinedDerived : public InlinedBase {
 
 class ExternBase : public GarbageCollected<ExternBase> {
  public:
-  virtual void trace(Visitor*);
-  virtual void trace(InlinedGlobalMarkingVisitor);
+  virtual void Trace(Visitor*);
 
  private:
-  template <typename VisitorDispatcher>
-  void traceImpl(VisitorDispatcher);
-
   Member<X> x_base_;
 };
 
 class ExternDerived : public ExternBase {
  public:
-  void trace(Visitor*) override;
-  void trace(InlinedGlobalMarkingVisitor) override;
+  void Trace(Visitor*) override;
 
  private:
-  template <typename VisitorDispatcher>
-  void traceImpl(VisitorDispatcher);
-
   Member<X> x_derived_;
 };
 

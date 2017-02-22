@@ -30,7 +30,6 @@
 
 .filter-bar {
     background-color: #f3f3f3;
-    padding: 2px 0;
     flex: none;
     flex-wrap: wrap;
     align-items: center;
@@ -139,13 +138,18 @@
 }
 
 .filter-input-field {
-    -webkit-appearance: none;
     border: 1px solid rgb(163, 163, 163);
     border-radius: 2px;
     padding: 1px 3px 0;
-    margin: 0 0 0 1px;
-    width: 253px;
+    margin: 0 0 0 3px;
+    width: 143px;
     height: 20px;
     line-height: 17px;
-    flex: 1;
+    -webkit-user-modify: read-write-plaintext-only;
+    -webkit-user-select: text;
+    display: inline-block;
+    background: #FFF;
+    overflow: hidden;
+    white-space: nowrap;
+    cursor: auto;
 }

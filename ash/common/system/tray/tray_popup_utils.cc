@@ -4,6 +4,9 @@
 
 #include "ash/common/system/tray/tray_popup_utils.h"
 
+#include <algorithm>
+#include <utility>
+
 #include "ash/common/ash_constants.h"
 #include "ash/common/ash_view_ids.h"
 #include "ash/common/material_design/material_design_controller.h"
@@ -12,9 +15,8 @@
 #include "ash/common/system/tray/size_range_layout.h"
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/tray_popup_item_style.h"
-#include "ash/common/system/tray/tray_popup_label_button.h"
-#include "ash/common/system/tray/tray_popup_label_button_border.h"
 #include "ash/common/wm_shell.h"
+#include "base/memory/ptr_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
@@ -44,7 +46,7 @@ namespace {
 std::unique_ptr<views::LayoutManager> CreateDefaultCenterLayoutManager() {
   // TODO(bruthig): Use constants instead of magic numbers.
   auto box_layout =
-      base::MakeUnique<views::BoxLayout>(views::BoxLayout::kVertical, 4, 8, 4);
+      base::MakeUnique<views::BoxLayout>(views::BoxLayout::kVertical, 4, 8, 0);
   box_layout->set_main_axis_alignment(
       views::BoxLayout::MAIN_AXIS_ALIGNMENT_CENTER);
   box_layout->set_cross_axis_alignment(
@@ -108,43 +110,24 @@ class BorderlessLabelButton : public views::LabelButton {
   BorderlessLabelButton(views::ButtonListener* listener,
                         const base::string16& text)
       : LabelButton(listener, text) {
-    if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
-      SetInkDropMode(views::InkDropHostView::InkDropMode::ON);
-      set_has_ink_drop_action_on_click(true);
-      set_ink_drop_base_color(kTrayPopupInkDropBaseColor);
-      set_ink_drop_visible_opacity(kTrayPopupInkDropRippleOpacity);
-      const int kHorizontalPadding = 8;
-      SetBorder(views::CreateEmptyBorder(gfx::Insets(0, kHorizontalPadding)));
-      TrayPopupItemStyle style(nullptr, TrayPopupItemStyle::FontStyle::BUTTON);
-      style.SetupLabel(label());
-      // TODO(tdanderson): Update focus rect for material design. See
-      // crbug.com/615892
-      // Hack alert: CreateSolidFocusPainter should add 0.5f to all insets to
-      // make the lines align to pixel centers, but for now it doesn't. We can
-      // get around this by relying on Skia rounding up integer coordinates.
-      SetFocusPainter(views::Painter::CreateSolidFocusPainter(
-          kFocusBorderColor, gfx::Insets(0, 0, 1, 1)));
-    } else {
-      SetBorder(std::unique_ptr<views::Border>(new TrayPopupLabelButtonBorder));
-      SetFocusPainter(views::Painter::CreateSolidFocusPainter(
-          kFocusBorderColor, gfx::Insets(1, 1, 2, 2)));
-      set_animate_on_state_change(false);
-    }
+    const int kHorizontalPadding = 20;
+    SetBorder(views::CreateEmptyBorder(gfx::Insets(0, kHorizontalPadding)));
+    TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::BUTTON);
+    style.SetupLabel(label());
     SetHorizontalAlignment(gfx::ALIGN_CENTER);
-    SetFocusForPlatform();
+    SetFocusPainter(TrayPopupUtils::CreateFocusPainter());
+
+    TrayPopupUtils::ConfigureTrayPopupButton(this);
   }
 
   ~BorderlessLabelButton() override {}
 
   // views::LabelButton:
-  int GetHeightForWidth(int width) const override {
-    if (MaterialDesignController::IsSystemTrayMenuMaterial())
-      return kMenuButtonSize - 2 * kTrayPopupInkDropInset;
-
-    return LabelButton::GetHeightForWidth(width);
-  }
+  int GetHeightForWidth(int width) const override { return kMenuButtonSize; }
 
  private:
+  // TODO(estade,bruthig): there's a lot in common here with ActionableView.
+  // Find a way to share. See related TODO on InkDropHostView::SetInkDropMode().
   std::unique_ptr<views::InkDrop> CreateInkDrop() override {
     return TrayPopupUtils::CreateInkDrop(TrayPopupInkDropStyle::INSET_BOUNDS,
                                          this);
@@ -188,12 +171,21 @@ TriView* TrayPopupUtils::CreateDefaultRowView() {
   return tri_view;
 }
 
+TriView* TrayPopupUtils::CreateSubHeaderRowView() {
+  TriView* tri_view = CreateMultiTargetRowView();
+  tri_view->SetInsets(gfx::Insets(0, kTrayPopupPaddingHorizontal, 0, 0));
+  tri_view->SetContainerVisible(TriView::Container::START, false);
+  tri_view->SetContainerLayout(
+      TriView::Container::END,
+      CreateDefaultLayoutManager(TriView::Container::END));
+  return tri_view;
+}
+
 TriView* TrayPopupUtils::CreateMultiTargetRowView() {
   TriView* tri_view = new TriView(0 /* padding_between_items */);
 
   tri_view->SetInsets(
-      gfx::Insets(0, GetTrayConstant(TRAY_POPUP_ITEM_LEFT_INSET), 0,
-                  GetTrayConstant(TRAY_POPUP_ITEM_RIGHT_INSET)));
+      gfx::Insets(0, GetTrayConstant(TRAY_POPUP_ITEM_LEFT_INSET), 0, 0));
 
   ConfigureDefaultSizeAndFlex(tri_view, TriView::Container::START);
   ConfigureDefaultSizeAndFlex(tri_view, TriView::Container::CENTER);
@@ -214,15 +206,12 @@ views::Label* TrayPopupUtils::CreateDefaultLabel() {
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   label->SetBorder(
       views::CreateEmptyBorder(0, 0, 0, kTrayPopupLabelRightPadding));
-
-  // TODO(bruthig): Fix this so that |label| uses the kBackgroundColor to
-  // perform subpixel rendering instead of disabling subpixel rendering.
-  //
-  // Text rendered on a non-opaque background looks ugly and it is possible for
-  // labels to given a a clear canvas at paint time when an ink drop is visible.
-  // See http://crbug.com/661714.
-  label->SetSubpixelRenderingEnabled(false);
-
+  // Frequently the label will paint to a layer that's non-opaque, so subpixel
+  // rendering won't work unless we explicitly set a background. See
+  // crbug.com/686363
+  label->set_background(
+      views::Background::CreateSolidBackground(kBackgroundColor));
+  label->SetBackgroundColor(kBackgroundColor);
   return label;
 }
 
@@ -243,7 +232,6 @@ views::ImageView* TrayPopupUtils::CreateMoreImageView() {
 views::Slider* TrayPopupUtils::CreateSlider(views::SliderListener* listener) {
   const bool is_material = MaterialDesignController::IsSystemTrayMenuMaterial();
   views::Slider* slider = views::Slider::CreateSlider(is_material, listener);
-  slider->set_focus_border_color(kFocusBorderColor);
   if (is_material) {
     slider->SetBorder(
         views::CreateEmptyBorder(gfx::Insets(0, kTrayPopupSliderPaddingMD)));
@@ -264,12 +252,27 @@ views::ToggleButton* TrayPopupUtils::CreateToggleButton(
       (kTrayToggleButtonWidth - toggle_size.width()) / 2;
   toggle->SetBorder(views::CreateEmptyBorder(
       gfx::Insets(vertical_padding, horizontal_padding)));
-  // TODO(tdanderson): Update the focus rect color, border thickness, and
-  // location for material design.
-  toggle->SetFocusPainter(views::Painter::CreateSolidFocusPainter(
-      kFocusBorderColor, gfx::Insets(1)));
+  toggle->SetFocusPainter(CreateFocusPainter());
   toggle->SetAccessibleName(l10n_util::GetStringUTF16(accessible_name_id));
   return toggle;
+}
+
+std::unique_ptr<views::Painter> TrayPopupUtils::CreateFocusPainter() {
+  return views::Painter::CreateSolidFocusPainter(
+      kFocusBorderColor, kFocusBorderThickness, gfx::InsetsF());
+}
+
+void TrayPopupUtils::ConfigureTrayPopupButton(views::CustomButton* button) {
+  // All buttons that call into here want this focus painter, but
+  // SetFocusPainter is defined separately on derived classes and isn't part of
+  // CustomButton. TODO(estade): Address this.
+  // button->SetFocusPainter(TrayPopupUtils::CreateFocusPainter());
+  button->SetFocusForPlatform();
+
+  button->SetInkDropMode(views::InkDropHostView::InkDropMode::ON);
+  button->set_has_ink_drop_action_on_click(true);
+  button->set_ink_drop_base_color(kTrayPopupInkDropBaseColor);
+  button->set_ink_drop_visible_opacity(kTrayPopupInkDropRippleOpacity);
 }
 
 void TrayPopupUtils::ConfigureAsStickyHeader(views::View* view) {
@@ -278,6 +281,23 @@ void TrayPopupUtils::ConfigureAsStickyHeader(views::View* view) {
       views::Background::CreateSolidBackground(kBackgroundColor));
   view->SetBorder(
       views::CreateEmptyBorder(gfx::Insets(kMenuSeparatorVerticalPadding, 0)));
+  view->SetPaintToLayer();
+  view->layer()->SetFillsBoundsOpaquely(false);
+}
+
+void TrayPopupUtils::ShowStickyHeaderSeparator(views::View* view,
+                                               bool show_separator) {
+  if (show_separator) {
+    view->SetBorder(views::CreatePaddedBorder(
+        views::CreateSolidSidedBorder(0, 0, kSeparatorWidth, 0,
+                                      kMenuSeparatorColor),
+        gfx::Insets(kMenuSeparatorVerticalPadding, 0,
+                    kMenuSeparatorVerticalPadding - kSeparatorWidth, 0)));
+  } else {
+    view->SetBorder(views::CreateEmptyBorder(
+        gfx::Insets(kMenuSeparatorVerticalPadding, 0)));
+  }
+  view->SchedulePaint();
 }
 
 void TrayPopupUtils::ConfigureContainer(TriView::Container container,
@@ -295,19 +315,15 @@ views::LabelButton* TrayPopupUtils::CreateTrayPopupBorderlessButton(
 views::LabelButton* TrayPopupUtils::CreateTrayPopupButton(
     views::ButtonListener* listener,
     const base::string16& text) {
-  if (!MaterialDesignController::IsSystemTrayMenuMaterial())
-    return CreateTrayPopupBorderlessButton(listener, text);
-
   auto* button = views::MdTextButton::Create(listener, text);
   button->SetProminent(true);
   return button;
 }
 
 views::Separator* TrayPopupUtils::CreateVerticalSeparator() {
-  views::Separator* separator =
-      new views::Separator(views::Separator::HORIZONTAL);
-  separator->SetPreferredSize(kHorizontalSeparatorHeight);
-  separator->SetColor(kHorizontalSeparatorColor);
+  views::Separator* separator = new views::Separator();
+  separator->SetPreferredHeight(24);
+  separator->SetColor(kMenuSeparatorColor);
   return separator;
 }
 
@@ -326,39 +342,22 @@ std::unique_ptr<views::InkDrop> TrayPopupUtils::CreateInkDrop(
 std::unique_ptr<views::InkDropRipple> TrayPopupUtils::CreateInkDropRipple(
     TrayPopupInkDropStyle ink_drop_style,
     const views::View* host,
-    const gfx::Point& center_point) {
-  const gfx::Rect bounds =
-      TrayPopupUtils::GetInkDropBounds(ink_drop_style, host);
-  switch (ink_drop_style) {
-    case TrayPopupInkDropStyle::HOST_CENTERED:
-      if (MaterialDesignController::GetMode() ==
-          MaterialDesignController::MATERIAL_EXPERIMENTAL) {
-        return base::MakeUnique<views::SquareInkDropRipple>(
-            bounds.size(), bounds.size().width() / 2, bounds.size(),
-            bounds.size().width() / 2, center_point, bounds.CenterPoint(),
-            kTrayPopupInkDropBaseColor, kTrayPopupInkDropRippleOpacity);
-      }
-    // Intentional fall through.
-    case TrayPopupInkDropStyle::INSET_BOUNDS:
-    case TrayPopupInkDropStyle::FILL_BOUNDS:
-      return base::MakeUnique<views::FloodFillInkDropRipple>(
-          bounds, center_point, kTrayPopupInkDropBaseColor,
-          kTrayPopupInkDropRippleOpacity);
-  }
-  // Required for some compilers.
-  NOTREACHED();
-  return nullptr;
+    const gfx::Point& center_point,
+    SkColor color) {
+  return base::MakeUnique<views::FloodFillInkDropRipple>(
+      host->size(), TrayPopupUtils::GetInkDropInsets(ink_drop_style),
+      center_point, color, kTrayPopupInkDropRippleOpacity);
 }
 
 std::unique_ptr<views::InkDropHighlight> TrayPopupUtils::CreateInkDropHighlight(
     TrayPopupInkDropStyle ink_drop_style,
-    const views::View* host) {
+    const views::View* host,
+    SkColor color) {
   const gfx::Rect bounds =
       TrayPopupUtils::GetInkDropBounds(ink_drop_style, host);
   std::unique_ptr<views::InkDropHighlight> highlight(
       new views::InkDropHighlight(bounds.size(), 0,
-                                  gfx::PointF(bounds.CenterPoint()),
-                                  kTrayPopupInkDropBaseColor));
+                                  gfx::PointF(bounds.CenterPoint()), color));
   highlight->set_visible_opacity(kTrayPopupInkDropHighlightOpacity);
   return highlight;
 }
@@ -413,17 +412,23 @@ gfx::Rect TrayPopupUtils::GetInkDropBounds(TrayPopupInkDropStyle ink_drop_style,
 }
 
 views::Separator* TrayPopupUtils::CreateListItemSeparator(bool left_inset) {
-  views::Separator* separator =
-      new views::Separator(views::Separator::HORIZONTAL);
-  separator->SetColor(kHorizontalSeparatorColor);
-  separator->SetPreferredSize(kSeparatorWidth);
+  views::Separator* separator = new views::Separator();
+  separator->SetColor(kMenuSeparatorColor);
   separator->SetBorder(views::CreateEmptyBorder(
-      kMenuSeparatorVerticalPadding - kSeparatorWidth,
+      kMenuSeparatorVerticalPadding - views::Separator::kThickness,
       left_inset
           ? kMenuExtraMarginFromLeftEdge + kMenuButtonSize +
                 kTrayPopupLabelHorizontalPadding
           : 0,
       kMenuSeparatorVerticalPadding, 0));
+  return separator;
+}
+
+views::Separator* TrayPopupUtils::CreateListSubHeaderSeparator() {
+  views::Separator* separator = new views::Separator();
+  separator->SetColor(kMenuSeparatorColor);
+  separator->SetBorder(views::CreateEmptyBorder(
+      kMenuSeparatorVerticalPadding - views::Separator::kThickness, 0, 0, 0));
   return separator;
 }
 

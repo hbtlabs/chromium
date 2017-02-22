@@ -27,10 +27,12 @@
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
+#include "content/public/renderer/window_features_converter.h"
 #include "extensions/features/features.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/WebKit/public/web/WebWindowFeatures.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/common/extensions/chrome_extension_messages.h"
@@ -98,15 +100,17 @@ void ChromeRenderViewObserver::OnGetWebApplicationInfo() {
 
   // The warning below is specific to mobile but it doesn't hurt to show it even
   // if the Chromium build is running on a desktop. It will get more exposition.
-  if (web_app_info.mobile_capable ==
-        WebApplicationInfo::MOBILE_CAPABLE_APPLE) {
+  // TODO(mlamouri): Associate this message with an actual frame, to avoid the
+  // need to check whether or not the main frame is local.
+  if (web_app_info.mobile_capable == WebApplicationInfo::MOBILE_CAPABLE_APPLE &&
+      main_frame->isWebLocalFrame()) {
     blink::WebConsoleMessage message(
         blink::WebConsoleMessage::LevelWarning,
         "<meta name=\"apple-mobile-web-app-capable\" content=\"yes\"> is "
         "deprecated. Please include <meta name=\"mobile-web-app-capable\" "
         "content=\"yes\"> - "
         "http://developers.google.com/chrome/mobile/docs/installtohomescreen");
-    main_frame->addMessageToConsole(message);
+    main_frame->toWebLocalFrame()->addMessageToConsole(message);
   }
 
   // Prune out any data URLs in the set of icons.  The browser process expects
@@ -132,8 +136,9 @@ void ChromeRenderViewObserver::OnGetWebApplicationInfo() {
 }
 
 void ChromeRenderViewObserver::OnSetWindowFeatures(
-    const WebWindowFeatures& window_features) {
-  render_view()->GetWebView()->setWindowFeatures(window_features);
+    const blink::mojom::WindowFeatures& window_features) {
+  render_view()->GetWebView()->setWindowFeatures(
+      content::ConvertMojoWindowFeaturesToWebWindowFeatures(window_features));
 }
 
 void ChromeRenderViewObserver::Navigate(const GURL& url) {
@@ -163,7 +168,9 @@ void ChromeRenderViewObserver::OnSetVisuallyDeemphasized(bool deemphasized) {
 void ChromeRenderViewObserver::DidCommitProvisionalLoad(
     blink::WebLocalFrame* frame,
     bool is_new_navigation) {
-  if ((render_view()->GetEnabledBindings() & content::BINDINGS_POLICY_WEB_UI) &&
+  auto* render_frame = content::RenderFrame::FromWebFrame(frame);
+  if (render_frame->IsMainFrame() &&
+      (render_frame->GetEnabledBindings() & content::BINDINGS_POLICY_WEB_UI) &&
       !webui_javascript_.empty()) {
     for (const auto& script : webui_javascript_)
       render_view()->GetMainRenderFrame()->ExecuteJavaScript(script);

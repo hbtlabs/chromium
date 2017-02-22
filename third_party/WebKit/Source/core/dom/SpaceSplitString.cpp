@@ -64,7 +64,7 @@ inline void SpaceSplitString::Data::createVector(
     while (end < length && isNotHTMLSpace<CharacterType>(characters[end]))
       ++end;
 
-    m_vector.append(AtomicString(characters + start, end - start));
+    m_vector.push_back(AtomicString(characters + start, end - start));
 
     start = end + 1;
   }
@@ -103,7 +103,7 @@ bool SpaceSplitString::Data::containsAll(Data& other) {
 void SpaceSplitString::Data::add(const AtomicString& string) {
   DCHECK(hasOneRef());
   DCHECK(!contains(string));
-  m_vector.append(string);
+  m_vector.push_back(string);
 }
 
 void SpaceSplitString::Data::remove(unsigned index) {
@@ -162,12 +162,12 @@ void SpaceSplitString::set(const AtomicString& inputString,
 
 SpaceSplitString::Data::~Data() {
   if (!m_keyString.isNull())
-    sharedDataMap().remove(m_keyString);
+    sharedDataMap().erase(m_keyString);
 }
 
 PassRefPtr<SpaceSplitString::Data> SpaceSplitString::Data::create(
     const AtomicString& string) {
-  Data*& data = sharedDataMap().add(string, nullptr).storedValue->value;
+  Data*& data = sharedDataMap().insert(string, nullptr).storedValue->value;
   if (!data) {
     data = new Data(string);
     return adoptRef(data);

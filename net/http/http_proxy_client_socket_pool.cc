@@ -91,7 +91,8 @@ HttpProxyConnectJob::HttpProxyConnectJob(
           priority,
           respect_limits,
           delegate,
-          NetLogWithSource::Make(net_log, NetLogSourceType::CONNECT_JOB)),
+          NetLogWithSource::Make(net_log,
+                                 NetLogSourceType::HTTP_PROXY_CONNECT_JOB)),
       client_socket_(new HttpProxyClientSocketWrapper(
           group_name,
           priority,
@@ -242,6 +243,12 @@ void HttpProxyClientSocketPool::CancelRequest(
     const std::string& group_name,
     ClientSocketHandle* handle) {
   base_.CancelRequest(group_name, handle);
+}
+
+void HttpProxyClientSocketPool::SetPriority(const std::string& group_name,
+                                            ClientSocketHandle* handle,
+                                            RequestPriority priority) {
+  base_.SetPriority(group_name, handle, priority);
 }
 
 void HttpProxyClientSocketPool::ReleaseSocket(

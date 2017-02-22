@@ -9,9 +9,13 @@
  */
 function replaceBody(element) {
   var body = document.body;
-  var currentBody =
-      body.querySelector('history-app') || body.querySelector('.test-body');
+  var app = body.querySelector('history-app');
+
+  var currentBody = app || body.querySelector('.test-body');
   body.removeChild(currentBody);
+
+  // Clear any query in the URL.
+  window.history.replaceState({}, '', '/');
 
   element.classList.add('test-body');
   body.appendChild(element);
@@ -27,6 +31,7 @@ function replaceApp() {
   // Disable querying for tests by default.
   app.queryState_.queryingDisabled = true;
   replaceBody(app);
+  Polymer.dom.flush();
   return app;
 }
 
@@ -85,8 +90,8 @@ function createHistoryInfo(searchTerm) {
   return {
     finished: true,
     hasSyncedResults: false,
-    queryEndTime: 'Monday',
-    queryStartTime: 'Tuesday',
+    queryInterval: 'Monday - Tuesday',
+    queryMonth: 'June',
     term: searchTerm || ''
   };
 }

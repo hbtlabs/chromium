@@ -55,7 +55,7 @@ SOCKSConnectJob::SOCKSConnectJob(
           priority,
           respect_limits,
           delegate,
-          NetLogWithSource::Make(net_log, NetLogSourceType::CONNECT_JOB)),
+          NetLogWithSource::Make(net_log, NetLogSourceType::SOCKS_CONNECT_JOB)),
       socks_params_(socks_params),
       transport_pool_(transport_pool),
       resolver_(host_resolver),
@@ -234,6 +234,12 @@ void SOCKSClientSocketPool::RequestSockets(const std::string& group_name,
       static_cast<const scoped_refptr<SOCKSSocketParams>*>(params);
 
   base_.RequestSockets(group_name, *casted_params, num_sockets, net_log);
+}
+
+void SOCKSClientSocketPool::SetPriority(const std::string& group_name,
+                                        ClientSocketHandle* handle,
+                                        RequestPriority priority) {
+  base_.SetPriority(group_name, handle, priority);
 }
 
 void SOCKSClientSocketPool::CancelRequest(const std::string& group_name,

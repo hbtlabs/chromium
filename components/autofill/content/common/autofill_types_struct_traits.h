@@ -7,6 +7,7 @@
 
 #include <utility>
 
+#include "base/i18n/rtl.h"
 #include "base/strings/string16.h"
 #include "components/autofill/content/common/autofill_types.mojom.h"
 #include "components/autofill/core/common/form_data.h"
@@ -37,14 +38,6 @@ struct EnumTraits<autofill::mojom::RoleAttribute,
       autofill::FormFieldData::RoleAttribute input);
   static bool FromMojom(autofill::mojom::RoleAttribute input,
                         autofill::FormFieldData::RoleAttribute* output);
-};
-
-template <>
-struct EnumTraits<autofill::mojom::TextDirection, base::i18n::TextDirection> {
-  static autofill::mojom::TextDirection ToMojom(
-      base::i18n::TextDirection input);
-  static bool FromMojom(autofill::mojom::TextDirection input,
-                        base::i18n::TextDirection* output);
 };
 
 template <>
@@ -101,6 +94,10 @@ struct StructTraits<autofill::mojom::FormFieldDataDataView,
 
   static const base::string16& name(const autofill::FormFieldData& r) {
     return r.name;
+  }
+
+  static const base::string16& id(const autofill::FormFieldData& r) {
+    return r.id;
   }
 
   static const base::string16& value(const autofill::FormFieldData& r) {
@@ -455,6 +452,11 @@ struct StructTraits<autofill::mojom::PasswordFormDataView,
 
   static bool new_password_marked_by_site(const autofill::PasswordForm& r) {
     return r.new_password_marked_by_site;
+  }
+
+  static const base::string16& confirmation_password_element(
+      const autofill::PasswordForm& r) {
+    return r.confirmation_password_element;
   }
 
   static bool preferred(const autofill::PasswordForm& r) { return r.preferred; }

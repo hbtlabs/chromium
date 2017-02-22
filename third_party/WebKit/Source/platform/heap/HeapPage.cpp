@@ -31,25 +31,24 @@
 #include "platform/heap/HeapPage.h"
 
 #include "base/trace_event/process_memory_dump.h"
+#include "platform/MemoryCoordinator.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/heap/BlinkGCMemoryDumpProvider.h"
 #include "platform/heap/CallbackStack.h"
-#include "platform/heap/Heap.h"
-#include "platform/heap/MarkingVisitor.h"
+#include "platform/heap/HeapCompact.h"
 #include "platform/heap/PageMemory.h"
 #include "platform/heap/PagePool.h"
 #include "platform/heap/SafePoint.h"
 #include "platform/heap/ThreadState.h"
-#include "platform/tracing/TraceEvent.h"
-#include "platform/tracing/web_memory_allocator_dump.h"
-#include "platform/tracing/web_process_memory_dump.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/web_memory_allocator_dump.h"
+#include "platform/instrumentation/tracing/web_process_memory_dump.h"
 #include "public/platform/Platform.h"
 #include "wtf/Assertions.h"
 #include "wtf/AutoReset.h"
 #include "wtf/ContainerAnnotations.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/LeakAnnotations.h"
-#include "wtf/allocator/PageAllocator.h"
 #include "wtf/allocator/Partitions.h"
 
 #ifdef ANNOTATE_CONTIGUOUS_CONTAINER
@@ -89,7 +88,7 @@
 
 namespace blink {
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 NO_SANITIZE_ADDRESS
 void HeapObjectHeader::zapMagic() {
   ASSERT(checkHeader());
@@ -117,17 +116,15 @@ BaseArena::~BaseArena() {
   ASSERT(!m_firstUnsweptPage);
 }
 
-void BaseArena::cleanupPages() {
+void BaseArena::removeAllPages() {
   clearFreeLists();
 
   ASSERT(!m_firstUnsweptPage);
-  // Add the BaseArena's pages to the orphanedPagePool.
-  for (BasePage* page = m_firstPage; page; page = page->next()) {
-    getThreadState()->heap().heapStats().decreaseAllocatedSpace(page->size());
-    getThreadState()->heap().getOrphanedPagePool()->addOrphanedPage(
-        arenaIndex(), page);
+  while (m_firstPage) {
+    BasePage* page = m_firstPage;
+    page->unlink(&m_firstPage);
+    page->removeFromHeap();
   }
-  m_firstPage = nullptr;
 }
 
 void BaseArena::takeSnapshot(const String& dumpBaseName,
@@ -158,7 +155,7 @@ void BaseArena::takeSnapshot(const String& dumpBaseName,
   allocatorDump->AddScalar("free_count", "objects", heapInfo.freeCount);
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 BasePage* BaseArena::findPageFromAddress(Address address) {
   for (BasePage* page = m_firstPage; page; page = page->next()) {
     if (page->contains(address))
@@ -180,27 +177,19 @@ void BaseArena::makeConsistentForGC() {
     page->invalidateObjectStartBitmap();
   }
 
-  // If a new GC is requested before this thread got around to sweep,
-  // ie. due to the thread doing a long running operation, we clear
-  // the mark bits and mark any of the dead objects as dead. The latter
-  // is used to ensure the next GC marking does not trace already dead
-  // objects. If we trace a dead object we could end up tracing into
-  // garbage or the middle of another object via the newly conservatively
-  // found object.
-  BasePage* previousPage = nullptr;
-  for (BasePage *page = m_firstUnsweptPage; page;
-       previousPage = page, page = page->next()) {
-    page->makeConsistentForGC();
-    ASSERT(!page->hasBeenSwept());
-    page->invalidateObjectStartBitmap();
+  // We should not start a new GC until we finish sweeping in the current GC.
+  CHECK(!m_firstUnsweptPage);
+
+  HeapCompact* heapCompactor = getThreadState()->heap().compaction();
+  if (!heapCompactor->isCompactingArena(arenaIndex()))
+    return;
+
+  BasePage* nextPage = m_firstPage;
+  while (nextPage) {
+    if (!nextPage->isLargeObjectPage())
+      heapCompactor->addCompactingPage(nextPage);
+    nextPage = nextPage->next();
   }
-  if (previousPage) {
-    ASSERT(m_firstUnsweptPage);
-    previousPage->m_next = m_firstPage;
-    m_firstPage = m_firstUnsweptPage;
-    m_firstUnsweptPage = nullptr;
-  }
-  ASSERT(!m_firstUnsweptPage);
 }
 
 void BaseArena::makeConsistentForMutator() {
@@ -234,13 +223,6 @@ size_t BaseArena::objectPayloadSizeForTesting() {
   for (BasePage* page = m_firstPage; page; page = page->next())
     objectPayloadSize += page->objectPayloadSizeForTesting();
   return objectPayloadSize;
-}
-
-void BaseArena::prepareHeapForTermination() {
-  ASSERT(!m_firstUnsweptPage);
-  for (BasePage* page = m_firstPage; page; page = page->next()) {
-    page->setTerminating();
-  }
 }
 
 void BaseArena::prepareForSweep() {
@@ -440,7 +422,139 @@ void NormalPageArena::clearFreeLists() {
   m_freeList.clear();
 }
 
-#if ENABLE(ASSERT)
+size_t NormalPageArena::arenaSize() {
+  size_t size = 0;
+  BasePage* page = m_firstPage;
+  while (page) {
+    size += page->size();
+    page = page->next();
+  }
+  LOG_HEAP_FREELIST_VERBOSE("Heap size: %zu (%d)\n", size, arenaIndex());
+  return size;
+}
+
+size_t NormalPageArena::freeListSize() {
+  size_t freeSize = m_freeList.freeListSize();
+  LOG_HEAP_FREELIST_VERBOSE("Free size: %zu (%d)\n", freeSize, arenaIndex());
+  return freeSize;
+}
+
+void NormalPageArena::sweepAndCompact() {
+  ThreadHeap& heap = getThreadState()->heap();
+  if (!heap.compaction()->isCompactingArena(arenaIndex()))
+    return;
+
+  if (!m_firstUnsweptPage) {
+    heap.compaction()->finishedArenaCompaction(this, 0, 0);
+    return;
+  }
+
+  // Compaction is performed in-place, sliding objects down over unused
+  // holes for a smaller heap page footprint and improved locality.
+  // A "compaction pointer" is consequently kept, pointing to the next
+  // available address to move objects down to. It will belong to one
+  // of the already sweep-compacted pages for this arena, but as compaction
+  // proceeds, it will not belong to the same page as the one being
+  // currently compacted.
+  //
+  // The compaction pointer is represented by the
+  // |(currentPage, allocationPoint)| pair, with |allocationPoint|
+  // being the offset into |currentPage|, making up the next
+  // available location. When the compaction of an arena page causes the
+  // compaction pointer to exhaust the current page it is compacting into,
+  // page compaction will advance the current page of the compaction
+  // pointer, as well as the allocation point.
+  //
+  // By construction, the page compaction can be performed without having
+  // to allocate any new pages. So to arrange for the page compaction's
+  // supply of freed, available pages, we chain them together after each
+  // has been "compacted from". The page compaction will then reuse those
+  // as needed, and once finished, the chained, available pages can be
+  // released back to the OS.
+  //
+  // To ease the passing of the compaction state when iterating over an
+  // arena's pages, package it up into a |CompactionContext|.
+  NormalPage::CompactionContext context;
+  context.m_compactedPages = &m_firstPage;
+
+  while (m_firstUnsweptPage) {
+    BasePage* page = m_firstUnsweptPage;
+    if (page->isEmpty()) {
+      page->unlink(&m_firstUnsweptPage);
+      page->removeFromHeap();
+      continue;
+    }
+    // Large objects do not belong to this arena.
+    DCHECK(!page->isLargeObjectPage());
+    NormalPage* normalPage = static_cast<NormalPage*>(page);
+    normalPage->unlink(&m_firstUnsweptPage);
+    normalPage->markAsSwept();
+    // If not the first page, add |normalPage| onto the available pages chain.
+    if (!context.m_currentPage)
+      context.m_currentPage = normalPage;
+    else
+      normalPage->link(&context.m_availablePages);
+    normalPage->sweepAndCompact(context);
+  }
+
+  size_t freedSize = 0;
+  size_t freedPageCount = 0;
+
+  DCHECK(context.m_currentPage);
+  // If the current page hasn't been allocated into, add it to the available
+  // list, for subsequent release below.
+  size_t allocationPoint = context.m_allocationPoint;
+  if (!allocationPoint) {
+    context.m_currentPage->link(&context.m_availablePages);
+  } else {
+    NormalPage* currentPage = context.m_currentPage;
+    currentPage->link(&m_firstPage);
+    if (allocationPoint != currentPage->payloadSize()) {
+      // Put the remainder of the page onto the free list.
+      freedSize = currentPage->payloadSize() - allocationPoint;
+      Address payload = currentPage->payload();
+      SET_MEMORY_INACCESSIBLE(payload + allocationPoint, freedSize);
+      currentPage->arenaForNormalPage()->addToFreeList(
+          payload + allocationPoint, freedSize);
+    }
+  }
+
+  // Return available pages to the free page pool, decommitting them from
+  // the pagefile.
+  BasePage* availablePages = context.m_availablePages;
+  while (availablePages) {
+    size_t pageSize = availablePages->size();
+#if DEBUG_HEAP_COMPACTION
+    if (!freedPageCount)
+      LOG_HEAP_COMPACTION("Releasing:");
+    LOG_HEAP_COMPACTION(" [%p, %p]", availablePages, availablePages + pageSize);
+#endif
+    freedSize += pageSize;
+    freedPageCount++;
+    BasePage* nextPage;
+    availablePages->unlink(&nextPage);
+#if !(DCHECK_IS_ON() || defined(LEAK_SANITIZER) || \
+      defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER))
+    // Clear out the page before adding it to the free page pool, which
+    // decommits it. Recommitting the page must find a zeroed page later.
+    // We cannot assume that the OS will hand back a zeroed page across
+    // its "decommit" operation.
+    //
+    // If in a debug setting, the unused page contents will have been
+    // zapped already; leave it in that state.
+    DCHECK(!availablePages->isLargeObjectPage());
+    NormalPage* unusedPage = reinterpret_cast<NormalPage*>(availablePages);
+    memset(unusedPage->payload(), 0, unusedPage->payloadSize());
+#endif
+    availablePages->removeFromHeap();
+    availablePages = static_cast<NormalPage*>(nextPage);
+  }
+  if (freedPageCount)
+    LOG_HEAP_COMPACTION("\n");
+  heap.compaction()->finishedArenaCompaction(this, freedPageCount, freedSize);
+}
+
+#if DCHECK_IS_ON()
 bool NormalPageArena::isConsistentForGC() {
   // A thread heap is consistent for sweeping if none of the pages to be swept
   // contain a freelist block or the current allocation point.
@@ -484,7 +598,7 @@ void NormalPageArena::takeFreelistSnapshot(const String& dumpName) {
 void NormalPageArena::allocatePage() {
   getThreadState()->shouldFlushHeapDoesNotContainCache();
   PageMemory* pageMemory =
-      getThreadState()->heap().getFreePagePool()->takeFreePage(arenaIndex());
+      getThreadState()->heap().getFreePagePool()->take(arenaIndex());
 
   if (!pageMemory) {
     // Allocate a memory region for blinkPagesPerRegion pages that
@@ -509,18 +623,16 @@ void NormalPageArena::allocatePage() {
         RELEASE_ASSERT(result);
         pageMemory = memory;
       } else {
-        getThreadState()->heap().getFreePagePool()->addFreePage(arenaIndex(),
-                                                                memory);
+        getThreadState()->heap().getFreePagePool()->add(arenaIndex(), memory);
       }
     }
   }
-
   NormalPage* page =
       new (pageMemory->writableStart()) NormalPage(pageMemory, this);
   page->link(&m_firstPage);
 
   getThreadState()->heap().heapStats().increaseAllocatedSpace(page->size());
-#if ENABLE(ASSERT) || defined(LEAK_SANITIZER) || defined(ADDRESS_SANITIZER)
+#if DCHECK_IS_ON() || defined(LEAK_SANITIZER) || defined(ADDRESS_SANITIZER)
   // Allow the following addToFreeList() to add the newly allocated memory
   // to the free list.
   ASAN_UNPOISON_MEMORY_REGION(page->payload(), page->payloadSize());
@@ -535,23 +647,9 @@ void NormalPageArena::allocatePage() {
 void NormalPageArena::freePage(NormalPage* page) {
   getThreadState()->heap().heapStats().decreaseAllocatedSpace(page->size());
 
-  if (page->terminating()) {
-    // The thread is shutting down and this page is being removed as a part
-    // of the thread local GC.  In that case the object could be traced in
-    // the next global GC if there is a dangling pointer from a live thread
-    // heap to this dead thread heap.  To guard against this, we put the
-    // page into the orphaned page pool and zap the page memory.  This
-    // ensures that tracing the dangling pointer in the next global GC just
-    // crashes instead of causing use-after-frees.  After the next global
-    // GC, the orphaned pages are removed.
-    getThreadState()->heap().getOrphanedPagePool()->addOrphanedPage(
-        arenaIndex(), page);
-  } else {
-    PageMemory* memory = page->storage();
-    page->~NormalPage();
-    getThreadState()->heap().getFreePagePool()->addFreePage(arenaIndex(),
-                                                            memory);
-  }
+  PageMemory* memory = page->storage();
+  page->~NormalPage();
+  getThreadState()->heap().getFreePagePool()->add(arenaIndex(), memory);
 }
 
 bool NormalPageArena::coalesce() {
@@ -758,7 +856,7 @@ void NormalPageArena::updateRemainingAllocationSize() {
 }
 
 void NormalPageArena::setAllocationPoint(Address point, size_t size) {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   if (point) {
     ASSERT(size);
     BasePage* page = pageFromObject(point);
@@ -893,7 +991,7 @@ Address LargeObjectArena::doAllocateLargeObjectPage(size_t allocationSize,
   Address largeObjectAddress = pageMemory->writableStart();
   Address headerAddress =
       largeObjectAddress + LargeObjectPage::pageHeaderSize();
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   // Verify that the allocated PageMemory is expectedly zeroed.
   for (size_t i = 0; i < largeObjectSize; ++i)
     ASSERT(!largeObjectAddress[i]);
@@ -933,24 +1031,9 @@ void LargeObjectArena::freeLargeObjectPage(LargeObjectPage* object) {
   ASAN_UNPOISON_MEMORY_REGION(object->getAddress() + object->size(),
                               allocationGranularity);
 
-  if (object->terminating()) {
-    ASSERT(ThreadState::current()->isTerminating());
-    // The thread is shutting down and this page is being removed as a part
-    // of the thread local GC.  In that case the object could be traced in
-    // the next global GC if there is a dangling pointer from a live thread
-    // heap to this dead thread heap.  To guard against this, we put the
-    // page into the orphaned page pool and zap the page memory.  This
-    // ensures that tracing the dangling pointer in the next global GC just
-    // crashes instead of causing use-after-frees.  After the next global
-    // GC, the orphaned pages are removed.
-    getThreadState()->heap().getOrphanedPagePool()->addOrphanedPage(
-        arenaIndex(), object);
-  } else {
-    ASSERT(!ThreadState::current()->isTerminating());
-    PageMemory* memory = object->storage();
-    object->~LargeObjectPage();
-    delete memory;
-  }
+  PageMemory* memory = object->storage();
+  object->~LargeObjectPage();
+  delete memory;
 }
 
 Address LargeObjectArena::lazySweepPages(size_t allocationSize,
@@ -1006,20 +1089,13 @@ void FreeList::addToFreeList(Address address, size_t size) {
   }
   entry = new (NotNull, address) FreeListEntry(size);
 
-#if ENABLE(ASSERT) || defined(LEAK_SANITIZER) || defined(ADDRESS_SANITIZER)
+#if DCHECK_IS_ON() || defined(LEAK_SANITIZER) || defined(ADDRESS_SANITIZER)
   // The following logic delays reusing free lists for (at least) one GC
   // cycle or coalescing. This is helpful to detect use-after-free errors
   // that could be caused by lazy sweeping etc.
   size_t allowedCount = 0;
   size_t forbiddenCount = 0;
-  for (size_t i = sizeof(FreeListEntry); i < size; i++) {
-    if (address[i] == reuseAllowedZapValue)
-      allowedCount++;
-    else if (address[i] == reuseForbiddenZapValue)
-      forbiddenCount++;
-    else
-      ASSERT_NOT_REACHED();
-  }
+  getAllowedAndForbiddenCounts(address, size, allowedCount, forbiddenCount);
   size_t entryCount = size - sizeof(FreeListEntry);
   if (forbiddenCount == entryCount) {
     // If all values in the memory region are reuseForbiddenZapValue,
@@ -1056,8 +1132,24 @@ void FreeList::addToFreeList(Address address, size_t size) {
     m_biggestFreeListIndex = index;
 }
 
-#if ENABLE(ASSERT) || defined(LEAK_SANITIZER) || defined(ADDRESS_SANITIZER) || \
+#if DCHECK_IS_ON() || defined(LEAK_SANITIZER) || defined(ADDRESS_SANITIZER) || \
     defined(MEMORY_SANITIZER)
+NO_SANITIZE_MEMORY
+void NEVER_INLINE
+FreeList::getAllowedAndForbiddenCounts(Address address,
+                                       size_t size,
+                                       size_t& allowedCount,
+                                       size_t& forbiddenCount) {
+  for (size_t i = sizeof(FreeListEntry); i < size; i++) {
+    if (address[i] == reuseAllowedZapValue)
+      allowedCount++;
+    else if (address[i] == reuseForbiddenZapValue)
+      forbiddenCount++;
+    else
+      NOTREACHED();
+  }
+}
+
 NO_SANITIZE_ADDRESS
 NO_SANITIZE_MEMORY
 void NEVER_INLINE FreeList::zapFreedMemory(Address address, size_t size) {
@@ -1076,6 +1168,37 @@ void NEVER_INLINE FreeList::checkFreedMemoryIsZapped(Address address,
   }
 }
 #endif
+
+size_t FreeList::freeListSize() const {
+  size_t freeSize = 0;
+  for (unsigned i = 0; i < blinkPageSizeLog2; ++i) {
+    FreeListEntry* entry = m_freeLists[i];
+    while (entry) {
+      freeSize += entry->size();
+      entry = entry->next();
+    }
+  }
+#if DEBUG_HEAP_FREELIST
+  if (freeSize) {
+    LOG_HEAP_FREELIST_VERBOSE("FreeList(%p): %zu\n", this, freeSize);
+    for (unsigned i = 0; i < blinkPageSizeLog2; ++i) {
+      FreeListEntry* entry = m_freeLists[i];
+      size_t bucket = 0;
+      size_t count = 0;
+      while (entry) {
+        bucket += entry->size();
+        count++;
+        entry = entry->next();
+      }
+      if (bucket) {
+        LOG_HEAP_FREELIST_VERBOSE("[%d, %d]: %zu (%zu)\n", 0x1 << i,
+                                  0x1 << (i + 1), bucket, count);
+      }
+    }
+  }
+#endif
+  return freeSize;
+}
 
 void FreeList::clear() {
   m_biggestFreeListIndex = 0;
@@ -1120,17 +1243,8 @@ BasePage::BasePage(PageMemory* storage, BaseArena* arena)
     : m_storage(storage),
       m_arena(arena),
       m_next(nullptr),
-      m_terminating(false),
       m_swept(true) {
   ASSERT(isPageHeaderAddress(reinterpret_cast<Address>(this)));
-}
-
-void BasePage::markOrphaned() {
-  m_arena = nullptr;
-  m_terminating = false;
-  // Since we zap the page payload for orphaned pages we need to mark it as
-  // unused so a conservative pointer won't interpret the object headers.
-  storage()->markUnused();
 }
 
 NormalPage::NormalPage(PageMemory* storage, BaseArena* arena)
@@ -1166,14 +1280,14 @@ void NormalPage::removeFromHeap() {
   arenaForNormalPage()->freePage(this);
 }
 
-#if !ENABLE(ASSERT) && !defined(LEAK_SANITIZER) && !defined(ADDRESS_SANITIZER)
+#if !DCHECK_IS_ON() && !defined(LEAK_SANITIZER) && !defined(ADDRESS_SANITIZER)
 static void discardPages(Address begin, Address end) {
   uintptr_t beginAddress =
-      WTF::roundUpToSystemPage(reinterpret_cast<uintptr_t>(begin));
+      WTF::RoundUpToSystemPage(reinterpret_cast<uintptr_t>(begin));
   uintptr_t endAddress =
-      WTF::roundDownToSystemPage(reinterpret_cast<uintptr_t>(end));
+      WTF::RoundDownToSystemPage(reinterpret_cast<uintptr_t>(end));
   if (beginAddress < endAddress)
-    WTF::discardSystemPages(reinterpret_cast<void*>(beginAddress),
+    WTF::DiscardSystemPages(reinterpret_cast<void*>(beginAddress),
                             endAddress - beginAddress);
 }
 #endif
@@ -1222,10 +1336,10 @@ void NormalPage::sweep() {
     }
     if (startOfGap != headerAddress) {
       pageArena->addToFreeList(startOfGap, headerAddress - startOfGap);
-#if !ENABLE(ASSERT) && !defined(LEAK_SANITIZER) && !defined(ADDRESS_SANITIZER)
+#if !DCHECK_IS_ON() && !defined(LEAK_SANITIZER) && !defined(ADDRESS_SANITIZER)
       // Discarding pages increases page faults and may regress performance.
       // So we enable this only on low-RAM devices.
-      if (ProcessHeap::isLowEndDevice())
+      if (MemoryCoordinator::isLowEndDevice())
         discardPages(startOfGap + sizeof(FreeListEntry), headerAddress);
 #endif
     }
@@ -1236,8 +1350,8 @@ void NormalPage::sweep() {
   }
   if (startOfGap != payloadEnd()) {
     pageArena->addToFreeList(startOfGap, payloadEnd() - startOfGap);
-#if !ENABLE(ASSERT) && !defined(LEAK_SANITIZER) && !defined(ADDRESS_SANITIZER)
-    if (ProcessHeap::isLowEndDevice())
+#if !DCHECK_IS_ON() && !defined(LEAK_SANITIZER) && !defined(ADDRESS_SANITIZER)
+    if (MemoryCoordinator::isLowEndDevice())
       discardPages(startOfGap + sizeof(FreeListEntry), payloadEnd());
 #endif
   }
@@ -1246,29 +1360,111 @@ void NormalPage::sweep() {
     pageArena->getThreadState()->increaseMarkedObjectSize(markedObjectSize);
 }
 
-void NormalPage::makeConsistentForGC() {
+void NormalPage::sweepAndCompact(CompactionContext& context) {
+  NormalPage*& currentPage = context.m_currentPage;
+  size_t& allocationPoint = context.m_allocationPoint;
+
   size_t markedObjectSize = 0;
+  NormalPageArena* pageArena = arenaForNormalPage();
+#if defined(ADDRESS_SANITIZER)
+  bool isVectorArena = ThreadState::isVectorArenaIndex(pageArena->arenaIndex());
+#endif
+  HeapCompact* compact = pageArena->getThreadState()->heap().compaction();
   for (Address headerAddress = payload(); headerAddress < payloadEnd();) {
     HeapObjectHeader* header =
         reinterpret_cast<HeapObjectHeader*>(headerAddress);
-    ASSERT(header->size() < blinkPagePayloadSize());
-    // Check if a free list entry first since we cannot call
-    // isMarked on a free list entry.
+    size_t size = header->size();
+    DCHECK(size > 0 && size < blinkPagePayloadSize());
+
+    if (header->isPromptlyFreed())
+      pageArena->decreasePromptlyFreedSize(size);
     if (header->isFree()) {
-      headerAddress += header->size();
+      // Unpoison the freelist entry so that we
+      // can compact into it as wanted.
+      ASAN_UNPOISON_MEMORY_REGION(headerAddress, size);
+      headerAddress += size;
       continue;
     }
-    if (header->isMarked()) {
-      header->unmark();
-      markedObjectSize += header->size();
-    } else {
-      header->markDead();
+    // This is a fast version of header->payloadSize().
+    size_t payloadSize = size - sizeof(HeapObjectHeader);
+    Address payload = header->payload();
+    if (!header->isMarked()) {
+      // For ASan, unpoison the object before calling the finalizer. The
+      // finalized object will be zero-filled and poison'ed afterwards.
+      // Given all other unmarked objects are poisoned, ASan will detect
+      // an error if the finalizer touches any other on-heap object that
+      // die at the same GC cycle.
+      ASAN_UNPOISON_MEMORY_REGION(headerAddress, size);
+      header->finalize(payload, payloadSize);
+
+// As compaction is under way, leave the freed memory accessible
+// while compacting the rest of the page. We just zap the payload
+// to catch out other finalizers trying to access it.
+#if DCHECK_IS_ON() || defined(LEAK_SANITIZER) || defined(ADDRESS_SANITIZER) || \
+    defined(MEMORY_SANITIZER)
+      FreeList::zapFreedMemory(payload, payloadSize);
+#endif
+      headerAddress += size;
+      continue;
     }
-    headerAddress += header->size();
+    header->unmark();
+    // Allocate and copy over the live object.
+    Address compactFrontier = currentPage->payload() + allocationPoint;
+    if (compactFrontier + size > currentPage->payloadEnd()) {
+      // Can't fit on current allocation page; add remaining onto the
+      // freelist and advance to next available page.
+      //
+      // TODO(sof): be more clever & compact later objects into
+      // |currentPage|'s unused slop.
+      currentPage->link(context.m_compactedPages);
+      size_t freeSize = currentPage->payloadSize() - allocationPoint;
+      if (freeSize) {
+        SET_MEMORY_INACCESSIBLE(compactFrontier, freeSize);
+        currentPage->arenaForNormalPage()->addToFreeList(compactFrontier,
+                                                         freeSize);
+      }
+
+      BasePage* nextAvailablePage;
+      context.m_availablePages->unlink(&nextAvailablePage);
+      currentPage = reinterpret_cast<NormalPage*>(context.m_availablePages);
+      context.m_availablePages = nextAvailablePage;
+      allocationPoint = 0;
+      compactFrontier = currentPage->payload();
+    }
+    if (LIKELY(compactFrontier != headerAddress)) {
+#if defined(ADDRESS_SANITIZER)
+      // Unpoison the header + if it is a vector backing
+      // store object, let go of the container annotations.
+      // Do that by unpoisoning the payload entirely.
+      ASAN_UNPOISON_MEMORY_REGION(header, sizeof(HeapObjectHeader));
+      if (isVectorArena)
+        ASAN_UNPOISON_MEMORY_REGION(payload, payloadSize);
+#endif
+      // Use a non-overlapping copy, if possible.
+      if (currentPage == this)
+        memmove(compactFrontier, headerAddress, size);
+      else
+        memcpy(compactFrontier, headerAddress, size);
+      compact->relocate(payload, compactFrontier + sizeof(HeapObjectHeader));
+    }
+    headerAddress += size;
+    markedObjectSize += size;
+    allocationPoint += size;
+    DCHECK(allocationPoint <= currentPage->payloadSize());
   }
   if (markedObjectSize)
-    arenaForNormalPage()->getThreadState()->increaseMarkedObjectSize(
-        markedObjectSize);
+    pageArena->getThreadState()->increaseMarkedObjectSize(markedObjectSize);
+
+#if DCHECK_IS_ON() || defined(LEAK_SANITIZER) || defined(ADDRESS_SANITIZER) || \
+    defined(MEMORY_SANITIZER)
+  // Zap the unused portion, until it is either compacted into or freed.
+  if (currentPage != this) {
+    FreeList::zapFreedMemory(payload(), payloadSize());
+  } else {
+    FreeList::zapFreedMemory(payload() + allocationPoint,
+                             payloadSize() - allocationPoint);
+  }
+#endif
 }
 
 void NormalPage::makeConsistentForMutator() {
@@ -1385,7 +1581,7 @@ HeapObjectHeader* NormalPage::findHeaderFromAddress(Address address) {
   return header;
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 static bool isUninitializedMemory(void* objectPointer, size_t objectSize) {
   // Scan through the object's fields and check that they are all zero.
   Address* objectFields = reinterpret_cast<Address*>(objectPointer);
@@ -1420,25 +1616,27 @@ static void markPointer(Visitor* visitor, HeapObjectHeader* header) {
 }
 
 void NormalPage::checkAndMarkPointer(Visitor* visitor, Address address) {
-  ASSERT(contains(address));
+#if DCHECK_IS_ON()
+  DCHECK(contains(address));
+#endif
   HeapObjectHeader* header = findHeaderFromAddress(address);
-  if (!header || header->isDead())
+  if (!header)
     return;
   markPointer(visitor, header);
 }
 
-void NormalPage::markOrphaned() {
-// Zap the payload with a recognizable value to detect any incorrect
-// cross thread pointer usage.
-#if defined(ADDRESS_SANITIZER)
-  // This needs to zap poisoned memory as well.
-  // Force unpoison memory before memset.
-  ASAN_UNPOISON_MEMORY_REGION(payload(), payloadSize());
-#endif
-  OrphanedPagePool::asanDisabledMemset(
-      payload(), OrphanedPagePool::orphanedZapValue, payloadSize());
-  BasePage::markOrphaned();
+#if DCHECK_IS_ON()
+void NormalPage::checkAndMarkPointer(Visitor* visitor,
+                                     Address address,
+                                     MarkedPointerCallbackForTesting callback) {
+  DCHECK(contains(address));
+  HeapObjectHeader* header = findHeaderFromAddress(address);
+  if (!header)
+    return;
+  if (!callback(header))
+    markPointer(visitor, header);
 }
+#endif
 
 void NormalPage::takeSnapshot(base::trace_event::MemoryAllocatorDump* pageDump,
                               ThreadState::GCSnapshotInfo& info,
@@ -1483,7 +1681,7 @@ void NormalPage::takeSnapshot(base::trace_event::MemoryAllocatorDump* pageDump,
   heapInfo.freeCount += freeCount;
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 bool NormalPage::contains(Address addr) {
   Address blinkPageStart = roundToBlinkPageStart(getAddress());
   // Page is at aligned address plus guard page size.
@@ -1522,16 +1720,6 @@ void LargeObjectPage::sweep() {
   arena()->getThreadState()->increaseMarkedObjectSize(size());
 }
 
-void LargeObjectPage::makeConsistentForGC() {
-  HeapObjectHeader* header = heapObjectHeader();
-  if (header->isMarked()) {
-    header->unmark();
-    arena()->getThreadState()->increaseMarkedObjectSize(size());
-  } else {
-    header->markDead();
-  }
-}
-
 void LargeObjectPage::makeConsistentForMutator() {
   HeapObjectHeader* header = heapObjectHeader();
   if (header->isMarked())
@@ -1547,19 +1735,26 @@ void LargeObjectPage::poisonUnmarkedObjects() {
 #endif
 
 void LargeObjectPage::checkAndMarkPointer(Visitor* visitor, Address address) {
-  ASSERT(contains(address));
-  if (!containedInObjectPayload(address) || heapObjectHeader()->isDead())
+#if DCHECK_IS_ON()
+  DCHECK(contains(address));
+#endif
+  if (!containedInObjectPayload(address))
     return;
   markPointer(visitor, heapObjectHeader());
 }
 
-void LargeObjectPage::markOrphaned() {
-  // Zap the payload with a recognizable value to detect any incorrect
-  // cross thread pointer usage.
-  OrphanedPagePool::asanDisabledMemset(
-      payload(), OrphanedPagePool::orphanedZapValue, payloadSize());
-  BasePage::markOrphaned();
+#if DCHECK_IS_ON()
+void LargeObjectPage::checkAndMarkPointer(
+    Visitor* visitor,
+    Address address,
+    MarkedPointerCallbackForTesting callback) {
+  DCHECK(contains(address));
+  if (!containedInObjectPayload(address))
+    return;
+  if (!callback(heapObjectHeader()))
+    markPointer(visitor, heapObjectHeader());
 }
+#endif
 
 void LargeObjectPage::takeSnapshot(
     base::trace_event::MemoryAllocatorDump* pageDump,
@@ -1590,7 +1785,7 @@ void LargeObjectPage::takeSnapshot(
   pageDump->AddScalar("dead_size", "bytes", deadSize);
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 bool LargeObjectPage::contains(Address object) {
   return roundToBlinkPageStart(getAddress()) <= object &&
          object < roundToBlinkPageEnd(getAddress() + size());

@@ -8,21 +8,19 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.StrictMode;
 import android.preference.Preference;
 import android.preference.PreferenceFragment;
 
 import org.chromium.base.VisibleForTesting;
-import org.chromium.blimp_public.BlimpClientContext;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.PasswordUIView;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
-import org.chromium.chrome.browser.blimp.BlimpClientContextFactory;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.partnercustomizations.HomepageManager;
 import org.chromium.chrome.browser.preferences.datareduction.DataReductionPreferences;
 import org.chromium.chrome.browser.preferences.password.SavePasswordsPreferences;
-import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService.LoadListener;
 import org.chromium.chrome.browser.signin.SigninManager;
@@ -98,9 +96,13 @@ public class MainPreferences extends PreferenceFragment
 
     private void updatePreferences() {
         if (getPreferenceScreen() != null) getPreferenceScreen().removeAll();
-        addPreferencesFromResource(R.xml.main_preferences);
 
-        addBlimpPreferences();
+        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+        try {
+            addPreferencesFromResource(R.xml.main_preferences);
+        } finally {
+            StrictMode.setThreadPolicy(oldPolicy);
+        }
 
         if (TemplateUrlService.getInstance().isLoaded()) {
             updateSummary();
@@ -114,7 +116,6 @@ public class MainPreferences extends PreferenceFragment
 
         ChromeBasePreference autofillPref =
                 (ChromeBasePreference) findPreference(PREF_AUTOFILL_SETTINGS);
-        setOnOffSummary(autofillPref, PersonalDataManager.isAutofillEnabled());
         autofillPref.setManagedPreferenceDelegate(mManagedPreferenceDelegate);
 
         ChromeBasePreference passwordsPref =
@@ -123,22 +124,15 @@ public class MainPreferences extends PreferenceFragment
         ProfileSyncService syncService = ProfileSyncService.get();
 
         if (AndroidSyncSettings.isSyncEnabled(getActivity().getApplicationContext())
-                  && syncService.isBackendInitialized()
-                  && !syncService.isUsingSecondaryPassphrase()
-                  && ChromeFeatureList.isEnabled(VIEW_PASSWORDS)) {
+                && syncService.isEngineInitialized() && !syncService.isUsingSecondaryPassphrase()
+                && ChromeFeatureList.isEnabled(VIEW_PASSWORDS)) {
             passwordsPref.setKey(PREF_MANAGE_ACCOUNT_LINK);
             passwordsPref.setTitle(R.string.redirect_to_passwords_text);
             passwordsPref.setSummary(R.string.redirect_to_passwords_link);
             passwordsPref.setOnPreferenceClickListener(this);
             passwordsPref.setManagedPreferenceDelegate(null);
         } else {
-            if (PasswordUIView.shouldUseSmartLockBranding()) {
-                passwordsPref.setTitle(getResources().getString(
-                         R.string.prefs_smart_lock_for_passwords));
-            } else {
-                passwordsPref.setTitle(getResources().getString(
-                          R.string.prefs_saved_passwords));
-            }
+            passwordsPref.setTitle(getResources().getString(R.string.prefs_saved_passwords));
             passwordsPref.setFragment(SavePasswordsPreferences.class.getCanonicalName());
             setOnOffSummary(passwordsPref,
                     PrefServiceBridge.getInstance().isRememberPasswordsEnabled());
@@ -155,13 +149,8 @@ public class MainPreferences extends PreferenceFragment
 
         ChromeBasePreference dataReduction =
                 (ChromeBasePreference) findPreference(PREF_DATA_REDUCTION);
-        if (DataReductionProxySettings.getInstance().isDataReductionProxyAllowed()) {
-            dataReduction.setSummary(
-                    DataReductionPreferences.generateSummary(getResources()));
-            dataReduction.setManagedPreferenceDelegate(mManagedPreferenceDelegate);
-        } else {
-            getPreferenceScreen().removePreference(dataReduction);
-        }
+        dataReduction.setSummary(DataReductionPreferences.generateSummary(getResources()));
+        dataReduction.setManagedPreferenceDelegate(mManagedPreferenceDelegate);
 
         if (!SigninManager.get(getActivity()).isSigninSupported()) {
             getPreferenceScreen().removePreference(findPreference(PREF_SIGN_IN));
@@ -254,11 +243,5 @@ public class MainPreferences extends PreferenceFragment
                 return super.isPreferenceClickDisabledByPolicy(preference);
             }
         };
-    }
-
-    private void addBlimpPreferences() {
-        BlimpClientContext blimpClientContext = BlimpClientContextFactory
-                .getBlimpClientContextForProfile(Profile.getLastUsedProfile().getOriginalProfile());
-        blimpClientContext.attachBlimpPreferences(this);
     }
 }

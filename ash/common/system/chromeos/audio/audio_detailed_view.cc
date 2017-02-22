@@ -5,7 +5,6 @@
 #include "ash/common/system/chromeos/audio/audio_detailed_view.h"
 
 #include "ash/common/material_design/material_design_controller.h"
-#include "ash/common/system/tray/fixed_sized_scroll_view.h"
 #include "ash/common/system/tray/hover_highlight_view.h"
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/tray_popup_utils.h"
@@ -18,15 +17,19 @@
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icons_public.h"
+#include "ui/native_theme/native_theme.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/separator.h"
 
 namespace {
 
 base::string16 GetAudioDeviceName(const chromeos::AudioDevice& device) {
   switch (device.type) {
+    case chromeos::AUDIO_TYPE_FRONT_MIC:
+      return l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_AUDIO_FRONT_MIC);
     case chromeos::AUDIO_TYPE_HEADPHONE:
       return l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_AUDIO_HEADPHONE);
     case chromeos::AUDIO_TYPE_INTERNAL_SPEAKER:
@@ -34,6 +37,8 @@ base::string16 GetAudioDeviceName(const chromeos::AudioDevice& device) {
           IDS_ASH_STATUS_TRAY_AUDIO_INTERNAL_SPEAKER);
     case chromeos::AUDIO_TYPE_INTERNAL_MIC:
       return l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_AUDIO_INTERNAL_MIC);
+    case chromeos::AUDIO_TYPE_REAR_MIC:
+      return l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_AUDIO_REAR_MIC);
     case chromeos::AUDIO_TYPE_USB:
       return l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_AUDIO_USB_DEVICE,
                                         base::UTF8ToUTF16(device.display_name));
@@ -73,33 +78,30 @@ void AudioDetailedView::Update() {
 }
 
 void AudioDetailedView::AddInputHeader() {
-  AddScrollListInfoItem(
-      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_AUDIO_INPUT),
-      gfx::CreateVectorIcon(kSystemMenuAudioInputIcon,
-                            TrayPopupItemStyle::GetIconColor(
-                                TrayPopupItemStyle::ColorStyle::ACTIVE)));
+  AddScrollListInfoItem(IDS_ASH_STATUS_TRAY_AUDIO_INPUT,
+                        kSystemMenuAudioInputIcon);
 }
 
 void AudioDetailedView::AddOutputHeader() {
-  AddScrollListInfoItem(
-      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_AUDIO_OUTPUT),
-      gfx::CreateVectorIcon(kSystemMenuAudioOutputIcon,
-                            TrayPopupItemStyle::GetIconColor(
-                                TrayPopupItemStyle::ColorStyle::ACTIVE)));
+  AddScrollListInfoItem(IDS_ASH_STATUS_TRAY_AUDIO_OUTPUT,
+                        kSystemMenuAudioOutputIcon);
 }
 
-void AudioDetailedView::AddScrollListInfoItem(const base::string16& text,
-                                              const gfx::ImageSkia& image) {
+void AudioDetailedView::AddScrollListInfoItem(int text_id,
+                                              const gfx::VectorIcon& icon) {
+  const base::string16 text = l10n_util::GetStringUTF16(text_id);
   if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
     TriView* header = TrayPopupUtils::CreateDefaultRowView();
+    TrayPopupUtils::ConfigureAsStickyHeader(header);
     views::ImageView* image_view = TrayPopupUtils::CreateMainImageView();
-    image_view->SetImage(image);
+    image_view->SetImage(gfx::CreateVectorIcon(
+        icon, GetNativeTheme()->GetSystemColor(
+                  ui::NativeTheme::kColorId_ProminentButtonColor)));
     header->AddView(TriView::Container::START, image_view);
 
     views::Label* label = TrayPopupUtils::CreateDefaultLabel();
     label->SetText(text);
-    TrayPopupItemStyle style(
-        TrayPopupItemStyle::FontStyle::DETAILED_VIEW_LABEL);
+    TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::SUB_HEADER);
     style.SetupLabel(label);
     header->AddView(TriView::Container::CENTER, label);
 
@@ -187,9 +189,6 @@ void AudioDetailedView::UpdateScrollableList() {
   const bool has_output_devices = output_devices_.size() > 0;
   if (!use_md || has_output_devices)
     AddOutputHeader();
-  if (use_md && has_output_devices)
-    scroll_content()->AddChildView(
-        TrayPopupUtils::CreateListItemSeparator(true));
 
   for (size_t i = 0; i < output_devices_.size(); ++i) {
     HoverHighlightView* container = AddScrollListItem(
@@ -202,16 +201,13 @@ void AudioDetailedView::UpdateScrollableList() {
     AddScrollSeparator();
   } else if (has_output_devices) {
     scroll_content()->AddChildView(
-        TrayPopupUtils::CreateListItemSeparator(false));
+        TrayPopupUtils::CreateListSubHeaderSeparator());
   }
 
   // Add audio input devices.
   const bool has_input_devices = input_devices_.size() > 0;
   if (!use_md || has_input_devices)
     AddInputHeader();
-  if (use_md && has_input_devices)
-    scroll_content()->AddChildView(
-        TrayPopupUtils::CreateListItemSeparator(true));
 
   for (size_t i = 0; i < input_devices_.size(); ++i) {
     HoverHighlightView* container = AddScrollListItem(

@@ -50,8 +50,7 @@ class AccessPolicy {
   virtual bool CanChangeWindowVisibility(const ServerWindow* window) const = 0;
   virtual bool CanChangeWindowOpacity(const ServerWindow* window) const = 0;
   virtual bool CanSetWindowCompositorFrameSink(
-      const ServerWindow* window,
-      mojom::CompositorFrameSinkType compositor_frame_sink_type) const = 0;
+      const ServerWindow* window) const = 0;
   virtual bool CanSetWindowBounds(const ServerWindow* window) const = 0;
   virtual bool CanSetWindowProperties(const ServerWindow* window) const = 0;
   virtual bool CanSetWindowTextInputState(const ServerWindow* window) const = 0;
@@ -60,7 +59,10 @@ class AccessPolicy {
   virtual bool CanSetClientArea(const ServerWindow* window) const = 0;
   virtual bool CanSetHitTestMask(const ServerWindow* window) const = 0;
   virtual bool CanSetAcceptDrops(const ServerWindow* window) const = 0;
-  virtual bool CanSetAcceptEvents(const ServerWindow* window) const = 0;
+  virtual bool CanSetEventTargetingPolicy(const ServerWindow* window) const = 0;
+  virtual bool CanStackAbove(const ServerWindow* above,
+                             const ServerWindow* below) const = 0;
+  virtual bool CanStackAtTop(const ServerWindow* window) const = 0;
   // Used for all client controllable cursor properties; which cursor should be
   // displayed, visibility, locking, etc.
   virtual bool CanSetCursorProperties(const ServerWindow* window) const = 0;

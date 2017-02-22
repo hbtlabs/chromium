@@ -639,18 +639,10 @@ namespace chrome {
 
 // Declared in browser_dialogs.h.
 task_manager::TaskManagerTableModel* ShowTaskManager(Browser* browser) {
-  if (chrome::ToolkitViewsDialogsEnabled())
-    return chrome::ShowTaskManagerViews(browser);
-
   return task_manager::TaskManagerMac::Show();
 }
 
 void HideTaskManager() {
-  if (chrome::ToolkitViewsDialogsEnabled()) {
-    chrome::HideTaskManagerViews();
-    return;
-  }
-
   task_manager::TaskManagerMac::Hide();
 }
 

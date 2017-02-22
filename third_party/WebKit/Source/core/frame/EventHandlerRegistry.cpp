@@ -34,7 +34,10 @@ EventHandlerRegistry::EventHandlerRegistry(FrameHost& frameHost)
     : m_frameHost(&frameHost) {}
 
 EventHandlerRegistry::~EventHandlerRegistry() {
-  checkConsistency();
+  for (size_t i = 0; i < EventHandlerClassCount; ++i) {
+    EventHandlerClass handlerClass = static_cast<EventHandlerClass>(i);
+    checkConsistency(handlerClass);
+  }
 }
 
 bool EventHandlerRegistry::eventTypeToClass(
@@ -59,7 +62,7 @@ bool EventHandlerRegistry::eventTypeToClass(
     // the pointer events never block scrolling and the compositor
     // only needs to know about the touch listeners.
     *result = TouchStartOrMoveEventPassive;
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   } else if (eventType == EventTypeNames::load ||
              eventType == EventTypeNames::mousemove ||
              eventType == EventTypeNames::touchstart) {
@@ -73,13 +76,13 @@ bool EventHandlerRegistry::eventTypeToClass(
 
 const EventTargetSet* EventHandlerRegistry::eventHandlerTargets(
     EventHandlerClass handlerClass) const {
-  checkConsistency();
+  checkConsistency(handlerClass);
   return &m_targets[handlerClass];
 }
 
 bool EventHandlerRegistry::hasEventHandlers(
     EventHandlerClass handlerClass) const {
-  checkConsistency();
+  checkConsistency(handlerClass);
   return m_targets[handlerClass].size();
 }
 
@@ -119,8 +122,18 @@ void EventHandlerRegistry::updateEventHandlerInternal(
   bool targetSetChanged = updateEventHandlerTargets(op, handlerClass, target);
   bool hasHandlers = m_targets[handlerClass].size();
 
-  if (hadHandlers != hasHandlers)
-    notifyHasHandlersChanged(handlerClass, hasHandlers);
+  if (hadHandlers != hasHandlers) {
+    LocalFrame* frame = nullptr;
+    if (Node* node = target->toNode()) {
+      frame = node->document().frame();
+    } else if (LocalDOMWindow* domWindow = target->toLocalDOMWindow()) {
+      frame = domWindow->frame();
+    } else {
+      NOTREACHED() << "Unexpected target type for event handler.";
+    }
+
+    notifyHasHandlersChanged(frame, handlerClass, hasHandlers);
+  }
 
   if (targetSetChanged)
     notifyDidAddOrRemoveEventHandlerTarget(handlerClass);
@@ -187,21 +200,6 @@ void EventHandlerRegistry::didMoveOutOfFrameHost(EventTarget& target) {
   didRemoveAllEventHandlers(target);
 }
 
-void EventHandlerRegistry::didMoveBetweenFrameHosts(EventTarget& target,
-                                                    FrameHost* oldFrameHost,
-                                                    FrameHost* newFrameHost) {
-  ASSERT(newFrameHost != oldFrameHost);
-  for (size_t i = 0; i < EventHandlerClassCount; ++i) {
-    EventHandlerClass handlerClass = static_cast<EventHandlerClass>(i);
-    const EventTargetSet* targets =
-        &oldFrameHost->eventHandlerRegistry().m_targets[handlerClass];
-    for (unsigned count = targets->count(&target); count > 0; --count)
-      newFrameHost->eventHandlerRegistry().didAddEventHandler(target,
-                                                              handlerClass);
-    oldFrameHost->eventHandlerRegistry().didRemoveAllEventHandlers(target);
-  }
-}
-
 void EventHandlerRegistry::didRemoveAllEventHandlers(EventTarget& target) {
   for (size_t i = 0; i < EventHandlerClassCount; ++i) {
     EventHandlerClass handlerClass = static_cast<EventHandlerClass>(i);
@@ -210,23 +208,25 @@ void EventHandlerRegistry::didRemoveAllEventHandlers(EventTarget& target) {
 }
 
 void EventHandlerRegistry::notifyHasHandlersChanged(
+    LocalFrame* frame,
     EventHandlerClass handlerClass,
     bool hasActiveHandlers) {
   switch (handlerClass) {
     case ScrollEvent:
-      m_frameHost->chromeClient().setHasScrollEventHandlers(hasActiveHandlers);
+      m_frameHost->chromeClient().setHasScrollEventHandlers(frame,
+                                                            hasActiveHandlers);
       break;
     case WheelEventBlocking:
     case WheelEventPassive:
       m_frameHost->chromeClient().setEventListenerProperties(
-          WebEventListenerClass::MouseWheel,
+          frame, WebEventListenerClass::MouseWheel,
           webEventListenerProperties(hasEventHandlers(WheelEventBlocking),
                                      hasEventHandlers(WheelEventPassive)));
       break;
     case TouchStartOrMoveEventBlocking:
     case TouchStartOrMoveEventPassive:
       m_frameHost->chromeClient().setEventListenerProperties(
-          WebEventListenerClass::TouchStartOrMove,
+          frame, WebEventListenerClass::TouchStartOrMove,
           webEventListenerProperties(
               hasEventHandlers(TouchStartOrMoveEventBlocking),
               hasEventHandlers(TouchStartOrMoveEventPassive)));
@@ -234,12 +234,12 @@ void EventHandlerRegistry::notifyHasHandlersChanged(
     case TouchEndOrCancelEventBlocking:
     case TouchEndOrCancelEventPassive:
       m_frameHost->chromeClient().setEventListenerProperties(
-          WebEventListenerClass::TouchEndOrCancel,
+          frame, WebEventListenerClass::TouchEndOrCancel,
           webEventListenerProperties(
               hasEventHandlers(TouchEndOrCancelEventBlocking),
               hasEventHandlers(TouchEndOrCancelEventPassive)));
       break;
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     case EventsForTesting:
       break;
 #endif
@@ -272,9 +272,9 @@ void EventHandlerRegistry::clearWeakMembers(Visitor* visitor) {
       Node* node = eventTarget.key->toNode();
       LocalDOMWindow* window = eventTarget.key->toLocalDOMWindow();
       if (node && !ThreadHeap::isHeapObjectAlive(node)) {
-        deadTargets.append(node);
+        deadTargets.push_back(node);
       } else if (window && !ThreadHeap::isHeapObjectAlive(window)) {
-        deadTargets.append(window);
+        deadTargets.push_back(window);
       }
     }
   }
@@ -295,7 +295,7 @@ void EventHandlerRegistry::documentDetached(Document& document) {
         for (Document* doc = &node->document(); doc;
              doc = doc->localOwner() ? &doc->localOwner()->document() : 0) {
           if (doc == &document) {
-            targetsToRemove.append(eventTarget.key);
+            targetsToRemove.push_back(eventTarget.key);
             break;
           }
         }
@@ -311,27 +311,25 @@ void EventHandlerRegistry::documentDetached(Document& document) {
   }
 }
 
-void EventHandlerRegistry::checkConsistency() const {
-#if ENABLE(ASSERT)
-  for (size_t i = 0; i < EventHandlerClassCount; ++i) {
-    EventHandlerClass handlerClass = static_cast<EventHandlerClass>(i);
-    const EventTargetSet* targets = &m_targets[handlerClass];
-    for (const auto& eventTarget : *targets) {
-      if (Node* node = eventTarget.key->toNode()) {
-        // See the comment for |documentDetached| if either of these assertions
-        // fails.
-        ASSERT(node->document().frameHost());
-        ASSERT(node->document().frameHost() == m_frameHost);
-      } else if (LocalDOMWindow* window = eventTarget.key->toLocalDOMWindow()) {
-        // If any of these assertions fail, LocalDOMWindow failed to unregister
-        // its handlers properly.
-        ASSERT(window->frame());
-        ASSERT(window->frame()->host());
-        ASSERT(window->frame()->host() == m_frameHost);
-      }
+void EventHandlerRegistry::checkConsistency(
+    EventHandlerClass handlerClass) const {
+#if DCHECK_IS_ON()
+  const EventTargetSet* targets = &m_targets[handlerClass];
+  for (const auto& eventTarget : *targets) {
+    if (Node* node = eventTarget.key->toNode()) {
+      // See the comment for |documentDetached| if either of these assertions
+      // fails.
+      DCHECK(node->document().frameHost());
+      DCHECK(node->document().frameHost() == m_frameHost);
+    } else if (LocalDOMWindow* window = eventTarget.key->toLocalDOMWindow()) {
+      // If any of these assertions fail, LocalDOMWindow failed to unregister
+      // its handlers properly.
+      DCHECK(window->frame());
+      DCHECK(window->frame()->host());
+      DCHECK(window->frame()->host() == m_frameHost);
     }
   }
-#endif  // ENABLE(ASSERT)
+#endif  // DCHECK_IS_ON()
 }
 
 }  // namespace blink

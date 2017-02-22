@@ -15,15 +15,15 @@ class CSSLengthListInterpolationType : public CSSInterpolationType {
  public:
   CSSLengthListInterpolationType(PropertyHandle);
 
-  InterpolationValue maybeConvertUnderlyingValue(
-      const InterpolationEnvironment&) const final;
+  InterpolationValue maybeConvertStandardPropertyUnderlyingValue(
+      const ComputedStyle&) const final;
   void composite(UnderlyingValueOwner&,
                  double underlyingFraction,
                  const InterpolationValue&,
                  double interpolationFraction) const final;
-  void apply(const InterpolableValue&,
-             const NonInterpolableValue*,
-             InterpolationEnvironment&) const final;
+  void applyStandardPropertyValue(const InterpolableValue&,
+                                  const NonInterpolableValue*,
+                                  StyleResolverState&) const final;
 
  private:
   InterpolationValue maybeConvertNeutral(const InterpolationValue& underlying,
@@ -33,7 +33,7 @@ class CSSLengthListInterpolationType : public CSSInterpolationType {
   InterpolationValue maybeConvertInherit(const StyleResolverState&,
                                          ConversionCheckers&) const final;
   virtual InterpolationValue maybeConvertValue(const CSSValue&,
-                                               const StyleResolverState&,
+                                               const StyleResolverState*,
                                                ConversionCheckers&) const;
 
   PairwiseInterpolationValue maybeMergeSingles(

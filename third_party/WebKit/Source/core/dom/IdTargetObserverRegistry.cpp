@@ -43,11 +43,11 @@ void IdTargetObserverRegistry::addObserver(const AtomicString& id,
   if (id.isEmpty())
     return;
 
-  IdToObserverSetMap::AddResult result = m_registry.add(id.impl(), nullptr);
+  IdToObserverSetMap::AddResult result = m_registry.insert(id.impl(), nullptr);
   if (result.isNewEntry)
     result.storedValue->value = new ObserverSet();
 
-  result.storedValue->value->add(observer);
+  result.storedValue->value->insert(observer);
 }
 
 void IdTargetObserverRegistry::removeObserver(const AtomicString& id,
@@ -58,7 +58,7 @@ void IdTargetObserverRegistry::removeObserver(const AtomicString& id,
   IdToObserverSetMap::iterator iter = m_registry.find(id.impl());
 
   ObserverSet* set = iter->value.get();
-  set->remove(observer);
+  set->erase(observer);
   if (set->isEmpty() && set != m_notifyingObserversInSet)
     m_registry.remove(iter);
 }
@@ -79,7 +79,7 @@ void IdTargetObserverRegistry::notifyObserversInternal(const AtomicString& id) {
   }
 
   if (m_notifyingObserversInSet->isEmpty())
-    m_registry.remove(id.impl());
+    m_registry.erase(id.impl());
 
   m_notifyingObserversInSet = nullptr;
 }

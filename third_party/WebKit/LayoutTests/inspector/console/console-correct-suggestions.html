@@ -11,25 +11,42 @@ function templateString()
     };
 }
 
+function shouldNotFindThisFunction() { }
+function shouldFindThisFunction() { }
+window["should not find this"] = true;
+
+var myMap = new Map([['first', 1], ['second', 2], ['third', 3], ['shouldNotFindThis', 4]]);
+
 function test()
 {
     var consoleEditor;
     function testCompletions(text, expected, force)
     {
-        consoleEditor.setText(text);
-        consoleEditor.setSelection(Common.TextRange.createFromLocation(Infinity, Infinity));
+        var cursorPosition = text.indexOf('|');
+        if (cursorPosition < 0)
+            cursorPosition = Infinity;
+        consoleEditor.setText(text.replace('|', ''));
+        consoleEditor.setSelection(Common.TextRange.createFromLocation(0, cursorPosition));
         consoleEditor._autocompleteController.autocomplete(force);
         return InspectorTest.addSnifferPromise(consoleEditor._autocompleteController, "_onSuggestionsShownForTest").then(checkExpected);
 
         function checkExpected(suggestions)
         {
-            var completions = new Set(suggestions.map(suggestion => suggestion.title));
-            var message = "Checking '" + text + "'";
+            var completions = new Map(suggestions.map(suggestion => [suggestion.text, suggestion]));
+            var message = "Checking '" + text.replace('\n', '\\n').replace('\r', '\\r') + "'";
             if (force)
                 message += " forcefully";
             InspectorTest.addResult(message);
-            for (var i = 0; i < expected.length; i++)
-                InspectorTest.addResult((completions.has(expected[i]) ? "Found" : "Not Found") + ": " + expected[i]);
+            for (var i = 0; i < expected.length; i++) {
+                if (completions.has(expected[i])) {
+                    if (completions.get(expected[i]).title)
+                        InspectorTest.addResult("Found: " + expected[i] + ", displayed as " + completions.get(expected[i]).title);
+                    else
+                        InspectorTest.addResult("Found: " + expected[i]);
+                } else {
+                    InspectorTest.addResult("Not Found: " + expected[i]);
+                }
+            }
             InspectorTest.addResult("");
         }
     }
@@ -62,7 +79,26 @@ function test()
         () => testCompletions('"string g', ["getComputedStyle"], false),
         () => testCompletions("`template string docu", ["document"], false),
         () => testCompletions("`${do", ["document"], false),
-        () => testCompletions("// do", ["document"], false)
+        () => testCompletions("// do", ["document"], false),
+        () => testCompletions('["should', ["shouldNotFindThisFunction"]),
+        () => testCompletions("shou", ["should not find this"]),
+        () => testCompletions('myMap.get(', ['"first")', '"second")', '"third")']),
+        () => testCompletions('myMap.get(\'', ['\'first\')', '\'second\')', '\'third\')']),
+        () => testCompletions('myMap.set(\'firs', ['\'first\', ']),
+        () => testCompletions('myMap.set(should', ['shouldFindThisFunction', 'shouldNotFindThis', '\"shouldNotFindThis\")']),
+        () => testCompletions('myMap.delete(\'', ['\'first\')', '\'second\')', '\'third\')']),
+        () => testCompletions("document.   bo", ["body"]),
+        () => testCompletions("document.\tbo", ["body"]),
+        () => testCompletions("document.\nbo", ["body"]),
+        () => testCompletions("document.\r\nbo", ["body"]),
+        () => testCompletions("document   [    'bo", ["'body']"]),
+        () => testCompletions("function hey(should", ["shouldNotFindThisFunction"]),
+        () => testCompletions("var should", ["shouldNotFindThisFunction"]),
+        () => testCompletions("document[[win", ["window"]),
+        () => testCompletions("document[   [win", ["window"]),
+        () => testCompletions("document[   [  win", ["window"]),
+        () => testCompletions('I|mag', ['Image', 'Infinity']),
+        () => testCompletions('var x = (do|);', ['document'])
     ]).then(InspectorTest.completeTest);
 
 }

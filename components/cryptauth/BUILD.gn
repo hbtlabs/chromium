@@ -8,6 +8,13 @@
 
 static_library("cryptauth") {
   sources = [
+    "authenticator.cc",
+    "authenticator.h",
+    "bluetooth_throttler.h",
+    "bluetooth_throttler_impl.cc",
+    "bluetooth_throttler_impl.h",
+    "connection.cc",
+    "connection.h",
     "cryptauth_access_token_fetcher.h",
     "cryptauth_access_token_fetcher_impl.cc",
     "cryptauth_access_token_fetcher_impl.h",
@@ -29,8 +36,23 @@ static_library("cryptauth") {
     "cryptauth_gcm_manager.h",
     "cryptauth_gcm_manager_impl.cc",
     "cryptauth_gcm_manager_impl.h",
+    "device_to_device_authenticator.cc",
+    "device_to_device_authenticator.h",
+    "device_to_device_initiator_operations.cc",
+    "device_to_device_initiator_operations.h",
+    "device_to_device_secure_context.cc",
+    "device_to_device_secure_context.h",
+    "eid_generator.cc",
+    "eid_generator.h",
     "pref_names.cc",
     "pref_names.h",
+    "remote_beacon_seed_fetcher.cc",
+    "remote_beacon_seed_fetcher.h",
+    "remote_device.cc",
+    "remote_device.h",
+    "secure_channel.cc",
+    "secure_channel.h",
+    "secure_context.h",
     "secure_message_delegate.cc",
     "secure_message_delegate.h",
     "switches.cc",
@@ -39,10 +61,13 @@ static_library("cryptauth") {
     "sync_scheduler.h",
     "sync_scheduler_impl.cc",
     "sync_scheduler_impl.h",
+    "wire_message.cc",
+    "wire_message.h",
   ]
 
   deps = [
     "//base",
+    "//components/cryptauth/ble",
     "//components/gcm_driver",
     "//components/gcm_driver/common",
     "//components/prefs",
@@ -55,20 +80,41 @@ static_library("cryptauth") {
   public_deps = [
     "//components/cryptauth/proto",
   ]
+
+  # TODO (hansberry): Resolve this.
+  allow_circular_includes_from = [ "//components/cryptauth/ble" ]
 }
 
 static_library("test_support") {
   testonly = true
 
   sources = [
+    "cryptauth_test_util.cc",
+    "cryptauth_test_util.h",
+    "device_to_device_responder_operations.cc",
+    "device_to_device_responder_operations.h",
+    "fake_authenticator.cc",
+    "fake_authenticator.h",
+    "fake_connection.cc",
+    "fake_connection.h",
     "fake_cryptauth_gcm_manager.cc",
     "fake_cryptauth_gcm_manager.h",
+    "fake_secure_channel.cc",
+    "fake_secure_channel.h",
+    "fake_secure_context.cc",
+    "fake_secure_context.h",
     "fake_secure_message_delegate.cc",
     "fake_secure_message_delegate.h",
     "mock_cryptauth_client.cc",
     "mock_cryptauth_client.h",
+    "mock_eid_generator.cc",
+    "mock_eid_generator.h",
+    "mock_remote_beacon_seed_fetcher.cc",
+    "mock_remote_beacon_seed_fetcher.h",
     "mock_sync_scheduler.cc",
     "mock_sync_scheduler.h",
+    "remote_device_test_util.cc",
+    "remote_device_test_util.h",
   ]
 
   public_deps = [
@@ -78,6 +124,7 @@ static_library("test_support") {
 
   deps = [
     "//base",
+    "//components/proximity_auth/logging",
     "//testing/gmock",
   ]
 }
@@ -85,6 +132,8 @@ static_library("test_support") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "bluetooth_throttler_impl_unittest.cc",
+    "connection_unittest.cc",
     "cryptauth_access_token_fetcher_impl_unittest.cc",
     "cryptauth_api_call_flow_unittest.cc",
     "cryptauth_client_impl_unittest.cc",
@@ -92,17 +141,24 @@ source_set("unit_tests") {
     "cryptauth_enroller_impl_unittest.cc",
     "cryptauth_enrollment_manager_unittest.cc",
     "cryptauth_gcm_manager_impl_unittest.cc",
+    "device_to_device_authenticator_unittest.cc",
+    "device_to_device_operations_unittest.cc",
+    "device_to_device_secure_context_unittest.cc",
+    "eid_generator_unittest.cc",
     "fake_secure_message_delegate_unittest.cc",
+    "remote_beacon_seed_fetcher_unittest.cc",
+    "secure_channel_unittest.cc",
     "sync_scheduler_impl_unittest.cc",
+    "wire_message_unittest.cc",
   ]
 
   deps = [
     ":cryptauth",
     ":test_support",
     "//base/test:test_support",
+    "//components/cryptauth/ble:unit_tests",
     "//components/gcm_driver:test_support",
     "//components/prefs:test_support",
-    "//components/proximity_auth",
     "//google_apis:test_support",
     "//net:test_support",
     "//testing/gtest",

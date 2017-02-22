@@ -41,36 +41,39 @@ public class ChildProcessConnectionImpl implements ChildProcessConnection {
     // (specifically start and stop) may be called from any thread, hence all entry point methods
     // into the class are synchronized on the lock to protect access to these members.
     private final Object mLock = new Object();
-    private IChildProcessService mService = null;
+    private IChildProcessService mService;
+    // Set to true when the service connection callback runs. This differs from
+    // mServiceConnectComplete, which tracks that the connection completed successfully.
+    private boolean mDidOnServiceConnected;
     // Set to true when the service connected successfully.
-    private boolean mServiceConnectComplete = false;
+    private boolean mServiceConnectComplete;
     // Set to true when the service disconnects, as opposed to being properly closed. This happens
     // when the process crashes or gets killed by the system out-of-memory killer.
-    private boolean mServiceDisconnected = false;
+    private boolean mServiceDisconnected;
     // When the service disconnects (i.e. mServiceDisconnected is set to true), the status of the
     // oom bindings is stashed here for future inspection.
-    private boolean mWasOomProtected = false;
-    private int mPid = 0;  // Process ID of the corresponding child process.
+    private boolean mWasOomProtected;
+    private int mPid;  // Process ID of the corresponding child process.
     // Initial binding protects the newly spawned process from being killed before it is put to use,
     // it is maintained between calls to start() and removeInitialBinding().
-    private ChildServiceConnection mInitialBinding = null;
+    private ChildServiceConnection mInitialBinding;
     // Strong binding will make the service priority equal to the priority of the activity. We want
     // the OS to be able to kill background renderers as it kills other background apps, so strong
     // bindings are maintained only for services that are active at the moment (between
     // addStrongBinding() and removeStrongBinding()).
-    private ChildServiceConnection mStrongBinding = null;
+    private ChildServiceConnection mStrongBinding;
     // Low priority binding maintained in the entire lifetime of the connection, i.e. between calls
     // to start() and stop().
-    private ChildServiceConnection mWaivedBinding = null;
+    private ChildServiceConnection mWaivedBinding;
     // Incremented on addStrongBinding(), decremented on removeStrongBinding().
-    private int mStrongBindingCount = 0;
+    private int mStrongBindingCount;
     // Moderate binding will make the service priority equal to the priority of a visible process
     // while the app is in the foreground. It will stay bound only while the app is in the
     // foreground to protect a background process from the system out-of-memory killer.
-    private ChildServiceConnection mModerateBinding = null;
+    private ChildServiceConnection mModerateBinding;
 
     // Linker-related parameters.
-    private ChromiumLinkerParams mLinkerParams = null;
+    private ChromiumLinkerParams mLinkerParams;
 
     private final boolean mAlwaysInForeground;
     private final ChildProcessCreationParams mCreationParams;
@@ -97,6 +100,9 @@ public class ChildProcessConnectionImpl implements ChildProcessConnection {
         }
     }
 
+    // This is set in start() and is used in onServiceConnected().
+    private ChildProcessConnection.StartCallback mStartCallback;
+
     // This is set in setupConnection() and is later used in doConnectionSetupLocked(), after which
     // the variable is cleared. Therefore this is only valid while the connection is being set up.
     private ConnectionParams mConnectionParams;
@@ -108,7 +114,7 @@ public class ChildProcessConnectionImpl implements ChildProcessConnection {
     private ChildProcessConnection.ConnectionCallback mConnectionCallback;
 
     private class ChildServiceConnection implements ServiceConnection {
-        private boolean mBound = false;
+        private boolean mBound;
 
         private final int mBindFlags;
 
@@ -125,14 +131,14 @@ public class ChildProcessConnectionImpl implements ChildProcessConnection {
             mBindFlags = bindFlags;
         }
 
-        boolean bind(String[] commandLine) {
+        boolean bind() {
             if (!mBound) {
                 try {
                     TraceEvent.begin("ChildProcessConnectionImpl.ChildServiceConnection.bind");
                     final Intent intent = createServiceBindIntent();
-                    if (commandLine != null) {
-                        intent.putExtra(ChildProcessConstants.EXTRA_COMMAND_LINE, commandLine);
-                    }
+                    // Note, the intent may be saved and re-used by Android for re-launching the
+                    // child service. Do not pass data that is different for each child; command
+                    // line arguments for example.
                     if (mLinkerParams != null) {
                         mLinkerParams.addIntentExtras(intent);
                     }
@@ -160,14 +166,42 @@ public class ChildProcessConnectionImpl implements ChildProcessConnection {
             synchronized (mLock) {
                 // A flag from the parent class ensures we run the post-connection logic only once
                 // (instead of once per each ChildServiceConnection).
-                if (mServiceConnectComplete) {
+                if (mDidOnServiceConnected) {
                     return;
                 }
                 try {
                     TraceEvent.begin(
                             "ChildProcessConnectionImpl.ChildServiceConnection.onServiceConnected");
-                    mServiceConnectComplete = true;
+                    mDidOnServiceConnected = true;
                     mService = IChildProcessService.Stub.asInterface(service);
+
+                    StartCallback startCallback = mStartCallback;
+                    mStartCallback = null;
+
+                    boolean boundToUs = false;
+                    try {
+                        boundToUs = mService.bindToCaller();
+                    } catch (RemoteException ex) {
+                        // Do not trigger the StartCallback here, since the service is already
+                        // dead and the DeathCallback will run from onServiceDisconnected().
+                        Log.e(TAG, "Failed to bind service to connection.", ex);
+                        return;
+                    }
+
+                    if (startCallback != null) {
+                        if (boundToUs) {
+                            startCallback.onChildStarted();
+                        } else {
+                            startCallback.onChildStartFailed();
+                        }
+                    }
+
+                    if (!boundToUs) {
+                        return;
+                    }
+
+                    mServiceConnectComplete = true;
+
                     // Run the setup if the connection parameters have already been provided. If
                     // not, doConnectionSetupLocked() will be called from setupConnection().
                     if (mConnectionParams != null) {
@@ -289,7 +323,7 @@ public class ChildProcessConnectionImpl implements ChildProcessConnection {
     }
 
     @Override
-    public void start(String[] commandLine) {
+    public void start(ChildProcessConnection.StartCallback startCallback) {
         try {
             TraceEvent.begin("ChildProcessConnectionImpl.start");
             synchronized (mLock) {
@@ -297,13 +331,15 @@ public class ChildProcessConnectionImpl implements ChildProcessConnection {
                 assert mConnectionParams == null :
                         "setupConnection() called before start() in ChildProcessConnectionImpl.";
 
-                if (!mInitialBinding.bind(commandLine)) {
+                mStartCallback = startCallback;
+
+                if (!mInitialBinding.bind()) {
                     Log.e(TAG, "Failed to establish the service connection.");
                     // We have to notify the caller so that they can free-up associated resources.
                     // TODO(ppi): Can we hard-fail here?
                     mDeathCallback.onChildProcessDied(ChildProcessConnectionImpl.this);
                 } else {
-                    mWaivedBinding.bind(null);
+                    mWaivedBinding.bind();
                 }
             }
         } finally {
@@ -457,7 +493,7 @@ public class ChildProcessConnectionImpl implements ChildProcessConnection {
                 return;
             }
             if (mStrongBindingCount == 0) {
-                mStrongBinding.bind(null);
+                mStrongBinding.bind();
             }
             mStrongBindingCount++;
         }
@@ -492,7 +528,7 @@ public class ChildProcessConnectionImpl implements ChildProcessConnection {
                 Log.w(TAG, "The connection is not bound for %d", mPid);
                 return;
             }
-            mModerateBinding.bind(null);
+            mModerateBinding.bind();
         }
     }
 

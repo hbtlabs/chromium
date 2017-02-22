@@ -311,6 +311,30 @@ public class ChromeDownloadDelegate {
     }
 
     /**
+     * Enqueue a request to download a file using Android DownloadManager.
+     * @param url Url to download.
+     * @param userAgent User agent to use.
+     * @param contentDisposition Content disposition of the request.
+     * @param mimeType MIME type.
+     * @param cookie Cookie to use.
+     * @param referrer Referrer to use.
+     */
+    @CalledByNative
+    private void enqueueAndroidDownloadManagerRequest(String url, String userAgent,
+            String contentDisposition, String mimeType, String cookie, String referrer) {
+        DownloadInfo downloadInfo = new DownloadInfo.Builder()
+                .setUrl(url)
+                .setUserAgent(userAgent)
+                .setContentDisposition(contentDisposition)
+                .setMimeType(mimeType)
+                .setCookie(cookie)
+                .setReferrer(referrer)
+                .setIsGETRequest(true)
+                .build();
+        enqueueDownloadManagerRequest(downloadInfo);
+    }
+
+    /**
      * Called when download starts.
      *
      * @param filename Name of the file.
@@ -318,10 +342,8 @@ public class ChromeDownloadDelegate {
      */
     @CalledByNative
     private void onDownloadStarted(String filename) {
-        if (!isDangerousFile(filename)) {
-            DownloadUtils.showDownloadStartToast(mContext);
-            closeBlankTab();
-        }
+        DownloadUtils.showDownloadStartToast(mContext);
+        closeBlankTab();
     }
 
     /**
@@ -375,16 +397,6 @@ public class ChromeDownloadDelegate {
             if (index > 0) return filename.substring(index + 1);
         }
         return MimeTypeMap.getFileExtensionFromUrl(url);
-    }
-
-    /**
-     * Check whether a file is dangerous.
-     *
-     * @param filename Name of the file.
-     * @return true if the file is dangerous, or false otherwise.
-     */
-    protected boolean isDangerousFile(String filename) {
-        return nativeIsDownloadDangerous(filename);
     }
 
     /**
@@ -475,7 +487,6 @@ public class ChromeDownloadDelegate {
 
     private native void nativeInit(WebContents webContents);
     private static native String nativeGetDownloadWarningText(String filename);
-    private static native boolean nativeIsDownloadDangerous(String filename);
     private static native void nativeLaunchDuplicateDownloadInfoBar(ChromeDownloadDelegate delegate,
             Tab tab, DownloadInfo downloadInfo, String filePath, boolean isIncognito);
     private static native void nativeLaunchPermissionUpdateInfoBar(

@@ -5,20 +5,29 @@
 #ifndef UI_EVENTS_BLINK_WEB_INPUT_EVENT_TRAITS_H_
 #define UI_EVENTS_BLINK_WEB_INPUT_EVENT_TRAITS_H_
 
-#include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "ui/events/blink/scoped_web_input_event.h"
 #include "ui/events/latency_info.h"
 
+namespace blink {
+class WebGestureEvent;
+class WebMouseWheelEvent;
+}
+
 namespace ui {
+
+struct WebInputEventDeleter {
+  void operator()(blink::WebInputEvent*) const;
+};
+
+using WebScopedInputEvent =
+    std::unique_ptr<blink::WebInputEvent, WebInputEventDeleter>;
 
 // Utility class for performing operations on and with WebInputEvents.
 class WebInputEventTraits {
  public:
   static std::string ToString(const blink::WebInputEvent& event);
   static size_t GetSize(blink::WebInputEvent::Type type);
-  static ScopedWebInputEvent Clone(const blink::WebInputEvent& event);
-  static void Delete(blink::WebInputEvent* event);
+  static WebScopedInputEvent Clone(const blink::WebInputEvent& event);
   static bool ShouldBlockEventStream(const blink::WebInputEvent& event);
 
   static bool CanCauseScroll(const blink::WebMouseWheelEvent& event);
@@ -26,7 +35,7 @@ class WebInputEventTraits {
   // Return uniqueTouchEventId for WebTouchEvent, otherwise return 0.
   static uint32_t GetUniqueTouchEventId(const blink::WebInputEvent& event);
   static LatencyInfo CreateLatencyInfoForWebGestureEvent(
-      blink::WebGestureEvent event);
+      const blink::WebGestureEvent& event);
 };
 
 }  // namespace ui

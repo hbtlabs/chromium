@@ -38,8 +38,6 @@
 #include "bindings/core/v8/V8ThrowException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/events/Event.h"
-#include "core/fetch/MemoryCache.h"
-#include "core/fetch/ResourceLoaderOptions.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/WorkerInspectorController.h"
 #include "core/inspector/WorkerThreadDebugger.h"
@@ -56,6 +54,8 @@
 #include "modules/serviceworkers/ServiceWorkerThread.h"
 #include "modules/serviceworkers/WaitUntilObserver.h"
 #include "platform/Histogram.h"
+#include "platform/loader/fetch/MemoryCache.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/weborigin/KURL.h"
 #include "public/platform/Platform.h"
@@ -63,6 +63,7 @@
 #include "wtf/CurrentTime.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
+#include <utility>
 
 namespace blink {
 
@@ -77,7 +78,7 @@ ServiceWorkerGlobalScope* ServiceWorkerGlobalScope::create(
       std::move(startupData->m_starterOriginPrivilegeData),
       startupData->m_workerClients);
 
-  context->setV8CacheOptions(startupData->m_v8CacheOptions);
+  context->setV8CacheOptions(startupData->m_workerV8Settings.m_v8CacheOptions);
   context->applyContentSecurityPolicyFromVector(
       *startupData->m_contentSecurityPolicyHeaders);
   if (!startupData->m_referrerPolicy.isNull())
@@ -166,7 +167,8 @@ ScriptPromise ServiceWorkerGlobalScope::skipWaiting(ScriptState* scriptState) {
   ScriptPromise promise = resolver->promise();
 
   ServiceWorkerGlobalScopeClient::from(executionContext)
-      ->skipWaiting(new CallbackPromiseAdapter<void, void>(resolver));
+      ->skipWaiting(
+          WTF::makeUnique<CallbackPromiseAdapter<void, void>>(resolver));
   return promise;
 }
 
@@ -175,7 +177,7 @@ void ServiceWorkerGlobalScope::setRegistration(
   if (!getExecutionContext())
     return;
   m_registration = ServiceWorkerRegistration::getOrCreate(
-      getExecutionContext(), wrapUnique(handle.release()));
+      getExecutionContext(), WTF::wrapUnique(handle.release()));
 }
 
 bool ServiceWorkerGlobalScope::addEventListenerInternal(

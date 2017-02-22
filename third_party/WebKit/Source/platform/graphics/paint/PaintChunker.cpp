@@ -8,12 +8,6 @@
 
 namespace blink {
 
-#if DCHECK_IS_ON()
-static bool gNullPaintPropertyChecksDisabled = false;
-DisableNullPaintPropertyChecks::DisableNullPaintPropertyChecks()
-    : m_disabler(&gNullPaintPropertyChecksDisabled, true) {}
-#endif
-
 PaintChunker::PaintChunker() {}
 
 PaintChunker::~PaintChunker() {}
@@ -33,16 +27,13 @@ bool PaintChunker::incrementDisplayItemIndex(const DisplayItem& item) {
   DCHECK(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
 
 #if DCHECK_IS_ON()
-  if (!gNullPaintPropertyChecksDisabled) {
-    // Property nodes should never be null because they should either be set to
-    // properties created by a LayoutObject/FrameView, or be set to a non-null
-    // root node. If these DCHECKs are hit we are missing a call to update the
-    // properties. See: ScopedPaintChunkProperties.
-    DCHECK(m_currentProperties.transform);
-    DCHECK(m_currentProperties.clip);
-    DCHECK(m_currentProperties.effect);
-    DCHECK(m_currentProperties.scroll);
-  }
+  // Property nodes should never be null because they should either be set to
+  // properties created by a LayoutObject/FrameView, or be set to a non-null
+  // root node. If these DCHECKs are hit we are missing a call to update the
+  // properties. See: ScopedPaintChunkProperties.
+  DCHECK(m_currentProperties.propertyTreeState.transform());
+  DCHECK(m_currentProperties.propertyTreeState.clip());
+  DCHECK(m_currentProperties.propertyTreeState.effect());
 #endif
 
   ItemBehavior behavior;
@@ -67,8 +58,8 @@ bool PaintChunker::incrementDisplayItemIndex(const DisplayItem& item) {
   if (m_chunks.isEmpty()) {
     PaintChunk newChunk(0, 1, newChunkId ? &*newChunkId : nullptr,
                         m_currentProperties);
-    m_chunks.append(newChunk);
-    m_chunkBehavior.append(behavior);
+    m_chunks.push_back(newChunk);
+    m_chunkBehavior.push_back(behavior);
     return true;
   }
 
@@ -83,24 +74,23 @@ bool PaintChunker::incrementDisplayItemIndex(const DisplayItem& item) {
 
   PaintChunk newChunk(lastChunk.endIndex, lastChunk.endIndex + 1,
                       newChunkId ? &*newChunkId : nullptr, m_currentProperties);
-  m_chunks.append(newChunk);
-  m_chunkBehavior.append(behavior);
+  m_chunks.push_back(newChunk);
+  m_chunkBehavior.push_back(behavior);
   return true;
 }
 
-bool PaintChunker::decrementDisplayItemIndex() {
+void PaintChunker::decrementDisplayItemIndex() {
   DCHECK(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
   DCHECK(!m_chunks.isEmpty());
 
   auto& lastChunk = m_chunks.back();
   if ((lastChunk.endIndex - lastChunk.beginIndex) > 1) {
     lastChunk.endIndex--;
-    return false;
+    return;
   }
 
   m_chunks.pop_back();
   m_chunkBehavior.pop_back();
-  return true;
 }
 
 void PaintChunker::clear() {

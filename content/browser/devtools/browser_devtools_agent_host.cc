@@ -6,13 +6,13 @@
 
 #include "base/bind.h"
 #include "base/guid.h"
-#include "base/json/json_reader.h"
-#include "content/browser/devtools/devtools_protocol_handler.h"
+#include "base/memory/ptr_util.h"
 #include "content/browser/devtools/devtools_session.h"
 #include "content/browser/devtools/protocol/io_handler.h"
 #include "content/browser/devtools/protocol/memory_handler.h"
 #include "content/browser/devtools/protocol/protocol.h"
 #include "content/browser/devtools/protocol/system_info_handler.h"
+#include "content/browser/devtools/protocol/target_handler.h"
 #include "content/browser/devtools/protocol/tethering_handler.h"
 #include "content/browser/devtools/protocol/tracing_handler.h"
 #include "content/browser/frame_host/frame_tree_node.h"
@@ -22,44 +22,48 @@ namespace content {
 scoped_refptr<DevToolsAgentHost> DevToolsAgentHost::CreateForBrowser(
     scoped_refptr<base::SingleThreadTaskRunner> tethering_task_runner,
     const CreateServerSocketCallback& socket_callback) {
-  return new BrowserDevToolsAgentHost(tethering_task_runner, socket_callback);
+  return new BrowserDevToolsAgentHost(
+      tethering_task_runner, socket_callback, false);
+}
+
+scoped_refptr<DevToolsAgentHost> DevToolsAgentHost::CreateForDiscovery() {
+  CreateServerSocketCallback null_callback;
+  return new BrowserDevToolsAgentHost(nullptr, null_callback, true);
 }
 
 BrowserDevToolsAgentHost::BrowserDevToolsAgentHost(
     scoped_refptr<base::SingleThreadTaskRunner> tethering_task_runner,
-    const CreateServerSocketCallback& socket_callback)
+    const CreateServerSocketCallback& socket_callback,
+    bool only_discovery)
     : DevToolsAgentHostImpl(base::GenerateGUID()),
-      memory_handler_(new devtools::memory::MemoryHandler()),
-      system_info_handler_(new devtools::system_info::SystemInfoHandler()),
-      tethering_handler_(
-          new devtools::tethering::TetheringHandler(socket_callback,
-                                                    tethering_task_runner)),
-      protocol_handler_(new DevToolsProtocolHandler(this)) {
-  DevToolsProtocolDispatcher* dispatcher = protocol_handler_->dispatcher();
-  dispatcher->SetMemoryHandler(memory_handler_.get());
-  dispatcher->SetSystemInfoHandler(system_info_handler_.get());
-  dispatcher->SetTetheringHandler(tethering_handler_.get());
+      tethering_task_runner_(tethering_task_runner),
+      socket_callback_(socket_callback),
+      only_discovery_(only_discovery) {
   NotifyCreated();
 }
 
 BrowserDevToolsAgentHost::~BrowserDevToolsAgentHost() {
 }
 
-void BrowserDevToolsAgentHost::Attach() {
-  session()->dispatcher()->setFallThroughForNotFound(true);
-  io_handler_.reset(new protocol::IOHandler(GetIOContext()));
-  io_handler_->Wire(session()->dispatcher());
+void BrowserDevToolsAgentHost::AttachSession(DevToolsSession* session) {
+  if (only_discovery_) {
+    session->AddHandler(base::WrapUnique(new protocol::TargetHandler()));
+    return;
+  }
 
-  tracing_handler_.reset(new protocol::TracingHandler(
+  session->AddHandler(base::WrapUnique(new protocol::IOHandler(
+      GetIOContext())));
+  session->AddHandler(base::WrapUnique(new protocol::MemoryHandler()));
+  session->AddHandler(base::WrapUnique(new protocol::SystemInfoHandler()));
+  session->AddHandler(base::WrapUnique(new protocol::TetheringHandler(
+      socket_callback_, tethering_task_runner_)));
+  session->AddHandler(base::WrapUnique(new protocol::TracingHandler(
       protocol::TracingHandler::Browser,
       FrameTreeNode::kFrameTreeNodeInvalidId,
-      GetIOContext()));
-  tracing_handler_->Wire(session()->dispatcher());
+      GetIOContext())));
 }
 
-void BrowserDevToolsAgentHost::Detach() {
-  io_handler_.reset();
-  tracing_handler_.reset();
+void BrowserDevToolsAgentHost::DetachSession(int session_id) {
 }
 
 std::string BrowserDevToolsAgentHost::GetType() {
@@ -86,14 +90,11 @@ void BrowserDevToolsAgentHost::Reload() {
 }
 
 bool BrowserDevToolsAgentHost::DispatchProtocolMessage(
+    DevToolsSession* session,
     const std::string& message) {
-  std::unique_ptr<base::Value> value = base::JSONReader::Read(message);
-  std::unique_ptr<protocol::Value> protocolValue =
-      protocol::toProtocolValue(value.get(), 1000);
-  if (session()->dispatcher()->dispatch(std::move(protocolValue)) ==
-      protocol::Response::kFallThrough) {
-    protocol_handler_->HandleMessage(session()->session_id(), std::move(value));
-  }
+  int call_id;
+  std::string method;
+  session->Dispatch(message, &call_id, &method);
   return true;
 }
 

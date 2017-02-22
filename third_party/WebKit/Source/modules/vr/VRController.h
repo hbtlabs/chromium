@@ -38,6 +38,8 @@ class VRController final : public GarbageCollectedFinalized<VRController>,
                           device::mojom::blink::VRDisplayClientRequest,
                           device::mojom::blink::VRDisplayInfoPtr) override;
 
+  void focusChanged();
+
   DECLARE_VIRTUAL_TRACE();
 
  private:
@@ -45,7 +47,7 @@ class VRController final : public GarbageCollectedFinalized<VRController>,
   void onGetDisplays();
 
   // ContextLifecycleObserver.
-  void contextDestroyed() override;
+  void contextDestroyed(ExecutionContext*) override;
   void dispose();
 
   Member<NavigatorVR> m_navigatorVR;

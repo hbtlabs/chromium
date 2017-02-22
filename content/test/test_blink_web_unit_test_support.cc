@@ -24,6 +24,7 @@
 #include "content/test/mock_webclipboard_impl.h"
 #include "content/test/web_gesture_curve_mock.h"
 #include "media/base/media.h"
+#include "media/media_features.h"
 #include "net/cookies/cookie_monster.h"
 #include "storage/browser/database/vfs_backend.h"
 #include "third_party/WebKit/public/platform/WebConnectionType.h"
@@ -48,11 +49,13 @@
 #include "gin/v8_initializer.h"  // nogncheck
 #endif
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
 #include "content/renderer/media/rtc_certificate.h"
 #include "third_party/WebKit/public/platform/WebRTCCertificateGenerator.h"
-#include "third_party/webrtc/base/rtccertificate.h"
+#include "third_party/webrtc/base/rtccertificate.h"  // nogncheck
 #endif
+
+using blink::WebString;
 
 namespace {
 
@@ -132,7 +135,7 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport() {
   blink::setLayoutTestMode(true);
   blink::WebRuntimeFeatures::enableDatabase(true);
   blink::WebRuntimeFeatures::enableNotifications(true);
-  blink::WebRuntimeFeatures::enableTouch(true);
+  blink::WebRuntimeFeatures::enableTouchEventFeatureDetection(true);
 
   // Initialize NetworkStateNotifier.
   blink::WebNetworkStateNotifier::setWebConnection(
@@ -193,8 +196,7 @@ blink::WebIDBFactory* TestBlinkWebUnitTestSupport::idbFactory() {
 blink::WebURLLoader* TestBlinkWebUnitTestSupport::createURLLoader() {
   // This loader should be used only for process-local resources such as
   // data URLs.
-  blink::WebURLLoader* default_loader =
-      new WebURLLoaderImpl(nullptr, nullptr, nullptr);
+  blink::WebURLLoader* default_loader = new WebURLLoaderImpl(nullptr, nullptr);
   return url_loader_factory_->createURLLoader(default_loader);
 }
 
@@ -214,27 +216,27 @@ blink::WebString TestBlinkWebUnitTestSupport::queryLocalizedString(
   // Returns placeholder strings to check if they are correctly localized.
   switch (name) {
     case blink::WebLocalizedString::OtherDateLabel:
-      return base::ASCIIToUTF16("<<OtherDateLabel>>");
+      return WebString::fromASCII("<<OtherDateLabel>>");
     case blink::WebLocalizedString::OtherMonthLabel:
-      return base::ASCIIToUTF16("<<OtherMonthLabel>>");
+      return WebString::fromASCII("<<OtherMonthLabel>>");
     case blink::WebLocalizedString::OtherTimeLabel:
-      return base::ASCIIToUTF16("<<OtherTimeLabel>>");
+      return WebString::fromASCII("<<OtherTimeLabel>>");
     case blink::WebLocalizedString::OtherWeekLabel:
-      return base::ASCIIToUTF16("<<OtherWeekLabel>>");
+      return WebString::fromASCII("<<OtherWeekLabel>>");
     case blink::WebLocalizedString::CalendarClear:
-      return base::ASCIIToUTF16("<<CalendarClear>>");
+      return WebString::fromASCII("<<CalendarClear>>");
     case blink::WebLocalizedString::CalendarToday:
-      return base::ASCIIToUTF16("<<CalendarToday>>");
+      return WebString::fromASCII("<<CalendarToday>>");
     case blink::WebLocalizedString::ThisMonthButtonLabel:
-      return base::ASCIIToUTF16("<<ThisMonthLabel>>");
+      return WebString::fromASCII("<<ThisMonthLabel>>");
     case blink::WebLocalizedString::ThisWeekButtonLabel:
-      return base::ASCIIToUTF16("<<ThisWeekLabel>>");
+      return WebString::fromASCII("<<ThisWeekLabel>>");
     case blink::WebLocalizedString::ValidationValueMissing:
-      return base::ASCIIToUTF16("<<ValidationValueMissing>>");
+      return WebString::fromASCII("<<ValidationValueMissing>>");
     case blink::WebLocalizedString::ValidationValueMissingForSelect:
-      return base::ASCIIToUTF16("<<ValidationValueMissingForSelect>>");
+      return WebString::fromASCII("<<ValidationValueMissingForSelect>>");
     case blink::WebLocalizedString::WeekFormatTemplate:
-      return base::ASCIIToUTF16("Week $2, $1");
+      return WebString::fromASCII("Week $2, $1");
     default:
       return blink::WebString();
   }
@@ -244,11 +246,11 @@ blink::WebString TestBlinkWebUnitTestSupport::queryLocalizedString(
     blink::WebLocalizedString::Name name,
     const blink::WebString& value) {
   if (name == blink::WebLocalizedString::ValidationRangeUnderflow)
-    return base::ASCIIToUTF16("range underflow");
+    return blink::WebString::fromASCII("range underflow");
   if (name == blink::WebLocalizedString::ValidationRangeOverflow)
-    return base::ASCIIToUTF16("range overflow");
+    return blink::WebString::fromASCII("range overflow");
   if (name == blink::WebLocalizedString::SelectMenuListText)
-    return base::ASCIIToUTF16("$1 selected");
+    return blink::WebString::fromASCII("$1 selected");
   return BlinkPlatformImpl::queryLocalizedString(name, value);
 }
 
@@ -257,14 +259,14 @@ blink::WebString TestBlinkWebUnitTestSupport::queryLocalizedString(
     const blink::WebString& value1,
     const blink::WebString& value2) {
   if (name == blink::WebLocalizedString::ValidationTooLong)
-    return base::ASCIIToUTF16("too long");
+    return blink::WebString::fromASCII("too long");
   if (name == blink::WebLocalizedString::ValidationStepMismatch)
-    return base::ASCIIToUTF16("step mismatch");
+    return blink::WebString::fromASCII("step mismatch");
   return BlinkPlatformImpl::queryLocalizedString(name, value1, value2);
 }
 
 blink::WebString TestBlinkWebUnitTestSupport::defaultLocale() {
-  return base::ASCIIToUTF16("en-US");
+  return blink::WebString::fromASCII("en-US");
 }
 
 #if defined(OS_WIN) || defined(OS_MACOSX)
@@ -309,7 +311,7 @@ void TestBlinkWebUnitTestSupport::getPluginList(
   builder->addMediaTypeToLastPlugin("application/pdf", "pdf");
 }
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
 namespace {
 
 class TestWebRTCCertificateGenerator
@@ -341,11 +343,11 @@ class TestWebRTCCertificateGenerator
 };
 
 }  // namespace
-#endif  // defined(ENABLE_WEBRTC)
+#endif  // BUILDFLAG(ENABLE_WEBRTC)
 
 blink::WebRTCCertificateGenerator*
 TestBlinkWebUnitTestSupport::createRTCCertificateGenerator() {
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   return new TestWebRTCCertificateGenerator();
 #else
   return nullptr;

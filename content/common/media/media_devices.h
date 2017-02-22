@@ -10,6 +10,11 @@
 
 #include "content/common/content_export.h"
 
+namespace media {
+struct AudioDeviceDescription;
+struct VideoCaptureDeviceDescriptor;
+}
+
 namespace content {
 
 enum MediaDeviceType {
@@ -20,10 +25,19 @@ enum MediaDeviceType {
 };
 
 struct CONTENT_EXPORT MediaDeviceInfo {
-  MediaDeviceInfo() = default;
+  MediaDeviceInfo();
+  MediaDeviceInfo(const MediaDeviceInfo& other);
+  MediaDeviceInfo(MediaDeviceInfo&& other);
   MediaDeviceInfo(const std::string& device_id,
                   const std::string& label,
                   const std::string& group_id);
+  explicit MediaDeviceInfo(const media::AudioDeviceDescription& description);
+  explicit MediaDeviceInfo(
+      const media::VideoCaptureDeviceDescriptor& descriptor);
+  ~MediaDeviceInfo();
+  MediaDeviceInfo& operator=(const MediaDeviceInfo& other);
+  MediaDeviceInfo& operator=(MediaDeviceInfo&& other);
+
   std::string device_id;
   std::string label;
   std::string group_id;

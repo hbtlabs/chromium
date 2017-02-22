@@ -27,7 +27,6 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
-import org.chromium.chrome.browser.util.ViewUtils;
 import org.chromium.chrome.browser.widget.ControlContainer;
 import org.chromium.content.browser.ContentVideoView;
 import org.chromium.content.browser.ContentViewCore;
@@ -84,17 +83,24 @@ public class ChromeFullscreenManager
         public void onContentOffsetChanged(float offset);
 
         /**
-         * Called whenever the content's visible offset changes.
-         * @param offset The new offset of the visible content from the top of the screen.
+         * Called whenever the controls' offset changes.
+         * @param topOffset    The new value of the offset from the top of the top control.
+         * @param bottomOffset The new value of the offset from the top of the bottom control.
          * @param needsAnimate Whether the caller is driving an animation with further updates.
          */
-        public void onVisibleContentOffsetChanged(float offset, boolean needsAnimate);
+        public void onControlsOffsetChanged(float topOffset, float bottomOffset,
+                boolean needsAnimate);
 
         /**
          * Called when a ContentVideoView is created/destroyed.
          * @param enabled Whether to enter or leave overlay video mode.
          */
         public void onToggleOverlayVideoMode(boolean enabled);
+
+        /**
+         * Called when the height of the controls are changed.
+         */
+        public void onBottomControlsHeightChanged(int bottomControlsHeight);
     }
 
     private final Runnable mUpdateVisibilityRunnable = new Runnable() {
@@ -122,7 +128,17 @@ public class ChromeFullscreenManager
         mActivity = activity;
         mWindow = activity.getWindow();
         mIsBottomControls = isBottomControls;
-        mBrowserVisibilityDelegate = new BrowserStateBrowserControlsVisibilityDelegate();
+        mBrowserVisibilityDelegate = new BrowserStateBrowserControlsVisibilityDelegate(
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        if (getTab() != null) {
+                            getTab().updateFullscreenEnabledState();
+                        } else if (!mBrowserVisibilityDelegate.isHidingBrowserControlsEnabled()) {
+                            setPositionsForTabToNonFullscreen();
+                        }
+                    }
+                });
     }
 
     /**
@@ -157,6 +173,11 @@ public class ChromeFullscreenManager
 
             @Override
             public void didSelectTab(Tab tab, TabSelectionType type, int lastId) {
+                setTab(mTabModelSelector.getCurrentTab());
+            }
+
+            @Override
+            public void didCloseTab(int tabId, boolean incognito) {
                 setTab(mTabModelSelector.getCurrentTab());
             }
         };
@@ -197,9 +218,11 @@ public class ChromeFullscreenManager
     public void setTab(Tab tab) {
         Tab previousTab = getTab();
         super.setTab(tab);
-        mBrowserVisibilityDelegate.setTab(getTab());
         if (tab != null && previousTab != getTab()) {
             mBrowserVisibilityDelegate.showControlsTransient();
+        }
+        if (tab == null && !mBrowserVisibilityDelegate.isHidingBrowserControlsEnabled()) {
+            setPositionsForTabToNonFullscreen();
         }
     }
 
@@ -311,6 +334,17 @@ public class ChromeFullscreenManager
      */
     public boolean drawControlsAsTexture() {
         return getBrowserControlHiddenRatio() > 0;
+    }
+
+    /**
+     * Sets the height of the bottom controls.
+     */
+    public void setBottomControlsHeight(int bottomControlsHeight) {
+        if (mBottomControlContainerHeight == bottomControlsHeight) return;
+        mBottomControlContainerHeight = bottomControlsHeight;
+        for (int i = 0; i < mListeners.size(); i++) {
+            mListeners.get(i).onBottomControlsHeightChanged(mBottomControlContainerHeight);
+        }
     }
 
     @Override
@@ -463,11 +497,8 @@ public class ChromeFullscreenManager
             // scrolling.
             boolean needsAnimate = shouldShowAndroidControls();
             for (int i = 0; i < mListeners.size(); i++) {
-                // Since, in the case of bottom controls, the view is never translated, we don't
-                // need to change the information passed into this method.
-                // getTopVisibleContentOffset will return 0 which is the expected result.
-                mListeners.get(i).onVisibleContentOffsetChanged(
-                        getTopVisibleContentOffset(), needsAnimate);
+                mListeners.get(i).onControlsOffsetChanged(
+                        getTopControlOffset(), getBottomControlOffset(), needsAnimate);
             }
         }
 
@@ -593,33 +624,6 @@ public class ChromeFullscreenManager
         updateControlOffset();
 
         updateVisuals();
-    }
-
-    /**
-     * @param e The dispatched motion event
-     * @return Whether or not this motion event is in the top control container area and should be
-     *         consumed.
-     */
-    public boolean onInterceptMotionEvent(MotionEvent e) {
-        int bottomPosition;
-        int topPosition = 0;
-        float offset;
-
-        if (mIsBottomControls) {
-            int[] position = new int[2];
-            ViewUtils.getRelativeLayoutPosition(mControlContainer.getView().getRootView(),
-                    mControlContainer.getView(), position);
-
-            topPosition = position[1];
-            bottomPosition = topPosition + getBottomControlsHeight();
-            offset = getBottomControlOffset();
-        } else {
-            bottomPosition = getTopControlsHeight();
-            offset = getTopControlOffset();
-        }
-
-        return e.getY() < topPosition + offset && e.getY() > bottomPosition + offset
-                && !mBrowserControlsAndroidViewHidden;
     }
 
     /**

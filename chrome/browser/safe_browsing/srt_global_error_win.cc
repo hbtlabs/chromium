@@ -15,6 +15,7 @@
 #include "base/process/launch.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
@@ -69,6 +70,7 @@ enum class ChromePromptValue {
 void MaybeExecuteSRTFromBlockingPool(
     const base::FilePath& downloaded_path,
     bool metrics_enabled,
+    bool sber_enabled,
     ChromePromptValue prompt_value,
     const scoped_refptr<SingleThreadTaskRunner>& task_runner,
     const base::Closure& success_callback,
@@ -98,6 +100,9 @@ void MaybeExecuteSRTFromBlockingPool(
         srt_command_line.AppendSwitch(kUmaUserSwitch);
         srt_command_line.AppendSwitch(kEnableCrashReporting);
       }
+
+      if (sber_enabled)
+        srt_command_line.AppendSwitch(kExtendedSafeBrowsingEnabledSwitch);
 
       base::Process srt_process(
           base::LaunchProcess(srt_command_line, base::LaunchOptions()));
@@ -130,8 +135,10 @@ SRTGlobalError::SRTGlobalError(GlobalErrorService* global_error_service,
 
 SRTGlobalError::~SRTGlobalError() {
   if (!interacted_) {
-    BrowserThread::PostBlockingPoolTask(
-        FROM_HERE, base::Bind(&DeleteFilesFromBlockingPool, downloaded_path_));
+    base::PostTaskWithTraits(
+        FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
+                       base::TaskPriority::BACKGROUND),
+        base::Bind(&DeleteFilesFromBlockingPool, downloaded_path_));
   }
 }
 
@@ -206,8 +213,10 @@ void SRTGlobalError::BubbleViewAcceptButtonPressed(Browser* browser) {
 
 void SRTGlobalError::BubbleViewCancelButtonPressed(Browser* browser) {
   OnUserinteractionStarted(SRT_PROMPT_DENIED);
-  BrowserThread::PostBlockingPoolTask(
-      FROM_HERE, base::Bind(&DeleteFilesFromBlockingPool, downloaded_path_));
+  base::PostTaskWithTraits(
+      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
+                     base::TaskPriority::BACKGROUND),
+      base::Bind(&DeleteFilesFromBlockingPool, downloaded_path_));
   OnUserinteractionDone();
 }
 
@@ -221,13 +230,15 @@ void SRTGlobalError::MaybeExecuteSRT() {
     return;
   }
   // At this point, this object owns itself, since ownership has been taken back
-  // from the global_error_service_ in the call to RemoveGlobalError. This means
-  // that it is safe to use base::Unretained here.
-  BrowserThread::PostBlockingPoolTask(
-      FROM_HERE,
+  // from the global_error_service_ in the call to OnUserInteractionStarted.
+  // This means that it is safe to use base::Unretained here.
+  base::PostTaskWithTraits(
+      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
+                     base::TaskPriority::BACKGROUND),
       base::Bind(
           &MaybeExecuteSRTFromBlockingPool, downloaded_path_,
           ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled(),
+          SafeBrowsingExtendedReportingEnabled(),
           bubble_shown_from_menu_ ? ChromePromptValue::kShownFromMenu
                                   : ChromePromptValue::kPrompted,
           base::ThreadTaskRunnerHandle::Get(),
@@ -248,8 +259,10 @@ void SRTGlobalError::FallbackToDownloadPage() {
                                ui::PAGE_TRANSITION_LINK, false));
   }
 
-  BrowserThread::PostBlockingPoolTask(
-      FROM_HERE, base::Bind(&DeleteFilesFromBlockingPool, downloaded_path_));
+  base::PostTaskWithTraits(
+      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
+                     base::TaskPriority::BACKGROUND),
+      base::Bind(&DeleteFilesFromBlockingPool, downloaded_path_));
   OnUserinteractionDone();
 }
 
@@ -262,7 +275,7 @@ void SRTGlobalError::OnUserinteractionStarted(
   RecordSRTPromptHistogram(histogram_value);
   interacted_ = true;
   if (global_error_service_) {
-    global_error_service_->RemoveGlobalError(this);
+    global_error_service_->RemoveGlobalError(this).release();
     global_error_service_ = nullptr;
   }
 }

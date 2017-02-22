@@ -9,6 +9,7 @@
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
+#include "content/public/common/url_utils.h"
 #include "content/renderer/web_frame_utils.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
@@ -96,8 +97,7 @@ void GetSavableResourceLinkForElement(
 }  // namespace
 
 bool GetSavableResourceLinksForFrame(WebFrame* current_frame,
-                                     SavableResourcesResult* result,
-                                     const char** savable_schemes) {
+                                     SavableResourcesResult* result) {
   // Get current frame's URL.
   GURL current_frame_url = current_frame->document().url();
 
@@ -106,14 +106,7 @@ bool GetSavableResourceLinksForFrame(WebFrame* current_frame,
     return false;
 
   // If url of current frame is not a savable protocol, ignore it.
-  bool is_valid_protocol = false;
-  for (int i = 0; savable_schemes[i] != NULL; ++i) {
-    if (current_frame_url.SchemeIs(savable_schemes[i])) {
-      is_valid_protocol = true;
-      break;
-    }
-  }
-  if (!is_valid_protocol)
+  if (!IsSavableURL(current_frame_url))
     return false;
 
   // Get current using document.
@@ -157,10 +150,12 @@ WebString GetSubResourceLinkFromElement(const WebElement& element) {
     attribute_name = "data";
   } else if (element.hasHTMLTagName("link")) {
     // If the link element is not linked to css, ignore it.
-    if (base::LowerCaseEqualsASCII(
-            base::StringPiece16(element.getAttribute("type")), "text/css") ||
-        base::LowerCaseEqualsASCII(
-            base::StringPiece16(element.getAttribute("rel")), "stylesheet")) {
+    WebString type = element.getAttribute("type");
+    WebString rel = element.getAttribute("rel");
+    if ((type.containsOnlyASCII() &&
+         base::LowerCaseEqualsASCII(type.ascii(), "text/css")) ||
+        (rel.containsOnlyASCII() &&
+         base::LowerCaseEqualsASCII(rel.ascii(), "stylesheet"))) {
       // TODO(jnd): Add support for extracting links of sub-resources which
       // are inside style-sheet such as @import, url(), etc.
       // See bug: http://b/issue?id=1111667.

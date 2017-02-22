@@ -28,11 +28,12 @@
 #include "wtf/DynamicAnnotations.h"
 #include "wtf/LeakAnnotations.h"
 #include "wtf/PtrUtil.h"
+#include "wtf/StaticConstructors.h"
 #include "wtf/StdLibExtras.h"
-#include "wtf/allocator/PartitionAlloc.h"
 #include "wtf/allocator/Partitions.h"
 #include "wtf/text/AtomicString.h"
 #include "wtf/text/AtomicStringTable.h"
+#include "wtf/text/CString.h"
 #include "wtf/text/CharacterNames.h"
 #include "wtf/text/StringBuffer.h"
 #include "wtf/text/StringHash.h"
@@ -55,8 +56,16 @@ namespace WTF {
 
 using namespace Unicode;
 
-static_assert(sizeof(StringImpl) == 3 * sizeof(int),
+// As of Jan 2017, StringImpl needs 2 * sizeof(int) + 29 bits of data, and
+// sizeof(ThreadRestrictionVerifier) is 16 bytes. Thus, in DCHECK mode the
+// class may be padded to 32 bytes.
+#if DCHECK_IS_ON()
+static_assert(sizeof(StringImpl) <= 8 * sizeof(int),
               "StringImpl should stay small");
+#else
+static_assert(sizeof(StringImpl) <= 3 * sizeof(int),
+              "StringImpl should stay small");
+#endif
 
 #ifdef STRING_STATS
 
@@ -284,7 +293,7 @@ void StringStats::printStats() {
 #endif
 
 void* StringImpl::operator new(size_t size) {
-  ASSERT(size == sizeof(StringImpl));
+  DCHECK_EQ(size, sizeof(StringImpl));
   return Partitions::bufferMalloc(size, "WTF::StringImpl");
 }
 
@@ -293,7 +302,7 @@ void StringImpl::operator delete(void* ptr) {
 }
 
 inline StringImpl::~StringImpl() {
-  ASSERT(!isStatic());
+  DCHECK(!isStatic());
 
   STRING_STATS_REMOVE_STRING(this);
 
@@ -301,9 +310,16 @@ inline StringImpl::~StringImpl() {
     AtomicStringTable::instance().remove(this);
 }
 
-void StringImpl::destroyIfNotStatic() {
+void StringImpl::destroyIfNotStatic() const {
   if (!isStatic())
     delete this;
+}
+
+void StringImpl::updateContainsOnlyASCII() const {
+  m_containsOnlyASCII = is8Bit()
+                            ? charactersAreAllASCII(characters8(), length())
+                            : charactersAreAllASCII(characters16(), length());
+  m_needsASCIICheck = false;
 }
 
 bool StringImpl::isSafeToSendToAnotherThread() const {
@@ -318,11 +334,18 @@ bool StringImpl::isSafeToSendToAnotherThread() const {
   return false;
 }
 
+#if DCHECK_IS_ON()
+std::string StringImpl::asciiForDebugging() const {
+  CString ascii = String(isolatedCopy()->substring(0, 128)).ascii();
+  return std::string(ascii.data(), ascii.length());
+}
+#endif
+
 PassRefPtr<StringImpl> StringImpl::createUninitialized(unsigned length,
                                                        LChar*& data) {
   if (!length) {
     data = 0;
-    return empty();
+    return empty;
   }
 
   // Allocate a single buffer large enough to contain the StringImpl
@@ -339,7 +362,7 @@ PassRefPtr<StringImpl> StringImpl::createUninitialized(unsigned length,
                                                        UChar*& data) {
   if (!length) {
     data = 0;
-    return empty();
+    return empty;
   }
 
   // Allocate a single buffer large enough to contain the StringImpl
@@ -357,7 +380,7 @@ static StaticStringsTable& staticStrings() {
   return staticStrings;
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 static bool s_allowCreationOfStaticStrings = true;
 #endif
 
@@ -366,25 +389,43 @@ const StaticStringsTable& StringImpl::allStaticStrings() {
 }
 
 void StringImpl::freezeStaticStrings() {
-  ASSERT(isMainThread());
+  DCHECK(isMainThread());
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   s_allowCreationOfStaticStrings = false;
 #endif
 }
 
 unsigned StringImpl::m_highestStaticStringLength = 0;
 
+DEFINE_GLOBAL(StringImpl, globalEmpty);
+DEFINE_GLOBAL(StringImpl, globalEmpty16Bit);
+// Callers need the global empty strings to be non-const.
+StringImpl* StringImpl::empty = const_cast<StringImpl*>(&globalEmpty);
+StringImpl* StringImpl::empty16Bit = const_cast<StringImpl*>(&globalEmpty16Bit);
+void StringImpl::initStatics() {
+  new ((void*)empty) StringImpl(ConstructEmptyString);
+  new ((void*)empty16Bit) StringImpl(ConstructEmptyString16Bit);
+  WTF_ANNOTATE_BENIGN_RACE(StringImpl::empty,
+                           "Benign race on the reference counter of a static "
+                           "string created by StringImpl::empty");
+  WTF_ANNOTATE_BENIGN_RACE(StringImpl::empty16Bit,
+                           "Benign race on the reference counter of a static "
+                           "string created by StringImpl::empty16Bit");
+}
+
 StringImpl* StringImpl::createStatic(const char* string,
                                      unsigned length,
                                      unsigned hash) {
-  ASSERT(s_allowCreationOfStaticStrings);
-  ASSERT(string);
-  ASSERT(length);
+#if DCHECK_IS_ON()
+  DCHECK(s_allowCreationOfStaticStrings);
+#endif
+  DCHECK(string);
+  DCHECK(length);
 
   StaticStringsTable::const_iterator it = staticStrings().find(hash);
   if (it != staticStrings().end()) {
-    ASSERT(!memcmp(string, it->value + 1, length * sizeof(LChar)));
+    DCHECK(!memcmp(string, it->value + 1, length * sizeof(LChar)));
     return it->value;
   }
 
@@ -403,13 +444,13 @@ StringImpl* StringImpl::createStatic(const char* string,
   LChar* data = reinterpret_cast<LChar*>(impl + 1);
   impl = new (impl) StringImpl(length, hash, StaticString);
   memcpy(data, string, length * sizeof(LChar));
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   impl->assertHashIsCorrect();
 #endif
 
-  ASSERT(isMainThread());
+  DCHECK(isMainThread());
   m_highestStaticStringLength = std::max(m_highestStaticStringLength, length);
-  staticStrings().add(hash, impl);
+  staticStrings().insert(hash, impl);
   WTF_ANNOTATE_BENIGN_RACE(impl,
                            "Benign race on the reference counter of a static "
                            "string created by StringImpl::createStatic");
@@ -418,14 +459,16 @@ StringImpl* StringImpl::createStatic(const char* string,
 }
 
 void StringImpl::reserveStaticStringsCapacityForSize(unsigned size) {
-  ASSERT(s_allowCreationOfStaticStrings);
+#if DCHECK_IS_ON()
+  DCHECK(s_allowCreationOfStaticStrings);
+#endif
   staticStrings().reserveCapacityForSize(size);
 }
 
 PassRefPtr<StringImpl> StringImpl::create(const UChar* characters,
                                           unsigned length) {
   if (!characters || !length)
-    return empty();
+    return empty;
 
   UChar* data;
   RefPtr<StringImpl> string = createUninitialized(length, data);
@@ -436,7 +479,7 @@ PassRefPtr<StringImpl> StringImpl::create(const UChar* characters,
 PassRefPtr<StringImpl> StringImpl::create(const LChar* characters,
                                           unsigned length) {
   if (!characters || !length)
-    return empty();
+    return empty;
 
   LChar* data;
   RefPtr<StringImpl> string = createUninitialized(length, data);
@@ -447,7 +490,7 @@ PassRefPtr<StringImpl> StringImpl::create(const LChar* characters,
 PassRefPtr<StringImpl> StringImpl::create8BitIfPossible(const UChar* characters,
                                                         unsigned length) {
   if (!characters || !length)
-    return empty();
+    return empty;
 
   LChar* data;
   RefPtr<StringImpl> string = createUninitialized(length, data);
@@ -463,7 +506,7 @@ PassRefPtr<StringImpl> StringImpl::create8BitIfPossible(const UChar* characters,
 
 PassRefPtr<StringImpl> StringImpl::create(const LChar* string) {
   if (!string)
-    return empty();
+    return empty;
   size_t length = strlen(reinterpret_cast<const char*>(string));
   RELEASE_ASSERT(length <= numeric_limits<unsigned>::max());
   return create(string, length);
@@ -491,13 +534,16 @@ bool StringImpl::containsOnlyWhitespace() {
   return true;
 }
 
-PassRefPtr<StringImpl> StringImpl::substring(unsigned start, unsigned length) {
+PassRefPtr<StringImpl> StringImpl::substring(unsigned start,
+                                             unsigned length) const {
   if (start >= m_length)
-    return empty();
+    return empty;
   unsigned maxLength = m_length - start;
   if (length >= maxLength) {
+    // PassRefPtr has trouble dealing with const arguments. It should be updated
+    // so this const_cast is not necessary.
     if (!start)
-      return this;
+      return const_cast<StringImpl*>(this);
     length = maxLength;
   }
   if (is8Bit())
@@ -930,7 +976,7 @@ template <class UCharPredicate>
 inline PassRefPtr<StringImpl> StringImpl::stripMatchedCharacters(
     UCharPredicate predicate) {
   if (!m_length)
-    return empty();
+    return empty;
 
   unsigned start = 0;
   unsigned end = m_length - 1;
@@ -942,7 +988,7 @@ inline PassRefPtr<StringImpl> StringImpl::stripMatchedCharacters(
 
   // only white space
   if (start > end)
-    return empty();
+    return empty;
 
   // skip white space from end
   while (end && predicate(is8Bit() ? characters8()[end] : characters16()[end]))
@@ -1731,7 +1777,7 @@ PassRefPtr<StringImpl> StringImpl::replace(UChar pattern,
 PassRefPtr<StringImpl> StringImpl::replace(UChar pattern,
                                            const LChar* replacement,
                                            unsigned repStrLength) {
-  ASSERT(replacement);
+  DCHECK(replacement);
 
   size_t srcSegmentStart = 0;
   unsigned matchCount = 0;
@@ -1779,7 +1825,7 @@ PassRefPtr<StringImpl> StringImpl::replace(UChar pattern,
     memcpy(data + dstOffset, characters8() + srcSegmentStart,
            srcSegmentLength * sizeof(LChar));
 
-    ASSERT(dstOffset + srcSegmentLength == newImpl->length());
+    DCHECK_EQ(dstOffset + srcSegmentLength, newImpl->length());
 
     return newImpl.release();
   }
@@ -1804,7 +1850,7 @@ PassRefPtr<StringImpl> StringImpl::replace(UChar pattern,
   memcpy(data + dstOffset, characters16() + srcSegmentStart,
          srcSegmentLength * sizeof(UChar));
 
-  ASSERT(dstOffset + srcSegmentLength == newImpl->length());
+  DCHECK_EQ(dstOffset + srcSegmentLength, newImpl->length());
 
   return newImpl.release();
 }
@@ -1812,7 +1858,7 @@ PassRefPtr<StringImpl> StringImpl::replace(UChar pattern,
 PassRefPtr<StringImpl> StringImpl::replace(UChar pattern,
                                            const UChar* replacement,
                                            unsigned repStrLength) {
-  ASSERT(replacement);
+  DCHECK(replacement);
 
   size_t srcSegmentStart = 0;
   unsigned matchCount = 0;
@@ -1862,7 +1908,7 @@ PassRefPtr<StringImpl> StringImpl::replace(UChar pattern,
     for (unsigned i = 0; i < srcSegmentLength; ++i)
       data[i + dstOffset] = characters8()[i + srcSegmentStart];
 
-    ASSERT(dstOffset + srcSegmentLength == newImpl->length());
+    DCHECK_EQ(dstOffset + srcSegmentLength, newImpl->length());
 
     return newImpl.release();
   }
@@ -1886,7 +1932,7 @@ PassRefPtr<StringImpl> StringImpl::replace(UChar pattern,
   memcpy(data + dstOffset, characters16() + srcSegmentStart,
          srcSegmentLength * sizeof(UChar));
 
-  ASSERT(dstOffset + srcSegmentLength == newImpl->length());
+  DCHECK_EQ(dstOffset + srcSegmentLength, newImpl->length());
 
   return newImpl.release();
 }
@@ -1955,7 +2001,7 @@ PassRefPtr<StringImpl> StringImpl::replace(const StringView& pattern,
     memcpy(data + dstOffset, characters8() + srcSegmentStart,
            srcSegmentLength * sizeof(LChar));
 
-    ASSERT(dstOffset + srcSegmentLength == newImpl->length());
+    DCHECK_EQ(dstOffset + srcSegmentLength, newImpl->length());
 
     return newImpl.release();
   }
@@ -1998,7 +2044,7 @@ PassRefPtr<StringImpl> StringImpl::replace(const StringView& pattern,
            srcSegmentLength * sizeof(UChar));
   }
 
-  ASSERT(dstOffset + srcSegmentLength == newImpl->length());
+  DCHECK_EQ(dstOffset + srcSegmentLength, newImpl->length());
 
   return newImpl.release();
 }
@@ -2100,7 +2146,8 @@ bool equal(const StringImpl* a, const LChar* b) {
 }
 
 bool equalNonNull(const StringImpl* a, const StringImpl* b) {
-  ASSERT(a && b);
+  DCHECK(a);
+  DCHECK(b);
   if (a == b)
     return true;
 

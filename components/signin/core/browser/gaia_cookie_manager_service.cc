@@ -15,6 +15,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "google_apis/gaia/gaia_auth_fetcher.h"
@@ -99,6 +100,7 @@ GaiaCookieManagerService::GaiaCookieRequest::CreateLogOutRequest(
       source);
 }
 
+// static
 GaiaCookieManagerService::GaiaCookieRequest
 GaiaCookieManagerService::GaiaCookieRequest::CreateListAccountsRequest(
     const std::string& source) {
@@ -134,7 +136,8 @@ void GaiaCookieManagerService::ExternalCcResultFetcher::Start() {
   results_.clear();
   helper_->gaia_auth_fetcher_.reset(
       helper_->signin_client_->CreateGaiaAuthFetcher(
-          this, helper_->source_, helper_->request_context()));
+          this, helper_->GetDefaultSourceForRequest(),
+          helper_->request_context()));
   helper_->gaia_auth_fetcher_->StartGetCheckConnectionInfo();
 
   // Some fetches may timeout.  Start a timer to decide when the result fetcher
@@ -213,6 +216,8 @@ GaiaCookieManagerService::ExternalCcResultFetcher::CreateFetcher(
   fetcher->SetRequestContext(helper_->request_context());
   fetcher->SetLoadFlags(net::LOAD_DO_NOT_SEND_COOKIES |
                         net::LOAD_DO_NOT_SAVE_COOKIES);
+  data_use_measurement::DataUseUserData::AttachToFetcher(
+      fetcher.get(), data_use_measurement::DataUseUserData::SIGNIN);
 
   // Fetchers are sometimes cancelled because a network change was detected,
   // especially at startup and after sign-in on ChromeOS.
@@ -392,7 +397,7 @@ void GaiaCookieManagerService::ForceOnCookieChangedProcessing() {
   std::unique_ptr<net::CanonicalCookie> cookie(net::CanonicalCookie::Create(
       google_url, kGaiaCookieName, std::string(), "." + google_url.host(),
       std::string(), base::Time(), base::Time(), false, false,
-      net::CookieSameSite::DEFAULT_MODE, false, net::COOKIE_PRIORITY_DEFAULT));
+      net::CookieSameSite::DEFAULT_MODE, net::COOKIE_PRIORITY_DEFAULT));
   OnCookieChanged(*cookie, net::CookieStore::ChangeCause::UNKNOWN_DELETION);
 }
 
@@ -462,9 +467,13 @@ void GaiaCookieManagerService::CancelAll() {
 }
 
 std::string GaiaCookieManagerService::GetSourceForRequest(
-    const GaiaCookieManagerService::GaiaCookieRequest& request,
-    const std::string& source_default) {
-  return request.source().empty() ? source_default : request.source();
+    const GaiaCookieManagerService::GaiaCookieRequest& request) {
+  return request.source().empty() ? GetDefaultSourceForRequest() :
+      request.source();
+}
+
+std::string GaiaCookieManagerService::GetDefaultSourceForRequest() {
+  return source_;
 }
 
 void GaiaCookieManagerService::OnCookieChanged(
@@ -480,13 +489,25 @@ void GaiaCookieManagerService::OnCookieChanged(
   // cause an endless loop (see crbug.com/516070).
   if (requests_.empty()) {
     // Build gaia "source" based on cause to help track down channel id issues.
-    std::string source(source_);
+    std::string source(GetDefaultSourceForRequest());
     switch (cause) {
       case net::CookieStore::ChangeCause::INSERTED:
         source += "INSERTED";
         break;
       case net::CookieStore::ChangeCause::EXPLICIT:
         source += "EXPLICIT";
+        break;
+      case net::CookieStore::ChangeCause::EXPLICIT_DELETE_BETWEEN:
+        source += "EXPLICIT_DELETE_BETWEEN";
+        break;
+      case net::CookieStore::ChangeCause::EXPLICIT_DELETE_PREDICATE:
+        source += "EXPLICIT_DELETE_PREDICATE";
+        break;
+      case net::CookieStore::ChangeCause::EXPLICIT_DELETE_SINGLE:
+        source += "EXPLICIT_DELETE_SINGLE";
+        break;
+      case net::CookieStore::ChangeCause::EXPLICIT_DELETE_CANONICAL:
+        source += "EXPLICIT_DELETE_CANONICAL";
         break;
       case net::CookieStore::ChangeCause::UNKNOWN_DELETION:
         source += "UNKNOWN_DELETION";
@@ -700,7 +721,8 @@ void GaiaCookieManagerService::StartFetchingUbertoken() {
   VLOG(1) << "GaiaCookieManagerService::StartFetchingUbertoken account_id="
           << requests_.front().account_id();
   uber_token_fetcher_.reset(new UbertokenFetcher(
-      token_service_, this, source_, signin_client_->GetURLRequestContext(),
+      token_service_, this, GetDefaultSourceForRequest(),
+      signin_client_->GetURLRequestContext(),
       base::Bind(&SigninClient::CreateGaiaAuthFetcher,
                  base::Unretained(signin_client_))));
   if (access_token_.empty()) {
@@ -714,7 +736,7 @@ void GaiaCookieManagerService::StartFetchingUbertoken() {
 void GaiaCookieManagerService::StartFetchingMergeSession() {
   DCHECK(!uber_token_.empty());
   gaia_auth_fetcher_.reset(signin_client_->CreateGaiaAuthFetcher(
-      this, GetSourceForRequest(requests_.front(), source_),
+      this, GetSourceForRequest(requests_.front()),
       signin_client_->GetURLRequestContext()));
 
   gaia_auth_fetcher_->StartMergeSession(uber_token_,
@@ -725,7 +747,7 @@ void GaiaCookieManagerService::StartFetchingLogOut() {
   DCHECK(requests_.front().request_type() == GaiaCookieRequestType::LOG_OUT);
   VLOG(1) << "GaiaCookieManagerService::StartFetchingLogOut";
   gaia_auth_fetcher_.reset(signin_client_->CreateGaiaAuthFetcher(
-      this, GetSourceForRequest(requests_.front(), source_),
+      this, GetSourceForRequest(requests_.front()),
       signin_client_->GetURLRequestContext()));
   gaia_auth_fetcher_->StartLogOut();
 }
@@ -733,7 +755,7 @@ void GaiaCookieManagerService::StartFetchingLogOut() {
 void GaiaCookieManagerService::StartFetchingListAccounts() {
   VLOG(1) << "GaiaCookieManagerService::ListAccounts";
   gaia_auth_fetcher_.reset(signin_client_->CreateGaiaAuthFetcher(
-      this, GetSourceForRequest(requests_.front(), source_),
+      this, GetSourceForRequest(requests_.front()),
       signin_client_->GetURLRequestContext()));
   gaia_auth_fetcher_->StartListAccounts();
 }

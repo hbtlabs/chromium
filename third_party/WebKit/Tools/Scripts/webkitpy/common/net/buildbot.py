@@ -31,8 +31,8 @@ import re
 import urllib2
 
 from webkitpy.common.memoized import memoized
-from webkitpy.common.net.layouttestresults import LayoutTestResults
-from webkitpy.common.net.networktransaction import NetworkTransaction
+from webkitpy.common.net.layout_test_results import LayoutTestResults
+from webkitpy.common.net.network_transaction import NetworkTransaction
 
 
 RESULTS_URL_BASE = 'https://storage.googleapis.com/chromium-layout-test-archives'
@@ -86,7 +86,7 @@ class BuildBot(object):
         both with and without ("ignored").
         """
         url_base = "%s/%s" % (self.builder_results_url_base(build.builder_name), build.build_number)
-        return NetworkTransaction(convert_404_to_None=True).run(
+        return NetworkTransaction(return_none_on_404=True).run(
             lambda: self._fetch_file(url_base, "retry_summary.json"))
 
     def accumulated_results_url_base(self, builder_name):
@@ -103,9 +103,9 @@ class BuildBot(object):
     @memoized
     def fetch_layout_test_results(self, results_url):
         """Returns a LayoutTestResults object for results fetched from a given URL."""
-        results_file = NetworkTransaction(convert_404_to_None=True).run(
+        results_file = NetworkTransaction(return_none_on_404=True).run(
             lambda: self._fetch_file(results_url, "failing_results.json"))
-        revision = NetworkTransaction(convert_404_to_None=True).run(
+        revision = NetworkTransaction(return_none_on_404=True).run(
             lambda: self._fetch_file(results_url, "LAST_CHANGE"))
         if not revision:
             results_file = None
@@ -120,3 +120,33 @@ class BuildBot(object):
         # urlopen returns a file-like object which sometimes works fine with str()
         # but sometimes is a addinfourl object.  In either case calling read() is correct.
         return result.read()
+
+
+def current_build_link(host):
+    """Returns a link to the current job if running on buildbot, or None."""
+    master_name = host.environ.get('BUILDBOT_MASTERNAME')
+    builder_name = host.environ.get('BUILDBOT_BUILDERNAME')
+    build_number = host.environ.get('BUILDBOT_BUILDNUMBER')
+    if not (master_name and builder_name and build_number):
+        return None
+    return 'https://build.chromium.org/p/%s/builders/%s/builds/%s' % (master_name, builder_name, build_number)
+
+
+def filter_latest_builds(builds):
+    """Filters Build objects to include only the latest for each builder.
+
+    Args:
+        builds: A collection of Build objects.
+
+    Returns:
+        A list of Build objects; only one Build object per builder name. If
+        there are only Builds with no build number, then one is kept; if there
+        are Builds with build numbers, then the one with the highest build
+        number is kept.
+    """
+    latest_builds = {}
+    for build in builds:
+        builder = build.builder_name
+        if builder not in latest_builds or build.build_number > latest_builds[builder].build_number:
+            latest_builds[builder] = build
+    return sorted(latest_builds.values())

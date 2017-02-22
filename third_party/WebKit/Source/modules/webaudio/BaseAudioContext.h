@@ -29,8 +29,8 @@
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "core/dom/ActiveDOMObject.h"
 #include "core/dom/DOMTypedArray.h"
+#include "core/dom/SuspendableObject.h"
 #include "core/events/EventListener.h"
 #include "modules/EventTargetModules.h"
 #include "modules/ModulesExport.h"
@@ -52,6 +52,7 @@ class AnalyserNode;
 class AudioBuffer;
 class AudioBufferCallback;
 class AudioBufferSourceNode;
+class AudioContextOptions;
 class AudioListener;
 class BaseAudioContextTest;
 class BiquadFilterNode;
@@ -85,9 +86,10 @@ class WaveShaperNode;
 // are created from it.  For thread safety between the audio thread and the main
 // thread, it has a rendering graph locking mechanism.
 
-class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
-                                        public ActiveScriptWrappable,
-                                        public ActiveDOMObject {
+class MODULES_EXPORT BaseAudioContext
+    : public EventTargetWithInlineData,
+      public ActiveScriptWrappable<BaseAudioContext>,
+      public SuspendableObject {
   USING_GARBAGE_COLLECTED_MIXIN(BaseAudioContext);
   DEFINE_WRAPPERTYPEINFO();
 
@@ -100,7 +102,9 @@ class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
   enum AudioContextState { Suspended, Running, Closed };
 
   // Create an AudioContext for rendering to the audio hardware.
-  static BaseAudioContext* create(Document&, ExceptionState&);
+  static BaseAudioContext* create(Document&,
+                                  const AudioContextOptions&,
+                                  ExceptionState&);
 
   ~BaseAudioContext() override;
 
@@ -113,7 +117,7 @@ class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
   }
 
   // Document notification
-  void contextDestroyed() final;
+  void contextDestroyed(ExecutionContext*) final;
   bool hasPendingActivity() const final;
 
   // Cannnot be called from the audio thread.
@@ -137,7 +141,20 @@ class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
   }
 
   float sampleRate() const {
-    return m_destinationNode ? m_destinationNode->handler().sampleRate() : 0;
+    return m_destinationNode
+               ? m_destinationNode->audioDestinationHandler().sampleRate()
+               : closedContextSampleRate();
+  }
+
+  float framesPerBuffer() const {
+    return m_destinationNode
+               ? m_destinationNode->audioDestinationHandler().framesPerBuffer()
+               : 0;
+  }
+
+  size_t callbackBufferSize() const {
+    return m_destinationNode ? m_destinationNode->handler().callbackBufferSize()
+                             : 0;
   }
 
   String state() const;
@@ -238,14 +255,20 @@ class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
   void notifySourceNodeFinishedProcessing(AudioHandler*);
 
   // Called at the start of each render quantum.
-  void handlePreRenderTasks();
+  void handlePreRenderTasks(const AudioIOPosition& outputPosition);
 
   // Called at the end of each render quantum.
   void handlePostRenderTasks();
 
-  // Called periodically at the end of each render quantum to release finished
-  // source nodes.
-  void releaseFinishedSourceNodes();
+  // Called periodically at the end of each render quantum to release
+  // finished source nodes.  Updates m_finishedSourceNodes with nodes
+  // to be deleted.  Returns true if any node needs deletion.  Must be
+  // run from the audio thread.
+  bool releaseFinishedSourceNodes();
+
+  // The finished source nodes found by |releaseFinishedSourceNodes|
+  // will be removed on the main thread, which is done here.
+  void removeFinishedSourceNodes(bool needsRemoval);
 
   // Keeps track of the number of connections made.
   void incrementConnectionCount() {
@@ -267,7 +290,7 @@ class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
   void lock() { deferredTaskHandler().lock(); }
   bool tryLock() { return deferredTaskHandler().tryLock(); }
   void unlock() { deferredTaskHandler().unlock(); }
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   // Returns true if this thread owns the context's lock.
   bool isGraphOwner() { return deferredTaskHandler().isGraphOwner(); }
 #endif
@@ -346,6 +369,8 @@ class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
   // Returns whether the AudioContext is allowed to start rendering.
   bool isAllowedToStart() const;
 
+  AudioIOPosition outputPosition();
+
  private:
   friend class BaseAudioContextTest;
 
@@ -371,7 +396,10 @@ class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
   // haven't finished playing.  Make sure to release them here.
   void releaseActiveSourceNodes();
 
-  void removeFinishedSourceNodes();
+  // Actually remove the nodes noted for deletion by
+  // releaseFinishedSourceNodes.  Must be run from the main thread,
+  // and must not be run with the context lock.
+  void removeFinishedSourceNodesOnMainThread();
 
   // Listener for the PannerNodes
   Member<AudioListener> m_listener;
@@ -449,6 +477,7 @@ class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
   enum { MaxNumberOfChannels = 32 };
 
   Optional<AutoplayStatus> m_autoplayStatus;
+  AudioIOPosition m_outputPosition;
 };
 
 }  // namespace blink

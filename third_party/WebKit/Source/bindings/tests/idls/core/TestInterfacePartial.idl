@@ -54,6 +54,5 @@ typedef DOMString PartialString;
     attribute PartialEnumType partialPartialEnumTypeAttribute;
     void partialVoidMethodPartialCallbackTypeArg(PartialCallbackType partialCallbackTypeArg);
 
-    [ImplementedInPrivateScript] short shortMethodWithShortArgumentImplementedInPrivateScript(short value);
-    [ImplementedInPrivateScript] attribute DOMString stringAttribute;
+    [SecureContext] attribute long partialSecureContextLongAttribute;
 };

@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "chromecast/base/metrics/cast_metrics_helper.h"
+#include "chromecast/media/cdm/cast_cdm_context.h"
 #include "chromecast/media/cma/base/buffering_defs.h"
 #include "chromecast/media/cma/base/cma_logging.h"
 #include "chromecast/media/cma/base/coded_frame_provider.h"
@@ -56,19 +57,25 @@ VideoPipelineImpl::~VideoPipelineImpl() {
   }
   DCHECK(configs.size() <= 2);
   DCHECK(configs[0].IsValidConfig());
+  encryption_schemes_.resize(configs.size());
+
   VideoConfig video_config =
       DecoderConfigAdapter::ToCastVideoConfig(kPrimary, configs[0]);
+  encryption_schemes_[0] = video_config.encryption_scheme;
+
   VideoConfig secondary_config;
   if (configs.size() == 2) {
     DCHECK(configs[1].IsValidConfig());
     secondary_config = DecoderConfigAdapter::ToCastVideoConfig(kSecondary,
                                                                configs[1]);
     video_config.additional_config = &secondary_config;
+    encryption_schemes_[1] = secondary_config.encryption_scheme;
   }
 
   if (!video_decoder_->SetConfig(video_config)) {
     return ::media::PIPELINE_ERROR_INITIALIZATION_FAILED;
   }
+
   set_state(kFlushed);
   return ::media::PIPELINE_OK;
 }
@@ -86,6 +93,11 @@ void VideoPipelineImpl::OnVideoResolutionChanged(const Size& size) {
   if (!natural_size_changed_cb_.is_null()) {
     natural_size_changed_cb_.Run(gfx::Size(size.width, size.height));
   }
+
+  CastCdmContext* cdm = cdm_context();
+  if (cdm) {
+    cdm->SetVideoResolution(size.width, size.height);
+  }
 }
 
 void VideoPipelineImpl::OnUpdateConfig(
@@ -96,11 +108,22 @@ void VideoPipelineImpl::OnUpdateConfig(
     CMALOG(kLogControl) << __FUNCTION__ << " id:" << id << " "
                         << video_config.AsHumanReadableString();
 
-    bool success = video_decoder_->SetConfig(
-        DecoderConfigAdapter::ToCastVideoConfig(id, video_config));
+    DCHECK_LT(id, encryption_schemes_.size());
+    VideoConfig cast_video_config =
+        DecoderConfigAdapter::ToCastVideoConfig(id, video_config);
+    encryption_schemes_[static_cast<int>(id)] =
+        cast_video_config.encryption_scheme;
+
+    bool success = video_decoder_->SetConfig(cast_video_config);
     if (!success && !client().playback_error_cb.is_null())
       client().playback_error_cb.Run(::media::PIPELINE_ERROR_DECODE);
   }
+}
+
+const EncryptionScheme& VideoPipelineImpl::GetEncryptionScheme(
+    StreamId id) const {
+  DCHECK_LT(id, encryption_schemes_.size());
+  return encryption_schemes_[static_cast<int>(id)];
 }
 
 void VideoPipelineImpl::UpdateStatistics() {

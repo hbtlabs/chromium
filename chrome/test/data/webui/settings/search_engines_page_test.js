@@ -162,17 +162,15 @@ cr.define('settings_search_engines_page', function() {
       // Test that the <search-engine-entry> is populated according to its
       // underlying SearchEngine model.
       test('Initialization', function() {
-        var nameElement = entry.$$('.name');
-        assertTrue(!!nameElement);
-        assertEquals(searchEngine.displayName, nameElement.textContent);
-
-        var keywordElement = entry.$$('.keyword-column');
-        assertTrue(!!keywordElement);
-        assertEquals(searchEngine.keyword, keywordElement.textContent);
-
-        var urlElement = entry.$$('.url-column');
-        assertTrue(!!urlElement);
-        assertEquals(searchEngine.url, urlElement.textContent);
+        assertEquals(
+            searchEngine.displayName,
+            entry.root.querySelector('#name-column').textContent.trim());
+        assertEquals(
+            searchEngine.keyword,
+            entry.root.querySelector('#keyword-column').textContent);
+        assertEquals(
+            searchEngine.url,
+            entry.root.querySelector('#url-column').textContent);
       });
 
       test('Remove_Enabled', function() {
@@ -261,6 +259,16 @@ cr.define('settings_search_engines_page', function() {
       test('Edit_Disabled', function() {
         testButtonDisabled(createSampleSearchEngine(true, false, true), 'edit');
       });
+
+      test('All_Disabled', function() {
+        entry.engine = createSampleSearchEngine(true, false, false);
+        Polymer.dom.flush();
+        assertTrue(entry.hasAttribute('show-dots_'));
+
+        entry.engine = createSampleSearchEngine(false, false, false);
+        Polymer.dom.flush();
+        assertFalse(entry.hasAttribute('show-dots_'));
+      });
     });
   }
 
@@ -285,6 +293,7 @@ cr.define('settings_search_engines_page', function() {
         PolymerTest.clearBody();
         page = document.createElement('settings-search-engines-page');
         document.body.appendChild(page);
+        return browserProxy.whenCalled('getSearchEnginesList');
       });
 
       teardown(function() { page.remove(); });
@@ -292,31 +301,44 @@ cr.define('settings_search_engines_page', function() {
       // Tests that the page is querying and displaying search engine info on
       // startup.
       test('Initialization', function() {
-        return browserProxy.whenCalled('getSearchEnginesList').then(function() {
-          var searchEnginesLists = Polymer.dom(page.shadowRoot).
-              querySelectorAll('settings-search-engines-list');
-          assertEquals(2, searchEnginesLists.length);
+        var searchEnginesLists = page.shadowRoot.
+            querySelectorAll('settings-search-engines-list');
+        assertEquals(2, searchEnginesLists.length);
 
-          // Note: iron-list may create hidden children, so test the length
-          // if IronList.items instead of the child nodes.
-          Polymer.dom.flush();
-          var defaultsList = searchEnginesLists[0];
-          var defaultsEntries = Polymer.dom(defaultsList.shadowRoot).
-              querySelector('iron-list').items;
-          assertEquals(
-              searchEnginesInfo.defaults.length, defaultsEntries.length);
+        // Note: iron-list may create hidden children, so test the length
+        // if IronList.items instead of the child nodes.
+        Polymer.dom.flush();
+        var defaultsList = searchEnginesLists[0];
+        var defaultsEntries = Polymer.dom(defaultsList.shadowRoot).
+            querySelector('iron-list').items;
+        assertEquals(
+            searchEnginesInfo.defaults.length, defaultsEntries.length);
 
-          var othersList = searchEnginesLists[1];
-          var othersEntries = Polymer.dom(othersList.shadowRoot).
-              querySelector('iron-list').items;
-          assertEquals(
-              searchEnginesInfo.others.length, othersEntries.length);
+        var othersList = searchEnginesLists[1];
+        var othersEntries = Polymer.dom(othersList.shadowRoot).
+            querySelector('iron-list').items;
+        assertEquals(
+            searchEnginesInfo.others.length, othersEntries.length);
 
-          var extensionEntries = Polymer.dom(page.shadowRoot).
-              querySelector('iron-list').items;
-          assertEquals(
-              searchEnginesInfo.extensions.length, extensionEntries.length);
+        var extensionEntries = Polymer.dom(page.shadowRoot).
+            querySelector('iron-list').items;
+        assertEquals(
+            searchEnginesInfo.extensions.length, extensionEntries.length);
+      });
+
+      // Test that the "no other search engines" message is shown/hidden as
+      // expected.
+      test('NoOtherSearchEnginesMessage', function() {
+        var message = page.root.querySelector('#noOtherEngines');
+        assertTrue(!!message);
+        assertFalse(message.hasAttribute('hidden'));
+
+        cr.webUIListenerCallback('search-engines-changed', {
+          defaults: [],
+          others: [createSampleSearchEngine()],
+          extensions: [],
         });
+        assertTrue(message.hasAttribute('hidden'));
       });
 
       // Tests that the add search engine dialog opens when the corresponding

@@ -21,8 +21,6 @@
 #include "base/metrics/sparse_histogram.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
-#include "base/sys_info.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/input_method/candidate_window_controller.h"
 #include "chrome/browser/chromeos/input_method/component_extension_ime_manager_impl.h"
@@ -34,6 +32,7 @@
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/system/devicemode.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "third_party/icu/source/common/unicode/uloc.h"
@@ -131,6 +130,8 @@ void InputMethodManagerImpl::StateImpl::InitFrom(const StateImpl& other) {
   enabled_extension_imes = other.enabled_extension_imes;
   extra_input_methods = other.extra_input_methods;
   menu_activated = other.menu_activated;
+  allowed_keyboard_layout_input_method_ids =
+      other.allowed_keyboard_layout_input_method_ids;
 }
 
 bool InputMethodManagerImpl::StateImpl::IsActive() const {
@@ -256,7 +257,12 @@ void InputMethodManagerImpl::StateImpl::EnableLoginLayouts(
   for (size_t i = 0; i < initial_layouts.size(); ++i) {
     if (manager_->util_.IsValidInputMethodId(initial_layouts[i])) {
       if (manager_->IsLoginKeyboard(initial_layouts[i])) {
-        layouts.push_back(initial_layouts[i]);
+        if (IsInputMethodAllowed(initial_layouts[i])) {
+          layouts.push_back(initial_layouts[i]);
+        } else {
+          DVLOG(1) << "EnableLoginLayouts: ignoring layout disallowd by policy:"
+                   << initial_layouts[i];
+        }
       } else {
         DVLOG(1)
             << "EnableLoginLayouts: ignoring non-login initial keyboard layout:"
@@ -273,8 +279,10 @@ void InputMethodManagerImpl::StateImpl::EnableLoginLayouts(
     const std::string& candidate = candidates[i];
     // Not efficient, but should be fine, as the two vectors are very
     // short (2-5 items).
-    if (!Contains(layouts, candidate) && manager_->IsLoginKeyboard(candidate))
+    if (!Contains(layouts, candidate) && manager_->IsLoginKeyboard(candidate) &&
+        IsInputMethodAllowed(candidate)) {
       layouts.push_back(candidate);
+    }
   }
 
   manager_->MigrateInputMethods(&layouts);
@@ -335,6 +343,11 @@ void InputMethodManagerImpl::StateImpl::EnableLockScreenLayouts() {
 bool InputMethodManagerImpl::StateImpl::EnableInputMethodImpl(
     const std::string& input_method_id,
     std::vector<std::string>* new_active_input_method_ids) const {
+  if (!IsInputMethodAllowed(input_method_id)) {
+    DVLOG(1) << "EnableInputMethod: " << input_method_id << " is not allowed.";
+    return false;
+  }
+
   DCHECK(new_active_input_method_ids);
   if (!manager_->util_.IsValidInputMethodId(input_method_id)) {
     DVLOG(1) << "EnableInputMethod: Invalid ID: " << input_method_id;
@@ -394,6 +407,54 @@ bool InputMethodManagerImpl::StateImpl::ReplaceEnabledInputMethods(
                        active_input_method_ids.size());
 
   return true;
+}
+
+bool InputMethodManagerImpl::StateImpl::SetAllowedInputMethods(
+    const std::vector<std::string>& new_allowed_input_method_ids) {
+  allowed_keyboard_layout_input_method_ids.clear();
+  for (auto input_method_id : new_allowed_input_method_ids) {
+    std::string migrated_id =
+        manager_->util_.MigrateInputMethod(input_method_id);
+    if (manager_->util_.IsValidInputMethodId(migrated_id)) {
+      allowed_keyboard_layout_input_method_ids.push_back(migrated_id);
+    }
+  }
+
+  if (allowed_keyboard_layout_input_method_ids.empty()) {
+    // None of the passed input methods were valid, so allow everything.
+    return false;
+  }
+
+  // Enable all allowed keyboard layout input methods. Leave all non-keyboard
+  // input methods enabled.
+  std::vector<std::string> new_active_input_method_ids(
+      allowed_keyboard_layout_input_method_ids);
+  for (auto active_input_method_id : active_input_method_ids) {
+    if (!manager_->util_.IsKeyboardLayout(active_input_method_id))
+      new_active_input_method_ids.push_back(active_input_method_id);
+  }
+  return ReplaceEnabledInputMethods(new_active_input_method_ids);
+}
+
+const std::vector<std::string>&
+InputMethodManagerImpl::StateImpl::GetAllowedInputMethods() {
+  return allowed_keyboard_layout_input_method_ids;
+}
+
+bool InputMethodManagerImpl::StateImpl::IsInputMethodAllowed(
+    const std::string& input_method_id) const {
+  // Every input method is allowed if SetAllowedKeyboardLayoutInputMethods has
+  // not been called.
+  if (allowed_keyboard_layout_input_method_ids.empty())
+    return true;
+
+  // We only restrict keyboard layouts.
+  if (!manager_->util_.IsKeyboardLayout(input_method_id))
+    return true;
+
+  return Contains(allowed_keyboard_layout_input_method_ids, input_method_id) ||
+         Contains(allowed_keyboard_layout_input_method_ids,
+                  manager_->util_.MigrateInputMethod(input_method_id));
 }
 
 void InputMethodManagerImpl::StateImpl::ChangeInputMethod(
@@ -862,7 +923,7 @@ InputMethodManagerImpl::InputMethodManagerImpl(
       is_ime_menu_activated_(false) {
   // TODO(mohsen): Revisit using FakeImeKeyboard with mash when InputController
   // work is ready. http://crbug.com/601981
-  if (base::SysInfo::IsRunningOnChromeOS() && !chrome::IsRunningInMash())
+  if (IsRunningAsSystemCompositor() && !chrome::IsRunningInMash())
     keyboard_.reset(ImeKeyboard::Create());
   else
     keyboard_.reset(new FakeImeKeyboard());
@@ -1215,7 +1276,13 @@ void InputMethodManagerImpl::MaybeNotifyImeMenuActivationChanged() {
 }
 
 void InputMethodManagerImpl::OverrideKeyboardUrlRef(const std::string& keyset) {
-  GURL url = keyboard::GetOverrideContentUrl();
+  GURL input_view_url;
+  if (GetActiveIMEState()) {
+    input_view_url =
+        GetActiveIMEState()->GetCurrentInputMethod().input_view_url();
+  }
+  GURL url = input_view_url.is_empty() ? keyboard::GetOverrideContentUrl()
+                                       : input_view_url;
 
   // If fails to find ref or tag "id" in the ref, it means the current IME is
   // not system IME, and we don't support show emoji, handwriting or voice
@@ -1223,6 +1290,7 @@ void InputMethodManagerImpl::OverrideKeyboardUrlRef(const std::string& keyset) {
   if (!url.has_ref())
     return;
   std::string overridden_ref = url.ref();
+
   auto i = overridden_ref.find("id=");
   if (i == std::string::npos)
     return;
@@ -1230,8 +1298,7 @@ void InputMethodManagerImpl::OverrideKeyboardUrlRef(const std::string& keyset) {
   if (keyset.empty()) {
     // Resets the url as the input method default url and notify the hash
     // changed to VK.
-    keyboard::SetOverrideContentUrl(
-        GetActiveIMEState()->GetCurrentInputMethod().input_view_url());
+    keyboard::SetOverrideContentUrl(input_view_url);
     keyboard::KeyboardController* keyboard_controller =
         keyboard::KeyboardController::GetInstance();
     if (keyboard_controller)
@@ -1254,6 +1321,11 @@ void InputMethodManagerImpl::OverrideKeyboardUrlRef(const std::string& keyset) {
   GURL::Replacements replacements;
   replacements.SetRefStr(overridden_ref);
   keyboard::SetOverrideContentUrl(url.ReplaceComponents(replacements));
+
+  keyboard::KeyboardController* keyboard_controller =
+      keyboard::KeyboardController::GetInstance();
+  if (keyboard_controller)
+    keyboard_controller->Reload();
 }
 
 bool InputMethodManagerImpl::IsEmojiHandwritingVoiceOnImeMenuEnabled() {

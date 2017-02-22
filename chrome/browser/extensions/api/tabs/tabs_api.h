@@ -26,10 +26,6 @@ class GURL;
 class SkBitmap;
 class TabStripModel;
 
-namespace base {
-class DictionaryValue;
-}
-
 namespace content {
 class WebContents;
 }
@@ -238,9 +234,8 @@ class ExecuteCodeInTabFunction : public ExecuteCodeFunction {
   // ExtensionFunction:
   bool HasPermission() override;
 
-  // Initialize the |execute_tab_id_| and |details_| if they haven't already
-  // been. Returns whether initialization was successful.
-  bool Init() override;
+  // Initializes |execute_tab_id_| and |details_|.
+  InitResult Init() override;
   bool CanExecuteScriptOnPage() override;
   ScriptExecutor* GetScriptExecutor() override;
   bool IsWebView() const override;

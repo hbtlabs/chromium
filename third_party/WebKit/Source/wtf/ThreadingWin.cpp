@@ -125,27 +125,18 @@ typedef struct tagTHREADNAME_INFO {
 } THREADNAME_INFO;
 #pragma pack(pop)
 
-static Mutex* atomicallyInitializedStaticMutex;
+namespace internal {
 
-void lockAtomicallyInitializedStaticMutex() {
-  ASSERT(atomicallyInitializedStaticMutex);
-  atomicallyInitializedStaticMutex->lock();
+ThreadIdentifier currentThreadSyscall() {
+  return static_cast<ThreadIdentifier>(GetCurrentThreadId());
 }
 
-void unlockAtomicallyInitializedStaticMutex() {
-  atomicallyInitializedStaticMutex->unlock();
-}
+}  // namespace internal
 
 void initializeThreading() {
   // This should only be called once.
-  ASSERT(!atomicallyInitializedStaticMutex);
+  WTFThreadData::initialize();
 
-  // StringImpl::empty() does not construct its static string in a threadsafe
-  // fashion, so ensure it has been initialized from here.
-  StringImpl::empty();
-  StringImpl::empty16Bit();
-  atomicallyInitializedStaticMutex = new Mutex;
-  wtfThreadData();
   initializeDates();
   // Force initialization of static DoubleToStringConverter converter variable
   // inside EcmaScriptConverter function while we are in single thread mode.
@@ -153,7 +144,7 @@ void initializeThreading() {
 }
 
 ThreadIdentifier currentThread() {
-  return static_cast<ThreadIdentifier>(GetCurrentThreadId());
+  return wtfThreadData().threadId();
 }
 
 MutexBase::MutexBase(bool recursive) {
@@ -171,7 +162,7 @@ void MutexBase::lock() {
 }
 
 void MutexBase::unlock() {
-  ASSERT(m_mutex.m_recursionCount);
+  DCHECK(m_mutex.m_recursionCount);
   --m_mutex.m_recursionCount;
   LeaveCriticalSection(&m_mutex.m_internalMutex);
 }
@@ -389,13 +380,8 @@ DWORD absoluteTimeToWaitTimeoutInterval(double absoluteTime) {
   return static_cast<DWORD>((absoluteTime - currentTime) * 1000.0);
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 static bool s_threadCreated = false;
-
-bool isAtomicallyInitializedStaticMutexLockHeld() {
-  return atomicallyInitializedStaticMutex &&
-         atomicallyInitializedStaticMutex->locked();
-}
 
 bool isBeforeThreadCreated() {
   return !s_threadCreated;

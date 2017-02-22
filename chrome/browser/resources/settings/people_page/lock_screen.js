@@ -37,7 +37,52 @@ Polymer({
       type: Object,
       observer: 'onSetModesChanged_'
     },
+
+    /**
+     * writeUma_ is a function that handles writing uma stats. It may be
+     * overridden for tests.
+     *
+     * @type {Function}
+     * @private
+     */
+    writeUma_: {
+      type: Object,
+      value: function() { return settings.recordLockScreenProgress; }
+    },
+
+    /**
+     * True if pin unlock settings should be displayed on this machine.
+     * @private
+     */
+    pinUnlockEnabled_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('pinUnlockEnabled');
+      },
+      readOnly: true,
+    },
+
+    /**
+     * True if fingerprint unlock settings should be displayed on this machine.
+     * @private
+     */
+    fingerprintUnlockEnabled_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('fingerprintUnlockEnabled');
+      },
+      readOnly: true,
+    },
+
+    /** @private */
+    numFingerprints_: {
+      type: Number,
+      value: 0,
+    },
   },
+
+  /** @private {?settings.FingerprintBrowserProxy} */
+  browserProxy_: null,
 
   /** selectedUnlockType is defined in LockStateBehavior. */
   observers: ['selectedUnlockTypeChanged_(selectedUnlockType)'],
@@ -47,20 +92,34 @@ Polymer({
     // currentRouteChanged is not called during the initial navigation. If the
     // user navigates directly to the lockScreen page, we still want to show the
     // password prompt page.
-    this.currentRouteChanged();
+    this.currentRouteChanged(settings.Route.LOCK_SCREEN,
+        settings.Route.LOCK_SCREEN);
+    this.browserProxy_ = settings.FingerprintBrowserProxyImpl.getInstance();
   },
 
   /**
    * Overridden from settings.RouteObserverBehavior.
+   * @param {!settings.Route} newRoute
+   * @param {!settings.Route} oldRoute
    * @protected
    */
-  currentRouteChanged: function() {
-    if (settings.getCurrentRoute() == settings.Route.LOCK_SCREEN &&
-        !this.setModes_) {
+  currentRouteChanged: function(newRoute, oldRoute) {
+    if (newRoute == settings.Route.LOCK_SCREEN &&
+        this.fingerprintUnlockEnabled_ &&
+        this.browserProxy_) {
+      this.browserProxy_.getNumFingerprints().then(
+          function(numFingerprints) {
+            this.numFingerprints_ = numFingerprints;
+          }.bind(this));
+    }
+
+    if (newRoute == settings.Route.LOCK_SCREEN && !this.setModes_) {
       this.$.passwordPrompt.open();
-    } else {
+    } else if (newRoute != settings.Route.FINGERPRINT &&
+        oldRoute != settings.Route.FINGERPRINT) {
       // If the user navigated away from the lock screen settings page they will
-      // have to re-enter their password.
+      // have to re-enter their password. An exception is if they are navigating
+      // to or from the fingerprint subpage.
       this.setModes_ = undefined;
     }
   },
@@ -119,7 +178,27 @@ Polymer({
   },
 
   /** @private */
-  onConfigurePin_: function() {
+  getDescriptionText_: function() {
+    if (this.numFingerprints_ > 0) {
+      return this.i18n('lockScreenNumberFingerprints',
+          this.numFingerprints_.toString());
+    }
+
+    return this.i18n('lockScreenEditFingerprintsDescription');
+  },
+
+  /**
+   * @param {!Event} e
+   * @private
+   */
+  onConfigurePin_: function(e) {
+    e.preventDefault();
     this.$.setupPin.open();
+    this.writeUma_(LockScreenProgress.CHOOSE_PIN_OR_PASSWORD);
+  },
+
+  /** @private */
+  onEditFingerprints_: function() {
+    settings.navigateTo(settings.Route.FINGERPRINT);
   },
 });

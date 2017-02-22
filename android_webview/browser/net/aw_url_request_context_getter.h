@@ -31,8 +31,6 @@ class URLRequestJobFactory;
 
 namespace android_webview {
 
-class AwNetworkDelegate;
-
 class AwURLRequestContextGetter : public net::URLRequestContextGetter {
  public:
   AwURLRequestContextGetter(
@@ -48,6 +46,8 @@ class AwURLRequestContextGetter : public net::URLRequestContextGetter {
   // NetLog is thread-safe, so clients can call this method from arbitrary
   // threads (UI and IO).
   net::NetLog* GetNetLog();
+
+  static void set_check_cleartext_permitted(bool permitted);
 
  private:
   friend class AwBrowserContext;

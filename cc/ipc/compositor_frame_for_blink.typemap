@@ -9,7 +9,6 @@ traits_headers = [
   "//cc/ipc/compositor_frame_struct_traits.h",
   "//cc/ipc/filter_operation_struct_traits.h",
   "//cc/ipc/filter_operations_struct_traits.h",
-  "//cc/ipc/render_pass_id_struct_traits.h",
   "//cc/ipc/render_pass_struct_traits.h",
   "//cc/ipc/selection_struct_traits.h",
   "//cc/ipc/shared_quad_state_struct_traits.h",
@@ -25,11 +24,9 @@ traits_headers = [
   "//ui/gfx/mojo/transform_struct_traits.h",
   "//ui/events/mojo/latency_info_struct_traits.h",
 ]
-sources = [
-  "//cc/ipc:struct_traits",
-]
 public_deps = [
   "//cc",
+  "//cc/ipc:interfaces",
   "//gpu/ipc/common:interfaces",
   "//mojo/common:common_custom_types",
   "//skia/public/interfaces",

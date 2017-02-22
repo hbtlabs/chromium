@@ -834,7 +834,7 @@ public class java.util.HashSet {
     content = file(os.path.join(script_dir,
         'java/src/org/chromium/example/jni_generator/SampleForTests.java')
         ).read()
-    golden_file = os.path.join(script_dir, 'golden_sample_for_tests_jni.h')
+    golden_file = os.path.join(script_dir, 'SampleForTests_jni.golden')
     golden_content = file(golden_file).read()
     jni_from_java = jni_generator.JNIFromJavaSource(
         content, 'org/chromium/example/jni_generator/SampleForTests',
@@ -949,6 +949,33 @@ class Foo {
     h = jni_generator.InlHeaderFileGenerator('', 'org/chromium/TestJni',
                                              natives, [], [], test_options)
     self.assertGoldenTextEquals(h.GetContent())
+
+  def testMainDexFile(self):
+    test_data = """
+    package org.chromium.example.jni_generator;
+
+    @MainDex
+    class Test {
+        private static native int nativeStaticMethod(long nativeTest, int arg1);
+    }
+    """
+    options = TestOptions()
+    jni_from_java = jni_generator.JNIFromJavaSource(
+      test_data, 'org/chromium/foo/Bar', options)
+    self.assertGoldenTextEquals(jni_from_java.GetContent())
+
+  def testNonMainDexFile(self):
+    test_data = """
+    package org.chromium.example.jni_generator;
+
+    class Test {
+        private static native int nativeStaticMethod(long nativeTest, int arg1);
+    }
+    """
+    options = TestOptions()
+    jni_from_java = jni_generator.JNIFromJavaSource(
+      test_data, 'org/chromium/foo/Bar', options)
+    self.assertGoldenTextEquals(jni_from_java.GetContent())
 
   def testNativeExportsOnlyOption(self):
     test_data = """

@@ -25,7 +25,11 @@ class Arguments;
 }
 
 namespace extensions {
+class APIBindingHooks;
 class APIEventHandler;
+class APIRequestHandler;
+class APISignature;
+class APITypeReferenceMap;
 
 // A class that vends v8::Objects for extension APIs. These APIs have function
 // interceptors for all exposed methods, which call back into the APIBinding.
@@ -33,20 +37,10 @@ class APIEventHandler;
 // signature, throwing an error if they don't match.
 // There should only need to be a single APIBinding object for each API, and
 // each can vend multiple v8::Objects for different contexts.
-// TODO(devlin): What's the lifetime of this object?
+// This object is designed to be one-per-isolate, but used across separate
+// contexts.
 class APIBinding {
  public:
-  // The callback to called when an API method is invoked with matching
-  // arguments. This passes the name of the api method and the arguments it
-  // was passed, as well as the current isolate, context, and callback value.
-  // Note that the callback can be empty if none was passed.
-  using APIMethodCallback =
-      base::Callback<void(const std::string& name,
-                          std::unique_ptr<base::ListValue> arguments,
-                          v8::Isolate*,
-                          v8::Local<v8::Context>,
-                          v8::Local<v8::Function>)>;
-
   // The callback for determining if a given API method (specified by |name|)
   // is available.
   using AvailabilityCallback = base::Callback<bool(const std::string& name)>;
@@ -54,36 +48,38 @@ class APIBinding {
   // The callback type for handling an API call.
   using HandlerCallback = base::Callback<void(gin::Arguments*)>;
 
-  // The ArgumentSpec::RefMap is required to outlive this object.
-  // |type_definitions| and |event_definitions| may be null if the API does not
-  // specify any types or events.
+  // The APITypeReferenceMap is required to outlive this object.
+  // |function_definitions|, |type_definitions| and |event_definitions|
+  // may be null if the API does not specify any of that category.
   APIBinding(const std::string& name,
-             const base::ListValue& function_definitions,
+             const base::ListValue* function_definitions,
              const base::ListValue* type_definitions,
              const base::ListValue* event_definitions,
-             const APIMethodCallback& callback,
-             ArgumentSpec::RefMap* type_refs);
+             const base::DictionaryValue* property_definitions,
+             std::unique_ptr<APIBindingHooks> binding_hooks,
+             APITypeReferenceMap* type_refs,
+             APIRequestHandler* request_handler,
+             APIEventHandler* event_handler);
   ~APIBinding();
 
   // Returns a new v8::Object for the API this APIBinding represents.
   v8::Local<v8::Object> CreateInstance(
       v8::Local<v8::Context> context,
       v8::Isolate* isolate,
-      APIEventHandler* event_handler,
       const AvailabilityCallback& is_available);
 
+  // Returns the JS interface to use when registering hooks with legacy custom
+  // bindings.
+  v8::Local<v8::Object> GetJSHookInterface(v8::Local<v8::Context> context);
+
  private:
-  using APISignature = std::vector<std::unique_ptr<ArgumentSpec>>;
+  // Initializes the object_template_ for this API. Called lazily when the
+  // first instance is created.
+  void InitializeTemplate(v8::Isolate* isolate);
 
-  // Per-context data that stores the callbacks that are used within the
-  // context. Since these callbacks are used within v8::Externals, v8 itself
-  // does not clean them up.
-  struct APIPerContextData : public base::SupportsUserData::Data {
-    APIPerContextData();
-    ~APIPerContextData() override;
-
-    std::vector<std::unique_ptr<HandlerCallback>> context_callbacks;
-  };
+  // Handler for getting the v8::Object associated with an event on the API.
+  static void GetEventObject(v8::Local<v8::Name>,
+                             const v8::PropertyCallbackInfo<v8::Value>& info);
 
   // Handles a call an API method with the given |name| and matches the
   // arguments against |signature|.
@@ -94,17 +90,37 @@ class APIBinding {
   // The root name of the API, e.g. "tabs" for chrome.tabs.
   std::string api_name_;
 
-  // A map from method name to expected signature.
-  std::map<std::string, std::unique_ptr<APISignature>> signatures_;
+  // A map from method name to method data.
+  struct MethodData;
+  std::map<std::string, std::unique_ptr<MethodData>> methods_;
 
-  // The names of all events associated with this API.
-  std::vector<std::string> event_names_;
+  // The events associated with this API.
+  struct EventData;
+  std::vector<std::unique_ptr<EventData>> events_;
 
-  // The callback to use when an API is invoked with valid arguments.
-  APIMethodCallback method_callback_;
+  // The pair for enum entry is <original, js-ified>. JS enum entries use
+  // SCREAMING_STYLE (whereas our API enums are just inconsistent).
+  using EnumEntry = std::pair<std::string, std::string>;
+  // A map of <name, values> for the enums on this API.
+  std::map<std::string, std::vector<EnumEntry>> enums_;
+
+  // The associated properties of the API, if any.
+  const base::DictionaryValue* property_definitions_;
+
+  // The registered hooks for this API.
+  std::unique_ptr<APIBindingHooks> binding_hooks_;
 
   // The reference map for all known types; required to outlive this object.
-  const ArgumentSpec::RefMap* type_refs_;
+  const APITypeReferenceMap* type_refs_;
+
+  // The associated request handler, shared between this and other bindings.
+  // Required to outlive this object.
+  APIRequestHandler* request_handler_;
+
+  // The template for this API. Note: some methods may only be available in
+  // certain contexts, but this template contains all methods. Those that are
+  // unavailable are removed after object instantiation.
+  v8::Eternal<v8::ObjectTemplate> object_template_;
 
   base::WeakPtrFactory<APIBinding> weak_factory_;
 

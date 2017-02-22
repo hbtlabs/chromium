@@ -27,18 +27,23 @@ class CORE_EXPORT PointerEventManager
   WTF_MAKE_NONCOPYABLE(PointerEventManager);
 
  public:
-  PointerEventManager(LocalFrame*, MouseEventManager*);
+  PointerEventManager(LocalFrame&, MouseEventManager&);
   DECLARE_TRACE();
 
   // Sends the mouse pointer events and the boundary events
   // that it may cause. It also sends the compat mouse events
   // and sets the newNodeUnderMouse if the capturing is set
   // in this function.
-  WebInputEventResult sendMousePointerEvent(Node* target,
-                                            const AtomicString& type,
-                                            const PlatformMouseEvent&);
+  WebInputEventResult sendMousePointerEvent(
+      Node* target,
+      const String& canvasRegionId,
+      const AtomicString& type,
+      const WebMouseEvent&,
+      const Vector<WebMouseEvent>& coalescedEvents);
 
-  WebInputEventResult handleTouchEvents(const PlatformTouchEvent&);
+  WebInputEventResult handleTouchEvents(
+      const WebTouchEvent&,
+      const Vector<WebTouchEvent>& coalescedEvents);
 
   // Sends boundary events pointerout/leave/over/enter and
   // mouseout/leave/over/enter to the corresponding targets.
@@ -47,7 +52,8 @@ class CORE_EXPORT PointerEventManager
   // and their corresponding boundary events will be handled altogether by
   // sendMousePointerEvent function.
   void sendMouseAndPointerBoundaryEvents(Node* enteredNode,
-                                         const PlatformMouseEvent&);
+                                         const String& canvasRegionId,
+                                         const WebMouseEvent&);
 
   // Resets the internal state of this object.
   void clear();
@@ -71,10 +77,6 @@ class CORE_EXPORT PointerEventManager
   // Returns whether pointerId is for an active touch pointerevent and whether
   // the last event was sent to the given frame.
   bool isTouchPointerIdActiveOnFrame(int, LocalFrame*) const;
-
-  // TODO(crbug.com/625843): This can be hidden when mouse refactoring in
-  // EventHandler is done.
-  EventTarget* getMouseCapturingNode();
 
   // Returns true if the primary pointerdown corresponding to the given
   // |uniqueTouchEventId| was canceled. Also drops stale ids from
@@ -136,13 +138,14 @@ class CORE_EXPORT PointerEventManager
   // blockTouchPointers().
   void unblockTouchPointers();
 
-  // Generate the TouchInfos for a PlatformTouchEvent, hit-testing as necessary.
-  void computeTouchTargets(const PlatformTouchEvent&,
+  // Generate the TouchInfos for a WebTouchEvent, hit-testing as necessary.
+  void computeTouchTargets(const WebTouchEvent&,
                            HeapVector<TouchEventManager::TouchInfo>&);
 
   // Sends touch pointer events and sets consumed bits in TouchInfo array
   // based on the return value of pointer event handlers.
-  void dispatchTouchPointerEvents(const PlatformTouchEvent&,
+  void dispatchTouchPointerEvents(const WebTouchEvent&,
+                                  const Vector<WebTouchEvent>& coalescedEvents,
                                   HeapVector<TouchEventManager::TouchInfo>&);
 
   // Returns whether the event is consumed or not.
@@ -167,7 +170,8 @@ class CORE_EXPORT PointerEventManager
   EventTarget* processCaptureAndPositionOfPointerEvent(
       PointerEvent*,
       EventTarget* hitTestTarget,
-      const PlatformMouseEvent& = PlatformMouseEvent(),
+      const String& canvasRegionId = String(),
+      const WebMouseEvent& = WebMouseEvent(),
       bool sendMouseEvent = false);
 
   void removeTargetFromPointerCapturingMapping(PointerCapturingMap&,
@@ -219,6 +223,10 @@ class CORE_EXPORT PointerEventManager
   PointerEventFactory m_pointerEventFactory;
   Member<TouchEventManager> m_touchEventManager;
   Member<MouseEventManager> m_mouseEventManager;
+
+  // The pointerId of the PointerEvent currently being dispatched within this
+  // frame or 0 if none.
+  int m_dispatchingPointerId;
 };
 
 }  // namespace blink

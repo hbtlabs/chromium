@@ -22,16 +22,17 @@
 
 #include "core/frame/LocalFrame.h"
 #include "core/page/Page.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/plugins/PluginData.h"
 #include "wtf/Vector.h"
 #include "wtf/text/AtomicString.h"
 
 namespace blink {
 
-DOMPluginArray::DOMPluginArray(LocalFrame* frame) : DOMWindowProperty(frame) {}
+DOMPluginArray::DOMPluginArray(LocalFrame* frame) : ContextClient(frame) {}
 
 DEFINE_TRACE(DOMPluginArray) {
-  DOMWindowProperty::trace(visitor);
+  ContextClient::trace(visitor);
 }
 
 unsigned DOMPluginArray::length() const {
@@ -67,8 +68,12 @@ void DOMPluginArray::refresh(bool reload) {
   if (!frame())
     return;
   Page::refreshPlugins();
-  if (reload)
-    frame()->reload(FrameLoadTypeReload, ClientRedirectPolicy::ClientRedirect);
+  if (reload) {
+    frame()->reload(RuntimeEnabledFeatures::fasterLocationReloadEnabled()
+                        ? FrameLoadTypeReloadMainResource
+                        : FrameLoadTypeReload,
+                    ClientRedirectPolicy::ClientRedirect);
+  }
 }
 
 PluginData* DOMPluginArray::pluginData() const {

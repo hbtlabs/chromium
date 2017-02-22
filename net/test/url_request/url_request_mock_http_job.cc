@@ -184,6 +184,7 @@ void URLRequestMockHTTPJob::SetHeadersAndStart(const std::string& raw_headers) {
   // ParseRawHeaders expects \0 to end each header line.
   base::ReplaceSubstringsAfterOffset(
       &raw_headers_, 0, "\n", base::StringPiece("\0", 1));
+  total_received_bytes_ += raw_headers_.size();
   URLRequestFileJob::Start();
 }
 
@@ -200,15 +201,6 @@ bool URLRequestMockHTTPJob::GetMimeType(std::string* mime_type) const {
   HttpResponseInfo info;
   GetResponseInfoConst(&info);
   return info.headers.get() && info.headers->GetMimeType(mime_type);
-}
-
-int URLRequestMockHTTPJob::GetResponseCode() const {
-  HttpResponseInfo info;
-  GetResponseInfoConst(&info);
-  // If we have headers, get the response code from them.
-  if (info.headers.get())
-    return info.headers->response_code();
-  return URLRequestJob::GetResponseCode();
 }
 
 bool URLRequestMockHTTPJob::GetCharset(std::string* charset) {

@@ -12,6 +12,9 @@ import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
+import org.chromium.chrome.browser.tabmodel.TabModel;
+import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.net.NetworkChangeNotifier;
 
 import java.util.HashMap;
@@ -49,9 +52,26 @@ public class OfflinePageTabObserver
         }
     }
 
+    /** Class for observing TabModel without implementing a full interface. */
+    private class TabModelObserverImpl extends EmptyTabModelObserver {
+        public TabModelObserverImpl(TabModel model) {
+            if (model != null) {
+                model.addObserver(this);
+            }
+        }
+
+        @Override
+        public void tabRemoved(Tab tab) {
+            Log.d(TAG, "tabRemoved");
+            OfflinePageTabObserver.this.stopObservingTab(tab);
+            OfflinePageTabObserver.this.mSnackbarManager.dismissSnackbars(mSnackbarController);
+        }
+    }
+
     private Context mContext;
     private SnackbarManager mSnackbarManager;
     private SnackbarController mSnackbarController;
+    private TabModelObserverImpl mTabModelObserver;
 
     /** Map of observed tabs. */
     private final Map<Integer, TabState> mObservedTabs = new HashMap<>();
@@ -62,8 +82,13 @@ public class OfflinePageTabObserver
 
     private static OfflinePageTabObserver sInstance;
 
-    static void init(Context context, SnackbarManager manager, SnackbarController controller) {
-        sInstance = new OfflinePageTabObserver(context, manager, controller);
+    static void init(Context context, TabModel tabModel, SnackbarManager manager,
+            SnackbarController controller) {
+        if (sInstance == null) {
+            sInstance = new OfflinePageTabObserver(context, tabModel, manager, controller);
+            return;
+        }
+        sInstance.reinitialize(context, tabModel, manager, controller);
     }
 
     static OfflinePageTabObserver getInstance() {
@@ -88,14 +113,13 @@ public class OfflinePageTabObserver
     /**
      * Builds a new OfflinePageTabObserver.
      * @param context Android context.
+     * @param tabModel Tab model managing the observerd tab.
      * @param snackbarManager The snackbar manager to show and dismiss snackbars.
      * @param snackbarController Controller to use to build the snackbar.
      */
-    OfflinePageTabObserver(Context context, SnackbarManager snackbarManager,
+    OfflinePageTabObserver(Context context, TabModel tabModel, SnackbarManager snackbarManager,
             SnackbarController snackbarController) {
-        mContext = context;
-        mSnackbarManager = snackbarManager;
-        mSnackbarController = snackbarController;
+        reinitialize(context, tabModel, snackbarManager, snackbarController);
 
         // The first time observer is created snackbar has net yet been shown.
         mIsObservingNetworkChanges = false;
@@ -191,6 +215,16 @@ public class OfflinePageTabObserver
         Log.d(TAG, "Got connectivity event, connectionType: " + connectionType + ", is connected: "
                         + isConnected() + ", controller: " + mSnackbarController);
         maybeShowReloadSnackbar(mCurrentTab, true);
+
+        // Since we are loosing the connection, next time we connect, we still want to show a
+        // snackbar. This works in event that onConnectionTypeChanged happens, while Chrome is not
+        // visible. Making it visible after that would not trigger the snackbar, even though
+        // connection state changed. See http://crbug.com/651410
+        if (!isConnected()) {
+            for (TabState tabState : mObservedTabs.values()) {
+                tabState.wasSnackbarSeen = false;
+            }
+        }
     }
 
     @VisibleForTesting
@@ -250,5 +284,24 @@ public class OfflinePageTabObserver
     @VisibleForTesting
     void stopObservingNetworkChanges() {
         NetworkChangeNotifier.removeConnectionTypeObserver(this);
+    }
+
+    @VisibleForTesting
+    TabModelObserver getTabModelObserver() {
+        return mTabModelObserver;
+    }
+
+    boolean isCurrentContext(Context context) {
+        return mContext == context;
+    }
+
+    void reinitialize(Context context, TabModel tabModel, SnackbarManager manager,
+            SnackbarController controller) {
+        // TODO(fgorski): Work out if we need to also update network changes observer with the
+        // context change.
+        mContext = context;
+        mSnackbarManager = manager;
+        mSnackbarController = controller;
+        mTabModelObserver = this.new TabModelObserverImpl(tabModel);
     }
 }

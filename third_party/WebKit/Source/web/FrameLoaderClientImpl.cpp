@@ -66,12 +66,12 @@
 #include "modules/storage/DOMWindowStorageController.h"
 #include "modules/vr/NavigatorVR.h"
 #include "platform/Histogram.h"
-#include "platform/MIMETypeRegistry.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/exported/WrappedResourceResponse.h"
 #include "platform/network/HTTPParsers.h"
+#include "platform/network/mime/MIMETypeRegistry.h"
 #include "platform/plugins/PluginData.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebApplicationCacheHost.h"
@@ -190,11 +190,9 @@ void FrameLoaderClientImpl::runScriptsAtDocumentReady(bool documentIsEmpty) {
 
 void FrameLoaderClientImpl::didCreateScriptContext(
     v8::Local<v8::Context> context,
-    int extensionGroup,
     int worldId) {
   if (m_webFrame->client())
-    m_webFrame->client()->didCreateScriptContext(m_webFrame, context,
-                                                 extensionGroup, worldId);
+    m_webFrame->client()->didCreateScriptContext(m_webFrame, context, worldId);
 }
 
 void FrameLoaderClientImpl::willReleaseScriptContext(
@@ -205,13 +203,7 @@ void FrameLoaderClientImpl::willReleaseScriptContext(
                                                    worldId);
 }
 
-bool FrameLoaderClientImpl::allowScriptExtension(const String& extensionName,
-                                                 int extensionGroup,
-                                                 int worldId) {
-  if (m_webFrame->contentSettingsClient())
-    return m_webFrame->contentSettingsClient()->allowScriptExtension(
-        extensionName, extensionGroup, worldId);
-
+bool FrameLoaderClientImpl::allowScriptExtensions() {
   return true;
 }
 
@@ -289,11 +281,6 @@ void FrameLoaderClientImpl::didNotAllowScript() {
 void FrameLoaderClientImpl::didNotAllowPlugins() {
   if (m_webFrame->contentSettingsClient())
     m_webFrame->contentSettingsClient()->didNotAllowPlugins();
-}
-
-void FrameLoaderClientImpl::didUseKeygen() {
-  if (m_webFrame->contentSettingsClient())
-    m_webFrame->contentSettingsClient()->didUseKeygen();
 }
 
 bool FrameLoaderClientImpl::hasWebView() const {
@@ -418,9 +405,12 @@ void FrameLoaderClientImpl::dispatchWillCommitProvisionalLoad() {
     m_webFrame->client()->willCommitProvisionalLoad(m_webFrame);
 }
 
-void FrameLoaderClientImpl::dispatchDidStartProvisionalLoad() {
-  if (m_webFrame->client())
-    m_webFrame->client()->didStartProvisionalLoad(m_webFrame);
+void FrameLoaderClientImpl::dispatchDidStartProvisionalLoad(
+    DocumentLoader* loader) {
+  if (m_webFrame->client()) {
+    m_webFrame->client()->didStartProvisionalLoad(
+        WebDataSourceImpl::fromDocumentLoader(loader));
+  }
   if (WebDevToolsAgentImpl* devTools = devToolsAgent())
     devTools->didStartProvisionalLoad(m_webFrame->frame());
 }
@@ -474,14 +464,14 @@ void FrameLoaderClientImpl::dispatchDidChangeThemeColor() {
 
 static bool allowCreatingBackgroundTabs() {
   const WebInputEvent* inputEvent = WebViewImpl::currentInputEvent();
-  if (!inputEvent || (inputEvent->type != WebInputEvent::MouseUp &&
-                      (inputEvent->type != WebInputEvent::RawKeyDown &&
-                       inputEvent->type != WebInputEvent::KeyDown) &&
-                      inputEvent->type != WebInputEvent::GestureTap))
+  if (!inputEvent || (inputEvent->type() != WebInputEvent::MouseUp &&
+                      (inputEvent->type() != WebInputEvent::RawKeyDown &&
+                       inputEvent->type() != WebInputEvent::KeyDown) &&
+                      inputEvent->type() != WebInputEvent::GestureTap))
     return false;
 
   unsigned short buttonNumber;
-  if (WebInputEvent::isMouseEventType(inputEvent->type)) {
+  if (WebInputEvent::isMouseEventType(inputEvent->type())) {
     const WebMouseEvent* mouseEvent =
         static_cast<const WebMouseEvent*>(inputEvent);
 
@@ -502,10 +492,10 @@ static bool allowCreatingBackgroundTabs() {
     // The click is simulated when triggering the keypress event.
     buttonNumber = 0;
   }
-  bool ctrl = inputEvent->modifiers & WebMouseEvent::ControlKey;
-  bool shift = inputEvent->modifiers & WebMouseEvent::ShiftKey;
-  bool alt = inputEvent->modifiers & WebMouseEvent::AltKey;
-  bool meta = inputEvent->modifiers & WebMouseEvent::MetaKey;
+  bool ctrl = inputEvent->modifiers() & WebMouseEvent::ControlKey;
+  bool shift = inputEvent->modifiers() & WebMouseEvent::ShiftKey;
+  bool alt = inputEvent->modifiers() & WebMouseEvent::AltKey;
+  bool meta = inputEvent->modifiers() & WebMouseEvent::MetaKey;
 
   NavigationPolicy userPolicy;
   if (!navigationPolicyFromMouseEvent(buttonNumber, ctrl, shift, alt, meta,
@@ -542,7 +532,8 @@ NavigationPolicy FrameLoaderClientImpl::decidePolicyForNavigation(
       isBackForwardLoadType(toWebLocalFrameImpl(m_webFrame->parent())
                                 ->frame()
                                 ->loader()
-                                .loadType()) &&
+                                .documentLoader()
+                                ->loadType()) &&
       !toWebLocalFrameImpl(m_webFrame->parent())
            ->frame()
            ->document()
@@ -557,6 +548,12 @@ NavigationPolicy FrameLoaderClientImpl::decidePolicyForNavigation(
   navigationInfo.isHistoryNavigationInNewChildFrame =
       isHistoryNavigationInNewChildFrame;
   navigationInfo.isClientRedirect = isClientRedirect;
+  // Caching could be disabled for requests initiated by DevTools.
+  // TODO(ananta)
+  // We should extract the network cache state into a global component which
+  // can be queried here and wherever necessary.
+  navigationInfo.isCacheDisabled =
+      devToolsAgent() ? devToolsAgent()->cacheDisabled() : false;
   if (form)
     navigationInfo.form = WebFormElement(form);
 
@@ -602,6 +599,11 @@ void FrameLoaderClientImpl::loadURLExternally(const ResourceRequest& request,
   m_webFrame->client()->loadURLExternally(
       WrappedResourceRequest(request), static_cast<WebNavigationPolicy>(policy),
       suggestedName, shouldReplaceCurrentEntry);
+}
+
+void FrameLoaderClientImpl::loadErrorPage(int reason) {
+  if (m_webFrame->client())
+    m_webFrame->client()->loadErrorPage(reason);
 }
 
 bool FrameLoaderClientImpl::navigateBackForward(int offset) const {
@@ -682,6 +684,8 @@ DocumentLoader* FrameLoaderClientImpl::createDocumentLoader(
     const ResourceRequest& request,
     const SubstituteData& data,
     ClientRedirectPolicy clientRedirectPolicy) {
+  DCHECK(frame);
+
   WebDataSourceImpl* ds =
       WebDataSourceImpl::create(frame, request, data, clientRedirectPolicy);
   if (m_webFrame->client())
@@ -775,7 +779,7 @@ std::unique_ptr<WebMediaPlayer> FrameLoaderClientImpl::createWebMediaPlayer(
   HTMLMediaElementEncryptedMedia& encryptedMedia =
       HTMLMediaElementEncryptedMedia::from(htmlMediaElement);
   WebString sinkId(HTMLMediaElementAudioOutputDevice::sinkId(htmlMediaElement));
-  return wrapUnique(webFrame->client()->createMediaPlayer(
+  return WTF::wrapUnique(webFrame->client()->createMediaPlayer(
       source, client, &encryptedMedia, encryptedMedia.contentDecryptionModule(),
       sinkId));
 }
@@ -866,14 +870,21 @@ void FrameLoaderClientImpl::didChangeSandboxFlags(Frame* childFrame,
       WebFrame::fromFrame(childFrame), static_cast<WebSandboxFlags>(flags));
 }
 
+void FrameLoaderClientImpl::didSetFeaturePolicyHeader(
+    const WebParsedFeaturePolicyHeader& parsedHeader) {
+  if (m_webFrame->client())
+    m_webFrame->client()->didSetFeaturePolicyHeader(parsedHeader);
+}
+
 void FrameLoaderClientImpl::didAddContentSecurityPolicy(
     const String& headerValue,
     ContentSecurityPolicyHeaderType type,
-    ContentSecurityPolicyHeaderSource source) {
+    ContentSecurityPolicyHeaderSource source,
+    const std::vector<WebContentSecurityPolicyPolicy>& policies) {
   if (m_webFrame->client()) {
     m_webFrame->client()->didAddContentSecurityPolicy(
         headerValue, static_cast<WebContentSecurityPolicyType>(type),
-        static_cast<WebContentSecurityPolicySource>(source));
+        static_cast<WebContentSecurityPolicySource>(source), policies);
   }
 }
 
@@ -885,9 +896,11 @@ void FrameLoaderClientImpl::didChangeFrameOwnerProperties(
   m_webFrame->client()->didChangeFrameOwnerProperties(
       WebFrame::fromFrame(frameElement->contentFrame()),
       WebFrameOwnerProperties(
+          frameElement->browsingContextContainerName(),
           frameElement->scrollingMode(), frameElement->marginWidth(),
           frameElement->marginHeight(), frameElement->allowFullscreen(),
-          frameElement->csp(), frameElement->delegatedPermissions()));
+          frameElement->allowPaymentRequest(), frameElement->csp(),
+          frameElement->delegatedPermissions()));
 }
 
 void FrameLoaderClientImpl::dispatchWillStartUsingPeerConnectionHandler(
@@ -911,7 +924,7 @@ std::unique_ptr<WebServiceWorkerProvider>
 FrameLoaderClientImpl::createServiceWorkerProvider() {
   if (!m_webFrame->client())
     return nullptr;
-  return wrapUnique(m_webFrame->client()->createServiceWorkerProvider());
+  return WTF::wrapUnique(m_webFrame->client()->createServiceWorkerProvider());
 }
 
 bool FrameLoaderClientImpl::isControlledByServiceWorker(
@@ -938,7 +951,8 @@ FrameLoaderClientImpl::createApplicationCacheHost(
     WebApplicationCacheHostClient* client) {
   if (!m_webFrame->client())
     return nullptr;
-  return wrapUnique(m_webFrame->client()->createApplicationCacheHost(client));
+  return WTF::wrapUnique(
+      m_webFrame->client()->createApplicationCacheHost(client));
 }
 
 void FrameLoaderClientImpl::dispatchDidChangeManifest() {
@@ -988,6 +1002,11 @@ WebDevToolsAgentImpl* FrameLoaderClientImpl::devToolsAgent() {
 
 KURL FrameLoaderClientImpl::overrideFlashEmbedWithHTML(const KURL& url) {
   return m_webFrame->client()->overrideFlashEmbedWithHTML(WebURL(url));
+}
+
+void FrameLoaderClientImpl::setHasReceivedUserGesture() {
+  if (m_webFrame->client())
+    m_webFrame->client()->setHasReceivedUserGesture();
 }
 
 }  // namespace blink

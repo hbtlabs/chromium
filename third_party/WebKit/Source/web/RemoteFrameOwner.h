@@ -29,6 +29,7 @@ class RemoteFrameOwner final
   }
 
   // FrameOwner overrides:
+  Frame* contentFrame() const override { return m_frame.get(); }
   void setContentFrame(Frame&) override;
   void clearContentFrame() override;
   SandboxFlags getSandboxFlags() const override { return m_sandboxFlags; }
@@ -37,24 +38,36 @@ class RemoteFrameOwner final
   // TODO(dcheng): Implement.
   bool canRenderFallbackContent() const override { return false; }
   void renderFallbackContent() override {}
+
+  AtomicString browsingContextContainerName() const override {
+    return m_browsingContextContainerName;
+  }
   ScrollbarMode scrollingMode() const override { return m_scrolling; }
   int marginWidth() const override { return m_marginWidth; }
   int marginHeight() const override { return m_marginHeight; }
   bool allowFullscreen() const override { return m_allowFullscreen; }
+  bool allowPaymentRequest() const override { return m_allowPaymentRequest; }
   AtomicString csp() const override { return m_csp; }
-  const WebVector<WebPermissionType>& delegatedPermissions() const override {
+  const WebVector<mojom::blink::PermissionName>& delegatedPermissions()
+      const override {
     return m_delegatedPermissions;
   }
 
+  void setBrowsingContextContainerName(const WebString& name) {
+    m_browsingContextContainerName = name;
+  }
   void setScrollingMode(WebFrameOwnerProperties::ScrollingMode);
   void setMarginWidth(int marginWidth) { m_marginWidth = marginWidth; }
   void setMarginHeight(int marginHeight) { m_marginHeight = marginHeight; }
   void setAllowFullscreen(bool allowFullscreen) {
     m_allowFullscreen = allowFullscreen;
   }
+  void setAllowPaymentRequest(bool allowPaymentRequest) {
+    m_allowPaymentRequest = allowPaymentRequest;
+  }
   void setCsp(const WebString& csp) { m_csp = csp; }
   void setDelegatedpermissions(
-      const WebVector<WebPermissionType>& delegatedPermissions) {
+      const WebVector<mojom::blink::PermissionName>& delegatedPermissions) {
     m_delegatedPermissions = delegatedPermissions;
   }
 
@@ -70,12 +83,14 @@ class RemoteFrameOwner final
 
   Member<Frame> m_frame;
   SandboxFlags m_sandboxFlags;
+  AtomicString m_browsingContextContainerName;
   ScrollbarMode m_scrolling;
   int m_marginWidth;
   int m_marginHeight;
   bool m_allowFullscreen;
+  bool m_allowPaymentRequest;
   WebString m_csp;
-  WebVector<WebPermissionType> m_delegatedPermissions;
+  WebVector<mojom::blink::PermissionName> m_delegatedPermissions;
 };
 
 DEFINE_TYPE_CASTS(RemoteFrameOwner,

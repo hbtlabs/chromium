@@ -33,9 +33,11 @@ import org.chromium.chrome.browser.feedback.EmptyFeedbackReporter;
 import org.chromium.chrome.browser.feedback.FeedbackReporter;
 import org.chromium.chrome.browser.gsa.GSAHelper;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
+import org.chromium.chrome.browser.historyreport.AppIndexingReporter;
 import org.chromium.chrome.browser.init.InvalidStartupDialog;
 import org.chromium.chrome.browser.instantapps.InstantAppsHandler;
 import org.chromium.chrome.browser.locale.LocaleManager;
+import org.chromium.chrome.browser.media.VideoPersister;
 import org.chromium.chrome.browser.metrics.UmaUtils;
 import org.chromium.chrome.browser.metrics.VariationsSession;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
@@ -43,13 +45,11 @@ import org.chromium.chrome.browser.net.qualityprovider.ExternalEstimateProviderA
 import org.chromium.chrome.browser.omaha.RequestGenerator;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.physicalweb.PhysicalWebBleClient;
-import org.chromium.chrome.browser.physicalweb.PhysicalWebEnvironment;
 import org.chromium.chrome.browser.policy.PolicyAuditor;
 import org.chromium.chrome.browser.preferences.LocationSettings;
 import org.chromium.chrome.browser.preferences.PreferencesLauncher;
-import org.chromium.chrome.browser.preferences.autofill.AutofillPreferences;
+import org.chromium.chrome.browser.preferences.autofill.AutofillAndPaymentsPreferences;
 import org.chromium.chrome.browser.preferences.password.SavePasswordsPreferences;
-import org.chromium.chrome.browser.preferences.privacy.ClearBrowsingDataPreferences;
 import org.chromium.chrome.browser.rlz.RevenueStats;
 import org.chromium.chrome.browser.services.AndroidEduOwnerCheckCallback;
 import org.chromium.chrome.browser.signin.GoogleActivityController;
@@ -60,6 +60,8 @@ import org.chromium.chrome.browser.tabmodel.document.ActivityDelegateImpl;
 import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelSelector;
 import org.chromium.chrome.browser.tabmodel.document.StorageDelegate;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
+import org.chromium.chrome.browser.webapps.ChromeShortcutManager;
+import org.chromium.chrome.browser.webapps.GooglePlayWebApkInstallDelegate;
 import org.chromium.components.signin.AccountManagerDelegate;
 import org.chromium.components.signin.SystemAccountManagerDelegate;
 import org.chromium.content.app.ContentApplication;
@@ -144,8 +146,8 @@ public class ChromeApplication extends ContentApplication {
 
     @CalledByNative
     protected void showAutofillSettings() {
-        PreferencesLauncher.launchSettingsPage(this,
-                AutofillPreferences.class.getName());
+        PreferencesLauncher.launchSettingsPage(
+                this, AutofillAndPaymentsPreferences.class.getName());
     }
 
     @CalledByNative
@@ -193,8 +195,8 @@ public class ChromeApplication extends ContentApplication {
                     "Attempting to open clear browsing data for a tab without a valid activity");
             return;
         }
-        Intent intent = PreferencesLauncher.createIntentForSettingsPage(activity,
-                ClearBrowsingDataPreferences.class.getName());
+
+        Intent intent = PreferencesLauncher.createIntentForClearBrowsingDataPage(activity);
         activity.startActivity(intent);
     }
 
@@ -308,13 +310,6 @@ public class ChromeApplication extends ContentApplication {
         return new PhysicalWebBleClient();
     }
 
-    /**
-     * @return A new {@link PhysicalWebEnvironment} instance.
-     */
-    public PhysicalWebEnvironment createPhysicalWebEnvironment() {
-        return new PhysicalWebEnvironment();
-    }
-
     public InstantAppsHandler createInstantAppsHandler() {
         return new InstantAppsHandler();
     }
@@ -361,6 +356,13 @@ public class ChromeApplication extends ContentApplication {
     }
 
     /**
+     * @return An instance of VideoPersister to be installed as a singleton.
+     */
+    public VideoPersister createVideoPersister() {
+        return new VideoPersister();
+    }
+
+    /**
      * @return An instance of RequestGenerator to be used for Omaha XML creation.  Will be null if
      *         a generator is unavailable.
      */
@@ -391,8 +393,18 @@ public class ChromeApplication extends ContentApplication {
         return null;
     }
 
+    /** Returns the singleton instance of GooglePlayWebApkInstallDelegate. */
+    public GooglePlayWebApkInstallDelegate getGooglePlayWebApkInstallDelegate() {
+        return null;
+    }
+
+    /** Returns the singleton instance of ChromeShortcutManager */
+    public ChromeShortcutManager createChromeShortcutManager() {
+        return new ChromeShortcutManager();
+    }
+
     /**
-     * Returns the Singleton instance of the DocumentTabModelSelector.
+     * Returns the singleton instance of the DocumentTabModelSelector.
      * TODO(dfalcantara): Find a better place for this once we differentiate between activity and
      *                    application-level TabModelSelectors.
      * @return The DocumentTabModelSelector for the application.
@@ -422,5 +434,13 @@ public class ChromeApplication extends ContentApplication {
      */
     public AccountManagerDelegate createAccountManagerDelegate() {
         return new SystemAccountManagerDelegate(this);
+    }
+
+    /**
+     * Creates a new {@link AppIndexingReporter}.
+     * @return the created {@link AppIndexingReporter}.
+     */
+    public AppIndexingReporter createAppIndexingReporter() {
+        return new AppIndexingReporter();
     }
 }

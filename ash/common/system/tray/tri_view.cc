@@ -27,6 +27,18 @@ views::BoxLayout::Orientation GetOrientation(TriView::Orientation orientation) {
   return views::BoxLayout::kHorizontal;
 }
 
+// A View that will perform a layout if a child view's preferred size changes.
+class RelayoutView : public views::View {
+ public:
+  RelayoutView() {}
+
+  // views::View:
+  void ChildPreferredSizeChanged(View* child) override { Layout(); }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(RelayoutView);
+};
+
 }  // namespace
 
 TriView::TriView() : TriView(0) {}
@@ -44,9 +56,9 @@ TriView::TriView(Orientation orientation, int padding_between_containers)
       start_container_layout_manager_(new SizeRangeLayout),
       center_container_layout_manager_(new SizeRangeLayout),
       end_container_layout_manager_(new SizeRangeLayout) {
-  AddChildView(new views::View);
-  AddChildView(new views::View);
-  AddChildView(new views::View);
+  AddChildView(new RelayoutView);
+  AddChildView(new RelayoutView);
+  AddChildView(new RelayoutView);
 
   GetContainer(Container::START)
       ->SetLayoutManager(GetLayoutManager(Container::START));
@@ -66,8 +78,28 @@ TriView::~TriView() {
   enable_hierarchy_changed_dcheck_ = false;
 }
 
+void TriView::SetMinHeight(int height) {
+  gfx::Size min_size;
+
+  min_size = GetMinSize(TriView::Container::START);
+  min_size.set_height(height);
+  SetMinSize(TriView::Container::START, min_size);
+
+  min_size = GetMinSize(TriView::Container::CENTER);
+  min_size.set_height(height);
+  SetMinSize(TriView::Container::CENTER, min_size);
+
+  min_size = GetMinSize(TriView::Container::END);
+  min_size.set_height(height);
+  SetMinSize(TriView::Container::END, min_size);
+}
+
 void TriView::SetMinSize(Container container, const gfx::Size& size) {
   GetLayoutManager(container)->SetMinSize(size);
+}
+
+gfx::Size TriView::GetMinSize(Container container) {
+  return GetLayoutManager(container)->min_size();
 }
 
 void TriView::SetMaxSize(Container container, const gfx::Size& size) {
@@ -120,6 +152,10 @@ void TriView::ViewHierarchyChanged(
       DCHECK(false) << "Container views should not be removed.";
     }
   }
+}
+
+const char* TriView::GetClassName() const {
+  return "TriView";
 }
 
 views::View* TriView::GetContainer(Container container) {

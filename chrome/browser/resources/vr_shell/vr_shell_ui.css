@@ -7,13 +7,11 @@ html {
 }
 
 #ui {
-  --scaleFactor: 4;
   left: 0;
+  max-width: 1920px;
   position: absolute;
   top: 0;
-  transform: scale(0.25, 0.25);
   transform-origin: left top;
-  width: 400%;
 }
 
 /* This class manages the position of elements on the texture page.
@@ -30,12 +28,6 @@ html {
   justify-content: center;
 }
 
-/* Permanent security warning for WebVR. */
-#webvr-not-secure-permanent {
-  height: 128px;
-  width: 512px;
-}
-
 #webvr-not-secure-permanent .webvr-not-secure-icon {
   display: inline-block;
   margin: 20px 0;
@@ -48,11 +40,9 @@ html {
   vertical-align: middle;
 }
 
-/* This is a single-line (nowrap) short message. The width has some elasticity
- * for translations, and the underlying string had a request to translators
- * to keep it short. The maximum is based on the fixed-size container DIV,
- * excess will be clipped. There's space for about twice the length of the
- * English "Not secure" message. */
+/* This is a single-line (nowrap) short message. The width is elastic for
+ * translations, and the underlying string had a request to translators
+ * to keep it short. */
 #webvr-not-secure-permanent .webvr-box {
   background-color: white;
   border-radius: 6px;
@@ -61,22 +51,13 @@ html {
   color: #444;
   font-size: 26px;
   height: 78px;
-  max-width: 472px;
   min-width: 226px;
   overflow: hidden;
   padding: 0 20px;
   white-space: nowrap;
 }
 
-/* Transient security warning for WebVR. */
-#webvr-not-secure-transient {
-  height: 256px;
-  width: 512px;
-}
-
-/* This uses fixed width but the height has some elasticity for translations.
- * The maximum is based on the fixed-size container DIV, excess will be
- * clipped. */
+/* This uses fixed width but the height is elastic for translations. */
 #webvr-not-secure-transient > div {
   background-color: rgba(26, 26, 26, 0.8);
   border-radius: 6px;
@@ -87,7 +68,6 @@ html {
   font-size: 26px;
   justify-content: center;
   line-height: 1.4;
-  max-height: 210px;
   min-height: 160px;
   overflow: hidden;
   padding: 20px;
@@ -100,7 +80,7 @@ html {
   background-position: center;
   background-repeat: no-repeat;
   background-size: contain;
-  border-radius: 50%;
+  border-radius: 10%;
   height: 96px;
   margin: auto auto;
   opacity: 0.8;
@@ -119,7 +99,8 @@ html {
   white-space: nowrap;
 }
 
-#back .button {
+#back .button,
+#forward .button {
   background-image: url(../../../../ui/webui/resources/images/vr_back.svg);
 }
 
@@ -128,76 +109,183 @@ html {
 }
 
 #forward .button {
-  background-image: url(../../../../ui/webui/resources/images/vr_back.svg);
   transform: scaleX(-1);
 }
 
 #reload-ui-button {
-  background-color: #555;
   color: white;
   font-size: 24px;
   padding: 12px;
 }
 
-#omni-container {
+#reload-ui-button:hover {
+  background-color: pink;
+}
+
+.tab {
+  background-color: #eee;
+  border-radius: 6px;
+  color: black;
+  display: inline-block;
+  font-size: 20px;
+  height: 30px;
+  line-height: 30px;
+  margin: 0 15px 0 15px;
+  overflow: hidden;
+  padding: 12px;
+  vertical-align: middle;
+  white-space: nowrap;
+  width: 300px;
+}
+
+.tab-incognito {
+  background-color: #525252;
+  color: white;
+}
+
+/* The tab container element behaves like a scroll view (in conjunction with the
+ * clip view). */
+#tab-container {
+  height: 54px;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  white-space: nowrap;
+  width: 1500px;
+}
+
+/* The tab clip element's width will be programmatically set to the total width
+ * of all it's children (the tabs). By doing so, the tabs can be scrolled
+ * horizontally in the tab container element. */
+#tab-clip {
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+#url-indicator-container {
   --tranX: 0;
   --tranY: -0.65;
   --tranZ: -1.2;
 }
 
-#omni {
+#url-indicator-border {
+  --fadeTimeMs: 500;
+  --fadeYOffset: -0.1;
+  --opacity: 0.9;
+  --statusBarColor: rgb(66, 133, 244);
+  background-color: #ececec;
+  border-radius: 200px;
+  padding: 6px;
+}
+
+#url-indicator {
   align-items: center;
-  background-color: rgba(255, 255, 255, 0.9);
-  border-radius: 100px;
+  background-color: #ececec;
+  border-radius: 200px;
   box-sizing: border-box;
   display: flex;
   height: 104px;
   justify-content: center;
-  margin-bottom: 60px;
-  margin-top: 0;
-  opacity: 1;
-  transition: opacity 500ms ease, margin-top 500ms ease;
+  overflow: hidden;
   white-space: nowrap;
   width: 512px;
 }
 
-#omni-content {
+#url-indicator-content {
   align-items: center;
   display: flex;
   max-width: 448px;
 }
 
-#omni .connection-security {
+.url-indicator-icon {
+  -webkit-mask-size: 50px;
+  display: none;
+  flex: none;
   height: 50px;
   margin-right: 10px;
   width: 50px;
 }
 
-#omni #url {
+#url-indicator-info-icon {
+  -webkit-mask-image: url(../../../../ui/webui/resources/images/i_circle.svg);
+  background-color: rgb(90, 90, 90);
+}
+
+#url-indicator-lock-icon {
+  -webkit-mask-image: url(../../../../ui/webui/resources/images/lock.svg);
+  background-color: rgb(11, 128, 67);
+}
+
+#url-indicator-warning-icon {
+  -webkit-mask-image: url(../../../../ui/webui/resources/images/warning.svg);
+  background-color: rgb(199, 56, 33);
+}
+
+#url-indicator #url {
   color: #252525;
   font-size: 34px;
   overflow: hidden;
   white-space: nowrap;
 }
 
-#omni #path {
+#url-indicator #path {
   color: #868686;
 }
 
-#omni.hide {
-  margin-bottom: 0;
-  margin-top: 60px;
-  opacity: 0;
+#omnibox-ui-element {
+  --tranX: 0;
+  --tranY: -0.1;
+  --tranZ: -1.0;
+  background-color: transparent;
+  box-sizing: border-box;
+  font-family: arial;
+  font-size: 16px;
+  width: 400px;
 }
 
-#omni.loading {
-  border: 4px solid rgb(86, 203, 255);
+#suggestions {
+  border: 1px solid transparent;
+  box-sizing: border-box;
 }
 
-#omni.idle {
-  background-color: #ececec;
+.suggestion {
+  align-items: center; /* Vertically center text in div. */
+  background-color: white;
+  /* Use a transparent border to hide text overflow, but allow background to
+   * color show through. */
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  box-sizing: border-box;
+  display: flex;
+  height: 24px;
+  overflow: hidden;
+  visibility: hidden;
+  white-space: nowrap;
 }
 
-#omni.idle #domain {
-  color: black;
+.suggestion:hover {
+  background-color: orange;
+}
+
+#omnibox-url-element {
+  background-color: white;
+  border: 1px solid grey;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row-reverse; /* Right-justify for convienence. */
+  margin-top: 2px;
+  padding: 5px;
+}
+
+#omnibox-input-field {
+  border: none;
+  font-size: 16px;
+  outline: none; /* Do not show an outline when focused. */
+  overflow: hidden;
+  white-space: nowrap;
+  width: 100%;
+}
+
+#omnibox-clear-button {
+  background: url(../../../../ui/webui/resources/images/x-hover.png) no-repeat center center;
+  width: 18px;
 }

@@ -33,8 +33,6 @@
 #include "core/imagebitmap/ImageBitmapSource.h"
 #include "third_party/khronos/GLES2/gl2.h"
 
-class SkPaint;
-
 namespace gpu {
 namespace gles2 {
 class GLES2Interface;
@@ -69,15 +67,28 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
   unsigned webkitDroppedFrameCount() const;
 
   // Used by canvas to gain raw pixel access
-  void paintCurrentFrame(SkCanvas*, const IntRect&, const SkPaint*) const;
+  void paintCurrentFrame(PaintCanvas*, const IntRect&, const PaintFlags*) const;
 
   // Used by WebGL to do GPU-GPU textures copy if possible.
+  // The caller is responsible for allocating the destination texture.
   bool copyVideoTextureToPlatformTexture(gpu::gles2::GLES2Interface*,
                                          GLuint texture,
-                                         GLenum internalFormat,
-                                         GLenum type,
                                          bool premultiplyAlpha,
                                          bool flipY);
+
+  // Used by WebGL to do CPU-GPU texture upload if possible.
+  bool texImageImpl(WebMediaPlayer::TexImageFunctionID,
+                    GLenum target,
+                    gpu::gles2::GLES2Interface*,
+                    GLint level,
+                    GLint internalformat,
+                    GLenum format,
+                    GLenum type,
+                    GLint xoffset,
+                    GLint yoffset,
+                    GLint zoffset,
+                    bool flipY,
+                    bool premultiplyAlpha);
 
   bool shouldDisplayPosterImage() const { return getDisplayMode() == Poster; }
 
@@ -115,9 +126,7 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
   bool layoutObjectIsNeeded(const ComputedStyle&) override;
   LayoutObject* createLayoutObject(const ComputedStyle&) override;
   void attachLayoutTree(const AttachContext& = AttachContext()) override;
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+  void parseAttribute(const AttributeModificationParams&) override;
   bool isPresentationAttribute(const QualifiedName&) const override;
   void collectStyleForPresentationAttribute(const QualifiedName&,
                                             const AtomicString&,

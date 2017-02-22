@@ -5,7 +5,10 @@ recordActionTaken:
     AnimationsPlaybackRateChanged : 11
     AuditsStarted : 7
     CommandEvaluatedInConsolePanel : 15
+    ConnectToNodeJSDirectly : 20
+    ConnectToNodeJSFromFrontend : 19
     ConsoleEvaluated : 8
+    CpuThrottlingEnabled : 21
     DOMPropertiesExpanded : 16
     DeviceModeEnabled : 10
     FileSavedInWorkspace : 9
@@ -16,6 +19,7 @@ recordActionTaken:
     RevisionApplied : 12
     ScriptsBreakpointSet : 3
     StyleRuleEdited : 14
+    TimelinePageReloadStarted : 18
     TimelineStarted : 4
     WindowDocked : 1
     WindowUndocked : 2
@@ -34,15 +38,16 @@ recordPanelShown:
     drawer-sensors : 14
     drawer-sources.search : 15
     elements : 1
+    heap_profiler : 6
+    js_profiler : 17
     layers : 9
     network : 3
-    profiles : 6
     resources : 2
     security : 16
     sources : 4
     timeline : 5
 }
-Panel shown: profiles
+Panel shown: js_profiler
 Panel shown: timeline
 Panel shown: audits
 

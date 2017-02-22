@@ -40,7 +40,7 @@ gpu::gles2::ContextCreationAttribHelper CreateAttributes() {
   gpu::gles2::ContextCreationAttribHelper attributes;
   attributes.alpha_size = -1;
   attributes.depth_size = 0;
-  attributes.stencil_size = 0;
+  attributes.stencil_size = 8;
   attributes.samples = 0;
   attributes.sample_buffers = 0;
   attributes.fail_if_major_perf_caveat = false;
@@ -121,18 +121,7 @@ base::Lock* InProcessContextProvider::GetLock() {
 }
 
 gpu::Capabilities InProcessContextProvider::ContextCapabilities() {
-  gpu::Capabilities capabilities;
-  capabilities.texture_rectangle = true;
-  capabilities.sync_query = true;
-  switch (PlatformColor::Format()) {
-    case PlatformColor::SOURCE_FORMAT_RGBA8:
-      capabilities.texture_format_bgra8888 = false;
-      break;
-    case PlatformColor::SOURCE_FORMAT_BGRA8:
-      capabilities.texture_format_bgra8888 = true;
-      break;
-  }
-  return capabilities;
+  return context_->GetCapabilities();
 }
 
 void InProcessContextProvider::SetLostContextCallback(

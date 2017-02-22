@@ -65,10 +65,7 @@ class CompositorVSyncManager;
 class LatencyInfo;
 class Layer;
 class Reflector;
-
-#if defined(USE_AURA)
-class Window;
-#endif
+class ScopedAnimationDurationScaleMode;
 
 const int kCompositorLockTimeoutMs = 67;
 
@@ -86,47 +83,17 @@ class COMPOSITOR_EXPORT ContextFactoryObserver {
   virtual void OnLostResources() = 0;
 };
 
-// This class abstracts the creation of the 3D context for the compositor. It is
-// a global object.
-class COMPOSITOR_EXPORT ContextFactory {
+// This is privileged interface to the compositor. It is a global object.
+class COMPOSITOR_EXPORT ContextFactoryPrivate {
  public:
-  virtual ~ContextFactory() {}
-
-  // Creates an output surface for the given compositor. The factory may keep
-  // per-compositor data (e.g. a shared context), that needs to be cleaned up
-  // by calling RemoveCompositor when the compositor gets destroyed.
-  virtual void CreateCompositorFrameSink(
-      base::WeakPtr<Compositor> compositor) = 0;
-
   // Creates a reflector that copies the content of the |mirrored_compositor|
   // onto |mirroring_layer|.
   virtual std::unique_ptr<Reflector> CreateReflector(
       Compositor* mirrored_compositor,
       Layer* mirroring_layer) = 0;
+
   // Removes the reflector, which stops the mirroring.
   virtual void RemoveReflector(Reflector* reflector) = 0;
-
-  // Return a reference to a shared offscreen context provider usable from the
-  // main thread.
-  virtual scoped_refptr<cc::ContextProvider>
-      SharedMainThreadContextProvider() = 0;
-
-  // Destroys per-compositor data.
-  virtual void RemoveCompositor(Compositor* compositor) = 0;
-
-  // When true, the factory uses test contexts that do not do real GL
-  // operations.
-  virtual bool DoesCreateTestContexts() = 0;
-
-  // Returns the OpenGL target to use for image textures.
-  virtual uint32_t GetImageTextureTarget(gfx::BufferFormat format,
-                                         gfx::BufferUsage usage) = 0;
-
-  // Gets the GPU memory buffer manager.
-  virtual gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() = 0;
-
-  // Gets the task graph runner.
-  virtual cc::TaskGraphRunner* GetTaskGraphRunner() = 0;
 
   // Allocate a new client ID for the display compositor.
   virtual cc::FrameSinkId AllocateFrameSinkId() = 0;
@@ -156,6 +123,41 @@ class COMPOSITOR_EXPORT ContextFactory {
                                          base::TimeDelta interval) = 0;
 
   virtual void SetOutputIsSecure(Compositor* compositor, bool secure) = 0;
+};
+
+// This class abstracts the creation of the 3D context for the compositor. It is
+// a global object.
+class COMPOSITOR_EXPORT ContextFactory {
+ public:
+  virtual ~ContextFactory() {}
+
+  // Creates an output surface for the given compositor. The factory may keep
+  // per-compositor data (e.g. a shared context), that needs to be cleaned up
+  // by calling RemoveCompositor when the compositor gets destroyed.
+  virtual void CreateCompositorFrameSink(
+      base::WeakPtr<Compositor> compositor) = 0;
+
+  // Return a reference to a shared offscreen context provider usable from the
+  // main thread.
+  virtual scoped_refptr<cc::ContextProvider>
+  SharedMainThreadContextProvider() = 0;
+
+  // Destroys per-compositor data.
+  virtual void RemoveCompositor(Compositor* compositor) = 0;
+
+  // When true, the factory uses test contexts that do not do real GL
+  // operations.
+  virtual bool DoesCreateTestContexts() = 0;
+
+  // Returns the OpenGL target to use for image textures.
+  virtual uint32_t GetImageTextureTarget(gfx::BufferFormat format,
+                                         gfx::BufferUsage usage) = 0;
+
+  // Gets the GPU memory buffer manager.
+  virtual gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() = 0;
+
+  // Gets the task graph runner.
+  virtual cc::TaskGraphRunner* GetTaskGraphRunner() = 0;
 
   virtual void AddObserver(ContextFactoryObserver* observer) = 0;
 
@@ -197,11 +199,17 @@ class COMPOSITOR_EXPORT Compositor
     : NON_EXPORTED_BASE(public cc::LayerTreeHostClient),
       NON_EXPORTED_BASE(public cc::LayerTreeHostSingleThreadClient) {
  public:
-  Compositor(ui::ContextFactory* context_factory,
+  Compositor(const cc::FrameSinkId& frame_sink_id,
+             ui::ContextFactory* context_factory,
+             ui::ContextFactoryPrivate* context_factory_private,
              scoped_refptr<base::SingleThreadTaskRunner> task_runner);
   ~Compositor() override;
 
   ui::ContextFactory* context_factory() { return context_factory_; }
+
+  ui::ContextFactoryPrivate* context_factory_private() {
+    return context_factory_private_;
+  }
 
   void AddFrameSink(const cc::FrameSinkId& frame_sink_id);
   void RemoveFrameSink(const cc::FrameSinkId& frame_sink_id);
@@ -293,12 +301,6 @@ class COMPOSITOR_EXPORT Compositor
   gfx::AcceleratedWidget ReleaseAcceleratedWidget();
   gfx::AcceleratedWidget widget() const;
 
-#if defined(USE_AURA)
-  // Sets the window for the compositor to render into on mus+ash.
-  void SetWindow(ui::Window* window);
-  ui::Window* window() const;
-#endif
-
   // Returns the vsync manager for this compositor.
   scoped_refptr<CompositorVSyncManager> vsync_manager() const;
 
@@ -378,6 +380,8 @@ class COMPOSITOR_EXPORT Compositor
   }
 
   const cc::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
+  int committed_frame_number() const { return committed_frame_number_; }
+  float refresh_rate() const { return refresh_rate_; }
 
  private:
   friend class base::RefCounted<Compositor>;
@@ -392,6 +396,7 @@ class COMPOSITOR_EXPORT Compositor
   gfx::Size size_;
 
   ui::ContextFactory* context_factory_;
+  ui::ContextFactoryPrivate* context_factory_private_;
 
   // The root of the Layer tree drawn by this compositor.
   Layer* root_layer_;
@@ -400,9 +405,12 @@ class COMPOSITOR_EXPORT Compositor
   base::ObserverList<CompositorAnimationObserver> animation_observer_list_;
 
   gfx::AcceleratedWidget widget_;
-#if defined(USE_AURA)
-  ui::Window* window_;
-#endif
+  // A sequence number of a current compositor frame for use with metrics.
+  int committed_frame_number_;
+
+  // current VSYNC refresh rate per second.
+  float refresh_rate_;
+
   // A map from child id to parent id.
   std::unordered_set<cc::FrameSinkId, cc::FrameSinkIdHash> child_frame_sinks_;
   bool widget_valid_;
@@ -425,6 +433,7 @@ class COMPOSITOR_EXPORT Compositor
 
   LayerAnimatorCollection layer_animator_collection_;
   scoped_refptr<cc::AnimationTimeline> animation_timeline_;
+  std::unique_ptr<ScopedAnimationDurationScaleMode> slow_animations_;
 
   gfx::ColorSpace color_space_;
 

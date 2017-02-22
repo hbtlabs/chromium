@@ -1,4 +1,6 @@
+<link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/action_link.html">
+<link rel="import" href="chrome://resources/html/action_link_css.html">
 <link rel="import" href="chrome://resources/html/cr.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
@@ -13,7 +15,7 @@
 
 <dom-module id="downloads-item">
   <template>
-    <style>
+    <style include="action-link">
       :host {
         display: flex;
         flex-direction: column;
@@ -30,7 +32,7 @@
       }
 
       #date {
-        color: rgb(104, 113, 116);
+        color: var(--paper-grey-700);
         font-size: 100%;
         font-weight: 500;
         margin: 24px auto 10px;
@@ -76,7 +78,7 @@
       }
 
       #content:not(.is-active) #details {
-        color: rgba(186, 186, 186, .6);
+        color: rgba(27, 27, 27, .6);
       }
 
       #content:not(.is-active) #name {
@@ -154,7 +156,7 @@
       }
 
       .is-active #url {
-        color: #969696;
+        color: var(--paper-grey-600);
       }
 
       #progress,
@@ -211,7 +213,7 @@
       }
 
       #remove {
-        color: #969696;
+        color: var(--paper-grey-700);
         font-size: 16px;
         height: 32px;
         line-height: 17px;  /* TODO(dbeam): why is this necesssary? */
@@ -315,6 +317,5 @@
     </div>
 
   </template>
-  <link rel="import" type="css" href="chrome://resources/css/action_link.css">
   <script src="chrome://downloads/item.js"></script>
 </dom-module>

@@ -4,37 +4,54 @@
 
 #include "chrome/app/mash/mash_runner.h"
 
+#include <string>
+
 #include "base/at_exit.h"
+#include "base/base_paths.h"
+#include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
+#include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/i18n/icu_util.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/path_service.h"
 #include "base/process/launch.h"
+#include "base/process/process.h"
 #include "base/run_loop.h"
+#include "base/sys_info.h"
+#include "base/task_scheduler/task_scheduler.h"
+#include "base/threading/sequenced_worker_pool.h"
+#include "base/threading/thread.h"
 #include "base/trace_event/trace_event.h"
+#include "chrome/app/mash/chrome_mash_catalog.h"
+#include "chrome/common/chrome_switches.h"
 #include "components/tracing/common/trace_to_console.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_names.mojom.h"
+#include "mash/common/config.h"
 #include "mash/package/mash_packaged_service.h"
+#include "mash/quick_launch/public/interfaces/constants.mojom.h"
+#include "mojo/edk/embedder/embedder.h"
+#include "mojo/edk/embedder/scoped_ipc_support.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/catalog/public/interfaces/catalog.mojom.h"
 #include "services/catalog/public/interfaces/constants.mojom.h"
 #include "services/service_manager/background/background_service_manager.h"
-#include "services/service_manager/native_runner_delegate.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/identity.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
+#include "services/service_manager/public/cpp/standalone_service/standalone_service.h"
 #include "services/service_manager/public/interfaces/service_factory.mojom.h"
+#include "services/service_manager/runner/common/client_util.h"
 #include "services/service_manager/runner/common/switches.h"
-#include "services/service_manager/runner/host/child_process.h"
-#include "services/service_manager/runner/host/child_process_base.h"
 #include "services/service_manager/runner/init.h"
+#include "services/ui/public/interfaces/constants.mojom.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
@@ -47,21 +64,6 @@ namespace {
 const char* kMashChild = "mash-child";
 
 const char kChromeMashServiceName[] = "chrome_mash";
-
-const char kChromeMashContentBrowserPackageName[] =
-    "chrome_mash_content_browser";
-const char kChromeContentGpuPackageName[] = "chrome_content_gpu";
-const char kChromeContentRendererPackageName[] = "chrome_content_renderer";
-const char kChromeContentUtilityPackageName[] = "chrome_content_utility";
-
-const char kPackagesPath[] = "Packages";
-const char kManifestFilename[] = "manifest.json";
-
-base::FilePath GetPackageManifestPath(const std::string& package_name) {
-  base::FilePath exe = base::CommandLine::ForCurrentProcess()->GetProgram();
-  return exe.DirName().AppendASCII(kPackagesPath).AppendASCII(package_name)
-      .AppendASCII(kManifestFilename);
-}
 
 bool IsChild() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -80,17 +82,24 @@ void InitializeResources() {
       locale, nullptr, ui::ResourceBundle::LOAD_COMMON_RESOURCES);
 }
 
-class NativeRunnerDelegateImpl : public service_manager::NativeRunnerDelegate {
+class ServiceProcessLauncherDelegateImpl
+    : public service_manager::ServiceProcessLauncher::Delegate {
  public:
-  NativeRunnerDelegateImpl() {}
-  ~NativeRunnerDelegateImpl() override {}
+  ServiceProcessLauncherDelegateImpl() {}
+  ~ServiceProcessLauncherDelegateImpl() override {}
 
  private:
-  // service_manager::NativeRunnerDelegate:
+  // service_manager::ServiceProcessLauncher::Delegate:
   void AdjustCommandLineArgumentsForTarget(
-      const service_manager::Identity& target,
-      base::CommandLine* command_line) override {
-    if (target.name() != content::mojom::kBrowserServiceName) {
+        const service_manager::Identity& target,
+        base::CommandLine* command_line) override {
+    if (target.name() == kChromeMashServiceName ||
+        target.name() == content::mojom::kPackagedServicesServiceName) {
+      base::FilePath exe_path;
+      base::PathService::Get(base::FILE_EXE, &exe_path);
+      command_line->SetProgram(exe_path);
+    }
+    if (target.name() != content::mojom::kPackagedServicesServiceName) {
       // If running anything other than the browser process, launch a mash
       // child process. The new process will execute MashRunner::RunChild().
       command_line->AppendSwitchASCII(switches::kProcessType, kMashChild);
@@ -102,16 +111,37 @@ class NativeRunnerDelegateImpl : public service_manager::NativeRunnerDelegate {
 
     // When launching the browser process, ensure that we don't inherit the
     // --mash flag so it proceeds with the normal content/browser startup path.
-    base::CommandLine::StringVector argv(command_line->argv());
-    auto iter =
-        std::find(argv.begin(), argv.end(), FILE_PATH_LITERAL("--mash"));
-    if (iter != argv.end())
-      argv.erase(iter);
-    *command_line = base::CommandLine(argv);
+    base::CommandLine::SwitchMap new_switches = command_line->GetSwitches();
+    new_switches.erase(switches::kMash);
+    *command_line = base::CommandLine(command_line->GetProgram());
+    for (const std::pair<std::string, base::CommandLine::StringType>& sw :
+         new_switches) {
+      command_line->AppendSwitchNative(sw.first, sw.second);
+    }
   }
 
-  DISALLOW_COPY_AND_ASSIGN(NativeRunnerDelegateImpl);
+  DISALLOW_COPY_AND_ASSIGN(ServiceProcessLauncherDelegateImpl);
 };
+
+// Quits |run_loop| if the |identity| of the quitting service is critical to the
+// system (e.g. the window manager). Used in the main process.
+void OnInstanceQuitInMain(base::RunLoop* run_loop,
+                          int* exit_value,
+                          const service_manager::Identity& identity) {
+  DCHECK(exit_value);
+  DCHECK(run_loop);
+
+  if (identity.name() != mash::common::GetWindowManagerServiceName() &&
+      identity.name() != ui::mojom::kServiceName &&
+      identity.name() != content::mojom::kPackagedServicesServiceName) {
+    return;
+  }
+
+  LOG(ERROR) << "Main process exiting because service " << identity.name()
+             << " quit unexpectedly.";
+  *exit_value = 1;
+  run_loop->Quit();
+}
 
 }  // namespace
 
@@ -120,68 +150,78 @@ MashRunner::MashRunner() {}
 MashRunner::~MashRunner() {}
 
 int MashRunner::Run() {
+  base::TaskScheduler::CreateAndSetSimpleTaskScheduler(
+      base::SysInfo::NumberOfProcessors());
+
   if (IsChild())
     return RunChild();
-  RunMain();
-  return 0;
+
+  return RunMain();
 }
 
-void MashRunner::RunMain() {
+int MashRunner::RunMain() {
+  base::MessageLoop message_loop(base::MessageLoop::TYPE_UI);
+
+  base::SequencedWorkerPool::EnableWithRedirectionToTaskSchedulerForProcess();
+
+  mojo::edk::Init();
+
+  base::Thread ipc_thread("IPC thread");
+  ipc_thread.StartWithOptions(
+      base::Thread::Options(base::MessageLoop::TYPE_IO, 0));
+  mojo::edk::ScopedIPCSupport ipc_support(
+      ipc_thread.task_runner(),
+      mojo::edk::ScopedIPCSupport::ShutdownPolicy::FAST);
+
+  int exit_value = RunServiceManagerInMain();
+
+  ipc_thread.Stop();
+  base::TaskScheduler::GetInstance()->Shutdown();
+  return exit_value;
+}
+
+int MashRunner::RunServiceManagerInMain() {
   // TODO(sky): refactor BackgroundServiceManager so can supply own context, we
   // shouldn't we using context as it has a lot of stuff we don't really want
   // in chrome.
-  NativeRunnerDelegateImpl native_runner_delegate;
-  service_manager::BackgroundServiceManager background_service_manager;
-  std::unique_ptr<service_manager::BackgroundServiceManager::InitParams>
-      init_params(new service_manager::BackgroundServiceManager::InitParams);
-  init_params->native_runner_delegate = &native_runner_delegate;
-  background_service_manager.Init(std::move(init_params));
-  context_.reset(new service_manager::ServiceContext(
+  ServiceProcessLauncherDelegateImpl service_process_launcher_delegate;
+  service_manager::BackgroundServiceManager background_service_manager(
+      &service_process_launcher_delegate, CreateChromeMashCatalog());
+  service_manager::mojom::ServicePtr service;
+  service_manager::ServiceContext context(
       base::MakeUnique<mash::MashPackagedService>(),
-      background_service_manager.CreateServiceRequest(kChromeMashServiceName)));
+      service_manager::mojom::ServiceRequest(&service));
+  background_service_manager.RegisterService(
+      service_manager::Identity(
+          kChromeMashServiceName, service_manager::mojom::kRootUserID),
+      std::move(service), nullptr);
 
-  // We need to send a sync messages to the Catalog, so we wait for a completed
-  // connection first.
-  std::unique_ptr<service_manager::Connection> catalog_connection =
-      context_->connector()->Connect(catalog::mojom::kServiceName);
-  {
-    base::RunLoop run_loop;
-    catalog_connection->AddConnectionCompletedClosure(run_loop.QuitClosure());
-    run_loop.Run();
-  }
+  // Quit the main process if an important child (e.g. window manager) dies.
+  // On Chrome OS the OS-level session_manager will restart the main process.
+  base::RunLoop run_loop;
+  int exit_value = 0;
+  background_service_manager.SetInstanceQuitCallback(
+      base::Bind(&OnInstanceQuitInMain, &run_loop, &exit_value));
 
-  // Synchronously override manifests needed for content process services.
-  catalog::mojom::CatalogControlPtr catalog_control;
-  catalog_connection->GetInterface(&catalog_control);
-  CHECK(catalog_control->OverrideManifestPath(
-      content::mojom::kBrowserServiceName,
-      GetPackageManifestPath(kChromeMashContentBrowserPackageName)));
-  CHECK(catalog_control->OverrideManifestPath(
-      content::mojom::kGpuServiceName,
-      GetPackageManifestPath(kChromeContentGpuPackageName)));
-  CHECK(catalog_control->OverrideManifestPath(
-      content::mojom::kRendererServiceName,
-      GetPackageManifestPath(kChromeContentRendererPackageName)));
-  CHECK(catalog_control->OverrideManifestPath(
-      content::mojom::kUtilityServiceName,
-      GetPackageManifestPath(kChromeContentUtilityPackageName)));
+  // Ping services that we know we want to launch on startup (UI service,
+  // window manager, quick launch app).
+  context.connector()->Connect(ui::mojom::kServiceName);
+  context.connector()->Connect(mash::common::GetWindowManagerServiceName());
+  context.connector()->Connect(mash::quick_launch::mojom::kServiceName);
+  context.connector()->Connect(content::mojom::kPackagedServicesServiceName);
 
-  // Ping mash_session to ensure an instance is brought up
-  context_->connector()->Connect("mash_session");
-  base::RunLoop().Run();
+  run_loop.Run();
+
+  // |context| must be destroyed before the message loop.
+  return exit_value;
 }
 
 int MashRunner::RunChild() {
-  base::FilePath path =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
-          switches::kChildProcess);
-  if (base::PathExists(path))
-    return service_manager::ChildProcessMain();
+  service_manager::WaitForDebuggerIfNecessary();
 
-  // If the path doesn't exist - try launching this as a packaged service.
   base::i18n::InitializeICU();
   InitializeResources();
-  service_manager::ChildProcessMainWithCallback(
+  service_manager::RunStandaloneService(
       base::Bind(&MashRunner::StartChildApp, base::Unretained(this)));
   return 0;
 }
@@ -193,10 +233,14 @@ void MashRunner::StartChildApp(
   // going to be mojo:ui at this point. So always create a TYPE_UI message loop
   // for now.
   base::MessageLoop message_loop(base::MessageLoop::TYPE_UI);
-  context_.reset(new service_manager::ServiceContext(
+  base::RunLoop run_loop;
+  service_manager::ServiceContext context(
       base::MakeUnique<mash::MashPackagedService>(),
-      std::move(service_request)));
-  base::RunLoop().Run();
+      std::move(service_request));
+  // Quit the child process when the service quits.
+  context.SetQuitClosure(run_loop.QuitClosure());
+  run_loop.Run();
+  // |context| must be destroyed before |message_loop|.
 }
 
 int MashMain() {
@@ -206,12 +250,17 @@ int MashMain() {
   // TODO(sky): wire this up correctly.
   service_manager::InitializeLogging();
 
-  std::unique_ptr<base::MessageLoop> message_loop;
 #if defined(OS_LINUX)
   base::AtExitManager exit_manager;
 #endif
-  if (!IsChild())
-    message_loop.reset(new base::MessageLoop(base::MessageLoop::TYPE_UI));
+
+#if !defined(OFFICIAL_BUILD)
+  // Initialize stack dumping before initializing sandbox to make sure symbol
+  // names in all loaded libraries will be cached.
+  // NOTE: On Chrome OS, crash reporting for the root process and non-browser
+  // service processes is handled by the OS-level crash_reporter.
+  base::debug::EnableInProcessStackDumping();
+#endif
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kTraceToConsole)) {
@@ -224,4 +273,24 @@ int MashMain() {
 
   MashRunner mash_runner;
   return mash_runner.Run();
+}
+
+void WaitForMashDebuggerIfNecessary() {
+  if (!service_manager::ServiceManagerIsRemote())
+    return;
+
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+  const std::string service_name =
+      command_line->GetSwitchValueASCII(switches::kProcessServiceName);
+  if (service_name !=
+      command_line->GetSwitchValueASCII(switches::kWaitForDebugger)) {
+    return;
+  }
+
+  // Include the pid as logging may not have been initialized yet (the pid
+  // printed out by logging is wrong).
+  LOG(WARNING) << "waiting for debugger to attach for service " << service_name
+               << " pid=" << base::Process::Current().Pid();
+  base::debug::WaitForDebugger(120, true);
 }

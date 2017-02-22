@@ -2,7 +2,8 @@
   {
     "prefix": "color_space",
     "base": "fast/canvas/color-space",
-    "args": ["--enable-color-correct-rendering"]
+    "args": ["--enable-color-correct-rendering",
+             "--enable-true-color-rendering"]
   },
   {
     "prefix": "gpu",
@@ -98,6 +99,22 @@
     "args": ["--stable-release-mode"]
   },
   {
+    "prefix": "disable-spinvalidation",
+    "base": "paint/invalidation",
+    "args": ["--disable-slimming-paint-invalidation"]
+  },
+  {
+    "prefix": "stable",
+    "base": "http/tests/origin_trials/webexposed",
+    "args": ["--stable-release-mode"]
+  },
+  {
+    "prefix": "origin-trials-features-disabled",
+    "base": "http/tests/origin_trials/webexposed",
+    "args": ["--disable-blink-features=ForeignFetch,ImageCapture,LinkServiceWorker,LongTaskObserver,ServiceWorkerNavigationPreload,SetRootScroller,WebUSB,WebVR,WebShare",
+             "--disable-features=ForeignFetch,ImageCapture,LinkServiceWorker,LongTaskObserver,ServiceWorkerNavigationPreload,SetRootScroller,WebUSB,WebVR,WebShare"]
+  },
+  {
     "prefix": "android",
     "base": "fullscreen",
     "args": ["--enable-threaded-compositing",
@@ -181,11 +198,6 @@
     "prefix": "scroll_customization",
     "base": "fast/events/touch",
     "args": ["--enable-blink-features=ScrollCustomization"]
-  },
-  {
-    "prefix": "smoothscrolling",
-    "base": "fast/events/touch/gesture",
-    "args": ["--enable-smooth-scrolling"]
   },
   {
     "prefix": "mse-1mb-buffers",
@@ -275,23 +287,18 @@
     "args": ["--enable-features=TouchpadAndWheelScrollLatching"]
   },
   {
-    "prefix": "parsehtmlonmainthread_sync",
-    "base": "fast/parser",
-    "args": ["--blink-settings=parseHTMLOnMainThreadSyncTokenize=true"]
-  },
-  {
-    "prefix": "parsehtmlonmainthread_coalesce",
-    "base": "fast/parser",
-    "args": ["--disable-blink-features=ParseHTMLOnMainThread", "--blink-settings=parseHTMLOnMainThreadCoalesceChunks=true"]
-  },
-  {
     "prefix": "mojo-loading",
     "base": "webexposed",
     "args": ["--enable-blink-features=LoadingWithMojo"]
   },
   {
     "prefix": "mojo-loading",
-    "base": "http/tests/xmlhttprequest",
+    "base": "http/tests",
+    "args": ["--enable-blink-features=LoadingWithMojo"]
+  },
+  {
+    "prefix": "mojo-loading",
+    "base": "css1",
     "args": ["--enable-blink-features=LoadingWithMojo"]
   },
   {
@@ -305,14 +312,19 @@
     "args": ["--enable-features=WebAssembly"]
   },
   {
-    "prefix": "disable-mojo-service-worker",
-    "base": "http/tests/serviceworker",
-    "args": ["--disable-mojo-service-worker"]
+    "prefix": "enable_asmjs",
+    "base": "http/tests/asmjs",
+    "args": ["--enable-features=AsmJsToWebAssembly"]
   },
   {
     "prefix": "service-worker-navigation-preload",
     "base": "http/tests/serviceworker",
     "args": ["--enable-features=ServiceWorkerNavigationPreload"]
+  },
+  {
+    "prefix": "service-worker-navigation-preload-disabled",
+    "base": "http/tests/serviceworker/chromium",
+    "args": ["--disable-features=ServiceWorkerNavigationPreload"]
   },
   {
     "prefix": "layout_ng",
@@ -326,7 +338,32 @@
   },
   {
     "prefix": "layout_ng",
+    "base": "css2.1/20110323",
+    "args": ["--enable-blink-features=LayoutNG"]
+  },
+  {
+    "prefix": "layout_ng",
     "base": "fast/block/float",
     "args": ["--enable-blink-features=LayoutNG"]
+  },
+  {
+    "prefix": "feature-policy",
+    "base": "http/tests/feature-policy",
+    "args": ["--enable-blink-features=FeaturePolicy"]
+  },
+  {
+    "prefix": "mojo-localstorage",
+    "base": "external/wpt/webstorage",
+    "args": ["--mojo-local-storage"]
+  },
+  {
+    "prefix": "mojo-localstorage",
+    "base": "storage/domstorage/localstorage",
+    "args": ["--mojo-local-storage"]
+  },
+  {
+    "prefix": "print_browser",
+    "base": "print_testharness",
+    "args": ["--enable-print-browser"]
   }
 ]

@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "content/browser/media/media_browsertest.h"
 #include "content/public/test/browser_test_utils.h"
@@ -22,7 +23,7 @@ const char kProbably[] = "probably";
 const char kMaybe[] = "maybe";
 const char kNot[] = "";
 
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
 const char* kPropProbably = kProbably;
 const char* kPropMaybe = kMaybe;
 #else
@@ -199,8 +200,8 @@ class MediaCanPlayTypeTest : public MediaBrowserTest {
 
     // Remove all but "audio/mpeg" when https://crbug.com/592889 is fixed.
     if (mime != "audio/mpeg" && mime != "audio/mp4" && mime != "video/mp4" &&
-        mime != "application/x-mpegurl" &&
-        mime != "application/vnd.apple.mpegurl" && mime != "video/mp2t") {
+        mime != "video/mp2t" &&
+        !base::EndsWith(mime, "mpegurl", base::CompareCase::SENSITIVE)) {
       EXPECT_EQ(kNot, CanPlay("'" + mime + "; codecs=\"mp3\"'"));
     }
 
@@ -368,7 +369,6 @@ class MediaCanPlayTypeTest : public MediaBrowserTest {
     EXPECT_EQ(kNot, CanPlay("'" + mime + "; codecs=\"hev1.1.6.L93.B0,opus\"'"));
     EXPECT_EQ(kNot, CanPlay("'" + mime + "; codecs=\"hvc1.1.6.L93.B0,opus\"'"));
 
-    EXPECT_EQ(kNot, CanPlay("'" + mime + "; codecs=\"flac\"'"));
     EXPECT_EQ(kNot, CanPlay("'" + mime + "; codecs=\"mp3\"'"));
 
     EXPECT_EQ(kNot, CanPlay("'" + mime + "; codecs=\"mp4a.66\"'"));
@@ -523,6 +523,80 @@ class MediaCanPlayTypeTest : public MediaBrowserTest {
     EXPECT_EQ(kNot, CanPlay("'" + mime + "; codecs=\"unknown\"'"));
   }
 
+  void TestHLSCombinations(const std::string& mime) {
+    EXPECT_EQ(kHlsMaybe, CanPlay("'" + mime + "'"));
+
+    EXPECT_EQ(kHlsMaybe, CanPlay("'" + mime + "; codecs=\"avc1\"'"));
+    EXPECT_EQ(kHlsMaybe, CanPlay("'" + mime + "; codecs=\"avc3\"'"));
+    EXPECT_EQ(kHlsMaybe, CanPlay("'" + mime + "; codecs=\"mp4a.40\"'"));
+    EXPECT_EQ(kHlsMaybe, CanPlay("'" + mime + "; codecs=\"avc1, mp4a.40\"'"));
+    EXPECT_EQ(kHlsMaybe, CanPlay("'" + mime + "; codecs=\"avc3, mp4a.40\"'"));
+
+    EXPECT_EQ(kHlsProbably, CanPlay("'" + mime + "; codecs=\"avc1.42E01E\"'"));
+    EXPECT_EQ(kHlsProbably, CanPlay("'" + mime + "; codecs=\"avc1.42101E\"'"));
+    EXPECT_EQ(kHlsProbably, CanPlay("'" + mime + "; codecs=\"avc1.42701E\"'"));
+    EXPECT_EQ(kHlsProbably, CanPlay("'" + mime + "; codecs=\"avc1.42F01E\"'"));
+
+    EXPECT_EQ(kHlsProbably, CanPlay("'" + mime + "; codecs=\"avc3.42E01E\"'"));
+    EXPECT_EQ(kHlsProbably, CanPlay("'" + mime + "; codecs=\"avc3.42801E\"'"));
+    EXPECT_EQ(kHlsProbably, CanPlay("'" + mime + "; codecs=\"avc3.42C01E\"'"));
+
+    // Android, is the only platform that supports these types, and its HLS
+    // implementations uses platform codecs, which do not include MPEG-2 AAC.
+    // See https://crbug.com/544268.
+    EXPECT_EQ(kNot, CanPlay("'" + mime + "; codecs=\"mp4a.66\"'"));
+    EXPECT_EQ(kNot, CanPlay("'" + mime + "; codecs=\"mp4a.67\"'"));
+    EXPECT_EQ(kNot, CanPlay("'" + mime + "; codecs=\"mp4a.68\"'"));
+
+    EXPECT_EQ(kHlsProbably, CanPlay("'" + mime + "; codecs=\"mp4a.69\"'"));
+    EXPECT_EQ(kHlsProbably, CanPlay("'" + mime + "; codecs=\"mp4a.6B\"'"));
+
+    EXPECT_EQ(kHlsProbably, CanPlay("'" + mime + "; codecs=\"mp4a.40.2\"'"));
+    EXPECT_EQ(kHlsProbably, CanPlay("'" + mime + "; codecs=\"mp4a.40.02\"'"));
+    EXPECT_EQ(kHlsProbably,
+              CanPlay("'" + mime + "; codecs=\"avc1.42E01E, mp4a.40.2\"'"));
+    EXPECT_EQ(kHlsProbably,
+              CanPlay("'" + mime + "; codecs=\"avc1.42E01E, mp4a.40.02\"'"));
+    EXPECT_EQ(kHlsProbably,
+              CanPlay("'" + mime + "; codecs=\"avc3.42E01E, mp4a.40.5\"'"));
+    EXPECT_EQ(kHlsProbably,
+              CanPlay("'" + mime + "; codecs=\"avc3.42E01E, mp4a.40.05\"'"));
+    EXPECT_EQ(kHlsProbably,
+              CanPlay("'" + mime + "; codecs=\"avc3.42E01E, mp4a.40.29\"'"));
+
+    EXPECT_EQ(kNot, CanPlay("'" + mime + "; codecs=\"hev1.1.6.L93.B0\"'"));
+    EXPECT_EQ(kNot, CanPlay("'" + mime + "; codecs=\"hvc1.1.6.L93.B0\"'"));
+    EXPECT_EQ(kNot,
+              CanPlay("'" + mime + "; codecs=\"hev1.1.6.L93.B0,mp4a.40.5\"'"));
+    EXPECT_EQ(kNot,
+              CanPlay("'" + mime + "; codecs=\"hvc1.1.6.L93.B0,mp4a.40.5\"'"));
+
+    EXPECT_EQ(kNot,
+              CanPlay("'" + mime + "; codecs=\"vp09.01.01.08.04.03.00.00\"'"));
+
+    EXPECT_EQ(kNot, CanPlay("'" + mime + "; codecs=\"ac-3\"'"));
+    EXPECT_EQ(kNot, CanPlay("'" + mime + "; codecs=\"ec-3\"'"));
+    EXPECT_EQ(kNot, CanPlay("'" + mime + "; codecs=\"mp4a.A5\"'"));
+    EXPECT_EQ(kNot, CanPlay("'" + mime + "; codecs=\"mp4a.A6\"'"));
+    EXPECT_EQ(kNot, CanPlay("'" + mime + "; codecs=\"mp4a.a5\"'"));
+    EXPECT_EQ(kNot, CanPlay("'" + mime + "; codecs=\"mp4a.a6\"'"));
+
+    EXPECT_EQ(kHlsMaybe, CanPlay("'" + mime + "; codecs=\"avc1, mp4a.40.2\"'"));
+    EXPECT_EQ(kHlsMaybe,
+              CanPlay("'" + mime + "; codecs=\"avc1, mp4a.40.02\"'"));
+    EXPECT_EQ(kHlsMaybe, CanPlay("'" + mime + "; codecs=\"avc3, mp4a.40.2\"'"));
+    EXPECT_EQ(kHlsMaybe,
+              CanPlay("'" + mime + "; codecs=\"avc3, mp4a.40.02\"'"));
+    EXPECT_EQ(kHlsMaybe,
+              CanPlay("'" + mime + "; codecs=\"avc1.42E01E, mp4a.40\"'"));
+    EXPECT_EQ(kHlsMaybe,
+              CanPlay("'" + mime + "; codecs=\"avc3.42E01E, mp4a.40\"'"));
+
+    TestMPEGUnacceptableCombinations(mime);
+    // This result is incorrect. See https://crbug.com/592889.
+    EXPECT_EQ(kHlsProbably, CanPlay("'" + mime + "; codecs=\"mp3\"'"));
+  }
+
  private:
   GURL url_;
   DISALLOW_COPY_AND_ASSIGN(MediaCanPlayTypeTest);
@@ -587,50 +661,55 @@ IN_PROC_BROWSER_TEST_F(MediaCanPlayTypeTest, CodecSupportTest_webm) {
 IN_PROC_BROWSER_TEST_F(MediaCanPlayTypeTest, CodecSupportTest_ogg) {
   EXPECT_EQ(kOggVideoMaybe, CanPlay("'video/ogg'"));
   EXPECT_EQ(kOggVideoProbably, CanPlay("'video/ogg; codecs=\"theora\"'"));
+  EXPECT_EQ(kOggVideoProbably, CanPlay("'video/ogg; codecs=\"theora, flac\"'"));
+  EXPECT_EQ(kOggVideoProbably, CanPlay("'video/ogg; codecs=\"theora, opus\"'"));
   EXPECT_EQ(kOggVideoProbably,
             CanPlay("'video/ogg; codecs=\"theora, vorbis\"'"));
   EXPECT_EQ(kOggVideoProbably,
-            CanPlay("'video/ogg; codecs=\"theora, opus\"'"));
-  EXPECT_EQ(kOggVideoProbably,
-            CanPlay("'video/ogg; codecs=\"opus, vorbis\"'"));
+            CanPlay("'video/ogg; codecs=\"flac, opus, vorbis\"'"));
 
   TestOGGUnacceptableCombinations("video/ogg");
 
   EXPECT_EQ(kMaybe, CanPlay("'audio/ogg'"));
-  EXPECT_EQ(kProbably, CanPlay("'audio/ogg; codecs=\"vorbis\"'"));
+  EXPECT_EQ(kProbably, CanPlay("'audio/ogg; codecs=\"flac\"'"));
   EXPECT_EQ(kProbably, CanPlay("'audio/ogg; codecs=\"opus\"'"));
-  EXPECT_EQ(kProbably, CanPlay("'audio/ogg; codecs=\"vorbis, opus\"'"));
+  EXPECT_EQ(kProbably, CanPlay("'audio/ogg; codecs=\"vorbis\"'"));
+  EXPECT_EQ(kProbably, CanPlay("'audio/ogg; codecs=\"flac, vorbis, opus\"'"));
 
   EXPECT_EQ(kNot, CanPlay("'audio/ogg; codecs=\"theora\"'"));
+  EXPECT_EQ(kNot, CanPlay("'audio/ogg; codecs=\"theora, flac\"'"));
   EXPECT_EQ(kNot, CanPlay("'audio/ogg; codecs=\"theora, opus\"'"));
   EXPECT_EQ(kNot, CanPlay("'audio/ogg; codecs=\"theora, vorbis\"'"));
 
   TestOGGUnacceptableCombinations("audio/ogg");
 
   EXPECT_EQ(kMaybe, CanPlay("'application/ogg'"));
-  EXPECT_EQ(kProbably, CanPlay("'application/ogg; codecs=\"vorbis\"'"));
-  EXPECT_EQ(kTheoraProbably, CanPlay("'application/ogg; codecs=\"theora\"'"));
+  EXPECT_EQ(kProbably, CanPlay("'application/ogg; codecs=\"flac\"'"));
   EXPECT_EQ(kProbably, CanPlay("'application/ogg; codecs=\"opus\"'"));
+  EXPECT_EQ(kProbably, CanPlay("'application/ogg; codecs=\"vorbis\"'"));
+  EXPECT_EQ(kProbably,
+            CanPlay("'application/ogg; codecs=\"flac, opus, vorbis\"'"));
+  EXPECT_EQ(kTheoraProbably, CanPlay("'application/ogg; codecs=\"theora\"'"));
   EXPECT_EQ(kTheoraProbably,
-            CanPlay("'application/ogg; codecs=\"theora, vorbis\"'"));
+            CanPlay("'application/ogg; codecs=\"theora, flac\"'"));
   EXPECT_EQ(kTheoraProbably,
             CanPlay("'application/ogg; codecs=\"theora, opus\"'"));
-  EXPECT_EQ(kProbably, CanPlay("'application/ogg; codecs=\"opus, vorbis\"'"));
+  EXPECT_EQ(kTheoraProbably,
+            CanPlay("'application/ogg; codecs=\"theora, vorbis\"'"));
 
   TestOGGUnacceptableCombinations("application/ogg");
 }
 
 IN_PROC_BROWSER_TEST_F(MediaCanPlayTypeTest, CodecSupportTest_flac) {
   EXPECT_EQ(kProbably, CanPlay("'audio/flac'"));
+  EXPECT_EQ(kProbably, CanPlay("'audio/ogg; codecs=\"flac\"'"));
 
-  // Only audio/flac is supported.
   EXPECT_EQ(kNot, CanPlay("'video/flac'"));
   EXPECT_EQ(kNot, CanPlay("'video/x-flac'"));
   EXPECT_EQ(kNot, CanPlay("'audio/x-flac'"));
   EXPECT_EQ(kNot, CanPlay("'application/x-flac'"));
   EXPECT_EQ(kNot, CanPlay("'audio/flac; codecs=\"flac\"'"));
 
-  // Currently only flac in a flac container is supported.
   EXPECT_EQ(kNot, CanPlay("'video/mp4; codecs=\"flac\"'"));
   EXPECT_EQ(kNot, CanPlay("'video/webm; codecs=\"flac\"'"));
   EXPECT_EQ(kNot, CanPlay("'audio/mp4; codecs=\"flac\"'"));
@@ -797,9 +876,9 @@ IN_PROC_BROWSER_TEST_F(MediaCanPlayTypeTest, CodecSupportTest_mp4) {
   EXPECT_EQ(kHevcSupported,
             CanPlay("'video/mp4; codecs=\"hvc1.1.6.L93.B0, mp4a.40.5\"'"));
 
-  // Note: set to kPropProbably when switches::kEnableVp9InMp4 is enabled by
-  // default.
-  EXPECT_EQ(kNot, CanPlay("'video/mp4; codecs=\"vp09.00.01.08.02.01.01.00\"'"));
+  // switches::kEnableVp9InMp4 is enabled in MediaBrowserTest.
+  EXPECT_EQ(kPropProbably,
+            CanPlay("'video/mp4; codecs=\"vp09.00.01.08.02.01.01.00\"'"));
 
   TestMPEGUnacceptableCombinations("video/mp4");
   EXPECT_EQ(kNot, CanPlay("'video/mp4; codecs=\"flac\"'"));
@@ -1336,206 +1415,10 @@ IN_PROC_BROWSER_TEST_F(MediaCanPlayTypeTest, CodecSupportTest_Mp4aVariants) {
 }
 
 IN_PROC_BROWSER_TEST_F(MediaCanPlayTypeTest, CodecSupportTest_HLS) {
-  EXPECT_EQ(kHlsMaybe, CanPlay("'application/x-mpegurl'"));
-
-  EXPECT_EQ(kHlsMaybe, CanPlay("'application/x-mpegurl; codecs=\"avc1\"'"));
-  EXPECT_EQ(kHlsMaybe, CanPlay("'application/x-mpegurl; codecs=\"avc3\"'"));
-  EXPECT_EQ(kHlsMaybe, CanPlay("'application/x-mpegurl; codecs=\"mp4a.40\"'"));
-  EXPECT_EQ(kHlsMaybe,
-            CanPlay("'application/x-mpegurl; codecs=\"avc1, mp4a.40\"'"));
-  EXPECT_EQ(kHlsMaybe,
-            CanPlay("'application/x-mpegurl; codecs=\"avc3, mp4a.40\"'"));
-
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/x-mpegurl; codecs=\"avc1.42E01E\"'"));
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/x-mpegurl; codecs=\"avc1.42101E\"'"));
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/x-mpegurl; codecs=\"avc1.42701E\"'"));
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/x-mpegurl; codecs=\"avc1.42F01E\"'"));
-
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/x-mpegurl; codecs=\"avc3.42E01E\"'"));
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/x-mpegurl; codecs=\"avc3.42801E\"'"));
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/x-mpegurl; codecs=\"avc3.42C01E\"'"));
-
-  // Android, is the only platform that supports these types, and its HLS
-  // implementations uses platform codecs, which do not include MPEG-2 AAC.
-  // See https://crbug.com/544268.
-  EXPECT_EQ(kNot, CanPlay("'application/x-mpegurl; codecs=\"mp4a.66\"'"));
-  EXPECT_EQ(kNot, CanPlay("'application/x-mpegurl; codecs=\"mp4a.67\"'"));
-  EXPECT_EQ(kNot, CanPlay("'application/x-mpegurl; codecs=\"mp4a.68\"'"));
-
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/x-mpegurl; codecs=\"mp4a.69\"'"));
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/x-mpegurl; codecs=\"mp4a.6B\"'"));
-
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/x-mpegurl; codecs=\"mp4a.40.2\"'"));
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/x-mpegurl; codecs=\"mp4a.40.02\"'"));
-  EXPECT_EQ(
-      kHlsProbably,
-      CanPlay("'application/x-mpegurl; codecs=\"avc1.42E01E, mp4a.40.2\"'"));
-  EXPECT_EQ(
-      kHlsProbably,
-      CanPlay("'application/x-mpegurl; codecs=\"avc1.42E01E, mp4a.40.02\"'"));
-  EXPECT_EQ(
-      kHlsProbably,
-      CanPlay("'application/x-mpegurl; codecs=\"avc3.42E01E, mp4a.40.5\"'"));
-  EXPECT_EQ(
-      kHlsProbably,
-      CanPlay("'application/x-mpegurl; codecs=\"avc3.42E01E, mp4a.40.05\"'"));
-  EXPECT_EQ(
-      kHlsProbably,
-      CanPlay("'application/x-mpegurl; codecs=\"avc3.42E01E, mp4a.40.29\"'"));
-
-  EXPECT_EQ(kNot,
-      CanPlay("'application/x-mpegurl; codecs=\"hev1.1.6.L93.B0\"'"));
-  EXPECT_EQ(kNot,
-      CanPlay("'application/x-mpegurl; codecs=\"hvc1.1.6.L93.B0\"'"));
-  EXPECT_EQ(kNot,
-      CanPlay("'application/x-mpegurl; codecs=\"hev1.1.6.L93.B0,mp4a.40.5\"'"));
-  EXPECT_EQ(kNot,
-      CanPlay("'application/x-mpegurl; codecs=\"hvc1.1.6.L93.B0,mp4a.40.5\"'"));
-
-  EXPECT_EQ(
-      kNot,
-      CanPlay("'application/x-mpegurl; codecs=\"vp09.01.01.08.04.03.00.00\"'"));
-
-  EXPECT_EQ(kNot, CanPlay("'application/x-mpegurl; codecs=\"ac-3\"'"));
-  EXPECT_EQ(kNot, CanPlay("'application/x-mpegurl; codecs=\"ec-3\"'"));
-  EXPECT_EQ(kNot, CanPlay("'application/x-mpegurl; codecs=\"mp4a.A5\"'"));
-  EXPECT_EQ(kNot, CanPlay("'application/x-mpegurl; codecs=\"mp4a.A6\"'"));
-  EXPECT_EQ(kNot, CanPlay("'application/x-mpegurl; codecs=\"mp4a.a5\"'"));
-  EXPECT_EQ(kNot, CanPlay("'application/x-mpegurl; codecs=\"mp4a.a6\"'"));
-
-  EXPECT_EQ(kHlsMaybe,
-            CanPlay("'application/x-mpegurl; codecs=\"avc1, mp4a.40.2\"'"));
-  EXPECT_EQ(kHlsMaybe,
-            CanPlay("'application/x-mpegurl; codecs=\"avc1, mp4a.40.02\"'"));
-  EXPECT_EQ(kHlsMaybe,
-            CanPlay("'application/x-mpegurl; codecs=\"avc3, mp4a.40.2\"'"));
-  EXPECT_EQ(kHlsMaybe,
-            CanPlay("'application/x-mpegurl; codecs=\"avc3, mp4a.40.02\"'"));
-  EXPECT_EQ(
-      kHlsMaybe,
-      CanPlay("'application/x-mpegurl; codecs=\"avc1.42E01E, mp4a.40\"'"));
-  EXPECT_EQ(
-      kHlsMaybe,
-      CanPlay("'application/x-mpegurl; codecs=\"avc3.42E01E, mp4a.40\"'"));
-
-  TestMPEGUnacceptableCombinations("application/x-mpegurl");
-  // This result is incorrect. See https://crbug.com/592889.
-  EXPECT_EQ(kHlsProbably, CanPlay("'application/x-mpegurl; codecs=\"mp3\"'"));
-
-  EXPECT_EQ(kHlsMaybe, CanPlay("'application/vnd.apple.mpegurl'"));
-
-  EXPECT_EQ(kHlsMaybe,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"avc1\"'"));
-  EXPECT_EQ(kHlsMaybe,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"avc3\"'"));
-  EXPECT_EQ(kHlsMaybe,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"mp4a.40\"'"));
-  EXPECT_EQ(
-      kHlsMaybe,
-      CanPlay("'application/vnd.apple.mpegurl; codecs=\"avc1, mp4a.40\"'"));
-  EXPECT_EQ(
-      kHlsMaybe,
-      CanPlay("'application/vnd.apple.mpegurl; codecs=\"avc3, mp4a.40\"'"));
-
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"avc1.42E01E\"'"));
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"avc1.42101E\"'"));
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"avc1.42701E\"'"));
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"avc1.42F01E\"'"));
-
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"avc3.42E01E\"'"));
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"avc3.42801E\"'"));
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"avc3.42C01E\"'"));
-
-  // Android, is the only platform that supports these types, and its HLS
-  // implementations uses platform codecs, which do not include MPEG-2 AAC.
-  // See https://crbug.com/544268.
-  EXPECT_EQ(kNot,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"mp4a.66\"'"));
-  EXPECT_EQ(kNot,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"mp4a.67\"'"));
-  EXPECT_EQ(kNot,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"mp4a.68\"'"));
-
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"mp4a.69\"'"));
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"mp4a.6B\"'"));
-
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"mp4a.40.2\"'"));
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"mp4a.40.02\"'"));
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"mp4a.40.5\"'"));
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"mp4a.40.05\"'"));
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"mp4a.40.29\"'"));
-
-  EXPECT_EQ(
-      kHlsMaybe,
-      CanPlay("'application/vnd.apple.mpegurl; codecs=\"avc1, mp4a.40.2\"'"));
-  EXPECT_EQ(
-      kHlsMaybe,
-      CanPlay("'application/vnd.apple.mpegurl; codecs=\"avc1, mp4a.40.02\"'"));
-  EXPECT_EQ(
-      kHlsMaybe,
-      CanPlay("'application/vnd.apple.mpegurl; codecs=\"avc3, mp4a.40.2\"'"));
-  EXPECT_EQ(
-      kHlsMaybe,
-      CanPlay("'application/vnd.apple.mpegurl; codecs=\"avc3, mp4a.40.02\"'"));
-  EXPECT_EQ(kHlsMaybe, CanPlay("'application/vnd.apple.mpegurl; "
-                               "codecs=\"avc1.42E01E, mp4a.40\"'"));
-  EXPECT_EQ(kHlsMaybe, CanPlay("'application/vnd.apple.mpegurl; "
-                               "codecs=\"avc3.42E01E, mp4a.40\"'"));
-
-  EXPECT_EQ(kNot,
-      CanPlay("'application/vnd.apple.mpegurl; codecs=\"hev1.1.6.L93.B0\"'"));
-  EXPECT_EQ(kNot,
-      CanPlay("'application/vnd.apple.mpegurl; codecs=\"hvc1.1.6.L93.B0\"'"));
-  EXPECT_EQ(kNot,
-      CanPlay("'application/vnd.apple.mpegurl; "
-              "codecs=\"hev1.1.6.L93.B0,mp4a.40.5\"'"));
-  EXPECT_EQ(kNot,
-      CanPlay("'application/vnd.apple.mpegurl; "
-              "codecs=\"hvc1.1.6.L93.B0,mp4a.40.5\"'"));
-
-  EXPECT_EQ(kNot, CanPlay("'application/vnd.apple.mpegurl; "
-                          "codecs=\"vp09.01.01.08.04.03.00.00\"'"));
-
-  EXPECT_EQ(kNot, CanPlay("'application/vnd.apple.mpegurl; codecs=\"ac-3\"'"));
-  EXPECT_EQ(kNot, CanPlay("'application/vnd.apple.mpegurl; codecs=\"ec-3\"'"));
-  EXPECT_EQ(kNot,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"mp4a.A5\"'"));
-  EXPECT_EQ(kNot,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"mp4a.A6\"'"));
-  EXPECT_EQ(kNot,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"mp4a.a5\"'"));
-  EXPECT_EQ(kNot,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"mp4a.a6\"'"));
-
-  TestMPEGUnacceptableCombinations("application/vnd.apple.mpegurl");
-  // This result is incorrect. See https://crbug.com/592889.
-  EXPECT_EQ(kHlsProbably,
-            CanPlay("'application/vnd.apple.mpegurl; codecs=\"mp3\"'"));
+  TestHLSCombinations("application/vnd.apple.mpegurl");
+  TestHLSCombinations("application/x-mpegurl");
+  TestHLSCombinations("audio/mpegurl");
+  TestHLSCombinations("audio/x-mpegurl");
 }
 
 IN_PROC_BROWSER_TEST_F(MediaCanPlayTypeTest, CodecSupportTest_AAC_ADTS) {
@@ -1645,7 +1528,6 @@ class MediaCanPlayTypeTestMp4Vp9Demuxing
       public ::testing::WithParamInterface<bool> {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    MediaCanPlayTypeTest::SetUpCommandLine(command_line);
     const bool enable_mp4_vp9_demuxing = GetParam();
     if (enable_mp4_vp9_demuxing)
       command_line->AppendSwitch(switches::kEnableVp9InMp4);

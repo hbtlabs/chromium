@@ -259,6 +259,7 @@ message SystemTimezoneProto {
     DISABLED = 1;
     IP_ONLY = 2;
     SEND_WIFI_ACCESS_POINTS = 3;
+    SEND_ALL_LOCATION_INFO = 4;
   };
 
   optional AutomaticTimezoneDetectionType timezone_detection_type = 2;
@@ -308,6 +309,12 @@ message AndroidKioskAppInfoProto {
   // If package and action are specified, but not the class name, runtime may
   // use PackageManager.queryIntentActivity() to find out the class name.
   optional string action = 3;
+
+  // Display name (optional).
+  // User-friendly app name that should be used in Chrome UI where kiosk app
+  // name is shown. Chrome side could override the string with an updated
+  // value that it will get from Google Play when the app will be installed.
+  optional string display_name = 4;
 }
 
 // Describes a single device-local account.
@@ -754,6 +761,22 @@ message LoginAppsProto {
   repeated string login_apps = 1;
 }
 
+// A list of allowed locales on the login screen.
+message LoginScreenLocalesProto {
+  repeated string login_screen_locales = 1;
+}
+
+// A list of allowed input methods on the login screen.
+message LoginScreenInputMethodsProto {
+  repeated string login_screen_input_methods = 1;
+}
+
+// The url and hash that specified in JSON format that can be used to set the
+// device-level wallpaper on the login screen before any user logs in.
+message DeviceWallpaperImageProto {
+  optional string device_wallpaper_image = 1;
+}
+
 message ChromeDeviceSettingsProto {
   optional DevicePolicyRefreshRateProto device_policy_refresh_rate = 1;
   optional UserWhitelistProto user_whitelist = 2;
@@ -808,4 +831,7 @@ message ChromeDeviceSettingsProto {
       45;
   optional LoginAppsProto login_apps = 46;
   optional NetworkThrottlingEnabledProto network_throttling = 47;
+  optional DeviceWallpaperImageProto device_wallpaper_image = 48;
+  optional LoginScreenLocalesProto login_screen_locales = 49;
+  optional LoginScreenInputMethodsProto login_screen_input_methods = 50;
 }

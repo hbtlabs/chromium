@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/outdated_upgrade_bubble_view.h"
 
 #include "base/metrics/histogram_macros.h"
+#include "base/task_scheduler/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/layout_constants.h"
@@ -13,13 +14,10 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/theme_resources.h"
 #include "components/prefs/pref_service.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/user_metrics.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/resource/resource_bundle.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/layout_constants.h"
@@ -100,15 +98,6 @@ base::string16 OutdatedUpgradeBubbleView::GetWindowTitle() const {
   return l10n_util::GetStringUTF16(IDS_UPGRADE_BUBBLE_TITLE);
 }
 
-gfx::ImageSkia OutdatedUpgradeBubbleView::GetWindowIcon() {
-  return *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-      IDR_UPDATE_MENU_SEVERITY_HIGH);
-}
-
-bool OutdatedUpgradeBubbleView::ShouldShowWindowIcon() const {
-  return true;
-}
-
 bool OutdatedUpgradeBubbleView::Cancel() {
   content::RecordAction(base::UserMetricsAction("OutdatedUpgradeBubble.Later"));
   return true;
@@ -143,9 +132,13 @@ bool OutdatedUpgradeBubbleView::Accept() {
           prefs::kAttemptedToEnableAutoupdate, true);
     }
 
-    // Re-enable updates by shelling out to setup.exe in the blocking pool.
-    content::BrowserThread::PostBlockingPoolTask(
+    // Re-enable updates by shelling out to setup.exe asynchronously.
+    base::PostTaskWithTraits(
         FROM_HERE,
+        base::TaskTraits()
+            .MayBlock()
+            .WithPriority(base::TaskPriority::BACKGROUND)
+            .WithShutdownBehavior(base::TaskShutdownBehavior::BLOCK_SHUTDOWN),
         base::Bind(&google_update::ElevateIfNeededToReenableUpdates));
 #endif  // defined(OS_WIN)
   }

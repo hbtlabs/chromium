@@ -38,7 +38,7 @@
 #include "core/page/Page.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/animation/CompositorAnimationTimeline.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
 #include "wtf/PtrUtil.h"
@@ -89,7 +89,7 @@ bool AnimationTimeline::isActive() {
 void AnimationTimeline::animationAttached(Animation& animation) {
   DCHECK_EQ(animation.timeline(), this);
   DCHECK(!m_animations.contains(&animation));
-  m_animations.add(&animation);
+  m_animations.insert(&animation);
 }
 
 Animation* AnimationTimeline::play(AnimationEffectReadOnly* child) {
@@ -110,7 +110,7 @@ HeapVector<Member<Animation>> AnimationTimeline::getAnimations() {
   for (const auto& animation : m_animations) {
     if (animation->effect() &&
         (animation->effect()->isCurrent() || animation->effect()->isInEffect()))
-      animations.append(animation);
+      animations.push_back(animation);
   }
   std::sort(animations.begin(), animations.end(), compareAnimations);
   return animations;
@@ -128,13 +128,13 @@ void AnimationTimeline::serviceAnimations(TimingUpdateReason reason) {
   HeapVector<Member<Animation>> animations;
   animations.reserveInitialCapacity(m_animationsNeedingUpdate.size());
   for (Animation* animation : m_animationsNeedingUpdate)
-    animations.append(animation);
+    animations.push_back(animation);
 
   std::sort(animations.begin(), animations.end(), Animation::hasLowerPriority);
 
   for (Animation* animation : animations) {
     if (!animation->update(reason))
-      m_animationsNeedingUpdate.remove(animation);
+      m_animationsNeedingUpdate.erase(animation);
   }
 
   DCHECK_EQ(m_outdatedAnimationCount, 0U);
@@ -281,7 +281,7 @@ void AnimationTimeline::clearOutdatedAnimation(Animation* animation) {
 void AnimationTimeline::setOutdatedAnimation(Animation* animation) {
   DCHECK(animation->outdated());
   m_outdatedAnimationCount++;
-  m_animationsNeedingUpdate.add(animation);
+  m_animationsNeedingUpdate.insert(animation);
   if (isActive() && !m_document->page()->animator().isServicingAnimations())
     m_timing->serviceOnNextFrame();
 }

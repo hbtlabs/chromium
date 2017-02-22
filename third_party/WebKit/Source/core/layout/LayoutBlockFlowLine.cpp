@@ -67,7 +67,7 @@ class ExpansionOpportunities {
           text.characters16() + run.m_start, run.m_stop - run.m_start,
           run.m_box->direction(), isAfterExpansion, textJustify);
     }
-    m_runsWithExpansions.append(opportunitiesInRun);
+    m_runsWithExpansions.push_back(opportunitiesInRun);
     m_totalOpportunities += opportunitiesInRun;
   }
   void removeTrailingExpansion() {
@@ -99,7 +99,7 @@ class ExpansionOpportunities {
         RELEASE_ASSERT(opportunitiesInRun <= m_totalOpportunities);
 
         // Don't justify for white-space: pre.
-        if (r->m_lineLayoutItem.style()->whiteSpace() != PRE) {
+        if (r->m_lineLayoutItem.style()->whiteSpace() != EWhiteSpace::kPre) {
           InlineTextBox* textBox = toInlineTextBox(r->m_box);
           RELEASE_ASSERT(m_totalOpportunities);
           int expansion = ((availableLogicalWidth - totalLogicalWidth) *
@@ -148,7 +148,7 @@ static inline InlineTextBox* createInlineBoxForText(BidiRun& run,
   if (text.isBR())
     textBox->setIsText(isOnlyRun || text.document().inNoQuirksMode());
   textBox->setDirOverride(
-      run.dirOverride(text.style()->rtlOrdering() == VisualOrder));
+      run.dirOverride(text.style()->rtlOrdering() == EOrder::kVisual));
   if (run.m_hasHyphen)
     textBox->setHasHyphen(true);
   return textBox;
@@ -363,20 +363,20 @@ ETextAlign LayoutBlockFlow::textAlignmentForLine(bool endsWithSoftBreak) const {
   TextAlignLast alignmentLast = style()->getTextAlignLast();
   switch (alignmentLast) {
     case TextAlignLastStart:
-      return ETextAlign::Start;
+      return ETextAlign::kStart;
     case TextAlignLastEnd:
-      return ETextAlign::End;
+      return ETextAlign::kEnd;
     case TextAlignLastLeft:
-      return ETextAlign::Left;
+      return ETextAlign::kLeft;
     case TextAlignLastRight:
-      return ETextAlign::Right;
+      return ETextAlign::kRight;
     case TextAlignLastCenter:
-      return ETextAlign::Center;
+      return ETextAlign::kCenter;
     case TextAlignLastJustify:
-      return ETextAlign::Justify;
+      return ETextAlign::kJustify;
     case TextAlignLastAuto:
-      if (alignment == ETextAlign::Justify)
-        return ETextAlign::Start;
+      if (alignment == ETextAlign::kJustify)
+        return ETextAlign::kStart;
       return alignment;
   }
 
@@ -588,7 +588,7 @@ static inline void setLogicalWidthForTextRun(
         for (HashSet<const SimpleFontData*>::const_iterator it =
                  wordMeasurement.fallbackFonts.begin();
              it != end; ++it)
-          fallbackFonts.add(*it);
+          fallbackFonts.insert(*it);
       }
     }
     wordMeasurementsIndex = i;
@@ -629,9 +629,9 @@ static inline void setLogicalWidthForTextRun(
     ASSERT(run->m_box->isText());
     GlyphOverflowAndFallbackFontsMap::ValueType* it =
         textBoxDataMap
-            .add(toInlineTextBox(run->m_box),
-                 std::make_pair(Vector<const SimpleFontData*>(),
-                                GlyphOverflow()))
+            .insert(toInlineTextBox(run->m_box),
+                    std::make_pair(Vector<const SimpleFontData*>(),
+                                   GlyphOverflow()))
             .storedValue;
     ASSERT(it->value.first.isEmpty());
     copyToVector(fallbackFonts, it->value.first);
@@ -641,9 +641,9 @@ static inline void setLogicalWidthForTextRun(
     ASSERT(run->m_box->isText());
     GlyphOverflowAndFallbackFontsMap::ValueType* it =
         textBoxDataMap
-            .add(toInlineTextBox(run->m_box),
-                 std::make_pair(Vector<const SimpleFontData*>(),
-                                GlyphOverflow()))
+            .insert(toInlineTextBox(run->m_box),
+                    std::make_pair(Vector<const SimpleFontData*>(),
+                                   GlyphOverflow()))
             .storedValue;
     it->value.second = glyphOverflow;
     run->m_box->clearKnownToHaveNoOverflow();
@@ -660,7 +660,8 @@ void LayoutBlockFlow::updateLogicalWidthForAlignment(
     unsigned expansionOpportunityCount) {
   TextDirection direction;
   if (rootInlineBox &&
-      rootInlineBox->getLineLayoutItem().style()->unicodeBidi() == Plaintext)
+      rootInlineBox->getLineLayoutItem().style()->getUnicodeBidi() ==
+          UnicodeBidi::kPlaintext)
     direction = rootInlineBox->direction();
   else
     direction = style()->direction();
@@ -670,25 +671,25 @@ void LayoutBlockFlow::updateLogicalWidthForAlignment(
   // position the objects horizontally. The total width of the line can be
   // increased if we end up justifying text.
   switch (textAlign) {
-    case ETextAlign::Left:
-    case ETextAlign::WebkitLeft:
+    case ETextAlign::kLeft:
+    case ETextAlign::kWebkitLeft:
       updateLogicalWidthForLeftAlignedBlock(
           style()->isLeftToRightDirection(), trailingSpaceRun, logicalLeft,
           totalLogicalWidth, availableLogicalWidth);
       break;
-    case ETextAlign::Right:
-    case ETextAlign::WebkitRight:
+    case ETextAlign::kRight:
+    case ETextAlign::kWebkitRight:
       updateLogicalWidthForRightAlignedBlock(
           style()->isLeftToRightDirection(), trailingSpaceRun, logicalLeft,
           totalLogicalWidth, availableLogicalWidth);
       break;
-    case ETextAlign::Center:
-    case ETextAlign::WebkitCenter:
+    case ETextAlign::kCenter:
+    case ETextAlign::kWebkitCenter:
       updateLogicalWidthForCenterAlignedBlock(
           style()->isLeftToRightDirection(), trailingSpaceRun, logicalLeft,
           totalLogicalWidth, availableLogicalWidth);
       break;
-    case ETextAlign::Justify:
+    case ETextAlign::kJustify:
       adjustInlineDirectionLineBounds(expansionOpportunityCount, logicalLeft,
                                       availableLogicalWidth);
       if (expansionOpportunityCount) {
@@ -699,8 +700,8 @@ void LayoutBlockFlow::updateLogicalWidthForAlignment(
         break;
       }
     // Fall through
-    case ETextAlign::Start:
-      if (direction == LTR)
+    case ETextAlign::kStart:
+      if (direction == TextDirection::kLtr)
         updateLogicalWidthForLeftAlignedBlock(
             style()->isLeftToRightDirection(), trailingSpaceRun, logicalLeft,
             totalLogicalWidth, availableLogicalWidth);
@@ -709,8 +710,8 @@ void LayoutBlockFlow::updateLogicalWidthForAlignment(
             style()->isLeftToRightDirection(), trailingSpaceRun, logicalLeft,
             totalLogicalWidth, availableLogicalWidth);
       break;
-    case ETextAlign::End:
-      if (direction == LTR)
+    case ETextAlign::kEnd:
+      if (direction == TextDirection::kLtr)
         updateLogicalWidthForRightAlignedBlock(
             style()->isLeftToRightDirection(), trailingSpaceRun, logicalLeft,
             totalLogicalWidth, availableLogicalWidth);
@@ -820,7 +821,7 @@ BidiRun* LayoutBlockFlow::computeInlineDirectionPositionsForSegment(
     }
     if (r->m_lineLayoutItem.isText()) {
       LineLayoutText rt(r->m_lineLayoutItem);
-      if (textAlign == ETextAlign::Justify && r != trailingSpaceRun &&
+      if (textAlign == ETextAlign::kJustify && r != trailingSpaceRun &&
           textJustify != TextJustifyNone) {
         if (!isAfterExpansion)
           toInlineTextBox(r->m_box)->setCanHaveLeadingExpansion(true);
@@ -1010,8 +1011,7 @@ inline const InlineIterator& LayoutBlockFlow::restartLayoutRunsAndFloatsInRange(
     FloatingObject* lastFloatFromPreviousLine,
     InlineBidiResolver& resolver,
     const InlineIterator& oldEnd) {
-  removeFloatingObjectsBelow(lastFloatFromPreviousLine,
-                             oldLogicalHeight.toInt());
+  removeFloatingObjectsBelow(lastFloatFromPreviousLine, oldLogicalHeight);
   setLogicalHeight(newLogicalHeight);
   resolver.setPositionIgnoringNestedIsolates(oldEnd);
   return oldEnd;
@@ -1140,17 +1140,19 @@ void LayoutBlockFlow::layoutRunsAndFloatsInRange(
       resolver.runs().deleteRuns();
     } else {
       VisualDirectionOverride override =
-          (styleToUse.rtlOrdering() == VisualOrder
-               ? (styleToUse.direction() == LTR ? VisualLeftToRightOverride
-                                                : VisualRightToLeftOverride)
+          (styleToUse.rtlOrdering() == EOrder::kVisual
+               ? (styleToUse.direction() == TextDirection::kLtr
+                      ? VisualLeftToRightOverride
+                      : VisualRightToLeftOverride)
                : NoVisualOverride);
-      if (isNewUBAParagraph && styleToUse.unicodeBidi() == Plaintext &&
+      if (isNewUBAParagraph &&
+          styleToUse.getUnicodeBidi() == UnicodeBidi::kPlaintext &&
           !resolver.context()->parent()) {
         TextDirection direction = determinePlaintextDirectionality(
             resolver.position().root(), resolver.position().getLineLayoutItem(),
             resolver.position().offset());
         resolver.setStatus(
-            BidiStatus(direction, isOverride(styleToUse.unicodeBidi())));
+            BidiStatus(direction, isOverride(styleToUse.getUnicodeBidi())));
       }
       // FIXME: This ownership is reversed. We should own the BidiRunList and
       // pass it to createBidiRunsForLine.
@@ -1672,10 +1674,12 @@ void LayoutBlockFlow::computeInlinePreferredLogicalWidths(
           const ComputedStyle& childStyle = child->styleRef();
           clearPreviousFloat =
               (prevFloat &&
-               ((prevFloat->styleRef().floating() == EFloat::Left &&
-                 (childStyle.clear() & ClearLeft)) ||
-                (prevFloat->styleRef().floating() == EFloat::Right &&
-                 (childStyle.clear() & ClearRight))));
+               ((prevFloat->styleRef().floating() == EFloat::kLeft &&
+                 (childStyle.clear() == EClear::kBoth ||
+                  childStyle.clear() == EClear::kLeft)) ||
+                (prevFloat->styleRef().floating() == EFloat::kRight &&
+                 (childStyle.clear() == EClear::kBoth ||
+                  childStyle.clear() == EClear::kRight))));
           prevFloat = child;
         } else {
           clearPreviousFloat = false;
@@ -1930,12 +1934,12 @@ void LayoutBlockFlow::layoutInlineChildren(bool relayoutChildren,
         if (o->isOutOfFlowPositioned()) {
           o->containingBlock()->insertPositionedObject(box);
         } else if (o->isFloating()) {
-          layoutState.floats().append(FloatWithRect(box));
+          layoutState.floats().push_back(FloatWithRect(box));
           if (box->needsLayout()) {
-            box->layout();
-            // Dirty any lineboxes potentially affected by the float, but don't
-            // search outside this object as we are only interested in dirtying
-            // lineboxes to which we may attach the float.
+            // Be sure to at least mark the first line affected by the float as
+            // dirty, so that the float gets relaid out. Otherwise we'll miss
+            // it. After float layout, if it turns out that it changed size,
+            // any lines after this line will be deleted and relaid out.
             dirtyLinesFromChangedChild(box, MarkOnlyThis);
           }
         } else if (isFullLayout || o->needsLayout()) {
@@ -2111,10 +2115,10 @@ RootInlineBox* LayoutBlockFlow::determineStartPosition(
     resolver.setStatus(last->lineBreakBidiStatus());
   } else {
     TextDirection direction = style()->direction();
-    if (style()->unicodeBidi() == Plaintext)
+    if (style()->getUnicodeBidi() == UnicodeBidi::kPlaintext)
       direction = determinePlaintextDirectionality(LineLayoutItem(this));
     resolver.setStatus(
-        BidiStatus(direction, isOverride(style()->unicodeBidi())));
+        BidiStatus(direction, isOverride(style()->getUnicodeBidi())));
     InlineIterator iter = InlineIterator(
         LineLayoutBlockFlow(this),
         bidiFirstSkippingEmptyInlines(LineLayoutBlockFlow(this),
@@ -2135,7 +2139,7 @@ bool LayoutBlockFlow::lineBoxHasBRWithClearance(RootInlineBox* curr) {
                            ? curr->lastLeafChild()
                            : curr->firstLeafChild();
   return lastBox && lastBox->getLineLayoutItem().isBR() &&
-         lastBox->getLineLayoutItem().style()->clear() != ClearNone;
+         lastBox->getLineLayoutItem().style()->clear() != EClear::kNone;
 }
 
 void LayoutBlockFlow::determineEndPosition(LineLayoutState& layoutState,
@@ -2350,14 +2354,12 @@ void LayoutBlockFlow::checkLinesForTextOverflow() {
                                   fullstopCharacter};
   DEFINE_STATIC_LOCAL(AtomicString, fullstopCharacterStr,
                       (fullStopString, fullStopStringLength));
-  DEFINE_STATIC_LOCAL(AtomicString, ellipsisStr,
-                      (&horizontalEllipsisCharacter, 1));
-  AtomicString& selectedEllipsisStr = ellipsisStr;
+  AtomicString selectedEllipsisStr(&horizontalEllipsisCharacter, 1);
 
   const Font& firstLineFont = firstLineStyle()->font();
   // FIXME: We should probably not hard-code the direction here.
   // https://crbug.com/333004
-  TextDirection ellipsisDirection = LTR;
+  TextDirection ellipsisDirection = TextDirection::kLtr;
   float firstLineEllipsisWidth = 0;
   float ellipsisWidth = 0;
 
@@ -2380,7 +2382,6 @@ void LayoutBlockFlow::checkLinesForTextOverflow() {
   if (!ellipsisWidth) {
     ASSERT(font.primaryFont());
     if (font.primaryFont()->glyphForCharacter(horizontalEllipsisCharacter)) {
-      selectedEllipsisStr = ellipsisStr;
       ellipsisWidth =
           font.width(constructTextRun(font, &horizontalEllipsisCharacter, 1,
                                       styleRef(), ellipsisDirection));
@@ -2419,8 +2420,8 @@ void LayoutBlockFlow::checkLinesForTextOverflow() {
       LayoutUnit width(indentText == IndentText ? firstLineEllipsisWidth
                                                 : ellipsisWidth);
       LayoutUnit blockEdge = ltr ? blockRightEdge : blockLeftEdge;
-      if (curr->lineCanAccommodateEllipsis(
-              ltr, blockEdge.toInt(), lineBoxEdge.toInt(), width.toInt())) {
+      if (curr->lineCanAccommodateEllipsis(ltr, blockEdge, lineBoxEdge,
+                                           width)) {
         LayoutUnit totalLogicalWidth = curr->placeEllipsis(
             selectedEllipsisStr, ltr, blockLeftEdge, blockRightEdge, width);
         LayoutUnit logicalLeft;  // We are only interested in the delta from the
@@ -2470,15 +2471,15 @@ LayoutUnit LayoutBlockFlow::startAlignedOffsetForLine(
 
   bool applyIndentText;
   switch (textAlign) {  // FIXME: Handle TAEND here
-    case ETextAlign::Left:
-    case ETextAlign::WebkitLeft:
+    case ETextAlign::kLeft:
+    case ETextAlign::kWebkitLeft:
       applyIndentText = style()->isLeftToRightDirection();
       break;
-    case ETextAlign::Right:
-    case ETextAlign::WebkitRight:
+    case ETextAlign::kRight:
+    case ETextAlign::kWebkitRight:
       applyIndentText = !style()->isLeftToRightDirection();
       break;
-    case ETextAlign::Start:
+    case ETextAlign::kStart:
       applyIndentText = true;
       break;
     default:

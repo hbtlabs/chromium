@@ -8,15 +8,16 @@
 #import <Foundation/Foundation.h>
 
 #import "base/ios/weak_nsobject.h"
-#include "ios/web/public/web_state/web_state_delegate.h"
+#import "ios/web/public/web_state/web_state_delegate.h"
 
 // Objective-C interface for web::WebStateDelegate.
 @protocol CRWWebStateDelegate<NSObject>
 @optional
 
-// Called when the page has made some progress loading. |progress| is a value
-// between 0.0 (nothing loaded) to 1.0 (page fully loaded).
-- (void)webState:(web::WebState*)webState didChangeProgress:(double)progress;
+// Returns the WebState the URL is opened in, or nullptr if the URL wasn't
+// opened immediately.
+- (web::WebState*)webState:(web::WebState*)webState
+         openURLWithParams:(const web::WebState::OpenURLParams&)params;
 
 // Called when the user triggers the context menu with the given
 // |ContextMenuParams|. Returns YES if the context menu operation was
@@ -25,11 +26,26 @@
 - (BOOL)webState:(web::WebState*)webState
     handleContextMenu:(const web::ContextMenuParams&)params;
 
+// Requests the repost form confirmation dialog. Clients must call |handler|
+// with YES to allow repost and with NO to cancel the repost. If this method is
+// not implemented then WebState will repost the form.
+- (void)webState:(web::WebState*)webState
+    runRepostFormDialogWithCompletionHandler:(void (^)(BOOL))handler;
+
 // Returns a pointer to a service to manage dialogs. May return null in which
 // case dialogs aren't shown.
 - (web::JavaScriptDialogPresenter*)javaScriptDialogPresenterForWebState:
     (web::WebState*)webState;
 
+// Called when a request receives an authentication challenge specified by
+// |protectionSpace|, and is unable to respond using cached credentials.
+// Clients must call |handler| even if they want to cancel authentication
+// (in which case |username| or |password| should be nil).
+- (void)webState:(web::WebState*)webState
+    didRequestHTTPAuthForProtectionSpace:(NSURLProtectionSpace*)protectionSpace
+                      proposedCredential:(NSURLCredential*)proposedCredential
+                       completionHandler:(void (^)(NSString* username,
+                                                   NSString* password))handler;
 @end
 
 namespace web {
@@ -41,11 +57,19 @@ class WebStateDelegateBridge : public web::WebStateDelegate {
   ~WebStateDelegateBridge() override;
 
   // web::WebStateDelegate methods.
-  void LoadProgressChanged(WebState* source, double progress) override;
+  WebState* OpenURLFromWebState(WebState*,
+                                const WebState::OpenURLParams&) override;
   bool HandleContextMenu(WebState* source,
                          const ContextMenuParams& params) override;
+  void ShowRepostFormWarningDialog(
+      WebState* source,
+      const base::Callback<void(bool)>& callback) override;
   JavaScriptDialogPresenter* GetJavaScriptDialogPresenter(
       WebState* source) override;
+  void OnAuthRequired(WebState* source,
+                      NSURLProtectionSpace* protection_space,
+                      NSURLCredential* proposed_credential,
+                      const AuthCallback& callback) override;
 
  private:
   // CRWWebStateDelegate which receives forwarded calls.

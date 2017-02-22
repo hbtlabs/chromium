@@ -3,17 +3,20 @@
 // found in the LICENSE file.
 
 define("mojo/public/js/router", [
+  "console",
   "mojo/public/js/codec",
   "mojo/public/js/core",
   "mojo/public/js/connector",
+  "mojo/public/js/lib/control_message_handler",
   "mojo/public/js/validator",
-], function(codec, core, connector, validator) {
+], function(console, codec, core, connector, controlMessageHandler, validator) {
 
   var Connector = connector.Connector;
   var MessageReader = codec.MessageReader;
   var Validator = validator.Validator;
+  var ControlMessageHandler = controlMessageHandler.ControlMessageHandler;
 
-  function Router(handle, connectorFactory) {
+  function Router(handle, interface_version, connectorFactory) {
     if (!core.isHandle(handle))
       throw new Error("Router constructor: Not a handle");
     if (connectorFactory === undefined)
@@ -24,6 +27,12 @@ define("mojo/public/js/router", [
     this.nextRequestID_ = 0;
     this.completers_ = new Map();
     this.payloadValidators_ = [];
+    this.testingController_ = null;
+
+    if (interface_version !== undefined) {
+      this.controlMessageHandler_ = new
+          ControlMessageHandler(interface_version);
+    }
 
     this.connector_.setIncomingReceiver({
         accept: this.handleIncomingMessage_.bind(this),
@@ -36,6 +45,7 @@ define("mojo/public/js/router", [
   Router.prototype.close = function() {
     this.completers_.clear();  // Drop any responders.
     this.connector_.close();
+    this.testingController_ = null;
   };
 
   Router.prototype.accept = function(message) {
@@ -81,6 +91,11 @@ define("mojo/public/js/router", [
     return this.connector_.encounteredError();
   };
 
+  Router.prototype.enableTestingMode = function() {
+    this.testingController_ = new RouterTestingController(this.connector_);
+    return this.testingController_;
+  };
+
   Router.prototype.handleIncomingMessage_ = function(message) {
     var noError = validator.validationError.NONE;
     var messageValidator = new Validator(message);
@@ -95,8 +110,17 @@ define("mojo/public/js/router", [
   };
 
   Router.prototype.handleValidIncomingMessage_ = function(message) {
+    if (this.testingController_)
+      return;
+
     if (message.expectsResponse()) {
-      if (this.incomingReceiver_) {
+      if (controlMessageHandler.isControlMessage(message)) {
+        if (this.controlMessageHandler_) {
+          this.controlMessageHandler_.acceptWithResponder(message, this);
+        } else {
+          this.close();
+        }
+      } else if (this.incomingReceiver_) {
         this.incomingReceiver_.acceptWithResponder(message, this);
       } else {
         // If we receive a request expecting a response when the client is not
@@ -107,17 +131,39 @@ define("mojo/public/js/router", [
       var reader = new MessageReader(message);
       var requestID = reader.requestID;
       var completer = this.completers_.get(requestID);
-      this.completers_.delete(requestID);
-      completer.resolve(message);
+      if (completer) {
+        this.completers_.delete(requestID);
+        completer.resolve(message);
+      } else {
+        console.log("Unexpected response with request ID: " + requestID);
+      }
     } else {
-      if (this.incomingReceiver_)
+      if (controlMessageHandler.isControlMessage(message)) {
+        if (this.controlMessageHandler_) {
+          var ok = this.controlMessageHandler_.accept(message);
+          if (ok) return;
+        }
+        this.close();
+      } else if (this.incomingReceiver_) {
         this.incomingReceiver_.accept(message);
+      }
     }
-  }
+  };
 
   Router.prototype.handleInvalidIncomingMessage_ = function(message, error) {
-    this.close();
-  }
+    if (!this.testingController_) {
+      // TODO(yzshen): Consider notifying the embedder.
+      // TODO(yzshen): This should also trigger connection error handler.
+      // Consider making accept() return a boolean and let the connector deal
+      // with this, as the C++ code does.
+      console.log("Invalid message: " + validator.validationError[error]);
+
+      this.close();
+      return;
+    }
+
+    this.testingController_.onInvalidIncomingMessage(error);
+  };
 
   Router.prototype.handleConnectionError_ = function(result) {
     this.completers_.forEach(function(value) {
@@ -128,25 +174,30 @@ define("mojo/public/js/router", [
     this.close();
   };
 
-  // The TestRouter subclass is only intended to be used in unit tests.
-  // It defeats valid message handling and delgates invalid message handling.
+  // The RouterTestingController is used in unit tests. It defeats valid message
+  // handling and delgates invalid message handling.
 
-  function TestRouter(handle, connectorFactory) {
-    Router.call(this, handle, connectorFactory);
+  function RouterTestingController(connector) {
+    this.connector_ = connector;
+    this.invalidMessageHandler_ = null;
   }
 
-  TestRouter.prototype = Object.create(Router.prototype);
-
-  TestRouter.prototype.handleValidIncomingMessage_ = function() {
+  RouterTestingController.prototype.waitForNextMessage = function() {
+    this.connector_.waitForNextMessageForTesting();
   };
 
-  TestRouter.prototype.handleInvalidIncomingMessage_ =
-      function(message, error) {
-        this.validationErrorHandler(error);
-      };
+  RouterTestingController.prototype.setInvalidIncomingMessageHandler =
+      function(callback) {
+    this.invalidMessageHandler_ = callback;
+  };
+
+  RouterTestingController.prototype.onInvalidIncomingMessage =
+      function(error) {
+    if (this.invalidMessageHandler_)
+      this.invalidMessageHandler_(error);
+  };
 
   var exports = {};
   exports.Router = Router;
-  exports.TestRouter = TestRouter;
   return exports;
 });

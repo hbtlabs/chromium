@@ -4,6 +4,8 @@
 
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_test_util.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "components/browser_sync/profile_sync_service_mock.h"
@@ -38,7 +40,11 @@ CreateProfileSyncServiceParamsForTest(
   init_params.url_request_context = browser_state->GetRequestContext();
   init_params.debug_identifier = browser_state->GetDebugName();
   init_params.channel = ::GetChannel();
-  init_params.blocking_pool = web::WebThread::GetBlockingPool();
+  base::SequencedWorkerPool* blocking_pool = web::WebThread::GetBlockingPool();
+  init_params.blocking_task_runner =
+      blocking_pool->GetSequencedTaskRunnerWithShutdownBehavior(
+          blocking_pool->GetSequenceToken(),
+          base::SequencedWorkerPool::SKIP_ON_SHUTDOWN);
 
   return init_params;
 }

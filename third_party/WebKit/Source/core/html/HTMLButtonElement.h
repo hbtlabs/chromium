@@ -24,15 +24,16 @@
 #ifndef HTMLButtonElement_h
 #define HTMLButtonElement_h
 
+#include "core/CoreExport.h"
 #include "core/html/HTMLFormControlElement.h"
 
 namespace blink {
 
-class HTMLButtonElement final : public HTMLFormControlElement {
+class CORE_EXPORT HTMLButtonElement final : public HTMLFormControlElement {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static HTMLButtonElement* create(Document&, HTMLFormElement*);
+  static HTMLButtonElement* create(Document&);
 
   void setType(const AtomicString&);
 
@@ -41,7 +42,7 @@ class HTMLButtonElement final : public HTMLFormControlElement {
   bool willRespondToMouseClickEvents() override;
 
  private:
-  HTMLButtonElement(Document&, HTMLFormElement*);
+  explicit HTMLButtonElement(Document&);
 
   enum Type { SUBMIT, RESET, BUTTON };
 
@@ -53,9 +54,7 @@ class HTMLButtonElement final : public HTMLFormControlElement {
   bool alwaysCreateUserAgentShadowRoot() const override { return false; }
 
   Node::InsertionNotificationRequest insertedInto(ContainerNode*) override;
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+  void parseAttribute(const AttributeModificationParams&) override;
   bool isPresentationAttribute(const QualifiedName&) const override;
   void defaultEventHandler(Event*) override;
 

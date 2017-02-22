@@ -103,6 +103,14 @@ inline bool compareEqual(const T& a, const T& b) {
   if (!compareEqual(group->variable.color(), value))  \
   group.access()->variable.setColor(value)
 
+#define SET_BORDER_WIDTH(group, variable, value) \
+  if (!group->variable.widthEquals(value))       \
+  group.access()->variable.setWidth(value)
+
+#define SET_NESTED_BORDER_WIDTH(group, base, variable, value) \
+  if (!group->base->variable.widthEquals(value))              \
+  group.access()->base.access()->variable.setWidth(value)
+
 namespace blink {
 
 using std::max;
@@ -193,68 +201,27 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   DataRef<SVGComputedStyle> m_svgStyle;
 
   // !START SYNC!: Keep this in sync with the copy constructor in
-  // ComputedStyle.cpp and implicitlyInherited() in StyleResolver.cpp
+  // ComputedStyle.cpp.
 
   // inherit
   struct InheritedData {
     bool operator==(const InheritedData& other) const {
-      return compareEqualIndependent(other) &&
-             compareEqualNonIndependent(other);
+      // Generated properties are compared in ComputedStyleBase
+      return (m_hasSimpleUnderline == other.m_hasSimpleUnderline) &&
+             (m_cursorStyle == other.m_cursorStyle) &&
+             (m_insideLink == other.m_insideLink);
     }
 
     bool operator!=(const InheritedData& other) const {
       return !(*this == other);
     }
 
-    inline bool compareEqualIndependent(const InheritedData& other) const {
-      // These must match the properties tagged 'independent' in
-      // CSSProperties.in.
-      // TODO(sashab): Generate this function.
-      return (m_pointerEvents == other.m_pointerEvents);
-    }
-
-    inline bool compareEqualNonIndependent(const InheritedData& other) const {
-      return (m_captionSide == other.m_captionSide) &&
-             (m_listStyleType == other.m_listStyleType) &&
-             (m_listStylePosition == other.m_listStylePosition) &&
-             (m_textAlign == other.m_textAlign) &&
-             (m_textTransform == other.m_textTransform) &&
-             (m_hasSimpleUnderline == other.m_hasSimpleUnderline) &&
-             (m_cursorStyle == other.m_cursorStyle) &&
-             (m_direction == other.m_direction) &&
-             (m_whiteSpace == other.m_whiteSpace) &&
-             (m_borderCollapse == other.m_borderCollapse) &&
-             (m_boxDirection == other.m_boxDirection) &&
-             (m_rtlOrdering == other.m_rtlOrdering) &&
-             (m_printColorAdjust == other.m_printColorAdjust) &&
-             (m_insideLink == other.m_insideLink) &&
-             (m_writingMode == other.m_writingMode);
-    }
-
-    unsigned m_captionSide : 2;        // ECaptionSide
-    unsigned m_listStyleType : 7;      // EListStyleType
-    unsigned m_listStylePosition : 1;  // EListStylePosition
-    unsigned m_textAlign : 4;          // ETextAlign
-    unsigned m_textTransform : 2;      // ETextTransform
     unsigned m_hasSimpleUnderline : 1;  // True if 'underline solid' is the only
                                         // text decoration on this element.
     unsigned m_cursorStyle : 6;     // ECursor
-    unsigned m_direction : 1;       // TextDirection
-    unsigned m_whiteSpace : 3;      // EWhiteSpace
-    unsigned m_borderCollapse : 1;  // EBorderCollapse
-    unsigned m_boxDirection : 1;  // EBoxDirection (CSS3 box_direction property,
-                                  // flexible box layout module)
-    // 32 bits
 
     // non CSS2 inherited
-    unsigned m_rtlOrdering : 1;  // Order
-    unsigned m_printColorAdjust : PrintColorAdjustBits;
-    unsigned m_pointerEvents : 4;  // EPointerEvents
     unsigned m_insideLink : 2;     // EInsideLink
-
-    // CSS Text Layout Module Level 3: Vertical writing support
-    unsigned m_writingMode : 2;  // WritingMode
-                                 // 42 bits
   } m_inheritedData;
 
   // don't inherit
@@ -262,19 +229,12 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
     // Compare computed styles, differences in inherited bits or other flags
     // should not cause an inequality.
     bool operator==(const NonInheritedData& other) const {
+      // Generated properties are compared in ComputedStyleBase
       return m_effectiveDisplay == other.m_effectiveDisplay &&
              m_originalDisplay == other.m_originalDisplay &&
-             m_overflowAnchor == other.m_overflowAnchor &&
-             m_overflowX == other.m_overflowX &&
-             m_overflowY == other.m_overflowY &&
-             m_verticalAlign == other.m_verticalAlign &&
-             m_clear == other.m_clear && m_position == other.m_position &&
-             m_tableLayout == other.m_tableLayout &&
-             m_unicodeBidi == other.m_unicodeBidi
-             // hasViewportUnits
-             && m_breakBefore == other.m_breakBefore &&
-             m_breakAfter == other.m_breakAfter &&
-             m_breakInside == other.m_breakInside;
+             m_verticalAlign == other.m_verticalAlign;
+      // Differences in the following fields do not cause inequality:
+      // hasViewportUnits
       // styleType
       // pseudoBits
       // explicitInheritance
@@ -294,14 +254,7 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
 
     unsigned m_effectiveDisplay : 5;  // EDisplay
     unsigned m_originalDisplay : 5;   // EDisplay
-    unsigned m_overflowAnchor : 2;    // EOverflowAnchor
-    unsigned m_overflowX : 3;         // EOverflow
-    unsigned m_overflowY : 3;         // EOverflow
     unsigned m_verticalAlign : 4;     // EVerticalAlign
-    unsigned m_clear : 2;             // EClear
-    unsigned m_position : 3;          // EPosition
-    unsigned m_tableLayout : 1;       // ETableLayout
-    unsigned m_unicodeBidi : 3;       // EUnicodeBidi
 
     // This is set if we used viewport units when resolving a length.
     // It is mutable so we can pass around const ComputedStyles to resolve
@@ -309,10 +262,6 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
     mutable unsigned m_hasViewportUnits : 1;
 
     // 32 bits
-
-    unsigned m_breakBefore : 4;  // EBreak
-    unsigned m_breakAfter : 4;   // EBreak
-    unsigned m_breakInside : 2;  // EBreak
 
     unsigned m_styleType : 6;  // PseudoId
     unsigned m_pseudoBits : 8;
@@ -335,68 +284,25 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
 
     mutable unsigned m_hasRemUnits : 1;
 
-    // For each independent inherited property, store a 1 if the stored
-    // value was inherited from its parent, or 0 if it is explicitly set on
-    // this element.
-    // Eventually, all properties will have a bit in here to store whether
-    // they were inherited from their parent or not.
-    // Although two ComputedStyles are equal if their nonInheritedData is
-    // equal regardless of the isInherited flags, this struct is stored next
-    // to the existing flags to take advantage of packing as much as possible.
-    // TODO(sashab): Move these flags closer to inheritedData so that it's
-    // clear which inherited properties have a flag stored and which don't.
-    // Keep this list of fields in sync with:
-    // - setBitDefaults()
-    // - The ComputedStyle setter, which must take an extra boolean parameter
-    //   and set this - propagateIndependentInheritedProperties() in
-    //   ComputedStyle.cpp
-    // - The compareEqual() methods in the corresponding class
-    // InheritedFlags
-    unsigned m_isPointerEventsInherited : 1;
-    unsigned m_isVisibilityInherited : 1;
-
     // If you add more style bits here, you will also need to update
     // ComputedStyle::copyNonInheritedFromCached() 68 bits
   } m_nonInheritedData;
 
   // !END SYNC!
 
-  void setBitDefaults() {
-    ComputedStyleBase::setBitDefaults();
-    m_inheritedData.m_captionSide = static_cast<unsigned>(initialCaptionSide());
-    m_inheritedData.m_listStyleType =
-        static_cast<unsigned>(initialListStyleType());
-    m_inheritedData.m_listStylePosition =
-        static_cast<unsigned>(initialListStylePosition());
-    m_inheritedData.m_textAlign = static_cast<unsigned>(initialTextAlign());
-    m_inheritedData.m_textTransform = initialTextTransform();
-    m_inheritedData.m_cursorStyle = static_cast<unsigned>(initialCursor());
+  // Only call inside the constructor. Generated properties in the base class
+  // are not initialized in this method.
+  void initializeBitDefaults() {
     m_inheritedData.m_hasSimpleUnderline = false;
     m_inheritedData.m_cursorStyle = static_cast<unsigned>(initialCursor());
-    m_inheritedData.m_direction = initialDirection();
-    m_inheritedData.m_whiteSpace = initialWhiteSpace();
-    m_inheritedData.m_borderCollapse = initialBorderCollapse();
-    m_inheritedData.m_rtlOrdering = initialRTLOrdering();
-    m_inheritedData.m_boxDirection = initialBoxDirection();
-    m_inheritedData.m_printColorAdjust = initialPrintColorAdjust();
-    m_inheritedData.m_pointerEvents = initialPointerEvents();
-    m_inheritedData.m_insideLink = NotInsideLink;
-    m_inheritedData.m_writingMode = initialWritingMode();
+    m_inheritedData.m_insideLink =
+        static_cast<unsigned>(EInsideLink::kNotInsideLink);
 
     m_nonInheritedData.m_effectiveDisplay =
         m_nonInheritedData.m_originalDisplay =
             static_cast<unsigned>(initialDisplay());
-    m_nonInheritedData.m_overflowAnchor = initialOverflowAnchor();
-    m_nonInheritedData.m_overflowX = initialOverflowX();
-    m_nonInheritedData.m_overflowY = initialOverflowY();
-    m_nonInheritedData.m_verticalAlign = initialVerticalAlign();
-    m_nonInheritedData.m_clear = initialClear();
-    m_nonInheritedData.m_position = initialPosition();
-    m_nonInheritedData.m_tableLayout = initialTableLayout();
-    m_nonInheritedData.m_unicodeBidi = initialUnicodeBidi();
-    m_nonInheritedData.m_breakBefore = initialBreakBefore();
-    m_nonInheritedData.m_breakAfter = initialBreakAfter();
-    m_nonInheritedData.m_breakInside = initialBreakInside();
+    m_nonInheritedData.m_verticalAlign =
+        static_cast<unsigned>(initialVerticalAlign());
     m_nonInheritedData.m_styleType = PseudoIdNone;
     m_nonInheritedData.m_pseudoBits = 0;
     m_nonInheritedData.m_explicitInheritance = false;
@@ -410,10 +316,6 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
     m_nonInheritedData.m_affectedByDrag = false;
     m_nonInheritedData.m_isLink = false;
     m_nonInheritedData.m_hasRemUnits = false;
-
-    // All independently inherited properties default to being inherited.
-    m_nonInheritedData.m_isPointerEventsInherited = true;
-    m_nonInheritedData.m_isVisibilityInherited = true;
   }
 
  private:
@@ -693,32 +595,34 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   void setBorderImageOutset(const BorderImageLengthBox&);
 
   // Border width properties.
-  static unsigned initialBorderWidth() { return 3; }
+  static float initialBorderWidth() { return 3; }
 
   // border-top-width
-  int borderTopWidth() const { return m_surround->border.borderTopWidth(); }
-  void setBorderTopWidth(unsigned v) {
-    SET_VAR(m_surround, border.m_top.m_width, v);
+  float borderTopWidth() const { return m_surround->border.borderTopWidth(); }
+  void setBorderTopWidth(float v) {
+    SET_BORDER_WIDTH(m_surround, border.m_top, v);
   }
 
   // border-bottom-width
-  int borderBottomWidth() const {
+  float borderBottomWidth() const {
     return m_surround->border.borderBottomWidth();
   }
-  void setBorderBottomWidth(unsigned v) {
-    SET_VAR(m_surround, border.m_bottom.m_width, v);
+  void setBorderBottomWidth(float v) {
+    SET_BORDER_WIDTH(m_surround, border.m_bottom, v);
   }
 
   // border-left-width
-  int borderLeftWidth() const { return m_surround->border.borderLeftWidth(); }
-  void setBorderLeftWidth(unsigned v) {
-    SET_VAR(m_surround, border.m_left.m_width, v);
+  float borderLeftWidth() const { return m_surround->border.borderLeftWidth(); }
+  void setBorderLeftWidth(float v) {
+    SET_BORDER_WIDTH(m_surround, border.m_left, v);
   }
 
   // border-right-width
-  int borderRightWidth() const { return m_surround->border.borderRightWidth(); }
-  void setBorderRightWidth(unsigned v) {
-    SET_VAR(m_surround, border.m_right.m_width, v);
+  float borderRightWidth() const {
+    return m_surround->border.borderRightWidth();
+  }
+  void setBorderRightWidth(float v) {
+    SET_BORDER_WIDTH(m_surround, border.m_right, v);
   }
 
   // Border style properties.
@@ -841,48 +745,10 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   void setBoxShadow(PassRefPtr<ShadowList>);
 
   // box-sizing (aka -webkit-box-sizing)
-  static EBoxSizing initialBoxSizing() { return BoxSizingContentBox; }
+  static EBoxSizing initialBoxSizing() { return EBoxSizing::kContentBox; }
   EBoxSizing boxSizing() const { return m_box->boxSizing(); }
-  void setBoxSizing(EBoxSizing s) { SET_VAR(m_box, m_boxSizing, s); }
-
-  // clear
-  static EClear initialClear() { return ClearNone; }
-  EClear clear() const {
-    return static_cast<EClear>(m_nonInheritedData.m_clear);
-  }
-  void setClear(EClear v) { m_nonInheritedData.m_clear = v; }
-
-  // Page break properties.
-  // break-after (shorthand for page-break-after and -webkit-column-break-after)
-  static EBreak initialBreakAfter() { return BreakAuto; }
-  EBreak breakAfter() const {
-    return static_cast<EBreak>(m_nonInheritedData.m_breakAfter);
-  }
-  void setBreakAfter(EBreak b) {
-    DCHECK_LE(b, BreakValueLastAllowedForBreakAfterAndBefore);
-    m_nonInheritedData.m_breakAfter = b;
-  }
-
-  // break-before (shorthand for page-break-before and
-  // -webkit-column-break-before)
-  static EBreak initialBreakBefore() { return BreakAuto; }
-  EBreak breakBefore() const {
-    return static_cast<EBreak>(m_nonInheritedData.m_breakBefore);
-  }
-  void setBreakBefore(EBreak b) {
-    DCHECK_LE(b, BreakValueLastAllowedForBreakAfterAndBefore);
-    m_nonInheritedData.m_breakBefore = b;
-  }
-
-  // break-inside (shorthand for page-break-inside and
-  // -webkit-column-break-inside)
-  static EBreak initialBreakInside() { return BreakAuto; }
-  EBreak breakInside() const {
-    return static_cast<EBreak>(m_nonInheritedData.m_breakInside);
-  }
-  void setBreakInside(EBreak b) {
-    DCHECK_LE(b, BreakValueLastAllowedForBreakInside);
-    m_nonInheritedData.m_breakInside = b;
+  void setBoxSizing(EBoxSizing s) {
+    SET_VAR(m_box, m_boxSizing, static_cast<unsigned>(s));
   }
 
   // clip
@@ -960,7 +826,7 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
     return m_rareNonInheritedData->m_multiCol->ruleWidth();
   }
   void setColumnRuleWidth(unsigned short w) {
-    SET_NESTED_VAR(m_rareNonInheritedData, m_multiCol, m_rule.m_width, w);
+    SET_NESTED_BORDER_WIDTH(m_rareNonInheritedData, m_multiCol, m_rule, w);
   }
 
   // column-span (aka -webkit-column-span)
@@ -1434,7 +1300,7 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
 
   // offset-anchor
   static LengthPoint initialOffsetAnchor() {
-    return LengthPoint(Length(50.0, Percent), Length(50.0, Percent));
+    return LengthPoint(Length(Auto), Length(Auto));
   }
   const LengthPoint& offsetAnchor() const {
     return m_rareNonInheritedData->m_transform->m_motion.m_anchor;
@@ -1471,6 +1337,15 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   void setOffsetPosition(const LengthPoint& offsetPosition) {
     SET_NESTED_VAR(m_rareNonInheritedData, m_transform, m_motion.m_position,
                    offsetPosition);
+  }
+
+  // offset-rotate
+  static StyleOffsetRotation initialOffsetRotate() {
+    return initialOffsetRotation();
+  }
+  const StyleOffsetRotation& offsetRotate() const { return offsetRotation(); }
+  void setOffsetRotate(const StyleOffsetRotation& offsetRotate) {
+    setOffsetRotation(offsetRotate);
   }
 
   // offset-rotation
@@ -1527,13 +1402,13 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
 
   // outline-width
   static unsigned short initialOutlineWidth() { return 3; }
-  int outlineWidth() const {
+  unsigned short outlineWidth() const {
     if (m_rareNonInheritedData->m_outline.style() == BorderStyleNone)
       return 0;
     return m_rareNonInheritedData->m_outline.width();
   }
   void setOutlineWidth(unsigned short v) {
-    SET_VAR(m_rareNonInheritedData, m_outline.m_width, v);
+    SET_BORDER_WIDTH(m_rareNonInheritedData, m_outline, v);
   }
 
   // outline-offset
@@ -1546,30 +1421,6 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   void setOutlineOffset(int v) {
     SET_VAR(m_rareNonInheritedData, m_outline.m_offset, v);
   }
-
-  // Overflow properties.
-  // overflow-anchor
-  static EOverflowAnchor initialOverflowAnchor() { return AnchorAuto; }
-  EOverflowAnchor overflowAnchor() const {
-    return static_cast<EOverflowAnchor>(m_nonInheritedData.m_overflowAnchor);
-  }
-  void setOverflowAnchor(EOverflowAnchor v) {
-    m_nonInheritedData.m_overflowAnchor = v;
-  }
-
-  // overflow-x
-  static EOverflow initialOverflowX() { return OverflowVisible; }
-  EOverflow overflowX() const {
-    return static_cast<EOverflow>(m_nonInheritedData.m_overflowX);
-  }
-  void setOverflowX(EOverflow v) { m_nonInheritedData.m_overflowX = v; }
-
-  // overflow-y
-  static EOverflow initialOverflowY() { return OverflowVisible; }
-  EOverflow overflowY() const {
-    return static_cast<EOverflow>(m_nonInheritedData.m_overflowY);
-  }
-  void setOverflowY(EOverflow v) { m_nonInheritedData.m_overflowY = v; }
 
   // Padding properties.
   static Length initialPadding() { return Length(Fixed); }
@@ -1627,13 +1478,6 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   void setPerspectiveOriginY(const Length& v) {
     setPerspectiveOrigin(LengthPoint(perspectiveOriginX(), v));
   }
-
-  // position
-  static EPosition initialPosition() { return StaticPosition; }
-  EPosition position() const {
-    return static_cast<EPosition>(m_nonInheritedData.m_position);
-  }
-  void setPosition(EPosition v) { m_nonInheritedData.m_position = v; }
 
   // resize
   static EResize initialResize() { return RESIZE_NONE; }
@@ -1843,12 +1687,6 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   void setPageSizeType(PageSizeType t) {
     SET_VAR(m_rareNonInheritedData, m_pageSizeType, t);
   }
-  // table-layout
-  static ETableLayout initialTableLayout() { return TableLayoutAuto; }
-  ETableLayout tableLayout() const {
-    return static_cast<ETableLayout>(m_nonInheritedData.m_tableLayout);
-  }
-  void setTableLayout(ETableLayout v) { m_nonInheritedData.m_tableLayout = v; }
 
   // Text decoration properties.
   // text-decoration-line
@@ -1919,15 +1757,10 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
     SET_VAR(m_rareNonInheritedData, m_touchAction, t);
   }
 
-  // unicode-bidi
-  static EUnicodeBidi initialUnicodeBidi() { return UBNormal; }
-  EUnicodeBidi unicodeBidi() const {
-    return static_cast<EUnicodeBidi>(m_nonInheritedData.m_unicodeBidi);
-  }
-  void setUnicodeBidi(EUnicodeBidi b) { m_nonInheritedData.m_unicodeBidi = b; }
-
   // vertical-align
-  static EVerticalAlign initialVerticalAlign() { return VerticalAlignBaseline; }
+  static EVerticalAlign initialVerticalAlign() {
+    return EVerticalAlign::kBaseline;
+  }
   EVerticalAlign verticalAlign() const {
     return static_cast<EVerticalAlign>(m_nonInheritedData.m_verticalAlign);
   }
@@ -1935,17 +1768,11 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
     return m_box->verticalAlign();
   }
   void setVerticalAlign(EVerticalAlign v) {
-    m_nonInheritedData.m_verticalAlign = v;
+    m_nonInheritedData.m_verticalAlign = static_cast<unsigned>(v);
   }
   void setVerticalAlignLength(const Length& length) {
-    setVerticalAlign(VerticalAlignLength);
+    setVerticalAlign(EVerticalAlign::kLength);
     SET_VAR(m_box, m_verticalAlign, length);
-  }
-
-  // visibility
-  // TODO(sashab): Move this to ComputedStyleBase.
-  void setVisibilityIsInherited(bool isInherited) {
-    m_nonInheritedData.m_isVisibilityInherited = isInherited;
   }
 
   // will-change
@@ -2057,17 +1884,6 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
 
   // Inherited properties.
 
-  // border-collapse
-  static EBorderCollapse initialBorderCollapse() {
-    return BorderCollapseSeparate;
-  }
-  EBorderCollapse borderCollapse() const {
-    return static_cast<EBorderCollapse>(m_inheritedData.m_borderCollapse);
-  }
-  void setBorderCollapse(EBorderCollapse collapse) {
-    m_inheritedData.m_borderCollapse = collapse;
-  }
-
   // Border-spacing properties.
   // -webkit-border-horizontal-spacing
   static short initialHorizontalBorderSpacing() { return 0; }
@@ -2079,30 +1895,14 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   short verticalBorderSpacing() const;
   void setVerticalBorderSpacing(short);
 
-  // caption-side (aka -epub-caption-side)
-  static ECaptionSide initialCaptionSide() { return ECaptionSide::Top; }
-  ECaptionSide captionSide() const {
-    return static_cast<ECaptionSide>(m_inheritedData.m_captionSide);
-  }
-  void setCaptionSide(ECaptionSide v) {
-    m_inheritedData.m_captionSide = static_cast<unsigned>(v);
-  }
-
   // cursor
-  static ECursor initialCursor() { return ECursor::Auto; }
+  static ECursor initialCursor() { return ECursor::kAuto; }
   ECursor cursor() const {
     return static_cast<ECursor>(m_inheritedData.m_cursorStyle);
   }
   void setCursor(ECursor c) {
     m_inheritedData.m_cursorStyle = static_cast<unsigned>(c);
   }
-
-  // direction
-  static TextDirection initialDirection() { return LTR; }
-  TextDirection direction() const {
-    return static_cast<TextDirection>(m_inheritedData.m_direction);
-  }
-  void setDirection(TextDirection v) { m_inheritedData.m_direction = v; }
 
   // color
   static Color initialColor() { return Color::black; }
@@ -2130,26 +1930,6 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   void setLineHeight(const Length& specifiedLineHeight);
 
   // List style properties.
-  // list-style-type
-  static EListStyleType initialListStyleType() { return EListStyleType::Disc; }
-  EListStyleType listStyleType() const {
-    return static_cast<EListStyleType>(m_inheritedData.m_listStyleType);
-  }
-  void setListStyleType(EListStyleType v) {
-    m_inheritedData.m_listStyleType = static_cast<unsigned>(v);
-  }
-
-  // list-style-position
-  static EListStylePosition initialListStylePosition() {
-    return EListStylePosition::Outside;
-  }
-  EListStylePosition listStylePosition() const {
-    return static_cast<EListStylePosition>(m_inheritedData.m_listStylePosition);
-  }
-  void setListStylePosition(EListStylePosition v) {
-    m_inheritedData.m_listStylePosition = static_cast<unsigned>(v);
-  }
-
   // list-style-image
   static StyleImage* initialListStyleImage() { return 0; }
   StyleImage* listStyleImage() const;
@@ -2172,18 +1952,6 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   }
   void setOverflowWrap(EOverflowWrap b) {
     SET_VAR(m_rareInheritedData, overflowWrap, b);
-  }
-
-  // pointer-events
-  static EPointerEvents initialPointerEvents() { return PE_AUTO; }
-  EPointerEvents pointerEvents() const {
-    return static_cast<EPointerEvents>(m_inheritedData.m_pointerEvents);
-  }
-  void setPointerEvents(EPointerEvents p) {
-    m_inheritedData.m_pointerEvents = p;
-  }
-  void setPointerEventsIsInherited(bool isInherited) {
-    m_nonInheritedData.m_isPointerEventsInherited = isInherited;
   }
 
   // quotes
@@ -2217,15 +1985,6 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   TabSize getTabSize() const { return m_rareInheritedData->m_tabSize; }
   void setTabSize(TabSize size) {
     SET_VAR(m_rareInheritedData, m_tabSize, size);
-  }
-
-  // text-align
-  static ETextAlign initialTextAlign() { return ETextAlign::Start; }
-  ETextAlign textAlign() const {
-    return static_cast<ETextAlign>(m_inheritedData.m_textAlign);
-  }
-  void setTextAlign(ETextAlign v) {
-    m_inheritedData.m_textAlign = static_cast<unsigned>(v);
   }
 
   // text-align-last
@@ -2303,22 +2062,6 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
     SET_VAR(m_rareInheritedData, m_textSizeAdjust, sizeAdjust);
   }
 
-  // text-transform (aka -epub-text-transform)
-  static ETextTransform initialTextTransform() { return TTNONE; }
-  ETextTransform textTransform() const {
-    return static_cast<ETextTransform>(m_inheritedData.m_textTransform);
-  }
-  void setTextTransform(ETextTransform v) {
-    m_inheritedData.m_textTransform = v;
-  }
-
-  // white-space inherited
-  static EWhiteSpace initialWhiteSpace() { return NORMAL; }
-  EWhiteSpace whiteSpace() const {
-    return static_cast<EWhiteSpace>(m_inheritedData.m_whiteSpace);
-  }
-  void setWhiteSpace(EWhiteSpace v) { m_inheritedData.m_whiteSpace = v; }
-
   // word-break inherited (aka -epub-word-break)
   static EWordBreak initialWordBreak() { return NormalWordBreak; }
   EWordBreak wordBreak() const {
@@ -2334,19 +2077,6 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
     return static_cast<LineBreak>(m_rareInheritedData->lineBreak);
   }
   void setLineBreak(LineBreak b) { SET_VAR(m_rareInheritedData, lineBreak, b); }
-
-  // writing-mode (aka -webkit-writing-mode, -epub-writing-mode)
-  static WritingMode initialWritingMode() { return TopToBottomWritingMode; }
-  WritingMode getWritingMode() const {
-    return static_cast<WritingMode>(m_inheritedData.m_writingMode);
-  }
-  bool setWritingMode(WritingMode v) {
-    if (v == getWritingMode())
-      return false;
-
-    m_inheritedData.m_writingMode = v;
-    return true;
-  }
 
   // Text emphasis properties.
   static TextEmphasisFill initialTextEmphasisFill() {
@@ -2394,13 +2124,6 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
     SET_VAR(m_rareInheritedData, textEmphasisPosition, position);
   }
 
-  // -webkit-box-direction
-  static EBoxDirection initialBoxDirection() { return BNORMAL; }
-  EBoxDirection boxDirection() const {
-    return static_cast<EBoxDirection>(m_inheritedData.m_boxDirection);
-  }
-  void setBoxDirection(EBoxDirection d) { m_inheritedData.m_boxDirection = d; }
-
   // -webkit-highlight
   static const AtomicString& initialHighlight() { return nullAtom; }
   const AtomicString& highlight() const {
@@ -2418,24 +2141,6 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   void setLineClamp(LineClampValue c) {
     SET_VAR(m_rareNonInheritedData, lineClamp, c);
   }
-
-  // -webkit-print-color-adjust
-  static PrintColorAdjust initialPrintColorAdjust() {
-    return PrintColorAdjustEconomy;
-  }
-  PrintColorAdjust getPrintColorAdjust() const {
-    return static_cast<PrintColorAdjust>(m_inheritedData.m_printColorAdjust);
-  }
-  void setPrintColorAdjust(PrintColorAdjust value) {
-    m_inheritedData.m_printColorAdjust = value;
-  }
-
-  // -webkit-rtl-ordering
-  static Order initialRTLOrdering() { return LogicalOrder; }
-  Order rtlOrdering() const {
-    return static_cast<Order>(m_inheritedData.m_rtlOrdering);
-  }
-  void setRTLOrdering(Order o) { m_inheritedData.m_rtlOrdering = o; }
 
   // -webkit-ruby-position
   static RubyPosition initialRubyPosition() { return RubyPositionBefore; }
@@ -2508,6 +2213,11 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   }
   void setUserSelect(EUserSelect s) {
     SET_VAR(m_rareInheritedData, userSelect, s);
+  }
+
+  // caret-color
+  void setCaretColor(const StyleAutoColor& c) {
+    SET_VAR_WITH_SETTER(m_rareInheritedData, caretColor, setCaretColor, c);
   }
 
   // Font properties.
@@ -2700,11 +2410,16 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
                                        PassRefPtr<CSSVariableData>,
                                        const CSSValue*);
 
-  void removeInheritedVariable(const AtomicString&);
-  void removeNonInheritedVariable(const AtomicString&);
+  void removeVariable(const AtomicString&, bool isInheritedProperty);
 
   // Handles both inherited and non-inherited variables
   CSSVariableData* getVariable(const AtomicString&) const;
+
+  CSSVariableData* getVariable(const AtomicString&,
+                               bool isInheritedProperty) const;
+
+  const CSSValue* getRegisteredVariable(const AtomicString&,
+                                        bool isInheritedProperty) const;
 
   void setHasVariableReferenceFromNonInheritedProperty() {
     m_nonInheritedData.m_variableReference = true;
@@ -2777,13 +2492,13 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   }
 
   bool isLink() const { return m_nonInheritedData.m_isLink; }
-  void setIsLink(bool b) { m_nonInheritedData.m_isLink = b; }
+  void setIsLink() { m_nonInheritedData.m_isLink = true; }
 
   EInsideLink insideLink() const {
     return static_cast<EInsideLink>(m_inheritedData.m_insideLink);
   }
   void setInsideLink(EInsideLink insideLink) {
-    m_inheritedData.m_insideLink = insideLink;
+    m_inheritedData.m_insideLink = static_cast<unsigned>(insideLink);
   }
 
   bool hasExplicitlyInheritedProperties() const {
@@ -2827,11 +2542,6 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   void setIsStackingContext(bool b) {
     SET_VAR(m_rareNonInheritedData, m_isStackingContext, b);
   }
-
-  // A unique style is one that has matches something that makes it impossible
-  // to share.
-  bool unique() const { return m_nonInheritedData.m_unique; }
-  void setUnique() { m_nonInheritedData.m_unique = true; }
 
   float textAutosizingMultiplier() const {
     return m_styleInheritedData->textAutosizingMultiplier;
@@ -3246,6 +2956,7 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   // Line-height utility functions.
   const Length& specifiedLineHeight() const;
   int computedLineHeight() const;
+  float computedLineHeightInFloat() const;
 
   // Width/height utility functions.
   const Length& logicalWidth() const {
@@ -3369,12 +3080,12 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   const BorderValue& borderAfter() const;
   const BorderValue& borderStart() const;
   const BorderValue& borderEnd() const;
-  int borderAfterWidth() const;
-  int borderBeforeWidth() const;
-  int borderEndWidth() const;
-  int borderStartWidth() const;
-  int borderOverWidth() const;
-  int borderUnderWidth() const;
+  float borderAfterWidth() const;
+  float borderBeforeWidth() const;
+  float borderEndWidth() const;
+  float borderStartWidth() const;
+  float borderOverWidth() const;
+  float borderUnderWidth() const;
 
   bool hasBorderFill() const { return m_surround->border.hasBorderFill(); }
   bool hasBorder() const { return m_surround->border.hasBorder(); }
@@ -3436,12 +3147,12 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
       bool includeLogicalLeftEdge = true,
       bool includeLogicalRightEdge = true) const;
   FloatRoundedRect getRoundedInnerBorderFor(const LayoutRect& borderRect,
-                                            const LayoutRectOutsets insets,
+                                            const LayoutRectOutsets& insets,
                                             bool includeLogicalLeftEdge,
                                             bool includeLogicalRightEdge) const;
 
   // Float utility functions.
-  bool isFloating() const { return floating() != EFloat::None; }
+  bool isFloating() const { return floating() != EFloat::kNone; }
 
   // Mix-blend-mode utility functions.
   bool hasBlendMode() const { return blendMode() != WebBlendModeNormal; }
@@ -3452,7 +3163,9 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   }
 
   // Direction utility functions.
-  bool isLeftToRightDirection() const { return direction() == LTR; }
+  bool isLeftToRightDirection() const {
+    return direction() == TextDirection::kLtr;
+  }
 
   // Perspective utility functions.
   bool hasPerspective() const {
@@ -3473,13 +3186,15 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
 
   // Position utility functions.
   bool hasOutOfFlowPosition() const {
-    return position() == AbsolutePosition || position() == FixedPosition;
+    return position() == EPosition::kAbsolute ||
+           position() == EPosition::kFixed;
   }
   bool hasInFlowPosition() const {
-    return position() == RelativePosition || position() == StickyPosition;
+    return position() == EPosition::kRelative ||
+           position() == EPosition::kSticky;
   }
   bool hasViewportConstrainedPosition() const {
-    return position() == FixedPosition || position() == StickyPosition;
+    return position() == EPosition::kFixed || position() == EPosition::kSticky;
   }
 
   // Clip utility functions.
@@ -3547,6 +3262,9 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   bool isOriginalDisplayInlineType() const {
     return isDisplayInlineType(originalDisplay());
   }
+  bool isDisplayBlockContainer() const {
+    return isDisplayBlockContainer(display());
+  }
   bool isDisplayFlexibleOrGridBox() const {
     return isDisplayFlexibleBox(display()) || isDisplayGridBox(display());
   }
@@ -3586,16 +3304,18 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   // It's sufficient to just check one direction, since it's illegal to have
   // visible on only one overflow value.
   bool isOverflowVisible() const {
-    DCHECK(overflowX() != OverflowVisible || overflowX() == overflowY());
-    return overflowX() == OverflowVisible;
+    DCHECK(overflowX() != EOverflow::kVisible || overflowX() == overflowY());
+    return overflowX() == EOverflow::kVisible;
   }
   bool isOverflowPaged() const {
-    return overflowY() == OverflowPagedX || overflowY() == OverflowPagedY;
+    return overflowY() == EOverflow::kWebkitPagedX ||
+           overflowY() == EOverflow::kWebkitPagedY;
   }
 
   // Visibility utility functions.
   bool visibleToHitTesting() const {
-    return visibility() == EVisibility::Visible && pointerEvents() != PE_NONE;
+    return visibility() == EVisibility::kVisible &&
+           pointerEvents() != EPointerEvents::kNone;
   }
 
   // Animation utility functions.
@@ -3615,7 +3335,7 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
 
   // Table layout utility functions.
   bool isFixedTableLayout() const {
-    return tableLayout() == TableLayoutFixed && !logicalWidth().isAuto();
+    return tableLayout() == ETableLayout::kFixed && !logicalWidth().isAuto();
   }
 
   // Filter/transform utility functions.
@@ -3716,7 +3436,7 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   // but not managed in stacks. See ObjectPainter::paintAllPhasesAtomically().)
   void updateIsStackingContext(bool isDocumentElement, bool isInTopLayer);
   bool isStacked() const {
-    return isStackingContext() || position() != StaticPosition;
+    return isStackingContext() || position() != EPosition::kStatic;
   }
 
   // Pseudo-styles
@@ -3730,7 +3450,7 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   // canContainFixedPositionObjects.  We currently never use this value
   // directly, always OR'ing it with canContainFixedPositionObjects.
   bool canContainAbsolutePositionObjects() const {
-    return position() != StaticPosition;
+    return position() != EPosition::kStatic;
   }
   bool canContainFixedPositionObjects() const {
     return hasTransformRelatedProperty() || containsPaint();
@@ -3739,21 +3459,21 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   // Whitespace utility functions.
   static bool autoWrap(EWhiteSpace ws) {
     // Nowrap and pre don't automatically wrap.
-    return ws != NOWRAP && ws != PRE;
+    return ws != EWhiteSpace::kNowrap && ws != EWhiteSpace::kPre;
   }
 
   bool autoWrap() const { return autoWrap(whiteSpace()); }
 
   static bool preserveNewline(EWhiteSpace ws) {
     // Normal and nowrap do not preserve newlines.
-    return ws != NORMAL && ws != NOWRAP;
+    return ws != EWhiteSpace::kNormal && ws != EWhiteSpace::kNowrap;
   }
 
   bool preserveNewline() const { return preserveNewline(whiteSpace()); }
 
   static bool collapseWhiteSpace(EWhiteSpace ws) {
     // Pre and prewrap do not collapse whitespace.
-    return ws != PRE && ws != PRE_WRAP;
+    return ws != EWhiteSpace::kPre && ws != EWhiteSpace::kPreWrap;
   }
 
   bool collapseWhiteSpace() const { return collapseWhiteSpace(whiteSpace()); }
@@ -3769,14 +3489,15 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
     return false;
   }
   bool breakOnlyAfterWhiteSpace() const {
-    return whiteSpace() == PRE_WRAP ||
+    return whiteSpace() == EWhiteSpace::kPreWrap ||
            getLineBreak() == LineBreakAfterWhiteSpace;
   }
 
   bool breakWords() const {
     return (wordBreak() == BreakWordBreak ||
             overflowWrap() == BreakOverflowWrap) &&
-           whiteSpace() != PRE && whiteSpace() != NOWRAP;
+           whiteSpace() != EWhiteSpace::kPre &&
+           whiteSpace() != EWhiteSpace::kNowrap;
   }
 
   // Text direction utility functions.
@@ -3787,8 +3508,10 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
     // If the pagination axis is parallel with the writing mode inline axis,
     // columns may be laid out along the inline axis, just like for regular
     // multicol. Otherwise, we need to lay out along the block axis.
-    if (isOverflowPaged())
-      return (overflowY() == OverflowPagedX) == isHorizontalWritingMode();
+    if (isOverflowPaged()) {
+      return (overflowY() == EOverflow::kWebkitPagedX) ==
+             isHorizontalWritingMode();
+    }
     return false;
   }
 
@@ -3891,9 +3614,15 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
     SET_VAR_WITH_SETTER(m_rareInheritedData, visitedLinkTextStrokeColor,
                         setVisitedLinkTextStrokeColor, v);
   }
+  void setVisitedLinkCaretColor(const StyleAutoColor& v) {
+    SET_VAR_WITH_SETTER(m_rareInheritedData, visitedLinkCaretColor,
+                        setVisitedLinkCaretColor, v);
+  }
 
-  void inheritUnicodeBidiFrom(const ComputedStyle& parent) {
-    m_nonInheritedData.m_unicodeBidi = parent.m_nonInheritedData.m_unicodeBidi;
+  static bool isDisplayBlockContainer(EDisplay display) {
+    return display == EDisplay::Block || display == EDisplay::ListItem ||
+           display == EDisplay::InlineBlock || display == EDisplay::FlowRoot ||
+           display == EDisplay::TableCell || display == EDisplay::TableCaption;
   }
 
   static bool isDisplayFlexibleBox(EDisplay display) {
@@ -3905,7 +3634,8 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   }
 
   static bool isDisplayReplacedType(EDisplay display) {
-    return display == EDisplay::InlineBlock || display == EDisplay::InlineBox ||
+    return display == EDisplay::InlineBlock ||
+           display == EDisplay::WebkitInlineBox ||
            display == EDisplay::InlineFlex ||
            display == EDisplay::InlineTable || display == EDisplay::InlineGrid;
   }
@@ -3938,6 +3668,9 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
     return m_surround->border.bottom().color();
   }
   StyleColor backgroundColor() const { return m_background->color(); }
+  StyleAutoColor caretColor() const {
+    return m_rareInheritedData->caretColor();
+  }
   Color color() const;
   StyleColor columnRuleColor() const {
     return m_rareNonInheritedData->m_multiCol->m_rule.color();
@@ -3953,6 +3686,9 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   }
   StyleColor textStrokeColor() const {
     return m_rareInheritedData->textStrokeColor();
+  }
+  StyleAutoColor visitedLinkCaretColor() const {
+    return m_rareInheritedData->visitedLinkCaretColor();
   }
   Color visitedLinkColor() const;
   StyleColor visitedLinkBackgroundColor() const {
@@ -4007,7 +3743,7 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
                                 TransformationMatrix&) const;
 
   bool scrollAnchorDisablingPropertyChanged(const ComputedStyle& other,
-                                            StyleDifference&) const;
+                                            const StyleDifference&) const;
   bool diffNeedsFullLayoutAndPaintInvalidation(
       const ComputedStyle& other) const;
   bool diffNeedsFullLayout(const ComputedStyle& other) const;
@@ -4016,6 +3752,7 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   bool diffNeedsPaintInvalidationObjectForPaintImage(
       const StyleImage*,
       const ComputedStyle& other) const;
+  bool diffNeedsPaintInvalidationSelection(const ComputedStyle& other) const;
   void updatePropertySpecificDifferences(const ComputedStyle& other,
                                          StyleDifference&) const;
 

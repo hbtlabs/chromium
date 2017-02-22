@@ -14,7 +14,6 @@
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/time/time.h"
@@ -41,7 +40,8 @@ class SyncSchedulerImpl : public SyncScheduler, public base::NonThreadSafe {
   SyncSchedulerImpl(const std::string& name,
                     BackoffDelayProvider* delay_provider,
                     SyncCycleContext* context,
-                    Syncer* syncer);
+                    Syncer* syncer,
+                    bool ignore_auth_credentials);
 
   // Calls Stop().
   ~SyncSchedulerImpl() override;
@@ -266,7 +266,7 @@ class SyncSchedulerImpl : public SyncScheduler, public base::NonThreadSafe {
   // A map tracking LOCAL NudgeSource invocations of ScheduleNudge* APIs,
   // organized by datatype. Each datatype that was part of the types requested
   // in the call will have its TimeTicks value updated.
-  typedef std::map<ModelType, base::TimeTicks> ModelTypeTimeMap;
+  using ModelTypeTimeMap = std::map<ModelType, base::TimeTicks>;
   ModelTypeTimeMap last_local_nudges_by_model_type_;
 
   // Used as an "anti-reentrancy defensive assertion".
@@ -291,6 +291,9 @@ class SyncSchedulerImpl : public SyncScheduler, public base::NonThreadSafe {
 
   // One-shot timer for scheduling GU retry according to delay set by server.
   base::OneShotTimer retry_timer_;
+
+  // Dictates if the scheduler should wait for authentication to happen or not.
+  bool ignore_auth_credentials_;
 
   base::WeakPtrFactory<SyncSchedulerImpl> weak_ptr_factory_;
 

@@ -11,10 +11,13 @@ namespace mojo {
 extern const char kBindingsModuleName[];
 extern const char kBufferModuleName[];
 extern const char kCodecModuleName[];
-extern const char kConnectionModuleName[];
 extern const char kConnectorModuleName[];
-extern const char kUnicodeModuleName[];
+extern const char kControlMessageHandlerModuleName[];
+extern const char kControlMessageProxyModuleName[];
+extern const char kInterfaceControlMessagesMojom[];
+extern const char kInterfaceTypesModuleName[];
 extern const char kRouterModuleName[];
+extern const char kUnicodeModuleName[];
 extern const char kValidatorModuleName[];
 
 }  // namespace mojo

@@ -26,13 +26,14 @@ class BoxPaintInvalidatorTest : public ::testing::WithParamInterface<bool>,
     // TODO(wangxianzhu): Test SPv2.
     return layoutView()
         .layer()
-        ->graphicsLayerBackingForScrolling()
+        ->graphicsLayerBacking()
         ->getRasterInvalidationTracking();
   }
 
  private:
   void SetUp() override {
     RenderingTest::SetUp();
+    document().setCompatibilityMode(Document::NoQuirksMode);
     enableCompositing();
     setBodyInnerHTML(
         "<style>"
@@ -57,6 +58,9 @@ class BoxPaintInvalidatorTest : public ::testing::WithParamInterface<bool>,
         "  }"
         "  .gradient {"
         "    background-image: linear-gradient(blue, yellow)"
+        "  }"
+        "  .transform {"
+        "    transform: scale(2);"
         "  }"
         "</style>"
         "<div id='target' class='border'></div>");
@@ -115,64 +119,98 @@ TEST_P(BoxPaintInvalidatorTest, SubpixelVisualRectChagne) {
 
   Element* target = document().getElementById("target");
 
-  // Should do full invalidation if new geometry has subpixels.
   document().view()->setTracksPaintInvalidations(true);
   target->setAttribute(HTMLNames::styleAttr, "width: 100.6px; height: 70.3px");
   document().view()->updateAllLifecyclePhases();
   const auto* rasterInvalidations =
       &getRasterInvalidationTracking()->trackedRasterInvalidations;
   ASSERT_EQ(2u, rasterInvalidations->size());
-  EXPECT_EQ(IntRect(0, 0, 70, 140), (*rasterInvalidations)[0].rect);
-  EXPECT_EQ(PaintInvalidationBorderBoxChange, (*rasterInvalidations)[0].reason);
-  EXPECT_EQ(IntRect(0, 0, 121, 111), (*rasterInvalidations)[1].rect);
-  EXPECT_EQ(PaintInvalidationBorderBoxChange, (*rasterInvalidations)[1].reason);
+  EXPECT_EQ(IntRect(60, 0, 61, 111), (*rasterInvalidations)[0].rect);
+  EXPECT_EQ(PaintInvalidationIncremental, (*rasterInvalidations)[0].reason);
+  EXPECT_EQ(IntRect(0, 90, 70, 50), (*rasterInvalidations)[1].rect);
+  EXPECT_EQ(PaintInvalidationIncremental, (*rasterInvalidations)[1].reason);
   document().view()->setTracksPaintInvalidations(false);
 
-  // Should do full invalidation if old geometry has subpixels.
   document().view()->setTracksPaintInvalidations(true);
   target->setAttribute(HTMLNames::styleAttr, "width: 50px; height: 100px");
   document().view()->updateAllLifecyclePhases();
   rasterInvalidations =
       &getRasterInvalidationTracking()->trackedRasterInvalidations;
   ASSERT_EQ(2u, rasterInvalidations->size());
-  EXPECT_EQ(IntRect(0, 0, 121, 111), (*rasterInvalidations)[0].rect);
+  EXPECT_EQ(IntRect(60, 0, 61, 111), (*rasterInvalidations)[0].rect);
+  EXPECT_EQ(PaintInvalidationIncremental, (*rasterInvalidations)[0].reason);
+  EXPECT_EQ(IntRect(0, 90, 70, 50), (*rasterInvalidations)[1].rect);
+  EXPECT_EQ(PaintInvalidationIncremental, (*rasterInvalidations)[1].reason);
+  document().view()->setTracksPaintInvalidations(false);
+}
+
+TEST_P(BoxPaintInvalidatorTest, SubpixelVisualRectChangeWithTransform) {
+  ScopedSlimmingPaintInvalidationForTest scopedSlimmingPaintInvalidation(true);
+
+  Element* target = document().getElementById("target");
+  target->setAttribute(HTMLNames::classAttr, "border transform");
+  document().view()->updateAllLifecyclePhases();
+
+  document().view()->setTracksPaintInvalidations(true);
+  target->setAttribute(HTMLNames::styleAttr, "width: 100.6px; height: 70.3px");
+  document().view()->updateAllLifecyclePhases();
+  const auto* rasterInvalidations =
+      &getRasterInvalidationTracking()->trackedRasterInvalidations;
+  ASSERT_EQ(2u, rasterInvalidations->size());
+  EXPECT_EQ(IntRect(0, 0, 140, 280), (*rasterInvalidations)[0].rect);
   EXPECT_EQ(PaintInvalidationBorderBoxChange, (*rasterInvalidations)[0].reason);
-  EXPECT_EQ(IntRect(0, 0, 70, 140), (*rasterInvalidations)[1].rect);
+  EXPECT_EQ(IntRect(0, 0, 242, 222), (*rasterInvalidations)[1].rect);
+  EXPECT_EQ(PaintInvalidationBorderBoxChange, (*rasterInvalidations)[1].reason);
+  document().view()->setTracksPaintInvalidations(false);
+
+  document().view()->setTracksPaintInvalidations(true);
+  target->setAttribute(HTMLNames::styleAttr, "width: 50px; height: 100px");
+  document().view()->updateAllLifecyclePhases();
+  rasterInvalidations =
+      &getRasterInvalidationTracking()->trackedRasterInvalidations;
+  ASSERT_EQ(2u, rasterInvalidations->size());
+  EXPECT_EQ(IntRect(0, 0, 242, 222), (*rasterInvalidations)[0].rect);
+  EXPECT_EQ(PaintInvalidationBorderBoxChange, (*rasterInvalidations)[0].reason);
+  EXPECT_EQ(IntRect(0, 0, 140, 280), (*rasterInvalidations)[1].rect);
   EXPECT_EQ(PaintInvalidationBorderBoxChange, (*rasterInvalidations)[1].reason);
   document().view()->setTracksPaintInvalidations(false);
 }
 
-TEST_P(BoxPaintInvalidatorTest, SubpixelChangeWithoutVisualRectChange) {
+TEST_P(BoxPaintInvalidatorTest, SubpixelWithinPixelsChange) {
   ScopedSlimmingPaintInvalidationForTest scopedSlimmingPaintInvalidation(true);
 
   Element* target = document().getElementById("target");
   LayoutObject* targetObject = target->layoutObject();
   EXPECT_EQ(LayoutRect(0, 0, 70, 140), targetObject->previousVisualRect());
 
-  // Should do full invalidation if new geometry has subpixels even if the paint
-  // invalidation rect doesn't change.
   document().view()->setTracksPaintInvalidations(true);
   target->setAttribute(HTMLNames::styleAttr,
                        "margin-top: 0.6px; width: 50px; height: 99.3px");
   document().view()->updateAllLifecyclePhases();
-  EXPECT_EQ(LayoutRect(0, 0, 70, 140), targetObject->previousVisualRect());
+  EXPECT_EQ(LayoutRect(LayoutUnit(), LayoutUnit(0.6), LayoutUnit(70),
+                       LayoutUnit(139.3)),
+            targetObject->previousVisualRect());
   const auto* rasterInvalidations =
       &getRasterInvalidationTracking()->trackedRasterInvalidations;
   ASSERT_EQ(1u, rasterInvalidations->size());
   EXPECT_EQ(IntRect(0, 0, 70, 140), (*rasterInvalidations)[0].rect);
-  EXPECT_EQ(PaintInvalidationLocationChange, (*rasterInvalidations)[0].reason);
+  EXPECT_EQ(PaintInvalidationBoundsChange, (*rasterInvalidations)[0].reason);
   document().view()->setTracksPaintInvalidations(false);
 
   document().view()->setTracksPaintInvalidations(true);
   target->setAttribute(HTMLNames::styleAttr,
                        "margin-top: 0.6px; width: 49.3px; height: 98.5px");
   document().view()->updateAllLifecyclePhases();
-  EXPECT_EQ(LayoutRect(0, 0, 70, 140), targetObject->previousVisualRect());
+  EXPECT_EQ(LayoutRect(LayoutUnit(), LayoutUnit(0.6), LayoutUnit(69.3),
+                       LayoutUnit(138.5)),
+            targetObject->previousVisualRect());
   rasterInvalidations =
       &getRasterInvalidationTracking()->trackedRasterInvalidations;
-  ASSERT_EQ(1u, rasterInvalidations->size());
-  EXPECT_EQ(IntRect(0, 0, 70, 140), (*rasterInvalidations)[0].rect);
-  EXPECT_EQ(PaintInvalidationBorderBoxChange, (*rasterInvalidations)[0].reason);
+  ASSERT_EQ(2u, rasterInvalidations->size());
+  EXPECT_EQ(IntRect(59, 0, 11, 140), (*rasterInvalidations)[0].rect);
+  EXPECT_EQ(PaintInvalidationIncremental, (*rasterInvalidations)[0].reason);
+  EXPECT_EQ(IntRect(0, 119, 70, 21), (*rasterInvalidations)[1].rect);
+  EXPECT_EQ(PaintInvalidationIncremental, (*rasterInvalidations)[1].reason);
   document().view()->setTracksPaintInvalidations(false);
 }
 
@@ -232,25 +270,19 @@ TEST_P(BoxPaintInvalidatorTest, CompositedLayoutViewResize) {
   document().view()->setTracksPaintInvalidations(true);
   target->setAttribute(HTMLNames::styleAttr, "height: 3000px");
   document().view()->updateAllLifecyclePhases();
+  const auto& rasterInvalidations =
+      getRasterInvalidationTracking()->trackedRasterInvalidations;
+  ASSERT_EQ(1u, rasterInvalidations.size());
+  EXPECT_EQ(IntRect(0, 2000, 800, 1000), rasterInvalidations[0].rect);
+  EXPECT_EQ(static_cast<const DisplayItemClient*>(&layoutView()),
+            rasterInvalidations[0].client);
   if (RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
-    // For now in RootLayerScrolling mode root background is invalidated and
-    // painted on the container layer. No invalidation because the changed part
-    // is clipped.
-    // TODO(skobes): Treat LayoutView in the same way as normal objects having
-    // background-attachment: local. crbug.com/568847.
-    EXPECT_FALSE(layoutView()
-                     .layer()
-                     ->graphicsLayerBacking()
-                     ->getRasterInvalidationTracking());
+    EXPECT_EQ(PaintInvalidationBackgroundOnScrollingContentsLayer,
+              rasterInvalidations[0].reason);
   } else {
-    const auto& rasterInvalidations =
-        getRasterInvalidationTracking()->trackedRasterInvalidations;
-    ASSERT_EQ(1u, rasterInvalidations.size());
-    EXPECT_EQ(IntRect(0, 2000, 800, 1000), rasterInvalidations[0].rect);
-    EXPECT_EQ(static_cast<const DisplayItemClient*>(&layoutView()),
-              rasterInvalidations[0].client);
     EXPECT_EQ(PaintInvalidationIncremental, rasterInvalidations[0].reason);
   }
+
   document().view()->setTracksPaintInvalidations(false);
 
   // Resize the viewport. No paint invalidation.
@@ -273,32 +305,21 @@ TEST_P(BoxPaintInvalidatorTest, CompositedLayoutViewGradientResize) {
   document().view()->setTracksPaintInvalidations(true);
   target->setAttribute(HTMLNames::styleAttr, "height: 3000px");
   document().view()->updateAllLifecyclePhases();
+
+  const auto& rasterInvalidations =
+      getRasterInvalidationTracking()->trackedRasterInvalidations;
+  ASSERT_EQ(1u, rasterInvalidations.size());
+  EXPECT_EQ(IntRect(0, 0, 800, 3000), rasterInvalidations[0].rect);
+  EXPECT_EQ(static_cast<const DisplayItemClient*>(&layoutView()),
+            rasterInvalidations[0].client);
   if (RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
-    // For now in RootLayerScrolling mode root background is invalidated and
-    // painted on the container layer.
-    // TODO(skobes): Treat LayoutView in the same way as normal objects having
-    // background-attachment: local. crbug.com/568847.
-    const auto& rasterInvalidations = layoutView()
-                                          .layer()
-                                          ->graphicsLayerBacking()
-                                          ->getRasterInvalidationTracking()
-                                          ->trackedRasterInvalidations;
-    ASSERT_EQ(1u, rasterInvalidations.size());
-    EXPECT_EQ(IntRect(0, 0, 800, 600), rasterInvalidations[0].rect);
-    EXPECT_EQ(static_cast<const DisplayItemClient*>(&layoutView()),
-              rasterInvalidations[0].client);
-    EXPECT_EQ(PaintInvalidationLayoutOverflowBoxChange,
+    EXPECT_EQ(PaintInvalidationBackgroundOnScrollingContentsLayer,
               rasterInvalidations[0].reason);
   } else {
-    const auto& rasterInvalidations =
-        getRasterInvalidationTracking()->trackedRasterInvalidations;
-    ASSERT_EQ(1u, rasterInvalidations.size());
-    EXPECT_EQ(IntRect(0, 0, 800, 3000), rasterInvalidations[0].rect);
-    EXPECT_EQ(static_cast<const DisplayItemClient*>(&layoutView()),
-              rasterInvalidations[0].client);
     EXPECT_EQ(PaintInvalidationLayoutOverflowBoxChange,
               rasterInvalidations[0].reason);
   }
+
   document().view()->setTracksPaintInvalidations(false);
 
   // Resize the viewport. No paint invalidation.
@@ -419,7 +440,7 @@ TEST_P(BoxPaintInvalidatorTest, NonCompositedLayoutViewGradientResize) {
     // background-attachment: local. crbug.com/568847.
     EXPECT_EQ(PaintInvalidationFull, (*rasterInvalidations)[1].reason);
   } else {
-    EXPECT_EQ(PaintInvalidationBorderBoxChange,
+    EXPECT_EQ(PaintInvalidationViewBackground,
               (*rasterInvalidations)[1].reason);
   }
   document().view()->setTracksPaintInvalidations(false);
@@ -441,12 +462,11 @@ TEST_P(BoxPaintInvalidatorTest, CompositedBackgroundAttachmentLocalResize) {
   document().view()->setTracksPaintInvalidations(true);
   child->setAttribute(HTMLNames::styleAttr, "width: 500px; height: 1000px");
   document().view()->updateAllLifecyclePhases();
-  GraphicsLayer* containerLayer = toLayoutBoxModelObject(target->layoutObject())
-                                      ->layer()
-                                      ->graphicsLayerBacking();
-  GraphicsLayer* contentsLayer = toLayoutBoxModelObject(target->layoutObject())
-                                     ->layer()
-                                     ->graphicsLayerBackingForScrolling();
+  LayoutBoxModelObject* targetObj =
+      toLayoutBoxModelObject(target->layoutObject());
+  GraphicsLayer* containerLayer =
+      targetObj->layer()->graphicsLayerBacking(targetObj);
+  GraphicsLayer* contentsLayer = targetObj->layer()->graphicsLayerBacking();
   // No invalidation on the container layer.
   EXPECT_FALSE(containerLayer->getRasterInvalidationTracking());
   // Incremental invalidation of background on contents layer.
@@ -499,12 +519,11 @@ TEST_P(BoxPaintInvalidatorTest,
   document().view()->setTracksPaintInvalidations(true);
   child->setAttribute(HTMLNames::styleAttr, "width: 500px; height: 1000px");
   document().view()->updateAllLifecyclePhases();
-  GraphicsLayer* containerLayer = toLayoutBoxModelObject(target->layoutObject())
-                                      ->layer()
-                                      ->graphicsLayerBacking();
-  GraphicsLayer* contentsLayer = toLayoutBoxModelObject(target->layoutObject())
-                                     ->layer()
-                                     ->graphicsLayerBackingForScrolling();
+  LayoutBoxModelObject* targetObj =
+      toLayoutBoxModelObject(target->layoutObject());
+  GraphicsLayer* containerLayer =
+      targetObj->layer()->graphicsLayerBacking(targetObj);
+  GraphicsLayer* contentsLayer = targetObj->layer()->graphicsLayerBacking();
   // No invalidation on the container layer.
   EXPECT_FALSE(containerLayer->getRasterInvalidationTracking());
   // Full invalidation of background on contents layer because the gradient

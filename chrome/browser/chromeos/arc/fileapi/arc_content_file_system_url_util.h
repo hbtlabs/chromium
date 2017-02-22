@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_CHROMEOS_ARC_FILEAPI_ARC_CONTENT_FILE_SYSTEM_URL_UTIL_H_
 #define CHROME_BROWSER_CHROMEOS_ARC_FILEAPI_ARC_CONTENT_FILE_SYSTEM_URL_UTIL_H_
 
+#include <string>
+
 #include "base/files/file_path.h"
 #include "url/gurl.h"
 
@@ -15,10 +17,10 @@ class FileSystemURL;
 namespace arc {
 
 // The name of the ARC content file system mount point.
-extern const char kMountPointName[];
+extern const char kContentFileSystemMountPointName[];
 
 // The path of the ARC content file system mount point.
-extern const base::FilePath::CharType kMountPointPath[];
+extern const base::FilePath::CharType kContentFileSystemMountPointPath[];
 
 // Escapes the given ARC URL.
 std::string EscapeArcUrl(const GURL& arc_url);

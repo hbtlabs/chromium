@@ -55,9 +55,28 @@ const char kAllowFailedPolicyFetchForTest[] =
 // mode. This can be enabled by this flag.
 const char kAllowRAInDevMode[] = "allow-ra-in-dev-mode";
 
+// Specifies whether an app launched in kiosk mode was auto launched with zero
+// delay. Used in order to properly restore auto-launched state during session
+// restore flow.
+const char kAppAutoLaunched[] = "app-auto-launched";
+
 // Path for app's OEM manifest file.
 const char kAppOemManifestFile[] = "app-mode-oem-manifest";
 
+// Signals ARC support status on this device. This can take one of the
+// following three values.
+// - none: ARC is not installed on this device. (default)
+// - installed: ARC is installed on this device, but not officially supported.
+//   Users can enable ARC only when Finch experiment is turned on.
+// - installed-only-kiosk-supported: ARC is installed, but officially supported
+//   only in kiosk mode.
+// - officially-supported: ARC is installed and supported on this device. So
+//   users can enable ARC via settings etc.
+// - officially-supported-with-active-directory: ARC is supported and also
+//   allowed to use with Active Directory management.
+const char kArcAvailability[] = "arc-availability";
+
+// DEPRECATED: Please use --arc-availability=installed.
 // Signals the availability of the ARC instance on this device.
 const char kArcAvailable[] = "arc-available";
 
@@ -144,9 +163,6 @@ const char kDisableDeviceDisabling[] = "disable-device-disabling";
 // Disables notification when device is in end of life status.
 const char kDisableEolNotification[] = "disable-eol-notification";
 
-// Disables quick view in Files app.
-const char kDisableFilesQuickView[] = "disable-files-quick-view";
-
 // Disables GAIA services such as enrollment and OAuth session restore. Used by
 // 'fake' telemetry login.
 const char kDisableGaiaServices[] = "disable-gaia-services";
@@ -211,11 +227,21 @@ const char kEafeUrl[] = "eafe-url";
 // Enables AD functionality.
 const char kEnableAd[] = "enable-ad";
 
+// Enables the Android Wallpapers App as the default app on Chrome OS.
+const char kEnableAndroidWallpapersApp[] = "enable-android-wallpapers-app";
+
+// DEPRECATED. Please use --arc-availability=officially-supported.
 // Enables starting the ARC instance upon session start.
 const char kEnableArc[] = "enable-arc";
 
 // Enables ARC OptIn flow in OOBE.
 const char kEnableArcOOBEOptIn[] = "enable-arc-oobe-optin";
+
+// Enables native ChromeVox support for Arc.
+const char kEnableChromeVoxArcSupport[] = "enable-chromevox-arc-support";
+
+// Enables consume kiosk mode.
+const char kEnableConsumerKiosk[] = "enable-consumer-kiosk";
 
 // Enables Data Saver prompt on cellular networks.
 const char kEnableDataSaverPrompt[] = "enable-datasaver-prompt";
@@ -228,12 +254,6 @@ const char kEnableExperimentalAccessibilityFeatures[] =
 // Enables sharing assets for installed default apps.
 const char kEnableExtensionAssetsSharing[] = "enable-extension-assets-sharing";
 
-// Enables details panel in Files app.
-const char kEnableFilesDetailsPanel[] = "enable-files-details-panel";
-
-// Enables quick view in Files app.
-const char kEnableFilesQuickView[] = "enable-files-quick-view";
-
 // Enables animated transitions during first-run tutorial.
 const char kEnableFirstRunUITransitions[] = "enable-first-run-ui-transitions";
 
@@ -241,15 +261,15 @@ const char kEnableFirstRunUITransitions[] = "enable-first-run-ui-transitions";
 // rather than the kiosk app mode.
 const char kEnableKioskMode[] = "enable-kiosk-mode";
 
+// Enables tethering to nearby LTE devices.
+const char kEnableTether[] = "enable-tether";
+
 // Disables material design OOBE UI.
 const char kDisableMdOobe[] = "disable-md-oobe";
 
 // Enables notifications about captive portals in session.
 const char kEnableNetworkPortalNotification[] =
     "enable-network-portal-notification";
-
-// Enables storage manager in MD Settings.
-const char kEnableMdStorageManager[] = "enable-md-storage-manager";
 
 // Enables suggestions while typing on a physical keyboard.
 const char kEnablePhysicalKeyboardAutocorrect[] =
@@ -262,9 +282,18 @@ const char kEnableRequestTabletSite[] = "enable-request-tablet-site";
 const char kEnableScreenshotTestingWithMode[] =
     "enable-screenshot-testing-with-mode";
 
+// Enables the touch calibration option in MD settings UI for valid touch
+// displays.
+const char kEnableTouchCalibrationSetting[] =
+    "enable-touch-calibration-setting";
+
 // Enables touchpad three-finger-click as middle button.
 const char kEnableTouchpadThreeFingerClick[] =
     "enable-touchpad-three-finger-click";
+
+// Enables touch support for screen magnifier.
+const char kEnableTouchSupportForScreenMagnifier[] =
+    "enable-touch-support-for-screen-magnifier";
 
 // Enables the chromecast support for video player app.
 const char kEnableVideoPlayerChromecastSupport[] =
@@ -420,6 +449,9 @@ const char kAttestationServer[] = "attestation-server";
 // Enables wake on wifi packet feature, which wakes the device on the receipt
 // of network packets from whitelisted sources.
 const char kWakeOnWifiPacket[] = "wake-on-wifi-packet";
+
+// Force system compositor mode when set.
+const char kForceSystemCompositorMode[] = "force-system-compositor-mode";
 
 bool WakeOnWifiEnabled() {
   return !base::CommandLine::ForCurrentProcess()->HasSwitch(kDisableWakeOnWifi);

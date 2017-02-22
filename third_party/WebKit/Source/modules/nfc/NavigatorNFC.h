@@ -5,6 +5,7 @@
 #ifndef NavigatorNFC_h
 #define NavigatorNFC_h
 
+#include "core/frame/Navigator.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
 
@@ -26,7 +27,7 @@ class NavigatorNFC final : public GarbageCollected<NavigatorNFC>,
   DECLARE_TRACE();
 
  private:
-  NavigatorNFC();
+  explicit NavigatorNFC(Navigator&);
   static const char* supplementName();
 
   Member<NFC> m_nfc;

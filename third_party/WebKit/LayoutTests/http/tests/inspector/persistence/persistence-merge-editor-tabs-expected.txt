@@ -1,37 +1,36 @@
-Verify that tabs get merged and split when binding is added and removed.
+Verify that tabs get merged when binding is added and removed.
 
 
 Running: addFileSystem
 
 Running: openNetworkTab
 SourceFrame: http://127.0.0.1:8000/inspector/persistence/resources/foo.js
-    selection: {"startLine":0,"startColumn":0,"endLine":0,"endColumn":0}
-    firstVisibleLine: 0
+    selection: {"startLine":2,"startColumn":0,"endLine":2,"endColumn":5}
+    firstVisibleLine: 2
     isDirty: false
 
 Running: openFileSystemTab
 SourceFrame: file:///var/www/inspector/persistence/resources/foo.js
-    selection: {"startLine":2,"startColumn":0,"endLine":2,"endColumn":5}
-    firstVisibleLine: 2
-    isDirty: true
+    selection: {"startLine":0,"startColumn":0,"endLine":0,"endColumn":0}
+    firstVisibleLine: 0
+    isDirty: false
 Opened tabs: 
     file:///var/www/inspector/persistence/resources/foo.js
     http://127.0.0.1:8000/inspector/persistence/resources/foo.js
 
 Running: addFileMapping
 Opened tabs: 
-    http://127.0.0.1:8000/inspector/persistence/resources/foo.js
-SourceFrame: http://127.0.0.1:8000/inspector/persistence/resources/foo.js
+    file:///var/www/inspector/persistence/resources/foo.js
+SourceFrame: file:///var/www/inspector/persistence/resources/foo.js
     selection: {"startLine":2,"startColumn":0,"endLine":2,"endColumn":5}
     firstVisibleLine: 2
-    isDirty: true
+    isDirty: false
 
 Running: removeFileMapping
 Opened tabs: 
     file:///var/www/inspector/persistence/resources/foo.js
-    http://127.0.0.1:8000/inspector/persistence/resources/foo.js
 SourceFrame: file:///var/www/inspector/persistence/resources/foo.js
     selection: {"startLine":2,"startColumn":0,"endLine":2,"endColumn":5}
     firstVisibleLine: 2
-    isDirty: true
+    isDirty: false
 

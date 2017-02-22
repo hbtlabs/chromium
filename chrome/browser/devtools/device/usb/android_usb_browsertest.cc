@@ -6,9 +6,9 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <unordered_map>
 #include <utility>
 
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
@@ -300,14 +300,13 @@ class MockUsbDeviceHandle : public UsbDeviceHandle {
                       current_message_->arg0,
                       AdbMessage::kCommandOKAY,
                       std::string());
-        local_sockets_.set(
-            current_message_->arg0,
+        local_sockets_[current_message_->arg0] =
             base::MakeUnique<MockLocalSocket>(
                 base::Bind(&MockUsbDeviceHandle::WriteResponse,
                            base::Unretained(this), last_local_socket_,
                            current_message_->arg0),
                 kDeviceSerial, current_message_->body.substr(
-                                   0, current_message_->body.size() - 1)));
+                                   0, current_message_->body.size() - 1));
         return;
       }
       default: {
@@ -388,7 +387,7 @@ class MockUsbDeviceHandle : public UsbDeviceHandle {
   std::unique_ptr<AdbMessage> current_message_;
   std::vector<char> output_buffer_;
   std::queue<Query> queries_;
-  base::ScopedPtrHashMap<int, std::unique_ptr<MockLocalSocket>> local_sockets_;
+  std::unordered_map<int, std::unique_ptr<MockLocalSocket>> local_sockets_;
   int last_local_socket_;
   bool broken_;
 };
@@ -413,7 +412,7 @@ class MockUsbDevice : public UsbDevice {
     interface_desc.endpoints.emplace_back(0x81, 0x02, 512, 0);
     interface_desc.endpoints.emplace_back(0x01, 0x02, 512, 0);
     config_desc.interfaces.push_back(interface_desc);
-    configurations_.push_back(config_desc);
+    descriptor_.configurations.push_back(config_desc);
     if (T::kConfigured)
       ActiveConfigurationChanged(1);
   }

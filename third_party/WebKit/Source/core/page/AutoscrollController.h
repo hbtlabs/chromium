@@ -30,6 +30,7 @@
 #include "platform/geometry/FloatSize.h"
 #include "platform/geometry/IntPoint.h"
 #include "platform/heap/Handle.h"
+#include "wtf/Time.h"
 
 namespace blink {
 
@@ -37,9 +38,9 @@ class LocalFrame;
 class FrameView;
 class Node;
 class Page;
-class PlatformMouseEvent;
 class LayoutBox;
 class LayoutObject;
+class WebMouseEvent;
 
 enum AutoscrollType {
   NoAutoscroll,
@@ -69,9 +70,9 @@ class CORE_EXPORT AutoscrollController final
   void updateAutoscrollLayoutObject();
   void updateDragAndDrop(Node* targetNode,
                          const IntPoint& eventPosition,
-                         double eventTime);
+                         TimeTicks eventTime);
   void handleMouseReleaseForMiddleClickAutoscroll(LocalFrame*,
-                                                  const PlatformMouseEvent&);
+                                                  const WebMouseEvent&);
   void startMiddleClickAutoscroll(LayoutBox*, const IntPoint&);
 
  private:
@@ -88,7 +89,7 @@ class CORE_EXPORT AutoscrollController final
   LayoutBox* m_pressedLayoutObject;
   AutoscrollType m_autoscrollType;
   IntPoint m_dragAndDropAutoscrollReferencePosition;
-  double m_dragAndDropAutoscrollStartTime;
+  TimeTicks m_dragAndDropAutoscrollStartTime;
   IntPoint m_middleClickAutoscrollStartPos;
   bool m_didLatchForMiddleClickAutoscroll;
 };

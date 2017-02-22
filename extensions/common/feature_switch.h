@@ -31,7 +31,6 @@ namespace extensions {
 // 5. Otherwise, the default value is used.
 class FeatureSwitch {
  public:
-  static FeatureSwitch* easy_off_store_install();
   static FeatureSwitch* force_dev_mode_highlighting();
   static FeatureSwitch* prompt_for_external_extensions();
   static FeatureSwitch* error_console();
@@ -41,6 +40,7 @@ class FeatureSwitch {
   static FeatureSwitch* embedded_extension_options();
   static FeatureSwitch* trace_app_source();
   static FeatureSwitch* load_media_router_component_extension();
+  static FeatureSwitch* native_crx_bindings();
 
   enum DefaultValue {
     DEFAULT_ENABLED,

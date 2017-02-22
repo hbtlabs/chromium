@@ -31,8 +31,7 @@
 #ifndef StorageErrorCallback_h
 #define StorageErrorCallback_h
 
-#include "core/dom/ExecutionContext.h"
-#include "core/dom/ExecutionContextTask.h"
+#include "core/dom/ExceptionCode.h"
 #include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
@@ -41,8 +40,6 @@ namespace blink {
 
 class DOMError;
 
-typedef int ExceptionCode;
-
 class StorageErrorCallback
     : public GarbageCollectedFinalized<StorageErrorCallback> {
  public:
@@ -50,8 +47,9 @@ class StorageErrorCallback
   DEFINE_INLINE_VIRTUAL_TRACE() {}
   virtual void handleEvent(DOMError*) = 0;
 
-  MODULES_EXPORT static std::unique_ptr<ExecutionContextTask>
-  createSameThreadTask(StorageErrorCallback*, ExceptionCode);
+  MODULES_EXPORT static std::unique_ptr<WTF::Closure> createSameThreadTask(
+      StorageErrorCallback*,
+      ExceptionCode);
 
  private:
   static void run(StorageErrorCallback*, ExceptionCode);

@@ -18,6 +18,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/experience_sampling_private/experience_sampling.h"
 #include "chrome/browser/extensions/extension_install_prompt_show_params.h"
@@ -26,7 +27,6 @@
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/installer/util/browser_distribution.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/page_navigator.h"
@@ -38,7 +38,6 @@
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_utils.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/native_theme/common_theme.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
@@ -245,20 +244,13 @@ void ExtensionInstallDialogView::InitView() {
     user_count->SetAutoColorReadabilityEnabled(false);
     user_count->SetEnabledColor(SK_ColorGRAY);
     layout->AddView(user_count);
-
-    layout->StartRow(0, column_set_id);
-    views::Link* store_link = new views::Link(
-        l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_STORE_LINK));
-    store_link->SetFontList(small_font_list);
-    store_link->set_listener(this);
-    layout->AddView(store_link);
   }
 
   if (prompt_->ShouldShowPermissions()) {
     layout->AddPaddingRow(0, views::kRelatedControlVerticalSpacing);
     layout->StartRow(0, column_set_id);
-    layout->AddView(new views::Separator(views::Separator::HORIZONTAL), 3, 1,
-                    views::GridLayout::FILL, views::GridLayout::FILL);
+    layout->AddView(new views::Separator(), 3, 1, views::GridLayout::FILL,
+                    views::GridLayout::FILL);
   }
 
   const int content_width =
@@ -559,6 +551,16 @@ gfx::Size ExtensionInstallDialogView::GetPreferredSize() const {
   return dialog_size_;
 }
 
+views::View* ExtensionInstallDialogView::CreateExtraView() {
+  if (!prompt_->has_webstore_data())
+    return nullptr;
+
+  views::Link* store_link = new views::Link(
+      l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_STORE_LINK));
+  store_link->set_listener(this);
+  return store_link;
+}
+
 void ExtensionInstallDialogView::UpdateInstallResultHistogram(bool accepted)
     const {
   if (prompt_->type() == ExtensionInstallPrompt::INSTALL_PROMPT)
@@ -729,8 +731,7 @@ void ExpandableContainerView::ToggleDetailLevel() {
 
 void ExpandableContainerView::UpdateArrowToggle(bool expanded) {
   gfx::ImageSkia icon = gfx::CreateVectorIcon(
-      expanded ? gfx::VectorIconId::FIND_PREV : gfx::VectorIconId::FIND_NEXT,
-      gfx::kChromeIconGrey);
+      expanded ? kCaretUpIcon : kCaretDownIcon, gfx::kChromeIconGrey);
   arrow_toggle_->SetImage(views::Button::STATE_NORMAL, &icon);
 }
 

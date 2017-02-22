@@ -5,13 +5,11 @@ hidden non-treeitem
 Descendant of aria-hidden node
 List item also presentational
 Div in list isn't presentational
-Content within label refers to label container    
+Content within label refers to label container     
 
 WebArea
   tree
-    treeitem "non-hidden treeitem"
     *Ignored
-      text "hidden non-treeitem"
 {
   "nodeId": "<string>",
   "ignored": true,
@@ -88,16 +86,7 @@ WebArea
 }
 
 WebArea
-  Div
-  tree
-  img
-  button "Buttons are leaf nodes"
   *Ignored
-  text "List item also presentational"
-  Div
-  checkbox "Content within label refers to label container"
-  Div
-  Div
 {
   "nodeId": "<string>",
   "ignored": true,
@@ -118,16 +107,7 @@ WebArea
 }
 
 WebArea
-  Div
-  tree
-  img
-  button "Buttons are leaf nodes"
   *Ignored
-  text "List item also presentational"
-  Div
-  checkbox "Content within label refers to label container"
-  Div
-  Div
 {
   "nodeId": "<string>",
   "ignored": true,
@@ -152,16 +132,7 @@ WebArea
 }
 
 WebArea
-  Div
-  tree
-  img
-  button "Buttons are leaf nodes"
   *Ignored
-    text "List item also presentational"
-    Div
-  checkbox "Content within label refers to label container"
-  Div
-  Div
 {
   "nodeId": "<string>",
   "ignored": true,
@@ -182,16 +153,7 @@ WebArea
 }
 
 WebArea
-  Div
-  tree
-  img
-  button "Buttons are leaf nodes"
   *Ignored
-    text "List item also presentational"
-  Div
-  checkbox "Content within label refers to label container"
-  Div
-  Div
 {
   "nodeId": "<string>",
   "ignored": true,
@@ -216,16 +178,8 @@ WebArea
 }
 
 WebArea
-  Div
-  tree
-  img
-  button "Buttons are leaf nodes"
-  text "List item also presentational"
   *Div
     text "Div in list isn't presentational"
-  checkbox "Content within label refers to label container"
-  Div
-  Div
 {
   "nodeId": "<string>",
   "ignored": false,
@@ -256,16 +210,7 @@ WebArea
 }
 
 WebArea
-  Div
-  tree
-  img
-  button "Buttons are leaf nodes"
-  text "List item also presentational"
-  Div
   *Ignored
-  checkbox "Content within label refers to label container"
-  Div
-  Div
 {
   "nodeId": "<string>",
   "ignored": true,
@@ -291,16 +236,7 @@ WebArea
 }
 
 WebArea
-  Div
-  tree
-  img
-  button "Buttons are leaf nodes"
-  text "List item also presentational"
-  Div
   *Ignored
-  checkbox "Content within label refers to label container"
-  Div
-  Div
 {
   "nodeId": "<string>",
   "ignored": true,
@@ -337,17 +273,7 @@ WebArea
 }
 
 WebArea
-  Div
-  tree
-  img
-  button "Buttons are leaf nodes"
-  text "List item also presentational"
-  Div
-  checkbox "Content within label refers to label container"
   *Ignored
-    button "aria-hidden false button"
-  Div
-  Div
 {
   "nodeId": "<string>",
   "ignored": true,
@@ -369,7 +295,6 @@ WebArea
 
 WebArea
   *Ignored
-  button "aria-hidden false button"
 {
   "nodeId": "<string>",
   "ignored": true,
@@ -390,16 +315,7 @@ WebArea
 }
 
 WebArea
-  Div
-  tree
-  img
-  button "Buttons are leaf nodes"
-  text "List item also presentational"
-  Div
-  checkbox "Content within label refers to label container"
   *Ignored
-  Div
-  Div
 {
   "nodeId": "<string>",
   "ignored": true,
@@ -420,16 +336,7 @@ WebArea
 }
 
 WebArea
-  Div
-  tree
-  img
-  button "Buttons are leaf nodes"
-  text "List item also presentational"
-  Div
-  checkbox "Content within label refers to label container"
   *Ignored
-    Div
-  Div
 {
   "nodeId": "<string>",
   "ignored": true,
@@ -447,5 +354,63 @@ WebArea
     "value": "Ignored"
   },
   "domNode": "canvas"
+}
+
+WebArea
+  *combobox
+    MenuListPopup
+      menuitem "Options should be"
+      menuitem "sent down even though"
+      menuitem "they are grandchildren"
+{
+  "nodeId": "<string>",
+  "ignored": false,
+  "role": {
+    "type": "role",
+    "value": "combobox"
+  },
+  "name": {
+    "type": "computedString",
+    "value": "",
+    "sources": [
+      {
+        "type": "relatedElement",
+        "attribute": "aria-labelledby"
+      },
+      {
+        "type": "attribute",
+        "attribute": "aria-label"
+      },
+      {
+        "type": "relatedElement",
+        "nativeSource": "label"
+      },
+      {
+        "type": "attribute",
+        "attribute": "title"
+      }
+    ]
+  },
+  "value": {
+    "type": "string",
+    "value": "Options should be"
+  },
+  "properties": [
+    {
+      "name": "invalid",
+      "value": {
+        "type": "token",
+        "value": "false"
+      }
+    },
+    {
+      "name": "expanded",
+      "value": {
+        "type": "booleanOrUndefined",
+        "value": false
+      }
+    }
+  ],
+  "domNode": "select"
 }
 

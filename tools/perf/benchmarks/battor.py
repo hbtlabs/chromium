@@ -65,29 +65,12 @@ class BattOrPowerCases(_BattOrBenchmark):
     return 'battor.power_cases'
 
 
-@benchmark.Disabled('all')  # crbug.com/651384.
-class BattOrPowerCasesNoChromeTrace(_BattOrBenchmark):
-  page_set = page_sets.power_cases.PowerCasesPageSet
-
-  def CreateTimelineBasedMeasurementOptions(self):
-    options = timeline_based_measurement.Options()
-    options.config.enable_battor_trace = True
-    options.config.enable_chrome_trace = False
-    options.config.chrome_trace_config.SetDefaultOverheadFilter()
-    options.SetTimelineBasedMetrics(['powerMetric', 'clockSyncLatencyMetric'])
-    return options
-
-  @classmethod
-  def Name(cls):
-    return 'battor.power_cases_no_chrome_trace'
-
-
 @benchmark.Enabled('mac')
 class BattOrTrivialPages(_BattOrBenchmark):
 
   def CreateStorySet(self, options):
     # We want it to wait for 30 seconds to be comparable to legacy power tests.
-    return page_sets.MacGpuTrivialPagesStorySet(wait_in_seconds=30)
+    return page_sets.TrivialSitesStorySet(wait_in_seconds=30)
 
   @classmethod
   def Name(cls):

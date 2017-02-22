@@ -9,7 +9,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "third_party/skia/include/core/SkPaint.h"
+#include "cc/paint/paint_flags.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/views/painter.h"
@@ -88,16 +88,16 @@ RoundedRectBorder::RoundedRectBorder(int thickness,
     : thickness_(thickness), corner_radius_(corner_radius), color_(color) {}
 
 void RoundedRectBorder::Paint(const View& view, gfx::Canvas* canvas) {
-  SkPaint paint;
-  paint.setStrokeWidth(thickness_);
-  paint.setColor(color_);
-  paint.setStyle(SkPaint::kStroke_Style);
-  paint.setAntiAlias(true);
+  cc::PaintFlags flags;
+  flags.setStrokeWidth(thickness_);
+  flags.setColor(color_);
+  flags.setStyle(cc::PaintFlags::kStroke_Style);
+  flags.setAntiAlias(true);
 
   float half_thickness = thickness_ / 2.0f;
   gfx::RectF bounds(view.GetLocalBounds());
   bounds.Inset(half_thickness, half_thickness);
-  canvas->DrawRoundRect(bounds, corner_radius_, paint);
+  canvas->DrawRoundRect(bounds, corner_radius_, flags);
 }
 
 gfx::Insets RoundedRectBorder::GetInsets() const {
@@ -245,13 +245,11 @@ std::unique_ptr<Border> CreateSolidSidedBorder(int top,
       gfx::Insets(top, left, bottom, right), color);
 }
 
-// static
 std::unique_ptr<Border> CreatePaddedBorder(std::unique_ptr<Border> border,
                                            const gfx::Insets& insets) {
   return base::MakeUnique<ExtraInsetsBorder>(std::move(border), insets);
 }
 
-// static
 std::unique_ptr<Border> CreateBorderPainter(std::unique_ptr<Painter> painter,
                                             const gfx::Insets& insets) {
   return base::WrapUnique(new BorderPainter(std::move(painter), insets));

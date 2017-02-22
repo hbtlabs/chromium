@@ -18,8 +18,8 @@
 #include "cc/scheduler/compositor_timing_history.h"
 #include "cc/scheduler/delay_based_time_source.h"
 #include "cc/scheduler/scheduler.h"
+#include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_host_common.h"
-#include "cc/trees/layer_tree_host_in_process.h"
 #include "cc/trees/layer_tree_host_single_thread_client.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/mutator_host.h"
@@ -28,14 +28,14 @@
 namespace cc {
 
 std::unique_ptr<Proxy> SingleThreadProxy::Create(
-    LayerTreeHostInProcess* layer_tree_host,
+    LayerTreeHost* layer_tree_host,
     LayerTreeHostSingleThreadClient* client,
     TaskRunnerProvider* task_runner_provider) {
   return base::WrapUnique(
       new SingleThreadProxy(layer_tree_host, client, task_runner_provider));
 }
 
-SingleThreadProxy::SingleThreadProxy(LayerTreeHostInProcess* layer_tree_host,
+SingleThreadProxy::SingleThreadProxy(LayerTreeHost* layer_tree_host,
                                      LayerTreeHostSingleThreadClient* client,
                                      TaskRunnerProvider* task_runner_provider)
     : layer_tree_host_(layer_tree_host),
@@ -273,15 +273,6 @@ bool SingleThreadProxy::CommitRequested() const {
   return commit_requested_;
 }
 
-bool SingleThreadProxy::BeginMainFrameRequested() const {
-  DCHECK(task_runner_provider_->IsMainThread());
-  // If there is no scheduler, then there can be no pending begin frame,
-  // as all frames are all manually initiated by the embedder of cc.
-  if (!scheduler_on_impl_thread_)
-    return false;
-  return commit_requested_;
-}
-
 void SingleThreadProxy::Stop() {
   TRACE_EVENT0("cc", "SingleThreadProxy::stop");
   DCHECK(task_runner_provider_->IsMainThread());
@@ -433,6 +424,12 @@ void SingleThreadProxy::OnDrawForCompositorFrameSink(
   NOTREACHED() << "Implemented by ThreadProxy for synchronous compositor.";
 }
 
+void SingleThreadProxy::NeedsImplSideInvalidation() {
+  // TODO(khushalsagar): Plumb this to the scheduler when
+  // https://codereview.chromium.org/2659123004/ lands. See crbug.com/686267.
+  NOTIMPLEMENTED();
+}
+
 void SingleThreadProxy::CompositeImmediately(base::TimeTicks frame_begin_time) {
   TRACE_EVENT0("cc,benchmark", "SingleThreadProxy::CompositeImmediately");
   DCHECK(task_runner_provider_->IsMainThread());
@@ -450,7 +447,7 @@ void SingleThreadProxy::CompositeImmediately(base::TimeTicks frame_begin_time) {
   }
 
   BeginFrameArgs begin_frame_args(BeginFrameArgs::Create(
-      BEGINFRAME_FROM_HERE, frame_begin_time, base::TimeTicks(),
+      BEGINFRAME_FROM_HERE, 0, 1, frame_begin_time, base::TimeTicks(),
       BeginFrameArgs::DefaultInterval(), BeginFrameArgs::NORMAL));
 
   // Start the impl frame.

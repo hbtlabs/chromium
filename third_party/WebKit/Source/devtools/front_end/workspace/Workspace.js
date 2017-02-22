@@ -65,15 +65,6 @@ Workspace.ProjectSearchConfig.prototype = {
  */
 Workspace.Project = function() {};
 
-/**
- * @param {!Workspace.Project} project
- * @return {boolean}
- */
-Workspace.Project.isServiceProject = function(project) {
-  return project.type() === Workspace.projectTypes.Debugger || project.type() === Workspace.projectTypes.Formatter ||
-      project.type() === Workspace.projectTypes.Service;
-};
-
 Workspace.Project.prototype = {
   /**
    * @return {!Workspace.Workspace}
@@ -89,6 +80,11 @@ Workspace.Project.prototype = {
    * @return {string}
    */
   type() {},
+
+  /**
+   * @return {boolean}
+   */
+  isServiceProject() {},
 
   /**
    * @return {string}
@@ -120,6 +116,12 @@ Workspace.Project.prototype = {
   setFileContent(uiSourceCode, newContent, callback) {},
 
   /**
+   * @param {!Workspace.UISourceCode} uiSourceCode
+   * @return {string}
+   */
+  fullDisplayName(uiSourceCode) {},
+
+  /**
    * @return {boolean}
    */
   canRename() {},
@@ -145,9 +147,9 @@ Workspace.Project.prototype = {
   createFile(path, name, content, callback) {},
 
   /**
-   * @param {string} path
+   * @param {!Workspace.UISourceCode} uiSourceCode
    */
-  deleteFile(path) {},
+  deleteFile(uiSourceCode) {},
 
   remove() {},
 

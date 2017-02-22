@@ -11,7 +11,6 @@
 #include "ash/common/system/tray/system_tray_item.h"
 #include "ash/common/system/tray/tray_item_view.h"
 #include "ash/common/system/tray/tray_notification_view.h"
-#include "ash/common/system/tray/tray_popup_label_button.h"
 #include "base/macros.h"
 #include "ui/message_center/notification_delegate.h"
 #include "ui/views/controls/button/button.h"
@@ -55,16 +54,14 @@ class ScreenStatusView : public views::View, public views::ButtonListener {
  protected:
   views::ImageView* icon() { return icon_; }
   views::Label* label() { return label_; }
-
-  // Overridden from views::View:
-  void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
+  views::Button* stop_button() { return stop_button_; }
 
  private:
   // The controller for this view. May be null.
   ScreenTrayItem* screen_tray_item_;
   views::ImageView* icon_;
   views::Label* label_;
-  views::View* stop_button_;
+  views::Button* stop_button_;
   base::string16 label_text_;
   base::string16 stop_button_text_;
 

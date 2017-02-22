@@ -14,7 +14,7 @@
 #include <iomanip>
 #include <sstream>
 
-#ifndef NDEBUG
+#if DCHECK_IS_ON()
 
 namespace blink {
 namespace {
@@ -90,8 +90,8 @@ class PropertyTreePrinter {
       stringBuilder.append(' ');
     if (m_nodeToDebugString.contains(node))
       stringBuilder.append(m_nodeToDebugString.get(node));
-    stringBuilder.append(String::format(" %p", node));
-    Traits::printNodeAsString(node, stringBuilder);
+    stringBuilder.append(String::format(" %p ", node));
+    stringBuilder.append(node->toString());
     stringBuilder.append("\n");
 
     for (const auto* childNode : m_nodeToDebugString.keys()) {
@@ -162,38 +162,6 @@ class PropertyTreePrinterTraits<TransformPaintPropertyNode> {
           scrollbarPaintOffset,
           "ScrollbarPaintOffset (" + object.debugName() + ")");
   }
-
-  static void printNodeAsString(const TransformPaintPropertyNode* node,
-                                StringBuilder& stringBuilder) {
-    stringBuilder.append(" transform=");
-
-    TransformationMatrix::DecomposedType decomposition;
-    if (!node->matrix().decompose(decomposition)) {
-      stringBuilder.append("degenerate");
-      return;
-    }
-
-    stringBuilder.append(
-        String::format("translation=%f,%f,%f", decomposition.translateX,
-                       decomposition.translateY, decomposition.translateZ));
-    if (node->matrix().isIdentityOrTranslation())
-      return;
-
-    stringBuilder.append(
-        String::format(", scale=%f,%f,%f", decomposition.scaleX,
-                       decomposition.scaleY, decomposition.scaleZ));
-    stringBuilder.append(String::format(", skew=%f,%f,%f", decomposition.skewXY,
-                                        decomposition.skewXZ,
-                                        decomposition.skewYZ));
-    stringBuilder.append(
-        String::format(", quaternion=%f,%f,%f,%f", decomposition.quaternionX,
-                       decomposition.quaternionY, decomposition.quaternionZ,
-                       decomposition.quaternionW));
-    stringBuilder.append(
-        String::format(", perspective=%f,%f,%f,%f", decomposition.perspectiveX,
-                       decomposition.perspectiveY, decomposition.perspectiveZ,
-                       decomposition.perspectiveW));
-  }
 };
 
 template <>
@@ -227,16 +195,6 @@ class PropertyTreePrinterTraits<ClipPaintPropertyNode> {
       printer.addPropertyNode(overflowClip,
                               "OverflowClip (" + object.debugName() + ")");
   }
-
-  static void printNodeAsString(const ClipPaintPropertyNode* node,
-                                StringBuilder& stringBuilder) {
-    stringBuilder.append(String::format(" localTransformSpace=%p ",
-                                        node->localTransformSpace()));
-    stringBuilder.append(String::format(
-        "rect=%f,%f,%f,%f", node->clipRect().rect().x(),
-        node->clipRect().rect().y(), node->clipRect().rect().width(),
-        node->clipRect().rect().height()));
-  }
 };
 
 template <>
@@ -253,11 +211,6 @@ class PropertyTreePrinterTraits<EffectPaintPropertyNode> {
     if (const EffectPaintPropertyNode* effect = paintProperties.effect())
       printer.addPropertyNode(effect, "Effect (" + object.debugName() + ")");
   }
-
-  static void printNodeAsString(const EffectPaintPropertyNode* node,
-                                StringBuilder& stringBuilder) {
-    stringBuilder.append(String::format(" opacity=%f", node->opacity()));
-  }
 };
 
 template <>
@@ -266,37 +219,20 @@ class PropertyTreePrinterTraits<ScrollPaintPropertyNode> {
   static void addFrameViewProperties(
       const FrameView& frameView,
       PropertyTreePrinter<ScrollPaintPropertyNode>& printer) {
-    if (const ScrollPaintPropertyNode* scroll = frameView.scroll())
-      printer.addPropertyNode(scroll, "Scroll (FrameView)");
+    if (const auto* scrollTranslation = frameView.scrollTranslation()) {
+      const auto* scrollNode = scrollTranslation->scrollNode();
+      printer.addPropertyNode(scrollNode, "Scroll (FrameView)");
+    }
   }
 
   static void addObjectPaintProperties(
       const LayoutObject& object,
       const ObjectPaintProperties& paintProperties,
       PropertyTreePrinter<ScrollPaintPropertyNode>& printer) {
-    if (const ScrollPaintPropertyNode* scroll = paintProperties.scroll())
-      printer.addPropertyNode(scroll, "Scroll (" + object.debugName() + ")");
-  }
-
-  static void printNodeAsString(const ScrollPaintPropertyNode* node,
-                                StringBuilder& stringBuilder) {
-    FloatSize scrollOffset =
-        node->scrollOffsetTranslation()->matrix().to2DTranslation();
-    stringBuilder.append(" scrollOffsetTranslation=");
-    stringBuilder.append(scrollOffset.toString());
-    stringBuilder.append(" clip=");
-    stringBuilder.append(node->clip().toString());
-    stringBuilder.append(" bounds=");
-    stringBuilder.append(node->bounds().toString());
-    stringBuilder.append(" userScrollableHorizontal=");
-    stringBuilder.append(node->userScrollableHorizontal() ? "yes" : "no");
-    stringBuilder.append(" userScrollableVertical=");
-    stringBuilder.append(node->userScrollableVertical() ? "yes" : "no");
-    stringBuilder.append(" threadedScrollingDisabled=");
-    stringBuilder.append(node->threadedScrollingDisabled() ? "yes" : "no");
-    stringBuilder.append(" hasBackgroundAttachmentFixedDescendants=");
-    stringBuilder.append(
-        node->hasBackgroundAttachmentFixedDescendants() ? "yes" : "no");
+    if (const auto* scrollTranslation = paintProperties.scrollTranslation()) {
+      printer.addPropertyNode(scrollTranslation->scrollNode(),
+                              "Scroll (" + object.debugName() + ")");
+    }
   }
 };
 
@@ -377,7 +313,7 @@ class PaintPropertyTreeGraphBuilder {
 
     os << "flattensInheritedTransform="
        << (node.flattensInheritedTransform() ? "true" : "false") << "\\n";
-    os << "renderingContextID=" << node.renderingContextID() << "\\n";
+    os << "renderingContextId=" << node.renderingContextId() << "\\n";
 
     const TransformationMatrix& matrix = node.matrix();
     os << "[" << std::setw(8) << matrix.m11() << "," << std::setw(8)
@@ -497,7 +433,9 @@ class PaintPropertyTreeGraphBuilder {
       if (object.isLayoutView() && overflowClip->parent())
         writePaintPropertyNode(*overflowClip->parent(), nullptr, "rootClip");
     }
-    const ScrollPaintPropertyNode* scroll = properties->scroll();
+
+    const auto* scroll =
+        scrollTranslation ? scrollTranslation->scrollNode() : nullptr;
     if (scroll)
       writePaintPropertyNode(*scroll, &object, "scroll");
   }
@@ -518,8 +456,6 @@ class PaintPropertyTreeGraphBuilder {
         writePaintPropertyNode(*root, &frameView, "rootClip");
       if (const auto* root = getRoot(contentsState->effect()))
         writePaintPropertyNode(*root, &frameView, "rootEffect");
-      if (const auto* root = getRoot(contentsState->scroll()))
-        writePaintPropertyNode(*root, &frameView, "rootScroll");
     }
     TransformPaintPropertyNode* preTranslation = frameView.preTranslation();
     if (preTranslation)
@@ -532,7 +468,8 @@ class PaintPropertyTreeGraphBuilder {
     ClipPaintPropertyNode* contentClip = frameView.contentClip();
     if (contentClip)
       writePaintPropertyNode(*contentClip, &frameView, "contentClip");
-    const ScrollPaintPropertyNode* scroll = frameView.scroll();
+    const auto* scroll =
+        scrollTranslation ? scrollTranslation->scrollNode() : nullptr;
     if (scroll)
       writePaintPropertyNode(*scroll, &frameView, "scroll");
   }
@@ -641,57 +578,6 @@ String scrollPropertyTreeAsString(const blink::FrameView& rootFrame) {
       .treeAsString(rootFrame);
 }
 
-String transformPaintPropertyPathAsString(
-    const blink::TransformPaintPropertyNode* node) {
-  return blink::PropertyTreePrinter<blink::TransformPaintPropertyNode>()
-      .pathAsString(node);
-}
-
-String clipPaintPropertyPathAsString(const blink::ClipPaintPropertyNode* node) {
-  return blink::PropertyTreePrinter<blink::ClipPaintPropertyNode>()
-      .pathAsString(node);
-}
-
-String effectPaintPropertyPathAsString(
-    const blink::EffectPaintPropertyNode* node) {
-  return blink::PropertyTreePrinter<blink::EffectPaintPropertyNode>()
-      .pathAsString(node);
-}
-
-String scrollPaintPropertyPathAsString(
-    const blink::ScrollPaintPropertyNode* node) {
-  return blink::PropertyTreePrinter<blink::ScrollPaintPropertyNode>()
-      .pathAsString(node);
-}
-
-void showPaintPropertyPath(const blink::TransformPaintPropertyNode* node) {
-  fprintf(stderr, "%s\n",
-          transformPaintPropertyPathAsString(node).utf8().data());
-}
-
-void showPaintPropertyPath(const blink::ClipPaintPropertyNode* node) {
-  fprintf(stderr, "%s\n", clipPaintPropertyPathAsString(node).utf8().data());
-}
-
-void showPaintPropertyPath(const blink::EffectPaintPropertyNode* node) {
-  fprintf(stderr, "%s\n", effectPaintPropertyPathAsString(node).utf8().data());
-}
-
-void showPaintPropertyPath(const blink::ScrollPaintPropertyNode* node) {
-  fprintf(stderr, "%s\n", scrollPaintPropertyPathAsString(node).utf8().data());
-}
-
-void showPropertyTreeState(const blink::PropertyTreeState& state) {
-  fprintf(stderr, "%s\n", propertyTreeStateAsString(state).utf8().data());
-}
-
-String propertyTreeStateAsString(const blink::PropertyTreeState& state) {
-  return transformPaintPropertyPathAsString(state.transform()) + "\n" +
-         clipPaintPropertyPathAsString(state.clip()) + "\n" +
-         effectPaintPropertyPathAsString(state.effect()) + "\n" +
-         scrollPaintPropertyPathAsString(state.scroll());
-}
-
 String paintPropertyTreeGraph(const blink::FrameView& frameView) {
   blink::PaintPropertyTreeGraphBuilder builder;
   StringBuilder stringBuilder;
@@ -699,4 +585,4 @@ String paintPropertyTreeGraph(const blink::FrameView& frameView) {
   return stringBuilder.toString();
 }
 
-#endif
+#endif  // DCHECK_IS_ON()

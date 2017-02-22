@@ -47,10 +47,10 @@
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/plugins/PluginView.h"
 #include "platform/Histogram.h"
-#include "platform/MIMETypeFromURL.h"
-#include "platform/MIMETypeRegistry.h"
 #include "platform/Widget.h"
 #include "platform/network/ResourceRequest.h"
+#include "platform/network/mime/MIMETypeFromURL.h"
+#include "platform/network/mime/MIMETypeRegistry.h"
 #include "platform/plugins/PluginData.h"
 #include "public/platform/WebURLRequest.h"
 
@@ -209,6 +209,8 @@ void HTMLPlugInElement::removedFrom(ContainerNode* insertionPoint) {
   // If we've persisted the plugin and we're removed from the tree then
   // make sure we cleanup the persistance pointer.
   if (m_persistedPluginWidget) {
+    // TODO(dcheng): This UpdateSuspendScope doesn't seem to provide much;
+    // investigate removing it.
     HTMLFrameOwnerElement::UpdateSuspendScope suspendWidgetHierarchyUpdates;
     setPersistedPluginWidget(nullptr);
   }
@@ -242,8 +244,8 @@ void HTMLPlugInElement::createPluginWithoutLayoutObject() {
   Vector<String> paramNames;
   Vector<String> paramValues;
 
-  paramNames.append("type");
-  paramValues.append(m_serviceType);
+  paramNames.push_back("type");
+  paramValues.push_back(m_serviceType);
 
   bool useFallback = false;
   loadPlugin(url, m_serviceType, paramNames, paramValues, useFallback, false);
@@ -422,6 +424,11 @@ bool HTMLPlugInElement::isPluginElement() const {
   return true;
 }
 
+void HTMLPlugInElement::disconnectContentFrame() {
+  HTMLFrameOwnerElement::disconnectContentFrame();
+  setPersistedPluginWidget(nullptr);
+}
+
 bool HTMLPlugInElement::layoutObjectIsFocusable() const {
   if (HTMLFrameOwnerElement::supportsFocus() &&
       HTMLFrameOwnerElement::layoutObjectIsFocusable())
@@ -458,11 +465,9 @@ LayoutEmbeddedItem HTMLPlugInElement::layoutEmbeddedItem() const {
 // depending on <param> values.
 bool HTMLPlugInElement::allowedToLoadFrameURL(const String& url) {
   KURL completeURL = document().completeURL(url);
-  if (contentFrame() && protocolIsJavaScript(completeURL) &&
-      !document().getSecurityOrigin()->canAccess(
-          contentFrame()->securityContext()->getSecurityOrigin()))
-    return false;
-  return document().frame()->isURLAllowed(completeURL);
+  return !(contentFrame() && completeURL.protocolIsJavaScript() &&
+           !document().getSecurityOrigin()->canAccess(
+               contentFrame()->securityContext()->getSecurityOrigin()));
 }
 
 // We don't use m_url, or m_serviceType as they may not be the final values

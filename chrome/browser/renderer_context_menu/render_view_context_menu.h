@@ -21,6 +21,7 @@
 #include "components/renderer_context_menu/render_view_context_menu_proxy.h"
 #include "content/public/common/context_menu_params.h"
 #include "extensions/features/features.h"
+#include "ppapi/features/features.h"
 #include "printing/features/features.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/base/window_open_disposition.h"
@@ -31,7 +32,6 @@
 #include "chrome/browser/extensions/menu_manager.h"
 #endif
 
-class OpenWithMenuObserver;
 class PrintPreviewContextMenuObserver;
 class Profile;
 class SpellingMenuObserver;
@@ -117,7 +117,7 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   // RenderViewContextMenuBase:
   void InitMenu() override;
   void RecordShownItem(int id) override;
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   void HandleAuthorizeAllPlugins() override;
 #endif
   void NotifyMenuShown() override;
@@ -169,6 +169,7 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   bool IsPasteAndMatchStyleEnabled() const;
   bool IsPrintPreviewEnabled() const;
   bool IsRouteMediaEnabled() const;
+  bool IsOpenLinkOTREnabled() const;
 
   // Command execution functions.
   void ExecOpenLinkNewTab();

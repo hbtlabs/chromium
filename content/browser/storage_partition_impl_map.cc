@@ -14,10 +14,12 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -399,10 +401,6 @@ StoragePartitionImpl* StoragePartitionImplMap::Get(
   StoragePartitionImpl* partition = partition_ptr.get();
   partitions_[partition_config] = std::move(partition_ptr);
 
-  partition->GetQuotaManager()->SetTemporaryStorageEvictionPolicy(
-      GetContentClient()->browser()->GetTemporaryStorageEvictionPolicy(
-          browser_context_));
-
   ChromeBlobStorageContext* blob_storage_context =
       ChromeBlobStorageContext::GetFor(browser_context_);
   StreamContext* stream_context = StreamContext::GetFor(browser_context_);
@@ -442,16 +440,14 @@ StoragePartitionImpl* StoragePartitionImplMap::Get(
                                         browser_context_->IsOffTheRecord()));
 
   URLRequestInterceptorScopedVector request_interceptors;
-  request_interceptors.push_back(
-      ServiceWorkerRequestHandler::CreateInterceptor(
-          browser_context_->GetResourceContext()).release());
+  request_interceptors.push_back(ServiceWorkerRequestHandler::CreateInterceptor(
+      browser_context_->GetResourceContext()));
   if (ForeignFetchRequestHandler::IsForeignFetchEnabled()) {
     request_interceptors.push_back(
         ForeignFetchRequestHandler::CreateInterceptor(
-            browser_context_->GetResourceContext())
-            .release());
+            browser_context_->GetResourceContext()));
   }
-  request_interceptors.push_back(new AppCacheInterceptor());
+  request_interceptors.push_back(base::MakeUnique<AppCacheInterceptor>());
 
   // These calls must happen after StoragePartitionImpl::Create().
   if (partition_domain.empty()) {
@@ -522,8 +518,9 @@ void StoragePartitionImplMap::AsyncObliterate(
   base::FilePath domain_root = browser_context_->GetPath().Append(
       GetStoragePartitionDomainPath(partition_domain));
 
-  BrowserThread::PostBlockingPoolTask(
-      FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
+                     base::TaskPriority::BACKGROUND),
       base::Bind(&BlockingObliteratePath, browser_context_->GetPath(),
                  domain_root, paths_to_keep,
                  base::ThreadTaskRunnerHandle::Get(), on_gc_required));

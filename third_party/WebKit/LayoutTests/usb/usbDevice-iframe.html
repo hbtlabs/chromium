@@ -32,13 +32,14 @@ function runIframeDisconnectTest(usb, onDeviceConnected) {
 
     iframe.src = 'resources/open-in-iframe.html';
     iframe.onload = () => {
-      iframe.contentWindow.mojo.define(
+      iframe.contentWindow.gin.define(
           "Mojo Service Registry",
           [ 'content/public/renderer/frame_interfaces' ],
           (frameInterfaces) => {
             frameInterfaces.addInterfaceOverrideForTesting(
             usb.DeviceManager.name,
-            pipe => { mockDeviceManager.bindToPipe(pipe); });
+            handle => { mockDeviceManager.bindingSet.addBinding(
+                mockDeviceManager, handle); });
         iframe.contentWindow.postMessage('Ready', '*');
       });
     }
@@ -77,13 +78,14 @@ usb_test(usb => {
 
     iframe.src = 'resources/open-in-iframe.html';
     iframe.onload = () => {
-      iframe.contentWindow.mojo.define(
+      iframe.contentWindow.gin.define(
           "Mojo Service Registry",
           [ 'content/public/renderer/frame_interfaces' ],
           (frameInterfaces) => {
             frameInterfaces.addInterfaceOverrideForTesting(
             usb.DeviceManager.name,
-            pipe => { mockDeviceManager.bindToPipe(pipe); });
+            handle => { mockDeviceManager.bindingSet.addBinding(
+                mockDeviceManager, handle); });
         iframe.contentWindow.postMessage('Ready', '*');
       });
     }

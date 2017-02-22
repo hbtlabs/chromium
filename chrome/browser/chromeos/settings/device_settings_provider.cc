@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
@@ -64,6 +65,7 @@ const char* const kKnownSettings[] = {
     kDeviceDisabledMessage,
     kDeviceOwner,
     kDeviceQuirksDownloadEnabled,
+    kDeviceWallpaperImage,
     kDisplayRotationDefault,
     kExtensionCacheSize,
     kHeartbeatEnabled,
@@ -93,8 +95,11 @@ const char* const kKnownSettings[] = {
     kSystemLogUploadEnabled,
     kSystemTimezonePolicy,
     kSystemUse24HourClock,
+    kTargetVersionPrefix,
     kUpdateDisabled,
     kVariationsRestrictParameter,
+    kDeviceLoginScreenLocales,
+    kDeviceLoginScreenInputMethods,
 };
 
 void DecodeLoginPolicies(
@@ -216,6 +221,11 @@ void DecodeLoginPolicies(
             chromeos::kAccountsPrefDeviceLocalAccountsKeyArcKioskAction,
             entry->android_kiosk_app().action());
       }
+      if (entry->android_kiosk_app().has_display_name()) {
+        entry_dict->SetStringWithoutPathExpansion(
+            chromeos::kAccountsPrefDeviceLocalAccountsKeyArcKioskDisplayName,
+            entry->android_kiosk_app().display_name());
+      }
     } else if (entry->has_deprecated_public_session_id()) {
       // Deprecated public session specification.
       entry_dict->SetStringWithoutPathExpansion(
@@ -307,6 +317,26 @@ void DecodeLoginPolicies(
       login_apps->AppendString(login_app);
     new_values_cache->SetValue(kLoginApps, std::move(login_apps));
   }
+
+  if (policy.has_login_screen_locales()) {
+    std::unique_ptr<base::ListValue> locales(new base::ListValue);
+    const em::LoginScreenLocalesProto& login_screen_locales(
+        policy.login_screen_locales());
+    for (const auto& locale : login_screen_locales.login_screen_locales())
+      locales->AppendString(locale);
+    new_values_cache->SetValue(kDeviceLoginScreenLocales, std::move(locales));
+  }
+
+  if (policy.has_login_screen_input_methods()) {
+    std::unique_ptr<base::ListValue> input_methods(new base::ListValue);
+    const em::LoginScreenInputMethodsProto& login_screen_input_methods(
+        policy.login_screen_input_methods());
+    for (const auto& input_method :
+         login_screen_input_methods.login_screen_input_methods())
+      input_methods->AppendString(input_method);
+    new_values_cache->SetValue(kDeviceLoginScreenInputMethods,
+                               std::move(input_methods));
+  }
 }
 
 void DecodeNetworkPolicies(
@@ -330,6 +360,12 @@ void DecodeAutoUpdatePolicies(
       new_values_cache->SetBoolean(kUpdateDisabled,
                                    au_settings_proto.update_disabled());
     }
+
+    if (au_settings_proto.has_target_version_prefix()) {
+      new_values_cache->SetString(kTargetVersionPrefix,
+                                  au_settings_proto.target_version_prefix());
+    }
+
     const RepeatedField<int>& allowed_connection_types =
         au_settings_proto.allowed_connection_types();
     std::unique_ptr<base::ListValue> list(new base::ListValue());
@@ -515,6 +551,14 @@ void DecodeGenericPolicies(
     new_values_cache->SetBoolean(
         kDeviceQuirksDownloadEnabled,
         policy.quirks_download_enabled().quirks_download_enabled());
+  }
+
+  if (policy.has_device_wallpaper_image() &&
+      policy.device_wallpaper_image().has_device_wallpaper_image()) {
+    std::unique_ptr<base::DictionaryValue> dict_val =
+        base::DictionaryValue::From(base::JSONReader::Read(
+            policy.device_wallpaper_image().device_wallpaper_image()));
+    new_values_cache->SetValue(kDeviceWallpaperImage, std::move(dict_val));
   }
 }
 
@@ -718,11 +762,11 @@ void DeviceSettingsProvider::UpdateValuesCache(
   // cache so that if somebody actually reads the cache will be already valid.
   std::vector<std::string> notifications;
   // Go through the new values and verify in the old ones.
-  PrefValueMap::iterator iter = new_values_cache.begin();
+  auto iter = new_values_cache.begin();
   for (; iter != new_values_cache.end(); ++iter) {
     const base::Value* old_value;
     if (!values_cache_.GetValue(iter->first, &old_value) ||
-        !old_value->Equals(iter->second)) {
+        !old_value->Equals(iter->second.get())) {
       notifications.push_back(iter->first);
     }
   }

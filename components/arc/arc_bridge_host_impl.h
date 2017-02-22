@@ -17,6 +17,8 @@
 
 namespace arc {
 
+class ArcBridgeService;
+
 // Implementation of the ArcBridgeHost.
 // The lifetime of ArcBridgeHost and ArcBridgeInstance mojo channels are tied
 // to this instance. Also, any ARC related Mojo channel will be closed if
@@ -31,10 +33,13 @@ class ArcBridgeHostImpl : public mojom::ArcBridgeHost {
   // Interface to keep the Mojo channel InterfacePtr.
   class MojoChannel;
 
-  explicit ArcBridgeHostImpl(mojom::ArcBridgeInstancePtr instance);
+  ArcBridgeHostImpl(ArcBridgeService* arc_bridge_service,
+                    mojom::ArcBridgeInstancePtr instance);
   ~ArcBridgeHostImpl() override;
 
   // ArcBridgeHost overrides.
+  void OnAccessibilityHelperInstanceReady(
+      mojom::AccessibilityHelperInstancePtr accessibility_helper_ptr) override;
   void OnAppInstanceReady(mojom::AppInstancePtr app_ptr) override;
   void OnAudioInstanceReady(mojom::AudioInstancePtr audio_ptr) override;
   void OnAuthInstanceReady(mojom::AuthInstancePtr auth_ptr) override;
@@ -85,6 +90,9 @@ class ArcBridgeHostImpl : public mojom::ArcBridgeHost {
   void OnChannelClosed(MojoChannel* channel);
 
   base::ThreadChecker thread_checker_;
+
+  // Owned by ArcServiceManager.
+  ArcBridgeService* const arc_bridge_service_;
 
   mojo::Binding<mojom::ArcBridgeHost> binding_;
   mojom::ArcBridgeInstancePtr instance_;

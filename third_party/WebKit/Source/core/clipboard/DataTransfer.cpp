@@ -32,17 +32,17 @@
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/serializers/Serialization.h"
-#include "core/fetch/ImageResource.h"
 #include "core/fileapi/FileList.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/TextControlElement.h"
 #include "core/layout/LayoutImage.h"
 #include "core/layout/LayoutObject.h"
+#include "core/loader/resource/ImageResourceContent.h"
 #include "platform/DragImage.h"
-#include "platform/MIMETypeRegistry.h"
 #include "platform/clipboard/ClipboardMimeTypes.h"
 #include "platform/clipboard/ClipboardUtilities.h"
+#include "platform/network/mime/MIMETypeRegistry.h"
 #include <memory>
 
 namespace blink {
@@ -127,11 +127,13 @@ void DataTransfer::setDropEffect(const String& effect) {
       effect != "move")
     return;
 
-  // FIXME: The spec actually allows this in all circumstances, even though
-  // there's no point in setting the drop effect when this condition is not
-  // true.
-  if (canReadTypes())
-    m_dropEffect = effect;
+  // The specification states that dropEffect can be changed at all times, even
+  // if the DataTransfer instance is protected or neutered.
+  //
+  // Allowing these changes seems inconsequential, but findDropZone() in
+  // EventHandler.cpp relies on being able to call setDropEffect during
+  // dragenter, when the DataTransfer policy is DataTransferTypesReadable.
+  m_dropEffect = effect;
 }
 
 void DataTransfer::setEffectAllowed(const String& effect) {
@@ -228,7 +230,7 @@ void DataTransfer::clearDragImage() {
   m_dragImageElement = nullptr;
 }
 
-void DataTransfer::setDragImageResource(ImageResource* img,
+void DataTransfer::setDragImageResource(ImageResourceContent* img,
                                         const IntPoint& loc) {
   setDragImage(img, 0, loc);
 }
@@ -252,8 +254,8 @@ std::unique_ptr<DragImage> DataTransfer::createDragImage(
   return nullptr;
 }
 
-static ImageResource* getImageResource(Element* element) {
-  // Attempt to pull ImageResource from element
+static ImageResourceContent* getImageResourceContent(Element* element) {
+  // Attempt to pull ImageResourceContent from element
   ASSERT(element);
   LayoutObject* layoutObject = element->layoutObject();
   if (!layoutObject || !layoutObject->isImage())
@@ -268,9 +270,9 @@ static ImageResource* getImageResource(Element* element) {
 
 static void writeImageToDataObject(DataObject* dataObject,
                                    Element* element,
-                                   const KURL& url) {
+                                   const KURL& imageURL) {
   // Shove image data into a DataObject for use as a file
-  ImageResource* cachedImage = getImageResource(element);
+  ImageResourceContent* cachedImage = getImageResourceContent(element);
   if (!cachedImage || !cachedImage->getImage() || !cachedImage->isLoaded())
     return;
 
@@ -278,54 +280,23 @@ static void writeImageToDataObject(DataObject* dataObject,
   if (!imageBuffer || !imageBuffer->size())
     return;
 
-  String imageExtension = cachedImage->getImage()->filenameExtension();
-  ASSERT(!imageExtension.isEmpty());
-
-  // Determine the filename for the file contents of the image.
-  String filename = cachedImage->response().suggestedFilename();
-  if (filename.isEmpty())
-    filename = url.lastPathComponent();
-
-  String fileExtension;
-  if (filename.isEmpty()) {
-    filename = element->getAttribute(HTMLNames::altAttr);
-  } else {
-    // Strip any existing extension. Assume that alt text is usually not a
-    // filename.
-    int extensionIndex = filename.reverseFind('.');
-    if (extensionIndex != -1) {
-      fileExtension = filename.substring(extensionIndex + 1);
-      filename.truncate(extensionIndex);
-    }
-  }
-
-  if (!fileExtension.isEmpty() && fileExtension != imageExtension) {
-    String imageMimeType =
-        MIMETypeRegistry::getMIMETypeForExtension(imageExtension);
-    ASSERT(imageMimeType.startsWith("image/"));
-    // Use the file extension only if it has imageMimeType: it's untrustworthy
-    // otherwise.
-    if (imageMimeType ==
-        MIMETypeRegistry::getMIMETypeForExtension(fileExtension))
-      imageExtension = fileExtension;
-  }
-
-  imageExtension = "." + imageExtension;
-  validateFilename(filename, imageExtension);
-
-  dataObject->addSharedBuffer(filename + imageExtension, imageBuffer);
+  dataObject->addSharedBuffer(imageBuffer, imageURL,
+                              cachedImage->getImage()->filenameExtension(),
+                              cachedImage->response().httpHeaderFields().get(
+                                  HTTPNames::Content_Disposition));
 }
 
 void DataTransfer::declareAndWriteDragImage(Element* element,
-                                            const KURL& url,
+                                            const KURL& linkURL,
+                                            const KURL& imageURL,
                                             const String& title) {
   if (!m_dataObject)
     return;
 
-  m_dataObject->setURLAndTitle(url, title);
+  m_dataObject->setURLAndTitle(linkURL.isValid() ? linkURL : imageURL, title);
 
   // Write the bytes in the image to the file format.
-  writeImageToDataObject(m_dataObject.get(), element, url);
+  writeImageToDataObject(m_dataObject.get(), element, imageURL);
 
   // Put img tag on the clipboard referencing the image
   m_dataObject->setData(mimeTypeTextHTML,
@@ -351,7 +322,8 @@ void DataTransfer::writeSelection(const FrameSelection& selection) {
   if (!m_dataObject)
     return;
 
-  if (!enclosingTextControl(selection.start())) {
+  if (!enclosingTextControl(
+          selection.computeVisibleSelectionInDOMTreeDeprecated().start())) {
     m_dataObject->setHTMLAndBaseURL(selection.selectedHTMLForClipboard(),
                                     selection.frame()->document()->url());
   }
@@ -449,7 +421,7 @@ DataTransfer::DataTransfer(DataTransferType type,
       m_transferType(type),
       m_dataObject(dataObject) {}
 
-void DataTransfer::setDragImage(ImageResource* image,
+void DataTransfer::setDragImage(ImageResourceContent* image,
                                 Node* node,
                                 const IntPoint& loc) {
   if (!canSetDragImage())
@@ -464,13 +436,12 @@ bool DataTransfer::hasFileOfType(const String& type) const {
   if (!canReadTypes())
     return false;
 
-  FileList* fileList = files();
-  if (fileList->isEmpty())
-    return false;
-
-  for (unsigned f = 0; f < fileList->length(); f++) {
-    if (equalIgnoringCase(fileList->item(f)->type(), type))
-      return true;
+  for (size_t i = 0; i < m_dataObject->length(); ++i) {
+    if (m_dataObject->item(i)->kind() == DataObjectItem::FileKind) {
+      Blob* blob = m_dataObject->item(i)->getAsFile();
+      if (blob && blob->isFile() && equalIgnoringCase(blob->type(), type))
+        return true;
+    }
   }
   return false;
 }

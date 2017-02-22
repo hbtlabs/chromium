@@ -13,7 +13,7 @@
 namespace blink {
 
 StylePropertySet* CSSVariableData::propertySet() {
-  ASSERT(!m_needsVariableResolution);
+  DCHECK(!m_needsVariableResolution);
   if (!m_cachedPropertySet) {
     m_propertySet = CSSParser::parseCustomPropertySet(m_tokens);
     m_cachedPropertySet = true;
@@ -29,13 +29,13 @@ void CSSVariableData::updateTokens(const CSSParserTokenRange& range) {
     if (token.hasStringBacking()) {
       unsigned length = token.value().length();
       StringView string(currentOffset, length);
-      m_tokens.append(token.copyWithUpdatedString(string));
+      m_tokens.push_back(token.copyWithUpdatedString(string));
       currentOffset += length;
     } else {
-      m_tokens.append(token);
+      m_tokens.push_back(token);
     }
   }
-  ASSERT(currentOffset ==
+  DCHECK(currentOffset ==
          m_backingString.getCharacters<CharacterType>() +
              m_backingString.length());
 }
@@ -66,14 +66,17 @@ CSSVariableData::CSSVariableData(const CSSParserTokenRange& range,
     : m_isAnimationTainted(isAnimationTainted),
       m_needsVariableResolution(needsVariableResolution),
       m_cachedPropertySet(false) {
-  ASSERT(!range.atEnd());
+  DCHECK(!range.atEnd());
   consumeAndUpdateTokens(range);
 }
 
 const CSSValue* CSSVariableData::parseForSyntax(
     const CSSSyntaxDescriptor& syntax) const {
   DCHECK(!needsVariableResolution());
-  return syntax.parse(tokenRange(), m_isAnimationTainted);
+  // TODO(timloh): This probably needs a proper parser context for
+  // relative URL resolution.
+  return syntax.parse(tokenRange(), strictCSSParserContext(),
+                      m_isAnimationTainted);
 }
 
 }  // namespace blink

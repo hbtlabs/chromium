@@ -53,6 +53,7 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/base/cocoa/appkit_utils.h"
 #import "ui/base/cocoa/focus_tracker.h"
 #import "ui/base/cocoa/nsview_additions.h"
 #include "ui/base/ui_base_types.h"
@@ -609,6 +610,7 @@ willPositionSheet:(NSWindow*)sheet
 
   [self setSheetHiddenForFullscreenTransition:YES];
   [self adjustUIForEnteringFullscreen];
+  browser_->WindowFullscreenStateWillChange();
 }
 
 - (void)windowDidEnterFullScreen:(NSNotification*)notification {
@@ -699,6 +701,7 @@ willPositionSheet:(NSWindow*)sheet
   } else {
     [self adjustUIForExitingFullscreen];
   }
+  browser_->WindowFullscreenStateWillChange();
 }
 
 - (void)windowDidExitFullScreen:(NSNotification*)notification {
@@ -966,12 +969,20 @@ willPositionSheet:(NSWindow*)sheet
 
 - (void)updateSubviewZOrderFullscreen {
   base::scoped_nsobject<NSMutableArray> subviews([[NSMutableArray alloc] init]);
+
+  // The infobar should overlay the toolbar if the toolbar is fully shown.
+  FullscreenToolbarLayout layout = [fullscreenToolbarController_ computeLayout];
+  BOOL shouldInfoBarOverlayToolbar =
+      ui::IsCGFloatEqual(layout.toolbarFraction, 1.0);
+
   if ([downloadShelfController_ view])
     [subviews addObject:[downloadShelfController_ view]];
   if ([self tabContentArea])
     [subviews addObject:[self tabContentArea]];
-  if ([infoBarContainerController_ view])
+
+  if (!shouldInfoBarOverlayToolbar && [infoBarContainerController_ view])
     [subviews addObject:[infoBarContainerController_ view]];
+
   if ([self placeBookmarkBarBelowInfoBar]) {
     if ([bookmarkBarController_ view])
       [subviews addObject:[bookmarkBarController_ view]];
@@ -983,8 +994,13 @@ willPositionSheet:(NSWindow*)sheet
     if ([bookmarkBarController_ view])
       [subviews addObject:[bookmarkBarController_ view]];
   }
+
   if ([toolbarController_ view])
     [subviews addObject:[toolbarController_ view]];
+
+  if (shouldInfoBarOverlayToolbar && [infoBarContainerController_ view])
+    [subviews addObject:[infoBarContainerController_ view]];
+
   if ([findBarCocoaController_ view])
     [subviews addObject:[findBarCocoaController_ view]];
 

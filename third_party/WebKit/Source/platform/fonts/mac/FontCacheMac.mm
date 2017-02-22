@@ -216,7 +216,8 @@ PassRefPtr<SimpleFontData> FontCache::fallbackFontForCharacter(
       substituteFont, platformData.size(), syntheticBold,
       (traits & NSFontItalicTrait) &&
           !(substituteFontTraits & NSFontItalicTrait),
-      platformData.orientation());
+      platformData.orientation(),
+      nullptr);  // No variation paramaters in fallback.
 
   return fontDataFromFontPlatformData(&alternateFont, DoNotRetain);
 }
@@ -230,7 +231,8 @@ PassRefPtr<SimpleFontData> FontCache::getLastResortFallbackFont(
   // For now we'll pick the default that the user would get without changing
   // any prefs.
   RefPtr<SimpleFontData> simpleFontData =
-      getFontData(fontDescription, timesStr, false, shouldRetain);
+      getFontData(fontDescription, timesStr, AlternateFontName::AllowAlternate,
+                  shouldRetain);
   if (simpleFontData)
     return simpleFontData.release();
 
@@ -239,13 +241,15 @@ PassRefPtr<SimpleFontData> FontCache::getLastResortFallbackFont(
   // that's guaranteed to be there, according to Nathan Taylor. This is good
   // enough to avoid a crash at least.
   DEFINE_STATIC_LOCAL(AtomicString, lucidaGrandeStr, ("Lucida Grande"));
-  return getFontData(fontDescription, lucidaGrandeStr, false, shouldRetain);
+  return getFontData(fontDescription, lucidaGrandeStr,
+                     AlternateFontName::AllowAlternate, shouldRetain);
 }
 
 std::unique_ptr<FontPlatformData> FontCache::createFontPlatformData(
     const FontDescription& fontDescription,
     const FontFaceCreationParams& creationParams,
-    float fontSize) {
+    float fontSize,
+    AlternateFontName) {
   NSFontTraitMask traits = fontDescription.style() ? NSFontItalicTrait : 0;
   float size = fontSize;
 
@@ -281,9 +285,10 @@ std::unique_ptr<FontPlatformData> FontCache::createFontPlatformData(
   // font loading failing.  Out-of-process loading occurs for registered fonts
   // stored in non-system locations.  When loading fails, we do not want to use
   // the returned FontPlatformData since it will not have a valid SkTypeface.
-  std::unique_ptr<FontPlatformData> platformData = wrapUnique(
-      new FontPlatformData(platformFont, size, syntheticBold, syntheticItalic,
-                           fontDescription.orientation()));
+  std::unique_ptr<FontPlatformData> platformData =
+      WTF::makeUnique<FontPlatformData>(
+          platformFont, size, syntheticBold, syntheticItalic,
+          fontDescription.orientation(), fontDescription.variationSettings());
   if (!platformData->typeface()) {
     return nullptr;
   }

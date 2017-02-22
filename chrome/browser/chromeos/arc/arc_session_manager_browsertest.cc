@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 
+#include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
@@ -13,7 +14,9 @@
 #include "base/run_loop.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/arc/arc_service_launcher.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/test/arc_data_removed_waiter.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
@@ -24,16 +27,12 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/fake_profile_oauth2_token_service_builder.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
-#include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_profile.h"
-#include "chromeos/chromeos_switches.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/fake_session_manager_client.h"
-#include "chromeos/dbus/session_manager_client.h"
-#include "components/arc/arc_bridge_service_impl.h"
 #include "components/arc/arc_service_manager.h"
+#include "components/arc/arc_session_runner.h"
+#include "components/arc/arc_util.h"
 #include "components/arc/test/fake_arc_session.h"
 #include "components/policy/core/common/cloud/device_management_service.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
@@ -60,39 +59,39 @@ constexpr char kManagedAuthToken[] = "managed-auth-token";
 constexpr char kUnmanagedAuthToken[] = "unmanaged-auth-token";
 constexpr char kWellKnownConsumerName[] = "test@gmail.com";
 constexpr char kFakeUserName[] = "test@example.com";
+constexpr char kFakeGaiaId[] = "1234567890";
 
 }  // namespace
 
 namespace arc {
 
-// Observer of ARC bridge shutdown.
-class ArcSessionManagerShutdownObserver : public ArcSessionManager::Observer {
+// Waits for the "arc.enabled" preference value from true to false.
+class ArcPlayStoreDisabledWaiter : public ArcSessionManager::Observer {
  public:
-  ArcSessionManagerShutdownObserver() {
-    ArcSessionManager::Get()->AddObserver(this);
-  }
+  ArcPlayStoreDisabledWaiter() { ArcSessionManager::Get()->AddObserver(this); }
 
-  ~ArcSessionManagerShutdownObserver() override {
+  ~ArcPlayStoreDisabledWaiter() override {
     ArcSessionManager::Get()->RemoveObserver(this);
   }
 
   void Wait() {
-    run_loop_.reset(new base::RunLoop);
-    run_loop_->Run();
-    run_loop_.reset();
-  }
-
-  // ArcSessionManager::Observer:
-  void OnShutdownBridge() override {
-    if (!run_loop_)
-      return;
-    run_loop_->Quit();
+    base::RunLoop run_loop;
+    base::AutoReset<base::RunLoop*> reset(&run_loop_, &run_loop);
+    run_loop.Run();
   }
 
  private:
-  std::unique_ptr<base::RunLoop> run_loop_;
+  // ArcSessionManager::Observer override:
+  void OnArcPlayStoreEnabledChanged(bool enabled) override {
+    if (!enabled) {
+      DCHECK(run_loop_);
+      run_loop_->Quit();
+    }
+  }
 
-  DISALLOW_COPY_AND_ASSIGN(ArcSessionManagerShutdownObserver);
+  base::RunLoop* run_loop_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(ArcPlayStoreDisabledWaiter);
 };
 
 class ArcSessionManagerTest : public InProcessBrowserTest {
@@ -101,6 +100,11 @@ class ArcSessionManagerTest : public InProcessBrowserTest {
 
   // InProcessBrowserTest:
   ~ArcSessionManagerTest() override {}
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    InProcessBrowserTest::SetUpCommandLine(command_line);
+    arc::SetArcAvailableCommandLineForTesting(command_line);
+  }
 
   void SetUpInProcessBrowserTestFixture() override {
     // Start test device management server.
@@ -113,21 +117,6 @@ class ArcSessionManagerTest : public InProcessBrowserTest {
         base::CommandLine::ForCurrentProcess();
     command_line->AppendSwitchASCII(policy::switches::kDeviceManagementUrl,
                                     url);
-
-    // Enable ARC.
-    command_line->AppendSwitch(chromeos::switches::kEnableArc);
-    chromeos::FakeSessionManagerClient* const fake_session_manager_client =
-        new chromeos::FakeSessionManagerClient;
-    fake_session_manager_client->set_arc_available(true);
-    chromeos::DBusThreadManager::GetSetterForTesting()->SetSessionManagerClient(
-        std::unique_ptr<chromeos::SessionManagerClient>(
-            fake_session_manager_client));
-
-    // Mock out ARC bridge.
-    // Here inject FakeArcSession so blocking task runner is not needed.
-    auto service = base::MakeUnique<ArcBridgeServiceImpl>(nullptr);
-    service->SetArcSessionFactoryForTesting(base::Bind(FakeArcSession::Create));
-    ArcServiceManager::SetArcBridgeServiceForTesting(std::move(service));
   }
 
   void SetUpOnMainThread() override {
@@ -136,6 +125,8 @@ class ArcSessionManagerTest : public InProcessBrowserTest {
     // Init ArcSessionManager for testing.
     ArcSessionManager::DisableUIForTesting();
     ArcSessionManager::EnableCheckAndroidManagementForTesting();
+    ArcSessionManager::Get()->SetArcSessionRunnerForTesting(
+        base::MakeUnique<ArcSessionRunner>(base::Bind(FakeArcSession::Create)));
 
     EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());
 
@@ -152,23 +143,25 @@ class ArcSessionManagerTest : public InProcessBrowserTest {
     token_service_->UpdateCredentials("", kRefreshToken);
 
     profile()->GetPrefs()->SetBoolean(prefs::kArcSignedIn, true);
+    profile()->GetPrefs()->SetBoolean(prefs::kArcTermsAccepted, true);
 
     const AccountId account_id(
-        AccountId::FromUserEmailGaiaId(kFakeUserName, "1234567890"));
+        AccountId::FromUserEmailGaiaId(kFakeUserName, kFakeGaiaId));
     GetFakeUserManager()->AddUser(account_id);
     GetFakeUserManager()->LoginUser(account_id);
 
     // Set up ARC for test profile.
-    std::unique_ptr<BooleanPrefMember> arc_enabled_pref =
-        base::MakeUnique<BooleanPrefMember>();
-    arc_enabled_pref->Init(prefs::kArcEnabled, profile()->GetPrefs());
-    ArcServiceManager::Get()->OnPrimaryUserProfilePrepared(
-        multi_user_util::GetAccountIdFromProfile(profile()),
-        std::move(arc_enabled_pref));
-    ArcSessionManager::Get()->OnPrimaryUserProfilePrepared(profile());
+    ArcServiceLauncher::Get()->OnPrimaryUserProfilePrepared(profile());
   }
 
   void TearDownOnMainThread() override {
+    // Explicitly removing the user is required; otherwise ProfileHelper keeps
+    // a dangling pointer to the User.
+    // TODO(nya): Consider removing all users from ProfileHelper in the
+    // destructor of FakeChromeUserManager.
+    const AccountId account_id(
+        AccountId::FromUserEmailGaiaId(kFakeUserName, kFakeGaiaId));
+    GetFakeUserManager()->RemoveUserFromList(account_id);
     ArcSessionManager::Get()->Shutdown();
     ArcServiceManager::Get()->Shutdown();
     profile_.reset();
@@ -179,6 +172,12 @@ class ArcSessionManagerTest : public InProcessBrowserTest {
   chromeos::FakeChromeUserManager* GetFakeUserManager() const {
     return static_cast<chromeos::FakeChromeUserManager*>(
         user_manager::UserManager::Get());
+  }
+
+  void EnableArc() {
+    PrefService* const prefs = profile()->GetPrefs();
+    prefs->SetBoolean(prefs::kArcEnabled, true);
+    base::RunLoop().RunUntilIdle();
   }
 
   void set_profile_name(const std::string& username) {
@@ -200,8 +199,7 @@ class ArcSessionManagerTest : public InProcessBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(ArcSessionManagerTest, ConsumerAccount) {
-  PrefService* const prefs = profile()->GetPrefs();
-  prefs->SetBoolean(prefs::kArcEnabled, true);
+  EnableArc();
   token_service()->IssueTokenForAllPendingRequests(kUnmanagedAuthToken,
                                                    base::Time::Max());
   ASSERT_EQ(ArcSessionManager::State::ACTIVE,
@@ -210,9 +208,7 @@ IN_PROC_BROWSER_TEST_F(ArcSessionManagerTest, ConsumerAccount) {
 
 IN_PROC_BROWSER_TEST_F(ArcSessionManagerTest, WellKnownConsumerAccount) {
   set_profile_name(kWellKnownConsumerName);
-  PrefService* const prefs = profile()->GetPrefs();
-
-  prefs->SetBoolean(prefs::kArcEnabled, true);
+  EnableArc();
   ASSERT_EQ(ArcSessionManager::State::ACTIVE,
             ArcSessionManager::Get()->state());
 }
@@ -222,21 +218,19 @@ IN_PROC_BROWSER_TEST_F(ArcSessionManagerTest, ManagedChromeAccount) {
       policy::ProfilePolicyConnectorFactory::GetForBrowserContext(profile());
   connector->OverrideIsManagedForTesting(true);
 
-  PrefService* const pref = profile()->GetPrefs();
-
-  pref->SetBoolean(prefs::kArcEnabled, true);
+  EnableArc();
   ASSERT_EQ(ArcSessionManager::State::ACTIVE,
             ArcSessionManager::Get()->state());
 }
 
 IN_PROC_BROWSER_TEST_F(ArcSessionManagerTest, ManagedAndroidAccount) {
-  PrefService* const prefs = profile()->GetPrefs();
-
-  prefs->SetBoolean(prefs::kArcEnabled, true);
+  EnableArc();
   token_service()->IssueTokenForAllPendingRequests(kManagedAuthToken,
                                                    base::Time::Max());
-  ArcSessionManagerShutdownObserver observer;
-  observer.Wait();
+  ArcPlayStoreDisabledWaiter().Wait();
+  ASSERT_EQ(ArcSessionManager::State::REMOVING_DATA_DIR,
+            ArcSessionManager::Get()->state());
+  ArcDataRemovedWaiter().Wait();
   ASSERT_EQ(ArcSessionManager::State::STOPPED,
             ArcSessionManager::Get()->state());
 }

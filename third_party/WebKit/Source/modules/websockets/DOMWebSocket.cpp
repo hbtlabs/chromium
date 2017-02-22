@@ -40,6 +40,7 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/SecurityContext.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/MessageEvent.h"
 #include "core/fileapi/Blob.h"
 #include "core/frame/LocalDOMWindow.h"
@@ -70,7 +71,10 @@ namespace blink {
 DOMWebSocket::EventQueue::EventQueue(EventTarget* target)
     : m_state(Active),
       m_target(target),
-      m_resumeTimer(this, &EventQueue::resumeTimerFired) {}
+      m_resumeTimer(TaskRunnerHelper::get(TaskType::WebSocket,
+                                          target->getExecutionContext()),
+                    this,
+                    &EventQueue::resumeTimerFired) {}
 
 DOMWebSocket::EventQueue::~EventQueue() {
   contextDestroyed();
@@ -218,8 +222,7 @@ const char* DOMWebSocket::subprotocolSeperator() {
 }
 
 DOMWebSocket::DOMWebSocket(ExecutionContext* context)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(context),
+    : SuspendableObject(context),
       m_state(kConnecting),
       m_bufferedAmount(0),
       m_consumedBufferedAmount(0),
@@ -230,6 +233,7 @@ DOMWebSocket::DOMWebSocket(ExecutionContext* context)
       m_extensions(""),
       m_eventQueue(EventQueue::create(this)),
       m_bufferedAmountConsumeTimer(
+          TaskRunnerHelper::get(TaskType::WebSocket, context),
           this,
           &DOMWebSocket::reflectBufferedAmountConsumption) {}
 
@@ -269,7 +273,7 @@ DOMWebSocket* DOMWebSocket::create(ExecutionContext* context,
     webSocket->connect(url, protocolsVector, exceptionState);
   } else if (protocols.isString()) {
     Vector<String> protocolsVector;
-    protocolsVector.append(protocols.getAsString());
+    protocolsVector.push_back(protocols.getAsString());
     webSocket->connect(url, protocolsVector, exceptionState);
   } else {
     DCHECK(protocols.isStringSequence());
@@ -360,7 +364,7 @@ void DOMWebSocket::connect(const String& url,
   // Fail if there're duplicated elements in |protocols|.
   HashSet<String> visited;
   for (size_t i = 0; i < protocols.size(); ++i) {
-    if (!visited.add(protocols[i]).isNewEntry) {
+    if (!visited.insert(protocols[i]).isNewEntry) {
       m_state = kClosed;
       exceptionState.throwDOMException(
           SyntaxError, "The subprotocol '" +
@@ -650,10 +654,10 @@ const AtomicString& DOMWebSocket::interfaceName() const {
 }
 
 ExecutionContext* DOMWebSocket::getExecutionContext() const {
-  return ActiveDOMObject::getExecutionContext();
+  return SuspendableObject::getExecutionContext();
 }
 
-void DOMWebSocket::contextDestroyed() {
+void DOMWebSocket::contextDestroyed(ExecutionContext*) {
   NETWORK_DVLOG(1) << "WebSocket " << this << " contextDestroyed()";
   m_eventQueue->contextDestroyed();
   if (m_channel) {
@@ -863,7 +867,7 @@ DEFINE_TRACE(DOMWebSocket) {
   visitor->trace(m_eventQueue);
   WebSocketChannelClient::trace(visitor);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  SuspendableObject::trace(visitor);
 }
 
 }  // namespace blink

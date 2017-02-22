@@ -6,7 +6,11 @@ package org.chromium.chrome.browser.ntp.cards;
 
 import android.support.annotation.CallSuper;
 
+import org.chromium.base.Callback;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
+
+import java.util.Collections;
+import java.util.Set;
 
 /**
  * An optional leaf (i.e. single item) in the tree. Depending on its internal state (see
@@ -19,16 +23,8 @@ import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 public abstract class OptionalLeaf extends ChildNode {
     private boolean mVisible;
 
-    /**
-     * Constructor for {@link OptionalLeaf}.
-     * By default it is not visible. See {@link #setVisible(boolean)} to update the visibility.
-     */
-    public OptionalLeaf(NodeParent parent) {
-        super(parent);
-    }
-
     @Override
-    public int getItemCount() {
+    protected int getItemCountForDebugging() {
         return isVisible() ? 1 : 0;
     }
 
@@ -51,11 +47,16 @@ public abstract class OptionalLeaf extends ChildNode {
     }
 
     @Override
-    public int getDismissSiblingPosDelta(int position) {
+    public Set<Integer> getItemDismissalGroup(int position) {
         checkIndex(position);
-        return 0;
+        return canBeDismissed() ? Collections.singleton(0) : Collections.<Integer>emptySet();
     }
 
+    @Override
+    public void dismissItem(int position, Callback<String> itemRemovedCallback) {
+        checkIndex(position);
+        dismiss(itemRemovedCallback);
+    }
 
     /** @return Whether the optional item is currently visible. */
     public final boolean isVisible() {
@@ -94,9 +95,21 @@ public abstract class OptionalLeaf extends ChildNode {
     @ItemViewType
     protected abstract int getItemViewType();
 
-    protected void checkIndex(int position) {
-        if (position < 0 || position >= getItemCount()) {
-            throw new IndexOutOfBoundsException(position + "/" + getItemCount());
-        }
+    /**
+     * @return Whether the item can be dismissed.
+     */
+    protected boolean canBeDismissed() {
+        return false;
+    }
+
+    /**
+     * Dismiss this item. The default implementation asserts, as by default items can't be
+     * dismissed.
+     * @param itemRemovedCallback Should be called with the title of the dismissed item, to announce
+     * it for accessibility purposes.
+     * @see TreeNode#dismissItem
+     */
+    protected void dismiss(Callback<String> itemRemovedCallback) {
+        assert false;
     }
 }

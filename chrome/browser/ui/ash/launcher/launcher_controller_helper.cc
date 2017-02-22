@@ -8,7 +8,9 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/arc_support_host.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/launch_util.h"
@@ -16,6 +18,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
+#include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_controller.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
@@ -81,7 +84,7 @@ const extensions::Extension* GetExtensionByID(Profile* profile,
       id, extensions::ExtensionRegistry::EVERYTHING);
 }
 
-std::string GetSourceFromAppListSource(ash::LaunchSource source) {
+std::string GetSourceFromAppListSource(ash::ShelfLaunchSource source) {
   switch (source) {
     case ash::LAUNCH_FROM_APP_LIST:
       return std::string(extension_urls::kLaunchSourceAppList);
@@ -103,25 +106,25 @@ LauncherControllerHelper::~LauncherControllerHelper() {}
 base::string16 LauncherControllerHelper::GetAppTitle(
     Profile* profile,
     const std::string& app_id) {
-  base::string16 title;
   if (app_id.empty())
-    return title;
+    return base::string16();
 
-  // Get title if the app is an Arc app.
+  // Get the title if the app is an ARC app.
   ArcAppListPrefs* arc_prefs = ArcAppListPrefs::Get(profile);
-  if (arc_prefs && arc_prefs->IsRegistered(app_id)) {
+  const std::string arc_app_id =
+      ArcAppWindowLauncherController::GetArcAppIdFromShelfAppId(app_id);
+  if (arc_prefs && arc_prefs->IsRegistered(arc_app_id)) {
     std::unique_ptr<ArcAppListPrefs::AppInfo> app_info =
-        arc_prefs->GetApp(app_id);
+        arc_prefs->GetApp(arc_app_id);
     DCHECK(app_info.get());
     if (app_info)
-      title = base::UTF8ToUTF16(app_info->name);
-    return title;
+      return base::UTF8ToUTF16(app_info->name);
   }
 
   const extensions::Extension* extension = GetExtensionByID(profile, app_id);
   if (extension)
-    title = base::UTF8ToUTF16(extension->name());
-  return title;
+    return base::UTF8ToUTF16(extension->name());
+  return base::string16();
 }
 
 std::string LauncherControllerHelper::GetAppID(content::WebContents* tab) {
@@ -151,14 +154,14 @@ bool LauncherControllerHelper::IsValidIDForCurrentUser(
   if (!GetExtensionByID(profile_, id))
     return false;
   if (id == ArcSupportHost::kHostAppId) {
-    if (!arc::ArcSessionManager::IsAllowedForProfile(profile()))
+    if (!arc::IsArcAllowedForProfile(profile()))
       return false;
     const arc::ArcSessionManager* arc_session_manager =
         arc::ArcSessionManager::Get();
     DCHECK(arc_session_manager);
     if (!arc_session_manager->IsAllowed())
       return false;
-    if (!arc_session_manager->IsArcEnabled() &&
+    if (!arc_session_manager->IsArcPlayStoreEnabled() &&
         arc_session_manager->IsArcManaged())
       return false;
   }
@@ -166,12 +169,13 @@ bool LauncherControllerHelper::IsValidIDForCurrentUser(
   return true;
 }
 
-void LauncherControllerHelper::LaunchApp(const std::string& app_id,
-                                         ash::LaunchSource source,
+void LauncherControllerHelper::LaunchApp(ash::AppLauncherId id,
+                                         ash::ShelfLaunchSource source,
                                          int event_flags) {
+  const std::string& app_id = id.app_id();
   const ArcAppListPrefs* arc_prefs = GetArcAppListPrefs();
   if (arc_prefs && arc_prefs->IsRegistered(app_id)) {
-    arc::LaunchApp(profile_, app_id);
+    arc::LaunchApp(profile_, app_id, event_flags);
     return;
   }
 
@@ -204,6 +208,7 @@ void LauncherControllerHelper::LaunchApp(const std::string& app_id,
     params.override_url = net::AppendQueryParameter(
         extension_url, extension_urls::kWebstoreSourceField, source_value);
   }
+  params.launch_id = id.launch_id();
 
   OpenApplication(params);
 }
@@ -213,8 +218,8 @@ ArcAppListPrefs* LauncherControllerHelper::GetArcAppListPrefs() const {
 }
 
 void LauncherControllerHelper::ExtensionEnableFlowFinished() {
-  LaunchApp(extension_enable_flow_->extension_id(), ash::LAUNCH_FROM_UNKNOWN,
-            ui::EF_NONE);
+  LaunchApp(ash::AppLauncherId(extension_enable_flow_->extension_id()),
+            ash::LAUNCH_FROM_UNKNOWN, ui::EF_NONE);
   extension_enable_flow_.reset();
 }
 

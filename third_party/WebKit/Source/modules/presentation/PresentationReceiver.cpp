@@ -10,6 +10,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/UseCounter.h"
 #include "modules/presentation/PresentationConnection.h"
 #include "modules/presentation/PresentationConnectionList.h"
 #include "public/platform/modules/presentation/WebPresentationClient.h"
@@ -18,7 +19,8 @@ namespace blink {
 
 PresentationReceiver::PresentationReceiver(LocalFrame* frame,
                                            WebPresentationClient* client)
-    : DOMWindowProperty(frame) {
+    : ContextClient(frame) {
+  recordOriginTypeAccess(frame->document());
   m_connectionList = new PresentationConnectionList(frame->document());
 
   if (client)
@@ -39,17 +41,15 @@ ScriptPromise PresentationReceiver::connectionList(ScriptState* scriptState) {
   return m_connectionListProperty->promise(scriptState->world());
 }
 
-void PresentationReceiver::onReceiverConnectionAvailable(
-    WebPresentationConnectionClient* connectionClient) {
-  DCHECK(connectionClient);
+WebPresentationConnection* PresentationReceiver::onReceiverConnectionAvailable(
+    const WebPresentationSessionInfo& sessionInfo) {
   // take() will call PresentationReceiver::registerConnection()
   // and register the connection.
-  auto connection =
-      PresentationConnection::take(this, wrapUnique(connectionClient));
+  auto connection = PresentationConnection::take(this, sessionInfo);
 
   // receiver.connectionList property not accessed
   if (!m_connectionListProperty)
-    return;
+    return nullptr;
 
   if (m_connectionListProperty->getState() ==
       ScriptPromisePropertyBase::Pending)
@@ -57,6 +57,8 @@ void PresentationReceiver::onReceiverConnectionAvailable(
   else if (m_connectionListProperty->getState() ==
            ScriptPromisePropertyBase::Resolved)
     m_connectionList->dispatchConnectionAvailableEvent(connection);
+
+  return connection;
 }
 
 void PresentationReceiver::registerConnection(
@@ -65,9 +67,19 @@ void PresentationReceiver::registerConnection(
   m_connectionList->addConnection(connection);
 }
 
+void PresentationReceiver::recordOriginTypeAccess(Document* document) const {
+  DCHECK(document);
+  if (document->isSecureContext()) {
+    UseCounter::count(document, UseCounter::PresentationReceiverSecureOrigin);
+  } else {
+    UseCounter::count(document, UseCounter::PresentationReceiverInsecureOrigin);
+  }
+}
+
 DEFINE_TRACE(PresentationReceiver) {
   visitor->trace(m_connectionList);
   visitor->trace(m_connectionListProperty);
-  DOMWindowProperty::trace(visitor);
+  ContextClient::trace(visitor);
 }
+
 }  // namespace blink

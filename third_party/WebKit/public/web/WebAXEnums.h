@@ -111,6 +111,7 @@ enum WebAXRole {
   WebAXRoleDiv,
   WebAXRoleDocument,
   WebAXRoleEmbeddedObject,
+  WebAXRoleFeed,
   WebAXRoleFigcaption,
   WebAXRoleFigure,
   WebAXRoleFooter,
@@ -186,6 +187,7 @@ enum WebAXRole {
   WebAXRoleTab,
   WebAXRoleTableHeaderContainer,
   WebAXRoleTable,
+  WebAXRoleTerm,
   WebAXRoleTextField,
   WebAXRoleTime,
   WebAXRoleTimer,
@@ -223,6 +225,18 @@ enum WebAXState {
   WebAXStateSelected,
   WebAXStateVertical,
   WebAXStateVisited,
+};
+
+enum class WebAXSupportedAction {
+  None = 0,
+  Activate,
+  Check,
+  Click,
+  Jump,
+  Open,
+  Press,
+  Select,
+  Uncheck
 };
 
 enum WebAXTextDirection {
@@ -317,7 +331,6 @@ enum WebAXDescriptionFrom {
   WebAXDescriptionFromUninitialized = -1,
   WebAXDescriptionFromAttribute = 0,
   WebAXDescriptionFromContents,
-  WebAXDescriptionFromPlaceholder,
   WebAXDescriptionFromRelatedElement,
 };
 
@@ -325,6 +338,49 @@ enum WebAXDescriptionFrom {
 enum WebAXTextAffinity {
   WebAXTextAffinityUpstream,
   WebAXTextAffinityDownstream
+};
+
+//
+// Sparse accessibility attributes
+//
+// The following enums represent accessibility attributes that apply
+// to only a small fraction of WebAXObjects. Rather than the client
+// asking each WebAXObject for the value of each accessibility
+// attribute, it can call a single function to query for all
+// sparse attributes at the same time. Any sparse attributes that
+// are present are returned via a callback consisting of an attribute
+// key enum and an attribute value.
+//
+
+// Sparse attributes of a WebAXObject whose value is either true or
+// false. In order for it to be a sparse attribute the default value
+// must be false.
+enum class WebAXBoolAttribute {};
+
+// Sparse attributes of a WebAXObject whose value is a string.
+// In order for it to be a sparse attribute the default value
+// must be "".
+enum class WebAXStringAttribute {
+  AriaKeyShortcuts,
+  AriaRoleDescription,
+};
+
+// Sparse attributes of a WebAXObject whose value is a reference to
+// another WebAXObject within the same frame. In order for it to be a
+// sparse attribute the default value must be the null WebAXObject.
+enum class WebAXObjectAttribute {
+  AriaActiveDescendant,
+  AriaErrorMessage,
+};
+
+// Sparse attributes of a WebAXObject whose value is a vector of
+// references to other WebAXObjects within the same frame. In order
+// for it to be a sparse attribute the default value must be the
+// empty vector.
+enum class WebAXObjectVectorAttribute {
+  AriaControls,
+  AriaDetails,
+  AriaFlowTo,
 };
 
 }  // namespace blink

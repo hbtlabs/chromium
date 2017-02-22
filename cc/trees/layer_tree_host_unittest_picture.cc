@@ -24,7 +24,7 @@ class LayerTreeHostPictureTest : public LayerTreeTest {
     root_picture_layer_->SetBounds(size);
     root->AddChild(root_picture_layer_);
 
-    layer_tree()->SetRootLayer(root);
+    layer_tree_host()->SetRootLayer(root);
     client_.set_bounds(size);
   }
 
@@ -62,7 +62,7 @@ class LayerTreeHostPictureTestTwinLayer
         scoped_refptr<FakePictureLayer> picture =
             FakePictureLayer::Create(&client_);
         picture_id2_ = picture->id();
-        layer_tree()->root_layer()->AddChild(picture);
+        layer_tree_host()->root_layer()->AddChild(picture);
         break;
       }
       case 4:
@@ -158,7 +158,7 @@ class LayerTreeHostPictureTestResizeViewportWithGpuRaster
     picture_->SetBounds(gfx::Size(768, 960));
     root->AddChild(picture_);
 
-    layer_tree()->SetRootLayer(root);
+    layer_tree_host()->SetRootLayer(root);
     LayerTreeHostPictureTest::SetupTree();
   }
 
@@ -190,7 +190,7 @@ class LayerTreeHostPictureTestResizeViewportWithGpuRaster
         // Change the picture layer's size along with the viewport, so it will
         // consider picking a new tile size.
         picture_->SetBounds(gfx::Size(768, 1056));
-        layer_tree()->SetViewportSize(gfx::Size(768, 1056));
+        layer_tree_host()->SetViewportSize(gfx::Size(768, 1056));
         break;
       case 2:
         EndTest();
@@ -226,7 +226,7 @@ class LayerTreeHostPictureTestChangeLiveTilesRectWithRecycleTree
     // force it to have a transform node by making it scrollable.
     picture_->SetScrollClipLayerId(root->id());
 
-    layer_tree()->SetRootLayer(root);
+    layer_tree_host()->SetRootLayer(root);
     LayerTreeHostPictureTest::SetupTree();
     client_.set_bounds(picture_->bounds());
   }
@@ -338,7 +338,7 @@ class LayerTreeHostPictureTestRSLLMembership : public LayerTreeHostPictureTest {
     picture_->SetBounds(gfx::Size(100, 100));
     child_->AddChild(picture_);
 
-    layer_tree()->SetRootLayer(root);
+    layer_tree_host()->SetRootLayer(root);
     LayerTreeHostPictureTest::SetupTree();
   }
 
@@ -429,10 +429,10 @@ class LayerTreeHostPictureTestRSLLMembershipWithScale
     picture_->SetBounds(gfx::Size(100, 100));
     pinch_->AddChild(picture_);
 
-    layer_tree()->RegisterViewportLayers(NULL, page_scale_layer, pinch_,
-                                         nullptr);
-    layer_tree()->SetPageScaleFactorAndLimits(1.f, 1.f, 4.f);
-    layer_tree()->SetRootLayer(root_clip);
+    layer_tree_host()->RegisterViewportLayers(NULL, page_scale_layer, pinch_,
+                                              nullptr);
+    layer_tree_host()->SetPageScaleFactorAndLimits(1.f, 1.f, 4.f);
+    layer_tree_host()->SetRootLayer(root_clip);
     LayerTreeHostPictureTest::SetupTree();
     client_.set_bounds(picture_->bounds());
   }
@@ -458,19 +458,19 @@ class LayerTreeHostPictureTestRSLLMembershipWithScale
       case 0:
         // On 1st commit the pending layer has tilings.
         ASSERT_EQ(1u, picture->tilings()->num_tilings());
-        EXPECT_EQ(1.f, picture->tilings()->tiling_at(0)->contents_scale_key());
+        EXPECT_EQ(1.f, picture->tilings()->tiling_at(0)->contents_scale());
         break;
       case 1:
         // On 2nd commit, the pending layer is transparent, so has a stale
         // value.
         ASSERT_EQ(1u, picture->tilings()->num_tilings());
-        EXPECT_EQ(1.f, picture->tilings()->tiling_at(0)->contents_scale_key());
+        EXPECT_EQ(1.f, picture->tilings()->tiling_at(0)->contents_scale());
         break;
       case 2:
         // On 3rd commit, the pending layer is visible again, so has tilings and
         // is updated for the pinch.
         ASSERT_EQ(1u, picture->tilings()->num_tilings());
-        EXPECT_EQ(2.f, picture->tilings()->tiling_at(0)->contents_scale_key());
+        EXPECT_EQ(2.f, picture->tilings()->tiling_at(0)->contents_scale());
     }
   }
 
@@ -488,7 +488,7 @@ class LayerTreeHostPictureTestRSLLMembershipWithScale
         if (draws_in_frame_ == 1) {
           // On 1st commit the layer has tilings.
           EXPECT_GT(picture->tilings()->num_tilings(), 0u);
-          EXPECT_EQ(1.f, picture->HighResTiling()->contents_scale_key());
+          EXPECT_EQ(1.f, picture->HighResTiling()->contents_scale());
 
           // Pinch zoom in to change the scale on the active tree.
           impl->PinchGestureBegin();
@@ -498,7 +498,7 @@ class LayerTreeHostPictureTestRSLLMembershipWithScale
           // If the pinch gesture caused a commit we could get here with a
           // pending tree.
           EXPECT_FALSE(impl->pending_tree());
-          EXPECT_EQ(2.f, picture->HighResTiling()->contents_scale_key());
+          EXPECT_EQ(2.f, picture->HighResTiling()->contents_scale());
 
           // Need to wait for ready to draw here so that the pinch is
           // entirely complete, otherwise another draw might come in before
@@ -592,8 +592,8 @@ class LayerTreeHostPictureTestForceRecalculateScales
     normal_layer_->SetBounds(size);
     root->AddChild(normal_layer_);
 
-    layer_tree()->SetRootLayer(root);
-    layer_tree()->SetViewportSize(size);
+    layer_tree_host()->SetRootLayer(root);
+    layer_tree_host()->SetViewportSize(size);
 
     client_.set_fill_with_nonsolid_color(true);
     client_.set_bounds(size);
@@ -616,12 +616,10 @@ class LayerTreeHostPictureTestForceRecalculateScales
       case 0:
         // On first commit, both layers are at the default scale.
         ASSERT_EQ(1u, will_change_layer->tilings()->num_tilings());
-        EXPECT_EQ(
-            1.f,
-            will_change_layer->tilings()->tiling_at(0)->contents_scale_key());
-        ASSERT_EQ(1u, normal_layer->tilings()->num_tilings());
         EXPECT_EQ(1.f,
-                  normal_layer->tilings()->tiling_at(0)->contents_scale_key());
+                  will_change_layer->tilings()->tiling_at(0)->contents_scale());
+        ASSERT_EQ(1u, normal_layer->tilings()->num_tilings());
+        EXPECT_EQ(1.f, normal_layer->tilings()->tiling_at(0)->contents_scale());
 
         MainThreadTaskRunner()->PostTask(
             FROM_HERE,
@@ -633,12 +631,10 @@ class LayerTreeHostPictureTestForceRecalculateScales
         // On 2nd commit after scaling up to 2, the normal layer will adjust its
         // scale and the will change layer should not (as it is will change.
         ASSERT_EQ(1u, will_change_layer->tilings()->num_tilings());
-        EXPECT_EQ(
-            1.f,
-            will_change_layer->tilings()->tiling_at(0)->contents_scale_key());
+        EXPECT_EQ(1.f,
+                  will_change_layer->tilings()->tiling_at(0)->contents_scale());
         ASSERT_EQ(1u, normal_layer->tilings()->num_tilings());
-        EXPECT_EQ(2.f,
-                  normal_layer->tilings()->tiling_at(0)->contents_scale_key());
+        EXPECT_EQ(2.f, normal_layer->tilings()->tiling_at(0)->contents_scale());
 
         MainThreadTaskRunner()->PostTask(
             FROM_HERE,
@@ -650,12 +646,10 @@ class LayerTreeHostPictureTestForceRecalculateScales
         // On 3rd commit, both layers should adjust scales due to forced
         // recalculating.
         ASSERT_EQ(1u, will_change_layer->tilings()->num_tilings());
-        EXPECT_EQ(
-            4.f,
-            will_change_layer->tilings()->tiling_at(0)->contents_scale_key());
-        ASSERT_EQ(1u, normal_layer->tilings()->num_tilings());
         EXPECT_EQ(4.f,
-                  normal_layer->tilings()->tiling_at(0)->contents_scale_key());
+                  will_change_layer->tilings()->tiling_at(0)->contents_scale());
+        ASSERT_EQ(1u, normal_layer->tilings()->num_tilings());
+        EXPECT_EQ(4.f, normal_layer->tilings()->tiling_at(0)->contents_scale());
         EndTest();
         break;
     }
@@ -664,13 +658,13 @@ class LayerTreeHostPictureTestForceRecalculateScales
   void ScaleRootUp() {
     gfx::Transform transform;
     transform.Scale(2, 2);
-    layer_tree_host()->GetLayerTree()->root_layer()->SetTransform(transform);
+    layer_tree_host()->root_layer()->SetTransform(transform);
   }
 
   void ScaleRootUpAndRecalculateScales() {
     gfx::Transform transform;
     transform.Scale(4, 4);
-    layer_tree_host()->GetLayerTree()->root_layer()->SetTransform(transform);
+    layer_tree_host()->root_layer()->SetTransform(transform);
     layer_tree_host()->SetNeedsRecalculateRasterScales();
   }
 

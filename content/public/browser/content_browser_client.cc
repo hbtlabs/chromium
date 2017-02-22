@@ -6,6 +6,7 @@
 
 #include "base/files/file_path.h"
 #include "base/guid.h"
+#include "base/logging.h"
 #include "build/build_config.h"
 #include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/browser/memory_coordinator_delegate.h"
@@ -13,6 +14,7 @@
 #include "content/public/browser/vpn_service_proxy.h"
 #include "content/public/common/sandbox_type.h"
 #include "media/base/cdm_factory.h"
+#include "media/media_features.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "ui/gfx/image/image_skia.h"
 #include "url/gurl.h"
@@ -127,11 +129,6 @@ bool ContentBrowserClient::ShouldAssignSiteForURL(const GURL& url) {
   return true;
 }
 
-std::string ContentBrowserClient::GetCanonicalEncodingNameByAliasName(
-    const std::string& alias_name) {
-  return std::string();
-}
-
 std::string ContentBrowserClient::GetApplicationLocale() {
   return "en-US";
 }
@@ -151,11 +148,11 @@ bool ContentBrowserClient::AllowAppCache(const GURL& manifest_url,
   return true;
 }
 
-bool ContentBrowserClient::AllowServiceWorker(const GURL& scope,
-                                              const GURL& document_url,
-                                              content::ResourceContext* context,
-                                              int render_process_id,
-                                              int render_frame_id) {
+bool ContentBrowserClient::AllowServiceWorker(
+    const GURL& scope,
+    const GURL& first_party,
+    ResourceContext* context,
+    const base::Callback<WebContents*(void)>& wc_getter) {
   return true;
 }
 
@@ -202,18 +199,13 @@ bool ContentBrowserClient::AllowWorkerIndexedDB(
   return true;
 }
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
 bool ContentBrowserClient::AllowWebRTCIdentityCache(const GURL& url,
                                                     const GURL& first_party_url,
                                                     ResourceContext* context) {
   return true;
 }
-#endif  // defined(ENABLE_WEBRTC)
-
-bool ContentBrowserClient::AllowKeygen(const GURL& url,
-                                       content::ResourceContext* context) {
-  return true;
-}
+#endif  // BUILDFLAG(ENABLE_WEBRTC)
 
 ContentBrowserClient::AllowWebBluetoothResult
 ContentBrowserClient::AllowWebBluetooth(
@@ -223,7 +215,7 @@ ContentBrowserClient::AllowWebBluetooth(
   return AllowWebBluetoothResult::ALLOW;
 }
 
-std::string ContentBrowserClient::GetWebBluetoothBlacklist() {
+std::string ContentBrowserClient::GetWebBluetoothBlocklist() {
   return std::string();
 }
 
@@ -231,10 +223,12 @@ QuotaPermissionContext* ContentBrowserClient::CreateQuotaPermissionContext() {
   return nullptr;
 }
 
-std::unique_ptr<storage::QuotaEvictionPolicy>
-ContentBrowserClient::GetTemporaryStorageEvictionPolicy(
-    content::BrowserContext* context) {
-  return std::unique_ptr<storage::QuotaEvictionPolicy>();
+void ContentBrowserClient::GetQuotaSettings(
+    BrowserContext* context,
+    StoragePartition* partition,
+    const storage::OptionalQuotaSettingsCallback& callback) {
+  // By default, no quota is provided, embedders should override.
+  callback.Run(storage::GetNoQuotaSettings());
 }
 
 void ContentBrowserClient::SelectClientCertificate(
@@ -283,21 +277,20 @@ ContentBrowserClient::GetPlatformNotificationService() {
 }
 
 bool ContentBrowserClient::CanCreateWindow(
+    int opener_render_process_id,
+    int opener_render_frame_id,
     const GURL& opener_url,
     const GURL& opener_top_level_frame_url,
     const GURL& source_origin,
-    WindowContainerType container_type,
+    content::mojom::WindowContainerType container_type,
     const GURL& target_url,
     const Referrer& referrer,
     const std::string& frame_name,
     WindowOpenDisposition disposition,
-    const blink::WebWindowFeatures& features,
+    const blink::mojom::WindowFeatures& features,
     bool user_gesture,
     bool opener_suppressed,
     ResourceContext* context,
-    int render_process_id,
-    int opener_render_view_id,
-    int opener_render_frame_id,
     bool* no_javascript_access) {
   *no_javascript_access = false;
   return true;
@@ -383,8 +376,14 @@ std::string ContentBrowserClient::GetServiceUserIdForBrowserContext(
   return base::GenerateGUID();
 }
 
-PresentationServiceDelegate*
-ContentBrowserClient::GetPresentationServiceDelegate(
+ControllerPresentationServiceDelegate*
+ContentBrowserClient::GetControllerPresentationServiceDelegate(
+    WebContents* web_contents) {
+  return nullptr;
+}
+
+ReceiverPresentationServiceDelegate*
+ContentBrowserClient::GetReceiverPresentationServiceDelegate(
     WebContents* web_contents) {
   return nullptr;
 }
@@ -396,10 +395,10 @@ void ContentBrowserClient::OpenURL(
   callback.Run(nullptr);
 }
 
-ScopedVector<NavigationThrottle>
+std::vector<std::unique_ptr<NavigationThrottle>>
 ContentBrowserClient::CreateThrottlesForNavigation(
     NavigationHandle* navigation_handle) {
-  return ScopedVector<NavigationThrottle>();
+  return std::vector<std::unique_ptr<NavigationThrottle>>();
 }
 
 std::unique_ptr<NavigationUIData> ContentBrowserClient::GetNavigationUIData(
@@ -424,13 +423,30 @@ base::string16 ContentBrowserClient::GetAppContainerSidForSandboxType(
 #endif  // defined(OS_WIN)
 
 std::unique_ptr<base::Value> ContentBrowserClient::GetServiceManifestOverlay(
-    const std::string& name) {
+    base::StringPiece name) {
   return nullptr;
+}
+
+std::vector<ContentBrowserClient::ServiceManifestInfo>
+ContentBrowserClient::GetExtraServiceManifests() {
+  return std::vector<ContentBrowserClient::ServiceManifestInfo>();
 }
 
 std::unique_ptr<MemoryCoordinatorDelegate>
 ContentBrowserClient::GetMemoryCoordinatorDelegate() {
   return std::unique_ptr<MemoryCoordinatorDelegate>();
+}
+
+::rappor::RapporService* ContentBrowserClient::GetRapporService() {
+  return nullptr;
+}
+
+bool ContentBrowserClient::ShouldRedirectDOMStorageTaskRunner() {
+  return false;
+}
+
+bool ContentBrowserClient::RedirectNonUINonIOBrowserThreadsToTaskScheduler() {
+  return false;
 }
 
 }  // namespace content

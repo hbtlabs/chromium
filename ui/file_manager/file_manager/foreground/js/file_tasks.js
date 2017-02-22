@@ -206,7 +206,7 @@ FileTasks.prototype.openSuggestAppsDialog = function(
   var extension = splitted[1];
 
   // Returns with failure if the file has neither extension nor MIME type.
-  if (!extension || !mimeType) {
+  if (!extension && !mimeType) {
     onFailure();
     return;
   }
@@ -316,7 +316,7 @@ FileTasks.annotateTasks_ = function(tasks, entries) {
     var task = tasks[i];
     var taskParts = task.taskId.split('|');
 
-    // Skip internal Files.app's handlers.
+    // Skip internal Files app's handlers.
     if (taskParts[0] === id &&
         (taskParts[2] === 'select' || taskParts[2] === 'open')) {
       continue;

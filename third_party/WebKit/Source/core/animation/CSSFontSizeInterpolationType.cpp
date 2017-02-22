@@ -19,7 +19,7 @@ namespace {
 class IsMonospaceChecker : public InterpolationType::ConversionChecker {
  public:
   static std::unique_ptr<IsMonospaceChecker> create(bool isMonospace) {
-    return wrapUnique(new IsMonospaceChecker(isMonospace));
+    return WTF::wrapUnique(new IsMonospaceChecker(isMonospace));
   }
 
  private:
@@ -38,7 +38,7 @@ class InheritedFontSizeChecker : public InterpolationType::ConversionChecker {
  public:
   static std::unique_ptr<InheritedFontSizeChecker> create(
       const FontDescription::Size& inheritedFontSize) {
-    return wrapUnique(new InheritedFontSizeChecker(inheritedFontSize));
+    return WTF::wrapUnique(new InheritedFontSizeChecker(inheritedFontSize));
   }
 
  private:
@@ -65,7 +65,7 @@ InterpolationValue maybeConvertKeyword(
     InterpolationType::ConversionCheckers& conversionCheckers) {
   if (FontSize::isValidValueID(valueID)) {
     bool isMonospace = state.style()->getFontDescription().isMonospace();
-    conversionCheckers.append(IsMonospaceChecker::create(isMonospace));
+    conversionCheckers.push_back(IsMonospaceChecker::create(isMonospace));
     return convertFontSize(state.fontBuilder().fontSizeForKeyword(
         FontSize::keywordSize(valueID), isMonospace));
   }
@@ -75,7 +75,7 @@ InterpolationValue maybeConvertKeyword(
 
   const FontDescription::Size& inheritedFontSize =
       state.parentFontDescription().getSize();
-  conversionCheckers.append(
+  conversionCheckers.push_back(
       InheritedFontSizeChecker::create(inheritedFontSize));
   if (valueID == CSSValueSmaller)
     return convertFontSize(
@@ -104,14 +104,14 @@ InterpolationValue CSSFontSizeInterpolationType::maybeConvertInherit(
     ConversionCheckers& conversionCheckers) const {
   const FontDescription::Size& inheritedFontSize =
       state.parentFontDescription().getSize();
-  conversionCheckers.append(
+  conversionCheckers.push_back(
       InheritedFontSizeChecker::create(inheritedFontSize));
   return convertFontSize(inheritedFontSize.value);
 }
 
 InterpolationValue CSSFontSizeInterpolationType::maybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState& state,
+    const StyleResolverState* state,
     ConversionCheckers& conversionCheckers) const {
   std::unique_ptr<InterpolableValue> result =
       LengthInterpolationFunctions::maybeConvertCSSValue(value)
@@ -122,27 +122,28 @@ InterpolationValue CSSFontSizeInterpolationType::maybeConvertValue(
   if (!value.isIdentifierValue())
     return nullptr;
 
-  return maybeConvertKeyword(toCSSIdentifierValue(value).getValueID(), state,
+  DCHECK(state);
+  return maybeConvertKeyword(toCSSIdentifierValue(value).getValueID(), *state,
                              conversionCheckers);
 }
 
-InterpolationValue CSSFontSizeInterpolationType::maybeConvertUnderlyingValue(
-    const InterpolationEnvironment& environment) const {
-  return convertFontSize(environment.state().style()->specifiedFontSize());
+InterpolationValue
+CSSFontSizeInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
+    const ComputedStyle& style) const {
+  return convertFontSize(style.specifiedFontSize());
 }
 
-void CSSFontSizeInterpolationType::apply(
+void CSSFontSizeInterpolationType::applyStandardPropertyValue(
     const InterpolableValue& interpolableValue,
     const NonInterpolableValue*,
-    InterpolationEnvironment& environment) const {
-  const FontDescription& parentFont =
-      environment.state().parentFontDescription();
+    StyleResolverState& state) const {
+  const FontDescription& parentFont = state.parentFontDescription();
   Length fontSizeLength = LengthInterpolationFunctions::createLength(
-      interpolableValue, nullptr, environment.state().fontSizeConversionData(),
+      interpolableValue, nullptr, state.fontSizeConversionData(),
       ValueRangeNonNegative);
   float fontSize =
       floatValueForLength(fontSizeLength, parentFont.getSize().value);
-  environment.state().fontBuilder().setSize(FontDescription::Size(
+  state.fontBuilder().setSize(FontDescription::Size(
       0, fontSize,
       !fontSizeLength.isPercentOrCalc() || parentFont.isAbsoluteSize()));
 }

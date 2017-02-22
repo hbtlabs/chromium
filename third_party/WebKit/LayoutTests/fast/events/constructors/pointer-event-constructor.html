@@ -7,7 +7,7 @@ description("This tests the constructor for the PointerEvent DOM class.");
 
 debug("--- tests for intrinsic attributes plus screen & client coordinates ---");
 
-["pointerId", "tiltX", "tiltY"].forEach(function (attr) {
+["pointerId", "tiltX", "tiltY", "twist"].forEach(function (attr) {
   debug("-- no init --");
   shouldBeZero("new PointerEvent('eventType')." + attr);
 
@@ -35,7 +35,7 @@ debug("--- tests for intrinsic attributes plus screen & client coordinates ---")
   shouldBeEqualToNumber("new PointerEvent('eventType', { " + attr + ": {valueOf: function () { return 123; }} })." + attr, 123);
 });
 
-["width", "height", "pressure", "screenX", "screenY", "clientX", "clientY"].forEach(function (attr) {
+["width", "height", "pressure", "tangentialPressure", "screenX", "screenY", "clientX", "clientY"].forEach(function (attr) {
   debug("-- no init --");
   var defaultValue = (attr == "width" || attr == "height") ? 1 : 0;
   shouldBeEqualToNumber("new PointerEvent('eventType')." + attr, defaultValue);
@@ -79,5 +79,22 @@ shouldBeFalse("new PointerEvent('eventType').metaKey");
 shouldBeZero("new PointerEvent('eventType').button");
 shouldBeZero("new PointerEvent('eventType').buttons");
 shouldBeNull("new PointerEvent('eventType').relatedTarget");
+
+debug("--- tests for coalesced events ---");
+var coalescedEvents = [
+  new PointerEvent('eventType', { 'pressure' : 1, pointerId : 2 }),
+  new PointerEvent('eventType', { 'pressure' : 0.5, pointerId : 2 }),
+];
+var pe = new PointerEvent('eventType', {'coalescedEvents': coalescedEvents, 'pressure' : 0.1, pointerId : 1 });
+shouldBeEqualToNumber("pe.getCoalescedEvents().length", coalescedEvents.length);
+
+shouldBeCloseTo("pe.pressure", 0.1, 0.00001);
+shouldBeCloseTo("pe.getCoalescedEvents()[0].pressure", 1, 0.00001);
+shouldBeCloseTo("pe.getCoalescedEvents()[1].pressure", 0.5, 0.00001);
+
+shouldBeEqualToNumber("pe.pointerId", 1);
+shouldBeEqualToNumber("pe.getCoalescedEvents()[0].pointerId", 2);
+shouldBeEqualToNumber("pe.getCoalescedEvents()[1].pointerId", 2);
+
 
 </script>

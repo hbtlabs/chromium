@@ -250,6 +250,15 @@ function test()
         "tts": 1758056
     },
     {
+        "name": "TimeStamp",
+        "ts": 227130,
+        "ph": "I",
+        "tid": 23,
+        "pid": 17851,
+        "cat":"disabled-by-default-devtools.timeline",
+        "args": {"data":{"message":"foo05"}}
+    },
+    {
         "args": {
             "data": {
                 "stackTrace": [
@@ -594,27 +603,27 @@ function test()
     ];
 
     var timeline = UI.panels.timeline;
-    InspectorTest.setTraceEvents(InspectorTest.timelineModel(), InspectorTest.tracingModel(), rawTraceEvents);
+    timeline._setModel(InspectorTest.createPerformanceModelWithEvents(rawTraceEvents));
 
     timeline.requestWindowTimes(0, Infinity);
     var groupByEnum = Timeline.AggregatedTimelineTreeView.GroupBy;
     for (var grouping in groupByEnum) {
         var groupingValue = groupByEnum[grouping];
-        testEventTree(Timeline.TimelinePanel.DetailsTab.CallTree, groupingValue);
-        testEventTree(Timeline.TimelinePanel.DetailsTab.BottomUp, groupingValue);
+        testEventTree(Timeline.TimelinePanel.ViewMode.CallTree, groupingValue);
+        testEventTree(Timeline.TimelinePanel.ViewMode.BottomUp, groupingValue);
     }
 
-    testEventTree(Timeline.TimelinePanel.DetailsTab.Events);
+    testEventTree(Timeline.TimelinePanel.ViewMode.EventLog);
     InspectorTest.completeTest();
 
     function testEventTree(type, grouping)
     {
         InspectorTest.addResult("");
-        timeline._detailsView.selectTab(type, true);
-        var callTree = timeline._detailsView._rangeDetailViews.get(type);
+        timeline._tabbedPane.selectTab(type, true);
+        var callTree = timeline._currentViews[0]._treeView;
         if (grouping) {
             InspectorTest.addResult(type + "  Group by: " + grouping);
-            callTree._groupByCombobox.select(callTree._groupByCombobox.options().find((x) => x.value === grouping));
+            callTree._groupByCombobox.select(callTree._groupByCombobox.options().find(x => x.value === grouping));
             callTree._onGroupByChanged();
         } else {
             InspectorTest.addResult(type);
@@ -635,7 +644,7 @@ function test()
                       : Timeline.TimelineUIUtils.eventTitle(node.event);
         }
         InspectorTest.addResult("  ".repeat(padding) + `${name}: ${node.selfTime.toFixed(3)}  ${node.totalTime.toFixed(3)}`);
-        (node.children || new Map()).forEach(printEventTree.bind(null, padding + 1));
+        node.children().forEach(printEventTree.bind(null, padding + 1));
     }
 }
 

@@ -33,38 +33,32 @@
  */
 Resources.IDBDatabaseView = class extends UI.VBox {
   /**
+   * @param {!Resources.IndexedDBModel} model
    * @param {!Resources.IndexedDBModel.Database} database
    */
-  constructor(database) {
+  constructor(model, database) {
     super();
-    this.registerRequiredCSS('resources/indexedDBViews.css');
 
-    this.element.classList.add('indexed-db-database-view');
-    this.element.classList.add('storage-view');
+    this._model = model;
 
-    this._securityOriginElement = this.element.createChild('div', 'header-row');
-    this._nameElement = this.element.createChild('div', 'header-row');
-    this._versionElement = this.element.createChild('div', 'header-row');
+    this._reportView = new UI.ReportView(database.databaseId.name);
+    this._reportView.show(this.contentElement);
+
+    var bodySection = this._reportView.appendSection('');
+    this._securityOriginElement = bodySection.appendField(Common.UIString('Security origin'));
+    this._versionElement = bodySection.appendField(Common.UIString('Version'));
+
+    var footer = this._reportView.appendSection('').appendRow();
+    this._clearButton = UI.createTextButton(
+        Common.UIString('Delete database'), () => this._deleteDatabase(), Common.UIString('Delete database'));
+    footer.appendChild(this._clearButton);
 
     this.update(database);
   }
 
-  /**
-   * @param {!Element} element
-   * @param {string} name
-   * @param {string} value
-   */
-  _formatHeader(element, name, value) {
-    element.removeChildren();
-    element.createChild('div', 'attribute-name').textContent = name + ':';
-    element.createChild('div', 'attribute-value source-code').textContent = value;
-  }
-
   _refreshDatabase() {
-    this._formatHeader(
-        this._securityOriginElement, Common.UIString('Security origin'), this._database.databaseId.securityOrigin);
-    this._formatHeader(this._nameElement, Common.UIString('Name'), this._database.databaseId.name);
-    this._formatHeader(this._versionElement, Common.UIString('Version'), this._database.version);
+    this._securityOriginElement.textContent = this._database.databaseId.securityOrigin;
+    this._versionElement.textContent = this._database.version;
   }
 
   /**
@@ -73,6 +67,12 @@ Resources.IDBDatabaseView = class extends UI.VBox {
   update(database) {
     this._database = database;
     this._refreshDatabase();
+  }
+
+  _deleteDatabase() {
+    UI.ConfirmDialog.show(
+        this.element, Common.UIString('Are you sure you want to delete "%s"?', this._database.databaseId.name),
+        () => this._model.deleteDatabase(this._database.databaseId));
   }
 };
 
@@ -99,10 +99,10 @@ Resources.IDBDataView = class extends UI.SimpleView {
     this._createEditorToolbar();
 
     this._refreshButton = new UI.ToolbarButton(Common.UIString('Refresh'), 'largeicon-refresh');
-    this._refreshButton.addEventListener('click', this._refreshButtonClicked, this);
+    this._refreshButton.addEventListener(UI.ToolbarButton.Events.Click, this._refreshButtonClicked, this);
 
     this._clearButton = new UI.ToolbarButton(Common.UIString('Clear object store'), 'largeicon-clear');
-    this._clearButton.addEventListener('click', this._clearButtonClicked, this);
+    this._clearButton.addEventListener(UI.ToolbarButton.Events.Click, this._clearButtonClicked, this);
 
     this._pageSize = 50;
     this._skipCount = 0;
@@ -112,12 +112,12 @@ Resources.IDBDataView = class extends UI.SimpleView {
   }
 
   /**
-   * @return {!UI.DataGrid}
+   * @return {!DataGrid.DataGrid}
    */
   _createDataGrid() {
     var keyPath = this._isIndex ? this._index.keyPath : this._objectStore.keyPath;
 
-    var columns = /** @type {!Array<!UI.DataGrid.ColumnDescriptor>} */ ([]);
+    var columns = /** @type {!Array<!DataGrid.DataGrid.ColumnDescriptor>} */ ([]);
     columns.push({id: 'number', title: Common.UIString('#'), sortable: false, width: '50px'});
     columns.push(
         {id: 'key', titleDOMFragment: this._keyColumnHeaderFragment(Common.UIString('Key'), keyPath), sortable: false});
@@ -130,7 +130,7 @@ Resources.IDBDataView = class extends UI.SimpleView {
     }
     columns.push({id: 'value', title: Common.UIString('Value'), sortable: false});
 
-    var dataGrid = new UI.DataGrid(columns);
+    var dataGrid = new DataGrid.DataGrid(columns);
     return dataGrid;
   }
 
@@ -179,12 +179,12 @@ Resources.IDBDataView = class extends UI.SimpleView {
     var editorToolbar = new UI.Toolbar('data-view-toolbar', this.element);
 
     this._pageBackButton = new UI.ToolbarButton(Common.UIString('Show previous page'), 'largeicon-play-back');
-    this._pageBackButton.addEventListener('click', this._pageBackButtonClicked, this);
+    this._pageBackButton.addEventListener(UI.ToolbarButton.Events.Click, this._pageBackButtonClicked, this);
     editorToolbar.appendToolbarItem(this._pageBackButton);
 
     this._pageForwardButton = new UI.ToolbarButton(Common.UIString('Show next page'), 'largeicon-play');
     this._pageForwardButton.setEnabled(false);
-    this._pageForwardButton.addEventListener('click', this._pageForwardButtonClicked, this);
+    this._pageForwardButton.addEventListener(UI.ToolbarButton.Events.Click, this._pageForwardButtonClicked, this);
     editorToolbar.appendToolbarItem(this._pageForwardButton);
 
     this._keyInputElement = editorToolbar.element.createChild('input', 'key-input');
@@ -195,12 +195,18 @@ Resources.IDBDataView = class extends UI.SimpleView {
     this._keyInputElement.addEventListener('keydown', this._keyInputChanged.bind(this), false);
   }
 
-  _pageBackButtonClicked() {
+  /**
+   * @param {!Common.Event} event
+   */
+  _pageBackButtonClicked(event) {
     this._skipCount = Math.max(0, this._skipCount - this._pageSize);
     this._updateData(false);
   }
 
-  _pageForwardButtonClicked() {
+  /**
+   * @param {!Common.Event} event
+   */
+  _pageForwardButtonClicked(event) {
     this._skipCount = this._skipCount + this._pageSize;
     this._updateData(false);
   }
@@ -295,10 +301,16 @@ Resources.IDBDataView = class extends UI.SimpleView {
     }
   }
 
+  /**
+   * @param {!Common.Event} event
+   */
   _refreshButtonClicked(event) {
     this._updateData(true);
   }
 
+  /**
+   * @param {!Common.Event} event
+   */
   _clearButtonClicked(event) {
     /**
      * @this {Resources.IDBDataView}
@@ -328,7 +340,7 @@ Resources.IDBDataView = class extends UI.SimpleView {
 /**
  * @unrestricted
  */
-Resources.IDBDataGridNode = class extends UI.DataGridNode {
+Resources.IDBDataGridNode = class extends DataGrid.DataGridNode {
   /**
    * @param {!Object.<string, *>} data
    */
@@ -350,7 +362,7 @@ Resources.IDBDataGridNode = class extends UI.DataGridNode {
       case 'key':
       case 'primaryKey':
         cell.removeChildren();
-        var objectElement = Components.ObjectPropertiesSection.defaultObjectPresentation(value, undefined, true);
+        var objectElement = ObjectUI.ObjectPropertiesSection.defaultObjectPresentation(value, undefined, true);
         cell.appendChild(objectElement);
         break;
       default:

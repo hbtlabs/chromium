@@ -4,12 +4,17 @@
 
 package org.chromium.chrome.browser.payments;
 
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.MediumTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.payments.PaymentAppFactory.PaymentAppCreatedCallback;
+import org.chromium.chrome.browser.payments.PaymentAppFactory.PaymentAppFactoryAddition;
+import org.chromium.content_public.browser.WebContents;
 
+import java.util.Arrays;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
@@ -71,7 +76,16 @@ public class PaymentRequestPaymentAppTest extends PaymentRequestTestBase {
     @Feature({"Payments"})
     public void testPaymentWithInstrumentsAppResponseAfterDismissShouldNotCrash()
             throws InterruptedException, ExecutionException, TimeoutException {
-        final TestPay app = installPaymentApp(HAVE_INSTRUMENTS, IMMEDIATE_RESPONSE);
+        final TestPay app = new TestPay(
+                Arrays.asList("https://bobpay.com"), HAVE_INSTRUMENTS, IMMEDIATE_RESPONSE);
+        PaymentAppFactory.getInstance().addAdditionalFactory(new PaymentAppFactoryAddition() {
+            @Override
+            public void create(WebContents webContents, Set<String> methodNames,
+                    PaymentAppFactory.PaymentAppCreatedCallback callback) {
+                callback.onPaymentAppCreated(app);
+                callback.onAllPaymentAppsCreated();
+            }
+        });
         triggerUIAndWait(mReadyForInput);
         clickAndWait(R.id.close_button, mDismissed);
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -90,7 +104,16 @@ public class PaymentRequestPaymentAppTest extends PaymentRequestTestBase {
     @Feature({"Payments"})
     public void testPaymentAppNoInstrumentsResponseAfterDismissShouldNotCrash()
             throws InterruptedException, ExecutionException, TimeoutException {
-        final TestPay app = installPaymentApp(NO_INSTRUMENTS, IMMEDIATE_RESPONSE);
+        final TestPay app = new TestPay(
+                Arrays.asList("https://bobpay.com"), NO_INSTRUMENTS, IMMEDIATE_RESPONSE);
+        PaymentAppFactory.getInstance().addAdditionalFactory(new PaymentAppFactoryAddition() {
+            @Override
+            public void create(WebContents webContents, Set<String> methodNames,
+                    PaymentAppCreatedCallback callback) {
+                callback.onPaymentAppCreated(app);
+                callback.onAllPaymentAppsCreated();
+            }
+        });
         openPageAndClickBuyAndWait(mShowFailed);
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
@@ -128,5 +151,35 @@ public class PaymentRequestPaymentAppTest extends PaymentRequestTestBase {
         triggerUIAndWait(mReadyToPay);
         clickAndWait(R.id.button_primary, mDismissed);
         expectResultContains(new String[]{"https://bobpay.com", "\"transaction\"", "1337"});
+    }
+
+    /**
+     * Test payment with a Bob Pay that is created with a delay, but responds immediately
+     * to getInstruments.
+     */
+    @MediumTest
+    @Feature({"Payments"})
+    public void testPayViaDelayedFastBobPay()
+            throws InterruptedException, ExecutionException, TimeoutException {
+        installPaymentApp(
+                "https://bobpay.com", HAVE_INSTRUMENTS, IMMEDIATE_RESPONSE, DELAYED_CREATION);
+        triggerUIAndWait(mReadyToPay);
+        clickAndWait(R.id.button_primary, mDismissed);
+        expectResultContains(new String[] {"https://bobpay.com", "\"transaction\"", "1337"});
+    }
+
+    /**
+     * Test payment with a Bob Pay that is created with a delay, and responds slowly to
+     * getInstruments.
+     */
+    @MediumTest
+    @Feature({"Payments"})
+    public void testPayViaDelayedSlowBobPay()
+            throws InterruptedException, ExecutionException, TimeoutException {
+        installPaymentApp(
+                "https://bobpay.com", HAVE_INSTRUMENTS, DELAYED_RESPONSE, DELAYED_CREATION);
+        triggerUIAndWait(mReadyToPay);
+        clickAndWait(R.id.button_primary, mDismissed);
+        expectResultContains(new String[] {"https://bobpay.com", "\"transaction\"", "1337"});
     }
 }

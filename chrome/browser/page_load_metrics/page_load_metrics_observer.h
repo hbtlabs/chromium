@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_PAGE_LOAD_METRICS_PAGE_LOAD_METRICS_OBSERVER_H_
 #define CHROME_BROWSER_PAGE_LOAD_METRICS_PAGE_LOAD_METRICS_OBSERVER_H_
 
+#include <string>
+
 #include "base/macros.h"
 #include "base/optional.h"
 #include "chrome/common/page_load_metrics/page_load_timing.h"
@@ -17,43 +19,41 @@ namespace page_load_metrics {
 // This enum represents how a page load ends. If the action occurs before the
 // page load finishes (or reaches some point like first paint), then we consider
 // the load to be aborted.
-enum UserAbortType {
-  // Represents no abort.
-  ABORT_NONE,
+enum PageEndReason {
+  // Page lifetime has not yet ended (page is still active).
+  END_NONE,
 
-  // If the user presses reload or shift-reload.
-  ABORT_RELOAD,
+  // The page was reloaded, possibly by the user.
+  END_RELOAD,
 
-  // The user presses the back/forward button.
-  ABORT_FORWARD_BACK,
+  // The page was navigated away from, via a back or forward navigation.
+  END_FORWARD_BACK,
 
   // The navigation is replaced with a navigation with the qualifier
   // ui::PAGE_TRANSITION_CLIENT_REDIRECT, which is caused by Javascript, or the
   // meta refresh tag.
-  ABORT_CLIENT_REDIRECT,
+  END_CLIENT_REDIRECT,
 
   // If the page load is replaced by a new navigation. This includes link
   // clicks, typing in the omnibox (not a reload), and form submissions.
-  ABORT_NEW_NAVIGATION,
+  END_NEW_NAVIGATION,
 
-  // If the user presses the stop X button.
-  ABORT_STOP,
+  // The page load was stopped (e.g. the user presses the stop X button).
+  END_STOP,
 
-  // If the page load is aborted by closing the tab or browser.
-  ABORT_CLOSE,
+  // Page load ended due to closing the tab or browser.
+  END_CLOSE,
 
-  // The page load was backgrounded, e.g. the browser was minimized or the user
-  // switched tabs. Note that the same page may be foregrounded in the future,
-  // so this is not a 'terminal' abort type.
-  ABORT_BACKGROUND,
+  // The provisional load for this page load failed before committing.
+  END_PROVISIONAL_LOAD_FAILED,
 
-  // We don't know why the page load aborted. This is the value we assign to an
-  // aborted load if the only signal we get is a provisional load finishing
+  // The render process hosting the page terminated unexpectedly.
+  END_RENDER_PROCESS_GONE,
+
+  // We don't know why the page load ended. This is the value we assign to a
+  // terminated provisional load if the only signal we get is the load finished
   // without committing, either without error or with net::ERR_ABORTED.
-  ABORT_OTHER,
-
-  // Add values before this final count.
-  ABORT_LAST_ENTRY
+  END_OTHER
 };
 
 // Information related to failed provisional loads.
@@ -65,19 +65,58 @@ struct FailedProvisionalLoadInfo {
   net::Error error;
 };
 
+// Information related to whether an associated action, such as a navigation or
+// an abort, was initiated by a user. Clicking a link or tapping on a UI
+// element are examples of user initiation actions.
+struct UserInitiatedInfo {
+  static UserInitiatedInfo NotUserInitiated() {
+    return UserInitiatedInfo(false, false, false);
+  }
+
+  static UserInitiatedInfo BrowserInitiated() {
+    return UserInitiatedInfo(true, false, false);
+  }
+
+  static UserInitiatedInfo RenderInitiated(bool user_gesture,
+                                           bool user_input_event) {
+    return UserInitiatedInfo(false, user_gesture, user_input_event);
+  }
+
+  // Whether the associated action was initiated from the browser process, as
+  // opposed to from the render process. We generally assume that all actions
+  // initiated from the browser process are user initiated.
+  bool browser_initiated;
+
+  // Whether the associated action was initiated by a user, according to user
+  // gesture tracking in content and Blink, as reported by NavigationHandle.
+  bool user_gesture;
+
+  // Whether the associated action was initiated by a user, based on our
+  // heuristic-driven implementation that tests to see if there was an input
+  // event that happened shortly before the given action.
+  bool user_input_event;
+
+ private:
+  UserInitiatedInfo(bool browser_initiated,
+                    bool user_gesture,
+                    bool user_input_event)
+      : browser_initiated(browser_initiated),
+        user_gesture(user_gesture),
+        user_input_event(user_input_event) {}
+};
+
 struct PageLoadExtraInfo {
   PageLoadExtraInfo(
       const base::Optional<base::TimeDelta>& first_background_time,
       const base::Optional<base::TimeDelta>& first_foreground_time,
       bool started_in_foreground,
-      bool user_initiated,
-      const GURL& committed_url,
+      UserInitiatedInfo user_initiated_info,
+      const GURL& url,
       const GURL& start_url,
-      UserAbortType abort_type,
-      bool abort_user_initiated,
-      const base::Optional<base::TimeDelta>& time_to_abort,
-      int num_cache_requests,
-      int num_network_requests,
+      bool did_commit,
+      PageEndReason page_end_reason,
+      UserInitiatedInfo page_end_user_initiated_info,
+      const base::Optional<base::TimeDelta>& page_end_time,
       const PageLoadMetadata& metadata);
 
   PageLoadExtraInfo(const PageLoadExtraInfo& other);
@@ -93,45 +132,79 @@ struct PageLoadExtraInfo {
   // True if the page load started in the foreground.
   const bool started_in_foreground;
 
-  // True if this is either a browser initiated navigation or the user_gesture
-  // bit is true in the renderer.
-  const bool user_initiated;
+  // Whether the page load was initiated by a user.
+  const UserInitiatedInfo user_initiated_info;
 
-  // Committed URL. If the page load did not commit, |committed_url| will be
-  // empty.
-  const GURL committed_url;
+  // Most recent URL for this page. Can be updated at navigation start, upon
+  // redirection, and at commit time.
+  const GURL url;
 
   // The URL that started the navigation, before redirects.
   const GURL start_url;
 
-  // The abort time and time to abort for this page load. If the page was not
-  // aborted, |abort_type| will be |ABORT_NONE|.
-  const UserAbortType abort_type;
+  // Whether the navigation for this page load committed.
+  const bool did_commit;
 
-  // Whether the abort for this page load was user initiated. For example, if
-  // this page load was aborted by a new navigation, this field tracks whether
+  // The reason the page load ended. If the page is still active,
+  // |page_end_reason| will be |END_NONE|. |page_end_time| contains the duration
+  // of time until the cause of the page end reason was encountered.
+  const PageEndReason page_end_reason;
+
+  // Whether the end reason for this page load was user initiated. For example,
+  // if
+  // this page load was ended due to a new navigation, this field tracks whether
   // that new navigation was user-initiated. This field is only useful if this
-  // page load's abort type is a value other than ABORT_NONE. Note that this
+  // page load's end reason is a value other than END_NONE. Note that this
   // value is currently experimental, and is subject to change. In particular,
-  // this field is never set to true for some abort types, such as stop and
+  // this field is not currently set for some end reasons, such as stop and
   // close, since we don't yet have sufficient instrumentation to know if a stop
   // or close was caused by a user action.
   //
-  // TODO(csharrison): If more metadata for aborts is needed we should provide a
+  // TODO(csharrison): If more metadata for end reasons is needed we should
+  // provide a
   // better abstraction. Note that this is an approximation.
-  bool abort_user_initiated;
+  UserInitiatedInfo page_end_user_initiated_info;
 
-  const base::Optional<base::TimeDelta> time_to_abort;
-
-  // Note: these are only approximations, based on WebContents attribution from
-  // ResourceRequestInfo objects while this is the currently committed load in
-  // the WebContents.
-  int num_cache_requests;
-  int num_network_requests;
+  // Total lifetime of the page from the user standoint, starting at navigation
+  // start. The page lifetime ends when the first of the following events
+  // happen:
+  // * the load of the main resource fails
+  // * the page load is stopped
+  // * the tab hosting the page is closed
+  // * the render process hosting the page goes away
+  // * a new navigation which later commits is initiated in the same tab
+  // This field will not be set if the page is still active and hasn't yet
+  // finished.
+  const base::Optional<base::TimeDelta> page_end_time;
 
   // Extra information supplied to the page load metrics system from the
   // renderer.
   const PageLoadMetadata metadata;
+};
+
+// Container for various information about a request within a page load.
+struct ExtraRequestInfo {
+  ExtraRequestInfo(bool was_cached,
+                   int64_t raw_body_bytes,
+                   bool data_reduction_proxy_used,
+                   int64_t original_network_content_length);
+
+  ExtraRequestInfo(const ExtraRequestInfo& other);
+
+  ~ExtraRequestInfo();
+
+  // True if the resource was loaded from cache.
+  const bool was_cached;
+
+  // The number of body (not header) prefilter bytes.
+  const int64_t raw_body_bytes;
+
+  // Whether this request used Data Reduction Proxy.
+  const bool data_reduction_proxy_used;
+
+  // The number of body (not header) bytes that the data reduction proxy saw
+  // before it compressed the requests.
+  const int64_t original_network_content_length;
 };
 
 // Interface for PageLoadMetrics observers. All instances of this class are
@@ -151,14 +224,11 @@ class PageLoadMetricsObserver {
 
   virtual ~PageLoadMetricsObserver() {}
 
-  // The page load started, with the given navigation handle. Note that OnStart
-  // is called for same-page navigations. Implementers of OnStart that only want
-  // to process non-same-page navigations should also check to see that the page
-  // load committed via OnCommit or committed_url in
-  // PageLoadExtraInfo. currently_committed_url contains the URL of the
-  // committed page load at the time the navigation for navigation_handle was
-  // initiated, or the empty URL if there was no committed page load at the time
-  // the navigation was initiated.
+  // The page load started, with the given navigation handle.
+  // currently_committed_url contains the URL of the committed page load at the
+  // time the navigation for navigation_handle was initiated, or the empty URL
+  // if there was no committed page load at the time the navigation was
+  // initiated.
   virtual ObservePolicy OnStart(content::NavigationHandle* navigation_handle,
                                 const GURL& currently_committed_url,
                                 bool started_in_foreground);
@@ -174,7 +244,6 @@ class PageLoadMetricsObserver {
   // first data for the request. The navigation handle holds relevant data for
   // the navigation, but will be destroyed soon after this call. Don't hold a
   // reference to it.
-  // Note that this does not get called for same-page navigations.
   // Observers that return STOP_OBSERVING will not receive any additional
   // callbacks, and will be deleted after invocation of this method returns.
   virtual ObservePolicy OnCommit(content::NavigationHandle* navigation_handle);
@@ -188,6 +257,13 @@ class PageLoadMetricsObserver {
   // OnShown is triggered when a page is brought to the foreground. It does not
   // fire when the page first loads; for that, listen for OnStart instead.
   virtual ObservePolicy OnShown();
+
+  // Called before OnCommit. The observer should return whether it wishes to
+  // observe navigations whose main resource has MIME type |mine_type|. The
+  // default is to observe HTML and XHTML only. Note that PageLoadTrackers only
+  // track XHTML, HTML, and MHTML (related/multipart).
+  virtual ObservePolicy ShouldObserveMimeType(
+      const std::string& mime_type) const;
 
   // The callbacks below are only invoked after a navigation commits, for
   // tracked page loads. Page loads that don't meet the criteria for being
@@ -263,7 +339,8 @@ class PageLoadMetricsObserver {
   // OnComplete is invoked for tracked page loads that committed, immediately
   // before the observer is deleted. Observers that implement OnComplete may
   // also want to implement FlushMetricsOnAppEnterBackground, to avoid loss of
-  // data if the application is killed while in the background.
+  // data if the application is killed while in the background (this happens
+  // frequently on Android).
   virtual void OnComplete(const PageLoadTiming& timing,
                           const PageLoadExtraInfo& extra_info) {}
 
@@ -272,6 +349,9 @@ class PageLoadMetricsObserver {
   virtual void OnFailedProvisionalLoad(
       const FailedProvisionalLoadInfo& failed_provisional_load_info,
       const PageLoadExtraInfo& extra_info) {}
+
+  // Called whenever a request is loaded for this page load.
+  virtual void OnLoadedResource(const ExtraRequestInfo& extra_request_info) {}
 };
 
 }  // namespace page_load_metrics

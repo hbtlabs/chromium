@@ -428,6 +428,14 @@ int GLES2Util::GLGetNumValuesReturned(int id) const {
       return 1;
     case GL_TEXTURE_MAX_ANISOTROPY_EXT:
       return 1;
+    case GL_TEXTURE_SWIZZLE_R:
+      return 1;
+    case GL_TEXTURE_SWIZZLE_G:
+      return 1;
+    case GL_TEXTURE_SWIZZLE_B:
+      return 1;
+    case GL_TEXTURE_SWIZZLE_A:
+      return 1;
 
     // -- glGetVertexAttrib
     case GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING:
@@ -475,8 +483,39 @@ int GLES2Util::GLGetNumValuesReturned(int id) const {
 
 namespace {
 
+// Return the number of bytes per element, based on the element type.
+int BytesPerElement(int type) {
+  switch (type) {
+    case GL_FLOAT_32_UNSIGNED_INT_24_8_REV:
+      return 8;
+    case GL_FLOAT:
+    case GL_UNSIGNED_INT_24_8_OES:
+    case GL_UNSIGNED_INT:
+    case GL_INT:
+    case GL_UNSIGNED_INT_2_10_10_10_REV:
+    case GL_UNSIGNED_INT_10F_11F_11F_REV:
+    case GL_UNSIGNED_INT_5_9_9_9_REV:
+      return 4;
+    case GL_HALF_FLOAT:
+    case GL_HALF_FLOAT_OES:
+    case GL_UNSIGNED_SHORT:
+    case GL_SHORT:
+    case GL_UNSIGNED_SHORT_5_6_5:
+    case GL_UNSIGNED_SHORT_4_4_4_4:
+    case GL_UNSIGNED_SHORT_5_5_5_1:
+      return 2;
+    case GL_UNSIGNED_BYTE:
+    case GL_BYTE:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+}  // anonymous namespace
+
 // Return the number of elements per group of a specified format.
-int ElementsPerGroup(int format, int type) {
+int GLES2Util::ElementsPerGroup(int format, int type) {
   switch (type) {
     case GL_UNSIGNED_SHORT_5_6_5:
     case GL_UNSIGNED_SHORT_4_4_4_4:
@@ -520,37 +559,6 @@ int ElementsPerGroup(int format, int type) {
        return 0;
   }
 }
-
-// Return the number of bytes per element, based on the element type.
-int BytesPerElement(int type) {
-  switch (type) {
-    case GL_FLOAT_32_UNSIGNED_INT_24_8_REV:
-      return 8;
-    case GL_FLOAT:
-    case GL_UNSIGNED_INT_24_8_OES:
-    case GL_UNSIGNED_INT:
-    case GL_INT:
-    case GL_UNSIGNED_INT_2_10_10_10_REV:
-    case GL_UNSIGNED_INT_10F_11F_11F_REV:
-    case GL_UNSIGNED_INT_5_9_9_9_REV:
-      return 4;
-    case GL_HALF_FLOAT:
-    case GL_HALF_FLOAT_OES:
-    case GL_UNSIGNED_SHORT:
-    case GL_SHORT:
-    case GL_UNSIGNED_SHORT_5_6_5:
-    case GL_UNSIGNED_SHORT_4_4_4_4:
-    case GL_UNSIGNED_SHORT_5_5_5_1:
-       return 2;
-    case GL_UNSIGNED_BYTE:
-    case GL_BYTE:
-       return 1;
-    default:
-       return 0;
-  }
-}
-
-}  // anonymous namespace
 
 uint32_t GLES2Util::ComputeImageGroupSize(int format, int type) {
   int bytes_per_element = BytesPerElement(type);
@@ -1301,6 +1309,18 @@ bool GLES2Util::IsSizedColorFormat(uint32_t internal_format) {
   }
 }
 
+GLint GLES2Util::GetColorEncodingFromInternalFormat(uint32_t internalformat) {
+  switch (internalformat) {
+    case GL_SRGB_EXT:
+    case GL_SRGB_ALPHA_EXT:
+    case GL_SRGB8:
+    case GL_SRGB8_ALPHA8:
+      return GL_SRGB;
+    default:
+      return GL_LINEAR;
+  }
+}
+
 void GLES2Util::GetColorFormatComponentSizes(
     uint32_t internal_format, uint32_t type, int* r, int* g, int* b, int* a) {
   DCHECK(r && g && b && a);
@@ -1951,4 +1971,3 @@ bool ContextCreationAttribHelper::Parse(const std::vector<int32_t>& attribs) {
 
 }  // namespace gles2
 }  // namespace gpu
-

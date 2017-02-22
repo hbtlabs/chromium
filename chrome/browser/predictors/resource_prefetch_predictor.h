@@ -38,6 +38,29 @@ class URLRequest;
 
 namespace predictors {
 
+namespace internal {
+constexpr char kResourcePrefetchPredictorPrecisionHistogram[] =
+    "ResourcePrefetchPredictor.LearningPrecision";
+constexpr char kResourcePrefetchPredictorRecallHistogram[] =
+    "ResourcePrefetchPredictor.LearningRecall";
+constexpr char kResourcePrefetchPredictorCountHistogram[] =
+    "ResourcePrefetchPredictor.LearningCount";
+constexpr char kResourcePrefetchPredictorPrefetchingDurationHistogram[] =
+    "ResourcePrefetchPredictor.PrefetchingDuration";
+constexpr char kResourcePrefetchPredictorPrefetchMissesCountCached[] =
+    "ResourcePrefetchPredictor.PrefetchMissesCount.Cached";
+constexpr char kResourcePrefetchPredictorPrefetchMissesCountNotCached[] =
+    "ResourcePrefetchPredictor.PrefetchMissesCount.NotCached";
+constexpr char kResourcePrefetchPredictorPrefetchHitsCountCached[] =
+    "ResourcePrefetchPredictor.PrefetchHitsCount.Cached";
+constexpr char kResourcePrefetchPredictorPrefetchHitsCountNotCached[] =
+    "ResourcePrefetchPredictor.PrefetchHitsCount.NotCached";
+constexpr char kResourcePrefetchPredictorPrefetchHitsSize[] =
+    "ResourcePrefetchPredictor.PrefetchHitsSizeKB";
+constexpr char kResourcePrefetchPredictorPrefetchMissesSize[] =
+    "ResourcePrefetchPredictor.PrefetchMissesSizeKB";
+}  // namespace internal
+
 class TestObserver;
 class ResourcePrefetcherManager;
 
@@ -50,9 +73,10 @@ class ResourcePrefetcherManager;
 // The overall flow of the resource prefetching algorithm is as follows:
 //
 // * ResourcePrefetchPredictorObserver - Listens for URL requests, responses and
-//   redirects on the IO thread (via ResourceDispatcherHostDelegate) and posts
-//   tasks to the ResourcePrefetchPredictor on the UI thread. This is owned by
-//   the ProfileIOData for the profile.
+//   redirects (client-side redirects are not supported) on the IO thread (via
+//   ResourceDispatcherHostDelegate) and posts tasks to the
+//   ResourcePrefetchPredictor on the UI thread. This is owned by the
+//   ProfileIOData for the profile.
 // * ResourcePrefetchPredictorTables - Persists ResourcePrefetchPredictor data
 //   to a sql database. Runs entirely on the DB thread. Owned by the
 //   PredictorDatabase.
@@ -96,7 +120,8 @@ class ResourcePrefetchPredictor
     bool always_revalidate;
 
     // Initializes a |URLRequestSummary| from a |URLRequest| response.
-    // Returns true for success.
+    // Returns true for success. Note: NavigationID is NOT initialized
+    // by this function.
     static bool SummarizeResponse(const net::URLRequest& request,
                                   URLRequestSummary* summary);
   };
@@ -151,13 +176,22 @@ class ResourcePrefetchPredictor
   // Called when the main frame of a page completes loading.
   void RecordMainFrameLoadComplete(const NavigationID& navigation_id);
 
-  // Starts prefetching if it is enabled and prefetching data exists for the
-  // |main_frame_url| either at the URL or at the host level.
-  void StartPrefetching(const GURL& main_frame_url);
+  // Starts prefetching if it is enabled for |origin| and prefetching data
+  // exists for the |main_frame_url| either at the URL or at the host level.
+  void StartPrefetching(const GURL& main_frame_url, PrefetchOrigin origin);
 
   // Stops prefetching that may be in progress corresponding to
   // |main_frame_url|.
   void StopPrefetching(const GURL& main_frame_url);
+
+  // Called when ResourcePrefetcher is finished, i.e. there is nothing pending
+  // in flight.
+  void OnPrefetchingFinished(
+      const GURL& main_frame_url,
+      std::unique_ptr<ResourcePrefetcher::PrefetcherStats> stats);
+
+  // Returns true if prefetching data exists for the |main_frame_url|.
+  virtual bool IsUrlPrefetchable(const GURL& main_frame_url);
 
   // Sets the |observer| to be notified when the resource prefetch predictor
   // data changes. Previously registered observer will be discarded. Call
@@ -192,13 +226,16 @@ class ResourcePrefetchPredictor
                            PopulatePrefetcherRequest);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, GetRedirectEndpoint);
   FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest, GetPrefetchData);
+  FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest,
+                           TestPrecisionRecallHistograms);
+  FRIEND_TEST_ALL_PREFIXES(ResourcePrefetchPredictorTest,
+                           TestPrefetchingDurationHistogram);
 
   enum InitializationState {
     NOT_INITIALIZED = 0,
     INITIALIZING = 1,
     INITIALIZED = 2
   };
-
   typedef ResourcePrefetchPredictorTables::PrefetchDataMap PrefetchDataMap;
   typedef ResourcePrefetchPredictorTables::RedirectDataMap RedirectDataMap;
 
@@ -242,15 +279,16 @@ class ResourcePrefetchPredictor
 
   // Returns true iff there is PrefetchData that can be used for a
   // |main_frame_url| and fills |urls| with resources that need to be
-  // prefetched.
-  bool GetPrefetchData(const GURL& main_frame_url, std::vector<GURL>* urls);
+  // prefetched. |urls| pointer may be equal nullptr to get return value only.
+  bool GetPrefetchData(const GURL& main_frame_url,
+                       std::vector<GURL>* urls) const;
 
   // Returns true iff the |data_map| contains PrefetchData that can be used
   // for a |main_frame_key| and fills |urls| with resources that need to be
-  // prefetched.
+  // prefetched. |urls| pointer may be equal nullptr to get return value only.
   bool PopulatePrefetcherRequest(const std::string& main_frame_key,
                                  const PrefetchDataMap& data_map,
-                                 std::vector<GURL>* urls);
+                                 std::vector<GURL>* urls) const;
 
   // Callback for task to read predictor database. Takes ownership of
   // all arguments.
@@ -263,8 +301,7 @@ class ResourcePrefetchPredictor
   // database has been read.
   void OnHistoryAndCacheLoaded();
 
-  // Removes data for navigations where the onload never fired. Will cleanup
-  // inflight_navigations_.
+  // Cleanup inflight_navigations_, inflight_prefetches_, and prefetcher_stats_.
   void CleanupAbandonedNavigations(const NavigationID& navigation_id);
 
   // Deletes all URLs from the predictor database, the caches and removes all
@@ -305,15 +342,13 @@ class ResourcePrefetchPredictor
                      size_t max_redirect_map_size,
                      RedirectDataMap* redirect_map);
 
-  // Reports overall page load time.
-  void ReportPageLoadTimeStats(base::TimeDelta plt) const;
+  // Returns true iff |resource| has sufficient confidence level and required
+  // number of hits.
+  bool IsResourcePrefetchable(const ResourceData& resource) const;
 
-  // Reports page load time for prefetched and not prefetched pages.
-  void ReportPageLoadTimePrefetchStats(
-      base::TimeDelta plt,
-      bool prefetched,
-      base::Callback<void(int)> report_network_type_callback,
-      PrefetchKeyType key_type) const;
+  // Reports database readiness metric defined as percentage of navigated hosts
+  // found in DB for last X entries in history.
+  void ReportDatabaseReadiness(const history::TopHostsList& top_hosts) const;
 
   // history::HistoryServiceObserver:
   void OnURLsDeleted(history::HistoryService* history_service,
@@ -347,7 +382,11 @@ class ResourcePrefetchPredictor
   std::unique_ptr<RedirectDataMap> url_redirect_table_cache_;
   std::unique_ptr<RedirectDataMap> host_redirect_table_cache_;
 
+  std::map<GURL, base::TimeTicks> inflight_prefetches_;
   NavigationMap inflight_navigations_;
+
+  std::map<GURL, std::unique_ptr<ResourcePrefetcher::PrefetcherStats>>
+      prefetcher_stats_;
 
   ScopedObserver<history::HistoryService, history::HistoryServiceObserver>
       history_service_observer_;
@@ -365,6 +404,8 @@ class TestObserver {
   virtual void OnNavigationLearned(
       size_t url_visit_count,
       const ResourcePrefetchPredictor::PageRequestSummary& summary) {}
+
+  virtual void OnPrefetchingFinished(const GURL& main_frame_url) {}
 
   virtual void OnPredictorInitialized() {}
 

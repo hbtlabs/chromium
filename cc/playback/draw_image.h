@@ -29,14 +29,14 @@ class CC_EXPORT DrawImage {
 
   const sk_sp<const SkImage>& image() const { return image_; }
   const SkSize& scale() const { return scale_; }
-  const SkIRect src_rect() const { return src_rect_; }
+  const SkIRect& src_rect() const { return src_rect_; }
   SkFilterQuality filter_quality() const { return filter_quality_; }
   bool matrix_is_decomposable() const { return matrix_is_decomposable_; }
   const SkMatrix& matrix() const { return matrix_; }
 
-  DrawImage ApplyScale(const gfx::SizeF& scales) const {
+  DrawImage ApplyScale(float scale) const {
     SkMatrix scaled_matrix = matrix_;
-    scaled_matrix.preScale(scales.width(), scales.height());
+    scaled_matrix.preScale(scale, scale);
     return DrawImage(image_, src_rect_, filter_quality_, scaled_matrix);
   }
 

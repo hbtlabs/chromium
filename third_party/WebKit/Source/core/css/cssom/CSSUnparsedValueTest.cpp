@@ -14,7 +14,7 @@ namespace {
 CSSUnparsedValue* unparsedValueFromCSSVariableReferenceValue(
     CSSStyleVariableReferenceValue* variableReferenceValue) {
   HeapVector<StringOrCSSVariableReferenceValue> fragments;
-  fragments.append(
+  fragments.push_back(
       StringOrCSSVariableReferenceValue::fromCSSVariableReferenceValue(
           variableReferenceValue));
   return CSSUnparsedValue::create(fragments);
@@ -26,13 +26,13 @@ TEST(CSSUnparsedValueTest, EmptyList) {
   HeapVector<StringOrCSSVariableReferenceValue> fragments;
   CSSUnparsedValue* unparsedValue = CSSUnparsedValue::create(fragments);
 
-  EXPECT_EQ(unparsedValue->size(), 0UL);
+  EXPECT_EQ(unparsedValue->length(), 0UL);
 }
 
 TEST(CSSUnparsedValueTest, ListOfStrings) {
   CSSUnparsedValue* unparsedValue = CSSUnparsedValue::fromString("string");
 
-  EXPECT_EQ(unparsedValue->size(), 1UL);
+  EXPECT_EQ(unparsedValue->length(), 1UL);
 
   EXPECT_TRUE(unparsedValue->fragmentAtIndex(0).isString());
   EXPECT_FALSE(unparsedValue->fragmentAtIndex(0).isNull());
@@ -49,7 +49,7 @@ TEST(CSSUnparsedValueTest, ListOfCSSVariableReferenceValues) {
   CSSUnparsedValue* unparsedValue =
       unparsedValueFromCSSVariableReferenceValue(variableReferenceValue);
 
-  EXPECT_EQ(unparsedValue->size(), 1UL);
+  EXPECT_EQ(unparsedValue->length(), 1UL);
 
   EXPECT_FALSE(unparsedValue->fragmentAtIndex(0).isString());
   EXPECT_FALSE(unparsedValue->fragmentAtIndex(0).isNull());
@@ -65,15 +65,15 @@ TEST(CSSUnparsedValueTest, MixedList) {
           "Ref", CSSUnparsedValue::fromString("string"));
 
   HeapVector<StringOrCSSVariableReferenceValue> fragments;
-  fragments.append(StringOrCSSVariableReferenceValue::fromString("string"));
-  fragments.append(
+  fragments.push_back(StringOrCSSVariableReferenceValue::fromString("string"));
+  fragments.push_back(
       StringOrCSSVariableReferenceValue::fromCSSVariableReferenceValue(
           variableReferenceValue));
-  fragments.append(StringOrCSSVariableReferenceValue());
+  fragments.push_back(StringOrCSSVariableReferenceValue());
 
   CSSUnparsedValue* unparsedValue = CSSUnparsedValue::create(fragments);
 
-  EXPECT_EQ(unparsedValue->size(), fragments.size());
+  EXPECT_EQ(unparsedValue->length(), fragments.size());
 
   EXPECT_TRUE(unparsedValue->fragmentAtIndex(0).isString());
   EXPECT_FALSE(unparsedValue->fragmentAtIndex(0).isCSSVariableReferenceValue());

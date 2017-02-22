@@ -194,6 +194,7 @@ group("installer_deps") {
   }
   if (current_cpu == "x86" || current_cpu == "x64") {
     public_deps += [
+      "//third_party/widevine/cdm:widevine_signature_scripts",
       "//third_party/widevine/cdm:widevinecdm",
       "//third_party/widevine/cdm:widevinecdmadapter",
     ]
@@ -289,8 +290,6 @@ template("linux_package") {
       branding_path_component,
       "-s",
       rebase_path(sysroot),
-      "-e",
-      rebase_path("//third_party/dpkg-dev"),
     ]
     deps = [
       ":installer_deps",

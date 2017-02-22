@@ -15,40 +15,20 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "components/pref_registry/pref_registry_syncable.h"
-#include "components/pref_registry/testing_pref_service_syncable.h"
+#include "components/search_engines/default_search_manager.h"
 #include "components/search_engines/search_engines_pref_names.h"
+#include "components/search_engines/search_engines_test_util.h"
 #include "components/search_engines/template_url_data.h"
+#include "components/search_engines/template_url_data_util.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
-// A dictionary to hold all data related to the Default Search Engine.
-// Eventually, this should replace all the data stored in the
-// default_search_provider.* prefs.
-const char kDefaultSearchProviderData[] =
-    "default_search_provider_data.template_url_data";
-
-// Checks that the two TemplateURLs are similar. Does not check the id, the
-// date_created or the last_modified time.  Neither pointer should be NULL.
-void ExpectSimilar(const TemplateURLData* expected,
-                   const TemplateURLData* actual) {
-  ASSERT_TRUE(expected != NULL);
-  ASSERT_TRUE(actual != NULL);
-
-  EXPECT_EQ(expected->short_name(), actual->short_name());
-  EXPECT_EQ(expected->keyword(), actual->keyword());
-  EXPECT_EQ(expected->url(), actual->url());
-  EXPECT_EQ(expected->suggestions_url, actual->suggestions_url);
-  EXPECT_EQ(expected->favicon_url, actual->favicon_url);
-  EXPECT_EQ(expected->alternate_urls, actual->alternate_urls);
-  EXPECT_EQ(expected->safe_for_autoreplace, actual->safe_for_autoreplace);
-  EXPECT_EQ(expected->input_encodings, actual->input_encodings);
-  EXPECT_EQ(expected->search_terms_replacement_key,
-            actual->search_terms_replacement_key);
-}
 
 // TODO(caitkp): TemplateURLData-ify this.
-void SetOverrides(user_prefs::TestingPrefServiceSyncable* prefs, bool update) {
+void SetOverrides(sync_preferences::TestingPrefServiceSyncable* prefs,
+                  bool update) {
   prefs->SetUserPref(prefs::kSearchProviderOverridesVersion,
                      new base::FundamentalValue(1));
   base::ListValue* overrides = new base::ListValue;
@@ -82,62 +62,19 @@ void SetOverrides(user_prefs::TestingPrefServiceSyncable* prefs, bool update) {
   prefs->SetUserPref(prefs::kSearchProviderOverrides, overrides);
 }
 
-void SetPolicy(user_prefs::TestingPrefServiceSyncable* prefs,
+void SetPolicy(sync_preferences::TestingPrefServiceSyncable* prefs,
                bool enabled,
                TemplateURLData* data) {
   if (enabled) {
     EXPECT_FALSE(data->keyword().empty());
     EXPECT_FALSE(data->url().empty());
   }
-  std::unique_ptr<base::DictionaryValue> entry(new base::DictionaryValue);
-  entry->SetString(DefaultSearchManager::kShortName, data->short_name());
-  entry->SetString(DefaultSearchManager::kKeyword, data->keyword());
-  entry->SetString(DefaultSearchManager::kURL, data->url());
-  entry->SetString(DefaultSearchManager::kFaviconURL, data->favicon_url.spec());
-  entry->SetString(DefaultSearchManager::kSuggestionsURL,
-                   data->suggestions_url);
-  entry->SetBoolean(DefaultSearchManager::kSafeForAutoReplace,
-                    data->safe_for_autoreplace);
-  std::unique_ptr<base::ListValue> alternate_urls(new base::ListValue);
-  for (std::vector<std::string>::const_iterator it =
-           data->alternate_urls.begin();
-       it != data->alternate_urls.end();
-       ++it) {
-    alternate_urls->AppendString(*it);
-  }
-  entry->Set(DefaultSearchManager::kAlternateURLs, alternate_urls.release());
-
-  std::unique_ptr<base::ListValue> encodings(new base::ListValue);
-  for (std::vector<std::string>::const_iterator it =
-           data->input_encodings.begin();
-       it != data->input_encodings.end();
-       ++it) {
-    encodings->AppendString(*it);
-  }
-  entry->Set(DefaultSearchManager::kInputEncodings, encodings.release());
-
-  entry->SetString(DefaultSearchManager::kSearchTermsReplacementKey,
-                   data->search_terms_replacement_key);
+  std::unique_ptr<base::DictionaryValue> entry(
+      TemplateURLDataToDictionary(*data));
   entry->SetBoolean(DefaultSearchManager::kDisabledByPolicy, !enabled);
-  prefs->SetManagedPref(kDefaultSearchProviderData, entry.release());
-}
-
-std::unique_ptr<TemplateURLData> GenerateDummyTemplateURLData(
-    const std::string& type) {
-  std::unique_ptr<TemplateURLData> data(new TemplateURLData());
-  data->SetShortName(base::UTF8ToUTF16(std::string(type).append("name")));
-  data->SetKeyword(base::UTF8ToUTF16(std::string(type).append("key")));
-  data->SetURL(std::string("http://").append(type).append("foo/{searchTerms}"));
-  data->suggestions_url = std::string("http://").append(type).append("sugg");
-  data->alternate_urls.push_back(
-      std::string("http://").append(type).append("foo/alt"));
-  data->favicon_url = GURL("http://icon1");
-  data->safe_for_autoreplace = true;
-  data->input_encodings = base::SplitString(
-      "UTF-8;UTF-16", ";", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-  data->date_created = base::Time();
-  data->last_modified = base::Time();
-  return data;
+  prefs->SetManagedPref(
+      DefaultSearchManager::kDefaultSearchProviderDataPrefName,
+      entry.release());
 }
 
 }  // namespace
@@ -147,17 +84,17 @@ class DefaultSearchManagerTest : public testing::Test {
   DefaultSearchManagerTest() {};
 
   void SetUp() override {
-    pref_service_.reset(new user_prefs::TestingPrefServiceSyncable);
+    pref_service_.reset(new sync_preferences::TestingPrefServiceSyncable);
     DefaultSearchManager::RegisterProfilePrefs(pref_service_->registry());
     TemplateURLPrepopulateData::RegisterProfilePrefs(pref_service_->registry());
   }
 
-  user_prefs::TestingPrefServiceSyncable* pref_service() {
+  sync_preferences::TestingPrefServiceSyncable* pref_service() {
     return pref_service_.get();
   }
 
  private:
-  std::unique_ptr<user_prefs::TestingPrefServiceSyncable> pref_service_;
+  std::unique_ptr<sync_preferences::TestingPrefServiceSyncable> pref_service_;
 
   DISALLOW_COPY_AND_ASSIGN(DefaultSearchManagerTest);
 };
@@ -178,9 +115,10 @@ TEST_F(DefaultSearchManagerTest, ReadAndWritePref) {
       "UTF-8;UTF-16", ";", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   data.date_created = base::Time();
   data.last_modified = base::Time();
+  data.last_modified = base::Time();
 
   manager.SetUserSelectedDefaultSearchEngine(data);
-  TemplateURLData* read_data = manager.GetDefaultSearchEngine(NULL);
+  const TemplateURLData* read_data = manager.GetDefaultSearchEngine(nullptr);
   ExpectSimilar(&data, read_data);
 }
 
@@ -277,7 +215,8 @@ TEST_F(DefaultSearchManagerTest, DefaultSearchSetByPolicy) {
   EXPECT_EQ(NULL, manager.GetDefaultSearchEngine(&source));
   EXPECT_EQ(DefaultSearchManager::FROM_POLICY, source);
 
-  pref_service()->RemoveManagedPref(kDefaultSearchProviderData);
+  pref_service()->RemoveManagedPref(
+      DefaultSearchManager::kDefaultSearchProviderDataPrefName);
   ExpectSimilar(data.get(), manager.GetDefaultSearchEngine(&source));
   EXPECT_EQ(DefaultSearchManager::FROM_USER, source);
 }
@@ -309,7 +248,8 @@ TEST_F(DefaultSearchManagerTest, DefaultSearchSetByExtension) {
 
   ExpectSimilar(policy_data.get(), manager.GetDefaultSearchEngine(&source));
   EXPECT_EQ(DefaultSearchManager::FROM_POLICY, source);
-  pref_service()->RemoveManagedPref(kDefaultSearchProviderData);
+  pref_service()->RemoveManagedPref(
+      DefaultSearchManager::kDefaultSearchProviderDataPrefName);
 
   // Extensions trump each other:
   std::unique_ptr<TemplateURLData> extension_data_2 =

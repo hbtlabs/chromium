@@ -16,10 +16,11 @@
 #include "content/common/content_export.h"
 #include "content/common/frame_message_enums.h"
 #include "content/public/browser/site_instance.h"
-#include "content/public/common/javascript_message_type.h"
+#include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/media_stream_request.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 #include "net/http/http_response_headers.h"
+#include "ui/base/window_open_disposition.h"
 
 #if defined(OS_WIN)
 #include "ui/gfx/native_widget_types.h"
@@ -36,23 +37,37 @@ class GeolocationServiceContext;
 class WakeLockServiceContext;
 }
 
+namespace gfx {
+class Rect;
+}
+
+namespace url {
+class Origin;
+}
+
 namespace content {
 class FrameTreeNode;
 class InterstitialPage;
 class PageState;
 class RenderFrameHost;
+class RenderFrameHostImpl;
+class SessionStorageNamespace;
 class WebContents;
 struct AXEventNotificationDetails;
 struct AXLocationChangeNotificationDetails;
 struct ContextMenuParams;
 struct FileChooserParams;
 
+namespace mojom {
+class CreateNewWindowParams;
+}
+
 // An interface implemented by an object interested in knowing about the state
 // of the RenderFrameHost.
 class CONTENT_EXPORT RenderFrameHostDelegate {
  public:
   // This is used to give the delegate a chance to filter IPC messages.
-  virtual bool OnMessageReceived(RenderFrameHost* render_frame_host,
+  virtual bool OnMessageReceived(RenderFrameHostImpl* render_frame_host,
                                  const IPC::Message& message);
 
   // Allows the delegate to filter incoming associated inteface requests.
@@ -82,13 +97,13 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual void ShowContextMenu(RenderFrameHost* render_frame_host,
                                const ContextMenuParams& params) {}
 
-  // A JavaScript message, confirmation or prompt should be shown.
-  virtual void RunJavaScriptMessage(RenderFrameHost* render_frame_host,
-                                    const base::string16& message,
-                                    const base::string16& default_prompt,
-                                    const GURL& frame_url,
-                                    JavaScriptMessageType type,
-                                    IPC::Message* reply_msg) {}
+  // A JavaScript alert, confirmation or prompt dialog should be shown.
+  virtual void RunJavaScriptDialog(RenderFrameHost* render_frame_host,
+                                   const base::string16& message,
+                                   const base::string16& default_prompt,
+                                   const GURL& frame_url,
+                                   JavaScriptDialogType type,
+                                   IPC::Message* reply_msg) {}
 
   virtual void RunBeforeUnloadConfirm(RenderFrameHost* render_frame_host,
                                       bool is_reload,
@@ -143,14 +158,21 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // Checks if we have permission to access the microphone or camera. Note that
   // this does not query the user. |type| must be MEDIA_DEVICE_AUDIO_CAPTURE
   // or MEDIA_DEVICE_VIDEO_CAPTURE.
+  // TODO(guidou): use url::Origin for |security_origin|. See crbug.com/683115.
   virtual bool CheckMediaAccessPermission(const GURL& security_origin,
                                           MediaStreamType type);
+
+  // Returns the ID of the default device for the given media device |type|.
+  // If the returned value is an empty string, it means that there is no
+  // default device for the given |type|.
+  virtual std::string GetDefaultMediaDeviceID(MediaStreamType type);
 
   // Get the accessibility mode for the WebContents that owns this frame.
   virtual AccessibilityMode GetAccessibilityMode() const;
 
-  // Forward accessibility messages to other potential listeners like
-  // the automation extension API.
+  // Called when accessibility events or location changes are received
+  // from a render frame, when the accessibility mode has the
+  // ACCESSIBILITY_MODE_FLAG_WEB_CONTENTS flag set.
   virtual void AccessibilityEventReceived(
       const std::vector<AXEventNotificationDetails>& details) {}
   virtual void AccessibilityLocationChangesReceived(
@@ -206,6 +228,67 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // applies, returns null.
   virtual std::unique_ptr<WebUIImpl> CreateWebUIForRenderFrameHost(
       const GURL& url);
+
+  // Called by |frame| to notify that it has received an update on focused
+  // element. |bounds_in_root_view| is the rectangle containing the element that
+  // is focused and is with respect to root frame's RenderWidgetHost's
+  // coordinate space.
+  virtual void OnFocusedElementChangedInFrame(
+      RenderFrameHostImpl* frame,
+      const gfx::Rect& bounds_in_root_view) {}
+
+  // The page is trying to open a new page (e.g. a popup window). The window
+  // should be created associated with the given |main_frame_widget_route_id| in
+  // the process of |source_site_instance|, but it should not be shown yet. That
+  // should happen in response to ShowCreatedWindow.
+  // |params.window_container_type| describes the type of RenderViewHost
+  // container that is requested -- in particular, the window.open call may have
+  // specified 'background' and 'persistent' in the feature string.
+  //
+  // The passed |params.frame_name| parameter is the name parameter that was
+  // passed to window.open(), and will be empty if none was passed.
+  //
+  // Note: this is not called "CreateWindow" because that will clash with
+  // the Windows function which is actually a #define.
+  //
+  // The caller is expected to handle cleanup if this operation fails or is
+  // suppressed, by looking for the existence of a RenderFrameHost in
+  // source_site_instance's process with |main_frame_route_id| after this method
+  // returns.
+  virtual void CreateNewWindow(
+      SiteInstance* source_site_instance,
+      int32_t render_view_route_id,
+      int32_t main_frame_route_id,
+      int32_t main_frame_widget_route_id,
+      const mojom::CreateNewWindowParams& params,
+      SessionStorageNamespace* session_storage_namespace) {}
+
+  // Show a previously created page with the specified disposition and bounds.
+  // The window is identified by the |main_frame_widget_route_id| passed to
+  // CreateNewWindow.
+  //
+  // Note: this is not called "ShowWindow" because that will clash with
+  // the Windows function which is actually a #define.
+  virtual void ShowCreatedWindow(int process_id,
+                                 int main_frame_widget_route_id,
+                                 WindowOpenDisposition disposition,
+                                 const gfx::Rect& initial_rect,
+                                 bool user_gesture) {}
+
+  // Notifies that mixed content was displayed or ran.
+  virtual void DidDisplayInsecureContent() {}
+  virtual void DidRunInsecureContent(const GURL& security_origin,
+                                     const GURL& target_url) {}
+
+  // Reports that passive mixed content was found at the specified url.
+  virtual void PassiveInsecureContentFound(const GURL& resource_url) {}
+
+  // Checks if running of active mixed content is allowed for the specified
+  // WebContents/tab.
+  virtual bool ShouldAllowRunningInsecureContent(WebContents* web_contents,
+                                                 bool allowed_per_prefs,
+                                                 const url::Origin& origin,
+                                                 const GURL& resource_url);
 
  protected:
   virtual ~RenderFrameHostDelegate() {}

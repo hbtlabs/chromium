@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.contextualsearch;
 
 import android.content.Context;
 import android.net.Uri;
+import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 
 import org.chromium.base.VisibleForTesting;
@@ -49,12 +50,11 @@ class ContextualSearchPolicy {
     private Integer mTapLimitForUndecided;
 
     /**
-     * @param context The Android Context.
+     * ContextualSearchPolicy constructor.
      */
-    public ContextualSearchPolicy(Context context,
-                                  ContextualSearchSelectionController selectionController,
-                                  ContextualSearchNetworkCommunicator networkCommunicator) {
-        mPreferenceManager = ChromePreferenceManager.getInstance(context);
+    public ContextualSearchPolicy(ContextualSearchSelectionController selectionController,
+            ContextualSearchNetworkCommunicator networkCommunicator) {
+        mPreferenceManager = ChromePreferenceManager.getInstance();
 
         mSelectionController = selectionController;
         mNetworkCommunicator = networkCommunicator;
@@ -506,6 +506,23 @@ class ContextualSearchPolicy {
         if (isForceTranslationOneboxDisabled()) return true;
 
         return ContextualSearchFieldTrial.isAutoDetectTranslationOneboxDisabled();
+    }
+
+    /**
+     * @return The ISO country code for the user's home country, or an empty string if not
+     *         available or privacy-enabled.
+     */
+    String getHomeCountry(Context context) {
+        if (!ContextualSearchFieldTrial.isSendHomeCountryEnabled()) return "";
+
+        TelephonyManager telephonyManager =
+                (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
+        if (telephonyManager == null) return "";
+
+        String simCountryIso = telephonyManager.getSimCountryIso();
+        if (TextUtils.isEmpty(simCountryIso)) return "";
+
+        return simCountryIso;
     }
 
     /**

@@ -40,6 +40,7 @@
 #include "core/html/HTMLSelectElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/layout/LayoutTheme.h"
+#include "core/style/ComputedStyle.h"
 #include "wtf/Vector.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -49,7 +50,6 @@ using namespace HTMLNames;
 
 HTMLOptionElement::HTMLOptionElement(Document& document)
     : HTMLElement(optionTag, document), m_isSelected(false) {
-  setHasCustomStyleCallbacks();
 }
 
 // An explicit empty destructor should be in HTMLOptionElement.cpp, because
@@ -90,18 +90,17 @@ HTMLOptionElement* HTMLOptionElement::createForJSConstructor(
 
 void HTMLOptionElement::attachLayoutTree(const AttachContext& context) {
   AttachContext optionContext(context);
-  if (context.resolvedStyle) {
-    DCHECK(!m_style || m_style == context.resolvedStyle);
-    m_style = context.resolvedStyle;
-  } else if (parentComputedStyle()) {
-    updateNonComputedStyle();
-    optionContext.resolvedStyle = m_style.get();
+  RefPtr<ComputedStyle> resolvedStyle;
+  if (!context.resolvedStyle && parentComputedStyle()) {
+    if (HTMLSelectElement* select = ownerSelectElement())
+      select->updateListOnLayoutObject();
+    resolvedStyle = originalStyleForLayoutObject();
+    optionContext.resolvedStyle = resolvedStyle.get();
   }
   HTMLElement::attachLayoutTree(optionContext);
 }
 
 void HTMLOptionElement::detachLayoutTree(const AttachContext& context) {
-  m_style.clear();
   HTMLElement::detachLayoutTree(context);
 }
 
@@ -194,14 +193,14 @@ int HTMLOptionElement::listIndex() const {
   return -1;
 }
 
-void HTMLOptionElement::parseAttribute(const QualifiedName& name,
-                                       const AtomicString& oldValue,
-                                       const AtomicString& value) {
+void HTMLOptionElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  const QualifiedName& name = params.name;
   if (name == valueAttr) {
     if (HTMLDataListElement* dataList = ownerDataListElement())
       dataList->optionElementChildrenChanged();
   } else if (name == disabledAttr) {
-    if (oldValue.isNull() != value.isNull()) {
+    if (params.oldValue.isNull() != params.newValue.isNull()) {
       pseudoStateChanged(CSSSelector::PseudoDisabled);
       pseudoStateChanged(CSSSelector::PseudoEnabled);
       if (layoutObject())
@@ -209,13 +208,13 @@ void HTMLOptionElement::parseAttribute(const QualifiedName& name,
                                                  EnabledControlState);
     }
   } else if (name == selectedAttr) {
-    if (oldValue.isNull() != value.isNull() && !m_isDirty)
-      setSelected(!value.isNull());
+    if (params.oldValue.isNull() != params.newValue.isNull() && !m_isDirty)
+      setSelected(!params.newValue.isNull());
     pseudoStateChanged(CSSSelector::PseudoDefault);
   } else if (name == labelAttr) {
     updateLabel();
   } else {
-    HTMLElement::parseAttribute(name, oldValue, value);
+    HTMLElement::parseAttribute(params);
   }
 }
 
@@ -330,21 +329,6 @@ void HTMLOptionElement::setLabel(const AtomicString& label) {
   setAttribute(labelAttr, label);
 }
 
-void HTMLOptionElement::updateNonComputedStyle() {
-  m_style = originalStyleForLayoutObject();
-  if (HTMLSelectElement* select = ownerSelectElement())
-    select->updateListOnLayoutObject();
-}
-
-ComputedStyle* HTMLOptionElement::nonLayoutObjectComputedStyle() const {
-  return m_style.get();
-}
-
-PassRefPtr<ComputedStyle> HTMLOptionElement::customStyleForLayoutObject() {
-  updateNonComputedStyle();
-  return m_style;
-}
-
 String HTMLOptionElement::textIndentedToRespectGroupLabel() const {
   ContainerNode* parent = parentNode();
   if (parent && isHTMLOptGroupElement(*parent))
@@ -431,12 +415,13 @@ bool HTMLOptionElement::spatialNavigationFocused() const {
 }
 
 bool HTMLOptionElement::isDisplayNone() const {
-  // If m_style is not set, then the node is still unattached.
+  // If the style is not set, then the node is still unattached.
   // We have to wait till it gets attached to read the display property.
-  if (!m_style)
+  const ComputedStyle* style = nonLayoutObjectComputedStyle();
+  if (!style)
     return false;
 
-  if (m_style->display() != EDisplay::None) {
+  if (style->display() != EDisplay::None) {
     // We need to check the parent's display property.  Parent's
     // display:none doesn't override children's display properties in
     // ComputedStyle.
@@ -449,7 +434,7 @@ bool HTMLOptionElement::isDisplayNone() const {
       return !parentStyle || parentStyle->display() == EDisplay::None;
     }
   }
-  return m_style->display() == EDisplay::None;
+  return style->display() == EDisplay::None;
 }
 
 String HTMLOptionElement::innerText() {

@@ -9,12 +9,14 @@
 #include "base/bind.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "content/common/media/midi_messages.h"
 #include "content/renderer/render_thread_impl.h"
 #include "ipc/ipc_logging.h"
 
 using base::AutoLock;
+using blink::WebString;
 using midi::mojom::PortState;
 using midi::mojom::Result;
 
@@ -49,6 +51,11 @@ void MidiMessageFilter::AddClient(blink::WebMIDIAccessorClient* client) {
 }
 
 void MidiMessageFilter::RemoveClient(blink::WebMIDIAccessorClient* client) {
+  DCHECK(clients_.find(client) != clients_.end() ||
+         std::find(clients_waiting_session_queue_.begin(),
+                   clients_waiting_session_queue_.end(),
+                   client) != clients_waiting_session_queue_.end())
+      << "RemoveClient call was not ballanced with AddClient call";
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   clients_.erase(client);
   ClientsQueue::iterator it = std::find(clients_waiting_session_queue_.begin(),
@@ -211,17 +218,17 @@ void MidiMessageFilter::HandleClientAdded(Result result) {
     if (result == Result::OK) {
       // Add the client's input and output ports.
       for (const auto& info : inputs_) {
-        client->didAddInputPort(base::UTF8ToUTF16(info.id),
-                                base::UTF8ToUTF16(info.manufacturer),
-                                base::UTF8ToUTF16(info.name),
-                                base::UTF8ToUTF16(info.version), info.state);
+        client->didAddInputPort(WebString::fromUTF8(info.id),
+                                WebString::fromUTF8(info.manufacturer),
+                                WebString::fromUTF8(info.name),
+                                WebString::fromUTF8(info.version), info.state);
       }
 
       for (const auto& info : outputs_) {
-        client->didAddOutputPort(base::UTF8ToUTF16(info.id),
-                                 base::UTF8ToUTF16(info.manufacturer),
-                                 base::UTF8ToUTF16(info.name),
-                                 base::UTF8ToUTF16(info.version), info.state);
+        client->didAddOutputPort(WebString::fromUTF8(info.id),
+                                 WebString::fromUTF8(info.manufacturer),
+                                 WebString::fromUTF8(info.name),
+                                 WebString::fromUTF8(info.version), info.state);
       }
     }
     client->didStartSession(result);
@@ -232,10 +239,10 @@ void MidiMessageFilter::HandleClientAdded(Result result) {
 void MidiMessageFilter::HandleAddInputPort(midi::MidiPortInfo info) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   inputs_.push_back(info);
-  const base::string16 id = base::UTF8ToUTF16(info.id);
-  const base::string16 manufacturer = base::UTF8ToUTF16(info.manufacturer);
-  const base::string16 name = base::UTF8ToUTF16(info.name);
-  const base::string16 version = base::UTF8ToUTF16(info.version);
+  const WebString id = WebString::fromUTF8(info.id);
+  const WebString manufacturer = WebString::fromUTF8(info.manufacturer);
+  const WebString name = WebString::fromUTF8(info.name);
+  const WebString version = WebString::fromUTF8(info.version);
   for (auto* client : clients_)
     client->didAddInputPort(id, manufacturer, name, version, info.state);
 }
@@ -243,10 +250,10 @@ void MidiMessageFilter::HandleAddInputPort(midi::MidiPortInfo info) {
 void MidiMessageFilter::HandleAddOutputPort(midi::MidiPortInfo info) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   outputs_.push_back(info);
-  const base::string16 id = base::UTF8ToUTF16(info.id);
-  const base::string16 manufacturer = base::UTF8ToUTF16(info.manufacturer);
-  const base::string16 name = base::UTF8ToUTF16(info.name);
-  const base::string16 version = base::UTF8ToUTF16(info.version);
+  const WebString id = WebString::fromUTF8(info.id);
+  const WebString manufacturer = WebString::fromUTF8(info.manufacturer);
+  const WebString name = WebString::fromUTF8(info.name);
+  const WebString version = WebString::fromUTF8(info.version);
   for (auto* client : clients_)
     client->didAddOutputPort(id, manufacturer, name, version, info.state);
 }

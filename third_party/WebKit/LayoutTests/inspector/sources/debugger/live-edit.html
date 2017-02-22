@@ -4,6 +4,7 @@
 <script src="../../../http/tests/inspector/debugger-test.js"></script>
 <script src="../../../http/tests/inspector/live-edit-test.js"></script>
 <script src="resources/edit-me.js"></script>
+<script src="resources/edit-me-2.js"></script>
 <script src="resources/edit-me-when-paused.js"></script>
 
 <script>
@@ -109,11 +110,14 @@ function test()
 
         function testBreakpointsUpdated(next)
         {
+            var testSourceFrame;
             InspectorTest.showScriptSource("edit-me.js", didShowScriptSource);
 
             function didShowScriptSource(sourceFrame)
             {
-                InspectorTest.addSniffer(sourceFrame, "_addBreakpointDecoration", breakpointAdded);
+                testSourceFrame = sourceFrame;
+                InspectorTest.prepareSourceFrameForBreakpointTest(sourceFrame);
+                InspectorTest.waitJavaScriptSourceFrameBreakpoints(sourceFrame).then(breakpointAdded);
                 InspectorTest.setBreakpoint(sourceFrame, 2, "", true);
             }
 
@@ -124,39 +128,36 @@ function test()
 
             function didEditScriptSource()
             {
-                var breakpoints = panel.visibleView._breakpoints;
-                for (var lineNumber in breakpoints)
-                    InspectorTest.assertEquals("5", lineNumber);
-                next();
+                InspectorTest.waitJavaScriptSourceFrameBreakpoints(testSourceFrame)
+                    .then(() => InspectorTest.dumpJavaScriptSourceFrameBreakpoints(testSourceFrame))
+                    .then(() => Bindings.breakpointManager._allBreakpoints().map(breakpoint => breakpoint.remove()))
+                    .then(next);
             }
         },
 
         function testNoCrashWhenLiveEditOnBreakpoint(next)
         {
-            InspectorTest.showScriptSource("edit-me.js", didShowScriptSource);
+            InspectorTest.showScriptSource("edit-me-2.js", didShowScriptSource);
 
             var testSourceFrame;
 
             function didShowScriptSource(sourceFrame)
             {
                 testSourceFrame = sourceFrame;
-                InspectorTest.addSniffer(sourceFrame, "_addBreakpointDecoration", uiBreakpointAdded);
+                InspectorTest.prepareSourceFrameForBreakpointTest(sourceFrame);
+                InspectorTest.waitJavaScriptSourceFrameBreakpoints(testSourceFrame).then(breakpointAdded);
                 InspectorTest.setBreakpoint(sourceFrame, 3, "", true);
-            }
-
-            function uiBreakpointAdded() {
-                InspectorTest.addSniffer(testSourceFrame, "_addBreakpointDecoration", breakpointAdded);
             }
 
             function breakpointAdded()
             {
                 InspectorTest.waitUntilPaused(pausedInF);
-                InspectorTest.evaluateInPage("setTimeout(f, 0)");
+                InspectorTest.evaluateInPage("setTimeout(editMe2F, 0)");
             }
 
             function pausedInF(callFrames)
             {
-                replaceInSource(panel.visibleView, "function f()", "function f()\n", didEditScriptSource);
+                replaceInSource(panel.visibleView, "function editMe2F()", "function editMe2F()\n", didEditScriptSource);
             }
 
             function didEditScriptSource()

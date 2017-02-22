@@ -16,6 +16,7 @@
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_image.h"
 #include "ui/gl/gl_implementation.h"
+#include "ui/gl/gl_surface_format.h"
 #include "ui/gl/gl_switches.h"
 
 namespace gl {
@@ -28,10 +29,10 @@ base::LazyInstance<base::ThreadLocalPointer<GLSurface> >::Leaky
 GLSurface::GLSurface() {}
 
 bool GLSurface::Initialize() {
-  return Initialize(SURFACE_DEFAULT);
+  return Initialize(GLSurfaceFormat());
 }
 
-bool GLSurface::Initialize(GLSurface::Format format) {
+bool GLSurface::Initialize(GLSurfaceFormat format) {
   return true;
 }
 
@@ -51,7 +52,7 @@ bool GLSurface::DeferDraws() {
   return false;
 }
 
-bool GLSurface::SupportsSwapBuffersWithDamage() {
+bool GLSurface::SupportsSwapBuffersWithBounds() {
   return false;
 }
 
@@ -75,10 +76,8 @@ void GLSurface::SwapBuffersAsync(const SwapCompletionCallback& callback) {
   NOTREACHED();
 }
 
-gfx::SwapResult GLSurface::SwapBuffersWithDamage(int x,
-                                                 int y,
-                                                 int width,
-                                                 int height) {
+gfx::SwapResult GLSurface::SwapBuffersWithBounds(
+    const std::vector<gfx::Rect>& rects) {
   return gfx::SwapResult::SWAP_FAILED;
 }
 
@@ -134,9 +133,9 @@ unsigned long GLSurface::GetCompatibilityKey() {
   return 0;
 }
 
-GLSurface::Format GLSurface::GetFormat() {
+GLSurfaceFormat GLSurface::GetFormat() {
   NOTIMPLEMENTED();
-  return SURFACE_DEFAULT;
+  return GLSurfaceFormat();
 }
 
 gfx::VSyncProvider* GLSurface::GetVSyncProvider() {
@@ -205,7 +204,7 @@ void GLSurface::OnSetSwapInterval(int interval) {
 
 GLSurfaceAdapter::GLSurfaceAdapter(GLSurface* surface) : surface_(surface) {}
 
-bool GLSurfaceAdapter::Initialize(GLSurface::Format format) {
+bool GLSurfaceAdapter::Initialize(GLSurfaceFormat format) {
   return surface_->Initialize(format);
 }
 
@@ -240,11 +239,9 @@ void GLSurfaceAdapter::SwapBuffersAsync(
   surface_->SwapBuffersAsync(callback);
 }
 
-gfx::SwapResult GLSurfaceAdapter::SwapBuffersWithDamage(int x,
-                                                        int y,
-                                                        int width,
-                                                        int height) {
-  return surface_->SwapBuffersWithDamage(x, y, width, height);
+gfx::SwapResult GLSurfaceAdapter::SwapBuffersWithBounds(
+    const std::vector<gfx::Rect>& rects) {
+  return surface_->SwapBuffersWithBounds(rects);
 }
 
 gfx::SwapResult GLSurfaceAdapter::PostSubBuffer(int x,
@@ -272,8 +269,8 @@ void GLSurfaceAdapter::CommitOverlayPlanesAsync(
   surface_->CommitOverlayPlanesAsync(callback);
 }
 
-bool GLSurfaceAdapter::SupportsSwapBuffersWithDamage() {
-  return surface_->SupportsSwapBuffersWithDamage();
+bool GLSurfaceAdapter::SupportsSwapBuffersWithBounds() {
+  return surface_->SupportsSwapBuffersWithBounds();
 }
 
 bool GLSurfaceAdapter::SupportsPostSubBuffer() {
@@ -328,7 +325,7 @@ unsigned long GLSurfaceAdapter::GetCompatibilityKey() {
   return surface_->GetCompatibilityKey();
 }
 
-GLSurface::Format GLSurfaceAdapter::GetFormat() {
+GLSurfaceFormat GLSurfaceAdapter::GetFormat() {
   return surface_->GetFormat();
 }
 
@@ -357,12 +354,21 @@ bool GLSurfaceAdapter::BuffersFlipped() const {
   return surface_->BuffersFlipped();
 }
 
+void GLSurfaceAdapter::OnSetSwapInterval(int interval) {
+  surface_->OnSetSwapInterval(interval);
+}
+
 GLSurfaceAdapter::~GLSurfaceAdapter() {}
 
-scoped_refptr<GLSurface> InitializeGLSurface(scoped_refptr<GLSurface> surface) {
-  if (!surface->Initialize())
+scoped_refptr<GLSurface> InitializeGLSurfaceWithFormat(
+    scoped_refptr<GLSurface> surface, GLSurfaceFormat format) {
+  if (!surface->Initialize(format))
     return nullptr;
   return surface;
+}
+
+scoped_refptr<GLSurface> InitializeGLSurface(scoped_refptr<GLSurface> surface) {
+  return InitializeGLSurfaceWithFormat(surface, GLSurfaceFormat());
 }
 
 GLSurface::CALayerInUseQuery::CALayerInUseQuery() = default;

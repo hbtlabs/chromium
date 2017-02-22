@@ -10,12 +10,14 @@
 #include "base/location.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/string_piece.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/renderer/dispatcher.h"
 #include "extensions/renderer/process_info_native_handler.h"
 #include "gin/converter.h"
 #include "gin/dictionary.h"
+#include "gin/modules/console.h"
 #include "mojo/edk/js/core.h"
 #include "mojo/edk/js/handle.h"
 #include "mojo/edk/js/support.h"
@@ -117,14 +119,12 @@ ApiTestEnvironment::~ApiTestEnvironment() {
 
 void ApiTestEnvironment::RegisterModules() {
   v8_schema_registry_.reset(new V8SchemaRegistry);
-  const std::vector<std::pair<std::string, int> > resources =
+  const std::vector<std::pair<const char*, int>> resources =
       Dispatcher::GetJsResources();
-  for (std::vector<std::pair<std::string, int> >::const_iterator resource =
-           resources.begin();
-       resource != resources.end();
-       ++resource) {
-    if (resource->first != "test_environment_specific_bindings")
-      env()->RegisterModule(resource->first, resource->second);
+  for (const auto& resource : resources) {
+    if (base::StringPiece(resource.first) !=
+        "test_environment_specific_bindings")
+      env()->RegisterModule(resource.first, resource.second);
   }
   Dispatcher::RegisterNativeHandlers(env()->module_system(),
                                      env()->context(),
@@ -153,6 +153,9 @@ void ApiTestEnvironment::RegisterModules() {
       "exports.$set('AttachFilteredEvent', function() {});"
       "exports.$set('MatchAgainstEventFilter', function() { return [] });");
 
+  gin::ModuleRegistry::From(env()->context()->v8_context())
+      ->AddBuiltinModule(env()->isolate(), gin::Console::kModuleName,
+                         gin::Console::GetModule(env()->isolate()));
   gin::ModuleRegistry::From(env()->context()->v8_context())
       ->AddBuiltinModule(env()->isolate(), mojo::edk::js::Core::kModuleName,
                          mojo::edk::js::Core::GetModule(env()->isolate()));
@@ -204,12 +207,21 @@ void ApiTestEnvironment::RunTestInner(const std::string& test_name,
                                       const base::Closure& quit_closure) {
   v8::HandleScope scope(env()->isolate());
   ModuleSystem::NativesEnabledScope natives_enabled(env()->module_system());
-  v8::Local<v8::Value> result =
-      env()->module_system()->CallModuleMethod("testBody", test_name);
-  if (!result->IsTrue()) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, quit_closure);
-    FAIL() << "Failed to run test \"" << test_name << "\"";
-  }
+  v8::Local<v8::Value> result;
+  bool did_run = false;
+  auto callback = [](bool* did_run, const base::Closure& quit_closure,
+                     const std::string& test_name,
+                     const std::vector<v8::Local<v8::Value>>& result) {
+    *did_run = true;
+    if (result.empty() || result[0].IsEmpty() || !result[0]->IsTrue()) {
+      base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, quit_closure);
+      FAIL() << "Failed to run test \"" << test_name << "\"";
+    }
+  };
+  env()->module_system()->CallModuleMethodSafe(
+      "testBody", test_name, 0, nullptr,
+      base::Bind(callback, &did_run, quit_closure, test_name));
+  ASSERT_TRUE(did_run);
 }
 
 void ApiTestEnvironment::RunPromisesAgain() {

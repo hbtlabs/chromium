@@ -34,7 +34,11 @@
 #include "core/clipboard/DataObjectItem.h"
 #include "core/clipboard/DataTransfer.h"
 #include "core/dom/StringCallback.h"
+#include "core/dom/TaskRunnerHelper.h"
+#include "core/inspector/InspectorInstrumentation.h"
+#include "public/platform/WebTraceLocation.h"
 #include "wtf/StdLibExtras.h"
+#include "wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -64,18 +68,31 @@ String DataTransferItem::type() const {
   return m_item->type();
 }
 
-void DataTransferItem::getAsString(ExecutionContext* context,
+static void runGetAsStringTask(ExecutionContext* context,
+                               StringCallback* callback,
+                               const String& data) {
+  InspectorInstrumentation::AsyncTask asyncTask(context, callback);
+  if (context)
+    callback->handleEvent(data);
+}
+
+void DataTransferItem::getAsString(ScriptState* scriptState,
                                    StringCallback* callback) const {
   if (!m_dataTransfer->canReadData())
     return;
   if (!callback || m_item->kind() != DataObjectItem::StringKind)
     return;
 
-  StringCallback::scheduleCallback(callback, context, m_item->getAsString(),
-                                   "DataTransferItem.getAsString");
+  ExecutionContext* context = scriptState->getExecutionContext();
+  InspectorInstrumentation::asyncTaskScheduled(
+      context, "DataTransferItem.getAsString", callback);
+  TaskRunnerHelper::get(TaskType::UserInteraction, scriptState)
+      ->postTask(BLINK_FROM_HERE,
+                 WTF::bind(&runGetAsStringTask, wrapWeakPersistent(context),
+                           wrapPersistent(callback), m_item->getAsString()));
 }
 
-Blob* DataTransferItem::getAsFile() const {
+File* DataTransferItem::getAsFile() const {
   if (!m_dataTransfer->canReadData())
     return nullptr;
 

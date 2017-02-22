@@ -16,6 +16,7 @@
 #include "chromeos/dbus/dbus_client.h"
 #include "chromeos/dbus/dbus_client_implementation_type.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
+#include "third_party/cros_system_api/dbus/login_manager/dbus-constants.h"
 
 namespace cryptohome {
 class Identification;
@@ -197,6 +198,10 @@ class CHROMEOS_EXPORT SessionManagerClient : public DBusClient {
       const std::string& policy_blob,
       const StorePolicyCallback& callback) = 0;
 
+  // Returns whether session manager can be used to restart Chrome in order to
+  // apply per-user session flags.
+  virtual bool SupportsRestartToApplyUserFlags() const = 0;
+
   // Sets the flags to be applied next time by the session manager when Chrome
   // is restarted inside an already started session for a particular user.
   virtual void SetFlagsForUser(const cryptohome::Identification& cryptohome_id,
@@ -211,7 +216,8 @@ class CHROMEOS_EXPORT SessionManagerClient : public DBusClient {
   // for the device to retrieve after a device factory reset.
   //
   // The state keys are returned asynchronously via |callback|. The callback
-  // will be invoked with an empty state key vector in case of errors.
+  // is invoked with an empty state key vector in case of errors. If the time
+  // sync fails or there's no network, the callback is never invoked.
   virtual void GetServerBackedStateKeys(const StateKeysCallback& callback) = 0;
 
   // Used for several ARC methods.  Takes a boolean indicating whether the
@@ -252,15 +258,20 @@ class CHROMEOS_EXPORT SessionManagerClient : public DBusClient {
   // reached).
   virtual void StopArcInstance(const ArcCallback& callback) = 0;
 
-  // Prioritizes the ARC instance by removing cgroups restrictions that
-  // session_manager applies to the instance by default. Upon completion,
-  // invokes |callback| with the result; true on success, false on failure.
-  // Calling this multiple times is okay. Such calls except the first one
-  // will be ignored.
-  virtual void PrioritizeArcInstance(const ArcCallback& callback) = 0;
+  // Adjusts the amount of CPU the ARC instance is allowed to use. When
+  // |restriction_state| is CONTAINER_CPU_RESTRICTION_FOREGROUND the limit is
+  // adjusted so ARC can use all the system's CPU if needed. When it is
+  // CONTAINER_CPU_RESTRICTION_BACKGROUND, ARC can only use tightly restricted
+  // CPU resources. The ARC instance is started in a state that is more
+  // restricted than CONTAINER_CPU_RESTRICTION_BACKGROUND. When ARC is not
+  // supported, the function asynchronously runs the |callback| with false.
+  virtual void SetArcCpuRestriction(
+      login_manager::ContainerCpuRestrictionState restriction_state,
+      const ArcCallback& callback) = 0;
 
   // Emits the "arc-booted" upstart signal.
-  virtual void EmitArcBooted() = 0;
+  virtual void EmitArcBooted(const cryptohome::Identification& cryptohome_id,
+                             const ArcCallback& callback) = 0;
 
   // Asynchronously retrieves the timestamp which ARC instance is invoked or
   // returns false if there is no ARC instance or ARC is not available.

@@ -28,6 +28,7 @@
 namespace blink {
 
 class SVGElement;
+enum class SVGTransformChange;
 
 class CORE_EXPORT LayoutSVGRoot final : public LayoutReplaced {
  public:
@@ -68,9 +69,10 @@ class CORE_EXPORT LayoutSVGRoot final : public LayoutReplaced {
     // SVGImage::draw() does a view layout prior to painting,
     // and we need that layout to know of the new size otherwise
     // the layout may be incorrectly using the old size.
-    if (m_containerSize != containerSize)
+    if (m_containerSize != containerSize) {
       setNeedsLayoutAndFullPaintInvalidation(
           LayoutInvalidationReason::SizeChanged);
+    }
     m_containerSize = containerSize;
   }
 
@@ -79,7 +81,11 @@ class CORE_EXPORT LayoutSVGRoot final : public LayoutReplaced {
   const AffineTransform& localToBorderBoxTransform() const {
     return m_localToBorderBoxTransform;
   }
+
   bool shouldApplyViewportClip() const;
+  bool shouldClipOverflow() const override {
+    return LayoutBox::shouldClipOverflow() || shouldApplyViewportClip();
+  }
 
   LayoutRect visualOverflowRect() const override;
   LayoutRect overflowClipRect(
@@ -155,7 +161,7 @@ class CORE_EXPORT LayoutSVGRoot final : public LayoutReplaced {
   void descendantIsolationRequirementsChanged(DescendantIsolationState) final;
 
   void updateCachedBoundaries();
-  void buildLocalToBorderBoxTransform();
+  SVGTransformChange buildLocalToBorderBoxTransform();
 
   PositionWithAffinity positionForPoint(const LayoutPoint&) final;
 

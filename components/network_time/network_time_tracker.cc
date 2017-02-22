@@ -20,6 +20,7 @@
 #include "base/time/tick_clock.h"
 #include "build/build_config.h"
 #include "components/client_update_protocol/ecdsa.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/network_time/network_time_pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -464,6 +465,9 @@ void NetworkTimeTracker::CheckTime() {
     DVLOG(1) << "tried to make fetch happen; failed";
     return;
   }
+  data_use_measurement::DataUseUserData::AttachToFetcher(
+      time_fetcher_.get(),
+      data_use_measurement::DataUseUserData::NETWORK_TIME_TRACKER);
   time_fetcher_->SaveResponseWithWriter(
       std::unique_ptr<net::URLFetcherResponseWriter>(
           new SizeLimitingStringWriter(max_response_size_)));
@@ -534,8 +538,19 @@ bool NetworkTimeTracker::UpdateTimeFromResponse() {
   base::TimeDelta resolution =
       base::TimeDelta::FromMilliseconds(1) +
       base::TimeDelta::FromSeconds(kTimeServerMaxSkewSeconds);
+
+  // Record histograms for the latency of the time query and the time delta
+  // between time fetches.
   base::TimeDelta latency = tick_clock_->NowTicks() - fetch_started_;
   UMA_HISTOGRAM_TIMES("NetworkTimeTracker.TimeQueryLatency", latency);
+  if (!last_fetched_time_.is_null()) {
+    UMA_HISTOGRAM_CUSTOM_TIMES("NetworkTimeTracker.TimeBetweenFetches",
+                               current_time - last_fetched_time_,
+                               base::TimeDelta::FromHours(1),
+                               base::TimeDelta::FromDays(7), 50);
+  }
+  last_fetched_time_ = current_time;
+
   UpdateNetworkTime(current_time, resolution, latency, tick_clock_->NowTicks());
   return true;
 }

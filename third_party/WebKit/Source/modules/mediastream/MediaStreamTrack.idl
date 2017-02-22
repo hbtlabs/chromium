@@ -47,10 +47,11 @@ enum MediaStreamTrackState {
     readonly attribute MediaStreamTrackState readyState;
     attribute EventHandler onended;
 
-    [CallWith=ExecutionContext] MediaStreamTrack clone();
+    [CallWith=ScriptState] MediaStreamTrack clone();
     [ImplementedAs=stopTrack, RaisesException] void stop();
     [RuntimeEnabled=MediaConstraints] MediaTrackConstraints getConstraints();
     [RuntimeEnabled=MediaGetSettings] MediaTrackSettings getSettings();
+
 
     // Non-standard APIs
     [MeasureAs=MediaStreamTrackRemote] readonly attribute boolean remote;

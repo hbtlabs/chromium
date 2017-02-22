@@ -13,7 +13,7 @@ function performActions()
 
 function test() 
 {
-    UI.panels.timeline._captureJSProfileSetting.set(false);
+    UI.panels.timeline._disableCaptureJSProfileSetting.set(true);
     InspectorTest.startTimeline(step1);
     function step1()
     {
@@ -28,17 +28,13 @@ function test()
 
     function step3()
     {
-        function format(record)
-        {
-            if (record.type() === TimelineModel.TimelineModel.RecordType.EvaluateScript) {
-                InspectorTest.dumpTimelineRecord(record, undefined, undefined, [
-                    "TimeStamp",
-                ]);
-                InspectorTest.printTimelineRecordProperties(record);
+        InspectorTest.timelineModel().mainThreadEvents().forEach(event => {
+            if (event.name === TimelineModel.TimelineModel.RecordType.EvaluateScript) {
+                InspectorTest.printTraceEventProperties(event);
+            } else if (event.name === TimelineModel.TimelineModel.RecordType.TimeStamp) {
+                InspectorTest.addResult(`----> ${Timeline.TimelineUIUtils.eventTitle(event)}`);
             }
-        }
-
-        InspectorTest.printTimelineRecords(null, InspectorTest.safeWrap(format));
+        });
         InspectorTest.completeTest();
     }
 }

@@ -65,6 +65,11 @@ def SanitizeLiteral(literal):
   return {
       # Rename null enumeration values to avoid a clash with the NULL macro.
       'null': 'none',
+      # Rename literals that clash with Win32 defined macros.
+      'error': 'err',
+      'mouseMoved': 'mouse_ptr_moved',
+      'Strict': 'exact',
+      'getCurrentTime': 'getCurrentAnimationTime',
       # Rename mathematical constants to avoid colliding with C macros.
       'Infinity': 'InfinityValue',
       '-Infinity': 'NegativeInfinityValue',
@@ -321,10 +326,10 @@ def SynthesizeCommandTypes(json_api):
           if 'enum' in parameter and not '$ref' in parameter:
             SynthesizeEnumType(domain, command['name'], parameter)
         parameters_type = {
-            'id': ToTitleCase(command['name']) + 'Params',
+            'id': ToTitleCase(SanitizeLiteral(command['name'])) + 'Params',
             'type': 'object',
             'description': 'Parameters for the %s command.' % ToTitleCase(
-                command['name']),
+                SanitizeLiteral(command['name'])),
             'properties': command['parameters']
         }
         domain['types'].append(parameters_type)
@@ -333,10 +338,10 @@ def SynthesizeCommandTypes(json_api):
           if 'enum' in parameter and not '$ref' in parameter:
             SynthesizeEnumType(domain, command['name'], parameter)
         result_type = {
-            'id': ToTitleCase(command['name']) + 'Result',
+            'id': ToTitleCase(SanitizeLiteral(command['name'])) + 'Result',
             'type': 'object',
             'description': 'Result for the %s command.' % ToTitleCase(
-                command['name']),
+                SanitizeLiteral(command['name'])),
             'properties': command['returns']
         }
         domain['types'].append(result_type)
@@ -494,8 +499,8 @@ def GenerateTypes(jinja_env, output_dirname, json_api):
   # Generate forward declarations for types.
   GeneratePerDomain(
       jinja_env, os.path.join(output_dirname, 'devtools', 'internal'),
-      json_api, 'domain_types_forward_declaration', ['h'],
-      lambda domain_name: 'types_forward_declaration_%s' % (domain_name, ))
+      json_api, 'domain_types_forward_declarations', ['h'],
+      lambda domain_name: 'types_forward_declarations_%s' % (domain_name, ))
   # Generate types on per-domain basis.
   GeneratePerDomain(
       jinja_env, os.path.join(output_dirname, 'devtools', 'domains'),

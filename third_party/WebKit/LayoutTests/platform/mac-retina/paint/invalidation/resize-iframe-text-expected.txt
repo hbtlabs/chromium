@@ -1,7 +1,5 @@
 {
-  "name": "Content Root Layer",
-  "bounds": [800, 800],
-  "children": [
+  "layers": [
     {
       "name": "LayoutView #document",
       "bounds": [800, 800],
@@ -36,7 +34,7 @@
         {
           "object": "LayoutBlockFlow H1",
           "rect": [8, 700, 600, 37],
-          "reason": "bounds change"
+          "reason": "became visible"
         },
         {
           "object": "LayoutText #text",
@@ -85,20 +83,24 @@
       "reason": "scroll"
     },
     {
+      "object": "HorizontalScrollbar",
+      "reason": "scroll"
+    },
+    {
+      "object": "LayoutView #document",
+      "reason": "scroll"
+    },
+    {
       "object": "LayoutBlockFlow HTML",
       "reason": "forced by layout"
     },
     {
       "object": "LayoutBlockFlow H1",
-      "reason": "bounds change"
+      "reason": "became visible"
     },
     {
       "object": "RootInlineBox",
-      "reason": "bounds change"
-    },
-    {
-      "object": "LayoutView #document",
-      "reason": "scroll"
+      "reason": "became visible"
     }
   ]
 }

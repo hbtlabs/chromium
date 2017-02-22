@@ -15,6 +15,7 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/memory/discardable_memory_allocator.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/rand_util.h"
@@ -36,6 +37,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/pepper_plugin_info.h"
 #include "content/public/common/sandbox_init.h"
+#include "content/public/common/service_manager_connection.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_platform_file.h"
 #include "ipc/ipc_sync_channel.h"
@@ -48,6 +50,9 @@
 #include "ppapi/proxy/plugin_message_filter.h"
 #include "ppapi/proxy/ppapi_messages.h"
 #include "ppapi/proxy/resource_reply_thread_registrar.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
+#include "services/ui/public/interfaces/constants.mojom.h"
 #include "third_party/WebKit/public/web/WebKit.h"
 #include "ui/base/ui_base_switches.h"
 
@@ -58,6 +63,10 @@
 #include "sandbox/win/src/sandbox.h"
 #elif defined(OS_MACOSX)
 #include "content/common/sandbox_init_mac.h"
+#endif
+
+#if BUILDFLAG(ENABLE_PEPPER_CDMS)
+#include "content/common/media/cdm_host_files.h"
 #endif
 
 #if defined(OS_WIN)
@@ -101,6 +110,11 @@ static void WarmupWindowsLocales(const ppapi::PpapiPermissions& permissions) {
 
 #endif
 
+static bool IsRunningInMash() {
+  const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
+  return cmdline->HasSwitch(switches::kIsRunningInMash);
+}
+
 namespace content {
 
 typedef int32_t (*InitializeBrokerFunc)
@@ -111,7 +125,8 @@ PpapiThread::PpapiThread(const base::CommandLine& command_line, bool is_broker)
       plugin_globals_(GetIOTaskRunner()),
       connect_instance_func_(NULL),
       local_pp_module_(base::RandInt(0, std::numeric_limits<PP_Module>::max())),
-      next_plugin_dispatcher_id_(1) {
+      next_plugin_dispatcher_id_(1),
+      field_trial_syncer_(this) {
   plugin_globals_.SetPluginProxyDelegate(this);
   plugin_globals_.set_command_line(
       command_line.GetSwitchValueASCII(switches::kPpapiFlashArgs));
@@ -130,9 +145,26 @@ PpapiThread::PpapiThread(const base::CommandLine& command_line, bool is_broker)
   // In single process, browser main loop set up the discardable memory
   // allocator.
   if (!command_line.HasSwitch(switches::kSingleProcess)) {
+    discardable_memory::mojom::DiscardableSharedMemoryManagerPtr manager_ptr;
+    if (IsRunningInMash()) {
+#if defined(USE_AURA)
+      GetServiceManagerConnection()->GetConnector()->BindInterface(
+          ui::mojom::kServiceName, &manager_ptr);
+#else
+      NOTREACHED();
+#endif
+    } else {
+      ChildThread::Get()->GetRemoteInterfaces()->GetInterface(
+          mojo::MakeRequest(&manager_ptr));
+    }
+    discardable_shared_memory_manager_ = base::MakeUnique<
+        discardable_memory::ClientDiscardableSharedMemoryManager>(
+        std::move(manager_ptr), GetIOTaskRunner());
     base::DiscardableMemoryAllocator::SetInstance(
-        ChildThreadImpl::discardable_shared_memory_manager());
+        discardable_shared_memory_manager_.get());
   }
+  field_trial_syncer_.InitFieldTrialObserving(command_line,
+                                              switches::kSingleProcess);
 }
 
 PpapiThread::~PpapiThread() {
@@ -344,6 +376,22 @@ void PpapiThread::OnLoadPlugin(const base::FilePath& path,
     }
   }
 
+#if BUILDFLAG(ENABLE_PEPPER_CDMS)
+  // Use a local instance of CdmHostFiles so that if we return early for any
+  // error, all files will closed automatically.
+  std::unique_ptr<CdmHostFiles> cdm_host_files;
+
+#if defined(OS_WIN) || defined(OS_MACOSX)
+  // Open CDM host files before the process is sandboxed.
+  if (!is_broker_ && IsCdm(path))
+    cdm_host_files = CdmHostFiles::Create(path);
+#elif defined(OS_LINUX)
+  cdm_host_files = CdmHostFiles::TakeGlobalInstance();
+  if (is_broker_ || !IsCdm(path))
+    cdm_host_files.reset();  // Close all opened files.
+#endif  // defined(OS_WIN) || defined(OS_MACOSX)
+#endif  // BUILDFLAG(ENABLE_PEPPER_CDMS)
+
 #if defined(OS_WIN)
   // If code subsequently tries to exit using abort(), force a crash (since
   // otherwise these would be silent terminations and fly under the radar).
@@ -430,6 +478,18 @@ void PpapiThread::OnLoadPlugin(const base::FilePath& path,
       ReportLoadResult(path, INIT_FAILED);
       return;
     }
+#if BUILDFLAG(ENABLE_PEPPER_CDMS)
+    // Now the process is sandboxed. Verify CDM host.
+    if (cdm_host_files) {
+      DCHECK(IsCdm(path));
+      if (!cdm_host_files->VerifyFiles(library.get(), path)) {
+        LOG(WARNING) << "CDM host verification failed.";
+        // TODO(xhwang): Add a new load result if needed.
+        ReportLoadResult(path, INIT_FAILED);
+        return;
+      }
+    }
+#endif  // BUILDFLAG(ENABLE_PEPPER_CDMS)
   }
 
   // Initialization succeeded, so keep the plugin DLL loaded.
@@ -481,6 +541,12 @@ void PpapiThread::OnHang() {
   // Intentionally hang upon the request of the browser.
   for (;;)
     base::PlatformThread::Sleep(base::TimeDelta::FromSeconds(1));
+}
+
+void PpapiThread::OnFieldTrialGroupFinalized(const std::string& trial_name,
+                                             const std::string& group_name) {
+  // IPC to the browser process to tell it the specified trial was activated.
+  Send(new PpapiHostMsg_FieldTrialActivated(trial_name));
 }
 
 bool PpapiThread::SetupChannel(base::ProcessId renderer_pid,

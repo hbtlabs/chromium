@@ -278,7 +278,14 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
                                                       GLsizei length,
                                                       GLint* params);
 
-  void BuildExtensionsString();
+  void InsertError(GLenum error, const std::string& message);
+  GLenum PopError();
+  bool FlushErrors();
+
+  bool IsEmulatedQueryTarget(GLenum target) const;
+  error::Error ProcessQueries(bool did_finish);
+
+  void UpdateTextureBinding(GLenum target, GLuint client_id, GLuint service_id);
 
   int commands_to_process_;
 
@@ -309,6 +316,7 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
   // The GL context this decoder renders to on behalf of the client.
   scoped_refptr<gl::GLSurface> surface_;
   scoped_refptr<gl::GLContext> context_;
+  bool offscreen_;
 
   // Managers
   std::unique_ptr<ImageManager> image_manager_;
@@ -340,10 +348,34 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
   // State tracking of currently bound 2D textures (client IDs)
   size_t active_texture_unit_;
-  std::vector<GLuint> bound_textures_;
+  std::unordered_map<GLenum, std::vector<GLuint>> bound_textures_;
 
-  std::vector<std::string> emulated_extensions_;
-  std::string extension_string_;
+  // Track the service-id to type of all queries for validation
+  struct QueryInfo {
+    GLenum type = GL_NONE;
+  };
+  std::unordered_map<GLuint, QueryInfo> query_info_map_;
+
+  // All queries that are waiting for their results to be ready
+  struct PendingQuery {
+    GLenum target = GL_NONE;
+    GLuint service_id = 0;
+
+    int32_t shm_id = 0;
+    uint32_t shm_offset = 0;
+    base::subtle::Atomic32 submit_count = 0;
+  };
+  std::deque<PendingQuery> pending_queries_;
+
+  // Currently active queries
+  struct ActiveQuery {
+    GLuint service_id = 0;
+    int32_t shm_id = 0;
+    uint32_t shm_offset = 0;
+  };
+  std::unordered_map<GLenum, ActiveQuery> active_queries_;
+
+  std::set<GLenum> errors_;
 
   // Cache of scratch memory
   std::vector<uint8_t> scratch_memory_;

@@ -9,11 +9,13 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/android/mojo/chrome_interface_registrar_android.h"
 #include "chrome/browser/android/seccomp_support_detector.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/common/chrome_paths.h"
+#include "chrome/common/descriptors_android.h"
 #include "components/crash/content/app/breakpad_linux.h"
 #include "components/crash/content/browser/crash_dump_manager_android.h"
 #include "components/signin/core/browser/signin_manager.h"
@@ -46,10 +48,13 @@ ChromeBrowserMainPartsAndroid::~ChromeBrowserMainPartsAndroid() {
 int ChromeBrowserMainPartsAndroid::PreCreateThreads() {
   TRACE_EVENT0("startup", "ChromeBrowserMainPartsAndroid::PreCreateThreads")
 
-  // The CrashDumpManager must be initialized before any child process is
-  // created (as they need to access it during creation). Such processes
-  // are created on the PROCESS_LAUNCHER thread, and so the manager is
-  // initialized before that thread is created.
+  // The CrashDumpManager must be registered before any child process is
+  // created (as it needs to be notified during child process
+  // creation). Such processes are created on the PROCESS_LAUNCHER
+  // thread, and so the observer is initialized and the manager
+  // registered before that thread is created.
+  breakpad::CrashDumpObserver::Create();
+
 #if defined(GOOGLE_CHROME_BUILD)
   // TODO(jcivelli): we should not initialize the crash-reporter when it was not
   // enabled. Right now if it is disabled we still generate the minidumps but we
@@ -67,7 +72,9 @@ int ChromeBrowserMainPartsAndroid::PreCreateThreads() {
   if (breakpad_enabled) {
     base::FilePath crash_dump_dir;
     PathService::Get(chrome::DIR_CRASH_DUMPS, &crash_dump_dir);
-    crash_dump_manager_.reset(new breakpad::CrashDumpManager(crash_dump_dir));
+    breakpad::CrashDumpObserver::GetInstance()->RegisterClient(
+        base::MakeUnique<breakpad::CrashDumpManager>(
+            crash_dump_dir, kAndroidMinidumpDescriptor));
   }
 
   // Auto-detect based on en-US whether locale .pak files are store uncompressed
@@ -127,9 +134,10 @@ void ChromeBrowserMainPartsAndroid::PreEarlyInitialization() {
 void ChromeBrowserMainPartsAndroid::PostBrowserStart() {
   ChromeBrowserMainParts::PostBrowserStart();
 
-  content::BrowserThread::GetBlockingPool()->PostDelayedTask(FROM_HERE,
-      base::Bind(&SeccompSupportDetector::StartDetection),
-      base::TimeDelta::FromMinutes(1));
+  base::PostDelayedTaskWithTraits(
+      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
+                     base::TaskPriority::BACKGROUND),
+      base::Bind(&ReportSeccompSupport), base::TimeDelta::FromMinutes(1));
 
   RegisterChromeJavaMojoInterfaces();
 }

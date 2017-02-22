@@ -85,6 +85,12 @@ class NET_EXPORT ClientSocketHandle {
            PoolType* pool,
            const NetLogWithSource& net_log);
 
+  // Changes the priority of the ClientSocketHandle to the passed value.
+  // This function is a no-op if |priority| is the same as the current
+  // priority, of if Init() has not been called since the last time
+  // the ClientSocketHandle was reset.
+  void SetPriority(RequestPriority priority);
+
   // An initialized handle can be reset, which causes it to return to the
   // un-initialized state.  This releases the underlying socket, which in the
   // case of a socket that still has an established connection, indicates that
@@ -114,12 +120,6 @@ class NET_EXPORT ClientSocketHandle {
   // Returns true when Init() has completed successfully.
   bool is_initialized() const { return is_initialized_; }
 
-  // Returns the time tick when Init() was called.
-  base::TimeTicks init_time() const { return init_time_; }
-
-  // Returns the time between Init() and when is_initialized() becomes true.
-  base::TimeDelta setup_time() const { return setup_time_; }
-
   // Sets the portion of LoadTimingInfo related to connection establishment, and
   // the socket id.  |is_reused| is needed because the handle may not have full
   // reuse information.  |load_timing_info| must have all default values when
@@ -127,6 +127,11 @@ class NET_EXPORT ClientSocketHandle {
   // |socket_| is NULL.
   bool GetLoadTimingInfo(bool is_reused,
                          LoadTimingInfo* load_timing_info) const;
+
+  // Dumps memory allocation stats into |stats|. |stats| can be assumed as being
+  // default initialized upon entry. Implementation overrides fields in
+  // |stats|.
+  void DumpMemoryStats(StreamSocket::SocketMemoryStats* stats) const;
 
   // Used by ClientSocketPool to initialize the ClientSocketHandle.
   //
@@ -217,8 +222,6 @@ class NET_EXPORT ClientSocketHandle {
   HttpResponseInfo ssl_error_response_info_;
   std::unique_ptr<ClientSocketHandle> pending_http_proxy_connection_;
   std::vector<ConnectionAttempt> connection_attempts_;
-  base::TimeTicks init_time_;
-  base::TimeDelta setup_time_;
 
   NetLogSource requesting_source_;
 
@@ -245,7 +248,6 @@ int ClientSocketHandle::Init(
   ResetErrorState();
   pool_ = pool;
   group_name_ = group_name;
-  init_time_ = base::TimeTicks::Now();
   int rv = pool_->RequestSocket(group_name, &socket_params, priority,
                                 respect_limits, this, callback_, net_log);
   if (rv == ERR_IO_PENDING) {

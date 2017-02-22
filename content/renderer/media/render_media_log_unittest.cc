@@ -5,6 +5,7 @@
 #include <tuple>
 
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "content/common/view_messages.h"
@@ -121,6 +122,29 @@ TEST_F(RenderMediaLogTest, BufferedExtents) {
   EXPECT_EQ(media::MediaLogEvent::LOAD, events[0].type);
   EXPECT_EQ(media::MediaLogEvent::SEEK, events[1].type);
   EXPECT_EQ(media::MediaLogEvent::BUFFERED_EXTENTS_CHANGED, events[2].type);
+}
+
+TEST_F(RenderMediaLogTest, DurationChanged) {
+  AddEvent(media::MediaLogEvent::LOAD);
+  AddEvent(media::MediaLogEvent::SEEK);
+
+  // This event is handled separately and should always appear last regardless
+  // of how many times we see it.
+  AddEvent(media::MediaLogEvent::DURATION_SET);
+  AddEvent(media::MediaLogEvent::DURATION_SET);
+  AddEvent(media::MediaLogEvent::DURATION_SET);
+
+  EXPECT_EQ(0, message_count());
+  Advance(base::TimeDelta::FromMilliseconds(1000));
+  EXPECT_EQ(1, message_count());
+
+  // Verify contents. There should only be a single buffered extents changed
+  // event.
+  std::vector<media::MediaLogEvent> events = GetMediaLogEvents();
+  ASSERT_EQ(3u, events.size());
+  EXPECT_EQ(media::MediaLogEvent::LOAD, events[0].type);
+  EXPECT_EQ(media::MediaLogEvent::SEEK, events[1].type);
+  EXPECT_EQ(media::MediaLogEvent::DURATION_SET, events[2].type);
 }
 
 }  // namespace content

@@ -63,27 +63,27 @@ class BorderData {
     return false;
   }
 
-  int borderLeftWidth() const {
+  float borderLeftWidth() const {
     if (m_left.style() == BorderStyleNone ||
         m_left.style() == BorderStyleHidden)
       return 0;
     return m_left.width();
   }
 
-  int borderRightWidth() const {
+  float borderRightWidth() const {
     if (m_right.style() == BorderStyleNone ||
         m_right.style() == BorderStyleHidden)
       return 0;
     return m_right.width();
   }
 
-  int borderTopWidth() const {
+  float borderTopWidth() const {
     if (m_top.style() == BorderStyleNone || m_top.style() == BorderStyleHidden)
       return 0;
     return m_top.width();
   }
 
-  int borderBottomWidth() const {
+  float borderBottomWidth() const {
     if (m_bottom.style() == BorderStyleNone ||
         m_bottom.style() == BorderStyleHidden)
       return 0;
@@ -92,17 +92,13 @@ class BorderData {
 
   bool operator==(const BorderData& o) const {
     return m_left == o.m_left && m_right == o.m_right && m_top == o.m_top &&
-           m_bottom == o.m_bottom && m_image == o.m_image &&
-           m_topLeft == o.m_topLeft && m_topRight == o.m_topRight &&
-           m_bottomLeft == o.m_bottomLeft && m_bottomRight == o.m_bottomRight;
+           m_bottom == o.m_bottom && m_image == o.m_image && radiiEqual(o);
   }
 
   bool visuallyEqual(const BorderData& o) const {
     return m_left.visuallyEqual(o.m_left) && m_right.visuallyEqual(o.m_right) &&
            m_top.visuallyEqual(o.m_top) && m_bottom.visuallyEqual(o.m_bottom) &&
-           m_image == o.m_image && m_topLeft == o.m_topLeft &&
-           m_topRight == o.m_topRight && m_bottomLeft == o.m_bottomLeft &&
-           m_bottomRight == o.m_bottomRight;
+           m_image == o.m_image && radiiEqual(o);
   }
 
   bool visualOverflowEqual(const BorderData& o) const {
@@ -116,6 +112,11 @@ class BorderData {
            borderTopWidth() == o.borderTopWidth() &&
            borderRightWidth() == o.borderRightWidth() &&
            borderBottomWidth() == o.borderBottomWidth();
+  }
+
+  bool radiiEqual(const BorderData& o) const {
+    return m_topLeft == o.m_topLeft && m_topRight == o.m_topRight &&
+           m_bottomLeft == o.m_bottomLeft && m_bottomRight == o.m_bottomRight;
   }
 
   const BorderValue& left() const { return m_left; }

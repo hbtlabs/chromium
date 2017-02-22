@@ -19,6 +19,7 @@
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "net/base/sockaddr_storage.h"
+#include "net/base/trace_constants.h"
 
 namespace net {
 
@@ -59,7 +60,10 @@ int MapConnectError(int os_error) {
 
 SocketPosix::SocketPosix()
     : socket_fd_(kInvalidSocket),
+      accept_socket_watcher_(FROM_HERE),
+      read_socket_watcher_(FROM_HERE),
       read_buf_len_(0),
+      write_socket_watcher_(FROM_HERE),
       write_buf_len_(0),
       waiting_connect_(false) {}
 
@@ -369,7 +373,8 @@ void SocketPosix::DetachFromThread() {
 }
 
 void SocketPosix::OnFileCanReadWithoutBlocking(int fd) {
-  TRACE_EVENT0("net", "SocketPosix::OnFileCanReadWithoutBlocking");
+  TRACE_EVENT0(kNetTracingCategory,
+               "SocketPosix::OnFileCanReadWithoutBlocking");
   DCHECK(!accept_callback_.is_null() || !read_callback_.is_null());
   if (!accept_callback_.is_null()) {
     AcceptCompleted();

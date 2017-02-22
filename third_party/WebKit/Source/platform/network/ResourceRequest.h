@@ -45,14 +45,14 @@ namespace blink {
 
 enum class WebCachePolicy;
 
-enum ResourceRequestBlockedReason {
-  ResourceRequestBlockedReasonCSP,
-  ResourceRequestBlockedReasonMixedContent,
-  ResourceRequestBlockedReasonOrigin,
-  ResourceRequestBlockedReasonInspector,
-  ResourceRequestBlockedReasonSubresourceFilter,
-  ResourceRequestBlockedReasonOther,
-  ResourceRequestBlockedReasonNone
+enum class ResourceRequestBlockedReason {
+  CSP,
+  MixedContent,
+  Origin,
+  Inspector,
+  SubresourceFilter,
+  Other,
+  None
 };
 
 enum InputToLoadPerfMetricReportPolicy {
@@ -271,9 +271,9 @@ class PLATFORM_EXPORT ResourceRequest final {
     m_fetchRedirectMode = redirect;
   }
 
-  WebURLRequest::LoFiState loFiState() const { return m_loFiState; }
-  void setLoFiState(WebURLRequest::LoFiState loFiState) {
-    m_loFiState = loFiState;
+  WebURLRequest::PreviewsState previewsState() const { return m_previewsState; }
+  void setPreviewsState(WebURLRequest::PreviewsState previewsState) {
+    m_previewsState = previewsState;
   }
 
   bool cacheControlContainsNoCache() const;
@@ -310,9 +310,12 @@ class PLATFORM_EXPORT ResourceRequest final {
   void setNavigationStartTime(double);
   double navigationStartTime() const { return m_navigationStart; }
 
- private:
-  void initialize(const KURL&);
+  void setIsSameDocumentNavigation(bool isSameDocument) {
+    m_isSameDocumentNavigation = isSameDocument;
+  }
+  bool isSameDocumentNavigation() const { return m_isSameDocumentNavigation; }
 
+ private:
   const CacheControlHeader& cacheControlHeader() const;
 
   bool needsHTTPOrigin() const;
@@ -346,12 +349,13 @@ class PLATFORM_EXPORT ResourceRequest final {
   WebURLRequest::FetchRequestMode m_fetchRequestMode;
   WebURLRequest::FetchCredentialsMode m_fetchCredentialsMode;
   WebURLRequest::FetchRedirectMode m_fetchRedirectMode;
-  WebURLRequest::LoFiState m_loFiState;
+  WebURLRequest::PreviewsState m_previewsState;
   ReferrerPolicy m_referrerPolicy;
   bool m_didSetHTTPReferrer;
   bool m_checkForBrowserSideNavigation;
   double m_uiStartTime;
   bool m_isExternalRequest;
+  bool m_isSameDocumentNavigation;
   InputToLoadPerfMetricReportPolicy m_inputPerfMetricReportPolicy;
 
   mutable CacheControlHeader m_cacheControlHeaderCache;
@@ -397,7 +401,7 @@ struct CrossThreadResourceRequestData {
   WebURLRequest::FetchRequestMode m_fetchRequestMode;
   WebURLRequest::FetchCredentialsMode m_fetchCredentialsMode;
   WebURLRequest::FetchRedirectMode m_fetchRedirectMode;
-  WebURLRequest::LoFiState m_loFiState;
+  WebURLRequest::PreviewsState m_previewsState;
   ReferrerPolicy m_referrerPolicy;
   bool m_didSetHTTPReferrer;
   bool m_checkForBrowserSideNavigation;

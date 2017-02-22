@@ -15,8 +15,12 @@ PassRefPtr<const ShapeResult> CachingWordShapeIterator::shapeWordWithoutSpacing(
   if (cacheEntry && cacheEntry->m_shapeResult)
     return cacheEntry->m_shapeResult;
 
-  HarfBuzzShaper shaper(wordRun);
-  RefPtr<const ShapeResult> shapeResult = shaper.shapeResult(font);
+  unsigned wordLength = 0;
+  std::unique_ptr<UChar[]> wordText = wordRun.normalizedUTF16(&wordLength);
+
+  HarfBuzzShaper shaper(wordText.get(), wordLength);
+  RefPtr<const ShapeResult> shapeResult =
+      shaper.shape(font, wordRun.direction());
   if (!shapeResult)
     return nullptr;
 

@@ -110,7 +110,7 @@ static KeyValueMap retrieveKeyValuePairs(SharedBufferChunkReader* buffer) {
       if (keyValuePairs.find(key) != keyValuePairs.end())
         DVLOG(1) << "Key duplicate found in MIME header. Key is '" << key
                  << "', previous value replaced.";
-      keyValuePairs.add(key, value.toString().stripWhiteSpace());
+      keyValuePairs.insert(key, value.toString().stripWhiteSpace());
       key = String();
       value.clear();
     }
@@ -226,7 +226,7 @@ bool MHTMLParser::parseArchiveWithHeader(
         parseNextPart(*header, String(), String(), endOfArchiveReached);
     if (!resource)
       return false;
-    resources.append(resource);
+    resources.push_back(resource);
     return true;
   }
 
@@ -258,7 +258,7 @@ bool MHTMLParser::parseArchiveWithHeader(
       DVLOG(1) << "Failed to parse MHTML part.";
       return false;
     }
-    resources.append(resource);
+    resources.push_back(resource);
   }
   return true;
 }

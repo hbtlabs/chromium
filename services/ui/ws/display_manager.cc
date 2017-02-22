@@ -8,7 +8,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
-#include "services/ui/display/platform_screen.h"
+#include "services/ui/ws/cursor_location_manager.h"
 #include "services/ui/ws/display.h"
 #include "services/ui/ws/display_binding.h"
 #include "services/ui/ws/event_dispatcher.h"
@@ -45,9 +45,18 @@ UserDisplayManager* DisplayManager::GetUserDisplayManager(
     const UserId& user_id) {
   if (!user_display_managers_.count(user_id)) {
     user_display_managers_[user_id] =
-        base::MakeUnique<UserDisplayManager>(this, window_server_, user_id);
+        base::MakeUnique<UserDisplayManager>(window_server_, user_id);
   }
   return user_display_managers_[user_id].get();
+}
+
+CursorLocationManager* DisplayManager::GetCursorLocationManager(
+    const UserId& user_id) {
+  if (!cursor_location_managers_.count(user_id)) {
+    cursor_location_managers_[user_id] =
+        base::MakeUnique<CursorLocationManager>();
+  }
+  return cursor_location_managers_[user_id].get();
 }
 
 void DisplayManager::AddDisplay(Display* display) {
@@ -60,10 +69,11 @@ void DisplayManager::DestroyDisplay(Display* display) {
     pending_displays_.erase(display);
   } else {
     for (const auto& pair : user_display_managers_)
-      pair.second->OnWillDestroyDisplay(display);
+      pair.second->OnWillDestroyDisplay(display->GetId());
 
     DCHECK(displays_.count(display));
     displays_.erase(display);
+    window_server_->OnDisplayDestroyed(display);
   }
   delete display;
 
@@ -90,7 +100,7 @@ std::set<const Display*> DisplayManager::displays() const {
 
 void DisplayManager::OnDisplayUpdate(Display* display) {
   for (const auto& pair : user_display_managers_)
-    pair.second->OnDisplayUpdate(display);
+    pair.second->OnDisplayUpdate(display->ToDisplay());
 }
 
 Display* DisplayManager::GetDisplayContaining(const ServerWindow* window) {
@@ -180,8 +190,6 @@ void DisplayManager::OnDisplayAdded(int64_t id,
 
   ws::Display* display = new ws::Display(window_server_);
   display->Init(params, nullptr);
-
-  window_server_->delegate()->UpdateTouchTransforms();
 }
 
 void DisplayManager::OnDisplayRemoved(int64_t id) {

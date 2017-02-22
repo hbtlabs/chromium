@@ -29,7 +29,7 @@
 #import "ui/base/cocoa/controls/hyperlink_button_cell.h"
 #import "ui/base/cocoa/controls/hyperlink_text_view.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/native_theme/native_theme_mac.h"
+#include "ui/native_theme/native_theme.h"
 
 namespace {
 
@@ -142,14 +142,16 @@ NSTextField* AddTextField(
 @implementation ProfileSigninConfirmationViewController
 
 - (id)initWithBrowser:(Browser*)browser
-             username:(const std::string&)username
-             delegate:(ui::ProfileSigninConfirmationDelegate*)delegate
-  closeDialogCallback:(const base::Closure&)closeDialogCallback
- offerProfileCreation:(bool)offer {
+                username:(const std::string&)username
+                delegate:
+                    (std::unique_ptr<ui::ProfileSigninConfirmationDelegate>)
+                        delegate
+     closeDialogCallback:(const base::Closure&)closeDialogCallback
+    offerProfileCreation:(bool)offer {
   if ((self = [super initWithNibName:nil bundle:nil])) {
     browser_ = browser;
     username_ = username;
-    delegate_ = delegate;
+    delegate_ = std::move(delegate);
     closeDialogCallback_ = closeDialogCallback;
     offerProfileCreation_ = offer;
   }
@@ -188,7 +190,7 @@ NSTextField* AddTextField(
 
   // OK button.
   [self addButton:okButton_
-        withTitle:IDS_ENTERPRISE_SIGNIN_CONTINUE_NEW_STYLE
+        withTitle:IDS_ENTERPRISE_SIGNIN_CONTINUE
            target:self
            action:@selector(ok:)
    shouldAutoSize:YES];
@@ -214,7 +216,7 @@ NSTextField* AddTextField(
   // Create Profile link.
   if (offerProfileCreation_) {
     [self addButton:createProfileButton_
-          withTitle:IDS_ENTERPRISE_SIGNIN_CREATE_NEW_PROFILE_NEW_STYLE
+          withTitle:IDS_ENTERPRISE_SIGNIN_CREATE_NEW_PROFILE
              target:self
              action:@selector(createProfile:)
      shouldAutoSize:YES];
@@ -224,7 +226,7 @@ NSTextField* AddTextField(
   titleField_.reset(
       [AddTextField([self view],
                     l10n_util::GetStringUTF16(
-                        IDS_ENTERPRISE_SIGNIN_TITLE_NEW_STYLE),
+                        IDS_ENTERPRISE_SIGNIN_TITLE),
                     chrome_style::kTitleFontStyle) retain]);
   [titleField_ setFrame:ComputeFrame(
       [titleField_ attributedStringValue], 0.0, 0.0)];
@@ -249,13 +251,13 @@ NSTextField* AddTextField(
   [promptBox_
       setBorderColor:skia::SkColorToCalibratedNSColor(
                          ui::GetSigninConfirmationPromptBarColor(
-                             ui::NativeThemeMac::instance(),
+                             ui::NativeTheme::GetInstanceForNativeUi(),
                              ui::kSigninConfirmationPromptBarBorderAlpha))];
   [promptBox_ setBorderWidth:kDialogAlertBarBorderWidth];
   [promptBox_
       setFillColor:skia::SkColorToCalibratedNSColor(
                        ui::GetSigninConfirmationPromptBarColor(
-                           ui::NativeThemeMac::instance(),
+                           ui::NativeTheme::GetInstanceForNativeUi(),
                            ui::kSigninConfirmationPromptBarBackgroundAlpha))];
   [promptBox_ setBoxType:NSBoxCustom];
   [promptBox_ setTitlePosition:NSNoTitle];
@@ -268,7 +270,7 @@ NSTextField* AddTextField(
   const base::string16 username = base::ASCIIToUTF16(username_);
   const base::string16 prompt_text =
       l10n_util::GetStringFUTF16(
-          IDS_ENTERPRISE_SIGNIN_ALERT_NEW_STYLE,
+          IDS_ENTERPRISE_SIGNIN_ALERT,
           domain, &offset);
   promptField_.reset(
       [AddTextField(promptBox_, prompt_text, chrome_style::kTextFontStyle)
@@ -294,8 +296,8 @@ NSTextField* AddTextField(
   const base::string16 explanation_text =
       l10n_util::GetStringFUTF16(
           offerProfileCreation_ ?
-          IDS_ENTERPRISE_SIGNIN_EXPLANATION_WITH_PROFILE_CREATION_NEW_STYLE :
-          IDS_ENTERPRISE_SIGNIN_EXPLANATION_WITHOUT_PROFILE_CREATION_NEW_STYLE,
+          IDS_ENTERPRISE_SIGNIN_EXPLANATION_WITH_PROFILE_CREATION :
+          IDS_ENTERPRISE_SIGNIN_EXPLANATION_WITHOUT_PROFILE_CREATION,
           username, learn_more_text, &offsets);
   // HyperlinkTextView requires manually inserting the link text
   // into the middle of the message text.  To do this we slice out
@@ -376,7 +378,7 @@ NSTextField* AddTextField(
 - (IBAction)cancel:(id)sender {
   if (delegate_) {
     delegate_->OnCancelSignin();
-    delegate_ = NULL;
+    delegate_ = nullptr;
     closeDialogCallback_.Run();
   }
 }
@@ -384,7 +386,7 @@ NSTextField* AddTextField(
 - (IBAction)ok:(id)sender {
   if (delegate_) {
     delegate_->OnContinueSignin();
-    delegate_ = NULL;
+    delegate_ = nullptr;
     closeDialogCallback_.Run();
   }
 }
@@ -392,7 +394,7 @@ NSTextField* AddTextField(
 - (IBAction)close:(id)sender {
   if (delegate_) {
     delegate_->OnCancelSignin();
-    delegate_ = NULL;
+    delegate_ = nullptr;
   }
   closeDialogCallback_.Run();
 }
@@ -400,7 +402,7 @@ NSTextField* AddTextField(
 - (IBAction)createProfile:(id)sender {
   if (delegate_) {
     delegate_->OnSigninWithNewProfile();
-    delegate_ = NULL;
+    delegate_ = nullptr;
     closeDialogCallback_.Run();
   }
 }
@@ -437,22 +439,6 @@ NSTextField* AddTextField(
   [[self view] addSubview:button];
   if (shouldAutoSize)
     [GTMUILocalizerAndLayoutTweaker sizeToFitView:button];
-}
-
-@end
-
-@implementation ProfileSigninConfirmationViewController (TestingAPI)
-
-- (ui::ProfileSigninConfirmationDelegate*)delegate {
-  return delegate_;
-}
-
-- (NSButton*)createProfileButton {
-  return createProfileButton_.get();
-}
-
-- (NSTextView*)explanationField {
-  return explanationField_.get();
 }
 
 @end

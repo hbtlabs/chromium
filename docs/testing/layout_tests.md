@@ -5,6 +5,10 @@ limited to layout and rendering. In general, layout tests involve loading pages
 in a test renderer (`content_shell`) and comparing the rendered output or
 JavaScript output against an expected output file.
 
+This document covers running and debugging existing layout tests. See the
+[Writing Layout Tests documentation](./writing_layout_tests.md) if you find
+yourself writing layout tests.
+
 [TOC]
 
 ## Running Layout Tests
@@ -62,15 +66,19 @@ Tests marked as `[ Skip ]` in
 [TestExpectations](../../third_party/WebKit/LayoutTests/TestExpectations)
 won't be run at all, generally because they cause some intractable tool error.
 To force one of them to be run, either rename that file or specify the skipped
-test as the only one on the command line (see below).
+test as the only one on the command line (see below). Read the
+[Layout Test Expectations documentation](./layout_test_expectations.md) to learn
+more about TestExpectations and related files.
 
-Note that currently only the tests listed in
+*** promo
+Currently only the tests listed in
 [SmokeTests](../../third_party/WebKit/LayoutTests/SmokeTests)
 are run on the Android bots, since running all layout tests takes too long on
 Android (and may still have some infrastructure issues). Most developers focus
 their Blink testing on Linux. We rely on the fact that the Linux and Android
 behavior is nearly identical for scenarios outside those covered by the smoke
 tests.
+***
 
 To run only some of the tests, specify their directories or filenames as
 arguments to `run_webkit_tests.py` relative to the layout test directory
@@ -176,12 +184,10 @@ A row of dots in the script's output indicates one or more tests that passed.
 ## Test expectations
 
 The
-[TestExpectations](../../WebKit/LayoutTests/TestExpectations) file (and related
-files, including
-[skia_test_expectations.txt](../../skia/skia_test_expectations.txt))
-contains the list of all known layout test failures. See
-[Test Expectations](./layout_test_expectations.md)
-for more on this.
+[TestExpectations](../../third_party/WebKit/LayoutTests/TestExpectations) file (and related
+files) contains the list of all known layout test failures. See the
+[Layout Test Expectations documentation](./layout_test_expectations.md) for more
+on this.
 
 ## Testing Runtime Flags
 
@@ -201,7 +207,7 @@ There are two ways to run layout tests with additional command-line arguments:
   suppressions in this file override the main TestExpectations file.
 
 * Using a *virtual test suite* defined in
-  [LayoutTests/VirtualTestSuites](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/LayoutTests/VirtualTestSuites).
+  [LayoutTests/VirtualTestSuites](../../third_party/WebKit/LayoutTests/VirtualTestSuites).
   A virtual test suite runs a subset of layout tests under a specific path with
   additional flags. For example, you could test a (hypothetical) new mode for
   repainting using the following virtual test suite:
@@ -275,95 +281,6 @@ When creating a new layout test bug, please set the following properties:
 You can also use the _Layout Test Failure_ template, which will pre-set these
 labels for you.
 
-## Writing Layout Tests
-
-###  Pixel Tests
-
-TODO: Write documentation here.
-
-### Reference Tests
-
-TODO: Write documentation here.
-
-### Script Tests
-
-These tests use a JavaScript test harness and test cases written in script to
-exercise features and make assertions about the behavior. Generally, new tests
-are written using the [testharness.js](https://github.com/w3c/testharness.js/)
-test harness, which is also heavily used in the cross-vendor
-[web-platform-tests](https://github.com/w3c/web-platform-tests) project. Tests
-written with testharness.js generally look something like the following:
-
-```html
-<!DOCTYPE html>
-<script src="/resources/testharness.js"></script>
-<script src="/resources/testharnessreport.js"></script>
-<script>
-test(t => {
-  var x = true;
-  assert_true(x);
-}, "Truth is true.");
-</script>
-```
-
-Many older tests are written using the **js-test**
-(`LayoutTests/resources/js-test.js`) test harness. This harness is
-**deprecated**, and should not be used for new tests. The tests call
-`testRunner.dumpAsText()` to signal that the page content should be dumped and
-compared against an \*-expected.txt file, and optionally
-`testRunner.waitUntilDone()` and `testRunner.notifyDone()` for asynchronous
-tests.
-
-### Tests that use a HTTP Server
-
-By default, tests are loaded as if via `file:` URLs. Some web platform features
-require tests served via HTTP or HTTPS, for example relative paths (`src=/foo`)
-or features restricted to secure protocols.
-
-HTTP tests are those tests that are under `LayoutTests/http/tests` (or virtual
-variants). Use a locally running HTTP server (Apache) to run. Tests are served
-off of ports 8000, 8080 for HTTP and 8443 for HTTPS. If you run the tests using
-`run-webkit-tests`, the server will be started automatically.To run the server
-manually to reproduce or debug a failure:
-
-```bash
-cd src/third_party/WebKit/Tools/Scripts
-run-blink-httpd start
-```
-
-The layout tests will be served from `http://127.0.0.1:8000`. For example, to
-run the test `http/tests/serviceworker/chromium/service-worker-allowed.html`,
-navigate to
-`http://127.0.0.1:8000/serviceworker/chromium/service-worker-allowed.html`. Some
-tests will behave differently if you go to 127.0.0.1 instead of localhost, so
-use 127.0.0.1.
-
-To kill the server, run `run-blink-httpd --server stop`, or just use `taskkill`
-or the Task Manager on Windows, and `killall` or Activity Monitor on MacOS.
-
-The test server sets up an alias to `LayoutTests/resources` directory. In HTTP
-tests, you can access the testing framework at e.g.
-`src="/js-test-resources/js-test.js"`.
-
-### Writing tests that need to paint, raster, or draw a frame of intermediate output
-
-A layout test does not actually draw frames of output until the test exits. If
-it is required to generate a painted frame, then use
-`window.testRunner.displayAsyncThen`, which will run the machinery to put up a
-frame, then call the passed callback. There is also a library at
-`fast/repaint/resources/text-based-repaint.js` to help with writing paint
-invalidation and repaint tests.
-
-#### Layout test support for `testRunner`
-
-Some layout tests rely on the testRunner object to expose configuration for
-mocking the platform. This is provided in content_shell, here's a UML diagram of
-testRunner bindings configuring platform implementation:
-
-[![UML of testRunner bindings configuring platform implementation](https://docs.google.com/drawings/u/1/d/1KNRNjlxK0Q3Tp8rKxuuM5mpWf4OJQZmvm9_kpwu_Wwg/export/svg?id=1KNRNjlxK0Q3Tp8rKxuuM5mpWf4OJQZmvm9_kpwu_Wwg&pageid=p)](https://docs.google.com/drawings/d/1KNRNjlxK0Q3Tp8rKxuuM5mpWf4OJQZmvm9_kpwu_Wwg/edit)
-
-[Writing reliable layout tests](https://docs.google.com/document/d/1Yl4SnTLBWmY1O99_BTtQvuoffP8YM9HZx2YPkEsaduQ/edit)
-
 ## Debugging Layout Tests
 
 After the layout tests run, you should get a summary of tests that pass or fail.
@@ -405,10 +322,10 @@ finding the problem.
 * If you're lucky, your test is one that runs properly when you navigate to it
   in content_shell normally. In that case, build the Debug content_shell
   project, fire it up in your favorite debugger, and load the test file either
-  from a file:// URL.
+  from a `file:` URL.
     * You'll probably be starting and stopping the content_shell a lot. In VS,
       to save navigating to the test every time, you can set the URL to your
-      test (file: or http:) as the command argument in the Debugging section of
+      test (`file:` or `http:`) as the command argument in the Debugging section of
       the content_shell project Properties.
     * If your test contains a JS call, DOM manipulation, or other distinctive
       piece of code that you think is failing, search for that in the Chrome
@@ -419,7 +336,7 @@ finding the problem.
 * If your test only works in full layout-test mode, or if you find it simpler to
   debug without all the overhead of an interactive session, start the
   content_shell with the command-line flag `--run-layout-test`, followed by the
-  URL (file: or http:) to your test. More information about running layout tests
+  URL (`file:` or `http:`) to your test. More information about running layout tests
   in content_shell can be found [here](./layout_tests_in_content_shell.md).
     * In VS, you can do this in the Debugging section of the content_shell
       project Properties.
@@ -505,7 +422,7 @@ machine?
 * Open `http://localhost:9222` in a stable/beta/canary Chrome, click the single
   link to open the devtools with the test loaded.
 * You may need to replace devtools.html with inspector.html in your URL (or you
-  can use local chrome inspection of content_shell from chrome://inspect
+  can use local chrome inspection of content_shell from `chrome://inspect`
   instead)
 * In the loaded devtools, set any required breakpoints and execute `test()` in
   the console to actually start the test.
@@ -545,11 +462,10 @@ test is being re-baselined. If this is a special case (i.e., something we've
 decided to be different with upstream), please put a README file next to the new
 expected output explaining the difference.
 
-## W3C Tests
+## web-platform-tests
 
-In addition to layout tests developed and run just by the Blink team, there are
-also W3C conformance tests. For more info, see
-[Importing the W3C Tests](https://www.chromium.org/blink/importing-the-w3c-tests).
+In addition to layout tests developed and run just by the Blink team, there is
+also a shared test suite, see [web-platform-tests](./web_platform_tests.md).
 
 ## Known Issues
 

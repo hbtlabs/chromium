@@ -12,11 +12,10 @@
 #include "ash/common/shelf/shelf_constants.h"
 #include "ash/common/shelf/shelf_view.h"
 #include "ash/common/shelf/wm_shelf.h"
-#include "ash/common/shelf/wm_shelf_util.h"
+#include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "grit/ash_resources.h"
 #include "skia/ext/image_operations.h"
-#include "third_party/skia/include/core/SkPaint.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/layer.h"
@@ -61,13 +60,13 @@ const int kIconPaddingVerticalMD = 8;
 
 // Paints an activity indicator on |canvas| whose |size| is specified in DIP.
 void PaintIndicatorOnCanvas(gfx::Canvas* canvas, const gfx::Size& size) {
-  SkPaint paint;
-  paint.setColor(kIndicatorColor);
-  paint.setFlags(SkPaint::kAntiAlias_Flag);
+  cc::PaintFlags flags;
+  flags.setColor(kIndicatorColor);
+  flags.setFlags(cc::PaintFlags::kAntiAlias_Flag);
   canvas->DrawCircle(
       gfx::Point(size.width() / 2,
                  size.height() - kIndicatorOffsetFromBottom - kIndicatorRadius),
-      kIndicatorRadius, paint);
+      kIndicatorRadius, flags);
 }
 
 // Simple AnimationDelegate that owns a single ThrobAnimation instance to
@@ -208,7 +207,7 @@ class ShelfButton::BarView : public views::ImageView,
           animating_ ? ShelfButtonAnimation::GetInstance()->GetAnimation()
                      : 1.0;
       double scale = .35 + .65 * animation;
-      if (IsHorizontalAlignment(wm_shelf_->GetAlignment())) {
+      if (wm_shelf_->IsHorizontalAlignment()) {
         int width = base_bounds_.width() * scale;
         bounds.set_width(std::min(width, kIconSize));
         int x_offset = (base_bounds_.width() - bounds.width()) / 2;
@@ -272,7 +271,7 @@ ShelfButton::ShelfButton(InkDropButtonListener* listener, ShelfView* shelf_view)
   icon_shadows_.assign(kShadows, kShadows + arraysize(kShadows));
 
   // TODO: refactor the layers so each button doesn't require 2.
-  icon_view_->SetPaintToLayer(true);
+  icon_view_->SetPaintToLayer();
   icon_view_->layer()->SetFillsBoundsOpaquely(false);
   icon_view_->SetHorizontalAlignment(views::ImageView::CENTER);
   icon_view_->SetVerticalAlignment(views::ImageView::LEADING);
@@ -403,8 +402,7 @@ void ShelfButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 void ShelfButton::Layout() {
   const gfx::Rect button_bounds(GetContentsBounds());
   WmShelf* wm_shelf = shelf_view_->wm_shelf();
-  const bool is_horizontal_shelf =
-      IsHorizontalAlignment(wm_shelf->GetAlignment());
+  const bool is_horizontal_shelf = wm_shelf->IsHorizontalAlignment();
   const int icon_pad = ash::MaterialDesignController::IsShelfMaterial()
                            ? (is_horizontal_shelf ? kIconPaddingHorizontalMD
                                                   : kIconPaddingVerticalMD)
@@ -442,6 +440,7 @@ void ShelfButton::Layout() {
       gfx::Rect(button_bounds.x() + x_offset, button_bounds.y() + y_offset,
                 icon_width, icon_height);
   icon_view_bounds.Inset(insets_shadows);
+  icon_view_bounds.AdjustToFit(gfx::Rect(size()));
   icon_view_->SetBoundsRect(icon_view_bounds);
 
   // Icon size has been incorrect when running
@@ -472,9 +471,8 @@ void ShelfButton::OnBlur() {
 void ShelfButton::OnPaint(gfx::Canvas* canvas) {
   CustomButton::OnPaint(canvas);
   if (HasFocus()) {
-    gfx::Rect paint_bounds(GetLocalBounds());
-    paint_bounds.Inset(1, 1, 1, 1);
-    canvas->DrawSolidFocusRect(paint_bounds, kFocusBorderColor);
+    canvas->DrawSolidFocusRect(gfx::RectF(GetLocalBounds()), kFocusBorderColor,
+                               kFocusBorderThickness);
   }
 }
 
@@ -536,7 +534,7 @@ void ShelfButton::NotifyClick(const ui::Event& event) {
 void ShelfButton::UpdateState() {
   UpdateBar();
   const bool is_horizontal_shelf =
-      IsHorizontalAlignment(shelf_view_->wm_shelf()->GetAlignment());
+      shelf_view_->wm_shelf()->IsHorizontalAlignment();
   icon_view_->SetHorizontalAlignment(is_horizontal_shelf
                                          ? views::ImageView::CENTER
                                          : views::ImageView::LEADING);
@@ -576,7 +574,7 @@ void ShelfButton::UpdateBar() {
       image = *rb->GetImageNamed(bar_id).ToImageSkia();
     }
     ShelfAlignment shelf_alignment = wm_shelf->GetAlignment();
-    if (!IsHorizontalAlignment(shelf_alignment)) {
+    if (!wm_shelf->IsHorizontalAlignment()) {
       image = gfx::ImageSkiaOperations::CreateRotatedImage(
           image, shelf_alignment == SHELF_ALIGNMENT_LEFT
                      ? SkBitmapOperations::ROTATION_90_CW

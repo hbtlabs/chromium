@@ -6,29 +6,34 @@
 
 #include "platform/geometry/FloatRect.h"
 #include "platform/graphics/GraphicsContext.h"
-#include "third_party/skia/include/core/SkPicture.h"
+#include "platform/graphics/paint/PaintRecord.h"
 
 namespace blink {
 
-void PaintGeneratedImage::draw(SkCanvas* canvas,
-                               const SkPaint& paint,
+void PaintGeneratedImage::draw(PaintCanvas* canvas,
+                               const PaintFlags& flags,
                                const FloatRect& destRect,
                                const FloatRect& srcRect,
                                RespectImageOrientationEnum,
-                               ImageClampingMode) {
-  SkAutoCanvasRestore ar(canvas, true);
+                               ImageClampingMode,
+                               const ColorBehavior& colorBehavior) {
+  // TODO(ccameron): This function should not ignore |colorBehavior|.
+  // https://crbug.com/672306
+  PaintCanvasAutoRestore ar(canvas, true);
   canvas->clipRect(destRect);
   canvas->translate(destRect.x(), destRect.y());
   if (destRect.size() != srcRect.size())
     canvas->scale(destRect.width() / srcRect.width(),
                   destRect.height() / srcRect.height());
   canvas->translate(-srcRect.x(), -srcRect.y());
-  canvas->drawPicture(m_picture.get(), nullptr, &paint);
+  canvas->drawPicture(m_record.get(), nullptr, &flags);
 }
 
 void PaintGeneratedImage::drawTile(GraphicsContext& context,
                                    const FloatRect& srcRect) {
-  context.drawPicture(m_picture.get());
+  // TODO(ccameron): This function should not ignore |context|'s color behavior.
+  // https://crbug.com/672306
+  context.drawRecord(m_record.get());
 }
 
 }  // namespace blink

@@ -116,6 +116,8 @@ const base::FilePath::CharType kHelperProcessExecutablePath[] = FPL("chrome");
 #if defined(OS_MACOSX)
 const base::FilePath::CharType kFrameworkName[] =
     FPL(PRODUCT_STRING " Framework.framework");
+const base::FilePath::CharType kFrameworkExecutableName[] =
+    FPL(PRODUCT_STRING " Framework");
 #endif  // OS_MACOSX
 
 #if defined(OS_WIN)
@@ -161,8 +163,6 @@ const base::FilePath::CharType kPreviewsOptOutDBFilename[] =
 const base::FilePath::CharType kProtectedPreferencesFilenameDeprecated[] =
     FPL("Protected Preferences");
 const base::FilePath::CharType kReadmeFilename[] = FPL("README");
-const base::FilePath::CharType kSafeBrowsingBaseFilename[] =
-    FPL("Safe Browsing");
 const base::FilePath::CharType kSecurePreferencesFilename[] =
     FPL("Secure Preferences");
 const base::FilePath::CharType kServiceStateFileName[] = FPL("Service State");

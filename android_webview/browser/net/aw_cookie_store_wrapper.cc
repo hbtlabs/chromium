@@ -7,7 +7,7 @@
 #include <string>
 
 #include "android_webview/browser/net/init_native_callback.h"
-#include "base/memory/ref_counted_delete_on_message_loop.h"
+#include "base/memory/ref_counted_delete_on_sequence.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "url/gurl.h"
 
@@ -46,12 +46,12 @@ class SubscriptionWrapper {
   // underlying subscription to the real CookieStore, and posting notifications
   // back to |callback_list_|.
   class NestedSubscription
-      : public base::RefCountedDeleteOnMessageLoop<NestedSubscription> {
+      : public base::RefCountedDeleteOnSequence<NestedSubscription> {
    public:
     NestedSubscription(const GURL& url,
                        const std::string& name,
                        base::WeakPtr<SubscriptionWrapper> subscription_wrapper)
-        : base::RefCountedDeleteOnMessageLoop<NestedSubscription>(
+        : base::RefCountedDeleteOnSequence<NestedSubscription>(
               GetCookieStoreTaskRunner()),
           subscription_wrapper_(subscription_wrapper),
           client_task_runner_(base::ThreadTaskRunnerHandle::Get()) {
@@ -60,7 +60,7 @@ class SubscriptionWrapper {
     }
 
    private:
-    friend class base::RefCountedDeleteOnMessageLoop<NestedSubscription>;
+    friend class base::RefCountedDeleteOnSequence<NestedSubscription>;
     friend class base::DeleteHelper<NestedSubscription>;
 
     ~NestedSubscription() {}
@@ -121,13 +121,11 @@ void SetCookieWithDetailsAsyncOnCookieThread(
     bool secure,
     bool http_only,
     net::CookieSameSite same_site,
-    bool enforce_strict_secure,
     net::CookiePriority priority,
     const net::CookieStore::SetCookiesCallback& callback) {
   GetCookieStore()->SetCookieWithDetailsAsync(
       url, name, value, domain, path, creation_time, expiration_time,
-      last_access_time, secure, http_only, same_site, enforce_strict_secure,
-      priority, callback);
+      last_access_time, secure, http_only, same_site, priority, callback);
 }
 
 void GetCookiesWithOptionsAsyncOnCookieThread(
@@ -222,14 +220,13 @@ void AwCookieStoreWrapper::SetCookieWithDetailsAsync(
     bool secure,
     bool http_only,
     net::CookieSameSite same_site,
-    bool enforce_strict_secure,
     net::CookiePriority priority,
     const SetCookiesCallback& callback) {
   DCHECK(client_task_runner_->RunsTasksOnCurrentThread());
   PostTaskToCookieStoreTaskRunner(
       base::Bind(&SetCookieWithDetailsAsyncOnCookieThread, url, name, value,
                  domain, path, creation_time, expiration_time, last_access_time,
-                 secure, http_only, same_site, enforce_strict_secure, priority,
+                 secure, http_only, same_site, priority,
                  CreateWrappedCallback<bool>(callback)));
 }
 

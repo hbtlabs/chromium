@@ -6,9 +6,13 @@
     "chrome": "node scripts/chrome_debug_launcher/launch_chrome.js",
     "server": "node scripts/hosted_mode/server.js",
     "test": "node scripts/npm_test.js",
+    "debug-test": "node scripts/npm_test.js --debug-devtools",
+    "compat-test": "node scripts/npm_test.js --compat-protocol=1.2",
     "lint": "eslint front_end",
     "format": "node scripts/format.js",
-    "closure": "python scripts/compile_frontend.py"
+    "closure": "python scripts/compile_frontend.py",
+    "setup-dtrun": "cd scripts/devtools_run && npm link",
+    "format-py": "yapf --exclude scripts/build/rjsmin.py -i --recursive scripts PRESUBMIT.py"
   },
   "repository": {
     "type": "git",

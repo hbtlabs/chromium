@@ -46,7 +46,7 @@ class AwContentsClientBridge : public AwContentsClientBridgeBase {
       std::unique_ptr<content::ClientCertificateDelegate> delegate) override;
 
   void RunJavaScriptDialog(
-      content::JavaScriptMessageType message_type,
+      content::JavaScriptDialogType dialog_type,
       const GURL& origin_url,
       const base::string16& message_text,
       const base::string16& default_prompt_text,
@@ -70,6 +70,13 @@ class AwContentsClientBridge : public AwContentsClientBridgeBase {
   void NewLoginRequest(const std::string& realm,
                        const std::string& account,
                        const std::string& args) override;
+
+  void OnReceivedError(const AwWebResourceRequest& request,
+                       int error_code) override;
+
+  void OnReceivedHttpError(const AwWebResourceRequest& request,
+                           const scoped_refptr<const net::HttpResponseHeaders>&
+                               response_headers) override;
 
   // Methods called from Java.
   void ProceedSslError(JNIEnv* env,
@@ -95,12 +102,12 @@ class AwContentsClientBridge : public AwContentsClientBridgeBase {
 
   typedef const base::Callback<void(content::CertificateRequestResultType)>
       CertErrorCallback;
-  IDMap<CertErrorCallback, IDMapOwnPointer> pending_cert_error_callbacks_;
-  IDMap<content::JavaScriptDialogManager::DialogClosedCallback, IDMapOwnPointer>
+  IDMap<std::unique_ptr<CertErrorCallback>> pending_cert_error_callbacks_;
+  IDMap<std::unique_ptr<content::JavaScriptDialogManager::DialogClosedCallback>>
       pending_js_dialog_callbacks_;
   // |pending_client_cert_request_delegates_| owns its pointers, but IDMap
   // doesn't provide Release, so ownership is managed manually.
-  IDMap<content::ClientCertificateDelegate>
+  IDMap<content::ClientCertificateDelegate*>
       pending_client_cert_request_delegates_;
 };
 

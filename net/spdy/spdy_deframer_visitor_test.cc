@@ -31,7 +31,9 @@ namespace {
 
 class SpdyDeframerVisitorTest : public ::testing::Test {
  protected:
-  SpdyDeframerVisitorTest() : encoder_(HTTP2), decoder_(HTTP2) {
+  SpdyDeframerVisitorTest()
+      : encoder_(SpdyFramer::ENABLE_COMPRESSION),
+        decoder_(SpdyFramer::ENABLE_COMPRESSION) {
     decoder_.set_process_single_input_frame(true);
     auto collector = MakeUnique<DeframerCallbackCollector>(&collected_frames_);
     auto log_and_collect =
@@ -43,7 +45,7 @@ class SpdyDeframerVisitorTest : public ::testing::Test {
   bool DeframeInput(const char* input, size_t size) {
     size_t input_remaining = size;
     while (input_remaining > 0 &&
-           decoder_.error_code() == SpdyFramer::SPDY_NO_ERROR) {
+           decoder_.spdy_framer_error() == SpdyFramer::SPDY_NO_ERROR) {
       // To make the tests more interesting, we feed random (and small) chunks
       // into the framer.  This simulates getting strange-sized reads from
       // the socket.
@@ -58,7 +60,7 @@ class SpdyDeframerVisitorTest : public ::testing::Test {
       }
     }
     return (input_remaining == 0 &&
-            decoder_.error_code() == SpdyFramer::SPDY_NO_ERROR);
+            decoder_.spdy_framer_error() == SpdyFramer::SPDY_NO_ERROR);
   }
 
   SpdySerializedFrame SerializeFrame(const SpdyFrameIR& frame) {
@@ -70,7 +72,7 @@ class SpdyDeframerVisitorTest : public ::testing::Test {
     string result;
     for (const auto& frame_ptr : frames) {
       auto sf = SerializeFrame(*frame_ptr);
-      base::StringPiece(sf.data(), sf.size()).AppendToString(&result);
+      result.append(sf.data(), sf.size());
     }
     return result;
   }
@@ -226,7 +228,7 @@ TEST_F(SpdyDeframerVisitorTest, SettingsFrame) {
   ASSERT_NE(cf0.frame_ir, nullptr);
 
   SpdySettingsIR expected_ir;
-  expected_ir.AddSetting(SETTINGS_INITIAL_WINDOW_SIZE, true, true, 255);
+  expected_ir.AddSetting(SETTINGS_INITIAL_WINDOW_SIZE, 255);
   EXPECT_TRUE(cf0.VerifyHasFrame(expected_ir));
 
   SettingVector expected_settings;
@@ -239,7 +241,7 @@ TEST_F(SpdyDeframerVisitorTest, SettingsFrame) {
   expected_settings.push_back({SETTINGS_INITIAL_WINDOW_SIZE, 65536});
   EXPECT_FALSE(cf0.VerifyHasSettings(expected_settings));
 
-  expected_ir.AddSetting(SETTINGS_INITIAL_WINDOW_SIZE, true, true, 65536);
+  expected_ir.AddSetting(SETTINGS_INITIAL_WINDOW_SIZE, 65536);
   EXPECT_FALSE(cf0.VerifyHasFrame(expected_ir));
 
   SpdySettingsIR unexpected_ir;

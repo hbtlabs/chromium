@@ -9,6 +9,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
+#include "ui/base/models/combobox_model.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/prefix_delegate.h"
 
@@ -17,7 +18,6 @@ class FontList;
 }
 
 namespace ui {
-class ComboboxModel;
 class MenuModel;
 }
 
@@ -36,11 +36,13 @@ class PrefixSelector;
 // Combobox has two distinct parts, the drop down arrow and the text. Combobox
 // offers two distinct behaviors:
 // * STYLE_NORMAL: typical combobox, clicking on the text and/or button shows
-// the drop down, arrow keys change selection, selected index can be changed by
-// the user to something other than the first item.
+//   the drop down, arrow keys change selection or show the menu depending on
+//   the platform, selected index can be changed by the user to something other
+//   than the first item.
 // * STYLE_ACTION: clicking on the text notifies the listener. The menu can be
-// shown only by clicking on the arrow. The selected index is always reverted to
-// 0 after the listener is notified.
+//   shown only by clicking on the arrow, except on Mac where it can be shown
+//   through the keyboard. The selected index is always reverted to 0 after the
+//   listener is notified.
 class VIEWS_EXPORT Combobox : public View,
                               public PrefixDelegate,
                               public ButtonListener {
@@ -54,7 +56,10 @@ class VIEWS_EXPORT Combobox : public View,
   // The combobox's class name.
   static const char kViewClassName[];
 
-  // |model| is not owned by the combobox.
+  // |model| is owned by the combobox when using this constructor.
+  explicit Combobox(std::unique_ptr<ui::ComboboxModel> model,
+                    Style style = STYLE_NORMAL);
+  // |model| is not owned by the combobox when using this constructor.
   explicit Combobox(ui::ComboboxModel* model, Style style = STYLE_NORMAL);
   ~Combobox() override;
 
@@ -157,7 +162,11 @@ class VIEWS_EXPORT Combobox : public View,
   // Returns the width of the combobox's arrow container.
   int GetArrowContainerWidth() const;
 
-  // Our model. Not owned.
+  // Optionally used to tie the lifetime of the model to this combobox. See
+  // constructor.
+  std::unique_ptr<ui::ComboboxModel> owned_model_;
+
+  // Reference to our model, which may be owned or not.
   ui::ComboboxModel* model_;
 
   // The visual style of this combobox.

@@ -11,6 +11,7 @@ import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.net.Uri;
 import android.os.StrictMode;
 import android.os.SystemClock;
 import android.text.Editable;
@@ -20,6 +21,7 @@ import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.style.ReplacementSpan;
 import android.util.AttributeSet;
+import android.util.Pair;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
@@ -30,8 +32,10 @@ import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputConnectionWrapper;
+import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.Log;
 import org.chromium.base.SysUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
@@ -52,7 +56,9 @@ import java.net.URL;
  * The URL text entry view for the Omnibox.
  */
 public class UrlBar extends VerticallyFixedEditText {
-    private static final String TAG = "UrlBar";
+    private static final String TAG = "cr_UrlBar";
+
+    private static final boolean DEBUG = false;
 
     // TextView becomes very slow on long strings, so we limit maximum length
     // of what is displayed to the user, see limitDisplayableLength().
@@ -349,6 +355,7 @@ public class UrlBar extends VerticallyFixedEditText {
 
     @Override
     public void onBeginBatchEdit() {
+        if (DEBUG) Log.i(TAG, "onBeginBatchEdit");
         mBeforeBatchEditAutocompleteIndex = getText().getSpanStart(mAutocompleteSpan);
         mBeforeBatchEditFullText = getText().toString();
 
@@ -359,6 +366,7 @@ public class UrlBar extends VerticallyFixedEditText {
 
     @Override
     public void onEndBatchEdit() {
+        if (DEBUG) Log.i(TAG, "onEndBatchEdit");
         super.onEndBatchEdit();
         mInBatchEditMode = false;
         limitDisplayableLength();
@@ -391,6 +399,7 @@ public class UrlBar extends VerticallyFixedEditText {
 
     @Override
     protected void onSelectionChanged(int selStart, int selEnd) {
+        if (DEBUG) Log.i(TAG, "onSelectionChanged -- selStart: %d, selEnd: %d", selStart, selEnd);
         if (!mInBatchEditMode) {
             int beforeTextLength = getText().length();
             if (validateSelection(selStart, selEnd)) {
@@ -414,7 +423,15 @@ public class UrlBar extends VerticallyFixedEditText {
     private boolean validateSelection(int selStart, int selEnd) {
         int spanStart = getText().getSpanStart(mAutocompleteSpan);
         int spanEnd = getText().getSpanEnd(mAutocompleteSpan);
+
+        if (DEBUG) {
+            Log.i(TAG, "validateSelection -- selStart: %d, selEnd: %d, spanStart: %d, spanEnd: %d",
+                    selStart, selEnd, spanStart, spanEnd);
+        }
+
         if (spanStart >= 0 && (spanStart != selStart || spanEnd != selEnd)) {
+            CharSequence previousAutocompleteText = mAutocompleteSpan.mAutocompleteText;
+
             // On selection changes, the autocomplete text has been accepted by the user or needs
             // to be deleted below.
             mAutocompleteSpan.clearSpan();
@@ -426,7 +443,10 @@ public class UrlBar extends VerticallyFixedEditText {
             // character appears, Chrome may decide to append some autocomplete, but the keyboard
             // will then remove this temporary character only while leaving the autocomplete text
             // alone.  See crbug/273763 for more details.
-            if (selEnd <= spanStart) getText().delete(spanStart, getText().length());
+            if (selEnd <= spanStart && TextUtils.equals(previousAutocompleteText,
+                    getText().subSequence(spanStart, getText().length()))) {
+                getText().delete(spanStart, getText().length());
+            }
             return true;
         }
         return false;
@@ -446,8 +466,6 @@ public class UrlBar extends VerticallyFixedEditText {
         if (focused) StartupMetrics.getInstance().recordFocusedOmnibox();
 
         fixupTextDirection();
-        // Always align to the same as the paragraph direction (LTR = left, RTL = right).
-        ApiCompatibilityUtils.setTextAlignment(this, TEXT_ALIGNMENT_TEXT_START);
     }
 
     /**
@@ -486,6 +504,8 @@ public class UrlBar extends VerticallyFixedEditText {
         } else {
             ApiCompatibilityUtils.setTextDirection(this, TEXT_DIRECTION_LTR);
         }
+        // Always align to the same as the paragraph direction (LTR = left, RTL = right).
+        ApiCompatibilityUtils.setTextAlignment(this, TEXT_ALIGNMENT_TEXT_START);
     }
 
     @Override
@@ -758,6 +778,10 @@ public class UrlBar extends VerticallyFixedEditText {
      * @param inlineAutocompleteText The suggested autocompletion for the user's text.
      */
     public void setAutocompleteText(CharSequence userText, CharSequence inlineAutocompleteText) {
+        if (DEBUG) {
+            Log.i(TAG, "setAutocompleteText -- userText: %s, inlineAutocompleteText: %s",
+                    userText, inlineAutocompleteText);
+        }
         boolean emptyAutocomplete = TextUtils.isEmpty(inlineAutocompleteText);
 
         if (!emptyAutocomplete) mDisableTextScrollingFromAutocomplete = true;
@@ -823,25 +847,40 @@ public class UrlBar extends VerticallyFixedEditText {
         mAccessibilityTextOverride = accessibilityOverride;
     }
 
-    private void scrollToTLD() {
+    /**
+     * Scroll to ensure the TLD is visible.
+     * @return Whether the TLD was discovered and successfully scrolled to.
+     */
+    public boolean scrollToTLD() {
         Editable url = getText();
-        if (url == null || url.length() < 1) return;
+        if (url == null || url.length() < 1) return false;
         String urlString = url.toString();
-        URL javaUrl;
-        try {
-            javaUrl = new URL(urlString);
-        } catch (MalformedURLException mue) {
-            return;
+        Pair<String, String> urlComponents =
+                LocationBarLayout.splitPathFromUrlDisplayText(urlString);
+
+        if (TextUtils.isEmpty(urlComponents.first)) return false;
+
+        // Do not scroll to the end of the host for URLs such as data:, javascript:, etc...
+        if (urlComponents.second == null) {
+            Uri uri = Uri.parse(urlString);
+            String scheme = uri.getScheme();
+            if (!TextUtils.isEmpty(scheme)
+                    && LocationBarLayout.UNSUPPORTED_SCHEMES_TO_SPLIT.contains(scheme)) {
+                return false;
+            }
         }
-        String host = javaUrl.getHost();
-        if (host == null || host.isEmpty()) return;
-        int hostStart = urlString.indexOf(host);
-        int hostEnd = hostStart + host.length();
-        setSelection(hostEnd);
+
+        setSelection(urlComponents.first.length());
+        return true;
     }
 
     @Override
     protected void onTextChanged(CharSequence text, int start, int lengthBefore, int lengthAfter) {
+        if (DEBUG) {
+            Log.i(TAG, "onTextChanged -- text: %s, start: %d, lengthBefore: %d, lengthAfter: %d",
+                    text, start, lengthBefore, lengthAfter);
+        }
+
         super.onTextChanged(text, start, lengthBefore, lengthAfter);
         if (!mInBatchEditMode) {
             limitDisplayableLength();
@@ -854,6 +893,8 @@ public class UrlBar extends VerticallyFixedEditText {
 
     @Override
     public void setText(CharSequence text, BufferType type) {
+        if (DEBUG) Log.i(TAG, "setText -- text: %s", text);
+
         mDisableTextScrollingFromAutocomplete = false;
 
         // Avoid setting the same text to the URL bar as it will mess up the scroll/cursor
@@ -1130,6 +1171,17 @@ public class UrlBar extends VerticallyFixedEditText {
      */
     public boolean isPastedText() {
         return mIsPastedText;
+    }
+
+    @Override
+    public CharSequence getAccessibilityClassName() {
+        // When UrlBar is used as a read-only TextView, force Talkback to pronounce it like
+        // TextView. Otherwise Talkback will say "Edit box, http://...". crbug.com/636988
+        if (isEnabled()) {
+            return super.getAccessibilityClassName();
+        } else {
+            return TextView.class.getName();
+        }
     }
 
     private void notifyAutocompleteTextStateChanged(boolean textDeleted) {

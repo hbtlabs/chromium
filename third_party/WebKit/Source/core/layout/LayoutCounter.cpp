@@ -392,7 +392,7 @@ static CounterNode* makeCounterNodeIfNeeded(LayoutObject& object,
     nodeMap = counterMaps().get(&object);
   } else {
     nodeMap = new CounterMap;
-    counterMaps().set(&object, wrapUnique(nodeMap));
+    counterMaps().set(&object, WTF::wrapUnique(nodeMap));
     object.setHasCounterNodeMap(true);
   }
   nodeMap->set(identifier, newNode);
@@ -426,7 +426,7 @@ static CounterNode* makeCounterNodeIfNeeded(LayoutObject& object,
 }
 
 LayoutCounter::LayoutCounter(Document* node, const CounterContent& counter)
-    : LayoutText(node, StringImpl::empty()),
+    : LayoutText(node, StringImpl::empty),
       m_counter(counter),
       m_counterNode(nullptr),
       m_nextForSameCounter(nullptr) {
@@ -505,7 +505,7 @@ static void destroyCounterNodeWithoutMapRemoval(const AtomicString& identifier,
     previous = child->previousInPreOrder();
     child->parent()->removeChild(child.get());
     ASSERT(counterMaps().get(&child->owner())->get(identifier) == child);
-    counterMaps().get(&child->owner())->remove(identifier);
+    counterMaps().get(&child->owner())->erase(identifier);
   }
   if (CounterNode* parent = node->parent())
     parent->removeChild(node);

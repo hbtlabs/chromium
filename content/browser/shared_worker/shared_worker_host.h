@@ -7,6 +7,7 @@
 
 #include <list>
 #include <memory>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -14,7 +15,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
-#include "content/browser/shared_worker/shared_worker_message_filter.h"
 #include "content/browser/shared_worker/worker_document_set.h"
 
 class GURL;
@@ -24,11 +24,15 @@ class Message;
 }
 
 namespace content {
+
+class MessagePort;
 class SharedWorkerMessageFilter;
 class SharedWorkerInstance;
 
 // The SharedWorkerHost is the interface that represents the browser side of
-// the browser <-> worker communication channel.
+// the browser <-> worker communication channel. This is owned by
+// SharedWorkerServiceImpl and destructed when a worker context or worker's
+// message filter is closed.
 class SharedWorkerHost {
  public:
   SharedWorkerHost(SharedWorkerInstance* instance,
@@ -36,17 +40,15 @@ class SharedWorkerHost {
                    int worker_route_id);
   ~SharedWorkerHost();
 
-  // Sends |message| to the SharedWorker.
-  bool Send(IPC::Message* message);
-
   // Starts the SharedWorker in the renderer process which is associated with
   // |filter_|.
   void Start(bool pause_on_start);
 
   // Returns true iff the given message from a renderer process was forwarded to
   // the worker.
-  bool FilterMessage(const IPC::Message& message,
-                     SharedWorkerMessageFilter* filter);
+  bool SendConnectToWorker(int worker_route_id,
+                           const MessagePort& port,
+                           SharedWorkerMessageFilter* filter);
 
   // Handles the shutdown of the filter. If the worker has no other client,
   // sends TerminateWorkerContext message to shut it down.
@@ -62,12 +64,13 @@ class SharedWorkerHost {
   // referenced by active documents.
   void RenderFrameDetached(int render_process_id, int render_frame_id);
 
+  void CountFeature(uint32_t feature);
   void WorkerContextClosed();
+  void WorkerContextDestroyed();
   void WorkerReadyForInspection();
   void WorkerScriptLoaded();
   void WorkerScriptLoadFailed();
-  void WorkerConnected(int message_port_id);
-  void WorkerContextDestroyed();
+  void WorkerConnected(int connection_request_id);
   void AllowFileSystem(const GURL& url,
                        std::unique_ptr<IPC::Message> reply_msg);
   void AllowIndexedDB(const GURL& url,
@@ -83,8 +86,8 @@ class SharedWorkerHost {
   WorkerDocumentSet* worker_document_set() const {
     return worker_document_set_.get();
   }
-  SharedWorkerMessageFilter* container_render_filter() const {
-    return container_render_filter_;
+  SharedWorkerMessageFilter* worker_render_filter() const {
+    return worker_render_filter_;
   }
   int process_id() const { return worker_process_id_; }
   int worker_route_id() const { return worker_route_id_; }
@@ -95,44 +98,53 @@ class SharedWorkerHost {
   class FilterInfo {
    public:
     FilterInfo(SharedWorkerMessageFilter* filter, int route_id)
-        : filter_(filter), route_id_(route_id), message_port_id_(0) {}
+        : filter_(filter), route_id_(route_id), connection_request_id_(0) {}
     SharedWorkerMessageFilter* filter() const { return filter_; }
     int route_id() const { return route_id_; }
-    int message_port_id() const { return message_port_id_; }
-    void set_message_port_id(int id) { message_port_id_ = id; }
+    int connection_request_id() const { return connection_request_id_; }
+    void set_connection_request_id(int id) { connection_request_id_ = id; }
 
    private:
     SharedWorkerMessageFilter* filter_;
     const int route_id_;
-    int message_port_id_;
+    int connection_request_id_;
   };
 
   using FilterList = std::list<FilterInfo>;
-
-  // Relays |message| to the SharedWorker. Takes care of parsing the message if
-  // it contains a message port and sending it a valid route id.
-  void RelayMessage(const IPC::Message& message,
-                    SharedWorkerMessageFilter* incoming_filter);
 
   // Return a vector of all the render process/render frame IDs.
   std::vector<std::pair<int, int> > GetRenderFrameIDsForWorker();
 
   void RemoveFilters(SharedWorkerMessageFilter* filter);
   bool HasFilter(SharedWorkerMessageFilter* filter, int route_id) const;
-  void SetMessagePortID(SharedWorkerMessageFilter* filter,
-                        int route_id,
-                        int message_port_id);
+  void SetConnectionRequestID(SharedWorkerMessageFilter* filter,
+                              int route_id,
+                              int connection_request_id);
   void AllowFileSystemResponse(std::unique_ptr<IPC::Message> reply_msg,
                                bool allowed);
+
+  // Sends |message| to the SharedWorker.
+  bool Send(IPC::Message* message);
+
   std::unique_ptr<SharedWorkerInstance> instance_;
   scoped_refptr<WorkerDocumentSet> worker_document_set_;
   FilterList filters_;
-  SharedWorkerMessageFilter* container_render_filter_;
+
+  // A message filter for a renderer process that hosts a worker. This is always
+  // valid because this host is destructed immediately after the filter is
+  // closed (see SharedWorkerServiceImpl::OnSharedWorkerMessageFilterClosing).
+  SharedWorkerMessageFilter* worker_render_filter_;
+
   const int worker_process_id_;
   const int worker_route_id_;
-  bool termination_message_sent_;
-  bool closed_;
+  int next_connection_request_id_;
+  bool termination_message_sent_ = false;
+  bool closed_ = false;
   const base::TimeTicks creation_time_;
+
+  // This is the set of features that this worker has used. The values must be
+  // from blink::UseCounter::Feature enum.
+  std::set<uint32_t> used_features_;
 
   base::WeakPtrFactory<SharedWorkerHost> weak_factory_;
 

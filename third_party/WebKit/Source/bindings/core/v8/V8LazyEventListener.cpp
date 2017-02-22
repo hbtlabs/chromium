@@ -72,7 +72,7 @@ v8::Local<v8::Object> toObjectWrapper(T* domObject, ScriptState* scriptState) {
   if (!domObject)
     return v8::Object::New(scriptState->isolate());
   v8::Local<v8::Value> value =
-      toV8(domObject, scriptState->context()->Global(), scriptState->isolate());
+      ToV8(domObject, scriptState->context()->Global(), scriptState->isolate());
   if (value.IsEmpty())
     return v8::Object::New(scriptState->isolate());
   return v8::Local<v8::Object>::New(scriptState->isolate(),
@@ -101,7 +101,8 @@ v8::Local<v8::Value> V8LazyEventListener::callListenerFunction(
   if (!frame)
     return v8::Local<v8::Value>();
 
-  if (!frame->script().canExecuteScripts(AboutToExecuteScript))
+  if (!scriptState->getExecutionContext()->canExecuteScripts(
+          AboutToExecuteScript))
     return v8::Local<v8::Value>();
 
   v8::Local<v8::Value> parameters[1] = {jsEvent};

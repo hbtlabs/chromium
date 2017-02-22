@@ -210,14 +210,16 @@ class ChannelPosix : public Channel,
   void StartOnIOThread() {
     DCHECK(!read_watcher_);
     DCHECK(!write_watcher_);
-    read_watcher_.reset(new base::MessageLoopForIO::FileDescriptorWatcher);
+    read_watcher_.reset(
+        new base::MessageLoopForIO::FileDescriptorWatcher(FROM_HERE));
     base::MessageLoop::current()->AddDestructionObserver(this);
     if (handle_.get().needs_connection) {
       base::MessageLoopForIO::current()->WatchFileDescriptor(
           handle_.get().handle, false /* persistent */,
           base::MessageLoopForIO::WATCH_READ, read_watcher_.get(), this);
     } else {
-      write_watcher_.reset(new base::MessageLoopForIO::FileDescriptorWatcher);
+      write_watcher_.reset(
+          new base::MessageLoopForIO::FileDescriptorWatcher(FROM_HERE));
       base::MessageLoopForIO::current()->WatchFileDescriptor(
           handle_.get().handle, true /* persistent */,
           base::MessageLoopForIO::WATCH_READ, read_watcher_.get(), this);
@@ -400,8 +402,26 @@ class ChannelPosix : public Channel,
       }
 
       if (result < 0) {
-        if (errno != EAGAIN && errno != EWOULDBLOCK)
+        if (errno != EAGAIN && errno != EWOULDBLOCK
+#if defined(OS_MACOSX)
+            // On OS X if sendmsg() is trying to send fds between processes and
+            // there isn't enough room in the output buffer to send the fd
+            // structure over atomically then EMSGSIZE is returned.
+            //
+            // EMSGSIZE presents a problem since the system APIs can only call
+            // us when there's room in the socket buffer and not when there is
+            // "enough" room.
+            //
+            // The current behavior is to return to the event loop when EMSGSIZE
+            // is received and hopefull service another FD.  This is however
+            // still technically a busy wait since the event loop will call us
+            // right back until the receiver has read enough data to allow
+            // passing the FD over atomically.
+            && errno != EMSGSIZE
+#endif
+            ) {
           return false;
+        }
         message_view.SetHandles(std::move(handles));
         outgoing_messages_.emplace_front(std::move(message_view));
         WaitForWriteOnIOThreadNoLock();

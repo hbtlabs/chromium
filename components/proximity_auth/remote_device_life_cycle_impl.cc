@@ -11,17 +11,18 @@
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
+#include "components/cryptauth/bluetooth_throttler_impl.h"
+#include "components/cryptauth/connection_finder.h"
+#include "components/cryptauth/device_to_device_authenticator.h"
+#include "components/cryptauth/secure_context.h"
 #include "components/cryptauth/secure_message_delegate.h"
 #include "components/proximity_auth/ble/bluetooth_low_energy_connection.h"
 #include "components/proximity_auth/ble/bluetooth_low_energy_connection_finder.h"
 #include "components/proximity_auth/bluetooth_connection.h"
 #include "components/proximity_auth/bluetooth_connection_finder.h"
-#include "components/proximity_auth/bluetooth_throttler_impl.h"
-#include "components/proximity_auth/device_to_device_authenticator.h"
 #include "components/proximity_auth/logging/logging.h"
 #include "components/proximity_auth/messenger_impl.h"
 #include "components/proximity_auth/proximity_auth_client.h"
-#include "components/proximity_auth/secure_context.h"
 
 namespace proximity_auth {
 
@@ -41,13 +42,13 @@ const int kAuthenticationRecoveryTimeSeconds = 10;
 }  // namespace
 
 RemoteDeviceLifeCycleImpl::RemoteDeviceLifeCycleImpl(
-    const RemoteDevice& remote_device,
+    const cryptauth::RemoteDevice& remote_device,
     ProximityAuthClient* proximity_auth_client)
     : remote_device_(remote_device),
       proximity_auth_client_(proximity_auth_client),
       state_(RemoteDeviceLifeCycle::State::STOPPED),
       observers_(base::ObserverList<Observer>::NOTIFY_EXISTING_ONLY),
-      bluetooth_throttler_(new BluetoothThrottlerImpl(
+      bluetooth_throttler_(new cryptauth::BluetoothThrottlerImpl(
           base::WrapUnique(new base::DefaultTickClock()))),
       weak_ptr_factory_(this) {}
 
@@ -60,7 +61,7 @@ void RemoteDeviceLifeCycleImpl::Start() {
   FindConnection();
 }
 
-RemoteDevice RemoteDeviceLifeCycleImpl::GetRemoteDevice() const {
+cryptauth::RemoteDevice RemoteDeviceLifeCycleImpl::GetRemoteDevice() const {
   return remote_device_;
 }
 
@@ -80,9 +81,9 @@ void RemoteDeviceLifeCycleImpl::RemoveObserver(Observer* observer) {
   observers_.RemoveObserver(observer);
 }
 
-std::unique_ptr<ConnectionFinder>
+std::unique_ptr<cryptauth::ConnectionFinder>
 RemoteDeviceLifeCycleImpl::CreateConnectionFinder() {
-  if (remote_device_.bluetooth_type == RemoteDevice::BLUETOOTH_LE) {
+  if (remote_device_.bluetooth_type == cryptauth::RemoteDevice::BLUETOOTH_LE) {
     return base::MakeUnique<BluetoothLowEnergyConnectionFinder>(
         remote_device_, kBLESmartLockServiceUUID,
         BluetoothLowEnergyConnectionFinder::FinderStrategy::FIND_PAIRED_DEVICE,
@@ -94,9 +95,9 @@ RemoteDeviceLifeCycleImpl::CreateConnectionFinder() {
   }
 }
 
-std::unique_ptr<Authenticator>
+std::unique_ptr<cryptauth::Authenticator>
 RemoteDeviceLifeCycleImpl::CreateAuthenticator() {
-  return base::MakeUnique<DeviceToDeviceAuthenticator>(
+  return base::MakeUnique<cryptauth::DeviceToDeviceAuthenticator>(
       connection_.get(), remote_device_.user_id,
       proximity_auth_client_->CreateSecureMessageDelegate());
 }
@@ -120,7 +121,7 @@ void RemoteDeviceLifeCycleImpl::FindConnection() {
 }
 
 void RemoteDeviceLifeCycleImpl::OnConnectionFound(
-    std::unique_ptr<Connection> connection) {
+    std::unique_ptr<cryptauth::Connection> connection) {
   DCHECK(state_ == RemoteDeviceLifeCycle::State::FINDING_CONNECTION);
   connection_ = std::move(connection);
   authenticator_ = CreateAuthenticator();
@@ -131,11 +132,11 @@ void RemoteDeviceLifeCycleImpl::OnConnectionFound(
 }
 
 void RemoteDeviceLifeCycleImpl::OnAuthenticationResult(
-    Authenticator::Result result,
-    std::unique_ptr<SecureContext> secure_context) {
+    cryptauth::Authenticator::Result result,
+    std::unique_ptr<cryptauth::SecureContext> secure_context) {
   DCHECK(state_ == RemoteDeviceLifeCycle::State::AUTHENTICATING);
   authenticator_.reset();
-  if (result != Authenticator::Result::SUCCESS) {
+  if (result != cryptauth::Authenticator::Result::SUCCESS) {
     PA_LOG(WARNING) << "Waiting " << kAuthenticationRecoveryTimeSeconds
                     << " seconds to retry after authentication failure.";
     connection_->Disconnect();

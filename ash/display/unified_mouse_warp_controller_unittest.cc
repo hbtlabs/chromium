@@ -53,8 +53,7 @@ class UnifiedMouseWarpControllerTest : public test::AshTestBase {
                 ->window_tree_host_manager()
                 ->mirror_window_controller()
                 ->GetAshWindowTreeHostForDisplayId(info.id());
-        ash_host->AsWindowTreeHost()->ConvertPointFromHost(
-            point_in_unified_host);
+        ash_host->AsWindowTreeHost()->ConvertPixelsToDIP(point_in_unified_host);
         return true;
       }
     }
@@ -87,7 +86,7 @@ class UnifiedMouseWarpControllerTest : public test::AshTestBase {
     gfx::Point new_location_in_unified_host =
         aura::Env::GetInstance()->last_mouse_location();
     // Convert screen to the host.
-    root->GetHost()->ConvertPointToHost(&new_location_in_unified_host);
+    root->GetHost()->ConvertDIPToPixels(&new_location_in_unified_host);
 
     int new_index = display::FindDisplayIndexContainingPoint(
         display_manager()->software_mirroring_display_list(),
@@ -156,9 +155,6 @@ class UnifiedMouseWarpControllerTest : public test::AshTestBase {
 
 // Verifies if MouseCursorEventFilter's bounds calculation works correctly.
 TEST_F(UnifiedMouseWarpControllerTest, BoundaryTest) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   {
     SCOPED_TRACE("1x1");
     BoundaryTestBody("400x400,0+450-700x400", "400x400,0+450-700x600");
@@ -180,8 +176,6 @@ TEST_F(UnifiedMouseWarpControllerTest, BoundaryTest) {
 // Verifies if the mouse pointer correctly moves to another display in
 // unified desktop mode.
 TEST_F(UnifiedMouseWarpControllerTest, WarpMouse) {
-  if (!SupportsMultipleDisplays())
-    return;
   UpdateDisplay("500x500,600+0-500x500");
   ASSERT_EQ(1, display::Screen::GetScreen()->GetNumDisplays());
 

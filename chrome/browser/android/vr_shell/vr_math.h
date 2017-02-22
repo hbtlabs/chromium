@@ -7,7 +7,7 @@
 
 #include <array>
 
-#include "third_party/gvr-android-sdk/src/ndk/include/vr/gvr/capi/include/gvr_types.h"
+#include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr_types.h"
 
 namespace vr_shell {
 
@@ -33,6 +33,13 @@ typedef struct RotationAxisAngle {
   float z;
   float angle;
 } RotationAxisAngle;
+
+typedef struct Colorf {
+  float r;
+  float g;
+  float b;
+  float a;
+} Colorf;
 
 void SetIdentityM(gvr::Mat4f& mat);
 

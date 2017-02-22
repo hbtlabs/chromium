@@ -7,6 +7,7 @@
 #include <inttypes.h>
 #include <stddef.h>
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "services/ui/common/transient_window_utils.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
@@ -15,7 +16,6 @@
 #include "services/ui/ws/server_window_observer.h"
 
 namespace ui {
-
 namespace ws {
 
 ServerWindow::ServerWindow(ServerWindowDelegate* delegate, const WindowId& id)
@@ -31,11 +31,12 @@ ServerWindow::ServerWindow(ServerWindowDelegate* delegate,
       transient_parent_(nullptr),
       is_modal_(false),
       visible_(false),
-      cursor_id_(mojom::Cursor::CURSOR_NULL),
-      non_client_cursor_id_(mojom::Cursor::CURSOR_NULL),
+      // Default to POINTER as CURSOR_NULL doesn't change the cursor, it leaves
+      // the last non-null cursor.
+      cursor_id_(mojom::Cursor::POINTER),
+      non_client_cursor_id_(mojom::Cursor::POINTER),
       opacity_(1),
       can_focus_(true),
-      can_accept_events_(true),
       properties_(properties),
       // Don't notify newly added observers during notification. This causes
       // problems for code that adds an observer as part of an observer
@@ -83,16 +84,21 @@ bool ServerWindow::HasObserver(ServerWindowObserver* observer) {
   return observers_.HasObserver(observer);
 }
 
-void ServerWindow::CreateCompositorFrameSink(
-    mojom::CompositorFrameSinkType compositor_frame_sink_type,
+void ServerWindow::CreateDisplayCompositorFrameSink(
     gfx::AcceleratedWidget widget,
-    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-    scoped_refptr<SurfacesContextProvider> context_provider,
+    cc::mojom::MojoCompositorFrameSinkAssociatedRequest sink_request,
+    cc::mojom::MojoCompositorFrameSinkClientPtr client,
+    cc::mojom::DisplayPrivateAssociatedRequest display_request) {
+  GetOrCreateCompositorFrameSinkManager()->CreateDisplayCompositorFrameSink(
+      widget, std::move(sink_request), std::move(client),
+      std::move(display_request));
+}
+
+void ServerWindow::CreateOffscreenCompositorFrameSink(
     cc::mojom::MojoCompositorFrameSinkRequest request,
     cc::mojom::MojoCompositorFrameSinkClientPtr client) {
-  GetOrCreateCompositorFrameSinkManager()->CreateCompositorFrameSink(
-      compositor_frame_sink_type, widget, gpu_memory_buffer_manager,
-      std::move(context_provider), std::move(request), std::move(client));
+  GetOrCreateCompositorFrameSinkManager()->CreateOffscreenCompositorFrameSink(
+      std::move(request), std::move(client));
 }
 
 void ServerWindow::Add(ServerWindow* child) {
@@ -111,11 +117,17 @@ void ServerWindow::Add(ServerWindow* child) {
   for (auto& observer : child->observers_)
     observer.OnWillChangeWindowHierarchy(child, this, old_parent);
 
+  ServerWindow* old_root = child->GetRoot();
+  ServerWindow* new_root = GetRoot();
+
   if (child->parent())
     child->parent()->RemoveImpl(child);
 
   child->parent_ = this;
   children_.push_back(child);
+
+  if (old_root != new_root)
+    child->ProcessRootChanged(old_root, new_root);
 
   // Stack the child properly if it is a transient child of a sibling.
   if (child->transient_parent_ && child->transient_parent_->parent() == this)
@@ -134,7 +146,11 @@ void ServerWindow::Remove(ServerWindow* child) {
 
   for (auto& observer : child->observers_)
     observer.OnWillChangeWindowHierarchy(child, nullptr, this);
+
   RemoveImpl(child);
+
+  if (GetRoot() != nullptr)
+    child->ProcessRootChanged(GetRoot(), nullptr);
 
   // Stack the child properly if it is a transient child of a sibling.
   if (child->transient_parent_ && child->transient_parent_->parent() == this)
@@ -415,6 +431,14 @@ void ServerWindow::RemoveImpl(ServerWindow* window) {
   children_.erase(std::find(children_.begin(), children_.end(), window));
 }
 
+void ServerWindow::ProcessRootChanged(ServerWindow* old_root,
+                                      ServerWindow* new_root) {
+  if (compositor_frame_sink_manager_)
+    compositor_frame_sink_manager_->OnRootChanged(old_root, new_root);
+  for (ServerWindow* child : children_)
+    child->ProcessRootChanged(old_root, new_root);
+}
+
 void ServerWindow::OnStackingChanged() {
   if (stacking_target_) {
     Windows::const_iterator window_i = std::find(
@@ -463,5 +487,4 @@ ServerWindow** ServerWindow::GetStackingTarget(ServerWindow* window) {
 }
 
 }  // namespace ws
-
 }  // namespace ui

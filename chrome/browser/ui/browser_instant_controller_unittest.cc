@@ -6,7 +6,6 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -17,10 +16,12 @@
 #include "chrome/browser/ui/browser_instant_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/url_constants.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 
 namespace chrome {
 
@@ -80,9 +81,21 @@ class FakeWebContentsObserver : public content::WebContentsObserver {
         url_(contents->GetURL()),
         num_reloads_(0) {}
 
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    if (!content::IsBrowserSideNavigationEnabled())
+      return;
+    if (url_ == navigation_handle->GetURL())
+      num_reloads_++;
+    current_url_ = navigation_handle->GetURL();
+  }
+
+  // TODO: remove this method when PlzNavigate is turned on by default.
   void DidStartNavigationToPendingEntry(
       const GURL& url,
       content::ReloadType reload_type) override {
+    if (content::IsBrowserSideNavigationEnabled())
+      return;
     if (url_ == url)
       num_reloads_++;
     current_url_ = url;
@@ -116,7 +129,7 @@ class FakeWebContentsObserver : public content::WebContentsObserver {
 
 TEST_F(BrowserInstantControllerTest, DefaultSearchProviderChanged) {
   size_t num_tests = arraysize(kTabReloadTestCasesFinalProviderNotGoogle);
-  ScopedVector<FakeWebContentsObserver> observers;
+  std::vector<std::unique_ptr<FakeWebContentsObserver>> observers;
   for (size_t i = 0; i < num_tests; ++i) {
     const TabReloadTestCase& test =
         kTabReloadTestCasesFinalProviderNotGoogle[i];
@@ -131,13 +144,13 @@ TEST_F(BrowserInstantControllerTest, DefaultSearchProviderChanged) {
       << test.description;
 
     // Setup an observer to verify reload or absence thereof.
-    observers.push_back(new FakeWebContentsObserver(contents));
+    observers.push_back(base::MakeUnique<FakeWebContentsObserver>(contents));
   }
 
   SetUserSelectedDefaultSearchProvider("https://bar.com/");
 
   for (size_t i = 0; i < num_tests; ++i) {
-    FakeWebContentsObserver* observer = observers[i];
+    FakeWebContentsObserver* observer = observers[i].get();
     const TabReloadTestCase& test =
         kTabReloadTestCasesFinalProviderNotGoogle[i];
 
@@ -164,7 +177,7 @@ TEST_F(BrowserInstantControllerTest, DefaultSearchProviderChanged) {
 
 TEST_F(BrowserInstantControllerTest, GoogleBaseURLUpdated) {
   const size_t num_tests = arraysize(kTabReloadTestCasesFinalProviderGoogle);
-  ScopedVector<FakeWebContentsObserver> observers;
+  std::vector<std::unique_ptr<FakeWebContentsObserver>> observers;
   for (size_t i = 0; i < num_tests; ++i) {
     const TabReloadTestCase& test = kTabReloadTestCasesFinalProviderGoogle[i];
     AddTab(browser(), GURL(test.start_url));
@@ -178,14 +191,14 @@ TEST_F(BrowserInstantControllerTest, GoogleBaseURLUpdated) {
       << test.description;
 
     // Setup an observer to verify reload or absence thereof.
-    observers.push_back(new FakeWebContentsObserver(contents));
+    observers.push_back(base::MakeUnique<FakeWebContentsObserver>(contents));
   }
 
   NotifyGoogleBaseURLUpdate("https://www.google.es/");
 
   for (size_t i = 0; i < num_tests; ++i) {
     const TabReloadTestCase& test = kTabReloadTestCasesFinalProviderGoogle[i];
-    FakeWebContentsObserver* observer = observers[i];
+    FakeWebContentsObserver* observer = observers[i].get();
 
     // Validate final instant state.
     EXPECT_EQ(test.end_in_instant_process,

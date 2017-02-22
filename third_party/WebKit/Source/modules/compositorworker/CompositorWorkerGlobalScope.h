@@ -5,7 +5,6 @@
 #ifndef CompositorWorkerGlobalScope_h
 #define CompositorWorkerGlobalScope_h
 
-#include "core/dom/CompositorProxyClient.h"
 #include "core/dom/FrameRequestCallbackCollection.h"
 #include "core/dom/MessagePort.h"
 #include "core/workers/WorkerGlobalScope.h"
@@ -34,11 +33,11 @@ class MODULES_EXPORT CompositorWorkerGlobalScope final
   // EventTarget
   const AtomicString& interfaceName() const override;
 
-  void postMessage(ExecutionContext*,
+  void postMessage(ScriptState*,
                    PassRefPtr<SerializedScriptValue>,
                    const MessagePortArray&,
                    ExceptionState&);
-  static bool canTransferArrayBuffer() { return true; }
+  static bool canTransferArrayBuffersAndImageBitmaps() { return true; }
   DEFINE_ATTRIBUTE_EVENT_LISTENER(message);
 
   int requestAnimationFrame(FrameRequestCallback*);

@@ -19,6 +19,7 @@
 #include "remoting/host/client_session_control.h"
 #include "remoting/host/client_session_details.h"
 #include "remoting/host/desktop_environment_options.h"
+#include "remoting/host/host_experiment_session_plugin.h"
 #include "remoting/host/host_extension_session_manager.h"
 #include "remoting/host/remote_input_filter.h"
 #include "remoting/protocol/clipboard_echo_filter.h"
@@ -33,10 +34,6 @@
 #include "remoting/protocol/pairing_registry.h"
 #include "remoting/protocol/video_stream.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
-
-namespace base {
-class SingleThreadTaskRunner;
-}  // namespace base
 
 namespace remoting {
 
@@ -248,6 +245,8 @@ class ClientSession : public base::NonThreadSafe,
 
   scoped_refptr<protocol::InputEventTimestampsSource>
       event_timestamp_source_for_tests_;
+
+  HostExperimentSessionPlugin host_experiment_session_plugin_;
 
   // Used to disable callbacks to |this| once DisconnectSession() has been
   // called.

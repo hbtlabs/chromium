@@ -25,9 +25,9 @@
 
 #include "core/page/NetworkStateNotifier.h"
 
-#include "core/dom/ExecutionContext.h"
-#include "core/dom/ExecutionContextTask.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/page/Page.h"
+#include "platform/CrossThreadFunctional.h"
 #include "wtf/Assertions.h"
 #include "wtf/Functional.h"
 #include "wtf/PtrUtil.h"
@@ -85,25 +85,25 @@ void NetworkStateNotifier::setWebConnection(WebConnectionType type,
 }
 
 void NetworkStateNotifier::addObserver(NetworkStateObserver* observer,
-                                       ExecutionContext* context) {
-  ASSERT(context->isContextThread());
-  ASSERT(observer);
+                                       WebTaskRunner* taskRunner) {
+  DCHECK(taskRunner->runsTasksOnCurrentThread());
+  DCHECK(observer);
 
   MutexLocker locker(m_mutex);
-  ObserverListMap::AddResult result = m_observers.add(context, nullptr);
+  ObserverListMap::AddResult result = m_observers.insert(taskRunner, nullptr);
   if (result.isNewEntry)
-    result.storedValue->value = wrapUnique(new ObserverList);
+    result.storedValue->value = WTF::wrapUnique(new ObserverList);
 
-  ASSERT(result.storedValue->value->observers.find(observer) == kNotFound);
-  result.storedValue->value->observers.append(observer);
+  DCHECK(result.storedValue->value->observers.find(observer) == kNotFound);
+  result.storedValue->value->observers.push_back(observer);
 }
 
 void NetworkStateNotifier::removeObserver(NetworkStateObserver* observer,
-                                          ExecutionContext* context) {
-  ASSERT(context->isContextThread());
-  ASSERT(observer);
+                                          WebTaskRunner* taskRunner) {
+  DCHECK(taskRunner->runsTasksOnCurrentThread());
+  DCHECK(observer);
 
-  ObserverList* observerList = lockAndFindObserverList(context);
+  ObserverList* observerList = lockAndFindObserverList(taskRunner);
   if (!observerList)
     return;
 
@@ -111,11 +111,11 @@ void NetworkStateNotifier::removeObserver(NetworkStateObserver* observer,
   size_t index = observers.find(observer);
   if (index != kNotFound) {
     observers[index] = 0;
-    observerList->zeroedObservers.append(index);
+    observerList->zeroedObservers.push_back(index);
   }
 
   if (!observerList->iterating && !observerList->zeroedObservers.isEmpty())
-    collectZeroedObservers(observerList, context);
+    collectZeroedObservers(observerList, taskRunner);
 }
 
 void NetworkStateNotifier::setOverride(bool onLine,
@@ -146,28 +146,30 @@ void NetworkStateNotifier::clearOverride() {
 void NetworkStateNotifier::notifyObservers(WebConnectionType type,
                                            double maxBandwidthMbps) {
   DCHECK(isMainThread());
+  MutexLocker locker(m_mutex);
   for (const auto& entry : m_observers) {
-    ExecutionContext* context = entry.key;
-    context->postTask(
+    WebTaskRunner* taskRunner = entry.key;
+    taskRunner->postTask(
         BLINK_FROM_HERE,
-        createCrossThreadTask(
-            &NetworkStateNotifier::notifyObserversOfConnectionChangeOnContext,
-            crossThreadUnretained(this), type, maxBandwidthMbps));
+        crossThreadBind(&NetworkStateNotifier::
+                            notifyObserversOfConnectionChangeOnTaskRunner,
+                        crossThreadUnretained(this), type, maxBandwidthMbps,
+                        crossThreadUnretained(taskRunner)));
   }
 }
 
-void NetworkStateNotifier::notifyObserversOfConnectionChangeOnContext(
+void NetworkStateNotifier::notifyObserversOfConnectionChangeOnTaskRunner(
     WebConnectionType type,
     double maxBandwidthMbps,
-    ExecutionContext* context) {
-  ObserverList* observerList = lockAndFindObserverList(context);
+    WebTaskRunner* taskRunner) {
+  ObserverList* observerList = lockAndFindObserverList(taskRunner);
 
   // The context could have been removed before the notification task got to
   // run.
   if (!observerList)
     return;
 
-  ASSERT(context->isContextThread());
+  DCHECK(taskRunner->runsTasksOnCurrentThread());
 
   observerList->iterating = true;
 
@@ -180,20 +182,20 @@ void NetworkStateNotifier::notifyObserversOfConnectionChangeOnContext(
   observerList->iterating = false;
 
   if (!observerList->zeroedObservers.isEmpty())
-    collectZeroedObservers(observerList, context);
+    collectZeroedObservers(observerList, taskRunner);
 }
 
 NetworkStateNotifier::ObserverList*
-NetworkStateNotifier::lockAndFindObserverList(ExecutionContext* context) {
+NetworkStateNotifier::lockAndFindObserverList(WebTaskRunner* taskRunner) {
   MutexLocker locker(m_mutex);
-  ObserverListMap::iterator it = m_observers.find(context);
+  ObserverListMap::iterator it = m_observers.find(taskRunner);
   return it == m_observers.end() ? nullptr : it->value.get();
 }
 
 void NetworkStateNotifier::collectZeroedObservers(ObserverList* list,
-                                                  ExecutionContext* context) {
-  ASSERT(context->isContextThread());
-  ASSERT(!list->iterating);
+                                                  WebTaskRunner* taskRunner) {
+  DCHECK(taskRunner->runsTasksOnCurrentThread());
+  DCHECK(!list->iterating);
 
   // If any observers were removed during the iteration they will have
   // 0 values, clean them up.
@@ -204,7 +206,7 @@ void NetworkStateNotifier::collectZeroedObservers(ObserverList* list,
 
   if (list->observers.isEmpty()) {
     MutexLocker locker(m_mutex);
-    m_observers.remove(context);  // deletes list
+    m_observers.erase(taskRunner);  // deletes list
   }
 }
 

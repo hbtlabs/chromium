@@ -41,11 +41,22 @@ extern const char kHistogramLoadTypeParseStartNewNavigation[];
 
 extern const char kHistogramFailedProvisionalLoad[];
 
+extern const char kHistogramPageTimingPageEnd[];
+extern const char kHistogramPageTimingFirstBackground[];
+
 extern const char kRapporMetricsNameCoarseTiming[];
 extern const char kHistogramFirstMeaningfulPaintStatus[];
 
 extern const char kHistogramFirstNonScrollInputAfterFirstPaint[];
 extern const char kHistogramFirstScrollInputAfterFirstPaint[];
+
+extern const char kHistogramTotalBytes[];
+extern const char kHistogramNetworkBytes[];
+extern const char kHistogramCacheBytes[];
+
+extern const char kHistogramTotalCompletedResources[];
+extern const char kHistogramNetworkCompletedResources[];
+extern const char kHistogramCacheCompletedResources[];
 
 enum FirstMeaningfulPaintStatus {
   FIRST_MEANINGFUL_PAINT_RECORDED,
@@ -104,16 +115,35 @@ class CorePageLoadMetricsObserver
   void OnFailedProvisionalLoad(
       const page_load_metrics::FailedProvisionalLoadInfo& failed_load_info,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
+  ObservePolicy FlushMetricsOnAppEnterBackground(
+      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& info) override;
   void OnUserInput(const blink::WebInputEvent& event) override;
+  void OnLoadedResource(
+      const page_load_metrics::ExtraRequestInfo& extra_request_info) override;
 
  private:
   void RecordTimingHistograms(const page_load_metrics::PageLoadTiming& timing,
                               const page_load_metrics::PageLoadExtraInfo& info);
+  void RecordByteAndResourceHistograms(
+      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& info);
   void RecordRappor(const page_load_metrics::PageLoadTiming& timing,
                     const page_load_metrics::PageLoadExtraInfo& info);
 
   ui::PageTransition transition_;
   bool was_no_store_main_resource_;
+
+  // Note: these are only approximations, based on WebContents attribution from
+  // ResourceRequestInfo objects while this is the currently committed load in
+  // the WebContents.
+  int num_cache_resources_;
+  int num_network_resources_;
+
+  // The number of body (not header) prefilter bytes consumed by requests for
+  // the page.
+  int64_t cache_bytes_;
+  int64_t network_bytes_;
 
   // True if we've received a non-scroll input (touch tap or mouse up)
   // after first paint has happened.

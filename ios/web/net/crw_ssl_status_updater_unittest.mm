@@ -9,7 +9,7 @@
 #import "ios/web/navigation/crw_session_controller+private_constructors.h"
 #import "ios/web/navigation/crw_session_controller.h"
 #import "ios/web/navigation/navigation_manager_impl.h"
-#include "ios/web/public/navigation_item.h"
+#import "ios/web/public/navigation_item.h"
 #include "ios/web/public/ssl_status.h"
 #include "ios/web/public/test/web_test.h"
 #import "ios/web/web_state/wk_web_view_security_util.h"
@@ -80,7 +80,8 @@ class CRWSSLStatusUpdaterTest : public web::WebTest {
     delegate_.reset([[OCMockObject
         mockForProtocol:@protocol(CRWSSLStatusUpdaterDelegate)] retain]);
 
-    nav_manager_.reset(new NavigationManagerImpl(nullptr, GetBrowserState()));
+    nav_manager_.reset(new NavigationManagerImpl());
+    nav_manager_->SetBrowserState(GetBrowserState());
 
     ssl_status_updater_.reset([[CRWSSLStatusUpdater alloc]
         initWithDataSource:data_source_
@@ -102,17 +103,18 @@ class CRWSSLStatusUpdaterTest : public web::WebTest {
 
   // Returns autoreleased session controller with a single committed entry.
   CRWSessionController* SessionControllerWithEntry(std::string item_url_spec) {
-    ScopedVector<web::NavigationItem> nav_items;
+    std::vector<std::unique_ptr<web::NavigationItem>> nav_items;
     base::scoped_nsobject<CRWSessionController> session_controller(
         [[CRWSessionController alloc]
             initWithNavigationItems:std::move(nav_items)
                        currentIndex:0
                        browserState:GetBrowserState()]);
-    [session_controller addPendingEntry:GURL(item_url_spec)
-                               referrer:Referrer()
-                             transition:ui::PAGE_TRANSITION_LINK
-                      rendererInitiated:NO];
-    [session_controller commitPendingEntry];
+    [session_controller
+        addPendingItem:GURL(item_url_spec)
+              referrer:Referrer()
+            transition:ui::PAGE_TRANSITION_LINK
+        initiationType:web::NavigationInitiationType::USER_INITIATED];
+    [session_controller commitPendingItem];
 
     return session_controller.autorelease();
   }

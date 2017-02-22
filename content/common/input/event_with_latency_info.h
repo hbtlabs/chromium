@@ -9,33 +9,13 @@
 #include "base/logging.h"
 #include "content/common/content_export.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
+#include "third_party/WebKit/public/platform/WebTouchEvent.h"
 #include "ui/events/blink/blink_event_util.h"
-#include "ui/events/blink/scoped_web_input_event.h"
+#include "ui/events/blink/web_input_event_traits.h"
 #include "ui/events/latency_info.h"
 
 namespace content {
-
-class ScopedWebInputEventWithLatencyInfo {
- public:
-  ScopedWebInputEventWithLatencyInfo(ui::ScopedWebInputEvent,
-                                     const ui::LatencyInfo&);
-
-  ~ScopedWebInputEventWithLatencyInfo();
-
-  bool CanCoalesceWith(const ScopedWebInputEventWithLatencyInfo& other) const
-      WARN_UNUSED_RESULT;
-
-  const blink::WebInputEvent& event() const;
-  blink::WebInputEvent& event();
-  const ui::LatencyInfo latencyInfo() const { return latency_; }
-
-  void CoalesceWith(const ScopedWebInputEventWithLatencyInfo& other);
-
- private:
-  ui::ScopedWebInputEvent event_;
-  mutable ui::LatencyInfo latency_;
-};
 
 template <typename T>
 class EventWithLatencyInfo {
@@ -48,15 +28,21 @@ class EventWithLatencyInfo {
   EventWithLatencyInfo(const T& e, const ui::LatencyInfo& l)
       : event(e), latency(l) {}
 
+  EventWithLatencyInfo(blink::WebInputEvent::Type type,
+                       int modifiers,
+                       double timeStampSeconds,
+                       const ui::LatencyInfo& l)
+      : event(type, modifiers, timeStampSeconds), latency(l) {}
+
   EventWithLatencyInfo() {}
 
   bool CanCoalesceWith(const EventWithLatencyInfo& other)
       const WARN_UNUSED_RESULT {
-    if (other.event.type != event.type)
+    if (other.event.type() != event.type())
       return false;
 
-    DCHECK_EQ(sizeof(T), event.size);
-    DCHECK_EQ(sizeof(T), other.event.size);
+    DCHECK_EQ(sizeof(T), event.size());
+    DCHECK_EQ(sizeof(T), other.event.size());
 
     return ui::CanCoalesce(other.event, event);
   }
@@ -68,9 +54,9 @@ class EventWithLatencyInfo {
 
     // New events get coalesced into older events, and the newer timestamp
     // should always be preserved.
-    const double time_stamp_seconds = other.event.timeStampSeconds;
+    const double time_stamp_seconds = other.event.timeStampSeconds();
     ui::Coalesce(other.event, &event);
-    event.timeStampSeconds = time_stamp_seconds;
+    event.setTimeStampSeconds(time_stamp_seconds);
 
     // When coalescing two input events, we keep the oldest LatencyInfo
     // for Telemetry latency tests, since it will represent the longest

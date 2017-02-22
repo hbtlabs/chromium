@@ -50,7 +50,6 @@ class CORE_EXPORT HTMLInputElement : public TextControlElement {
 
  public:
   static HTMLInputElement* create(Document&,
-                                  HTMLFormElement*,
                                   bool createdByParser);
   ~HTMLInputElement() override;
   DECLARE_VIRTUAL_TRACE();
@@ -157,15 +156,17 @@ class CORE_EXPORT HTMLInputElement : public TextControlElement {
   // delay the 'input' event with EventQueueScope.
   void setValueFromRenderer(const String&);
 
-  int selectionStartForBinding(ExceptionState&) const;
-  int selectionEndForBinding(ExceptionState&) const;
+  unsigned selectionStartForBinding(bool&, ExceptionState&) const;
+  unsigned selectionEndForBinding(bool&, ExceptionState&) const;
   String selectionDirectionForBinding(ExceptionState&) const;
-  void setSelectionStartForBinding(int, ExceptionState&);
-  void setSelectionEndForBinding(int, ExceptionState&);
+  void setSelectionStartForBinding(unsigned, ExceptionState&);
+  void setSelectionEndForBinding(unsigned, ExceptionState&);
   void setSelectionDirectionForBinding(const String&, ExceptionState&);
-  void setSelectionRangeForBinding(int start, int end, ExceptionState&);
-  void setSelectionRangeForBinding(int start,
-                                   int end,
+  void setSelectionRangeForBinding(unsigned start,
+                                   unsigned end,
+                                   ExceptionState&);
+  void setSelectionRangeForBinding(unsigned start,
+                                   unsigned end,
                                    const String& direction,
                                    ExceptionState&);
 
@@ -288,7 +289,7 @@ class CORE_EXPORT HTMLInputElement : public TextControlElement {
   unsigned sizeOfRadioGroup() const;
 
  protected:
-  HTMLInputElement(Document&, HTMLFormElement*, bool createdByParser);
+  HTMLInputElement(Document&, bool createdByParser);
 
   void defaultEventHandler(Event*) override;
 
@@ -325,9 +326,7 @@ class CORE_EXPORT HTMLInputElement : public TextControlElement {
 
   void accessKeyAction(bool sendMouseEvents) final;
 
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+  void parseAttribute(const AttributeModificationParams&) override;
   bool isPresentationAttribute(const QualifiedName&) const final;
   void collectStyleForPresentationAttribute(const QualifiedName&,
                                             const AtomicString&,

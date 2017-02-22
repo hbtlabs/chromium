@@ -19,10 +19,6 @@ class Window;
 class WindowTreeClient;
 class WindowTreeHostMus;
 
-namespace client {
-class CaptureClient;
-}
-
 // Interface implemented by an application using mus.
 class AURA_EXPORT WindowTreeClientDelegate {
  public:
@@ -38,10 +34,17 @@ class AURA_EXPORT WindowTreeClientDelegate {
   virtual void OnUnembed(Window* root);
 
   // Called when the embed root has been destroyed on the server side (or
-  // another client was embedded in the same window). This is only called if the
-  // WindowTreeClient was created from an InterfaceRequest. Generally when this
-  // is called the delegate should delete the WindowTreeClient.
-  virtual void OnEmbedRootDestroyed(Window* root) = 0;
+  // another client was embedded in the same window). This is called in two
+  // distinct cases:
+  // . If the WindowTreeClient was created from an InterfaceRequest. In this
+  //   case the WindowTreeClient associated with the WindowTreeHost is no
+  //   longer in a usable state and should be deleted (after deleting
+  //   |window_tree_host|).
+  // . When the window associated with a top level window (one created by way of
+  //   directly creating a WindowTreeHostMus) is destroyed on the server side.
+  //   In this case the |window_tree_host| should be destroyed, but the
+  //   WindowTreeClient is still usable.
+  virtual void OnEmbedRootDestroyed(WindowTreeHostMus* window_tree_host) = 0;
 
   // Called when the connection to the window server has been lost. After this
   // call the windows are still valid, and you can still do things, but they
@@ -54,10 +57,6 @@ class AURA_EXPORT WindowTreeClientDelegate {
   // windows owned by other processes.
   virtual void OnPointerEventObserved(const ui::PointerEvent& event,
                                       Window* target) = 0;
-
-  // Mus expects a single CaptureClient is used for all WindowTreeHosts. This
-  // returns it. GetCaptureClient() is called from the constructor.
-  virtual client::CaptureClient* GetCaptureClient() = 0;
 
   virtual PropertyConverter* GetPropertyConverter() = 0;
 

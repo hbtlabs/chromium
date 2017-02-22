@@ -146,8 +146,45 @@ function test2AfterScrollEvent() {
     shouldNotBe('window.internals.pagePopupWindow', 'null');
     shouldBeEqualToString('menuElement2.value', '2');
 
-    finishJSTest();
+    test3();
 }
+
+function test3() {
+    debug("==> Test popup closes on outside GestureTapDawn");
+    eventSender.clearTouchPoints();
+    openPicker(menuElement, function () {
+        eventSender.gestureTapDown(300, 300);
+        shouldBeNull('window.internals.pagePopupWindow');
+        test4();
+    }, function () {
+        testFailed('picker didn\'t open')
+        finishJSTest();
+    });
+}
+
+function test4() {
+  debug("==> Test popup doesn't reopen immediately after closing");
+  eventSender.clearTouchPoints();
+  shouldBeNull('window.internals.pagePopupWindow');
+
+  // Open the popup with a GestureTap.
+  var position =  elementCenterPosition(menuElement);
+  eventSender.gestureTapDown(position[0], position[1]);
+  shouldBeNull('window.internals.pagePopupWindow');
+  eventSender.gestureTap(position[0], position[1]);
+  shouldNotBe('window.internals.pagePopupWindow', 'null');
+
+  // GestureTapDown on an open popup closes it.
+  eventSender.gestureTapDown(position[0], position[1]);
+  shouldBeNull('window.internals.pagePopupWindow');
+
+  // The next GestureTap on the recently closed popup shouldn't open it.
+  eventSender.gestureTap(position[0], position[1]);
+  shouldBeNull('window.internals.pagePopupWindow');
+
+  finishJSTest();
+}
+
 </script>
 </body>
 </html>

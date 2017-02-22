@@ -27,9 +27,6 @@ Para obtener más información sobre la privacidad, consulta la política de pri
 <translation id="1654128982815600832">Habilitando conexiones remotas para esta computadora…</translation>
 <translation id="170207782578677537">No se pudo registrar esta computadora.</translation>
 <translation id="1704090719919187045">Preferencias del host de Chromoting</translation>
-<translation id="1730409684442507495">• Mejora la calidad de la imagen del escritorio, la capacidad de respuesta y el consumo de la batería.
-• Mejora la capacidad de respuesta en operaciones para hacer clic y arrastrar.
-• Mejora varios efectos de animación en la IU.</translation>
 <translation id="174018511426417793">No tienes ninguna computadora registrada. Para habilitar conexiones remotas con una computadora, instala allí Escritorio remoto de Chrome y haz clic en "<ph name="BUTTON_NAME" />".</translation>
 <translation id="1742469581923031760">Conectando…</translation>
 <translation id="1770394049404108959">No puedo abrir la aplicación.</translation>
@@ -44,6 +41,10 @@ Para obtener más información sobre la privacidad, consulta la política de pri
 <translation id="2013996867038862849">Se eliminaron todos los clientes sincronizados.</translation>
 <translation id="2038229918502634450">El host está reiniciándose para implementar un cambio de política.</translation>
 <translation id="2046651113449445291">Los clientes que se indican a continuación se sincronizaron con esta computadora y pueden conectarse sin proporcionar un PIN. Puedes revocar este permiso en cualquier momento, ya sea de forma individual o para todos los clientes.</translation>
+<translation id="2053901200959289492">• Compatibilidad con la función Multiventana para Android Nougat.
+• Mejor calidad de la imagen del escritorio, capacidad de respuesta y consumo de la batería.
+• Mejor capacidad de respuesta en operaciones para hacer clic y arrastrar.
+• Mejoras en varios efectos de animación en la IU.</translation>
 <translation id="2078880767960296260">Proceso de host</translation>
 <translation id="20876857123010370">Modo de panel táctil</translation>
 <translation id="2089514346391228378">Se habilitaron las conexiones remotas con esta computadora.</translation>
@@ -223,6 +224,7 @@ remoto de Chrome</translation>
 <translation id="6640610550128933069">Última vez en línea el <ph name="DATE" /></translation>
 <translation id="6668065415969892472">Se actualizó tu PIN.</translation>
 <translation id="6681800064886881394">Copyright 2013 Google Inc. Todos los derechos reservados.</translation>
+<translation id="6705482892455291412">Después de ingresar el código, se te pedirá que aceptes la conexión e inicies la sesión de uso compartido.</translation>
 <translation id="6746493157771801606">Borrar historial</translation>
 <translation id="6748108480210050150">De</translation>
 <translation id="677755392401385740">Host iniciado para usuario: <ph name="HOST_USERNAME" /></translation>
@@ -231,7 +233,7 @@ remoto de Chrome</translation>
 <translation id="6939719207673461467">Mostrar u ocultar teclado</translation>
 <translation id="6944854424004126054">Restaurar ventana</translation>
 <translation id="6963936880795878952">Las conexiones con la computadora remota se bloquearon temporalmente porque alguien intentó conectarse a ella con un PIN no válido. Vuelve a intentarlo más tarde.</translation>
-<translation id="6965382102122355670">Aceptar</translation>
+<translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">¿Realmente deseas inhabilitar las conexiones remotas con <ph name="HOSTNAME" />? Si te arrepientes, tendrás que ir a esa computadora para volver a habilitar las conexiones.</translation>
 <translation id="6998989275928107238">A</translation>
 <translation id="7019153418965365059">Error de host no reconocido: <ph name="HOST_OFFLINE_REASON" /></translation>
@@ -299,6 +301,7 @@ remoto de Chrome</translation>
 <translation id="9188433529406846933">Autorizar</translation>
 <translation id="9213184081240281106">Configuración del host no válida</translation>
 <translation id="951991426597076286">Rechazar</translation>
+<translation id="962733587145768554">Selecciona "<ph name="SHARE" />" en el cuadro de diálogo de conexión para completar el proceso.</translation>
 <translation id="979100198331752041">La aplicación Escritorio remoto de Chrome en <ph name="HOSTNAME" /> está desactualizada y debe actualizarse.</translation>
 <translation id="985602178874221306">Los creadores de Chromium</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" /> (en línea por última vez: <ph name="DATE_OR_TIME" />)</translation>

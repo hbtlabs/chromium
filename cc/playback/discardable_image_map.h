@@ -10,9 +10,9 @@
 #include <vector>
 
 #include "cc/base/cc_export.h"
-#include "cc/base/region.h"
 #include "cc/base/rtree.h"
 #include "cc/playback/draw_image.h"
+#include "cc/playback/image_id.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "ui/gfx/geometry/rect.h"
@@ -28,9 +28,6 @@ SkRect MapRect(const SkMatrix& matrix, const SkRect& src);
 // rect and get back a list of DrawImages in that rect.
 class CC_EXPORT DiscardableImageMap {
  public:
-  // A map of SkImage id to the region for this image.
-  using ImageToRegionMap = std::unordered_map<uint32_t, Region>;
-
   class CC_EXPORT ScopedMetadataGenerator {
    public:
     ScopedMetadataGenerator(DiscardableImageMap* image_map,
@@ -41,7 +38,7 @@ class CC_EXPORT DiscardableImageMap {
 
    private:
     DiscardableImageMap* image_map_;
-    sk_sp<SkCanvas> metadata_canvas_;
+    std::unique_ptr<SkCanvas> metadata_canvas_;
   };
 
   DiscardableImageMap();
@@ -49,19 +46,19 @@ class CC_EXPORT DiscardableImageMap {
 
   bool empty() const { return all_images_.empty(); }
   void GetDiscardableImagesInRect(const gfx::Rect& rect,
-                                  const gfx::SizeF& raster_scales,
+                                  float contents_scale,
                                   std::vector<DrawImage>* images) const;
-  Region GetRegionForImage(uint32_t image_id) const;
+  gfx::Rect GetRectForImage(ImageId image_id) const;
 
  private:
   friend class ScopedMetadataGenerator;
   friend class DiscardableImageMapTest;
 
-  sk_sp<SkCanvas> BeginGeneratingMetadata(const gfx::Size& bounds);
+  std::unique_ptr<SkCanvas> BeginGeneratingMetadata(const gfx::Size& bounds);
   void EndGeneratingMetadata();
 
   std::vector<std::pair<DrawImage, gfx::Rect>> all_images_;
-  ImageToRegionMap image_id_to_region_;
+  std::unordered_map<ImageId, gfx::Rect> image_id_to_rect_;
 
   RTree images_rtree_;
 };

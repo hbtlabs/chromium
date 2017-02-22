@@ -42,14 +42,21 @@ SigninViewControllerDelegateViews::SigninViewControllerDelegateViews(
     SigninViewController* signin_view_controller,
     std::unique_ptr<views::WebView> content_view,
     Browser* browser,
+    ui::ModalType dialog_modal_type,
     bool wait_for_size)
     : SigninViewControllerDelegate(signin_view_controller,
                                    content_view->GetWebContents()),
       content_view_(content_view.release()),
       modal_signin_widget_(nullptr),
-      wait_for_size_(wait_for_size),
+      dialog_modal_type_(dialog_modal_type),
       browser_(browser) {
-  if (!wait_for_size_)
+  DCHECK(browser_);
+  DCHECK(browser_->tab_strip_model()->GetActiveWebContents())
+      << "A tab must be active to present the sign-in modal dialog.";
+  DCHECK(dialog_modal_type == ui::MODAL_TYPE_CHILD ||
+         dialog_modal_type == ui::MODAL_TYPE_WINDOW)
+      << "Unsupported dialog modal type " << dialog_modal_type;
+  if (!wait_for_size)
     DisplayModal();
 }
 
@@ -74,7 +81,7 @@ void SigninViewControllerDelegateViews::DeleteDelegate() {
 }
 
 ui::ModalType SigninViewControllerDelegateViews::GetModalType() const {
-  return ui::MODAL_TYPE_CHILD;
+  return dialog_modal_type_;
 }
 
 bool SigninViewControllerDelegateViews::ShouldShowCloseButton() const {
@@ -99,7 +106,7 @@ void SigninViewControllerDelegateViews::ResizeNativeView(int height) {
       gfx::Size(kModalDialogWidth, std::min(height, max_height)));
   content_view_->Layout();
 
-  if (wait_for_size_) {
+  if (!modal_signin_widget_) {
     // The modal wasn't displayed yet so just show it with the already resized
     // view.
     DisplayModal();
@@ -107,8 +114,31 @@ void SigninViewControllerDelegateViews::ResizeNativeView(int height) {
 }
 
 void SigninViewControllerDelegateViews::DisplayModal() {
-  modal_signin_widget_ = constrained_window::ShowWebModalDialogViews(
-      this, browser_->tab_strip_model()->GetActiveWebContents());
+  DCHECK(!modal_signin_widget_);
+
+  content::WebContents* host_web_contents =
+      browser_->tab_strip_model()->GetActiveWebContents();
+
+  // Avoid displaying the sign-in modal view if there are no active web
+  // contents. This happens if the user closes the browser window before this
+  // dialog has a chance to be displayed.
+  if (!host_web_contents)
+    return;
+
+  gfx::NativeWindow window = host_web_contents->GetTopLevelNativeWindow();
+  switch (dialog_modal_type_) {
+    case ui::MODAL_TYPE_WINDOW:
+      modal_signin_widget_ =
+          constrained_window::CreateBrowserModalDialogViews(this, window);
+      modal_signin_widget_->Show();
+      break;
+    case ui::MODAL_TYPE_CHILD:
+      modal_signin_widget_ = constrained_window::ShowWebModalDialogViews(
+          this, browser_->tab_strip_model()->GetActiveWebContents());
+      break;
+    default:
+      NOTREACHED() << "Unsupported dialog modal type " << dialog_modal_type_;
+  }
   content_view_->RequestFocus();
 }
 
@@ -192,7 +222,7 @@ SigninViewControllerDelegate::CreateModalSigninDelegate(
       signin_view_controller,
       SigninViewControllerDelegateViews::CreateGaiaWebView(
           nullptr, mode, browser, access_point),
-      browser, false);
+      browser, ui::MODAL_TYPE_CHILD, false);
 }
 
 SigninViewControllerDelegate*
@@ -202,7 +232,7 @@ SigninViewControllerDelegate::CreateSyncConfirmationDelegate(
   return new SigninViewControllerDelegateViews(
       signin_view_controller,
       SigninViewControllerDelegateViews::CreateSyncConfirmationWebView(browser),
-      browser, true);
+      browser, ui::MODAL_TYPE_WINDOW, true);
 }
 
 SigninViewControllerDelegate*
@@ -212,5 +242,5 @@ SigninViewControllerDelegate::CreateSigninErrorDelegate(
   return new SigninViewControllerDelegateViews(
       signin_view_controller,
       SigninViewControllerDelegateViews::CreateSigninErrorWebView(browser),
-      browser, true);
+      browser, ui::MODAL_TYPE_WINDOW, true);
 }

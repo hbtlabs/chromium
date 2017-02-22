@@ -89,9 +89,10 @@ class MediaGpuChannelFilter : public IPC::MessageFilter {
   base::UnguessableToken channel_token_;
 };
 
-MediaGpuChannel::MediaGpuChannel(gpu::GpuChannel* channel) : channel_(channel) {
-  channel_->AddFilter(
-      new MediaGpuChannelFilter(base::UnguessableToken::Create()));
+MediaGpuChannel::MediaGpuChannel(gpu::GpuChannel* channel,
+                                 const base::UnguessableToken& channel_token)
+    : channel_(channel) {
+  channel_->AddFilter(new MediaGpuChannelFilter(channel_token));
 }
 
 MediaGpuChannel::~MediaGpuChannel() {}
@@ -121,6 +122,10 @@ void MediaGpuChannel::OnCreateJpegDecoder(int32_t route_id,
                                           IPC::Message* reply_msg) {
   std::unique_ptr<IPC::Message> msg(reply_msg);
   if (!jpeg_decoder_) {
+    // The lifetime of |jpeg_decoder_| is managed by a gpu::GpuChannel. The
+    // GpuChannels destroy all the GpuJpegDecodeAccelerator that they own when
+    // they are destroyed. Therefore, passing |channel_| as a raw pointer is
+    // safe.
     jpeg_decoder_.reset(
         new GpuJpegDecodeAccelerator(channel_, channel_->io_task_runner()));
   }

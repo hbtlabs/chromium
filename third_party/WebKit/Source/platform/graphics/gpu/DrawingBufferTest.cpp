@@ -32,6 +32,7 @@
 
 #include "cc/resources/single_release_callback.h"
 #include "cc/resources/texture_mailbox.h"
+#include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "gpu/command_buffer/client/gles2_interface_stub.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/sync_token.h"
@@ -40,6 +41,7 @@
 #include "platform/graphics/gpu/DrawingBufferTestHelpers.h"
 #include "public/platform/Platform.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/Source/platform/testing/TestingPlatformSupport.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/RefPtr.h"
 #include <memory>
@@ -49,16 +51,30 @@ using testing::_;
 
 namespace blink {
 
+namespace {
+
+class FakePlatformSupport : public TestingPlatformSupport {
+  gpu::GpuMemoryBufferManager* getGpuMemoryBufferManager() override {
+    return &m_testGpuMemoryBufferManager;
+  }
+
+ private:
+  cc::TestGpuMemoryBufferManager m_testGpuMemoryBufferManager;
+};
+
+}  // anonymous namespace
+
 class DrawingBufferTest : public Test {
  protected:
   void SetUp() override {
     IntSize initialSize(InitialWidth, InitialHeight);
     std::unique_ptr<GLES2InterfaceForTests> gl =
-        wrapUnique(new GLES2InterfaceForTests);
+        WTF::wrapUnique(new GLES2InterfaceForTests);
     m_gl = gl.get();
     SetAndSaveRestoreState(false);
     std::unique_ptr<WebGraphicsContext3DProviderForTests> provider =
-        wrapUnique(new WebGraphicsContext3DProviderForTests(std::move(gl)));
+        WTF::wrapUnique(
+            new WebGraphicsContext3DProviderForTests(std::move(gl)));
     m_drawingBuffer = DrawingBufferForTests::create(
         std::move(provider), m_gl, initialSize, DrawingBuffer::Preserve);
     CHECK(m_drawingBuffer);
@@ -345,13 +361,16 @@ TEST_F(DrawingBufferTest, verifyInsertAndWaitSyncTokenCorrectly) {
 class DrawingBufferImageChromiumTest : public DrawingBufferTest {
  protected:
   void SetUp() override {
+    m_platform.reset(new ScopedTestingPlatformSupport<FakePlatformSupport>);
+
     IntSize initialSize(InitialWidth, InitialHeight);
     std::unique_ptr<GLES2InterfaceForTests> gl =
-        wrapUnique(new GLES2InterfaceForTests);
+        WTF::wrapUnique(new GLES2InterfaceForTests);
     m_gl = gl.get();
     SetAndSaveRestoreState(true);
     std::unique_ptr<WebGraphicsContext3DProviderForTests> provider =
-        wrapUnique(new WebGraphicsContext3DProviderForTests(std::move(gl)));
+        WTF::wrapUnique(
+            new WebGraphicsContext3DProviderForTests(std::move(gl)));
     RuntimeEnabledFeatures::setWebGLImageChromiumEnabled(true);
     m_imageId0 = m_gl->nextImageIdToBeCreated();
     EXPECT_CALL(*m_gl, BindTexImage2DMock(m_imageId0)).Times(1);
@@ -363,9 +382,11 @@ class DrawingBufferImageChromiumTest : public DrawingBufferTest {
 
   void TearDown() override {
     RuntimeEnabledFeatures::setWebGLImageChromiumEnabled(false);
+    m_platform.reset();
   }
 
   GLuint m_imageId0;
+  std::unique_ptr<ScopedTestingPlatformSupport<FakePlatformSupport>> m_platform;
 };
 
 TEST_F(DrawingBufferImageChromiumTest, verifyResizingReallocatesImages) {
@@ -591,10 +612,11 @@ TEST(DrawingBufferDepthStencilTest, packedDepthStencilSupported) {
   for (size_t i = 0; i < WTF_ARRAY_LENGTH(cases); i++) {
     SCOPED_TRACE(cases[i].testCaseName);
     std::unique_ptr<DepthStencilTrackingGLES2Interface> gl =
-        wrapUnique(new DepthStencilTrackingGLES2Interface);
+        WTF::wrapUnique(new DepthStencilTrackingGLES2Interface);
     DepthStencilTrackingGLES2Interface* trackingGL = gl.get();
     std::unique_ptr<WebGraphicsContext3DProviderForTests> provider =
-        wrapUnique(new WebGraphicsContext3DProviderForTests(std::move(gl)));
+        WTF::wrapUnique(
+            new WebGraphicsContext3DProviderForTests(std::move(gl)));
     DrawingBuffer::PreserveDrawingBuffer preserve = DrawingBuffer::Preserve;
 
     bool premultipliedAlpha = false;

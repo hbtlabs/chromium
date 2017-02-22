@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.physicalweb;
 
 import android.app.Activity;
-import android.content.Intent;
 import android.content.res.Resources;
 import android.os.Build;
 import android.text.Html;
@@ -16,11 +15,10 @@ import android.widget.Button;
 import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.ContextUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.BasicNativePage;
+import org.chromium.chrome.browser.NativePageHost;
 import org.chromium.chrome.browser.UrlConstants;
-import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.location.LocationUtils;
 
 import java.util.HashSet;
@@ -40,14 +38,15 @@ public class PhysicalWebDiagnosticsPage extends BasicNativePage {
     /**
      * Create a new instance of the Physical Web diagnostics page.
      * @param activity The activity to get context and manage fragments.
-     * @param tab The tab to load urls.
+     * @param host A NativePageHost to load urls.
      */
-    public PhysicalWebDiagnosticsPage(Activity activity, Tab tab) {
-        super(activity, tab);
+    public PhysicalWebDiagnosticsPage(Activity activity, NativePageHost host) {
+        super(activity, host);
     }
 
     @Override
-    protected void initialize(final Activity activity, Tab tab) {
+    @SuppressWarnings("deprecation") // Update usage of Html.fromHtml when API min is 24
+    protected void initialize(final Activity activity, NativePageHost host) {
         Resources resources = activity.getResources();
         mSuccessColor = colorToHexValue(ApiCompatibilityUtils.getColor(resources,
                 R.color.physical_web_diags_success_color));
@@ -63,7 +62,8 @@ public class PhysicalWebDiagnosticsPage extends BasicNativePage {
         mLaunchButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                activity.startActivity(createListUrlsIntent());
+                PhysicalWebUma.onActivityReferral(PhysicalWebUma.DIAGNOSTICS_REFERER);
+                PhysicalWeb.showUrlList();
             }
         });
 
@@ -79,7 +79,7 @@ public class PhysicalWebDiagnosticsPage extends BasicNativePage {
 
     @Override
     public String getHost() {
-        return UrlConstants.PHYSICAL_WEB_HOST;
+        return UrlConstants.PHYSICAL_WEB_DIAGNOSTICS_HOST;
     }
 
     @Override
@@ -215,11 +215,6 @@ public class PhysicalWebDiagnosticsPage extends BasicNativePage {
 
     private boolean isSdkVersionCorrect() {
         return (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT);
-    }
-
-    private static Intent createListUrlsIntent() {
-        return new Intent(ContextUtils.getApplicationContext(), ListUrlsActivity.class)
-                .putExtra(ListUrlsActivity.REFERER_KEY, ListUrlsActivity.DIAGNOSTICS_REFERER);
     }
 
     private static String colorToHexValue(int color) {

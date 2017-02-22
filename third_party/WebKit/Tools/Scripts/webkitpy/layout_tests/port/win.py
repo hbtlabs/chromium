@@ -31,11 +31,12 @@
 import errno
 import logging
 
+# The _winreg library is only available on Windows.
+# https://docs.python.org/2/library/_winreg.html
 try:
-    import _winreg
-except ImportError as e:
-    _winreg = None
-    WindowsError = Exception  # this shuts up pylint.
+    import _winreg  # pylint: disable=import-error
+except ImportError:
+    _winreg = None  # pylint: disable=invalid-name
 
 from webkitpy.layout_tests.breakpad.dump_reader_win import DumpReaderWin
 from webkitpy.layout_tests.models import test_run_results
@@ -56,7 +57,7 @@ class WinPort(base.Port):
 
     DEFAULT_BUILD_DIRECTORIES = ('build', 'out')
 
-    BUILD_REQUIREMENTS_URL = 'http://www.chromium.org/developers/how-tos/build-instructions-windows'
+    BUILD_REQUIREMENTS_URL = 'https://chromium.googlesource.com/chromium/src/+/master/docs/windows_build_instructions.md'
 
     @classmethod
     def determine_full_port_name(cls, host, options, port_name):
@@ -120,9 +121,9 @@ class WinPort(base.Port):
             # existing entry points to a valid path and has the right command line.
             if len(args) == 2 and self._filesystem.exists(args[0]) and args[0].endswith('perl.exe') and args[1] == '-wT':
                 return True
-        except WindowsError as e:
-            if e.errno != errno.ENOENT:
-                raise e
+        except WindowsError as error:  # WindowsError is not defined on non-Windows platforms - pylint: disable=undefined-variable
+            if error.errno != errno.ENOENT:
+                raise
             # The key simply probably doesn't exist.
 
         # Note that we write to HKCU so that we don't need privileged access
@@ -173,11 +174,6 @@ class WinPort(base.Port):
             self._executive.run_command([setup_mount])  # Paths are all absolute, so this does not require a cwd.
         return env
 
-    def _modules_to_search_for_symbols(self):
-        # FIXME: we should return the path to the ffmpeg equivalents to detect if we have the mp3 and aac codecs installed.
-        # See https://bugs.webkit.org/show_bug.cgi?id=89706.
-        return []
-
     def check_build(self, needs_http, printer):
         result = super(WinPort, self).check_build(needs_http, printer)
 
@@ -188,7 +184,7 @@ class WinPort(base.Port):
         if result:
             _log.error('For complete Windows build requirements, please see:')
             _log.error('')
-            _log.error('    http://dev.chromium.org/developers/how-tos/build-instructions-windows')
+            _log.error('    https://chromium.googlesource.com/chromium/src/+/master/docs/windows_build_instructions.md')
         return result
 
     def operating_system(self):
@@ -225,9 +221,6 @@ class WinPort(base.Port):
     def _path_to_image_diff(self):
         binary_name = 'image_diff.exe'
         return self._build_path(binary_name)
-
-    def _path_to_wdiff(self):
-        return self.path_from_chromium_base('third_party', 'cygwin', 'bin', 'wdiff.exe')
 
     def _check_crash_service_available(self):
         """Checks whether the crash service binary is present."""

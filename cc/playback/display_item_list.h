@@ -19,38 +19,21 @@
 #include "cc/base/rtree.h"
 #include "cc/playback/discardable_image_map.h"
 #include "cc/playback/display_item.h"
-#include "cc/playback/display_item_list_settings.h"
+#include "cc/playback/image_id.h"
 #include "third_party/skia/include/core/SkPicture.h"
+#include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
 class SkCanvas;
 
 namespace cc {
-class ClientPictureCache;
 class DisplayItem;
-
-namespace proto {
-class DisplayItemList;
-}
 
 class CC_EXPORT DisplayItemList
     : public base::RefCountedThreadSafe<DisplayItemList> {
  public:
-  // Creates a display item list.
-  static scoped_refptr<DisplayItemList> Create(
-      const DisplayItemListSettings& settings);
-
-  // Creates a DisplayItemList from a Protobuf.
-  // TODO(dtrainor): Pass in a list of possible DisplayItems to reuse
-  // (crbug.com/548434).
-  static scoped_refptr<DisplayItemList> CreateFromProto(
-      const proto::DisplayItemList& proto,
-      ClientPictureCache* client_picture_cache,
-      std::vector<uint32_t>* used_engine_picture_ids);
-
-  // Creates a Protobuf representing the state of this DisplayItemList.
-  void ToProtobuf(proto::DisplayItemList* proto);
+  DisplayItemList();
 
   // TODO(trchen): Deprecated. Apply clip and scale on the canvas instead.
   void Raster(SkCanvas* canvas,
@@ -142,6 +125,18 @@ class CC_EXPORT DisplayItemList
     inputs_.all_items_are_suitable_for_gpu_rasterization = is_suitable;
   }
   bool IsSuitableForGpuRasterization() const;
+
+  void SetImpliedColorSpace(const gfx::ColorSpace& implied_color_space) {
+    inputs_.implied_color_space_specified = true;
+    inputs_.implied_color_space = implied_color_space;
+  }
+  bool HasImpliedColorSpace() const {
+    return inputs_.implied_color_space_specified;
+  }
+  const gfx::ColorSpace& GetImpliedColorSpace() const {
+    return inputs_.implied_color_space;
+  }
+
   int ApproximateOpCount() const;
   size_t ApproximateMemoryUsage() const;
   bool ShouldBeAnalyzedForSolidColor() const;
@@ -153,9 +148,9 @@ class CC_EXPORT DisplayItemList
 
   void GenerateDiscardableImagesMetadata();
   void GetDiscardableImagesInRect(const gfx::Rect& rect,
-                                  const gfx::SizeF& raster_scales,
+                                  float contents_scale,
                                   std::vector<DrawImage>* images);
-  Region GetRegionForImage(uint32_t image_id);
+  gfx::Rect GetRectForImage(ImageId image_id) const;
 
   void SetRetainVisualRectsForTesting(bool retain) {
     retain_visual_rects_ = retain;
@@ -176,8 +171,6 @@ class CC_EXPORT DisplayItemList
   }
 
  private:
-  explicit DisplayItemList(
-      const DisplayItemListSettings& display_list_settings);
   ~DisplayItemList();
 
   RTree rtree_;
@@ -202,7 +195,7 @@ class CC_EXPORT DisplayItemList
   DiscardableImageMap image_map_;
 
   struct Inputs {
-    explicit Inputs(const DisplayItemListSettings& settings);
+    Inputs();
     ~Inputs();
 
     ContiguousContainer<DisplayItem> items;
@@ -213,8 +206,9 @@ class CC_EXPORT DisplayItemList
     // because they are not needed while walking the |items| for raster.
     std::vector<gfx::Rect> visual_rects;
     std::vector<size_t> begin_item_indices;
-    const DisplayItemListSettings settings;
     bool all_items_are_suitable_for_gpu_rasterization = true;
+    bool implied_color_space_specified = false;
+    gfx::ColorSpace implied_color_space;
   };
 
   Inputs inputs_;

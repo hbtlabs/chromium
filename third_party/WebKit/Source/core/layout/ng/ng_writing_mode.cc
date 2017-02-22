@@ -4,23 +4,27 @@
 
 #include "core/layout/ng/ng_writing_mode.h"
 
-#include "platform/text/WritingMode.h"
+#include "core/layout/LayoutObject.h"
 #include "wtf/Assertions.h"
 
 namespace blink {
 
 NGWritingMode FromPlatformWritingMode(WritingMode mode) {
   switch (mode) {
-    case TopToBottomWritingMode:
-      return HorizontalTopBottom;
-    case RightToLeftWritingMode:
-      return VerticalRightLeft;
-    case LeftToRightWritingMode:
-      return VerticalLeftRight;
+    case WritingMode::kHorizontalTb:
+      return kHorizontalTopBottom;
+    case WritingMode::kVerticalRl:
+      return kVerticalRightLeft;
+    case WritingMode::kVerticalLr:
+      return kVerticalLeftRight;
     default:
       NOTREACHED();
-      return HorizontalTopBottom;
+      return kHorizontalTopBottom;
   }
+}
+
+bool IsParallelWritingMode(NGWritingMode a, NGWritingMode b) {
+  return (a == kHorizontalTopBottom) == (b == kHorizontalTopBottom);
 }
 
 }  // namespace blink

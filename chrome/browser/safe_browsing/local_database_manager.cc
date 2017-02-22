@@ -17,6 +17,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -28,11 +29,11 @@
 #include "chrome/browser/safe_browsing/safe_browsing_database.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
-#include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing/common/safebrowsing_switches.h"
 #include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "components/safe_browsing_db/util.h"
 #include "components/safe_browsing_db/v4_protocol_manager_util.h"
@@ -271,7 +272,6 @@ LocalSafeBrowsingDatabaseManager::LocalSafeBrowsingDatabaseManager(
     const scoped_refptr<SafeBrowsingService>& service)
     : sb_service_(service),
       database_(NULL),
-      enabled_(false),
       enable_download_protection_(false),
       enable_csd_whitelist_(false),
       enable_download_whitelist_(false),
@@ -287,20 +287,20 @@ LocalSafeBrowsingDatabaseManager::LocalSafeBrowsingDatabaseManager(
   DCHECK(sb_service_.get() != NULL);
 
   base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
-  enable_download_protection_ =
-      !cmdline->HasSwitch(switches::kSbDisableDownloadProtection);
+  enable_download_protection_ = !cmdline->HasSwitch(
+      safe_browsing::switches::kSbDisableDownloadProtection);
 
   // We only download the csd-whitelist if client-side phishing detection is
   // enabled.
   enable_csd_whitelist_ =
-      !cmdline->HasSwitch(switches::kDisableClientSidePhishingDetection);
+      !cmdline->HasSwitch(::switches::kDisableClientSidePhishingDetection);
 
   // We download the download-whitelist if download protection is enabled.
   enable_download_whitelist_ = enable_download_protection_;
 
   // TODO(kalman): there really shouldn't be a flag for this.
-  enable_extension_blacklist_ =
-      !cmdline->HasSwitch(switches::kSbDisableExtensionBlacklist);
+  enable_extension_blacklist_ = !cmdline->HasSwitch(
+      safe_browsing::switches::kSbDisableExtensionBlacklist);
 
   // The client-side IP blacklist feature is tightly integrated with client-side
   // phishing protection for now.
@@ -558,6 +558,14 @@ bool LocalSafeBrowsingDatabaseManager::CheckBrowseUrl(const GURL& url,
   return false;
 }
 
+bool LocalSafeBrowsingDatabaseManager::CheckUrlForSubresourceFilter(
+    const GURL& url,
+    Client* client) {
+  // TODO(melandory): implement Android support.
+  NOTREACHED();
+  return true;
+}
+
 void LocalSafeBrowsingDatabaseManager::CancelCheck(Client* client) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   for (const auto& check : checks_) {
@@ -692,12 +700,13 @@ void LocalSafeBrowsingDatabaseManager::StartOnIOThread(
 
 void LocalSafeBrowsingDatabaseManager::StopOnIOThread(bool shutdown) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  SafeBrowsingDatabaseManager::StopOnIOThread(shutdown);
 
   DoStopOnIOThread();
   if (shutdown) {
     sb_service_ = NULL;
   }
+
+  SafeBrowsingDatabaseManager::StopOnIOThread(shutdown);
 }
 
 void LocalSafeBrowsingDatabaseManager::NotifyDatabaseUpdateFinished(

@@ -31,34 +31,6 @@
 
 namespace blink {
 
-namespace {
-
-class DOMTokenListIterationSource final
-    : public ValueIterable<String>::IterationSource {
- public:
-  explicit DOMTokenListIterationSource(DOMTokenList* domTokenList)
-      : m_domTokenList(domTokenList) {}
-
-  bool next(ScriptState* scriptState,
-            String& value,
-            ExceptionState& exceptionState) override {
-    if (m_index >= m_domTokenList->length())
-      return false;
-    value = m_domTokenList->item(m_index);
-    return true;
-  }
-
-  DEFINE_INLINE_VIRTUAL_TRACE() {
-    visitor->trace(m_domTokenList);
-    ValueIterable<String>::IterationSource::trace(visitor);
-  }
-
- private:
-  const Member<DOMTokenList> m_domTokenList;
-};
-
-}  // namespace
-
 bool DOMTokenList::validateToken(const String& token,
                                  ExceptionState& exceptionState) const {
   if (token.isEmpty()) {
@@ -80,8 +52,8 @@ bool DOMTokenList::validateToken(const String& token,
 
 bool DOMTokenList::validateTokens(const Vector<String>& tokens,
                                   ExceptionState& exceptionState) const {
-  for (size_t i = 0; i < tokens.size(); ++i) {
-    if (!validateToken(tokens[i], exceptionState))
+  for (const auto& token : tokens) {
+    if (!validateToken(token, exceptionState))
       return false;
   }
 
@@ -105,7 +77,7 @@ bool DOMTokenList::contains(const AtomicString& token,
 void DOMTokenList::add(const AtomicString& token,
                        ExceptionState& exceptionState) {
   Vector<String> tokens;
-  tokens.append(token.getString());
+  tokens.push_back(token.getString());
   add(tokens, exceptionState);
 }
 
@@ -115,14 +87,14 @@ void DOMTokenList::add(const Vector<String>& tokens,
                        ExceptionState& exceptionState) {
   Vector<String> filteredTokens;
   filteredTokens.reserveCapacity(tokens.size());
-  for (size_t i = 0; i < tokens.size(); ++i) {
-    if (!validateToken(tokens[i], exceptionState))
+  for (const auto& token : tokens) {
+    if (!validateToken(token, exceptionState))
       return;
-    if (containsInternal(AtomicString(tokens[i])))
+    if (containsInternal(AtomicString(token)))
       continue;
-    if (filteredTokens.contains(tokens[i]))
+    if (filteredTokens.contains(token))
       continue;
-    filteredTokens.append(tokens[i]);
+    filteredTokens.push_back(token);
   }
 
   if (!filteredTokens.isEmpty())
@@ -132,7 +104,7 @@ void DOMTokenList::add(const Vector<String>& tokens,
 void DOMTokenList::remove(const AtomicString& token,
                           ExceptionState& exceptionState) {
   Vector<String> tokens;
-  tokens.append(token.getString());
+  tokens.push_back(token.getString());
   remove(tokens, exceptionState);
 }
 
@@ -146,15 +118,14 @@ void DOMTokenList::remove(const Vector<String>& tokens,
   // Check using containsInternal first since it is a lot faster than going
   // through the string character by character.
   bool found = false;
-  for (size_t i = 0; i < tokens.size(); ++i) {
-    if (containsInternal(AtomicString(tokens[i]))) {
+  for (const auto& token : tokens) {
+    if (containsInternal(AtomicString(token))) {
       found = true;
       break;
     }
   }
 
-  if (found)
-    setValue(removeTokens(value(), tokens));
+  setValue(found ? removeTokens(value(), tokens) : value());
 }
 
 bool DOMTokenList::toggle(const AtomicString& token,
@@ -205,7 +176,7 @@ void DOMTokenList::removeInternal(const AtomicString& token) {
 AtomicString DOMTokenList::addToken(const AtomicString& input,
                                     const AtomicString& token) {
   Vector<String> tokens;
-  tokens.append(token.getString());
+  tokens.push_back(token.getString());
   return addTokens(input, tokens);
 }
 
@@ -221,10 +192,10 @@ AtomicString DOMTokenList::addTokens(const AtomicString& input,
     needsSpace = !isHTMLSpace<UChar>(input[input.length() - 1]);
   }
 
-  for (size_t i = 0; i < tokens.size(); ++i) {
+  for (const auto& token : tokens) {
     if (needsSpace)
       builder.append(' ');
-    builder.append(tokens[i]);
+    builder.append(token);
     needsSpace = true;
   }
 
@@ -234,7 +205,7 @@ AtomicString DOMTokenList::addTokens(const AtomicString& input,
 AtomicString DOMTokenList::removeToken(const AtomicString& input,
                                        const AtomicString& token) {
   Vector<String> tokens;
-  tokens.append(token.getString());
+  tokens.push_back(token.getString());
   return removeTokens(input, tokens);
 }
 
@@ -291,20 +262,16 @@ AtomicString DOMTokenList::removeTokens(const AtomicString& input,
 }
 
 void DOMTokenList::setValue(const AtomicString& value) {
+  bool valueChanged = m_value != value;
   m_value = value;
-  m_tokens.set(value, SpaceSplitString::ShouldNotFoldCase);
+  if (valueChanged)
+    m_tokens.set(value, SpaceSplitString::ShouldNotFoldCase);
   if (m_observer)
     m_observer->valueWasSet();
 }
 
 bool DOMTokenList::containsInternal(const AtomicString& token) const {
   return m_tokens.contains(token);
-}
-
-ValueIterable<String>::IterationSource* DOMTokenList::startIteration(
-    ScriptState*,
-    ExceptionState&) {
-  return new DOMTokenListIterationSource(this);
 }
 
 const AtomicString DOMTokenList::item(unsigned index) const {

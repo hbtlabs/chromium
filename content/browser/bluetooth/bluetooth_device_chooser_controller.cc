@@ -10,10 +10,12 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "content/browser/bluetooth/bluetooth_blacklist.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "content/browser/bluetooth/bluetooth_blocklist.h"
 #include "content/browser/bluetooth/bluetooth_metrics.h"
 #include "content/browser/bluetooth/web_bluetooth_service_impl.h"
 #include "content/public/browser/browser_thread.h"
@@ -30,19 +32,45 @@ using UUIDSet = device::BluetoothDevice::UUIDSet;
 
 namespace {
 
-// Anything worse than or equal to this will show 0 bars.
-const int kMinRSSI = -100;
-// Anything better than or equal to this will show the maximum bars.
-const int kMaxRSSI = -55;
-// Number of RSSI levels used in the signal strength image.
-const int kNumSignalStrengthLevels = 5;
-
-const content::UMARSSISignalStrengthLevel kRSSISignalStrengthEnumTable[] = {
-    content::UMARSSISignalStrengthLevel::LEVEL_0,
-    content::UMARSSISignalStrengthLevel::LEVEL_1,
-    content::UMARSSISignalStrengthLevel::LEVEL_2,
-    content::UMARSSISignalStrengthLevel::LEVEL_3,
-    content::UMARSSISignalStrengthLevel::LEVEL_4};
+// Signal Strength Display Notes:
+//
+// RSSI values are displayed by the chooser to empower a user to differentiate
+// between multiple devices with the same name, comparing devices with different
+// names is a secondary goal. It is important that a user is able to move closer
+// and farther away from a device and have it transition between two different
+// signal strength levels, thus we want to spread RSSI values out evenly accross
+// displayed levels.
+//
+// RSSI values from UMA in RecordRSSISignalStrength are charted here:
+// https://goo.gl/photos/pCoAkF7mPyza9B1k7 (2016-12-08)
+// with a copy-paste of table data at every 5dBm:
+//  dBm   CDF* Histogram Bucket Quantity (hand drawn estimate)
+// -100 00.0%  -
+//  -95 00.4%  --
+//  -90 01.9%  ---
+//  -85 05.1%  ---
+//  -80 09.2%  ----
+//  -75 14.9%  -----
+//  -70 22.0%  ------
+//  -65 32.4%  --------
+//  -60 47.9%  ---------
+//  -55 60.4%  --------
+//  -50 72.8%  ---------
+//  -45 85.5%  -------
+//  -40 94.5%  -----
+//  -35 97.4%  ---
+//  -30 99.0%  --
+//  -25 99.7%  -
+//
+// CDF: Cumulative Distribution Function:
+// https://en.wikipedia.org/wiki/Cumulative_distribution_function
+//
+// Conversion to signal strengths is done by selecting 4 threshold points
+// equally spaced through the CDF.
+const int k20thPercentileRSSI = -71;
+const int k40thPercentileRSSI = -63;
+const int k60thPercentileRSSI = -55;
+const int k80thPercentileRSSI = -47;
 
 }  // namespace
 
@@ -51,8 +79,9 @@ namespace content {
 bool BluetoothDeviceChooserController::use_test_scan_duration_ = false;
 
 namespace {
-constexpr size_t kMaxLengthForDeviceName =
-    29;  // max length of device name in filter.
+// Max length of device name in filter. Bluetooth 5.0 3.C.3.2.2.3 states that
+// the maximum device name length is 248 bytes (UTF-8 encoded).
+constexpr size_t kMaxLengthForDeviceName = 248;
 
 // The duration of a Bluetooth Scan in seconds.
 constexpr int kScanDuration = 60;
@@ -60,22 +89,27 @@ constexpr int kTestScanDuration = 0;
 
 void LogRequestDeviceOptions(
     const blink::mojom::WebBluetoothRequestDeviceOptionsPtr& options) {
-  VLOG(1) << "requestDevice called with the following filters: ";
+  DVLOG(1) << "requestDevice called with the following filters: ";
+  DVLOG(1) << "acceptAllDevices: " << options->accept_all_devices;
+
+  if (!options->filters)
+    return;
+
   int i = 0;
-  for (const auto& filter : options->filters) {
-    VLOG(1) << "Filter #" << ++i;
-    if (!filter->name.is_null())
-      VLOG(1) << "Name: " << filter->name;
+  for (const auto& filter : options->filters.value()) {
+    DVLOG(1) << "Filter #" << ++i;
+    if (filter->name)
+      DVLOG(1) << "Name: " << filter->name.value();
 
-    if (!filter->name_prefix.is_null())
-      VLOG(1) << "Name Prefix: " << filter->name_prefix;
+    if (filter->name_prefix)
+      DVLOG(1) << "Name Prefix: " << filter->name_prefix.value();
 
-    if (!filter->services.is_null()) {
-      VLOG(1) << "Services: ";
-      VLOG(1) << "\t[";
-      for (const auto& service : filter->services)
-        VLOG(1) << "\t\t" << service->canonical_value();
-      VLOG(1) << "\t]";
+    if (filter->services) {
+      DVLOG(1) << "Services: ";
+      DVLOG(1) << "\t[";
+      for (const auto& service : filter->services.value())
+        DVLOG(1) << "\t\t" << service.canonical_value();
+      DVLOG(1) << "\t]";
     }
   }
 }
@@ -83,52 +117,65 @@ void LogRequestDeviceOptions(
 bool IsEmptyOrInvalidFilter(
     const blink::mojom::WebBluetoothScanFilterPtr& filter) {
   // At least one member needs to be present.
-  if (filter->name.is_null() && filter->name_prefix.is_null() &&
-      filter->services.is_null())
+  if (!filter->name && !filter->name_prefix && !filter->services)
     return true;
 
   // The renderer will never send a name or a name_prefix longer than
   // kMaxLengthForDeviceName.
-  if (!filter->name.is_null() && filter->name.size() > kMaxLengthForDeviceName)
+  if (filter->name && filter->name->size() > kMaxLengthForDeviceName)
     return true;
-  if (!filter->name_prefix.is_null() && filter->name_prefix.size() == 0)
+  if (filter->name_prefix && filter->name_prefix->size() == 0)
     return true;
-  if (!filter->name_prefix.is_null() &&
-      filter->name_prefix.size() > kMaxLengthForDeviceName)
+  if (filter->name_prefix &&
+      filter->name_prefix->size() > kMaxLengthForDeviceName)
     return true;
 
   return false;
 }
 
 bool HasEmptyOrInvalidFilter(
-    const mojo::Array<blink::mojom::WebBluetoothScanFilterPtr>& filters) {
-  return filters.empty()
+    const base::Optional<std::vector<blink::mojom::WebBluetoothScanFilterPtr>>&
+        filters) {
+  if (!filters) {
+    return true;
+  }
+
+  return filters->empty()
              ? true
-             : filters.end() != std::find_if(filters.begin(), filters.end(),
-                                             IsEmptyOrInvalidFilter);
+             : filters->end() != std::find_if(filters->begin(), filters->end(),
+                                              IsEmptyOrInvalidFilter);
+}
+
+bool IsOptionsInvalid(
+    const blink::mojom::WebBluetoothRequestDeviceOptionsPtr& options) {
+  if (options->accept_all_devices) {
+    return options->filters.has_value();
+  } else {
+    return HasEmptyOrInvalidFilter(options->filters);
+  }
 }
 
 bool MatchesFilter(const std::string* device_name,
                    const UUIDSet& device_uuids,
                    const blink::mojom::WebBluetoothScanFilterPtr& filter) {
-  if (!filter->name.is_null()) {
+  if (filter->name) {
     if (device_name == nullptr)
       return false;
-    if (filter->name != *device_name)
+    if (filter->name.value() != *device_name)
       return false;
   }
 
-  if (!filter->name_prefix.is_null() && filter->name_prefix.size()) {
+  if (filter->name_prefix && filter->name_prefix->size()) {
     if (device_name == nullptr)
       return false;
-    if (!base::StartsWith(*device_name, filter->name_prefix.get(),
+    if (!base::StartsWith(*device_name, filter->name_prefix.value(),
                           base::CompareCase::SENSITIVE))
       return false;
   }
 
-  if (!filter->services.is_null()) {
-    for (const base::Optional<BluetoothUUID>& service : filter->services) {
-      if (!base::ContainsKey(device_uuids, service.value())) {
+  if (filter->services) {
+    for (const auto& service : filter->services.value()) {
+      if (!base::ContainsKey(device_uuids, service)) {
         return false;
       }
     }
@@ -140,9 +187,10 @@ bool MatchesFilter(const std::string* device_name,
 bool MatchesFilters(
     const std::string* device_name,
     const UUIDSet& device_uuids,
-    const mojo::Array<blink::mojom::WebBluetoothScanFilterPtr>& filters) {
+    const base::Optional<std::vector<blink::mojom::WebBluetoothScanFilterPtr>>&
+        filters) {
   DCHECK(!HasEmptyOrInvalidFilter(filters));
-  for (const auto& filter : filters) {
+  for (const auto& filter : filters.value()) {
     if (MatchesFilter(device_name, device_uuids, filter)) {
       return true;
     }
@@ -151,13 +199,21 @@ bool MatchesFilters(
 }
 
 std::unique_ptr<device::BluetoothDiscoveryFilter> ComputeScanFilter(
-    const mojo::Array<blink::mojom::WebBluetoothScanFilterPtr>& filters) {
+    const base::Optional<std::vector<blink::mojom::WebBluetoothScanFilterPtr>>&
+        filters) {
   std::unordered_set<BluetoothUUID, device::BluetoothUUIDHash> services;
-  for (const auto& filter : filters) {
-    for (const base::Optional<BluetoothUUID>& service : filter->services) {
-      services.insert(service.value());
+
+  if (filters) {
+    for (const auto& filter : filters.value()) {
+      if (!filter->services) {
+        continue;
+      }
+      for (const auto& service : filter->services.value()) {
+        services.insert(service);
+      }
     }
   }
+
   // There isn't much support for GATT over BR/EDR from neither platforms nor
   // devices so performing a Dual scan will find devices that the API is not
   // able to interact with. To avoid wasting power and confusing users with
@@ -259,24 +315,25 @@ void BluetoothDeviceChooserController::GetDevice(
   success_callback_ = success_callback;
   error_callback_ = error_callback;
 
-  // The renderer should never send empty filters.
-  if (HasEmptyOrInvalidFilter(options->filters)) {
+  // The renderer should never send invalid options.
+  if (IsOptionsInvalid(options)) {
     web_bluetooth_service_->CrashRendererAndClosePipe(
-        bad_message::BDH_EMPTY_OR_INVALID_FILTERS);
+        bad_message::BDH_INVALID_OPTIONS);
     return;
   }
   options_ = std::move(options);
   LogRequestDeviceOptions(options_);
 
-  // Check blacklist to reject invalid filters and adjust optional_services.
-  if (BluetoothBlacklist::Get().IsExcluded(options_->filters)) {
+  // Check blocklist to reject invalid filters and adjust optional_services.
+  if (options_->filters &&
+      BluetoothBlocklist::Get().IsExcluded(options_->filters.value())) {
     RecordRequestDeviceOutcome(
-        UMARequestDeviceOutcome::BLACKLISTED_SERVICE_IN_FILTER);
+        UMARequestDeviceOutcome::BLOCKLISTED_SERVICE_IN_FILTER);
     PostErrorCallback(
-        blink::mojom::WebBluetoothResult::REQUEST_DEVICE_WITH_BLACKLISTED_UUID);
+        blink::mojom::WebBluetoothResult::REQUEST_DEVICE_WITH_BLOCKLISTED_UUID);
     return;
   }
-  BluetoothBlacklist::Get().RemoveExcludedUUIDs(options_.get());
+  BluetoothBlocklist::Get().RemoveExcludedUUIDs(options_.get());
 
   const url::Origin requesting_origin =
       render_frame_host_->GetLastCommittedOrigin();
@@ -296,7 +353,7 @@ void BluetoothDeviceChooserController::GetDevice(
   DCHECK(!requesting_origin.unique());
 
   if (!adapter_->IsPresent()) {
-    VLOG(1) << "Bluetooth Adapter not present. Can't serve requestDevice.";
+    DVLOG(1) << "Bluetooth Adapter not present. Can't serve requestDevice.";
     RecordRequestDeviceOutcome(
         UMARequestDeviceOutcome::BLUETOOTH_ADAPTER_NOT_PRESENT);
     PostErrorCallback(blink::mojom::WebBluetoothResult::NO_BLUETOOTH_ADAPTER);
@@ -317,7 +374,7 @@ void BluetoothDeviceChooserController::GetDevice(
         BLOCK_GLOBALLY_DISABLED: {
       // Log to the developer console.
       web_contents_->GetMainFrame()->AddMessageToConsole(
-          content::CONSOLE_MESSAGE_LEVEL_LOG,
+          content::CONSOLE_MESSAGE_LEVEL_INFO,
           "Bluetooth permission has been blocked.");
       // Block requests.
       RecordRequestDeviceOutcome(
@@ -346,12 +403,13 @@ void BluetoothDeviceChooserController::GetDevice(
   }
 
   if (!chooser_->CanAskForScanningPermission()) {
-    VLOG(1) << "Closing immediately because Chooser cannot obtain permission.";
+    DVLOG(1) << "Closing immediately because Chooser cannot obtain permission.";
     OnBluetoothChooserEvent(BluetoothChooser::Event::DENIED_PERMISSION,
                             "" /* device_address */);
     return;
   }
 
+  device_ids_.clear();
   PopulateConnectedDevices();
   if (!chooser_.get()) {
     // If the dialog's closing, no need to do any of the rest of this.
@@ -370,15 +428,19 @@ void BluetoothDeviceChooserController::GetDevice(
 void BluetoothDeviceChooserController::AddFilteredDevice(
     const device::BluetoothDevice& device) {
   base::Optional<std::string> device_name = device.GetName();
-  if (chooser_.get() &&
-      MatchesFilters(device_name ? &device_name.value() : nullptr,
-                     device.GetUUIDs(), options_->filters)) {
-    base::Optional<int8_t> rssi = device.GetInquiryRSSI();
-    chooser_->AddOrUpdateDevice(
-        device.GetAddress(), !!device.GetName() /* should_update_name */,
-        device.GetNameForDisplay(), device.IsGattConnected(),
-        web_bluetooth_service_->IsDevicePaired(device.GetAddress()),
-        rssi ? CalculateSignalStrengthLevel(rssi.value()) : -1);
+  if (chooser_.get()) {
+    if (options_->accept_all_devices ||
+        MatchesFilters(device_name ? &device_name.value() : nullptr,
+                       device.GetUUIDs(), options_->filters)) {
+      base::Optional<int8_t> rssi = device.GetInquiryRSSI();
+      std::string device_id = device.GetAddress();
+      device_ids_.insert(device_id);
+      chooser_->AddOrUpdateDevice(
+          device_id, !!device.GetName() /* should_update_name */,
+          device.GetNameForDisplay(), device.IsGattConnected(),
+          web_bluetooth_service_->IsDevicePaired(device.GetAddress()),
+          rssi ? CalculateSignalStrengthLevel(rssi.value()) : -1);
+    }
   }
 }
 
@@ -406,24 +468,22 @@ int BluetoothDeviceChooserController::CalculateSignalStrengthLevel(
     int8_t rssi) {
   RecordRSSISignalStrength(rssi);
 
-  if (rssi <= kMinRSSI) {
-    RecordRSSISignalStrengthLevel(
-        UMARSSISignalStrengthLevel::LESS_THAN_OR_EQUAL_TO_MIN_RSSI);
+  if (rssi < k20thPercentileRSSI) {
+    RecordRSSISignalStrengthLevel(content::UMARSSISignalStrengthLevel::LEVEL_0);
     return 0;
+  } else if (rssi < k40thPercentileRSSI) {
+    RecordRSSISignalStrengthLevel(content::UMARSSISignalStrengthLevel::LEVEL_1);
+    return 1;
+  } else if (rssi < k60thPercentileRSSI) {
+    RecordRSSISignalStrengthLevel(content::UMARSSISignalStrengthLevel::LEVEL_2);
+    return 2;
+  } else if (rssi < k80thPercentileRSSI) {
+    RecordRSSISignalStrengthLevel(content::UMARSSISignalStrengthLevel::LEVEL_3);
+    return 3;
+  } else {
+    RecordRSSISignalStrengthLevel(content::UMARSSISignalStrengthLevel::LEVEL_4);
+    return 4;
   }
-
-  if (rssi >= kMaxRSSI) {
-    RecordRSSISignalStrengthLevel(
-        UMARSSISignalStrengthLevel::GREATER_THAN_OR_EQUAL_TO_MAX_RSSI);
-    return kNumSignalStrengthLevels - 1;
-  }
-
-  double input_range = kMaxRSSI - kMinRSSI;
-  double output_range = kNumSignalStrengthLevels - 1;
-  int level = static_cast<int>((rssi - kMinRSSI) * output_range / input_range);
-  DCHECK(kNumSignalStrengthLevels == arraysize(kRSSISignalStrengthEnumTable));
-  RecordRSSISignalStrengthLevel(kRSSISignalStrengthEnumTable[level]);
-  return level;
 }
 
 void BluetoothDeviceChooserController::SetTestScanDurationForTesting() {
@@ -478,7 +538,7 @@ void BluetoothDeviceChooserController::StopDeviceDiscovery() {
 void BluetoothDeviceChooserController::OnStartDiscoverySessionSuccess(
     std::unique_ptr<device::BluetoothDiscoverySession> discovery_session) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  VLOG(1) << "Started discovery session.";
+  DVLOG(1) << "Started discovery session.";
   if (chooser_.get()) {
     discovery_session_ = std::move(discovery_session);
     discovery_session_timer_.Reset();
@@ -504,6 +564,7 @@ void BluetoothDeviceChooserController::OnBluetoothChooserEvent(
   switch (event) {
     case BluetoothChooser::Event::RESCAN:
       RecordRequestDeviceOutcome(OutcomeFromChooserEvent(event));
+      device_ids_.clear();
       PopulateConnectedDevices();
       DCHECK(chooser_);
       StartDeviceDiscovery();
@@ -519,21 +580,22 @@ void BluetoothDeviceChooserController::OnBluetoothChooserEvent(
       PostErrorCallback(blink::mojom::WebBluetoothResult::CHOOSER_CANCELLED);
       break;
     case BluetoothChooser::Event::SHOW_OVERVIEW_HELP:
-      VLOG(1) << "Overview Help link pressed.";
+      DVLOG(1) << "Overview Help link pressed.";
       RecordRequestDeviceOutcome(OutcomeFromChooserEvent(event));
       PostErrorCallback(blink::mojom::WebBluetoothResult::CHOOSER_CANCELLED);
       break;
     case BluetoothChooser::Event::SHOW_ADAPTER_OFF_HELP:
-      VLOG(1) << "Adapter Off Help link pressed.";
+      DVLOG(1) << "Adapter Off Help link pressed.";
       RecordRequestDeviceOutcome(OutcomeFromChooserEvent(event));
       PostErrorCallback(blink::mojom::WebBluetoothResult::CHOOSER_CANCELLED);
       break;
     case BluetoothChooser::Event::SHOW_NEED_LOCATION_HELP:
-      VLOG(1) << "Need Location Help link pressed.";
+      DVLOG(1) << "Need Location Help link pressed.";
       RecordRequestDeviceOutcome(OutcomeFromChooserEvent(event));
       PostErrorCallback(blink::mojom::WebBluetoothResult::CHOOSER_CANCELLED);
       break;
     case BluetoothChooser::Event::SELECTED:
+      RecordNumOfDevices(options_->accept_all_devices, device_ids_.size());
       // RecordRequestDeviceOutcome is called in the callback, because the
       // device may have vanished.
       PostSuccessCallback(device_address);

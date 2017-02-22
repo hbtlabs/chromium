@@ -58,7 +58,7 @@ class WebDataSource {
   // include additional request headers added by WebKit that were not
   // present in the original request.  This request may also correspond
   // to a location specified by a redirect that was followed.
-  virtual const WebURLRequest& request() const = 0;
+  virtual const WebURLRequest& getRequest() const = 0;
 
   // Returns the response associated with this datasource.
   virtual const WebURLResponse& response() const = 0;
@@ -112,7 +112,7 @@ class WebDataSource {
   virtual void updateNavigation(double redirectStartTime,
                                 double redirectEndTime,
                                 double fetchStartTime,
-                                const WebVector<WebURL>& redirectChain) = 0;
+                                bool hasRedirect) = 0;
 
   // Allows the embedder to inject a filter that will be consulted for each
   // subsequent subresource load, and gets the final say in deciding whether

@@ -25,7 +25,16 @@ BROWSER_TEST_SUITES = [
   'content_browsertests',
 ]
 
-RUN_IN_SUB_THREAD_TEST_SUITES = ['net_unittests']
+RUN_IN_SUB_THREAD_TEST_SUITES = [
+  # Multiprocess tests should be run outside of the main thread.
+  'base_unittests',  # file_locking_unittest.cc uses a child process.
+  'ipc_perftests',
+  'ipc_tests',
+  'mojo_message_pipe_perftests',
+  'mojo_public_bindings_perftests',
+  'mojo_system_unittests',
+  'net_unittests'
+]
 
 
 # Used for filtering large data deps at a finer grain than what's allowed in
@@ -73,6 +82,8 @@ _RE_TEST_ERROR = re.compile(r'FAILURES!!! Tests run: \d+,'
                                     r' Failures: \d+, Errors: 1')
 _RE_TEST_CURRENTLY_RUNNING = re.compile(r'\[ERROR:.*?\]'
                                     r' Currently running: (.*)')
+_RE_DISABLED = re.compile(r'DISABLED_')
+_RE_FLAKY = re.compile(r'FLAKY_')
 
 def ParseGTestListTests(raw_list):
   """Parses a raw test list as provided by --gtest_list_tests.
@@ -97,13 +108,15 @@ def ParseGTestListTests(raw_list):
   for test in raw_list:
     if not test:
       continue
-    if test[0] != ' ':
+    if not test.startswith(' '):
       test_case = test.split()[0]
       if test_case.endswith('.'):
         current = test_case
-    elif not 'YOU HAVE' in test:
-      test_name = test.split()[0]
-      ret += [current + test_name]
+    else:
+      test = test.strip()
+      if test and not 'YOU HAVE' in test:
+        test_name = test.split()[0]
+        ret += [current + test_name]
   return ret
 
 
@@ -227,6 +240,19 @@ def ConvertTestFilterFileIntoGTestFilterArgument(input_lines):
   # Join the filter lines into one, big --gtest_filter argument.
   return positive_patterns + negative_patterns
 
+def TestNameWithoutDisabledPrefix(test_name):
+  """Modify the test name without disabled prefix if prefix 'DISABLED_' or
+  'FLAKY_' presents.
+
+  Args:
+    test_name: The name of a test.
+  Returns:
+    A test name without prefix 'DISABLED_' or 'FLAKY_'.
+  """
+  disabled_prefixes = [_RE_DISABLED, _RE_FLAKY]
+  for dp in disabled_prefixes:
+    test_name = dp.sub('', test_name)
+  return test_name
 
 class GtestTestInstance(test_instance.TestInstance):
 
@@ -288,6 +314,8 @@ class GtestTestInstance(test_instance.TestInstance):
     else:
       self._gtest_filter = None
 
+    self._run_disabled = args.run_disabled
+
     self._data_deps_delegate = data_deps_delegate
     self._runtime_deps_path = args.runtime_deps_path
     if not self._runtime_deps_path:
@@ -340,6 +368,10 @@ class GtestTestInstance(test_instance.TestInstance):
   @property
   def extras(self):
     return self._extras
+
+  @property
+  def gtest_also_run_disabled_tests(self):
+    return self._run_disabled
 
   @property
   def gtest_filter(self):
@@ -423,13 +455,24 @@ class GtestTestInstance(test_instance.TestInstance):
         logging.debug('Filtering tests using: %s', gtest_filter_string)
         filtered_test_list = unittest_util.FilterTestNames(
             filtered_test_list, gtest_filter_string)
+
+      if self._run_disabled and self._gtest_filter:
+        out_filtered_test_list = list(set(test_list)-set(filtered_test_list))
+        for test in out_filtered_test_list:
+          test_name_no_disabled = TestNameWithoutDisabledPrefix(test)
+          if test_name_no_disabled != test and unittest_util.FilterTestNames(
+              [test_name_no_disabled], self._gtest_filter):
+            filtered_test_list.append(test)
     return filtered_test_list
 
   def _GenerateDisabledFilterString(self, disabled_prefixes):
     disabled_filter_items = []
 
     if disabled_prefixes is None:
-      disabled_prefixes = ['DISABLED_', 'FLAKY_', 'FAILS_', 'PRE_', 'MANUAL_']
+      disabled_prefixes = ['FAILS_', 'PRE_', 'MANUAL_']
+      if not self._run_disabled:
+        disabled_prefixes += ['DISABLED_', 'FLAKY_']
+
     disabled_filter_items += ['%s*' % dp for dp in disabled_prefixes]
     disabled_filter_items += ['*.%s*' % dp for dp in disabled_prefixes]
 

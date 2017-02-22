@@ -15,13 +15,14 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_async_task_scheduler.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "gin/array_buffer.h"
 #include "gin/public/isolate_holder.h"
 #include "gin/v8_initializer.h"
 #include "mojo/common/data_pipe_utils.h"
 #include "mojo/edk/js/mojo_runner_delegate.h"
 #include "mojo/edk/js/tests/js_to_cpp.mojom.h"
-#include "mojo/edk/test/test_utils.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/lib/validation_errors.h"
 #include "mojo/public/cpp/system/core.h"
@@ -388,11 +389,11 @@ class JsToCppTest : public testing::Test {
     cpp_side->set_run_loop(&run_loop_);
 
     js_to_cpp::JsSidePtr js_side;
-    auto js_side_proxy = GetProxy(&js_side);
+    auto js_side_proxy = MakeRequest(&js_side);
 
     cpp_side->set_js_side(js_side.get());
     js_to_cpp::CppSidePtr cpp_side_ptr;
-    cpp_side->Bind(GetProxy(&cpp_side_ptr));
+    cpp_side->Bind(MakeRequest(&cpp_side_ptr));
 
     js_side->SetCppSide(std::move(cpp_side_ptr));
 
@@ -404,7 +405,7 @@ class JsToCppTest : public testing::Test {
     gin::IsolateHolder::Initialize(gin::IsolateHolder::kStrictMode,
                                    gin::IsolateHolder::kStableV8Extras,
                                    gin::ArrayBufferAllocator::SharedInstance());
-    gin::IsolateHolder instance;
+    gin::IsolateHolder instance(base::ThreadTaskRunnerHandle::Get());
     MojoRunnerDelegate delegate;
     gin::ShellRunner runner(&delegate, instance.isolate());
     delegate.Start(&runner, js_side_proxy.PassMessagePipe().release().value(),
@@ -417,6 +418,10 @@ class JsToCppTest : public testing::Test {
   base::ShadowingAtExitManager at_exit_;
   base::MessageLoop loop;
   base::RunLoop run_loop_;
+
+  // Required by gin::V8Platform::CallOnBackgroundThread(). Can't be a
+  // ScopedTaskScheduler because v8 synchronously waits for tasks to run.
+  base::test::ScopedAsyncTaskScheduler scoped_async_task_scheduler;
 
   DISALLOW_COPY_AND_ASSIGN(JsToCppTest);
 };

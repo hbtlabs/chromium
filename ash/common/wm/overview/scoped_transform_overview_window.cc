@@ -12,11 +12,12 @@
 #include "ash/common/wm/overview/window_selector_item.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_lookup.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/common/wm_window_property.h"
+#include "ash/root_window_controller.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/compositor/layer.h"
@@ -173,6 +174,7 @@ ScopedTransformOverviewWindow::ScopedTransformOverviewWindow(WmWindow* window)
       ignored_by_shelf_(window->GetWindowState()->ignored_by_shelf()),
       overview_started_(false),
       original_transform_(window->GetTargetTransform()),
+      original_opacity_(window->GetTargetOpacity()),
       weak_ptr_factory_(this) {}
 
 ScopedTransformOverviewWindow::~ScopedTransformOverviewWindow() {}
@@ -194,6 +196,7 @@ void ScopedTransformOverviewWindow::RestoreWindow() {
           OverviewAnimationType::OVERVIEW_ANIMATION_LAY_OUT_SELECTOR_ITEMS,
           window_);
   window_->GetWindowState()->set_ignored_by_shelf(ignored_by_shelf_);
+  SetOpacity(original_opacity_);
 }
 
 void ScopedTransformOverviewWindow::BeginScopedAnimation(
@@ -443,8 +446,13 @@ WmWindow* ScopedTransformOverviewWindow::GetOverviewWindow() const {
   return window_;
 }
 
+void ScopedTransformOverviewWindow::EnsureVisible() {
+  original_opacity_ = 1.f;
+}
+
 void ScopedTransformOverviewWindow::OnGestureEvent(ui::GestureEvent* event) {
   if (event->type() == ui::ET_GESTURE_TAP) {
+    EnsureVisible();
     window_->Show();
     window_->Activate();
   }
@@ -452,6 +460,7 @@ void ScopedTransformOverviewWindow::OnGestureEvent(ui::GestureEvent* event) {
 
 void ScopedTransformOverviewWindow::OnMouseEvent(ui::MouseEvent* event) {
   if (event->type() == ui::ET_MOUSE_PRESSED && event->IsOnlyLeftMouseButton()) {
+    EnsureVisible();
     window_->Show();
     window_->Activate();
   }

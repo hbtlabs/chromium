@@ -6,6 +6,7 @@
 #define GPU_COMMAND_BUFFER_CLIENT_CONTEXT_SUPPORT_H_
 
 #include <stdint.h>
+#include <vector>
 
 #include "base/callback.h"
 #include "ui/gfx/overlay_transform.h"
@@ -21,9 +22,14 @@ struct SyncToken;
 
 class ContextSupport {
  public:
-  // Runs |callback| when a sync token is signalled.
+  // Runs |callback| when the given sync token is signalled. The sync token may
+  // belong to any context.
   virtual void SignalSyncToken(const SyncToken& sync_token,
                                const base::Closure& callback) = 0;
+
+  // Returns true if the given sync token has been signalled. The sync token
+  // must belong to this context. This may be called from any thread.
+  virtual bool IsSyncTokenSignalled(const SyncToken& sync_token) = 0;
 
   // Runs |callback| when a query created via glCreateQueryEXT() has cleared
   // passed the glEndQueryEXT() point.
@@ -36,7 +42,7 @@ class ContextSupport {
       bool aggressively_free_resources) = 0;
 
   virtual void Swap() = 0;
-  virtual void SwapWithDamage(const gfx::Rect& damage) = 0;
+  virtual void SwapWithBounds(const std::vector<gfx::Rect>& rects) = 0;
   virtual void PartialSwapBuffers(const gfx::Rect& sub_buffer) = 0;
   virtual void CommitOverlayPlanes() = 0;
 

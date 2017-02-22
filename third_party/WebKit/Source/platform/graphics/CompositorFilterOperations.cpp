@@ -4,7 +4,9 @@
 
 #include "platform/graphics/CompositorFilterOperations.h"
 
+#include "platform/geometry/IntRect.h"
 #include "third_party/skia/include/core/SkImageFilter.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace blink {
 
@@ -92,9 +94,42 @@ bool CompositorFilterOperations::isEmpty() const {
   return m_filterOperations.IsEmpty();
 }
 
+FloatRect CompositorFilterOperations::mapRect(
+    const FloatRect& inputRect) const {
+  gfx::Rect result =
+      m_filterOperations.MapRect(enclosingIntRect(inputRect), SkMatrix::I());
+  return FloatRect(result.x(), result.y(), result.width(), result.height());
+}
+
+bool CompositorFilterOperations::hasFilterThatMovesPixels() const {
+  return m_filterOperations.HasFilterThatMovesPixels();
+}
+
 bool CompositorFilterOperations::operator==(
     const CompositorFilterOperations& o) const {
   return m_filterOperations == o.m_filterOperations;
+}
+
+bool CompositorFilterOperations::equalsIgnoringReferenceFilters(
+    const CompositorFilterOperations& o) const {
+  size_t size = m_filterOperations.size();
+  if (size != o.m_filterOperations.size())
+    return false;
+  for (size_t i = 0; i < size; ++i) {
+    const auto& operation = m_filterOperations.at(i);
+    if (operation.type() == cc::FilterOperation::REFERENCE) {
+      if (o.m_filterOperations.at(i).type() != cc::FilterOperation::REFERENCE)
+        return false;
+      continue;
+    }
+    if (operation != o.m_filterOperations.at(i))
+      return false;
+  }
+  return true;
+}
+
+String CompositorFilterOperations::toString() const {
+  return m_filterOperations.ToString().c_str();
 }
 
 }  // namespace blink

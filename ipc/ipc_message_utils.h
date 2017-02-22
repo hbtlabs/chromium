@@ -27,7 +27,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
-#include "ipc/brokerable_attachment.h"
 #include "ipc/ipc_message_start.h"
 #include "ipc/ipc_param_traits.h"
 #include "ipc/ipc_sync_message.h"
@@ -306,6 +305,37 @@ struct IPC_EXPORT ParamTraits<double> {
                    base::PickleIterator* iter,
                    param_type* r);
   static void Log(const param_type& p, std::string* l);
+};
+
+template <class P, size_t Size>
+struct ParamTraits<P[Size]> {
+  using param_type = P[Size];
+  static void GetSize(base::PickleSizer* sizer, const param_type& p) {
+    for (const P& element : p)
+      GetParamSize(sizer, element);
+  }
+  static void Write(base::Pickle* m, const param_type& p) {
+    for (const P& element : p)
+      WriteParam(m, element);
+  }
+  static bool Read(const base::Pickle* m,
+                   base::PickleIterator* iter,
+                   param_type* r) {
+    for (P& element : *r) {
+      if (!ReadParam(m, iter, &element))
+        return false;
+    }
+    return true;
+  }
+  static void Log(const param_type& p, std::string* l) {
+    l->append("[");
+    for (const P& element : p) {
+      if (&element != &p[0])
+        l->append(" ");
+      LogParam(element, l);
+    }
+    l->append("]");
+  }
 };
 
 // STL ParamTraits -------------------------------------------------------------

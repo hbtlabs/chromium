@@ -43,6 +43,7 @@
 #include "chrome/browser/ui/cocoa/chrome_style.h"
 #import "chrome/browser/ui/cocoa/info_bubble_view.h"
 #import "chrome/browser/ui/cocoa/info_bubble_window.h"
+#include "chrome/browser/ui/cocoa/l10n_util.h"
 #include "chrome/browser/ui/cocoa/profiles/signin_view_controller_delegate_mac.h"
 #import "chrome/browser/ui/cocoa/profiles/user_manager_mac.h"
 #include "chrome/browser/ui/profile_chooser_constants.h"
@@ -87,7 +88,6 @@
 #include "ui/gfx/vector_icons_public.h"
 #include "ui/native_theme/common_theme.h"
 #include "ui/native_theme/native_theme.h"
-#include "ui/native_theme/native_theme_mac.h"
 
 namespace {
 
@@ -221,7 +221,7 @@ NSTextView* BuildFixedWidthTextViewWithLink(
 // Returns the native dialog background color.
 NSColor* GetDialogBackgroundColor() {
   return skia::SkColorToCalibratedNSColor(
-      ui::NativeThemeMac::instance()->GetSystemColor(
+      ui::NativeTheme::GetInstanceForNativeUi()->GetSystemColor(
           ui::NativeTheme::kColorId_DialogBackground));
 }
 
@@ -1366,8 +1366,13 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
     [window accessibilitySetOverrideValue:
         l10n_util::GetNSString(IDS_PROFILES_NEW_AVATAR_MENU_ACCESSIBLE_NAME)
                              forAttribute:NSAccessibilityHelpAttribute];
-
-    [[self bubble] setAlignment:info_bubble::kAlignTrailingEdgeToAnchorEdge];
+    BOOL shouldUseLeadingEdgeForBubble =
+        cocoa_l10n_util::ShouldDoExperimentalRTLLayout() &&
+        !cocoa_l10n_util::ShouldFlipWindowControlsInRTL();
+    [[self bubble]
+        setAlignment:shouldUseLeadingEdgeForBubble
+                         ? info_bubble::kAlignLeadingEdgeToAnchorEdge
+                         : info_bubble::kAlignTrailingEdgeToAnchorEdge];
     [[self bubble] setArrowLocation:info_bubble::kNoArrow];
     [[self bubble] setBackgroundColor:GetDialogBackgroundColor()];
     [self initMenuContentsWithView:viewMode_];
@@ -1563,8 +1568,8 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
       [[NSMutableArray alloc] init]);
   // Local and guest profiles cannot lock their profile.
   bool showLock = false;
-  bool isFastProfileChooser = switches::IsMaterialDesignUserMenu() ?
-      false : viewMode_ == profiles::BUBBLE_VIEW_MODE_FAST_PROFILE_CHOOSER;
+  bool isFastProfileChooser =
+      viewMode_ == profiles::BUBBLE_VIEW_MODE_FAST_PROFILE_CHOOSER;
   if (isFastProfileChooser) {
     // The user is using right-click switching, no need to tell them about it.
     PrefService* localState = g_browser_process->local_state();
@@ -1592,6 +1597,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
       [otherProfiles addObject:[self createOtherProfileView:i]];
     }
   }
+  firstProfileView_ = [otherProfiles lastObject];
   if (!currentProfileView)  // Guest windows don't have an active profile.
     currentProfileView = [self createGuestProfileView];
 
@@ -1601,9 +1607,11 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   CGFloat yOffset = 1;
 
   if (isFastProfileChooser) {
-    [self buildFastUserSwitcherViewWithProfiles:otherProfiles.get()
-                                      atYOffset:yOffset
-                                    inContainer:container];
+    if (!switches::IsMaterialDesignUserMenu()) {
+      [self buildFastUserSwitcherViewWithProfiles:otherProfiles.get()
+                                        atYOffset:yOffset
+                                      inContainer:container];
+    }
   } else {
     [self buildProfileChooserViewWithProfileView:currentProfileView
                                     tutorialView:tutorialView
@@ -2131,14 +2139,20 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   // Profile name, left-aligned to the right of profile icon.
   xOffset += kMdImageSide + kHorizontalSpacing;
   CGFloat fontSize = kTextFontSize + 1.0;
-  NSTextField* profileName =
-      BuildLabel(base::SysUTF16ToNSString(profileNameString), NSZeroPoint, nil);
+  NSString* profileNameNSString = base::SysUTF16ToNSString(profileNameString);
+  NSTextField* profileName = BuildLabel(profileNameNSString, NSZeroPoint, nil);
   [[profileName cell] setLineBreakMode:NSLineBreakByTruncatingTail];
   [profileName setFont:[NSFont labelFontOfSize:fontSize]];
   [profileName sizeToFit];
   const int profileNameYOffset =
       cardYOffset +
       std::floor((kMdImageSide - NSHeight([profileName frame])) / 2);
+  if (profileName.frame.size.width > availableTextWidth) {
+    // Add the tooltip only if the profile name is truncated. This method to
+    // test if text field is truncated is not ideal (spaces between characters
+    // may be reduced to avoid truncation).
+    profileName.toolTip = profileNameNSString;
+  }
   [profileName
       setFrame:NSMakeRect(xOffset, profileNameYOffset, availableTextWidth,
                           NSHeight([profileName frame]))];
@@ -2151,10 +2165,16 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
     cardYOffset += kMdImageSide / 2 - [profileName frame].size.height;
     [profileName setFrameOrigin:NSMakePoint(xOffset, cardYOffset)];
 
+    NSString* elidedEmail =
+        ElideEmail(base::UTF16ToUTF8(item.username), availableTextWidth);
     NSTextField* username = BuildLabel(
-        ElideEmail(base::UTF16ToUTF8(item.username), availableTextWidth),
-        NSZeroPoint, skia::SkColorToSRGBNSColor(SK_ColorGRAY));
+        elidedEmail, NSZeroPoint, skia::SkColorToSRGBNSColor(SK_ColorGRAY));
     [username setFrameOrigin:NSMakePoint(xOffset, NSMaxY([profileName frame]))];
+    NSString* usernameNSString = base::SysUTF16ToNSString(item.username);
+    if (![elidedEmail isEqualToString:usernameNSString]) {
+      // Add the tooltip only if the user name is truncated.
+      username.toolTip = usernameNSString;
+    }
     [profileCard addSubview:username];
   }
 
@@ -2936,6 +2956,14 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
       IncognitoModePrefs::GetAvailability(browser_->profile()->GetPrefs()) !=
           IncognitoModePrefs::DISABLED;
   return incognitoAvailable && !browser_->profile()->IsGuestSession();
+}
+
+- (void)showWindow:(id)sender {
+  [super showWindow:sender];
+  NSEvent *event = [[NSApplication sharedApplication] currentEvent];
+  if (firstProfileView_ && [event type] == NSKeyDown) {
+    [[self window] makeFirstResponder:firstProfileView_];
+  }
 }
 
 @end

@@ -23,7 +23,6 @@ class ShortcutsBackend;
 
 namespace net {
 class URLFetcher;
-class URLRequestStatus;
 }
 
 // Monitors omnibox navigations in order to trigger behaviors that depend on
@@ -80,14 +79,10 @@ class ChromeOmniboxNavigationObserver : public OmniboxNavigationObserver,
                const content::NotificationDetails& details) override;
 
   // content::WebContentsObserver:
-  void DidStartNavigationToPendingEntry(
-      const GURL& url,
-      content::ReloadType reload_type) override;
-  void DidFailProvisionalLoad(content::RenderFrameHost* render_frame_host,
-                              const GURL& validated_url,
-                              int error_code,
-                              const base::string16& error_description,
-                              bool was_ignored_by_handler) override;
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override;
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void NavigationEntryCommitted(
       const content::LoadCommittedDetails& load_details) override;
   void WebContentsDestroyed() override;

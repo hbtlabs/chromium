@@ -67,9 +67,6 @@ public class EmptyTabObserver implements TabObserver {
     public void onContextualActionBarVisibilityChanged(Tab tab, boolean visible) { }
 
     @Override
-    public void onWebContentsInstantSupportDisabled() { }
-
-    @Override
     public void onLoadStarted(Tab tab, boolean toDifferentDocument) { }
 
     @Override
@@ -85,23 +82,21 @@ public class EmptyTabObserver implements TabObserver {
     public void onToggleFullscreenMode(Tab tab, boolean enable) { }
 
     @Override
-    public void onDidFailLoad(Tab tab, boolean isProvisionalLoad, boolean isMainFrame,
-            int errorCode, String description, String failingUrl) { }
+    public void onDidFailLoad(
+            Tab tab, boolean isMainFrame, int errorCode, String description, String failingUrl) {}
 
     @Override
-    public void onDidStartProvisionalLoadForFrame(
-            Tab tab, boolean isMainFrame, String validatedUrl) {}
+    public void onDidStartNavigation(
+            Tab tab, String url, boolean isInMainFrame, boolean isSamePage, boolean isErrorPage) {}
 
     @Override
-    public void onDidCommitProvisionalLoadForFrame(Tab tab, long frameId, boolean isMainFrame,
-            String url, int transitionType) { }
+    public void onDidFinishNavigation(Tab tab, String url, boolean isInMainFrame,
+            boolean isErrorPage, boolean hasCommitted, boolean isSamePage,
+            boolean isFragmentNavigation, Integer pageTransition, int errorCode,
+            int httpStatusCode) {}
 
     @Override
-    public void onDidNavigateMainFrame(Tab tab, String url, String baseUrl,
-            boolean isNavigationToDifferentPage, boolean isFragmentNavigation, int statusCode) { }
-
-    @Override
-    public void didFirstVisuallyNonEmptyPaint(Tab tab) { }
+    public void didFirstVisuallyNonEmptyPaint(Tab tab) {}
 
     @Override
     public void onDidChangeThemeColor(Tab tab, int color) { }
@@ -111,9 +106,6 @@ public class EmptyTabObserver implements TabObserver {
 
     @Override
     public void onDidDetachInterstitialPage(Tab tab) { }
-
-    @Override
-    public void onDidStartNavigationToPendingEntry(Tab tab, String url) { }
 
     @Override
     public void onBackgroundColorChanged(Tab tab, int color) { }

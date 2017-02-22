@@ -28,10 +28,11 @@
 
 #include "core/html/HTMLMediaElement.h"
 #include "core/inspector/InspectorTraceEvents.h"
+#include "core/layout/LayoutBlock.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/paint/PaintLayer.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 
 namespace blink {
 
@@ -53,8 +54,13 @@ class GraphicsLayerUpdater::UpdateContext {
   }
 
   const PaintLayer* compositingContainer(const PaintLayer& layer) const {
-    return layer.stackingNode()->isStacked() ? m_compositingStackingContext
-                                             : m_compositingAncestor;
+    if (layer.stackingNode()->isStacked())
+      return m_compositingStackingContext;
+
+    if (layer.layoutObject().isFloatingWithNonContainingBlockParent())
+      return layer.enclosingLayerWithCompositedLayerMapping(ExcludeSelf);
+
+    return m_compositingAncestor;
   }
 
   const PaintLayer* compositingStackingContext() const {
@@ -113,7 +119,7 @@ void GraphicsLayerUpdater::updateRecursive(
                     layersNeedingPaintInvalidation);
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 
 void GraphicsLayerUpdater::assertNeedsToUpdateGraphicsLayerBitsCleared(
     PaintLayer& layer) {

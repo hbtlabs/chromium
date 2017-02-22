@@ -133,25 +133,28 @@ bool DateTimeFormatValidator::validateFormat(
 
 DateTimeEditElement* MultipleFieldsTemporalInputTypeView::dateTimeEditElement()
     const {
-  return toDateTimeEditElement(element().userAgentShadowRoot()->getElementById(
-      ShadowElementNames::dateTimeEdit()));
+  return toDateTimeEditElementOrDie(
+      element().userAgentShadowRoot()->getElementById(
+          ShadowElementNames::dateTimeEdit()));
 }
 
 SpinButtonElement* MultipleFieldsTemporalInputTypeView::spinButtonElement()
     const {
-  return toSpinButtonElement(element().userAgentShadowRoot()->getElementById(
-      ShadowElementNames::spinButton()));
+  return toSpinButtonElementOrDie(
+      element().userAgentShadowRoot()->getElementById(
+          ShadowElementNames::spinButton()));
 }
 
 ClearButtonElement* MultipleFieldsTemporalInputTypeView::clearButtonElement()
     const {
-  return toClearButtonElement(element().userAgentShadowRoot()->getElementById(
-      ShadowElementNames::clearButton()));
+  return toClearButtonElementOrDie(
+      element().userAgentShadowRoot()->getElementById(
+          ShadowElementNames::clearButton()));
 }
 
 PickerIndicatorElement*
 MultipleFieldsTemporalInputTypeView::pickerIndicatorElement() const {
-  return toPickerIndicatorElement(
+  return toPickerIndicatorElementOrDie(
       element().userAgentShadowRoot()->getElementById(
           ShadowElementNames::pickerIndicator()));
 }
@@ -283,7 +286,7 @@ void MultipleFieldsTemporalInputTypeView::pickerIndicatorChooseValue(
     double value) {
   DCHECK(std::isfinite(value) || std::isnan(value));
   if (std::isnan(value))
-    element().setValue(emptyString(), DispatchInputAndChangeEvent);
+    element().setValue(emptyString, DispatchInputAndChangeEvent);
   else
     element().setValueAsNumber(value, ASSERT_NO_EXCEPTION,
                                DispatchInputAndChangeEvent);
@@ -621,7 +624,7 @@ void MultipleFieldsTemporalInputTypeView::updateClearButtonVisibility() {
 }
 
 TextDirection MultipleFieldsTemporalInputTypeView::computedTextDirection() {
-  return element().locale().isRTL() ? RTL : LTR;
+  return element().locale().isRTL() ? TextDirection::kRtl : TextDirection::kLtr;
 }
 
 AXObject* MultipleFieldsTemporalInputTypeView::popupRootAXObject() {

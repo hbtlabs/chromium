@@ -7,6 +7,10 @@
 #include "base/logging.h"
 #include "components/sync/driver/sync_service.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 SyncObserverBridge::SyncObserverBridge(id<SyncObserverModelBridge> delegate,
                                        syncer::SyncService* sync_service)
     : delegate_(delegate), scoped_observer_(this) {
@@ -18,11 +22,12 @@ SyncObserverBridge::SyncObserverBridge(id<SyncObserverModelBridge> delegate,
 SyncObserverBridge::~SyncObserverBridge() {
 }
 
-void SyncObserverBridge::OnStateChanged() {
+void SyncObserverBridge::OnStateChanged(syncer::SyncService* sync) {
   [delegate_ onSyncStateChanged];
 }
 
-void SyncObserverBridge::OnSyncConfigurationCompleted() {
-  if ([delegate_ respondsToSelector:@selector(onSyncConfigurationCompleted:)])
+void SyncObserverBridge::OnSyncConfigurationCompleted(
+    syncer::SyncService* sync) {
+  if ([delegate_ respondsToSelector:@selector(onSyncConfigurationCompleted)])
     [delegate_ onSyncConfigurationCompleted];
 }

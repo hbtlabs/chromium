@@ -10,7 +10,6 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "base/observer_list.h"
 #include "base/values.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -26,7 +25,6 @@ class PrefRegistrySyncable;
 }
 
 class AccountTrackerService;
-class GaiaAuthFetcher;
 class ProfileOAuth2TokenService;
 class SigninClient;
 
@@ -39,6 +37,7 @@ using TimedSigninStatusValue = std::pair<std::string, std::string>;
 class AboutSigninInternals
     : public KeyedService,
       public signin_internals_util::SigninDiagnosticsObserver,
+      public OAuth2TokenService::Observer,
       public OAuth2TokenService::DiagnosticsObserver,
       public GaiaCookieManagerService::Observer,
       SigninManagerBase::Observer,
@@ -185,6 +184,9 @@ class AboutSigninInternals
                                   base::Time expiration_time) override;
   void OnTokenRemoved(const std::string& account_id,
                       const OAuth2TokenService::ScopeSet& scopes) override;
+
+  // OAuth2TokenServiceDelegate::Observer implementations.
+  void OnRefreshTokensLoaded() override;
 
   // SigninManagerBase::Observer implementations.
   void GoogleSigninFailed(const GoogleServiceAuthError& error) override;

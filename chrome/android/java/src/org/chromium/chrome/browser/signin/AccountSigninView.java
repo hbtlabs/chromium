@@ -8,6 +8,7 @@ import android.app.Activity;
 import android.app.FragmentManager;
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.support.v7.app.AlertDialog;
 import android.text.TextUtils;
 import android.text.method.LinkMovementMethod;
 import android.util.AttributeSet;
@@ -16,6 +17,8 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
+
+import com.google.android.gms.common.ConnectionResult;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
@@ -46,6 +49,7 @@ import java.util.List;
  */
 
 public class AccountSigninView extends FrameLayout implements ProfileDownloader.Observer {
+
     /**
      * Callbacks for various account selection events.
      */
@@ -113,6 +117,8 @@ public class AccountSigninView extends FrameLayout implements ProfileDownloader.
     private boolean mSignedIn;
     private int mCancelButtonTextId;
     private boolean mIsChildAccount;
+    private boolean mIsGooglePlayServicesOutOfDate;
+    private UserRecoverableErrorHandler.ModalDialog mGooglePlayServicesUpdateErrorHandler;
 
     private AccountSigninConfirmationView mSigninConfirmationView;
     private ImageView mSigninAccountImage;
@@ -192,6 +198,10 @@ public class AccountSigninView extends FrameLayout implements ProfileDownloader.
         super.onWindowVisibilityChanged(visibility);
         if (visibility == View.VISIBLE) {
             updateAccounts();
+            return;
+        }
+        if (visibility == View.INVISIBLE && mGooglePlayServicesUpdateErrorHandler != null) {
+            mGooglePlayServicesUpdateErrorHandler.cancelDialog();
         }
     }
 
@@ -216,56 +226,127 @@ public class AccountSigninView extends FrameLayout implements ProfileDownloader.
     }
 
     /**
-     * Refresh the list of available system accounts.
+     * Refresh the list of available system accounts asynchronously. This is a convenience method
+     * that will ignore whether the accounts updating was actually successful.
      */
     private void updateAccounts() {
-        if (mSignedIn || mProfileData == null) return;
+        updateAccounts(new Callback<Boolean>() {
+            @Override
+            public void onResult(Boolean result) {}
+        });
+    }
 
-        if (!ExternalAuthUtils.getInstance().canUseGooglePlayServices(getContext(),
-                    new UserRecoverableErrorHandler.ModalDialog(mDelegate.getActivity()))) {
+    /**
+     * Refresh the list of available system accounts asynchronously.
+     *
+     * @param callback Called once the accounts have been refreshed. Boolean indicates whether the
+     *                 accounts haven been successfully updated.
+     */
+    private void updateAccounts(final Callback<Boolean> callback) {
+        if (mSignedIn || mProfileData == null) {
+            callback.onResult(false);
             return;
         }
 
-        List<String> oldAccountNames = mAccountNames;
-        mAccountNames = mAccountManagerHelper.getGoogleAccountNames();
-        int accountToSelect = 0;
-        if (isInForcedAccountMode()) {
-            accountToSelect = mAccountNames.indexOf(mForcedAccountName);
-            if (accountToSelect < 0) {
-                mListener.onFailedToSetForcedAccount(mForcedAccountName);
-                return;
-            }
-        } else {
-            accountToSelect = getIndexOfNewElement(
-                    oldAccountNames, mAccountNames, mSigninChooseView.getSelectedAccountPosition());
-        }
-
-        int oldSelectedAccount = mSigninChooseView.getSelectedAccountPosition();
-        mSigninChooseView.updateAccounts(mAccountNames, accountToSelect, mProfileData);
-        if (mAccountNames.isEmpty()) {
+        if (!checkGooglePlayServicesAvailable()) {
             setUpSigninButton(false);
+            callback.onResult(false);
             return;
         }
-        setUpSigninButton(true);
 
-        mProfileData.update();
+        final List<String> oldAccountNames = mAccountNames;
+        final AlertDialog updatingGmsDialog;
 
-        // Determine how the accounts have changed. Each list should only have unique elements.
-        if (oldAccountNames == null || oldAccountNames.isEmpty()) return;
-
-        if (!mAccountNames.get(accountToSelect).equals(oldAccountNames.get(oldSelectedAccount))) {
-            // Any dialogs that may have been showing are now invalid (they were created for the
-            // previously selected account).
-            ConfirmSyncDataStateMachine
-                    .cancelAllDialogs(mDelegate.getFragmentManager());
-
-            if (mAccountNames.containsAll(oldAccountNames)) {
-                // A new account has been added and no accounts have been deleted. We will have
-                // changed the account selection to the newly added account, so shortcut to the
-                // confirm signin page.
-                showConfirmSigninPageAccountTrackerServiceCheck();
-            }
+        if (mIsGooglePlayServicesOutOfDate) {
+            updatingGmsDialog = new AlertDialog.Builder(getContext())
+                    .setCancelable(false)
+                    .setView(R.layout.updating_gms_progress_view)
+                    .create();
+            updatingGmsDialog.show();
+        } else {
+            updatingGmsDialog = null;
         }
+
+        mAccountManagerHelper.getGoogleAccountNames(new Callback<List<String>>() {
+            @Override
+            public void onResult(List<String> result) {
+                if (updatingGmsDialog != null) {
+                    updatingGmsDialog.dismiss();
+                }
+                mIsGooglePlayServicesOutOfDate = false;
+
+                if (mSignedIn) {
+                    // If sign-in completed in the mean time, return in order to avoid showing the
+                    // wrong state in the UI.
+                    return;
+                }
+
+                mAccountNames = result;
+
+                int accountToSelect = 0;
+                if (isInForcedAccountMode()) {
+                    accountToSelect = mAccountNames.indexOf(mForcedAccountName);
+                    if (accountToSelect < 0) {
+                        mListener.onFailedToSetForcedAccount(mForcedAccountName);
+                        callback.onResult(false);
+                        return;
+                    }
+                } else {
+                    accountToSelect = getIndexOfNewElement(
+                            oldAccountNames, mAccountNames,
+                            mSigninChooseView.getSelectedAccountPosition());
+                }
+
+                int oldSelectedAccount = mSigninChooseView.getSelectedAccountPosition();
+                mSigninChooseView.updateAccounts(mAccountNames, accountToSelect, mProfileData);
+                if (mAccountNames.isEmpty()) {
+                    setUpSigninButton(false);
+                    callback.onResult(true);
+                    return;
+                }
+                setUpSigninButton(true);
+
+                mProfileData.update();
+
+                // Determine how the accounts have changed. Each list should only have unique
+                // elements.
+                if (oldAccountNames == null || oldAccountNames.isEmpty()) {
+                    callback.onResult(true);
+                    return;
+                }
+
+                if (!mAccountNames.get(accountToSelect).equals(
+                        oldAccountNames.get(oldSelectedAccount))) {
+                    // Any dialogs that may have been showing are now invalid (they were created
+                    // for the previously selected account).
+                    ConfirmSyncDataStateMachine
+                            .cancelAllDialogs(mDelegate.getFragmentManager());
+
+                    if (mAccountNames.containsAll(oldAccountNames)) {
+                        // A new account has been added and no accounts have been deleted. We
+                        // will have changed the account selection to the newly added account, so
+                        // shortcut to the confirm signin page.
+                        showConfirmSigninPageAccountTrackerServiceCheck();
+                    }
+                }
+                callback.onResult(true);
+            }
+        });
+    }
+
+    private boolean checkGooglePlayServicesAvailable() {
+        ExternalAuthUtils extAuthUtils = ExternalAuthUtils.getInstance();
+        if (mGooglePlayServicesUpdateErrorHandler == null) {
+            boolean cancelable = !SigninManager.get(getContext()).isForceSigninEnabled();
+            mGooglePlayServicesUpdateErrorHandler = new UserRecoverableErrorHandler.ModalDialog(
+                    mDelegate.getActivity(), cancelable);
+        }
+        int resultCode = extAuthUtils.canUseGooglePlayServicesResultCode(
+                getContext(), mGooglePlayServicesUpdateErrorHandler);
+        if (extAuthUtils.isGooglePlayServicesUpdateRequiredError(resultCode)) {
+            mIsGooglePlayServicesOutOfDate = true;
+        }
+        return resultCode == ConnectionResult.SUCCESS;
     }
 
     /**
@@ -429,6 +510,9 @@ public class AccountSigninView extends FrameLayout implements ProfileDownloader.
             mPositiveButton.setOnClickListener(new OnClickListener() {
                 @Override
                 public void onClick(View v) {
+                    if (!checkGooglePlayServicesAvailable()) {
+                        return;
+                    }
                     RecordUserAction.record("Signin_AddAccountToDevice");
                     mListener.onNewAccount();
                 }
@@ -516,10 +600,15 @@ public class AccountSigninView extends FrameLayout implements ProfileDownloader.
      */
     public void switchToForcedAccountMode(String forcedAccountName) {
         mForcedAccountName = forcedAccountName;
-        updateAccounts();
-        assert TextUtils.equals(getSelectedAccountName(), mForcedAccountName);
-        switchToSignedMode();
-        assert TextUtils.equals(getSelectedAccountName(), mForcedAccountName);
+        updateAccounts(new Callback<Boolean>() {
+            @Override
+            public void onResult(Boolean result) {
+                if (!result) return;
+                assert TextUtils.equals(getSelectedAccountName(), mForcedAccountName);
+                switchToSignedMode();
+                assert TextUtils.equals(getSelectedAccountName(), mForcedAccountName);
+            }
+        });
     }
 
     /**

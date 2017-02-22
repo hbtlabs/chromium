@@ -12,9 +12,11 @@
 #include "ash/common/shelf/shelf_view.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shelf/wm_shelf_util.h"
+#include "ash/common/system/tray/tray_popup_utils.h"
 #include "ash/common/wm_shell.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -22,6 +24,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/scoped_canvas.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/ink_drop_mask.h"
@@ -33,6 +36,7 @@ AppListButton::AppListButton(InkDropButtonListener* listener,
                              ShelfView* shelf_view,
                              WmShelf* wm_shelf)
     : views::ImageButton(nullptr),
+      is_showing_app_list_(false),
       draw_background_as_active_(false),
       background_alpha_(0),
       listener_(listener),
@@ -50,8 +54,7 @@ AppListButton::AppListButton(InkDropButtonListener* listener,
       l10n_util::GetStringUTF16(IDS_ASH_SHELF_APP_LIST_LAUNCHER_TITLE));
   SetSize(
       gfx::Size(GetShelfConstant(SHELF_SIZE), GetShelfConstant(SHELF_SIZE)));
-  SetFocusPainter(views::Painter::CreateSolidFocusPainter(
-      kFocusBorderColor, gfx::Insets(1, 1, 1, 1)));
+  SetFocusPainter(TrayPopupUtils::CreateFocusPainter());
   set_notify_action(CustomButton::NOTIFY_ON_PRESS);
 }
 
@@ -62,6 +65,8 @@ void AppListButton::OnAppListShown() {
     AnimateInkDrop(views::InkDropState::ACTIVATED, nullptr);
   else
     SchedulePaint();
+  is_showing_app_list_ = true;
+  wm_shelf_->UpdateAutoHideState();
 }
 
 void AppListButton::OnAppListDismissed() {
@@ -69,6 +74,8 @@ void AppListButton::OnAppListDismissed() {
     AnimateInkDrop(views::InkDropState::DEACTIVATED, nullptr);
   else
     SchedulePaint();
+  is_showing_app_list_ = false;
+  wm_shelf_->UpdateAutoHideState();
 }
 
 void AppListButton::SetBackgroundAlpha(int alpha) {
@@ -157,28 +164,29 @@ void AppListButton::PaintMd(gfx::Canvas* canvas) {
   gfx::PointF circle_center(GetCenterPoint());
 
   // Paint the circular background.
-  SkPaint bg_paint;
-  bg_paint.setColor(SkColorSetA(kShelfBaseColor, background_alpha_));
-  bg_paint.setFlags(SkPaint::kAntiAlias_Flag);
-  bg_paint.setStyle(SkPaint::kFill_Style);
-  canvas->DrawCircle(circle_center, kAppListButtonRadius, bg_paint);
+  cc::PaintFlags bg_flags;
+  bg_flags.setColor(SkColorSetA(kShelfBaseColor, background_alpha_));
+  bg_flags.setFlags(cc::PaintFlags::kAntiAlias_Flag);
+  bg_flags.setStyle(cc::PaintFlags::kFill_Style);
+  canvas->DrawCircle(circle_center, kAppListButtonRadius, bg_flags);
 
   // Paint a white ring as the foreground. The ceil/dsf math assures that the
   // ring draws sharply and is centered at all scale factors.
   const float kRingOuterRadiusDp = 7.f;
   const float kRingThicknessDp = 1.5f;
+  gfx::ScopedCanvas scoped_canvas(canvas);
   const float dsf = canvas->UndoDeviceScaleFactor();
   circle_center.Scale(dsf);
 
-  SkPaint fg_paint;
-  fg_paint.setFlags(SkPaint::kAntiAlias_Flag);
-  fg_paint.setStyle(SkPaint::kStroke_Style);
-  fg_paint.setColor(kShelfIconColor);
+  cc::PaintFlags fg_flags;
+  fg_flags.setFlags(cc::PaintFlags::kAntiAlias_Flag);
+  fg_flags.setStyle(cc::PaintFlags::kStroke_Style);
+  fg_flags.setColor(kShelfIconColor);
   const float thickness = std::ceil(kRingThicknessDp * dsf);
   const float radius = std::ceil(kRingOuterRadiusDp * dsf) - thickness / 2;
-  fg_paint.setStrokeWidth(thickness);
+  fg_flags.setStrokeWidth(thickness);
   // Make sure the center of the circle lands on pixel centers.
-  canvas->DrawCircle(circle_center, radius, fg_paint);
+  canvas->DrawCircle(circle_center, radius, fg_flags);
 }
 
 void AppListButton::PaintAppListButton(gfx::Canvas* canvas,
@@ -188,8 +196,6 @@ void AppListButton::PaintAppListButton(gfx::Canvas* canvas,
   if (WmShell::Get()->GetAppListTargetVisibility() ||
       draw_background_as_active_) {
     background_image_id = IDR_AURA_LAUNCHER_BACKGROUND_PRESSED;
-  } else if (wm_shelf_->IsDimmed()) {
-    background_image_id = IDR_AURA_LAUNCHER_BACKGROUND_ON_BLACK;
   } else {
     background_image_id = IDR_AURA_LAUNCHER_BACKGROUND_NORMAL;
   }
@@ -245,7 +251,8 @@ std::unique_ptr<views::InkDropRipple> AppListButton::CreateInkDropRipple()
                    center.y() - kAppListButtonRadius, 2 * kAppListButtonRadius,
                    2 * kAppListButtonRadius);
   return base::MakeUnique<views::FloodFillInkDropRipple>(
-      bounds, GetInkDropCenterBasedOnLastEvent(), GetInkDropBaseColor(),
+      size(), GetLocalBounds().InsetsFrom(bounds),
+      GetInkDropCenterBasedOnLastEvent(), GetInkDropBaseColor(),
       ink_drop_visible_opacity());
 }
 
@@ -283,16 +290,23 @@ void AppListButton::SetDrawBackgroundAsActive(bool draw_background_as_active) {
 }
 
 gfx::Point AppListButton::GetCenterPoint() const {
-  // During shelf hide/show animations, width and height may not be equal. Take
-  // the greater of the two as the one that represents the normal size of the
-  // button.
-  int center = std::max(width(), height()) / 2.f;
-  gfx::Point centroid(center, center);
-  // For the left shelf alignment, we need to right-justify. For other shelf
-  // alignments, left/top justification (i.e. no adjustments are necessary).
-  if (SHELF_ALIGNMENT_LEFT == wm_shelf_->GetAlignment())
-    centroid.set_x(width() - center);
-  return centroid;
+  // For a bottom-aligned shelf, the button bounds could have a larger height
+  // than width (in the case of touch-dragging the shelf updwards) or a larger
+  // width than height (in the case of a shelf hide/show animation), so adjust
+  // the y-position of the circle's center to ensure correct layout. Similarly
+  // adjust the x-position for a left- or right-aligned shelf.
+  const int x_mid = width() / 2.f;
+  const int y_mid = height() / 2.f;
+  ShelfAlignment alignment = wm_shelf_->GetAlignment();
+  if (alignment == SHELF_ALIGNMENT_BOTTOM ||
+      alignment == SHELF_ALIGNMENT_BOTTOM_LOCKED) {
+    return gfx::Point(x_mid, x_mid);
+  } else if (alignment == SHELF_ALIGNMENT_RIGHT) {
+    return gfx::Point(y_mid, y_mid);
+  } else {
+    DCHECK_EQ(alignment, SHELF_ALIGNMENT_LEFT);
+    return gfx::Point(width() - y_mid, y_mid);
+  }
 }
 
 }  // namespace ash

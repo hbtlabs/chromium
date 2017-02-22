@@ -1,6 +1,7 @@
 // Copyright (c) 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
 #include "net/quic/core/quic_stream_sequencer_buffer.h"
 
 #include <algorithm>
@@ -9,9 +10,9 @@
 #include <string>
 #include <utility>
 
-#include "base/logging.h"
 #include "base/macros.h"
-#include "base/rand_util.h"
+#include "net/quic/platform/api/quic_logging.h"
+#include "net/quic/platform/api/quic_str_cat.h"
 #include "net/quic/test_tools/mock_clock.h"
 #include "net/quic/test_tools/quic_stream_sequencer_buffer_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
@@ -20,7 +21,6 @@
 #include "testing/gmock_mutant.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using std::min;
 using std::string;
 
 namespace net {
@@ -111,7 +111,9 @@ TEST_F(QuicStreamSequencerBufferTest, OnStreamData0length) {
 }
 
 TEST_F(QuicStreamSequencerBufferTest, OnStreamDataWithinBlock) {
-  EXPECT_FALSE(helper_->IsBufferAllocated());
+  if (FLAGS_quic_reloadable_flag_quic_reduce_sequencer_buffer_memory_life_time) {  // NOLINT
+    EXPECT_FALSE(helper_->IsBufferAllocated());
+  }
   string source(1024, 'a');
   size_t written;
   clock_.AdvanceTime(QuicTime::Delta::FromSeconds(1));
@@ -126,7 +128,7 @@ TEST_F(QuicStreamSequencerBufferTest, OnStreamDataWithinBlock) {
   std::list<Gap> gaps = helper_->GetGaps();
   EXPECT_EQ(800u, gaps.front().end_offset);
   EXPECT_EQ(1824u, gaps.back().begin_offset);
-  auto* frame_map = helper_->frame_arrival_time_map();
+  auto frame_map = helper_->frame_arrival_time_map();
   EXPECT_EQ(1u, frame_map->size());
   EXPECT_EQ(800u, frame_map->begin()->first);
   EXPECT_EQ(t, (*frame_map)[800].timestamp);
@@ -137,16 +139,16 @@ TEST_F(QuicStreamSequencerBufferTest, OnStreamDataWithinBlock) {
 TEST_F(QuicStreamSequencerBufferTest, OnStreamDataInvalidSource) {
   // Pass in an invalid source, expects to return error.
   StringPiece source;
-  source.set(nullptr, 1024);
+  source = StringPiece(nullptr, 1024);
   size_t written;
   clock_.AdvanceTime(QuicTime::Delta::FromSeconds(1));
   QuicTime t = clock_.ApproximateNow();
   EXPECT_EQ(QUIC_STREAM_SEQUENCER_INVALID_STATE,
             buffer_->OnStreamData(800, source, t, &written, &error_details_));
-  EXPECT_EQ(
-      0u, error_details_.find("QuicStreamSequencerBuffer error: OnStreamData()"
-                              " dest == nullptr: false"
-                              " source == nullptr: true"));
+  EXPECT_EQ(0u, error_details_.find(QuicStrCat(
+                    "QuicStreamSequencerBuffer error: OnStreamData() "
+                    "dest == nullptr: ",
+                    false, " source == nullptr: ", true)));
 }
 
 TEST_F(QuicStreamSequencerBufferTest, OnStreamDataWithOverlap) {
@@ -165,7 +167,7 @@ TEST_F(QuicStreamSequencerBufferTest, OnStreamDataWithOverlap) {
             buffer_->OnStreamData(0, source, t2, &written, &error_details_));
   EXPECT_EQ(QUIC_OVERLAPPING_STREAM_DATA,
             buffer_->OnStreamData(1024, source, t2, &written, &error_details_));
-  auto* frame_map = helper_->frame_arrival_time_map();
+  auto frame_map = helper_->frame_arrival_time_map();
   EXPECT_EQ(1u, frame_map->size());
   EXPECT_EQ(t1, (*frame_map)[800].timestamp);
 }
@@ -196,7 +198,7 @@ TEST_F(QuicStreamSequencerBufferTest,
   EXPECT_EQ(QUIC_NO_ERROR,
             buffer_->OnStreamData(1824, one_byte, clock_.ApproximateNow(),
                                   &written, &error_details_));
-  auto* frame_map = helper_->frame_arrival_time_map();
+  auto frame_map = helper_->frame_arrival_time_map();
   EXPECT_EQ(3u, frame_map->size());
   EXPECT_TRUE(helper_->CheckBufferInvariants());
 }
@@ -322,7 +324,7 @@ TEST_F(QuicStreamSequencerBufferTest, Readv100Bytes) {
   iovec iovecs[3]{iovec{dest, 40}, iovec{dest + 40, 40}, iovec{dest + 80, 40}};
   size_t read;
   EXPECT_EQ(QUIC_NO_ERROR, buffer_->Readv(iovecs, 3, &read, &error_details_));
-  LOG(ERROR) << error_details_;
+  QUIC_LOG(ERROR) << error_details_;
   EXPECT_EQ(100u, read);
   EXPECT_EQ(100u, buffer_->BytesConsumed());
   EXPECT_EQ(source, string(dest, read));
@@ -330,26 +332,6 @@ TEST_F(QuicStreamSequencerBufferTest, Readv100Bytes) {
   // The first block should be released as its data has been read out.
   EXPECT_EQ(nullptr, helper_->GetBlock(0));
   EXPECT_TRUE(helper_->CheckBufferInvariants());
-}
-
-TEST_F(QuicStreamSequencerBufferTest, ReadvError) {
-  string source = string(100, 'b');
-  clock_.AdvanceTime(QuicTime::Delta::FromSeconds(1));
-  QuicTime t1 = clock_.ApproximateNow();
-  // Write something into [0, 100).
-  size_t written;
-  buffer_->OnStreamData(0, source, t1, &written, &error_details_);
-  EXPECT_TRUE(helper_->GetBlock(0) != nullptr);
-  EXPECT_TRUE(buffer_->HasBytesToRead());
-  // Read into a iovec array with total capacity of 120 bytes.
-  iovec iov{nullptr, 120};
-  size_t read;
-  EXPECT_EQ(QUIC_STREAM_SEQUENCER_INVALID_STATE,
-            buffer_->Readv(&iov, 1, &read, &error_details_));
-  EXPECT_EQ(0u,
-            error_details_.find(
-                "QuicStreamSequencerBuffer error: Readv() dest == nullptr: true"
-                " blocks_[0] == nullptr: false"));
 }
 
 TEST_F(QuicStreamSequencerBufferTest, ReadvAcrossBlocks) {
@@ -490,6 +472,10 @@ TEST_F(QuicStreamSequencerBufferTest, GetReadableRegionsEmpty) {
 
 TEST_F(QuicStreamSequencerBufferTest, ReleaseWholeBuffer) {
   // Tests that buffer is not deallocated unless ReleaseWholeBuffer() is called.
+  if (!FLAGS_quic_reloadable_flag_quic_reduce_sequencer_buffer_memory_life_time) {  // NOLINT
+    // Won't release buffer when flag is off.
+    return;
+  }
 
   string source(100, 'b');
   clock_.AdvanceTime(QuicTime::Delta::FromSeconds(1));
@@ -835,8 +821,8 @@ class QuicStreamSequencerBufferRandomIOTest
     bytes_to_buffer_ = 2 * max_capacity_bytes_;
     Initialize();
 
-    uint32_t seed = base::RandInt(0, std::numeric_limits<int32_t>::max());
-    LOG(INFO) << "RandomWriteAndProcessInPlace test seed is " << seed;
+    uint64_t seed = QuicRandom::GetInstance()->RandUint64();
+    QUIC_LOG(INFO) << "**** The current seed is " << seed << " ****";
     rng_.set_seed(seed);
   }
 
@@ -852,8 +838,8 @@ class QuicStreamSequencerBufferRandomIOTest
     size_t start_chopping_offset = 0;
     size_t iterations = 0;
     while (start_chopping_offset < bytes_to_buffer_) {
-      size_t max_chunk = min<size_t>(max_chunk_size_bytes_,
-                                     bytes_to_buffer_ - start_chopping_offset);
+      size_t max_chunk = std::min<size_t>(
+          max_chunk_size_bytes_, bytes_to_buffer_ - start_chopping_offset);
       size_t chunk_size = rng_.RandUint64() % max_chunk + 1;
       chopped_stream[iterations] =
           OffsetSizePair(start_chopping_offset, chunk_size);
@@ -867,8 +853,8 @@ class QuicStreamSequencerBufferRandomIOTest
     // out-of-order array of OffsetSizePairs.
     for (int i = chunk_num - 1; i >= 0; --i) {
       size_t random_idx = rng_.RandUint64() % (i + 1);
-      DVLOG(1) << "chunk offset " << chopped_stream[random_idx].first
-               << " size " << chopped_stream[random_idx].second;
+      QUIC_DVLOG(1) << "chunk offset " << chopped_stream[random_idx].first
+                    << " size " << chopped_stream[random_idx].second;
       shuffled_buf_.push_front(chopped_stream[random_idx]);
       chopped_stream[random_idx] = chopped_stream[i];
     }
@@ -899,9 +885,10 @@ class QuicStreamSequencerBufferRandomIOTest
       shuffled_buf_.push_back(chunk);
       shuffled_buf_.pop_front();
     }
-    DVLOG(1) << " write at offset: " << offset
-             << " len to write: " << num_to_write << " write result: " << result
-             << " left over: " << shuffled_buf_.size();
+    QUIC_DVLOG(1) << " write at offset: " << offset
+                  << " len to write: " << num_to_write
+                  << " write result: " << result
+                  << " left over: " << shuffled_buf_.size();
   }
 
  protected:
@@ -930,7 +917,7 @@ TEST_F(QuicStreamSequencerBufferRandomIOTest, RandomWriteAndReadv) {
          iterations <= 2 * bytes_to_buffer_) {
     uint8_t next_action =
         shuffled_buf_.empty() ? uint8_t{1} : rng_.RandUint64() % 2;
-    DVLOG(1) << "iteration: " << iterations;
+    QUIC_DVLOG(1) << "iteration: " << iterations;
     switch (next_action) {
       case 0: {  // write
         WriteNextChunkToBuffer();
@@ -953,9 +940,9 @@ TEST_F(QuicStreamSequencerBufferRandomIOTest, RandomWriteAndReadv) {
                   buffer_->Readv(dest_iov, kNumReads, &actually_read,
                                  &error_details_));
         ASSERT_LE(actually_read, num_to_read);
-        DVLOG(1) << " read from offset: " << total_bytes_read_
-                 << " size: " << num_to_read
-                 << " actual read: " << actually_read;
+        QUIC_DVLOG(1) << " read from offset: " << total_bytes_read_
+                      << " size: " << num_to_read
+                      << " actual read: " << actually_read;
         for (size_t i = 0; i < actually_read; ++i) {
           char ch = (i + total_bytes_read_) % 256;
           ASSERT_EQ(ch, GetCharFromIOVecs(i, dest_iov, kNumReads))
@@ -991,7 +978,7 @@ TEST_F(QuicStreamSequencerBufferRandomIOTest, RandomWriteAndConsumeInPlace) {
          iterations <= 2 * bytes_to_buffer_) {
     uint8_t next_action =
         shuffled_buf_.empty() ? uint8_t{1} : rng_.RandUint64() % 2;
-    DVLOG(1) << "iteration: " << iterations;
+    QUIC_DVLOG(1) << "iteration: " << iterations;
     switch (next_action) {
       case 0: {  // write
         WriteNextChunkToBuffer();
@@ -1013,7 +1000,7 @@ TEST_F(QuicStreamSequencerBufferRandomIOTest, RandomWriteAndConsumeInPlace) {
         size_t bytes_to_process = rng_.RandUint64() % (avail_bytes + 1);
         size_t bytes_processed = 0;
         for (size_t i = 0; i < actually_num_read; ++i) {
-          size_t bytes_in_block = min<size_t>(
+          size_t bytes_in_block = std::min<size_t>(
               bytes_to_process - bytes_processed, dest_iov[i].iov_len);
           if (bytes_in_block == 0) {
             break;
@@ -1031,10 +1018,11 @@ TEST_F(QuicStreamSequencerBufferRandomIOTest, RandomWriteAndConsumeInPlace) {
 
         buffer_->MarkConsumed(bytes_processed);
 
-        DVLOG(1) << "iteration " << iterations << ": try to get " << num_read
-                 << " readable regions, actually get " << actually_num_read
-                 << " from offset: " << total_bytes_read_
-                 << "\nprocesse bytes: " << bytes_processed;
+        QUIC_DVLOG(1) << "iteration " << iterations << ": try to get "
+                      << num_read << " readable regions, actually get "
+                      << actually_num_read
+                      << " from offset: " << total_bytes_read_
+                      << "\nprocesse bytes: " << bytes_processed;
         total_bytes_read_ += bytes_processed;
         ASSERT_EQ(total_bytes_read_, buffer_->BytesConsumed());
         ASSERT_TRUE(helper_->CheckBufferInvariants());

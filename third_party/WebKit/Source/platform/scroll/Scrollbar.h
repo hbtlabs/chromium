@@ -39,10 +39,10 @@ namespace blink {
 class GraphicsContext;
 class HostWindow;
 class IntRect;
-class PlatformGestureEvent;
-class PlatformMouseEvent;
 class ScrollableArea;
 class ScrollbarTheme;
+class WebGestureEvent;
+class WebMouseEvent;
 
 class PLATFORM_EXPORT Scrollbar : public Widget,
                                   public ScrollbarThemeClient,
@@ -108,6 +108,10 @@ class PLATFORM_EXPORT Scrollbar : public Widget,
   bool enabled() const override { return m_enabled; }
   void setEnabled(bool) override;
 
+  // This returns device-scale-factor-aware pixel value.
+  // e.g. 15 in dsf=1.0, 30 in dsf=2.0.
+  // This returns 0 for overlay scrollbars.
+  // See also ScrolbarTheme::scrollbatThickness().
   int scrollbarThickness() const;
 
   // Called by the ScrollableArea when the scroll offset changes.
@@ -135,20 +139,20 @@ class PLATFORM_EXPORT Scrollbar : public Widget,
   // Return if the gesture event was handled. |shouldUpdateCapture|
   // will be set to true if the handler should update the capture
   // state for this scrollbar.
-  bool gestureEvent(const PlatformGestureEvent&, bool* shouldUpdateCapture);
+  bool gestureEvent(const WebGestureEvent&, bool* shouldUpdateCapture);
 
   // These methods are used for platform scrollbars to give :hover feedback.
   // They will not get called when the mouse went down in a scrollbar, since it
   // is assumed the scrollbar will start
   // grabbing all events in that case anyway.
-  void mouseMoved(const PlatformMouseEvent&);
+  void mouseMoved(const WebMouseEvent&);
   void mouseEntered();
   void mouseExited();
 
   // Used by some platform scrollbars to know when they've been released from
   // capture.
-  void mouseUp(const PlatformMouseEvent&);
-  void mouseDown(const PlatformMouseEvent&);
+  void mouseUp(const WebMouseEvent&);
+  void mouseDown(const WebMouseEvent&);
 
   ScrollbarTheme& theme() const { return m_theme; }
 
@@ -177,7 +181,9 @@ class PLATFORM_EXPORT Scrollbar : public Widget,
     return m_orientation == HorizontalScrollbar ? "HorizontalScrollbar"
                                                 : "VerticalScrollbar";
   }
-  LayoutRect visualRect() const override;
+  LayoutRect visualRect() const final { return m_visualRect; }
+
+  virtual void setVisualRect(const LayoutRect& r) { m_visualRect = r; }
 
   // Marks the scrollbar as needing to be redrawn.
   //
@@ -232,7 +238,7 @@ class PLATFORM_EXPORT Scrollbar : public Widget,
 
   bool m_enabled;
 
-  Timer<Scrollbar> m_scrollTimer;
+  TaskRunnerTimer<Scrollbar> m_scrollTimer;
 
   float m_elasticOverscroll;
 
@@ -251,6 +257,7 @@ class PLATFORM_EXPORT Scrollbar : public Widget,
   int m_themeScrollbarThickness;
   bool m_trackNeedsRepaint;
   bool m_thumbNeedsRepaint;
+  LayoutRect m_visualRect;
 };
 
 DEFINE_TYPE_CASTS(Scrollbar,

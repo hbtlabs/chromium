@@ -4,7 +4,10 @@
 
 package org.chromium.chrome.browser.offlinepages.evaluation;
 
+import android.os.AsyncTask;
+
 import org.chromium.base.Callback;
+import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
@@ -14,8 +17,17 @@ import org.chromium.chrome.browser.offlinepages.OfflinePageItem;
 import org.chromium.chrome.browser.offlinepages.SavePageRequest;
 import org.chromium.chrome.browser.profiles.Profile;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+
+import java.text.SimpleDateFormat;
+
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Class used for offline page evaluation testing tools.
@@ -54,35 +66,54 @@ public class OfflinePageEvaluationBridge {
     }
 
     /**
+     * Class used for writing logs to external log file asynchronously to prevent violating strict
+     * mode during test.
+     */
+    private class LogTask extends AsyncTask<String, Void, Void> {
+        @Override
+        protected Void doInBackground(String... strings) {
+            try {
+                synchronized (mLogOutput) {
+                    mLogOutput.write(strings[0]);
+                    mLogOutput.flush();
+                }
+            } catch (IOException e) {
+                Log.e(TAG, e.getMessage(), e);
+            }
+            return null;
+        }
+    }
+
+    /**
      * Get the instance of the evaluation bridge.
      * @param profile The profile used to get bridge.
      * @param useEvaluationScheduler True if using the evaluation scheduler instead of the
-     * GCMNetworkManager one.
+     *                               GCMNetworkManager one.
+     * @param useBackgroundLoader True if using background loader. False for prerenderer.
      */
-    public static OfflinePageEvaluationBridge getForProfile(
-            Profile profile, boolean useEvaluationScheduler) {
+    public OfflinePageEvaluationBridge(
+            Profile profile, boolean useEvaluationScheduler, boolean useBackgroundLoader) {
         ThreadUtils.assertOnUiThread();
-        return nativeGetBridgeForProfile(profile, useEvaluationScheduler);
+        mNativeOfflinePageEvaluationBridge =
+                nativeCreateBridgeForProfile(profile, useEvaluationScheduler, useBackgroundLoader);
     }
 
+    private static final String TAG = "OPEvalBridge";
     private long mNativeOfflinePageEvaluationBridge;
     private boolean mIsOfflinePageModelLoaded;
     private ObserverList<OfflinePageEvaluationObserver> mObservers =
             new ObserverList<OfflinePageEvaluationObserver>();
 
-    /**
-     * Creates an offline page evalutaion bridge for a given profile.
-     */
-    OfflinePageEvaluationBridge(long nativeOfflinePageEvaluationBridge) {
-        mNativeOfflinePageEvaluationBridge = nativeOfflinePageEvaluationBridge;
-    }
+    private OutputStreamWriter mLogOutput;
 
-    /**
-     * Called by the native OfflinePageEvaluationBridge.
-     */
-    @CalledByNative
-    private static OfflinePageEvaluationBridge create(long nativeOfflinePageEvaluationBridge) {
-        return new OfflinePageEvaluationBridge(nativeOfflinePageEvaluationBridge);
+    /** Destroys the native portion of the bridge. */
+    public void destory() {
+        if (mNativeOfflinePageEvaluationBridge != 0) {
+            nativeDestory(mNativeOfflinePageEvaluationBridge);
+            mNativeOfflinePageEvaluationBridge = 0;
+            mIsOfflinePageModelLoaded = false;
+        }
+        mObservers.clear();
     }
 
     /**
@@ -152,11 +183,37 @@ public class OfflinePageEvaluationBridge {
         nativeRemoveRequestsFromQueue(mNativeOfflinePageEvaluationBridge, ids, callback);
     }
 
+    public void setLogOutputFile(File outputFile) throws IOException {
+        // This open file operation shouldn't happen on UI thread.
+        assert !ThreadUtils.runningOnUiThread();
+        mLogOutput = new FileWriter(outputFile);
+    }
+
     /**
      * @return True if the offline page model has fully loaded.
      */
     public boolean isOfflinePageModelLoaded() {
         return mIsOfflinePageModelLoaded;
+    }
+
+    @CalledByNative
+    public void log(String sourceTag, String message) {
+        Date date = new Date(System.currentTimeMillis());
+        SimpleDateFormat formatter =
+                new SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.getDefault());
+        String logString = formatter.format(date) + ": " + sourceTag + " | " + message
+                + System.getProperty("line.separator");
+        LogTask logTask = new LogTask();
+        Log.d(TAG, logString);
+        logTask.executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, logString);
+    }
+
+    public void closeLog() {
+        try {
+            mLogOutput.close();
+        } catch (IOException e) {
+            Log.e(TAG, e.getMessage(), e);
+        }
     }
 
     @CalledByNative
@@ -189,17 +246,6 @@ public class OfflinePageEvaluationBridge {
     }
 
     @CalledByNative
-    private void offlinePageEvaluationBridgeDestroyed() {
-        ThreadUtils.assertOnUiThread();
-        assert mNativeOfflinePageEvaluationBridge != 0;
-
-        mNativeOfflinePageEvaluationBridge = 0;
-        mIsOfflinePageModelLoaded = false;
-
-        mObservers.clear();
-    }
-
-    @CalledByNative
     private static void createOfflinePageAndAddToList(List<OfflinePageItem> offlinePagesList,
             String url, long offlineId, String clientNamespace, String clientId, String filePath,
             long fileSize, long creationTime, int accessCount, long lastAccessTimeMs) {
@@ -214,8 +260,9 @@ public class OfflinePageEvaluationBridge {
                 creationTime, accessCount, lastAccessTimeMs);
     }
 
-    private static native OfflinePageEvaluationBridge nativeGetBridgeForProfile(
-            Profile profile, boolean useEvaluationScheduler);
+    private native long nativeCreateBridgeForProfile(
+            Profile profile, boolean useEvaluationScheduler, boolean useBackgroundLoader);
+    private native void nativeDestory(long nativeOfflinePageEvaluationBridge);
 
     private native void nativeGetAllPages(long nativeOfflinePageEvaluationBridge,
             List<OfflinePageItem> offlinePages, final Callback<List<OfflinePageItem>> callback);

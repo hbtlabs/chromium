@@ -6,6 +6,8 @@
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_VALIDATION_H_
 
 #include "base/strings/string16.h"
+#include "base/strings/string_piece.h"
+#include "components/autofill/core/browser/field_types.h"
 
 namespace base {
 class Time;
@@ -23,13 +25,10 @@ bool IsValidCreditCardExpirationDate(int year,
 // Uses the Luhn formula to validate the number.
 bool IsValidCreditCardNumber(const base::string16& text);
 
-// Returns true if |text| looks like a valid credit card security code.
-bool IsValidCreditCardSecurityCode(const base::string16& text);
-
 // Returns true if |code| looks like a valid credit card security code
-// for the type of credit card designated by |number|.
+// for the given credit card type.
 bool IsValidCreditCardSecurityCode(const base::string16& code,
-                                   const base::string16& number);
+                                   const base::StringPiece card_type);
 
 // Returns true if |text| looks like a valid e-mail address.
 bool IsValidEmailAddress(const base::string16& text);
@@ -44,6 +43,12 @@ bool IsValidZip(const base::string16& text);
 
 // Returns true if |text| looks like an SSN, with or without separators.
 bool IsSSN(const base::string16& text);
+
+// Returns whether |value| is valid for the given |type|. If not null,
+// |error_message| is populated when the function returns false.
+bool IsValidForType(const base::string16& value,
+                    ServerFieldType type,
+                    base::string16* error_message);
 
 }  // namespace autofill
 

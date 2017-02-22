@@ -68,6 +68,7 @@ const RoleEntry roles[] = {{"alert", AlertRole},
                            {"article", ArticleRole},
                            {"banner", BannerRole},
                            {"button", ButtonRole},
+                           {"cell", CellRole},
                            {"checkbox", CheckBoxRole},
                            {"columnheader", ColumnHeaderRole},
                            {"combobox", ComboBoxRole},
@@ -77,6 +78,8 @@ const RoleEntry roles[] = {{"alert", AlertRole},
                            {"dialog", DialogRole},
                            {"directory", DirectoryRole},
                            {"document", DocumentRole},
+                           {"feed", FeedRole},
+                           {"figure", FigureRole},
                            {"form", FormRole},
                            {"grid", GridRole},
                            {"gridcell", CellRole},
@@ -116,8 +119,10 @@ const RoleEntry roles[] = {{"alert", AlertRole},
                            {"status", StatusRole},
                            {"switch", SwitchRole},
                            {"tab", TabRole},
+                           {"table", TableRole},
                            {"tablist", TabListRole},
                            {"tabpanel", TabPanelRole},
+                           {"term", TermRole},
                            {"text", StaticTextRole},
                            {"textbox", TextFieldRole},
                            {"timer", TimerRole},
@@ -169,6 +174,7 @@ const InternalRoleEntry internalRoles[] = {
     {DivRole, "Div"},
     {DocumentRole, "Document"},
     {EmbeddedObjectRole, "EmbeddedObject"},
+    {FeedRole, "feed"},
     {FigcaptionRole, "Figcaption"},
     {FigureRole, "Figure"},
     {FooterRole, "Footer"},
@@ -244,6 +250,7 @@ const InternalRoleEntry internalRoles[] = {
     {TabRole, "Tab"},
     {TableHeaderContainerRole, "TableHeaderContainer"},
     {TableRole, "Table"},
+    {TermRole, "Term"},
     {TextFieldRole, "TextField"},
     {TimeRole, "Time"},
     {TimerRole, "Timer"},
@@ -314,7 +321,7 @@ const char* ariaWidgets[] = {
 static ARIAWidgetSet* createARIARoleWidgetSet() {
   ARIAWidgetSet* widgetSet = new HashSet<String, CaseFoldingHash>();
   for (size_t i = 0; i < WTF_ARRAY_LENGTH(ariaWidgets); ++i)
-    widgetSet->add(String(ariaWidgets[i]));
+    widgetSet->insert(String(ariaWidgets[i]));
   return widgetSet;
 }
 
@@ -419,7 +426,7 @@ bool AXObject::isMenuRelated() const {
 
 bool AXObject::isPasswordFieldAndShouldHideValue() const {
   Settings* settings = getDocument()->settings();
-  if (!settings || settings->accessibilityPasswordValuesEnabled())
+  if (!settings || settings->getAccessibilityPasswordValuesEnabled())
     return false;
 
   return isPasswordField();
@@ -503,7 +510,8 @@ AXObjectInclusion AXObject::defaultObjectInclusion(
   if (isPresentationalChild()) {
     if (ignoredReasons) {
       AXObject* ancestor = ancestorForWhichThisIsAPresentationalChild();
-      ignoredReasons->append(IgnoredReason(AXAncestorDisallowsChild, ancestor));
+      ignoredReasons->push_back(
+          IgnoredReason(AXAncestorDisallowsChild, ancestor));
     }
     return IgnoreObject;
   }
@@ -525,13 +533,13 @@ bool AXObject::computeIsInertOrAriaHidden(
         if (dialog) {
           AXObject* dialogObject = axObjectCache().getOrCreate(dialog);
           if (dialogObject)
-            ignoredReasons->append(
+            ignoredReasons->push_back(
                 IgnoredReason(AXActiveModalDialog, dialogObject));
           else
-            ignoredReasons->append(IgnoredReason(AXInert));
+            ignoredReasons->push_back(IgnoredReason(AXInert));
         } else {
           // TODO(aboxhall): handle inert attribute if it eventuates
-          ignoredReasons->append(IgnoredReason(AXInert));
+          ignoredReasons->push_back(IgnoredReason(AXInert));
         }
       }
       return true;
@@ -549,9 +557,9 @@ bool AXObject::computeIsInertOrAriaHidden(
   if (hiddenRoot) {
     if (ignoredReasons) {
       if (hiddenRoot == this)
-        ignoredReasons->append(IgnoredReason(AXAriaHidden));
+        ignoredReasons->push_back(IgnoredReason(AXAriaHidden));
       else
-        ignoredReasons->append(IgnoredReason(AXAriaHiddenRoot, hiddenRoot));
+        ignoredReasons->push_back(IgnoredReason(AXAriaHiddenRoot, hiddenRoot));
     }
     return true;
   }
@@ -676,7 +684,7 @@ String AXObject::name(AXNameFrom& nameFrom,
   if (nameObjects) {
     nameObjects->clear();
     for (size_t i = 0; i < relatedObjects.size(); i++)
-      nameObjects->append(relatedObjects[i]->object);
+      nameObjects->push_back(relatedObjects[i]->object);
   }
 
   return text;
@@ -708,7 +716,7 @@ bool AXObject::isHiddenForTextAlternativeCalculation() const {
     return false;
 
   if (getLayoutObject())
-    return getLayoutObject()->style()->visibility() != EVisibility::Visible;
+    return getLayoutObject()->style()->visibility() != EVisibility::kVisible;
 
   // This is an obscure corner case: if a node has no LayoutObject, that means
   // it's not rendered, but we still may be exploring it as part of a text
@@ -716,14 +724,17 @@ bool AXObject::isHiddenForTextAlternativeCalculation() const {
   // aria-labelledby. So we need to explicitly call the style resolver to check
   // whether it's invisible or display:none, rather than relying on the style
   // cached in the LayoutObject.
-  Document* doc = getDocument();
-  if (doc && doc->frame() && getNode() && getNode()->isElementNode()) {
-    RefPtr<ComputedStyle> style =
-        doc->ensureStyleResolver().styleForElement(toElement(getNode()));
-    return style->display() == EDisplay::None ||
-           style->visibility() != EVisibility::Visible;
+  Document* document = getDocument();
+  if (!document || !document->frame())
+    return false;
+  if (Node* node = getNode()) {
+    if (node->isConnected() && node->isElementNode()) {
+      RefPtr<ComputedStyle> style =
+          document->ensureStyleResolver().styleForElement(toElement(node));
+      return style->display() == EDisplay::None ||
+             style->visibility() != EVisibility::kVisible;
+    }
   }
-
   return false;
 }
 
@@ -736,7 +747,7 @@ String AXObject::ariaTextAlternative(bool recursive,
                                      bool* foundTextAlternative) const {
   String textAlternative;
   bool alreadyVisited = visited.contains(this);
-  visited.add(this);
+  visited.insert(this);
 
   // Step 2A from: http://www.w3.org/TR/accname-aam-1.1
   // If you change this logic, update AXNodeObject::nameFromLabelElement, too.
@@ -754,7 +765,7 @@ String AXObject::ariaTextAlternative(bool recursive,
             : aria_labelledbyAttr;
     nameFrom = AXNameFromRelatedElement;
     if (nameSources) {
-      nameSources->append(NameSource(*foundTextAlternative, attr));
+      nameSources->push_back(NameSource(*foundTextAlternative, attr));
       nameSources->back().type = nameFrom;
     }
 
@@ -789,7 +800,7 @@ String AXObject::ariaTextAlternative(bool recursive,
   // If you change this logic, update AXNodeObject::nameFromLabelElement, too.
   nameFrom = AXNameFromAttribute;
   if (nameSources) {
-    nameSources->append(NameSource(*foundTextAlternative, aria_labelAttr));
+    nameSources->push_back(NameSource(*foundTextAlternative, aria_labelAttr));
     nameSources->back().type = nameFrom;
   }
   const AtomicString& ariaLabel = getAttribute(aria_labelAttr);
@@ -825,7 +836,7 @@ String AXObject::textFromElements(bool inAriaLabelledbyTraversal,
 
       String result = recursiveTextAlternative(
           *axElement, inAriaLabelledbyTraversal, visited);
-      localRelatedObjects.append(
+      localRelatedObjects.push_back(
           new NameSourceRelatedObject(axElement, result));
       if (!result.isEmpty()) {
         if (!accumulatedText.isEmpty())
@@ -865,7 +876,7 @@ void AXObject::elementsFromAttribute(HeapVector<Member<Element>>& elements,
   TreeScope& scope = getNode()->treeScope();
   for (const auto& id : ids) {
     if (Element* idElement = scope.getElementById(AtomicString(id)))
-      elements.append(idElement);
+      elements.push_back(idElement);
   }
 }
 
@@ -904,33 +915,28 @@ AccessibilityOrientation AXObject::orientation() const {
   return AccessibilityOrientationUndefined;
 }
 
-static String queryString(WebLocalizedString::Name name) {
-  return Locale::defaultLocale().queryString(name);
-}
-
-String AXObject::actionVerb() const {
+AXSupportedAction AXObject::action() const {
   if (!actionElement())
-    return emptyString();
+    return AXSupportedAction::None;
 
   switch (roleValue()) {
     case ButtonRole:
     case ToggleButtonRole:
-      return queryString(WebLocalizedString::AXButtonActionVerb);
+      return AXSupportedAction::Press;
     case TextFieldRole:
-      return queryString(WebLocalizedString::AXTextFieldActionVerb);
+      return AXSupportedAction::Activate;
     case RadioButtonRole:
-      return queryString(WebLocalizedString::AXRadioButtonActionVerb);
+      return AXSupportedAction::Select;
     case CheckBoxRole:
     case SwitchRole:
-      return queryString(
-          isChecked() ? WebLocalizedString::AXCheckedCheckBoxActionVerb
-                      : WebLocalizedString::AXUncheckedCheckBoxActionVerb);
+      return isChecked() ? AXSupportedAction::Check
+                         : AXSupportedAction::Uncheck;
     case LinkRole:
-      return queryString(WebLocalizedString::AXLinkActionVerb);
+      return AXSupportedAction::Jump;
     case PopUpButtonRole:
-      return queryString(WebLocalizedString::AXPopUpButtonActionVerb);
+      return AXSupportedAction::Open;
     default:
-      return queryString(WebLocalizedString::AXDefaultActionVerb);
+      return AXSupportedAction::Click;
   }
 }
 
@@ -1209,7 +1215,7 @@ bool AXObject::isScrollableContainer() const {
   return !!getScrollableAreaIfScrollable();
 }
 
-IntPoint AXObject::scrollOffset() const {
+IntPoint AXObject::getScrollOffset() const {
   ScrollableArea* area = getScrollableAreaIfScrollable();
   if (!area)
     return IntPoint();
@@ -1303,7 +1309,7 @@ void AXObject::getRelativeBounds(AXObject** outContainer,
   // bounds to be relative to the *unscrolled* position of the container object.
   ScrollableArea* scrollableArea = container->getScrollableAreaIfScrollable();
   if (scrollableArea && !container->isWebArea()) {
-    ScrollOffset scrollOffset = scrollableArea->scrollOffset();
+    ScrollOffset scrollOffset = scrollableArea->getScrollOffset();
     outBoundsInContainer.move(scrollOffset);
   }
 
@@ -1328,9 +1334,10 @@ LayoutRect AXObject::getBoundsInFrameCoordinates() const {
   FloatRect computedBounds(0, 0, bounds.width(), bounds.height());
   while (container && container != this) {
     computedBounds.move(bounds.x(), bounds.y());
-    if (!container->isWebArea())
-      computedBounds.move(-container->scrollOffset().x(),
-                          -container->scrollOffset().y());
+    if (!container->isWebArea()) {
+      computedBounds.move(-container->getScrollOffset().x(),
+                          -container->getScrollOffset().y());
+    }
     if (!transform.isIdentity()) {
       TransformationMatrix transformationMatrix(transform);
       transformationMatrix.mapRect(computedBounds);
@@ -1501,9 +1508,15 @@ void AXObject::scrollToMakeVisibleWithSubFocus(const IntRect& subfocus) const {
   newSubfocus.move(newElementRect.x(), newElementRect.y());
   newSubfocus.move(-scrollParentRect.x(), -scrollParentRect.y());
 
-  // Recursively make sure the scroll parent itself is visible.
-  if (scrollParent->parentObject())
+  if (scrollParent->parentObject()) {
+    // Recursively make sure the scroll parent itself is visible.
     scrollParent->scrollToMakeVisibleWithSubFocus(newSubfocus);
+  } else {
+    // To minimize the number of notifications, only fire one on the topmost
+    // object that has been scrolled.
+    axObjectCache().postNotification(const_cast<AXObject*>(this),
+                                     AXObjectCacheImpl::AXLocationChanged);
+  }
 }
 
 void AXObject::scrollToGlobalPoint(const IntPoint& globalPoint) const {
@@ -1516,7 +1529,7 @@ void AXObject::scrollToGlobalPoint(const IntPoint& globalPoint) const {
     if (parentObject->getScrollableAreaIfScrollable())
       objects.prepend(parentObject);
   }
-  objects.append(this);
+  objects.push_back(this);
 
   // Start with the outermost scrollable (the main window) and try to scroll the
   // next innermost object to the given point.
@@ -1565,6 +1578,13 @@ void AXObject::scrollToGlobalPoint(const IntPoint& globalPoint) const {
       offsetY = 0;
     }
   }
+
+  // To minimize the number of notifications, only fire one on the topmost
+  // object that has been scrolled.
+  DCHECK(objects[0]);
+  // TODO(nektar): Switch to postNotification(objects[0] and remove |getNode|.
+  axObjectCache().postNotification(objects[0]->getNode(),
+                                   AXObjectCacheImpl::AXLocationChanged);
 }
 
 void AXObject::setSequentialFocusNavigationStartingPoint() {

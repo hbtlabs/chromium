@@ -34,17 +34,13 @@
 namespace blink {
 
 class AffineTransform;
-class CSSCursorImageValue;
 class Document;
 class SVGAnimatedPropertyBase;
 class SubtreeLayoutScope;
 class SVGAnimatedString;
-class SVGCursorElement;
-class SVGDocumentExtensions;
 class SVGElement;
 class SVGElementProxySet;
 class SVGElementRareData;
-class SVGFitToViewBox;
 class SVGPropertyBase;
 class SVGSVGElement;
 class SVGUseElement;
@@ -62,6 +58,10 @@ class CORE_EXPORT SVGElement : public Element {
   int tabIndex() const override;
   bool supportsFocus() const override { return false; }
 
+  // The TreeScope this element should resolve id's against. This differs from
+  // the regular Node::treeScope() by taking <use> into account.
+  TreeScope& treeScopeForIdResolution() const;
+
   bool isOutermostSVGSVGElement() const;
 
   bool hasTagName(const SVGQualifiedName& name) const {
@@ -74,12 +74,15 @@ class CORE_EXPORT SVGElement : public Element {
   }
   static bool isAnimatableCSSProperty(const QualifiedName&);
 
+  enum ApplyMotionTransform { ExcludeMotionTransform, IncludeMotionTransform };
+  bool hasTransform(ApplyMotionTransform) const;
+  AffineTransform calculateTransform(ApplyMotionTransform) const;
+
   enum CTMScope {
     NearestViewportScope,  // Used by SVGGraphicsElement::getCTM()
-    ScreenScope,           // Used by SVGGraphicsElement::getScreenCTM()
     AncestorScope  // Used by SVGSVGElement::get{Enclosure|Intersection}List()
   };
-  virtual AffineTransform localCoordinateSpaceTransform(CTMScope) const;
+  virtual AffineTransform localCoordinateSpaceTransform() const;
   virtual bool needsPendingResourceHandling() const { return true; }
 
   bool instanceUpdatesBlocked() const;
@@ -102,8 +105,6 @@ class CORE_EXPORT SVGElement : public Element {
 
   SVGSVGElement* ownerSVGElement() const;
   SVGElement* viewportElement() const;
-
-  SVGDocumentExtensions& accessDocumentSVGExtensions();
 
   virtual bool isSVGGeometryElement() const { return false; }
   virtual bool isSVGGraphicsElement() const { return false; }
@@ -139,9 +140,6 @@ class CORE_EXPORT SVGElement : public Element {
   void mapInstanceToElement(SVGElement*);
   void removeInstanceMapping(SVGElement*);
 
-  void setCursorElement(SVGCursorElement*);
-  void setCursorImageValue(const CSSCursorImageValue*);
-
   SVGElement* correspondingElement() const;
   void setCorrespondingElement(SVGElement*);
   SVGUseElement* correspondingUseElement() const;
@@ -149,6 +147,7 @@ class CORE_EXPORT SVGElement : public Element {
   void synchronizeAnimatedSVGAttribute(const QualifiedName&) const;
 
   PassRefPtr<ComputedStyle> customStyleForLayoutObject() final;
+  bool layoutObjectIsNeeded(const ComputedStyle&) override;
 
 #if DCHECK_IS_ON()
   virtual bool isAnimatableAttribute(const QualifiedName&) const;
@@ -216,15 +215,8 @@ class CORE_EXPORT SVGElement : public Element {
              Document&,
              ConstructionType = CreateSVGElement);
 
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
-
-  void attributeChanged(
-      const QualifiedName&,
-      const AtomicString&,
-      const AtomicString&,
-      AttributeModificationReason = ModifiedDirectly) override;
+  void parseAttribute(const AttributeModificationParams&) override;
+  void attributeChanged(const AttributeModificationParams&) override;
 
   void collectStyleForPresentationAttribute(const QualifiedName&,
                                             const AtomicString&,
@@ -243,6 +235,8 @@ class CORE_EXPORT SVGElement : public Element {
 
   virtual bool selfHasRelativeLengths() const { return false; }
 
+  bool hasSVGParent() const;
+
   SVGElementRareData* ensureSVGRareData();
   inline bool hasSVGRareData() const { return m_SVGRareData; }
   inline SVGElementRareData* svgRareData() const {
@@ -250,8 +244,6 @@ class CORE_EXPORT SVGElement : public Element {
     return m_SVGRareData.get();
   }
 
-  // SVGFitToViewBox::parseAttribute uses reportAttributeParsingError.
-  friend class SVGFitToViewBox;
   void reportAttributeParsingError(SVGParsingError,
                                    const QualifiedName&,
                                    const AtomicString&);
@@ -283,8 +275,8 @@ class CORE_EXPORT SVGElement : public Element {
       AttributeToPropertyMap;
   AttributeToPropertyMap m_attributeToPropertyMap;
 
-#if ENABLE(ASSERT)
-  bool m_inRelativeLengthClientsInvalidation;
+#if DCHECK_IS_ON()
+  bool m_inRelativeLengthClientsInvalidation = false;
 #endif
 
   Member<SVGElementRareData> m_SVGRareData;

@@ -12,6 +12,10 @@
 #import "components/translate/ios/browser/js_translate_manager.h"
 #include "ios/web/public/web_state/web_state.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace translate {
 
 namespace {
@@ -24,7 +28,7 @@ TranslateController::TranslateController(web::WebState* web_state,
                                          JsTranslateManager* manager)
     : web::WebStateObserver(web_state),
       observer_(nullptr),
-      js_manager_([manager retain]),
+      js_manager_(manager),
       weak_method_factory_(this) {
   DCHECK(js_manager_);
   DCHECK(web::WebStateObserver::web_state());
@@ -55,6 +59,11 @@ void TranslateController::StartTranslation(const std::string& source_language,
 
 void TranslateController::CheckTranslateStatus() {
   [js_manager_ injectTranslateStatusScript];
+}
+
+void TranslateController::SetJsTranslateManagerForTesting(
+    JsTranslateManager* manager) {
+  js_manager_.reset(manager);
 }
 
 bool TranslateController::OnJavascriptCommandReceived(

@@ -13,7 +13,7 @@
 #include "core/inspector/ThreadDebugger.h"
 #include "core/inspector/V8InspectorString.h"
 #include "platform/ScriptForbiddenScope.h"
-#include "platform/tracing/TracedValue.h"
+#include "platform/instrumentation/tracing/TracedValue.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
 
@@ -23,11 +23,11 @@ namespace {
 
 std::unique_ptr<v8_inspector::V8StackTrace> captureStackTrace(bool full) {
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
-  V8PerIsolateData* data = V8PerIsolateData::from(isolate);
-  if (!data->threadDebugger() || !isolate->InContext())
+  ThreadDebugger* debugger = ThreadDebugger::from(isolate);
+  if (!debugger || !isolate->InContext())
     return nullptr;
   ScriptForbiddenScope::AllowUserAgentScript allowScripting;
-  return data->threadDebugger()->v8Inspector()->captureStackTrace(full);
+  return debugger->v8Inspector()->captureStackTrace(full);
 }
 }
 
@@ -80,9 +80,9 @@ std::unique_ptr<SourceLocation> SourceLocation::fromMessage(
     ExecutionContext* executionContext) {
   v8::Local<v8::StackTrace> stack = message->GetStackTrace();
   std::unique_ptr<v8_inspector::V8StackTrace> stackTrace = nullptr;
-  V8PerIsolateData* data = V8PerIsolateData::from(isolate);
-  if (data && data->threadDebugger())
-    stackTrace = data->threadDebugger()->v8Inspector()->createStackTrace(stack);
+  ThreadDebugger* debugger = ThreadDebugger::from(isolate);
+  if (debugger)
+    stackTrace = debugger->v8Inspector()->createStackTrace(stack);
 
   int scriptId = message->GetScriptOrigin().ScriptID()->Value();
   if (!stack.IsEmpty() && stack->GetFrameCount() > 0) {
@@ -118,8 +118,8 @@ std::unique_ptr<SourceLocation> SourceLocation::create(
     unsigned columnNumber,
     std::unique_ptr<v8_inspector::V8StackTrace> stackTrace,
     int scriptId) {
-  return wrapUnique(new SourceLocation(url, lineNumber, columnNumber,
-                                       std::move(stackTrace), scriptId));
+  return WTF::wrapUnique(new SourceLocation(url, lineNumber, columnNumber,
+                                            std::move(stackTrace), scriptId));
 }
 
 // static
@@ -130,8 +130,8 @@ std::unique_ptr<SourceLocation> SourceLocation::createFromNonEmptyV8StackTrace(
   String url = toCoreString(stackTrace->topSourceURL());
   unsigned lineNumber = stackTrace->topLineNumber();
   unsigned columnNumber = stackTrace->topColumnNumber();
-  return wrapUnique(new SourceLocation(url, lineNumber, columnNumber,
-                                       std::move(stackTrace), scriptId));
+  return WTF::wrapUnique(new SourceLocation(url, lineNumber, columnNumber,
+                                            std::move(stackTrace), scriptId));
 }
 
 // static
@@ -186,7 +186,7 @@ void SourceLocation::toTracedValue(TracedValue* value, const char* name) const {
 }
 
 std::unique_ptr<SourceLocation> SourceLocation::clone() const {
-  return wrapUnique(new SourceLocation(
+  return WTF::wrapUnique(new SourceLocation(
       m_url.isolatedCopy(), m_lineNumber, m_columnNumber,
       m_stackTrace ? m_stackTrace->clone() : nullptr, m_scriptId));
 }

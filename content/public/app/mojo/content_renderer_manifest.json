@@ -19,13 +19,22 @@
       },
       "requires": {
         "content_browser": [ "renderer" ],
-        "ui": [ "ui:gpu_client" ]
+        "device": [
+          "device:power_monitor",
+          "device:time_zone_monitor"
+        ],
+        "ui": [
+          "discardable_memory",
+          "gpu_client"
+        ]
       }
     },
     "navigation:frame": {
       "provides": {
         "browser": [
           "blink::mojom::AppBannerController",
+          "blink::mojom::EngagementClient",
+          "blink::mojom::InstallationService",
           "content::mojom::ImageDownloader",
           "mojom::MediaDevicesListener"
         ]
@@ -34,5 +43,29 @@
         "content_browser": [ "renderer" ]
       }
     }
+  },
+  "required_files" : {
+    "v8_natives_data" : [
+      {
+        "path": "natives_blob.bin",
+        "platform": "linux"
+      },
+      {
+        "path": "assets/natives_blob.bin",
+        "platform": "android"
+      }
+    ],
+    "v8_snapshot_data" : [{
+      "path": "snapshot_blob.bin",
+      "platform": "linux"
+    }],
+    "v8_snapshot_32_data" : [{
+      "path": "assets/snapshot_blob_32.bin",
+      "platform": "android"
+    }],
+    "v8_snapshot_64_data" : [{
+      "path": "assets/snapshot_blob_64.bin",
+      "platform": "android"
+    }]
   }
 }

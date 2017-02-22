@@ -20,11 +20,11 @@
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/attestation/attestation_ca_client.h"
+#include "chrome/browser/chromeos/policy/active_directory_policy_manager.h"
 #include "chrome/browser/chromeos/policy/affiliated_cloud_policy_invalidator.h"
 #include "chrome/browser/chromeos/policy/affiliated_invalidation_service_provider.h"
 #include "chrome/browser/chromeos/policy/affiliated_invalidation_service_provider_impl.h"
 #include "chrome/browser/chromeos/policy/bluetooth_policy_handler.h"
-#include "chrome/browser/chromeos/policy/device_active_directory_policy_manager.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_initializer.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_store_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
@@ -45,6 +45,7 @@
 #include "chromeos/cryptohome/system_salt_getter.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/upstart_client.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/onc/onc_certificate_importer_impl.h"
 #include "chromeos/settings/cros_settings_names.h"
@@ -110,9 +111,14 @@ BrowserPolicyConnectorChromeOS::BrowserPolicyConnectorChromeOS()
             GetBackgroundTaskRunner());
 
     if (install_attributes_->IsActiveDirectoryManaged()) {
+      chromeos::DBusThreadManager::Get()
+          ->GetUpstartClient()
+          ->StartAuthPolicyService();
+
       device_active_directory_policy_manager_ =
-          new DeviceActiveDirectoryPolicyManager(
-              std::move(device_cloud_policy_store));
+          ActiveDirectoryPolicyManager::CreateForDevicePolicy(
+              std::move(device_cloud_policy_store))
+              .release();
       AddPolicyProvider(base::WrapUnique<ConfigurationPolicyProvider>(
           device_active_directory_policy_manager_));
     } else {
@@ -223,6 +229,14 @@ void BrowserPolicyConnectorChromeOS::Shutdown() {
 
 bool BrowserPolicyConnectorChromeOS::IsEnterpriseManaged() const {
   return install_attributes_ && install_attributes_->IsEnterpriseManaged();
+}
+
+bool BrowserPolicyConnectorChromeOS::IsCloudManaged() const {
+  return install_attributes_ && install_attributes_->IsCloudManaged();
+}
+
+bool BrowserPolicyConnectorChromeOS::IsActiveDirectoryManaged() const {
+  return install_attributes_ && install_attributes_->IsActiveDirectoryManaged();
 }
 
 std::string BrowserPolicyConnectorChromeOS::GetEnterpriseDomain() const {

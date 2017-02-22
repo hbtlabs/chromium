@@ -14,7 +14,7 @@
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/user_activity/user_activity_detector.h"
 #include "ui/compositor/compositor.h"
-#include "ui/display/chromeos/display_configurator.h"
+#include "ui/display/manager/chromeos/display_configurator.h"
 
 namespace ash {
 
@@ -118,14 +118,22 @@ void PowerEventObserver::SuspendImminent() {
   }
 
   ui::UserActivityDetector::Get()->OnDisplayPowerChanging();
-  Shell::GetInstance()->display_configurator()->SuspendDisplays(base::Bind(
-      &OnSuspendDisplaysCompleted, chromeos::DBusThreadManager::Get()
-                                       ->GetPowerManagerClient()
-                                       ->GetSuspendReadinessCallback()));
+
+  // TODO(derat): After mus exposes a method for suspending displays, call it
+  // here: http://crbug.com/692193
+  if (!WmShell::Get()->IsRunningInMash()) {
+    Shell::GetInstance()->display_configurator()->SuspendDisplays(base::Bind(
+        &OnSuspendDisplaysCompleted, chromeos::DBusThreadManager::Get()
+                                         ->GetPowerManagerClient()
+                                         ->GetSuspendReadinessCallback()));
+  }
 }
 
 void PowerEventObserver::SuspendDone(const base::TimeDelta& sleep_duration) {
-  Shell::GetInstance()->display_configurator()->ResumeDisplays();
+  // TODO(derat): After mus exposes a method for resuming displays, call it
+  // here: http://crbug.com/692193
+  if (!WmShell::Get()->IsRunningInMash())
+    Shell::GetInstance()->display_configurator()->ResumeDisplays();
   WmShell::Get()->system_tray_notifier()->NotifyRefreshClock();
 
   // If the suspend request was being blocked while waiting for the lock

@@ -148,11 +148,12 @@ void PrintSettings::Clear() {
   page_setup_device_units_.Clear();
   dpi_ = 0;
   scale_factor_ = 1.0f;
+  rasterize_pdf_ = false;
   landscape_ = false;
   supports_alpha_blend_ = true;
 #if defined(OS_WIN)
   print_text_with_gdi_ = false;
-  printer_is_xps_ = false;
+  printer_type_ = PrintSettings::PrinterType::TYPE_NONE;
 #endif
 }
 

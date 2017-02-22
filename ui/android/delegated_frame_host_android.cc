@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/layers/surface_layer.h"
 #include "cc/output/compositor_frame.h"
@@ -17,30 +18,13 @@
 #include "ui/android/context_provider_factory.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android_compositor.h"
-#include "ui/gfx/android/device_display_info.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/geometry/dip_util.h"
 
 namespace ui {
 
 namespace {
-
-void SatisfyCallback(cc::SurfaceManager* manager,
-                     const cc::SurfaceSequence& sequence) {
-  std::vector<uint32_t> sequences;
-  sequences.push_back(sequence.sequence);
-  manager->DidSatisfySequences(sequence.frame_sink_id, &sequences);
-}
-
-void RequireCallback(cc::SurfaceManager* manager,
-                     const cc::SurfaceId& id,
-                     const cc::SurfaceSequence& sequence) {
-  cc::Surface* surface = manager->GetSurfaceForId(id);
-  if (!surface) {
-    LOG(ERROR) << "Attempting to require callback on nonexistent surface";
-    return;
-  }
-  surface->AddDestructionDependency(sequence);
-}
 
 scoped_refptr<cc::SurfaceLayer> CreateSurfaceLayer(
     cc::SurfaceManager* surface_manager,
@@ -48,10 +32,8 @@ scoped_refptr<cc::SurfaceLayer> CreateSurfaceLayer(
     const gfx::Size surface_size,
     bool surface_opaque) {
   // manager must outlive compositors using it.
-  scoped_refptr<cc::SurfaceLayer> layer = cc::SurfaceLayer::Create(
-      base::Bind(&SatisfyCallback, base::Unretained(surface_manager)),
-      base::Bind(&RequireCallback, base::Unretained(surface_manager)));
-  layer->SetSurfaceId(surface_id, 1.f, surface_size);
+  auto layer = cc::SurfaceLayer::Create(surface_manager->reference_factory());
+  layer->SetPrimarySurfaceInfo(cc::SurfaceInfo(surface_id, 1.f, surface_size));
   layer->SetBounds(surface_size);
   layer->SetIsDrawable(true);
   layer->SetContentsOpaque(surface_opaque);
@@ -72,14 +54,14 @@ void CopyOutputRequestCallback(
 DelegatedFrameHostAndroid::DelegatedFrameHostAndroid(
     ui::ViewAndroid* view,
     SkColor background_color,
-    ReturnResourcesCallback return_resources_callback)
-    : frame_sink_id_(
-          ui::ContextProviderFactory::GetInstance()->AllocateFrameSinkId()),
+    Client* client,
+    const cc::FrameSinkId& frame_sink_id)
+    : frame_sink_id_(frame_sink_id),
       view_(view),
-      return_resources_callback_(return_resources_callback),
+      client_(client),
       background_layer_(cc::SolidColorLayer::Create()) {
   DCHECK(view_);
-  DCHECK(!return_resources_callback_.is_null());
+  DCHECK(client_);
 
   surface_manager_ =
       ui::ContextProviderFactory::GetInstance()->GetSurfaceManager();
@@ -96,7 +78,7 @@ DelegatedFrameHostAndroid::DelegatedFrameHostAndroid(
 DelegatedFrameHostAndroid::~DelegatedFrameHostAndroid() {
   DestroyDelegatedContent();
   surface_factory_.reset();
-  UnregisterFrameSinkHierarchy();
+  DetachFromCompositor();
   surface_manager_->InvalidateFrameSinkId(frame_sink_id_);
   background_layer_->RemoveFromParent();
 }
@@ -128,9 +110,7 @@ void DelegatedFrameHostAndroid::SubmitCompositorFrame(
     DCHECK(!current_frame_);
 
     current_frame_ = base::MakeUnique<FrameData>();
-    current_frame_->local_frame_id = surface_id_allocator_->GenerateId();
-    surface_factory_->Create(current_frame_->local_frame_id);
-
+    current_frame_->local_surface_id = surface_id_allocator_->GenerateId();
     current_frame_->surface_size = surface_size;
     current_frame_->top_controls_height = frame.metadata.top_controls_height;
     current_frame_->top_controls_shown_ratio =
@@ -141,19 +121,21 @@ void DelegatedFrameHostAndroid::SubmitCompositorFrame(
         frame.metadata.bottom_controls_shown_ratio;
     current_frame_->has_transparent_background =
         root_pass->has_transparent_background;
-
     current_frame_->viewport_selection = frame.metadata.selection;
+    surface_factory_->SubmitCompositorFrame(current_frame_->local_surface_id,
+                                            std::move(frame), draw_callback);
+
     content_layer_ = CreateSurfaceLayer(
         surface_manager_, cc::SurfaceId(surface_factory_->frame_sink_id(),
-                                        current_frame_->local_frame_id),
+                                        current_frame_->local_surface_id),
         current_frame_->surface_size,
         !current_frame_->has_transparent_background);
     view_->GetLayer()->AddChild(content_layer_);
     UpdateBackgroundLayer();
+  } else {
+    surface_factory_->SubmitCompositorFrame(current_frame_->local_surface_id,
+                                            std::move(frame), draw_callback);
   }
-
-  surface_factory_->SubmitCompositorFrame(current_frame_->local_frame_id,
-                                          std::move(frame), draw_callback);
 }
 
 cc::FrameSinkId DelegatedFrameHostAndroid::GetFrameSinkId() const {
@@ -169,7 +151,7 @@ void DelegatedFrameHostAndroid::RequestCopyOfSurface(
 
   scoped_refptr<cc::Layer> readback_layer = CreateSurfaceLayer(
       surface_manager_, cc::SurfaceId(surface_factory_->frame_sink_id(),
-                                      current_frame_->local_frame_id),
+                                      current_frame_->local_surface_id),
       current_frame_->surface_size,
       !current_frame_->has_transparent_background);
   readback_layer->SetHideLayerAndSubtree(true);
@@ -181,8 +163,7 @@ void DelegatedFrameHostAndroid::RequestCopyOfSurface(
   if (!src_subrect_in_pixel.IsEmpty())
     copy_output_request->set_area(src_subrect_in_pixel);
 
-  surface_factory_->RequestCopyOfSurface(current_frame_->local_frame_id,
-                                         std::move(copy_output_request));
+  surface_factory_->RequestCopyOfSurface(std::move(copy_output_request));
 }
 
 void DelegatedFrameHostAndroid::DestroyDelegatedContent() {
@@ -193,7 +174,7 @@ void DelegatedFrameHostAndroid::DestroyDelegatedContent() {
 
   content_layer_->RemoveFromParent();
   content_layer_ = nullptr;
-  surface_factory_->Destroy(current_frame_->local_frame_id);
+  surface_factory_->EvictSurface();
   current_frame_.reset();
 
   UpdateBackgroundLayer();
@@ -215,38 +196,38 @@ void DelegatedFrameHostAndroid::UpdateBackgroundColor(SkColor color) {
 void DelegatedFrameHostAndroid::UpdateContainerSizeinDIP(
     const gfx::Size& size_in_dip) {
   container_size_in_dip_ = size_in_dip;
-  background_layer_->SetBounds(gfx::ConvertSizeToPixel(
-      gfx::DeviceDisplayInfo().GetDIPScale(), container_size_in_dip_));
+  float device_scale_factor = display::Screen::GetScreen()
+      ->GetDisplayNearestWindow(view_).device_scale_factor();
+  background_layer_->SetBounds(
+      gfx::ConvertSizeToPixel(device_scale_factor, container_size_in_dip_));
   UpdateBackgroundLayer();
 }
 
-void DelegatedFrameHostAndroid::RegisterFrameSinkHierarchy(
-    const cc::FrameSinkId& parent_id) {
-  if (registered_parent_frame_sink_id_.is_valid())
-    UnregisterFrameSinkHierarchy();
-  registered_parent_frame_sink_id_ = parent_id;
+void DelegatedFrameHostAndroid::AttachToCompositor(
+    WindowAndroidCompositor* compositor) {
+  if (registered_parent_compositor_)
+    DetachFromCompositor();
   surface_manager_->RegisterSurfaceFactoryClient(frame_sink_id_, this);
-  surface_manager_->RegisterFrameSinkHierarchy(parent_id, frame_sink_id_);
+  compositor->AddChildFrameSink(frame_sink_id_);
+  registered_parent_compositor_ = compositor;
 }
 
-void DelegatedFrameHostAndroid::UnregisterFrameSinkHierarchy() {
-  if (!registered_parent_frame_sink_id_.is_valid())
+void DelegatedFrameHostAndroid::DetachFromCompositor() {
+  if (!registered_parent_compositor_)
     return;
   surface_manager_->UnregisterSurfaceFactoryClient(frame_sink_id_);
-  surface_manager_->UnregisterFrameSinkHierarchy(
-      registered_parent_frame_sink_id_, frame_sink_id_);
-  registered_parent_frame_sink_id_ = cc::FrameSinkId();
+  registered_parent_compositor_->RemoveChildFrameSink(frame_sink_id_);
+  registered_parent_compositor_ = nullptr;
 }
 
 void DelegatedFrameHostAndroid::ReturnResources(
     const cc::ReturnedResourceArray& resources) {
-  return_resources_callback_.Run(resources);
+  client_->ReturnResources(resources);
 }
 
 void DelegatedFrameHostAndroid::SetBeginFrameSource(
     cc::BeginFrameSource* begin_frame_source) {
-  // TODO(enne): hook this up instead of making RWHVAndroid a
-  // WindowAndroidObserver.
+  client_->SetBeginFrameSource(begin_frame_source);
 }
 
 void DelegatedFrameHostAndroid::UpdateBackgroundLayer() {
@@ -257,7 +238,8 @@ void DelegatedFrameHostAndroid::UpdateBackgroundLayer() {
   bool background_is_drawable = false;
 
   if (current_frame_) {
-    float device_scale_factor = gfx::DeviceDisplayInfo().GetDIPScale();
+    float device_scale_factor = display::Screen::GetScreen()
+        ->GetDisplayNearestWindow(view_).device_scale_factor();
     gfx::Size content_size_in_dip = gfx::ConvertSizeToDIP(
         device_scale_factor, current_frame_->surface_size);
     background_is_drawable =

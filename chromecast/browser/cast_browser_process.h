@@ -13,10 +13,6 @@
 
 class PrefService;
 
-namespace breakpad {
-class CrashDumpManager;
-}  // namespace breakpad
-
 namespace net {
 class NetLog;
 }  // namespace net
@@ -34,7 +30,6 @@ class CastMetricsServiceClient;
 namespace shell {
 class CastBrowserContext;
 class CastContentBrowserClient;
-class CastResourceDispatcherHostDelegate;
 class RemoteDebuggingServer;
 
 class CastBrowserProcess {
@@ -60,12 +55,6 @@ class CastBrowserProcess {
   void SetPrefService(std::unique_ptr<PrefService> pref_service);
   void SetRemoteDebuggingServer(
       std::unique_ptr<RemoteDebuggingServer> remote_debugging_server);
-  void SetResourceDispatcherHostDelegate(
-      std::unique_ptr<CastResourceDispatcherHostDelegate> delegate);
-#if defined(OS_ANDROID)
-  void SetCrashDumpManager(
-      std::unique_ptr<breakpad::CrashDumpManager> crash_dump_manager);
-#endif  // defined(OS_ANDROID)
   void SetConnectivityChecker(
       scoped_refptr<ConnectivityChecker> connectivity_checker);
   void SetNetLog(net::NetLog* net_log);
@@ -82,10 +71,6 @@ class CastBrowserProcess {
     return metrics_service_client_.get();
   }
   PrefService* pref_service() const { return pref_service_.get(); }
-  CastResourceDispatcherHostDelegate* resource_dispatcher_host_delegate()
-      const {
-    return resource_dispatcher_host_delegate_.get();
-  }
   ConnectivityChecker* connectivity_checker() const {
     return connectivity_checker_.get();
   }
@@ -102,11 +87,6 @@ class CastBrowserProcess {
   scoped_refptr<ConnectivityChecker> connectivity_checker_;
   std::unique_ptr<CastBrowserContext> browser_context_;
   std::unique_ptr<metrics::CastMetricsServiceClient> metrics_service_client_;
-  std::unique_ptr<CastResourceDispatcherHostDelegate>
-      resource_dispatcher_host_delegate_;
-#if defined(OS_ANDROID)
-  std::unique_ptr<breakpad::CrashDumpManager> crash_dump_manager_;
-#endif  // defined(OS_ANDROID)
   std::unique_ptr<RemoteDebuggingServer> remote_debugging_server_;
 
   CastContentBrowserClient* cast_content_browser_client_;

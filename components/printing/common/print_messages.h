@@ -20,6 +20,7 @@
 #include "printing/page_size_margins.h"
 #include "printing/print_job_constants.h"
 #include "third_party/WebKit/public/web/WebPrintScalingOption.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/ipc/geometry/gfx_param_traits.h"
 #include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
@@ -47,6 +48,7 @@ struct PrintMsg_Print_Params {
   double dpi;
   double scale_factor;
   int desired_dpi;
+  bool rasterize_pdf;
   int document_cookie;
   bool selection_only;
   bool supports_alpha_blend;
@@ -127,6 +129,9 @@ IPC_STRUCT_TRAITS_BEGIN(PrintMsg_Print_Params)
 
   // Desired apparent dpi on paper.
   IPC_STRUCT_TRAITS_MEMBER(desired_dpi)
+
+  // Whether to rasterize a PDF for printing
+  IPC_STRUCT_TRAITS_MEMBER(rasterize_pdf)
 
   // Cookie for the document to ensure correctness.
   IPC_STRUCT_TRAITS_MEMBER(document_cookie)
@@ -302,6 +307,10 @@ IPC_STRUCT_BEGIN(PrintHostMsg_DidPrintPage_Params)
 
   // The printable area the page author specified.
   IPC_STRUCT_MEMBER(gfx::Rect, content_area)
+
+  // The physical offsets of the printer in DPI. Used for PS printing.
+  IPC_STRUCT_MEMBER(gfx::Point, physical_offsets)
+
 IPC_STRUCT_END()
 
 // TODO(dgn) Rename *ScriptedPrint messages because they are not called only
@@ -406,12 +415,12 @@ IPC_SYNC_MESSAGE_ROUTED1_1(PrintHostMsg_ScriptedPrint,
 // Asks the browser to create a temporary file for the renderer to fill
 // in resulting PdfMetafileSkia in printing.
 IPC_SYNC_MESSAGE_CONTROL1_2(PrintHostMsg_AllocateTempFileForPrinting,
-                            int /* render_view_id */,
+                            int /* render_frame_id */,
                             base::FileDescriptor /* temp file fd */,
-                            int /* fd in browser*/)  // Used only by Chrome OS.
+                            int /* fd in browser*/)
 IPC_MESSAGE_CONTROL2(PrintHostMsg_TempFileForPrintingWritten,
-                     int /* render_view_id */,
-                     int /* fd in browser */)  // Used only by Chrome OS.
+                     int /* render_frame_id */,
+                     int /* fd in browser */)
 #endif  // defined(OS_ANDROID)
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)

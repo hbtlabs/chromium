@@ -9,7 +9,7 @@
 
 namespace chromeos {
 
-class NetworkModel;
+class NetworkScreen;
 
 // Interface for dependency injection between NetworkScreen and its actual
 // representation, either views based or WebUI. Owned by NetworkScreen.
@@ -17,17 +17,14 @@ class NetworkView {
  public:
   virtual ~NetworkView() {}
 
-  // Prepare the contents to showing.
-  virtual void PrepareToShow() = 0;
-
   // Shows the contents of the screen.
   virtual void Show() = 0;
 
   // Hides the contents of the screen.
   virtual void Hide() = 0;
 
-  // Binds |model| to the view.
-  virtual void Bind(NetworkModel& model) = 0;
+  // Binds |screen| to the view.
+  virtual void Bind(NetworkScreen* screen) = 0;
 
   // Unbinds model from the view.
   virtual void Unbind() = 0;

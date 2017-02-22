@@ -54,7 +54,7 @@ class DOMDataStore {
   DOMDataStore(v8::Isolate* isolate, bool isMainWorld)
       : m_isMainWorld(isMainWorld),
         // We never use |m_wrapperMap| when it's the main world.
-        m_wrapperMap(wrapUnique(
+        m_wrapperMap(WTF::wrapUnique(
             isMainWorld ? nullptr
                         : new DOMWrapperMap<ScriptWrappable>(isolate))) {}
 
@@ -117,39 +117,24 @@ class DOMDataStore {
     return current(isolate).get(ScriptWrappable::fromNode(node), isolate);
   }
 
-  static void setWrapperReference(const v8::Persistent<v8::Object>& parent,
-                                  ScriptWrappable* child,
-                                  v8::Isolate* isolate) {
-    current(isolate).setReference(parent, child, isolate);
-  }
-
-  static void setWrapperReference(const v8::Persistent<v8::Object>& parent,
-                                  Node* child,
-                                  v8::Isolate* isolate) {
-    if (canUseScriptWrappable(child)) {
-      ScriptWrappable::fromNode(child)->setReference(parent, isolate);
-      return;
-    }
-    current(isolate).setReference(parent, ScriptWrappable::fromNode(child),
-                                  isolate);
-  }
-
   // Associates the given |object| with the given |wrapper| if the object is
   // not yet associated with any wrapper.  Returns true if the given wrapper
   // is associated with the object, or false if the object is already
   // associated with a wrapper.  In the latter case, |wrapper| will be updated
   // to the existing wrapper.
-  static bool setWrapper(v8::Isolate* isolate,
-                         ScriptWrappable* object,
-                         const WrapperTypeInfo* wrapperTypeInfo,
-                         v8::Local<v8::Object>& wrapper) WARN_UNUSED_RETURN {
+  WARN_UNUSED_RESULT static bool setWrapper(
+      v8::Isolate* isolate,
+      ScriptWrappable* object,
+      const WrapperTypeInfo* wrapperTypeInfo,
+      v8::Local<v8::Object>& wrapper) {
     return current(isolate).set(isolate, object, wrapperTypeInfo, wrapper);
   }
 
-  static bool setWrapper(v8::Isolate* isolate,
-                         Node* node,
-                         const WrapperTypeInfo* wrapperTypeInfo,
-                         v8::Local<v8::Object>& wrapper) WARN_UNUSED_RETURN {
+  WARN_UNUSED_RESULT static bool setWrapper(
+      v8::Isolate* isolate,
+      Node* node,
+      const WrapperTypeInfo* wrapperTypeInfo,
+      v8::Local<v8::Object>& wrapper) {
     if (canUseScriptWrappable(node))
       return ScriptWrappable::fromNode(node)->setWrapper(
           isolate, wrapperTypeInfo, wrapper);
@@ -171,16 +156,6 @@ class DOMDataStore {
     m_wrapperMap->markWrapper(scriptWrappable);
   }
 
-  void setReference(const v8::Persistent<v8::Object>& parent,
-                    ScriptWrappable* child,
-                    v8::Isolate* isolate) {
-    if (m_isMainWorld) {
-      child->setReference(parent, isolate);
-      return;
-    }
-    m_wrapperMap->setReference(isolate, parent, child);
-  }
-
   bool setReturnValueFrom(v8::ReturnValue<v8::Value> returnValue,
                           ScriptWrappable* object) {
     if (m_isMainWorld)
@@ -195,10 +170,10 @@ class DOMDataStore {
   }
 
  private:
-  bool set(v8::Isolate* isolate,
-           ScriptWrappable* object,
-           const WrapperTypeInfo* wrapperTypeInfo,
-           v8::Local<v8::Object>& wrapper) WARN_UNUSED_RETURN {
+  WARN_UNUSED_RESULT bool set(v8::Isolate* isolate,
+                              ScriptWrappable* object,
+                              const WrapperTypeInfo* wrapperTypeInfo,
+                              v8::Local<v8::Object>& wrapper) {
     ASSERT(object);
     ASSERT(!wrapper.IsEmpty());
     if (m_isMainWorld)

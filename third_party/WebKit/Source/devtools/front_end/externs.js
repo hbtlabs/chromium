@@ -91,19 +91,23 @@ Array.prototype.sortNumbers = function() {};
 /**
  * @param {!S} object
  * @param {function(!S,!T):number=} comparator
+ * @param {number=} left
+ * @param {number=} right
  * @return {number}
  * @this {Array.<T>}
  * @template S
  */
-Array.prototype.lowerBound = function(object, comparator) {};
+Array.prototype.lowerBound = function(object, comparator, left, right) {};
 /**
  * @param {!S} object
  * @param {function(!S,!T):number=} comparator
+ * @param {number=} left
+ * @param {number=} right
  * @return {number}
  * @this {Array.<T>}
  * @template S
  */
-Array.prototype.upperBound = function(object, comparator) {};
+Array.prototype.upperBound = function(object, comparator, left, right) {};
 /**
  * @param {!S} value
  * @param {function(!S,!T):number} comparator
@@ -181,6 +185,15 @@ Array.prototype.intersectOrdered = function(array, comparator) {};
  * @template T
  */
 Array.prototype.mergeOrdered = function(array, comparator) {};
+
+/**
+ * @param {number} object
+ * @param {function(number, number):number=} comparator
+ * @param {number=} left
+ * @param {number=} right
+ * @return {number}
+ */
+Int32Array.prototype.lowerBound = function(object, comparator, left, right) {};
 
 // File System API
 /**
@@ -619,12 +632,6 @@ CodeMirror.doc;
 window.dispatchStandaloneTestRunnerMessages;
 
 /**
- * @param {*} obj
- * @return {boolean}
- */
-ArrayBuffer.isView = function(obj) {};
-
-/**
  * @param {Array.<Object>} keyframes
  * @param {number|Object} timing
  * @return {Object}
@@ -745,7 +752,7 @@ ESTree.TemplateLiteralNode = function() {
   /** @type {!Array.<!ESTree.Node>} */
   this.expressions;
 };
-
+/** @type {!Object} */
 var Gonzales = {};
 var gonzales = {
   /**
@@ -805,50 +812,3 @@ Terminal.prototype = {
   /** @param {string} eventName * @param {!Function} handler */
   on: function(eventName, handler) {}
 };
-
-// Module namespaces.
-var Accessibility = {};
-var Animation = {};
-var Audits = {};
-var Audits2 = {};
-var Audits2Worker = {};
-var Bindings = {};
-var CmModes = {};
-var Common = {};
-var Components = {};
-var Console = {};
-var Devices = {};
-var Diff = {};
-var Elements = {};
-var Emulation = {};
-var Extensions = {};
-var FormatterWorker = {};
-var Gonzales = {};
-var HeapSnapshotWorker = {};
-var Host = {};
-var LayerViewer = {};
-var Layers = {};
-var Main = {};
-var Network = {};
-var Persistence = {};
-var Platform = {};
-var Profiler = {};
-var Resources = {};
-var Sass = {};
-var Screencast = {};
-var SDK = {};
-var Security = {};
-var Services = {};
-var Settings = {};
-var Snippets = {};
-var SourceFrame = {};
-var Sources = {};
-var Terminal = {};
-var TextEditor = {};
-var Timeline = {};
-var TimelineModel = {};
-var ToolboxBootstrap = {};
-var UI = {};
-var UtilitySharedWorker = {};
-var WorkerService = {};
-var Workspace = {};

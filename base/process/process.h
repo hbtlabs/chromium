@@ -76,6 +76,9 @@ class BASE_EXPORT Process {
   // Returns true if processes can be backgrounded.
   static bool CanBackgroundProcesses();
 
+  // Terminates the current process immediately with |exit_code|.
+  static void TerminateCurrentProcessImmediately(int exit_code);
+
   // Returns true if this objects represents a valid process.
   bool IsValid() const;
 
@@ -108,12 +111,12 @@ class BASE_EXPORT Process {
   // any process.
   // NOTE: |exit_code| is optional, nullptr can be passed if the exit code is
   // not required.
-  bool WaitForExit(int* exit_code);
+  bool WaitForExit(int* exit_code) const;
 
   // Same as WaitForExit() but only waits for up to |timeout|.
   // NOTE: |exit_code| is optional, nullptr can be passed if the exit code
   // is not required.
-  bool WaitForExitWithTimeout(TimeDelta timeout, int* exit_code);
+  bool WaitForExitWithTimeout(TimeDelta timeout, int* exit_code) const;
 
 #if defined(OS_MACOSX)
   // The Mac needs a Mach port in order to manipulate a process's priority,

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMPONENTS_PROXIMITY_AUTH_CRYPTAUTH_CRYPTAUTH_DEVICE_MANAGER_H
-#define COMPONENTS_PROXIMITY_AUTH_CRYPTAUTH_CRYPTAUTH_DEVICE_MANAGER_H
+#ifndef COMPONENTS_CRYPTAUTH_CRYPTAUTH_DEVICE_MANAGER_H_
+#define COMPONENTS_CRYPTAUTH_CRYPTAUTH_DEVICE_MANAGER_H_
 
 #include <memory>
 
@@ -88,7 +88,7 @@ class CryptAuthDeviceManager : public SyncScheduler::Delegate,
   // sync attempt is already in progress, this function does nothing.
   // |invocation_reason| specifies the reason that the sync was triggered,
   // which is upload to the server.
-  void ForceSyncNow(cryptauth::InvocationReason invocation_reason);
+  void ForceSyncNow(InvocationReason invocation_reason);
 
   // Returns the timestamp of the last successful sync. If no sync
   // has ever been made, then returns a null base::Time object.
@@ -105,12 +105,20 @@ class CryptAuthDeviceManager : public SyncScheduler::Delegate,
   // has ever been recorded, then this function will also return true.
   bool IsRecoveringFromFailure() const;
 
+  // Returns a list of all remote devices that have been synced.
+  virtual std::vector<ExternalDeviceInfo> GetSyncedDevices() const;
+
   // Returns a list of remote devices that can unlock the user's other devices.
-  const std::vector<cryptauth::ExternalDeviceInfo>& unlock_keys() const {
-    return unlock_keys_;
-  }
+  virtual std::vector<ExternalDeviceInfo> GetUnlockKeys() const;
+
+  // Returns a list of remote devices that can host tether hotspots.
+  virtual std::vector<ExternalDeviceInfo> GetTetherHosts() const;
 
  protected:
+  // Empty constructor, to be used by tests to mock the device manager. Do not
+  // use this constructor outside of tests.
+  CryptAuthDeviceManager();
+
   // Creates a new SyncScheduler instance. Exposed for testing.
   virtual std::unique_ptr<SyncScheduler> CreateSyncScheduler();
 
@@ -126,7 +134,7 @@ class CryptAuthDeviceManager : public SyncScheduler::Delegate,
       std::unique_ptr<SyncScheduler::SyncRequest> sync_request) override;
 
   // Callback when |cryptauth_client_| completes with the response.
-  void OnGetMyDevicesSuccess(const cryptauth::GetMyDevicesResponse& response);
+  void OnGetMyDevicesSuccess(const GetMyDevicesResponse& response);
   void OnGetMyDevicesFailure(const std::string& error);
 
   // Used to determine the time.
@@ -144,8 +152,8 @@ class CryptAuthDeviceManager : public SyncScheduler::Delegate,
   // instance.
   PrefService* const pref_service_;
 
-  // The unlock keys currently synced from CryptAuth.
-  std::vector<cryptauth::ExternalDeviceInfo> unlock_keys_;
+  // All devices currently synced from CryptAuth.
+  std::vector<ExternalDeviceInfo> synced_devices_;
 
   // Schedules the time between device sync attempts.
   std::unique_ptr<SyncScheduler> scheduler_;
@@ -168,4 +176,4 @@ class CryptAuthDeviceManager : public SyncScheduler::Delegate,
 
 }  // namespace cryptauth
 
-#endif  // COMPONENTS_PROXIMITY_CRYPTAUTH_CRYPTAUTH_DEVICE_MANAGER_H
+#endif  // COMPONENTS_CRYPTAUTH_CRYPTAUTH_DEVICE_MANAGER_H_

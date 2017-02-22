@@ -13,10 +13,10 @@
 #include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_session.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/platform/api/quic_logging.h"
 
 using std::string;
 using base::StringPiece;
-using net::SpdyPriority;
 
 namespace net {
 
@@ -42,19 +42,18 @@ QuicByteCount QuicCryptoStream::CryptoMessageFramingOverhead(
   return QuicPacketCreator::StreamFramePacketOverhead(
       version, PACKET_8BYTE_CONNECTION_ID,
       /*include_version=*/true,
-      /*include_path_id=*/true,
       /*include_diversification_nonce=*/true, PACKET_1BYTE_PACKET_NUMBER,
       /*offset=*/0);
 }
 
 void QuicCryptoStream::OnError(CryptoFramer* framer) {
-  DLOG(WARNING) << "Error processing crypto data: "
-                << QuicUtils::ErrorToString(framer->error());
+  QUIC_DLOG(WARNING) << "Error processing crypto data: "
+                     << QuicErrorCodeToString(framer->error());
 }
 
 void QuicCryptoStream::OnHandshakeMessage(
     const CryptoHandshakeMessage& message) {
-  DVLOG(1) << ENDPOINT << "Received " << message.DebugString();
+  QUIC_DVLOG(1) << ENDPOINT << "Received " << message.DebugString();
   session()->OnCryptoHandshakeMessageReceived(message);
 }
 
@@ -73,7 +72,7 @@ void QuicCryptoStream::OnDataAvailable() {
     }
     sequencer()->MarkConsumed(iov.iov_len);
     if (handshake_confirmed_ && crypto_framer_.InputBytesRemaining() == 0 &&
-        FLAGS_quic_release_crypto_stream_buffer) {
+        FLAGS_quic_reloadable_flag_quic_release_crypto_stream_buffer) {
       // If the handshake is complete and the current message has been fully
       // processed then no more handshake messages are likely to arrive soon
       // so release the memory in the stream sequencer.
@@ -84,7 +83,7 @@ void QuicCryptoStream::OnDataAvailable() {
 
 void QuicCryptoStream::SendHandshakeMessage(
     const CryptoHandshakeMessage& message) {
-  DVLOG(1) << ENDPOINT << "Sending " << message.DebugString();
+  QUIC_DVLOG(1) << ENDPOINT << "Sending " << message.DebugString();
   session()->connection()->NeuterUnencryptedPackets();
   session()->OnCryptoHandshakeMessageSent(message);
   const QuicData& data = message.GetSerialized();
@@ -96,8 +95,8 @@ bool QuicCryptoStream::ExportKeyingMaterial(StringPiece label,
                                             size_t result_len,
                                             string* result) const {
   if (!handshake_confirmed()) {
-    DLOG(ERROR) << "ExportKeyingMaterial was called before forward-secure"
-                << "encryption was established.";
+    QUIC_DLOG(ERROR) << "ExportKeyingMaterial was called before forward-secure"
+                     << "encryption was established.";
     return false;
   }
   return CryptoUtils::ExportKeyingMaterial(

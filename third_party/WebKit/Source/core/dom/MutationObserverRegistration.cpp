@@ -87,7 +87,7 @@ void MutationObserverRegistration::observedSubtreeNodeWillDetach(Node& node) {
     m_registrationNodeKeepAlive =
         m_registrationNode.get();  // Balanced in clearTransientRegistrations.
   }
-  m_transientRegistrationNodes->add(&node);
+  m_transientRegistrationNodes->insert(&node);
 }
 
 void MutationObserverRegistration::clearTransientRegistrations() {
@@ -107,10 +107,11 @@ void MutationObserverRegistration::clearTransientRegistrations() {
 }
 
 void MutationObserverRegistration::unregister() {
-  DCHECK(m_registrationNode);
-  m_registrationNode->unregisterMutationObserver(this);
-  // The above line will cause this object to be deleted, so don't do any more
-  // in this function.
+  // |this| can outlives m_registrationNode.
+  if (m_registrationNode)
+    m_registrationNode->unregisterMutationObserver(this);
+  else
+    dispose();
 }
 
 bool MutationObserverRegistration::shouldReceiveMutationFrom(
@@ -138,12 +139,12 @@ bool MutationObserverRegistration::shouldReceiveMutationFrom(
 void MutationObserverRegistration::addRegistrationNodesToSet(
     HeapHashSet<Member<Node>>& nodes) const {
   DCHECK(m_registrationNode);
-  nodes.add(m_registrationNode.get());
+  nodes.insert(m_registrationNode.get());
   if (!m_transientRegistrationNodes)
     return;
   for (NodeHashSet::const_iterator iter = m_transientRegistrationNodes->begin();
        iter != m_transientRegistrationNodes->end(); ++iter)
-    nodes.add(iter->get());
+    nodes.insert(iter->get());
 }
 
 DEFINE_TRACE(MutationObserverRegistration) {

@@ -46,8 +46,7 @@ MIDIPort::MIDIPort(MIDIAccess* access,
                    TypeCode type,
                    const String& version,
                    PortState state)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(access->getExecutionContext()),
+    : ContextLifecycleObserver(access->getExecutionContext()),
       m_id(id),
       m_manufacturer(manufacturer),
       m_name(name),
@@ -70,7 +69,7 @@ String MIDIPort::connection() const {
     case ConnectionStatePending:
       return "pending";
   }
-  return emptyString();
+  return emptyString;
 }
 
 String MIDIPort::state() const {
@@ -83,7 +82,7 @@ String MIDIPort::state() const {
       NOTREACHED();
       return "connected";
   }
-  return emptyString();
+  return emptyString;
 }
 
 String MIDIPort::type() const {
@@ -93,7 +92,7 @@ String MIDIPort::type() const {
     case TypeOutput:
       return "output";
   }
-  return emptyString();
+  return emptyString;
 }
 
 ScriptPromise MIDIPort::open(ScriptState* scriptState) {
@@ -156,7 +155,7 @@ bool MIDIPort::hasPendingActivity() const {
   return m_connection != ConnectionStateClosed;
 }
 
-void MIDIPort::contextDestroyed() {
+void MIDIPort::contextDestroyed(ExecutionContext*) {
   // Should be "closed" to assume there are no pending activities.
   m_connection = ConnectionStateClosed;
 }
@@ -164,7 +163,7 @@ void MIDIPort::contextDestroyed() {
 DEFINE_TRACE(MIDIPort) {
   visitor->trace(m_access);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
 }
 
 DEFINE_TRACE_WRAPPERS(MIDIPort) {
@@ -191,7 +190,7 @@ void MIDIPort::open() {
 ScriptPromise MIDIPort::accept(ScriptState* scriptState) {
   return ScriptPromise::cast(
       scriptState,
-      toV8(this, scriptState->context()->Global(), scriptState->isolate()));
+      ToV8(this, scriptState->context()->Global(), scriptState->isolate()));
 }
 
 ScriptPromise MIDIPort::reject(ScriptState* scriptState,

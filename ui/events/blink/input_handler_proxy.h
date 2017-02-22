@@ -13,15 +13,19 @@
 #include "third_party/WebKit/public/platform/WebGestureCurve.h"
 #include "third_party/WebKit/public/platform/WebGestureCurveTarget.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebActiveWheelFlingParameters.h"
 #include "ui/events/blink/blink_features.h"
 #include "ui/events/blink/input_scroll_elasticity_controller.h"
-#include "ui/events/blink/scoped_web_input_event.h"
 #include "ui/events/blink/synchronous_input_handler_proxy.h"
+#include "ui/events/blink/web_input_event_traits.h"
 
 namespace base {
 class TickClock;
+}
+
+namespace blink {
+class WebMouseWheelEvent;
+class WebTouchEvent;
 }
 
 namespace ui {
@@ -58,6 +62,9 @@ class InputHandlerProxy
   }
 
   void set_smooth_scroll_enabled(bool value) { smooth_scroll_enabled_ = value; }
+  void set_touchpad_and_wheel_scroll_latching_enabled(bool value) {
+    touchpad_and_wheel_scroll_latching_enabled_ = value;
+  }
 
   enum EventDisposition {
     DID_HANDLE,
@@ -68,11 +75,11 @@ class InputHandlerProxy
   };
   using EventDispositionCallback =
       base::Callback<void(EventDisposition,
-                          ScopedWebInputEvent WebInputEvent,
+                          WebScopedInputEvent WebInputEvent,
                           const LatencyInfo&,
                           std::unique_ptr<ui::DidOverscrollParams>)>;
   void HandleInputEventWithLatencyInfo(
-      ScopedWebInputEvent event,
+      WebScopedInputEvent event,
       const LatencyInfo& latency_info,
       const EventDispositionCallback& callback);
   EventDisposition HandleInputEvent(const blink::WebInputEvent& event);
@@ -111,6 +118,8 @@ class InputHandlerProxy
  protected:
   void RecordMainThreadScrollingReasons(blink::WebGestureDevice device,
                                         uint32_t reasons);
+  void RecordScrollingThreadStatus(blink::WebGestureDevice device,
+                                   uint32_t reasons);
 
  private:
   friend class test::InputHandlerProxyTest;
@@ -123,7 +132,7 @@ class InputHandlerProxy
   // Helper functions for handling more complicated input events.
   EventDisposition HandleMouseWheel(
       const blink::WebMouseWheelEvent& event);
-  EventDisposition ScrollByMouseWheel(
+  EventDisposition FlingScrollByMouseWheel(
       const blink::WebMouseWheelEvent& event,
       cc::EventListenerProperties listener_properties);
   EventDisposition HandleGestureScrollBegin(
@@ -231,11 +240,16 @@ class InputHandlerProxy
 
   bool smooth_scroll_enabled_;
   bool uma_latency_reporting_enabled_;
+  bool touchpad_and_wheel_scroll_latching_enabled_;
 
   // The merged result of the last touch start with previous touch starts.
   // This value will get returned for subsequent TouchMove events to allow
   // passive events not to block scrolling.
   int32_t touch_start_result_;
+
+  // The result of the last mouse wheel event. This value is used to determine
+  // whether the next wheel scroll is blocked on the Main thread or not.
+  int32_t mouse_wheel_result_;
 
   base::TimeTicks last_fling_animate_time_;
 

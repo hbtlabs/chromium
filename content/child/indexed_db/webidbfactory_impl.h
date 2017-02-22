@@ -22,12 +22,10 @@ class SyncMessageFilter;
 }
 
 namespace content {
-class ThreadSafeSender;
 
 class WebIDBFactoryImpl : public blink::WebIDBFactory {
  public:
   WebIDBFactoryImpl(scoped_refptr<IPC::SyncMessageFilter> sync_message_filter,
-                    scoped_refptr<ThreadSafeSender> thread_safe_sender,
                     scoped_refptr<base::SingleThreadTaskRunner> io_runner);
   ~WebIDBFactoryImpl() override;
 
@@ -42,13 +40,13 @@ class WebIDBFactoryImpl : public blink::WebIDBFactory {
             const blink::WebSecurityOrigin& origin) override;
   void deleteDatabase(const blink::WebString& name,
                       blink::WebIDBCallbacks* callbacks,
-                      const blink::WebSecurityOrigin& origin) override;
+                      const blink::WebSecurityOrigin& origin,
+                      bool force_close) override;
 
  private:
   class IOThreadHelper;
 
   IOThreadHelper* io_helper_;
-  scoped_refptr<ThreadSafeSender> thread_safe_sender_;
   scoped_refptr<base::SingleThreadTaskRunner> io_runner_;
 };
 

@@ -229,19 +229,13 @@ void ForeignSessionHandler::RegisterMessages() {
                  base::Unretained(this)));
 }
 
-void ForeignSessionHandler::OnSyncConfigurationCompleted() {
+void ForeignSessionHandler::OnSyncConfigurationCompleted(
+    syncer::SyncService* sync) {
   HandleGetForeignSessions(nullptr);
 }
 
-void ForeignSessionHandler::OnForeignSessionUpdated() {
+void ForeignSessionHandler::OnForeignSessionUpdated(syncer::SyncService* sync) {
   HandleGetForeignSessions(nullptr);
-}
-
-bool ForeignSessionHandler::IsTabSyncEnabled() {
-  Profile* profile = Profile::FromWebUI(web_ui());
-  browser_sync::ProfileSyncService* service =
-      ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile);
-  return service && service->GetActiveDataTypes().Has(syncer::PROXY_TABS);
 }
 
 base::string16 ForeignSessionHandler::FormatSessionTime(
@@ -338,9 +332,7 @@ void ForeignSessionHandler::HandleGetForeignSessions(
       session_list.Append(std::move(session_data));
     }
   }
-  base::FundamentalValue tab_sync_enabled(IsTabSyncEnabled());
-  web_ui()->CallJavascriptFunctionUnsafe("setForeignSessions", session_list,
-                                         tab_sync_enabled);
+  web_ui()->CallJavascriptFunctionUnsafe("setForeignSessions", session_list);
 }
 
 void ForeignSessionHandler::HandleOpenForeignSession(

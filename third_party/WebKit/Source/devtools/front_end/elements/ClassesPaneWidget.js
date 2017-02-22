@@ -10,7 +10,6 @@ Elements.ClassesPaneWidget = class extends UI.Widget {
     this.element.className = 'styles-element-classes-pane';
     var container = this.element.createChild('div', 'title-container');
     this._input = container.createChild('div', 'new-class-input monospace');
-    this._input.setAttribute('placeholder', Common.UIString('Add new class'));
     this.setDefaultFocusedElement(this._input);
     this._classesContainer = this.element.createChild('div', 'source-code');
     this._classesContainer.classList.add('styles-element-classes-container');
@@ -19,6 +18,7 @@ Elements.ClassesPaneWidget = class extends UI.Widget {
     this._prompt.renderAsBlock();
 
     var proxyElement = this._prompt.attach(this._input);
+    this._prompt.setPlaceholder(Common.UIString('Add new class'));
     proxyElement.addEventListener('keydown', this._onKeyDown.bind(this), false);
 
     SDK.targetManager.addModelListener(SDK.DOMModel, SDK.DOMModel.Events.DOMMutated, this._onDOMMutated, this);
@@ -96,7 +96,7 @@ Elements.ClassesPaneWidget = class extends UI.Widget {
     keys.sort(String.caseInsensetiveComparator);
     for (var i = 0; i < keys.length; ++i) {
       var className = keys[i];
-      var label = createCheckboxLabel(className, classes.get(className));
+      var label = UI.createCheckboxLabel(className, classes.get(className));
       label.visualizeFocus = true;
       label.classList.add('monospace');
       label.checkboxElement.addEventListener('click', this._onClick.bind(this, className), false);
@@ -184,7 +184,7 @@ Elements.ClassesPaneWidget.ButtonProvider = class {
     this._button = new UI.ToolbarToggle(Common.UIString('Element Classes'), '');
     this._button.setText('.cls');
     this._button.element.classList.add('monospace');
-    this._button.addEventListener('click', this._clicked, this);
+    this._button.addEventListener(UI.ToolbarButton.Events.Click, this._clicked, this);
     this._view = new Elements.ClassesPaneWidget();
   }
 
@@ -222,7 +222,7 @@ Elements.ClassesPaneWidget.ClassNamePrompt = class extends UI.TextPrompt {
     var completions = new Set();
     this._selectedFrameId = selectedNode.frameId();
 
-    var cssModel = SDK.CSSModel.fromTarget(selectedNode.target());
+    var cssModel = SDK.CSSModel.fromNode(selectedNode);
     var allStyleSheets = cssModel.allStyleSheets();
     for (var stylesheet of allStyleSheets) {
       if (stylesheet.frameId !== this._selectedFrameId)
@@ -249,7 +249,7 @@ Elements.ClassesPaneWidget.ClassNamePrompt = class extends UI.TextPrompt {
       this._classNamesPromise = null;
 
     var selectedNode = UI.context.flavor(SDK.DOMNode);
-    if (!selectedNode || (!prefix && !force && !expression))
+    if (!selectedNode || (!prefix && !force && !expression.trim()))
       return Promise.resolve([]);
 
     if (!this._classNamesPromise || this._selectedFrameId !== selectedNode.frameId())
@@ -258,7 +258,7 @@ Elements.ClassesPaneWidget.ClassNamePrompt = class extends UI.TextPrompt {
     return this._classNamesPromise.then(completions => {
       if (prefix[0] === '.')
         completions = completions.map(value => '.' + value);
-      return completions.filter(value => value.startsWith(prefix)).map(completion => ({title: completion}));
+      return completions.filter(value => value.startsWith(prefix)).map(completion => ({text: completion}));
     });
   }
 };

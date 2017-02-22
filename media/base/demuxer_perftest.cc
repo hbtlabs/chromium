@@ -22,6 +22,7 @@
 #include "media/base/timestamp_constants.h"
 #include "media/filters/ffmpeg_demuxer.h"
 #include "media/filters/file_data_source.h"
+#include "media/media_features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/perf/perf_test.h"
 
@@ -101,23 +102,13 @@ class StreamReader {
 
 StreamReader::StreamReader(media::Demuxer* demuxer,
                            bool enable_bitstream_converter) {
-  media::DemuxerStream* stream =
-      demuxer->GetStream(media::DemuxerStream::AUDIO);
-  if (stream) {
+  std::vector<media::DemuxerStream*> streams = demuxer->GetAllStreams();
+  for (const auto& stream : streams) {
     streams_.push_back(stream);
     end_of_stream_.push_back(false);
     last_read_timestamp_.push_back(media::kNoTimestamp);
     counts_.push_back(0);
-  }
-
-  stream = demuxer->GetStream(media::DemuxerStream::VIDEO);
-  if (stream) {
-    streams_.push_back(stream);
-    end_of_stream_.push_back(false);
-    last_read_timestamp_.push_back(media::kNoTimestamp);
-    counts_.push_back(0);
-
-    if (enable_bitstream_converter)
+    if (enable_bitstream_converter && stream->type() == DemuxerStream::VIDEO)
       stream->EnableBitstreamConverter();
   }
 }
@@ -239,11 +230,11 @@ TEST(DemuxerPerfTest, MAYBE_Demuxer) {
   RunDemuxerBenchmark("bear-640x360.webm");
   RunDemuxerBenchmark("sfx_s16le.wav");
   RunDemuxerBenchmark("bear.flac");
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
   RunDemuxerBenchmark("bear-1280x720.mp4");
   RunDemuxerBenchmark("sfx.mp3");
 #endif
-#if defined(USE_PROPRIETARY_CODECS) && defined(OS_CHROMEOS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS) && defined(OS_CHROMEOS)
   RunDemuxerBenchmark("bear.avi");
 #endif
 }

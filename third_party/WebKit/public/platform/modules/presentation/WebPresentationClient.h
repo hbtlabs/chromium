@@ -14,20 +14,14 @@ namespace blink {
 
 class WebPresentationAvailabilityObserver;
 class WebPresentationController;
-class WebPresentationConnectionClient;
+struct WebPresentationError;
+class WebPresentationConnectionCallbacks;
+class WebPresentationConnectionProxy;
 class WebPresentationReceiver;
 class WebString;
 class WebURL;
-struct WebPresentationError;
 template <typename T>
 class WebVector;
-
-// If session was created, callback's onSuccess() is invoked with the
-// information about the presentation session created by the embedder.
-// Otherwise, onError() is invoked with the error code and message.
-using WebPresentationConnectionClientCallbacks =
-    WebCallbacks<std::unique_ptr<WebPresentationConnectionClient>,
-                 const WebPresentationError&>;
 
 // Callback for .getAvailability().
 using WebPresentationAvailabilityCallbacks =
@@ -46,35 +40,44 @@ class WebPresentationClient {
   virtual void setReceiver(WebPresentationReceiver*) = 0;
 
   // Called when the frame requests to start a new session.
-  // The ownership of the |callbacks| argument is transferred to the embedder.
-  virtual void startSession(const WebVector<WebURL>& presentationUrls,
-                            WebPresentationConnectionClientCallbacks*) = 0;
+  virtual void startSession(
+      const WebVector<WebURL>& presentationUrls,
+      std::unique_ptr<WebPresentationConnectionCallbacks>) = 0;
 
   // Called when the frame requests to join an existing session.
-  // The ownership of the |callbacks| argument is transferred to the embedder.
-  virtual void joinSession(const WebVector<WebURL>& presentationUrls,
-                           const WebString& presentationId,
-                           WebPresentationConnectionClientCallbacks*) = 0;
+  virtual void joinSession(
+      const WebVector<WebURL>& presentationUrls,
+      const WebString& presentationId,
+      std::unique_ptr<WebPresentationConnectionCallbacks>) = 0;
 
   // Called when the frame requests to send String message to an existing
   // session.
+  // |proxy|: proxy of blink connection object initiating send String message
+  //          request. Does not pass ownership.
   virtual void sendString(const WebURL& presentationUrl,
                           const WebString& presentationId,
-                          const WebString& message) = 0;
+                          const WebString& message,
+                          const WebPresentationConnectionProxy*) = 0;
 
   // Called when the frame requests to send ArrayBuffer/View data to an existing
   // session.  Embedder copies the |data| and the ownership is not transferred.
+  // |proxy|: proxy of blink connection object initiating send ArrayBuffer
+  //          request. Does not pass ownership.
   virtual void sendArrayBuffer(const WebURL& presentationUrl,
                                const WebString& presentationId,
                                const uint8_t* data,
-                               size_t length) = 0;
+                               size_t length,
+                               const WebPresentationConnectionProxy*) = 0;
 
   // Called when the frame requests to send Blob data to an existing session.
   // Embedder copies the |data| and the ownership is not transferred.
+  // |proxy|: proxy of blink connection object initiating send Blob data
+  //          request. Does not pass ownership.
   virtual void sendBlobData(const WebURL& presentationUrl,
                             const WebString& presentationId,
                             const uint8_t* data,
-                            size_t length) = 0;
+                            size_t length,
+                            const WebPresentationConnectionProxy*) = 0;
 
   // Called when the frame requests to close an existing session.
   virtual void closeSession(const WebURL& presentationUrl,
@@ -85,10 +88,10 @@ class WebPresentationClient {
                                 const WebString& presentationId) = 0;
 
   // Called when the frame wants to know the availability of a presentation
-  // display for |availabilityUrl|.  The ownership of the callbacks argument
-  // is transferred to the embedder.
-  virtual void getAvailability(const WebURL& availabilityUrl,
-                               WebPresentationAvailabilityCallbacks*) = 0;
+  // display for |availabilityUrl|.
+  virtual void getAvailability(
+      const WebVector<WebURL>& availabilityUrls,
+      std::unique_ptr<WebPresentationAvailabilityCallbacks>) = 0;
 
   // Start listening to changes in presentation displays availability. The
   // observer will be notified in case of a change. The observer is

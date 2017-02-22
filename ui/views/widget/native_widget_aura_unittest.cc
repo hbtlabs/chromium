@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
@@ -75,7 +76,7 @@ class NativeWidgetAuraTest : public aura::test::AuraTestBase {
     test_focus_rules_ = new TestFocusRules;
     focus_controller_.reset(new wm::FocusController(test_focus_rules_));
     aura::client::SetActivationClient(root_window(), focus_controller_.get());
-    host()->SetBounds(gfx::Rect(640, 480));
+    host()->SetBoundsInPixels(gfx::Rect(640, 480));
   }
 
  private:
@@ -308,9 +309,10 @@ class PropertyTestLayoutManager : public TestLayoutManagerBase {
  private:
   // aura::LayoutManager:
   void OnWindowAddedToLayout(aura::Window* child) override {
-    EXPECT_TRUE(child->GetProperty(aura::client::kCanMaximizeKey));
-    EXPECT_TRUE(child->GetProperty(aura::client::kCanMinimizeKey));
-    EXPECT_TRUE(child->GetProperty(aura::client::kCanResizeKey));
+    EXPECT_EQ(ui::mojom::kResizeBehaviorCanResize |
+                  ui::mojom::kResizeBehaviorCanMaximize |
+                  ui::mojom::kResizeBehaviorCanMinimize,
+              child->GetProperty(aura::client::kResizeBehaviorKey));
     added_ = true;
   }
 
@@ -337,8 +339,7 @@ class PropertyTestWidgetDelegate : public views::WidgetDelegate {
   DISALLOW_COPY_AND_ASSIGN(PropertyTestWidgetDelegate);
 };
 
-// Verifies that the kCanMaximizeKey/kCanMinimizeKey/kCanResizeKey have the
-// correct value when added to the layout manager.
+// Verifies the resize behavior when added to the layout manager.
 TEST_F(NativeWidgetAuraTest, TestPropertiesWhenAddedToLayout) {
   root_window()->SetBounds(gfx::Rect(0, 0, 640, 480));
   PropertyTestLayoutManager* layout_manager = new PropertyTestLayoutManager();
@@ -484,7 +485,7 @@ TEST_F(NativeWidgetAuraTest, PreferViewLayersToChildWindows) {
   views::View* view_with_layer = new views::View;
   parent_root->AddChildView(view_with_layer);
   view_with_layer->SetBounds(0, 0, 50, 50);
-  view_with_layer->SetPaintToLayer(true);
+  view_with_layer->SetPaintToLayer();
 
   // Make sure that |child| still gets the event.
   EXPECT_EQ(child->GetNativeWindow(),
@@ -514,6 +515,54 @@ TEST_F(NativeWidgetAuraTest, PreferViewLayersToChildWindows) {
   // Work around for bug in NativeWidgetAura.
   // TODO: fix bug and remove this.
   parent->Close();
+}
+
+// Verifies views with layers are targeted for events properly.
+TEST_F(NativeWidgetAuraTest,
+       ShouldDescendIntoChildForEventHandlingChecksVisibleBounds) {
+  // Create two widgets: |parent| and |child|. |child| is a child of |parent|.
+  View* parent_root_view = new View;
+  Widget parent;
+  Widget::InitParams parent_params(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
+  parent_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  parent_params.context = root_window();
+  parent.Init(parent_params);
+  parent.SetContentsView(parent_root_view);
+  parent.SetBounds(gfx::Rect(0, 0, 400, 400));
+  parent.Show();
+
+  Widget child;
+  Widget::InitParams child_params(Widget::InitParams::TYPE_CONTROL);
+  child_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  child_params.parent = parent.GetNativeWindow();
+  child.Init(child_params);
+  child.SetBounds(gfx::Rect(0, 0, 200, 200));
+  child.Show();
+
+  // Point is over |child|.
+  EXPECT_EQ(
+      child.GetNativeWindow(),
+      parent.GetNativeWindow()->GetEventHandlerForPoint(gfx::Point(50, 50)));
+
+  View* parent_root_view_child = new View;
+  parent_root_view->AddChildView(parent_root_view_child);
+  parent_root_view_child->SetBounds(0, 0, 10, 10);
+
+  // Create a View whose layer extends outside the bounds of its parent. Event
+  // targetting should only consider the visible bounds.
+  View* parent_root_view_child_child = new View;
+  parent_root_view_child->AddChildView(parent_root_view_child_child);
+  parent_root_view_child_child->SetBounds(0, 0, 100, 100);
+  parent_root_view_child_child->SetPaintToLayer();
+  parent_root_view_child_child->layer()->parent()->StackAtTop(
+      parent_root_view_child_child->layer());
+
+  // 20,20 is over |parent_root_view_child_child|'s layer, but not the visible
+  // bounds of |parent_root_view_child_child|, so |child| should be the event
+  // target.
+  EXPECT_EQ(
+      child.GetNativeWindow(),
+      parent.GetNativeWindow()->GetEventHandlerForPoint(gfx::Point(20, 20)));
 }
 
 // Verifies that widget->FlashFrame() sets aura::client::kDrawAttentionKey,

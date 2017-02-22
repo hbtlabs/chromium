@@ -40,12 +40,12 @@ bool CSSVariableResolver::resolveFallback(CSSParserTokenRange range,
 CSSVariableData* CSSVariableResolver::valueForCustomProperty(
     AtomicString name) {
   if (m_variablesSeen.contains(name)) {
-    m_cycleStartPoints.add(name);
+    m_cycleStartPoints.insert(name);
     return nullptr;
   }
 
   DCHECK(m_registry || !RuntimeEnabledFeatures::cssVariables2Enabled());
-  const PropertyRegistry::Registration* registration =
+  const PropertyRegistration* registration =
       m_registry ? m_registry->registration(name) : nullptr;
 
   CSSVariableData* variableData = nullptr;
@@ -53,7 +53,8 @@ CSSVariableData* CSSVariableResolver::valueForCustomProperty(
     if (m_inheritedVariables)
       variableData = m_inheritedVariables->getVariable(name);
   } else {
-    variableData = m_nonInheritedVariables->getVariable(name);
+    if (m_nonInheritedVariables)
+      variableData = m_nonInheritedVariables->getVariable(name);
   }
   if (!variableData)
     return registration ? registration->initialVariableData() : nullptr;
@@ -93,11 +94,11 @@ PassRefPtr<CSSVariableData> CSSVariableResolver::resolveCustomProperty(
   bool disallowAnimationTainted = false;
   bool isAnimationTainted = variableData.isAnimationTainted();
   Vector<CSSParserToken> tokens;
-  m_variablesSeen.add(name);
+  m_variablesSeen.insert(name);
   bool success =
       resolveTokenRange(variableData.tokens(), disallowAnimationTainted, tokens,
                         isAnimationTainted);
-  m_variablesSeen.remove(name);
+  m_variablesSeen.erase(name);
 
   // The old variable data holds onto the backing string the new resolved
   // CSSVariableData relies on. Ensure it will live beyond us overwriting the
@@ -105,7 +106,7 @@ PassRefPtr<CSSVariableData> CSSVariableResolver::resolveCustomProperty(
   ASSERT(variableData.refCount() > 1);
 
   if (!success || !m_cycleStartPoints.isEmpty()) {
-    m_cycleStartPoints.remove(name);
+    m_cycleStartPoints.erase(name);
     return nullptr;
   }
   return CSSVariableData::createResolved(tokens, variableData,
@@ -184,7 +185,7 @@ bool CSSVariableResolver::resolveTokenRange(CSSParserTokenRange range,
                RuntimeEnabledFeatures::cssApplyAtRulesEnabled()) {
       resolveApplyAtRule(range, result);
     } else {
-      result.append(range.consume());
+      result.push_back(range.consume());
     }
   }
   return success;
@@ -255,7 +256,7 @@ const CSSValue* CSSVariableResolver::resolvePendingSubstitutions(
     if (resolver.resolveTokenRange(
             shorthandValue->variableDataValue()->tokens(),
             disallowAnimationTainted, tokens, isAnimationTainted)) {
-      CSSParserContext context(HTMLStandardMode, 0);
+      CSSParserContext* context = CSSParserContext::create(HTMLStandardMode);
 
       HeapVector<CSSProperty, 256> parsedProperties;
 
@@ -331,9 +332,5 @@ CSSVariableResolver::CSSVariableResolver(const StyleResolverState& state)
     : m_inheritedVariables(state.style()->inheritedVariables()),
       m_nonInheritedVariables(state.style()->nonInheritedVariables()),
       m_registry(state.document().propertyRegistry()) {}
-
-DEFINE_TRACE(CSSVariableResolver) {
-  visitor->trace(m_registry);
-}
 
 }  // namespace blink

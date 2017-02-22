@@ -276,7 +276,8 @@ NavigationEntryImpl::NavigationEntryImpl(
       can_load_local_resources_(false),
       frame_tree_node_id_(-1),
       reload_type_(ReloadType::NONE),
-      started_from_context_menu_(false) {
+      started_from_context_menu_(false),
+      ssl_error_(false) {
 #if defined(OS_ANDROID)
   has_user_gesture_ = false;
 #endif
@@ -354,11 +355,6 @@ const base::string16& NavigationEntryImpl::GetTitle() const {
 }
 
 void NavigationEntryImpl::SetPageState(const PageState& state) {
-  if (!SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    frame_tree_->frame_entry->SetPageState(state);
-    return;
-  }
-
   // SetPageState should only be called before the NavigationEntry has been
   // loaded, such as for restore (when there are no subframe
   // FrameNavigationEntries yet).  However, some callers expect to call this
@@ -386,10 +382,9 @@ void NavigationEntryImpl::SetPageState(const PageState& state) {
 }
 
 PageState NavigationEntryImpl::GetPageState() const {
-  // Just return the main frame's PageState in default Chrome, or if there are
-  // no subframe FrameNavigationEntries.
-  if (!SiteIsolationPolicy::UseSubframeNavigationEntries() ||
-      frame_tree_->children.size() == 0U)
+  // Just return the main frame's state if there are no subframe
+  // FrameNavigationEntries.
+  if (frame_tree_->children.size() == 0U)
     return frame_tree_->frame_entry->page_state();
 
   // When we're using subframe entries, each FrameNavigationEntry has a
@@ -671,7 +666,7 @@ CommonNavigationParams NavigationEntryImpl::ConstructCommonNavigationParams(
     const GURL& dest_url,
     const Referrer& dest_referrer,
     FrameMsg_Navigate_Type::Value navigation_type,
-    LoFiState lofi_state,
+    PreviewsState previews_state,
     const base::TimeTicks& navigation_start) const {
   FrameMsg_UILoadMetricsReportType::Value report_type =
       FrameMsg_UILoadMetricsReportType::NO_REPORT;
@@ -694,7 +689,7 @@ CommonNavigationParams NavigationEntryImpl::ConstructCommonNavigationParams(
   return CommonNavigationParams(
       dest_url, dest_referrer, GetTransitionType(), navigation_type,
       !IsViewSourceMode(), should_replace_entry(), ui_timestamp, report_type,
-      GetBaseURLForDataURL(), GetHistoryURLForDataURL(), lofi_state,
+      GetBaseURLForDataURL(), GetHistoryURLForDataURL(), previews_state,
       navigation_start, method, post_body ? post_body : post_data_);
 }
 
@@ -707,7 +702,8 @@ StartNavigationParams NavigationEntryImpl::ConstructStartNavigationParams()
 
 RequestNavigationParams NavigationEntryImpl::ConstructRequestNavigationParams(
     const FrameNavigationEntry& frame_entry,
-    bool is_same_document_history_load,
+    const GURL& original_url,
+    const std::string& original_method,
     bool is_history_navigation_in_new_child,
     const std::map<std::string, bool>& subframe_unique_names,
     bool has_committed_real_load,
@@ -739,8 +735,8 @@ RequestNavigationParams NavigationEntryImpl::ConstructRequestNavigationParams(
   user_gesture = has_user_gesture();
 #endif
   RequestNavigationParams request_params(
-      GetIsOverridingUserAgent(), redirects, GetCanLoadLocalResources(),
-      frame_entry.page_state(), GetUniqueID(), is_same_document_history_load,
+      GetIsOverridingUserAgent(), redirects, original_url, original_method,
+      GetCanLoadLocalResources(), frame_entry.page_state(), GetUniqueID(),
       is_history_navigation_in_new_child, subframe_unique_names,
       has_committed_real_load, intended_as_new_entry, pending_offset_to_send,
       current_offset_to_send, current_length_to_send, IsViewSourceMode(),
@@ -876,10 +872,10 @@ std::map<std::string, bool> NavigationEntryImpl::GetSubframeUniqueNames(
       // that was the default URL.  PageState doesn't matter there, because
       // content injected into about:blank frames doesn't use it.
       //
-      // Be careful not to include iframe srcdoc URLs in this check, which do
-      // need their PageState.  The committed URL in that case gets rewritten to
-      // about:blank, but we can detect it via the PageState's URL.
-      //
+      // Be careful not to rely on FrameNavigationEntry's URLs in this check,
+      // because the committed URL in the browser could be rewritten to
+      // about:blank.
+      // See RenderProcessHostImpl::FilterURL to know which URLs are rewritten.
       // See https://crbug.com/657896 for details.
       bool is_about_blank = false;
       ExplodedPageState exploded_page_state;

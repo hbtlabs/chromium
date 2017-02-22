@@ -160,8 +160,8 @@ emit display items to a `PaintController` (using `GraphicsContext`).
 
 #### [DrawingDisplayItem](DrawingDisplayItem.h)
 
-Holds an `SkPicture` which contains the Skia commands required to draw some atom
-of content.
+Holds a `PaintRecord` which contains the paint operations required to draw some
+atom of content.
 
 #### [ForeignLayerDisplayItem](ForeignLayerDisplayItem.h)
 
@@ -258,6 +258,10 @@ to combine paint chunks into a smaller number of layers.
 
 The owner of the `PaintArtifactCompositor` (e.g. `WebView`) can then attach its
 root layer to the overall layer hierarchy to be displayed to the user.
+
+In the future we would like to explore moving to a single shared property tree
+representation across both cc and
+Blink. See [Web Page Geometries](https://goo.gl/MwVIto) for more.
 
 ## Geometry routines
 

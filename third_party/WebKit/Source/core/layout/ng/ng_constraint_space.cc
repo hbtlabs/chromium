@@ -6,194 +6,135 @@
 
 #include "core/layout/LayoutBlock.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/ng/ng_constraint_space.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
 #include "core/layout/ng/ng_layout_opportunity_iterator.h"
-#include "core/layout/ng/ng_units.h"
 
 namespace blink {
 
-NGConstraintSpace::NGConstraintSpace(NGWritingMode writing_mode,
-                                     TextDirection direction,
-                                     NGPhysicalConstraintSpace* physical_space)
-    : physical_space_(physical_space),
-      size_(physical_space->available_size_.ConvertToLogical(writing_mode)),
+NGConstraintSpace::NGConstraintSpace(
+    NGWritingMode writing_mode,
+    TextDirection direction,
+    NGLogicalSize available_size,
+    NGLogicalSize percentage_resolution_size,
+    NGPhysicalSize initial_containing_block_size,
+    LayoutUnit fragmentainer_space_available,
+    bool is_fixed_size_inline,
+    bool is_fixed_size_block,
+    bool is_shrink_to_fit,
+    bool is_inline_direction_triggers_scrollbar,
+    bool is_block_direction_triggers_scrollbar,
+    NGFragmentationType block_direction_fragmentation_type,
+    bool is_new_fc,
+    const NGMarginStrut& margin_strut,
+    const NGLogicalOffset& bfc_offset,
+    const std::shared_ptr<NGExclusions>& exclusions)
+    : available_size_(available_size),
+      percentage_resolution_size_(percentage_resolution_size),
+      initial_containing_block_size_(initial_containing_block_size),
+      fragmentainer_space_available_(fragmentainer_space_available),
+      is_fixed_size_inline_(is_fixed_size_inline),
+      is_fixed_size_block_(is_fixed_size_block),
+      is_shrink_to_fit_(is_shrink_to_fit),
+      is_inline_direction_triggers_scrollbar_(
+          is_inline_direction_triggers_scrollbar),
+      is_block_direction_triggers_scrollbar_(
+          is_block_direction_triggers_scrollbar),
+      block_direction_fragmentation_type_(block_direction_fragmentation_type),
+      is_new_fc_(is_new_fc),
       writing_mode_(writing_mode),
-      direction_(direction) {}
+      direction_(static_cast<unsigned>(direction)),
+      margin_strut_(margin_strut),
+      bfc_offset_(bfc_offset),
+      exclusions_(exclusions) {}
 
 NGConstraintSpace* NGConstraintSpace::CreateFromLayoutObject(
     const LayoutBox& box) {
+  auto writing_mode = FromPlatformWritingMode(box.styleRef().getWritingMode());
+  bool parallel_containing_block = IsParallelWritingMode(
+      FromPlatformWritingMode(
+          box.containingBlock()->styleRef().getWritingMode()),
+      writing_mode);
   bool fixed_inline = false, fixed_block = false;
-  // XXX for orthogonal writing mode this is not right
-  LayoutUnit available_logical_width =
-      std::max(LayoutUnit(), box.containingBlockLogicalWidthForContent());
+
+  LayoutUnit available_logical_width;
+  if (parallel_containing_block)
+    available_logical_width = box.containingBlockLogicalWidthForContent();
+  else
+    available_logical_width = box.perpendicularContainingBlockLogicalHeight();
+  available_logical_width = std::max(LayoutUnit(), available_logical_width);
+
   LayoutUnit available_logical_height;
   if (!box.parent()) {
     available_logical_height = box.view()->viewLogicalHeightForPercentages();
   } else if (box.containingBlock()) {
-    available_logical_height =
-        box.containingBlock()->availableLogicalHeightForPercentageComputation();
+    if (parallel_containing_block) {
+      available_logical_height =
+          box.containingBlock()
+              ->availableLogicalHeightForPercentageComputation();
+    } else {
+      available_logical_height = box.containingBlockLogicalWidthForContent();
+    }
   }
+  NGLogicalSize percentage_size = {available_logical_width,
+                                   available_logical_height};
+  NGLogicalSize available_size = percentage_size;
   // When we have an override size, the available_logical_{width,height} will be
   // used as the final size of the box, so it has to include border and
   // padding.
   if (box.hasOverrideLogicalContentWidth()) {
-    available_logical_width =
+    available_size.inline_size =
         box.borderAndPaddingLogicalWidth() + box.overrideLogicalContentWidth();
     fixed_inline = true;
   }
   if (box.hasOverrideLogicalContentHeight()) {
-    available_logical_height = box.borderAndPaddingLogicalHeight() +
-                               box.overrideLogicalContentHeight();
+    available_size.block_size = box.borderAndPaddingLogicalHeight() +
+                                box.overrideLogicalContentHeight();
     fixed_block = true;
   }
 
   bool is_new_fc =
       box.isLayoutBlock() && toLayoutBlock(box).createsNewFormattingContext();
 
-  NGConstraintSpaceBuilder builder(
-      FromPlatformWritingMode(box.styleRef().getWritingMode()));
-  builder
-      .SetAvailableSize(
-          NGLogicalSize(available_logical_width, available_logical_height))
-      .SetPercentageResolutionSize(
-          NGLogicalSize(available_logical_width, available_logical_height))
+  FloatSize icb_float_size = box.view()->viewportSizeForViewportUnits();
+  NGPhysicalSize initial_containing_block_size{
+      LayoutUnit(icb_float_size.width()), LayoutUnit(icb_float_size.height())};
+
+  return NGConstraintSpaceBuilder(writing_mode)
+      .SetAvailableSize(available_size)
+      .SetPercentageResolutionSize(percentage_size)
+      .SetInitialContainingBlockSize(initial_containing_block_size)
       .SetIsInlineDirectionTriggersScrollbar(
-          box.styleRef().overflowInlineDirection() == OverflowAuto)
+          box.styleRef().overflowInlineDirection() == EOverflow::kAuto)
       .SetIsBlockDirectionTriggersScrollbar(
-          box.styleRef().overflowBlockDirection() == OverflowAuto)
+          box.styleRef().overflowBlockDirection() == EOverflow::kAuto)
       .SetIsFixedSizeInline(fixed_inline)
       .SetIsFixedSizeBlock(fixed_block)
-      .SetIsNewFormattingContext(is_new_fc);
-
-  return new NGConstraintSpace(
-      FromPlatformWritingMode(box.styleRef().getWritingMode()),
-      box.styleRef().direction(), builder.ToConstraintSpace());
+      .SetIsShrinkToFit(
+          box.sizesLogicalWidthToFitContent(box.styleRef().logicalWidth()))
+      .SetIsNewFormattingContext(is_new_fc)
+      .SetTextDirection(box.styleRef().direction())
+      .ToConstraintSpace(writing_mode);
 }
 
-void NGConstraintSpace::AddExclusion(const NGExclusion& exclusion) const {
-  WRITING_MODE_IGNORED(
-      "Exclusions are stored directly in physical constraint space.");
-  MutablePhysicalSpace()->AddExclusion(exclusion);
-}
-
-const NGExclusion* NGConstraintSpace::LastLeftFloatExclusion() const {
-  WRITING_MODE_IGNORED(
-      "Exclusions are stored directly in physical constraint space.");
-  return PhysicalSpace()->LastLeftFloatExclusion();
-}
-
-const NGExclusion* NGConstraintSpace::LastRightFloatExclusion() const {
-  WRITING_MODE_IGNORED(
-      "Exclusions are stored directly in physical constraint space.");
-  return PhysicalSpace()->LastRightFloatExclusion();
-}
-
-NGLogicalSize NGConstraintSpace::PercentageResolutionSize() const {
-  return physical_space_->percentage_resolution_size_.ConvertToLogical(
-      static_cast<NGWritingMode>(writing_mode_));
-}
-
-NGLogicalSize NGConstraintSpace::AvailableSize() const {
-  return physical_space_->available_size_.ConvertToLogical(
-      static_cast<NGWritingMode>(writing_mode_));
-}
-
-bool NGConstraintSpace::IsNewFormattingContext() const {
-  return physical_space_->is_new_fc_;
-}
-
-bool NGConstraintSpace::InlineTriggersScrollbar() const {
-  return writing_mode_ == HorizontalTopBottom
-             ? physical_space_->width_direction_triggers_scrollbar_
-             : physical_space_->height_direction_triggers_scrollbar_;
-}
-
-bool NGConstraintSpace::BlockTriggersScrollbar() const {
-  return writing_mode_ == HorizontalTopBottom
-             ? physical_space_->height_direction_triggers_scrollbar_
-             : physical_space_->width_direction_triggers_scrollbar_;
-}
-
-bool NGConstraintSpace::FixedInlineSize() const {
-  return writing_mode_ == HorizontalTopBottom ? physical_space_->fixed_width_
-                                              : physical_space_->fixed_height_;
-}
-
-bool NGConstraintSpace::FixedBlockSize() const {
-  return writing_mode_ == HorizontalTopBottom ? physical_space_->fixed_height_
-                                              : physical_space_->fixed_width_;
+void NGConstraintSpace::AddExclusion(const NGExclusion& exclusion) {
+  exclusions_->Add(exclusion);
 }
 
 NGFragmentationType NGConstraintSpace::BlockFragmentationType() const {
-  return static_cast<NGFragmentationType>(
-      writing_mode_ == HorizontalTopBottom
-          ? physical_space_->height_direction_fragmentation_type_
-          : physical_space_->width_direction_fragmentation_type_);
+  return static_cast<NGFragmentationType>(block_direction_fragmentation_type_);
 }
 
-void NGConstraintSpace::Subtract(const NGFragment*) {
+void NGConstraintSpace::Subtract(const NGBoxFragment*) {
   // TODO(layout-ng): Implement.
 }
 
-NGLayoutOpportunityIterator* NGConstraintSpace::LayoutOpportunities(
-    unsigned clear,
-    bool for_inline_or_bfc) {
-  NGLayoutOpportunityIterator* iterator = new NGLayoutOpportunityIterator(this);
-  return iterator;
-}
-
-void NGConstraintSpace::SetOverflowTriggersScrollbar(bool inline_triggers,
-                                                     bool block_triggers) {
-  if (writing_mode_ == HorizontalTopBottom) {
-    physical_space_->width_direction_triggers_scrollbar_ = inline_triggers;
-    physical_space_->height_direction_triggers_scrollbar_ = block_triggers;
-  } else {
-    physical_space_->width_direction_triggers_scrollbar_ = block_triggers;
-    physical_space_->height_direction_triggers_scrollbar_ = inline_triggers;
-  }
-}
-
-void NGConstraintSpace::SetFixedSize(bool inline_fixed, bool block_fixed) {
-  if (writing_mode_ == HorizontalTopBottom) {
-    physical_space_->fixed_width_ = inline_fixed;
-    physical_space_->fixed_height_ = block_fixed;
-  } else {
-    physical_space_->fixed_width_ = block_fixed;
-    physical_space_->fixed_height_ = inline_fixed;
-  }
-}
-
-void NGConstraintSpace::SetFragmentationType(NGFragmentationType type) {
-  if (writing_mode_ == HorizontalTopBottom) {
-    DCHECK_EQ(static_cast<NGFragmentationType>(
-                  physical_space_->width_direction_fragmentation_type_),
-              FragmentNone);
-    physical_space_->height_direction_fragmentation_type_ = type;
-  } else {
-    DCHECK_EQ(static_cast<NGFragmentationType>(
-                  physical_space_->height_direction_fragmentation_type_),
-              FragmentNone);
-    physical_space_->width_direction_triggers_scrollbar_ = type;
-  }
-}
-
-void NGConstraintSpace::SetIsNewFormattingContext(bool is_new_fc) {
-  physical_space_->is_new_fc_ = is_new_fc;
-}
-
-NGConstraintSpace* NGConstraintSpace::ChildSpace(
-    const ComputedStyle* style) const {
-  return new NGConstraintSpace(FromPlatformWritingMode(style->getWritingMode()),
-                               style->direction(), MutablePhysicalSpace());
-}
-
 String NGConstraintSpace::ToString() const {
-  return String::format("%s,%s %sx%s",
-                        offset_.inline_offset.toString().ascii().data(),
-                        offset_.block_offset.toString().ascii().data(),
-                        size_.inline_size.toString().ascii().data(),
-                        size_.block_size.toString().ascii().data());
+  return String::format("Offset: %s,%s Size: %sx%s MarginStrut: %s",
+                        bfc_offset_.inline_offset.toString().ascii().data(),
+                        bfc_offset_.block_offset.toString().ascii().data(),
+                        AvailableSize().inline_size.toString().ascii().data(),
+                        AvailableSize().block_size.toString().ascii().data(),
+                        margin_strut_.ToString().ascii().data());
 }
 
 }  // namespace blink

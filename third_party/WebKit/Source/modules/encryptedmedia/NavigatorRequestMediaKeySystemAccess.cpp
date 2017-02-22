@@ -4,6 +4,8 @@
 
 #include "modules/encryptedmedia/NavigatorRequestMediaKeySystemAccess.h"
 
+#include <algorithm>
+
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/ScriptState.h"
@@ -12,6 +14,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/frame/Deprecation.h"
+#include "core/frame/Settings.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "modules/encryptedmedia/EncryptedMediaUtils.h"
 #include "modules/encryptedmedia/MediaKeySession.h"
@@ -20,6 +23,7 @@
 #include "platform/EncryptedMediaRequest.h"
 #include "platform/Histogram.h"
 #include "platform/network/ParsedContentType.h"
+#include "platform/network/mime/ContentType.h"
 #include "public/platform/WebEncryptedMediaClient.h"
 #include "public/platform/WebEncryptedMediaRequest.h"
 #include "public/platform/WebMediaKeySystemConfiguration.h"
@@ -28,7 +32,6 @@
 #include "wtf/PtrUtil.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
-#include <algorithm>
 
 namespace blink {
 
@@ -48,11 +51,12 @@ static WebVector<WebMediaKeySystemMediaCapability> convertCapabilities(
   for (size_t i = 0; i < capabilities.size(); ++i) {
     const WebString& contentType = capabilities[i].contentType();
     result[i].contentType = contentType;
-    if (isValidContentType(contentType)) {
+    if (ParsedContentType(contentType).isValid()) {
       // FIXME: Fail if there are unrecognized parameters.
-      ParsedContentType type(capabilities[i].contentType());
-      result[i].mimeType = type.mimeType();
-      result[i].codecs = type.parameterValueForName("codecs");
+      // http://crbug.com/690131
+      ContentType type(capabilities[i].contentType());
+      result[i].mimeType = type.type();
+      result[i].codecs = type.parameter("codecs");
     }
     result[i].robustness = capabilities[i].robustness();
   }
@@ -79,11 +83,6 @@ static WebVector<WebEncryptedMediaSessionType> convertSessionTypes(
   for (size_t i = 0; i < sessionTypes.size(); ++i)
     result[i] = EncryptedMediaUtils::convertToSessionType(sessionTypes[i]);
   return result;
-}
-
-static bool AreCodecsSpecified(
-    const WebMediaKeySystemMediaCapability& capability) {
-  return !capability.codecs.isEmpty();
 }
 
 // This class allows capabilities to be checked and a MediaKeySystemAccess
@@ -122,21 +121,7 @@ class MediaKeySystemAccessInitializer final : public EncryptedMediaRequest {
   // For widevine key system, generate warning and report to UMA if
   // |m_supportedConfigurations| contains any video capability with empty
   // robustness string.
-  // TODO(xhwang): Remove after we handle empty robustness correctly.
-  // See http://crbug.com/482277
   void checkVideoCapabilityRobustness() const;
-
-  // Generate deprecation warning and log UseCounter if configuration
-  // contains only container-only contentType strings.
-  // TODO(jrummell): Remove once this is no longer allowed.
-  // See http://crbug.com/605661.
-  void checkEmptyCodecs(const WebMediaKeySystemConfiguration&);
-
-  // Log UseCounter if selected configuration does not have at least one of
-  // 'audioCapabilities' and 'videoCapabilities' non-empty.
-  // TODO(jrummell): Switch to deprecation message once we have data.
-  // See http://crbug.com/616233.
-  void checkCapabilities(const WebMediaKeySystemConfiguration&);
 
   Member<ScriptPromiseResolver> m_resolver;
   const String m_keySystem;
@@ -203,14 +188,11 @@ SecurityOrigin* MediaKeySystemAccessInitializer::getSecurityOrigin() const {
 
 void MediaKeySystemAccessInitializer::requestSucceeded(
     WebContentDecryptionModuleAccess* access) {
-  checkEmptyCodecs(access->getConfiguration());
-  checkCapabilities(access->getConfiguration());
-
   if (!isExecutionContextValid())
     return;
 
   m_resolver->resolve(
-      new MediaKeySystemAccess(m_keySystem, wrapUnique(access)));
+      new MediaKeySystemAccess(m_keySystem, WTF::wrapUnique(access)));
   m_resolver.clear();
 }
 
@@ -224,11 +206,11 @@ void MediaKeySystemAccessInitializer::requestNotSupported(
 }
 
 bool MediaKeySystemAccessInitializer::isExecutionContextValid() const {
-  // activeDOMObjectsAreStopped() is called to see if the context is in the
+  // isContextDestroyed() is called to see if the context is in the
   // process of being destroyed. If it is true, assume the context is no
   // longer valid as it is about to be destroyed anyway.
   ExecutionContext* context = m_resolver->getExecutionContext();
-  return context && !context->activeDOMObjectsAreStopped();
+  return context && !context->isContextDestroyed();
 }
 
 void MediaKeySystemAccessInitializer::checkVideoCapabilityRobustness() const {
@@ -264,63 +246,8 @@ void MediaKeySystemAccessInitializer::checkVideoCapabilityRobustness() const {
     m_resolver->getExecutionContext()->addConsoleMessage(ConsoleMessage::create(
         JSMessageSource, WarningMessageLevel,
         "It is recommended that a robustness level be specified. Not "
-        "specifying the robustness level could "
-        "result in unexpected behavior in the future, potentially including "
-        "failure to play."));
-  }
-}
-
-void MediaKeySystemAccessInitializer::checkEmptyCodecs(
-    const WebMediaKeySystemConfiguration& config) {
-  // This is only checking for empty codecs in the selected configuration,
-  // as apps may pass container only contentType strings for compatibility
-  // with other implementations.
-  // This will only check that all returned capabilities do not contain
-  // codecs. This avoids alerting on configurations that will continue
-  // to succeed in the future once strict checking is enforced.
-  bool areAllAudioCodecsEmpty = false;
-  if (!config.audioCapabilities.isEmpty()) {
-    areAllAudioCodecsEmpty =
-        std::find_if(config.audioCapabilities.begin(),
-                     config.audioCapabilities.end(),
-                     AreCodecsSpecified) == config.audioCapabilities.end();
-  }
-
-  bool areAllVideoCodecsEmpty = false;
-  if (!config.videoCapabilities.isEmpty()) {
-    areAllVideoCodecsEmpty =
-        std::find_if(config.videoCapabilities.begin(),
-                     config.videoCapabilities.end(),
-                     AreCodecsSpecified) == config.videoCapabilities.end();
-  }
-
-  if (areAllAudioCodecsEmpty || areAllVideoCodecsEmpty) {
-    Deprecation::countDeprecation(
-        m_resolver->getExecutionContext(),
-        UseCounter::EncryptedMediaAllSelectedContentTypesMissingCodecs);
-  } else {
-    UseCounter::count(
-        m_resolver->getExecutionContext(),
-        UseCounter::EncryptedMediaAllSelectedContentTypesHaveCodecs);
-  }
-}
-
-void MediaKeySystemAccessInitializer::checkCapabilities(
-    const WebMediaKeySystemConfiguration& config) {
-  // This is only checking that at least one capability is provided in the
-  // selected configuration, as apps may pass empty capabilities for
-  // compatibility with other implementations.
-  bool atLeastOneAudioCapability = config.audioCapabilities.size() > 0;
-  bool atLeastOneVideoCapability = config.videoCapabilities.size() > 0;
-
-  if (atLeastOneAudioCapability || atLeastOneVideoCapability) {
-    UseCounter::count(m_resolver->getExecutionContext(),
-                      UseCounter::EncryptedMediaCapabilityProvided);
-  } else {
-    // TODO(jrummell): Switch to deprecation message once we understand
-    // current usage. http://crbug.com/616233.
-    UseCounter::count(m_resolver->getExecutionContext(),
-                      UseCounter::EncryptedMediaCapabilityNotProvided);
+        "specifying the robustness level could result in unexpected behavior, "
+        "potentially including failure to play."));
   }
 }
 
@@ -332,6 +259,26 @@ ScriptPromise NavigatorRequestMediaKeySystemAccess::requestMediaKeySystemAccess(
     const String& keySystem,
     const HeapVector<MediaKeySystemConfiguration>& supportedConfigurations) {
   DVLOG(3) << __func__;
+
+  ExecutionContext* executionContext = scriptState->getExecutionContext();
+  Document* document = toDocument(executionContext);
+
+  // From https://w3c.github.io/encrypted-media/#common-key-systems
+  // All user agents MUST support the common key systems described in this
+  // section.
+  // 9.1 Clear Key: The "org.w3.clearkey" Key System uses plain-text clear
+  //                (unencrypted) key(s) to decrypt the source.
+  //
+  // Do not check settings for Clear Key.
+  if (keySystem != "org.w3.clearkey") {
+    // For other key systems, check settings.
+    if (!document->settings() ||
+        !document->settings()->getEncryptedMediaEnabled()) {
+      return ScriptPromise::rejectWithDOMException(
+          scriptState,
+          DOMException::create(NotSupportedError, "Unsupported keySystem"));
+    }
+  }
 
   // From https://w3c.github.io/encrypted-media/#requestMediaKeySystemAccess
   // When this method is invoked, the user agent must run the following steps:
@@ -353,23 +300,8 @@ ScriptPromise NavigatorRequestMediaKeySystemAccess::requestMediaKeySystemAccess(
                          "The supportedConfigurations parameter is empty."));
   }
 
-  // Note: This method should only be exposed to secure contexts as indicated
-  // by the [SecureContext] IDL attribute. Since that will break some existing
-  // sites, we simply keep track of sites that aren't secure and output a
-  // deprecation message.
-  ExecutionContext* executionContext = scriptState->getExecutionContext();
-  String errorMessage;
-  if (executionContext->isSecureContext(errorMessage)) {
-    UseCounter::count(executionContext, UseCounter::EncryptedMediaSecureOrigin);
-  } else {
-    Deprecation::countDeprecation(executionContext,
-                                  UseCounter::EncryptedMediaInsecureOrigin);
-    // TODO(ddorwin): Implement the following:
-    // Reject promise with a new DOMException whose name is NotSupportedError.
-  }
-
   // 3. Let document be the calling context's Document.
-  Document* document = toDocument(executionContext);
+  //    (Done at the begining of this function.)
   if (!document->page()) {
     return ScriptPromise::rejectWithDOMException(
         scriptState,

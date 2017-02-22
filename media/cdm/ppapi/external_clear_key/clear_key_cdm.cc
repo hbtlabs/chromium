@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/files/file.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/time/time.h"
@@ -18,6 +19,7 @@
 #include "media/base/cdm_key_information.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/decrypt_config.h"
+#include "media/cdm/api/content_decryption_module_ext.h"
 #include "media/cdm/json_web_key.h"
 #include "media/cdm/ppapi/cdm_file_io_test.h"
 #include "media/cdm/ppapi/external_clear_key/cdm_video_decoder.h"
@@ -64,6 +66,8 @@ const char kExternalClearKeyPlatformVerificationTestKeySystem[] =
     "org.chromium.externalclearkey.platformverificationtest";
 const char kExternalClearKeyCrashKeySystem[] =
     "org.chromium.externalclearkey.crash";
+const char kExternalClearKeyVerifyCdmHostTestKeySystem[] =
+    "org.chromium.externalclearkey.verifycdmhosttest";
 
 // Constants for the enumalted session that can be loaded by LoadSession().
 // These constants need to be in sync with
@@ -95,24 +99,30 @@ static scoped_refptr<media::DecoderBuffer> CopyDecoderBufferFrom(
   // TODO(xhwang): Get rid of this copy.
   scoped_refptr<media::DecoderBuffer> output_buffer =
       media::DecoderBuffer::CopyFrom(input_buffer.data, input_buffer.data_size);
-
-  std::vector<media::SubsampleEntry> subsamples;
-  for (uint32_t i = 0; i < input_buffer.num_subsamples; ++i) {
-    subsamples.push_back(
-        media::SubsampleEntry(input_buffer.subsamples[i].clear_bytes,
-                              input_buffer.subsamples[i].cipher_bytes));
-  }
-
-  std::unique_ptr<media::DecryptConfig> decrypt_config(new media::DecryptConfig(
-      std::string(reinterpret_cast<const char*>(input_buffer.key_id),
-                  input_buffer.key_id_size),
-      std::string(reinterpret_cast<const char*>(input_buffer.iv),
-                  input_buffer.iv_size),
-      subsamples));
-
-  output_buffer->set_decrypt_config(std::move(decrypt_config));
   output_buffer->set_timestamp(
       base::TimeDelta::FromMicroseconds(input_buffer.timestamp));
+
+  // TODO(xhwang): Unify how to check whether a buffer is encrypted.
+  // See http://crbug.com/675003
+  if (input_buffer.iv_size != 0) {
+    DCHECK_GT(input_buffer.key_id_size, 0u);
+    std::vector<media::SubsampleEntry> subsamples;
+    for (uint32_t i = 0; i < input_buffer.num_subsamples; ++i) {
+      subsamples.push_back(
+          media::SubsampleEntry(input_buffer.subsamples[i].clear_bytes,
+                                input_buffer.subsamples[i].cipher_bytes));
+    }
+
+    std::unique_ptr<media::DecryptConfig> decrypt_config(
+        new media::DecryptConfig(
+            std::string(reinterpret_cast<const char*>(input_buffer.key_id),
+                        input_buffer.key_id_size),
+            std::string(reinterpret_cast<const char*>(input_buffer.iv),
+                        input_buffer.iv_size),
+            subsamples));
+
+    output_buffer->set_decrypt_config(std::move(decrypt_config));
+  }
 
   return output_buffer;
 }
@@ -145,18 +155,17 @@ static cdm::Error ConvertException(
   return cdm::kUnknownError;
 }
 
-static media::MediaKeys::SessionType ConvertSessionType(
-    cdm::SessionType session_type) {
+static media::CdmSessionType ConvertSessionType(cdm::SessionType session_type) {
   switch (session_type) {
     case cdm::kTemporary:
-      return media::MediaKeys::TEMPORARY_SESSION;
+      return media::CdmSessionType::TEMPORARY_SESSION;
     case cdm::kPersistentLicense:
-      return media::MediaKeys::PERSISTENT_LICENSE_SESSION;
+      return media::CdmSessionType::PERSISTENT_LICENSE_SESSION;
     case cdm::kPersistentKeyRelease:
-      return media::MediaKeys::PERSISTENT_RELEASE_MESSAGE_SESSION;
+      return media::CdmSessionType::PERSISTENT_RELEASE_MESSAGE_SESSION;
   }
   NOTREACHED();
-  return media::MediaKeys::TEMPORARY_SESSION;
+  return media::CdmSessionType::TEMPORARY_SESSION;
 }
 
 static media::EmeInitDataType ConvertInitDataType(
@@ -211,7 +220,7 @@ void ConvertCdmKeysInfo(const std::vector<media::CdmKeyInformation*>& keys_info,
 }
 
 void INITIALIZE_CDM_MODULE() {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
 #if defined(CLEAR_KEY_CDM_USE_FFMPEG_DECODER)
   media::InitializeMediaLibrary();
   av_register_all();
@@ -219,7 +228,7 @@ void INITIALIZE_CDM_MODULE() {
 }
 
 void DeinitializeCdmModule() {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
 }
 
 void* CreateCdmInstance(int cdm_interface_version,
@@ -235,7 +244,8 @@ void* CreateCdmInstance(int cdm_interface_version,
       key_system_string != kExternalClearKeyFileIOTestKeySystem &&
       key_system_string != kExternalClearKeyOutputProtectionTestKeySystem &&
       key_system_string != kExternalClearKeyPlatformVerificationTestKeySystem &&
-      key_system_string != kExternalClearKeyCrashKeySystem) {
+      key_system_string != kExternalClearKeyCrashKeySystem &&
+      key_system_string != kExternalClearKeyVerifyCdmHostTestKeySystem) {
     DVLOG(1) << "Unsupported key system:" << key_system_string;
     return NULL;
   }
@@ -255,6 +265,42 @@ void* CreateCdmInstance(int cdm_interface_version,
 
 const char* GetCdmVersion() {
   return kClearKeyCdmVersion;
+}
+
+static bool g_verify_host_files_result = false;
+
+// Makes sure files and corresponding signature files are readable but not
+// writable.
+bool VerifyCdmHost_0(const cdm::HostFile* host_files, uint32_t num_files) {
+  DVLOG(1) << __func__;
+
+  // We should always have the CDM and CDM adapter.
+  // We might not have any common CDM host file (e.g. chrome) since we are
+  // running in browser_tests.
+  if (num_files < 2) {
+    LOG(ERROR) << "Too few host files: " << num_files;
+    g_verify_host_files_result = false;
+    return true;
+  }
+
+  for (uint32_t i = 0; i < num_files; ++i) {
+    const int kBytesToRead = 10;
+    std::vector<char> buffer(kBytesToRead);
+
+    base::File file(static_cast<base::PlatformFile>(host_files[i].file));
+    int bytes_read = file.Read(0, buffer.data(), buffer.size());
+    if (bytes_read != kBytesToRead) {
+      LOG(ERROR) << "File bytes read: " << bytes_read;
+      g_verify_host_files_result = false;
+      return true;
+    }
+
+    // TODO(xhwang): Check that the files are not writable.
+    // TODO(xhwang): Also verify the signature file when it's available.
+  }
+
+  g_verify_host_files_result = true;
+  return true;
 }
 
 namespace media {
@@ -298,7 +344,7 @@ void ClearKeyCdm::CreateSessionAndGenerateRequest(
     cdm::InitDataType init_data_type,
     const uint8_t* init_data,
     uint32_t init_data_size) {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
 
   std::unique_ptr<media::NewSessionCdmPromise> promise(
       new media::CdmCallbackPromise<std::string>(
@@ -318,6 +364,8 @@ void ClearKeyCdm::CreateSessionAndGenerateRequest(
   } else if (key_system_ ==
              kExternalClearKeyPlatformVerificationTestKeySystem) {
     StartPlatformVerificationTest();
+  } else if (key_system_ == kExternalClearKeyVerifyCdmHostTestKeySystem) {
+    VerifyCdmHostTest();
   }
 }
 
@@ -328,7 +376,7 @@ void ClearKeyCdm::LoadSession(uint32_t promise_id,
                               cdm::SessionType session_type,
                               const char* session_id,
                               uint32_t session_id_length) {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   DCHECK_EQ(session_type, cdm::kPersistentLicense);
 
   if (std::string(kLoadableSessionId) !=
@@ -351,7 +399,7 @@ void ClearKeyCdm::LoadSession(uint32_t promise_id,
   std::vector<uint8_t> key_id(
       kLoadableSessionKeyId,
       kLoadableSessionKeyId + arraysize(kLoadableSessionKeyId) - 1);
-  decryptor_->CreateSessionAndGenerateRequest(MediaKeys::TEMPORARY_SESSION,
+  decryptor_->CreateSessionAndGenerateRequest(CdmSessionType::TEMPORARY_SESSION,
                                               EmeInitDataType::WEBM, key_id,
                                               std::move(promise));
 }
@@ -361,7 +409,7 @@ void ClearKeyCdm::UpdateSession(uint32_t promise_id,
                                 uint32_t session_id_length,
                                 const uint8_t* response,
                                 uint32_t response_size) {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   std::string web_session_str(session_id, session_id_length);
 
   // If updating the loadable session, use the actual session id generated.
@@ -378,16 +426,29 @@ void ClearKeyCdm::UpdateSession(uint32_t promise_id,
       web_session_str, std::vector<uint8_t>(response, response + response_size),
       std::move(promise));
 
-  if (key_system_ == kExternalClearKeyRenewalKeySystem && !renewal_timer_set_) {
-    ScheduleNextRenewal();
-    renewal_timer_set_ = true;
+  // TODO(xhwang): Only schedule renewal and update expiration change when the
+  // promise is resolved.
+
+  cdm::Time expiration = 0.0;  // Never expires.
+
+  if (key_system_ == kExternalClearKeyRenewalKeySystem) {
+    // For renewal key system, set a non-zero expiration that is approximately
+    // 100 years after 01 January 1970 UTC.
+    expiration = 3153600000.0;  // 100 * 365 * 24 * 60 * 60;
+
+    if (!renewal_timer_set_) {
+      ScheduleNextRenewal();
+      renewal_timer_set_ = true;
+    }
   }
+
+  host_->OnExpirationChange(session_id, session_id_length, expiration);
 }
 
 void ClearKeyCdm::CloseSession(uint32_t promise_id,
                                const char* session_id,
                                uint32_t session_id_length) {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   std::string web_session_str(session_id, session_id_length);
 
   // If closing the loadable session, use the actual session id generated.
@@ -406,7 +467,7 @@ void ClearKeyCdm::CloseSession(uint32_t promise_id,
 void ClearKeyCdm::RemoveSession(uint32_t promise_id,
                                 const char* session_id,
                                 uint32_t session_id_length) {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   std::string web_session_str(session_id, session_id_length);
 
   // RemoveSession only allowed for the loadable session.
@@ -674,7 +735,10 @@ cdm::Status ClearKeyCdm::DecryptToMediaDecoderBuffer(
   scoped_refptr<media::DecoderBuffer> buffer =
       CopyDecoderBufferFrom(encrypted_buffer);
 
-  if (buffer->end_of_stream()) {
+  // TODO(xhwang): Unify how to check whether a buffer is encrypted.
+  // See http://crbug.com/675003
+  if (buffer->end_of_stream() || !buffer->decrypt_config() ||
+      !buffer->decrypt_config()->is_encrypted()) {
     *decrypted_buffer = buffer;
     return cdm::kSuccess;
   }
@@ -699,7 +763,7 @@ cdm::Status ClearKeyCdm::DecryptToMediaDecoderBuffer(
 
 void ClearKeyCdm::OnPlatformChallengeResponse(
     const cdm::PlatformChallengeResponse& response) {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
 
   if (!is_running_platform_verification_test_) {
     NOTREACHED() << "OnPlatformChallengeResponse() called unexpectedly.";
@@ -718,7 +782,7 @@ void ClearKeyCdm::OnQueryOutputProtectionStatus(
     cdm::QueryResult result,
     uint32_t link_mask,
     uint32_t output_protection_mask) {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
 
   if (!is_running_output_protection_test_) {
     NOTREACHED() << "OnQueryOutputProtectionStatus() called unexpectedly.";
@@ -757,9 +821,10 @@ void ClearKeyCdm::LoadLoadableSession() {
       std::vector<uint8_t>(jwk_set.begin(), jwk_set.end()), std::move(promise));
 }
 
-void ClearKeyCdm::OnSessionMessage(const std::string& session_id,
-                                   MediaKeys::MessageType message_type,
-                                   const std::vector<uint8_t>& message) {
+void ClearKeyCdm::OnSessionMessage(
+    const std::string& session_id,
+    ContentDecryptionModule::MessageType message_type,
+    const std::vector<uint8_t>& message) {
   DVLOG(1) << "OnSessionMessage: " << message.size();
 
   // Ignore the message when we are waiting to update the loadable session.
@@ -960,19 +1025,19 @@ void ClearKeyCdm::StartFileIOTest() {
 }
 
 void ClearKeyCdm::OnFileIOTestComplete(bool success) {
-  DVLOG(1) << __FUNCTION__ << ": " << success;
+  DVLOG(1) << __func__ << ": " << success;
   OnUnitTestComplete(success);
   file_io_test_runner_.reset();
 }
 
 void ClearKeyCdm::StartOutputProtectionTest() {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   is_running_output_protection_test_ = true;
   host_->QueryOutputProtectionStatus();
 }
 
 void ClearKeyCdm::StartPlatformVerificationTest() {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   is_running_platform_verification_test_ = true;
 
   std::string service_id = "test_service_id";
@@ -980,6 +1045,12 @@ void ClearKeyCdm::StartPlatformVerificationTest() {
 
   host_->SendPlatformChallenge(service_id.data(), service_id.size(),
                                challenge.data(), challenge.size());
+}
+
+void ClearKeyCdm::VerifyCdmHostTest() {
+  // VerifyCdmHost() should have already been called and test result stored
+  // in |g_verify_host_files_result|.
+  OnUnitTestComplete(g_verify_host_files_result);
 }
 
 }  // namespace media

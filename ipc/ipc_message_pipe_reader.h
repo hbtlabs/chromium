@@ -26,8 +26,6 @@
 namespace IPC {
 namespace internal {
 
-class AsyncHandleWaiter;
-
 // A helper class to handle bytestream directly over mojo::MessagePipe
 // in template-method pattern. MessagePipeReader manages the lifetime
 // of given MessagePipe and participates the event loop, and
@@ -86,7 +84,7 @@ class IPC_EXPORT MessagePipeReader : public NON_EXPORTED_BASE(mojom::Channel) {
   void GetRemoteInterface(const std::string& name,
                           mojo::ScopedInterfaceEndpointHandle handle);
 
-  mojom::Channel* sender() const { return sender_.get(); }
+  mojom::ChannelAssociatedPtr& sender() { return sender_; }
 
  protected:
   void OnPipeClosed();

@@ -23,7 +23,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/sequenced_worker_pool.h"
-#include "base/threading/worker_pool.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -58,6 +57,13 @@ namespace android_webview {
 
 
 namespace {
+
+#if DCHECK_IS_ON()
+bool g_created_url_request_context_builder = false;
+#endif
+// On apps targeting API level O or later, check cleartext is enforced.
+bool g_check_cleartext_permitted = false;
+
 
 const base::FilePath::CharType kChannelIDFilename[] = "Origin Bound Certs";
 const char kProxyServerSwitch[] = "proxy-server";
@@ -136,10 +142,8 @@ std::unique_ptr<net::URLRequestJobFactory> CreateJobFactory(
   // it cannot be used by child processes until access to it is granted via
   // ChildProcessSecurityPolicy::GrantScheme(). This is done in
   // AwContentBrowserClient.
-  request_interceptors.push_back(
-      CreateAndroidContentRequestInterceptor().release());
-  request_interceptors.push_back(
-      CreateAndroidAssetFileRequestInterceptor().release());
+  request_interceptors.push_back(CreateAndroidContentRequestInterceptor());
+  request_interceptors.push_back(CreateAndroidAssetFileRequestInterceptor());
   // The AwRequestInterceptor must come after the content and asset file job
   // factories. This for WebViewClassic compatibility where it was not
   // possible to intercept resource loads to resolvable content:// and
@@ -147,20 +151,18 @@ std::unique_ptr<net::URLRequestJobFactory> CreateJobFactory(
   // This logical dependency is also the reason why the Content
   // URLRequestInterceptor has to be added as an interceptor rather than as a
   // ProtocolHandler.
-  request_interceptors.push_back(new AwRequestInterceptor());
+  request_interceptors.push_back(base::MakeUnique<AwRequestInterceptor>());
 
   // The chain of responsibility will execute the handlers in reverse to the
   // order in which the elements of the chain are created.
   std::unique_ptr<net::URLRequestJobFactory> job_factory(
       std::move(aw_job_factory));
-  for (content::URLRequestInterceptorScopedVector::reverse_iterator i =
-           request_interceptors.rbegin();
-       i != request_interceptors.rend();
+  for (auto i = request_interceptors.rbegin(); i != request_interceptors.rend();
        ++i) {
     job_factory.reset(new net::URLRequestInterceptingJobFactory(
-        std::move(job_factory), base::WrapUnique(*i)));
+        std::move(job_factory), std::move(*i)));
   }
-  request_interceptors.weak_clear();
+  request_interceptors.clear();
 
   return job_factory;
 }
@@ -223,8 +225,7 @@ void AwURLRequestContextGetter::InitializeURLRequestContext() {
             BrowserThread::GetBlockingPool()->GetSequenceToken()));
 
     channel_id_service.reset(new net::ChannelIDService(
-        new net::DefaultChannelIDStore(channel_id_db.get()),
-        base::WorkerPool::GetTaskRunner(true)));
+        new net::DefaultChannelIDStore(channel_id_db.get())));
   }
 
   // Android provides a local HTTP proxy that handles all the proxying.
@@ -268,6 +269,11 @@ void AwURLRequestContextGetter::InitializeURLRequestContext() {
   builder.set_host_resolver(std::move(host_resolver));
 
   url_request_context_ = builder.Build();
+#if DCHECK_IS_ON()
+  g_created_url_request_context_builder = true;
+#endif
+  url_request_context_->set_check_cleartext_permitted(
+    g_check_cleartext_permitted);
 
   job_factory_ =
       CreateJobFactory(&protocol_handlers_, std::move(request_interceptors_));
@@ -298,6 +304,14 @@ void AwURLRequestContextGetter::SetHandlersAndInterceptors(
 
 net::NetLog* AwURLRequestContextGetter::GetNetLog() {
   return net_log_.get();
+}
+
+// static
+void AwURLRequestContextGetter::set_check_cleartext_permitted(bool permitted) {
+#if DCHECK_IS_ON()
+    DCHECK(!g_created_url_request_context_builder);
+#endif
+    g_check_cleartext_permitted = permitted;
 }
 
 std::unique_ptr<net::HttpAuthHandlerFactory>

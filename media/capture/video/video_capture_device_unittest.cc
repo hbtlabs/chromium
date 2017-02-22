@@ -32,7 +32,6 @@
 #endif
 
 #if defined(OS_MACOSX)
-#include "media/base/mac/avfoundation_glue.h"
 #include "media/capture/video/mac/video_capture_device_factory_mac.h"
 #endif
 
@@ -114,38 +113,44 @@ class MockVideoCaptureClient : public VideoCaptureDevice::Client {
                               const VideoCaptureFormat& format,
                               int rotation,
                               base::TimeTicks reference_time,
-                              base::TimeDelta timestamp) override {
+                              base::TimeDelta timestamp,
+                              int frame_feedback_id) override {
     ASSERT_GT(length, 0);
     ASSERT_TRUE(data);
     main_thread_->PostTask(FROM_HERE, base::Bind(frame_cb_, format));
   }
 
   // Trampoline methods to workaround GMOCK problems with std::unique_ptr<>.
-  std::unique_ptr<Buffer> ReserveOutputBuffer(
-      const gfx::Size& dimensions,
-      media::VideoPixelFormat format,
-      media::VideoPixelStorage storage) override {
+  Buffer ReserveOutputBuffer(const gfx::Size& dimensions,
+                             media::VideoPixelFormat format,
+                             media::VideoPixelStorage storage,
+                             int frame_feedback_id) override {
     DoReserveOutputBuffer();
     NOTREACHED() << "This should never be called";
-    return std::unique_ptr<Buffer>();
+    return Buffer();
   }
-  void OnIncomingCapturedBuffer(std::unique_ptr<Buffer> buffer,
-                                const VideoCaptureFormat& frame_format,
+  void OnIncomingCapturedBuffer(Buffer buffer,
+                                const VideoCaptureFormat& format,
                                 base::TimeTicks reference_time,
                                 base::TimeDelta timestamp) override {
     DoOnIncomingCapturedBuffer();
   }
-  void OnIncomingCapturedVideoFrame(std::unique_ptr<Buffer> buffer,
-                                    scoped_refptr<VideoFrame> frame) override {
+  void OnIncomingCapturedBufferExt(
+      Buffer buffer,
+      const VideoCaptureFormat& format,
+      base::TimeTicks reference_time,
+      base::TimeDelta timestamp,
+      gfx::Rect visible_rect,
+      const VideoFrameMetadata& additional_metadata) override {
     DoOnIncomingCapturedVideoFrame();
   }
-  std::unique_ptr<Buffer> ResurrectLastOutputBuffer(
-      const gfx::Size& dimensions,
-      media::VideoPixelFormat format,
-      media::VideoPixelStorage storage) {
+  Buffer ResurrectLastOutputBuffer(const gfx::Size& dimensions,
+                                   media::VideoPixelFormat format,
+                                   media::VideoPixelStorage storage,
+                                   int frame_feedback_id) {
     DoResurrectLastOutputBuffer();
     NOTREACHED() << "This should never be called";
-    return std::unique_ptr<Buffer>();
+    return Buffer();
   }
 
  private:
@@ -153,7 +158,8 @@ class MockVideoCaptureClient : public VideoCaptureDevice::Client {
   base::Callback<void(const VideoCaptureFormat&)> frame_cb_;
 };
 
-class MockImageCaptureClient : public base::RefCounted<MockImageCaptureClient> {
+class MockImageCaptureClient
+    : public base::RefCountedThreadSafe<MockImageCaptureClient> {
  public:
   // GMock doesn't support move-only arguments, so we use this forward method.
   void DoOnPhotoTaken(mojom::BlobPtr blob) {
@@ -192,7 +198,7 @@ class MockImageCaptureClient : public base::RefCounted<MockImageCaptureClient> {
   const mojom::PhotoCapabilities* capabilities() { return capabilities_.get(); }
 
  private:
-  friend class base::RefCounted<MockImageCaptureClient>;
+  friend class base::RefCountedThreadSafe<MockImageCaptureClient>;
   virtual ~MockImageCaptureClient() {}
 
   mojom::PhotoCapabilitiesPtr capabilities_;
@@ -238,9 +244,6 @@ class VideoCaptureDeviceTest : public testing::TestWithParam<gfx::Size> {
     static_cast<VideoCaptureDeviceFactoryAndroid*>(
         video_capture_device_factory_.get())
         ->ConfigureForTesting();
-#endif
-#if defined(OS_MACOSX)
-    AVFoundationGlue::InitializeAVFoundation();
 #endif
     EXPECT_CALL(*video_capture_client_, DoReserveOutputBuffer()).Times(0);
     EXPECT_CALL(*video_capture_client_, DoOnIncomingCapturedBuffer()).Times(0);

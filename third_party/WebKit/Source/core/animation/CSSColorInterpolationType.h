@@ -13,17 +13,18 @@
 namespace blink {
 
 class StyleColor;
+struct OptionalStyleColor;
 
 class CSSColorInterpolationType : public CSSInterpolationType {
  public:
   CSSColorInterpolationType(PropertyHandle property)
       : CSSInterpolationType(property) {}
 
-  InterpolationValue maybeConvertUnderlyingValue(
-      const InterpolationEnvironment&) const final;
-  void apply(const InterpolableValue&,
-             const NonInterpolableValue*,
-             InterpolationEnvironment&) const final;
+  InterpolationValue maybeConvertStandardPropertyUnderlyingValue(
+      const ComputedStyle&) const final;
+  void applyStandardPropertyValue(const InterpolableValue&,
+                                  const NonInterpolableValue*,
+                                  StyleResolverState&) const final;
 
   static std::unique_ptr<InterpolableValue> createInterpolableColor(
       const Color&);
@@ -46,10 +47,14 @@ class CSSColorInterpolationType : public CSSInterpolationType {
   InterpolationValue maybeConvertInherit(const StyleResolverState&,
                                          ConversionCheckers&) const final;
   InterpolationValue maybeConvertValue(const CSSValue&,
-                                       const StyleResolverState&,
+                                       const StyleResolverState*,
                                        ConversionCheckers&) const final;
-  InterpolationValue convertStyleColorPair(const StyleColor&,
-                                           const StyleColor&) const;
+  InterpolationValue convertStyleColorPair(const OptionalStyleColor&,
+                                           const OptionalStyleColor&) const;
+
+  const CSSValue* createCSSValue(const InterpolableValue&,
+                                 const NonInterpolableValue*,
+                                 const StyleResolverState&) const final;
 };
 
 }  // namespace blink

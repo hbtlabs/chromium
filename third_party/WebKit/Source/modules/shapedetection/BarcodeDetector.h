@@ -11,25 +11,35 @@
 #include "modules/ModulesExport.h"
 #include "modules/canvas2d/CanvasRenderingContext2D.h"
 #include "modules/shapedetection/ShapeDetector.h"
-#include "public/platform/modules/shapedetection/shapedetection.mojom-blink.h"
+#include "services/shape_detection/public/interfaces/barcodedetection.mojom-blink.h"
 
 namespace blink {
-
-class LocalFrame;
 
 class MODULES_EXPORT BarcodeDetector final : public ShapeDetector,
                                              public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static BarcodeDetector* create(ScriptState*);
+  static BarcodeDetector* create();
 
-  ScriptPromise detect(ScriptState*, const CanvasImageSourceUnion&);
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  explicit BarcodeDetector(LocalFrame&);
+  BarcodeDetector();
   ~BarcodeDetector() override = default;
+
+  ScriptPromise doDetect(ScriptPromiseResolver*,
+                         mojo::ScopedSharedBufferHandle,
+                         int imageWidth,
+                         int imageHeight) override;
+  void onDetectBarcodes(
+      ScriptPromiseResolver*,
+      Vector<shape_detection::mojom::blink::BarcodeDetectionResultPtr>);
+  void onBarcodeServiceConnectionError();
+
+  shape_detection::mojom::blink::BarcodeDetectionPtr m_barcodeService;
+
+  HeapHashSet<Member<ScriptPromiseResolver>> m_barcodeServiceRequests;
 };
 
 }  // namespace blink

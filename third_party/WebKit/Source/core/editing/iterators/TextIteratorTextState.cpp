@@ -27,11 +27,13 @@
 
 #include "core/editing/iterators/TextIteratorTextState.h"
 
+#include "core/editing/iterators/TextIteratorBehavior.h"
 #include "core/layout/LayoutText.h"
 
 namespace blink {
 
-TextIteratorTextState::TextIteratorTextState(bool emitsOriginalText)
+TextIteratorTextState::TextIteratorTextState(
+    const TextIteratorBehavior& behavior)
     : m_textLength(0),
       m_singleCharacterBuffer(0),
       m_positionNode(nullptr),
@@ -39,7 +41,8 @@ TextIteratorTextState::TextIteratorTextState(bool emitsOriginalText)
       m_positionEndOffset(0),
       m_hasEmitted(false),
       m_lastCharacter(0),
-      m_emitsOriginalText(emitsOriginalText) {}
+      m_behavior(behavior),
+      m_textStartOffset(0) {}
 
 UChar TextIteratorTextState::characterAt(unsigned index) const {
   SECURITY_DCHECK(index < static_cast<unsigned>(length()));
@@ -60,7 +63,7 @@ String TextIteratorTextState::substring(unsigned position,
   SECURITY_DCHECK(position <= static_cast<unsigned>(this->length()));
   SECURITY_DCHECK(position + length <= static_cast<unsigned>(this->length()));
   if (!length)
-    return emptyString();
+    return emptyString;
   if (m_singleCharacterBuffer) {
     DCHECK_EQ(position, 0u);
     DCHECK_EQ(length, 1u);
@@ -95,12 +98,14 @@ void TextIteratorTextState::updateForReplacedElement(Node* baseNode) {
 
   m_textLength = 0;
   m_lastCharacter = 0;
+  m_textStartOffset = 0;
 }
 
 void TextIteratorTextState::emitAltText(Node* node) {
   m_text = toHTMLElement(node)->altText();
   m_textLength = m_text.length();
   m_lastCharacter = m_textLength ? m_text[m_textLength - 1] : 0;
+  m_textStartOffset = 0;
 }
 
 void TextIteratorTextState::flushPositionOffsets() const {
@@ -136,6 +141,7 @@ void TextIteratorTextState::spliceBuffer(UChar c,
 
   // remember some iteration state
   m_lastCharacter = c;
+  m_textStartOffset = 0;
 }
 
 void TextIteratorTextState::emitText(Node* textNode,
@@ -143,8 +149,11 @@ void TextIteratorTextState::emitText(Node* textNode,
                                      int textStartOffset,
                                      int textEndOffset) {
   DCHECK(textNode);
-  m_text =
-      m_emitsOriginalText ? layoutObject->originalText() : layoutObject->text();
+  m_text = m_behavior.emitsOriginalText() ? layoutObject->originalText()
+                                          : layoutObject->text();
+  if (m_behavior.emitsSpaceForNbsp())
+    m_text.replace(noBreakSpaceCharacter, spaceCharacter);
+
   DCHECK(!m_text.isEmpty());
   DCHECK_LE(0, textStartOffset);
   DCHECK_LT(textStartOffset, static_cast<int>(m_text.length()));
@@ -161,6 +170,7 @@ void TextIteratorTextState::emitText(Node* textNode,
   m_lastCharacter = m_text[textEndOffset - 1];
 
   m_hasEmitted = true;
+  m_textStartOffset = layoutObject->textStartOffset();
 }
 
 void TextIteratorTextState::appendTextTo(ForwardsTextBuffer* output,

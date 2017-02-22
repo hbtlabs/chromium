@@ -21,8 +21,11 @@ ArcPlaystoreShortcutLauncherItemController::
 ArcPlaystoreShortcutLauncherItemController::
     ~ArcPlaystoreShortcutLauncherItemController() {}
 
-ash::ShelfItemDelegate::PerformedAction
-ArcPlaystoreShortcutLauncherItemController::Activate(ash::LaunchSource source) {
+ash::ShelfAction ArcPlaystoreShortcutLauncherItemController::ItemSelected(
+    ui::EventType event_type,
+    int event_flags,
+    int64_t display_id,
+    ash::ShelfLaunchSource source) {
   arc::ArcSessionManager* arc_session_manager = arc::ArcSessionManager::Get();
   DCHECK(arc_session_manager);
   DCHECK(arc_session_manager->IsAllowed());
@@ -31,8 +34,8 @@ ArcPlaystoreShortcutLauncherItemController::Activate(ash::LaunchSource source) {
       ArcAppListPrefs::Get(controller()->profile());
   DCHECK(arc_app_prefs);
 
-  const bool arc_was_enabled = arc_session_manager->IsArcEnabled();
-  arc_session_manager->EnableArc();
+  const bool arc_was_enabled = arc_session_manager->IsArcPlayStoreEnabled();
+  arc_session_manager->SetArcPlayStoreEnabled(true);
 
   // Deferred launcher.
   if (arc_app_prefs->IsRegistered(arc::kPlayStoreAppId) && arc_was_enabled) {
@@ -44,5 +47,5 @@ ArcPlaystoreShortcutLauncherItemController::Activate(ash::LaunchSource source) {
                                                  arc::kPlayStoreAppId, true));
   }
 
-  return kNoAction;
+  return ash::SHELF_ACTION_NONE;
 }

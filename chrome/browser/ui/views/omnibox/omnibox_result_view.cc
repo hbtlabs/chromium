@@ -27,9 +27,11 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/grit/components_scaled_resources.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
+#include "components/omnibox/browser/vector_icons.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/canvas.h"
@@ -40,7 +42,6 @@
 #include "ui/gfx/range/range.h"
 #include "ui/gfx/render_text.h"
 #include "ui/gfx/text_utils.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/native_theme/native_theme.h"
 
 using ui::NativeTheme;
@@ -86,6 +87,19 @@ struct TextStyle {
   gfx::BaselineStyle baseline;
 };
 
+// Returns the styles that should be applied to the specified answer text type.
+//
+// Note that the font value is only consulted for the first text type that
+// appears on an answer line, because RenderText does not yet support multiple
+// font sizes. Subsequent text types on the same line will share the text size
+// of the first type, while the color and baseline styles specified here will
+// always apply. The gfx::INFERIOR baseline style is used as a workaround to
+// produce smaller text on the same line. The way this is used in the current
+// set of answers is that the small types (TOP_ALIGNED, DESCRIPTION_NEGATIVE,
+// DESCRIPTION_POSITIVE and SUGGESTION_SECONDARY_TEXT_SMALL) only ever appear
+// following LargeFont text, so for consistency they specify LargeFont for the
+// first value even though this is not actually used (since they're not the
+// first value).
 TextStyle GetTextStyle(int type) {
   switch (type) {
     case SuggestionAnswer::TOP_ALIGNED:
@@ -124,7 +138,12 @@ TextStyle GetTextStyle(int type) {
                NativeTheme::kColorId_ResultsTableHoveredText,
                NativeTheme::kColorId_ResultsTableSelectedText},
               gfx::NORMAL_BASELINE};
-    case SuggestionAnswer::SUGGESTION_SECONDARY_TEXT_SMALL:  // Fall through.
+    case SuggestionAnswer::SUGGESTION_SECONDARY_TEXT_SMALL:
+      return {ui::ResourceBundle::LargeFont,
+              {NativeTheme::kColorId_ResultsTableNormalDimmedText,
+               NativeTheme::kColorId_ResultsTableHoveredDimmedText,
+               NativeTheme::kColorId_ResultsTableSelectedDimmedText},
+              gfx::INFERIOR};
     case SuggestionAnswer::SUGGESTION_SECONDARY_TEXT_MEDIUM:
       return {ui::ResourceBundle::BaseFont,
               {NativeTheme::kColorId_ResultsTableNormalDimmedText,
@@ -197,8 +216,7 @@ OmniboxResultView::OmniboxResultView(OmniboxPopupContentsView* model,
   CHECK_GE(model_index, 0);
   keyword_icon_->set_owned_by_client();
   keyword_icon_->EnableCanvasFlippingForRTLUI(true);
-  keyword_icon_->SetImage(
-      GetVectorIcon(gfx::VectorIconId::OMNIBOX_KEYWORD_SEARCH));
+  keyword_icon_->SetImage(GetVectorIcon(omnibox::kKeywordSearchIcon));
   keyword_icon_->SizeToPreferredSize();
 }
 
@@ -278,12 +296,11 @@ void OmniboxResultView::OnSelected() {
 gfx::Size OmniboxResultView::GetPreferredSize() const {
   if (!match_.answer)
     return gfx::Size(0, GetContentLineHeight());
-  // An answer implies a match and a description in a large font.
   if (match_.answer->second_line().num_text_lines() == 1)
     return gfx::Size(0, GetContentLineHeight() + GetAnswerLineHeight());
   if (!description_rendertext_) {
     description_rendertext_ =
-        CreateAnswerLine(match_.answer->second_line(), font_list_);
+        CreateAnswerLine(match_.answer->second_line(), GetAnswerLineFont());
   }
   description_rendertext_->SetDisplayRect(
       gfx::Rect(text_bounds_.width(), 0));
@@ -299,6 +316,11 @@ void OmniboxResultView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
                                IDS_OMNIBOX_ACCESSIBLE_ANSWER, match_.contents,
                                match_.answer->second_line().AccessibleText())
                          : match_.contents);
+}
+
+void OmniboxResultView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
+  Invalidate();
+  SchedulePaint();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -560,19 +582,18 @@ gfx::ImageSkia OmniboxResultView::GetIcon() const {
   if (!image.IsEmpty())
     return image.AsImageSkia();
 
-  return GetVectorIcon(
-      model_->IsStarredMatch(match_)
-          ? gfx::VectorIconId::OMNIBOX_STAR
-          : AutocompleteMatch::TypeToVectorIcon(match_.type));
+  return GetVectorIcon(model_->IsStarredMatch(match_)
+                           ? omnibox::kStarIcon
+                           : AutocompleteMatch::TypeToVectorIcon(match_.type));
 }
 
 gfx::ImageSkia OmniboxResultView::GetVectorIcon(
-    gfx::VectorIconId icon_id) const {
+    const gfx::VectorIcon& icon) const {
   // For selected rows, paint the icon the same color as the text.
   SkColor color = GetColor(GetState(), TEXT);
   if (GetState() != SELECTED)
     color = color_utils::DeriveDefaultIconColor(color);
-  return gfx::CreateVectorIcon(icon_id, 16, color);
+  return gfx::CreateVectorIcon(icon, 16, color);
 }
 
 bool OmniboxResultView::ShowOnlyKeywordMatch() const {
@@ -582,20 +603,25 @@ bool OmniboxResultView::ShowOnlyKeywordMatch() const {
 
 void OmniboxResultView::InitContentsRenderTextIfNecessary() const {
   if (!contents_rendertext_) {
-    contents_rendertext_.reset(
-        CreateClassifiedRenderText(
-            match_.contents, match_.contents_class, false).release());
+    if (match_.answer) {
+      contents_rendertext_ =
+          CreateAnswerLine(match_.answer->first_line(), font_list_);
+    } else {
+      contents_rendertext_ = CreateClassifiedRenderText(
+          match_.contents, match_.contents_class, false);
+    }
   }
 }
 
 void OmniboxResultView::Layout() {
-  int horizontal_padding =
-      GetLayoutConstant(LOCATION_BAR_HORIZONTAL_PADDING);
+  const int horizontal_padding =
+      GetLayoutConstant(LOCATION_BAR_ELEMENT_PADDING) +
+      LocationBarView::kIconInteriorPadding;
   // The horizontal bounds we're given are the outside bounds, so we can match
   // the omnibox border outline shape exactly in OnPaint().  We have to inset
   // here to keep the icons lined up.
-  const int start_x =
-      GetLayoutConstant(LOCATION_BAR_BORDER_THICKNESS) + horizontal_padding;
+  const int start_x = BackgroundWith1PxBorder::kLocationBarBorderThicknessDip +
+                      horizontal_padding;
   const int end_x = width() - start_x;
 
   const gfx::ImageSkia icon = GetIcon();
@@ -638,10 +664,8 @@ void OmniboxResultView::OnPaint(gfx::Canvas* canvas) {
 
     if (!description_rendertext_) {
       if (match_.answer) {
-        contents_rendertext_ =
-            CreateAnswerLine(match_.answer->first_line(), font_list_);
         description_rendertext_ =
-            CreateAnswerLine(match_.answer->second_line(), font_list_);
+            CreateAnswerLine(match_.answer->second_line(), GetAnswerLineFont());
       } else if (!match_.description.empty()) {
         description_rendertext_ = CreateClassifiedRenderText(
             match_.description, match_.description_class, true);
@@ -656,17 +680,13 @@ void OmniboxResultView::OnPaint(gfx::Canvas* canvas) {
     int x = GetMirroredXForRect(keyword_text_bounds_);
     mirroring_context_->Initialize(x, keyword_text_bounds_.width());
     if (!keyword_contents_rendertext_) {
-      keyword_contents_rendertext_.reset(
-          CreateClassifiedRenderText(keyword_match->contents,
-                                     keyword_match->contents_class,
-                                     false).release());
+      keyword_contents_rendertext_ = CreateClassifiedRenderText(
+          keyword_match->contents, keyword_match->contents_class, false);
     }
     if (!keyword_description_rendertext_ &&
         !keyword_match->description.empty()) {
-      keyword_description_rendertext_.reset(
-          CreateClassifiedRenderText(keyword_match->description,
-                                     keyword_match->description_class,
-                                     true).release());
+      keyword_description_rendertext_ = CreateClassifiedRenderText(
+          keyword_match->description, keyword_match->description_class, true);
     }
     PaintMatch(*keyword_match, keyword_contents_rendertext_.get(),
                keyword_description_rendertext_.get(), canvas, x);
@@ -678,24 +698,35 @@ void OmniboxResultView::AnimationProgressed(const gfx::Animation* animation) {
   SchedulePaint();
 }
 
+const gfx::FontList& OmniboxResultView::GetAnswerLineFont() const {
+  // This assumes that the first text type in the second answer line can be used
+  // to specify the font for all the text fields in the line. For now this works
+  // but eventually it will be necessary to get RenderText to support multiple
+  // font sizes or use multiple RenderTexts.
+  int text_type =
+      match_.answer && !match_.answer->second_line().text_fields().empty()
+          ? match_.answer->second_line().text_fields()[0].type()
+          : SuggestionAnswer::SUGGESTION;
+  return ui::ResourceBundle::GetSharedInstance().GetFontList(
+      GetTextStyle(text_type).font);
+}
+
 int OmniboxResultView::GetAnswerLineHeight() const {
-  // ANSWER_TEXT_LARGE is the largest font used and so defines the boundary that
-  // all the other answer styles fit within.
-  return ui::ResourceBundle::GetSharedInstance()
-      .GetFontList(GetTextStyle(SuggestionAnswer::ANSWER_TEXT_LARGE).font)
-      .GetHeight();
+  return GetAnswerLineFont().GetHeight();
 }
 
 int OmniboxResultView::GetContentLineHeight() const {
+  using Md = ui::MaterialDesignController;
+  const int kIconVerticalPad = Md::GetMode() == Md::MATERIAL_HYBRID ? 8 : 4;
+  const int kTextVerticalPad = 3;
   return std::max(
-      LocationBarView::kIconWidth +
-          GetLayoutInsets(OMNIBOX_DROPDOWN_ICON).height(),
-      GetTextHeight() + GetLayoutInsets(OMNIBOX_DROPDOWN_TEXT).height());
+      LocationBarView::kIconWidth + 2 * kIconVerticalPad,
+      GetTextHeight() + 2 * kTextVerticalPad);
 }
 
 std::unique_ptr<gfx::RenderText> OmniboxResultView::CreateAnswerLine(
     const SuggestionAnswer::ImageLine& line,
-    gfx::FontList font_list) const {
+    const gfx::FontList& font_list) const {
   std::unique_ptr<gfx::RenderText> destination =
       CreateRenderText(base::string16());
   destination->SetFontList(font_list);

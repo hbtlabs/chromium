@@ -45,6 +45,10 @@ DeviceCloudPolicyStoreChromeOS::~DeviceCloudPolicyStoreChromeOS() {
 
 void DeviceCloudPolicyStoreChromeOS::Store(
     const em::PolicyFetchResponse& policy) {
+  // The policy and the public key must have already been loaded by the device
+  // settings service.
+  DCHECK(is_initialized());
+
   // Cancel all pending requests.
   weak_factory_.InvalidateWeakPtrs();
 
@@ -61,8 +65,7 @@ void DeviceCloudPolicyStoreChromeOS::Store(
   std::unique_ptr<DeviceCloudPolicyValidator> validator(
       CreateValidator(policy));
   validator->ValidateSignatureAllowingRotation(
-      public_key->as_string(), GetPolicyVerificationKey(),
-      install_attributes_->GetDomain());
+      public_key->as_string(), install_attributes_->GetDomain());
   validator->ValidateAgainstCurrentPolicy(
       device_settings_service_->policy_data(),
       CloudPolicyValidatorBase::TIMESTAMP_FULLY_VALIDATED,
@@ -90,8 +93,7 @@ void DeviceCloudPolicyStoreChromeOS::InstallInitialPolicy(
 
   std::unique_ptr<DeviceCloudPolicyValidator> validator(
       CreateValidator(policy));
-  validator->ValidateInitialKey(GetPolicyVerificationKey(),
-                                install_attributes_->GetDomain());
+  validator->ValidateInitialKey(install_attributes_->GetDomain());
   validator.release()->StartValidation(
       base::Bind(&DeviceCloudPolicyStoreChromeOS::OnPolicyToStoreValidated,
                  weak_factory_.GetWeakPtr()));
@@ -163,6 +165,10 @@ void DeviceCloudPolicyStoreChromeOS::UpdateFromService() {
                          &new_policy_map);
     }
     policy_map_.Swap(&new_policy_map);
+
+    scoped_refptr<ownership::PublicKey> key =
+        device_settings_service_->GetPublicKey();
+    policy_signature_public_key_ = key ? key->as_string() : std::string();
 
     NotifyStoreLoaded();
     return;

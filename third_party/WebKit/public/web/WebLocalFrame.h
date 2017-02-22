@@ -5,15 +5,24 @@
 #ifndef WebLocalFrame_h
 #define WebLocalFrame_h
 
+#include <set>
 #include "WebCompositionUnderline.h"
 #include "WebFrame.h"
 #include "WebFrameLoadType.h"
 #include "WebHistoryItem.h"
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLError.h"
+#include "public/platform/WebURLRequest.h"
+#include "public/platform/site_engagement.mojom-shared.h"
+
+namespace base {
+class SingleThreadTaskRunner;
+}
 
 namespace blink {
 
+class InterfaceProvider;
+class InterfaceRegistry;
 class WebAutofillClient;
 class WebContentSettingsClient;
 class WebDevToolsAgent;
@@ -21,12 +30,13 @@ class WebDevToolsAgentClient;
 class WebDoubleSize;
 class WebFrameClient;
 class WebFrameWidget;
+class WebInputMethodController;
 class WebRange;
 class WebScriptExecutionCallback;
-class WebSuspendableTask;
 enum class WebCachePolicy;
 enum class WebSandboxFlags;
 enum class WebTreeScopeType;
+struct WebConsoleMessage;
 struct WebFindOptions;
 struct WebFloatRect;
 struct WebPrintPresetOptions;
@@ -40,16 +50,33 @@ class WebLocalFrame : public WebFrame {
   // WebFrameClient may not be null.
   BLINK_EXPORT static WebLocalFrame* create(WebTreeScopeType,
                                             WebFrameClient*,
+                                            blink::InterfaceProvider*,
+                                            blink::InterfaceRegistry*,
                                             WebFrame* opener = nullptr);
 
-  // Used to create a provisional local frame in prepration for replacing a
-  // remote frame if the load commits. The returned frame is only partially
-  // attached to the frame tree: it has the same parent as its potential
-  // replacee but is invisible to the rest of the frames in the frame tree.
-  // If the load commits, call swap() to fully attach this frame.
-  BLINK_EXPORT static WebLocalFrame* createProvisional(WebFrameClient*,
-                                                       WebRemoteFrame*,
-                                                       WebSandboxFlags);
+  // Used to create a provisional local frame. Currently, it's possible for a
+  // provisional navigation not to commit (i.e. it might turn into a download),
+  // but this can only be determined by actually trying to load it. The loading
+  // process depends on having a corresponding LocalFrame in Blink to hold all
+  // the pending state.
+  //
+  // When a provisional frame is first created, it is only partially attached to
+  // the frame tree. This means that though a provisional frame might have a
+  // frame owner, the frame owner's content frame does not point back at the
+  // provisional frame. Similarly, though a provisional frame may have a parent
+  // frame pointer, the parent frame's children list will not contain the
+  // provisional frame. Thus, a provisional frame is invisible to the rest of
+  // Blink unless the navigation commits and the provisional frame is fully
+  // attached to the frame tree by calling swap().
+  //
+  // Otherwise, if the load should not commit, call detach() to discard the
+  // frame.
+  BLINK_EXPORT static WebLocalFrame* createProvisional(
+      WebFrameClient*,
+      blink::InterfaceProvider*,
+      blink::InterfaceRegistry*,
+      WebRemoteFrame*,
+      WebSandboxFlags);
 
   // Returns the WebFrame associated with the current V8 context. This
   // function can return 0 if the context is associated with a Document that
@@ -132,10 +159,6 @@ class WebLocalFrame : public WebFrame {
   // Returns true if the current frame's load event has not completed.
   virtual bool isLoading() const = 0;
 
-  // Returns true if the current frame is detaching/detached. crbug.com/654654
-  virtual bool isFrameDetachedForSpecialOneOffStopTheCrashingHackBug561873()
-      const = 0;
-
   // Returns true if there is a pending redirect or location change
   // within specified interval (in seconds). This could be caused by:
   // * an HTTP Refresh header
@@ -155,6 +178,21 @@ class WebLocalFrame : public WebFrame {
   // Mark this frame's document as having received a user gesture, based on
   // one of its descendants having processed a user gesture.
   virtual void setHasReceivedUserGesture() = 0;
+
+  // Reports a list of unique blink::UseCounter::Feature values representing
+  // Blink features used, performed or encountered by the browser during the
+  // current page load happening on the frame.
+  virtual void blinkFeatureUsageReport(const std::set<int>& features) = 0;
+
+  // Informs the renderer that mixed content was found externally regarding this
+  // frame. Currently only the the browser process can do so. The included data
+  // is used for instance to report to the CSP policy and to log to the frame
+  // console.
+  virtual void mixedContentFound(const WebURL& mainResourceUrl,
+                                 const WebURL& mixedContentUrl,
+                                 WebURLRequest::RequestContext,
+                                 bool wasAllowed,
+                                 bool hadRedirect) = 0;
 
   // Orientation Changes ----------------------------------------------------
 
@@ -217,19 +255,16 @@ class WebLocalFrame : public WebFrame {
       int worldID,
       const WebScriptSource* sourceIn,
       unsigned numSources,
-      int extensionGroup,
       bool userGesture,
       WebScriptExecutionCallback*) = 0;
-
-  // Run the task when the context of the current page is not suspended
-  // otherwise run it on context resumed.
-  // Method takes ownership of the passed task.
-  virtual void requestRunTask(WebSuspendableTask*) const = 0;
 
   // Associates an isolated world with human-readable name which is useful for
   // extension debugging.
   virtual void setIsolatedWorldHumanReadableName(int worldID,
                                                  const WebString&) = 0;
+
+  // Logs to the console associated with this frame.
+  virtual void addMessageToConsole(const WebConsoleMessage&) = 0;
 
   // Editing -------------------------------------------------------------
 
@@ -307,6 +342,10 @@ class WebLocalFrame : public WebFrame {
   // Deletes text before and after the current cursor position, excluding the
   // selection.
   virtual void deleteSurroundingText(int before, int after) = 0;
+
+  virtual void extractSmartClipData(WebRect rectInViewport,
+                                    WebString& clipText,
+                                    WebString& clipHtml) = 0;
 
   // Spell-checking support -------------------------------------------------
   virtual void replaceMisspelledRange(const WebString&) = 0;
@@ -443,9 +482,25 @@ class WebLocalFrame : public WebFrame {
   // coordinates.
   virtual void saveImageAt(const WebPoint&) = 0;
 
+  // Site engagement --------------------------------------------------------
+
+  // Sets the site engagement level for this frame's document.
+  virtual void setEngagementLevel(mojom::EngagementLevel) = 0;
+
   // TEMP: Usage count for chrome.loadtimes deprecation.
   // This will be removed following the deprecation.
   virtual void usageCountChromeLoadTimes(const WebString& metric) = 0;
+
+  // Task queues --------------------------------------------------------------
+
+  // Returns frame-specific task runner to run tasks of this type on.
+  // They have the same lifetime as the frame.
+  virtual base::SingleThreadTaskRunner* timerTaskRunner() = 0;
+  virtual base::SingleThreadTaskRunner* loadingTaskRunner() = 0;
+  virtual base::SingleThreadTaskRunner* unthrottledTaskRunner() = 0;
+
+  // Returns the WebInputMethodController associated with this local frame.
+  virtual WebInputMethodController* inputMethodController() const = 0;
 
  protected:
   explicit WebLocalFrame(WebTreeScopeType scope) : WebFrame(scope) {}

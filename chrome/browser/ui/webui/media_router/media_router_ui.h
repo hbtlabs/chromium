@@ -43,11 +43,9 @@ class CreatePresentationConnectionRequest;
 class IssuesObserver;
 class MediaRoute;
 class MediaRouter;
-class MediaRouterDialogCallbacks;
 class MediaRoutesObserver;
 class MediaRouterWebUIMessageHandler;
 class MediaSink;
-class MediaSinksObserver;
 class RouteRequestResult;
 
 // Implements the chrome://media-router user interface.
@@ -97,8 +95,9 @@ class MediaRouterUI : public ConstrainedWebDialogUI,
   // Closes the media router UI.
   void Close();
 
-  // Notifies this instance that the UI has been initialized.
-  void UIInitialized();
+  // Notifies this instance that the UI has been initialized. Marked virtual for
+  // tests.
+  virtual void UIInitialized();
 
   // Requests a route be created from the source mapped to
   // |cast_mode|, to the sink given by |sink_id|.
@@ -115,7 +114,7 @@ class MediaRouterUI : public ConstrainedWebDialogUI,
   void CloseRoute(const MediaRoute::Id& route_id);
 
   // Calls MediaRouter to add the given issue.
-  void AddIssue(const Issue& issue);
+  void AddIssue(const IssueInfo& issue);
 
   // Calls MediaRouter to clear the given issue.
   void ClearIssue(const Issue::Id& issue_id);
@@ -128,6 +127,14 @@ class MediaRouterUI : public ConstrainedWebDialogUI,
                                  const std::string& domain,
                                  MediaCastMode cast_mode);
 
+  // Returns true if the cast mode last chosen for the current origin is tab
+  // mirroring. Marked virtual for tests.
+  virtual bool UserSelectedTabMirroringForCurrentOrigin() const;
+
+  // Records the cast mode selection for the current origin, unless the cast
+  // mode is MediaCastMode::DESKTOP_MIRROR. Marked virtual for tests.
+  virtual void RecordCastModeSelection(MediaCastMode cast_mode);
+
   // Returns the hostname of the default source's parent frame URL.
   std::string GetPresentationRequestSourceName() const;
   std::string GetTruncatedPresentationRequestSourceName() const;
@@ -139,10 +146,11 @@ class MediaRouterUI : public ConstrainedWebDialogUI,
   const std::vector<MediaRoute::Id>& joinable_route_ids() const {
     return joinable_route_ids_;
   }
-  const std::set<MediaCastMode>& cast_modes() const { return cast_modes_; }
-  const std::unordered_map<MediaRoute::Id, MediaCastMode>& current_cast_modes()
-      const {
-    return current_cast_modes_;
+  // Marked virtual for tests.
+  virtual const std::set<MediaCastMode>& cast_modes() const;
+  const std::unordered_map<MediaRoute::Id, MediaCastMode>&
+  routes_and_cast_modes() const {
+    return routes_and_cast_modes_;
   }
   const content::WebContents* initiator() const { return initiator_; }
 
@@ -165,10 +173,8 @@ class MediaRouterUI : public ConstrainedWebDialogUI,
  private:
   FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest, SortedSinks);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest, SortSinksByIconType);
-  FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest,
-                           UIMediaRoutesObserverFiltersNonDisplayRoutes);
-  FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest,
-      UIMediaRoutesObserverFiltersNonDisplayJoinableRoutes);
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest, FilterNonDisplayRoutes);
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest, FilterNonDisplayJoinableRoutes);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest,
       UIMediaRoutesObserverAssignsCurrentCastModes);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest,
@@ -216,7 +222,8 @@ class MediaRouterUI : public ConstrainedWebDialogUI,
   // Called by |issues_observer_| when the top issue has changed.
   // If the UI is already initialized, notifies |handler_| to update the UI.
   // Ignored if the UI is not yet initialized.
-  void SetIssue(const Issue* issue);
+  void SetIssue(const Issue& issue);
+  void ClearIssue();
 
   // Called by |routes_observer_| when the set of active routes has changed.
   void OnRoutesUpdated(const std::vector<MediaRoute>& routes,
@@ -263,7 +270,7 @@ class MediaRouterUI : public ConstrainedWebDialogUI,
       const MediaSink::Id& sink_id,
       MediaCastMode cast_mode,
       MediaSource::Id* source_id,
-      GURL* origin,
+      url::Origin* origin,
       std::vector<MediaRouteResponseCallback>* route_response_callbacks,
       base::TimeDelta* timeout,
       bool* incognito);
@@ -272,13 +279,21 @@ class MediaRouterUI : public ConstrainedWebDialogUI,
   // |handler_|.
   void UpdateCastModes();
 
+  // Updates the routes-to-cast-modes mapping in |routes_and_cast_modes_| to
+  // match the value of |routes_|.
+  void UpdateRoutesToCastModesMapping();
+
   // Returns the default presentation request's frame URL if there is one.
   // Otherwise returns an empty GURL.
   GURL GetFrameURL() const;
 
+  // Returns the serialized origin for |initiator_|, or the serialization of an
+  // opaque origin ("null") if |initiator_| is not set.
+  std::string GetSerializedInitiatorOrigin() const;
+
   // Owned by the |web_ui| passed in the ctor, and guaranteed to be deleted
   // only after it has deleted |this|.
-  MediaRouterWebUIMessageHandler* handler_;
+  MediaRouterWebUIMessageHandler* handler_ = nullptr;
 
   // These are non-null while this instance is registered to receive
   // updates from them.
@@ -303,7 +318,7 @@ class MediaRouterUI : public ConstrainedWebDialogUI,
   std::vector<MediaRoute> routes_;
   std::vector<MediaRoute::Id> joinable_route_ids_;
   CastModeSet cast_modes_;
-  std::unordered_map<MediaRoute::Id, MediaCastMode> current_cast_modes_;
+  std::unordered_map<MediaRoute::Id, MediaCastMode> routes_and_cast_modes_;
 
   std::unique_ptr<QueryResultManager> query_result_manager_;
 

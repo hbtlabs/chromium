@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "base/optional.h"
+#include "media/base/video_facing.h"
 #include "media/capture/capture_export.h"
 
 namespace media {
@@ -48,12 +50,14 @@ struct CAPTURE_EXPORT VideoCaptureDeviceDescriptor {
       VideoCaptureApi capture_api = VideoCaptureApi::UNKNOWN,
       VideoCaptureTransportType transport_type =
           VideoCaptureTransportType::OTHER_TRANSPORT);
-  VideoCaptureDeviceDescriptor(const std::string& display_name,
-                               const std::string& device_id,
-                               const std::string& model_id,
-                               VideoCaptureApi capture_api,
-                               VideoCaptureTransportType transport_type =
-                                   VideoCaptureTransportType::OTHER_TRANSPORT);
+  VideoCaptureDeviceDescriptor(
+      const std::string& display_name,
+      const std::string& device_id,
+      const std::string& model_id,
+      VideoCaptureApi capture_api,
+      VideoCaptureTransportType transport_type =
+          VideoCaptureTransportType::OTHER_TRANSPORT,
+      VideoFacingMode facing = VideoFacingMode::MEDIA_VIDEO_FACING_NONE);
   VideoCaptureDeviceDescriptor(const VideoCaptureDeviceDescriptor& other);
   ~VideoCaptureDeviceDescriptor();
 
@@ -63,11 +67,7 @@ struct CAPTURE_EXPORT VideoCaptureDeviceDescriptor {
   bool operator==(const VideoCaptureDeviceDescriptor& other) const {
     return (other.device_id == device_id) && (other.capture_api == capture_api);
   }
-  bool operator<(const VideoCaptureDeviceDescriptor& other) const {
-    if (device_id < other.device_id)
-      return true;
-    return capture_api < other.capture_api;
-  }
+  bool operator<(const VideoCaptureDeviceDescriptor& other) const;
 
   const char* GetCaptureApiTypeString() const;
   // Friendly name of a device, plus the model identifier in parentheses.
@@ -80,8 +80,25 @@ struct CAPTURE_EXPORT VideoCaptureDeviceDescriptor {
   // otherwise.
   std::string model_id;
 
+  VideoFacingMode facing;
+
   VideoCaptureApi capture_api;
   VideoCaptureTransportType transport_type;
+
+  // Contains camera calibration parameters.
+  // These parameters apply to both RGB and depth video devices.  See also
+  // https://w3c.github.io/mediacapture-depth/#mediatracksettings-dictionary
+  // TODO(aleksandar.stojiljkovic): Add principal point and camera distortion
+  // model and coefficients.  See also https://crbug.com/616098
+  struct CameraCalibration {
+    double focal_length_x = 0.0;
+    double focal_length_y = 0.0;
+    // depth near and far are used only for depth cameras.
+    double depth_near = 0.0;
+    double depth_far = 0.0;
+  };
+
+  base::Optional<CameraCalibration> camera_calibration;
 };
 
 using VideoCaptureDeviceDescriptors = std::vector<VideoCaptureDeviceDescriptor>;

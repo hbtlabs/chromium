@@ -36,13 +36,13 @@ class StatisticsProvider;
 }
 }
 
-namespace content {
-class NotificationDetails;
-class NotificationSource;
+namespace user_manager {
+class User;
 }
 
 class PrefRegistrySimple;
 class PrefService;
+class Profile;
 
 namespace policy {
 
@@ -73,7 +73,10 @@ class DeviceStatusCollector {
   using AndroidStatusReceiver =
       base::Callback<void(const std::string&, const std::string&)>;
   // Calls the enterprise reporting mojo interface, passing over the
-  // AndroidStatusReceiver.
+  // AndroidStatusReceiver. Returns false if the mojo interface isn't available,
+  // in which case no asynchronous query is emitted and the android status query
+  // fails synchronously. The |AndroidStatusReceiver| is not called in this
+  // case.
   using AndroidStatusFetcher =
       base::Callback<bool(const AndroidStatusReceiver&)>;
 
@@ -84,10 +87,10 @@ class DeviceStatusCollector {
       std::unique_ptr<enterprise_management::DeviceStatusReportRequest>,
       std::unique_ptr<enterprise_management::SessionStatusReportRequest>)>;
 
-  // Constructor. Callers can inject their own VolumeInfoFetcher,
-  // CPUStatisticsFetcher and CPUTempFetcher. These callbacks are executed on
-  // Blocking Pool. A null callback can be passed for either parameter, to use
-  // the default implementation.
+  // Constructor. Callers can inject their own *Fetcher callbacks, e.g. for unit
+  // testing. A null callback can be passed for any *Fetcher parameter, to use
+  // the default implementation. These callbacks are always executed on Blocking
+  // Pool.
   DeviceStatusCollector(
       PrefService* local_state,
       chromeos::system::StatisticsProvider* provider,
@@ -107,6 +110,7 @@ class DeviceStatusCollector {
   void OnSubmittedSuccessfully();
 
   static void RegisterPrefs(PrefRegistrySimple* registry);
+  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
   // Returns the DeviceLocalAccount associated with the currently active
   // kiosk session, if the session was auto-launched with zero delay
@@ -132,6 +136,10 @@ class DeviceStatusCollector {
 
   // Gets the version of the passed app. Virtual to allow mocking.
   virtual std::string GetAppVersion(const std::string& app_id);
+
+  // Gets the DMToken associated with a profile. Returns an empty string if no
+  // DMToken could be retrieved. Virtual to allow mocking.
+  virtual std::string GetDMTokenForProfile(Profile* profile);
 
   // Samples the current hardware resource usage to be sent up with the
   // next device status update.
@@ -170,6 +178,10 @@ class DeviceStatusCollector {
   void GetDeviceStatus(scoped_refptr<GetStatusState> state);
   void GetSessionStatus(scoped_refptr<GetStatusState> state);
 
+  bool GetSessionStatusForUser(
+      scoped_refptr<GetStatusState> state,
+      enterprise_management::SessionStatusReportRequest* status,
+      const user_manager::User* user);
   // Helpers for the various portions of DEVICE STATUS. Return true if they
   // actually report any status. Functions that queue async queries take
   // a |GetStatusState| instance.
@@ -261,7 +273,6 @@ class DeviceStatusCollector {
   bool report_users_ = false;
   bool report_hardware_status_ = false;
   bool report_kiosk_session_status_ = false;
-  bool report_android_status_ = false;
   bool report_os_update_status_ = false;
   bool report_running_kiosk_app_ = false;
 
@@ -283,7 +294,6 @@ class DeviceStatusCollector {
       os_update_status_subscription_;
   std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
       running_kiosk_app_subscription_;
-  BooleanPrefMember report_arc_status_pref_;
 
   // Task runner in the creation thread where responses are sent to.
   scoped_refptr<base::SequencedTaskRunner> task_runner_;

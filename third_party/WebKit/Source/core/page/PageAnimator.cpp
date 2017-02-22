@@ -10,7 +10,7 @@
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/svg/SVGDocumentExtensions.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "wtf/AutoReset.h"
 
 namespace blink {
@@ -37,7 +37,7 @@ void PageAnimator::serviceScriptedAnimations(
   for (Frame* frame = m_page->mainFrame(); frame;
        frame = frame->tree().traverseNext()) {
     if (frame->isLocalFrame())
-      documents.append(toLocalFrame(frame)->document());
+      documents.push_back(toLocalFrame(frame)->document());
   }
 
   for (auto& document : documents) {

@@ -182,10 +182,6 @@ bool LayerTreeHostCommon::ScrollbarsUpdateInfo::operator==(
   return layer_id == other.layer_id && hidden == other.hidden;
 }
 
-ReflectedMainFrameState::ReflectedMainFrameState() : page_scale_delta(1.0f) {}
-
-ReflectedMainFrameState::~ReflectedMainFrameState() = default;
-
 ScrollAndScaleSet::ScrollAndScaleSet()
     : page_scale_delta(1.f), top_controls_delta(0.f) {
 }
@@ -577,7 +573,7 @@ void LayerTreeHostCommon::CalculateDrawPropertiesForTesting(
   LayerList update_layer_list;
   bool can_render_to_separate_surface = true;
   PropertyTrees* property_trees =
-      inputs->root_layer->GetLayerTree()->property_trees();
+      inputs->root_layer->layer_tree_host()->property_trees();
   Layer* overscroll_elasticity_layer = nullptr;
   gfx::Vector2dF elastic_overscroll;
   PropertyTreeBuilder::BuildPropertyTrees(
@@ -590,7 +586,8 @@ void LayerTreeHostCommon::CalculateDrawPropertiesForTesting(
   draw_property_utils::UpdatePropertyTrees(property_trees,
                                            can_render_to_separate_surface);
   draw_property_utils::FindLayersThatNeedUpdates(
-      inputs->root_layer->GetLayerTree(), property_trees, &update_layer_list);
+      inputs->root_layer->layer_tree_host(), property_trees,
+      &update_layer_list);
 }
 
 void LayerTreeHostCommon::CalculateDrawProperties(
@@ -650,7 +647,7 @@ void LayerTreeHostCommon::CalculateDrawPropertiesForTesting(
 }
 
 PropertyTrees* GetPropertyTrees(Layer* layer) {
-  return layer->GetLayerTree()->property_trees();
+  return layer->layer_tree_host()->property_trees();
 }
 
 PropertyTrees* GetPropertyTrees(LayerImpl* layer) {

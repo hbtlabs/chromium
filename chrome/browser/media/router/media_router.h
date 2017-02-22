@@ -22,11 +22,13 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/presentation_service_delegate.h"
 
-class Profile;
-
 namespace content {
 class WebContents;
 }
+
+namespace url {
+class Origin;
+}  // namespace url
 
 namespace media_router {
 
@@ -80,7 +82,7 @@ class MediaRouter : public KeyedService {
   virtual void CreateRoute(
       const MediaSource::Id& source_id,
       const MediaSink::Id& sink_id,
-      const GURL& origin,
+      const url::Origin& origin,
       content::WebContents* web_contents,
       const std::vector<MediaRouteResponseCallback>& callbacks,
       base::TimeDelta timeout,
@@ -102,7 +104,7 @@ class MediaRouter : public KeyedService {
   virtual void ConnectRouteByRouteId(
       const MediaSource::Id& source_id,
       const MediaRoute::Id& route_id,
-      const GURL& origin,
+      const url::Origin& origin,
       content::WebContents* web_contents,
       const std::vector<MediaRouteResponseCallback>& callbacks,
       base::TimeDelta timeout,
@@ -122,7 +124,7 @@ class MediaRouter : public KeyedService {
   virtual void JoinRoute(
       const MediaSource::Id& source,
       const std::string& presentation_id,
-      const GURL& origin,
+      const url::Origin& origin,
       content::WebContents* web_contents,
       const std::vector<MediaRouteResponseCallback>& callbacks,
       base::TimeDelta timeout,
@@ -147,8 +149,8 @@ class MediaRouter : public KeyedService {
       std::unique_ptr<std::vector<uint8_t>> data,
       const SendRouteMessageCallback& callback) = 0;
 
-  // Adds a new |issue|.
-  virtual void AddIssue(const Issue& issue) = 0;
+  // Adds a new issue with info |issue_info|.
+  virtual void AddIssue(const IssueInfo& issue_info) = 0;
 
   // Clears the issue with the id |issue_id|.
   virtual void ClearIssue(const Issue::Id& issue_id) = 0;
@@ -182,6 +184,10 @@ class MediaRouter : public KeyedService {
   // Called when the incognito profile for this instance is being shut down.
   // This will terminate all incognito media routes.
   virtual void OnIncognitoProfileShutdown() = 0;
+
+  // Returns the media routes that currently exist. To get notified whenever
+  // there is a change to the media routes, subclass MediaRoutesObserver.
+  virtual std::vector<MediaRoute> GetCurrentRoutes() const = 0;
 
  private:
   friend class IssuesObserver;

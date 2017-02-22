@@ -17,18 +17,23 @@ MediaUrlDemuxer::MediaUrlDemuxer(
 
 MediaUrlDemuxer::~MediaUrlDemuxer() {}
 
-// Should never be called since DemuxerStreamProvider::Type is URL.
-DemuxerStream* MediaUrlDemuxer::GetStream(DemuxerStream::Type type) {
+// Should never be called since MediaResource::Type is URL.
+std::vector<DemuxerStream*> MediaUrlDemuxer::GetAllStreams() {
   NOTREACHED();
-  return nullptr;
+  return std::vector<DemuxerStream*>();
+}
+
+// Should never be called since MediaResource::Type is URL.
+void MediaUrlDemuxer::SetStreamStatusChangeCB(const StreamStatusChangeCB& cb) {
+  NOTREACHED();
 }
 
 MediaUrlParams MediaUrlDemuxer::GetMediaUrlParams() const {
   return params_;
 }
 
-DemuxerStreamProvider::Type MediaUrlDemuxer::GetType() const {
-  return DemuxerStreamProvider::Type::URL;
+MediaResource::Type MediaUrlDemuxer::GetType() const {
+  return MediaResource::Type::URL;
 }
 
 std::string MediaUrlDemuxer::GetDisplayName() const {
@@ -38,7 +43,7 @@ std::string MediaUrlDemuxer::GetDisplayName() const {
 void MediaUrlDemuxer::Initialize(DemuxerHost* host,
                                  const PipelineStatusCB& status_cb,
                                  bool enable_text_tracks) {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   task_runner_->PostTask(FROM_HERE, base::Bind(status_cb, PIPELINE_OK));
 }
 

@@ -32,10 +32,12 @@
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/html/HTMLMediaElement.h"
 #include "modules/encryptedmedia/ContentDecryptionModuleResultPromise.h"
 #include "modules/encryptedmedia/EncryptedMediaUtils.h"
 #include "modules/encryptedmedia/MediaKeySession.h"
+#include "platform/InstanceCounters.h"
 #include "platform/Timer.h"
 #include "public/platform/WebContentDecryptionModule.h"
 #include "wtf/RefPtr.h"
@@ -129,28 +131,28 @@ MediaKeys* MediaKeys::create(
     ExecutionContext* context,
     const WebVector<WebEncryptedMediaSessionType>& supportedSessionTypes,
     std::unique_ptr<WebContentDecryptionModule> cdm) {
-  MediaKeys* mediaKeys =
-      new MediaKeys(context, supportedSessionTypes, std::move(cdm));
-  mediaKeys->suspendIfNeeded();
-  return mediaKeys;
+  return new MediaKeys(context, supportedSessionTypes, std::move(cdm));
 }
 
 MediaKeys::MediaKeys(
     ExecutionContext* context,
     const WebVector<WebEncryptedMediaSessionType>& supportedSessionTypes,
     std::unique_ptr<WebContentDecryptionModule> cdm)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(context),
+    : ContextLifecycleObserver(context),
       m_supportedSessionTypes(supportedSessionTypes),
       m_cdm(std::move(cdm)),
       m_mediaElement(nullptr),
       m_reservedForMediaElement(false),
-      m_timer(this, &MediaKeys::timerFired) {
+      m_timer(TaskRunnerHelper::get(TaskType::MiscPlatformAPI, context),
+              this,
+              &MediaKeys::timerFired) {
   DVLOG(MEDIA_KEYS_LOG_LEVEL) << __func__ << "(" << this << ")";
+  InstanceCounters::incrementCounter(InstanceCounters::MediaKeysCounter);
 }
 
 MediaKeys::~MediaKeys() {
   DVLOG(MEDIA_KEYS_LOG_LEVEL) << __func__ << "(" << this << ")";
+  InstanceCounters::decrementCounter(InstanceCounters::MediaKeysCounter);
 }
 
 MediaKeySession* MediaKeys::createSession(ScriptState* scriptState,
@@ -293,15 +295,15 @@ WebContentDecryptionModule* MediaKeys::contentDecryptionModule() {
 DEFINE_TRACE(MediaKeys) {
   visitor->trace(m_pendingActions);
   visitor->trace(m_mediaElement);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
 }
 
-void MediaKeys::contextDestroyed() {
+void MediaKeys::contextDestroyed(ExecutionContext*) {
   m_timer.stop();
   m_pendingActions.clear();
 
   // We don't need the CDM anymore. Only destroyed after all related
-  // ActiveDOMObjects have been stopped.
+  // ContextLifecycleObservers have been stopped.
   m_cdm.reset();
 }
 

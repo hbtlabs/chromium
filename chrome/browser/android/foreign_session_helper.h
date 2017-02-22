@@ -15,12 +15,6 @@
 
 using base::android::ScopedJavaLocalRef;
 
-struct SessionWindow;
-
-namespace browser_sync {
-struct SyncedSession;
-}  // namespace browser_sync
-
 namespace syncer {
 class SyncService;
 }  // namespace syncer
@@ -54,9 +48,8 @@ class ForeignSessionHelper : public syncer::SyncServiceObserver {
       const base::android::JavaParamRef<jstring>& session_tag);
 
   // syncer::SyncServiceObserver implementation
-  void OnStateChanged() override {}
-  void OnSyncConfigurationCompleted() override;
-  void OnForeignSessionUpdated() override;
+  void OnSyncConfigurationCompleted(syncer::SyncService* sync) override;
+  void OnForeignSessionUpdated(syncer::SyncService* sync) override;
 
   static bool RegisterForeignSessionHelper(JNIEnv* env);
 

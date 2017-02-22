@@ -160,23 +160,23 @@ static bool isUndesiredAlias(const char* alias) {
 }
 
 static void addToTextEncodingNameMap(const char* alias, const char* name) {
-  ASSERT(strlen(alias) <= maxEncodingNameLength);
+  DCHECK_LE(strlen(alias), maxEncodingNameLength);
   if (isUndesiredAlias(alias))
     return;
   const char* atomicName = textEncodingNameMap->get(name);
-  ASSERT(strcmp(alias, name) == 0 || atomicName);
+  DCHECK(strcmp(alias, name) == 0 || atomicName);
   if (!atomicName)
     atomicName = name;
   checkExistingName(alias, atomicName);
-  textEncodingNameMap->add(alias, atomicName);
+  textEncodingNameMap->insert(alias, atomicName);
 }
 
 static void addToTextCodecMap(const char* name,
                               NewTextCodecFunction function,
                               const void* additionalData) {
   const char* atomicName = textEncodingNameMap->get(name);
-  ASSERT(atomicName);
-  textCodecMap->add(atomicName, TextCodecFactory(function, additionalData));
+  DCHECK(atomicName);
+  textCodecMap->insert(atomicName, TextCodecFactory(function, additionalData));
 }
 
 static void pruneBlacklistedCodecs() {
@@ -191,19 +191,19 @@ static void pruneBlacklistedCodecs() {
     TextEncodingNameMap::const_iterator end = textEncodingNameMap->end();
     for (; it != end; ++it) {
       if (it->value == atomicName)
-        names.append(it->key);
+        names.push_back(it->key);
     }
 
     textEncodingNameMap->removeAll(names);
 
-    textCodecMap->remove(atomicName);
+    textCodecMap->erase(atomicName);
   }
 }
 
 static void buildBaseTextCodecMaps() {
-  ASSERT(isMainThread());
-  ASSERT(!textCodecMap);
-  ASSERT(!textEncodingNameMap);
+  DCHECK(isMainThread());
+  DCHECK(!textCodecMap);
+  DCHECK(!textEncodingNameMap);
 
   textCodecMap = new TextCodecMap;
   textEncodingNameMap = new TextEncodingNameMap;
@@ -242,9 +242,9 @@ static void extendTextCodecMaps() {
 std::unique_ptr<TextCodec> newTextCodec(const TextEncoding& encoding) {
   MutexLocker lock(encodingRegistryMutex());
 
-  ASSERT(textCodecMap);
+  DCHECK(textCodecMap);
   TextCodecFactory factory = textCodecMap->get(encoding.name());
-  ASSERT(factory.function);
+  DCHECK(factory.function);
   return factory.function(encoding, factory.additionalData);
 }
 

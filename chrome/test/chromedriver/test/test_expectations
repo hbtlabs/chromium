@@ -75,7 +75,8 @@ _REVISION_NEGATIVE_FILTER['HEAD'] = [
     'TypingTest.testShouldBeAbleToTypeIntoContentEditableElementWithExistingValue',
     'TypingTest.testShouldNotTypeIntoElementsThatPreventKeyDownEvents',
     'TypingTest.testTypingIntoAnIFrameWithContentEditableOrDesignModeSet',
-    'UnexpectedAlertBehaviorTest.*',
+    'UnexpectedAlertBehaviorTest.requiredUnhandledAlertCapabilityHasPriorityOverDesired',
+    'UnexpectedAlertBehaviorTest.dismissUnhandledAlertsByDefault',
     'VisibilityTest.testElementHiddenByOverflowXIsNotVisible',
     'VisibilityTest.testElementHiddenByOverflowYIsNotVisible',
     'VisibilityTest.tooSmallAWindowWithOverflowHiddenIsNotAProblem',
@@ -99,7 +100,19 @@ _REVISION_NEGATIVE_FILTER['HEAD'] = [
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1503
     'BasicMouseInterfaceTest.testDraggingElementWithMouseFiresEvents',
     'BasicMouseInterfaceTest.testDraggingElementWithMouseMovesItToAnotherList',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1625
+    'TakesScreenshotTest.*',
+    'WindowTest.*',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1674
+    'WindowSwitchingTest.testShouldBeAbleToIterateOverAllOpenWindows',
 ]
+_REVISION_NEGATIVE_FILTER['57'] = (
+    _REVISION_NEGATIVE_FILTER['HEAD'] + [
+        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1625
+        'TakesScreenshotTest.*',
+        'WindowTest.*',
+    ]
+)
 
 _OS_NEGATIVE_FILTER = {}
 _OS_NEGATIVE_FILTER['win'] = [
@@ -176,6 +189,7 @@ _OS_NEGATIVE_FILTER['android:chrome'] = [
 
     # Alerts are not yet supported on Android.
     'AlertsTest.*',
+    'UnexpectedAlertBehaviorTest.*',
 
     # http://crbug.com/156390
     'DragAndDropTest.*',
@@ -233,6 +247,13 @@ _OS_NEGATIVE_FILTER['android:chromium'] = (
         'CorrectEventFiringTest.testShouldFireMouseDownEventWhenClicking',
         # https://bugs.chromium.org/p/chromedriver/issues/detail?id=998
         'ImplicitWaitTest.testShouldImplicitlyWaitForASingleElement',
+        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=922
+        'ClickTest.testCanClickOnAnElementWithTopSetToANegativeNumber',
+        'CorrectEventFiringTest.testClickEventsShouldBubble',
+        'VisibilityTest.testShouldModifyTheVisibilityOfAnElementDynamically',
+        'CorrectEventFiringTest.testSendingKeysToAFocusedElementShouldNotBlurThatElement',
+        'JavascriptEnabledDriverTest.testShouldBeAbleToClickOnSubmitButtons',
+        'JavascriptEnabledDriverTest.testIssue80ClickShouldGenerateClickEvent',
     ]
 )
 _OS_NEGATIVE_FILTER['android:chrome_beta'] = (

@@ -105,6 +105,12 @@ class NativeViewHostAuraTest : public test::NativeViewHostTestBase {
                                     host()));
   }
 
+  // test::NativeViewHostTestBase:
+  void TearDown() override {
+    child_.reset();
+    test::NativeViewHostTestBase::TearDown();
+  }
+
  private:
   std::unique_ptr<Widget> child_;
 
@@ -269,7 +275,7 @@ TEST_F(NativeViewHostAuraTest, ParentAfterDetach) {
 
   DestroyHost();
   DestroyTopLevel();
-  if (!IsMus() && !IsAuraMusClient()) {
+  if (!IsMus()) {
     // The window is detached, so no longer associated with any Widget
     // hierarchy. The root window still owns it, but the test harness checks
     // for orphaned windows during TearDown().

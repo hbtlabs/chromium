@@ -15,22 +15,9 @@
 ChromeLauncherAppMenuItemTab::ChromeLauncherAppMenuItemTab(
     const base::string16 title,
     const gfx::Image* icon,
-    content::WebContents* content,
-    bool has_leading_separator)
-    : ChromeLauncherAppMenuItem(title, icon, has_leading_separator),
-      content::WebContentsObserver(content) {
-}
-
-bool ChromeLauncherAppMenuItemTab::IsActive() const {
-  Browser* browser = chrome::FindBrowserWithWindow(ash::wm::GetActiveWindow());
-  if (!browser)
-    return false;
-  return web_contents() == browser->tab_strip_model()->GetActiveWebContents();
-}
-
-bool ChromeLauncherAppMenuItemTab::IsEnabled() const {
-  return true;
-}
+    content::WebContents* content)
+    : ash::ShelfApplicationMenuItem(title, icon),
+      content::WebContentsObserver(content) {}
 
 void ChromeLauncherAppMenuItemTab::Execute(int event_flags) {
   if (!web_contents())

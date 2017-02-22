@@ -10,6 +10,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
 #include "content/public/browser/android/compositor_client.h"
+#include "ui/gfx/geometry/size.h"
 
 typedef unsigned int SkColor;
 
@@ -34,9 +35,8 @@ class VrCompositor : public content::CompositorClient {
   ~VrCompositor() override;
 
   void SurfaceDestroyed();
-  void SurfaceChanged(int width,
-                      int height,
-                      const base::android::JavaParamRef<jobject>& surface);
+  void SetWindowBounds(gfx::Size size);
+  void SurfaceChanged(jobject surface);
   void SetLayer(content::WebContents* web_contents);
 
   // CompositorClient implementation:
@@ -44,6 +44,8 @@ class VrCompositor : public content::CompositorClient {
   void OnSwapBuffersCompleted(int pending_swap_buffers) override;
 
  private:
+  void RestoreLayer();
+
   std::unique_ptr<content::Compositor> compositor_;
 
   cc::Layer* layer_ = nullptr;

@@ -11,9 +11,13 @@ cr.define('settings_rtl_tests', function() {
 
   function registerDrawerPanelTests() {
     suite('settings drawer panel RTL tests', function() {
+      setup(function() {
+        PolymerTest.clearBody();
+      });
+
       test('test i18n processing flips drawer panel', function() {
         var ui = document.createElement('settings-ui');
-        var appDrawer = ui.$$('app-drawer');
+        var appDrawer = ui.$.drawer;
         assertEquals('left', appDrawer.align);
 
         ui.directionDelegate = new TestDirectionDelegate(true /* isRtl */);

@@ -9,10 +9,18 @@
 
 namespace blink {
 
-class WebPresentationConnectionClient;
+struct WebPresentationSessionInfo;
+class WebPresentationConnection;
 class WebString;
-enum class WebPresentationConnectionCloseReason;
-enum class WebPresentationConnectionState;
+
+enum class WebPresentationConnectionCloseReason { Error = 0, Closed, WentAway };
+
+enum class WebPresentationConnectionState {
+  Connecting = 0,
+  Connected,
+  Closed,
+  Terminated,
+};
 
 // The delegate Blink provides to WebPresentationClient in order to get updates.
 class BLINK_PLATFORM_EXPORT WebPresentationController {
@@ -21,23 +29,24 @@ class BLINK_PLATFORM_EXPORT WebPresentationController {
 
   // Called when the presentation session is started by the embedder using
   // the default presentation URL and id.
-  virtual void didStartDefaultSession(WebPresentationConnectionClient*) = 0;
+  virtual WebPresentationConnection* didStartDefaultSession(
+      const WebPresentationSessionInfo&) = 0;
 
   // Called when the state of a session changes.
-  virtual void didChangeSessionState(WebPresentationConnectionClient*,
+  virtual void didChangeSessionState(const WebPresentationSessionInfo&,
                                      WebPresentationConnectionState) = 0;
 
   // Called when a connection closes.
-  virtual void didCloseConnection(WebPresentationConnectionClient*,
+  virtual void didCloseConnection(const WebPresentationSessionInfo&,
                                   WebPresentationConnectionCloseReason,
                                   const WebString& message) = 0;
 
   // Called when a text message of a session is received.
-  virtual void didReceiveSessionTextMessage(WebPresentationConnectionClient*,
+  virtual void didReceiveSessionTextMessage(const WebPresentationSessionInfo&,
                                             const WebString& message) = 0;
 
   // Called when a binary message of a session is received.
-  virtual void didReceiveSessionBinaryMessage(WebPresentationConnectionClient*,
+  virtual void didReceiveSessionBinaryMessage(const WebPresentationSessionInfo&,
                                               const uint8_t* data,
                                               size_t length) = 0;
 };

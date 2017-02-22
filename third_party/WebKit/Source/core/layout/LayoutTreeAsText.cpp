@@ -48,6 +48,7 @@
 #include "core/layout/line/InlineTextBox.h"
 #include "core/layout/svg/LayoutSVGGradientStop.h"
 #include "core/layout/svg/LayoutSVGImage.h"
+#include "core/layout/svg/LayoutSVGInline.h"
 #include "core/layout/svg/LayoutSVGInlineText.h"
 #include "core/layout/svg/LayoutSVGRoot.h"
 #include "core/layout/svg/LayoutSVGShape.h"
@@ -144,7 +145,7 @@ String quoteAndEscapeNonPrintables(const String& s) {
         result.append('\\');
         result.append('x');
         result.append('{');
-        appendUnsignedAsHex(c, result);
+        HexNumber::appendUnsignedAsHex(c, result);
         result.append('}');
       }
     }
@@ -438,7 +439,7 @@ static void writeTextRun(TextStream& ts,
   // conversion to floating point. :(
   int x = run.x().toInt();
   int y = run.y().toInt();
-  int logicalWidth = (run.left() + run.logicalWidth()).ceil() - x;
+  int logicalWidth = (run.x() + run.logicalWidth()).ceil() - x;
 
   // FIXME: Table cell adjustment is temporary until results can be updated.
   if (o.containingBlock()->isTableCell())
@@ -484,6 +485,10 @@ void write(TextStream& ts,
   }
   if (o.isSVGText()) {
     writeSVGText(ts, toLayoutSVGText(o), indent);
+    return;
+  }
+  if (o.isSVGInline()) {
+    writeSVGInline(ts, toLayoutSVGInline(o), indent);
     return;
   }
   if (o.isSVGInlineText()) {
@@ -557,16 +562,16 @@ static void write(TextStream& ts,
   IntRect adjustedClipRect = pixelSnappedIntRect(clipRect);
 
   bool reportFrameScrollInfo =
-      layer.layoutObject()->isLayoutView() &&
+      layer.layoutObject().isLayoutView() &&
       !RuntimeEnabledFeatures::rootLayerScrollingEnabled();
 
   if (reportFrameScrollInfo) {
-    LayoutView* layoutView = toLayoutView(layer.layoutObject());
+    LayoutView& layoutView = toLayoutView(layer.layoutObject());
 
     adjustedLayoutBoundsWithScrollbars.setWidth(
-        layoutView->viewWidth(IncludeScrollbars));
+        layoutView.viewWidth(IncludeScrollbars));
     adjustedLayoutBoundsWithScrollbars.setHeight(
-        layoutView->viewHeight(IncludeScrollbars));
+        layoutView.viewHeight(IncludeScrollbars));
   }
 
   if (markedLayer)
@@ -574,7 +579,7 @@ static void write(TextStream& ts,
 
   writeIndent(ts, indent);
 
-  if (layer.layoutObject()->style()->visibility() == EVisibility::Hidden)
+  if (layer.layoutObject().style()->visibility() == EVisibility::kHidden)
     ts << "hidden ";
 
   ts << "layer ";
@@ -593,15 +598,15 @@ static void write(TextStream& ts,
   if (layer.isTransparent())
     ts << " transparent";
 
-  if (layer.layoutObject()->hasOverflowClip() || reportFrameScrollInfo) {
+  if (layer.layoutObject().hasOverflowClip() || reportFrameScrollInfo) {
     ScrollableArea* scrollableArea;
     if (reportFrameScrollInfo)
-      scrollableArea = toLayoutView(layer.layoutObject())->frameView();
+      scrollableArea = toLayoutView(layer.layoutObject()).frameView();
     else
       scrollableArea = layer.getScrollableArea();
 
     ScrollOffset adjustedScrollOffset =
-        scrollableArea->scrollOffset() +
+        scrollableArea->getScrollOffset() +
         toFloatSize(scrollableArea->scrollOrigin());
     if (adjustedScrollOffset.width())
       ts << " scrollX " << adjustedScrollOffset.width();
@@ -622,10 +627,11 @@ static void write(TextStream& ts,
   else if (paintPhase == LayerPaintPhaseForeground)
     ts << " layerType: foreground only";
 
-  if (layer.layoutObject()->style()->hasBlendMode())
+  if (layer.layoutObject().style()->hasBlendMode()) {
     ts << " blendMode: "
        << compositeOperatorName(CompositeSourceOver,
-                                layer.layoutObject()->style()->blendMode());
+                                layer.layoutObject().style()->blendMode());
+  }
 
   if (behavior & LayoutAsTextShowCompositedLayers) {
     if (layer.hasCompositedLayerMapping()) {
@@ -643,7 +649,7 @@ static void write(TextStream& ts,
   ts << "\n";
 
   if (paintPhase != LayerPaintPhaseBackground)
-    write(ts, *layer.layoutObject(), indent + 1, behavior);
+    write(ts, layer.layoutObject(), indent + 1, behavior);
 }
 
 static Vector<PaintLayerStackingNode*> normalFlowListFor(
@@ -651,7 +657,7 @@ static Vector<PaintLayerStackingNode*> normalFlowListFor(
   PaintLayerStackingNodeIterator it(*node, NormalFlowChildren);
   Vector<PaintLayerStackingNode*> vector;
   while (PaintLayerStackingNode* normalFlowChild = it.next())
-    vector.append(normalFlowChild);
+    vector.push_back(normalFlowChild);
   return vector;
 }
 
@@ -665,9 +671,9 @@ void LayoutTreeAsText::writeLayers(TextStream& ts,
   // Calculate the clip rects we should use.
   LayoutRect layerBounds;
   ClipRect damageRect, clipRectToApply;
-  layer->clipper().calculateRects(
-      ClipRectsContext(rootLayer, UncachedClipRects), paintRect, layerBounds,
-      damageRect, clipRectToApply);
+  layer->clipper(PaintLayer::DoNotUseGeometryMapper)
+      .calculateRects(ClipRectsContext(rootLayer, UncachedClipRects), paintRect,
+                      layerBounds, damageRect, clipRectToApply);
 
   // Ensure our lists are up to date.
   layer->stackingNode()->updateLayerListsIfNeeded();
@@ -679,8 +685,8 @@ void LayoutTreeAsText::writeLayers(TextStream& ts,
                          : layer->intersectsDamageRect(
                                layerBounds, damageRect.rect(), offsetFromRoot);
 
-  if (layer->layoutObject()->isLayoutPart() &&
-      toLayoutPart(layer->layoutObject())->isThrottledFrameView())
+  if (layer->layoutObject().isLayoutPart() &&
+      toLayoutPart(layer->layoutObject()).isThrottledFrameView())
     shouldPaint = false;
 
   Vector<PaintLayerStackingNode*>* negList =
@@ -736,7 +742,7 @@ void LayoutTreeAsText::writeLayers(TextStream& ts,
   }
 }
 
-String nodePositionAsStringForTesting(Node* node) {
+static String nodePosition(Node* node) {
   StringBuilder result;
 
   Element* body = node->document().body();
@@ -780,21 +786,20 @@ static void writeSelection(TextStream& ts, const LayoutObject* o) {
   if (!frame)
     return;
 
-  VisibleSelection selection = frame->selection().selection();
+  VisibleSelection selection =
+      frame->selection().computeVisibleSelectionInDOMTreeDeprecated();
   if (selection.isCaret()) {
     ts << "caret: position " << selection.start().computeEditingOffset()
-       << " of "
-       << nodePositionAsStringForTesting(selection.start().anchorNode());
+       << " of " << nodePosition(selection.start().anchorNode());
     if (selection.affinity() == TextAffinity::Upstream)
       ts << " (upstream affinity)";
     ts << "\n";
   } else if (selection.isRange()) {
     ts << "selection start: position "
        << selection.start().computeEditingOffset() << " of "
-       << nodePositionAsStringForTesting(selection.start().anchorNode()) << "\n"
+       << nodePosition(selection.start().anchorNode()) << "\n"
        << "selection end:   position " << selection.end().computeEditingOffset()
-       << " of " << nodePositionAsStringForTesting(selection.end().anchorNode())
-       << "\n";
+       << " of " << nodePosition(selection.end().anchorNode()) << "\n";
   }
 }
 

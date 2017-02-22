@@ -23,10 +23,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// http://www.w3.org/TR/SVG2/types.html#InterfaceSVGAnimatedLength
+// https://svgwg.org/svg2-draft/types.html#InterfaceSVGAnimatedLength
 
 [
-    SetWrapperReferenceTo(SVGElement contextElement),
+    DependentLifetime,
 ] interface SVGAnimatedLength {
     readonly attribute SVGLength baseVal;
     readonly attribute SVGLength animVal;

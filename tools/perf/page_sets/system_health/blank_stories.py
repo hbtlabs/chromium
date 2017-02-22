@@ -4,9 +4,7 @@
 
 from page_sets.system_health import system_health_story
 
-from telemetry import decorators
 
-@decorators.Disabled('win') # crbug.com/656040
 class BlankAboutBlankStory(system_health_story.SystemHealthStory):
   """Story that loads the about:blank page."""
 
@@ -16,7 +14,7 @@ class BlankAboutBlankStory(system_health_story.SystemHealthStory):
   def _DidLoadDocument(self, action_runner):
     # Request a RAF and wait for it to be processed to ensure that the metric
     # Startup.FirstWebContents.NonEmptyPaint2 is recorded.
-    action_runner.ExecuteJavaScript(
+    action_runner.ExecuteJavaScript2(
         """
         window.__hasRunRAF = false;
         requestAnimationFrame(function() {
@@ -24,4 +22,4 @@ class BlankAboutBlankStory(system_health_story.SystemHealthStory):
         });
         """
     )
-    action_runner.WaitForJavaScriptCondition("window.__hasRunRAF")
+    action_runner.WaitForJavaScriptCondition2("window.__hasRunRAF")

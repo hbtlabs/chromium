@@ -12,7 +12,7 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ResourceId;
-import org.chromium.chrome.browser.preferences.autofill.AutofillPreferences;
+import org.chromium.chrome.browser.preferences.autofill.AutofillAndPaymentsPreferences;
 import org.chromium.content_public.browser.WebContents;
 
 import java.util.ArrayList;
@@ -72,6 +72,14 @@ public class PersonalDataManager {
          */
         @CalledByNative("NormalizedAddressRequestDelegate")
         void onAddressNormalized(AutofillProfile profile);
+
+        /**
+         * Called when the address could not be normalized.
+         *
+         * @param profile The non normalized profile.
+         */
+        @CalledByNative("NormalizedAddressRequestDelegate")
+        void onCouldNotNormalize(AutofillProfile profile);
     }
 
     /**
@@ -131,12 +139,32 @@ public class PersonalDataManager {
          * locale. All other fields are empty strings, because JNI does not handle null strings.
          */
         public AutofillProfile() {
-            this("" /* guid */, AutofillPreferences.SETTINGS_ORIGIN /* origin */,
+            this("" /* guid */, AutofillAndPaymentsPreferences.SETTINGS_ORIGIN /* origin */,
                     true /* isLocal */, "" /* fullName */, "" /* companyName */,
                     "" /* streetAddress */, "" /* region */, "" /* locality */,
                     "" /* dependentLocality */, "" /* postalCode */, "" /* sortingCode */,
                     Locale.getDefault().getCountry() /* country */, "" /* phoneNumber */,
                     "" /* emailAddress */, "" /* languageCode */);
+        }
+
+        /* Builds an AutofillProfile that is an exact copy of the one passed as parameter. */
+        public AutofillProfile(AutofillProfile profile) {
+            mGUID = profile.getGUID();
+            mOrigin = profile.getOrigin();
+            mIsLocal = profile.getIsLocal();
+            mFullName = profile.getFullName();
+            mCompanyName = profile.getCompanyName();
+            mStreetAddress = profile.getStreetAddress();
+            mRegion = profile.getRegion();
+            mLocality = profile.getLocality();
+            mDependentLocality = profile.getDependentLocality();
+            mPostalCode = profile.getPostalCode();
+            mSortingCode = profile.getSortingCode();
+            mCountryCode = profile.getCountryCode();
+            mPhoneNumber = profile.getPhoneNumber();
+            mEmailAddress = profile.getEmailAddress();
+            mLanguageCode = profile.getLanguageCode();
+            mLabel = profile.getLabel();
         }
 
         /** TODO(estade): remove this constructor. */
@@ -292,6 +320,10 @@ public class PersonalDataManager {
             mLanguageCode = languageCode;
         }
 
+        public void setIsLocal(boolean isLocal) {
+            mIsLocal = isLocal;
+        }
+
         /** Used by ArrayAdapter in credit card settings. */
         @Override
         public String toString() {
@@ -349,10 +381,11 @@ public class PersonalDataManager {
         }
 
         public CreditCard() {
-            this("" /* guid */, AutofillPreferences.SETTINGS_ORIGIN /*origin */, true /* isLocal */,
-                    false /* isCached */, "" /* name */, "" /* number */, "" /* obfuscatedNumber */,
-                    "" /* month */, "" /* year */, "" /* basicCardPaymentType */,
-                    0 /* issuerIconDrawableId */, "" /* billingAddressId */, "" /* serverId */);
+            this("" /* guid */, AutofillAndPaymentsPreferences.SETTINGS_ORIGIN /*origin */,
+                    true /* isLocal */, false /* isCached */, "" /* name */, "" /* number */,
+                    "" /* obfuscatedNumber */, "" /* month */, "" /* year */,
+                    "" /* basicCardPaymentType */, 0 /* issuerIconDrawableId */,
+                    "" /* billingAddressId */, "" /* serverId */);
         }
 
         /** TODO(estade): remove this constructor. */
@@ -607,6 +640,11 @@ public class PersonalDataManager {
         return nativeSetProfile(mPersonalDataManagerAndroid, profile);
     }
 
+    public String setProfileToLocal(AutofillProfile profile) {
+        ThreadUtils.assertOnUiThread();
+        return nativeSetProfileToLocal(mPersonalDataManagerAndroid, profile);
+    }
+
     /**
      * Gets the credit cards to show in the settings page. Returns all the cards without any
      * processing.
@@ -649,10 +687,9 @@ public class PersonalDataManager {
         return nativeSetCreditCard(mPersonalDataManagerAndroid, card);
     }
 
-    public void updateServerCardBillingAddress(String cardServerId, String billingAddressId) {
+    public void updateServerCardBillingAddress(CreditCard card) {
         ThreadUtils.assertOnUiThread();
-        nativeUpdateServerCardBillingAddress(
-                mPersonalDataManagerAndroid, cardServerId, billingAddressId);
+        nativeUpdateServerCardBillingAddress(mPersonalDataManagerAndroid, card);
     }
 
     public String getBasicCardPaymentType(String cardNumber, boolean emptyIfInvalid) {
@@ -677,8 +714,18 @@ public class PersonalDataManager {
         nativeClearUnmaskedCache(mPersonalDataManagerAndroid, guid);
     }
 
-    public String getAddressLabelForPaymentRequest(AutofillProfile profile) {
-        return nativeGetAddressLabelForPaymentRequest(mPersonalDataManagerAndroid, profile);
+    public String getShippingAddressLabelWithCountryForPaymentRequest(AutofillProfile profile) {
+        return nativeGetShippingAddressLabelWithCountryForPaymentRequest(
+                mPersonalDataManagerAndroid, profile);
+    }
+
+    public String getShippingAddressLabelWithoutCountryForPaymentRequest(AutofillProfile profile) {
+        return nativeGetShippingAddressLabelWithoutCountryForPaymentRequest(
+                mPersonalDataManagerAndroid, profile);
+    }
+
+    public String getBillingAddressLabelForPaymentRequest(AutofillProfile profile) {
+        return nativeGetBillingAddressLabelForPaymentRequest(mPersonalDataManagerAndroid, profile);
     }
 
     public void getFullCard(WebContents webContents, CreditCard card,
@@ -772,20 +819,29 @@ public class PersonalDataManager {
      * @param guid The GUID of the profile to normalize.
      * @param regionCode The region code indicating which rules to use for normalization.
      * @param delegate The object requesting the normalization.
-     *
-     * @return Whether the normalization will happen asynchronously.
      */
-    public boolean normalizeAddress(
+    public void normalizeAddress(
             String guid, String regionCode, NormalizedAddressRequestDelegate delegate) {
         ThreadUtils.assertOnUiThread();
-        return nativeStartAddressNormalization(
-                mPersonalDataManagerAndroid, guid, regionCode, delegate);
+        nativeStartAddressNormalization(mPersonalDataManagerAndroid, guid, regionCode, delegate);
     }
 
-    /** Cancels the pending address normalizations. */
-    public void cancelPendingAddressNormalizations() {
-        ThreadUtils.assertOnUiThread();
-        nativeCancelPendingAddressNormalizations(mPersonalDataManagerAndroid);
+    /**
+     * Checks whether the Autofill PersonalDataManager has profiles.
+     *
+     * @return True If there are profiles.
+     */
+    public boolean hasProfiles() {
+        return nativeHasProfiles(mPersonalDataManagerAndroid);
+    }
+
+    /**
+     * Checks whether the Autofill PersonalDataManager has credit cards.
+     *
+     * @return True If there are credit cards.
+     */
+    public boolean hasCreditCards() {
+        return nativeHasCreditCards(mPersonalDataManagerAndroid);
     }
 
     /**
@@ -848,9 +904,15 @@ public class PersonalDataManager {
             boolean includeCountryInLabel);
     private native AutofillProfile nativeGetProfileByGUID(long nativePersonalDataManagerAndroid,
             String guid);
-    private native String nativeSetProfile(long nativePersonalDataManagerAndroid,
-            AutofillProfile profile);
-    private native String nativeGetAddressLabelForPaymentRequest(
+    private native String nativeSetProfile(
+            long nativePersonalDataManagerAndroid, AutofillProfile profile);
+    private native String nativeSetProfileToLocal(
+            long nativePersonalDataManagerAndroid, AutofillProfile profile);
+    private native String nativeGetShippingAddressLabelWithCountryForPaymentRequest(
+            long nativePersonalDataManagerAndroid, AutofillProfile profile);
+    private native String nativeGetShippingAddressLabelWithoutCountryForPaymentRequest(
+            long nativePersonalDataManagerAndroid, AutofillProfile profile);
+    private native String nativeGetBillingAddressLabelForPaymentRequest(
             long nativePersonalDataManagerAndroid, AutofillProfile profile);
     private native String[] nativeGetCreditCardGUIDsForSettings(
             long nativePersonalDataManagerAndroid);
@@ -863,7 +925,7 @@ public class PersonalDataManager {
     private native String nativeSetCreditCard(long nativePersonalDataManagerAndroid,
             CreditCard card);
     private native void nativeUpdateServerCardBillingAddress(long nativePersonalDataManagerAndroid,
-            String guid, String billingAddressId);
+            CreditCard card);
     private native String nativeGetBasicCardPaymentType(
             long nativePersonalDataManagerAndroid, String cardNumber, boolean emptyIfInvalid);
     private native void nativeAddServerCreditCardForTest(long nativePersonalDataManagerAndroid,
@@ -892,10 +954,10 @@ public class PersonalDataManager {
             WebContents webContents, CreditCard card, FullCardRequestDelegate delegate);
     private native void nativeLoadRulesForRegion(
             long nativePersonalDataManagerAndroid, String regionCode);
-    private native boolean nativeStartAddressNormalization(long nativePersonalDataManagerAndroid,
+    private native void nativeStartAddressNormalization(long nativePersonalDataManagerAndroid,
             String guid, String regionCode, NormalizedAddressRequestDelegate delegate);
-    private native void nativeCancelPendingAddressNormalizations(
-            long nativePersonalDataManagerAndroid);
+    private static native boolean nativeHasProfiles(long nativePersonalDataManagerAndroid);
+    private static native boolean nativeHasCreditCards(long nativePersonalDataManagerAndroid);
     private static native boolean nativeIsAutofillEnabled();
     private static native void nativeSetAutofillEnabled(boolean enable);
     private static native boolean nativeIsAutofillManaged();

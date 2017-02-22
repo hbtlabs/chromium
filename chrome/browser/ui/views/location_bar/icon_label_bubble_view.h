@@ -49,6 +49,10 @@ class IconLabelBubbleView : public views::InkDropHostView {
   views::Label* label() { return label_; }
   const views::Label* label() const { return label_; }
 
+  void set_next_element_interior_padding(int padding) {
+    next_element_interior_padding_ = padding;
+  }
+
   // Gets the color for displaying text.
   virtual SkColor GetTextColor() const = 0;
 
@@ -67,11 +71,12 @@ class IconLabelBubbleView : public views::InkDropHostView {
   // true if some handling was performed.
   virtual bool OnActivate(const ui::Event& event);
 
-  // views::View:
+  // views::InkDropHostView:
   gfx::Size GetPreferredSize() const override;
   void Layout() override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   bool OnKeyReleased(const ui::KeyEvent& event) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void OnNativeThemeChanged(const ui::NativeTheme* native_theme) override;
   void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
   void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
@@ -106,6 +111,11 @@ class IconLabelBubbleView : public views::InkDropHostView {
   // The contents of the bubble.
   views::ImageView* image_;
   views::Label* label_;
+
+  // The padding of the element that will be displayed after |this|. This value
+  // is relevant for calculating the amount of space to reserve after the
+  // separator.
+  int next_element_interior_padding_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(IconLabelBubbleView);
 };

@@ -19,10 +19,10 @@
 #include "cc/trees/layer_tree_host_client.h"
 #include "cc/trees/layer_tree_host_single_thread_client.h"
 #include "content/common/content_export.h"
-#include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/public/browser/android/compositor.h"
 #include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/ipc/common/surface_handle.h"
+#include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "ui/android/context_provider_factory.h"
 #include "ui/android/resources/resource_manager_impl.h"
@@ -53,20 +53,10 @@ class CONTENT_EXPORT CompositorImpl
       public ui::UIResourceProvider,
       public ui::WindowAndroidCompositor {
  public:
-  class VSyncObserver {
-   public:
-    virtual void OnVSync(base::TimeTicks timebase,
-                         base::TimeDelta interval) = 0;
-  };
-
   CompositorImpl(CompositorClient* client, gfx::NativeWindow root_window);
   ~CompositorImpl() override;
 
   static bool IsInitialized();
-
-  void AddObserver(VSyncObserver* observer);
-  void RemoveObserver(VSyncObserver* observer);
-  void OnNeedsBeginFramesChange(bool needs_begin_frames);
 
   // ui::ResourceProvider implementation.
   cc::UIResourceId CreateUIResource(cc::UIResourceClient* client) override;
@@ -77,7 +67,6 @@ class CONTENT_EXPORT CompositorImpl
   // Compositor implementation.
   void SetRootLayer(scoped_refptr<cc::Layer> root) override;
   void SetSurface(jobject surface) override;
-  void setDeviceScaleFactor(float factor) override;
   void SetWindowBounds(const gfx::Size& size) override;
   void SetHasTransparentBackground(bool flag) override;
   void SetNeedsComposite() override;
@@ -112,10 +101,10 @@ class CONTENT_EXPORT CompositorImpl
   void AttachLayerForReadback(scoped_refptr<cc::Layer> layer) override;
   void RequestCopyOfOutputOnRootLayer(
       std::unique_ptr<cc::CopyOutputRequest> request) override;
-  void OnVSync(base::TimeTicks frame_time,
-               base::TimeDelta vsync_period) override;
   void SetNeedsAnimate() override;
   cc::FrameSinkId GetFrameSinkId() override;
+  void AddChildFrameSink(const cc::FrameSinkId& frame_sink_id) override;
+  void RemoveChildFrameSink(const cc::FrameSinkId& frame_sink_id) override;
 
   void SetVisible(bool visible);
   void CreateLayerTreeHost();
@@ -134,6 +123,7 @@ class CONTENT_EXPORT CompositorImpl
       scoped_refptr<cc::ContextProvider> context_provider);
 
   bool HavePendingReadbacks();
+  void SetBackgroundColor(int color);
 
   cc::FrameSinkId frame_sink_id_;
 
@@ -145,7 +135,6 @@ class CONTENT_EXPORT CompositorImpl
   scoped_refptr<cc::Layer> readback_layer_tree_;
 
   // Destruction order matters here:
-  base::ObserverList<VSyncObserver, true> observer_list_;
   std::unique_ptr<cc::AnimationHost> animation_host_;
   std::unique_ptr<cc::LayerTreeHost> host_;
   ui::ResourceManagerImpl resource_manager_;
@@ -154,7 +143,6 @@ class CONTENT_EXPORT CompositorImpl
 
   gfx::Size size_;
   bool has_transparent_background_;
-  float device_scale_factor_;
 
   ANativeWindow* window_;
   gpu::SurfaceHandle surface_handle_;
@@ -179,7 +167,9 @@ class CONTENT_EXPORT CompositorImpl
   bool compositor_frame_sink_request_pending_;
 
   gpu::Capabilities gpu_capabilities_;
-  bool needs_begin_frames_;
+  bool has_compositor_frame_sink_ = false;
+  std::unordered_set<cc::FrameSinkId, cc::FrameSinkIdHash>
+      pending_child_frame_sink_ids_;
   base::WeakPtrFactory<CompositorImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(CompositorImpl);

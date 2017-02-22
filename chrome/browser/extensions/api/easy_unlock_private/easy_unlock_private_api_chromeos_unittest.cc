@@ -12,7 +12,6 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/extension_api_unittest.h"
@@ -580,7 +579,7 @@ TEST_F(EasyUnlockPrivateApiTest, GetRemoteDevicesExperimental) {
       extensions::api_test_utils::RunFunctionAndReturnSingleResult(
           function.get(), "[]", profile()));
   ASSERT_TRUE(value.get());
-  ASSERT_EQ(base::Value::TYPE_LIST, value->GetType());
+  ASSERT_EQ(base::Value::Type::LIST, value->GetType());
 
   base::ListValue* list_value = static_cast<base::ListValue*>(value.get());
   EXPECT_EQ(2u, list_value->GetSize());
@@ -589,8 +588,8 @@ TEST_F(EasyUnlockPrivateApiTest, GetRemoteDevicesExperimental) {
   base::Value* remote_device2;
   ASSERT_TRUE(list_value->Get(0, &remote_device1));
   ASSERT_TRUE(list_value->Get(1, &remote_device2));
-  EXPECT_EQ(base::Value::TYPE_DICTIONARY, remote_device1->GetType());
-  EXPECT_EQ(base::Value::TYPE_DICTIONARY, remote_device2->GetType());
+  EXPECT_EQ(base::Value::Type::DICTIONARY, remote_device1->GetType());
+  EXPECT_EQ(base::Value::Type::DICTIONARY, remote_device2->GetType());
 
   std::string name1, name2;
   EXPECT_TRUE(static_cast<base::DictionaryValue*>(remote_device1)
@@ -614,7 +613,7 @@ TEST_F(EasyUnlockPrivateApiTest, GetRemoteDevicesNonExperimental) {
       extensions::api_test_utils::RunFunctionAndReturnSingleResult(
           function.get(), "[]", profile()));
   ASSERT_TRUE(value.get());
-  ASSERT_EQ(base::Value::TYPE_LIST, value->GetType());
+  ASSERT_EQ(base::Value::Type::LIST, value->GetType());
 
   base::ListValue* list_value = static_cast<base::ListValue*>(value.get());
   EXPECT_EQ(0u, list_value->GetSize());
@@ -635,7 +634,7 @@ TEST_F(EasyUnlockPrivateApiTest, GetPermitAccessExperimental) {
       extensions::api_test_utils::RunFunctionAndReturnSingleResult(
           function.get(), "[]", profile()));
   ASSERT_TRUE(value);
-  ASSERT_EQ(base::Value::TYPE_DICTIONARY, value->GetType());
+  ASSERT_EQ(base::Value::Type::DICTIONARY, value->GetType());
   base::DictionaryValue* permit_access =
       static_cast<base::DictionaryValue*>(value.get());
 

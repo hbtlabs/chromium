@@ -21,14 +21,6 @@ Polymer({
     },
 
     /**
-     * The maximum height in pixels for the list of networks.
-     */
-    maxHeight: {
-      type: Number,
-      value: 500,
-    },
-
-    /**
      * Interface for networkingPrivate calls, passed from internet_page.
      * @type {NetworkingPrivate}
      */
@@ -45,6 +37,12 @@ Polymer({
       }
     },
   },
+
+  /** @private {string} */
+  selectedGuid_: '',
+
+  /** @private {boolean} */
+  selectedIsPreferred_: false,
 
   /**
    * Listener function for chrome.networkingPrivate.onNetworksChanged event.
@@ -138,20 +136,34 @@ Polymer({
   },
 
   /**
-   * @param {!{model: !{item: !CrOnc.NetworkStateProperties}}} e
+   * @param {!Event} event
    * @private
    */
-  onRemoveTap_: function(e) {
-    var state = e.model.item;
-    this.networkingPrivate.setProperties(state.GUID, {Priority: 0});
+  onMenuButtonTap_: function(event) {
+    var button = /** @type {!HTMLElement} */ (event.target);
+    this.selectedGuid_ =
+        /** @type {!{model: !{item: !CrOnc.NetworkStateProperties}}} */ (event)
+            .model.item.GUID;
+    this.selectedIsPreferred_ = button.hasAttribute('preferred');
+    /** @type {!CrActionMenuElement} */ (this.$.dotsMenu).showAt(button);
+    event.stopPropagation();
   },
 
-  /**
-   * @param {!{model: !{item: !CrOnc.NetworkStateProperties}}} e
-   * @private
-   */
-  onAddTap_: function(e) {
-    var state = e.model.item;
-    this.networkingPrivate.setProperties(state.GUID, {Priority: 1});
+  /** @private */
+  onRemovePreferredTap_: function() {
+    this.networkingPrivate.setProperties(this.selectedGuid_, {Priority: 0});
+    /** @type {!CrActionMenuElement} */ (this.$.dotsMenu).close();
+  },
+
+  /** @private */
+  onAddPreferredTap_: function() {
+    this.networkingPrivate.setProperties(this.selectedGuid_, {Priority: 1});
+    /** @type {!CrActionMenuElement} */ (this.$.dotsMenu).close();
+  },
+
+  /** @private */
+  onForgetTap_: function() {
+    this.networkingPrivate.forgetNetwork(this.selectedGuid_);
+    /** @type {!CrActionMenuElement} */ (this.$.dotsMenu).close();
   },
 });

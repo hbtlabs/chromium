@@ -19,11 +19,6 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "third_party/WebKit/public/platform/modules/sensitive_input_visibility/sensitive_input_visibility_service.mojom.h"
 
-namespace autofill {
-class AutofillManager;
-struct PasswordForm;
-}
-
 namespace content {
 class WebContents;
 }
@@ -64,9 +59,8 @@ class ContentPasswordManagerDriverFactory
   // content::WebContentsObserver:
   void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
   void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;
-  void DidNavigateAnyFrame(content::RenderFrameHost* render_frame_host,
-                           const content::LoadCommittedDetails& details,
-                           const content::FrameNavigateParams& params) override;
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
 
  private:
   ContentPasswordManagerDriverFactory(

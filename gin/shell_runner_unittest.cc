@@ -6,6 +6,8 @@
 
 #include "base/compiler_specific.h"
 #include "base/message_loop/message_loop.h"
+#include "base/test/scoped_async_task_scheduler.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "gin/array_buffer.h"
 #include "gin/converter.h"
 #include "gin/public/isolate_holder.h"
@@ -25,6 +27,7 @@ namespace gin {
 
 TEST(RunnerTest, Run) {
   base::MessageLoop message_loop;
+  base::test::ScopedAsyncTaskScheduler scoped_async_task_scheduler;
   std::string source = "this.result = 'PASS';\n";
 
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
@@ -35,7 +38,7 @@ TEST(RunnerTest, Run) {
   gin::IsolateHolder::Initialize(gin::IsolateHolder::kStrictMode,
                                  gin::IsolateHolder::kStableV8Extras,
                                  gin::ArrayBufferAllocator::SharedInstance());
-  gin::IsolateHolder instance;
+  gin::IsolateHolder instance(base::ThreadTaskRunnerHandle::Get());
 
   ShellRunnerDelegate delegate;
   Isolate* isolate = instance.isolate();

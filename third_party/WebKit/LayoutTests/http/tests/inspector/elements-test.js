@@ -398,11 +398,12 @@ function printStyleSection(section, omitLonghands, includeSelectorGroupMarks)
 
 function extractLinkText(element)
 {
-    var anchor = element.nodeName === "A" ? element : element.querySelector("a");
+    var anchor = element.querySelector(".devtools-link");
     if (!anchor)
         return element.textContent;
     var anchorText = anchor.textContent;
-    var uiLocation = anchor[Components.Linkifier._uiLocationSymbol];
+    var info = Components.Linkifier._linkInfo(anchor);
+    var uiLocation = info && info.uiLocation;
     var anchorTarget = uiLocation ? (uiLocation.uiSourceCode.name() + ":" + (uiLocation.lineNumber + 1) + ":" + (uiLocation.columnNumber + 1)) : "";
     return anchorText + " -> " + anchorTarget;
 }
@@ -442,9 +443,23 @@ InspectorTest.showEventListenersWidget = function()
     return UI.viewManager.showView("elements.eventListeners");
 }
 
-InspectorTest.expandAndDumpSelectedElementEventListeners = function(callback)
+InspectorTest.expandAndDumpSelectedElementEventListeners = function(callback, force)
 {
-    InspectorTest.expandAndDumpEventListeners(InspectorTest.eventListenersWidget()._eventListenersView, callback);
+    InspectorTest.expandAndDumpEventListeners(InspectorTest.eventListenersWidget()._eventListenersView, callback, force);
+}
+
+InspectorTest.removeFirstEventListener = function()
+{
+    var treeOutline = InspectorTest.eventListenersWidget()._eventListenersView._treeOutline;
+    var listenerTypes = treeOutline.rootElement().children();
+    for (var i = 0; i < listenerTypes.length; i++) {
+        var listeners = listenerTypes[i].children();
+        if (listeners.length && !listenerTypes[i].hidden) {
+            listeners[0].eventListener().remove();
+            listeners[0]._removeListenerBar();
+            break;
+        }
+    }
 }
 
 InspectorTest.dumpObjectPropertySectionDeep = function(section)
@@ -891,7 +906,7 @@ InspectorTest.dumpCSSStyleDeclaration = function(style, currentIndent)
         InspectorTest.addResult(currentIndent + "[NO STYLE]");
         return;
     }
-    var properties = style.allProperties;
+    var properties = style.allProperties();
     for (var i = 0; i < properties.length; ++i) {
         var property = properties[i];
         if (!property.disabled)

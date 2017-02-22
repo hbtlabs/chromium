@@ -5,9 +5,11 @@
 #ifndef IOS_WEB_NAVIGATION_CRW_SESSION_CONTROLLER_PRIVATE_CONSTRUCTORS_H_
 #define IOS_WEB_NAVIGATION_CRW_SESSION_CONTROLLER_PRIVATE_CONSTRUCTORS_H_
 
-#import "ios/web/navigation/crw_session_controller.h"
+#include <memory>
+#include <vector>
 
-#include "base/memory/scoped_vector.h"
+#import "ios/web/navigation/crw_session_controller.h"
+#include "ios/web/public/navigation_item_list.h"
 
 namespace web {
 class BrowserState;
@@ -29,7 +31,7 @@ class NavigationItem;
 
 // Initializes a session controller, supplying a list of NavigationItem objects
 // and the current index in the navigation history.
-- (id)initWithNavigationItems:(ScopedVector<web::NavigationItem>)scoped_items
+- (id)initWithNavigationItems:(web::ScopedNavigationItemList)items
                  currentIndex:(NSUInteger)currentIndex
                  browserState:(web::BrowserState*)browserState;
 @end

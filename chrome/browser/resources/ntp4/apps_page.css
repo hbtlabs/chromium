@@ -9,13 +9,13 @@
 }
 
 .app-contents {
-  -webkit-transition: -webkit-transform 100ms;
+  transition: transform 100ms;
 }
 
 .app-contents:active:not(.suppress-active),
 .app:not(.click-focus):focus .app-contents:not(.suppress-active),
 .drag-representation:not(.placing) .app-contents {
-  -webkit-transform: scale(1.1);
+  transform: scale(1.1);
 }
 
 /* Don't animate the initial scaling.  */
@@ -23,7 +23,7 @@
 /* Active gets applied right before .suppress-active, so to avoid flicker
  * we need to make the scale go back to normal without an animation. */
 .app-contents.suppress-active {
-  -webkit-transition-duration: 0ms;
+  transition-duration: 0ms;
 }
 
 .app-contents > span {
@@ -63,17 +63,6 @@
   bottom: 10px;
   left: 10px;
   position: absolute;
-}
-
-.app-icon-div .color-stripe {
-  border-bottom-left-radius: 5px 5px;
-  border-bottom-right-radius: 5px 5px;
-  bottom: 0;
-  height: 3px;
-  opacity: 1.0;
-  position: absolute;
-  width: 100%;
-  z-index: 100;
 }
 
 .app-context-menu > button:first-child {

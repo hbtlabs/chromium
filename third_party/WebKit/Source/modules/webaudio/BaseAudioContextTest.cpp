@@ -13,10 +13,12 @@
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/EmptyClients.h"
 #include "core/testing/DummyPageHolder.h"
+#include "modules/webaudio/AudioContextOptions.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/testing/HistogramTester.h"
 #include "platform/testing/TestingPlatformSupport.h"
 #include "public/platform/WebAudioDevice.h"
+#include "public/platform/WebAudioLatencyHint.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -47,30 +49,34 @@ class MockCrossOriginFrameLoaderClient final : public EmptyFrameLoaderClient {
 
 class MockWebAudioDevice : public WebAudioDevice {
  public:
-  explicit MockWebAudioDevice(double sampleRate) : m_sampleRate(sampleRate) {}
+  explicit MockWebAudioDevice(double sampleRate, int framesPerBuffer)
+      : m_sampleRate(sampleRate), m_framesPerBuffer(framesPerBuffer) {}
   ~MockWebAudioDevice() override = default;
 
   void start() override {}
   void stop() override {}
   double sampleRate() override { return m_sampleRate; }
+  int framesPerBuffer() override { return m_framesPerBuffer; }
 
  private:
   double m_sampleRate;
+  int m_framesPerBuffer;
 };
 
 class BaseAudioContextTestPlatform : public TestingPlatformSupport {
  public:
-  WebAudioDevice* createAudioDevice(size_t bufferSize,
-                                    unsigned numberOfInputChannels,
+  WebAudioDevice* createAudioDevice(unsigned numberOfInputChannels,
                                     unsigned numberOfChannels,
-                                    double sampleRate,
+                                    const WebAudioLatencyHint& latencyHint,
                                     WebAudioDevice::RenderCallback*,
                                     const WebString& deviceId,
                                     const WebSecurityOrigin&) override {
-    return new MockWebAudioDevice(sampleRate);
+    return new MockWebAudioDevice(audioHardwareSampleRate(),
+                                  audioHardwareBufferSize());
   }
 
   double audioHardwareSampleRate() override { return 44100; }
+  size_t audioHardwareBufferSize() override { return 128; }
 };
 
 }  // anonymous namespace
@@ -87,11 +93,8 @@ class BaseAudioContextTest : public ::testing::Test {
   }
 
   void TearDown() override {
-    if (m_childFrame) {
-      m_childDocumentLoader->detachFromFrame();
-      m_childDocumentLoader.clear();
+    if (m_childFrame)
       m_childFrame->detach(FrameDetachType::Remove);
-    }
   }
 
   void createChildFrame() {
@@ -100,9 +103,6 @@ class BaseAudioContextTest : public ::testing::Test {
         document().frame()->host(), m_dummyFrameOwner.get());
     m_childFrame->setView(FrameView::create(*m_childFrame, IntSize(500, 500)));
     m_childFrame->init();
-    m_childDocumentLoader = DocumentLoader::create(
-        m_childFrame.get(), ResourceRequest("https://www.example.com"),
-        SubstituteData(), ClientRedirectPolicy::NotClientRedirect);
 
     childDocument().updateSecurityOrigin(
         SecurityOrigin::create("https", "cross-origin.com", 80));
@@ -127,18 +127,15 @@ class BaseAudioContextTest : public ::testing::Test {
  private:
   std::unique_ptr<DummyPageHolder> m_dummyPageHolder;
   Persistent<DummyFrameOwner> m_dummyFrameOwner;
-
   Persistent<LocalFrame> m_childFrame;
-  Persistent<DocumentLoader> m_childDocumentLoader;
-
-  BaseAudioContextTestPlatform m_testPlatform;
+  ScopedTestingPlatformSupport<BaseAudioContextTestPlatform> m_platform;
 };
 
 TEST_F(BaseAudioContextTest, AutoplayMetrics_NoRestriction) {
   HistogramTester histogramTester;
 
-  BaseAudioContext* audioContext =
-      BaseAudioContext::create(document(), ASSERT_NO_EXCEPTION);
+  BaseAudioContext* audioContext = BaseAudioContext::create(
+      document(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
   recordAutoplayStatus(audioContext);
 
   histogramTester.expectTotalCount(kCrossOriginMetric, 0);
@@ -149,8 +146,8 @@ TEST_F(BaseAudioContextTest, AutoplayMetrics_CreateNoGesture) {
   createChildFrame();
   childDocument().settings()->setMediaPlaybackRequiresUserGesture(true);
 
-  BaseAudioContext* audioContext =
-      BaseAudioContext::create(childDocument(), ASSERT_NO_EXCEPTION);
+  BaseAudioContext* audioContext = BaseAudioContext::create(
+      childDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
   recordAutoplayStatus(audioContext);
 
   histogramTester.expectBucketCount(kCrossOriginMetric,
@@ -165,8 +162,8 @@ TEST_F(BaseAudioContextTest, AutoplayMetrics_CallResumeNoGesture) {
 
   ScriptState::Scope scope(getScriptStateFrom(childDocument()));
 
-  BaseAudioContext* audioContext =
-      BaseAudioContext::create(childDocument(), ASSERT_NO_EXCEPTION);
+  BaseAudioContext* audioContext = BaseAudioContext::create(
+      childDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
   audioContext->resumeContext(getScriptStateFrom(childDocument()));
   rejectPendingResolvers(audioContext);
   recordAutoplayStatus(audioContext);
@@ -184,8 +181,8 @@ TEST_F(BaseAudioContextTest, AutoplayMetrics_CreateGesture) {
   UserGestureIndicator userGestureScope(DocumentUserGestureToken::create(
       &childDocument(), UserGestureToken::NewGesture));
 
-  BaseAudioContext* audioContext =
-      BaseAudioContext::create(childDocument(), ASSERT_NO_EXCEPTION);
+  BaseAudioContext* audioContext = BaseAudioContext::create(
+      childDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
   recordAutoplayStatus(audioContext);
 
   histogramTester.expectBucketCount(kCrossOriginMetric,
@@ -200,8 +197,8 @@ TEST_F(BaseAudioContextTest, AutoplayMetrics_CallResumeGesture) {
 
   ScriptState::Scope scope(getScriptStateFrom(childDocument()));
 
-  BaseAudioContext* audioContext =
-      BaseAudioContext::create(childDocument(), ASSERT_NO_EXCEPTION);
+  BaseAudioContext* audioContext = BaseAudioContext::create(
+      childDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
 
   UserGestureIndicator userGestureScope(DocumentUserGestureToken::create(
       &childDocument(), UserGestureToken::NewGesture));
@@ -220,8 +217,8 @@ TEST_F(BaseAudioContextTest, AutoplayMetrics_NodeStartNoGesture) {
   createChildFrame();
   childDocument().settings()->setMediaPlaybackRequiresUserGesture(true);
 
-  BaseAudioContext* audioContext =
-      BaseAudioContext::create(childDocument(), ASSERT_NO_EXCEPTION);
+  BaseAudioContext* audioContext = BaseAudioContext::create(
+      childDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
   audioContext->maybeRecordStartAttempt();
   recordAutoplayStatus(audioContext);
 
@@ -235,8 +232,8 @@ TEST_F(BaseAudioContextTest, AutoplayMetrics_NodeStartGesture) {
   createChildFrame();
   childDocument().settings()->setMediaPlaybackRequiresUserGesture(true);
 
-  BaseAudioContext* audioContext =
-      BaseAudioContext::create(childDocument(), ASSERT_NO_EXCEPTION);
+  BaseAudioContext* audioContext = BaseAudioContext::create(
+      childDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
 
   UserGestureIndicator userGestureScope(DocumentUserGestureToken::create(
       &childDocument(), UserGestureToken::NewGesture));
@@ -255,8 +252,8 @@ TEST_F(BaseAudioContextTest, AutoplayMetrics_NodeStartNoGestureThenSuccess) {
 
   ScriptState::Scope scope(getScriptStateFrom(childDocument()));
 
-  BaseAudioContext* audioContext =
-      BaseAudioContext::create(childDocument(), ASSERT_NO_EXCEPTION);
+  BaseAudioContext* audioContext = BaseAudioContext::create(
+      childDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
   audioContext->maybeRecordStartAttempt();
 
   UserGestureIndicator userGestureScope(DocumentUserGestureToken::create(
@@ -277,8 +274,8 @@ TEST_F(BaseAudioContextTest, AutoplayMetrics_NodeStartGestureThenSucces) {
 
   ScriptState::Scope scope(getScriptStateFrom(childDocument()));
 
-  BaseAudioContext* audioContext =
-      BaseAudioContext::create(childDocument(), ASSERT_NO_EXCEPTION);
+  BaseAudioContext* audioContext = BaseAudioContext::create(
+      childDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
 
   UserGestureIndicator userGestureScope(DocumentUserGestureToken::create(
       &childDocument(), UserGestureToken::NewGesture));

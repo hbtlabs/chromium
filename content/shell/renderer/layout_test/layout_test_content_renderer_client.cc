@@ -7,11 +7,7 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
-#include "components/test_runner/mock_credential_manager_client.h"
-#include "components/test_runner/web_frame_test_proxy.h"
-#include "components/test_runner/web_test_interfaces.h"
-#include "components/test_runner/web_test_runner.h"
-#include "components/test_runner/web_view_test_proxy.h"
+#include "base/memory/ptr_util.h"
 #include "components/web_cache/renderer/web_cache_impl.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
@@ -28,9 +24,14 @@
 #include "content/shell/renderer/layout_test/layout_test_render_thread_observer.h"
 #include "content/shell/renderer/layout_test/test_media_stream_renderer_factory.h"
 #include "content/shell/renderer/shell_render_view_observer.h"
+#include "content/shell/test_runner/mock_credential_manager_client.h"
+#include "content/shell/test_runner/web_frame_test_proxy.h"
+#include "content/shell/test_runner/web_test_interfaces.h"
+#include "content/shell/test_runner/web_test_runner.h"
+#include "content/shell/test_runner/web_view_test_proxy.h"
 #include "content/test/mock_webclipboard_impl.h"
 #include "gin/modules/module_registry.h"
-#include "ppapi/shared_impl/ppapi_switches.h"
+#include "media/media_features.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamCenter.h"
 #include "third_party/WebKit/public/web/WebFrameWidget.h"
 #include "third_party/WebKit/public/web/WebKit.h"
@@ -164,7 +165,7 @@ void LayoutTestContentRendererClient::RenderViewCreated(
 WebMediaStreamCenter*
 LayoutTestContentRendererClient::OverrideCreateWebMediaStreamCenter(
     WebMediaStreamCenterClient* client) {
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   test_runner::WebTestInterfaces* interfaces =
       LayoutTestRenderThreadObserver::GetInstance()->test_interfaces();
   return interfaces->CreateMediaStreamCenter(client);
@@ -176,7 +177,7 @@ LayoutTestContentRendererClient::OverrideCreateWebMediaStreamCenter(
 WebRTCPeerConnectionHandler*
 LayoutTestContentRendererClient::OverrideCreateWebRTCPeerConnectionHandler(
     WebRTCPeerConnectionHandlerClient* client) {
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   test_runner::WebTestInterfaces* interfaces =
       LayoutTestRenderThreadObserver::GetInstance()->test_interfaces();
   return interfaces->CreateWebRTCPeerConnectionHandler(client);
@@ -193,12 +194,10 @@ LayoutTestContentRendererClient::OverrideCreateMIDIAccessor(
   return interfaces->CreateMIDIAccessor(client);
 }
 
-WebAudioDevice*
-LayoutTestContentRendererClient::OverrideCreateAudioDevice(
-    double sample_rate) {
+WebAudioDevice* LayoutTestContentRendererClient::OverrideCreateAudioDevice() {
   test_runner::WebTestInterfaces* interfaces =
       LayoutTestRenderThreadObserver::GetInstance()->test_interfaces();
-  return interfaces->CreateAudioDevice(sample_rate);
+  return interfaces->CreateAudioDevice(44100, 128);
 }
 
 WebClipboard* LayoutTestContentRendererClient::OverrideWebClipboard() {
@@ -215,7 +214,7 @@ WebThemeEngine* LayoutTestContentRendererClient::OverrideThemeEngine() {
 
 std::unique_ptr<MediaStreamRendererFactory>
 LayoutTestContentRendererClient::CreateMediaStreamRendererFactory() {
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   return std::unique_ptr<MediaStreamRendererFactory>(
       new TestMediaStreamRendererFactory());
 #else

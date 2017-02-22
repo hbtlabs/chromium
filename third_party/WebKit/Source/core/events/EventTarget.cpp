@@ -126,7 +126,7 @@ void reportBlockedEvent(ExecutionContext* context,
 
   PerformanceMonitor::reportGenericViolation(
       context, PerformanceMonitor::kBlockedEvent, messageText, delayedSeconds,
-      getFunctionLocation(context, registeredListener->listener()).get());
+      getFunctionLocation(context, registeredListener->listener()));
   registeredListener->setBlockedEventWarningEmitted();
 }
 
@@ -170,6 +170,10 @@ LocalDOMWindow* EventTarget::toLocalDOMWindow() {
 }
 
 MessagePort* EventTarget::toMessagePort() {
+  return nullptr;
+}
+
+ServiceWorker* EventTarget::toServiceWorker() {
   return nullptr;
 }
 
@@ -219,7 +223,7 @@ void EventTarget::setDefaultAddEventListenerOptions(
   }
 
   if (Settings* settings = windowSettings(executingWindow())) {
-    switch (settings->passiveListenerDefault()) {
+    switch (settings->getPassiveListenerDefault()) {
       case PassiveListenerDefault::False:
         if (!options.hasPassive())
           options.setPassive(false);
@@ -235,6 +239,18 @@ void EventTarget::setDefaultAddEventListenerOptions(
   } else {
     if (!options.hasPassive())
       options.setPassive(false);
+  }
+
+  if (!options.passive()) {
+    String messageText = String::format(
+        "Added non-passive event listener to a scroll-blocking '%s' event. "
+        "Consider marking event handler as 'passive' to make the page more "
+        "responsive.",
+        eventType.getString().utf8().data());
+
+    PerformanceMonitor::reportGenericViolation(
+        getExecutionContext(), PerformanceMonitor::kDiscouragedAPIUse,
+        messageText, 0, nullptr);
   }
 }
 
@@ -279,8 +295,8 @@ bool EventTarget::addEventListenerInternal(
       V8DOMActivityLogger::currentActivityLoggerIfIsolatedWorld();
   if (activityLogger) {
     Vector<String> argv;
-    argv.append(toNode() ? toNode()->nodeName() : interfaceName());
-    argv.append(eventType);
+    argv.push_back(toNode() ? toNode()->nodeName() : interfaceName());
+    argv.push_back(eventType);
     activityLogger->logEvent("blinkAddEventListener", argv.size(), argv.data());
   }
 
@@ -304,6 +320,11 @@ void EventTarget::addedEventListener(
     if (LocalDOMWindow* executingWindow = this->executingWindow()) {
       UseCounter::count(executingWindow->document(),
                         UseCounter::AuxclickAddListenerCount);
+    }
+  } else if (eventType == EventTypeNames::appinstalled) {
+    if (LocalDOMWindow* executingWindow = this->executingWindow()) {
+      UseCounter::count(executingWindow->document(),
+                        UseCounter::AppInstalledEventAddListener);
     }
   } else if (EventUtil::isPointerEventType(eventType)) {
     if (LocalDOMWindow* executingWindow = this->executingWindow()) {
@@ -367,8 +388,7 @@ bool EventTarget::removeEventListenerInternal(
   // Notify firing events planning to invoke the listener at 'index' that
   // they have one less listener to invoke.
   if (d->firingEventIterators) {
-    for (size_t i = 0; i < d->firingEventIterators->size(); ++i) {
-      FiringEventIterator& firingIterator = d->firingEventIterators->at(i);
+    for (const auto& firingIterator : *d->firingEventIterators) {
       if (eventType != firingIterator.eventType)
         continue;
 
@@ -638,16 +658,17 @@ bool EventTarget::fireEventListeners(Event* event,
   size_t i = 0;
   size_t size = entry.size();
   if (!d->firingEventIterators)
-    d->firingEventIterators = wrapUnique(new FiringEventIteratorVector);
-  d->firingEventIterators->append(FiringEventIterator(event->type(), i, size));
+    d->firingEventIterators = WTF::wrapUnique(new FiringEventIteratorVector);
+  d->firingEventIterators->push_back(
+      FiringEventIterator(event->type(), i, size));
 
   double blockedEventThreshold = blockedEventsWarningThreshold(context, event);
-  double now = 0.0;
+  TimeTicks now;
   bool shouldReportBlockedEvent = false;
   if (blockedEventThreshold) {
-    now = WTF::monotonicallyIncreasingTime();
+    now = TimeTicks::Now();
     shouldReportBlockedEvent =
-        now - event->platformTimeStamp() > blockedEventThreshold;
+        (now - event->platformTimeStamp()).InSecondsF() > blockedEventThreshold;
   }
   bool firedListener = false;
 
@@ -698,7 +719,7 @@ bool EventTarget::fireEventListeners(Event* event,
         !entry[i - 1].blockedEventWarningEmitted() &&
         !event->defaultPrevented()) {
       reportBlockedEvent(context, event, &entry[i - 1],
-                         now - event->platformTimeStamp());
+                         (now - event->platformTimeStamp()).InSecondsF());
     }
 
     if (passiveForced) {
@@ -750,9 +771,9 @@ void EventTarget::removeAllEventListeners() {
   // Notify firing events planning to invoke the listener at 'index' that
   // they have one less listener to invoke.
   if (d->firingEventIterators) {
-    for (size_t i = 0; i < d->firingEventIterators->size(); ++i) {
-      d->firingEventIterators->at(i).iterator = 0;
-      d->firingEventIterators->at(i).end = 0;
+    for (const auto& iterator : *d->firingEventIterators) {
+      iterator.iterator = 0;
+      iterator.end = 0;
     }
   }
 }

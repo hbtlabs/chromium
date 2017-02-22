@@ -8,23 +8,19 @@ let presentationServiceMock = loadMojoModules(
     'presentationServiceMock',
     [
       'third_party/WebKit/public/platform/modules/presentation/presentation.mojom',
-      'mojo/public/js/router',
+      'mojo/public/js/bindings',
     ]).then(mojo => {
-      let [ presentationService, router ] = mojo.modules;
+      let [ presentationService, bindings ] = mojo.modules;
 
       class PresentationServiceMock {
         constructor(interfaceProvider) {
           interfaceProvider.addInterfaceOverrideForTesting(
               presentationService.PresentationService.name,
-              handle => this.connectPresentationService_(handle));
+              handle => this.bindingSet_.addBinding(this, handle));
           this.interfaceProvider_ = interfaceProvider;
           this.pendingResponse_ = null;
-        }
-
-        connectPresentationService_(handle) {
-          this.presentationServiceStub_ = new presentationService.PresentationService.stubClass(this);
-          this.presentationServiceRouter_ = new router.Router(handle);
-          this.presentationServiceRouter_.setIncomingReceiver(this.presentationServiceStub_);
+          this.bindingSet_ = new bindings.BindingSet(
+              presentationService.PresentationService);
         }
 
         startSession(urls) {
@@ -33,7 +29,29 @@ let presentationServiceMock = loadMojoModules(
               error: null,
           });
         }
+
+        joinSession(urls) {
+          return Promise.resolve({
+              sessionInfo: { url: urls[0], id: 'fakeSessionId' },
+              error: null,
+          });
+        }
       }
 
       return new PresentationServiceMock(mojo.frameInterfaces);
     });
+
+function waitForClick(callback, button) {
+  button.addEventListener('click', callback, { once: true });
+
+  if (!('eventSender' in window))
+    return;
+
+  var boundingRect = button.getBoundingClientRect();
+  var x = boundingRect.left + boundingRect.width / 2;
+  var y = boundingRect.top + boundingRect.height / 2;
+
+  eventSender.mouseMoveTo(x, y);
+  eventSender.mouseDown();
+  eventSender.mouseUp();
+}

@@ -4,11 +4,11 @@
 
 #include "net/quic/core/crypto/aead_base_decrypter.h"
 
-#include <memory>
+#include <cstdint>
 
-#include "net/quic/core/quic_bug_tracker.h"
-#include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/platform/api/quic_bug_tracker.h"
+#include "net/quic/platform/api/quic_logging.h"
 #include "third_party/boringssl/src/include/openssl/err.h"
 #include "third_party/boringssl/src/include/openssl/evp.h"
 
@@ -34,7 +34,7 @@ void DLogOpenSslErrors() {
   while (uint32_t error = ERR_get_error()) {
     char buf[120];
     ERR_error_string_n(error, buf, arraysize(buf));
-    DLOG(ERROR) << "OpenSSL error: " << buf;
+    QUIC_DLOG(ERROR) << "OpenSSL error: " << buf;
   }
 #endif
 }
@@ -115,7 +115,7 @@ bool AeadBaseDecrypter::SetDiversificationNonce(
   return true;
 }
 
-bool AeadBaseDecrypter::DecryptPacket(QuicPathId path_id,
+bool AeadBaseDecrypter::DecryptPacket(QuicVersion /*version*/,
                                       QuicPacketNumber packet_number,
                                       StringPiece associated_data,
                                       StringPiece ciphertext,
@@ -134,10 +134,7 @@ bool AeadBaseDecrypter::DecryptPacket(QuicPathId path_id,
   uint8_t nonce[sizeof(nonce_prefix_) + sizeof(packet_number)];
   const size_t nonce_size = nonce_prefix_size_ + sizeof(packet_number);
   memcpy(nonce, nonce_prefix_, nonce_prefix_size_);
-  uint64_t path_id_packet_number =
-      QuicUtils::PackPathIdAndPacketNumber(path_id, packet_number);
-  memcpy(nonce + nonce_prefix_size_, &path_id_packet_number,
-         sizeof(path_id_packet_number));
+  memcpy(nonce + nonce_prefix_size_, &packet_number, sizeof(packet_number));
   if (!EVP_AEAD_CTX_open(
           ctx_.get(), reinterpret_cast<uint8_t*>(output), output_length,
           max_output_length, reinterpret_cast<const uint8_t*>(nonce),

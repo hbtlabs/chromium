@@ -54,6 +54,10 @@ pin-keyboard {
   top: -87px !important;
 }
 
+.disable-pin-animation .pod.pin-enabled {
+  transition: none;
+}
+
 .pod .pin-container {
   height: 204px;
   position: absolute;
@@ -225,6 +229,10 @@ html[dir=rtl] .main-pane {
   display: none;
 }
 
+.pod[is-active-directory] .reauth-warning {
+  display: none;
+}
+
 .pod[auth-type='offlinePassword'].focused .password-entry-container,
 .pod[auth-type='forceOfflinePassword'].focused .password-entry-container {
   display: flex;
@@ -295,8 +303,7 @@ html[dir=rtl] .main-pane {
 }
 
 .custom-icon.faded {
-  -webkit-transition: opacity 200ms ease-in-out,
-                      visibility 200ms ease-in-out;
+  transition: opacity 200ms ease-in-out, visibility 200ms ease-in-out;
 }
 
 .custom-icon-hardlocked {
@@ -391,11 +398,11 @@ html[dir=rtl] .main-pane {
 }
 
 .custom-icon-spinner {
-  -webkit-animation: easy-unlock-spinner-animation 2s steps(45) infinite;
+  animation: easy-unlock-spinner-animation 2s steps(45) infinite;
   background-image: url(chrome://theme/IDR_EASY_UNLOCK_SPINNER);
 }
 
-@-webkit-keyframes easy-unlock-spinner-animation {
+@keyframes easy-unlock-spinner-animation {
   from { background-position: 0 }
   to { background-position: -1215px }
 }
@@ -432,9 +439,9 @@ html[dir=rtl] .main-pane {
 
 .pod[auth-type='onlineSignIn'] .reauth-hint-container {
   display: flex;
+  justify-content: center;
   margin-top: 8px;
   width: 100%;
-  justify-content: center;
 }
 
 .reauth-hint-container .reauth-warning {
@@ -699,10 +706,12 @@ html[dir=rtl] .user-type-bubble {
 /**** Public account user pod rules *******************************************/
 
 .pod.public-account.expanded {
+  height: 230px;
   width: 500px;
 }
 
 .pod.public-account.expanded.advanced {
+  height: 280px;
   width: 610px;
 }
 
@@ -711,7 +720,7 @@ html[dir=rtl] .user-type-bubble {
 }
 
 .pod.public-account.expanded .name-container {
-  transform: translateY(-34px);
+  display: none;
 }
 
 .pod.public-account .learn-more-container {
@@ -720,7 +729,7 @@ html[dir=rtl] .user-type-bubble {
 }
 
 .pod.public-account .learn-more {
-  top: 15px;
+  top: 22px;
 }
 
 .expanded-pane {
@@ -740,7 +749,7 @@ html[dir=rtl] .user-type-bubble {
   display: flex;
   flex-direction: column;
   float: right;
-  height: 193px;
+  height: 213px;
   width: 490px;
 }
 
@@ -749,6 +758,7 @@ html[dir=rtl] .user-type-bubble {
 }
 
 .pod.public-account.expanded.advanced .expanded-pane-contents {
+  height: 263px;
   width: 600px;
 }
 
@@ -770,8 +780,12 @@ html[dir=rtl] .expanded-pane-contents {
   white-space: nowrap;
 }
 
+.expanded-pane-container {
+  color: grey;
+}
+
 .reminder {
-  font-weight: bold;
+  margin-top: 20px;
 }
 
 .language-and-input-section {
@@ -814,10 +828,14 @@ html[dir=rtl] .expanded-pane-contents {
 }
 
 .bottom-container {
-  -webkit-margin-start: 10px;
+  -webkit-margin-start: 20px;
+  align-items: center;
   display: flex;
+  flex-direction: row-reverse;
   flex: none;
   font-size: 13px;
+  justify-content: space-between;
+  margin-bottom: 4px;
 }
 
 .expanded-pane-learn-more-container,
@@ -830,6 +848,7 @@ html[dir=rtl] .expanded-pane-contents {
   background-image: url(../../webui/resources/images/business.svg);
   background-size: 18px;
   height: 18px;
+  margin-top: -10px;
   position: relative;
   width: 18px;
 }
@@ -840,10 +859,72 @@ html[dir=rtl] .expanded-pane-contents {
 
 .info {
   flex: auto;
-  margin: 5px 10px;
+  margin: -10px 25px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.monitoring-container {
+  margin-top: 35px;
+}
+
+.monitoring-learn-more {
+  color: rgb(49, 106, 197);
+  text-decoration: none;
+}
+
+.monitoring-dialog-container .cr-dialog-shield {
+  background: black;
+  opacity: 0.5;
+}
+
+.monitoring-dialog-container .cr-dialog-buttons {
+  display: none;
+}
+
+.monitoring-dialog-container .cr-dialog-frame {
+  height: 170px;
+  left: -46px;
+  padding: 0px;
+  position: relative;
+  top: -24px;
+  width: 430px;
+}
+
+.monitoring-dialog-container.advanced .cr-dialog-frame {
+  left: -110px;
+  top: 0px;
+}
+
+.monitoring-dialog-container .cr-dialog-close {
+  color: grey;
+  height: 34px;
+  position: absolute;
+  top: 0px;
+  width: 34px;
+}
+
+.monitoring-dialog-container .cr-dialog-title {
+  font-size: 16px;
+  font-weight: bold;
+  left: 20px;
+  position: absolute;
+  top: 15px;
+}
+
+.monitoring-dialog-container .cr-dialog-text {
+  color: grey;
+  font-size: 13px;
+  overflow: visible;
+  position: absolute;
+  top: 20px;
+}
+
+.monitoring-dialog-container .cr-dialog-item {
+  -webkit-margin-start: 42px;
+  display: list-item;
+  margin-bottom: -6px;
 }
 
 .language-and-input-container {
@@ -853,9 +934,7 @@ html[dir=rtl] .expanded-pane-contents {
 
 .language-and-input {
   color: rgb(49, 106, 197);
-  position: relative;
   text-decoration: none;
-  top: 4px;
 }
 
 .pod.public-account.expanded.advanced .language-and-input-container {
@@ -863,15 +942,28 @@ html[dir=rtl] .expanded-pane-contents {
 }
 
 .enter-button {
-  font-size: 14px;
+  background-color: rgb(66, 133, 244);
+  color: white;
+  font-size: 12px;
+  text-transform: none;
+}
+
+.enter-button.keyboard-focus {
+  font-weight: normal;
+}
+
+.horizontal-line {
+  border-bottom: 1px double #cccccc;
+  bottom: 8px;
+  position: relative;
 }
 
 /* Animations for the animated ellipsis: */
 .animated-ellipsis-component0 {
-  -webkit-animation: ellipsis-component0 1.5s infinite;
+  animation: ellipsis-component0 1.5s infinite;
 }
 
-@-webkit-keyframes ellipsis-component0 {
+@keyframes ellipsis-component0 {
   0% { opacity: 0; }
   25% { opacity: 1; }
   50% { opacity: 1; }
@@ -880,10 +972,10 @@ html[dir=rtl] .expanded-pane-contents {
 }
 
 .animated-ellipsis-component1 {
-  -webkit-animation: ellipsis-component1 1.5s infinite;
+  animation: ellipsis-component1 1.5s infinite;
 }
 
-@-webkit-keyframes ellipsis-component1 {
+@keyframes ellipsis-component1 {
   0% { opacity: 0; }
   25% { opacity: 0; }
   50% { opacity: 1; }
@@ -892,10 +984,10 @@ html[dir=rtl] .expanded-pane-contents {
 }
 
 .animated-ellipsis-component2 {
-  -webkit-animation: ellipsis-component2 1.5s infinite;
+  animation: ellipsis-component2 1.5s infinite;
 }
 
-@-webkit-keyframes ellipsis-component2 {
+@keyframes ellipsis-component2 {
   0% { opacity: 0; }
   25% { opacity: 0; }
   50% { opacity: 0; }

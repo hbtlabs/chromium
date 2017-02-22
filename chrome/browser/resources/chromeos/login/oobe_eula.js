@@ -20,13 +20,6 @@ Polymer({
     },
 
     /**
-     * Shows Terms Of Service frame.
-     */
-    eulaScreenShown: {
-      type: Array,
-    },
-
-    /**
      * "Accepot and continue" button is disabled until content is loaded.
      */
     acceptButtonDisabled: {
@@ -49,6 +42,14 @@ Polymer({
     screen: {
       type: Object,
     },
+  },
+
+  focus: function() {
+    if (this.eulaLoadingScreenShown) {
+      this.$.eulaLoadingDialog.show();
+    } else {
+      this.$.eulaDialog.show();
+    }
   },
 
   /**
@@ -76,7 +77,7 @@ Polymer({
   /**
    * On-change event handler for usageStats.
    *
-   * * @private
+   * @private
    */
   onUsageChanged_: function() {
     this.screen.onUsageStatsClicked_(this.$.usageStats.checked);
@@ -85,7 +86,7 @@ Polymer({
   /**
    * On-tap event handler for installationSettings.
    *
-   * * @private
+   * @private
    */
   onInstallationSettingsClicked_: function() {
     chrome.send('eulaOnInstallationSettingsPopupOpened');
@@ -96,9 +97,18 @@ Polymer({
   /**
    * On-tap event handler for stats-help-link.
    *
-   * * @private
+   * @private
    */
   onUsageStatsHelpLinkClicked_: function() {
     chrome.send('eulaOnLearnMore');
+  },
+
+  /**
+   * On-tap event handler for back button.
+   *
+   * @private
+   */
+  onEulaBackButtonPressed_: function() {
+    chrome.send('login.EulaScreen.userActed', ['back-button']);
   },
 });

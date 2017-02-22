@@ -13,10 +13,9 @@
 
 #include "ash/common/wm/overview/window_selector.h"
 #include "ash/common/wm/window_state_observer.h"
-#include "ash/common/wm_window_observer.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/scoped_observer.h"
+#include "ui/aura/window_observer.h"
 
 namespace views {
 class Widget;
@@ -48,7 +47,7 @@ class WindowSelectorItem;
 //    0, 1, 2, 3, 4, 5, 6
 // The selector is switched to the next window grid (if available) or wrapped if
 // it reaches the end of its movement sequence.
-class ASH_EXPORT WindowGrid : public WmWindowObserver,
+class ASH_EXPORT WindowGrid : public aura::WindowObserver,
                               public wm::WindowStateObserver {
  public:
   WindowGrid(WmWindow* root_window,
@@ -112,14 +111,14 @@ class ASH_EXPORT WindowGrid : public WmWindowObserver,
   // Returns the root window in which the grid displays the windows.
   const WmWindow* root_window() const { return root_window_; }
 
-  const std::vector<WindowSelectorItem*>& window_list() const {
-    return window_list_.get();
+  const std::vector<std::unique_ptr<WindowSelectorItem>>& window_list() const {
+    return window_list_;
   }
 
-  // WmWindowObserver:
-  void OnWindowDestroying(WmWindow* window) override;
+  // aura::WindowObserver:
+  void OnWindowDestroying(aura::Window* window) override;
   // TODO(flackr): Handle window bounds changed in WindowSelectorItem.
-  void OnWindowBoundsChanged(WmWindow* window,
+  void OnWindowBoundsChanged(aura::Window* window,
                              const gfx::Rect& old_bounds,
                              const gfx::Rect& new_bounds) override;
 
@@ -168,9 +167,9 @@ class ASH_EXPORT WindowGrid : public WmWindowObserver,
   WindowSelector* window_selector_;
 
   // Vector containing all the windows in this grid.
-  ScopedVector<WindowSelectorItem> window_list_;
+  std::vector<std::unique_ptr<WindowSelectorItem>> window_list_;
 
-  ScopedObserver<WmWindow, WindowGrid> window_observer_;
+  ScopedObserver<aura::Window, WindowGrid> window_observer_;
   ScopedObserver<wm::WindowState, WindowGrid> window_state_observer_;
 
   // Widget that darkens the screen background.

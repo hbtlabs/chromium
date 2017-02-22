@@ -28,7 +28,6 @@ class SourceLocation;
 // (in the local frame tree) in m_webPerformanceObservers.
 class CORE_EXPORT PerformanceMonitor final
     : public GarbageCollectedFinalized<PerformanceMonitor>,
-      public WebThread::TaskObserver,
       public scheduler::TaskTimeObserver {
   WTF_MAKE_NONCOPYABLE(PerformanceMonitor);
 
@@ -38,6 +37,7 @@ class CORE_EXPORT PerformanceMonitor final
     kLongLayout,
     kBlockedEvent,
     kBlockedParser,
+    kDiscouragedAPIUse,
     kHandler,
     kRecurringHandler,
     kAfterLast
@@ -57,10 +57,10 @@ class CORE_EXPORT PerformanceMonitor final
 
   class CORE_EXPORT Client : public GarbageCollectedMixin {
    public:
-    virtual void reportLongTask(
-        double startTime,
-        double endTime,
-        const HeapHashSet<Member<Frame>>& contextFrames){};
+    virtual void reportLongTask(double startTime,
+                                double endTime,
+                                ExecutionContext* taskContext,
+                                bool hasMultipleContexts){};
     virtual void reportLongLayout(double duration){};
     virtual void reportGenericViolation(Violation,
                                         const String& text,
@@ -83,12 +83,13 @@ class CORE_EXPORT PerformanceMonitor final
                                      Violation,
                                      const String& text,
                                      double time,
-                                     SourceLocation*);
+                                     std::unique_ptr<SourceLocation>);
   static double threshold(ExecutionContext*, Violation);
 
   // Direct API for core.
   void subscribe(Violation, double threshold, Client*);
   void unsubscribeAll(Client*);
+  void shutdown();
 
   explicit PerformanceMonitor(LocalFrame*);
   ~PerformanceMonitor();
@@ -104,25 +105,23 @@ class CORE_EXPORT PerformanceMonitor final
 
   void updateInstrumentation();
 
-  void innerWillExecuteScript(ExecutionContext*);
-  void didExecuteScript();
-  void innerWillCallFunction(ExecutionContext*);
-  void didCallFunction(v8::Local<v8::Function>);
+  void alwaysWillExecuteScript(ExecutionContext*);
+  void alwaysDidExecuteScript();
+  void alwaysWillCallFunction(ExecutionContext*);
+  void alwaysDidCallFunction(ExecutionContext*, v8::Local<v8::Function>);
   void willUpdateLayout();
   void didUpdateLayout();
   void willRecalculateStyle();
   void didRecalculateStyle();
-  void reportGenericViolation(Violation,
-                              const String& text,
-                              double time,
-                              SourceLocation*);
-
-  // WebThread::TaskObserver implementation.
-  void willProcessTask() override;
-  void didProcessTask() override;
+  void innerReportGenericViolation(ExecutionContext*,
+                                   Violation,
+                                   const String& text,
+                                   double time,
+                                   std::unique_ptr<SourceLocation>);
 
   // scheduler::TaskTimeObserver implementation
-  void ReportTaskTime(scheduler::TaskQueue*,
+  void willProcessTask(scheduler::TaskQueue*, double startTime) override;
+  void didProcessTask(scheduler::TaskQueue*,
                       double startTime,
                       double endTime) override;
 
@@ -146,7 +145,8 @@ class CORE_EXPORT PerformanceMonitor final
   double m_thresholds[kAfterLast];
 
   Member<LocalFrame> m_localRoot;
-  HeapHashSet<Member<Frame>> m_frameContexts;
+  Member<ExecutionContext> m_taskExecutionContext;
+  bool m_taskHasMultipleContexts = false;
   using ClientThresholds = HeapHashMap<Member<Client>, double>;
   HeapHashMap<Violation,
               Member<ClientThresholds>,

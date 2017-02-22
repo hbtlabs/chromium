@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "cc/base/switches.h"
 #include "cc/layers/solid_color_layer.h"
@@ -101,7 +102,7 @@ void LayerTreePixelTest::ReadbackResult(
 
 void LayerTreePixelTest::BeginTest() {
   Layer* target =
-      readback_target_ ? readback_target_ : layer_tree()->root_layer();
+      readback_target_ ? readback_target_ : layer_tree_host()->root_layer();
   target->RequestCopyOfOutput(CreateCopyOutputRequest());
   PostSetNeedsCommitToMainThread();
 }
@@ -214,7 +215,7 @@ void LayerTreePixelTest::SetupTree() {
   scoped_refptr<Layer> root = Layer::Create();
   root->SetBounds(content_root_->bounds());
   root->AddChild(content_root_);
-  layer_tree()->SetRootLayer(root);
+  layer_tree_host()->SetRootLayer(root);
   LayerTreeTest::SetupTree();
 }
 

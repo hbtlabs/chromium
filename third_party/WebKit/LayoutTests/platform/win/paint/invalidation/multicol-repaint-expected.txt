@@ -19,7 +19,12 @@
         {
           "object": "LayoutText #text",
           "rect": [234, 15, 300, 50],
-          "reason": "full"
+          "reason": "layoutObject insertion"
+        },
+        {
+          "object": "LayoutText #text",
+          "rect": [234, 15, 50, 50],
+          "reason": "layoutObject removal"
         },
         {
           "object": "LayoutText #text",
@@ -30,6 +35,10 @@
     }
   ],
   "objectPaintInvalidations": [
+    {
+      "object": "LayoutText #text",
+      "reason": "layoutObject removal"
+    },
     {
       "object": "LayoutMultiColumnFlowThread (anonymous)",
       "reason": "forced by layout"
@@ -64,11 +73,11 @@
     },
     {
       "object": "LayoutText #text",
-      "reason": "full"
+      "reason": "layoutObject insertion"
     },
     {
       "object": "InlineTextBox 'XXXXXX'",
-      "reason": "full"
+      "reason": "layoutObject insertion"
     }
   ]
 }

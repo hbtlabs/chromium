@@ -3267,6 +3267,38 @@ TEST_P(GLES2DecoderTest, ProduceAndConsumeTextureCHROMIUM) {
   EXPECT_EQ(kServiceTextureId, texture->service_id());
 }
 
+TEST_P(GLES2DecoderTest, ConsumeAlreadyBoundTexture) {
+  Mailbox mailbox = Mailbox::Generate();
+
+  DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
+  DoTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 3, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0,
+               0);
+
+  TextureRef* texture_ref1 =
+      group().texture_manager()->GetTexture(client_texture_id_);
+
+  ProduceTextureCHROMIUMImmediate& produce_cmd =
+      *GetImmediateAs<ProduceTextureCHROMIUMImmediate>();
+  produce_cmd.Init(GL_TEXTURE_2D, mailbox.name);
+  EXPECT_EQ(error::kNoError,
+            ExecuteImmediateCmd(produce_cmd, sizeof(mailbox.name)));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+
+  // Consume texture that is already bound.  Operation should succeed, leaving
+  // existing texture bound with no extra GL calls expected.
+  ConsumeTextureCHROMIUMImmediate& consume_cmd =
+      *GetImmediateAs<ConsumeTextureCHROMIUMImmediate>();
+  consume_cmd.Init(GL_TEXTURE_2D, mailbox.name);
+  EXPECT_EQ(error::kNoError,
+            ExecuteImmediateCmd(consume_cmd, sizeof(mailbox.name)));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+
+  TextureRef* texture_ref2 =
+      group().texture_manager()->GetTexture(client_texture_id_);
+
+  EXPECT_EQ(texture_ref1, texture_ref2);
+}
+
 TEST_P(GLES2DecoderTest, ProduceAndConsumeDirectTextureCHROMIUM) {
   Mailbox mailbox = Mailbox::Generate();
 
@@ -4718,6 +4750,68 @@ TEST_P(GLES2DecoderTest, BindTextureInvalidArgs) {
   cmd.Init(GL_TEXTURE_3D, client_texture_id_);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_INVALID_ENUM, GetGLError());
+}
+
+TEST_P(GLES3DecoderTest, TexSwizzleAllowed) {
+  const GLenum kTarget = GL_TEXTURE_2D;
+  const GLenum kSwizzleParam = GL_TEXTURE_SWIZZLE_R;
+  const GLenum kSwizzleValue = GL_BLUE;
+  const GLenum kInvalidSwizzleValue = GL_RG;
+
+  {
+    EXPECT_CALL(*gl_, TexParameteri(kTarget, kSwizzleParam, kSwizzleValue));
+    TexParameteri cmd;
+    cmd.Init(kTarget, kSwizzleParam, kSwizzleValue);
+    EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+    EXPECT_EQ(GL_NO_ERROR, GetGLError());
+  }
+
+  {
+    TexParameteri cmd;
+    cmd.Init(kTarget, kSwizzleParam, kInvalidSwizzleValue);
+    EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+    EXPECT_EQ(GL_INVALID_ENUM, GetGLError());
+  }
+
+  {
+    EXPECT_CALL(*gl_, GetError())
+        .WillOnce(Return(GL_NO_ERROR))
+        .WillOnce(Return(GL_NO_ERROR))
+        .RetiresOnSaturation();
+    typedef GetTexParameteriv::Result Result;
+    Result* result = static_cast<Result*>(shared_memory_address_);
+    result->size = 0;
+    GetTexParameteriv cmd;
+    cmd.Init(kTarget, kSwizzleParam, shared_memory_id_, shared_memory_offset_);
+    EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+    EXPECT_EQ(decoder_->GetGLES2Util()->GLGetNumValuesReturned(kSwizzleParam),
+              result->GetNumResults());
+    EXPECT_EQ(GL_NO_ERROR, GetGLError());
+    EXPECT_EQ(kSwizzleValue, static_cast<GLenum>(result->GetData()[0]));
+  }
+}
+
+TEST_P(WebGL2DecoderTest, TexSwizzleDisabled) {
+  const GLenum kTarget = GL_TEXTURE_2D;
+  const GLenum kSwizzleParam = GL_TEXTURE_SWIZZLE_R;
+  const GLenum kSwizzleValue = GL_BLUE;
+
+  {
+    TexParameteri cmd;
+    cmd.Init(kTarget, kSwizzleParam, kSwizzleValue);
+    EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+    EXPECT_EQ(GL_INVALID_ENUM, GetGLError());
+  }
+
+  {
+    typedef GetTexParameteriv::Result Result;
+    Result* result = static_cast<Result*>(shared_memory_address_);
+    result->size = 0;
+    GetTexParameteriv cmd;
+    cmd.Init(kTarget, kSwizzleParam, shared_memory_id_, shared_memory_offset_);
+    EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+    EXPECT_EQ(GL_INVALID_ENUM, GetGLError());
+  }
 }
 
 // TODO(gman): Complete this test.

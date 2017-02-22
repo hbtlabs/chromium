@@ -4,12 +4,15 @@
 
 #include "core/frame/ImageBitmap.h"
 
+#include "core/html/Float32ImageData.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/html/ImageData.h"
+#include "core/offscreencanvas/OffscreenCanvas.h"
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "platform/image-decoders/ImageDecoder.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "wtf/CheckedNumeric.h"
 #include "wtf/PtrUtil.h"
@@ -18,8 +21,15 @@
 
 namespace blink {
 
-static const char* imageOrientationFlipY = "flipY";
-static const char* imageBitmapOptionNone = "none";
+constexpr const char* kImageOrientationFlipY = "flipY";
+constexpr const char* kImageBitmapOptionNone = "none";
+constexpr const char* kImageBitmapOptionDefault = "default";
+constexpr const char* kImageBitmapOptionPremultiply = "premultiply";
+constexpr const char* kImageBitmapOptionResizeQualityHigh = "high";
+constexpr const char* kImageBitmapOptionResizeQualityMedium = "medium";
+constexpr const char* kImageBitmapOptionResizeQualityPixelated = "pixelated";
+constexpr const char* kSRGBImageBitmapColorSpaceConversion = "srgb";
+constexpr const char* kLinearRGBImageBitmapColorSpaceConversion = "linear-rgb";
 
 namespace {
 
@@ -31,11 +41,15 @@ struct ParsedOptions {
   unsigned resizeHeight = 0;
   IntRect cropRect;
   SkFilterQuality resizeQuality = kLow_SkFilterQuality;
-  // This value should be changed in the future when we support
-  // createImageBitmap with higher bit depth, in the parseOptions() function.
-  // For now, it is always 4.
-  int bytesPerPixel = 4;
+  sk_sp<SkColorSpace> dstColorSpace = nullptr;
+  sk_sp<SkColorSpace> latestColorSpace = nullptr;
+  SkColorType dstColorType = kN32_SkColorType;
+  SkColorType latestColorType = kN32_SkColorType;
 };
+
+ParsedOptions defaultOptions() {
+  return ParsedOptions();
+}
 
 // The following two functions are helpers used in cropImage
 static inline IntRect normalizeRect(const IntRect& rect) {
@@ -49,18 +63,45 @@ ParsedOptions parseOptions(const ImageBitmapOptions& options,
                            Optional<IntRect> cropRect,
                            IntSize sourceSize) {
   ParsedOptions parsedOptions;
-  if (options.imageOrientation() == imageOrientationFlipY) {
+  if (options.imageOrientation() == kImageOrientationFlipY) {
     parsedOptions.flipY = true;
   } else {
     parsedOptions.flipY = false;
-    DCHECK(options.imageOrientation() == imageBitmapOptionNone);
+    DCHECK(options.imageOrientation() == kImageBitmapOptionNone);
   }
-  if (options.premultiplyAlpha() == imageBitmapOptionNone) {
+  if (options.premultiplyAlpha() == kImageBitmapOptionNone) {
     parsedOptions.premultiplyAlpha = false;
   } else {
     parsedOptions.premultiplyAlpha = true;
-    DCHECK(options.premultiplyAlpha() == "default" ||
-           options.premultiplyAlpha() == "premultiply");
+    DCHECK(options.premultiplyAlpha() == kImageBitmapOptionDefault ||
+           options.premultiplyAlpha() == kImageBitmapOptionPremultiply);
+  }
+
+  if (options.colorSpaceConversion() != kImageBitmapOptionNone) {
+    if (!RuntimeEnabledFeatures::experimentalCanvasFeaturesEnabled() ||
+        !RuntimeEnabledFeatures::colorCorrectRenderingEnabled()) {
+      DCHECK_EQ(options.colorSpaceConversion(), kImageBitmapOptionDefault);
+      if (RuntimeEnabledFeatures::colorCorrectRenderingDefaultModeEnabled()) {
+        parsedOptions.dstColorSpace =
+            ColorBehavior::globalTargetColorSpace().ToSkColorSpace();
+        parsedOptions.dstColorType = SkColorType::kN32_SkColorType;
+      }
+    } else {
+      if (options.colorSpaceConversion() == kImageBitmapOptionDefault ||
+          options.colorSpaceConversion() ==
+              kSRGBImageBitmapColorSpaceConversion) {
+        parsedOptions.dstColorSpace = SkColorSpace::MakeSRGB();
+        parsedOptions.dstColorType = SkColorType::kN32_SkColorType;
+      } else if (options.colorSpaceConversion() ==
+                 kLinearRGBImageBitmapColorSpaceConversion) {
+        parsedOptions.dstColorSpace = SkColorSpace::MakeSRGBLinear();
+        parsedOptions.dstColorType = SkColorType::kRGBA_F16_SkColorType;
+      } else {
+        NOTREACHED()
+            << "Invalid ImageBitmap creation attribute colorSpaceConversion: "
+            << options.colorSpaceConversion();
+      }
+    }
   }
 
   int sourceWidth = sourceSize.width();
@@ -96,21 +137,21 @@ ParsedOptions parseOptions(const ImageBitmapOptions& options,
   }
   parsedOptions.shouldScaleInput = true;
 
-  if (options.resizeQuality() == "high")
+  if (options.resizeQuality() == kImageBitmapOptionResizeQualityHigh)
     parsedOptions.resizeQuality = kHigh_SkFilterQuality;
-  else if (options.resizeQuality() == "medium")
+  else if (options.resizeQuality() == kImageBitmapOptionResizeQualityMedium)
     parsedOptions.resizeQuality = kMedium_SkFilterQuality;
-  else if (options.resizeQuality() == "pixelated")
+  else if (options.resizeQuality() == kImageBitmapOptionResizeQualityPixelated)
     parsedOptions.resizeQuality = kNone_SkFilterQuality;
   else
     parsedOptions.resizeQuality = kLow_SkFilterQuality;
   return parsedOptions;
 }
 
-bool dstBufferSizeHasOverflow(ParsedOptions options) {
+bool dstBufferSizeHasOverflow(const ParsedOptions& options) {
   CheckedNumeric<unsigned> totalBytes = options.cropRect.width();
   totalBytes *= options.cropRect.height();
-  totalBytes *= options.bytesPerPixel;
+  totalBytes *= SkColorTypeBytesPerPixel(options.latestColorType);
   if (!totalBytes.IsValid())
     return true;
 
@@ -118,7 +159,7 @@ bool dstBufferSizeHasOverflow(ParsedOptions options) {
     return false;
   totalBytes = options.resizeWidth;
   totalBytes *= options.resizeHeight;
-  totalBytes *= options.bytesPerPixel;
+  totalBytes *= SkColorTypeBytesPerPixel(options.latestColorType);
   if (!totalBytes.IsValid())
     return true;
 
@@ -187,14 +228,27 @@ static void swizzleImageData(unsigned char* srcAddr,
   }
 }
 
-static sk_sp<SkImage> flipSkImageVertically(SkImage* input,
-                                            AlphaDisposition alphaOp) {
+enum AlphaPremultiplyEnforcement {
+  EnforceAlphaPremultiply,
+  DontEnforceAlphaPremultiply,
+};
+
+static sk_sp<SkImage> flipSkImageVertically(
+    SkImage* input,
+    AlphaPremultiplyEnforcement premultiplyEnforcement =
+        DontEnforceAlphaPremultiply,
+    const ParsedOptions& options = defaultOptions()) {
   unsigned width = static_cast<unsigned>(input->width());
   unsigned height = static_cast<unsigned>(input->height());
-  SkImageInfo info = SkImageInfo::MakeN32(input->width(), input->height(),
-                                          (alphaOp == PremultiplyAlpha)
-                                              ? kPremul_SkAlphaType
-                                              : kUnpremul_SkAlphaType);
+  SkAlphaType alphaType =
+      ((premultiplyEnforcement == EnforceAlphaPremultiply) ||
+       options.premultiplyAlpha)
+          ? kPremul_SkAlphaType
+          : kUnpremul_SkAlphaType;
+  SkImageInfo info = SkImageInfo::Make(input->width(), input->height(),
+                                       options.latestColorType, alphaType,
+                                       options.latestColorSpace);
+
   unsigned imageRowBytes = width * info.bytesPerPixel();
   RefPtr<Uint8Array> imagePixels = copySkImageData(input, info);
   if (!imagePixels)
@@ -210,9 +264,13 @@ static sk_sp<SkImage> flipSkImageVertically(SkImage* input,
   return newSkImageFromRaster(info, std::move(imagePixels), imageRowBytes);
 }
 
-static sk_sp<SkImage> premulSkImageToUnPremul(SkImage* input) {
-  SkImageInfo info = SkImageInfo::Make(input->width(), input->height(),
-                                       kN32_SkColorType, kUnpremul_SkAlphaType);
+static sk_sp<SkImage> premulSkImageToUnPremul(
+    SkImage* input,
+    const ParsedOptions& options = defaultOptions()) {
+  SkImageInfo info = SkImageInfo::Make(
+      input->width(), input->height(), options.latestColorType,
+      kUnpremul_SkAlphaType, options.latestColorSpace);
+
   RefPtr<Uint8Array> dstPixels = copySkImageData(input, info);
   if (!dstPixels)
     return nullptr;
@@ -221,26 +279,140 @@ static sk_sp<SkImage> premulSkImageToUnPremul(SkImage* input) {
       static_cast<unsigned>(input->width()) * info.bytesPerPixel());
 }
 
-static sk_sp<SkImage> unPremulSkImageToPremul(SkImage* input) {
-  SkImageInfo info = SkImageInfo::Make(input->width(), input->height(),
-                                       kN32_SkColorType, kPremul_SkAlphaType);
+static sk_sp<SkImage> unPremulSkImageToPremul(
+    SkImage* input,
+    const ParsedOptions& options = defaultOptions()) {
+  SkImageInfo info = SkImageInfo::Make(
+      input->width(), input->height(), options.latestColorType,
+      kPremul_SkAlphaType, options.latestColorSpace);
+
   RefPtr<Uint8Array> dstPixels = copySkImageData(input, info);
   if (!dstPixels)
     return nullptr;
   return newSkImageFromRaster(
       info, std::move(dstPixels),
       static_cast<unsigned>(input->width()) * info.bytesPerPixel());
+}
+
+// This code is borrowed from third_party/skia/src/codec/SkCodecPriv.h
+// If you need to change this, please check SkColorSpaceXform::ColorFormat
+// and SkColorType for proper coverage.
+static inline SkColorSpaceXform::ColorFormat getXformFormat(
+    SkColorType colorType) {
+  switch (colorType) {
+    case kRGBA_8888_SkColorType:
+      return SkColorSpaceXform::kRGBA_8888_ColorFormat;
+    case kBGRA_8888_SkColorType:
+      return SkColorSpaceXform::kBGRA_8888_ColorFormat;
+    case kRGBA_F16_SkColorType:
+      return SkColorSpaceXform::kRGBA_F16_ColorFormat;
+    default:
+      NOTREACHED();
+      return SkColorSpaceXform::kRGBA_8888_ColorFormat;
+  }
+}
+
+static inline void updateLatestColorInformation(ParsedOptions& options) {
+  options.latestColorType = options.dstColorType;
+  options.latestColorSpace = options.dstColorSpace;
+}
+
+// TODO (zakrinasab). Rewrite this when SkImage::readPixels() respectes the
+// color space of the passed SkImageInfo (crbug.com/skia/6021) and SkImage
+// exposes SkColorSpace and SkColorType (crbug.com/skia/6022).
+static void applyColorSpaceConversion(sk_sp<SkImage>& image,
+                                      ParsedOptions& options) {
+  if (!options.dstColorSpace)
+    return;
+  if (SkColorSpace::Equals(options.latestColorSpace.get(),
+                           options.dstColorSpace.get()))
+    return;
+
+  // If we have the color space information of the source image, we can use
+  // SkColorSpaceXform. Otherwise, we need to draw the image on a canvas and
+  // take a snapshot.
+  if (options.latestColorSpace) {
+    SkImageInfo info = SkImageInfo::Make(
+        image->width(), image->height(), options.latestColorType,
+        image->alphaType(), options.latestColorSpace);
+    size_t size = image->width() * image->height() * info.bytesPerPixel();
+    sk_sp<SkData> srcData = SkData::MakeUninitialized(size);
+    if (srcData->size() != size)
+      return;
+    if (!image->readPixels(info, srcData->writable_data(),
+                           image->width() * info.bytesPerPixel(), 0, 0)) {
+      return;
+    }
+    // Proceed with in-place color correction, if possible.
+    sk_sp<SkData> dstData = srcData;
+    if (SkColorTypeBytesPerPixel(options.dstColorType) !=
+        SkColorTypeBytesPerPixel(options.latestColorType)) {
+      size = image->width() * image->height() *
+             SkColorTypeBytesPerPixel(options.dstColorType);
+      dstData = SkData::MakeUninitialized(size);
+      if (dstData->size() != size)
+        return;
+    }
+    SkImageInfo dstInfo =
+        SkImageInfo::Make(image->width(), image->height(), options.dstColorType,
+                          image->alphaType(), options.dstColorSpace);
+    std::unique_ptr<SkColorSpaceXform> xform = SkColorSpaceXform::New(
+        options.latestColorSpace.get(), options.dstColorSpace.get());
+    if (xform->apply(getXformFormat(options.dstColorType),
+                     dstData->writable_data(),
+                     getXformFormat(options.latestColorType), srcData->data(),
+                     image->width() * image->height(), kUnpremul_SkAlphaType)) {
+      sk_sp<SkImage> coloredImage = SkImage::MakeRasterData(
+          dstInfo, dstData, image->width() * dstInfo.bytesPerPixel());
+      if (coloredImage) {
+        updateLatestColorInformation(options);
+        image = coloredImage;
+        return;
+      }
+    }
+    return;
+  }
+  // Skia does not support drawing to unpremul surfaces/canvases.
+  sk_sp<SkImage> unPremulImage = nullptr;
+  if (image->alphaType() == kUnpremul_SkAlphaType)
+    unPremulImage = unPremulSkImageToPremul(image.get(), options);
+
+  // If the color space of the source SkImage is null, the following code
+  // does not do any color conversion even thought the new SkImage will be
+  // tagged by the new color space. If this is the case, the following code
+  // will tag a wrong color space to the SkImage. However, this cannot be
+  // addressed here and the code that creates the SkImage must tag the
+  // SkImage with proper color space.
+  SkImageInfo imageInfo = SkImageInfo::Make(
+      image->width(), image->height(), options.dstColorType,
+      unPremulImage ? unPremulImage->alphaType() : image->alphaType(),
+      options.dstColorSpace);
+  sk_sp<SkSurface> surface = SkSurface::MakeRaster(imageInfo);
+  surface->getCanvas()->drawImage(
+      unPremulImage ? unPremulImage : sk_sp<SkImage>(image), 0, 0);
+  sk_sp<SkImage> coloredImage = surface->makeImageSnapshot();
+  updateLatestColorInformation(options);
+  image = coloredImage;
+  return;
 }
 
 sk_sp<SkImage> ImageBitmap::getSkImageFromDecoder(
-    std::unique_ptr<ImageDecoder> decoder) {
+    std::unique_ptr<ImageDecoder> decoder,
+    SkColorType* decodedColorType,
+    sk_sp<SkColorSpace>* decodedColorSpace,
+    ColorSpaceInfoUpdate colorSpaceInfoUpdate) {
   if (!decoder->frameCount())
     return nullptr;
   ImageFrame* frame = decoder->frameBufferAtIndex(0);
   if (!frame || frame->getStatus() != ImageFrame::FrameComplete)
     return nullptr;
   DCHECK(!frame->bitmap().isNull() && !frame->bitmap().empty());
-  return frame->finalizePixelsAndGetImage();
+  sk_sp<SkImage> image = frame->finalizePixelsAndGetImage();
+  if (colorSpaceInfoUpdate == UpdateColorSpaceInformation) {
+    *decodedColorType = frame->bitmap().colorType();
+    *decodedColorSpace = sk_sp<SkColorSpace>(frame->bitmap().colorSpace());
+  }
+  return image;
 }
 
 bool ImageBitmap::isResizeOptionValid(const ImageBitmapOptions& options,
@@ -272,12 +444,11 @@ bool ImageBitmap::isSourceSizeValid(int sourceWidth,
 // premuliplied format For example, if the image is already in unpremultiplied
 // format and we want the created ImageBitmap in the same format, then we don't
 // need to use the ImageDecoder to decode the image.
-static PassRefPtr<StaticBitmapImage> cropImage(
+static PassRefPtr<StaticBitmapImage> cropImageAndApplyColorSpaceConversion(
     Image* image,
-    const ParsedOptions& parsedOptions,
-    AlphaDisposition imageFormat = PremultiplyAlpha,
-    ImageDecoder::ColorSpaceOption colorSpaceOp =
-        ImageDecoder::ColorSpaceApplied) {
+    ParsedOptions& parsedOptions,
+    AlphaDisposition imageFormat,
+    ColorBehavior colorBehavior) {
   ASSERT(image);
   IntRect imgRect(IntPoint(), IntSize(image->width(), image->height()));
   const IntRect srcRect = intersection(imgRect, parsedOptions.cropRect);
@@ -301,39 +472,43 @@ static PassRefPtr<StaticBitmapImage> cropImage(
         static_cast<unsigned>(info.width()) * info.bytesPerPixel()));
   }
 
-  sk_sp<SkImage> skiaImage = image->imageForCurrentFrame();
+  // TODO(ccameron): Canvas should operate in sRGB and not display space.
+  // https://crbug.com/667431
+  sk_sp<SkImage> skiaImage =
+      image->imageForCurrentFrame(ColorBehavior::transformToGlobalTarget());
   // Attempt to get raw unpremultiplied image data, executed only when skiaImage
   // is premultiplied.
   if ((((!parsedOptions.premultiplyAlpha && !skiaImage->isOpaque()) ||
         !skiaImage) &&
        image->data() && imageFormat == PremultiplyAlpha) ||
-      colorSpaceOp == ImageDecoder::ColorSpaceIgnored) {
+      colorBehavior.isIgnore()) {
     std::unique_ptr<ImageDecoder> decoder(ImageDecoder::create(
         image->data(), true,
         parsedOptions.premultiplyAlpha ? ImageDecoder::AlphaPremultiplied
                                        : ImageDecoder::AlphaNotPremultiplied,
-        colorSpaceOp));
+        colorBehavior));
     if (!decoder)
       return nullptr;
-    skiaImage = ImageBitmap::getSkImageFromDecoder(std::move(decoder));
+    skiaImage = ImageBitmap::getSkImageFromDecoder(
+        std::move(decoder), &parsedOptions.latestColorType,
+        &parsedOptions.latestColorSpace, UpdateColorSpaceInformation);
     if (!skiaImage)
       return nullptr;
   }
 
   if (parsedOptions.cropRect == srcRect && !parsedOptions.shouldScaleInput) {
     sk_sp<SkImage> croppedSkImage = skiaImage->makeSubset(srcRect);
-    if (parsedOptions.flipY)
+    if (parsedOptions.dstColorSpace)
+      applyColorSpaceConversion(croppedSkImage, parsedOptions);
+    if (parsedOptions.flipY) {
       return StaticBitmapImage::create(flipSkImageVertically(
-          croppedSkImage.get(), parsedOptions.premultiplyAlpha
-                                    ? PremultiplyAlpha
-                                    : DontPremultiplyAlpha));
+          croppedSkImage.get(), DontEnforceAlphaPremultiply, parsedOptions));
+    }
     // Special case: The first parameter image is unpremul but we need to turn
     // it into premul.
     if (parsedOptions.premultiplyAlpha && imageFormat == DontPremultiplyAlpha)
       return StaticBitmapImage::create(
           unPremulSkImageToPremul(croppedSkImage.get()));
-    // Call preroll to trigger image decoding.
-    croppedSkImage->preroll();
     return StaticBitmapImage::create(std::move(croppedSkImage));
   }
 
@@ -368,6 +543,8 @@ static PassRefPtr<StaticBitmapImage> cropImage(
     surface->getCanvas()->drawImage(skiaImage, dstLeft, dstTop);
   }
   skiaImage = surface->makeImageSnapshot();
+  if (parsedOptions.dstColorSpace)
+    applyColorSpaceConversion(skiaImage, parsedOptions);
 
   if (parsedOptions.premultiplyAlpha) {
     if (imageFormat == DontPremultiplyAlpha)
@@ -388,22 +565,29 @@ ImageBitmap::ImageBitmap(HTMLImageElement* image,
   if (dstBufferSizeHasOverflow(parsedOptions))
     return;
 
-  if (options.colorSpaceConversion() == "none") {
-    m_image = cropImage(input.get(), parsedOptions, PremultiplyAlpha,
-                        ImageDecoder::ColorSpaceIgnored);
+  if (options.colorSpaceConversion() == kImageBitmapOptionNone) {
+    m_image = cropImageAndApplyColorSpaceConversion(
+        input.get(), parsedOptions, PremultiplyAlpha, ColorBehavior::ignore());
   } else {
-    m_image = cropImage(input.get(), parsedOptions, PremultiplyAlpha,
-                        ImageDecoder::ColorSpaceApplied);
+    m_image = cropImageAndApplyColorSpaceConversion(
+        input.get(), parsedOptions, PremultiplyAlpha,
+        ColorBehavior::transformToGlobalTarget());
   }
+
   if (!m_image)
     return;
   // In the case where the source image is lazy-decoded, m_image may not be in
   // a decoded state, we trigger it here.
-  sk_sp<SkImage> skImage = m_image->imageForCurrentFrame();
+  // TODO(ccameron): Canvas should operate in sRGB and not display space.
+  // https://crbug.com/667431
+  sk_sp<SkImage> skImage =
+      m_image->imageForCurrentFrame(ColorBehavior::transformToGlobalTarget());
   SkPixmap pixmap;
   if (!skImage->isTextureBacked() && !skImage->peekPixels(&pixmap)) {
-    sk_sp<SkSurface> surface =
-        SkSurface::MakeRasterN32Premul(skImage->width(), skImage->height());
+    SkImageInfo imageInfo = SkImageInfo::Make(
+        skImage->width(), skImage->height(), parsedOptions.dstColorType,
+        kPremul_SkAlphaType, parsedOptions.dstColorSpace);
+    sk_sp<SkSurface> surface = SkSurface::MakeRaster(imageInfo);
     surface->getCanvas()->drawImage(skImage, 0, 0);
     m_image = StaticBitmapImage::create(surface->makeImageSnapshot());
   }
@@ -470,10 +654,12 @@ ImageBitmap::ImageBitmap(HTMLCanvasElement* canvas,
                          const ImageBitmapOptions& options) {
   ASSERT(canvas->isPaintable());
   RefPtr<Image> input;
-  if (canvas->placeholderFrame())
+  if (canvas->placeholderFrame()) {
     input = canvas->placeholderFrame();
-  else
-    input = canvas->copiedImage(BackBuffer, PreferAcceleration);
+  } else {
+    input = canvas->copiedImage(BackBuffer, PreferAcceleration,
+                                SnapshotReasonCreateImageBitmap);
+  }
   ParsedOptions parsedOptions =
       parseOptions(options, cropRect, IntSize(input->width(), input->height()));
   if (dstBufferSizeHasOverflow(parsedOptions))
@@ -484,17 +670,58 @@ ImageBitmap::ImageBitmap(HTMLCanvasElement* canvas,
     parsedOptions.premultiplyAlpha = true;
     isPremultiplyAlphaReverted = true;
   }
-  m_image = cropImage(input.get(), parsedOptions);
+  m_image = cropImageAndApplyColorSpaceConversion(
+      input.get(), parsedOptions, PremultiplyAlpha,
+      ColorBehavior::transformToGlobalTarget());
   if (!m_image)
     return;
   if (isPremultiplyAlphaReverted) {
     parsedOptions.premultiplyAlpha = false;
-    m_image = StaticBitmapImage::create(
-        premulSkImageToUnPremul(m_image->imageForCurrentFrame().get()));
+    // TODO(ccameron): Canvas should operate in sRGB and not display space.
+    // https://crbug.com/667431
+    m_image = StaticBitmapImage::create(premulSkImageToUnPremul(
+        m_image->imageForCurrentFrame(ColorBehavior::transformToGlobalTarget())
+            .get()));
   }
   if (!m_image)
     return;
   m_image->setOriginClean(canvas->originClean());
+  m_image->setPremultiplied(parsedOptions.premultiplyAlpha);
+}
+
+ImageBitmap::ImageBitmap(OffscreenCanvas* offscreenCanvas,
+                         Optional<IntRect> cropRect,
+                         const ImageBitmapOptions& options) {
+  SourceImageStatus status;
+  RefPtr<Image> input = offscreenCanvas->getSourceImageForCanvas(
+      &status, PreferNoAcceleration, SnapshotReasonCreateImageBitmap,
+      FloatSize(offscreenCanvas->size()));
+  if (status != NormalSourceImageStatus)
+    return;
+  ParsedOptions parsedOptions =
+      parseOptions(options, cropRect, IntSize(input->width(), input->height()));
+  if (dstBufferSizeHasOverflow(parsedOptions))
+    return;
+
+  bool isPremultiplyAlphaReverted = false;
+  if (!parsedOptions.premultiplyAlpha) {
+    parsedOptions.premultiplyAlpha = true;
+    isPremultiplyAlphaReverted = true;
+  }
+  m_image = cropImageAndApplyColorSpaceConversion(
+      input.get(), parsedOptions, PremultiplyAlpha,
+      ColorBehavior::transformToGlobalTarget());
+  if (!m_image)
+    return;
+  if (isPremultiplyAlphaReverted) {
+    parsedOptions.premultiplyAlpha = false;
+    m_image = StaticBitmapImage::create(premulSkImageToUnPremul(
+        m_image->imageForCurrentFrame(ColorBehavior::transformToGlobalTarget())
+            .get()));
+  }
+  if (!m_image)
+    return;
+  m_image->setOriginClean(offscreenCanvas->originClean());
   m_image->setPremultiplied(parsedOptions.premultiplyAlpha);
 }
 
@@ -517,24 +744,41 @@ ImageBitmap::ImageBitmap(const void* pixelData,
 static sk_sp<SkImage> scaleSkImage(sk_sp<SkImage> skImage,
                                    unsigned resizeWidth,
                                    unsigned resizeHeight,
-                                   SkFilterQuality resizeQuality) {
+                                   SkFilterQuality resizeQuality,
+                                   SkColorType colorType = kN32_SkColorType,
+                                   sk_sp<SkColorSpace> colorSpace = nullptr) {
   SkImageInfo resizedInfo = SkImageInfo::Make(
-      resizeWidth, resizeHeight, kN32_SkColorType, kUnpremul_SkAlphaType);
+      resizeWidth, resizeHeight, colorType, kUnpremul_SkAlphaType, colorSpace);
   RefPtr<ArrayBuffer> dstBuffer = ArrayBuffer::createOrNull(
       resizeWidth * resizeHeight, resizedInfo.bytesPerPixel());
   if (!dstBuffer)
     return nullptr;
-  RefPtr<Uint8Array> resizedPixels =
-      Uint8Array::create(dstBuffer, 0, dstBuffer->byteLength());
+
+  if (colorType == kN32_SkColorType) {
+    RefPtr<Uint8Array> resizedPixels =
+        Uint8Array::create(dstBuffer, 0, dstBuffer->byteLength());
+    SkPixmap pixmap(
+        resizedInfo, resizedPixels->data(),
+        static_cast<unsigned>(resizeWidth) * resizedInfo.bytesPerPixel());
+    skImage->scalePixels(pixmap, resizeQuality);
+    return SkImage::MakeFromRaster(pixmap,
+                                   [](const void*, void* pixels) {
+                                     static_cast<Uint8Array*>(pixels)->deref();
+                                   },
+                                   resizedPixels.leakRef());
+  }
+
+  RefPtr<Float32Array> resizedPixels =
+      Float32Array::create(dstBuffer, 0, dstBuffer->byteLength());
   SkPixmap pixmap(
       resizedInfo, resizedPixels->data(),
       static_cast<unsigned>(resizeWidth) * resizedInfo.bytesPerPixel());
   skImage->scalePixels(pixmap, resizeQuality);
   return SkImage::MakeFromRaster(pixmap,
                                  [](const void*, void* pixels) {
-                                   static_cast<Uint8Array*>(pixels)->deref();
+                                   static_cast<Float32Array*>(pixels)->deref();
                                  },
-                                 resizedPixels.release().leakRef());
+                                 resizedPixels.leakRef());
 }
 
 ImageBitmap::ImageBitmap(ImageData* data,
@@ -556,7 +800,7 @@ ImageBitmap::ImageBitmap(ImageData* data,
     // Using kN32 type, swizzle input if necessary.
     SkImageInfo info = SkImageInfo::Make(
         parsedOptions.cropRect.width(), parsedOptions.cropRect.height(),
-        kN32_SkColorType, kUnpremul_SkAlphaType);
+        kN32_SkColorType, kUnpremul_SkAlphaType, data->getSkColorSpace());
     unsigned bytesPerPixel = static_cast<unsigned>(info.bytesPerPixel());
     unsigned srcPixelBytesPerRow = bytesPerPixel * data->size().width();
     unsigned dstPixelBytesPerRow =
@@ -633,20 +877,27 @@ ImageBitmap::ImageBitmap(ImageData* data,
     }
     if (!skImage)
       return;
-    if (parsedOptions.shouldScaleInput)
-      m_image = StaticBitmapImage::create(scaleSkImage(
-          skImage, parsedOptions.resizeWidth, parsedOptions.resizeHeight,
-          parsedOptions.resizeQuality));
-    else
+    if (data->getSkColorSpace()) {
+      parsedOptions.latestColorSpace = data->getSkColorSpace();
+      applyColorSpaceConversion(skImage, parsedOptions);
+    }
+    if (parsedOptions.shouldScaleInput) {
+      m_image = StaticBitmapImage::create(
+          scaleSkImage(skImage, parsedOptions.resizeWidth,
+                       parsedOptions.resizeHeight, parsedOptions.resizeQuality,
+                       parsedOptions.latestColorType, data->getSkColorSpace()));
+    } else {
       m_image = StaticBitmapImage::create(skImage);
+    }
     if (!m_image)
       return;
     m_image->setPremultiplied(parsedOptions.premultiplyAlpha);
     return;
   }
 
-  std::unique_ptr<ImageBuffer> buffer = ImageBuffer::create(
-      parsedOptions.cropRect.size(), NonOpaque, DoNotInitializeImagePixels);
+  std::unique_ptr<ImageBuffer> buffer =
+      ImageBuffer::create(parsedOptions.cropRect.size(), NonOpaque,
+                          DoNotInitializeImagePixels, data->getSkColorSpace());
   if (!buffer)
     return;
 
@@ -662,17 +913,19 @@ ImageBitmap::ImageBitmap(ImageData* data,
     dstPoint.setX(-parsedOptions.cropRect.x());
   if (parsedOptions.cropRect.y() < 0)
     dstPoint.setY(-parsedOptions.cropRect.y());
+
   buffer->putByteArray(Unmultiplied, data->data()->data(), data->size(),
                        srcRect, dstPoint);
   sk_sp<SkImage> skImage =
       buffer->newSkImageSnapshot(PreferNoAcceleration, SnapshotReasonUnknown);
   if (parsedOptions.flipY)
-    skImage = flipSkImageVertically(skImage.get(), PremultiplyAlpha);
+    skImage = flipSkImageVertically(skImage.get(), EnforceAlphaPremultiply);
   if (!skImage)
     return;
   if (parsedOptions.shouldScaleInput) {
-    sk_sp<SkSurface> surface = SkSurface::MakeRasterN32Premul(
-        parsedOptions.resizeWidth, parsedOptions.resizeHeight);
+    sk_sp<SkSurface> surface = SkSurface::MakeRaster(SkImageInfo::MakeN32Premul(
+        parsedOptions.resizeWidth, parsedOptions.resizeHeight,
+        data->getSkColorSpace()));
     if (!surface)
       return;
     SkPaint paint;
@@ -682,8 +935,17 @@ ImageBitmap::ImageBitmap(ImageData* data,
     surface->getCanvas()->drawImageRect(skImage, dstDrawRect, &paint);
     skImage = surface->makeImageSnapshot();
   }
+  if (data->getSkColorSpace()) {
+    parsedOptions.latestColorSpace = data->getSkColorSpace();
+    applyColorSpaceConversion(skImage, parsedOptions);
+  }
   m_image = StaticBitmapImage::create(std::move(skImage));
 }
+
+// TODO(zakerinasab): Fix the constructor from Float32ImageData.
+ImageBitmap::ImageBitmap(Float32ImageData* data,
+                         Optional<IntRect> cropRect,
+                         const ImageBitmapOptions& options) {}
 
 ImageBitmap::ImageBitmap(ImageBitmap* bitmap,
                          Optional<IntRect> cropRect,
@@ -695,9 +957,10 @@ ImageBitmap::ImageBitmap(ImageBitmap* bitmap,
   if (dstBufferSizeHasOverflow(parsedOptions))
     return;
 
-  m_image = cropImage(input.get(), parsedOptions, bitmap->isPremultiplied()
-                                                      ? PremultiplyAlpha
-                                                      : DontPremultiplyAlpha);
+  m_image = cropImageAndApplyColorSpaceConversion(
+      input.get(), parsedOptions,
+      bitmap->isPremultiplied() ? PremultiplyAlpha : DontPremultiplyAlpha,
+      ColorBehavior::transformToGlobalTarget());
   if (!m_image)
     return;
   m_image->setOriginClean(bitmap->originClean());
@@ -713,7 +976,9 @@ ImageBitmap::ImageBitmap(PassRefPtr<StaticBitmapImage> image,
   if (dstBufferSizeHasOverflow(parsedOptions))
     return;
 
-  m_image = cropImage(input.get(), parsedOptions);
+  m_image = cropImageAndApplyColorSpaceConversion(
+      input.get(), parsedOptions, PremultiplyAlpha,
+      ColorBehavior::transformToGlobalTarget());
   if (!m_image)
     return;
 
@@ -729,7 +994,7 @@ PassRefPtr<StaticBitmapImage> ImageBitmap::transfer() {
   ASSERT(!isNeutered());
   m_isNeutered = true;
   m_image->transfer();
-  return m_image.release();
+  return std::move(m_image);
 }
 
 ImageBitmap::~ImageBitmap() {}
@@ -754,7 +1019,19 @@ ImageBitmap* ImageBitmap::create(HTMLCanvasElement* canvas,
   return new ImageBitmap(canvas, cropRect, options);
 }
 
+ImageBitmap* ImageBitmap::create(OffscreenCanvas* offscreenCanvas,
+                                 Optional<IntRect> cropRect,
+                                 const ImageBitmapOptions& options) {
+  return new ImageBitmap(offscreenCanvas, cropRect, options);
+}
+
 ImageBitmap* ImageBitmap::create(ImageData* data,
+                                 Optional<IntRect> cropRect,
+                                 const ImageBitmapOptions& options) {
+  return new ImageBitmap(data, cropRect, options);
+}
+
+ImageBitmap* ImageBitmap::create(Float32ImageData* data,
                                  Optional<IntRect> cropRect,
                                  const ImageBitmapOptions& options) {
   return new ImageBitmap(data, cropRect, options);
@@ -804,8 +1081,12 @@ PassRefPtr<Uint8Array> ImageBitmap::copyBitmapData(AlphaDisposition alphaOp,
       (format == RGBAColorType) ? kRGBA_8888_SkColorType : kN32_SkColorType,
       (alphaOp == PremultiplyAlpha) ? kPremul_SkAlphaType
                                     : kUnpremul_SkAlphaType);
-  RefPtr<Uint8Array> dstPixels =
-      copySkImageData(m_image->imageForCurrentFrame().get(), info);
+  // TODO(ccameron): Canvas should operate in sRGB and not display space.
+  // https://crbug.com/667431
+  RefPtr<Uint8Array> dstPixels = copySkImageData(
+      m_image->imageForCurrentFrame(ColorBehavior::transformToGlobalTarget())
+          .get(),
+      info);
   return dstPixels.release();
 }
 
@@ -856,7 +1137,16 @@ PassRefPtr<Image> ImageBitmap::getSourceImageForCanvas(
     SnapshotReason,
     const FloatSize&) const {
   *status = NormalSourceImageStatus;
-  return m_image ? m_image : nullptr;
+  if (!m_image)
+    return nullptr;
+  if (m_image->isPremultiplied())
+    return m_image;
+  // Skia does not support drawing unpremul SkImage on SkCanvas.
+  // Premultiply and return.
+  sk_sp<SkImage> premulSkImage = unPremulSkImageToPremul(
+      m_image->imageForCurrentFrame(ColorBehavior::transformToGlobalTarget())
+          .get());
+  return StaticBitmapImage::create(premulSkImage);
 }
 
 void ImageBitmap::adjustDrawRects(FloatRect* srcRect,

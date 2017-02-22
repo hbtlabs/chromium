@@ -654,8 +654,10 @@ void BrowserAccessibilityManagerAndroid::SetSelection(
     jint start,
     jint end) {
   BrowserAccessibilityAndroid* node = GetFromUniqueID(id);
-  if (node)
-    node->manager()->SetTextSelection(*node, start, end);
+  if (node) {
+    node->manager()->SetSelection(AXPlatformRange(node->CreatePositionAt(start),
+                                                  node->CreatePositionAt(end)));
+  }
 }
 
 jboolean BrowserAccessibilityManagerAndroid::AdjustSlider(
@@ -920,11 +922,6 @@ void BrowserAccessibilityManagerAndroid::SetAccessibilityFocus(
     return;
 
   node->manager()->SetAccessibilityFocus(*node);
-
-  // Auto-focus links, because some websites have skip links that are
-  // only visible when focused.  See http://crbug.com/657157
-  if (node->IsLink())
-    node->manager()->SetFocus(*node);
 }
 
 bool BrowserAccessibilityManagerAndroid::IsSlider(

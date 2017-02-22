@@ -23,7 +23,8 @@ class WebApplicationCacheHostImpl
   static WebApplicationCacheHostImpl* FromId(int id);
 
   WebApplicationCacheHostImpl(blink::WebApplicationCacheHostClient* client,
-                              AppCacheBackend* backend);
+                              AppCacheBackend* backend,
+                              int appcache_host_id);
   ~WebApplicationCacheHostImpl() override;
 
   int host_id() const { return host_id_; }
@@ -56,11 +57,7 @@ class WebApplicationCacheHostImpl
   void getAssociatedCacheInfo(CacheInfo* info) override;
 
  private:
-  enum IsNewMasterEntry {
-    MAYBE,
-    YES,
-    NO
-  };
+  enum IsNewMasterEntry { MAYBE_NEW_ENTRY, NEW_ENTRY, OLD_ENTRY };
 
   blink::WebApplicationCacheHostClient* client_;
   AppCacheBackend* backend_;

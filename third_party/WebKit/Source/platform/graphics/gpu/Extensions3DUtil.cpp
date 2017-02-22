@@ -18,14 +18,15 @@ void splitStringHelper(const String& str, HashSet<String>& set) {
   Vector<String> substrings;
   str.split(' ', substrings);
   for (size_t i = 0; i < substrings.size(); ++i)
-    set.add(substrings[i]);
+    set.insert(substrings[i]);
 }
 
 }  // anonymous namespace
 
 std::unique_ptr<Extensions3DUtil> Extensions3DUtil::create(
     gpu::gles2::GLES2Interface* gl) {
-  std::unique_ptr<Extensions3DUtil> out = wrapUnique(new Extensions3DUtil(gl));
+  std::unique_ptr<Extensions3DUtil> out =
+      WTF::wrapUnique(new Extensions3DUtil(gl));
   out->initializeExtensions();
   return out;
 }

@@ -26,6 +26,7 @@
 #include "base/gtest_prod_util.h"
 #include "core/CoreExport.h"
 #include "core/dom/AXObjectCache.h"
+#include "core/dom/AnimationWorkletProxyClient.h"
 #include "core/inspector/ConsoleTypes.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/NavigationPolicy.h"
@@ -49,8 +50,8 @@ namespace blink {
 class AXObject;
 class ColorChooser;
 class ColorChooserClient;
+class CompositorWorkerProxyClient;
 class CompositorAnimationTimeline;
-class CompositorProxyClient;
 class DateTimeChooser;
 class DateTimeChooserClient;
 class Element;
@@ -72,13 +73,14 @@ class WebDragData;
 class WebFrameScheduler;
 class WebImage;
 class WebLayer;
+class WebLayerTreeView;
 
 struct CompositedSelection;
 struct DateTimeChooserParameters;
 struct FrameLoadRequest;
-struct GraphicsDeviceAdapter;
 struct ViewportDescription;
 struct WebPoint;
+struct WebScreenInfo;
 struct WindowFeatures;
 
 class CORE_EXPORT ChromeClient : public HostWindow {
@@ -180,7 +182,11 @@ class CORE_EXPORT ChromeClient : public HostWindow {
   virtual WebScreenInfo screenInfo() const = 0;
   virtual void setCursor(const Cursor&, LocalFrame* localRoot) = 0;
   // End methods used by HostWindow.
+
   virtual Cursor lastSetCursorForTesting() const = 0;
+  Node* lastSetTooltipNodeForTesting() const {
+    return m_lastMouseOverNode.get();
+  }
 
   // Returns a custom visible content rect if a viewport override is active.
   virtual WTF::Optional<IntRect> visibleContentRectForPainting() const {
@@ -245,21 +251,24 @@ class CORE_EXPORT ChromeClient : public HostWindow {
   virtual void detachCompositorAnimationTimeline(CompositorAnimationTimeline*,
                                                  LocalFrame* localRoot) {}
 
-  virtual void enterFullscreenForElement(Element*) {}
-  virtual void exitFullscreen(LocalFrame*) {}
+  virtual void enterFullscreen(LocalFrame&) {}
+  virtual void exitFullscreen(LocalFrame&) {}
+  virtual void fullscreenElementChanged(Element*, Element*) {}
 
   virtual void clearCompositedSelection(LocalFrame*) {}
   virtual void updateCompositedSelection(LocalFrame*,
                                          const CompositedSelection&) {}
 
-  virtual void setEventListenerProperties(WebEventListenerClass,
+  virtual void setEventListenerProperties(LocalFrame*,
+                                          WebEventListenerClass,
                                           WebEventListenerProperties) = 0;
   virtual WebEventListenerProperties eventListenerProperties(
+      LocalFrame*,
       WebEventListenerClass) const = 0;
-  virtual void setHasScrollEventHandlers(bool) = 0;
-  virtual bool hasScrollEventHandlers() const = 0;
+  virtual void updateTouchRectsForSubframeIfNecessary(LocalFrame*) = 0;
+  virtual void setHasScrollEventHandlers(LocalFrame*, bool) = 0;
 
-  virtual void setTouchAction(TouchAction) = 0;
+  virtual void setTouchAction(LocalFrame*, TouchAction) = 0;
 
   // Checks if there is an opened popup, called by LayoutMenuList::showPopup().
   virtual bool hasOpenedPopup() const = 0;
@@ -277,7 +286,8 @@ class CORE_EXPORT ChromeClient : public HostWindow {
     HTMLDialog = 3
   };
   virtual bool shouldOpenModalDialogDuringPageDismissal(
-      const DialogType&,
+      LocalFrame&,
+      DialogType,
       const String&,
       Document::PageDismissalType) const {
     return true;
@@ -301,10 +311,9 @@ class CORE_EXPORT ChromeClient : public HostWindow {
   virtual void ajaxSucceeded(LocalFrame*) {}
 
   // Input method editor related functions.
-  virtual void didCancelCompositionOnSelectionChange() {}
-  virtual void willSetInputMethodState() {}
+  virtual void resetInputMethod() {}
   virtual void didUpdateTextOfFocusedElementByNonUserInput(LocalFrame&) {}
-  virtual void showImeIfNeeded() {}
+  virtual void showVirtualKeyboardOnElementFocus() {}
 
   virtual void registerViewportLayers() const {}
 
@@ -317,7 +326,10 @@ class CORE_EXPORT ChromeClient : public HostWindow {
   virtual void registerPopupOpeningObserver(PopupOpeningObserver*) = 0;
   virtual void unregisterPopupOpeningObserver(PopupOpeningObserver*) = 0;
 
-  virtual CompositorProxyClient* createCompositorProxyClient(LocalFrame*) = 0;
+  virtual CompositorWorkerProxyClient* createCompositorWorkerProxyClient(
+      LocalFrame*) = 0;
+  virtual AnimationWorkletProxyClient* createAnimationWorkletProxyClient(
+      LocalFrame*) = 0;
 
   virtual FloatSize elasticOverscroll() const { return FloatSize(); }
 
@@ -334,6 +346,10 @@ class CORE_EXPORT ChromeClient : public HostWindow {
   virtual double lastFrameTimeMonotonic() const { return 0.0; }
 
   virtual void installSupplements(LocalFrame&) {}
+
+  virtual WebLayerTreeView* getWebLayerTreeView(LocalFrame*) { return nullptr; }
+
+  DECLARE_TRACE();
 
  protected:
   ~ChromeClient() override {}
@@ -356,6 +372,7 @@ class CORE_EXPORT ChromeClient : public HostWindow {
                                          const String& message);
   void setToolTip(LocalFrame&, const HitTestResult&);
 
+  WeakMember<Node> m_lastMouseOverNode;
   LayoutPoint m_lastToolTipPoint;
   String m_lastToolTipText;
 

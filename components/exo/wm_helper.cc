@@ -70,6 +70,15 @@ void WMHelper::RemoveAccessibilityObserver(AccessibilityObserver* observer) {
   accessibility_observers_.RemoveObserver(observer);
 }
 
+void WMHelper::AddInputDeviceEventObserver(InputDeviceEventObserver* observer) {
+  input_device_event_observers_.AddObserver(observer);
+}
+
+void WMHelper::RemoveInputDeviceEventObserver(
+    InputDeviceEventObserver* observer) {
+  input_device_event_observers_.RemoveObserver(observer);
+}
+
 void WMHelper::NotifyWindowActivated(aura::Window* gained_active,
                                      aura::Window* lost_active) {
   for (ActivationObserver& observer : activation_observers_)
@@ -97,6 +106,11 @@ void WMHelper::NotifyMaximizeModeStarted() {
     observer.OnMaximizeModeStarted();
 }
 
+void WMHelper::NotifyMaximizeModeEnding() {
+  for (MaximizeModeObserver& observer : maximize_mode_observers_)
+    observer.OnMaximizeModeEnding();
+}
+
 void WMHelper::NotifyMaximizeModeEnded() {
   for (MaximizeModeObserver& observer : maximize_mode_observers_)
     observer.OnMaximizeModeEnded();
@@ -105,6 +119,11 @@ void WMHelper::NotifyMaximizeModeEnded() {
 void WMHelper::NotifyAccessibilityModeChanged() {
   for (AccessibilityObserver& observer : accessibility_observers_)
     observer.OnAccessibilityModeChanged();
+}
+
+void WMHelper::NotifyKeyboardDeviceConfigurationChanged() {
+  for (InputDeviceEventObserver& observer : input_device_event_observers_)
+    observer.OnKeyboardDeviceConfigurationChanged();
 }
 
 }  // namespace exo

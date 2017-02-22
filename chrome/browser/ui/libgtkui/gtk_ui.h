@@ -21,18 +21,16 @@
 typedef struct _GtkStyle GtkStyle;
 typedef struct _GtkWidget GtkWidget;
 
-class SkBitmap;
-
 namespace libgtkui {
 class Gtk2KeyBindingsHandler;
 class GConfListener;
 
 // Interface to GTK2 desktop features.
 //
-class Gtk2UI : public views::LinuxUI {
+class GtkUi : public views::LinuxUI {
  public:
-  Gtk2UI();
-  ~Gtk2UI() override;
+  GtkUi();
+  ~GtkUi() override;
 
   typedef base::Callback<ui::NativeTheme*(aura::Window* window)>
       NativeThemeGetter;
@@ -121,41 +119,24 @@ class Gtk2UI : public views::LinuxUI {
   // ThemeService interface and the colors we send to webkit.
   void LoadGtkValues();
 
-  // Initialize the Xcursor theme and size with the GTK theme and size.
-  void LoadCursorTheme();
-
-  // Reads in explicit theme frame colors from the ChromeGtkFrame style class
-  // or generates them per our fallback algorithm.
-  void BuildFrameColors();
-
-  // Gets a tint which depends on the default for |id| as well as |color|.
-  color_utils::HSL ColorToTint(int id, SkColor color);
-
-  // Returns the tint for buttons that contrasts with the normal window
-  // background color.
-  void GetNormalButtonTintHSL(color_utils::HSL* tint) const;
-
-  // Returns a tint that's the color of the current normal text in an entry.
-  void GetNormalEntryForegroundHSL(color_utils::HSL* tint) const;
-
-  // Returns a tint that's the color of the current highlighted text in an
-  // entry.
-  void GetSelectedEntryForegroundHSL(color_utils::HSL* tint) const;
-
-  // Gets a color for the background of the prominent button.
-  SkColor GetProminentButtonBgColor(int gtk_state) const;
+  // Sets the Xcursor theme and size with the GTK theme and size.
+  void UpdateCursorTheme();
 
   // Updates |default_font_*|.
   void UpdateDefaultFont();
 
+  // Gets a ChromeGtkFrame theme color; returns true on success.  No-op on gtk3.
+  bool GetChromeStyleColor(const char* sytle_property,
+                           SkColor* ret_color) const;
+
+  ui::NativeTheme* native_theme_;
+
+  // A GtkWindow object with the class "ChromeGtkFrame".
+  GtkWidget* fake_window_;
+
   // Colors calculated by LoadGtkValues() that are given to the
   // caller while |use_gtk_| is true.
   ColorMap colors_;
-
-  // Colors used to tint certain icons.
-  color_utils::HSL button_tint_;
-  color_utils::HSL entry_tint_;
-  color_utils::HSL selected_entry_tint_;
 
   // Colors that we pass to WebKit. These are generated each time the theme
   // changes.
@@ -197,13 +178,13 @@ class Gtk2UI : public views::LinuxUI {
   NonClientMiddleClickAction middle_click_action_;
 
   // Used to override the native theme for a window. If no override is provided
-  // or the callback returns NULL, Gtk2UI will default to a NativeThemeGtk2
+  // or the callback returns NULL, GtkUi will default to a NativeThemeGtk2
   // instance.
   NativeThemeGetter native_theme_overrider_;
 
   float device_scale_factor_ = 1.0f;
 
-  DISALLOW_COPY_AND_ASSIGN(Gtk2UI);
+  DISALLOW_COPY_AND_ASSIGN(GtkUi);
 };
 
 }  // namespace libgtkui
@@ -213,6 +194,6 @@ class Gtk2UI : public views::LinuxUI {
 // interface, because eventually this .so will be loaded through dlopen at
 // runtime so our main binary can conditionally load GTK2 or GTK3 or EFL or
 // QT or whatever.
-LIBGTKUI_EXPORT views::LinuxUI* BuildGtk2UI();
+LIBGTKUI_EXPORT views::LinuxUI* BuildGtkUi();
 
 #endif  // CHROME_BROWSER_UI_LIBGTKUI_GTK_UI_H_

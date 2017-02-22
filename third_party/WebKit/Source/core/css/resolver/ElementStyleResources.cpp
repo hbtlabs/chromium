@@ -24,12 +24,10 @@
 #include "core/css/resolver/ElementStyleResources.h"
 
 #include "core/CSSPropertyNames.h"
-#include "core/css/CSSCursorImageValue.h"
 #include "core/css/CSSGradientValue.h"
 #include "core/css/CSSImageValue.h"
 #include "core/css/CSSURIValue.h"
 #include "core/dom/Document.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/style/ComputedStyle.h"
 #include "core/style/ContentData.h"
 #include "core/style/CursorData.h"
@@ -42,6 +40,7 @@
 #include "core/style/StyleInvalidImage.h"
 #include "core/style/StylePendingImage.h"
 #include "core/svg/SVGElementProxy.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 
 namespace blink {
 
@@ -61,9 +60,6 @@ StyleImage* ElementStyleResources::styleImage(CSSPropertyID property,
   if (value.isImageSetValue())
     return setOrPendingFromValue(property, toCSSImageSetValue(value));
 
-  if (value.isCursorImageValue())
-    return cursorOrPendingFromValue(property, toCSSCursorImageValue(value));
-
   return nullptr;
 }
 
@@ -71,7 +67,7 @@ StyleImage* ElementStyleResources::generatedOrPendingFromValue(
     CSSPropertyID property,
     const CSSImageGeneratorValue& value) {
   if (value.isPending()) {
-    m_pendingImageProperties.add(property);
+    m_pendingImageProperties.insert(property);
     return StylePendingImage::create(value);
   }
   return StyleGeneratedImage::create(value);
@@ -81,7 +77,7 @@ StyleImage* ElementStyleResources::setOrPendingFromValue(
     CSSPropertyID property,
     const CSSImageSetValue& value) {
   if (value.isCachePending(m_deviceScaleFactor)) {
-    m_pendingImageProperties.add(property);
+    m_pendingImageProperties.insert(property);
     return StylePendingImage::create(value);
   }
   return value.cachedImage(m_deviceScaleFactor);
@@ -91,21 +87,11 @@ StyleImage* ElementStyleResources::cachedOrPendingFromValue(
     CSSPropertyID property,
     const CSSImageValue& value) {
   if (value.isCachePending()) {
-    m_pendingImageProperties.add(property);
+    m_pendingImageProperties.insert(property);
     return StylePendingImage::create(value);
   }
   value.restoreCachedResourceIfNeeded(*m_document);
   return value.cachedImage();
-}
-
-StyleImage* ElementStyleResources::cursorOrPendingFromValue(
-    CSSPropertyID property,
-    const CSSCursorImageValue& value) {
-  if (value.isCachePending(m_deviceScaleFactor)) {
-    m_pendingImageProperties.add(property);
-    return StylePendingImage::create(value);
-  }
-  return value.cachedImage(m_deviceScaleFactor);
 }
 
 SVGElementProxy& ElementStyleResources::cachedOrPendingFromValue(
@@ -146,10 +132,6 @@ StyleImage* ElementStyleResources::loadPendingImage(
     imageGeneratorValue->loadSubimages(*m_document);
     return StyleGeneratedImage::create(*imageGeneratorValue);
   }
-
-  if (CSSCursorImageValue* cursorImageValue =
-          pendingImage->cssCursorImageValue())
-    return cursorImageValue->cacheImage(*m_document, m_deviceScaleFactor);
 
   if (CSSImageSetValue* imageSetValue = pendingImage->cssImageSetValue())
     return imageSetValue->cacheImage(*m_document, m_deviceScaleFactor,

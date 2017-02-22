@@ -6,29 +6,15 @@ import("//testing/test.gni")
 
 static_library("proximity_auth") {
   sources = [
-    "authenticator.h",
     "bluetooth_connection.cc",
     "bluetooth_connection.h",
     "bluetooth_connection_finder.cc",
     "bluetooth_connection_finder.h",
-    "bluetooth_throttler.h",
-    "bluetooth_throttler_impl.cc",
-    "bluetooth_throttler_impl.h",
     "bluetooth_util.cc",
     "bluetooth_util.h",
     "bluetooth_util_chromeos.cc",
-    "connection.cc",
-    "connection.h",
-    "connection_finder.h",
-    "connection_observer.h",
     "cryptauth_enroller_factory_impl.cc",
     "cryptauth_enroller_factory_impl.h",
-    "device_to_device_authenticator.cc",
-    "device_to_device_authenticator.h",
-    "device_to_device_initiator_operations.cc",
-    "device_to_device_initiator_operations.h",
-    "device_to_device_secure_context.cc",
-    "device_to_device_secure_context.h",
     "messenger.h",
     "messenger_impl.cc",
     "messenger_impl.h",
@@ -46,8 +32,6 @@ static_library("proximity_auth") {
     "proximity_monitor_impl.cc",
     "proximity_monitor_impl.h",
     "proximity_monitor_observer.h",
-    "remote_device.cc",
-    "remote_device.h",
     "remote_device_life_cycle.h",
     "remote_device_life_cycle_impl.cc",
     "remote_device_life_cycle_impl.h",
@@ -58,20 +42,18 @@ static_library("proximity_auth") {
     "screenlock_bridge.cc",
     "screenlock_bridge.h",
     "screenlock_state.h",
-    "secure_context.h",
     "switches.cc",
     "switches.h",
     "throttled_bluetooth_connection_finder.cc",
     "throttled_bluetooth_connection_finder.h",
     "unlock_manager.cc",
     "unlock_manager.h",
-    "wire_message.cc",
-    "wire_message.h",
   ]
 
   deps = [
     "//base",
     "//components/cryptauth",
+    "//components/cryptauth/ble",
     "//components/prefs",
     "//components/proximity_auth/ble",
     "//components/proximity_auth/logging",
@@ -94,16 +76,8 @@ static_library("test_support") {
   testonly = true
 
   sources = [
-    "device_to_device_responder_operations.cc",
-    "device_to_device_responder_operations.h",
-    "fake_connection.cc",
-    "fake_connection.h",
-    "fake_secure_context.cc",
-    "fake_secure_context.h",
     "mock_proximity_auth_client.cc",
     "mock_proximity_auth_client.h",
-    "proximity_auth_test_util.cc",
-    "proximity_auth_test_util.h",
   ]
 
   public_deps = [
@@ -123,11 +97,6 @@ source_set("unit_tests") {
   sources = [
     "bluetooth_connection_finder_unittest.cc",
     "bluetooth_connection_unittest.cc",
-    "bluetooth_throttler_impl_unittest.cc",
-    "connection_unittest.cc",
-    "device_to_device_authenticator_unittest.cc",
-    "device_to_device_operations_unittest.cc",
-    "device_to_device_secure_context_unittest.cc",
     "messenger_impl_unittest.cc",
     "proximity_auth_pref_manager_unittest.cc",
     "proximity_auth_system_unittest.cc",
@@ -137,7 +106,6 @@ source_set("unit_tests") {
     "remote_status_update_unittest.cc",
     "throttled_bluetooth_connection_finder_unittest.cc",
     "unlock_manager_unittest.cc",
-    "wire_message_unittest.cc",
   ]
 
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]

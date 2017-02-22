@@ -53,10 +53,13 @@ struct GFX_EXPORT TextRunHarfBuzz {
   void GetClusterAt(size_t pos, Range* chars, Range* glyphs) const;
 
   // Returns the grapheme bounds at |text_index|. Handles multi-grapheme glyphs.
-  RangeF GetGraphemeBounds(RenderTextHarfBuzz* render_text, size_t text_index);
+  RangeF GetGraphemeBounds(RenderTextHarfBuzz* render_text,
+                           size_t text_index) const;
 
-  // Returns whether the given shaped run contains any missing glyphs.
-  bool HasMissingGlyphs() const;
+  // Returns the width of the given |char_range| handling grapheme boundaries
+  // within glyphs.
+  float GetGraphemeWidthForCharRange(RenderTextHarfBuzz* render_text,
+                                     const Range& char_range) const;
 
   // Returns the glyph width for the given character range. |char_range| is in
   // text-space (0 corresponds to |GetDisplayText()[0]|).
@@ -193,7 +196,6 @@ class GFX_EXPORT RenderTextHarfBuzz : public RenderText {
   // Return the run index that contains the argument; or the length of the
   // |runs_| vector if argument exceeds the text length or width.
   size_t GetRunContainingCaret(const SelectionModel& caret);
-  size_t GetRunContainingXCoord(float x, float* offset) const;
 
   // Given a |run|, returns the SelectionModel that contains the logical first
   // or last caret position inside (not at a boundary of) the run.

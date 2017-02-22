@@ -16,6 +16,7 @@
 #include <ostream>
 
 #include "base/logging.h"
+#include "base/numerics/safe_math.h"
 #include "build/build_config.h"
 
 #if defined(OS_ANDROID)
@@ -25,7 +26,6 @@
 #endif
 
 #if !defined(OS_MACOSX)
-#include "base/lazy_instance.h"
 #include "base/synchronization/lock.h"
 #endif
 
@@ -34,8 +34,10 @@ namespace {
 #if !defined(OS_MACOSX)
 // This prevents a crash on traversing the environment global and looking up
 // the 'TZ' variable in libc. See: crbug.com/390567.
-base::LazyInstance<base::Lock>::Leaky
-    g_sys_time_to_time_struct_lock = LAZY_INSTANCE_INITIALIZER;
+base::Lock* GetSysTimeToTimeStructLock() {
+  static auto* lock = new base::Lock();
+  return lock;
+}
 
 // Define a system-specific SysTime that wraps either to a time_t or
 // a time64_t depending on the host system, and associated convertion.
@@ -44,7 +46,7 @@ base::LazyInstance<base::Lock>::Leaky
 typedef time64_t SysTime;
 
 SysTime SysTimeFromTimeStruct(struct tm* timestruct, bool is_local) {
-  base::AutoLock locked(g_sys_time_to_time_struct_lock.Get());
+  base::AutoLock locked(*GetSysTimeToTimeStructLock());
   if (is_local)
     return mktime64(timestruct);
   else
@@ -52,7 +54,7 @@ SysTime SysTimeFromTimeStruct(struct tm* timestruct, bool is_local) {
 }
 
 void SysTimeToTimeStruct(SysTime t, struct tm* timestruct, bool is_local) {
-  base::AutoLock locked(g_sys_time_to_time_struct_lock.Get());
+  base::AutoLock locked(*GetSysTimeToTimeStructLock());
   if (is_local)
     localtime64_r(&t, timestruct);
   else
@@ -63,7 +65,7 @@ void SysTimeToTimeStruct(SysTime t, struct tm* timestruct, bool is_local) {
 typedef time_t SysTime;
 
 SysTime SysTimeFromTimeStruct(struct tm* timestruct, bool is_local) {
-  base::AutoLock locked(g_sys_time_to_time_struct_lock.Get());
+  base::AutoLock locked(*GetSysTimeToTimeStructLock());
   if (is_local)
     return mktime(timestruct);
   else
@@ -71,7 +73,7 @@ SysTime SysTimeFromTimeStruct(struct tm* timestruct, bool is_local) {
 }
 
 void SysTimeToTimeStruct(SysTime t, struct tm* timestruct, bool is_local) {
-  base::AutoLock locked(g_sys_time_to_time_struct_lock.Get());
+  base::AutoLock locked(*GetSysTimeToTimeStructLock());
   if (is_local)
     localtime_r(&t, timestruct);
   else
@@ -227,19 +229,28 @@ void Time::Explode(bool is_local, Exploded* exploded) const {
 
 // static
 bool Time::FromExploded(bool is_local, const Exploded& exploded, Time* time) {
+  CheckedNumeric<int> month = exploded.month;
+  month--;
+  CheckedNumeric<int> year = exploded.year;
+  year -= 1900;
+  if (!month.IsValid() || !year.IsValid()) {
+    *time = Time(0);
+    return false;
+  }
+
   struct tm timestruct;
-  timestruct.tm_sec    = exploded.second;
-  timestruct.tm_min    = exploded.minute;
-  timestruct.tm_hour   = exploded.hour;
-  timestruct.tm_mday   = exploded.day_of_month;
-  timestruct.tm_mon    = exploded.month - 1;
-  timestruct.tm_year   = exploded.year - 1900;
-  timestruct.tm_wday   = exploded.day_of_week;  // mktime/timegm ignore this
-  timestruct.tm_yday   = 0;     // mktime/timegm ignore this
-  timestruct.tm_isdst  = -1;    // attempt to figure it out
+  timestruct.tm_sec = exploded.second;
+  timestruct.tm_min = exploded.minute;
+  timestruct.tm_hour = exploded.hour;
+  timestruct.tm_mday = exploded.day_of_month;
+  timestruct.tm_mon = month.ValueOrDie();
+  timestruct.tm_year = year.ValueOrDie();
+  timestruct.tm_wday = exploded.day_of_week;  // mktime/timegm ignore this
+  timestruct.tm_yday = 0;                     // mktime/timegm ignore this
+  timestruct.tm_isdst = -1;                   // attempt to figure it out
 #if !defined(OS_NACL) && !defined(OS_SOLARIS)
-  timestruct.tm_gmtoff = 0;     // not a POSIX field, so mktime/timegm ignore
-  timestruct.tm_zone   = NULL;  // not a POSIX field, so mktime/timegm ignore
+  timestruct.tm_gmtoff = 0;   // not a POSIX field, so mktime/timegm ignore
+  timestruct.tm_zone = NULL;  // not a POSIX field, so mktime/timegm ignore
 #endif
 
   SysTime seconds;

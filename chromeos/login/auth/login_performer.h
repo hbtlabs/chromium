@@ -20,12 +20,12 @@
 
 class AccountId;
 
-namespace net {
-class URLRequestContextGetter;
+namespace base {
+class TaskRunner;
 }
 
-namespace policy {
-class WildcardLoginChecker;
+namespace net {
+class URLRequestContextGetter;
 }
 
 namespace content {

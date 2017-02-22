@@ -17,60 +17,40 @@
             // as long as the associated MediaKeys object is around.
 
             // For this test, create a MediaKeySession and verify lifetime.
-            async_test(function(test)
+            promise_test(function(test)
             {
                 var initDataType;
                 var initData;
                 var mediaKeys;
-                var startingActiveDOMObjectCount = window.internals.activeDOMObjectCount(document);
 
-                function numActiveDOMObjectsCreated()
-                {
-                    return window.internals.activeDOMObjectCount(document) - startingActiveDOMObjectCount;
-                }
+                // Even though there should be no existing objects, start by
+                // running gc() and verifying that none exist. This also
+                // allows the failures to be reported from inside a promise
+                // so that the test fails properly.
+                return createGCPromise().then(function() {
+                    verifyMediaKeyAndMediaKeySessionCount(0, 0, 'After initial gc()');
 
-                // Create a MediaKeys object with a session.
-                navigator.requestMediaKeySystemAccess('org.w3.clearkey', getSimpleConfiguration()).then(function(access) {
+                    // Create a MediaKeys object with a session.
+                    return navigator.requestMediaKeySystemAccess('org.w3.clearkey', getSimpleConfiguration());
+                }).then(function(access) {
                     initDataType = access.getConfiguration().initDataTypes[0];
                     initData = getInitData(initDataType);
                     return access.createMediaKeys();
                 }).then(function(result) {
                     mediaKeys = result;
-
-                    // Verify MediaKeys is an ActiveDOMObject.
-                    // In non-Oilpan, numActiveDOMObjectsCreate() == 1.
-                    // In Oilpan, numActiveDOMObjectsCreate() <= 4.
-                    // (1 MediaKeys,
-                    //  1 MediaKeysInitializer and
-                    //  1 MediaKeySystemAccessInitializer (navigator.requestMediaKeySystemAccess() use above),
-                    //  1 MediaKeySystemAccessInitializer (isInitDataSupported() (via getSupportedInitDataType())))
-                    assert_between_inclusive(numActiveDOMObjectsCreated(), 1, 4, 'MediaKeys.create()');
+                    verifyMediaKeyAndMediaKeySessionCount(1, 0, 'MediaKeys.create()');
 
                     var mediaKeySession = mediaKeys.createSession();
                     return mediaKeySession.generateRequest(initDataType, initData);
                 }).then(function() {
-                    // Should be 1 MediaKeys + 1 MediaKeySession.
-                    // In non-Oilpan, numActiveDOMObjectsCreate() == 2.
-                    // In Oilpan, numActiveDOMObjectsCreate() <= 6.
-                    // (1 MediaKeys,
-                    //  1 MediaKeysInitializer and
-                    //  2 MediaKeySystemAccessInitializer,
-                    //  1 ContentDecryptionModuleResultPromise and
-                    //  1 MediaKeySession).
-                    assert_between_inclusive(numActiveDOMObjectsCreated(), 2, 6, 'MediaKeys.createSession()');
+                    verifyMediaKeyAndMediaKeySessionCount(1, 1, 'MediaKeys.createSession()');
 
                     // Run gc(), should not affect MediaKeys object nor the
                     // session since we still have a reference to it.
-
-                    // When enabling oilpan GC, the in-active
-                    // ScriptPromiseResolvers will be destroyed.
                     return createGCPromise();
                 }).then(function(result) {
                     assert_equals(typeof mediaKeys.createSession, 'function');
-
-                    // MediaKeys + MediaKeySessions should remain.
-                    // In non-Oilpan, there is also something from createGCPromise().
-                    assert_between_inclusive(numActiveDOMObjectsCreated(), 2, 3, 'After gc()');
+                    verifyMediaKeyAndMediaKeySessionCount(1, 1, 'After gc()');
 
                     // Drop reference to the MediaKeys object and run gc()
                     // again. Object should be collected this time. Since
@@ -85,13 +65,7 @@
                 }).then(function(result) {
                     return createGCPromise();
                 }).then(function(result) {
-                    // No MediaKeySessions should remain.
-                    // In non-Oilpan, there is also something from createGCPromise().
-                    assert_between_inclusive(numActiveDOMObjectsCreated(), 0, 1, 'After final gc()');
-
-                    test.done();
-                }).catch(function(error) {
-                    forceTestFailureFromPromise(test, error);
+                    verifyMediaKeyAndMediaKeySessionCount(0, 0, 'After final gc()');
                 });
             }, 'MediaKeys lifetime with session');
         </script>

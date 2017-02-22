@@ -14,6 +14,8 @@
 #include "chrome/browser/task_manager/task_manager_observer.h"
 #include "components/nacl/browser/nacl_browser.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/memory_coordinator.h"
+#include "content/public/common/content_features.h"
 #include "gpu/ipc/common/memory_stats.h"
 
 namespace task_manager {
@@ -22,12 +24,16 @@ namespace {
 
 // A mask for the refresh types that are done in the background thread.
 const int kBackgroundRefreshTypesMask =
-    REFRESH_TYPE_CPU |
-    REFRESH_TYPE_MEMORY |
-    REFRESH_TYPE_IDLE_WAKEUPS |
+    REFRESH_TYPE_CPU | REFRESH_TYPE_MEMORY | REFRESH_TYPE_IDLE_WAKEUPS |
+#if defined(OS_WIN)
+    REFRESH_TYPE_START_TIME | REFRESH_TYPE_CPU_TIME |
+#endif  // defined(OS_WIN)
 #if defined(OS_LINUX)
     REFRESH_TYPE_FD_COUNT |
 #endif  // defined(OS_LINUX)
+#if !defined(DISABLE_NACL)
+    REFRESH_TYPE_NACL |
+#endif  // !defined(DISABLE_NACL)
     REFRESH_TYPE_PRIORITY;
 
 #if defined(OS_WIN)
@@ -60,6 +66,13 @@ void GetWindowsHandles(base::ProcessHandle handle,
 }
 #endif  // defined(OS_WIN)
 
+#if !defined(DISABLE_NACL)
+int GetNaClDebugStubPortOnIoThread(int process_id) {
+  return nacl::NaClBrowser::GetInstance()->GetProcessGdbDebugStubPort(
+      process_id);
+}
+#endif  // !defined(DISABLE_NACL)
+
 }  // namespace
 
 TaskGroup::TaskGroup(
@@ -77,6 +90,7 @@ TaskGroup::TaskGroup(
       current_on_bg_done_flags_(0),
       cpu_usage_(0.0),
       gpu_memory_(-1),
+      memory_state_(base::MemoryState::UNKNOWN),
       per_process_network_usage_(-1),
 #if defined(OS_WIN)
       gdi_current_handles_(-1),
@@ -85,7 +99,7 @@ TaskGroup::TaskGroup(
       user_peak_handles_(-1),
 #endif  // defined(OS_WIN)
 #if !defined(DISABLE_NACL)
-      nacl_debug_stub_port_(-1),
+      nacl_debug_stub_port_(nacl::kGdbDebugStubPortUnknown),
 #endif  // !defined(DISABLE_NACL)
       idle_wakeups_per_second_(-1),
 #if defined(OS_LINUX)
@@ -114,8 +128,12 @@ TaskGroup::TaskGroup(
   shared_sampler_->RegisterCallbacks(
       process_id_, base::Bind(&TaskGroup::OnIdleWakeupsRefreshDone,
                               weak_ptr_factory_.GetWeakPtr()),
-                   base::Bind(&TaskGroup::OnPhysicalMemoryUsageRefreshDone,
-                              weak_ptr_factory_.GetWeakPtr()));
+      base::Bind(&TaskGroup::OnPhysicalMemoryUsageRefreshDone,
+                 weak_ptr_factory_.GetWeakPtr()),
+      base::Bind(&TaskGroup::OnStartTimeRefreshDone,
+                 weak_ptr_factory_.GetWeakPtr()),
+      base::Bind(&TaskGroup::OnCpuTimeRefreshDone,
+                 weak_ptr_factory_.GetWeakPtr()));
 }
 
 TaskGroup::~TaskGroup() {
@@ -136,6 +154,7 @@ void TaskGroup::Refresh(const gpu::VideoMemoryUsageStats& gpu_memory_stats,
                         base::TimeDelta update_interval,
                         int64_t refresh_flags) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK(!empty());
 
   expected_on_bg_done_flags_ = refresh_flags & kBackgroundRefreshTypesMask;
   // If a refresh type was recently disabled, we need to account for that too.
@@ -168,11 +187,11 @@ void TaskGroup::Refresh(const gpu::VideoMemoryUsageStats& gpu_memory_stats,
   }
 #endif  // defined(OS_WIN)
 
-  // 4- Refresh the NACL debug stub port (if enabled).
+// 4- Refresh the NACL debug stub port (if enabled). This calls out to
+//    NaClBrowser on the browser's IO thread, completing asynchronously.
 #if !defined(DISABLE_NACL)
   if (TaskManagerObserver::IsResourceRefreshEnabled(REFRESH_TYPE_NACL,
-                                                    refresh_flags) &&
-      !tasks_.empty()) {
+                                                    refresh_flags)) {
     RefreshNaClDebugStubPort(tasks_[0]->GetChildProcessUniqueID());
   }
 #endif  // !defined(DISABLE_NACL)
@@ -188,13 +207,22 @@ void TaskGroup::Refresh(const gpu::VideoMemoryUsageStats& gpu_memory_stats,
     refresh_flags &= ~shared_refresh_flags;
   }
 
+  // 6- Refresh memory state when memory coordinator is enabled.
+  if (TaskManagerObserver::IsResourceRefreshEnabled(REFRESH_TYPE_MEMORY_STATE,
+                                                    refresh_flags) &&
+      base::FeatureList::IsEnabled(features::kMemoryCoordinator)) {
+    memory_state_ =
+        content::MemoryCoordinator::GetInstance()->GetStateForProcess(
+            process_handle_);
+  }
+
   // The remaining resource refreshes are time consuming and cannot be done on
   // the UI thread. Do them all on the worker thread using the TaskGroupSampler.
-  // 6-  CPU usage.
-  // 7-  Memory usage.
-  // 8-  Idle Wakeups per second.
-  // 9-  (Linux and ChromeOS only) The number of file descriptors current open.
-  // 10- Process priority (foreground vs. background).
+  // 7-  CPU usage.
+  // 8-  Memory usage.
+  // 9-  Idle Wakeups per second.
+  // 10-  (Linux and ChromeOS only) The number of file descriptors current open.
+  // 11- Process priority (foreground vs. background).
   worker_thread_sampler_->Refresh(refresh_flags);
 }
 
@@ -238,19 +266,42 @@ void TaskGroup::RefreshWindowsHandles() {
 #endif  // defined(OS_WIN)
 }
 
-void TaskGroup::RefreshNaClDebugStubPort(int child_process_unique_id) {
 #if !defined(DISABLE_NACL)
-  nacl::NaClBrowser* nacl_browser = nacl::NaClBrowser::GetInstance();
-  nacl_debug_stub_port_ =
-      nacl_browser->GetProcessGdbDebugStubPort(child_process_unique_id);
-#endif  // !defined(DISABLE_NACL)
+void TaskGroup::RefreshNaClDebugStubPort(int child_process_unique_id) {
+  content::BrowserThread::PostTaskAndReplyWithResult(
+      content::BrowserThread::IO, FROM_HERE,
+      base::Bind(&GetNaClDebugStubPortOnIoThread, child_process_unique_id),
+      base::Bind(&TaskGroup::OnRefreshNaClDebugStubPortDone,
+                 weak_ptr_factory_.GetWeakPtr()));
 }
+
+void TaskGroup::OnRefreshNaClDebugStubPortDone(int nacl_debug_stub_port) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  nacl_debug_stub_port_ = nacl_debug_stub_port;
+  OnBackgroundRefreshTypeFinished(REFRESH_TYPE_NACL);
+}
+#endif  // !defined(DISABLE_NACL)
 
 void TaskGroup::OnCpuRefreshDone(double cpu_usage) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   cpu_usage_ = cpu_usage;
   OnBackgroundRefreshTypeFinished(REFRESH_TYPE_CPU);
+}
+
+void TaskGroup::OnStartTimeRefreshDone(base::Time start_time) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  start_time_ = start_time;
+  OnBackgroundRefreshTypeFinished(REFRESH_TYPE_START_TIME);
+}
+
+void TaskGroup::OnCpuTimeRefreshDone(base::TimeDelta cpu_time) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  cpu_time_ = cpu_time;
+  OnBackgroundRefreshTypeFinished(REFRESH_TYPE_CPU_TIME);
 }
 
 void TaskGroup::OnPhysicalMemoryUsageRefreshDone(int64_t physical_bytes) {

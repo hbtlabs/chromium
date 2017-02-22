@@ -131,7 +131,7 @@ class V8ValueConverterImplTest : public testing::Test {
       ADD_FAILURE();
       return false;
     }
-    return child->GetType() == base::Value::TYPE_NULL;
+    return child->GetType() == base::Value::Type::NONE;
   }
 
   bool IsNull(v8::Local<v8::Object> value, const std::string& key) {
@@ -150,7 +150,7 @@ class V8ValueConverterImplTest : public testing::Test {
       ADD_FAILURE();
       return false;
     }
-    return child->GetType() == base::Value::TYPE_NULL;
+    return child->GetType() == base::Value::Type::NONE;
   }
 
   bool IsNull(v8::Local<v8::Array> value, uint32_t index) {
@@ -208,7 +208,7 @@ class V8ValueConverterImplTest : public testing::Test {
       // types into null.
       base::Value* temp = NULL;
       ASSERT_TRUE(list->Get(0, &temp));
-      EXPECT_EQ(base::Value::TYPE_NULL, temp->GetType());
+      EXPECT_EQ(base::Value::Type::NONE, temp->GetType());
     }
   }
 
@@ -403,21 +403,21 @@ TEST_F(V8ValueConverterImplTest, WeirdTypes) {
 
   V8ValueConverterImpl converter;
   TestWeirdType(converter, v8::Undefined(isolate_),
-                base::Value::TYPE_NULL,  // Arbitrary type, result is NULL.
+                base::Value::Type::NONE,  // Arbitrary type, result is NULL.
                 std::unique_ptr<base::Value>());
   TestWeirdType(converter, v8::Date::New(isolate_, 1000),
-                base::Value::TYPE_DICTIONARY,
+                base::Value::Type::DICTIONARY,
                 std::unique_ptr<base::Value>(new base::DictionaryValue()));
-  TestWeirdType(converter, regex, base::Value::TYPE_DICTIONARY,
+  TestWeirdType(converter, regex, base::Value::Type::DICTIONARY,
                 std::unique_ptr<base::Value>(new base::DictionaryValue()));
 
   converter.SetDateAllowed(true);
   TestWeirdType(converter, v8::Date::New(isolate_, 1000),
-                base::Value::TYPE_DOUBLE,
+                base::Value::Type::DOUBLE,
                 std::unique_ptr<base::Value>(new base::FundamentalValue(1.0)));
 
   converter.SetRegExpAllowed(true);
-  TestWeirdType(converter, regex, base::Value::TYPE_STRING,
+  TestWeirdType(converter, regex, base::Value::Type::STRING,
                 std::unique_ptr<base::Value>(new base::StringValue("/./")));
 }
 
@@ -1108,8 +1108,29 @@ TEST_F(V8ValueConverterImplTest, StrategyBypass) {
   EXPECT_TRUE(
       base::Value::Equals(reference_array_value.get(), array_value.get()));
 
-  // Not testing ArrayBuffers as V8ValueConverter uses blink helpers and
-  // this requires having blink to be initialized.
+  const char kExampleData[] = {1, 2, 3, 4, 5};
+  v8::Local<v8::ArrayBuffer> array_buffer(
+      v8::ArrayBuffer::New(isolate_, sizeof(kExampleData)));
+  memcpy(array_buffer->GetContents().Data(), kExampleData,
+         sizeof(kExampleData));
+  std::unique_ptr<base::Value> binary_value(
+      converter.FromV8Value(array_buffer, context));
+  ASSERT_TRUE(binary_value);
+  std::unique_ptr<base::Value> reference_binary_value(
+      base::BinaryValue::CreateWithCopiedBuffer(kExampleData,
+                                                sizeof(kExampleData)));
+  EXPECT_TRUE(
+      base::Value::Equals(reference_binary_value.get(), binary_value.get()));
+
+  v8::Local<v8::ArrayBufferView> array_buffer_view(
+      v8::Uint8Array::New(array_buffer, 1, 3));
+  std::unique_ptr<base::Value> binary_view_value(
+      converter.FromV8Value(array_buffer_view, context));
+  ASSERT_TRUE(binary_view_value);
+  std::unique_ptr<base::Value> reference_binary_view_value(
+      base::BinaryValue::CreateWithCopiedBuffer(&kExampleData[1], 3));
+  EXPECT_TRUE(base::Value::Equals(reference_binary_view_value.get(),
+                                  binary_view_value.get()));
 
   v8::Local<v8::Number> number(v8::Number::New(isolate_, 0.0));
   std::unique_ptr<base::Value> number_value(

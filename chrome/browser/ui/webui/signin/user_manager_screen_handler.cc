@@ -43,6 +43,8 @@
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "chrome/browser/ui/webui/profile_helper.h"
+#include "chrome/browser/ui/webui/signin/login_ui_service.h"
+#include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -462,11 +464,22 @@ void UserManagerScreenHandler::HandleAuthenticatedLaunchUser(
   if (!email_address_.empty()) {
     // In order to support the upgrade case where we have a local hash but no
     // password token, the user must perform a full online reauth.
-    UserManager::ShowReauthDialog(browser_context, email_address_,
-                                  signin_metrics::Reason::REASON_UNLOCK);
+    UserManagerProfileDialog::ShowReauthDialog(
+        browser_context, email_address_, signin_metrics::Reason::REASON_UNLOCK);
+  } else if (entry->IsSigninRequired() && entry->IsSupervised()) {
+    // Supervised profile will only be locked when force-sign-in is enabled
+    // and it shouldn't be unlocked. Display the error message directly via
+    // the system profile to avoid profile creation.
+    LoginUIServiceFactory::GetForProfile(
+        Profile::FromWebUI(web_ui())->GetOriginalProfile())
+        ->DisplayLoginResult(nullptr,
+                             l10n_util::GetStringUTF16(
+                                 IDS_SUPERVISED_USER_NOT_ALLOWED_BY_POLICY),
+                             base::string16());
+    UserManagerProfileDialog::ShowDialogAndDisplayErrorMessage(browser_context);
   } else {
     // Fresh sign in via user manager without existing email address.
-    UserManager::ShowSigninDialog(browser_context, profile_path);
+    UserManagerProfileDialog::ShowSigninDialog(browser_context, profile_path);
   }
 }
 
@@ -691,9 +704,9 @@ void UserManagerScreenHandler::OnOAuthError() {
   // Password has changed.  Go through online signin flow.
   DCHECK(!email_address_.empty());
   oauth_client_.reset();
-  UserManager::ShowReauthDialog(web_ui()->GetWebContents()->GetBrowserContext(),
-                                email_address_,
-                                signin_metrics::Reason::REASON_UNLOCK);
+  UserManagerProfileDialog::ShowReauthDialog(
+      web_ui()->GetWebContents()->GetBrowserContext(), email_address_,
+      signin_metrics::Reason::REASON_UNLOCK);
 }
 
 void UserManagerScreenHandler::OnNetworkError(int response_code) {
@@ -750,6 +763,7 @@ void UserManagerScreenHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback("loginVisible", kDoNothingCallback);
   // Unused callbacks from user_pod_row.js
   web_ui()->RegisterMessageCallback("focusPod", kDoNothingCallback);
+  web_ui()->RegisterMessageCallback("noPodFocused", kDoNothingCallback);
 }
 
 void UserManagerScreenHandler::GetLocalizedValues(
@@ -861,6 +875,18 @@ void UserManagerScreenHandler::GetLocalizedValues(
                                base::string16());
   localized_strings->SetString("publicAccountEnter", base::string16());
   localized_strings->SetString("publicAccountEnterAccessibleName",
+                               base::string16());
+  localized_strings->SetString("publicAccountMonitoringWarning",
+                               base::string16());
+  localized_strings->SetString("publicAccountLearnMore", base::string16());
+  localized_strings->SetString("publicAccountMonitoringInfo", base::string16());
+  localized_strings->SetString("publicAccountMonitoringInfoItem1",
+                               base::string16());
+  localized_strings->SetString("publicAccountMonitoringInfoItem2",
+                               base::string16());
+  localized_strings->SetString("publicAccountMonitoringInfoItem3",
+                               base::string16());
+  localized_strings->SetString("publicAccountMonitoringInfoItem4",
                                base::string16());
   localized_strings->SetString("publicSessionSelectLanguage", base::string16());
   localized_strings->SetString("publicSessionSelectKeyboard", base::string16());

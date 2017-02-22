@@ -12,6 +12,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/shared_memory.h"
 #include "base/message_loop/message_loop.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "content/child/blob_storage/blob_consolidation.h"
@@ -111,6 +112,9 @@ void WebBlobRegistryImpl::removeBlobDataRef(const WebString& uuid) {
 
 void WebBlobRegistryImpl::registerPublicBlobURL(const WebURL& url,
                                                 const WebString& uuid) {
+  // Measure how much jank the following synchronous IPC introduces.
+  SCOPED_UMA_HISTOGRAM_TIMER("Storage.Blob.RegisterPublicURLTime");
+
   sender_->Send(new BlobHostMsg_RegisterPublicURL(url, uuid.utf8()));
 }
 
@@ -148,8 +152,7 @@ void WebBlobRegistryImpl::addDataToStream(const WebURL& url,
     size_t shared_memory_size =
         std::min(length, limits_.max_shared_memory_size);
     std::unique_ptr<base::SharedMemory> shared_memory(
-        ChildThreadImpl::AllocateSharedMemory(shared_memory_size,
-                                              sender_.get(), nullptr));
+        ChildThreadImpl::AllocateSharedMemory(shared_memory_size));
     CHECK(shared_memory.get());
     if (!shared_memory->Map(shared_memory_size))
       CHECK(false);

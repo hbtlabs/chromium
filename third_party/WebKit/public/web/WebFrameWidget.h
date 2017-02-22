@@ -83,8 +83,8 @@ class WebFrameWidget : public WebWidget {
 
   // Current instance of the active WebInputMethodController, that is, the
   // WebInputMethodController corresponding to (and owned by) the focused
-  // WebLocalFrameImpl. It might return nullptr when there are no focused
-  // frames or possibly when the WebFrameWidget does not accept IME events.
+  // WebLocalFrameImpl. It will return nullptr when there are no focused
+  // frames inside this WebFrameWidget.
   virtual WebInputMethodController* getActiveWebInputMethodController()
       const = 0;
 
@@ -101,7 +101,8 @@ class WebFrameWidget : public WebWidget {
       const WebPoint& screenPoint,
       WebDragOperationsMask operationsAllowed,
       int modifiers) = 0;
-  virtual void dragTargetDragLeave() = 0;
+  virtual void dragTargetDragLeave(const WebPoint& pointInViewport,
+                                   const WebPoint& screenPoint) = 0;
   virtual void dragTargetDrop(const WebDragData&,
                               const WebPoint& pointInViewport,
                               const WebPoint& screenPoint,
@@ -112,9 +113,14 @@ class WebFrameWidget : public WebWidget {
                                  const WebPoint& screenPoint,
                                  WebDragOperation) = 0;
 
-  // Notfies the WebFrameWidget that the system drag and drop operation has
+  // Notifies the WebFrameWidget that the system drag and drop operation has
   // ended.
   virtual void dragSourceSystemDragEnded() = 0;
+
+  // Constrains the viewport intersection for use by IntersectionObserver.
+  // This is needed for out-of-process iframes to know if they are clipped
+  // by ancestor frames in another process.
+  virtual void setRemoteViewportIntersection(const WebRect&) {}
 };
 
 }  // namespace blink

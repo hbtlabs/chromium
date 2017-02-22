@@ -6,8 +6,13 @@ module cc.mojom;
 
 import "cc/ipc/begin_frame_args.mojom";
 import "cc/ipc/compositor_frame.mojom";
+import "cc/ipc/copy_output_request.mojom";
 import "cc/ipc/frame_sink_id.mojom";
+import "cc/ipc/local_surface_id.mojom";
+import "cc/ipc/surface_reference.mojom";
 import "cc/ipc/returned_resource.mojom";
+import "cc/ipc/surface_sequence.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
 
 // A MojoCompositorFrameSink is an interface for receiving CompositorFrame
 // structs. A CompositorFrame contains the complete output meant for display.
@@ -21,13 +26,28 @@ interface MojoCompositorFrameSink {
 
   // Submits a CompositorFrame to the display compositor that will be presented
   // to screen the next time frames from all CompositorFrameSinks are aggregated
-  // to produce a display CompositorFrame.
+  // to produce a display CompositorFrame. If a client wishes to allocate a new
+  // surface (e.g. during resize), then it can simply allocate a new
+  // |local_surface_id|.
   // For successful swaps, the implementation must call
   // DidReceiveCompositorFrameAck() asynchronously when the frame has been
   // processed in order to unthrottle the next frame.
-  SubmitCompositorFrame(cc.mojom.CompositorFrame frame);
+  SubmitCompositorFrame(cc.mojom.LocalSurfaceId local_surface_id,
+                        cc.mojom.CompositorFrame frame);
 
-  // TODO(fsamuel): ReadbackBitmap API would be useful here.
+  // Notify that the surface is no longer in use (and is okay to be evicted) so
+  // that its resources gets returned in time.
+  EvictFrame();
+
+  // TODO(staraz): Delete Require() and Satisfy() once surface references
+  // (CL 2541683004) are ready.
+  // Add the provided |sequence| as a destruction dependency of the
+  // surface associated with the provided |local_surface_id|.
+  Require(cc.mojom.LocalSurfaceId local_surface_id,
+          cc.mojom.SurfaceSequence sequence);
+
+  // Mark the sequence as satisfied and garbage collect surfaces.
+  Satisfy(cc.mojom.SurfaceSequence sequence);
 };
 
 interface MojoCompositorFrameSinkClient {
@@ -45,6 +65,9 @@ interface MojoCompositorFrameSinkClient {
 
   // Returns resources sent to SubmitCompositorFrame to be reused or freed.
   ReclaimResources(ReturnedResourceArray resources);
+
+  // Called when surface is being scheduled for a draw.
+  WillDrawSurface(LocalSurfaceId local_surface_id, gfx.mojom.Rect damage_rect);
 };
 
 // MojoCompositorFrameSinkPrivate is used by the display compositor host to set
@@ -54,4 +77,9 @@ interface MojoCompositorFrameSinkClient {
 interface MojoCompositorFrameSinkPrivate {
   AddChildFrameSink(FrameSinkId child_frame_sink_id);
   RemoveChildFrameSink(FrameSinkId child_frame_sink_id);
+
+  // Requests that the renderer send back a copy of the surface that this
+  // CompositorFrameSink submits to. The result can be in form of a bitmap
+  // or a texture. See cc::CopyOutputRequest.
+  RequestCopyOfSurface(cc.mojom.CopyOutputRequest request);
 };

@@ -51,12 +51,9 @@ class CORE_EXPORT SVGGraphicsElement : public SVGElement, public SVGTests {
   SVGElement* nearestViewportElement() const;
   SVGElement* farthestViewportElement() const;
 
-  AffineTransform localCoordinateSpaceTransform(
-      SVGElement::CTMScope) const override {
-    return calculateAnimatedLocalTransform();
+  AffineTransform localCoordinateSpaceTransform() const override {
+    return calculateTransform(IncludeMotionTransform);
   }
-  bool hasAnimatedLocalTransform() const;
-  AffineTransform calculateAnimatedLocalTransform() const;
   AffineTransform* animateMotionTransform() override;
 
   virtual FloatRect getBBox();
@@ -84,6 +81,9 @@ class CORE_EXPORT SVGGraphicsElement : public SVGElement, public SVGTests {
     return Element::supportsFocus() || hasFocusEventListeners();
   }
 
+  void collectStyleForPresentationAttribute(const QualifiedName&,
+                                            const AtomicString&,
+                                            MutableStylePropertySet*) override;
   void svgAttributeChanged(const QualifiedName&) override;
 
   Member<SVGAnimatedTransformList> m_transform;

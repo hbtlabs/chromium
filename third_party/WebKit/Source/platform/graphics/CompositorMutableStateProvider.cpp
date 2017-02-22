@@ -35,14 +35,14 @@ CompositorMutableStateProvider::getMutableStateFor(uint64_t elementId) {
   // Ensure that we have an entry in the map for |elementId| but do as few
   // allocations and queries as possible. This will update the map only if we
   // have not added a value for |elementId|.
-  auto result = m_mutations->map.add(elementId, nullptr);
+  auto result = m_mutations->map.insert(elementId, nullptr);
 
   // Only if this is a new entry do we want to allocate a new mutation.
   if (result.isNewEntry)
-    result.storedValue->value = wrapUnique(new CompositorMutation);
+    result.storedValue->value = WTF::wrapUnique(new CompositorMutation);
 
-  return wrapUnique(new CompositorMutableState(result.storedValue->value.get(),
-                                               mainLayer, scrollLayer));
+  return WTF::wrapUnique(new CompositorMutableState(
+      result.storedValue->value.get(), mainLayer, scrollLayer));
 }
 
 }  // namespace blink

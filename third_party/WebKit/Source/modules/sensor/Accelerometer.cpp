@@ -6,46 +6,47 @@
 
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "modules/sensor/AccelerometerReading.h"
 
 using device::mojom::blink::SensorType;
 
 namespace blink {
 
-Accelerometer* Accelerometer::create(ScriptState* scriptState,
+Accelerometer* Accelerometer::create(ExecutionContext* executionContext,
                                      const AccelerometerOptions& options,
                                      ExceptionState& exceptionState) {
-  return new Accelerometer(scriptState, options, exceptionState);
+  return new Accelerometer(executionContext, options, exceptionState);
 }
 
 // static
-Accelerometer* Accelerometer::create(ScriptState* scriptState,
+Accelerometer* Accelerometer::create(ExecutionContext* executionContext,
                                      ExceptionState& exceptionState) {
-  return create(scriptState, AccelerometerOptions(), exceptionState);
+  return create(executionContext, AccelerometerOptions(), exceptionState);
 }
 
-Accelerometer::Accelerometer(ScriptState* scriptState,
+Accelerometer::Accelerometer(ExecutionContext* executionContext,
                              const AccelerometerOptions& options,
                              ExceptionState& exceptionState)
-    : Sensor(scriptState,
+    : Sensor(executionContext,
              options,
              exceptionState,
              options.includeGravity() ? SensorType::ACCELEROMETER
                                       : SensorType::LINEAR_ACCELERATION),
       m_accelerometerOptions(options) {}
 
-AccelerometerReading* Accelerometer::reading() const {
-  return static_cast<AccelerometerReading*>(Sensor::reading());
+double Accelerometer::x(bool& isNull) const {
+  return readingValue(0, isNull);
+}
+
+double Accelerometer::y(bool& isNull) const {
+  return readingValue(1, isNull);
+}
+
+double Accelerometer::z(bool& isNull) const {
+  return readingValue(2, isNull);
 }
 
 bool Accelerometer::includesGravity() const {
   return m_accelerometerOptions.includeGravity();
-}
-
-std::unique_ptr<SensorReadingFactory>
-Accelerometer::createSensorReadingFactory() {
-  return std::unique_ptr<SensorReadingFactory>(
-      new SensorReadingFactoryImpl<AccelerometerReading>());
 }
 
 DEFINE_TRACE(Accelerometer) {

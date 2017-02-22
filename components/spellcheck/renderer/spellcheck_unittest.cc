@@ -12,6 +12,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -74,7 +75,7 @@ class SpellCheckTest : public testing::Test {
 #if defined(OS_MACOSX)
     // TODO(groby): Forcing spellcheck to use hunspell, even on OSX.
     // Instead, tests should exercise individual spelling engines.
-    spell_check_->languages_.push_back(new SpellcheckLanguage());
+    spell_check_->languages_.push_back(base::MakeUnique<SpellcheckLanguage>());
     spell_check_->languages_.front()->platform_spelling_engine_.reset(
         new HunspellEngine);
     spell_check_->languages_.front()->Init(std::move(file), language);
@@ -489,13 +490,13 @@ TEST_F(SpellCheckTest, SpellCheckSuggestions_EN_US) {
 
 // This test verifies our spellchecker can split a text into words and check
 // the spelling of each word in the text.
-#if defined(THREAD_SANITIZER)
-// SpellCheckTest.SpellCheckText fails under ThreadSanitizer v2.
-// See http://crbug.com/217909.
+#if defined(OS_WIN)
+// SpellCheckTest.SpellCheckText fails on Windows.
+// See http://crbug.com/689101.
 #define MAYBE_SpellCheckText DISABLED_SpellCheckText
 #else
 #define MAYBE_SpellCheckText SpellCheckText
-#endif  // THREAD_SANITIZER
+#endif  // OS_WIN
 TEST_F(SpellCheckTest, MAYBE_SpellCheckText) {
   static const struct {
     const char* language;
@@ -1230,9 +1231,9 @@ TEST_F(SpellCheckTest, CreateTextCheckingResultsKeepsTypographicalApostrophe) {
   ASSERT_EQ(arraysize(kExpectedReplacements), textcheck_results.size());
   for (size_t i = 0; i < arraysize(kExpectedReplacements); ++i) {
     EXPECT_EQ(base::WideToUTF16(kExpectedReplacements[i]),
-              textcheck_results[i].replacement)
+              textcheck_results[i].replacement.utf16())
         << "i=" << i << "\nactual: \""
-        << base::string16(textcheck_results[i].replacement) << "\"";
+        << textcheck_results[i].replacement.utf16() << "\"";
   }
 }
 
@@ -1333,7 +1334,8 @@ TEST_F(SpellCheckTest, NoSuggest) {
 
     EXPECT_EQ(kTestCases[i].should_pass, result) << kTestCases[i].suggestion <<
         " in " << kTestCases[i].locale;
-
+    // TODO(cb/673424): Bring this back when suggestions are sped up.
+#if 0
     // Now verify that this test case does not show up as a suggestion.
     std::vector<base::string16> suggestions;
     size_t input_length = 0;
@@ -1360,6 +1362,7 @@ TEST_F(SpellCheckTest, NoSuggest) {
             " in " << kTestCases[i].locale;
       }
     }
+#endif
   }
 }
 

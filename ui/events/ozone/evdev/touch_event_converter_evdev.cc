@@ -32,7 +32,7 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/ozone/evdev/device_event_dispatcher_evdev.h"
 #include "ui/events/ozone/evdev/touch_evdev_types.h"
-#include "ui/events/ozone/evdev/touch_noise/touch_noise_finder.h"
+#include "ui/events/ozone/evdev/touch_filter/false_touch_finder.h"
 #include "ui/ozone/public/input_controller.h"
 
 namespace {
@@ -78,23 +78,15 @@ int32_t AbsCodeToMtCode(int32_t code) {
   }
 }
 
-ui::PointerDetails GetEventPointerDetails(
-    const ui::InProgressTouchEvdev& event) {
-  ui::EventPointerType type;
-  switch (event.tool_code) {
+ui::EventPointerType GetEventPointerType(int tool_code) {
+  switch (tool_code) {
     case BTN_TOOL_PEN:
-      type = ui::EventPointerType::POINTER_TYPE_PEN;
-      break;
+      return ui::EventPointerType::POINTER_TYPE_PEN;
     case BTN_TOOL_RUBBER:
-      type = ui::EventPointerType::POINTER_TYPE_ERASER;
-      break;
+      return ui::EventPointerType::POINTER_TYPE_ERASER;
     default:
-      type = ui::EventPointerType::POINTER_TYPE_TOUCH;
+      return ui::EventPointerType::POINTER_TYPE_TOUCH;
   }
-  return ui::PointerDetails(type, event.radius_x, event.radius_y,
-                            event.pressure,
-                            /* tilt_x */ 0.0f,
-                            /* tilt_y */ 0.0f);
 }
 
 const int kTrackingIdForUnusedSlot = -1;
@@ -104,23 +96,21 @@ const int kTrackingIdForUnusedSlot = -1;
 namespace ui {
 
 TouchEventConverterEvdev::TouchEventConverterEvdev(
-    int fd,
+    ScopedInputDevice fd,
     base::FilePath path,
     int id,
     const EventDeviceInfo& devinfo,
     DeviceEventDispatcherEvdev* dispatcher)
-    : EventConverterEvdev(fd,
+    : EventConverterEvdev(fd.get(),
                           path,
                           id,
                           devinfo.device_type(),
                           devinfo.name(),
                           devinfo.vendor_id(),
                           devinfo.product_id()),
+      input_device_fd_(std::move(fd)),
       dispatcher_(dispatcher) {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kExtraTouchNoiseFiltering)) {
-    touch_noise_finder_.reset(new TouchNoiseFinder);
-  }
+
   touch_evdev_debug_buffer_.Initialize(devinfo);
 }
 
@@ -175,7 +165,7 @@ void TouchEventConverterEvdev::Initialize(const EventDeviceInfo& info) {
   // TODO(denniskempin): Use EVIOCGKEY to synchronize key state.
 
   events_.resize(touch_points_);
-
+  bool cancelled_state = false;
   if (has_mt_) {
     for (size_t i = 0; i < events_.size(); ++i) {
       events_[i].x = info.GetAbsMtSlotValueWithDefault(ABS_MT_POSITION_X, i, 0);
@@ -196,7 +186,9 @@ void TouchEventConverterEvdev::Initialize(const EventDeviceInfo& info) {
           info.GetAbsMtSlotValueWithDefault(ABS_MT_TOUCH_MINOR, i, 0) / 2.0f;
       events_[i].pressure = ScalePressure(
           info.GetAbsMtSlotValueWithDefault(ABS_MT_PRESSURE, i, 0));
-      events_[i].cancelled = (major_max_ > 0 && touch_major == major_max_);
+      events_[i].cancelled = major_max_ > 0 && touch_major == major_max_;
+      if (events_[i].cancelled)
+        cancelled_state = true;
     }
   } else {
     // TODO(spang): Add key state to EventDeviceInfo to allow initial contact.
@@ -211,6 +203,20 @@ void TouchEventConverterEvdev::Initialize(const EventDeviceInfo& info) {
     events_[0].pressure = 0;
     events_[0].tool_code = 0;
     events_[0].cancelled = false;
+  }
+  if (cancelled_state)
+    CancelAllTouches();
+
+  bool touch_noise_filtering =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kExtraTouchNoiseFiltering);
+  bool edge_touch_filtering =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kEdgeTouchFiltering);
+  if (touch_noise_filtering || edge_touch_filtering) {
+    false_touch_finder_.reset(new FalseTouchFinder(touch_noise_filtering,
+                                                  edge_touch_filtering,
+                                                  GetTouchscreenSize()));
   }
 }
 
@@ -296,7 +302,7 @@ void TouchEventConverterEvdev::SetPalmSuppressionCallback(
 
 void TouchEventConverterEvdev::ProcessMultitouchEvent(
     const input_event& input) {
-  if (touch_logging_enabled_)
+  if (touch_logging_enabled_ && !has_pen_)
     touch_evdev_debug_buffer_.ProcessEvent(current_slot_, &input);
 
   if (input.type == EV_SYN) {
@@ -328,7 +334,7 @@ void TouchEventConverterEvdev::EmulateMultitouchEvent(
     if (emulated_event.code >= 0)
       ProcessMultitouchEvent(emulated_event);
   } else if (event.type == EV_KEY) {
-    if (event.code == BTN_TOUCH ||
+    if (event.code == BTN_TOUCH || event.code == BTN_0 ||
         (quirk_left_mouse_button_ && event.code == BTN_LEFT)) {
       emulated_event.type = EV_ABS;
       emulated_event.code = ABS_MT_TRACKING_ID;
@@ -357,11 +363,6 @@ void TouchEventConverterEvdev::ProcessKey(const input_event& input) {
       break;
     case BTN_TOOL_PEN:
     case BTN_TOOL_RUBBER:
-      // Do not change tool types while touching to prevent inconsistencies
-      // from switching between Mouse and TouchEvents.
-      if (events_[current_slot_].was_touching)
-        break;
-
       if (input.value > 0) {
         events_[current_slot_].tool_code = input.code;
       } else {
@@ -435,48 +436,57 @@ void TouchEventConverterEvdev::ProcessSyn(const input_event& input) {
 
 EventType TouchEventConverterEvdev::GetEventTypeForTouch(
     const InProgressTouchEvdev& touch) {
-  if (touch.was_cancelled)
+
+  bool touch_is_alive =
+      touch.touching && !touch.delayed && !touch.cancelled;
+  bool touch_was_alive =
+      touch.was_touching && !touch.was_delayed && !touch.was_cancelled;
+
+  // Delaying an already live touch is not possible.
+  DCHECK(!touch_was_alive || !touch.delayed);
+
+  if ((!touch_was_alive && !touch_is_alive) || touch.was_cancelled) {
+    // Ignore this touch; it was never born or has already died.
     return ET_UNKNOWN;
+  }
 
-  if (touch.cancelled)
-    return touch.was_touching ? ET_TOUCH_CANCELLED : ET_UNKNOWN;
+  if (!touch_was_alive) {
+    // This touch has just been born.
+    return ET_TOUCH_PRESSED;
+  }
 
-  if (touch.touching)
-    return touch.was_touching ? ET_TOUCH_MOVED : ET_TOUCH_PRESSED;
-  return touch.was_touching ? ET_TOUCH_RELEASED : ET_UNKNOWN;
+  if (!touch_is_alive) {
+    // This touch was alive but is now dead.
+    if (touch.cancelled)
+      return ET_TOUCH_CANCELLED;  // Cancelled by driver or noise filter.
+    return ET_TOUCH_RELEASED;  // Finger lifted.
+  }
+
+  return ET_TOUCH_MOVED;
 }
 
 void TouchEventConverterEvdev::ReportTouchEvent(
     const InProgressTouchEvdev& event,
     EventType event_type,
     base::TimeTicks timestamp) {
-  dispatcher_->DispatchTouchEvent(TouchEventParams(
-      input_device_.id, event.slot, event_type, gfx::PointF(event.x, event.y),
-      GetEventPointerDetails(event), timestamp));
+  ui::PointerDetails details(event.reported_tool_type, event.radius_x,
+                             event.radius_y, event.pressure,
+                             /* tilt_x */ 0.0f, /* tilt_y */ 0.0f);
+  dispatcher_->DispatchTouchEvent(
+      TouchEventParams(input_device_.id, event.slot, event_type,
+                       gfx::PointF(event.x, event.y), details, timestamp));
 }
 
-void TouchEventConverterEvdev::ReportStylusEvent(
-    const InProgressTouchEvdev& event,
-    base::TimeTicks timestamp) {
-  if (event.btn_left.changed)
-    ReportButton(BTN_LEFT, event.btn_left.down, event, timestamp);
-  if (event.btn_right.changed)
-    ReportButton(BTN_RIGHT, event.btn_right.down, event, timestamp);
-  if (event.btn_middle.changed)
-    ReportButton(BTN_MIDDLE, event.btn_middle.down, event, timestamp);
-
-  dispatcher_->DispatchMouseMoveEvent(MouseMoveEventParams(
-      input_device_.id, EF_DIRECT_INPUT, gfx::PointF(event.x, event.y),
-      GetEventPointerDetails(event), timestamp));
-}
-
-void TouchEventConverterEvdev::ReportButton(unsigned int button,
-                                            bool down,
-                                            const InProgressTouchEvdev& event,
-                                            base::TimeTicks timestamp) {
-  dispatcher_->DispatchMouseButtonEvent(MouseButtonEventParams(
-      input_device_.id, EF_DIRECT_INPUT, gfx::PointF(event.x, event.y), button,
-      down, false /* allow_remap */, GetEventPointerDetails(event), timestamp));
+void TouchEventConverterEvdev::CancelAllTouches() {
+  // TODO(denniskempin): Remove once upper layers properly handle single
+  // cancelled touches.
+  for (size_t i = 0; i < events_.size(); i++) {
+    InProgressTouchEvdev* event = &events_[i];
+    if (event->was_touching || event->touching) {
+      event->cancelled = true;
+      event->altered = true;
+    }
+  }
 }
 
 void TouchEventConverterEvdev::ReportEvents(base::TimeTicks timestamp) {
@@ -485,8 +495,18 @@ void TouchEventConverterEvdev::ReportEvents(base::TimeTicks timestamp) {
     dropped_events_ = false;
   }
 
-  if (touch_noise_finder_)
-    touch_noise_finder_->HandleTouches(events_, timestamp);
+  if (false_touch_finder_)
+    false_touch_finder_->HandleTouches(events_, timestamp);
+
+  for (size_t i = 0; i < events_.size(); i++) {
+    InProgressTouchEvdev* event = &events_[i];
+    if (event->altered && (event->cancelled ||
+                           (false_touch_finder_ &&
+                            false_touch_finder_->SlotHasNoise(event->slot)))) {
+      CancelAllTouches();
+      break;
+    }
+  }
 
   for (size_t i = 0; i < events_.size(); i++) {
     InProgressTouchEvdev* event = &events_[i];
@@ -496,19 +516,19 @@ void TouchEventConverterEvdev::ReportEvents(base::TimeTicks timestamp) {
     if (enable_palm_suppression_callback_)
       enable_palm_suppression_callback_.Run(event->tool_code > 0);
 
-    if (touch_noise_finder_ && touch_noise_finder_->SlotHasNoise(event->slot))
-      event->cancelled = true;
+    if (false_touch_finder_)
+      event->delayed = false_touch_finder_->SlotShouldDelay(event->slot);
 
-    if (event->tool_code > 0) {
-      ReportStylusEvent(*event, timestamp);
-    } else {
-      EventType event_type = GetEventTypeForTouch(*event);
-      if (event_type != ET_UNKNOWN)
-        ReportTouchEvent(*event, event_type, timestamp);
-    }
+    EventType event_type = GetEventTypeForTouch(*event);
+    // The tool type is fixed with the touch pressed event and does not change.
+    if (event_type == ET_TOUCH_PRESSED)
+      event->reported_tool_type = GetEventPointerType(event->tool_code);
+    if (event_type != ET_UNKNOWN)
+      ReportTouchEvent(*event, event_type, timestamp);
 
     event->was_cancelled = event->cancelled;
     event->was_touching = event->touching;
+    event->was_delayed = event->delayed;
     event->altered = false;
     event->btn_left.changed = false;
     event->btn_right.changed = false;

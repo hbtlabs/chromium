@@ -16,6 +16,7 @@
 #include "base/environment.h"
 #include "base/i18n/time_formatting.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringize_macros.h"
 #include "base/strings/stringprintf.h"
@@ -64,7 +65,7 @@ WebUIDataSource* CreateGpuHTMLSource() {
   source->SetJsonPath("strings.js");
   source->AddResourcePath("gpu_internals.js", IDR_GPU_INTERNALS_JS);
   source->SetDefaultResource(IDR_GPU_INTERNALS_HTML);
-  source->DisableI18nAndUseGzipForAllPaths();
+  source->UseGzip(std::unordered_set<std::string>());
   return source;
 }
 
@@ -128,6 +129,9 @@ base::DictionaryValue* GpuInfoAsDictionaryValue() {
   basic_info->Append(NewDescriptionValuePair(
       "In-process GPU", new base::FundamentalValue(gpu_info.in_process_gpu)));
   basic_info->Append(NewDescriptionValuePair(
+      "Passthrough Command Decoder",
+      new base::FundamentalValue(gpu_info.passthrough_cmd_decoder)));
+  basic_info->Append(NewDescriptionValuePair(
       "Sandboxed", new base::FundamentalValue(gpu_info.sandboxed)));
   basic_info->Append(NewDescriptionValuePair(
       "GPU0", GPUDeviceToString(gpu_info.gpu)));
@@ -140,14 +144,6 @@ base::DictionaryValue* GpuInfoAsDictionaryValue() {
       "Optimus", new base::FundamentalValue(gpu_info.optimus)));
   basic_info->Append(NewDescriptionValuePair(
       "AMD switchable", new base::FundamentalValue(gpu_info.amd_switchable)));
-  if (gpu_info.lenovo_dcute) {
-    basic_info->Append(NewDescriptionValuePair(
-        "Lenovo dCute", new base::FundamentalValue(true)));
-  }
-  if (gpu_info.display_link_version.IsValid()) {
-    basic_info->Append(NewDescriptionValuePair(
-        "DisplayLink Version", gpu_info.display_link_version.GetString()));
-  }
 #if defined(OS_WIN)
   std::string compositor =
       ui::win::IsAeroGlassEnabled() ? "Aero Glass" : "none";
@@ -554,7 +550,7 @@ void GpuMessageHandler::OnGpuSwitched() {
 
 GpuInternalsUI::GpuInternalsUI(WebUI* web_ui)
     : WebUIController(web_ui) {
-  web_ui->AddMessageHandler(new GpuMessageHandler());
+  web_ui->AddMessageHandler(base::MakeUnique<GpuMessageHandler>());
 
   // Set up the chrome://gpu/ source.
   BrowserContext* browser_context =

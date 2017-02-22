@@ -19,5 +19,14 @@ Polymer({
     chromeMessage: {
       type: String,
     },
+
+    /**
+     * ARIA-label for the button.
+     */
+    labelForAria: String,
+  },
+
+  focus: function() {
+    this.$.button.focus();
   },
 });

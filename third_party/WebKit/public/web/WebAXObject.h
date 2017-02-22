@@ -34,16 +34,10 @@
 #include "../platform/WebCommon.h"
 #include "../platform/WebPoint.h"
 #include "../platform/WebPrivatePtr.h"
+#include "../platform/WebSize.h"
 #include "../platform/WebVector.h"
 #include "WebAXEnums.h"
 #include <memory>
-
-#if BLINK_IMPLEMENTATION
-namespace WTF {
-template <typename T>
-class PassRefPtr;
-}
-#endif
 
 class SkMatrix44;
 
@@ -59,6 +53,19 @@ class WebURL;
 struct WebFloatRect;
 struct WebPoint;
 struct WebRect;
+struct WebSize;
+
+class BLINK_EXPORT WebAXSparseAttributeClient {
+ public:
+  WebAXSparseAttributeClient() {}
+  virtual ~WebAXSparseAttributeClient() {}
+
+  virtual void addBoolAttribute(WebAXBoolAttribute, bool) = 0;
+  virtual void addStringAttribute(WebAXStringAttribute, const WebString&) = 0;
+  virtual void addObjectAttribute(WebAXObjectAttribute, const WebAXObject&) = 0;
+  virtual void addObjectVectorAttribute(WebAXObjectVectorAttribute,
+                                        const WebVector<WebAXObject>&) = 0;
+};
 
 // An instance of this class, while kept alive, indicates that accessibility
 // should be temporarily enabled. If accessibility was enabled globally
@@ -112,6 +119,12 @@ class WebAXObject {
   BLINK_EXPORT WebAXObject childAt(unsigned) const;
   BLINK_EXPORT WebAXObject parentObject() const;
 
+  // Retrieve accessibility attributes that apply to only a small
+  // fraction of WebAXObjects by passing an implementation of
+  // WebAXSparseAttributeClient, which will be called with only the attributes
+  // that apply to this object.
+  BLINK_EXPORT void getSparseAXAttributes(WebAXSparseAttributeClient&) const;
+
   BLINK_EXPORT bool isAnchor() const;
   BLINK_EXPORT bool isAriaReadOnly() const;
   BLINK_EXPORT bool isButtonStateMixed() const;
@@ -125,6 +138,7 @@ class WebAXObject {
   BLINK_EXPORT bool isHovered() const;
   BLINK_EXPORT bool isLinked() const;
   BLINK_EXPORT bool isLoaded() const;
+  BLINK_EXPORT bool isModal() const;
   BLINK_EXPORT bool isMultiSelectable() const;
   BLINK_EXPORT bool isOffScreen() const;
   BLINK_EXPORT bool isPasswordField() const;
@@ -144,10 +158,7 @@ class WebAXObject {
   BLINK_EXPORT unsigned colorValue() const;
   BLINK_EXPORT WebAXObject ariaActiveDescendant() const;
   BLINK_EXPORT WebString ariaAutoComplete() const;
-  BLINK_EXPORT bool ariaControls(
-      WebVector<WebAXObject>& controlsElements) const;
   BLINK_EXPORT WebAXAriaCurrentState ariaCurrentState() const;
-  BLINK_EXPORT bool ariaFlowTo(WebVector<WebAXObject>& flowToElements) const;
   BLINK_EXPORT bool ariaHasPopup() const;
   BLINK_EXPORT bool isEditable() const;
   BLINK_EXPORT bool isMultiline() const;
@@ -156,6 +167,8 @@ class WebAXObject {
   BLINK_EXPORT WebString fontFamily() const;
   BLINK_EXPORT float fontSize() const;
   BLINK_EXPORT bool canvasHasFallbackContent() const;
+  // If this is an image, returns the image (scaled to maxSize) as a data url.
+  BLINK_EXPORT WebString imageDataUrl(const WebSize& maxSize) const;
   BLINK_EXPORT WebAXInvalidState invalidState() const;
   // Only used when invalidState() returns WebAXInvalidStateOther.
   BLINK_EXPORT WebString ariaInvalidValue() const;
@@ -190,7 +203,7 @@ class WebAXObject {
   // Takes the result of nameFrom and descriptionFrom from calling |name| and
   // |description|, above, and retrieves the placeholder of the object, if
   // present and if it wasn't already exposed by one of the two functions above.
-  BLINK_EXPORT WebString placeholder(WebAXNameFrom, WebAXDescriptionFrom) const;
+  BLINK_EXPORT WebString placeholder(WebAXNameFrom) const;
 
   // The following selection functions get or set the global document
   // selection and can be called on any object in the tree.
@@ -246,8 +259,7 @@ class WebAXObject {
                             WebVector<int>& ends) const;
 
   // Actions
-  BLINK_EXPORT WebString
-  actionVerb() const;  // The verb corresponding to performDefaultAction.
+  BLINK_EXPORT WebAXSupportedAction action() const;
   BLINK_EXPORT bool canDecrement() const;
   BLINK_EXPORT bool canIncrement() const;
   BLINK_EXPORT bool canPress() const;
@@ -266,6 +278,10 @@ class WebAXObject {
   BLINK_EXPORT void showContextMenu() const;
 
   // For a table
+  BLINK_EXPORT int ariaColumnCount() const;
+  BLINK_EXPORT unsigned ariaColumnIndex() const;
+  BLINK_EXPORT int ariaRowCount() const;
+  BLINK_EXPORT unsigned ariaRowIndex() const;
   BLINK_EXPORT unsigned columnCount() const;
   BLINK_EXPORT unsigned rowCount() const;
   BLINK_EXPORT WebAXObject cellForColumnAndRow(unsigned column,
@@ -307,7 +323,7 @@ class WebAXObject {
 
   // Scrollable containers.
   BLINK_EXPORT bool isScrollableContainer() const;
-  BLINK_EXPORT WebPoint scrollOffset() const;
+  BLINK_EXPORT WebPoint getScrollOffset() const;
   BLINK_EXPORT WebPoint minimumScrollOffset() const;
   BLINK_EXPORT WebPoint maximumScrollOffset() const;
   BLINK_EXPORT void setScrollOffset(const WebPoint&) const;

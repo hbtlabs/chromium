@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/util/process_version.gni")
+import("//media/media_options.gni")
 import("//remoting/build/config/remoting_build.gni")
 
 group("all_tests") {
@@ -161,6 +162,8 @@ static_library("host") {
     "host_event_logger_win.cc",
     "host_exit_codes.cc",
     "host_exit_codes.h",
+    "host_experiment_session_plugin.cc",
+    "host_experiment_session_plugin.h",
     "host_export.h",
     "host_extension.h",
     "host_extension_session.h",
@@ -199,8 +202,6 @@ static_library("host") {
     "ipc_mouse_cursor_monitor.h",
     "ipc_screen_controls.cc",
     "ipc_screen_controls.h",
-    "ipc_util.h",
-    "ipc_util_win.cc",
     "ipc_video_frame_capturer.cc",
     "ipc_video_frame_capturer.h",
     "it2me_desktop_environment.cc",
@@ -234,10 +235,6 @@ static_library("host") {
     "mouse_cursor_monitor_proxy.h",
     "mouse_shape_pump.cc",
     "mouse_shape_pump.h",
-    "oauth_token_getter.cc",
-    "oauth_token_getter.h",
-    "oauth_token_getter_impl.cc",
-    "oauth_token_getter_impl.h",
     "pairing_registry_delegate.cc",
     "pairing_registry_delegate.h",
     "pairing_registry_delegate_linux.cc",
@@ -314,6 +311,7 @@ static_library("host") {
     "//google_apis",
     "//ipc",
     "//remoting/base",
+    "//remoting/base:authorization",
     "//remoting/host/security_key",
     "//remoting/protocol",
     "//remoting/resources",
@@ -324,7 +322,7 @@ static_library("host") {
 
   public_deps = []
 
-  if (enable_configuration_policy) {
+  if (!is_ios) {
     deps += [ "//components/policy:generated" ]
   }
 
@@ -338,11 +336,7 @@ static_library("host") {
       "//build/config/linux:xrandr",
     ]
     if (is_desktop_linux) {
-      if (use_gtk3) {
-        deps += [ "//build/config/linux/gtk3" ]
-      } else {
-        deps += [ "//build/config/linux/gtk2" ]
-      }
+      deps += [ "//build/config/linux/gtk" ]
     }
   } else {
     sources -= [
@@ -453,12 +447,8 @@ static_library("test_support") {
     "fake_host_status_monitor.h",
     "fake_mouse_cursor_monitor.cc",
     "fake_mouse_cursor_monitor.h",
-    "fake_oauth_token_getter.cc",
-    "fake_oauth_token_getter.h",
     "host_mock_objects.cc",
     "host_mock_objects.h",
-    "setup/mock_oauth_client.cc",
-    "setup/mock_oauth_client.h",
   ]
 
   configs += [ "//remoting/build/config:version" ]
@@ -470,14 +460,14 @@ static_library("test_support") {
   ]
   public_deps = [
     ":host",
+    "//remoting/base:test_support",
     "//third_party/protobuf:protobuf_lite",
   ]
 
   if (enable_webrtc) {
     public_deps += [
       "//third_party/libjingle/webrtc:libjingle_webrtc",
-      "//third_party/webrtc/libjingle/xmllite",
-      "//third_party/webrtc/libjingle/xmpp",
+      "//third_party/libjingle_xmpp",
       "//third_party/webrtc/modules/desktop_capture",
     ]
   }
@@ -504,6 +494,7 @@ source_set("unit_tests") {
     "host_attributes_unittest.cc",
     "host_change_notification_listener_unittest.cc",
     "host_config_unittest.cc",
+    "host_experiment_session_plugin_unittest.cc",
     "host_extension_session_manager_unittest.cc",
     "host_power_save_blocker_unittest.cc",
     "host_session_options_unittest.cc",
@@ -533,7 +524,6 @@ source_set("unit_tests") {
     "screen_resolution_unittest.cc",
     "server_log_entry_host_unittest.cc",
     "setup/me2me_native_messaging_host_unittest.cc",
-    "setup/oauth_helper_unittest.cc",
     "setup/pin_validator_unittest.cc",
     "third_party_auth_config_unittest.cc",
     "token_validator_base_unittest.cc",
@@ -570,7 +560,7 @@ source_set("unit_tests") {
     deps += [ "//remoting/host/win:unit_tests" ]
   }
 
-  if (enable_configuration_policy) {
+  if (!is_ios) {
     deps += [ "//components/policy/core/browser:test_support" ]
   }
 }
@@ -608,7 +598,8 @@ if (enable_remoting_host) {
     configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
     if (is_win) {
-      defines = host_predefines + [ "BINARY=BINARY_REMOTING_START_HOST" ]
+      defines = host_predefines +
+                [ "REMOTING_HOST_BINARY=BINARY_REMOTING_START_HOST" ]
 
       deps += [
         "//build/win:default_exe_manifest",
@@ -623,14 +614,16 @@ if (enable_remoting_host) {
         "setup/start_host_main.h",
       ]
 
-      deps += [ "//remoting/host/setup" ]
+      deps += [
+        "//google_apis",
+        "//remoting/host/setup",
+      ]
     }
 
     if (enable_webrtc) {
       deps += [
         "//third_party/libjingle/webrtc:libjingle_webrtc",
-        "//third_party/webrtc/libjingle/xmllite",
-        "//third_party/webrtc/libjingle/xmpp",
+        "//third_party/libjingle_xmpp",
       ]
     }
   }
@@ -732,6 +725,7 @@ if (enable_me2me_host) {
       "//base",
       "//base:i18n",
       "//components/policy/core/common",
+      "//ipc",
       "//net",
       "//remoting/base",
       "//remoting/host",
@@ -739,24 +733,19 @@ if (enable_me2me_host) {
       "//third_party/webrtc/modules/desktop_capture",
     ]
 
-    if (enable_configuration_policy) {
+    if (!is_ios) {
       deps += [ "//components/policy:generated" ]
     }
 
     if (enable_webrtc) {
       deps += [
         "//third_party/libjingle/webrtc:libjingle_webrtc",
-        "//third_party/webrtc/libjingle/xmllite",
-        "//third_party/webrtc/libjingle/xmpp",
+        "//third_party/libjingle_xmpp",
       ]
     }
 
     if (is_desktop_linux) {
-      if (use_gtk3) {
-        deps += [ "//build/config/linux/gtk3" ]
-      } else {
-        deps += [ "//build/config/linux/gtk2" ]
-      }
+      deps += [ "//build/config/linux/gtk" ]
     }
     if ((is_linux && !is_chromeos) || is_mac) {
       libs = [ "pam" ]

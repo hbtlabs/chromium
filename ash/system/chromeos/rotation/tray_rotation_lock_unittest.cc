@@ -20,6 +20,7 @@
 #include "base/time/time.h"
 #include "ui/display/display_switches.h"
 #include "ui/display/manager/display_manager.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/views/view.h"
@@ -158,8 +159,6 @@ TEST_F(TrayRotationLockTest, TrayViewVisibilityChangesDuringMaximizeMode) {
 // Tests that the when the tray view is created for a secondary display, that
 // it is not visible, and that MaximizeMode does not affect visibility.
 TEST_F(TrayRotationLockTest, CreateSecondaryTrayView) {
-  if (!SupportsMultipleDisplays())
-    return;
   UpdateDisplay("400x400,200x200");
 
   SetUpForStatusAreaWidget(
@@ -205,8 +204,6 @@ TEST_F(TrayRotationLockTest, DefaultViewVisibilityChangesDuringMaximizeMode) {
 // Tests that no default view is created when the target is a secondary
 // display.
 TEST_F(TrayRotationLockTest, CreateSecondaryDefaultView) {
-  if (!SupportsMultipleDisplays())
-    return;
   UpdateDisplay("400x400,200x200");
 
   TearDownViews();
@@ -240,7 +237,7 @@ TEST_F(TrayRotationLockTest, PerformActionOnDefaultView) {
 TEST_F(TrayRotationLockTest, InternalDisplayNotAvailableAtCreation) {
   int64_t internal_display_id = display::Display::InternalDisplayId();
   TearDownViews();
-  display::Display::SetInternalDisplayId(display::Display::kInvalidDisplayID);
+  display::Display::SetInternalDisplayId(display::kInvalidDisplayId);
 
   std::unique_ptr<TrayRotationLock> tray(new TrayRotationLock(
       StatusAreaWidgetTestHelper::GetStatusAreaWidget()->system_tray()));

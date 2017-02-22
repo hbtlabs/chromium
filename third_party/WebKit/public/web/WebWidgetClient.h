@@ -48,7 +48,6 @@ namespace blink {
 class WebDragData;
 class WebGestureEvent;
 class WebImage;
-class WebLocalFrame;
 class WebNode;
 class WebString;
 class WebWidget;
@@ -56,22 +55,18 @@ struct WebCursorInfo;
 struct WebFloatPoint;
 struct WebFloatRect;
 struct WebFloatSize;
-struct WebSize;
 
 class WebWidgetClient {
  public:
   // Called when a region of the WebWidget needs to be re-painted.
   virtual void didInvalidateRect(const WebRect&) {}
 
-  // Attempt to initialize compositing for this widget. If this is successful,
-  // layerTreeView() will return a valid WebLayerTreeView.
-  virtual void initializeLayerTreeView() {}
-
-  // Return a compositing view used for this widget. This is owned by the
+  // Attempt to initialize compositing view for this widget. If successful,
+  // returns a valid WebLayerTreeView which is owned by the
   // WebWidgetClient.
-  virtual WebLayerTreeView* layerTreeView() { return 0; }
-  // FIXME: Remove all overrides of this and change layerTreeView() above to
-  // ASSERT_NOT_REACHED.
+  virtual WebLayerTreeView* initializeLayerTreeView() { return nullptr; }
+
+  // FIXME: Remove all overrides of this.
   virtual bool allowsBrokenNullLayerTreeView() const { return false; }
 
   // Called when a call to WebWidget::animate is required
@@ -111,10 +106,6 @@ class WebWidgetClient {
   // displayed.
   virtual WebScreenInfo screenInfo() { return WebScreenInfo(); }
 
-  // When this method gets called, WebWidgetClient implementation should
-  // reset the input method by cancelling any ongoing composition.
-  virtual void resetInputMethod() {}
-
   // Requests to lock the mouse cursor. If true is returned, the success
   // result will be asynchronously returned via a single call to
   // WebWidget::didAcquirePointerLock() or
@@ -148,12 +139,8 @@ class WebWidgetClient {
   // the embedder of the touch actions that are permitted for this touch.
   virtual void setTouchAction(WebTouchAction touchAction) {}
 
-  // Called when value of focused text field gets dirty, e.g. value is
-  // modified by script, not by user input.
-  virtual void didUpdateTextOfFocusedElementByNonUserInput() {}
-
-  // Request the browser to show the IME for current input type.
-  virtual void showImeIfNeeded() {}
+  // Request the browser to show virtual keyboard for current input type.
+  virtual void showVirtualKeyboardOnElementFocus() {}
 
   // Request that the browser show a UI for an unhandled tap, if needed.
   // Invoked during the handling of a GestureTap input event whenever the

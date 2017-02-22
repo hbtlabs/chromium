@@ -28,6 +28,7 @@ class Rect;
 
 namespace blink {
 class WebMouseEvent;
+class WebMouseWheelEvent;
 }
 
 namespace content {
@@ -182,8 +183,6 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
                                     const SkColorType color_type) = 0;
   // Ensures that the view does not drop the backing store even when hidden.
   virtual bool CanCopyFromBackingStore() = 0;
-  virtual void LockBackingStore() = 0;
-  virtual void UnlockBackingStore() = 0;
 
   // Forwards the given message to the renderer. These are called by
   // the view when it has received a message.
@@ -243,12 +242,13 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
   virtual void AddMouseEventCallback(const MouseEventCallback& callback) = 0;
   virtual void RemoveMouseEventCallback(const MouseEventCallback& callback) = 0;
 
-  // Observer for WebInputEvents (but not input event acks).
+  // Observer for WebInputEvents.
   class InputEventObserver {
    public:
     virtual ~InputEventObserver() {}
 
-    virtual void OnInputEvent(const blink::WebInputEvent&) = 0;
+    virtual void OnInputEvent(const blink::WebInputEvent&) {};
+    virtual void OnInputEventAck(const blink::WebInputEvent&) {};
   };
 
   // Add/remove an input event observer.
@@ -257,9 +257,6 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
 
   // Get the screen info corresponding to this render widget.
   virtual void GetScreenInfo(ScreenInfo* result) = 0;
-
-  // Sends a compositor proto to the render widget.
-  virtual void HandleCompositorProto(const std::vector<uint8_t>& proto) = 0;
 
   // Drag-and-drop drop target messages that get sent to Blink.
   virtual void DragTargetDragEnter(
@@ -279,7 +276,8 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
       const gfx::Point& screen_pt,
       blink::WebDragOperationsMask operations_allowed,
       int key_modifiers) {}
-  virtual void DragTargetDragLeave() {}
+  virtual void DragTargetDragLeave(const gfx::Point& client_point,
+                                   const gfx::Point& screen_point) {}
   virtual void DragTargetDrop(const DropData& drop_data,
                               const gfx::Point& client_pt,
                               const gfx::Point& screen_pt,

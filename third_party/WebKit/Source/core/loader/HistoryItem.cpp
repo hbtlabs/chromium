@@ -43,7 +43,8 @@ static long long generateSequenceNumber() {
 }
 
 HistoryItem::HistoryItem()
-    : m_pageScaleFactor(0),
+    : m_didSaveScrollOrScaleState(false),
+      m_pageScaleFactor(0),
       m_itemSequenceNumber(generateSequenceNumber()),
       m_documentSequenceNumber(generateSequenceNumber()),
       m_scrollRestorationType(ScrollRestorationAuto) {}
@@ -91,14 +92,16 @@ const ScrollOffset& HistoryItem::visualViewportScrollOffset() const {
 
 void HistoryItem::setVisualViewportScrollOffset(const ScrollOffset& offset) {
   m_visualViewportScrollOffset = offset;
+  setDidSaveScrollOrScaleState(true);
 }
 
-const ScrollOffset& HistoryItem::scrollOffset() const {
+const ScrollOffset& HistoryItem::getScrollOffset() const {
   return m_scrollOffset;
 }
 
 void HistoryItem::setScrollOffset(const ScrollOffset& offset) {
   m_scrollOffset = offset;
+  setDidSaveScrollOrScaleState(true);
 }
 
 float HistoryItem::pageScaleFactor() const {
@@ -107,6 +110,7 @@ float HistoryItem::pageScaleFactor() const {
 
 void HistoryItem::setPageScaleFactor(float scaleFactor) {
   m_pageScaleFactor = scaleFactor;
+  setDidSaveScrollOrScaleState(true);
 }
 
 void HistoryItem::setDocumentState(const Vector<String>& state) {
@@ -118,14 +122,14 @@ void HistoryItem::setDocumentState(DocumentState* state) {
   m_documentState = state;
 }
 
-const Vector<String>& HistoryItem::documentState() {
+const Vector<String>& HistoryItem::getDocumentState() {
   if (m_documentState)
     m_documentStateVector = m_documentState->toStateVector();
   return m_documentStateVector;
 }
 
 Vector<String> HistoryItem::getReferencedFilePaths() {
-  return FormController::getReferencedFilePaths(documentState());
+  return FormController::getReferencedFilePaths(getDocumentState());
 }
 
 void HistoryItem::clearDocumentState() {

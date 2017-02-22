@@ -13,7 +13,6 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkTypeface.h"
 #include "ui/gfx/render_text.h"
 #include "ui/gfx/skia_util.h"
@@ -133,8 +132,8 @@ hb_position_t GetGlyphKerning(FontData* font_data,
 
   SkScalar upm = SkIntToScalar(typeface->getUnitsPerEm());
   SkScalar size = font_data->paint_.getTextSize();
-  return SkiaScalarToHarfBuzzUnits(
-      SkScalarMulDiv(SkIntToScalar(kerning_adjustments[0]), size, upm));
+  return SkiaScalarToHarfBuzzUnits(SkIntToScalar(kerning_adjustments[0]) *
+                                   size / upm);
 }
 
 hb_position_t GetGlyphHorizontalKerning(hb_font_t* font,

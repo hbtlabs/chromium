@@ -29,7 +29,6 @@ class WebString;
 
 namespace media {
 class MediaLog;
-class VideoFrame;
 enum VideoRotation;
 }
 
@@ -69,15 +68,17 @@ class CONTENT_EXPORT WebMediaPlayerMS
  public:
   // Construct a WebMediaPlayerMS with reference to the client, and
   // a MediaStreamClient which provides MediaStreamVideoRenderer.
+  // |delegate| must not be null.
   WebMediaPlayerMS(
       blink::WebFrame* frame,
       blink::WebMediaPlayerClient* client,
-      base::WeakPtr<media::WebMediaPlayerDelegate> delegate,
+      media::WebMediaPlayerDelegate* delegate,
       media::MediaLog* media_log,
       std::unique_ptr<MediaStreamRendererFactory> factory,
-      const scoped_refptr<base::SingleThreadTaskRunner>& compositor_task_runner,
-      const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
-      const scoped_refptr<base::TaskRunner>& worker_task_runner,
+      scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_,
+      scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
+      scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
+      scoped_refptr<base::TaskRunner> worker_task_runner,
       media::GpuVideoAcceleratorFactories* gpu_factories,
       const blink::WebString& sink_id,
       const blink::WebSecurityOrigin& security_origin);
@@ -105,7 +106,7 @@ class CONTENT_EXPORT WebMediaPlayerMS
   // Methods for painting.
   void paint(blink::WebCanvas* canvas,
              const blink::WebRect& rect,
-             SkPaint& paint) override;
+             cc::PaintFlags& flags) override;
   media::SkCanvasVideoRenderer* GetSkCanvasVideoRenderer();
   void ResetCanvasCache();
 
@@ -143,19 +144,31 @@ class CONTENT_EXPORT WebMediaPlayerMS
   size_t videoDecodedByteCount() const override;
 
   // WebMediaPlayerDelegate::Observer implementation.
-  void OnHidden() override;
-  void OnShown() override;
-  bool OnSuspendRequested(bool must_suspend) override;
+  void OnFrameHidden() override;
+  void OnFrameClosed() override;
+  void OnFrameShown() override;
+  void OnIdleTimeout() override;
   void OnPlay() override;
   void OnPause() override;
   void OnVolumeMultiplierUpdate(double multiplier) override;
 
   bool copyVideoTextureToPlatformTexture(gpu::gles2::GLES2Interface* gl,
                                          unsigned int texture,
-                                         unsigned int internal_format,
-                                         unsigned int type,
                                          bool premultiply_alpha,
                                          bool flip_y) override;
+
+  bool texImageImpl(TexImageFunctionID functionID,
+                    unsigned target,
+                    gpu::gles2::GLES2Interface* gl,
+                    int level,
+                    int internalformat,
+                    unsigned format,
+                    unsigned type,
+                    int xoffset,
+                    int yoffset,
+                    int zoffset,
+                    bool flip_y,
+                    bool premultiply_alpha) override;
 
  private:
   friend class WebMediaPlayerMSTest;
@@ -163,6 +176,7 @@ class CONTENT_EXPORT WebMediaPlayerMS
   void OnFirstFrameReceived(media::VideoRotation video_rotation,
                             bool is_opaque);
   void OnOpacityChanged(bool is_opaque);
+  void OnRotationChanged(media::VideoRotation video_rotation, bool is_opaque);
 
   // Need repaint due to state change.
   void RepaintInternal();
@@ -191,7 +205,13 @@ class CONTENT_EXPORT WebMediaPlayerMS
   // |delegate_id_|; an id provided after registering with the delegate.  The
   // WebMediaPlayer may also receive directives (play, pause) from the delegate
   // via the WebMediaPlayerDelegate::Observer interface after registration.
-  const base::WeakPtr<media::WebMediaPlayerDelegate> delegate_;
+  //
+  // NOTE: HTMLMediaElement is a Blink::SuspendableObject, and will receive a
+  // call to contextDestroyed() when Blink::Document::shutdown() is called.
+  // Document::shutdown() is called before the frame detaches (and before the
+  // frame is destroyed). RenderFrameImpl owns of |delegate_|, and is guaranteed
+  // to outlive |this|. It is therefore safe use a raw pointer directly.
+  media::WebMediaPlayerDelegate* delegate_;
   int delegate_id_;
 
   // Inner class used for transfering frames on compositor thread to
@@ -213,6 +233,8 @@ class CONTENT_EXPORT WebMediaPlayerMS
 
   std::unique_ptr<MediaStreamRendererFactory> renderer_factory_;
 
+  const scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
+  const scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner_;
   const scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_;
   const scoped_refptr<base::TaskRunner> worker_task_runner_;
   media::GpuVideoAcceleratorFactories* gpu_factories_;
@@ -220,11 +242,7 @@ class CONTENT_EXPORT WebMediaPlayerMS
   // Used for DCHECKs to ensure methods calls executed in the correct thread.
   base::ThreadChecker thread_checker_;
 
-  // WebMediaPlayerMS owns |compositor_| and destroys it on
-  // |compositor_task_runner_|.
-  std::unique_ptr<WebMediaPlayerMSCompositor> compositor_;
-
-  const scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner_;
+  scoped_refptr<WebMediaPlayerMSCompositor> compositor_;
 
   const std::string initial_audio_output_device_id_;
   const url::Origin initial_security_origin_;

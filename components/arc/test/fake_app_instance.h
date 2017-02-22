@@ -118,7 +118,9 @@ class FakeAppInstance : public mojom::AppInstance {
   void SendAppAdded(const mojom::AppInfo& app);
   void SendPackageAppListRefreshed(const std::string& package_name,
                                    const std::vector<mojom::AppInfo>& apps);
-  void SendTaskCreated(int32_t taskId, const mojom::AppInfo& app);
+  void SendTaskCreated(int32_t taskId,
+                       const mojom::AppInfo& app,
+                       const std::string& intent);
   void SendTaskDestroyed(int32_t taskId);
   bool GenerateAndSendIcon(const mojom::AppInfo& app,
                            mojom::ScaleFactor scale_factor,
@@ -132,6 +134,10 @@ class FakeAppInstance : public mojom::AppInstance {
       const std::vector<mojom::ArcPackageInfo>& packages);
   void SendPackageAdded(const mojom::ArcPackageInfo& package);
   void SendPackageUninstalled(const std::string& pacakge_name);
+
+  void SendInstallationStarted(const std::string& package_name);
+  void SendInstallationFinished(const std::string& package_name,
+                                bool success);
 
   int refresh_app_list_count() const { return refresh_app_list_count_; }
 

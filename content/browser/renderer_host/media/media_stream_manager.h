@@ -249,6 +249,10 @@ class CONTENT_EXPORT MediaStreamManager
   void SetGenerateStreamCallbackForTesting(
       GenerateStreamTestCallback test_callback);
 
+#if defined(OS_WIN)
+  void FlushVideoCaptureThreadForTesting();
+#endif
+
  private:
   // Contains all data needed to keep track of requests.
   class DeviceRequest;
@@ -377,6 +381,13 @@ class CONTENT_EXPORT MediaStreamManager
                          bool requested_video_input,
                          const std::string& label,
                          const MediaDeviceEnumeration& enumeration);
+
+  // Creates MediaStreamDevices for |devices_infos| of |stream_type|. For video
+  // capture device it also uses cached content from |video_capture_manager_| to
+  // set the MediaStreamDevice fields.
+  MediaStreamDevices ConvertToMediaStreamDevices(
+      MediaStreamType stream_type,
+      const MediaDeviceInfoArray& device_infos);
 
   // Task runner shared by VideoCaptureManager and AudioInputDeviceManager and
   // used for enumerating audio output devices.

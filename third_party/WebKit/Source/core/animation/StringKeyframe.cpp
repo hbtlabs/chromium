@@ -22,22 +22,28 @@ StringKeyframe::StringKeyframe(const StringKeyframe& copyFrom)
           copyFrom.m_presentationAttributeMap->mutableCopy()),
       m_svgAttributeMap(copyFrom.m_svgAttributeMap) {}
 
-void StringKeyframe::setCSSPropertyValue(
+MutableStylePropertySet::SetResult StringKeyframe::setCSSPropertyValue(
     const AtomicString& propertyName,
+    const PropertyRegistry* registry,
     const String& value,
     StyleSheetContents* styleSheetContents) {
   bool isAnimationTainted = true;
-  m_cssPropertyMap->setProperty(propertyName, value, false, styleSheetContents,
-                                isAnimationTainted);
+  return m_cssPropertyMap->setProperty(propertyName, registry, value, false,
+                                       styleSheetContents, isAnimationTainted);
 }
 
-void StringKeyframe::setCSSPropertyValue(
+MutableStylePropertySet::SetResult StringKeyframe::setCSSPropertyValue(
     CSSPropertyID property,
     const String& value,
     StyleSheetContents* styleSheetContents) {
   DCHECK_NE(property, CSSPropertyInvalid);
-  if (!CSSAnimations::isAnimationAffectingProperty(property))
-    m_cssPropertyMap->setProperty(property, value, false, styleSheetContents);
+  if (CSSAnimations::isAnimationAffectingProperty(property)) {
+    bool didParse = true;
+    bool didChange = false;
+    return MutableStylePropertySet::SetResult{didParse, didChange};
+  }
+  return m_cssPropertyMap->setProperty(property, value, false,
+                                       styleSheetContents);
 }
 
 void StringKeyframe::setCSSPropertyValue(CSSPropertyID property,
@@ -73,18 +79,18 @@ PropertyHandleSet StringKeyframe::properties() const {
         << "Web Animations: Encountered unexpanded shorthand CSS property ("
         << propertyReference.id() << ").";
     if (propertyReference.id() == CSSPropertyVariable)
-      properties.add(PropertyHandle(
+      properties.insert(PropertyHandle(
           toCSSCustomPropertyDeclaration(propertyReference.value()).name()));
     else
-      properties.add(PropertyHandle(propertyReference.id(), false));
+      properties.insert(PropertyHandle(propertyReference.id(), false));
   }
 
   for (unsigned i = 0; i < m_presentationAttributeMap->propertyCount(); ++i)
-    properties.add(
+    properties.insert(
         PropertyHandle(m_presentationAttributeMap->propertyAt(i).id(), true));
 
   for (const auto& key : m_svgAttributeMap.keys())
-    properties.add(PropertyHandle(*key));
+    properties.insert(PropertyHandle(*key));
 
   return properties;
 }
@@ -94,7 +100,8 @@ PassRefPtr<Keyframe> StringKeyframe::clone() const {
 }
 
 PassRefPtr<Keyframe::PropertySpecificKeyframe>
-StringKeyframe::createPropertySpecificKeyframe(PropertyHandle property) const {
+StringKeyframe::createPropertySpecificKeyframe(
+    const PropertyHandle& property) const {
   if (property.isCSSProperty())
     return CSSPropertySpecificKeyframe::create(
         offset(), &easing(), &cssPropertyValue(property), composite());

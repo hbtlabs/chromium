@@ -6,8 +6,8 @@
 
 #include "platform/CrossThreadFunctional.h"
 #include "platform/WebTaskRunner.h"
-#include "platform/graphics/Image.h"
 #include "platform/graphics/OffscreenCanvasFrameDispatcher.h"
+#include "platform/graphics/StaticBitmapImage.h"
 #include "wtf/HashMap.h"
 
 namespace {
@@ -49,7 +49,7 @@ OffscreenCanvasPlaceholder* OffscreenCanvasPlaceholder::getPlaceholderById(
 void OffscreenCanvasPlaceholder::registerPlaceholder(unsigned placeholderId) {
   DCHECK(!placeholderRegistry().contains(placeholderId));
   DCHECK(!isPlaceholderRegistered());
-  placeholderRegistry().add(placeholderId, this);
+  placeholderRegistry().insert(placeholderId, this);
   m_placeholderId = placeholderId;
 }
 
@@ -57,14 +57,14 @@ void OffscreenCanvasPlaceholder::unregisterPlaceholder() {
   if (!isPlaceholderRegistered())
     return;
   DCHECK(placeholderRegistry().find(m_placeholderId)->value == this);
-  placeholderRegistry().remove(m_placeholderId);
+  placeholderRegistry().erase(m_placeholderId);
   m_placeholderId = kNoPlaceholderId;
 }
 
 void OffscreenCanvasPlaceholder::setPlaceholderFrame(
-    RefPtr<Image> newFrame,
+    RefPtr<StaticBitmapImage> newFrame,
     WeakPtr<OffscreenCanvasFrameDispatcher> dispatcher,
-    std::unique_ptr<WebTaskRunner> taskRunner,
+    RefPtr<WebTaskRunner> taskRunner,
     unsigned resourceId) {
   DCHECK(isPlaceholderRegistered());
   DCHECK(newFrame);

@@ -12,17 +12,9 @@
 
 namespace blink {
 
-class EmptyPlatform : public TestingPlatformSupport {
- public:
-  EmptyPlatform() {}
-  ~EmptyPlatform() override {}
-};
-
 TEST(FontCache, getLastResortFallbackFont) {
   FontCache* fontCache = FontCache::fontCache();
   ASSERT_TRUE(fontCache);
-
-  EmptyPlatform platform;
 
   FontDescription fontDescription;
   fontDescription.setGenericFamily(FontDescription::StandardFamily);
@@ -54,5 +46,12 @@ TEST(FontCache, firstAvailableOrFirst) {
   EXPECT_EQ("not exist",
             FontCache::firstAvailableOrFirst(", not exist, not exist"));
 }
+
+#if !OS(MACOSX)
+TEST(FontCache, systemFont) {
+  FontCache::systemFontFamily();
+  // Test the function does not crash. Return value varies by system and config.
+}
+#endif
 
 }  // namespace blink

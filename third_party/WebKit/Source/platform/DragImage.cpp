@@ -39,7 +39,6 @@
 #include "platform/graphics/Image.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
-#include "platform/graphics/paint/SkPictureBuilder.h"
 #include "platform/text/BidiTextRun.h"
 #include "platform/text/StringTruncator.h"
 #include "platform/text/TextRun.h"
@@ -150,7 +149,10 @@ std::unique_ptr<DragImage> DragImage::create(
   if (!image)
     return nullptr;
 
-  sk_sp<SkImage> skImage = image->imageForCurrentFrame();
+  // TODO(ccameron): DragImage needs to be color space aware.
+  // https://crbug.com/672316
+  sk_sp<SkImage> skImage =
+      image->imageForCurrentFrame(ColorBehavior::transformToGlobalTarget());
   if (!skImage)
     return nullptr;
 
@@ -167,7 +169,8 @@ std::unique_ptr<DragImage> DragImage::create(
       !resizedImage->asLegacyBitmap(&bm, SkImage::kRO_LegacyBitmapMode))
     return nullptr;
 
-  return wrapUnique(new DragImage(bm, deviceScaleFactor, interpolationQuality));
+  return WTF::wrapUnique(
+      new DragImage(bm, deviceScaleFactor, interpolationQuality));
 }
 
 static Font deriveDragLabelFont(int size,
@@ -255,7 +258,7 @@ std::unique_ptr<DragImage> DragImage::create(const KURL& url,
   const float DragLabelRadius = 5;
 
   IntRect rect(IntPoint(), imageSize);
-  SkPaint backgroundPaint;
+  PaintFlags backgroundPaint;
   backgroundPaint.setColor(SkColorSetRGB(140, 140, 140));
   backgroundPaint.setAntiAlias(true);
   SkRRect rrect;
@@ -264,7 +267,7 @@ std::unique_ptr<DragImage> DragImage::create(const KURL& url,
   buffer->canvas()->drawRRect(rrect, backgroundPaint);
 
   // Draw the text
-  SkPaint textPaint;
+  PaintFlags textPaint;
   if (drawURLString) {
     if (clipURLString)
       urlString = StringTruncator::centerTruncate(
@@ -287,7 +290,7 @@ std::unique_ptr<DragImage> DragImage::create(const KURL& url,
   IntPoint textPos(
       kDragLabelBorderX,
       kDragLabelBorderY + labelFont.getFontDescription().computedPixelSize());
-  if (hasStrongDirectionality && textRun.direction() == RTL) {
+  if (hasStrongDirectionality && textRun.direction() == TextDirection::kRtl) {
     float textWidth = labelFont.width(textRun);
     int availableWidth = imageSize.width() - kDragLabelBorderX * 2;
     textPos.setX(availableWidth - ceilf(textWidth));

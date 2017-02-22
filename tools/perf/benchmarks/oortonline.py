@@ -23,8 +23,8 @@ class _OortOnlineMeasurement(legacy_page_test.LegacyPageTest):
 
   def ValidateAndMeasurePage(self, page, tab, results):
     del page  # unused
-    tab.WaitForJavaScriptExpression('window.benchmarkFinished', 1000)
-    scores = tab.EvaluateJavaScript('window.benchmarkScore')
+    tab.WaitForJavaScriptCondition2('window.benchmarkFinished', timeout=1000)
+    scores = tab.EvaluateJavaScript2('window.benchmarkScore')
     for score in scores:
       valid = score['valid']
       if valid:
@@ -93,6 +93,10 @@ class OortOnlineTBMv2(perf_benchmark.PerfBenchmark):
     options.config.chrome_trace_config.SetMemoryDumpConfig(
         chrome_trace_config.MemoryDumpConfig())
     return options
+
+  @classmethod
+  def ShouldDisable(cls, possible_browser):
+    return possible_browser.platform.GetDeviceTypeName() == 'Nexus 9'
 
   @classmethod
   def Name(cls):

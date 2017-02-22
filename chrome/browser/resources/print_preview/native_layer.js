@@ -15,6 +15,15 @@ cr.exportPath('print_preview');
  */
 print_preview.PreviewSettings;
 
+/**
+ * @typedef {{
+ *   printerId: string,
+ *   success: boolean,
+ *   capabilities: Object,
+ * }}
+*/
+print_preview.PrinterSetupResponse;
+
 cr.define('print_preview', function() {
   'use strict';
 
@@ -54,7 +63,6 @@ cr.define('print_preview', function() {
     global.onDidPreviewPage = this.onDidPreviewPage_.bind(this);
     global.updatePrintPreview = this.onUpdatePrintPreview_.bind(this);
     global.onDidGetAccessToken = this.onDidGetAccessToken_.bind(this);
-    global.autoCancelForTesting = this.autoCancelForTesting_.bind(this);
     global.onPrivetPrinterChanged = this.onPrivetPrinterChanged_.bind(this);
     global.onPrivetCapabilitiesSet =
         this.onPrivetCapabilitiesSet_.bind(this);
@@ -232,6 +240,15 @@ cr.define('print_preview', function() {
     },
 
     /**
+     * Requests that Chrome peform printer setup for the given printer.
+     * @param {string} printerId
+     * @return {!Promise<!print_preview.PrinterSetupResponse>}
+     */
+    setupPrinter: function(printerId) {
+      return cr.sendWithPromise('setupPrinter', printerId);
+    },
+
+    /**
      * @param {!print_preview.Destination} destination Destination to print to.
      * @param {!print_preview.ticket_items.Color} color Color ticket item.
      * @return {number} Native layer color model.
@@ -294,6 +311,7 @@ cr.define('print_preview', function() {
             NativeLayer.DuplexMode.LONG_EDGE : NativeLayer.DuplexMode.SIMPLEX,
         'copies': 1,
         'collate': true,
+        'rasterizePDF': false,
         'shouldPrintBackgrounds': printTicketStore.cssBackground.getValue(),
         'shouldPrintSelectionOnly': printTicketStore.selectionOnly.getValue()
       };
@@ -367,6 +385,7 @@ cr.define('print_preview', function() {
         'printWithCloudPrint': !destination.isLocal,
         'printWithPrivet': destination.isPrivet,
         'printWithExtension': destination.isExtension,
+        'rasterizePDF': printTicketStore.rasterize.getValue(),
         'scaleFactor': printTicketStore.scaling.getValueAsNumber(),
         'deviceName': destination.id,
         'isFirstRequest': false,
@@ -738,17 +757,6 @@ cr.define('print_preview', function() {
           NativeLayer.EventType.PRINT_PRESET_OPTIONS);
       printPresetOptionsEvent.optionsFromDocument = options;
       this.dispatchEvent(printPresetOptionsEvent);
-    },
-
-    /**
-     * Simulates a user click on the print preview dialog cancel button. Used
-     * only for testing.
-     * @private
-     */
-    autoCancelForTesting_: function() {
-      var properties = {view: window, bubbles: true, cancelable: true};
-      var click = new MouseEvent('click', properties);
-      document.querySelector('#print-header .cancel').dispatchEvent(click);
     },
 
     /**

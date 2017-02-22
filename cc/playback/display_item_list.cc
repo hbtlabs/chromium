@@ -16,12 +16,14 @@
 #include "cc/debug/picture_debug_util.h"
 #include "cc/debug/traced_display_item_list.h"
 #include "cc/debug/traced_value.h"
-#include "cc/playback/display_item_list_settings.h"
-#include "cc/playback/display_item_proto_factory.h"
+#include "cc/playback/clip_display_item.h"
+#include "cc/playback/clip_path_display_item.h"
+#include "cc/playback/compositing_display_item.h"
 #include "cc/playback/drawing_display_item.h"
+#include "cc/playback/filter_display_item.h"
+#include "cc/playback/float_clip_display_item.h"
 #include "cc/playback/largest_display_item.h"
-#include "cc/proto/display_item.pb.h"
-#include "cc/proto/gfx_conversions.h"
+#include "cc/playback/transform_display_item.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
 #include "third_party/skia/include/utils/SkPictureUtils.h"
@@ -46,7 +48,7 @@ bool DisplayItemsTracingEnabled() {
 
 bool GetCanvasClipBounds(SkCanvas* canvas, gfx::Rect* clip_bounds) {
   SkRect canvas_clip_bounds;
-  if (!canvas->getClipBounds(&canvas_clip_bounds))
+  if (!canvas->getLocalClipBounds(&canvas_clip_bounds))
     return false;
   *clip_bounds = ToEnclosingRect(gfx::SkRectToRectF(canvas_clip_bounds));
   return true;
@@ -56,60 +58,15 @@ const int kDefaultNumDisplayItemsToReserve = 100;
 
 }  // namespace
 
-DisplayItemList::Inputs::Inputs(const DisplayItemListSettings& settings)
+DisplayItemList::Inputs::Inputs()
     : items(LargestDisplayItemSize(),
-            LargestDisplayItemSize() * kDefaultNumDisplayItemsToReserve),
-      settings(settings) {}
+            LargestDisplayItemSize() * kDefaultNumDisplayItemsToReserve) {}
 
-DisplayItemList::Inputs::~Inputs() {}
+DisplayItemList::Inputs::~Inputs() = default;
 
-scoped_refptr<DisplayItemList> DisplayItemList::Create(
-    const DisplayItemListSettings& settings) {
-  return make_scoped_refptr(new DisplayItemList(settings));
-}
+DisplayItemList::DisplayItemList() = default;
 
-scoped_refptr<DisplayItemList> DisplayItemList::CreateFromProto(
-    const proto::DisplayItemList& proto,
-    ClientPictureCache* client_picture_cache,
-    std::vector<uint32_t>* used_engine_picture_ids) {
-  scoped_refptr<DisplayItemList> list =
-      DisplayItemList::Create(DisplayItemListSettings(proto.settings()));
-
-  for (int i = 0; i < proto.items_size(); i++) {
-    const proto::DisplayItem& item_proto = proto.items(i);
-    const gfx::Rect visual_rect = ProtoToRect(proto.visual_rects(i));
-    DisplayItemProtoFactory::AllocateAndConstruct(
-        visual_rect, list.get(), item_proto, client_picture_cache,
-        used_engine_picture_ids);
-  }
-
-  list->Finalize();
-
-  return list;
-}
-
-DisplayItemList::DisplayItemList(const DisplayItemListSettings& settings)
-    : inputs_(settings) {}
-
-DisplayItemList::~DisplayItemList() {
-}
-
-void DisplayItemList::ToProtobuf(proto::DisplayItemList* proto) {
-  // The flattened SkPicture approach is going away, and the proto
-  // doesn't currently support serializing that flattened picture.
-  inputs_.settings.ToProtobuf(proto->mutable_settings());
-
-  DCHECK_EQ(0, proto->items_size());
-  DCHECK_EQ(0, proto->visual_rects_size());
-  DCHECK(inputs_.items.size() == inputs_.visual_rects.size())
-      << "items.size() " << inputs_.items.size() << " visual_rects.size() "
-      << inputs_.visual_rects.size();
-  int i = 0;
-  for (const auto& item : inputs_.items) {
-    RectToProto(inputs_.visual_rects[i++], proto->add_visual_rects());
-    item.ToProtobuf(proto->add_items());
-  }
-}
+DisplayItemList::~DisplayItemList() = default;
 
 void DisplayItemList::Raster(SkCanvas* canvas,
                              SkPicture::AbortCallback* callback,
@@ -156,8 +113,6 @@ void DisplayItemList::GrowCurrentBeginItemVisualRect(
 
 void DisplayItemList::Finalize() {
   TRACE_EVENT0("cc", "DisplayItemList::Finalize");
-  // TODO(dtrainor): Need to deal with serializing inputs_.visual_rects.
-  // http://crbug.com/568757.
   DCHECK(inputs_.items.size() == inputs_.visual_rects.size())
       << "items.size() " << inputs_.items.size() << " visual_rects.size() "
       << inputs_.visual_rects.size();
@@ -183,7 +138,6 @@ int DisplayItemList::ApproximateOpCount() const {
   return approximate_op_count_;
 }
 
-DISABLE_CFI_PERF
 size_t DisplayItemList::ApproximateMemoryUsage() const {
   size_t memory_usage = sizeof(*this);
 
@@ -191,7 +145,44 @@ size_t DisplayItemList::ApproximateMemoryUsage() const {
   // Warning: this double-counts SkPicture data if use_cached_picture is
   // also true.
   for (const auto& item : inputs_.items) {
-    external_memory_usage += item.ExternalMemoryUsage();
+    size_t bytes = 0;
+    switch (item.type()) {
+      case DisplayItem::CLIP:
+        bytes = static_cast<const ClipDisplayItem&>(item).ExternalMemoryUsage();
+        break;
+      case DisplayItem::CLIP_PATH:
+        bytes =
+            static_cast<const ClipPathDisplayItem&>(item).ExternalMemoryUsage();
+        break;
+      case DisplayItem::COMPOSITING:
+        bytes = static_cast<const CompositingDisplayItem&>(item)
+                    .ExternalMemoryUsage();
+        break;
+      case DisplayItem::DRAWING:
+        bytes =
+            static_cast<const DrawingDisplayItem&>(item).ExternalMemoryUsage();
+        break;
+      case DisplayItem::FLOAT_CLIP:
+        bytes = static_cast<const FloatClipDisplayItem&>(item)
+                    .ExternalMemoryUsage();
+        break;
+      case DisplayItem::FILTER:
+        bytes =
+            static_cast<const FilterDisplayItem&>(item).ExternalMemoryUsage();
+        break;
+      case DisplayItem::TRANSFORM:
+        bytes = static_cast<const TransformDisplayItem&>(item)
+                    .ExternalMemoryUsage();
+        break;
+      case DisplayItem::END_CLIP:
+      case DisplayItem::END_CLIP_PATH:
+      case DisplayItem::END_COMPOSITING:
+      case DisplayItem::END_FLOAT_CLIP:
+      case DisplayItem::END_FILTER:
+      case DisplayItem::END_TRANSFORM:
+        break;
+    }
+    external_memory_usage += bytes;
   }
 
   // Memory outside this class due to |items_|.
@@ -266,13 +257,13 @@ void DisplayItemList::GenerateDiscardableImagesMetadata() {
 
 void DisplayItemList::GetDiscardableImagesInRect(
     const gfx::Rect& rect,
-    const gfx::SizeF& raster_scales,
+    float contents_scale,
     std::vector<DrawImage>* images) {
-  image_map_.GetDiscardableImagesInRect(rect, raster_scales, images);
+  image_map_.GetDiscardableImagesInRect(rect, contents_scale, images);
 }
 
-Region DisplayItemList::GetRegionForImage(uint32_t image_id) {
-  return image_map_.GetRegionForImage(image_id);
+gfx::Rect DisplayItemList::GetRectForImage(ImageId image_id) const {
+  return image_map_.GetRectForImage(image_id);
 }
 
 }  // namespace cc

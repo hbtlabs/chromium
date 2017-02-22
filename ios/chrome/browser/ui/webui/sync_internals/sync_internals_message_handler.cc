@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/values.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/sync/base/weak_handle.h"
@@ -137,7 +138,7 @@ void SyncInternalsMessageHandler::HandleGetAllNodes(
     const base::ListValue* args) {
   DCHECK_EQ(1U, args->GetSize());
   int request_id = 0;
-  bool success = args->GetInteger(0, &request_id);
+  bool success = ExtractIntegerValue(args, &request_id);
   DCHECK(success);
 
   syncer::SyncService* service = GetSyncService();
@@ -156,7 +157,7 @@ void SyncInternalsMessageHandler::OnReceivedAllNodes(
                                    id, *nodes);
 }
 
-void SyncInternalsMessageHandler::OnStateChanged() {
+void SyncInternalsMessageHandler::OnStateChanged(syncer::SyncService* sync) {
   SendAboutInfo();
 }
 

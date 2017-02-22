@@ -33,12 +33,11 @@
 #include "core/frame/Navigator.h"
 #include "modules/quota/DeprecatedStorageQuota.h"
 #include "modules/quota/StorageManager.h"
-#include "modules/quota/StorageQuota.h"
 
 namespace blink {
 
-NavigatorStorageQuota::NavigatorStorageQuota(LocalFrame* frame)
-    : DOMWindowProperty(frame) {}
+NavigatorStorageQuota::NavigatorStorageQuota(Navigator& navigator)
+    : Supplement<Navigator>(navigator) {}
 
 const char* NavigatorStorageQuota::supplementName() {
   return "NavigatorStorageQuota";
@@ -48,15 +47,12 @@ NavigatorStorageQuota& NavigatorStorageQuota::from(Navigator& navigator) {
   NavigatorStorageQuota* supplement = static_cast<NavigatorStorageQuota*>(
       Supplement<Navigator>::from(navigator, supplementName()));
   if (!supplement) {
-    supplement = new NavigatorStorageQuota(navigator.frame());
+    supplement = new NavigatorStorageQuota(navigator);
     provideTo(navigator, supplementName(), supplement);
   }
   return *supplement;
 }
 
-StorageQuota* NavigatorStorageQuota::storageQuota(Navigator& navigator) {
-  return NavigatorStorageQuota::from(navigator).storageQuota();
-}
 
 DeprecatedStorageQuota* NavigatorStorageQuota::webkitTemporaryStorage(
     Navigator& navigator) {
@@ -72,39 +68,31 @@ StorageManager* NavigatorStorageQuota::storage(Navigator& navigator) {
   return NavigatorStorageQuota::from(navigator).storage();
 }
 
-StorageQuota* NavigatorStorageQuota::storageQuota() const {
-  if (!m_storageQuota && frame())
-    m_storageQuota = StorageQuota::create();
-  return m_storageQuota.get();
-}
-
 DeprecatedStorageQuota* NavigatorStorageQuota::webkitTemporaryStorage() const {
-  if (!m_temporaryStorage && frame())
+  if (!m_temporaryStorage)
     m_temporaryStorage =
         DeprecatedStorageQuota::create(DeprecatedStorageQuota::Temporary);
   return m_temporaryStorage.get();
 }
 
 DeprecatedStorageQuota* NavigatorStorageQuota::webkitPersistentStorage() const {
-  if (!m_persistentStorage && frame())
+  if (!m_persistentStorage)
     m_persistentStorage =
         DeprecatedStorageQuota::create(DeprecatedStorageQuota::Persistent);
   return m_persistentStorage.get();
 }
 
 StorageManager* NavigatorStorageQuota::storage() const {
-  if (!m_storageManager && frame())
+  if (!m_storageManager)
     m_storageManager = new StorageManager();
   return m_storageManager.get();
 }
 
 DEFINE_TRACE(NavigatorStorageQuota) {
-  visitor->trace(m_storageQuota);
   visitor->trace(m_temporaryStorage);
   visitor->trace(m_persistentStorage);
   visitor->trace(m_storageManager);
   Supplement<Navigator>::trace(visitor);
-  DOMWindowProperty::trace(visitor);
 }
 
 }  // namespace blink

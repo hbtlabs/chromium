@@ -25,10 +25,13 @@ settings.ContentSettingsTypes = {
   PROTOCOL_HANDLERS: 'register-protocol-handler',
   UNSANDBOXED_PLUGINS: 'ppapi-broker',
   AUTOMATIC_DOWNLOADS: 'multiple-automatic-downloads',
-  KEYGEN: 'keygen',
   BACKGROUND_SYNC: 'background-sync',
+  MIDI_DEVICES: 'midi-sysex',
   USB_DEVICES: 'usb-chooser-data',
   ZOOM_LEVELS: 'zoom-levels',
+// <if expr="chromeos">
+  PROTECTED_CONTENT: 'protectedContent',
+// </if>
 };
 
 /**

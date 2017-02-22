@@ -26,7 +26,6 @@
 #include "core/editing/commands/DeleteFromTextNodeCommand.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Text.h"
 #include "core/editing/EditingUtilities.h"
 
@@ -51,13 +50,12 @@ void DeleteFromTextNodeCommand::doApply(EditingState*) {
   if (!hasEditableStyle(*m_node))
     return;
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   m_text = m_node->substringData(m_offset, m_count, exceptionState);
   if (exceptionState.hadException())
     return;
 
   m_node->deleteData(m_offset, m_count, exceptionState);
-  m_node->document().updateStyleAndLayout();
 }
 
 void DeleteFromTextNodeCommand::doUnapply() {
@@ -66,8 +64,7 @@ void DeleteFromTextNodeCommand::doUnapply() {
   if (!hasEditableStyle(*m_node))
     return;
 
-  m_node->insertData(m_offset, m_text, IGNORE_EXCEPTION);
-  m_node->document().updateStyleAndLayout();
+  m_node->insertData(m_offset, m_text, IGNORE_EXCEPTION_FOR_TESTING);
 }
 
 DEFINE_TRACE(DeleteFromTextNodeCommand) {

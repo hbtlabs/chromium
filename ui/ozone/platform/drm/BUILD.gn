@@ -5,21 +5,7 @@
 import("//build/config/linux/pkg_config.gni")
 import("//ui/ozone/ozone.gni")
 
-declare_args() {
-  use_drm_atomic = false
-}
-
 visibility = [ "//ui/ozone/*" ]
-
-pkg_config("libdrm") {
-  packages = [ "libdrm" ]
-}
-
-config("drm_atomic") {
-  if (use_drm_atomic) {
-    defines = [ "USE_DRM_ATOMIC" ]
-  }
-}
 
 source_set("gbm") {
   sources = [
@@ -79,8 +65,12 @@ source_set("gbm") {
     "gpu/hardware_display_controller.h",
     "gpu/hardware_display_plane.cc",
     "gpu/hardware_display_plane.h",
+    "gpu/hardware_display_plane_atomic.cc",
+    "gpu/hardware_display_plane_atomic.h",
     "gpu/hardware_display_plane_manager.cc",
     "gpu/hardware_display_plane_manager.h",
+    "gpu/hardware_display_plane_manager_atomic.cc",
+    "gpu/hardware_display_plane_manager_atomic.h",
     "gpu/hardware_display_plane_manager_legacy.cc",
     "gpu/hardware_display_plane_manager_legacy.h",
     "gpu/inter_thread_messaging_proxy.cc",
@@ -129,6 +119,7 @@ source_set("gbm") {
     "//services/service_manager/public/cpp:sources",
     "//services/ui/public/interfaces:constants",
     "//skia",
+    "//third_party/libdrm",
     "//third_party/minigbm",
     "//ui/base",
     "//ui/display",
@@ -150,26 +141,13 @@ source_set("gbm") {
     "//ui/platform_window",
   ]
 
-  configs += [ ":libdrm" ]
-
   public_configs = [ "//third_party/khronos:khronos_headers" ]
 
   defines = [ "OZONE_IMPLEMENTATION" ]
-
-  if (use_drm_atomic) {
-    configs += [ ":drm_atomic" ]
-    sources += [
-      "gpu/hardware_display_plane_atomic.cc",
-      "gpu/hardware_display_plane_atomic.h",
-      "gpu/hardware_display_plane_manager_atomic.cc",
-      "gpu/hardware_display_plane_manager_atomic.h",
-    ]
-  }
 }
 
 source_set("gbm_unittests") {
   testonly = true
-  configs += [ ":drm_atomic" ]
   sources = [
     "gpu/drm_overlay_validator_unittest.cc",
     "gpu/drm_window_unittest.cc",
@@ -194,10 +172,9 @@ source_set("gbm_unittests") {
     ":gbm",
     "//skia",
     "//testing/gtest",
+    "//third_party/libdrm",
     "//ui/gfx",
     "//ui/ozone:platform",
     "//ui/ozone/common",
   ]
-
-  public_configs = [ ":libdrm" ]
 }

@@ -21,6 +21,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/browser_process.h"
@@ -79,13 +80,13 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/favicon_size.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/gfx/text_elider.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
@@ -165,9 +166,13 @@ gfx::ImageSkia* GetImageSkiaNamed(int id) {
   return ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(id);
 }
 
+// Ink drop ripple/highlight for bookmark buttons should be inset 1px vertically
+// so that they do not touch the bookmark bar borders.
+constexpr gfx::Insets kInkDropInsets(1, 0);
+
 gfx::Rect CalculateInkDropBounds(const gfx::Size& size) {
   gfx::Rect ink_drop_bounds(size);
-  ink_drop_bounds.Inset(0, 1);
+  ink_drop_bounds.Inset(kInkDropInsets);
   return ink_drop_bounds;
 }
 
@@ -225,7 +230,7 @@ class BookmarkButtonBase : public views::LabelButton {
 
   std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override {
     return base::MakeUnique<views::FloodFillInkDropRipple>(
-        CalculateInkDropBounds(size()), GetInkDropCenterBasedOnLastEvent(),
+        size(), kInkDropInsets, GetInkDropCenterBasedOnLastEvent(),
         GetInkDropBaseColor(), ink_drop_visible_opacity());
   }
 
@@ -244,7 +249,6 @@ class BookmarkButtonBase : public views::LabelButton {
 
  private:
   std::unique_ptr<gfx::SlideAnimation> show_animation_;
-
 
   DISALLOW_COPY_AND_ASSIGN(BookmarkButtonBase);
 };
@@ -284,7 +288,7 @@ class BookmarkButton : public BookmarkButtonBase {
 
   void SetText(const base::string16& text) override {
     BookmarkButtonBase::SetText(text);
-    tooltip_text_.empty();
+    tooltip_text_.clear();
   }
 
   const char* GetClassName() const override { return kViewClassName; }
@@ -348,7 +352,7 @@ class BookmarkMenuButtonBase : public views::MenuButton {
 
   std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override {
     return base::MakeUnique<views::FloodFillInkDropRipple>(
-        CalculateInkDropBounds(size()), GetInkDropCenterBasedOnLastEvent(),
+        size(), kInkDropInsets, GetInkDropCenterBasedOnLastEvent(),
         GetInkDropBaseColor(), ink_drop_visible_opacity());
   }
 
@@ -582,7 +586,7 @@ BookmarkBarView::BookmarkBarView(Browser* browser, BrowserView* browser_view)
   Init();
 
   // Don't let the bookmarks show on top of the location bar while animating.
-  SetPaintToLayer(true);
+  SetPaintToLayer();
   layer()->SetMasksToBounds(true);
   layer()->SetFillsBoundsOpaquely(false);
 
@@ -1202,6 +1206,8 @@ int BookmarkBarView::OnPerformDrop(const DropTargetEvent& event) {
   DCHECK(data.is_valid());
   bool copy = drop_info_->location.operation == ui::DragDropTypes::DRAG_COPY;
   drop_info_.reset();
+
+  content::RecordAction(base::UserMetricsAction("BookmarkBar_DragEnd"));
   return chrome::DropBookmarks(
       browser_->profile(), data, parent_node, index, copy);
 }
@@ -2090,7 +2096,7 @@ void BookmarkBarView::UpdateAppearanceForTheme() {
 
   overflow_button_->SetImage(
       views::Button::STATE_NORMAL,
-      gfx::CreateVectorIcon(gfx::VectorIconId::OVERFLOW_CHEVRON, 8,
+      gfx::CreateVectorIcon(kOverflowChevronIcon, 8,
                             theme_provider->GetColor(
                                 ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON)));
 

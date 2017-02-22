@@ -12,6 +12,7 @@
 #include "android_webview/common/aw_switches.h"
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/output/compositor_frame.h"
 #include "content/public/browser/android/synchronous_compositor.h"
@@ -119,8 +120,7 @@ std::unique_ptr<cc::CompositorFrame> RenderingTest::ConstructEmptyFrame() {
       new cc::CompositorFrame);
   std::unique_ptr<cc::RenderPass> root_pass(cc::RenderPass::Create());
   gfx::Rect viewport(browser_view_renderer_->size());
-  root_pass->SetNew(cc::RenderPassId(1, 1), viewport, viewport,
-                    gfx::Transform());
+  root_pass->SetNew(1, viewport, viewport, gfx::Transform());
   compositor_frame->render_pass_list.push_back(std::move(root_pass));
   return compositor_frame;
 }

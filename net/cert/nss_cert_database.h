@@ -25,7 +25,6 @@
 namespace base {
 template <class ObserverType>
 class ObserverListThreadSafe;
-class TaskRunner;
 }
 
 namespace net {
@@ -42,10 +41,9 @@ class NET_EXPORT NSSCertDatabase {
    public:
     virtual ~Observer() {}
 
-    // Will be called when a CA certificate is changed.
-    // Called with |cert| == NULL after importing a list of certificates
-    // in ImportCACerts().
-    virtual void OnCertDBChanged(const X509Certificate* cert) {}
+    // Will be called when a certificate is added, removed, or trust settings
+    // are changed.
+    virtual void OnCertDBChanged() {}
 
    protected:
     Observer() {}
@@ -145,18 +143,6 @@ class NET_EXPORT NSSCertDatabase {
   // Can return NULL.
   crypto::ScopedPK11Slot GetPrivateSlot() const;
 
-  // Get the default module for public key data.
-  // The returned pointer must be stored in a scoped_refptr<CryptoModule>.
-  // DEPRECATED: use GetPublicSlot instead.
-  // TODO(mattm): remove usage of this method and remove it.
-  CryptoModule* GetPublicModule() const;
-
-  // Get the default module for private key or mixed private/public key data.
-  // The returned pointer must be stored in a scoped_refptr<CryptoModule>.
-  // DEPRECATED: use GetPrivateSlot instead.
-  // TODO(mattm): remove usage of this method and remove it.
-  CryptoModule* GetPrivateModule() const;
-
   // Get all modules.
   // If |need_rw| is true, only writable modules will be returned.
   // TODO(mattm): come up with better alternative to CryptoModuleList.
@@ -168,7 +154,7 @@ class NET_EXPORT NSSCertDatabase {
   // Returns OK or a network error code such as ERR_PKCS12_IMPORT_BAD_PASSWORD
   // or ERR_PKCS12_IMPORT_ERROR. |imported_certs|, if non-NULL, returns a list
   // of certs that were imported.
-  int ImportFromPKCS12(CryptoModule* module,
+  int ImportFromPKCS12(PK11SlotInfo* slot_info,
                        const std::string& data,
                        const base::string16& password,
                        bool is_extractable,
@@ -249,10 +235,6 @@ class NET_EXPORT NSSCertDatabase {
   // Check whether cert is stored in a hardware slot.
   bool IsHardwareBacked(const X509Certificate* cert) const;
 
-  // Overrides task runner that's used for running slow tasks.
-  void SetSlowTaskRunnerForTest(
-      const scoped_refptr<base::TaskRunner>& task_runner);
-
  protected:
   // Certificate listing implementation used by |ListCerts*| and
   // |ListCertsSync|. Static so it may safely be used on the worker thread.
@@ -261,14 +243,9 @@ class NET_EXPORT NSSCertDatabase {
   static void ListCertsImpl(crypto::ScopedPK11Slot slot,
                             CertificateList* certs);
 
-  // Gets task runner that should be used for slow tasks like certificate
-  // listing. Defaults to a base::WorkerPool runner, but may be overriden
-  // in tests (see SetSlowTaskRunnerForTest).
-  scoped_refptr<base::TaskRunner> GetSlowTaskRunner() const;
-
  protected:
   // Broadcasts notifications to all registered observers.
-  void NotifyObserversCertDBChanged(const X509Certificate* cert);
+  void NotifyObserversCertDBChanged();
 
  private:
   // Registers |observer| to receive notifications of certificate changes.  The
@@ -283,10 +260,9 @@ class NET_EXPORT NSSCertDatabase {
   // on the same thread on which AddObserver() was called.
   void RemoveObserver(Observer* observer);
 
-  // Notifies observers of the removal of |cert| and calls |callback| with
+  // Notifies observers of the removal of a cert and calls |callback| with
   // |success| as argument.
-  void NotifyCertRemovalAndCallBack(scoped_refptr<X509Certificate> cert,
-                                    const DeleteCertCallback& callback,
+  void NotifyCertRemovalAndCallBack(const DeleteCertCallback& callback,
                                     bool success);
 
   // Certificate removal implementation used by |DeleteCertAndKey*|. Static so
@@ -298,9 +274,6 @@ class NET_EXPORT NSSCertDatabase {
 
   // A helper observer that forwards events from this database to CertDatabase.
   std::unique_ptr<Observer> cert_notification_forwarder_;
-
-  // Task runner that should be used in tests if set.
-  scoped_refptr<base::TaskRunner> slow_task_runner_for_test_;
 
   const scoped_refptr<base::ObserverListThreadSafe<Observer>> observer_list_;
 

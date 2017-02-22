@@ -22,6 +22,7 @@
 #include "components/metrics/metrics_service.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/variations/variations_associated_data.h"
 
 namespace metrics {
 
@@ -70,6 +71,15 @@ constexpr SourceOptions kSourceOptions[] = {
   }
 };
 
+void DeleteFileWhenPossible(const base::FilePath& path) {
+  // Open (with delete) and then immediately close the file by going out of
+  // scope. This is the only cross-platform safe way to delete a file that may
+  // be open elsewhere, a distinct possibility given the asynchronous nature
+  // of the delete task.
+  base::File file(path, base::File::FLAG_OPEN | base::File::FLAG_READ |
+                            base::File::FLAG_DELETE_ON_CLOSE);
+}
+
 }  // namespace
 
 // This structure stores all the information about the sources being monitored
@@ -112,6 +122,8 @@ FileMetricsProvider::FileMetricsProvider(
     : task_runner_(task_runner),
       pref_service_(local_state),
       weak_factory_(this) {
+  base::StatisticsRecorder::RegisterHistogramProvider(
+      weak_factory_.GetWeakPtr());
 }
 
 FileMetricsProvider::~FileMetricsProvider() {}
@@ -432,9 +444,7 @@ void FileMetricsProvider::RecordSourcesChecked(SourceInfoList* checked) {
 }
 
 void FileMetricsProvider::DeleteFileAsync(const base::FilePath& path) {
-  task_runner_->PostTask(FROM_HERE,
-                         base::Bind(base::IgnoreResult(&base::DeleteFile),
-                                    path, /*recursive=*/false));
+  task_runner_->PostTask(FROM_HERE, base::Bind(DeleteFileWhenPossible, path));
 }
 
 void FileMetricsProvider::RecordSourceAsRead(SourceInfo* source) {
@@ -470,6 +480,12 @@ void FileMetricsProvider::OnDidCreateMetricsLog() {
 
 bool FileMetricsProvider::HasInitialStabilityMetrics() {
   DCHECK(thread_checker_.CalledOnValidThread());
+
+  // Check if there is an experiment that disables stability metrics.
+  std::string unreported = variations::GetVariationParamValueByFeature(
+      base::kPersistentHistogramsFeature, "send_unreported_metrics");
+  if (unreported == "no")
+    sources_for_previous_run_.clear();
 
   // Measure the total time spent checking all sources as well as the time
   // per individual file. This method is called during startup and thus blocks
@@ -508,20 +524,6 @@ bool FileMetricsProvider::HasInitialStabilityMetrics() {
   return !sources_for_previous_run_.empty();
 }
 
-void FileMetricsProvider::MergeHistogramDeltas() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  // Measure the total time spent processing all sources as well as the time
-  // per individual file. This method is called on the UI thread so it's
-  // important to know how much total "jank" may be introduced.
-  SCOPED_UMA_HISTOGRAM_TIMER("UMA.FileMetricsProvider.SnapshotTime.Total");
-
-  for (std::unique_ptr<SourceInfo>& source : sources_mapped_) {
-    SCOPED_UMA_HISTOGRAM_TIMER("UMA.FileMetricsProvider.SnapshotTime.File");
-    MergeHistogramDeltasFromSource(source.get());
-  }
-}
-
 void FileMetricsProvider::RecordInitialHistogramSnapshots(
     base::HistogramSnapshotManager* snapshot_manager) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -547,6 +549,20 @@ void FileMetricsProvider::RecordInitialHistogramSnapshots(
 
     // Update the last-seen time so it isn't read again unless it changes.
     RecordSourceAsRead(source.get());
+  }
+}
+
+void FileMetricsProvider::MergeHistogramDeltas() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  // Measure the total time spent processing all sources as well as the time
+  // per individual file. This method is called on the UI thread so it's
+  // important to know how much total "jank" may be introduced.
+  SCOPED_UMA_HISTOGRAM_TIMER("UMA.FileMetricsProvider.SnapshotTime.Total");
+
+  for (std::unique_ptr<SourceInfo>& source : sources_mapped_) {
+    SCOPED_UMA_HISTOGRAM_TIMER("UMA.FileMetricsProvider.SnapshotTime.File");
+    MergeHistogramDeltasFromSource(source.get());
   }
 }
 

@@ -10,8 +10,6 @@
 #include "base/compiler_specific.h"
 #include "chrome/browser/download/download_shelf.h"
 
-class DownloadItemModel;
-
 @class DownloadShelfController;
 
 // A class to bridge the chromium download shelf to mac gui. This is just a
@@ -28,8 +26,10 @@ class DownloadShelfMac : public DownloadShelf {
 
  protected:
   void DoAddDownload(content::DownloadItem* download) override;
-  void DoShow() override;
+  void DoOpen() override;
   void DoClose(CloseReason reason) override;
+  void DoHide() override;
+  void DoUnhide() override;
 
  private:
   // The browser that owns this shelf.

@@ -70,9 +70,9 @@ class LinkedHashSetNodeBase {
   void unlink() {
     if (!m_next)
       return;
-    ASSERT(m_prev);
-    ASSERT(m_next->m_prev == this);
-    ASSERT(m_prev->m_next == this);
+    DCHECK(m_prev);
+    DCHECK(m_next->m_prev == this);
+    DCHECK(m_prev->m_next == this);
     m_next->m_prev = m_prev;
     m_prev->m_next = m_next;
   }
@@ -84,10 +84,10 @@ class LinkedHashSetNodeBase {
     other.m_prev = m_prev;
     m_prev->m_next = &other;
     m_prev = &other;
-    ASSERT(other.m_next);
-    ASSERT(other.m_prev);
-    ASSERT(m_next);
-    ASSERT(m_prev);
+    DCHECK(other.m_next);
+    DCHECK(other.m_prev);
+    DCHECK(m_next);
+    DCHECK(m_prev);
   }
 
   void insertAfter(LinkedHashSetNodeBase& other) {
@@ -95,16 +95,16 @@ class LinkedHashSetNodeBase {
     other.m_next = m_next;
     m_next->m_prev = &other;
     m_next = &other;
-    ASSERT(other.m_next);
-    ASSERT(other.m_prev);
-    ASSERT(m_next);
-    ASSERT(m_prev);
+    DCHECK(other.m_next);
+    DCHECK(other.m_prev);
+    DCHECK(m_next);
+    DCHECK(m_prev);
   }
 
   LinkedHashSetNodeBase(LinkedHashSetNodeBase* prev,
                         LinkedHashSetNodeBase* next)
       : m_prev(prev), m_next(next) {
-    ASSERT((prev && next) || (!prev && !next));
+    DCHECK((prev && next) || (!prev && !next));
   }
 
   LinkedHashSetNodeBase* m_prev;
@@ -157,7 +157,7 @@ template <typename ValueArg,
           typename TraitsArg = HashTraits<ValueArg>,
           typename Allocator = PartitionAllocator>
 class LinkedHashSet {
-  WTF_USE_ALLOCATOR(LinkedHashSet, Allocator);
+  USE_ALLOCATOR(LinkedHashSet, Allocator);
 
  private:
   typedef ValueArg Value;
@@ -261,6 +261,8 @@ class LinkedHashSet {
   // and a bool that is true if an new entry was added.
   template <typename IncomingValueType>
   AddResult add(IncomingValueType&&);
+  template <typename IncomingValueType>
+  AddResult insert(IncomingValueType&&);
 
   // Same as add() except that the return value is an
   // iterator. Useful in cases where it's needed to have the
@@ -299,6 +301,13 @@ class LinkedHashSet {
   template <typename VisitorDispatcher>
   void trace(VisitorDispatcher visitor) {
     m_impl.trace(visitor);
+    // Should the underlying table be moved by GC, register a callback
+    // that fixes up the interior pointers that the (Heap)LinkedHashSet keeps.
+    if (m_impl.m_table) {
+      Allocator::registerBackingStoreCallback(
+          visitor, m_impl.m_table, moveBackingCallback,
+          reinterpret_cast<void*>(&m_anchor));
+    }
   }
 
   int64_t modifications() const { return m_impl.modifications(); }
@@ -331,6 +340,50 @@ class LinkedHashSet {
   }
   const_reverse_iterator makeConstReverseIterator(const Node* position) const {
     return const_reverse_iterator(position, this);
+  }
+
+  static void moveBackingCallback(void* anchor,
+                                  void* from,
+                                  void* to,
+                                  size_t size) {
+    // Note: the hash table move may have been overlapping; linearly scan the
+    // entire table and fixup interior pointers into the old region with
+    // correspondingly offset ones into the new.
+    size_t tableSize = size / sizeof(Node);
+    Node* table = reinterpret_cast<Node*>(to);
+    NodeBase* fromStart = reinterpret_cast<NodeBase*>(from);
+    NodeBase* fromEnd =
+        reinterpret_cast<NodeBase*>(reinterpret_cast<uintptr_t>(from) + size);
+    for (Node* element = table + tableSize - 1; element >= table; element--) {
+      Node& node = *element;
+      if (ImplType::isEmptyOrDeletedBucket(node))
+        continue;
+      if (node.m_next >= fromStart && node.m_next < fromEnd) {
+        size_t diff = reinterpret_cast<uintptr_t>(node.m_next) -
+                      reinterpret_cast<uintptr_t>(from);
+        node.m_next =
+            reinterpret_cast<NodeBase*>(reinterpret_cast<uintptr_t>(to) + diff);
+      }
+      if (node.m_prev >= fromStart && node.m_prev < fromEnd) {
+        size_t diff = reinterpret_cast<uintptr_t>(node.m_prev) -
+                      reinterpret_cast<uintptr_t>(from);
+        node.m_prev =
+            reinterpret_cast<NodeBase*>(reinterpret_cast<uintptr_t>(to) + diff);
+      }
+    }
+    NodeBase* anchorNode = reinterpret_cast<NodeBase*>(anchor);
+    if (anchorNode->m_next >= fromStart && anchorNode->m_next < fromEnd) {
+      size_t diff = reinterpret_cast<uintptr_t>(anchorNode->m_next) -
+                    reinterpret_cast<uintptr_t>(from);
+      anchorNode->m_next =
+          reinterpret_cast<NodeBase*>(reinterpret_cast<uintptr_t>(to) + diff);
+    }
+    if (anchorNode->m_prev >= fromStart && anchorNode->m_prev < fromEnd) {
+      size_t diff = reinterpret_cast<uintptr_t>(anchorNode->m_prev) -
+                    reinterpret_cast<uintptr_t>(from);
+      anchorNode->m_prev =
+          reinterpret_cast<NodeBase*>(reinterpret_cast<uintptr_t>(to) + diff);
+    }
   }
 
   ImplType m_impl;
@@ -483,7 +536,7 @@ class LinkedHashSetConstIterator {
   LinkedHashSetConstIterator(const LinkedHashSetNodeBase* position,
                              const LinkedHashSetType* container)
       : m_position(position)
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
         ,
         m_container(container),
         m_containerModifications(container->modifications())
@@ -500,14 +553,14 @@ class LinkedHashSetConstIterator {
   PointerType operator->() const { return get(); }
 
   LinkedHashSetConstIterator& operator++() {
-    ASSERT(m_position);
+    DCHECK(m_position);
     checkModifications();
     m_position = m_position->m_next;
     return *this;
   }
 
   LinkedHashSetConstIterator& operator--() {
-    ASSERT(m_position);
+    DCHECK(m_position);
     checkModifications();
     m_position = m_position->m_prev;
     return *this;
@@ -525,7 +578,7 @@ class LinkedHashSetConstIterator {
 
  private:
   const LinkedHashSetNodeBase* m_position;
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   void checkModifications() const {
     m_container->checkModifications(m_containerModifications);
   }
@@ -598,8 +651,14 @@ class LinkedHashSetConstReverseIterator
   friend class LinkedHashSet;
 };
 
-template <typename T, typename U, typename V, typename W>
-inline LinkedHashSet<T, U, V, W>::LinkedHashSet() {}
+template <typename T, typename U, typename V, typename Allocator>
+inline LinkedHashSet<T, U, V, Allocator>::LinkedHashSet() {
+  static_assert(
+      Allocator::isGarbageCollected ||
+          !IsPointerToGarbageCollectedType<T>::value,
+      "Cannot put raw pointers to garbage-collected classes into "
+      "an off-heap LinkedHashSet. Use HeapLinkedHashSet<Member<T>> instead.");
+}
 
 template <typename T, typename U, typename V, typename W>
 inline LinkedHashSet<T, U, V, W>::LinkedHashSet(const LinkedHashSet& other)
@@ -644,37 +703,37 @@ inline LinkedHashSet<T, U, V, Allocator>::~LinkedHashSet() {
 
 template <typename T, typename U, typename V, typename W>
 inline T& LinkedHashSet<T, U, V, W>::first() {
-  ASSERT(!isEmpty());
+  DCHECK(!isEmpty());
   return firstNode()->m_value;
 }
 
 template <typename T, typename U, typename V, typename W>
 inline const T& LinkedHashSet<T, U, V, W>::first() const {
-  ASSERT(!isEmpty());
+  DCHECK(!isEmpty());
   return firstNode()->m_value;
 }
 
 template <typename T, typename U, typename V, typename W>
 inline void LinkedHashSet<T, U, V, W>::removeFirst() {
-  ASSERT(!isEmpty());
+  DCHECK(!isEmpty());
   m_impl.remove(static_cast<Node*>(m_anchor.m_next));
 }
 
 template <typename T, typename U, typename V, typename W>
 inline T& LinkedHashSet<T, U, V, W>::last() {
-  ASSERT(!isEmpty());
+  DCHECK(!isEmpty());
   return lastNode()->m_value;
 }
 
 template <typename T, typename U, typename V, typename W>
 inline const T& LinkedHashSet<T, U, V, W>::last() const {
-  ASSERT(!isEmpty());
+  DCHECK(!isEmpty());
   return lastNode()->m_value;
 }
 
 template <typename T, typename U, typename V, typename W>
 inline void LinkedHashSet<T, U, V, W>::removeLast() {
-  ASSERT(!isEmpty());
+  DCHECK(!isEmpty());
   m_impl.remove(static_cast<Node*>(m_anchor.m_prev));
 }
 
@@ -761,6 +820,17 @@ LinkedHashSet<Value, HashFunctions, Traits, Allocator>::add(
       std::forward<IncomingValueType>(value), &m_anchor);
 }
 
+template <typename Value,
+          typename HashFunctions,
+          typename Traits,
+          typename Allocator>
+template <typename IncomingValueType>
+typename LinkedHashSet<Value, HashFunctions, Traits, Allocator>::AddResult
+LinkedHashSet<Value, HashFunctions, Traits, Allocator>::insert(
+    IncomingValueType&& value) {
+  return add(value);
+}
+
 template <typename T, typename U, typename V, typename W>
 template <typename IncomingValueType>
 typename LinkedHashSet<T, U, V, W>::iterator
@@ -820,11 +890,14 @@ inline void LinkedHashSet<T, U, V, W>::remove(ValuePeekInType value) {
 }
 
 inline void swapAnchor(LinkedHashSetNodeBase& a, LinkedHashSetNodeBase& b) {
-  ASSERT(a.m_prev && a.m_next && b.m_prev && b.m_next);
+  DCHECK(a.m_prev);
+  DCHECK(a.m_next);
+  DCHECK(b.m_prev);
+  DCHECK(b.m_next);
   swap(a.m_prev, b.m_prev);
   swap(a.m_next, b.m_next);
   if (b.m_next == &a) {
-    ASSERT(b.m_prev == &a);
+    DCHECK_EQ(b.m_prev, &a);
     b.m_next = &b;
     b.m_prev = &b;
   } else {
@@ -832,7 +905,7 @@ inline void swapAnchor(LinkedHashSetNodeBase& a, LinkedHashSetNodeBase& b) {
     b.m_prev->m_next = &b;
   }
   if (a.m_next == &b) {
-    ASSERT(a.m_prev == &b);
+    DCHECK_EQ(a.m_prev, &b);
     a.m_next = &a;
     a.m_prev = &a;
   } else {
@@ -842,7 +915,8 @@ inline void swapAnchor(LinkedHashSetNodeBase& a, LinkedHashSetNodeBase& b) {
 }
 
 inline void swap(LinkedHashSetNodeBase& a, LinkedHashSetNodeBase& b) {
-  ASSERT(a.m_next != &a && b.m_next != &b);
+  DCHECK_NE(a.m_next, &a);
+  DCHECK_NE(b.m_next, &b);
   swap(a.m_prev, b.m_prev);
   swap(a.m_next, b.m_next);
   if (b.m_next) {

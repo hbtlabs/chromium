@@ -10,9 +10,12 @@
 #include <utility>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/command_line.h"
-#include "base/strings/string_split.h"
+#include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "chrome/browser/loader/chrome_resource_dispatcher_host_delegate.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
@@ -31,6 +34,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/ppapi_test_utils.h"
+#include "net/base/load_flags.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "net/url_request/url_request_filter.h"
 #include "ppapi/shared_impl/ppapi_switches.h"
@@ -104,6 +108,59 @@ class CountingInterceptor : public net::URLRequestInterceptor {
   mutable base::WeakPtrFactory<CountingInterceptor> weak_factory_;
 };
 
+class CountingInterceptorWithCallback : public net::URLRequestInterceptor {
+ public:
+  // Inserts the interceptor object to intercept requests to |url|.  Can be
+  // called on any thread. Assumes that |counter| lives on the UI thread.  The
+  // |callback_io| will be called on IO thread with the net::URLrequest
+  // provided.
+  static void Initialize(const GURL& url,
+                         RequestCounter* counter,
+                         base::Callback<void(net::URLRequest*)> callback_io) {
+    content::BrowserThread::PostTask(
+        content::BrowserThread::IO, FROM_HERE,
+        base::Bind(&CountingInterceptorWithCallback::CreateAndAddOnIO, url,
+                   counter->AsWeakPtr(), callback_io));
+  }
+
+  // net::URLRequestInterceptor:
+  net::URLRequestJob* MaybeInterceptRequest(
+      net::URLRequest* request,
+      net::NetworkDelegate* network_delegate) const override {
+    // Run the callback.
+    callback_.Run(request);
+
+    // Ping the request counter.
+    content::BrowserThread::PostTask(
+        content::BrowserThread::UI, FROM_HERE,
+        base::Bind(&RequestCounter::RequestStarted, counter_));
+    return nullptr;
+  }
+
+ private:
+  CountingInterceptorWithCallback(
+      const base::WeakPtr<RequestCounter>& counter,
+      base::Callback<void(net::URLRequest*)> callback)
+      : callback_(callback), counter_(counter) {}
+
+  static void CreateAndAddOnIO(
+      const GURL& url,
+      const base::WeakPtr<RequestCounter>& counter,
+      base::Callback<void(net::URLRequest*)> callback_io) {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+    // Create the object with base::WrapUnique to restrict access to the
+    // constructor.
+    net::URLRequestFilter::GetInstance()->AddUrlInterceptor(
+        url, base::WrapUnique(
+                 new CountingInterceptorWithCallback(counter, callback_io)));
+  }
+
+  base::Callback<void(net::URLRequest*)> callback_;
+  base::WeakPtr<RequestCounter> counter_;
+
+  DISALLOW_COPY_AND_ASSIGN(CountingInterceptorWithCallback);
+};
+
 // URLRequestJob (and associated handler) which hangs.
 class HangingURLRequestJob : public net::URLRequestJob {
  public:
@@ -168,8 +225,8 @@ class NeverRunsExternalProtocolHandlerDelegate
     return nullptr;
   }
 
-  ExternalProtocolHandler::BlockState GetBlockState(
-      const std::string& scheme) override {
+  ExternalProtocolHandler::BlockState GetBlockState(const std::string& scheme,
+                                                    Profile* profile) override {
     // Block everything and fail the test.
     ADD_FAILURE();
     return ExternalProtocolHandler::BLOCK;
@@ -185,7 +242,11 @@ class NeverRunsExternalProtocolHandlerDelegate
     NOTREACHED();
   }
 
-  void LaunchUrlWithoutSecurityCheck(const GURL& url) override { NOTREACHED(); }
+  void LaunchUrlWithoutSecurityCheck(
+      const GURL& url,
+      content::WebContents* web_contents) override {
+    NOTREACHED();
+  }
 
   void FinishedProcessingCheck() override { NOTREACHED(); }
 };
@@ -476,6 +537,34 @@ void TestPrerender::OnPrerenderStop(PrerenderContents* contents) {
     load_waiter_->Quit();
 }
 
+// static
+FirstContentfulPaintManagerWaiter* FirstContentfulPaintManagerWaiter::Create(
+    PrerenderManager* manager) {
+  auto fcp_waiter = base::WrapUnique(new FirstContentfulPaintManagerWaiter());
+  auto* fcp_waiter_ptr = fcp_waiter.get();
+  manager->AddObserver(std::move(fcp_waiter));
+  return fcp_waiter_ptr;
+}
+
+FirstContentfulPaintManagerWaiter::FirstContentfulPaintManagerWaiter()
+    : saw_fcp_(false) {}
+
+FirstContentfulPaintManagerWaiter::~FirstContentfulPaintManagerWaiter() {}
+
+void FirstContentfulPaintManagerWaiter::OnFirstContentfulPaint() {
+  saw_fcp_ = true;
+  if (waiter_)
+    waiter_->Quit();
+}
+
+void FirstContentfulPaintManagerWaiter::Wait() {
+  if (saw_fcp_)
+    return;
+  waiter_ = base::MakeUnique<base::RunLoop>();
+  waiter_->Run();
+  waiter_.reset();
+}
+
 TestPrerenderContentsFactory::TestPrerenderContentsFactory() {}
 
 TestPrerenderContentsFactory::~TestPrerenderContentsFactory() {
@@ -696,6 +785,13 @@ void CreateCountingInterceptorOnIO(
   CHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::IO));
   net::URLRequestFilter::GetInstance()->AddUrlInterceptor(
       url, base::MakeUnique<CountingInterceptor>(file, counter));
+}
+
+void InterceptRequestAndCount(
+    const GURL& url,
+    RequestCounter* counter,
+    base::Callback<void(net::URLRequest*)> callback_io) {
+  CountingInterceptorWithCallback::Initialize(url, counter, callback_io);
 }
 
 void CreateMockInterceptorOnIO(const GURL& url, const base::FilePath& file) {

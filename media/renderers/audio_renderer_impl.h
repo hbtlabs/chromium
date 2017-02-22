@@ -47,7 +47,6 @@ namespace media {
 class AudioBufferConverter;
 class AudioBus;
 class AudioClock;
-class DecryptingDemuxerStream;
 
 class MEDIA_EXPORT AudioRendererImpl
     : public AudioRenderer,
@@ -152,11 +151,12 @@ class MEDIA_EXPORT AudioRendererImpl
   // Render() updates the pipeline's playback timestamp. If Render() is
   // not called at the same rate as audio samples are played, then the reported
   // timestamp in the pipeline will be ahead of the actual audio playback. In
-  // this case |frames_delayed| should be used to indicate when in the future
+  // this case |delay| should be used to indicate when in the future
   // should the filled buffer be played.
-  int Render(AudioBus* audio_bus,
-             uint32_t frames_delayed,
-             uint32_t frames_skipped) override;
+  int Render(base::TimeDelta delay,
+             base::TimeTicks delay_timestamp,
+             int prior_frames_skipped,
+             AudioBus* dest) override;
   void OnRenderError() override;
 
   // Helper methods that schedule an asynchronous read from the decoder as long
@@ -196,6 +196,10 @@ class MEDIA_EXPORT AudioRendererImpl
   // Updates |buffering_state_| and fires |buffering_state_cb_|.
   void SetBufferingState_Locked(BufferingState buffering_state);
 
+  // Configure's the channel mask for |algorithm_|. Must be called if the layout
+  // changes. Expect the layout in |last_decoded_channel_layout_|.
+  void ConfigureChannelMask();
+
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   std::unique_ptr<AudioBufferConverter> buffer_converter_;
@@ -233,6 +237,10 @@ class MEDIA_EXPORT AudioRendererImpl
   // Sample rate of the last decoded audio buffer. Allows for detection of
   // sample rate changes due to implicit AAC configuration change.
   int last_decoded_sample_rate_;
+
+  // Similar to |last_decoded_sample_rate_|, used to configure the channel mask
+  // given to the |algorithm_| for efficient playback rate changes.
+  ChannelLayout last_decoded_channel_layout_;
 
   // After Initialize() has completed, all variables below must be accessed
   // under |lock_|. ------------------------------------------------------------

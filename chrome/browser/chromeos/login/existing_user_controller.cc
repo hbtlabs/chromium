@@ -21,11 +21,14 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/chromeos/app_mode/kiosk_app_launch_error.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chrome/browser/chromeos/customization/customization_document.h"
+#include "chrome/browser/chromeos/login/arc_kiosk_controller.h"
 #include "chrome/browser/chromeos/login/auth/chrome_login_performer.h"
 #include "chrome/browser/chromeos/login/easy_unlock/bootstrap_user_context_initializer.h"
 #include "chrome/browser/chromeos/login/easy_unlock/bootstrap_user_flow.h"
+#include "chrome/browser/chromeos/login/enterprise_user_session_metrics.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/login/signin/oauth2_token_initializer.h"
@@ -73,6 +76,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/user_metrics.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/google_service_auth_error.h"
@@ -115,11 +119,12 @@ void RefreshPoliciesOnUIThread() {
     g_browser_process->policy_service()->RefreshPolicies(base::Closure());
 }
 
-// Copies any authentication details that were entered in the login profile in
-// the mail profile to make sure all subsystems of Chrome can access the network
+// Copies any authentication details that were entered in the login profile to
+// the main profile to make sure all subsystems of Chrome can access the network
 // with the provided authentication which are possibly for a proxy server.
 void TransferContextAuthenticationsOnIOThread(
     net::URLRequestContextGetter* default_profile_context_getter,
+    net::URLRequestContextGetter* webview_context_getter,
     net::URLRequestContextGetter* browser_process_context_getter) {
   net::HttpAuthCache* new_cache =
       browser_process_context_getter->GetURLRequestContext()->
@@ -128,6 +133,18 @@ void TransferContextAuthenticationsOnIOThread(
       default_profile_context_getter->GetURLRequestContext()->
       http_transaction_factory()->GetSession()->http_auth_cache();
   new_cache->UpdateAllFrom(*old_cache);
+
+  // Copy the auth cache from webview's context since the proxy authentication
+  // information is saved in webview's context.
+  if (webview_context_getter) {
+    net::HttpAuthCache* webview_cache =
+        webview_context_getter->GetURLRequestContext()
+            ->http_transaction_factory()
+            ->GetSession()
+            ->http_auth_cache();
+    new_cache->UpdateAllFrom(*webview_cache);
+  }
+
   VLOG(1) << "Main request context populated with authentication data.";
   // Last but not least tell the policy subsystem to refresh now as it might
   // have been stuck until now too.
@@ -312,10 +329,19 @@ void ExistingUserController::Observe(
         signin_profile->GetRequestContext();
     DCHECK(browser_process_context_getter.get());
     DCHECK(signin_profile_context_getter.get());
+
+    content::StoragePartition* signin_partition = login::GetSigninPartition();
+    scoped_refptr<net::URLRequestContextGetter> webview_context_getter;
+    if (signin_partition) {
+      webview_context_getter = signin_partition->GetURLRequestContext();
+      DCHECK(webview_context_getter.get());
+    }
+
     content::BrowserThread::PostDelayedTask(
         content::BrowserThread::IO, FROM_HERE,
         base::Bind(&TransferContextAuthenticationsOnIOThread,
                    base::RetainedRef(signin_profile_context_getter),
+                   base::RetainedRef(webview_context_getter),
                    base::RetainedRef(browser_process_context_getter)),
         base::TimeDelta::FromMilliseconds(kAuthCacheTransferDelayMs));
   }
@@ -421,6 +447,15 @@ void ExistingUserController::PerformLogin(
     login_performer_.reset(nullptr);
     login_performer_.reset(new ChromeLoginPerformer(this));
   }
+  policy::BrowserPolicyConnectorChromeOS* connector =
+      g_browser_process->platform_part()->browser_policy_connector_chromeos();
+  if (connector->IsActiveDirectoryManaged() &&
+      user_context.GetAuthFlow() != UserContext::AUTH_FLOW_ACTIVE_DIRECTORY) {
+    PerformLoginFinishedActions(false /* don't start auto login timer */);
+    ShowError(IDS_LOGIN_ERROR_GOOGLE_ACCOUNT_NOT_ALLOWED,
+              "Google accounts are not allowed on this device");
+    return;
+  }
 
   if (gaia::ExtractDomainName(user_context.GetAccountId().GetUserEmail()) ==
       user_manager::kSupervisedUserDomain) {
@@ -491,8 +526,15 @@ void ExistingUserController::SetDisplayEmail(const std::string& email) {
   display_email_ = email;
 }
 
+void ExistingUserController::SetDisplayAndGivenName(
+    const std::string& display_name,
+    const std::string& given_name) {
+  display_name_ = base::UTF8ToUTF16(display_name);
+  given_name_ = base::UTF8ToUTF16(given_name);
+}
+
 void ExistingUserController::ShowWrongHWIDScreen() {
-  host_->StartWizard(WizardController::kWrongHWIDScreenName);
+  host_->StartWizard(OobeScreen::SCREEN_WRONG_HWID);
 }
 
 void ExistingUserController::Signout() {
@@ -537,23 +579,23 @@ void ExistingUserController::OnEnrollmentOwnershipCheckCompleted(
 }
 
 void ExistingUserController::ShowEnrollmentScreen() {
-  host_->StartWizard(WizardController::kEnrollmentScreenName);
+  host_->StartWizard(OobeScreen::SCREEN_OOBE_ENROLLMENT);
 }
 
 void ExistingUserController::ShowResetScreen() {
-  host_->StartWizard(WizardController::kResetScreenName);
+  host_->StartWizard(OobeScreen::SCREEN_OOBE_RESET);
 }
 
 void ExistingUserController::ShowEnableDebuggingScreen() {
-  host_->StartWizard(WizardController::kEnableDebuggingScreenName);
+  host_->StartWizard(OobeScreen::SCREEN_OOBE_ENABLE_DEBUGGING);
 }
 
 void ExistingUserController::ShowKioskEnableScreen() {
-  host_->StartWizard(WizardController::kKioskEnableScreenName);
+  host_->StartWizard(OobeScreen::SCREEN_KIOSK_ENABLE);
 }
 
 void ExistingUserController::ShowKioskAutolaunchScreen() {
-  host_->StartWizard(WizardController::kKioskAutolaunchScreenName);
+  host_->StartWizard(OobeScreen::SCREEN_KIOSK_AUTOLAUNCH);
 }
 
 void ExistingUserController::ShowTPMError() {
@@ -641,8 +683,7 @@ void ExistingUserController::OnAuthFailure(const AuthFailure& failure) {
   if (auth_status_consumer_)
     auth_status_consumer_->OnAuthFailure(failure);
 
-  // Clear the recorded displayed email so it won't affect any future attempts.
-  display_email_.clear();
+  ClearRecordedNames();
 
   // TODO(ginkage): Fix this case once crbug.com/469990 is ready.
   /*
@@ -700,7 +741,20 @@ void ExistingUserController::OnAuthSuccess(const UserContext& user_context) {
   if (!display_email_.empty()) {
     user_manager::UserManager::Get()->SaveUserDisplayEmail(
         user_context.GetAccountId(), display_email_);
-    display_email_.clear();
+  }
+  if (!display_name_.empty() || !given_name_.empty()) {
+    user_manager::UserManager::Get()->UpdateUserAccountData(
+        user_context.GetAccountId(),
+        user_manager::UserManager::UserAccountData(display_name_, given_name_,
+                                                   std::string() /* locale */));
+  }
+  ClearRecordedNames();
+
+  if (g_browser_process->platform_part()
+          ->browser_policy_connector_chromeos()
+          ->IsEnterpriseManaged()) {
+    enterprise_user_session_metrics::RecordSignInEvent(
+        user_context, last_login_attempt_was_auto_login_);
   }
 }
 
@@ -782,14 +836,14 @@ void ExistingUserController::WhiteListCheckFailed(const std::string& email) {
         AuthFailure(AuthFailure::WHITELIST_CHECK_FAILED));
   }
 
-  display_email_.clear();
+  ClearRecordedNames();
 }
 
 void ExistingUserController::PolicyLoadFailed() {
   ShowError(IDS_LOGIN_ERROR_OWNER_KEY_LOST, "");
 
   PerformLoginFinishedActions(false /* don't start auto login timer */);
-  display_email_.clear();
+  ClearRecordedNames();
 }
 
 void ExistingUserController::SetAuthFlowOffline(bool offline) {
@@ -833,7 +887,7 @@ void ExistingUserController::LoginAsGuest() {
     // Disallowed. The UI should normally not show the guest session button.
     LOG(ERROR) << "Guest login attempt when guest mode is disallowed.";
     PerformLoginFinishedActions(true /* start auto login timer */);
-    display_email_.clear();
+    ClearRecordedNames();
     return;
   }
 
@@ -922,9 +976,7 @@ void ExistingUserController::LoginAsKioskApp(const std::string& app_id,
 }
 
 void ExistingUserController::LoginAsArcKioskApp(const AccountId& account_id) {
-  login_performer_.reset(nullptr);
-  login_performer_.reset(new ChromeLoginPerformer(this));
-  login_performer_->LoginAsArcKioskAccount(account_id);
+  host_->StartArcKiosk(account_id);
 }
 
 void ExistingUserController::ConfigureAutoLogin() {
@@ -960,7 +1012,8 @@ void ExistingUserController::ConfigureAutoLogin() {
       user_manager::UserManager::Get()->FindUser(
           arc_kiosk_auto_login_account_id_);
   if (!arc_kiosk_user ||
-      arc_kiosk_user->GetType() != user_manager::USER_TYPE_ARC_KIOSK_APP) {
+      arc_kiosk_user->GetType() != user_manager::USER_TYPE_ARC_KIOSK_APP ||
+      KioskAppLaunchError::Get() != KioskAppLaunchError::NONE) {
     arc_kiosk_auto_login_account_id_ = EmptyAccountId();
   }
 
@@ -987,16 +1040,20 @@ void ExistingUserController::ResetAutoLoginTimer() {
 
 void ExistingUserController::OnPublicSessionAutoLoginTimerFire() {
   CHECK(auto_launch_ready_ && public_session_auto_login_account_id_.is_valid());
+  SigninSpecifics signin_specifics;
+  signin_specifics.is_auto_login = true;
   Login(UserContext(user_manager::USER_TYPE_PUBLIC_ACCOUNT,
                     public_session_auto_login_account_id_),
-        SigninSpecifics());
+        signin_specifics);
 }
 
 void ExistingUserController::OnArcKioskAutoLoginTimerFire() {
   CHECK(auto_launch_ready_ && (arc_kiosk_auto_login_account_id_.is_valid()));
+  SigninSpecifics signin_specifics;
+  signin_specifics.is_auto_login = true;
   Login(UserContext(user_manager::USER_TYPE_ARC_KIOSK_APP,
                     arc_kiosk_auto_login_account_id_),
-        SigninSpecifics());
+        signin_specifics);
 }
 
 void ExistingUserController::StopAutoLoginTimer() {
@@ -1234,6 +1291,8 @@ void ExistingUserController::DoCompleteLogin(
 
 void ExistingUserController::DoLogin(const UserContext& user_context,
                                      const SigninSpecifics& specifics) {
+  last_login_attempt_was_auto_login_ = specifics.is_auto_login;
+
   if (user_context.GetUserType() == user_manager::USER_TYPE_GUEST) {
     if (!specifics.guest_mode_url.empty()) {
       guest_mode_url_ = GURL(specifics.guest_mode_url);
@@ -1324,6 +1383,12 @@ void ExistingUserController::OnTokenHandleChecked(
   RecordPasswordChangeFlow(LOGIN_PASSWORD_CHANGE_FLOW_CRYPTOHOME_FAILURE);
   VLOG(1) << "Show unrecoverable cryptohome error dialog.";
   login_display_->ShowUnrecoverableCrypthomeErrorDialog();
+}
+
+void ExistingUserController::ClearRecordedNames() {
+  display_email_.clear();
+  display_name_.clear();
+  given_name_.clear();
 }
 
 }  // namespace chromeos

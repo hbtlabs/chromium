@@ -11,7 +11,6 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
-#include "base/test/simple_test_clock.h"
 #include "base/threading/platform_thread.h"
 #include "base/values.h"
 #include "chrome/browser/content_settings/content_settings_mock_observer.h"
@@ -38,6 +37,7 @@
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "ppapi/features/features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -68,10 +68,11 @@ class DeadlockCheckerObserver {
       : provider_(provider),
       notification_received_(false) {
     pref_change_registrar_.Init(prefs);
+    WebsiteSettingsRegistry* registry = WebsiteSettingsRegistry::GetInstance();
     for (const auto& pair : provider_->content_settings_prefs_) {
       const ContentSettingsPref* pref = pair.second.get();
       pref_change_registrar_.Add(
-          pref->pref_name_,
+          registry->Get(pair.first)->pref_name(),
           base::Bind(
               &DeadlockCheckerObserver::OnContentSettingsPatternPairsChanged,
               base::Unretained(this), base::Unretained(pref)));
@@ -133,7 +134,7 @@ TEST_F(PrefProviderTest, Observer) {
 }
 
 // Tests that fullscreen and mouselock content settings are cleared.
-TEST_F(PrefProviderTest, DiscardObsoletePreferences) {
+TEST_F(PrefProviderTest, DiscardObsoleteFullscreenAndMouselockPreferences) {
   static const char kFullscreenPrefPath[] =
       "profile.content_settings.exceptions.fullscreen";
 #if !defined(OS_ANDROID)
@@ -175,6 +176,68 @@ TEST_F(PrefProviderTest, DiscardObsoletePreferences) {
             TestUtils::GetContentSetting(&provider, primary_url, primary_url,
                                          CONTENT_SETTINGS_TYPE_GEOLOCATION,
                                          std::string(), false));
+}
+
+// Tests that last usage content settings are cleared.
+TEST_F(PrefProviderTest, DiscardObsoleteLastUsagePreferences) {
+  std::string kGeolocationPrefPath =
+      ContentSettingsRegistry::GetInstance()
+          ->Get(CONTENT_SETTINGS_TYPE_GEOLOCATION)
+          ->website_settings_info()
+          ->pref_name();
+  std::string kMicPrefPath = ContentSettingsRegistry::GetInstance()
+                                 ->Get(CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC)
+                                 ->website_settings_info()
+                                 ->pref_name();
+  const char kObsoleteLastUsed[] = "last_used";
+
+  TestingProfile profile;
+  PrefService* prefs = profile.GetPrefs();
+
+  // Content settings prefs are structured as follows:
+  // "media_stream_mic": {
+  //   "https://example.com:443,*": {
+  //     "last_used": 1486968992.758971,
+  //     "setting": 1
+  //   }
+  // }
+  const char kPattern[] = "https://example.com:443,*";
+  GURL host("https://example.com/");
+
+  auto geolocation_pattern_data = base::MakeUnique<base::DictionaryValue>();
+  geolocation_pattern_data->SetDouble(kObsoleteLastUsed, 1485000000.0);
+  base::DictionaryValue geolocation_pref_data;
+  geolocation_pref_data.SetWithoutPathExpansion(
+      kPattern, std::move(geolocation_pattern_data));
+  prefs->Set(kGeolocationPrefPath, geolocation_pref_data);
+
+  auto mic_pattern_data = base::MakeUnique<base::DictionaryValue>();
+  mic_pattern_data->SetInteger("setting", CONTENT_SETTING_ALLOW);
+  mic_pattern_data->SetDouble(kObsoleteLastUsed, 1480000000.0);
+  base::DictionaryValue mic_pref_data;
+  mic_pref_data.SetWithoutPathExpansion(kPattern, std::move(mic_pattern_data));
+  prefs->Set(kMicPrefPath, mic_pref_data);
+
+  // Instantiate a new PrefProvider here, because we want to test the
+  // constructor's behavior after setting the above.
+  PrefProvider provider(prefs, false);
+
+  // Check that last_used data has been deleted.
+  EXPECT_TRUE(prefs->GetDictionary(kGeolocationPrefPath)->empty());
+  auto mic_prefs = prefs->GetDictionary(kMicPrefPath);
+  const base::DictionaryValue* mic_result_pattern_data;
+  ASSERT_TRUE(mic_prefs->GetDictionaryWithoutPathExpansion(
+      kPattern, &mic_result_pattern_data));
+  EXPECT_EQ(static_cast<size_t>(1), mic_result_pattern_data->size());
+  int mic_result_setting;
+  EXPECT_TRUE(
+      mic_result_pattern_data->GetInteger("setting", &mic_result_setting));
+  EXPECT_EQ(CONTENT_SETTING_ALLOW, mic_result_setting);
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            TestUtils::GetContentSetting(&provider, host, host,
+                                         CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
+                                         std::string(), false));
+  provider.ShutdownOnUIThread();
 }
 
 // Test for regression in which the PrefProvider modified the user pref store
@@ -337,7 +400,7 @@ TEST_F(PrefProviderTest, Patterns) {
   pref_content_settings_provider.ShutdownOnUIThread();
 }
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 TEST_F(PrefProviderTest, ResourceIdentifier) {
   TestingProfile testing_profile;
   PrefProvider pref_content_settings_provider(testing_profile.GetPrefs(),
@@ -395,41 +458,6 @@ TEST_F(PrefProviderTest, Deadlock) {
   EXPECT_TRUE(observer.notification_received());
 
   provider.ShutdownOnUIThread();
-}
-
-TEST_F(PrefProviderTest, LastUsage) {
-  TestingProfile testing_profile;
-  PrefProvider pref_content_settings_provider(testing_profile.GetPrefs(),
-                                              false);
-  base::SimpleTestClock* test_clock = new base::SimpleTestClock;
-  test_clock->SetNow(base::Time::Now());
-
-  pref_content_settings_provider.SetClockForTesting(
-      std::unique_ptr<base::Clock>(test_clock));
-  GURL host("http://example.com/");
-  ContentSettingsPattern pattern =
-      ContentSettingsPattern::FromString("[*.]example.com");
-
-  base::Time no_usage = pref_content_settings_provider.GetLastUsage(
-      pattern, pattern, CONTENT_SETTINGS_TYPE_GEOLOCATION);
-  EXPECT_EQ(no_usage.ToDoubleT(), 0);
-
-  pref_content_settings_provider.UpdateLastUsage(
-      pattern, pattern, CONTENT_SETTINGS_TYPE_GEOLOCATION);
-  base::Time first = pref_content_settings_provider.GetLastUsage(
-      pattern, pattern, CONTENT_SETTINGS_TYPE_GEOLOCATION);
-
-  test_clock->Advance(base::TimeDelta::FromSeconds(10));
-
-  pref_content_settings_provider.UpdateLastUsage(
-      pattern, pattern, CONTENT_SETTINGS_TYPE_GEOLOCATION);
-  base::Time second = pref_content_settings_provider.GetLastUsage(
-      pattern, pattern, CONTENT_SETTINGS_TYPE_GEOLOCATION);
-
-  base::TimeDelta delta = second - first;
-  EXPECT_EQ(delta.InSeconds(), 10);
-
-  pref_content_settings_provider.ShutdownOnUIThread();
 }
 
 TEST_F(PrefProviderTest, IncognitoInheritsValueMap) {
@@ -518,7 +546,7 @@ TEST_F(PrefProviderTest, ClearAllContentSettingsRules) {
   provider.SetWebsiteSetting(pattern, wildcard,
                              CONTENT_SETTINGS_TYPE_GEOLOCATION,
                              ResourceIdentifier(), value->DeepCopy());
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   // Non-empty pattern, plugins, non-empty resource identifier.
   provider.SetWebsiteSetting(pattern, wildcard, CONTENT_SETTINGS_TYPE_PLUGINS,
                              res_id, value->DeepCopy());
@@ -538,7 +566,7 @@ TEST_F(PrefProviderTest, ClearAllContentSettingsRules) {
 
   provider.ClearAllContentSettingsRules(CONTENT_SETTINGS_TYPE_JAVASCRIPT);
   provider.ClearAllContentSettingsRules(CONTENT_SETTINGS_TYPE_GEOLOCATION);
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   provider.ClearAllContentSettingsRules(CONTENT_SETTINGS_TYPE_PLUGINS);
 #endif
 
@@ -547,7 +575,7 @@ TEST_F(PrefProviderTest, ClearAllContentSettingsRules) {
   const char* empty_prefs[] = {
     registry->Get(CONTENT_SETTINGS_TYPE_JAVASCRIPT)->pref_name().c_str(),
     registry->Get(CONTENT_SETTINGS_TYPE_GEOLOCATION)->pref_name().c_str(),
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
     registry->Get(CONTENT_SETTINGS_TYPE_PLUGINS)->pref_name().c_str(),
 #endif
   };

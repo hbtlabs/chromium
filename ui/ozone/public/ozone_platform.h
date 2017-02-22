@@ -8,7 +8,12 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "ui/ozone/ozone_export.h"
+
+namespace display {
+class NativeDisplayDelegate;
+}
 
 namespace gfx {
 class Rect;
@@ -28,7 +33,6 @@ namespace ui {
 class CursorFactoryOzone;
 class InputController;
 class GpuPlatformSupportHost;
-class NativeDisplayDelegate;
 class OverlayManagerOzone;
 class PlatformWindow;
 class PlatformWindowDelegate;
@@ -68,6 +72,12 @@ class OZONE_EXPORT OzonePlatform {
     bool single_process = false;
   };
 
+  // Ensures the OzonePlatform instance without doing any initialization.
+  // No-op in case the instance is already created.
+  // This is useful in order call virtual methods that depend on the ozone
+  // platform selected at runtime, e.g. ::GetMessageLoopTypeForGpu.
+  static OzonePlatform* EnsureInstance();
+
   // Initializes the subsystems/resources necessary for the UI process (e.g.
   // events, etc.)
   // TODO(rjkroege): Remove deprecated entry point (http://crbug.com/620934)
@@ -102,8 +112,12 @@ class OZONE_EXPORT OzonePlatform {
   virtual std::unique_ptr<PlatformWindow> CreatePlatformWindow(
       PlatformWindowDelegate* delegate,
       const gfx::Rect& bounds) = 0;
-  virtual std::unique_ptr<ui::NativeDisplayDelegate>
+  virtual std::unique_ptr<display::NativeDisplayDelegate>
   CreateNativeDisplayDelegate() = 0;
+
+  // Returns the message loop type required for OzonePlatform instance that
+  // will be initialized for the GPU process.
+  virtual base::MessageLoop::Type GetMessageLoopTypeForGpu();
 
   // Ozone platform implementations may also choose to expose mojo interfaces to
   // internal functionality. Embedders wishing to take advantage of ozone mojo
@@ -120,8 +134,6 @@ class OZONE_EXPORT OzonePlatform {
   virtual void InitializeGPU() = 0;
   virtual void InitializeUI(const InitParams& args);
   virtual void InitializeGPU(const InitParams& args);
-
-  static void CreateInstance();
 
   static OzonePlatform* instance_;
 

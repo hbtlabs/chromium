@@ -141,6 +141,11 @@ class MODULES_EXPORT AudioHandler : public ThreadSafeRefCounted<AudioHandler> {
   // Called from context's audio thread.
   virtual void process(size_t framesToProcess) = 0;
 
+  // Like process(), but only causes the automations to process; the
+  // normal processing of the node is bypassed.  By default, we assume
+  // no AudioParams need to be updated.
+  virtual void processOnlyAudioParams(size_t framesToProcess){};
+
   // No significant resources should be allocated until initialize() is called.
   // Processing may not occur until a node is initialized.
   virtual void initialize();
@@ -166,8 +171,6 @@ class MODULES_EXPORT AudioHandler : public ThreadSafeRefCounted<AudioHandler> {
   AudioNodeInput& input(unsigned);
   // The argument must be less than numberOfOutputs().
   AudioNodeOutput& output(unsigned);
-
-  virtual float sampleRate() const { return m_sampleRate; }
 
   // processIfNecessary() is called by our output(s) when the rendering graph
   // needs this AudioNode to process.  This method ensures that the AudioNode
@@ -229,6 +232,11 @@ class MODULES_EXPORT AudioHandler : public ThreadSafeRefCounted<AudioHandler> {
   void updateChannelCountMode();
   void updateChannelInterpretation();
 
+  // Default callbackBufferSize should be the render quantum size
+  virtual size_t callbackBufferSize() const {
+    return AudioUtilities::kRenderQuantumFrames;
+  }
+
  protected:
   // Inputs and outputs must be created before the AudioHandler is
   // initialized.
@@ -262,7 +270,6 @@ class MODULES_EXPORT AudioHandler : public ThreadSafeRefCounted<AudioHandler> {
   // See http://crbug.com/404527 for the detail.
   UntracedMember<BaseAudioContext> m_context;
 
-  float m_sampleRate;
   Vector<std::unique_ptr<AudioNodeInput>> m_inputs;
   Vector<std::unique_ptr<AudioNodeOutput>> m_outputs;
 

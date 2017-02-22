@@ -24,13 +24,16 @@ class TabDialogsCocoa : public TabDialogs {
       Browser* browser,
       Profile* profile,
       const std::string& username,
-      ui::ProfileSigninConfirmationDelegate* delegate) override;
+      std::unique_ptr<ui::ProfileSigninConfirmationDelegate> delegate) override;
   void ShowManagePasswordsBubble(bool user_action) override;
   void HideManagePasswordsBubble() override;
   base::WeakPtr<ValidationMessageBubble> ShowValidationMessage(
       const gfx::Rect& anchor_in_root_view,
       const base::string16& main_text,
       const base::string16& sub_text) override;
+
+ protected:
+  content::WebContents* web_contents() const { return web_contents_; }
 
  private:
   content::WebContents* web_contents_;  // Weak. Owns this.

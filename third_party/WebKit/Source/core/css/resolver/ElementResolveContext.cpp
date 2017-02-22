@@ -33,10 +33,11 @@ namespace blink {
 ElementResolveContext::ElementResolveContext(const Document& document)
     : m_element(nullptr),
       m_parentNode(nullptr),
+      m_layoutParent(nullptr),
       m_rootElementStyle(document.documentElement()
                              ? document.documentElement()->computedStyle()
                              : document.computedStyle()),
-      m_elementLinkState(NotInsideLink),
+      m_elementLinkState(EInsideLink::kNotInsideLink),
       m_distributedToInsertionPoint(false) {}
 
 ElementResolveContext::ElementResolveContext(Element& element)
@@ -45,10 +46,14 @@ ElementResolveContext::ElementResolveContext(Element& element)
           element.document().visitedLinkState().determineLinkState(element)),
       m_distributedToInsertionPoint(false) {
   LayoutTreeBuilderTraversal::ParentDetails parentDetails;
-  m_parentNode =
-      element.isActiveSlotOrActiveInsertionPoint()
-          ? nullptr
-          : LayoutTreeBuilderTraversal::parent(element, &parentDetails);
+  if (element.isActiveSlotOrActiveInsertionPoint()) {
+    m_parentNode = nullptr;
+    m_layoutParent = nullptr;
+  } else {
+    m_parentNode = LayoutTreeBuilderTraversal::parent(element);
+    m_layoutParent =
+        LayoutTreeBuilderTraversal::layoutParent(element, &parentDetails);
+  }
   m_distributedToInsertionPoint = parentDetails.insertionPoint();
 
   const Document& document = element.document();

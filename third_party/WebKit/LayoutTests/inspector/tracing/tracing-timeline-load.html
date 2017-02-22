@@ -6,31 +6,38 @@
 
 function test()
 {
-    InspectorTest.TestTimelineLifecycleDelegate = function() {}
+    InspectorTest.TestTimelineLoaderClient = function(callback)
+    {
+        this._callback = callback;
+    }
 
-    InspectorTest.TestTimelineLifecycleDelegate.prototype = {
+    InspectorTest.TestTimelineLoaderClient.prototype = {
         loadingStarted: function()
         {
-            InspectorTest.addResult("TimelineLifecycleDelegate.loadingStarted()");
+            InspectorTest.addResult("TimelineLoaderClient.loadingStarted()");
         },
 
         loadingProgress: function()
         {
-            InspectorTest.addResult("TimelineLifecycleDelegate.loadingProgress()");
+            InspectorTest.addResult("TimelineLoaderClient.loadingProgress()");
         },
 
-        loadingComplete: function(success)
+        processingStarted: function()
         {
-            InspectorTest.addResult(`TimelineLifecycleDelegate.loadingComplete(${success})`);
+            InspectorTest.addResult("TimelineLoaderClient.processingStarted()");
+        },
+
+        loadingComplete: function(model, storage)
+        {
+            this.model = model;
+            this.storage = storage;
+            InspectorTest.addResult(`TimelineLoaderClient.loadingComplete(${!!model})`);
+            this._callback();
         },
     }
 
     function runTestWithDataAndCheck(input, expectedOutput, callback)
     {
-        var model = InspectorTest.tracingModel();
-        model.reset();
-        var timeline = UI.panels.timeline;
-
         function createFileReader(file, delegate)
         {
             return new InspectorTest.FakeFileReader(input, delegate, () => {});
@@ -44,34 +51,34 @@ function test()
         }
 
         InspectorTest.override(Timeline.TimelineLoader, "_createFileReader", createFileReader);
-        Timeline.TimelineLoader.loadFromFile(model, {}, new InspectorTest.TestTimelineLifecycleDelegate());
-
-        var saver = new Timeline.TracingTimelineSaver();
-        var stream = new InspectorTest.StringOutputStream(InspectorTest.safeWrap(checkSaveData));
-        var storage = timeline._tracingModelBackingStorage;
-        stream.open("", storage.writeToStream.bind(storage, stream, saver));
+        var delegate = new InspectorTest.TestTimelineLoaderClient(onTimelineLoaded);
+        Timeline.TimelineLoader.loadFromFile({}, delegate);
+        function onTimelineLoaded()
+        {
+            var saver = new Timeline.TracingTimelineSaver();
+            var stream = new InspectorTest.StringOutputStream(InspectorTest.safeWrap(checkSaveData));
+            var storage = delegate.storage;
+            stream.open("", storage.writeToStream.bind(storage, stream, saver));
+        };
     }
 
     function runTestOnMalformedInput(input, callback)
     {
-        var model = InspectorTest.tracingModel();
-        var timeline = UI.panels.timeline;
-
-        model.reset();
-
         function createFileReader(file, delegate)
         {
-            return new InspectorTest.FakeFileReader(input, delegate, checkLoadedData);
+            return new InspectorTest.FakeFileReader(input, delegate, () => {});
         }
 
         function checkLoadedData(data)
         {
-            InspectorTest.addResult("Model is empty: " + (!model.minimumRecordTime() && !model.maximumRecordTime()));
+            var model = delegate.model;
+            InspectorTest.addResult("Model is empty: " + (!model || (!model.minimumRecordTime() && !model.maximumRecordTime())));
             callback();
         }
 
         InspectorTest.override(Timeline.TimelineLoader, "_createFileReader", createFileReader);
-        Timeline.TimelineLoader.loadFromFile(model, {}, new InspectorTest.TestTimelineLifecycleDelegate());
+        var delegate = new InspectorTest.TestTimelineLoaderClient(checkLoadedData);
+        Timeline.TimelineLoader.loadFromFile({}, delegate);
     }
 
     var data = [{"args":{"number":32},"cat":"__metadata","name":"num_cpus","ph":"M","pid":32127,"tid":0,"ts":0},

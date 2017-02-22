@@ -11,6 +11,7 @@ which also confuses clang. This script generates a compile DB that should mostly
 work until clang tooling can be improved upstream.
 """
 
+import argparse
 import os
 import re
 import json
@@ -47,23 +48,22 @@ def _ProcessEntry(e):
   except IOError:
     pass
 
-  # TODO(dcheng): This should be implemented in Clang tooling.
-  # http://llvm.org/bugs/show_bug.cgi?id=19687
-  # Finally, use slashes instead of backslashes to avoid bad escaping by the
-  # tooling. This should really only matter for command, but we do it for all
-  # keys for consistency.
-  e['directory'] = e['directory'].replace('\\', '/')
-  e['command'] = e['command'].replace('\\', '/')
-  e['file'] = e['file'].replace('\\', '/')
-
   return e
 
 
 def main(argv):
+  # Parse argument
+  parser = argparse.ArgumentParser()
+  parser.add_argument(
+      'build_path',
+      nargs='?',
+      help='Path to build directory',
+      default='out/Debug')
+  args = parser.parse_args()
   # First, generate the compile database.
   print 'Generating compile DB with ninja...'
   compile_db_as_json = subprocess.check_output(shlex.split(
-      'ninja -C out/Debug -t compdb cc cxx objc objcxx'))
+      'ninja -C %s -t compdb cc cxx objc objcxx' % args.build_path))
 
   compile_db = json.loads(compile_db_as_json)
   print 'Read in %d entries from the compile db' % len(compile_db)
@@ -74,7 +74,7 @@ def main(argv):
   compile_db = [e for e in compile_db if '_nacl.cc.pdb' not in e['command']
       and '_nacl_win64.cc.pdb' not in e['command']]
   print 'Filtered out %d entries...' % (original_length - len(compile_db))
-  f = file('out/Debug/compile_commands.json', 'w')
+  f = file('%s/compile_commands.json' % args.build_path, 'w')
   f.write(json.dumps(compile_db, indent=2))
   print 'Done!'
 

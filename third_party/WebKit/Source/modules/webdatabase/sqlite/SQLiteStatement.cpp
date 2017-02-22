@@ -82,10 +82,6 @@ SQLiteStatement::SQLiteStatement(SQLiteDatabase& db, const String& sql)
     : m_database(db),
       m_query(sql),
       m_statement(0)
-#if ENABLE(ASSERT)
-      ,
-      m_isPrepared(false)
-#endif
 {
 }
 
@@ -100,14 +96,12 @@ int SQLiteStatement::prepare() {
 
   // Need to pass non-stack |const char*| and |sqlite3_stmt*| to avoid race
   // with Oilpan stack scanning.
-  std::unique_ptr<const char*> tail = wrapUnique(new const char*);
-  std::unique_ptr<sqlite3_stmt*> statement = wrapUnique(new sqlite3_stmt*);
+  std::unique_ptr<const char*> tail = WTF::wrapUnique(new const char*);
+  std::unique_ptr<sqlite3_stmt*> statement = WTF::wrapUnique(new sqlite3_stmt*);
   *tail = nullptr;
   *statement = nullptr;
   int error;
   {
-    SafePointScope scope(BlinkGC::HeapPointersOnStack);
-
     SQL_DVLOG(1) << "SQL - prepare - " << query.data();
 
     // Pass the length of the string including the null character to
@@ -127,16 +121,13 @@ int SQLiteStatement::prepare() {
   else if (*tail && **tail)
     error = SQLITE_ERROR;
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   m_isPrepared = error == SQLITE_OK;
 #endif
   return restrictError(error);
 }
 
 int SQLiteStatement::step() {
-  SafePointScope scope(BlinkGC::HeapPointersOnStack);
-  // ASSERT(m_isPrepared);
-
   if (!m_statement)
     return SQLITE_OK;
 
@@ -156,7 +147,7 @@ int SQLiteStatement::step() {
 }
 
 int SQLiteStatement::finalize() {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   m_isPrepared = false;
 #endif
   if (!m_statement)

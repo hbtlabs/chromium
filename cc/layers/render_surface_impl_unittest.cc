@@ -71,11 +71,10 @@ TEST(RenderSurfaceLayerImplTest, AppendQuadsWithScaledMask) {
   LayerTestCommon::LayerImplTest impl;
   std::unique_ptr<LayerImpl> root =
       LayerImpl::Create(impl.host_impl()->active_tree(), 2);
-  root->SetHasRenderSurface(true);
   std::unique_ptr<LayerImpl> surface =
       LayerImpl::Create(impl.host_impl()->active_tree(), 3);
   surface->SetBounds(layer_size);
-  surface->SetHasRenderSurface(true);
+  surface->test_properties()->force_render_surface = true;
 
   gfx::Transform scale;
   scale.Scale(2, 2);
@@ -107,10 +106,7 @@ TEST(RenderSurfaceLayerImplTest, AppendQuadsWithScaledMask) {
   RenderSurfaceImpl* render_surface_impl = surface_raw->render_surface();
   std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
   AppendQuadsData append_quads_data;
-  render_surface_impl->AppendQuads(
-      render_pass.get(), render_surface_impl->draw_transform(), Occlusion(),
-      SK_ColorBLACK, 1.f, render_surface_impl->MaskLayer(), &append_quads_data,
-      RenderPassId(1, 1));
+  render_surface_impl->AppendQuads(render_pass.get(), &append_quads_data);
 
   const RenderPassDrawQuad* quad =
       RenderPassDrawQuad::MaterialCast(render_pass->quad_list.front());

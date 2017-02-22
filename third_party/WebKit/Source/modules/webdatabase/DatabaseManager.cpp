@@ -29,8 +29,9 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/ExecutionContextTask.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/inspector/InspectorInstrumentation.h"
 #include "modules/webdatabase/Database.h"
 #include "modules/webdatabase/DatabaseCallback.h"
 #include "modules/webdatabase/DatabaseClient.h"
@@ -53,20 +54,7 @@ DatabaseManager& DatabaseManager::manager() {
   return *s_databaseManager;
 }
 
-void DatabaseManager::terminateDatabaseThread() {
-  DCHECK(isMainThread());
-  if (!s_databaseManager)
-    return;
-  for (const Member<DatabaseContext>& context :
-       s_databaseManager->m_contextMap.values())
-    context->stopDatabases();
-}
-
 DatabaseManager::DatabaseManager()
-#if ENABLE(ASSERT)
-    : m_databaseContextRegisteredCount(0),
-      m_databaseContextInstanceCount(0)
-#endif
 {
 }
 
@@ -75,6 +63,8 @@ DatabaseManager::~DatabaseManager() {}
 // This is just for ignoring DatabaseCallback::handleEvent()'s return value.
 static void databaseCallbackHandleEvent(DatabaseCallback* callback,
                                         Database* database) {
+  InspectorInstrumentation::AsyncTask asyncTask(database->getExecutionContext(),
+                                                callback);
   callback->handleEvent(database);
 }
 
@@ -97,7 +87,7 @@ void DatabaseManager::registerDatabaseContext(
     DatabaseContext* databaseContext) {
   ExecutionContext* context = databaseContext->getExecutionContext();
   m_contextMap.set(context, databaseContext);
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   m_databaseContextRegisteredCount++;
 #endif
 }
@@ -106,13 +96,13 @@ void DatabaseManager::unregisterDatabaseContext(
     DatabaseContext* databaseContext) {
   ExecutionContext* context = databaseContext->getExecutionContext();
   ASSERT(m_contextMap.get(context));
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   m_databaseContextRegisteredCount--;
 #endif
-  m_contextMap.remove(context);
+  m_contextMap.erase(context);
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 void DatabaseManager::didConstructDatabaseContext() {
   m_databaseContextInstanceCount++;
 }
@@ -208,11 +198,13 @@ Database* DatabaseManager::openDatabase(ExecutionContext* context,
   if (database->isNew() && creationCallback) {
     STORAGE_DVLOG(1) << "Scheduling DatabaseCreationCallbackTask for database "
                      << database;
-    database->getExecutionContext()->postTask(
-        BLINK_FROM_HERE, createSameThreadTask(&databaseCallbackHandleEvent,
+    InspectorInstrumentation::asyncTaskScheduled(
+        database->getExecutionContext(), "openDatabase", creationCallback);
+    TaskRunnerHelper::get(TaskType::DatabaseAccess,
+                          database->getExecutionContext())
+        ->postTask(BLINK_FROM_HERE, WTF::bind(&databaseCallbackHandleEvent,
                                               wrapPersistent(creationCallback),
-                                              wrapPersistent(database)),
-        "openDatabase");
+                                              wrapPersistent(database)));
   }
 
   ASSERT(database);

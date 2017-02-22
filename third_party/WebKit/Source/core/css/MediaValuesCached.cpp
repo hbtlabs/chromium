@@ -9,8 +9,28 @@
 #include "core/frame/LocalFrame.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/api/LayoutViewItem.h"
+#include "platform/graphics/ColorSpace.h"
 
 namespace blink {
+
+MediaValuesCached::MediaValuesCachedData::MediaValuesCachedData()
+    : viewportWidth(0),
+      viewportHeight(0),
+      deviceWidth(0),
+      deviceHeight(0),
+      devicePixelRatio(1.0),
+      colorBitsPerComponent(24),
+      monochromeBitsPerComponent(0),
+      primaryPointerType(PointerTypeNone),
+      availablePointerTypes(PointerTypeNone),
+      primaryHoverType(HoverTypeNone),
+      availableHoverTypes(HoverTypeNone),
+      defaultFontSize(16),
+      threeDEnabled(false),
+      strictMode(true),
+      displayMode(WebDisplayModeBrowser),
+      displayShape(DisplayShapeRect),
+      colorGamut(ColorSpaceGamut::Unknown) {}
 
 MediaValuesCached::MediaValuesCachedData::MediaValuesCachedData(
     Document& document)
@@ -43,6 +63,8 @@ MediaValuesCached::MediaValuesCachedData::MediaValuesCachedData(
     strictMode = MediaValues::calculateStrictMode(frame);
     displayMode = MediaValues::calculateDisplayMode(frame);
     mediaType = MediaValues::calculateMediaType(frame);
+    displayShape = MediaValues::calculateDisplayShape(frame);
+    colorGamut = MediaValues::calculateColorGamut(frame);
   }
 }
 
@@ -152,6 +174,14 @@ void MediaValuesCached::overrideViewportDimensions(double width,
                                                    double height) {
   m_data.viewportWidth = width;
   m_data.viewportHeight = height;
+}
+
+DisplayShape MediaValuesCached::displayShape() const {
+  return m_data.displayShape;
+}
+
+ColorSpaceGamut MediaValuesCached::colorGamut() const {
+  return m_data.colorGamut;
 }
 
 }  // namespace blink

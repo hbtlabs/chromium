@@ -27,6 +27,7 @@
 // on systems without case-sensitive file systems.
 
 #include "wtf/Allocator.h"
+#include "wtf/Compiler.h"
 #include "wtf/HashTableDeletedValueType.h"
 #include "wtf/WTFExport.h"
 #include "wtf/text/ASCIIFastPath.h"
@@ -56,9 +57,6 @@ enum UTF8ConversionMode {
        : (caseSensitivity == TextCaseASCIIInsensitive) \
              ? op##IgnoringASCIICase args              \
              : op##IgnoringCase args)
-
-template <bool isSpecialCharacter(UChar), typename CharacterType>
-bool isAllSpecialCharacters(const CharacterType*, size_t);
 
 // You can find documentation about this class in this doc:
 // https://docs.google.com/document/d/1kOCUlJdh2WJMJGDf-WoEQhmnjKLaOYRbiHz5TiGJl14/edit?usp=sharing
@@ -92,8 +90,10 @@ class WTF_EXPORT String {
   String(const char* characters, unsigned length);
 
   // Construct a string with latin1 data, from a null-terminated source.
-  String(const LChar* characters);
-  String(const char* characters);
+  String(const LChar* characters)
+      : String(reinterpret_cast<const char*>(characters)) {}
+  String(const char* characters)
+      : String(characters, characters ? strlen(characters) : 0) {}
 
   // Construct a string referencing an existing StringImpl.
   String(StringImpl* impl) : m_impl(impl) {}
@@ -104,10 +104,11 @@ class WTF_EXPORT String {
   template <typename CharType>
   static String adopt(StringBuffer<CharType>& buffer) {
     if (!buffer.length())
-      return StringImpl::empty();
+      return StringImpl::empty;
     return String(buffer.release());
   }
 
+  explicit operator bool() const { return !isNull(); }
   bool isNull() const { return !m_impl; }
   bool isEmpty() const { return !m_impl || !m_impl->length(); }
 
@@ -123,14 +124,14 @@ class WTF_EXPORT String {
   const LChar* characters8() const {
     if (!m_impl)
       return 0;
-    ASSERT(m_impl->is8Bit());
+    DCHECK(m_impl->is8Bit());
     return m_impl->characters8();
   }
 
   const UChar* characters16() const {
     if (!m_impl)
       return 0;
-    ASSERT(!m_impl->is8Bit());
+    DCHECK(!m_impl->is8Bit());
     return m_impl->characters16();
   }
 
@@ -305,7 +306,8 @@ class WTF_EXPORT String {
   // Return the string with case folded for case insensitive comparison.
   String foldCase() const;
 
-  static String format(const char*, ...) WTF_ATTRIBUTE_PRINTF(1, 2);
+  // Takes a printf format and args and prints into a String.
+  PRINTF_FORMAT(1, 2) static String format(const char* format, ...);
 
   // Returns an uninitialized string. The characters needs to be written
   // into the buffer returned in data before the returned string is used.
@@ -317,10 +319,10 @@ class WTF_EXPORT String {
     return StringImpl::createUninitialized(length, data);
   }
 
-  void split(const String& separator,
+  void split(const StringView& separator,
              bool allowEmptyEntries,
              Vector<String>& result) const;
-  void split(const String& separator, Vector<String>& result) const {
+  void split(const StringView& separator, Vector<String>& result) const {
     split(separator, false, result);
   }
   void split(UChar separator,
@@ -407,7 +409,9 @@ class WTF_EXPORT String {
                                       length);
   }
 
-  bool containsOnlyASCII() const;
+  bool containsOnlyASCII() const {
+    return !m_impl || m_impl->containsOnlyASCII();
+  }
   bool containsOnlyLatin1() const;
   bool containsOnlyWhitespace() const {
     return !m_impl || m_impl->containsOnlyWhitespace();
@@ -425,14 +429,11 @@ class WTF_EXPORT String {
   }
 
 #ifndef NDEBUG
+  // For use in the debugger.
   void show() const;
 #endif
 
  private:
-  typedef struct ImplicitConversionFromWTFStringToBoolDisallowed*(
-      String::*UnspecifiedBoolType);
-  operator UnspecifiedBoolType() const;
-
   template <typename CharacterType>
   void appendInternal(CharacterType);
 
@@ -442,51 +443,25 @@ class WTF_EXPORT String {
 #undef DISPATCH_CASE_OP
 
 inline bool operator==(const String& a, const String& b) {
+  // We don't use equalStringView here since we want the isAtomic() fast path
+  // inside WTF::equal.
   return equal(a.impl(), b.impl());
 }
-inline bool operator==(const String& a, const LChar* b) {
-  return equal(a.impl(), b);
-}
 inline bool operator==(const String& a, const char* b) {
-  return equal(a.impl(), reinterpret_cast<const LChar*>(b));
-}
-inline bool operator==(const LChar* a, const String& b) {
-  return equal(a, b.impl());
+  return equalStringView(a, b);
 }
 inline bool operator==(const char* a, const String& b) {
-  return equal(reinterpret_cast<const LChar*>(a), b.impl());
-}
-template <size_t inlineCapacity>
-inline bool operator==(const Vector<char, inlineCapacity>& a, const String& b) {
-  return equal(b.impl(), a.data(), a.size());
-}
-template <size_t inlineCapacity>
-inline bool operator==(const String& a, const Vector<char, inlineCapacity>& b) {
   return b == a;
 }
 
 inline bool operator!=(const String& a, const String& b) {
-  return !equal(a.impl(), b.impl());
-}
-inline bool operator!=(const String& a, const LChar* b) {
-  return !equal(a.impl(), b);
-}
-inline bool operator!=(const String& a, const char* b) {
-  return !equal(a.impl(), reinterpret_cast<const LChar*>(b));
-}
-inline bool operator!=(const LChar* a, const String& b) {
-  return !equal(a, b.impl());
-}
-inline bool operator!=(const char* a, const String& b) {
-  return !equal(reinterpret_cast<const LChar*>(a), b.impl());
-}
-template <size_t inlineCapacity>
-inline bool operator!=(const Vector<char, inlineCapacity>& a, const String& b) {
   return !(a == b);
 }
-template <size_t inlineCapacity>
-inline bool operator!=(const String& a, const Vector<char, inlineCapacity>& b) {
-  return b != a;
+inline bool operator!=(const String& a, const char* b) {
+  return !(a == b);
+}
+inline bool operator!=(const char* a, const String& b) {
+  return !(a == b);
 }
 
 inline bool equalPossiblyIgnoringCase(const String& a,
@@ -505,10 +480,6 @@ inline bool equalIgnoringNullity(const Vector<UChar, inlineCapacity>& a,
   return equalIgnoringNullity(a, b.impl());
 }
 
-inline bool operator!(const String& str) {
-  return str.isNull();
-}
-
 inline void swap(String& a, String& b) {
   a.swap(b);
 }
@@ -518,17 +489,17 @@ inline void swap(String& a, String& b) {
 template <size_t inlineCapacity>
 String::String(const Vector<UChar, inlineCapacity>& vector)
     : m_impl(vector.size() ? StringImpl::create(vector.data(), vector.size())
-                           : StringImpl::empty()) {}
+                           : StringImpl::empty) {}
 
 template <>
 inline const LChar* String::getCharacters<LChar>() const {
-  ASSERT(is8Bit());
+  DCHECK(is8Bit());
   return characters8();
 }
 
 template <>
 inline const UChar* String::getCharacters<UChar>() const {
-  ASSERT(!is8Bit());
+  DCHECK(!is8Bit());
   return characters16();
 }
 
@@ -555,16 +526,6 @@ inline NSString* nsStringNilIfEmpty(const String& str) {
 }
 #endif
 
-inline bool String::containsOnlyASCII() const {
-  if (isEmpty())
-    return true;
-
-  if (is8Bit())
-    return charactersAreAllASCII(characters8(), m_impl->length());
-
-  return charactersAreAllASCII(characters16(), m_impl->length());
-}
-
 WTF_EXPORT int codePointCompare(const String&, const String&);
 
 inline bool codePointCompareLessThan(const String& a, const String& b) {
@@ -573,28 +534,9 @@ inline bool codePointCompareLessThan(const String& a, const String& b) {
 
 WTF_EXPORT int codePointCompareIgnoringASCIICase(const String&, const char*);
 
-template <bool isSpecialCharacter(UChar), typename CharacterType>
-inline bool isAllSpecialCharacters(const CharacterType* characters,
-                                   size_t length) {
-  for (size_t i = 0; i < length; ++i) {
-    if (!isSpecialCharacter(characters[i]))
-      return false;
-  }
-  return true;
-}
-
 template <bool isSpecialCharacter(UChar)>
 inline bool String::isAllSpecialCharacters() const {
-  size_t len = length();
-
-  if (!len)
-    return true;
-
-  if (is8Bit())
-    return WTF::isAllSpecialCharacters<isSpecialCharacter, LChar>(characters8(),
-                                                                  len);
-  return WTF::isAllSpecialCharacters<isSpecialCharacter, UChar>(characters16(),
-                                                                len);
+  return StringView(*this).isAllSpecialCharacters<isSpecialCharacter>();
 }
 
 template <typename BufferType>
@@ -624,8 +566,8 @@ struct DefaultHash<String> {
 };
 
 // Shared global empty string.
-WTF_EXPORT const String& emptyString();
-WTF_EXPORT const String& emptyString16Bit();
+WTF_EXPORT extern const String& emptyString;
+WTF_EXPORT extern const String& emptyString16Bit;
 WTF_EXPORT extern const String& xmlnsWithColon;
 
 // Pretty printer for gtest and base/logging.*.  It prepends and appends
@@ -654,7 +596,6 @@ using WTF::emptyString16Bit;
 using WTF::charactersAreAllASCII;
 using WTF::equal;
 using WTF::find;
-using WTF::isAllSpecialCharacters;
 using WTF::isSpaceOrNewline;
 
 #include "wtf/text/AtomicString.h"

@@ -8,33 +8,27 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "ui/views/view.h"
 
 namespace views {
 
 // The Separator class is a view that shows a line used to visually separate
 // other views.
-
 class VIEWS_EXPORT Separator : public View {
  public:
-  enum Orientation {
-    HORIZONTAL,
-    VERTICAL
-  };
-
   // The separator's class name.
   static const char kViewClassName[];
 
-  explicit Separator(Orientation orientation);
+  // The separator's thickness in dip.
+  static const int kThickness;
+
+  Separator();
   ~Separator() override;
 
-  SkColor color() const { return color_; }
   void SetColor(SkColor color);
 
-  int size() const { return size_; }
-  // Preferred size of one axis: height for horizontal separator
-  // and width for vertical separator
-  void SetPreferredSize(int size);
+  void SetPreferredHeight(int height);
 
   // Overridden from View:
   gfx::Size GetPreferredSize() const override;
@@ -43,9 +37,8 @@ class VIEWS_EXPORT Separator : public View {
   const char* GetClassName() const override;
 
  private:
-  const Orientation orientation_;
-  SkColor color_;
-  int size_;
+  int preferred_height_ = kThickness;
+  base::Optional<SkColor> overridden_color_;
 
   DISALLOW_COPY_AND_ASSIGN(Separator);
 };

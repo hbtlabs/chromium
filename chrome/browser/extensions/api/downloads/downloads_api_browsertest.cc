@@ -17,8 +17,8 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
-#include "base/synchronization/waitable_event.h"
 #include "build/build_config.h"
 #include "chrome/browser/download/download_file_icon_extractor.h"
 #include "chrome/browser/download/download_service.h"
@@ -320,7 +320,6 @@ class DownloadExtensionTest : public ExtensionApiTest {
     CreateAndSetDownloadsDirectory();
     current_browser()->profile()->GetPrefs()->SetBoolean(
         prefs::kPromptForDownload, false);
-    GetOnRecordManager()->RemoveAllDownloads();
     events_listener_.reset(new DownloadsEventsListener());
     // Disable file chooser for current profile.
     DownloadTestFileActivityObserver observer(current_browser()->profile());
@@ -332,7 +331,6 @@ class DownloadExtensionTest : public ExtensionApiTest {
   void GoOffTheRecord() {
     if (!incognito_browser_) {
       incognito_browser_ = CreateIncognitoBrowser();
-      GetOffRecordManager()->RemoveAllDownloads();
       // Disable file chooser for incognito profile.
       DownloadTestFileActivityObserver observer(incognito_browser_->profile());
       observer.EnableFileChooser(false);
@@ -703,29 +701,25 @@ class HTML5FileWriter {
     }
     // Invoke the fileapi to copy it into the sandboxed filesystem.
     bool result = false;
-    base::WaitableEvent done_event(
-        base::WaitableEvent::ResetPolicy::MANUAL,
-        base::WaitableEvent::InitialState::NOT_SIGNALED);
+    base::RunLoop run_loop;
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&CreateFileForTestingOnIOThread,
-                   base::Unretained(context),
-                   path, temp_file,
-                   base::Unretained(&result),
-                   base::Unretained(&done_event)));
+        base::Bind(&CreateFileForTestingOnIOThread, base::Unretained(context),
+                   path, temp_file, base::Unretained(&result),
+                   run_loop.QuitClosure()));
     // Wait for that to finish.
-    done_event.Wait();
+    run_loop.Run();
     base::DeleteFile(temp_file, false);
     return result;
   }
 
  private:
   static void CopyInCompletion(bool* result,
-                               base::WaitableEvent* done_event,
+                               const base::Closure& quit_closure,
                                base::File::Error error) {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
     *result = error == base::File::FILE_OK;
-    done_event->Signal();
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, quit_closure);
   }
 
   static void CreateFileForTestingOnIOThread(
@@ -733,13 +727,11 @@ class HTML5FileWriter {
       const storage::FileSystemURL& path,
       const base::FilePath& temp_file,
       bool* result,
-      base::WaitableEvent* done_event) {
+      const base::Closure& quit_closure) {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
     context->operation_runner()->CopyInForeignFile(
         temp_file, path,
-        base::Bind(&CopyInCompletion,
-                   base::Unretained(result),
-                   base::Unretained(done_event)));
+        base::Bind(&CopyInCompletion, base::Unretained(result), quit_closure));
   }
 };
 
@@ -950,10 +942,16 @@ scoped_refptr<UIThreadExtensionFunction> MockedGetFileIconFunction(
   return function;
 }
 
+// https://crbug.com/678967
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_FileIcon_Active DISABLED_DownloadExtensionTest_FileIcon_Active
+#else
+#define MAYBE_DownloadExtensionTest_FileIcon_Active DownloadExtensionTest_FileIcon_Active
+#endif
 // Test downloads.getFileIcon() on in-progress, finished, cancelled and deleted
 // download items.
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-    DownloadExtensionTest_FileIcon_Active) {
+    MAYBE_DownloadExtensionTest_FileIcon_Active) {
   DownloadItem* download_item = CreateSlowTestDownload();
   ASSERT_TRUE(download_item);
   ASSERT_FALSE(download_item->GetTargetFilePath().empty());

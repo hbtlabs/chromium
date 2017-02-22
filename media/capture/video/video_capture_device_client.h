@@ -9,10 +9,12 @@
 #include <stdint.h>
 
 #include <memory>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/threading/thread_collision_warner.h"
 #include "media/capture/capture_export.h"
 #include "media/capture/video/video_capture_device.h"
 
@@ -34,11 +36,6 @@ using VideoCaptureJpegDecoderFactoryCB =
 // v4l2_thread on Linux, and the UI thread for tab capture.
 // The owner is responsible for making sure that the instance outlives these
 // calls.
-//
-// It has an internal ref counted TextureWrapHelper class used to wrap incoming
-// GpuMemoryBuffers into Texture backed VideoFrames. This class creates and
-// manages the necessary entities to interact with the GPU process, notably an
-// offscreen Context to avoid janking the UI thread.
 class CAPTURE_EXPORT VideoCaptureDeviceClient
     : public media::VideoCaptureDevice::Client,
       public base::SupportsWeakPtr<VideoCaptureDeviceClient> {
@@ -49,60 +46,61 @@ class CAPTURE_EXPORT VideoCaptureDeviceClient
       const VideoCaptureJpegDecoderFactoryCB& jpeg_decoder_factory);
   ~VideoCaptureDeviceClient() override;
 
+  static Buffer MakeBufferStruct(
+      scoped_refptr<VideoCaptureBufferPool> buffer_pool,
+      int buffer_id,
+      int frame_feedback_id);
+
   // VideoCaptureDevice::Client implementation.
   void OnIncomingCapturedData(const uint8_t* data,
                               int length,
                               const media::VideoCaptureFormat& frame_format,
                               int rotation,
                               base::TimeTicks reference_time,
-                              base::TimeDelta timestamp) override;
-  std::unique_ptr<Buffer> ReserveOutputBuffer(
-      const gfx::Size& dimensions,
-      media::VideoPixelFormat format,
-      media::VideoPixelStorage storage) override;
-  void OnIncomingCapturedBuffer(std::unique_ptr<Buffer> buffer,
-                                const media::VideoCaptureFormat& frame_format,
+                              base::TimeDelta timestamp,
+                              int frame_feedback_id = 0) override;
+  Buffer ReserveOutputBuffer(const gfx::Size& dimensions,
+                             media::VideoPixelFormat format,
+                             media::VideoPixelStorage storage,
+                             int frame_feedback_id) override;
+  void OnIncomingCapturedBuffer(Buffer buffer,
+                                const VideoCaptureFormat& format,
                                 base::TimeTicks reference_time,
                                 base::TimeDelta timestamp) override;
-  void OnIncomingCapturedVideoFrame(
-      std::unique_ptr<Buffer> buffer,
-      scoped_refptr<media::VideoFrame> frame) override;
-  std::unique_ptr<Buffer> ResurrectLastOutputBuffer(
-      const gfx::Size& dimensions,
-      media::VideoPixelFormat format,
-      media::VideoPixelStorage storage) override;
+  void OnIncomingCapturedBufferExt(
+      Buffer buffer,
+      const VideoCaptureFormat& format,
+      base::TimeTicks reference_time,
+      base::TimeDelta timestamp,
+      gfx::Rect visible_rect,
+      const VideoFrameMetadata& additional_metadata) override;
+  Buffer ResurrectLastOutputBuffer(const gfx::Size& dimensions,
+                                   media::VideoPixelFormat format,
+                                   media::VideoPixelStorage storage,
+                                   int new_frame_feedback_id) override;
   void OnError(const tracked_objects::Location& from_here,
                const std::string& reason) override;
   void OnLog(const std::string& message) override;
   double GetBufferPoolUtilization() const override;
 
  private:
-  // Reserve output buffer into which I420 contents can be copied directly.
-  // The dimensions of the frame is described by |dimensions|, and requested
-  // output buffer format is specified by |storage|. The reserved output buffer
-  // is returned; and the pointer to Y plane is stored at [y_plane_data], U
-  // plane is stored at [u_plane_data], V plane is stored at [v_plane_data].
-  // Returns an nullptr if allocation fails.
-  //
-  // When requested |storage| is PIXEL_STORAGE_CPU, a single shared memory
-  // chunk is reserved. The output buffers stay reserved and mapped for use
-  // until the Buffer objects are destroyed or returned.
-  std::unique_ptr<Buffer> ReserveI420OutputBuffer(
-      const gfx::Size& dimensions,
-      media::VideoPixelStorage storage,
-      uint8_t** y_plane_data,
-      uint8_t** u_plane_data,
-      uint8_t** v_plane_data);
+  void InitializeI420PlanePointers(const gfx::Size& dimensions,
+                                   uint8_t* const data,
+                                   uint8_t** y_plane_data,
+                                   uint8_t** u_plane_data,
+                                   uint8_t** v_plane_data);
 
   // A branch of OnIncomingCapturedData for Y16 frame_format.pixel_format.
   void OnIncomingCapturedY16Data(const uint8_t* data,
                                  int length,
                                  const VideoCaptureFormat& frame_format,
                                  base::TimeTicks reference_time,
-                                 base::TimeDelta timestamp);
+                                 base::TimeDelta timestamp,
+                                 int frame_feedback_id);
 
   // The receiver to which we post events.
   const std::unique_ptr<VideoFrameReceiver> receiver_;
+  std::vector<int> buffer_ids_known_by_receiver_;
 
   const VideoCaptureJpegDecoderFactoryCB jpeg_decoder_factory_callback_;
   std::unique_ptr<VideoCaptureJpegDecoder> external_jpeg_decoder_;
@@ -122,6 +120,11 @@ class CAPTURE_EXPORT VideoCaptureDeviceClient
 #endif  // DCHECK_IS_ON()
 
   media::VideoPixelFormat last_captured_pixel_format_;
+
+  // Thread collision warner to ensure that producer-facing API is not called
+  // concurrently. Producers are allowed to call from multiple threads, but not
+  // concurrently.
+  DFAKE_MUTEX(call_from_producer_);
 
   DISALLOW_COPY_AND_ASSIGN(VideoCaptureDeviceClient);
 };

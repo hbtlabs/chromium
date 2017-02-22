@@ -33,7 +33,7 @@ template <typename Strategy>
 CharacterIteratorAlgorithm<Strategy>::CharacterIteratorAlgorithm(
     const PositionTemplate<Strategy>& start,
     const PositionTemplate<Strategy>& end,
-    TextIteratorBehaviorFlags behavior)
+    const TextIteratorBehavior& behavior)
     : m_offset(0),
       m_runOffset(0),
       m_atBreak(true),
@@ -44,7 +44,7 @@ CharacterIteratorAlgorithm<Strategy>::CharacterIteratorAlgorithm(
 template <typename Strategy>
 CharacterIteratorAlgorithm<Strategy>::CharacterIteratorAlgorithm(
     const EphemeralRangeTemplate<Strategy>& range,
-    TextIteratorBehaviorFlags behavior)
+    const TextIteratorBehavior& behavior)
     : CharacterIteratorAlgorithm(range.startPosition(),
                                  range.endPosition(),
                                  behavior) {}
@@ -189,6 +189,8 @@ CharacterIteratorAlgorithm<Strategy>::calculateCharacterSubrange(int offset,
   advance(offset);
   const PositionTemplate<Strategy> startPos = startPosition();
 
+  if (!length)
+    return EphemeralRangeTemplate<Strategy>(startPos, startPos);
   if (length > 1)
     advance(length - 1);
   return EphemeralRangeTemplate<Strategy>(startPos, endPosition());
@@ -198,7 +200,9 @@ EphemeralRange calculateCharacterSubrange(const EphemeralRange& range,
                                           int characterOffset,
                                           int characterCount) {
   CharacterIterator entireRangeIterator(
-      range, TextIteratorEmitsObjectReplacementCharacter);
+      range, TextIteratorBehavior::Builder()
+                 .setEmitsObjectReplacementCharacter(true)
+                 .build());
   return entireRangeIterator.calculateCharacterSubrange(characterOffset,
                                                         characterCount);
 }

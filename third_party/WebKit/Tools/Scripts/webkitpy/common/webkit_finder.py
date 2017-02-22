@@ -30,6 +30,47 @@ import os
 import sys
 
 
+def add_typ_dir_to_sys_path():
+    path_to_typ = get_typ_dir()
+    if path_to_typ not in sys.path:
+        sys.path.append(path_to_typ)
+
+
+def add_bindings_scripts_dir_to_sys_path():
+    path_to_bindings_scripts = get_bindings_scripts_dir()
+    if path_to_bindings_scripts not in sys.path:
+        sys.path.append(path_to_bindings_scripts)
+
+
+def get_bindings_scripts_dir():
+    return os.path.join(get_source_dir(), 'bindings', 'scripts')
+
+
+def get_blink_dir():
+    return os.path.dirname(os.path.dirname(get_scripts_dir()))
+
+
+def get_chromium_src_dir():
+    return os.path.dirname(os.path.dirname(get_blink_dir()))
+
+
+def get_scripts_dir():
+    return os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+
+
+def get_source_dir():
+    return os.path.join(get_blink_dir(), 'Source')
+
+
+def get_typ_dir():
+    return os.path.join(get_chromium_src_dir(), 'third_party', 'typ')
+
+
+def get_webkitpy_thirdparty_dir():
+    return os.path.join(get_scripts_dir(), 'webkitpy', 'thirdparty')
+
+
 class WebKitFinder(object):
 
     def __init__(self, filesystem):
@@ -47,7 +88,7 @@ class WebKitFinder(object):
         Raises an AssertionError if the top dir can't be determined.
         """
         # Note: This code somewhat duplicates the code in
-        # scm.find_checkout_root(). However, that code only works if the top
+        # git.find_checkout_root(). However, that code only works if the top
         # of the SCM repository also matches the top of the WebKit tree. Some SVN users
         # (the chromium test bots, for example), might only check out subdirectories like
         # Tools/Scripts. This code will also work if there is no SCM system at all.

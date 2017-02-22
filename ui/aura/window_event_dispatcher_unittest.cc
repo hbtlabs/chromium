@@ -20,6 +20,7 @@
 #include "ui/aura/client/event_client.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/env.h"
+#include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/test/aura_test_base.h"
 #include "ui/aura/test/env_test_helper.h"
 #include "ui/aura/test/test_cursor_client.h"
@@ -1623,6 +1624,7 @@ TEST_P(WindowEventDispatcherTest, DeleteDispatcherDuringPreDispatch) {
   // on.
   WindowTreeHost* host = WindowTreeHost::Create(gfx::Rect(0, 0, 100, 100));
   host->InitHost();
+  host->window()->Show();
 
   // Create two windows.
   Window* w1 = CreateNormalWindow(1, host->window(), nullptr);
@@ -1700,6 +1702,7 @@ TEST_P(WindowEventDispatcherTest, ValidRootDuringDestruction) {
     std::unique_ptr<WindowTreeHost> host(
         WindowTreeHost::Create(gfx::Rect(0, 0, 100, 100)));
     host->InitHost();
+    host->window()->Show();
     // Owned by WindowEventDispatcher.
     Window* w1 = CreateNormalWindow(1, host->window(), NULL);
     w1->AddObserver(&observer);
@@ -1806,6 +1809,7 @@ TEST_P(WindowEventDispatcherTest, DeleteHostFromHeldMouseEvent) {
   // Should be deleted by |delegate|.
   WindowTreeHost* h2 = WindowTreeHost::Create(gfx::Rect(0, 0, 100, 100));
   h2->InitHost();
+  h2->window()->Show();
   DeleteHostFromHeldMouseEventDelegate delegate(h2);
   // Owned by |h2|.
   Window* w1 = CreateNormalWindow(1, h2->window(), &delegate);
@@ -2397,6 +2401,7 @@ TEST_P(WindowEventDispatcherTest, NestedEventDispatchTargetMoved) {
   std::unique_ptr<WindowTreeHost> second_host(
       WindowTreeHost::Create(gfx::Rect(20, 30, 100, 50)));
   second_host->InitHost();
+  second_host->window()->Show();
   Window* second_root = second_host->window();
 
   // Create two windows parented to |root_window()|.
@@ -2459,6 +2464,7 @@ TEST_P(WindowEventDispatcherTest,
   std::unique_ptr<WindowTreeHost> second_host(
       WindowTreeHost::Create(gfx::Rect(20, 30, 100, 50)));
   second_host->InitHost();
+  second_host->window()->Show();
   WindowEventDispatcher* second_dispatcher = second_host->dispatcher();
 
   // Install an InputStateLookup on the Env that always claims that a
@@ -2499,6 +2505,7 @@ TEST_P(WindowEventDispatcherTest,
   std::unique_ptr<WindowTreeHost> second_host(
       WindowTreeHost::Create(gfx::Rect(20, 30, 100, 50)));
   second_host->InitHost();
+  second_host->window()->Show();
   client::SetCaptureClient(second_host->window(),
                            client::GetCaptureClient(root_window()));
 
@@ -2683,5 +2690,140 @@ INSTANTIATE_TEST_CASE_P(/* no prefix */,
                         WindowEventDispatcherTestInHighDPI,
                         ::testing::Values(test::BackendType::CLASSIC,
                                           test::BackendType::MUS));
+
+using WindowEventDispatcherMusTest = test::AuraTestBaseMus;
+
+class LastEventLocationDelegate : public test::TestWindowDelegate {
+ public:
+  LastEventLocationDelegate() {}
+  ~LastEventLocationDelegate() override {}
+
+  int mouse_event_count() const { return mouse_event_count_; }
+  const gfx::Point& last_mouse_location() const { return last_mouse_location_; }
+
+  // TestWindowDelegate:
+  void OnMouseEvent(ui::MouseEvent* event) override {
+    ++mouse_event_count_;
+    last_mouse_location_ = event->root_location();
+    EXPECT_EQ(last_mouse_location_, Env::GetInstance()->last_mouse_location());
+  }
+
+ private:
+  int mouse_event_count_ = 0;
+  gfx::Point last_mouse_location_;
+
+  DISALLOW_COPY_AND_ASSIGN(LastEventLocationDelegate);
+};
+
+TEST_F(WindowEventDispatcherMusTest, LastEventLocation) {
+  LastEventLocationDelegate last_event_location_delegate;
+  std::unique_ptr<Window> window(
+      CreateTestWindowWithDelegate(&last_event_location_delegate, 123,
+                                   gfx::Rect(0, 0, 10, 20), root_window()));
+
+  // Enable fetching mouse location from mouse.
+  test::EnvTestHelper().SetAlwaysUseLastMouseLocation(false);
+  EXPECT_EQ(gfx::Point(0, 0),
+            window_tree_client_impl()->GetCursorScreenPoint());
+  EXPECT_EQ(gfx::Point(0, 0), Env::GetInstance()->last_mouse_location());
+
+  // Dispatch an event to |mouse_location|. While dispatching the event
+  // Env::last_mouse_location() should return |mouse_location|.
+  const gfx::Point mouse_location(1, 2);
+  ui::MouseEvent mouse(ui::ET_MOUSE_PRESSED, mouse_location, mouse_location,
+                       ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
+                       ui::EF_LEFT_MOUSE_BUTTON);
+  DispatchEventUsingWindowDispatcher(&mouse);
+  EXPECT_EQ(1, last_event_location_delegate.mouse_event_count());
+  EXPECT_EQ(mouse_location, last_event_location_delegate.last_mouse_location());
+
+  // After dispatch the location should fallback to that of the
+  // WindowTreeClient, which defaults to 0,0.
+  EXPECT_EQ(gfx::Point(0, 0), Env::GetInstance()->last_mouse_location());
+}
+
+class NestedLocationDelegate : public test::TestWindowDelegate {
+ public:
+  NestedLocationDelegate() {}
+  ~NestedLocationDelegate() override {}
+
+  int mouse_event_count() const { return mouse_event_count_; }
+  int nested_message_loop_count() const { return nested_message_loop_count_; }
+  const gfx::Point& last_mouse_location() const { return last_mouse_location_; }
+
+  // TestWindowDelegate:
+  void OnMouseEvent(ui::MouseEvent* event) override {
+    ++mouse_event_count_;
+    last_mouse_location_ = event->root_location();
+    EXPECT_EQ(last_mouse_location_, Env::GetInstance()->last_mouse_location());
+
+    // Start a RunLoop that in turn starts a RunLoop. We have to do this as the
+    // first RunLoop doesn't triggering nesting (the MessageLoop isn't running
+    // at this point). The second RunLoop (created in InInitialMessageLoop())
+    // is considered the first nested loop.
+    base::RunLoop run_loop;
+    base::MessageLoop::current()->task_runner()->PostTask(
+        FROM_HERE, base::Bind(&NestedLocationDelegate::InInitialMessageLoop,
+                              base::Unretained(this), &run_loop));
+    run_loop.Run();
+  }
+
+ private:
+  void InInitialMessageLoop(base::RunLoop* initial_run_loop) {
+    // See comments in OnMouseEvent() for details on which this creates another
+    // RunLoop.
+    base::MessageLoop::ScopedNestableTaskAllower allow_nestable_tasks(
+        base::MessageLoop::current());
+    base::RunLoop run_loop;
+    base::MessageLoop::current()->task_runner()->PostTask(
+        FROM_HERE, base::Bind(&NestedLocationDelegate::InRunMessageLoop,
+                              base::Unretained(this), &run_loop));
+    run_loop.Run();
+    initial_run_loop->Quit();
+  }
+
+  void InRunMessageLoop(base::RunLoop* run_loop) {
+    ++nested_message_loop_count_;
+    // Nested message loops trigger falling back to using the location from
+    // WindowTreeClient, which is 0,0.
+    EXPECT_EQ(gfx::Point(0, 0), Env::GetInstance()->last_mouse_location());
+    run_loop->Quit();
+  }
+
+  int mouse_event_count_ = 0;
+  // Incremented when the deepest message loop is encountered.
+  int nested_message_loop_count_ = 0;
+  gfx::Point last_mouse_location_;
+
+  DISALLOW_COPY_AND_ASSIGN(NestedLocationDelegate);
+};
+
+TEST_F(WindowEventDispatcherMusTest, EventDispatchTriggersNestedMessageLoop) {
+  NestedLocationDelegate last_event_location_delegate;
+  std::unique_ptr<Window> window(
+      CreateTestWindowWithDelegate(&last_event_location_delegate, 123,
+                                   gfx::Rect(0, 0, 10, 20), root_window()));
+
+  // Enable fetching mouse location from mouse.
+  test::EnvTestHelper().SetAlwaysUseLastMouseLocation(false);
+  EXPECT_EQ(gfx::Point(0, 0),
+            window_tree_client_impl()->GetCursorScreenPoint());
+  EXPECT_EQ(gfx::Point(0, 0), Env::GetInstance()->last_mouse_location());
+
+  // Dispatch an event to |mouse_location|. While dispatching the event
+  // Env::last_mouse_location() should return |mouse_location|.
+  const gfx::Point mouse_location(1, 2);
+  ui::MouseEvent mouse(ui::ET_MOUSE_PRESSED, mouse_location, mouse_location,
+                       ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
+                       ui::EF_LEFT_MOUSE_BUTTON);
+  DispatchEventUsingWindowDispatcher(&mouse);
+  EXPECT_EQ(1, last_event_location_delegate.mouse_event_count());
+  EXPECT_EQ(1, last_event_location_delegate.nested_message_loop_count());
+  EXPECT_EQ(mouse_location, last_event_location_delegate.last_mouse_location());
+
+  // After dispatch the location should fallback to that of the
+  // WindowTreeClient, which defaults to 0,0.
+  EXPECT_EQ(gfx::Point(0, 0), Env::GetInstance()->last_mouse_location());
+}
 
 }  // namespace aura

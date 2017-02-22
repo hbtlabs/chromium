@@ -6,7 +6,10 @@
 
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
-#import "base/mac/scoped_nsobject.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 
@@ -15,12 +18,9 @@ NSString* const kModuleFriendlyNameKey = @"ModuleFriendlyName";
 
 }  // namespace
 
-@interface SafeModeCrashingModulesConfig () {
-  base::scoped_nsobject<NSDictionary> _configuration;
+@implementation SafeModeCrashingModulesConfig {
+  NSDictionary* _configuration;
 }
-@end
-
-@implementation SafeModeCrashingModulesConfig
 
 + (SafeModeCrashingModulesConfig*)sharedInstance {
   static SafeModeCrashingModulesConfig* instance =
@@ -32,10 +32,9 @@ NSString* const kModuleFriendlyNameKey = @"ModuleFriendlyName";
   self = [super init];
   if (self) {
     NSString* configPath =
-        [[NSBundle mainBundle] pathForResource:@"CrashingModules"
+        [[NSBundle mainBundle] pathForResource:@"SafeModeCrashingModules"
                                         ofType:@"plist"];
-    _configuration.reset(
-        [[NSDictionary alloc] initWithContentsOfFile:configPath]);
+    _configuration = [[NSDictionary alloc] initWithContentsOfFile:configPath];
   }
   return self;
 }

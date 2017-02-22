@@ -2,6 +2,33 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+group("media_router_perf_tests") {
+  testonly = true
+  data = [
+    "$root_out_dir/media_router/test_extension/",
+    "$root_out_dir/mr_extension/release/",
+    "internal/",
+    "telemetry/",
+  ]
+  deps = [
+    ":test_extension_resource_files",
+    "//tools/perf:perf",
+  ]
+}
+
+group("media_router_tests") {
+  testonly = true
+  data_deps = [
+    "//chrome/test:browser_tests",
+  ]
+  data = [
+    "$root_out_dir/mr_extension/",
+    "internal/",
+    "../../../media/test/data/player.html",
+    "../../../media/test/data/bear-vp9.webm",
+  ]
+}
+
 # Browser test resource files.
 media_router_integration_test_resources = [
   "resources/basic_test.html",

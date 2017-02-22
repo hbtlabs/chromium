@@ -4,7 +4,7 @@
 
 #include "platform/feature_policy/FeaturePolicy.h"
 
-#include "bindings/core/v8/ConditionalFeatures.h"
+#include "bindings/core/v8/ConditionalFeaturesForCore.h"
 #include "core/frame/LocalFrame.h"
 #include "core/testing/DummyPageHolder.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -54,7 +54,8 @@ class FeaturePolicyInFrameTest : public ::testing::Test {
   std::unique_ptr<FeaturePolicy> createFromParentPolicy(
       const FeaturePolicy* parent,
       RefPtr<SecurityOrigin> origin) {
-    return FeaturePolicy::createFromParentPolicy(parent, origin, m_featureList);
+    return FeaturePolicy::createFromParentPolicy(parent, nullptr, origin,
+                                                 m_featureList);
   }
 
   Document& document() { return m_dummyPageHolder->document(); }
@@ -77,7 +78,7 @@ class FeaturePolicyInFrameTest : public ::testing::Test {
 TEST_F(FeaturePolicyInFrameTest, TestFeatureDefaultsInTopLevelFrame) {
   std::unique_ptr<FeaturePolicy> policy1 =
       createFromParentPolicy(nullptr, m_originA);
-  document().setFeaturePolicy(std::move(policy1));
+  document().setFeaturePolicyForTesting(std::move(policy1));
   EXPECT_TRUE(isFeatureEnabledInFrame(kDefaultOnFeature, frame()));
   EXPECT_TRUE(isFeatureEnabledInFrame(kDefaultSelfFeature, frame()));
   EXPECT_FALSE(isFeatureEnabledInFrame(kDefaultOffFeature, frame()));
@@ -88,7 +89,7 @@ TEST_F(FeaturePolicyInFrameTest, TestFeatureDefaultsInCrossOriginFrame) {
       createFromParentPolicy(nullptr, m_originB);
   std::unique_ptr<FeaturePolicy> policy2 =
       createFromParentPolicy(policy1.get(), m_originA);
-  document().setFeaturePolicy(std::move(policy2));
+  document().setFeaturePolicyForTesting(std::move(policy2));
   EXPECT_TRUE(isFeatureEnabledInFrame(kDefaultOnFeature, frame()));
   EXPECT_FALSE(isFeatureEnabledInFrame(kDefaultSelfFeature, frame()));
   EXPECT_FALSE(isFeatureEnabledInFrame(kDefaultOffFeature, frame()));
@@ -98,10 +99,11 @@ TEST_F(FeaturePolicyInFrameTest, TestFeatureOverriddenInFrame) {
   Vector<String> messages;
   std::unique_ptr<FeaturePolicy> policy1 =
       createFromParentPolicy(nullptr, m_originA);
-  policy1->setHeaderPolicy("{\"default-off\": [\"self\"], \"default-on\": []}",
-                           messages);
+  policy1->setHeaderPolicy(FeaturePolicy::parseFeaturePolicy(
+      "{\"default-off\": [\"self\"], \"default-on\": []}", m_originA.get(),
+      &messages));
   EXPECT_EQ(0UL, messages.size());
-  document().setFeaturePolicy(std::move(policy1));
+  document().setFeaturePolicyForTesting(std::move(policy1));
   EXPECT_TRUE(isFeatureEnabledInFrame(kDefaultOffFeature, frame()));
   EXPECT_FALSE(isFeatureEnabledInFrame(kDefaultOnFeature, frame()));
 }
@@ -122,9 +124,10 @@ TEST_F(FeaturePolicyInFrameTest, TestPolicyInactiveWhenFPDisabled) {
   Vector<String> messages;
   std::unique_ptr<FeaturePolicy> policy1 =
       createFromParentPolicy(nullptr, m_originA);
-  policy1->setHeaderPolicy("{\"default-on\": []}", messages);
+  policy1->setHeaderPolicy(FeaturePolicy::parseFeaturePolicy(
+      "{\"default-on\": []}", m_originA.get(), &messages));
   EXPECT_EQ(0UL, messages.size());
-  document().setFeaturePolicy(std::move(policy1));
+  document().setFeaturePolicyForTesting(std::move(policy1));
   EXPECT_TRUE(isFeatureEnabledInFrame(kDefaultOnFeature, frame()));
 }
 

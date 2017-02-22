@@ -7,7 +7,6 @@
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/mac/bundle_locations.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
@@ -28,6 +27,7 @@
 #endif
 
 #if defined(OS_MACOSX)
+#include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
 #endif
 
@@ -146,18 +146,11 @@ bool PathProvider(int key, base::FilePath* result) {
 #else
       // Debug builds write next to the binary (in the build tree)
 #if defined(OS_MACOSX)
-      if (!PathService::Get(base::DIR_EXE, result))
-        return false;
+      // Apps may not write into their own bundle.
       if (base::mac::AmIBundled()) {
-        // If we're called from chrome, dump it beside the app (outside the
-        // app bundle), if we're called from a unittest, we'll already
-        // outside the bundle so use the exe dir.
-        // exe_dir gave us .../Chromium.app/Contents/MacOS/Chromium.
-        *result = result->DirName();
-        *result = result->DirName();
-        *result = result->DirName();
+        return PathService::Get(chrome::DIR_USER_DATA, result);
       }
-      return true;
+      return PathService::Get(base::DIR_EXE, result);
 #else
       return PathService::Get(base::DIR_EXE, result);
 #endif  // defined(OS_MACOSX)
@@ -407,12 +400,6 @@ bool PathProvider(int key, base::FilePath* result) {
         return false;
 #endif
       cur = cur.Append(FILE_PATH_LITERAL("resources.pak"));
-      break;
-    case chrome::DIR_RESOURCES_EXTENSION:
-      if (!PathService::Get(base::DIR_MODULE, &cur))
-        return false;
-      cur = cur.Append(FILE_PATH_LITERAL("resources"))
-               .Append(FILE_PATH_LITERAL("extension"));
       break;
 #if defined(OS_CHROMEOS)
     case chrome::DIR_CHROMEOS_WALLPAPERS:

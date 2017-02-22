@@ -12,7 +12,6 @@
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/output/copy_output_request.h"
-#include "cc/proto/gfx_conversions.h"
 #include "cc/trees/clip_node.h"
 #include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_host_common.h"
@@ -49,6 +48,7 @@ TransformTree::TransformTree()
       device_scale_factor_(1.f),
       device_transform_scale_factor_(1.f) {
   cached_data_.push_back(TransformCachedNodeData());
+  cached_data_[kRootNodeId].target_id = kRootNodeId;
 }
 
 TransformTree::~TransformTree() = default;
@@ -117,6 +117,7 @@ void TransformTree::clear() {
   nodes_affected_by_outer_viewport_bounds_delta_.clear();
   cached_data_.clear();
   cached_data_.push_back(TransformCachedNodeData());
+  cached_data_[kRootNodeId].target_id = kRootNodeId;
   sticky_position_data_.clear();
 
 #if DCHECK_IS_ON()
@@ -130,7 +131,7 @@ void TransformTree::clear() {
 
 void TransformTree::set_needs_update(bool needs_update) {
   if (needs_update && !needs_update_)
-    property_trees()->UpdateCachedNumber();
+    property_trees()->UpdateTransformTreeUpdateNumber();
   needs_update_ = needs_update;
 }
 
@@ -179,7 +180,8 @@ void TransformTree::OnTransformAnimated(const gfx::Transform& transform,
                                         int id,
                                         LayerTreeImpl* layer_tree_impl) {
   TransformNode* node = Node(id);
-  layer_tree_impl->AddToTransformAnimationsMap(node->owner_id, transform);
+  layer_tree_impl->AddToTransformAnimationsMap(node->owning_layer_id,
+                                               transform);
   if (node->local == transform) {
     return;
   }
@@ -197,7 +199,8 @@ bool TransformTree::NeedsSourceToParentUpdate(TransformNode* node) {
 }
 
 void TransformTree::ResetChangeTracking() {
-  for (int id = 1; id < static_cast<int>(size()); ++id) {
+  for (int id = TransformTree::kContentsRootNodeId;
+       id < static_cast<int>(size()); ++id) {
     TransformNode* node = Node(id);
     node->transform_changed = false;
   }
@@ -350,7 +353,7 @@ gfx::Vector2dF StickyPositionOffset(TransformTree* tree, TransformNode* node) {
       tree->property_trees()->scroll_tree.Node(sticky_data->scroll_ancestor);
   gfx::ScrollOffset scroll_offset =
       tree->property_trees()->scroll_tree.current_scroll_offset(
-          scroll_node->owner_id);
+          scroll_node->owning_layer_id);
   gfx::PointF scroll_position(scroll_offset.x(), scroll_offset.y());
   TransformNode* scroll_ancestor_transform_node =
       tree->Node(scroll_node->transform_id);
@@ -836,7 +839,7 @@ void EffectTree::OnOpacityAnimated(float opacity,
                                    int id,
                                    LayerTreeImpl* layer_tree_impl) {
   EffectNode* node = Node(id);
-  layer_tree_impl->AddToOpacityAnimationsMap(node->owner_id, opacity);
+  layer_tree_impl->AddToOpacityAnimationsMap(node->owning_layer_id, opacity);
   if (node->opacity == opacity)
     return;
   node->opacity = opacity;
@@ -850,7 +853,7 @@ void EffectTree::OnFilterAnimated(const FilterOperations& filters,
                                   int id,
                                   LayerTreeImpl* layer_tree_impl) {
   EffectNode* node = Node(id);
-  layer_tree_impl->AddToFilterAnimationsMap(node->owner_id, filters);
+  layer_tree_impl->AddToFilterAnimationsMap(node->owning_layer_id, filters);
   if (node->filters == filters)
     return;
   node->filters = filters;
@@ -922,7 +925,7 @@ void EffectTree::TakeCopyRequestsAndTransformToSurface(
     // the surface to the space of the surface itself.
     int destination_id = effect_node->transform_id;
     int source_id;
-    if (effect_node->parent_id != -1) {
+    if (effect_node->parent_id != EffectTree::kInvalidNodeId) {
       // For non-root surfaces, transform only by sub-layer scale.
       source_id = destination_id;
     } else {
@@ -955,9 +958,9 @@ void EffectTree::ClearCopyRequests() {
 }
 
 int EffectTree::ClosestAncestorWithCopyRequest(int id) const {
-  DCHECK_GE(id, 0);
+  DCHECK_GE(id, EffectTree::kRootNodeId);
   const EffectNode* node = Node(id);
-  while (node->id > 1) {
+  while (node->id > EffectTree::kContentsRootNodeId) {
     if (node->has_copy_request)
       return node->id;
 
@@ -967,7 +970,7 @@ int EffectTree::ClosestAncestorWithCopyRequest(int id) const {
   if (node->has_copy_request)
     return node->id;
   else
-    return -1;
+    return EffectTree::kInvalidNodeId;
 }
 
 void EffectTree::AddMaskLayerId(int id) {
@@ -984,9 +987,83 @@ bool EffectTree::ContributesToDrawnSurface(int id) {
 }
 
 void EffectTree::ResetChangeTracking() {
-  for (int id = 1; id < static_cast<int>(size()); ++id) {
+  for (int id = EffectTree::kContentsRootNodeId; id < static_cast<int>(size());
+       ++id) {
     EffectNode* node = Node(id);
     node->effect_changed = false;
+  }
+}
+
+EffectTree::StableIdRenderSurfaceList
+EffectTree::CreateStableIdRenderSurfaceList() const {
+  StableIdRenderSurfaceList stable_id_render_surface_list;
+  for (int id = kContentsRootNodeId; id < static_cast<int>(size()); ++id) {
+    const EffectNode* node = Node(id);
+    if (node->render_surface) {
+      stable_id_render_surface_list.push_back(
+          std::make_pair(node->owning_layer_id, node->render_surface));
+    }
+  }
+  std::sort(stable_id_render_surface_list.begin(),
+            stable_id_render_surface_list.end());
+  return stable_id_render_surface_list;
+}
+
+void EffectTree::UpdateRenderSurfaceEffectIds(
+    const EffectTree::StableIdRenderSurfaceList& stable_id_render_surface_list,
+    LayerTreeImpl* layer_tree_impl) {
+  // Make a list of {stable id, node id} pairs for nodes that are supposed to
+  // have surfaces.
+  std::vector<std::pair<int, int>> stable_id_node_id_list;
+  for (int id = kContentsRootNodeId; id < static_cast<int>(size()); ++id) {
+    const EffectNode* node = Node(id);
+    if (node->has_render_surface) {
+      stable_id_node_id_list.push_back(
+          std::make_pair(node->owning_layer_id, node->id));
+    }
+  }
+
+  // Sort by stable id so that we can process the two lists cosequentially.
+  std::sort(stable_id_node_id_list.begin(), stable_id_node_id_list.end());
+
+  auto surface_list_it = stable_id_render_surface_list.begin();
+  auto node_id_list_it = stable_id_node_id_list.begin();
+  while (surface_list_it != stable_id_render_surface_list.end() &&
+         node_id_list_it != stable_id_node_id_list.end()) {
+    if (surface_list_it->first == node_id_list_it->first) {
+      RenderSurfaceImpl* surface = surface_list_it->second;
+      int node_id = node_id_list_it->second;
+      Node(node_id)->render_surface = surface;
+      surface->set_effect_tree_index(node_id);
+      surface_list_it++;
+      node_id_list_it++;
+      continue;
+    }
+
+    if (surface_list_it->first > node_id_list_it->first) {
+      node_id_list_it++;
+      continue;
+    }
+
+    // If we reach here, there's no longer an effect node with stable id
+    // |surface_list_it->first| that has a render surface. If there's no longer
+    // any corresponding layer either, there's nothing more to do since the
+    // surface owned by that layer would have been destroyed when the layer was
+    // destroyed. But if the layer still exists, we need to destroy the surface
+    // since it now has an invalid effect node id.
+    if (LayerImpl* layer_impl =
+            layer_tree_impl->LayerById(surface_list_it->first)) {
+      layer_impl->SetHasRenderSurface(false);
+    }
+    surface_list_it++;
+  }
+
+  while (surface_list_it != stable_id_render_surface_list.end()) {
+    if (LayerImpl* layer_impl =
+            layer_tree_impl->LayerById(surface_list_it->first)) {
+      layer_impl->SetHasRenderSurface(false);
+    }
+    surface_list_it++;
   }
 }
 
@@ -1041,34 +1118,37 @@ ScrollTree::~ScrollTree() {}
 ScrollTree& ScrollTree::operator=(const ScrollTree& from) {
   PropertyTree::operator=(from);
   currently_scrolling_node_id_ = kInvalidNodeId;
-  // layer_id_to_scroll_offset_map_ is intentionally omitted in operator=,
-  // because we do not want to simply copy the map when property tree is
-  // propagating from pending to active.
-  // In the main to pending case, we do want to copy it, but this can be done by
-  // calling UpdateScrollOffsetMap after the assignment;
-  // In the other case, we want pending and active property trees to share the
-  // same map.
+  // Maps for ScrollOffsets/SyncedScrollOffsets are intentionally ommitted here
+  // since we can not directly copy them. Pushing of these updates from main
+  // currently depends on Layer properties for scroll offset animation changes
+  // (setting clobber_active_value for scroll offset animations interrupted on
+  // the main thread) being pushed to impl first.
   return *this;
 }
 
 bool ScrollTree::operator==(const ScrollTree& other) const {
-  const ScrollTree::ScrollOffsetMap& other_scroll_offset_map =
-      other.scroll_offset_map();
-  if (layer_id_to_scroll_offset_map_.size() != other_scroll_offset_map.size())
+  if (layer_id_to_scroll_offset_map_ != other.layer_id_to_scroll_offset_map_)
     return false;
-
-  for (auto map_entry : layer_id_to_scroll_offset_map_) {
-    int key = map_entry.first;
-    if (other_scroll_offset_map.find(key) == other_scroll_offset_map.end() ||
-        map_entry.second != layer_id_to_scroll_offset_map_.at(key))
-      return false;
-  }
+  if (layer_id_to_synced_scroll_offset_map_ !=
+      other.layer_id_to_synced_scroll_offset_map_)
+    return false;
 
   bool is_currently_scrolling_node_equal =
       currently_scrolling_node_id_ == other.currently_scrolling_node_id_;
 
   return PropertyTree::operator==(other) && is_currently_scrolling_node_equal;
 }
+
+#if DCHECK_IS_ON()
+void ScrollTree::CopyCompleteTreeState(const ScrollTree& other) {
+  currently_scrolling_node_id_ = other.currently_scrolling_node_id_;
+  layer_id_to_scrollbars_enabled_map_ =
+      other.layer_id_to_scrollbars_enabled_map_;
+  layer_id_to_scroll_offset_map_ = other.layer_id_to_scroll_offset_map_;
+  layer_id_to_synced_scroll_offset_map_ =
+      other.layer_id_to_synced_scroll_offset_map_;
+}
+#endif
 
 void ScrollTree::clear() {
   PropertyTree<ScrollNode>::clear();
@@ -1081,8 +1161,10 @@ void ScrollTree::clear() {
 #if DCHECK_IS_ON()
   ScrollTree tree;
   if (!property_trees()->is_main_thread) {
+    DCHECK(layer_id_to_scroll_offset_map_.empty());
     tree.currently_scrolling_node_id_ = currently_scrolling_node_id_;
-    tree.layer_id_to_scroll_offset_map_ = layer_id_to_scroll_offset_map_;
+    tree.layer_id_to_synced_scroll_offset_map_ =
+        layer_id_to_synced_scroll_offset_map_;
   }
   DCHECK(tree == *this);
 #endif
@@ -1123,7 +1205,6 @@ gfx::ScrollOffset ScrollTree::MaxScrollOffset(int scroll_node_id) const {
 }
 
 void ScrollTree::OnScrollOffsetAnimated(int layer_id,
-                                        int transform_tree_index,
                                         int scroll_tree_index,
                                         const gfx::ScrollOffset& scroll_offset,
                                         LayerTreeImpl* layer_tree_impl) {
@@ -1195,25 +1276,34 @@ gfx::Transform ScrollTree::ScreenSpaceTransform(int scroll_node_id) const {
   return screen_space_transform;
 }
 
-SyncedScrollOffset* ScrollTree::synced_scroll_offset(int layer_id) {
-  if (layer_id_to_scroll_offset_map_.find(layer_id) ==
-      layer_id_to_scroll_offset_map_.end()) {
-    layer_id_to_scroll_offset_map_[layer_id] = new SyncedScrollOffset;
+SyncedScrollOffset* ScrollTree::GetOrCreateSyncedScrollOffset(int layer_id) {
+  DCHECK(!property_trees()->is_main_thread);
+  if (layer_id_to_synced_scroll_offset_map_.find(layer_id) ==
+      layer_id_to_synced_scroll_offset_map_.end()) {
+    layer_id_to_synced_scroll_offset_map_[layer_id] = new SyncedScrollOffset;
   }
-  return layer_id_to_scroll_offset_map_[layer_id].get();
+  return layer_id_to_synced_scroll_offset_map_[layer_id].get();
 }
 
-const SyncedScrollOffset* ScrollTree::synced_scroll_offset(int layer_id) const {
-  if (layer_id_to_scroll_offset_map_.find(layer_id) ==
-      layer_id_to_scroll_offset_map_.end()) {
+const SyncedScrollOffset* ScrollTree::GetSyncedScrollOffset(
+    int layer_id) const {
+  DCHECK(!property_trees()->is_main_thread);
+  if (layer_id_to_synced_scroll_offset_map_.find(layer_id) ==
+      layer_id_to_synced_scroll_offset_map_.end()) {
     return nullptr;
   }
-  return layer_id_to_scroll_offset_map_.at(layer_id).get();
+  return layer_id_to_synced_scroll_offset_map_.at(layer_id).get();
 }
 
 const gfx::ScrollOffset ScrollTree::current_scroll_offset(int layer_id) const {
-  return synced_scroll_offset(layer_id)
-             ? synced_scroll_offset(layer_id)->Current(
+  if (property_trees()->is_main_thread) {
+    ScrollOffsetMap::const_iterator it =
+        layer_id_to_scroll_offset_map_.find(layer_id);
+    return it != layer_id_to_scroll_offset_map_.end() ? it->second
+                                                      : gfx::ScrollOffset();
+  }
+  return GetSyncedScrollOffset(layer_id)
+             ? GetSyncedScrollOffset(layer_id)->Current(
                    property_trees()->is_active)
              : gfx::ScrollOffset();
 }
@@ -1239,7 +1329,8 @@ gfx::ScrollOffset ScrollTree::PullDeltaForMainThread(
 
 void ScrollTree::CollectScrollDeltas(ScrollAndScaleSet* scroll_info,
                                      int inner_viewport_layer_id) {
-  for (auto map_entry : layer_id_to_scroll_offset_map_) {
+  DCHECK(!property_trees()->is_main_thread);
+  for (auto map_entry : layer_id_to_synced_scroll_offset_map_) {
     gfx::ScrollOffset scroll_delta =
         PullDeltaForMainThread(map_entry.second.get());
 
@@ -1262,88 +1353,97 @@ void ScrollTree::CollectScrollDeltas(ScrollAndScaleSet* scroll_info,
 }
 
 void ScrollTree::CollectScrollDeltasForTesting() {
-  for (auto map_entry : layer_id_to_scroll_offset_map_) {
+  for (auto map_entry : layer_id_to_synced_scroll_offset_map_) {
     PullDeltaForMainThread(map_entry.second.get());
   }
 }
 
-void ScrollTree::UpdateScrollOffsetMapEntry(
-    int key,
-    ScrollTree::ScrollOffsetMap* new_scroll_offset_map,
-    LayerTreeImpl* layer_tree_impl) {
-  bool changed = false;
-  // If we are pushing scroll offset from main to pending tree, we create a new
-  // instance of synced scroll offset; if we are pushing from pending to active,
-  // we reuse the pending tree's value in the map.
-  if (!property_trees()->is_active) {
-    changed = synced_scroll_offset(key)->PushFromMainThread(
-        new_scroll_offset_map->at(key)->PendingBase());
+void ScrollTree::PushScrollUpdatesFromMainThread(
+    PropertyTrees* main_property_trees,
+    LayerTreeImpl* sync_tree) {
+  DCHECK(!property_trees()->is_main_thread);
+  const ScrollOffsetMap& main_scroll_offset_map =
+      main_property_trees->scroll_tree.layer_id_to_scroll_offset_map_;
 
-    if (new_scroll_offset_map->at(key)->clobber_active_value()) {
-      synced_scroll_offset(key)->set_clobber_active_value();
-    }
-    if (changed) {
-      layer_tree_impl->DidUpdateScrollOffset(key);
-    }
-  } else {
-    layer_id_to_scroll_offset_map_[key] = new_scroll_offset_map->at(key);
-    changed |= synced_scroll_offset(key)->PushPendingToActive();
-    if (changed) {
-      layer_tree_impl->DidUpdateScrollOffset(key);
-    }
+  // We first want to clear SyncedProperty instances for layers which were
+  // destroyed or became non-scrollable on the main thread.
+  for (auto map_entry = layer_id_to_synced_scroll_offset_map_.begin();
+       map_entry != layer_id_to_synced_scroll_offset_map_.end();) {
+    int layer_id = map_entry->first;
+    if (main_scroll_offset_map.find(layer_id) == main_scroll_offset_map.end())
+      map_entry = layer_id_to_synced_scroll_offset_map_.erase(map_entry);
+    else
+      map_entry++;
+  }
+
+  for (auto map_entry : main_scroll_offset_map) {
+    int layer_id = map_entry.first;
+    SyncedScrollOffset* synced_scroll_offset =
+        GetOrCreateSyncedScrollOffset(layer_id);
+
+    bool changed = synced_scroll_offset->PushFromMainThread(map_entry.second);
+    // If we are committing directly to the active tree, push pending to active
+    // here.
+    if (property_trees()->is_active)
+      changed |= synced_scroll_offset->PushPendingToActive();
+
+    if (changed)
+      sync_tree->DidUpdateScrollOffset(layer_id);
   }
 }
 
-void ScrollTree::UpdateScrollOffsetMap(
-    ScrollTree::ScrollOffsetMap* new_scroll_offset_map,
-    LayerTreeImpl* layer_tree_impl) {
-  if (layer_tree_impl && !layer_tree_impl->LayerListIsEmpty()) {
-    DCHECK(!property_trees()->is_main_thread);
-    for (auto map_entry = layer_id_to_scroll_offset_map_.begin();
-         map_entry != layer_id_to_scroll_offset_map_.end();) {
-      int key = map_entry->first;
-      if (new_scroll_offset_map->find(key) != new_scroll_offset_map->end()) {
-        UpdateScrollOffsetMapEntry(key, new_scroll_offset_map, layer_tree_impl);
-        ++map_entry;
-      } else {
-        map_entry = layer_id_to_scroll_offset_map_.erase(map_entry);
-      }
-    }
+void ScrollTree::PushScrollUpdatesFromPendingTree(
+    PropertyTrees* pending_property_trees,
+    LayerTreeImpl* active_tree) {
+  DCHECK(property_trees()->is_active);
+  DCHECK(!pending_property_trees->is_main_thread);
+  DCHECK(!pending_property_trees->is_active);
 
-    for (auto& map_entry : *new_scroll_offset_map) {
-      int key = map_entry.first;
-      if (layer_id_to_scroll_offset_map_.find(key) ==
-          layer_id_to_scroll_offset_map_.end())
-        UpdateScrollOffsetMapEntry(key, new_scroll_offset_map, layer_tree_impl);
-    }
+  // When pushing to the active tree, we can simply copy over the map from the
+  // pending tree. The pending and active tree hold a reference to the same
+  // SyncedProperty instances.
+  layer_id_to_synced_scroll_offset_map_.clear();
+  for (auto map_entry : pending_property_trees->scroll_tree
+                            .layer_id_to_synced_scroll_offset_map_) {
+    layer_id_to_synced_scroll_offset_map_[map_entry.first] = map_entry.second;
+    if (map_entry.second->PushPendingToActive())
+      active_tree->DidUpdateScrollOffset(map_entry.first);
   }
-}
-
-ScrollTree::ScrollOffsetMap& ScrollTree::scroll_offset_map() {
-  return layer_id_to_scroll_offset_map_;
-}
-
-const ScrollTree::ScrollOffsetMap& ScrollTree::scroll_offset_map() const {
-  return layer_id_to_scroll_offset_map_;
 }
 
 void ScrollTree::ApplySentScrollDeltasFromAbortedCommit() {
   DCHECK(property_trees()->is_active);
-  for (auto& map_entry : layer_id_to_scroll_offset_map_)
+  for (auto& map_entry : layer_id_to_synced_scroll_offset_map_)
     map_entry.second->AbortCommit();
 }
 
 bool ScrollTree::SetBaseScrollOffset(int layer_id,
                                      const gfx::ScrollOffset& scroll_offset) {
-  return synced_scroll_offset(layer_id)->PushFromMainThread(scroll_offset);
+  if (property_trees()->is_main_thread) {
+    layer_id_to_scroll_offset_map_[layer_id] = scroll_offset;
+    return true;
+  }
+
+  // Scroll offset updates on the impl thread should only be for layers which
+  // were created on the main thread. But this method is called when we build
+  // PropertyTrees on the impl thread from LayerTreeImpl.
+  return GetOrCreateSyncedScrollOffset(layer_id)->PushFromMainThread(
+      scroll_offset);
 }
 
 bool ScrollTree::SetScrollOffset(int layer_id,
                                  const gfx::ScrollOffset& scroll_offset) {
-  if (property_trees()->is_main_thread)
-    return synced_scroll_offset(layer_id)->PushFromMainThread(scroll_offset);
-  else if (property_trees()->is_active)
-    return synced_scroll_offset(layer_id)->SetCurrent(scroll_offset);
+  if (property_trees()->is_main_thread) {
+    if (layer_id_to_scroll_offset_map_[layer_id] == scroll_offset)
+      return false;
+    layer_id_to_scroll_offset_map_[layer_id] = scroll_offset;
+    return true;
+  }
+
+  if (property_trees()->is_active) {
+    return GetOrCreateSyncedScrollOffset(layer_id)->SetCurrent(scroll_offset);
+  }
+
   return false;
 }
 
@@ -1351,25 +1451,28 @@ bool ScrollTree::UpdateScrollOffsetBaseForTesting(
     int layer_id,
     const gfx::ScrollOffset& offset) {
   DCHECK(!property_trees()->is_main_thread);
-  bool changed = synced_scroll_offset(layer_id)->PushFromMainThread(offset);
+  SyncedScrollOffset* synced_scroll_offset =
+      GetOrCreateSyncedScrollOffset(layer_id);
+  bool changed = synced_scroll_offset->PushFromMainThread(offset);
   if (property_trees()->is_active)
-    changed |= synced_scroll_offset(layer_id)->PushPendingToActive();
+    changed |= synced_scroll_offset->PushPendingToActive();
   return changed;
 }
 
 bool ScrollTree::SetScrollOffsetDeltaForTesting(int layer_id,
                                                 const gfx::Vector2dF& delta) {
-  return synced_scroll_offset(layer_id)->SetCurrent(
-      synced_scroll_offset(layer_id)->ActiveBase() + gfx::ScrollOffset(delta));
+  return GetOrCreateSyncedScrollOffset(layer_id)->SetCurrent(
+      GetOrCreateSyncedScrollOffset(layer_id)->ActiveBase() +
+      gfx::ScrollOffset(delta));
 }
 
 const gfx::ScrollOffset ScrollTree::GetScrollOffsetBaseForTesting(
     int layer_id) const {
   DCHECK(!property_trees()->is_main_thread);
-  if (synced_scroll_offset(layer_id))
+  if (GetSyncedScrollOffset(layer_id))
     return property_trees()->is_active
-               ? synced_scroll_offset(layer_id)->ActiveBase()
-               : synced_scroll_offset(layer_id)->PendingBase();
+               ? GetSyncedScrollOffset(layer_id)->ActiveBase()
+               : GetSyncedScrollOffset(layer_id)->PendingBase();
   else
     return gfx::ScrollOffset();
 }
@@ -1377,10 +1480,10 @@ const gfx::ScrollOffset ScrollTree::GetScrollOffsetBaseForTesting(
 const gfx::ScrollOffset ScrollTree::GetScrollOffsetDeltaForTesting(
     int layer_id) const {
   DCHECK(!property_trees()->is_main_thread);
-  if (synced_scroll_offset(layer_id))
+  if (GetSyncedScrollOffset(layer_id))
     return property_trees()->is_active
-               ? synced_scroll_offset(layer_id)->Delta()
-               : synced_scroll_offset(layer_id)->PendingDelta().get();
+               ? GetSyncedScrollOffset(layer_id)->Delta()
+               : GetSyncedScrollOffset(layer_id)->PendingDelta().get();
   else
     return gfx::ScrollOffset();
 }
@@ -1413,11 +1516,12 @@ gfx::Vector2dF ScrollTree::ScrollBy(ScrollNode* scroll_node,
   if (!scroll_node->user_scrollable_vertical)
     adjusted_scroll.set_y(0);
   DCHECK(scroll_node->scrollable);
-  gfx::ScrollOffset old_offset = current_scroll_offset(scroll_node->owner_id);
+  gfx::ScrollOffset old_offset =
+      current_scroll_offset(scroll_node->owning_layer_id);
   gfx::ScrollOffset new_offset =
       ClampScrollOffsetToLimits(old_offset + adjusted_scroll, scroll_node);
-  if (SetScrollOffset(scroll_node->owner_id, new_offset))
-    layer_tree_impl->DidUpdateScrollOffset(scroll_node->owner_id);
+  if (SetScrollOffset(scroll_node->owning_layer_id, new_offset))
+    layer_tree_impl->DidUpdateScrollOffset(scroll_node->owning_layer_id);
 
   gfx::ScrollOffset unscrolled =
       old_offset + gfx::ScrollOffset(scroll) - new_offset;
@@ -1433,7 +1537,7 @@ gfx::ScrollOffset ScrollTree::ClampScrollOffsetToLimits(
 }
 
 PropertyTreesCachedData::PropertyTreesCachedData()
-    : property_tree_update_number(0) {
+    : transform_tree_update_number(0) {
   animation_scales.clear();
 }
 
@@ -1459,10 +1563,17 @@ bool PropertyTrees::operator==(const PropertyTrees& other) const {
   return transform_tree == other.transform_tree &&
          effect_tree == other.effect_tree && clip_tree == other.clip_tree &&
          scroll_tree == other.scroll_tree &&
-         transform_id_to_index_map == other.transform_id_to_index_map &&
-         effect_id_to_index_map == other.effect_id_to_index_map &&
-         clip_id_to_index_map == other.clip_id_to_index_map &&
-         scroll_id_to_index_map == other.scroll_id_to_index_map &&
+         layer_id_to_transform_node_index ==
+             other.layer_id_to_transform_node_index &&
+         layer_id_to_effect_node_index == other.layer_id_to_effect_node_index &&
+         layer_id_to_clip_node_index == other.layer_id_to_clip_node_index &&
+         layer_id_to_scroll_node_index == other.layer_id_to_scroll_node_index &&
+         element_id_to_effect_node_index ==
+             other.element_id_to_effect_node_index &&
+         element_id_to_scroll_node_index ==
+             other.element_id_to_scroll_node_index &&
+         element_id_to_transform_node_index ==
+             other.element_id_to_transform_node_index &&
          always_use_active_tree_opacity_effect_ids ==
              other.always_use_active_tree_opacity_effect_ids &&
          needs_rebuild == other.needs_rebuild && changed == other.changed &&
@@ -1478,12 +1589,15 @@ PropertyTrees& PropertyTrees::operator=(const PropertyTrees& from) {
   effect_tree = from.effect_tree;
   clip_tree = from.clip_tree;
   scroll_tree = from.scroll_tree;
-  transform_id_to_index_map = from.transform_id_to_index_map;
-  effect_id_to_index_map = from.effect_id_to_index_map;
+  layer_id_to_transform_node_index = from.layer_id_to_transform_node_index;
+  layer_id_to_effect_node_index = from.layer_id_to_effect_node_index;
   always_use_active_tree_opacity_effect_ids =
       from.always_use_active_tree_opacity_effect_ids;
-  clip_id_to_index_map = from.clip_id_to_index_map;
-  scroll_id_to_index_map = from.scroll_id_to_index_map;
+  layer_id_to_clip_node_index = from.layer_id_to_clip_node_index;
+  layer_id_to_scroll_node_index = from.layer_id_to_scroll_node_index;
+  element_id_to_effect_node_index = from.element_id_to_effect_node_index;
+  element_id_to_scroll_node_index = from.element_id_to_scroll_node_index;
+  element_id_to_transform_node_index = from.element_id_to_transform_node_index;
   needs_rebuild = from.needs_rebuild;
   changed = from.changed;
   full_tree_damaged = from.full_tree_damaged;
@@ -1510,16 +1624,20 @@ void PropertyTrees::clear() {
   clip_tree.clear();
   effect_tree.clear();
   scroll_tree.clear();
-  transform_id_to_index_map.clear();
-  effect_id_to_index_map.clear();
-  clip_id_to_index_map.clear();
-  scroll_id_to_index_map.clear();
+  layer_id_to_transform_node_index.clear();
+  layer_id_to_effect_node_index.clear();
+  layer_id_to_clip_node_index.clear();
+  layer_id_to_scroll_node_index.clear();
+  element_id_to_effect_node_index.clear();
+  element_id_to_scroll_node_index.clear();
+  element_id_to_transform_node_index.clear();
   always_use_active_tree_opacity_effect_ids.clear();
 
   needs_rebuild = true;
   full_tree_damaged = false;
   changed = false;
   non_root_surfaces_enabled = true;
+  sequence_number++;
 
 #if DCHECK_IS_ON()
   PropertyTrees tree;
@@ -1527,12 +1645,7 @@ void PropertyTrees::clear() {
   tree.effect_tree = effect_tree;
   tree.clip_tree = clip_tree;
   tree.scroll_tree = scroll_tree;
-  // Scroll offset map and currently scrolling node id may not be copied
-  // during operator=.
-  ScrollTree::ScrollOffsetMap& map = tree.scroll_tree.scroll_offset_map();
-  map = scroll_tree.scroll_offset_map();
-  tree.scroll_tree.set_currently_scrolling_node(
-      scroll_tree.CurrentlyScrollingNodeId());
+  tree.scroll_tree.CopyCompleteTreeState(scroll_tree);
 
   tree.sequence_number = sequence_number;
   tree.is_main_thread = is_main_thread;
@@ -1566,12 +1679,13 @@ void PropertyTrees::SetInnerViewportScrollBoundsDelta(
 
 void PropertyTrees::PushOpacityIfNeeded(PropertyTrees* target_tree) {
   for (int id : target_tree->always_use_active_tree_opacity_effect_ids) {
-    if (effect_id_to_index_map.find(id) == effect_id_to_index_map.end())
+    if (layer_id_to_effect_node_index.find(id) ==
+        layer_id_to_effect_node_index.end())
       continue;
     EffectNode* source_effect_node =
-        effect_tree.Node(effect_id_to_index_map[id]);
-    EffectNode* target_effect_node =
-        target_tree->effect_tree.Node(target_tree->effect_id_to_index_map[id]);
+        effect_tree.Node(layer_id_to_effect_node_index[id]);
+    EffectNode* target_effect_node = target_tree->effect_tree.Node(
+        target_tree->layer_id_to_effect_node_index[id]);
     float source_opacity = source_effect_node->opacity;
     float target_opacity = target_effect_node->opacity;
     if (source_opacity == target_opacity)
@@ -1582,38 +1696,40 @@ void PropertyTrees::PushOpacityIfNeeded(PropertyTrees* target_tree) {
 }
 
 void PropertyTrees::RemoveIdFromIdToIndexMaps(int id) {
-  transform_id_to_index_map.erase(id);
-  effect_id_to_index_map.erase(id);
-  clip_id_to_index_map.erase(id);
-  scroll_id_to_index_map.erase(id);
+  layer_id_to_transform_node_index.erase(id);
+  layer_id_to_effect_node_index.erase(id);
+  layer_id_to_clip_node_index.erase(id);
+  layer_id_to_scroll_node_index.erase(id);
 }
 
 bool PropertyTrees::IsInIdToIndexMap(TreeType tree_type, int id) {
   std::unordered_map<int, int>* id_to_index_map = nullptr;
   switch (tree_type) {
     case TRANSFORM:
-      id_to_index_map = &transform_id_to_index_map;
+      id_to_index_map = &layer_id_to_transform_node_index;
       break;
     case EFFECT:
-      id_to_index_map = &effect_id_to_index_map;
+      id_to_index_map = &layer_id_to_effect_node_index;
       break;
     case CLIP:
-      id_to_index_map = &clip_id_to_index_map;
+      id_to_index_map = &layer_id_to_clip_node_index;
       break;
     case SCROLL:
-      id_to_index_map = &scroll_id_to_index_map;
+      id_to_index_map = &layer_id_to_scroll_node_index;
       break;
   }
   return id_to_index_map->find(id) != id_to_index_map->end();
 }
 
 void PropertyTrees::UpdateChangeTracking() {
-  for (int id = 1; id < static_cast<int>(effect_tree.size()); ++id) {
+  for (int id = EffectTree::kContentsRootNodeId;
+       id < static_cast<int>(effect_tree.size()); ++id) {
     EffectNode* node = effect_tree.Node(id);
     EffectNode* parent_node = effect_tree.parent(node);
     effect_tree.UpdateEffectChanged(node, parent_node);
   }
-  for (int i = 1; i < static_cast<int>(transform_tree.size()); ++i) {
+  for (int i = TransformTree::kContentsRootNodeId;
+       i < static_cast<int>(transform_tree.size()); ++i) {
     TransformNode* node = transform_tree.Node(i);
     TransformNode* parent_node = transform_tree.parent(node);
     TransformNode* source_node = transform_tree.Node(node->source_node_id);
@@ -1622,14 +1738,16 @@ void PropertyTrees::UpdateChangeTracking() {
 }
 
 void PropertyTrees::PushChangeTrackingTo(PropertyTrees* tree) {
-  for (int id = 1; id < static_cast<int>(effect_tree.size()); ++id) {
+  for (int id = EffectTree::kContentsRootNodeId;
+       id < static_cast<int>(effect_tree.size()); ++id) {
     EffectNode* node = effect_tree.Node(id);
     if (node->effect_changed) {
       EffectNode* target_node = tree->effect_tree.Node(node->id);
       target_node->effect_changed = true;
     }
   }
-  for (int id = 1; id < static_cast<int>(transform_tree.size()); ++id) {
+  for (int id = TransformTree::kContentsRootNodeId;
+       id < static_cast<int>(transform_tree.size()); ++id) {
     TransformNode* node = transform_tree.Node(id);
     if (node->transform_changed) {
       TransformNode* target_node = tree->transform_tree.Node(node->id);
@@ -1678,11 +1796,11 @@ CombinedAnimationScale PropertyTrees::GetAnimationScales(
     int transform_node_id,
     LayerTreeImpl* layer_tree_impl) {
   if (cached_data_.animation_scales[transform_node_id].update_number !=
-      cached_data_.property_tree_update_number) {
+      cached_data_.transform_tree_update_number) {
     if (!layer_tree_impl->settings()
              .layer_transforms_should_scale_layer_contents) {
       cached_data_.animation_scales[transform_node_id].update_number =
-          cached_data_.property_tree_update_number;
+          cached_data_.transform_tree_update_number;
       cached_data_.animation_scales[transform_node_id]
           .combined_maximum_animation_target_scale = 0.f;
       cached_data_.animation_scales[transform_node_id]
@@ -1764,7 +1882,7 @@ CombinedAnimationScale PropertyTrees::GetAnimationScales(
     } else {
       // TODO(sunxd): make LayerTreeImpl::MaximumTargetScale take layer id as
       // parameter.
-      LayerImpl* layer_impl = layer_tree_impl->LayerById(node->owner_id);
+      LayerImpl* layer_impl = layer_tree_impl->LayerById(node->owning_layer_id);
       layer_impl->GetMutatorHost()->MaximumTargetScale(
           layer_impl->element_id(), layer_impl->GetElementTypeForAnimation(),
           &cached_data_.animation_scales[transform_node_id]
@@ -1808,7 +1926,7 @@ CombinedAnimationScale PropertyTrees::GetAnimationScales(
       }
     }
     cached_data_.animation_scales[transform_node_id].update_number =
-        cached_data_.property_tree_update_number;
+        cached_data_.transform_tree_update_number;
   }
   return CombinedAnimationScale(cached_data_.animation_scales[transform_node_id]
                                     .combined_maximum_animation_target_scale,
@@ -1825,7 +1943,7 @@ void PropertyTrees::SetAnimationScalesForTesting(
   cached_data_.animation_scales[transform_id]
       .combined_starting_animation_scale = starting_animation_scale;
   cached_data_.animation_scales[transform_id].update_number =
-      cached_data_.property_tree_update_number;
+      cached_data_.transform_tree_update_number;
 }
 
 bool PropertyTrees::GetToTarget(int transform_id,
@@ -1869,9 +1987,10 @@ DrawTransformData& PropertyTrees::FetchDrawTransformsDataFromCache(
     int dest_id) const {
   for (auto& transform_data : cached_data_.draw_transforms[transform_id]) {
     // We initialize draw_transforms with 1 element vectors when
-    // ResetCachedData, so if we hit a -1 target id, it means it's the first
-    // time we compute draw transforms after reset.
-    if (transform_data.target_id == dest_id || transform_data.target_id == -1) {
+    // ResetCachedData, so if we hit an invalid target id, it means it's the
+    // first time we compute draw transforms after reset.
+    if (transform_data.target_id == dest_id ||
+        transform_data.target_id == EffectTree::kInvalidNodeId) {
       return transform_data;
     }
   }
@@ -1891,9 +2010,9 @@ DrawTransforms& PropertyTrees::GetDrawTransforms(int transform_id,
   DrawTransformData& data =
       FetchDrawTransformsDataFromCache(transform_id, dest_id);
 
-  DCHECK(data.update_number != cached_data_.property_tree_update_number ||
-         data.target_id != -1);
-  if (data.update_number == cached_data_.property_tree_update_number)
+  DCHECK(data.update_number != cached_data_.transform_tree_update_number ||
+         data.target_id != EffectTree::kInvalidNodeId);
+  if (data.update_number == cached_data_.transform_tree_update_number)
     return data.transforms;
 
   // Cache miss.
@@ -1932,7 +2051,7 @@ DrawTransforms& PropertyTrees::GetDrawTransforms(int transform_id,
 
   if (!already_computed_inverse)
     data.transforms.to_valid = true;
-  data.update_number = cached_data_.property_tree_update_number;
+  data.update_number = cached_data_.transform_tree_update_number;
   data.target_id = dest_id;
   data.transforms.from_target = from_target;
   data.transforms.to_target = target_space_transform;
@@ -1940,22 +2059,21 @@ DrawTransforms& PropertyTrees::GetDrawTransforms(int transform_id,
 }
 
 void PropertyTrees::ResetCachedData() {
-  cached_data_.property_tree_update_number = 0;
+  cached_data_.transform_tree_update_number = 0;
   cached_data_.animation_scales = std::vector<AnimationScaleData>(
       transform_tree.nodes().size(), AnimationScaleData());
   cached_data_.draw_transforms = std::vector<std::vector<DrawTransformData>>(
       transform_tree.nodes().size(), std::vector<DrawTransformData>(1));
 }
 
-void PropertyTrees::UpdateCachedNumber() {
-  cached_data_.property_tree_update_number++;
+void PropertyTrees::UpdateTransformTreeUpdateNumber() {
+  cached_data_.transform_tree_update_number++;
 }
 
 gfx::Transform PropertyTrees::ToScreenSpaceTransformWithoutSurfaceContentsScale(
     int transform_id,
     int effect_id) const {
-  DCHECK_GT(transform_id, 0);
-  if (transform_id == 1) {
+  if (transform_id == TransformTree::kRootNodeId) {
     return gfx::Transform();
   }
   gfx::Transform screen_space_transform = transform_tree.ToScreen(transform_id);

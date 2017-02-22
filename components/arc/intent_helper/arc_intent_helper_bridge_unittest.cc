@@ -6,14 +6,47 @@
 
 #include <utility>
 
+#include "base/memory/ptr_util.h"
+#include "components/arc/arc_bridge_service.h"
 #include "components/arc/common/intent_helper.mojom.h"
+#include "components/arc/intent_helper/local_activity_resolver.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace arc {
 
+namespace {
+
+class ArcIntentHelperTest : public testing::Test {
+ public:
+  ArcIntentHelperTest() = default;
+
+ protected:
+  std::unique_ptr<ArcBridgeService> arc_bridge_service_;
+  scoped_refptr<LocalActivityResolver> activity_resolver_;
+  std::unique_ptr<ArcIntentHelperBridge> instance_;
+
+ private:
+  void SetUp() override {
+    arc_bridge_service_ = base::MakeUnique<ArcBridgeService>();
+    activity_resolver_ = new LocalActivityResolver();
+    instance_ = base::MakeUnique<ArcIntentHelperBridge>(
+        arc_bridge_service_.get(), activity_resolver_);
+  }
+
+  void TearDown() override {
+    instance_.reset();
+    activity_resolver_ = nullptr;
+    arc_bridge_service_.reset();
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(ArcIntentHelperTest);
+};
+
+}  // namespace
+
 // Tests if IsIntentHelperPackage works as expected. Probably too trivial
 // to test but just in case.
-TEST(ArcIntentHelperTest, TestIsIntentHelperPackage) {
+TEST_F(ArcIntentHelperTest, TestIsIntentHelperPackage) {
   EXPECT_FALSE(ArcIntentHelperBridge::IsIntentHelperPackage(""));
   EXPECT_FALSE(ArcIntentHelperBridge::IsIntentHelperPackage(
       ArcIntentHelperBridge::kArcIntentHelperPackageName + std::string("a")));
@@ -25,7 +58,7 @@ TEST(ArcIntentHelperTest, TestIsIntentHelperPackage) {
 }
 
 // Tests if FilterOutIntentHelper removes handlers as expected.
-TEST(ArcIntentHelperTest, TestFilterOutIntentHelper) {
+TEST_F(ArcIntentHelperTest, TestFilterOutIntentHelper) {
   {
     std::vector<mojom::IntentHandlerInfoPtr> orig;
     std::vector<mojom::IntentHandlerInfoPtr> filtered =
@@ -99,6 +132,33 @@ TEST(ArcIntentHelperTest, TestFilterOutIntentHelper) {
         ArcIntentHelperBridge::FilterOutIntentHelper(std::move(orig));
     EXPECT_EQ(0U, filtered.size());
   }
+}
+
+// Tests if observer works as expected.
+TEST_F(ArcIntentHelperTest, TestObserver) {
+  class FakeObserver : public ArcIntentHelperObserver {
+   public:
+    FakeObserver() = default;
+    void OnIntentFiltersUpdated() override { updated_ = true; }
+    bool IsUpdated() { return updated_; }
+    void Reset() { updated_ = false; }
+
+   private:
+    bool updated_ = false;
+  };
+
+  // Observer should be called when intent filter is updated.
+  auto observer = base::MakeUnique<FakeObserver>();
+  instance_->AddObserver(observer.get());
+  EXPECT_FALSE(observer->IsUpdated());
+  instance_->OnIntentFiltersUpdated(std::vector<IntentFilter>());
+  EXPECT_TRUE(observer->IsUpdated());
+
+  // Observer should not be called after it's removed.
+  observer->Reset();
+  instance_->RemoveObserver(observer.get());
+  instance_->OnIntentFiltersUpdated(std::vector<IntentFilter>());
+  EXPECT_FALSE(observer->IsUpdated());
 }
 
 }  // namespace arc

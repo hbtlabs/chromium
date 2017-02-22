@@ -20,21 +20,25 @@ class CONTENT_EXPORT OffscreenCanvasSurfaceManager
 
   static OffscreenCanvasSurfaceManager* GetInstance();
 
-  void RegisterOffscreenCanvasSurfaceInstance(cc::FrameSinkId,
-                                              OffscreenCanvasSurfaceImpl*);
-  void UnregisterOffscreenCanvasSurfaceInstance(cc::FrameSinkId);
-  OffscreenCanvasSurfaceImpl* GetSurfaceInstance(cc::FrameSinkId);
+  // Registration of the frame sink with the given frame sink id to its parent
+  // frame sink (if it has one), so that parent frame is able to send signals
+  // to it on begin frame.
+  void RegisterFrameSinkToParent(const cc::FrameSinkId& frame_sink_id);
+  void UnregisterFrameSinkFromParent(const cc::FrameSinkId& frame_sink_id);
+
+  void RegisterOffscreenCanvasSurfaceInstance(
+      const cc::FrameSinkId& frame_sink_id,
+      OffscreenCanvasSurfaceImpl* offscreen_canvas_surface);
+  void UnregisterOffscreenCanvasSurfaceInstance(
+      const cc::FrameSinkId& frame_sink_id);
+  OffscreenCanvasSurfaceImpl* GetSurfaceInstance(
+      const cc::FrameSinkId& frame_sink_id);
 
  private:
   friend class OffscreenCanvasSurfaceManagerTest;
 
   // cc::SurfaceObserver implementation.
-  // TODO(crbug.com/662498): Implement these functions when
-  // OffscreenCanvasSurfaceManager must propagate the resizing information
-  // back to renderer/main.
-  void OnSurfaceCreated(const cc::SurfaceId& surface_id,
-                        const gfx::Size& frame_size,
-                        float device_scale_factor) override {}
+  void OnSurfaceCreated(const cc::SurfaceInfo& surface_info) override;
   void OnSurfaceDamaged(const cc::SurfaceId&, bool* changed) override {}
 
   // When an OffscreenCanvasSurfaceImpl instance is destructed, it will

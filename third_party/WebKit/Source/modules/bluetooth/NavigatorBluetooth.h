@@ -5,6 +5,7 @@
 #ifndef NavigatorBluetooth_h
 #define NavigatorBluetooth_h
 
+#include "core/frame/Navigator.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
 
@@ -28,7 +29,7 @@ class NavigatorBluetooth final : public GarbageCollected<NavigatorBluetooth>,
   DECLARE_TRACE();
 
  private:
-  NavigatorBluetooth();
+  explicit NavigatorBluetooth(Navigator&);
   static const char* supplementName();
 
   Member<Bluetooth> m_bluetooth;

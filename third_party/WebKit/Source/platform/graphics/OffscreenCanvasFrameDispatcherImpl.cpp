@@ -28,31 +28,36 @@
 namespace blink {
 
 OffscreenCanvasFrameDispatcherImpl::OffscreenCanvasFrameDispatcherImpl(
+    OffscreenCanvasFrameDispatcherClient* client,
     uint32_t clientId,
     uint32_t sinkId,
-    uint32_t localId,
-    uint64_t nonceHigh,
-    uint64_t nonceLow,
     int canvasId,
     int width,
     int height)
-    : m_surfaceId(
-          cc::FrameSinkId(clientId, sinkId),
-          cc::LocalFrameId(
-              localId,
-              base::UnguessableToken::Deserialize(nonceHigh, nonceLow))),
+    : OffscreenCanvasFrameDispatcher(client),
+      m_frameSinkId(cc::FrameSinkId(clientId, sinkId)),
       m_width(width),
       m_height(height),
+      m_changeSizeForNextCommit(false),
+      m_needsBeginFrame(false),
       m_nextResourceId(1u),
       m_binding(this),
       m_placeholderCanvasId(canvasId) {
-  DCHECK(!m_sink.is_bound());
-  mojom::blink::OffscreenCanvasCompositorFrameSinkProviderPtr provider;
-  Platform::current()->interfaceProvider()->getInterface(
-      mojo::GetProxy(&provider));
-  provider->CreateCompositorFrameSink(m_surfaceId,
-                                      m_binding.CreateInterfacePtrAndBind(),
-                                      mojo::GetProxy(&m_sink));
+  if (m_frameSinkId.is_valid()) {
+    // Only frameless canvas pass an invalid frame sink id; we don't create
+    // mojo channel for this special case.
+    m_currentLocalSurfaceId = m_surfaceIdAllocator.GenerateId();
+    DCHECK(!m_sink.is_bound());
+    mojom::blink::OffscreenCanvasCompositorFrameSinkProviderPtr provider;
+    Platform::current()->interfaceProvider()->getInterface(
+        mojo::MakeRequest(&provider));
+    provider->CreateCompositorFrameSink(m_frameSinkId,
+                                        m_binding.CreateInterfacePtrAndBind(),
+                                        mojo::MakeRequest(&m_sink));
+  }
+}
+
+OffscreenCanvasFrameDispatcherImpl::~OffscreenCanvasFrameDispatcherImpl() {
 }
 
 void OffscreenCanvasFrameDispatcherImpl::setTransferableResourceToSharedBitmap(
@@ -70,15 +75,17 @@ void OffscreenCanvasFrameDispatcherImpl::setTransferableResourceToSharedBitmap(
   // TODO(xlai): Optimize to avoid copying pixels. See crbug.com/651456.
   // However, in the case when |image| is texture backed, this function call
   // does a GPU readback which is required.
-  image->imageForCurrentFrame()->readPixels(imageInfo, pixels,
-                                            imageInfo.minRowBytes(), 0, 0);
+  // TODO(ccameron): Canvas should produce sRGB images.
+  // https://crbug.com/672299
+  image->imageForCurrentFrame(ColorBehavior::transformToGlobalTarget())
+      ->readPixels(imageInfo, pixels, imageInfo.minRowBytes(), 0, 0);
   resource.mailbox_holder.mailbox = bitmap->id();
   resource.mailbox_holder.texture_target = 0;
   resource.is_software = true;
 
   // Hold ref to |bitmap|, to keep it alive until the browser ReclaimResources.
   // It guarantees that the shared bitmap is not re-used or deleted.
-  m_sharedBitmaps.add(m_nextResourceId, std::move(bitmap));
+  m_sharedBitmaps.insert(m_nextResourceId, std::move(bitmap));
 }
 
 void OffscreenCanvasFrameDispatcherImpl::
@@ -105,8 +112,10 @@ void OffscreenCanvasFrameDispatcherImpl::
     return;
   RefPtr<Uint8Array> dstPixels =
       Uint8Array::create(dstBuffer, 0, dstBuffer->byteLength());
-  image->imageForCurrentFrame()->readPixels(info, dstPixels->data(),
-                                            info.minRowBytes(), 0, 0);
+  // TODO(ccameron): Canvas should produce sRGB images.
+  // https://crbug.com/672299
+  image->imageForCurrentFrame(ColorBehavior::transformToGlobalTarget())
+      ->readPixels(info, dstPixels->data(), info.minRowBytes(), 0, 0);
 
   GLuint textureId = 0u;
   gl->GenTextures(1, &textureId);
@@ -137,7 +146,7 @@ void OffscreenCanvasFrameDispatcherImpl::
 
   // Hold ref to |textureId| for the piece of GPU memory where the pixel data
   // is uploaded to, to keep it alive until the browser ReclaimResources.
-  m_cachedTextureIds.add(m_nextResourceId, textureId);
+  m_cachedTextureIds.insert(m_nextResourceId, textureId);
 }
 
 void OffscreenCanvasFrameDispatcherImpl::
@@ -152,15 +161,15 @@ void OffscreenCanvasFrameDispatcherImpl::
 
   // Hold ref to |image|, to keep it alive until the browser ReclaimResources.
   // It guarantees that the resource is not re-used or deleted.
-  m_cachedImages.add(m_nextResourceId, std::move(image));
+  m_cachedImages.insert(m_nextResourceId, std::move(image));
 }
 
 namespace {
 
 void updatePlaceholderImage(WeakPtr<OffscreenCanvasFrameDispatcher> dispatcher,
-                            std::unique_ptr<WebTaskRunner> taskRunner,
+                            RefPtr<WebTaskRunner> taskRunner,
                             int placeholderCanvasId,
-                            RefPtr<blink::Image> image,
+                            RefPtr<blink::StaticBitmapImage> image,
                             unsigned resourceId) {
   DCHECK(isMainThread());
   OffscreenCanvasPlaceholder* placeholderCanvas =
@@ -174,34 +183,51 @@ void updatePlaceholderImage(WeakPtr<OffscreenCanvasFrameDispatcher> dispatcher,
 
 }  // namespace
 
+void OffscreenCanvasFrameDispatcherImpl::postImageToPlaceholder(
+    RefPtr<StaticBitmapImage> image) {
+  // After this point, |image| can only be used on the main thread, until
+  // it is returned.
+  image->transfer();
+  RefPtr<WebTaskRunner> dispatcherTaskRunner =
+      Platform::current()->currentThread()->getWebTaskRunner();
+
+  Platform::current()->mainThread()->getWebTaskRunner()->postTask(
+      BLINK_FROM_HERE,
+      crossThreadBind(updatePlaceholderImage, this->createWeakPtr(),
+                      WTF::passed(std::move(dispatcherTaskRunner)),
+                      m_placeholderCanvasId, std::move(image),
+                      m_nextResourceId));
+  m_spareResourceLocks.insert(m_nextResourceId);
+}
+
 void OffscreenCanvasFrameDispatcherImpl::dispatchFrame(
     RefPtr<StaticBitmapImage> image,
     double commitStartTime,
     bool isWebGLSoftwareRendering /* This flag is true when WebGL's commit is
     called on SwiftShader. */) {
-  if (!image)
+  if (!image || !verifyImageSize(image->size()))
     return;
-  if (!verifyImageSize(image->size()))
+  if (!m_frameSinkId.is_valid()) {
+    postImageToPlaceholder(std::move(image));
     return;
+  }
   cc::CompositorFrame frame;
   // TODO(crbug.com/652931): update the device_scale_factor
   frame.metadata.device_scale_factor = 1.0f;
 
   const gfx::Rect bounds(m_width, m_height);
-  const cc::RenderPassId renderPassId(1, 1);
+  const int renderPassId = 1;
   std::unique_ptr<cc::RenderPass> pass = cc::RenderPass::Create();
-  pass->SetAll(renderPassId, bounds, bounds, gfx::Transform(), false);
+  pass->SetNew(renderPassId, bounds, bounds, gfx::Transform());
+  pass->has_transparent_background = false;
 
   cc::SharedQuadState* sqs = pass->CreateAndAppendSharedQuadState();
   sqs->SetAll(gfx::Transform(), bounds.size(), bounds, bounds, false, 1.f,
-              SkXfermode::kSrcOver_Mode, 0);
+              SkBlendMode::kSrcOver, 0);
 
   cc::TransferableResource resource;
   resource.id = m_nextResourceId;
   resource.format = cc::ResourceFormat::RGBA_8888;
-  // TODO(crbug.com/645590): filter should respect the image-rendering CSS
-  // property of associated canvas element.
-  resource.filter = GL_LINEAR;
   resource.size = gfx::Size(m_width, m_height);
   // TODO(crbug.com/646022): making this overlay-able.
   resource.is_overlay_candidate = false;
@@ -240,19 +266,7 @@ void OffscreenCanvasFrameDispatcherImpl::dispatchFrame(
     }
   }
 
-  // After this point, |image| can only be used on the main thread, until
-  // it is returned.
-  image->transfer();
-  std::unique_ptr<WebTaskRunner> dispatcherTaskRunner =
-      Platform::current()->currentThread()->getWebTaskRunner()->clone();
-
-  Platform::current()->mainThread()->getWebTaskRunner()->postTask(
-      BLINK_FROM_HERE,
-      crossThreadBind(updatePlaceholderImage, this->createWeakPtr(),
-                      passed(std::move(dispatcherTaskRunner)),
-                      m_placeholderCanvasId, std::move(image), resource.id));
-  m_spareResourceLocks.add(m_nextResourceId);
-
+  postImageToPlaceholder(std::move(image));
   commitTypeHistogram.count(commitType);
 
   m_nextResourceId++;
@@ -271,6 +285,8 @@ void OffscreenCanvasFrameDispatcherImpl::dispatchFrame(
   float vertexOpacity[4] = {1.f, 1.f, 1.f, 1.f};
   // TODO(crbug.com/645994): this should be true when using style
   // "image-rendering: pixelated".
+  // TODO(crbug.com/645590): filter should respect the image-rendering CSS
+  // property of associated canvas element.
   const bool nearestNeighbor = false;
   quad->SetAll(sqs, bounds, bounds, bounds, needsBlending, resource.id,
                gfx::Size(), premultipliedAlpha, uvTopLeft, uvBottomRight,
@@ -358,15 +374,31 @@ void OffscreenCanvasFrameDispatcherImpl::dispatchFrame(
       NOTREACHED();
   }
 
-  m_sink->SubmitCompositorFrame(std::move(frame));
+  if (m_changeSizeForNextCommit) {
+    m_currentLocalSurfaceId = m_surfaceIdAllocator.GenerateId();
+    m_changeSizeForNextCommit = false;
+  }
+
+  m_sink->SubmitCompositorFrame(m_currentLocalSurfaceId, std::move(frame));
 }
 
 void OffscreenCanvasFrameDispatcherImpl::DidReceiveCompositorFrameAck() {
   // TODO(fsamuel): Implement this.
 }
 
+void OffscreenCanvasFrameDispatcherImpl::setNeedsBeginFrame(
+    bool needsBeginFrame) {
+  if (m_sink && needsBeginFrame != m_needsBeginFrame) {
+    m_needsBeginFrame = needsBeginFrame;
+    m_sink->SetNeedsBeginFrame(needsBeginFrame);
+  }
+}
+
 void OffscreenCanvasFrameDispatcherImpl::OnBeginFrame(
-    const cc::BeginFrameArgs& beginFrameArgs) {}
+    const cc::BeginFrameArgs& beginFrameArgs) {
+  DCHECK(client());
+  client()->beginFrame();
+}
 
 void OffscreenCanvasFrameDispatcherImpl::ReclaimResources(
     const cc::ReturnedResourceArray& resources) {
@@ -378,6 +410,12 @@ void OffscreenCanvasFrameDispatcherImpl::ReclaimResources(
   }
 }
 
+void OffscreenCanvasFrameDispatcherImpl::WillDrawSurface(
+    const cc::LocalSurfaceId& localSurfaceId,
+    ::gfx::mojom::blink::RectPtr damageRect) {
+  // TODO(fsamuel, staraz): Implement this.
+}
+
 void OffscreenCanvasFrameDispatcherImpl::reclaimResource(unsigned resourceId) {
   // An image resource needs to be returned by both the
   // CompositorFrameSink and the HTMLCanvasElement. These
@@ -386,12 +424,12 @@ void OffscreenCanvasFrameDispatcherImpl::reclaimResource(unsigned resourceId) {
   // resource lock being lifted, and the second will delete
   // the resource for real.
   if (m_spareResourceLocks.contains(resourceId)) {
-    m_spareResourceLocks.remove(resourceId);
+    m_spareResourceLocks.erase(resourceId);
     return;
   }
-  m_cachedImages.remove(resourceId);
-  m_sharedBitmaps.remove(resourceId);
-  m_cachedTextureIds.remove(resourceId);
+  m_cachedImages.erase(resourceId);
+  m_sharedBitmaps.erase(resourceId);
+  m_cachedTextureIds.erase(resourceId);
 }
 
 bool OffscreenCanvasFrameDispatcherImpl::verifyImageSize(
@@ -399,6 +437,14 @@ bool OffscreenCanvasFrameDispatcherImpl::verifyImageSize(
   if (imageSize.width() == m_width && imageSize.height() == m_height)
     return true;
   return false;
+}
+
+void OffscreenCanvasFrameDispatcherImpl::reshape(int width, int height) {
+  if (m_width != width || m_height != height) {
+    m_width = width;
+    m_height = height;
+    m_changeSizeForNextCommit = true;
+  }
 }
 
 }  // namespace blink

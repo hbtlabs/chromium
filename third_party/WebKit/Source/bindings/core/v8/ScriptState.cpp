@@ -25,7 +25,8 @@ static void derefCallback(const v8::WeakCallbackInfo<ScriptState>& data) {
   data.GetParameter()->deref();
 }
 
-static void weakCallback(const v8::WeakCallbackInfo<ScriptState>& data) {
+static void contextCollectedCallback(
+    const v8::WeakCallbackInfo<ScriptState>& data) {
   data.GetParameter()->clearContext();
   data.SetSecondPassCallback(derefCallback);
 }
@@ -36,13 +37,9 @@ ScriptState::ScriptState(v8::Local<v8::Context> context,
       m_context(m_isolate, context),
       m_world(world),
       m_perContextData(V8PerContextData::create(context))
-#if ENABLE(ASSERT)
-      ,
-      m_globalObjectDetached(false)
-#endif
 {
   DCHECK(m_world);
-  m_context.setWeak(this, &weakCallback);
+  m_context.setWeak(this, &contextCollectedCallback);
   context->SetAlignedPointerInEmbedderData(v8ContextPerContextDataIndex, this);
 }
 
@@ -54,7 +51,7 @@ ScriptState::~ScriptState() {
 void ScriptState::detachGlobalObject() {
   ASSERT(!m_context.isEmpty());
   context()->DetachGlobal();
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   m_globalObjectDetached = true;
 #endif
 }

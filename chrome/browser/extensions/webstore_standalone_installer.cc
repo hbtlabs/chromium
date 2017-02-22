@@ -69,6 +69,11 @@ void WebstoreStandaloneInstaller::BeginInstall() {
       profile_->GetRequestContext(),
       GetRequestorURL(),
       id_));
+
+  std::string json_post_data = GetJsonPostData();
+  if (!json_post_data.empty())
+    webstore_data_fetcher_->SetJsonPostData(json_post_data);
+
   webstore_data_fetcher_->Start();
 }
 
@@ -157,6 +162,10 @@ WebstoreStandaloneInstaller::GetLocalizedExtensionForDisplay() {
 void WebstoreStandaloneInstaller::InitInstallData(
     ActiveInstallData* install_data) const {
   // Default implementation sets no properties.
+}
+
+std::string WebstoreStandaloneInstaller::GetJsonPostData() {
+  return std::string();
 }
 
 void WebstoreStandaloneInstaller::OnManifestParsed() {
@@ -298,8 +307,7 @@ void WebstoreStandaloneInstaller::OnWebstoreResponseParseSuccess(
                       webstore_install::kInvalidWebstoreResponseError);
       return;
     }
-    icon_url = GURL(extension_urls::GetWebstoreLaunchURL()).Resolve(
-        icon_url_string);
+    icon_url = extension_urls::GetWebstoreLaunchURL().Resolve(icon_url_string);
     if (!icon_url.is_valid()) {
       CompleteInstall(webstore_install::INVALID_WEBSTORE_RESPONSE,
                       webstore_install::kInvalidWebstoreResponseError);

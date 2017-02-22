@@ -43,7 +43,7 @@
 #include "net/http/http_response_info.h"
 #include "net/http/http_util.h"
 #include "net/log/net_log_with_source.h"
-#include "net/quic/core/crypto/quic_server_info.h"
+#include "net/quic/chromium/quic_server_info.h"
 
 #if defined(OS_POSIX)
 #include <unistd.h>
@@ -230,7 +230,10 @@ void HttpCache::MetadataWriter::Write(const GURL& url,
   DCHECK(buf->data());
   request_info_.url = url;
   request_info_.method = "GET";
-  request_info_.load_flags = LOAD_ONLY_FROM_CACHE | LOAD_SKIP_CACHE_VALIDATION;
+
+  // todo (crbug.com/690099): Incorrect usage of LOAD_ONLY_FROM_CACHE.
+  request_info_.load_flags =
+      LOAD_ONLY_FROM_CACHE | LOAD_SKIP_CACHE_VALIDATION | LOAD_SKIP_VARY_CHECK;
 
   expected_response_time_ = expected_response_time;
   buf_ = buf;
@@ -281,8 +284,10 @@ class HttpCache::QuicServerInfoFactoryAdaptor : public QuicServerInfoFactory {
       : http_cache_(http_cache) {
   }
 
-  QuicServerInfo* GetForServer(const QuicServerId& server_id) override {
-    return new DiskCacheBasedQuicServerInfo(server_id, http_cache_);
+  std::unique_ptr<QuicServerInfo> GetForServer(
+      const QuicServerId& server_id) override {
+    return base::MakeUnique<DiskCacheBasedQuicServerInfo>(server_id,
+                                                          http_cache_);
   }
 
  private:
@@ -292,14 +297,14 @@ class HttpCache::QuicServerInfoFactoryAdaptor : public QuicServerInfoFactory {
 //-----------------------------------------------------------------------------
 HttpCache::HttpCache(HttpNetworkSession* session,
                      std::unique_ptr<BackendFactory> backend_factory,
-                     bool set_up_quic_server_info)
+                     bool is_main_cache)
     : HttpCache(base::MakeUnique<HttpNetworkLayer>(session),
                 std::move(backend_factory),
-                set_up_quic_server_info) {}
+                is_main_cache) {}
 
 HttpCache::HttpCache(std::unique_ptr<HttpTransactionFactory> network_layer,
                      std::unique_ptr<BackendFactory> backend_factory,
-                     bool set_up_quic_server_info)
+                     bool is_main_cache)
     : net_log_(nullptr),
       backend_factory_(std::move(backend_factory)),
       building_backend_(false),
@@ -315,7 +320,7 @@ HttpCache::HttpCache(std::unique_ptr<HttpTransactionFactory> network_layer,
   // rather than having logic only used in unit tests here.
   if (session) {
     net_log_ = session->net_log();
-    if (set_up_quic_server_info &&
+    if (is_main_cache &&
         !session->quic_stream_factory()->has_quic_server_info_factory()) {
       // QuicStreamFactory takes ownership of QuicServerInfoFactoryAdaptor.
       session->quic_stream_factory()->set_quic_server_info_factory(

@@ -65,7 +65,7 @@ void HostsUsingFeatures::Value::count(Feature feature) {
 }
 
 void HostsUsingFeatures::countName(Feature feature, const String& name) {
-  auto result = m_valueByName.add(name, Value());
+  auto result = m_valueByName.insert(name, Value());
   result.storedValue->value.count(feature);
 }
 
@@ -83,7 +83,7 @@ void HostsUsingFeatures::documentDetached(Document& document) {
   if (!url.protocolIsInHTTPFamily())
     return;
 
-  m_urlAndValues.append(std::make_pair(url, counter));
+  m_urlAndValues.push_back(std::make_pair(url, counter));
   document.HostsUsingFeaturesValue().clear();
   DCHECK(document.HostsUsingFeaturesValue().isEmpty());
 }
@@ -106,7 +106,7 @@ void HostsUsingFeatures::recordHostToRappor() {
   for (const auto& urlAndValue : m_urlAndValues) {
     DCHECK(!urlAndValue.first.isEmpty());
     auto result =
-        aggregatedByHost.add(urlAndValue.first.host(), urlAndValue.second);
+        aggregatedByHost.insert(urlAndValue.first.host(), urlAndValue.second);
     if (!result.isNewEntry)
       result.storedValue->value.aggregate(urlAndValue.second);
   }
@@ -123,7 +123,7 @@ void HostsUsingFeatures::recordETLDPlus1ToRappor() {
   HashMap<String, HostsUsingFeatures::Value> aggregatedByURL;
   for (const auto& urlAndValue : m_urlAndValues) {
     DCHECK(!urlAndValue.first.isEmpty());
-    auto result = aggregatedByURL.add(urlAndValue.first, urlAndValue.second);
+    auto result = aggregatedByURL.insert(urlAndValue.first, urlAndValue.second);
     if (!result.isNewEntry)
       result.storedValue->value.aggregate(urlAndValue.second);
   }
@@ -202,6 +202,13 @@ void HostsUsingFeatures::Value::recordETLDPlus1ToRappor(const KURL& url) {
   if (get(Feature::RTCPeerConnectionDataChannel))
     Platform::current()->recordRapporURL("RTCPeerConnection.DataChannel",
                                          WebURL(url));
+  if (get(Feature::RTCPeerConnectionUsed) &&
+      !get(Feature::RTCPeerConnectionAudio) &&
+      !get(Feature::RTCPeerConnectionVideo) &&
+      !get(Feature::RTCPeerConnectionDataChannel)) {
+    Platform::current()->recordRapporURL("RTCPeerConnection.Unconnected",
+                                         WebURL(url));
+  }
 }
 
 }  // namespace blink

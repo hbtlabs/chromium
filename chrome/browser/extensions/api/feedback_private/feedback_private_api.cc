@@ -21,6 +21,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/ui/simple_message_box.h"
+#include "chrome/common/extensions/api/feedback_private.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/feedback/tracing_manager.h"
@@ -72,6 +73,9 @@ namespace feedback_private = api::feedback_private;
 using feedback_private::SystemInformation;
 using feedback_private::FeedbackInfo;
 using feedback_private::FeedbackFlow;
+
+using SystemInformationList =
+    std::vector<api::feedback_private::SystemInformation>;
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<FeedbackPrivateAPI> >
     g_factory = LAZY_INSTANCE_INITIALIZER;
@@ -131,10 +135,12 @@ void FeedbackPrivateAPI::RequestFeedbackForFlow(
     }
     info.flow = flow;
 #if defined(OS_MACOSX)
-    info.use_system_window_frame = true;
+    const bool use_system_window_frame = true;
 #else
-    info.use_system_window_frame = false;
+    const bool use_system_window_frame = false;
 #endif
+    info.use_system_window_frame =
+        base::MakeUnique<bool>(use_system_window_frame);
 
     std::unique_ptr<base::ListValue> args =
         feedback_private::OnFeedbackRequested::Create(info);
@@ -166,7 +172,7 @@ ExtensionFunction::ResponseAction FeedbackPrivateGetStringsFunction::Run() {
 #if defined(OS_CHROMEOS)
   const arc::ArcSessionManager* arc_session_manager =
       arc::ArcSessionManager::Get();
-  if (arc_session_manager && arc_session_manager->IsArcEnabled()) {
+  if (arc_session_manager && arc_session_manager->IsArcPlayStoreEnabled()) {
     SET_STRING("sys-info",
                IDS_FEEDBACK_INCLUDE_SYSTEM_INFORMATION_AND_METRICS_CHKBOX_ARC);
   } else {
@@ -220,21 +226,33 @@ ExtensionFunction::ResponseAction FeedbackPrivateGetUserEmailFunction::Run() {
                      : std::string())));
 }
 
-bool FeedbackPrivateGetSystemInformationFunction::RunAsync() {
-  FeedbackService* service =
-      FeedbackPrivateAPI::GetFactoryInstance()->Get(GetProfile())->GetService();
+ExtensionFunction::ResponseAction
+FeedbackPrivateGetSystemInformationFunction::Run() {
+  FeedbackService* service = FeedbackPrivateAPI::GetFactoryInstance()
+                                 ->Get(browser_context())
+                                 ->GetService();
   DCHECK(service);
   service->GetSystemInformation(
       base::Bind(
           &FeedbackPrivateGetSystemInformationFunction::OnCompleted, this));
-  return true;
+  return RespondLater();
 }
 
 void FeedbackPrivateGetSystemInformationFunction::OnCompleted(
-    const SystemInformationList& sys_info) {
-  results_ = feedback_private::GetSystemInformation::Results::Create(
-      sys_info);
-  SendResponse(true);
+    std::unique_ptr<system_logs::SystemLogsResponse> sys_info) {
+  SystemInformationList sys_info_list;
+  if (sys_info) {
+    sys_info_list.reserve(sys_info->size());
+    for (auto& itr : *sys_info) {
+      SystemInformation sys_info_entry;
+      sys_info_entry.key = std::move(itr.first);
+      sys_info_entry.value = std::move(itr.second);
+      sys_info_list.emplace_back(std::move(sys_info_entry));
+    }
+  }
+
+  Respond(ArgumentList(
+      feedback_private::GetSystemInformation::Results::Create(sys_info_list)));
 }
 
 bool FeedbackPrivateSendFeedbackFunction::RunAsync() {

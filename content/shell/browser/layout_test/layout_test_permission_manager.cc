@@ -5,14 +5,16 @@
 #include "content/shell/browser/layout_test/layout_test_permission_manager.h"
 
 #include <list>
+#include <memory>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/memory/ptr_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/permission_type.h"
 #include "content/public/browser/web_contents.h"
 #include "content/shell/browser/layout_test/layout_test_content_browser_client.h"
-#include "content/shell/browser/layout_test/layout_test_notification_manager.h"
 
 namespace content {
 
@@ -133,13 +135,6 @@ blink::mojom::PermissionStatus LayoutTestPermissionManager::GetPermissionStatus(
   return it->second;
 }
 
-void LayoutTestPermissionManager::RegisterPermissionUsage(
-    PermissionType permission,
-    const GURL& requesting_origin,
-    const GURL& embedding_origin) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-}
-
 int LayoutTestPermissionManager::SubscribePermissionStatusChange(
     PermissionType permission,
     const GURL& requesting_origin,
@@ -147,7 +142,7 @@ int LayoutTestPermissionManager::SubscribePermissionStatusChange(
     const base::Callback<void(blink::mojom::PermissionStatus)>& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  Subscription* subscription = new Subscription();
+  auto subscription = base::MakeUnique<Subscription>();
   subscription->permission =
       PermissionDescription(permission, requesting_origin, embedding_origin);
   subscription->callback = callback;
@@ -156,7 +151,7 @@ int LayoutTestPermissionManager::SubscribePermissionStatusChange(
                           subscription->permission.origin,
                           subscription->permission.embedding_origin);
 
-  return subscriptions_.Add(subscription);
+  return subscriptions_.Add(std::move(subscription));
 }
 
 void LayoutTestPermissionManager::UnsubscribePermissionStatusChange(

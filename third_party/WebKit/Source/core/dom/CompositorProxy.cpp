@@ -6,6 +6,7 @@
 
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
+#include "core/dom/CompositorWorkerProxyClient.h"
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
@@ -98,10 +99,8 @@ static uint32_t compositorMutablePropertiesFromNames(
 static bool sanityCheckMutableProperties(uint32_t properties) {
   // Ensures that we only have bits set for valid mutable properties.
   uint32_t sanityCheckProperties = properties;
-  for (unsigned i = 0; i < WTF_ARRAY_LENGTH(allowedProperties); ++i) {
-    sanityCheckProperties &=
-        ~static_cast<uint32_t>(allowedProperties[i].property);
-  }
+  for (const auto& property : allowedProperties)
+    sanityCheckProperties &= ~static_cast<uint32_t>(property.property);
   return !sanityCheckProperties;
 }
 #endif
@@ -125,7 +124,8 @@ CompositorProxy* CompositorProxy::create(ExecutionContext* context,
   if (context->isCompositorWorkerGlobalScope()) {
     WorkerClients* clients = toWorkerGlobalScope(context)->clients();
     DCHECK(clients);
-    CompositorProxyClient* client = CompositorProxyClient::from(clients);
+    CompositorWorkerProxyClient* client =
+        CompositorWorkerProxyClient::from(clients);
     return new CompositorProxy(elementId, compositorMutableProperties, client);
   }
 

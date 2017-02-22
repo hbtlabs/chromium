@@ -10,44 +10,39 @@ import android.view.View;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ntp.ContextMenuManager;
-import org.chromium.chrome.browser.ntp.ContextMenuManager.ContextMenuItemId;
-import org.chromium.chrome.browser.ntp.ContextMenuManager.Delegate;
-import org.chromium.chrome.browser.ntp.NewTabPageView.NewTabPageManager;
-import org.chromium.chrome.browser.ntp.UiConfig;
-import org.chromium.chrome.browser.ntp.snippets.SnippetsConfig;
+import org.chromium.chrome.browser.ntp.snippets.CategoryInt;
+import org.chromium.chrome.browser.suggestions.SuggestionsRanker;
+import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
+import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
 /**
  * Item that allows the user to perform an action on the NTP.
- * Note: Use {@link #refreshVisibility()} to update the visibility of the button instead of calling
- * {@link #setVisible(boolean)} directly.
  */
-class ActionItem extends OptionalLeaf {
-    @IntDef({ACTION_NONE, ACTION_VIEW_ALL, ACTION_FETCH_MORE, ACTION_RELOAD})
+public class ActionItem extends OptionalLeaf {
+    @IntDef({ACTION_NONE, ACTION_VIEW_ALL, ACTION_FETCH})
     @Retention(RetentionPolicy.SOURCE)
     public @interface Action {}
     public static final int ACTION_NONE = 0;
     public static final int ACTION_VIEW_ALL = 1;
-    public static final int ACTION_FETCH_MORE = 2;
-    public static final int ACTION_RELOAD = 3;
+    public static final int ACTION_FETCH = 2;
 
     private final SuggestionsCategoryInfo mCategoryInfo;
     private final SuggestionsSection mParentSection;
+    private final SuggestionsRanker mSuggestionsRanker;
 
     @Action
-    private int mCurrentAction = ACTION_NONE;
-    private boolean mImpressionTracked;
+    private final int mCurrentAction;
 
-    public ActionItem(SuggestionsSection section) {
-        super(section);
+    private boolean mImpressionTracked;
+    private int mPerSectionRank = -1;
+
+    public ActionItem(SuggestionsSection section, SuggestionsRanker ranker) {
         mCategoryInfo = section.getCategoryInfo();
         mParentSection = section;
-    }
-
-    /** Call this instead of {@link #setVisible(boolean)} to update the visibility. */
-    public void refreshVisibility() {
+        mSuggestionsRanker = ranker;
         mCurrentAction = findAppropriateAction();
         setVisible(mCurrentAction != ACTION_NONE);
     }
@@ -60,25 +55,33 @@ class ActionItem extends OptionalLeaf {
     @Override
     protected void onBindViewHolder(NewTabPageViewHolder holder) {
         assert holder instanceof ViewHolder;
+        mSuggestionsRanker.rankActionItem(this, mParentSection);
         ((ViewHolder) holder).onBindViewHolder(this);
     }
 
-    private int getPosition() {
-        // TODO(dgn): looks dodgy. Confirm that's what we want.
-        return mParentSection.getSuggestionsCount();
+    @CategoryInt
+    public int getCategory() {
+        return mCategoryInfo.getCategory();
+    }
+
+    public void setPerSectionRank(int perSectionRank) {
+        mPerSectionRank = perSectionRank;
+    }
+
+    public int getPerSectionRank() {
+        return mPerSectionRank;
     }
 
     @VisibleForTesting
-    void performAction(NewTabPageManager manager, NewTabPageAdapter adapter) {
-        manager.trackSnippetCategoryActionClick(mCategoryInfo.getCategory(), getPosition());
+    void performAction(SuggestionsUiDelegate uiDelegate) {
+        uiDelegate.getMetricsReporter().onMoreButtonClicked(this);
 
         switch (mCurrentAction) {
             case ACTION_VIEW_ALL:
-                mCategoryInfo.performViewAllAction(manager);
+                mCategoryInfo.performViewAllAction(uiDelegate.getNavigationDelegate());
                 return;
-            case ACTION_FETCH_MORE:
-            case ACTION_RELOAD:
-                manager.getSuggestionsSource().fetchSuggestions(
+            case ACTION_FETCH:
+                uiDelegate.getSuggestionsSource().fetchSuggestions(
                         mCategoryInfo.getCategory(), mParentSection.getDisplayedSuggestionIds());
                 mParentSection.onFetchStarted();
                 return;
@@ -91,26 +94,25 @@ class ActionItem extends OptionalLeaf {
 
     @Action
     private int findAppropriateAction() {
-        boolean hasSuggestions = mParentSection.hasSuggestions();
         if (mCategoryInfo.hasViewAllAction()) return ACTION_VIEW_ALL;
-        if (hasSuggestions && mCategoryInfo.hasFetchMoreAction()) return ACTION_FETCH_MORE;
-        if (!hasSuggestions && mCategoryInfo.hasReloadAction()) return ACTION_RELOAD;
+        if (mCategoryInfo.hasFetchAction()) return ACTION_FETCH;
         return ACTION_NONE;
     }
 
+    /** ViewHolder associated to {@link ItemViewType#ACTION}. */
     public static class ViewHolder extends CardViewHolder implements ContextMenuManager.Delegate {
         private ActionItem mActionListItem;
 
         public ViewHolder(final NewTabPageRecyclerView recyclerView,
-                final NewTabPageManager manager, UiConfig uiConfig) {
-            super(R.layout.new_tab_page_action_card, recyclerView, uiConfig, manager);
+                ContextMenuManager contextMenuManager, final SuggestionsUiDelegate uiDelegate,
+                UiConfig uiConfig) {
+            super(R.layout.new_tab_page_action_card, recyclerView, uiConfig, contextMenuManager);
 
             itemView.findViewById(R.id.action_button)
                     .setOnClickListener(new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
-                            mActionListItem.performAction(
-                                    manager, recyclerView.getNewTabPageAdapter());
+                            mActionListItem.performAction(uiDelegate);
                         }
                     });
 
@@ -119,43 +121,10 @@ class ActionItem extends OptionalLeaf {
                 public void onImpression() {
                     if (mActionListItem != null && !mActionListItem.mImpressionTracked) {
                         mActionListItem.mImpressionTracked = true;
-                        manager.trackSnippetCategoryActionImpression(
-                                mActionListItem.mCategoryInfo.getCategory(),
-                                mActionListItem.getPosition());
+                        uiDelegate.getMetricsReporter().onMoreButtonShown(mActionListItem);
                     }
                 }
             });
-        }
-
-        @Override
-        public boolean isDismissable() {
-            return SnippetsConfig.isSectionDismissalEnabled()
-                    && !mActionListItem.mParentSection.hasSuggestions();
-        }
-
-        @Override
-        protected Delegate getContextMenuDelegate() {
-            return this;
-        }
-
-        @Override
-        public void openItem(int windowDisposition) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void removeItem() {
-            getRecyclerView().dismissItemWithAnimation(this);
-        }
-
-        @Override
-        public String getUrl() {
-            return null;
-        }
-
-        @Override
-        public boolean isItemSupported(@ContextMenuItemId int menuItemId) {
-            return menuItemId == ContextMenuManager.ID_REMOVE && isDismissable();
         }
 
         public void onBindViewHolder(ActionItem item) {

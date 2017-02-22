@@ -4,6 +4,7 @@
 
 #include "services/ui/ws/window_manager_display_root.h"
 
+#include "services/ui/ws/display.h"
 #include "services/ui/ws/display_manager.h"
 #include "services/ui/ws/server_window.h"
 #include "services/ui/ws/window_server.h"
@@ -16,6 +17,8 @@ WindowManagerDisplayRoot::WindowManagerDisplayRoot(Display* display)
   root_.reset(window_server()->CreateServerWindow(
       window_server()->display_manager()->GetAndAdvanceNextRootId(),
       ServerWindow::Properties()));
+  root_->set_event_targeting_policy(
+      mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
   // Our root is always a child of the Display's root. Do this
   // before the WindowTree has been created so that the client doesn't get
   // notified of the add, bounds change and visibility change.

@@ -93,6 +93,7 @@ InspectorTest.dumpConsoleMessages = function(printOriginatingCommand, dumpClassN
 
 InspectorTest.dumpConsoleMessagesIntoArray = function(printOriginatingCommand, dumpClassNames, formatter)
 {
+    Common.settingForTest('messageLevelFilters2').set(SDK.ConsoleMessage.MessageLevel.Verbose);
     formatter = formatter || InspectorTest.prepareConsoleMessageText;
     var result = [];
     InspectorTest.disableConsoleViewport();
@@ -286,7 +287,7 @@ InspectorTest.expandGettersInConsoleMessages = function(callback)
     var messageViews = Console.ConsoleView.instance()._visibleViewMessages;
     var properties = [];
     var propertiesCount  = 0;
-    InspectorTest.addSniffer(Components.ObjectPropertyTreeElement.prototype, "_updateExpandable", propertyExpandableUpdated);
+    InspectorTest.addSniffer(ObjectUI.ObjectPropertyTreeElement.prototype, "_updateExpandable", propertyExpandableUpdated);
     for (var i = 0; i < messageViews.length; ++i) {
         var element = messageViews[i].element();
         for (var node = element; node; node = node.traverseNextNode(element)) {
@@ -306,7 +307,7 @@ InspectorTest.expandGettersInConsoleMessages = function(callback)
                 properties[i].click();
             InspectorTest.deprecatedRunAfterPendingDispatches(callback);
         } else {
-            InspectorTest.addSniffer(Components.ObjectPropertyTreeElement.prototype, "_updateExpandable", propertyExpandableUpdated);
+            InspectorTest.addSniffer(ObjectUI.ObjectPropertyTreeElement.prototype, "_updateExpandable", propertyExpandableUpdated);
         }
     }
 }
@@ -396,7 +397,7 @@ InspectorTest.changeExecutionContext = function(namePrefix)
     var selector = Console.ConsoleView.instance()._consoleContextSelector._selectElement;
     var option = selector.firstChild;
     while (option) {
-        if (option.textContent && option.textContent.startsWith(namePrefix))
+        if (option.textContent && option.textContent.trim().startsWith(namePrefix))
             break;
         option = option.nextSibling;
     }

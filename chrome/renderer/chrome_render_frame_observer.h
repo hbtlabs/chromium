@@ -10,8 +10,6 @@
 #include "chrome/common/prerender_types.h"
 #include "content/public/renderer/render_frame_observer.h"
 
-class GURL;
-
 namespace gfx {
 class Size;
 }
@@ -36,7 +34,7 @@ class ChromeRenderFrameObserver : public content::RenderFrameObserver {
 
   // RenderFrameObserver implementation.
   bool OnMessageReceived(const IPC::Message& message) override;
-  void DidStartProvisionalLoad() override;
+  void DidStartProvisionalLoad(blink::WebDataSource* data_source) override;
   void DidFinishLoad() override;
   void DidCommitProvisionalLoad(bool is_new_navigation,
                                 bool is_same_page_navigation) override;

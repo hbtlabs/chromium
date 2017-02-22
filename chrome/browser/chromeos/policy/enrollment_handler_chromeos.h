@@ -27,6 +27,9 @@ class SequencedTaskRunner;
 }
 
 namespace chromeos {
+
+class ActiveDirectoryJoinDelegate;
+
 namespace attestation {
 class AttestationFlow;
 }
@@ -35,6 +38,7 @@ class AttestationFlow;
 namespace policy {
 
 class DeviceCloudPolicyStoreChromeOS;
+class DMTokenStorage;
 class ServerBackedStateKeysBroker;
 
 // Implements the logic that establishes enterprise enrollment for Chromium OS
@@ -64,6 +68,7 @@ class EnrollmentHandlerChromeOS : public CloudPolicyClient::Observer,
       chromeos::attestation::AttestationFlow* attestation_flow,
       std::unique_ptr<CloudPolicyClient> client,
       scoped_refptr<base::SequencedTaskRunner> background_task_runner,
+      chromeos::ActiveDirectoryJoinDelegate* ad_join_delegate,
       const EnrollmentConfig& enrollment_config,
       const std::string& auth_token,
       const std::string& client_id,
@@ -110,11 +115,13 @@ class EnrollmentHandlerChromeOS : public CloudPolicyClient::Observer,
     STEP_VALIDATION = 5,          // Policy validation.
     STEP_ROBOT_AUTH_FETCH = 6,    // Fetching device API auth code.
     STEP_ROBOT_AUTH_REFRESH = 7,  // Fetching device API refresh token.
-    STEP_LOCK_DEVICE = 8,         // Writing installation-time attributes.
-    STEP_STORE_TOKEN_AND_ID = 9,  // Storing DM token and virtual device ID.
-    STEP_STORE_ROBOT_AUTH = 10,   // Encrypting & writing robot refresh token.
-    STEP_STORE_POLICY = 11,       // Storing policy and API refresh token.
-    STEP_FINISHED = 12,           // Enrollment process done, no further action.
+    STEP_AD_DOMAIN_JOIN = 8,      // Joining Active Directory domain.
+    STEP_LOCK_DEVICE = 9,         // Writing installation-time attributes.
+    STEP_STORE_TOKEN = 10,        // Encrypting and storing DM token.
+    STEP_STORE_ROBOT_AUTH = 11,   // Encrypting & writing robot refresh token.
+    STEP_STORE_POLICY = 12,       // Storing policy and API refresh token. For
+                                  // AD, includes policy fetch via authpolicyd.
+    STEP_FINISHED = 13,           // Enrollment process done, no further action.
   };
 
   // Handles the response to a request for server-backed state keys.
@@ -135,24 +142,36 @@ class EnrollmentHandlerChromeOS : public CloudPolicyClient::Observer,
   // successful.
   void HandlePolicyValidationResult(DeviceCloudPolicyValidator* validator);
 
+  // Start joining the Active Directory domain in case the device is enrolling
+  // into Active Directory management mode.
+  void StartJoinAdDomain();
+
+  // Handles successful Active Directory domain join.
+  void OnAdDomainJoined(const std::string& realm);
+
   // Calls InstallAttributes::LockDevice() for enterprise enrollment and
   // DeviceSettingsService::SetManagementSettings() for consumer
   // enrollment.
   void StartLockDevice();
 
-  // Called after SetManagementSettings() is done. Proceeds to robot
-  // auth code storing if successful.
-  void HandleSetManagementSettingsDone(bool success);
-
   // Handle callback from InstallAttributes::LockDevice() and retry on failure.
   void HandleLockDeviceResult(
       chromeos::InstallAttributes::LockResult lock_result);
+
+  // Initiates storing DM token. For Active Directory devices only.
+  void StartStoreDMToken();
+
+  // Called after StartStoreDMtoken() is done.
+  void HandleDMTokenStoreResult(bool success);
 
   // Initiates storing of robot auth token.
   void StartStoreRobotAuth();
 
   // Handles completion of the robot token store operation.
   void HandleStoreRobotAuthTokenResult(bool result);
+
+  // Handles result from device policy refresh via authpolicyd.
+  void HandleActiveDirectoryPolicyRefreshed(bool success);
 
   // Drops any ongoing actions.
   void Stop();
@@ -169,7 +188,9 @@ class EnrollmentHandlerChromeOS : public CloudPolicyClient::Observer,
   chromeos::attestation::AttestationFlow* attestation_flow_;
   std::unique_ptr<CloudPolicyClient> client_;
   scoped_refptr<base::SequencedTaskRunner> background_task_runner_;
+  chromeos::ActiveDirectoryJoinDelegate* ad_join_delegate_ = nullptr;
   std::unique_ptr<gaia::GaiaOAuthClient> gaia_oauth_client_;
+  std::unique_ptr<policy::DMTokenStorage> dm_token_storage_;
 
   EnrollmentConfig enrollment_config_;
   std::string auth_token_;
@@ -181,10 +202,10 @@ class EnrollmentHandlerChromeOS : public CloudPolicyClient::Observer,
   std::string current_state_key_;
 
   // The device mode as received in the registration request.
-  DeviceMode device_mode_;
+  DeviceMode device_mode_ = DEVICE_MODE_NOT_SET;
 
   // Whether the server signaled to skip robot auth setup.
-  bool skip_robot_auth_;
+  bool skip_robot_auth_ = false;
 
   // The robot account refresh token.
   std::string robot_refresh_token_;
@@ -192,6 +213,7 @@ class EnrollmentHandlerChromeOS : public CloudPolicyClient::Observer,
   // The validated policy response info to be installed in the store.
   std::unique_ptr<enterprise_management::PolicyFetchResponse> policy_;
   std::string domain_;
+  std::string realm_;
   std::string device_id_;
 
   // Current enrollment step.
@@ -199,7 +221,7 @@ class EnrollmentHandlerChromeOS : public CloudPolicyClient::Observer,
 
   // Total amount of time in milliseconds spent waiting for lockbox
   // initialization.
-  int lockbox_init_duration_;
+  int lockbox_init_duration_ = 0;
 
   base::WeakPtrFactory<EnrollmentHandlerChromeOS> weak_ptr_factory_;
 

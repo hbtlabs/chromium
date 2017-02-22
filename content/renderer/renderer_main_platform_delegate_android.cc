@@ -4,13 +4,16 @@
 
 #include "content/renderer/renderer_main_platform_delegate.h"
 
+#include <signal.h>
+
 #include "base/android/build_info.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "sandbox/sandbox_features.h"
 
-#ifdef USE_SECCOMP_BPF
+#if BUILDFLAG(USE_SECCOMP_BPF)
 #include "content/common/sandbox_linux/android/sandbox_bpf_base_policy_android.h"
 #include "content/public/common/content_features.h"
 #include "sandbox/linux/seccomp-bpf/sandbox_bpf.h"
@@ -47,7 +50,7 @@ class RecordSeccompStatus {
   DISALLOW_COPY_AND_ASSIGN(RecordSeccompStatus);
 };
 
-#ifdef USE_SECCOMP_BPF
+#if BUILDFLAG(USE_SECCOMP_BPF)
 // Determines if the running device should support Seccomp, based on the Android
 // SDK version.
 bool IsSeccompBPFSupportedBySDK() {
@@ -92,7 +95,7 @@ void RendererMainPlatformDelegate::PlatformUninitialize() {
 bool RendererMainPlatformDelegate::EnableSandbox() {
   RecordSeccompStatus status_uma;
 
-#ifdef USE_SECCOMP_BPF
+#if BUILDFLAG(USE_SECCOMP_BPF)
   // Determine if Seccomp is available via the Android SDK version.
   if (!IsSeccompBPFSupportedBySDK())
     return true;
@@ -109,6 +112,14 @@ bool RendererMainPlatformDelegate::EnableSandbox() {
   // Seccomp has been detected, check if the field trial experiment should run.
   if (base::FeatureList::IsEnabled(features::kSeccompSandboxAndroid)) {
     status_uma.set_status(RecordSeccompStatus::FEATURE_ENABLED);
+
+    // TODO(rsesek): When "the thing after N" has an sdk_int(), restrict this to
+    // that platform version or higher.
+    sig_t old_handler = signal(SIGSYS, SIG_DFL);
+    if (old_handler != SIG_DFL) {
+      DLOG(WARNING) << "Un-hooking existing SIGSYS handler before "
+                    << "starting Seccomp sandbox";
+    }
 
     sandbox::SandboxBPF sandbox(new SandboxBPFBasePolicyAndroid());
     CHECK(sandbox.StartSandbox(

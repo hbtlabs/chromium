@@ -511,18 +511,21 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, NoPromptForAllowedOrigin) {
   ExpectPosition(fake_latitude(), fake_longitude());
 }
 
-IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, NoPromptForOffTheRecord) {
+IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, PromptForOffTheRecord) {
   // For a regular profile the user is prompted, and when granted the position
   // gets to the script.
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
   ASSERT_TRUE(WatchPositionAndGrantPermission());
   ExpectPosition(fake_latitude(), fake_longitude());
 
-  // The permission is persisted for the regular profile, and inherited by its
-  // incognito profile. Go incognito, and check that the user is not prompted
-  // again and the position gets to the script.
+  // The permission from the regular profile is not inherited because it is more
+  // permissive than the initial default for geolocation. This prevents
+  // identifying information to be sent to a server without explicit consent by
+  // the user.
+  // Go incognito, and check that the user is prompted again and when granted,
+  // the position gets to the script.
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_OFFTHERECORD));
-  WatchPositionAndObservePermissionRequest(false);
+  ASSERT_TRUE(WatchPositionAndGrantPermission());
   ExpectPosition(fake_latitude(), fake_longitude());
 }
 
@@ -740,35 +743,4 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, TabDestroyed) {
   std::string script = "window.domAutomationController.send(window.close())";
   ASSERT_TRUE(content::ExecuteScript(
       current_browser()->tab_strip_model()->GetActiveWebContents(), script));
-}
-
-IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, LastUsageUpdated) {
-  ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
-  base::SimpleTestClock* clock_ = new base::SimpleTestClock();
-  GetHostContentSettingsMap()->SetPrefClockForTesting(
-      std::unique_ptr<base::Clock>(clock_));
-  clock_->SetNow(base::Time::UnixEpoch() + base::TimeDelta::FromSeconds(10));
-
-  // Setting the permission should trigger the last usage.
-  GetHostContentSettingsMap()->SetContentSettingDefaultScope(
-      current_url(), current_url(), CONTENT_SETTINGS_TYPE_GEOLOCATION,
-      std::string(), CONTENT_SETTING_ALLOW);
-
-  // Permission has been used at the starting time.
-  EXPECT_EQ(GetHostContentSettingsMap()->GetLastUsage(
-      current_url().GetOrigin(),
-      current_url().GetOrigin(),
-      CONTENT_SETTINGS_TYPE_GEOLOCATION).ToDoubleT(), 10);
-
-  clock_->Advance(base::TimeDelta::FromSeconds(3));
-
-  // Calling watchPosition should trigger the last usage update.
-  WatchPositionAndObservePermissionRequest(false);
-  ExpectPosition(fake_latitude(), fake_longitude());
-
-  // Last usage has been updated.
-  EXPECT_EQ(GetHostContentSettingsMap()->GetLastUsage(
-      current_url().GetOrigin(),
-      current_url().GetOrigin(),
-      CONTENT_SETTINGS_TYPE_GEOLOCATION).ToDoubleT(), 13);
 }

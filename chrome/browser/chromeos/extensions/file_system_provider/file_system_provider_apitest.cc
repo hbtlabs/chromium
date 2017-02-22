@@ -7,7 +7,6 @@
 
 #include "base/files/file.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
@@ -110,7 +109,7 @@ class AbortOnUnresponsivePerformer : public Observer {
 
  private:
   Service* service_;  // Not owned.
-  ScopedVector<NotificationButtonClicker> clickers_;
+  std::vector<std::unique_ptr<NotificationButtonClicker>> clickers_;
   DISALLOW_COPY_AND_ASSIGN(AbortOnUnresponsivePerformer);
 };
 
@@ -160,7 +159,13 @@ IN_PROC_BROWSER_TEST_F(FileSystemProviderApiTest, ReadDirectory) {
       << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(FileSystemProviderApiTest, ReadFile) {
+// http://crbug.com/691449
+#if defined(OS_CHROMEOS)
+#define MAYBE_ReadFile DISABLED_ReadFile
+#else
+#define MAYBE_ReadFile ReadFile
+#endif
+IN_PROC_BROWSER_TEST_F(FileSystemProviderApiTest, MAYBE_ReadFile) {
   ASSERT_TRUE(RunPlatformAppTestWithFlags("file_system_provider/read_file",
                                           kFlagLoadAsComponent))
       << message_;

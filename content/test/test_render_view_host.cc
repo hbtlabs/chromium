@@ -17,7 +17,6 @@
 #include "content/browser/site_instance_impl.h"
 #include "content/common/dom_storage/dom_storage_types.h"
 #include "content/common/frame_messages.h"
-#include "content/common/site_isolation_policy.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -200,8 +199,7 @@ bool TestRenderWidgetHostView::IsSpeaking() const {
   return false;
 }
 
-void TestRenderWidgetHostView::StopSpeaking() {
-}
+void TestRenderWidgetHostView::StopSpeaking() {}
 
 #endif
 
@@ -239,6 +237,7 @@ TestRenderViewHost::TestRenderViewHost(
                          swapped_out,
                          false /* has_initialized_audio_host */),
       delete_counter_(nullptr),
+      webkit_preferences_changed_counter_(nullptr),
       opener_frame_route_id_(MSG_ROUTING_NONE) {
   // TestRenderWidgetHostView installs itself into this->view_ in its
   // constructor, and deletes itself when TestRenderWidgetHostView::Destroy() is
@@ -294,6 +293,12 @@ WebPreferences TestRenderViewHost::TestComputeWebkitPrefs() {
   return ComputeWebkitPrefs();
 }
 
+void TestRenderViewHost::OnWebkitPreferencesChanged() {
+  RenderViewHostImpl::OnWebkitPreferencesChanged();
+  if (webkit_preferences_changed_counter_)
+    ++*webkit_preferences_changed_counter_;
+}
+
 void TestRenderViewHost::TestOnStartDragging(
     const DropData& drop_data) {
   blink::WebDragOperationsMask drag_operation = blink::WebDragOperationEvery;
@@ -306,11 +311,7 @@ void TestRenderViewHost::TestOnUpdateStateWithFile(
     const base::FilePath& file_path) {
   PageState state = PageState::CreateForTesting(GURL("http://www.google.com"),
                                                 false, "data", &file_path);
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    static_cast<RenderFrameHostImpl*>(GetMainFrame())->OnUpdateState(state);
-  } else {
-    OnUpdateState(state);
-  }
+  static_cast<RenderFrameHostImpl*>(GetMainFrame())->OnUpdateState(state);
 }
 
 RenderViewHostImplTestHarness::RenderViewHostImplTestHarness() {

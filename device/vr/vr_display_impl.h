@@ -16,6 +16,8 @@
 
 namespace device {
 
+class VRServiceImpl;
+
 class VRDisplayImpl : public mojom::VRDisplay {
  public:
   VRDisplayImpl(device::VRDevice* device, VRServiceImpl* service);
@@ -24,9 +26,9 @@ class VRDisplayImpl : public mojom::VRDisplay {
   mojom::VRDisplayClient* client() { return client_.get(); }
 
  private:
+  friend class VRDisplayImplTest;
   friend class VRServiceImpl;
 
-  void GetPose(const GetPoseCallback& callback) override;
   void ResetPose() override;
 
   void RequestPresent(bool secure_origin,
@@ -34,12 +36,16 @@ class VRDisplayImpl : public mojom::VRDisplay {
   void ExitPresent() override;
   void SubmitFrame(mojom::VRPosePtr pose) override;
 
-  void UpdateLayerBounds(mojom::VRLayerBoundsPtr left_bounds,
+  void UpdateLayerBounds(int16_t frame_index,
+                         mojom::VRLayerBoundsPtr left_bounds,
                          mojom::VRLayerBoundsPtr right_bounds) override;
+  void GetVRVSyncProvider(mojom::VRVSyncProviderRequest request) override;
 
   void RequestPresentResult(const RequestPresentCallback& callback,
                             bool secure_origin,
                             bool success);
+
+  void OnVRDisplayInfoCreated(mojom::VRDisplayInfoPtr display_info);
 
   mojo::Binding<mojom::VRDisplay> binding_;
   mojom::VRDisplayClientPtr client_;

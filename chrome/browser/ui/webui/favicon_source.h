@@ -77,6 +77,7 @@ class FaviconSource : public content::URLDataSource {
       const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
       const content::URLDataSource::GotDataCallback& callback) override;
   std::string GetMimeType(const std::string&) const override;
+  bool AllowCaching() const override;
   bool ShouldReplaceExistingSource() const override;
   bool ShouldServiceRequest(const net::URLRequest* request) const override;
 
@@ -126,10 +127,6 @@ class FaviconSource : public content::URLDataSource {
   void SendDefaultResponse(const IconRequest& request);
 
   base::CancelableTaskTracker cancelable_task_tracker_;
-
-  // Raw PNG representations of favicons of each size to show when the favicon
-  // database doesn't have a favicon for a webpage. Indexed by IconSize values.
-  scoped_refptr<base::RefCountedMemory> default_favicons_[NUM_SIZES];
 
   // The favicon_base::IconTypes of icon that this FaviconSource handles.
   int icon_types_;

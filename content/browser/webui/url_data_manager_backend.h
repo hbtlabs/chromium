@@ -13,6 +13,7 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/supports_user_data.h"
+#include "base/values.h"
 #include "content/browser/webui/url_data_manager.h"
 #include "content/public/browser/url_data_source.h"
 #include "net/url_request/url_request_job_factory.h"
@@ -52,6 +53,9 @@ class URLDataManagerBackend : public base::SupportsUserData::Data {
   // Adds a DataSource to the collection of data sources.
   void AddDataSource(URLDataSourceImpl* source);
 
+  void UpdateWebUIDataSource(const std::string& source_name,
+                             const base::DictionaryValue& update);
+
   // DataSource invokes this. Sends the data to the URLRequest. |bytes| may be
   // null, which signals an error handling the request.
   void DataAvailable(RequestID request_id, base::RefCountedMemory* bytes);
@@ -76,7 +80,6 @@ class URLDataManagerBackend : public base::SupportsUserData::Data {
   static void CallStartRequest(
       scoped_refptr<URLDataSourceImpl> source,
       const std::string& path,
-      int child_id,
       const ResourceRequestInfo::WebContentsGetter& wc_getter,
       int request_id);
 

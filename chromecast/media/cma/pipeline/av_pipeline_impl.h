@@ -35,6 +35,7 @@ class BufferingState;
 class CodedFrameProvider;
 class DecoderBufferBase;
 class DecryptContextImpl;
+struct EncryptionScheme;
 
 class AvPipelineImpl : MediaPipelineBackend::Decoder::Delegate {
  public:
@@ -69,11 +70,13 @@ class AvPipelineImpl : MediaPipelineBackend::Decoder::Delegate {
   State state() const { return state_; }
   void set_state(State state) { state_ = state; }
   const AvPipelineClient& client() const { return client_; }
+  CastCdmContext* cdm_context() const { return cast_cdm_context_; }
 
   virtual void OnUpdateConfig(
       StreamId id,
       const ::media::AudioDecoderConfig& audio_config,
       const ::media::VideoDecoderConfig& video_config) = 0;
+  virtual const EncryptionScheme& GetEncryptionScheme(StreamId id) const = 0;
 
   // Setting the frame provider must be done in the |kUninitialized| state.
   void SetCodedFrameProvider(std::unique_ptr<CodedFrameProvider> frame_provider,

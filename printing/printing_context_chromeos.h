@@ -14,10 +14,6 @@
 #include "printing/backend/cups_printer.h"
 #include "printing/printing_context.h"
 
-namespace base {
-class DictionaryValue;
-}
-
 namespace printing {
 
 class PRINTING_EXPORT PrintingContextChromeos : public PrintingContext {
@@ -48,9 +44,6 @@ class PRINTING_EXPORT PrintingContextChromeos : public PrintingContext {
  private:
   // Lazily initializes |printer_|.
   Result InitializeDevice(const std::string& device);
-
-  // id for ongoing print job.  0 if no job is active.
-  int job_id_;
 
   CupsConnection connection_;
   std::unique_ptr<CupsPrinter> printer_;

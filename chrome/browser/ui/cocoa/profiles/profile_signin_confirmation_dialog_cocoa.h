@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CHROME_BROWSER_UI_COCOA_PROFILES_PROFILE_SIGNIN_CONFIRMATION_DIALOG_COCOA_
-#define CHROME_BROWSER_UI_COCOA_PROFILES_PROFILE_SIGNIN_CONFIRMATION_DIALOG_COCOA_
+#ifndef CHROME_BROWSER_UI_COCOA_PROFILES_PROFILE_SIGNIN_CONFIRMATION_DIALOG_COCOA_H_
+#define CHROME_BROWSER_UI_COCOA_PROFILES_PROFILE_SIGNIN_CONFIRMATION_DIALOG_COCOA_H_
 
 #import <Cocoa/Cocoa.h>
 
@@ -38,16 +38,17 @@ class ProfileSigninConfirmationDialogCocoa : ConstrainedWindowMacDelegate {
       content::WebContents* web_contents,
       Profile* profile,
       const std::string& username,
-      ui::ProfileSigninConfirmationDelegate* delegate,
+      std::unique_ptr<ui::ProfileSigninConfirmationDelegate> delegate,
       bool offer_profile_creation);
   virtual ~ProfileSigninConfirmationDialogCocoa();
 
   // Shows the dialog if needed.
-  static void Show(Browser* browser,
-                   content::WebContents* web_contents,
-                   Profile* profile,
-                   const std::string& username,
-                   ui::ProfileSigninConfirmationDelegate* delegate);
+  static void Show(
+      Browser* browser,
+      content::WebContents* web_contents,
+      Profile* profile,
+      const std::string& username,
+      std::unique_ptr<ui::ProfileSigninConfirmationDelegate> delegate);
 
   // Closes the dialog, which deletes itself.
   void Close();
@@ -65,4 +66,4 @@ class ProfileSigninConfirmationDialogCocoa : ConstrainedWindowMacDelegate {
   DISALLOW_COPY_AND_ASSIGN(ProfileSigninConfirmationDialogCocoa);
 };
 
-#endif  // CHROME_BROWSER_UI_COCOA_PROFILES_PROFILE_SIGNIN_CONFIRMATION_DIALOG_COCOA_
+#endif  // CHROME_BROWSER_UI_COCOA_PROFILES_PROFILE_SIGNIN_CONFIRMATION_DIALOG_COCOA_H_

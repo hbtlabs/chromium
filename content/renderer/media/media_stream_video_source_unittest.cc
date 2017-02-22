@@ -50,9 +50,9 @@ class MediaStreamVideoSourceTest : public ::testing::Test {
     formats.push_back(media::VideoCaptureFormat(
         gfx::Size(320, 240), 30, media::PIXEL_FORMAT_I420));
     mock_source_->SetSupportedFormats(formats);
-    webkit_source_.initialize(base::UTF8ToUTF16("dummy_source_id"),
+    webkit_source_.initialize(blink::WebString::fromASCII("dummy_source_id"),
                               blink::WebMediaStreamSource::TypeVideo,
-                              base::UTF8ToUTF16("dummy_source_name"),
+                              blink::WebString::fromASCII("dummy_source_name"),
                               false /* remote */);
     webkit_source_.setExtraData(mock_source_);
   }
@@ -780,6 +780,26 @@ TEST_F(MediaStreamVideoSourceTest, MutedSource) {
             blink::WebMediaStreamSource::ReadyStateLive);
 
   sink.DisconnectFromTrack();
+}
+
+// Test that an optional constraint with an invalid aspect ratio is ignored.
+TEST_F(MediaStreamVideoSourceTest, InvalidOptionalAspectRatioIgnored) {
+  MockConstraintFactory factory;
+  factory.AddAdvanced().aspectRatio.setMax(0.0);
+  blink::WebMediaStreamTrack track =
+      CreateTrack("123", factory.CreateWebMediaConstraints());
+  mock_source()->CompleteGetSupportedFormats();
+  EXPECT_EQ(0, NumberOfFailedConstraintsCallbacks());
+}
+
+// Test that setting an invalid mandatory aspect ratio fails.
+TEST_F(MediaStreamVideoSourceTest, InvalidMandatoryAspectRatioFails) {
+  MockConstraintFactory factory;
+  factory.basic().aspectRatio.setMax(0.0);
+  blink::WebMediaStreamTrack track =
+      CreateTrack("123", factory.CreateWebMediaConstraints());
+  mock_source()->CompleteGetSupportedFormats();
+  EXPECT_EQ(1, NumberOfFailedConstraintsCallbacks());
 }
 
 }  // namespace content

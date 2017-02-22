@@ -1,4 +1,4 @@
-<!DOCTYPE>
+<!DOCTYPE html>
 <html>
 <head>
 <style>
@@ -12,7 +12,7 @@
         width: 50px;
         height: 50px;
         background-color: rgba(255, 255, 255, 1);
-        -webkit-transition: opacity 1s;
+        transition: opacity 1s;
     }
 
     #popup {
@@ -20,7 +20,7 @@
         height: 20px;
         background-color: red;
         border-radius: 6px;
-        -webkit-transition: -webkit-transform 1s;
+        transition: transform 1s;
     }
 
     .transparent {
@@ -37,8 +37,10 @@
 
 </style>
 <script type="text/javascript" charset="utf-8">
+    'use strict';
     function runTest()
     {
+        document.body.offsetHeight; // Force style recalc
         var solid_color_overlay = document.getElementById("solid_color_overlay");
         solid_color_overlay.removeAttribute('hidden');
 
@@ -46,7 +48,7 @@
         popup.removeAttribute('hidden');
 
         // NOTE: This is a hacky way to force the container to layout which
-        // will allow us to trigger the webkit transition.
+        // will allow us to trigger the transition.
         // See crbug.com/324685
         solid_color_overlay.scrollTop;
         solid_color_overlay.classList.remove('transparent');
@@ -56,7 +58,13 @@
             window.internals.forceCompositingUpdate(document);
             window.internals.pauseAnimations(0.5);
         }
-        triggerPixelResults();
+        waitForCompositor().then(() => {
+            triggerPixelResults();
+        });
+    }
+
+    function waitForCompositor() {
+      return background.animate({opacity: ['1', '1']}, 1).ready;
     }
 
     function triggerPixelResults()

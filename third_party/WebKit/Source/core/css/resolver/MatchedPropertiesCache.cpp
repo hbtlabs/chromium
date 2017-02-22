@@ -86,7 +86,7 @@ void MatchedPropertiesCache::add(const ComputedStyle& style,
                                  unsigned hash,
                                  const MatchedPropertiesVector& properties) {
   ASSERT(hash);
-  Cache::AddResult addResult = m_cache.add(hash, nullptr);
+  Cache::AddResult addResult = m_cache.insert(hash, nullptr);
   if (addResult.isNewEntry)
     addResult.storedValue->value = new CachedMatchedProperties;
 
@@ -112,7 +112,7 @@ void MatchedPropertiesCache::clearViewportDependent() {
   for (const auto& cacheEntry : m_cache) {
     CachedMatchedProperties* cacheItem = cacheEntry.value.get();
     if (cacheItem->computedStyle->hasViewportUnits())
-      toRemove.append(cacheEntry.key);
+      toRemove.push_back(cacheEntry.key);
   }
   m_cache.removeAll(toRemove);
 }

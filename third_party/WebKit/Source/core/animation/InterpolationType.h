@@ -31,8 +31,6 @@ class InterpolationType {
   WTF_MAKE_NONCOPYABLE(InterpolationType);
 
  public:
-  virtual ~InterpolationType() { NOTREACHED(); }
-
   PropertyHandle getProperty() const { return m_property; }
 
   // ConversionCheckers are returned from calls to maybeConvertPairwise() and
@@ -79,6 +77,16 @@ class InterpolationType {
       const InterpolationValue& underlying,
       ConversionCheckers&) const = 0;
 
+  virtual PairwiseInterpolationValue maybeMergeSingles(
+      InterpolationValue&& start,
+      InterpolationValue&& end) const {
+    DCHECK(!start.nonInterpolableValue);
+    DCHECK(!end.nonInterpolableValue);
+    return PairwiseInterpolationValue(std::move(start.interpolableValue),
+                                      std::move(end.interpolableValue),
+                                      nullptr);
+  }
+
   virtual InterpolationValue maybeConvertUnderlyingValue(
       const InterpolationEnvironment&) const = 0;
 
@@ -107,16 +115,6 @@ class InterpolationType {
 
  protected:
   InterpolationType(PropertyHandle property) : m_property(property) {}
-
-  virtual PairwiseInterpolationValue maybeMergeSingles(
-      InterpolationValue&& start,
-      InterpolationValue&& end) const {
-    DCHECK(!start.nonInterpolableValue);
-    DCHECK(!end.nonInterpolableValue);
-    return PairwiseInterpolationValue(std::move(start.interpolableValue),
-                                      std::move(end.interpolableValue),
-                                      nullptr);
-  }
 
   const PropertyHandle m_property;
 };

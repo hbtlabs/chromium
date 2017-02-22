@@ -18,6 +18,7 @@
 #include <sstream>
 #include <string>
 #include "base/atomic_sequence_num.h"
+#include "base/bits.h"
 #include "base/compiler_specific.h"
 #include "base/numerics/safe_math.h"
 #include "base/strings/string_split.h"
@@ -219,6 +220,8 @@ bool GLES2Implementation::Initialize(
   if (mapped_memory_limit != SharedMemoryLimits::kNoLimit) {
     // Use smaller chunks if the client is very memory conscientious.
     chunk_size = std::min(mapped_memory_limit / 4, chunk_size);
+    chunk_size = base::bits::Align(chunk_size,
+                                   FencedAllocator::kAllocAlignment);
   }
   mapped_memory_->set_chunk_size_multiple(chunk_size);
 
@@ -262,21 +265,10 @@ bool GLES2Implementation::Initialize(
     return false;
   }
 
-  // In certain cases, ThreadTaskRunnerHandle isn't set (Android Webview).
-  // Don't register a dump provider in these cases.
-  // TODO(ericrk): Get this working in Android Webview. crbug.com/517156
-  if (base::ThreadTaskRunnerHandle::IsSet()) {
-    base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
-        this, "GLES2Implementation", base::ThreadTaskRunnerHandle::Get());
-  }
-
   return true;
 }
 
 GLES2Implementation::~GLES2Implementation() {
-  base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
-      this);
-
   // Make sure the queries are finished otherwise we'll delete the
   // shared memory (mapped_memory_) which will free the memory used
   // by the queries. The GPU process when validating that memory is still
@@ -405,6 +397,16 @@ void GLES2Implementation::SignalSyncToken(const gpu::SyncToken& sync_token,
   }
 }
 
+// This may be called from any thread. It's safe to access gpu_control_ without
+// the lock because it is const.
+bool GLES2Implementation::IsSyncTokenSignalled(
+    const gpu::SyncToken& sync_token) {
+  // Check that the sync token belongs to this context.
+  DCHECK_EQ(gpu_control_->GetNamespaceID(), sync_token.namespace_id());
+  DCHECK_EQ(gpu_control_->GetCommandBufferID(), sync_token.command_buffer_id());
+  return gpu_control_->IsFenceSyncReleased(sync_token.release_count());
+}
+
 void GLES2Implementation::SignalQuery(uint32_t query,
                                       const base::Closure& callback) {
   // Flush previously entered commands to ensure ordering with any
@@ -440,6 +442,9 @@ bool GLES2Implementation::OnMemoryDump(
     base::trace_event::ProcessMemoryDump* pmd) {
   using base::trace_event::MemoryAllocatorDump;
   using base::trace_event::MemoryDumpLevelOfDetail;
+
+  // Dump owned MappedMemoryManager memory as well.
+  mapped_memory_->OnMemoryDump(args, pmd);
 
   if (!transfer_buffer_->HaveBuffer())
     return true;
@@ -804,6 +809,15 @@ bool GLES2Implementation::GetHelper(GLenum pname, GLint* params) {
     case GL_MAX_VERTEX_UNIFORM_VECTORS:
       *params = capabilities_.max_vertex_uniform_vectors;
       return true;
+    case GL_MAX_VIEWPORT_DIMS:
+      if (capabilities_.max_viewport_width > 0 &&
+          capabilities_.max_viewport_height > 0) {
+        params[0] = capabilities_.max_viewport_width;
+        params[1] = capabilities_.max_viewport_height;
+        return true;
+      }
+      // If they are not cached on the client side yet, query the service side.
+      return false;
     case GL_NUM_COMPRESSED_TEXTURE_FORMATS:
       *params = capabilities_.num_compressed_texture_formats;
       return true;
@@ -832,7 +846,8 @@ bool GLES2Implementation::GetHelper(GLenum pname, GLint* params) {
       *params = bound_pixel_unpack_transfer_buffer_id_;
       return true;
     case GL_READ_FRAMEBUFFER_BINDING:
-      if (IsChromiumFramebufferMultisampleAvailable()) {
+      if (capabilities_.major_version >= 3 ||
+          IsChromiumFramebufferMultisampleAvailable()) {
         *params = bound_read_framebuffer_;
         return true;
       }
@@ -846,6 +861,23 @@ bool GLES2Implementation::GetHelper(GLenum pname, GLint* params) {
     case GL_GPU_DISJOINT_EXT:
       *params = static_cast<GLint>(query_tracker_->CheckAndResetDisjoint());
       return true;
+
+    case GL_VIEWPORT:
+      if (state_.viewport_width > 0 &&
+          state_.viewport_height > 0 &&
+          capabilities_.max_viewport_width > 0 &&
+          capabilities_.max_viewport_height > 0) {
+        params[0] = state_.viewport_x;
+        params[1] = state_.viewport_y;
+        params[2] = std::min(state_.viewport_width,
+                             capabilities_.max_viewport_width);
+        params[3] = std::min(state_.viewport_height,
+                             capabilities_.max_viewport_height);
+        return true;
+      }
+      // If they haven't been cached on the client side, go to service side
+      // to query the underlying driver.
+      return false;
 
     // Non-cached parameters.
     case GL_ALIASED_LINE_WIDTH_RANGE:
@@ -879,7 +911,6 @@ bool GLES2Implementation::GetHelper(GLenum pname, GLint* params) {
     case GL_IMPLEMENTATION_COLOR_READ_FORMAT:
     case GL_IMPLEMENTATION_COLOR_READ_TYPE:
     case GL_LINE_WIDTH:
-    case GL_MAX_VIEWPORT_DIMS:
     case GL_PACK_ALIGNMENT:
     case GL_POLYGON_OFFSET_FACTOR:
     case GL_POLYGON_OFFSET_FILL:
@@ -914,7 +945,6 @@ bool GLES2Implementation::GetHelper(GLenum pname, GLint* params) {
     case GL_STENCIL_WRITEMASK:
     case GL_SUBPIXEL_BITS:
     case GL_UNPACK_ALIGNMENT:
-    case GL_VIEWPORT:
       return false;
     default:
       break;
@@ -1458,20 +1488,28 @@ void GLES2Implementation::SwapBuffers() {
   }
 }
 
-void GLES2Implementation::SwapBuffersWithDamageCHROMIUM(GLint x,
-                                                        GLint y,
-                                                        GLint width,
-                                                        GLint height) {
+void GLES2Implementation::SwapBuffersWithBoundsCHROMIUM(GLsizei count,
+                                                        const GLint* rects) {
   GPU_CLIENT_SINGLE_THREAD_CHECK();
-  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glSwapBuffersWithDamageCHROMIUM("
-                     << x << ", " << y << ", " << width << ", " << height
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glSwapBuffersWithBoundsCHROMIUM("
+                     << count << ", " << static_cast<const void*>(rects)
                      << ")");
-  TRACE_EVENT2("gpu", "GLES2::SwapBuffersWithDamageCHROMIUM", "width", width,
-               "height", height);
+  GPU_CLIENT_LOG_CODE_BLOCK({
+    for (GLsizei i = 0; i < count; ++i) {
+      GPU_CLIENT_LOG("  " << i << ": " << rects[0 + i * 4] << ", "
+                          << rects[1 + i * 4] << ", " << rects[2 + i * 4]
+                          << ", " << rects[3 + i * 4]);
+    }
+  });
+  if (count < 0) {
+    SetGLError(GL_INVALID_VALUE, "glSwapBuffersWithBoundsCHROMIUM",
+               "count < 0");
+    return;
+  }
 
   // Same flow control as GLES2Implementation::SwapBuffers (see comments there).
   swap_buffers_tokens_.push(helper_->InsertToken());
-  helper_->SwapBuffersWithDamageCHROMIUM(x, y, width, height);
+  helper_->SwapBuffersWithBoundsCHROMIUMImmediate(count, rects);
   helper_->CommandBufferHelper::Flush();
   if (swap_buffers_tokens_.size() > kMaxSwapBuffers + 1) {
     helper_->WaitForToken(swap_buffers_tokens_.front());
@@ -2388,7 +2426,7 @@ void GLES2Implementation::CompressedTexSubImage2D(
     helper_->CompressedTexSubImage2D(
         target, level, xoffset, yoffset, width, height, format, image_size,
         0, ToGLuint(data));
-  } else {
+  } else if (data) {
     SetBucketContents(kResultBucketId, data, image_size);
     helper_->CompressedTexSubImage2DBucket(
         target, level, xoffset, yoffset, width, height, format,
@@ -2397,6 +2435,9 @@ void GLES2Implementation::CompressedTexSubImage2D(
     // and we don't have to wait for the result so from the client's perspective
     // it's cheap.
     helper_->SetBucketSize(kResultBucketId, 0);
+  } else {
+    helper_->CompressedTexSubImage2D(target, level, xoffset, yoffset, width,
+                                     height, format, image_size, 0, 0);
   }
   CheckGLError();
 }
@@ -2491,7 +2532,7 @@ void GLES2Implementation::CompressedTexSubImage3D(
     helper_->CompressedTexSubImage3D(
         target, level, xoffset, yoffset, zoffset, width, height, depth, format,
         image_size, 0, ToGLuint(data));
-  } else {
+  } else if (data) {
     SetBucketContents(kResultBucketId, data, image_size);
     helper_->CompressedTexSubImage3DBucket(
         target, level, xoffset, yoffset, zoffset, width, height, depth, format,
@@ -2500,6 +2541,10 @@ void GLES2Implementation::CompressedTexSubImage3D(
     // and we don't have to wait for the result so from the client's perspective
     // it's cheap.
     helper_->SetBucketSize(kResultBucketId, 0);
+  } else {
+    helper_->CompressedTexSubImage3D(target, level, xoffset, yoffset, zoffset,
+                                     width, height, depth, format, image_size,
+                                     0, 0);
   }
   CheckGLError();
 }
@@ -3727,8 +3772,7 @@ const GLubyte* GLES2Implementation::GetStringHelper(GLenum name) {
       str += std::string(str.empty() ? "" : " ") +
              "GL_EXT_unpack_subimage "
              "GL_CHROMIUM_map_sub "
-             "GL_CHROMIUM_image "
-             "GL_CHROMIUM_gpu_memory_buffer_image";
+             "GL_CHROMIUM_image";
       if (capabilities_.future_sync_points)
         str += " GL_CHROMIUM_future_sync_point";
     }
@@ -4340,20 +4384,16 @@ void GLES2Implementation::BindFramebufferHelper(
       }
       break;
     case GL_READ_FRAMEBUFFER:
-      if (!IsChromiumFramebufferMultisampleAvailable()) {
-        SetGLErrorInvalidEnum("glBindFramebuffer", target, "target");
-        return;
-      }
+      DCHECK(capabilities_.major_version >= 3 ||
+          IsChromiumFramebufferMultisampleAvailable());
       if (bound_read_framebuffer_ != framebuffer) {
         bound_read_framebuffer_ = framebuffer;
         changed = true;
       }
       break;
     case GL_DRAW_FRAMEBUFFER:
-      if (!IsChromiumFramebufferMultisampleAvailable()) {
-        SetGLErrorInvalidEnum("glBindFramebuffer", target, "target");
-        return;
-      }
+      DCHECK(capabilities_.major_version >= 3 ||
+          IsChromiumFramebufferMultisampleAvailable());
       if (bound_framebuffer_ != framebuffer) {
         bound_framebuffer_ = framebuffer;
         changed = true;
@@ -4843,9 +4883,15 @@ void GLES2Implementation::Swap() {
   SwapBuffers();
 }
 
-void GLES2Implementation::SwapWithDamage(const gfx::Rect& damage) {
-  SwapBuffersWithDamageCHROMIUM(damage.x(), damage.y(), damage.width(),
-                                damage.height());
+void GLES2Implementation::SwapWithBounds(const std::vector<gfx::Rect>& rects) {
+  std::vector<int> rects_data(rects.size() * 4);
+  for (size_t i = 0; i < rects.size(); ++i) {
+    rects_data[i * 4 + 0] = rects[i].x();
+    rects_data[i * 4 + 1] = rects[i].y();
+    rects_data[i * 4 + 2] = rects[i].width();
+    rects_data[i * 4 + 3] = rects[i].height();
+  }
+  SwapBuffersWithBoundsCHROMIUM(rects.size(), rects_data.data());
 }
 
 void GLES2Implementation::PartialSwapBuffers(const gfx::Rect& sub_buffer) {
@@ -5524,12 +5570,20 @@ void GLES2Implementation::BeginQueryEXT(GLenum target, GLuint id) {
         return;
       }
       break;
+    case GL_SAMPLES_PASSED_ARB:
+      if (!capabilities_.occlusion_query) {
+        SetGLError(
+            GL_INVALID_OPERATION, "glBeginQueryEXT",
+            "not enabled for occlusion queries");
+        return;
+      }
+      break;
     case GL_ANY_SAMPLES_PASSED:
     case GL_ANY_SAMPLES_PASSED_CONSERVATIVE:
       if (!capabilities_.occlusion_query_boolean) {
         SetGLError(
             GL_INVALID_OPERATION, "glBeginQueryEXT",
-            "not enabled for occlusion queries");
+            "not enabled for boolean occlusion queries");
         return;
       }
       break;
@@ -6144,20 +6198,6 @@ bool CreateImageValidInternalFormat(GLenum internalformat,
   }
 }
 
-bool CreateGpuMemoryBufferValidInternalFormat(GLenum internalformat) {
-  switch (internalformat) {
-    case GL_RGB:
-    case GL_RGBA:
-      return true;
-    default:
-      return false;
-  }
-}
-
-bool ValidImageUsage(GLenum usage) {
-  return usage == GL_READ_WRITE_CHROMIUM;
-}
-
 }  // namespace
 
 GLuint GLES2Implementation::CreateImageCHROMIUMHelper(ClientBuffer buffer,
@@ -6222,69 +6262,6 @@ void GLES2Implementation::DestroyImageCHROMIUM(GLuint image_id) {
   CheckGLError();
 }
 
-GLuint GLES2Implementation::CreateGpuMemoryBufferImageCHROMIUMHelper(
-    GLsizei width,
-    GLsizei height,
-    GLenum internalformat,
-    GLenum usage) {
-  if (width <= 0) {
-    SetGLError(
-        GL_INVALID_VALUE, "glCreateGpuMemoryBufferImageCHROMIUM", "width <= 0");
-    return 0;
-  }
-
-  if (height <= 0) {
-    SetGLError(GL_INVALID_VALUE,
-               "glCreateGpuMemoryBufferImageCHROMIUM",
-               "height <= 0");
-    return 0;
-  }
-
-  if (!CreateGpuMemoryBufferValidInternalFormat(internalformat)) {
-    SetGLError(GL_INVALID_VALUE,
-               "glCreateGpuMemoryBufferImageCHROMIUM",
-               "invalid format");
-    return 0;
-  }
-
-  if (!ValidImageUsage(usage)) {
-    SetGLError(GL_INVALID_VALUE,
-               "glCreateGpuMemoryBufferImageCHROMIUM",
-               "invalid usage");
-    return 0;
-  }
-
-  // Flush the command stream to ensure ordering in case the newly
-  // returned image_id has recently been in use with a different buffer.
-  helper_->CommandBufferHelper::Flush();
-  int32_t image_id = gpu_control_->CreateGpuMemoryBufferImage(
-      width, height, internalformat, usage);
-  if (image_id < 0) {
-    SetGLError(GL_OUT_OF_MEMORY,
-               "glCreateGpuMemoryBufferImageCHROMIUM",
-               "image_id < 0");
-    return 0;
-  }
-  return image_id;
-}
-
-GLuint GLES2Implementation::CreateGpuMemoryBufferImageCHROMIUM(
-    GLsizei width,
-    GLsizei height,
-    GLenum internalformat,
-    GLenum usage) {
-  GPU_CLIENT_SINGLE_THREAD_CHECK();
-  GPU_CLIENT_LOG("[" << GetLogPrefix()
-                     << "] glCreateGpuMemoryBufferImageCHROMIUM(" << width
-                     << ", " << height << ", "
-                     << GLES2Util::GetStringImageInternalFormat(internalformat)
-                     << ", " << GLES2Util::GetStringImageUsage(usage) << ")");
-  GLuint image_id = CreateGpuMemoryBufferImageCHROMIUMHelper(
-      width, height, internalformat, usage);
-  CheckGLError();
-  return image_id;
-}
-
 bool GLES2Implementation::ValidateSize(const char* func, GLsizeiptr size) {
   if (size < 0) {
     SetGLError(GL_INVALID_VALUE, func, "size < 0");
@@ -6327,7 +6304,7 @@ bool GLES2Implementation::PackStringsToBucket(GLsizei count,
                                               const char* func_name) {
   DCHECK_LE(0, count);
   // Compute the total size.
-  base::CheckedNumeric<size_t> total_size = count;
+  base::CheckedNumeric<uint32_t> total_size = count;
   total_size += 1;
   total_size *= sizeof(GLint);
   if (!total_size.IsValid()) {
@@ -7028,6 +7005,22 @@ void GLES2Implementation::UpdateCachedExtensionsIfNeeded() {
 void GLES2Implementation::InvalidateCachedExtensions() {
   cached_extension_string_ = nullptr;
   cached_extensions_.clear();
+}
+
+void GLES2Implementation::Viewport(GLint x,
+                                   GLint y,
+                                   GLsizei width,
+                                   GLsizei height) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glViewport(" << x << ", " << y
+                     << ", " << width << ", " << height << ")");
+  if (width < 0 || height < 0) {
+    SetGLError(GL_INVALID_VALUE, "glViewport", "negative width/height");
+    return;
+  }
+  state_.SetViewport(x, y, width, height);
+  helper_->Viewport(x, y, width, height);
+  CheckGLError();
 }
 
 // Include the auto-generated part of this file. We split this because it means

@@ -28,30 +28,22 @@ class DummyProofSource : public net::ProofSource {
   ~DummyProofSource() override {}
 
   // ProofSource override.
-  bool GetProof(const net::IPAddress& server_ip,
+  void GetProof(const net::QuicSocketAddress& server_addr,
                 const std::string& hostname,
                 const std::string& server_config,
                 net::QuicVersion quic_version,
                 base::StringPiece chlo_hash,
                 const net::QuicTagVector& connection_options,
-                scoped_refptr<net::ProofSource::Chain>* out_chain,
-                std::string* out_signature,
-                std::string* out_leaf_cert_sct) override {
+                std::unique_ptr<Callback> callback) override {
+    net::QuicReferenceCountedPointer<net::ProofSource::Chain> chain;
+    net::QuicCryptoProof proof;
     std::vector<std::string> certs;
     certs.push_back("Dummy cert");
-    *out_chain = new ProofSource::Chain(certs);
-    *out_signature = "Dummy signature";
-    *out_leaf_cert_sct = "Dummy timestamp";
-    return true;
+    chain = new ProofSource::Chain(certs);
+    proof.signature = "Dummy signature";
+    proof.leaf_cert_scts = "Dummy timestamp";
+    callback->Run(true, chain, proof, nullptr /* details */);
   }
-
-  void GetProof(const net::IPAddress& server_ip,
-                const std::string& hostname,
-                const std::string& server_config,
-                net::QuicVersion quic_version,
-                base::StringPiece chlo_hash,
-                const net::QuicTagVector& connection_options,
-                std::unique_ptr<Callback> callback) override {}
 };
 
 // Used by QuicCryptoClientConfig to ignore the peer's credentials
@@ -100,7 +92,7 @@ QuicConnectionId QuartcCryptoServerStreamHelper::GenerateConnectionIdForReject(
 
 bool QuartcCryptoServerStreamHelper::CanAcceptClientHello(
     const CryptoHandshakeMessage& message,
-    const IPEndPoint& self_address,
+    const QuicSocketAddress& self_address,
     std::string* error_details) const {
   return true;
 }

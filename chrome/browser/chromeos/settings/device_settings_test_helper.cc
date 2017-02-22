@@ -175,6 +175,10 @@ void DeviceSettingsTestHelper::StoreDeviceLocalAccountPolicy(
   device_local_account_policy_[account_id].store_callbacks_.push_back(callback);
 }
 
+bool DeviceSettingsTestHelper::SupportsRestartToApplyUserFlags() const {
+  return false;
+}
+
 void DeviceSettingsTestHelper::SetFlagsForUser(
     const cryptohome::Identification& cryptohome_id,
     const std::vector<std::string>& flags) {}
@@ -192,10 +196,13 @@ void DeviceSettingsTestHelper::StartArcInstance(
 
 void DeviceSettingsTestHelper::StopArcInstance(const ArcCallback& callback) {}
 
-void DeviceSettingsTestHelper::PrioritizeArcInstance(
+void DeviceSettingsTestHelper::SetArcCpuRestriction(
+    login_manager::ContainerCpuRestrictionState restriction_state,
     const ArcCallback& callback) {}
 
-void DeviceSettingsTestHelper::EmitArcBooted() {}
+void DeviceSettingsTestHelper::EmitArcBooted(
+    const cryptohome::Identification& cryptohome_id,
+    const ArcCallback& callback) {}
 
 void DeviceSettingsTestHelper::GetArcStartTime(
     const GetArcStartTimeCallback& callback) {}

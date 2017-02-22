@@ -39,7 +39,7 @@
 namespace blink {
 
 AbstractWorker::AbstractWorker(ExecutionContext* context)
-    : ActiveDOMObject(context) {}
+    : ContextLifecycleObserver(context) {}
 
 AbstractWorker::~AbstractWorker() {}
 
@@ -57,7 +57,8 @@ KURL AbstractWorker::resolveURL(const String& url,
   // We can safely expose the URL in the following exceptions, as these checks
   // happen synchronously before redirection. JavaScript receives no new
   // information.
-  if (!getExecutionContext()->getSecurityOrigin()->canRequestNoSuborigin(
+  if (!scriptURL.protocolIsData() &&
+      !getExecutionContext()->getSecurityOrigin()->canRequestNoSuborigin(
           scriptURL)) {
     exceptionState.throwSecurityError(
         "Script at '" + scriptURL.elidedString() +
@@ -84,7 +85,7 @@ KURL AbstractWorker::resolveURL(const String& url,
 
 DEFINE_TRACE(AbstractWorker) {
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
 }
 
 }  // namespace blink

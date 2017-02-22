@@ -121,7 +121,7 @@ ChromeRenderFrameObserver::ChromeRenderFrameObserver(
   if (!command_line.HasSwitch(switches::kDisableClientSidePhishingDetection))
     OnSetClientSidePhishingDetection(true);
   translate_helper_ = new translate::TranslateHelper(
-      render_frame, chrome::ISOLATED_WORLD_ID_TRANSLATE, 0,
+      render_frame, chrome::ISOLATED_WORLD_ID_TRANSLATE,
       extensions::kExtensionScheme);
 }
 
@@ -251,7 +251,8 @@ void ChromeRenderFrameObserver::DidFinishLoad() {
   }
 }
 
-void ChromeRenderFrameObserver::DidStartProvisionalLoad() {
+void ChromeRenderFrameObserver::DidStartProvisionalLoad(
+    blink::WebDataSource* data_source) {
   // Let translate_helper do any preparatory work for loading a URL.
   if (!translate_helper_)
     return;
@@ -304,7 +305,8 @@ void ChromeRenderFrameObserver::CapturePageText(TextCaptureType capture_type) {
   // testing purposes. See http://crbug.com/585164.
   base::string16 contents =
       WebFrameContentDumper::deprecatedDumpFrameTreeAsText(frame,
-                                                           kMaxIndexChars);
+                                                           kMaxIndexChars)
+          .utf16();
 
   UMA_HISTOGRAM_TIMES(kTranslateCaptureText,
                       base::TimeTicks::Now() - capture_begin_time);

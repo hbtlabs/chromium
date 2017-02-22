@@ -53,10 +53,6 @@ struct FrameHostMsg_HittestData_Params;
 struct ViewHostMsg_SelectionBounds_Params;
 struct ViewHostMsg_UpdateRect_Params;
 
-namespace base {
-class RefCountedBytes;
-}
-
 namespace blink {
 class WebInputEvent;
 class WebMouseEvent;
@@ -70,6 +66,7 @@ class PowerSaveBlocker;
 #endif
 
 namespace gfx {
+class Image;
 class Range;
 }
 
@@ -149,8 +146,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
                             const ReadbackRequestCallback& callback,
                             const SkColorType preferred_color_type) override;
   bool CanCopyFromBackingStore() override;
-  void LockBackingStore() override;
-  void UnlockBackingStore() override;
   void ForwardMouseEvent(const blink::WebMouseEvent& mouse_event) override;
   void ForwardWheelEvent(const blink::WebMouseWheelEvent& wheel_event) override;
   void ForwardKeyboardEvent(const NativeWebKeyboardEvent& key_event) override;
@@ -174,7 +169,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   void RemoveInputEventObserver(
       RenderWidgetHost::InputEventObserver* observer) override;
   void GetScreenInfo(content::ScreenInfo* result) override;
-  void HandleCompositorProto(const std::vector<uint8_t>& proto) override;
   // |drop_data| must have been filtered. The embedder should call
   // FilterDropData before passing the drop data to RWHI.
   void DragTargetDragEnter(const DropData& drop_data,
@@ -192,7 +186,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
                           const gfx::Point& screen_pt,
                           blink::WebDragOperationsMask operations_allowed,
                           int key_modifiers) override;
-  void DragTargetDragLeave() override;
+  void DragTargetDragLeave(const gfx::Point& client_point,
+                           const gfx::Point& screen_point) override;
   // |drop_data| must have been filtered. The embedder should call
   // FilterDropData before passing the drop data to RWHI.
   void DragTargetDrop(const DropData& drop_data,
@@ -209,9 +204,12 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   void NotifyScreenInfoChanged();
 
   // Forces redraw in the renderer and when the update reaches the browser
-  // grabs snapshot from the compositor. Returns PNG-encoded snapshot.
+  // grabs snapshot from the compositor. On MacOS, the snapshot is taken from
+  // the Cocoa view for end-to-end testing purposes. Returns a gfx::Image that
+  // is backed by an NSImage on MacOS or by an SkBitmap otherwise. The
+  // gfx::Image may be empty if the snapshot failed.
   using GetSnapshotFromBrowserCallback =
-      base::Callback<void(const unsigned char*, size_t)>;
+      base::Callback<void(const gfx::Image&)>;
   void GetSnapshotFromBrowser(const GetSnapshotFromBrowserCallback& callback);
 
   const NativeWebKeyboardEvent* GetLastKeyboardEvent() const;
@@ -339,6 +337,12 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // yet.
   void OnFirstPaintAfterLoad();
 
+  // Forwards the keyboard event with optional commands to the renderer. If
+  // |key_event| is not forwarded for any reason, then |commands| are ignored.
+  void ForwardKeyboardEventWithCommands(
+      const NativeWebKeyboardEvent& key_event,
+      const std::vector<EditCommand>* commands);
+
   // Forwards the given message to the renderer. These are called by the view
   // when it has received a message.
   void ForwardGestureEventWithLatencyInfo(
@@ -403,9 +407,11 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   //   (on Windows);
   // * when it receives a "commit" signal of GtkIMContext (on Linux);
   // * when insertText of NSTextInput is called (on Mac).
-  void ImeCommitText(const base::string16& text,
-                     const gfx::Range& replacement_range,
-                     int relative_cursor_pos);
+  void ImeCommitText(
+      const base::string16& text,
+      const std::vector<blink::WebCompositionUnderline>& underlines,
+      const gfx::Range& replacement_range,
+      int relative_cursor_pos);
 
   // Finishes an ongoing composition.
   // A browser should call this function or ImeCommitText:
@@ -429,11 +435,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
 
   // Set the RenderView background transparency.
   void SetBackgroundOpaque(bool opaque);
-
-  // Notifies the renderer that the next key event is bound to one or more
-  // pre-defined edit commands
-  void SetEditCommandsForNextKeyEvent(
-      const std::vector<EditCommand>& commands);
 
   // Executes the edit command.
   void ExecuteEditCommand(const std::string& command,
@@ -475,10 +476,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
 
   // Update the renderer's cache of the screen rect of the view and window.
   void SendScreenRects();
-
-  // Suppresses Char and KeyUp events until the next (Raw)KeyDown. See
-  // suppress_events_until_keydown_.
-  void SuppressEventsUntilKeyDown();
 
   // Called by the view in response to a flush request.
   void FlushInput();
@@ -642,9 +639,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
                                  const cc::SharedBitmapId& id);
   void OnSelectionBoundsChanged(
       const ViewHostMsg_SelectionBounds_Params& params);
-  void OnForwardCompositorProto(const std::vector<uint8_t>& proto);
   void OnSetNeedsBeginFrames(bool needs_begin_frames);
   void OnHittestData(const FrameHostMsg_HittestData_Params& params);
+  void OnFocusedNodeTouched(bool editable);
   void OnStartDragging(const DropData& drop_data,
                        blink::WebDragOperationsMask operations_allowed,
                        const SkBitmap& bitmap,
@@ -699,13 +696,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
 
   void WindowSnapshotReachedScreen(int snapshot_id);
 
-  void OnSnapshotDataReceived(int snapshot_id,
-                              const unsigned char* png,
-                              size_t size);
-
-  void OnSnapshotDataReceivedAsync(
-      int snapshot_id,
-      scoped_refptr<base::RefCountedBytes> png_data);
+  void OnSnapshotReceived(int snapshot_id, const gfx::Image& image);
 
   // 1. Grants permissions to URL (if any)
   // 2. Grants permissions to filenames

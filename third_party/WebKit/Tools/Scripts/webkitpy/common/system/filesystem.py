@@ -79,7 +79,7 @@ class FileSystem(object):
     def exists(self, path):
         return os.path.exists(path)
 
-    def files_under(self, path, dirs_to_skip=[], file_filter=None):
+    def files_under(self, path, dirs_to_skip=None, file_filter=None):
         """Return the list of all files under the given path in topdown order.
 
         Args:
@@ -90,6 +90,8 @@ class FileSystem(object):
                 each file found. The file is included in the result if the
                 callback returns True.
         """
+        dirs_to_skip = dirs_to_skip or []
+
         def filter_all(fs, dirpath, basename):
             return True
 
@@ -174,8 +176,8 @@ class FileSystem(object):
         """Create the specified directory if it doesn't already exist."""
         try:
             os.makedirs(self.join(*path))
-        except OSError as e:
-            if e.errno != errno.EEXIST:
+        except OSError as error:
+            if error.errno != errno.EEXIST:
                 raise
 
     def move(self, source, destination):
@@ -258,11 +260,11 @@ class FileSystem(object):
             try:
                 osremove(path)
                 return True
-            except exceptions.WindowsError as e:
+            except exceptions.WindowsError:
                 time.sleep(sleep_interval)
                 retry_timeout_sec -= sleep_interval
                 if retry_timeout_sec < 0:
-                    raise e
+                    raise
 
     def rmtree(self, path):
         """Delete the directory rooted at path, whether empty or not."""

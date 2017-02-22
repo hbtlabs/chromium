@@ -22,8 +22,6 @@ class GURL;
 
 namespace net {
 
-class CookieMonster;
-
 // An interface for storing and retrieving cookies. Implementations are not
 // thread safe, as with most other net classes. All methods must be invoked on
 // the network thread, and all callbacks will be calle there.
@@ -39,6 +37,14 @@ class NET_EXPORT CookieStore {
     INSERTED,
     // The cookie was changed directly by a consumer's action.
     EXPLICIT,
+    // The following four values have the same meaning as EXPLICIT, but are
+    // being used to track down where a bug is coming from.
+    // TODO(nharper): Remove the following four values once the one of interest
+    // has been found.
+    EXPLICIT_DELETE_BETWEEN,
+    EXPLICIT_DELETE_PREDICATE,
+    EXPLICIT_DELETE_SINGLE,
+    EXPLICIT_DELETE_CANONICAL,
     // The cookie was deleted, but no more details are known.
     UNKNOWN_DELETION,
     // The cookie was automatically removed due to an insert operation that
@@ -118,7 +124,6 @@ class NET_EXPORT CookieStore {
       bool secure,
       bool http_only,
       CookieSameSite same_site,
-      bool enforce_strict_secure,
       CookiePriority priority,
       const SetCookiesCallback& callback) = 0;
 

@@ -25,7 +25,7 @@ void CompositingReasonFinder::updateTriggers() {
   m_compositingTriggers = 0;
 
   Settings& settings = m_layoutView.document().page()->settings();
-  if (settings.preferCompositingToLCDTextEnabled()) {
+  if (settings.getPreferCompositingToLCDTextEnabled()) {
     m_compositingTriggers |= ScrollableInnerFrameTrigger;
     m_compositingTriggers |= OverflowScrollTrigger;
     m_compositingTriggers |= ViewportConstrainedPositionedTrigger;
@@ -66,13 +66,13 @@ bool CompositingReasonFinder::requiresCompositingForScrollableFrame() const {
 
 CompositingReasons
 CompositingReasonFinder::potentialCompositingReasonsFromStyle(
-    LayoutObject* layoutObject) const {
+    LayoutObject& layoutObject) const {
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
     return CompositingReasonNone;
 
   CompositingReasons reasons = CompositingReasonNone;
 
-  const ComputedStyle& style = layoutObject->styleRef();
+  const ComputedStyle& style = layoutObject.styleRef();
 
   if (requiresCompositingForTransform(layoutObject))
     reasons |= CompositingReason3DTransform;
@@ -101,9 +101,9 @@ CompositingReasonFinder::potentialCompositingReasonsFromStyle(
 
   // If the implementation of createsGroup changes, we need to be aware of that
   // in this part of code.
-  DCHECK((layoutObject->isTransparent() || layoutObject->hasMask() ||
-          layoutObject->hasFilterInducingProperty() || style.hasBlendMode()) ==
-         layoutObject->createsGroup());
+  DCHECK((layoutObject.isTransparent() || layoutObject.hasMask() ||
+          layoutObject.hasFilterInducingProperty() || style.hasBlendMode()) ==
+         layoutObject.createsGroup());
 
   if (style.hasMask())
     reasons |= CompositingReasonMaskWithCompositedDescendants;
@@ -115,16 +115,16 @@ CompositingReasonFinder::potentialCompositingReasonsFromStyle(
     reasons |= CompositingReasonBackdropFilter;
 
   // See Layer::updateTransform for an explanation of why we check both.
-  if (layoutObject->hasTransformRelatedProperty() && style.hasTransform())
+  if (layoutObject.hasTransformRelatedProperty() && style.hasTransform())
     reasons |= CompositingReasonTransformWithCompositedDescendants;
 
-  if (layoutObject->isTransparent())
+  if (layoutObject.isTransparent())
     reasons |= CompositingReasonOpacityWithCompositedDescendants;
 
   if (style.hasBlendMode())
     reasons |= CompositingReasonBlendingWithCompositedDescendants;
 
-  if (layoutObject->hasReflection())
+  if (layoutObject.hasReflection())
     reasons |= CompositingReasonReflectionWithCompositedDescendants;
 
   DCHECK(!(reasons & ~CompositingReasonComboAllStyleDeterminedReasons));
@@ -132,18 +132,18 @@ CompositingReasonFinder::potentialCompositingReasonsFromStyle(
 }
 
 bool CompositingReasonFinder::requiresCompositingForTransform(
-    LayoutObject* layoutObject) const {
+    const LayoutObject& layoutObject) {
   // Note that we ask the layoutObject if it has a transform, because the style
   // may have transforms, but the layoutObject may be an inline that doesn't
   // support them.
-  return layoutObject->hasTransformRelatedProperty() &&
-         layoutObject->style()->has3DTransform();
+  return layoutObject.hasTransformRelatedProperty() &&
+         layoutObject.styleRef().has3DTransform();
 }
 
 CompositingReasons CompositingReasonFinder::nonStyleDeterminedDirectReasons(
     const PaintLayer* layer) const {
   CompositingReasons directReasons = CompositingReasonNone;
-  LayoutObject* layoutObject = layer->layoutObject();
+  LayoutObject& layoutObject = layer->layoutObject();
 
   if (m_compositingTriggers & OverflowScrollTrigger && layer->clipParent())
     directReasons |= CompositingReasonOutOfFlowClipping;
@@ -164,24 +164,59 @@ CompositingReasons CompositingReasonFinder::nonStyleDeterminedDirectReasons(
   if (requiresCompositingForScrollDependentPosition(layer))
     directReasons |= CompositingReasonScrollDependentPosition;
 
-  directReasons |= layoutObject->additionalCompositingReasons();
+  directReasons |= layoutObject.additionalCompositingReasons();
 
   DCHECK(!(directReasons & CompositingReasonComboAllStyleDeterminedReasons));
   return directReasons;
 }
 
 bool CompositingReasonFinder::requiresCompositingForAnimation(
-    const ComputedStyle& style) const {
+    const ComputedStyle& style) {
   if (style.subtreeWillChangeContents())
     return style.isRunningAnimationOnCompositor();
 
   return style.shouldCompositeForCurrentAnimations();
 }
 
+bool CompositingReasonFinder::requiresCompositingForOpacityAnimation(
+    const ComputedStyle& style) {
+  return style.subtreeWillChangeContents()
+             ? style.isRunningOpacityAnimationOnCompositor()
+             : style.hasCurrentOpacityAnimation();
+}
+
+bool CompositingReasonFinder::requiresCompositingForFilterAnimation(
+    const ComputedStyle& style) {
+  return style.subtreeWillChangeContents()
+             ? style.isRunningFilterAnimationOnCompositor()
+             : style.hasCurrentFilterAnimation();
+}
+
+bool CompositingReasonFinder::requiresCompositingForBackdropFilterAnimation(
+    const ComputedStyle& style) {
+  return style.subtreeWillChangeContents()
+             ? style.isRunningBackdropFilterAnimationOnCompositor()
+             : style.hasCurrentBackdropFilterAnimation();
+}
+
+bool CompositingReasonFinder::requiresCompositingForEffectAnimation(
+    const ComputedStyle& style) {
+  return requiresCompositingForOpacityAnimation(style) ||
+         requiresCompositingForFilterAnimation(style) ||
+         requiresCompositingForBackdropFilterAnimation(style);
+}
+
+bool CompositingReasonFinder::requiresCompositingForTransformAnimation(
+    const ComputedStyle& style) {
+  return style.subtreeWillChangeContents()
+             ? style.isRunningTransformAnimationOnCompositor()
+             : style.hasCurrentTransformAnimation();
+}
+
 bool CompositingReasonFinder::requiresCompositingForScrollDependentPosition(
     const PaintLayer* layer) const {
-  if (layer->layoutObject()->style()->position() != FixedPosition &&
-      layer->layoutObject()->style()->position() != StickyPosition)
+  if (layer->layoutObject().style()->position() != EPosition::kFixed &&
+      layer->layoutObject().style()->position() != EPosition::kSticky)
     return false;
 
   if (!(m_compositingTriggers & ViewportConstrainedPositionedTrigger) &&
@@ -194,9 +229,9 @@ bool CompositingReasonFinder::requiresCompositingForScrollDependentPosition(
   // Don't promote fixed position elements that are descendants of a non-view
   // container, e.g. transformed elements.  They will stay fixed wrt the
   // container rather than the enclosing frame.
-  if (layer->scrollsWithViewport())
+  if (layer->sticksToViewport())
     return m_layoutView.frameView()->isScrollable();
-  return layer->layoutObject()->style()->position() == StickyPosition &&
+  return layer->layoutObject().style()->position() == EPosition::kSticky &&
          layer->ancestorOverflowLayer()->scrollsOverflow();
 }
 

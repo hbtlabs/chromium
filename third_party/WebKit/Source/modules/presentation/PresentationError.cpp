@@ -11,8 +11,7 @@
 namespace blink {
 
 // static
-DOMException* PresentationError::take(ScriptPromiseResolver*,
-                                      const WebPresentationError& error) {
+DOMException* PresentationError::take(const WebPresentationError& error) {
   ExceptionCode code = UnknownError;
   switch (error.errorType) {
     case WebPresentationError::ErrorTypeNoAvailableScreens:
@@ -20,10 +19,13 @@ DOMException* PresentationError::take(ScriptPromiseResolver*,
       code = NotFoundError;
       break;
     case WebPresentationError::ErrorTypeSessionRequestCancelled:
-      code = AbortError;
+      code = NotAllowedError;
       break;
     case WebPresentationError::ErrorTypeAvailabilityNotSupported:
       code = NotSupportedError;
+      break;
+    case WebPresentationError::ErrorTypePreviousStartInProgress:
+      code = OperationError;
       break;
     case WebPresentationError::ErrorTypeUnknown:
       code = UnknownError;

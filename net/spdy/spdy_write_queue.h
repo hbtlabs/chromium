@@ -16,7 +16,6 @@
 
 namespace net {
 
-class SpdyBuffer;
 class SpdyBufferProducer;
 class SpdyStream;
 
@@ -60,6 +59,9 @@ class NET_EXPORT_PRIVATE SpdyWriteQueue {
   // Removes all pending writes.
   void Clear();
 
+  // Returns the estimate of dynamically allocated memory in bytes.
+  size_t EstimateMemoryUsage() const;
+
  private:
   // A struct holding a frame producer and its associated stream.
   struct PendingWrite {
@@ -76,6 +78,8 @@ class NET_EXPORT_PRIVATE SpdyWriteQueue {
     ~PendingWrite();
     PendingWrite(PendingWrite&& other);
     PendingWrite& operator=(PendingWrite&& other);
+
+    size_t EstimateMemoryUsage() const;
 
     DISALLOW_COPY_AND_ASSIGN(PendingWrite);
   };

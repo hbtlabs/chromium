@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "net/quic/core/crypto/crypto_handshake.h"
 #include "net/quic/core/crypto/crypto_protocol.h"
+#include "net/quic/platform/api/quic_socket_address.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/quic_stream_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
@@ -86,8 +87,8 @@ TEST_F(QuicCryptoStreamTest, ProcessRawData) {
   const CryptoHandshakeMessage& message = (*stream_.messages())[0];
   EXPECT_EQ(kSHLO, message.tag());
   EXPECT_EQ(2u, message.tag_value_map().size());
-  EXPECT_EQ("abc", CryptoTestUtils::GetValueForTag(message, 1));
-  EXPECT_EQ("def", CryptoTestUtils::GetValueForTag(message, 2));
+  EXPECT_EQ("abc", crypto_test_utils::GetValueForTag(message, 1));
+  EXPECT_EQ("def", crypto_test_utils::GetValueForTag(message, 2));
 }
 
 TEST_F(QuicCryptoStreamTest, ProcessBadData) {

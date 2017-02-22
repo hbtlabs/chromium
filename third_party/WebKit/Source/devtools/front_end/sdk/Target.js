@@ -12,7 +12,7 @@ SDK.Target = class extends Protocol.TargetBase {
    * @param {!SDK.TargetManager} targetManager
    * @param {string} name
    * @param {number} capabilitiesMask
-   * @param {!InspectorBackendClass.Connection.Factory} connectionFactory
+   * @param {!Protocol.InspectorBackend.Connection.Factory} connectionFactory
    * @param {?SDK.Target} parentTarget
    */
   constructor(targetManager, name, capabilitiesMask, connectionFactory, parentTarget) {
@@ -23,8 +23,6 @@ SDK.Target = class extends Protocol.TargetBase {
     this._capabilitiesMask = capabilitiesMask;
     this._parentTarget = parentTarget;
     this._id = SDK.Target._nextId++;
-
-    /** @type {!Map.<!Function, !SDK.SDKModel>} */
     this._modelByConstructor = new Map();
   }
 
@@ -136,18 +134,29 @@ SDK.Target = class extends Protocol.TargetBase {
   }
 
   /**
-   * @param {!Function} modelClass
-   * @return {?SDK.SDKModel}
+   * @param {function(new:T, !SDK.Target)} modelClass
+   * @return {?T}
+   * @template T
    */
   model(modelClass) {
+    if (!this._modelByConstructor.get(modelClass)) {
+      var capabilities = SDK.SDKModel._capabilitiesByModelClass.get(modelClass);
+      if (capabilities === undefined)
+        throw 'Model class is not registered';
+      if ((this._capabilitiesMask & capabilities) === capabilities) {
+        var model = new modelClass(this);
+        this._modelByConstructor.set(modelClass, model);
+        this._targetManager.modelAdded(this, modelClass, model);
+      }
+    }
     return this._modelByConstructor.get(modelClass) || null;
   }
 
   /**
-   * @return {!Array<!SDK.SDKModel>}
+   * @return {!Map<function(new:SDK.SDKModel, !SDK.Target), !SDK.SDKModel>}
    */
   models() {
-    return this._modelByConstructor.valuesArray();
+    return this._modelByConstructor;
   }
 
   /**
@@ -181,7 +190,12 @@ SDK.Target.Capability = {
   JS: 4,
   Log: 8,
   Network: 16,
-  Target: 32
+  Target: 32,
+  ScreenCapture: 64,
+
+  None: 0,
+
+  AllForTests: 127
 };
 
 SDK.Target._nextId = 1;
@@ -211,12 +225,10 @@ SDK.SDKObject = class extends Common.Object {
  */
 SDK.SDKModel = class extends SDK.SDKObject {
   /**
-   * @param {!Function} modelClass
    * @param {!SDK.Target} target
    */
-  constructor(modelClass, target) {
+  constructor(target) {
     super(target);
-    target._modelByConstructor.set(modelClass, this);
   }
 
   /**
@@ -235,14 +247,18 @@ SDK.SDKModel = class extends SDK.SDKObject {
 
   dispose() {
   }
-
-  /**
-   * @param {!Common.Event} event
-   */
-  _targetDisposed(event) {
-    var target = /** @type {!SDK.Target} */ (event.data);
-    if (target !== this._target)
-      return;
-    this.dispose();
-  }
 };
+
+
+/**
+ * @param {function(new:SDK.SDKModel, !SDK.Target)} modelClass
+ * @param {number} capabilities
+ */
+SDK.SDKModel.register = function(modelClass, capabilities) {
+  if (!SDK.SDKModel._capabilitiesByModelClass)
+    SDK.SDKModel._capabilitiesByModelClass = new Map();
+  SDK.SDKModel._capabilitiesByModelClass.set(modelClass, capabilities);
+};
+
+/** @type {!Map<function(new:SDK.SDKModel, !SDK.Target), number>} */
+SDK.SDKModel._capabilitiesByModelClass;

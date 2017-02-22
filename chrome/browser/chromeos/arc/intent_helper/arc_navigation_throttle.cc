@@ -27,16 +27,6 @@ namespace arc {
 
 namespace {
 
-constexpr uint32_t kMinVersionForHandleUrl = 2;
-constexpr uint32_t kMinVersionForRequestUrlHandlerList = 2;
-constexpr uint32_t kMinVersionForAddPreferredPackage = 7;
-
-scoped_refptr<ActivityIconLoader> GetIconLoader() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  ArcServiceManager* arc_service_manager = ArcServiceManager::Get();
-  return arc_service_manager ? arc_service_manager->icon_loader() : nullptr;
-}
-
 // Compares the host name of the referrer and target URL to decide whether
 // the navigation needs to be overriden.
 bool ShouldOverrideUrlLoading(const GURL& previous_url,
@@ -182,7 +172,9 @@ ArcNavigationThrottle::HandleRequest() {
     return content::NavigationThrottle::PROCEED;
 
   ArcServiceManager* arc_service_manager = ArcServiceManager::Get();
-  DCHECK(arc_service_manager);
+  if (!arc_service_manager)
+    return content::NavigationThrottle::PROCEED;
+
   scoped_refptr<LocalActivityResolver> local_resolver =
       arc_service_manager->activity_resolver();
   if (local_resolver->ShouldChromeHandleUrl(url)) {
@@ -191,8 +183,9 @@ ArcNavigationThrottle::HandleRequest() {
     return content::NavigationThrottle::PROCEED;
   }
 
-  auto* instance = ArcIntentHelperBridge::GetIntentHelperInstance(
-      "RequestUrlHandlerList", kMinVersionForRequestUrlHandlerList);
+  auto* instance = ARC_GET_INSTANCE_FOR_METHOD(
+      arc_service_manager->arc_bridge_service()->intent_helper(),
+      RequestUrlHandlerList);
   if (!instance)
     return content::NavigationThrottle::PROCEED;
   instance->RequestUrlHandlerList(
@@ -248,16 +241,17 @@ void ArcNavigationThrottle::OnAppCandidatesReceived(
   if (IsSwapElementsNeeded(handlers, &indices))
     std::swap(handlers[indices.first], handlers[indices.second]);
 
-  scoped_refptr<ActivityIconLoader> icon_loader = GetIconLoader();
-  if (!icon_loader) {
-    LOG(ERROR) << "Cannot get an instance of ActivityIconLoader";
+  auto* intent_helper_bridge =
+      ArcServiceManager::GetGlobalService<ArcIntentHelperBridge>();
+  if (!intent_helper_bridge) {
+    LOG(ERROR) << "Cannot get an instance of ArcIntentHelperBridge";
     navigation_handle()->Resume();
     return;
   }
-  std::vector<ActivityIconLoader::ActivityName> activities;
+  std::vector<ArcIntentHelperBridge::ActivityName> activities;
   for (const auto& handler : handlers)
     activities.emplace_back(handler->package_name, handler->activity_name);
-  icon_loader->GetActivityIcons(
+  intent_helper_bridge->GetActivityIcons(
       activities,
       base::Bind(&ArcNavigationThrottle::OnAppIconsReceived,
                  weak_ptr_factory_.GetWeakPtr(), base::Passed(&handlers)));
@@ -265,14 +259,14 @@ void ArcNavigationThrottle::OnAppCandidatesReceived(
 
 void ArcNavigationThrottle::OnAppIconsReceived(
     std::vector<mojom::IntentHandlerInfoPtr> handlers,
-    std::unique_ptr<ActivityIconLoader::ActivityToIconsMap> icons) {
+    std::unique_ptr<ArcIntentHelperBridge::ActivityToIconsMap> icons) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   std::vector<AppInfo> app_info;
 
   for (const auto& handler : handlers) {
     gfx::Image icon;
-    const ActivityIconLoader::ActivityName activity(handler->package_name,
-                                                    handler->activity_name);
+    const ArcIntentHelperBridge::ActivityName activity(handler->package_name,
+                                                       handler->activity_name);
     const auto it = icons->find(activity);
 
     app_info.emplace_back(
@@ -296,8 +290,13 @@ void ArcNavigationThrottle::OnIntentPickerClosed(
   previous_user_action_ = close_reason;
 
   // Make sure that the instance at least supports HandleUrl.
-  auto* instance = ArcIntentHelperBridge::GetIntentHelperInstance(
-      "HandleUrl", kMinVersionForHandleUrl);
+  auto* arc_service_manager = ArcServiceManager::Get();
+  mojom::IntentHelperInstance* instance = nullptr;
+  if (arc_service_manager) {
+    instance = ARC_GET_INSTANCE_FOR_METHOD(
+        arc_service_manager->arc_bridge_service()->intent_helper(), HandleUrl);
+  }
+
   // Since we are selecting an app by its package name, we need to locate it
   // on the |handlers| structure before sending the IPC to ARC.
   const size_t selected_app_index = GetAppIndex(handlers, selected_app_package);
@@ -323,8 +322,10 @@ void ArcNavigationThrottle::OnIntentPickerClosed(
     case CloseReason::ALWAYS_PRESSED: {
       // Call AddPreferredPackage if it is supported. Reusing the same
       // |instance| is okay.
-      if (ArcIntentHelperBridge::GetIntentHelperInstance(
-              "AddPreferredPackage", kMinVersionForAddPreferredPackage)) {
+      DCHECK(arc_service_manager);
+      if (ARC_GET_INSTANCE_FOR_METHOD(
+              arc_service_manager->arc_bridge_service()->intent_helper(),
+              AddPreferredPackage)) {
         instance->AddPreferredPackage(
             handlers[selected_app_index]->package_name);
       }

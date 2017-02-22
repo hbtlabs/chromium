@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/json/json_writer.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "chrome/test/chromedriver/chrome/browser_info.h"
@@ -221,8 +222,14 @@ Status PerformanceLogger::StartTrace() {
     LOG(WARNING) << "tried to start tracing, but a trace was already started";
     return Status(kOk);
   }
+  std::unique_ptr<base::ListValue> categories(new base::ListValue());
+  categories->AppendStrings(base::SplitString(prefs_.trace_categories,
+                                              ",",
+                                              base::TRIM_WHITESPACE,
+                                              base::SPLIT_WANT_NONEMPTY));
   base::DictionaryValue params;
-  params.SetString("categories", prefs_.trace_categories);
+  params.Set("traceConfig.includedCategories", std::move(categories));
+  params.SetString("traceConfig.recordingMode", "recordAsMuchAsPossible");
   // Ask DevTools to report buffer usage.
   params.SetInteger("bufferUsageReportingInterval",
                     prefs_.buffer_usage_reporting_interval);
@@ -245,15 +252,15 @@ Status PerformanceLogger::CollectTraceEvents() {
                   "was not started");
   }
 
-  // As of r307466, DevTools no longer returns a response to Tracing.end
-  // commands, so we need to ignore it here to avoid a timeout. See
-  // https://code.google.com/p/chromedriver/issues/detail?id=997 for details.
-  // TODO(samuong): find other commands where we don't need the response.
-  bool wait_for_response = false;
+  // Prior to commit position 433389, DevTools did not return a response to
+  // Tracing.end commands, so we need to ignore it here to avoid a timeout. See
+  // https://bugs.chromium.org/p/chromedriver/issues/detail?id=1607 for details.
+  // TODO(samuong): remove this after we stop supporting Chrome 56.
+  bool wait_for_response = true;
   if (session_->chrome) {
     const BrowserInfo* browser_info = session_->chrome->GetBrowserInfo();
-    if (browser_info->browser_name == "chrome" && browser_info->build_no < 2245)
-      wait_for_response = true;
+    if (browser_info->browser_name == "chrome" && browser_info->build_no < 2925)
+      wait_for_response = false;
   }
   base::DictionaryValue params;
   Status status(kOk);

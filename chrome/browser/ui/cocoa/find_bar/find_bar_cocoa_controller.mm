@@ -7,6 +7,7 @@
 #include "base/auto_reset.h"
 #include "base/mac/bundle_locations.h"
 #include "base/strings/sys_string_conversions.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/cocoa/browser_window_controller.h"
@@ -32,7 +33,6 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_skia_util_mac.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/resources/grit/ui_resources.h"
 
 using content::NativeWebKeyboardEvent;
@@ -41,7 +41,7 @@ const float kFindBarOpenDuration = 0.2;
 const float kFindBarCloseDuration = 0.15;
 const float kFindBarMoveDuration = 0.15;
 const float kRightEdgeOffset = 25;
-
+const int kMaxCharacters = 4000;
 
 @interface FindBarCocoaController (PrivateMethods) <NSAnimationDelegate>
 // Returns the appropriate frame for a hidden find bar.
@@ -135,12 +135,12 @@ const float kRightEdgeOffset = 25;
   [nextButton_ setTitle:l10n_util::GetNSString(IDS_ACCNAME_NEXT)];
 
   NSImage* image = NSImageFromImageSkia(
-      gfx::CreateVectorIcon(gfx::VectorIconId::FIND_NEXT, SK_ColorBLACK));
+      gfx::CreateVectorIcon(kCaretDownIcon, SK_ColorBLACK));
   [image setTemplate:YES];
   [nextButton_ setImage:image];
 
-  image = NSImageFromImageSkia(
-      gfx::CreateVectorIcon(gfx::VectorIconId::FIND_PREV, SK_ColorBLACK));
+  image =
+      NSImageFromImageSkia(gfx::CreateVectorIcon(kCaretUpIcon, SK_ColorBLACK));
   [image setTemplate:YES];
   [previousButton_ setImage:image];
 
@@ -228,6 +228,10 @@ const float kRightEdgeOffset = 25;
     return;
   FindTabHelper* findTabHelper = FindTabHelper::FromWebContents(webContents);
 
+  // The find bar stops functioning if too many characters are used.
+  if ([[findText_ stringValue] length] > kMaxCharacters)
+    [findText_ setStringValue:[[findText_ stringValue]
+                                  substringToIndex:kMaxCharacters]];
   NSString* findText = [findText_ stringValue];
   if (![self isOffTheRecordProfile]) {
     base::AutoReset<BOOL> suppressReset(&suppressPboardUpdateActions_, YES);

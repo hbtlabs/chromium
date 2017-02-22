@@ -4,16 +4,26 @@
 
 package org.chromium.chrome.browser.ntp.cards;
 
+import org.chromium.base.Callback;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
+
+import java.util.Collections;
+import java.util.Set;
 
 /**
  * A permanent leaf in the tree, i.e. a single item.
  * If the leaf is not to be a permanent member of the tree, see {@link OptionalLeaf} for an
  * implementation that will take care of hiding or showing the item.
  */
-public abstract class Leaf implements TreeNode {
+public abstract class Leaf extends ChildNode {
+    protected Leaf() {
+        // Initialize the item count to 1 (at this point the parent is null, so no notification will
+        // be sent).
+        notifyItemInserted(0);
+    }
+
     @Override
-    public int getItemCount() {
+    protected final int getItemCountForDebugging() {
         return 1;
     }
 
@@ -38,8 +48,13 @@ public abstract class Leaf implements TreeNode {
     }
 
     @Override
-    public int getDismissSiblingPosDelta(int position) {
-        return 0;
+    public Set<Integer> getItemDismissalGroup(int position) {
+        return Collections.emptySet();
+    }
+
+    @Override
+    public void dismissItem(int position, Callback<String> itemRemovedCallback) {
+        assert false;
     }
 
     /**

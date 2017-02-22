@@ -27,8 +27,10 @@ SelectionController::SelectionController(SelectionControllerDelegate* delegate)
   DCHECK(delegate);
 }
 
-bool SelectionController::OnMousePressed(const ui::MouseEvent& event,
-                                         bool handled) {
+bool SelectionController::OnMousePressed(
+    const ui::MouseEvent& event,
+    bool handled,
+    InitialFocusStateOnMousePress initial_focus_state) {
   gfx::RenderText* render_text = GetRenderText();
   DCHECK(render_text);
 
@@ -56,20 +58,25 @@ bool SelectionController::OnMousePressed(const ui::MouseEvent& event,
         break;
       case 1:
         // Select the word at the click location on a double click.
-        delegate_->OnBeforePointerAction();
-        render_text->MoveCursorTo(event.location(), false);
-        render_text->SelectWord();
-        delegate_->OnAfterPointerAction(false, true);
+        SelectWord(event.location());
         double_click_word_ = render_text->selection();
         break;
       case 2:
         // Select all the text on a triple click.
-        delegate_->OnBeforePointerAction();
-        render_text->SelectAll(false);
-        delegate_->OnAfterPointerAction(false, true);
+        SelectAll();
         break;
       default:
         NOTREACHED();
+    }
+  }
+
+  if (event.IsOnlyRightMouseButton()) {
+    if (PlatformStyle::kSelectAllOnRightClickWhenUnfocused &&
+        initial_focus_state == InitialFocusStateOnMousePress::UNFOCUSED) {
+      SelectAll();
+    } else if (PlatformStyle::kSelectWordOnRightClick &&
+               !render_text->IsPointInSelection(event.location())) {
+      SelectWord(event.location());
     }
   }
 
@@ -171,6 +178,23 @@ void SelectionController::TrackMouseClicks(const ui::MouseEvent& event) {
   }
 }
 
+void SelectionController::SelectWord(const gfx::Point& point) {
+  gfx::RenderText* render_text = GetRenderText();
+  DCHECK(render_text);
+  delegate_->OnBeforePointerAction();
+  render_text->MoveCursorTo(point, false);
+  render_text->SelectWord();
+  delegate_->OnAfterPointerAction(false, true);
+}
+
+void SelectionController::SelectAll() {
+  gfx::RenderText* render_text = GetRenderText();
+  DCHECK(render_text);
+  delegate_->OnBeforePointerAction();
+  render_text->SelectAll(false);
+  delegate_->OnAfterPointerAction(false, true);
+}
+
 gfx::RenderText* SelectionController::GetRenderText() {
   return delegate_->GetRenderTextForSelectionController();
 }
@@ -181,18 +205,7 @@ void SelectionController::SelectThroughLastDragLocation() {
 
   delegate_->OnBeforePointerAction();
 
-  // TODO(karandeepb): See if this can be handled at the RenderText level.
-  const bool drags_to_end = PlatformStyle::kTextDragVerticallyDragsToEnd;
-  if (drags_to_end && last_drag_location_.y() < 0) {
-    render_text->MoveCursor(gfx::LINE_BREAK, gfx::CURSOR_LEFT,
-                            gfx::SELECTION_RETAIN);
-  } else if (drags_to_end &&
-             last_drag_location_.y() > delegate_->GetViewHeight()) {
-    render_text->MoveCursor(gfx::LINE_BREAK, gfx::CURSOR_RIGHT,
-                            gfx::SELECTION_RETAIN);
-  } else {
-    render_text->MoveCursorTo(last_drag_location_, true);
-  }
+  render_text->MoveCursorTo(last_drag_location_, true);
 
   if (aggregated_clicks_ == 1) {
     render_text->SelectWord();

@@ -11,11 +11,13 @@
 #include "base/callback.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
+#include "base/task_scheduler/task_scheduler.h"
 #include "ui/base/layout.h"
 #include "url/url_util.h"
 
 namespace base {
 class RefCountedMemory;
+class SchedulerWorkerPoolParams;
 }
 
 class GURL;
@@ -70,14 +72,6 @@ class WebClient {
   // browser would return true for "chrome://about" URL.
   virtual bool IsAppSpecificURL(const GURL& url) const;
 
-  // Returns true if web views can be created using an alloc, init call.
-  // Web view creation using an alloc, init call is disabled by default.
-  // If this is disallowed all web view creation must happen through the
-  // web view creation utils methods that vend a web view.
-  // This is called once (only in debug builds) before the first web view is
-  // created and not called repeatedly.
-  virtual bool AllowWebViewAllocInit() const;
-
   // Returns text to be displayed for an unsupported plugin.
   virtual base::string16 GetPluginNotSupportedText() const;
 
@@ -127,6 +121,16 @@ class WebClient {
       const GURL& request_url,
       bool overridable,
       const base::Callback<void(bool)>& callback);
+
+  // Provides parameters for initializing the global task scheduler. If
+  // |params_vector| is empty, default parameters are used.
+  virtual void GetTaskSchedulerInitializationParams(
+      std::vector<base::SchedulerWorkerPoolParams>* params_vector,
+      base::TaskScheduler::WorkerPoolIndexForTraitsCallback*
+          index_to_traits_callback) {}
+
+  // Performs any necessary PostTask API redirection to the task scheduler.
+  virtual void PerformExperimentalTaskSchedulerRedirections() {}
 };
 
 }  // namespace web

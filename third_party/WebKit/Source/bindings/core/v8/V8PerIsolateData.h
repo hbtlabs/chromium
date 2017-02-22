@@ -26,6 +26,8 @@
 #ifndef V8PerIsolateData_h
 #define V8PerIsolateData_h
 
+#include <v8.h>
+#include <memory>
 #include "bindings/core/v8/ScopedPersistent.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptWrappableVisitor.h"
@@ -38,16 +40,14 @@
 #include "wtf/HashMap.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/Vector.h"
-#include <memory>
-#include <v8.h>
 
 namespace blink {
 
-class ActiveScriptWrappable;
+class ActiveScriptWrappableBase;
 class DOMDataStore;
 class StringCache;
-class ThreadDebugger;
 class V8PrivateProperty;
+class WebTaskRunner;
 struct WrapperTypeInfo;
 
 typedef WTF::Vector<DOMDataStore*> DOMDataStoreList;
@@ -89,7 +89,15 @@ class CORE_EXPORT V8PerIsolateData {
     const bool m_originalUseCounterDisabled;
   };
 
-  static v8::Isolate* initialize();
+  // Use this class to abstract away types of members that are pointers to core/
+  // objects, which are simply owned and released by V8PerIsolateData (see
+  // m_threadDebugger for an example).
+  class CORE_EXPORT Data {
+   public:
+    virtual ~Data() = default;
+  };
+
+  static v8::Isolate* initialize(WebTaskRunner*);
 
   static V8PerIsolateData* from(v8::Isolate* isolate) {
     ASSERT(isolate);
@@ -120,6 +128,8 @@ class CORE_EXPORT V8PerIsolateData {
 
   bool isReportingException() const { return m_isReportingException; }
   void setReportingException(bool value) { m_isReportingException = value; }
+
+  bool isUseCounterDisabled() const { return m_useCounterDisabled; }
 
   V8HiddenValue* hiddenValue() { return m_hiddenValue.get(); }
   V8PrivateProperty* privateProperty() { return m_privateProperty.get(); }
@@ -156,15 +166,42 @@ class CORE_EXPORT V8PerIsolateData {
   void runEndOfScopeTasks();
   void clearEndOfScopeTasks();
 
-  void setThreadDebugger(std::unique_ptr<ThreadDebugger>);
-  ThreadDebugger* threadDebugger();
+  void setThreadDebugger(std::unique_ptr<Data>);
+  Data* threadDebugger();
 
   using ActiveScriptWrappableSet =
-      HeapHashSet<WeakMember<ActiveScriptWrappable>>;
-  void addActiveScriptWrappable(ActiveScriptWrappable*);
+      HeapHashSet<WeakMember<ActiveScriptWrappableBase>>;
+  void addActiveScriptWrappable(ActiveScriptWrappableBase*);
   const ActiveScriptWrappableSet* activeScriptWrappables() const {
     return m_activeScriptWrappables.get();
   }
+
+  class TemporaryScriptWrappableVisitorScope {
+    WTF_MAKE_NONCOPYABLE(TemporaryScriptWrappableVisitorScope);
+    STACK_ALLOCATED();
+
+   public:
+    TemporaryScriptWrappableVisitorScope(
+        v8::Isolate* isolate,
+        std::unique_ptr<ScriptWrappableVisitor> visitor)
+        : m_isolate(isolate), m_savedVisitor(std::move(visitor)) {
+      swapWithV8PerIsolateDataVisitor(m_savedVisitor);
+    }
+    ~TemporaryScriptWrappableVisitorScope() {
+      swapWithV8PerIsolateDataVisitor(m_savedVisitor);
+    }
+
+    inline ScriptWrappableVisitor* currentVisitor() {
+      return V8PerIsolateData::from(m_isolate)->scriptWrappableVisitor();
+    }
+
+   private:
+    void swapWithV8PerIsolateDataVisitor(
+        std::unique_ptr<ScriptWrappableVisitor>&);
+
+    v8::Isolate* m_isolate;
+    std::unique_ptr<ScriptWrappableVisitor> m_savedVisitor;
+  };
 
   void setScriptWrappableVisitor(
       std::unique_ptr<ScriptWrappableVisitor> visitor) {
@@ -175,10 +212,8 @@ class CORE_EXPORT V8PerIsolateData {
   }
 
  private:
-  V8PerIsolateData();
+  explicit V8PerIsolateData(WebTaskRunner*);
   ~V8PerIsolateData();
-
-  static void useCounterCallback(v8::Isolate*, v8::Isolate::UseCounterFeature);
 
   typedef HashMap<const void*, v8::Eternal<v8::FunctionTemplate>>
       V8FunctionTemplateMap;
@@ -218,7 +253,7 @@ class CORE_EXPORT V8PerIsolateData {
   bool m_isReportingException;
 
   Vector<std::unique_ptr<EndOfScopeTask>> m_endOfScopeTasks;
-  std::unique_ptr<ThreadDebugger> m_threadDebugger;
+  std::unique_ptr<Data> m_threadDebugger;
 
   Persistent<ActiveScriptWrappableSet> m_activeScriptWrappables;
   std::unique_ptr<ScriptWrappableVisitor> m_scriptWrappableVisitor;

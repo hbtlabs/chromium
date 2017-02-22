@@ -10,10 +10,6 @@
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "url/gurl.h"
 
-namespace content {
-class BrowserContext;
-}
-
 namespace extensions {
 
 class ExtensionViewGuest
@@ -41,12 +37,7 @@ class ExtensionViewGuest
   int GetTaskPrefix() const final;
 
   // content::WebContentsObserver implementation.
-  void DidCommitProvisionalLoadForFrame(
-      content::RenderFrameHost* render_frame_host,
-      const GURL& url,
-      ui::PageTransition transition_type) final;
-  void DidNavigateMainFrame(const content::LoadCommittedDetails& details,
-                            const content::FrameNavigateParams& params) final;
+  void DidFinishNavigation(content::NavigationHandle* navigation_handle) final;
 
   // Applies attributes to the extensionview.
   void ApplyAttributes(const base::DictionaryValue& params);

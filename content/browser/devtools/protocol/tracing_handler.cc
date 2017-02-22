@@ -17,8 +17,9 @@
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event_impl.h"
 #include "base/trace_event/tracing_agent.h"
-#include "components/tracing/browser/trace_config_file.h"
+#include "components/tracing/common/trace_config_file.h"
 #include "content/browser/devtools/devtools_io_context.h"
+#include "content/browser/devtools/devtools_session.h"
 #include "content/browser/tracing/tracing_controller_impl.h"
 
 namespace content {
@@ -118,7 +119,8 @@ class DevToolsStreamEndpoint : public TraceDataEndpoint {
 TracingHandler::TracingHandler(TracingHandler::Target target,
                                int frame_tree_node_id,
                                DevToolsIOContext* io_context)
-    : target_(target),
+    : DevToolsDomainHandler(Tracing::Metainfo::domainName),
+      target_(target),
       io_context_(io_context),
       frame_tree_node_id_(frame_tree_node_id),
       did_initiate_recording_(false),
@@ -126,6 +128,12 @@ TracingHandler::TracingHandler(TracingHandler::Target target,
       weak_factory_(this) {}
 
 TracingHandler::~TracingHandler() {
+}
+
+// static
+TracingHandler* TracingHandler::FromSession(DevToolsSession* session) {
+  return static_cast<TracingHandler*>(
+      session->GetHandlerByName(Tracing::Metainfo::domainName));
 }
 
 void TracingHandler::Wire(UberDispatcher* dispatcher) {
@@ -193,8 +201,8 @@ void TracingHandler::Start(Maybe<std::string> categories,
   base::trace_event::TraceConfig trace_config;
   if (config.isJust()) {
     std::unique_ptr<base::Value> value =
-        protocol::toBaseValue(config.fromJust()->serialize().get(), 1000);
-    if (value && value->IsType(base::Value::TYPE_DICTIONARY)) {
+        protocol::toBaseValue(config.fromJust()->toValue().get(), 1000);
+    if (value && value->IsType(base::Value::Type::DICTIONARY)) {
       trace_config = GetTraceConfigFromDevToolsConfig(
           *static_cast<base::DictionaryValue*>(value.get()));
     }
@@ -345,7 +353,7 @@ bool TracingHandler::IsStartupTracingActive() {
 base::trace_event::TraceConfig TracingHandler::GetTraceConfigFromDevToolsConfig(
     const base::DictionaryValue& devtools_config) {
   std::unique_ptr<base::Value> value = ConvertDictKeyStyle(devtools_config);
-  DCHECK(value && value->IsType(base::Value::TYPE_DICTIONARY));
+  DCHECK(value && value->IsType(base::Value::Type::DICTIONARY));
   std::unique_ptr<base::DictionaryValue> tracing_dict(
       static_cast<base::DictionaryValue*>(value.release()));
 

@@ -11,7 +11,8 @@ namespace blink {
 
 WorkerNavigatorNetworkInformation::WorkerNavigatorNetworkInformation(
     WorkerNavigator& navigator,
-    ExecutionContext* context) {}
+    ExecutionContext* context)
+    : Supplement<WorkerNavigator>(navigator) {}
 
 WorkerNavigatorNetworkInformation& WorkerNavigatorNetworkInformation::from(
     WorkerNavigator& navigator,
@@ -38,8 +39,9 @@ const char* WorkerNavigatorNetworkInformation::supplementName() {
 }
 
 NetworkInformation* WorkerNavigatorNetworkInformation::connection(
-    ExecutionContext* context,
+    ScriptState* scriptState,
     WorkerNavigator& navigator) {
+  ExecutionContext* context = scriptState->getExecutionContext();
   return WorkerNavigatorNetworkInformation::from(navigator, context)
       .connection(context);
 }

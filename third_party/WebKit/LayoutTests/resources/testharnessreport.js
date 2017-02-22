@@ -14,6 +14,8 @@
 
 (function() {
 
+    var output_document = document;
+
     // Setup for WebKit JavaScript tests
     if (self.testRunner) {
         testRunner.dumpAsText();
@@ -52,9 +54,9 @@
 
     var localPathRegExp;
     if (document.URL.startsWith("file:///")) {
-        var index = document.URL.indexOf("/imported/wpt");
+        var index = document.URL.indexOf("/external/wpt");
         if (index >= 0) {
-            var localPath = document.URL.substring("file:///".length, index + "/imported/wpt".length);
+            var localPath = document.URL.substring("file:///".length, index + "/external/wpt".length);
             localPathRegExp = new RegExp(localPath.replace(/(\W)/g, "\\$1"), "g");
         }
     }
@@ -74,18 +76,6 @@
         return text;
     }
 
-    // If the test has a meta tag named flags and the content contains "dom",
-    // then it's a CSSWG test.
-    function isCSSWGTest() {
-        var flags = document.querySelector('meta[name=flags]'),
-            content = flags ? flags.getAttribute('content') : null;
-        return content && content.match(/\bdom\b/);
-    }
-
-    function isJSTest() {
-        return !!document.querySelector('script[src*="/resources/testharness"]');
-    }
-
     function isWPTManualTest() {
         var path = location.pathname;
         if (location.hostname == 'web-platform.test' && path.endsWith('-manual.html'))
@@ -95,7 +85,7 @@
 
     // Returns a directory part relative to WPT root and a basename part of the
     // current test. e.g.
-    // Current test: file:///.../LayoutTests/imported/wpt/pointerevents/foobar.html
+    // Current test: file:///.../LayoutTests/external/wpt/pointerevents/foobar.html
     // Output: "/pointerevents/foobar"
     function pathAndBaseNameInWPT() {
         var path = location.pathname;
@@ -111,7 +101,7 @@
         var pathAndBase = pathAndBaseNameInWPT();
         if (!pathAndBase)
             return;
-        var automationPath = location.pathname.replace(/\/imported\/wpt\/.*$/, '/imported/wpt_automation');
+        var automationPath = location.pathname.replace(/\/imported\/wpt\/.*$/, '/external/wpt_automation');
         if (location.hostname == 'web-platform.test')
             automationPath = '/wpt_automation';
 
@@ -146,12 +136,17 @@
         }
     }, { once: true });
 
+    add_start_callback(function(properties) {
+      if (properties.output_document)
+        output_document = properties.output_document;
+    });
+
     // Using a callback function, test results will be added to the page in a
     // manner that allows dumpAsText to produce readable test results.
     add_completion_callback(function (tests, harness_status) {
 
         // Create element to hold results.
-        var results = document.createElement("pre");
+        var results = output_document.createElement("pre");
 
         // Declare result string.
         var resultStr = "This is a testharness.js-based test.\n";
@@ -167,7 +162,7 @@
         }
         // reflection tests contain huge number of tests, and Chromium code
         // review tool has the 1MB diff size limit. We merge PASS lines.
-        if (document.URL.indexOf("/html/dom/reflection") >= 0) {
+        if (output_document.URL.indexOf("/html/dom/reflection") >= 0) {
             for (var i = 0; i < tests.length; ++i) {
                 if (tests[i].status == 0) {
                     var colon = tests[i].name.indexOf(':');
@@ -193,11 +188,24 @@
         } else {
             // Iterate through tests array and build string that contains
             // results for all tests.
+            let testResults = "";
+            let resultCounter = [0, 0, 0, 0];
             for (var i = 0; i < tests.length; ++i) {
-                resultStr += convertResult(tests[i].status) + " " +
+                resultCounter[tests[i].status]++;
+                testResults += convertResult(tests[i].status) + " " +
                     sanitize(tests[i].name) + " " +
                     sanitize(tests[i].message) + "\n";
             }
+            if (output_document.URL.indexOf("http://web-platform.test") >= 0 &&
+                tests.length >= 50 && (resultCounter[1] || resultCounter[2] || resultCounter[3])) {
+                // Output failure metrics if there are many.
+                resultStr += `Found ${tests.length} tests;` +
+                    ` ${resultCounter[0]} PASS,` +
+                    ` ${resultCounter[1]} FAIL,` +
+                    ` ${resultCounter[2]} TIMEOUT,` +
+                    ` ${resultCounter[3]} NOTRUN.\n`;
+            }
+            resultStr += testResults;
         }
 
         resultStr += "Harness: the test ran to completion.\n";
@@ -206,35 +214,41 @@
         results.textContent = resultStr;
 
         function done() {
-            if (self.testRunner) {
+            // A temporary workaround since |window.self| property lookup starts
+            // failing if the frame is detached. |output_document| may be an
+            // ancestor of |self| so clearing |textContent| may detach |self|.
+            // To get around this, cache window.self now and use the cached
+            // value.
+            // TODO(dcheng): Remove this hack after fixing window/self/frames
+            // lookup in https://crbug.com/618672
+            var cachedSelf = window.self;
+            if (cachedSelf.testRunner) {
                 // The following DOM operations may show console messages.  We
                 // suppress them because they are not related to the running
                 // test.
                 testRunner.setDumpConsoleMessages(false);
 
-                if (isCSSWGTest() || isJSTest()) {
-                    // Anything isn't material to the testrunner output, so
-                    // should be hidden from the text dump.
-                    if (document.body && document.body.tagName == 'BODY')
-                        document.body.textContent = '';
-                }
+                // Anything isn't material to the testrunner output, so should
+                // be hidden from the text dump.
+                if (output_document.body && output_document.body.tagName == 'BODY')
+                    output_document.body.textContent = '';
             }
 
-            // Add results element to document.
-            if (!document.body || document.body.tagName != 'BODY') {
-                if (!document.documentElement)
-                    document.appendChild(document.createElement('html'));
-                else if (document.body) // document.body is <frameset>.
-                    document.body.remove();
-                document.documentElement.appendChild(document.createElement("body"));
+            // Add results element to output_document.
+            if (!output_document.body || output_document.body.tagName != 'BODY') {
+                if (!output_document.documentElement)
+                    output_document.appendChild(output_document.createElement('html'));
+                else if (output_document.body) // output_document.body is <frameset>.
+                    output_document.body.remove();
+                output_document.documentElement.appendChild(output_document.createElement("body"));
             }
-            document.body.appendChild(results);
+            output_document.body.appendChild(results);
 
-            if (self.testRunner)
+            if (cachedSelf.testRunner)
                 testRunner.notifyDone();
         }
 
-        if (didDispatchLoadEvent || document.readyState != 'loading') {
+        if (didDispatchLoadEvent || output_document.readyState != 'loading') {
             // This function might not be the last 'completion callback', and
             // another completion callback might generate more results.  So, we
             // don't dump the results immediately.

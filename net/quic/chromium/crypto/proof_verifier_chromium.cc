@@ -30,7 +30,6 @@
 using base::StringPiece;
 using base::StringPrintf;
 using std::string;
-using std::vector;
 
 namespace net {
 
@@ -96,7 +95,7 @@ class ProofVerifierChromium::Job {
   };
 
   // Convert |certs| to |cert_|(X509Certificate). Returns true if successful.
-  bool GetX509Certificate(const vector<string>& certs,
+  bool GetX509Certificate(const std::vector<string>& certs,
                           std::string* error_details,
                           std::unique_ptr<ProofVerifyDetails>* verify_details);
 
@@ -202,7 +201,7 @@ QuicAsyncStatus ProofVerifierChromium::Job::VerifyProof(
     const string& server_config,
     QuicVersion quic_version,
     StringPiece chlo_hash,
-    const vector<string>& certs,
+    const std::vector<string>& certs,
     const std::string& cert_sct,
     const string& signature,
     std::string* error_details,
@@ -226,14 +225,12 @@ QuicAsyncStatus ProofVerifierChromium::Job::VerifyProof(
   if (!GetX509Certificate(certs, error_details, verify_details))
     return QUIC_FAILURE;
 
-  if (!cert_sct.empty()) {
-    // Note that this is a completely synchronous operation: The CT Log Verifier
-    // gets all the data it needs for SCT verification and does not do any
-    // external communication.
-    cert_transparency_verifier_->Verify(cert_.get(), std::string(), cert_sct,
-                                        &verify_details_->ct_verify_result.scts,
-                                        net_log_);
-  }
+  // Note that this is a completely synchronous operation: The CT Log Verifier
+  // gets all the data it needs for SCT verification and does not do any
+  // external communication.
+  cert_transparency_verifier_->Verify(cert_.get(), std::string(), cert_sct,
+                                      &verify_details_->ct_verify_result.scts,
+                                      net_log_);
 
   // We call VerifySignature first to avoid copying of server_config and
   // signature.
@@ -254,7 +251,7 @@ QuicAsyncStatus ProofVerifierChromium::Job::VerifyProof(
 
 QuicAsyncStatus ProofVerifierChromium::Job::VerifyCertChain(
     const string& hostname,
-    const vector<string>& certs,
+    const std::vector<string>& certs,
     std::string* error_details,
     std::unique_ptr<ProofVerifyDetails>* verify_details,
     std::unique_ptr<ProofVerifierCallback> callback) {
@@ -283,7 +280,7 @@ QuicAsyncStatus ProofVerifierChromium::Job::VerifyCertChain(
 }
 
 bool ProofVerifierChromium::Job::GetX509Certificate(
-    const vector<string>& certs,
+    const std::vector<string>& certs,
     std::string* error_details,
     std::unique_ptr<ProofVerifyDetails>* verify_details) {
   if (certs.empty()) {
@@ -295,7 +292,7 @@ bool ProofVerifierChromium::Job::GetX509Certificate(
   }
 
   // Convert certs to X509Certificate.
-  vector<StringPiece> cert_pieces(certs.size());
+  std::vector<StringPiece> cert_pieces(certs.size());
   for (unsigned i = 0; i < certs.size(); i++) {
     cert_pieces[i] = base::StringPiece(certs[i]);
   }

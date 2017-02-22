@@ -5,6 +5,7 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 
 #include <memory>
+#include <string>
 
 #if defined(OS_WIN)
 #include <windows.h>
@@ -36,6 +37,7 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
+#include "components/metrics/metrics_service.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_details.h"
@@ -44,16 +46,18 @@
 #if defined(OS_CHROMEOS)
 #include "base/sys_info.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
+#include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_policy_controller.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/dbus/update_engine_client.h"
+#include "chromeos/settings/cros_settings_names.h"
+#include "ui/base/l10n/l10n_util.h"
 #endif
 
 #if defined(OS_WIN)
 #include "base/win/win_util.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
-#include "chrome/common/chrome_constants.h"
 #endif
 
 namespace chrome {
@@ -82,6 +86,34 @@ bool AreAllBrowsersCloseable() {
 #endif  // !defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
+// Sets kApplicationLocale in |local_state| for the login screen on the next
+// application start, if it is forced to a specific value due to enterprise
+// policy or the owner's locale.  Returns true if any pref has been modified.
+bool SetLocaleForNextStart(PrefService* local_state) {
+  // If a policy mandates the login screen locale, use it.
+  chromeos::CrosSettings* cros_settings = chromeos::CrosSettings::Get();
+  const base::ListValue* login_screen_locales = nullptr;
+  std::string login_screen_locale;
+  if (cros_settings->GetList(chromeos::kDeviceLoginScreenLocales,
+                             &login_screen_locales) &&
+      !login_screen_locales->empty() &&
+      login_screen_locales->GetString(0, &login_screen_locale)) {
+    local_state->SetString(prefs::kApplicationLocale, login_screen_locale);
+    return true;
+  }
+
+  // Login screen should show up in owner's locale.
+  std::string owner_locale = local_state->GetString(prefs::kOwnerLocale);
+  if (!owner_locale.empty() &&
+      local_state->GetString(prefs::kApplicationLocale) != owner_locale &&
+      !local_state->IsManagedPreference(prefs::kApplicationLocale)) {
+    local_state->SetString(prefs::kApplicationLocale, owner_locale);
+    return true;
+  }
+
+  return false;
+}
+
 // Whether chrome should send stop request to a session manager.
 bool g_send_stop_request_to_session_manager = false;
 #endif
@@ -167,12 +199,7 @@ void AttemptUserExit() {
   if (state) {
     chromeos::BootTimesRecorder::Get()->OnLogoutStarted(state);
 
-    // Login screen should show up in owner's locale.
-    std::string owner_locale = state->GetString(prefs::kOwnerLocale);
-    if (!owner_locale.empty() &&
-        state->GetString(prefs::kApplicationLocale) != owner_locale &&
-        !state->IsManagedPreference(prefs::kApplicationLocale)) {
-      state->SetString(prefs::kApplicationLocale, owner_locale);
+    if (SetLocaleForNextStart(state)) {
       TRACE_EVENT0("shutdown", "CommitPendingWrite");
       state->CommitPendingWrite();
     }
@@ -305,6 +332,9 @@ void SessionEnding() {
   // exit this function.
   ShutdownWatcherHelper shutdown_watcher;
   shutdown_watcher.Arm(base::TimeDelta::FromSeconds(90));
+  metrics::MetricsService::SetExecutionPhase(
+      metrics::ExecutionPhase::SHUTDOWN_TIMEBOMB_ARM,
+      g_browser_process->local_state());
 
   browser_shutdown::OnShutdownStarting(browser_shutdown::END_SESSION);
 
@@ -354,6 +384,10 @@ void NotifyAppTerminating() {
 }
 
 void NotifyAndTerminate(bool fast_path) {
+  NotifyAndTerminate(fast_path, RebootPolicy::kOptionalReboot);
+}
+
+void NotifyAndTerminate(bool fast_path, RebootPolicy reboot_policy) {
 #if defined(OS_CHROMEOS)
   static bool notified = false;
   // Return if a shutdown request has already been sent.
@@ -372,15 +406,17 @@ void NotifyAndTerminate(bool fast_path) {
   if (base::SysInfo::IsRunningOnChromeOS()) {
     // If we're on a ChromeOS device, reboot if an update has been applied,
     // or else signal the session manager to log out.
-    chromeos::UpdateEngineClient* update_engine_client
-        = chromeos::DBusThreadManager::Get()->GetUpdateEngineClient();
+    chromeos::UpdateEngineClient* update_engine_client =
+        chromeos::DBusThreadManager::Get()->GetUpdateEngineClient();
     if (update_engine_client->GetLastStatus().status ==
-        chromeos::UpdateEngineClient::UPDATE_STATUS_UPDATED_NEED_REBOOT) {
+            chromeos::UpdateEngineClient::UPDATE_STATUS_UPDATED_NEED_REBOOT ||
+        reboot_policy == RebootPolicy::kForceReboot) {
       update_engine_client->RebootAfterUpdate();
     } else if (g_send_stop_request_to_session_manager) {
       // Don't ask SessionManager to stop session if the shutdown request comes
       // from session manager.
-      chromeos::DBusThreadManager::Get()->GetSessionManagerClient()
+      chromeos::DBusThreadManager::Get()
+          ->GetSessionManagerClient()
           ->StopSession();
     }
   } else {

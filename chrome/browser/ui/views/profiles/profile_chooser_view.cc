@@ -23,6 +23,8 @@
 #include "chrome/browser/signin/signin_ui_util.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/sync_ui_util.h"
+#include "chrome/browser/themes/theme_service.h"
+#include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_dialogs.h"
@@ -177,7 +179,6 @@ views::ImageButton* CreateBackButton(views::ButtonListener* listener) {
   back_button->SetImage(views::ImageButton::STATE_DISABLED,
                         rb->GetImageSkiaNamed(IDR_BACK_D));
   back_button->SetFocusForPlatform();
-  back_button->set_request_focus_on_press(true);
   return back_button;
 }
 
@@ -186,9 +187,14 @@ views::ImageButton* CreateBackButton(views::ButtonListener* listener) {
 // A custom button that allows for setting a background color when hovered over.
 class BackgroundColorHoverButton : public views::LabelButton {
  public:
-  BackgroundColorHoverButton(views::ButtonListener* listener,
+  BackgroundColorHoverButton(ProfileChooserView* profile_chooser_view,
                              const base::string16& text)
-      : views::LabelButton(listener, text) {
+      : views::LabelButton(profile_chooser_view, text),
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+        profile_chooser_view_(profile_chooser_view),
+#endif
+        title_(nullptr),
+        subtitle_(nullptr) {
     SetImageLabelSpacing(switches::IsMaterialDesignUserMenu()
                              ? (kMaterialMenuEdgeMargin - 2)
                              : views::kItemLabelSpacing);
@@ -197,33 +203,98 @@ class BackgroundColorHoverButton : public views::LabelButton {
                                   : views::kButtonHEdgeMarginNew;
     SetBorder(views::CreateEmptyBorder(0, button_margin, 0, button_margin));
     SetFocusForPlatform();
-    set_request_focus_on_press(true);
 
     if (switches::IsMaterialDesignUserMenu()) {
       label()->SetHandlesTooltips(false);
     }
   }
 
-  BackgroundColorHoverButton(views::ButtonListener* listener,
+  BackgroundColorHoverButton(ProfileChooserView* profile_chooser_view,
                              const base::string16& text,
                              const gfx::ImageSkia& icon)
-      : BackgroundColorHoverButton(listener, text) {
+      : BackgroundColorHoverButton(profile_chooser_view, text) {
     SetMinSize(gfx::Size(
         icon.width(), kButtonHeight + views::kRelatedControlVerticalSpacing));
     SetImage(STATE_NORMAL, icon);
   }
 
+  // Overrides the main label associated with this button.  If unset,
+  // label() will be used instead.  |label| should be drawn over this
+  // button, but it is not necessary that it be a child view.
+  void set_title(views::Label* label) { title_ = label; }
+
+  // Sets a secondary label associated with this button.  |label|
+  // should be drawn over this button, but it is not necessary that it
+  // be a child view.
+  void set_subtitle(views::Label* label) { subtitle_ = label; }
+
   ~BackgroundColorHoverButton() override {}
 
  private:
-  // views::LabelButton:
-  void OnPaint(gfx::Canvas* canvas) override {
-    if ((state() == STATE_PRESSED) ||
-        (state() == STATE_HOVERED)) {
-      canvas->DrawColor(profiles::kHoverColor);
-    }
-    LabelButton::OnPaint(canvas);
+  // views::View:
+  void OnNativeThemeChanged(const ui::NativeTheme* theme) override {
+    // The first time the theme changes, the state will not be hovered
+    // or pressed and the colors will be initialized.  It's okay to
+    // reset the colors when the theme changes and the button is NOT
+    // hovered or pressed because the labels will be in a normal state.
+    if (state() == STATE_HOVERED || state() == STATE_PRESSED)
+      return;
+
+    LabelButton::OnNativeThemeChanged(theme);
+    views::Label* title = title_ ? title_ : label();
+    normal_title_color_ = title->enabled_color();
+    if (subtitle_)
+      normal_subtitle_color_ = subtitle_->disabled_color();
   }
+
+  // views::CustomButton:
+  void StateChanged(ButtonState old_state) override {
+    LabelButton::StateChanged(old_state);
+
+    views::Label* title = title_ ? title_ : label();
+
+    bool was_prelight =
+        old_state == STATE_HOVERED || old_state == STATE_PRESSED;
+    bool is_prelight = state() == STATE_HOVERED || state() == STATE_PRESSED;
+    if (was_prelight && !is_prelight) {
+      // The pointer is no longer over this button.  Set the
+      // background and text colors back to their normal states.
+      set_background(nullptr);
+      title->SetEnabledColor(normal_title_color_);
+      if (subtitle_)
+        subtitle_->SetDisabledColor(normal_subtitle_color_);
+    } else if (!was_prelight && is_prelight) {
+      // The pointer moved over this button.  Set the background and
+      // text colors back to their hovered states.
+      SkColor bg_color = profiles::kHoverColor;
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+      if (ThemeServiceFactory::GetForProfile(
+              profile_chooser_view_->browser()->profile())
+              ->UsingSystemTheme()) {
+        // When using the system (GTK) theme, use the selected menuitem colors.
+        bg_color = GetNativeTheme()->GetSystemColor(
+            ui::NativeTheme::kColorId_FocusedMenuItemBackgroundColor);
+        title->SetEnabledColor(GetNativeTheme()->GetSystemColor(
+            ui::NativeTheme::kColorId_SelectedMenuItemForegroundColor));
+        if (subtitle_) {
+          subtitle_->SetDisabledColor(GetNativeTheme()->GetSystemColor(
+              ui::NativeTheme::kColorId_MenuItemSubtitleColor));
+        }
+      }
+#endif
+      set_background(views::Background::CreateSolidBackground(bg_color));
+    }
+  }
+
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  ProfileChooserView* profile_chooser_view_;
+#endif
+
+  views::Label* title_;
+  SkColor normal_title_color_;
+
+  views::Label* subtitle_;
+  SkColor normal_subtitle_color_;
 
   DISALLOW_COPY_AND_ASSIGN(BackgroundColorHoverButton);
 };
@@ -415,11 +486,11 @@ class EditableProfilePhoto : public views::LabelButton {
       gfx::Point center_point = bounds.CenterPoint() + badge_offset_vector;
 
       // Paint the circular background.
-      SkPaint paint;
-      paint.setAntiAlias(true);
-      paint.setColor(GetNativeTheme()->GetSystemColor(
+      cc::PaintFlags flags;
+      flags.setAntiAlias(true);
+      flags.setColor(GetNativeTheme()->GetSystemColor(
           ui::NativeTheme::kColorId_BubbleBackground));
-      canvas->DrawCircle(center_point, GetProfileBadgeSize() / 2, paint);
+      canvas->DrawCircle(center_point, GetProfileBadgeSize() / 2, flags);
 
       gfx::VectorIconId icon_id;
       int icon_size;
@@ -432,10 +503,10 @@ class EditableProfilePhoto : public views::LabelButton {
         icon_color = gfx::kChromeIconGrey;
       } else {
         // Paint the light blue circle.
-        paint.setColor(SkColorSetRGB(0xaf, 0xd9, 0xfc));
+        flags.setColor(SkColorSetRGB(0xaf, 0xd9, 0xfc));
         canvas->DrawCircle(
             center_point, GetProfileBadgeSize() / 2 - kProfileBadgeWhitePadding,
-            paint);
+            flags);
 
         icon_id = profile_->IsChild()
             ? gfx::VectorIconId::ACCOUNT_CHILD
@@ -466,7 +537,7 @@ class EditableProfilePhoto : public views::LabelButton {
 
  private:
   // views::CustomButton:
-  void StateChanged() override {
+  void StateChanged(ButtonState old_state) override {
     if (photo_overlay_) {
       photo_overlay_->SetVisible(
           state() == STATE_PRESSED || state() == STATE_HOVERED || HasFocus());
@@ -534,7 +605,7 @@ class EditableProfileName : public views::View,
     AddChildView(profile_name_textfield_);
 
     button_ = new RightAlignedIconLabelButton(this, text);
-    button_->SetFontList(medium_font_list);
+    button_->SetFontListDeprecated(medium_font_list);
     // Show an "edit" pencil icon when hovering over. In the default state,
     // we need to create an empty placeholder of the correct size, so that
     // the text doesn't jump around when the hovered icon appears.
@@ -644,7 +715,7 @@ class TitleCard : public views::View {
     layout->StartRowWithPadding(1, 0, 0, kVerticalSpacing);
     layout->AddView(title_card);
     layout->StartRowWithPadding(1, 1, 0, kVerticalSpacing);
-    layout->AddView(new views::Separator(views::Separator::HORIZONTAL));
+    layout->AddView(new views::Separator());
 
     layout->StartRow(1, 1);
     layout->AddView(view);
@@ -688,18 +759,14 @@ void ProfileChooserView::ShowBubble(
     signin_metrics::AccessPoint access_point,
     views::View* anchor_view,
     Browser* browser) {
-  if (switches::IsMaterialDesignUserMenu()) {
-    // The Material Design User Menu doesn't have a fast user switcher on
-    // right-click. To ease up the transition for users, show the regular user
-    // menu when right-clicking instead of doing nothing.
-    view_mode = profiles::BUBBLE_VIEW_MODE_PROFILE_CHOOSER;
-  }
-
   // Don't start creating the view if it would be an empty fast user switcher.
   // It has to happen here to prevent the view system from creating an empty
   // container.
+  // Same for material design user menu since fast profile switcher will be
+  // migrated to the left-click menu.
   if (view_mode == profiles::BUBBLE_VIEW_MODE_FAST_PROFILE_CHOOSER &&
-      !profiles::HasProfileSwitchTargets(browser->profile())) {
+      (!profiles::HasProfileSwitchTargets(browser->profile()) ||
+       switches::IsMaterialDesignUserMenu())) {
     return;
   }
 
@@ -1241,7 +1308,7 @@ void ProfileChooserView::PopulateCompleteProfileChooserView(
     layout->StartRow(1, 0);
     layout->AddView(sync_error_view);
     layout->StartRow(0, 0);
-    layout->AddView(new views::Separator(views::Separator::HORIZONTAL));
+    layout->AddView(new views::Separator());
   }
 
   if (!current_profile_view) {
@@ -1256,7 +1323,7 @@ void ProfileChooserView::PopulateCompleteProfileChooserView(
   if (!IsProfileChooser(view_mode_)) {
     DCHECK(current_profile_accounts);
     layout->StartRow(0, 0);
-    layout->AddView(new views::Separator(views::Separator::HORIZONTAL));
+    layout->AddView(new views::Separator());
     layout->StartRow(1, 0);
     layout->AddView(current_profile_accounts);
   }
@@ -1264,14 +1331,14 @@ void ProfileChooserView::PopulateCompleteProfileChooserView(
   if (browser_->profile()->IsSupervised()) {
     if (!switches::IsMaterialDesignUserMenu()) {
       layout->StartRow(0, 0);
-      layout->AddView(new views::Separator(views::Separator::HORIZONTAL));
+      layout->AddView(new views::Separator());
     }
     layout->StartRow(1, 0);
     layout->AddView(CreateSupervisedUserDisclaimerView());
   }
 
   layout->StartRow(0, 0);
-  layout->AddView(new views::Separator(views::Separator::HORIZONTAL));
+  layout->AddView(new views::Separator());
 
   if (option_buttons_view) {
     layout->StartRow(0, 0);
@@ -1623,7 +1690,6 @@ views::View* ProfileChooserView::CreateCurrentProfileView(
             gfx::CreateVectorIcon(gfx::VectorIconId::WARNING, 18,
                                   gfx::kChromeIconGrey));
         auth_error_email_button_->SetFocusForPlatform();
-        auth_error_email_button_->set_request_focus_on_press(true);
         gfx::Insets insets =
             views::LabelButtonAssetBorder::GetDefaultInsetsForStyle(
                 views::Button::STYLE_TEXTBUTTON);
@@ -1678,8 +1744,9 @@ views::View* ProfileChooserView::CreateMaterialDesignCurrentProfileView(
                            views::kRelatedControlVerticalSpacing, 0));
 
   // Container for the profile photo and avatar/user name.
-  current_profile_card_ =
+  BackgroundColorHoverButton* current_profile_card =
       new BackgroundColorHoverButton(this, base::string16());
+  current_profile_card_ = current_profile_card;
 
   // Profile picture, left-aligned.
   EditableProfilePhoto* current_profile_photo = new EditableProfilePhoto(
@@ -1688,6 +1755,7 @@ views::View* ProfileChooserView::CreateMaterialDesignCurrentProfileView(
   // Profile name, left-aligned to the right of profile icon.
   views::Label* current_profile_name = new views::Label(
       profiles::GetAvatarNameForProfile(browser_->profile()->GetPath()));
+  current_profile_card->set_title(current_profile_name);
   current_profile_name->SetFontList(
       ui::ResourceBundle::GetSharedInstance().GetFontListWithDelta(
           1, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::MEDIUM));
@@ -1737,6 +1805,7 @@ views::View* ProfileChooserView::CreateMaterialDesignCurrentProfileView(
       view->AddChildView(manage_accounts_button_);
     } else {
       views::Label* email_label = new views::Label(avatar_item.username);
+      current_profile_card->set_subtitle(email_label);
       email_label->SetElideBehavior(gfx::ELIDE_EMAIL);
       email_label->SetEnabled(false);
       email_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -1832,7 +1901,7 @@ views::View* ProfileChooserView::CreateOtherProfilesView(
     open_other_profile_indexes_map_[button] = index;
 
     layout->StartRow(1, 0);
-    layout->AddView(new views::Separator(views::Separator::HORIZONTAL));
+    layout->AddView(new views::Separator());
     layout->StartRow(1, 0);
     layout->AddView(button);
   }
@@ -1907,7 +1976,7 @@ views::View* ProfileChooserView::CreateOptionsView(bool display_lock,
 
   if (!switches::IsMaterialDesignUserMenu() && ShouldShowGoIncognito()) {
     layout->StartRow(1, 0);
-    layout->AddView(new views::Separator(views::Separator::HORIZONTAL));
+    layout->AddView(new views::Separator());
 
     ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
     go_incognito_button_ = new BackgroundColorHoverButton(
@@ -1921,7 +1990,7 @@ views::View* ProfileChooserView::CreateOptionsView(bool display_lock,
   if (display_lock) {
     if (!switches::IsMaterialDesignUserMenu()) {
       layout->StartRow(1, 0);
-      layout->AddView(new views::Separator(views::Separator::HORIZONTAL));
+      layout->AddView(new views::Separator());
     }
 
     lock_button_ = new BackgroundColorHoverButton(
@@ -2278,7 +2347,7 @@ views::View* ProfileChooserView::CreateSwitchUserView() {
 
   // Adds "Add person" button.
   layout->StartRowWithPadding(1, 0, 0, views::kUnrelatedControlVerticalSpacing);
-  layout->AddView(new views::Separator(views::Separator::HORIZONTAL));
+  layout->AddView(new views::Separator());
 
   const int kIconSize = 24;
   add_person_button_ = new BackgroundColorHoverButton(
@@ -2290,7 +2359,7 @@ views::View* ProfileChooserView::CreateSwitchUserView() {
 
   // Adds "Disconnect your Google Account" button.
   layout->StartRow(1, 0);
-  layout->AddView(new views::Separator(views::Separator::HORIZONTAL));
+  layout->AddView(new views::Separator());
 
   disconnect_button_ = new BackgroundColorHoverButton(
       this, l10n_util::GetStringUTF16(IDS_PROFILES_DISCONNECT_BUTTON),

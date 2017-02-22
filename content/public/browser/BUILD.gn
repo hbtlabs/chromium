@@ -22,7 +22,6 @@ source_set("browser_sources") {
   visibility = [ "//content/*" ]
 
   sources = [
-    "android/app_web_message_port_service.h",
     "android/browser_media_player_manager_register.cc",
     "android/browser_media_player_manager_register.h",
     "android/compositor.h",
@@ -71,8 +70,10 @@ source_set("browser_sources") {
     "browser_thread.h",
     "browser_thread_delegate.h",
     "browser_url_handler.h",
+    "browsing_data_filter_builder.h",
     "cache_storage_context.h",
     "cache_storage_usage_info.h",
+    "cdm_registry.h",
     "certificate_request_result_type.h",
     "child_process_data.h",
     "child_process_security_policy.h",
@@ -115,6 +116,8 @@ source_set("browser_sources") {
     "global_request_id.h",
     "gpu_data_manager.h",
     "gpu_data_manager_observer.h",
+    "gpu_feature_checker.cc",
+    "gpu_feature_checker.h",
     "gpu_service_registry.cc",
     "gpu_service_registry.h",
     "gpu_utils.cc",
@@ -139,10 +142,10 @@ source_set("browser_sources") {
     "media_session.h",
     "media_session_observer.cc",
     "media_session_observer.h",
+    "memory_coordinator.h",
     "memory_coordinator_delegate.h",
     "memory_pressure_controller.cc",
     "memory_pressure_controller.h",
-    "message_port_delegate.h",
     "message_port_provider.h",
     "native_web_keyboard_event.h",
     "navigation_controller.cc",
@@ -170,6 +173,7 @@ source_set("browser_sources") {
     "overscroll_configuration.h",
     "page_navigator.cc",
     "page_navigator.h",
+    "payment_app_provider.h",
     "pepper_flash_settings_helper.h",
     "pepper_vpn_provider_resource_host_proxy.h",
     "permission_manager.h",
@@ -181,10 +185,6 @@ source_set("browser_sources") {
     "plugin_service_filter.h",
     "presentation_screen_availability_listener.h",
     "presentation_service_delegate.h",
-    "presentation_session.cc",
-    "presentation_session.h",
-    "presentation_session_message.cc",
-    "presentation_session_message.h",
     "profiler_controller.h",
     "profiler_subscriber.h",
     "provision_fetcher_factory.h",
@@ -201,11 +201,9 @@ source_set("browser_sources") {
     "render_view_host.h",
     "render_widget_host.h",
     "render_widget_host_view.h",
-    "render_widget_host_view_frame_subscriber.h",
     "render_widget_host_view_mac_delegate.h",
     "renderer_unresponsive_type.h",
     "resource_context.h",
-    "resource_controller.h",
     "resource_dispatcher_host.cc",
     "resource_dispatcher_host.h",
     "resource_dispatcher_host_delegate.cc",
@@ -219,9 +217,6 @@ source_set("browser_sources") {
     "resource_throttle.h",
     "save_page_type.h",
     "screen_orientation_delegate.h",
-    "screen_orientation_dispatcher_host.h",
-    "screen_orientation_provider.cc",
-    "screen_orientation_provider.h",
     "security_style_explanation.h",
     "security_style_explanations.cc",
     "security_style_explanations.h",
@@ -299,6 +294,9 @@ source_set("browser_sources") {
 
     # We expose skia headers in the public API.
     "//skia",
+
+    # We expose storage headers for quota in the public API.
+    "//storage/browser",
     "//third_party/WebKit/public:mojo_bindings",
   ]
   deps = [
@@ -311,7 +309,6 @@ source_set("browser_sources") {
     "//media",
     "//net",
     "//ppapi/c",
-    "//storage/browser",
     "//ui/accessibility",
     "//ui/base",
     "//ui/events",

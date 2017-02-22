@@ -121,7 +121,7 @@ class SmoothnessToughWebGLCases(_Smoothness):
     return 'smoothness.tough_webgl_cases'
 
 
-@benchmark.Enabled('android')
+@benchmark.Disabled('win') # http://crbug.com/692663
 @benchmark.Disabled('android-webview')  # http://crbug.com/653933
 class SmoothnessMaps(perf_benchmark.PerfBenchmark):
   page_set = page_sets.MapsPageSet
@@ -139,6 +139,11 @@ class SmoothnessKeyDesktopMoveCases(_Smoothness):
   @classmethod
   def Name(cls):
     return 'smoothness.key_desktop_move_cases'
+
+  @classmethod
+  def ShouldDisable(cls, possible_browser):  # http://crbug.com/597656
+      return (possible_browser.browser_type == 'reference' and
+              possible_browser.platform.GetOSName() == 'win')
 
 
 @benchmark.Enabled('android')
@@ -376,8 +381,7 @@ class SmoothnessToughScrollingCases(_Smoothness):
   def Name(cls):
     return 'smoothness.tough_scrolling_cases'
 
-
-@benchmark.Enabled('android')
+@benchmark.Disabled('all')  # crbug.com/667489
 class SmoothnessGpuRasterizationToughScrollingCases(_Smoothness):
   tag = 'gpu_rasterization'
   test = smoothness.Smoothness
@@ -447,6 +451,13 @@ class SmoothnessPathologicalMobileSites(_Smoothness):
   def Name(cls):
     return 'smoothness.pathological_mobile_sites'
 
+  @classmethod
+  def ShouldDisable(cls, possible_browser):
+    # http://crbug.com/685342
+    if possible_browser.platform.GetDeviceTypeName() == 'Nexus 7':
+      return True
+    return False
+
 
 class SmoothnessToughTextureUploadCases(_Smoothness):
   page_set = page_sets.ToughTextureUploadCasesPageSet
@@ -476,7 +487,8 @@ class SmoothnessToughAdCases(_Smoothness):
 
 
 # http://crbug.com/522619 (mac/win)
-@benchmark.Disabled('win', 'mac')
+# http://crbug.com/683247 (android/linux)
+@benchmark.Disabled('win', 'mac', 'android', 'linux')
 class SmoothnessScrollingToughAdCases(_Smoothness):
   """Measures rendering statistics while scrolling advertisements."""
   page_set = page_sets.ScrollingToughAdCasesPageSet

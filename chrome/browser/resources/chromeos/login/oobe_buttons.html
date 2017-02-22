@@ -15,6 +15,10 @@
         <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z">
         </path>
       </g>
+      <g id="arrow-forward">
+        <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z">
+        </path>
+      </g>
     </defs>
   </svg>
 </iron-iconset-svg>
@@ -33,12 +37,13 @@
   Attributes:
     'disabled' - button is disabled when the attribute is set.
     'inverse' - makes text white and background blue
+    'aria-label' - accessibility label.
 -->
 <dom-module id="oobe-text-button">
   <link rel="stylesheet" href="oobe_text_button.css">
   <template>
     <paper-button id="textButton" on-tap="onClick_" disabled="[[disabled]]"
-        inverse$="[[inverse]]">
+        inverse$="[[inverse]]" aria-label$="[[ariaLabel]]">
       <div id="container"
           class="flex layout horizontal center center-justified self-stretch">
         <content></content>
@@ -48,7 +53,7 @@
 </dom-module>
 
 <!--
-  Material design square "<- Back" button.
+  Material design square "<- Back" and "Next ->" buttons.
   Text is blue, background is white.
 
   Example:
@@ -57,14 +62,28 @@
 
   Attributes:
     'disabled' - button is disabled when the attribute is set.
+    'aria-label' - accessibility label.
 -->
 <dom-module id="oobe-back-button">
-  <link rel="stylesheet" href="oobe_back_button.css">
+  <link rel="stylesheet" href="oobe_nav_button.css">
   <template>
-    <paper-button id="button" on-tap="onClick_" disabled="[[disabled]]">
+    <paper-button id="button" on-tap="onClick_" disabled="[[disabled]]"
+        aria-label$="[[ariaLabel]]">
       <div class="flex horizontal layout start center">
         <iron-icon icon="oobe-buttons:arrow-back"></iron-icon>
         <div id="text" i18n-content="back"></div>
+      </div>
+    </paper-button>
+  </template>
+</dom-module>
+
+<dom-module id="oobe-next-button">
+  <link rel="stylesheet" href="oobe_nav_button.css">
+  <template>
+    <paper-button id="button" on-tap="onClick_" disabled="[[disabled]]">
+      <div class="flex horizontal layout start center">
+        <div id="text" i18n-content="next"></div>
+        <iron-icon icon="oobe-buttons:arrow-forward"></iron-icon>
       </div>
     </paper-button>
   </template>
@@ -85,7 +104,7 @@
 <dom-module id="oobe-welcome-secondary-button">
   <link rel="stylesheet" href="oobe_welcome_secondary_button.css">
   <template>
-    <paper-button id="button" aria-label="[[ariaLabel]]">
+    <paper-button id="button" aria-label$="[[ariaLabel]]">
       <div id="container" class="flex layout vertical center self-stretch">
         <div id="subcontainer"
             class="flex layout horizontal center self-stretch">

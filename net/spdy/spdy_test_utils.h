@@ -42,13 +42,9 @@ void CompareCharArraysWithHexError(
     const unsigned char* expected,
     const int expected_len);
 
-void SetFrameFlags(SpdySerializedFrame* frame,
-                   uint8_t flags,
-                   SpdyMajorVersion spdy_version);
+void SetFrameFlags(SpdySerializedFrame* frame, uint8_t flags);
 
-void SetFrameLength(SpdySerializedFrame* frame,
-                    size_t length,
-                    SpdyMajorVersion spdy_version);
+void SetFrameLength(SpdySerializedFrame* frame, size_t length);
 
 std::string a2b_hex(const char* hex_data);
 
@@ -97,7 +93,8 @@ class TestServerPushDelegate : public ServerPushDelegate {
   explicit TestServerPushDelegate();
   ~TestServerPushDelegate() override;
 
-  void OnPush(std::unique_ptr<ServerPushHelper> push_helper) override;
+  void OnPush(std::unique_ptr<ServerPushHelper> push_helper,
+              const NetLogWithSource& session_net_log) override;
 
   bool CancelPush(GURL url);
 

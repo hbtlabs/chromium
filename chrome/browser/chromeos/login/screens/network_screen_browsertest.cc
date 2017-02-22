@@ -8,6 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/login/enrollment/enrollment_screen.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/screens/base_screen.h"
@@ -19,6 +20,7 @@
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
+#include "chromeos/dbus/shill_manager_client.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -52,9 +54,9 @@ class MockNetworkStateHelper : public NetworkStateHelper {
 
 class NetworkScreenTest : public WizardInProcessBrowserTest {
  public:
-  NetworkScreenTest(): WizardInProcessBrowserTest("network"),
-                       fake_session_manager_client_(NULL) {
-  }
+  NetworkScreenTest()
+      : WizardInProcessBrowserTest(OobeScreen::SCREEN_OOBE_NETWORK),
+        fake_session_manager_client_(nullptr) {}
 
  protected:
   void SetUpInProcessBrowserTestFixture() override {
@@ -68,10 +70,10 @@ class NetworkScreenTest : public WizardInProcessBrowserTest {
   void SetUpOnMainThread() override {
     WizardInProcessBrowserTest::SetUpOnMainThread();
     mock_base_screen_delegate_.reset(new MockBaseScreenDelegate());
-    ASSERT_TRUE(WizardController::default_controller() != NULL);
+    ASSERT_TRUE(WizardController::default_controller() != nullptr);
     network_screen_ =
         NetworkScreen::Get(WizardController::default_controller());
-    ASSERT_TRUE(network_screen_ != NULL);
+    ASSERT_TRUE(network_screen_ != nullptr);
     ASSERT_EQ(WizardController::default_controller()->current_screen(),
               network_screen_);
     network_screen_->base_screen_delegate_ = mock_base_screen_delegate_.get();
@@ -158,6 +160,17 @@ class HandsOffNetworkScreenTest : public NetworkScreenTest {
  public:
   HandsOffNetworkScreenTest() {}
 
+ protected:
+  void SetUpOnMainThread() override {
+    NetworkScreenTest::SetUpOnMainThread();
+
+    // Set up fake networks.
+    DBusThreadManager::Get()
+        ->GetShillManagerClient()
+        ->GetTestInterface()
+        ->SetupDefaultEnvironment();
+  }
+
  private:
   // Overridden from InProcessBrowserTest:
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -168,7 +181,13 @@ class HandsOffNetworkScreenTest : public NetworkScreenTest {
   DISALLOW_COPY_AND_ASSIGN(HandsOffNetworkScreenTest);
 };
 
-IN_PROC_BROWSER_TEST_F(HandsOffNetworkScreenTest, RequiresNoInput) {
+#if defined(OS_CHROMEOS)
+// Flaky on ChromeOS. See https://crbug.com/674782.
+#define MAYBE_RequiresNoInput DISABLED_RequiresNoInput
+#else
+#define MAYBE_RequiresNoInput RequiresNoInput
+#endif
+IN_PROC_BROWSER_TEST_F(HandsOffNetworkScreenTest, MAYBE_RequiresNoInput) {
   WizardController* wizard_controller = WizardController::default_controller();
 
   // Allow the WizardController to advance throught the enrollment flow.
@@ -176,6 +195,7 @@ IN_PROC_BROWSER_TEST_F(HandsOffNetworkScreenTest, RequiresNoInput) {
 
   // Simulate a network connection.
   EXPECT_CALL(*mock_network_state_helper_, IsConnected())
+      .Times(AnyNumber())
       .WillRepeatedly((Return(true)));
   network_screen_->UpdateStatus();
 
@@ -212,6 +232,44 @@ IN_PROC_BROWSER_TEST_F(HandsOffNetworkScreenTest, RequiresNoInput) {
       "}"
       "SendReplyIfEnrollmentDone();",
       &done));
+
+  // Reset the enrollment helper so there is no side effect with other tests.
+  static_cast<EnrollmentScreen*>(wizard_controller->current_screen())
+      ->enrollment_helper_.reset();
+}
+
+IN_PROC_BROWSER_TEST_F(HandsOffNetworkScreenTest, ContinueClickedOnlyOnce) {
+  WizardController* wizard_controller = WizardController::default_controller();
+
+  // Allow the WizardController to advance through the enrollment flow.
+  network_screen_->base_screen_delegate_ = wizard_controller;
+
+  // Check that OnContinueButtonPressed has not been called yet.
+  ASSERT_EQ(0, network_screen_->continue_attempts_);
+
+  // Connect to network "net0".
+  EXPECT_CALL(*mock_network_state_helper_, GetCurrentNetworkName())
+      .Times(AnyNumber())
+      .WillRepeatedly(Return(base::ASCIIToUTF16("net0")));
+  EXPECT_CALL(*mock_network_state_helper_, IsConnected())
+      .Times(AnyNumber())
+      .WillRepeatedly(Return(true));
+
+  // Stop waiting for net0.
+  network_screen_->StopWaitingForConnection(base::ASCIIToUTF16("net0"));
+
+  // Check that OnContinueButtonPressed has been called exactly once.
+  ASSERT_EQ(1, network_screen_->continue_attempts_);
+
+  // Stop waiting for another network, net1.
+  network_screen_->StopWaitingForConnection(base::ASCIIToUTF16("net1"));
+
+  // Check that OnContinueButtonPressed stil has been called exactly once
+  ASSERT_EQ(1, network_screen_->continue_attempts_);
+
+  // Wait for the enrollment screen.
+  OobeScreenWaiter(OobeScreen::SCREEN_OOBE_ENROLLMENT)
+      .WaitNoAssertCurrentScreen();
 
   // Reset the enrollment helper so there is no side effect with other tests.
   static_cast<EnrollmentScreen*>(wizard_controller->current_screen())

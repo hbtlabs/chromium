@@ -7,20 +7,18 @@
 #include <memory>
 
 #include "crypto/hkdf.h"
-#include "crypto/secure_hash.h"
-#include "net/base/url_util.h"
 #include "net/quic/core/crypto/crypto_handshake.h"
 #include "net/quic/core/crypto/crypto_protocol.h"
 #include "net/quic/core/crypto/quic_decrypter.h"
 #include "net/quic/core/crypto/quic_encrypter.h"
 #include "net/quic/core/crypto/quic_random.h"
-#include "net/quic/core/quic_bug_tracker.h"
 #include "net/quic/core/quic_time.h"
 #include "net/quic/core/quic_utils.h"
-#include "url/url_canon.h"
+#include "net/quic/platform/api/quic_bug_tracker.h"
+#include "net/quic/platform/api/quic_logging.h"
+#include "third_party/boringssl/src/include/openssl/sha.h"
 
 using base::StringPiece;
-using std::numeric_limits;
 using std::string;
 
 namespace net {
@@ -50,38 +48,6 @@ void CryptoUtils::GenerateNonce(QuicWallTime now,
 
   random_generator->RandBytes(&(*nonce)[bytes_written],
                               kNonceSize - bytes_written);
-}
-
-// static
-bool CryptoUtils::IsValidSNI(StringPiece sni) {
-  // TODO(rtenneti): Support RFC2396 hostname.
-  // NOTE: Microsoft does NOT enforce this spec, so if we throw away hostnames
-  // based on the above spec, we may be losing some hostnames that windows
-  // would consider valid. By far the most common hostname character NOT
-  // accepted by the above spec is '_'.
-  url::CanonHostInfo host_info;
-  string canonicalized_host(CanonicalizeHost(sni.as_string(), &host_info));
-  return !host_info.IsIPAddress() &&
-         IsCanonicalizedHostCompliant(canonicalized_host) &&
-         sni.find_last_of('.') != string::npos;
-}
-
-// static
-string CryptoUtils::NormalizeHostname(const char* hostname) {
-  url::CanonHostInfo host_info;
-  string host(CanonicalizeHost(hostname, &host_info));
-
-  // Walk backwards over the string, stopping at the first trailing dot.
-  size_t host_end = host.length();
-  while (host_end != 0 && host[host_end - 1] == '.') {
-    host_end--;
-  }
-
-  // Erase the trailing dots.
-  if (host_end != host.length()) {
-    host.erase(host_end, host.length() - host_end);
-  }
-  return host;
 }
 
 // static
@@ -186,13 +152,13 @@ bool CryptoUtils::ExportKeyingMaterial(StringPiece subkey_secret,
                                        string* result) {
   for (size_t i = 0; i < label.length(); i++) {
     if (label[i] == '\0') {
-      LOG(ERROR) << "ExportKeyingMaterial label may not contain NULs";
+      QUIC_LOG(ERROR) << "ExportKeyingMaterial label may not contain NULs";
       return false;
     }
   }
   // Create HKDF info input: null-terminated label + length-prefixed context
   if (context.length() >= std::numeric_limits<uint32_t>::max()) {
-    LOG(ERROR) << "Context value longer than 2^32";
+    QUIC_LOG(ERROR) << "Context value longer than 2^32";
     return false;
   }
   uint32_t context_length = static_cast<uint32_t>(context.length());
@@ -208,8 +174,8 @@ bool CryptoUtils::ExportKeyingMaterial(StringPiece subkey_secret,
 }
 
 // static
-uint64_t CryptoUtils::ComputeLeafCertHash(const std::string& cert) {
-  return QuicUtils::FNV1a_64_Hash(cert.data(), cert.size());
+uint64_t CryptoUtils::ComputeLeafCertHash(StringPiece cert) {
+  return QuicUtils::FNV1a_64_Hash(cert);
 }
 
 QuicErrorCode CryptoUtils::ValidateServerHello(
@@ -329,12 +295,10 @@ const char* CryptoUtils::HandshakeFailureReasonToString(
 void CryptoUtils::HashHandshakeMessage(const CryptoHandshakeMessage& message,
                                        string* output) {
   const QuicData& serialized = message.GetSerialized();
-  std::unique_ptr<crypto::SecureHash> hash(
-      crypto::SecureHash::Create(crypto::SecureHash::SHA256));
-  hash->Update(serialized.data(), serialized.length());
-  uint8_t digest[32];
-  hash->Finish(digest, sizeof(digest));
-  output->assign(reinterpret_cast<const char*>(&digest), sizeof(digest));
+  uint8_t digest[SHA256_DIGEST_LENGTH];
+  SHA256(reinterpret_cast<const uint8_t*>(serialized.data()),
+         serialized.length(), digest);
+  output->assign(reinterpret_cast<const char*>(digest), sizeof(digest));
 }
 
 }  // namespace net

@@ -16,6 +16,7 @@ import operator
 import optparse
 import os
 import re
+import shutil
 import struct
 import sys
 import tempfile
@@ -23,11 +24,14 @@ import zipfile
 import zlib
 
 import devil_chromium
+from devil.android.sdk import build_tools
 from devil.utils import cmd_helper
+from devil.utils import lazy
 import method_count
 from pylib import constants
 from pylib.constants import host_paths
 
+_AAPT_PATH = lazy.WeakConstant(lambda: build_tools.GetPath('aapt'))
 _GRIT_PATH = os.path.join(host_paths.DIR_SOURCE_ROOT, 'tools', 'grit')
 
 # Prepend the grit module from the source tree so it takes precedence over other
@@ -79,10 +83,11 @@ def _PatchedDecodeExtra(self):
 zipfile.ZipInfo._decodeExtra = (  # pylint: disable=protected-access
     _PatchedDecodeExtra)
 
-# Static initializers expected in official builds. Note that this list is built
-# using 'nm' on libchrome.so which results from a GCC official build (i.e.
-# Clang is not supported currently).
-
+# Captures an entire config from aapt output.
+_AAPT_CONFIG_PATTERN = r'config %s:(.*?)config [a-zA-Z-]+:'
+# Matches string resource entries from aapt output.
+_AAPT_ENTRY_RE = re.compile(
+    r'resource (?P<id>\w{10}) [\w\.]+:string/.*?"(?P<val>.+?)"', re.DOTALL)
 _BASE_CHART = {
     'format_version': '0.1',
     'benchmark_name': 'resource_sizes',
@@ -95,9 +100,58 @@ _DUMP_STATIC_INITIALIZERS_PATH = os.path.join(
 # Pragma exists when enable_resource_whitelist_generation=true.
 _RC_HEADER_RE = re.compile(
     r'^#define (?P<name>\w+) (?:_Pragma\(.*?\) )?(?P<id>\d+)$')
+_READELF_SIZES_METRICS = {
+  'text': ['.text'],
+  'data': ['.data', '.rodata', '.data.rel.ro', '.data.rel.ro.local'],
+  'relocations': ['.rel.dyn', '.rel.plt', '.rela.dyn', '.rela.plt'],
+  'unwind': ['.ARM.extab', '.ARM.exidx', '.eh_frame', '.eh_frame_hdr',],
+  'symbols': ['.dynsym', '.dynstr', '.dynamic', '.shstrtab', '.got', '.plt',
+              '.got.plt', '.hash'],
+  'bss': ['.bss'],
+  'other': ['.init_array', '.fini_array', '.comment', '.note.gnu.gold-version',
+            '.ARM.attributes', '.note.gnu.build-id', '.gnu.version',
+            '.gnu.version_d', '.gnu.version_r', '.interp', '.gcc_except_table']
+}
+
+
+def _ExtractMainLibSectionSizesFromApk(apk_path, main_lib_path):
+  tmpdir = tempfile.mkdtemp(suffix='_apk_extract')
+  grouped_section_sizes = collections.defaultdict(int)
+  try:
+    with zipfile.ZipFile(apk_path, 'r') as z:
+      extracted_lib_path = z.extract(main_lib_path, tmpdir)
+      section_sizes = _CreateSectionNameSizeMap(extracted_lib_path)
+
+      for group_name, section_names in _READELF_SIZES_METRICS.iteritems():
+        for section_name in section_names:
+          if section_name in section_sizes:
+            grouped_section_sizes[group_name] += section_sizes.pop(section_name)
+
+      # Group any unknown section headers into the "other" group.
+      for section_header, section_size in section_sizes.iteritems():
+        print "Unknown elf section header:", section_header
+        grouped_section_sizes['other'] += section_size
+
+      return grouped_section_sizes
+  finally:
+    shutil.rmtree(tmpdir)
+
+
+def _CreateSectionNameSizeMap(so_path):
+  stdout = cmd_helper.GetCmdOutput(['readelf', '-S', '--wide', so_path])
+  section_sizes = {}
+  # Matches  [ 2] .hash HASH 00000000006681f0 0001f0 003154 04   A  3   0  8
+  for match in re.finditer(r'\[[\s\d]+\] (\..*)$', stdout, re.MULTILINE):
+    items = match.group(1).split()
+    section_sizes[items[0]] = int(items[4], 16)
+
+  return section_sizes
 
 
 def CountStaticInitializers(so_path):
+  # Static initializers expected in official builds. Note that this list is
+  # built using 'nm' on libchrome.so which results from a GCC official build
+  # (i.e. Clang is not supported currently).
   def get_elf_section_size(readelf_stdout, section_name):
     # Matches: .ctors PROGBITS 000000000516add0 5169dd0 000010 00 WA 0 0 8
     match = re.search(r'\.%s.*$' % re.escape(section_name),
@@ -135,6 +189,53 @@ def GetStaticInitializers(so_path):
   return output.splitlines()
 
 
+def _NormalizeResourcesArsc(apk_path):
+  """Estimates the expected overhead of untranslated strings in resources.arsc.
+
+  See http://crbug.com/677966 for why this is necessary.
+  """
+  aapt_output = _RunAaptDumpResources(apk_path)
+
+  # en-rUS is in the default config and may be cluttered with non-translatable
+  # strings, so en-rGB is a better baseline for finding missing translations.
+  en_strings = _CreateResourceIdValueMap(aapt_output, 'en-rGB')
+  fr_strings = _CreateResourceIdValueMap(aapt_output, 'fr')
+
+  # Chrome supports 44 locales (en-US and en-GB will never be translated).
+  # This can be changed to |translations.GetNumEntries()| when Chrome and
+  # WebView support the same set of locales (http://crbug.com/369218).
+  config_count = 42
+
+  size = 0
+  for res_id, string_val in en_strings.iteritems():
+    if string_val == fr_strings[res_id]:
+      string_size = len(string_val)
+      # 7 bytes is the per-entry overhead (not specific to any string). See
+      # https://android.googlesource.com/platform/frameworks/base.git/+/android-4.2.2_r1/tools/aapt/StringPool.cpp#414.
+      # The 1.5 factor was determined experimentally and is meant to account for
+      # other languages generally having longer strings than english.
+      size += config_count * (7 + string_size * 1.5)
+
+  return size
+
+
+def _CreateResourceIdValueMap(aapt_output, lang):
+  """Return a map of resource ids to string values for the given |lang|."""
+  config_re = _AAPT_CONFIG_PATTERN % lang
+  return {entry.group('id'): entry.group('val')
+          for config_section in re.finditer(config_re, aapt_output, re.DOTALL)
+          for entry in re.finditer(_AAPT_ENTRY_RE, config_section.group(0))}
+
+
+def _RunAaptDumpResources(apk_path):
+  cmd = [_AAPT_PATH.read(), 'dump', '--values', 'resources', apk_path]
+  status, output = cmd_helper.GetCmdStatusAndOutput(cmd)
+  if status != 0:
+    raise Exception('Failed running aapt command: "%s" with output "%s".' %
+                    (' '.join(cmd), output))
+  return output
+
+
 def ReportPerfResult(chart_data, graph_title, trace_title, value, units,
                      improvement_direction='down', important=True):
   """Outputs test results in correct format.
@@ -168,38 +269,69 @@ def PrintResourceSizes(files, chartjson=None):
                      os.path.getsize(f), 'bytes')
 
 
+class _FileGroup(object):
+  """Represents a category that apk files can fall into."""
+
+  def __init__(self, name):
+    self.name = name
+    self._zip_infos = []
+    self._extracted = []
+
+  def AddZipInfo(self, zip_info, extracted=False):
+    self._zip_infos.append(zip_info)
+    self._extracted.append(extracted)
+
+  def AllEntries(self):
+    return iter(self._zip_infos)
+
+  def GetNumEntries(self):
+    return len(self._zip_infos)
+
+  def FindByPattern(self, pattern):
+    return next((i for i in self._zip_infos if re.match(pattern, i.filename)),
+                None)
+
+  def FindLargest(self):
+    return max(self._zip_infos, key=lambda i: i.file_size)
+
+  def ComputeZippedSize(self):
+    return sum(i.compress_size for i in self._zip_infos)
+
+  def ComputeUncompressedSize(self):
+    return sum(i.file_size for i in self._zip_infos)
+
+  def ComputeExtractedSize(self):
+    ret = 0
+    for zi, extracted in zip(self._zip_infos, self._extracted):
+      if extracted:
+        ret += zi.file_size
+    return ret
+
+  def ComputeInstallSize(self):
+    return self.ComputeExtractedSize() + self.ComputeZippedSize()
+
+
 def PrintApkAnalysis(apk_filename, chartjson=None):
   """Analyse APK to determine size contributions of different file classes."""
-  # Define a named tuple type for file grouping.
-  # name: Human readable name for this file group
-  # regex: Regular expression to match filename
-  # extracted: Function that takes a file name and returns whether the file is
-  #            extracted from the apk at install/runtime.
-  FileGroup = collections.namedtuple('FileGroup',
-                                     ['name', 'regex', 'extracted'])
+  file_groups = []
 
-  # File groups are checked in sequence, so more specific regexes should be
-  # earlier in the list.
-  YES = lambda _: True
-  NO = lambda _: False
-  FILE_GROUPS = (
-      FileGroup('Native code', r'\.so$', lambda f: 'crazy' not in f),
-      FileGroup('Java code', r'\.dex$', YES),
-      FileGroup('Native resources (no l10n)',
-                r'^assets/.*(resources|percent)\.pak$', NO),
-      # For locale paks, assume only english paks are extracted.
-      # Handles locale paks as bother resources or assets (.lpak or .pak).
-      FileGroup('Native resources (l10n)',
-                r'\.lpak$|^assets/.*(?!resources|percent)\.pak$',
-                lambda f: 'en_' in f or 'en-' in f),
-      FileGroup('ICU (i18n library) data', r'^assets/icudtl\.dat$', NO),
-      FileGroup('V8 Snapshots', r'^assets/.*\.bin$', NO),
-      FileGroup('PNG drawables', r'\.png$', NO),
-      FileGroup('Non-compiled Android resources', r'^res/', NO),
-      FileGroup('Compiled Android resources', r'\.arsc$', NO),
-      FileGroup('Package metadata', r'^(META-INF/|AndroidManifest\.xml$)', NO),
-      FileGroup('Unknown files', r'.', NO),
-      )
+  def make_group(name):
+    group = _FileGroup(name)
+    file_groups.append(group)
+    return group
+
+  native_code = make_group('Native code')
+  java_code = make_group('Java code')
+  native_resources_no_translations = make_group('Native resources (no l10n)')
+  translations = make_group('Native resources (l10n)')
+  icu_data = make_group('ICU (i18n library) data')
+  v8_snapshots = make_group('V8 Snapshots')
+  png_drawables = make_group('PNG drawables')
+  res_directory = make_group('Non-compiled Android resources')
+  arsc = make_group('Compiled Android resources')
+  metadata = make_group('Package metadata')
+  unknown = make_group('Unknown files')
+  notices = make_group('licenses.notice file')
 
   apk = zipfile.ZipFile(apk_filename, 'r')
   try:
@@ -210,48 +342,111 @@ def PrintApkAnalysis(apk_filename, chartjson=None):
   total_apk_size = os.path.getsize(apk_filename)
   apk_basename = os.path.basename(apk_filename)
 
-  found_files = {}
-  for group in FILE_GROUPS:
-    found_files[group] = []
-
   for member in apk_contents:
-    for group in FILE_GROUPS:
-      if re.search(group.regex, member.filename):
-        found_files[group].append(member)
-        break
+    filename = member.filename
+    if filename.endswith('/'):
+      continue
+
+    if filename.endswith('.so'):
+      native_code.AddZipInfo(member, 'crazy' not in filename)
+    elif filename.endswith('.dex'):
+      java_code.AddZipInfo(member, True)
+    elif re.search(r'^assets/.*(resources|percent)\.pak$', filename):
+      native_resources_no_translations.AddZipInfo(member)
+    elif re.search(r'\.lpak$|^assets/.*(?!resources|percent)\.pak$', filename):
+      translations.AddZipInfo(member, 'en_' in filename or 'en-' in filename)
+    elif filename == 'assets/icudtl.dat':
+      icu_data.AddZipInfo(member)
+    elif filename.endswith('.bin'):
+      v8_snapshots.AddZipInfo(member)
+    elif filename.endswith('.png') or filename.endswith('.webp'):
+      png_drawables.AddZipInfo(member)
+    elif filename.startswith('res/'):
+      res_directory.AddZipInfo(member)
+    elif filename.endswith('.arsc'):
+      arsc.AddZipInfo(member)
+    elif filename.startswith('META-INF') or filename == 'AndroidManifest.xml':
+      metadata.AddZipInfo(member)
+    elif filename.endswith('.notice'):
+      notices.AddZipInfo(member)
     else:
-      raise KeyError('No group found for file "%s"' % member.filename)
+      unknown.AddZipInfo(member)
 
   total_install_size = total_apk_size
 
-  for group in FILE_GROUPS:
-    uncompressed_size = 0
-    packed_size = 0
-    extracted_size = 0
-    for member in found_files[group]:
-      uncompressed_size += member.file_size
-      packed_size += member.compress_size
-      # Assume that if a file is not compressed, then it is not extracted.
-      is_compressed = member.compress_type != zipfile.ZIP_STORED
-      if is_compressed and group.extracted(member.filename):
-        extracted_size += member.file_size
-    install_size = packed_size + extracted_size
-    total_install_size += extracted_size
+  for group in file_groups:
+    install_size = group.ComputeInstallSize()
+    total_install_size += group.ComputeExtractedSize()
 
     ReportPerfResult(chartjson, apk_basename + '_Breakdown',
-                     group.name + ' size', packed_size, 'bytes')
+                     group.name + ' size', group.ComputeZippedSize(), 'bytes')
     ReportPerfResult(chartjson, apk_basename + '_InstallBreakdown',
                      group.name + ' size', install_size, 'bytes')
     ReportPerfResult(chartjson, apk_basename + '_Uncompressed',
-                     group.name + ' size', uncompressed_size, 'bytes')
+                     group.name + ' size', group.ComputeUncompressedSize(),
+                     'bytes')
 
-  transfer_size = _CalculateCompressedSize(apk_filename)
-  ReportPerfResult(chartjson, apk_basename + '_InstallSize',
-                   'Estimated installed size', total_install_size, 'bytes')
   ReportPerfResult(chartjson, apk_basename + '_InstallSize', 'APK size',
                    total_apk_size, 'bytes')
+  ReportPerfResult(chartjson, apk_basename + '_InstallSize',
+                   'Estimated installed size', total_install_size, 'bytes')
+  transfer_size = _CalculateCompressedSize(apk_filename)
   ReportPerfResult(chartjson, apk_basename + '_TransferSize',
                    'Transfer size (deflate)', transfer_size, 'bytes')
+
+  # Size of main dex vs remaining.
+  main_dex_info = java_code.FindByPattern('classes.dex')
+  if main_dex_info:
+    main_dex_size = main_dex_info.file_size
+    ReportPerfResult(chartjson, apk_basename + '_Specifics',
+                     'main dex size', main_dex_size, 'bytes')
+    secondary_size = java_code.ComputeUncompressedSize() - main_dex_size
+    ReportPerfResult(chartjson, apk_basename + '_Specifics',
+                     'secondary dex size', secondary_size, 'bytes')
+
+  # Size of main .so vs remaining.
+  main_lib_info = native_code.FindLargest()
+  if main_lib_info:
+    main_lib_size = main_lib_info.file_size
+    ReportPerfResult(chartjson, apk_basename + '_Specifics',
+                     'main lib size', main_lib_size, 'bytes')
+    secondary_size = native_code.ComputeUncompressedSize() - main_lib_size
+    ReportPerfResult(chartjson, apk_basename + '_Specifics',
+                     'other lib size', secondary_size, 'bytes')
+
+    main_lib_section_sizes = _ExtractMainLibSectionSizesFromApk(
+        apk_filename, main_lib_info.filename)
+    for metric_name, size in main_lib_section_sizes.iteritems():
+      ReportPerfResult(chartjson, apk_basename + '_MainLibInfo',
+                       metric_name, size, 'bytes')
+
+  # Main metric that we want to monitor for jumps.
+  normalized_apk_size = total_apk_size
+  # Always look at uncompressed .dex & .so.
+  normalized_apk_size -= java_code.ComputeZippedSize()
+  normalized_apk_size += java_code.ComputeUncompressedSize()
+  normalized_apk_size -= native_code.ComputeZippedSize()
+  normalized_apk_size += native_code.ComputeUncompressedSize()
+  # Avoid noise caused when strings change and translations haven't yet been
+  # updated.
+  english_pak = translations.FindByPattern(r'.*/en[-_][Uu][Ss]\.l?pak')
+  num_translations = translations.GetNumEntries()
+  if english_pak and num_translations > 1:
+    normalized_apk_size -= translations.ComputeZippedSize()
+    # 1.17 found by looking at Chrome.apk and seeing how much smaller en-US.pak
+    # is relative to the average locale .pak.
+    normalized_apk_size += int(
+        english_pak.compress_size * num_translations * 1.17)
+    normalized_apk_size += int(_NormalizeResourcesArsc(apk_filename))
+
+  ReportPerfResult(chartjson, apk_basename + '_Specifics',
+                   'normalized apk size', normalized_apk_size, 'bytes')
+
+  ReportPerfResult(chartjson, apk_basename + '_Specifics',
+                   'file count', len(apk_contents), 'zip entries')
+
+  for info in unknown.AllEntries():
+    print 'Unknown entry:', info.filename, info.compress_size
 
 
 def IsPakFileName(file_name):
@@ -290,6 +485,9 @@ def PrintPakAnalysis(apk_filename, min_pak_resource_size):
   print 'Total uncompressed size: %s' % _FormatBytes(total_file_size)
   print
 
+  if not paks:
+    return
+
   # Output the table of details about all pak files.
   print '%25s%11s%21s%21s' % (
       'FILENAME', 'RESOURCES', 'COMPRESSED SIZE', 'UNCOMPRESSED SIZE')
@@ -323,23 +521,41 @@ def PrintPakAnalysis(apk_filename, min_pak_resource_size):
       total_resource_size)
   print
 
-  resource_id_name_map = _GetResourceIdNameMap()
+  resource_id_name_map, resources_id_header_map = _AnnotatePakResources()
 
   # Output the table of details about all resources across pak files.
   print
   print '%56s %5s %17s' % ('RESOURCE', 'COUNT', 'UNCOMPRESSED SIZE')
   for i in sorted(resource_size_map, key=resource_size_map.get,
                   reverse=True):
-    if resource_size_map[i] >= min_pak_resource_size:
-      print '%56s %5s %9s %6.2f%%' % (
-          resource_id_name_map.get(i, i),
-          resource_count_map[i],
-          _FormatBytes(resource_size_map[i]),
-          100.0 * resource_size_map[i] / total_resource_size)
+    if resource_size_map[i] < min_pak_resource_size:
+      break
+
+    print '%56s %5s %9s %6.2f%%' % (
+        resource_id_name_map.get(i, i),
+        resource_count_map[i],
+        _FormatBytes(resource_size_map[i]),
+        100.0 * resource_size_map[i] / total_resource_size)
+
+  # Print breakdown on a per-grd file basis.
+  size_by_header = collections.defaultdict(int)
+  for resid, size in resource_size_map.iteritems():
+    size_by_header[resources_id_header_map.get(resid, 'unknown')] += size
+
+  print
+  print '%80s %17s' % ('HEADER', 'UNCOMPRESSED SIZE')
+  for header in sorted(size_by_header, key=size_by_header.get, reverse=True):
+    if size_by_header[header] < min_pak_resource_size:
+      break
+
+    print '%80s %9s %6.2f%%' % (
+        header,
+        _FormatBytes(size_by_header[header]),
+        100.0 * size_by_header[header] / total_resource_size)
 
 
-def _GetResourceIdNameMap():
-  """Returns a map of {resource_id: resource_name}."""
+def _AnnotatePakResources():
+  """Returns a pair of maps: id_name_map, id_header_map."""
   out_dir = constants.GetOutDirectory()
   assert os.path.isdir(out_dir), 'Failed to locate out dir at %s' % out_dir
   print 'Looking at resources in: %s' % out_dir
@@ -351,6 +567,7 @@ def _GetResourceIdNameMap():
   assert grit_headers, 'Failed to find grit headers in %s' % out_dir
 
   id_name_map = {}
+  id_header_map = {}
   for header in grit_headers:
     with open(header, 'r') as f:
       for line in f.readlines():
@@ -362,7 +579,8 @@ def _GetResourceIdNameMap():
             print 'WARNING: Resource ID conflict %s (%s vs %s)' % (
                 i, id_name_map[i], name)
           id_name_map[i] = name
-  return id_name_map
+          id_header_map[i] = os.path.relpath(header, out_dir)
+  return id_name_map, id_header_map
 
 
 def _PrintStaticInitializersCountFromApk(apk_filename, chartjson=None):
@@ -466,10 +684,13 @@ Pass any number of files to graph their sizes. Any files with the extension
   option_parser.add_option('--chromium-output-directory',
                            help='Location of the build artifacts. '
                                 'Takes precidence over --build_type.')
-  option_parser.add_option('--chartjson', action="store_true",
+  option_parser.add_option('--chartjson', action='store_true',
                            help='Sets output mode to chartjson.')
   option_parser.add_option('--output-dir', default='.',
                            help='Directory to save chartjson to.')
+  option_parser.add_option('--no-output-dir', action='store_true',
+                           help='Skip all measurements that rely on having '
+                                'output-dir')
   option_parser.add_option('-d', '--device',
                            help='Dummy option for perf runner.')
   options, args = option_parser.parse_args(argv)
@@ -479,7 +700,9 @@ Pass any number of files to graph their sizes. Any files with the extension
   constants.SetBuildType(options.build_type)
   if options.chromium_output_directory:
     constants.SetOutputDirectory(options.chromium_output_directory)
-  constants.CheckOutputDirectory()
+  if not options.no_output_dir:
+    constants.CheckOutputDirectory()
+    devil_chromium.Initialize()
 
   # For backward compatibilty with buildbot scripts, treat --so-path as just
   # another file to print the size of. We don't need it for anything special any
@@ -489,8 +712,6 @@ Pass any number of files to graph their sizes. Any files with the extension
 
   if not files:
     option_parser.error('Must specify a file')
-
-  devil_chromium.Initialize()
 
   if options.so_with_symbols_path:
     si_count = _PrintStaticInitializersCount(options.so_with_symbols_path)
@@ -502,10 +723,11 @@ Pass any number of files to graph their sizes. Any files with the extension
   for f in files:
     if f.endswith('.apk'):
       PrintApkAnalysis(f, chartjson=chartjson)
-      PrintPakAnalysis(f, options.min_pak_resource_size)
       _PrintDexAnalysis(f, chartjson=chartjson)
-      if not options.so_with_symbols_path:
-        _PrintStaticInitializersCountFromApk(f, chartjson=chartjson)
+      if not options.no_output_dir:
+        PrintPakAnalysis(f, options.min_pak_resource_size)
+        if not options.so_with_symbols_path:
+          _PrintStaticInitializersCountFromApk(f, chartjson=chartjson)
 
   if chartjson:
     results_path = os.path.join(options.output_dir, 'results-chart.json')

@@ -26,17 +26,14 @@ class MdSettingsUI : public content::WebUIController,
   ~MdSettingsUI() override;
 
   // content::WebContentsObserver:
-  void DidStartProvisionalLoadForFrame(
-      content::RenderFrameHost* render_frame_host,
-      const GURL& validated_url,
-      bool is_error_page,
-      bool is_iframe_srcdoc) override;
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void DocumentLoadedInFrame(
       content::RenderFrameHost *render_frame_host) override;
   void DocumentOnLoadCompletedInMainFrame() override;
 
  private:
-  void AddSettingsPageUIHandler(SettingsPageUIHandler* handler);
+  void AddSettingsPageUIHandler(std::unique_ptr<SettingsPageUIHandler> handler);
 
   // Weak references; all |handlers_| are owned by |web_ui()|.
   std::unordered_set<SettingsPageUIHandler*> handlers_;

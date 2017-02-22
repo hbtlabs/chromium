@@ -8,8 +8,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "mojo/common/common_type_converters.h"
 #include "services/service_manager/public/interfaces/connector.mojom.h"
 #include "services/ui/common/types.h"
 #include "services/ui/public/interfaces/cursor.mojom.h"
@@ -200,8 +200,8 @@ void Display::SetSize(const gfx::Size& size) {
   platform_display_->SetViewportSize(size);
 }
 
-void Display::SetTitle(const mojo::String& title) {
-  platform_display_->SetTitle(title.To<base::string16>());
+void Display::SetTitle(const std::string& title) {
+  platform_display_->SetTitle(base::UTF8ToUTF16(title));
 }
 
 void Display::InitWindowManagerDisplayRoots() {
@@ -256,10 +256,16 @@ void Display::CreateRootWindow(const gfx::Size& size) {
   root_.reset(window_server_->CreateServerWindow(
       display_manager()->GetAndAdvanceNextRootId(),
       ServerWindow::Properties()));
+  root_->set_event_targeting_policy(
+      mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
   root_->SetBounds(gfx::Rect(size));
   root_->SetVisible(true);
   focus_controller_ = base::MakeUnique<FocusController>(this, root_.get());
   focus_controller_->AddObserver(this);
+}
+
+display::Display Display::GetDisplay() {
+  return ToDisplay();
 }
 
 ServerWindow* Display::GetRootWindow() {
@@ -278,7 +284,7 @@ bool Display::IsInHighContrastMode() {
 void Display::OnEvent(const ui::Event& event) {
   WindowManagerDisplayRoot* display_root = GetActiveWindowManagerDisplayRoot();
   if (display_root)
-    display_root->window_manager_state()->ProcessEvent(event);
+    display_root->window_manager_state()->ProcessEvent(event, GetId());
   window_server_
       ->GetUserActivityMonitorForUser(
           window_server_->user_id_tracker()->active_id())
@@ -300,6 +306,13 @@ void Display::OnViewportMetricsChanged(
   root_->SetBounds(new_bounds);
   for (auto& pair : window_manager_display_root_map_)
     pair.second->root()->SetBounds(new_bounds);
+}
+
+ServerWindow* Display::GetActiveRootWindow() {
+  WindowManagerDisplayRoot* display_root = GetActiveWindowManagerDisplayRoot();
+  if (display_root)
+    return display_root->root();
+  return nullptr;
 }
 
 bool Display::CanHaveActiveChildren(ServerWindow* window) const {

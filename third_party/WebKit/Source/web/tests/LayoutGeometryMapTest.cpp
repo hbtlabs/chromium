@@ -36,9 +36,9 @@
 #include "core/paint/PaintLayer.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/URLTestHelpers.h"
+#include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
-#include "public/web/WebCache.h"
 #include "public/web/WebFrameClient.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "web/WebLocalFrameImpl.h"
@@ -48,8 +48,8 @@ namespace blink {
 
 typedef bool TestParamRootLayerScrolling;
 class LayoutGeometryMapTest
-    : public testing::Test,
-      public testing::WithParamInterface<TestParamRootLayerScrolling>,
+    : public ::testing::Test,
+      public ::testing::WithParamInterface<TestParamRootLayerScrolling>,
       private ScopedRootLayerScrollingForTest {
  public:
   LayoutGeometryMapTest()
@@ -57,8 +57,9 @@ class LayoutGeometryMapTest
         m_baseURL("http://www.test.com/") {}
 
   void TearDown() override {
-    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
-    WebCache::clear();
+    Platform::current()
+        ->getURLLoaderMockFactory()
+        ->unregisterAllURLsAndClearMemoryCache();
   }
 
  protected:
@@ -77,14 +78,19 @@ class LayoutGeometryMapTest
     return element->layoutBox();
   }
 
-  static LayoutBox* getLayoutBox(WebView* webView,
-                                 const WTF::AtomicString& elementId) {
+  static Element* getElement(WebView* webView,
+                             const WTF::AtomicString& elementId) {
     WebViewImpl* webViewImpl = toWebViewImpl(webView);
     if (!webViewImpl)
       return nullptr;
     LocalFrame* frame = webViewImpl->mainFrameImpl()->frame();
     Document* doc = frame->document();
-    Element* element = doc->getElementById(elementId);
+    return doc->getElementById(elementId);
+  }
+
+  static LayoutBox* getLayoutBox(WebView* webView,
+                                 const WTF::AtomicString& elementId) {
+    Element* element = getElement(webView, elementId);
     if (!element)
       return nullptr;
     return element->layoutBox();
@@ -100,7 +106,7 @@ class LayoutGeometryMapTest
         rb->enclosingLayer()->enclosingLayerForPaintInvalidation();
     if (!compositingLayer)
       return nullptr;
-    return compositingLayer->layoutObject();
+    return &compositingLayer->layoutObject();
   }
 
   static const LayoutBoxModelObject* getFrameLayoutContainer(
@@ -114,7 +120,7 @@ class LayoutGeometryMapTest
         rb->enclosingLayer()->enclosingLayerForPaintInvalidation();
     if (!compositingLayer)
       return nullptr;
-    return compositingLayer->layoutObject();
+    return &compositingLayer->layoutObject();
   }
 
   static const FloatRect rectFromQuad(const FloatQuad& quad) {
@@ -153,9 +159,9 @@ class LayoutGeometryMapTest
   }
 
   void registerMockedHttpURLLoad(const std::string& fileName) {
-    URLTestHelpers::registerMockedURLFromBaseURL(
-        WebString::fromUTF8(m_baseURL.c_str()),
-        WebString::fromUTF8(fileName.c_str()));
+    URLTestHelpers::registerMockedURLLoadFromBase(
+        WebString::fromUTF8(m_baseURL), testing::webTestDataPath(),
+        WebString::fromUTF8(fileName));
   }
 
   const std::string m_baseURL;
@@ -492,6 +498,40 @@ TEST_P(LayoutGeometryMapTest, ColumnTest) {
   EXPECT_NEAR(8.0f, rectFromQuad(rgm.mapToAncestor(rect, nullptr)).y(), 0.1f);
   EXPECT_EQ(5.0f, rectFromQuad(rgm.mapToAncestor(rect, nullptr)).width());
   EXPECT_EQ(3.0f, rectFromQuad(rgm.mapToAncestor(rect, nullptr)).height());
+}
+
+TEST_P(LayoutGeometryMapTest, FloatUnderInlineLayer) {
+  registerMockedHttpURLLoad("rgm_float_under_inline.html");
+  FrameTestHelpers::WebViewHelper webViewHelper;
+  WebView* webView = webViewHelper.initializeAndLoad(
+      m_baseURL + "rgm_float_under_inline.html", true, 0, 0);
+  webView->resize(WebSize(1000, 1000));
+  webView->updateAllLifecyclePhases();
+
+  LayoutGeometryMap rgm;
+  auto* layerUnderFloat = getLayoutBox(webView, "layer-under-float");
+  auto* span = getElement(webView, "span")->layoutBoxModelObject();
+  auto* floating = getLayoutBox(webView, "float");
+  auto* container = getLayoutBox(webView, "container");
+  FloatRect rect(3.0f, 4.0f, 10.0f, 8.0f);
+
+  rgm.pushMappingsToAncestor(container->layer(), nullptr);
+  rgm.pushMappingsToAncestor(span->layer(), container->layer());
+  rgm.pushMappingsToAncestor(layerUnderFloat->layer(), span->layer());
+  EXPECT_EQ(rect, rectFromQuad(rgm.mapToAncestor(rect, container)));
+  EXPECT_EQ(FloatRect(63.0f, 54.0f, 10.0f, 8.0f),
+            rectFromQuad(rgm.mapToAncestor(rect, nullptr)));
+
+  rgm.popMappingsToAncestor(span->layer());
+  EXPECT_EQ(FloatRect(203.0f, 104.0f, 10.0f, 8.0f),
+            rectFromQuad(rgm.mapToAncestor(rect, container)));
+  EXPECT_EQ(FloatRect(263.0f, 154.0f, 10.0f, 8.0f),
+            rectFromQuad(rgm.mapToAncestor(rect, nullptr)));
+
+  rgm.pushMappingsToAncestor(floating, span);
+  EXPECT_EQ(rect, rectFromQuad(rgm.mapToAncestor(rect, container)));
+  EXPECT_EQ(FloatRect(63.0f, 54.0f, 10.0f, 8.0f),
+            rectFromQuad(rgm.mapToAncestor(rect, nullptr)));
 }
 
 }  // namespace blink

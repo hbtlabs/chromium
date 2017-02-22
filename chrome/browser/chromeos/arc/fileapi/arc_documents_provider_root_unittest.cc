@@ -1,0 +1,346 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include <string.h>
+
+#include <memory>
+#include <string>
+#include <utility>
+
+#include "base/files/file_path.h"
+#include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
+#include "chrome/browser/chromeos/arc/fileapi/arc_documents_provider_root.h"
+#include "chrome/browser/chromeos/arc/fileapi/arc_documents_provider_util.h"
+#include "chrome/browser/chromeos/arc/fileapi/arc_file_system_operation_runner.h"
+#include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_service_manager.h"
+#include "components/arc/test/fake_file_system_instance.h"
+#include "content/public/test/test_browser_thread_bundle.h"
+#include "storage/common/fileapi/directory_entry.h"
+#include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
+
+using storage::DirectoryEntry;
+using Document = arc::FakeFileSystemInstance::Document;
+using EntryList = storage::AsyncFileUtil::EntryList;
+
+namespace arc {
+
+namespace {
+
+// Simliar as FakeFileSystemInstance::Document, but all fields are primitives
+// so that values can be constexpr.
+struct DocumentSpec {
+  const char* document_id;
+  const char* parent_document_id;
+  const char* display_name;
+  const char* mime_type;
+  int64_t size;
+  uint64_t last_modified;
+};
+
+// Fake file system hierarchy:
+//
+// <path>            <type>      <ID>
+// (root)/           dir         root-id
+//   dir/            dir         dir-id
+//     photo.jpg     image/jpeg  photo-id
+//     music.bin     audio/mp3   music-id
+//   dups/           dir         dups-id
+//     dup.mp4       video/mp4   dup1-id
+//     dup.mp4       video/mp4   dup2-id
+//     dup.mp4       video/mp4   dup3-id
+//     dup.mp4       video/mp4   dup4-id
+constexpr char kAuthority[] = "org.chromium.test";
+constexpr DocumentSpec kRootSpec{"root-id", "", "", kAndroidDirectoryMimeType,
+                                 -1,        0};
+constexpr DocumentSpec kDirSpec{
+    "dir-id", kRootSpec.document_id, "dir", kAndroidDirectoryMimeType, -1, 22};
+constexpr DocumentSpec kPhotoSpec{
+    "photo-id", kDirSpec.document_id, "photo.jpg", "image/jpeg", 3, 33};
+constexpr DocumentSpec kMusicSpec{
+    "music-id", kDirSpec.document_id, "music.bin", "audio/mp3", 4, 44};
+constexpr DocumentSpec kDupsSpec{"dups-id", kRootSpec.document_id,
+                                 "dups",    kAndroidDirectoryMimeType,
+                                 -1,        55};
+constexpr DocumentSpec kDup1Spec{
+    "dup1-id", kDupsSpec.document_id, "dup.mp4", "video/mp4", 6, 66};
+constexpr DocumentSpec kDup2Spec{
+    "dup2-id", kDupsSpec.document_id, "dup.mp4", "video/mp4", 7, 77};
+constexpr DocumentSpec kDup3Spec{
+    "dup3-id", kDupsSpec.document_id, "dup.mp4", "video/mp4", 8, 88};
+constexpr DocumentSpec kDup4Spec{
+    "dup4-id", kDupsSpec.document_id, "dup.mp4", "video/mp4", 9, 99};
+
+// The order is intentionally shuffled here so that
+// FileSystemInstance::GetChildDocuments() returns documents in shuffled order.
+// See ResolveToContentUrlDups test below.
+constexpr DocumentSpec kAllSpecs[] = {kRootSpec,  kDirSpec,  kPhotoSpec,
+                                      kMusicSpec, kDupsSpec, kDup2Spec,
+                                      kDup1Spec,  kDup4Spec, kDup3Spec};
+
+Document ToDocument(const DocumentSpec& spec) {
+  return Document(kAuthority, spec.document_id, spec.parent_document_id,
+                  spec.display_name, spec.mime_type, spec.size,
+                  spec.last_modified);
+}
+
+void ExpectMatchesSpec(const base::File::Info& info, const DocumentSpec& spec) {
+  EXPECT_EQ(spec.size, info.size);
+  if (spec.mime_type == kAndroidDirectoryMimeType) {
+    EXPECT_TRUE(info.is_directory);
+  } else {
+    EXPECT_FALSE(info.is_directory);
+  }
+  EXPECT_FALSE(info.is_symbolic_link);
+  EXPECT_EQ(spec.last_modified,
+            static_cast<uint64_t>(info.last_modified.ToJavaTime()));
+  EXPECT_EQ(spec.last_modified,
+            static_cast<uint64_t>(info.last_accessed.ToJavaTime()));
+  EXPECT_EQ(spec.last_modified,
+            static_cast<uint64_t>(info.creation_time.ToJavaTime()));
+}
+
+class ArcDocumentsProviderRootTest : public testing::Test {
+ public:
+  ArcDocumentsProviderRootTest() = default;
+  ~ArcDocumentsProviderRootTest() override = default;
+
+  void SetUp() override {
+    for (auto spec : kAllSpecs) {
+      fake_file_system_.AddDocument(ToDocument(spec));
+    }
+
+    arc_service_manager_ = base::MakeUnique<ArcServiceManager>(nullptr);
+    arc_service_manager_->AddService(
+        ArcFileSystemOperationRunner::CreateForTesting(
+            arc_service_manager_->arc_bridge_service()));
+    arc_service_manager_->arc_bridge_service()->file_system()->SetInstance(
+        &fake_file_system_);
+
+    root_ = base::MakeUnique<ArcDocumentsProviderRoot>(kAuthority,
+                                                       kRootSpec.document_id);
+  }
+
+ protected:
+  content::TestBrowserThreadBundle thread_bundle_;
+  FakeFileSystemInstance fake_file_system_;
+  std::unique_ptr<ArcServiceManager> arc_service_manager_;
+  std::unique_ptr<ArcDocumentsProviderRoot> root_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ArcDocumentsProviderRootTest);
+};
+
+}  // namespace
+
+TEST_F(ArcDocumentsProviderRootTest, GetFileInfo) {
+  base::RunLoop run_loop;
+  root_->GetFileInfo(base::FilePath(FILE_PATH_LITERAL("dir/photo.jpg")),
+                     base::Bind(
+                         [](base::RunLoop* run_loop, base::File::Error error,
+                            const base::File::Info& info) {
+                           EXPECT_EQ(base::File::FILE_OK, error);
+                           ExpectMatchesSpec(info, kPhotoSpec);
+                           run_loop->Quit();
+                         },
+                         &run_loop));
+  run_loop.Run();
+}
+
+TEST_F(ArcDocumentsProviderRootTest, GetFileInfoDirectory) {
+  base::RunLoop run_loop;
+  root_->GetFileInfo(base::FilePath(FILE_PATH_LITERAL("dir")),
+                     base::Bind(
+                         [](base::RunLoop* run_loop, base::File::Error error,
+                            const base::File::Info& info) {
+                           EXPECT_EQ(base::File::FILE_OK, error);
+                           ExpectMatchesSpec(info, kDirSpec);
+                           run_loop->Quit();
+                         },
+                         &run_loop));
+  run_loop.Run();
+}
+
+TEST_F(ArcDocumentsProviderRootTest, GetFileInfoRoot) {
+  base::RunLoop run_loop;
+  root_->GetFileInfo(base::FilePath(FILE_PATH_LITERAL("")),
+                     base::Bind(
+                         [](base::RunLoop* run_loop, base::File::Error error,
+                            const base::File::Info& info) {
+                           EXPECT_EQ(base::File::FILE_OK, error);
+                           ExpectMatchesSpec(info, kRootSpec);
+                           run_loop->Quit();
+                         },
+                         &run_loop));
+  run_loop.Run();
+}
+
+TEST_F(ArcDocumentsProviderRootTest, GetFileInfoNoSuchFile) {
+  base::RunLoop run_loop;
+  root_->GetFileInfo(base::FilePath(FILE_PATH_LITERAL("dir/missing.jpg")),
+                     base::Bind(
+                         [](base::RunLoop* run_loop, base::File::Error error,
+                            const base::File::Info& info) {
+                           EXPECT_EQ(base::File::FILE_ERROR_NOT_FOUND, error);
+                           run_loop->Quit();
+                         },
+                         &run_loop));
+  run_loop.Run();
+}
+
+TEST_F(ArcDocumentsProviderRootTest, GetFileInfoDups) {
+  base::RunLoop run_loop;
+  // "dup (2).mp4" should map to the 3rd instance of "dup.mp4" regardless of the
+  // order returned from FileSystemInstance.
+  root_->GetFileInfo(base::FilePath(FILE_PATH_LITERAL("dups/dup (2).mp4")),
+                     base::Bind(
+                         [](base::RunLoop* run_loop, base::File::Error error,
+                            const base::File::Info& info) {
+                           EXPECT_EQ(base::File::FILE_OK, error);
+                           ExpectMatchesSpec(info, kDup3Spec);
+                           run_loop->Quit();
+                         },
+                         &run_loop));
+  run_loop.Run();
+}
+
+TEST_F(ArcDocumentsProviderRootTest, ReadDirectory) {
+  base::RunLoop run_loop;
+  root_->ReadDirectory(
+      base::FilePath(FILE_PATH_LITERAL("dir")),
+      base::Bind(
+          [](base::RunLoop* run_loop, base::File::Error error,
+             const EntryList& file_list, bool has_more) {
+            EXPECT_EQ(base::File::FILE_OK, error);
+            ASSERT_EQ(2u, file_list.size());
+            EXPECT_EQ(FILE_PATH_LITERAL("music.bin.mp3"), file_list[0].name);
+            EXPECT_FALSE(file_list[0].is_directory);
+            EXPECT_EQ(FILE_PATH_LITERAL("photo.jpg"), file_list[1].name);
+            EXPECT_FALSE(file_list[1].is_directory);
+            EXPECT_FALSE(has_more);
+            run_loop->Quit();
+          },
+          &run_loop));
+  run_loop.Run();
+}
+
+TEST_F(ArcDocumentsProviderRootTest, ReadDirectoryRoot) {
+  base::RunLoop run_loop;
+  root_->ReadDirectory(
+      base::FilePath(FILE_PATH_LITERAL("")),
+      base::Bind(
+          [](base::RunLoop* run_loop, base::File::Error error,
+             const EntryList& file_list, bool has_more) {
+            EXPECT_EQ(base::File::FILE_OK, error);
+            ASSERT_EQ(2u, file_list.size());
+            EXPECT_EQ(FILE_PATH_LITERAL("dir"), file_list[0].name);
+            EXPECT_TRUE(file_list[0].is_directory);
+            EXPECT_EQ(FILE_PATH_LITERAL("dups"), file_list[1].name);
+            EXPECT_TRUE(file_list[1].is_directory);
+            EXPECT_FALSE(has_more);
+            run_loop->Quit();
+          },
+          &run_loop));
+  run_loop.Run();
+}
+
+TEST_F(ArcDocumentsProviderRootTest, ReadDirectoryNoSuchDirectory) {
+  base::RunLoop run_loop;
+  root_->ReadDirectory(base::FilePath(FILE_PATH_LITERAL("missing")),
+                       base::Bind(
+                           [](base::RunLoop* run_loop, base::File::Error error,
+                              const EntryList& file_list, bool has_more) {
+                             EXPECT_EQ(base::File::FILE_ERROR_NOT_FOUND, error);
+                             EXPECT_EQ(0u, file_list.size());
+                             EXPECT_FALSE(has_more);
+                             run_loop->Quit();
+                           },
+                           &run_loop));
+  run_loop.Run();
+}
+
+TEST_F(ArcDocumentsProviderRootTest, ReadDirectoryDups) {
+  base::RunLoop run_loop;
+  root_->ReadDirectory(
+      base::FilePath(FILE_PATH_LITERAL("dups")),
+      base::Bind(
+          [](base::RunLoop* run_loop, base::File::Error error,
+             const EntryList& file_list, bool has_more) {
+            EXPECT_EQ(base::File::FILE_OK, error);
+            ASSERT_EQ(4u, file_list.size());
+            // Files are sorted lexicographically.
+            EXPECT_EQ(FILE_PATH_LITERAL("dup (1).mp4"), file_list[0].name);
+            EXPECT_FALSE(file_list[0].is_directory);
+            EXPECT_EQ(FILE_PATH_LITERAL("dup (2).mp4"), file_list[1].name);
+            EXPECT_FALSE(file_list[1].is_directory);
+            EXPECT_EQ(FILE_PATH_LITERAL("dup (3).mp4"), file_list[2].name);
+            EXPECT_FALSE(file_list[2].is_directory);
+            EXPECT_EQ(FILE_PATH_LITERAL("dup.mp4"), file_list[3].name);
+            EXPECT_FALSE(file_list[3].is_directory);
+            EXPECT_FALSE(has_more);
+            run_loop->Quit();
+          },
+          &run_loop));
+  run_loop.Run();
+}
+
+TEST_F(ArcDocumentsProviderRootTest, ResolveToContentUrl) {
+  base::RunLoop run_loop;
+  root_->ResolveToContentUrl(
+      base::FilePath(FILE_PATH_LITERAL("dir/photo.jpg")),
+      base::Bind(
+          [](base::RunLoop* run_loop, const GURL& url) {
+            EXPECT_EQ(GURL("content://org.chromium.test/document/photo-id"),
+                      url);
+            run_loop->Quit();
+          },
+          &run_loop));
+  run_loop.Run();
+}
+
+TEST_F(ArcDocumentsProviderRootTest, ResolveToContentUrlRoot) {
+  base::RunLoop run_loop;
+  root_->ResolveToContentUrl(
+      base::FilePath(FILE_PATH_LITERAL("")),
+      base::Bind(
+          [](base::RunLoop* run_loop, const GURL& url) {
+            EXPECT_EQ(GURL("content://org.chromium.test/document/root-id"),
+                      url);
+            run_loop->Quit();
+          },
+          &run_loop));
+  run_loop.Run();
+}
+
+TEST_F(ArcDocumentsProviderRootTest, ResolveToContentUrlNoSuchFile) {
+  base::RunLoop run_loop;
+  root_->ResolveToContentUrl(base::FilePath(FILE_PATH_LITERAL("missing")),
+                             base::Bind(
+                                 [](base::RunLoop* run_loop, const GURL& url) {
+                                   EXPECT_EQ(GURL(), url);
+                                   run_loop->Quit();
+                                 },
+                                 &run_loop));
+  run_loop.Run();
+}
+
+TEST_F(ArcDocumentsProviderRootTest, ResolveToContentUrlDups) {
+  base::RunLoop run_loop;
+  // "dup 2.mp4" should map to the 3rd instance of "dup.mp4" regardless of the
+  // order returned from FileSystemInstance.
+  root_->ResolveToContentUrl(
+      base::FilePath(FILE_PATH_LITERAL("dups/dup (2).mp4")),
+      base::Bind(
+          [](base::RunLoop* run_loop, const GURL& url) {
+            EXPECT_EQ(GURL("content://org.chromium.test/document/dup3-id"),
+                      url);
+            run_loop->Quit();
+          },
+          &run_loop));
+  run_loop.Run();
+}
+
+}  // namespace arc

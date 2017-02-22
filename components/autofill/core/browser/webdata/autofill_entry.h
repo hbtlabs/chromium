@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_WEBDATA_AUTOFILL_ENTRY_H__
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_WEBDATA_AUTOFILL_ENTRY_H__
 
+#include <string>
+
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 
@@ -14,7 +16,7 @@ class AutofillKey {
  public:
   AutofillKey();
   AutofillKey(const base::string16& name, const base::string16& value);
-  AutofillKey(const char* name, const char* value);
+  AutofillKey(const std::string& name, const std::string& value);
   AutofillKey(const AutofillKey& key);
   virtual ~AutofillKey();
 
@@ -31,6 +33,7 @@ class AutofillKey {
 
 class AutofillEntry {
  public:
+  AutofillEntry();
   AutofillEntry(const AutofillKey& key,
                 const base::Time& date_created,
                 const base::Time& date_last_used);
@@ -41,6 +44,7 @@ class AutofillEntry {
   const base::Time& date_last_used() const { return date_last_used_; }
 
   bool operator==(const AutofillEntry& entry) const;
+  bool operator!=(const AutofillEntry& entry) const;
   bool operator<(const AutofillEntry& entry) const;
 
  private:

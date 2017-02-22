@@ -13,7 +13,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/debug/leak_annotations.h"
-#include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -26,14 +25,16 @@
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_id_name_manager.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/threading/worker_pool.h"
 #include "base/time/time.h"
 #include "base/trace_event/category_registry.h"
+#include "base/trace_event/event_name_filter.h"
 #include "base/trace_event/heap_profiler.h"
 #include "base/trace_event/heap_profiler_allocation_context_tracker.h"
+#include "base/trace_event/heap_profiler_event_filter.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "base/trace_event/process_memory_dump.h"
@@ -84,88 +85,13 @@ const size_t kEchoToConsoleTraceEventBufferChunks = 256;
 const size_t kTraceEventBufferSizeInBytes = 100 * 1024;
 const int kThreadFlushTimeoutMs = 3000;
 
-const char kEventNameWhitelist[] = "event_name_whitelist";
-
 #define MAX_TRACE_EVENT_FILTERS 32
 
 // List of TraceEventFilter objects from the most recent tracing session.
-base::LazyInstance<std::vector<std::unique_ptr<TraceLog::TraceEventFilter>>>::
-    Leaky g_category_group_filters = LAZY_INSTANCE_INITIALIZER;
-
-class EventNameFilter : public TraceLog::TraceEventFilter {
- public:
-  EventNameFilter(const base::DictionaryValue* filter_args) {
-    const base::ListValue* whitelist = nullptr;
-    if (filter_args->GetList(kEventNameWhitelist, &whitelist)) {
-      for (size_t i = 0; i < whitelist->GetSize(); ++i) {
-        std::string event_name;
-        if (!whitelist->GetString(i, &event_name))
-          continue;
-
-        whitelist_.insert(event_name);
-      }
-    }
-  }
-
-  bool FilterTraceEvent(const TraceEvent& trace_event) const override {
-    return ContainsKey(whitelist_, trace_event.name());
-  }
-
- private:
-  std::unordered_set<std::string> whitelist_;
-};
-
-// This filter is used to record trace events as pseudo stack for the heap
-// profiler. It does not filter-out any events from the trace, ie. the behavior
-// of trace events being added to TraceLog remains same: the events are added
-// iff enabled for recording and not filtered-out by any other filter.
-class HeapProfilerFilter : public TraceLog::TraceEventFilter {
- public:
-  HeapProfilerFilter() {}
-
-  bool FilterTraceEvent(const TraceEvent& trace_event) const override {
-    if (AllocationContextTracker::capture_mode() !=
-        AllocationContextTracker::CaptureMode::PSEUDO_STACK) {
-      return true;
-    }
-
-    // TODO(primiano): Add support for events with copied name crbug.com/581079.
-    if (trace_event.flags() & TRACE_EVENT_FLAG_COPY)
-      return true;
-
-    const char* category_name =
-        TraceLog::GetCategoryGroupName(trace_event.category_group_enabled());
-    if (trace_event.phase() == TRACE_EVENT_PHASE_BEGIN ||
-        trace_event.phase() == TRACE_EVENT_PHASE_COMPLETE) {
-      AllocationContextTracker::GetInstanceForCurrentThread()
-          ->PushPseudoStackFrame({category_name, trace_event.name()});
-    } else if (trace_event.phase() == TRACE_EVENT_PHASE_END) {
-      // The pop for |TRACE_EVENT_PHASE_COMPLETE| events is in |EndEvent|.
-      AllocationContextTracker::GetInstanceForCurrentThread()
-          ->PopPseudoStackFrame({category_name, trace_event.name()});
-    }
-    // Do not filter-out any events and always return true. TraceLog adds the
-    // event only if it is enabled for recording.
-    return true;
-  }
-
-  void EndEvent(const char* name, const char* category_group) override {
-    if (AllocationContextTracker::capture_mode() ==
-        AllocationContextTracker::CaptureMode::PSEUDO_STACK) {
-      AllocationContextTracker::GetInstanceForCurrentThread()
-          ->PopPseudoStackFrame({category_group, name});
-    }
-  }
-};
-
-TraceLog::TraceEventFilterConstructorForTesting
-    g_trace_event_filter_constructor_for_testing = nullptr;
-
-// The name of the current thread. This is used to decide if the current
-// thread name has changed. We combine all the seen thread names into the
-// output name for the thread.
-LazyInstance<ThreadLocalPointer<const char>>::Leaky g_current_thread_name =
-    LAZY_INSTANCE_INITIALIZER;
+std::vector<std::unique_ptr<TraceEventFilter>>& GetCategoryGroupFilters() {
+  static auto* filters = new std::vector<std::unique_ptr<TraceEventFilter>>();
+  return *filters;
+}
 
 ThreadTicks ThreadNow() {
   return ThreadTicks::IsSupported() ? ThreadTicks::Now() : ThreadTicks();
@@ -232,17 +158,14 @@ void MakeHandle(uint32_t chunk_seq,
 }
 
 template <typename Function>
-void ForEachCategoryGroupFilter(const unsigned char* category_group_enabled,
-                                Function filter_fn) {
+void ForEachCategoryFilter(const unsigned char* category_group_enabled,
+                           Function filter_fn) {
   const TraceCategory* category =
       CategoryRegistry::GetCategoryByStatePtr(category_group_enabled);
   uint32_t filter_bitmap = category->enabled_filters();
-  int index = 0;
-  while (filter_bitmap) {
-    if (filter_bitmap & 1 && g_category_group_filters.Get()[index])
-      filter_fn(g_category_group_filters.Get()[index].get());
-    filter_bitmap = filter_bitmap >> 1;
-    index++;
+  for (int index = 0; filter_bitmap != 0; filter_bitmap >>= 1, index++) {
+    if (filter_bitmap & 1 && GetCategoryGroupFilters()[index])
+      filter_fn(GetCategoryGroupFilters()[index].get());
   }
 }
 
@@ -429,7 +352,8 @@ TraceLog::TraceLog()
       trace_config_(TraceConfig()),
       thread_shared_chunk_index_(0),
       generation_(0),
-      use_worker_thread_(false) {
+      use_worker_thread_(false),
+      filter_factory_for_testing_(nullptr) {
   CategoryRegistry::Initialize();
 
 #if defined(OS_NACL)  // NaCl shouldn't expose the process id.
@@ -493,11 +417,18 @@ const unsigned char* TraceLog::GetCategoryGroupEnabled(
     DCHECK(!CategoryRegistry::kCategoryAlreadyShutdown->is_enabled());
     return CategoryRegistry::kCategoryAlreadyShutdown->state_ptr();
   }
-  TraceCategory* category = nullptr;
-  bool is_new_category =
-      CategoryRegistry::GetOrCreateCategoryByName(category_group, &category);
-  if (is_new_category)
-    tracelog->UpdateCategoryState(category);
+  TraceCategory* category = CategoryRegistry::GetCategoryByName(category_group);
+  if (!category) {
+    // Slow path: in the case of a new category we have to repeat the check
+    // holding the lock, as multiple threads might have reached this point
+    // at the same time.
+    auto category_initializer = [](TraceCategory* category) {
+      TraceLog::GetInstance()->UpdateCategoryState(category);
+    };
+    AutoLock lock(tracelog->lock_);
+    CategoryRegistry::GetOrCreateCategoryLocked(
+        category_group, category_initializer, &category);
+  }
   DCHECK(category->state_ptr());
   return category->state_ptr();
 }
@@ -509,6 +440,7 @@ const char* TraceLog::GetCategoryGroupName(
 }
 
 void TraceLog::UpdateCategoryState(TraceCategory* category) {
+  lock_.AssertAcquired();
   DCHECK(category->is_valid());
   unsigned char state_flags = 0;
   if (enabled_modes_ & RECORDING_MODE &&
@@ -536,7 +468,7 @@ void TraceLog::UpdateCategoryState(TraceCategory* category) {
   for (const auto& event_filter : enabled_event_filters_) {
     if (event_filter.IsCategoryGroupEnabled(category->name())) {
       state_flags |= TraceCategory::ENABLED_FOR_FILTERING;
-      DCHECK(g_category_group_filters.Get()[index]);
+      DCHECK(GetCategoryGroupFilters()[index]);
       enabled_filters_bitmap |= 1 << index;
     }
     if (index++ >= MAX_TRACE_EVENT_FILTERS) {
@@ -549,6 +481,7 @@ void TraceLog::UpdateCategoryState(TraceCategory* category) {
 }
 
 void TraceLog::UpdateCategoryRegistry() {
+  lock_.AssertAcquired();
   CreateFiltersForTraceConfig();
   for (TraceCategory& category : CategoryRegistry::GetAllCategories()) {
     UpdateCategoryState(&category);
@@ -561,30 +494,30 @@ void TraceLog::CreateFiltersForTraceConfig() {
 
   // Filters were already added and tracing could be enabled. Filters list
   // cannot be changed when trace events are using them.
-  if (g_category_group_filters.Get().size())
+  if (GetCategoryGroupFilters().size())
     return;
 
-  for (auto& event_filter : enabled_event_filters_) {
-    if (g_category_group_filters.Get().size() >= MAX_TRACE_EVENT_FILTERS) {
+  for (auto& filter_config : enabled_event_filters_) {
+    if (GetCategoryGroupFilters().size() >= MAX_TRACE_EVENT_FILTERS) {
       NOTREACHED()
           << "Too many trace event filters installed in the current session";
       break;
     }
 
     std::unique_ptr<TraceEventFilter> new_filter;
-    if (event_filter.predicate_name() ==
-        TraceEventFilter::kEventWhitelistPredicate) {
-      new_filter = MakeUnique<EventNameFilter>(event_filter.filter_args());
-    } else if (event_filter.predicate_name() ==
-               TraceEventFilter::kHeapProfilerPredicate) {
-      new_filter = MakeUnique<HeapProfilerFilter>();
-    } else if (event_filter.predicate_name() == "testing_predicate") {
-      CHECK(g_trace_event_filter_constructor_for_testing);
-      new_filter = g_trace_event_filter_constructor_for_testing();
+    const std::string& predicate_name = filter_config.predicate_name();
+    if (predicate_name == EventNameFilter::kName) {
+      auto whitelist = MakeUnique<std::unordered_set<std::string>>();
+      CHECK(filter_config.GetArgAsSet("event_name_whitelist", &*whitelist));
+      new_filter = MakeUnique<EventNameFilter>(std::move(whitelist));
+    } else if (predicate_name == HeapProfilerEventFilter::kName) {
+      new_filter = MakeUnique<HeapProfilerEventFilter>();
     } else {
-      NOTREACHED();
+      if (filter_factory_for_testing_)
+        new_filter = filter_factory_for_testing_(predicate_name);
+      CHECK(new_filter) << "Unknown trace filter " << predicate_name;
     }
-    g_category_group_filters.Get().push_back(std::move(new_filter));
+    GetCategoryGroupFilters().push_back(std::move(new_filter));
   }
 }
 
@@ -651,7 +584,7 @@ void TraceLog::SetEnabled(const TraceConfig& trace_config,
     // cleared at the end of tracing because some threads which hit trace event
     // when disabling, could try to use the filters.
     if (!enabled_modes_)
-      g_category_group_filters.Get().clear();
+      GetCategoryGroupFilters().clear();
 
     // Update trace config for recording.
     const bool already_recording = enabled_modes_ & RECORDING_MODE;
@@ -784,9 +717,8 @@ void TraceLog::SetDisabledWhileLocked(uint8_t modes_to_disable) {
   if (modes_to_disable & FILTERING_MODE)
     enabled_event_filters_.clear();
 
-  if (modes_to_disable & RECORDING_MODE) {
+  if (modes_to_disable & RECORDING_MODE)
     trace_config_.Clear();
-  }
 
   UpdateCategoryRegistry();
 
@@ -1033,12 +965,16 @@ void TraceLog::FinishFlush(int generation, bool discard_events) {
     return;
   }
 
-  if (use_worker_thread_ &&
-      WorkerPool::PostTask(
-          FROM_HERE, Bind(&TraceLog::ConvertTraceEventsToTraceFormat,
-                          Passed(&previous_logged_events),
-                          flush_output_callback, argument_filter_predicate),
-          true)) {
+  if (use_worker_thread_) {
+    base::PostTaskWithTraits(
+        FROM_HERE, base::TaskTraits()
+                       .MayBlock()
+                       .WithPriority(base::TaskPriority::BACKGROUND)
+                       .WithShutdownBehavior(
+                           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN),
+        Bind(&TraceLog::ConvertTraceEventsToTraceFormat,
+             Passed(&previous_logged_events), flush_output_callback,
+             argument_filter_predicate));
     return;
   }
 
@@ -1283,9 +1219,9 @@ TraceEventHandle TraceLog::AddTraceEventWithThreadIdAndTimestamp(
     // call (if any), but don't bother if the new name is empty. Note this will
     // not detect a thread name change within the same char* buffer address: we
     // favor common case performance over corner case correctness.
-    if (new_name != g_current_thread_name.Get().Get() && new_name &&
-        *new_name) {
-      g_current_thread_name.Get().Set(new_name);
+    static auto* current_thread_name = new ThreadLocalPointer<const char>();
+    if (new_name != current_thread_name->Get() && new_name && *new_name) {
+      current_thread_name->Set(new_name);
 
       AutoLock thread_info_lock(thread_info_lock_);
 
@@ -1331,7 +1267,7 @@ TraceEventHandle TraceLog::AddTraceEventWithThreadIdAndTimestamp(
                                 arg_values, convertable_values, flags);
 
     disabled_by_filters = true;
-    ForEachCategoryGroupFilter(
+    ForEachCategoryFilter(
         category_group_enabled, [&new_trace_event, &disabled_by_filters](
                                     TraceEventFilter* trace_event_filter) {
           if (trace_event_filter->FilterTraceEvent(*new_trace_event))
@@ -1461,10 +1397,10 @@ void TraceLog::EndFilteredEvent(const unsigned char* category_group_enabled,
                                 const char* name,
                                 TraceEventHandle handle) {
   const char* category_name = GetCategoryGroupName(category_group_enabled);
-  ForEachCategoryGroupFilter(
+  ForEachCategoryFilter(
       category_group_enabled,
       [name, category_name](TraceEventFilter* trace_event_filter) {
-        trace_event_filter->EndEvent(name, category_name);
+        trace_event_filter->EndEvent(category_name, name);
       });
 }
 
@@ -1603,11 +1539,6 @@ void TraceLog::AddMetadataEventsWhileLocked() {
 void TraceLog::DeleteForTesting() {
   internal::DeleteTraceLogForTesting::Delete();
   CategoryRegistry::ResetForTesting();
-}
-
-void TraceLog::SetTraceEventFilterConstructorForTesting(
-    TraceEventFilterConstructorForTesting predicate) {
-  g_trace_event_filter_constructor_for_testing = predicate;
 }
 
 TraceEvent* TraceLog::GetEventByHandle(TraceEventHandle handle) {

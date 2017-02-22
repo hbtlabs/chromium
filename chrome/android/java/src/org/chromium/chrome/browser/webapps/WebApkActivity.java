@@ -11,6 +11,8 @@ import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationParams;
+import org.chromium.chrome.browser.metrics.WebApkUma;
+import org.chromium.chrome.browser.tab.BrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.tab.InterceptNavigationDelegateImpl;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabDelegateFactory;
@@ -28,6 +30,7 @@ import org.chromium.webapk.lib.client.WebApkServiceConnectionManager;
 public class WebApkActivity extends WebappActivity {
     /** Manages whether to check update for the WebAPK, and starts update check if needed. */
     private WebApkUpdateManager mUpdateManager;
+
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
@@ -43,6 +46,9 @@ public class WebApkActivity extends WebappActivity {
                 && !overrideUrl.equals(getActivityTab().getUrl())) {
             getActivityTab().loadUrl(
                     new LoadUrlParams(overrideUrl, PageTransition.AUTO_TOPLEVEL));
+        }
+        if (isInitialized()) {
+            getActivityTab().setWebappManifestScope(mWebappInfo.scopeUri().toString());
         }
     }
 
@@ -104,7 +110,20 @@ public class WebApkActivity extends WebappActivity {
                 // WebAPK scope navigates via JavaScript while the WebAPK is in the background.
                 return false;
             }
+
+            @Override
+            public BrowserControlsVisibilityDelegate createBrowserControlsVisibilityDelegate(
+                    Tab tab) {
+                return new WebApkBrowserControlsDelegate(WebApkActivity.this, tab);
+            }
         };
+    }
+
+    @Override
+    public void finishNativeInitialization() {
+        super.finishNativeInitialization();
+        if (!isInitialized()) return;
+        getActivityTab().setWebappManifestScope(mWebappInfo.scopeUri().toString());
     }
 
     @Override
@@ -114,10 +133,18 @@ public class WebApkActivity extends WebappActivity {
                 ContextUtils.getApplicationContext(), getWebApkPackageName());
     }
 
+    @Override
+    public void onStopWithNative() {
+        super.onStopWithNative();
+        if (mUpdateManager != null && mUpdateManager.requestPendingUpdate()) {
+            WebApkUma.recordUpdateRequestSent(WebApkUma.UPDATE_REQUEST_SENT_ONSTOP);
+        }
+    }
+
     /**
      * Returns the WebAPK's package name.
      */
-    private String getWebApkPackageName() {
+    public String getWebApkPackageName() {
         return getWebappInfo().webApkPackageName();
     }
 
@@ -142,7 +169,7 @@ public class WebApkActivity extends WebappActivity {
     public void onDeferredStartup() {
         super.onDeferredStartup();
 
-        mUpdateManager = new WebApkUpdateManager();
+        mUpdateManager = new WebApkUpdateManager(this);
         mUpdateManager.updateIfNeeded(getActivityTab(), (WebApkInfo) mWebappInfo);
     }
 

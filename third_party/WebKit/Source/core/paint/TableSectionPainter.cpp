@@ -81,14 +81,12 @@ void TableSectionPainter::paintRepeatingHeaderGroup(
                paintOffset.y() + totalHeightOfRows);
 
   while (paginationOffset.y() < bottomBound) {
-    LayoutPoint nestedOffset =
-        paginationOffset +
-        LayoutPoint(LayoutUnit(),
-                    m_layoutTableSection.offsetForRepeatingHeader());
-    if (itemToPaint == PaintCollapsedBorders)
-      paintCollapsedSectionBorders(paintInfo, nestedOffset, currentBorderValue);
-    else
-      paintSection(paintInfo, nestedOffset);
+    if (itemToPaint == PaintCollapsedBorders) {
+      paintCollapsedSectionBorders(paintInfo, paginationOffset,
+                                   currentBorderValue);
+    } else {
+      paintSection(paintInfo, paginationOffset);
+    }
     paginationOffset.move(0, pageHeight.toInt());
   }
 }
@@ -191,11 +189,12 @@ void TableSectionPainter::paintCollapsedSectionBorders(
   // precedence due to cell position is respected.
   for (unsigned r = dirtiedRows.end(); r > dirtiedRows.start(); r--) {
     unsigned row = r - 1;
-    for (unsigned c = dirtiedColumns.end(); c > dirtiedColumns.start(); c--) {
+    unsigned nCols = m_layoutTableSection.numCols(row);
+    for (unsigned c = std::min(dirtiedColumns.end(), nCols);
+         c > dirtiedColumns.start(); c--) {
       unsigned col = c - 1;
-      const LayoutTableSection::CellStruct& current =
-          m_layoutTableSection.cellAt(row, col);
-      const LayoutTableCell* cell = current.primaryCell();
+      const LayoutTableCell* cell =
+          m_layoutTableSection.primaryCellAt(row, col);
       if (!cell || (row > dirtiedRows.start() &&
                     m_layoutTableSection.primaryCellAt(row - 1, col) == cell) ||
           (col > dirtiedColumns.start() &&
@@ -305,17 +304,19 @@ void TableSectionPainter::paintObject(const PaintInfo& paintInfo,
           shouldPaintSelfOutline(paintInfoForDescendants.phase))
         TableRowPainter(*row).paintOutline(paintInfoForDescendants,
                                            paintOffset);
-      for (unsigned c = dirtiedColumns.start(); c < dirtiedColumns.end(); c++) {
+      unsigned nCols = m_layoutTableSection.numCols(r);
+      for (unsigned c = dirtiedColumns.start();
+           c < nCols && c < dirtiedColumns.end(); c++) {
         const LayoutTableSection::CellStruct& current =
             m_layoutTableSection.cellAt(r, c);
         for (LayoutTableCell* cell : current.cells) {
           if (overflowingCells.contains(cell))
             continue;
           if (cell->rowSpan() > 1 || cell->colSpan() > 1) {
-            if (!spanningCells.add(cell).isNewEntry)
+            if (!spanningCells.insert(cell).isNewEntry)
               continue;
           }
-          cells.append(cell);
+          cells.push_back(cell);
         }
       }
     }
@@ -400,9 +401,16 @@ void TableSectionPainter::paintBoxShadow(const PaintInfo& paintInfo,
                           .boundsForDrawingRecorder(paintInfo, paintOffset);
   LayoutObjectDrawingRecorder recorder(paintInfo.context, m_layoutTableSection,
                                        type, bounds);
-  BoxPainter::paintBoxShadow(
-      paintInfo, LayoutRect(paintOffset, m_layoutTableSection.size()),
-      m_layoutTableSection.styleRef(), shadowStyle);
+  LayoutRect paintRect(paintOffset, m_layoutTableSection.size());
+  if (shadowStyle == Normal) {
+    BoxPainter::paintNormalBoxShadow(paintInfo, paintRect,
+                                     m_layoutTableSection.styleRef());
+  } else {
+    // TODO(wangxianzhu): Calculate the inset shadow bounds by insetting
+    // paintRect by half widths of collapsed borders.
+    BoxPainter::paintInsetBoxShadow(paintInfo, paintRect,
+                                    m_layoutTableSection.styleRef());
+  }
 }
 
 }  // namespace blink

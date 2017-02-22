@@ -10,24 +10,20 @@
 #include "ash/common/accelerators/accelerator_router.h"
 #include "ash/common/wm_shell.h"
 #include "ash/mus/accelerators/accelerator_ids.h"
-#include "ash/mus/bridge/wm_window_mus.h"
 #include "ash/mus/window_manager.h"
 #include "base/logging.h"
-#include "services/ui/common/event_matcher_util.h"
-#include "services/ui/public/cpp/window_manager_delegate.h"
-#include "services/ui/public/cpp/window_tree_client.h"
+#include "services/ui/common/accelerator_util.h"
 #include "ui/base/accelerators/accelerator_history.h"
 
 namespace ash {
 namespace mus {
 namespace {
 
-// Callback from registering the accelerator.
-void OnAcceleratorAdded(const ui::Accelerator& accelerator, bool added) {
+// Callback from registering the accelerators.
+void OnAcceleratorsAdded(const std::vector<ui::Accelerator>& accelerators,
+                         bool added) {
   // All our accelerators should be registered, so we expect |added| to be true.
-  DCHECK(added) << "duplicate accelerator key_code=" << accelerator.key_code()
-                << " type=" << accelerator.type()
-                << " modifiers=" << accelerator.modifiers();
+  DCHECK(added) << "Unexpected accelerator vector registration failure.";
 }
 
 }  // namespace
@@ -101,38 +97,16 @@ ui::mojom::EventResult AcceleratorControllerRegistrar::OnAccelerator(
              : ui::mojom::EventResult::UNHANDLED;
 }
 
-void AcceleratorControllerRegistrar::OnAcceleratorRegistered(
-    const ui::Accelerator& accelerator) {
-  Ids ids;
-  if (!GenerateIds(&ids)) {
-    DVLOG(1) << "max number of accelerators registered, dropping request";
-    return;
-  }
-  DCHECK_EQ(0u, accelerator_to_ids_.count(accelerator));
-  accelerator_to_ids_[accelerator] = ids;
-  DCHECK_EQ(accelerator_to_ids_.size() * 2, ids_.size());
+void AcceleratorControllerRegistrar::OnAcceleratorsRegistered(
+    const std::vector<ui::Accelerator>& accelerators) {
+  std::vector<ui::mojom::AcceleratorPtr> accelerator_vector;
 
-  ui::mojom::EventMatcherPtr event_matcher = ui::CreateKeyMatcher(
-      static_cast<ui::mojom::KeyboardCode>(accelerator.key_code()),
-      accelerator.modifiers());
-  event_matcher->accelerator_phase = ui::mojom::AcceleratorPhase::PRE_TARGET;
-  DCHECK(accelerator.type() == ui::ET_KEY_PRESSED ||
-         accelerator.type() == ui::ET_KEY_RELEASED);
-  event_matcher->type_matcher->type = accelerator.type() == ui::ET_KEY_PRESSED
-                                          ? ui::mojom::EventType::KEY_PRESSED
-                                          : ui::mojom::EventType::KEY_RELEASED;
+  for (const ui::Accelerator& accelerator : accelerators)
+    AddAcceleratorToVector(accelerator, accelerator_vector);
 
-  ui::mojom::EventMatcherPtr post_event_matcher = event_matcher.Clone();
-  post_event_matcher->accelerator_phase =
-      ui::mojom::AcceleratorPhase::POST_TARGET;
-
-  window_manager_->window_manager_client()->AddAccelerator(
-      ComputeAcceleratorId(id_namespace_, ids.pre_id), std::move(event_matcher),
-      base::Bind(OnAcceleratorAdded, accelerator));
-  window_manager_->window_manager_client()->AddAccelerator(
-      ComputeAcceleratorId(id_namespace_, ids.post_id),
-      std::move(post_event_matcher),
-      base::Bind(OnAcceleratorAdded, accelerator));
+  window_manager_->window_manager_client()->AddAccelerators(
+      std::move(accelerator_vector),
+      base::Bind(OnAcceleratorsAdded, accelerators));
 }
 
 void AcceleratorControllerRegistrar::OnAcceleratorUnregistered(
@@ -148,6 +122,43 @@ void AcceleratorControllerRegistrar::OnAcceleratorUnregistered(
       ComputeAcceleratorId(id_namespace_, ids.pre_id));
   window_manager_->window_manager_client()->RemoveAccelerator(
       ComputeAcceleratorId(id_namespace_, ids.post_id));
+}
+
+void AcceleratorControllerRegistrar::AddAcceleratorToVector(
+    const ui::Accelerator& accelerator,
+    std::vector<ui::mojom::AcceleratorPtr>& accelerator_vector) {
+  Ids ids;
+  if (!GenerateIds(&ids)) {
+    LOG(ERROR) << "max number of accelerators registered, dropping request";
+    return;
+  }
+  DCHECK_EQ(0u, accelerator_to_ids_.count(accelerator));
+  accelerator_to_ids_[accelerator] = ids;
+  DCHECK_EQ(accelerator_to_ids_.size() * 2, ids_.size());
+
+  ui::mojom::EventMatcherPtr pre_event_matcher = ui::CreateKeyMatcher(
+      static_cast<ui::mojom::KeyboardCode>(accelerator.key_code()),
+      accelerator.modifiers());
+  pre_event_matcher->accelerator_phase =
+      ui::mojom::AcceleratorPhase::PRE_TARGET;
+  DCHECK(accelerator.type() == ui::ET_KEY_PRESSED ||
+         accelerator.type() == ui::ET_KEY_RELEASED);
+  pre_event_matcher->type_matcher->type =
+      accelerator.type() == ui::ET_KEY_PRESSED
+          ? ui::mojom::EventType::KEY_PRESSED
+          : ui::mojom::EventType::KEY_RELEASED;
+
+  ui::mojom::EventMatcherPtr post_event_matcher = pre_event_matcher.Clone();
+  post_event_matcher->accelerator_phase =
+      ui::mojom::AcceleratorPhase::POST_TARGET;
+
+  accelerator_vector.push_back(
+      ui::CreateAccelerator(ComputeAcceleratorId(id_namespace_, ids.pre_id),
+                            std::move(pre_event_matcher)));
+
+  accelerator_vector.push_back(
+      ui::CreateAccelerator(ComputeAcceleratorId(id_namespace_, ids.post_id),
+                            std::move(post_event_matcher)));
 }
 
 bool AcceleratorControllerRegistrar::GenerateIds(Ids* ids) {

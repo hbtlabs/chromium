@@ -4,6 +4,8 @@
 
 #include "chrome/browser/android/vr_shell/vr_input_manager.h"
 
+#include <memory>
+
 #include "base/task_runner_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_widget_host.h"
@@ -16,66 +18,47 @@ using blink::WebInputEvent;
 
 namespace vr_shell {
 
+namespace {
+WebGestureEvent MakeGestureEvent(WebInputEvent::Type type,
+                                 double time,
+                                 float x,
+                                 float y) {
+  WebGestureEvent result(type, WebInputEvent::NoModifiers, time);
+  result.x = x;
+  result.y = y;
+  result.sourceDevice = blink::WebGestureDeviceTouchpad;
+  return result;
+}
+}  // namespace
+
 VrInputManager::VrInputManager(content::WebContents* web_contents)
     : web_contents_(web_contents) {
-  dpi_scale_ = 1;
 }
 
-VrInputManager::~VrInputManager() {}
+VrInputManager::~VrInputManager() = default;
 
-void VrInputManager::ProcessUpdatedGesture(const WebInputEvent& event) {
-  base::Closure task;
-  if (WebInputEvent::isMouseEventType(event.type)) {
-    task = base::Bind(&VrInputManager::SendMouseEvent, this,
-                      static_cast<const blink::WebMouseEvent&>(event));
+void VrInputManager::ProcessUpdatedGesture(
+    std::unique_ptr<blink::WebInputEvent> event) {
+  if (WebInputEvent::isMouseEventType(event->type())) {
+    ForwardMouseEvent(static_cast<const blink::WebMouseEvent&>(*event));
   } else {
-    task = base::Bind(&VrInputManager::SendGesture, this,
-                      static_cast<const blink::WebGestureEvent&>(event));
+    SendGesture(static_cast<const blink::WebGestureEvent&>(*event));
   }
-  if (!content::BrowserThread::CurrentlyOn(content::BrowserThread::UI)) {
-    content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
-                                     task);
-  } else {
-    if (WebInputEvent::isMouseEventType(event.type))
-      SendMouseEvent(static_cast<const blink::WebMouseEvent&>(event));
-    else if ((WebInputEvent::isGestureEventType(event.type)))
-      SendGesture(static_cast<const blink::WebGestureEvent&>(event));
-  }
-  return;
 }
 
 void VrInputManager::SendGesture(const WebGestureEvent& gesture) {
-  if (gesture.type == WebGestureEvent::GestureTapDown) {
+  if (gesture.type() == WebGestureEvent::GestureTapDown) {
     ForwardGestureEvent(gesture);
 
     // Generate and forward Tap
-    WebGestureEvent tap_event = MakeGestureEvent(
-        WebInputEvent::GestureTap, gesture.timeStampSeconds,
-        gesture.data.tapDown.width, gesture.data.tapDown.height);
+    WebGestureEvent tap_event =
+        MakeGestureEvent(WebInputEvent::GestureTap, gesture.timeStampSeconds(),
+                         gesture.x, gesture.y);
     tap_event.data.tap.tapCount = 1;
     ForwardGestureEvent(tap_event);
   } else {
     ForwardGestureEvent(gesture);
   }
-}
-
-void VrInputManager::SendMouseEvent(const WebMouseEvent& mouse_event) {
-  ForwardMouseEvent(mouse_event);
-}
-
-WebGestureEvent VrInputManager::MakeGestureEvent(WebInputEvent::Type type,
-                                                 int64_t time_ms,
-                                                 float x,
-                                                 float y) const {
-  WebGestureEvent result;
-
-  result.type = type;
-  result.x = x / dpi_scale_;
-  result.y = y / dpi_scale_;
-  result.timeStampSeconds = time_ms / 1000.0;
-  result.sourceDevice = blink::WebGestureDeviceTouchpad;
-
-  return result;
 }
 
 void VrInputManager::ForwardGestureEvent(

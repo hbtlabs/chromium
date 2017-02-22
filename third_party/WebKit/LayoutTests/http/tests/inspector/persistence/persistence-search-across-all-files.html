@@ -2,7 +2,6 @@
 <head>
 <script src="../inspector-test.js"></script>
 <script src="../debugger-test.js"></script>
-<script src="../workspace-test.js"></script>
 <script src="../search/search-test.js"></script>
 <script src="../isolated-filesystem-test.js"></script>
 <script src="./persistence-test.js"></script>
@@ -39,7 +38,7 @@ function test()
     function dumpSearchResults(next)
     {
         var searchConfig = new Workspace.SearchConfig("window.foo f:foo", true, false);
-        InspectorTest.runSearchAndDumpResults(scope, searchConfig, true, next);
+        InspectorTest.runSearchAndDumpResults(scope, searchConfig, next);
     }
 
     InspectorFrontendHost.searchInPath = function(requestId, path, query)

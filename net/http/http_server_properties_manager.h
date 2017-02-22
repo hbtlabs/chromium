@@ -22,10 +22,8 @@
 #include "net/http/http_server_properties.h"
 #include "net/http/http_server_properties_impl.h"
 
-class PrefService;
-
 namespace base {
-class SequencedTaskRunner;
+class SingleThreadTaskRunner;
 }
 
 namespace net {
@@ -42,8 +40,14 @@ class IPAddress;
 // changes are received from, and the network thread, which owns it, and it
 // persists the changes from network stack whether server supports SPDY or not.
 //
-// It must be constructed on the pref thread, to set up |pref_task_runner_| and
-// the prefs listeners.
+// There are two SingleThreadTaskRunners:
+// |pref_task_runner_| should be bound with the pref thread and is used to post
+// cache update to the pref thread;
+// |network_task_runner_| should be bound with the network thread and is used
+// to post pref update to the cache thread.
+//
+// It must be constructed with correct task runners passed in to set up
+// |pref_task_runner_| and |network_task_runner| as well as the prefs listeners.
 //
 // ShutdownOnPrefThread must be called from pref thread before destruction, to
 // release the prefs listeners on the pref thread.
@@ -83,10 +87,15 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
   // passed as a raw pointer rather than a scoped_refptr currently because
   // the test uses gmock and it doesn't forward move semantics properly.
   //
-  // Must be constructed on the Pref thread.
+  // There are two SingleThreadTaskRunners:
+  // |pref_task_runner| should be bound with the pref thread and is used to post
+  // cache update to the pref thread;
+  // |network_task_runner| should be bound with the network thread and is used
+  // to post pref update to the cache thread.
   HttpServerPropertiesManager(
       PrefDelegate* pref_delegate,
-      scoped_refptr<base::SequencedTaskRunner> network_task_runner);
+      scoped_refptr<base::SingleThreadTaskRunner> pref_task_runner,
+      scoped_refptr<base::SingleThreadTaskRunner> network_task_runner);
   ~HttpServerPropertiesManager() override;
 
   // Initialize on Network thread.
@@ -151,6 +160,7 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
   size_t max_server_configs_stored_in_properties() const override;
   void SetMaxServerConfigsStoredInProperties(
       size_t max_server_configs_stored_in_properties) override;
+  bool IsInitialized() const override;
 
  protected:
   // The location where ScheduleUpdatePrefsOnNetworkThread was called.
@@ -180,10 +190,6 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
   // execute only one update per simultaneous prefs changes.
   void ScheduleUpdateCacheOnPrefThread();
 
-  // Starts the timers to update the cached prefs. This are overridden in tests
-  // to prevent the delay.
-  virtual void StartCacheUpdateTimerOnPrefThread(base::TimeDelta delay);
-
   // Update cached prefs in |http_server_properties_impl_| with data from
   // preferences. It gets the data on pref thread and calls
   // UpdateSpdyServersFromPrefsOnNetworkThread() to perform the update on
@@ -205,10 +211,6 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
   // simultaneous spdy_servers or spdy_settings or alternative_service changes.
   // |location| specifies where this method is called from. Virtual for testing.
   virtual void ScheduleUpdatePrefsOnNetworkThread(Location location);
-
-  // Starts the timers to update the prefs from cache. This are overridden in
-  // tests to prevent the delay.
-  virtual void StartPrefsUpdateTimerOnNetworkThread(base::TimeDelta delay);
 
   // Update prefs::kHttpServerProperties in preferences with the cached data
   // from |http_server_properties_impl_|. This gets the data on network thread
@@ -274,12 +276,13 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
   void SaveQuicServerInfoMapToServerPrefs(
       QuicServerInfoMap* quic_server_info_map,
       base::DictionaryValue* http_server_properties_dict);
+  void SetInitialized();
 
   // -----------
   // Pref thread
   // -----------
 
-  const scoped_refptr<base::SequencedTaskRunner> pref_task_runner_;
+  const scoped_refptr<base::SingleThreadTaskRunner> pref_task_runner_;
 
   base::WeakPtr<HttpServerPropertiesManager> pref_weak_ptr_;
 
@@ -293,7 +296,10 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
   // Network thread
   // --------------
 
-  const scoped_refptr<base::SequencedTaskRunner> network_task_runner_;
+  // Whether InitializeOnNetworkThread() has completed.
+  bool is_initialized_;
+
+  const scoped_refptr<base::SingleThreadTaskRunner> network_task_runner_;
 
   // Used to post |prefs::kHttpServerProperties| pref update tasks.
   std::unique_ptr<base::OneShotTimer> network_prefs_update_timer_;

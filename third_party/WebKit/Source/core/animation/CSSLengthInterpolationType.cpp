@@ -32,7 +32,7 @@ class InheritedLengthChecker : public InterpolationType::ConversionChecker {
  public:
   static std::unique_ptr<InheritedLengthChecker> create(CSSPropertyID property,
                                                         const Length& length) {
-    return wrapUnique(new InheritedLengthChecker(property, length));
+    return WTF::wrapUnique(new InheritedLengthChecker(property, length));
   }
 
  private:
@@ -77,7 +77,7 @@ InterpolationValue CSSLengthInterpolationType::maybeConvertInherit(
   if (!LengthPropertyFunctions::getLength(cssProperty(), *state.parentStyle(),
                                           inheritedLength))
     return nullptr;
-  conversionCheckers.append(
+  conversionCheckers.push_back(
       InheritedLengthChecker::create(cssProperty(), inheritedLength));
   return LengthInterpolationFunctions::maybeConvertLength(
       inheritedLength, effectiveZoom(*state.parentStyle()));
@@ -85,7 +85,7 @@ InterpolationValue CSSLengthInterpolationType::maybeConvertInherit(
 
 InterpolationValue CSSLengthInterpolationType::maybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState&,
+    const StyleResolverState*,
     ConversionCheckers& conversionCheckers) const {
   if (value.isIdentifierValue()) {
     CSSValueID valueID = toCSSIdentifierValue(value).getValueID();
@@ -107,14 +107,23 @@ PairwiseInterpolationValue CSSLengthInterpolationType::maybeMergeSingles(
                                                     std::move(end));
 }
 
-InterpolationValue CSSLengthInterpolationType::maybeConvertUnderlyingValue(
-    const InterpolationEnvironment& environment) const {
+InterpolationValue
+CSSLengthInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
+    const ComputedStyle& style) const {
   Length underlyingLength;
-  if (!LengthPropertyFunctions::getLength(
-          cssProperty(), *environment.state().style(), underlyingLength))
+  if (!LengthPropertyFunctions::getLength(cssProperty(), style,
+                                          underlyingLength))
     return nullptr;
-  return LengthInterpolationFunctions::maybeConvertLength(
-      underlyingLength, effectiveZoom(*environment.state().style()));
+  return LengthInterpolationFunctions::maybeConvertLength(underlyingLength,
+                                                          effectiveZoom(style));
+}
+
+const CSSValue* CSSLengthInterpolationType::createCSSValue(
+    const InterpolableValue& interpolableValue,
+    const NonInterpolableValue* nonInterpolableValue,
+    const StyleResolverState&) const {
+  return LengthInterpolationFunctions::createCSSValue(
+      interpolableValue, nonInterpolableValue, m_valueRange);
 }
 
 void CSSLengthInterpolationType::composite(
@@ -129,11 +138,10 @@ void CSSLengthInterpolationType::composite(
       value.nonInterpolableValue.get());
 }
 
-void CSSLengthInterpolationType::apply(
+void CSSLengthInterpolationType::applyStandardPropertyValue(
     const InterpolableValue& interpolableValue,
     const NonInterpolableValue* nonInterpolableValue,
-    InterpolationEnvironment& environment) const {
-  StyleResolverState& state = environment.state();
+    StyleResolverState& state) const {
   ComputedStyle& style = *state.style();
   float zoom = effectiveZoom(style);
   Length length = LengthInterpolationFunctions::createLength(
@@ -150,13 +158,12 @@ void CSSLengthInterpolationType::apply(
     StyleBuilder::applyProperty(cssProperty(), state,
                                 *CSSValue::create(length, zoom));
     DCHECK(LengthPropertyFunctions::getLength(cssProperty(), style, after));
-    DCHECK_EQ(before.type(), after.type());
-    if (before.isSpecified()) {
-      const float kSlack = 0.1;
-      float delta =
-          floatValueForLength(after, 100) - floatValueForLength(before, 100);
-      DCHECK_LT(std::abs(delta), kSlack);
-    }
+    DCHECK(before.isSpecified());
+    DCHECK(after.isSpecified());
+    const float kSlack = 0.1;
+    float delta =
+        floatValueForLength(after, 100) - floatValueForLength(before, 100);
+    DCHECK_LT(std::abs(delta), kSlack);
 #endif
     return;
   }

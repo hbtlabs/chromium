@@ -41,11 +41,11 @@ TEST_F('SettingsAdvancedPageBrowserTest', 'MAYBE_Load', function() {
     });
 
     test('advanced pages', function() {
-      var page = self.getPage('advanced');
+      var page = self.getPage('basic');
       var sections = ['privacy', 'passwordsAndForms', 'languages', 'downloads',
           'reset'];
       if (cr.isChromeOS)
-        sections = sections.concat(['dateTime', 'bluetooth', 'a11y']);
+        sections = sections.concat(['dateTime', 'a11y']);
 
       for (var i = 0; i < sections.length; i++) {
         var section = self.getSection(page, sections[i]);

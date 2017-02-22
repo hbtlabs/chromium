@@ -17,6 +17,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/sys_info.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/tracing/tracing_controller_impl.h"
@@ -31,6 +32,7 @@
 #include "net/base/network_interfaces.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "ui/base/platform_window_defaults.h"
 #include "ui/base/test/material_design_controller_test_api.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/gl/gl_implementation.h"
@@ -53,9 +55,6 @@
 #if defined(USE_AURA)
 #include "content/browser/compositor/image_transport_factory.h"
 #include "ui/aura/test/event_generator_delegate_aura.h"  // nogncheck
-#if defined(USE_X11)
-#include "ui/aura/window_tree_host_x11.h"  // nogncheck
-#endif
 #endif
 
 namespace content {
@@ -151,9 +150,7 @@ BrowserTestBase::BrowserTestBase()
   base::mac::SetOverrideAmIBundled(true);
 #endif
 
-#if defined(USE_AURA) && defined(USE_X11)
-  aura::test::SetUseOverrideRedirectWindowByDefault(true);
-#endif
+  ui::test::EnableTestConfigForPlatformWindows();
 
 #if defined(OS_POSIX)
   handle_sigterm_ = true;
@@ -165,6 +162,13 @@ BrowserTestBase::BrowserTestBase()
   base::i18n::AllowMultipleInitializeCallsForTesting();
 
   embedded_test_server_.reset(new net::EmbeddedTestServer);
+
+  // SequencedWorkerPool is enabled by default in tests (see
+  // base::TestSuite::Initialize). In browser tests, disable it and expect it
+  // to be re-enabled as part of BrowserMainLoop::PreCreateThreads().
+  // TODO(fdoray): Remove this once the SequencedWorkerPool to TaskScheduler
+  // redirection experiment concludes https://crbug.com/622400.
+  base::SequencedWorkerPool::DisableForProcessForTesting();
 }
 
 BrowserTestBase::~BrowserTestBase() {
@@ -232,36 +236,36 @@ void BrowserTestBase::SetUp() {
   aura::test::InitializeAuraEventGeneratorDelegate();
 #endif
 
-  bool use_osmesa = true;
+  bool use_software_gl = true;
 
-  // We usually use OSMesa as this works on all bots. The command line can
-  // override this behaviour to use hardware GL.
+  // We usually use software GL as this works on all bots. The command
+  // line can override this behaviour to use hardware GL.
   if (command_line->HasSwitch(switches::kUseGpuInTests))
-    use_osmesa = false;
+    use_software_gl = false;
 
   // Some bots pass this flag when they want to use hardware GL.
   if (command_line->HasSwitch("enable-gpu"))
-    use_osmesa = false;
+    use_software_gl = false;
 
 #if defined(OS_MACOSX)
   // On Mac we always use hardware GL.
-  use_osmesa = false;
+  use_software_gl = false;
 #endif
 
 #if defined(OS_ANDROID)
   // On Android we always use hardware GL.
-  use_osmesa = false;
+  use_software_gl = false;
 #endif
 
 #if defined(OS_CHROMEOS)
   // If the test is running on the chromeos envrionment (such as
   // device or vm bots), we use hardware GL.
   if (base::SysInfo::IsRunningOnChromeOS())
-    use_osmesa = false;
+    use_software_gl = false;
 #endif
 
-  if (use_osmesa && !use_software_compositing_)
-    command_line->AppendSwitch(switches::kOverrideUseGLWithOSMesaForTests);
+  if (use_software_gl && !use_software_compositing_)
+    command_line->AppendSwitch(switches::kOverrideUseSoftwareGLForTests);
 
   scoped_refptr<net::HostResolverProc> local_resolver =
       new LocalHostResolverProc();
@@ -333,7 +337,14 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
         TracingController::StartTracingDoneCallback());
   }
 
-  RunTestOnMainThreadLoop();
+  {
+    // This can be called from a posted task. Allow nested tasks here, because
+    // otherwise the test body will have to do it in order to use RunLoop for
+    // waiting.
+    base::MessageLoop::ScopedNestableTaskAllower allow(
+        base::MessageLoop::current());
+    RunTestOnMainThreadLoop();
+  }
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableTracing)) {
@@ -388,10 +399,10 @@ void BrowserTestBase::UseSoftwareCompositing() {
   use_software_compositing_ = true;
 }
 
-bool BrowserTestBase::UsingOSMesa() const {
+bool BrowserTestBase::UsingSoftwareGL() const {
   base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
   return cmd->GetSwitchValueASCII(switches::kUseGL) ==
-         gl::kGLImplementationOSMesaName;
+         gl::GetGLImplementationName(gl::GetSoftwareGLImplementation());
 }
 
 }  // namespace content

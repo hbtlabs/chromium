@@ -33,21 +33,20 @@
 
 #include "public/web/WebSharedWorker.h"
 
+#include <memory>
 #include "core/dom/ExecutionContext.h"
 #include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerReportingProxy.h"
 #include "core/workers/WorkerThread.h"
 #include "public/platform/WebAddressSpace.h"
-#include "public/web/WebContentSecurityPolicy.h"
+#include "public/platform/WebContentSecurityPolicy.h"
 #include "public/web/WebDevToolsAgentClient.h"
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebSharedWorkerClient.h"
 #include "wtf/RefPtr.h"
-#include <memory>
 
 namespace blink {
 
-class ConsoleMessage;
 class ParentFrameTaskRunners;
 class WebApplicationCacheHost;
 class WebApplicationCacheHostClient;
@@ -75,6 +74,8 @@ class WebSharedWorkerImpl final : public WorkerReportingProxy,
   explicit WebSharedWorkerImpl(WebSharedWorkerClient*);
 
   // WorkerReportingProxy methods:
+  void countFeature(UseCounter::Feature) override;
+  void countDeprecation(UseCounter::Feature) override;
   void reportException(const WTF::String&,
                        std::unique_ptr<SourceLocation>,
                        int exceptionId) override;
@@ -95,7 +96,6 @@ class WebSharedWorkerImpl final : public WorkerReportingProxy,
   void didFinishDocumentLoad(WebLocalFrame*) override;
   bool isControlledByServiceWorker(WebDataSource&) override;
   int64_t serviceWorkerID(WebDataSource&) override;
-  InterfaceProvider* interfaceProvider() override;
 
   // WebDevToolsAgentClient overrides.
   void sendProtocolMessage(int sessionId,
@@ -141,7 +141,7 @@ class WebSharedWorkerImpl final : public WorkerReportingProxy,
   void didReceiveScriptLoaderResponse();
   void onScriptLoaderFinished();
 
-  static void connectTask(WebMessagePortChannelUniquePtr, ExecutionContext*);
+  void connectTask(WebMessagePortChannelUniquePtr);
 
   // Tasks that are run on the main thread.
   void didCloseWorkerGlobalScopeOnMainThread();
@@ -154,10 +154,14 @@ class WebSharedWorkerImpl final : public WorkerReportingProxy,
                         std::unique_ptr<ExecutionContextTask>) override;
   void postTaskToWorkerGlobalScope(
       const WebTraceLocation&,
-      std::unique_ptr<ExecutionContextTask>) override;
+      std::unique_ptr<WTF::CrossThreadClosure>) override;
 
   // 'shadow page' - created to proxy loading requests from the worker.
-  Persistent<ExecutionContext> m_loadingDocument;
+  // Will be accessed by worker thread when posting tasks.
+  //
+  // TODO: it is undesirable to keep a cross-thread reference to this
+  // document; avoid reaching into the document when posting.
+  CrossThreadPersistent<ExecutionContext> m_loadingDocument;
   WebView* m_webView;
   Persistent<WebLocalFrameImpl> m_mainFrame;
   bool m_askedToTerminate;
@@ -167,7 +171,8 @@ class WebSharedWorkerImpl final : public WorkerReportingProxy,
 
   Persistent<WorkerInspectorProxy> m_workerInspectorProxy;
 
-  Persistent<ParentFrameTaskRunners> m_mainThreadTaskRunners;
+  // Owned by the main thread, but will be accessed by the worker.
+  CrossThreadPersistent<ParentFrameTaskRunners> m_parentFrameTaskRunners;
 
   std::unique_ptr<WorkerThread> m_workerThread;
 

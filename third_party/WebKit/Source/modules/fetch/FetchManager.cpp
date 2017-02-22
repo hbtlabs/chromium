@@ -10,7 +10,6 @@
 #include "bindings/core/v8/V8ThrowException.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/Document.h"
-#include "core/fetch/FetchUtils.h"
 #include "core/fileapi/Blob.h"
 #include "core/frame/Frame.h"
 #include "core/frame/SubresourceIntegrity.h"
@@ -30,10 +29,12 @@
 #include "modules/fetch/Response.h"
 #include "modules/fetch/ResponseInit.h"
 #include "platform/HTTPNames.h"
+#include "platform/loader/fetch/FetchUtils.h"
 #include "platform/network/NetworkUtils.h"
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
+#include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/SecurityPolicy.h"
@@ -154,6 +155,7 @@ class FetchManager::Loader final
   ~Loader() override;
   DECLARE_VIRTUAL_TRACE();
 
+  void didReceiveRedirectTo(const KURL&) override;
   void didReceiveResponse(unsigned long,
                           const ResourceResponse&,
                           std::unique_ptr<WebDataConsumerHandle>) override;
@@ -213,7 +215,7 @@ class FetchManager::Loader final
       if (r == WebDataConsumerHandle::Done) {
         if (SubresourceIntegrity::CheckSubresourceIntegrity(
                 m_integrityMetadata, m_buffer.data(), m_buffer.size(), m_url,
-                *m_loader->document(), errorMessage)) {
+                *m_loader->executionContext(), errorMessage)) {
           m_updater->update(
               new FormDataBytesConsumer(m_buffer.data(), m_buffer.size()));
           m_loader->m_resolver->resolve(m_response);
@@ -270,6 +272,7 @@ class FetchManager::Loader final
   void failed(const String& message);
   void notifyFinished();
   Document* document() const;
+  ExecutionContext* executionContext() { return m_executionContext; }
   void loadSucceeded();
 
   Member<FetchManager> m_fetchManager;
@@ -282,6 +285,7 @@ class FetchManager::Loader final
   Member<SRIVerifier> m_integrityVerifier;
   bool m_didFinishLoading;
   bool m_isIsolatedWorld;
+  Vector<KURL> m_urlList;
   Member<ExecutionContext> m_executionContext;
 };
 
@@ -300,7 +304,7 @@ FetchManager::Loader::Loader(ExecutionContext* executionContext,
       m_didFinishLoading(false),
       m_isIsolatedWorld(isIsolatedWorld),
       m_executionContext(executionContext) {
-  ThreadState::current()->registerPreFinalizer(this);
+  m_urlList.push_back(request->url());
 }
 
 FetchManager::Loader::~Loader() {
@@ -316,11 +320,18 @@ DEFINE_TRACE(FetchManager::Loader) {
   visitor->trace(m_executionContext);
 }
 
+void FetchManager::Loader::didReceiveRedirectTo(const KURL& url) {
+  m_urlList.push_back(url);
+}
+
 void FetchManager::Loader::didReceiveResponse(
     unsigned long,
     const ResourceResponse& response,
     std::unique_ptr<WebDataConsumerHandle> handle) {
   ASSERT(handle);
+  // TODO(horo): This check could be false when we will use the response url
+  // in service worker responses. (crbug.com/553535)
+  DCHECK(response.url() == m_urlList.back());
   ScriptState* scriptState = m_resolver->getScriptState();
   ScriptState::Scope scope(scriptState);
 
@@ -380,7 +391,7 @@ void FetchManager::Loader::didReceiveResponse(
         tainting = FetchRequestData::CORSTainting;
         break;
       case WebURLRequest::FetchRequestModeNavigate:
-        RELEASE_NOTREACHED();
+        LOG(FATAL);
         break;
     }
   }
@@ -397,13 +408,12 @@ void FetchManager::Loader::didReceiveResponse(
         tainting = FetchRequestData::OpaqueTainting;
         break;
       case WebServiceWorkerResponseTypeOpaqueRedirect:
-      // ServiceWorker can't respond to the request from fetch() with an
-      // opaque redirect response.
+        DCHECK(NetworkUtils::isRedirectResponseCode(m_responseHttpStatusCode));
+        break;  // The code below creates an opaque-redirect filtered response.
       case WebServiceWorkerResponseTypeError:
-        // When ServiceWorker respond to the request from fetch() with an
-        // error response, FetchManager::Loader::didFail() must be called
-        // instead.
-        RELEASE_NOTREACHED();
+        LOG(FATAL) << "When ServiceWorker respond to the request from fetch() "
+                      "with an error response, FetchManager::Loader::didFail() "
+                      "must be called instead.";
         break;
     }
   }
@@ -424,7 +434,15 @@ void FetchManager::Loader::didReceiveResponse(
   responseData->setStatusMessage(response.httpStatusText());
   for (auto& it : response.httpHeaderFields())
     responseData->headerList()->append(it.key, it.value);
-  responseData->setURL(response.url());
+  if (response.urlListViaServiceWorker().isEmpty()) {
+    // Note: |urlListViaServiceWorker| is empty, unless the response came from a
+    // service worker, in which case it will only be empty if it was created
+    // through new Response().
+    responseData->setURLList(m_urlList);
+  } else {
+    DCHECK(response.wasFetchedViaServiceWorker());
+    responseData->setURLList(response.urlListViaServiceWorker());
+  }
   responseData->setMIMEType(response.mimeType());
   responseData->setResponseTime(response.responseTime());
 
@@ -539,7 +557,7 @@ void FetchManager::Loader::loadSucceeded() {
   m_finished = true;
 
   if (document() && document()->frame() && document()->frame()->page() &&
-      m_responseHttpStatusCode >= 200 && m_responseHttpStatusCode < 300) {
+      FetchUtils::isOkStatus(m_responseHttpStatusCode)) {
     document()->frame()->page()->chromeClient().ajaxSucceeded(
         document()->frame());
   }
@@ -658,6 +676,7 @@ void FetchManager::Loader::start() {
 }
 
 void FetchManager::Loader::dispose() {
+  InspectorInstrumentation::detachClientRequest(m_executionContext, this);
   // Prevent notification
   m_fetchManager = nullptr;
   if (m_loader) {
@@ -833,14 +852,6 @@ void FetchManager::Loader::performHTTPFetch(bool corsFlag,
 void FetchManager::Loader::performDataFetch() {
   ASSERT(m_request->url().protocolIsData());
 
-  // Spec: https://fetch.spec.whatwg.org/#concept-basic-fetch
-  // If |request|'s method is `GET` .... Otherwise, return a network error.
-  if (m_request->method() != HTTPNames::GET) {
-    performNetworkError(
-        "Only 'GET' method is allowed for data URLs in Fetch API.");
-    return;
-  }
-
   ResourceRequest request(m_request->url());
   request.setRequestContext(m_request->context());
   request.setUseStreamOnResponse(true);
@@ -871,7 +882,7 @@ void FetchManager::Loader::failed(const String& message) {
   if (m_failed || m_finished)
     return;
   m_failed = true;
-  if (m_executionContext->activeDOMObjectsAreStopped())
+  if (m_executionContext->isContextDestroyed())
     return;
   if (!message.isEmpty())
     m_executionContext->addConsoleMessage(
@@ -896,7 +907,7 @@ FetchManager* FetchManager::create(ExecutionContext* executionContext) {
 }
 
 FetchManager::FetchManager(ExecutionContext* executionContext)
-    : ContextLifecycleObserver(executionContext), m_isStopped(false) {}
+    : ContextLifecycleObserver(executionContext) {}
 
 ScriptPromise FetchManager::fetch(ScriptState* scriptState,
                                   FetchRequestData* request) {
@@ -908,20 +919,18 @@ ScriptPromise FetchManager::fetch(ScriptState* scriptState,
   Loader* loader =
       Loader::create(getExecutionContext(), this, resolver, request,
                      scriptState->world().isIsolatedWorld());
-  m_loaders.add(loader);
+  m_loaders.insert(loader);
   loader->start();
   return promise;
 }
 
-void FetchManager::contextDestroyed() {
-  ASSERT(!m_isStopped);
-  m_isStopped = true;
+void FetchManager::contextDestroyed(ExecutionContext*) {
   for (auto& loader : m_loaders)
     loader->dispose();
 }
 
 void FetchManager::onLoaderFinished(Loader* loader) {
-  m_loaders.remove(loader);
+  m_loaders.erase(loader);
   loader->dispose();
 }
 

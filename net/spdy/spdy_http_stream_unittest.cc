@@ -7,9 +7,11 @@
 #include <stdint.h>
 
 #include <memory>
+#include <string>
 
 #include "base/run_loop.h"
 #include "base/stl_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "crypto/ec_private_key.h"
 #include "crypto/ec_signature_creator.h"
 #include "crypto/signature_creator.h"
@@ -35,10 +37,9 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using net::test::IsError;
-using net::test::IsOk;
-
 namespace net {
+
+namespace test {
 
 namespace {
 
@@ -104,7 +105,7 @@ class ReadErrorUploadDataStream : public UploadDataStream {
 
 class CancelStreamCallback : public TestCompletionCallbackBase {
  public:
-  CancelStreamCallback(SpdyHttpStream* stream)
+  explicit CancelStreamCallback(SpdyHttpStream* stream)
       : stream_(stream),
         callback_(base::Bind(&CancelStreamCallback::CancelStream,
                              base::Unretained(this))) {}
@@ -126,11 +127,11 @@ class CancelStreamCallback : public TestCompletionCallbackBase {
 class SpdyHttpStreamTest : public testing::Test {
  public:
   SpdyHttpStreamTest()
-      : host_port_pair_(HostPortPair::FromURL(GURL(kDefaultUrl))),
+      : url_(kDefaultUrl),
+        host_port_pair_(HostPortPair::FromURL(url_)),
         key_(host_port_pair_, ProxyServer::Direct(), PRIVACY_MODE_DISABLED),
         ssl_(SYNCHRONOUS, OK) {
     session_deps_.net_log = &net_log_;
-    spdy_util_.set_default_url(GURL("http://www.example.org/"));
   }
 
   ~SpdyHttpStreamTest() override {}
@@ -169,6 +170,7 @@ class SpdyHttpStreamTest : public testing::Test {
   SpdyTestUtil spdy_util_;
   TestNetLog net_log_;
   SpdySessionDependencies session_deps_;
+  const GURL url_;
   const HostPortPair host_port_pair_;
   const SpdySessionKey key_;
   std::unique_ptr<SequencedSocketData> sequenced_data_;
@@ -195,7 +197,7 @@ TEST_F(SpdyHttpStreamTest, SendRequest) {
 
   HttpRequestInfo request;
   request.method = "GET";
-  request.url = GURL("http://www.example.org/");
+  request.url = url_;
   TestCompletionCallback callback;
   HttpResponseInfo response;
   HttpRequestHeaders headers;
@@ -206,14 +208,13 @@ TEST_F(SpdyHttpStreamTest, SendRequest) {
   LoadTimingInfo load_timing_info;
   EXPECT_FALSE(http_stream->GetLoadTimingInfo(&load_timing_info));
 
-  ASSERT_EQ(
-      OK,
-      http_stream->InitializeStream(&request, DEFAULT_PRIORITY,
-                                    net_log, CompletionCallback()));
+  ASSERT_THAT(http_stream->InitializeStream(&request, DEFAULT_PRIORITY, net_log,
+                                            CompletionCallback()),
+              IsOk());
   EXPECT_FALSE(http_stream->GetLoadTimingInfo(&load_timing_info));
 
-  EXPECT_EQ(ERR_IO_PENDING, http_stream->SendRequest(headers, &response,
-                                                     callback.callback()));
+  EXPECT_THAT(http_stream->SendRequest(headers, &response, callback.callback()),
+              IsError(ERR_IO_PENDING));
   EXPECT_TRUE(HasSpdySession(http_session_->spdy_session_pool(), key_));
   EXPECT_FALSE(http_stream->GetLoadTimingInfo(&load_timing_info));
 
@@ -259,7 +260,7 @@ TEST_F(SpdyHttpStreamTest, LoadTimingTwoRequests) {
 
   HttpRequestInfo request1;
   request1.method = "GET";
-  request1.url = GURL("http://www.example.org/");
+  request1.url = url_;
   TestCompletionCallback callback1;
   HttpResponseInfo response1;
   HttpRequestHeaders headers1;
@@ -268,7 +269,7 @@ TEST_F(SpdyHttpStreamTest, LoadTimingTwoRequests) {
 
   HttpRequestInfo request2;
   request2.method = "GET";
-  request2.url = GURL("http://www.example.org/");
+  request2.url = url_;
   TestCompletionCallback callback2;
   HttpResponseInfo response2;
   HttpRequestHeaders headers2;
@@ -276,11 +277,13 @@ TEST_F(SpdyHttpStreamTest, LoadTimingTwoRequests) {
       new SpdyHttpStream(session_, true));
 
   // First write.
-  ASSERT_EQ(OK, http_stream1->InitializeStream(&request1, DEFAULT_PRIORITY,
-                                               NetLogWithSource(),
-                                               CompletionCallback()));
-  EXPECT_EQ(ERR_IO_PENDING, http_stream1->SendRequest(headers1, &response1,
-                                                      callback1.callback()));
+  ASSERT_THAT(
+      http_stream1->InitializeStream(&request1, DEFAULT_PRIORITY,
+                                     NetLogWithSource(), CompletionCallback()),
+      IsOk());
+  EXPECT_THAT(
+      http_stream1->SendRequest(headers1, &response1, callback1.callback()),
+      IsError(ERR_IO_PENDING));
   EXPECT_TRUE(HasSpdySession(http_session_->spdy_session_pool(), key_));
 
   EXPECT_LE(0, callback1.WaitForResult());
@@ -292,14 +295,20 @@ TEST_F(SpdyHttpStreamTest, LoadTimingTwoRequests) {
   EXPECT_FALSE(http_stream2->GetLoadTimingInfo(&load_timing_info2));
 
   // Second write.
-  ASSERT_EQ(OK, http_stream2->InitializeStream(&request2, DEFAULT_PRIORITY,
-                                               NetLogWithSource(),
-                                               CompletionCallback()));
-  EXPECT_EQ(ERR_IO_PENDING, http_stream2->SendRequest(headers2, &response2,
-                                                      callback2.callback()));
+  ASSERT_THAT(
+      http_stream2->InitializeStream(&request2, DEFAULT_PRIORITY,
+                                     NetLogWithSource(), CompletionCallback()),
+      IsOk());
+  EXPECT_THAT(
+      http_stream2->SendRequest(headers2, &response2, callback2.callback()),
+      IsError(ERR_IO_PENDING));
   EXPECT_TRUE(HasSpdySession(http_session_->spdy_session_pool(), key_));
 
   EXPECT_LE(0, callback2.WaitForResult());
+
+  // Perform all async reads.
+  base::RunLoop().RunUntilIdle();
+
   TestLoadTimingReused(*http_stream2);
   EXPECT_TRUE(http_stream2->GetLoadTimingInfo(&load_timing_info2));
   EXPECT_EQ(load_timing_info1.socket_log_id, load_timing_info2.socket_log_id);
@@ -339,7 +348,7 @@ TEST_F(SpdyHttpStreamTest, SendChunkedPost) {
 
   SpdySerializedFrame resp(spdy_util_.ConstructSpdyPostReply(nullptr, 0));
   MockRead reads[] = {
-      CreateMockRead(resp, 2), CreateMockRead(body, 3),
+      CreateMockRead(resp, 2), CreateMockRead(body, 3, SYNCHRONOUS),
       MockRead(SYNCHRONOUS, 0, 4)  // EOF
   };
 
@@ -353,7 +362,7 @@ TEST_F(SpdyHttpStreamTest, SendChunkedPost) {
 
   HttpRequestInfo request;
   request.method = "POST";
-  request.url = GURL("http://www.example.org/");
+  request.url = url_;
   request.upload_data_stream = &upload_stream;
 
   ASSERT_THAT(upload_stream.Init(TestCompletionCallback().callback(),
@@ -365,13 +374,12 @@ TEST_F(SpdyHttpStreamTest, SendChunkedPost) {
   HttpRequestHeaders headers;
   NetLogWithSource net_log;
   SpdyHttpStream http_stream(session_, true);
-  ASSERT_EQ(
-      OK,
-      http_stream.InitializeStream(&request, DEFAULT_PRIORITY,
-                                   net_log, CompletionCallback()));
+  ASSERT_THAT(http_stream.InitializeStream(&request, DEFAULT_PRIORITY, net_log,
+                                           CompletionCallback()),
+              IsOk());
 
-  EXPECT_EQ(ERR_IO_PENDING, http_stream.SendRequest(
-      headers, &response, callback.callback()));
+  EXPECT_THAT(http_stream.SendRequest(headers, &response, callback.callback()),
+              IsError(ERR_IO_PENDING));
   EXPECT_TRUE(HasSpdySession(http_session_->spdy_session_pool(), key_));
 
   EXPECT_THAT(callback.WaitForResult(), IsOk());
@@ -398,7 +406,7 @@ TEST_F(SpdyHttpStreamTest, SendChunkedPostLastEmpty) {
 
   SpdySerializedFrame resp(spdy_util_.ConstructSpdyPostReply(nullptr, 0));
   MockRead reads[] = {
-      CreateMockRead(resp, 2), CreateMockRead(chunk, 3),
+      CreateMockRead(resp, 2), CreateMockRead(chunk, 3, SYNCHRONOUS),
       MockRead(SYNCHRONOUS, 0, 4)  // EOF
   };
 
@@ -409,7 +417,7 @@ TEST_F(SpdyHttpStreamTest, SendChunkedPostLastEmpty) {
 
   HttpRequestInfo request;
   request.method = "POST";
-  request.url = GURL("http://www.example.org/");
+  request.url = url_;
   request.upload_data_stream = &upload_stream;
 
   ASSERT_THAT(upload_stream.Init(TestCompletionCallback().callback(),
@@ -421,10 +429,11 @@ TEST_F(SpdyHttpStreamTest, SendChunkedPostLastEmpty) {
   HttpRequestHeaders headers;
   NetLogWithSource net_log;
   SpdyHttpStream http_stream(session_, true);
-  ASSERT_EQ(OK, http_stream.InitializeStream(&request, DEFAULT_PRIORITY,
-                                             net_log, CompletionCallback()));
-  EXPECT_EQ(ERR_IO_PENDING,
-            http_stream.SendRequest(headers, &response, callback.callback()));
+  ASSERT_THAT(http_stream.InitializeStream(&request, DEFAULT_PRIORITY, net_log,
+                                           CompletionCallback()),
+              IsOk());
+  EXPECT_THAT(http_stream.SendRequest(headers, &response, callback.callback()),
+              IsError(ERR_IO_PENDING));
   EXPECT_TRUE(HasSpdySession(http_session_->spdy_session_pool(), key_));
 
   EXPECT_THAT(callback.WaitForResult(), IsOk());
@@ -462,7 +471,7 @@ TEST_F(SpdyHttpStreamTest, ConnectionClosedDuringChunkedPost) {
 
   HttpRequestInfo request;
   request.method = "POST";
-  request.url = GURL("http://www.example.org/");
+  request.url = url_;
   request.upload_data_stream = &upload_stream;
 
   ASSERT_THAT(upload_stream.Init(TestCompletionCallback().callback(),
@@ -474,11 +483,12 @@ TEST_F(SpdyHttpStreamTest, ConnectionClosedDuringChunkedPost) {
   HttpRequestHeaders headers;
   NetLogWithSource net_log;
   SpdyHttpStream http_stream(session_, true);
-  ASSERT_EQ(OK, http_stream.InitializeStream(&request, DEFAULT_PRIORITY,
-                                             net_log, CompletionCallback()));
+  ASSERT_THAT(http_stream.InitializeStream(&request, DEFAULT_PRIORITY, net_log,
+                                           CompletionCallback()),
+              IsOk());
 
-  EXPECT_EQ(ERR_IO_PENDING,
-            http_stream.SendRequest(headers, &response, callback.callback()));
+  EXPECT_THAT(http_stream.SendRequest(headers, &response, callback.callback()),
+              IsError(ERR_IO_PENDING));
   EXPECT_TRUE(HasSpdySession(http_session_->spdy_session_pool(), key_));
 
   EXPECT_THAT(callback.WaitForResult(), IsError(ERR_CONNECTION_CLOSED));
@@ -531,7 +541,7 @@ TEST_F(SpdyHttpStreamTest, DelayedSendChunkedPost) {
 
   HttpRequestInfo request;
   request.method = "POST";
-  request.url = GURL("http://www.example.org/");
+  request.url = url_;
   request.upload_data_stream = &upload_stream;
 
   ASSERT_THAT(upload_stream.Init(TestCompletionCallback().callback(),
@@ -542,16 +552,17 @@ TEST_F(SpdyHttpStreamTest, DelayedSendChunkedPost) {
   NetLogWithSource net_log;
   std::unique_ptr<SpdyHttpStream> http_stream(
       new SpdyHttpStream(session_, true));
-  ASSERT_EQ(OK, http_stream->InitializeStream(&request, DEFAULT_PRIORITY,
-                                              net_log, CompletionCallback()));
+  ASSERT_THAT(http_stream->InitializeStream(&request, DEFAULT_PRIORITY, net_log,
+                                            CompletionCallback()),
+              IsOk());
 
   TestCompletionCallback callback;
   HttpRequestHeaders headers;
   HttpResponseInfo response;
   // This will attempt to Write() the initial request and headers, which will
   // complete asynchronously.
-  EXPECT_EQ(ERR_IO_PENDING, http_stream->SendRequest(headers, &response,
-                                                     callback.callback()));
+  EXPECT_THAT(http_stream->SendRequest(headers, &response, callback.callback()),
+              IsError(ERR_IO_PENDING));
   EXPECT_TRUE(HasSpdySession(http_session_->spdy_session_pool(), key_));
 
   // Complete the initial request write and the first chunk.
@@ -625,7 +636,7 @@ TEST_F(SpdyHttpStreamTest, DelayedSendChunkedPostWithEmptyFinalDataFrame) {
 
   HttpRequestInfo request;
   request.method = "POST";
-  request.url = GURL("http://www.example.org/");
+  request.url = url_;
   request.upload_data_stream = &upload_stream;
 
   ASSERT_THAT(upload_stream.Init(TestCompletionCallback().callback(),
@@ -636,16 +647,17 @@ TEST_F(SpdyHttpStreamTest, DelayedSendChunkedPostWithEmptyFinalDataFrame) {
   NetLogWithSource net_log;
   std::unique_ptr<SpdyHttpStream> http_stream(
       new SpdyHttpStream(session_, true));
-  ASSERT_EQ(OK, http_stream->InitializeStream(&request, DEFAULT_PRIORITY,
-                                              net_log, CompletionCallback()));
+  ASSERT_THAT(http_stream->InitializeStream(&request, DEFAULT_PRIORITY, net_log,
+                                            CompletionCallback()),
+              IsOk());
 
   TestCompletionCallback callback;
   HttpRequestHeaders headers;
   HttpResponseInfo response;
   // This will attempt to Write() the initial request and headers, which will
   // complete asynchronously.
-  EXPECT_EQ(ERR_IO_PENDING, http_stream->SendRequest(headers, &response,
-                                                     callback.callback()));
+  EXPECT_THAT(http_stream->SendRequest(headers, &response, callback.callback()),
+              IsError(ERR_IO_PENDING));
   EXPECT_TRUE(HasSpdySession(http_session_->spdy_session_pool(), key_));
 
   // Complete the initial request write and the first chunk.
@@ -708,7 +720,7 @@ TEST_F(SpdyHttpStreamTest, ChunkedPostWithEmptyPayload) {
 
   HttpRequestInfo request;
   request.method = "POST";
-  request.url = GURL("http://www.example.org/");
+  request.url = url_;
   request.upload_data_stream = &upload_stream;
 
   ASSERT_THAT(upload_stream.Init(TestCompletionCallback().callback(),
@@ -719,16 +731,17 @@ TEST_F(SpdyHttpStreamTest, ChunkedPostWithEmptyPayload) {
   NetLogWithSource net_log;
   std::unique_ptr<SpdyHttpStream> http_stream(
       new SpdyHttpStream(session_, true));
-  ASSERT_EQ(OK, http_stream->InitializeStream(&request, DEFAULT_PRIORITY,
-                                              net_log, CompletionCallback()));
+  ASSERT_THAT(http_stream->InitializeStream(&request, DEFAULT_PRIORITY, net_log,
+                                            CompletionCallback()),
+              IsOk());
 
   TestCompletionCallback callback;
   HttpRequestHeaders headers;
   HttpResponseInfo response;
   // This will attempt to Write() the initial request and headers, which will
   // complete asynchronously.
-  EXPECT_EQ(ERR_IO_PENDING, http_stream->SendRequest(headers, &response,
-                                                     callback.callback()));
+  EXPECT_THAT(http_stream->SendRequest(headers, &response, callback.callback()),
+              IsError(ERR_IO_PENDING));
   EXPECT_TRUE(HasSpdySession(http_session_->spdy_session_pool(), key_));
 
   // Complete writing request, followed by a FIN.
@@ -754,10 +767,10 @@ TEST_F(SpdyHttpStreamTest, ChunkedPostWithEmptyPayload) {
   ASSERT_EQ(200, response.headers->response_code());
 }
 
-// Test case for bug: http://code.google.com/p/chromium/issues/detail?id=50058
+// Test case for https://crbug.com/50058.
 TEST_F(SpdyHttpStreamTest, SpdyURLTest) {
-  const char* const full_url = "http://www.example.org/foo?query=what#anchor";
-  const char* const base_url = "http://www.example.org/foo?query=what";
+  const char* const full_url = "https://www.example.org/foo?query=what#anchor";
+  const char* const base_url = "https://www.example.org/foo?query=what";
   SpdySerializedFrame req(spdy_util_.ConstructSpdyGet(base_url, 1, LOWEST));
   MockWrite writes[] = {
       CreateMockWrite(req, 0),
@@ -778,12 +791,12 @@ TEST_F(SpdyHttpStreamTest, SpdyURLTest) {
   NetLogWithSource net_log;
   std::unique_ptr<SpdyHttpStream> http_stream(
       new SpdyHttpStream(session_, true));
-  ASSERT_EQ(OK,
-            http_stream->InitializeStream(
-                &request, DEFAULT_PRIORITY, net_log, CompletionCallback()));
+  ASSERT_THAT(http_stream->InitializeStream(&request, DEFAULT_PRIORITY, net_log,
+                                            CompletionCallback()),
+              IsOk());
 
-  EXPECT_EQ(ERR_IO_PENDING, http_stream->SendRequest(headers, &response,
-                                                     callback.callback()));
+  EXPECT_THAT(http_stream->SendRequest(headers, &response, callback.callback()),
+              IsError(ERR_IO_PENDING));
 
   EXPECT_EQ(base_url, http_stream->stream()->GetUrlFromHeaders().spec());
 
@@ -821,7 +834,7 @@ TEST_F(SpdyHttpStreamTest, DelayedSendChunkedPostWithWindowUpdate) {
 
   HttpRequestInfo request;
   request.method = "POST";
-  request.url = GURL("http://www.example.org/");
+  request.url = url_;
   request.upload_data_stream = &upload_stream;
 
   ASSERT_THAT(upload_stream.Init(TestCompletionCallback().callback(),
@@ -831,16 +844,17 @@ TEST_F(SpdyHttpStreamTest, DelayedSendChunkedPostWithWindowUpdate) {
   NetLogWithSource net_log;
   std::unique_ptr<SpdyHttpStream> http_stream(
       new SpdyHttpStream(session_, true));
-  ASSERT_EQ(OK, http_stream->InitializeStream(&request, DEFAULT_PRIORITY,
-                                              net_log, CompletionCallback()));
+  ASSERT_THAT(http_stream->InitializeStream(&request, DEFAULT_PRIORITY, net_log,
+                                            CompletionCallback()),
+              IsOk());
 
   HttpRequestHeaders headers;
   HttpResponseInfo response;
   // This will attempt to Write() the initial request and headers, which will
   // complete asynchronously.
   TestCompletionCallback callback;
-  EXPECT_EQ(ERR_IO_PENDING, http_stream->SendRequest(headers, &response,
-                                                     callback.callback()));
+  EXPECT_THAT(http_stream->SendRequest(headers, &response, callback.callback()),
+              IsError(ERR_IO_PENDING));
   EXPECT_TRUE(HasSpdySession(http_session_->spdy_session_pool(), key_));
 
   // Complete the initial request write and first chunk.
@@ -899,11 +913,11 @@ TEST_F(SpdyHttpStreamTest, DelayedSendChunkedPostWithWindowUpdate) {
 TEST_F(SpdyHttpStreamTest, DataReadErrorSynchronous) {
   SpdySerializedFrame req(spdy_util_.ConstructChunkedSpdyPost(nullptr, 0));
 
-  // Server receives RST_STREAM_INTERNAL_ERROR on client's internal failure.
+  // Server receives ERROR_CODE_INTERNAL_ERROR on client's internal failure.
   // The failure is a reading error in this case caused by
   // UploadDataStream::Read().
   SpdySerializedFrame rst_frame(
-      spdy_util_.ConstructSpdyRstStream(1, RST_STREAM_INTERNAL_ERROR));
+      spdy_util_.ConstructSpdyRstStream(1, ERROR_CODE_INTERNAL_ERROR));
 
   MockWrite writes[] = {
       CreateMockWrite(req, 0, SYNCHRONOUS),       // Request
@@ -926,7 +940,7 @@ TEST_F(SpdyHttpStreamTest, DataReadErrorSynchronous) {
 
   HttpRequestInfo request;
   request.method = "POST";
-  request.url = GURL("http://www.example.org/");
+  request.url = url_;
   request.upload_data_stream = &upload_data_stream;
 
   TestCompletionCallback callback;
@@ -934,11 +948,15 @@ TEST_F(SpdyHttpStreamTest, DataReadErrorSynchronous) {
   HttpRequestHeaders headers;
   NetLogWithSource net_log;
   SpdyHttpStream http_stream(session_, true);
-  ASSERT_EQ(OK, http_stream.InitializeStream(&request, DEFAULT_PRIORITY,
-                                             net_log, CompletionCallback()));
+  ASSERT_THAT(http_stream.InitializeStream(&request, DEFAULT_PRIORITY, net_log,
+                                           CompletionCallback()),
+              IsOk());
 
   int result = http_stream.SendRequest(headers, &response, callback.callback());
   EXPECT_THAT(callback.GetResult(result), IsError(ERR_FAILED));
+
+  // Run posted SpdyHttpStream::ResetStreamInternal() task.
+  base::RunLoop().RunUntilIdle();
 
   // Because the server has not closed the connection yet, there shouldn't be
   // a stream but a session in the pool
@@ -948,11 +966,11 @@ TEST_F(SpdyHttpStreamTest, DataReadErrorSynchronous) {
 TEST_F(SpdyHttpStreamTest, DataReadErrorAsynchronous) {
   SpdySerializedFrame req(spdy_util_.ConstructChunkedSpdyPost(nullptr, 0));
 
-  // Server receives RST_STREAM_INTERNAL_ERROR on client's internal failure.
+  // Server receives ERROR_CODE_INTERNAL_ERROR on client's internal failure.
   // The failure is a reading error in this case caused by
   // UploadDataStream::Read().
   SpdySerializedFrame rst_frame(
-      spdy_util_.ConstructSpdyRstStream(1, RST_STREAM_INTERNAL_ERROR));
+      spdy_util_.ConstructSpdyRstStream(1, ERROR_CODE_INTERNAL_ERROR));
 
   MockWrite writes[] = {
       CreateMockWrite(req, 0),       // Request
@@ -975,7 +993,7 @@ TEST_F(SpdyHttpStreamTest, DataReadErrorAsynchronous) {
 
   HttpRequestInfo request;
   request.method = "POST";
-  request.url = GURL("http://www.example.org/");
+  request.url = url_;
   request.upload_data_stream = &upload_data_stream;
 
   TestCompletionCallback callback;
@@ -983,12 +1001,16 @@ TEST_F(SpdyHttpStreamTest, DataReadErrorAsynchronous) {
   HttpRequestHeaders headers;
   NetLogWithSource net_log;
   SpdyHttpStream http_stream(session_, true);
-  ASSERT_EQ(OK, http_stream.InitializeStream(&request, DEFAULT_PRIORITY,
-                                             net_log, CompletionCallback()));
+  ASSERT_THAT(http_stream.InitializeStream(&request, DEFAULT_PRIORITY, net_log,
+                                           CompletionCallback()),
+              IsOk());
 
   int result = http_stream.SendRequest(headers, &response, callback.callback());
   EXPECT_THAT(result, IsError(ERR_IO_PENDING));
   EXPECT_THAT(callback.GetResult(result), IsError(ERR_FAILED));
+
+  // Run posted SpdyHttpStream::ResetStreamInternal() task.
+  base::RunLoop().RunUntilIdle();
 
   // Because the server has closed the connection, there shouldn't be a session
   // in the pool anymore.
@@ -1001,7 +1023,7 @@ TEST_F(SpdyHttpStreamTest, RequestCallbackCancelsStream) {
   SpdySerializedFrame chunk(
       spdy_util_.ConstructSpdyDataFrame(1, nullptr, 0, true));
   SpdySerializedFrame rst(
-      spdy_util_.ConstructSpdyRstStream(1, RST_STREAM_CANCEL));
+      spdy_util_.ConstructSpdyRstStream(1, ERROR_CODE_CANCEL));
   MockWrite writes[] = {CreateMockWrite(req, 0), CreateMockWrite(chunk, 1),
                         CreateMockWrite(rst, 2)};
   MockRead reads[] = {MockRead(ASYNC, 0, 3)};
@@ -1009,7 +1031,7 @@ TEST_F(SpdyHttpStreamTest, RequestCallbackCancelsStream) {
 
   HttpRequestInfo request;
   request.method = "POST";
-  request.url = GURL("http://www.example.org/");
+  request.url = url_;
   ChunkedUploadDataStream upload_stream(0);
   request.upload_data_stream = &upload_stream;
 
@@ -1030,17 +1052,22 @@ TEST_F(SpdyHttpStreamTest, RequestCallbackCancelsStream) {
   HttpResponseInfo response;
   // This will attempt to Write() the initial request and headers, which will
   // complete asynchronously.
-  EXPECT_EQ(ERR_IO_PENDING,
-            http_stream.SendRequest(headers, &response, callback.callback()));
+  EXPECT_THAT(http_stream.SendRequest(headers, &response, callback.callback()),
+              IsError(ERR_IO_PENDING));
   EXPECT_TRUE(HasSpdySession(http_session_->spdy_session_pool(), key_));
 
   // The callback cancels |http_stream|.
   EXPECT_THAT(callback.WaitForResult(), IsOk());
+
+  // Finish async network reads/writes.
+  base::RunLoop().RunUntilIdle();
 
   EXPECT_FALSE(HasSpdySession(http_session_->spdy_session_pool(), key_));
 }
 
 // TODO(willchan): Write a longer test for SpdyStream that exercises all
 // methods.
+
+}  // namespace test
 
 }  // namespace net

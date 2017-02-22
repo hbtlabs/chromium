@@ -70,8 +70,14 @@ class ASH_EXPORT TriView : public views::View {
 
   ~TriView() override;
 
+  // Set the minimum height for all containers to |height|.
+  void SetMinHeight(int height);
+
   // Set the minimum size for the given |container|.
   void SetMinSize(Container container, const gfx::Size& size);
+
+  // Get the minimum size for the given |container|.
+  gfx::Size GetMinSize(Container container);
 
   // Set the maximum size for the given |container|.
   void SetMaxSize(Container container, const gfx::Size& size);
@@ -118,6 +124,7 @@ class ASH_EXPORT TriView : public views::View {
   // View:
   void ViewHierarchyChanged(
       const views::View::ViewHierarchyChangedDetails& details) override;
+  const char* GetClassName() const override;
 
  private:
   friend class TriViewTest;

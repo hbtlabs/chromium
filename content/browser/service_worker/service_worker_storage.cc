@@ -81,6 +81,12 @@ ServiceWorkerStatusCode DatabaseStatusToStatusCode(
   }
 }
 
+void DidUpdateNavigationPreloadState(
+    const ServiceWorkerStorage::StatusCallback& callback,
+    ServiceWorkerDatabase::Status status) {
+  callback.Run(DatabaseStatusToStatusCode(status));
+}
+
 }  // namespace
 
 ServiceWorkerStorage::InitialData::InitialData()
@@ -410,6 +416,8 @@ void ServiceWorkerStorage::StoreRegistration(
   data.foreign_fetch_origins = version->foreign_fetch_origins();
   if (version->origin_trial_tokens())
     data.origin_trial_tokens = *version->origin_trial_tokens();
+  data.navigation_preload_state = registration->navigation_preload_state();
+  data.used_features = version->used_features();
 
   ResourceList resources;
   version->script_cache_map()->GetResources(&resources);
@@ -481,6 +489,44 @@ void ServiceWorkerStorage::UpdateLastUpdateCheckTime(
           registration->id(),
           registration->pattern().GetOrigin(),
           registration->last_update_check()));
+}
+
+void ServiceWorkerStorage::UpdateNavigationPreloadEnabled(
+    int64_t registration_id,
+    const GURL& origin,
+    bool enable,
+    const StatusCallback& callback) {
+  DCHECK(state_ == INITIALIZED || state_ == DISABLED) << state_;
+  if (IsDisabled()) {
+    callback.Run(SERVICE_WORKER_ERROR_ABORT);
+    return;
+  }
+
+  PostTaskAndReplyWithResult(
+      database_task_manager_->GetTaskRunner(), FROM_HERE,
+      base::Bind(&ServiceWorkerDatabase::UpdateNavigationPreloadEnabled,
+                 base::Unretained(database_.get()), registration_id, origin,
+                 enable),
+      base::Bind(&DidUpdateNavigationPreloadState, callback));
+}
+
+void ServiceWorkerStorage::UpdateNavigationPreloadHeader(
+    int64_t registration_id,
+    const GURL& origin,
+    const std::string& value,
+    const StatusCallback& callback) {
+  DCHECK(state_ == INITIALIZED || state_ == DISABLED) << state_;
+  if (IsDisabled()) {
+    callback.Run(SERVICE_WORKER_ERROR_ABORT);
+    return;
+  }
+
+  PostTaskAndReplyWithResult(
+      database_task_manager_->GetTaskRunner(), FROM_HERE,
+      base::Bind(&ServiceWorkerDatabase::UpdateNavigationPreloadHeader,
+                 base::Unretained(database_.get()), registration_id, origin,
+                 value),
+      base::Bind(&DidUpdateNavigationPreloadState, callback));
 }
 
 void ServiceWorkerStorage::DeleteRegistration(int64_t registration_id,
@@ -582,11 +628,14 @@ void ServiceWorkerStorage::StoreUserData(
     const GURL& origin,
     const std::vector<std::pair<std::string, std::string>>& key_value_pairs,
     const StatusCallback& callback) {
-  DCHECK(state_ == INITIALIZED || state_ == DISABLED) << state_;
-  if (IsDisabled()) {
-    RunSoon(FROM_HERE, base::Bind(callback, SERVICE_WORKER_ERROR_ABORT));
+  if (!LazyInitialize(base::Bind(&ServiceWorkerStorage::StoreUserData,
+                                 weak_factory_.GetWeakPtr(), registration_id,
+                                 origin, key_value_pairs, callback))) {
+    if (state_ != INITIALIZING)
+      RunSoon(FROM_HERE, base::Bind(callback, SERVICE_WORKER_ERROR_ABORT));
     return;
   }
+  DCHECK_EQ(INITIALIZED, state_);
 
   if (registration_id == kInvalidServiceWorkerRegistrationId ||
       key_value_pairs.empty()) {
@@ -612,12 +661,16 @@ void ServiceWorkerStorage::StoreUserData(
 void ServiceWorkerStorage::GetUserData(int64_t registration_id,
                                        const std::vector<std::string>& keys,
                                        const GetUserDataCallback& callback) {
-  DCHECK(state_ == INITIALIZED || state_ == DISABLED) << state_;
-  if (IsDisabled()) {
-    RunSoon(FROM_HERE, base::Bind(callback, std::vector<std::string>(),
-                                  SERVICE_WORKER_ERROR_ABORT));
+  if (!LazyInitialize(base::Bind(&ServiceWorkerStorage::GetUserData,
+                                 weak_factory_.GetWeakPtr(), registration_id,
+                                 keys, callback))) {
+    if (state_ != INITIALIZING) {
+      RunSoon(FROM_HERE, base::Bind(callback, std::vector<std::string>(),
+                                    SERVICE_WORKER_ERROR_ABORT));
+    }
     return;
   }
+  DCHECK_EQ(INITIALIZED, state_);
 
   if (registration_id == kInvalidServiceWorkerRegistrationId || keys.empty()) {
     RunSoon(FROM_HERE, base::Bind(callback, std::vector<std::string>(),
@@ -643,7 +696,15 @@ void ServiceWorkerStorage::GetUserData(int64_t registration_id,
 void ServiceWorkerStorage::ClearUserData(int64_t registration_id,
                                          const std::vector<std::string>& keys,
                                          const StatusCallback& callback) {
-  DCHECK(state_ == INITIALIZED || state_ == DISABLED) << state_;
+  if (!LazyInitialize(base::Bind(&ServiceWorkerStorage::ClearUserData,
+                                 weak_factory_.GetWeakPtr(), registration_id,
+                                 keys, callback))) {
+    if (state_ != INITIALIZING)
+      RunSoon(FROM_HERE, base::Bind(callback, SERVICE_WORKER_ERROR_ABORT));
+    return;
+  }
+  DCHECK_EQ(INITIALIZED, state_);
+
   if (IsDisabled()) {
     RunSoon(FROM_HERE, base::Bind(callback, SERVICE_WORKER_ERROR_ABORT));
     return;
@@ -1264,6 +1325,7 @@ ServiceWorkerStorage::GetOrCreateRegistration(
     version->set_foreign_fetch_origins(data.foreign_fetch_origins);
     if (data.origin_trial_tokens)
       version->SetValidOriginTrialTokens(*data.origin_trial_tokens);
+    version->set_used_features(data.used_features);
   }
 
   if (version->status() == ServiceWorkerVersion::ACTIVATED)
@@ -1273,6 +1335,9 @@ ServiceWorkerStorage::GetOrCreateRegistration(
   else
     NOTREACHED();
 
+  registration->EnableNavigationPreload(data.navigation_preload_state.enabled);
+  registration->SetNavigationPreloadHeader(
+      data.navigation_preload_state.header);
   return registration;
 }
 

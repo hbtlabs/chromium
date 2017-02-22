@@ -9,9 +9,12 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/time/time.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/user_input_tracker.h"
 #include "chrome/common/page_load_metrics/page_load_timing.h"
+#include "content/public/browser/global_request_id.h"
 #include "ui/base/page_transition_types.h"
 
 class GURL;
@@ -74,11 +77,11 @@ enum InternalErrorLoadEvent {
   // occur if the browser filters loads less aggressively than the renderer.
   ERR_NO_IPCS_RECEIVED,
 
-  // Tracks frequency with which we record an abort time that occurred before
+  // Tracks frequency with which we record an end time that occurred before
   // navigation start. This is expected to happen in some cases (see comments in
   // cc file for details). We use this error counter to understand how often it
   // happens.
-  ERR_ABORT_BEFORE_NAVIGATION_START,
+  ERR_END_BEFORE_NAVIGATION_START,
 
   // A new navigation triggers abort updates in multiple trackers in
   // |aborted_provisional_loads_|, when usually there should only be one (the
@@ -101,6 +104,9 @@ enum InternalErrorLoadEvent {
   // commit nor a failed provisional load.
   ERR_NO_COMMIT_OR_FAILED_PROVISIONAL_LOAD,
 
+  // No page load end time was recorded for this page load.
+  ERR_NO_PAGE_LOAD_END_TIME,
+
   // Add values before this final count.
   ERR_LAST_ENTRY,
 };
@@ -109,7 +115,7 @@ enum InternalErrorLoadEvent {
 // metrics_web_contents_observer.cc. They are declared here to allow both files
 // to access them.
 void RecordInternalError(InternalErrorLoadEvent event);
-UserAbortType AbortTypeForPageTransition(ui::PageTransition transition);
+PageEndReason EndReasonForPageTransition(ui::PageTransition transition);
 void LogAbortChainSameURLHistogram(int aborted_chain_size_same_url);
 bool IsNavigationUserInitiated(content::NavigationHandle* handle);
 
@@ -127,12 +133,16 @@ class PageLoadTracker {
                   PageLoadMetricsEmbedderInterface* embedder_interface,
                   const GURL& currently_committed_url,
                   content::NavigationHandle* navigation_handle,
+                  UserInitiatedInfo user_initiated_info,
                   int aborted_chain_size,
                   int aborted_chain_size_same_url);
   ~PageLoadTracker();
   void Redirect(content::NavigationHandle* navigation_handle);
+  void WillProcessNavigationResponse(
+      content::NavigationHandle* navigation_handle);
   void Commit(content::NavigationHandle* navigation_handle);
-  void FailedProvisionalLoad(content::NavigationHandle* navigation_handle);
+  void FailedProvisionalLoad(content::NavigationHandle* navigation_handle,
+                             base::TimeTicks failed_load_time);
   void WebContentsHidden();
   void WebContentsShown();
 
@@ -150,7 +160,7 @@ class PageLoadTracker {
   bool UpdateTiming(const PageLoadTiming& timing,
                     const PageLoadMetadata& metadata);
 
-  void OnLoadedSubresource(bool was_cached);
+  void OnLoadedResource(const ExtraRequestInfo& extra_request_info);
 
   // Signals that we should stop tracking metrics for the associated page load.
   // We may stop tracking a page load if it doesn't meet the criteria for
@@ -162,8 +172,8 @@ class PageLoadTracker {
     return aborted_chain_size_same_url_;
   }
 
-  UserAbortType abort_type() const { return abort_type_; }
-  base::TimeTicks abort_time() const { return abort_time_; }
+  PageEndReason page_end_reason() const { return page_end_reason_; }
+  base::TimeTicks page_end_time() const { return page_end_time_; }
 
   void AddObserver(std::unique_ptr<PageLoadMetricsObserver> observer);
 
@@ -174,35 +184,44 @@ class PageLoadTracker {
   // in the
   // browser process or not. We need this to possibly clamp browser timestamp on
   // a machine with inter process time tick skew.
-  void NotifyAbort(UserAbortType abort_type,
-                   bool user_initiated,
-                   base::TimeTicks timestamp,
-                   bool is_certainly_browser_timestamp);
-  void UpdateAbort(UserAbortType abort_type,
-                   bool user_initiated,
-                   base::TimeTicks timestamp,
-                   bool is_certainly_browser_timestamp);
+  void NotifyPageEnd(PageEndReason page_end_reason,
+                     UserInitiatedInfo user_initiated_info,
+                     base::TimeTicks timestamp,
+                     bool is_certainly_browser_timestamp);
+  void UpdatePageEnd(PageEndReason page_end_reason,
+                     UserInitiatedInfo user_initiated_info,
+                     base::TimeTicks timestamp,
+                     bool is_certainly_browser_timestamp);
 
   // This method returns true if this page load has been aborted with type of
-  // ABORT_OTHER, and the |abort_cause_time| is within a sufficiently close
+  // END_OTHER, and the |abort_cause_time| is within a sufficiently close
   // delta to when it was aborted. Note that only provisional loads can be
-  // aborted with ABORT_OTHER. While this heuristic is coarse, it works better
+  // aborted with END_OTHER. While this heuristic is coarse, it works better
   // and is simpler than other feasible methods. See https://goo.gl/WKRG98.
   bool IsLikelyProvisionalAbort(base::TimeTicks abort_cause_time) const;
 
   bool MatchesOriginalNavigation(content::NavigationHandle* navigation_handle);
 
-  // Only valid to call post-commit.
-  const GURL& committed_url() const {
-    DCHECK(!committed_url_.is_empty());
-    return committed_url_;
-  }
+  bool did_commit() const { return did_commit_; }
+  const GURL& url() const { return url_; }
 
   base::TimeTicks navigation_start() const { return navigation_start_; }
 
   PageLoadExtraInfo ComputePageLoadExtraInfo();
 
   ui::PageTransition page_transition() const { return page_transition_; }
+
+  UserInitiatedInfo user_initiated_info() const { return user_initiated_info_; }
+
+  UserInputTracker* input_tracker() { return &input_tracker_; }
+
+  // Whether this PageLoadTracker has a navigation GlobalRequestID that matches
+  // the given request_id. This method will return false before
+  // WillProcessNavigationResponse has been invoked, as PageLoadTracker doesn't
+  // know its GlobalRequestID until WillProcessNavigationResponse has been
+  // invoked.
+  bool HasMatchingNavigationRequestID(
+      const content::GlobalRequestID& request_id) const;
 
  private:
   // This function converts a TimeTicks value taken in the browser process
@@ -213,15 +232,19 @@ class PageLoadTracker {
   void ClampBrowserTimestampIfInterProcessTimeTickSkew(
       base::TimeTicks* event_time);
 
-  void UpdateAbortInternal(UserAbortType abort_type,
-                           bool user_initiated,
-                           base::TimeTicks timestamp,
-                           bool is_certainly_browser_timestamp);
+  void UpdatePageEndInternal(PageEndReason page_end_reason,
+                             UserInitiatedInfo user_initiated_info,
+                             base::TimeTicks timestamp,
+                             bool is_certainly_browser_timestamp);
 
   // If |final_navigation| is null, then this is an "unparented" abort chain,
   // and represents a sequence of provisional aborts that never ends with a
   // committed load.
   void LogAbortChainHistograms(content::NavigationHandle* final_navigation);
+
+  void MaybeUpdateURL(content::NavigationHandle* navigation_handle);
+
+  UserInputTracker input_tracker_;
 
   // Whether we stopped tracking this navigation after it was initiated. We may
   // stop tracking a navigation if it doesn't meet the criteria for tracking
@@ -235,29 +258,33 @@ class PageLoadTracker {
   // The navigation start in TimeTicks, not the wall time reported by Blink.
   const base::TimeTicks navigation_start_;
 
-  // The committed URL of this page load.
-  GURL committed_url_;
+  // The most recent URL of this page load. Updated at navigation start, upon
+  // redirection, and at commit time.
+  GURL url_;
 
   // The start URL for this page load (before redirects).
   GURL start_url_;
 
+  // Whether this page load committed.
+  bool did_commit_;
+
   std::unique_ptr<FailedProvisionalLoadInfo> failed_provisional_load_info_;
 
-  // Will be ABORT_NONE if we have not aborted this load yet. Otherwise will
-  // be the first abort action the user performed.
-  UserAbortType abort_type_;
+  // Will be END_NONE if we have not ended this load yet. Otherwise will
+  // be the first page end reason encountered.
+  PageEndReason page_end_reason_;
 
-  // Whether the abort for this page load was user initiated. For example, if
-  // this page load was aborted by a new navigation, this field tracks whether
-  // that new navigation was user-initiated. This field is only useful if this
-  // page load's abort type is a value other than ABORT_NONE. Note that this
-  // value is currently experimental, and is subject to change. In particular,
-  // this field is never set to true for some abort types, such as stop and
-  // close, since we don't yet have sufficient instrumentation to know if a stop
-  // or close was caused by a user action.
-  bool abort_user_initiated_;
+  // Whether the page end cause for this page load was user initiated. For
+  // example, if this page load was ended by a new navigation, this field tracks
+  // whether that new navigation was user-initiated. This field is only useful
+  // if this page load's end reason is a value other than END_NONE. Note that
+  // this value is currently experimental, and is subject to change. In
+  // particular, this field is never set to true for some page end reasons, such
+  // as stop and close, since we don't yet have sufficient instrumentation to
+  // know if a stop or close was caused by a user action.
+  UserInitiatedInfo page_end_user_initiated_info_;
 
-  base::TimeTicks abort_time_;
+  base::TimeTicks page_end_time_;
 
   // We record separate metrics for events that occur after a background,
   // because metrics like layout/paint are delayed artificially
@@ -271,15 +298,10 @@ class PageLoadTracker {
 
   ui::PageTransition page_transition_;
 
-  // Note: these are only approximations, based on WebContents attribution from
-  // ResourceRequestInfo objects while this is the currently committed load in
-  // the WebContents.
-  int num_cache_requests_;
-  int num_network_requests_;
+  base::Optional<content::GlobalRequestID> navigation_request_id_;
 
-  // This is derived from the user gesture bit in the renderer. For browser
-  // initiated navigations this will always be true.
-  bool user_initiated_;
+  // Whether this page load was user initiated.
+  UserInitiatedInfo user_initiated_info_;
 
   // This is a subtle member. If a provisional load A gets aborted by
   // provisional load B, which gets aborted by C that eventually commits, then

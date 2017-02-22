@@ -6,7 +6,6 @@
 
 #include <stdio.h>
 
-#include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/stop_source.h"
@@ -22,8 +21,9 @@ namespace {
 // The set of user-selectable datatypes. This must be in the same order as
 // |SyncSetupService::SyncableDatatype|.
 syncer::ModelType kDataTypes[] = {
-    syncer::BOOKMARKS,  syncer::TYPED_URLS, syncer::PASSWORDS,
-    syncer::PROXY_TABS, syncer::AUTOFILL,   syncer::PREFERENCES,
+    syncer::BOOKMARKS,    syncer::TYPED_URLS, syncer::PASSWORDS,
+    syncer::PROXY_TABS,   syncer::AUTOFILL,   syncer::PREFERENCES,
+    syncer::READING_LIST,
 };
 }  // namespace
 

@@ -20,7 +20,7 @@
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
-#include "ui/display/manager/display_layout.h"
+#include "ui/display/display_layout.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/test/display_manager_test_api.h"
 #include "ui/events/event_utils.h"
@@ -496,9 +496,6 @@ TEST_F(ImmersiveFullscreenControllerTest, Inactive) {
 // has a vertical display layout (primary display above/below secondary display)
 // and the immersive fullscreen window is on the bottom display.
 TEST_F(ImmersiveFullscreenControllerTest, MouseEventsVerticalDisplayLayout) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   // Set up initial state.
   UpdateDisplay("800x600,800x600");
   ash::Shell::GetInstance()->display_manager()->SetLayoutForCurrentDisplays(
@@ -662,16 +659,7 @@ TEST_F(ImmersiveFullscreenControllerTest, DifferentModalityEnterExit) {
 }
 
 // Test when the SWIPE_CLOSE edge gesture closes the top-of-window views.
-#if !defined(OS_CHROMEOS)
-// On Windows/Linux, touch events do not result in mouse events being disabled.
-// As a result, the last part of this test which ends the reveal via a gesture
-// will not work correctly.  See crbug.com/332430, and the function
-// ShouldHideCursorOnTouch() in compound_event_filter.cc.
-#define MAYBE_EndRevealViaGesture DISABLED_EndRevealViaGesture
-#else
-#define MAYBE_EndRevealViaGesture EndRevealViaGesture
-#endif
-TEST_F(ImmersiveFullscreenControllerTest, MAYBE_EndRevealViaGesture) {
+TEST_F(ImmersiveFullscreenControllerTest, EndRevealViaGesture) {
   SetEnabled(true);
   EXPECT_TRUE(controller()->IsEnabled());
   EXPECT_FALSE(controller()->IsRevealed());
@@ -776,10 +764,6 @@ TEST_F(ImmersiveFullscreenControllerTest, WindowStateImmersiveFullscreen) {
   ASSERT_FALSE(controller()->IsEnabled());
   EXPECT_FALSE(window_state->in_immersive_fullscreen());
 }
-
-// Do not test under windows because focus testing is not reliable on
-// Windows. (crbug.com/79493)
-#if !defined(OS_WIN)
 
 // Test how focus and activation affects whether the top-of-window views are
 // revealed.
@@ -1015,8 +999,6 @@ TEST_F(ImmersiveFullscreenControllerTest, Bubbles) {
   EXPECT_FALSE(controller()->IsRevealed());
   bubble_widget8->Close();
 }
-
-#endif  // defined(OS_WIN)
 
 // Test that the shelf is set to auto hide as long as the window is in
 // immersive fullscreen and that the shelf's state before entering immersive

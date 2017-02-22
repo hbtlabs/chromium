@@ -6,19 +6,20 @@
 #define WebFrameWidgetBase_h
 
 #include "core/clipboard/DataObject.h"
+#include "platform/UserGestureIndicator.h"
 #include "public/platform/WebDragData.h"
 #include "public/web/WebFrameWidget.h"
 #include "wtf/Assertions.h"
 
 namespace blink {
 
-class CompositorAnimationTimeline;
-class CompositorProxyClient;
-class DragController;
+class AnimationWorkletProxyClient;
+class CompositorAnimationHost;
+class CompositorWorkerProxyClient;
 class GraphicsLayer;
 class WebImage;
 class WebLayer;
-class WebLocalFrameImpl;
+class WebLayerTreeView;
 class WebViewImpl;
 class HitTestResult;
 struct WebPoint;
@@ -27,7 +28,8 @@ class WebFrameWidgetBase : public WebFrameWidget {
  public:
   virtual bool forSubframe() const = 0;
   virtual void scheduleAnimation() = 0;
-  virtual CompositorProxyClient* createCompositorProxyClient() = 0;
+  virtual CompositorWorkerProxyClient* createCompositorWorkerProxyClient() = 0;
+  virtual AnimationWorkletProxyClient* createAnimationWorkletProxyClient() = 0;
   virtual WebWidgetClient* client() const = 0;
 
   // Sets the root graphics layer. |GraphicsLayer| can be null when detaching
@@ -37,11 +39,8 @@ class WebFrameWidgetBase : public WebFrameWidget {
   // Sets the root layer. |WebLayer| can be null when detaching the root layer.
   virtual void setRootLayer(WebLayer*) = 0;
 
-  // Attaches/detaches a CompositorAnimationTimeline to the layer tree.
-  virtual void attachCompositorAnimationTimeline(
-      CompositorAnimationTimeline*) = 0;
-  virtual void detachCompositorAnimationTimeline(
-      CompositorAnimationTimeline*) = 0;
+  virtual WebLayerTreeView* getLayerTreeView() const = 0;
+  virtual CompositorAnimationHost* animationHost() const = 0;
 
   virtual HitTestResult coreHitTestResultAt(const WebPoint&) = 0;
 
@@ -55,7 +54,8 @@ class WebFrameWidgetBase : public WebFrameWidget {
                                       const WebPoint& screenPoint,
                                       WebDragOperationsMask operationsAllowed,
                                       int modifiers) override;
-  void dragTargetDragLeave() override;
+  void dragTargetDragLeave(const WebPoint& pointInViewport,
+                           const WebPoint& screenPoint) override;
   void dragTargetDrop(const WebDragData&,
                       const WebPoint& pointInViewport,
                       const WebPoint& screenPoint,
@@ -73,6 +73,13 @@ class WebFrameWidgetBase : public WebFrameWidget {
                      const WebPoint& dragImageOffset);
 
   bool doingDragAndDrop() { return m_doingDragAndDrop; }
+  static void setIgnoreInputEvents(bool value) { s_ignoreInputEvents = value; }
+  static bool ignoreInputEvents() { return s_ignoreInputEvents; }
+
+  // WebWidget methods.
+  void didAcquirePointerLock() override;
+  void didNotAcquirePointerLock() override;
+  void didLosePointerLock() override;
 
  protected:
   enum DragAction { DragEnter, DragOver };
@@ -106,6 +113,17 @@ class WebFrameWidgetBase : public WebFrameWidget {
   // When not equal to DragOperationNone, the drag data can be dropped onto the
   // current drop target in this WebView (the drop target can accept the drop).
   WebDragOperation m_dragOperation = WebDragOperationNone;
+
+  // Helper function to process events while pointer locked.
+  void pointerLockMouseEvent(const WebInputEvent&);
+
+ private:
+  void cancelDrag();
+
+  static bool s_ignoreInputEvents;
+  RefPtr<UserGestureToken> m_pointerLockGestureToken;
+
+  friend class WebViewImpl;
 };
 
 DEFINE_TYPE_CASTS(WebFrameWidgetBase, WebFrameWidget, widget, true, true);

@@ -7,22 +7,22 @@
 
 #include "chrome/common/resource_usage_reporter.mojom.h"
 #include "mojo/public/cpp/bindings/type_converter.h"
-#include "third_party/WebKit/public/web/WebCache.h"
+#include "third_party/WebKit/public/platform/WebCache.h"
 
 namespace mojo {
 
 template <>
-struct TypeConverter<mojom::ResourceTypeStatsPtr,
+struct TypeConverter<chrome::mojom::ResourceTypeStatsPtr,
                      blink::WebCache::ResourceTypeStats> {
-  static mojom::ResourceTypeStatsPtr Convert(
+  static chrome::mojom::ResourceTypeStatsPtr Convert(
       const blink::WebCache::ResourceTypeStats& obj);
 };
 
 template <>
 struct TypeConverter<blink::WebCache::ResourceTypeStats,
-                     mojom::ResourceTypeStats> {
+                     chrome::mojom::ResourceTypeStats> {
   static blink::WebCache::ResourceTypeStats Convert(
-      const mojom::ResourceTypeStats& obj);
+      const chrome::mojom::ResourceTypeStats& obj);
 };
 
 }  // namespace mojo

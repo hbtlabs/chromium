@@ -12,10 +12,10 @@
 #include "ash/common/shelf/wm_shelf_util.h"
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/wm_lookup.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/root_window_controller.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -57,7 +57,7 @@ StatusAreaWidgetDelegate::StatusAreaWidgetDelegate()
   // Allow the launcher to surrender the focus to another window upon
   // navigation completion by the user.
   set_allow_deactivate_on_esc(true);
-  SetPaintToLayer(true);
+  SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 }
 
@@ -69,25 +69,7 @@ void StatusAreaWidgetDelegate::SetFocusCyclerForTesting(
 }
 
 views::View* StatusAreaWidgetDelegate::GetDefaultFocusableChild() {
-  return default_last_focusable_child_ ? GetLastFocusableChild()
-                                       : GetFirstFocusableChild();
-}
-
-views::FocusSearch* StatusAreaWidgetDelegate::GetFocusSearch() {
-  return custom_focus_traversable_ ? custom_focus_traversable_->GetFocusSearch()
-                                   : AccessiblePaneView::GetFocusSearch();
-}
-
-views::FocusTraversable* StatusAreaWidgetDelegate::GetFocusTraversableParent() {
-  return custom_focus_traversable_
-             ? custom_focus_traversable_->GetFocusTraversableParent()
-             : AccessiblePaneView::GetFocusTraversableParent();
-}
-
-views::View* StatusAreaWidgetDelegate::GetFocusTraversableParentView() {
-  return custom_focus_traversable_
-             ? custom_focus_traversable_->GetFocusTraversableParentView()
-             : AccessiblePaneView::GetFocusTraversableParentView();
+  return child_at(0);
 }
 
 views::Widget* StatusAreaWidgetDelegate::GetWidget() {
@@ -146,14 +128,10 @@ void StatusAreaWidgetDelegate::UpdateLayout() {
   views::ColumnSet* columns = layout->AddColumnSet(0);
 
   if (IsHorizontalAlignment(alignment_)) {
-    bool is_first_visible_child = true;
     for (int c = child_count() - 1; c >= 0; --c) {
       views::View* child = child_at(c);
       if (!child->visible())
         continue;
-      if (!is_first_visible_child)
-        columns->AddPaddingColumn(0, GetTrayConstant(TRAY_SPACING));
-      is_first_visible_child = false;
       columns->AddColumn(views::GridLayout::CENTER, views::GridLayout::FILL,
                          0, /* resize percent */
                          views::GridLayout::USE_PREF, 0, 0);
@@ -168,14 +146,10 @@ void StatusAreaWidgetDelegate::UpdateLayout() {
     columns->AddColumn(views::GridLayout::FILL, views::GridLayout::CENTER,
                        0, /* resize percent */
                        views::GridLayout::USE_PREF, 0, 0);
-    bool is_first_visible_child = true;
     for (int c = child_count() - 1; c >= 0; --c) {
       views::View* child = child_at(c);
       if (!child->visible())
         continue;
-      if (!is_first_visible_child)
-        layout->AddPaddingRow(0, GetTrayConstant(TRAY_SPACING));
-      is_first_visible_child = false;
       layout->StartRow(0, 0);
       layout->AddView(child);
     }

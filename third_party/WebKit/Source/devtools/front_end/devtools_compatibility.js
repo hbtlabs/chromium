@@ -176,9 +176,18 @@
 
     /**
      * @param {!Array<string>} changedPaths
+     * @param {!Array<string>} addedPaths
+     * @param {!Array<string>} removedPaths
      */
-    fileSystemFilesChanged(changedPaths) {
-      this._dispatchOnInspectorFrontendAPI('fileSystemFilesChanged', [changedPaths]);
+    fileSystemFilesChangedAddedRemoved(changedPaths, addedPaths, removedPaths) {
+      // Support for legacy front-ends (<M58)
+      if (window['InspectorFrontendAPI'] && window['InspectorFrontendAPI']['fileSystemFilesChanged']) {
+        this._dispatchOnInspectorFrontendAPI(
+            'fileSystemFilesChanged', [changedPaths.concat(addedPaths).concat(removedPaths)]);
+      } else {
+        this._dispatchOnInspectorFrontendAPI(
+            'fileSystemFilesChangedAddedRemoved', [changedPaths, addedPaths, removedPaths]);
+      }
     }
 
     /**
@@ -337,6 +346,12 @@
      */
     loadCompleted() {
       DevToolsAPI.sendMessageToEmbedder('loadCompleted', [], null);
+      // Support for legacy (<57) frontends.
+      if (window.Runtime && window.Runtime.queryParam) {
+        var panelToOpen = window.Runtime.queryParam('panel');
+        if (panelToOpen)
+          window.DevToolsAPI.showPanel(panelToOpen);
+      }
     }
 
     /**
@@ -601,6 +616,7 @@
     }
 
     /**
+     * @override
      * @param {!Array<string>} certChain
      */
     showCertificateViewer(certChain) {
@@ -666,6 +682,13 @@
      */
     openRemotePage(browserId, url) {
       DevToolsAPI.sendMessageToEmbedder('openRemotePage', [browserId, url], null);
+    }
+
+    /**
+     * @override
+     */
+    openNodeFrontend() {
+      DevToolsAPI.sendMessageToEmbedder('openNodeFrontend', [], null);
     }
 
     /**

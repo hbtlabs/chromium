@@ -15,6 +15,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner_util.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/version.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -62,6 +63,8 @@
 #include "chrome/browser/supervised_user/legacy/supervised_user_pref_mapping_service_factory.h"
 #include "chrome/browser/supervised_user/legacy/supervised_user_registration_utility.h"
 #include "chrome/browser/supervised_user/legacy/supervised_user_shared_settings_service_factory.h"
+#include "chrome/browser/themes/theme_service.h"
+#include "chrome/browser/themes/theme_service_factory.h"
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -76,11 +79,6 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
-#endif
-
-#if defined(ENABLE_THEMES)
-#include "chrome/browser/themes/theme_service.h"
-#include "chrome/browser/themes/theme_service_factory.h"
 #endif
 
 using base::DictionaryValue;
@@ -588,7 +586,7 @@ void SupervisedUserService::SetActive(bool active) {
 
   // Now activate/deactivate anything not handled by the delegate yet.
 
-#if defined(ENABLE_THEMES)
+#if !defined(OS_ANDROID)
   // Re-set the default theme to turn the SU theme on/off.
   ThemeService* theme_service = ThemeServiceFactory::GetForProfile(profile_);
   if (theme_service->UsingDefaultTheme() || theme_service->UsingSystemTheme())
@@ -723,14 +721,14 @@ void SupervisedUserService::StartSetupSync() {
 }
 
 void SupervisedUserService::FinishSetupSyncWhenReady() {
-  // If we're already waiting for the Sync backend, there's nothing to do here.
+  // If we're already waiting for the sync engine, there's nothing to do here.
   if (waiting_for_sync_initialization_)
     return;
 
-  // Continue in FinishSetupSync() once the Sync backend has been initialized.
+  // Continue in FinishSetupSync() once the sync engine has been initialized.
   browser_sync::ProfileSyncService* service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
-  if (service->IsBackendInitialized()) {
+  if (service->IsEngineInitialized()) {
     FinishSetupSync();
   } else {
     service->AddObserver(this);
@@ -741,7 +739,7 @@ void SupervisedUserService::FinishSetupSyncWhenReady() {
 void SupervisedUserService::FinishSetupSync() {
   browser_sync::ProfileSyncService* service =
       ProfileSyncServiceFactory::GetForProfile(profile_);
-  DCHECK(service->IsBackendInitialized());
+  DCHECK(service->IsEngineInitialized());
 
   // Sync nothing (except types which are set via GetPreferredDataTypes).
   bool sync_everything = false;
@@ -1260,17 +1258,15 @@ syncer::ModelTypeSet SupervisedUserService::GetPreferredDataTypes() const {
 }
 
 #if !defined(OS_ANDROID)
-void SupervisedUserService::OnStateChanged() {
-  browser_sync::ProfileSyncService* service =
-      ProfileSyncServiceFactory::GetForProfile(profile_);
-  if (waiting_for_sync_initialization_ && service->IsBackendInitialized()) {
+void SupervisedUserService::OnStateChanged(syncer::SyncService* sync) {
+  if (waiting_for_sync_initialization_ && sync->IsEngineInitialized()) {
     waiting_for_sync_initialization_ = false;
-    service->RemoveObserver(this);
+    sync->RemoveObserver(this);
     FinishSetupSync();
     return;
   }
 
-  DLOG_IF(ERROR, service->GetAuthError().state() ==
+  DLOG_IF(ERROR, sync->GetAuthError().state() ==
                      GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS)
       << "Credentials rejected";
 }

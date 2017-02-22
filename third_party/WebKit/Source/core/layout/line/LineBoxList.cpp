@@ -40,7 +40,7 @@
 
 namespace blink {
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 LineBoxList::~LineBoxList() {
   ASSERT(!m_firstLineBox);
   ASSERT(!m_lastLineBox);
@@ -293,11 +293,13 @@ void LineBoxList::dirtyLinesFromChangedChild(LineLayoutItem container,
   RootInlineBox* box = nullptr;
   LineLayoutItem curr = child.previousSibling();
   if (child.isFloating() && !curr) {
-    LineLayoutItem parent = child.parent();
-    while (parent && parent.isLayoutInline() && !parent.previousSibling())
-      parent = parent.parent();
-    if (parent)
-      curr = parent.previousSibling();
+    LineLayoutInline outerInline;
+    for (LineLayoutItem parent = child.parent();
+         parent && parent.isLayoutInline() && !parent.previousSibling();
+         parent = parent.parent())
+      outerInline = LineLayoutInline(parent);
+    if (outerInline)
+      curr = outerInline.previousSibling();
   }
 
   for (; curr; curr = curr.previousSibling()) {
@@ -364,7 +366,7 @@ void LineBoxList::dirtyLinesFromChangedChild(LineLayoutItem container,
   }
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 void LineBoxList::checkConsistency() const {
 #ifdef CHECK_CONSISTENCY
   const InlineFlowBox* prev = nullptr;

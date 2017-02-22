@@ -7,6 +7,7 @@
 #include "base/at_exit.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/process/launch.h"
 #include "base/run_loop.h"
@@ -56,27 +57,15 @@ MojoResult ServiceRunner::Run(MojoHandle service_request_handle,
         mojo::MakeRequest<mojom::Service>(mojo::MakeScopedHandle(
             mojo::MessagePipeHandle(service_request_handle)))));
     base::RunLoop run_loop;
-    context_->SetConnectionLostClosure(run_loop.QuitClosure());
+    context_->SetQuitClosure(run_loop.QuitClosure());
     run_loop.Run();
-    // It's very common for the service to cache the app and terminate on
-    // errors. If we don't delete the service before the app we run the risk of
-    // the service having a stale reference to the app and trying to use it.
-    // Note that we destruct the message loop first because that might trigger
-    // connection error handlers and they might access objects created by the
-    // service.
-    loop.reset();
     context_.reset();
   }
   return MOJO_RESULT_OK;
 }
 
 MojoResult ServiceRunner::Run(MojoHandle service_request_handle) {
-  bool init_base = true;
-  if (base::CommandLine::InitializedForCurrentProcess()) {
-    init_base =
-        !base::CommandLine::ForCurrentProcess()->HasSwitch("single-process");
-  }
-  return Run(service_request_handle, init_base);
+  return Run(service_request_handle, false);
 }
 
 void ServiceRunner::Quit() {

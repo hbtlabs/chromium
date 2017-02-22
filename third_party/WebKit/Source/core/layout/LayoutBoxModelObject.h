@@ -47,11 +47,15 @@ enum PaintLayerType {
   ForcedPaintLayer
 };
 
+enum : uint32_t {
+  BackgroundPaintInGraphicsLayer = 1 << 0,
+  BackgroundPaintInScrollingContents = 1 << 1
+};
+using BackgroundPaintLocation = uint32_t;
+
 // Modes for some of the line-related functions.
 enum LinePositionMode { PositionOnContainingLine, PositionOfInteriorLineBoxes };
 enum LineDirectionMode { HorizontalLine, VerticalLine };
-
-class InlineFlowBox;
 
 struct LayoutBoxModelObjectRareData {
   WTF_MAKE_NONCOPYABLE(LayoutBoxModelObjectRareData);
@@ -191,9 +195,9 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
   bool hasNonEmptyLayoutSize() const;
   bool usesCompositedScrolling() const;
 
-  // Checks if all of the background's layers can be painted as locally
-  // attached.
-  bool hasLocalEquivalentBackground() const;
+  // Returns which layers backgrounds should be painted into for overflow
+  // scrolling boxes.
+  BackgroundPaintLocation backgroundPaintLocation(uint32_t* reasons) const;
 
   // These return the CSS computed padding values.
   LayoutUnit computedCSSPaddingTop() const {
@@ -246,19 +250,39 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
   LayoutUnit paddingOver() const { return computedCSSPaddingOver(); }
   LayoutUnit paddingUnder() const { return computedCSSPaddingUnder(); }
 
-  virtual int borderTop() const { return style()->borderTopWidth(); }
-  virtual int borderBottom() const { return style()->borderBottomWidth(); }
-  virtual int borderLeft() const { return style()->borderLeftWidth(); }
-  virtual int borderRight() const { return style()->borderRightWidth(); }
-  virtual int borderBefore() const { return style()->borderBeforeWidth(); }
-  virtual int borderAfter() const { return style()->borderAfterWidth(); }
-  virtual int borderStart() const { return style()->borderStartWidth(); }
-  virtual int borderEnd() const { return style()->borderEndWidth(); }
-  int borderOver() const { return style()->borderOverWidth(); }
-  int borderUnder() const { return style()->borderUnderWidth(); }
+  virtual LayoutUnit borderTop() const {
+    return LayoutUnit(style()->borderTopWidth());
+  }
+  virtual LayoutUnit borderBottom() const {
+    return LayoutUnit(style()->borderBottomWidth());
+  }
+  virtual LayoutUnit borderLeft() const {
+    return LayoutUnit(style()->borderLeftWidth());
+  }
+  virtual LayoutUnit borderRight() const {
+    return LayoutUnit(style()->borderRightWidth());
+  }
+  virtual LayoutUnit borderBefore() const {
+    return LayoutUnit(style()->borderBeforeWidth());
+  }
+  virtual LayoutUnit borderAfter() const {
+    return LayoutUnit(style()->borderAfterWidth());
+  }
+  virtual LayoutUnit borderStart() const {
+    return LayoutUnit(style()->borderStartWidth());
+  }
+  virtual LayoutUnit borderEnd() const {
+    return LayoutUnit(style()->borderEndWidth());
+  }
+  LayoutUnit borderOver() const {
+    return LayoutUnit(style()->borderOverWidth());
+  }
+  LayoutUnit borderUnder() const {
+    return LayoutUnit(style()->borderUnderWidth());
+  }
 
-  int borderWidth() const { return borderLeft() + borderRight(); }
-  int borderHeight() const { return borderTop() + borderBottom(); }
+  LayoutUnit borderWidth() const { return borderLeft() + borderRight(); }
+  LayoutUnit borderHeight() const { return borderTop() + borderBottom(); }
 
   // Insets from the border box to the inside of the border.
   LayoutRectOutsets borderInsets() const {
@@ -406,13 +430,15 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
   bool backgroundStolenForBeingBody(
       const ComputedStyle* rootElementStyle = nullptr) const;
 
-  void absoluteQuads(Vector<FloatQuad>& quads) const override;
+  void absoluteQuads(Vector<FloatQuad>& quads,
+                     MapCoordinatesFlags mode = 0) const override;
 
  protected:
   // Compute absolute quads for |this|, but not any continuations. May only be
   // called for objects which can be or have continuations, i.e. LayoutInline or
   // LayoutBlockFlow.
-  virtual void absoluteQuadsForSelf(Vector<FloatQuad>& quads) const;
+  virtual void absoluteQuadsForSelf(Vector<FloatQuad>& quads,
+                                    MapCoordinatesFlags mode = 0) const;
 
   void willBeDestroyed() override;
 
@@ -511,7 +537,7 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
 
   LayoutBoxModelObjectRareData& ensureRareData() {
     if (!m_rareData)
-      m_rareData = makeUnique<LayoutBoxModelObjectRareData>();
+      m_rareData = WTF::makeUnique<LayoutBoxModelObjectRareData>();
     return *m_rareData.get();
   }
 

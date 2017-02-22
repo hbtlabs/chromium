@@ -34,6 +34,7 @@
 #include "base/memory/discardable_memory_allocator.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/statistics_recorder.h"
+#include "base/run_loop.h"
 #include "base/test/icu_test_util.h"
 #include "base/test/test_discardable_memory_allocator.h"
 #include "cc/blink/web_compositor_support_impl.h"
@@ -41,6 +42,7 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "platform/HTTPNames.h"
 #include "platform/heap/Heap.h"
+#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/network/mime/MockMimeRegistry.h"
 #include "platform/scheduler/base/real_time_domain.h"
 #include "platform/scheduler/base/task_queue_manager.h"
@@ -71,7 +73,7 @@ class TestingPlatformSupport::TestingInterfaceProvider
                     mojo::ScopedMessagePipeHandle handle) override {
     if (std::string(name) == mojom::blink::MimeRegistry::Name_) {
       mojo::MakeStrongBinding(
-          makeUnique<MockMimeRegistry>(),
+          WTF::makeUnique<MockMimeRegistry>(),
           mojo::MakeRequest<mojom::blink::MimeRegistry>(std::move(handle)));
       return;
     }
@@ -138,12 +140,11 @@ TestingPlatformSupport::TestingPlatformSupport(const Config& config)
     : m_config(config),
       m_oldPlatform(Platform::current()),
       m_interfaceProvider(new TestingInterfaceProvider) {
-  ASSERT(m_oldPlatform);
-  Platform::setCurrentPlatformForTesting(this);
+  DCHECK(m_oldPlatform);
 }
 
 TestingPlatformSupport::~TestingPlatformSupport() {
-  Platform::setCurrentPlatformForTesting(m_oldPlatform);
+  DCHECK_EQ(this, Platform::current());
 }
 
 WebString TestingPlatformSupport::defaultLocale() {
@@ -195,6 +196,10 @@ WebURLError TestingPlatformSupport::cancelledError(const WebURL& url) const {
 
 InterfaceProvider* TestingPlatformSupport::interfaceProvider() {
   return m_interfaceProvider.get();
+}
+
+void TestingPlatformSupport::runUntilIdle() {
+  base::RunLoop().RunUntilIdle();
 }
 
 // TestingPlatformSupportWithMockScheduler definition:
@@ -315,28 +320,30 @@ ScopedUnittestsEnvironmentSetup::ScopedUnittestsEnvironmentSetup(int argc,
   base::test::InitializeICUForTesting();
 
   m_discardableMemoryAllocator =
-      wrapUnique(new base::TestDiscardableMemoryAllocator);
+      WTF::wrapUnique(new base::TestDiscardableMemoryAllocator);
   base::DiscardableMemoryAllocator::SetInstance(
       m_discardableMemoryAllocator.get());
   base::StatisticsRecorder::Initialize();
 
-  m_platform = wrapUnique(new DummyPlatform);
-  Platform::setCurrentPlatformForTesting(m_platform.get());
+  m_dummyPlatform = WTF::wrapUnique(new DummyPlatform);
+  Platform::setCurrentPlatformForTesting(m_dummyPlatform.get());
 
   WTF::Partitions::initialize(nullptr);
   WTF::setTimeFunctionsForTesting(dummyCurrentTime);
   WTF::initialize(nullptr);
 
-  m_compositorSupport = wrapUnique(new cc_blink::WebCompositorSupportImpl);
+  m_compositorSupport = WTF::wrapUnique(new cc_blink::WebCompositorSupportImpl);
   m_testingPlatformConfig.compositorSupport = m_compositorSupport.get();
   m_testingPlatformSupport =
-      makeUnique<TestingPlatformSupport>(m_testingPlatformConfig);
+      WTF::wrapUnique(new TestingPlatformSupport(m_testingPlatformConfig));
+  Platform::setCurrentPlatformForTesting(m_testingPlatformSupport.get());
 
   ProcessHeap::init();
   ThreadState::attachMainThread();
   ThreadState::current()->registerTraceDOMWrappers(nullptr, nullptr, nullptr,
                                                    nullptr);
   HTTPNames::init();
+  FetchInitiatorTypeNames::init();
 }
 
 ScopedUnittestsEnvironmentSetup::~ScopedUnittestsEnvironmentSetup() {}

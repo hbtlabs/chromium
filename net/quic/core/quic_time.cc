@@ -8,14 +8,13 @@
 #include <cstdlib>
 #include <limits>
 
-#include "base/logging.h"
-#include "base/strings/stringprintf.h"
+#include "net/quic/platform/api/quic_str_cat.h"
 
-using base::StringPrintf;
+using std::string;
 
 namespace net {
 
-std::string QuicTime::Delta::ToDebugValue() const {
+string QuicTime::Delta::ToDebugValue() const {
   const int64_t one_ms = 1000;
   const int64_t one_s = 1000 * one_ms;
 
@@ -24,12 +23,12 @@ std::string QuicTime::Delta::ToDebugValue() const {
   // For debugging purposes, always display the value with the highest precision
   // available.
   if (absolute_value > one_s && absolute_value % one_s == 0) {
-    return StringPrintf("%" PRId64 "s", time_offset_ / one_s);
+    return QuicStringPrintf("%" PRId64 "s", time_offset_ / one_s);
   }
   if (absolute_value > one_ms && absolute_value % one_ms == 0) {
-    return StringPrintf("%" PRId64 "ms", time_offset_ / one_ms);
+    return QuicStringPrintf("%" PRId64 "ms", time_offset_ / one_ms);
   }
-  return StringPrintf("%" PRId64 "us", time_offset_);
+  return QuicStringPrintf("%" PRId64 "us", time_offset_);
 }
 
 uint64_t QuicWallTime::ToUNIXSeconds() const {

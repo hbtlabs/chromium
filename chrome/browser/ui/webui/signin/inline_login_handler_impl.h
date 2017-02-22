@@ -117,11 +117,9 @@ class InlineLoginHandlerImpl : public InlineLoginHandler,
                                   Profile* profile,
                                   Profile::CreateStatus status);
 
-  // Overridden from content::WebContentsObserver overrides.
-  void DidCommitProvisionalLoadForFrame(
-      content::RenderFrameHost* render_frame_host,
-      const GURL& url,
-      ui::PageTransition transition_type) override;
+  // content::WebContentsObserver implementation:
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
 
   // True if the user has navigated to untrusted domains during the signin
   // process.
@@ -189,6 +187,7 @@ class InlineSigninHelper : public GaiaAuthConsumer {
       const GURL& current_url,
       const GURL& continue_url,
       const std::string& refresh_token,
+      OneClickSigninSyncStarter::ProfileMode profile_mode,
       OneClickSigninSyncStarter::StartSyncMode start_mode,
       OneClickSigninSyncStarter::ConfirmationRequired confirmation_required);
 

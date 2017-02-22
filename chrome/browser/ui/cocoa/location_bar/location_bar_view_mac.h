@@ -12,7 +12,6 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/cocoa/omnibox/omnibox_view_mac.h"
@@ -71,7 +70,6 @@ class LocationBarViewMac : public LocationBar,
   void UpdateLocationBarVisibility(bool visible, bool animate) override;
   bool ShowPageActionPopup(const extensions::Extension* extension,
                            bool grant_active_tab) override;
-  void UpdateOpenPDFInReaderPrompt() override;
   void SaveStateToContents(content::WebContents* contents) override;
   void Revert() override;
   const OmniboxView* GetOmniboxView() const override;
@@ -85,6 +83,7 @@ class LocationBarViewMac : public LocationBar,
   ExtensionAction* GetVisiblePageAction(size_t index) override;
   void TestPageActionPressed(size_t index) override;
   bool GetBookmarkStarVisibility() override;
+  bool TestContentSettingImagePressed(size_t index) override;
 
   // Set/Get the editable state of the field.
   void SetEditable(bool editable);
@@ -106,21 +105,13 @@ class LocationBarViewMac : public LocationBar,
   // Checks if the bookmark star should be enabled or not.
   bool IsStarEnabled() const;
 
-  // Get the point in window coordinates on the star for the bookmark bubble to
-  // aim at. Only works if IsStarEnabled returns YES.
-  NSPoint GetBookmarkBubblePoint() const;
+  // Get the point in window coordinates in the |decoration| at which the
+  // associate bubble aims.
+  NSPoint GetBubblePointForDecoration(LocationBarDecoration* decoration) const;
 
   // Get the point in window coordinates in the save credit card icon for the
   //  save credit card bubble to aim at.
   NSPoint GetSaveCreditCardBubblePoint() const;
-
-  // Get the point in window coordinates on the star for the Translate bubble to
-  // aim at.
-  NSPoint GetTranslateBubblePoint() const;
-
-  // Get the point in window coordinates in the lock icon for the Manage
-  // Passwords bubble to aim at.
-  NSPoint GetManagePasswordsBubblePoint() const;
 
   // Get the point in window coordinates in the security icon at which the page
   // info bubble aims.
@@ -135,14 +126,6 @@ class LocationBarViewMac : public LocationBar,
 
   // Re-draws |decoration| if it's already being displayed.
   void RedrawDecoration(LocationBarDecoration* decoration);
-
-  // Sets preview_enabled_ for the PageActionImageView associated with this
-  // |page_action|. If |preview_enabled|, the location bar will display the
-  // PageAction icon even if it has not been activated by the extension.
-  // This is used by the ExtensionInstalledBubble to preview what the icon
-  // will look like for the user upon installation of the extension.
-  void SetPreviewEnabledPageAction(ExtensionAction* page_action,
-                                   bool preview_enabled);
 
   // Retrieve the frame for the given |page_action|.
   NSRect GetPageActionFrame(ExtensionAction* page_action);
@@ -185,6 +168,14 @@ class LocationBarViewMac : public LocationBar,
 
   bool ShouldShowEVBubble() const;
 
+  // Returns true if the URL is an extension URL and the extension bubble should
+  // be shown.
+  bool ShouldShowExtensionBubble() const;
+
+  // Returns true if the the URL is a chrome:// URL and the Chrome bubble should
+  // be shown.
+  bool ShouldShowChromeBubble() const;
+
   // Returns true if the security state decoration should be displayed. The
   // security state should only be shown for valid and invalid HTTPS states.
   bool ShouldShowSecurityState() const;
@@ -199,8 +190,17 @@ class LocationBarViewMac : public LocationBar,
   // Returns true if the location bar is dark.
   bool IsLocationBarDark() const;
 
+  // Returns the decoration for the page info bubble.
+  LocationBarDecoration* GetPageInfoDecoration() const;
+
   ManagePasswordsDecoration* manage_passwords_decoration() {
     return manage_passwords_decoration_.get();
+  }
+
+  StarDecoration* star_decoration() const { return star_decoration_.get(); }
+
+  TranslateDecoration* translate_decoration() const {
+    return translate_decoration_.get();
   }
 
   Browser* browser() const { return browser_; }
@@ -298,10 +298,11 @@ class LocationBarViewMac : public LocationBar,
   std::unique_ptr<ZoomDecoration> zoom_decoration_;
 
   // Decorations for the installed Page Actions.
-  ScopedVector<PageActionDecoration> page_action_decorations_;
+  std::vector<std::unique_ptr<PageActionDecoration>> page_action_decorations_;
 
   // The content blocked decorations.
-  ScopedVector<ContentSettingDecoration> content_setting_decorations_;
+  std::vector<std::unique_ptr<ContentSettingDecoration>>
+      content_setting_decorations_;
 
   // Keyword hint decoration displayed on the right-hand side.
   std::unique_ptr<KeywordHintDecoration> keyword_hint_decoration_;
@@ -316,22 +317,6 @@ class LocationBarViewMac : public LocationBar,
 
   // Indicates whether or not the location bar is currently visible.
   bool location_bar_visible_;
-
-  // True if the HTTPS state should be displayed on the security state
-  // decoration. This does not apply to the EV cert.
-  bool should_show_secure_verbose_;
-
-  // True if the non-secure state should be displayed on the security state
-  // decoration.
-  bool should_show_nonsecure_verbose_;
-
-  // True if the security state decoration should be animated for a secure
-  // security level.
-  bool should_animate_secure_verbose_;
-
-  // True if the security state decoration should be animated for a non-secure
-  // security level.
-  bool should_animate_nonsecure_verbose_;
 
   // True if there's enough room for the omnibox to show the security verbose.
   // If the verbose is displaying the EV cert, then this should always be true.

@@ -8,7 +8,6 @@
 #include <memory>
 #include <vector>
 
-#include "base/memory/ptr_util.h"
 #include "net/quic/core/crypto/aes_128_gcm_12_encrypter.h"
 #include "net/quic/core/crypto/crypto_framer.h"
 #include "net/quic/core/crypto/crypto_handshake.h"
@@ -20,10 +19,13 @@
 #include "net/quic/core/crypto/quic_random.h"
 #include "net/quic/core/quic_crypto_client_stream.h"
 #include "net/quic/core/quic_flags.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_session.h"
+#include "net/quic/platform/api/quic_logging.h"
+#include "net/quic/platform/api/quic_ptr_util.h"
+#include "net/quic/platform/api/quic_socket_address.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
-#include "net/quic/test_tools/delayed_verify_strike_register_client.h"
+#include "net/quic/test_tools/failing_proof_source.h"
 #include "net/quic/test_tools/quic_crypto_server_config_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -57,7 +59,8 @@ const uint16_t kServerPort = 443;
 class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
  public:
   QuicCryptoServerStreamTest()
-      : QuicCryptoServerStreamTest(CryptoTestUtils::ProofSourceForTesting()) {}
+      : QuicCryptoServerStreamTest(crypto_test_utils::ProofSourceForTesting()) {
+  }
 
   explicit QuicCryptoServerStreamTest(std::unique_ptr<ProofSource> proof_source)
       : server_crypto_config_(QuicCryptoServerConfig::TESTING,
@@ -66,27 +69,11 @@ class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
         server_compressed_certs_cache_(
             QuicCompressedCertsCache::kQuicCompressedCertsCacheSize),
         server_id_(kServerHostname, kServerPort, PRIVACY_MODE_DISABLED),
-        client_crypto_config_(CryptoTestUtils::ProofVerifierForTesting()) {
-    FLAGS_enable_quic_stateless_reject_support = false;
-    server_crypto_config_.set_strike_register_no_startup_period();
+        client_crypto_config_(crypto_test_utils::ProofVerifierForTesting()) {
+    FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support = false;
   }
 
-  void Initialize() {
-    InitializeServer();
-
-    if (AsyncStrikeRegisterVerification()) {
-      QuicCryptoServerConfigPeer peer(&server_crypto_config_);
-      strike_register_client_ = new DelayedVerifyStrikeRegisterClient(
-          10000,  // strike_register_max_entries
-          static_cast<uint32_t>(
-              server_connection_->clock()->WallNow().ToUNIXSeconds()),
-          60,  // strike_register_window_secs
-          peer.GetPrimaryConfig()->orbit,
-          StrikeRegister::NO_STARTUP_PERIOD_NEEDED);
-      strike_register_client_->StartDelayingVerification();
-      server_crypto_config_.SetStrikeRegisterClient(strike_register_client_);
-    }
-  }
+  void Initialize() { InitializeServer(); }
 
   ~QuicCryptoServerStreamTest() override {
     // Ensure that anything that might reference |helpers_| is destroyed before
@@ -101,8 +88,8 @@ class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
   // called multiple times.
   void InitializeServer() {
     TestQuicSpdyServerSession* server_session = nullptr;
-    helpers_.push_back(base::MakeUnique<MockQuicConnectionHelper>());
-    alarm_factories_.push_back(base::MakeUnique<MockAlarmFactory>());
+    helpers_.push_back(QuicMakeUnique<MockQuicConnectionHelper>());
+    alarm_factories_.push_back(QuicMakeUnique<MockAlarmFactory>());
     CreateServerSessionForTest(
         server_id_, QuicTime::Delta::FromSeconds(100000), supported_versions_,
         helpers_.back().get(), alarm_factories_.back().get(),
@@ -110,9 +97,9 @@ class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
         &server_connection_, &server_session);
     CHECK(server_session);
     server_session_.reset(server_session);
-    CryptoTestUtils::FakeServerOptions options;
+    crypto_test_utils::FakeServerOptions options;
     options.token_binding_params = QuicTagVector{kTB10};
-    CryptoTestUtils::SetupCryptoServerConfigForTest(
+    crypto_test_utils::SetupCryptoServerConfigForTest(
         server_connection_->clock(), server_connection_->random_generator(),
         &server_crypto_config_, options);
   }
@@ -129,8 +116,8 @@ class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
   // testing.  May be called multiple times.
   void InitializeFakeClient(bool supports_stateless_rejects) {
     TestQuicSpdyClientSession* client_session = nullptr;
-    helpers_.push_back(base::MakeUnique<MockQuicConnectionHelper>());
-    alarm_factories_.push_back(base::MakeUnique<MockAlarmFactory>());
+    helpers_.push_back(QuicMakeUnique<MockQuicConnectionHelper>());
+    alarm_factories_.push_back(QuicMakeUnique<MockAlarmFactory>());
     CreateClientSessionForTest(
         server_id_, supports_stateless_rejects,
         QuicTime::Delta::FromSeconds(100000), supported_versions_,
@@ -138,13 +125,6 @@ class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
         &client_crypto_config_, &client_connection_, &client_session);
     CHECK(client_session);
     client_session_.reset(client_session);
-  }
-
-  bool AsyncStrikeRegisterVerification() {
-    if (server_connection_->version() > QUIC_VERSION_32) {
-      return false;
-    }
-    return GetParam();
   }
 
   void ConstructHandshakeMessage() {
@@ -155,7 +135,7 @@ class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
   int CompleteCryptoHandshake() {
     CHECK(server_connection_);
     CHECK(server_session_ != nullptr);
-    return CryptoTestUtils::HandshakeWithFakeClient(
+    return crypto_test_utils::HandshakeWithFakeClient(
         helpers_.back().get(), alarm_factories_.back().get(),
         server_connection_, server_stream(), server_id_, client_options_);
   }
@@ -168,8 +148,8 @@ class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
 
     EXPECT_CALL(*client_session_, OnProofValid(_)).Times(testing::AnyNumber());
     client_stream()->CryptoConnect();
-    CryptoTestUtils::AdvanceHandshake(client_connection_, client_stream(), 0,
-                                      server_connection_, server_stream(), 0);
+    crypto_test_utils::AdvanceHandshake(client_connection_, client_stream(), 0,
+                                        server_connection_, server_stream(), 0);
   }
 
  protected:
@@ -195,8 +175,7 @@ class QuicCryptoServerStreamTest : public ::testing::TestWithParam<bool> {
 
   CryptoHandshakeMessage message_;
   std::unique_ptr<QuicData> message_data_;
-  CryptoTestUtils::FakeClientOptions client_options_;
-  DelayedVerifyStrikeRegisterClient* strike_register_client_;
+  crypto_test_utils::FakeClientOptions client_options_;
 
   // Which QUIC versions the client and server support.
   QuicVersionVector supported_versions_ = AllSupportedVersions();
@@ -249,8 +228,7 @@ TEST_P(QuicCryptoServerStreamTest, ForwardSecureAfterCHLO) {
 }
 
 TEST_P(QuicCryptoServerStreamTest, StatelessRejectAfterCHLO) {
-  FLAGS_enable_quic_stateless_reject_support = true;
-
+  FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support = true;
   Initialize();
 
   EXPECT_CALL(*server_connection_,
@@ -283,8 +261,7 @@ TEST_P(QuicCryptoServerStreamTest, StatelessRejectAfterCHLO) {
 }
 
 TEST_P(QuicCryptoServerStreamTest, ConnectedAfterStatelessHandshake) {
-  FLAGS_enable_quic_stateless_reject_support = true;
-
+  FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support = true;
   Initialize();
 
   InitializeFakeClient(/* supports_stateless_rejects= */ true);
@@ -314,7 +291,6 @@ TEST_P(QuicCryptoServerStreamTest, ConnectedAfterStatelessHandshake) {
   InitializeServer();
 
   InitializeFakeClient(/* supports_stateless_rejects= */ true);
-
   // In the stateless case, the second handshake contains a server-nonce, so the
   // AsyncStrikeRegisterVerification() case will still succeed (unlike a 0-RTT
   // handshake).
@@ -328,8 +304,7 @@ TEST_P(QuicCryptoServerStreamTest, ConnectedAfterStatelessHandshake) {
 }
 
 TEST_P(QuicCryptoServerStreamTest, NoStatelessRejectIfNoClientSupport) {
-  FLAGS_enable_quic_stateless_reject_support = true;
-
+  FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support = true;
   Initialize();
 
   // The server is configured to use stateless rejects, but the client does not
@@ -359,45 +334,14 @@ TEST_P(QuicCryptoServerStreamTest, ZeroRTT) {
   AdvanceHandshakeWithFakeClient();
 
   // Now do another handshake, hopefully in 0-RTT.
-  DVLOG(1) << "Resetting for 0-RTT handshake attempt";
+  QUIC_LOG(INFO) << "Resetting for 0-RTT handshake attempt";
   InitializeFakeClient(/* supports_stateless_rejects= */ false);
   InitializeServer();
 
   client_stream()->CryptoConnect();
 
-  if (AsyncStrikeRegisterVerification()) {
-    EXPECT_FALSE(client_stream()->handshake_confirmed());
-    EXPECT_FALSE(server_stream()->handshake_confirmed());
-
-    // Advance the handshake.  Expect that the server will be stuck waiting for
-    // client nonce verification to complete.
-    std::pair<size_t, size_t> messages_moved =
-        CryptoTestUtils::AdvanceHandshake(client_connection_, client_stream(),
-                                          0, server_connection_,
-                                          server_stream(), 0);
-    EXPECT_EQ(1u, messages_moved.first);
-    EXPECT_EQ(0u, messages_moved.second);
-    EXPECT_EQ(1, strike_register_client_->PendingVerifications());
-    EXPECT_FALSE(client_stream()->handshake_confirmed());
-    EXPECT_FALSE(server_stream()->handshake_confirmed());
-
-    // The server handshake completes once the nonce verification completes.
-    strike_register_client_->RunPendingVerifications();
-    EXPECT_FALSE(client_stream()->handshake_confirmed());
-    EXPECT_TRUE(server_stream()->handshake_confirmed());
-
-    messages_moved = CryptoTestUtils::AdvanceHandshake(
-        client_connection_, client_stream(), messages_moved.first,
-        server_connection_, server_stream(), messages_moved.second);
-    EXPECT_EQ(1u, messages_moved.first);
-    EXPECT_EQ(1u, messages_moved.second);
-    EXPECT_TRUE(client_stream()->handshake_confirmed());
-    EXPECT_TRUE(server_stream()->handshake_confirmed());
-  } else {
-    CryptoTestUtils::CommunicateHandshakeMessages(
-        client_connection_, client_stream(), server_connection_,
-        server_stream());
-  }
+  crypto_test_utils::CommunicateHandshakeMessages(
+      client_connection_, client_stream(), server_connection_, server_stream());
 
   EXPECT_EQ(1, client_stream()->num_sent_client_hellos());
 }
@@ -472,6 +416,12 @@ TEST_P(QuicCryptoServerStreamTest, OnlySendSCUPAfterHandshakeComplete) {
 }
 
 TEST_P(QuicCryptoServerStreamTest, SendSCUPAfterHandshakeComplete) {
+  // Do not send MAX_HEADER_LIST_SIZE SETTING frame.
+  // TODO(fayang): This SETTING frame cannot be decrypted and
+  // crypto_test_utils::MovePackets stops processing parsing following packets.
+  // Actually, crypto stream test should use QuicSession instead of
+  // QuicSpdySession (b/32366134).
+  FLAGS_quic_reloadable_flag_quic_send_max_header_list_size = false;
   Initialize();
 
   InitializeFakeClient(/* supports_stateless_rejects= */ false);
@@ -488,8 +438,8 @@ TEST_P(QuicCryptoServerStreamTest, SendSCUPAfterHandshakeComplete) {
   // Send a SCUP message and ensure that the client was able to verify it.
   EXPECT_CALL(*client_connection_, CloseConnection(_, _, _)).Times(0);
   server_stream()->SendServerConfigUpdate(nullptr);
-  CryptoTestUtils::AdvanceHandshake(client_connection_, client_stream(), 1,
-                                    server_connection_, server_stream(), 1);
+  crypto_test_utils::AdvanceHandshake(client_connection_, client_stream(), 1,
+                                      server_connection_, server_stream(), 1);
 
   EXPECT_EQ(1, server_stream()->NumServerConfigUpdateMessagesSent());
   EXPECT_EQ(1, client_stream()->num_scup_messages_received());
@@ -533,74 +483,6 @@ TEST_P(QuicCryptoServerStreamTest, NoTokenBindingWithoutClientSupport) {
   EXPECT_TRUE(server_stream()->handshake_confirmed());
 }
 
-TEST_P(QuicCryptoServerStreamTest, CancelRPCBeforeVerificationCompletes) {
-  FLAGS_quic_require_handshake_confirmation_pre33 = false;
-  // Tests that the client can close the connection while the remote strike
-  // register verification RPC is still pending.
-
-  // Set version to QUIC_VERSION_32 as QUIC_VERSION_33 and later don't support
-  // asynchronous strike register RPCs.
-  supported_versions_ = {QUIC_VERSION_32};
-  Initialize();
-  if (!AsyncStrikeRegisterVerification()) {
-    return;
-  }
-  InitializeFakeClient(/* supports_stateless_rejects= */ false);
-
-  // Do a first handshake in order to prime the client config with the server's
-  // information.
-  AdvanceHandshakeWithFakeClient();
-
-  // Now start another handshake, this time the server will attempt to verify
-  // the client's nonce with the strike registers.
-  InitializeFakeClient(/* supports_stateless_rejects= */ false);
-  InitializeServer();
-  client_stream()->CryptoConnect();
-  EXPECT_FALSE(client_stream()->handshake_confirmed());
-  EXPECT_FALSE(server_stream()->handshake_confirmed());
-
-  // Advance the handshake.  Expect that the server will be stuck waiting for
-  // client nonce verification to complete.
-  CryptoTestUtils::AdvanceHandshake(client_connection_, client_stream(), 0,
-                                    server_connection_, server_stream(), 0);
-  EXPECT_EQ(1, strike_register_client_->PendingVerifications());
-  EXPECT_FALSE(client_stream()->handshake_confirmed());
-  EXPECT_FALSE(server_stream()->handshake_confirmed());
-
-  // While waiting for the asynchronous verification to complete, the client
-  // decides to close the connection.
-  server_session_->connection()->CloseConnection(
-      QUIC_NO_ERROR, "", ConnectionCloseBehavior::SILENT_CLOSE);
-
-  // The outstanding nonce verification RPC now completes.
-  strike_register_client_->RunPendingVerifications();
-}
-
-class FailingProofSource : public ProofSource {
- public:
-  bool GetProof(const IPAddress& server_ip,
-                const string& hostname,
-                const string& server_config,
-                QuicVersion quic_version,
-                StringPiece chlo_hash,
-                const QuicTagVector& connection_options,
-                scoped_refptr<ProofSource::Chain>* out_chain,
-                string* out_signature,
-                string* out_leaf_cert_sct) override {
-    return false;
-  }
-
-  void GetProof(const IPAddress& server_ip,
-                const string& hostname,
-                const string& server_config,
-                QuicVersion quic_version,
-                StringPiece chlo_hash,
-                const QuicTagVector& connection_options,
-                std::unique_ptr<Callback> callback) override {
-    callback->Run(false, nullptr, "", "", nullptr);
-  }
-};
-
 class QuicCryptoServerStreamTestWithFailingProofSource
     : public QuicCryptoServerStreamTest {
  public:
@@ -624,6 +506,5 @@ TEST_P(QuicCryptoServerStreamTestWithFailingProofSource, Test) {
 }
 
 }  // namespace
-
 }  // namespace test
 }  // namespace net

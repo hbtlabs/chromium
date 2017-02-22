@@ -45,6 +45,7 @@
 #include "core/page/Page.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/testing/URLTestHelpers.h"
+#include "platform/testing/UnitTestHelpers.h"
 #include "public/web/WebFrame.h"
 #include "public/web/WebSettings.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -53,6 +54,8 @@
 #include "web/tests/FrameTestHelpers.h"
 
 namespace blink {
+
+namespace {
 
 KeyboardEvent* createKeyboardEventWithLocation(
     KeyboardEvent::KeyLocationCode location) {
@@ -66,8 +69,17 @@ KeyboardEvent* createKeyboardEventWithLocation(
 int getModifiersForKeyLocationCode(KeyboardEvent::KeyLocationCode location) {
   KeyboardEvent* event = createKeyboardEventWithLocation(location);
   WebKeyboardEventBuilder convertedEvent(*event);
-  return convertedEvent.modifiers;
+  return convertedEvent.modifiers();
 }
+
+void registerMockedURL(const std::string& baseURL,
+                       const std::string& fileName) {
+  URLTestHelpers::registerMockedURLLoadFromBase(WebString::fromUTF8(baseURL),
+                                                testing::webTestDataPath(),
+                                                WebString::fromUTF8(fileName));
+}
+
+}  // namespace
 
 TEST(WebInputEventConversionTest, WebKeyboardEventBuilder) {
   // Test key location conversion.
@@ -99,203 +111,14 @@ TEST(WebInputEventConversionTest, WebKeyboardEventBuilder) {
 TEST(WebInputEventConversionTest, WebMouseEventBuilder) {
   TouchEvent* event = TouchEvent::create();
   WebMouseEventBuilder mouse(0, 0, *event);
-  EXPECT_EQ(WebInputEvent::Undefined, mouse.type);
-}
-
-TEST(WebInputEventConversionTest, WebTouchEventBuilder) {
-  const std::string baseURL("http://www.test0.com/");
-  const std::string fileName("fixed_layout.html");
-
-  URLTestHelpers::registerMockedURLFromBaseURL(
-      WebString::fromUTF8(baseURL.c_str()),
-      WebString::fromUTF8("fixed_layout.html"));
-  FrameTestHelpers::WebViewHelper webViewHelper;
-  WebViewImpl* webViewImpl =
-      webViewHelper.initializeAndLoad(baseURL + fileName, true);
-  int pageWidth = 640;
-  int pageHeight = 480;
-  webViewImpl->resize(WebSize(pageWidth, pageHeight));
-  webViewImpl->updateAllLifecyclePhases();
-
-  Document* document =
-      toLocalFrame(webViewImpl->page()->mainFrame())->document();
-  LocalDOMWindow* domWindow = document->domWindow();
-  LayoutViewItem documentLayoutView = document->layoutViewItem();
-
-  WebTouchPoint p0, p1;
-  p0.id = 1;
-  p1.id = 2;
-  p0.screenPosition = WebFloatPoint(100.f, 50.f);
-  p1.screenPosition = WebFloatPoint(150.f, 25.f);
-  p0.position = WebFloatPoint(10.f, 10.f);
-  p1.position = WebFloatPoint(5.f, 5.f);
-  p0.radiusX = p1.radiusY = 10.f;
-  p0.radiusY = p1.radiusX = 5.f;
-  p0.rotationAngle = p1.rotationAngle = 1.f;
-  p0.force = p1.force = 25.f;
-
-  Touch* touch0 = Touch::create(toLocalFrame(webViewImpl->page()->mainFrame()),
-                                document, p0.id, p0.screenPosition, p0.position,
-                                FloatSize(p0.radiusX, p0.radiusY),
-                                p0.rotationAngle, p0.force, String());
-  Touch* touch1 = Touch::create(toLocalFrame(webViewImpl->page()->mainFrame()),
-                                document, p1.id, p1.screenPosition, p1.position,
-                                FloatSize(p1.radiusX, p1.radiusY),
-                                p1.rotationAngle, p1.force, String());
-
-  // Test touchstart.
-  {
-    TouchList* touchList = TouchList::create();
-    touchList->append(touch0);
-    TouchEvent* touchEvent = TouchEvent::create(
-        touchList, touchList, touchList, EventTypeNames::touchstart, domWindow,
-        PlatformEvent::NoModifiers, false, false, true, 0, TouchActionAuto);
-
-    WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
-    ASSERT_EQ(1u, webTouchBuilder.touchesLength);
-    EXPECT_EQ(WebInputEvent::TouchStart, webTouchBuilder.type);
-    EXPECT_EQ(WebTouchPoint::StatePressed, webTouchBuilder.touches[0].state);
-    EXPECT_FLOAT_EQ(p0.screenPosition.x,
-                    webTouchBuilder.touches[0].screenPosition.x);
-    EXPECT_FLOAT_EQ(p0.screenPosition.y,
-                    webTouchBuilder.touches[0].screenPosition.y);
-    EXPECT_FLOAT_EQ(p0.position.x, webTouchBuilder.touches[0].position.x);
-    EXPECT_FLOAT_EQ(p0.position.y, webTouchBuilder.touches[0].position.y);
-    EXPECT_FLOAT_EQ(p0.radiusX, webTouchBuilder.touches[0].radiusX);
-    EXPECT_FLOAT_EQ(p0.radiusY, webTouchBuilder.touches[0].radiusY);
-    EXPECT_FLOAT_EQ(p0.rotationAngle, webTouchBuilder.touches[0].rotationAngle);
-    EXPECT_FLOAT_EQ(p0.force, webTouchBuilder.touches[0].force);
-    EXPECT_EQ(WebInputEvent::EventNonBlocking, webTouchBuilder.dispatchType);
-  }
-
-  // Test cancelable touchstart.
-  {
-    TouchList* touchList = TouchList::create();
-    touchList->append(touch0);
-    TouchEvent* touchEvent = TouchEvent::create(
-        touchList, touchList, touchList, EventTypeNames::touchstart, domWindow,
-        PlatformEvent::NoModifiers, true, false, true, 0, TouchActionAuto);
-
-    WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
-    EXPECT_EQ(WebInputEvent::Blocking, webTouchBuilder.dispatchType);
-  }
-
-  // Test touchmove.
-  {
-    TouchList* activeTouchList = TouchList::create();
-    TouchList* movedTouchList = TouchList::create();
-    activeTouchList->append(touch0);
-    activeTouchList->append(touch1);
-    movedTouchList->append(touch0);
-    TouchEvent* touchEvent = TouchEvent::create(
-        activeTouchList, activeTouchList, movedTouchList,
-        EventTypeNames::touchmove, domWindow, PlatformEvent::NoModifiers, false,
-        false, true, 0, TouchActionAuto);
-
-    WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
-    ASSERT_EQ(2u, webTouchBuilder.touchesLength);
-    EXPECT_EQ(WebInputEvent::TouchMove, webTouchBuilder.type);
-    EXPECT_EQ(WebTouchPoint::StateMoved, webTouchBuilder.touches[0].state);
-    EXPECT_EQ(WebTouchPoint::StateStationary, webTouchBuilder.touches[1].state);
-    EXPECT_EQ(p0.id, webTouchBuilder.touches[0].id);
-    EXPECT_EQ(p1.id, webTouchBuilder.touches[1].id);
-    EXPECT_EQ(WebInputEvent::EventNonBlocking, webTouchBuilder.dispatchType);
-  }
-
-  // Test touchmove, different point yields same ordering.
-  {
-    TouchList* activeTouchList = TouchList::create();
-    TouchList* movedTouchList = TouchList::create();
-    activeTouchList->append(touch0);
-    activeTouchList->append(touch1);
-    movedTouchList->append(touch1);
-    TouchEvent* touchEvent = TouchEvent::create(
-        activeTouchList, activeTouchList, movedTouchList,
-        EventTypeNames::touchmove, domWindow, PlatformEvent::NoModifiers, false,
-        false, true, 0, TouchActionAuto);
-
-    WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
-    ASSERT_EQ(2u, webTouchBuilder.touchesLength);
-    EXPECT_EQ(WebInputEvent::TouchMove, webTouchBuilder.type);
-    EXPECT_EQ(WebTouchPoint::StateStationary, webTouchBuilder.touches[0].state);
-    EXPECT_EQ(WebTouchPoint::StateMoved, webTouchBuilder.touches[1].state);
-    EXPECT_EQ(p0.id, webTouchBuilder.touches[0].id);
-    EXPECT_EQ(p1.id, webTouchBuilder.touches[1].id);
-    EXPECT_EQ(WebInputEvent::EventNonBlocking, webTouchBuilder.dispatchType);
-  }
-
-  // Test touchend.
-  {
-    TouchList* activeTouchList = TouchList::create();
-    TouchList* releasedTouchList = TouchList::create();
-    activeTouchList->append(touch0);
-    releasedTouchList->append(touch1);
-    TouchEvent* touchEvent = TouchEvent::create(
-        activeTouchList, activeTouchList, releasedTouchList,
-        EventTypeNames::touchend, domWindow, PlatformEvent::NoModifiers, false,
-        false, false, 0, TouchActionAuto);
-
-    WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
-    ASSERT_EQ(2u, webTouchBuilder.touchesLength);
-    EXPECT_EQ(WebInputEvent::TouchEnd, webTouchBuilder.type);
-    EXPECT_EQ(WebTouchPoint::StateStationary, webTouchBuilder.touches[0].state);
-    EXPECT_EQ(WebTouchPoint::StateReleased, webTouchBuilder.touches[1].state);
-    EXPECT_EQ(p0.id, webTouchBuilder.touches[0].id);
-    EXPECT_EQ(p1.id, webTouchBuilder.touches[1].id);
-    EXPECT_EQ(WebInputEvent::EventNonBlocking, webTouchBuilder.dispatchType);
-  }
-
-  // Test touchcancel.
-  {
-    TouchList* activeTouchList = TouchList::create();
-    TouchList* cancelledTouchList = TouchList::create();
-    cancelledTouchList->append(touch0);
-    cancelledTouchList->append(touch1);
-    TouchEvent* touchEvent = TouchEvent::create(
-        activeTouchList, activeTouchList, cancelledTouchList,
-        EventTypeNames::touchcancel, domWindow, PlatformEvent::NoModifiers,
-        false, false, false, 0, TouchActionAuto);
-
-    WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
-    ASSERT_EQ(2u, webTouchBuilder.touchesLength);
-    EXPECT_EQ(WebInputEvent::TouchCancel, webTouchBuilder.type);
-    EXPECT_EQ(WebTouchPoint::StateCancelled, webTouchBuilder.touches[0].state);
-    EXPECT_EQ(WebTouchPoint::StateCancelled, webTouchBuilder.touches[1].state);
-    EXPECT_EQ(p0.id, webTouchBuilder.touches[0].id);
-    EXPECT_EQ(p1.id, webTouchBuilder.touches[1].id);
-    EXPECT_EQ(WebInputEvent::EventNonBlocking, webTouchBuilder.dispatchType);
-  }
-
-  // Test max point limit.
-  {
-    TouchList* touchList = TouchList::create();
-    TouchList* changedTouchList = TouchList::create();
-    for (int i = 0; i <= static_cast<int>(WebTouchEvent::kTouchesLengthCap) * 2;
-         ++i) {
-      Touch* touch = Touch::create(
-          toLocalFrame(webViewImpl->page()->mainFrame()), document, i,
-          p0.screenPosition, p0.position, FloatSize(p0.radiusX, p0.radiusY),
-          p0.rotationAngle, p0.force, String());
-      touchList->append(touch);
-      changedTouchList->append(touch);
-    }
-    TouchEvent* touchEvent = TouchEvent::create(
-        touchList, touchList, touchList, EventTypeNames::touchstart, domWindow,
-        PlatformEvent::NoModifiers, false, false, true, 0, TouchActionAuto);
-
-    WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
-    ASSERT_EQ(static_cast<unsigned>(WebTouchEvent::kTouchesLengthCap),
-              webTouchBuilder.touchesLength);
-  }
+  EXPECT_EQ(WebInputEvent::Undefined, mouse.type());
 }
 
 TEST(WebInputEventConversionTest, InputEventsScaling) {
   const std::string baseURL("http://www.test1.com/");
   const std::string fileName("fixed_layout.html");
 
-  URLTestHelpers::registerMockedURLFromBaseURL(
-      WebString::fromUTF8(baseURL.c_str()),
-      WebString::fromUTF8("fixed_layout.html"));
+  registerMockedURL(baseURL, fileName);
   FrameTestHelpers::WebViewHelper webViewHelper;
   WebViewImpl* webViewImpl =
       webViewHelper.initializeAndLoad(baseURL + fileName, true);
@@ -308,14 +131,11 @@ TEST(WebInputEventConversionTest, InputEventsScaling) {
   webViewImpl->setPageScaleFactor(2);
 
   FrameView* view = toLocalFrame(webViewImpl->page()->mainFrame())->view();
-  Document* document =
-      toLocalFrame(webViewImpl->page()->mainFrame())->document();
-  LocalDOMWindow* domWindow = document->domWindow();
-  LayoutViewItem documentLayoutView = document->layoutViewItem();
 
   {
-    WebMouseEvent webMouseEvent;
-    webMouseEvent.type = WebInputEvent::MouseMove;
+    WebMouseEvent webMouseEvent(WebInputEvent::MouseMove,
+                                WebInputEvent::NoModifiers,
+                                WebInputEvent::TimeStampForTesting);
     webMouseEvent.x = 10;
     webMouseEvent.y = 10;
     webMouseEvent.windowX = 10;
@@ -325,18 +145,23 @@ TEST(WebInputEventConversionTest, InputEventsScaling) {
     webMouseEvent.movementX = 10;
     webMouseEvent.movementY = 10;
 
-    PlatformMouseEventBuilder platformMouseBuilder(view, webMouseEvent);
-    EXPECT_EQ(5, platformMouseBuilder.position().x());
-    EXPECT_EQ(5, platformMouseBuilder.position().y());
-    EXPECT_EQ(10, platformMouseBuilder.globalPosition().x());
-    EXPECT_EQ(10, platformMouseBuilder.globalPosition().y());
-    EXPECT_EQ(5, platformMouseBuilder.movementDelta().x());
-    EXPECT_EQ(5, platformMouseBuilder.movementDelta().y());
+    WebMouseEvent transformedEvent =
+        TransformWebMouseEvent(view, webMouseEvent);
+    IntPoint position = flooredIntPoint(transformedEvent.positionInRootFrame());
+    EXPECT_EQ(5, position.x());
+    EXPECT_EQ(5, position.y());
+    EXPECT_EQ(10, transformedEvent.globalX);
+    EXPECT_EQ(10, transformedEvent.globalY);
+
+    IntPoint movement = flooredIntPoint(transformedEvent.movementInRootFrame());
+    EXPECT_EQ(5, movement.x());
+    EXPECT_EQ(5, movement.y());
   }
 
   {
-    WebGestureEvent webGestureEvent;
-    webGestureEvent.type = WebInputEvent::GestureScrollUpdate;
+    WebGestureEvent webGestureEvent(WebInputEvent::GestureScrollUpdate,
+                                    WebInputEvent::NoModifiers,
+                                    WebInputEvent::TimeStampForTesting);
     webGestureEvent.sourceDevice = WebGestureDeviceTouchscreen;
     webGestureEvent.x = 10;
     webGestureEvent.y = 12;
@@ -350,115 +175,141 @@ TEST(WebInputEventConversionTest, InputEventsScaling) {
         WebGestureEvent::MomentumPhase;
     webGestureEvent.data.scrollUpdate.preventPropagation = true;
 
-    PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
-    EXPECT_EQ(5, platformGestureBuilder.position().x());
-    EXPECT_EQ(6, platformGestureBuilder.position().y());
-    EXPECT_EQ(20, platformGestureBuilder.globalPosition().x());
-    EXPECT_EQ(22, platformGestureBuilder.globalPosition().y());
-    EXPECT_EQ(15, platformGestureBuilder.deltaX());
-    EXPECT_EQ(16, platformGestureBuilder.deltaY());
+    WebGestureEvent scaledGestureEvent =
+        TransformWebGestureEvent(view, webGestureEvent);
+    IntPoint position =
+        flooredIntPoint(scaledGestureEvent.positionInRootFrame());
+    EXPECT_EQ(5, position.x());
+    EXPECT_EQ(6, position.y());
+    EXPECT_EQ(20, scaledGestureEvent.globalX);
+    EXPECT_EQ(22, scaledGestureEvent.globalY);
+    EXPECT_EQ(15, scaledGestureEvent.deltaXInRootFrame());
+    EXPECT_EQ(16, scaledGestureEvent.deltaYInRootFrame());
     // TODO: The velocity values may need to be scaled to page scale in
     // order to remain consist with delta values.
-    EXPECT_EQ(40, platformGestureBuilder.velocityX());
-    EXPECT_EQ(42, platformGestureBuilder.velocityY());
-    EXPECT_EQ(ScrollInertialPhaseMomentum,
-              platformGestureBuilder.inertialPhase());
-    EXPECT_TRUE(platformGestureBuilder.preventPropagation());
+    EXPECT_EQ(40, scaledGestureEvent.velocityX());
+    EXPECT_EQ(42, scaledGestureEvent.velocityY());
+    EXPECT_EQ(WebGestureEvent::MomentumPhase,
+              scaledGestureEvent.inertialPhase());
+    EXPECT_TRUE(scaledGestureEvent.preventPropagation());
   }
 
   {
-    WebGestureEvent webGestureEvent;
-    webGestureEvent.type = WebInputEvent::GestureScrollEnd;
+    WebGestureEvent webGestureEvent(WebInputEvent::GestureScrollEnd,
+                                    WebInputEvent::NoModifiers,
+                                    WebInputEvent::TimeStampForTesting);
     webGestureEvent.sourceDevice = WebGestureDeviceTouchscreen;
     webGestureEvent.x = 10;
     webGestureEvent.y = 12;
     webGestureEvent.globalX = 20;
     webGestureEvent.globalY = 22;
 
-    PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
-    EXPECT_EQ(5, platformGestureBuilder.position().x());
-    EXPECT_EQ(6, platformGestureBuilder.position().y());
-    EXPECT_EQ(20, platformGestureBuilder.globalPosition().x());
-    EXPECT_EQ(22, platformGestureBuilder.globalPosition().y());
-    EXPECT_EQ(ScrollInertialPhaseUnknown,
-              platformGestureBuilder.inertialPhase());
+    WebGestureEvent scaledGestureEvent =
+        TransformWebGestureEvent(view, webGestureEvent);
+    IntPoint position =
+        flooredIntPoint(scaledGestureEvent.positionInRootFrame());
+    EXPECT_EQ(5, position.x());
+    EXPECT_EQ(6, position.y());
+    EXPECT_EQ(20, scaledGestureEvent.globalX);
+    EXPECT_EQ(22, scaledGestureEvent.globalY);
+    EXPECT_EQ(WebGestureEvent::UnknownMomentumPhase,
+              scaledGestureEvent.inertialPhase());
   }
 
   {
-    WebGestureEvent webGestureEvent;
-    webGestureEvent.type = WebInputEvent::GestureTap;
+    WebGestureEvent webGestureEvent(WebInputEvent::GestureTap,
+                                    WebInputEvent::NoModifiers,
+                                    WebInputEvent::TimeStampForTesting);
     webGestureEvent.sourceDevice = WebGestureDeviceTouchscreen;
     webGestureEvent.data.tap.width = 10;
     webGestureEvent.data.tap.height = 10;
 
-    PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
-    EXPECT_EQ(5, platformGestureBuilder.area().width());
-    EXPECT_EQ(5, platformGestureBuilder.area().height());
+    WebGestureEvent scaledGestureEvent =
+        TransformWebGestureEvent(view, webGestureEvent);
+    IntSize area = flooredIntSize(scaledGestureEvent.tapAreaInRootFrame());
+    EXPECT_EQ(5, area.width());
+    EXPECT_EQ(5, area.height());
   }
 
   {
-    WebGestureEvent webGestureEvent;
-    webGestureEvent.type = WebInputEvent::GestureTapUnconfirmed;
+    WebGestureEvent webGestureEvent(WebInputEvent::GestureTapUnconfirmed,
+                                    WebInputEvent::NoModifiers,
+                                    WebInputEvent::TimeStampForTesting);
     webGestureEvent.sourceDevice = WebGestureDeviceTouchscreen;
     webGestureEvent.data.tap.width = 10;
     webGestureEvent.data.tap.height = 10;
 
-    PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
-    EXPECT_EQ(5, platformGestureBuilder.area().width());
-    EXPECT_EQ(5, platformGestureBuilder.area().height());
+    WebGestureEvent scaledGestureEvent =
+        TransformWebGestureEvent(view, webGestureEvent);
+    IntSize area = flooredIntSize(scaledGestureEvent.tapAreaInRootFrame());
+    EXPECT_EQ(5, area.width());
+    EXPECT_EQ(5, area.height());
   }
 
   {
-    WebGestureEvent webGestureEvent;
-    webGestureEvent.type = WebInputEvent::GestureTapDown;
+    WebGestureEvent webGestureEvent(WebInputEvent::GestureTapDown,
+                                    WebInputEvent::NoModifiers,
+                                    WebInputEvent::TimeStampForTesting);
     webGestureEvent.sourceDevice = WebGestureDeviceTouchscreen;
     webGestureEvent.data.tapDown.width = 10;
     webGestureEvent.data.tapDown.height = 10;
 
-    PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
-    EXPECT_EQ(5, platformGestureBuilder.area().width());
-    EXPECT_EQ(5, platformGestureBuilder.area().height());
+    WebGestureEvent scaledGestureEvent =
+        TransformWebGestureEvent(view, webGestureEvent);
+    IntSize area = flooredIntSize(scaledGestureEvent.tapAreaInRootFrame());
+    EXPECT_EQ(5, area.width());
+    EXPECT_EQ(5, area.height());
   }
 
   {
-    WebGestureEvent webGestureEvent;
-    webGestureEvent.type = WebInputEvent::GestureShowPress;
+    WebGestureEvent webGestureEvent(WebInputEvent::GestureShowPress,
+                                    WebInputEvent::NoModifiers,
+                                    WebInputEvent::TimeStampForTesting);
     webGestureEvent.sourceDevice = WebGestureDeviceTouchscreen;
     webGestureEvent.data.showPress.width = 10;
     webGestureEvent.data.showPress.height = 10;
 
-    PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
-    EXPECT_EQ(5, platformGestureBuilder.area().width());
-    EXPECT_EQ(5, platformGestureBuilder.area().height());
+    WebGestureEvent scaledGestureEvent =
+        TransformWebGestureEvent(view, webGestureEvent);
+    IntSize area = flooredIntSize(scaledGestureEvent.tapAreaInRootFrame());
+    EXPECT_EQ(5, area.width());
+    EXPECT_EQ(5, area.height());
   }
 
   {
-    WebGestureEvent webGestureEvent;
-    webGestureEvent.type = WebInputEvent::GestureLongPress;
+    WebGestureEvent webGestureEvent(WebInputEvent::GestureLongPress,
+                                    WebInputEvent::NoModifiers,
+                                    WebInputEvent::TimeStampForTesting);
     webGestureEvent.sourceDevice = WebGestureDeviceTouchscreen;
     webGestureEvent.data.longPress.width = 10;
     webGestureEvent.data.longPress.height = 10;
 
-    PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
-    EXPECT_EQ(5, platformGestureBuilder.area().width());
-    EXPECT_EQ(5, platformGestureBuilder.area().height());
+    WebGestureEvent scaledGestureEvent =
+        TransformWebGestureEvent(view, webGestureEvent);
+    IntSize area = flooredIntSize(scaledGestureEvent.tapAreaInRootFrame());
+    EXPECT_EQ(5, area.width());
+    EXPECT_EQ(5, area.height());
   }
 
   {
-    WebGestureEvent webGestureEvent;
-    webGestureEvent.type = WebInputEvent::GestureTwoFingerTap;
+    WebGestureEvent webGestureEvent(WebInputEvent::GestureTwoFingerTap,
+                                    WebInputEvent::NoModifiers,
+                                    WebInputEvent::TimeStampForTesting);
     webGestureEvent.sourceDevice = WebGestureDeviceTouchscreen;
     webGestureEvent.data.twoFingerTap.firstFingerWidth = 10;
     webGestureEvent.data.twoFingerTap.firstFingerHeight = 10;
 
-    PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
-    EXPECT_EQ(5, platformGestureBuilder.area().width());
-    EXPECT_EQ(5, platformGestureBuilder.area().height());
+    WebGestureEvent scaledGestureEvent =
+        TransformWebGestureEvent(view, webGestureEvent);
+    IntSize area = flooredIntSize(scaledGestureEvent.tapAreaInRootFrame());
+    EXPECT_EQ(5, area.width());
+    EXPECT_EQ(5, area.height());
   }
 
   {
-    WebTouchEvent webTouchEvent;
-    webTouchEvent.type = WebInputEvent::TouchMove;
+    WebTouchEvent webTouchEvent(WebInputEvent::TouchMove,
+                                WebInputEvent::NoModifiers,
+                                WebInputEvent::TimeStampForTesting);
     webTouchEvent.touchesLength = 1;
     webTouchEvent.touches[0].state = WebTouchPoint::StateMoved;
     webTouchEvent.touches[0].screenPosition.x = 10.6f;
@@ -467,6 +318,8 @@ TEST(WebInputEventConversionTest, InputEventsScaling) {
     webTouchEvent.touches[0].position.y = 10.4f;
     webTouchEvent.touches[0].radiusX = 10.6f;
     webTouchEvent.touches[0].radiusY = 10.4f;
+    webTouchEvent.touches[0].movementX = 20;
+    webTouchEvent.touches[0].movementY = 20;
 
     EXPECT_FLOAT_EQ(10.6f, webTouchEvent.touches[0].screenPosition.x);
     EXPECT_FLOAT_EQ(10.4f, webTouchEvent.touches[0].screenPosition.y);
@@ -474,102 +327,20 @@ TEST(WebInputEventConversionTest, InputEventsScaling) {
     EXPECT_FLOAT_EQ(10.4f, webTouchEvent.touches[0].position.y);
     EXPECT_FLOAT_EQ(10.6f, webTouchEvent.touches[0].radiusX);
     EXPECT_FLOAT_EQ(10.4f, webTouchEvent.touches[0].radiusY);
+    EXPECT_EQ(20, webTouchEvent.touches[0].movementX);
+    EXPECT_EQ(20, webTouchEvent.touches[0].movementY);
 
-    PlatformTouchEventBuilder platformTouchBuilder(view, webTouchEvent);
-    EXPECT_FLOAT_EQ(10.6f,
-                    platformTouchBuilder.touchPoints()[0].screenPos().x());
-    EXPECT_FLOAT_EQ(10.4f,
-                    platformTouchBuilder.touchPoints()[0].screenPos().y());
-    EXPECT_FLOAT_EQ(5.3f, platformTouchBuilder.touchPoints()[0].pos().x());
-    EXPECT_FLOAT_EQ(5.2f, platformTouchBuilder.touchPoints()[0].pos().y());
-    EXPECT_FLOAT_EQ(5.3f,
-                    platformTouchBuilder.touchPoints()[0].radius().width());
-    EXPECT_FLOAT_EQ(5.2f,
-                    platformTouchBuilder.touchPoints()[0].radius().height());
-  }
-
-  // Reverse builders should *not* go back to physical pixels, as they are used
-  // for plugins which expect CSS pixel coordinates.
-  {
-    PlatformMouseEvent platformMouseEvent(
-        IntPoint(10, 10), IntPoint(10, 10), WebPointerProperties::Button::Left,
-        PlatformEvent::MouseMoved, 1, PlatformEvent::NoModifiers,
-        PlatformMouseEvent::RealOrIndistinguishable, 0);
-    MouseEvent* mouseEvent = MouseEvent::create(
-        EventTypeNames::mousemove, domWindow, platformMouseEvent, 0, document);
-    WebMouseEventBuilder webMouseBuilder(view, documentLayoutView, *mouseEvent);
-
-    EXPECT_EQ(10, webMouseBuilder.x);
-    EXPECT_EQ(10, webMouseBuilder.y);
-    EXPECT_EQ(10, webMouseBuilder.globalX);
-    EXPECT_EQ(10, webMouseBuilder.globalY);
-    EXPECT_EQ(10, webMouseBuilder.windowX);
-    EXPECT_EQ(10, webMouseBuilder.windowY);
-  }
-
-  {
-    PlatformMouseEvent platformMouseEvent(
-        IntPoint(10, 10), IntPoint(10, 10),
-        WebPointerProperties::Button::NoButton, PlatformEvent::MouseMoved, 1,
-        PlatformEvent::NoModifiers, PlatformMouseEvent::RealOrIndistinguishable,
-        0);
-    MouseEvent* mouseEvent = MouseEvent::create(
-        EventTypeNames::mousemove, domWindow, platformMouseEvent, 0, document);
-    WebMouseEventBuilder webMouseBuilder(view, documentLayoutView, *mouseEvent);
-    EXPECT_EQ(WebMouseEvent::Button::NoButton, webMouseBuilder.button);
-  }
-
-  {
-    PlatformGestureEvent platformGestureEvent(
-        PlatformEvent::GestureScrollUpdate, IntPoint(10, 12), IntPoint(20, 22),
-        IntSize(25, 27), 0, PlatformEvent::NoModifiers,
-        PlatformGestureSourceTouchscreen);
-    platformGestureEvent.setScrollGestureData(30, 32, ScrollByPrecisePixel, 40,
-                                              42, ScrollInertialPhaseMomentum,
-                                              true, -1 /* null plugin id */);
-    // FIXME: GestureEvent does not preserve velocityX, velocityY,
-    // or preventPropagation. It also fails to scale
-    // coordinates (x, y, deltaX, deltaY) to the page scale. This
-    // may lead to unexpected bugs if a PlatformGestureEvent is
-    // transformed into WebGestureEvent and back.
-    GestureEvent* gestureEvent =
-        GestureEvent::create(domWindow, platformGestureEvent);
-    WebGestureEventBuilder webGestureBuilder(documentLayoutView, *gestureEvent);
-
-    EXPECT_EQ(10, webGestureBuilder.x);
-    EXPECT_EQ(12, webGestureBuilder.y);
-    EXPECT_EQ(20, webGestureBuilder.globalX);
-    EXPECT_EQ(22, webGestureBuilder.globalY);
-    EXPECT_EQ(30, webGestureBuilder.data.scrollUpdate.deltaX);
-    EXPECT_EQ(32, webGestureBuilder.data.scrollUpdate.deltaY);
-    EXPECT_EQ(0, webGestureBuilder.data.scrollUpdate.velocityX);
-    EXPECT_EQ(0, webGestureBuilder.data.scrollUpdate.velocityY);
-    EXPECT_EQ(WebGestureEvent::MomentumPhase,
-              webGestureBuilder.data.scrollUpdate.inertialPhase);
-    EXPECT_FALSE(webGestureBuilder.data.scrollUpdate.preventPropagation);
-    EXPECT_EQ(WebGestureDeviceTouchscreen, webGestureBuilder.sourceDevice);
-  }
-
-  {
-    Touch* touch =
-        Touch::create(toLocalFrame(webViewImpl->page()->mainFrame()), document,
-                      0, FloatPoint(10, 9.5), FloatPoint(3.5, 2),
-                      FloatSize(4, 4.5), 0, 0, String());
-    TouchList* touchList = TouchList::create();
-    touchList->append(touch);
-    TouchEvent* touchEvent = TouchEvent::create(
-        touchList, touchList, touchList, EventTypeNames::touchmove, domWindow,
-        PlatformEvent::NoModifiers, false, false, true, 0, TouchActionAuto);
-
-    WebTouchEventBuilder webTouchBuilder(documentLayoutView, *touchEvent);
-    ASSERT_EQ(1u, webTouchBuilder.touchesLength);
-    EXPECT_EQ(10, webTouchBuilder.touches[0].screenPosition.x);
-    EXPECT_FLOAT_EQ(9.5, webTouchBuilder.touches[0].screenPosition.y);
-    EXPECT_FLOAT_EQ(3.5, webTouchBuilder.touches[0].position.x);
-    EXPECT_FLOAT_EQ(2, webTouchBuilder.touches[0].position.y);
-    EXPECT_FLOAT_EQ(4, webTouchBuilder.touches[0].radiusX);
-    EXPECT_FLOAT_EQ(4.5, webTouchBuilder.touches[0].radiusY);
-    EXPECT_EQ(WebInputEvent::EventNonBlocking, webTouchBuilder.dispatchType);
+    WebTouchEvent transformedEvent =
+        TransformWebTouchEvent(view, webTouchEvent);
+    WebTouchPoint transformedPoint = transformedEvent.touchPointInRootFrame(0);
+    EXPECT_FLOAT_EQ(10.6f, transformedPoint.screenPosition.x);
+    EXPECT_FLOAT_EQ(10.4f, transformedPoint.screenPosition.y);
+    EXPECT_FLOAT_EQ(5.3f, transformedPoint.position.x);
+    EXPECT_FLOAT_EQ(5.2f, transformedPoint.position.y);
+    EXPECT_FLOAT_EQ(5.3f, transformedPoint.radiusX);
+    EXPECT_FLOAT_EQ(5.2f, transformedPoint.radiusY);
+    EXPECT_EQ(10, transformedPoint.movementX);
+    EXPECT_EQ(10, transformedPoint.movementY);
   }
 }
 
@@ -577,9 +348,7 @@ TEST(WebInputEventConversionTest, InputEventsTransform) {
   const std::string baseURL("http://www.test2.com/");
   const std::string fileName("fixed_layout.html");
 
-  URLTestHelpers::registerMockedURLFromBaseURL(
-      WebString::fromUTF8(baseURL.c_str()),
-      WebString::fromUTF8("fixed_layout.html"));
+  registerMockedURL(baseURL, fileName);
   FrameTestHelpers::WebViewHelper webViewHelper;
   WebViewImpl* webViewImpl =
       webViewHelper.initializeAndLoad(baseURL + fileName, true);
@@ -596,8 +365,9 @@ TEST(WebInputEventConversionTest, InputEventsTransform) {
   FrameView* view = toLocalFrame(webViewImpl->page()->mainFrame())->view();
 
   {
-    WebMouseEvent webMouseEvent;
-    webMouseEvent.type = WebInputEvent::MouseMove;
+    WebMouseEvent webMouseEvent(WebInputEvent::MouseMove,
+                                WebInputEvent::NoModifiers,
+                                WebInputEvent::TimeStampForTesting);
     webMouseEvent.x = 100;
     webMouseEvent.y = 110;
     webMouseEvent.windowX = 100;
@@ -607,18 +377,73 @@ TEST(WebInputEventConversionTest, InputEventsTransform) {
     webMouseEvent.movementX = 60;
     webMouseEvent.movementY = 60;
 
-    PlatformMouseEventBuilder platformMouseBuilder(view, webMouseEvent);
-    EXPECT_EQ(30, platformMouseBuilder.position().x());
-    EXPECT_EQ(30, platformMouseBuilder.position().y());
-    EXPECT_EQ(100, platformMouseBuilder.globalPosition().x());
-    EXPECT_EQ(110, platformMouseBuilder.globalPosition().y());
-    EXPECT_EQ(20, platformMouseBuilder.movementDelta().x());
-    EXPECT_EQ(20, platformMouseBuilder.movementDelta().y());
+    WebMouseEvent transformedEvent =
+        TransformWebMouseEvent(view, webMouseEvent);
+    FloatPoint position = transformedEvent.positionInRootFrame();
+
+    EXPECT_FLOAT_EQ(30, position.x());
+    EXPECT_FLOAT_EQ(30, position.y());
+    EXPECT_EQ(100, transformedEvent.globalX);
+    EXPECT_EQ(110, transformedEvent.globalY);
+
+    IntPoint movement = flooredIntPoint(transformedEvent.movementInRootFrame());
+    EXPECT_EQ(20, movement.x());
+    EXPECT_EQ(20, movement.y());
   }
 
   {
-    WebGestureEvent webGestureEvent;
-    webGestureEvent.type = WebInputEvent::GestureScrollUpdate;
+    WebMouseEvent webMouseEvent1(WebInputEvent::MouseMove,
+                                 WebInputEvent::NoModifiers,
+                                 WebInputEvent::TimeStampForTesting);
+    webMouseEvent1.x = 100;
+    webMouseEvent1.y = 110;
+    webMouseEvent1.windowX = 100;
+    webMouseEvent1.windowY = 110;
+    webMouseEvent1.globalX = 100;
+    webMouseEvent1.globalY = 110;
+    webMouseEvent1.movementX = 60;
+    webMouseEvent1.movementY = 60;
+
+    WebMouseEvent webMouseEvent2 = webMouseEvent1;
+    webMouseEvent2.y = 140;
+    webMouseEvent2.windowY = 140;
+    webMouseEvent2.globalY = 140;
+    webMouseEvent2.movementY = 30;
+
+    std::vector<const WebInputEvent*> events;
+    events.push_back(&webMouseEvent1);
+    events.push_back(&webMouseEvent2);
+
+    Vector<WebMouseEvent> coalescedevents =
+        TransformWebMouseEventVector(view, events);
+    EXPECT_EQ(events.size(), coalescedevents.size());
+
+    FloatPoint position = coalescedevents[0].positionInRootFrame();
+    EXPECT_FLOAT_EQ(30, position.x());
+    EXPECT_FLOAT_EQ(30, position.y());
+    EXPECT_EQ(100, coalescedevents[0].globalX);
+    EXPECT_EQ(110, coalescedevents[0].globalY);
+
+    IntPoint movement =
+        flooredIntPoint(coalescedevents[0].movementInRootFrame());
+    EXPECT_EQ(20, movement.x());
+    EXPECT_EQ(20, movement.y());
+
+    position = coalescedevents[1].positionInRootFrame();
+    EXPECT_FLOAT_EQ(30, position.x());
+    EXPECT_FLOAT_EQ(40, position.y());
+    EXPECT_EQ(100, coalescedevents[1].globalX);
+    EXPECT_EQ(140, coalescedevents[1].globalY);
+
+    movement = flooredIntPoint(coalescedevents[1].movementInRootFrame());
+    EXPECT_EQ(20, movement.x());
+    EXPECT_EQ(10, movement.y());
+  }
+
+  {
+    WebGestureEvent webGestureEvent(WebInputEvent::GestureScrollUpdate,
+                                    WebInputEvent::NoModifiers,
+                                    WebInputEvent::TimeStampForTesting);
     webGestureEvent.sourceDevice = WebGestureDeviceTouchscreen;
     webGestureEvent.x = 100;
     webGestureEvent.y = 110;
@@ -627,90 +452,112 @@ TEST(WebInputEventConversionTest, InputEventsTransform) {
     webGestureEvent.data.scrollUpdate.deltaX = 60;
     webGestureEvent.data.scrollUpdate.deltaY = 60;
 
-    PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
-    EXPECT_EQ(30, platformGestureBuilder.position().x());
-    EXPECT_EQ(30, platformGestureBuilder.position().y());
-    EXPECT_EQ(100, platformGestureBuilder.globalPosition().x());
-    EXPECT_EQ(110, platformGestureBuilder.globalPosition().y());
-    EXPECT_EQ(20, platformGestureBuilder.deltaX());
-    EXPECT_EQ(20, platformGestureBuilder.deltaY());
+    WebGestureEvent scaledGestureEvent =
+        TransformWebGestureEvent(view, webGestureEvent);
+    FloatPoint position = scaledGestureEvent.positionInRootFrame();
+
+    EXPECT_FLOAT_EQ(30, position.x());
+    EXPECT_FLOAT_EQ(30, position.y());
+    EXPECT_EQ(100, scaledGestureEvent.globalX);
+    EXPECT_EQ(110, scaledGestureEvent.globalY);
+    EXPECT_EQ(20, scaledGestureEvent.deltaXInRootFrame());
+    EXPECT_EQ(20, scaledGestureEvent.deltaYInRootFrame());
   }
 
   {
-    WebGestureEvent webGestureEvent;
-    webGestureEvent.type = WebInputEvent::GestureTap;
+    WebGestureEvent webGestureEvent(WebInputEvent::GestureTap,
+                                    WebInputEvent::NoModifiers,
+                                    WebInputEvent::TimeStampForTesting);
     webGestureEvent.sourceDevice = WebGestureDeviceTouchscreen;
     webGestureEvent.data.tap.width = 30;
     webGestureEvent.data.tap.height = 30;
 
-    PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
-    EXPECT_EQ(10, platformGestureBuilder.area().width());
-    EXPECT_EQ(10, platformGestureBuilder.area().height());
+    WebGestureEvent scaledGestureEvent =
+        TransformWebGestureEvent(view, webGestureEvent);
+    IntSize area = flooredIntSize(scaledGestureEvent.tapAreaInRootFrame());
+    EXPECT_EQ(10, area.width());
+    EXPECT_EQ(10, area.height());
   }
 
   {
-    WebGestureEvent webGestureEvent;
-    webGestureEvent.type = WebInputEvent::GestureTapUnconfirmed;
+    WebGestureEvent webGestureEvent(WebInputEvent::GestureTapUnconfirmed,
+                                    WebInputEvent::NoModifiers,
+                                    WebInputEvent::TimeStampForTesting);
     webGestureEvent.sourceDevice = WebGestureDeviceTouchscreen;
     webGestureEvent.data.tap.width = 30;
     webGestureEvent.data.tap.height = 30;
 
-    PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
-    EXPECT_EQ(10, platformGestureBuilder.area().width());
-    EXPECT_EQ(10, platformGestureBuilder.area().height());
+    WebGestureEvent scaledGestureEvent =
+        TransformWebGestureEvent(view, webGestureEvent);
+    IntSize area = flooredIntSize(scaledGestureEvent.tapAreaInRootFrame());
+    EXPECT_EQ(10, area.width());
+    EXPECT_EQ(10, area.height());
   }
 
   {
-    WebGestureEvent webGestureEvent;
-    webGestureEvent.type = WebInputEvent::GestureTapDown;
+    WebGestureEvent webGestureEvent(WebInputEvent::GestureTapDown,
+                                    WebInputEvent::NoModifiers,
+                                    WebInputEvent::TimeStampForTesting);
     webGestureEvent.sourceDevice = WebGestureDeviceTouchscreen;
     webGestureEvent.data.tapDown.width = 30;
     webGestureEvent.data.tapDown.height = 30;
 
-    PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
-    EXPECT_EQ(10, platformGestureBuilder.area().width());
-    EXPECT_EQ(10, platformGestureBuilder.area().height());
+    WebGestureEvent scaledGestureEvent =
+        TransformWebGestureEvent(view, webGestureEvent);
+    IntSize area = flooredIntSize(scaledGestureEvent.tapAreaInRootFrame());
+    EXPECT_EQ(10, area.width());
+    EXPECT_EQ(10, area.height());
   }
 
   {
-    WebGestureEvent webGestureEvent;
-    webGestureEvent.type = WebInputEvent::GestureShowPress;
+    WebGestureEvent webGestureEvent(WebInputEvent::GestureShowPress,
+                                    WebInputEvent::NoModifiers,
+                                    WebInputEvent::TimeStampForTesting);
     webGestureEvent.sourceDevice = WebGestureDeviceTouchscreen;
     webGestureEvent.data.showPress.width = 30;
     webGestureEvent.data.showPress.height = 30;
 
-    PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
-    EXPECT_EQ(10, platformGestureBuilder.area().width());
-    EXPECT_EQ(10, platformGestureBuilder.area().height());
+    WebGestureEvent scaledGestureEvent =
+        TransformWebGestureEvent(view, webGestureEvent);
+    IntSize area = flooredIntSize(scaledGestureEvent.tapAreaInRootFrame());
+    EXPECT_EQ(10, area.width());
+    EXPECT_EQ(10, area.height());
   }
 
   {
-    WebGestureEvent webGestureEvent;
-    webGestureEvent.type = WebInputEvent::GestureLongPress;
+    WebGestureEvent webGestureEvent(WebInputEvent::GestureLongPress,
+                                    WebInputEvent::NoModifiers,
+                                    WebInputEvent::TimeStampForTesting);
     webGestureEvent.sourceDevice = WebGestureDeviceTouchscreen;
     webGestureEvent.data.longPress.width = 30;
     webGestureEvent.data.longPress.height = 30;
 
-    PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
-    EXPECT_EQ(10, platformGestureBuilder.area().width());
-    EXPECT_EQ(10, platformGestureBuilder.area().height());
+    WebGestureEvent scaledGestureEvent =
+        TransformWebGestureEvent(view, webGestureEvent);
+    IntSize area = flooredIntSize(scaledGestureEvent.tapAreaInRootFrame());
+    EXPECT_EQ(10, area.width());
+    EXPECT_EQ(10, area.height());
   }
 
   {
-    WebGestureEvent webGestureEvent;
-    webGestureEvent.type = WebInputEvent::GestureTwoFingerTap;
+    WebGestureEvent webGestureEvent(WebInputEvent::GestureTwoFingerTap,
+                                    WebInputEvent::NoModifiers,
+                                    WebInputEvent::TimeStampForTesting);
     webGestureEvent.sourceDevice = WebGestureDeviceTouchscreen;
     webGestureEvent.data.twoFingerTap.firstFingerWidth = 30;
     webGestureEvent.data.twoFingerTap.firstFingerHeight = 30;
 
-    PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
-    EXPECT_EQ(10, platformGestureBuilder.area().width());
-    EXPECT_EQ(10, platformGestureBuilder.area().height());
+    WebGestureEvent scaledGestureEvent =
+        TransformWebGestureEvent(view, webGestureEvent);
+    IntSize area = flooredIntSize(scaledGestureEvent.tapAreaInRootFrame());
+    EXPECT_EQ(10, area.width());
+    EXPECT_EQ(10, area.height());
   }
 
   {
-    WebTouchEvent webTouchEvent;
-    webTouchEvent.type = WebInputEvent::TouchMove;
+    WebTouchEvent webTouchEvent(WebInputEvent::TouchMove,
+                                WebInputEvent::NoModifiers,
+                                WebInputEvent::TimeStampForTesting);
     webTouchEvent.touchesLength = 1;
     webTouchEvent.touches[0].state = WebTouchPoint::StateMoved;
     webTouchEvent.touches[0].screenPosition.x = 100;
@@ -720,14 +567,60 @@ TEST(WebInputEventConversionTest, InputEventsTransform) {
     webTouchEvent.touches[0].radiusX = 30;
     webTouchEvent.touches[0].radiusY = 30;
 
-    PlatformTouchEventBuilder platformTouchBuilder(view, webTouchEvent);
-    EXPECT_FLOAT_EQ(100, platformTouchBuilder.touchPoints()[0].screenPos().x());
-    EXPECT_FLOAT_EQ(110, platformTouchBuilder.touchPoints()[0].screenPos().y());
-    EXPECT_FLOAT_EQ(30, platformTouchBuilder.touchPoints()[0].pos().x());
-    EXPECT_FLOAT_EQ(30, platformTouchBuilder.touchPoints()[0].pos().y());
-    EXPECT_FLOAT_EQ(10, platformTouchBuilder.touchPoints()[0].radius().width());
-    EXPECT_FLOAT_EQ(10,
-                    platformTouchBuilder.touchPoints()[0].radius().height());
+    WebTouchEvent transformedEvent =
+        TransformWebTouchEvent(view, webTouchEvent);
+
+    WebTouchPoint transformedPoint = transformedEvent.touchPointInRootFrame(0);
+    EXPECT_FLOAT_EQ(100, transformedPoint.screenPosition.x);
+    EXPECT_FLOAT_EQ(110, transformedPoint.screenPosition.y);
+    EXPECT_FLOAT_EQ(30, transformedPoint.position.x);
+    EXPECT_FLOAT_EQ(30, transformedPoint.position.y);
+    EXPECT_FLOAT_EQ(10, transformedPoint.radiusX);
+    EXPECT_FLOAT_EQ(10, transformedPoint.radiusY);
+  }
+
+  {
+    WebTouchEvent webTouchEvent1(WebInputEvent::TouchMove,
+                                 WebInputEvent::NoModifiers,
+                                 WebInputEvent::TimeStampForTesting);
+    webTouchEvent1.touchesLength = 1;
+    webTouchEvent1.touches[0].state = WebTouchPoint::StateMoved;
+    webTouchEvent1.touches[0].screenPosition.x = 100;
+    webTouchEvent1.touches[0].screenPosition.y = 110;
+    webTouchEvent1.touches[0].position.x = 100;
+    webTouchEvent1.touches[0].position.y = 110;
+    webTouchEvent1.touches[0].radiusX = 30;
+    webTouchEvent1.touches[0].radiusY = 30;
+
+    WebTouchEvent webTouchEvent2 = webTouchEvent1;
+    webTouchEvent2.touches[0].screenPosition.x = 130;
+    webTouchEvent2.touches[0].position.x = 130;
+    webTouchEvent2.touches[0].radiusX = 60;
+
+    std::vector<const WebInputEvent*> events;
+    events.push_back(&webTouchEvent1);
+    events.push_back(&webTouchEvent2);
+
+    Vector<WebTouchEvent> coalescedevents =
+        TransformWebTouchEventVector(view, events);
+    EXPECT_EQ(events.size(), coalescedevents.size());
+
+    WebTouchPoint transformedPoint =
+        coalescedevents[0].touchPointInRootFrame(0);
+    EXPECT_FLOAT_EQ(100, transformedPoint.screenPosition.x);
+    EXPECT_FLOAT_EQ(110, transformedPoint.screenPosition.y);
+    EXPECT_FLOAT_EQ(30, transformedPoint.position.x);
+    EXPECT_FLOAT_EQ(30, transformedPoint.position.y);
+    EXPECT_FLOAT_EQ(10, transformedPoint.radiusX);
+    EXPECT_FLOAT_EQ(10, transformedPoint.radiusY);
+
+    transformedPoint = coalescedevents[1].touchPointInRootFrame(0);
+    EXPECT_FLOAT_EQ(130, transformedPoint.screenPosition.x);
+    EXPECT_FLOAT_EQ(110, transformedPoint.screenPosition.y);
+    EXPECT_FLOAT_EQ(40, transformedPoint.position.x);
+    EXPECT_FLOAT_EQ(30, transformedPoint.position.y);
+    EXPECT_FLOAT_EQ(20, transformedPoint.radiusX);
+    EXPECT_FLOAT_EQ(10, transformedPoint.radiusY);
   }
 }
 
@@ -735,9 +628,7 @@ TEST(WebInputEventConversionTest, InputEventsConversions) {
   const std::string baseURL("http://www.test3.com/");
   const std::string fileName("fixed_layout.html");
 
-  URLTestHelpers::registerMockedURLFromBaseURL(
-      WebString::fromUTF8(baseURL.c_str()),
-      WebString::fromUTF8("fixed_layout.html"));
+  registerMockedURL(baseURL, fileName);
   FrameTestHelpers::WebViewHelper webViewHelper;
   WebViewImpl* webViewImpl =
       webViewHelper.initializeAndLoad(baseURL + fileName, true);
@@ -747,14 +638,10 @@ TEST(WebInputEventConversionTest, InputEventsConversions) {
   webViewImpl->updateAllLifecyclePhases();
 
   FrameView* view = toLocalFrame(webViewImpl->page()->mainFrame())->view();
-  Document* document =
-      toLocalFrame(webViewImpl->page()->mainFrame())->document();
-  LocalDOMWindow* domWindow = document->domWindow();
-  LayoutViewItem documentLayoutView = document->layoutViewItem();
-
   {
-    WebGestureEvent webGestureEvent;
-    webGestureEvent.type = WebInputEvent::GestureTap;
+    WebGestureEvent webGestureEvent(WebInputEvent::GestureTap,
+                                    WebInputEvent::NoModifiers,
+                                    WebInputEvent::TimeStampForTesting);
     webGestureEvent.sourceDevice = WebGestureDeviceTouchscreen;
     webGestureEvent.x = 10;
     webGestureEvent.y = 10;
@@ -764,24 +651,15 @@ TEST(WebInputEventConversionTest, InputEventsConversions) {
     webGestureEvent.data.tap.width = 10;
     webGestureEvent.data.tap.height = 10;
 
-    PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
-    EXPECT_EQ(10.f, platformGestureBuilder.position().x());
-    EXPECT_EQ(10.f, platformGestureBuilder.position().y());
-    EXPECT_EQ(10.f, platformGestureBuilder.globalPosition().x());
-    EXPECT_EQ(10.f, platformGestureBuilder.globalPosition().y());
-    EXPECT_EQ(1, platformGestureBuilder.tapCount());
-
-    GestureEvent* coreGestureEvent =
-        GestureEvent::create(domWindow, platformGestureBuilder);
-    WebGestureEventBuilder recreatedWebGestureEvent(documentLayoutView,
-                                                    *coreGestureEvent);
-    EXPECT_EQ(webGestureEvent.type, recreatedWebGestureEvent.type);
-    EXPECT_EQ(webGestureEvent.x, recreatedWebGestureEvent.x);
-    EXPECT_EQ(webGestureEvent.y, recreatedWebGestureEvent.y);
-    EXPECT_EQ(webGestureEvent.globalX, recreatedWebGestureEvent.globalX);
-    EXPECT_EQ(webGestureEvent.globalY, recreatedWebGestureEvent.globalY);
-    EXPECT_EQ(webGestureEvent.data.tap.tapCount,
-              recreatedWebGestureEvent.data.tap.tapCount);
+    WebGestureEvent scaledGestureEvent =
+        TransformWebGestureEvent(view, webGestureEvent);
+    IntPoint position =
+        flooredIntPoint(scaledGestureEvent.positionInRootFrame());
+    EXPECT_EQ(10.f, position.x());
+    EXPECT_EQ(10.f, position.y());
+    EXPECT_EQ(10.f, scaledGestureEvent.globalX);
+    EXPECT_EQ(10.f, scaledGestureEvent.globalY);
+    EXPECT_EQ(1, scaledGestureEvent.tapCount());
   }
 }
 
@@ -789,9 +667,7 @@ TEST(WebInputEventConversionTest, VisualViewportOffset) {
   const std::string baseURL("http://www.test4.com/");
   const std::string fileName("fixed_layout.html");
 
-  URLTestHelpers::registerMockedURLFromBaseURL(
-      WebString::fromUTF8(baseURL.c_str()),
-      WebString::fromUTF8("fixed_layout.html"));
+  registerMockedURL(baseURL, fileName);
   FrameTestHelpers::WebViewHelper webViewHelper;
   WebViewImpl* webViewImpl =
       webViewHelper.initializeAndLoad(baseURL + fileName, true);
@@ -808,8 +684,9 @@ TEST(WebInputEventConversionTest, VisualViewportOffset) {
   FrameView* view = toLocalFrame(webViewImpl->page()->mainFrame())->view();
 
   {
-    WebMouseEvent webMouseEvent;
-    webMouseEvent.type = WebInputEvent::MouseMove;
+    WebMouseEvent webMouseEvent(WebInputEvent::MouseMove,
+                                WebInputEvent::NoModifiers,
+                                WebInputEvent::TimeStampForTesting);
     webMouseEvent.x = 10;
     webMouseEvent.y = 10;
     webMouseEvent.windowX = 10;
@@ -817,16 +694,20 @@ TEST(WebInputEventConversionTest, VisualViewportOffset) {
     webMouseEvent.globalX = 10;
     webMouseEvent.globalY = 10;
 
-    PlatformMouseEventBuilder platformMouseBuilder(view, webMouseEvent);
-    EXPECT_EQ(5 + visualOffset.x(), platformMouseBuilder.position().x());
-    EXPECT_EQ(5 + visualOffset.y(), platformMouseBuilder.position().y());
-    EXPECT_EQ(10, platformMouseBuilder.globalPosition().x());
-    EXPECT_EQ(10, platformMouseBuilder.globalPosition().y());
+    WebMouseEvent transformedMouseEvent =
+        TransformWebMouseEvent(view, webMouseEvent);
+    IntPoint position =
+        flooredIntPoint(transformedMouseEvent.positionInRootFrame());
+    EXPECT_EQ(5 + visualOffset.x(), position.x());
+    EXPECT_EQ(5 + visualOffset.y(), position.y());
+    EXPECT_EQ(10, transformedMouseEvent.globalX);
+    EXPECT_EQ(10, transformedMouseEvent.globalY);
   }
 
   {
-    WebMouseWheelEvent webMouseWheelEvent;
-    webMouseWheelEvent.type = WebInputEvent::MouseWheel;
+    WebMouseWheelEvent webMouseWheelEvent(WebInputEvent::MouseWheel,
+                                          WebInputEvent::NoModifiers,
+                                          WebInputEvent::TimeStampForTesting);
     webMouseWheelEvent.x = 10;
     webMouseWheelEvent.y = 10;
     webMouseWheelEvent.windowX = 10;
@@ -834,32 +715,40 @@ TEST(WebInputEventConversionTest, VisualViewportOffset) {
     webMouseWheelEvent.globalX = 10;
     webMouseWheelEvent.globalY = 10;
 
-    PlatformWheelEventBuilder platformWheelBuilder(view, webMouseWheelEvent);
-    EXPECT_EQ(5 + visualOffset.x(), platformWheelBuilder.position().x());
-    EXPECT_EQ(5 + visualOffset.y(), platformWheelBuilder.position().y());
-    EXPECT_EQ(10, platformWheelBuilder.globalPosition().x());
-    EXPECT_EQ(10, platformWheelBuilder.globalPosition().y());
+    WebMouseWheelEvent scaledMouseWheelEvent =
+        TransformWebMouseWheelEvent(view, webMouseWheelEvent);
+    IntPoint position =
+        flooredIntPoint(scaledMouseWheelEvent.positionInRootFrame());
+    EXPECT_EQ(5 + visualOffset.x(), position.x());
+    EXPECT_EQ(5 + visualOffset.y(), position.y());
+    EXPECT_EQ(10, scaledMouseWheelEvent.globalX);
+    EXPECT_EQ(10, scaledMouseWheelEvent.globalY);
   }
 
   {
-    WebGestureEvent webGestureEvent;
-    webGestureEvent.type = WebInputEvent::GestureScrollUpdate;
+    WebGestureEvent webGestureEvent(WebInputEvent::GestureScrollUpdate,
+                                    WebInputEvent::NoModifiers,
+                                    WebInputEvent::TimeStampForTesting);
     webGestureEvent.sourceDevice = WebGestureDeviceTouchscreen;
     webGestureEvent.x = 10;
     webGestureEvent.y = 10;
     webGestureEvent.globalX = 10;
     webGestureEvent.globalY = 10;
 
-    PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
-    EXPECT_EQ(5 + visualOffset.x(), platformGestureBuilder.position().x());
-    EXPECT_EQ(5 + visualOffset.y(), platformGestureBuilder.position().y());
-    EXPECT_EQ(10, platformGestureBuilder.globalPosition().x());
-    EXPECT_EQ(10, platformGestureBuilder.globalPosition().y());
+    WebGestureEvent scaledGestureEvent =
+        TransformWebGestureEvent(view, webGestureEvent);
+    IntPoint position =
+        flooredIntPoint(scaledGestureEvent.positionInRootFrame());
+    EXPECT_EQ(5 + visualOffset.x(), position.x());
+    EXPECT_EQ(5 + visualOffset.y(), position.y());
+    EXPECT_EQ(10, scaledGestureEvent.globalX);
+    EXPECT_EQ(10, scaledGestureEvent.globalY);
   }
 
   {
-    WebTouchEvent webTouchEvent;
-    webTouchEvent.type = WebInputEvent::TouchMove;
+    WebTouchEvent webTouchEvent(WebInputEvent::TouchMove,
+                                WebInputEvent::NoModifiers,
+                                WebInputEvent::TimeStampForTesting);
     webTouchEvent.touchesLength = 1;
     webTouchEvent.touches[0].state = WebTouchPoint::StateMoved;
     webTouchEvent.touches[0].screenPosition.x = 10.6f;
@@ -872,15 +761,14 @@ TEST(WebInputEventConversionTest, VisualViewportOffset) {
     EXPECT_FLOAT_EQ(10.6f, webTouchEvent.touches[0].position.x);
     EXPECT_FLOAT_EQ(10.4f, webTouchEvent.touches[0].position.y);
 
-    PlatformTouchEventBuilder platformTouchBuilder(view, webTouchEvent);
-    EXPECT_FLOAT_EQ(10.6f,
-                    platformTouchBuilder.touchPoints()[0].screenPos().x());
-    EXPECT_FLOAT_EQ(10.4f,
-                    platformTouchBuilder.touchPoints()[0].screenPos().y());
-    EXPECT_FLOAT_EQ(5.3f + visualOffset.x(),
-                    platformTouchBuilder.touchPoints()[0].pos().x());
-    EXPECT_FLOAT_EQ(5.2f + visualOffset.y(),
-                    platformTouchBuilder.touchPoints()[0].pos().y());
+    WebTouchEvent transformedTouchEvent =
+        TransformWebTouchEvent(view, webTouchEvent);
+    WebTouchPoint transformedPoint =
+        transformedTouchEvent.touchPointInRootFrame(0);
+    EXPECT_FLOAT_EQ(10.6f, transformedPoint.screenPosition.x);
+    EXPECT_FLOAT_EQ(10.4f, transformedPoint.screenPosition.y);
+    EXPECT_FLOAT_EQ(5.3f + visualOffset.x(), transformedPoint.position.x);
+    EXPECT_FLOAT_EQ(5.2f + visualOffset.y(), transformedPoint.position.y);
   }
 }
 
@@ -888,9 +776,7 @@ TEST(WebInputEventConversionTest, ElasticOverscroll) {
   const std::string baseURL("http://www.test5.com/");
   const std::string fileName("fixed_layout.html");
 
-  URLTestHelpers::registerMockedURLFromBaseURL(
-      WebString::fromUTF8(baseURL.c_str()),
-      WebString::fromUTF8("fixed_layout.html"));
+  registerMockedURL(baseURL, fileName);
   FrameTestHelpers::WebViewHelper webViewHelper;
   WebViewImpl* webViewImpl =
       webViewHelper.initializeAndLoad(baseURL + fileName, true);
@@ -907,8 +793,9 @@ TEST(WebInputEventConversionTest, ElasticOverscroll) {
 
   // Just elastic overscroll.
   {
-    WebMouseEvent webMouseEvent;
-    webMouseEvent.type = WebInputEvent::MouseMove;
+    WebMouseEvent webMouseEvent(WebInputEvent::MouseMove,
+                                WebInputEvent::NoModifiers,
+                                WebInputEvent::TimeStampForTesting);
     webMouseEvent.x = 10;
     webMouseEvent.y = 50;
     webMouseEvent.windowX = 10;
@@ -916,13 +803,15 @@ TEST(WebInputEventConversionTest, ElasticOverscroll) {
     webMouseEvent.globalX = 10;
     webMouseEvent.globalY = 50;
 
-    PlatformMouseEventBuilder platformMouseBuilder(view, webMouseEvent);
-    EXPECT_EQ(webMouseEvent.x + elasticOverscroll.width(),
-              platformMouseBuilder.position().x());
-    EXPECT_EQ(webMouseEvent.y + elasticOverscroll.height(),
-              platformMouseBuilder.position().y());
-    EXPECT_EQ(webMouseEvent.globalX, platformMouseBuilder.globalPosition().x());
-    EXPECT_EQ(webMouseEvent.globalY, platformMouseBuilder.globalPosition().y());
+    WebMouseEvent transformedMouseEvent =
+        TransformWebMouseEvent(view, webMouseEvent);
+    IntPoint position =
+        flooredIntPoint(transformedMouseEvent.positionInRootFrame());
+
+    EXPECT_EQ(webMouseEvent.x + elasticOverscroll.width(), position.x());
+    EXPECT_EQ(webMouseEvent.y + elasticOverscroll.height(), position.y());
+    EXPECT_EQ(webMouseEvent.globalX, transformedMouseEvent.globalX);
+    EXPECT_EQ(webMouseEvent.globalY, transformedMouseEvent.globalY);
   }
 
   // Elastic overscroll and pinch-zoom (this doesn't actually ever happen,
@@ -933,8 +822,9 @@ TEST(WebInputEventConversionTest, ElasticOverscroll) {
   IntPoint visualOffset(35, 60);
   webViewImpl->page()->frameHost().visualViewport().setLocation(visualOffset);
   {
-    WebMouseEvent webMouseEvent;
-    webMouseEvent.type = WebInputEvent::MouseMove;
+    WebMouseEvent webMouseEvent(WebInputEvent::MouseMove,
+                                WebInputEvent::NoModifiers,
+                                WebInputEvent::TimeStampForTesting);
     webMouseEvent.x = 10;
     webMouseEvent.y = 10;
     webMouseEvent.windowX = 10;
@@ -942,15 +832,19 @@ TEST(WebInputEventConversionTest, ElasticOverscroll) {
     webMouseEvent.globalX = 10;
     webMouseEvent.globalY = 10;
 
-    PlatformMouseEventBuilder platformMouseBuilder(view, webMouseEvent);
+    WebMouseEvent transformedMouseEvent =
+        TransformWebMouseEvent(view, webMouseEvent);
+    IntPoint position =
+        flooredIntPoint(transformedMouseEvent.positionInRootFrame());
+
     EXPECT_EQ(webMouseEvent.x / pageScale + visualOffset.x() +
                   elasticOverscroll.width(),
-              platformMouseBuilder.position().x());
+              position.x());
     EXPECT_EQ(webMouseEvent.y / pageScale + visualOffset.y() +
                   elasticOverscroll.height(),
-              platformMouseBuilder.position().y());
-    EXPECT_EQ(webMouseEvent.globalX, platformMouseBuilder.globalPosition().x());
-    EXPECT_EQ(webMouseEvent.globalY, platformMouseBuilder.globalPosition().y());
+              position.y());
+    EXPECT_EQ(webMouseEvent.globalX, transformedMouseEvent.globalX);
+    EXPECT_EQ(webMouseEvent.globalY, transformedMouseEvent.globalY);
   }
 }
 
@@ -959,9 +853,7 @@ TEST(WebInputEventConversionTest, ElasticOverscrollWithPageReload) {
   const std::string baseURL("http://www.test6.com/");
   const std::string fileName("fixed_layout.html");
 
-  URLTestHelpers::registerMockedURLFromBaseURL(
-      WebString::fromUTF8(baseURL.c_str()),
-      WebString::fromUTF8("fixed_layout.html"));
+  registerMockedURL(baseURL, fileName);
   FrameTestHelpers::WebViewHelper webViewHelper;
   WebViewImpl* webViewImpl =
       webViewHelper.initializeAndLoad(baseURL + fileName, true);
@@ -978,8 +870,9 @@ TEST(WebInputEventConversionTest, ElasticOverscrollWithPageReload) {
 
   // Just elastic overscroll.
   {
-    WebMouseEvent webMouseEvent;
-    webMouseEvent.type = WebInputEvent::MouseMove;
+    WebMouseEvent webMouseEvent(WebInputEvent::MouseMove,
+                                WebInputEvent::NoModifiers,
+                                WebInputEvent::TimeStampForTesting);
     webMouseEvent.x = 10;
     webMouseEvent.y = 50;
     webMouseEvent.windowX = 10;
@@ -987,269 +880,15 @@ TEST(WebInputEventConversionTest, ElasticOverscrollWithPageReload) {
     webMouseEvent.globalX = 10;
     webMouseEvent.globalY = 50;
 
-    PlatformMouseEventBuilder platformMouseBuilder(view, webMouseEvent);
-    EXPECT_EQ(webMouseEvent.x + elasticOverscroll.width(),
-              platformMouseBuilder.position().x());
-    EXPECT_EQ(webMouseEvent.y + elasticOverscroll.height(),
-              platformMouseBuilder.position().y());
-    EXPECT_EQ(webMouseEvent.globalX, platformMouseBuilder.globalPosition().x());
-    EXPECT_EQ(webMouseEvent.globalY, platformMouseBuilder.globalPosition().y());
-  }
-}
+    WebMouseEvent transformedMouseEvent =
+        TransformWebMouseEvent(view, webMouseEvent);
+    IntPoint position =
+        flooredIntPoint(transformedMouseEvent.positionInRootFrame());
 
-TEST(WebInputEventConversionTest, WebMouseWheelEventBuilder) {
-  const std::string baseURL("http://www.test7.com/");
-  const std::string fileName("fixed_layout.html");
-
-  URLTestHelpers::registerMockedURLFromBaseURL(
-      WebString::fromUTF8(baseURL.c_str()),
-      WebString::fromUTF8("fixed_layout.html"));
-  FrameTestHelpers::WebViewHelper webViewHelper;
-  WebViewImpl* webViewImpl =
-      webViewHelper.initializeAndLoad(baseURL + fileName, true);
-  int pageWidth = 640;
-  int pageHeight = 480;
-  webViewImpl->resize(WebSize(pageWidth, pageHeight));
-  webViewImpl->updateAllLifecyclePhases();
-
-  Document* document =
-      toLocalFrame(webViewImpl->page()->mainFrame())->document();
-  {
-    WheelEvent* event = WheelEvent::create(
-        FloatPoint(1, 3), FloatPoint(5, 10), WheelEvent::kDomDeltaPage,
-        document->domWindow(), IntPoint(2, 6), IntPoint(10, 30),
-        PlatformEvent::CtrlKey, 0, 0, -1 /* null plugin id */,
-        true /* hasPreciseScrollingDeltas */, Event::RailsModeHorizontal,
-        true /*cancelable*/
-#if OS(MACOSX)
-        ,
-        WheelEventPhaseBegan, WheelEventPhaseChanged
-#endif
-        );
-    WebMouseWheelEventBuilder webMouseWheel(
-        toLocalFrame(webViewImpl->page()->mainFrame())->view(),
-        document->layoutViewItem(), *event);
-    EXPECT_EQ(1, webMouseWheel.wheelTicksX);
-    EXPECT_EQ(3, webMouseWheel.wheelTicksY);
-    EXPECT_EQ(5, webMouseWheel.deltaX);
-    EXPECT_EQ(10, webMouseWheel.deltaY);
-    EXPECT_EQ(2, webMouseWheel.globalX);
-    EXPECT_EQ(6, webMouseWheel.globalY);
-    EXPECT_EQ(10, webMouseWheel.windowX);
-    EXPECT_EQ(30, webMouseWheel.windowY);
-    EXPECT_TRUE(webMouseWheel.scrollByPage);
-    EXPECT_EQ(WebInputEvent::ControlKey, webMouseWheel.modifiers);
-    EXPECT_EQ(WebInputEvent::RailsModeHorizontal, webMouseWheel.railsMode);
-    EXPECT_TRUE(webMouseWheel.hasPreciseScrollingDeltas);
-    EXPECT_EQ(WebInputEvent::Blocking, webMouseWheel.dispatchType);
-#if OS(MACOSX)
-    EXPECT_EQ(WebMouseWheelEvent::PhaseBegan, webMouseWheel.phase);
-    EXPECT_EQ(WebMouseWheelEvent::PhaseChanged, webMouseWheel.momentumPhase);
-#endif
-  }
-
-  {
-    WheelEvent* event = WheelEvent::create(
-        FloatPoint(1, 3), FloatPoint(5, 10), WheelEvent::kDomDeltaPage,
-        document->domWindow(), IntPoint(2, 6), IntPoint(10, 30),
-        PlatformEvent::CtrlKey, 0, 0, -1 /* null plugin id */,
-        true /* hasPreciseScrollingDeltas */, Event::RailsModeHorizontal, false
-#if OS(MACOSX)
-        ,
-        WheelEventPhaseNone, WheelEventPhaseNone
-#endif
-        );
-    WebMouseWheelEventBuilder webMouseWheel(
-        toLocalFrame(webViewImpl->page()->mainFrame())->view(),
-        document->layoutViewItem(), *event);
-    EXPECT_EQ(WebInputEvent::EventNonBlocking, webMouseWheel.dispatchType);
-  }
-}
-
-TEST(WebInputEventConversionTest, PlatformWheelEventBuilder) {
-  const std::string baseURL("http://www.test8.com/");
-  const std::string fileName("fixed_layout.html");
-
-  URLTestHelpers::registerMockedURLFromBaseURL(
-      WebString::fromUTF8(baseURL.c_str()),
-      WebString::fromUTF8("fixed_layout.html"));
-  FrameTestHelpers::WebViewHelper webViewHelper;
-  WebViewImpl* webViewImpl =
-      webViewHelper.initializeAndLoad(baseURL + fileName, true);
-  int pageWidth = 640;
-  int pageHeight = 480;
-  webViewImpl->resize(WebSize(pageWidth, pageHeight));
-  webViewImpl->updateAllLifecyclePhases();
-
-  FrameView* view = toLocalFrame(webViewImpl->page()->mainFrame())->view();
-
-  {
-    WebMouseWheelEvent webMouseWheelEvent;
-    webMouseWheelEvent.type = WebInputEvent::MouseWheel;
-    webMouseWheelEvent.x = 0;
-    webMouseWheelEvent.y = 5;
-    webMouseWheelEvent.deltaX = 10;
-    webMouseWheelEvent.deltaY = 15;
-    webMouseWheelEvent.modifiers = WebInputEvent::ControlKey;
-    webMouseWheelEvent.hasPreciseScrollingDeltas = true;
-    webMouseWheelEvent.railsMode = WebInputEvent::RailsModeHorizontal;
-    webMouseWheelEvent.phase = WebMouseWheelEvent::PhaseBegan;
-    webMouseWheelEvent.momentumPhase = WebMouseWheelEvent::PhaseChanged;
-
-    PlatformWheelEventBuilder platformWheelBuilder(view, webMouseWheelEvent);
-    EXPECT_EQ(0, platformWheelBuilder.position().x());
-    EXPECT_EQ(5, platformWheelBuilder.position().y());
-    EXPECT_EQ(10, platformWheelBuilder.deltaX());
-    EXPECT_EQ(15, platformWheelBuilder.deltaY());
-    EXPECT_EQ(PlatformEvent::CtrlKey, platformWheelBuilder.getModifiers());
-    EXPECT_TRUE(platformWheelBuilder.hasPreciseScrollingDeltas());
-    EXPECT_EQ(platformWheelBuilder.getRailsMode(),
-              PlatformEvent::RailsModeHorizontal);
-#if OS(MACOSX)
-    EXPECT_EQ(PlatformWheelEventPhaseBegan, platformWheelBuilder.phase());
-    EXPECT_EQ(PlatformWheelEventPhaseChanged,
-              platformWheelBuilder.momentumPhase());
-#endif
-  }
-
-  {
-    WebMouseWheelEvent webMouseWheelEvent;
-    webMouseWheelEvent.type = WebInputEvent::MouseWheel;
-    webMouseWheelEvent.x = 5;
-    webMouseWheelEvent.y = 0;
-    webMouseWheelEvent.deltaX = 15;
-    webMouseWheelEvent.deltaY = 10;
-    webMouseWheelEvent.modifiers = WebInputEvent::ShiftKey;
-    webMouseWheelEvent.hasPreciseScrollingDeltas = false;
-    webMouseWheelEvent.railsMode = WebInputEvent::RailsModeFree;
-    webMouseWheelEvent.phase = WebMouseWheelEvent::PhaseNone;
-    webMouseWheelEvent.momentumPhase = WebMouseWheelEvent::PhaseNone;
-
-    PlatformWheelEventBuilder platformWheelBuilder(view, webMouseWheelEvent);
-    EXPECT_EQ(5, platformWheelBuilder.position().x());
-    EXPECT_EQ(0, platformWheelBuilder.position().y());
-    EXPECT_EQ(15, platformWheelBuilder.deltaX());
-    EXPECT_EQ(10, platformWheelBuilder.deltaY());
-    EXPECT_EQ(PlatformEvent::ShiftKey, platformWheelBuilder.getModifiers());
-    EXPECT_FALSE(platformWheelBuilder.hasPreciseScrollingDeltas());
-    EXPECT_EQ(platformWheelBuilder.getRailsMode(),
-              PlatformEvent::RailsModeFree);
-#if OS(MACOSX)
-    EXPECT_EQ(PlatformWheelEventPhaseNone, platformWheelBuilder.phase());
-    EXPECT_EQ(PlatformWheelEventPhaseNone,
-              platformWheelBuilder.momentumPhase());
-#endif
-  }
-
-  {
-    WebMouseWheelEvent webMouseWheelEvent;
-    webMouseWheelEvent.type = WebInputEvent::MouseWheel;
-    webMouseWheelEvent.x = 5;
-    webMouseWheelEvent.y = 0;
-    webMouseWheelEvent.deltaX = 15;
-    webMouseWheelEvent.deltaY = 10;
-    webMouseWheelEvent.modifiers = WebInputEvent::AltKey;
-    webMouseWheelEvent.hasPreciseScrollingDeltas = true;
-    webMouseWheelEvent.railsMode = WebInputEvent::RailsModeVertical;
-    webMouseWheelEvent.phase = WebMouseWheelEvent::PhaseNone;
-    webMouseWheelEvent.momentumPhase = WebMouseWheelEvent::PhaseNone;
-
-    PlatformWheelEventBuilder platformWheelBuilder(view, webMouseWheelEvent);
-    EXPECT_EQ(5, platformWheelBuilder.position().x());
-    EXPECT_EQ(0, platformWheelBuilder.position().y());
-    EXPECT_EQ(15, platformWheelBuilder.deltaX());
-    EXPECT_EQ(10, platformWheelBuilder.deltaY());
-    EXPECT_EQ(PlatformEvent::AltKey, platformWheelBuilder.getModifiers());
-    EXPECT_TRUE(platformWheelBuilder.hasPreciseScrollingDeltas());
-    EXPECT_EQ(platformWheelBuilder.getRailsMode(),
-              PlatformEvent::RailsModeVertical);
-#if OS(MACOSX)
-    EXPECT_EQ(PlatformWheelEventPhaseNone, platformWheelBuilder.phase());
-    EXPECT_EQ(PlatformWheelEventPhaseNone,
-              platformWheelBuilder.momentumPhase());
-#endif
-  }
-}
-
-TEST(WebInputEventConversionTest, PlatformGestureEventBuilder) {
-  const std::string baseURL("http://www.test9.com/");
-  const std::string fileName("fixed_layout.html");
-
-  URLTestHelpers::registerMockedURLFromBaseURL(
-      WebString::fromUTF8(baseURL.c_str()),
-      WebString::fromUTF8("fixed_layout.html"));
-  FrameTestHelpers::WebViewHelper webViewHelper;
-  WebViewImpl* webViewImpl =
-      webViewHelper.initializeAndLoad(baseURL + fileName, true);
-  int pageWidth = 640;
-  int pageHeight = 480;
-  webViewImpl->resize(WebSize(pageWidth, pageHeight));
-  webViewImpl->updateAllLifecyclePhases();
-
-  FrameView* view = toLocalFrame(webViewImpl->page()->mainFrame())->view();
-
-  {
-    WebGestureEvent webGestureEvent;
-    webGestureEvent.type = WebInputEvent::GestureScrollBegin;
-    webGestureEvent.x = 0;
-    webGestureEvent.y = 5;
-    webGestureEvent.globalX = 10;
-    webGestureEvent.globalY = 15;
-    webGestureEvent.sourceDevice = WebGestureDeviceTouchpad;
-    webGestureEvent.resendingPluginId = 2;
-    webGestureEvent.data.scrollBegin.inertialPhase =
-        WebGestureEvent::MomentumPhase;
-    webGestureEvent.data.scrollBegin.synthetic = true;
-    webGestureEvent.data.scrollBegin.deltaXHint = 100;
-    webGestureEvent.data.scrollBegin.deltaYHint = 10;
-    webGestureEvent.data.scrollBegin.deltaHintUnits = WebGestureEvent::Pixels;
-    webGestureEvent.uniqueTouchEventId = 12345U;
-
-    PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
-    EXPECT_EQ(PlatformGestureSourceTouchpad, platformGestureBuilder.source());
-    EXPECT_EQ(2, platformGestureBuilder.resendingPluginId());
-    EXPECT_EQ(0, platformGestureBuilder.position().x());
-    EXPECT_EQ(5, platformGestureBuilder.position().y());
-    EXPECT_EQ(10, platformGestureBuilder.globalPosition().x());
-    EXPECT_EQ(15, platformGestureBuilder.globalPosition().y());
-    EXPECT_EQ(ScrollInertialPhaseMomentum,
-              platformGestureBuilder.inertialPhase());
-    EXPECT_TRUE(platformGestureBuilder.synthetic());
-    EXPECT_EQ(100, platformGestureBuilder.deltaX());
-    EXPECT_EQ(10, platformGestureBuilder.deltaY());
-    EXPECT_EQ(ScrollGranularity::ScrollByPixel,
-              platformGestureBuilder.deltaUnits());
-    EXPECT_EQ(12345U, platformGestureBuilder.uniqueTouchEventId());
-  }
-
-  {
-    WebGestureEvent webGestureEvent;
-    webGestureEvent.type = WebInputEvent::GestureScrollEnd;
-    webGestureEvent.x = 0;
-    webGestureEvent.y = 5;
-    webGestureEvent.globalX = 10;
-    webGestureEvent.globalY = 15;
-    webGestureEvent.sourceDevice = WebGestureDeviceTouchpad;
-    webGestureEvent.resendingPluginId = 2;
-    webGestureEvent.data.scrollEnd.inertialPhase =
-        WebGestureEvent::NonMomentumPhase;
-    webGestureEvent.data.scrollEnd.synthetic = true;
-    webGestureEvent.data.scrollEnd.deltaUnits = WebGestureEvent::Page;
-    webGestureEvent.uniqueTouchEventId = 12345U;
-
-    PlatformGestureEventBuilder platformGestureBuilder(view, webGestureEvent);
-    EXPECT_EQ(PlatformGestureSourceTouchpad, platformGestureBuilder.source());
-    EXPECT_EQ(2, platformGestureBuilder.resendingPluginId());
-    EXPECT_EQ(0, platformGestureBuilder.position().x());
-    EXPECT_EQ(5, platformGestureBuilder.position().y());
-    EXPECT_EQ(10, platformGestureBuilder.globalPosition().x());
-    EXPECT_EQ(15, platformGestureBuilder.globalPosition().y());
-    EXPECT_EQ(ScrollInertialPhaseNonMomentum,
-              platformGestureBuilder.inertialPhase());
-    EXPECT_TRUE(platformGestureBuilder.synthetic());
-    EXPECT_EQ(ScrollGranularity::ScrollByPage,
-              platformGestureBuilder.deltaUnits());
-    EXPECT_EQ(12345U, platformGestureBuilder.uniqueTouchEventId());
+    EXPECT_EQ(webMouseEvent.x + elasticOverscroll.width(), position.x());
+    EXPECT_EQ(webMouseEvent.y + elasticOverscroll.height(), position.y());
+    EXPECT_EQ(webMouseEvent.globalX, transformedMouseEvent.globalX);
+    EXPECT_EQ(webMouseEvent.globalY, transformedMouseEvent.globalY);
   }
 }
 

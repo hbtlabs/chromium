@@ -61,13 +61,13 @@ TextDirection SelectionModifier::directionOfEnclosingBlock() const {
   return blink::directionOfEnclosingBlock(m_selection.extent());
 }
 
-TextDirection SelectionModifier::directionOfSelection() const {
+static TextDirection directionOf(const VisibleSelection& visibleSelection) {
   InlineBox* startBox = nullptr;
   InlineBox* endBox = nullptr;
   // Cache the VisiblePositions because visibleStart() and visibleEnd()
   // can cause layout, which has the potential to invalidate lineboxes.
-  VisiblePosition startPosition = m_selection.visibleStart();
-  VisiblePosition endPosition = m_selection.visibleEnd();
+  const VisiblePosition& startPosition = visibleSelection.visibleStart();
+  const VisiblePosition& endPosition = visibleSelection.visibleEnd();
   if (startPosition.isNotNull())
     startBox = computeInlineBoxPosition(startPosition).inlineBox;
   if (endPosition.isNotNull())
@@ -75,62 +75,56 @@ TextDirection SelectionModifier::directionOfSelection() const {
   if (startBox && endBox && startBox->direction() == endBox->direction())
     return startBox->direction();
 
-  return directionOfEnclosingBlock();
+  return directionOfEnclosingBlock(visibleSelection.extent());
 }
 
-void SelectionModifier::willBeModified(EAlteration alter,
-                                       SelectionDirection direction) {
-  if (alter != FrameSelection::AlterationExtend)
-    return;
+TextDirection SelectionModifier::directionOfSelection() const {
+  return directionOf(m_selection);
+}
 
-  Position start = m_selection.start();
-  Position end = m_selection.end();
-
-  bool baseIsStart = true;
-
-  if (m_selection.isDirectional()) {
+static bool isBaseStart(const VisibleSelection& visibleSelection,
+                        SelectionDirection direction) {
+  if (visibleSelection.isDirectional()) {
     // Make base and extent match start and end so we extend the user-visible
     // selection. This only matters for cases where base and extend point to
     // different positions than start and end (e.g. after a double-click to
     // select a word).
-    if (m_selection.isBaseFirst())
-      baseIsStart = true;
-    else
-      baseIsStart = false;
-  } else {
-    switch (direction) {
-      case DirectionRight:
-        if (directionOfSelection() == LTR)
-          baseIsStart = true;
-        else
-          baseIsStart = false;
-        break;
-      case DirectionForward:
-        baseIsStart = true;
-        break;
-      case DirectionLeft:
-        if (directionOfSelection() == LTR)
-          baseIsStart = false;
-        else
-          baseIsStart = true;
-        break;
-      case DirectionBackward:
-        baseIsStart = false;
-        break;
-    }
+    return visibleSelection.isBaseFirst();
   }
-  if (baseIsStart) {
-    m_selection.setBase(start);
-    m_selection.setExtent(end);
-  } else {
-    m_selection.setBase(end);
-    m_selection.setExtent(start);
+  switch (direction) {
+    case DirectionRight:
+      return directionOf(visibleSelection) == TextDirection::kLtr;
+    case DirectionForward:
+      return true;
+    case DirectionLeft:
+      return directionOf(visibleSelection) != TextDirection::kLtr;
+    case DirectionBackward:
+      return false;
   }
+  NOTREACHED() << "We should handle " << direction;
+  return true;
+}
+
+// This function returns |SelectionInDOMTree| from start and end position of
+// |visibleSelection| with |direction| and ordering of base and extent to
+// handle base/extent don't match to start/end, e.g. granularity != character,
+// and start/end adjustment in |visibleSelection::validate()| for range
+// selection.
+static SelectionInDOMTree prepareToExtendSeelction(
+    const VisibleSelection& visibleSelection,
+    SelectionDirection direction) {
+  if (visibleSelection.start().isNull())
+    return visibleSelection.asSelection();
+  const bool baseIsStart = isBaseStart(visibleSelection, direction);
+  return SelectionInDOMTree::Builder(visibleSelection.asSelection())
+      .collapse(baseIsStart ? visibleSelection.start() : visibleSelection.end())
+      .extend(baseIsStart ? visibleSelection.end() : visibleSelection.start())
+      .build();
 }
 
 VisiblePosition SelectionModifier::positionForPlatform(bool isGetStart) const {
   Settings* settings = frame() ? frame()->settings() : nullptr;
-  if (settings && settings->editingBehaviorType() == EditingMacBehavior)
+  if (settings && settings->getEditingBehaviorType() == EditingMacBehavior)
     return isGetStart ? m_selection.visibleStart() : m_selection.visibleEnd();
   // Linux and Windows always extend selections from the extent endpoint.
   // FIXME: VisibleSelection should be fixed to ensure as an invariant that
@@ -202,19 +196,19 @@ VisiblePosition SelectionModifier::modifyExtendingRight(
   // block is RTL direction.
   switch (granularity) {
     case CharacterGranularity:
-      if (directionOfEnclosingBlock() == LTR)
+      if (directionOfEnclosingBlock() == TextDirection::kLtr)
         pos = nextPositionOf(pos, CanSkipOverEditingBoundary);
       else
         pos = previousPositionOf(pos, CanSkipOverEditingBoundary);
       break;
     case WordGranularity:
-      if (directionOfEnclosingBlock() == LTR)
+      if (directionOfEnclosingBlock() == TextDirection::kLtr)
         pos = nextWordPositionForPlatform(pos);
       else
         pos = previousWordPosition(pos);
       break;
     case LineBoundary:
-      if (directionOfEnclosingBlock() == LTR)
+      if (directionOfEnclosingBlock() == TextDirection::kLtr)
         pos = modifyExtendingForward(granularity);
       else
         pos = modifyExtendingBackward(granularity);
@@ -229,7 +223,8 @@ VisiblePosition SelectionModifier::modifyExtendingRight(
       pos = modifyExtendingForward(granularity);
       break;
   }
-  adjustPositionForUserSelectAll(pos, directionOfEnclosingBlock() == LTR);
+  adjustPositionForUserSelectAll(
+      pos, directionOfEnclosingBlock() == TextDirection::kLtr);
   return pos;
 }
 
@@ -272,7 +267,8 @@ VisiblePosition SelectionModifier::modifyExtendingForward(
         pos = endOfDocument(pos);
       break;
   }
-  adjustPositionForUserSelectAll(pos, directionOfEnclosingBlock() == LTR);
+  adjustPositionForUserSelectAll(
+      pos, directionOfEnclosingBlock() == TextDirection::kLtr);
   return pos;
 }
 
@@ -282,7 +278,7 @@ VisiblePosition SelectionModifier::modifyMovingRight(
   switch (granularity) {
     case CharacterGranularity:
       if (m_selection.isRange()) {
-        if (directionOfSelection() == LTR)
+        if (directionOfSelection() == TextDirection::kLtr)
           pos =
               createVisiblePosition(m_selection.end(), m_selection.affinity());
         else
@@ -388,19 +384,19 @@ VisiblePosition SelectionModifier::modifyExtendingLeft(
   // block is RTL direction.
   switch (granularity) {
     case CharacterGranularity:
-      if (directionOfEnclosingBlock() == LTR)
+      if (directionOfEnclosingBlock() == TextDirection::kLtr)
         pos = previousPositionOf(pos, CanSkipOverEditingBoundary);
       else
         pos = nextPositionOf(pos, CanSkipOverEditingBoundary);
       break;
     case WordGranularity:
-      if (directionOfEnclosingBlock() == LTR)
+      if (directionOfEnclosingBlock() == TextDirection::kLtr)
         pos = previousWordPosition(pos);
       else
         pos = nextWordPositionForPlatform(pos);
       break;
     case LineBoundary:
-      if (directionOfEnclosingBlock() == LTR)
+      if (directionOfEnclosingBlock() == TextDirection::kLtr)
         pos = modifyExtendingBackward(granularity);
       else
         pos = modifyExtendingForward(granularity);
@@ -414,7 +410,8 @@ VisiblePosition SelectionModifier::modifyExtendingLeft(
       pos = modifyExtendingBackward(granularity);
       break;
   }
-  adjustPositionForUserSelectAll(pos, !(directionOfEnclosingBlock() == LTR));
+  adjustPositionForUserSelectAll(
+      pos, !(directionOfEnclosingBlock() == TextDirection::kLtr));
   return pos;
 }
 
@@ -462,7 +459,8 @@ VisiblePosition SelectionModifier::modifyExtendingBackward(
         pos = startOfDocument(pos);
       break;
   }
-  adjustPositionForUserSelectAll(pos, !(directionOfEnclosingBlock() == LTR));
+  adjustPositionForUserSelectAll(
+      pos, !(directionOfEnclosingBlock() == TextDirection::kLtr));
   return pos;
 }
 
@@ -472,7 +470,7 @@ VisiblePosition SelectionModifier::modifyMovingLeft(
   switch (granularity) {
     case CharacterGranularity:
       if (m_selection.isRange()) {
-        if (directionOfSelection() == LTR)
+        if (directionOfSelection() == TextDirection::kLtr)
           pos = createVisiblePosition(m_selection.start(),
                                       m_selection.affinity());
         else
@@ -589,7 +587,10 @@ bool SelectionModifier::modify(EAlteration alter,
   DocumentLifecycle::DisallowTransitionScope disallowTransition(
       frame()->document()->lifecycle());
 
-  willBeModified(alter, direction);
+  if (alter == FrameSelection::AlterationExtend) {
+    m_selection = createVisibleSelection(
+        prepareToExtendSeelction(m_selection, direction));
+  }
 
   bool wasRange = m_selection.isRange();
   VisiblePosition originalStartPosition = m_selection.visibleStart();
@@ -681,8 +682,10 @@ bool SelectionModifier::modify(EAlteration alter,
       } else {
         TextDirection textDirection = directionOfEnclosingBlock();
         if (direction == DirectionForward ||
-            (textDirection == LTR && direction == DirectionRight) ||
-            (textDirection == RTL && direction == DirectionLeft))
+            (textDirection == TextDirection::kLtr &&
+             direction == DirectionRight) ||
+            (textDirection == TextDirection::kRtl &&
+             direction == DirectionLeft))
           setSelectionEnd(&m_selection, position);
         else
           setSelectionStart(&m_selection, position);
@@ -715,9 +718,12 @@ bool SelectionModifier::modifyWithPageGranularity(EAlteration alter,
   DocumentLifecycle::DisallowTransitionScope disallowTransition(
       frame()->document()->lifecycle());
 
-  willBeModified(alter, direction == FrameSelection::DirectionUp
-                            ? DirectionBackward
-                            : DirectionForward);
+  if (alter == FrameSelection::AlterationExtend) {
+    m_selection = createVisibleSelection(prepareToExtendSeelction(
+        m_selection, direction == FrameSelection::DirectionUp
+                         ? DirectionBackward
+                         : DirectionForward));
+  }
 
   VisiblePosition pos;
   LayoutUnit xPos;
@@ -861,11 +867,6 @@ LayoutUnit SelectionModifier::lineDirectionPointForBlockDirectionNavigation(
   }
 
   return x;
-}
-
-DEFINE_TRACE(SelectionModifier) {
-  visitor->trace(m_frame);
-  visitor->trace(m_selection);
 }
 
 }  // namespace blink

@@ -12,7 +12,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.Uri;
 import android.os.SystemClock;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 import android.text.TextUtils;
 import android.util.Base64;
 
@@ -82,6 +82,16 @@ public class UrlOverridingTest extends ChromeActivityTestCaseBase<ChromeActivity
         }
 
         @Override
+        public void onDidFinishNavigation(Tab tab, String url, boolean isInMainFrame,
+                boolean isErrorPage, boolean hasCommitted, boolean isSamePage,
+                boolean isFragmentNavigation, Integer pageTransition, int errorCode,
+                int httpStatusCode) {
+            if (errorCode != 0) {
+                mLoadFailCallback.notifyCalled();
+            }
+        }
+
+        @Override
         public void onPageLoadFinished(Tab tab) {
             mFinishCallback.notifyCalled();
         }
@@ -92,8 +102,8 @@ public class UrlOverridingTest extends ChromeActivityTestCaseBase<ChromeActivity
         }
 
         @Override
-        public void onDidFailLoad(Tab tab, boolean isProvisionalLoad, boolean isMainFrame,
-                int errorCode, String description, String failingUrl) {
+        public void onDidFailLoad(Tab tab, boolean isMainFrame, int errorCode, String description,
+                String failingUrl) {
             mLoadFailCallback.notifyCalled();
         }
 
@@ -325,7 +335,7 @@ public class UrlOverridingTest extends ChromeActivityTestCaseBase<ChromeActivity
 
     @SmallTest
     @RetryOnFailure
-    public void testRedirectionFromIntent() throws InterruptedException {
+    public void testRedirectionFromIntent() {
         Intent intent = new Intent(Intent.ACTION_VIEW,
                 Uri.parse(mTestServer.getURL(NAVIGATION_FROM_JAVA_REDIRECTION_PAGE)));
         Context targetContext = getInstrumentation().getTargetContext();

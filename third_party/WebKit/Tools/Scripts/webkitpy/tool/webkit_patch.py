@@ -65,12 +65,15 @@ _log = logging.getLogger(__name__)
 
 
 class WebKitPatch(Host):
+    # FIXME: It might make more sense if this class had a Host attribute
+    # instead of being a Host subclass.
+
     global_options = [
         optparse.make_option(
             "-v", "--verbose", action="store_true", dest="verbose", default=False,
             help="enable all logging"),
         optparse.make_option(
-            "-d", "--directory", action="append", dest="patch_directories", default=[],
+            "-d", "--directory", action="append", default=[],
             help="Directory to look at for changed files"),
     ]
 
@@ -112,7 +115,6 @@ class WebKitPatch(Host):
 
         command.set_option_parser(option_parser)
         (options, args) = command.parse_args(args)
-        self._handle_global_options(options)
 
         (should_execute, failure_reason) = self._should_execute_command(command)
         if not should_execute:
@@ -149,14 +151,10 @@ class WebKitPatch(Host):
         for option in global_options:
             option_parser.add_option(option)
 
-    # FIXME: This may be unnecessary since we pass global options to all commands during execute() as well.
-    def _handle_global_options(self, options):
-        self.initialize_scm(options.patch_directories)
-
     def _should_execute_command(self, command):
-        if command.requires_local_commits and not self.scm().supports_local_commits():
+        if command.requires_local_commits and not self.git().supports_local_commits():
             failure_reason = "%s requires local commits using %s in %s." % (
-                command.name, self.scm().display_name(), self.scm().checkout_root)
+                command.name, self.git().display_name(), self.git().checkout_root)
             return (False, failure_reason)
         return (True, None)
 
@@ -167,7 +165,7 @@ class WebKitPatch(Host):
         if not command.show_in_main_help:
             return False
         if command.requires_local_commits:
-            return self.scm().supports_local_commits()
+            return self.git().supports_local_commits()
         return True
 
     def command_by_name(self, command_name):

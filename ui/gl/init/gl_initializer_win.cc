@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/native_library.h"
 #include "base/path_service.h"
@@ -19,8 +18,6 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/trace_event.h"
 #include "base/win/windows_version.h"
-// TODO(jmadill): Apply to all platforms eventually
-#include "ui/gl/angle_platform_impl.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_egl_api_implementation.h"
 #include "ui/gl/gl_features.h"
@@ -37,12 +34,6 @@ namespace init {
 namespace {
 
 const wchar_t kD3DCompiler[] = L"D3DCompiler_47.dll";
-
-// TODO(jmadill): Apply to all platforms eventually
-base::LazyInstance<ANGLEPlatformImpl> g_angle_platform_impl =
-    LAZY_INSTANCE_INITIALIZER;
-
-ANGLEPlatformShutdownFunc g_angle_platform_shutdown = nullptr;
 
 bool LoadD3DXLibrary(const base::FilePath& module_path,
                      const base::FilePath::StringType& name) {
@@ -107,9 +98,11 @@ bool InitializeStaticEGLInternal() {
   base::FilePath gles_path;
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
+  const std::string use_gl =
+      command_line->GetSwitchValueASCII(switches::kUseGL);
   bool using_swift_shader =
-      command_line->GetSwitchValueASCII(switches::kUseGL) ==
-      kGLImplementationSwiftShaderName;
+      (use_gl == kGLImplementationSwiftShaderName) ||
+      (use_gl == kGLImplementationSwiftShaderForWebGLName);
   if (using_swift_shader) {
     if (!command_line->HasSwitch(switches::kSwiftShaderPath))
       return false;
@@ -151,22 +144,6 @@ bool InitializeStaticEGLInternal() {
     }
   }
 #endif
-
-  if (!using_swift_shader) {
-    // Init ANGLE platform here, before we call GetPlatformDisplay().
-    // TODO(jmadill): Apply to all platforms eventually
-    ANGLEPlatformInitializeFunc angle_platform_init =
-        reinterpret_cast<ANGLEPlatformInitializeFunc>(
-            base::GetFunctionPointerFromNativeLibrary(
-                gles_library, "ANGLEPlatformInitialize"));
-    if (angle_platform_init) {
-      angle_platform_init(&g_angle_platform_impl.Get());
-
-      g_angle_platform_shutdown = reinterpret_cast<ANGLEPlatformShutdownFunc>(
-          base::GetFunctionPointerFromNativeLibrary(gles_library,
-                                                    "ANGLEPlatformShutdown"));
-    }
-  }
 
   GLGetProcAddressProc get_proc_address =
       reinterpret_cast<GLGetProcAddressProc>(
@@ -267,6 +244,7 @@ bool InitializeGLOneOffPlatform() {
         return false;
       }
       break;
+    case kGLImplementationSwiftShaderGL:
     case kGLImplementationEGLGLES2:
       if (!GLSurfaceEGL::InitializeOneOff(GetDC(nullptr))) {
         LOG(ERROR) << "GLSurfaceEGL::InitializeOneOff failed.";
@@ -275,6 +253,7 @@ bool InitializeGLOneOffPlatform() {
       break;
     case kGLImplementationOSMesaGL:
     case kGLImplementationMockGL:
+    case kGLImplementationStubGL:
       break;
     default:
       NOTREACHED();
@@ -297,12 +276,14 @@ bool InitializeStaticGLBindings(GLImplementation implementation) {
   switch (implementation) {
     case kGLImplementationOSMesaGL:
       return InitializeStaticOSMesaInternal();
+    case kGLImplementationSwiftShaderGL:
     case kGLImplementationEGLGLES2:
       return InitializeStaticEGLInternal();
     case kGLImplementationDesktopGL:
       return InitializeStaticWGLInternal();
     case kGLImplementationMockGL:
-      SetGLImplementation(kGLImplementationMockGL);
+    case kGLImplementationStubGL:
+      SetGLImplementation(implementation);
       InitializeStaticGLBindingsGL();
       return true;
     default:
@@ -319,16 +300,12 @@ void InitializeDebugGLBindings() {
   InitializeDebugGLBindingsWGL();
 }
 
-void ClearGLBindingsPlatform() {
-  // TODO(jmadill): Apply to all platforms eventually
-  if (g_angle_platform_shutdown) {
-    g_angle_platform_shutdown();
-  }
-
-  ClearGLBindingsEGL();
-  ClearGLBindingsGL();
-  ClearGLBindingsOSMESA();
-  ClearGLBindingsWGL();
+void ShutdownGLPlatform() {
+  GLSurfaceEGL::ShutdownOneOff();
+  ClearBindingsEGL();
+  ClearBindingsGL();
+  ClearBindingsOSMESA();
+  ClearBindingsWGL();
 }
 
 }  // namespace init

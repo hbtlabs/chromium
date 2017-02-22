@@ -69,11 +69,21 @@ HeadlessDevToolsClientImpl::HeadlessDevToolsClientImpl()
 
 HeadlessDevToolsClientImpl::~HeadlessDevToolsClientImpl() {}
 
-void HeadlessDevToolsClientImpl::AttachToHost(
+bool HeadlessDevToolsClientImpl::AttachToHost(
+    content::DevToolsAgentHost* agent_host) {
+  DCHECK(!agent_host_);
+  if (agent_host->AttachClient(this)) {
+    agent_host_ = agent_host;
+    return true;
+  }
+  return false;
+}
+
+void HeadlessDevToolsClientImpl::ForceAttachToHost(
     content::DevToolsAgentHost* agent_host) {
   DCHECK(!agent_host_);
   agent_host_ = agent_host;
-  agent_host_->AttachClient(this);
+  agent_host_->ForceAttachClient(this);
 }
 
 void HeadlessDevToolsClientImpl::DetachFromHost(
@@ -116,11 +126,16 @@ bool HeadlessDevToolsClientImpl::DispatchMessageReply(
   pending_messages_.erase(it);
   if (!callback.callback_with_result.is_null()) {
     const base::DictionaryValue* result_dict;
-    if (!message_dict.GetDictionary("result", &result_dict)) {
-      NOTREACHED() << "Badly formed reply result";
+    if (message_dict.GetDictionary("result", &result_dict)) {
+      callback.callback_with_result.Run(*result_dict);
+    } else if (message_dict.GetDictionary("error", &result_dict)) {
+      std::unique_ptr<base::Value> null_value = base::Value::CreateNullValue();
+      DLOG(ERROR) << "Error in method call result: " << *result_dict;
+      callback.callback_with_result.Run(*null_value);
+    } else {
+      NOTREACHED() << "Reply has neither result nor error";
       return false;
     }
-    callback.callback_with_result.Run(*result_dict);
   } else if (!callback.callback.is_null()) {
     callback.callback.Run();
   }
@@ -133,15 +148,10 @@ bool HeadlessDevToolsClientImpl::DispatchEvent(
   std::string method;
   if (!message_dict.GetString("method", &method))
     return false;
+  if (method == "Inspector.targetCrashed")
+    renderer_crashed_ = true;
   EventHandlerMap::const_iterator it = event_handlers_.find(method);
   if (it == event_handlers_.end()) {
-    // Silently swallow errors related to the target crashing. This can be
-    // observed via HeadlessWebContents::Observer::RenderProcessExited.
-    if (method == "Inspector.targetCrashed") {
-      renderer_crashed_ = true;
-      return true;
-    }
-
     NOTREACHED() << "Unknown event: " << method;
     return false;
   }

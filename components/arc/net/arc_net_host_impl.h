@@ -62,13 +62,13 @@ class ArcNetHostImpl : public ArcService,
   void CreateNetwork(mojom::WifiConfigurationPtr cfg,
                      const CreateNetworkCallback& callback) override;
 
-  void ForgetNetwork(const mojo::String& guid,
+  void ForgetNetwork(const std::string& guid,
                      const ForgetNetworkCallback& callback) override;
 
-  void StartConnect(const mojo::String& guid,
+  void StartConnect(const std::string& guid,
                     const StartConnectCallback& callback) override;
 
-  void StartDisconnect(const mojo::String& guid,
+  void StartDisconnect(const std::string& guid,
                        const StartDisconnectCallback& callback) override;
 
   // Overriden from chromeos::NetworkStateHandlerObserver.
@@ -80,6 +80,7 @@ class ArcNetHostImpl : public ArcService,
 
   // Overridden from ArcBridgeService::InterfaceObserver<mojom::NetInstance>:
   void OnInstanceReady() override;
+  void OnInstanceClosed() override;
 
  private:
   void DefaultNetworkSuccessCallback(const std::string& service_path,
@@ -102,6 +103,10 @@ class ArcNetHostImpl : public ArcService,
       const mojom::NetHost::CreateNetworkCallback& mojo_callback,
       const std::string& error_name,
       std::unique_ptr<base::DictionaryValue> error_data);
+
+  // True if the chrome::NetworkStateHandler is currently being observed for
+  // state changes.
+  bool observing_network_state_ = false;
 
   std::string cached_service_path_;
   std::string cached_guid_;

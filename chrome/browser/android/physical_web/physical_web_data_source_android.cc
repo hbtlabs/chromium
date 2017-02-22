@@ -9,7 +9,6 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/memory/ptr_util.h"
-#include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "jni/UrlManager_jni.h"
 
@@ -19,7 +18,7 @@ using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 
 PhysicalWebCollection::PhysicalWebCollection()
-    : metadata_list_(base::MakeUnique<base::ListValue>()),
+    : metadata_list_(base::MakeUnique<physical_web::MetadataList>()),
       accessed_once_(false) {}
 
 PhysicalWebCollection::~PhysicalWebCollection() {}
@@ -29,31 +28,26 @@ void PhysicalWebCollection::AppendMetadataItem(
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jstring>& j_request_url,
     jdouble distance_estimate,
-    jint scan_timestamp,
+    jlong scan_timestamp,
     const JavaParamRef<jstring>& j_site_url,
     const JavaParamRef<jstring>& j_icon_url,
     const JavaParamRef<jstring>& j_title,
     const JavaParamRef<jstring>& j_description,
     const JavaParamRef<jstring>& j_group_id) {
-  auto metadata_item = new base::DictionaryValue();
-  metadata_item->SetString(kPhysicalWebScannedUrlKey,
-                           ConvertJavaStringToUTF8(j_request_url));
-  metadata_item->SetDouble(kPhysicalWebDistanceEstimateKey, distance_estimate);
-  metadata_item->SetInteger(kPhysicalWebScanTimestampKey, scan_timestamp);
-  metadata_item->SetString(kPhysicalWebResolvedUrlKey,
-                           ConvertJavaStringToUTF8(j_site_url));
-  metadata_item->SetString(kPhysicalWebIconUrlKey,
-                           ConvertJavaStringToUTF8(j_icon_url));
-  metadata_item->SetString(kPhysicalWebTitleKey,
-                           ConvertJavaStringToUTF8(j_title));
-  metadata_item->SetString(kPhysicalWebDescriptionKey,
-                           ConvertJavaStringToUTF8(j_description));
-  metadata_item->SetString(kPhysicalWebGroupIdKey,
-                           ConvertJavaStringToUTF8(j_group_id));
-  metadata_list_->Append(std::move(metadata_item));
+  metadata_list_->emplace_back();
+  physical_web::Metadata& metadata = metadata_list_->back();
+  metadata.scanned_url = GURL(ConvertJavaStringToUTF8(j_request_url));
+  metadata.resolved_url = GURL(ConvertJavaStringToUTF8(j_site_url));
+  metadata.icon_url = GURL(ConvertJavaStringToUTF8(j_icon_url));
+  metadata.title = ConvertJavaStringToUTF8(j_title);
+  metadata.description = ConvertJavaStringToUTF8(j_description);
+  metadata.group_id = ConvertJavaStringToUTF8(j_group_id);
+  metadata.distance_estimate = distance_estimate;
+  metadata.scan_timestamp = base::Time::FromJavaTime(scan_timestamp);
 }
 
-std::unique_ptr<base::ListValue> PhysicalWebCollection::GetMetadataList() {
+std::unique_ptr<physical_web::MetadataList>
+    PhysicalWebCollection::GetMetadataList() {
   DCHECK(!accessed_once_);
   accessed_once_ = true;
   return std::move(metadata_list_);
@@ -84,12 +78,13 @@ void PhysicalWebDataSourceAndroid::StopDiscovery() {
   NOTREACHED();
 }
 
-std::unique_ptr<base::ListValue> PhysicalWebDataSourceAndroid::GetMetadata() {
+std::unique_ptr<physical_web::MetadataList>
+    PhysicalWebDataSourceAndroid::GetMetadataList() {
   JNIEnv* env = AttachCurrentThread();
 
   auto pw_collection = base::MakeUnique<PhysicalWebCollection>();
   Java_UrlManager_getPwCollection(env, url_manager_.obj(),
-                                  (long)pw_collection.get());
+                                  reinterpret_cast<long>(pw_collection.get()));
 
   return pw_collection->GetMetadataList();
 }
@@ -103,16 +98,14 @@ void PhysicalWebDataSourceAndroid::OnFound(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj,
     const base::android::JavaParamRef<jstring>& j_url) {
-  std::string url = ConvertJavaStringToUTF8(env, j_url);
-  NotifyOnFound(url);
+  NotifyOnFound(GURL(ConvertJavaStringToUTF8(env, j_url)));
 }
 
 void PhysicalWebDataSourceAndroid::OnLost(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj,
     const base::android::JavaParamRef<jstring>& j_url) {
-  std::string url = ConvertJavaStringToUTF8(env, j_url);
-  NotifyOnLost(url);
+  NotifyOnLost(GURL(ConvertJavaStringToUTF8(env, j_url)));
 }
 
 void PhysicalWebDataSourceAndroid::OnDistanceChanged(
@@ -120,8 +113,8 @@ void PhysicalWebDataSourceAndroid::OnDistanceChanged(
     const base::android::JavaParamRef<jobject>& obj,
     const base::android::JavaParamRef<jstring>& j_url,
     jdouble distance_estimate) {
-  std::string url = ConvertJavaStringToUTF8(env, j_url);
-  NotifyOnDistanceChanged(url, distance_estimate);
+  NotifyOnDistanceChanged(GURL(ConvertJavaStringToUTF8(env, j_url)),
+                          distance_estimate);
 }
 
 // static
@@ -130,7 +123,7 @@ bool PhysicalWebDataSourceAndroid::RegisterPhysicalWebDataSource(JNIEnv* env) {
 }
 
 static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
-  PhysicalWebDataSource* data_source =
+  physical_web::PhysicalWebDataSource* data_source =
       g_browser_process->GetPhysicalWebDataSource();
   return reinterpret_cast<intptr_t>(data_source);
 }

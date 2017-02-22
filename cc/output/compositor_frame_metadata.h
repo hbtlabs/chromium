@@ -75,12 +75,12 @@ class CC_EXPORT CompositorFrameMetadata {
 
   std::vector<ui::LatencyInfo> latency_info;
 
-  // A set of SurfaceSequences that this frame satisfies (always in the same
-  // namespace as the current Surface).
-  std::vector<uint32_t> satisfies_sequences;
-
   // This is the set of Surfaces that are referenced by this frame.
   std::vector<SurfaceId> referenced_surfaces;
+
+  // This indicates whether this CompositorFrame can be activated before
+  // dependencies have been resolved.
+  bool can_activate_before_dependencies = true;
 
  private:
   CompositorFrameMetadata(const CompositorFrameMetadata& other);

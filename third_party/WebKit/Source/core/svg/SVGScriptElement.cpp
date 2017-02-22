@@ -22,10 +22,12 @@
 
 #include "bindings/core/v8/ScriptEventListener.h"
 #include "core/HTMLNames.h"
+#include "core/XLinkNames.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/ScriptLoader.h"
 #include "core/dom/ScriptRunner.h"
 #include "core/events/Event.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 
 namespace blink {
 
@@ -42,15 +44,24 @@ SVGScriptElement* SVGScriptElement::create(Document& document,
   return new SVGScriptElement(document, insertedByParser, false);
 }
 
-void SVGScriptElement::parseAttribute(const QualifiedName& name,
-                                      const AtomicString& oldValue,
-                                      const AtomicString& value) {
-  if (name == HTMLNames::onerrorAttr)
+void SVGScriptElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  if (params.name == HTMLNames::onerrorAttr) {
     setAttributeEventListener(
         EventTypeNames::error,
-        createAttributeEventListener(this, name, value, eventParameterName()));
-  else
-    SVGElement::parseAttribute(name, oldValue, value);
+        createAttributeEventListener(this, params.name, params.newValue,
+                                     eventParameterName()));
+  } else if (params.name == HTMLNames::nonceAttr) {
+    if (params.newValue == ContentSecurityPolicy::getNonceReplacementString())
+      return;
+    setNonce(params.newValue);
+    if (RuntimeEnabledFeatures::hideNonceContentAttributeEnabled()) {
+      setAttribute(HTMLNames::nonceAttr,
+                   ContentSecurityPolicy::getNonceReplacementString());
+    }
+  } else {
+    SVGElement::parseAttribute(params);
+  }
 }
 
 void SVGScriptElement::svgAttributeChanged(const QualifiedName& attrName) {
@@ -143,11 +154,11 @@ void SVGScriptElement::dispatchLoadEvent() {
   dispatchEvent(Event::create(EventTypeNames::load));
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 bool SVGScriptElement::isAnimatableAttribute(const QualifiedName& name) const {
-  if (name == SVGNames::typeAttr)
+  if (name == SVGNames::typeAttr || name == SVGNames::hrefAttr ||
+      name == XLinkNames::hrefAttr)
     return false;
-
   return SVGElement::isAnimatableAttribute(name);
 }
 #endif

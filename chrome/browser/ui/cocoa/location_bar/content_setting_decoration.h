@@ -16,6 +16,8 @@
 // of view when a page attempts to show a popup and the popup blocker is on.
 
 @class ContentSettingAnimationState;
+@class ContentSettingBubbleController;
+class ContentSettingDecorationTest;
 class ContentSettingImageModel;
 class LocationBarViewMac;
 class Profile;
@@ -26,8 +28,7 @@ class WebContents;
 
 class ContentSettingDecoration : public ImageDecoration {
  public:
-  // ContentSettingDecoration takes ownership of its model.
-  ContentSettingDecoration(ContentSettingImageModel* model,
+  ContentSettingDecoration(std::unique_ptr<ContentSettingImageModel> model,
                            LocationBarViewMac* owner,
                            Profile* profile);
   ~ContentSettingDecoration() override;
@@ -49,6 +50,7 @@ class ContentSettingDecoration : public ImageDecoration {
   virtual void AnimationTimerFired();
 
  private:
+  friend class ContentSettingDecorationTest;
 
   void SetToolTip(NSString* tooltip);
 
@@ -69,6 +71,9 @@ class ContentSettingDecoration : public ImageDecoration {
   base::scoped_nsobject<ContentSettingAnimationState> animation_;
   CGFloat text_width_;
   base::scoped_nsobject<NSAttributedString> animated_text_;
+
+  // The window of the content setting bubble.
+  base::scoped_nsobject<NSWindow> bubbleWindow_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentSettingDecoration);
 };

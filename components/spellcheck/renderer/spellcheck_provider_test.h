@@ -9,7 +9,6 @@
 
 #include <vector>
 
-#include "base/memory/scoped_vector.h"
 #include "base/strings/string16.h"
 #include "components/spellcheck/renderer/spellcheck_provider.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -50,8 +49,14 @@ class TestingSpellCheckProvider : public SpellCheckProvider {
                              const std::vector<SpellCheckMarker>& markers);
   void ResetResult();
 
+  void SetLastResults(
+      const base::string16 last_request,
+      blink::WebVector<blink::WebTextCheckingResult>& last_results);
+  bool SatisfyRequestFromCache(const base::string16& text,
+                               blink::WebTextCheckingCompletion* completion);
+
   base::string16 text_;
-  ScopedVector<IPC::Message> messages_;
+  std::vector<std::unique_ptr<IPC::Message>> messages_;
   size_t spelling_service_call_count_;
 };
 

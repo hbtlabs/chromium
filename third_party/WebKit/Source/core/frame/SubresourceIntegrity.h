@@ -7,15 +7,15 @@
 
 #include "base/gtest_prod_util.h"
 #include "core/CoreExport.h"
-#include "core/fetch/IntegrityMetadata.h"
 #include "platform/Crypto.h"
+#include "platform/loader/fetch/IntegrityMetadata.h"
 #include "wtf/Allocator.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
 
-class Document;
 class Element;
+class ExecutionContext;
 class KURL;
 class Resource;
 
@@ -46,13 +46,13 @@ class CORE_EXPORT SubresourceIntegrity {
                                         const char*,
                                         size_t,
                                         const KURL& resourceUrl,
-                                        Document&,
+                                        ExecutionContext&,
                                         WTF::String&);
   static bool CheckSubresourceIntegrity(const IntegrityMetadataSet&,
                                         const char*,
                                         size_t,
                                         const KURL& resourceUrl,
-                                        Document&,
+                                        ExecutionContext&,
                                         WTF::String&);
 
   // The IntegrityMetadataSet arguments are out parameters which contain the
@@ -63,7 +63,7 @@ class CORE_EXPORT SubresourceIntegrity {
   static IntegrityParseResult parseIntegrityAttribute(
       const WTF::String& attribute,
       IntegrityMetadataSet&,
-      Document*);
+      ExecutionContext*);
 
  private:
   friend class SubresourceIntegrityTest;

@@ -5,22 +5,18 @@
 var mediaRouter;
 
 define('media_router_bindings', [
-    'mojo/public/js/bindings',
-    'mojo/public/js/core',
     'content/public/renderer/frame_interfaces',
     'chrome/browser/media/router/mojo/media_router.mojom',
     'extensions/common/mojo/keep_alive.mojom',
-    'mojo/common/common_custom_types.mojom',
-    'mojo/public/js/connection',
-    'mojo/public/js/router',
-], function(bindings,
-            core,
-            frameInterfaces,
+    'mojo/common/time.mojom',
+    'mojo/public/js/bindings',
+    'url/mojo/origin.mojom',
+], function(frameInterfaces,
             mediaRouterMojom,
             keepAliveMojom,
-            commonCustomTypesMojom,
-            connector,
-            routerModule) {
+            timeMojom,
+            bindings,
+            originMojom) {
   'use strict';
 
   /**
@@ -149,6 +145,43 @@ define('media_router_bindings', [
     }
   }
 
+  // TODO(crbug.com/688177): remove this conversion.
+  /**
+   * Converts Mojo origin to string.
+   * @param {!originMojom.Origin} Mojo origin
+   * @return {string}
+   */
+  function mojoOriginToString_(origin) {
+    return origin.unique ? '' :
+        `${origin.scheme}:\/\/${origin.host}` +
+        `${origin.port ? `:${origin.port}` : ''}/`
+  }
+
+  // TODO(crbug.com/688177): remove this conversion.
+  /**
+   * Converts string to Mojo origin.
+   * @param {string} origin
+   * @return {!originMojom.Origin}
+   */
+  function stringToMojoOrigin_(origin) {
+    var url = new URL(origin);
+    var mojoOrigin = {};
+    mojoOrigin.scheme = url.protocol.replace(':', '');
+    mojoOrigin.host = url.hostname;
+    var port = url.port ? Number.parseInt(url.port) : 0;
+    switch (mojoOrigin.scheme) {
+      case 'http':
+        mojoOrigin.port = port || 80;
+        break;
+      case 'https':
+        mojoOrigin.port = port || 443;
+        break;
+      default:
+        throw new Error('Scheme must be http or https');
+    }
+    return new originMojom.Origin(mojoOrigin);
+  }
+
   /**
    * Parses the given route request Error object and converts it to the
    * corresponding result code.
@@ -187,14 +220,14 @@ define('media_router_bindings', [
   /**
    * Creates a new MediaRouter.
    * Converts a route struct to its Mojo form.
-   * @param {!MediaRouterService} service
+   * @param {!mediaRouterMojom.MediaRouterPtr} service
    * @constructor
    */
   function MediaRouter(service) {
     /**
      * The Mojo service proxy. Allows extension code to call methods that reside
      * in the browser.
-     * @type {!MediaRouterService}
+     * @type {!mediaRouterMojom.MediaRouterPtr}
      */
     this.service_ = service;
 
@@ -206,15 +239,6 @@ define('media_router_bindings', [
     this.mrpm_ = new MediaRouteProvider(this);
 
     /**
-     * The message pipe that connects the Media Router to mrpm_ across
-     * browser/renderer IPC boundaries. Object must remain in scope for the
-     * lifetime of the connection to prevent the connection from closing
-     * automatically.
-     * @type {!mojo.MessagePipe}
-     */
-    this.pipe_ = core.createMessagePipe();
-
-    /**
      * Handle to a KeepAlive service object, which prevents the extension from
      * being suspended as long as it remains in scope.
      * @type {boolean}
@@ -222,16 +246,13 @@ define('media_router_bindings', [
     this.keepAlive_ = null;
 
     /**
-     * The stub used to bind the service delegate to the Mojo interface.
+     * The bindings to bind the service delegate to the Mojo interface.
      * Object must remain in scope for the lifetime of the connection to
      * prevent the connection from closing automatically.
-     * @type {!mojom.MediaRouter}
+     * @type {!bindings.Binding}
      */
-    this.mediaRouteProviderStub_ = connector.bindHandleToStub(
-        this.pipe_.handle0, mediaRouterMojom.MediaRouteProvider);
-
-    // Link mediaRouteProviderStub_ to the provider manager delegate.
-    bindings.StubBindings(this.mediaRouteProviderStub_).delegate = this.mrpm_;
+    this.mediaRouteProviderBinding_ = new bindings.Binding(
+        mediaRouterMojom.MediaRouteProvider, this.mrpm_);
   }
 
   /**
@@ -239,10 +260,11 @@ define('media_router_bindings', [
    * @return {!Promise<string>} Instance ID for the Media Router.
    */
   MediaRouter.prototype.start = function() {
-    return this.service_.registerMediaRouteProvider(this.pipe_.handle1).then(
-        function(result) {
-          return result.instance_id;
-        }.bind(this));
+    return this.service_.registerMediaRouteProvider(
+        this.mediaRouteProviderBinding_.createInterfacePtrAndBind()).then(
+            function(result) {
+      return result.instance_id;
+    }.bind(this));
   }
 
   /**
@@ -271,7 +293,7 @@ define('media_router_bindings', [
   MediaRouter.prototype.onSinksReceived = function(sourceUrn, sinks,
       origins) {
     this.service_.onSinksReceived(sourceUrn, sinks.map(sinkToMojo_),
-        origins);
+        origins.map(stringToMojoOrigin_));
   };
 
   /**
@@ -298,10 +320,10 @@ define('media_router_bindings', [
    */
   MediaRouter.prototype.setKeepAlive = function(keepAlive) {
     if (keepAlive === false && this.keepAlive_) {
-      this.keepAlive_.close();
+      this.keepAlive_.ptr.reset();
       this.keepAlive_ = null;
     } else if (keepAlive === true && !this.keepAlive_) {
-      this.keepAlive_ = new routerModule.Router(
+      this.keepAlive_ = new keepAliveMojom.KeepAlivePtr(
           frameInterfaces.getInterface(keepAliveMojom.KeepAlive.name));
     }
   };
@@ -509,8 +531,6 @@ define('media_router_bindings', [
    * @constructor
    */
   function MediaRouteProvider(mediaRouter) {
-    mediaRouterMojom.MediaRouteProvider.stubClass.call(this);
-
     /**
      * Object containing JS callbacks into Provider Manager code.
      * @type {!MediaRouterHandlers}
@@ -523,8 +543,6 @@ define('media_router_bindings', [
      */
     this.mediaRouter_ = mediaRouter;
   }
-  MediaRouteProvider.prototype = Object.create(
-      mediaRouterMojom.MediaRouteProvider.stubClass.prototype);
 
   /*
    * Sets the callback handler used to invoke methods in the provider manager.
@@ -593,7 +611,7 @@ define('media_router_bindings', [
    * @param {!string} sinkId Media sink ID.
    * @param {!string} presentationId Presentation ID from the site
    *     requesting presentation. TODO(mfoltz): Remove.
-   * @param {!string} origin Origin of site requesting presentation.
+   * @param {!originMojom.Origin} origin Origin of site requesting presentation.
    * @param {!number} tabId ID of tab requesting presentation.
    * @param {!TimeDelta} timeout If positive, the timeout duration for the
    *     request. Otherwise, the default duration will be used.
@@ -608,7 +626,7 @@ define('media_router_bindings', [
                timeout, incognito) {
     this.handlers_.onBeforeInvokeHandler();
     return this.handlers_.createRoute(
-        sourceUrn, sinkId, presentationId, origin, tabId,
+        sourceUrn, sinkId, presentationId, mojoOriginToString_(origin), tabId,
         Math.floor(timeout.microseconds / 1000), incognito)
         .then(function(route) {
           return toSuccessRouteResponse_(route);
@@ -624,7 +642,7 @@ define('media_router_bindings', [
    * validating same-origin/tab scope.
    * @param {!string} sourceUrn Media source to render.
    * @param {!string} presentationId Presentation ID to join.
-   * @param {!string} origin Origin of site requesting join.
+   * @param {!originMojom.Origin} origin Origin of site requesting join.
    * @param {!number} tabId ID of tab requesting join.
    * @param {!TimeDelta} timeout If positive, the timeout duration for the
    *     request. Otherwise, the default duration will be used.
@@ -639,7 +657,7 @@ define('media_router_bindings', [
                incognito) {
     this.handlers_.onBeforeInvokeHandler();
     return this.handlers_.joinRoute(
-        sourceUrn, presentationId, origin, tabId,
+        sourceUrn, presentationId, mojoOriginToString_(origin), tabId,
         Math.floor(timeout.microseconds / 1000), incognito)
         .then(function(route) {
           return toSuccessRouteResponse_(route);
@@ -656,7 +674,7 @@ define('media_router_bindings', [
    * @param {!string} sourceUrn Media source to render.
    * @param {!string} routeId Route ID to join.
    * @param {!string} presentationId Presentation ID to join.
-   * @param {!string} origin Origin of site requesting join.
+   * @param {!originMojom.Origin} origin Origin of site requesting join.
    * @param {!number} tabId ID of tab requesting join.
    * @param {!TimeDelta} timeout If positive, the timeout duration for the
    *     request. Otherwise, the default duration will be used.
@@ -671,7 +689,7 @@ define('media_router_bindings', [
                timeout, incognito) {
     this.handlers_.onBeforeInvokeHandler();
     return this.handlers_.connectRouteByRouteId(
-        sourceUrn, routeId, presentationId, origin, tabId,
+        sourceUrn, routeId, presentationId, mojoOriginToString_(origin), tabId,
         Math.floor(timeout.microseconds / 1000), incognito)
         .then(function(route) {
           return toSuccessRouteResponse_(route);
@@ -716,14 +734,14 @@ define('media_router_bindings', [
   /**
    * Sends a binary message to the route designated by |routeId|.
    * @param {!string} routeId
-   * @param {!Uint8Array} data
+   * @param {!Array<number>} data
    * @return {!Promise.<boolean>} Resolved with true if the data was sent,
    *    or false on failure.
    */
   MediaRouteProvider.prototype.sendRouteBinaryMessage = function(
     routeId, data) {
     this.handlers_.onBeforeInvokeHandler();
-    return this.handlers_.sendRouteBinaryMessage(routeId, data)
+    return this.handlers_.sendRouteBinaryMessage(routeId, new Uint8Array(data))
         .then(function() {
           return {'sent': true};
         }, function() {
@@ -824,9 +842,8 @@ define('media_router_bindings', [
     });
   };
 
-  mediaRouter = new MediaRouter(connector.bindHandleToProxy(
-      frameInterfaces.getInterface(mediaRouterMojom.MediaRouter.name),
-      mediaRouterMojom.MediaRouter));
+  mediaRouter = new MediaRouter(new mediaRouterMojom.MediaRouterPtr(
+      frameInterfaces.getInterface(mediaRouterMojom.MediaRouter.name)));
 
   return mediaRouter;
 });

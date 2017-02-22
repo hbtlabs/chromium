@@ -4,7 +4,7 @@
 
 #include "public/web/WebMemoryStatistics.h"
 
-#include "platform/heap/Heap.h"
+#include "platform/heap/Handle.h"
 #include "wtf/allocator/Partitions.h"
 
 namespace blink {
@@ -15,13 +15,13 @@ class LightPartitionStatsDumperImpl : public WTF::PartitionStatsDumper {
  public:
   LightPartitionStatsDumperImpl() : m_totalActiveBytes(0) {}
 
-  void partitionDumpTotals(
+  void PartitionDumpTotals(
       const char* partitionName,
       const WTF::PartitionMemoryStats* memoryStats) override {
-    m_totalActiveBytes += memoryStats->totalActiveBytes;
+    m_totalActiveBytes += memoryStats->total_active_bytes;
   }
 
-  void partitionsDumpBucketStats(
+  void PartitionsDumpBucketStats(
       const char* partitionName,
       const WTF::PartitionBucketMemoryStats*) override {}
 

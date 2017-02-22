@@ -10,6 +10,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/strings/stringprintf.h"
+#include "components/rappor/public/rappor_utils.h"
 
 namespace ntp_tiles {
 namespace metrics {
@@ -24,6 +25,11 @@ const char kHistogramClientName[] = "client";
 const char kHistogramServerName[] = "server";
 const char kHistogramPopularName[] = "popular";
 const char kHistogramWhitelistName[] = "whitelist";
+
+// Suffixes for the various icon types.
+const char kIconTypeSuffixColor[] = "IconsColor";
+const char kIconTypeSuffixGray[] = "IconsGray";
+const char kIconTypeSuffixReal[] = "IconsReal";
 
 // Log an event for a given |histogram| at a given element |position|. This
 // routine exists because regular histogram macros are cached thus can't be used
@@ -53,45 +59,79 @@ std::string GetSourceHistogramName(NTPTileSource source) {
   return std::string();
 }
 
+const char* GetIconTypeSuffix(MostVisitedTileType type) {
+  switch (type) {
+    case ICON_COLOR:
+      return kIconTypeSuffixColor;
+    case ICON_DEFAULT:
+      return kIconTypeSuffixGray;
+    case ICON_REAL:
+      return kIconTypeSuffixReal;
+    case NONE:                     // Fall through.
+    case NUM_RECORDED_TILE_TYPES:  // Fall through.
+    case THUMBNAIL:                // Fall through.
+    case UNKNOWN_TILE_TYPE:
+      break;
+  }
+  return nullptr;
+}
+
 }  // namespace
 
-void RecordTileImpression(int index, NTPTileSource source) {
-  UMA_HISTOGRAM_ENUMERATION("NewTabPage.SuggestionsImpression",
-                            static_cast<int>(index), kMaxNumTiles);
+void RecordPageImpression(const std::vector<TileImpression>& tiles,
+                          rappor::RapporService* rappor_service) {
+  UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.NumberOfTiles", tiles.size());
 
-  std::string histogram =
-      base::StringPrintf("NewTabPage.SuggestionsImpression.%s",
-                         GetSourceHistogramName(source).c_str());
-  LogHistogramEvent(histogram, static_cast<int>(index), kMaxNumTiles);
-}
-
-void RecordPageImpression(int number_of_tiles) {
-  UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.NumberOfTiles", number_of_tiles);
-}
-
-void RecordImpressionTileTypes(
-    const std::vector<MostVisitedTileType>& tile_types,
-    const std::vector<NTPTileSource>& sources) {
   int counts_per_type[NUM_RECORDED_TILE_TYPES] = {0};
-  for (size_t i = 0; i < tile_types.size(); ++i) {
-    MostVisitedTileType tile_type = tile_types[i];
-    DCHECK_LT(tile_type, NUM_RECORDED_TILE_TYPES);
+  bool have_tile_types = false;
+  for (int index = 0; index < static_cast<int>(tiles.size()); index++) {
+    NTPTileSource source = tiles[index].source;
+    MostVisitedTileType tile_type = tiles[index].type;
+    const GURL& url = tiles[index].url;
+
+    UMA_HISTOGRAM_ENUMERATION("NewTabPage.SuggestionsImpression", index,
+                              kMaxNumTiles);
+
+    std::string source_name = GetSourceHistogramName(source);
+    std::string impression_histogram = base::StringPrintf(
+        "NewTabPage.SuggestionsImpression.%s", source_name.c_str());
+    LogHistogramEvent(impression_histogram, index, kMaxNumTiles);
+
+    if (tile_type >= NUM_RECORDED_TILE_TYPES) {
+      continue;
+    }
+
+    have_tile_types = true;
     ++counts_per_type[tile_type];
 
     UMA_HISTOGRAM_ENUMERATION("NewTabPage.TileType", tile_type,
                               NUM_RECORDED_TILE_TYPES);
 
-    std::string histogram = base::StringPrintf(
-        "NewTabPage.TileType.%s", GetSourceHistogramName(sources[i]).c_str());
-    LogHistogramEvent(histogram, tile_type, NUM_RECORDED_TILE_TYPES);
+    std::string tile_type_histogram =
+        base::StringPrintf("NewTabPage.TileType.%s", source_name.c_str());
+    LogHistogramEvent(tile_type_histogram, tile_type, NUM_RECORDED_TILE_TYPES);
+
+    const char* icon_type_suffix = GetIconTypeSuffix(tile_type);
+    if (icon_type_suffix) {
+      rappor::SampleDomainAndRegistryFromGURL(
+          rappor_service,
+          base::StringPrintf("NTP.SuggestionsImpressions.%s", icon_type_suffix),
+          url);
+
+      std::string icon_impression_histogram = base::StringPrintf(
+          "NewTabPage.SuggestionsImpression.%s", icon_type_suffix);
+      LogHistogramEvent(icon_impression_histogram, index, kMaxNumTiles);
+    }
   }
 
-  UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.IconsReal",
-                              counts_per_type[ICON_REAL]);
-  UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.IconsColor",
-                              counts_per_type[ICON_COLOR]);
-  UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.IconsGray",
-                              counts_per_type[ICON_DEFAULT]);
+  if (have_tile_types) {
+    UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.IconsReal",
+                                counts_per_type[ICON_REAL]);
+    UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.IconsColor",
+                                counts_per_type[ICON_COLOR]);
+    UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.IconsGray",
+                                counts_per_type[ICON_DEFAULT]);
+  }
 }
 
 void RecordTileClick(int index,
@@ -102,6 +142,13 @@ void RecordTileClick(int index,
   std::string histogram = base::StringPrintf(
       "NewTabPage.MostVisited.%s", GetSourceHistogramName(source).c_str());
   LogHistogramEvent(histogram, index, kMaxNumTiles);
+
+  const char* icon_type_suffix = GetIconTypeSuffix(tile_type);
+  if (icon_type_suffix) {
+    std::string icon_histogram =
+        base::StringPrintf("NewTabPage.MostVisited.%s", icon_type_suffix);
+    LogHistogramEvent(icon_histogram, index, kMaxNumTiles);
+  }
 
   if (tile_type < NUM_RECORDED_TILE_TYPES) {
     UMA_HISTOGRAM_ENUMERATION("NewTabPage.TileTypeClicked", tile_type,

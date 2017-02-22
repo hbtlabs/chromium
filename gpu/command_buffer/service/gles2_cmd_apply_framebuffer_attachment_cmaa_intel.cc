@@ -8,6 +8,7 @@
 #include "gpu/command_buffer/service/framebuffer_manager.h"
 #include "gpu/command_buffer/service/gles2_cmd_copy_texture_chromium.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
+#include "gpu/command_buffer/service/texture_manager.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_gl_api_implementation.h"
 #include "ui/gl/gl_version_info.h"
@@ -207,9 +208,10 @@ void ApplyFramebufferAttachmentCMAAINTELResourceManager::Destroy() {
 // Reference GL_INTEL_framebuffer_CMAA for details.
 void ApplyFramebufferAttachmentCMAAINTELResourceManager::
     ApplyFramebufferAttachmentCMAAINTEL(
-        gles2::GLES2Decoder* decoder,
-        gles2::Framebuffer* framebuffer,
-        gles2::CopyTextureCHROMIUMResourceManager* copier) {
+        GLES2Decoder* decoder,
+        Framebuffer* framebuffer,
+        CopyTextureCHROMIUMResourceManager* copier,
+        TextureManager* texture_manager) {
   DCHECK(decoder);
   DCHECK(initialized_);
   if (!framebuffer)
@@ -241,16 +243,55 @@ void ApplyFramebufferAttachmentCMAAINTELResourceManager::
 
       // CMAA internally expects GL_RGBA8 textures.
       // Process using a GL_RGBA8 copy if this is not the case.
-      bool do_copy = internal_format != GL_RGBA8;
+      DCHECK(attachment->object_name());
+      TextureRef* texture =
+          texture_manager->GetTexture(attachment->object_name());
+      const bool rgba_immutable =
+          texture->texture()->IsImmutable() &&
+          TextureManager::ExtractFormatFromStorageFormat(internal_format) ==
+              GL_RGBA;
+      const bool do_copy = !rgba_immutable;
 
       // CMAA Effect
       if (do_copy) {
         ApplyCMAAEffectTexture(source_texture, rgba8_texture_, do_copy);
 
+        // Source format for DoCopySubTexture is always GL_RGBA8.
+        CopyTextureMethod method = DIRECT_COPY;
+        bool copy_tex_image_format_valid =
+            !GLES2Util::IsIntegerFormat(internal_format) &&
+            GLES2Util::GetColorEncodingFromInternalFormat(internal_format) !=
+                GL_SRGB &&
+            internal_format != GL_BGRA_EXT && internal_format != GL_BGRA8_EXT;
+        if (GLES2Util::IsSizedColorFormat(internal_format)) {
+          int dr, dg, db, da;
+          GLES2Util::GetColorFormatComponentSizes(internal_format, 0, &dr, &dg,
+                                                  &db, &da);
+          if ((dr > 0 && dr != 8) || (dg > 0 && dg != 8) ||
+              (db > 0 && db != 8) || (da > 0 && da != 8)) {
+            copy_tex_image_format_valid = false;
+          }
+        }
+        if (!copy_tex_image_format_valid)
+          method = DIRECT_DRAW;
+        bool color_renderable =
+            Texture::ColorRenderable(decoder->GetFeatureInfo(), internal_format,
+                                     texture->texture()->IsImmutable());
+#if defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)
+        // glDrawArrays is faster than glCopyTexSubImage2D on IA Mesa driver,
+        // although opposite in Android.
+        // TODO(dshwang): After Mesa fixes this issue, remove this hack.
+        // https://bugs.freedesktop.org/show_bug.cgi?id=98478, crbug.com/535198.
+        if (color_renderable)
+          method = DIRECT_DRAW;
+#endif
+        if (method == DIRECT_DRAW && !color_renderable)
+          method = DRAW_AND_COPY;
+
         copier->DoCopySubTexture(
-            decoder, GL_TEXTURE_2D, rgba8_texture_, GL_RGBA8, GL_TEXTURE_2D,
-            source_texture, internal_format, 0, 0, 0, 0, width_, height_,
-            width_, height_, width_, height_, false, false, false);
+            decoder, GL_TEXTURE_2D, rgba8_texture_, 0, GL_RGBA8, GL_TEXTURE_2D,
+            source_texture, 0, internal_format, 0, 0, 0, 0, width_, height_,
+            width_, height_, width_, height_, false, false, false, method);
       } else {
         ApplyCMAAEffectTexture(source_texture, source_texture, do_copy);
       }

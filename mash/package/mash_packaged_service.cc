@@ -4,12 +4,11 @@
 
 #include "mash/package/mash_packaged_service.h"
 
-#include "ash/autoclick/mus/autoclick_application.h"
-#include "ash/mus/window_manager_application.h"
-#include "ash/touch_hud/mus/touch_hud_application.h"
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
+#include "base/memory/ptr_util.h"
+#include "base/process/process.h"
 #include "mash/catalog_viewer/catalog_viewer.h"
 #include "mash/catalog_viewer/public/interfaces/constants.mojom.h"
 #include "mash/quick_launch/public/interfaces/constants.mojom.h"
@@ -18,10 +17,17 @@
 #include "mash/session/session.h"
 #include "mash/task_viewer/public/interfaces/constants.mojom.h"
 #include "mash/task_viewer/task_viewer.h"
+#include "services/service_manager/public/cpp/interface_registry.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/ui/ime/test_ime_driver/test_ime_application.h"
 #include "services/ui/public/interfaces/constants.mojom.h"
 #include "services/ui/service.h"
+
+#if defined(OS_CHROMEOS)
+#include "ash/autoclick/mus/autoclick_application.h"  // nogncheck
+#include "ash/mus/window_manager_application.h"  // nogncheck
+#include "ash/touch_hud/mus/touch_hud_application.h"  // nogncheck
+#endif
 
 #if defined(OS_LINUX)
 #include "components/font_service/font_service_app.h"
@@ -70,21 +76,23 @@ std::unique_ptr<service_manager::Service> MashPackagedService::CreateService(
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           switches::kWaitForDebugger);
   if (!debugger_target.empty()) {
-    const size_t index = name.find(':');
-    if (index != std::string::npos &&
-        name.substr(index + 1) == debugger_target) {
-      LOG(WARNING) << "waiting for debugger to attach for service " << name;
+    if (name == debugger_target) {
+      LOG(WARNING) << "waiting for debugger to attach for service " << name
+                   << " pid=" << base::Process::Current().Pid();
       base::debug::WaitForDebugger(120, true);
     }
   }
+
+#if defined(OS_CHROMEOS)
   if (name == "ash")
     return base::WrapUnique(new ash::mus::WindowManagerApplication);
   if (name == "accessibility_autoclick")
     return base::WrapUnique(new ash::autoclick::AutoclickApplication);
-  if (name == catalog_viewer::mojom::kServiceName)
-    return base::WrapUnique(new mash::catalog_viewer::CatalogViewer);
   if (name == "touch_hud")
     return base::WrapUnique(new ash::touch_hud::TouchHudApplication);
+#endif
+  if (name == catalog_viewer::mojom::kServiceName)
+    return base::WrapUnique(new mash::catalog_viewer::CatalogViewer);
   if (name == session::mojom::kServiceName)
     return base::WrapUnique(new mash::session::Session);
   if (name == ui::mojom::kServiceName)

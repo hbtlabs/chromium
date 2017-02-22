@@ -10,9 +10,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/version.h"
-#if defined(OS_WIN)
-#include "base/win/win_util.h"
-#endif
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/component_updater/component_patcher_operation_out_of_process.h"
 #include "chrome/browser/component_updater/component_updater_utils.h"
@@ -20,14 +18,16 @@
 #include "chrome/browser/update_client/chrome_update_query_params_delegate.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/pref_names.h"
-#if defined(OS_WIN)
-#include "chrome/installer/util/google_update_settings.h"
-#endif  // OS_WIN
 #include "components/component_updater/configurator_impl.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/update_client/update_query_params.h"
 #include "content/public/browser/browser_thread.h"
+
+#if defined(OS_WIN)
+#include "base/win/win_util.h"
+#include "chrome/installer/util/google_update_settings.h"
+#endif
 
 namespace component_updater {
 
@@ -149,14 +149,13 @@ std::string ChromeConfigurator::ExtraRequestParams() const {
 
 std::string ChromeConfigurator::GetDownloadPreference() const {
 #if defined(OS_WIN)
-  // This group policy is supported only on Windows and only for computers
-  // which are joined to a Windows domain.
-  return base::win::IsEnrolledToDomain()
+  // This group policy is supported only on Windows and only for enterprises.
+  return base::win::IsEnterpriseManaged()
              ? base::SysWideToUTF8(
                    GoogleUpdateSettings::GetDownloadPreference())
-             : std::string("");
+             : std::string();
 #else
-  return std::string("");
+  return std::string();
 #endif
 }
 

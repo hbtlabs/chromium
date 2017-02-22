@@ -13,14 +13,24 @@
 #include <unordered_set>
 #include <vector>
 
+#include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
 #include "cc/surfaces/frame_sink_id.h"
+#include "cc/surfaces/surface_dependency_tracker.h"
 #include "cc/surfaces/surface_id.h"
 #include "cc/surfaces/surface_observer.h"
+#include "cc/surfaces/surface_reference.h"
+#include "cc/surfaces/surface_reference_factory.h"
 #include "cc/surfaces/surface_sequence.h"
 #include "cc/surfaces/surfaces_export.h"
+
+#if DCHECK_IS_ON()
+#include <iosfwd>
+#include <string>
+#endif
 
 namespace cc {
 class BeginFrameSource;
@@ -28,10 +38,32 @@ class CompositorFrame;
 class Surface;
 class SurfaceFactoryClient;
 
+namespace test {
+class CompositorFrameSinkSupportTest;
+}
+
 class CC_SURFACES_EXPORT SurfaceManager {
  public:
-  SurfaceManager();
+  enum class LifetimeType {
+    REFERENCES,
+    SEQUENCES,
+  };
+
+  explicit SurfaceManager(LifetimeType lifetime_type = LifetimeType::SEQUENCES);
   ~SurfaceManager();
+
+#if DCHECK_IS_ON()
+  // Returns a string representation of all reachable surface references.
+  std::string SurfaceReferencesToString();
+#endif
+
+  void SetDependencyTracker(
+      std::unique_ptr<SurfaceDependencyTracker> dependency_tracker);
+  SurfaceDependencyTracker* dependency_tracker() {
+    return dependency_tracker_.get();
+  }
+
+  void RequestSurfaceResolution(Surface* pending_surface);
 
   void RegisterSurface(Surface* surface);
   void DeregisterSurface(const SurfaceId& surface_id);
@@ -51,38 +83,22 @@ class CC_SURFACES_EXPORT SurfaceManager {
 
   // Called when a CompositorFrame is submitted to a SurfaceFactory for a given
   // |surface_id| for the first time.
-  void SurfaceCreated(const SurfaceId& surface_id,
-                      const gfx::Size& frame_size,
-                      float device_scale_factor);
+  void SurfaceCreated(const SurfaceInfo& surface_info);
 
-  // A frame for a surface satisfies a set of sequence numbers in a particular
-  // id namespace.
-  void DidSatisfySequences(const FrameSinkId& frame_sink_id,
-                           std::vector<uint32_t>* sequence);
+  // Require that the given sequence number must be satisfied (using
+  // SatisfySequence) before the given surface can be destroyed.
+  void RequireSequence(const SurfaceId& surface_id,
+                       const SurfaceSequence& sequence);
+
+  // Satisfies the given sequence number. Once all sequence numbers that
+  // a surface depends on are satisfied, the surface can be destroyed.
+  void SatisfySequence(const SurfaceSequence& sequence);
 
   void RegisterFrameSinkId(const FrameSinkId& frame_sink_id);
 
   // Invalidate a frame_sink_id that might still have associated sequences,
   // possibly because a renderer process has crashed.
   void InvalidateFrameSinkId(const FrameSinkId& frame_sink_id);
-
-  // Adds a reference from a parent surface to a child surface. Any surface
-  // embedding a child surface should have a reference added so that the child
-  // surface is not garbage collected until after the parent surface.
-  void AddSurfaceReference(const SurfaceId& parent_id,
-                           const SurfaceId& child_id);
-
-  // Removes a reference from a parent surface to a child surface.
-  void RemoveSurfaceReference(const SurfaceId& parent_id,
-                              const SurfaceId& child_id);
-
-  // Returns the number of surfaces that have references to |surface_id|. When
-  // the count is zero nothing is referencing the surface and it may be garbage
-  // collected.
-  size_t GetSurfaceReferenceCount(const SurfaceId& surface_id) const;
-
-  // Returns the number of surfaces that |surface_id| has references to.
-  size_t GetReferencedSurfaceCount(const SurfaceId& surface_id) const;
 
   // SurfaceFactoryClient, hierarchy, and BeginFrameSource can be registered
   // and unregistered in any order with respect to each other.
@@ -118,24 +134,83 @@ class CC_SURFACES_EXPORT SurfaceManager {
   void UnregisterFrameSinkHierarchy(const FrameSinkId& parent_frame_sink_id,
                                     const FrameSinkId& child_frame_sink_id);
 
-  const SurfaceId& GetRootSurfaceId() { return kRootSurfaceId; }
+  // Returns the top level root SurfaceId. Surfaces that are not reachable
+  // from the top level root may be garbage collected. It will not be a valid
+  // SurfaceId and will never correspond to a surface.
+  const SurfaceId& GetRootSurfaceId() const;
+
+  // Adds a reference from |parent_id| to |child_id|. If there is a temporary
+  // references for |child_id| then it will be removed.
+  void AddSurfaceReference(const SurfaceId& parent_id,
+                           const SurfaceId& child_id);
+
+  // Removes a reference from |parent_id| to |child_id|.
+  void RemoveSurfaceReference(const SurfaceId& parent_id,
+                              const SurfaceId& child_id);
+
+  // Adds all surface references in |references|. This will remove any temporary
+  // references for child surface in a surface reference.
+  void AddSurfaceReferences(const std::vector<SurfaceReference>& references);
+
+  // Removes all surface references in |references| then runs garbage
+  // collection to delete unreachable surfaces.
+  void RemoveSurfaceReferences(const std::vector<SurfaceReference>& references);
+
+  scoped_refptr<SurfaceReferenceFactory> reference_factory() {
+    return reference_factory_;
+  }
+
+  bool using_surface_references() const {
+    return lifetime_type_ == LifetimeType::REFERENCES;
+  }
 
  private:
+  friend class test::CompositorFrameSinkSupportTest;
+  friend class SurfaceManagerRefTest;
+
+  using SurfaceIdSet = std::unordered_set<SurfaceId, SurfaceIdHash>;
+
   void RecursivelyAttachBeginFrameSource(const FrameSinkId& frame_sink_id,
                                          BeginFrameSource* source);
   void RecursivelyDetachBeginFrameSource(const FrameSinkId& frame_sink_id,
                                          BeginFrameSource* source);
+
   // Returns true if |child namespace| is or has |search_frame_sink_id| as a
   // child.
   bool ChildContains(const FrameSinkId& child_frame_sink_id,
                      const FrameSinkId& search_frame_sink_id) const;
 
+  // Garbage collects all destroyed surfaces that aren't live.
   void GarbageCollectSurfaces();
 
-  // Removes reference from a parent surface to a child surface. Used to remove
-  // references without triggered GC.
+  // Returns set of live surfaces for |lifetime_manager_| is REFERENCES.
+  SurfaceIdSet GetLiveSurfacesForReferences();
+
+  // Returns set of live surfaces for |lifetime_manager_| is SEQUENCES.
+  SurfaceIdSet GetLiveSurfacesForSequences();
+
+  // Adds a reference from |parent_id| to |child_id| without dealing with
+  // temporary references.
+  void AddSurfaceReferenceImpl(const SurfaceId& parent_id,
+                               const SurfaceId& child_id);
+
+  // Removes a reference from a |parent_id| to |child_id|.
   void RemoveSurfaceReferenceImpl(const SurfaceId& parent_id,
                                   const SurfaceId& child_id);
+
+  // Removes all surface references to or from |surface_id|. Used when the
+  // surface is about to be deleted.
+  void RemoveAllSurfaceReferences(const SurfaceId& surface_id);
+
+#if DCHECK_IS_ON()
+  // Recursively prints surface references starting at |surface_id| to |str|.
+  void SurfaceReferencesToStringImpl(const SurfaceId& surface_id,
+                                     std::string indent,
+                                     std::stringstream* str);
+#endif
+
+  // Use reference or sequence based lifetime management.
+  LifetimeType lifetime_type_;
 
   using SurfaceMap = std::unordered_map<SurfaceId, Surface*, SurfaceIdHash>;
   SurfaceMap surface_map_;
@@ -173,7 +248,6 @@ class CC_SURFACES_EXPORT SurfaceManager {
   std::unordered_map<FrameSinkId, FrameSinkSourceMapping, FrameSinkIdHash>
       frame_sink_source_map_;
 
-  using SurfaceIdSet = std::unordered_set<SurfaceId, SurfaceIdHash>;
   // Tracks references from the child surface to parent surface. If there are
   // zero entries in the set for a SurfaceId then nothing is referencing the
   // surface and it can be garbage collected.
@@ -191,7 +265,23 @@ class CC_SURFACES_EXPORT SurfaceManager {
 
   // Root SurfaceId that references display root surfaces. There is no Surface
   // with this id, it's for bookkeeping purposes only.
-  const SurfaceId kRootSurfaceId;
+  const SurfaceId root_surface_id_;
+
+  // The DirectSurfaceReferenceFactory that uses this manager to create surface
+  // references.
+  scoped_refptr<SurfaceReferenceFactory> reference_factory_;
+
+  // SurfaceIds that have temporary references from top level root so they
+  // aren't GC'd before a real reference is added. This is basically a
+  // collection of surface ids, for example:
+  //   SurfaceId surface_id(key, value[index]);
+  // The LocalSurfaceIds are stored in the order the surfaces are created in.
+  std::unordered_map<FrameSinkId, std::vector<LocalSurfaceId>, FrameSinkIdHash>
+      temp_references_;
+
+  std::unique_ptr<SurfaceDependencyTracker> dependency_tracker_;
+
+  base::WeakPtrFactory<SurfaceManager> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SurfaceManager);
 };

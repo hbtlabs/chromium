@@ -30,7 +30,7 @@
 Sources.ScopeChainSidebarPane = class extends UI.VBox {
   constructor() {
     super();
-    this._expandController = new Components.ObjectPropertiesSectionExpandController();
+    this._expandController = new ObjectUI.ObjectPropertiesSectionExpandController();
     this._linkifier = new Components.Linkifier();
     this._update();
   }
@@ -70,14 +70,13 @@ Sources.ScopeChainSidebarPane = class extends UI.VBox {
     var scopeChain = callFrame.scopeChain();
     for (var i = 0; i < scopeChain.length; ++i) {
       var scope = scopeChain[i];
-      var title = null;
+      var title = scope.typeName();
       var emptyPlaceholder = null;
       var extraProperties = [];
 
       switch (scope.type()) {
         case Protocol.Debugger.ScopeType.Local:
           foundLocalScope = true;
-          title = Common.UIString('Local');
           emptyPlaceholder = Common.UIString('No Variables');
           if (thisObject)
             extraProperties.push(new SDK.RemoteObjectProperty('this', thisObject));
@@ -104,21 +103,6 @@ Sources.ScopeChainSidebarPane = class extends UI.VBox {
             title = Common.UIString('Closure');
           emptyPlaceholder = Common.UIString('No Variables');
           break;
-        case Protocol.Debugger.ScopeType.Catch:
-          title = Common.UIString('Catch');
-          break;
-        case Protocol.Debugger.ScopeType.Block:
-          title = Common.UIString('Block');
-          break;
-        case Protocol.Debugger.ScopeType.Script:
-          title = Common.UIString('Script');
-          break;
-        case Protocol.Debugger.ScopeType.With:
-          title = Common.UIString('With Block');
-          break;
-        case Protocol.Debugger.ScopeType.Global:
-          title = Common.UIString('Global');
-          break;
       }
 
       var subtitle = scope.description();
@@ -129,7 +113,7 @@ Sources.ScopeChainSidebarPane = class extends UI.VBox {
       titleElement.createChild('div', 'scope-chain-sidebar-pane-section-subtitle').textContent = subtitle;
       titleElement.createChild('div', 'scope-chain-sidebar-pane-section-title').textContent = title;
 
-      var section = new Components.ObjectPropertiesSection(
+      var section = new ObjectUI.ObjectPropertiesSection(
           Sources.SourceMapNamesResolver.resolveScopeInObject(scope), titleElement, this._linkifier, emptyPlaceholder,
           true, extraProperties);
       this._expandController.watchSection(title + (subtitle ? ':' + subtitle : ''), section);

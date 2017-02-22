@@ -4,9 +4,11 @@
 
 package org.chromium.chrome.browser.physicalweb;
 
-import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.AsyncTask;
+
+import org.json.JSONArray;
+import org.json.JSONException;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -14,8 +16,6 @@ import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.components.location.LocationUtils;
-import org.json.JSONArray;
-import org.json.JSONException;
 
 import java.util.concurrent.TimeUnit;
 
@@ -26,18 +26,17 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 public class PhysicalWebUma {
+    // Obsolete; don't use:  NOTIFICATION_REFERER = 1;
+    // Obsolete; don't use: OPTIN_REFERER = 2;
+    public static final int PREFERENCE_REFERER = 3;
+    public static final int DIAGNOSTICS_REFERER = 4;
+
     private static final String TAG = "PhysicalWeb";
     private static final String HAS_DEFERRED_METRICS_KEY = "PhysicalWeb.HasDeferredMetrics";
     private static final String OPT_IN_DECLINE_BUTTON_PRESS_COUNT =
             "PhysicalWeb.OptIn.DeclineButtonPressed";
     private static final String OPT_IN_ENABLE_BUTTON_PRESS_COUNT =
             "PhysicalWeb.OptIn.EnableButtonPressed";
-    private static final String OPT_IN_HIGH_PRIORITY_NOTIFICATION_COUNT =
-            "PhysicalWeb.OptIn.HighPriorityNotificationShown";
-    private static final String OPT_IN_MIN_PRIORITY_NOTIFICATION_COUNT =
-            "PhysicalWeb.OptIn.MinPriorityNotificationShown";
-    private static final String OPT_IN_NOTIFICATION_PRESS_COUNT =
-            "PhysicalWeb.OptIn.NotificationPressed";
     private static final String PREFS_FEATURE_DISABLED_COUNT = "PhysicalWeb.Prefs.FeatureDisabled";
     private static final String PREFS_FEATURE_ENABLED_COUNT = "PhysicalWeb.Prefs.FeatureEnabled";
     private static final String PREFS_LOCATION_DENIED_COUNT = "PhysicalWeb.Prefs.LocationDenied";
@@ -45,10 +44,6 @@ public class PhysicalWebUma {
     private static final String PWS_BACKGROUND_RESOLVE_TIMES = "PhysicalWeb.ResolveTime.Background";
     private static final String PWS_FOREGROUND_RESOLVE_TIMES = "PhysicalWeb.ResolveTime.Foreground";
     private static final String PWS_REFRESH_RESOLVE_TIMES = "PhysicalWeb.ResolveTime.Refresh";
-    private static final String OPT_IN_NOTIFICATION_PRESS_DELAYS =
-            "PhysicalWeb.ReferralDelay.OptInNotification";
-    private static final String STANDARD_NOTIFICATION_PRESS_DELAYS =
-            "PhysicalWeb.ReferralDelay.StandardNotification";
     private static final String URL_SELECTED_COUNT = "PhysicalWeb.UrlSelected";
     private static final String TOTAL_URLS_INITIAL_COUNTS =
             "PhysicalWeb.TotalUrls.OnInitialDisplay";
@@ -65,85 +60,65 @@ public class PhysicalWebUma {
     private static final String PREFERENCE = "Preference";
     private static final int BOOLEAN_BOUNDARY = 2;
     private static final int TRISTATE_BOUNDARY = 3;
+    private static final int REFERER_BOUNDARY = 5;
 
     /**
      * Records a URL selection.
      */
-    public static void onUrlSelected(Context context) {
-        handleAction(context, URL_SELECTED_COUNT);
+    public static void onUrlSelected() {
+        handleAction(URL_SELECTED_COUNT);
     }
 
     /**
      * Records a tap on the opt-in decline button.
      */
-    public static void onOptInDeclineButtonPressed(Context context) {
-        handleAction(context, OPT_IN_DECLINE_BUTTON_PRESS_COUNT);
+    public static void onOptInDeclineButtonPressed() {
+        handleAction(OPT_IN_DECLINE_BUTTON_PRESS_COUNT);
     }
 
     /**
      * Records a tap on the opt-in enable button.
      */
-    public static void onOptInEnableButtonPressed(Context context) {
-        handleAction(context, OPT_IN_ENABLE_BUTTON_PRESS_COUNT);
-    }
-
-    /**
-     * Records a display of a high priority opt-in notification.
-     */
-    public static void onOptInHighPriorityNotificationShown(Context context) {
-        handleAction(context, OPT_IN_HIGH_PRIORITY_NOTIFICATION_COUNT);
-    }
-
-    /**
-     * Records a display of a min priority opt-in notification.
-     */
-    public static void onOptInMinPriorityNotificationShown(Context context) {
-        handleAction(context, OPT_IN_MIN_PRIORITY_NOTIFICATION_COUNT);
-    }
-
-    /**
-     * Records a display of the opt-in activity.
-     */
-    public static void onOptInNotificationPressed(Context context) {
-        handleAction(context, OPT_IN_NOTIFICATION_PRESS_COUNT);
+    public static void onOptInEnableButtonPressed() {
+        handleAction(OPT_IN_ENABLE_BUTTON_PRESS_COUNT);
     }
 
     /**
      * Records when the user disables the Physical Web fetaure.
      */
-    public static void onPrefsFeatureDisabled(Context context) {
-        handleAction(context, PREFS_FEATURE_DISABLED_COUNT);
+    public static void onPrefsFeatureDisabled() {
+        handleAction(PREFS_FEATURE_DISABLED_COUNT);
     }
 
     /**
      * Records when the user enables the Physical Web fetaure.
      */
-    public static void onPrefsFeatureEnabled(Context context) {
-        handleAction(context, PREFS_FEATURE_ENABLED_COUNT);
+    public static void onPrefsFeatureEnabled() {
+        handleAction(PREFS_FEATURE_ENABLED_COUNT);
     }
 
     /**
      * Records when the user denies the location permission when enabling the Physical Web from the
      * privacy settings menu.
      */
-    public static void onPrefsLocationDenied(Context context) {
-        handleAction(context, PREFS_LOCATION_DENIED_COUNT);
+    public static void onPrefsLocationDenied() {
+        handleAction(PREFS_LOCATION_DENIED_COUNT);
     }
 
     /**
      * Records when the user grants the location permission when enabling the Physical Web from the
      * privacy settings menu.
      */
-    public static void onPrefsLocationGranted(Context context) {
-        handleAction(context, PREFS_LOCATION_GRANTED_COUNT);
+    public static void onPrefsLocationGranted() {
+        handleAction(PREFS_LOCATION_GRANTED_COUNT);
     }
 
     /**
      * Records a response time from PWS for a resolution during a background scan.
      * @param duration The length of time PWS took to respond.
      */
-    public static void onBackgroundPwsResolution(Context context, long duration) {
-        handleTime(context, PWS_BACKGROUND_RESOLVE_TIMES, duration, TimeUnit.MILLISECONDS);
+    public static void onBackgroundPwsResolution(long duration) {
+        handleTime(PWS_BACKGROUND_RESOLVE_TIMES, duration, TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -151,8 +126,8 @@ public class PhysicalWebUma {
      * explicitly user-initiated through a refresh.
      * @param duration The length of time PWS took to respond.
      */
-    public static void onForegroundPwsResolution(Context context, long duration) {
-        handleTime(context, PWS_FOREGROUND_RESOLVE_TIMES, duration, TimeUnit.MILLISECONDS);
+    public static void onForegroundPwsResolution(long duration) {
+        handleTime(PWS_FOREGROUND_RESOLVE_TIMES, duration, TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -160,19 +135,19 @@ public class PhysicalWebUma {
      * user-initiated through a refresh.
      * @param duration The length of time PWS took to respond.
      */
-    public static void onRefreshPwsResolution(Context context, long duration) {
-        handleTime(context, PWS_REFRESH_RESOLVE_TIMES, duration, TimeUnit.MILLISECONDS);
+    public static void onRefreshPwsResolution(long duration) {
+        handleTime(PWS_REFRESH_RESOLVE_TIMES, duration, TimeUnit.MILLISECONDS);
     }
 
     /**
      * Records number of URLs displayed to a user when the URL list is first displayed.
      * @param numUrls The number of URLs displayed to a user.
      */
-    public static void onUrlsDisplayed(Context context, int numUrls) {
+    public static void onUrlsDisplayed(int numUrls) {
         if (LibraryLoader.isInitialized()) {
             RecordHistogram.recordCountHistogram(TOTAL_URLS_INITIAL_COUNTS, numUrls);
         } else {
-            storeValue(context, TOTAL_URLS_INITIAL_COUNTS, numUrls);
+            storeValue(TOTAL_URLS_INITIAL_COUNTS, numUrls);
         }
     }
 
@@ -180,11 +155,11 @@ public class PhysicalWebUma {
      * Records number of URLs displayed to a user when the user refreshes the URL list.
      * @param numUrls The number of URLs displayed to a user.
      */
-    public static void onUrlsRefreshed(Context context, int numUrls) {
+    public static void onUrlsRefreshed(int numUrls) {
         if (LibraryLoader.isInitialized()) {
             RecordHistogram.recordCountHistogram(TOTAL_URLS_REFRESH_COUNTS, numUrls);
         } else {
-            storeValue(context, TOTAL_URLS_REFRESH_COUNTS, numUrls);
+            storeValue(TOTAL_URLS_REFRESH_COUNTS, numUrls);
         }
     }
 
@@ -193,24 +168,14 @@ public class PhysicalWebUma {
      * @param refer The type of referral.  This enum is listed as PhysicalWebActivityReferer in
      *     histograms.xml.
      */
-    public static void onActivityReferral(Context context, int referer) {
-        handleEnum(context, ACTIVITY_REFERRALS, referer, ListUrlsActivity.REFERER_BOUNDARY);
+    public static void onActivityReferral(int referer) {
+        handleEnum(ACTIVITY_REFERRALS, referer, REFERER_BOUNDARY);
         switch (referer) {
-            case ListUrlsActivity.NOTIFICATION_REFERER:
-                handleTime(context, STANDARD_NOTIFICATION_PRESS_DELAYS,
-                        UrlManager.getInstance().getTimeSinceNotificationUpdate(),
-                        TimeUnit.MILLISECONDS);
+            case PREFERENCE_REFERER:
+                recordPhysicalWebState(LAUNCH_FROM_PREFERENCES);
                 break;
-            case ListUrlsActivity.OPTIN_REFERER:
-                handleTime(context, OPT_IN_NOTIFICATION_PRESS_DELAYS,
-                        UrlManager.getInstance().getTimeSinceNotificationUpdate(),
-                        TimeUnit.MILLISECONDS);
-                break;
-            case ListUrlsActivity.PREFERENCE_REFERER:
-                recordPhysicalWebState(context, LAUNCH_FROM_PREFERENCES);
-                break;
-            case ListUrlsActivity.DIAGNOSTICS_REFERER:
-                recordPhysicalWebState(context, LAUNCH_FROM_DIAGNOSTICS);
+            case DIAGNOSTICS_REFERER:
+                recordPhysicalWebState(LAUNCH_FROM_DIAGNOSTICS);
                 break;
             default:
                 break;
@@ -226,21 +191,21 @@ public class PhysicalWebUma {
      * - The data connection status
      * - The Physical Web preference status
      */
-    public static void recordPhysicalWebState(Context context, String actionName) {
+    public static void recordPhysicalWebState(String actionName) {
         LocationUtils locationUtils = LocationUtils.getInstance();
-        handleEnum(context, createStateString(LOCATION_SERVICES, actionName),
+        handleEnum(createStateString(LOCATION_SERVICES, actionName),
                 locationUtils.isSystemLocationSettingEnabled() ? 1 : 0, BOOLEAN_BOUNDARY);
-        handleEnum(context, createStateString(LOCATION_PERMISSION, actionName),
+        handleEnum(createStateString(LOCATION_PERMISSION, actionName),
                 locationUtils.hasAndroidLocationPermission() ? 1 : 0, BOOLEAN_BOUNDARY);
-        handleEnum(context, createStateString(BLUETOOTH, actionName),
+        handleEnum(createStateString(BLUETOOTH, actionName),
                 Utils.getBluetoothEnabledStatus(), TRISTATE_BOUNDARY);
-        handleEnum(context, createStateString(DATA_CONNECTION, actionName),
+        handleEnum(createStateString(DATA_CONNECTION, actionName),
                 Utils.isDataConnectionActive() ? 1 : 0, BOOLEAN_BOUNDARY);
         int preferenceState = 2;
         if (!PhysicalWeb.isOnboarding()) {
             preferenceState = PhysicalWeb.isPhysicalWebPreferenceEnabled() ? 1 : 0;
         }
-        handleEnum(context, createStateString(PREFERENCE, actionName),
+        handleEnum(createStateString(PREFERENCE, actionName),
                 preferenceState, TRISTATE_BOUNDARY);
     }
 
@@ -259,7 +224,7 @@ public class PhysicalWebUma {
         return PHYSICAL_WEB_STATE + "." + stateName + "." + actionName;
     }
 
-    private static void storeAction(Context context, String key) {
+    private static void storeAction(String key) {
         SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
         int count = prefs.getInt(key, 0);
         prefs.edit()
@@ -268,7 +233,7 @@ public class PhysicalWebUma {
                 .apply();
     }
 
-    private static void storeValue(Context context, String key, Object value) {
+    private static void storeValue(String key, Object value) {
         SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
         SharedPreferences.Editor prefsEditor = prefs.edit();
         JSONArray values = null;
@@ -287,27 +252,27 @@ public class PhysicalWebUma {
         prefsEditor.putString(key, values.toString()).apply();
     }
 
-    private static void handleAction(Context context, String key) {
+    private static void handleAction(String key) {
         if (LibraryLoader.isInitialized()) {
             RecordUserAction.record(key);
         } else {
-            storeAction(context, key);
+            storeAction(key);
         }
     }
 
-    private static void handleTime(Context context, String key, long duration, TimeUnit tu) {
+    private static void handleTime(String key, long duration, TimeUnit tu) {
         if (LibraryLoader.isInitialized()) {
             RecordHistogram.recordTimesHistogram(key, duration, tu);
         } else {
-            storeValue(context, key, duration);
+            storeValue(key, duration);
         }
     }
 
-    private static void handleEnum(Context context, String key, int value, int boundary) {
+    private static void handleEnum(String key, int value, int boundary) {
         if (LibraryLoader.isInitialized()) {
             RecordHistogram.recordEnumeratedHistogram(key, value, boundary);
         } else {
-            storeValue(context, key, value);
+            storeValue(key, value);
         }
     }
 
@@ -323,9 +288,6 @@ public class PhysicalWebUma {
             uploadActions(URL_SELECTED_COUNT);
             uploadActions(OPT_IN_DECLINE_BUTTON_PRESS_COUNT);
             uploadActions(OPT_IN_ENABLE_BUTTON_PRESS_COUNT);
-            uploadActions(OPT_IN_HIGH_PRIORITY_NOTIFICATION_COUNT);
-            uploadActions(OPT_IN_MIN_PRIORITY_NOTIFICATION_COUNT);
-            uploadActions(OPT_IN_NOTIFICATION_PRESS_COUNT);
             uploadActions(PREFS_FEATURE_DISABLED_COUNT);
             uploadActions(PREFS_FEATURE_ENABLED_COUNT);
             uploadActions(PREFS_LOCATION_DENIED_COUNT);
@@ -333,11 +295,9 @@ public class PhysicalWebUma {
             uploadTimes(PWS_BACKGROUND_RESOLVE_TIMES, TimeUnit.MILLISECONDS);
             uploadTimes(PWS_FOREGROUND_RESOLVE_TIMES, TimeUnit.MILLISECONDS);
             uploadTimes(PWS_REFRESH_RESOLVE_TIMES, TimeUnit.MILLISECONDS);
-            uploadTimes(STANDARD_NOTIFICATION_PRESS_DELAYS, TimeUnit.MILLISECONDS);
-            uploadTimes(OPT_IN_NOTIFICATION_PRESS_DELAYS, TimeUnit.MILLISECONDS);
             uploadCounts(TOTAL_URLS_INITIAL_COUNTS);
             uploadCounts(TOTAL_URLS_REFRESH_COUNTS);
-            uploadEnums(ACTIVITY_REFERRALS, ListUrlsActivity.REFERER_BOUNDARY);
+            uploadEnums(ACTIVITY_REFERRALS, REFERER_BOUNDARY);
             uploadEnums(createStateString(LOCATION_SERVICES, LAUNCH_FROM_DIAGNOSTICS),
                     BOOLEAN_BOUNDARY);
             uploadEnums(createStateString(LOCATION_PERMISSION, LAUNCH_FROM_DIAGNOSTICS),

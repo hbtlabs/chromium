@@ -11,7 +11,9 @@
 #include "base/memory/ptr_util.h"
 #include "cc/base/cc_export.h"
 #include "cc/layers/layer_impl.h"
+#include "cc/quads/surface_draw_quad.h"
 #include "cc/surfaces/surface_id.h"
+#include "cc/surfaces/surface_info.h"
 
 namespace cc {
 
@@ -23,10 +25,17 @@ class CC_EXPORT SurfaceLayerImpl : public LayerImpl {
   }
   ~SurfaceLayerImpl() override;
 
-  void SetSurfaceId(const SurfaceId& surface_id);
-  void SetSurfaceScale(float scale);
-  void SetSurfaceSize(const gfx::Size& size);
-  const SurfaceId& surface_id() const { return surface_id_; }
+  void SetPrimarySurfaceInfo(const SurfaceInfo& surface_info);
+  const SurfaceInfo& primary_surface_info() const {
+    return primary_surface_info_;
+  }
+
+  void SetFallbackSurfaceInfo(const SurfaceInfo& surface_info);
+  const SurfaceInfo& fallback_surface_info() const {
+    return fallback_surface_info_;
+  }
+
+  void SetStretchContentToFillBounds(bool stretch_content);
 
   // LayerImpl overrides.
   std::unique_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl) override;
@@ -38,14 +47,20 @@ class CC_EXPORT SurfaceLayerImpl : public LayerImpl {
   SurfaceLayerImpl(LayerTreeImpl* tree_impl, int id);
 
  private:
+  SurfaceDrawQuad* CreateSurfaceDrawQuad(
+      RenderPass* render_pass,
+      SurfaceDrawQuadType surface_draw_quad_type,
+      const SurfaceInfo& surface_info);
+
   void GetDebugBorderProperties(SkColor* color, float* width) const override;
   void AppendRainbowDebugBorder(RenderPass* render_pass);
   void AsValueInto(base::trace_event::TracedValue* dict) const override;
   const char* LayerTypeAsString() const override;
 
-  SurfaceId surface_id_;
-  gfx::Size surface_size_;
-  float surface_scale_;
+  SurfaceInfo primary_surface_info_;
+  SurfaceInfo fallback_surface_info_;
+
+  bool stretch_content_to_fill_bounds_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(SurfaceLayerImpl);
 };

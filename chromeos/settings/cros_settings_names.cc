@@ -32,6 +32,8 @@ const char kAccountsPrefDeviceLocalAccountsKeyArcKioskClass[] =
     "arc_kiosk_class";
 const char kAccountsPrefDeviceLocalAccountsKeyArcKioskAction[] =
     "arc_kiosk_action";
+const char kAccountsPrefDeviceLocalAccountsKeyArcKioskDisplayName[] =
+    "arc_kiosk_display_name";
 const char kAccountsPrefDeviceLocalAccountAutoLoginId[] =
     "cros.accounts.deviceLocalAccountAutoLoginId";
 const char kAccountsPrefDeviceLocalAccountAutoLoginDelay[] =
@@ -55,6 +57,9 @@ const char kSignedDataRoamingEnabled[] = "cros.signed.data_roaming_enabled";
 
 // True if auto-update was disabled by the system administrator.
 const char kUpdateDisabled[] = "cros.system.updateDisabled";
+
+// True if a target version prefix is set by the system administrator.
+const char kTargetVersionPrefix[] = "cros.system.targetVersionPrefix";
 
 // A list of strings which specifies allowed connection types for
 // update.
@@ -223,5 +228,18 @@ const char kLoginVideoCaptureAllowedUrls[] =
 
 // A list pref storing the apps to install on the login page.
 const char kLoginApps[] = "cros.device.login_apps";
+
+// A string pref storing the url and cryptographic hash of the image in JSON
+// format allowed to set a device-level wallpaper before any user logs in.
+const char kDeviceWallpaperImage[] = "cros.device_wallpaper_image";
+
+// A list pref specifying the locales allowed on the login screen. Currently
+// only the first value is used, as the single locale allowed on the login
+// screen.
+const char kDeviceLoginScreenLocales[] = "cros.device_login_screen_locales";
+
+// A list pref containing the input method IDs allowed on the login screen.
+const char kDeviceLoginScreenInputMethods[] =
+    "cros.device_login_screen_input_methods";
 
 }  // namespace chromeos

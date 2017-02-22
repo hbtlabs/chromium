@@ -6,6 +6,7 @@
 
 #import <EarlGrey/EarlGrey.h>
 
+#import "ios/testing/wait_util.h"
 #import "ios/web/public/test/earl_grey/js_test_util.h"
 #include "ios/web/shell/test/app/navigation_test_util.h"
 #import "ios/web/shell/test/app/web_shell_test_util.h"
@@ -13,10 +14,6 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-namespace {
-const NSTimeInterval kWaitForPageLoadTimeout = 10.0;
-}  // namespace
 
 @implementation ShellEarlGrey
 
@@ -31,12 +28,16 @@ const NSTimeInterval kWaitForPageLoadTimeout = 10.0;
                                  block:^BOOL {
                                    return !web::shell_test_util::IsLoading();
                                  }];
-  GREYAssert([condition waitWithTimeout:kWaitForPageLoadTimeout],
+  GREYAssert([condition waitWithTimeout:testing::kWaitForPageLoadTimeout],
              @"Page did not complete loading.");
 
   web::WebState* webState = web::shell_test_util::GetCurrentWebState();
   if (webState->ContentIsHTML())
     web::WaitUntilWindowIdInjected(webState);
+
+  // Ensure any UI elements handled by EarlGrey become idle for any subsequent
+  // EarlGrey steps.
+  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
 }
 
 @end

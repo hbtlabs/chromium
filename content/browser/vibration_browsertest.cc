@@ -7,6 +7,7 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "content/public/browser/render_frame_host.h"
@@ -48,12 +49,12 @@ void ResetGlobalValues() {
   g_wait_cancel_runner = new MessageLoopRunner();
 }
 
-class FakeVibrationManager : public device::VibrationManager {
+class FakeVibrationManager : public device::mojom::VibrationManager {
  public:
   FakeVibrationManager() {}
   ~FakeVibrationManager() override {}
 
-  static void Create(device::VibrationManagerRequest request) {
+  static void Create(device::mojom::VibrationManagerRequest request) {
     mojo::MakeStrongBinding(base::MakeUnique<FakeVibrationManager>(),
                             std::move(request));
   }

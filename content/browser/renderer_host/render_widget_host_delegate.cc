@@ -5,6 +5,7 @@
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 
 #include "build/build_config.h"
+#include "components/rappor/public/sample.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -71,6 +72,10 @@ bool RenderWidgetHostDelegate::HasMouseLock(
   return false;
 }
 
+RenderWidgetHostImpl* RenderWidgetHostDelegate::GetMouseLockWidget() {
+  return nullptr;
+}
+
 TextInputManager* RenderWidgetHostDelegate::GetTextInputManager() {
   return nullptr;
 }
@@ -90,6 +95,16 @@ RenderWidgetHostImpl* RenderWidgetHostDelegate::GetFullscreenRenderWidgetHost()
 
 bool RenderWidgetHostDelegate::OnUpdateDragCursor() {
   return false;
+}
+
+bool RenderWidgetHostDelegate::AddDomainInfoToRapporSample(
+    rappor::Sample* sample) {
+  sample->SetStringField("Domain", "Unknown");
+  return false;
+}
+
+WebContents* RenderWidgetHostDelegate::GetAsWebContents() {
+  return nullptr;
 }
 
 }  // namespace content

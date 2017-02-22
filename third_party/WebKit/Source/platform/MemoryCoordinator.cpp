@@ -4,13 +4,33 @@
 
 #include "platform/MemoryCoordinator.h"
 
+#include "base/sys_info.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/graphics/ImageDecodingStore.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "wtf/allocator/Partitions.h"
 
 namespace blink {
 
+// static
+bool MemoryCoordinator::s_isLowEndDevice = false;
+
+// static
+bool MemoryCoordinator::isLowEndDevice() {
+  return s_isLowEndDevice;
+}
+
+// static
+void MemoryCoordinator::initialize() {
+  s_isLowEndDevice = ::base::SysInfo::IsLowEndDevice();
+}
+
+// static
+void MemoryCoordinator::setIsLowEndDeviceForTesting(bool isLowEndDevice) {
+  s_isLowEndDevice = isLowEndDevice;
+}
+
+// static
 MemoryCoordinator& MemoryCoordinator::instance() {
   DEFINE_STATIC_LOCAL(Persistent<MemoryCoordinator>, external,
                       (new MemoryCoordinator));
@@ -18,18 +38,19 @@ MemoryCoordinator& MemoryCoordinator::instance() {
   return *external.get();
 }
 
+
 MemoryCoordinator::MemoryCoordinator() {}
 
 void MemoryCoordinator::registerClient(MemoryCoordinatorClient* client) {
   DCHECK(isMainThread());
   DCHECK(client);
   DCHECK(!m_clients.contains(client));
-  m_clients.add(client);
+  m_clients.insert(client);
 }
 
 void MemoryCoordinator::unregisterClient(MemoryCoordinatorClient* client) {
   DCHECK(isMainThread());
-  m_clients.remove(client);
+  m_clients.erase(client);
 }
 
 void MemoryCoordinator::onMemoryPressure(WebMemoryPressureLevel level) {
@@ -44,8 +65,14 @@ void MemoryCoordinator::onMemoryPressure(WebMemoryPressureLevel level) {
 void MemoryCoordinator::onMemoryStateChange(MemoryState state) {
   for (auto& client : m_clients)
     client->onMemoryStateChange(state);
-  if (state == MemoryState::SUSPENDED)
-    clearMemory();
+}
+
+void MemoryCoordinator::onPurgeMemory() {
+  // Don't call clearMemory() because font cache invalidation always causes full
+  // layout. This increases tab switching cost significantly (e.g.
+  // en.wikipedia.org/wiki/Wikipedia). So we should not invalidate the font
+  // cache in purge+throttle.
+  ImageDecodingStore::instance().clear();
   WTF::Partitions::decommitFreeableMemory();
 }
 

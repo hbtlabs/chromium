@@ -37,64 +37,30 @@ class CookieNotificationObserver {
   // Called when any cookie is added, deleted or changed in
   // |NSHTTPCookieStorge sharedHTTPCookieStorage|.
   virtual void OnSystemCookiesChanged() = 0;
-  // Called when the cookie policy changes on
-  // |NSHTTPCookieStorge sharedHTTPCookieStorage|.
-  virtual void OnSystemCookiePolicyChanged() = 0;
 };
 
 // The CookieStoreIOS is an implementation of CookieStore relying on
 // NSHTTPCookieStorage, ensuring that the cookies are consistent between the
-// network stack and the UIWebViews.
-// On iOS, the Chrome CookieMonster is not used in conjunction with UIWebView,
-// because UIWebView expects the cookies to be in the shared
-// NSHTTPCookieStorage. In particular, javascript may read and write cookies
-// there.
-// CookieStoreIOS is not thread safe.
+// network stack and NSHTTPCookieStorage. CookieStoreIOS is not thread safe.
 //
-// At any given time, a CookieStoreIOS can either be synchronized with the
-// system cookie store or not. If a CookieStoreIOS is not synchronized with the
-// system store, changes are written back to the backing CookieStore. If a
-// CookieStoreIOS is synchronized with the system store, changes are written
-// directly to the system cookie store, then propagated to the backing store by
-// OnSystemCookiesChanged, which is called by the system store once the change
-// to the system store is written back.
-//
-// To unsynchronize, CookieStoreIOS copies the system cookie store into its
-// backing CookieStore. To synchronize, CookieStoreIOS clears the system cookie
-// store, copies its backing CookieStore into the system cookie store.
+// CookieStoreIOS is created synchronized with the system cookie store -
+// changes are written directly to the system cookie store, then propagated to
+// the backing store by OnSystemCookiesChanged, which is called by the system
+// store once the change to the system store is written back.
+// For not synchronized CookieStore, please see CookieStoreIOSPersistent.
 class CookieStoreIOS : public net::CookieStore,
                        public CookieNotificationObserver {
  public:
-  // Creates a CookieStoreIOS with a default value of
-  // |NSHTTPCookieStorage sharedCookieStorage| as the system's cookie store.
-  explicit CookieStoreIOS(
-      net::CookieMonster::PersistentCookieStore* persistent_store);
-
-  explicit CookieStoreIOS(
-      net::CookieMonster::PersistentCookieStore* persistent_store,
-      NSHTTPCookieStorage* system_store);
-
-  ~CookieStoreIOS() override;
-
-  enum CookiePolicy { ALLOW, BLOCK };
-
-  // Must be called on the thread where CookieStoreIOS instances live.
-  // Affects only those CookieStoreIOS instances that are backed by
-  // |NSHTTPCookieStorage sharedHTTPCookieStorage|.
-  static void SetCookiePolicy(CookiePolicy setting);
-
-  // Create an instance of CookieStoreIOS that is generated from the cookies
+  // Creates an instance of CookieStoreIOS that is generated from the cookies
   // stored in |cookie_storage|. The CookieStoreIOS uses the |cookie_storage|
   // as its default backend and is initially synchronized with it.
   // Apple does not persist the cookies' creation dates in NSHTTPCookieStorage,
   // so callers should not expect these values to be populated.
-  static std::unique_ptr<CookieStoreIOS> CreateCookieStore(
-      NSHTTPCookieStorage* cookie_storage);
+  explicit CookieStoreIOS(NSHTTPCookieStorage* cookie_storage);
 
-  // As there is only one system store, only one CookieStoreIOS at a time may
-  // be synchronized with it.
-  static void SwitchSynchronizedStore(CookieStoreIOS* old_store,
-                                      CookieStoreIOS* new_store);
+  ~CookieStoreIOS() override;
+
+  enum CookiePolicy { ALLOW, BLOCK };
 
   // Must be called when the state of
   // |NSHTTPCookieStorage sharedHTTPCookieStorage| changes.
@@ -102,16 +68,8 @@ class CookieStoreIOS : public net::CookieStore,
   // |NSHTTPCookieStorage sharedHTTPCookieStorage|.
   static void NotifySystemCookiesChanged();
 
-  // Unsynchronizes the cookie store if it is currently synchronized.
-  void UnSynchronize();
-
   // Only one cookie store may enable metrics.
   void SetMetricsEnabled();
-
-  // Sets the delay between flushes. Only used in tests.
-  void set_flush_delay_for_testing(base::TimeDelta delay) {
-    flush_delay_ = delay;
-  }
 
   // Inherited CookieStore methods.
   void SetCookieWithOptionsAsync(const GURL& url,
@@ -129,7 +87,6 @@ class CookieStoreIOS : public net::CookieStore,
                                  bool secure,
                                  bool http_only,
                                  CookieSameSite same_site,
-                                 bool enforce_strict_secure,
                                  CookiePriority priority,
                                  const SetCookiesCallback& callback) override;
   void GetCookiesWithOptionsAsync(const GURL& url,
@@ -164,42 +121,41 @@ class CookieStoreIOS : public net::CookieStore,
 
   bool IsEphemeral() override;
 
+ protected:
+  CookieStoreIOS(net::CookieMonster::PersistentCookieStore* persistent_store,
+                 NSHTTPCookieStorage* system_store);
+
+  // These three functions are used for wrapping user-supplied callbacks given
+  // to CookieStoreIOS mutator methods. Given a callback, they return a new
+  // callback that invokes UpdateCachesFromCookieMonster() to schedule an
+  // asynchronous synchronization of the cookie cache and then calls the
+  // original callback.
+  SetCookiesCallback WrapSetCallback(const SetCookiesCallback& callback);
+  DeleteCallback WrapDeleteCallback(const DeleteCallback& callback);
+  base::Closure WrapClosure(const base::Closure& callback);
+
+  bool metrics_enabled() { return metrics_enabled_; }
+
+  net::CookieMonster* cookie_monster() { return cookie_monster_.get(); }
+
+  const base::ThreadChecker& thread_checker() { return thread_checker_; }
+
  private:
-  // For tests.
-  friend struct CookieStoreIOSTestTraits;
-
-  enum SynchronizationState {
-    NOT_SYNCHRONIZED,  // Uses CookieMonster as backend.
-    SYNCHRONIZING,     // Moves from NSHTTPCookieStorage to CookieMonster.
-    SYNCHRONIZED       // Uses NSHTTPCookieStorage as backend.
-  };
-
-  // Cookie fliter for DeleteCookiesWithFilter().
-  // Takes a cookie and a creation time and returns true if the cookie must be
+  // Cookie filter for DeleteCookiesWithFilter().
+  // Takes a cookie and a creation time and returns true the cookie must be
   // deleted.
   typedef base::Callback<bool(NSHTTPCookie*, base::Time)> CookieFilterFunction;
 
   // Clears the system cookie store.
   void ClearSystemStore();
-  // Changes the synchronization of the store.
-  // If |synchronized| is true, then the system cookie store is used as a
-  // backend, else |cookie_monster_| is used. Cookies are moved from one to
-  // the other accordingly.
-  void SetSynchronizedWithSystemStore(bool synchronized);
   // Returns true if the system cookie store policy is
   // |NSHTTPCookieAcceptPolicyAlways|.
   bool SystemCookiesAllowed();
-  // Converts |cookies| to NSHTTPCookie and add them to the system store.
-  void AddCookiesToSystemStore(const net::CookieList& cookies);
-  // Copies the cookies to the backing CookieMonster. If the cookie store is not
-  // synchronized with the system store, this is a no-op.
-  void WriteToCookieMonster(NSArray* system_cookies);
-  // Runs all the pending tasks.
-  void RunAllPendingTasks();
+  // Copies the cookies to the backing CookieMonster.
+  virtual void WriteToCookieMonster(NSArray* system_cookies);
 
   // Inherited CookieNotificationObserver methods.
   void OnSystemCookiesChanged() override;
-  void OnSystemCookiePolicyChanged() override;
 
   void DeleteCookiesWithFilter(const CookieFilterFunction& filter,
                                const DeleteCallback& callback);
@@ -208,12 +164,7 @@ class CookieStoreIOS : public net::CookieStore,
   base::scoped_nsobject<NSHTTPCookieStorage> system_store_;
   std::unique_ptr<CookieCreationTimeManager> creation_time_manager_;
   bool metrics_enabled_;
-  base::TimeDelta flush_delay_;
   base::CancelableClosure flush_closure_;
-
-  SynchronizationState synchronization_state_;
-  // Tasks received when SYNCHRONIZING are queued and run when SYNCHRONIZED.
-  std::vector<base::Closure> tasks_pending_synchronization_;
 
   base::ThreadChecker thread_checker_;
 
@@ -286,15 +237,14 @@ class CookieStoreIOS : public net::CookieStore,
   // OnSystemCookiesChanged is responsible for updating the cookie cache (and
   // hence running callbacks).
   //
-  // When this CookieStoreIOS object is not synchronized (or is synchronizing),
-  // the various mutator methods (SetCookieWithOptionsAsync &c) instead store
-  // their state in a CookieMonster object to be written back when the system
-  // store synchronizes. To deliver notifications in a timely manner, the
-  // mutators have to ensure that hooks get run, but only after the changes have
-  // been written back to CookieMonster. To do this, the mutators wrap the
-  // user-supplied callback in a callback which schedules an asynchronous task
-  // to synchronize the cache and run callbacks, then calls through to the
-  // user-specified callback.
+  // When this CookieStoreIOS object is not synchronized, the various mutator
+  // methods (SetCookieWithOptionsAsync &c) instead store their state in a
+  // CookieMonster object to be written back when the system store synchronizes.
+  // To deliver notifications in a timely manner, the mutators have to ensure
+  // that hooks get run, but only after the changes have been written back to
+  // CookieMonster. To do this, the mutators wrap the user-supplied callback in
+  // a callback which schedules an asynchronous task to synchronize the cache
+  // and run callbacks, then calls through to the user-specified callback.
   //
   // These three UpdateCachesAfter functions are responsible for scheduling an
   // asynchronous cache update (using UpdateCachesFromCookieMonster()) and
@@ -308,16 +258,6 @@ class CookieStoreIOS : public net::CookieStore,
   // The returned cookies are ordered by longest path, then earliest
   // creation date.
   net::CookieList CanonicalCookieListFromSystemCookies(NSArray* cookies);
-
-  // These three functions are used for wrapping user-supplied callbacks given
-  // to CookieStoreIOS mutator methods. Given a callback, they return a new
-  // callback that invokes UpdateCachesFromCookieMonster() to schedule an
-  // asynchronous synchronization of the cookie cache and then calls the
-  // original callback.
-
-  SetCookiesCallback WrapSetCallback(const SetCookiesCallback& callback);
-  DeleteCallback WrapDeleteCallback(const DeleteCallback& callback);
-  base::Closure WrapClosure(const base::Closure& callback);
 
   // Cached values of system cookies. Only cookies which have an observer added
   // with AddCallbackForCookie are kept in this cache.

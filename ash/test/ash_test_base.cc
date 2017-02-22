@@ -10,7 +10,6 @@
 #include "ash/common/test/test_session_state_delegate.h"
 #include "ash/common/test/test_system_tray_delegate.h"
 #include "ash/common/wm/window_positioner.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/display/extended_mouse_warp_controller.h"
@@ -18,12 +17,14 @@
 #include "ash/display/unified_mouse_warp_controller.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/ime/input_method_event_handler.h"
+#include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/shell/toplevel_window.h"
 #include "ash/test/ash_test_environment.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/test_shell_delegate.h"
 #include "base/command_line.h"
+#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/client/window_parenting_client.h"
@@ -38,14 +39,10 @@
 #include "ui/display/display_switches.h"
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/wm/core/coordinate_conversion.h"
-
-#if defined(OS_WIN)
-#include "base/win/windows_version.h"
-#include "ui/platform_window/win/win_window.h"
-#endif
 
 #if defined(USE_X11)
 #include "ui/gfx/x/x11_connection.h"  // nogncheck
@@ -92,10 +89,7 @@ class AshEventGeneratorDelegate
 /////////////////////////////////////////////////////////////////////////////
 
 AshTestBase::AshTestBase()
-    : setup_called_(false),
-      teardown_called_(false),
-      start_session_(true),
-      material_mode_(MaterialDesignController::Mode::UNINITIALIZED) {
+    : setup_called_(false), teardown_called_(false), start_session_(true) {
 #if defined(USE_X11)
   // This is needed for tests which use this base class but are run in browser
   // test binaries so don't get the default initialization in the unit test
@@ -132,11 +126,8 @@ void AshTestBase::SetUp() {
     command_line->AppendSwitchASCII(::switches::kHostWindowBounds,
                                     "1+1-800x600");
   }
-#if defined(OS_WIN)
-  ui::test::SetUsePopupAsRootWindowForTest(true);
-#endif
 
-  ash_test_helper_->SetUp(start_session_, material_mode_);
+  ash_test_helper_->SetUp(start_session_);
 
   Shell::GetPrimaryRootWindow()->Show();
   Shell::GetPrimaryRootWindow()->GetHost()->Show();
@@ -162,14 +153,11 @@ void AshTestBase::TearDown() {
   RunAllPendingInMessageLoop();
 
   ash_test_helper_->TearDown();
-#if defined(OS_WIN)
-  ui::test::SetUsePopupAsRootWindowForTest(false);
-#endif
 
   event_generator_.reset();
   // Some tests set an internal display id,
   // reset it here, so other tests will continue in a clean environment.
-  display::Display::SetInternalDisplayId(display::Display::kInvalidDisplayID);
+  display::Display::SetInternalDisplayId(display::kInvalidDisplayId);
 }
 
 // static
@@ -204,11 +192,6 @@ display::Display::Rotation AshTestBase::GetActiveDisplayRotation(int64_t id) {
 // static
 display::Display::Rotation AshTestBase::GetCurrentInternalDisplayRotation() {
   return GetActiveDisplayRotation(display::Display::InternalDisplayId());
-}
-
-// static
-bool AshTestBase::SupportsMultipleDisplays() {
-  return AshTestHelper::SupportsMultipleDisplays();
 }
 
 // static
@@ -289,8 +272,11 @@ aura::Window* AshTestBase::CreateTestWindowInShellWithDelegateAndType(
     window->SetBounds(gfx::Rect(origin, bounds.size()));
     aura::client::ParentWindowWithContext(window, root, bounds);
   }
-  window->SetProperty(aura::client::kCanMaximizeKey, true);
-  window->SetProperty(aura::client::kCanMinimizeKey, true);
+  window->SetProperty(aura::client::kResizeBehaviorKey,
+                      ui::mojom::kResizeBehaviorCanMaximize |
+                          ui::mojom::kResizeBehaviorCanMinimize |
+                          ui::mojom::kResizeBehaviorCanResize);
+
   return window;
 }
 

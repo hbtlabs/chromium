@@ -31,18 +31,16 @@ void FieldsetPainter::paintBoxDecorationBackground(
   // https://bugs.webkit.org/show_bug.cgi?id=47236
   if (m_layoutFieldset.style()->isHorizontalWritingMode()) {
     LayoutUnit yOff =
-        (legend->location().y() +
-         (legend->size().height() - m_layoutFieldset.borderTop()) / 2)
-            .clampNegativeToZero();
-
+        (legend->location().y() > 0)
+            ? LayoutUnit()
+            : (legend->size().height() - m_layoutFieldset.borderTop()) / 2;
     paintRect.setHeight(paintRect.height() - yOff);
     paintRect.setY(paintRect.y() + yOff);
   } else {
     LayoutUnit xOff =
-        (legend->location().x() +
-         (legend->size().width() - m_layoutFieldset.borderLeft()) / 2)
-            .clampNegativeToZero();
-
+        (legend->location().x() > 0)
+            ? LayoutUnit()
+            : (legend->size().width() - m_layoutFieldset.borderLeft()) / 2;
     paintRect.setWidth(paintRect.width() - xOff);
     paintRect.setX(paintRect.x() + xOff);
   }
@@ -51,14 +49,15 @@ void FieldsetPainter::paintBoxDecorationBackground(
                                        paintInfo.phase, paintRect);
   BoxDecorationData boxDecorationData(m_layoutFieldset);
 
-  if (boxDecorationData.bleedAvoidance == BackgroundBleedNone)
-    BoxPainter::paintBoxShadow(paintInfo, paintRect,
-                               m_layoutFieldset.styleRef(), Normal);
+  if (boxDecorationData.bleedAvoidance == BackgroundBleedNone) {
+    BoxPainter::paintNormalBoxShadow(paintInfo, paintRect,
+                                     m_layoutFieldset.styleRef());
+  }
   BoxPainter(m_layoutFieldset)
       .paintFillLayers(paintInfo, boxDecorationData.backgroundColor,
                        m_layoutFieldset.style()->backgroundLayers(), paintRect);
-  BoxPainter::paintBoxShadow(paintInfo, paintRect, m_layoutFieldset.styleRef(),
-                             Inset);
+  BoxPainter::paintInsetBoxShadow(paintInfo, paintRect,
+                                  m_layoutFieldset.styleRef());
 
   if (!boxDecorationData.hasBorderDecoration)
     return;
@@ -95,7 +94,7 @@ void FieldsetPainter::paintBoxDecorationBackground(
 
 void FieldsetPainter::paintMask(const PaintInfo& paintInfo,
                                 const LayoutPoint& paintOffset) {
-  if (m_layoutFieldset.style()->visibility() != EVisibility::Visible ||
+  if (m_layoutFieldset.style()->visibility() != EVisibility::kVisible ||
       paintInfo.phase != PaintPhaseMask)
     return;
 
@@ -113,18 +112,16 @@ void FieldsetPainter::paintMask(const PaintInfo& paintInfo,
   // https://bugs.webkit.org/show_bug.cgi?id=47236
   if (m_layoutFieldset.style()->isHorizontalWritingMode()) {
     LayoutUnit yOff =
-        (legend->location().y() +
-         (legend->size().height() - m_layoutFieldset.borderTop()) / 2)
-            .clampNegativeToZero();
-
+        (legend->location().y() > LayoutUnit())
+            ? LayoutUnit()
+            : (legend->size().height() - m_layoutFieldset.borderTop()) / 2;
     paintRect.expand(LayoutUnit(), -yOff);
     paintRect.move(LayoutUnit(), yOff);
   } else {
     LayoutUnit xOff =
-        (legend->location().x() +
-         (legend->size().width() - m_layoutFieldset.borderLeft()) / 2)
-            .clampNegativeToZero();
-
+        (legend->location().x() > LayoutUnit())
+            ? LayoutUnit()
+            : (legend->size().width() - m_layoutFieldset.borderLeft()) / 2;
     paintRect.expand(-xOff, LayoutUnit());
     paintRect.move(xOff, LayoutUnit());
   }

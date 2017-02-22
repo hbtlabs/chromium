@@ -32,10 +32,6 @@ class Extension;
 // location bar to be mocked for testing.
 class LocationBar {
  public:
-  // The parameters for the Security Chip Feature.
-  static const char kSecurityChipFeatureVisibilityParam[];
-  static const char kSecurityChipFeatureAnimationParam[];
-
   explicit LocationBar(Profile* profile);
 
   // Shows the first run bubble anchored to the location bar.
@@ -80,9 +76,6 @@ class LocationBar {
   virtual bool ShowPageActionPopup(const extensions::Extension* extension,
                                    bool grant_active_tab) = 0;
 
-  // Updates the state of the button to open a PDF in Adobe Reader.
-  virtual void UpdateOpenPDFInReaderPrompt() = 0;
-
   // Saves the state of the location bar to the specified WebContents, so that
   // it can be restored later. (Done when switching tabs).
   virtual void SaveStateToContents(content::WebContents* contents) = 0;
@@ -103,6 +96,12 @@ class LocationBar {
 
   // Checks if any extension has requested that the bookmark star be hidden.
   bool IsBookmarkStarHiddenByExtension() const;
+
+  // If |url| is an extension URL, returns the name of the associated extension,
+  // with whitespace collapsed. Otherwise, returns empty string. |web_contents|
+  // is used to get at the extension registry.
+  static base::string16 GetExtensionName(const GURL& url,
+                                         content::WebContents* web_contents);
 
  private:
   Profile* profile_;
@@ -129,6 +128,10 @@ class LocationBarTesting {
 
   // Returns whether or not the bookmark star decoration is visible.
   virtual bool GetBookmarkStarVisibility() = 0;
+
+  // Invokes the content setting image at |index|, displaying the bubble.
+  // Returns false if there is none.
+  virtual bool TestContentSettingImagePressed(size_t index) = 0;
 
  protected:
   virtual ~LocationBarTesting() {}

@@ -42,9 +42,6 @@ class WebGLVertexArrayObjectBase : public WebGLContextObject {
   }
   void unbindBuffer(WebGLBuffer*);
 
-  virtual void visitChildDOMWrappers(v8::Isolate*,
-                                     const v8::Persistent<v8::Object>&);
-
   DECLARE_VIRTUAL_TRACE();
   DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
@@ -62,7 +59,6 @@ class WebGLVertexArrayObjectBase : public WebGLContextObject {
 
   VaoType m_type;
   bool m_hasEverBeenBound;
-  bool m_destructionInProgress;
   TraceWrapperMember<WebGLBuffer> m_boundElementArrayBuffer;
   HeapVector<TraceWrapperMember<WebGLBuffer>> m_arrayBufferList;
   Vector<bool> m_attribEnabled;

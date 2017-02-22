@@ -8,8 +8,10 @@
 [
     RuntimeEnabled=Sensor,
     Constructor(optional SensorOptions sensorOptions),
-    ConstructorCallWith=ScriptState,
+    ConstructorCallWith=ExecutionContext,
     RaisesException=Constructor,
 ] interface Gyroscope : Sensor {
-    readonly attribute GyroscopeReading? reading;
+    readonly attribute unrestricted double? x;
+    readonly attribute unrestricted double? y;
+    readonly attribute unrestricted double? z;
 };

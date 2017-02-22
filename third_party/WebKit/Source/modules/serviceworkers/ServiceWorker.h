@@ -43,9 +43,12 @@
 
 namespace blink {
 
-class MODULES_EXPORT ServiceWorker final : public AbstractWorker,
-                                           public ActiveScriptWrappable,
-                                           public WebServiceWorkerProxy {
+class ScriptState;
+
+class MODULES_EXPORT ServiceWorker final
+    : public AbstractWorker,
+      public ActiveScriptWrappable<ServiceWorker>,
+      public WebServiceWorkerProxy {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(ServiceWorker);
 
@@ -59,15 +62,17 @@ class MODULES_EXPORT ServiceWorker final : public AbstractWorker,
   // Eager finalization needed to promptly release owned WebServiceWorker.
   EAGERLY_FINALIZE();
 
-  void postMessage(ExecutionContext*,
+  void postMessage(ScriptState*,
                    PassRefPtr<SerializedScriptValue> message,
                    const MessagePortArray&,
                    ExceptionState&);
-  static bool canTransferArrayBuffer() { return false; }
+  static bool canTransferArrayBuffersAndImageBitmaps() { return false; }
 
   String scriptURL() const;
   String state() const;
   DEFINE_ATTRIBUTE_EVENT_LISTENER(statechange);
+
+  ServiceWorker* toServiceWorker() override { return this; }
 
   // ScriptWrappable overrides.
   bool hasPendingActivity() const final;
@@ -85,8 +90,8 @@ class MODULES_EXPORT ServiceWorker final : public AbstractWorker,
                                     std::unique_ptr<WebServiceWorker::Handle>);
   ServiceWorker(ExecutionContext*, std::unique_ptr<WebServiceWorker::Handle>);
 
-  // ActiveDOMObject overrides.
-  void contextDestroyed() override;
+  // SuspendableObject overrides.
+  void contextDestroyed(ExecutionContext*) override;
 
   // A handle to the service worker representation in the embedder.
   std::unique_ptr<WebServiceWorker::Handle> m_handle;

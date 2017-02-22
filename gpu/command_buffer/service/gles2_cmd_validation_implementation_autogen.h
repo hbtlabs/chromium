@@ -471,10 +471,6 @@ static const GLenum valid_image_internal_format_table[] = {
     GL_RGBA,
 };
 
-static const GLenum valid_image_usage_table[] = {
-    GL_READ_WRITE_CHROMIUM,
-};
-
 static const GLenum valid_index_type_table[] = {
     GL_UNSIGNED_BYTE, GL_UNSIGNED_SHORT,
 };
@@ -733,6 +729,7 @@ bool Validators::QueryObjectParameterValidator::IsValid(
 
 bool Validators::QueryTargetValidator::IsValid(const GLenum value) const {
   switch (value) {
+    case GL_SAMPLES_PASSED_ARB:
     case GL_ANY_SAMPLES_PASSED_EXT:
     case GL_ANY_SAMPLES_PASSED_CONSERVATIVE_EXT:
     case GL_COMMANDS_ISSUED_CHROMIUM:
@@ -1216,6 +1213,16 @@ static const GLenum
         GL_RGB_YCBCR_420V_CHROMIUM,
 };
 
+bool Validators::TextureSrgbDecodeExtValidator::IsValid(
+    const GLenum value) const {
+  switch (value) {
+    case GL_DECODE_EXT:
+    case GL_SKIP_DECODE_EXT:
+      return true;
+  }
+  return false;
+};
+
 static const GLenum
     valid_texture_stencil_renderable_internal_format_table_es3[] = {
         GL_STENCIL_INDEX8, GL_DEPTH24_STENCIL8, GL_DEPTH32F_STENCIL8,
@@ -1376,7 +1383,6 @@ Validators::Validators()
       hint_target(valid_hint_target_table, arraysize(valid_hint_target_table)),
       image_internal_format(valid_image_internal_format_table,
                             arraysize(valid_image_internal_format_table)),
-      image_usage(valid_image_usage_table, arraysize(valid_image_usage_table)),
       index_type(valid_index_type_table, arraysize(valid_index_type_table)),
       pixel_store(valid_pixel_store_table, arraysize(valid_pixel_store_table)),
       pixel_type(valid_pixel_type_table, arraysize(valid_pixel_type_table)),

@@ -13,16 +13,10 @@
 #include "chrome/browser/ui/website_settings/website_settings.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "content/public/browser/permission_type.h"
 #include "ui/gfx/native_widget_types.h"
 
-class GURL;
 class Profile;
 class WebsiteSettings;
-
-namespace base {
-class Value;
-};
 
 namespace gfx {
 class Image;
@@ -201,9 +195,6 @@ class WebsiteSettingsUI {
 
   // Sets site identity information.
   virtual void SetIdentityInfo(const IdentityInfo& identity_info) = 0;
-
-  // Selects the tab with the given |tab_id|.
-  virtual void SetSelectedTab(TabId tab_id) = 0;
 };
 
 typedef WebsiteSettingsUI::CookieInfoList CookieInfoList;

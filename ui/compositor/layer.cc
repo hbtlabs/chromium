@@ -22,7 +22,6 @@
 #include "cc/output/copy_output_request.h"
 #include "cc/output/filter_operation.h"
 #include "cc/output/filter_operations.h"
-#include "cc/playback/display_item_list_settings.h"
 #include "cc/resources/transferable_resource.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "ui/compositor/compositor_switches.h"
@@ -32,6 +31,7 @@
 #include "ui/compositor/paint_context.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -181,14 +181,10 @@ std::unique_ptr<Layer> Layer::Clone() const {
     clone->SetAlphaShape(base::MakeUnique<SkRegion>(*alpha_shape_));
 
   // cc::Layer state.
-  if (surface_layer_ && surface_layer_->surface_id().is_valid()) {
-    clone->SetShowSurface(
-        surface_layer_->surface_id(),
-        surface_layer_->satisfy_callback(),
-        surface_layer_->require_callback(),
-        surface_layer_->surface_size(),
-        surface_layer_->surface_scale(),
-        frame_size_in_dip_);
+  if (surface_layer_ &&
+      surface_layer_->primary_surface_info().id().is_valid()) {
+    clone->SetShowSurface(surface_layer_->primary_surface_info(),
+                          surface_layer_->surface_reference_factory());
   } else if (type_ == LAYER_SOLID_COLOR) {
     clone->SetColor(GetTargetColor());
   }
@@ -658,27 +654,22 @@ bool Layer::TextureFlipped() const {
 }
 
 void Layer::SetShowSurface(
-    const cc::SurfaceId& surface_id,
-    const cc::SurfaceLayer::SatisfyCallback& satisfy_callback,
-    const cc::SurfaceLayer::RequireCallback& require_callback,
-    gfx::Size surface_size,
-    float scale,
-    gfx::Size frame_size_in_dip) {
+    const cc::SurfaceInfo& surface_info,
+    scoped_refptr<cc::SurfaceReferenceFactory> ref_factory) {
   DCHECK(type_ == LAYER_TEXTURED || type_ == LAYER_SOLID_COLOR);
 
   scoped_refptr<cc::SurfaceLayer> new_layer =
-      cc::SurfaceLayer::Create(satisfy_callback, require_callback);
-  new_layer->SetSurfaceId(surface_id, scale, surface_size);
+      cc::SurfaceLayer::Create(ref_factory);
+  new_layer->SetPrimarySurfaceInfo(surface_info);
   SwitchToLayer(new_layer);
   surface_layer_ = new_layer;
 
-  frame_size_in_dip_ = frame_size_in_dip;
+  frame_size_in_dip_ = gfx::ConvertSizeToDIP(surface_info.device_scale_factor(),
+                                             surface_info.size_in_pixels());
   RecomputeDrawsContentAndUVRect();
 
   for (const auto& mirror : mirrors_) {
-    mirror->dest()->SetShowSurface(
-        surface_id, satisfy_callback, require_callback,
-        surface_size, scale, frame_size_in_dip);
+    mirror->dest()->SetShowSurface(surface_info, ref_factory);
   }
 }
 
@@ -701,23 +692,21 @@ void Layer::SetShowSolidColorContent() {
 }
 
 void Layer::UpdateNinePatchLayerImage(const gfx::ImageSkia& image) {
-  DCHECK(type_ == LAYER_NINE_PATCH && nine_patch_layer_.get());
+  DCHECK_EQ(type_, LAYER_NINE_PATCH);
+  DCHECK(nine_patch_layer_.get());
+
   nine_patch_layer_image_ = image;
-  SkBitmap bitmap = nine_patch_layer_image_.GetRepresentation(
-      device_scale_factor_).sk_bitmap();
-  SkBitmap bitmap_copy;
-  if (bitmap.isImmutable()) {
-    bitmap_copy = bitmap;
-  } else {
-    // UIResourceBitmap requires an immutable copy of the input |bitmap|.
-    bitmap.copyTo(&bitmap_copy);
-    bitmap_copy.setImmutable();
-  }
-  nine_patch_layer_->SetBitmap(bitmap_copy);
+  // TODO(estade): we don't clean up old bitmaps in the UIResourceManager when
+  // the scale factor changes. Currently for the way NinePatchLayers are used,
+  // we don't need/want to, but we should address this in the future if it
+  // becomes an issue.
+  nine_patch_layer_->SetBitmap(
+      image.GetRepresentation(device_scale_factor_).sk_bitmap());
 }
 
 void Layer::UpdateNinePatchLayerAperture(const gfx::Rect& aperture_in_dip) {
-  DCHECK(type_ == LAYER_NINE_PATCH && nine_patch_layer_.get());
+  DCHECK_EQ(type_, LAYER_NINE_PATCH);
+  DCHECK(nine_patch_layer_.get());
   nine_patch_layer_aperture_ = aperture_in_dip;
   gfx::Rect aperture_in_pixel = ConvertRectToPixel(this, aperture_in_dip);
   nine_patch_layer_->SetAperture(aperture_in_pixel);
@@ -730,7 +719,8 @@ void Layer::UpdateNinePatchLayerBorder(const gfx::Rect& border) {
 }
 
 void Layer::UpdateNinePatchOcclusion(const gfx::Rect& occlusion) {
-  DCHECK(type_ == LAYER_NINE_PATCH && nine_patch_layer_.get());
+  DCHECK_EQ(type_, LAYER_NINE_PATCH);
+  DCHECK(nine_patch_layer_.get());
   nine_patch_layer_->SetLayerOcclusion(occlusion);
 }
 
@@ -812,7 +802,8 @@ void Layer::OnDeviceScaleFactorChanged(float device_scale_factor) {
   RecomputeDrawsContentAndUVRect();
   RecomputePosition();
   if (nine_patch_layer_) {
-    UpdateNinePatchLayerImage(nine_patch_layer_image_);
+    if (!nine_patch_layer_image_.isNull())
+      UpdateNinePatchLayerImage(nine_patch_layer_image_);
     UpdateNinePatchLayerAperture(nine_patch_layer_aperture_);
   }
   SchedulePaint(gfx::Rect(bounds_.size()));
@@ -830,8 +821,9 @@ void Layer::OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) {
     delegate_->OnDelegatedFrameDamage(damage_rect_in_dip);
 }
 
-void Layer::SetScrollable(Layer* parent_clip_layer,
-                          const base::Closure& on_scroll) {
+void Layer::SetScrollable(
+    Layer* parent_clip_layer,
+    const base::Callback<void(const gfx::ScrollOffset&)>& on_scroll) {
   cc_layer_->SetScrollClipLayerId(parent_clip_layer->cc_layer_->id());
   cc_layer_->set_did_scroll_callback(on_scroll);
   cc_layer_->SetUserScrollable(true, true);
@@ -874,10 +866,7 @@ scoped_refptr<cc::DisplayItemList> Layer::PaintContentsToDisplayList(
   gfx::Rect invalidation(
       gfx::IntersectRects(paint_region_.bounds(), local_bounds));
   paint_region_.Clear();
-  cc::DisplayItemListSettings settings;
-  settings.use_cached_picture = false;
-  scoped_refptr<cc::DisplayItemList> display_list =
-      cc::DisplayItemList::Create(settings);
+  auto display_list = make_scoped_refptr(new cc::DisplayItemList);
   if (delegate_) {
     delegate_->OnPaintLayer(
         PaintContext(display_list.get(), device_scale_factor_, invalidation));
@@ -1089,6 +1078,16 @@ float Layer::GetDeviceScaleFactor() const {
 LayerAnimatorCollection* Layer::GetLayerAnimatorCollection() {
   Compositor* compositor = GetCompositor();
   return compositor ? compositor->layer_animator_collection() : NULL;
+}
+
+int Layer::GetFrameNumber() const {
+  const Compositor* compositor = GetCompositor();
+  return compositor ? compositor->committed_frame_number() : 0;
+}
+
+float Layer::GetRefreshRate() const {
+  const Compositor* compositor = GetCompositor();
+  return compositor ? compositor->refresh_rate() : 60.0;
 }
 
 cc::Layer* Layer::GetCcLayer() const {

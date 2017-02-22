@@ -30,11 +30,14 @@ component("web") {
     "//third_party/WebKit/Source:config",
     "//third_party/WebKit/Source:inside_blink",
     "//third_party/WebKit/Source:non_test_config",
+    "//third_party/WebKit/Source/core:blink_core_pch",
   ]
 
   defines = [ "BLINK_WEB_IMPLEMENTATION=1" ]
 
   sources = [
+    "AnimationWorkletProxyClientImpl.cpp",
+    "AnimationWorkletProxyClientImpl.h",
     "AssertMatchingEnums.cpp",
     "AudioOutputDeviceClientImpl.cpp",
     "AudioOutputDeviceClientImpl.h",
@@ -47,10 +50,11 @@ component("web") {
     "CompositionUnderlineBuilder.h",
     "CompositionUnderlineVectorBuilder.cpp",
     "CompositionUnderlineVectorBuilder.h",
+    "CompositorAnimator.h",
     "CompositorMutatorImpl.cpp",
     "CompositorMutatorImpl.h",
-    "CompositorProxyClientImpl.cpp",
-    "CompositorProxyClientImpl.h",
+    "CompositorWorkerProxyClientImpl.cpp",
+    "CompositorWorkerProxyClientImpl.h",
     "ContextFeaturesClientImpl.cpp",
     "ContextFeaturesClientImpl.h",
     "ContextMenuAllowedScope.cpp",
@@ -141,7 +145,6 @@ component("web") {
     "WebAssociatedURLLoaderImpl.h",
     "WebBlob.cpp",
     "WebCSSParser.cpp",
-    "WebCache.cpp",
     "WebColorSuggestion.cpp",
     "WebCryptoNormalize.cpp",
     "WebCustomElement.cpp",
@@ -192,12 +195,14 @@ component("web") {
     "WebImageCache.cpp",
     "WebImageDecoder.cpp",
     "WebInputElement.cpp",
+    "WebInputEvent.cpp",
     "WebInputEventConversion.cpp",
     "WebInputEventConversion.h",
     "WebInputMethodControllerImpl.cpp",
     "WebInputMethodControllerImpl.h",
     "WebKit.cpp",
     "WebLabelElement.cpp",
+    "WebLanguageDetectionDetails.cpp",
     "WebLeakDetector.cpp",
     "WebLocalFrameImpl.cpp",
     "WebLocalFrameImpl.h",
@@ -295,7 +300,10 @@ static_library("test_support") {
     "WebTestingSupport.cpp",
   ]
 
-  configs += [ "//third_party/WebKit/Source:config" ]
+  configs += [
+    "//third_party/WebKit/Source:config",
+    "//third_party/WebKit/Source/core:blink_core_pch",
+  ]
 
   include_dirs = [ "$root_gen_dir/blink" ]
 }
@@ -323,6 +331,7 @@ test("webkit_unit_tests") {
 
     # FIXME: Move the tests from web/tests/ to appropriate places.
     # crbug.com/353585
+    "tests/ActiveConnectionThrottlingTest.cpp",
     "tests/ActivityLoggerTest.cpp",
     "tests/BrowserControlsTest.cpp",
     "tests/ChromeClientImplTest.cpp",
@@ -337,6 +346,7 @@ test("webkit_unit_tests") {
     "tests/FrameTestHelpers.cpp",
     "tests/FrameTestHelpers.h",
     "tests/FrameThrottlingTest.cpp",
+    "tests/HTMLDocumentParserLoadingTest.cpp",
     "tests/ImeOnFocusTest.cpp",
     "tests/IntersectionObserverTest.cpp",
     "tests/KeyboardTest.cpp",
@@ -345,6 +355,7 @@ test("webkit_unit_tests") {
     "tests/LinkSelectionTest.cpp",
     "tests/ListenerLeakTest.cpp",
     "tests/MHTMLTest.cpp",
+    "tests/MediaElementFillingViewportTest.cpp",
     "tests/NGInlineLayoutTest.cpp",
     "tests/PrerenderingTest.cpp",
     "tests/ProgrammaticScrollTest.cpp",
@@ -352,9 +363,11 @@ test("webkit_unit_tests") {
     "tests/RootScrollerTest.cpp",
     "tests/RunAllTests.cpp",
     "tests/ScreenWakeLockTest.cpp",
+    "tests/ScrollbarsTest.cpp",
     "tests/ScrollingCoordinatorTest.cpp",
     "tests/SpinLockTest.cpp",
     "tests/TextFinderTest.cpp",
+    "tests/TextSelectionRepaintTest.cpp",
     "tests/TimerPerfTest.cpp",
     "tests/TouchActionTest.cpp",
     "tests/ViewportTest.cpp",
@@ -385,6 +398,8 @@ test("webkit_unit_tests") {
     "tests/sim/SimDisplayItemList.h",
     "tests/sim/SimNetwork.cpp",
     "tests/sim/SimNetwork.h",
+    "tests/sim/SimPage.cpp",
+    "tests/sim/SimPage.h",
     "tests/sim/SimRequest.cpp",
     "tests/sim/SimRequest.h",
     "tests/sim/SimTest.cpp",
@@ -424,6 +439,7 @@ test("webkit_unit_tests") {
   configs += [
     "//third_party/WebKit/Source:config",
     "//third_party/WebKit/Source:inside_blink",
+    "//third_party/WebKit/Source/core:blink_core_pch",
   ]
 
   if (is_android) {

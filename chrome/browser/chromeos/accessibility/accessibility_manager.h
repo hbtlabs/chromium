@@ -26,16 +26,17 @@
 #include "extensions/browser/extension_system.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 
-namespace content {
-class RenderViewHost;
-}
-
 class Profile;
+
+namespace gfx {
+class Rect;
+}  // namespace gfx
 
 namespace chromeos {
 
 class AccessibilityExtensionLoader;
 class AccessibilityHighlightManager;
+class SelectToSpeakEventHandler;
 
 enum AccessibilityNotificationType {
   ACCESSIBILITY_MANAGER_SHUTDOWN,
@@ -234,9 +235,6 @@ class AccessibilityManager
   // Initiates play of shutdown sound and returns it's duration.
   base::TimeDelta PlayShutdownSound();
 
-  // Injects ChromeVox scripts into given |render_view_host|.
-  void InjectChromeVox(content::RenderViewHost* render_view_host);
-
   // Register a callback to be notified when the status of an accessibility
   // option changes.
   std::unique_ptr<AccessibilityStatusSubscription> RegisterCallback(
@@ -249,8 +247,15 @@ class AccessibilityManager
   // Notify accessibility when locale changes occur.
   void OnLocaleChanged();
 
+  // Whether or not to enable toggling spoken feedback via holding down
+  // two fingers on the screen.
+  bool ShouldToggleSpokenFeedbackViaTouch();
+
   // Play tick sound indicating spoken feedback will be toggled after countdown.
   bool PlaySpokenFeedbackToggleCountdown(int tick_count);
+
+  // Notify that a view is focused in arc.
+  void OnViewFocusedInArc(const gfx::Rect& bounds_in_screen);
 
   // Plays an earcon. Earcons are brief and distinctive sounds that indicate
   // when their mapped event has occurred. The sound key enums can be found in
@@ -381,8 +386,6 @@ class AccessibilityManager
 
   ash::AccessibilityNotificationVisibility spoken_feedback_notification_;
 
-  bool should_speak_chrome_vox_announcements_on_user_screen_;
-
   bool system_sounds_enabled_;
 
   AccessibilityStatusCallbackList callback_list_;
@@ -411,6 +414,11 @@ class AccessibilityManager
   std::unique_ptr<AccessibilityExtensionLoader> chromevox_loader_;
 
   std::unique_ptr<AccessibilityExtensionLoader> select_to_speak_loader_;
+
+  std::unique_ptr<chromeos::SelectToSpeakEventHandler>
+      select_to_speak_event_handler_;
+
+  std::unique_ptr<AccessibilityExtensionLoader> switch_access_loader_;
 
   base::WeakPtrFactory<AccessibilityManager> weak_ptr_factory_;
 

@@ -863,6 +863,7 @@ class SettingGetterImplKDE : public ProxyConfigServiceLinux::SettingGetter,
  public:
   explicit SettingGetterImplKDE(base::Environment* env_var_getter)
       : inotify_fd_(-1),
+        inotify_watcher_(FROM_HERE),
         notify_delegate_(nullptr),
         debounce_timer_(new base::OneShotTimer()),
         indirect_manual_(false),
@@ -1548,7 +1549,7 @@ ProxyConfigServiceLinux::Delegate::Delegate(
       // We have to load symbols and check the GNOME version in use to decide
       // if we should use the gsettings getter. See LoadAndCheckVersion().
       if (gs_getter->LoadAndCheckVersion(env_var_getter_.get()))
-        setting_getter_.reset(gs_getter.release());
+        setting_getter_ = std::move(gs_getter);
       }
 #endif
 #if defined(USE_GCONF)

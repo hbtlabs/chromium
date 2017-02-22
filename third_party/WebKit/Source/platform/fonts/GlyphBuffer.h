@@ -43,6 +43,11 @@ class GlyphBuffer {
   STACK_ALLOCATED();
 
  public:
+  enum class Type { Normal, TextIntercepts };
+  explicit GlyphBuffer(Type type = Type::Normal) : m_type(type) {}
+
+  Type type() const { return m_type; }
+
   bool isEmpty() const { return m_fontData.isEmpty(); }
   unsigned size() const {
     ASSERT(m_fontData.size() == m_glyphs.size());
@@ -96,49 +101,19 @@ class GlyphBuffer {
     // cannot mix x-only/xy offsets
     ASSERT(!hasVerticalOffsets());
 
-    m_fontData.append(font);
-    m_glyphs.append(glyph);
-    m_offsets.append(x);
+    m_fontData.push_back(font);
+    m_glyphs.push_back(glyph);
+    m_offsets.push_back(x);
   }
 
   void add(Glyph glyph, const SimpleFontData* font, const FloatPoint& offset) {
     // cannot mix x-only/xy offsets
     ASSERT(isEmpty() || hasVerticalOffsets());
 
-    m_fontData.append(font);
-    m_glyphs.append(glyph);
-    m_offsets.append(offset.x());
-    m_offsets.append(offset.y());
-  }
-
-  void reverseForSimpleRTL(float afterOffset, float totalWidth) {
-    ASSERT(!hasVerticalOffsets());
-
-    if (isEmpty())
-      return;
-
-    m_fontData.reverse();
-    m_glyphs.reverse();
-
-    // | .. [X0 X1 ..   Xn]     ..   |
-    // ^                   ^         ^
-    // 0             afterOffset totalWidth
-    //
-    // The input buffer is shaped using RTL advances, but since the right edge
-    // is unknown at that time, offsets are computed as if the advances were
-    // LTR. This method performs the required adjustments by reconstructing
-    // advances and positioning offsets in an RTL progression.
-
-    // FIXME: we should get rid of this (idea: store negative offsets while
-    //        shaping, and adjust the initial advance accordingly -> should
-    //        yield correctly positioned RTL glyphs without any post-shape
-    //        munging).
-    SECURITY_DCHECK(!m_offsets.isEmpty());
-    for (unsigned i = 0; i + 1 < m_offsets.size(); ++i)
-      m_offsets[i] = totalWidth - m_offsets[i + 1];
-    m_offsets.back() = totalWidth - afterOffset;
-
-    m_offsets.reverse();
+    m_fontData.push_back(font);
+    m_glyphs.push_back(glyph);
+    m_offsets.push_back(offset.x());
+    m_offsets.push_back(offset.y());
   }
 
  protected:
@@ -149,6 +124,8 @@ class GlyphBuffer {
   // (depending on the buffer-wide positioning mode). This matches the
   // glyph positioning format used by Skia.
   Vector<float, 2048> m_offsets;
+
+  Type m_type;
 };
 
 }  // namespace blink

@@ -32,7 +32,30 @@ Panel.Mode = {
   COLLAPSED: 'collapsed',
   FOCUSED: 'focused',
   FULLSCREEN_MENUS: 'menus',
-  FULLSCREEN_TUTORIAL: 'tutorial'
+  FULLSCREEN_TUTORIAL: 'tutorial',
+  SEARCH: 'search'
+};
+
+/**
+ * @type {!Object<string, {title: string, location: (string|undefined)}>}
+ */
+Panel.ModeInfo = {
+  collapsed: {title: 'panel_title', location: '#'},
+  focused: {title: 'panel_title', location: '#focus'},
+  menus: {title: 'panel_menus_title', location: '#fullscreen'},
+  tutorial: {title: 'panel_tutorial_title', location: '#fullscreen'},
+  search: {title: 'panel_title', location: '#focus'}
+};
+
+/**
+ * A callback function to be executed to perform the action from selecting
+ * a menu item after the menu has been closed and focus has been restored
+ * to the page or wherever it was previously.
+ * @param {?Function} callback
+ */
+Panel.setPendingCallback = function(callback) {
+  /** @type {?Function} @private */
+  Panel.pendingCallback_ = callback;
 };
 
 /**
@@ -81,23 +104,7 @@ Panel.init = function() {
    * @type {boolean}
    * @private
    */
-  this.menusEnabled_ = localStorage['useNext'] == 'true';
-
-  /**
-   * A callback function to be executed to perform the action from selecting
-   * a menu item after the menu has been closed and focus has been restored
-   * to the page or wherever it was previously.
-   * @type {?Function}
-   * @private
-   */
-  this.pendingCallback_ = null;
-
-  /**
-   * True if we're currently in incremental search mode.
-   * @type {boolean}
-   * @private
-   */
-  this.searching_ = false;
+  this.menusEnabled_ = localStorage['useClassic'] == 'false';
 
   /**
    * @type {Tutorial}
@@ -105,6 +112,7 @@ Panel.init = function() {
    */
   this.tutorial_ = new Tutorial();
 
+  Panel.setPendingCallback(null);
   Panel.updateFromPrefs();
 
   Msgs.addTranslatedMessagesToDom(document);
@@ -137,15 +145,13 @@ Panel.init = function() {
 
     Panel.closeMenusAndRestoreFocus();
   }, false);
-
-  Panel.searchInput_.addEventListener('blur', Panel.onSearchInputBlur, false);
 };
 
 /**
  * Update the display based on prefs.
  */
 Panel.updateFromPrefs = function() {
-  if (Panel.searching_) {
+  if (Panel.mode_ == Panel.Mode.SEARCH) {
     this.speechContainer_.hidden = true;
     this.brailleContainer_.hidden = true;
     this.searchContainer_.hidden = false;
@@ -257,21 +263,8 @@ Panel.setMode = function(mode) {
 
   this.mode_ = mode;
 
-  if (this.mode_ == Panel.Mode.FULLSCREEN_MENUS ||
-      this.mode_ == Panel.Mode.FULLSCREEN_TUTORIAL) {
-    // Change the url fragment to 'fullscreen', which signals the native
-    // host code to make the window fullscreen and give it focus.
-    window.location = '#fullscreen';
-  } else if (this.mode_ == Panel.Mode.FOCUSED) {
-    // Change the url fragment to 'focus', which signals the native
-    // host code to give the window focus.
-    window.location = '#focus';
-  } else {
-    // Remove the url fragment, which signals the native host code to
-    // collapse the panel to its normal size and cause it to lose focus.
-    window.location = '#';
-  }
-
+  document.title = Msgs.getMsg(Panel.ModeInfo[this.mode_].title);
+  window.location = Panel.ModeInfo[this.mode_].location;
   $('main').hidden = (this.mode_ == Panel.Mode.FULLSCREEN_TUTORIAL);
   $('menus_background').hidden = (this.mode_ != Panel.Mode.FULLSCREEN_MENUS);
   $('tutorial').hidden = (this.mode_ != Panel.Mode.FULLSCREEN_TUTORIAL);
@@ -426,13 +419,12 @@ Panel.onOpenMenus = function(opt_event, opt_activateMenuTitle) {
 
 /** Open incremental search. */
 Panel.onSearch = function() {
+  Panel.setMode(Panel.Mode.SEARCH);
   Panel.clearMenus();
   Panel.pendingCallback_ = null;
-  Panel.searching_ = true;
   Panel.updateFromPrefs();
-  Panel.setMode(Panel.Mode.FOCUSED);
 
-  ISearchUI.get(Panel.searchInput_);
+  ISearchUI.init(Panel.searchInput_);
 };
 
 /**
@@ -471,17 +463,19 @@ Panel.addMenu = function(menuMsg) {
  */
 Panel.onUpdateBraille = function(data) {
   var groups = data.groups;
-  var cols = parseInt(localStorage['virtualBrailleColumns'], 10);
-  var rows = parseInt(localStorage['virtualBrailleRows'], 10);
+  var cols = data.cols;
+  var rows = data.rows;
   var sideBySide = localStorage['brailleSideBySide'] === 'true';
 
   var addBorders = function(event) {
     var cell = event.target;
     if (cell.tagName == 'TD') {
       cell.className = 'highlighted-cell';
-      var companionID = cell.getAttribute('companionID');
-      var companion = $(companionID);
-      companion.className = 'highlighted-cell';
+      var companionIDs = cell.getAttribute('data-companionIDs');
+      companionIDs.split(' ').map(function(companionID) {
+        var companion = $(companionID);
+        companion.className = 'highlighted-cell';
+      });
     }
   };
 
@@ -489,9 +483,11 @@ Panel.onUpdateBraille = function(data) {
     var cell = event.target;
     if (cell.tagName == 'TD') {
       cell.className = 'unhighlighted-cell';
-      var companionID = cell.getAttribute('companionID');
-      var companion = $(companionID);
-      companion.className = 'unhighlighted-cell';
+      var companionIDs = cell.getAttribute('data-companionIDs');
+      companionIDs.split(' ').map(function(companionID) {
+        var companion = $(companionID);
+        companion.className = 'unhighlighted-cell';
+      });
     }
   };
 
@@ -510,8 +506,10 @@ Panel.onUpdateBraille = function(data) {
 
   var row1, row2;
   rowCount = 0;
+  var cellCount = cols;
   for (var i = 0; i < groups.length; i++) {
-    if (i % cols == 0) {
+    if (cellCount == cols) {
+      cellCount = 0;
       // Check if we reached the limit on the number of rows we can have.
       if (rowCount == rows)
         break;
@@ -529,14 +527,44 @@ Panel.onUpdateBraille = function(data) {
     var topCell = row1.insertCell(-1);
     topCell.innerHTML = groups[i][0];
     topCell.id = i + '-textCell';
-    topCell.setAttribute('companionID', i + '-brailleCell');
+    topCell.setAttribute('data-companionIDs', i + '-brailleCell');
     topCell.className = 'unhighlighted-cell';
 
     var bottomCell = row2.insertCell(-1);
-    bottomCell.innerHTML = groups[i][1];
     bottomCell.id = i + '-brailleCell';
-    bottomCell.setAttribute('companionID', i + '-textCell');
+    bottomCell.setAttribute('data-companionIDs', i + '-textCell');
     bottomCell.className = 'unhighlighted-cell';
+    if (cellCount + groups[i][1].length > cols) {
+      bottomCell.innerHTML = groups[i][1].substring(0, cols - cellCount);
+      if (rowCount == rows)
+        break;
+      rowCount++;
+      row1 = this.brailleTableElement_.insertRow(-1);
+      if (sideBySide) {
+        // Side by side.
+        row2 = this.brailleTableElement2_.insertRow(-1);
+      } else {
+        // Interleaved.
+        row2 = this.brailleTableElement_.insertRow(-1);
+      }
+      var bottomCell2 = row2.insertCell(-1);
+      bottomCell2.id = i + '-brailleCell2';
+      bottomCell2.setAttribute('data-companionIDs',
+          i + '-textCell ' + i + '-brailleCell');
+      bottomCell.setAttribute('data-companionIDs',
+          bottomCell.getAttribute('data-companionIDs') +
+          ' ' + i + '-brailleCell2');
+      topCell.setAttribute('data-companionID2',
+          bottomCell.getAttribute('data-companionIDs') +
+          ' ' + i + '-brailleCell2');
+
+      bottomCell2.className = 'unhighlighted-cell';
+      bottomCell2.innerHTML = groups[i][1].substring(cols - cellCount);
+      cellCount = bottomCell2.innerHTML.length;
+    } else {
+      bottomCell.innerHTML = groups[i][1];
+      cellCount += groups[i][1].length;
+    }
   }
 };
 
@@ -668,6 +696,11 @@ Panel.onKeyDown = function(event) {
     return;
   }
 
+  // Events don't propagate correctly because blur places focus on body.
+  if (Panel.mode_ == Panel.Mode.FULLSCREEN_TUTORIAL &&
+      !Panel.tutorial_.onKeyDown(event))
+    return;
+
   if (!Panel.activeMenu_)
     return;
 
@@ -717,20 +750,6 @@ Panel.onKeyDown = function(event) {
 };
 
 /**
- * Called when focus leaves the search input.
- */
-Panel.onSearchInputBlur = function() {
-  if (Panel.searching_) {
-    if (document.activeElement != Panel.searchInput_ || !document.hasFocus()) {
-      Panel.searching_ = false;
-      Panel.setMode(Panel.Mode.COLLAPSED);
-      Panel.updateFromPrefs();
-      Panel.searchInput_.value = '';
-    }
-  }
-};
-
-/**
  * Open the ChromeVox Options.
  */
 Panel.onOptions = function() {
@@ -766,7 +785,7 @@ Panel.getCallbackForCurrentItem = function() {
 Panel.closeMenusAndRestoreFocus = function() {
   // Watch for the next focus event.
   var onFocus = function(desktop, evt) {
-    desktop.removeEventListener(chrome.automation.EventType.focus, onFocus);
+    desktop.removeEventListener(chrome.automation.EventType.FOCUS, onFocus);
     if (Panel.pendingCallback_) {
       // Clear it before calling it, in case the callback itself triggers
       // another pending callback.
@@ -779,7 +798,7 @@ Panel.closeMenusAndRestoreFocus = function() {
   chrome.automation.getDesktop(function(desktop) {
     onFocus = /** @type {function(chrome.automation.AutomationEvent)} */(
         onFocus.bind(this, desktop));
-    desktop.addEventListener(chrome.automation.EventType.focus,
+    desktop.addEventListener(chrome.automation.EventType.FOCUS,
                              onFocus,
                              true);
 

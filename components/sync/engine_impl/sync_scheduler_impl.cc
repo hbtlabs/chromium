@@ -100,12 +100,10 @@ ConfigurationParams::ConfigurationParams()
 ConfigurationParams::ConfigurationParams(
     const sync_pb::GetUpdatesCallerInfo::GetUpdatesSource& source,
     ModelTypeSet types_to_download,
-    const ModelSafeRoutingInfo& routing_info,
     const base::Closure& ready_task,
     const base::Closure& retry_task)
     : source(source),
       types_to_download(types_to_download),
-      routing_info(routing_info),
       ready_task(ready_task),
       retry_task(retry_task) {
   DCHECK(!ready_task.is_null());
@@ -151,7 +149,8 @@ GetUpdatesCallerInfo::GetUpdatesSource GetUpdatesFromNudgeSource(
 SyncSchedulerImpl::SyncSchedulerImpl(const std::string& name,
                                      BackoffDelayProvider* delay_provider,
                                      SyncCycleContext* context,
-                                     Syncer* syncer)
+                                     Syncer* syncer,
+                                     bool ignore_auth_credentials)
     : name_(name),
       started_(false),
       syncer_short_poll_interval_seconds_(
@@ -163,6 +162,7 @@ SyncSchedulerImpl::SyncSchedulerImpl(const std::string& name,
       syncer_(syncer),
       cycle_context_(context),
       next_sync_cycle_job_priority_(NORMAL_PRIORITY),
+      ignore_auth_credentials_(ignore_auth_credentials),
       weak_ptr_factory_(this),
       weak_ptr_factory_for_weak_handle_(this) {
   weak_handle_this_ =
@@ -268,25 +268,6 @@ void SyncSchedulerImpl::SendInitialSnapshot() {
     observer.OnSyncCycleEvent(event);
 }
 
-namespace {
-
-// Helper to extract the routing info corresponding to types in
-// |types_to_download| from |current_routes|.
-void BuildModelSafeParams(ModelTypeSet types_to_download,
-                          const ModelSafeRoutingInfo& current_routes,
-                          ModelSafeRoutingInfo* result_routes) {
-  for (ModelTypeSet::Iterator iter = types_to_download.First(); iter.Good();
-       iter.Inc()) {
-    ModelType type = iter.Get();
-    ModelSafeRoutingInfo::const_iterator route = current_routes.find(type);
-    DCHECK(route != current_routes.end());
-    ModelSafeGroup group = route->second;
-    (*result_routes)[type] = group;
-  }
-}
-
-}  // namespace.
-
 void SyncSchedulerImpl::ScheduleConfiguration(
     const ConfigurationParams& params) {
   DCHECK(CalledOnValidThread());
@@ -299,11 +280,6 @@ void SyncSchedulerImpl::ScheduleConfiguration(
   // Only one configuration is allowed at a time. Verify we're not waiting
   // for a pending configure job.
   DCHECK(!pending_configure_params_);
-
-  ModelSafeRoutingInfo restricted_routes;
-  BuildModelSafeParams(params.types_to_download, params.routing_info,
-                       &restricted_routes);
-  cycle_context_->SetRoutingInfo(restricted_routes);
 
   // Only reconfigure if we have types to download.
   if (!params.types_to_download.Empty()) {
@@ -337,7 +313,8 @@ bool SyncSchedulerImpl::CanRunJobNow(JobPriority priority) {
     return false;
   }
 
-  if (cycle_context_->connection_manager()->HasInvalidAuthToken()) {
+  if (!ignore_auth_credentials_ &&
+      cycle_context_->connection_manager()->HasInvalidAuthToken()) {
     SDVLOG(1) << "Unable to run a job because we have no valid auth token.";
     return false;
   }
@@ -534,7 +511,6 @@ void SyncSchedulerImpl::DoClearServerDataSyncCycleJob(JobPriority priority) {
 
   if (!CanRunJobNow(priority)) {
     SDVLOG(2) << "Unable to run clear server data job right now.";
-    RunAndReset(&pending_configure_params_->retry_task);
     return;
   }
 

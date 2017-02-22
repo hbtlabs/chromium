@@ -18,7 +18,7 @@ const int buttonShadowHeight = 2;
 
 void FileUploadControlPainter::paintObject(const PaintInfo& paintInfo,
                                            const LayoutPoint& paintOffset) {
-  if (m_layoutFileUploadControl.style()->visibility() != EVisibility::Visible)
+  if (m_layoutFileUploadControl.style()->visibility() != EVisibility::kVisible)
     return;
 
   // Push a clip.
@@ -29,8 +29,8 @@ void FileUploadControlPainter::paintObject(const PaintInfo& paintInfo,
         LayoutPoint(paintOffset.x() + m_layoutFileUploadControl.borderLeft(),
                     paintOffset.y() + m_layoutFileUploadControl.borderTop()),
         m_layoutFileUploadControl.size() +
-            LayoutSize(0, -m_layoutFileUploadControl.borderWidth() +
-                              buttonShadowHeight)));
+            LayoutSize(LayoutUnit(), -m_layoutFileUploadControl.borderWidth() +
+                                         buttonShadowHeight)));
     if (clipRect.isEmpty())
       return;
     clipRecorder.emplace(paintInfo.context, m_layoutFileUploadControl,

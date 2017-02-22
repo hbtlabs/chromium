@@ -194,6 +194,10 @@ class V4Store {
   // of the hash prefixes.
   void Initialize();
 
+  // True if this store has valid contents, either from a successful read
+  // from disk or a full update.  This does not mean the checksum was verified.
+  virtual bool HasValidData() const;
+
   // Reset internal state.
   void Reset();
 
@@ -263,6 +267,7 @@ class V4Store {
                            TestHashPrefixExistsInMapWithDifferentSizes);
   FRIEND_TEST_ALL_PREFIXES(V4StoreTest,
                            TestHashPrefixDoesNotExistInMapWithDifferentSizes);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest, GetMatchingHashPrefixSize32Or21);
   FRIEND_TEST_ALL_PREFIXES(V4StoreTest,
                            TestAdditionsWithRiceEncodingFailsWithInvalidInput);
   FRIEND_TEST_ALL_PREFIXES(V4StoreTest, TestAdditionsWithRiceEncodingSucceeds);
@@ -386,6 +391,10 @@ class V4Store {
   // |checksum| is used to set the |checksum| field in the final proto.
   StoreWriteResult WriteToDisk(const Checksum& checksum);
 
+ protected:
+  HashPrefixMap hash_prefix_map_;
+
+ private:
   // The checksum value as read from the disk, until it is verified. Once
   // verified, it is cleared.
   std::string expected_checksum_;
@@ -393,11 +402,14 @@ class V4Store {
   // The size of the file on disk for this store.
   int64_t file_size_;
 
+  // True if the file was successfully read+parsed or was populated from
+  // a full update.
+  bool has_valid_data_;
+
   // The state of the store as returned by the PVer4 server in the last applied
   // update response.
   std::string state_;
   const base::FilePath store_path_;
-  HashPrefixMap hash_prefix_map_;
   const scoped_refptr<base::SequencedTaskRunner> task_runner_;
 };
 

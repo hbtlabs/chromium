@@ -22,12 +22,12 @@
 #include "core/svg/SVGFEImageElement.h"
 
 #include "core/dom/Document.h"
-#include "core/fetch/FetchRequest.h"
-#include "core/fetch/ResourceFetcher.h"
-#include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGPreserveAspectRatio.h"
+#include "core/svg/SVGTreeScopeResources.h"
 #include "core/svg/graphics/filters/SVGFEImage.h"
 #include "platform/graphics/Image.h"
+#include "platform/loader/fetch/FetchRequest.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 
 namespace blink {
 
@@ -44,7 +44,7 @@ DEFINE_NODE_FACTORY(SVGFEImageElement)
 
 SVGFEImageElement::~SVGFEImageElement() {
   if (m_cachedImage) {
-    m_cachedImage->removeClient(this);
+    m_cachedImage->removeObserver(this);
     m_cachedImage = nullptr;
   }
 }
@@ -54,7 +54,6 @@ DEFINE_TRACE(SVGFEImageElement) {
   visitor->trace(m_cachedImage);
   SVGFilterPrimitiveStandardAttributes::trace(visitor);
   SVGURIReference::trace(visitor);
-  ResourceClient::trace(visitor);
 }
 
 bool SVGFEImageElement::currentFrameHasSingleSecurityOrigin() const {
@@ -66,7 +65,7 @@ bool SVGFEImageElement::currentFrameHasSingleSecurityOrigin() const {
 
 void SVGFEImageElement::clearResourceReferences() {
   if (m_cachedImage) {
-    m_cachedImage->removeClient(this);
+    m_cachedImage->removeObserver(this);
     m_cachedImage = nullptr;
   }
 
@@ -76,10 +75,10 @@ void SVGFEImageElement::clearResourceReferences() {
 void SVGFEImageElement::fetchImageResource() {
   FetchRequest request(
       ResourceRequest(ownerDocument()->completeURL(hrefString())), localName());
-  m_cachedImage = ImageResource::fetch(request, document().fetcher());
+  m_cachedImage = ImageResourceContent::fetch(request, document().fetcher());
 
   if (m_cachedImage)
-    m_cachedImage->addClient(this);
+    m_cachedImage->addObserver(this);
 }
 
 void SVGFEImageElement::buildPendingResource() {
@@ -94,8 +93,8 @@ void SVGFEImageElement::buildPendingResource() {
     if (id.isEmpty()) {
       fetchImageResource();
     } else {
-      document().accessSVGExtensions().addPendingResource(id, this);
-      ASSERT(hasPendingResources());
+      treeScope().ensureSVGTreeScopedResources().addPendingResource(id, this);
+      DCHECK(hasPendingResources());
     }
   } else if (target->isSVGElement()) {
     // Register us with the target in the dependencies map. Any change of
@@ -136,7 +135,7 @@ void SVGFEImageElement::removedFrom(ContainerNode* rootParent) {
     clearResourceReferences();
 }
 
-void SVGFEImageElement::notifyFinished(Resource*) {
+void SVGFEImageElement::imageNotifyFinished(ImageResourceContent*) {
   if (!isConnected())
     return;
 

@@ -7,7 +7,7 @@ import logging
 
 from common import chrome_proxy_metrics as metrics
 from telemetry.core import exceptions
-from telemetry.page import page_test
+from telemetry.page import legacy_page_test
 
 
 def WaitForViaHeader(tab, url="http://check.googlezip.net/test.html"):
@@ -51,17 +51,19 @@ def WaitForViaHeader(tab, url="http://check.googlezip.net/test.html"):
     '</body></html>'))
 
   # Ensure the page has finished loading before attempting the DRP check.
-  tab.WaitForJavaScriptExpression('performance.timing.loadEventEnd', 60)
+  tab.WaitForJavaScriptCondition2('performance.timing.loadEventEnd', timeout=60)
 
   expected_via_header = metrics.CHROME_PROXY_VIA_HEADER
   if ChromeProxyValidation.extra_via_header:
     expected_via_header = ChromeProxyValidation.extra_via_header
 
-  tab.WaitForJavaScriptExpression(
-      'PollDRPCheck("%s", "%s")' % (url, expected_via_header), 60)
+  tab.WaitForJavaScriptCondition2(
+      'PollDRPCheck({{ url }}, {{ via_header }})',
+      url=url, via_header=expected_via_header,
+      timeout=60)
 
 
-class ChromeProxyValidation(page_test.PageTest):
+class ChromeProxyValidation(legacy_page_test.LegacyPageTest):
   """Base class for all chrome proxy correctness measurements."""
 
   # Value of the extra via header. |None| if no extra via header is expected.
@@ -100,7 +102,8 @@ class ChromeProxyValidation(page_test.PageTest):
   def ValidateAndMeasurePage(self, page, tab, results):
     self._page = page
     # Wait for the load event.
-    tab.WaitForJavaScriptExpression('performance.timing.loadEventStart', 300)
+    tab.WaitForJavaScriptCondition2(
+        'performance.timing.loadEventStart', timeout=300)
     assert self._metrics
     self._metrics.Stop(page, tab)
     if ChromeProxyValidation.extra_via_header:

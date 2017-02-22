@@ -8,7 +8,7 @@
 
 #include "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
-#import "chrome/browser/ui/cocoa/base_bubble_controller.h"
+#import "chrome/browser/ui/cocoa/omnibox_decoration_bubble_controller.h"
 #include "chrome/browser/ui/website_settings/website_settings_ui.h"
 #include "content/public/browser/web_contents_observer.h"
 
@@ -31,7 +31,7 @@ struct SecurityInfo;
 //
 // TODO(palmer): Normalize all WebsiteSettings*, SiteSettings*, PageInfo*, et c.
 // to OriginInfo*.
-@interface WebsiteSettingsBubbleController : BaseBubbleController {
+@interface WebsiteSettingsBubbleController : OmniboxDecorationBubbleController {
  @private
   content::WebContents* webContents_;
 
@@ -48,10 +48,9 @@ struct SecurityInfo;
   // user should treat it.
   NSTextField* securityDetailsField_;
 
-  // The link button for opening security details for the page. This is the
-  // DevTools Security panel for most users, but may be the certificate viewer
-  // for enterprise users with DevTools disabled.
-  NSButton* securityDetailsButton_;
+  // The link button for opening a Chrome Help Center page explaining connection
+  // security.
+  NSButton* connectionHelpButton_;
 
   // URL of the page for which the bubble is shown.
   GURL url_;
@@ -65,9 +64,6 @@ struct SecurityInfo;
   // The link button for revoking certificate decisions.
   // This link only shows when there is an acrive certificate exception.
   NSButton* resetDecisionsButton_;
-
-  // Whether DevTools is disabled for the relevant profile.
-  BOOL isDevToolsDisabled_;
 
   // The server certificate from the identity info. This should always be
   // non-null on a cryptographic connection, and null otherwise.
@@ -106,8 +102,7 @@ struct SecurityInfo;
 - (id)initWithParentWindow:(NSWindow*)parentWindow
     websiteSettingsUIBridge:(WebsiteSettingsUIBridge*)bridge
                 webContents:(content::WebContents*)webContents
-                        url:(const GURL&)url
-         isDevToolsDisabled:(BOOL)isDevToolsDisabled;
+                        url:(const GURL&)url;
 
 // Return the default width of the window. It may be wider to fit the content.
 // This may be overriden by a subclass for testing purposes.
@@ -146,7 +141,6 @@ class WebsiteSettingsUIBridge : public content::WebContentsObserver,
   void SetPermissionInfo(const PermissionInfoList& permission_info_list,
                          ChosenObjectInfoList chosen_object_info_list) override;
   void SetIdentityInfo(const IdentityInfo& identity_info) override;
-  void SetSelectedTab(TabId tab_id) override;
 
  private:
   // The WebContents the bubble UI is attached to.

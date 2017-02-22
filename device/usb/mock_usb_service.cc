@@ -7,11 +7,12 @@
 #include <string>
 #include <vector>
 
+#include "base/threading/thread_task_runner_handle.h"
 #include "device/usb/usb_device.h"
 
 namespace device {
 
-MockUsbService::MockUsbService() : UsbService(nullptr, nullptr) {}
+MockUsbService::MockUsbService() : UsbService(nullptr) {}
 
 MockUsbService::~MockUsbService() {
   // Shutdown() must be called before the base class destructor.

@@ -23,7 +23,6 @@ class TranslateEventProto;
 namespace translate {
 
 class TranslatePrefs;
-class TranslateRankerMetricsProvider;
 class TranslateURLFetcher;
 
 // Features used to enable ranker query, enforcement and logging. Note that
@@ -89,9 +88,9 @@ class TranslateRanker {
   TranslateRanker();
 
   // Exposed for testing via FRIEND_TEST.
-  double CalculateScore(double accept_ratio,
-                        double decline_ratio,
-                        double ignore_ratio,
+  double CalculateScore(int accept_count,
+                        int decline_count,
+                        int ignore_count,
                         const std::string& src_lang,
                         const std::string& dst_lang,
                         const std::string& app_locale,

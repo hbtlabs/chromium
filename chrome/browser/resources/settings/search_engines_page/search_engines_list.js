@@ -14,5 +14,14 @@ Polymer({
   properties: {
     /** @type {!Array<!SearchEngine>} */
     engines: Array,
+
+    /** @override */
+    subpageRoute: {
+      type: Object,
+      value: settings.Route.SEARCH_ENGINES,
+    },
+
+    /** Whether column headers should be displayed */
+    hideHeaders: Boolean,
   },
 });

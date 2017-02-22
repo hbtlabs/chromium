@@ -27,43 +27,23 @@ using testing::_;
 
 namespace ntp_snippets {
 
-namespace {
-
-std::vector<SnippetSource> ExtractSources(const NTPSnippet& snippet) {
-  std::vector<SnippetSource> result;
-  SnippetProto proto = snippet.ToProto();
-  for (const auto& source : proto.sources()) {
-    result.emplace_back(GURL(source.url()), source.publisher_name(),
-                        source.has_amp_url() ? GURL(source.amp_url()) : GURL());
-  }
-  return result;
-}
-
-}  // namespace
-
-bool operator==(const SnippetSource& lhs, const SnippetSource& rhs) {
-  return lhs.url == rhs.url && lhs.publisher_name == rhs.publisher_name &&
-         lhs.amp_url == rhs.amp_url;
-}
-
-bool operator==(const NTPSnippet& lhs, const NTPSnippet& rhs) {
+bool operator==(const RemoteSuggestion& lhs, const RemoteSuggestion& rhs) {
   return lhs.id() == rhs.id() && lhs.title() == rhs.title() &&
-         lhs.snippet() == rhs.snippet() &&
+         lhs.url() == rhs.url() &&
+         lhs.publisher_name() == rhs.publisher_name() &&
+         lhs.amp_url() == rhs.amp_url() && lhs.snippet() == rhs.snippet() &&
          lhs.salient_image_url() == rhs.salient_image_url() &&
          lhs.publish_date() == rhs.publish_date() &&
-         lhs.expiry_date() == rhs.expiry_date() &&
-         ExtractSources(lhs) == ExtractSources(rhs) &&
-         lhs.score() == rhs.score() && lhs.is_dismissed() == rhs.is_dismissed();
+         lhs.expiry_date() == rhs.expiry_date() && lhs.score() == rhs.score() &&
+         lhs.is_dismissed() == rhs.is_dismissed();
 }
 
 namespace {
 
-std::unique_ptr<NTPSnippet> CreateTestSnippet() {
-  auto snippet =
-      base::MakeUnique<NTPSnippet>("http://localhost", kArticlesRemoteId);
-  snippet->add_source(
-      SnippetSource(GURL("http://localhost"), "Publisher", GURL("http://amp")));
-  return snippet;
+std::unique_ptr<RemoteSuggestion> CreateTestSuggestion() {
+  return RemoteSuggestion::CreateForTesting(
+      "http://localhost", kArticlesRemoteId, GURL("http://localhost"),
+      "Publisher", GURL("http://amp"));
 }
 
 MATCHER_P(SnippetEq, snippet, "") {
@@ -99,11 +79,11 @@ class RemoteSuggestionsDatabaseTest : public testing::Test {
 
   // TODO(tschumann): MOCK_METHODS on non mock objects are an anti-pattern.
   // Clean up.
-  void OnSnippetsLoaded(NTPSnippet::PtrVector snippets) {
+  void OnSnippetsLoaded(RemoteSuggestion::PtrVector snippets) {
     OnSnippetsLoadedImpl(snippets);
   }
   MOCK_METHOD1(OnSnippetsLoadedImpl,
-               void(const NTPSnippet::PtrVector& snippets));
+               void(const RemoteSuggestion::PtrVector& snippets));
 
   MOCK_METHOD1(OnImageLoaded, void(std::string));
 
@@ -170,7 +150,7 @@ TEST_F(RemoteSuggestionsDatabaseTest, Save) {
   base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(db()->IsInitialized());
 
-  std::unique_ptr<NTPSnippet> snippet = CreateTestSnippet();
+  std::unique_ptr<RemoteSuggestion> snippet = CreateTestSuggestion();
   std::string image_data("pretty image");
 
   // Store a snippet and an image.
@@ -199,7 +179,7 @@ TEST_F(RemoteSuggestionsDatabaseTest, SavePersist) {
   base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(db()->IsInitialized());
 
-  std::unique_ptr<NTPSnippet> snippet = CreateTestSnippet();
+  std::unique_ptr<RemoteSuggestion> snippet = CreateTestSuggestion();
   std::string image_data("pretty image");
 
   // Store a snippet and an image.
@@ -227,14 +207,13 @@ TEST_F(RemoteSuggestionsDatabaseTest, Update) {
   base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(db()->IsInitialized());
 
-  std::unique_ptr<NTPSnippet> snippet = CreateTestSnippet();
+  std::unique_ptr<RemoteSuggestion> snippet = CreateTestSuggestion();
 
   // Store a snippet.
   db()->SaveSnippet(*snippet);
 
   // Change it.
-  const std::string text("some text");
-  snippet->set_snippet(text);
+  snippet->set_dismissed(true);
   db()->SaveSnippet(*snippet);
 
   // Make sure we get the updated version.
@@ -251,7 +230,7 @@ TEST_F(RemoteSuggestionsDatabaseTest, Delete) {
   base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(db()->IsInitialized());
 
-  std::unique_ptr<NTPSnippet> snippet = CreateTestSnippet();
+  std::unique_ptr<RemoteSuggestion> snippet = CreateTestSuggestion();
 
   // Store a snippet.
   db()->SaveSnippet(*snippet);
@@ -282,7 +261,7 @@ TEST_F(RemoteSuggestionsDatabaseTest, DeleteSnippetDoesNotDeleteImage) {
   base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(db()->IsInitialized());
 
-  std::unique_ptr<NTPSnippet> snippet = CreateTestSnippet();
+  std::unique_ptr<RemoteSuggestion> snippet = CreateTestSuggestion();
   std::string image_data("pretty image");
 
   // Store a snippet and image.
@@ -320,7 +299,7 @@ TEST_F(RemoteSuggestionsDatabaseTest, DeleteImage) {
   base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(db()->IsInitialized());
 
-  std::unique_ptr<NTPSnippet> snippet = CreateTestSnippet();
+  std::unique_ptr<RemoteSuggestion> snippet = CreateTestSuggestion();
   std::string image_data("pretty image");
 
   // Store the image.

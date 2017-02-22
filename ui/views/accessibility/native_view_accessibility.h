@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/accessibility/platform/ax_platform_node_delegate.h"
@@ -19,6 +20,10 @@
 #undef PLATFORM_HAS_NATIVE_VIEW_ACCESSIBILITY_IMPL
 
 #if defined(OS_WIN)
+#define PLATFORM_HAS_NATIVE_VIEW_ACCESSIBILITY_IMPL 1
+#endif
+
+#if defined(OS_MACOSX)
 #define PLATFORM_HAS_NATIVE_VIEW_ACCESSIBILITY_IMPL 1
 #endif
 
@@ -45,6 +50,9 @@ class VIEWS_EXPORT NativeViewAccessibility
 
   void NotifyAccessibilityEvent(ui::AXEvent event_type);
 
+  // Focuses or unfocuses a View.
+  bool SetFocused(bool focused);
+
   // ui::AXPlatformNodeDelegate
   const ui::AXNodeData& GetData() override;
   int GetChildCount() override;
@@ -55,11 +63,8 @@ class VIEWS_EXPORT NativeViewAccessibility
   gfx::NativeViewAccessible HitTestSync(int x, int y) override;
   gfx::NativeViewAccessible GetFocus() override;
   gfx::AcceleratedWidget GetTargetForNativeAccessibilityEvent() override;
+  bool AccessibilityPerformAction(const ui::AXActionData& data) override;
   void DoDefaultAction() override;
-  bool SetStringValue(const base::string16& new_value,
-                      bool clear_first) override;
-  bool CanSetStringValue() override;
-  bool SetFocused(bool focused) override;
 
   // WidgetObserver
   void OnWidgetDestroying(Widget* widget) override;

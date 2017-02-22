@@ -34,7 +34,7 @@
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/heap/SelfKeepAlive.h"
 #include "platform/scroll/ScrollTypes.h"
-#include "public/platform/WebInputEvent.h"
+#include "public/platform/WebCoalescedInputEvent.h"
 #include "public/platform/WebPoint.h"
 #include "public/platform/WebSize.h"
 #include "public/web/WebInputMethodController.h"
@@ -47,14 +47,14 @@
 #include "wtf/HashSet.h"
 
 namespace blink {
+
+class CompositorAnimationHost;
 class Frame;
 class Element;
 class InspectorOverlay;
 class LocalFrame;
-class Page;
 class PaintLayerCompositor;
 class UserGestureToken;
-class CompositorAnimationTimeline;
 class WebLayer;
 class WebLayerTreeView;
 class WebMouseEvent;
@@ -70,7 +70,6 @@ class WebFrameWidgetImpl final
       public PageWidgetEventHandler {
  public:
   static WebFrameWidgetImpl* create(WebWidgetClient*, WebLocalFrame*);
-  static WebFrameWidgetsSet& allInstances();
 
   ~WebFrameWidgetImpl();
 
@@ -88,7 +87,7 @@ class WebFrameWidgetImpl final
   void compositeAndReadbackAsync(
       WebCompositeAndReadbackAsyncCallback*) override;
   void themeChanged() override;
-  WebInputEventResult handleInputEvent(const WebInputEvent&) override;
+  WebInputEventResult handleInputEvent(const WebCoalescedInputEvent&) override;
   void setCursorVisibilityState(bool isVisible) override;
   bool hasTouchEventHandlersAt(const WebPoint&) override;
 
@@ -100,8 +99,6 @@ class WebFrameWidgetImpl final
   void mouseCaptureLost() override;
   void setFocus(bool enable) override;
   WebRange compositionRange() override;
-  WebTextInputInfo textInputInfo() override;
-  WebTextInputType textInputType() override;
   WebColor backgroundColor() const override;
   bool selectionBounds(WebRect& anchor, WebRect& focus) const override;
   bool selectionTextDirection(WebTextDirection& start,
@@ -111,11 +108,8 @@ class WebFrameWidgetImpl final
   void setTextDirection(WebTextDirection) override;
   bool isAcceleratedCompositingActive() const override;
   void willCloseLayerTreeView() override;
-  void didAcquirePointerLock() override;
-  void didNotAcquirePointerLock() override;
-  void didLosePointerLock() override;
   bool getCompositionCharacterBounds(WebVector<WebRect>& bounds) override;
-  void applyReplacementRange(const WebRange&) override;
+  void setRemoteViewportIntersection(const WebRect&) override;
 
   // WebFrameWidget implementation.
   WebLocalFrameImpl* localRoot() const override { return m_localRoot; }
@@ -136,20 +130,20 @@ class WebFrameWidgetImpl final
   // WebFrameWidgetBase overrides:
   bool forSubframe() const override { return true; }
   void scheduleAnimation() override;
-  CompositorProxyClient* createCompositorProxyClient() override;
+  CompositorWorkerProxyClient* createCompositorWorkerProxyClient() override;
+  AnimationWorkletProxyClient* createAnimationWorkletProxyClient() override;
+
   WebWidgetClient* client() const override { return m_client; }
   void setRootGraphicsLayer(GraphicsLayer*) override;
   void setRootLayer(WebLayer*) override;
-  void attachCompositorAnimationTimeline(CompositorAnimationTimeline*) override;
-  void detachCompositorAnimationTimeline(CompositorAnimationTimeline*) override;
+  WebLayerTreeView* getLayerTreeView() const override;
+  CompositorAnimationHost* animationHost() const override;
   HitTestResult coreHitTestResultAt(const WebPoint&) override;
 
   // Exposed for the purpose of overriding device metrics.
   void sendResizeEventAndRepaint();
 
   void updateMainFrameLayoutSize();
-
-  void setIgnoreInputEvents(bool newValue);
 
   // Event related methods:
   void mouseContextMenu(const WebMouseEvent&);
@@ -198,6 +192,8 @@ class WebFrameWidgetImpl final
 
   LocalFrame* focusedLocalFrameAvailableForIme() const;
 
+  CompositorMutatorImpl& mutator();
+
   WebWidgetClient* m_client;
 
   // WebFrameWidget is associated with a subtree of the frame tree,
@@ -219,16 +215,17 @@ class WebFrameWidgetImpl final
   WebLayerTreeView* m_layerTreeView;
   WebLayer* m_rootLayer;
   GraphicsLayer* m_rootGraphicsLayer;
+  std::unique_ptr<CompositorAnimationHost> m_animationHost;
   bool m_isAcceleratedCompositingActive;
   bool m_layerTreeViewClosed;
 
   bool m_suppressNextKeypressEvent;
 
-  bool m_ignoreInputEvents;
-
   // Whether the WebFrameWidget is rendering transparently.
   bool m_isTransparent;
 
+  // TODO(ekaramad): Can we remove this and make sure IME events are not called
+  // when there is no page focus?
   // Represents whether or not this object should process incoming IME events.
   bool m_imeAcceptEvents;
 

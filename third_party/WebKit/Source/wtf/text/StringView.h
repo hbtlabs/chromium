@@ -68,7 +68,7 @@ class WTF_EXPORT StringView {
 
   // From a literal string or LChar buffer:
   StringView(const LChar* chars, unsigned length)
-      : m_impl(StringImpl::empty()), m_characters8(chars), m_length(length) {}
+      : m_impl(StringImpl::empty), m_characters8(chars), m_length(length) {}
   StringView(const char* chars, unsigned length)
       : StringView(reinterpret_cast<const LChar*>(chars), length) {}
   StringView(const LChar* chars)
@@ -79,7 +79,7 @@ class WTF_EXPORT StringView {
 
   // From a wide literal string or UChar buffer.
   StringView(const UChar* chars, unsigned length)
-      : m_impl(StringImpl::empty16Bit()),
+      : m_impl(StringImpl::empty16Bit),
         m_characters16(chars),
         m_length(length) {}
   StringView(const UChar* chars);
@@ -136,6 +136,9 @@ class WTF_EXPORT StringView {
 
   String toString() const;
   AtomicString toAtomicString() const;
+
+  template <bool isSpecialCharacter(UChar)>
+  bool isAllSpecialCharacters() const;
 
  private:
   void set(const StringImpl&, unsigned offset, unsigned length);
@@ -200,7 +203,7 @@ inline StringView::StringView(StringImpl& impl,
 inline void StringView::clear() {
   m_length = 0;
   m_bytes = nullptr;
-  m_impl = StringImpl::empty();  // mark as 8 bit.
+  m_impl = StringImpl::empty;  // mark as 8 bit.
 }
 
 inline void StringView::set(const StringImpl& impl,
@@ -237,10 +240,33 @@ inline bool operator!=(const StringView& a, const StringView& b) {
   return !(a == b);
 }
 
+template <bool isSpecialCharacter(UChar), typename CharacterType>
+inline bool isAllSpecialCharacters(const CharacterType* characters,
+                                   size_t length) {
+  for (size_t i = 0; i < length; ++i) {
+    if (!isSpecialCharacter(characters[i]))
+      return false;
+  }
+  return true;
+}
+
+template <bool isSpecialCharacter(UChar)>
+inline bool StringView::isAllSpecialCharacters() const {
+  size_t len = length();
+  if (!len)
+    return true;
+
+  return is8Bit() ? WTF::isAllSpecialCharacters<isSpecialCharacter, LChar>(
+                        characters8(), len)
+                  : WTF::isAllSpecialCharacters<isSpecialCharacter, UChar>(
+                        characters16(), len);
+}
+
 }  // namespace WTF
 
 using WTF::StringView;
 using WTF::equalIgnoringASCIICase;
 using WTF::equalIgnoringCase;
+using WTF::isAllSpecialCharacters;
 
 #endif

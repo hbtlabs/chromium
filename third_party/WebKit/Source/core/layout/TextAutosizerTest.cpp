@@ -7,7 +7,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
-
 class TextAutosizerTest : public RenderingTest {
  private:
   void SetUp() override {
@@ -21,21 +20,17 @@ class TextAutosizerTest : public RenderingTest {
 TEST_F(TextAutosizerTest, SimpleParagraph) {
   setBodyInnerHTML(
       "<style>"
-      "    html { font-size: 16px; }"
-      "    body { width: 800px; margin: 0; overflow-y: hidden; }"
+      "  html { font-size: 16px; }"
+      "  body { width: 800px; margin: 0; overflow-y: hidden; }"
       "</style>"
       "<div id='autosized'>"
-      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do "
-      "eiusmod tempor"
-      "    incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
-      "veniam, quis nostrud"
-      "    exercitation ullamco laboris nisi ut aliquip ex ea commodo "
-      "consequat. Duis aute irure"
-      "    dolor in reprehenderit in voluptate velit esse cillum dolore eu "
-      "fugiat nulla pariatur."
-      "    Excepteur sint occaecat cupidatat non proident, sunt in culpa qui "
-      "officia deserunt"
-      "    mollit anim id est laborum."
+      "  Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do"
+      "  eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim"
+      "  ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
+      "  aliquip ex ea commodo consequat. Duis aute irure dolor in"
+      "  reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
+      "  pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
+      "  culpa qui officia deserunt mollit anim id est laborum."
       "</div>");
   Element* autosized = document().getElementById("autosized");
   EXPECT_FLOAT_EQ(16.f,
@@ -48,47 +43,35 @@ TEST_F(TextAutosizerTest, SimpleParagraph) {
 TEST_F(TextAutosizerTest, TextSizeAdjustDisablesAutosizing) {
   setBodyInnerHTML(
       "<style>"
-      "    html { font-size: 16px; }"
-      "    body { width: 800px; margin: 0; overflow-y: hidden; }"
+      "  html { font-size: 16px; }"
+      "  body { width: 800px; margin: 0; overflow-y: hidden; }"
       "</style>"
       "<div id='textSizeAdjustAuto' style='text-size-adjust: auto;'>"
-      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do "
-      "eiusmod tempor"
-      "    incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
-      "veniam, quis nostrud"
-      "    exercitation ullamco laboris nisi ut aliquip ex ea commodo "
-      "consequat. Duis aute irure"
-      "    dolor in reprehenderit in voluptate velit esse cillum dolore eu "
-      "fugiat nulla pariatur."
-      "    Excepteur sint occaecat cupidatat non proident, sunt in culpa qui "
-      "officia deserunt"
-      "    mollit anim id est laborum."
+      "  Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do"
+      "  eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim"
+      "  ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
+      "  aliquip ex ea commodo consequat. Duis aute irure dolor in"
+      "  reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
+      "  pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
+      "  culpa qui officia deserunt mollit anim id est laborum."
       "</div>"
       "<div id='textSizeAdjustNone' style='text-size-adjust: none;'>"
-      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do "
-      "eiusmod tempor"
-      "    incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
-      "veniam, quis nostrud"
-      "    exercitation ullamco laboris nisi ut aliquip ex ea commodo "
-      "consequat. Duis aute irure"
-      "    dolor in reprehenderit in voluptate velit esse cillum dolore eu "
-      "fugiat nulla pariatur."
-      "    Excepteur sint occaecat cupidatat non proident, sunt in culpa qui "
-      "officia deserunt"
-      "    mollit anim id est laborum."
+      "  Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do"
+      "  eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim"
+      "  ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
+      "  aliquip ex ea commodo consequat. Duis aute irure dolor in"
+      "  reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
+      "  pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
+      "  culpa qui officia deserunt mollit anim id est laborum."
       "</div>"
       "<div id='textSizeAdjust100' style='text-size-adjust: 100%;'>"
-      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do "
-      "eiusmod tempor"
-      "    incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
-      "veniam, quis nostrud"
-      "    exercitation ullamco laboris nisi ut aliquip ex ea commodo "
-      "consequat. Duis aute irure"
-      "    dolor in reprehenderit in voluptate velit esse cillum dolore eu "
-      "fugiat nulla pariatur."
-      "    Excepteur sint occaecat cupidatat non proident, sunt in culpa qui "
-      "officia deserunt"
-      "    mollit anim id est laborum."
+      "  Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do"
+      "  eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim"
+      "  ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
+      "  aliquip ex ea commodo consequat. Duis aute irure dolor in"
+      "  reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
+      "  pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
+      "  culpa qui officia deserunt mollit anim id est laborum."
       "</div>");
   LayoutObject* textSizeAdjustAuto =
       document().getElementById("textSizeAdjustAuto")->layoutObject();
@@ -107,24 +90,20 @@ TEST_F(TextAutosizerTest, TextSizeAdjustDisablesAutosizing) {
 TEST_F(TextAutosizerTest, ParagraphWithChangingTextSizeAdjustment) {
   setBodyInnerHTML(
       "<style>"
-      "    html { font-size: 16px; }"
-      "    body { width: 800px; margin: 0; overflow-y: hidden; }"
-      "    .none { text-size-adjust: none; }"
-      "    .small { text-size-adjust: 50%; }"
-      "    .large { text-size-adjust: 150%; }"
+      "  html { font-size: 16px; }"
+      "  body { width: 800px; margin: 0; overflow-y: hidden; }"
+      "  .none { text-size-adjust: none; }"
+      "  .small { text-size-adjust: 50%; }"
+      "  .large { text-size-adjust: 150%; }"
       "</style>"
       "<div id='autosized'>"
-      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do "
-      "eiusmod tempor"
-      "    incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
-      "veniam, quis nostrud"
-      "    exercitation ullamco laboris nisi ut aliquip ex ea commodo "
-      "consequat. Duis aute irure"
-      "    dolor in reprehenderit in voluptate velit esse cillum dolore eu "
-      "fugiat nulla pariatur."
-      "    Excepteur sint occaecat cupidatat non proident, sunt in culpa qui "
-      "officia deserunt"
-      "    mollit anim id est laborum."
+      "  Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do"
+      "  eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim"
+      "  ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
+      "  aliquip ex ea commodo consequat. Duis aute irure dolor in"
+      "  reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
+      "  pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
+      "  culpa qui officia deserunt mollit anim id est laborum."
       "</div>");
   Element* autosizedDiv = document().getElementById("autosized");
   EXPECT_FLOAT_EQ(16.f,
@@ -164,21 +143,17 @@ TEST_F(TextAutosizerTest, ParagraphWithChangingTextSizeAdjustment) {
 TEST_F(TextAutosizerTest, ZeroTextSizeAdjustment) {
   setBodyInnerHTML(
       "<style>"
-      "    html { font-size: 16px; }"
-      "    body { width: 800px; margin: 0; overflow-y: hidden; }"
+      "  html { font-size: 16px; }"
+      "  body { width: 800px; margin: 0; overflow-y: hidden; }"
       "</style>"
       "<div id='textSizeAdjustZero' style='text-size-adjust: 0%;'>"
-      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do "
-      "eiusmod tempor"
-      "    incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
-      "veniam, quis nostrud"
-      "    exercitation ullamco laboris nisi ut aliquip ex ea commodo "
-      "consequat. Duis aute irure"
-      "    dolor in reprehenderit in voluptate velit esse cillum dolore eu "
-      "fugiat nulla pariatur."
-      "    Excepteur sint occaecat cupidatat non proident, sunt in culpa qui "
-      "officia deserunt"
-      "    mollit anim id est laborum."
+      "  Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do"
+      "  eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim"
+      "  ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
+      "  aliquip ex ea commodo consequat. Duis aute irure dolor in"
+      "  reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
+      "  pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
+      "  culpa qui officia deserunt mollit anim id est laborum."
       "</div>");
   LayoutObject* textSizeAdjustZero =
       document().getElementById("textSizeAdjustZero")->layoutObject();
@@ -189,22 +164,18 @@ TEST_F(TextAutosizerTest, ZeroTextSizeAdjustment) {
 TEST_F(TextAutosizerTest, NegativeTextSizeAdjustment) {
   setBodyInnerHTML(
       "<style>"
-      "    html { font-size: 16px; }"
-      "    body { width: 800px; margin: 0; overflow-y: hidden; }"
+      "  html { font-size: 16px; }"
+      "  body { width: 800px; margin: 0; overflow-y: hidden; }"
       "</style>"
       // Negative values should be treated as auto.
       "<div id='textSizeAdjustNegative' style='text-size-adjust: -10%;'>"
-      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do "
-      "eiusmod tempor"
-      "    incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
-      "veniam, quis nostrud"
-      "    exercitation ullamco laboris nisi ut aliquip ex ea commodo "
-      "consequat. Duis aute irure"
-      "    dolor in reprehenderit in voluptate velit esse cillum dolore eu "
-      "fugiat nulla pariatur."
-      "    Excepteur sint occaecat cupidatat non proident, sunt in culpa qui "
-      "officia deserunt"
-      "    mollit anim id est laborum."
+      "  Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do"
+      "  eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim"
+      "  ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
+      "  aliquip ex ea commodo consequat. Duis aute irure dolor in"
+      "  reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
+      "  pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
+      "  culpa qui officia deserunt mollit anim id est laborum."
       "</div>");
   LayoutObject* textSizeAdjustNegative =
       document().getElementById("textSizeAdjustNegative")->layoutObject();
@@ -215,22 +186,18 @@ TEST_F(TextAutosizerTest, NegativeTextSizeAdjustment) {
 TEST_F(TextAutosizerTest, TextSizeAdjustmentPixelUnits) {
   setBodyInnerHTML(
       "<style>"
-      "    html { font-size: 16px; }"
-      "    body { width: 800px; margin: 0; overflow-y: hidden; }"
+      "  html { font-size: 16px; }"
+      "  body { width: 800px; margin: 0; overflow-y: hidden; }"
       "</style>"
       // Non-percentage values should be treated as auto.
       "<div id='textSizeAdjustPixels' style='text-size-adjust: 0.1px;'>"
-      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do "
-      "eiusmod tempor"
-      "    incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
-      "veniam, quis nostrud"
-      "    exercitation ullamco laboris nisi ut aliquip ex ea commodo "
-      "consequat. Duis aute irure"
-      "    dolor in reprehenderit in voluptate velit esse cillum dolore eu "
-      "fugiat nulla pariatur."
-      "    Excepteur sint occaecat cupidatat non proident, sunt in culpa qui "
-      "officia deserunt"
-      "    mollit anim id est laborum."
+      "  Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do"
+      "  eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim"
+      "  ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
+      "  aliquip ex ea commodo consequat. Duis aute irure dolor in"
+      "  reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
+      "  pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
+      "  culpa qui officia deserunt mollit anim id est laborum."
       "</div>");
   LayoutObject* textSizeAdjustPixels =
       document().getElementById("textSizeAdjustPixels")->layoutObject();
@@ -241,34 +208,26 @@ TEST_F(TextAutosizerTest, TextSizeAdjustmentPixelUnits) {
 TEST_F(TextAutosizerTest, NestedTextSizeAdjust) {
   setBodyInnerHTML(
       "<style>"
-      "    html { font-size: 16px; }"
-      "    body { width: 800px; margin: 0; overflow-y: hidden; }"
+      "  html { font-size: 16px; }"
+      "  body { width: 800px; margin: 0; overflow-y: hidden; }"
       "</style>"
       "<div id='textSizeAdjustA' style='text-size-adjust: 47%;'>"
-      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do "
-      "eiusmod tempor"
-      "    incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
-      "veniam, quis nostrud"
-      "    exercitation ullamco laboris nisi ut aliquip ex ea commodo "
-      "consequat. Duis aute irure"
-      "    dolor in reprehenderit in voluptate velit esse cillum dolore eu "
-      "fugiat nulla pariatur."
-      "    Excepteur sint occaecat cupidatat non proident, sunt in culpa qui "
-      "officia deserunt"
-      "    mollit anim id est laborum."
-      "    <div id='textSizeAdjustB' style='text-size-adjust: 53%;'>"
-      "        Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed "
-      "do eiusmod tempor"
-      "        incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
-      "veniam, quis nostrud"
-      "        exercitation ullamco laboris nisi ut aliquip ex ea commodo "
-      "consequat. Duis aute"
-      "        irure dolor in reprehenderit in voluptate velit esse cillum "
-      "dolore eu fugiat nulla"
-      "        pariatur. Excepteur sint occaecat cupidatat non proident, sunt "
-      "in culpa qui"
-      "        officia deserunt mollit anim id est laborum."
-      "    </div>"
+      "  Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do"
+      "  eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim"
+      "  ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
+      "  aliquip ex ea commodo consequat. Duis aute irure dolor in"
+      "  reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
+      "  pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
+      "  culpa qui officia deserunt mollit anim id est laborum."
+      "  <div id='textSizeAdjustB' style='text-size-adjust: 53%;'>"
+      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do"
+      "    eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim"
+      "    ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
+      "    aliquip ex ea commodo consequat. Duis aute irure dolor in"
+      "    reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
+      "    pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
+      "    culpa qui officia deserunt mollit anim id est laborum."
+      "  </div>"
       "</div>");
   LayoutObject* textSizeAdjustA =
       document().getElementById("textSizeAdjustA")->layoutObject();
@@ -285,21 +244,17 @@ TEST_F(TextAutosizerTest, NestedTextSizeAdjust) {
 TEST_F(TextAutosizerTest, PrefixedTextSizeAdjustIsAlias) {
   setBodyInnerHTML(
       "<style>"
-      "    html { font-size: 16px; }"
-      "    body { width: 800px; margin: 0; overflow-y: hidden; }"
+      "  html { font-size: 16px; }"
+      "  body { width: 800px; margin: 0; overflow-y: hidden; }"
       "</style>"
       "<div id='textSizeAdjust' style='-webkit-text-size-adjust: 50%;'>"
-      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do "
-      "eiusmod tempor"
-      "    incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
-      "veniam, quis nostrud"
-      "    exercitation ullamco laboris nisi ut aliquip ex ea commodo "
-      "consequat. Duis aute irure"
-      "    dolor in reprehenderit in voluptate velit esse cillum dolore eu "
-      "fugiat nulla pariatur."
-      "    Excepteur sint occaecat cupidatat non proident, sunt in culpa qui "
-      "officia deserunt"
-      "    mollit anim id est laborum."
+      "  Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do"
+      "  eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim"
+      "  ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
+      "  aliquip ex ea commodo consequat. Duis aute irure dolor in"
+      "  reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
+      "  pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
+      "  culpa qui officia deserunt mollit anim id est laborum."
       "</div>");
   LayoutObject* textSizeAdjust =
       document().getElementById("textSizeAdjust")->layoutObject();
@@ -313,21 +268,17 @@ TEST_F(TextAutosizerTest, AccessibilityFontScaleFactor) {
   document().settings()->setAccessibilityFontScaleFactor(1.5);
   setBodyInnerHTML(
       "<style>"
-      "    html { font-size: 16px; }"
-      "    body { width: 800px; margin: 0; overflow-y: hidden; }"
+      "  html { font-size: 16px; }"
+      "  body { width: 800px; margin: 0; overflow-y: hidden; }"
       "</style>"
       "<div id='autosized'>"
-      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do "
-      "eiusmod tempor"
-      "    incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
-      "veniam, quis nostrud"
-      "    exercitation ullamco laboris nisi ut aliquip ex ea commodo "
-      "consequat. Duis aute irure"
-      "    dolor in reprehenderit in voluptate velit esse cillum dolore eu "
-      "fugiat nulla pariatur."
-      "    Excepteur sint occaecat cupidatat non proident, sunt in culpa qui "
-      "officia deserunt"
-      "    mollit anim id est laborum."
+      "  Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do"
+      "  eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim"
+      "  ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
+      "  aliquip ex ea commodo consequat. Duis aute irure dolor in"
+      "  reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
+      "  pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
+      "  culpa qui officia deserunt mollit anim id est laborum."
       "</div>");
   Element* autosized = document().getElementById("autosized");
   EXPECT_FLOAT_EQ(16.f,
@@ -337,25 +288,64 @@ TEST_F(TextAutosizerTest, AccessibilityFontScaleFactor) {
   EXPECT_FLOAT_EQ(60.f, autosized->layoutObject()->style()->computedFontSize());
 }
 
+TEST_F(TextAutosizerTest, AccessibilityFontScaleFactorWithTextSizeAdjustNone) {
+  document().settings()->setAccessibilityFontScaleFactor(1.5);
+  setBodyInnerHTML(
+      "<style>"
+      "  html { font-size: 16px; }"
+      "  body { width: 800px; margin: 0; overflow-y: hidden; }"
+      "  #autosized { width: 400px; text-size-adjust: 100%; }"
+      "  #notAutosized { width: 100px; text-size-adjust: 100%; }"
+      "</style>"
+      "<div id='autosized'>"
+      "  Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do"
+      "  eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim"
+      "  ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
+      "  aliquip ex ea commodo consequat. Duis aute irure dolor in"
+      "  reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
+      "  pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
+      "  culpa qui officia deserunt mollit anim id est laborum."
+      "</div>"
+      "<div id='notAutosized'>"
+      "  Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do"
+      "  eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim"
+      "  ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
+      "  aliquip ex ea commodo consequat. Duis aute irure dolor in"
+      "  reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
+      "  pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
+      "  culpa qui officia deserunt mollit anim id est laborum."
+      "</div>");
+  Element* autosized = document().getElementById("autosized");
+  EXPECT_FLOAT_EQ(16.f,
+                  autosized->layoutObject()->style()->specifiedFontSize());
+  // 1.5 * (specified font-size = 16px) = 24px.
+  EXPECT_FLOAT_EQ(24.f, autosized->layoutObject()->style()->computedFontSize());
+
+  // Because this does not autosize (due to the width), no accessibility font
+  // scale factor should be applied.
+  Element* notAutosized = document().getElementById("notAutosized");
+  EXPECT_FLOAT_EQ(16.f,
+                  notAutosized->layoutObject()->style()->specifiedFontSize());
+  // specified font-size = 16px.
+  EXPECT_FLOAT_EQ(16.f,
+                  notAutosized->layoutObject()->style()->computedFontSize());
+}
+
 TEST_F(TextAutosizerTest, ChangingAccessibilityFontScaleFactor) {
   document().settings()->setAccessibilityFontScaleFactor(1);
   setBodyInnerHTML(
       "<style>"
-      "    html { font-size: 16px; }"
-      "    body { width: 800px; margin: 0; overflow-y: hidden; }"
+      "  html { font-size: 16px; }"
+      "  body { width: 800px; margin: 0; overflow-y: hidden; }"
       "</style>"
       "<div id='autosized'>"
-      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do "
-      "eiusmod tempor"
-      "    incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
-      "veniam, quis nostrud"
-      "    exercitation ullamco laboris nisi ut aliquip ex ea commodo "
-      "consequat. Duis aute irure"
-      "    dolor in reprehenderit in voluptate velit esse cillum dolore eu "
-      "fugiat nulla pariatur."
-      "    Excepteur sint occaecat cupidatat non proident, sunt in culpa qui "
-      "officia deserunt"
-      "    mollit anim id est laborum."
+      "  Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do"
+      "  eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim"
+      "  ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
+      "  aliquip ex ea commodo consequat. Duis aute irure dolor in"
+      "  reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
+      "  pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
+      "  culpa qui officia deserunt mollit anim id est laborum."
       "</div>");
   Element* autosized = document().getElementById("autosized");
   EXPECT_FLOAT_EQ(16.f,
@@ -378,34 +368,26 @@ TEST_F(TextAutosizerTest, TextSizeAdjustDoesNotDisableAccessibility) {
   document().settings()->setAccessibilityFontScaleFactor(1.5);
   setBodyInnerHTML(
       "<style>"
-      "    html { font-size: 16px; }"
-      "    body { width: 800px; margin: 0; overflow-y: hidden; }"
+      "  html { font-size: 16px; }"
+      "  body { width: 800px; margin: 0; overflow-y: hidden; }"
       "</style>"
       "<div id='textSizeAdjustNone' style='text-size-adjust: none;'>"
-      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do "
-      "eiusmod tempor"
-      "    incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
-      "veniam, quis nostrud"
-      "    exercitation ullamco laboris nisi ut aliquip ex ea commodo "
-      "consequat. Duis aute irure"
-      "    dolor in reprehenderit in voluptate velit esse cillum dolore eu "
-      "fugiat nulla pariatur."
-      "    Excepteur sint occaecat cupidatat non proident, sunt in culpa qui "
-      "officia deserunt"
-      "    mollit anim id est laborum."
+      "  Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do"
+      "  eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim"
+      "  ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
+      "  aliquip ex ea commodo consequat. Duis aute irure dolor in"
+      "  reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
+      "  pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
+      "  culpa qui officia deserunt mollit anim id est laborum."
       "</div>"
       "<div id='textSizeAdjustDouble' style='text-size-adjust: 200%;'>"
-      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do "
-      "eiusmod tempor"
-      "    incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
-      "veniam, quis nostrud"
-      "    exercitation ullamco laboris nisi ut aliquip ex ea commodo "
-      "consequat. Duis aute irure"
-      "    dolor in reprehenderit in voluptate velit esse cillum dolore eu "
-      "fugiat nulla pariatur."
-      "    Excepteur sint occaecat cupidatat non proident, sunt in culpa qui "
-      "officia deserunt"
-      "    mollit anim id est laborum."
+      "  Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do"
+      "  eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim"
+      "  ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
+      "  aliquip ex ea commodo consequat. Duis aute irure dolor in"
+      "  reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
+      "  pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
+      "  culpa qui officia deserunt mollit anim id est laborum."
       "</div>");
   Element* textSizeAdjustNone = document().getElementById("textSizeAdjustNone");
   EXPECT_FLOAT_EQ(
@@ -445,11 +427,11 @@ TEST_F(TextAutosizerTest, DISABLED_TextSizeAdjustWithoutNeedingAutosizing) {
   document().settings()->setTextAutosizingWindowSizeOverride(IntSize(800, 600));
   setBodyInnerHTML(
       "<style>"
-      "    html { font-size: 16px; }"
-      "    body { width: 800px; margin: 0; overflow-y: hidden; }"
+      "  html { font-size: 16px; }"
+      "  body { width: 800px; margin: 0; overflow-y: hidden; }"
       "</style>"
       "<div id='textSizeAdjust' style='text-size-adjust: 150%;'>"
-      "    Text"
+      "  Text"
       "</div>");
 
   LayoutObject* textSizeAdjust =
@@ -464,21 +446,17 @@ TEST_F(TextAutosizerTest, DeviceScaleAdjustmentWithViewport) {
   setBodyInnerHTML(
       "<meta name='viewport' content='width=800'>"
       "<style>"
-      "    html { font-size: 16px; }"
-      "    body { width: 800px; margin: 0; overflow-y: hidden; }"
+      "  html { font-size: 16px; }"
+      "  body { width: 800px; margin: 0; overflow-y: hidden; }"
       "</style>"
       "<div id='autosized'>"
-      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do "
-      "eiusmod tempor"
-      "    incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
-      "veniam, quis nostrud"
-      "    exercitation ullamco laboris nisi ut aliquip ex ea commodo "
-      "consequat. Duis aute irure"
-      "    dolor in reprehenderit in voluptate velit esse cillum dolore eu "
-      "fugiat nulla pariatur."
-      "    Excepteur sint occaecat cupidatat non proident, sunt in culpa qui "
-      "officia deserunt"
-      "    mollit anim id est laborum."
+      "  Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do"
+      "  eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim"
+      "  ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
+      "  aliquip ex ea commodo consequat. Duis aute irure dolor in"
+      "  reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
+      "  pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
+      "  culpa qui officia deserunt mollit anim id est laborum."
       "</div>");
 
   document().settings()->setViewportMetaEnabled(true);
@@ -504,4 +482,274 @@ TEST_F(TextAutosizerTest, DeviceScaleAdjustmentWithViewport) {
   EXPECT_FLOAT_EQ(60.f, autosized->layoutObject()->style()->computedFontSize());
 }
 
+TEST_F(TextAutosizerTest, ChangingSuperClusterFirstText) {
+  setBodyInnerHTML(
+      "<meta name='viewport' content='width=800'>"
+      "<style>"
+      "  html { font-size: 16px; }"
+      "  body { width: 800px; margin: 0; overflow-y: hidden; }"
+      "  .supercluster { width:560px; }"
+      "</style>"
+      "<div class='supercluster'>"
+      "  <div id='longText'>short blah blah</div>"
+      "</div>"
+      "<div class='supercluster'>"
+      "  <div id='shortText'>short blah blah</div>"
+      "</div>");
+  document().view()->updateAllLifecyclePhases();
+
+  Element* longTextElement = document().getElementById("longText");
+  longTextElement->setInnerHTML(
+      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed "
+      "do eiusmod tempor"
+      "    incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
+      "veniam, quis nostrud"
+      "    exercitation ullamco laboris nisi ut aliquip ex ea commodo "
+      "consequat. Duis aute irure"
+      "    dolor in reprehenderit in voluptate velit esse cillum dolore eu "
+      "fugiat nulla pariatur."
+      "    Excepteur sint occaecat cupidatat non proident, sunt in culpa "
+      "qui officia deserunt"
+      "    mollit anim id est laborum.",
+      ASSERT_NO_EXCEPTION);
+  document().view()->updateAllLifecyclePhases();
+
+  LayoutObject* longText =
+      document().getElementById("longText")->layoutObject();
+  EXPECT_FLOAT_EQ(16.f, longText->style()->specifiedFontSize());
+  //(specified font-size = 16px) * (block width = 560px) /
+  // (window width = 320px) = 28px.
+  EXPECT_FLOAT_EQ(28.f, longText->style()->computedFontSize());
+  LayoutObject* shortText =
+      document().getElementById("shortText")->layoutObject();
+  EXPECT_FLOAT_EQ(16.f, shortText->style()->specifiedFontSize());
+  EXPECT_FLOAT_EQ(28.f, shortText->style()->computedFontSize());
+}
+
+TEST_F(TextAutosizerTest, ChangingSuperClusterSecondText) {
+  setBodyInnerHTML(
+      "<meta name='viewport' content='width=800'>"
+      "<style>"
+      "  html { font-size: 16px; }"
+      "  body { width: 800px; margin: 0; overflow-y: hidden; }"
+      "  .supercluster { width:560px; }"
+      "</style>"
+      "<div class='supercluster'>"
+      "  <div id='shortText'>short blah blah</div>"
+      "</div>"
+      "<div class='supercluster'>"
+      "  <div id='longText'>short blah blah</div>"
+      "</div>");
+  document().view()->updateAllLifecyclePhases();
+
+  Element* longTextElement = document().getElementById("longText");
+  longTextElement->setInnerHTML(
+      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed "
+      "do eiusmod tempor"
+      "    incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
+      "veniam, quis nostrud"
+      "    exercitation ullamco laboris nisi ut aliquip ex ea commodo "
+      "consequat. Duis aute irure"
+      "    dolor in reprehenderit in voluptate velit esse cillum dolore eu "
+      "fugiat nulla pariatur."
+      "    Excepteur sint occaecat cupidatat non proident, sunt in culpa "
+      "qui officia deserunt"
+      "    mollit anim id est laborum.",
+      ASSERT_NO_EXCEPTION);
+  document().view()->updateAllLifecyclePhases();
+
+  LayoutObject* longText =
+      document().getElementById("longText")->layoutObject();
+  EXPECT_FLOAT_EQ(16.f, longText->style()->specifiedFontSize());
+  //(specified font-size = 16px) * (block width = 560px) /
+  // (window width = 320px) = 28px.
+  EXPECT_FLOAT_EQ(28.f, longText->style()->computedFontSize());
+  LayoutObject* shortText =
+      document().getElementById("shortText")->layoutObject();
+  EXPECT_FLOAT_EQ(16.f, shortText->style()->specifiedFontSize());
+  EXPECT_FLOAT_EQ(28.f, shortText->style()->computedFontSize());
+}
+
+TEST_F(TextAutosizerTest, AddingSuperCluster) {
+  setBodyInnerHTML(
+      "<meta name='viewport' content='width=800'>"
+      "<style>"
+      "  html { font-size: 16px; }"
+      "  body { width: 800px; margin: 0; overflow-y: hidden; }"
+      "  .supercluster { width:560px; }"
+      "</style>"
+      "<div>"
+      "  <div class='supercluster' id='shortText'>"
+      "      short blah blah"
+      "  </div>"
+      "</div>"
+      "<div id='container'></div>");
+  document().view()->updateAllLifecyclePhases();
+
+  Element* container = document().getElementById("container");
+  container->setInnerHTML(
+      "<div class='supercluster' id='longText'>"
+      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed "
+      "do eiusmod tempor"
+      "    incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
+      "veniam, quis nostrud"
+      "    exercitation ullamco laboris nisi ut aliquip ex ea commodo "
+      "consequat. Duis aute irure"
+      "    dolor in reprehenderit in voluptate velit esse cillum dolore eu "
+      "fugiat nulla pariatur."
+      "    Excepteur sint occaecat cupidatat non proident, sunt in culpa "
+      "qui officia deserunt"
+      "    mollit anim id est laborum."
+      "</div>",
+      ASSERT_NO_EXCEPTION);
+  document().view()->updateAllLifecyclePhases();
+
+  LayoutObject* longText =
+      document().getElementById("longText")->layoutObject();
+  EXPECT_FLOAT_EQ(16.f, longText->style()->specifiedFontSize());
+  //(specified font-size = 16px) * (block width = 560px) /
+  // (window width = 320px) = 28px.
+  EXPECT_FLOAT_EQ(28.f, longText->style()->computedFontSize());
+  LayoutObject* shortText =
+      document().getElementById("shortText")->layoutObject();
+  EXPECT_FLOAT_EQ(16.f, shortText->style()->specifiedFontSize());
+  EXPECT_FLOAT_EQ(28.f, shortText->style()->computedFontSize());
+}
+
+TEST_F(TextAutosizerTest, ChangingInheritedClusterTextInsideSuperCluster) {
+  setBodyInnerHTML(
+      "<meta name='viewport' content='width=800'>"
+      "<style>"
+      "  html { font-size: 16px; }"
+      "  body { width: 800px; margin: 0; overflow-y: hidden; }"
+      "  .supercluster { width:560px; }"
+      "  .cluster{width:560px;}"
+      "</style>"
+      "<div class='supercluster'>"
+      "  <div class='cluster' id='longText'>short blah blah</div>"
+      "</div>"
+      "<div class='supercluster'>"
+      "  <div class='cluster' id='shortText'>short blah blah</div>"
+      "</div>");
+  document().view()->updateAllLifecyclePhases();
+
+  Element* longTextElement = document().getElementById("longText");
+  longTextElement->setInnerHTML(
+      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed "
+      "do eiusmod tempor"
+      "    incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
+      "veniam, quis nostrud"
+      "    exercitation ullamco laboris nisi ut aliquip ex ea commodo "
+      "consequat. Duis aute irure"
+      "    dolor in reprehenderit in voluptate velit esse cillum dolore eu "
+      "fugiat nulla pariatur."
+      "    Excepteur sint occaecat cupidatat non proident, sunt in culpa "
+      "qui officia deserunt"
+      "    mollit anim id est laborum.",
+      ASSERT_NO_EXCEPTION);
+  document().view()->updateAllLifecyclePhases();
+
+  LayoutObject* longText =
+      document().getElementById("longText")->layoutObject();
+  EXPECT_FLOAT_EQ(16.f, longText->style()->specifiedFontSize());
+  //(specified font-size = 16px) * (block width = 560px) /
+  // (window width = 320px) = 28px.
+  EXPECT_FLOAT_EQ(28.f, longText->style()->computedFontSize());
+  LayoutObject* shortText =
+      document().getElementById("shortText")->layoutObject();
+  EXPECT_FLOAT_EQ(16.f, shortText->style()->specifiedFontSize());
+  EXPECT_FLOAT_EQ(28.f, shortText->style()->computedFontSize());
+}
+
+TEST_F(TextAutosizerTest, AutosizeInnerContentOfRuby) {
+  setBodyInnerHTML(
+      "<meta name='viewport' content='width=800'>"
+      "<style>"
+      "  html { font-size: 16px; }"
+      "  body { width: 800px; margin: 0; overflow-y: hidden; }"
+      "</style>"
+      "<div id='autosized'>"
+      "  東京特許許可局許可局長　今日"
+      "  <ruby>"
+      "    <rb id='rubyInline'>急遽</rb>"
+      "    <rp>(</rp>"
+      "    <rt>きゅうきょ</rt>"
+      "    <rp>)</rp>"
+      "  </ruby>"
+      "  許可却下、<br><br>"
+      "  <span>"
+      "      Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec "
+      "      sed diam facilisis, elementum elit at, elementum sem. Aliquam "
+      "      consectetur leo at nisi fermentum, vitae maximus libero "
+      "sodales. Sed "
+      "      laoreet congue ipsum, at tincidunt ante tempor sed. Cras eget "
+      "erat "
+      "      mattis urna vestibulum porta. Sed tempus vitae dui et suscipit. "
+      "      Curabitur laoreet accumsan pharetra. Nunc facilisis, elit sit "
+      "amet "
+      "      sollicitudin condimentum, ipsum velit ultricies mi, eget "
+      "dapibus nunc "
+      "      nulla nec sapien. Fusce dictum imperdiet aliquet."
+      "  </span>"
+      "  <ruby style='display:block'>"
+      "    <rb id='rubyBlock'>拼音</rb>"
+      "    <rt>pin yin</rt>"
+      "  </ruby>"
+      "</div>");
+  document().view()->updateAllLifecyclePhases();
+
+  Element* rubyInline = document().getElementById("rubyInline");
+  EXPECT_FLOAT_EQ(16.f,
+                  rubyInline->layoutObject()->style()->specifiedFontSize());
+  // (specified font-size = 16px) * (viewport width = 800px) /
+  // (window width = 320px) = 40px.
+  EXPECT_FLOAT_EQ(40.f,
+                  rubyInline->layoutObject()->style()->computedFontSize());
+
+  Element* rubyBlock = document().getElementById("rubyBlock");
+  EXPECT_FLOAT_EQ(16.f,
+                  rubyBlock->layoutObject()->style()->specifiedFontSize());
+  // (specified font-size = 16px) * (viewport width = 800px) /
+  // (window width = 320px) = 40px.
+  EXPECT_FLOAT_EQ(40.f, rubyBlock->layoutObject()->style()->computedFontSize());
+}
+
+TEST_F(TextAutosizerTest, ResizeAndGlyphOverflowChanged) {
+  document().settings()->setTextAutosizingWindowSizeOverride(IntSize(360, 640));
+  Element* html = document().body()->parentElement();
+  html->setInnerHTML(
+      "<head>"
+      "  <meta name='viewport' content='800'>"
+      "  <style>"
+      "    html { font-size:16px; font-family:'Times New Roman';}"
+      "  </style>"
+      "</head>"
+      "<body>"
+      "  <span id='autosized' style='font-size:10px'>"
+      "    Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do"
+      "    eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim"
+      "    ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut"
+      "    aliquip ex ea commodo consequat. Duis aute irure dolor in"
+      "    reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla"
+      "    pariatur. Excepteur sint occaecat cupidatat non proident, sunt in"
+      "    culpa qui officia deserunt mollit anim id est laborum."
+      "  </span>"
+      "  <span style='font-size:8px'>n</span>"
+      "  <span style='font-size:9px'>n</span>"
+      "  <span style='font-size:10px'>n</span>"
+      "  <span style='font-size:11px'>n</span>"
+      "  <span style='font-size:12px'>n</span>"
+      "  <span style='font-size:13px'>n</span>"
+      "  <span style='font-size:14px'>n</span>"
+      "  <span style='font-size:15px'>n</span>"
+      "</body>",
+      ASSERT_NO_EXCEPTION);
+  document().view()->updateAllLifecyclePhases();
+
+  document().settings()->setTextAutosizingWindowSizeOverride(IntSize(640, 360));
+  document().view()->updateAllLifecyclePhases();
+
+  document().settings()->setTextAutosizingWindowSizeOverride(IntSize(360, 640));
+  document().view()->updateAllLifecyclePhases();
+}
 }  // namespace blink

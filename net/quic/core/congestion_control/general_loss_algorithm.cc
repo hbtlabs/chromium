@@ -5,9 +5,9 @@
 #include "net/quic/core/congestion_control/general_loss_algorithm.h"
 
 #include "net/quic/core/congestion_control/rtt_stats.h"
-#include "net/quic/core/quic_bug_tracker.h"
 #include "net/quic/core/quic_flags.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
+#include "net/quic/platform/api/quic_bug_tracker.h"
 
 namespace net {
 
@@ -100,9 +100,7 @@ void GeneralLossAlgorithm::DetectLosses(
     // there are retransmittable packets in flight.
     // This also implements a timer-protected variant of FACK.
     if ((!it->retransmittable_frames.empty() &&
-         (FLAGS_quic_largest_sent_retransmittable
-              ? unacked_packets.largest_sent_retransmittable_packet()
-              : unacked_packets.largest_sent_packet()) <=
+         unacked_packets.largest_sent_retransmittable_packet() <=
              largest_newly_acked) ||
         (loss_type_ == kTime || loss_type_ == kAdaptiveTime)) {
       QuicTime when_lost = it->sent_time + loss_delay;

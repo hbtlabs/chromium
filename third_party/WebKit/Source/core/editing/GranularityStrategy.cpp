@@ -12,12 +12,12 @@ namespace blink {
 enum class BoundAdjust { CurrentPosIfOnBound, NextBoundIfOnBound };
 enum class SearchDirection { SearchBackwards, SearchForward };
 
-// We use the bottom-left corner of the caret rect to represent the
+// We use the bottom-left corner of the selection rect to represent the
 // location of a VisiblePosition. This way locations corresponding to
 // VisiblePositions on the same line will all have the same y coordinate
 // unless the text is transformed.
 static IntPoint positionLocation(const VisiblePosition& vp) {
-  return absoluteCaretBoundsOf(vp).minXMaxYCorner();
+  return absoluteSelectionBoundsOf(vp).minXMaxYCorner();
 }
 
 // Order is specified using the same contract as comparePositions.
@@ -67,7 +67,8 @@ VisibleSelection CharacterGranularityStrategy::updateExtent(
     LocalFrame* frame) {
   const VisiblePosition& extentPosition =
       visiblePositionForContentsPoint(extentPoint, frame);
-  const VisibleSelection& selection = frame->selection().selection();
+  const VisibleSelection& selection =
+      frame->selection().computeVisibleSelectionInDOMTreeDeprecated();
   if (selection.visibleBase().deepEquivalent() ==
       extentPosition.deepEquivalent())
     return selection;
@@ -99,7 +100,8 @@ void DirectionGranularityStrategy::Clear() {
 VisibleSelection DirectionGranularityStrategy::updateExtent(
     const IntPoint& extentPoint,
     LocalFrame* frame) {
-  const VisibleSelection& selection = frame->selection().selection();
+  const VisibleSelection& selection =
+      frame->selection().computeVisibleSelectionInDOMTreeDeprecated();
 
   if (m_state == StrategyState::Cleared)
     m_state = StrategyState::Expanding;

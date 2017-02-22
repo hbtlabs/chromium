@@ -46,6 +46,7 @@
 #include "core/dom/custom/CustomElementRegistry.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "core/html/FormAssociated.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLHtmlElement.h"
 #include "core/html/HTMLPlugInElement.h"
@@ -102,6 +103,9 @@ static inline void insert(HTMLConstructionSiteTask& task) {
   if (isHTMLTemplateElement(*task.parent))
     task.parent = toHTMLTemplateElement(task.parent.get())->content();
 
+  // https://html.spec.whatwg.org/#insert-a-foreign-element
+  // 3.1, (3) Push (pop) an element queue
+  CEReactionsScope reactions;
   if (task.nextChild)
     task.parent->parserInsertBefore(task.child.get(), *task.nextChild);
   else
@@ -276,7 +280,7 @@ void HTMLConstructionSite::flushPendingText(FlushMode mode) {
 void HTMLConstructionSite::queueTask(const HTMLConstructionSiteTask& task) {
   flushPendingText(FlushAlways);
   ASSERT(m_pendingText.isEmpty());
-  m_taskQueue.append(task);
+  m_taskQueue.push_back(task);
 }
 
 void HTMLConstructionSite::attachLater(ContainerNode* parent,
@@ -320,8 +324,8 @@ void HTMLConstructionSite::executeQueuedTasks() {
   TaskQueue queue;
   queue.swap(m_taskQueue);
 
-  for (size_t i = 0; i < size; ++i)
-    executeTask(queue[i]);
+  for (auto& task : queue)
+    executeTask(task);
 
   // We might be detached now.
 }
@@ -406,8 +410,7 @@ void HTMLConstructionSite::mergeAttributesFromTokenIntoElement(
   if (token->attributes().isEmpty())
     return;
 
-  for (unsigned i = 0; i < token->attributes().size(); ++i) {
-    const Attribute& tokenAttribute = token->attributes().at(i);
+  for (const auto& tokenAttribute : token->attributes()) {
     if (element->attributesWithoutUpdate().findIndex(tokenAttribute.name()) ==
         kNotFound)
       element->setAttribute(tokenAttribute.name(), tokenAttribute.value());
@@ -761,7 +764,7 @@ void HTMLConstructionSite::insertForeignElement(
     m_openElements.push(HTMLStackItem::create(element, token, namespaceURI));
 }
 
-void HTMLConstructionSite::insertTextNode(const String& string,
+void HTMLConstructionSite::insertTextNode(const StringView& string,
                                           WhitespaceMode whitespaceMode) {
   HTMLConstructionSiteTask dummyTask(HTMLConstructionSiteTask::Insert);
   dummyTask.parent = currentNode();
@@ -871,7 +874,7 @@ CustomElementDefinition* HTMLConstructionSite::lookUpCustomElementDefinition(
 }
 
 // "create an element for a token"
-// https://html.spec.whatwg.org/#create-an-element-for-the-token
+// https://html.spec.whatwg.org/multipage/syntax.html#create-an-element-for-the-token
 // TODO(dominicc): When form association is separate from creation, unify this
 // with foreign element creation. Add a namespace parameter and check for HTML
 // namespace to lookupCustomElementDefinition.
@@ -935,8 +938,12 @@ HTMLElement* HTMLConstructionSite::createHTMLElement(AtomicHTMLToken* token) {
     // FIXME: This can't use HTMLConstructionSite::createElement because we have
     // to pass the current form element. We should rework form association to
     // occur after construction to allow better code sharing here.
-    element = HTMLElementFactory::createHTMLElement(
-        token->name(), document, form, getCreateElementFlags());
+    element = HTMLElementFactory::createHTMLElement(token->name(), document,
+                                                    getCreateElementFlags());
+    if (FormAssociated* formAssociatedElement =
+            element->toFormAssociatedOrNull()) {
+      formAssociatedElement->associateWith(form);
+    }
     // Definition for the created element does not exist here and it cannot be
     // custom or failed.
     DCHECK_NE(element->getCustomElementState(), CustomElementState::Custom);

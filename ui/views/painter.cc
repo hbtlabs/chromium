@@ -9,11 +9,13 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "cc/paint/paint_shader.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
 #include "third_party/skia/include/pathops/SkPathOps.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/insets_f.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
@@ -68,17 +70,17 @@ void SolidRoundRectPainter::Paint(gfx::Canvas* canvas, const gfx::Size& size) {
   gfx::RectF border_rect_f(gfx::ScaleToEnclosingRect(gfx::Rect(size), scale));
   const SkScalar scaled_corner_radius = SkFloatToScalar(radius_ * scale);
 
-  SkPaint paint;
-  paint.setAntiAlias(true);
-  paint.setStyle(SkPaint::kFill_Style);
-  paint.setColor(bg_color_);
-  canvas->DrawRoundRect(border_rect_f, scaled_corner_radius, paint);
+  cc::PaintFlags flags;
+  flags.setAntiAlias(true);
+  flags.setStyle(cc::PaintFlags::kFill_Style);
+  flags.setColor(bg_color_);
+  canvas->DrawRoundRect(border_rect_f, scaled_corner_radius, flags);
 
   border_rect_f.Inset(gfx::InsetsF(0.5f));
-  paint.setStyle(SkPaint::kStroke_Style);
-  paint.setStrokeWidth(1);
-  paint.setColor(stroke_color_);
-  canvas->DrawRoundRect(border_rect_f, scaled_corner_radius, paint);
+  flags.setStyle(cc::PaintFlags::kStroke_Style);
+  flags.setStrokeWidth(1);
+  flags.setColor(stroke_color_);
+  canvas->DrawRoundRect(border_rect_f, scaled_corner_radius, flags);
 }
 
 // DashedFocusPainter ----------------------------------------------------------
@@ -119,7 +121,9 @@ void DashedFocusPainter::Paint(gfx::Canvas* canvas, const gfx::Size& size) {
 
 class SolidFocusPainter : public Painter {
  public:
-  SolidFocusPainter(SkColor color, const gfx::Insets& insets);
+  SolidFocusPainter(SkColor color,
+                    SkScalar thickness,
+                    const gfx::InsetsF& insets);
   ~SolidFocusPainter() override;
 
   // Painter:
@@ -128,16 +132,16 @@ class SolidFocusPainter : public Painter {
 
  private:
   const SkColor color_;
-  const gfx::Insets insets_;
+  const SkScalar thickness_;
+  const gfx::InsetsF insets_;
 
   DISALLOW_COPY_AND_ASSIGN(SolidFocusPainter);
 };
 
 SolidFocusPainter::SolidFocusPainter(SkColor color,
-                                     const gfx::Insets& insets)
-    : color_(color),
-      insets_(insets) {
-}
+                                     SkScalar thickness,
+                                     const gfx::InsetsF& insets)
+    : color_(color), thickness_(thickness), insets_(insets) {}
 
 SolidFocusPainter::~SolidFocusPainter() {
 }
@@ -147,9 +151,9 @@ gfx::Size SolidFocusPainter::GetMinimumSize() const {
 }
 
 void SolidFocusPainter::Paint(gfx::Canvas* canvas, const gfx::Size& size) {
-  gfx::Rect rect(size);
+  gfx::RectF rect((gfx::Rect(size)));
   rect.Inset(insets_);
-  canvas->DrawSolidFocusRect(rect, color_);
+  canvas->DrawSolidFocusRect(rect, color_, thickness_);
 }
 
 // GradientPainter ------------------------------------------------------------
@@ -201,7 +205,7 @@ gfx::Size GradientPainter::GetMinimumSize() const {
 }
 
 void GradientPainter::Paint(gfx::Canvas* canvas, const gfx::Size& size) {
-  SkPaint paint;
+  cc::PaintFlags flags;
   SkPoint p[2];
   p[0].iset(0, 0);
   if (horizontal_)
@@ -209,13 +213,13 @@ void GradientPainter::Paint(gfx::Canvas* canvas, const gfx::Size& size) {
   else
     p[1].iset(0, size.height());
 
-  paint.setShader(SkGradientShader::MakeLinear(
-      p, colors_.get(), pos_.get(), count_, SkShader::kClamp_TileMode));
-  paint.setStyle(SkPaint::kFill_Style);
+  flags.setShader(cc::WrapSkShader(SkGradientShader::MakeLinear(
+      p, colors_.get(), pos_.get(), count_, SkShader::kClamp_TileMode)));
+  flags.setStyle(cc::PaintFlags::kFill_Style);
 
   canvas->sk_canvas()->drawRectCoords(SkIntToScalar(0), SkIntToScalar(0),
                                       SkIntToScalar(size.width()),
-                                      SkIntToScalar(size.height()), paint);
+                                      SkIntToScalar(size.height()), flags);
 }
 
 // ImagePainter ---------------------------------------------------------------
@@ -294,51 +298,42 @@ void Painter::PaintFocusPainter(View* view,
 }
 
 // static
-Painter* Painter::CreateSolidRoundRectPainter(SkColor color, float radius) {
-  return new SolidRoundRectPainter(color, SK_ColorTRANSPARENT, radius);
+std::unique_ptr<Painter> Painter::CreateSolidRoundRectPainter(SkColor color,
+                                                              float radius) {
+  return base::MakeUnique<SolidRoundRectPainter>(color, SK_ColorTRANSPARENT,
+                                                 radius);
 }
 
 // static
-Painter* Painter::CreateRoundRectWith1PxBorderPainter(SkColor bg_color,
-                                                      SkColor stroke_color,
-                                                      float radius) {
-  return new SolidRoundRectPainter(bg_color, stroke_color, radius);
+std::unique_ptr<Painter> Painter::CreateRoundRectWith1PxBorderPainter(
+    SkColor bg_color,
+    SkColor stroke_color,
+    float radius) {
+  return base::MakeUnique<SolidRoundRectPainter>(bg_color, stroke_color,
+                                                 radius);
 }
 
 // static
-Painter* Painter::CreateHorizontalGradient(SkColor c1, SkColor c2) {
+std::unique_ptr<Painter> Painter::CreateVerticalGradient(SkColor c1,
+                                                         SkColor c2) {
   SkColor colors[2];
   colors[0] = c1;
   colors[1] = c2;
   SkScalar pos[] = {0, 1};
-  return new GradientPainter(true, colors, pos, 2);
+  return base::MakeUnique<GradientPainter>(false, colors, pos, 2);
 }
 
 // static
-Painter* Painter::CreateVerticalGradient(SkColor c1, SkColor c2) {
-  SkColor colors[2];
-  colors[0] = c1;
-  colors[1] = c2;
-  SkScalar pos[] = {0, 1};
-  return new GradientPainter(false, colors, pos, 2);
+std::unique_ptr<Painter> Painter::CreateImagePainter(
+    const gfx::ImageSkia& image,
+    const gfx::Insets& insets) {
+  return base::MakeUnique<ImagePainter>(image, insets);
 }
 
 // static
-Painter* Painter::CreateVerticalMultiColorGradient(SkColor* colors,
-                                                   SkScalar* pos,
-                                                   size_t count) {
-  return new GradientPainter(false, colors, pos, count);
-}
-
-// static
-Painter* Painter::CreateImagePainter(const gfx::ImageSkia& image,
-                                     const gfx::Insets& insets) {
-  return new ImagePainter(image, insets);
-}
-
-// static
-Painter* Painter::CreateImageGridPainter(const int image_ids[]) {
-  return new ImagePainter(image_ids);
+std::unique_ptr<Painter> Painter::CreateImageGridPainter(
+    const int image_ids[]) {
+  return base::MakeUnique<ImagePainter>(image_ids);
 }
 
 // static
@@ -356,7 +351,22 @@ std::unique_ptr<Painter> Painter::CreateDashedFocusPainterWithInsets(
 std::unique_ptr<Painter> Painter::CreateSolidFocusPainter(
     SkColor color,
     const gfx::Insets& insets) {
-  return base::MakeUnique<SolidFocusPainter>(color, insets);
+  // Before Canvas::DrawSolidFocusRect correctly inset the rect's bounds based
+  // on the thickness, callers had to add 1 to the bottom and right insets.
+  // Subtract that here so it works the same way with the new
+  // Canvas::DrawSolidFocusRect.
+  const gfx::Insets corrected_insets = insets - gfx::Insets(0, 0, 1, 1);
+  return base::MakeUnique<SolidFocusPainter>(color, SkIntToScalar(1),
+                                             corrected_insets);
+}
+
+// static
+std::unique_ptr<Painter> Painter::CreateSolidFocusPainter(
+    SkColor color,
+    float thickness,
+    const gfx::InsetsF& insets) {
+  return base::MakeUnique<SolidFocusPainter>(color, SkFloatToScalar(thickness),
+                                             insets);
 }
 
 // HorizontalPainter ----------------------------------------------------------

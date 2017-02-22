@@ -30,7 +30,7 @@
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/SerializedScriptValue.h"
 #include "core/CoreExport.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/events/EventListener.h"
 #include "core/events/EventTarget.h"
 #include "public/platform/WebMessagePortChannel.h"
@@ -45,6 +45,7 @@ namespace blink {
 class ExceptionState;
 class ExecutionContext;
 class MessagePort;
+class ScriptState;
 class SerializedScriptValue;
 
 // Not to be confused with WebMessagePortChannelArray; this one uses Vector and
@@ -52,8 +53,8 @@ class SerializedScriptValue;
 typedef Vector<WebMessagePortChannelUniquePtr, 1> MessagePortChannelArray;
 
 class CORE_EXPORT MessagePort : public EventTargetWithInlineData,
-                                public ActiveScriptWrappable,
-                                public ActiveDOMObject,
+                                public ActiveScriptWrappable<MessagePort>,
+                                public ContextLifecycleObserver,
                                 public WebMessagePortChannelClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(MessagePort);
@@ -62,11 +63,11 @@ class CORE_EXPORT MessagePort : public EventTargetWithInlineData,
   static MessagePort* create(ExecutionContext&);
   ~MessagePort() override;
 
-  void postMessage(ExecutionContext*,
+  void postMessage(ScriptState*,
                    PassRefPtr<SerializedScriptValue> message,
                    const MessagePortArray&,
                    ExceptionState&);
-  static bool canTransferArrayBuffer() { return false; }
+  static bool canTransferArrayBuffersAndImageBitmaps() { return false; }
 
   void start();
   void close();
@@ -74,38 +75,36 @@ class CORE_EXPORT MessagePort : public EventTargetWithInlineData,
   void entangle(WebMessagePortChannelUniquePtr);
   WebMessagePortChannelUniquePtr disentangle();
 
-  // Returns nullptr if the passed-in array is nullptr/empty.
-  static std::unique_ptr<WebMessagePortChannelArray>
-      toWebMessagePortChannelArray(std::unique_ptr<MessagePortChannelArray>);
+  static WebMessagePortChannelArray toWebMessagePortChannelArray(
+      MessagePortChannelArray);
 
   // Returns an empty array if the passed array is empty.
-  static MessagePortArray* toMessagePortArray(
-      ExecutionContext*,
-      const WebMessagePortChannelArray&);
+  static MessagePortArray* toMessagePortArray(ExecutionContext*,
+                                              WebMessagePortChannelArray);
 
-  // Returns nullptr if there is an exception, or if the passed-in array is
+  // Returns an empty array if there is an exception, or if the passed array is
   // nullptr/empty.
-  static std::unique_ptr<MessagePortChannelArray>
-  disentanglePorts(ExecutionContext*, const MessagePortArray&, ExceptionState&);
+  static MessagePortChannelArray disentanglePorts(ExecutionContext*,
+                                                  const MessagePortArray&,
+                                                  ExceptionState&);
 
-  // Returns an empty array if the passed array is nullptr/empty.
-  static MessagePortArray* entanglePorts(
-      ExecutionContext&,
-      std::unique_ptr<MessagePortChannelArray>);
+  // Returns an empty array if the passed array is empty.
+  static MessagePortArray* entanglePorts(ExecutionContext&,
+                                         MessagePortChannelArray);
 
   bool started() const { return m_started; }
 
   const AtomicString& interfaceName() const override;
   ExecutionContext* getExecutionContext() const override {
-    return ActiveDOMObject::getExecutionContext();
+    return ContextLifecycleObserver::getExecutionContext();
   }
   MessagePort* toMessagePort() override { return this; }
 
   // ScriptWrappable implementation.
   bool hasPendingActivity() const final;
 
-  // ActiveDOMObject implementation.
-  void contextDestroyed() override { close(); }
+  // ContextLifecycleObserver implementation.
+  void contextDestroyed(ExecutionContext*) override { close(); }
 
   void setOnmessage(EventListener* listener) {
     setAttributeEventListener(EventTypeNames::message, listener);
@@ -133,7 +132,7 @@ class CORE_EXPORT MessagePort : public EventTargetWithInlineData,
  protected:
   explicit MessagePort(ExecutionContext&);
   bool tryGetMessage(RefPtr<SerializedScriptValue>& message,
-                     std::unique_ptr<MessagePortChannelArray>& channels);
+                     MessagePortChannelArray& channels);
 
  private:
   // WebMessagePortChannelClient implementation.

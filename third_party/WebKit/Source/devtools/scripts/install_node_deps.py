@@ -3,7 +3,6 @@
 # Copyright 2016 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-
 """
 Ensure node.js and npm modules are installed
 """
@@ -13,6 +12,8 @@ from os import path
 import shutil
 import subprocess
 import sys
+
+import utils
 
 MIN_NODE_VERSION = 4
 LOCAL_NODE_VERSION = '4.5.0'
@@ -31,7 +32,9 @@ def main():
 
 def resolve_node_paths():
     if has_valid_global_node():
-        return (which('node'), which('npm'))
+        if sys.platform == "win32":
+            return (utils.which('node'), utils.which('npm.cmd'))
+        return (utils.which('node'), utils.which('npm'))
     has_installed_local_node = path.isfile(local_node_binary_path)
     if has_installed_local_node:
         return (local_node_binary_path, local_npm_binary_path)
@@ -46,7 +49,7 @@ def resolve_node_paths():
 
 
 def has_valid_global_node():
-    node_path = which('node')
+    node_path = utils.which('node')
     if not node_path:
         return False
     node_process = popen([node_path, '--version'])
@@ -79,27 +82,8 @@ def npm_install(npm_path):
     print(npm_process_out)
 
 
-# Based on http://stackoverflow.com/questions/377017/test-if-executable-exists-in-python.
-def which(program):
-    def is_exe(fpath):
-        return path.isfile(fpath) and os.access(fpath, os.X_OK)
-
-    fpath, fname = path.split(program)
-    if fpath:
-        if is_exe(program):
-            return program
-    else:
-        for part in os.environ['PATH'].split(os.pathsep):
-            part = part.strip('\"')
-            exe_file = path.join(part, program)
-            if is_exe(exe_file):
-                return exe_file
-    return None
-
-
 def popen(arguments, env=None):
-    return subprocess.Popen(
-        arguments, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
+    return subprocess.Popen(arguments, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
 
 
 if __name__ == '__main__':

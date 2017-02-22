@@ -27,10 +27,12 @@
 #ifndef StyleBuilderConverter_h
 #define StyleBuilderConverter_h
 
+#include "core/css/CSSFunctionValue.h"
 #include "core/css/CSSIdentifierValue.h"
 #include "core/css/CSSStringValue.h"
 #include "core/css/CSSValue.h"
 #include "core/css/CSSValueList.h"
+#include "core/css/CSSValuePair.h"
 #include "core/css/resolver/StyleResolverState.h"
 #include "core/style/QuotesData.h"
 #include "core/style/ShadowList.h"
@@ -72,12 +74,16 @@ class StyleBuilderConverter {
                                                        const CSSValue&);
   static FilterOperations convertFilterOperations(StyleResolverState&,
                                                   const CSSValue&);
+  static FilterOperations convertOffscreenFilterOperations(const CSSValue&);
   template <typename T>
   static T convertFlags(StyleResolverState&, const CSSValue&);
   static FontDescription::FamilyDescription convertFontFamily(
       StyleResolverState&,
       const CSSValue&);
   static PassRefPtr<FontFeatureSettings> convertFontFeatureSettings(
+      StyleResolverState&,
+      const CSSValue&);
+  static PassRefPtr<FontVariationSettings> convertFontVariationSettings(
       StyleResolverState&,
       const CSSValue&);
   static FontDescription::Size convertFontSize(StyleResolverState&,
@@ -115,8 +121,8 @@ class StyleBuilderConverter {
   static TabSize convertLengthOrTabSpaces(StyleResolverState&, const CSSValue&);
   static Length convertLineHeight(StyleResolverState&, const CSSValue&);
   static float convertNumberOrPercentage(StyleResolverState&, const CSSValue&);
-  static StyleOffsetRotation convertOffsetRotation(StyleResolverState&,
-                                                   const CSSValue&);
+  static StyleOffsetRotation convertOffsetRotate(StyleResolverState&,
+                                                 const CSSValue&);
   static LengthPoint convertPosition(StyleResolverState&, const CSSValue&);
   static LengthPoint convertPositionOrAuto(StyleResolverState&,
                                            const CSSValue&);
@@ -126,8 +132,13 @@ class StyleBuilderConverter {
                                               const CSSValue&);
   static LengthSize convertRadius(StyleResolverState&, const CSSValue&);
   static EPaintOrder convertPaintOrder(StyleResolverState&, const CSSValue&);
-  static PassRefPtr<ShadowList> convertShadow(StyleResolverState&,
-                                              const CSSValue&);
+  static ShadowData convertShadow(const CSSToLengthConversionData&,
+                                  StyleResolverState*,
+                                  const CSSValue&);
+  static double convertValueToNumber(const CSSFunctionValue*,
+                                     const CSSPrimitiveValue*);
+  static PassRefPtr<ShadowList> convertShadowList(StyleResolverState&,
+                                                  const CSSValue&);
   static ShapeValue* convertShapeValue(StyleResolverState&, const CSSValue&);
   static float convertSpacing(StyleResolverState&, const CSSValue&);
   template <CSSValueID IdForNone>
@@ -137,6 +148,9 @@ class StyleBuilderConverter {
   static StyleColor convertStyleColor(StyleResolverState&,
                                       const CSSValue&,
                                       bool forVisitedLink = false);
+  static StyleAutoColor convertStyleAutoColor(StyleResolverState&,
+                                              const CSSValue&,
+                                              bool forVisitedLink = false);
   static float convertTextStrokeWidth(StyleResolverState&, const CSSValue&);
   static TextSizeAdjust convertTextSizeAdjust(StyleResolverState&,
                                               const CSSValue&);
@@ -181,11 +195,12 @@ class StyleBuilderConverter {
       const CSSValue&);
   static PassRefPtr<StylePath> convertPathOrNone(StyleResolverState&,
                                                  const CSSValue&);
-  static StyleOffsetRotation convertOffsetRotation(const CSSValue&);
+  static StyleOffsetRotation convertOffsetRotate(const CSSValue&);
   template <CSSValueID cssValueFor0, CSSValueID cssValueFor100>
   static Length convertPositionLength(StyleResolverState&, const CSSValue&);
   static Rotation convertRotation(const CSSValue&);
 
+  static const CSSValue& convertRegisteredPropertyInitialValue(const CSSValue&);
   static const CSSValue& convertRegisteredPropertyValue(
       const StyleResolverState&,
       const CSSValue&);
@@ -237,6 +252,35 @@ T StyleBuilderConverter::convertLineWidth(StyleResolverState& state,
     return 1.0;
   return clampTo<T>(roundForImpreciseConversion<T>(result),
                     defaultMinimumForClamp<T>(), defaultMaximumForClamp<T>());
+}
+
+template <CSSValueID cssValueFor0, CSSValueID cssValueFor100>
+Length StyleBuilderConverter::convertPositionLength(StyleResolverState& state,
+                                                    const CSSValue& value) {
+  if (value.isValuePair()) {
+    const CSSValuePair& pair = toCSSValuePair(value);
+    Length length = StyleBuilderConverter::convertLength(state, pair.second());
+    if (toCSSIdentifierValue(pair.first()).getValueID() == cssValueFor0)
+      return length;
+    DCHECK_EQ(toCSSIdentifierValue(pair.first()).getValueID(), cssValueFor100);
+    return length.subtractFromOneHundredPercent();
+  }
+
+  if (value.isIdentifierValue()) {
+    switch (toCSSIdentifierValue(value).getValueID()) {
+      case cssValueFor0:
+        return Length(0, Percent);
+      case cssValueFor100:
+        return Length(100, Percent);
+      case CSSValueCenter:
+        return Length(50, Percent);
+      default:
+        NOTREACHED();
+    }
+  }
+
+  return StyleBuilderConverter::convertLength(state,
+                                              toCSSPrimitiveValue(value));
 }
 
 template <CSSValueID IdForNone>

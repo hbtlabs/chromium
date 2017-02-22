@@ -6,6 +6,7 @@
 #define THIRD_PARTY_WEBKIT_PUBLIC_PLATFORM_SCHEDULER_TEST_MOCK_RENDERER_SCHEDULER_H_
 
 #include "base/macros.h"
+#include "cc/output/begin_frame_args.h"
 #include "public/platform/scheduler/renderer/renderer_scheduler.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -37,7 +38,8 @@ class MockRendererScheduler : public RendererScheduler {
   MOCK_METHOD0(DidCommitFrameToCompositor, void());
   MOCK_METHOD2(DidHandleInputEventOnCompositorThread,
                void(const WebInputEvent&, InputEventState));
-  MOCK_METHOD1(DidHandleInputEventOnMainThread, void(const WebInputEvent&));
+  MOCK_METHOD2(DidHandleInputEventOnMainThread,
+               void(const WebInputEvent&, WebInputEventResult));
   MOCK_METHOD0(DidAnimateForInputOnCompositorThread, void());
   MOCK_METHOD0(OnRendererBackgrounded, void());
   MOCK_METHOD0(OnRendererForegrounded, void());
@@ -58,6 +60,7 @@ class MockRendererScheduler : public RendererScheduler {
   MOCK_METHOD1(SetTimerQueueSuspensionWhenBackgroundedEnabled, void(bool));
   MOCK_METHOD1(SetTopLevelBlameContext, void(base::trace_event::BlameContext*));
   MOCK_METHOD1(SetRAILModeObserver, void(RAILModeObserver*));
+  MOCK_METHOD1(MainThreadSeemsUnresponsive, bool(base::TimeDelta));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockRendererScheduler);

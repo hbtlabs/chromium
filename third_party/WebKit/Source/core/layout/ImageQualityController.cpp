@@ -97,7 +97,7 @@ ImageQualityController::~ImageQualityController() {
 }
 
 ImageQualityController::ImageQualityController()
-    : m_timer(wrapUnique(new Timer<ImageQualityController>(
+    : m_timer(WTF::wrapUnique(new Timer<ImageQualityController>(
           this,
           &ImageQualityController::highQualityRepaintTimerFired))),
       m_frameTimeWhenTimerStarted(0.0) {}
@@ -110,7 +110,7 @@ void ImageQualityController::removeLayer(const LayoutObject& object,
                                          LayerSizeMap* innerMap,
                                          const void* layer) {
   if (innerMap) {
-    innerMap->remove(layer);
+    innerMap->erase(layer);
     if (innerMap->isEmpty())
       objectDestroyed(object);
   }
@@ -133,7 +133,7 @@ void ImageQualityController::set(const LayoutObject& object,
 }
 
 void ImageQualityController::objectDestroyed(const LayoutObject& object) {
-  m_objectLayerSizeMap.remove(&object);
+  m_objectLayerSizeMap.erase(&object);
   if (m_objectLayerSizeMap.isEmpty()) {
     m_timer->stop();
   }
@@ -181,7 +181,7 @@ bool ImageQualityController::shouldPaintAtLowQuality(
 
   if (LocalFrame* frame = object.frame()) {
     if (frame->settings() &&
-        frame->settings()->useDefaultImageInterpolationQuality())
+        frame->settings()->getUseDefaultImageInterpolationQuality())
       return false;
   }
 

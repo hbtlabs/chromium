@@ -10,6 +10,7 @@
     border-top: 1px solid #ccc;
     display: flex;
     overflow: hidden;
+    z-index: 0;
 }
 
 .search-bar.replaceable {
@@ -128,7 +129,6 @@
 .search-results-matches {
     display: inline-block;
     text-align: right;
-    font-size: 11px;
     padding: 0 4px;
     color: rgb(165, 165, 165);
 }

@@ -15,6 +15,7 @@
 namespace blink {
 
 class WebURL;
+class WebURLLoader;
 class WebURLResponse;
 struct WebURLError;
 
@@ -31,18 +32,25 @@ class WebURLLoaderMockFactory {
 
   // Registers a response and the file to be served when the specified URL
   // is loaded. If no file is specified then the response content will be empty.
+  // unregisterURL() should be called for each test entry before registering
+  // another response for the same URL from another test.
   virtual void registerURL(const WebURL&,
                            const WebURLResponse&,
                            const WebString& filePath) = 0;
 
   // Registers an error to be served when the specified URL is requested.
+  // unregisterURL() should be called for each test entry before registering
+  // another response for the same URL from another test.
   virtual void registerErrorURL(const WebURL&,
                                 const WebURLResponse&,
                                 const WebURLError&) = 0;
 
-  // Unregisters URLs so they are no longer mocked.
+  // Unregisters the given URL so it is no longer mocked.
   virtual void unregisterURL(const WebURL&) = 0;
-  virtual void unregisterAllURLs() = 0;
+
+  // Unregisters URLs so they are no longer mocked. This also clears the
+  // MemoryCache.
+  virtual void unregisterAllURLsAndClearMemoryCache() = 0;
 
   // Causes all pending asynchronous requests to be served. When this method
   // returns all the pending requests have been processed.

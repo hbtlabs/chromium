@@ -5,14 +5,7 @@
 #ifndef ConditionalFeaturesForModules_h
 #define ConditionalFeaturesForModules_h
 
-#include "bindings/core/v8/ConditionalFeatures.h"
-
 namespace blink {
-
-void installConditionalFeaturesForModules(const WrapperTypeInfo*,
-                                          const ScriptState*,
-                                          v8::Local<v8::Object>,
-                                          v8::Local<v8::Function>);
 
 void registerInstallConditionalFeaturesForModules();
 

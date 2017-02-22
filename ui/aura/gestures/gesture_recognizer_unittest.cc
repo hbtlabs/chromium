@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -644,12 +645,12 @@ void DelayByShowPressTimeout() {
 void SetTouchRadius(ui::TouchEvent* event, float radius_x, float radius_y) {
   // Using ctor (over direct struct access) due to it's special behavior with
   // radii.
-  ui::PointerDetails details(ui::EventPointerType::POINTER_TYPE_TOUCH,
-                             radius_x,
-                             radius_y,
-                             event->pointer_details().force,
-                             event->pointer_details().tilt_x,
-                             event->pointer_details().tilt_y);
+  ui::PointerDetails details(
+      ui::EventPointerType::POINTER_TYPE_TOUCH, radius_x, radius_y,
+      event->pointer_details().force, event->pointer_details().tilt_x,
+      event->pointer_details().tilt_y,
+      event->pointer_details().tangential_pressure,
+      event->pointer_details().twist, event->pointer_details().id);
   event->set_pointer_details(details);
 }
 

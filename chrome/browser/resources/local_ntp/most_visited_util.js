@@ -7,7 +7,7 @@
  * @fileoverview Utilities for rendering most visited thumbnails and titles.
  */
 
-<include src="instant_iframe_validation.js">
+// <include src="instant_iframe_validation.js">
 
 
 /**
@@ -205,14 +205,13 @@ function fillMostVisited(location, fill) {
     // Means that the suggestion data comes from the server. Create data object.
     data = {
       url: params.url,
-      largeIconUrl: params.liu || '',
       thumbnailUrl: params.tu || '',
       title: params.ti || '',
       direction: params.di || '',
       domain: params.dom || ''
     };
   } else {
-    var apiHandle = chrome.embeddedSearch.searchBox;
+    var apiHandle = chrome.embeddedSearch.newTabPage;
     data = apiHandle.getMostVisitedItemData(params.rid);
     if (!data)
       return;

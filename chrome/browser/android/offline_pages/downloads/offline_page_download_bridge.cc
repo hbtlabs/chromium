@@ -11,6 +11,7 @@
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "chrome/browser/android/offline_pages/downloads/offline_page_infobar_delegate.h"
 #include "chrome/browser/android/offline_pages/downloads/offline_page_notification_bridge.h"
 #include "chrome/browser/android/offline_pages/offline_page_mhtml_archiver.h"
@@ -21,12 +22,12 @@
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
-#include "components/offline_pages/background/request_coordinator.h"
-#include "components/offline_pages/client_namespace_constants.h"
-#include "components/offline_pages/client_policy_controller.h"
-#include "components/offline_pages/downloads/download_ui_item.h"
-#include "components/offline_pages/offline_page_feature.h"
-#include "components/offline_pages/offline_page_model.h"
+#include "components/offline_pages/core/background/request_coordinator.h"
+#include "components/offline_pages/core/client_namespace_constants.h"
+#include "components/offline_pages/core/client_policy_controller.h"
+#include "components/offline_pages/core/downloads/download_ui_item.h"
+#include "components/offline_pages/core/offline_page_feature.h"
+#include "components/offline_pages/core/offline_page_model.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "jni/OfflinePageDownloadBridge_jni.h"
@@ -41,10 +42,41 @@ using base::android::JavaParamRef;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
 
+namespace {
+const char kDownloadUIAdapterKey[] = "download-ui-adapter";
+}
+
 namespace offline_pages {
 namespace android {
 
 namespace {
+
+class DownloadUIAdapterDelegate : public DownloadUIAdapter::Delegate {
+ public:
+  explicit DownloadUIAdapterDelegate(OfflinePageModel* model);
+
+  // DownloadUIAdapter::Delegate
+  bool IsVisibleInUI(const ClientId& client_id) override;
+  bool IsTemporarilyHiddenInUI(const ClientId& client_id) override;
+
+ private:
+  // Not owned, cached service pointer.
+  OfflinePageModel* model_;
+};
+
+DownloadUIAdapterDelegate::DownloadUIAdapterDelegate(OfflinePageModel* model)
+    : model_(model) {}
+
+bool DownloadUIAdapterDelegate::IsVisibleInUI(const ClientId& client_id) {
+  const std::string& name_space = client_id.name_space;
+  return model_->GetPolicyController()->IsSupportedByDownload(name_space) &&
+         base::IsValidGUID(client_id.id);
+}
+
+bool DownloadUIAdapterDelegate::IsTemporarilyHiddenInUI(
+    const ClientId& client_id) {
+  return false;
+}
 
 // TODO(dewittj): Move to Download UI Adapter.
 content::WebContents* GetWebContentsFromJavaTab(
@@ -83,9 +115,13 @@ void SavePageIfNotNavigatedAway(const GURL& original_url,
     offline_pages::RequestCoordinator* request_coordinator =
         offline_pages::RequestCoordinatorFactory::GetForBrowserContext(
             web_contents->GetBrowserContext());
-    request_id = request_coordinator->SavePageLater(
-        url, client_id, true,
-        RequestCoordinator::RequestAvailability::DISABLED_FOR_OFFLINER);
+    if (request_coordinator) {
+      request_id = request_coordinator->SavePageLater(
+          url, client_id, true,
+          RequestCoordinator::RequestAvailability::DISABLED_FOR_OFFLINER);
+    } else {
+      DVLOG(1) << "SavePageIfNotNavigatedAway has no valid coordinator.";
+    }
   }
 
   // Pass request_id to the current tab's helper to attempt download right from
@@ -99,7 +135,10 @@ void SavePageIfNotNavigatedAway(const GURL& original_url,
       offline_pages::RequestCoordinator* request_coordinator =
           offline_pages::RequestCoordinatorFactory::GetForBrowserContext(
               web_contents->GetBrowserContext());
-      request_coordinator->EnableForOffliner(request_id);
+      if (request_coordinator)
+        request_coordinator->EnableForOffliner(request_id, client_id);
+      else
+        DVLOG(1) << "SavePageIfNotNavigatedAway has no valid coordinator.";
     }
     return;
   }
@@ -112,8 +151,19 @@ void SavePageIfNotNavigatedAway(const GURL& original_url,
 void RequestQueueDuplicateCheckDone(
     const GURL& original_url,
     const ScopedJavaGlobalRef<jobject>& j_tab_ref,
-    bool has_duplicates) {
+    bool has_duplicates,
+    const base::Time& latest_request_time) {
   if (has_duplicates) {
+    base::TimeDelta time_since_most_recent_duplicate =
+        base::Time::Now() - latest_request_time;
+    // Using CUSTOM_COUNTS instead of time-oriented histogram to record
+    // samples in seconds rather than milliseconds.
+    UMA_HISTOGRAM_CUSTOM_COUNTS(
+        "OfflinePages.DownloadRequestTimeSinceDuplicateRequested",
+        time_since_most_recent_duplicate.InSeconds(),
+        base::TimeDelta::FromSeconds(1).InSeconds(),
+        base::TimeDelta::FromDays(7).InSeconds(), 50);
+
     // TODO(fgorski): Additionally we could update existing request's expiration
     // period, as it is still important. Alternative would be to actually take a
     // snapshot on the spot, but that would only work if the page is loaded
@@ -129,12 +179,23 @@ void RequestQueueDuplicateCheckDone(
 
 void ModelDuplicateCheckDone(const GURL& original_url,
                              const ScopedJavaGlobalRef<jobject>& j_tab_ref,
-                             bool has_duplicates) {
+                             bool has_duplicates,
+                             const base::Time& latest_saved_time) {
   content::WebContents* web_contents = GetWebContentsFromJavaTab(j_tab_ref);
   if (!web_contents)
     return;
 
   if (has_duplicates) {
+    base::TimeDelta time_since_most_recent_duplicate =
+        base::Time::Now() - latest_saved_time;
+    // Using CUSTOM_COUNTS instead of time-oriented histogram to record
+    // samples in seconds rather than milliseconds.
+    UMA_HISTOGRAM_CUSTOM_COUNTS(
+        "OfflinePages.DownloadRequestTimeSinceDuplicateSaved",
+        time_since_most_recent_duplicate.InSeconds(),
+        base::TimeDelta::FromSeconds(1).InSeconds(),
+        base::TimeDelta::FromDays(7).InSeconds(), 50);
+
     OfflinePageInfoBarDelegate::Create(
         base::Bind(&SavePageIfNotNavigatedAway, original_url, j_tab_ref),
         original_url, web_contents);
@@ -155,7 +216,8 @@ void ToJavaOfflinePageDownloadItemList(
   for (const auto item : items) {
     Java_OfflinePageDownloadBridge_createDownloadItemAndAddToList(
         env, j_result_obj, ConvertUTF8ToJavaString(env, item->guid),
-        ConvertUTF8ToJavaString(env, item->url.spec()),
+        ConvertUTF8ToJavaString(env, item->url.spec()), item->download_state,
+        item->download_progress_bytes,
         ConvertUTF16ToJavaString(env, item->title),
         ConvertUTF8ToJavaString(env, item->target_path.value()),
         item->start_time.ToJavaTime(), item->total_bytes);
@@ -167,7 +229,8 @@ ScopedJavaLocalRef<jobject> ToJavaOfflinePageDownloadItem(
     const DownloadUIItem& item) {
   return Java_OfflinePageDownloadBridge_createDownloadItem(
       env, ConvertUTF8ToJavaString(env, item.guid),
-      ConvertUTF8ToJavaString(env, item.url.spec()),
+      ConvertUTF8ToJavaString(env, item.url.spec()), item.download_state,
+      item.download_progress_bytes,
       ConvertUTF16ToJavaString(env, item.title),
       ConvertUTF8ToJavaString(env, item.target_path.value()),
       item.start_time.ToJavaTime(), item.total_bytes);
@@ -411,9 +474,20 @@ static jlong Init(JNIEnv* env,
 
   OfflinePageModel* offline_page_model =
       OfflinePageModelFactory::GetForBrowserContext(browser_context);
+  DCHECK(offline_page_model);
 
-  DownloadUIAdapter* adapter =
-      DownloadUIAdapter::FromOfflinePageModel(offline_page_model);
+  DownloadUIAdapter* adapter = static_cast<DownloadUIAdapter*>(
+      offline_page_model->GetUserData(kDownloadUIAdapterKey));
+
+  if (!adapter) {
+    RequestCoordinator* request_coordinator =
+        RequestCoordinatorFactory::GetForBrowserContext(browser_context);
+    DCHECK(request_coordinator);
+    adapter = new DownloadUIAdapter(
+        offline_page_model, request_coordinator,
+        base::MakeUnique<DownloadUIAdapterDelegate>(offline_page_model));
+    offline_page_model->SetUserData(kDownloadUIAdapterKey, adapter);
+  }
 
   return reinterpret_cast<jlong>(
       new OfflinePageDownloadBridge(env, obj, adapter, browser_context));

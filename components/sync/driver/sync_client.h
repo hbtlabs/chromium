@@ -19,7 +19,6 @@ class BookmarkUndoService;
 class PrefService;
 
 namespace autofill {
-class AutocompleteSyncableService;
 class PersonalDataManager;
 }  // namespace autofill
 
@@ -72,6 +71,7 @@ class SyncClient {
   virtual bookmarks::BookmarkModel* GetBookmarkModel() = 0;
   virtual favicon::FaviconService* GetFaviconService() = 0;
   virtual history::HistoryService* GetHistoryService() = 0;
+  virtual bool HasPasswordStore() = 0;
 
   // Returns a callback that will register the types specific to the current
   // platform.

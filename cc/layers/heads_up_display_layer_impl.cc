@@ -93,8 +93,7 @@ void HeadsUpDisplayLayerImpl::AcquireResource(
     }
   }
 
-  std::unique_ptr<ScopedResource> resource =
-      ScopedResource::Create(resource_provider);
+  auto resource = base::MakeUnique<ScopedResource>(resource_provider);
   resource->Allocate(
       internal_content_bounds_, ResourceProvider::TEXTURE_HINT_IMMUTABLE,
       resource_provider->best_texture_format(), gfx::ColorSpace());
@@ -136,7 +135,8 @@ void HeadsUpDisplayLayerImpl::AppendQuads(
 
   SharedQuadState* shared_quad_state =
       render_pass->CreateAndAppendSharedQuadState();
-  PopulateScaledSharedQuadState(shared_quad_state, internal_contents_scale_);
+  PopulateScaledSharedQuadState(shared_quad_state, internal_contents_scale_,
+                                internal_contents_scale_);
 
   gfx::Rect quad_rect(internal_content_bounds_);
   gfx::Rect opaque_rect(contents_opaque() ? quad_rect : gfx::Rect());

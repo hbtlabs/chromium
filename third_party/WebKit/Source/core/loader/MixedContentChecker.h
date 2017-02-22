@@ -35,7 +35,7 @@
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
 #include "platform/network/ResourceRequest.h"
-#include "public/platform/WebMixedContent.h"
+#include "public/platform/WebMixedContentContextType.h"
 #include "public/platform/WebURLRequest.h"
 #include "wtf/text/WTFString.h"
 
@@ -47,6 +47,14 @@ class KURL;
 class ResourceResponse;
 class SecurityOrigin;
 
+// Checks resource loads for mixed content. If PlzNavigate is enabled then this
+// class only checks for sub-resource loads while frame-level loads are
+// delegated to the browser where they are checked by
+// MixedContentNavigationThrottle. Changes to this class might need to be
+// reflected on its browser counterpart.
+//
+// Current mixed content W3C draft that drives this implementation:
+// https://w3c.github.io/webappsec-mixed-content/
 class CORE_EXPORT MixedContentChecker final {
   WTF_MAKE_NONCOPYABLE(MixedContentChecker);
   DISALLOW_NEW();
@@ -80,7 +88,7 @@ class CORE_EXPORT MixedContentChecker final {
   static void checkMixedPrivatePublic(LocalFrame*,
                                       const AtomicString& resourceIPAddress);
 
-  static WebMixedContent::ContextType contextTypeForInspector(
+  static WebMixedContentContextType contextTypeForInspector(
       LocalFrame*,
       const ResourceRequest&);
 
@@ -93,6 +101,14 @@ class CORE_EXPORT MixedContentChecker final {
                                      const ResourceResponse&,
                                      WebURLRequest::FrameType,
                                      WebURLRequest::RequestContext);
+
+  // Receive information about mixed content found externally.
+  static void mixedContentFound(LocalFrame*,
+                                const KURL& mainResourceUrl,
+                                const KURL& mixedContentUrl,
+                                WebURLRequest::RequestContext,
+                                bool wasAllowed,
+                                bool hadRedirect);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(MixedContentCheckerTest, HandleCertificateError);

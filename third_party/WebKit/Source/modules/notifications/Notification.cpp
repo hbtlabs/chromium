@@ -33,14 +33,18 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/SerializedScriptValueFactory.h"
+#include "bindings/core/v8/SourceLocation.h"
 #include "bindings/modules/v8/V8NotificationAction.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentUserGestureToken.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/ExecutionContextTask.h"
 #include "core/dom/ScopedWindowFocusAllowedIndicator.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/Event.h"
+#include "core/frame/Deprecation.h"
+#include "core/frame/PerformanceMonitor.h"
 #include "core/frame/UseCounter.h"
+#include "core/inspector/InspectorInstrumentation.h"
 #include "modules/notifications/NotificationAction.h"
 #include "modules/notifications/NotificationData.h"
 #include "modules/notifications/NotificationManager.h"
@@ -91,16 +95,16 @@ Notification* Notification::create(ExecutionContext* context,
     return nullptr;
   }
 
-  String insecureOriginMessage;
-  if (context->isSecureContext(insecureOriginMessage)) {
+  if (context->isSecureContext()) {
     UseCounter::count(context, UseCounter::NotificationSecureOrigin);
     if (context->isDocument())
       UseCounter::countCrossOriginIframe(
           *toDocument(context), UseCounter::NotificationAPISecureOriginIframe);
   } else {
-    UseCounter::count(context, UseCounter::NotificationInsecureOrigin);
+    Deprecation::countDeprecation(context,
+                                  UseCounter::NotificationInsecureOrigin);
     if (context->isDocument())
-      UseCounter::countCrossOriginIframe(
+      Deprecation::countDeprecationCrossOriginIframe(
           *toDocument(context),
           UseCounter::NotificationAPIInsecureOriginIframe);
   }
@@ -113,8 +117,6 @@ Notification* Notification::create(ExecutionContext* context,
   Notification* notification =
       new Notification(context, Type::NonPersistent, data);
   notification->schedulePrepareShow();
-
-  notification->suspendIfNeeded();
   return notification;
 }
 
@@ -126,16 +128,13 @@ Notification* Notification::create(ExecutionContext* context,
       new Notification(context, Type::Persistent, data);
   notification->setState(showing ? State::Showing : State::Closed);
   notification->setNotificationId(notificationId);
-
-  notification->suspendIfNeeded();
   return notification;
 }
 
 Notification::Notification(ExecutionContext* context,
                            Type type,
                            const WebNotificationData& data)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(context),
+    : ContextLifecycleObserver(context),
       m_type(type),
       m_state(State::Loading),
       m_data(data) {
@@ -155,7 +154,8 @@ void Notification::schedulePrepareShow() {
 
 void Notification::prepareShow() {
   DCHECK_EQ(m_state, State::Loading);
-  if (NotificationManager::from(getExecutionContext())->permissionStatus() !=
+  if (NotificationManager::from(getExecutionContext())
+          ->permissionStatus(getExecutionContext()) !=
       mojom::blink::PermissionStatus::GRANTED) {
     dispatchErrorEvent();
     return;
@@ -186,8 +186,8 @@ void Notification::close() {
   // Schedule the "close" event to be fired for non-persistent notifications.
   // Persistent notifications won't get such events for programmatic closes.
   if (m_type == Type::NonPersistent) {
-    getExecutionContext()->postTask(
-        BLINK_FROM_HERE, createSameThreadTask(&Notification::dispatchCloseEvent,
+    TaskRunnerHelper::get(TaskType::UserInteraction, getExecutionContext())
+        ->postTask(BLINK_FROM_HERE, WTF::bind(&Notification::dispatchCloseEvent,
                                               wrapPersistent(this)));
     m_state = State::Closing;
 
@@ -332,7 +332,7 @@ Vector<v8::Local<v8::Value>> Notification::actions(
     // Both the Action dictionaries themselves and the sequence they'll be
     // returned in are expected to the frozen. This cannot be done with WebIDL.
     actions[i] =
-        freezeV8Object(toV8(action, scriptState), scriptState->isolate());
+        freezeV8Object(ToV8(action, scriptState), scriptState->isolate());
   }
 
   return actions;
@@ -355,14 +355,36 @@ String Notification::permissionString(
 
 String Notification::permission(ExecutionContext* context) {
   return permissionString(
-      NotificationManager::from(context)->permissionStatus());
+      NotificationManager::from(context)->permissionStatus(context));
 }
 
 ScriptPromise Notification::requestPermission(
     ScriptState* scriptState,
     NotificationPermissionCallback* deprecatedCallback) {
-  return NotificationManager::from(scriptState->getExecutionContext())
-      ->requestPermission(scriptState, deprecatedCallback);
+  ExecutionContext* context = scriptState->getExecutionContext();
+  if (!context->isSecureContext()) {
+    Deprecation::countDeprecation(
+        context, UseCounter::NotificationPermissionRequestedInsecureOrigin);
+  }
+  if (context->isDocument()) {
+    LocalFrame* frame = toDocument(context)->frame();
+    if (frame && !frame->isMainFrame()) {
+      UseCounter::count(context,
+                        UseCounter::NotificationPermissionRequestedIframe);
+    }
+  }
+
+  if (!UserGestureIndicator::processingUserGesture()) {
+    PerformanceMonitor::reportGenericViolation(
+        context, PerformanceMonitor::kDiscouragedAPIUse,
+        "Only request notification permission in response to a user gesture.",
+        0, nullptr);
+  }
+  InspectorInstrumentation::NativeBreakpoint nativeBreakpoint(
+      context, "Notification.requestPermission", true);
+
+  return NotificationManager::from(context)->requestPermission(
+      scriptState, deprecatedCallback);
 }
 
 size_t Notification::maxActions() {
@@ -378,7 +400,7 @@ const AtomicString& Notification::interfaceName() const {
   return EventTargetNames::Notification;
 }
 
-void Notification::contextDestroyed() {
+void Notification::contextDestroyed(ExecutionContext*) {
   notificationManager()->notifyDelegateDestroyed(this);
 
   m_state = State::Closed;
@@ -403,7 +425,7 @@ DEFINE_TRACE(Notification) {
   visitor->trace(m_prepareShowMethodRunner);
   visitor->trace(m_loader);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
 }
 
 }  // namespace blink

@@ -23,6 +23,7 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
+#include "media/audio/audio_manager.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/perf/perf_test.h"
 
@@ -234,7 +235,7 @@ class WebRtcGetUserMediaBrowserTest : public WebRtcContentBrowserTestBase {
         &error_message);
 
     ASSERT_TRUE(value.get() != NULL) << error_message;
-    EXPECT_EQ(value->GetType(), base::Value::TYPE_LIST);
+    EXPECT_EQ(value->GetType(), base::Value::Type::LIST);
 
     base::ListValue* values;
     ASSERT_TRUE(value->GetAsList(&values));
@@ -413,6 +414,8 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
   GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
 
   // Test with invalid mandatory audio sourceID.
+  // TODO(guidou): Update error string when spec-compliant constraint resolution
+  // for audio is implemented. See http://crbug.com/657733.
   NavigateToURL(shell(), url);
   EXPECT_EQ("DevicesNotFoundError", ExecuteJavascriptAndReturnResult(
       GenerateGetUserMediaWithMandatorySourceID(
@@ -421,13 +424,15 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
           video_ids[0])));
 
   // Test with invalid mandatory video sourceID.
-  EXPECT_EQ("DevicesNotFoundError", ExecuteJavascriptAndReturnResult(
-      GenerateGetUserMediaWithMandatorySourceID(
-          kGetUserMediaAndExpectFailure,
-          audio_ids[0],
-          "something invalid")));
+  EXPECT_EQ("ConstraintNotSatisfiedError",
+            ExecuteJavascriptAndReturnResult(
+                GenerateGetUserMediaWithMandatorySourceID(
+                    kGetUserMediaAndExpectFailure, audio_ids[0],
+                    "something invalid")));
 
   // Test with empty mandatory audio sourceID.
+  // TODO(guidou): Update error string when spec-compliant constraint resolution
+  // for audio is implemented. See http://crbug.com/657733.
   EXPECT_EQ("DevicesNotFoundError", ExecuteJavascriptAndReturnResult(
       GenerateGetUserMediaWithMandatorySourceID(
           kGetUserMediaAndExpectFailure,
@@ -576,6 +581,23 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
   NavigateToURL(shell(), url);
 
   EXPECT_EQ("ConstraintNotSatisfiedError",
+            ExecuteJavascriptAndReturnResult(call));
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+                       GetUserMediaFailToAccessAudioDevice) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+
+  // Set the maximum allowed input and output streams to 0
+  // so that the call to create a new audio input stream will fail.
+  media::AudioManager::Get()->SetMaxStreamCountForTesting(0, 0);
+
+  const std::string call = base::StringPrintf(
+      "%s({video: false, audio: true});", kGetUserMediaAndExpectFailure);
+  EXPECT_EQ("TrackStartError",
             ExecuteJavascriptAndReturnResult(call));
 }
 

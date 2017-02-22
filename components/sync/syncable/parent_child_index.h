@@ -26,8 +26,8 @@ struct ChildComparator {
 };
 
 // An ordered set of nodes.
-typedef std::set<EntryKernel*, ChildComparator> OrderedChildSet;
-typedef std::shared_ptr<OrderedChildSet> OrderedChildSetRef;
+using OrderedChildSet = std::set<EntryKernel*, ChildComparator>;
+using OrderedChildSetRef = std::shared_ptr<OrderedChildSet>;
 
 // Container that tracks parent-child relationships.
 // Provides fast lookup of all items under a given parent.
@@ -60,12 +60,15 @@ class ParentChildIndex {
   // Returns all siblings of the entry.
   const OrderedChildSet* GetSiblings(EntryKernel* e) const;
 
+  // Estimates amount of heap memory used.
+  size_t EstimateMemoryUsage() const;
+
  private:
   friend class ParentChildIndexTest;
 
-  typedef std::map<Id, OrderedChildSetRef> ParentChildrenMap;
-  typedef std::vector<Id> TypeRootIds;
-  typedef std::vector<OrderedChildSetRef> TypeRootChildSets;
+  using ParentChildrenMap = std::map<Id, OrderedChildSetRef>;
+  using TypeRootIds = std::vector<Id>;
+  using TypeRootChildSets = std::vector<OrderedChildSetRef>;
 
   static bool ShouldUseParentId(const Id& parent_id, ModelType model_type);
 

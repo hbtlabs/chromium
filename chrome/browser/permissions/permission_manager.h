@@ -22,7 +22,6 @@ class Profile;
 
 namespace content {
 enum class PermissionType;
-class WebContents;
 };  // namespace content
 
 class PermissionManager : public KeyedService,
@@ -33,6 +32,21 @@ class PermissionManager : public KeyedService,
 
   explicit PermissionManager(Profile* profile);
   ~PermissionManager() override;
+
+  // Callers from within chrome/ should use the methods which take the
+  // ContentSettingsType enum. The methods which take PermissionType values
+  // are for the content::PermissionManager overrides and shouldn't be used
+  // from chrome/.
+  int RequestPermission(
+      ContentSettingsType permission,
+      content::RenderFrameHost* render_frame_host,
+      const GURL& requesting_origin,
+      bool user_gesture,
+      const base::Callback<void(blink::mojom::PermissionStatus)>& callback);
+  blink::mojom::PermissionStatus GetPermissionStatus(
+      ContentSettingsType permission,
+      const GURL& requesting_origin,
+      const GURL& embedding_origin);
 
   // content::PermissionManager implementation.
   int RequestPermission(
@@ -58,9 +72,6 @@ class PermissionManager : public KeyedService,
       content::PermissionType permission,
       const GURL& requesting_origin,
       const GURL& embedding_origin) override;
-  void RegisterPermissionUsage(content::PermissionType permission,
-                               const GURL& requesting_origin,
-                               const GURL& embedding_origin) override;
   int SubscribePermissionStatusChange(
       content::PermissionType permission,
       const GURL& requesting_origin,
@@ -69,19 +80,21 @@ class PermissionManager : public KeyedService,
       override;
   void UnsubscribePermissionStatusChange(int subscription_id) override;
 
+  // TODO(raymes): Rather than exposing this, expose a denial reason from
+  // GetPermissionStatus so that callers can determine whether a permission is
+  // denied due to the kill switch.
+  bool IsPermissionKillSwitchOn(ContentSettingsType);
+
  private:
   friend class GeolocationPermissionContextTests;
-  // TODO(raymes): Refactor MediaPermission to not call GetPermissionContext.
-  // See crbug.com/596786.
-  friend class MediaPermission;
 
   class PendingRequest;
-  using PendingRequestsMap = IDMap<PendingRequest, IDMapOwnPointer>;
+  using PendingRequestsMap = IDMap<std::unique_ptr<PendingRequest>>;
 
   struct Subscription;
-  using SubscriptionsMap = IDMap<Subscription, IDMapOwnPointer>;
+  using SubscriptionsMap = IDMap<std::unique_ptr<Subscription>>;
 
-  PermissionContextBase* GetPermissionContext(content::PermissionType type);
+  PermissionContextBase* GetPermissionContext(ContentSettingsType type);
 
   // Called when a permission was decided for a given PendingRequest. The
   // PendingRequest is identified by its |request_id| and the permission is
@@ -104,9 +117,9 @@ class PermissionManager : public KeyedService,
   PendingRequestsMap pending_requests_;
   SubscriptionsMap subscriptions_;
 
-  std::unordered_map<content::PermissionType,
+  std::unordered_map<ContentSettingsType,
                      std::unique_ptr<PermissionContextBase>,
-                     PermissionTypeHash>
+                     ContentSettingsTypeHash>
       permission_contexts_;
 
   base::WeakPtrFactory<PermissionManager> weak_ptr_factory_;

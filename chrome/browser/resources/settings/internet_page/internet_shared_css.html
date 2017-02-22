@@ -1,9 +1,13 @@
-<link rel="import" href="/settings_shared_css.html">
+<link rel="import" href="../settings_shared_css.html">
 
 <!-- Common styles for Material Design settings. -->
 <dom-module id="internet-shared">
   <template>
     <style include="settings-shared">
+      iron-icon.policy {
+        -webkit-margin-end: 12px;
+      }
+
       paper-input-container {
         --paper-input-container-input: {
           color: var(--paper-grey-600);
@@ -12,6 +16,10 @@
         };
         margin-bottom: 0;
         margin-top: -9px;
+      }
+
+      .settings-box.indent {
+        @apply(--settings-list-frame-padding);
       }
     </style>
   </template>

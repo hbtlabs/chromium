@@ -9,6 +9,7 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/threading/thread.h"
 #include "base/time/default_clock.h"
@@ -23,6 +24,11 @@
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+#if defined(OS_ANDROID)
+#include "base/test/scoped_feature_list.h"
+#include "net/cert/cert_verify_proc_android.h"
+#endif
 
 using net::SSLInfo;
 using testing::UnorderedElementsAre;
@@ -128,9 +134,10 @@ TEST(ErrorReportTest, SerializedReportAsProtobufWithInterstitialInfo) {
       GetTestSSLInfo(EXCLUDE_UNVERIFIED_CERT_CHAIN, &ssl_info, kCertStatus));
   ErrorReport report(kDummyHostname, ssl_info);
 
-  report.SetInterstitialInfo(ErrorReport::INTERSTITIAL_CLOCK,
-                             ErrorReport::USER_PROCEEDED,
-                             ErrorReport::INTERSTITIAL_OVERRIDABLE);
+  const base::Time interstitial_time = base::Time::Now();
+  report.SetInterstitialInfo(
+      ErrorReport::INTERSTITIAL_CLOCK, ErrorReport::USER_PROCEEDED,
+      ErrorReport::INTERSTITIAL_OVERRIDABLE, interstitial_time);
 
   ASSERT_TRUE(report.Serialize(&serialized_report));
 
@@ -153,6 +160,10 @@ TEST(ErrorReportTest, SerializedReportAsProtobufWithInterstitialInfo) {
   EXPECT_THAT(
       deserialized_report.cert_error(),
       UnorderedElementsAre(kFirstReportedCertError, kSecondReportedCertError));
+
+  EXPECT_EQ(
+      interstitial_time.ToInternalValue(),
+      deserialized_report.interstitial_info().interstitial_created_time_usec());
 }
 
 // Test that a serialized report can be parsed.
@@ -184,16 +195,16 @@ TEST(ErrorReportTest, CertificateTransparencyError) {
       VerifyErrorReportSerialization(report_known, ssl_info, cert_errors));
 }
 
-// Tests that information about relevant features are included in the
+// Tests that information about network time querying is included in the
 // report.
-TEST(ErrorReportTest, FeatureInfo) {
+TEST(ErrorReportTest, NetworkTimeQueryingFeatureInfo) {
   base::Thread io_thread("IO thread");
   base::Thread::Options thread_options;
   thread_options.message_loop_type = base::MessageLoop::TYPE_IO;
   EXPECT_TRUE(io_thread.StartWithOptions(thread_options));
 
   std::unique_ptr<network_time::FieldTrialTest> field_trial_test(
-      network_time::FieldTrialTest::CreateForUnitTest());
+      new network_time::FieldTrialTest());
   field_trial_test->SetNetworkQueriesWithVariationsService(
       true, 0.0, network_time::NetworkTimeTracker::FETCHES_ON_DEMAND_ONLY);
 
@@ -227,6 +238,46 @@ TEST(ErrorReportTest, FeatureInfo) {
                 .network_time_querying_info()
                 .network_time_query_behavior());
 }
+
+#if defined(OS_ANDROID)
+// Tests that information about the Android AIA fetching feature is included in
+// the report when the feature is disabled.
+TEST(ErrorReportTest, AndroidAIAFetchingFeatureDisabled) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(
+      net::CertVerifyProcAndroid::kAIAFetchingFeature);
+
+  SSLInfo ssl_info;
+  ASSERT_NO_FATAL_FAILURE(
+      GetTestSSLInfo(INCLUDE_UNVERIFIED_CERT_CHAIN, &ssl_info, kCertStatus));
+  ErrorReport report(kDummyHostname, ssl_info);
+  std::string serialized_report;
+  ASSERT_TRUE(report.Serialize(&serialized_report));
+  CertLoggerRequest parsed;
+  ASSERT_TRUE(parsed.ParseFromString(serialized_report));
+  EXPECT_EQ(CertLoggerFeaturesInfo::ANDROID_AIA_FETCHING_DISABLED,
+            parsed.features_info().android_aia_fetching_status());
+}
+
+// Tests that information about the Android AIA fetching feature is included in
+// the report when the feature is enabled.
+TEST(ErrorReportTest, AndroidAIAFetchingFeatureEnabled) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      net::CertVerifyProcAndroid::kAIAFetchingFeature);
+
+  SSLInfo ssl_info;
+  ASSERT_NO_FATAL_FAILURE(
+      GetTestSSLInfo(INCLUDE_UNVERIFIED_CERT_CHAIN, &ssl_info, kCertStatus));
+  ErrorReport report(kDummyHostname, ssl_info);
+  std::string serialized_report;
+  ASSERT_TRUE(report.Serialize(&serialized_report));
+  CertLoggerRequest parsed;
+  ASSERT_TRUE(parsed.ParseFromString(serialized_report));
+  EXPECT_EQ(CertLoggerFeaturesInfo::ANDROID_AIA_FETCHING_ENABLED,
+            parsed.features_info().android_aia_fetching_status());
+}
+#endif
 
 }  // namespace
 

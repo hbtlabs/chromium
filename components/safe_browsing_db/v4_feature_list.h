@@ -11,12 +11,21 @@ namespace safe_browsing {
 // through Finch.
 namespace V4FeatureList {
 
-// Is the PVer4 database manager enabled?
-bool IsLocalDatabaseManagerEnabled();
+enum class V4UsageStatus {
+  // The V4 database manager is not even instantiated i.e. is diabled. All
+  // SafeBrowsing operations use PVer3 code.
+  V4_DISABLED,
 
-// Is the PVer4 database being checked for resource reputation? If this returns
-// true, use PVer4 database for CheckBrowseUrl, otherwise use PVer3.
-bool IsV4HybridEnabled();
+  // The V4 database manager is instantiated, and performs background updates,
+  // but all SafeBrowsing verdicts are returned using the PVer3 database.
+  V4_INSTANTIATED,
+
+  // Only the V4 database manager is instantiated, PVer3 database manager is
+  // not. All SafeBrowsing verdicts are returned using PVer4 database.
+  V4_ONLY
+};
+
+V4UsageStatus GetV4UsageStatus();
 
 }  // namespace V4FeatureList
 

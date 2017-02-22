@@ -31,15 +31,15 @@
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/TraceWrapperMember.h"
 #include "core/CoreExport.h"
-#include "core/dom/ActiveDOMObject.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/SuspendableObject.h"
 #include "core/events/GenericEventQueue.h"
-#include "core/html/AutoplayExperimentHelper.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/track/TextTrack.h"
-#include "platform/MIMETypeRegistry.h"
 #include "platform/Supplementable.h"
+#include "platform/WebTaskRunner.h"
 #include "platform/audio/AudioSourceProvider.h"
+#include "platform/network/mime/MIMETypeRegistry.h"
 #include "public/platform/WebAudioSourceProviderClient.h"
 #include "public/platform/WebMediaPlayerClient.h"
 #include <memory>
@@ -75,11 +75,12 @@ class WebInbandTextTrack;
 class WebLayer;
 class WebRemotePlaybackClient;
 
-class CORE_EXPORT HTMLMediaElement : public HTMLElement,
-                                     public Supplementable<HTMLMediaElement>,
-                                     public ActiveScriptWrappable,
-                                     public ActiveDOMObject,
-                                     private WebMediaPlayerClient {
+class CORE_EXPORT HTMLMediaElement
+    : public HTMLElement,
+      public Supplementable<HTMLMediaElement>,
+      public ActiveScriptWrappable<HTMLMediaElement>,
+      public SuspendableObject,
+      private WebMediaPlayerClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(HTMLMediaElement);
   USING_PRE_FINALIZER(HTMLMediaElement, dispose);
@@ -92,6 +93,14 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   static void setMediaStreamRegistry(URLRegistry*);
   static bool isMediaStreamURL(const String& url);
   static bool isHLSURL(const KURL&);
+
+  // If HTMLMediaElement is using MediaTracks (either placeholder or provided
+  // by the page).
+  static bool mediaTracksEnabledInternally();
+
+  // Notify the HTMLMediaElement that the media controls settings have changed
+  // for the given document.
+  static void onMediaControlsEnabledChange(Document*);
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -172,8 +181,7 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   TimeRanges* seekable() const;
   bool ended() const;
   bool autoplay() const;
-  bool shouldAutoplay(
-      const RecordMetricsBehavior = RecordMetricsBehavior::DoNotRecord);
+  bool shouldAutoplay();
   bool loop() const;
   void setLoop(bool);
   ScriptPromise playForBindings(ScriptState*);
@@ -239,7 +247,7 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   void disableAutomaticTextTrackSelection();
 
   // EventTarget function.
-  // Both Node (via HTMLElement) and ActiveDOMObject define this method, which
+  // Both Node (via HTMLElement) and SuspendableObject define this method, which
   // causes an ambiguity error at compile time. This class's constructor
   // ensures that both implementations return document, so return the result
   // of one of them here.
@@ -250,8 +258,8 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   }
 
   bool isFullscreen() const;
-  void enterFullscreen();
-  void exitFullscreen();
+  void didEnterFullscreen();
+  void didExitFullscreen();
   virtual bool usesOverlayFullscreenVideo() const { return false; }
 
   bool hasClosedCaptions() const;
@@ -288,6 +296,9 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   // specified origin.
   bool isMediaDataCORSSameOrigin(SecurityOrigin*) const;
 
+  // Returns this media element is in a cross-origin frame.
+  bool isInCrossOriginFrame() const;
+
   void scheduleEvent(Event*);
   void scheduleTimeupdateEvent(bool periodicEvent);
 
@@ -301,10 +312,6 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
 
   void videoWillBeDrawnToCanvas() const;
 
-  // Temporary callback for crbug.com/487345,402044
-  void notifyPositionMayHaveChanged(const IntRect&);
-  void updatePositionNotificationRegistration();
-
   WebRemotePlaybackClient* remotePlaybackClient() {
     return m_remotePlaybackClient;
   }
@@ -317,9 +324,7 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   ~HTMLMediaElement() override;
   void dispose();
 
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+  void parseAttribute(const AttributeModificationParams&) override;
   void finishParsingChildren() final;
   bool isURLAttribute(const Attribute&) const override;
   void attachLayoutTree(const AttachContext& = AttachContext()) override;
@@ -331,9 +336,10 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   DisplayMode getDisplayMode() const { return m_displayMode; }
   virtual void setDisplayMode(DisplayMode mode) { m_displayMode = mode; }
 
-  void recordAutoplayMetric(AutoplayMetrics);
-
  private:
+  // Friend class for testing.
+  friend class MediaElementFillingViewportTest;
+
   void resetMediaPlayerAndMediaSource();
 
   bool alwaysCreateUserAgentShadowRoot() const final { return true; }
@@ -346,16 +352,14 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   InsertionNotificationRequest insertedInto(ContainerNode*) final;
   void didNotifySubtreeInsertionsToDocument() override;
   void removedFrom(ContainerNode*) final;
-  void didRecalcStyle(StyleRecalcChange) final;
+  void didRecalcStyle() final;
 
   bool canStartSelection() const override { return false; }
 
-  void didBecomeFullscreenElement() final;
-  void willStopBeingFullscreenElement() final;
   bool isInteractiveContent() const final;
 
-  // ActiveDOMObject functions.
-  void contextDestroyed() final;
+  // SuspendableObject functions.
+  void contextDestroyed(ExecutionContext*) final;
 
   virtual void updateDisplayState() {}
 
@@ -393,12 +397,16 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   void disconnectedFromRemoteDevice() final;
   void cancelledRemotePlaybackRequest() final;
   void remotePlaybackStarted() final;
+  bool hasSelectedVideoTrack() final;
+  WebMediaPlayer::TrackId getSelectedVideoTrackId() final;
   bool isAutoplayingMuted() final;
   void requestReload(const WebURL&) final;
+  void activateViewportIntersectionMonitoring(bool) final;
 
   void loadTimerFired(TimerBase*);
   void progressEventTimerFired(TimerBase*);
   void playbackProgressTimerFired(TimerBase*);
+  void checkViewportIntersectionTimerFired(TimerBase*);
   void startPlaybackProgressTimer();
   void startProgressEventTimer();
   void stopPeriodicTimers();
@@ -477,15 +485,11 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   void requireOfficialPlaybackPositionUpdate() const;
 
   void ensureMediaControls();
-  void configureMediaControls();
+  void updateControlsVisibility();
 
   TextTrackContainer& ensureTextTrackContainer();
 
-  EventDispatchHandlingState* preDispatchEventHandler(Event*) final;
-
   void changeNetworkStateFromLoadingToIdle();
-
-  bool isAutoplaying() const { return m_autoplaying; }
 
   WebMediaPlayer::CORSMode corsMode() const;
 
@@ -510,6 +514,8 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   // should use, if checking to see if an action is allowed.
   bool isLockedPendingUserGesture() const;
 
+  bool isLockedPendingUserGestureIfCrossOriginExperimentEnabled() const;
+
   // If the user gesture is required, then this will remove it.  Note that
   // one should not generally call this method directly; use the one on
   // m_helper and give it a reason.
@@ -521,6 +527,10 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   // gesture is currently being processed.
   bool isGestureNeededForPlayback() const;
 
+  bool isGestureNeededForPlaybackIfCrossOriginExperimentEnabled() const;
+
+  bool isGestureNeededForPlaybackIfPendingUserGestureIsLocked() const;
+
   // Return true if and only if the settings allow autoplay of media on this
   // frame.
   bool isAutoplayAllowedPerSettings() const;
@@ -528,9 +538,6 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   void setNetworkState(NetworkState);
 
   void audioTracksTimerFired(TimerBase*);
-
-  // TODO(liberato): remove once autoplay gesture override experiment concludes.
-  void triggerAutoplayViewportCheckForTesting();
 
   void scheduleResolvePlayPromises();
   void scheduleRejectPlayPromises(ExceptionCode);
@@ -544,10 +551,15 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
 
   void onVisibilityChangedForAutoplay(bool isVisible);
 
-  UnthrottledThreadTimer<HTMLMediaElement> m_loadTimer;
-  UnthrottledThreadTimer<HTMLMediaElement> m_progressEventTimer;
-  UnthrottledThreadTimer<HTMLMediaElement> m_playbackProgressTimer;
-  UnthrottledThreadTimer<HTMLMediaElement> m_audioTracksTimer;
+  void viewportFillDebouncerTimerFired(TimerBase*);
+
+  TaskRunnerTimer<HTMLMediaElement> m_loadTimer;
+  TaskRunnerTimer<HTMLMediaElement> m_progressEventTimer;
+  TaskRunnerTimer<HTMLMediaElement> m_playbackProgressTimer;
+  TaskRunnerTimer<HTMLMediaElement> m_audioTracksTimer;
+  TaskRunnerTimer<HTMLMediaElement> m_viewportFillDebouncerTimer;
+  TaskRunnerTimer<HTMLMediaElement> m_checkViewportIntersectionTimer;
+
   Member<TimeRanges> m_playedTimeRanges;
   Member<GenericEventQueue> m_asyncEventQueue;
 
@@ -625,10 +637,11 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
 
   // FIXME: HTMLMediaElement has way too many state bits.
   bool m_lockedPendingUserGesture : 1;
+  bool m_lockedPendingUserGestureIfCrossOriginExperimentEnabled : 1;
   bool m_playing : 1;
   bool m_shouldDelayLoadEvent : 1;
   bool m_haveFiredLoadedData : 1;
-  bool m_autoplaying : 1;
+  bool m_canAutoplay : 1;
   bool m_muted : 1;
   bool m_paused : 1;
   bool m_seeking : 1;
@@ -647,6 +660,8 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   // Whether this element is in overlay fullscreen mode.
   bool m_inOverlayFullscreenVideo : 1;
 
+  bool m_mostlyFillingViewport : 1;
+
   TraceWrapperMember<AudioTrackList> m_audioTracks;
   TraceWrapperMember<VideoTrackList> m_videoTracks;
   TraceWrapperMember<TextTrackList> m_textTracks;
@@ -655,8 +670,8 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
   Member<CueTimeline> m_cueTimeline;
 
   HeapVector<Member<ScriptPromiseResolver>> m_playPromiseResolvers;
-  std::unique_ptr<CancellableTaskFactory> m_playPromiseResolveTask;
-  std::unique_ptr<CancellableTaskFactory> m_playPromiseRejectTask;
+  TaskHandle m_playPromiseResolveTaskHandle;
+  TaskHandle m_playPromiseRejectTaskHandle;
   HeapVector<Member<ScriptPromiseResolver>> m_playPromiseResolveList;
   HeapVector<Member<ScriptPromiseResolver>> m_playPromiseRejectList;
   ExceptionCode m_playPromiseErrorCode;
@@ -714,22 +729,25 @@ class CORE_EXPORT HTMLMediaElement : public HTMLElement,
 
   AudioSourceProviderImpl m_audioSourceProvider;
 
-  class AutoplayHelperClientImpl;
-
   friend class AutoplayUmaHelper;  // for isAutoplayAllowedPerSettings
+  friend class AutoplayUmaHelperTest;
   friend class Internals;
   friend class TrackDisplayUpdateScope;
-  friend class AutoplayExperimentHelper;
   friend class MediaControlsTest;
+  friend class HTMLMediaElementTest;
+  friend class HTMLVideoElementTest;
+  friend class MediaControlsOrientationLockDelegateTest;
 
-  Member<AutoplayExperimentHelper::Client> m_autoplayHelperClient;
-  Member<AutoplayExperimentHelper> m_autoplayHelper;
   Member<AutoplayUmaHelper> m_autoplayUmaHelper;
 
   WebRemotePlaybackClient* m_remotePlaybackClient;
 
   // class AutoplayVisibilityObserver;
   Member<ElementVisibilityObserver> m_autoplayVisibilityObserver;
+
+  IntRect m_currentIntersectRect;
+
+  Member<MediaControls> m_mediaControls;
 
   static URLRegistry* s_mediaStreamRegistry;
 };

@@ -15,6 +15,8 @@
 #include "base/callback_forward.h"
 #include "content/common/content_export.h"
 #include "media/base/audio_parameters.h"
+#include "media/base/video_facing.h"
+#include "media/capture/video/video_capture_device_descriptor.h"
 #include "ui/gfx/native_widget_types.h"
 #include "url/gurl.h"
 
@@ -48,15 +50,6 @@ enum MediaStreamRequestType {
   MEDIA_OPEN_DEVICE_PEPPER_ONLY  // Only used in requests made by Pepper.
 };
 
-// Facing mode for video capture.
-enum VideoFacingMode {
-  MEDIA_VIDEO_FACING_NONE = 0,
-  MEDIA_VIDEO_FACING_USER,
-  MEDIA_VIDEO_FACING_ENVIRONMENT,
-
-  NUM_MEDIA_VIDEO_FACING_MODE
-};
-
 // Elements in this enum should not be deleted or rearranged; the only
 // permitted operation is to add new elements before NUM_MEDIA_REQUEST_RESULTS.
 enum MediaStreamRequestResult {
@@ -77,6 +70,9 @@ enum MediaStreamRequestResult {
   NUM_MEDIA_REQUEST_RESULTS
 };
 
+using CameraCalibration =
+    media::VideoCaptureDeviceDescriptor::CameraCalibration;
+
 // Convenience predicates to determine whether the given type represents some
 // audio or some video device.
 CONTENT_EXPORT bool IsAudioInputMediaType(MediaStreamType type);
@@ -91,6 +87,11 @@ struct CONTENT_EXPORT MediaStreamDevice {
   MediaStreamDevice(MediaStreamType type,
                     const std::string& id,
                     const std::string& name);
+
+  MediaStreamDevice(MediaStreamType type,
+                    const std::string& id,
+                    const std::string& name,
+                    media::VideoFacingMode facing);
 
   MediaStreamDevice(MediaStreamType type,
                     const std::string& id,
@@ -112,7 +113,7 @@ struct CONTENT_EXPORT MediaStreamDevice {
   std::string id;
 
   // The facing mode for video capture device.
-  VideoFacingMode video_facing;
+  media::VideoFacingMode video_facing;
 
   // The device id of a matched output device if any (otherwise empty).
   // Only applicable to audio devices.
@@ -164,6 +165,9 @@ struct CONTENT_EXPORT MediaStreamDevice {
   // exists (e.g. webcam w/mic), then the value of this member will be all
   // zeros.
   AudioDeviceParameters matched_output;
+
+  // This field is optional and available only for some camera models.
+  base::Optional<CameraCalibration> camera_calibration;
 };
 
 class CONTENT_EXPORT MediaStreamDevices

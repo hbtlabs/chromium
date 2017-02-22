@@ -62,6 +62,14 @@ void SessionManager::SessionStarted() {
   session_started_ = true;
 }
 
+bool SessionManager::IsInSecondaryLoginScreen() const {
+  return session_state_ == SessionState::LOGIN_SECONDARY;
+}
+
+bool SessionManager::IsScreenLocked() const {
+  return session_state_ == SessionState::LOCKED;
+}
+
 void SessionManager::AddObserver(SessionManagerObserver* observer) {
   observers_.AddObserver(observer);
 }

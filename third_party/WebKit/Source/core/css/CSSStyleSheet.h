@@ -24,6 +24,7 @@
 
 #include "core/CoreExport.h"
 #include "core/css/CSSRule.h"
+#include "core/css/MediaQueryEvaluator.h"
 #include "core/css/StyleSheet.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Noncopyable.h"
@@ -41,13 +42,13 @@ class MediaQuerySet;
 class SecurityOrigin;
 class StyleSheetContents;
 
-enum StyleSheetUpdateType { PartialRuleUpdate, EntireStyleSheetUpdate };
-
 class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
   DEFINE_WRAPPERTYPEINFO();
   WTF_MAKE_NONCOPYABLE(CSSStyleSheet);
 
  public:
+  static const Document* singleOwnerDocument(const CSSStyleSheet*);
+
   static CSSStyleSheet* create(StyleSheetContents*,
                                CSSImportRule* ownerRule = nullptr);
   static CSSStyleSheet* create(StyleSheetContents*, Node& ownerNode);
@@ -99,8 +100,15 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
 
   void clearOwnerRule() { m_ownerRule = nullptr; }
   Document* ownerDocument() const;
-  MediaQuerySet* mediaQueries() const { return m_mediaQueries.get(); }
+  const MediaQuerySet* mediaQueries() const { return m_mediaQueries; }
   void setMediaQueries(MediaQuerySet*);
+  bool matchesMediaQueries(const MediaQueryEvaluator&);
+  const MediaQueryResultList& viewportDependentMediaQueryResults() const {
+    return m_viewportDependentMediaQueryResults;
+  }
+  const MediaQueryResultList& deviceDependentMediaQueryResults() const {
+    return m_deviceDependentMediaQueryResults;
+  }
   void setTitle(const String& title) { m_title = title; }
   // Set by LinkStyle iff CORS-enabled fetch of stylesheet succeeded from this
   // origin.
@@ -121,7 +129,7 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
 
   void willMutateRules();
   void didMutateRules();
-  void didMutate(StyleSheetUpdateType = PartialRuleUpdate);
+  void didMutate();
 
   StyleSheetContents* contents() const { return m_contents.get(); }
 
@@ -157,6 +165,8 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
   bool m_loadCompleted = false;
   String m_title;
   Member<MediaQuerySet> m_mediaQueries;
+  MediaQueryResultList m_viewportDependentMediaQueryResults;
+  MediaQueryResultList m_deviceDependentMediaQueryResults;
 
   RefPtr<SecurityOrigin> m_allowRuleAccessFromOrigin;
 

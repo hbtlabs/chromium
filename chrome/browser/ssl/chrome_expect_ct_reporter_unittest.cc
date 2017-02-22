@@ -238,7 +238,7 @@ void CheckExpectCTReport(const std::string& serialized_report,
                          const net::SSLInfo& ssl_info) {
   std::unique_ptr<base::Value> value(base::JSONReader::Read(serialized_report));
   ASSERT_TRUE(value);
-  ASSERT_TRUE(value->IsType(base::Value::TYPE_DICTIONARY));
+  ASSERT_TRUE(value->IsType(base::Value::Type::DICTIONARY));
 
   base::DictionaryValue* report_dict;
   ASSERT_TRUE(value->GetAsDictionary(&report_dict));
@@ -301,19 +301,21 @@ class TestExpectCTNetworkDelegate : public net::NetworkDelegateImpl {
 class ChromeExpectCTReporterWaitTest : public ::testing::Test {
  public:
   ChromeExpectCTReporterWaitTest()
-      : context_(true),
-        thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP) {
-    context_.set_network_delegate(&network_delegate_);
-    context_.Init();
-  }
+      : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP) {}
 
-  void SetUp() override { net::URLRequestFailedJob::AddUrlHandler(); }
+  void SetUp() override {
+    // Initializes URLRequestContext after the thread is set up.
+    context_.reset(new net::TestURLRequestContext(true));
+    context_->set_network_delegate(&network_delegate_);
+    context_->Init();
+    net::URLRequestFailedJob::AddUrlHandler();
+  }
 
   void TearDown() override {
     net::URLRequestFilter::GetInstance()->ClearHandlers();
   }
 
-  net::TestURLRequestContext* context() { return &context_; }
+  net::TestURLRequestContext* context() { return context_.get(); }
 
  protected:
   void SendReport(ChromeExpectCTReporter* reporter,
@@ -329,7 +331,7 @@ class ChromeExpectCTReporterWaitTest : public ::testing::Test {
 
  private:
   TestExpectCTNetworkDelegate network_delegate_;
-  net::TestURLRequestContext context_;
+  std::unique_ptr<net::TestURLRequestContext> context_;
   content::TestBrowserThreadBundle thread_bundle_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeExpectCTReporterWaitTest);
@@ -339,6 +341,9 @@ class ChromeExpectCTReporterWaitTest : public ::testing::Test {
 
 // Test that no report is sent when the feature is not enabled.
 TEST(ChromeExpectCTReporterTest, FeatureDisabled) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(features::kExpectCTReporting);
+
   base::MessageLoop message_loop;
   base::HistogramTester histograms;
   histograms.ExpectTotalCount(kSendHistogramName, 0);
@@ -372,9 +377,6 @@ TEST(ChromeExpectCTReporterTest, EmptyReportURI) {
   base::HistogramTester histograms;
   histograms.ExpectTotalCount(kSendHistogramName, 0);
 
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(features::kExpectCTReporting);
-
   TestCertificateReportSender* sender = new TestCertificateReportSender();
   net::TestURLRequestContext context;
   ChromeExpectCTReporter reporter(&context);
@@ -392,9 +394,6 @@ TEST(ChromeExpectCTReporterTest, EmptyReportURI) {
 
 // Test that if a report fails to send, the UMA metric is recorded.
 TEST_F(ChromeExpectCTReporterWaitTest, SendReportFailure) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(features::kExpectCTReporting);
-
   base::HistogramTester histograms;
   histograms.ExpectTotalCount(kFailureHistogramName, 0);
   histograms.ExpectTotalCount(kSendHistogramName, 0);
@@ -426,9 +425,6 @@ TEST(ChromeExpectCTReporterTest, SendReport) {
   base::HistogramTester histograms;
   histograms.ExpectTotalCount(kFailureHistogramName, 0);
   histograms.ExpectTotalCount(kSendHistogramName, 0);
-
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(features::kExpectCTReporting);
 
   TestCertificateReportSender* sender = new TestCertificateReportSender();
   net::TestURLRequestContext context;

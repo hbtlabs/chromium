@@ -44,6 +44,8 @@ String messageSourceValue(MessageSource source) {
       return protocol::Log::LogEntry::SourceEnum::Worker;
     case ViolationMessageSource:
       return protocol::Log::LogEntry::SourceEnum::Violation;
+    case InterventionMessageSource:
+      return protocol::Log::LogEntry::SourceEnum::Intervention;
     default:
       return protocol::Log::LogEntry::SourceEnum::Other;
   }
@@ -51,18 +53,16 @@ String messageSourceValue(MessageSource source) {
 
 String messageLevelValue(MessageLevel level) {
   switch (level) {
-    case DebugMessageLevel:
-      return protocol::Log::LogEntry::LevelEnum::Debug;
-    case LogMessageLevel:
-      return protocol::Log::LogEntry::LevelEnum::Log;
+    case VerboseMessageLevel:
+      return protocol::Log::LogEntry::LevelEnum::Verbose;
+    case InfoMessageLevel:
+      return protocol::Log::LogEntry::LevelEnum::Info;
     case WarningMessageLevel:
       return protocol::Log::LogEntry::LevelEnum::Warning;
     case ErrorMessageLevel:
       return protocol::Log::LogEntry::LevelEnum::Error;
-    case InfoMessageLevel:
-      return protocol::Log::LogEntry::LevelEnum::Info;
   }
-  return protocol::Log::LogEntry::LevelEnum::Log;
+  return protocol::Log::LogEntry::LevelEnum::Info;
 }
 
 }  // namespace
@@ -92,7 +92,7 @@ void InspectorLogAgent::restore() {
   if (config) {
     protocol::ErrorSupport errors;
     startViolationsReport(
-        protocol::Array<ViolationSetting>::parse(config, &errors));
+        protocol::Array<ViolationSetting>::fromValue(config, &errors));
   }
 }
 
@@ -165,6 +165,8 @@ Response InspectorLogAgent::clear() {
 }
 
 static PerformanceMonitor::Violation parseViolation(const String& name) {
+  if (name == ViolationSetting::NameEnum::DiscouragedAPIUse)
+    return PerformanceMonitor::kDiscouragedAPIUse;
   if (name == ViolationSetting::NameEnum::LongTask)
     return PerformanceMonitor::kLongTask;
   if (name == ViolationSetting::NameEnum::LongLayout)
@@ -184,7 +186,7 @@ Response InspectorLogAgent::startViolationsReport(
     std::unique_ptr<protocol::Array<ViolationSetting>> settings) {
   if (!m_enabled)
     return Response::Error("Log is not enabled");
-  m_state->setValue(LogAgentState::logViolations, settings->serialize());
+  m_state->setValue(LogAgentState::logViolations, settings->toValue());
   if (!m_performanceMonitor)
     return Response::Error("Violations are not supported for this target");
   m_performanceMonitor->unsubscribeAll(this);
@@ -207,24 +209,12 @@ Response InspectorLogAgent::stopViolationsReport() {
   return Response::OK();
 }
 
-void InspectorLogAgent::reportLongTask(
-    double startTime,
-    double endTime,
-    const HeapHashSet<Member<Frame>>& contextFrames) {
-  double time = (endTime - startTime) * 1000;
-  String messageText =
-      String::format("Long running JavaScript task took %ldms", lround(time));
-  ConsoleMessage* message = ConsoleMessage::create(
-      ViolationMessageSource, WarningMessageLevel, messageText);
-  consoleMessageAdded(message);
-}
-
 void InspectorLogAgent::reportLongLayout(double duration) {
   String messageText =
       String::format("Forced reflow while executing JavaScript took %ldms",
                      lround(duration * 1000));
   ConsoleMessage* message = ConsoleMessage::create(
-      ViolationMessageSource, WarningMessageLevel, messageText);
+      ViolationMessageSource, VerboseMessageLevel, messageText);
   consoleMessageAdded(message);
 }
 
@@ -232,8 +222,9 @@ void InspectorLogAgent::reportGenericViolation(PerformanceMonitor::Violation,
                                                const String& text,
                                                double time,
                                                SourceLocation* location) {
+  location->takeStackTrace();
   ConsoleMessage* message = ConsoleMessage::create(
-      ViolationMessageSource, WarningMessageLevel, text, location->clone());
+      ViolationMessageSource, VerboseMessageLevel, text, location->clone());
   consoleMessageAdded(message);
 };
 

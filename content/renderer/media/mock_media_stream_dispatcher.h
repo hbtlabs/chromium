@@ -23,7 +23,8 @@ class MockMediaStreamDispatcher : public MediaStreamDispatcher {
       int request_id,
       const base::WeakPtr<MediaStreamDispatcherEventHandler>& event_handler,
       const StreamControls& controls,
-      const url::Origin& url) override;
+      const url::Origin& security_origin,
+      bool is_procesing_user_gesture) override;
   void CancelGenerateStream(
       int request_id,
       const base::WeakPtr<MediaStreamDispatcherEventHandler>& event_handler)
@@ -48,8 +49,9 @@ class MockMediaStreamDispatcher : public MediaStreamDispatcher {
   const StreamDeviceInfoArray& video_array() const { return video_array_; }
 
  private:
-  void AddAudioInputDeviceToArray(bool matched_output);
-  void AddVideoDeviceToArray(bool facing_user);
+  void AddAudioInputDeviceToArray(bool matched_output,
+                                  const std::string& device_id);
+  void AddVideoDeviceToArray(bool facing_user, const std::string& device_id);
 
   int audio_input_request_id_;
   base::WeakPtr<MediaStreamDispatcherEventHandler> event_handler_;

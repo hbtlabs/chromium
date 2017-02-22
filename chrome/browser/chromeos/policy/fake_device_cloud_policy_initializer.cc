@@ -27,7 +27,7 @@ FakeDeviceCloudPolicyInitializer::FakeDeviceCloudPolicyInitializer()
           nullptr),  // statistics_provider
       was_start_enrollment_called_(false),
       enrollment_status_(
-          EnrollmentStatus::ForStatus(EnrollmentStatus::STATUS_SUCCESS)) {}
+          EnrollmentStatus::ForStatus(EnrollmentStatus::SUCCESS)) {}
 
 void FakeDeviceCloudPolicyInitializer::Init() {
 }
@@ -37,6 +37,7 @@ void FakeDeviceCloudPolicyInitializer::Shutdown() {
 
 void FakeDeviceCloudPolicyInitializer::StartEnrollment(
     DeviceManagementService* device_management_service,
+    chromeos::ActiveDirectoryJoinDelegate* ad_join_delegate,
     const EnrollmentConfig& enrollment_config,
     const std::string& auth_token,
     const EnrollmentCallback& enrollment_callback) {

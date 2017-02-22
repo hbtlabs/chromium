@@ -101,14 +101,14 @@ struct StructTraits<cc::mojom::CompositorFrameMetadataDataView,
     return metadata.latency_info;
   }
 
-  static const std::vector<uint32_t>& satisfies_sequences(
-      const cc::CompositorFrameMetadata& metadata) {
-    return metadata.satisfies_sequences;
-  }
-
   static const std::vector<cc::SurfaceId>& referenced_surfaces(
       const cc::CompositorFrameMetadata& metadata) {
     return metadata.referenced_surfaces;
+  }
+
+  static bool can_activate_before_dependencies(
+      const cc::CompositorFrameMetadata& metadata) {
+    return metadata.can_activate_before_dependencies;
   }
 
   static bool Read(cc::mojom::CompositorFrameMetadataDataView data,

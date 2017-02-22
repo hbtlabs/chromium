@@ -94,8 +94,11 @@ UI.DragHandler = class {
 
   _createGlassPane() {
     this._glassPaneInUse = true;
-    if (!UI.DragHandler._glassPaneUsageCount++)
-      UI.DragHandler._glassPane = new UI.GlassPane(UI.DragHandler._documentForMouseOut);
+    if (!UI.DragHandler._glassPaneUsageCount++) {
+      UI.DragHandler._glassPane = new UI.GlassPane();
+      UI.DragHandler._glassPane.setBlockPointerEvents(true);
+      UI.DragHandler._glassPane.showGlassPane(UI.DragHandler._documentForMouseOut);
+    }
   }
 
   _disposeGlassPane() {
@@ -104,7 +107,7 @@ UI.DragHandler = class {
     this._glassPaneInUse = false;
     if (--UI.DragHandler._glassPaneUsageCount)
       return;
-    UI.DragHandler._glassPane.dispose();
+    UI.DragHandler._glassPane.hideGlassPane();
     delete UI.DragHandler._glassPane;
     delete UI.DragHandler._documentForMouseOut;
   }
@@ -297,35 +300,6 @@ UI.installInertialDragHandle = function(
     elementDrag(lastX, lastY);
   }
 };
-
-/**
- * @unrestricted
- */
-UI.GlassPane = class {
-  /**
-   * @param {!Document} document
-   * @param {boolean=} dimmed
-   */
-  constructor(document, dimmed) {
-    this.element = createElement('div');
-    var background = dimmed ? 'rgba(255, 255, 255, 0.5)' : 'transparent';
-    this._zIndex = UI._glassPane ? UI._glassPane._zIndex + 1000 :
-                                   3000;  // Deliberately starts with 3000 to hide other z-indexed elements below.
-    this.element.style.cssText = 'position:absolute;top:0;bottom:0;left:0;right:0;background-color:' + background +
-        ';z-index:' + this._zIndex + ';overflow:hidden;';
-    document.body.appendChild(this.element);
-    UI._glassPane = this;
-    // TODO(dgozman): disallow focus outside of glass pane?
-  }
-
-  dispose() {
-    delete UI._glassPane;
-    this.element.remove();
-  }
-};
-
-/** @type {!UI.GlassPane|undefined} */
-UI._glassPane;
 
 /**
  * @param {?Node=} node
@@ -730,7 +704,7 @@ UI.formatLocalized = function(format, substitutions) {
  * @return {string}
  */
 UI.openLinkExternallyLabel = function() {
-  return Common.UIString.capitalize('Open ^link in ^new ^tab');
+  return Common.UIString.capitalize('Open in ^new ^tab');
 };
 
 /**
@@ -752,8 +726,13 @@ UI.anotherProfilerActiveLabel = function() {
  * @return {string}
  */
 UI.asyncStackTraceLabel = function(description) {
-  if (description)
+  if (description) {
+    if (description === 'Promise.resolve')
+      description = Common.UIString('Promise resolved');
+    else if (description === 'Promise.reject')
+      description = Common.UIString('Promise rejected');
     return description + ' ' + Common.UIString('(async)');
+  }
   return Common.UIString('Async Call');
 };
 
@@ -990,7 +969,7 @@ UI.revertDomChanges = function(domChanges) {
 /**
  * @param {!Element} element
  * @param {?Element=} containerElement
- * @return {!Size}
+ * @return {!UI.Size}
  */
 UI.measurePreferredSize = function(element, containerElement) {
   var oldParent = element.parentElement;
@@ -998,14 +977,14 @@ UI.measurePreferredSize = function(element, containerElement) {
   containerElement = containerElement || element.ownerDocument.body;
   containerElement.appendChild(element);
   element.positionAt(0, 0);
-  var result = new Size(element.offsetWidth, element.offsetHeight);
+  var result = element.getBoundingClientRect();
 
   element.positionAt(undefined, undefined);
   if (oldParent)
     oldParent.insertBefore(element, oldNextSibling);
   else
     element.remove();
-  return result;
+  return new UI.Size(result.width, result.height);
 };
 
 /**
@@ -1212,6 +1191,7 @@ UI.initializeUIUtils = function(document, themeSetting) {
   var body = /** @type {!Element} */ (document.body);
   UI.appendStyle(body, 'ui/inspectorStyle.css');
   UI.appendStyle(body, 'ui/popover.css');
+  UI.GlassPane.setContainer(/** @type {!Element} */ (document.body));
 };
 
 /**
@@ -1230,9 +1210,9 @@ UI.beautifyFunctionName = function(name) {
  * @suppressGlobalPropertiesCheck
  * @template T
  */
-function registerCustomElement(localName, typeExtension, prototype) {
+UI.registerCustomElement = function(localName, typeExtension, prototype) {
   return document.registerElement(typeExtension, {prototype: Object.create(prototype), extends: localName});
-}
+};
 
 /**
  * @param {string} text
@@ -1241,7 +1221,7 @@ function registerCustomElement(localName, typeExtension, prototype) {
  * @param {string=} title
  * @return {!Element}
  */
-function createTextButton(text, clickHandler, className, title) {
+UI.createTextButton = function(text, clickHandler, className, title) {
   var element = createElementWithClass('button', className || '', 'text-button');
   element.textContent = text;
   if (clickHandler)
@@ -1249,7 +1229,7 @@ function createTextButton(text, clickHandler, className, title) {
   if (title)
     element.title = title;
   return element;
-}
+};
 
 /**
  * @param {string} name
@@ -1257,25 +1237,25 @@ function createTextButton(text, clickHandler, className, title) {
  * @param {boolean=} checked
  * @return {!Element}
  */
-function createRadioLabel(name, title, checked) {
+UI.createRadioLabel = function(name, title, checked) {
   var element = createElement('label', 'dt-radio');
   element.radioElement.name = name;
   element.radioElement.checked = !!checked;
   element.createTextChild(title);
   return element;
-}
+};
 
 /**
  * @param {string} title
  * @param {string} iconClass
  * @return {!Element}
  */
-function createLabel(title, iconClass) {
+UI.createLabel = function(title, iconClass) {
   var element = createElement('label', 'dt-icon-label');
   element.createChild('span').textContent = title;
   element.type = iconClass;
   return element;
-}
+};
 
 /**
  * @param {string=} title
@@ -1283,11 +1263,11 @@ function createLabel(title, iconClass) {
  * @param {string=} subtitle
  * @return {!Element}
  */
-function createCheckboxLabel(title, checked, subtitle) {
+UI.createCheckboxLabel = function(title, checked, subtitle) {
   var element = createElement('label', 'dt-checkbox');
   element.checkboxElement.checked = !!checked;
   if (title !== undefined) {
-    element.textElement = element.createChild('div', 'dt-checkbox-text');
+    element.textElement = element.shadowRoot.createChild('div', 'dt-checkbox-text');
     element.textElement.textContent = title;
     if (subtitle !== undefined) {
       element.subtitleElement = element.textElement.createChild('div', 'dt-checkbox-subtitle');
@@ -1295,7 +1275,7 @@ function createCheckboxLabel(title, checked, subtitle) {
     }
   }
   return element;
-}
+};
 
 /**
  * @return {!Element}
@@ -1303,14 +1283,14 @@ function createCheckboxLabel(title, checked, subtitle) {
  * @param {number} max
  * @param {number} tabIndex
  */
-function createSliderLabel(min, max, tabIndex) {
+UI.createSliderLabel = function(min, max, tabIndex) {
   var element = createElement('label', 'dt-slider');
   element.sliderElement.min = min;
   element.sliderElement.max = max;
   element.sliderElement.step = 1;
   element.sliderElement.tabIndex = tabIndex;
   return element;
-}
+};
 
 /**
  * @param {!Node} node
@@ -1336,7 +1316,7 @@ UI.appendStyle = function(node, cssFile) {
 };
 
 (function() {
-  registerCustomElement('button', 'text-button', {
+  UI.registerCustomElement('button', 'text-button', {
     /**
      * @this {Element}
      */
@@ -1349,7 +1329,7 @@ UI.appendStyle = function(node, cssFile) {
     __proto__: HTMLButtonElement.prototype
   });
 
-  registerCustomElement('label', 'dt-radio', {
+  UI.registerCustomElement('label', 'dt-radio', {
     /**
      * @this {Element}
      */
@@ -1377,7 +1357,7 @@ UI.appendStyle = function(node, cssFile) {
     this.radioElement.dispatchEvent(new Event('change'));
   }
 
-  registerCustomElement('label', 'dt-checkbox', {
+  UI.registerCustomElement('label', 'dt-checkbox', {
     /**
      * @this {Element}
      */
@@ -1395,7 +1375,8 @@ UI.appendStyle = function(node, cssFile) {
        * @this {Node}
        */
       function toggleCheckbox(event) {
-        if (event.target !== checkboxElement && event.target !== this) {
+        var deepTarget = event.deepElementFromPoint();
+        if (deepTarget !== checkboxElement && deepTarget !== this) {
           event.consume();
           checkboxElement.click();
         }
@@ -1444,7 +1425,7 @@ UI.appendStyle = function(node, cssFile) {
     __proto__: HTMLLabelElement.prototype
   });
 
-  registerCustomElement('label', 'dt-icon-label', {
+  UI.registerCustomElement('label', 'dt-icon-label', {
     /**
      * @this {Element}
      */
@@ -1467,7 +1448,7 @@ UI.appendStyle = function(node, cssFile) {
     __proto__: HTMLLabelElement.prototype
   });
 
-  registerCustomElement('label', 'dt-slider', {
+  UI.registerCustomElement('label', 'dt-slider', {
     /**
      * @this {Element}
      */
@@ -1496,7 +1477,7 @@ UI.appendStyle = function(node, cssFile) {
     __proto__: HTMLLabelElement.prototype
   });
 
-  registerCustomElement('label', 'dt-small-bubble', {
+  UI.registerCustomElement('label', 'dt-small-bubble', {
     /**
      * @this {Element}
      */
@@ -1518,13 +1499,19 @@ UI.appendStyle = function(node, cssFile) {
     __proto__: HTMLLabelElement.prototype
   });
 
-  registerCustomElement('div', 'dt-close-button', {
+  UI.registerCustomElement('div', 'dt-close-button', {
     /**
      * @this {Element}
      */
     createdCallback: function() {
       var root = UI.createShadowRootWithCoreStyles(this, 'ui/closeButton.css');
       this._buttonElement = root.createChild('div', 'close-button');
+      var regularIcon = UI.Icon.create('smallicon-cross', 'default-icon');
+      this._hoverIcon = UI.Icon.create('smallicon-red-cross-hover', 'hover-icon');
+      this._activeIcon = UI.Icon.create('smallicon-red-cross-active', 'active-icon');
+      this._buttonElement.appendChild(regularIcon);
+      this._buttonElement.appendChild(this._hoverIcon);
+      this._buttonElement.appendChild(this._activeIcon);
     },
 
     /**
@@ -1532,7 +1519,13 @@ UI.appendStyle = function(node, cssFile) {
      * @this {Element}
      */
     set gray(gray) {
-      this._buttonElement.className = gray ? 'close-button-gray' : 'close-button';
+      if (gray) {
+        this._hoverIcon.setIconType('smallicon-gray-cross-hover');
+        this._activeIcon.setIconType('smallicon-gray-cross-active');
+      } else {
+        this._hoverIcon.setIconType('smallicon-red-cross-hover');
+        this._activeIcon.setIconType('smallicon-red-cross-active');
+      }
     },
 
     __proto__: HTMLDivElement.prototype
@@ -1611,17 +1604,18 @@ UI.bindInput = function(input, apply, validate, numeric) {
 };
 
 /**
-   * @param {!CanvasRenderingContext2D} context
-   * @param {string} text
-   * @param {number} maxWidth
-   * @return {string}
-   */
-UI.trimTextMiddle = function(context, text, maxWidth) {
+ * @param {!CanvasRenderingContext2D} context
+ * @param {string} text
+ * @param {number} maxWidth
+ * @param {function(string, number):string} trimFunction
+ * @return {string}
+ */
+UI.trimText = function(context, text, maxWidth, trimFunction) {
   const maxLength = 200;
   if (maxWidth <= 10)
     return '';
   if (text.length > maxLength)
-    text = text.trimMiddle(maxLength);
+    text = trimFunction(text, maxLength);
   const textWidth = UI.measureTextWidth(context, text);
   if (textWidth <= maxWidth)
     return text;
@@ -1632,7 +1626,7 @@ UI.trimTextMiddle = function(context, text, maxWidth) {
   var rv = textWidth;
   while (l < r && lv !== rv && lv !== maxWidth) {
     const m = Math.ceil(l + (r - l) * (maxWidth - lv) / (rv - lv));
-    const mv = UI.measureTextWidth(context, text.trimMiddle(m));
+    const mv = UI.measureTextWidth(context, trimFunction(text, m));
     if (mv <= maxWidth) {
       l = m;
       lv = mv;
@@ -1641,8 +1635,28 @@ UI.trimTextMiddle = function(context, text, maxWidth) {
       rv = mv;
     }
   }
-  text = text.trimMiddle(l);
+  text = trimFunction(text, l);
   return text !== '\u2026' ? text : '';
+};
+
+/**
+ * @param {!CanvasRenderingContext2D} context
+ * @param {string} text
+ * @param {number} maxWidth
+ * @return {string}
+ */
+UI.trimTextMiddle = function(context, text, maxWidth) {
+  return UI.trimText(context, text, maxWidth, (text, width) => text.trimMiddle(width));
+};
+
+/**
+ * @param {!CanvasRenderingContext2D} context
+ * @param {string} text
+ * @param {number} maxWidth
+ * @return {string}
+ */
+UI.trimTextEnd = function(context, text, maxWidth) {
+  return UI.trimText(context, text, maxWidth, (text, width) => text.trimEnd(width));
 };
 
 /**
@@ -1919,7 +1933,7 @@ UI.createExternalLink = function(url, linkText, className, preventClick) {
   if (!linkText)
     linkText = url;
 
-  var a = createElementWithClass('a', className);
+  var a = createElementWithClass('span', className);
   var href = url;
   if (url.trim().toLowerCase().startsWith('javascript:'))
     href = null;
@@ -1927,17 +1941,20 @@ UI.createExternalLink = function(url, linkText, className, preventClick) {
     href = null;
   if (href !== null) {
     a.href = href;
-    a.classList.add('webkit-html-external-link');
-    a.addEventListener('click', (event) => {
-      event.consume(true);
-      if (!preventClick)
+    a.classList.add('devtools-link');
+    if (!preventClick) {
+      a.addEventListener('click', (event) => {
+        event.consume(true);
         InspectorFrontendHost.openInNewTab(/** @type {string} */ (href));
-    }, false);
+      }, false);
+    } else {
+      a.classList.add('devtools-link-prevent-click');
+    }
     a[UI._externalLinkSymbol] = true;
   }
   if (linkText !== url)
     a.title = url;
-  a.textContent = linkText.trimMiddle(150);
+  a.textContent = linkText.trimMiddle(UI.MaxLengthForDisplayedURLs);
   a.setAttribute('target', '_blank');
 
   return a;
@@ -1992,3 +2009,66 @@ UI.loadImage = function(url) {
 
 /** @type {!UI.ThemeSupport} */
 UI.themeSupport;
+
+/**
+ * @param {function(!File)} callback
+ * @return {!Node}
+ */
+UI.createFileSelectorElement = function(callback) {
+  var fileSelectorElement = createElement('input');
+  fileSelectorElement.type = 'file';
+  fileSelectorElement.style.display = 'none';
+  fileSelectorElement.setAttribute('tabindex', -1);
+  fileSelectorElement.onchange = onChange;
+  function onChange(event) {
+    callback(fileSelectorElement.files[0]);
+  }
+  return fileSelectorElement;
+};
+
+/**
+ * @const
+ * @type {number}
+ */
+UI.MaxLengthForDisplayedURLs = 150;
+
+/**
+ * @unrestricted
+ */
+UI.ConfirmDialog = class extends UI.VBox {
+  /**
+   * @param {!Document|!Element} where
+   * @param {string} message
+   * @param {!Function} callback
+   */
+  static show(where, message, callback) {
+    var dialog = new UI.Dialog();
+    dialog.setSizeBehavior(UI.GlassPane.SizeBehavior.MeasureContent);
+    dialog.addCloseButton();
+    dialog.setDimmed(true);
+    new UI
+        .ConfirmDialog(
+            message,
+            () => {
+              dialog.hideDialog();
+              callback();
+            },
+            () => dialog.hideDialog())
+        .show(dialog.contentElement);
+    dialog.showDialog(where);
+  }
+
+  /**
+   * @param {string} message
+   * @param {!Function} okCallback
+   * @param {!Function} cancelCallback
+   */
+  constructor(message, okCallback, cancelCallback) {
+    super(true);
+    this.registerRequiredCSS('ui/confirmDialog.css');
+    this.contentElement.createChild('div', 'message').createChild('span').textContent = message;
+    var buttonsBar = this.contentElement.createChild('div', 'button');
+    buttonsBar.appendChild(UI.createTextButton(Common.UIString('Ok'), okCallback));
+    buttonsBar.appendChild(UI.createTextButton(Common.UIString('Cancel'), cancelCallback));
+  }
+};

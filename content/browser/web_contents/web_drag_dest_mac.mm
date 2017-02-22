@@ -10,9 +10,11 @@
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
+#include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_drag_dest_delegate.h"
+#include "content/public/common/child_process_host.h"
 #include "content/public/common/drop_data.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #import "third_party/mozilla/NSPasteboard+Utils.h"
@@ -57,6 +59,11 @@ int GetModifierFlags() {
   return modifier_state;
 }
 
+content::GlobalRoutingID GetRenderViewHostID(content::RenderViewHost* rvh) {
+  return content::GlobalRoutingID(rvh->GetProcess()->GetID(),
+                                  rvh->GetRoutingID());
+}
+
 }  // namespace
 
 @implementation WebDragDest
@@ -68,6 +75,9 @@ int GetModifierFlags() {
   if ((self = [super init])) {
     webContents_ = contents;
     canceled_ = false;
+    dragStartProcessID_ = content::ChildProcessHost::kInvalidUniqueID;
+    dragStartViewID_ = content::GlobalRoutingID(
+        content::ChildProcessHost::kInvalidUniqueID, MSG_ROUTING_NONE);
   }
   return self;
 }
@@ -134,9 +144,20 @@ int GetModifierFlags() {
   NSPoint viewPoint = [self flipWindowPointToView:windowPoint view:view];
   NSPoint screenPoint = [self flipWindowPointToScreen:windowPoint view:view];
   gfx::Point transformedPt;
-  currentRWHForDrag_ =
-      [self GetRenderWidgetHostAtPoint:viewPoint transformedPt:&transformedPt]
-          ->GetWeakPtr();
+  if (!webContents_->GetRenderWidgetHostView()) {
+    // TODO(ekaramad, paulmeyer): Find a better way than toggling |canceled_|.
+    // This could happen when the renderer process for the top-level RWH crashes
+    // (see https://crbug.com/670645).
+    canceled_ = true;
+    return NSDragOperationNone;
+  }
+
+  content::RenderWidgetHostImpl* targetRWH =
+      [self GetRenderWidgetHostAtPoint:viewPoint transformedPt:&transformedPt];
+  if (![self isValidDragTarget:targetRWH])
+    return NSDragOperationNone;
+
+  currentRWHForDrag_ = targetRWH->GetWeakPtr();
 
   // Fill out a DropData from pasteboard.
   std::unique_ptr<DropData> dropData;
@@ -195,14 +216,19 @@ int GetModifierFlags() {
     delegate_->OnDragLeave();
 
   if (currentRWHForDrag_) {
-    currentRWHForDrag_->DragTargetDragLeave();
+    currentRWHForDrag_->DragTargetDragLeave(gfx::Point(), gfx::Point());
     currentRWHForDrag_.reset();
   }
   dropData_.reset();
 }
 
-- (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)info
-                              view:(NSView*)view {
+- (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)info view:(NSView*)view {
+  if (canceled_) {
+    // TODO(ekaramad,paulmeyer): We probably shouldn't be checking for
+    // |canceled_| twice in this method.
+    return NSDragOperationNone;
+  }
+
   // Create the appropriate mouse locations for WebCore. The draggingLocation
   // is in window coordinates. Both need to be flipped.
   NSPoint windowPoint = [info draggingLocation];
@@ -212,11 +238,29 @@ int GetModifierFlags() {
   content::RenderWidgetHostImpl* targetRWH =
       [self GetRenderWidgetHostAtPoint:viewPoint transformedPt:&transformedPt];
 
+  if (![self isValidDragTarget:targetRWH])
+    return NSDragOperationNone;
+
   // TODO(paulmeyer): The dragging delegates may now by invoked multiple times
   // per drag, even without the drag ever leaving the window.
   if (targetRWH != currentRWHForDrag_.get()) {
-    if (currentRWHForDrag_)
-      currentRWHForDrag_->DragTargetDragLeave();
+    if (currentRWHForDrag_) {
+      gfx::Point transformedLeavePoint = gfx::Point(viewPoint.x, viewPoint.y);
+      gfx::Point transformedScreenPoint =
+          gfx::Point(screenPoint.x, screenPoint.y);
+      content::RenderWidgetHostViewBase* rootView =
+          static_cast<content::RenderWidgetHostViewBase*>(
+              webContents_->GetRenderWidgetHostView());
+      content::RenderWidgetHostViewBase* currentDragView =
+          static_cast<content::RenderWidgetHostViewBase*>(
+              currentRWHForDrag_->GetView());
+      rootView->TransformPointToCoordSpaceForView(
+          transformedLeavePoint, currentDragView, &transformedLeavePoint);
+      rootView->TransformPointToCoordSpaceForView(
+          transformedScreenPoint, currentDragView, &transformedScreenPoint);
+      currentRWHForDrag_->DragTargetDragLeave(transformedLeavePoint,
+                                              transformedScreenPoint);
+    }
     [self draggingEntered:info view:view];
   }
 
@@ -251,9 +295,13 @@ int GetModifierFlags() {
   content::RenderWidgetHostImpl* targetRWH =
       [self GetRenderWidgetHostAtPoint:viewPoint transformedPt:&transformedPt];
 
+  if (![self isValidDragTarget:targetRWH])
+    return NO;
+
   if (targetRWH != currentRWHForDrag_.get()) {
     if (currentRWHForDrag_)
-      currentRWHForDrag_->DragTargetDragLeave();
+      currentRWHForDrag_->DragTargetDragLeave(
+          transformedPt, gfx::Point(screenPoint.x, screenPoint.y));
     [self draggingEntered:info view:view];
   }
 
@@ -292,6 +340,17 @@ GetRenderWidgetHostAtPoint:(const NSPoint&)viewPoint
   return webContents_->GetInputEventRouter()->GetRenderWidgetHostAtPoint(
       webContents_->GetRenderViewHost()->GetWidget()->GetView(),
       gfx::Point(viewPoint.x, viewPoint.y), transformedPt);
+}
+
+- (void)setDragStartTrackersForProcess:(int)processID {
+  dragStartProcessID_ = processID;
+  dragStartViewID_ = GetRenderViewHostID(webContents_->GetRenderViewHost());
+}
+
+- (bool)isValidDragTarget:(content::RenderWidgetHostImpl*)targetRWH {
+  return targetRWH->GetProcess()->GetID() == dragStartProcessID_ ||
+         GetRenderViewHostID(webContents_->GetRenderViewHost()) !=
+             dragStartViewID_;
 }
 
 // Given |data|, which should not be nil, fill it in using the contents of the

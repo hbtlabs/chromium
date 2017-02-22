@@ -27,9 +27,9 @@
 #define LayoutImage_h
 
 #include "core/CoreExport.h"
-#include "core/fetch/ResourceClient.h"
 #include "core/layout/LayoutImageResource.h"
 #include "core/layout/LayoutReplaced.h"
+#include "platform/loader/fetch/ResourceClient.h"
 
 namespace blink {
 
@@ -62,7 +62,7 @@ class CORE_EXPORT LayoutImage : public LayoutReplaced {
   const LayoutImageResource* imageResource() const {
     return m_imageResource.get();
   }
-  ImageResource* cachedImage() const {
+  ImageResourceContent* cachedImage() const {
     return m_imageResource ? m_imageResource->cachedImage() : 0;
   }
 
@@ -117,7 +117,7 @@ class CORE_EXPORT LayoutImage : public LayoutReplaced {
 
   LayoutUnit minimumReplacedHeight() const override;
 
-  void imageNotifyFinished(ImageResource*) final;
+  void imageNotifyFinished(ImageResourceContent*) final;
   bool nodeAtPoint(HitTestResult&,
                    const HitTestLocation& locationInContainer,
                    const LayoutPoint& accumulatedOffset,

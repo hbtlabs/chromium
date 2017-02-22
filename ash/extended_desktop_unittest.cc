@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/aura/wm_window_aura.h"
 #include "ash/common/system/tray/system_tray.h"
 #include "ash/common/wm/root_window_finder.h"
+#include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
@@ -21,7 +21,7 @@
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/display/display.h"
-#include "ui/display/manager/display_layout.h"
+#include "ui/display/display_layout.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/events/event_handler.h"
@@ -168,9 +168,6 @@ class ExtendedDesktopTest : public test::AshTestBase {
 // Test conditions that root windows in extended desktop mode
 // must satisfy.
 TEST_F(ExtendedDesktopTest, Basic) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("1000x600,600x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
@@ -190,9 +187,6 @@ TEST_F(ExtendedDesktopTest, Basic) {
 }
 
 TEST_F(ExtendedDesktopTest, Activation) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("1000x600,600x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
@@ -224,9 +218,6 @@ TEST_F(ExtendedDesktopTest, Activation) {
 }
 
 TEST_F(ExtendedDesktopTest, SystemModal) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("1000x600,600x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
@@ -261,9 +252,6 @@ TEST_F(ExtendedDesktopTest, SystemModal) {
 }
 
 TEST_F(ExtendedDesktopTest, TestCursor) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("1000x600,600x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   aura::WindowTreeHost* host0 = root_windows[0]->GetHost();
@@ -276,9 +264,6 @@ TEST_F(ExtendedDesktopTest, TestCursor) {
 }
 
 TEST_F(ExtendedDesktopTest, TestCursorLocation) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("1000x600,600x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   aura::test::WindowTestApi root_window0_test_api(root_windows[0]);
@@ -302,87 +287,68 @@ TEST_F(ExtendedDesktopTest, TestCursorLocation) {
 }
 
 TEST_F(ExtendedDesktopTest, GetRootWindowAt) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("700x500,500x500");
   SetSecondaryDisplayLayout(display::DisplayPlacement::LEFT);
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
-  EXPECT_EQ(root_windows[1], WmWindowAura::GetAuraWindow(
+  EXPECT_EQ(root_windows[1], WmWindow::GetAuraWindow(
                                  wm::GetRootWindowAt(gfx::Point(-400, 100))));
-  EXPECT_EQ(root_windows[1], WmWindowAura::GetAuraWindow(
-                                 wm::GetRootWindowAt(gfx::Point(-1, 100))));
-  EXPECT_EQ(root_windows[0], WmWindowAura::GetAuraWindow(
-                                 wm::GetRootWindowAt(gfx::Point(0, 300))));
-  EXPECT_EQ(root_windows[0], WmWindowAura::GetAuraWindow(
-                                 wm::GetRootWindowAt(gfx::Point(700, 300))));
+  EXPECT_EQ(root_windows[1],
+            WmWindow::GetAuraWindow(wm::GetRootWindowAt(gfx::Point(-1, 100))));
+  EXPECT_EQ(root_windows[0],
+            WmWindow::GetAuraWindow(wm::GetRootWindowAt(gfx::Point(0, 300))));
+  EXPECT_EQ(root_windows[0],
+            WmWindow::GetAuraWindow(wm::GetRootWindowAt(gfx::Point(700, 300))));
 
   // Zero origin.
   EXPECT_EQ(root_windows[0],
-            WmWindowAura::GetAuraWindow(wm::GetRootWindowAt(gfx::Point(0, 0))));
+            WmWindow::GetAuraWindow(wm::GetRootWindowAt(gfx::Point(0, 0))));
 
   // Out of range point should return the nearest root window
-  EXPECT_EQ(root_windows[1], WmWindowAura::GetAuraWindow(
-                                 wm::GetRootWindowAt(gfx::Point(-600, 0))));
-  EXPECT_EQ(root_windows[0], WmWindowAura::GetAuraWindow(
-                                 wm::GetRootWindowAt(gfx::Point(701, 100))));
+  EXPECT_EQ(root_windows[1],
+            WmWindow::GetAuraWindow(wm::GetRootWindowAt(gfx::Point(-600, 0))));
+  EXPECT_EQ(root_windows[0],
+            WmWindow::GetAuraWindow(wm::GetRootWindowAt(gfx::Point(701, 100))));
 }
 
 TEST_F(ExtendedDesktopTest, GetRootWindowMatching) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("700x500,500x500");
   SetSecondaryDisplayLayout(display::DisplayPlacement::LEFT);
 
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
   // Containing rect.
-  EXPECT_EQ(root_windows[1],
-            WmWindowAura::GetAuraWindow(
-                wm::GetRootWindowMatching(gfx::Rect(-300, 10, 50, 50))));
-  EXPECT_EQ(root_windows[0],
-            WmWindowAura::GetAuraWindow(
-                wm::GetRootWindowMatching(gfx::Rect(100, 10, 50, 50))));
+  EXPECT_EQ(root_windows[1], WmWindow::GetAuraWindow(wm::GetRootWindowMatching(
+                                 gfx::Rect(-300, 10, 50, 50))));
+  EXPECT_EQ(root_windows[0], WmWindow::GetAuraWindow(wm::GetRootWindowMatching(
+                                 gfx::Rect(100, 10, 50, 50))));
 
   // Intersecting rect.
-  EXPECT_EQ(root_windows[1],
-            WmWindowAura::GetAuraWindow(
-                wm::GetRootWindowMatching(gfx::Rect(-200, 0, 300, 300))));
-  EXPECT_EQ(root_windows[0],
-            WmWindowAura::GetAuraWindow(
-                wm::GetRootWindowMatching(gfx::Rect(-100, 0, 300, 300))));
+  EXPECT_EQ(root_windows[1], WmWindow::GetAuraWindow(wm::GetRootWindowMatching(
+                                 gfx::Rect(-200, 0, 300, 300))));
+  EXPECT_EQ(root_windows[0], WmWindow::GetAuraWindow(wm::GetRootWindowMatching(
+                                 gfx::Rect(-100, 0, 300, 300))));
 
   // Zero origin.
-  EXPECT_EQ(root_windows[0],
-            WmWindowAura::GetAuraWindow(
-                wm::GetRootWindowMatching(gfx::Rect(0, 0, 0, 0))));
-  EXPECT_EQ(root_windows[0],
-            WmWindowAura::GetAuraWindow(
-                wm::GetRootWindowMatching(gfx::Rect(0, 0, 1, 1))));
+  EXPECT_EQ(root_windows[0], WmWindow::GetAuraWindow(wm::GetRootWindowMatching(
+                                 gfx::Rect(0, 0, 0, 0))));
+  EXPECT_EQ(root_windows[0], WmWindow::GetAuraWindow(wm::GetRootWindowMatching(
+                                 gfx::Rect(0, 0, 1, 1))));
 
   // Empty rect.
-  EXPECT_EQ(root_windows[1],
-            WmWindowAura::GetAuraWindow(
-                wm::GetRootWindowMatching(gfx::Rect(-400, 100, 0, 0))));
-  EXPECT_EQ(root_windows[0],
-            WmWindowAura::GetAuraWindow(
-                wm::GetRootWindowMatching(gfx::Rect(100, 100, 0, 0))));
+  EXPECT_EQ(root_windows[1], WmWindow::GetAuraWindow(wm::GetRootWindowMatching(
+                                 gfx::Rect(-400, 100, 0, 0))));
+  EXPECT_EQ(root_windows[0], WmWindow::GetAuraWindow(wm::GetRootWindowMatching(
+                                 gfx::Rect(100, 100, 0, 0))));
 
   // Out of range rect should return the primary root window.
-  EXPECT_EQ(root_windows[0],
-            WmWindowAura::GetAuraWindow(
-                wm::GetRootWindowMatching(gfx::Rect(-600, -300, 50, 50))));
-  EXPECT_EQ(root_windows[0],
-            WmWindowAura::GetAuraWindow(
-                wm::GetRootWindowMatching(gfx::Rect(0, 1000, 50, 50))));
+  EXPECT_EQ(root_windows[0], WmWindow::GetAuraWindow(wm::GetRootWindowMatching(
+                                 gfx::Rect(-600, -300, 50, 50))));
+  EXPECT_EQ(root_windows[0], WmWindow::GetAuraWindow(wm::GetRootWindowMatching(
+                                 gfx::Rect(0, 1000, 50, 50))));
 }
 
 TEST_F(ExtendedDesktopTest, Capture) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("1000x600,600x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
@@ -450,9 +416,6 @@ TEST_F(ExtendedDesktopTest, Capture) {
 }
 
 TEST_F(ExtendedDesktopTest, CaptureEventLocation) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("1000x600,600x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
@@ -485,9 +448,6 @@ TEST_F(ExtendedDesktopTest, CaptureEventLocation) {
 }
 
 TEST_F(ExtendedDesktopTest, CaptureEventLocationHighDPI) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("1000x600*2,600x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
@@ -520,9 +480,6 @@ TEST_F(ExtendedDesktopTest, CaptureEventLocationHighDPI) {
 }
 
 TEST_F(ExtendedDesktopTest, CaptureEventLocationHighDPI_2) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("1000x600,600x400*2");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
@@ -559,9 +516,6 @@ TEST_F(ExtendedDesktopTest, CaptureEventLocationHighDPI_2) {
 }
 
 TEST_F(ExtendedDesktopTest, MoveWindow) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("1000x600,600x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   views::Widget* d1 = CreateTestWidget(gfx::Rect(10, 10, 100, 100));
@@ -593,9 +547,6 @@ TEST_F(ExtendedDesktopTest, MoveWindow) {
 // Verifies if the mouse event arrives to the window even when the window
 // moves to another root in a pre-target handler.  See: crbug.com/157583
 TEST_F(ExtendedDesktopTest, MoveWindowByMouseClick) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("1000x600,600x400");
 
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
@@ -616,9 +567,6 @@ TEST_F(ExtendedDesktopTest, MoveWindowByMouseClick) {
 }
 
 TEST_F(ExtendedDesktopTest, MoveWindowToDisplay) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("1000x1000,1000x1000");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
@@ -646,9 +594,6 @@ TEST_F(ExtendedDesktopTest, MoveWindowToDisplay) {
 }
 
 TEST_F(ExtendedDesktopTest, MoveWindowWithTransient) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("1000x600,600x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   views::Widget* w1 = CreateTestWidget(gfx::Rect(10, 10, 100, 100));
@@ -695,10 +640,7 @@ TEST_F(ExtendedDesktopTest, MoveWindowWithTransient) {
 }
 
 // Test if the Window::ConvertPointToTarget works across root windows.
-// TODO(oshima): Move multiple display suport and this test to aura.
 TEST_F(ExtendedDesktopTest, ConvertPoint) {
-  if (!SupportsMultipleDisplays())
-    return;
   display::Screen* screen = display::Screen::GetScreen();
   UpdateDisplay("1000x600,600x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
@@ -754,9 +696,6 @@ TEST_F(ExtendedDesktopTest, ConvertPoint) {
 }
 
 TEST_F(ExtendedDesktopTest, OpenSystemTray) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("500x600,600x400");
   SystemTray* tray = ash::Shell::GetInstance()->GetPrimarySystemTray();
   ASSERT_FALSE(tray->HasSystemBubble());
@@ -788,9 +727,6 @@ TEST_F(ExtendedDesktopTest, OpenSystemTray) {
 }
 
 TEST_F(ExtendedDesktopTest, StayInSameRootWindow) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("100x100,200x200");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   views::Widget* w1 = CreateTestWidget(gfx::Rect(10, 10, 50, 50));
@@ -829,9 +765,6 @@ TEST_F(ExtendedDesktopTest, StayInSameRootWindow) {
 }
 
 TEST_F(ExtendedDesktopTest, KeyEventsOnLockScreen) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("100x100,200x200");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
@@ -902,9 +835,6 @@ TEST_F(ExtendedDesktopTest, KeyEventsOnLockScreen) {
 }
 
 TEST_F(ExtendedDesktopTest, PassiveGrab) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   EventLocationRecordingEventHandler event_handler;
   ash::Shell::GetInstance()->AddPreTargetHandler(&event_handler);
 

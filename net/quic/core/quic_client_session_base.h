@@ -2,15 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_QUIC_QUIC_CLIENT_SESSION_BASE_H_
-#define NET_QUIC_QUIC_CLIENT_SESSION_BASE_H_
+#ifndef NET_QUIC_CORE_QUIC_CLIENT_SESSION_BASE_H_
+#define NET_QUIC_CORE_QUIC_CLIENT_SESSION_BASE_H_
 
 #include <string>
 
 #include "base/macros.h"
-#include "net/base/net_export.h"
 #include "net/quic/core/quic_crypto_client_stream.h"
 #include "net/quic/core/quic_spdy_session.h"
+#include "net/quic/platform/api/quic_export.h"
 
 namespace net {
 
@@ -32,7 +32,7 @@ using QuicPromisedByUrlMap =
 const int64_t kPushPromiseTimeoutSecs = 60;
 
 // Base class for all client-specific QuicSession subclasses.
-class NET_EXPORT_PRIVATE QuicClientSessionBase
+class QUIC_EXPORT_PRIVATE QuicClientSessionBase
     : public QuicSpdySession,
       public QuicCryptoClientStream::ProofHandler {
  public:
@@ -65,15 +65,15 @@ class NET_EXPORT_PRIVATE QuicClientSessionBase
   // Called by |QuicSpdyClientStream| on receipt of PUSH_PROMISE, does
   // some session level validation and creates the
   // |QuicClientPromisedInfo| inserting into maps by (promised) id and
-  // url. Returns true if a new push promise is accepted. Reset the promised
-  // stream and returns false otherwiese.
+  // url. Returns true if a new push promise is accepted. Resets the promised
+  // stream and returns false otherwise.
   virtual bool HandlePromised(QuicStreamId associated_id,
                               QuicStreamId promised_id,
                               const SpdyHeaderBlock& headers);
 
   // For cross-origin server push, this should verify the server is
   // authoritative per [RFC2818], Section 3.  Roughly, subjectAltName
-  // std::list in the certificate should contain a matching DNS name, or IP
+  // list in the certificate should contain a matching DNS name, or IP
   // address.  |hostname| is derived from the ":authority" header field of
   // the PUSH_PROMISE frame, port if present there will be dropped.
   virtual bool IsAuthorized(const std::string& hostname) = 0;
@@ -135,4 +135,4 @@ class NET_EXPORT_PRIVATE QuicClientSessionBase
 
 }  // namespace net
 
-#endif  // NET_QUIC_QUIC_CLIENT_SESSION_BASE_H_
+#endif  // NET_QUIC_CORE_QUIC_CLIENT_SESSION_BASE_H_

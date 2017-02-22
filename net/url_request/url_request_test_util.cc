@@ -14,7 +14,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/threading/worker_pool.h"
 #include "net/base/host_port_pair.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_policy_enforcer.h"
@@ -108,9 +107,8 @@ void TestURLRequestContext::Init() {
   // In-memory Channel ID service.  Must be created before the
   // HttpNetworkSession.
   if (!channel_id_service()) {
-    context_storage_.set_channel_id_service(base::MakeUnique<ChannelIDService>(
-        new DefaultChannelIDStore(nullptr),
-        base::WorkerPool::GetTaskRunner(true)));
+    context_storage_.set_channel_id_service(
+        base::MakeUnique<ChannelIDService>(new DefaultChannelIDStore(nullptr)));
   }
   if (http_transaction_factory()) {
     // Make sure we haven't been passed an object we're not going to use.
@@ -290,15 +288,22 @@ void TestDelegate::OnReadCompleted(URLRequest* request, int bytes_read) {
   if (response_started_count_ == 0)
     received_data_before_response_ = true;
 
-  if (cancel_in_rd_)
-    request_status_ = request->Cancel();
-
   if (bytes_read >= 0) {
     // There is data to read.
     received_bytes_count_ += bytes_read;
 
-    // consume the data
+    // Consume the data.
     data_received_.append(buf_->data(), bytes_read);
+
+    if (cancel_in_rd_) {
+      request_status_ = request->Cancel();
+      // If bytes_read is 0, won't get a notification on cancelation.
+      if (bytes_read == 0 && quit_on_complete_) {
+        base::ThreadTaskRunnerHandle::Get()->PostTask(
+            FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
+      }
+      return;
+    }
   }
 
   // If it was not end of stream, request to read more.
@@ -649,10 +654,6 @@ bool TestNetworkDelegate::OnCanAccessFile(const URLRequest& request,
 }
 
 bool TestNetworkDelegate::OnAreExperimentalCookieFeaturesEnabled() const {
-  return experimental_cookie_features_enabled_;
-}
-
-bool TestNetworkDelegate::OnAreStrictSecureCookiesEnabled() const {
   return experimental_cookie_features_enabled_;
 }
 

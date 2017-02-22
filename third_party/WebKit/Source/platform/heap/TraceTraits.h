@@ -7,7 +7,6 @@
 
 #include "platform/heap/GCInfo.h"
 #include "platform/heap/Heap.h"
-#include "platform/heap/InlinedGlobalMarkingVisitor.h"
 #include "platform/heap/StackFrameDepth.h"
 #include "platform/heap/Visitor.h"
 #include "platform/heap/WrapperVisitor.h"
@@ -39,6 +38,22 @@ class WeakMember;
 template <typename T>
 class WeakPersistent;
 
+// "g++ -Os" reasonably considers the mark() eager-tracing specialization
+// as an inlinable method. Its optimization pipeline will however trigger
+// unconditional uses of that inlining inside trace() methods, i.e., without
+// consideration for resulting code size, so one for each use of
+// "visitor->trace(..)". This results in an unwanted amount of extra code
+// across all trace methods. Address the issue indirectly by turning off
+// inlining for the method. See crbug.com/681991 for further details.
+//
+// TODO(sof): revisit with later g++ versions, or when g++ is no
+// longer used for production builds.
+#if !defined(__clang__) && defined(__GNUC__)
+#define NOINLINE_GXX_ONLY NOINLINE
+#else
+#define NOINLINE_GXX_ONLY
+#endif
+
 template <typename T, bool = NeedsAdjustAndMark<T>::value>
 class AdjustAndMarkTrait;
 
@@ -47,19 +62,9 @@ class AdjustAndMarkTrait<T, false> {
   STATIC_ONLY(AdjustAndMarkTrait);
 
  public:
-  static void markWrapper(const WrapperVisitor* visitor, const T* t) {
-    if (visitor->markWrapperHeader(heapObjectHeader(t))) {
-      visitor->markWrappersInAllWorlds(t);
-      visitor->dispatchTraceWrappers(t);
-    }
-  }
-  static HeapObjectHeader* heapObjectHeader(const T* t) {
-    return HeapObjectHeader::fromPayload(t);
-  }
-
   template <typename VisitorDispatcher>
-  static void mark(VisitorDispatcher visitor, const T* t) {
-#if ENABLE(ASSERT)
+  static NOINLINE_GXX_ONLY void mark(VisitorDispatcher visitor, const T* t) {
+#if DCHECK_IS_ON()
     assertObjectHasGCInfo(const_cast<T*>(t), GCInfoTrait<T>::index());
 #endif
     // Default mark method of the trait just calls the two-argument mark
@@ -77,6 +82,11 @@ class AdjustAndMarkTrait<T, false> {
       // but test and appropriately handle them should they occur
       // in release builds.
       //
+      // If you hit this assert, it means that you're creating an object
+      // graph that causes too many recursions, which might cause a stack
+      // overflow. To break the recursions, you need to add
+      // WILL_NOT_BE_EAGERLY_TRACED_CLASS() to classes that hold pointers
+      // that lead to many recursions.
       DCHECK(visitor->heap().stackFrameDepth().isAcceptableStackUse());
       if (LIKELY(visitor->heap().stackFrameDepth().isSafeToRecurse())) {
         if (visitor->ensureMarked(t)) {
@@ -94,26 +104,10 @@ class AdjustAndMarkTrait<T, true> {
   STATIC_ONLY(AdjustAndMarkTrait);
 
  public:
-  static void markWrapper(const WrapperVisitor* visitor, const T* t) {
-    t->adjustAndMarkWrapper(visitor);
-  }
-  static HeapObjectHeader* heapObjectHeader(const T* t) {
-    return t->adjustAndGetHeapObjectHeader();
-  }
-
   template <typename VisitorDispatcher>
   static void mark(VisitorDispatcher visitor, const T* self) {
     if (!self)
       return;
-
-    // If you hit this ASSERT, it means that there is a dangling pointer
-    // from a live thread heap to a dead thread heap. We must eliminate
-    // the dangling pointer.
-    // Release builds don't have the ASSERT, but it is OK because
-    // release builds will crash at the following self->adjustAndMark
-    // because all the entries of the orphaned arenas are zeroed out and
-    // thus the item does not have a valid vtable.
-    ASSERT(!pageFromObject(self)->orphaned());
     self->adjustAndMark(visitor);
   }
 };
@@ -198,19 +192,27 @@ class TraceTrait {
 
  public:
   static void trace(Visitor*, void* self);
-  static void trace(InlinedGlobalMarkingVisitor, void* self);
 
-  static void markWrapper(const WrapperVisitor* visitor, const void* t) {
-    AdjustAndMarkTrait<T>::markWrapper(visitor, reinterpret_cast<const T*>(t));
-  }
-  static HeapObjectHeader* heapObjectHeader(const void* t) {
-    return AdjustAndMarkTrait<T>::heapObjectHeader(
-        reinterpret_cast<const T*>(t));
-  }
+  static void markWrapperNoTracing(const WrapperVisitor*, const void*);
+  static void traceMarkedWrapper(const WrapperVisitor*, const void*);
+  static HeapObjectHeader* heapObjectHeader(const void*);
 
   template <typename VisitorDispatcher>
   static void mark(VisitorDispatcher visitor, const T* t) {
     AdjustAndMarkTrait<T>::mark(visitor, t);
+  }
+
+ private:
+  static const T* ToWrapperTracingType(const void* t) {
+    static_assert(CanTraceWrappers<T>::value,
+                  "T should be able to trace wrappers. See "
+                  "dispatchTraceWrappers in WrapperVisitor.h");
+    static_assert(!NeedsAdjustAndMark<T>::value,
+                  "wrapper tracing is not supported within mixins");
+#if DCHECK_IS_ON()
+    DCHECK(HeapObjectHeader::fromPayload(t)->checkHeader());
+#endif
+    return reinterpret_cast<const T*>(t);
   }
 };
 
@@ -220,18 +222,32 @@ class TraceTrait<const T> : public TraceTrait<T> {};
 template <typename T>
 void TraceTrait<T>::trace(Visitor* visitor, void* self) {
   static_assert(WTF::IsTraceable<T>::value, "T should not be traced");
-  if (visitor->getMarkingMode() == Visitor::GlobalMarking) {
-    // Switch to inlined global marking dispatch.
-    static_cast<T*>(self)->trace(InlinedGlobalMarkingVisitor(visitor->state()));
-  } else {
-    static_cast<T*>(self)->trace(visitor);
-  }
+  static_cast<T*>(self)->trace(visitor);
 }
 
 template <typename T>
-void TraceTrait<T>::trace(InlinedGlobalMarkingVisitor visitor, void* self) {
-  static_assert(WTF::IsTraceable<T>::value, "T should not be traced");
-  static_cast<T*>(self)->trace(visitor);
+void TraceTrait<T>::markWrapperNoTracing(const WrapperVisitor* visitor,
+                                         const void* t) {
+  const T* traceable = ToWrapperTracingType(t);
+  DCHECK(!heapObjectHeader(traceable)->isWrapperHeaderMarked());
+  visitor->markWrapperHeader(heapObjectHeader(traceable));
+}
+
+template <typename T>
+void TraceTrait<T>::traceMarkedWrapper(const WrapperVisitor* visitor,
+                                       const void* t) {
+  const T* traceable = ToWrapperTracingType(t);
+  DCHECK(heapObjectHeader(t)->isWrapperHeaderMarked());
+  // The term *mark* is misleading here as we effectively trace through the
+  // API boundary, i.e., tell V8 that an object is alive. Actual marking
+  // will be done in V8.
+  visitor->markWrappersInAllWorlds(traceable);
+  visitor->dispatchTraceWrappers(traceable);
+}
+
+template <typename T>
+HeapObjectHeader* TraceTrait<T>::heapObjectHeader(const void* t) {
+  return HeapObjectHeader::fromPayload(ToWrapperTracingType(t));
 }
 
 template <typename T, typename Traits>
@@ -341,6 +357,14 @@ class TraceEagerlyTrait {
 
 template <typename T>
 class TraceEagerlyTrait<Member<T>> {
+  STATIC_ONLY(TraceEagerlyTrait);
+
+ public:
+  static const bool value = TraceEagerlyTrait<T>::value;
+};
+
+template <typename T>
+class TraceEagerlyTrait<SameThreadCheckedMember<T>> {
   STATIC_ONLY(TraceEagerlyTrait);
 
  public:
@@ -492,6 +516,11 @@ struct TraceInCollectionTrait<NoWeakHandlingInCollections,
     // Use the payload size as recorded by the heap to determine how many
     // elements to trace.
     size_t length = header->payloadSize() / sizeof(T);
+#ifdef ANNOTATE_CONTIGUOUS_CONTAINER
+    // As commented above, HeapVectorBacking can trace unused slots
+    // (which are already zeroed out).
+    ANNOTATE_CHANGE_SIZE(array, length, 0, length);
+#endif
     if (std::is_polymorphic<T>::value) {
       char* pointer = reinterpret_cast<char*>(array);
       for (unsigned i = 0; i < length; ++i) {
@@ -502,11 +531,6 @@ struct TraceInCollectionTrait<NoWeakHandlingInCollections,
                                                                      array[i]);
       }
     } else {
-#ifdef ANNOTATE_CONTIGUOUS_CONTAINER
-      // As commented above, HeapVectorBacking can trace unused slots
-      // (which are already zeroed out).
-      ANNOTATE_CHANGE_SIZE(array, length, 0, length);
-#endif
       for (size_t i = 0; i < length; ++i)
         blink::TraceIfEnabled<
             T, IsTraceableInCollectionTrait<Traits>::value>::trace(visitor,
@@ -659,9 +683,9 @@ struct TraceInCollectionTrait<WeakHandlingInCollections,
     // key-value entry is leaked.  To avoid unexpected leaking, we disallow
     // this case, but if you run into this assert, please reach out to Blink
     // reviewers, and we may relax it.
-    const bool keyIsWeak =
+    constexpr bool keyIsWeak =
         Traits::KeyTraits::weakHandlingFlag == WeakHandlingInCollections;
-    const bool valueIsWeak =
+    constexpr bool valueIsWeak =
         Traits::ValueTraits::weakHandlingFlag == WeakHandlingInCollections;
     const bool keyHasStrongRefs =
         IsTraceableInCollectionTrait<typename Traits::KeyTraits>::value;

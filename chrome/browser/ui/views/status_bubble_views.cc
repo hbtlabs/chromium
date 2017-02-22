@@ -15,10 +15,11 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "cc/paint/paint_flags.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "components/url_formatter/elide_url.h"
 #include "components/url_formatter/url_formatter.h"
-#include "third_party/skia/include/core/SkPaint.h"
+#include "services/service_manager/runner/common/client_util.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/pathops/SkPathOps.h"
 #include "ui/base/theme_provider.h"
@@ -455,25 +456,25 @@ void StatusBubbleViews::StatusView::OnPaint(gfx::Canvas* canvas) {
   SkPath path;
   path.addRoundRect(gfx::RectFToSkRect(bubble_rect), rad);
 
-  SkPaint paint;
-  paint.setStyle(SkPaint::kStroke_Style);
-  paint.setStrokeWidth(1);
-  paint.setAntiAlias(true);
+  cc::PaintFlags flags;
+  flags.setStyle(cc::PaintFlags::kStroke_Style);
+  flags.setStrokeWidth(1);
+  flags.setAntiAlias(true);
 
   SkPath stroke_path;
-  paint.getFillPath(path, &stroke_path);
+  flags.getFillPath(path, &stroke_path);
 
   // Get the fill path by subtracting the shadow so they align neatly.
   SkPath fill_path;
   Op(path, stroke_path, kDifference_SkPathOp, &fill_path);
-  paint.setStyle(SkPaint::kFill_Style);
+  flags.setStyle(cc::PaintFlags::kFill_Style);
   const SkColor bubble_color =
       theme_provider_->GetColor(ThemeProperties::COLOR_TOOLBAR);
-  paint.setColor(bubble_color);
-  canvas->sk_canvas()->drawPath(fill_path, paint);
+  flags.setColor(bubble_color);
+  canvas->sk_canvas()->drawPath(fill_path, flags);
 
-  paint.setColor(kShadowColor);
-  canvas->sk_canvas()->drawPath(stroke_path, paint);
+  flags.setColor(kShadowColor);
+  canvas->sk_canvas()->drawPath(stroke_path, flags);
 
   canvas->Restore();
 
@@ -663,8 +664,13 @@ void StatusBubbleViews::Init() {
     popup_->SetOpacity(0.f);
     popup_->SetContentsView(view_);
 #if defined(USE_ASH)
-    ash::wm::GetWindowState(popup_->GetNativeWindow())->
-        set_ignored_by_shelf(true);
+    // TODO: http://crbug.com/671729 convert to WindowProperty (and then can
+    // remove explicit kWindowIgnoredByShelf_Property above and make this ifdef
+    // USE_AURA).
+    if (!service_manager::ServiceManagerIsRemote()) {
+      ash::wm::GetWindowState(popup_->GetNativeWindow())
+          ->set_ignored_by_shelf(true);
+    }
 #endif
     RepositionPopup();
   }

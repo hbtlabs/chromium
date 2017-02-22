@@ -60,7 +60,7 @@ public class OfflinePageDownloadBridge implements DownloadServiceDelegate, Offli
         public void onItemUpdated(OfflinePageDownloadItem item) {}
     }
 
-    private static boolean sIsTesting = false;
+    private static boolean sIsTesting;
     private final ObserverList<Observer> mObservers = new ObserverList<Observer>();
     private long mNativeOfflinePageDownloadBridge;
     private boolean mIsLoaded;
@@ -256,15 +256,18 @@ public class OfflinePageDownloadBridge implements DownloadServiceDelegate, Offli
 
     @CalledByNative
     static void createDownloadItemAndAddToList(List<OfflinePageDownloadItem> list, String guid,
-            String url, String title, String targetPath, long startTimeMs, long totalBytes) {
-        list.add(createDownloadItem(guid, url, title, targetPath, startTimeMs, totalBytes));
+            String url, int downloadState, long downloadProgressBytes, String title,
+            String targetPath, long startTimeMs, long totalBytes) {
+        list.add(createDownloadItem(guid, url, downloadState, downloadProgressBytes, title,
+                targetPath, startTimeMs, totalBytes));
     }
 
     @CalledByNative
-    static OfflinePageDownloadItem createDownloadItem(
-            String guid, String url, String title, String targetPath,
-            long startTimeMs, long totalBytes) {
-        return new OfflinePageDownloadItem(guid, url, title, targetPath, startTimeMs, totalBytes);
+    static OfflinePageDownloadItem createDownloadItem(String guid, String url, int downloadState,
+            long downloadProgressBytes, String title, String targetPath, long startTimeMs,
+            long totalBytes) {
+        return new OfflinePageDownloadItem(guid, url, downloadState, downloadProgressBytes, title,
+                targetPath, startTimeMs, totalBytes);
     }
 
     private native long nativeInit(Profile profile);

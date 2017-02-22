@@ -15,16 +15,17 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
-#include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/sys_byteorder.h"
 #include "base/sys_info.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/memory_dump_provider.h"
@@ -109,8 +110,10 @@ class VpxOffloadThread {
   DISALLOW_COPY_AND_ASSIGN(VpxOffloadThread);
 };
 
-static base::LazyInstance<VpxOffloadThread>::Leaky g_vpx_offload_thread =
-    LAZY_INSTANCE_INITIALIZER;
+static VpxOffloadThread* GetOffloadThread() {
+  static VpxOffloadThread* thread = new VpxOffloadThread();
+  return thread;
+}
 
 // Always try to use three threads for video decoding.  There is little reason
 // not to since current day CPUs tend to be multi-core and we measured
@@ -230,13 +233,9 @@ class VpxVideoDecoder::MemoryPool
 };
 
 VpxVideoDecoder::MemoryPool::MemoryPool() {
-  base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
-      this, "VpxVideoDecoder", base::ThreadTaskRunnerHandle::Get());
 }
 
 VpxVideoDecoder::MemoryPool::~MemoryPool() {
-  base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
-      this);
 }
 
 VpxVideoDecoder::MemoryPool::VP9FrameBuffer*
@@ -397,8 +396,16 @@ void VpxVideoDecoder::DecodeBuffer(const scoped_refptr<DecoderBuffer>& buffer,
     return;
   }
 
+  bool decode_okay;
   scoped_refptr<VideoFrame> video_frame;
-  if (!VpxDecode(buffer, &video_frame)) {
+  if (config_.codec() == kCodecVP9) {
+    SCOPED_UMA_HISTOGRAM_TIMER("Media.VpxVideoDecoder.Vp9DecodeTime");
+    decode_okay = VpxDecode(buffer, &video_frame);
+  } else {
+    decode_okay = VpxDecode(buffer, &video_frame);
+  }
+
+  if (!decode_okay) {
     state_ = kError;
     bound_decode_cb.Run(DecodeStatus::DECODE_ERROR);
     return;
@@ -436,7 +443,7 @@ void VpxVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
 void VpxVideoDecoder::Reset(const base::Closure& closure) {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (offload_task_runner_)
-    g_vpx_offload_thread.Pointer()->WaitForOutstandingTasks();
+    GetOffloadThread()->WaitForOutstandingTasks();
 
   state_ = kNormal;
   // PostTask() to avoid calling |closure| inmediately.
@@ -478,11 +485,15 @@ bool VpxVideoDecoder::ConfigureDecoder(const VideoDecoderConfig& config) {
     // Move high resolution vp9 decodes off of the main media thread (otherwise
     // decode may block audio decoding, demuxing, and other control activities).
     if (config.coded_size().width() >= 1024) {
-      offload_task_runner_ =
-          g_vpx_offload_thread.Pointer()->RequestOffloadThread();
+      offload_task_runner_ = GetOffloadThread()->RequestOffloadThread();
     }
 
+    DCHECK(!memory_pool_);
     memory_pool_ = new MemoryPool();
+    base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
+        memory_pool_.get(), "VpxVideoDecoder",
+        base::ThreadTaskRunnerHandle::Get());
+
     if (vpx_codec_set_frame_buffer_functions(vpx_codec_,
                                              &MemoryPool::GetVP9FrameBuffer,
                                              &MemoryPool::ReleaseVP9FrameBuffer,
@@ -502,8 +513,7 @@ bool VpxVideoDecoder::ConfigureDecoder(const VideoDecoderConfig& config) {
 
 void VpxVideoDecoder::CloseDecoder() {
   if (offload_task_runner_) {
-    g_vpx_offload_thread.Pointer()
-        ->WaitForOutstandingTasksAndReleaseOffloadThread();
+    GetOffloadThread()->WaitForOutstandingTasksAndReleaseOffloadThread();
     offload_task_runner_ = nullptr;
   }
 
@@ -511,6 +521,8 @@ void VpxVideoDecoder::CloseDecoder() {
     vpx_codec_destroy(vpx_codec_);
     delete vpx_codec_;
     vpx_codec_ = nullptr;
+    base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
+        memory_pool_.get());
     memory_pool_ = nullptr;
   }
   if (vpx_codec_alpha_) {
@@ -586,56 +598,63 @@ bool VpxVideoDecoder::VpxDecode(const scoped_refptr<DecoderBuffer>& buffer,
       ->metadata()
       ->SetInteger(VideoFrameMetadata::COLOR_SPACE, color_space);
 
-  gfx::ColorSpace::PrimaryID primaries =
-      gfx::ColorSpace::PrimaryID::UNSPECIFIED;
-  gfx::ColorSpace::TransferID transfer =
-      gfx::ColorSpace::TransferID::UNSPECIFIED;
-  gfx::ColorSpace::MatrixID matrix = gfx::ColorSpace::MatrixID::UNSPECIFIED;
-  gfx::ColorSpace::RangeID range = vpx_image->range == VPX_CR_FULL_RANGE
-                                       ? gfx::ColorSpace::RangeID::FULL
-                                       : gfx::ColorSpace::RangeID::LIMITED;
+  if (config_.color_space_info() != gfx::ColorSpace()) {
+    // config_.color_space_info() comes from the color tag which is
+    // more expressive than the bitstream, so prefer it over the
+    // bitstream data below.
+    (*video_frame)->set_color_space(config_.color_space_info());
+  } else {
+    gfx::ColorSpace::PrimaryID primaries = gfx::ColorSpace::PrimaryID::INVALID;
+    gfx::ColorSpace::TransferID transfer = gfx::ColorSpace::TransferID::INVALID;
+    gfx::ColorSpace::MatrixID matrix = gfx::ColorSpace::MatrixID::INVALID;
+    gfx::ColorSpace::RangeID range = vpx_image->range == VPX_CR_FULL_RANGE
+                                         ? gfx::ColorSpace::RangeID::FULL
+                                         : gfx::ColorSpace::RangeID::LIMITED;
 
-  switch (vpx_image->cs) {
-    case VPX_CS_BT_601:
-    case VPX_CS_SMPTE_170:
-      primaries = gfx::ColorSpace::PrimaryID::SMPTE170M;
-      transfer = gfx::ColorSpace::TransferID::SMPTE170M;
-      matrix = gfx::ColorSpace::MatrixID::SMPTE170M;
-      break;
-    case VPX_CS_SMPTE_240:
-      primaries = gfx::ColorSpace::PrimaryID::SMPTE240M;
-      transfer = gfx::ColorSpace::TransferID::SMPTE240M;
-      matrix = gfx::ColorSpace::MatrixID::SMPTE240M;
-      break;
-    case VPX_CS_BT_709:
-      primaries = gfx::ColorSpace::PrimaryID::BT709;
-      transfer = gfx::ColorSpace::TransferID::BT709;
-      matrix = gfx::ColorSpace::MatrixID::BT709;
-      break;
-    case VPX_CS_BT_2020:
-      primaries = gfx::ColorSpace::PrimaryID::BT2020;
-      if (vpx_image->bit_depth >= 12) {
-        transfer = gfx::ColorSpace::TransferID::BT2020_12;
-      } else if (vpx_image->bit_depth >= 10) {
-        transfer = gfx::ColorSpace::TransferID::BT2020_10;
-      } else {
+    switch (vpx_image->cs) {
+      case VPX_CS_BT_601:
+      case VPX_CS_SMPTE_170:
+        primaries = gfx::ColorSpace::PrimaryID::SMPTE170M;
+        transfer = gfx::ColorSpace::TransferID::SMPTE170M;
+        matrix = gfx::ColorSpace::MatrixID::SMPTE170M;
+        break;
+      case VPX_CS_SMPTE_240:
+        primaries = gfx::ColorSpace::PrimaryID::SMPTE240M;
+        transfer = gfx::ColorSpace::TransferID::SMPTE240M;
+        matrix = gfx::ColorSpace::MatrixID::SMPTE240M;
+        break;
+      case VPX_CS_BT_709:
+        primaries = gfx::ColorSpace::PrimaryID::BT709;
         transfer = gfx::ColorSpace::TransferID::BT709;
-      }
-      matrix = gfx::ColorSpace::MatrixID::BT2020_NCL;  // is this right?
-      break;
-    case VPX_CS_SRGB:
-      primaries = gfx::ColorSpace::PrimaryID::BT709;
-      transfer = gfx::ColorSpace::TransferID::IEC61966_2_1;
-      matrix = gfx::ColorSpace::MatrixID::BT709;
-      break;
+        matrix = gfx::ColorSpace::MatrixID::BT709;
+        break;
+      case VPX_CS_BT_2020:
+        primaries = gfx::ColorSpace::PrimaryID::BT2020;
+        if (vpx_image->bit_depth >= 12) {
+          transfer = gfx::ColorSpace::TransferID::BT2020_12;
+        } else if (vpx_image->bit_depth >= 10) {
+          transfer = gfx::ColorSpace::TransferID::BT2020_10;
+        } else {
+          transfer = gfx::ColorSpace::TransferID::BT709;
+        }
+        matrix = gfx::ColorSpace::MatrixID::BT2020_NCL;  // is this right?
+        break;
+      case VPX_CS_SRGB:
+        primaries = gfx::ColorSpace::PrimaryID::BT709;
+        transfer = gfx::ColorSpace::TransferID::IEC61966_2_1;
+        matrix = gfx::ColorSpace::MatrixID::BT709;
+        break;
 
-    default:
-      break;
-  }
+      default:
+        break;
+    }
 
-  if (primaries != gfx::ColorSpace::PrimaryID::UNSPECIFIED) {
-    (*video_frame)
-        ->set_color_space(gfx::ColorSpace(primaries, transfer, matrix, range));
+    // TODO(ccameron): Set a color space even for unspecified values.
+    if (primaries != gfx::ColorSpace::PrimaryID::INVALID) {
+      (*video_frame)
+          ->set_color_space(
+              gfx::ColorSpace(primaries, transfer, matrix, range));
+    }
   }
 
   return true;

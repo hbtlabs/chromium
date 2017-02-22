@@ -63,7 +63,7 @@ class HitTestResult;
 class LayoutBox;
 class LayoutScrollbarPart;
 class PaintLayer;
-class PlatformEvent;
+class ScrollingCoordinator;
 class StickyPositionScrollingConstraints;
 class SubtreeLayoutScope;
 
@@ -272,7 +272,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
       const IntPoint&) const override;
   int scrollSize(ScrollbarOrientation) const override;
   IntSize scrollOffsetInt() const override;
-  ScrollOffset scrollOffset() const override;
+  ScrollOffset getScrollOffset() const override;
   IntSize minimumScrollOffsetInt() const override;
   IntSize maximumScrollOffsetInt() const override;
   IntRect visibleContentRect(
@@ -280,6 +280,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   int visibleHeight() const override;
   int visibleWidth() const override;
   IntSize contentsSize() const override;
+  bool isScrollable() const override;
   IntPoint lastKnownMousePosition() const override;
   bool scrollAnimatorEnabled() const override;
   bool shouldSuspendScrollAnimations() const override;
@@ -292,6 +293,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   bool shouldPlaceVerticalScrollbarOnLeft() const override;
   int pageStep(ScrollbarOrientation) const override;
   ScrollBehavior scrollBehaviorStyle() const override;
+  CompositorAnimationHost* compositorAnimationHost() const override;
   CompositorAnimationTimeline* compositorAnimationTimeline() const override;
 
   void visibleSizeChanged();
@@ -320,7 +322,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   // Currently, they run at the end of box()'es layout (or after all flexbox
   // layout has finished) but while document layout is still happening.
   void updateAfterLayout();
-  void clampScrollOffsetsAfterLayout();
+  void clampScrollOffsetAfterOverflowChange();
 
   void didChangeGlobalRootScroller() override;
 
@@ -338,15 +340,11 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   LayoutScrollbarPart* scrollCorner() const override { return m_scrollCorner; }
 
-  void resize(const PlatformEvent&, const LayoutSize&);
+  void resize(const IntPoint& pos, const LayoutSize& oldOffset);
   IntSize offsetFromResizeCorner(const IntPoint& absolutePoint) const;
 
   bool inResizeMode() const { return m_inResizeMode; }
   void setInResizeMode(bool inResizeMode) { m_inResizeMode = inResizeMode; }
-
-  IntRect touchResizerCornerRect(const IntRect& bounds) const {
-    return resizerCornerRect(bounds, ResizerForTouch);
-  }
 
   LayoutUnit scrollWidth() const;
   LayoutUnit scrollHeight() const;
@@ -407,7 +405,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   // TODO(ymalik): Remove box() and update callers to use layoutBox() instead.
   LayoutBox& box() const;
-  PaintLayer* layer() const;
+  PaintLayer* layer() const override;
 
   LayoutScrollbarPart* resizer() const override { return m_resizer; }
 
@@ -431,6 +429,8 @@ class CORE_EXPORT PaintLayerScrollableArea final
   FloatQuad localToVisibleContentQuad(const FloatQuad&,
                                       const LayoutObject*,
                                       unsigned = 0) const final;
+
+  RefPtr<WebTaskRunner> getTimerTaskRunner() const final;
 
   bool shouldRebuildHorizontalScrollbarLayer() const {
     return m_rebuildHorizontalScrollbarLayer;
@@ -475,6 +475,12 @@ class CORE_EXPORT PaintLayerScrollableArea final
   void invalidateStickyConstraintsFor(PaintLayer*,
                                       bool needsCompositingUpdate = true);
 
+  void removeStyleRelatedMainThreadScrollingReasons();
+  void addStyleRelatedMainThreadScrollingReasons(const uint32_t);
+  bool hasMainThreadScrollingReason(uint32_t reason) const {
+    return m_reasons & reason;
+  }
+
   uint64_t id() const;
 
   DECLARE_VIRTUAL_TRACE();
@@ -506,8 +512,9 @@ class CORE_EXPORT PaintLayerScrollableArea final
       bool& needsVerticalScrollbar,
       ComputeScrollbarExistenceOption = Default) const;
 
-  void setHasHorizontalScrollbar(bool hasScrollbar);
-  void setHasVerticalScrollbar(bool hasScrollbar);
+  // Returns true iff scrollbar existence changed.
+  bool setHasHorizontalScrollbar(bool hasScrollbar);
+  bool setHasVerticalScrollbar(bool hasScrollbar);
 
   void updateScrollCornerStyle();
 
@@ -519,14 +526,17 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   void updateCompositingLayersAfterScroll();
 
+  ScrollingCoordinator* getScrollingCoordinator() const;
+
   PaintLayerScrollableAreaRareData* rareData() { return m_rareData.get(); }
 
   PaintLayerScrollableAreaRareData& ensureRareData() {
     if (!m_rareData)
-      m_rareData = makeUnique<PaintLayerScrollableAreaRareData>();
+      m_rareData = WTF::makeUnique<PaintLayerScrollableAreaRareData>();
     return *m_rareData.get();
   }
 
+  bool computeNeedsCompositedScrolling(const LCDTextMode, const PaintLayer*);
   PaintLayer& m_layer;
 
   PaintLayer* m_nextTopmostScrollChild;
@@ -578,7 +588,10 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   std::unique_ptr<PaintLayerScrollableAreaRareData> m_rareData;
 
-#if ENABLE(ASSERT)
+  // MainThreadScrollingReason due to the properties of the LayoutObject
+  uint32_t m_reasons;
+
+#if DCHECK_IS_ON()
   bool m_hasBeenDisposed;
 #endif
 };

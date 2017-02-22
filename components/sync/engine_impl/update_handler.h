@@ -15,11 +15,10 @@ class DataTypeProgressMarker;
 class SyncEntity;
 }
 
-typedef std::vector<const sync_pb::SyncEntity*> SyncEntityList;
+using SyncEntityList = std::vector<const sync_pb::SyncEntity*>;
 
 namespace syncer {
 
-class ModelSafeWorker;
 class StatusController;
 
 // This class represents an entity that can request, receive, and apply updates

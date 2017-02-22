@@ -37,21 +37,21 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
     }
   };
 
-  void commit(ScriptState*, ExceptionState&);
+  ScriptPromise commit(ScriptState*, ExceptionState&);
 
   // CanvasRenderingContext implementation
   ~OffscreenCanvasRenderingContext2D() override;
   ContextType getContextType() const override { return Context2d; }
   bool is2d() const override { return true; }
   void setOffscreenCanvasGetContextResult(OffscreenRenderingContext&) final;
-  void setIsHidden(bool) final { ASSERT_NOT_REACHED(); }
-  void stop() final { ASSERT_NOT_REACHED(); }
+  void setIsHidden(bool) final { NOTREACHED(); }
+  void stop() final { NOTREACHED(); }
   void setCanvasGetContextResult(RenderingContext&) final {}
   void clearRect(double x, double y, double width, double height) override {
     BaseRenderingContext2D::clearRect(x, y, width, height);
   }
   PassRefPtr<Image> getImage(AccelerationHint, SnapshotReason) const final;
-  ImageData* toImageData(SnapshotReason) const override;
+  ImageData* toImageData(SnapshotReason) override;
   void reset() override;
 
   // BaseRenderingContext2D implementation
@@ -67,12 +67,14 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
 
   bool parseColorOrCurrentColor(Color&, const String& colorString) const final;
 
-  SkCanvas* drawingCanvas() const final;
-  SkCanvas* existingDrawingCanvas() const final;
+  PaintCanvas* drawingCanvas() const final;
+  PaintCanvas* existingDrawingCanvas() const final;
   void disableDeferral(DisableDeferralReason) final;
 
   AffineTransform baseTransform() const final;
-  void didDraw(const SkIRect& dirtyRect) final;
+  void didDraw(const SkIRect& dirtyRect) final;  // overrides
+                                                 // BaseRenderingContext2D and
+                                                 // CanvasRenderingContext
 
   bool stateHasFilter() final;
   sk_sp<SkImageFilter> stateGetFilter() final;
@@ -84,6 +86,8 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
   bool isContextLost() const override;
 
   ImageBitmap* transferToImageBitmap(ScriptState*) final;
+
+  ColorBehavior drawImageColorBehavior() const final;
 
  protected:
   OffscreenCanvasRenderingContext2D(
@@ -104,8 +108,8 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
 DEFINE_TYPE_CASTS(OffscreenCanvasRenderingContext2D,
                   CanvasRenderingContext,
                   context,
-                  context->is2d() && context->getOffscreenCanvas(),
-                  context.is2d() && context.getOffscreenCanvas());
+                  context->is2d() && context->offscreenCanvas(),
+                  context.is2d() && context.offscreenCanvas());
 
 }  // namespace blink
 

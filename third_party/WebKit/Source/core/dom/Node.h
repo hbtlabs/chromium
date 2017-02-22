@@ -26,7 +26,7 @@
 #ifndef Node_h
 #define Node_h
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/NodeOrString.h"
 #include "bindings/core/v8/TraceWrapperMember.h"
 #include "core/CoreExport.h"
@@ -38,6 +38,7 @@
 #include "core/style/ComputedStyleConstants.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/heap/Handle.h"
+#include "wtf/Compiler.h"
 #include "wtf/Forward.h"
 
 // This needs to be here because Element.cpp also depends on it.
@@ -45,13 +46,11 @@
 
 namespace blink {
 
-class Attribute;
 class ContainerNode;
 class Document;
 class Element;
 class ElementShadow;
 class Event;
-class EventListener;
 class ExceptionState;
 class GetRootNodeOptions;
 class HTMLQualifiedName;
@@ -61,7 +60,6 @@ class EventDispatchHandlingState;
 class NodeList;
 class NodeListsNodeData;
 class NodeRareData;
-class PlatformMouseEvent;
 class QualifiedName;
 class RegisteredEventListener;
 class LayoutBox;
@@ -75,7 +73,7 @@ class StaticNodeTypeList;
 using StaticNodeList = StaticNodeTypeList<Node>;
 class StyleChangeReasonForTracing;
 class Text;
-class TouchEvent;
+class WebMouseEvent;
 
 const int nodeStyleChangeShift = 18;
 const int nodeCustomElementShift = 20;
@@ -228,7 +226,7 @@ class CORE_EXPORT Node : public EventTarget {
   Node* appendChild(Node* newChild, ExceptionState& = ASSERT_NO_EXCEPTION);
 
   bool hasChildren() const { return firstChild(); }
-  virtual Node* cloneNode(bool deep) = 0;
+  virtual Node* cloneNode(bool deep, ExceptionState& = ASSERT_NO_EXCEPTION) = 0;
   void normalize();
 
   bool isEqualNode(Node*) const;
@@ -396,7 +394,8 @@ class CORE_EXPORT Node : public EventTarget {
   }
 
   bool needsAttach() const {
-    return getStyleChangeType() == NeedsReattachStyleChange;
+    return getStyleChangeType() == NeedsReattachStyleChange ||
+           getFlag(NeedsReattachLayoutTree);
   }
   bool needsStyleRecalc() const {
     return getStyleChangeType() != NoStyleChange;
@@ -719,9 +718,10 @@ class CORE_EXPORT Node : public EventTarget {
   DispatchEventResult dispatchDOMActivateEvent(int detail,
                                                Event& underlyingEvent);
 
-  void dispatchMouseEvent(const PlatformMouseEvent&,
+  void dispatchMouseEvent(const WebMouseEvent&,
                           const AtomicString& eventType,
                           int clickCount = 0,
+                          const String& canvasNodeId = String(),
                           Node* relatedTarget = nullptr);
 
   void dispatchSimulatedClick(
@@ -778,10 +778,10 @@ class CORE_EXPORT Node : public EventTarget {
 
   v8::Local<v8::Object> wrap(v8::Isolate*,
                              v8::Local<v8::Object> creationContext) override;
-  v8::Local<v8::Object> associateWithWrapper(
+  WARN_UNUSED_RESULT v8::Local<v8::Object> associateWithWrapper(
       v8::Isolate*,
       const WrapperTypeInfo*,
-      v8::Local<v8::Object> wrapper) override WARN_UNUSED_RETURN;
+      v8::Local<v8::Object> wrapper) override;
 
  private:
   enum NodeFlags {
@@ -831,7 +831,9 @@ class CORE_EXPORT Node : public EventTarget {
     NeedsReattachLayoutTree = 1 << 26,
     ChildNeedsReattachLayoutTree = 1 << 27,
 
-    DefaultNodeFlags = IsFinishedParsingChildrenFlag | NeedsReattachStyleChange
+    DefaultNodeFlags = IsFinishedParsingChildrenFlag |
+                       NeedsReattachStyleChange |
+                       NeedsReattachLayoutTree
   };
 
   // 4 bits remaining.
@@ -844,18 +846,19 @@ class CORE_EXPORT Node : public EventTarget {
   void clearFlag(NodeFlags mask) { m_nodeFlags &= ~mask; }
 
   // TODO(mustaq): This is a hack to fix sites with flash objects. We should
-  // instead route all PlatformMouseEvents through EventHandler. See
+  // instead route all WebMouseEvents through EventHandler. See
   // crbug.com/665924.
   void createAndDispatchPointerEvent(const AtomicString& mouseEventName,
-                                     const PlatformMouseEvent&,
+                                     const WebMouseEvent&,
                                      LocalDOMWindow* view);
 
  protected:
   enum ConstructionType {
     CreateOther = DefaultNodeFlags,
     CreateText = DefaultNodeFlags | IsTextFlag,
-    CreateContainer =
-        DefaultNodeFlags | ChildNeedsStyleRecalcFlag | IsContainerFlag,
+    CreateContainer = DefaultNodeFlags | ChildNeedsStyleRecalcFlag |
+                      ChildNeedsReattachLayoutTree |
+                      IsContainerFlag,
     CreateElement = CreateContainer | IsElementFlag,
     CreateShadowRoot =
         CreateContainer | IsDocumentFragmentFlag | IsInShadowTreeFlag,
@@ -869,6 +872,8 @@ class CORE_EXPORT Node : public EventTarget {
 
   Node(TreeScope*, ConstructionType);
 
+  virtual void willMoveToNewDocument(Document& oldDocument,
+                                     Document& newDocument);
   virtual void didMoveToNewDocument(Document& oldDocument);
 
   void addedEventListener(const AtomicString& eventType,
@@ -921,10 +926,6 @@ class CORE_EXPORT Node : public EventTarget {
 
   void setStyleChange(StyleChangeType);
 
-  virtual ComputedStyle* nonLayoutObjectComputedStyle() const {
-    return nullptr;
-  }
-
   virtual const ComputedStyle* virtualEnsureComputedStyle(
       PseudoId = PseudoIdNone);
 
@@ -967,7 +968,7 @@ inline ContainerNode* Node::parentNode() const {
 }
 
 inline void Node::lazyReattachIfAttached() {
-  if (getStyleChangeType() == NeedsReattachStyleChange)
+  if (needsAttach())
     return;
   if (!inActiveDocument())
     return;
@@ -977,6 +978,7 @@ inline void Node::lazyReattachIfAttached() {
 
   detachLayoutTree(context);
   markAncestorsWithChildNeedsStyleRecalc();
+  markAncestorsWithChildNeedsReattachLayoutTree();
 }
 
 inline bool Node::shouldCallRecalcStyle(StyleRecalcChange change) {

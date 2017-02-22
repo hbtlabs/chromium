@@ -23,12 +23,7 @@ class PrefService;
 class PrefChangeRegistrar;
 
 namespace base {
-class Clock;
 class DictionaryValue;
-}
-
-namespace user_prefs {
-class PrefRegistrySyncable;
 }
 
 namespace content_settings {
@@ -65,23 +60,12 @@ class ContentSettingsPref {
 
   void ClearAllContentSettingsRules();
 
-  void UpdateLastUsage(const ContentSettingsPattern& primary_pattern,
-                       const ContentSettingsPattern& secondary_pattern,
-                       base::Clock* clock);
-
-  base::Time GetLastUsage(const ContentSettingsPattern& primary_pattern,
-                          const ContentSettingsPattern& secondary_pattern);
-
   size_t GetNumExceptions();
 
   // Tries to lock |lock_|. If successful, returns true and releases the lock.
   bool TryLockForTesting() const;
 
  private:
-  // TODO(msramek): Currently only needed in the unittest to get the
-  // corresponding pref name. Remove once pref names are in WebsiteSettingsInfo.
-  friend class DeadlockCheckerObserver;
-
   // Reads all content settings exceptions from the preference and loads them
   // into the |value_map_|. The |value_map_| is cleared first.
   void ReadContentSettingsFromPref();

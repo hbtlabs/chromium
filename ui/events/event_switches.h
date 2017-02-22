@@ -12,10 +12,6 @@
 namespace switches {
 
 EVENTS_BASE_EXPORT extern const char kEnableScrollPrediction[];
-EVENTS_BASE_EXPORT extern const char kTouchEvents[];
-EVENTS_BASE_EXPORT extern const char kTouchEventsAuto[];
-EVENTS_BASE_EXPORT extern const char kTouchEventsEnabled[];
-EVENTS_BASE_EXPORT extern const char kTouchEventsDisabled[];
 EVENTS_BASE_EXPORT extern const char kCompensateForUnstablePinchZoom[];
 
 #if defined(OS_LINUX)
@@ -25,6 +21,7 @@ EVENTS_BASE_EXPORT extern const char kTouchDevices[];
 #if defined(USE_X11) || defined(USE_OZONE)
 EVENTS_BASE_EXPORT extern const char kExtraTouchNoiseFiltering[];
 EVENTS_BASE_EXPORT extern const char kTouchCalibration[];
+EVENTS_BASE_EXPORT extern const char kEdgeTouchFiltering[];
 #endif
 
 }  // namespace switches

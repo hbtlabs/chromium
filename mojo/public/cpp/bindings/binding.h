@@ -23,7 +23,6 @@
 
 namespace mojo {
 
-class AssociatedGroup;
 class MessageReceiver;
 
 // Represents the binding of an interface implementation to a message pipe.
@@ -257,14 +256,6 @@ class Binding {
   // transferred to the caller.
   MessagePipeHandle handle() const { return internal_state_.handle(); }
 
-  // Returns the associated group that this object belongs to. Returns null if:
-  //   - this object is not bound; or
-  //   - the interface doesn't have methods to pass associated interface
-  //     pointers or requests.
-  AssociatedGroup* associated_group() {
-    return internal_state_.associated_group();
-  }
-
   // Sends a no-op message on the underlying message pipe and runs the current
   // message loop until its response is received. This can be used in tests to
   // verify that no message was sent on a message pipe in response to some
@@ -275,7 +266,7 @@ class Binding {
   void EnableTestingMode() { internal_state_.EnableTestingMode(); }
 
  private:
-  internal::BindingState<Interface, true, ImplRefTraits> internal_state_;
+  internal::BindingState<Interface, ImplRefTraits> internal_state_;
 
   DISALLOW_COPY_AND_ASSIGN(Binding);
 };

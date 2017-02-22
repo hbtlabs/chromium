@@ -48,9 +48,11 @@ void LayerTestCommon::VerifyQuadsExactlyCoverRect(const QuadList& quads,
   Region remaining = rect;
 
   for (auto iter = quads.cbegin(); iter != quads.cend(); ++iter) {
+    EXPECT_TRUE(iter->rect.Contains(iter->visible_rect));
+
     gfx::RectF quad_rectf = MathUtil::MapClippedRect(
         iter->shared_quad_state->quad_to_target_transform,
-        gfx::RectF(iter->rect));
+        gfx::RectF(iter->visible_rect));
 
     // Before testing for exact coverage in the integer world, assert that
     // rounding will not round the rect incorrectly.
@@ -118,8 +120,18 @@ void LayerTestCommon::VerifyQuadsAreOccluded(const QuadList& quads,
 LayerTestCommon::LayerImplTest::LayerImplTest()
     : LayerImplTest(LayerTreeSettingsForTesting()) {}
 
+LayerTestCommon::LayerImplTest::LayerImplTest(
+    std::unique_ptr<CompositorFrameSink> compositor_frame_sink)
+    : LayerImplTest(LayerTreeSettingsForTesting(),
+                    std::move(compositor_frame_sink)) {}
+
 LayerTestCommon::LayerImplTest::LayerImplTest(const LayerTreeSettings& settings)
-    : compositor_frame_sink_(FakeCompositorFrameSink::Create3d()),
+    : LayerImplTest(settings, FakeCompositorFrameSink::Create3d()) {}
+
+LayerTestCommon::LayerImplTest::LayerImplTest(
+    const LayerTreeSettings& settings,
+    std::unique_ptr<CompositorFrameSink> compositor_frame_sink)
+    : compositor_frame_sink_(std::move(compositor_frame_sink)),
       animation_host_(AnimationHost::CreateForTesting(ThreadInstance::MAIN)),
       host_(FakeLayerTreeHost::Create(&client_,
                                       &task_graph_runner_,
@@ -130,7 +142,6 @@ LayerTestCommon::LayerImplTest::LayerImplTest(const LayerTreeSettings& settings)
   std::unique_ptr<LayerImpl> root =
       LayerImpl::Create(host_->host_impl()->active_tree(), 1);
   host_->host_impl()->active_tree()->SetRootLayerForTesting(std::move(root));
-  root_layer_for_testing()->SetHasRenderSurface(true);
   host_->host_impl()->SetVisible(true);
   EXPECT_TRUE(
       host_->host_impl()->InitializeRenderer(compositor_frame_sink_.get()));
@@ -201,11 +212,10 @@ void LayerTestCommon::LayerImplTest::AppendSurfaceQuadsWithOcclusion(
   render_pass_->quad_list.clear();
   render_pass_->shared_quad_state_list.clear();
 
-  surface_impl->AppendQuads(
-      render_pass_.get(), gfx::Transform(),
+  surface_impl->set_occlusion_in_content_space(
       Occlusion(gfx::Transform(), SimpleEnclosedRegion(occluded),
-                SimpleEnclosedRegion()),
-      SK_ColorBLACK, 1.f, nullptr, &data, RenderPassId(1, 1));
+                SimpleEnclosedRegion()));
+  surface_impl->AppendQuads(render_pass_.get(), &data);
 }
 
 void EmptyCopyOutputCallback(std::unique_ptr<CopyOutputResult> result) {}

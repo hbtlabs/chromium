@@ -175,7 +175,6 @@ class SSLConfigServiceManagerPref : public ssl_config::SSLConfigServiceManager {
   BooleanPrefMember sha1_local_anchors_enabled_;
   StringPrefMember ssl_version_min_;
   StringPrefMember ssl_version_max_;
-  BooleanPrefMember dhe_enabled_;
 
   // The cached list of disabled SSL cipher suites.
   std::vector<uint16_t> disabled_cipher_suites_;
@@ -216,8 +215,6 @@ SSLConfigServiceManagerPref::SSLConfigServiceManagerPref(
                         local_state_callback);
   ssl_version_max_.Init(ssl_config::prefs::kSSLVersionMax, local_state,
                         local_state_callback);
-  dhe_enabled_.Init(ssl_config::prefs::kDHEEnabled, local_state,
-                    local_state_callback);
 
   local_state_change_registrar_.Init(local_state);
   local_state_change_registrar_.Add(ssl_config::prefs::kCipherSuiteBlacklist,
@@ -240,14 +237,12 @@ void SSLConfigServiceManagerPref::RegisterPrefs(PrefRegistrySimple* registry) {
       ssl_config::prefs::kCertRevocationCheckingRequiredLocalAnchors,
       default_config.rev_checking_required_local_anchors);
   registry->RegisterBooleanPref(ssl_config::prefs::kCertEnableSha1LocalAnchors,
-                                default_config.sha1_local_anchors_enabled);
+                                false);
   registry->RegisterStringPref(ssl_config::prefs::kSSLVersionMin,
                                std::string());
   registry->RegisterStringPref(ssl_config::prefs::kSSLVersionMax,
                                std::string());
   registry->RegisterListPref(ssl_config::prefs::kCipherSuiteBlacklist);
-  registry->RegisterBooleanPref(ssl_config::prefs::kDHEEnabled,
-                                default_config.dhe_enabled);
 }
 
 net::SSLConfigService* SSLConfigServiceManagerPref::Get() {
@@ -291,11 +286,10 @@ void SSLConfigServiceManagerPref::GetSSLConfigFromPrefs(
   if (version_min) {
     config->version_min = version_min;
   }
-  if (version_max) {
+  if (version_max && version_max >= net::SSL_PROTOCOL_VERSION_TLS1_2) {
     config->version_max = version_max;
   }
   config->disabled_cipher_suites = disabled_cipher_suites_;
-  config->dhe_enabled = dhe_enabled_.GetValue();
 }
 
 void SSLConfigServiceManagerPref::OnDisabledCipherSuitesChange(

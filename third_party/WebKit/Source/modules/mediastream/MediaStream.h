@@ -26,7 +26,6 @@
 #ifndef MediaStream_h
 #define MediaStream_h
 
-#include "core/dom/ContextLifecycleObserver.h"
 #include "core/html/URLRegistry.h"
 #include "modules/EventTargetModules.h"
 #include "modules/ModulesExport.h"
@@ -37,11 +36,13 @@
 namespace blink {
 
 class ExceptionState;
+class ExecutionContext;
+class ScriptState;
 
 class MODULES_EXPORT MediaStream final : public EventTargetWithInlineData,
+                                         public ContextClient,
                                          public URLRegistrable,
-                                         public MediaStreamDescriptorClient,
-                                         public ContextLifecycleObserver {
+                                         public MediaStreamDescriptorClient {
   USING_GARBAGE_COLLECTED_MIXIN(MediaStream);
   DEFINE_WRAPPERTYPEINFO();
 
@@ -57,7 +58,7 @@ class MODULES_EXPORT MediaStream final : public EventTargetWithInlineData,
   void addTrack(MediaStreamTrack*, ExceptionState&);
   void removeTrack(MediaStreamTrack*, ExceptionState&);
   MediaStreamTrack* getTrackById(String);
-  MediaStream* clone(ExecutionContext*);
+  MediaStream* clone(ScriptState*);
 
   MediaStreamTrackVector getAudioTracks() const { return m_audioTracks; }
   MediaStreamTrackVector getVideoTracks() const { return m_videoTracks; }
@@ -79,7 +80,9 @@ class MODULES_EXPORT MediaStream final : public EventTargetWithInlineData,
 
   // EventTarget
   const AtomicString& interfaceName() const override;
-  ExecutionContext* getExecutionContext() const override;
+  ExecutionContext* getExecutionContext() const override {
+    return ContextClient::getExecutionContext();
+  }
 
   // URLRegistrable
   URLRegistry& registry() const override;
@@ -98,9 +101,6 @@ class MODULES_EXPORT MediaStream final : public EventTargetWithInlineData,
               const MediaStreamTrackVector& audioTracks,
               const MediaStreamTrackVector& videoTracks);
 
-  // ContextLifecycleObserver
-  void contextDestroyed() override;
-
   // MediaStreamDescriptorClient
   void addRemoteTrack(MediaStreamComponent*) override;
   void removeRemoteTrack(MediaStreamComponent*) override;
@@ -110,17 +110,15 @@ class MODULES_EXPORT MediaStream final : public EventTargetWithInlineData,
   void scheduleDispatchEvent(Event*);
   void scheduledEventTimerFired(TimerBase*);
 
-  bool m_stopped;
-
   MediaStreamTrackVector m_audioTracks;
   MediaStreamTrackVector m_videoTracks;
   Member<MediaStreamDescriptor> m_descriptor;
 
-  Timer<MediaStream> m_scheduledEventTimer;
+  TaskRunnerTimer<MediaStream> m_scheduledEventTimer;
   HeapVector<Member<Event>> m_scheduledEvents;
 };
 
-typedef HeapVector<Member<MediaStream>> MediaStreamVector;
+using MediaStreamVector = HeapVector<Member<MediaStream>>;
 
 MediaStream* toMediaStream(MediaStreamDescriptor*);
 

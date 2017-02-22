@@ -12,6 +12,7 @@
 #include "core/dom/ExecutionContext.h"
 #include "modules/serviceworkers/ServiceWorkerGlobalScope.h"
 #include "platform/LayoutTestSupport.h"
+#include "public/platform/Platform.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerEventResult.h"
 #include "wtf/Assertions.h"
 #include <v8.h>
@@ -85,13 +86,13 @@ WaitUntilObserver* WaitUntilObserver::create(ExecutionContext* context,
 
 void WaitUntilObserver::willDispatchEvent() {
   m_eventDispatchTime = WTF::currentTime();
-  // When handling a notificationclick event, we want to allow one window to
-  // be focused or opened. These calls are allowed between the call to
-  // willDispatchEvent() and the last call to decrementPendingActivity(). If
-  // waitUntil() isn't called, that means between willDispatchEvent() and
-  // didDispatchEvent().
-  if (m_type == NotificationClick)
-    getExecutionContext()->allowWindowInteraction();
+  // When handling a notificationclick or paymentrequest event, we want to
+  // allow one window to be focused or opened. These calls are allowed between
+  // the call to willDispatchEvent() and the last call to
+  // decrementPendingActivity(). If waitUntil() isn't called, that means
+  // between willDispatchEvent() and didDispatchEvent().
+  if (m_type == NotificationClick || m_type == PaymentRequest)
+    m_executionContext->allowWindowInteraction();
 
   incrementPendingActivity();
 }
@@ -112,7 +113,7 @@ void WaitUntilObserver::waitUntil(ScriptState* scriptState,
     return;
   }
 
-  if (!getExecutionContext())
+  if (!m_executionContext)
     return;
 
   // When handling a notificationclick event, we want to allow one window to
@@ -133,10 +134,11 @@ void WaitUntilObserver::waitUntil(ScriptState* scriptState,
 WaitUntilObserver::WaitUntilObserver(ExecutionContext* context,
                                      EventType type,
                                      int eventID)
-    : ContextLifecycleObserver(context),
+    : m_executionContext(context),
       m_type(type),
       m_eventID(eventID),
       m_consumeWindowInteractionTimer(
+          Platform::current()->currentThread()->getWebTaskRunner(),
           this,
           &WaitUntilObserver::consumeWindowInteraction) {}
 
@@ -153,11 +155,11 @@ void WaitUntilObserver::incrementPendingActivity() {
 
 void WaitUntilObserver::decrementPendingActivity() {
   ASSERT(m_pendingActivity > 0);
-  if (!getExecutionContext() || (!m_hasError && --m_pendingActivity))
+  if (!m_executionContext || (!m_hasError && --m_pendingActivity))
     return;
 
   ServiceWorkerGlobalScopeClient* client =
-      ServiceWorkerGlobalScopeClient::from(getExecutionContext());
+      ServiceWorkerGlobalScopeClient::from(m_executionContext);
   WebServiceWorkerEventResult result =
       m_hasError ? WebServiceWorkerEventResultRejected
                  : WebServiceWorkerEventResultCompleted;
@@ -191,18 +193,22 @@ void WaitUntilObserver::decrementPendingActivity() {
     case Sync:
       client->didHandleSyncEvent(m_eventID, result, m_eventDispatchTime);
       break;
+    case PaymentRequest:
+      client->didHandlePaymentRequestEvent(m_eventID, result,
+                                           m_eventDispatchTime);
+      break;
   }
-  setContext(nullptr);
+  m_executionContext = nullptr;
 }
 
 void WaitUntilObserver::consumeWindowInteraction(TimerBase*) {
-  if (!getExecutionContext())
+  if (!m_executionContext)
     return;
-  getExecutionContext()->consumeWindowInteraction();
+  m_executionContext->consumeWindowInteraction();
 }
 
 DEFINE_TRACE(WaitUntilObserver) {
-  ContextLifecycleObserver::trace(visitor);
+  visitor->trace(m_executionContext);
 }
 
 }  // namespace blink

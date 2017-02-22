@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
+#include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/base/escape.h"
 #include "net/base/load_flags.h"
@@ -183,6 +184,7 @@ void GaiaOAuthClient::Core::GetUserInfoImpl(
   request_->SetMaxRetriesOn5xx(max_retries);
   request_->SetLoadFlags(net::LOAD_DO_NOT_SEND_COOKIES |
                          net::LOAD_DO_NOT_SAVE_COOKIES);
+  MarkURLFetcherAsGaia(request_.get());
 
   // Fetchers are sometimes cancelled because a network change was detected,
   // especially at startup and after sign-in on ChromeOS. Retrying once should
@@ -222,6 +224,7 @@ void GaiaOAuthClient::Core::MakeGaiaRequest(
   request_->SetMaxRetriesOn5xx(max_retries);
   request_->SetLoadFlags(net::LOAD_DO_NOT_SEND_COOKIES |
                          net::LOAD_DO_NOT_SAVE_COOKIES);
+  MarkURLFetcherAsGaia(request_.get());
   // See comment on SetAutomaticallyRetryOnNetworkChanges() above.
   request_->SetAutomaticallyRetryOnNetworkChanges(3);
   request_->Start();
@@ -271,7 +274,7 @@ void GaiaOAuthClient::Core::HandleResponse(
     source->GetResponseAsString(&data);
     std::unique_ptr<base::Value> message_value = base::JSONReader::Read(data);
     if (message_value.get() &&
-        message_value->IsType(base::Value::TYPE_DICTIONARY)) {
+        message_value->IsType(base::Value::Type::DICTIONARY)) {
       response_dict.reset(
           static_cast<base::DictionaryValue*>(message_value.release()));
     }
@@ -283,6 +286,7 @@ void GaiaOAuthClient::Core::HandleResponse(
     if ((source->GetMaxRetriesOn5xx() != -1) &&
         (num_retries_ >= source->GetMaxRetriesOn5xx())) {
       // Retry limit reached. Give up.
+      request_type_ = NO_PENDING_REQUEST;
       delegate_->OnNetworkError(source->GetResponseCode());
     } else {
       request_ = std::move(old_request);

@@ -104,7 +104,7 @@ void FontCache::setStatusFontMetrics(const wchar_t* familyName,
 FontCache::FontCache() : m_purgePreventCount(0) {
   m_fontManager = sk_ref_sp(s_staticFontManager);
   if (!m_fontManager)
-    m_fontManager.reset(SkFontMgr_New_DirectWrite());
+    m_fontManager = SkFontMgr_New_DirectWrite();
   ASSERT(m_fontManager.get());
 }
 
@@ -156,7 +156,7 @@ PassRefPtr<SimpleFontData> FontCache::fallbackFontForCharacter(
     if (typeface) {
       SkString skiaFamily;
       typeface->getFamilyName(&skiaFamily);
-      FontFaceCreationParams createByFamily(AtomicString(skiaFamily.c_str()));
+      FontFaceCreationParams createByFamily(toAtomicString(skiaFamily));
       data = getFontPlatformData(fontDescription, createByFamily);
     }
   }
@@ -229,7 +229,7 @@ PassRefPtr<SimpleFontData> FontCache::fallbackFontForCharacter(
 }
 
 static inline bool equalIgnoringCase(const AtomicString& a, const SkString& b) {
-  return equalIgnoringCase(a, AtomicString::fromUTF8(b.c_str()));
+  return equalIgnoringCase(a, toAtomicString(b));
 }
 
 static bool typefacesMatchesFamily(const SkTypeface* tf,
@@ -333,7 +333,8 @@ static bool typefacesHasStretchSuffix(const AtomicString& family,
 std::unique_ptr<FontPlatformData> FontCache::createFontPlatformData(
     const FontDescription& fontDescription,
     const FontFaceCreationParams& creationParams,
-    float fontSize) {
+    float fontSize,
+    AlternateFontName alternateFontName) {
   ASSERT(creationParams.creationType() == CreateFontByFamily);
 
   CString name;
@@ -346,8 +347,11 @@ std::unique_ptr<FontPlatformData> FontCache::createFontPlatformData(
     FontWeight variantWeight;
     FontStretch variantStretch;
 
-    if (typefacesHasWeightSuffix(creationParams.family(), adjustedName,
-                                 variantWeight)) {
+    if (alternateFontName == AlternateFontName::LastResort) {
+      if (!tf)
+        return nullptr;
+    } else if (typefacesHasWeightSuffix(creationParams.family(), adjustedName,
+                                        variantWeight)) {
       FontFaceCreationParams adjustedParams(adjustedName);
       FontDescription adjustedFontDescription = fontDescription;
       adjustedFontDescription.setWeight(variantWeight);
@@ -369,15 +373,16 @@ std::unique_ptr<FontPlatformData> FontCache::createFontPlatformData(
     }
   }
 
-  std::unique_ptr<FontPlatformData> result = wrapUnique(new FontPlatformData(
-      tf, name.data(), fontSize,
-      (fontDescription.weight() >= FontWeight600 && !tf->isBold()) ||
-          fontDescription.isSyntheticBold(),
-      ((fontDescription.style() == FontStyleItalic ||
-        fontDescription.style() == FontStyleOblique) &&
-       !tf->isItalic()) ||
-          fontDescription.isSyntheticItalic(),
-      fontDescription.orientation()));
+  std::unique_ptr<FontPlatformData> result =
+      WTF::wrapUnique(new FontPlatformData(
+          tf, name.data(), fontSize,
+          (fontDescription.weight() >= FontWeight600 && !tf->isBold()) ||
+              fontDescription.isSyntheticBold(),
+          ((fontDescription.style() == FontStyleItalic ||
+            fontDescription.style() == FontStyleOblique) &&
+           !tf->isItalic()) ||
+              fontDescription.isSyntheticItalic(),
+          fontDescription.orientation()));
 
   struct FamilyMinSize {
     const wchar_t* family;

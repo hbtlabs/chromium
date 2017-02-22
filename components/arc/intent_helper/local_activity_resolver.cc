@@ -4,6 +4,8 @@
 
 #include "components/arc/intent_helper/local_activity_resolver.h"
 
+#include <utility>
+
 #include "url/gurl.h"
 
 namespace arc {
@@ -28,10 +30,8 @@ bool LocalActivityResolver::ShouldChromeHandleUrl(const GURL& url) {
 }
 
 void LocalActivityResolver::UpdateIntentFilters(
-    std::vector<mojom::IntentFilterPtr> mojo_intent_filters) {
-  intent_filters_.clear();
-  for (mojom::IntentFilterPtr& mojo_filter : mojo_intent_filters)
-    intent_filters_.emplace_back(mojo_filter);
+    std::vector<IntentFilter> intent_filters) {
+  intent_filters_ = std::move(intent_filters);
 }
 
 }  // namespace arc

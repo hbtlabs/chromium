@@ -21,7 +21,7 @@ AppModalDialogHelper::AppModalDialogHelper(content::WebContents* dialog_host)
   content::WebContents* actual_host = dialog_host;
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // If the dialog was triggered via an PDF, get the actual web contents that
-  // embedds the PDF.
+  // embeds the PDF.
   guest_view::GuestViewBase* guest =
       guest_view::GuestViewBase::FromWebContents(dialog_host);
   if (guest)
@@ -36,7 +36,7 @@ AppModalDialogHelper::AppModalDialogHelper(content::WebContents* dialog_host)
     content::WebContents* active_web_contents =
         active_browser->tab_strip_model()->GetActiveWebContents();
     if (active_browser->is_type_popup() && active_web_contents &&
-        active_web_contents->GetOpener() == actual_host) {
+        active_web_contents->GetOriginalOpener() == actual_host) {
       // It's indeed a popup from the dialog opening WebContents. Store it, so
       // we can focus it later.
       popup_ = active_web_contents;
@@ -46,8 +46,14 @@ AppModalDialogHelper::AppModalDialogHelper(content::WebContents* dialog_host)
 }
 
 AppModalDialogHelper::~AppModalDialogHelper() {
-  if (popup_)
-    popup_->GetDelegate()->ActivateContents(popup_);
+  if (!popup_)
+    return;
+
+  content::WebContentsDelegate* delegate = popup_->GetDelegate();
+  if (!delegate)
+    return;
+
+  delegate->ActivateContents(popup_);
 }
 
 void AppModalDialogHelper::WebContentsDestroyed() {

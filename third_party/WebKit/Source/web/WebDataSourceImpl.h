@@ -56,7 +56,7 @@ class WebDataSourceImpl final : public DocumentLoader, public WebDataSource {
 
   // WebDataSource methods:
   const WebURLRequest& originalRequest() const override;
-  const WebURLRequest& request() const override;
+  const WebURLRequest& getRequest() const override;
   const WebURLResponse& response() const override;
   bool hasUnreachableURL() const override;
   WebURL unreachableURL() const override;
@@ -71,7 +71,7 @@ class WebDataSourceImpl final : public DocumentLoader, public WebDataSource {
   void updateNavigation(double redirectStartTime,
                         double redirectEndTime,
                         double fetchStartTime,
-                        const WebVector<WebURL>& redirectChain) override;
+                        bool hasRedirect) override;
   void setSubresourceFilter(WebDocumentSubresourceFilter*) override;
 
   static WebNavigationType toWebNavigationType(NavigationType);

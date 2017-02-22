@@ -24,11 +24,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// http://www.w3.org/TR/SVG2/types.html#InterfaceSVGNumberList
+// https://svgwg.org/svg2-draft/types.html#InterfaceSVGNumberList
 
 [
+    DependentLifetime,
     ImplementedAs=SVGNumberListTearOff,
-    SetWrapperReferenceTo(SVGElement contextElement),
 ] interface SVGNumberList {
     readonly attribute unsigned long length;
     [ImplementedAs=length] readonly attribute unsigned long numberOfItems;

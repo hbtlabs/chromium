@@ -5,6 +5,7 @@
 import("//build/buildflag_header.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/compiler/compiler.gni")
+import("//build/config/compiler/pgo/pgo.gni")
 import("//build/config/features.gni")
 import("//build/config/locales.gni")
 import("//build/config/sanitizers/sanitizers.gni")
@@ -31,7 +32,6 @@ if (is_android) {
   import("//build/mac/tweak_info_plist.gni")
   import("//build/util/branding.gni")
   import("//build/util/version.gni")
-  import("//build_overrides/v8.gni")
   import("//media/cdm/ppapi/cdm_paths.gni")
   import("//third_party/icu/config.gni")
 }
@@ -116,6 +116,16 @@ if (!is_android && !is_mac) {
       output_name = "chrome"
     }
 
+    if (!is_win || is_clang) {
+      # Normally, we need to pass specific flags to the linker to
+      # create an executable that gathers profile data. However, when
+      # using MSVC, we need to make sure we *don't* pass /GENPROFILE
+      # when linking without generating any code, or else the linker
+      # will give us fatal error LNK1264. So we add the PGO flags
+      # on all configurations, execpt MSVC on Windows.
+      configs += [ "//build/config/compiler/pgo:default_pgo_flags" ]
+    }
+
     # Because the sources list varies so significantly per-platform, generally
     # each platform lists its own files rather than relying on filtering or
     # removing unused files.
@@ -172,7 +182,7 @@ if (!is_android && !is_mac) {
         "//chrome/chrome_watcher:client",
         "//chrome/common:constants",
         "//chrome/common:metrics_constants_util_win",
-        "//chrome/install_static:install_static_util",
+        "//chrome/install_static:secondary_module",
         "//chrome/installer/util:with_no_strings",
         "//chrome_elf",
         "//components/browser_watcher:browser_watcher_client",
@@ -203,9 +213,6 @@ if (!is_android && !is_mac) {
         "/DELAYLOAD:ole32.dll",
         "/DELAYLOAD:oleaut32.dll",
       ]
-
-      # Turn on CFG for this project.
-      configs += [ "//build/config/win:win_msvc_cfg" ]
     } else if (use_aura) {
       # Non-Windows aura entrypoint.
       sources += [ "app/chrome_exe_main_aura.cc" ]
@@ -229,10 +236,11 @@ if (!is_android && !is_mac) {
         # Needed to use the master_preferences functions
         "//chrome/installer/util:with_no_strings",
         "//content/public/app:both",
+        "//pdf",
+
+        # For headless mode.
+        "//headless:headless_shell_lib",
       ]
-      if (enable_plugins && enable_pdf) {
-        deps += [ "//pdf" ]
-      }
 
       public_deps = [
         ":xdg_mime",  # Needs to be public for installer to consume files.
@@ -316,12 +324,14 @@ if (is_win) {
       "//chrome/app/theme:chrome_unscaled_resources",
       "//chrome/common:features",
       "//chrome/install_static:install_static_util",
+      "//chrome/install_static:secondary_module",
       "//chrome_elf",
       "//components/crash/content/app",
       "//components/policy:generated",
       "//content/app/resources",
       "//crypto",
       "//net:net_resources",
+      "//ppapi/features",
       "//third_party/cld",
       "//third_party/wtl",
       "//ui/views",
@@ -360,15 +370,18 @@ if (is_win) {
     if (is_multi_dll_chrome) {
       defines += [ "CHROME_MULTIPLE_DLL_BROWSER" ]
       deps += [ "//content/public/app:browser" ]
+      assert_no_deps = [
+        # The browser DLL may not depend on blink or v8.
+        "//third_party/WebKit/public:blink",
+        "//gin",
+        "//v8",
+      ]
     } else {
       deps += [
         ":child_dependencies",
         "//content/public/app:both",
+        "//pdf",
       ]
-    }
-
-    if (enable_plugins && enable_pdf && !is_multi_dll_chrome) {
-      deps += [ "//pdf" ]
     }
 
     if (enable_package_mash_services) {
@@ -403,9 +416,12 @@ if (is_win) {
         "//chrome/browser/policy:path_parser",
         "//chrome/common:features",
         "//chrome/install_static:install_static_util",
+        "//chrome/install_static:secondary_module",
+        "//chrome_elf",
         "//components/browser_watcher:browser_watcher_client",
         "//components/crash/content/app",
         "//content/public/app:child",
+        "//pdf",
       ]
 
       ldflags = [
@@ -424,32 +440,7 @@ if (is_win) {
         configs -= [ "//build/config/win:default_incremental_linking" ]
         configs += [ "//build/config/win:no_incremental_linking" ]
       }
-      if (chrome_pgo_phase == 1) {
-        ldflags += [
-          "/LTCG",
-
-          # Make sure that enough memory gets allocated for the PGO profiling
-          # buffers and also cap this memory. Usually a PGI instrumented build
-          # of chrome_child.dll requires ~55MB of memory for storing its counter
-          # etc, normally the linker should automatically choose an appropriate
-          # amount of memory but it doesn't always do a good estimate and
-          # sometime allocates too little or too much (and so the instrumented
-          # image fails to start). Making sure that the buffer has a size in the
-          # [128 MB, 512 MB] range should prevent this from happening.
-          "/GENPROFILE:MEMMIN=134217728",
-          "/GENPROFILE:MEMMAX=536870912",
-          "/PogoSafeMode",
-        ]
-      } else if (chrome_pgo_phase == 2) {
-        ldflags += [
-          "/LTCG",
-          "/USEPROFILE",
-        ]
-      }
-
-      if (enable_plugins && enable_pdf) {
-        deps += [ "//pdf" ]
-      }
+      configs += [ "//build/config/compiler/pgo:default_pgo_flags" ]
     }
   }
   copy("copy_first_run") {
@@ -463,10 +454,7 @@ if (is_win) {
 } else if (is_mac) {
   chrome_helper_name = chrome_product_full_name + " Helper"
   chrome_framework_name = chrome_product_full_name + " Framework"
-
-  if (enable_xpc_notifications) {
-    chrome_framework_version = "A"
-  }
+  chrome_framework_version = "A"
 
   group("chrome") {
     deps = [
@@ -508,7 +496,7 @@ if (is_win) {
   tweak_info_plist("chrome_app_plist") {
     info_plist = "app/app-Info.plist"
     _keystone_arg = "0"
-    if (enable_mac_keystone) {
+    if (is_chrome_branded) {
       _keystone_arg = "1"
     }
     args = [
@@ -771,7 +759,7 @@ if (is_win) {
       "//chrome/app_shim:app_mode_loader",
     ]
 
-    if (enable_mac_keystone) {
+    if (is_chrome_branded) {
       sources += [
         "browser/mac/keystone_promote_postflight.sh",
         "browser/mac/keystone_promote_preflight.sh",
@@ -910,12 +898,16 @@ if (is_win) {
     }
   }
 
-  if (enable_mac_keystone) {
+  if (is_chrome_branded) {
     action("keystone_registration_framework") {
       script = "//chrome/tools/build/mac/copy_keystone_framework.py"
 
       framework_path = "//third_party/googlemac/Releases/Keystone/KeystoneRegistration.framework"
-      output_path = "$root_out_dir/$chrome_framework_name.framework/Frameworks/"
+      output_path = "$root_out_dir/$chrome_framework_name.framework/"
+      if (defined(chrome_framework_version)) {
+        output_path += "/Versions/$chrome_framework_version/"
+      }
+      output_path += "Frameworks/"
 
       sources = [
         framework_path,
@@ -987,6 +979,7 @@ if (is_win) {
       "//components/crash/content/app",
       "//components/policy:generated",
       "//content/public/app:both",
+      "//pdf",
       "//third_party/cld",
     ]
 
@@ -999,10 +992,6 @@ if (is_win) {
       "-Wl," + rebase_path("app/framework.order", root_build_dir),
       "-ObjC",
     ]
-
-    if (enable_plugins && enable_pdf) {
-      deps += [ "//pdf" ]
-    }
 
     if (enable_package_mash_services) {
       deps += [ "//chrome/app/mash" ]
@@ -1022,7 +1011,10 @@ if (is_win) {
       ]
 
       if (is_chrome_branded) {
-        framework_contents += [ "Default Apps" ]
+        framework_contents += [
+          "Default Apps",
+          "Frameworks",  # For KeystoneRegistration.framework.
+        ]
       }
       if (enable_nacl) {
         framework_contents += [ "Internet Plug-Ins" ]
@@ -1234,16 +1226,20 @@ group("browser_dependencies") {
 
   if (!is_component_build) {
     assert_no_deps = [
-      # Blink and V8 should not be used in the browser process. In component
-      # build this is OK because all of content is linked into one library.
-      # Note that the blink_headers target is OK, so we can't do a wildcard for
-      # all blink targets.
+      # Blink should not be used in the browser process. In component build this
+      # is OK because all of content is linked into one library. Note that the
+      # blink_headers target is OK, so we can't do a wildcard for all blink
+      # targets.
       "//third_party/WebKit/public:blink",
-      # TODO(brettw) bug 581766: V8 should not be linked into the browser
-      # process, and then we can enable this. When testing whether you can
-      # enable this, run with a non-component build.
-      #"//v8/*",
     ]
+
+    if (is_win) {
+      assert_no_deps += [
+        # V8/Gin should not be used in the browser DLL on Windows.
+        "//gin",
+        "//v8",
+      ]
+    }
   }
 }
 
@@ -1342,28 +1338,35 @@ group("resources") {
 }
 
 group("extra_resources") {
+  # Deps should be same as those in chrome_extra_paks() within chrome_paks.gni.
   public_deps = [
-    "//chrome/browser/resources:component_extension_resources",
     "//chrome/browser/resources:invalidations_resources",
     "//chrome/browser/resources:net_internals_resources",
-    "//chrome/browser/resources:options_resources",
     "//chrome/browser/resources:password_manager_internals_resources",
     "//chrome/browser/resources:policy_resources",
-    "//chrome/browser/resources:settings_resources",
+    "//chrome/browser/resources:quota_internals_resources",
     "//chrome/browser/resources:task_scheduler_internals_resources",
     "//chrome/browser/resources:translate_internals_resources",
+    "//chrome/browser/resources:webapks_ui_resources",
   ]
+
+  if (!is_android && !is_ios) {
+    public_deps += [
+      "//chrome/browser/resources:component_extension_resources",
+      "//chrome/browser/resources:options_resources",
+      "//chrome/browser/resources:settings_resources",
+    ]
+  }
 
   if (is_chromeos) {
     public_deps += [ "//chrome/browser/resources/chromeos/chromevox" ]
     public_deps += [ "//chrome/browser/resources/chromeos/select_to_speak" ]
+    public_deps += [ "//chrome/browser/resources/chromeos/switch_access" ]
   }
 
   if (enable_extensions) {
-    public_deps += [
-      "//chrome/browser/resources:quota_internals_resources",
-      "//chrome/browser/resources:sync_file_system_internals_resources",
-    ]
+    public_deps +=
+        [ "//chrome/browser/resources:sync_file_system_internals_resources" ]
   }
 }
 
@@ -1430,14 +1433,16 @@ chrome_paks("packed_resources") {
 
 repack("browser_tests_pak") {
   sources = [
-    "$root_gen_dir/chrome/options_test_resources.pak",
     "$root_gen_dir/chrome/webui_test_resources.pak",
   ]
   output = "$root_out_dir/browser_tests.pak"
   deps = [
-    "//chrome/browser/resources:options_test_resources",
     "//chrome/test/data:webui_test_resources",
   ]
+  if (!is_android && !is_ios) {
+    sources += [ "$root_gen_dir/chrome/options_test_resources.pak" ]
+    deps += [ "//chrome/browser/resources:options_test_resources" ]
+  }
 }
 
 group("strings") {

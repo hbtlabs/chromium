@@ -5,6 +5,8 @@
 package org.chromium.chrome.browser.physicalweb;
 
 import android.app.Activity;
+import android.os.Handler;
+import android.os.Looper;
 
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.nearby.Nearby;
@@ -24,7 +26,7 @@ import org.chromium.chrome.browser.ChromeApplication;
  * subclass.
  */
 public class PhysicalWebBleClient {
-    private static PhysicalWebBleClient sInstance = null;
+    private static PhysicalWebBleClient sInstance;
     private static final String TAG = "PhysicalWeb";
 
     // We don't actually listen to any of the onFound or onLost events in the foreground.
@@ -33,6 +35,34 @@ public class PhysicalWebBleClient {
         @Override
         public void onFound(Message message) {}
     }
+
+    protected static class BackgroundMessageListener extends MessageListener {
+        @Override
+        public void onFound(Message message) {
+            final String url = PhysicalWebBleClient.getInstance().getUrlFromMessage(message);
+            if (url != null) {
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                    @Override
+                    public void run() {
+                        UrlManager.getInstance().addUrl(new UrlInfo(url));
+                    }
+                });
+            }
+        }
+
+        @Override
+        public void onLost(Message message) {
+            final String url = PhysicalWebBleClient.getInstance().getUrlFromMessage(message);
+            if (url != null) {
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                    @Override
+                    public void run() {
+                        UrlManager.getInstance().removeUrl(new UrlInfo(url));
+                    }
+                });
+            }
+        }
+    };
 
     /**
      * Get a singleton instance of this class.
@@ -86,6 +116,14 @@ public class PhysicalWebBleClient {
      */
     void backgroundUnsubscribe() {
         backgroundUnsubscribe(null);
+    }
+
+    /**
+     * Create a MessageListener that listens during a background scan.
+     * @return the MessageListener.
+     */
+    MessageListener createBackgroundMessageListener() {
+        return new BackgroundMessageListener();
     }
 
     /**

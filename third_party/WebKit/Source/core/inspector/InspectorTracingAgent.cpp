@@ -11,7 +11,7 @@
 #include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/inspector/InspectorWorkerAgent.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 
 namespace blink {
 
@@ -42,9 +42,9 @@ void InspectorTracingAgent::restore() {
   emitMetadataEvents();
 }
 
-void InspectorTracingAgent::frameStartedLoading(LocalFrame* frame) {
-  if (frame != m_inspectedFrames->root() ||
-      frame->loader().loadType() != FrameLoadTypeReload)
+void InspectorTracingAgent::frameStartedLoading(LocalFrame* frame,
+                                                FrameLoadType type) {
+  if (frame != m_inspectedFrames->root() || type != FrameLoadTypeReload)
     return;
   m_client->showReloadingBlanket();
 }

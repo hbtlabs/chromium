@@ -97,7 +97,8 @@ bool File::Read(void* buffer, size_t buffer_len, size_t offset,
 
   base::PostTaskAndReplyWithResult(
       s_worker_pool.Pointer(), FROM_HERE,
-      base::Bind(&File::DoRead, this, buffer, buffer_len, offset),
+      base::Bind(&File::DoRead, base::Unretained(this), buffer, buffer_len,
+                 offset),
       base::Bind(&File::OnOperationComplete, this, callback));
 
   *completed = false;
@@ -120,7 +121,8 @@ bool File::Write(const void* buffer, size_t buffer_len, size_t offset,
 
   base::PostTaskAndReplyWithResult(
       s_worker_pool.Pointer(), FROM_HERE,
-      base::Bind(&File::DoWrite, this, buffer, buffer_len, offset),
+      base::Bind(&File::DoWrite, base::Unretained(this), buffer, buffer_len,
+                 offset),
       base::Bind(&File::OnOperationComplete, this, callback));
 
   *completed = false;
@@ -139,6 +141,8 @@ size_t File::GetLength() {
   DCHECK(base_file_.IsValid());
   int64_t len = base_file_.GetLength();
 
+  if (len < 0)
+    return 0;
   if (len > static_cast<int64_t>(std::numeric_limits<uint32_t>::max()))
     return std::numeric_limits<uint32_t>::max();
 

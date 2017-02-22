@@ -5,22 +5,20 @@
 #include "chrome/browser/ui/ash/launcher/settings_window_observer.h"
 
 #include "ash/common/shelf/shelf_item_types.h"
+#include "ash/public/cpp/window_properties.h"
 #include "ash/resources/grit/ash_resources.h"
-#include "ash/wm/window_properties.h"
+#include "base/feature_list.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/ui/ash/ash_util.h"
-#include "chrome/browser/ui/ash/property_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/settings_window_manager.h"
+#include "chrome/common/chrome_features.h"
 #include "components/strings/grit/components_strings.h"
-#include "services/ui/public/cpp/property_type_converters.h"
-#include "services/ui/public/cpp/window.h"
-#include "services/ui/public/cpp/window_property.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "ui/aura/client/aura_constants.h"
-#include "ui/aura/mus/mus_util.h"
 #include "ui/aura/window.h"
-#include "ui/aura/window_property.h"
+#include "ui/base/class_property.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_skia.h"
@@ -43,37 +41,10 @@ class AuraWindowSettingsTitleTracker : public aura::WindowTracker {
   DISALLOW_COPY_AND_ASSIGN(AuraWindowSettingsTitleTracker);
 };
 
-// This class is only used in mash (mus+ash) to rename the Settings window.
-class UiWindowSettingsTitleTracker : public ui::WindowTracker {
- public:
-  UiWindowSettingsTitleTracker() {}
-  ~UiWindowSettingsTitleTracker() override {}
-
-  // ui::WindowTracker:
-  void OnWindowSharedPropertyChanged(
-      ui::Window* window,
-      const std::string& name,
-      const std::vector<uint8_t>* old_data,
-      const std::vector<uint8_t>* new_data) override {
-    if (name == ui::mojom::WindowManager::kWindowTitle_Property) {
-      // Name the window "Settings" instead of "Google Chrome - Settings".
-      window->SetSharedProperty<base::string16>(
-          ui::mojom::WindowManager::kWindowTitle_Property,
-          l10n_util::GetStringUTF16(IDS_SETTINGS_TITLE));
-    }
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UiWindowSettingsTitleTracker);
-};
-
 }  // namespace
 
 SettingsWindowObserver::SettingsWindowObserver() {
-  if (chrome::IsRunningInMash())
-    ui_window_tracker_.reset(new UiWindowSettingsTitleTracker);
-  else
-    aura_window_tracker_.reset(new AuraWindowSettingsTitleTracker);
+  aura_window_tracker_ = base::MakeUnique<AuraWindowSettingsTitleTracker>();
   chrome::SettingsWindowManager::GetInstance()->AddObserver(this);
 }
 
@@ -83,17 +54,14 @@ SettingsWindowObserver::~SettingsWindowObserver() {
 
 void SettingsWindowObserver::OnNewSettingsWindow(Browser* settings_browser) {
   aura::Window* window = settings_browser->window()->GetNativeWindow();
-  property_util::SetTitle(window,
-                          l10n_util::GetStringUTF16(IDS_SETTINGS_TITLE));
-  property_util::SetIntProperty(window, ash::kShelfItemTypeKey,
-                                ash::TYPE_DIALOG);
+  window->SetTitle(l10n_util::GetStringUTF16(IDS_SETTINGS_TITLE));
+  window->SetProperty<int>(ash::kShelfItemTypeKey, ash::TYPE_DIALOG);
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  gfx::ImageSkia* icon = rb.GetImageSkiaNamed(IDR_ASH_SHELF_ICON_SETTINGS);
+  gfx::ImageSkia* icon =
+      base::FeatureList::IsEnabled(features::kMaterialDesignSettings)
+          ? rb.GetImageSkiaNamed(IDR_ASH_SHELF_ICON_MD_SETTINGS)
+          : rb.GetImageSkiaNamed(IDR_ASH_SHELF_ICON_SETTINGS);
   // The new gfx::ImageSkia instance is owned by the window itself.
   window->SetProperty(aura::client::kWindowIconKey, new gfx::ImageSkia(*icon));
-
-  if (chrome::IsRunningInMash())
-    ui_window_tracker_->Add(aura::GetMusWindow(window));
-  else
-    aura_window_tracker_->Add(window);
+  aura_window_tracker_->Add(window);
 }

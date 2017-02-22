@@ -23,6 +23,7 @@
 
 #include "core/html/HTMLFrameElementBase.h"
 
+#include "bindings/core/v8/BindingSecurity.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptEventListener.h"
 #include "core/HTMLNames.h"
@@ -56,17 +57,20 @@ bool HTMLFrameElementBase::isURLAllowed() const {
 
   const KURL& completeURL = document().completeURL(m_URL);
 
-  if (protocolIsJavaScript(completeURL)) {
-    if (contentFrame() &&
-        !ScriptController::canAccessFromCurrentOrigin(toIsolate(&document()),
-                                                      contentFrame()))
+  if (contentFrame() && completeURL.protocolIsJavaScript()) {
+    // Check if the caller can execute script in the context of the content
+    // frame. NB: This check can be invoked without any JS on the stack for some
+    // parser operations. In such case, we use the origin of the frame element's
+    // containing document as the caller context.
+    v8::Isolate* isolate = toIsolate(&document());
+    LocalDOMWindow* accessingWindow = isolate->InContext()
+                                          ? currentDOMWindow(isolate)
+                                          : document().domWindow();
+    if (!BindingSecurity::shouldAllowAccessToFrame(
+            accessingWindow, contentFrame(),
+            BindingSecurity::ErrorReportOption::Report))
       return false;
   }
-
-  LocalFrame* parentFrame = document().frame();
-  if (parentFrame)
-    return parentFrame->isURLAllowed(completeURL);
-
   return true;
 }
 
@@ -84,7 +88,7 @@ void HTMLFrameElementBase::openURL(bool replaceCurrentItem) {
   // Support for <frame src="javascript:string">
   KURL scriptURL;
   KURL url = document().completeURL(m_URL);
-  if (protocolIsJavaScript(m_URL)) {
+  if (url.protocolIsJavaScript()) {
     // We'll set/execute |scriptURL| iff CSP allows us to execute inline
     // JavaScript. If CSP blocks inline JavaScript, then exit early if
     // we're trying to execute script in an existing document. If we're
@@ -121,9 +125,10 @@ void HTMLFrameElementBase::frameOwnerPropertiesChanged() {
     document().frame()->loader().client()->didChangeFrameOwnerProperties(this);
 }
 
-void HTMLFrameElementBase::parseAttribute(const QualifiedName& name,
-                                          const AtomicString& oldValue,
-                                          const AtomicString& value) {
+void HTMLFrameElementBase::parseAttribute(
+    const AttributeModificationParams& params) {
+  const QualifiedName& name = params.name;
+  const AtomicString& value = params.newValue;
   if (name == srcdocAttr) {
     if (!value.isNull()) {
       setLocation(srcdocURL().getString());
@@ -137,20 +142,14 @@ void HTMLFrameElementBase::parseAttribute(const QualifiedName& name,
   } else if (name == idAttr) {
     // Important to call through to base for the id attribute so the hasID bit
     // gets set.
-    HTMLFrameOwnerElement::parseAttribute(name, oldValue, value);
+    HTMLFrameOwnerElement::parseAttribute(params);
     m_frameName = value;
   } else if (name == nameAttr) {
     m_frameName = value;
-    // FIXME: If we are already attached, this doesn't actually change the
-    // frame's name.
-    // FIXME: If we are already attached, this doesn't check for frame name
-    // conflicts and generate a unique frame name.
   } else if (name == marginwidthAttr) {
     setMarginWidth(value.toInt());
-    // FIXME: If we are already attached, this has no effect.
   } else if (name == marginheightAttr) {
     setMarginHeight(value.toInt());
-    // FIXME: If we are already attached, this has no effect.
   } else if (name == scrollingAttr) {
     // Auto and yes both simply mean "allow scrolling." No means "don't allow
     // scrolling."
@@ -158,14 +157,13 @@ void HTMLFrameElementBase::parseAttribute(const QualifiedName& name,
       setScrollingMode(ScrollbarAuto);
     else if (equalIgnoringCase(value, "no"))
       setScrollingMode(ScrollbarAlwaysOff);
-    // FIXME: If we are already attached, this has no effect.
   } else if (name == onbeforeunloadAttr) {
     // FIXME: should <frame> elements have beforeunload handlers?
     setAttributeEventListener(
         EventTypeNames::beforeunload,
         createAttributeEventListener(this, name, value, eventParameterName()));
   } else {
-    HTMLFrameOwnerElement::parseAttribute(name, oldValue, value);
+    HTMLFrameOwnerElement::parseAttribute(params);
   }
 }
 
@@ -186,6 +184,10 @@ void HTMLFrameElementBase::didNotifySubtreeInsertionsToDocument() {
 
   if (!SubframeLoadingDisabler::canLoadFrame(*this))
     return;
+
+  // We should never have a content frame at the point where we got inserted
+  // into a tree.
+  SECURITY_CHECK(!contentFrame());
 
   setNameAndOpenURL();
 }
@@ -253,16 +255,37 @@ void HTMLFrameElementBase::defaultEventHandler(Event* event) {
 }
 
 void HTMLFrameElementBase::setScrollingMode(ScrollbarMode scrollbarMode) {
+  if (m_scrollingMode == scrollbarMode)
+    return;
+
+  if (contentDocument()) {
+    contentDocument()->willChangeFrameOwnerProperties(
+        m_marginWidth, m_marginHeight, scrollbarMode);
+  }
   m_scrollingMode = scrollbarMode;
   frameOwnerPropertiesChanged();
 }
 
 void HTMLFrameElementBase::setMarginWidth(int marginWidth) {
+  if (m_marginWidth == marginWidth)
+    return;
+
+  if (contentDocument()) {
+    contentDocument()->willChangeFrameOwnerProperties(
+        marginWidth, m_marginHeight, m_scrollingMode);
+  }
   m_marginWidth = marginWidth;
   frameOwnerPropertiesChanged();
 }
 
 void HTMLFrameElementBase::setMarginHeight(int marginHeight) {
+  if (m_marginHeight == marginHeight)
+    return;
+
+  if (contentDocument()) {
+    contentDocument()->willChangeFrameOwnerProperties(
+        m_marginWidth, marginHeight, m_scrollingMode);
+  }
   m_marginHeight = marginHeight;
   frameOwnerPropertiesChanged();
 }

@@ -61,7 +61,7 @@
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkletGlobalScope.h"
 #include "core/xml/XPathNSResolver.h"
-#include "platform/tracing/TracedValue.h"
+#include "platform/instrumentation/tracing/TracedValue.h"
 #include "wtf/MathExtras.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/Threading.h"
@@ -83,7 +83,7 @@ NodeFilter* toNodeFilter(v8::Local<v8::Value> callback,
   NodeFilter* filter = NodeFilter::create();
 
   v8::Local<v8::Value> filterWrapper =
-      toV8(filter, creationContext, scriptState->isolate());
+      ToV8(filter, creationContext, scriptState->isolate());
   if (filterWrapper.IsEmpty())
     return nullptr;
 
@@ -792,18 +792,6 @@ Frame* toFrameIfNotDetached(v8::Local<v8::Context> context) {
   return nullptr;
 }
 
-EventTarget* toEventTarget(v8::Isolate* isolate, v8::Local<v8::Value> value) {
-  // We need to handle a DOMWindow specially, because a DOMWindow wrapper
-  // exists on a prototype chain of v8Value.
-  if (DOMWindow* window = toDOMWindow(isolate, value))
-    return static_cast<EventTarget*>(window);
-  if (V8EventTarget::hasInstance(value, isolate)) {
-    v8::Local<v8::Object> object = v8::Local<v8::Object>::Cast(value);
-    return toWrapperTypeInfo(object)->toEventTarget(object);
-  }
-  return 0;
-}
-
 void toFlexibleArrayBufferView(v8::Isolate* isolate,
                                v8::Local<v8::Value> value,
                                FlexibleArrayBufferView& result,
@@ -869,7 +857,8 @@ bool isValidEnum(const String& value,
                  const String& enumName,
                  ExceptionState& exceptionState) {
   for (size_t i = 0; i < length; ++i) {
-    if (value == validValues[i])
+    // Avoid the strlen inside String::operator== (because of the StringView).
+    if (WTF::equal(value.impl(), validValues[i]))
       return true;
   }
   exceptionState.throwTypeError("The provided value '" + value +

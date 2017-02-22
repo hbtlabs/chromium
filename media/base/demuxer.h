@@ -14,9 +14,9 @@
 #include "base/time/time.h"
 #include "media/base/data_source.h"
 #include "media/base/demuxer_stream.h"
-#include "media/base/demuxer_stream_provider.h"
 #include "media/base/eme_constants.h"
 #include "media/base/media_export.h"
+#include "media/base/media_resource.h"
 #include "media/base/media_track.h"
 #include "media/base/pipeline_status.h"
 #include "media/base/ranges.h"
@@ -58,7 +58,7 @@ class MEDIA_EXPORT DemuxerHost {
   virtual ~DemuxerHost();
 };
 
-class MEDIA_EXPORT Demuxer : public DemuxerStreamProvider {
+class MEDIA_EXPORT Demuxer : public MediaResource {
  public:
   // A new potentially encrypted stream has been parsed.
   // First parameter - The type of initialization data.
@@ -89,7 +89,8 @@ class MEDIA_EXPORT Demuxer : public DemuxerStreamProvider {
                           bool enable_text_tracks) = 0;
 
   // Aborts any pending read operations that the demuxer is involved with; any
-  // read aborted will be aborted with a status of kAborted.
+  // read aborted will be aborted with a status of kAborted. Future reads will
+  // also be aborted until Seek() is called.
   virtual void AbortPendingReads() = 0;
 
   // Indicates that a new Seek() call is on its way. Implementations may abort

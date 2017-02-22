@@ -95,6 +95,9 @@ class PLATFORM_EXPORT SchemeRegistry {
   // differently from "webby" schemes.
   static bool shouldTreatURLSchemeAsLegacy(const String& scheme);
 
+  // Does the scheme represent a location relevant to web compatibility metrics?
+  static bool shouldTrackUsageMetricsForScheme(const String& scheme);
+
   // Schemes that can register a service worker.
   static void registerURLSchemeAsAllowingServiceWorkers(const String& scheme);
   static bool shouldTreatURLSchemeAsAllowingServiceWorkers(
@@ -117,8 +120,6 @@ class PLATFORM_EXPORT SchemeRegistry {
 
   // Allow resources from some schemes to load on a page, regardless of its
   // Content Security Policy.
-  // This enum should be kept in sync with public/web/WebSecurityPolicy.h.
-  // Enforced in AssertMatchingEnums.cpp.
   enum PolicyAreas : uint32_t {
     PolicyAreaNone = 0,
     PolicyAreaImage = 1 << 0,

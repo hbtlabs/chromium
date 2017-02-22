@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_package_syncable_service_factory.h"
@@ -26,9 +27,6 @@ using syncer::SyncChange;
 using ArcSyncItem = ArcPackageSyncableService::SyncItem;
 
 constexpr int64_t kNoAndroidID = 0;
-
-constexpr uint32_t kUninstallPackageMinVersion = 2;
-constexpr uint32_t kInstallPackageMinVersion = 8;
 
 std::unique_ptr<ArcSyncItem> CreateSyncItemFromSyncSpecifics(
     const sync_pb::ArcPackageSpecifics& specifics) {
@@ -204,7 +202,7 @@ syncer::SyncError ArcPackageSyncableService::ProcessSyncChanges(
     const syncer::SyncChangeList& change_list) {
   if (!sync_processor_.get()) {
     return syncer::SyncError(FROM_HERE, syncer::SyncError::DATATYPE_ERROR,
-                             "Arc package syncable service is not started.",
+                             "ARC package syncable service is not started.",
                              syncer::ARC_PACKAGE);
   }
 
@@ -343,7 +341,7 @@ bool ArcPackageSyncableService::ProcessSyncItemSpecifics(
     const sync_pb::ArcPackageSpecifics& specifics) {
   const std::string& package_name = specifics.package_name();
   if (package_name.empty()) {
-    VLOG(2) << "Add/Update Arc package item with empty package name";
+    VLOG(2) << "Add/Update ARC package item with empty package name";
     return false;
   }
 
@@ -372,7 +370,7 @@ bool ArcPackageSyncableService::DeleteSyncItemSpecifics(
     const sync_pb::ArcPackageSpecifics& specifics) {
   const std::string& package_name = specifics.package_name();
   if (package_name.empty()) {
-    VLOG(2) << "Delete Arc package item with empty package name";
+    VLOG(2) << "Delete ARC package item with empty package name";
     return false;
   }
 
@@ -404,8 +402,8 @@ void ArcPackageSyncableService::InstallPackage(const ArcSyncItem* sync_item) {
     return;
   }
 
-  auto* instance = prefs_->app_instance_holder()->GetInstanceForMethod(
-      "InstallPackage", kInstallPackageMinVersion);
+  auto* instance = ARC_GET_INSTANCE_FOR_METHOD(prefs_->app_instance_holder(),
+                                               InstallPackage);
   if (!instance)
     return;
 
@@ -426,8 +424,8 @@ void ArcPackageSyncableService::UninstallPackage(const ArcSyncItem* sync_item) {
     return;
   }
 
-  auto* instance = prefs_->app_instance_holder()->GetInstanceForMethod(
-      "UninstallPackage", kUninstallPackageMinVersion);
+  auto* instance = ARC_GET_INSTANCE_FOR_METHOD(prefs_->app_instance_holder(),
+                                               UninstallPackage);
   if (!instance)
     return;
 

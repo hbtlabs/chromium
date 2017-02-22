@@ -5,12 +5,12 @@
 
 #include <string>
 
-#include "ash/aura/wm_window_aura.h"
 #include "ash/common/shelf/shelf_delegate.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_lookup.h"
 #include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
 #include "ash/common/wm_window_property.h"
 #include "ash/display/screen_orientation_controller_chromeos.h"
 #include "ash/shared/app_types.h"
@@ -18,8 +18,9 @@
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/bind.h"
-#include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/chromeos/arc/arc_support_host.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_item_controller.h"
@@ -94,11 +95,11 @@ blink::WebScreenOrientationLockType BlinkOrientationLockFromMojom(
 // even when its AppWindow is not present.
 class ArcAppWindowLauncherController::AppWindowInfo {
  public:
-  explicit AppWindowInfo(const std::string& shelf_app_id)
-      : shelf_app_id_(shelf_app_id) {}
-  ~AppWindowInfo() {}
+  explicit AppWindowInfo(const arc::ArcAppShelfId& app_shelf_id)
+      : app_shelf_id_(app_shelf_id) {}
+  ~AppWindowInfo() = default;
 
-  const std::string& shelf_app_id() const { return shelf_app_id_; }
+  const arc::ArcAppShelfId& app_shelf_id() const { return app_shelf_id_; }
 
   bool has_requested_orientation_lock() const {
     return has_requested_orientation_lock_;
@@ -120,7 +121,7 @@ class ArcAppWindowLauncherController::AppWindowInfo {
   AppWindow* app_window() { return app_window_.get(); }
 
  private:
-  std::string shelf_app_id_;
+  const arc::ArcAppShelfId app_shelf_id_;
   bool has_requested_orientation_lock_ = false;
   arc::mojom::OrientationLock requested_orientation_lock_ =
       arc::mojom::OrientationLock::NONE;
@@ -133,10 +134,14 @@ class ArcAppWindowLauncherController::AppWindowInfo {
 class ArcAppWindowLauncherController::AppWindow : public ui::BaseWindow {
  public:
   AppWindow(int task_id,
+            const arc::ArcAppShelfId& app_shelf_id,
             views::Widget* widget,
             ArcAppWindowLauncherController* owner)
-      : task_id_(task_id), widget_(widget), owner_(owner) {}
-  ~AppWindow() {}
+      : task_id_(task_id),
+        app_shelf_id_(app_shelf_id),
+        widget_(widget),
+        owner_(owner) {}
+  ~AppWindow() = default;
 
   void SetController(ArcAppWindowLauncherItemController* controller) {
     DCHECK(!controller_ && controller);
@@ -153,6 +158,8 @@ class ArcAppWindowLauncherController::AppWindow : public ui::BaseWindow {
   FullScreenMode fullscreen_mode() const { return fullscreen_mode_; }
 
   int task_id() const { return task_id_; }
+
+  const arc::ArcAppShelfId& app_shelf_id() const { return app_shelf_id_; }
 
   ash::ShelfID shelf_id() const { return shelf_id_; }
 
@@ -231,14 +238,15 @@ class ArcAppWindowLauncherController::AppWindow : public ui::BaseWindow {
   void SetAlwaysOnTop(bool always_on_top) override { NOTREACHED(); }
 
  private:
-  int task_id_;
+  const int task_id_;
+  const arc::ArcAppShelfId app_shelf_id_;
   ash::ShelfID shelf_id_ = 0;
   FullScreenMode fullscreen_mode_ = FullScreenMode::NOT_DEFINED;
   // Unowned pointers
   views::Widget* const widget_;
   ArcAppWindowLauncherController* owner_;
   ArcAppWindowLauncherItemController* controller_ = nullptr;
-  // Unowned pointer, represents host Arc window.
+  // Unowned pointer, represents host ARC window.
 
   DISALLOW_COPY_AND_ASSIGN(AppWindow);
 };
@@ -247,7 +255,7 @@ ArcAppWindowLauncherController::ArcAppWindowLauncherController(
     ChromeLauncherController* owner,
     ash::ShelfDelegate* shelf_delegate)
     : AppWindowLauncherController(owner), shelf_delegate_(shelf_delegate) {
-  if (arc::ArcSessionManager::IsAllowedForProfile(owner->profile())) {
+  if (arc::IsArcAllowedForProfile(owner->profile())) {
     observed_profile_ = owner->profile();
     StartObserving(observed_profile_);
   }
@@ -281,33 +289,33 @@ void ArcAppWindowLauncherController::ActiveUserChanged(
                                               ->GetAccountId()
                                               .GetUserEmail();
   if (user_email == primary_user_email) {
-    // Restore existing Arc window and create controllers for them.
+    // Restore existing ARC window and create controllers for them.
     AttachControllerToWindowsIfNeeded();
 
     // Make sure that we created items for all apps, not only which have a
     // window.
     for (const auto& info : task_id_to_app_window_info_)
-      AttachControllerToTask(info.second->shelf_app_id(), info.first);
+      AttachControllerToTask(info.first, *info.second);
 
     // Update active status.
     OnTaskSetActive(active_task_id_);
   } else {
-    // Remove all Arc apps and destroy its controllers. There is no mapping
+    // Remove all ARC apps and destroy its controllers. There is no mapping
     // task id to app window because it is not safe when controller is missing.
     for (auto& it : task_id_to_app_window_info_)
-      UnregisterApp(it.second.get(), true);
+      UnregisterApp(it.second.get());
 
     // Some controllers might have no windows attached, for example background
     // task when foreground tasks is in full screen.
-    for (const auto& it : app_controller_map_)
+    for (const auto& it : app_shelf_group_to_controller_map_)
       owner()->CloseLauncherItem(it.second->shelf_id());
-    app_controller_map_.clear();
+    app_shelf_group_to_controller_map_.clear();
   }
 }
 
 void ArcAppWindowLauncherController::AdditionalUserAddedToSession(
     Profile* profile) {
-  DCHECK(!arc::ArcSessionManager::IsAllowedForProfile(profile));
+  DCHECK(!arc::IsArcAllowedForProfile(profile));
 }
 
 void ArcAppWindowLauncherController::OnWindowInitialized(aura::Window* window) {
@@ -326,7 +334,7 @@ void ArcAppWindowLauncherController::OnWindowVisibilityChanged(
     aura::Window* window,
     bool visible) {
   // Attach window to multi-user manager now to let it manage visibility state
-  // of the Arc window correctly.
+  // of the ARC window correctly.
   if (GetWindowTaskId(window) > 0) {
     chrome::MultiUserWindowManager::GetInstance()->SetWindowOwner(
         window,
@@ -359,7 +367,7 @@ void ArcAppWindowLauncherController::OnWindowDestroying(aura::Window* window) {
     // Note, window may be recreated in some cases, so do not close controller
     // on window destroying. Controller will be closed onTaskDestroyed event
     // which is generated when actual task is destroyed.
-    UnregisterApp(info_it->second.get(), false);
+    UnregisterApp(info_it->second.get());
   }
 }
 
@@ -411,11 +419,12 @@ void ArcAppWindowLauncherController::AttachControllerToWindowIfNeeded(
   views::Widget* widget = views::Widget::GetWidgetForNativeWindow(window);
   DCHECK(widget);
   DCHECK(!info->app_window());
-  info->set_app_window(base::MakeUnique<AppWindow>(task_id, widget, this));
+  info->set_app_window(
+      base::MakeUnique<AppWindow>(task_id, info->app_shelf_id(), widget, this));
   RegisterApp(info);
   DCHECK(info->app_window()->controller());
-  ash::WmWindowAura::Get(window)->SetIntProperty(
-      ash::WmWindowProperty::SHELF_ID, info->app_window()->shelf_id());
+  ash::WmWindow::Get(window)->SetIntProperty(ash::WmWindowProperty::SHELF_ID,
+                                             info->app_window()->shelf_id());
   if (ash::WmShell::Get()
           ->maximize_mode_controller()
           ->IsMaximizeModeWindowManagerEnabled()) {
@@ -430,38 +439,44 @@ void ArcAppWindowLauncherController::OnAppReadyChanged(
     OnAppRemoved(arc_app_id);
 }
 
-void ArcAppWindowLauncherController::OnAppRemoved(
-    const std::string& arc_app_id) {
-  const std::string shelf_app_id = GetShelfAppIdFromArcAppId(arc_app_id);
+std::vector<int> ArcAppWindowLauncherController::GetTaskIdsForApp(
+    const std::string& arc_app_id) const {
+  const std::string app_id = GetShelfAppIdFromArcAppId(arc_app_id);
 
-  const auto it = app_controller_map_.find(shelf_app_id);
-  if (it == app_controller_map_.end())
-    return;
-
-  const ArcAppWindowLauncherItemController* controller = it->second;
-
-  std::vector<int> task_ids_to_remove;
-  for (auto* window : controller->windows()) {
-    AppWindow* app_window = static_cast<AppWindow*>(window);
-    task_ids_to_remove.push_back(app_window->task_id());
+  // Note, AppWindow is optional part for a task and it may be not created if
+  // another full screen Android app is currently active. Use
+  // |task_id_to_app_window_info_| that keeps currently running tasks info.
+  std::vector<int> task_ids;
+  for (const auto& it : task_id_to_app_window_info_) {
+    const AppWindowInfo* app_window_info = it.second.get();
+    if (app_window_info->app_shelf_id().app_id() == app_id)
+      task_ids.push_back(it.first);
   }
 
+  return task_ids;
+}
+
+void ArcAppWindowLauncherController::OnAppRemoved(
+    const std::string& arc_app_id) {
+  const std::vector<int> task_ids_to_remove = GetTaskIdsForApp(arc_app_id);
   for (const auto task_id : task_ids_to_remove)
     OnTaskDestroyed(task_id);
-
-  DCHECK(app_controller_map_.find(shelf_app_id) == app_controller_map_.end());
+  DCHECK(GetTaskIdsForApp(arc_app_id).empty());
 }
 
 void ArcAppWindowLauncherController::OnTaskCreated(
     int task_id,
     const std::string& package_name,
-    const std::string& activity_name) {
+    const std::string& activity_name,
+    const std::string& intent) {
   DCHECK(!GetAppWindowForTask(task_id));
   const std::string arc_app_id =
       ArcAppListPrefs::GetAppId(package_name, activity_name);
-  const std::string shelf_app_id = GetShelfAppIdFromArcAppId(arc_app_id);
+  const arc::ArcAppShelfId arc_app_shelf_id =
+      arc::ArcAppShelfId::FromIntentAndAppId(
+          intent, GetShelfAppIdFromArcAppId(arc_app_id));
   task_id_to_app_window_info_[task_id] =
-      base::MakeUnique<AppWindowInfo>(shelf_app_id);
+      base::MakeUnique<AppWindowInfo>(arc_app_shelf_id);
   // Don't create shelf icon for non-primary user.
   if (observed_profile_ != owner()->profile())
     return;
@@ -471,26 +486,25 @@ void ArcAppWindowLauncherController::OnTaskCreated(
   // Some tasks can be started in background and might have no window until
   // pushed to the front. We need its representation on the shelf to give a user
   // control over it.
-  AttachControllerToTask(shelf_app_id, task_id);
+  AttachControllerToTask(task_id, *task_id_to_app_window_info_[task_id]);
 }
 
 void ArcAppWindowLauncherController::OnTaskDestroyed(int task_id) {
   auto it = task_id_to_app_window_info_.find(task_id);
   if (it == task_id_to_app_window_info_.end())
     return;
-  UnregisterApp(it->second.get(), true);
+
+  UnregisterApp(it->second.get());
 
   // Check if we may close controller now, at this point we can safely remove
   // controllers without window.
-  const std::string& shelf_app_id = it->second->shelf_app_id();
-
-  const auto it_controller = app_controller_map_.find(shelf_app_id);
-  if (it_controller != app_controller_map_.end()) {
-    ArcAppWindowLauncherItemController* controller = it_controller->second;
-    controller->RemoveTaskId(task_id);
-    if (!controller->window_count()) {
-      owner()->CloseLauncherItem(controller->shelf_id());
-      app_controller_map_.erase(it_controller);
+  auto it_controller =
+      app_shelf_group_to_controller_map_.find(it->second->app_shelf_id());
+  if (it_controller != app_shelf_group_to_controller_map_.end()) {
+    it_controller->second->RemoveTaskId(task_id);
+    if (!it_controller->second->HasAnyTasks()) {
+      owner()->CloseLauncherItem(it_controller->second->shelf_id());
+      app_shelf_group_to_controller_map_.erase(it_controller);
     }
   }
 
@@ -615,42 +629,41 @@ void ArcAppWindowLauncherController::StopObserving(Profile* profile) {
 
 ArcAppWindowLauncherItemController*
 ArcAppWindowLauncherController::AttachControllerToTask(
-    const std::string& shelf_app_id,
-    int task_id) {
-  const auto it = app_controller_map_.find(shelf_app_id);
-  if (it != app_controller_map_.end()) {
-    DCHECK_EQ(it->second->app_id(), shelf_app_id);
+    int task_id,
+    const AppWindowInfo& app_window_info) {
+  const arc::ArcAppShelfId& app_shelf_id = app_window_info.app_shelf_id();
+  const auto it = app_shelf_group_to_controller_map_.find(app_shelf_id);
+  if (it != app_shelf_group_to_controller_map_.end()) {
+    DCHECK_EQ(it->second->app_id(), app_shelf_id.ToString());
     it->second->AddTaskId(task_id);
     return it->second;
   }
 
   ArcAppWindowLauncherItemController* controller =
-      new ArcAppWindowLauncherItemController(shelf_app_id, owner());
+      new ArcAppWindowLauncherItemController(app_shelf_id.ToString(), owner());
   const ash::ShelfID shelf_id =
-      shelf_delegate_->GetShelfIDForAppID(shelf_app_id);
+      shelf_delegate_->GetShelfIDForAppID(app_shelf_id.ToString());
   if (!shelf_id) {
-    owner()->CreateAppLauncherItem(controller, shelf_app_id,
+    owner()->CreateAppLauncherItem(controller, app_shelf_id.ToString(),
                                    ash::STATUS_RUNNING);
   } else {
     owner()->SetItemController(shelf_id, controller);
     owner()->SetItemStatus(shelf_id, ash::STATUS_RUNNING);
   }
   controller->AddTaskId(task_id);
-  app_controller_map_[shelf_app_id] = controller;
+  app_shelf_group_to_controller_map_[app_shelf_id] = controller;
   return controller;
 }
 
 void ArcAppWindowLauncherController::RegisterApp(
     AppWindowInfo* app_window_info) {
-  const std::string shelf_app_id = app_window_info->shelf_app_id();
-  DCHECK(!shelf_app_id.empty());
   AppWindow* app_window = app_window_info->app_window();
   ArcAppWindowLauncherItemController* controller =
-      AttachControllerToTask(shelf_app_id, app_window->task_id());
+      AttachControllerToTask(app_window->task_id(), *app_window_info);
   DCHECK(controller);
 
   const ash::ShelfID shelf_id =
-      shelf_delegate_->GetShelfIDForAppID(shelf_app_id);
+      shelf_delegate_->GetShelfIDForAppID(controller->app_id());
   DCHECK(shelf_id);
 
   controller->AddWindow(app_window);
@@ -660,24 +673,14 @@ void ArcAppWindowLauncherController::RegisterApp(
 }
 
 void ArcAppWindowLauncherController::UnregisterApp(
-    AppWindowInfo* app_window_info,
-    bool close_controller) {
+    AppWindowInfo* app_window_info) {
   AppWindow* app_window = app_window_info->app_window();
   if (!app_window)
     return;
-  const std::string& shelf_app_id = app_window_info->shelf_app_id();
-  DCHECK(app_window);
-  DCHECK(!shelf_app_id.empty());
-  const auto it = app_controller_map_.find(shelf_app_id);
-  CHECK(it != app_controller_map_.end());
 
-  ArcAppWindowLauncherItemController* controller = it->second;
-  controller->RemoveWindow(app_window);
-  if (close_controller && !controller->window_count()) {
-    ash::ShelfID shelf_id = app_window->shelf_id();
-    owner()->CloseLauncherItem(shelf_id);
-    app_controller_map_.erase(it);
-  }
+  ArcAppWindowLauncherItemController* controller = app_window->controller();
+  if (controller)
+    controller->RemoveWindow(app_window);
   app_window->ResetController();
   app_window_info->set_app_window(nullptr);
 }
@@ -696,7 +699,7 @@ void ArcAppWindowLauncherController::SetOrientationLockForAppWindow(
   } else {
     ArcAppListPrefs* prefs = ArcAppListPrefs::Get(observed_profile_);
     std::unique_ptr<ArcAppListPrefs::AppInfo> app_info =
-        prefs->GetApp(info->shelf_app_id());
+        prefs->GetApp(info->app_shelf_id().app_id());
     if (!app_info)
       return;
     orientation_lock = app_info->orientation_lock;

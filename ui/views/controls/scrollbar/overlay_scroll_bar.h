@@ -22,8 +22,8 @@ class VIEWS_EXPORT OverlayScrollBar : public BaseScrollBar {
   gfx::Rect GetTrackBounds() const override;
 
   // ScrollBar overrides:
-  int GetLayoutSize() const override;
-  int GetContentOverlapSize() const override;
+  int GetThickness() const override;
+  bool OverlapsContent() const override;
 
   // View overrides:
   void Layout() override;
@@ -35,6 +35,8 @@ class VIEWS_EXPORT OverlayScrollBar : public BaseScrollBar {
    public:
     explicit Thumb(OverlayScrollBar* scroll_bar);
     ~Thumb() override;
+
+    void Init();
 
    protected:
     // BaseScrollBarThumb:

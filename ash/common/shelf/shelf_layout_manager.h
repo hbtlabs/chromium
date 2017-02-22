@@ -9,9 +9,8 @@
 
 #include "ash/ash_export.h"
 #include "ash/common/session/session_state_observer.h"
-#include "ash/common/shelf/shelf_widget.h"
+#include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shell_observer.h"
-#include "ash/common/wm/background_animator.h"
 #include "ash/common/wm/dock/docked_window_layout_manager_observer.h"
 #include "ash/common/wm/lock_state_observer.h"
 #include "ash/common/wm/wm_snap_to_pixel_layout_manager.h"
@@ -27,10 +26,12 @@
 
 namespace ui {
 class ImplicitAnimationObserver;
+class MouseEvent;
 }
 
 namespace ash {
 
+enum class AnimationChangeType;
 class PanelLayoutManagerTest;
 class ShelfLayoutManagerObserver;
 class ShelfLayoutManagerTest;
@@ -132,7 +133,6 @@ class ASH_EXPORT ShelfLayoutManager
                       const gfx::Rect& requested_bounds) override;
 
   // Overridden from ShellObserver:
-  void OnLockStateChanged(bool locked) override;
   void OnShelfAutoHideBehaviorChanged(WmWindow* root_window) override;
   void OnPinnedStateChanged(WmWindow* pinned_window) override;
 
@@ -150,14 +150,11 @@ class ASH_EXPORT ShelfLayoutManager
   // Overridden from SessionStateObserver:
   void SessionStateChanged(session_manager::SessionState state) override;
 
-  // TODO(msw): Remove these accessors, kept temporarily to simplify changes.
-  ShelfAlignment GetAlignment() const { return shelf_widget_->GetAlignment(); }
-
   // TODO(harrym|oshima): These templates will be moved to a new Shelf class.
   // A helper function for choosing values specific to a shelf alignment.
   template <typename T>
   T SelectValueForShelfAlignment(T bottom, T left, T right) const {
-    switch (GetAlignment()) {
+    switch (wm_shelf_->GetAlignment()) {
       case SHELF_ALIGNMENT_BOTTOM:
       case SHELF_ALIGNMENT_BOTTOM_LOCKED:
         return bottom;
@@ -172,13 +169,10 @@ class ASH_EXPORT ShelfLayoutManager
 
   template <typename T>
   T PrimaryAxisValue(T horizontal, T vertical) const {
-    return IsHorizontalAlignment() ? horizontal : vertical;
+    return wm_shelf_->IsHorizontalAlignment() ? horizontal : vertical;
   }
 
-  // Is the shelf's alignment horizontal?
-  bool IsHorizontalAlignment() const;
-
-  // Returns how the shelf background is painted.
+  // Returns how the shelf background should be painted.
   ShelfBackgroundType GetShelfBackgroundType() const;
 
   // Set the height of the ChromeVox panel, which takes away space from the
@@ -204,31 +198,25 @@ class ASH_EXPORT ShelfLayoutManager
   };
 
   struct State {
-    State()
-        : visibility_state(SHELF_VISIBLE),
-          auto_hide_state(SHELF_AUTO_HIDE_HIDDEN),
-          window_state(wm::WORKSPACE_WINDOW_STATE_DEFAULT),
-          is_screen_locked(false),
-          is_adding_user_screen(false) {}
+    State();
+
+    // Returns true when a secondary user is being added to an existing session.
+    bool IsAddingSecondaryUser() const;
+
+    bool IsScreenLocked() const;
 
     // Returns true if the two states are considered equal. As
     // |auto_hide_state| only matters if |visibility_state| is
     // |SHELF_AUTO_HIDE|, Equals() ignores the |auto_hide_state| as
     // appropriate.
-    bool Equals(const State& other) const {
-      return other.visibility_state == visibility_state &&
-             (visibility_state != SHELF_AUTO_HIDE ||
-              other.auto_hide_state == auto_hide_state) &&
-             other.window_state == window_state &&
-             other.is_screen_locked == is_screen_locked &&
-             other.is_adding_user_screen == is_adding_user_screen;
-    }
+    bool Equals(const State& other) const;
 
     ShelfVisibilityState visibility_state;
     ShelfAutoHideState auto_hide_state;
     wm::WorkspaceWindowState window_state;
-    bool is_screen_locked;
-    bool is_adding_user_screen;
+    // True when the system is in the cancelable, pre-lock screen animation.
+    bool pre_lock_screen_animation_active;
+    session_manager::SessionState session_state;
   };
 
   // Sets the visibility of the shelf to |state|.
@@ -253,8 +241,8 @@ class ASH_EXPORT ShelfLayoutManager
   // used by |CalculateTargetBounds()|.
   void UpdateTargetBoundsForGesture(TargetBounds* target_bounds) const;
 
-  // Updates the background of the shelf.
-  void UpdateShelfBackground(BackgroundAnimatorChangeType type);
+  // Updates the background of the shelf if it has changed.
+  void MaybeUpdateShelfBackground(AnimationChangeType change_type);
 
   // Updates the auto hide state immediately.
   void UpdateAutoHideStateNow();
@@ -364,6 +352,10 @@ class ASH_EXPORT ShelfLayoutManager
 
   // The show hide animation duration override or 0 for default.
   int duration_override_in_ms_;
+
+  // The current shelf background. Should not be assigned to directly, use
+  // MaybeUpdateShelfBackground() instead.
+  ShelfBackgroundType shelf_background_type_;
 
   DISALLOW_COPY_AND_ASSIGN(ShelfLayoutManager);
 };

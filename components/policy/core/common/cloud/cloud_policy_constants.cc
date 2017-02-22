@@ -49,6 +49,10 @@ const char kValueRequestDeviceAttributeUpdate[] = "device_attribute_update";
 const char kValueRequestGcmIdUpdate[] = "gcm_id_update";
 const char kValueRequestCheckAndroidManagement[] = "check_android_management";
 const char kValueRequestCertBasedRegister[] = "certificate_based_register";
+const char kValueRequestActiveDirectoryEnrollPlayUser[] =
+    "active_directory_enroll_play_user";
+const char kValueRequestActiveDirectoryPlayActivity[] =
+    "active_directory_play_activity";
 
 const char kChromeDevicePolicyType[] = "google/chromeos/device";
 #if defined(OS_CHROMEOS)
@@ -99,13 +103,8 @@ const uint8_t kPolicyVerificationKey[] = {
 const char kPolicyVerificationKeyHash[] = "1:356l7w";
 
 std::string GetPolicyVerificationKey() {
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kDisablePolicyKeyVerification)) {
-    return std::string();
-  } else {
-    return std::string(reinterpret_cast<const char*>(kPolicyVerificationKey),
-                       sizeof(kPolicyVerificationKey));
-  }
+  return std::string(reinterpret_cast<const char*>(kPolicyVerificationKey),
+                     sizeof(kPolicyVerificationKey));
 }
 
 }  // namespace policy

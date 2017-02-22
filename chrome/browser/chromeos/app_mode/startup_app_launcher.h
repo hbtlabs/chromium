@@ -46,6 +46,10 @@ class StartupAppLauncher : public base::SupportsWeakPtr<StartupAppLauncher>,
     // Returns true if Internet is online.
     virtual bool IsNetworkReady() = 0;
 
+    // Whether app launch flow can assume all required apps are installed, and
+    // skip app installation steps.
+    virtual bool ShouldSkipAppInstallation() = 0;
+
     virtual void OnLoadingOAuthFile() = 0;
     virtual void OnInitializingTokenService() = 0;
     virtual void OnInstallingApp() = 0;
@@ -101,7 +105,7 @@ class StartupAppLauncher : public base::SupportsWeakPtr<StartupAppLauncher>,
   void OnExtensionUpdateCheckFinished();
 
   void StartLoadingOAuthFile();
-  static void LoadOAuthFileOnBlockingPool(KioskOAuthParams* auth_params);
+  static void LoadOAuthFileAsync(KioskOAuthParams* auth_params);
   void OnOAuthFileLoaded(KioskOAuthParams* auth_params);
 
   void OnKioskAppDataLoadStatusChanged(const std::string& app_id);

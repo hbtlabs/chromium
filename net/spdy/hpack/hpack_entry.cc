@@ -6,6 +6,7 @@
 
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
+#include "net/spdy/platform/api/spdy_estimate_memory_usage.h"
 
 namespace net {
 
@@ -37,8 +38,8 @@ HpackEntry::HpackEntry(const HpackEntry& other)
   } else {
     name_ = other.name_;
     value_ = other.value_;
-    name_ref_.set(name_.data(), name_.size());
-    value_ref_.set(value_.data(), value_.size());
+    name_ref_ = StringPiece(name_.data(), name_.size());
+    value_ref_ = StringPiece(value_.data(), value_.size());
   }
 }
 
@@ -52,8 +53,8 @@ HpackEntry& HpackEntry::operator=(const HpackEntry& other) {
   }
   name_ = other.name_;
   value_ = other.value_;
-  name_ref_.set(name_.data(), name_.size());
-  value_ref_.set(value_.data(), value_.size());
+  name_ref_ = StringPiece(name_.data(), name_.size());
+  value_ref_ = StringPiece(value_.data(), value_.size());
   return *this;
 }
 
@@ -74,6 +75,10 @@ std::string HpackEntry::GetDebugString() const {
          base::SizeTToString(insertion_index_) +
          (IsStatic() ? " static" : (IsLookup() ? " lookup" : " dynamic")) +
          " }";
+}
+
+size_t HpackEntry::EstimateMemoryUsage() const {
+  return SpdyEstimateMemoryUsage(name_) + SpdyEstimateMemoryUsage(value_);
 }
 
 }  // namespace net

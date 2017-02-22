@@ -4,18 +4,14 @@
 
 #include "net/quic/core/quic_bandwidth.h"
 
-#include <stdint.h>
-
+#include <cinttypes>
 #include <limits>
 
-#include "base/format_macros.h"
-#include "base/logging.h"
-#include "base/strings/stringprintf.h"
-#include "net/quic/core/quic_bug_tracker.h"
+#include "net/quic/core/quic_constants.h"
 #include "net/quic/core/quic_time.h"
 #include "net/quic/core/quic_types.h"
-
-using base::StringPrintf;
+#include "net/quic/platform/api/quic_bug_tracker.h"
+#include "net/quic/platform/api/quic_str_cat.h"
 
 namespace net {
 
@@ -116,8 +112,8 @@ QuicTime::Delta QuicBandwidth::TransferTime(QuicByteCount bytes) const {
 
 std::string QuicBandwidth::ToDebugValue() const {
   if (bits_per_second_ < 80000) {
-    return StringPrintf("%" PRId64 " bits/s (%" PRId64 " bytes/s)",
-                        bits_per_second_, bits_per_second_ / 8);
+    return QuicStringPrintf("%" PRId64 " bits/s (%" PRId64 " bytes/s)",
+                            bits_per_second_, bits_per_second_ / 8);
   }
 
   double divisor;
@@ -135,9 +131,9 @@ std::string QuicBandwidth::ToDebugValue() const {
 
   double bits_per_second_with_unit = bits_per_second_ / divisor;
   double bytes_per_second_with_unit = bits_per_second_with_unit / 8;
-  return StringPrintf("%.2f %cbits/s (%.2f %cbytes/s)",
-                      bits_per_second_with_unit, unit,
-                      bytes_per_second_with_unit, unit);
+  return QuicStringPrintf("%.2f %cbits/s (%.2f %cbytes/s)",
+                          bits_per_second_with_unit, unit,
+                          bytes_per_second_with_unit, unit);
 }
 
 }  // namespace net

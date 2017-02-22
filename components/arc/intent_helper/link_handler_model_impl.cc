@@ -9,16 +9,15 @@
 
 #include "base/bind.h"
 #include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_service_manager.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
 #include "components/google/core/browser/google_util.h"
-#include "url/gurl.h"
 #include "url/url_util.h"
 
 namespace arc {
 
 namespace {
 
-constexpr int kMinInstanceVersion = 2;  // see intent_helper.mojom
 constexpr int kMaxValueLen = 2048;
 
 bool GetQueryValue(const GURL& url,
@@ -48,15 +47,17 @@ bool GetQueryValue(const GURL& url,
 
 }  // namespace
 
-LinkHandlerModelImpl::LinkHandlerModelImpl(
-    scoped_refptr<ActivityIconLoader> icon_loader)
-    : icon_loader_(icon_loader), weak_ptr_factory_(this) {}
+LinkHandlerModelImpl::LinkHandlerModelImpl() : weak_ptr_factory_(this) {}
 
-LinkHandlerModelImpl::~LinkHandlerModelImpl() {}
+LinkHandlerModelImpl::~LinkHandlerModelImpl() = default;
 
 bool LinkHandlerModelImpl::Init(const GURL& url) {
-  auto* instance = ArcIntentHelperBridge::GetIntentHelperInstance(
-      "RequestUrlHandlerList", kMinInstanceVersion);
+  auto* arc_service_manager = ArcServiceManager::Get();
+  if (!arc_service_manager)
+    return false;
+  auto* instance = ARC_GET_INSTANCE_FOR_METHOD(
+      arc_service_manager->arc_bridge_service()->intent_helper(),
+      RequestUrlHandlerList);
   if (!instance)
     return false;
 
@@ -77,8 +78,11 @@ void LinkHandlerModelImpl::AddObserver(Observer* observer) {
 
 void LinkHandlerModelImpl::OpenLinkWithHandler(const GURL& url,
                                                uint32_t handler_id) {
-  auto* instance = ArcIntentHelperBridge::GetIntentHelperInstance(
-      "HandleUrl", kMinInstanceVersion);
+  auto* arc_service_manager = ArcServiceManager::Get();
+  if (!arc_service_manager)
+    return;
+  auto* instance = ARC_GET_INSTANCE_FOR_METHOD(
+      arc_service_manager->arc_bridge_service()->intent_helper(), HandleUrl);
   if (!instance)
     return;
   if (handler_id >= handlers_.size())
@@ -92,16 +96,20 @@ void LinkHandlerModelImpl::OnUrlHandlerList(
   handlers_ = ArcIntentHelperBridge::FilterOutIntentHelper(std::move(handlers));
 
   bool icon_info_notified = false;
-  if (icon_loader_) {
-    std::vector<ActivityIconLoader::ActivityName> activities;
+  auto* intent_helper_bridge =
+      ArcServiceManager::GetGlobalService<ArcIntentHelperBridge>();
+  if (intent_helper_bridge) {
+    std::vector<ArcIntentHelperBridge::ActivityName> activities;
     for (size_t i = 0; i < handlers_.size(); ++i) {
       activities.emplace_back(handlers_[i]->package_name,
                               handlers_[i]->activity_name);
     }
-    const ActivityIconLoader::GetResult result = icon_loader_->GetActivityIcons(
-        activities, base::Bind(&LinkHandlerModelImpl::NotifyObserver,
-                               weak_ptr_factory_.GetWeakPtr()));
-    icon_info_notified = ActivityIconLoader::HasIconsReadyCallbackRun(result);
+    const ArcIntentHelperBridge::GetResult result =
+        intent_helper_bridge->GetActivityIcons(
+            activities, base::Bind(&LinkHandlerModelImpl::NotifyObserver,
+                                   weak_ptr_factory_.GetWeakPtr()));
+    icon_info_notified =
+        internal::ActivityIconLoader::HasIconsReadyCallbackRun(result);
   }
 
   if (!icon_info_notified) {
@@ -113,7 +121,7 @@ void LinkHandlerModelImpl::OnUrlHandlerList(
 }
 
 void LinkHandlerModelImpl::NotifyObserver(
-    std::unique_ptr<ActivityIconLoader::ActivityToIconsMap> icons) {
+    std::unique_ptr<ArcIntentHelperBridge::ActivityToIconsMap> icons) {
   if (icons) {
     icons_.insert(icons->begin(), icons->end());
     icons.reset();
@@ -122,7 +130,7 @@ void LinkHandlerModelImpl::NotifyObserver(
   std::vector<ash::LinkHandlerInfo> handlers;
   for (size_t i = 0; i < handlers_.size(); ++i) {
     gfx::Image icon;
-    const ActivityIconLoader::ActivityName activity(
+    const ArcIntentHelperBridge::ActivityName activity(
         handlers_[i]->package_name, handlers_[i]->activity_name);
     const auto it = icons_.find(activity);
     if (it != icons_.end())

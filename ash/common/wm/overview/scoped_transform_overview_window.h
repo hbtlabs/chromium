@@ -141,6 +141,9 @@ class ASH_EXPORT ScopedTransformOverviewWindow : public ui::EventHandler {
   // For minmiezd window, this will be a window that hosts mirrored layers.
   WmWindow* GetOverviewWindow() const;
 
+  // Ensures that a window is visible by setting its opacity to 1.
+  void EnsureVisible();
+
   // Returns the window created for minimized window, or nullptr
   // if it does not exit.
   WmWindow* GetOverviewWindowForMinimizedState() const;
@@ -178,6 +181,9 @@ class ASH_EXPORT ScopedTransformOverviewWindow : public ui::EventHandler {
 
   // The original transform of the window before entering overview mode.
   gfx::Transform original_transform_;
+
+  // The original opacity of the window before entering overview mode.
+  float original_opacity_;
 
   // A window that holds the content for minimized window.
   std::unique_ptr<views::Widget> minimized_widget_;

@@ -4,6 +4,7 @@
 
 #include "ash/display/display_error_observer_chromeos.h"
 
+#include "ash/common/system/chromeos/devicetype_utils.h"
 #include "ash/display/display_util.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
@@ -41,51 +42,43 @@ class DisplayErrorObserverTest : public test::AshTestBase {
 };
 
 TEST_F(DisplayErrorObserverTest, Normal) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("200x200,300x300");
   observer()->OnDisplayModeChangeFailed(
-      ui::DisplayConfigurator::DisplayStateList(),
-      ui::MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+      display::DisplayConfigurator::DisplayStateList(),
+      display::MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
   EXPECT_EQ(l10n_util::GetStringUTF16(IDS_ASH_DISPLAY_FAILURE_ON_MIRRORING),
             GetMessageContents());
 }
 
 TEST_F(DisplayErrorObserverTest, CallTwice) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("200x200,300x300");
   observer()->OnDisplayModeChangeFailed(
-      ui::DisplayConfigurator::DisplayStateList(),
-      ui::MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+      display::DisplayConfigurator::DisplayStateList(),
+      display::MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
   base::string16 message = GetMessageContents();
   EXPECT_FALSE(message.empty());
 
   observer()->OnDisplayModeChangeFailed(
-      ui::DisplayConfigurator::DisplayStateList(),
-      ui::MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+      display::DisplayConfigurator::DisplayStateList(),
+      display::MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
   base::string16 message2 = GetMessageContents();
   EXPECT_FALSE(message2.empty());
   EXPECT_EQ(message, message2);
 }
 
 TEST_F(DisplayErrorObserverTest, CallWithDifferentState) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("200x200,300x300");
   observer()->OnDisplayModeChangeFailed(
-      ui::DisplayConfigurator::DisplayStateList(),
-      ui::MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
+      display::DisplayConfigurator::DisplayStateList(),
+      display::MULTIPLE_DISPLAY_STATE_DUAL_MIRROR);
   EXPECT_EQ(l10n_util::GetStringUTF16(IDS_ASH_DISPLAY_FAILURE_ON_MIRRORING),
             GetMessageContents());
 
   observer()->OnDisplayModeChangeFailed(
-      ui::DisplayConfigurator::DisplayStateList(),
-      ui::MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED);
-  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_ASH_DISPLAY_FAILURE_ON_NON_MIRRORING),
+      display::DisplayConfigurator::DisplayStateList(),
+      display::MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED);
+  EXPECT_EQ(ash::SubstituteChromeOSDeviceType(
+                IDS_ASH_DISPLAY_FAILURE_ON_NON_MIRRORING),
             GetMessageContents());
 }
 

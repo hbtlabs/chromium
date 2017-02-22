@@ -1,7 +1,5 @@
 {
-  "name": "Content Root Layer",
-  "bounds": [800, 677],
-  "children": [
+  "layers": [
     {
       "name": "LayoutView #document",
       "bounds": [800, 677],
@@ -27,6 +25,11 @@
           "object": "LayoutBlockFlow HTML",
           "rect": [0, 0, 785, 677],
           "reason": "forced by layout"
+        },
+        {
+          "object": "LayoutView #document",
+          "rect": [0, 600, 785, 77],
+          "reason": "incremental"
         },
         {
           "object": "LayoutBlockFlow BODY",
@@ -81,8 +84,8 @@
       "reason": "forced by layout"
     },
     {
-      "object": "LayoutBlockFlow HTML",
-      "reason": "forced by layout"
+      "object": "HorizontalScrollbar",
+      "reason": "scroll"
     },
     {
       "object": "LayoutView #document",
@@ -91,6 +94,14 @@
     {
       "object": "VerticalScrollbar",
       "reason": "scroll"
+    },
+    {
+      "object": "LayoutView #document",
+      "reason": "incremental"
+    },
+    {
+      "object": "LayoutBlockFlow HTML",
+      "reason": "forced by layout"
     }
   ]
 }

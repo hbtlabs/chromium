@@ -32,6 +32,7 @@
 #define WorkerReportingProxy_h
 
 #include "core/CoreExport.h"
+#include "core/frame/UseCounter.h"
 #include "core/inspector/ConsoleTypes.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
@@ -39,7 +40,6 @@
 
 namespace blink {
 
-class ConsoleMessage;
 class SourceLocation;
 class WorkerOrWorkletGlobalScope;
 
@@ -48,6 +48,8 @@ class CORE_EXPORT WorkerReportingProxy {
  public:
   virtual ~WorkerReportingProxy() {}
 
+  virtual void countFeature(UseCounter::Feature) = 0;
+  virtual void countDeprecation(UseCounter::Feature) = 0;
   virtual void reportException(const String& errorMessage,
                                std::unique_ptr<SourceLocation>,
                                int exceptionId) = 0;

@@ -52,7 +52,8 @@ public class ContextualSearchFieldTrial {
     private static final String DISABLE_ACCEPT_LANGUAGES_FOR_TRANSLATION =
             "disable_accept_languages_for_translation";
     // Enables usage of English as the target language even when it's the primary UI language.
-    private static final String ENABLE_ENGLISH_TARGET_TRANSLATION =
+    @VisibleForTesting
+    static final String ENABLE_ENGLISH_TARGET_TRANSLATION =
             "enable_english_target_translation";
     // Enables relying on the server to control whether the onebox is actually shown, rather
     // than checking if translation is needed client-side based on source/target languages.
@@ -65,8 +66,6 @@ public class ContextualSearchFieldTrial {
     // Quick Answers.
     private static final String ENABLE_QUICK_ANSWERS = "enable_quick_answers";
 
-    // Tap triggering suppression.
-    static final String SUPPRESSION_TAPS = "suppression_taps";
     // Enables collection of recent scroll seen/unseen histograms.
     // TODO(donnd): remove all supporting code once short-lived data collection is done.
     private static final String ENABLE_RECENT_SCROLL_COLLECTION = "enable_recent_scroll_collection";
@@ -83,6 +82,9 @@ public class ContextualSearchFieldTrial {
     static final String ONLINE_DETECTION_DISABLED = "disable_online_detection";
 
     private static final String ENABLE_AMP_AS_SEPARATE_TAB = "enable_amp_as_separate_tab";
+
+    // Privacy-related flags
+    private static final String ENABLE_SEND_HOME_COUNTRY = "enable_send_home_country";
 
     // Cached values to avoid repeated and redundant JNI operations.
     private static Boolean sEnabled;
@@ -104,12 +106,13 @@ public class ContextualSearchFieldTrial {
     private static Integer sScreenTopSuppressionDps;
     private static Boolean sIsBarOverlapCollectionEnabled;
     private static Boolean sIsBarOverlapSuppressionEnabled;
-    private static Integer sSuppressionTaps;
     private static Boolean sShouldHideContextualCardsData;
     private static Boolean sIsContextualCardsBarIntegrationEnabled;
     private static Boolean sIsOnlineDetectionDisabled;
     private static Boolean sIsAmpAsSeparateTabEnabled;
     private static Boolean sContextualSearchSingleActionsEnabled;
+    private static Boolean sCanSendHomeCountry;
+    private static Boolean sContextualSearchUrlActionsEnabled;
 
     /**
      * Don't instantiate.
@@ -364,24 +367,6 @@ public class ContextualSearchFieldTrial {
     }
 
     /**
-     * @return Whether triggering by Tap is suppressed (through a combination of various signals).
-     */
-    static boolean isTapSuppressionEnabled() {
-        return getSuppressionTaps() > 0;
-    }
-
-    /**
-     * @return The suppression threshold, expressed as the number of Taps since the last open where
-     *         we start suppressing the UX on Tap.
-     */
-    static int getSuppressionTaps() {
-        if (sSuppressionTaps == null) {
-            sSuppressionTaps = getIntParamValueOrDefault(SUPPRESSION_TAPS, 0);
-        }
-        return sSuppressionTaps.intValue();
-    }
-
-    /**
      * @return Whether to auto-promote clicks in the AMP carousel into a separate Tab.
      */
     static boolean isAmpAsSeparateTabEnabled() {
@@ -418,6 +403,16 @@ public class ContextualSearchFieldTrial {
         return sIsOnlineDetectionDisabled;
     }
 
+    /**
+     * @return Whether sending the "home country" to Google is enabled.
+     */
+    static boolean isSendHomeCountryEnabled() {
+        if (sCanSendHomeCountry == null) {
+            sCanSendHomeCountry = getBooleanParam(ENABLE_SEND_HOME_COUNTRY);
+        }
+        return sCanSendHomeCountry.booleanValue();
+    }
+
     // ---------------
     // Features.
     // ---------------
@@ -432,6 +427,18 @@ public class ContextualSearchFieldTrial {
         }
 
         return sContextualSearchSingleActionsEnabled;
+    }
+
+    /**
+     * @return Whether or not URL actions based on Contextual Cards is enabled.
+     */
+    static boolean isContextualSearchUrlActionsEnabled() {
+        if (sContextualSearchUrlActionsEnabled == null) {
+            sContextualSearchUrlActionsEnabled =
+                    ChromeFeatureList.isEnabled(ChromeFeatureList.CONTEXTUAL_SEARCH_URL_ACTIONS);
+        }
+
+        return sContextualSearchUrlActionsEnabled;
     }
 
     // --------------------------------------------------------------------------------------------

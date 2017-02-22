@@ -13,11 +13,11 @@
 #include "chrome/browser/plugins/plugins_field_trial.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/navigation_interception/intercept_navigation_throttle.h"
 #include "components/navigation_interception/navigation_params.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
-#include "content/public/browser/permission_type.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h"
 #include "third_party/re2/src/re2/re2.h"
@@ -67,7 +67,7 @@ void FlashDownloadInterception::InterceptFlashDownloadNavigation(
   if (flash_setting == CONTENT_SETTING_DETECT_IMPORTANT_CONTENT) {
     PermissionManager* manager = PermissionManager::Get(profile);
     manager->RequestPermission(
-        content::PermissionType::FLASH, web_contents->GetMainFrame(),
+        CONTENT_SETTINGS_TYPE_PLUGINS, web_contents->GetMainFrame(),
         web_contents->GetLastCommittedURL(), true, base::Bind(&DoNothing));
   } else if (flash_setting == CONTENT_SETTING_BLOCK) {
     TabSpecificContentSettings::FromWebContents(web_contents)
@@ -116,10 +116,6 @@ std::unique_ptr<NavigationThrottle>
 FlashDownloadInterception::MaybeCreateThrottleFor(NavigationHandle* handle) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  // Never intercept Flash Download navigations in a new window.
-  if (handle->GetWebContents()->HasOpener())
-    return nullptr;
-
   // Browser initiated navigations like the Back button or the context menu
   // should never be intercepted.
   if (!handle->IsRendererInitiated())
@@ -131,13 +127,17 @@ FlashDownloadInterception::MaybeCreateThrottleFor(NavigationHandle* handle) {
   if (source_url.is_empty())
     return nullptr;
 
+  // Always treat main-frame navigations as having a user gesture. We have to do
+  // this because the user gesture system can be foiled by popular JavaScript
+  // analytics frameworks that capture the click event. crbug.com/678097
+  bool has_user_gesture = handle->HasUserGesture() || handle->IsInMainFrame();
+
   Profile* profile = Profile::FromBrowserContext(
       handle->GetWebContents()->GetBrowserContext());
   HostContentSettingsMap* host_content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(profile);
   if (!ShouldStopFlashDownloadAction(host_content_settings_map, source_url,
-                                     handle->GetURL(),
-                                     handle->HasUserGesture())) {
+                                     handle->GetURL(), has_user_gesture)) {
     return nullptr;
   }
 

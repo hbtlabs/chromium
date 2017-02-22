@@ -10,6 +10,7 @@
 #include "base/android/jni_weak_ref.h"
 #include "base/memory/ref_counted.h"
 #include "ui/android/ui_android_export.h"
+#include "ui/android/view_client.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace cc {
@@ -22,6 +23,8 @@ class WindowAndroid;
 
 // A simple container for a UI layer.
 // At the root of the hierarchy is a WindowAndroid, when attached.
+// TODO(jinsukkim): Replace WindowAndroid with ViewRoot for the root of the
+//     view hierarchy. See https://crbug.com/671401
 class UI_ANDROID_EXPORT ViewAndroid {
  public:
   // Stores an anchored view to delete itself at the end of its lifetime
@@ -54,16 +57,28 @@ class UI_ANDROID_EXPORT ViewAndroid {
     // Default copy/assign disabled by move constructor.
   };
 
-  // A ViewAndroid may have its own delegate or otherwise will
-  // use the next available parent's delegate.
-  ViewAndroid(const base::android::JavaRef<jobject>& delegate);
+  explicit ViewAndroid(ViewClient* client);
 
   ViewAndroid();
   virtual ~ViewAndroid();
 
+  // The content offset is in CSS pixels, and is used to translate
+  // snapshots to the correct part of the view.
+  void set_content_offset(const gfx::Vector2dF& content_offset) {
+    content_offset_ = content_offset;
+  }
+
+  gfx::Vector2dF content_offset() const {
+    return content_offset_;
+  }
+
   // Returns the window at the root of this hierarchy, or |null|
   // if disconnected.
   virtual WindowAndroid* GetWindowAndroid() const;
+
+  // Returns |ViewRoot| of this hierarchy. |null| if the hierarchy isn't
+  // attached to a |ViewRoot|.
+  virtual ViewAndroid* GetViewRoot();
 
   // Used to return and set the layer for this view. May be |null|.
   cc::Layer* GetLayer() const;
@@ -71,11 +86,18 @@ class UI_ANDROID_EXPORT ViewAndroid {
 
   void SetDelegate(const base::android::JavaRef<jobject>& delegate);
 
-  // Adds this view as a child of another view.
+  // Adds a child to this view.
   void AddChild(ViewAndroid* child);
+
+  // Move the give child ViewAndroid to the top of the list
+  // so that it can be the first responder of events.
+  void MoveToTop(ViewAndroid* child);
 
   // Detaches this view from its parent.
   void RemoveFromParent();
+
+  // Set the layout relative to parent. Used to do hit testing against events.
+  void SetLayout(int x, int y, int width, int height, bool match_parent);
 
   bool StartDragAndDrop(const base::android::JavaRef<jstring>& jtext,
                         const base::android::JavaRef<jobject>& jimage);
@@ -84,10 +106,22 @@ class UI_ANDROID_EXPORT ViewAndroid {
   void SetAnchorRect(const base::android::JavaRef<jobject>& anchor,
                      const gfx::RectF& bounds);
 
+  // This may return null.
+  base::android::ScopedJavaLocalRef<jobject> GetContainerView();
+
  protected:
+  // Internal implementation of ViewClient forwarding calls to the interface.
+  bool OnTouchEventInternal(const MotionEventData& event);
+
+  // Virtual for testing.
+  virtual float GetDipScale();
+
   ViewAndroid* parent_;
 
  private:
+  // Returns true only if this is of type |ViewRoot|.
+  bool IsViewRoot();
+
   void RemoveChild(ViewAndroid* child);
 
   // Returns the Java delegate for this view. This is used to delegate work
@@ -96,9 +130,19 @@ class UI_ANDROID_EXPORT ViewAndroid {
   const base::android::ScopedJavaLocalRef<jobject>
       GetViewAndroidDelegate() const;
 
+  // The child view at the back of the list receives event first.
   std::list<ViewAndroid*> children_;
   scoped_refptr<cc::Layer> layer_;
   JavaObjectWeakGlobalRef delegate_;
+  ViewClient* const client_;
+
+  // Basic view layout information. Used to do hit testing deciding whether
+  // the passed events should be processed by the view.
+  gfx::Point origin_;  // In parent's coordinate space.
+  gfx::Size size_;
+  bool match_parent_;  // Bounds matches that of the parent if true.
+
+  gfx::Vector2dF content_offset_;  // In CSS pixel.
 
   DISALLOW_COPY_AND_ASSIGN(ViewAndroid);
 };

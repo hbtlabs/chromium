@@ -26,11 +26,11 @@ struct ExpectedRun {
 class OrientationIteratorTest : public testing::Test {
  protected:
   void CheckRuns(const Vector<TestRun>& runs) {
-    String text(emptyString16Bit());
+    String text(emptyString16Bit);
     Vector<ExpectedRun> expect;
     for (auto& run : runs) {
       text.append(String::fromUTF8(run.text.c_str()));
-      expect.append(ExpectedRun(text.length(), run.code));
+      expect.push_back(ExpectedRun(text.length(), run.code));
     }
     OrientationIterator orientationIterator(text.characters16(), text.length(),
                                             FontOrientation::VerticalMixed);
@@ -60,7 +60,7 @@ class OrientationIteratorTest : public testing::Test {
   CheckRuns(runs);
 
 TEST_F(OrientationIteratorTest, Empty) {
-  String empty(emptyString16Bit());
+  String empty(emptyString16Bit);
   OrientationIterator orientationIterator(empty.characters16(), empty.length(),
                                           FontOrientation::VerticalMixed);
   unsigned limit = 0;

@@ -21,7 +21,7 @@ WebDatabaseBackend::WebDatabaseBackend(
     const FilePath& path,
     Delegate* delegate,
     const scoped_refptr<base::SingleThreadTaskRunner>& db_thread)
-    : base::RefCountedDeleteOnMessageLoop<WebDatabaseBackend>(db_thread),
+    : base::RefCountedDeleteOnSequence<WebDatabaseBackend>(db_thread),
       db_path_(path),
       request_manager_(new WebDataRequestManager()),
       init_status_(sql::INIT_FAILURE),
@@ -31,7 +31,7 @@ WebDatabaseBackend::WebDatabaseBackend(
 
 void WebDatabaseBackend::AddTable(std::unique_ptr<WebDatabaseTable> table) {
   DCHECK(!db_.get());
-  tables_.push_back(table.release());
+  tables_.push_back(std::move(table));
 }
 
 void WebDatabaseBackend::InitDatabase() {
@@ -52,11 +52,11 @@ void WebDatabaseBackend::ShutdownDatabase() {
 void WebDatabaseBackend::DBWriteTaskWrapper(
     const WebDatabaseService::WriteTask& task,
     std::unique_ptr<WebDataRequest> request) {
-  if (request->IsCancelled())
+  if (!request->IsActive())
     return;
 
   ExecuteWriteTask(task);
-  request_manager_->RequestCompleted(std::move(request));
+  request_manager_->RequestCompleted(std::move(request), nullptr);
 }
 
 void WebDatabaseBackend::ExecuteWriteTask(
@@ -72,11 +72,11 @@ void WebDatabaseBackend::ExecuteWriteTask(
 void WebDatabaseBackend::DBReadTaskWrapper(
     const WebDatabaseService::ReadTask& task,
     std::unique_ptr<WebDataRequest> request) {
-  if (request->IsCancelled())
+  if (!request->IsActive())
     return;
 
-  request->SetResult(ExecuteReadTask(task));
-  request_manager_->RequestCompleted(std::move(request));
+  std::unique_ptr<WDTypedResult> result = ExecuteReadTask(task);
+  request_manager_->RequestCompleted(std::move(request), std::move(result));
 }
 
 std::unique_ptr<WDTypedResult> WebDatabaseBackend::ExecuteReadTask(
@@ -100,7 +100,7 @@ void WebDatabaseBackend::LoadDatabaseIfNecessary() {
   db_.reset(new WebDatabase());
 
   for (const auto& table : tables_)
-    db_->AddTable(table);
+    db_->AddTable(table.get());
 
   // Unretained to avoid a ref loop since we own |db_|.
   db_->set_error_callback(base::Bind(&WebDatabaseBackend::DatabaseErrorCallback,

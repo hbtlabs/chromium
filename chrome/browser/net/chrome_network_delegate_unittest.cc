@@ -32,6 +32,7 @@
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/previews_state.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/features/features.h"
@@ -77,7 +78,7 @@ std::unique_ptr<net::URLRequest> RequestURL(
 
   content::ResourceRequestInfo::AllocateForTesting(
       request.get(), content::RESOURCE_TYPE_MAIN_FRAME, nullptr, -2, -2, -2,
-      true, false, true, true, false);
+      true, false, true, true, content::PREVIEWS_OFF);
 
   request->Start();
   base::RunLoop().RunUntilIdle();
@@ -121,6 +122,14 @@ class FakeDataUseAggregator : public data_usage::DataUseAggregator {
   int64_t off_the_record_tx_bytes_;
   int64_t off_the_record_rx_bytes_;
 };
+
+// Helper function to make the IsAccessAllowed test concise.
+bool IsAccessAllowed(const std::string& path,
+                     const std::string& profile_path) {
+  return ChromeNetworkDelegate::IsAccessAllowed(
+      base::FilePath::FromUTF8Unsafe(path),
+      base::FilePath::FromUTF8Unsafe(profile_path));
+}
 
 }  // namespace
 
@@ -526,4 +535,58 @@ TEST_F(ChromeNetworkDelegatePrivacyModeTest,
   // Privacy mode is disabled as kAllowedSite is still getting cookies
   EXPECT_FALSE(network_delegate_->CanEnablePrivacyMode(kAllowedSite,
                                                        kBlockedFirstPartySite));
+}
+
+TEST(ChromeNetworkDelegateStaticTest, IsAccessAllowed) {
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+  // Platforms other than Chrome OS and Android have access to any files.
+  EXPECT_TRUE(IsAccessAllowed("/", ""));
+  EXPECT_TRUE(IsAccessAllowed("/foo.txt", ""));
+#endif
+
+#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
+  // Chrome OS and Android don't have access to random files.
+  EXPECT_FALSE(IsAccessAllowed("/", ""));
+  EXPECT_FALSE(IsAccessAllowed("/foo.txt", ""));
+#endif
+
+#if defined(OS_CHROMEOS)
+  // Chrome OS allows the following directories.
+  EXPECT_TRUE(IsAccessAllowed("/home/chronos/user/Downloads", ""));
+  EXPECT_TRUE(IsAccessAllowed("/home/chronos/user/log", ""));
+  EXPECT_TRUE(IsAccessAllowed("/home/chronos/user/WebRTC Logs", ""));
+  EXPECT_TRUE(IsAccessAllowed("/media", ""));
+  EXPECT_TRUE(IsAccessAllowed("/opt/oem", ""));
+  EXPECT_TRUE(IsAccessAllowed("/usr/share/chromeos-assets", ""));
+  EXPECT_TRUE(IsAccessAllowed("/tmp", ""));
+  EXPECT_TRUE(IsAccessAllowed("/var/log", ""));
+  // Files under the directories are allowed.
+  EXPECT_TRUE(IsAccessAllowed("/tmp/foo.txt", ""));
+  // Make sure similar paths are not allowed.
+  EXPECT_FALSE(IsAccessAllowed("/home/chronos/user/log.txt", ""));
+  EXPECT_FALSE(IsAccessAllowed("/home/chronos/user", ""));
+  EXPECT_FALSE(IsAccessAllowed("/home/chronos", ""));
+
+  // If profile path is given, the following additional paths are allowed.
+  EXPECT_TRUE(IsAccessAllowed("/profile/Downloads", "/profile"));
+  EXPECT_TRUE(IsAccessAllowed("/profile/WebRTC Logs", "/profile"));
+
+#elif defined(OS_ANDROID)
+  // Android allows the following directories.
+  EXPECT_TRUE(IsAccessAllowed("/sdcard", ""));
+  EXPECT_TRUE(IsAccessAllowed("/mnt/sdcard", ""));
+  // Files under the directories are allowed.
+  EXPECT_TRUE(IsAccessAllowed("/sdcard/foo.txt", ""));
+  // Make sure similar paths are not allowed.
+  EXPECT_FALSE(IsAccessAllowed("/mnt/sdcard.txt", ""));
+  EXPECT_FALSE(IsAccessAllowed("/mnt", ""));
+
+  // Files in external storage are allowed.
+  base::FilePath external_storage_path;
+  PathService::Get(base::DIR_ANDROID_EXTERNAL_STORAGE, &external_storage_path);
+  EXPECT_TRUE(IsAccessAllowed(
+      external_storage_path.AppendASCII("foo.txt").AsUTF8Unsafe(), ""));
+  // The external storage root itself is not allowed.
+  EXPECT_FALSE(IsAccessAllowed(external_storage_path.AsUTF8Unsafe(), ""));
+#endif
 }

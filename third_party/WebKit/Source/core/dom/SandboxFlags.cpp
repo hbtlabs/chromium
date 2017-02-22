@@ -26,7 +26,9 @@
 
 #include "core/dom/SandboxFlags.h"
 
+#include "core/html/HTMLIFrameElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "wtf/text/StringBuilder.h"
 
 namespace blink {
@@ -65,22 +67,23 @@ SandboxFlags parseSandboxPolicy(const SpaceSplitString& policy,
       flags &= ~SandboxModals;
     } else if (equalIgnoringCase(sandboxToken, "allow-presentation")) {
       flags &= ~SandboxPresentation;
+    } else if (equalIgnoringCase(sandboxToken,
+                                 "allow-top-navigation-with-user-activation") &&
+               RuntimeEnabledFeatures::
+                   topNavWithUserActivationInSandboxEnabled()) {
+      flags &= ~SandboxTopNavigationWithUserActivation;
     } else {
-      if (numberOfTokenErrors)
-        tokenErrors.append(", '");
-      else
-        tokenErrors.append('\'');
+      tokenErrors.append(tokenErrors.isEmpty() ? "'" : ", '");
       tokenErrors.append(sandboxToken);
-      tokenErrors.append('\'');
+      tokenErrors.append("'");
       numberOfTokenErrors++;
     }
   }
 
   if (numberOfTokenErrors) {
-    if (numberOfTokenErrors > 1)
-      tokenErrors.append(" are invalid sandbox flags.");
-    else
-      tokenErrors.append(" is an invalid sandbox flag.");
+    tokenErrors.append(numberOfTokenErrors > 1
+                           ? " are invalid sandbox flags."
+                           : " is an invalid sandbox flag.");
     invalidTokensErrorMessage = tokenErrors.toString();
   }
 

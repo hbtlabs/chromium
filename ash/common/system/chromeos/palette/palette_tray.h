@@ -16,6 +16,7 @@
 #include "ash/common/system/tray/tray_background_view.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "ui/events/devices/input_device_event_observer.h"
 
 namespace gfx {
 class Point;
@@ -38,6 +39,7 @@ class ASH_EXPORT PaletteTray : public TrayBackgroundView,
                                public SessionStateObserver,
                                public ShellObserver,
                                public PaletteToolManager::Delegate,
+                               public ui::InputDeviceEventObserver,
                                public views::TrayBubbleView::Delegate {
  public:
   explicit PaletteTray(WmShelf* wm_shelf);
@@ -58,6 +60,7 @@ class ASH_EXPORT PaletteTray : public TrayBackgroundView,
   void HideBubbleWithView(const views::TrayBubbleView* bubble_view) override;
   void SetShelfAlignment(ShelfAlignment alignment) override;
   void AnchorUpdated() override;
+  void Initialize() override;
 
   // PaletteToolManager::Delegate:
   void HidePalette() override;
@@ -77,6 +80,10 @@ class ASH_EXPORT PaletteTray : public TrayBackgroundView,
   bool ContainsPointInScreen(const gfx::Point& point);
 
  private:
+  // ui::InputDeviceObserver:
+  void OnTouchscreenDeviceConfigurationChanged() override;
+  void OnStylusStateChanged(ui::StylusState stylus_state) override;
+
   // views::TrayBubbleView::Delegate:
   void BubbleViewDestroyed() override;
   void OnMouseEnteredView() override;
@@ -92,18 +99,11 @@ class ASH_EXPORT PaletteTray : public TrayBackgroundView,
   void OnActiveToolChanged() override;
   WmWindow* GetWindow() override;
 
-  // Creates a new border for the icon. The padding is determined based on the
-  // alignment of the shelf.
-  void SetIconBorderForShelfAlignment();
-
   // Updates the tray icon from the palette tool manager.
   void UpdateTrayIcon();
 
   // Sets the icon to visible if the palette can be used.
   void UpdateIconVisibility();
-
-  // Called when a stylus inserted or removed event is received.
-  void OnStylusStateChanged(ui::StylusState stylus_state);
 
   // Called when the palette enabled pref has changed.
   void OnPaletteEnabledPrefChanged(bool enabled);
@@ -123,6 +123,9 @@ class ASH_EXPORT PaletteTray : public TrayBackgroundView,
   // have to use a helper variable instead of just checking if we have a tray
   // instance.
   bool should_block_shelf_auto_hide_ = false;
+
+  // Cached palette enabled/disabled pref value.
+  bool is_palette_enabled_ = true;
 
   // Used to indicate whether the palette bubble is automatically opened by a
   // stylus eject event.

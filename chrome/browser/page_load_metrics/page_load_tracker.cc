@@ -18,6 +18,8 @@
 #include "chrome/common/page_load_metrics/page_load_timing.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/web_contents.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "ui/base/page_transition_types.h"
 
 // This macro invokes the specified method on each observer, passing the
@@ -63,20 +65,20 @@ void RecordInternalError(InternalErrorLoadEvent event) {
 
 // TODO(csharrison): Add a case for client side redirects, which is what JS
 // initiated window.location / window.history navigations get set to.
-UserAbortType AbortTypeForPageTransition(ui::PageTransition transition) {
+PageEndReason EndReasonForPageTransition(ui::PageTransition transition) {
   if (transition & ui::PAGE_TRANSITION_CLIENT_REDIRECT) {
-    return ABORT_CLIENT_REDIRECT;
+    return END_CLIENT_REDIRECT;
   }
   if (ui::PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_RELOAD))
-    return ABORT_RELOAD;
+    return END_RELOAD;
   if (transition & ui::PAGE_TRANSITION_FORWARD_BACK)
-    return ABORT_FORWARD_BACK;
+    return END_FORWARD_BACK;
   if (ui::PageTransitionIsNewNavigation(transition))
-    return ABORT_NEW_NAVIGATION;
+    return END_NEW_NAVIGATION;
   NOTREACHED()
-      << "AbortTypeForPageTransition received unexpected ui::PageTransition: "
+      << "EndReasonForPageTransition received unexpected ui::PageTransition: "
       << transition;
-  return ABORT_OTHER;
+  return END_OTHER;
 }
 
 void LogAbortChainSameURLHistogram(int aborted_chain_size_same_url) {
@@ -253,6 +255,8 @@ void DispatchObserverTimingCallbacks(PageLoadMetricsObserver* observer,
                                      const PageLoadTiming& new_timing,
                                      const PageLoadMetadata& last_metadata,
                                      const PageLoadExtraInfo& extra_info) {
+  if (extra_info.metadata.behavior_flags != last_metadata.behavior_flags)
+    observer->OnLoadingBehaviorObserved(extra_info);
   if (last_timing != new_timing)
     observer->OnTimingUpdate(new_timing, extra_info);
   if (new_timing.dom_content_loaded_event_start &&
@@ -276,8 +280,6 @@ void DispatchObserverTimingCallbacks(PageLoadMetricsObserver* observer,
     observer->OnParseStart(new_timing, extra_info);
   if (new_timing.parse_stop && !last_timing.parse_stop)
     observer->OnParseStop(new_timing, extra_info);
-  if (extra_info.metadata.behavior_flags != last_metadata.behavior_flags)
-    observer->OnLoadingBehaviorObserved(extra_info);
 }
 
 }  // namespace
@@ -287,32 +289,24 @@ PageLoadTracker::PageLoadTracker(
     PageLoadMetricsEmbedderInterface* embedder_interface,
     const GURL& currently_committed_url,
     content::NavigationHandle* navigation_handle,
+    UserInitiatedInfo user_initiated_info,
     int aborted_chain_size,
     int aborted_chain_size_same_url)
     : did_stop_tracking_(false),
       app_entered_background_(false),
       navigation_start_(navigation_handle->NavigationStart()),
+      url_(navigation_handle->GetURL()),
       start_url_(navigation_handle->GetURL()),
-      abort_type_(ABORT_NONE),
-      abort_user_initiated_(false),
+      did_commit_(false),
+      page_end_reason_(END_NONE),
+      page_end_user_initiated_info_(UserInitiatedInfo::NotUserInitiated()),
       started_in_foreground_(in_foreground),
       page_transition_(navigation_handle->GetPageTransition()),
-      num_cache_requests_(0),
-      num_network_requests_(0),
-      user_initiated_(IsNavigationUserInitiated(navigation_handle)),
+      user_initiated_info_(user_initiated_info),
       aborted_chain_size_(aborted_chain_size),
       aborted_chain_size_same_url_(aborted_chain_size_same_url),
       embedder_interface_(embedder_interface) {
   DCHECK(!navigation_handle->HasCommitted());
-  if (embedder_interface_->IsPrerendering(
-          navigation_handle->GetWebContents())) {
-    DCHECK(!started_in_foreground_);
-    // For the time being, we do not track prerenders. See crbug.com/648338 for
-    // details.
-    StopTracking();
-    return;
-  }
-
   embedder_interface_->RegisterObservers(this);
   INVOKE_AND_PRUNE_OBSERVERS(observers_, OnStart, navigation_handle,
                              currently_committed_url, started_in_foreground_);
@@ -326,14 +320,20 @@ PageLoadTracker::~PageLoadTracker() {
   if (did_stop_tracking_)
     return;
 
-  if (committed_url_.is_empty()) {
+  if (page_end_time_.is_null()) {
+    RecordInternalError(ERR_NO_PAGE_LOAD_END_TIME);
+    page_end_time_ = base::TimeTicks::Now();
+  }
+
+  if (!did_commit_) {
     if (!failed_provisional_load_info_)
       RecordInternalError(ERR_NO_COMMIT_OR_FAILED_PROVISIONAL_LOAD);
 
     // Don't include any aborts that resulted in a new navigation, as the chain
     // length will be included in the aborter PageLoadTracker.
-    if (abort_type_ != ABORT_RELOAD && abort_type_ != ABORT_FORWARD_BACK &&
-        abort_type_ != ABORT_NEW_NAVIGATION) {
+    if (page_end_reason_ != END_RELOAD &&
+        page_end_reason_ != END_FORWARD_BACK &&
+        page_end_reason_ != END_NEW_NAVIGATION) {
       LogAbortChainHistograms(nullptr);
     }
   } else if (timing_.IsEmpty()) {
@@ -344,7 +344,7 @@ PageLoadTracker::~PageLoadTracker() {
   for (const auto& observer : observers_) {
     if (failed_provisional_load_info_) {
       observer->OnFailedProvisionalLoad(*failed_provisional_load_info_, info);
-    } else if (!info.committed_url.is_empty()) {
+    } else if (did_commit_) {
       observer->OnComplete(timing_, info);
     }
   }
@@ -366,7 +366,7 @@ void PageLoadTracker::LogAbortChainHistograms(
   }
 
   // The following is only executed for committing trackers.
-  DCHECK(!committed_url_.is_empty());
+  DCHECK(did_commit_);
 
   // Note that histograms could be separated out by this commit's transition
   // type, but for simplicity they will all be bucketed together.
@@ -374,12 +374,12 @@ void PageLoadTracker::LogAbortChainHistograms(
 
   ui::PageTransition committed_transition =
       final_navigation->GetPageTransition();
-  switch (AbortTypeForPageTransition(committed_transition)) {
-    case ABORT_RELOAD:
+  switch (EndReasonForPageTransition(committed_transition)) {
+    case END_RELOAD:
       UMA_HISTOGRAM_COUNTS(internal::kAbortChainSizeReload,
                            aborted_chain_size_);
       return;
-    case ABORT_FORWARD_BACK:
+    case END_FORWARD_BACK:
       UMA_HISTOGRAM_COUNTS(internal::kAbortChainSizeForwardBack,
                            aborted_chain_size_);
       return;
@@ -388,8 +388,8 @@ void PageLoadTracker::LogAbortChainHistograms(
     // chain, log a histogram of the counts of each of these metrics. For now,
     // merge client redirects with new navigations, which was (basically) the
     // previous behavior.
-    case ABORT_CLIENT_REDIRECT:
-    case ABORT_NEW_NAVIGATION:
+    case END_CLIENT_REDIRECT:
+    case END_NEW_NAVIGATION:
       UMA_HISTOGRAM_COUNTS(internal::kAbortChainSizeNewNavigation,
                            aborted_chain_size_);
       return;
@@ -410,13 +410,6 @@ void PageLoadTracker::WebContentsHidden() {
     DCHECK_EQ(started_in_foreground_, foreground_time_.is_null());
     background_time_ = base::TimeTicks::Now();
     ClampBrowserTimestampIfInterProcessTimeTickSkew(&background_time_);
-    // Though most cases where a tab is backgrounded are user initiated, we
-    // can't be certain that we were backgrounded due to a user action. For
-    // example, on Android, the screen times out after a period of inactivity,
-    // resulting in a non-user-initiated backgrounding.
-    const bool abort_is_user_initiated = false;
-    NotifyAbort(ABORT_BACKGROUND, abort_is_user_initiated, background_time_,
-                true);
   }
   const PageLoadExtraInfo info = ComputePageLoadExtraInfo();
   INVOKE_AND_PRUNE_OBSERVERS(observers_, OnHidden, timing_, info);
@@ -436,29 +429,51 @@ void PageLoadTracker::WebContentsShown() {
   INVOKE_AND_PRUNE_OBSERVERS(observers_, OnShown);
 }
 
+void PageLoadTracker::WillProcessNavigationResponse(
+    content::NavigationHandle* navigation_handle) {
+  // PlzNavigate: NavigationHandle::GetGlobalRequestID() sometimes returns an
+  // uninitialized GlobalRequestID. Bail early in this case. See
+  // crbug.com/680841 for details.
+  if (content::IsBrowserSideNavigationEnabled() &&
+      navigation_handle->GetGlobalRequestID() == content::GlobalRequestID())
+    return;
+
+  DCHECK(!navigation_request_id_.has_value());
+  navigation_request_id_ = navigation_handle->GetGlobalRequestID();
+  DCHECK(navigation_request_id_.value() != content::GlobalRequestID());
+}
+
 void PageLoadTracker::Commit(content::NavigationHandle* navigation_handle) {
-  committed_url_ = navigation_handle->GetURL();
+  did_commit_ = true;
+  url_ = navigation_handle->GetURL();
   // Some transitions (like CLIENT_REDIRECT) are only known at commit time.
   page_transition_ = navigation_handle->GetPageTransition();
-  user_initiated_ = IsNavigationUserInitiated(navigation_handle);
+  user_initiated_info_.user_gesture = navigation_handle->HasUserGesture();
+
+  INVOKE_AND_PRUNE_OBSERVERS(
+      observers_, ShouldObserveMimeType,
+      navigation_handle->GetWebContents()->GetContentsMimeType());
 
   INVOKE_AND_PRUNE_OBSERVERS(observers_, OnCommit, navigation_handle);
   LogAbortChainHistograms(navigation_handle);
 }
 
 void PageLoadTracker::FailedProvisionalLoad(
-    content::NavigationHandle* navigation_handle) {
+    content::NavigationHandle* navigation_handle,
+    base::TimeTicks failed_load_time) {
   DCHECK(!failed_provisional_load_info_);
   failed_provisional_load_info_.reset(new FailedProvisionalLoadInfo(
-      base::TimeTicks::Now() - navigation_handle->NavigationStart(),
+      failed_load_time - navigation_handle->NavigationStart(),
       navigation_handle->GetNetErrorCode()));
 }
 
 void PageLoadTracker::Redirect(content::NavigationHandle* navigation_handle) {
+  url_ = navigation_handle->GetURL();
   INVOKE_AND_PRUNE_OBSERVERS(observers_, OnRedirect, navigation_handle);
 }
 
 void PageLoadTracker::OnInputEvent(const blink::WebInputEvent& event) {
+  input_tracker_.OnInputEvent(event);
   for (const auto& observer : observers_) {
     observer->OnUserInput(event);
   }
@@ -506,7 +521,7 @@ bool PageLoadTracker::UpdateTiming(const PageLoadTiming& new_timing,
       metadata_.behavior_flags;
   if (IsValidPageLoadTiming(new_timing) && valid_timing_descendent &&
       valid_behavior_descendent) {
-    DCHECK(!committed_url_.is_empty());  // OnCommit() must be called first.
+    DCHECK(did_commit_);  // OnCommit() must be called first.
     // There are some subtle ordering constraints here. GetPageLoadMetricsInfo()
     // must be called before DispatchObserverTimingCallbacks, but its
     // implementation depends on the state of metadata_, so we need to update
@@ -528,11 +543,10 @@ bool PageLoadTracker::UpdateTiming(const PageLoadTiming& new_timing,
   return false;
 }
 
-void PageLoadTracker::OnLoadedSubresource(bool was_cached) {
-  if (was_cached) {
-    ++num_cache_requests_;
-  } else {
-    ++num_network_requests_;
+void PageLoadTracker::OnLoadedResource(
+    const ExtraRequestInfo& extra_request_info) {
+  for (const auto& observer : observers_) {
+    observer->OnLoadedResource(extra_request_info);
   }
 }
 
@@ -576,7 +590,7 @@ void PageLoadTracker::ClampBrowserTimestampIfInterProcessTimeTickSkew(
 PageLoadExtraInfo PageLoadTracker::ComputePageLoadExtraInfo() {
   base::Optional<base::TimeDelta> first_background_time;
   base::Optional<base::TimeDelta> first_foreground_time;
-  base::Optional<base::TimeDelta> time_to_abort;
+  base::Optional<base::TimeDelta> page_end_time;
 
   if (!background_time_.is_null()) {
     DCHECK_GE(background_time_, navigation_start_);
@@ -588,70 +602,84 @@ PageLoadExtraInfo PageLoadTracker::ComputePageLoadExtraInfo() {
     first_foreground_time = foreground_time_ - navigation_start_;
   }
 
-  if (abort_type_ != ABORT_NONE) {
-    DCHECK_GE(abort_time_, navigation_start_);
-    time_to_abort = abort_time_ - navigation_start_;
+  if (page_end_reason_ != END_NONE) {
+    DCHECK_GE(page_end_time_, navigation_start_);
+    page_end_time = page_end_time_ - navigation_start_;
   } else {
-    DCHECK(abort_time_.is_null());
+    DCHECK(page_end_time_.is_null());
   }
 
-  // abort_type_ == ABORT_NONE implies !abort_user_initiated_.
-  DCHECK(abort_type_ != ABORT_NONE || !abort_user_initiated_);
+  // page_end_reason_ == END_NONE implies page_end_user_initiated_info_ is not
+  // user initiated.
+  DCHECK(page_end_reason_ != END_NONE ||
+         (!page_end_user_initiated_info_.browser_initiated &&
+          !page_end_user_initiated_info_.user_gesture &&
+          !page_end_user_initiated_info_.user_input_event));
   return PageLoadExtraInfo(
       first_background_time, first_foreground_time, started_in_foreground_,
-      user_initiated_, committed_url_, start_url_, abort_type_,
-      abort_user_initiated_, time_to_abort, num_cache_requests_,
-      num_network_requests_, metadata_);
+      user_initiated_info_, url(), start_url_, did_commit_, page_end_reason_,
+      page_end_user_initiated_info_, page_end_time, metadata_);
 }
 
-void PageLoadTracker::NotifyAbort(UserAbortType abort_type,
-                                  bool user_initiated,
-                                  base::TimeTicks timestamp,
-                                  bool is_certainly_browser_timestamp) {
-  DCHECK_NE(abort_type, ABORT_NONE);
-  // Use UpdateAbort to update an already notified PageLoadTracker.
-  if (abort_type_ != ABORT_NONE)
+bool PageLoadTracker::HasMatchingNavigationRequestID(
+    const content::GlobalRequestID& request_id) const {
+  DCHECK(request_id != content::GlobalRequestID());
+  return navigation_request_id_.has_value() &&
+         navigation_request_id_.value() == request_id;
+}
+
+void PageLoadTracker::NotifyPageEnd(PageEndReason page_end_reason,
+                                    UserInitiatedInfo user_initiated_info,
+                                    base::TimeTicks timestamp,
+                                    bool is_certainly_browser_timestamp) {
+  DCHECK_NE(page_end_reason, END_NONE);
+  // Use UpdatePageEnd to update an already notified PageLoadTracker.
+  if (page_end_reason_ != END_NONE)
     return;
 
-  UpdateAbortInternal(abort_type, user_initiated, timestamp,
-                      is_certainly_browser_timestamp);
+  UpdatePageEndInternal(page_end_reason, user_initiated_info, timestamp,
+                        is_certainly_browser_timestamp);
 }
 
-void PageLoadTracker::UpdateAbort(UserAbortType abort_type,
-                                  bool user_initiated,
-                                  base::TimeTicks timestamp,
-                                  bool is_certainly_browser_timestamp) {
-  DCHECK_NE(abort_type, ABORT_NONE);
-  DCHECK_NE(abort_type, ABORT_OTHER);
-  DCHECK_EQ(abort_type_, ABORT_OTHER);
+void PageLoadTracker::UpdatePageEnd(PageEndReason page_end_reason,
+                                    UserInitiatedInfo user_initiated_info,
+                                    base::TimeTicks timestamp,
+                                    bool is_certainly_browser_timestamp) {
+  DCHECK_NE(page_end_reason, END_NONE);
+  DCHECK_NE(page_end_reason, END_OTHER);
+  DCHECK_EQ(page_end_reason_, END_OTHER);
+  DCHECK(!page_end_time_.is_null());
+  if (page_end_time_.is_null() || page_end_reason_ != END_OTHER)
+    return;
 
   // For some aborts (e.g. navigations), the initiated timestamp can be earlier
   // than the timestamp that aborted the load. Taking the minimum gives the
   // closest user initiated time known.
-  UpdateAbortInternal(abort_type, user_initiated,
-                      std::min(abort_time_, timestamp),
-                      is_certainly_browser_timestamp);
+  UpdatePageEndInternal(page_end_reason, user_initiated_info,
+                        std::min(page_end_time_, timestamp),
+                        is_certainly_browser_timestamp);
 }
 
 bool PageLoadTracker::IsLikelyProvisionalAbort(
     base::TimeTicks abort_cause_time) const {
-  // Note that |abort_cause_time - abort_time| can be negative.
-  return abort_type_ == ABORT_OTHER &&
-         (abort_cause_time - abort_time_).InMilliseconds() < 100;
+  // Note that |abort_cause_time - page_end_time_| can be negative.
+  return page_end_reason_ == END_OTHER &&
+         (abort_cause_time - page_end_time_).InMilliseconds() < 100;
 }
 
 bool PageLoadTracker::MatchesOriginalNavigation(
     content::NavigationHandle* navigation_handle) {
   // Neither navigation should have committed.
   DCHECK(!navigation_handle->HasCommitted());
-  DCHECK(committed_url_.is_empty());
+  DCHECK(!did_commit_);
   return navigation_handle->GetURL() == start_url_;
 }
 
-void PageLoadTracker::UpdateAbortInternal(UserAbortType abort_type,
-                                          bool user_initiated,
-                                          base::TimeTicks timestamp,
-                                          bool is_certainly_browser_timestamp) {
+void PageLoadTracker::UpdatePageEndInternal(
+    PageEndReason page_end_reason,
+    UserInitiatedInfo user_initiated_info,
+    base::TimeTicks timestamp,
+    bool is_certainly_browser_timestamp) {
   // When a provisional navigation commits, that navigation's start time is
   // interpreted as the abort time for other provisional loads in the tab.
   // However, this only makes sense if the committed load started after the
@@ -662,13 +690,13 @@ void PageLoadTracker::UpdateAbortInternal(UserAbortType abort_type,
   // instead report the actual cause of an aborted navigation. See crbug/571647
   // for details.
   if (timestamp < navigation_start_) {
-    RecordInternalError(ERR_ABORT_BEFORE_NAVIGATION_START);
-    abort_type_ = ABORT_NONE;
-    abort_time_ = base::TimeTicks();
+    RecordInternalError(ERR_END_BEFORE_NAVIGATION_START);
+    page_end_reason_ = END_NONE;
+    page_end_time_ = base::TimeTicks();
     return;
   }
-  abort_type_ = abort_type;
-  abort_time_ = timestamp;
+  page_end_reason_ = page_end_reason;
+  page_end_time_ = timestamp;
   // A client redirect can never be user initiated. Due to the way Blink
   // implements user gesture tracking, where all events that occur within 1
   // second after a user interaction are considered to be triggered by user
@@ -677,10 +705,11 @@ void PageLoadTracker::UpdateAbortInternal(UserAbortType abort_type,
   // these navs may sometimes be reported as user initiated by Blink. Thus, we
   // explicitly filter these types of aborts out when deciding if the abort was
   // user initiated.
-  abort_user_initiated_ = user_initiated && abort_type != ABORT_CLIENT_REDIRECT;
+  if (page_end_reason != END_CLIENT_REDIRECT)
+    page_end_user_initiated_info_ = user_initiated_info;
 
   if (is_certainly_browser_timestamp) {
-    ClampBrowserTimestampIfInterProcessTimeTickSkew(&abort_time_);
+    ClampBrowserTimestampIfInterProcessTimeTickSkew(&page_end_time_);
   }
 }
 

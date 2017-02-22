@@ -7,7 +7,7 @@
 #include "core/workers/InProcessWorkerObjectProxy.h"
 #include "core/workers/WorkerThreadStartupData.h"
 #include "modules/compositorworker/CompositorWorkerGlobalScope.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "wtf/Assertions.h"
 #include <memory>
 
@@ -16,20 +16,24 @@ namespace blink {
 std::unique_ptr<CompositorWorkerThread> CompositorWorkerThread::create(
     PassRefPtr<WorkerLoaderProxy> workerLoaderProxy,
     InProcessWorkerObjectProxy& workerObjectProxy,
+    ParentFrameTaskRunners* parentFrameTaskRunners,
     double timeOrigin) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("compositor-worker"),
                "CompositorWorkerThread::create");
   ASSERT(isMainThread());
-  return wrapUnique(new CompositorWorkerThread(std::move(workerLoaderProxy),
-                                               workerObjectProxy, timeOrigin));
+  return WTF::wrapUnique(new CompositorWorkerThread(
+      std::move(workerLoaderProxy), workerObjectProxy, parentFrameTaskRunners,
+      timeOrigin));
 }
 
 CompositorWorkerThread::CompositorWorkerThread(
     PassRefPtr<WorkerLoaderProxy> workerLoaderProxy,
     InProcessWorkerObjectProxy& workerObjectProxy,
+    ParentFrameTaskRunners* parentFrameTaskRunners,
     double timeOrigin)
     : AbstractAnimationWorkletThread(std::move(workerLoaderProxy),
-                                     workerObjectProxy),
+                                     workerObjectProxy,
+                                     parentFrameTaskRunners),
       m_workerObjectProxy(workerObjectProxy),
       m_timeOrigin(timeOrigin) {}
 

@@ -26,6 +26,7 @@ namespace base {
 class CommandLine;
 struct LaunchOptions;
 class SequencedWorkerPoolOwner;
+class TaskRunner;
 class TestLauncher;
 class Thread;
 
@@ -142,6 +143,9 @@ class TestLauncher {
   // Runs all tests in current iteration. Uses callbacks to communicate success.
   void RunTests();
 
+  void CombinePositiveTestFilters(std::vector<std::string> filter_a,
+                                  std::vector<std::string> filter_b);
+
   void RunTestIteration();
 
   // Saves test results summary as JSON if requested from command line.
@@ -181,6 +185,7 @@ class TestLauncher {
   int cycles_;  // Number of remaining test itreations, or -1 for infinite.
 
   // Test filters (empty means no filter).
+  bool has_at_least_one_positive_filter_;
   std::vector<std::string> positive_test_filter_;
   std::vector<std::string> negative_test_filter_;
 

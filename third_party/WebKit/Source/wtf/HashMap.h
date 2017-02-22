@@ -23,6 +23,7 @@
 
 #include "wtf/HashTable.h"
 #include "wtf/allocator/PartitionAllocator.h"
+#include <initializer_list>
 
 namespace WTF {
 
@@ -47,7 +48,7 @@ template <typename KeyArg,
           typename MappedTraitsArg = HashTraits<MappedArg>,
           typename Allocator = PartitionAllocator>
 class HashMap {
-  WTF_USE_ALLOCATOR(HashMap, Allocator);
+  USE_ALLOCATOR(HashMap, Allocator);
 
  private:
   typedef KeyTraitsArg KeyTraits;
@@ -59,6 +60,7 @@ class HashMap {
   typedef const typename KeyTraits::PeekInType& KeyPeekInType;
   typedef typename MappedTraits::TraitType MappedType;
   typedef typename ValueTraits::TraitType ValueType;
+  using value_type = ValueType;
 
  private:
   typedef typename MappedTraits::PeekOutType MappedPeekType;
@@ -78,12 +80,31 @@ class HashMap {
   class HashMapValuesProxy;
 
  public:
+  HashMap() {
+    static_assert(Allocator::isGarbageCollected ||
+                      !IsPointerToGarbageCollectedType<KeyArg>::value,
+                  "Cannot put raw pointers to garbage-collected classes into "
+                  "an off-heap HashMap.  Use HeapHashMap<> instead.");
+    static_assert(Allocator::isGarbageCollected ||
+                      !IsPointerToGarbageCollectedType<MappedArg>::value,
+                  "Cannot put raw pointers to garbage-collected classes into "
+                  "an off-heap HashMap.  Use HeapHashMap<> instead.");
+  }
+  HashMap(const HashMap&) = default;
+  HashMap& operator=(const HashMap&) = default;
+  HashMap(HashMap&&) = default;
+  HashMap& operator=(HashMap&&) = default;
+
+  // For example, HashMap<int, int>({{1, 11}, {2, 22}, {3, 33}}) will give you
+  // a HashMap containing a mapping {1 -> 11, 2 -> 22, 3 -> 33}.
+  HashMap(std::initializer_list<ValueType> elements);
+  HashMap& operator=(std::initializer_list<ValueType> elements);
+
   typedef HashTableIteratorAdapter<HashTableType, ValueType> iterator;
   typedef HashTableConstIteratorAdapter<HashTableType, ValueType>
       const_iterator;
   typedef typename HashTableType::AddResult AddResult;
 
- public:
   void swap(HashMap& ref) { m_impl.swap(ref.m_impl); }
 
   unsigned size() const;
@@ -127,9 +148,13 @@ class HashMap {
   // iterator to the key location, and a boolean that's true if a new value
   // was actually added
   template <typename IncomingKeyType, typename IncomingMappedType>
-  AddResult add(IncomingKeyType&&, IncomingMappedType&&);
+  AddResult insert(IncomingKeyType&&, IncomingMappedType&&);
 
+  // TODO(pilgrim) remove remove() method once all references migrated to
+  // erase()
+  // https://crbug.com/662431
   void remove(KeyPeekInType);
+  void erase(KeyPeekInType);
   void remove(iterator);
   void clear();
   template <typename Collection>
@@ -151,7 +176,7 @@ class HashMap {
   template <typename HashTranslator, typename T>
   bool contains(const T&) const;
 
-  // An alternate version of add() that finds the object by hashing and
+  // An alternate version of insert() that finds the object by hashing and
   // comparing with some other type, to avoid the cost of type conversion if
   // the object is already in the table. HashTranslator must have the
   // following function members:
@@ -161,7 +186,7 @@ class HashMap {
   template <typename HashTranslator,
             typename IncomingKeyType,
             typename IncomingMappedType>
-  AddResult add(IncomingKeyType&&, IncomingMappedType&&);
+  AddResult insert(IncomingKeyType&&, IncomingMappedType&&);
 
   static bool isValidKey(KeyPeekInType);
 
@@ -319,6 +344,31 @@ struct HashMapTranslatorAdapter {
     ValueTraits::ValueTraits::store(std::forward<V>(mapped), location.value);
   }
 };
+
+template <typename T,
+          typename U,
+          typename V,
+          typename W,
+          typename X,
+          typename Y>
+HashMap<T, U, V, W, X, Y>::HashMap(std::initializer_list<ValueType> elements) {
+  if (elements.size())
+    m_impl.reserveCapacityForSize(elements.size());
+  for (const ValueType& element : elements)
+    insert(element.key, element.value);
+}
+
+template <typename T,
+          typename U,
+          typename V,
+          typename W,
+          typename X,
+          typename Y>
+auto HashMap<T, U, V, W, X, Y>::operator=(
+    std::initializer_list<ValueType> elements) -> HashMap& {
+  *this = HashMap(std::move(elements));
+  return *this;
+}
 
 template <typename T,
           typename U,
@@ -515,8 +565,9 @@ template <typename T,
 template <typename HashTranslator,
           typename IncomingKeyType,
           typename IncomingMappedType>
-auto HashMap<T, U, V, W, X, Y>::add(IncomingKeyType&& key,
-                                    IncomingMappedType&& mapped) -> AddResult {
+auto HashMap<T, U, V, W, X, Y>::insert(IncomingKeyType&& key,
+                                       IncomingMappedType&& mapped)
+    -> AddResult {
   return m_impl.template addPassingHashCode<
       HashMapTranslatorAdapter<ValueTraits, HashTranslator>>(
       std::forward<IncomingKeyType>(key),
@@ -530,7 +581,7 @@ template <typename T,
           typename X,
           typename Y>
 template <typename IncomingKeyType, typename IncomingMappedType>
-typename HashMap<T, U, V, W, X, Y>::AddResult HashMap<T, U, V, W, X, Y>::add(
+typename HashMap<T, U, V, W, X, Y>::AddResult HashMap<T, U, V, W, X, Y>::insert(
     IncomingKeyType&& key,
     IncomingMappedType&& mapped) {
   return inlineAdd(std::forward<IncomingKeyType>(key),
@@ -568,6 +619,16 @@ template <typename T,
           typename X,
           typename Y>
 inline void HashMap<T, U, V, W, X, Y>::remove(KeyPeekInType key) {
+  remove(find(key));
+}
+
+template <typename T,
+          typename U,
+          typename V,
+          typename W,
+          typename X,
+          typename Y>
+inline void HashMap<T, U, V, W, X, Y>::erase(KeyPeekInType key) {
   remove(find(key));
 }
 

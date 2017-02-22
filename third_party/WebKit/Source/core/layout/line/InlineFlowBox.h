@@ -59,7 +59,7 @@ class InlineFlowBox : public InlineBox {
         m_lineBreakBidiStatusLastStrong(WTF::Unicode::LeftToRight),
         m_lineBreakBidiStatusLast(WTF::Unicode::LeftToRight),
         m_isFirstAfterPageBreak(false)
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
         ,
         m_hasBadChildList(false)
 #endif
@@ -77,7 +77,7 @@ class InlineFlowBox : public InlineBox {
     m_hasTextDescendants = m_hasTextChildren;
   }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   ~InlineFlowBox() override;
 #endif
 
@@ -174,27 +174,23 @@ class InlineFlowBox : public InlineBox {
   LayoutUnit marginLogicalWidth() const {
     return marginLogicalLeft() + marginLogicalRight();
   }
-  int borderLogicalLeft() const {
+  LayoutUnit borderLogicalLeft() const {
     if (!includeLogicalLeftEdge())
-      return 0;
-    return isHorizontal()
-               ? getLineLayoutItem()
-                     .style(isFirstLineStyle())
-                     ->borderLeftWidth()
-               : getLineLayoutItem()
-                     .style(isFirstLineStyle())
-                     ->borderTopWidth();
+      return LayoutUnit();
+    return LayoutUnit(
+        isHorizontal()
+            ? getLineLayoutItem().style(isFirstLineStyle())->borderLeftWidth()
+            : getLineLayoutItem().style(isFirstLineStyle())->borderTopWidth());
   }
-  int borderLogicalRight() const {
+  LayoutUnit borderLogicalRight() const {
     if (!includeLogicalRightEdge())
-      return 0;
-    return isHorizontal()
-               ? getLineLayoutItem()
-                     .style(isFirstLineStyle())
-                     ->borderRightWidth()
-               : getLineLayoutItem()
-                     .style(isFirstLineStyle())
-                     ->borderBottomWidth();
+      return LayoutUnit();
+    return LayoutUnit(
+        isHorizontal()
+            ? getLineLayoutItem().style(isFirstLineStyle())->borderRightWidth()
+            : getLineLayoutItem()
+                  .style(isFirstLineStyle())
+                  ->borderBottomWidth());
   }
   int paddingLogicalLeft() const {
     if (!includeLogicalLeftEdge())
@@ -270,8 +266,8 @@ class InlineFlowBox : public InlineBox {
   SelectionState getSelectionState() const override;
 
   bool canAccommodateEllipsis(bool ltr,
-                              int blockEdge,
-                              int ellipsisWidth) const final;
+                              LayoutUnit blockEdge,
+                              LayoutUnit ellipsisWidth) const final;
   LayoutUnit placeEllipsisBox(bool ltr,
                               LayoutUnit blockLeftEdge,
                               LayoutUnit blockRightEdge,
@@ -356,8 +352,8 @@ class InlineFlowBox : public InlineBox {
   LayoutRect frameRectIncludingLineHeight(LayoutUnit lineTop,
                                           LayoutUnit lineBottom) const {
     if (isHorizontal())
-      return LayoutRect(m_topLeft.x(), lineTop, width(), lineBottom - lineTop);
-    return LayoutRect(lineTop, m_topLeft.y(), lineBottom - lineTop, height());
+      return LayoutRect(x(), lineTop, logicalWidth(), lineBottom - lineTop);
+    return LayoutRect(lineTop, y(), lineBottom - lineTop, logicalWidth());
   }
 
   LayoutRect logicalFrameRectIncludingLineHeight(LayoutUnit lineTop,
@@ -392,6 +388,11 @@ class InlineFlowBox : public InlineBox {
     setOverflowFromLogicalRects(logicalLayoutOverflow, logicalVisualOverflow,
                                 lineTop, lineBottom);
   }
+
+  LayoutUnit maxLogicalBottomForUnderline(LineLayoutItem decorationObject,
+                                          LayoutUnit maxLogicalBottom) const;
+  LayoutUnit minLogicalTopForUnderline(LineLayoutItem decorationObject,
+                                       LayoutUnit minLogicalTop) const;
 
  private:
   void placeBoxRangeInInlineDirection(InlineBox* firstChild,
@@ -443,10 +444,6 @@ class InlineFlowBox : public InlineBox {
       m_prevLineBox;  // The previous box that also uses our LayoutObject
   InlineFlowBox* m_nextLineBox;  // The next box that also uses our LayoutObject
 
-  // Maximum logicalTop among all children of an InlineFlowBox. Used to
-  // calculate the offset for TextUnderlinePositionUnder.
-  void computeMaxLogicalTop(LayoutUnit& maxLogicalTop) const;
-
  private:
   unsigned m_includeLogicalLeftEdge : 1;
   unsigned m_includeLogicalRightEdge : 1;
@@ -474,7 +471,7 @@ class InlineFlowBox : public InlineBox {
 
 // End of RootInlineBox-specific members.
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
  private:
   unsigned m_hasBadChildList : 1;
 #endif
@@ -482,12 +479,12 @@ class InlineFlowBox : public InlineBox {
 
 DEFINE_INLINE_BOX_TYPE_CASTS(InlineFlowBox);
 
-#if !ENABLE(ASSERT)
+#if !DCHECK_IS_ON()
 inline void InlineFlowBox::checkConsistency() const {}
 #endif
 
 inline void InlineFlowBox::setHasBadChildList() {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   m_hasBadChildList = true;
 #endif
 }

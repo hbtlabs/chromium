@@ -26,7 +26,7 @@
 
 #include "core/editing/commands/ReplaceSelectionCommand.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/CSSPropertyNames.h"
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
@@ -37,8 +37,9 @@
 #include "core/dom/Element.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/Text.h"
+#include "core/editing/EditingStyle.h"
 #include "core/editing/EditingUtilities.h"
-#include "core/editing/FrameSelection.h"
+#include "core/editing/Editor.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/commands/ApplyStyleCommand.h"
 #include "core/editing/commands/BreakBlockquoteCommand.h"
@@ -59,7 +60,7 @@
 #include "core/html/HTMLSpanElement.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutText.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/Vector.h"
 
@@ -236,9 +237,11 @@ ReplacementFragment::ReplacementFragment(Document* document,
       createVisibleSelection(
           SelectionInDOMTree::Builder().selectAllChildren(*holder).build())
           .toNormalizedEphemeralRange();
-  String text = plainText(range, static_cast<TextIteratorBehavior>(
-                                     TextIteratorEmitsOriginalText |
-                                     TextIteratorIgnoresStyleVisibility));
+  const TextIteratorBehavior& behavior = TextIteratorBehavior::Builder()
+                                             .setEmitsOriginalText(true)
+                                             .setIgnoresStyleVisibility(true)
+                                             .build();
+  const String& text = plainText(range, behavior);
 
   removeInterchangeNodes(holder);
   removeUnrenderedNodes(holder);
@@ -249,6 +252,10 @@ ReplacementFragment::ReplacementFragment(Document* document,
   editableRoot->dispatchEvent(evt);
   if (text != evt->text() || !hasRichlyEditableStyle(*editableRoot)) {
     restoreAndRemoveTestRenderingNodesToFragment(holder);
+
+    // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets
+    // needs to be audited.  See http://crbug.com/590369 for more details.
+    document->updateStyleAndLayoutIgnorePendingStylesheets();
 
     m_fragment = createFragmentFromText(selection.toNormalizedEphemeralRange(),
                                         evt->text());
@@ -341,7 +348,7 @@ void ReplacementFragment::removeUnrenderedNodes(ContainerNode* holder) {
 
   for (Node& node : NodeTraversal::descendantsOf(*holder)) {
     if (!isNodeRendered(node) && !isTableStructureNode(&node))
-      unrendered.append(&node);
+      unrendered.push_back(&node);
   }
 
   for (auto& node : unrendered)
@@ -406,6 +413,8 @@ ReplaceSelectionCommand::InsertedNodes::willRemoveNodePreservingChildren(
     m_lastNodeInserted = node.lastChild()
                              ? node.lastChild()
                              : NodeTraversal::nextSkippingChildren(node);
+  if (m_refNode.get() == node)
+    m_refNode = NodeTraversal::next(node);
 }
 
 inline void ReplaceSelectionCommand::InsertedNodes::willRemoveNode(Node& node) {
@@ -419,6 +428,8 @@ inline void ReplaceSelectionCommand::InsertedNodes::willRemoveNode(Node& node) {
     m_lastNodeInserted =
         NodeTraversal::previousSkippingChildren(*m_lastNodeInserted);
   }
+  if (node.contains(m_refNode))
+    m_refNode = NodeTraversal::nextSkippingChildren(node);
 }
 
 inline void ReplaceSelectionCommand::InsertedNodes::didReplaceNode(
@@ -428,6 +439,8 @@ inline void ReplaceSelectionCommand::InsertedNodes::didReplaceNode(
     m_firstNodeInserted = &newNode;
   if (m_lastNodeInserted.get() == node)
     m_lastNodeInserted = &newNode;
+  if (m_refNode.get() == node)
+    m_refNode = &newNode;
 }
 
 ReplaceSelectionCommand::ReplaceSelectionCommand(
@@ -658,36 +671,10 @@ void ReplaceSelectionCommand::removeRedundantStylesAndKeepStyleSpanInline(
       continue;
     }
 
-    if (element->parentNode() && hasRichlyEditableStyle(*element->parentNode()))
+    if (element->parentNode() &&
+        hasRichlyEditableStyle(*element->parentNode()) &&
+        hasRichlyEditableStyle(*element)) {
       removeElementAttribute(element, contenteditableAttr);
-
-    // WebKit used to not add display: inline and float: none on copy.
-    // Keep this code around for backward compatibility
-    if (isLegacyAppleHTMLSpanElement(element)) {
-      if (!element->hasChildren()) {
-        insertedNodes.willRemoveNodePreservingChildren(*element);
-        removeNodePreservingChildren(element, editingState);
-        if (editingState->isAborted())
-          return;
-        continue;
-      }
-      // There are other styles that style rules can give to style spans, but
-      // these are the two important ones because they'll prevent inserted
-      // content from appearing in the right paragraph.
-      // FIXME: Hyatt is concerned that selectively using display:inline will
-      // give inconsistent results. We already know one issue because td
-      // elements ignore their display property in quirks mode (which Mail.app
-      // is always in). We should look for an alternative.
-
-      // Mutate using the CSSOM wrapper so we get the same event behavior as a
-      // script.
-      if (isEnclosingBlock(element))
-        element->style()->setPropertyInternal(
-            CSSPropertyDisplay, String(), "inline", false, IGNORE_EXCEPTION);
-      if (element->layoutObject() &&
-          element->layoutObject()->style()->isFloating())
-        element->style()->setPropertyInternal(CSSPropertyFloat, String(),
-                                              "none", false, IGNORE_EXCEPTION);
     }
   }
 }
@@ -882,11 +869,11 @@ static bool followBlockElementStyle(const Node* node) {
 
 // Remove style spans before insertion if they are unnecessary.  It's faster
 // because we'll avoid doing a layout.
-static bool handleStyleSpansBeforeInsertion(ReplacementFragment& fragment,
+static void handleStyleSpansBeforeInsertion(ReplacementFragment& fragment,
                                             const Position& insertionPos) {
   Node* topNode = fragment.firstChild();
   if (!isHTMLSpanElement(topNode))
-    return false;
+    return;
 
   // Handling the case where we are doing Paste as Quotation or pasting into
   // quoted content is more complicated (see handleStyleSpans) and doesn't
@@ -894,7 +881,7 @@ static bool handleStyleSpansBeforeInsertion(ReplacementFragment& fragment,
   if (isMailPasteAsQuotationHTMLBlockQuoteElement(topNode) ||
       enclosingNodeOfType(firstPositionInOrBeforeNode(topNode),
                           isMailHTMLBlockquoteElement, CanCrossEditingBoundary))
-    return false;
+    return;
 
   // Remove style spans to follow the styles of parent block element when
   // |fragment| becomes a part of it. See bugs http://crbug.com/226941 and
@@ -907,19 +894,13 @@ static bool handleStyleSpansBeforeInsertion(ReplacementFragment& fragment,
   if (isInline(node)) {
     node = enclosingBlock(insertionPos.anchorNode());
     if (!node)
-      return false;
+      return;
   }
 
   if (followBlockElementStyle(node)) {
     fragment.removeNodePreservingChildren(wrappingStyleSpan);
-    return true;
+    return;
   }
-
-  // Either there are no style spans in the fragment or a WebKit client has
-  // added content to the fragment before inserting it.  Look for and handle
-  // style spans after insertion.
-  if (!isLegacyAppleHTMLSpanElement(topNode))
-    return false;
 
   EditingStyle* styleAtInsertionPos =
       EditingStyle::create(insertionPos.parentAnchoredEquivalent());
@@ -928,82 +909,9 @@ static bool handleStyleSpansBeforeInsertion(ReplacementFragment& fragment,
   // FIXME: This string comparison is a naive way of comparing two styles.
   // We should be taking the diff and check that the diff is empty.
   if (styleText != wrappingStyleSpan->getAttribute(styleAttr))
-    return false;
+    return;
 
   fragment.removeNodePreservingChildren(wrappingStyleSpan);
-  return true;
-}
-
-// At copy time, WebKit wraps copied content in a span that contains the source
-// document's default styles.  If the copied Range inherits any other styles
-// from its ancestors, we put those styles on a second span. This function
-// removes redundant styles from those spans, and removes the
-// spans if all their styles are redundant.
-// We should remove the Apple-style-span class when we're done, see
-// <rdar://problem/5685600>.
-// We should remove styles from spans that are overridden by all of their
-// children, either here or at copy time.
-void ReplaceSelectionCommand::handleStyleSpans(InsertedNodes& insertedNodes,
-                                               EditingState* editingState) {
-  if (!insertedNodes.firstNodeInserted())
-    return;
-
-  HTMLSpanElement* wrappingStyleSpan = nullptr;
-  // The style span that contains the source document's default style should be
-  // at the top of the fragment, but Mail sometimes adds a wrapper (for Paste As
-  // Quotation), so search for the top level style span instead of assuming it's
-  // at the top.
-
-  for (Node& node :
-       NodeTraversal::startsAt(*insertedNodes.firstNodeInserted())) {
-    if (isLegacyAppleHTMLSpanElement(&node)) {
-      wrappingStyleSpan = toHTMLSpanElement(&node);
-      break;
-    }
-  }
-
-  // There might not be any style spans if we're pasting from another
-  // application or if we are here because of a
-  // document.execCommand("InsertHTML", ...) call.
-  if (!wrappingStyleSpan)
-    return;
-
-  EditingStyle* style = EditingStyle::create(wrappingStyleSpan->inlineStyle());
-  ContainerNode* context = wrappingStyleSpan->parentNode();
-
-  // If Mail wraps the fragment with a Paste as Quotation blockquote, or if
-  // you're pasting into a quoted region, styles from blockquoteElement are
-  // allowed to override those from the source document, see
-  // <rdar://problem/4930986> and <rdar://problem/5089327>.
-  HTMLQuoteElement* blockquoteElement =
-      isMailPasteAsQuotationHTMLBlockQuoteElement(context)
-          ? toHTMLQuoteElement(context)
-          : toHTMLQuoteElement(enclosingNodeOfType(
-                Position::firstPositionInNode(context),
-                isMailHTMLBlockquoteElement, CanCrossEditingBoundary));
-  if (blockquoteElement)
-    context = document().documentElement();
-
-  // This operation requires that only editing styles to be removed from
-  // sourceDocumentStyle.
-  style->prepareToApplyAt(Position::firstPositionInNode(context));
-
-  // Remove block properties in the span's style. This prevents properties that
-  // probably have no effect currently from affecting blocks later if the style
-  // is cloned for a new block element during a future
-  // editing operation.
-  // FIXME: They *can* have an effect currently if blocks beneath the style span
-  // aren't individually marked with block styles by the editing engine used to
-  // style them.  WebKit doesn't do this, but others might.
-  style->removeBlockProperties();
-
-  if (style->isEmpty() || !wrappingStyleSpan->hasChildren()) {
-    insertedNodes.willRemoveNodePreservingChildren(*wrappingStyleSpan);
-    removeNodePreservingChildren(wrappingStyleSpan, editingState);
-  } else {
-    setNodeAttribute(wrappingStyleSpan, styleAttr,
-                     AtomicString(style->style()->asText()));
-  }
 }
 
 void ReplaceSelectionCommand::mergeEndIfNeeded(EditingState* editingState) {
@@ -1046,7 +954,11 @@ void ReplaceSelectionCommand::mergeEndIfNeeded(EditingState* editingState) {
                      editingState);
     if (editingState->isAborted())
       return;
+
+    // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets()
+    // needs to be audited.  See http://crbug.com/590369 for more details.
     document().updateStyleAndLayoutIgnorePendingStylesheets();
+
     destination = VisiblePosition::beforeNode(placeholder);
     startOfParagraphToMove =
         createVisiblePosition(startOfParagraphToMove.toPositionWithAffinity());
@@ -1342,7 +1254,7 @@ void ReplaceSelectionCommand::doApply(EditingState* editingState) {
   // doesn't seem to be any work performed after this that queries or uses the
   // typing style.
   if (LocalFrame* frame = document().frame())
-    frame->selection().clearTypingStyle();
+    frame->editor().clearTypingStyle();
 
   removeHeadContents(fragment);
 
@@ -1357,8 +1269,7 @@ void ReplaceSelectionCommand::doApply(EditingState* editingState) {
   // Paste into run of tabs splits the tab span.
   insertionPos = positionOutsideTabSpan(insertionPos);
 
-  bool handledStyleSpans =
-      handleStyleSpansBeforeInsertion(fragment, insertionPos);
+  handleStyleSpansBeforeInsertion(fragment, insertionPos);
 
   // We're finished if there is nothing to add.
   if (fragment.isEmpty() || !fragment.firstChild())
@@ -1412,39 +1323,39 @@ void ReplaceSelectionCommand::doApply(EditingState* editingState) {
   // 6) Select the replacement if requested, and match style if requested.
 
   InsertedNodes insertedNodes;
-  Node* refNode = fragment.firstChild();
-  DCHECK(refNode);
-  Node* node = refNode->nextSibling();
+  insertedNodes.setRefNode(fragment.firstChild());
+  DCHECK(insertedNodes.refNode());
+  Node* node = insertedNodes.refNode()->nextSibling();
 
-  fragment.removeNode(refNode);
+  fragment.removeNode(insertedNodes.refNode());
 
   Element* blockStart = enclosingBlock(insertionPos.anchorNode());
-  if ((isHTMLListElement(refNode) ||
-       (isLegacyAppleHTMLSpanElement(refNode) &&
-        isHTMLListElement(refNode->firstChild()))) &&
+  if ((isHTMLListElement(insertedNodes.refNode()) ||
+       (isHTMLListElement(insertedNodes.refNode()->firstChild()))) &&
       blockStart && blockStart->layoutObject()->isListItem() &&
       hasEditableStyle(*blockStart->parentNode())) {
-    refNode = insertAsListItems(toHTMLElement(refNode), blockStart,
-                                insertionPos, insertedNodes, editingState);
+    insertedNodes.setRefNode(
+        insertAsListItems(toHTMLElement(insertedNodes.refNode()), blockStart,
+                          insertionPos, insertedNodes, editingState));
     if (editingState->isAborted())
       return;
   } else {
-    insertNodeAt(refNode, insertionPos, editingState);
+    insertNodeAt(insertedNodes.refNode(), insertionPos, editingState);
     if (editingState->isAborted())
       return;
-    insertedNodes.respondToNodeInsertion(*refNode);
+    insertedNodes.respondToNodeInsertion(*insertedNodes.refNode());
   }
 
   // Mutation events (bug 22634) may have already removed the inserted content
-  if (!refNode->isConnected())
+  if (!insertedNodes.refNode()->isConnected())
     return;
 
-  bool plainTextFragment = isPlainTextMarkup(refNode);
+  bool plainTextFragment = isPlainTextMarkup(insertedNodes.refNode());
 
   while (node) {
     Node* next = node->nextSibling();
     fragment.removeNode(node);
-    insertNodeAfter(node, refNode, editingState);
+    insertNodeAfter(node, insertedNodes.refNode(), editingState);
     if (editingState->isAborted())
       return;
     insertedNodes.respondToNodeInsertion(*node);
@@ -1453,7 +1364,7 @@ void ReplaceSelectionCommand::doApply(EditingState* editingState) {
     if (!node->isConnected())
       return;
 
-    refNode = node;
+    insertedNodes.setRefNode(node);
     if (node && plainTextFragment)
       plainTextFragment = isPlainTextMarkup(node);
     node = next;
@@ -1461,12 +1372,6 @@ void ReplaceSelectionCommand::doApply(EditingState* editingState) {
 
   if (isRichlyEditablePosition(insertionPos))
     removeUnrenderedTextNodesAtEnds(insertedNodes);
-
-  if (!handledStyleSpans) {
-    handleStyleSpans(insertedNodes, editingState);
-    if (editingState->isAborted())
-      return;
-  }
 
   document().updateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -1523,9 +1428,18 @@ void ReplaceSelectionCommand::doApply(EditingState* editingState) {
   if (editingState->isAborted())
     return;
 
-  removeRedundantStylesAndKeepStyleSpanInline(insertedNodes, editingState);
-  if (editingState->isAborted())
-    return;
+  {
+    // TODO(dominicc): refNode may not be connected, for example in
+    // LayoutTests/editing/inserting/insert-table-in-paragraph-crash.html .
+    // Refactor this so there's a relationship between the conditions
+    // where refNode is dereferenced and refNode is connected.
+    bool refNodeWasConnected = insertedNodes.refNode()->isConnected();
+    removeRedundantStylesAndKeepStyleSpanInline(insertedNodes, editingState);
+    if (editingState->isAborted())
+      return;
+    DCHECK_EQ(insertedNodes.refNode()->isConnected(), refNodeWasConnected)
+        << insertedNodes.refNode();
+  }
 
   if (m_sanitizeFragment && insertedNodes.firstNodeInserted()) {
     applyCommandToComposite(SimplifyMarkupCommand::create(
@@ -1569,8 +1483,8 @@ void ReplaceSelectionCommand::doApply(EditingState* editingState) {
     if (m_shouldMergeEnd &&
         destinationNode != enclosingInline(destinationNode) &&
         enclosingInline(destinationNode)->nextSibling()) {
-      insertNodeBefore(HTMLBRElement::create(document()), refNode,
-                       editingState);
+      insertNodeBefore(HTMLBRElement::create(document()),
+                       insertedNodes.refNode(), editingState);
       if (editingState->isAborted())
         return;
     }
@@ -2071,6 +1985,10 @@ bool ReplaceSelectionCommand::performTrivialReplace(
           endingSelection().start()))
     return false;
 
+  // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
+
   Node* nodeAfterInsertionPos =
       mostForwardCaretPosition(endingSelection().end()).anchorNode();
   Text* textNode = toText(fragment.firstChild());
@@ -2081,6 +1999,8 @@ bool ReplaceSelectionCommand::performTrivialReplace(
   Position end = replaceSelectedTextInNode(textNode->data());
   if (end.isNull())
     return false;
+
+  document().updateStyleAndLayoutIgnorePendingStylesheets();
 
   if (nodeAfterInsertionPos && nodeAfterInsertionPos->parentNode() &&
       isHTMLBRElement(*nodeAfterInsertionPos) &&

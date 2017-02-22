@@ -16,10 +16,6 @@
 
 class Profile;
 
-namespace user_prefs {
-class PrefRegistrySyncable;
-}
-
 namespace url {
 class Origin;
 }
@@ -32,8 +28,6 @@ class BudgetManager : public KeyedService {
  public:
   explicit BudgetManager(Profile* profile);
   ~BudgetManager() override;
-
-  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
   // Query for the base cost for any background processing.
   static double GetCost(blink::mojom::BudgetOperationType type);
@@ -63,14 +57,14 @@ class BudgetManager : public KeyedService {
  private:
   friend class BudgetManagerTest;
 
-  // Called as a callback from BudgetDatabase after it made a SpendBudget
-  // decision.
+  void DidGetBudget(const GetBudgetCallback& callback,
+                    blink::mojom::BudgetServiceErrorType error,
+                    std::vector<blink::mojom::BudgetStatePtr> budget);
+
   void DidConsume(const ConsumeCallback& callback,
                   blink::mojom::BudgetServiceErrorType error,
                   bool success);
 
-  // Called as a callback from BudgetDatabase after it has made a reserve
-  // decision.
   void DidReserve(const url::Origin& origin,
                   const ReserveCallback& callback,
                   blink::mojom::BudgetServiceErrorType error,

@@ -8,6 +8,7 @@
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromisePropertyBase.h"
 #include "bindings/core/v8/ToV8.h"
+#include "platform/ScriptForbiddenScope.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/PassRefPtr.h"
 
@@ -60,6 +61,8 @@ class ScriptPromiseProperty : public ScriptPromisePropertyBase {
   template <typename PassResolvedType>
   void resolve(PassResolvedType);
 
+  void resolveWithUndefined();
+
   template <typename PassRejectedType>
   void reject(PassRejectedType);
 
@@ -84,6 +87,7 @@ class ScriptPromiseProperty : public ScriptPromisePropertyBase {
   HolderType m_holder;
   ResolvedType m_resolved;
   RejectedType m_rejected;
+  bool m_resolvedWithUndefined = false;
 };
 
 template <typename HolderType, typename ResolvedType, typename RejectedType>
@@ -99,13 +103,26 @@ template <typename PassResolvedType>
 void ScriptPromiseProperty<HolderType, ResolvedType, RejectedType>::resolve(
     PassResolvedType value) {
   if (getState() != Pending) {
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return;
   }
-  if (!getExecutionContext() ||
-      getExecutionContext()->activeDOMObjectsAreStopped())
+  CHECK(!ScriptForbiddenScope::isScriptForbidden());
+  if (!getExecutionContext() || getExecutionContext()->isContextDestroyed())
     return;
   m_resolved = value;
+  resolveOrReject(Resolved);
+}
+
+template <typename HolderType, typename ResolvedType, typename RejectedType>
+void ScriptPromiseProperty<HolderType, ResolvedType, RejectedType>::
+    resolveWithUndefined() {
+  if (getState() != Pending) {
+    NOTREACHED();
+    return;
+  }
+  if (!getExecutionContext() || getExecutionContext()->isContextDestroyed())
+    return;
+  m_resolvedWithUndefined = true;
   resolveOrReject(Resolved);
 }
 
@@ -114,11 +131,10 @@ template <typename PassRejectedType>
 void ScriptPromiseProperty<HolderType, ResolvedType, RejectedType>::reject(
     PassRejectedType value) {
   if (getState() != Pending) {
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return;
   }
-  if (!getExecutionContext() ||
-      getExecutionContext()->activeDOMObjectsAreStopped())
+  if (!getExecutionContext() || getExecutionContext()->isContextDestroyed())
     return;
   m_rejected = value;
   resolveOrReject(Rejected);
@@ -129,7 +145,7 @@ v8::Local<v8::Object>
 ScriptPromiseProperty<HolderType, ResolvedType, RejectedType>::holder(
     v8::Isolate* isolate,
     v8::Local<v8::Object> creationContext) {
-  v8::Local<v8::Value> value = toV8(m_holder, creationContext, isolate);
+  v8::Local<v8::Value> value = ToV8(m_holder, creationContext, isolate);
   if (value.IsEmpty())
     return v8::Local<v8::Object>();
   return value.As<v8::Object>();
@@ -141,7 +157,9 @@ ScriptPromiseProperty<HolderType, ResolvedType, RejectedType>::resolvedValue(
     v8::Isolate* isolate,
     v8::Local<v8::Object> creationContext) {
   ASSERT(getState() == Resolved);
-  return toV8(m_resolved, creationContext, isolate);
+  if (!m_resolvedWithUndefined)
+    return ToV8(m_resolved, creationContext, isolate);
+  return v8::Undefined(isolate);
 }
 
 template <typename HolderType, typename ResolvedType, typename RejectedType>
@@ -150,7 +168,7 @@ ScriptPromiseProperty<HolderType, ResolvedType, RejectedType>::rejectedValue(
     v8::Isolate* isolate,
     v8::Local<v8::Object> creationContext) {
   ASSERT(getState() == Rejected);
-  return toV8(m_rejected, creationContext, isolate);
+  return ToV8(m_rejected, creationContext, isolate);
 }
 
 template <typename HolderType, typename ResolvedType, typename RejectedType>
@@ -158,23 +176,12 @@ void ScriptPromiseProperty<HolderType, ResolvedType, RejectedType>::reset() {
   resetBase();
   m_resolved = ResolvedType();
   m_rejected = RejectedType();
+  m_resolvedWithUndefined = false;
 }
 
 template <typename HolderType, typename ResolvedType, typename RejectedType>
 void ScriptPromiseProperty<HolderType, ResolvedType, RejectedType>::trace(
     Visitor* visitor) {
-  traceImpl(visitor);
-}
-template <typename HolderType, typename ResolvedType, typename RejectedType>
-void ScriptPromiseProperty<HolderType, ResolvedType, RejectedType>::trace(
-    InlinedGlobalMarkingVisitor visitor) {
-  traceImpl(visitor);
-}
-
-template <typename HolderType, typename ResolvedType, typename RejectedType>
-template <typename VisitorDispatcher>
-void ScriptPromiseProperty<HolderType, ResolvedType, RejectedType>::traceImpl(
-    VisitorDispatcher visitor) {
   TraceIfNeeded<HolderType>::trace(visitor, m_holder);
   TraceIfNeeded<ResolvedType>::trace(visitor, m_resolved);
   TraceIfNeeded<RejectedType>::trace(visitor, m_rejected);

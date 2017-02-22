@@ -13,8 +13,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "cc/test/ordered_simple_task_runner.h"
-#include "platform/scheduler/base/test_time_source.h"
 #include "platform/scheduler/base/real_time_domain.h"
+#include "platform/scheduler/base/task_queue_impl.h"
+#include "platform/scheduler/base/test_time_source.h"
 #include "platform/scheduler/child/scheduler_tqm_delegate_for_test.h"
 #include "platform/scheduler/renderer/auto_advancing_virtual_time_domain.h"
 #include "platform/scheduler/renderer/renderer_scheduler_impl.h"
@@ -25,6 +26,20 @@
 
 using testing::ElementsAre;
 
+namespace {
+bool MessageLoopTaskCounter(size_t* count) {
+  *count = *count + 1;
+  return true;
+}
+
+void NopTask() {}
+
+void AddOneTask(size_t* count) {
+  (*count)++;
+}
+
+}  // namespace
+
 namespace blink {
 namespace scheduler {
 
@@ -34,6 +49,16 @@ void RunTenTimesTask(size_t* count, scoped_refptr<TaskQueue> timer_queue) {
     timer_queue->PostTask(FROM_HERE,
                           base::Bind(&RunTenTimesTask, count, timer_queue));
   }
+}
+
+bool IsQueueBlocked(TaskQueue* task_queue) {
+  internal::TaskQueueImpl* task_queue_impl =
+      reinterpret_cast<internal::TaskQueueImpl*>(task_queue);
+  if (!task_queue_impl->IsQueueEnabled())
+    return true;
+  return task_queue_impl->GetFenceForTest() ==
+         static_cast<internal::EnqueueOrder>(
+             internal::EnqueueOrderValues::BLOCKING_FENCE);
 }
 }
 
@@ -237,6 +262,55 @@ TEST_F(TaskQueueThrottlerTest,
   EXPECT_TRUE(task_queue_throttler_->task_runner()->IsEmpty());
 }
 
+TEST_F(TaskQueueThrottlerTest, OnTimeDomainHasImmediateWork_EnabledQueue) {
+  task_queue_throttler_->OnTimeDomainHasImmediateWork(timer_queue_.get());
+  // Check PostPumpThrottledTasksLocked was called.
+  EXPECT_FALSE(task_queue_throttler_->task_runner()->IsEmpty());
+}
+
+TEST_F(TaskQueueThrottlerTest, OnTimeDomainHasImmediateWork_DisabledQueue) {
+  std::unique_ptr<TaskQueue::QueueEnabledVoter> voter =
+      timer_queue_->CreateQueueEnabledVoter();
+  voter->SetQueueEnabled(false);
+
+  task_queue_throttler_->OnTimeDomainHasImmediateWork(timer_queue_.get());
+  // Check PostPumpThrottledTasksLocked was not called.
+  EXPECT_TRUE(task_queue_throttler_->task_runner()->IsEmpty());
+}
+
+TEST_F(TaskQueueThrottlerTest,
+       ThrottlingADisabledQueueDoesNotPostPumpThrottledTasks) {
+  timer_queue_->PostTask(FROM_HERE, base::Bind(&NopTask));
+
+  std::unique_ptr<TaskQueue::QueueEnabledVoter> voter =
+      timer_queue_->CreateQueueEnabledVoter();
+  voter->SetQueueEnabled(false);
+
+  task_queue_throttler_->IncreaseThrottleRefCount(timer_queue_.get());
+  EXPECT_TRUE(task_queue_throttler_->task_runner()->IsEmpty());
+
+  // Enabling it should trigger a call to PostPumpThrottledTasksLocked.
+  voter->SetQueueEnabled(true);
+  EXPECT_FALSE(task_queue_throttler_->task_runner()->IsEmpty());
+}
+
+TEST_F(TaskQueueThrottlerTest,
+       ThrottlingADisabledQueueDoesNotPostPumpThrottledTasks_DelayedTask) {
+  timer_queue_->PostDelayedTask(FROM_HERE, base::Bind(&NopTask),
+                                base::TimeDelta::FromMilliseconds(1));
+
+  std::unique_ptr<TaskQueue::QueueEnabledVoter> voter =
+      timer_queue_->CreateQueueEnabledVoter();
+  voter->SetQueueEnabled(false);
+
+  task_queue_throttler_->IncreaseThrottleRefCount(timer_queue_.get());
+  EXPECT_TRUE(task_queue_throttler_->task_runner()->IsEmpty());
+
+  // Enabling it should trigger a call to PostPumpThrottledTasksLocked.
+  voter->SetQueueEnabled(true);
+  EXPECT_FALSE(task_queue_throttler_->task_runner()->IsEmpty());
+}
+
 TEST_F(TaskQueueThrottlerTest, WakeUpForNonDelayedTask) {
   std::vector<base::TimeTicks> run_times;
 
@@ -269,20 +343,6 @@ TEST_F(TaskQueueThrottlerTest, WakeUpForDelayedTask) {
               ElementsAre(base::TimeTicks() +
                           base::TimeDelta::FromMilliseconds(2000.0)));
 }
-
-namespace {
-bool MessageLoopTaskCounter(size_t* count) {
-  *count = *count + 1;
-  return true;
-}
-
-void NopTask() {}
-
-void AddOneTask(size_t* count) {
-  (*count)++;
-}
-
-}  // namespace
 
 TEST_F(TaskQueueThrottlerTest,
        SingleThrottledTaskPumpedAndRunWithNoExtraneousMessageLoopTasks) {
@@ -386,84 +446,25 @@ TEST_F(TaskQueueThrottlerTest, TaskQueueDisabledTillPump) {
   size_t count = 0;
   timer_queue_->PostTask(FROM_HERE, base::Bind(&AddOneTask, &count));
 
-  EXPECT_TRUE(timer_queue_->IsQueueEnabled());
+  EXPECT_FALSE(IsQueueBlocked(timer_queue_.get()));
   task_queue_throttler_->IncreaseThrottleRefCount(timer_queue_.get());
-  EXPECT_FALSE(timer_queue_->IsQueueEnabled());
+  EXPECT_TRUE(IsQueueBlocked(timer_queue_.get()));
 
   mock_task_runner_->RunUntilIdle();  // Wait until the pump.
   EXPECT_EQ(1u, count);               // The task got run
-  EXPECT_TRUE(timer_queue_->IsQueueEnabled());
-}
-
-TEST_F(TaskQueueThrottlerTest, TaskQueueUnthrottle_InitiallyEnabled) {
-  timer_queue_->PostTask(FROM_HERE, base::Bind(&NopTask));
-
-  timer_queue_->SetQueueEnabled(true);  // NOP
-  task_queue_throttler_->IncreaseThrottleRefCount(timer_queue_.get());
-  EXPECT_FALSE(timer_queue_->IsQueueEnabled());
-
-  task_queue_throttler_->DecreaseThrottleRefCount(timer_queue_.get());
-  EXPECT_TRUE(timer_queue_->IsQueueEnabled());
-}
-
-TEST_F(TaskQueueThrottlerTest, TaskQueueUnthrottle_InitiallyDisabled) {
-  timer_queue_->PostTask(FROM_HERE, base::Bind(&NopTask));
-
-  timer_queue_->SetQueueEnabled(false);
-  task_queue_throttler_->IncreaseThrottleRefCount(timer_queue_.get());
-  EXPECT_FALSE(timer_queue_->IsQueueEnabled());
-
-  task_queue_throttler_->DecreaseThrottleRefCount(timer_queue_.get());
-  EXPECT_FALSE(timer_queue_->IsQueueEnabled());
-}
-
-TEST_F(TaskQueueThrottlerTest, SetQueueEnabled_Unthrottled) {
-  timer_queue_->PostTask(FROM_HERE, base::Bind(&NopTask));
-
-  task_queue_throttler_->SetQueueEnabled(timer_queue_.get(), false);
-  EXPECT_FALSE(timer_queue_->IsQueueEnabled());
-
-  task_queue_throttler_->SetQueueEnabled(timer_queue_.get(), true);
-  EXPECT_TRUE(timer_queue_->IsQueueEnabled());
-}
-
-TEST_F(TaskQueueThrottlerTest, SetQueueEnabled_DisabledWhileThrottled) {
-  timer_queue_->PostTask(FROM_HERE, base::Bind(&NopTask));
-
-  task_queue_throttler_->IncreaseThrottleRefCount(timer_queue_.get());
-  EXPECT_FALSE(timer_queue_->IsQueueEnabled());
-
-  task_queue_throttler_->SetQueueEnabled(timer_queue_.get(), false);
-  task_queue_throttler_->DecreaseThrottleRefCount(timer_queue_.get());
-  EXPECT_FALSE(timer_queue_->IsQueueEnabled());
-}
-
-TEST_F(TaskQueueThrottlerTest, TaskQueueDisabledTillPump_ThenManuallyDisabled) {
-  size_t count = 0;
-  timer_queue_->PostTask(FROM_HERE, base::Bind(&AddOneTask, &count));
-
-  EXPECT_TRUE(timer_queue_->IsQueueEnabled());
-  task_queue_throttler_->IncreaseThrottleRefCount(timer_queue_.get());
-  EXPECT_FALSE(timer_queue_->IsQueueEnabled());
-
-  mock_task_runner_->RunUntilIdle();  // Wait until the pump.
-  EXPECT_EQ(1u, count);               // Task ran
-  EXPECT_TRUE(timer_queue_->IsQueueEnabled());
-
-  task_queue_throttler_->SetQueueEnabled(timer_queue_.get(), false);
-  EXPECT_FALSE(timer_queue_->IsQueueEnabled());
+  EXPECT_FALSE(IsQueueBlocked(timer_queue_.get()));
 }
 
 TEST_F(TaskQueueThrottlerTest, DoubleIncrementDoubleDecrement) {
   timer_queue_->PostTask(FROM_HERE, base::Bind(&NopTask));
 
-  EXPECT_TRUE(timer_queue_->IsQueueEnabled());
+  EXPECT_FALSE(IsQueueBlocked(timer_queue_.get()));
   task_queue_throttler_->IncreaseThrottleRefCount(timer_queue_.get());
   task_queue_throttler_->IncreaseThrottleRefCount(timer_queue_.get());
-  EXPECT_FALSE(timer_queue_->IsQueueEnabled());
+  EXPECT_TRUE(IsQueueBlocked(timer_queue_.get()));
   task_queue_throttler_->DecreaseThrottleRefCount(timer_queue_.get());
   task_queue_throttler_->DecreaseThrottleRefCount(timer_queue_.get());
-  EXPECT_TRUE(timer_queue_->IsQueueEnabled());
+  EXPECT_FALSE(IsQueueBlocked(timer_queue_.get()));
 }
 
 TEST_F(TaskQueueThrottlerTest, EnableVirtualTimeThenIncrement) {
@@ -472,21 +473,21 @@ TEST_F(TaskQueueThrottlerTest, EnableVirtualTimeThenIncrement) {
   scheduler_->EnableVirtualTime();
   EXPECT_EQ(timer_queue_->GetTimeDomain(), scheduler_->GetVirtualTimeDomain());
 
-  EXPECT_TRUE(timer_queue_->IsQueueEnabled());
+  EXPECT_FALSE(IsQueueBlocked(timer_queue_.get()));
   task_queue_throttler_->IncreaseThrottleRefCount(timer_queue_.get());
-  EXPECT_TRUE(timer_queue_->IsQueueEnabled());
+  EXPECT_FALSE(IsQueueBlocked(timer_queue_.get()));
   EXPECT_EQ(timer_queue_->GetTimeDomain(), scheduler_->GetVirtualTimeDomain());
 }
 
 TEST_F(TaskQueueThrottlerTest, IncrementThenEnableVirtualTime) {
   timer_queue_->PostTask(FROM_HERE, base::Bind(&NopTask));
 
-  EXPECT_TRUE(timer_queue_->IsQueueEnabled());
+  EXPECT_FALSE(IsQueueBlocked(timer_queue_.get()));
   task_queue_throttler_->IncreaseThrottleRefCount(timer_queue_.get());
-  EXPECT_FALSE(timer_queue_->IsQueueEnabled());
+  EXPECT_TRUE(IsQueueBlocked(timer_queue_.get()));
 
   scheduler_->EnableVirtualTime();
-  EXPECT_TRUE(timer_queue_->IsQueueEnabled());
+  EXPECT_FALSE(IsQueueBlocked(timer_queue_.get()));
   EXPECT_EQ(timer_queue_->GetTimeDomain(), scheduler_->GetVirtualTimeDomain());
 }
 
@@ -788,31 +789,6 @@ TEST_F(TaskQueueThrottlerTest,
                   base::TimeTicks() + base::TimeDelta::FromMilliseconds(355)));
 }
 
-TEST_F(TaskQueueThrottlerTest,
-       TimeBudgetThrottlingDoesNotConflictWithSetQueueEnabled) {
-  timer_queue_->SetQueueEnabled(false);
-
-  std::vector<base::TimeTicks> run_times;
-
-  TaskQueueThrottler::TimeBudgetPool* pool =
-      task_queue_throttler_->CreateTimeBudgetPool("test", base::nullopt,
-                                                  base::nullopt);
-  pool->SetTimeBudgetRecoveryRate(clock_->NowTicks(), 0.1);
-
-  pool->AddQueue(clock_->NowTicks(), timer_queue_.get());
-
-  task_queue_throttler_->SetQueueEnabled(timer_queue_.get(), true);
-
-  timer_queue_->PostDelayedTask(
-      FROM_HERE, base::Bind(&ExpensiveTestTask, &run_times, clock_.get()),
-      base::TimeDelta::FromMilliseconds(100));
-
-  mock_task_runner_->RunUntilIdle();
-
-  EXPECT_THAT(run_times, ElementsAre(base::TimeTicks() +
-                                     base::TimeDelta::FromMilliseconds(105)));
-}
-
 TEST_F(TaskQueueThrottlerTest, MaxThrottlingDuration) {
   std::vector<base::TimeTicks> run_times;
 
@@ -990,6 +966,102 @@ TEST_F(TaskQueueThrottlerTest, GrantAdditionalBudget) {
   pool->RemoveQueue(clock_->NowTicks(), timer_queue_.get());
   task_queue_throttler_->DecreaseThrottleRefCount(timer_queue_.get());
   pool->Close();
+}
+
+TEST_F(TaskQueueThrottlerTest, EnableAndDisableThrottlingAndTimeBudgets) {
+  // This test checks that if time budget pool is enabled when throttling
+  // is disabled, it does not throttle the queue.
+  std::vector<base::TimeTicks> run_times;
+
+  task_queue_throttler_->DisableThrottling();
+
+  TaskQueueThrottler::TimeBudgetPool* pool =
+      task_queue_throttler_->CreateTimeBudgetPool("test", base::nullopt,
+                                                  base::nullopt);
+  task_queue_throttler_->IncreaseThrottleRefCount(timer_queue_.get());
+
+  LazyNow lazy_now(clock_.get());
+  pool->DisableThrottling(&lazy_now);
+
+  pool->AddQueue(base::TimeTicks(), timer_queue_.get());
+
+  mock_task_runner_->RunUntilTime(base::TimeTicks() +
+                                  base::TimeDelta::FromMilliseconds(100));
+
+  lazy_now = LazyNow(clock_.get());
+  pool->EnableThrottling(&lazy_now);
+
+  timer_queue_->PostDelayedTask(FROM_HERE,
+                                base::Bind(&TestTask, &run_times, clock_.get()),
+                                base::TimeDelta::FromMilliseconds(200));
+
+  mock_task_runner_->RunUntilIdle();
+
+  EXPECT_THAT(run_times, ElementsAre(base::TimeTicks() +
+                                     base::TimeDelta::FromMilliseconds(300)));
+}
+
+TEST_F(TaskQueueThrottlerTest, AddQueueToBudgetPoolWhenThrottlingDisabled) {
+  // This test checks that a task queue is added to time budget pool
+  // when throttling is disabled, is does not throttle queue.
+  std::vector<base::TimeTicks> run_times;
+
+  task_queue_throttler_->DisableThrottling();
+
+  TaskQueueThrottler::TimeBudgetPool* pool =
+      task_queue_throttler_->CreateTimeBudgetPool("test", base::nullopt,
+                                                  base::nullopt);
+  task_queue_throttler_->IncreaseThrottleRefCount(timer_queue_.get());
+
+  mock_task_runner_->RunUntilTime(base::TimeTicks() +
+                                  base::TimeDelta::FromMilliseconds(100));
+
+  timer_queue_->PostDelayedTask(FROM_HERE,
+                                base::Bind(&TestTask, &run_times, clock_.get()),
+                                base::TimeDelta::FromMilliseconds(200));
+
+  pool->AddQueue(base::TimeTicks(), timer_queue_.get());
+
+  mock_task_runner_->RunUntilIdle();
+
+  EXPECT_THAT(run_times, ElementsAre(base::TimeTicks() +
+                                     base::TimeDelta::FromMilliseconds(300)));
+}
+
+TEST_F(TaskQueueThrottlerTest, DisabledQueueThenEnabledQueue) {
+  std::vector<base::TimeTicks> run_times;
+
+  scoped_refptr<TaskQueue> second_queue =
+      scheduler_->NewTimerTaskRunner(TaskQueue::QueueType::TEST);
+
+  task_queue_throttler_->IncreaseThrottleRefCount(timer_queue_.get());
+  task_queue_throttler_->IncreaseThrottleRefCount(second_queue.get());
+
+  timer_queue_->PostDelayedTask(FROM_HERE,
+                                base::Bind(&TestTask, &run_times, clock_.get()),
+                                base::TimeDelta::FromMilliseconds(100));
+  second_queue->PostDelayedTask(FROM_HERE,
+                                base::Bind(&TestTask, &run_times, clock_.get()),
+                                base::TimeDelta::FromMilliseconds(200));
+
+  std::unique_ptr<TaskQueue::QueueEnabledVoter> voter =
+      timer_queue_->CreateQueueEnabledVoter();
+  voter->SetQueueEnabled(false);
+
+  clock_->Advance(base::TimeDelta::FromMilliseconds(250));
+
+  mock_task_runner_->RunUntilIdle();
+
+  EXPECT_THAT(run_times, ElementsAre(base::TimeTicks() +
+                                     base::TimeDelta::FromMilliseconds(1000)));
+
+  voter->SetQueueEnabled(true);
+  mock_task_runner_->RunUntilIdle();
+
+  EXPECT_THAT(
+      run_times,
+      ElementsAre(base::TimeTicks() + base::TimeDelta::FromMilliseconds(1000),
+                  base::TimeTicks() + base::TimeDelta::FromMilliseconds(2000)));
 }
 
 }  // namespace scheduler

@@ -30,8 +30,8 @@
 
 #include "web/ExternalPopupMenu.h"
 
-#include "core/dom/ExecutionContextTask.h"
 #include "core/dom/NodeComputedStyle.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -43,6 +43,7 @@
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/IntPoint.h"
 #include "platform/text/TextDirection.h"
+#include "public/platform/WebMouseEvent.h"
 #include "public/platform/WebVector.h"
 #include "public/web/WebExternalPopupMenu.h"
 #include "public/web/WebFrameClient.h"
@@ -95,8 +96,7 @@ bool ExternalPopupMenu::showInternal() {
                        ->localToAbsoluteQuad(FloatQuad(
                            toLayoutBox(layoutObject)->borderBoundingBox())));
     IntRect rect(quad.enclosingBoundingBox());
-    IntRect rectInViewport =
-        m_localFrame->view()->soonToBeRemovedContentsToUnscaledViewport(rect);
+    IntRect rectInViewport = m_localFrame->view()->contentsToViewport(rect);
     m_webExternalPopupMenu->show(rectInViewport);
     return true;
   } else {
@@ -112,10 +112,10 @@ void ExternalPopupMenu::show() {
     return;
 #if OS(MACOSX)
   const WebInputEvent* currentEvent = WebViewImpl::currentInputEvent();
-  if (currentEvent && currentEvent->type == WebInputEvent::MouseDown) {
-    m_syntheticEvent = wrapUnique(new WebMouseEvent);
+  if (currentEvent && currentEvent->type() == WebInputEvent::MouseDown) {
+    m_syntheticEvent = WTF::wrapUnique(new WebMouseEvent);
     *m_syntheticEvent = *static_cast<const WebMouseEvent*>(currentEvent);
-    m_syntheticEvent->type = WebInputEvent::MouseUp;
+    m_syntheticEvent->setType(WebInputEvent::MouseUp);
     m_dispatchEventTimer.startOneShot(0, BLINK_FROM_HERE);
     // FIXME: show() is asynchronous. If preparing a popup is slow and a
     // user released the mouse button before showing the popup, mouseup and
@@ -126,7 +126,7 @@ void ExternalPopupMenu::show() {
 }
 
 void ExternalPopupMenu::dispatchEvent(TimerBase*) {
-  m_webView.handleInputEvent(*m_syntheticEvent);
+  m_webView.handleInputEvent(blink::WebCoalescedInputEvent(*m_syntheticEvent));
   m_syntheticEvent.reset();
 }
 
@@ -146,8 +146,9 @@ void ExternalPopupMenu::updateFromElement(UpdateReason reason) {
       if (m_needsUpdate)
         return;
       m_needsUpdate = true;
-      m_ownerElement->document().postTask(
-          BLINK_FROM_HERE, createSameThreadTask(&ExternalPopupMenu::update,
+      TaskRunnerHelper::get(TaskType::UserInteraction,
+                            &m_ownerElement->document())
+          ->postTask(BLINK_FROM_HERE, WTF::bind(&ExternalPopupMenu::update,
                                                 wrapPersistent(this)));
       break;
 
@@ -213,7 +214,7 @@ void ExternalPopupMenu::didAcceptIndices(const WebVector<int>& indices) {
     Vector<int> listIndices;
     listIndices.reserveCapacity(indices.size());
     for (size_t i = 0; i < indices.size(); ++i)
-      listIndices.append(toPopupMenuItemIndex(indices[i], *ownerElement));
+      listIndices.push_back(toPopupMenuItemIndex(indices[i], *ownerElement));
     ownerElement->selectMultipleOptionsByPopup(listIndices);
   }
 
@@ -252,7 +253,7 @@ void ExternalPopupMenu::getPopupMenuInfo(WebPopupMenuInfo& info,
     popupItem.enabled = !itemElement.isDisabledFormControl();
     const ComputedStyle& style = *ownerElement.itemComputedStyle(itemElement);
     popupItem.textDirection = toWebTextDirection(style.direction());
-    popupItem.hasTextDirectionOverride = isOverride(style.unicodeBidi());
+    popupItem.hasTextDirectionOverride = isOverride(style.getUnicodeBidi());
   }
 
   const ComputedStyle& menuStyle = ownerElement.computedStyle()
@@ -265,7 +266,7 @@ void ExternalPopupMenu::getPopupMenuInfo(WebPopupMenuInfo& info,
       static_cast<int>(menuStyle.font().getFontDescription().computedSize());
   info.selectedIndex = toExternalPopupMenuItemIndex(
       ownerElement.selectedListIndex(), ownerElement);
-  info.rightAligned = menuStyle.direction() == RTL;
+  info.rightAligned = menuStyle.direction() == TextDirection::kRtl;
   info.allowMultipleSelection = ownerElement.isMultiple();
   if (count < itemCount)
     items.shrink(count);

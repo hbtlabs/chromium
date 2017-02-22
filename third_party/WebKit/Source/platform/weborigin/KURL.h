@@ -136,12 +136,13 @@ class PLATFORM_EXPORT KURL {
 
   String baseAsString() const;
 
-  // Returns true if the current URL's protocol is the same as the null-
-  // terminated ASCII argument. The argument must be lower-case.
-  bool protocolIs(const char*) const;
+  // Returns true if the current URL's protocol is the same as the StringView
+  // argument. The argument must be lower-case.
+  bool protocolIs(const StringView protocol) const;
   bool protocolIsData() const { return protocolIs("data"); }
   // This includes at least about:blank and about:srcdoc.
   bool protocolIsAbout() const { return protocolIs("about"); }
+  bool protocolIsJavaScript() const;
   bool protocolIsInHTTPFamily() const;
   bool isLocalFile() const;
   bool isAboutBlankURL() const;   // Is exactly about:blank.
@@ -191,22 +192,31 @@ class PLATFORM_EXPORT KURL {
 
   bool isSafeToSendToAnotherThread() const;
 
+  bool whitespaceRemoved() const { return m_parsed.whitespace_removed; }
+
  private:
   void init(const KURL& base,
             const String& relative,
             const WTF::TextEncoding* queryEncoding);
 
+  StringView componentStringView(const url::Component&) const;
   String componentString(const url::Component&) const;
-  String stringForInvalidComponent() const;
+  StringView stringViewForInvalidComponent() const;
 
   template <typename CHAR>
   void replaceComponents(const url::Replacements<CHAR>&);
 
   void initInnerURL();
-  void initProtocolIsInHTTPFamily();
+  void initProtocolMetadata();
 
   bool m_isValid;
   bool m_protocolIsInHTTPFamily;
+
+  // Keep a separate string for the protocol to avoid copious copies for
+  // protocol(). Normally this will be Atomic, except when constructed via
+  // KURL::copy(), which is deep.
+  String m_protocol;
+
   url::Parsed m_parsed;
   String m_string;
   std::unique_ptr<KURL> m_innerURL;

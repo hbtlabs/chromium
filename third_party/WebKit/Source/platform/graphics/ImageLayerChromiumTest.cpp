@@ -50,18 +50,21 @@ class TestImage : public Image {
 
   IntSize size() const override { return m_size; }
 
-  sk_sp<SkImage> imageForCurrentFrame() override { return m_image; }
+  sk_sp<SkImage> imageForCurrentFrame(const ColorBehavior&) override {
+    return m_image;
+  }
 
   void destroyDecodedData() override {
     // Image pure virtual stub.
   }
 
-  void draw(SkCanvas*,
-            const SkPaint&,
+  void draw(PaintCanvas*,
+            const PaintFlags&,
             const FloatRect&,
             const FloatRect&,
             RespectImageOrientationEnum,
-            ImageClampingMode) override {
+            ImageClampingMode,
+            const ColorBehavior&) override {
     // Image pure virtual stub.
   }
 
@@ -90,7 +93,7 @@ class TestImage : public Image {
 TEST(ImageLayerChromiumTest, imageLayerContentReset) {
   FakeGraphicsLayerClient client;
   std::unique_ptr<FakeGraphicsLayer> graphicsLayer =
-      wrapUnique(new FakeGraphicsLayer(&client));
+      WTF::wrapUnique(new FakeGraphicsLayer(&client));
   ASSERT_TRUE(graphicsLayer.get());
 
   ASSERT_FALSE(graphicsLayer->hasContentsLayer());
@@ -112,7 +115,7 @@ TEST(ImageLayerChromiumTest, imageLayerContentReset) {
 TEST(ImageLayerChromiumTest, opaqueImages) {
   FakeGraphicsLayerClient client;
   std::unique_ptr<FakeGraphicsLayer> graphicsLayer =
-      wrapUnique(new FakeGraphicsLayer(&client));
+      WTF::wrapUnique(new FakeGraphicsLayer(&client));
   ASSERT_TRUE(graphicsLayer.get());
 
   bool opaque = true;

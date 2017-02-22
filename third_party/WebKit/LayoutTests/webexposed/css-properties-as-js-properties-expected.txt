@@ -31,6 +31,7 @@ backgroundRepeatX
 backgroundRepeatY
 backgroundSize
 baselineShift
+blockSize
 border
 borderBottom
 borderBottomColor
@@ -72,6 +73,7 @@ breakBefore
 breakInside
 bufferedRendering
 captionSide
+caretColor
 clear
 clip
 clipPath
@@ -131,6 +133,7 @@ fontVariant
 fontVariantCaps
 fontVariantLigatures
 fontVariantNumeric
+fontVariationSettings
 fontWeight
 getPropertyPriority
 getPropertyValue
@@ -156,6 +159,7 @@ height
 hyphens
 imageOrientation
 imageRendering
+inlineSize
 isolation
 item
 justifyContent
@@ -182,10 +186,14 @@ markerStart
 mask
 maskSourceType
 maskType
+maxBlockSize
 maxHeight
+maxInlineSize
 maxWidth
 maxZoom
+minBlockSize
 minHeight
+minInlineSize
 minWidth
 minZoom
 mixBlendMode
@@ -197,6 +205,7 @@ offsetAnchor
 offsetDistance
 offsetPath
 offsetPosition
+offsetRotate
 offsetRotation
 opacity
 order

@@ -3,7 +3,8 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
-import("//remoting/remoting_enable.gni")
+import("//media/media_options.gni")
+import("//remoting/remoting_options.gni")
 import("//remoting/remoting_locales.gni")
 import("//remoting/remoting_version.gni")
 
@@ -57,12 +58,7 @@ source_set("common") {
     # disabled.
     # See crbug.com/462689 for details.
     all_dependent_configs = [ "//third_party/harfbuzz-ng:pangoft2_link_hack" ]
-
-    if (use_gtk3) {
-      deps += [ "//build/config/linux/gtk3" ]
-    } else {
-      deps += [ "//build/config/linux/gtk2" ]
-    }
+    deps += [ "//build/config/linux/gtk" ]
   }
 }
 
@@ -83,7 +79,8 @@ if (!is_chromeos && enable_remoting_host) {
         "it2me_native_messaging_host_entry_point.cc",
       ]
 
-      defines = host_predefines + [ "BINARY=BINARY_REMOTE_ASSISTANCE_HOST" ]
+      defines = host_predefines +
+                [ "REMOTING_HOST_BINARY=BINARY_REMOTE_ASSISTANCE_HOST" ]
 
       ldflags = [
         # "/NODEFAULTLIB", TODO(zijiehe): Why IgnoreAllDefaultLibraries: true in
@@ -106,7 +103,8 @@ if (!is_chromeos && enable_remoting_host) {
         "it2me_native_messaging_host_entry_point.cc",
       ]
 
-      defines = host_predefines + [ "BINARY=BINARY_HOST_IT2ME_UIACCESS" ]
+      defines = host_predefines +
+                [ "REMOTING_HOST_BINARY=BINARY_HOST_IT2ME_UIACCESS" ]
 
       ldflags = [
         # "/NODEFAULTLIB", TODO(zijiehe): Why IgnoreAllDefaultLibraries: true in
@@ -233,11 +231,7 @@ if (!is_chromeos && enable_remoting_host) {
       }
 
       if (is_desktop_linux) {
-        if (use_gtk3) {
-          deps += [ "//build/config/linux/gtk3" ]
-        } else {
-          deps += [ "//build/config/linux/gtk2" ]
-        }
+        deps += [ "//build/config/linux/gtk" ]
       }
     }
   }

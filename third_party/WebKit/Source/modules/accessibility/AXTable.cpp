@@ -164,11 +164,11 @@ bool AXTable::isDataTable() const {
   if (!firstBody)
     return false;
 
-  int numCols = firstBody->numEffectiveColumns();
+  int numColsInFirstBody = firstBody->numEffectiveColumns();
   int numRows = firstBody->numRows();
 
   // If there's only one cell, it's not a good AXTable candidate.
-  if (numRows == 1 && numCols == 1)
+  if (numRows == 1 && numColsInFirstBody == 1)
     return false;
 
   // If there are at least 20 rows, we'll call it a data table.
@@ -203,7 +203,8 @@ bool AXTable::isDataTable() const {
   int headersInFirstColumnCount = 0;
   for (int row = 0; row < numRows; ++row) {
     int headersInFirstRowCount = 0;
-    for (int col = 0; col < numCols; ++col) {
+    int nCols = firstBody->numCols(row);
+    for (int col = 0; col < nCols; ++col) {
       LayoutTableCell* cell = firstBody->primaryCellAt(row, col);
       if (!cell)
         continue;
@@ -242,7 +243,7 @@ bool AXTable::isDataTable() const {
         continue;
 
       // If the empty-cells style is set, we'll call it a data table.
-      if (computedStyle->emptyCells() == EEmptyCells::Hide)
+      if (computedStyle->emptyCells() == EEmptyCells::kHide)
         return true;
 
       // If a cell has matching bordered sides, call it a (fully) bordered cell.
@@ -291,7 +292,8 @@ bool AXTable::isDataTable() const {
       }
     }
 
-    if (!row && headersInFirstRowCount == numCols && numCols > 1)
+    if (!row && headersInFirstRowCount == numColsInFirstBody &&
+        numColsInFirstBody > 1)
       return true;
   }
 
@@ -386,7 +388,7 @@ void AXTable::addChildren() {
           toHTMLTableElement(tableNode)->caption()) {
     AXObject* captionObject = axCache.getOrCreate(caption);
     if (captionObject && !captionObject->accessibilityIsIgnored())
-      m_children.append(captionObject);
+      m_children.push_back(captionObject);
   }
 
   // Go through all the available sections to pull out the rows and add them as
@@ -416,10 +418,10 @@ void AXTable::addChildren() {
         continue;
 
       row->setRowIndex(static_cast<int>(m_rows.size()));
-      m_rows.append(row);
+      m_rows.push_back(row);
       if (!row->accessibilityIsIgnored())
-        m_children.append(row);
-      appendedRows.add(row);
+        m_children.push_back(row);
+      appendedRows.insert(row);
     }
 
     tableSection = table->sectionBelow(tableSection, SkipEmptySections);
@@ -431,14 +433,14 @@ void AXTable::addChildren() {
     AXTableColumn* column = toAXTableColumn(axCache.getOrCreate(ColumnRole));
     column->setColumnIndex((int)i);
     column->setParent(this);
-    m_columns.append(column);
+    m_columns.push_back(column);
     if (!column->accessibilityIsIgnored())
-      m_children.append(column);
+      m_children.push_back(column);
   }
 
   AXObject* headerContainerObject = headerContainer();
   if (headerContainerObject && !headerContainerObject->accessibilityIsIgnored())
-    m_children.append(headerContainerObject);
+    m_children.push_back(headerContainerObject);
 }
 
 AXObject* AXTable::headerContainer() {
@@ -489,6 +491,47 @@ void AXTable::rowHeaders(AXObjectVector& headers) {
     if (row->isTableRow())
       toAXTableRow(m_rows[r].get())->headerObjectsForRow(headers);
   }
+}
+
+int AXTable::ariaColumnCount() {
+  if (!hasAttribute(aria_colcountAttr))
+    return 0;
+
+  const AtomicString& colCountValue = getAttribute(aria_colcountAttr);
+  int colCountInt = colCountValue.toInt();
+
+  if (colCountInt > (int)columnCount())
+    return colCountInt;
+
+  // Spec says that if all of the columns are present in the DOM, it
+  // is not necessary to set this attribute as the user agent can
+  // automatically calculate the total number of columns.
+  // It returns 0 in order not to set this attribute.
+  if (colCountInt == (int)columnCount() || colCountInt != -1)
+    return 0;
+
+  return -1;
+}
+
+int AXTable::ariaRowCount() {
+  if (!hasAttribute(aria_rowcountAttr))
+    return 0;
+
+  const AtomicString& rowCountValue = getAttribute(aria_rowcountAttr);
+  int rowCountInt = rowCountValue.toInt();
+
+  if (rowCountInt > (int)rowCount())
+    return rowCountInt;
+
+  // Spec says that if all of the rows are present in the DOM, it is
+  // not necessary to set this attribute as the user agent can
+  // automatically calculate the total number of rows.
+  // It returns 0 in order not to set this attribute.
+  if (rowCountInt == (int)rowCount() || rowCountInt != -1)
+    return 0;
+
+  // In the spec, -1 explicitly means an unknown number of rows.
+  return -1;
 }
 
 unsigned AXTable::columnCount() {

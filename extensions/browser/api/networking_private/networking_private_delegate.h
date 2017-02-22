@@ -11,7 +11,6 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/values.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "extensions/common/api/networking_private.h"
@@ -104,7 +103,7 @@ class NetworkingPrivateDelegate : public KeyedService {
   ~NetworkingPrivateDelegate() override;
 
   void set_ui_delegate(std::unique_ptr<UIDelegate> ui_delegate) {
-    ui_delegate_.reset(ui_delegate.release());
+    ui_delegate_ = std::move(ui_delegate);
   }
 
   const UIDelegate* ui_delegate() { return ui_delegate_.get(); }
@@ -164,7 +163,6 @@ class NetworkingPrivateDelegate : public KeyedService {
                                  const std::string& puk,
                                  const VoidCallback& success_callback,
                                  const FailureCallback& failure_callback) = 0;
-
   virtual void SetCellularSimState(const std::string& guid,
                                    bool require_pin,
                                    const std::string& current_pin,
@@ -179,6 +177,12 @@ class NetworkingPrivateDelegate : public KeyedService {
 
   // Returns a list of DeviceStateProperties.
   virtual std::unique_ptr<DeviceStateList> GetDeviceStateList() = 0;
+
+  // Returns a dictionary of global policy values (may be empty). Note: the
+  // dictionary is expected to be a superset of the networkingPrivate
+  // GlobalPolicy dictionary. Any properties not in GlobalPolicy will be
+  // ignored.
+  virtual std::unique_ptr<base::DictionaryValue> GetGlobalPolicy() = 0;
 
   // Returns true if the ONC network type |type| is enabled.
   virtual bool EnableNetworkType(const std::string& type) = 0;

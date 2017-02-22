@@ -13,7 +13,7 @@ Represents a class registered by the author through `PaintWorkletGlobalScope#reg
 Specifically this class holds onto the javascript constructor and paint functions of the class via
 persistent handles. This class keeps these functions alive so they don't get garbage collected.
 
-The `CSSPaintDefinition` also holds onto an instance of the paint class va a persistent handle. This
+The `CSSPaintDefinition` also holds onto an instance of the paint class via a persistent handle. This
 instance is lazily created upon first use. If the constructor throws for some reason the constructor
 is marked as invalid and will always produce invalid images.
 
@@ -41,13 +41,13 @@ registered the generator is notified so it can invalidate an display the correct
 
 ### Generating a [PaintGeneratedImage](../../platform/graphics/PaintGeneratedImage.h)
 
-`PaintGeneratedImage` is a `Image` which just paints a single `SkPicture`.
+`PaintGeneratedImage` is a `Image` which just paints a single `PaintRecord`.
 
 A `CSSPaintValue` can generate an image from the method `CSSPaintImageGenerator#paint`. This method
 calls through to `CSSPaintDefinition#paint` which actually invokes the javascript paint method.
 This method returns the `PaintGeneratedImage`.
 
-The `SkPicture` is produced from a `RecordingImageBufferSurface`.
+The `PaintRecord` is produced from a `RecordingImageBufferSurface`.
 
 ### Style Invalidation
 

@@ -15,6 +15,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "cc/surfaces/surface.h"
+#include "cc/surfaces/surface_info.h"
 #include "cc/surfaces/surface_manager.h"
 #include "content/browser/browser_plugin/browser_plugin_embedder.h"
 #include "content/browser/browser_thread_impl.h"
@@ -44,6 +45,7 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/guest_host.h"
 #include "content/public/browser/guest_mode.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/user_metrics.h"
@@ -338,10 +340,6 @@ void BrowserPluginGuest::InitInternal(
   *renderer_prefs = *owner_web_contents_->GetMutableRendererPrefs();
   renderer_prefs->user_agent_override = guest_user_agent_override;
 
-  // We would like the guest to report changes to frame names so that we can
-  // update the BrowserPlugin's corresponding 'name' attribute.
-  // TODO(fsamuel): Remove this once http://crbug.com/169110 is addressed.
-  renderer_prefs->report_frame_name_changes = true;
   // Navigation is disabled in Chrome Apps. We want to make sure guest-initiated
   // navigations still continue to function inside the app.
   renderer_prefs->browser_handles_all_top_level_requests = false;
@@ -414,36 +412,24 @@ void BrowserPluginGuest::PointerLockPermissionResponse(bool allow) {
 }
 
 void BrowserPluginGuest::SetChildFrameSurface(
-    const cc::SurfaceId& surface_id,
-    const gfx::Size& frame_size,
-    float scale_factor,
+    const cc::SurfaceInfo& surface_info,
     const cc::SurfaceSequence& sequence) {
   has_attached_since_surface_set_ = false;
   SendMessageToEmbedder(base::MakeUnique<BrowserPluginMsg_SetChildFrameSurface>(
-      browser_plugin_instance_id(), surface_id, frame_size, scale_factor,
-      sequence));
+      browser_plugin_instance_id(), surface_info, sequence));
 }
 
 void BrowserPluginGuest::OnSatisfySequence(
     int instance_id,
     const cc::SurfaceSequence& sequence) {
-  std::vector<uint32_t> sequences;
-  sequences.push_back(sequence.sequence);
-  cc::SurfaceManager* manager = GetSurfaceManager();
-  manager->DidSatisfySequences(sequence.frame_sink_id, &sequences);
+  GetSurfaceManager()->SatisfySequence(sequence);
 }
 
 void BrowserPluginGuest::OnRequireSequence(
     int instance_id,
     const cc::SurfaceId& id,
     const cc::SurfaceSequence& sequence) {
-  cc::SurfaceManager* manager = GetSurfaceManager();
-  cc::Surface* surface = manager->GetSurfaceForId(id);
-  if (!surface) {
-    LOG(ERROR) << "Attempting to require callback on nonexistent surface";
-    return;
-  }
-  surface->AddDestructionDependency(sequence);
+  GetSurfaceManager()->RequireSequence(id, sequence);
 }
 
 bool BrowserPluginGuest::HandleFindForEmbedder(
@@ -467,7 +453,7 @@ void BrowserPluginGuest::ResendEventToEmbedder(
       static_cast<RenderWidgetHostViewBase*>(GetOwnerRenderWidgetHostView());
 
   gfx::Vector2d offset_from_embedder = guest_window_rect_.OffsetFromOrigin();
-  if (event.type == blink::WebInputEvent::GestureScrollUpdate) {
+  if (event.type() == blink::WebInputEvent::GestureScrollUpdate) {
     blink::WebGestureEvent resent_gesture_event;
     memcpy(&resent_gesture_event, &event, sizeof(blink::WebGestureEvent));
     resent_gesture_event.x += offset_from_embedder.x();
@@ -479,7 +465,7 @@ void BrowserPluginGuest::ResendEventToEmbedder(
         ui::WebInputEventTraits::CreateLatencyInfoForWebGestureEvent(
             resent_gesture_event);
     view->ProcessGestureEvent(resent_gesture_event, latency_info);
-  } else if (event.type == blink::WebInputEvent::MouseWheel) {
+  } else if (event.type() == blink::WebInputEvent::MouseWheel) {
     blink::WebMouseWheelEvent resent_wheel_event;
     memcpy(&resent_wheel_event, &event, sizeof(blink::WebMouseWheelEvent));
     resent_wheel_event.x += offset_from_embedder.x();
@@ -492,6 +478,21 @@ void BrowserPluginGuest::ResendEventToEmbedder(
   } else {
     NOTIMPLEMENTED();
   }
+}
+
+gfx::Point BrowserPluginGuest::GetCoordinatesInEmbedderWebContents(
+    const gfx::Point& relative_point) {
+  RenderWidgetHostView* owner_rwhv = GetOwnerRenderWidgetHostView();
+  if (!owner_rwhv)
+    return relative_point;
+
+  gfx::Point point(relative_point);
+
+  // Add the offset form the embedder web contents view.
+  point +=
+      owner_rwhv->TransformPointToRootCoordSpace(guest_window_rect_.origin())
+          .OffsetFromOrigin();
+  return point;
 }
 
 WebContentsImpl* BrowserPluginGuest::GetWebContents() const {
@@ -651,11 +652,10 @@ void BrowserPluginGuest::SendTextInputTypeChangedToView(
     guest_rwhv->TextInputStateChanged(*last_text_input_state_);
 }
 
-void BrowserPluginGuest::DidCommitProvisionalLoadForFrame(
-    RenderFrameHost* render_frame_host,
-    const GURL& url,
-    ui::PageTransition transition_type) {
-  RecordAction(base::UserMetricsAction("BrowserPlugin.Guest.DidNavigate"));
+void BrowserPluginGuest::DidFinishNavigation(
+    NavigationHandle* navigation_handle) {
+  if (navigation_handle->HasCommitted())
+    RecordAction(base::UserMetricsAction("BrowserPlugin.Guest.DidNavigate"));
 }
 
 void BrowserPluginGuest::RenderViewReady() {
@@ -865,7 +865,7 @@ void BrowserPluginGuest::OnDragStatusUpdate(int browser_plugin_instance_id,
       break;
     case blink::WebDragStatusLeave:
       embedder->DragLeftGuest(this);
-      widget->DragTargetDragLeave();
+      widget->DragTargetDragLeave(gfx::Point(), gfx::Point());
       ignore_dragged_url_ = true;
       break;
     case blink::WebDragStatusDrop:
@@ -906,11 +906,13 @@ void BrowserPluginGuest::OnImeSetComposition(
                                       selection_start, selection_end));
 }
 
-void BrowserPluginGuest::OnImeCommitText(int browser_plugin_instance_id,
-                                         const std::string& text,
-                                         int relative_cursor_pos) {
+void BrowserPluginGuest::OnImeCommitText(
+    int browser_plugin_instance_id,
+    const std::string& text,
+    const std::vector<blink::WebCompositionUnderline>& underlines,
+    int relative_cursor_pos) {
   Send(new InputMsg_ImeCommitText(routing_id(), base::UTF8ToUTF16(text),
-                                  gfx::Range::InvalidRange(),
+                                  underlines, gfx::Range::InvalidRange(),
                                   relative_cursor_pos));
 }
 

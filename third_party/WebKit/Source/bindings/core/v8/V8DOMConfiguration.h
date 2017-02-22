@@ -29,9 +29,11 @@
 #ifndef V8DOMConfiguration_h
 #define V8DOMConfiguration_h
 
+#include "bindings/core/v8/GeneratedCodeHelper.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8DOMWrapper.h"
 #include "core/CoreExport.h"
+
 #include <v8.h>
 
 namespace blink {
@@ -45,11 +47,6 @@ class CORE_EXPORT V8DOMConfiguration final {
   // from the generated bindings initialization (ConfigureXXXTemplate).
   // This greatly reduces the binary size by moving from code driven setup to
   // data table driven setup.
-
-  enum ExposeConfiguration {
-    ExposedToAllScripts,
-    OnlyExposedToPrivateScript,
-  };
 
   // Bitflags to show where the member will be defined.
   enum PropertyLocationConfiguration {
@@ -67,7 +64,7 @@ class CORE_EXPORT V8DOMConfiguration final {
 
   // AttributeConfiguration translates into calls to SetNativeDataProperty() on
   // either the instance or the prototype ObjectTemplate, based on
-  // |instanceOrPrototypeConfiguration|.
+  // |propertyLocationConfiguration|.
   struct AttributeConfiguration {
     AttributeConfiguration& operator=(const AttributeConfiguration&) = delete;
     DISALLOW_NEW();
@@ -81,9 +78,7 @@ class CORE_EXPORT V8DOMConfiguration final {
     // The accessor's 'result' is stored in a private property.
     CachedAccessorCallback cachedAccessorCallback;
     const WrapperTypeInfo* data;
-    unsigned settings : 8;             // v8::AccessControl
-    unsigned attribute : 8;            // v8::PropertyAttribute
-    unsigned exposeConfiguration : 1;  // ExposeConfiguration
+    unsigned attribute : 8;  // v8::PropertyAttribute
     unsigned
         propertyLocationConfiguration : 3;  // PropertyLocationConfiguration
     unsigned holderCheckConfiguration : 1;  // HolderCheckConfiguration
@@ -113,7 +108,7 @@ class CORE_EXPORT V8DOMConfiguration final {
   // returned by the getter callback, turning it into a real data value.
   //
   // This also means that the AttributeConfiguration must not specify a setter,
-  // nor any non-default attributes or access control settings.
+  // nor any non-default attributes.
   static void installLazyDataAttributes(
       v8::Isolate*,
       const DOMWrapperWorld&,
@@ -135,9 +130,7 @@ class CORE_EXPORT V8DOMConfiguration final {
     // The accessor's 'result' is stored in a private property.
     CachedAccessorCallback cachedAccessorCallback;
     const WrapperTypeInfo* data;
-    unsigned settings : 8;             // v8::AccessControl
-    unsigned attribute : 8;            // v8::PropertyAttribute
-    unsigned exposeConfiguration : 1;  // ExposeConfiguration
+    unsigned attribute : 8;  // v8::PropertyAttribute
     unsigned
         propertyLocationConfiguration : 3;  // PropertyLocationConfiguration
     unsigned holderCheckConfiguration : 1;  // HolderCheckConfiguration
@@ -240,8 +233,7 @@ class CORE_EXPORT V8DOMConfiguration final {
     v8::FunctionCallback callback;
     v8::FunctionCallback callbackForMainWorld;
     int length;
-    unsigned attribute : 8;            // v8::PropertyAttribute
-    unsigned exposeConfiguration : 1;  // ExposeConfiguration
+    unsigned attribute : 8;  // v8::PropertyAttribute
     unsigned
         propertyLocationConfiguration : 3;  // PropertyLocationConfiguration
     unsigned holderCheckConfiguration : 1;  // HolderCheckConfiguration
@@ -262,8 +254,7 @@ class CORE_EXPORT V8DOMConfiguration final {
     v8::FunctionCallback callback;
     // SymbolKeyedMethodConfiguration doesn't support per-world bindings.
     int length;
-    unsigned attribute : 8;            // v8::PropertyAttribute
-    unsigned exposeConfiguration : 1;  // ExposeConfiguration
+    unsigned attribute : 8;  // v8::PropertyAttribute
     unsigned
         propertyLocationConfiguration : 3;  // PropertyLocationConfiguration
     unsigned holderCheckConfiguration : 1;  // HolderCheckConfiguration

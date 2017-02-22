@@ -9,10 +9,6 @@
 
 #include "components/policy/policy_export.h"
 
-namespace enterprise_management {
-class PolicyData;
-}
-
 namespace policy {
 
 // Constants related to the device management protocol.
@@ -47,6 +43,8 @@ POLICY_EXPORT extern const char kValueRequestDeviceAttributeUpdate[];
 POLICY_EXPORT extern const char kValueRequestGcmIdUpdate[];
 POLICY_EXPORT extern const char kValueRequestCheckAndroidManagement[];
 POLICY_EXPORT extern const char kValueRequestCertBasedRegister[];
+POLICY_EXPORT extern const char kValueRequestActiveDirectoryEnrollPlayUser[];
+POLICY_EXPORT extern const char kValueRequestActiveDirectoryPlayActivity[];
 
 // Policy type strings for the policy_type field in PolicyFetchRequest.
 POLICY_EXPORT extern const char kChromeDevicePolicyType[];
@@ -66,9 +64,11 @@ enum PolicyFetchStatus {
 // The header used to transmit the policy ID for this client.
 POLICY_EXPORT extern const char kChromePolicyHeader[];
 
-// Information about the verification key used to verify that policy signing
-// keys are valid.
+// Public half of the verification key that is used to verify that policy
+// signing keys are originating from DM server.
 POLICY_EXPORT std::string GetPolicyVerificationKey();
+
+// Corresponding hash.
 POLICY_EXPORT extern const char kPolicyVerificationKeyHash[];
 
 // Status codes for communication errors with the device management service.
@@ -111,6 +111,8 @@ enum DeviceManagementStatus {
   DM_STATUS_CANNOT_SIGN_REQUEST = 15,
   // Service error: Policy not found. Error code defined by the DM folks.
   DM_STATUS_SERVICE_POLICY_NOT_FOUND = 902,
+  // Service error: ARC is not enabled on this domain.
+  DM_STATUS_SERVICE_ARC_DISABLED = 904,
 };
 
 // List of modes that the device can be locked into.

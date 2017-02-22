@@ -58,9 +58,9 @@ def main(argv, stdout, stderr):
 
     try:
         port = host.port_factory.get(options.platform, options)
-    except (NotImplementedError, ValueError) as e:
+    except (NotImplementedError, ValueError) as error:
         # FIXME: is this the best way to handle unsupported port names?
-        print >> stderr, str(e)
+        print >> stderr, str(error)
         return test_run_results.UNEXPECTED_ERROR_EXIT_STATUS
 
     try:
@@ -69,12 +69,12 @@ def main(argv, stdout, stderr):
     # We need to still handle KeyboardInterrupt, at least for webkitpy unittest cases.
     except KeyboardInterrupt:
         return test_run_results.INTERRUPTED_EXIT_STATUS
-    except test_run_results.TestRunException as e:
-        print >> stderr, e.msg
-        return e.code
-    except BaseException as e:
-        if isinstance(e, Exception):
-            print >> stderr, '\n%s raised: %s' % (e.__class__.__name__, str(e))
+    except test_run_results.TestRunException as error:
+        print >> stderr, error.msg
+        return error.code
+    except BaseException as error:
+        if isinstance(error, Exception):
+            print >> stderr, '\n%s raised: %s' % (error.__class__.__name__, error)
             traceback.print_exc(file=stderr)
         return test_run_results.UNEXPECTED_ERROR_EXIT_STATUS
 
@@ -264,13 +264,6 @@ def parse_args(args):
             optparse.make_option(
                 "--child-processes",
                 help="Number of drivers to run in parallel."),
-            # TODO(tkent): Remove --enable-wptserve.
-            optparse.make_option(
-                "--enable-wptserve",
-                dest="enable_wptserve",
-                action="store_true",
-                default=True,
-                help="Enable running web-platform-tests using WPTserve instead of Apache."),
             optparse.make_option(
                 "--disable-breakpad",
                 action="store_true",
@@ -330,13 +323,13 @@ def parse_args(args):
             optparse.make_option(
                 "--order",
                 action="store",
-                default="natural",
+                default="random",
                 help=("Determine the order in which the test cases will be run. "
                       "'none' == use the order in which the tests were listed "
                       "either in arguments or test list, "
-                      "'natural' == use the natural order (default), "
-                      "'random' == pseudo-random order. Seed can be specified "
-                      "via --seed, otherwise it will default to the current unix timestamp.")),
+                      "'random' == pseudo-random order (default). Seed can be specified "
+                      "via --seed, otherwise it will default to the current unix timestamp. "
+                      "'natural' == use the natural order")),
             optparse.make_option(
                 "--profile",
                 action="store_true",
@@ -369,11 +362,17 @@ def parse_args(args):
                 help=("Number of times to retry failures, default is 3. Only relevant when "
                       "failure retries are enabled.")),
             optparse.make_option(
-                "--run-chunk",
-                help="Run a specified chunk (n:l), the nth of len l, of the layout tests"),
+                "--total-shards",
+                type=int,
+                help=('Total number of shards being used for this test run. '
+                      'Must be used with --shard-index. '
+                      '(The user of this script is responsible for spawning '
+                      'all of the shards.)')),
             optparse.make_option(
-                "--run-part",
-                help="Run a specified part (n:m), the nth of m parts, of the layout tests"),
+                "--shard-index",
+                type=int,
+                help=('Shard index [0..total_shards) of this test run. '
+                      'Must be used with --total-shards.')),
             optparse.make_option(
                 "--run-singly",
                 action="store_true",
@@ -540,10 +539,10 @@ def _set_up_derived_options(port, options, args):
     if not options.skipped:
         options.skipped = 'default'
 
-    if 'GTEST_SHARD_INDEX' in port.host.environ and 'GTEST_TOTAL_SHARDS' in port.host.environ:
-        shard_index = int(port.host.environ['GTEST_SHARD_INDEX']) + 1
-        total_shards = int(port.host.environ['GTEST_TOTAL_SHARDS']) + 1
-        options.run_part = '{0}:{1}'.format(shard_index, total_shards)
+    if not options.total_shards and 'GTEST_TOTAL_SHARDS' in port.host.environ:
+        options.total_shards = int(port.host.environ['GTEST_TOTAL_SHARDS'])
+    if not options.shard_index and 'GTEST_SHARD_INDEX' in port.host.environ:
+        options.shard_index = int(port.host.environ['GTEST_SHARD_INDEX'])
 
     if not options.seed:
         options.seed = port.host.time()

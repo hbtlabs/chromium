@@ -5,6 +5,7 @@
 #ifndef WorkerNavigatorBudget_h
 #define WorkerNavigatorBudget_h
 
+#include "core/workers/WorkerNavigator.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/GarbageCollected.h"
 #include "wtf/Noncopyable.h"
@@ -30,7 +31,7 @@ class WorkerNavigatorBudget final
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  WorkerNavigatorBudget();
+  explicit WorkerNavigatorBudget(WorkerNavigator&);
   static const char* supplementName();
 
   Member<BudgetService> m_budget;

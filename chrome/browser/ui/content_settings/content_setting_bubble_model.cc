@@ -16,6 +16,8 @@
 #include "chrome/browser/content_settings/chrome_content_settings_utils.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/content_settings/mixed_content_settings_tab_helper.h"
+#include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -30,6 +32,7 @@
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model_delegate.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/insecure_content_renderer.mojom.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/grit/generated_resources.h"
@@ -38,7 +41,8 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/prefs/pref_service.h"
-#include "components/rappor/rappor_utils.h"
+#include "components/rappor/public/rappor_utils.h"
+#include "components/rappor/rappor_service_impl.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
 #include "components/url_formatter/elide_url.h"
@@ -50,6 +54,8 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/origin_util.h"
+#include "ppapi/features/features.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/resources/grit/ui_resources.h"
@@ -62,8 +68,6 @@ using content_settings::SETTING_SOURCE_USER;
 using content_settings::SETTING_SOURCE_NONE;
 
 namespace {
-
-const int kAllowButtonIndex = 0;
 
 // These states must match the order of appearance of the radio buttons
 // in the XIB file for the Mac port.
@@ -104,6 +108,8 @@ const content::MediaStreamDevice& GetMediaDeviceById(
 }
 
 }  // namespace
+
+const int ContentSettingBubbleModel::kAllowButtonIndex = 0;
 
 // ContentSettingSimpleBubbleModel ---------------------------------------------
 
@@ -188,29 +194,14 @@ void ContentSettingSimpleBubbleModel::OnManageLinkClicked() {
     content_settings::RecordPluginsAction(
         content_settings::PLUGINS_ACTION_CLICKED_MANAGE_PLUGIN_BLOCKING);
   }
+
+  if (content_type() == CONTENT_SETTINGS_TYPE_POPUPS) {
+    content_settings::RecordPopupsAction(
+        content_settings::POPUPS_ACTION_CLICKED_MANAGE_POPUPS_BLOCKING);
+  }
 }
 
 void ContentSettingSimpleBubbleModel::SetCustomLink() {
-  if (content_type() == CONTENT_SETTINGS_TYPE_PLUGINS) {
-    HostContentSettingsMap* map =
-        HostContentSettingsMapFactory::GetForProfile(profile());
-    GURL url = web_contents()->GetURL();
-    std::unique_ptr<base::Value> value = map->GetWebsiteSetting(
-        url, url, content_type(), std::string(), nullptr);
-    ContentSetting setting =
-        content_settings::ValueToContentSetting(value.get());
-
-    // When Flash has been hidden from the plugin list, it is impossible to
-    // dynamically load all the plugins on the page.
-    if (setting == CONTENT_SETTING_BLOCK &&
-        PluginUtils::ShouldPreferHtmlOverPlugins(map)) {
-      return;
-    }
-
-    set_custom_link(l10n_util::GetStringUTF8(IDS_BLOCKED_PLUGINS_LOAD_ALL));
-    return;
-  }
-
   static const ContentSettingsTypeIdEntry kCustomIDs[] = {
     {CONTENT_SETTINGS_TYPE_COOKIES, IDS_BLOCKED_COOKIES_INFO},
     {CONTENT_SETTINGS_TYPE_MIXEDSCRIPT, IDS_ALLOW_INSECURE_CONTENT_BUTTON},
@@ -354,13 +345,11 @@ void ContentSettingSingleRadioGroup::SetRadioGroup() {
   radio_group.radio_items.push_back(radio_block_label);
   ContentSetting setting;
   SettingSource setting_source = SETTING_SOURCE_NONE;
-  bool setting_is_wildcard = false;
 
   if (content_type() == CONTENT_SETTINGS_TYPE_COOKIES) {
     content_settings::CookieSettings* cookie_settings =
         CookieSettingsFactory::GetForProfile(profile()).get();
-    setting = cookie_settings->GetCookieSetting(
-        url, url, true, &setting_source);
+    cookie_settings->GetCookieSetting(url, url, &setting_source, &setting);
   } else {
     SettingInfo info;
     HostContentSettingsMap* map =
@@ -369,19 +358,9 @@ void ContentSettingSingleRadioGroup::SetRadioGroup() {
         map->GetWebsiteSetting(url, url, content_type(), std::string(), &info);
     setting = content_settings::ValueToContentSetting(value.get());
     setting_source = info.source;
-    setting_is_wildcard =
-        info.primary_pattern == ContentSettingsPattern::Wildcard() &&
-        info.secondary_pattern == ContentSettingsPattern::Wildcard();
   }
 
-  if (content_type() == CONTENT_SETTINGS_TYPE_PLUGINS &&
-      setting == CONTENT_SETTING_ALLOW &&
-      setting_is_wildcard) {
-    // In the corner case of unrecognized plugins (which are now blocked by
-    // default) we indicate the blocked state in the UI and allow the user to
-    // whitelist.
-    radio_group.default_item = 1;
-  } else if (setting == CONTENT_SETTING_ALLOW) {
+  if (setting == CONTENT_SETTING_ALLOW) {
     radio_group.default_item = kAllowButtonIndex;
     // |block_setting_| is already set to |CONTENT_SETTING_BLOCK|.
   } else {
@@ -389,19 +368,11 @@ void ContentSettingSingleRadioGroup::SetRadioGroup() {
     block_setting_ = setting;
   }
 
-  set_setting_is_managed(setting_source != SETTING_SOURCE_USER &&
-                         setting != CONTENT_SETTING_ASK);
+  const auto* map = HostContentSettingsMapFactory::GetForProfile(profile());
+  // Prevent creation of content settings for illegal urls like about:blank
+  bool is_valid = map->CanSetNarrowestContentSetting(url, url, content_type());
 
-  // When Flash has been hidden from the plugin list, it is impossible to
-  // dynamically load all the plugins on the page. Then the radio group would
-  // appear to do nothing. The user must go to Content Settings to enable Flash.
-  bool flash_hidden_from_plugin_list =
-      content_type() == CONTENT_SETTINGS_TYPE_PLUGINS &&
-      setting == CONTENT_SETTING_BLOCK &&
-      PluginUtils::ShouldPreferHtmlOverPlugins(
-          HostContentSettingsMapFactory::GetForProfile(profile()));
-  set_radio_group_enabled(setting_source == SETTING_SOURCE_USER &&
-                          !flash_hidden_from_plugin_list);
+  set_radio_group_enabled(is_valid && setting_source == SETTING_SOURCE_USER);
 
   selected_item_ = radio_group.default_item;
   set_radio_group(radio_group);
@@ -470,13 +441,11 @@ void ContentSettingCookiesBubbleModel::OnCustomLinkClicked() {
 
 // ContentSettingPluginBubbleModel ---------------------------------------------
 
-class ContentSettingPluginBubbleModel : public ContentSettingSingleRadioGroup {
+class ContentSettingPluginBubbleModel : public ContentSettingSimpleBubbleModel {
  public:
   ContentSettingPluginBubbleModel(Delegate* delegate,
                                   WebContents* web_contents,
                                   Profile* profile);
-
-  ~ContentSettingPluginBubbleModel() override;
 
  private:
   void OnLearnMoreLinkClicked() override;
@@ -491,17 +460,40 @@ ContentSettingPluginBubbleModel::ContentSettingPluginBubbleModel(
     Delegate* delegate,
     WebContents* web_contents,
     Profile* profile)
-    : ContentSettingSingleRadioGroup(delegate,
-                                     web_contents,
-                                     profile,
-                                     CONTENT_SETTINGS_TYPE_PLUGINS) {
-  // Disable the "Run all plugins this time" link if the setting is managed and
-  // can't be controlled by the user or if the user already clicked on the link
-  // and ran all plugins.
-  set_custom_link_enabled(!setting_is_managed() &&
-                          web_contents &&
-                          TabSpecificContentSettings::FromWebContents(
-                              web_contents)->load_plugins_link_enabled());
+    : ContentSettingSimpleBubbleModel(delegate,
+                                      web_contents,
+                                      profile,
+                                      CONTENT_SETTINGS_TYPE_PLUGINS) {
+  SettingInfo info;
+  HostContentSettingsMap* map =
+      HostContentSettingsMapFactory::GetForProfile(profile);
+  GURL url = web_contents->GetURL();
+  std::unique_ptr<base::Value> value =
+      map->GetWebsiteSetting(url, url, content_type(), std::string(), &info);
+  ContentSetting setting = content_settings::ValueToContentSetting(value.get());
+
+  // If the setting is not managed by the user, hide the "Manage..." link.
+  if (info.source != SETTING_SOURCE_USER)
+    set_manage_text(std::string());
+
+  // The user cannot manually run Flash on the BLOCK setting when either holds:
+  //  - The setting is from Policy. User cannot override admin intent.
+  //  - HTML By Default is on - Flash has been hidden from the plugin list, so
+  //    it's impossible to dynamically run the nonexistent plugin.
+  bool run_blocked = setting == CONTENT_SETTING_BLOCK &&
+                     (info.source != SETTING_SOURCE_USER ||
+                      PluginUtils::ShouldPreferHtmlOverPlugins(map));
+
+  if (!run_blocked) {
+    set_custom_link(l10n_util::GetStringUTF8(IDS_BLOCKED_PLUGINS_LOAD_ALL));
+    // Disable the "Run all plugins this time" link if the user already clicked
+    // on the link and ran all plugins.
+    set_custom_link_enabled(
+        web_contents &&
+        TabSpecificContentSettings::FromWebContents(web_contents)
+            ->load_plugins_link_enabled());
+  }
+
   // Build blocked plugin list.
   if (web_contents) {
     TabSpecificContentSettings* content_settings =
@@ -522,20 +514,6 @@ ContentSettingPluginBubbleModel::ContentSettingPluginBubbleModel(
 
   content_settings::RecordPluginsAction(
       content_settings::PLUGINS_ACTION_DISPLAYED_BUBBLE);
-}
-
-ContentSettingPluginBubbleModel::~ContentSettingPluginBubbleModel() {
-  // If the user elected to allow all plugins then run plugins at this time.
-  if (settings_changed() && selected_item() == kAllowButtonIndex) {
-    content_settings::RecordPluginsAction(
-        content_settings::
-            PLUGINS_ACTION_CLICKED_ALWAYS_ALLOW_PLUGINS_ON_ORIGIN);
-    rappor::SampleDomainAndRegistryFromGURL(
-        rappor_service(), "ContentSettings.Plugins.AddedAllowException",
-        web_contents()->GetLastCommittedURL());
-
-    RunPluginsOnPage();
-  }
 }
 
 void ContentSettingPluginBubbleModel::OnLearnMoreLinkClicked() {
@@ -559,7 +537,7 @@ void ContentSettingPluginBubbleModel::RunPluginsOnPage() {
   // settings bubble is visible.
   if (!web_contents())
     return;
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   // TODO(bauerb): We should send the identifiers of blocked plugins here.
   ChromePluginServiceFilter::GetInstance()->AuthorizeAllPlugins(
       web_contents(), true, std::string());
@@ -576,7 +554,7 @@ class ContentSettingPopupBubbleModel : public ContentSettingSingleRadioGroup {
   ContentSettingPopupBubbleModel(Delegate* delegate,
                                  WebContents* web_contents,
                                  Profile* profile);
-  ~ContentSettingPopupBubbleModel() override {}
+  ~ContentSettingPopupBubbleModel() override;
 
  private:
   void OnListItemClicked(int index) override;
@@ -612,12 +590,26 @@ ContentSettingPopupBubbleModel::ContentSettingPopupBubbleModel(
                         title, true, blocked_popup.first);
     add_list_item(popup_item);
   }
+  content_settings::RecordPopupsAction(
+      content_settings::POPUPS_ACTION_DISPLAYED_BUBBLE);
 }
 
 void ContentSettingPopupBubbleModel::OnListItemClicked(int index) {
   if (web_contents()) {
     auto* helper = PopupBlockerTabHelper::FromWebContents(web_contents());
     helper->ShowBlockedPopup(item_id_from_item_index(index));
+
+    content_settings::RecordPopupsAction(
+        content_settings::POPUPS_ACTION_CLICKED_LIST_ITEM_CLICKED);
+  }
+}
+
+ContentSettingPopupBubbleModel::~ContentSettingPopupBubbleModel(){
+  // User selected to always allow pop-ups from.
+  if (settings_changed() && selected_item() == kAllowButtonIndex) {
+    // Increases the counter.
+    content_settings::RecordPopupsAction(
+        content_settings::POPUPS_ACTION_SELECTED_ALWAYS_ALLOW_POPUPS_FROM);
   }
 }
 
@@ -1026,6 +1018,16 @@ void ContentSettingDomainListBubbleModel::OnCustomLinkClicked() {
 
 // ContentSettingMixedScriptBubbleModel ----------------------------------------
 
+namespace {
+
+void SetAllowRunningInsecureContent(content::RenderFrameHost* frame) {
+  chrome::mojom::InsecureContentRendererPtr renderer;
+  frame->GetRemoteInterfaces()->GetInterface(&renderer);
+  renderer->SetAllowRunningInsecureContent();
+}
+
+}  // namespace
+
 class ContentSettingMixedScriptBubbleModel
     : public ContentSettingSimpleBubbleModel {
  public:
@@ -1060,10 +1062,15 @@ void ContentSettingMixedScriptBubbleModel::OnCustomLinkClicked() {
   if (!web_contents())
     return;
 
-  web_contents()->SendToAllFrames(
-      new ChromeViewMsg_SetAllowRunningInsecureContent(MSG_ROUTING_NONE, true));
-  web_contents()->GetMainFrame()->Send(new ChromeViewMsg_ReloadFrame(
-      web_contents()->GetMainFrame()->GetRoutingID()));
+  MixedContentSettingsTabHelper* mixed_content_settings =
+      MixedContentSettingsTabHelper::FromWebContents(web_contents());
+  if (mixed_content_settings) {
+    // Update browser side settings to allow active mixed content.
+    mixed_content_settings->AllowRunningOfInsecureContent();
+  }
+
+  // Update renderer side settings to allow active mixed content.
+  web_contents()->ForEachFrame(base::Bind(&::SetAllowRunningInsecureContent));
 
   content_settings::RecordMixedScriptAction(
       content_settings::MIXED_SCRIPT_ACTION_CLICKED_ALLOW);
@@ -1408,7 +1415,6 @@ ContentSettingBubbleModel::ContentSettingBubbleModel(Delegate* delegate,
     : web_contents_(web_contents),
       profile_(profile),
       delegate_(delegate),
-      setting_is_managed_(false),
       rappor_service_(g_browser_process->rappor_service()) {
   registrar_.Add(this, content::NOTIFICATION_WEB_CONTENTS_DESTROYED,
                  content::Source<WebContents>(web_contents));

@@ -12,9 +12,7 @@
 #include "content/public/browser/content_browser_client.h"
 
 namespace content {
-class ShellBrowserContext;
 class ShellBrowserMainParts;
-class ShellResourceDispatcherHostDelegate;
 }
 
 namespace ash {
@@ -30,6 +28,10 @@ class ShellContentBrowserClient : public content::ContentBrowserClient {
   // Overridden from content::ContentBrowserClient:
   content::BrowserMainParts* CreateBrowserMainParts(
       const content::MainFunctionParams& parameters) override;
+  void GetQuotaSettings(
+      content::BrowserContext* context,
+      content::StoragePartition* partition,
+      const storage::OptionalQuotaSettingsCallback& callback) override;
 
  private:
   ShellBrowserMainParts* shell_browser_main_parts_;

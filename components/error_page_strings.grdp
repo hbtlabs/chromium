@@ -7,12 +7,6 @@
   <message name="IDS_ERRORPAGE_NET_BUTTON_HIDE_DETAILS" desc="Label for the button that hides the details on a net error page">
     Hide details
   </message>
-  <message name="IDS_ERRORPAGES_BUTTON_MORE" desc="Label for the button that expands the details on an error page">
-    More
-  </message>
-  <message name="IDS_ERRORPAGES_BUTTON_LESS" desc="Label for the button that hides the details on an error page">
-    Less
-  </message>
   <message name="IDS_ERRORPAGES_BUTTON_RELOAD" desc="Label for the button on an error page to reload the page">
     Reload
   </message>
@@ -32,11 +26,6 @@
   <message name="IDS_ERRORPAGE_FUN_DISABLED" desc="Explanation for when easter egg has been disabled by administrator">
     The owner of this device turned off the dinosaur game.
   </message>
-  <if expr="is_android">
-    <message name="IDS_ERRORPAGES_BUTTON_SETTINGS" desc="Mobile: Label for the button on an error page to launch system settings menu">
-      Settings
-    </message>
-  </if>
   <if expr="is_android">
     <message name="IDS_ERRORPAGES_BUTTON_DOWNLOAD" desc="Label for the button on an error page to download the failed-to-load page at a later time">
       Download page later
@@ -106,6 +95,9 @@
   <message name="IDS_ERRORPAGES_SUGGESTION_UNSUPPORTED_CIPHER_BODY" desc="The detailed explanation body text displayed for SSL cipher and version errors.">
     The client and server don't support a common SSL protocol version or cipher suite.
   </message>
+  <message name="IDS_ERRORPAGES_SUGGESTION_NAVIGATE_TO_ORIGIN" desc="When a webpage fails to load, sometimes we suggest to the user that they might navigate to the page's origin.">
+    Try <ph name="BEGIN_LINK">&lt;a jsvalues="href:originURL;.jstdata:$this" onmousedown="linkClicked(this.jstdata)"&gt;</ph>visiting the site's homepage<ph name="END_LINK">&lt;/a&gt;</ph>.
+  </message>
   <message name="IDS_ERRORPAGES_HEADING_NOT_AVAILABLE" desc="Heading in the error page when we can't connect to a site.">
     This site can’t be reached
   </message>
@@ -133,12 +125,6 @@
   </message>
   <message name="IDS_ERRORPAGES_HEADING_FILE_NOT_FOUND" desc="Heading in the error page when the local file was not found.">
     Your file was not found
-  </message>
-  <message name="IDS_ERRORPAGES_HEADING_TOO_MANY_REDIRECTS" desc="Heading in the error page when there are too many URL redirects.">
-    This webpage has a redirect loop
-  </message>
-  <message name="IDS_ERRORPAGES_HEADING_EMPTY_RESPONSE" desc="Heading in the error page when no data is received.">
-    No data received
   </message>
   <message name="IDS_ERRORPAGES_HEADING_BLOCKED" desc="Heading of the error page when a request is blocked by the administrator policy, extension or the browser itself.">
     <ph name="HOST_NAME">&lt;span jscontent="hostName"&gt;&lt;/span&gt;<ex>www.example.com</ex></ph> is blocked
@@ -233,15 +219,11 @@
     It may have been moved or deleted.
   </message>
   <message name="IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING" desc="Heading in the error page for HTTP 5xx errors, which are considered to be server side errors. Also used for bad responses.">
-    The <ph name="HOST_NAME">&lt;span jscontent="hostName"&gt;&lt;/span&gt;<ex>www.whatever.com</ex></ph> page isn’t working
+    This page isn’t working
   </message>
 
   <message name="IDS_ERRORPAGES_SUMMARY_WEBSITE_CANNOT_HANDLE_REQUEST" desc="Summary in the error page when the server returns a 501 or 505.">
     <ph name="HOST_NAME">&lt;strong jscontent="hostName"&gt;&lt;/strong&gt;<ex>www.whatever.com</ex></ph> is currently unable to handle this request.
-  </message>
-
-  <message name="IDS_ERRORPAGES_SUMMARY_SERVICE_UNAVAILABLE" desc="Summary in the error page when the server returns a 503.">
-    The webpage at <ph name="URL">&lt;strong jscontent="failedUrl"&gt;&lt;/strong&gt;</ph> is currently unavailable.  It may be overloaded or down for maintenance.
   </message>
 
   <message name="IDS_ERRORPAGES_SUMMARY_GATEWAY_TIMEOUT" desc="Summary in the error page when the server returns a 504.">
@@ -256,9 +238,6 @@
     <ph name="HOST_NAME">&lt;strong jscontent="hostName"&gt;&lt;/strong&gt;<ex>www.whatever.com</ex></ph> uses an unsupported protocol.
   </message>
 
-  <message name="IDS_ERRORPAGES_SUMMARY_PINNING_FAILURE_DETAILS" desc="Summary of the error page for a certificate which doesn't match the built-in pins for that name">
-    The server certificate at <ph name="HOST_NAME">&lt;strong jscontent="hostName"&gt;&lt;/strong&gt;<ex>www.whatever.com</ex></ph> appears to be a forgery.
-  </message>
   <message name="IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION" desc="Heading in the error page for insecure connections.">
     This site can’t provide a secure connection
   </message>
@@ -267,6 +246,9 @@
   </message>
   <message name="IDS_ERRORPAGES_SUMMARY_BLOCKED_BY_EXTENSION" desc="Summary in the error page when an extension blocks a request.">
     Requests to the server have been blocked by an extension.
+  </message>
+  <message name="IDS_ERRORPAGES_SUMMARY_BLOCKED_BY_XSS_AUDITOR" desc="Summary in the error page when the XSS Auditor blocks a response.">
+    Chrome detected unusual code on this page and blocked it to protect your personal information (for example, passwords, phone numbers, and credit cards).
   </message>
   <message name="IDS_ERRORPAGES_SUMMARY_BLOCKED_BY_ADMINISTRATOR" desc="Summary in the error page when an administrator policy blocks a request.">
     The person who set up this computer has chosen to block this site.
@@ -297,10 +279,10 @@
       <ph name="BEGIN_LINK">&lt;a href="#buttons" onclick="toggleHelpBox()"&gt;</ph>Checking the proxy address<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
     </message>
   </if>
-  <message name="IDS_ERRORPAGES_SUGGESTION_CONTACT_ADMIN_SUMMARY" desc="The message displayed in a list of suggestions following a network error suggesting to the user to contact his system administrator. The suggestions list is prefixed with 'Try:'.">
+  <message name="IDS_ERRORPAGES_SUGGESTION_CONTACT_ADMIN_SUMMARY" desc="The message displayed in a list of suggestions following a network error suggesting to the user to contact their system administrator. The suggestions list is prefixed with 'Try:'.">
     Contacting the system admin
   </message>
-  <message name="IDS_ERRORPAGES_SUGGESTION_CONTACT_ADMIN_SUMMARY_STANDALONE" desc="Stand alone suggestion following a network error suggesting to the user to contact his system administrator.">
+  <message name="IDS_ERRORPAGES_SUGGESTION_CONTACT_ADMIN_SUMMARY_STANDALONE" desc="Stand alone suggestion following a network error suggesting to the user to contact their system administrator.">
     Try contacting the system admin.
   </message>
   <message name="IDS_ERRORPAGES_SUGGESTION_LEARNMORE_SUMMARY" desc="The message displayed in a list of suggestions when a webpage fails to load. A link provided to the help center to learn more about the failure. The suggestions list is prefixed with 'Try:'.">

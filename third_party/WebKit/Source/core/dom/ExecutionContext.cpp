@@ -29,15 +29,17 @@
 
 #include "bindings/core/v8/SourceLocation.h"
 #include "core/dom/ExecutionContextTask.h"
+#include "core/dom/SuspendableObject.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/ErrorEvent.h"
 #include "core/events/EventTarget.h"
-#include "core/fetch/MemoryCache.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/PublicURLManager.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerThread.h"
+#include "platform/loader/fetch/MemoryCache.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
@@ -47,71 +49,47 @@ namespace blink {
 ExecutionContext::ExecutionContext()
     : m_circularSequentialID(0),
       m_inDispatchErrorEvent(false),
-      m_activeDOMObjectsAreSuspended(false),
-      m_activeDOMObjectsAreStopped(false),
+      m_isContextSuspended(false),
+      m_isContextDestroyed(false),
       m_windowInteractionTokens(0),
-      m_isRunSuspendableTasksScheduled(false),
       m_referrerPolicy(ReferrerPolicyDefault) {}
 
 ExecutionContext::~ExecutionContext() {}
 
-void ExecutionContext::suspendActiveDOMObjects() {
-  DCHECK(!m_activeDOMObjectsAreSuspended);
-  notifySuspendingActiveDOMObjects();
-  m_activeDOMObjectsAreSuspended = true;
+void ExecutionContext::suspendSuspendableObjects() {
+  DCHECK(!m_isContextSuspended);
+  notifySuspendingSuspendableObjects();
+  m_isContextSuspended = true;
 }
 
-void ExecutionContext::resumeActiveDOMObjects() {
-  DCHECK(m_activeDOMObjectsAreSuspended);
-  m_activeDOMObjectsAreSuspended = false;
-  notifyResumingActiveDOMObjects();
-}
-
-void ExecutionContext::postSuspendableTask(
-    std::unique_ptr<SuspendableTask> task) {
-  m_suspendedTasks.append(std::move(task));
-  if (!m_activeDOMObjectsAreSuspended)
-    postTask(BLINK_FROM_HERE,
-             createSameThreadTask(&ExecutionContext::runSuspendableTasks,
-                                  wrapPersistent(this)));
+void ExecutionContext::resumeSuspendableObjects() {
+  DCHECK(m_isContextSuspended);
+  m_isContextSuspended = false;
+  notifyResumingSuspendableObjects();
 }
 
 void ExecutionContext::notifyContextDestroyed() {
-  m_activeDOMObjectsAreStopped = true;
-
-  Deque<std::unique_ptr<SuspendableTask>> suspendedTasks;
-  suspendedTasks.swap(m_suspendedTasks);
-  for (Deque<std::unique_ptr<SuspendableTask>>::iterator it =
-           suspendedTasks.begin();
-       it != suspendedTasks.end(); ++it)
-    (*it)->contextDestroyed();
+  m_isContextDestroyed = true;
   ContextLifecycleNotifier::notifyContextDestroyed();
 }
 
 void ExecutionContext::suspendScheduledTasks() {
-  suspendActiveDOMObjects();
+  suspendSuspendableObjects();
   tasksWereSuspended();
 }
 
 void ExecutionContext::resumeScheduledTasks() {
-  resumeActiveDOMObjects();
+  resumeSuspendableObjects();
   tasksWereResumed();
-  // We need finish stack unwiding before running next task because it can
-  // suspend this context.
-  if (m_isRunSuspendableTasksScheduled)
-    return;
-  m_isRunSuspendableTasksScheduled = true;
-  postTask(BLINK_FROM_HERE,
-           createSameThreadTask(&ExecutionContext::runSuspendableTasks,
-                                wrapPersistent(this)));
 }
 
-void ExecutionContext::suspendActiveDOMObjectIfNeeded(ActiveDOMObject* object) {
+void ExecutionContext::suspendSuspendableObjectIfNeeded(
+    SuspendableObject* object) {
 #if DCHECK_IS_ON()
   DCHECK(contains(object));
 #endif
-  // Ensure all ActiveDOMObjects are suspended also newly created ones.
-  if (m_activeDOMObjectsAreSuspended)
+  // Ensure all SuspendableObjects are suspended also newly created ones.
+  if (m_isContextSuspended)
     object->suspend();
 }
 
@@ -120,14 +98,17 @@ bool ExecutionContext::shouldSanitizeScriptError(
     AccessControlStatus corsStatus) {
   if (corsStatus == OpaqueResource)
     return true;
-  return !(getSecurityOrigin()->canRequestNoSuborigin(completeURL(sourceURL)) ||
+  const KURL& url = completeURL(sourceURL);
+  if (url.protocolIsData())
+    return false;
+  return !(getSecurityOrigin()->canRequestNoSuborigin(url) ||
            corsStatus == SharableCrossOrigin);
 }
 
 void ExecutionContext::dispatchErrorEvent(ErrorEvent* errorEvent,
                                           AccessControlStatus corsStatus) {
   if (m_inDispatchErrorEvent) {
-    m_pendingExceptions.append(errorEvent);
+    m_pendingExceptions.push_back(errorEvent);
     return;
   }
 
@@ -157,14 +138,6 @@ bool ExecutionContext::dispatchErrorEventInternal(
   target->dispatchEvent(errorEvent);
   m_inDispatchErrorEvent = false;
   return errorEvent->defaultPrevented();
-}
-
-void ExecutionContext::runSuspendableTasks() {
-  m_isRunSuspendableTasksScheduled = false;
-  while (!m_activeDOMObjectsAreSuspended && m_suspendedTasks.size()) {
-    std::unique_ptr<SuspendableTask> task = m_suspendedTasks.takeFirst();
-    task->run();
-  }
 }
 
 int ExecutionContext::circularSequentialID() {
@@ -223,22 +196,13 @@ String ExecutionContext::outgoingReferrer() const {
 
 void ExecutionContext::parseAndSetReferrerPolicy(const String& policies,
                                                  bool supportLegacyKeywords) {
-  ReferrerPolicy referrerPolicy = ReferrerPolicyDefault;
+  ReferrerPolicy referrerPolicy;
 
-  Vector<String> tokens;
-  policies.split(',', true, tokens);
-  for (const auto& token : tokens) {
-    ReferrerPolicy currentResult;
-    if ((supportLegacyKeywords
-             ? SecurityPolicy::referrerPolicyFromStringWithLegacyKeywords(
-                   token, &currentResult)
-             : SecurityPolicy::referrerPolicyFromString(token,
-                                                        &currentResult))) {
-      referrerPolicy = currentResult;
-    }
-  }
-
-  if (referrerPolicy == ReferrerPolicyDefault) {
+  if (!SecurityPolicy::referrerPolicyFromHeaderValue(
+          policies,
+          supportLegacyKeywords ? SupportReferrerPolicyLegacyKeywords
+                                : DoNotSupportReferrerPolicyLegacyKeywords,
+          &referrerPolicy)) {
     addConsoleMessage(ConsoleMessage::create(
         RenderingMessageSource, ErrorMessageLevel,
         "Failed to set referrer policy: The value '" + policies +

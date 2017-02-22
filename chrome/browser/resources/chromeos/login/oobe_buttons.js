@@ -9,6 +9,8 @@ Polymer({
     disabled: {type: Boolean, value: false, reflectToAttribute: true},
 
     inverse: Boolean,
+
+    ariaLabel: String,
   },
 
   focus: function() {
@@ -23,6 +25,25 @@ Polymer({
 
 Polymer({
   is: 'oobe-back-button',
+
+  properties: {
+    disabled: {type: Boolean, value: false, reflectToAttribute: true},
+
+    ariaLabel: String,
+  },
+
+  focus: function() {
+    this.$.button.focus();
+  },
+
+  onClick_: function(e) {
+    if (this.disabled)
+      e.stopPropagation();
+  }
+});
+
+Polymer({
+  is: 'oobe-next-button',
 
   properties: {
     disabled: {type: Boolean, value: false, reflectToAttribute: true},
@@ -45,5 +66,9 @@ Polymer({
     icon: String,
 
     ariaLabel: String
+  },
+
+  focus: function() {
+    this.$.button.focus();
   },
 });

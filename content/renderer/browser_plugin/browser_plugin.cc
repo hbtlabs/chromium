@@ -14,6 +14,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/surfaces/surface.h"
+#include "cc/surfaces/surface_info.h"
 #include "content/common/browser_plugin/browser_plugin_constants.h"
 #include "content/common/browser_plugin/browser_plugin_messages.h"
 #include "content/common/view_messages.h"
@@ -30,6 +31,7 @@
 #include "content/renderer/sad_plugin.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/web/WebAXObject.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
@@ -119,17 +121,14 @@ bool BrowserPlugin::OnMessageReceived(const IPC::Message& message) {
 
 void BrowserPlugin::OnSetChildFrameSurface(
     int browser_plugin_instance_id,
-    const cc::SurfaceId& surface_id,
-    const gfx::Size& frame_size,
-    float scale_factor,
+    const cc::SurfaceInfo& surface_info,
     const cc::SurfaceSequence& sequence) {
   if (!attached())
     return;
 
   EnableCompositing(true);
   DCHECK(compositing_helper_.get());
-  compositing_helper_->OnSetSurface(surface_id, frame_size, scale_factor,
-                                    sequence);
+  compositing_helper_->OnSetSurface(surface_info, sequence);
 }
 
 void BrowserPlugin::SendSatisfySequence(const cc::SurfaceSequence& sequence) {
@@ -143,9 +142,8 @@ void BrowserPlugin::UpdateDOMAttribute(const std::string& attribute_name,
     return;
 
   blink::WebElement element = container()->element();
-  blink::WebString web_attribute_name =
-      blink::WebString::fromUTF8(attribute_name);
-  element.setAttribute(web_attribute_name, attribute_value);
+  element.setAttribute(blink::WebString::fromUTF8(attribute_name),
+                       blink::WebString::fromUTF16(attribute_value));
 }
 
 void BrowserPlugin::Attach() {
@@ -390,9 +388,13 @@ void BrowserPlugin::updateGeometry(const WebRect& plugin_rect_in_viewport,
   gfx::Rect old_view_rect = view_rect_;
   // Convert the plugin_rect_in_viewport to window coordinates, which is css.
   WebRect rect_in_css(plugin_rect_in_viewport);
-  blink::WebView* webview = container()->document().frame()->view();
-  RenderViewImpl::FromWebView(webview)->GetWidget()->convertViewportToWindow(
-      &rect_in_css);
+
+  // We will use the local root's RenderWidget to convert coordinates to Window.
+  // If this local root belongs to an OOPIF, on the browser side we will have to
+  // consider the displacement of the child frame in root window.
+  RenderFrameImpl::FromWebFrame(container()->document().frame())
+      ->GetRenderWidget()
+      ->convertViewportToWindow(&rect_in_css);
   view_rect_ = rect_in_css;
 
   if (!ready_) {
@@ -444,17 +446,17 @@ blink::WebInputEventResult BrowserPlugin::handleInputEvent(
   if (guest_crashed_ || !attached())
     return blink::WebInputEventResult::NotHandled;
 
-  DCHECK(!blink::WebInputEvent::isTouchEventType(event.type));
+  DCHECK(!blink::WebInputEvent::isTouchEventType(event.type()));
 
-  if (event.type == blink::WebInputEvent::MouseWheel) {
+  if (event.type() == blink::WebInputEvent::MouseWheel) {
     auto wheel_event = static_cast<const blink::WebMouseWheelEvent&>(event);
     if (wheel_event.resendingPluginId == browser_plugin_instance_id_)
       return blink::WebInputEventResult::NotHandled;
   }
 
-  if (blink::WebInputEvent::isGestureEventType(event.type)) {
+  if (blink::WebInputEvent::isGestureEventType(event.type())) {
     auto gesture_event = static_cast<const blink::WebGestureEvent&>(event);
-    DCHECK(blink::WebInputEvent::GestureTapDown == event.type ||
+    DCHECK(blink::WebInputEvent::GestureTapDown == event.type() ||
            gesture_event.resendingPluginId == browser_plugin_instance_id_);
 
     // We shouldn't be forwarding GestureEvents to the Guest anymore. Indicate
@@ -464,10 +466,10 @@ blink::WebInputEventResult BrowserPlugin::handleInputEvent(
                : blink::WebInputEventResult::HandledApplication;
   }
 
-  if (event.type == blink::WebInputEvent::ContextMenu)
+  if (event.type() == blink::WebInputEvent::ContextMenu)
     return blink::WebInputEventResult::HandledSuppressed;
 
-  if (blink::WebInputEvent::isKeyboardEventType(event.type) &&
+  if (blink::WebInputEvent::isKeyboardEventType(event.type()) &&
       !edit_commands_.empty()) {
     BrowserPluginManager::Get()->Send(
         new BrowserPluginHostMsg_SetEditCommandsForNextKeyEvent(
@@ -483,7 +485,7 @@ blink::WebInputEventResult BrowserPlugin::handleInputEvent(
 
   // Although we forward this event to the guest, we don't report it as consumed
   // since other targets of this event in Blink never get that chance either.
-  if (event.type == blink::WebInputEvent::GestureFlingStart)
+  if (event.type() == blink::WebInputEvent::GestureFlingStart)
     return blink::WebInputEventResult::NotHandled;
 
   return blink::WebInputEventResult::HandledApplication;
@@ -512,12 +514,12 @@ void BrowserPlugin::didReceiveResponse(
 
 void BrowserPlugin::didReceiveData(const char* data, int data_length) {
   if (delegate_)
-    delegate_->DidReceiveData(data, data_length);
+    delegate_->PluginDidReceiveData(data, data_length);
 }
 
 void BrowserPlugin::didFinishLoading() {
   if (delegate_)
-    delegate_->DidFinishLoading();
+    delegate_->PluginDidFinishLoading();
 }
 
 void BrowserPlugin::didFailLoading(const blink::WebURLError& error) {
@@ -546,10 +548,12 @@ bool BrowserPlugin::setComposition(
     int selectionEnd) {
   if (!attached())
     return false;
+
   std::vector<blink::WebCompositionUnderline> std_underlines;
   for (size_t i = 0; i < underlines.size(); ++i) {
     std_underlines.push_back(underlines[i]);
   }
+
   BrowserPluginManager::Get()->Send(new BrowserPluginHostMsg_ImeSetComposition(
       browser_plugin_instance_id_,
       text.utf8(),
@@ -560,13 +564,21 @@ bool BrowserPlugin::setComposition(
   return true;
 }
 
-bool BrowserPlugin::commitText(const blink::WebString& text,
-                               int relative_cursor_pos) {
+bool BrowserPlugin::commitText(
+    const blink::WebString& text,
+    const blink::WebVector<blink::WebCompositionUnderline>& underlines,
+    int relative_cursor_pos) {
   if (!attached())
     return false;
 
+  std::vector<blink::WebCompositionUnderline> std_underlines;
+  for (size_t i = 0; i < underlines.size(); ++i) {
+    std_underlines.push_back(std_underlines[i]);
+  }
+
   BrowserPluginManager::Get()->Send(new BrowserPluginHostMsg_ImeCommitText(
-      browser_plugin_instance_id_, text.utf8(), relative_cursor_pos));
+      browser_plugin_instance_id_, text.utf8(), std_underlines,
+      relative_cursor_pos));
   // TODO(kochi): This assumes the IPC handling always succeeds.
   return true;
 }

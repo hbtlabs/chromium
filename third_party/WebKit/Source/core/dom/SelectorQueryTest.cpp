@@ -5,6 +5,7 @@
 #include "core/dom/SelectorQuery.h"
 
 #include "core/css/parser/CSSParser.h"
+#include "core/css/parser/CSSParserContext.h"
 #include "core/dom/Document.h"
 #include "core/html/HTMLDocument.h"
 #include "core/html/HTMLHtmlElement.h"
@@ -21,8 +22,8 @@ TEST(SelectorQueryTest, NotMatchingPseudoElement) {
       "<body><style>span::before { content: 'X' }</style><span></span></body>");
 
   CSSSelectorList selectorList = CSSParser::parseSelector(
-      CSSParserContext(*document, nullptr, KURL(), emptyString(),
-                       CSSParserContext::StaticProfile),
+      CSSParserContext::create(*document, KURL(), emptyString,
+                               CSSParserContext::StaticProfile),
       nullptr, "span::before");
   std::unique_ptr<SelectorQuery> query =
       SelectorQuery::adopt(std::move(selectorList));
@@ -30,8 +31,8 @@ TEST(SelectorQueryTest, NotMatchingPseudoElement) {
   EXPECT_EQ(nullptr, elm);
 
   selectorList = CSSParser::parseSelector(
-      CSSParserContext(*document, nullptr, KURL(), emptyString(),
-                       CSSParserContext::StaticProfile),
+      CSSParserContext::create(*document, KURL(), emptyString,
+                               CSSParserContext::StaticProfile),
       nullptr, "span");
   query = SelectorQuery::adopt(std::move(selectorList));
   elm = query->queryFirst(*document);
@@ -48,8 +49,8 @@ TEST(SelectorQueryTest, LastOfTypeNotFinishedParsing) {
   document->body()->beginParsingChildren();
 
   CSSSelectorList selectorList = CSSParser::parseSelector(
-      CSSParserContext(*document, nullptr, KURL(), emptyString(),
-                       CSSParserContext::StaticProfile),
+      CSSParserContext::create(*document, KURL(), emptyString,
+                               CSSParserContext::StaticProfile),
       nullptr, "p:last-of-type");
   std::unique_ptr<SelectorQuery> query =
       SelectorQuery::adopt(std::move(selectorList));

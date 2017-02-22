@@ -35,7 +35,6 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/tabs/tab_strip_model_utils.h"
 #include "chrome/browser/ui/webui/inspect_ui.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/content_restriction.h"
@@ -88,18 +87,6 @@
 using content::NavigationEntry;
 using content::NavigationController;
 using content::WebContents;
-
-namespace {
-
-enum WindowState {
-  // Not in fullscreen mode.
-  WINDOW_STATE_NOT_FULLSCREEN,
-
-  // Fullscreen mode, occupying the whole screen.
-  WINDOW_STATE_FULLSCREEN,
-};
-
-}  // namespace
 
 namespace chrome {
 
@@ -200,8 +187,12 @@ bool BrowserCommandController::IsReservedCommandOrKey(
   }
 #endif
 
-  if (window()->IsFullscreen() && command_id == IDC_FULLSCREEN)
-    return true;
+  if (window()->IsFullscreen()) {
+    // In fullscreen, all commands except for IDC_FULLSCREEN and IDC_EXIT should
+    // be delivered to the web page. See, intent to implement,
+    // https://goo.gl/4tJ32G.
+    return command_id == IDC_EXIT || command_id == IDC_FULLSCREEN;
+  }
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   // If this key was registered by the user as a content editing hotkey, then
@@ -305,20 +296,20 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
       if (base::FeatureList::IsEnabled(features::kBackspaceGoesBackFeature))
         GoBack(browser_, disposition);
       else
-        browser_->window()->MaybeShowNewBackShortcutBubble(false);
+        window()->MaybeShowNewBackShortcutBubble(false);
       break;
     case IDC_BACK:
-      browser_->window()->HideNewBackShortcutBubble();
+      window()->HideNewBackShortcutBubble();
       GoBack(browser_, disposition);
       break;
     case IDC_BACKSPACE_FORWARD:
       if (base::FeatureList::IsEnabled(features::kBackspaceGoesBackFeature))
         GoForward(browser_, disposition);
       else
-        browser_->window()->MaybeShowNewBackShortcutBubble(true);
+        window()->MaybeShowNewBackShortcutBubble(true);
       break;
     case IDC_FORWARD:
-      browser_->window()->HideNewBackShortcutBubble();
+      window()->HideNewBackShortcutBubble();
       GoForward(browser_, disposition);
       break;
     case IDC_RELOAD:
@@ -381,9 +372,11 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_SELECT_TAB_5:
     case IDC_SELECT_TAB_6:
     case IDC_SELECT_TAB_7:
+      content::RecordAction(base::UserMetricsAction("Accel_SelectNumberedTab"));
       SelectNumberedTab(browser_, id - IDC_SELECT_TAB_0);
       break;
     case IDC_SELECT_LAST_TAB:
+      content::RecordAction(base::UserMetricsAction("Accel_SelectNumberedTab"));
       SelectLastTab(browser_);
       break;
     case IDC_DUPLICATE_TAB:
@@ -402,13 +395,13 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
 #if defined(OS_CHROMEOS)
     case IDC_VISIT_DESKTOP_OF_LRU_USER_2:
     case IDC_VISIT_DESKTOP_OF_LRU_USER_3:
-      ExecuteVisitDesktopCommand(id, browser_->window()->GetNativeWindow());
+      ExecuteVisitDesktopCommand(id, window()->GetNativeWindow());
       break;
 #endif
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
     case IDC_USE_SYSTEM_TITLE_BAR: {
-      PrefService* prefs = browser_->profile()->GetPrefs();
+      PrefService* prefs = profile()->GetPrefs();
       prefs->SetBoolean(prefs::kUseCustomChromeFrame,
                         !prefs->GetBoolean(prefs::kUseCustomChromeFrame));
       break;
@@ -535,7 +528,7 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
       ToggleDevToolsWindow(browser_, DevToolsToggleAction::Show());
       break;
     case IDC_DEV_TOOLS_CONSOLE:
-      ToggleDevToolsWindow(browser_, DevToolsToggleAction::ShowConsole());
+      ToggleDevToolsWindow(browser_, DevToolsToggleAction::ShowConsolePanel());
       break;
     case IDC_DEV_TOOLS_DEVICES:
       InspectUI::InspectDevices(browser_);
@@ -634,7 +627,7 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
         service_manager::Connector* connector =
             content::ServiceManagerConnection::GetForProcess()->GetConnector();
         mash::mojom::LaunchablePtr launchable;
-        connector->ConnectToInterface("touch_hud", &launchable);
+        connector->BindInterface("touch_hud", &launchable);
         launchable->Launch(mash::mojom::kWindow,
                            mash::mojom::LaunchMode::DEFAULT);
       } else {
@@ -1021,13 +1014,9 @@ void BrowserCommandController::UpdateCommandsForFileSelectionDialogs() {
 }
 
 void BrowserCommandController::UpdateCommandsForFullscreenMode() {
-  WindowState window_state = WINDOW_STATE_NOT_FULLSCREEN;
-  if (window() && window()->IsFullscreen()) {
-    window_state = WINDOW_STATE_FULLSCREEN;
-  }
-  bool show_main_ui = IsShowingMainUI();
-  bool main_not_fullscreen =
-      show_main_ui && window_state == WINDOW_STATE_NOT_FULLSCREEN;
+  const bool is_fullscreen = window() && window()->IsFullscreen();
+  const bool show_main_ui = IsShowingMainUI();
+  const bool main_not_fullscreen = show_main_ui && !is_fullscreen;
 
   // Navigation commands
   command_updater_.UpdateCommandEnabled(IDC_OPEN_CURRENT_URL, show_main_ui);
@@ -1035,8 +1024,7 @@ void BrowserCommandController::UpdateCommandsForFullscreenMode() {
   // Window management commands
   command_updater_.UpdateCommandEnabled(
       IDC_SHOW_AS_TAB,
-      !browser_->is_type_tabbed() &&
-          window_state == WINDOW_STATE_NOT_FULLSCREEN);
+      !browser_->is_type_tabbed() && !is_fullscreen);
 
   // Focus various bits of UI
   command_updater_.UpdateCommandEnabled(IDC_FOCUS_TOOLBAR, show_main_ui);
@@ -1078,13 +1066,12 @@ void BrowserCommandController::UpdateCommandsForFullscreenMode() {
   if (base::debug::IsProfilingSupported())
     command_updater_.UpdateCommandEnabled(IDC_PROFILING_ENABLED, show_main_ui);
 
-  bool fullscreen_enabled = true;
 #if !defined(OS_MACOSX)
-  if (window_state == WINDOW_STATE_NOT_FULLSCREEN &&
-      !profile()->GetPrefs()->GetBoolean(prefs::kFullscreenAllowed)) {
-    // Disable toggling into fullscreen mode if disallowed by pref.
-    fullscreen_enabled = false;
-  }
+  // Disable toggling into fullscreen mode if disallowed by pref.
+  const bool fullscreen_enabled = is_fullscreen ||
+      profile()->GetPrefs()->GetBoolean(prefs::kFullscreenAllowed);
+#else
+  const bool fullscreen_enabled = true;
 #endif
 
   command_updater_.UpdateCommandEnabled(IDC_FULLSCREEN, fullscreen_enabled);

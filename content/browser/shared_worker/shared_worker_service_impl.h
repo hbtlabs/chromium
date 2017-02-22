@@ -28,6 +28,7 @@ class Message;
 
 namespace content {
 
+class MessagePort;
 class SharedWorkerInstance;
 class SharedWorkerHost;
 class SharedWorkerMessageFilter;
@@ -56,32 +57,36 @@ class CONTENT_EXPORT SharedWorkerServiceImpl
       SharedWorkerMessageFilter* filter,
       ResourceContext* resource_context,
       const WorkerStoragePartitionId& partition_id);
-  void ForwardToWorker(const IPC::Message& message,
-                       SharedWorkerMessageFilter* filter);
-  void DocumentDetached(unsigned long long document_id,
-                        SharedWorkerMessageFilter* filter);
-  void WorkerContextClosed(int worker_route_id,
-                           SharedWorkerMessageFilter* filter);
-  void WorkerContextDestroyed(int worker_route_id,
-                              SharedWorkerMessageFilter* filter);
-  void WorkerReadyForInspection(int worker_route_id,
-                                SharedWorkerMessageFilter* filter);
-  void WorkerScriptLoaded(int worker_route_id,
-                          SharedWorkerMessageFilter* filter);
-  void WorkerScriptLoadFailed(int worker_route_id,
-                              SharedWorkerMessageFilter* filter);
-  void WorkerConnected(int message_port_id,
+  void ConnectToWorker(SharedWorkerMessageFilter* filter,
                        int worker_route_id,
-                       SharedWorkerMessageFilter* filter);
-  void AllowFileSystem(int worker_route_id,
+                       const MessagePort& port);
+  void DocumentDetached(SharedWorkerMessageFilter* filter,
+                        unsigned long long document_id);
+  void CountFeature(SharedWorkerMessageFilter* filter,
+                    int worker_route_id,
+                    uint32_t feature);
+  void WorkerContextClosed(SharedWorkerMessageFilter* filter,
+                           int worker_route_id);
+  void WorkerContextDestroyed(SharedWorkerMessageFilter* filter,
+                              int worker_route_id);
+  void WorkerReadyForInspection(SharedWorkerMessageFilter* filter,
+                                int worker_route_id);
+  void WorkerScriptLoaded(SharedWorkerMessageFilter* filter,
+                          int worker_route_id);
+  void WorkerScriptLoadFailed(SharedWorkerMessageFilter* filter,
+                              int worker_route_id);
+  void WorkerConnected(SharedWorkerMessageFilter* filter,
+                       int connection_request_id,
+                       int worker_route_id);
+  void AllowFileSystem(SharedWorkerMessageFilter* filter,
+                       int worker_route_id,
                        const GURL& url,
-                       IPC::Message* reply_msg,
-                       SharedWorkerMessageFilter* filter);
-  void AllowIndexedDB(int worker_route_id,
+                       IPC::Message* reply_msg);
+  void AllowIndexedDB(SharedWorkerMessageFilter* filter,
+                      int worker_route_id,
                       const GURL& url,
                       const base::string16& name,
-                      bool* result,
-                      SharedWorkerMessageFilter* filter);
+                      bool* result);
 
   void OnSharedWorkerMessageFilterClosing(
       SharedWorkerMessageFilter* filter);
@@ -100,7 +105,6 @@ class CONTENT_EXPORT SharedWorkerServiceImpl
 
  private:
   class SharedWorkerPendingInstance;
-  class SharedWorkerReserver;
 
   friend struct base::DefaultSingletonTraits<SharedWorkerServiceImpl>;
   friend class SharedWorkerServiceImplTest;
@@ -126,9 +130,7 @@ class CONTENT_EXPORT SharedWorkerServiceImpl
   // RenderProcessReservedCallback() or RenderProcessReserveFailedCallback()
   // will be called on IO thread. Returns blink::WebWorkerCreationErrorNone or
   // blink::WebWorkerCreationErrorSecureContextMismatch on success.
-  // (SecureContextMismatch is used for UMA and should be handled as success.
-  // See CreateWorkerErrorIsFatal() in shared_worker_message_filter.cc for
-  // details.)
+  // (SecureContextMismatch is used for UMA and should be handled as success.)
   blink::WebWorkerCreationError ReserveRenderProcessToCreateWorker(
       std::unique_ptr<SharedWorkerPendingInstance> pending_instance);
 
@@ -144,7 +146,8 @@ class CONTENT_EXPORT SharedWorkerServiceImpl
   void RenderProcessReserveFailedCallback(int pending_instance_id,
                                           int worker_process_id,
                                           int worker_route_id,
-                                          bool is_new_worker);
+                                          bool is_new_worker,
+                                          bool pause_on_start);
 
   // Returns nullptr if there is no host for given ids.
   SharedWorkerHost* FindSharedWorkerHost(int render_process_id,

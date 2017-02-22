@@ -41,7 +41,7 @@ class PLATFORM_EXPORT GIFImageDecoder final : public ImageDecoder {
   WTF_MAKE_NONCOPYABLE(GIFImageDecoder);
 
  public:
-  GIFImageDecoder(AlphaOption, ColorSpaceOption, size_t maxDecodedBytes);
+  GIFImageDecoder(AlphaOption, const ColorBehavior&, size_t maxDecodedBytes);
   ~GIFImageDecoder() override;
 
   enum GIFParseQuery { GIFSizeQuery, GIFFrameCountQuery };
@@ -52,7 +52,6 @@ class PLATFORM_EXPORT GIFImageDecoder final : public ImageDecoder {
   int repetitionCount() const override;
   bool frameIsCompleteAtIndex(size_t) const override;
   float frameDurationAtIndex(size_t) const override;
-  size_t clearCacheExceptFrame(size_t) override;
   // CAUTION: setFailed() deletes |m_reader|.  Be careful to avoid
   // accessing deleted memory, especially when calling this from inside
   // GIFImageReader!

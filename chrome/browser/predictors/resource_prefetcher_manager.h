@@ -21,7 +21,6 @@ class URLRequestContextGetter;
 
 namespace predictors {
 
-struct NavigationID;
 class ResourcePrefetchPredictor;
 
 // Manages prefetches for multiple navigations.
@@ -56,7 +55,9 @@ class ResourcePrefetcherManager
   void MaybeRemovePrefetch(const GURL& main_frame_url);
 
   // ResourcePrefetcher::Delegate methods.
-  void ResourcePrefetcherFinished(ResourcePrefetcher* prefetcher) override;
+  void ResourcePrefetcherFinished(
+      ResourcePrefetcher* prefetcher,
+      std::unique_ptr<ResourcePrefetcher::PrefetcherStats> stats) override;
   net::URLRequestContext* GetURLRequestContext() override;
 
  private:

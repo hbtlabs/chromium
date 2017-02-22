@@ -17,7 +17,6 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_timeouts.h"
 #include "base/time/time.h"
@@ -181,8 +180,8 @@ void NavigateToURLWithDispositionBlockUntilNavigationsComplete(
       tab_strip->GetActiveWebContents())
     content::WaitForLoadStop(tab_strip->GetActiveWebContents());
   content::TestNavigationObserver same_tab_observer(
-      tab_strip->GetActiveWebContents(),
-      number_of_navigations);
+      tab_strip->GetActiveWebContents(), number_of_navigations,
+      content::MessageLoopRunner::QuitMode::DEFERRED);
 
   std::set<Browser*> initial_browsers;
   for (auto* browser : *BrowserList::GetInstance())
@@ -222,8 +221,9 @@ void NavigateToURLWithDispositionBlockUntilNavigationsComplete(
     same_tab_observer.Wait();
     return;
   } else if (web_contents) {
-    content::TestNavigationObserver observer(web_contents,
-                                             number_of_navigations);
+    content::TestNavigationObserver observer(
+        web_contents, number_of_navigations,
+        content::MessageLoopRunner::QuitMode::DEFERRED);
     observer.Wait();
     return;
   }

@@ -1,62 +1,56 @@
 <!DOCTYPE html>
+<title>Test of animation-direction</title>
+<script src="../resources/testharness.js"></script>
+<script src="../resources/testharnessreport.js"></script>
+<style>
+    #target {
+      animation-direction: alternate-reverse;
+      animation-duration: 2s;
+      animation-iteration-count: 2;
+      animation-name: move;
+      animation-play-state: paused;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
 
-<html>
-<head>
-  <style type="text/css" media="screen">
-  
-    #container {
-      position: relative;
-      border: 1px solid black;
+
+      background-color: red;
       height: 100px;
-      width: 500px;
-    }
-    
-    #box {
+      left: 500px;
       position: absolute;
-      height: 100px;
       width: 100px;
-      background-color: blue;
-      -webkit-animation-name: move;
-      -webkit-animation-duration: 2s;
-      -webkit-animation-direction: alternate-reverse;
-      -webkit-animation-iteration-count: 2;
-      -webkit-animation-timing-function: linear;
-      -webkit-animation-fill-mode: forwards;
+    }
+    @keyframes move {
+      from { left: 0px; }
+      to   { left: 400px; }
     }
 
-    @-webkit-keyframes move {
-      0%   {
-        left: 0;
-      }
-      100% {
-        left: 400px;
-      }
-    }
-    
-  </style>
-  <script src="resources/animation-test-helpers.js" type="text/javascript" charset="utf-8"></script>
-  <script type="text/javascript" charset="utf-8">
+</style>
+<div id="target"></div>
+<script>
+  'use strict';
+  test(function() {
+    target.style.animationDelay = '1s';
+    assert_equals(getComputedStyle(target).left, '400px');
 
-    const expectedValues = [
-      // [time, element-id, property, expected-value, tolerance]
-      [1.0, "box", "left", 200, 20],
-      [2.0, "box", "left", 0, 20],
+    target.style.animationDelay = '-0.5s';
+    assert_equals(getComputedStyle(target).left, '300px');
 
-      [3.0, "box", "left", 200, 20],
-      [4.0, "box", "left", 400, 20],
-    ];
-    
-    runAnimationTest(expectedValues);
-  </script>
-</head>
-<body>
+    target.style.animationDelay = '-1s';
+    assert_equals(getComputedStyle(target).left, '200px');
 
-<!-- Test animation-direction: alternate-reverse -->
-<div id="container">
-  <div id="box"></div>
-</div>
+    target.style.animationDelay = '-2s';
+    assert_equals(getComputedStyle(target).left, '0px');
 
-<div id="result"></div>
+    target.style.animationDelay = '-2.5s';
+    assert_equals(getComputedStyle(target).left, '100px');
 
-</body>
-</html>
+    target.style.animationDelay = '-3s';
+    assert_equals(getComputedStyle(target).left, '200px');
+
+    target.style.animationDelay = '-4s';
+    assert_equals(getComputedStyle(target).left, '400px');
+
+    target.style.animationDelay = '-5s';
+    assert_equals(getComputedStyle(target).left, '400px');
+  }, "animation-direction alternate-reverse plays backwards, then forwards");
+</script>

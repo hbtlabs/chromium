@@ -30,6 +30,7 @@
 
 #include "core/loader/FrameLoadRequest.h"
 #include "core/page/Page.h"
+#include "core/page/ScopedPageSuspender.h"
 #include "public/platform/WebInputEvent.h"
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebLocalFrame.h"
@@ -70,8 +71,8 @@ class GetNavigationPolicyTest : public testing::Test {
   void SetUp() override {
     m_webView = toWebViewImpl(
         WebView::create(&m_webViewClient, WebPageVisibilityStateVisible));
-    m_webView->setMainFrame(
-        WebLocalFrame::create(WebTreeScopeType::Document, &m_webFrameClient));
+    m_webView->setMainFrame(WebLocalFrame::create(
+        WebTreeScopeType::Document, &m_webFrameClient, nullptr, nullptr));
     m_chromeClientImpl = toChromeClientImpl(&m_webView->page()->chromeClient());
     m_result = WebNavigationPolicyIgnore;
   }
@@ -82,9 +83,8 @@ class GetNavigationPolicyTest : public testing::Test {
       int modifiers,
       WebMouseEvent::Button button,
       bool asPopup) {
-    WebMouseEvent event;
-    event.modifiers = modifiers;
-    event.type = WebInputEvent::MouseUp;
+    WebMouseEvent event(WebInputEvent::MouseUp, modifiers,
+                        WebInputEvent::TimeStampForTesting);
     event.button = button;
     setCurrentInputEventForTest(&event);
     m_chromeClientImpl->setScrollbarsVisible(!asPopup);
@@ -252,8 +252,8 @@ class CreateWindowTest : public testing::Test {
   void SetUp() override {
     m_webView = toWebViewImpl(
         WebView::create(&m_webViewClient, WebPageVisibilityStateVisible));
-    m_mainFrame =
-        WebLocalFrame::create(WebTreeScopeType::Document, &m_webFrameClient);
+    m_mainFrame = WebLocalFrame::create(WebTreeScopeType::Document,
+                                        &m_webFrameClient, nullptr, nullptr);
     m_webView->setMainFrame(m_mainFrame);
     m_chromeClientImpl = toChromeClientImpl(&m_webView->page()->chromeClient());
   }
@@ -267,15 +267,14 @@ class CreateWindowTest : public testing::Test {
   Persistent<ChromeClientImpl> m_chromeClientImpl;
 };
 
-TEST_F(CreateWindowTest, CreateWindowFromDeferredPage) {
-  m_webView->page()->setDefersLoading(true);
+TEST_F(CreateWindowTest, CreateWindowFromSuspendedPage) {
+  ScopedPageSuspender suspender;
   LocalFrame* frame = toWebLocalFrameImpl(m_mainFrame)->frame();
   FrameLoadRequest request(frame->document());
   WindowFeatures features;
   EXPECT_EQ(nullptr,
             m_chromeClientImpl->createWindow(frame, request, features,
                                              NavigationPolicyNewForegroundTab));
-  m_webView->page()->setDefersLoading(false);
 }
 
 }  // namespace blink

@@ -18,7 +18,7 @@
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "gpu/ipc/common/gpu_surface_lookup.h"
 #include "gpu/ipc/service/gpu_channel.h"
-#include "media/base/android/sdk_media_codec_bridge.h"
+#include "media/base/android/media_codec_bridge_impl.h"
 #include "media/gpu/avda_codec_image.h"
 #include "media/gpu/avda_shared_state.h"
 #include "ui/gl/android/surface_texture.h"
@@ -81,15 +81,11 @@ AVDAPictureBufferManager::~AVDAPictureBufferManager() {}
 
 gl::ScopedJavaSurface AVDAPictureBufferManager::Initialize(int surface_id) {
   shared_state_ = new AVDASharedState();
+  surface_texture_ = nullptr;
 
   // Acquire the SurfaceView surface if given a valid id.
-  if (surface_id != SurfaceManager::kNoSurfaceID) {
-    if (surface_texture_) {
-      surface_texture_->ReleaseSurfaceTexture();
-      surface_texture_ = nullptr;
-    }
+  if (surface_id != SurfaceManager::kNoSurfaceID)
     return gpu::GpuSurfaceLookup::GetInstance()->AcquireJavaSurface(surface_id);
-  }
 
   // Otherwise create a SurfaceTexture.
   GLuint service_id;
@@ -106,11 +102,7 @@ void AVDAPictureBufferManager::Destroy(const PictureBufferMap& buffers) {
 
   ReleaseCodecBuffers(buffers);
   CodecChanged(nullptr);
-
-  // Release the surface texture and any back buffers.  This will preserve the
-  // front buffer, if any.
-  if (surface_texture_)
-    surface_texture_->ReleaseSurfaceTexture();
+  surface_texture_ = nullptr;
 }
 
 void AVDAPictureBufferManager::SetImageForPicture(

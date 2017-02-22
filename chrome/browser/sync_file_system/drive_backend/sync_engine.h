@@ -27,6 +27,7 @@ class OAuth2TokenService;
 
 namespace base {
 class SequencedTaskRunner;
+class SequencedWorkerPool;
 }
 
 namespace drive {
@@ -52,10 +53,8 @@ namespace drive_backend {
 
 class DriveServiceWrapper;
 class DriveUploaderWrapper;
-class MetadataDatabase;
 class RemoteChangeProcessorOnWorker;
 class RemoteChangeProcessorWrapper;
-class SyncTaskManager;
 class SyncWorkerInterface;
 
 class SyncEngine : public RemoteFileSyncService,

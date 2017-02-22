@@ -7,10 +7,6 @@
 #ifndef JINGLE_GLUE_CHROME_ASYNC_SOCKET_H_
 #define JINGLE_GLUE_CHROME_ASYNC_SOCKET_H_
 
-#if !defined(FEATURE_ENABLE_SSL)
-#error ChromeAsyncSocket expects FEATURE_ENABLE_SSL to be defined
-#endif
-
 #include <stddef.h>
 
 #include <memory>
@@ -23,7 +19,7 @@
 #include "base/memory/weak_ptr.h"
 #include "net/base/completion_callback.h"
 #include "net/base/net_errors.h"
-#include "third_party/webrtc/libjingle/xmpp/asyncsocket.h"
+#include "third_party/libjingle_xmpp/xmpp/asyncsocket.h"
 
 namespace net {
 class IOBufferWithSize;

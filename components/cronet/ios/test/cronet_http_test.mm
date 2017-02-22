@@ -202,6 +202,40 @@ TEST_F(HttpTest, SdchDisabledByDefault) {
   EXPECT_FALSE([[delegate_ responseBody] containsString:@"sdch"]);
 }
 
+// Verify that explictly setting Accept-Encoding request header to 'gzip,sdch"
+// is passed to the server and does not trigger any failures. This behavior may
+// In the future Cronet may not allow caller to set Accept-Encoding header and
+// could limit it to set of internally suported and enabled encodings, matching
+// behavior of Cronet on Android.
+TEST_F(HttpTest, AcceptEncodingSdchIsAllowed) {
+  NSURL* url =
+      net::NSURLWithGURL(GURL(TestServer::GetEchoHeaderURL("Accept-Encoding")));
+  NSMutableURLRequest* mutableRequest =
+      [[NSURLRequest requestWithURL:url] mutableCopy];
+  [mutableRequest addValue:@"gzip,sdch" forHTTPHeaderField:@"Accept-Encoding"];
+  NSURLSessionDataTask* task = [session_ dataTaskWithRequest:mutableRequest];
+  StartDataTaskAndWaitForCompletion(task);
+  EXPECT_EQ(nil, [delegate_ error]);
+  EXPECT_TRUE([[delegate_ responseBody] containsString:@"gzip,sdch"]);
+}
+
+// Verify that explictly setting Accept-Encoding request header to 'foo,bar"
+// is passed to the server and does not trigger any failures. This behavior may
+// In the future Cronet may not allow caller to set Accept-Encoding header and
+// could limit it to set of internally suported and enabled encodings, matching
+// behavior of Cronet on Android.
+TEST_F(HttpTest, AcceptEncodingFooBarIsAllowed) {
+  NSURL* url =
+      net::NSURLWithGURL(GURL(TestServer::GetEchoHeaderURL("Accept-Encoding")));
+  NSMutableURLRequest* mutableRequest =
+      [[NSURLRequest requestWithURL:url] mutableCopy];
+  [mutableRequest addValue:@"foo,bar" forHTTPHeaderField:@"Accept-Encoding"];
+  NSURLSessionDataTask* task = [session_ dataTaskWithRequest:mutableRequest];
+  StartDataTaskAndWaitForCompletion(task);
+  EXPECT_EQ(nil, [delegate_ error]);
+  EXPECT_TRUE([[delegate_ responseBody] containsString:@"foo,bar"]);
+}
+
 TEST_F(HttpTest, NSURLSessionAcceptLanguage) {
   NSURL* url =
       net::NSURLWithGURL(GURL(TestServer::GetEchoHeaderURL("Accept-Language")));
@@ -223,24 +257,102 @@ TEST_F(HttpTest, SetUserAgentIsExact) {
 
 TEST_F(HttpTest, SetCookie) {
   const char kCookieHeader[] = "Cookie";
-  const char kCookieLine[] = "aaaa=bbb";
-  NSURL* echoCookieUrl =
+  NSString* cookieName =
+      [NSString stringWithFormat:@"SetCookie-%@", [[NSUUID UUID] UUIDString]];
+  NSString* cookieValue = [[NSUUID UUID] UUIDString];
+  NSString* cookieLine =
+      [NSString stringWithFormat:@"%@=%@", cookieName, cookieValue];
+  NSHTTPCookieStorage* systemCookieStorage =
+      [NSHTTPCookieStorage sharedHTTPCookieStorage];
+  NSURL* cookieUrl =
       net::NSURLWithGURL(GURL(TestServer::GetEchoHeaderURL(kCookieHeader)));
-  StartDataTaskAndWaitForCompletion([session_ dataTaskWithURL:echoCookieUrl]);
+  // Verify that cookie is not set in system storage.
+  for (NSHTTPCookie* cookie in [systemCookieStorage cookiesForURL:cookieUrl]) {
+    EXPECT_FALSE([[cookie name] isEqualToString:cookieName]);
+  }
+
+  StartDataTaskAndWaitForCompletion([session_ dataTaskWithURL:cookieUrl]);
   EXPECT_EQ(nil, [delegate_ error]);
   EXPECT_EQ(nil, [delegate_ responseBody]);
 
-  NSURL* setCookieUrl =
-      net::NSURLWithGURL(GURL(TestServer::GetSetCookieURL(kCookieLine)));
+  NSURL* setCookieUrl = net::NSURLWithGURL(
+      GURL(TestServer::GetSetCookieURL(base::SysNSStringToUTF8(cookieLine))));
   StartDataTaskAndWaitForCompletion([session_ dataTaskWithURL:setCookieUrl]);
   EXPECT_EQ(nil, [delegate_ error]);
-  EXPECT_TRUE([[delegate_ responseBody]
-      containsString:base::SysUTF8ToNSString(kCookieLine)]);
+  EXPECT_TRUE([[delegate_ responseBody] containsString:cookieLine]);
+
+  StartDataTaskAndWaitForCompletion([session_ dataTaskWithURL:cookieUrl]);
+  EXPECT_EQ(nil, [delegate_ error]);
+  EXPECT_TRUE([[delegate_ responseBody] containsString:cookieLine]);
+
+  // Verify that cookie is set in system storage.
+  NSHTTPCookie* systemCookie = nil;
+  for (NSHTTPCookie* cookie in [systemCookieStorage cookiesForURL:cookieUrl]) {
+    if ([cookie.name isEqualToString:cookieName]) {
+      systemCookie = cookie;
+      break;
+    }
+  }
+  EXPECT_TRUE([[systemCookie value] isEqualToString:cookieValue]);
+  [systemCookieStorage deleteCookie:systemCookie];
+}
+
+TEST_F(HttpTest, SetSystemCookie) {
+  const char kCookieHeader[] = "Cookie";
+  NSString* cookieName = [NSString
+      stringWithFormat:@"SetSystemCookie-%@", [[NSUUID UUID] UUIDString]];
+  NSString* cookieValue = [[NSUUID UUID] UUIDString];
+  NSHTTPCookieStorage* systemCookieStorage =
+      [NSHTTPCookieStorage sharedHTTPCookieStorage];
+  NSURL* echoCookieUrl =
+      net::NSURLWithGURL(GURL(TestServer::GetEchoHeaderURL(kCookieHeader)));
+  NSHTTPCookie* systemCookie = [NSHTTPCookie cookieWithProperties:@{
+    NSHTTPCookiePath : [echoCookieUrl path],
+    NSHTTPCookieName : cookieName,
+    NSHTTPCookieValue : cookieValue,
+    NSHTTPCookieDomain : [echoCookieUrl host],
+  }];
+  [systemCookieStorage setCookie:systemCookie];
 
   StartDataTaskAndWaitForCompletion([session_ dataTaskWithURL:echoCookieUrl]);
+  [systemCookieStorage deleteCookie:systemCookie];
   EXPECT_EQ(nil, [delegate_ error]);
-  EXPECT_TRUE([[delegate_ responseBody]
-      containsString:base::SysUTF8ToNSString(kCookieLine)]);
+  // Verify that cookie set in system store was sent to the serever.
+  EXPECT_TRUE([[delegate_ responseBody] containsString:cookieName]);
+  EXPECT_TRUE([[delegate_ responseBody] containsString:cookieValue]);
+}
+
+TEST_F(HttpTest, SystemCookieWithNullCreationTime) {
+  const char kCookieHeader[] = "Cookie";
+  NSString* cookieName = [NSString
+      stringWithFormat:@"SetSystemCookie-%@", [[NSUUID UUID] UUIDString]];
+  NSString* cookieValue = [[NSUUID UUID] UUIDString];
+  NSHTTPCookieStorage* systemCookieStorage =
+      [NSHTTPCookieStorage sharedHTTPCookieStorage];
+  NSURL* echoCookieUrl =
+      net::NSURLWithGURL(GURL(TestServer::GetEchoHeaderURL(kCookieHeader)));
+  NSHTTPCookie* nullCreationTimeCookie = [NSHTTPCookie cookieWithProperties:@{
+    NSHTTPCookiePath : [echoCookieUrl path],
+    NSHTTPCookieName : cookieName,
+    NSHTTPCookieValue : cookieValue,
+    NSHTTPCookieDomain : [echoCookieUrl host],
+    @"Created" : [NSNumber numberWithDouble:0.0],
+  }];
+  [systemCookieStorage setCookie:nullCreationTimeCookie];
+  NSHTTPCookie* normalCookie = [NSHTTPCookie cookieWithProperties:@{
+    NSHTTPCookiePath : [echoCookieUrl path],
+    NSHTTPCookieName : [cookieName stringByAppendingString:@"-normal"],
+    NSHTTPCookieValue : cookieValue,
+    NSHTTPCookieDomain : [echoCookieUrl host],
+  }];
+  [systemCookieStorage setCookie:normalCookie];
+  StartDataTaskAndWaitForCompletion([session_ dataTaskWithURL:echoCookieUrl]);
+  [systemCookieStorage deleteCookie:nullCreationTimeCookie];
+  [systemCookieStorage deleteCookie:normalCookie];
+  EXPECT_EQ(nil, [delegate_ error]);
+  // Verify that cookie set in system store was sent to the serever.
+  EXPECT_TRUE([[delegate_ responseBody] containsString:cookieName]);
+  EXPECT_TRUE([[delegate_ responseBody] containsString:cookieValue]);
 }
 
 TEST_F(HttpTest, FilterOutRequest) {
@@ -259,6 +371,31 @@ TEST_F(HttpTest, FilterOutRequest) {
   EXPECT_FALSE([[delegate_ responseBody]
       containsString:base::SysUTF8ToNSString(kUserAgent)]);
   EXPECT_TRUE([[delegate_ responseBody] containsString:@"CFNetwork"]);
+}
+
+TEST_F(HttpTest, FileSchemeNotSupported) {
+  NSString* fileData = @"Hello, World!";
+  NSString* documentsDirectory = [NSSearchPathForDirectoriesInDomains(
+      NSDocumentDirectory, NSUserDomainMask, YES) objectAtIndex:0];
+  NSString* filePath = [documentsDirectory
+      stringByAppendingPathComponent:[[NSProcessInfo processInfo]
+                                         globallyUniqueString]];
+  [fileData writeToFile:filePath
+             atomically:YES
+               encoding:NSUTF8StringEncoding
+                  error:nil];
+
+  NSURL* url = [NSURL fileURLWithPath:filePath];
+  NSURLSessionDataTask* task = [session_ dataTaskWithURL:url];
+  [Cronet setRequestFilterBlock:^(NSURLRequest* request) {
+    [[NSFileManager defaultManager] removeItemAtPath:filePath error:nil];
+    EXPECT_TRUE(false) << "Block should not be called for unsupported requests";
+    return YES;
+  }];
+  StartDataTaskAndWaitForCompletion(task);
+  [[NSFileManager defaultManager] removeItemAtPath:filePath error:nil];
+  EXPECT_EQ(nil, [delegate_ error]);
+  EXPECT_TRUE([[delegate_ responseBody] containsString:fileData]);
 }
 
 }  // namespace cronet

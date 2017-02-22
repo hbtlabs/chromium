@@ -8,6 +8,7 @@
 #include "bindings/core/v8/ScriptState.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "modules/audio_output_devices/AudioOutputDeviceClient.h"
 #include "modules/audio_output_devices/SetSinkIdCallbacks.h"
 #include "public/platform/WebSecurityOrigin.h"
@@ -36,7 +37,7 @@ class SetSinkIdResolver : public ScriptPromiseResolver {
 
   Member<HTMLMediaElement> m_element;
   String m_sinkId;
-  Timer<SetSinkIdResolver> m_timer;
+  TaskRunnerTimer<SetSinkIdResolver> m_timer;
 };
 
 SetSinkIdResolver* SetSinkIdResolver::create(ScriptState* scriptState,
@@ -55,7 +56,9 @@ SetSinkIdResolver::SetSinkIdResolver(ScriptState* scriptState,
     : ScriptPromiseResolver(scriptState),
       m_element(element),
       m_sinkId(sinkId),
-      m_timer(this, &SetSinkIdResolver::timerFired) {}
+      m_timer(TaskRunnerHelper::get(TaskType::MiscPlatformAPI, scriptState),
+              this,
+              &SetSinkIdResolver::timerFired) {}
 
 void SetSinkIdResolver::startAsync() {
   m_timer.startOneShot(0, BLINK_FROM_HERE);
@@ -65,7 +68,7 @@ void SetSinkIdResolver::timerFired(TimerBase* timer) {
   ExecutionContext* context = getExecutionContext();
   ASSERT(context && context->isDocument());
   std::unique_ptr<SetSinkIdCallbacks> callbacks =
-      wrapUnique(new SetSinkIdCallbacks(this, *m_element, m_sinkId));
+      WTF::wrapUnique(new SetSinkIdCallbacks(this, *m_element, m_sinkId));
   WebMediaPlayer* webMediaPlayer = m_element->webMediaPlayer();
   if (webMediaPlayer) {
     // Using release() to transfer ownership because |webMediaPlayer| is a
@@ -81,7 +84,7 @@ void SetSinkIdResolver::timerFired(TimerBase* timer) {
     } else {
       // The context has been detached. Impossible to get a security origin to
       // check.
-      ASSERT(context->activeDOMObjectsAreStopped());
+      DCHECK(context->isContextDestroyed());
       reject(DOMException::create(
           SecurityError,
           "Impossible to authorize device for detached context"));

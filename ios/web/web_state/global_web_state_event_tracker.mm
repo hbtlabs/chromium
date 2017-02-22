@@ -9,7 +9,7 @@
 #include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "ios/web/public/web_state/web_state_observer.h"
-#include "ios/web/public/web_state/web_state_user_data.h"
+#import "ios/web/public/web_state/web_state_user_data.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -39,6 +39,7 @@ class WebStateEventForwarder : public WebStateUserData<WebStateEventForwarder>,
   void DidStartLoading() override;
   void DidStopLoading() override;
   void PageLoaded(PageLoadCompletionStatus load_completion_status) override;
+  void RenderProcessGone() override;
   void WebStateDestroyed() override;
 
   DISALLOW_COPY_AND_ASSIGN(WebStateEventForwarder);
@@ -80,6 +81,10 @@ void WebStateEventForwarder::PageLoaded(
     PageLoadCompletionStatus load_completion_status) {
   GlobalWebStateEventTracker::GetInstance()->PageLoaded(web_state(),
                                                         load_completion_status);
+}
+
+void WebStateEventForwarder::RenderProcessGone() {
+  GlobalWebStateEventTracker::GetInstance()->RenderProcessGone(web_state());
 }
 
 void WebStateEventForwarder::WebStateDestroyed() {
@@ -143,6 +148,11 @@ void GlobalWebStateEventTracker::PageLoaded(
     PageLoadCompletionStatus load_completion_status) {
   for (auto& observer : observer_list_)
     observer.PageLoaded(web_state, load_completion_status);
+}
+
+void GlobalWebStateEventTracker::RenderProcessGone(WebState* web_state) {
+  for (auto& observer : observer_list_)
+    observer.RenderProcessGone(web_state);
 }
 
 void GlobalWebStateEventTracker::WebStateDestroyed(WebState* web_state) {

@@ -32,7 +32,6 @@ class ProxyDelegate;
 class SSLClientSocketPool;
 class SSLSocketParams;
 class SpdySessionPool;
-class SpdyStream;
 class TransportClientSocketPool;
 class TransportSocketParams;
 
@@ -161,6 +160,10 @@ class NET_EXPORT_PRIVATE HttpProxyClientSocketPool
                       const void* params,
                       int num_sockets,
                       const NetLogWithSource& net_log) override;
+
+  void SetPriority(const std::string& group_name,
+                   ClientSocketHandle* handle,
+                   RequestPriority priority) override;
 
   void CancelRequest(const std::string& group_name,
                      ClientSocketHandle* handle) override;

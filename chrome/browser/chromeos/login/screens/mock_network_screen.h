@@ -28,12 +28,11 @@ class MockNetworkView : public NetworkView {
   MockNetworkView();
   ~MockNetworkView() override;
 
-  void Bind(NetworkModel& model) override;
+  void Bind(NetworkScreen* screen) override;
   void Unbind() override;
 
-  MOCK_METHOD1(MockBind, void(NetworkModel& model));
+  MOCK_METHOD1(MockBind, void(NetworkScreen* screen));
   MOCK_METHOD0(MockUnbind, void());
-  MOCK_METHOD0(PrepareToShow, void());
   MOCK_METHOD0(Show, void());
   MOCK_METHOD0(Hide, void());
   MOCK_METHOD1(ShowError, void(const base::string16& message));
@@ -45,7 +44,7 @@ class MockNetworkView : public NetworkView {
   MOCK_METHOD0(ReloadLocalizedContent, void());
 
  private:
-  NetworkModel* model_;
+  NetworkScreen* screen_ = nullptr;
 };
 
 }  // namespace chromeos

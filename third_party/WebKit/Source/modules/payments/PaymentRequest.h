@@ -35,22 +35,21 @@ class ScriptState;
 
 class MODULES_EXPORT PaymentRequest final
     : public EventTargetWithInlineData,
-      WTF_NON_EXPORTED_BASE(
-          public payments::mojom::blink::PaymentRequestClient),
+      NON_EXPORTED_BASE(public payments::mojom::blink::PaymentRequestClient),
       public PaymentCompleter,
       public PaymentUpdater,
       public ContextLifecycleObserver,
-      public ActiveScriptWrappable {
+      public ActiveScriptWrappable<PaymentRequest> {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(PaymentRequest)
   WTF_MAKE_NONCOPYABLE(PaymentRequest);
 
  public:
-  static PaymentRequest* create(ScriptState*,
+  static PaymentRequest* create(Document&,
                                 const HeapVector<PaymentMethodData>&,
                                 const PaymentDetails&,
                                 ExceptionState&);
-  static PaymentRequest* create(ScriptState*,
+  static PaymentRequest* create(Document&,
                                 const HeapVector<PaymentMethodData>&,
                                 const PaymentDetails&,
                                 const PaymentOptions&,
@@ -68,7 +67,7 @@ class MODULES_EXPORT PaymentRequest final
   DEFINE_ATTRIBUTE_EVENT_LISTENER(shippingaddresschange);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(shippingoptionchange);
 
-  ScriptPromise canMakeActivePayment(ScriptState*);
+  ScriptPromise canMakePayment(ScriptState*);
 
   // ScriptWrappable:
   bool hasPendingActivity() const override;
@@ -89,14 +88,14 @@ class MODULES_EXPORT PaymentRequest final
   void onCompleteTimeoutForTesting();
 
  private:
-  PaymentRequest(ScriptState*,
+  PaymentRequest(Document&,
                  const HeapVector<PaymentMethodData>&,
                  const PaymentDetails&,
                  const PaymentOptions&,
                  ExceptionState&);
 
   // LifecycleObserver:
-  void contextDestroyed() override;
+  void contextDestroyed(ExecutionContext*) override;
 
   // payments::mojom::blink::PaymentRequestClient:
   void OnShippingAddressChange(
@@ -106,8 +105,8 @@ class MODULES_EXPORT PaymentRequest final
   void OnError(payments::mojom::blink::PaymentErrorReason) override;
   void OnComplete() override;
   void OnAbort(bool abortedSuccessfully) override;
-  void OnCanMakeActivePayment(
-      payments::mojom::blink::ActivePaymentQueryResult) override;
+  void OnCanMakePayment(
+      payments::mojom::blink::CanMakePaymentQueryResult) override;
 
   void onCompleteTimeout(TimerBase*);
 
@@ -121,10 +120,10 @@ class MODULES_EXPORT PaymentRequest final
   Member<ScriptPromiseResolver> m_showResolver;
   Member<ScriptPromiseResolver> m_completeResolver;
   Member<ScriptPromiseResolver> m_abortResolver;
-  Member<ScriptPromiseResolver> m_canMakeActivePaymentResolver;
+  Member<ScriptPromiseResolver> m_canMakePaymentResolver;
   payments::mojom::blink::PaymentRequestPtr m_paymentProvider;
   mojo::Binding<payments::mojom::blink::PaymentRequestClient> m_clientBinding;
-  Timer<PaymentRequest> m_completeTimer;
+  TaskRunnerTimer<PaymentRequest> m_completeTimer;
 };
 
 }  // namespace blink

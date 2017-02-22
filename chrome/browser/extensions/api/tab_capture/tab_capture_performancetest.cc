@@ -5,7 +5,6 @@
 #include "base/command_line.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/trace_event_analyzer.h"
-#include "base/win/windows_version.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/tab_helper.h"
@@ -16,17 +15,16 @@
 #include "chrome/test/base/test_switches.h"
 #include "chrome/test/base/tracing.h"
 #include "content/public/common/content_switches.h"
-#include "extensions/common/feature_switch.h"
-#include "extensions/common/features/base_feature_provider.h"
-#include "extensions/common/features/complex_feature.h"
-#include "extensions/common/features/feature.h"
-#include "extensions/common/features/simple_feature.h"
 #include "extensions/common/switches.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/perf/perf_test.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/gl/gl_switches.h"
+
+#if defined(OS_WIN)
+#include "base/win/windows_version.h"
+#endif
 
 namespace {
 

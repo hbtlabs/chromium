@@ -19,7 +19,9 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/render_text.h"
 #include "ui/gfx/text_elider.h"
+#include "ui/views/corewm/test/tooltip_aura_test_api.h"
 #include "ui/views/corewm/tooltip_aura.h"
 #include "ui/views/corewm/tooltip_controller_test_helper.h"
 #include "ui/views/test/desktop_test_views_delegate.h"
@@ -86,16 +88,16 @@ class TooltipControllerTest : public ViewsTestBase {
 
     // TODO: these tests use GetContext(). That should go away for aura-mus
     // client. http://crbug.com/663781.
-    if (IsAuraMusClient())
+    if (IsMus())
       return;
 
     aura::Window* root_window = GetContext();
 
     new wm::DefaultActivationClient(root_window);
 #if defined(OS_CHROMEOS)
-    controller_.reset(
-        new TooltipController(std::unique_ptr<views::corewm::Tooltip>(
-            new views::corewm::TooltipAura)));
+    tooltip_aura_ = new views::corewm::TooltipAura();
+    controller_.reset(new TooltipController(
+        std::unique_ptr<views::corewm::Tooltip>(tooltip_aura_)));
     root_window->AddPreTargetHandler(controller_.get());
     SetTooltipClient(root_window, controller_.get());
 #endif
@@ -110,7 +112,7 @@ class TooltipControllerTest : public ViewsTestBase {
   }
 
   void TearDown() override {
-    if (!IsAuraMusClient()) {
+    if (!IsMus()) {
 #if defined(OS_CHROMEOS)
       aura::Window* root_window = GetContext();
       root_window->RemovePreTargetHandler(controller_.get());
@@ -161,6 +163,11 @@ class TooltipControllerTest : public ViewsTestBase {
   std::unique_ptr<TooltipControllerTestHelper> helper_;
   std::unique_ptr<ui::test::EventGenerator> generator_;
 
+ protected:
+#if defined(OS_CHROMEOS)
+  TooltipAura* tooltip_aura_;  // not owned.
+#endif
+
  private:
   std::unique_ptr<TooltipController> controller_;
 
@@ -174,23 +181,21 @@ class TooltipControllerTest : public ViewsTestBase {
 TEST_F(TooltipControllerTest, ViewTooltip) {
   // TODO: these tests use GetContext(). That should go away for aura-mus
   // client. http://crbug.com/663781.
-  if (IsAuraMusClient())
+  if (IsMus())
     return;
 
   view_->set_tooltip_text(ASCIIToUTF16("Tooltip Text"));
   EXPECT_EQ(base::string16(), helper_->GetTooltipText());
   EXPECT_EQ(NULL, helper_->GetTooltipWindow());
+
   generator_->MoveMouseToCenterOf(GetWindow());
 
   EXPECT_EQ(GetWindow(), GetRootWindow()->GetEventHandlerForPoint(
       generator_->current_location()));
   base::string16 expected_tooltip = ASCIIToUTF16("Tooltip Text");
   EXPECT_EQ(expected_tooltip, aura::client::GetTooltipText(GetWindow()));
-  EXPECT_EQ(base::string16(), helper_->GetTooltipText());
+  EXPECT_EQ(expected_tooltip, helper_->GetTooltipText());
   EXPECT_EQ(GetWindow(), helper_->GetTooltipWindow());
-
-  // Fire tooltip timer so tooltip becomes visible.
-  helper_->FireTooltipTimer();
 
   EXPECT_TRUE(helper_->IsTooltipVisible());
   generator_->MoveMouseBy(1, 0);
@@ -201,10 +206,54 @@ TEST_F(TooltipControllerTest, ViewTooltip) {
   EXPECT_EQ(GetWindow(), helper_->GetTooltipWindow());
 }
 
+TEST_F(TooltipControllerTest, HideEmptyTooltip) {
+  // TODO: these tests use GetContext(). That should go away for aura-mus
+  // client. http://crbug.com/663781.
+  if (IsMus())
+    return;
+
+  view_->set_tooltip_text(ASCIIToUTF16("Tooltip Text"));
+  EXPECT_EQ(base::string16(), helper_->GetTooltipText());
+  EXPECT_EQ(NULL, helper_->GetTooltipWindow());
+
+  generator_->MoveMouseToCenterOf(GetWindow());
+  generator_->MoveMouseBy(1, 0);
+  EXPECT_TRUE(helper_->IsTooltipVisible());
+
+  view_->set_tooltip_text(ASCIIToUTF16("    "));
+  generator_->MoveMouseBy(1, 0);
+  EXPECT_FALSE(helper_->IsTooltipVisible());
+}
+
+#if defined(OS_CHROMEOS)
+// crbug.com/664370.
+TEST_F(TooltipControllerTest, MaxWidth) {
+  // TODO: these tests use GetContext(). That should go away for mus client.
+  // http://crbug.com/663781.
+  if (IsMus())
+    return;
+
+  base::string16 text = base::ASCIIToUTF16(
+      "Really really realy long long long long  long tooltips that exceeds max "
+      "width");
+  view_->set_tooltip_text(text);
+  gfx::Point center = GetWindow()->bounds().CenterPoint();
+
+  generator_->MoveMouseTo(center);
+
+  EXPECT_TRUE(helper_->IsTooltipVisible());
+  gfx::RenderText* render_text =
+      test::TooltipAuraTestApi(tooltip_aura_).GetRenderText();
+
+  int max = helper_->controller()->GetMaxWidth(center);
+  EXPECT_EQ(max, render_text->display_rect().width());
+}
+#endif
+
 TEST_F(TooltipControllerTest, TooltipsInMultipleViews) {
   // TODO: these tests use GetContext(). That should go away for aura-mus
   // client. http://crbug.com/663781.
-  if (IsAuraMusClient())
+  if (IsMus())
     return;
 
   view_->set_tooltip_text(ASCIIToUTF16("Tooltip Text"));
@@ -215,9 +264,7 @@ TEST_F(TooltipControllerTest, TooltipsInMultipleViews) {
   aura::Window* window = GetWindow();
   aura::Window* root_window = GetRootWindow();
 
-  // Fire tooltip timer so tooltip becomes visible.
   generator_->MoveMouseRelativeTo(window, view_->bounds().CenterPoint());
-  helper_->FireTooltipTimer();
   EXPECT_TRUE(helper_->IsTooltipVisible());
   for (int i = 0; i < 49; ++i) {
     generator_->MoveMouseBy(1, 0);
@@ -244,7 +291,7 @@ TEST_F(TooltipControllerTest, TooltipsInMultipleViews) {
 TEST_F(TooltipControllerTest, EnableOrDisableTooltips) {
   // TODO: these tests use GetContext(). That should go away for aura-mus
   // client. http://crbug.com/663781.
-  if (IsAuraMusClient())
+  if (IsMus())
     return;
 
   view_->set_tooltip_text(ASCIIToUTF16("Tooltip Text"));
@@ -252,22 +299,18 @@ TEST_F(TooltipControllerTest, EnableOrDisableTooltips) {
   EXPECT_EQ(NULL, helper_->GetTooltipWindow());
 
   generator_->MoveMouseRelativeTo(GetWindow(), view_->bounds().CenterPoint());
-  base::string16 expected_tooltip = ASCIIToUTF16("Tooltip Text");
-
-  // Fire tooltip timer so tooltip becomes visible.
-  helper_->FireTooltipTimer();
   EXPECT_TRUE(helper_->IsTooltipVisible());
 
   // Disable tooltips and check again.
   helper_->controller()->SetTooltipsEnabled(false);
   EXPECT_FALSE(helper_->IsTooltipVisible());
-  helper_->FireTooltipTimer();
+  helper_->UpdateIfRequired();
   EXPECT_FALSE(helper_->IsTooltipVisible());
 
   // Enable tooltips back and check again.
   helper_->controller()->SetTooltipsEnabled(true);
   EXPECT_FALSE(helper_->IsTooltipVisible());
-  helper_->FireTooltipTimer();
+  helper_->UpdateIfRequired();
   EXPECT_TRUE(helper_->IsTooltipVisible());
 }
 
@@ -275,7 +318,7 @@ TEST_F(TooltipControllerTest, EnableOrDisableTooltips) {
 TEST_F(TooltipControllerTest, DontShowEmptyTooltips) {
   // TODO: these tests use GetContext(). That should go away for aura-mus
   // client. http://crbug.com/663781.
-  if (IsAuraMusClient())
+  if (IsMus())
     return;
 
   view_->set_tooltip_text(ASCIIToUTF16("                     "));
@@ -283,15 +326,13 @@ TEST_F(TooltipControllerTest, DontShowEmptyTooltips) {
   EXPECT_EQ(NULL, helper_->GetTooltipWindow());
 
   generator_->MoveMouseRelativeTo(GetWindow(), view_->bounds().CenterPoint());
-
-  helper_->FireTooltipTimer();
   EXPECT_FALSE(helper_->IsTooltipVisible());
 }
 
 TEST_F(TooltipControllerTest, TooltipHidesOnKeyPressAndStaysHiddenUntilChange) {
   // TODO: these tests use GetContext(). That should go away for aura-mus
   // client. http://crbug.com/663781.
-  if (IsAuraMusClient())
+  if (IsMus())
     return;
 
   view_->set_tooltip_text(ASCIIToUTF16("Tooltip Text for view 1"));
@@ -303,15 +344,12 @@ TEST_F(TooltipControllerTest, TooltipHidesOnKeyPressAndStaysHiddenUntilChange) {
 
   aura::Window* window = GetWindow();
 
-  // Fire tooltip timer so tooltip becomes visible.
   generator_->MoveMouseRelativeTo(window, view_->bounds().CenterPoint());
-  helper_->FireTooltipTimer();
   EXPECT_TRUE(helper_->IsTooltipVisible());
   EXPECT_TRUE(helper_->IsTooltipShownTimerRunning());
 
   generator_->PressKey(ui::VKEY_1, 0);
   EXPECT_FALSE(helper_->IsTooltipVisible());
-  EXPECT_FALSE(helper_->IsTooltipTimerRunning());
   EXPECT_FALSE(helper_->IsTooltipShownTimerRunning());
 
   // Moving the mouse inside |view1| should not change the state of the tooltip
@@ -319,7 +357,6 @@ TEST_F(TooltipControllerTest, TooltipHidesOnKeyPressAndStaysHiddenUntilChange) {
   for (int i = 0; i < 49; i++) {
     generator_->MoveMouseBy(1, 0);
     EXPECT_FALSE(helper_->IsTooltipVisible());
-    EXPECT_FALSE(helper_->IsTooltipTimerRunning());
     EXPECT_FALSE(helper_->IsTooltipShownTimerRunning());
     EXPECT_EQ(window,
               GetRootWindow()->GetEventHandlerForPoint(
@@ -330,10 +367,9 @@ TEST_F(TooltipControllerTest, TooltipHidesOnKeyPressAndStaysHiddenUntilChange) {
     EXPECT_EQ(window, helper_->GetTooltipWindow());
   }
 
-  // Now we move the mouse on to |view2|. It should re-start the tooltip timer.
+  // Now we move the mouse on to |view2|. It should update the tooltip.
   generator_->MoveMouseBy(1, 0);
-  EXPECT_TRUE(helper_->IsTooltipTimerRunning());
-  helper_->FireTooltipTimer();
+
   EXPECT_TRUE(helper_->IsTooltipVisible());
   EXPECT_TRUE(helper_->IsTooltipShownTimerRunning());
   base::string16 expected_tooltip = ASCIIToUTF16("Tooltip Text for view 2");
@@ -345,7 +381,7 @@ TEST_F(TooltipControllerTest, TooltipHidesOnKeyPressAndStaysHiddenUntilChange) {
 TEST_F(TooltipControllerTest, TooltipHidesOnTimeoutAndStaysHiddenUntilChange) {
   // TODO: these tests use GetContext(). That should go away for aura-mus
   // client. http://crbug.com/663781.
-  if (IsAuraMusClient())
+  if (IsMus())
     return;
 
   view_->set_tooltip_text(ASCIIToUTF16("Tooltip Text for view 1"));
@@ -357,15 +393,13 @@ TEST_F(TooltipControllerTest, TooltipHidesOnTimeoutAndStaysHiddenUntilChange) {
 
   aura::Window* window = GetWindow();
 
-  // Fire tooltip timer so tooltip becomes visible.
+  // Update tooltip so tooltip becomes visible.
   generator_->MoveMouseRelativeTo(window, view_->bounds().CenterPoint());
-  helper_->FireTooltipTimer();
   EXPECT_TRUE(helper_->IsTooltipVisible());
   EXPECT_TRUE(helper_->IsTooltipShownTimerRunning());
 
   helper_->FireTooltipShownTimer();
   EXPECT_FALSE(helper_->IsTooltipVisible());
-  EXPECT_FALSE(helper_->IsTooltipTimerRunning());
   EXPECT_FALSE(helper_->IsTooltipShownTimerRunning());
 
   // Moving the mouse inside |view1| should not change the state of the tooltip
@@ -373,7 +407,6 @@ TEST_F(TooltipControllerTest, TooltipHidesOnTimeoutAndStaysHiddenUntilChange) {
   for (int i = 0; i < 49; ++i) {
     generator_->MoveMouseBy(1, 0);
     EXPECT_FALSE(helper_->IsTooltipVisible());
-    EXPECT_FALSE(helper_->IsTooltipTimerRunning());
     EXPECT_FALSE(helper_->IsTooltipShownTimerRunning());
     EXPECT_EQ(window, GetRootWindow()->GetEventHandlerForPoint(
                   generator_->current_location()));
@@ -383,10 +416,9 @@ TEST_F(TooltipControllerTest, TooltipHidesOnTimeoutAndStaysHiddenUntilChange) {
     EXPECT_EQ(window, helper_->GetTooltipWindow());
   }
 
-  // Now we move the mouse on to |view2|. It should re-start the tooltip timer.
+  // Now we move the mouse on to |view2|. It should update the tooltip.
   generator_->MoveMouseBy(1, 0);
-  EXPECT_TRUE(helper_->IsTooltipTimerRunning());
-  helper_->FireTooltipTimer();
+
   EXPECT_TRUE(helper_->IsTooltipVisible());
   EXPECT_TRUE(helper_->IsTooltipShownTimerRunning());
   base::string16 expected_tooltip = ASCIIToUTF16("Tooltip Text for view 2");
@@ -399,18 +431,15 @@ TEST_F(TooltipControllerTest, TooltipHidesOnTimeoutAndStaysHiddenUntilChange) {
 TEST_F(TooltipControllerTest, HideOnExit) {
   // TODO: these tests use GetContext(). That should go away for aura-mus
   // client. http://crbug.com/663781.
-  if (IsAuraMusClient())
+  if (IsMus())
     return;
 
   view_->set_tooltip_text(ASCIIToUTF16("Tooltip Text"));
   generator_->MoveMouseToCenterOf(GetWindow());
   base::string16 expected_tooltip = ASCIIToUTF16("Tooltip Text");
   EXPECT_EQ(expected_tooltip, aura::client::GetTooltipText(GetWindow()));
-  EXPECT_EQ(base::string16(), helper_->GetTooltipText());
+  EXPECT_EQ(expected_tooltip, helper_->GetTooltipText());
   EXPECT_EQ(GetWindow(), helper_->GetTooltipWindow());
-
-  // Fire tooltip timer so tooltip becomes visible.
-  helper_->FireTooltipTimer();
 
   EXPECT_TRUE(helper_->IsTooltipVisible());
   generator_->SendMouseExit();
@@ -420,7 +449,7 @@ TEST_F(TooltipControllerTest, HideOnExit) {
 TEST_F(TooltipControllerTest, ReshowOnClickAfterEnterExit) {
   // TODO: these tests use GetContext(). That should go away for aura-mus
   // client. http://crbug.com/663781.
-  if (IsAuraMusClient())
+  if (IsMus())
     return;
 
   // Owned by |view_|.
@@ -442,8 +471,6 @@ TEST_F(TooltipControllerTest, ReshowOnClickAfterEnterExit) {
   View::ConvertPointToWidget(v1, &v1_point);
   generator_->MoveMouseRelativeTo(GetWindow(), v1_point);
 
-  // Fire tooltip timer so tooltip becomes visible.
-  helper_->FireTooltipTimer();
   EXPECT_TRUE(helper_->IsTooltipVisible());
   EXPECT_EQ(v1_tt, helper_->GetTooltipText());
 
@@ -455,7 +482,6 @@ TEST_F(TooltipControllerTest, ReshowOnClickAfterEnterExit) {
   generator_->MoveMouseRelativeTo(GetWindow(), v2_point);
   generator_->MoveMouseRelativeTo(GetWindow(), v1_point);
 
-  helper_->FireTooltipTimer();
   EXPECT_TRUE(helper_->IsTooltipVisible());
   EXPECT_EQ(v1_tt, helper_->GetTooltipText());
 }
@@ -483,7 +509,7 @@ class TooltipControllerCaptureTest : public TooltipControllerTest {
     TooltipControllerTest::SetUp();
     // TODO: these tests use GetContext(). That should go away for aura-mus
     // client. http://crbug.com/663781.
-    if (IsAuraMusClient())
+    if (IsMus())
       return;
 
     aura::client::SetScreenPositionClient(GetRootWindow(),
@@ -491,7 +517,7 @@ class TooltipControllerCaptureTest : public TooltipControllerTest {
   }
 
   void TearDown() override {
-    if (!IsAuraMusClient())
+    if (!IsMus())
       aura::client::SetScreenPositionClient(GetRootWindow(), NULL);
     TooltipControllerTest::TearDown();
   }
@@ -508,7 +534,7 @@ class TooltipControllerCaptureTest : public TooltipControllerTest {
 TEST_F(TooltipControllerCaptureTest, DISABLED_CloseOnCaptureLost) {
   // TODO: these tests use GetContext(). That should go away for aura-mus
   // client. http://crbug.com/663781.
-  if (IsAuraMusClient())
+  if (IsMus())
     return;
 
   view_->GetWidget()->SetCapture(view_);
@@ -519,9 +545,6 @@ TEST_F(TooltipControllerCaptureTest, DISABLED_CloseOnCaptureLost) {
   EXPECT_EQ(expected_tooltip, aura::client::GetTooltipText(GetWindow()));
   EXPECT_EQ(base::string16(), helper_->GetTooltipText());
   EXPECT_EQ(GetWindow(), helper_->GetTooltipWindow());
-
-  // Fire tooltip timer so tooltip becomes visible.
-  helper_->FireTooltipTimer();
 
   EXPECT_TRUE(helper_->IsTooltipVisible());
   view_->GetWidget()->ReleaseCapture();
@@ -540,9 +563,9 @@ TEST_F(TooltipControllerCaptureTest, DISABLED_CloseOnCaptureLost) {
 // Verifies the correct window is found for tooltips when there is a capture.
 TEST_F(TooltipControllerCaptureTest, MAYBE_Capture) {
   // Currently, capture in one test affects capture in other tests.
-  // TODO: these tests use GetContext(). That should go away for aura-mus
-  // client. http://crbug.com/663781.
-  if (IsMus() || IsAuraMusClient())
+  // TODO: these tests use GetContext(). That should go away for mus client.
+  // http://crbug.com/663781.
+  if (IsMus())
     return;
 
   const base::string16 tooltip_text(ASCIIToUTF16("1"));
@@ -568,8 +591,6 @@ TEST_F(TooltipControllerCaptureTest, MAYBE_Capture) {
   generator_->MoveMouseRelativeTo(widget_->GetNativeWindow(),
                                   view_->bounds().CenterPoint());
 
-  EXPECT_TRUE(helper_->IsTooltipTimerRunning());
-  helper_->FireTooltipTimer();
   // Even though the mouse is over a window with a tooltip it shouldn't be
   // picked up because the windows don't have the same value for
   // |TooltipManager::kGroupingPropertyKey|.
@@ -584,8 +605,6 @@ TEST_F(TooltipControllerCaptureTest, MAYBE_Capture) {
   widget2->SetNativeWindowProperty(TooltipManager::kGroupingPropertyKey,
                                    reinterpret_cast<void*>(grouping_key));
   generator_->MoveMouseBy(1, 10);
-  EXPECT_TRUE(helper_->IsTooltipTimerRunning());
-  helper_->FireTooltipTimer();
   EXPECT_EQ(tooltip_text2, helper_->GetTooltipText());
 
   widget2.reset();
@@ -670,8 +689,8 @@ TEST_F(TooltipControllerTest2, VerifyLeadingTrailingWhitespaceStripped) {
   window->SetBounds(gfx::Rect(0, 0, 300, 300));
   base::string16 tooltip_text(ASCIIToUTF16(" \nx  "));
   aura::client::SetTooltipText(window.get(), &tooltip_text);
+  EXPECT_FALSE(helper_->IsTooltipVisible());
   generator_->MoveMouseToCenterOf(window.get());
-  helper_->FireTooltipTimer();
   EXPECT_EQ(ASCIIToUTF16("x"), test_tooltip_->tooltip_text());
 }
 
@@ -683,10 +702,9 @@ TEST_F(TooltipControllerTest2, CloseOnCancelMode) {
   window->SetBounds(gfx::Rect(0, 0, 300, 300));
   base::string16 tooltip_text(ASCIIToUTF16("Tooltip Text"));
   aura::client::SetTooltipText(window.get(), &tooltip_text);
+  EXPECT_FALSE(helper_->IsTooltipVisible());
   generator_->MoveMouseToCenterOf(window.get());
 
-  // Fire tooltip timer so tooltip becomes visible.
-  helper_->FireTooltipTimer();
   EXPECT_TRUE(helper_->IsTooltipVisible());
 
   // Send OnCancelMode event and verify that tooltip becomes invisible and
@@ -708,8 +726,8 @@ class TooltipControllerTest3 : public ViewsTestBase {
 
   // TODO: these tests use GetContext(). That should go away for aura-mus
   // client. http://crbug.com/663781.
-  if (IsAuraMusClient())
-    return;
+    if (IsMus())
+      return;
 
     aura::Window* root_window = GetContext();
     new wm::DefaultActivationClient(root_window);
@@ -732,7 +750,7 @@ class TooltipControllerTest3 : public ViewsTestBase {
   }
 
   void TearDown() override {
-    if (!IsAuraMusClient()) {
+    if (!IsMus()) {
       GetRootWindow()->RemovePreTargetHandler(controller_.get());
       aura::client::SetTooltipClient(GetRootWindow(), NULL);
 
@@ -769,7 +787,7 @@ class TooltipControllerTest3 : public ViewsTestBase {
 TEST_F(TooltipControllerTest3, TooltipPositionChangesOnTwoViewsWithSameLabel) {
   // TODO: these tests use GetContext(). That should go away for aura-mus
   // client. http://crbug.com/663781.
-  if (IsAuraMusClient())
+  if (IsMus())
     return;
 
   // Owned by |view_|.
@@ -815,7 +833,6 @@ TEST_F(TooltipControllerTest3, TooltipPositionChangesOnTwoViewsWithSameLabel) {
   // Test whether a toolbar appears on v1
   gfx::Point center = v1->bounds().CenterPoint();
   generator_->MoveMouseRelativeTo(GetWindow(), center);
-  helper_->FireTooltipTimer();
   EXPECT_TRUE(helper_->IsTooltipVisible());
   EXPECT_EQ(reference_string, helper_->GetTooltipText());
   gfx::Point tooltip_bounds1 = test_tooltip_->location();
@@ -823,7 +840,6 @@ TEST_F(TooltipControllerTest3, TooltipPositionChangesOnTwoViewsWithSameLabel) {
   // Test whether the toolbar changes position on mouse over v2
   center = v2->bounds().CenterPoint();
   generator_->MoveMouseRelativeTo(GetWindow(), center);
-  helper_->FireTooltipTimer();
   EXPECT_TRUE(helper_->IsTooltipVisible());
   EXPECT_EQ(reference_string, helper_->GetTooltipText());
   gfx::Point tooltip_bounds2 = test_tooltip_->location();
@@ -837,7 +853,6 @@ TEST_F(TooltipControllerTest3, TooltipPositionChangesOnTwoViewsWithSameLabel) {
   center = v2_1->GetLocalBounds().CenterPoint();
   views::View::ConvertPointToTarget(v2_1, view_, &center);
   generator_->MoveMouseRelativeTo(GetWindow(), center);
-  helper_->FireTooltipTimer();
   gfx::Point tooltip_bounds2_1 = test_tooltip_->location();
 
   EXPECT_NE(tooltip_bounds2, tooltip_bounds2_1);
@@ -849,7 +864,6 @@ TEST_F(TooltipControllerTest3, TooltipPositionChangesOnTwoViewsWithSameLabel) {
   center = v2_2->GetLocalBounds().CenterPoint();
   views::View::ConvertPointToTarget(v2_2, view_, &center);
   generator_->MoveMouseRelativeTo(GetWindow(), center);
-  helper_->FireTooltipTimer();
   gfx::Point tooltip_bounds2_2 = test_tooltip_->location();
 
   EXPECT_NE(tooltip_bounds2_1, tooltip_bounds2_2);
@@ -861,7 +875,6 @@ TEST_F(TooltipControllerTest3, TooltipPositionChangesOnTwoViewsWithSameLabel) {
   center = v1_1->GetLocalBounds().CenterPoint();
   views::View::ConvertPointToTarget(v1_1, view_, &center);
   generator_->MoveMouseRelativeTo(GetWindow(), center);
-  helper_->FireTooltipTimer();
   gfx::Point tooltip_bounds1_1 = test_tooltip_->location();
 
   EXPECT_TRUE(helper_->IsTooltipVisible());
@@ -869,7 +882,6 @@ TEST_F(TooltipControllerTest3, TooltipPositionChangesOnTwoViewsWithSameLabel) {
 
   center = v1->bounds().CenterPoint();
   generator_->MoveMouseRelativeTo(GetWindow(), center);
-  helper_->FireTooltipTimer();
   tooltip_bounds1 = test_tooltip_->location();
 
   EXPECT_NE(tooltip_bounds1_1, tooltip_bounds1);

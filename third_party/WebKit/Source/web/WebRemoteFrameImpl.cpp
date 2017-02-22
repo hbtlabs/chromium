@@ -93,13 +93,6 @@ WebVector<WebIconURL> WebRemoteFrameImpl::iconURLs(int iconTypesMask) const {
   return WebVector<WebIconURL>();
 }
 
-void WebRemoteFrameImpl::setRemoteWebLayer(WebLayer* webLayer) {
-  if (!frame())
-    return;
-
-  frame()->setRemotePlatformLayer(webLayer);
-}
-
 void WebRemoteFrameImpl::setSharedWorkerRepositoryClient(
     WebSharedWorkerRepositoryClient*) {
   NOTREACHED();
@@ -109,7 +102,7 @@ void WebRemoteFrameImpl::setCanHaveScrollbars(bool) {
   NOTREACHED();
 }
 
-WebSize WebRemoteFrameImpl::scrollOffset() const {
+WebSize WebRemoteFrameImpl::getScrollOffset() const {
   NOTREACHED();
   return WebSize();
 }
@@ -171,8 +164,7 @@ void WebRemoteFrameImpl::executeScript(const WebScriptSource&) {
 void WebRemoteFrameImpl::executeScriptInIsolatedWorld(
     int worldID,
     const WebScriptSource* sources,
-    unsigned numSources,
-    int extensionGroup) {
+    unsigned numSources) {
   NOTREACHED();
 }
 
@@ -185,10 +177,6 @@ void WebRemoteFrameImpl::setIsolatedWorldSecurityOrigin(
 void WebRemoteFrameImpl::setIsolatedWorldContentSecurityPolicy(
     int worldID,
     const WebString&) {
-  NOTREACHED();
-}
-
-void WebRemoteFrameImpl::addMessageToConsole(const WebConsoleMessage&) {
   NOTREACHED();
 }
 
@@ -206,7 +194,6 @@ void WebRemoteFrameImpl::executeScriptInIsolatedWorld(
     int worldID,
     const WebScriptSource* sourcesIn,
     unsigned numSources,
-    int extensionGroup,
     WebVector<v8::Local<v8::Value>>* results) {
   NOTREACHED();
 }
@@ -279,10 +266,6 @@ void WebRemoteFrameImpl::setReferrerForRequest(WebURLRequest&,
   NOTREACHED();
 }
 
-void WebRemoteFrameImpl::dispatchWillSendRequest(WebURLRequest&) {
-  NOTREACHED();
-}
-
 WebAssociatedURLLoader* WebRemoteFrameImpl::createAssociatedURLLoader(
     const WebAssociatedURLLoaderOptions&) {
   NOTREACHED();
@@ -345,10 +328,13 @@ WebLocalFrame* WebRemoteFrameImpl::createLocalChild(
     const WebString& uniqueName,
     WebSandboxFlags sandboxFlags,
     WebFrameClient* client,
+    blink::InterfaceProvider* interfaceProvider,
+    blink::InterfaceRegistry* interfaceRegistry,
     WebFrame* previousSibling,
     const WebFrameOwnerProperties& frameOwnerProperties,
     WebFrame* opener) {
-  WebLocalFrameImpl* child = WebLocalFrameImpl::create(scope, client, opener);
+  WebLocalFrameImpl* child = WebLocalFrameImpl::create(
+      scope, client, interfaceProvider, interfaceRegistry, opener);
   insertAfter(child, previousSibling);
   RemoteFrameOwner* owner = RemoteFrameOwner::create(
       static_cast<SandboxFlags>(sandboxFlags), frameOwnerProperties);
@@ -387,6 +373,13 @@ WebRemoteFrame* WebRemoteFrameImpl::createRemoteChild(
       static_cast<SandboxFlags>(sandboxFlags), WebFrameOwnerProperties());
   child->initializeCoreFrame(frame()->host(), owner, name, uniqueName);
   return child;
+}
+
+void WebRemoteFrameImpl::setWebLayer(WebLayer* layer) {
+  if (!frame())
+    return;
+
+  frame()->setWebLayer(layer);
 }
 
 void WebRemoteFrameImpl::setCoreFrame(RemoteFrame* frame) {
@@ -432,6 +425,19 @@ void WebRemoteFrameImpl::setReplicatedName(const WebString& name,
   frame()->tree().setPrecalculatedName(name, uniqueName);
 }
 
+void WebRemoteFrameImpl::setReplicatedFeaturePolicyHeader(
+    const WebParsedFeaturePolicyHeader& parsedHeader) const {
+  if (RuntimeEnabledFeatures::featurePolicyEnabled()) {
+    FeaturePolicy* parentFeaturePolicy = nullptr;
+    if (parent()) {
+      Frame* parentFrame = frame()->client()->parent();
+      parentFeaturePolicy = parentFrame->securityContext()->getFeaturePolicy();
+    }
+    frame()->securityContext()->setFeaturePolicyFromHeader(parsedHeader,
+                                                           parentFeaturePolicy);
+  }
+}
+
 void WebRemoteFrameImpl::addReplicatedContentSecurityPolicyHeader(
     const WebString& headerValue,
     WebContentSecurityPolicyType type,
@@ -465,7 +471,7 @@ void WebRemoteFrameImpl::setReplicatedPotentiallyTrustworthyUniqueOrigin(
           isUniqueOriginPotentiallyTrustworthy);
 }
 
-void WebRemoteFrameImpl::DispatchLoadEventForFrameOwner() const {
+void WebRemoteFrameImpl::dispatchLoadEventOnFrameOwner() const {
   DCHECK(frame()->owner()->isLocal());
   frame()->owner()->dispatchLoad();
 }
@@ -487,7 +493,8 @@ bool WebRemoteFrameImpl::isIgnoredForHitTest() const {
   HTMLFrameOwnerElement* owner = frame()->deprecatedLocalOwner();
   if (!owner || !owner->layoutObject())
     return false;
-  return owner->layoutObject()->style()->pointerEvents() == PE_NONE;
+  return owner->layoutObject()->style()->pointerEvents() ==
+         EPointerEvents::kNone;
 }
 
 void WebRemoteFrameImpl::willEnterFullscreen() {
@@ -510,9 +517,13 @@ void WebRemoteFrameImpl::willEnterFullscreen() {
   // TODO(alexmos): currently, this assumes prefixed requests, but in the
   // future, this should plumb in information about which request type
   // (prefixed or unprefixed) to use for firing fullscreen events.
-  Fullscreen::from(ownerElement->document())
-      .requestFullscreen(*ownerElement, Fullscreen::PrefixedRequest,
-                         true /* forCrossProcessAncestor */);
+  Fullscreen::requestFullscreen(*ownerElement,
+                                Fullscreen::RequestType::Prefixed,
+                                true /* forCrossProcessAncestor */);
+}
+
+void WebRemoteFrameImpl::setHasReceivedUserGesture() {
+  frame()->setDocumentHasReceivedUserGesture();
 }
 
 WebRemoteFrameImpl::WebRemoteFrameImpl(WebTreeScopeType scope,

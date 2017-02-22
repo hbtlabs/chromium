@@ -24,6 +24,7 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -276,12 +277,19 @@ void ExtensionSettingsHandler::GetLocalizedValues(
   source->AddString("extensionCommandsRegular",
       l10n_util::GetStringUTF16(IDS_EXTENSION_COMMANDS_NOT_GLOBAL));
   source->AddString("ok", l10n_util::GetStringUTF16(IDS_OK));
+
+  // 'Bubble' text for the controlled-setting-indicator
+  source->AddString(
+      "extensionControlledSettingPolicy",
+      l10n_util::GetStringUTF16(IDS_OPTIONS_CONTROLLED_SETTING_POLICY));
 }
 
-void ExtensionSettingsHandler::DidStartNavigationToPendingEntry(
-    const GURL& url,
-    content::ReloadType reload_type) {
-  if (reload_type != content::ReloadType::NONE)
+void ExtensionSettingsHandler::DidStartNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (!navigation_handle->IsInMainFrame())
+    return;
+
+  if (navigation_handle->GetReloadType() != content::ReloadType::NONE)
     ReloadUnpackedExtensions();
 }
 

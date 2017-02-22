@@ -12,16 +12,16 @@
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "components/proximity_auth/fake_secure_context.h"
+#include "components/cryptauth/cryptauth_test_util.h"
+#include "components/cryptauth/fake_secure_context.h"
+#include "components/cryptauth/secure_context.h"
 #include "components/proximity_auth/logging/logging.h"
 #include "components/proximity_auth/messenger.h"
 #include "components/proximity_auth/mock_proximity_auth_client.h"
-#include "components/proximity_auth/proximity_auth_test_util.h"
 #include "components/proximity_auth/proximity_monitor.h"
 #include "components/proximity_auth/remote_device_life_cycle.h"
 #include "components/proximity_auth/remote_status_update.h"
 #include "components/proximity_auth/screenlock_bridge.h"
-#include "components/proximity_auth/secure_context.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -62,7 +62,7 @@ class MockRemoteDeviceLifeCycle : public RemoteDeviceLifeCycle {
   ~MockRemoteDeviceLifeCycle() override {}
 
   MOCK_METHOD0(Start, void());
-  MOCK_CONST_METHOD0(GetRemoteDevice, RemoteDevice());
+  MOCK_CONST_METHOD0(GetRemoteDevice, cryptauth::RemoteDevice());
   MOCK_CONST_METHOD0(GetState, State());
   MOCK_METHOD0(GetMessenger, Messenger*());
   MOCK_METHOD1(AddObserver, void(Observer*));
@@ -80,7 +80,7 @@ class MockMessenger : public Messenger {
   MOCK_METHOD0(DispatchUnlockEvent, void());
   MOCK_METHOD1(RequestDecryption, void(const std::string& challenge));
   MOCK_METHOD0(RequestUnlock, void());
-  MOCK_CONST_METHOD0(GetSecureContext, SecureContext*());
+  MOCK_CONST_METHOD0(GetSecureContext, cryptauth::SecureContext*());
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockMessenger);
@@ -159,8 +159,8 @@ class TestUnlockManager : public UnlockManager {
 
  private:
   std::unique_ptr<ProximityMonitor> CreateProximityMonitor(
-      const RemoteDevice& remote_device) override {
-    EXPECT_EQ(kTestRemoteDevicePublicKey, remote_device.public_key);
+      const cryptauth::RemoteDevice& remote_device) override {
+    EXPECT_EQ(cryptauth::kTestRemoteDevicePublicKey, remote_device.public_key);
     std::unique_ptr<MockProximityMonitor> proximity_monitor(
         new NiceMock<MockProximityMonitor>());
     proximity_monitor_ = proximity_monitor.get();
@@ -188,7 +188,7 @@ CreateAndRegisterMockBluetoothAdapter() {
 class ProximityAuthUnlockManagerTest : public testing::Test {
  public:
   ProximityAuthUnlockManagerTest()
-      : remote_device_(CreateClassicRemoteDeviceForTest()),
+      : remote_device_(cryptauth::CreateClassicRemoteDeviceForTest()),
         bluetooth_adapter_(CreateAndRegisterMockBluetoothAdapter()),
         task_runner_(new base::TestSimpleTaskRunner()),
         thread_task_runner_handle_(task_runner_) {
@@ -253,7 +253,7 @@ class ProximityAuthUnlockManagerTest : public testing::Test {
   }
 
  protected:
-  RemoteDevice remote_device_;
+  cryptauth::RemoteDevice remote_device_;
 
   // Mock used for verifying interactions with the Bluetooth subsystem.
   scoped_refptr<device::MockBluetoothAdapter> bluetooth_adapter_;
@@ -262,7 +262,7 @@ class ProximityAuthUnlockManagerTest : public testing::Test {
   NiceMock<MockRemoteDeviceLifeCycle> life_cycle_;
   NiceMock<MockMessenger> messenger_;
   std::unique_ptr<TestUnlockManager> unlock_manager_;
-  FakeSecureContext secure_context_;
+  cryptauth::FakeSecureContext secure_context_;
 
  private:
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;

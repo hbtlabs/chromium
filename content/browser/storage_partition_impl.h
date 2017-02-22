@@ -14,15 +14,18 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "content/browser/appcache/chrome_appcache_service.h"
 #include "content/browser/background_sync/background_sync_context.h"
+#include "content/browser/bluetooth/bluetooth_allowed_devices_map.h"
 #include "content/browser/broadcast_channel/broadcast_channel_provider.h"
 #include "content/browser/cache_storage/cache_storage_context_impl.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/host_zoom_level_context.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
-#include "content/browser/payments/payment_app_context.h"
+#include "content/browser/payments/payment_app_context_impl.h"
+#include "content/browser/push_messaging/push_messaging_context.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/common/content_export.h"
 #include "content/common/storage_partition_service.mojom.h"
@@ -73,15 +76,16 @@ class CONTENT_EXPORT  StoragePartitionImpl
   HostZoomLevelContext* GetHostZoomLevelContext() override;
   ZoomLevelDelegate* GetZoomLevelDelegate() override;
   PlatformNotificationContextImpl* GetPlatformNotificationContext() override;
+  void ClearBluetoothAllowedDevicesMapForTesting() override;
 
   BackgroundSyncContext* GetBackgroundSyncContext();
-  PaymentAppContext* GetPaymentAppContext();
+  PaymentAppContextImpl* GetPaymentAppContext();
   BroadcastChannelProvider* GetBroadcastChannelProvider();
+  BluetoothAllowedDevicesMap* GetBluetoothAllowedDevicesMap();
 
   // mojom::StoragePartitionService interface.
   void OpenLocalStorage(
       const url::Origin& origin,
-      mojom::LevelDBObserverPtr observer,
       mojo::InterfaceRequest<mojom::LevelDBWrapper> request) override;
 
   void ClearDataForOrigin(uint32_t remove_mask,
@@ -119,7 +123,7 @@ class CONTENT_EXPORT  StoragePartitionImpl
  private:
   friend class BackgroundSyncManagerTest;
   friend class BackgroundSyncServiceImplTest;
-  friend class PaymentAppManagerTest;
+  friend class PaymentAppContentUnitTestBase;
   friend class StoragePartitionImplMap;
   FRIEND_TEST_ALL_PREFIXES(StoragePartitionShaderClearTest, ClearShaderCache);
   FRIEND_TEST_ALL_PREFIXES(StoragePartitionImplTest,
@@ -165,23 +169,9 @@ class CONTENT_EXPORT  StoragePartitionImpl
       bool in_memory,
       const base::FilePath& relative_partition_path);
 
-  StoragePartitionImpl(
-      BrowserContext* browser_context,
-      const base::FilePath& partition_path,
-      storage::QuotaManager* quota_manager,
-      ChromeAppCacheService* appcache_service,
-      storage::FileSystemContext* filesystem_context,
-      storage::DatabaseTracker* database_tracker,
-      DOMStorageContextWrapper* dom_storage_context,
-      IndexedDBContextImpl* indexed_db_context,
-      CacheStorageContextImpl* cache_storage_context,
-      ServiceWorkerContextWrapper* service_worker_context,
-      storage::SpecialStoragePolicy* special_storage_policy,
-      HostZoomLevelContext* host_zoom_level_context,
-      PlatformNotificationContextImpl* platform_notification_context,
-      BackgroundSyncContext* background_sync_context,
-      PaymentAppContext* payment_app_context,
-      scoped_refptr<BroadcastChannelProvider>broadcast_channel_provider);
+  StoragePartitionImpl(BrowserContext* browser_context,
+                       const base::FilePath& partition_path,
+                       storage::SpecialStoragePolicy* special_storage_policy);
 
   // We will never have both remove_origin be populated and a cookie_matcher.
   void ClearDataImpl(uint32_t remove_mask,
@@ -211,6 +201,10 @@ class CONTENT_EXPORT  StoragePartitionImpl
   void SetMediaURLRequestContext(
       net::URLRequestContextGetter* media_url_request_context);
 
+  // Function used by the quota system to ask the embedder for the
+  // storage configuration info.
+  void GetQuotaSettings(const storage::OptionalQuotaSettingsCallback& callback);
+
   base::FilePath partition_path_;
   scoped_refptr<net::URLRequestContextGetter> url_request_context_;
   scoped_refptr<net::URLRequestContextGetter> media_url_request_context_;
@@ -222,12 +216,14 @@ class CONTENT_EXPORT  StoragePartitionImpl
   scoped_refptr<IndexedDBContextImpl> indexed_db_context_;
   scoped_refptr<CacheStorageContextImpl> cache_storage_context_;
   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context_;
+  scoped_refptr<PushMessagingContext> push_messaging_context_;
   scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy_;
   scoped_refptr<HostZoomLevelContext> host_zoom_level_context_;
   scoped_refptr<PlatformNotificationContextImpl> platform_notification_context_;
   scoped_refptr<BackgroundSyncContext> background_sync_context_;
-  scoped_refptr<PaymentAppContext> payment_app_context_;
+  scoped_refptr<PaymentAppContextImpl> payment_app_context_;
   scoped_refptr<BroadcastChannelProvider> broadcast_channel_provider_;
+  scoped_refptr<BluetoothAllowedDevicesMap> bluetooth_allowed_devices_map_;
 
   mojo::BindingSet<mojom::StoragePartitionService> bindings_;
 
@@ -235,6 +231,8 @@ class CONTENT_EXPORT  StoragePartitionImpl
   // StoragePartitionImplMap which then owns StoragePartitionImpl. When the
   // BrowserContext is destroyed, |this| will be destroyed too.
   BrowserContext* browser_context_;
+
+  base::WeakPtrFactory<StoragePartitionImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(StoragePartitionImpl);
 };

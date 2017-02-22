@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "content/public/browser/certificate_request_result_type.h"
@@ -19,10 +20,6 @@ class PrefService;
 
 namespace breakpad {
 class CrashHandlerHostLinux;
-}
-
-namespace media {
-class BrowserCdmFactory;
 }
 
 namespace metrics {
@@ -40,6 +37,7 @@ class InterfaceRegistry;
 
 namespace chromecast {
 class CastService;
+class CastWindowManager;
 
 namespace media {
 class MediaCapsImpl;
@@ -48,13 +46,17 @@ class MediaPipelineBackendManager;
 struct MediaPipelineDeviceParams;
 class MediaResourceTracker;
 class VideoPlaneController;
+class VideoModeSwitcher;
 class VideoResolutionPolicy;
 }
 
 namespace shell {
 
 class CastBrowserMainParts;
+class CastResourceDispatcherHostDelegate;
 class URLRequestContextFactory;
+
+using DisableQuicClosure = base::OnceClosure;
 
 class CastContentBrowserClient : public content::ContentBrowserClient {
  public:
@@ -77,7 +79,11 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
       content::BrowserContext* browser_context,
       PrefService* pref_service,
       net::URLRequestContextGetter* request_context_getter,
-      media::VideoPlaneController* video_plane_controller);
+      DisableQuicClosure disable_quic_closure,
+      media::VideoPlaneController* video_plane_controller,
+      CastWindowManager* window_manager);
+
+  virtual media::VideoModeSwitcher* GetVideoModeSwitcher();
 
 #if !defined(OS_ANDROID)
   // Gets object for enforcing video resolution policy restrictions.
@@ -95,6 +101,10 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   media::MediaResourceTracker* media_resource_tracker();
 
   media::MediaPipelineBackendManager* media_pipeline_backend_manager();
+
+  ::media::ScopedAudioManagerPtr CreateAudioManager(
+      ::media::AudioLogFactory* audio_log_factory) override;
+  std::unique_ptr<::media::CdmFactory> CreateCdmFactory() override;
 #endif
   media::MediaCapsImpl* media_caps();
 
@@ -121,6 +131,10 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   void ResourceDispatcherHostCreated() override;
   std::string GetApplicationLocale() override;
   content::QuotaPermissionContext* CreateQuotaPermissionContext() override;
+  void GetQuotaSettings(
+      content::BrowserContext* context,
+      content::StoragePartition* partition,
+      const storage::OptionalQuotaSettingsCallback& callback) override;
   void AllowCertificateError(
       content::WebContents* web_contents,
       int cert_error,
@@ -136,44 +150,31 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
       content::WebContents* web_contents,
       net::SSLCertRequestInfo* cert_request_info,
       std::unique_ptr<content::ClientCertificateDelegate> delegate) override;
-  bool CanCreateWindow(
-      const GURL& opener_url,
-      const GURL& opener_top_level_frame_url,
-      const GURL& source_origin,
-      WindowContainerType container_type,
-      const GURL& target_url,
-      const content::Referrer& referrer,
-      const std::string& frame_name,
-      WindowOpenDisposition disposition,
-      const blink::WebWindowFeatures& features,
-      bool user_gesture,
-      bool opener_suppressed,
-      content::ResourceContext* context,
-      int render_process_id,
-      int opener_render_view_id,
-      int opener_render_frame_id,
-      bool* no_javascript_access) override;
+  bool CanCreateWindow(int opener_render_process_id,
+                       int opener_render_frame_id,
+                       const GURL& opener_url,
+                       const GURL& opener_top_level_frame_url,
+                       const GURL& source_origin,
+                       content::mojom::WindowContainerType container_type,
+                       const GURL& target_url,
+                       const content::Referrer& referrer,
+                       const std::string& frame_name,
+                       WindowOpenDisposition disposition,
+                       const blink::mojom::WindowFeatures& features,
+                       bool user_gesture,
+                       bool opener_suppressed,
+                       content::ResourceContext* context,
+                       bool* no_javascript_access) override;
   void ExposeInterfacesToRenderer(
       service_manager::InterfaceRegistry* registry,
       content::RenderProcessHost* render_process_host) override;
   void RegisterInProcessServices(StaticServiceMap* services) override;
   std::unique_ptr<base::Value> GetServiceManifestOverlay(
-      const std::string& service_name) override;
-#if defined(OS_ANDROID)
-  void GetAdditionalMappedFilesForChildProcess(
-      const base::CommandLine& command_line,
-      int child_process_id,
-      content::FileDescriptorInfo* mappings,
-      std::map<int, base::MemoryMappedFile::Region>* regions) override;
-#else
-  ::media::ScopedAudioManagerPtr CreateAudioManager(
-      ::media::AudioLogFactory* audio_log_factory) override;
-  std::unique_ptr<::media::CdmFactory> CreateCdmFactory() override;
+      base::StringPiece service_name) override;
   void GetAdditionalMappedFilesForChildProcess(
       const base::CommandLine& command_line,
       int child_process_id,
       content::FileDescriptorInfo* mappings) override;
-#endif  // defined(OS_ANDROID)
   void GetAdditionalWebUISchemes(
       std::vector<std::string>* additional_schemes) override;
   content::DevToolsManagerDelegate* GetDevToolsManagerDelegate() override;
@@ -208,6 +209,8 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   // Created by CastContentBrowserClient but owned by BrowserMainLoop.
   CastBrowserMainParts* cast_browser_main_parts_;
   std::unique_ptr<URLRequestContextFactory> url_request_context_factory_;
+  std::unique_ptr<CastResourceDispatcherHostDelegate>
+      resource_dispatcher_host_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(CastContentBrowserClient);
 };

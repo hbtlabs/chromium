@@ -6,10 +6,10 @@ from telemetry.page import legacy_page_test
 
 
 def Repaint(action_runner, mode='viewport', width=None, height=None):
-  action_runner.WaitForJavaScriptCondition(
-    'document.readyState == "complete"', 90)
+  action_runner.WaitForJavaScriptCondition2(
+    'document.readyState == "complete"', timeout=90)
   # Rasterize only what's visible.
-  action_runner.ExecuteJavaScript(
+  action_runner.ExecuteJavaScript2(
       'chrome.gpuBenchmarking.setRasterizeOnlyVisibleContent();')
 
   args = {}
@@ -20,17 +20,18 @@ def Repaint(action_runner, mode='viewport', width=None, height=None):
     args['height'] = height
 
   # Enqueue benchmark
-  action_runner.ExecuteJavaScript("""
+  action_runner.ExecuteJavaScript2("""
       window.benchmark_results = {};
       window.benchmark_results.id =
           chrome.gpuBenchmarking.runMicroBenchmark(
               "invalidation_benchmark",
               function(value) {},
-              """ + str(args) + """
+              {{ args }}
           );
-  """)
+      """,
+      args=args)
 
-  micro_benchmark_id = action_runner.EvaluateJavaScript(
+  micro_benchmark_id = action_runner.EvaluateJavaScript2(
       'window.benchmark_results.id')
   if not micro_benchmark_id:
     raise legacy_page_test.MeasurementFailure(
@@ -39,13 +40,14 @@ def Repaint(action_runner, mode='viewport', width=None, height=None):
   with action_runner.CreateInteraction('Repaint'):
     action_runner.RepaintContinuously(seconds=5)
 
-  action_runner.ExecuteJavaScript("""
+  action_runner.ExecuteJavaScript2("""
       window.benchmark_results.message_handled =
           chrome.gpuBenchmarking.sendMessageToMicroBenchmark(
-              """ + str(micro_benchmark_id) + """, {
-                "notify_done": true
-              });
-  """)
+                {{ micro_benchmark_id }}, {
+                  "notify_done": true
+                });
+      """,
+      micro_benchmark_id=micro_benchmark_id)
 
 
 def WaitThenRepaint(action_runner):

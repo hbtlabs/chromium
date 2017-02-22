@@ -41,30 +41,6 @@
 
 namespace blink {
 
-class MessageLoopInterruptor final : public BlinkGCInterruptor {
- public:
-  explicit MessageLoopInterruptor(WebTaskRunner* taskRunner)
-      : m_taskRunner(taskRunner) {}
-
-  void requestInterrupt() override {
-    // GCTask has an empty run() method. Its only purpose is to guarantee
-    // that MessageLoop will have a task to process which will result
-    // in GCTaskRunner::didProcessTask being executed.
-    m_taskRunner->postTask(BLINK_FROM_HERE, crossThreadBind(&runGCTask));
-  }
-
- private:
-  static void runGCTask() {
-    // Don't do anything here because we don't know if this is
-    // a nested event loop or not. GCTaskRunner::didProcessTask
-    // will enter correct safepoint for us.
-    // We are not calling onInterrupted() because that always
-    // conservatively enters safepoint with pointers on stack.
-  }
-
-  WebTaskRunner* m_taskRunner;
-};
-
 class GCTaskObserver final : public WebThread::TaskObserver {
   USING_FAST_MALLOC(GCTaskObserver);
 
@@ -100,10 +76,9 @@ class GCTaskRunner final {
 
  public:
   explicit GCTaskRunner(WebThread* thread)
-      : m_gcTaskObserver(wrapUnique(new GCTaskObserver)), m_thread(thread) {
+      : m_gcTaskObserver(WTF::wrapUnique(new GCTaskObserver)),
+        m_thread(thread) {
     m_thread->addTaskObserver(m_gcTaskObserver.get());
-    ThreadState::current()->addInterruptor(
-        wrapUnique(new MessageLoopInterruptor(thread->getWebTaskRunner())));
   }
 
   ~GCTaskRunner() { m_thread->removeTaskObserver(m_gcTaskObserver.get()); }

@@ -16,6 +16,7 @@
 #include "content/browser/renderer_host/input/gesture_event_queue.h"
 #include "content/browser/renderer_host/input/input_ack_handler.h"
 #include "content/browser/renderer_host/input/input_router_client.h"
+#include "content/browser/renderer_host/input/legacy_touch_event_queue.h"
 #include "content/browser/renderer_host/input/touch_event_queue.h"
 #include "content/browser/renderer_host/input/touchpad_tap_suppression_controller.h"
 #include "content/common/content_constants_internal.h"
@@ -90,7 +91,7 @@ InputRouterImpl::InputRouterImpl(IPC::Sender* sender,
       wheel_event_queue_(this,
                          base::FeatureList::IsEnabled(
                              features::kTouchpadAndWheelScrollLatching)),
-      touch_event_queue_(this, config.touch_config),
+      touch_event_queue_(new LegacyTouchEventQueue(this, config.touch_config)),
       gesture_event_queue_(this, this, config.gesture_config),
       device_scale_factor_(1.f) {
   DCHECK(sender);
@@ -121,14 +122,14 @@ bool InputRouterImpl::SendInput(std::unique_ptr<IPC::Message> message) {
 
 void InputRouterImpl::SendMouseEvent(
     const MouseEventWithLatencyInfo& mouse_event) {
-  if (mouse_event.event.type == WebInputEvent::MouseDown &&
-      gesture_event_queue_.GetTouchpadTapSuppressionController()->
-          ShouldDeferMouseDown(mouse_event))
-      return;
-  if (mouse_event.event.type == WebInputEvent::MouseUp &&
-      gesture_event_queue_.GetTouchpadTapSuppressionController()->
-          ShouldSuppressMouseUp())
-      return;
+  if (mouse_event.event.type() == WebInputEvent::MouseDown &&
+      gesture_event_queue_.GetTouchpadTapSuppressionController()
+          ->ShouldDeferMouseDown(mouse_event))
+    return;
+  if (mouse_event.event.type() == WebInputEvent::MouseUp &&
+      gesture_event_queue_.GetTouchpadTapSuppressionController()
+          ->ShouldSuppressMouseUp())
+    return;
 
   SendMouseEventImmediately(mouse_event);
 }
@@ -164,19 +165,20 @@ void InputRouterImpl::SendGestureEvent(
   wheel_event_queue_.OnGestureScrollEvent(gesture_event);
 
   if (gesture_event.event.sourceDevice == blink::WebGestureDeviceTouchscreen) {
-    if (gesture_event.event.type == blink::WebInputEvent::GestureScrollBegin) {
+    if (gesture_event.event.type() ==
+        blink::WebInputEvent::GestureScrollBegin) {
       touch_scroll_started_sent_ = false;
-    } else if(!touch_scroll_started_sent_
-        && gesture_event.event.type ==
-            blink::WebInputEvent::GestureScrollUpdate) {
+    } else if (!touch_scroll_started_sent_ &&
+               gesture_event.event.type() ==
+                   blink::WebInputEvent::GestureScrollUpdate) {
       // A touch scroll hasn't really started until the first
       // GestureScrollUpdate event.  Eg. if the page consumes all touchmoves
       // then no scrolling really ever occurs (even though we still send
       // GestureScrollBegin).
-      touch_event_queue_.PrependTouchScrollNotification();
+      touch_event_queue_->PrependTouchScrollNotification();
       touch_scroll_started_sent_ = true;
     }
-    touch_event_queue_.OnGestureScrollEvent(gesture_event);
+    touch_event_queue_->OnGestureScrollEvent(gesture_event);
   }
 
   gesture_event_queue_.QueueEvent(gesture_event);
@@ -184,15 +186,17 @@ void InputRouterImpl::SendGestureEvent(
 
 void InputRouterImpl::SendTouchEvent(
     const TouchEventWithLatencyInfo& touch_event) {
-  input_stream_validator_.Validate(touch_event.event);
-  touch_event_queue_.QueueEvent(touch_event);
+  TouchEventWithLatencyInfo updatd_touch_event = touch_event;
+  SetMovementXYForTouchPoints(&updatd_touch_event.event);
+  input_stream_validator_.Validate(updatd_touch_event.event);
+  touch_event_queue_->QueueEvent(updatd_touch_event);
 }
 
 // Forwards MouseEvent without passing it through
 // TouchpadTapSuppressionController.
 void InputRouterImpl::SendMouseEventImmediately(
     const MouseEventWithLatencyInfo& mouse_event) {
-  if (mouse_event.event.type == blink::WebInputEvent::MouseMove)
+  if (mouse_event.event.type() == blink::WebInputEvent::MouseMove)
     mouse_move_queue_.push_back(mouse_event);
 
   FilterAndSendWebInputEvent(mouse_event.event, mouse_event.latency);
@@ -224,7 +228,7 @@ const NativeWebKeyboardEvent* InputRouterImpl::GetLastKeyboardEvent() const {
 }
 
 void InputRouterImpl::NotifySiteIsMobileOptimized(bool is_mobile_optimized) {
-  touch_event_queue_.SetIsMobileOptimizedSite(is_mobile_optimized);
+  touch_event_queue_->SetIsMobileOptimizedSite(is_mobile_optimized);
 }
 
 void InputRouterImpl::RequestNotificationWhenFlushed() {
@@ -233,7 +237,7 @@ void InputRouterImpl::RequestNotificationWhenFlushed() {
 }
 
 bool InputRouterImpl::HasPendingEvents() const {
-  return !touch_event_queue_.empty() || !gesture_event_queue_.empty() ||
+  return !touch_event_queue_->Empty() || !gesture_event_queue_.empty() ||
          !key_queue_.empty() || !mouse_move_queue_.empty() ||
          wheel_event_queue_.has_pending() || select_message_pending_ ||
          move_caret_pending_ || active_renderer_fling_count_ > 0;
@@ -290,7 +294,7 @@ void InputRouterImpl::OnFilteringTouchEvent(
 void InputRouterImpl::OnGestureEventAck(
     const GestureEventWithLatencyInfo& event,
     InputEventAckState ack_result) {
-  touch_event_queue_.OnGestureEventAck(event, ack_result);
+  touch_event_queue_->OnGestureEventAck(event, ack_result);
   ack_handler_->OnGestureEventAck(event, ack_result);
 }
 
@@ -350,7 +354,7 @@ void InputRouterImpl::FilterAndSendWebInputEvent(
     const WebInputEvent& input_event,
     const ui::LatencyInfo& latency_info) {
   TRACE_EVENT1("input", "InputRouterImpl::FilterAndSendWebInputEvent", "type",
-               WebInputEvent::GetName(input_event.type));
+               WebInputEvent::GetName(input_event.type()));
   TRACE_EVENT_WITH_FLOW2("input,benchmark,devtools.timeline",
                          "LatencyInfo.Flow",
                          TRACE_ID_DONT_MANGLE(latency_info.trace_id()),
@@ -377,7 +381,7 @@ void InputRouterImpl::OfferToHandlers(const WebInputEvent& input_event,
   // Generate a synthetic ack if the event was sent so it doesn't block.
   if (!should_block) {
     ProcessInputEventAck(
-        input_event.type, INPUT_EVENT_ACK_STATE_IGNORED, latency_info,
+        input_event.type(), INPUT_EVENT_ACK_STATE_IGNORED, latency_info,
         WebInputEventTraits::GetUniqueTouchEventId(input_event),
         IGNORING_DISPOSITION);
   }
@@ -394,7 +398,7 @@ bool InputRouterImpl::OfferToClient(const WebInputEvent& input_event,
     case INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS:
       // Send the ACK and early exit.
       ProcessInputEventAck(
-          input_event.type, filter_ack, latency_info,
+          input_event.type(), filter_ack, latency_info,
           WebInputEventTraits::GetUniqueTouchEventId(input_event), CLIENT);
       // WARNING: |this| may be deleted at this point.
       consumed = true;
@@ -413,7 +417,7 @@ bool InputRouterImpl::OfferToClient(const WebInputEvent& input_event,
 bool InputRouterImpl::OfferToRenderer(const WebInputEvent& input_event,
                                       const ui::LatencyInfo& latency_info,
                                       InputEventDispatchType dispatch_type) {
-  DCHECK(input_event.type != blink::WebInputEvent::GestureFlingStart ||
+  DCHECK(input_event.type() != blink::WebInputEvent::GestureFlingStart ||
          static_cast<const blink::WebGestureEvent&>(input_event)
                  .data.flingStart.velocityX != 0.0 ||
          static_cast<const blink::WebGestureEvent&>(input_event)
@@ -427,13 +431,14 @@ bool InputRouterImpl::OfferToRenderer(const WebInputEvent& input_event,
   const WebInputEvent* event_to_send =
       event_in_viewport ? event_in_viewport.get() : &input_event;
 
-  if (Send(new InputMsg_HandleInputEvent(routing_id(), event_to_send,
-                                         latency_info, dispatch_type))) {
+  if (Send(new InputMsg_HandleInputEvent(
+          routing_id(), event_to_send, std::vector<IPC::WebInputEventPointer>(),
+          latency_info, dispatch_type))) {
     // Ack messages for ignored ack event types should never be sent by the
     // renderer. Consequently, such event types should not affect event time
     // or in-flight event count metrics.
     if (dispatch_type == InputEventDispatchType::DISPATCH_TYPE_BLOCKING)
-      client_->IncrementInFlightEventCount(input_event.type);
+      client_->IncrementInFlightEventCount(input_event.type());
     return true;
   }
   return false;
@@ -484,13 +489,13 @@ void InputRouterImpl::OnHasTouchEventHandlers(bool has_handlers) {
   if (!has_handlers)
     touch_action_filter_.ResetTouchAction();
 
-  touch_event_queue_.OnHasTouchEventHandlers(has_handlers);
+  touch_event_queue_->OnHasTouchEventHandlers(has_handlers);
   client_->OnHasTouchEventHandlers(has_handlers);
 }
 
 void InputRouterImpl::OnSetTouchAction(TouchAction touch_action) {
   // Synthetic touchstart events should get filtered out in RenderWidget.
-  DCHECK(touch_event_queue_.IsPendingAckTouchStart());
+  DCHECK(touch_event_queue_->IsPendingAckTouchStart());
   TRACE_EVENT1("input", "InputRouterImpl::OnSetTouchAction",
                "action", touch_action);
 
@@ -552,7 +557,7 @@ void InputRouterImpl::ProcessKeyboardAck(blink::WebInputEvent::Type type,
                                          const ui::LatencyInfo& latency) {
   if (key_queue_.empty()) {
     ack_handler_->OnUnexpectedEventAck(InputAckHandler::UNEXPECTED_ACK);
-  } else if (key_queue_.front().event.type != type) {
+  } else if (key_queue_.front().event.type() != type) {
     // Something must be wrong. Clear the |key_queue_| and char event
     // suppression so that we can resume from the error.
     key_queue_.clear();
@@ -607,8 +612,8 @@ void InputRouterImpl::ProcessTouchAck(InputEventAckState ack_result,
                                       const ui::LatencyInfo& latency,
                                       uint32_t unique_touch_event_id) {
   // |touch_event_queue_| will forward to OnTouchEventAck when appropriate.
-  touch_event_queue_.ProcessTouchAck(ack_result, latency,
-                                     unique_touch_event_id);
+  touch_event_queue_->ProcessTouchAck(ack_result, latency,
+                                      unique_touch_event_id);
 }
 
 void InputRouterImpl::UpdateTouchAckTimeoutEnabled() {
@@ -617,7 +622,7 @@ void InputRouterImpl::UpdateTouchAckTimeoutEnabled() {
   // to page functionality, so the timeout could do more harm than good.
   const bool touch_ack_timeout_enabled =
       touch_action_filter_.allowed_touch_action() != TOUCH_ACTION_NONE;
-  touch_event_queue_.SetAckTimeoutEnabled(touch_ack_timeout_enabled);
+  touch_event_queue_->SetAckTimeoutEnabled(touch_ack_timeout_enabled);
 }
 
 void InputRouterImpl::SignalFlushedIfNecessary() {
@@ -633,6 +638,33 @@ void InputRouterImpl::SignalFlushedIfNecessary() {
 
 void InputRouterImpl::SetFrameTreeNodeId(int frameTreeNodeId) {
   frame_tree_node_id_ = frameTreeNodeId;
+}
+
+void InputRouterImpl::SetMovementXYForTouchPoints(blink::WebTouchEvent* event) {
+  for (size_t i = 0; i < event->touchesLength; ++i) {
+    blink::WebTouchPoint* touch_point = &event->touches[i];
+    if (touch_point->state == blink::WebTouchPoint::StateMoved) {
+      const gfx::Point& last_position = global_touch_position_[touch_point->id];
+      touch_point->movementX =
+          touch_point->screenPosition.x - last_position.x();
+      touch_point->movementY =
+          touch_point->screenPosition.y - last_position.y();
+      global_touch_position_[touch_point->id].SetPoint(
+          touch_point->screenPosition.x, touch_point->screenPosition.y);
+    } else {
+      touch_point->movementX = 0;
+      touch_point->movementY = 0;
+      if (touch_point->state == blink::WebTouchPoint::StateReleased ||
+          touch_point->state == blink::WebTouchPoint::StateCancelled) {
+        global_touch_position_.erase(touch_point->id);
+      } else if (touch_point->state == blink::WebTouchPoint::StatePressed) {
+        DCHECK(global_touch_position_.find(touch_point->id) ==
+               global_touch_position_.end());
+        global_touch_position_[touch_point->id] = gfx::Point(
+            touch_point->screenPosition.x, touch_point->screenPosition.y);
+      }
+    }
+  }
 }
 
 }  // namespace content

@@ -65,9 +65,6 @@ class CursorWindowControllerTest : public test::AshTestBase {
 // Test that the composited cursor moves to another display when the real cursor
 // moves to another display.
 TEST_F(CursorWindowControllerTest, MoveToDifferentDisplay) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("200x200,200x200*2/r");
 
   WindowTreeHostManager* window_tree_host_manager =
@@ -102,7 +99,7 @@ TEST_F(CursorWindowControllerTest, MoveToDifferentDisplay) {
   // asynchronously. This is implemented in a platform specific way. Generate a
   // fake mouse move instead of waiting.
   gfx::Point new_cursor_position_in_host(20, 50);
-  secondary_root->GetHost()->ConvertPointToHost(&new_cursor_position_in_host);
+  secondary_root->GetHost()->ConvertDIPToPixels(&new_cursor_position_in_host);
   ui::test::EventGenerator secondary_generator(secondary_root);
   secondary_generator.MoveMouseToInHost(new_cursor_position_in_host);
 

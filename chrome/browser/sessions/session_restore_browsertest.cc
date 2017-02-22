@@ -4,11 +4,13 @@
 
 #include <stddef.h>
 
+#include <set>
 #include <vector>
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/ptr_util.h"
@@ -17,6 +19,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/defaults.h"
+#include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/lifetime/keep_alive_types.h"
 #include "chrome/browser/lifetime/scoped_keep_alive.h"
@@ -49,11 +52,13 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/download_test_observer.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/base/page_transition_types.h"
@@ -854,6 +859,38 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, Basic) {
             new_browser->tab_strip_model()->GetActiveWebContents()->GetURL());
 }
 
+IN_PROC_BROWSER_TEST_F(SessionRestoreTest, StartupPagesWithOnlyNtp) {
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
+  SessionStartupPref pref(SessionStartupPref::URLS);
+  pref.urls.push_back(url1_);
+  pref.urls.push_back(url2_);
+  SessionStartupPref::SetStartupPref(browser()->profile(), pref);
+
+  SessionRestore::OpenStartupPagesAfterCrash(browser());
+
+  ASSERT_EQ(1u, active_browser_list_->size());
+  ASSERT_EQ(2, browser()->tab_strip_model()->count());
+  EXPECT_EQ(url1_, browser()->tab_strip_model()->GetWebContentsAt(0)->GetURL());
+  EXPECT_EQ(url2_, browser()->tab_strip_model()->GetWebContentsAt(1)->GetURL());
+}
+
+IN_PROC_BROWSER_TEST_F(SessionRestoreTest, StartupPagesWithExistingPages) {
+  ui_test_utils::NavigateToURL(browser(), url3_);
+
+  SessionStartupPref pref(SessionStartupPref::URLS);
+  pref.urls.push_back(url1_);
+  pref.urls.push_back(url2_);
+  SessionStartupPref::SetStartupPref(browser()->profile(), pref);
+
+  SessionRestore::OpenStartupPagesAfterCrash(browser());
+
+  ASSERT_EQ(1u, active_browser_list_->size());
+  ASSERT_EQ(3, browser()->tab_strip_model()->count());
+  EXPECT_EQ(url3_, browser()->tab_strip_model()->GetWebContentsAt(0)->GetURL());
+  EXPECT_EQ(url1_, browser()->tab_strip_model()->GetWebContentsAt(1)->GetURL());
+  EXPECT_EQ(url2_, browser()->tab_strip_model()->GetWebContentsAt(2)->GetURL());
+}
+
 IN_PROC_BROWSER_TEST_F(SessionRestoreTest, NoMemoryPressureLoadsAllTabs) {
   // Add several tabs to the browser. Restart the browser and check that all
   // tabs got loaded properly.
@@ -910,35 +947,35 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MemoryPressureLoadsNotAllTabs) {
 IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreWebUI) {
   const GURL webui_url("chrome://omnibox");
   ui_test_utils::NavigateToURL(browser(), webui_url);
-  const content::WebContents* old_tab =
+  content::WebContents* old_tab =
       browser()->tab_strip_model()->GetActiveWebContents();
   EXPECT_EQ(content::BINDINGS_POLICY_WEB_UI,
-            old_tab->GetRenderViewHost()->GetEnabledBindings());
+            old_tab->GetMainFrame()->GetEnabledBindings());
 
   Browser* new_browser = QuitBrowserAndRestore(browser(), 1);
   ASSERT_EQ(1u, active_browser_list_->size());
-  const content::WebContents* new_tab =
+  content::WebContents* new_tab =
       new_browser->tab_strip_model()->GetActiveWebContents();
   EXPECT_EQ(webui_url, new_tab->GetURL());
   EXPECT_EQ(content::BINDINGS_POLICY_WEB_UI,
-            new_tab->GetRenderViewHost()->GetEnabledBindings());
+            new_tab->GetMainFrame()->GetEnabledBindings());
 }
 
 IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreWebUISettings) {
   const GURL webui_url("chrome://settings");
   ui_test_utils::NavigateToURL(browser(), webui_url);
-  const content::WebContents* old_tab =
+  content::WebContents* old_tab =
       browser()->tab_strip_model()->GetActiveWebContents();
   EXPECT_EQ(content::BINDINGS_POLICY_WEB_UI,
-            old_tab->GetRenderViewHost()->GetEnabledBindings());
+            old_tab->GetMainFrame()->GetEnabledBindings());
 
   Browser* new_browser = QuitBrowserAndRestore(browser(), 1);
   ASSERT_EQ(1u, active_browser_list_->size());
-  const content::WebContents* new_tab =
+  content::WebContents* new_tab =
       new_browser->tab_strip_model()->GetActiveWebContents();
   EXPECT_EQ(webui_url, new_tab->GetURL());
   EXPECT_EQ(content::BINDINGS_POLICY_WEB_UI,
-            new_tab->GetRenderViewHost()->GetEnabledBindings());
+            new_tab->GetMainFrame()->GetEnabledBindings());
 }
 
 IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoresForwardAndBackwardNavs) {
@@ -1410,6 +1447,77 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, SessionStorageAfterTabReplace) {
   Browser* new_browser = QuitBrowserAndRestore(browser(), 1);
   ASSERT_EQ(1u, active_browser_list_->size());
   EXPECT_EQ(1, new_browser->tab_strip_model()->count());
+}
+
+IN_PROC_BROWSER_TEST_F(SessionRestoreTest, TabWithDownloadDoesNotGetRestored) {
+  base::ScopedTempDir download_directory;
+  ASSERT_TRUE(download_directory.CreateUniqueTempDir());
+  ASSERT_TRUE(embedded_test_server()->Start());
+  ASSERT_EQ(Browser::TYPE_TABBED, browser()->type());
+
+  DownloadPrefs* download_prefs =
+      DownloadPrefs::FromBrowserContext(browser()->profile());
+  download_prefs->SetDownloadPath(download_directory.GetPath());
+  GURL first_download_url =
+      embedded_test_server()->GetURL("/downloads/a_zip_file.zip");
+
+  {
+    content::DownloadTestObserverTerminal observer(
+        content::BrowserContext::GetDownloadManager(browser()->profile()), 1,
+        content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_ACCEPT);
+    ui_test_utils::NavigateToURL(browser(), first_download_url);
+    observer.WaitForFinished();
+
+    ASSERT_EQ(1, browser()->tab_strip_model()->count());
+  }
+
+  {
+    content::DownloadManager* download_manager =
+        content::BrowserContext::GetDownloadManager(browser()->profile());
+    content::DownloadTestObserverInProgress in_progress_counter(
+        download_manager, 2);
+    content::DownloadTestObserverTerminal observer(
+        download_manager, 1,
+        content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_ACCEPT);
+
+    Browser* new_browser = QuitBrowserAndRestore(browser(), 1);
+    ASSERT_EQ(1, new_browser->tab_strip_model()->count());
+
+    // In addition to restarting the browser, create a new download in a new
+    // tab. If session restore erroneously created a new download, then its
+    // initiation task chain should strictly precede the task chain for the new
+    // download initiated here. While the download termination is asynchronous,
+    // the erroneous download should enter the IN_PROGRESS state prior to the
+    // second download reaching COMPLETE.
+    //
+    // Hence verifying that there was only one IN_PROGRESS download by the time
+    // the new download completes ensures that there is no second download.
+    GURL second_download_url =
+        embedded_test_server()->GetURL("/downloads/image-octet-stream.png");
+    ui_test_utils::NavigateToURLWithDisposition(
+        new_browser, second_download_url,
+        WindowOpenDisposition::NEW_FOREGROUND_TAB,
+        ui_test_utils::BROWSER_TEST_NONE);
+    ASSERT_EQ(2, new_browser->tab_strip_model()->count());
+
+    observer.WaitForFinished();
+    EXPECT_EQ(1u, in_progress_counter.NumDownloadsSeenInState(
+                      content::DownloadItem::IN_PROGRESS));
+    EXPECT_EQ(
+        1u, observer.NumDownloadsSeenInState(content::DownloadItem::COMPLETE));
+
+    // We still need to verify that the second download that completed above is
+    // the new one that we initiated. This would be true iff the DownloadManager
+    // has exactly two downloads and they correspond to |first_download_url| and
+    // |second_download_url|.
+    std::vector<content::DownloadItem*> downloads;
+    download_manager->GetAllDownloads(&downloads);
+    ASSERT_EQ(2u, downloads.size());
+    std::set<GURL> download_urls{downloads[0]->GetURL(),
+                                 downloads[1]->GetURL()};
+    std::set<GURL> expected_urls{first_download_url, second_download_url};
+    EXPECT_EQ(expected_urls, download_urls);
+  }
 }
 
 IN_PROC_BROWSER_TEST_F(SmartSessionRestoreTest, PRE_CorrectLoadingOrder) {

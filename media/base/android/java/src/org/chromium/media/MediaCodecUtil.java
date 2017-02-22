@@ -6,7 +6,11 @@ package org.chromium.media;
 
 import android.annotation.TargetApi;
 import android.media.MediaCodec;
+import android.media.MediaCodec.CryptoInfo;
 import android.media.MediaCodecInfo;
+import android.media.MediaCodecInfo.CodecCapabilities;
+import android.media.MediaCodecInfo.CodecProfileLevel;
+import android.media.MediaCodecInfo.VideoCapabilities;
 import android.media.MediaCodecList;
 import android.os.Build;
 
@@ -16,8 +20,10 @@ import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.MainDex;
 
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
+import java.util.NoSuchElementException;
 
 /**
  * A collection of MediaCodec utility functions.
@@ -35,8 +41,8 @@ class MediaCodecUtil {
      * Class to pass parameters from createDecoder()
      */
     public static class CodecCreationInfo {
-        public MediaCodec mediaCodec = null;
-        public boolean supportsAdaptivePlayback = false;
+        public MediaCodec mediaCodec;
+        public boolean supportsAdaptivePlayback;
         public BitrateAdjustmentTypes bitrateAdjustmentType = BitrateAdjustmentTypes.NO_ADJUSTMENT;
     }
 
@@ -63,7 +69,7 @@ class MediaCodecUtil {
      * Class to abstract platform version API differences for interacting with
      * the MediaCodecList.
      */
-    private static class MediaCodecListHelper {
+    private static class MediaCodecListHelper implements Iterable<MediaCodecInfo> {
         @TargetApi(Build.VERSION_CODES.LOLLIPOP)
         public MediaCodecListHelper() {
             if (hasNewMediaCodecList()) {
@@ -71,14 +77,19 @@ class MediaCodecUtil {
             }
         }
 
+        @Override
+        public Iterator<MediaCodecInfo> iterator() {
+            return new CodecInfoIterator();
+        }
+
         @SuppressWarnings("deprecation")
-        public int getCodecCount() {
+        private int getCodecCount() {
             if (hasNewMediaCodecList()) return mCodecList.length;
             return MediaCodecList.getCodecCount();
         }
 
         @SuppressWarnings("deprecation")
-        public MediaCodecInfo getCodecInfoAt(int index) {
+        private MediaCodecInfo getCodecInfoAt(int index) {
             if (hasNewMediaCodecList()) return mCodecList[index];
             return MediaCodecList.getCodecInfoAt(index);
         }
@@ -88,6 +99,28 @@ class MediaCodecUtil {
         }
 
         private MediaCodecInfo[] mCodecList;
+
+        private class CodecInfoIterator implements Iterator<MediaCodecInfo> {
+            private int mPosition = 0;
+
+            @Override
+            public boolean hasNext() {
+                return mPosition < getCodecCount();
+            }
+
+            @Override
+            public MediaCodecInfo next() {
+                if (mPosition == getCodecCount()) {
+                    throw new NoSuchElementException();
+                }
+                return getCodecInfoAt(mPosition++);
+            }
+
+            @Override
+            public void remove() {
+                throw new UnsupportedOperationException();
+            }
+        }
     }
 
     /**
@@ -114,18 +147,14 @@ class MediaCodecUtil {
     private static String getDefaultCodecName(
             String mime, int direction, boolean requireSoftwareCodec) {
         MediaCodecListHelper codecListHelper = new MediaCodecListHelper();
-        int codecCount = codecListHelper.getCodecCount();
-        for (int i = 0; i < codecCount; ++i) {
-            MediaCodecInfo info = codecListHelper.getCodecInfoAt(i);
-
+        for (MediaCodecInfo info : codecListHelper) {
             int codecDirection = info.isEncoder() ? MEDIA_CODEC_ENCODER : MEDIA_CODEC_DECODER;
             if (codecDirection != direction) continue;
 
             if (requireSoftwareCodec && !isSoftwareCodec(info.getName())) continue;
 
-            String[] supportedTypes = info.getSupportedTypes();
-            for (int j = 0; j < supportedTypes.length; ++j) {
-                if (supportedTypes[j].equalsIgnoreCase(mime)) return info.getName();
+            for (String supportedType : info.getSupportedTypes()) {
+                if (supportedType.equalsIgnoreCase(mime)) return info.getName();
             }
         }
 
@@ -141,15 +170,12 @@ class MediaCodecUtil {
     @CalledByNative
     private static int[] getEncoderColorFormatsForMime(String mime) {
         MediaCodecListHelper codecListHelper = new MediaCodecListHelper();
-        int codecCount = codecListHelper.getCodecCount();
-        for (int i = 0; i < codecCount; i++) {
-            MediaCodecInfo info = codecListHelper.getCodecInfoAt(i);
+        for (MediaCodecInfo info : codecListHelper) {
             if (!info.isEncoder()) continue;
 
-            String[] supportedTypes = info.getSupportedTypes();
-            for (int j = 0; j < supportedTypes.length; ++j) {
-                if (supportedTypes[j].equalsIgnoreCase(mime)) {
-                    return info.getCapabilitiesForType(supportedTypes[j]).colorFormats;
+            for (String supportedType : info.getSupportedTypes()) {
+                if (supportedType.equalsIgnoreCase(mime)) {
+                    return info.getCapabilitiesForType(supportedType).colorFormats;
                 }
             }
         }
@@ -174,6 +200,57 @@ class MediaCodecUtil {
             Log.e(TAG, "Cannot release media codec", e);
         }
         return true;
+    }
+
+    /**
+      * Needed on M and older to get correct information about VP9 support.
+      * @param profileLevels The CodecProfileLevelList to add supported profile levels to.
+      * @param videoCapabilities The MediaCodecInfo.VideoCapabilities used to infer support.
+      */
+    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+    private static void addVp9CodecProfileLevels(CodecProfileLevelList profileLevels,
+            MediaCodecInfo.CodecCapabilities codecCapabilities) {
+        // https://www.webmproject.org/vp9/levels
+        final int[][] bitrateMapping = {
+                {200, 10}, {800, 11}, {1800, 20}, {3600, 21}, {7200, 30}, {12000, 31}, {18000, 40},
+                {30000, 41}, {60000, 50}, {120000, 51}, {180000, 52},
+        };
+        VideoCapabilities videoCapabilities = codecCapabilities.getVideoCapabilities();
+        for (int[] entry : bitrateMapping) {
+            int bitrate = entry[0];
+            int level = entry[1];
+            if (videoCapabilities.getBitrateRange().contains(bitrate)) {
+                // Assume all platforms before N only support VP9 profile 0.
+                profileLevels.addCodecProfileLevel("VP9", 12 /* VP9PROFILE_PROFILE0 */, level);
+            }
+        }
+    }
+
+    /**
+      * Return an array of supported codecs and profiles.
+      */
+    @CalledByNative
+    private static Object[] getSupportedCodecProfileLevels() {
+        CodecProfileLevelList profileLevels = new CodecProfileLevelList();
+        MediaCodecListHelper codecListHelper = new MediaCodecListHelper();
+        for (MediaCodecInfo info : codecListHelper) {
+            for (String mime : info.getSupportedTypes()) {
+                // On versions L and M, VP9 codecCapabilities do not advertise profile level
+                // support. In this case, estimate the level from MediaCodecInfo.VideoCapabilities
+                // instead. Assume VP9 is not supported before L. For more information, consult
+                // https://developer.android.com/reference/android/media/MediaCodecInfo.CodecProfileLevel.html
+                CodecCapabilities codecCapabilities = info.getCapabilitiesForType(mime);
+                if (mime.endsWith("vp9") && Build.VERSION_CODES.LOLLIPOP <= Build.VERSION.SDK_INT
+                        && Build.VERSION.SDK_INT <= 23) {
+                    addVp9CodecProfileLevels(profileLevels, codecCapabilities);
+                    continue;
+                }
+                for (CodecProfileLevel profileLevel : codecCapabilities.profileLevels) {
+                    profileLevels.addCodecProfileLevel(mime, profileLevel);
+                }
+            }
+        }
+        return profileLevels.toArray();
     }
 
     /**
@@ -280,7 +357,7 @@ class MediaCodecUtil {
                 // We copy blacklisting patterns from software_renderin_list_json.cc
                 // although they are broader than the bugs they refer to.
 
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
+                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT) {
                     // Samsung Galaxy Note 2, http://crbug.com/308721.
                     if (Build.MODEL.startsWith("GT-")) return false;
 
@@ -289,12 +366,21 @@ class MediaCodecUtil {
 
                     // Samsung Galaxy Tab, http://crbug.com/408353.
                     if (Build.MODEL.startsWith("SM-T")) return false;
+
+                    // http://crbug.com/600454
+                    if (Build.MODEL.startsWith("SM-G")) return false;
                 }
             }
 
             // MediaTek decoders do not work properly on vp8. See http://crbug.com/446974 and
             // http://crbug.com/597836.
             if (Build.HARDWARE.startsWith("mt")) return false;
+
+            // http://crbug.com/600454
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT
+                    && Build.MODEL.startsWith("Lenovo A6000")) {
+                return false;
+            }
         } else if (mime.equals("video/x-vnd.on2.vp9")) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) return false;
 
@@ -471,16 +557,25 @@ class MediaCodecUtil {
     }
 
     /**
+     * Provides a way to blacklist MediaCodec.setOutputSurface() on devices.
+     * @return true if setOutputSurface() is expected to work.
+     */
+    @CalledByNative
+    static boolean isSetOutputSurfaceSupported() {
+        // All Huawei devices based on this processor will immediately hang during
+        // MediaCodec.setOutputSurface().  http://crbug.com/683401
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                && !Build.HARDWARE.equalsIgnoreCase("hi6210sft");
+    }
+
+    /**
      * Find HW encoder with given MIME type.
      * @param mime MIME type of the media.
      * @return HWEncoderProperties object.
      */
     private static HWEncoderProperties findHWEncoder(String mime) {
         MediaCodecListHelper codecListHelper = new MediaCodecListHelper();
-        int codecCount = codecListHelper.getCodecCount();
-        for (int i = 0; i < codecCount; ++i) {
-            MediaCodecInfo info = codecListHelper.getCodecInfoAt(i);
-
+        for (MediaCodecInfo info : codecListHelper) {
             if (!info.isEncoder() || isSoftwareCodec(info.getName())) continue;
 
             String encoderName = null;
@@ -513,5 +608,28 @@ class MediaCodecUtil {
 
         Log.w(TAG, "HW encoder for " + mime + " is not available on this device.");
         return null;
+    }
+
+    /**
+     * Returns true if and only if the platform we are running on supports the 'cbcs'
+     * encryption scheme, specifically AES CBC encryption with possibility of pattern
+     * encryption.
+     * While 'cbcs' scheme was originally implemented in N, there was a bug (in the
+     * DRM code) which means that it didn't really work properly until post-N).
+     */
+    static boolean platformSupportsCbcsEncryption() {
+        return Build.VERSION.SDK_INT > Build.VERSION_CODES.N;
+    }
+
+    /**
+     * Sets the encryption pattern value if and only if CryptoInfo.setPattern method is
+     * supported.
+     * This method was introduced in Android N. Note that if platformSupportsCbcsEncryption
+     * returns true, then this function will set the pattern.
+     */
+    static void setPatternIfSupported(CryptoInfo cryptoInfo, int encrypt, int skip) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            cryptoInfo.setPattern(new CryptoInfo.Pattern(encrypt, skip));
+        }
     }
 }

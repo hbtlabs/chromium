@@ -14,9 +14,11 @@
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequenced_task_runner.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task_scheduler/task_scheduler.h"
 #include "base/values.h"
 #include "base/version.h"
 #include "build/build_config.h"
@@ -48,6 +50,7 @@
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/test/url_request/url_request_failed_job.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -76,7 +79,10 @@ class TestURLFetcherDelegate : public net::URLFetcherDelegate {
       net::URLRequestStatus expected_request_status)
       : expected_request_status_(expected_request_status),
         is_complete_(false),
-        fetcher_(net::URLFetcher::Create(url, net::URLFetcher::GET, this)) {
+        fetcher_(net::URLFetcher::Create(url,
+                                         net::URLFetcher::GET,
+                                         this,
+                                         TRAFFIC_ANNOTATION_FOR_TESTS)) {
     fetcher_->SetRequestContext(context_getter.get());
     fetcher_->Start();
   }
@@ -151,6 +157,10 @@ void SpinThreads() {
   content::RunAllPendingInMessageLoop();
   content::RunAllPendingInMessageLoop(content::BrowserThread::DB);
   content::RunAllPendingInMessageLoop(content::BrowserThread::FILE);
+
+  // This prevents HistoryBackend from accessing its databases after the
+  // directory that contains them has been deleted.
+  base::TaskScheduler::GetInstance()->FlushForTesting();
 }
 
 // Sends an HttpResponse for requests for "/" that result in sending an HPKP

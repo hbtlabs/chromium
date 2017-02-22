@@ -7,96 +7,6 @@
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace ui {
-namespace {
-
-// Return true if |attr| is a node ID that would need to be mapped when
-// renumbering the ids in a combined tree.
-bool IsNodeIdIntAttribute(AXIntAttribute attr) {
-  switch (attr) {
-    case AX_ATTR_ACTIVEDESCENDANT_ID:
-    case AX_ATTR_MEMBER_OF_ID:
-    case AX_ATTR_NEXT_ON_LINE_ID:
-    case AX_ATTR_PREVIOUS_ON_LINE_ID:
-    case AX_ATTR_TABLE_HEADER_ID:
-    case AX_ATTR_TABLE_COLUMN_HEADER_ID:
-    case AX_ATTR_TABLE_ROW_HEADER_ID:
-      return true;
-
-    // Note: all of the attributes are included here explicitly,
-    // rather than using "default:", so that it's a compiler error to
-    // add a new attribute without explicitly considering whether it's
-    // a node id attribute or not.
-    case AX_INT_ATTRIBUTE_NONE:
-    case AX_ATTR_SCROLL_X:
-    case AX_ATTR_SCROLL_X_MIN:
-    case AX_ATTR_SCROLL_X_MAX:
-    case AX_ATTR_SCROLL_Y:
-    case AX_ATTR_SCROLL_Y_MIN:
-    case AX_ATTR_SCROLL_Y_MAX:
-    case AX_ATTR_TEXT_SEL_START:
-    case AX_ATTR_TEXT_SEL_END:
-    case AX_ATTR_TABLE_ROW_COUNT:
-    case AX_ATTR_TABLE_COLUMN_COUNT:
-    case AX_ATTR_TABLE_ROW_INDEX:
-    case AX_ATTR_TABLE_COLUMN_INDEX:
-    case AX_ATTR_TABLE_CELL_COLUMN_INDEX:
-    case AX_ATTR_TABLE_CELL_COLUMN_SPAN:
-    case AX_ATTR_TABLE_CELL_ROW_INDEX:
-    case AX_ATTR_TABLE_CELL_ROW_SPAN:
-    case AX_ATTR_SORT_DIRECTION:
-    case AX_ATTR_HIERARCHICAL_LEVEL:
-    case AX_ATTR_NAME_FROM:
-    case AX_ATTR_DESCRIPTION_FROM:
-    case AX_ATTR_CHILD_TREE_ID:
-    case AX_ATTR_SET_SIZE:
-    case AX_ATTR_POS_IN_SET:
-    case AX_ATTR_COLOR_VALUE:
-    case AX_ATTR_ARIA_CURRENT_STATE:
-    case AX_ATTR_BACKGROUND_COLOR:
-    case AX_ATTR_COLOR:
-    case AX_ATTR_INVALID_STATE:
-    case AX_ATTR_TEXT_DIRECTION:
-    case AX_ATTR_TEXT_STYLE:
-      return false;
-  }
-
-  NOTREACHED();
-  return false;
-}
-
-// Return true if |attr| contains a vector of node ids that would need
-// to be mapped when renumbering the ids in a combined tree.
-bool IsNodeIdIntListAttribute(AXIntListAttribute attr) {
-  switch (attr) {
-    case AX_ATTR_CELL_IDS:
-    case AX_ATTR_CONTROLS_IDS:
-    case AX_ATTR_DESCRIBEDBY_IDS:
-    case AX_ATTR_FLOWTO_IDS:
-    case AX_ATTR_INDIRECT_CHILD_IDS:
-    case AX_ATTR_LABELLEDBY_IDS:
-    case AX_ATTR_UNIQUE_CELL_IDS:
-      return true;
-
-    // Note: all of the attributes are included here explicitly,
-    // rather than using "default:", so that it's a compiler error to
-    // add a new attribute without explicitly considering whether it's
-    // a node id attribute or not.
-    case AX_INT_LIST_ATTRIBUTE_NONE:
-    case AX_ATTR_MARKER_TYPES:
-    case AX_ATTR_MARKER_STARTS:
-    case AX_ATTR_MARKER_ENDS:
-    case AX_ATTR_CHARACTER_OFFSETS:
-    case AX_ATTR_CACHED_LINE_STARTS:
-    case AX_ATTR_WORD_STARTS:
-    case AX_ATTR_WORD_ENDS:
-      return false;
-  }
-
-  NOTREACHED();
-  return false;
-}
-
-}  // namespace
 
 AXTreeCombiner::AXTreeCombiner() {
 }
@@ -167,12 +77,6 @@ int32_t AXTreeCombiner::MapId(int32_t tree_id, int32_t node_id) {
 }
 
 void AXTreeCombiner::ProcessTree(const AXTreeUpdate* tree) {
-  // The root of each tree may contain a transform that needs to apply
-  // to all of its descendants.
-  gfx::Transform old_transform = transform_;
-  if (!tree->nodes.empty() && tree->nodes[0].transform)
-    transform_.ConcatTransform(*tree->nodes[0].transform);
-
   int32_t tree_id = tree->tree_data.tree_id;
   for (size_t i = 0; i < tree->nodes.size(); ++i) {
     AXNodeData node = tree->nodes[i];
@@ -185,9 +89,9 @@ void AXTreeCombiner::ProcessTree(const AXTreeUpdate* tree) {
     for (size_t j = 0; j < node.child_ids.size(); ++j)
       node.child_ids[j] = MapId(tree_id, node.child_ids[j]);
 
-    // Reset the offset container ID because we make all bounding boxes
-    // absolute.
-    node.offset_container_id = -1;
+    // Map the container id.
+    if (node.offset_container_id > 0)
+      node.offset_container_id = MapId(tree_id, node.offset_container_id);
 
     // Map other int attributes that refer to node IDs, and remove the
     // AX_ATTR_CHILD_TREE_ID attribute.
@@ -209,10 +113,6 @@ void AXTreeCombiner::ProcessTree(const AXTreeUpdate* tree) {
           attr.second[k] = MapId(tree_id, attr.second[k]);
       }
     }
-
-    // Apply the transformation to the object's bounds to put it in
-    // the coordinate space of the root frame.
-    transform_.TransformRect(&node.location);
 
     // See if this node has a child tree. As a sanity check make sure the
     // child tree lists this tree as its parent tree id.
@@ -236,9 +136,6 @@ void AXTreeCombiner::ProcessTree(const AXTreeUpdate* tree) {
     if (child_tree)
       ProcessTree(child_tree);
   }
-
-  // Reset the transform.
-  transform_ = old_transform;
 }
 
 }  // namespace ui

@@ -32,6 +32,7 @@
 #include "core/events/EventInit.h"
 #include "core/events/EventPath.h"
 #include "platform/heap/Handle.h"
+#include "wtf/Time.h"
 #include "wtf/text/AtomicString.h"
 
 namespace blink {
@@ -39,7 +40,7 @@ namespace blink {
 class DOMWrapperWorld;
 class EventDispatchMediator;
 class EventTarget;
-class ExecutionContext;
+class ScriptState;
 
 class CORE_EXPORT Event : public GarbageCollectedFinalized<Event>,
                           public ScriptWrappable {
@@ -51,25 +52,6 @@ class CORE_EXPORT Event : public GarbageCollectedFinalized<Event>,
     kCapturingPhase = 1,
     kAtTarget = 2,
     kBubblingPhase = 3
-  };
-
-  enum EventType {
-    kMousedown = 1,
-    kMouseup = 2,
-    kMouseover = 4,
-    kMouseout = 8,
-    kMousemove = 16,
-    kMousedrag = 32,
-    kClick = 64,
-    kDblclick = 128,
-    kKeydown = 256,
-    kKeyup = 512,
-    kKeypress = 1024,
-    kDragdrop = 2048,
-    kFocus = 4096,
-    kBlur = 8192,
-    kSelect = 16384,
-    kChange = 32768
   };
 
   enum RailsMode {
@@ -156,18 +138,24 @@ class CORE_EXPORT Event : public GarbageCollectedFinalized<Event>,
   // using the platform timestamp (see |m_platformTimeStamp|).
   // For more info see http://crbug.com/160524
   double timeStamp(ScriptState*) const;
-  double platformTimeStamp() const { return m_platformTimeStamp; }
+  TimeTicks platformTimeStamp() const { return m_platformTimeStamp; }
 
   void stopPropagation() { m_propagationStopped = true; }
+  void setStopPropagation(bool stopPropagation) {
+    m_propagationStopped = stopPropagation;
+  }
   void stopImmediatePropagation() { m_immediatePropagationStopped = true; }
+  void setStopImmediatePropagation(bool stopImmediatePropagation) {
+    m_immediatePropagationStopped = stopImmediatePropagation;
+  }
 
   // IE Extensions
   EventTarget* srcElement() const {
     return target();
   }  // MSIE extension - "the object that fired the event"
 
-  bool legacyReturnValue(ExecutionContext*) const;
-  void setLegacyReturnValue(ExecutionContext*, bool returnValue);
+  bool legacyReturnValue(ScriptState*) const;
+  void setLegacyReturnValue(ScriptState*, bool returnValue);
 
   virtual const AtomicString& interfaceName() const;
   bool hasInterface(const AtomicString&) const;
@@ -210,10 +198,10 @@ class CORE_EXPORT Event : public GarbageCollectedFinalized<Event>,
   bool defaultHandled() const { return m_defaultHandled; }
   void setDefaultHandled() { m_defaultHandled = true; }
 
-  bool cancelBubble(ExecutionContext* = nullptr) const {
-    return m_cancelBubble;
+  bool cancelBubble(ScriptState* = nullptr) const {
+    return propagationStopped();
   }
-  void setCancelBubble(ExecutionContext*, bool);
+  void setCancelBubble(ScriptState*, bool);
 
   Event* underlyingEvent() const { return m_underlyingEvent.get(); }
   void setUnderlyingEvent(Event*);
@@ -264,11 +252,11 @@ class CORE_EXPORT Event : public GarbageCollectedFinalized<Event>,
         bool canBubble,
         bool cancelable,
         ComposedMode,
-        double platformTimeStamp);
+        TimeTicks platformTimeStamp);
   Event(const AtomicString& type,
         bool canBubble,
         bool cancelable,
-        double platformTimeStamp);
+        TimeTicks platformTimeStamp);
   Event(const AtomicString& type,
         bool canBubble,
         bool cancelable,
@@ -297,7 +285,6 @@ class CORE_EXPORT Event : public GarbageCollectedFinalized<Event>,
   unsigned m_immediatePropagationStopped : 1;
   unsigned m_defaultPrevented : 1;
   unsigned m_defaultHandled : 1;
-  unsigned m_cancelBubble : 1;
   unsigned m_wasInitialized : 1;
   unsigned m_isTrusted : 1;
 
@@ -316,7 +303,7 @@ class CORE_EXPORT Event : public GarbageCollectedFinalized<Event>,
   // The monotonic platform time in seconds, for input events it is the
   // event timestamp provided by the host OS and reported in the original
   // WebInputEvent instance.
-  double m_platformTimeStamp;
+  TimeTicks m_platformTimeStamp;
 };
 
 #define DEFINE_EVENT_TYPE_CASTS(typeName)                          \

@@ -52,9 +52,11 @@ class FakeReflector : public Reflector {
 // GL surface.
 class DirectOutputSurface : public cc::OutputSurface {
  public:
-  DirectOutputSurface(scoped_refptr<InProcessContextProvider> context_provider)
-      : cc::OutputSurface(std::move(context_provider)),
-        weak_ptr_factory_(this) {}
+  explicit DirectOutputSurface(
+      scoped_refptr<InProcessContextProvider> context_provider)
+      : cc::OutputSurface(context_provider), weak_ptr_factory_(this) {
+    capabilities_.flipped_output_surface = true;
+  }
 
   ~DirectOutputSurface() override {}
 
@@ -70,7 +72,8 @@ class DirectOutputSurface : public cc::OutputSurface {
   void Reshape(const gfx::Size& size,
                float device_scale_factor,
                const gfx::ColorSpace& color_space,
-               bool has_alpha) override {
+               bool has_alpha,
+               bool use_stencil) override {
     context_provider()->ContextGL()->ResizeCHROMIUM(
         size.width(), size.height(), device_scale_factor, has_alpha);
   }
@@ -119,13 +122,14 @@ class DirectOutputSurface : public cc::OutputSurface {
 
 struct InProcessContextFactory::PerCompositorData {
   gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
+  std::unique_ptr<cc::BeginFrameSource> begin_frame_source;
   std::unique_ptr<cc::Display> display;
 };
 
 InProcessContextFactory::InProcessContextFactory(
     bool context_factory_for_test,
     cc::SurfaceManager* surface_manager)
-    : next_surface_client_id_(1u),
+    : next_surface_sink_id_(1u),
       use_test_surface_(true),
       context_factory_for_test_(context_factory_for_test),
       surface_manager_(surface_manager) {
@@ -200,15 +204,18 @@ void InProcessContextFactory::CreateCompositorFrameSink(
           base::MakeUnique<cc::DelayBasedTimeSource>(
               compositor->task_runner().get())));
   std::unique_ptr<cc::DisplayScheduler> scheduler(new cc::DisplayScheduler(
-      begin_frame_source.get(), compositor->task_runner().get(),
+      compositor->task_runner().get(),
       display_output_surface->capabilities().max_frames_pending));
 
   data->display = base::MakeUnique<cc::Display>(
       &shared_bitmap_manager_, &gpu_memory_buffer_manager_,
       compositor->GetRendererSettings(), compositor->frame_sink_id(),
-      std::move(begin_frame_source), std::move(display_output_surface),
+      begin_frame_source.get(), std::move(display_output_surface),
       std::move(scheduler), base::MakeUnique<cc::TextureMailboxDeleter>(
                                 compositor->task_runner().get()));
+  // Note that we are careful not to destroy a prior |data->begin_frame_source|
+  // until we have reset |data->display|.
+  data->begin_frame_source = std::move(begin_frame_source);
 
   auto* display = per_compositor_data_[compositor.get()]->display.get();
   auto compositor_frame_sink = base::MakeUnique<cc::DirectCompositorFrameSink>(
@@ -216,6 +223,8 @@ void InProcessContextFactory::CreateCompositorFrameSink(
       shared_worker_context_provider_, &gpu_memory_buffer_manager_,
       &shared_bitmap_manager_);
   compositor->SetCompositorFrameSink(std::move(compositor_frame_sink));
+
+  data->display->Resize(compositor->size());
 }
 
 std::unique_ptr<Reflector> InProcessContextFactory::CreateReflector(
@@ -276,7 +285,12 @@ cc::TaskGraphRunner* InProcessContextFactory::GetTaskGraphRunner() {
 }
 
 cc::FrameSinkId InProcessContextFactory::AllocateFrameSinkId() {
-  return cc::FrameSinkId(next_surface_client_id_++, 0);
+  // The FrameSinkId generated here must be unique with
+  // RenderWidgetHostViewAura's
+  // and RenderWidgetHostViewMac's FrameSinkId allocation.
+  // TODO(crbug.com/685777): Centralize allocation in one place for easier
+  // maintenance.
+  return cc::FrameSinkId(0, next_surface_sink_id_++);
 }
 
 cc::SurfaceManager* InProcessContextFactory::GetSurfaceManager() {

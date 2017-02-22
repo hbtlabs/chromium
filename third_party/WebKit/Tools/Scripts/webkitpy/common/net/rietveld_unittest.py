@@ -8,7 +8,7 @@ import urllib2
 from webkitpy.common.net.rietveld import Rietveld
 from webkitpy.common.net.buildbot import Build
 from webkitpy.common.net.web_mock import MockWeb
-from webkitpy.common.system.logtesting import LoggingTestCase
+from webkitpy.common.system.log_testing import LoggingTestCase
 
 
 class RietveldTest(LoggingTestCase):
@@ -93,27 +93,3 @@ class RietveldTest(LoggingTestCase):
     def test_changed_files_no_results(self):
         rietveld = Rietveld(self.mock_web())
         self.assertIsNone(rietveld.changed_files(11113333))
-
-    # Testing protected methods - pylint: disable=protected-access
-
-    def test_filter_latest_jobs_empty(self):
-        rietveld = Rietveld(self.mock_web())
-        self.assertEqual(rietveld._filter_latest_builds([]), [])
-
-    def test_filter_latest_jobs_higher_build_first(self):
-        rietveld = Rietveld(self.mock_web())
-        self.assertEqual(
-            rietveld._filter_latest_builds([Build('foo', 5), Build('foo', 3), Build('bar', 5)]),
-            [Build('bar', 5), Build('foo', 5)])
-
-    def test_filter_latest_jobs_higher_build_last(self):
-        rietveld = Rietveld(self.mock_web())
-        self.assertEqual(
-            rietveld._filter_latest_builds([Build('foo', 3), Build('bar', 5), Build('foo', 5)]),
-            [Build('bar', 5), Build('foo', 5)])
-
-    def test_filter_latest_jobs_no_build_number(self):
-        rietveld = Rietveld(self.mock_web())
-        self.assertEqual(
-            rietveld._filter_latest_builds([Build('foo', 3), Build('bar'), Build('bar')]),
-            [Build('bar'), Build('foo', 3)])

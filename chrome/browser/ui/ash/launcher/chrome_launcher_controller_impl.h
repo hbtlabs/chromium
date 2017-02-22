@@ -22,13 +22,13 @@
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/launcher_app_updater.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "components/sync_preferences/pref_service_syncable_observer.h"
 #include "ui/aura/window_observer.h"
 
 class AppSyncUIState;
 class BrowserStatusMonitor;
 class Profile;
 class AppWindowLauncherController;
-class TabContents;
 
 namespace ash {
 class ShelfModel;
@@ -37,16 +37,8 @@ class ChromeLauncherPrefsObserver;
 }
 }
 
-namespace aura {
-class Window;
-}
-
 namespace content {
 class BrowserContext;
-}
-
-namespace extensions {
-class Extension;
 }
 
 class ChromeLauncherControllerUserSwitchObserver;
@@ -62,16 +54,18 @@ class ChromeLauncherControllerImpl
       private ash::ShelfModelObserver,
       private ash::WindowTreeHostManager::Observer,
       private AppSyncUIStateObserver,
-      private app_list::AppListSyncableService::Observer {
+      private app_list::AppListSyncableService::Observer,
+      private sync_preferences::PrefServiceSyncableObserver {
  public:
   ChromeLauncherControllerImpl(Profile* profile, ash::ShelfModel* model);
   ~ChromeLauncherControllerImpl() override;
 
   // ChromeLauncherController:
-  void Init() override;
   ash::ShelfID CreateAppLauncherItem(LauncherItemController* controller,
                                      const std::string& app_id,
                                      ash::ShelfItemStatus status) override;
+  const ash::ShelfItem* GetItem(ash::ShelfID id) const override;
+  void SetItemType(ash::ShelfID id, ash::ShelfItemType type) override;
   void SetItemStatus(ash::ShelfID id, ash::ShelfItemStatus status) override;
   void SetItemController(ash::ShelfID id,
                          LauncherItemController* controller) override;
@@ -80,7 +74,6 @@ class ChromeLauncherControllerImpl
   void Unpin(ash::ShelfID id) override;
   bool IsPinned(ash::ShelfID id) override;
   void TogglePinned(ash::ShelfID id) override;
-  bool IsPinnable(ash::ShelfID id) const override;
   void LockV1AppWithID(const std::string& app_id) override;
   void UnlockV1AppWithID(const std::string& app_id) override;
   void Launch(ash::ShelfID id, int event_flags) override;
@@ -88,29 +81,25 @@ class ChromeLauncherControllerImpl
   bool IsOpen(ash::ShelfID id) override;
   bool IsPlatformApp(ash::ShelfID id) override;
   void ActivateApp(const std::string& app_id,
-                   ash::LaunchSource source,
+                   ash::ShelfLaunchSource source,
                    int event_flags) override;
-  extensions::LaunchType GetLaunchType(ash::ShelfID id) override;
   void SetLauncherItemImage(ash::ShelfID shelf_id,
                             const gfx::ImageSkia& image) override;
-  bool IsWindowedAppInLauncher(const std::string& app_id) override;
-  void SetLaunchType(ash::ShelfID id,
-                     extensions::LaunchType launch_type) override;
   void UpdateAppState(content::WebContents* contents,
                       AppState app_state) override;
   ash::ShelfID GetShelfIDForWebContents(
       content::WebContents* contents) override;
   void SetRefocusURLPatternForTest(ash::ShelfID id, const GURL& url) override;
-  ash::ShelfItemDelegate::PerformedAction ActivateWindowOrMinimizeIfActive(
+  ash::ShelfAction ActivateWindowOrMinimizeIfActive(
       ui::BaseWindow* window,
       bool allow_minimize) override;
   void ActiveUserChanged(const std::string& user_email) override;
   void AdditionalUserAddedToSession(Profile* profile) override;
-  ChromeLauncherAppMenuItems GetApplicationList(const ash::ShelfItem& item,
-                                                int event_flags) override;
+  ash::ShelfAppMenuItemList GetAppMenuItems(const ash::ShelfItem& item,
+                                            int event_flags) override;
   std::vector<content::WebContents*> GetV1ApplicationsFromAppId(
       const std::string& app_id) override;
-  void ActivateShellApp(const std::string& app_id, int index) override;
+  void ActivateShellApp(const std::string& app_id, int window_index) override;
   bool IsWebContentHandledByApplication(content::WebContents* web_contents,
                                         const std::string& app_id) override;
   bool ContentCanBeHandledByGmailApp(
@@ -161,16 +150,20 @@ class ChromeLauncherControllerImpl
                                 const std::string& app_id) override;
 
  protected:
+  // ChromeLauncherController:
+  void OnInit() override;
+
   // Creates a new app shortcut item and controller on the shelf at |index|.
   // Use kInsertItemAtEnd to add a shortcut as the last item.
   ash::ShelfID CreateAppShortcutLauncherItem(
-      const ash::launcher::AppLauncherId& app_launcher_id,
+      const ash::AppLauncherId& app_launcher_id,
       int index);
 
  private:
   friend class ChromeLauncherControllerImplTest;
   friend class ShelfAppBrowserTest;
   friend class LauncherPlatformAppBrowserTest;
+  friend class TestChromeLauncherControllerImpl;
   FRIEND_TEST_ALL_PREFIXES(ChromeLauncherControllerImplTest, AppPanels);
 
   typedef std::map<ash::ShelfID, LauncherItemController*> IDToItemControllerMap;
@@ -185,7 +178,7 @@ class ChromeLauncherControllerImpl
   // Creates a new app shortcut item and controller on the shelf at |index|.
   // Use kInsertItemAtEnd to add a shortcut as the last item.
   ash::ShelfID CreateAppShortcutLauncherItemWithType(
-      const ash::launcher::AppLauncherId& app_launcher_id,
+      const ash::AppLauncherId& app_launcher_id,
       int index,
       ash::ShelfItemType shelf_item_type);
 
@@ -214,6 +207,9 @@ class ChromeLauncherControllerImpl
   // Schedules re-sync of shelf model.
   void ScheduleUpdateAppLaunchersFromPref();
 
+  // Update the policy-pinned flag for each shelf item.
+  void UpdatePolicyPinnedAppsFromPrefs();
+
   // Sets whether the virtual keyboard is enabled from prefs.
   void SetVirtualKeyboardBehaviorFromPrefs();
 
@@ -230,10 +226,6 @@ class ChromeLauncherControllerImpl
                                      ash::ShelfItemStatus status,
                                      int index,
                                      ash::ShelfItemType shelf_item_type);
-
-  // Enumerate all Web contents which match a given shortcut |controller|.
-  std::vector<content::WebContents*> GetV1ApplicationsFromController(
-      LauncherItemController* controller);
 
   // Create ShelfItem for Browser Shortcut.
   void CreateBrowserShortcutLauncherItem();
@@ -277,6 +269,9 @@ class ChromeLauncherControllerImpl
 
   // app_list::AppListSyncableService::Observer:
   void OnSyncModelUpdated() override;
+
+  // sync_preferences::PrefServiceSyncableObserver:
+  void OnIsSyncingChanged() override;
 
   // Unpins shelf item and optionally updates pin prefs when |update_prefs| is
   // set to true.

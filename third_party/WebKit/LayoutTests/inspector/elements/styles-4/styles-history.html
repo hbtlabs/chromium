@@ -115,10 +115,10 @@ function test()
     {
         function result()
         {
-            InspectorTest.addResult("History length: " + uiSourceCode.history.length);
-            for (var i = 0; i < uiSourceCode.history.length; ++i) {
+            InspectorTest.addResult("History length: " + uiSourceCode.history().length);
+            for (var i = 0; i < uiSourceCode.history().length; ++i) {
                 InspectorTest.addResult("Item " + i + ":");
-                InspectorTest.addResult(uiSourceCode.history[i].content);
+                InspectorTest.addResult(uiSourceCode.history()[i].content);
             }
             next();
         }
@@ -127,7 +127,7 @@ function test()
 
     function getLiveProperty(style, name)
     {
-        for (var property of style.allProperties) {
+        for (var property of style.allProperties()) {
             if (!property.activeInStyle())
                 continue;
             if (property.name === name)

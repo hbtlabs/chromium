@@ -16,13 +16,21 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
+#include "base/trace_event/memory_dump_provider.h"
 #include "net/base/net_export.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_server_properties.h"
 #include "net/http/transport_security_state.h"
 #include "net/ssl/ssl_config_service.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request.h"
+
+namespace base {
+namespace trace_event {
+class ProcessMemoryDump;
+}
+}
 
 namespace net {
 class CertVerifier;
@@ -51,10 +59,11 @@ class URLRequestThrottlerManager;
 // URLRequestContext rather than creating a new one, as guaranteeing that the
 // URLRequestContext is destroyed before its members can be difficult.
 class NET_EXPORT URLRequestContext
-    : NON_EXPORTED_BASE(public base::NonThreadSafe) {
+    : NON_EXPORTED_BASE(public base::NonThreadSafe),
+      public base::trace_event::MemoryDumpProvider {
  public:
   URLRequestContext();
-  virtual ~URLRequestContext();
+  ~URLRequestContext() override;
 
   // Copies the state from |other| into this context.
   void CopyFrom(const URLRequestContext* other);
@@ -63,14 +72,28 @@ class NET_EXPORT URLRequestContext
   // session.
   const HttpNetworkSession::Params* GetNetworkSessionParams() const;
 
+  // This function should not be used in Chromium, please use the version with
+  // NetworkTrafficAnnotationTag in the future.
   std::unique_ptr<URLRequest> CreateRequest(
       const GURL& url,
       RequestPriority priority,
       URLRequest::Delegate* delegate) const;
 
-  NetLog* net_log() const {
-    return net_log_;
-  }
+  // |traffic_annotation| is metadata about the network traffic send via this
+  // URLRequest, see net::DefineNetworkTrafficAnnotation. Note that:
+  // - net provides the API for tagging requests with an opaque identifier.
+  // - tools/traffic_annotation/traffic_annotation.proto contains the Chrome
+  // specific .proto describing the verbose annotation format that Chrome's
+  // callsites are expected to follow.
+  // - tools/traffic_annotation/ contains sample and template for annotation and
+  // tools will be added for verification following crbug.com/690323.
+  std::unique_ptr<URLRequest> CreateRequest(
+      const GURL& url,
+      RequestPriority priority,
+      URLRequest::Delegate* delegate,
+      NetworkTrafficAnnotationTag traffic_annotation) const;
+
+  NetLog* net_log() const { return net_log_; }
 
   void set_net_log(NetLog* net_log) {
     net_log_ = net_log;
@@ -230,6 +253,24 @@ class NET_EXPORT URLRequestContext
 
   bool enable_brotli() const { return enable_brotli_; }
 
+  // Sets the |check_cleartext_permitted| flag, which controls whether to check
+  // system policy before allowing a cleartext http or ws request.
+  void set_check_cleartext_permitted(bool check_cleartext_permitted) {
+    check_cleartext_permitted_ = check_cleartext_permitted;
+  }
+
+  // Returns current value of the |check_cleartext_permitted| flag.
+  bool check_cleartext_permitted() const { return check_cleartext_permitted_; }
+
+  // Sets a name for this URLRequestContext. Currently the name is used in
+  // MemoryDumpProvier to annotate memory usage. The name does not need to be
+  // unique.
+  void set_name(const std::string& name) { name_ = name; }
+
+  // MemoryDumpProvider implementation:
+  bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
+                    base::trace_event::ProcessMemoryDump* pmd) override;
+
  private:
   // ---------------------------------------------------------------------------
   // Important: When adding any new members below, consider whether they need to
@@ -268,6 +309,14 @@ class NET_EXPORT URLRequestContext
 
   // Enables Brotli Content-Encoding support.
   bool enable_brotli_;
+  // Enables checking system policy before allowing a cleartext http or ws
+  // request. Only used on Android.
+  bool check_cleartext_permitted_;
+
+  // An optional name which can be set to describe this URLRequestContext.
+  // Used in MemoryDumpProvier to annotate memory usage. The name does not need
+  // to be unique.
+  std::string name_;
 
   DISALLOW_COPY_AND_ASSIGN(URLRequestContext);
 };

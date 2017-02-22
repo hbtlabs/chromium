@@ -106,6 +106,10 @@ ui::ContextFactory* ViewsDelegate::GetContextFactory() {
   return nullptr;
 }
 
+ui::ContextFactoryPrivate* ViewsDelegate::GetContextFactoryPrivate() {
+  return nullptr;
+}
+
 std::string ViewsDelegate::GetApplicationName() {
   base::FilePath program = base::CommandLine::ForCurrentProcess()->GetProgram();
   return program.BaseName().AsUTF8Unsafe();
@@ -122,13 +126,38 @@ scoped_refptr<base::TaskRunner> ViewsDelegate::GetBlockingPoolTaskRunner() {
   return nullptr;
 }
 
-gfx::Insets ViewsDelegate::GetDialogButtonInsets() {
+gfx::Insets ViewsDelegate::GetDialogButtonInsets() const {
   return gfx::Insets(0, kButtonHEdgeMarginNew, kButtonVEdgeMarginNew,
                      kButtonHEdgeMarginNew);
 }
 
-int ViewsDelegate::GetDialogRelatedButtonHorizontalSpacing() {
+int ViewsDelegate::GetDialogCloseButtonMargin() const {
+  return kCloseButtonMargin;
+}
+
+int ViewsDelegate::GetDialogRelatedButtonHorizontalSpacing() const {
   return kRelatedButtonHSpacing;
+}
+
+int ViewsDelegate::GetDialogRelatedControlVerticalSpacing() const {
+  return kRelatedControlVerticalSpacing;
+}
+
+gfx::Insets ViewsDelegate::GetDialogFrameViewInsets() const {
+  return gfx::Insets(kPanelVertMargin, kButtonHEdgeMarginNew, 0,
+                     kButtonHEdgeMarginNew);
+}
+
+gfx::Insets ViewsDelegate::GetBubbleDialogMargins() const {
+  return gfx::Insets(kPanelVertMargin, kPanelHorizMargin);
+}
+
+int ViewsDelegate::GetDialogButtonMinimumWidth() const {
+  return kDialogMinimumButtonWidth;
+}
+
+int ViewsDelegate::GetButtonHorizontalPadding() const {
+  return 0;
 }
 
 ViewsDelegate::ViewsDelegate()

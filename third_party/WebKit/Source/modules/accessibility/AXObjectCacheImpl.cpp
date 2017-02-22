@@ -31,6 +31,7 @@
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
 #include "core/dom/Document.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -93,12 +94,10 @@ AXObjectCache* AXObjectCacheImpl::create(Document& document) {
 AXObjectCacheImpl::AXObjectCacheImpl(Document& document)
     : m_document(document),
       m_modificationCount(0),
-#if ENABLE(ASSERT)
-      m_hasBeenDisposed(false),
-#endif
-      m_notificationPostTimer(this,
-                              &AXObjectCacheImpl::notificationPostTimerFired) {
-}
+      m_notificationPostTimer(
+          TaskRunnerHelper::get(TaskType::UnspecedTimer, &document),
+          this,
+          &AXObjectCacheImpl::notificationPostTimerFired) {}
 
 AXObjectCacheImpl::~AXObjectCacheImpl() {
   ASSERT(m_hasBeenDisposed);
@@ -113,7 +112,7 @@ void AXObjectCacheImpl::dispose() {
     removeAXID(obj);
   }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   m_hasBeenDisposed = true;
 #endif
 }
@@ -491,7 +490,7 @@ void AXObjectCacheImpl::remove(LayoutObject* layoutObject) {
 
   AXID axID = m_layoutObjectMapping.get(layoutObject);
   remove(axID);
-  m_layoutObjectMapping.remove(layoutObject);
+  m_layoutObjectMapping.erase(layoutObject);
 }
 
 void AXObjectCacheImpl::remove(Node* node) {
@@ -501,7 +500,7 @@ void AXObjectCacheImpl::remove(Node* node) {
   // This is all safe even if we didn't have a mapping.
   AXID axID = m_nodeObjectMapping.get(node);
   remove(axID);
-  m_nodeObjectMapping.remove(node);
+  m_nodeObjectMapping.erase(node);
 
   if (node->layoutObject()) {
     remove(node->layoutObject());
@@ -515,7 +514,7 @@ void AXObjectCacheImpl::remove(AbstractInlineTextBox* inlineTextBox) {
 
   AXID axID = m_inlineTextBoxObjectMapping.get(inlineTextBox);
   remove(axID);
-  m_inlineTextBoxObjectMapping.remove(inlineTextBox);
+  m_inlineTextBoxObjectMapping.erase(inlineTextBox);
 }
 
 AXID AXObjectCacheImpl::platformGenerateAXID() const {
@@ -543,7 +542,7 @@ AXID AXObjectCacheImpl::getAXID(AXObject* obj) {
 
   objID = platformGenerateAXID();
 
-  m_idsInUse.add(objID);
+  m_idsInUse.insert(objID);
   obj->setAXObjectID(objID);
 
   return objID;
@@ -559,17 +558,17 @@ void AXObjectCacheImpl::removeAXID(AXObject* object) {
   ASSERT(!HashTraits<AXID>::isDeletedValue(objID));
   ASSERT(m_idsInUse.contains(objID));
   object->setAXObjectID(0);
-  m_idsInUse.remove(objID);
+  m_idsInUse.erase(objID);
 
   if (m_ariaOwnerToChildrenMapping.contains(objID)) {
     Vector<AXID> childAXIDs = m_ariaOwnerToChildrenMapping.get(objID);
     for (size_t i = 0; i < childAXIDs.size(); ++i)
-      m_ariaOwnedChildToOwnerMapping.remove(childAXIDs[i]);
-    m_ariaOwnerToChildrenMapping.remove(objID);
+      m_ariaOwnedChildToOwnerMapping.erase(childAXIDs[i]);
+    m_ariaOwnerToChildrenMapping.erase(objID);
   }
-  m_ariaOwnedChildToOwnerMapping.remove(objID);
-  m_ariaOwnedChildToRealParentMapping.remove(objID);
-  m_ariaOwnerToIdsMapping.remove(objID);
+  m_ariaOwnedChildToOwnerMapping.erase(objID);
+  m_ariaOwnedChildToRealParentMapping.erase(objID);
+  m_ariaOwnerToIdsMapping.erase(objID);
 }
 
 void AXObjectCacheImpl::selectionChanged(Node* node) {
@@ -640,7 +639,7 @@ void AXObjectCacheImpl::notificationPostTimerFired(TimerBase*) {
     if (obj->isDetached())
       continue;
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     // Make sure none of the layout views are in the process of being layed out.
     // Notifications should only be sent after the layoutObject has finished
     if (obj->isAXLayoutObject()) {
@@ -666,8 +665,6 @@ void AXObjectCacheImpl::postNotification(LayoutObject* layoutObject,
                                          AXNotification notification) {
   if (!layoutObject)
     return;
-
-  m_modificationCount++;
   postNotification(get(layoutObject), notification);
 }
 
@@ -675,18 +672,16 @@ void AXObjectCacheImpl::postNotification(Node* node,
                                          AXNotification notification) {
   if (!node)
     return;
-
-  m_modificationCount++;
   postNotification(get(node), notification);
 }
 
 void AXObjectCacheImpl::postNotification(AXObject* object,
                                          AXNotification notification) {
-  m_modificationCount++;
   if (!object)
     return;
 
-  m_notificationsToPost.append(std::make_pair(object, notification));
+  m_modificationCount++;
+  m_notificationsToPost.push_back(std::make_pair(object, notification));
   if (!m_notificationPostTimer.isActive())
     m_notificationPostTimer.startOneShot(0, BLINK_FROM_HERE);
 }
@@ -713,15 +708,15 @@ void AXObjectCacheImpl::updateAriaOwns(
   HashSet<String> newIds;
   bool idsChanged = false;
   for (const String& id : idVector) {
-    newIds.add(id);
+    newIds.insert(id);
     if (!currentIds.contains(id)) {
       idsChanged = true;
       HashSet<AXID>* owners = m_idToAriaOwnersMapping.get(id);
       if (!owners) {
         owners = new HashSet<AXID>();
-        m_idToAriaOwnersMapping.set(id, wrapUnique(owners));
+        m_idToAriaOwnersMapping.set(id, WTF::wrapUnique(owners));
       }
-      owners->add(owner->axObjectID());
+      owners->insert(owner->axObjectID());
     }
   }
   for (const String& id : currentIds) {
@@ -729,9 +724,9 @@ void AXObjectCacheImpl::updateAriaOwns(
       idsChanged = true;
       HashSet<AXID>* owners = m_idToAriaOwnersMapping.get(id);
       if (owners) {
-        owners->remove(owner->axObjectID());
+        owners->erase(owner->axObjectID());
         if (owners->isEmpty())
-          m_idToAriaOwnersMapping.remove(id);
+          m_idToAriaOwnersMapping.erase(id);
       }
     }
   }
@@ -778,8 +773,8 @@ void AXObjectCacheImpl::updateAriaOwns(
     if (foundCycle)
       continue;
 
-    newChildAXIDs.append(child->axObjectID());
-    ownedChildren.append(child);
+    newChildAXIDs.push_back(child->axObjectID());
+    ownedChildren.push_back(child);
   }
 
   // Compare this to the current list of owned children, and exit early if there
@@ -813,7 +808,7 @@ void AXObjectCacheImpl::updateAriaOwns(
 
     // Remove it from the child -> owner mapping so it's not owned by this owner
     // anymore.
-    m_ariaOwnedChildToOwnerMapping.remove(removedChildID);
+    m_ariaOwnedChildToOwnerMapping.erase(removedChildID);
 
     if (removedChild) {
       // If the child still exists, find its "real" parent, and reparent it back
@@ -828,7 +823,7 @@ void AXObjectCacheImpl::updateAriaOwns(
 
     // Remove the child -> original parent mapping too since this object has now
     // been reparented back to its original parent.
-    m_ariaOwnedChildToRealParentMapping.remove(removedChildID);
+    m_ariaOwnedChildToRealParentMapping.erase(removedChildID);
   }
 
   for (size_t i = 0; i < newChildAXIDs.size(); ++i) {
@@ -1046,14 +1041,14 @@ bool AXObjectCacheImpl::accessibilityEnabled() {
   Settings* settings = this->settings();
   if (!settings)
     return false;
-  return settings->accessibilityEnabled();
+  return settings->getAccessibilityEnabled();
 }
 
 bool AXObjectCacheImpl::inlineTextBoxAccessibilityEnabled() {
   Settings* settings = this->settings();
   if (!settings)
     return false;
-  return settings->inlineTextBoxAccessibilityEnabled();
+  return settings->getInlineTextBoxAccessibilityEnabled();
 }
 
 const Element* AXObjectCacheImpl::rootAXEditableElement(const Node* node) {

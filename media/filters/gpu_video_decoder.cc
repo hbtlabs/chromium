@@ -29,15 +29,12 @@
 #include "media/base/pipeline_status.h"
 #include "media/base/surface_manager.h"
 #include "media/base/video_decoder_config.h"
+#include "media/media_features.h"
 #include "media/renderers/gpu_video_accelerator_factories.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
-#if defined(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
 #include "media/formats/mp4/box_definitions.h"
-#endif
-
-#if defined(OS_ANDROID)
-#include "base/android/build_info.h"
 #endif
 
 namespace media {
@@ -47,7 +44,7 @@ namespace {
 // be on the beefy side.
 static const size_t kSharedMemorySegmentBytes = 100 << 10;
 
-#if defined(OS_ANDROID) && defined(USE_PROPRIETARY_CODECS)
+#if defined(OS_ANDROID) && BUILDFLAG(USE_PROPRIETARY_CODECS)
 // Extract the SPS and PPS lists from |extra_data|. Each SPS and PPS is prefixed
 // with 0x0001, the Annex B framing bytes. The out parameters are not modified
 // on failure.
@@ -121,6 +118,7 @@ GpuVideoDecoder::GpuVideoDecoder(GpuVideoAcceleratorFactories* factories,
       factories_(factories),
       request_surface_cb_(request_surface_cb),
       media_log_(media_log),
+      vda_initialized_(false),
       state_(kNormal),
       decoder_texture_target_(0),
       pixel_format_(PIXEL_FORMAT_UNKNOWN),
@@ -217,18 +215,6 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
       base::Bind(&ReportGpuVideoDecoderInitializeStatusToUMAAndRunCB,
                  BindToCurrentLoop(init_cb), media_log_);
 
-  bool requires_restart_for_external_output_surface = false;
-#if !defined(OS_ANDROID)
-  if (config.is_encrypted()) {
-    DVLOG(1) << "Encrypted stream not supported.";
-    bound_init_cb.Run(false);
-    return;
-  }
-#else
-  requires_restart_for_external_output_surface =
-      base::android::BuildInfo::GetInstance()->sdk_int() < 23;
-#endif
-
   bool previously_initialized = config_.IsValidConfig();
   DVLOG(1) << (previously_initialized ? "Reinitializing" : "Initializing")
            << " GVD with config: " << config.AsHumanReadableString();
@@ -250,9 +236,17 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
 
   VideoDecodeAccelerator::Capabilities capabilities =
       factories_->GetVideoDecodeAcceleratorCapabilities();
+  if (config.is_encrypted() &&
+      !(capabilities.flags &
+        VideoDecodeAccelerator::Capabilities::SUPPORTS_ENCRYPTED_STREAMS)) {
+    DVLOG(1) << "Encrypted stream not supported.";
+    bound_init_cb.Run(false);
+    return;
+  }
+
   if (!IsProfileSupported(capabilities, config.profile(), config.coded_size(),
                           config.is_encrypted())) {
-    DVLOG(1) << "Unsupported profile " << config.profile()
+    DVLOG(1) << "Unsupported profile " << GetProfileName(config.profile())
              << ", unsupported coded size " << config.coded_size().ToString()
              << ", or accelerator should only be used for encrypted content. "
              << " is_encrypted: " << (config.is_encrypted() ? "yes." : "no.");
@@ -310,10 +304,14 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
 
   init_cb_ = bound_init_cb;
 
-  const bool supports_external_output_surface =
-      (capabilities.flags & VideoDecodeAccelerator::Capabilities::
-                                SUPPORTS_EXTERNAL_OUTPUT_SURFACE) != 0;
+  const bool supports_external_output_surface = !!(
+      capabilities.flags &
+      VideoDecodeAccelerator::Capabilities::SUPPORTS_EXTERNAL_OUTPUT_SURFACE);
   if (supports_external_output_surface && !request_surface_cb_.is_null()) {
+    const bool requires_restart_for_external_output_surface =
+        !(capabilities.flags & VideoDecodeAccelerator::Capabilities::
+                                   SUPPORTS_SET_EXTERNAL_OUTPUT_SURFACE);
+
     // If we have a surface request callback we should call it and complete
     // initialization with the returned surface.
     request_surface_cb_.Run(
@@ -327,50 +325,56 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
   CompleteInitialization(SurfaceManager::kNoSurfaceID);
 }
 
+// OnSurfaceAvailable() might be called at any time between Initialize() and
+// ~GpuVideoDecoder() so we have to be careful to not make assumptions about
+// the current state.
 void GpuVideoDecoder::OnSurfaceAvailable(int surface_id) {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
 
-  // It's possible for the vda to become null if NotifyError is called.
-  if (!vda_) {
-    if (!init_cb_.is_null())
-      base::ResetAndReturn(&init_cb_).Run(false);
+  if (!vda_)
+    return;
+
+  // If the VDA has not been initialized, we were waiting for the first surface
+  // so it can be passed to Initialize() via the config. We can't call
+  // SetSurface() before initializing because there is no remote VDA to handle
+  // the call yet.
+  if (!vda_initialized_) {
+    CompleteInitialization(surface_id);
     return;
   }
 
-  // If initialization has already completed, there's nothing to do but try to
-  // set the surface. If we're still initializing, we must pass the surface via
-  // the config since the remote VDA has not yet been created.
-  if (init_cb_.is_null()) {
-    vda_->SetSurface(surface_id);
-    return;
-  }
-
-  // Otherwise initialization was waiting for the surface, so complete it now.
-  CompleteInitialization(surface_id);
+  // The VDA must be already initialized (or async initialization is in
+  // progress) so we can call SetSurface().
+  vda_->SetSurface(surface_id);
 }
 
 void GpuVideoDecoder::CompleteInitialization(int surface_id) {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
   DCHECK(vda_);
   DCHECK(!init_cb_.is_null());
+  DCHECK(!vda_initialized_);
 
   VideoDecodeAccelerator::Config vda_config;
   vda_config.profile = config_.profile();
   vda_config.cdm_id = cdm_id_;
-  vda_config.is_encrypted = config_.is_encrypted();
   vda_config.surface_id = surface_id;
+  vda_config.encryption_scheme = config_.encryption_scheme();
   vda_config.is_deferred_initialization_allowed = true;
   vda_config.initial_expected_coded_size = config_.coded_size();
 
-#if defined(OS_ANDROID) && defined(USE_PROPRIETARY_CODECS)
+#if defined(OS_ANDROID) && BUILDFLAG(USE_PROPRIETARY_CODECS)
   // We pass the SPS and PPS on Android because it lets us initialize
   // MediaCodec more reliably (http://crbug.com/649185).
   if (config_.codec() == kCodecH264)
     ExtractSpsAndPps(config_.extra_data(), &vda_config.sps, &vda_config.pps);
 #endif
 
+  vda_initialized_ = true;
   if (!vda_->Initialize(vda_config, this)) {
     DVLOG(1) << "VDA::Initialize failed.";
+    // It's important to set |vda_| to null so that OnSurfaceAvailable() will
+    // not call SetSurface() on a nonexistent remote VDA.
+    DestroyVDA();
     base::ResetAndReturn(&init_cb_).Run(false);
     return;
   }
@@ -384,9 +388,9 @@ void GpuVideoDecoder::CompleteInitialization(int surface_id) {
 
 void GpuVideoDecoder::NotifyInitializationComplete(bool success) {
   DVLOG_IF(1, !success) << __func__ << " Deferred initialization failed.";
-  DCHECK(!init_cb_.is_null());
 
-  base::ResetAndReturn(&init_cb_).Run(success);
+  if (init_cb_)
+    base::ResetAndReturn(&init_cb_).Run(success);
 }
 
 void GpuVideoDecoder::DestroyPictureBuffers(PictureBufferMap* buffers) {
@@ -682,6 +686,12 @@ void GpuVideoDecoder::PictureReady(const media::Picture& picture) {
   frame->set_color_space(picture.color_space());
   if (picture.allow_overlay())
     frame->metadata()->SetBoolean(VideoFrameMetadata::ALLOW_OVERLAY, true);
+  if (picture.surface_texture())
+    frame->metadata()->SetBoolean(VideoFrameMetadata::SURFACE_TEXTURE, true);
+  if (picture.wants_promotion_hint()) {
+    frame->metadata()->SetBoolean(VideoFrameMetadata::WANTS_PROMOTION_HINT,
+                                  true);
+  }
 #if defined(OS_WIN)
   frame->metadata()->SetBoolean(VideoFrameMetadata::DECODER_OWNS_FRAME, true);
 #endif
@@ -854,6 +864,9 @@ void GpuVideoDecoder::NotifyError(media::VideoDecodeAccelerator::Error error) {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
   if (!vda_)
     return;
+
+  if (init_cb_)
+    base::ResetAndReturn(&init_cb_).Run(false);
 
   // If we have any bitstream buffers, then notify one that an error has
   // occurred.  This guarantees that somebody finds out about the error.  If

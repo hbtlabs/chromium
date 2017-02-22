@@ -29,6 +29,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/timer/elapsed_timer.h"
@@ -66,12 +67,13 @@
 
 using content::BrowserThread;
 using content::ResourceRequestInfo;
-using content::ResourceType;
 using extensions::Extension;
 using extensions::SharedModuleInfo;
 
 namespace extensions {
 namespace {
+
+ExtensionProtocolTestHandler* g_test_handler = nullptr;
 
 class GeneratedBackgroundPageJob : public net::URLRequestSimpleJob {
  public:
@@ -208,18 +210,16 @@ class URLRequestExtensionJob : public net::URLRequestFileJob {
     request_timer_.reset(new base::ElapsedTimer());
     base::FilePath* read_file_path = new base::FilePath;
     base::Time* last_modified_time = new base::Time();
-    bool posted = BrowserThread::PostBlockingPoolTaskAndReply(
-        FROM_HERE,
-        base::Bind(&ReadResourceFilePathAndLastModifiedTime,
-                   resource_,
-                   directory_path_,
-                   base::Unretained(read_file_path),
+
+    // Inherit task priority from the calling context.
+    base::PostTaskWithTraitsAndReply(
+        FROM_HERE, base::TaskTraits().MayBlock(),
+        base::Bind(&ReadResourceFilePathAndLastModifiedTime, resource_,
+                   directory_path_, base::Unretained(read_file_path),
                    base::Unretained(last_modified_time)),
         base::Bind(&URLRequestExtensionJob::OnFilePathAndLastModifiedTimeRead,
-                   weak_factory_.GetWeakPtr(),
-                   base::Owned(read_file_path),
+                   weak_factory_.GetWeakPtr(), base::Owned(read_file_path),
                    base::Owned(last_modified_time)));
-    DCHECK(posted);
   }
 
   bool IsRedirectResponse(GURL* location, int* http_status_code) override {
@@ -392,11 +392,12 @@ bool URLIsForExtensionIcon(const GURL& url, const Extension* extension) {
   if (!extension)
     return false;
 
-  std::string path = url.path();
   DCHECK_EQ(url.host(), extension->id());
+  base::StringPiece path = url.path_piece();
   DCHECK(path.length() > 0 && path[0] == '/');
-  path = path.substr(1);
-  return extensions::IconsInfo::GetIcons(extension).ContainsPath(path);
+  base::StringPiece path_without_slash = path.substr(1);
+  return extensions::IconsInfo::GetIcons(extension).ContainsPath(
+      path_without_slash);
 }
 
 class ExtensionProtocolHandler
@@ -523,6 +524,14 @@ ExtensionProtocolHandler::MaybeCreateJob(
       return NULL;
     }
   }
+
+  if (g_test_handler) {
+    net::URLRequestJob* test_job =
+        g_test_handler->Run(request, network_delegate, relative_path);
+    if (test_job)
+      return test_job;
+  }
+
   ContentVerifyJob* verify_job = NULL;
   ContentVerifier* verifier = extension_info_map_->content_verifier();
   if (verifier) {
@@ -588,6 +597,10 @@ CreateExtensionProtocolHandler(bool is_incognito,
                                extensions::InfoMap* extension_info_map) {
   return base::MakeUnique<ExtensionProtocolHandler>(is_incognito,
                                                     extension_info_map);
+}
+
+void SetExtensionProtocolTestHandler(ExtensionProtocolTestHandler* handler) {
+  g_test_handler = handler;
 }
 
 }  // namespace extensions

@@ -58,6 +58,7 @@ class FloatSize;
 class FrameConsole;
 class FrameSelection;
 class FrameView;
+class IdleSpellCheckCallback;
 class InputMethodController;
 class InstrumentingAgents;
 class InterfaceProvider;
@@ -70,12 +71,10 @@ class LocalDOMWindow;
 class NavigationScheduler;
 class Node;
 class NodeTraversal;
-class Performance;
 class PerformanceMonitor;
 template <typename Strategy>
 class PositionWithAffinityTemplate;
 class PluginData;
-class Range;
 class ScriptController;
 class SpellChecker;
 class WebFrameScheduler;
@@ -108,7 +107,6 @@ class CORE_EXPORT LocalFrame final : public Frame,
   // Frame overrides:
   ~LocalFrame() override;
   DECLARE_VIRTUAL_TRACE();
-  DOMWindow* domWindow() const override;
   WindowProxy* windowProxy(DOMWrapperWorld&) override;
   void navigate(Document& originDocument,
                 const KURL&,
@@ -120,14 +118,14 @@ class CORE_EXPORT LocalFrame final : public Frame,
   bool shouldClose() override;
   SecurityContext* securityContext() const override;
   void printNavigationErrorMessage(const Frame&, const char* reason) override;
+  void printNavigationWarning(const String&) override;
   bool prepareForCommit() override;
   void didChangeVisibilityState() override;
-  void setDocumentHasReceivedUserGesture() override;
 
   void detachChildren();
   void documentAttached();
 
-  LocalDOMWindow* localDOMWindow() const;
+  LocalDOMWindow* domWindow() const;
   void setDOMWindow(LocalDOMWindow*);
   FrameView* view() const;
   Document* document() const;
@@ -147,6 +145,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
   ScriptController& script() const;
   SpellChecker& spellChecker() const;
   FrameConsole& console() const;
+  IdleSpellCheckCallback& idleSpellCheckCallback() const;
 
   // This method is used to get the highest level LocalFrame in this
   // frame's in-process subtree.
@@ -205,7 +204,6 @@ class CORE_EXPORT LocalFrame final : public Frame,
   EphemeralRangeTemplate<EditingAlgorithm<NodeTraversal>> rangeForPoint(
       const IntPoint& framePoint);
 
-  bool isURLAllowed(const KURL&) const;
   bool shouldReuseDefaultView(const KURL&) const;
   void removeSpellingMarkersUnderWords(const Vector<String>& words);
 
@@ -236,7 +234,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
              InterfaceRegistry*);
 
   // Internal Frame helper overrides:
-  WindowProxyManager* getWindowProxyManager() const override;
+  WindowProxyManagerBase* getWindowProxyManager() const override;
   // Intentionally private to prevent redundant checks when the type is
   // already LocalFrame.
   bool isLocalFrame() const override { return true; }
@@ -250,8 +248,9 @@ class CORE_EXPORT LocalFrame final : public Frame,
   mutable FrameLoader m_loader;
   Member<NavigationScheduler> m_navigationScheduler;
 
+  // Cleared by LocalFrame::detach(), so as to keep the observable lifespan
+  // of LocalFrame::view().
   Member<FrameView> m_view;
-  Member<LocalDOMWindow> m_domWindow;
   // Usually 0. Non-null if this is the top frame of PagePopup.
   Member<Element> m_pagePopupOwner;
 
@@ -262,6 +261,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
   const Member<EventHandler> m_eventHandler;
   const Member<FrameConsole> m_console;
   const Member<InputMethodController> m_inputMethodController;
+  const Member<IdleSpellCheckCallback> m_idleSpellCheckCallback;
 
   int m_navigationDisableCount;
 
@@ -279,10 +279,6 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
 inline void LocalFrame::init() {
   m_loader.init();
-}
-
-inline LocalDOMWindow* LocalFrame::localDOMWindow() const {
-  return m_domWindow.get();
 }
 
 inline FrameLoader& LocalFrame::loader() const {
@@ -333,6 +329,11 @@ inline void LocalFrame::setInViewSourceMode(bool mode) {
 inline EventHandler& LocalFrame::eventHandler() const {
   ASSERT(m_eventHandler);
   return *m_eventHandler;
+}
+
+inline IdleSpellCheckCallback& LocalFrame::idleSpellCheckCallback() const {
+  DCHECK(m_idleSpellCheckCallback);
+  return *m_idleSpellCheckCallback;
 }
 
 DEFINE_TYPE_CASTS(LocalFrame,

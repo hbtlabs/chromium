@@ -5,6 +5,7 @@
 #include "chrome/browser/android/shortcut_helper.h"
 
 #include <jni.h>
+#include <utility>
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
@@ -14,8 +15,9 @@
 #include "base/command_line.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "chrome/browser/android/webapk/chrome_webapk_host.h"
-#include "chrome/browser/android/webapk/webapk_installer.h"
+#include "chrome/browser/android/webapk/webapk_install_service.h"
 #include "chrome/browser/manifest/manifest_icon_downloader.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/browser/browser_thread.h"
@@ -31,12 +33,13 @@ using content::Manifest;
 
 namespace {
 
-static int kIdealHomescreenIconSize = -1;
-static int kMinimumHomescreenIconSize = -1;
-static int kIdealSplashImageSize = -1;
-static int kMinimumSplashImageSize = -1;
+int g_ideal_homescreen_icon_size = -1;
+int g_minimum_homescreen_icon_size = -1;
+int g_ideal_splash_image_size = -1;
+int g_minimum_splash_image_size = -1;
+int g_ideal_badge_icon_size = -1;
 
-static int kDefaultRGBIconValue = 145;
+int g_default_rgb_icon_value = 145;
 
 // Retrieves and caches the ideal and minimum sizes of the Home screen icon
 // and the splash screen image.
@@ -45,24 +48,24 @@ void GetHomescreenIconAndSplashImageSizes() {
   ScopedJavaLocalRef<jintArray> java_size_array =
       Java_ShortcutHelper_getHomeScreenIconAndSplashImageSizes(env);
   std::vector<int> sizes;
-  base::android::JavaIntArrayToIntVector(
-      env, java_size_array.obj(), &sizes);
+  base::android::JavaIntArrayToIntVector(env, java_size_array.obj(), &sizes);
 
   // Check that the size returned is what is expected.
-  DCHECK(sizes.size() == 4);
+  DCHECK(sizes.size() == 5);
 
   // This ordering must be kept up to date with the Java ShortcutHelper.
-  kIdealHomescreenIconSize = sizes[0];
-  kMinimumHomescreenIconSize = sizes[1];
-  kIdealSplashImageSize = sizes[2];
-  kMinimumSplashImageSize = sizes[3];
+  g_ideal_homescreen_icon_size = sizes[0];
+  g_minimum_homescreen_icon_size = sizes[1];
+  g_ideal_splash_image_size = sizes[2];
+  g_minimum_splash_image_size = sizes[3];
+  g_ideal_badge_icon_size = sizes[4];
 
   // Try to ensure that the data returned is sane.
-  DCHECK(kMinimumHomescreenIconSize <= kIdealHomescreenIconSize);
-  DCHECK(kMinimumSplashImageSize <= kIdealSplashImageSize);
+  DCHECK(g_minimum_homescreen_icon_size <= g_ideal_homescreen_icon_size);
+  DCHECK(g_minimum_splash_image_size <= g_ideal_splash_image_size);
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 // static
 void ShortcutHelper::AddToLauncherWithSkBitmap(
@@ -76,7 +79,7 @@ void ShortcutHelper::AddToLauncherWithSkBitmap(
     AddWebappWithSkBitmap(info, webapp_id, icon_bitmap, splash_image_callback);
     return;
   }
-  AddShortcutWithSkBitmap(info, icon_bitmap);
+  AddShortcutWithSkBitmap(info, webapp_id, icon_bitmap);
 }
 
 // static
@@ -85,9 +88,8 @@ void ShortcutHelper::InstallWebApkWithSkBitmap(
     const ShortcutInfo& info,
     const SkBitmap& icon_bitmap,
     const WebApkInstaller::FinishCallback& callback) {
-  // WebApkInstaller destroys itself when it is done.
-  WebApkInstaller* installer = new WebApkInstaller(info, icon_bitmap);
-  installer->InstallAsync(browser_context, callback);
+  WebApkInstallService::Get(browser_context)
+      ->InstallAsync(info, icon_bitmap, callback);
 }
 
 // static
@@ -110,8 +112,9 @@ void ShortcutHelper::AddWebappWithSkBitmap(
       base::android::ConvertUTF16ToJavaString(env, info.name);
   ScopedJavaLocalRef<jstring> java_short_name =
       base::android::ConvertUTF16ToJavaString(env, info.short_name);
-  ScopedJavaLocalRef<jstring> java_best_icon_url =
-      base::android::ConvertUTF8ToJavaString(env, info.best_icon_url.spec());
+  ScopedJavaLocalRef<jstring> java_best_primary_icon_url =
+      base::android::ConvertUTF8ToJavaString(env,
+                                             info.best_primary_icon_url.spec());
   ScopedJavaLocalRef<jobject> java_bitmap;
   if (icon_bitmap.getSize())
     java_bitmap = gfx::ConvertToJavaBitmap(&icon_bitmap);
@@ -123,17 +126,19 @@ void ShortcutHelper::AddWebappWithSkBitmap(
   uintptr_t callback_pointer =
       reinterpret_cast<uintptr_t>(new base::Closure(splash_image_callback));
 
-  Java_ShortcutHelper_addWebapp(env, java_webapp_id, java_url, java_scope_url,
-                                java_user_title, java_name, java_short_name,
-                                java_best_icon_url, java_bitmap, info.display,
-                                info.orientation, info.source, info.theme_color,
-                                info.background_color, callback_pointer);
+  Java_ShortcutHelper_addWebapp(
+      env, java_webapp_id, java_url, java_scope_url, java_user_title, java_name,
+      java_short_name, java_best_primary_icon_url, java_bitmap, info.display,
+      info.orientation, info.source, info.theme_color, info.background_color,
+      callback_pointer);
 }
 
-void ShortcutHelper::AddShortcutWithSkBitmap(
-    const ShortcutInfo& info,
-    const SkBitmap& icon_bitmap) {
+void ShortcutHelper::AddShortcutWithSkBitmap(const ShortcutInfo& info,
+                                             const std::string& id,
+                                             const SkBitmap& icon_bitmap) {
   JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jstring> java_id =
+      base::android::ConvertUTF8ToJavaString(env, id);
   ScopedJavaLocalRef<jstring> java_url =
       base::android::ConvertUTF8ToJavaString(env, info.url.spec());
   ScopedJavaLocalRef<jstring> java_user_title =
@@ -142,53 +147,63 @@ void ShortcutHelper::AddShortcutWithSkBitmap(
   if (icon_bitmap.getSize())
     java_bitmap = gfx::ConvertToJavaBitmap(&icon_bitmap);
 
-  Java_ShortcutHelper_addShortcut(env, java_url, java_user_title, java_bitmap,
-                                  info.source);
+  Java_ShortcutHelper_addShortcut(env, java_id, java_url, java_user_title,
+                                  java_bitmap, info.source);
 }
 
-int ShortcutHelper::GetIdealHomescreenIconSizeInDp() {
-  if (kIdealHomescreenIconSize == -1)
-    GetHomescreenIconAndSplashImageSizes();
-  return kIdealHomescreenIconSize;
+void ShortcutHelper::ShowWebApkInstallInProgressToast() {
+  Java_ShortcutHelper_showWebApkInstallInProgressToast(
+      base::android::AttachCurrentThread());
 }
 
-int ShortcutHelper::GetMinimumHomescreenIconSizeInDp() {
-  if (kMinimumHomescreenIconSize == -1)
+int ShortcutHelper::GetIdealHomescreenIconSizeInPx() {
+  if (g_ideal_homescreen_icon_size == -1)
     GetHomescreenIconAndSplashImageSizes();
-  return kMinimumHomescreenIconSize;
+  return g_ideal_homescreen_icon_size;
 }
 
-int ShortcutHelper::GetIdealSplashImageSizeInDp() {
-  if (kIdealSplashImageSize == -1)
+int ShortcutHelper::GetMinimumHomescreenIconSizeInPx() {
+  if (g_minimum_homescreen_icon_size == -1)
     GetHomescreenIconAndSplashImageSizes();
-  return kIdealSplashImageSize;
+  return g_minimum_homescreen_icon_size;
 }
 
-int ShortcutHelper::GetMinimumSplashImageSizeInDp() {
-  if (kMinimumSplashImageSize == -1)
+int ShortcutHelper::GetIdealSplashImageSizeInPx() {
+  if (g_ideal_splash_image_size == -1)
     GetHomescreenIconAndSplashImageSizes();
-  return kMinimumSplashImageSize;
+  return g_ideal_splash_image_size;
+}
+
+int ShortcutHelper::GetMinimumSplashImageSizeInPx() {
+  if (g_minimum_splash_image_size == -1)
+    GetHomescreenIconAndSplashImageSizes();
+  return g_minimum_splash_image_size;
+}
+
+int ShortcutHelper::GetIdealBadgeIconSizeInPx() {
+  if (g_ideal_badge_icon_size == -1)
+    GetHomescreenIconAndSplashImageSizes();
+  return g_ideal_badge_icon_size;
 }
 
 // static
 void ShortcutHelper::FetchSplashScreenImage(
     content::WebContents* web_contents,
     const GURL& image_url,
-    const int ideal_splash_image_size_in_dp,
-    const int minimum_splash_image_size_in_dp,
+    const int ideal_splash_image_size_in_px,
+    const int minimum_splash_image_size_in_px,
     const std::string& webapp_id) {
   // This is a fire and forget task. It is not vital for the splash screen image
   // to be downloaded so if the downloader returns false there is no fallback.
   ManifestIconDownloader::Download(
-      web_contents, image_url, ideal_splash_image_size_in_dp,
-      minimum_splash_image_size_in_dp,
+      web_contents, image_url, ideal_splash_image_size_in_px,
+      minimum_splash_image_size_in_px,
       base::Bind(&ShortcutHelper::StoreWebappSplashImage, webapp_id));
 }
 
 // static
-void ShortcutHelper::StoreWebappSplashImage(
-    const std::string& webapp_id,
-    const SkBitmap& splash_image) {
+void ShortcutHelper::StoreWebappSplashImage(const std::string& webapp_id,
+                                            const SkBitmap& splash_image) {
   if (splash_image.drawsNothing())
     return;
 
@@ -226,8 +241,9 @@ SkBitmap ShortcutHelper::FinalizeLauncherIconInBackground(
   if (result.is_null()) {
     ScopedJavaLocalRef<jstring> java_url =
         base::android::ConvertUTF8ToJavaString(env, url.spec());
-    SkColor mean_color = SkColorSetRGB(
-        kDefaultRGBIconValue, kDefaultRGBIconValue, kDefaultRGBIconValue);
+    SkColor mean_color =
+        SkColorSetRGB(g_default_rgb_icon_value, g_default_rgb_icon_value,
+                      g_default_rgb_icon_value);
 
     if (!bitmap.isNull())
       mean_color = color_utils::CalculateKMeanColorOfBitmap(bitmap);
@@ -253,15 +269,19 @@ std::string ShortcutHelper::QueryWebApkPackage(const GURL& url) {
 
   std::string webapk_package_name = "";
   if (java_webapk_package_name.obj()) {
-    webapk_package_name = base::android::ConvertJavaStringToUTF8(
-        env, java_webapk_package_name);
+    webapk_package_name =
+        base::android::ConvertJavaStringToUTF8(env, java_webapk_package_name);
   }
   return webapk_package_name;
 }
 
 // static
-bool ShortcutHelper::IsWebApkInstalled(const GURL& url) {
-  return !QueryWebApkPackage(url).empty();
+bool ShortcutHelper::IsWebApkInstalled(content::BrowserContext* browser_context,
+                                       const GURL& start_url,
+                                       const GURL& manifest_url) {
+  return !QueryWebApkPackage(start_url).empty() ||
+         WebApkInstallService::Get(browser_context)
+             ->IsInstallInProgress(manifest_url);
 }
 
 GURL ShortcutHelper::GetScopeFromURL(const GURL& url) {
@@ -271,6 +291,13 @@ GURL ShortcutHelper::GetScopeFromURL(const GURL& url) {
   ScopedJavaLocalRef<jstring> java_scope_url =
       Java_ShortcutHelper_getScopeFromUrl(env, java_url);
   return GURL(base::android::ConvertJavaStringToUTF16(env, java_scope_url));
+}
+
+void ShortcutHelper::RetrieveWebApks(const WebApkInfoCallback& callback) {
+  uintptr_t callback_pointer =
+      reinterpret_cast<uintptr_t>(new WebApkInfoCallback(callback));
+  Java_ShortcutHelper_retrieveWebApks(base::android::AttachCurrentThread(),
+                                      callback_pointer);
 }
 
 // Callback used by Java when the shortcut has been created.
@@ -288,6 +315,44 @@ void OnWebappDataStored(JNIEnv* env,
       reinterpret_cast<base::Closure*>(jsplash_image_callback);
   splash_image_callback->Run();
   delete splash_image_callback;
+}
+
+void OnWebApksRetrieved(JNIEnv* env,
+                        const JavaParamRef<jclass>& clazz,
+                        const jlong jcallback_pointer,
+                        const JavaParamRef<jobjectArray>& jshort_names,
+                        const JavaParamRef<jobjectArray>& jpackage_names,
+                        const JavaParamRef<jintArray>& jshell_apk_versions,
+                        const JavaParamRef<jintArray>& jversion_codes) {
+  DCHECK(jcallback_pointer);
+  std::vector<std::string> short_names;
+  base::android::AppendJavaStringArrayToStringVector(env, jshort_names,
+                                                     &short_names);
+  std::vector<std::string> package_names;
+  base::android::AppendJavaStringArrayToStringVector(env, jpackage_names,
+                                                     &package_names);
+  std::vector<int> shell_apk_versions;
+  base::android::JavaIntArrayToIntVector(env, jshell_apk_versions,
+                                         &shell_apk_versions);
+  std::vector<int> version_codes;
+  base::android::JavaIntArrayToIntVector(env, jversion_codes, &version_codes);
+
+  DCHECK(short_names.size() == package_names.size());
+  DCHECK(short_names.size() == shell_apk_versions.size());
+  DCHECK(short_names.size() == version_codes.size());
+
+  std::vector<WebApkInfo> webapk_list;
+  webapk_list.reserve(short_names.size());
+  for (size_t i = 0; i < short_names.size(); ++i) {
+    webapk_list.push_back(WebApkInfo(std::move(short_names[i]),
+                                     std::move(package_names[i]),
+                                     shell_apk_versions[i], version_codes[i]));
+  }
+
+  ShortcutHelper::WebApkInfoCallback* webapk_list_callback =
+      reinterpret_cast<ShortcutHelper::WebApkInfoCallback*>(jcallback_pointer);
+  webapk_list_callback->Run(webapk_list);
+  delete webapk_list_callback;
 }
 
 bool ShortcutHelper::RegisterShortcutHelper(JNIEnv* env) {

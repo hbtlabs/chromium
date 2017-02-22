@@ -11,6 +11,7 @@
 #include "ash/common/system/chromeos/network/network_list_delegate.h"
 #include "ash/common/system/tray/system_menu_button.h"
 #include "ash/common/system/tray/tray_constants.h"
+#include "ash/common/system/tray/tray_popup_item_style.h"
 #include "ash/common/system/tray/tray_popup_utils.h"
 #include "base/memory/ptr_util.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -29,9 +30,9 @@
 #include "ui/gfx/font.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icons_public.h"
-#include "ui/views/border.h"
 #include "ui/views/controls/button/toggle_button.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/separator.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/painter.h"
@@ -46,11 +47,6 @@ using chromeos::NetworkTypePattern;
 namespace ash {
 
 namespace {
-
-// TODO(varkha): Merge some of those those constants in tray_constants.h
-const int kSectionHeaderRowSize = 48;
-const int kSectionHeaderRowVerticalInset = 4;
-const int kSectionHeaderRowLeftInset = 18;
 
 bool IsProhibitedByPolicy(const chromeos::NetworkState* network) {
   if (!NetworkTypePattern::WiFi().MatchesType(network->type()))
@@ -83,7 +79,12 @@ class NetworkListViewMd::SectionHeaderRowView : public views::View,
                                                 public views::ButtonListener {
  public:
   explicit SectionHeaderRowView(int title_id)
-      : title_id_(title_id), container_(nullptr), toggle_(nullptr) {}
+      : title_id_(title_id),
+        container_(nullptr),
+        toggle_(nullptr),
+        style_(
+            new TrayPopupItemStyle(TrayPopupItemStyle::FontStyle::SUB_HEADER)) {
+  }
 
   ~SectionHeaderRowView() override {}
 
@@ -105,14 +106,8 @@ class NetworkListViewMd::SectionHeaderRowView : public views::View,
   // enabled/disable their respective technology, for example.
   virtual void OnToggleToggled(bool is_on) = 0;
 
-  views::View* container() const { return container_; }
-
-  // views::View:
-  gfx::Size GetPreferredSize() const override {
-    gfx::Size size = views::View::GetPreferredSize();
-    size.set_height(kSectionHeaderRowSize + kSectionHeaderRowVerticalInset * 2);
-    return size;
-  }
+  TriView* container() const { return container_; }
+  TrayPopupItemStyle* style() const { return style_.get(); }
 
   int GetHeightForWidth(int w) const override {
     // Make row height fixed avoiding layout manager adjustments.
@@ -131,36 +126,20 @@ class NetworkListViewMd::SectionHeaderRowView : public views::View,
     // to TrayPopupUtils to simplify creation of the following layout. See
     // https://crbug.com/614453.
     TrayPopupUtils::ConfigureAsStickyHeader(this);
-    container_ = new views::View;
-    container_->SetBorder(
-        views::CreateEmptyBorder(0, kSectionHeaderRowLeftInset, 0, 0));
-    views::FillLayout* layout = new views::FillLayout;
-    SetLayoutManager(layout);
+    SetLayoutManager(new views::FillLayout);
+    container_ = TrayPopupUtils::CreateSubHeaderRowView();
     AddChildView(container_);
 
-    views::BoxLayout* container_layout =
-        new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 0);
-    container_layout->set_cross_axis_alignment(
-        views::BoxLayout::CROSS_AXIS_ALIGNMENT_CENTER);
-    container_->SetLayoutManager(container_layout);
-
-    ui::NativeTheme* theme = GetNativeTheme();
-    const SkColor prominent_color =
-        theme->GetSystemColor(ui::NativeTheme::kColorId_ProminentButtonColor);
-    ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-    views::Label* label =
-        new views::Label(rb.GetLocalizedString(title_id_),
-                         rb.GetFontList(ui::ResourceBundle::MediumFont));
-    label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    label->SetEnabledColor(prominent_color);
-    container_->AddChildView(label);
-    container_layout->SetFlexForView(label, 1);
+    views::Label* label = TrayPopupUtils::CreateDefaultLabel();
+    style()->SetupLabel(label);
+    label->SetText(l10n_util::GetStringUTF16(title_id_));
+    container_->AddView(TriView::Container::CENTER, label);
   }
 
   void AddToggleButton(bool enabled) {
     toggle_ = TrayPopupUtils::CreateToggleButton(this, title_id_);
     toggle_->SetIsOn(enabled, false);
-    container_->AddChildView(toggle_);
+    container_->AddView(TriView::Container::END, toggle_);
   }
 
   // Resource ID for the string to use as the title of the section and for the
@@ -169,10 +148,13 @@ class NetworkListViewMd::SectionHeaderRowView : public views::View,
 
   // View containing header row views, including title, toggle, and extra
   // buttons.
-  views::View* container_;
+  TriView* container_;
 
   // ToggleButton to toggle section on or off.
   views::ToggleButton* toggle_;
+
+  // TrayPopupItemStyle used to configure labels and buttons.
+  std::unique_ptr<TrayPopupItemStyle> style_;
 
   DISALLOW_COPY_AND_ASSIGN(SectionHeaderRowView);
 };
@@ -182,7 +164,7 @@ namespace {
 class CellularHeaderRowView : public NetworkListViewMd::SectionHeaderRowView {
  public:
   CellularHeaderRowView()
-      : SectionHeaderRowView(IDS_ASH_STATUS_TRAY_NETWORK_CELLULAR) {}
+      : SectionHeaderRowView(IDS_ASH_STATUS_TRAY_NETWORK_MOBILE) {}
 
   ~CellularHeaderRowView() override {}
 
@@ -226,10 +208,8 @@ class WifiHeaderRowView : public NetworkListViewMd::SectionHeaderRowView {
   }
 
   void AddExtraButtons(bool enabled) override {
-    ui::NativeTheme* theme = GetNativeTheme();
-    const SkColor prominent_color =
-        theme->GetSystemColor(ui::NativeTheme::kColorId_ProminentButtonColor);
-
+    const SkColor prominent_color = GetNativeTheme()->GetSystemColor(
+        ui::NativeTheme::kColorId_ProminentButtonColor);
     gfx::ImageSkia normal_image = network_icon::GetImageForNewWifiNetwork(
         SkColorSetA(prominent_color, kJoinIconAlpha),
         SkColorSetA(prominent_color, kJoinBadgeAlpha));
@@ -239,10 +219,9 @@ class WifiHeaderRowView : public NetworkListViewMd::SectionHeaderRowView {
     join_ = new SystemMenuButton(this, TrayPopupInkDropStyle::HOST_CENTERED,
                                  normal_image, disabled_image,
                                  IDS_ASH_STATUS_TRAY_OTHER_WIFI);
-    join_->set_ink_drop_base_color(prominent_color);
+    join_->SetInkDropColor(prominent_color);
     join_->SetEnabled(enabled);
-
-    container()->AddChildView(join_);
+    container()->AddView(TriView::Container::END, join_);
   }
 
   void ButtonPressed(views::Button* sender, const ui::Event& event) override {
@@ -284,7 +263,9 @@ NetworkListViewMd::NetworkListViewMd(NetworkListDelegate* delegate)
       no_wifi_networks_view_(nullptr),
       no_cellular_networks_view_(nullptr),
       cellular_header_view_(nullptr),
-      wifi_header_view_(nullptr) {
+      wifi_header_view_(nullptr),
+      cellular_separator_view_(nullptr),
+      wifi_separator_view_(nullptr) {
   CHECK(delegate_);
 }
 
@@ -298,18 +279,18 @@ void NetworkListViewMd::Update() {
   NetworkStateHandler* handler = NetworkHandler::Get()->network_state_handler();
   handler->GetVisibleNetworkList(&network_list);
   UpdateNetworks(network_list);
-  OrderNetworks();
   UpdateNetworkIcons();
+  OrderNetworks();
   UpdateNetworkListInternal();
 }
 
 bool NetworkListViewMd::IsNetworkEntry(views::View* view,
-                                       std::string* service_path) const {
+                                       std::string* guid) const {
   std::map<views::View*, std::string>::const_iterator found =
       network_map_.find(view);
   if (found == network_map_.end())
     return false;
-  *service_path = found->second;
+  *guid = found->second;
   return true;
 }
 
@@ -320,7 +301,7 @@ void NetworkListViewMd::UpdateNetworks(
   const NetworkTypePattern pattern = delegate_->GetNetworkTypePattern();
   for (const auto& network : networks) {
     if (pattern.MatchesType(network->type()))
-      network_list_.push_back(base::MakeUnique<NetworkInfo>(network->path()));
+      network_list_.push_back(base::MakeUnique<NetworkInfo>(network->guid()));
   }
 }
 
@@ -333,14 +314,18 @@ void NetworkListViewMd::OrderNetworks() {
     bool operator()(const std::unique_ptr<NetworkInfo>& network1,
                     const std::unique_ptr<NetworkInfo>& network2) {
       const int order1 =
-          GetOrder(handler_->GetNetworkState(network1->service_path));
+          GetOrder(handler_->GetNetworkStateFromGuid(network1->guid));
       const int order2 =
-          GetOrder(handler_->GetNetworkState(network2->service_path));
+          GetOrder(handler_->GetNetworkStateFromGuid(network2->guid));
       if (order1 != order2)
         return order1 < order2;
+      if (network1->connected != network2->connected)
+        return network1->connected;
+      if (network1->connecting != network2->connecting)
+        return network1->connecting;
       if (network1->highlight != network2->highlight)
         return network1->highlight;
-      return network1->service_path.compare(network2->service_path) < 0;
+      return network1->guid.compare(network2->guid) < 0;
     }
 
    private:
@@ -373,19 +358,20 @@ void NetworkListViewMd::UpdateNetworkIcons() {
 
   for (auto& info : network_list_) {
     const chromeos::NetworkState* network =
-        handler->GetNetworkState(info->service_path);
+        handler->GetNetworkStateFromGuid(info->guid);
     if (!network)
       continue;
     bool prohibited_by_policy = IsProhibitedByPolicy(network);
-    info->label =
-        network_icon::GetLabelForNetwork(network, network_icon::ICON_TYPE_LIST);
+    info->label = network_icon::GetLabelForNetwork(
+        network, network_icon::ICON_TYPE_MENU_LIST);
     info->image =
         network_icon::GetImageForNetwork(network, network_icon::ICON_TYPE_LIST);
     info->disable =
         (network->activation_state() == shill::kActivationStateActivating) ||
         prohibited_by_policy;
-    info->highlight =
-        network->IsConnectedState() || network->IsConnectingState();
+    info->connected = network->IsConnectedState();
+    info->connecting = network->IsConnectingState();
+    info->highlight = info->connected || info->connecting;
     if (network->Matches(NetworkTypePattern::WiFi()))
       info->type = NetworkInfo::Type::WIFI;
     else if (network->Matches(NetworkTypePattern::Cellular()))
@@ -408,28 +394,27 @@ void NetworkListViewMd::UpdateNetworkListInternal() {
   // Get the updated list entries.
   needs_relayout_ = false;
   network_map_.clear();
-  std::unique_ptr<std::set<std::string>> new_service_paths =
-      UpdateNetworkListEntries();
+  std::unique_ptr<std::set<std::string>> new_guids = UpdateNetworkListEntries();
 
   // Remove old children.
-  std::set<std::string> remove_service_paths;
-  for (const auto& iter : service_path_map_) {
-    if (new_service_paths->find(iter.first) == new_service_paths->end()) {
-      remove_service_paths.insert(iter.first);
+  std::set<std::string> remove_guids;
+  for (const auto& iter : network_guid_map_) {
+    if (new_guids->find(iter.first) == new_guids->end()) {
+      remove_guids.insert(iter.first);
       network_map_.erase(iter.second);
       delete iter.second;
       needs_relayout_ = true;
     }
   }
 
-  for (const auto& remove_iter : remove_service_paths)
-    service_path_map_.erase(remove_iter);
+  for (const auto& remove_iter : remove_guids)
+    network_guid_map_.erase(remove_iter);
 
   if (!needs_relayout_)
     return;
 
   views::View* selected_view = nullptr;
-  for (const auto& iter : service_path_map_) {
+  for (const auto& iter : network_guid_map_) {
     if (delegate_->IsViewHovered(iter.second)) {
       selected_view = iter.second;
       break;
@@ -446,20 +431,19 @@ NetworkListViewMd::UpdateNetworkListEntries() {
   NetworkStateHandler* handler = NetworkHandler::Get()->network_state_handler();
 
   // First add high-priority networks (not Wi-Fi nor cellular).
-  std::unique_ptr<std::set<std::string>> new_service_paths =
+  std::unique_ptr<std::set<std::string>> new_guids =
       UpdateNetworkChildren(NetworkInfo::Type::UNKNOWN, 0);
 
-  // Keep an index of the last inserted child.
-  int index = new_service_paths->size();
+  // Keep an index where the next child should be inserted.
+  int index = new_guids->size();
 
   const NetworkTypePattern pattern = delegate_->GetNetworkTypePattern();
   if (pattern.MatchesPattern(NetworkTypePattern::Cellular())) {
     if (handler->IsTechnologyAvailable(NetworkTypePattern::Cellular())) {
-      UpdateSectionHeaderRow(
+      index = UpdateSectionHeaderRow(
           NetworkTypePattern::Cellular(),
           handler->IsTechnologyEnabled(NetworkTypePattern::Cellular()), index,
-          &cellular_header_view_);
-      ++index;
+          &cellular_header_view_, &cellular_separator_view_);
     }
 
     // Cellular initializing.
@@ -467,26 +451,24 @@ NetworkListViewMd::UpdateNetworkListEntries() {
     if (!message_id &&
         handler->IsTechnologyEnabled(NetworkTypePattern::Mobile()) &&
         !handler->FirstNetworkByType(NetworkTypePattern::Mobile())) {
-      message_id = IDS_ASH_STATUS_TRAY_NO_CELLULAR_NETWORKS;
+      message_id = IDS_ASH_STATUS_TRAY_NO_MOBILE_NETWORKS;
     }
     UpdateInfoLabel(message_id, index, &no_cellular_networks_view_);
     if (message_id)
       ++index;
 
     // Add cellular networks.
-    std::unique_ptr<std::set<std::string>> new_cellular_service_paths =
+    std::unique_ptr<std::set<std::string>> new_cellular_guids =
         UpdateNetworkChildren(NetworkInfo::Type::CELLULAR, index);
-    index += new_cellular_service_paths->size();
-    new_service_paths->insert(new_cellular_service_paths->begin(),
-                              new_cellular_service_paths->end());
+    index += new_cellular_guids->size();
+    new_guids->insert(new_cellular_guids->begin(), new_cellular_guids->end());
   }
 
   if (pattern.MatchesPattern(NetworkTypePattern::WiFi())) {
-    UpdateSectionHeaderRow(
+    index = UpdateSectionHeaderRow(
         NetworkTypePattern::WiFi(),
         handler->IsTechnologyEnabled(NetworkTypePattern::WiFi()), index,
-        &wifi_header_view_);
-    ++index;
+        &wifi_header_view_, &wifi_separator_view_);
 
     // "Wifi Enabled / Disabled".
     int message_id = 0;
@@ -500,11 +482,10 @@ NetworkListViewMd::UpdateNetworkListEntries() {
       ++index;
 
     // Add Wi-Fi networks.
-    std::unique_ptr<std::set<std::string>> new_wifi_service_paths =
+    std::unique_ptr<std::set<std::string>> new_wifi_guids =
         UpdateNetworkChildren(NetworkInfo::Type::WIFI, index);
-    index += new_wifi_service_paths->size();
-    new_service_paths->insert(new_wifi_service_paths->begin(),
-                              new_wifi_service_paths->end());
+    index += new_wifi_guids->size();
+    new_guids->insert(new_wifi_guids->begin(), new_wifi_guids->end());
   }
 
   // No networks or other messages (fallback).
@@ -513,28 +494,26 @@ NetworkListViewMd::UpdateNetworkListEntries() {
                     &no_wifi_networks_view_);
   }
 
-  return new_service_paths;
+  return new_guids;
 }
 
 std::unique_ptr<std::set<std::string>> NetworkListViewMd::UpdateNetworkChildren(
     NetworkInfo::Type type,
     int index) {
-  std::unique_ptr<std::set<std::string>> new_service_paths(
-      new std::set<std::string>);
+  std::unique_ptr<std::set<std::string>> new_guids(new std::set<std::string>);
   for (const auto& info : network_list_) {
     if (info->type != type)
       continue;
     UpdateNetworkChild(index++, info.get());
-    new_service_paths->insert(info->service_path);
+    new_guids->insert(info->guid);
   }
-  return new_service_paths;
+  return new_guids;
 }
 
 void NetworkListViewMd::UpdateNetworkChild(int index, const NetworkInfo* info) {
   views::View* network_view = nullptr;
-  ServicePathMap::const_iterator found =
-      service_path_map_.find(info->service_path);
-  if (found == service_path_map_.end()) {
+  NetworkGuidMap::const_iterator found = network_guid_map_.find(info->guid);
+  if (found == network_guid_map_.end()) {
     network_view = delegate_->CreateViewForNetwork(*info);
   } else {
     network_view = found->second;
@@ -546,8 +525,8 @@ void NetworkListViewMd::UpdateNetworkChild(int index, const NetworkInfo* info) {
   PlaceViewAtIndex(network_view, index);
   if (info->disable)
     network_view->SetEnabled(false);
-  network_map_[network_view] = info->service_path;
-  service_path_map_[info->service_path] = network_view;
+  network_map_[network_view] = info->guid;
+  network_guid_map_[info->guid] = network_view;
 }
 
 void NetworkListViewMd::PlaceViewAtIndex(views::View* view, int index) {
@@ -582,10 +561,12 @@ void NetworkListViewMd::UpdateInfoLabel(int message_id,
   *label_ptr = label;
 }
 
-void NetworkListViewMd::UpdateSectionHeaderRow(NetworkTypePattern pattern,
-                                               bool enabled,
-                                               int child_index,
-                                               SectionHeaderRowView** view) {
+int NetworkListViewMd::UpdateSectionHeaderRow(
+    NetworkTypePattern pattern,
+    bool enabled,
+    int child_index,
+    SectionHeaderRowView** view,
+    views::Separator** separator_view) {
   if (!*view) {
     if (pattern.Equals(NetworkTypePattern::Cellular()))
       *view = new CellularHeaderRowView();
@@ -595,8 +576,21 @@ void NetworkListViewMd::UpdateSectionHeaderRow(NetworkTypePattern pattern,
       NOTREACHED();
     (*view)->Init(enabled);
   }
+  // Show or hide a separator above the header. The separator should only be
+  // visible when the header row is not at the top of the list.
+  if (child_index > 0) {
+    if (!*separator_view)
+      *separator_view = TrayPopupUtils::CreateListSubHeaderSeparator();
+    PlaceViewAtIndex(*separator_view, child_index++);
+  } else {
+    if (*separator_view)
+      delete *separator_view;
+    *separator_view = nullptr;
+  }
+
   (*view)->SetEnabled(enabled);
-  PlaceViewAtIndex(*view, child_index);
+  PlaceViewAtIndex(*view, child_index++);
+  return child_index;
 }
 
 void NetworkListViewMd::NetworkIconChanged() {

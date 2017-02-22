@@ -35,6 +35,7 @@
 #include "bindings/core/v8/V8GCController.h"
 #include "bindings/core/v8/V8Initializer.h"
 #include "core/animation/AnimationClock.h"
+#include "core/layout/LayoutTheme.h"
 #include "core/page/Page.h"
 #include "core/workers/WorkerBackingThread.h"
 #include "gin/public/v8_platform.h"
@@ -71,7 +72,7 @@ static WebThread::TaskObserver* s_endOfTaskRunner = nullptr;
 
 static ModulesInitializer& modulesInitializer() {
   DEFINE_STATIC_LOCAL(std::unique_ptr<ModulesInitializer>, initializer,
-                      (wrapUnique(new ModulesInitializer)));
+                      (WTF::wrapUnique(new ModulesInitializer)));
   return *initializer;
 }
 
@@ -88,23 +89,6 @@ void initialize(Platform* platform) {
     s_endOfTaskRunner = new EndOfTaskRunner;
     currentThread->addTaskObserver(s_endOfTaskRunner);
   }
-}
-
-void shutdown() {
-  ThreadState::current()->cleanupMainThread();
-
-  // currentThread() is null if we are running on a thread without a message
-  // loop.
-  if (WebThread* currentThread = Platform::current()->currentThread()) {
-    currentThread->removeTaskObserver(s_endOfTaskRunner);
-    s_endOfTaskRunner = nullptr;
-  }
-
-  modulesInitializer().shutdown();
-
-  V8Initializer::shutdownMainThread();
-
-  Platform::shutdown();
 }
 
 v8::Isolate* mainThreadIsolate() {
@@ -124,6 +108,7 @@ bool layoutTestMode() {
 
 void setMockThemeEnabledForTest(bool value) {
   LayoutTestSupport::setMockThemeEnabledForTest(value);
+  LayoutTheme::theme().didChangeThemeEngine();
 }
 
 void setFontAntialiasingEnabledForTest(bool value) {

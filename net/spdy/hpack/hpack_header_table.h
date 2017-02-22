@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_SPDY_HPACK_HEADER_TABLE_H_
-#define NET_SPDY_HPACK_HEADER_TABLE_H_
+#ifndef NET_SPDY_HPACK_HPACK_HEADER_TABLE_H_
+#define NET_SPDY_HPACK_HPACK_HEADER_TABLE_H_
 
 #include <cstddef>
 #include <deque>
@@ -125,6 +125,9 @@ class NET_EXPORT_PRIVATE HpackHeaderTable {
     debug_visitor_ = std::move(visitor);
   }
 
+  // Returns the estimate of dynamically allocated memory in bytes.
+  size_t EstimateMemoryUsage() const;
+
  private:
   // Returns number of evictions required to enter |name| & |value|.
   size_t EvictionCountForEntry(base::StringPiece name,
@@ -173,4 +176,4 @@ class NET_EXPORT_PRIVATE HpackHeaderTable {
 
 }  // namespace net
 
-#endif  // NET_SPDY_HPACK_HEADER_TABLE_H_
+#endif  // NET_SPDY_HPACK_HPACK_HEADER_TABLE_H_

@@ -14,6 +14,7 @@ goog.scope(function() {
 var AutomationNode = chrome.automation.AutomationNode;
 var RoleType = chrome.automation.RoleType;
 var TreeChange = chrome.automation.TreeChange;
+var TreeChangeObserverFilter = chrome.automation.TreeChangeObserverFilter;
 
 /**
  * ChromeVox2 live region handler.
@@ -43,7 +44,8 @@ LiveRegions = function(chromeVoxState) {
    */
   this.liveRegionNodeSet_ = new WeakSet();
   chrome.automation.addTreeChangeObserver(
-      'liveRegionTreeChanges', this.onTreeChange.bind(this));
+      TreeChangeObserverFilter.LIVE_REGION_TREE_CHANGES,
+      this.onTreeChange.bind(this));
 };
 
 /**
@@ -91,7 +93,7 @@ LiveRegions.prototype = {
     var webView = AutomationUtil.getTopLevelRoot(node);
     webView = webView ? webView.parent : null;
     if (!LiveRegions.announceLiveRegionsFromBackgroundTabs_ &&
-        currentRange.start.node.role != RoleType.desktop &&
+        currentRange.start.node.role != RoleType.DESKTOP &&
         (!webView || !webView.state.focused)) {
       return;
     }
@@ -128,12 +130,28 @@ LiveRegions.prototype = {
     if (node.containerLiveBusy)
       return;
 
-    if (node.containerLiveAtomic && !node.liveAtomic) {
-      if (node.parent)
-        this.outputLiveRegionChange_(node.parent, opt_prependFormatStr);
+    var delta = new Date() - this.lastLiveRegionTime_;
+    if (delta > LiveRegions.LIVE_REGION_MIN_SAME_NODE_MS)
+      this.liveRegionNodeSet_ = new WeakSet();
+
+    while (node.containerLiveAtomic && !node.liveAtomic && node.parent)
+      node = node.parent;
+
+    if (this.liveRegionNodeSet_.has(node)) {
+      this.lastLiveRegionTime_ = new Date();
       return;
     }
 
+    this.outputLiveRegionChangeForNode_(node, opt_prependFormatStr);
+  },
+
+  /**
+   * @param {!AutomationNode} node The changed node.
+   * @param {?string=} opt_prependFormatStr If set, a format string for
+   *     cvox2.Output to prepend to the output.
+   * @private
+   */
+  outputLiveRegionChangeForNode_: function(node, opt_prependFormatStr) {
     var range = cursors.Range.fromNode(node);
     var output = new Output();
     if (opt_prependFormatStr)
@@ -163,18 +181,6 @@ LiveRegions.prototype = {
       output.withQueueMode(cvox.QueueMode.CATEGORY_FLUSH);
     else
       output.withQueueMode(cvox.QueueMode.QUEUE);
-
-    if (delta > LiveRegions.LIVE_REGION_MIN_SAME_NODE_MS)
-      this.liveRegionNodeSet_ = new WeakSet();
-
-    var parent = node;
-    while (parent) {
-      if (this.liveRegionNodeSet_.has(parent)) {
-        this.lastLiveRegionTime_ = currentTime;
-        return;
-      }
-      parent = parent.parent;
-    }
 
     this.liveRegionNodeSet_.add(node);
     output.go();

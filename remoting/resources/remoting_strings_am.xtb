@@ -27,9 +27,6 @@
 <translation id="1654128982815600832">ለዚህ ኮምፒውተር የርቀት ግንኙነቶችን በማንቃት ላይ…</translation>
 <translation id="170207782578677537">ይህንን ኮምፒውተር መመዝገብ አልተሳካም።</translation>
 <translation id="1704090719919187045">Chromoting የአስተናጋጅ ምርጫዎች</translation>
-<translation id="1730409684442507495">• የተሻሻለ የዴስክቶፕ ምስል ጥራት፣ ምላሽ ሰጪነት፣ እና የባትሪ ፍጆታ።
-• የተሻሻለ የጠቅታ ክወናዎች ምላሽ ሰጪነት
-• የተለያዩ የተሻሻሉ የበይነገጽ እነማ ተጽዕኖዎች</translation>
 <translation id="174018511426417793">ምንም የተመዘገቡ ኮምፒውተሮች የለዎትም። ከአንድ ኮምፒውተር ጋር የርቀት ግንኙነቶችን ለማንቃት Chrome የርቀት ዴስክቶፕን እዚያው ይጫኑና «<ph name="BUTTON_NAME" />»ን ይጫኑ።</translation>
 <translation id="1742469581923031760">በመገናኘት ላይ...</translation>
 <translation id="1770394049404108959">መተግበሪያውን መክፈት አልችልም።</translation>
@@ -44,6 +41,10 @@
 <translation id="2013996867038862849">ሁሉም የተጣመሩ ደንበኞች ተሰርዘዋል።</translation>
 <translation id="2038229918502634450">የመመሪያ ለውጥን ከግምት ለማስገባት፣ አስተናጋጅ ዳግም እየጀመረ ነው።</translation>
 <translation id="2046651113449445291">የሚከተሉት ደንበኞች ከዚህ ኮምፒውተር ጋር የተጣመሩ ሲሆን ፒን ሳያስገቡ መገናኘት ይችላሉ። ይህንን ፈቃድ በማንኛውም ጊዜ በተናጠል ወይም ለሁሉም ደንበኞች መሻር ይችላሉ።</translation>
+<translation id="2053901200959289492">• ለAndroid Nougat የብዙ መስኮት ድጋፍ ታክሏል።
+• የተሻሻለ የዴስክቶፕ ምስል ጥራት፣ ምላሽ ሰጪነት እና የባትሪ ፍጆታ።
+• የተሻሻለ የጠቅ-አድርጎ-ጉተታ ክወናዎች ምላሽ ሰጪነት።
+• የተሻሻሉ የተለያዩ የተጠቃሚ በይነገጽ እነማ ተጽዕኖዎች።</translation>
 <translation id="2078880767960296260">የአስተናጋጅ ሂደት</translation>
 <translation id="20876857123010370">የትራክፓድ ሁነታ</translation>
 <translation id="2089514346391228378">ለዚህ ኮምፒውተር የርቀት ግንኙነቶች ነቅተዋል።</translation>
@@ -223,6 +224,7 @@
 <translation id="6640610550128933069">ለመጨረሻ ጊዜ መስመር ላይ <ph name="DATE" /></translation>
 <translation id="6668065415969892472">የእርስዎ ፒን ተዘምኗል።</translation>
 <translation id="6681800064886881394">የቅጂ መብት 2013 Google Inc. ሁሉም መብቶች የተጠበቁ ናቸው።</translation>
+<translation id="6705482892455291412">አንዴ ኮዱን ካስገቡት በኋላ ግንኙነቱን እንዲቀበሉ እና ክፍለ-ጊዜውን ማጋራት እንዲጀምሩ ጥያቄ ይደርሰዎታል።</translation>
 <translation id="6746493157771801606">ታሪክ አጽዳ</translation>
 <translation id="6748108480210050150">ከ</translation>
 <translation id="677755392401385740">አስተናጋጅ ለተጠቃሚ ተጀምሯል፦ <ph name="HOST_USERNAME" />።</translation>
@@ -231,7 +233,7 @@
 <translation id="6939719207673461467">የቁልፍ ሰሌዳን አሳይ/ደብቅ።</translation>
 <translation id="6944854424004126054">መስኮት ወደነበረበት ይመልሱ</translation>
 <translation id="6963936880795878952">የሆነ ሰው ልክ ባልሆነ ፒን ከርቀት ኮምፒውተሩ ጋር ለመገናኘት ስለሞከረ ከእሱ ጋር ያሉ ግንኙነቶች ለጊዜው ታግደዋል። እባክዎ ቆይተው እንደገና ይሞክሩ።</translation>
-<translation id="6965382102122355670">ይሁን</translation>
+<translation id="6965382102122355670">እሺ</translation>
 <translation id="6985691951107243942">እርግጠኛ ነዎት ከ<ph name="HOSTNAME" /> ጋር ያሉትን የርቀት ግንኙነቶች ማሰናከል ይፈልጋሉ? ሐሳብዎን ከቀየሩ ግንኙነቶችን ዳግም ለማንቃት ያንን ኮምፒውተር መጎብኘት ይኖርብዎታል።</translation>
 <translation id="6998989275928107238">ለ</translation>
 <translation id="7019153418965365059">ያልታወቀ የአስተናጋጅ ስህተት፦ <ph name="HOST_OFFLINE_REASON" />።</translation>
@@ -299,6 +301,7 @@
 <translation id="9188433529406846933">ፈቀዳ ይስጡ</translation>
 <translation id="9213184081240281106">ልክ ያልሆነ የአስተናጋጅ ውቅር።</translation>
 <translation id="951991426597076286">አትቀበል</translation>
+<translation id="962733587145768554">ሂደቱን ለማጠናቀቅ እባክዎ በግንኙነት መገናኛ ሳጥኑ ላይ «<ph name="SHARE" />»ን ይምረጡ።</translation>
 <translation id="979100198331752041">Chrome የርቀት ዴስክቶፕ በ<ph name="HOSTNAME" /> ላይ ጊዜው ያለፈበት እና መዘመን የሚያስፈልገው ነው።</translation>
 <translation id="985602178874221306">የChromium ደራሲዎች</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" /> (መስመር ላይ የነበረበት <ph name="DATE_OR_TIME" /> መጨረሻ ጊዜ)</translation>

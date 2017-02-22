@@ -12,8 +12,7 @@
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "services/service_manager/public/interfaces/connector.mojom.h"
-#include "services/ui/common/event_matcher_util.h"
-#include "services/ui/surfaces/display_compositor.h"
+#include "services/ui/common/accelerator_util.h"
 #include "services/ui/ws/accelerator.h"
 #include "services/ui/ws/display.h"
 #include "services/ui/ws/display_manager.h"
@@ -66,13 +65,10 @@ class WindowManagerStateTest : public testing::Test {
   TestWindowTreeClient* wm_client() {
     return window_event_targeting_helper_.wm_client();
   }
-  TestWindowTreeClient* last_tree_client() {
-    return window_event_targeting_helper_.last_window_tree_client();
-  }
-  WindowTree* last_tree() {
-    return window_event_targeting_helper_.last_binding()->tree();
-  }
   WindowManagerState* window_manager_state() { return window_manager_state_; }
+  WindowServer* window_server() {
+    return window_event_targeting_helper_.window_server();
+  }
 
   void EmbedAt(WindowTree* tree,
                const ClientWindowId& embed_window_id,
@@ -80,7 +76,7 @@ class WindowManagerStateTest : public testing::Test {
                WindowTree** embed_tree,
                TestWindowTreeClient** embed_client_proxy) {
     mojom::WindowTreeClientPtr embed_client;
-    mojom::WindowTreeClientRequest client_request = GetProxy(&embed_client);
+    mojom::WindowTreeClientRequest client_request(&embed_client);
     ASSERT_TRUE(
         tree->Embed(embed_window_id, std::move(embed_client), embed_flags));
     TestWindowTreeClient* client =
@@ -232,6 +228,7 @@ TEST_F(WindowManagerStateTest, PreTargetConsumed) {
   {
     mojom::EventMatcherPtr matcher = ui::CreateKeyMatcher(
         ui::mojom::KeyboardCode::W, ui::mojom::kEventFlagControlDown);
+
     ASSERT_TRUE(window_manager_state()->event_dispatcher()->AddAccelerator(
         accelerator_id, std::move(matcher)));
   }
@@ -242,7 +239,7 @@ TEST_F(WindowManagerStateTest, PreTargetConsumed) {
 
   // Send an ensure only the pre accelerator is called.
   ui::KeyEvent key(ui::ET_KEY_PRESSED, ui::VKEY_W, ui::EF_CONTROL_DOWN);
-  window_manager_state()->ProcessEvent(key);
+  window_manager_state()->ProcessEvent(key, 0);
   EXPECT_TRUE(window_manager()->on_accelerator_called());
   EXPECT_EQ(accelerator_id, window_manager()->on_accelerator_id());
   EXPECT_TRUE(tracker->changes()->empty());
@@ -257,7 +254,7 @@ TEST_F(WindowManagerStateTest, PreTargetConsumed) {
   window_manager()->ClearAcceleratorCalled();
 
   // Repeat, but respond with UNHANDLED.
-  window_manager_state()->ProcessEvent(key);
+  window_manager_state()->ProcessEvent(key, 0);
   EXPECT_TRUE(window_manager()->on_accelerator_called());
   EXPECT_EQ(accelerator_id, window_manager()->on_accelerator_id());
   EXPECT_TRUE(tracker->changes()->empty());
@@ -548,9 +545,9 @@ TEST_F(WindowManagerStateTest, PostAcceleratorForgotten) {
 TEST(WindowManagerStateShutdownTest, DestroyTreeBeforeDisplay) {
   WindowServerTestHelper ws_test_helper;
   WindowServer* window_server = ws_test_helper.window_server();
-  TestPlatformScreen platform_screen;
-  platform_screen.Init(window_server->display_manager());
-  platform_screen.AddDisplay();
+  TestScreenManager screen_manager;
+  screen_manager.Init(window_server->display_manager());
+  screen_manager.AddDisplay();
   const UserId kUserId1 = "2";
   AddWindowManager(window_server, kUserId1);
   ASSERT_EQ(1u, window_server->display_manager()->displays().size());
@@ -565,6 +562,31 @@ TEST(WindowManagerStateShutdownTest, DestroyTreeBeforeDisplay) {
   ASSERT_TRUE(tree->IsWindowKnown(*(tree->roots().begin()), &root_client_id));
   EXPECT_TRUE(tree->DeleteWindow(root_client_id));
   window_server->DestroyTree(tree);
+}
+
+TEST_F(WindowManagerStateTest, CursorResetOverNoTarget) {
+  ASSERT_EQ(1u, window_server()->display_manager()->displays().size());
+  Display* display = *(window_server()->display_manager()->displays().begin());
+  DisplayTestApi display_test_api(display);
+  const ClientWindowId child_window_id(11);
+  window_tree()->NewWindow(child_window_id, ServerWindow::Properties());
+  ServerWindow* child_window =
+      window_tree()->GetWindowByClientId(child_window_id);
+  window_tree()->AddWindow(FirstRootId(window_tree()), child_window_id);
+  child_window->SetVisible(true);
+  child_window->SetBounds(gfx::Rect(0, 0, 20, 20));
+  child_window->parent()->SetPredefinedCursor(ui::mojom::Cursor::COPY);
+  EXPECT_EQ(ui::mojom::Cursor::COPY, display_test_api.last_cursor());
+  // Move the mouse outside the bounds of the child, so that the mouse is not
+  // over any valid windows. Cursor should change to POINTER.
+  ui::PointerEvent move(
+      ui::ET_POINTER_MOVED, gfx::Point(25, 25), gfx::Point(25, 25), 0, 0, 0,
+      ui::PointerDetails(EventPointerType::POINTER_TYPE_MOUSE),
+      base::TimeTicks());
+  window_manager_state()->ProcessEvent(move, 0);
+  // The event isn't over a valid target, which should trigger resetting the
+  // cursor to POINTER.
+  EXPECT_EQ(ui::mojom::Cursor::POINTER, display_test_api.last_cursor());
 }
 
 }  // namespace test

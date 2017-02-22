@@ -1,6 +1,11 @@
 include_rules = [
-  "+chromecast/public",
   "+ui/aura",
+  "+ui/base",
+  "+ui/base/ime",
   "+ui/display",
+  "+ui/events/test",
   "+ui/gfx",
+  "+ui/gl/test",
+  "+ui/views",
+  "+ui/wm/public",
 ]

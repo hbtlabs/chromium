@@ -97,7 +97,7 @@ to detailed prose:
     design. However, once the code is implemented, design docs should serve as
     archives of these decisions, not as half-correct docs (they are often
     misused). See
-    [Implementation state](#implementation_state_determines_document_location)
+    [Implementation state](#Implementation-state-determines-document-repository)
     below.
 
 ## Implementation state determines document repository
@@ -110,6 +110,6 @@ keep it in shared Drive folders.
 
 Do not write your own guide to a common technology or process. Link to it
 instead. If the guide doesn't exist or it's badly out of date, submit your
-updates to the appriopriate docs/ directory or create a package-level
+updates to the appropriate docs/ directory or create a package-level
 README.md. **Take ownership and don't be shy**: Other teams will usually welcome
 your contributions.

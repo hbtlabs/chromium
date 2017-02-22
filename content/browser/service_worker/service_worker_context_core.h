@@ -44,7 +44,7 @@ class EmbeddedWorkerRegistry;
 class ServiceWorkerContextObserver;
 class ServiceWorkerContextWrapper;
 class ServiceWorkerDatabaseTaskManager;
-class ServiceWorkerHandle;
+class ServiceWorkerDispatcherHost;
 class ServiceWorkerJobCoordinator;
 class ServiceWorkerNavigationHandleCore;
 class ServiceWorkerProviderHost;
@@ -60,17 +60,18 @@ class CONTENT_EXPORT ServiceWorkerContextCore
     : NON_EXPORTED_BASE(public ServiceWorkerVersion::Listener) {
  public:
   using BoolCallback = base::Callback<void(bool)>;
-  typedef base::Callback<void(ServiceWorkerStatusCode status)> StatusCallback;
-  typedef base::Callback<void(ServiceWorkerStatusCode status,
-                              const std::string& status_message,
-                              int64_t registration_id)> RegistrationCallback;
-  typedef base::Callback<void(ServiceWorkerStatusCode status,
-                              const std::string& status_message,
-                              int64_t registration_id)> UpdateCallback;
-  typedef base::Callback<
-      void(ServiceWorkerStatusCode status)> UnregistrationCallback;
-  typedef IDMap<ServiceWorkerProviderHost, IDMapOwnPointer> ProviderMap;
-  typedef IDMap<ProviderMap, IDMapOwnPointer> ProcessToProviderMap;
+  using StatusCallback = base::Callback<void(ServiceWorkerStatusCode status)>;
+  using RegistrationCallback =
+      base::Callback<void(ServiceWorkerStatusCode status,
+                          const std::string& status_message,
+                          int64_t registration_id)>;
+  using UpdateCallback = base::Callback<void(ServiceWorkerStatusCode status,
+                                             const std::string& status_message,
+                                             int64_t registration_id)>;
+  using UnregistrationCallback =
+      base::Callback<void(ServiceWorkerStatusCode status)>;
+  using ProviderMap = IDMap<std::unique_ptr<ServiceWorkerProviderHost>>;
+  using ProcessToProviderMap = IDMap<std::unique_ptr<ProviderMap>>;
 
   using ProviderByClientUUIDMap =
       std::map<std::string, ServiceWorkerProviderHost*>;
@@ -154,10 +155,17 @@ class CONTENT_EXPORT ServiceWorkerContextCore
     return job_coordinator_.get();
   }
 
+  // Maintains DispatcherHosts to exchange service worker related messages
+  // through them. The DispatcherHosts are not owned by this class.
+  void AddDispatcherHost(int process_id,
+                         ServiceWorkerDispatcherHost* dispatcher_host);
+  ServiceWorkerDispatcherHost* GetDispatcherHost(int process_id);
+  void RemoveDispatcherHost(int process_id);
+
   // The context class owns the set of ProviderHosts.
-  ServiceWorkerProviderHost* GetProviderHost(int process_id, int provider_id);
   void AddProviderHost(
       std::unique_ptr<ServiceWorkerProviderHost> provider_host);
+  ServiceWorkerProviderHost* GetProviderHost(int process_id, int provider_id);
   void RemoveProviderHost(int process_id, int provider_id);
   void RemoveAllProviderHostsForProcess(int process_id);
   std::unique_ptr<ProviderHostIterator> GetProviderHostIterator();
@@ -292,8 +300,8 @@ class CONTENT_EXPORT ServiceWorkerContextCore
   }
 
  private:
-  friend class ServiceWorkerContextCoreTestP;
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerContextCoreTestP, FailureInfo);
+  friend class ServiceWorkerContextCoreTest;
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerContextCoreTest, FailureInfo);
 
   typedef std::map<int64_t, ServiceWorkerRegistration*> RegistrationsMap;
   typedef std::map<int64_t, ServiceWorkerVersion*> VersionMap;
@@ -342,6 +350,8 @@ class CONTENT_EXPORT ServiceWorkerContextCore
   // because the Wrapper::Shutdown call that hops threads to destroy |this| uses
   // Bind() to hold a reference to |wrapper_| until |this| is fully destroyed.
   ServiceWorkerContextWrapper* wrapper_;
+  std::map<int /* process_id */, ServiceWorkerDispatcherHost*>
+      dispatcher_hosts_;
   std::unique_ptr<ProcessToProviderMap> providers_;
   std::unique_ptr<ProviderByClientUUIDMap> provider_by_uuid_;
   std::unique_ptr<ServiceWorkerStorage> storage_;

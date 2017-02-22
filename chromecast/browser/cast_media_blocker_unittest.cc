@@ -8,12 +8,11 @@
 
 #include "base/memory/ptr_util.h"
 #include "content/public/browser/media_session.h"
-#include "content/public/browser/web_contents.h"
 #include "content/public/test/test_content_client_initializer.h"
 #include "content/public/test/test_renderer_host.h"
-#include "content/public/test/web_contents_tester.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gl/test/gl_surface_test_support.h"
 
 namespace chromecast {
 namespace shell {
@@ -21,28 +20,27 @@ namespace shell {
 using ::testing::_;
 using ::testing::Invoke;
 
+namespace {
+
 class MockMediaSession : public content::MediaSession {
  public:
-  explicit MockMediaSession(content::MediaSession* session) {
-    // Delegate the calls to the real MediaSession.
-    ON_CALL(*this, Resume(_))
-        .WillByDefault(Invoke(session, &MediaSession::Resume));
-    ON_CALL(*this, Suspend(_))
-        .WillByDefault(Invoke(session, &MediaSession::Suspend));
-    ON_CALL(*this, Stop(_)).WillByDefault(Invoke(session, &MediaSession::Stop));
-    ON_CALL(*this, DidReceiveAction(_))
-        .WillByDefault(Invoke(session, &MediaSession::DidReceiveAction));
-  }
-  ~MockMediaSession() {}
+  MockMediaSession() {}
+  ~MockMediaSession() override {}
 
   MOCK_METHOD1(Resume, void(content::MediaSession::SuspendType));
   MOCK_METHOD1(Suspend, void(content::MediaSession::SuspendType));
   MOCK_METHOD1(Stop, void(content::MediaSession::SuspendType));
+  MOCK_METHOD0(StartDucking, void());
+  MOCK_METHOD0(StopDucking, void());
   MOCK_METHOD1(DidReceiveAction, void(blink::mojom::MediaSessionAction));
+  MOCK_METHOD1(AddObserver, void(content::MediaSessionObserver*));
+  MOCK_METHOD1(RemoveObserver, void(content::MediaSessionObserver*));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockMediaSession);
 };
+
+}  // namespace
 
 class CastMediaBlockerTest : public content::RenderViewHostTestHarness {
  public:
@@ -50,15 +48,11 @@ class CastMediaBlockerTest : public content::RenderViewHostTestHarness {
   ~CastMediaBlockerTest() override {}
 
   void SetUp() override {
+    gl::GLSurfaceTestSupport::InitializeOneOff();
     initializer_ = base::MakeUnique<content::TestContentClientInitializer>();
     content::RenderViewHostTestHarness::SetUp();
-    media_session_ = base::MakeUnique<MockMediaSession>(
-        content::MediaSession::Get(web_contents()));
-    media_blocker_ = base::MakeUnique<CastMediaBlocker>(media_session_.get(),
-                                                        web_contents());
-
-    content::WebContentsTester::For(web_contents())
-        ->NavigateAndCommit(GURL("https://www.youtube.com"));
+    media_session_ = base::MakeUnique<MockMediaSession>();
+    media_blocker_ = base::MakeUnique<CastMediaBlocker>(media_session_.get());
   }
 
   void TearDown() override { content::RenderViewHostTestHarness::TearDown(); }
@@ -76,10 +70,8 @@ class CastMediaBlockerTest : public content::RenderViewHostTestHarness {
   DISALLOW_COPY_AND_ASSIGN(CastMediaBlockerTest);
 };
 
-// TODO(derekjchow): Make the tests pass on cast testbots.
-// crbug.com/665118
 
-TEST_F(CastMediaBlockerTest, DISABLED_Block_Unblock_Suspended) {
+TEST_F(CastMediaBlockerTest, Block_Unblock_Suspended) {
   // Testing block/unblock operations do nothing if media never plays.
   EXPECT_CALL(*media_session_, Suspend(_)).Times(0);
   EXPECT_CALL(*media_session_, Resume(_)).Times(0);
@@ -95,7 +87,7 @@ TEST_F(CastMediaBlockerTest, DISABLED_Block_Unblock_Suspended) {
   media_blocker_->BlockMediaLoading(false);
 }
 
-TEST_F(CastMediaBlockerTest, DISABLED_No_Block) {
+TEST_F(CastMediaBlockerTest, No_Block) {
   // Tests CastMediaBlocker does nothing if block/unblock is not called.
   EXPECT_CALL(*media_session_, Suspend(_)).Times(0);
   EXPECT_CALL(*media_session_, Resume(_)).Times(0);
@@ -120,7 +112,7 @@ TEST_F(CastMediaBlockerTest, DISABLED_No_Block) {
   MediaSessionChanged(true, true);
 }
 
-TEST_F(CastMediaBlockerTest, DISABLED_Block_Before_Controllable) {
+TEST_F(CastMediaBlockerTest, Block_Before_Controllable) {
   // Tests CastMediaBlocker only suspends when controllable.
   EXPECT_CALL(*media_session_, Suspend(_)).Times(0);
   EXPECT_CALL(*media_session_, Resume(_)).Times(0);
@@ -133,7 +125,7 @@ TEST_F(CastMediaBlockerTest, DISABLED_Block_Before_Controllable) {
   MediaSessionChanged(true, false);
 }
 
-TEST_F(CastMediaBlockerTest, DISABLED_Block_After_Controllable) {
+TEST_F(CastMediaBlockerTest, Block_After_Controllable) {
   // Tests CastMediaBlocker suspends immediately on block if controllable.
   EXPECT_CALL(*media_session_, Suspend(_)).Times(0);
   EXPECT_CALL(*media_session_, Resume(_)).Times(0);
@@ -153,7 +145,7 @@ TEST_F(CastMediaBlockerTest, DISABLED_Block_After_Controllable) {
   media_blocker_->BlockMediaLoading(false);
 }
 
-TEST_F(CastMediaBlockerTest, DISABLED_Block_Multiple) {
+TEST_F(CastMediaBlockerTest, Block_Multiple) {
   // Tests CastMediaBlocker repeatively suspends when blocked.
   EXPECT_CALL(*media_session_, Suspend(_)).Times(0);
   EXPECT_CALL(*media_session_, Resume(_)).Times(0);
@@ -181,7 +173,7 @@ TEST_F(CastMediaBlockerTest, DISABLED_Block_Multiple) {
   testing::Mock::VerifyAndClearExpectations(media_session_.get());
 }
 
-TEST_F(CastMediaBlockerTest, DISABLED_Block_Unblock_Uncontrollable) {
+TEST_F(CastMediaBlockerTest, Block_Unblock_Uncontrollable) {
   // Tests CastMediaBlocker does not suspend or resume when uncontrollable.
   EXPECT_CALL(*media_session_, Suspend(_)).Times(0);
   EXPECT_CALL(*media_session_, Resume(_)).Times(0);
@@ -195,7 +187,7 @@ TEST_F(CastMediaBlockerTest, DISABLED_Block_Unblock_Uncontrollable) {
   testing::Mock::VerifyAndClearExpectations(media_session_.get());
 }
 
-TEST_F(CastMediaBlockerTest, DISABLED_Block_Unblock_Uncontrollable2) {
+TEST_F(CastMediaBlockerTest, Block_Unblock_Uncontrollable2) {
   EXPECT_CALL(*media_session_, Suspend(_)).Times(1);
   EXPECT_CALL(*media_session_, Resume(_)).Times(0);
   MediaSessionChanged(true, true);
@@ -218,7 +210,7 @@ TEST_F(CastMediaBlockerTest, DISABLED_Block_Unblock_Uncontrollable2) {
   media_blocker_->BlockMediaLoading(false);
 }
 
-TEST_F(CastMediaBlockerTest, DISABLED_Resume_When_Controllable) {
+TEST_F(CastMediaBlockerTest, Resume_When_Controllable) {
   // Tests CastMediaBlocker will only resume after unblock when controllable.
   EXPECT_CALL(*media_session_, Suspend(_)).Times(1);
   EXPECT_CALL(*media_session_, Resume(_)).Times(0);
@@ -234,7 +226,7 @@ TEST_F(CastMediaBlockerTest, DISABLED_Resume_When_Controllable) {
   MediaSessionChanged(true, true);
 }
 
-TEST_F(CastMediaBlockerTest, DISABLED_No_Resume) {
+TEST_F(CastMediaBlockerTest, No_Resume) {
   // Tests CastMediaBlocker will not resume if media starts playing by itself
   // after unblock.
   EXPECT_CALL(*media_session_, Suspend(_)).Times(1);
@@ -251,7 +243,7 @@ TEST_F(CastMediaBlockerTest, DISABLED_No_Resume) {
   MediaSessionChanged(false, false);
 }
 
-TEST_F(CastMediaBlockerTest, DISABLED_Block_Before_Resume) {
+TEST_F(CastMediaBlockerTest, Block_Before_Resume) {
   // Tests CastMediaBlocker does not resume if blocked again after an unblock.
   EXPECT_CALL(*media_session_, Suspend(_)).Times(1);
   EXPECT_CALL(*media_session_, Resume(_)).Times(0);
@@ -268,7 +260,7 @@ TEST_F(CastMediaBlockerTest, DISABLED_Block_Before_Resume) {
   MediaSessionChanged(true, true);
 }
 
-TEST_F(CastMediaBlockerTest, DISABLED_Unblocked_Already_Playing) {
+TEST_F(CastMediaBlockerTest, Unblocked_Already_Playing) {
   // Tests CastMediaBlocker does not resume if unblocked and media is playing.
   EXPECT_CALL(*media_session_, Suspend(_)).Times(1);
   EXPECT_CALL(*media_session_, Resume(_)).Times(0);

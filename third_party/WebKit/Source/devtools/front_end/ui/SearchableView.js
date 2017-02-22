@@ -54,14 +54,14 @@ UI.SearchableView = class extends UI.VBox {
     if (this._searchProvider.supportsCaseSensitiveSearch()) {
       this._caseSensitiveButton = new UI.ToolbarToggle(Common.UIString('Case sensitive'), '');
       this._caseSensitiveButton.setText('Aa');
-      this._caseSensitiveButton.addEventListener('click', this._toggleCaseSensitiveSearch, this);
+      this._caseSensitiveButton.addEventListener(UI.ToolbarButton.Events.Click, this._toggleCaseSensitiveSearch, this);
       toolbar.appendToolbarItem(this._caseSensitiveButton);
     }
 
     if (this._searchProvider.supportsRegexSearch()) {
       this._regexButton = new UI.ToolbarToggle(Common.UIString('Regex'), '');
       this._regexButton.setText('.*');
-      this._regexButton.addEventListener('click', this._toggleRegexSearch, this);
+      this._regexButton.addEventListener(UI.ToolbarButton.Events.Click, this._toggleRegexSearch, this);
       toolbar.appendToolbarItem(this._regexButton);
     }
 
@@ -133,7 +133,7 @@ UI.SearchableView = class extends UI.VBox {
     // Column 4
     this._replaceElement = this._firstRowElement.createChild('td').createChild('span');
 
-    this._replaceLabelElement = createCheckboxLabel(Common.UIString('Replace'));
+    this._replaceLabelElement = UI.createCheckboxLabel(Common.UIString('Replace'));
     this._replaceCheckboxElement = this._replaceLabelElement.checkboxElement;
     this._uniqueId = ++UI.SearchableView._lastUniqueId;
     var replaceCheckboxId = 'search-replace-trigger' + this._uniqueId;

@@ -67,7 +67,7 @@ void AbstractInlineTextBox::willDestroy(InlineTextBox* inlineTextBox) {
       gAbstractInlineTextBoxMap->find(inlineTextBox);
   if (it != gAbstractInlineTextBoxMap->end()) {
     it->value->detach();
-    gAbstractInlineTextBoxMap->remove(inlineTextBox);
+    gAbstractInlineTextBoxMap->erase(inlineTextBox);
   }
 }
 
@@ -100,7 +100,7 @@ LayoutRect AbstractInlineTextBox::localBounds() const {
   if (!m_inlineTextBox || !m_lineLayoutItem)
     return LayoutRect();
 
-  return m_inlineTextBox->calculateBoundaries();
+  return m_inlineTextBox->frameRect();
 }
 
 unsigned AbstractInlineTextBox::len() const {
@@ -114,9 +114,12 @@ AbstractInlineTextBox::Direction AbstractInlineTextBox::getDirection() const {
   if (!m_inlineTextBox || !m_lineLayoutItem)
     return LeftToRight;
 
-  if (m_lineLayoutItem.style()->isHorizontalWritingMode())
-    return (m_inlineTextBox->direction() == RTL ? RightToLeft : LeftToRight);
-  return (m_inlineTextBox->direction() == RTL ? BottomToTop : TopToBottom);
+  if (m_lineLayoutItem.style()->isHorizontalWritingMode()) {
+    return (m_inlineTextBox->direction() == TextDirection::kRtl ? RightToLeft
+                                                                : LeftToRight);
+  }
+  return (m_inlineTextBox->direction() == TextDirection::kRtl ? BottomToTop
+                                                              : TopToBottom);
 }
 
 void AbstractInlineTextBox::characterWidths(Vector<float>& widths) const {
@@ -143,7 +146,7 @@ void AbstractInlineTextBox::wordBoundaries(
   while (pos >= 0 && pos < len) {
     int next = iterator->next();
     if (isWordTextBreak(iterator))
-      words.append(WordBoundaries(pos, next));
+      words.push_back(WordBoundaries(pos, next));
     pos = next;
   }
 }
@@ -155,14 +158,15 @@ String AbstractInlineTextBox::text() const {
   unsigned start = m_inlineTextBox->start();
   unsigned len = m_inlineTextBox->len();
   if (Node* node = m_lineLayoutItem.node()) {
-    if (node->isTextNode())
+    if (node->isTextNode()) {
       return plainText(
           EphemeralRange(Position(node, start), Position(node, start + len)),
-          TextIteratorIgnoresStyleVisibility);
+          TextIteratorBehavior::ignoresStyleVisibilityBehavior());
+    }
     return plainText(
         EphemeralRange(Position(node, PositionAnchorType::BeforeAnchor),
                        Position(node, PositionAnchorType::AfterAnchor)),
-        TextIteratorIgnoresStyleVisibility);
+        TextIteratorBehavior::ignoresStyleVisibilityBehavior());
   }
 
   String result = m_lineLayoutItem.text()

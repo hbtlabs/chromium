@@ -33,13 +33,14 @@
 #include "core/html/parser/HTMLInputStream.h"
 #include "core/html/parser/HTMLParserOptions.h"
 #include "core/html/parser/HTMLParserReentryPermit.h"
+#include "core/html/parser/HTMLParserScriptRunnerHost.h"
 #include "core/html/parser/HTMLPreloadScanner.h"
-#include "core/html/parser/HTMLScriptRunnerHost.h"
 #include "core/html/parser/HTMLSourceTracker.h"
 #include "core/html/parser/HTMLToken.h"
 #include "core/html/parser/HTMLTokenizer.h"
 #include "core/html/parser/HTMLTreeBuilderSimulator.h"
 #include "core/html/parser/ParserSynchronizationPolicy.h"
+#include "core/html/parser/PreloadRequest.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/html/parser/XSSAuditor.h"
 #include "core/html/parser/XSSAuditorDelegate.h"
@@ -59,17 +60,16 @@ class DocumentFragment;
 class Element;
 class HTMLDocument;
 class HTMLParserScheduler;
+class HTMLParserScriptRunner;
 class HTMLPreloadScanner;
 class HTMLResourcePreloader;
-class HTMLScriptRunner;
 class HTMLTreeBuilder;
-class PumpSession;
 class SegmentedString;
 class TokenizedChunkQueue;
 class DocumentWriteEvaluator;
 
 class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
-                                       private HTMLScriptRunnerHost {
+                                       private HTMLParserScriptRunnerHost {
   USING_GARBAGE_COLLECTED_MIXIN(HTMLDocumentParser);
   USING_PRE_FINALIZER(HTMLDocumentParser, dispose);
 
@@ -95,7 +95,9 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
       ParserContentPolicy = AllowScriptingContent);
 
   // Exposed for testing.
-  HTMLScriptRunnerHost* asHTMLScriptRunnerHostForTesting() { return this; }
+  HTMLParserScriptRunnerHost* asHTMLParserScriptRunnerHostForTesting() {
+    return this;
+  }
 
   HTMLTokenizer* tokenizer() const { return m_tokenizer.get(); }
 
@@ -167,13 +169,19 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
   bool hasInsertionPoint() final;
   void prepareToStopParsing() final;
   void stopParsing() final;
+  bool isPaused() const {
+    return isWaitingForScripts() || m_isWaitingForStylesheets;
+  }
   bool isWaitingForScripts() const final;
   bool isExecutingScript() const final;
   void executeScriptsWaitingForResources() final;
+  void didAddPendingStylesheetInBody() final;
+  void didLoadAllBodyStylesheets() final;
+  void checkIfBodyStylesheetAdded();
   void documentElementAvailable() override;
 
-  // HTMLScriptRunnerHost
-  void notifyScriptLoaded(Resource*) final;
+  // HTMLParserScriptRunnerHost
+  void notifyScriptLoaded(PendingScript*) final;
   HTMLInputStream& inputStream() final { return m_input; }
   bool hasPreloadScanner() const final {
     return m_preloadScanner.get() && !shouldUseThreading();
@@ -198,7 +206,7 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
   void constructTreeFromCompactHTMLToken(const CompactHTMLToken&);
 
   void runScriptsForPausedTreeBuilder();
-  void resumeParsingAfterScriptExecution();
+  void resumeParsingAfterPause();
 
   void attemptToEnd();
   void endIfDelayed();
@@ -211,32 +219,18 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
   bool isScheduledForResume() const;
   bool inPumpSession() const { return m_pumpSessionNestingLevel > 0; }
   bool shouldDelayEnd() const {
-    return inPumpSession() || isWaitingForScripts() || isScheduledForResume() ||
+    return inPumpSession() || isPaused() || isScheduledForResume() ||
            isExecutingScript();
   }
 
   std::unique_ptr<HTMLPreloadScanner> createPreloadScanner();
 
+  // Let the given HTMLPreloadScanner scan the input it has, and then preloads
+  // resources using the resulting PreloadRequests and |m_preloader|.
+  void scanAndPreload(HTMLPreloadScanner*);
   void fetchQueuedPreloads();
 
   void evaluateAndPreloadScriptForDocumentWrite(const String& source);
-
-  // Temporary enum for the ParseHTMLOnMainThread experiment. This is used to
-  // annotate whether a given task should post a task or not on the main thread
-  // if the lookahead parser is living on the main thread.
-  enum LookaheadParserTaskSynchrony {
-    Synchronous,
-    Asynchronous,
-  };
-
-  // Setting |synchronyPolicy| to Synchronous will just call the function with
-  // the given parameters. Note, this method is completely temporary as we need
-  // to maintain both threading implementations until the ParseHTMLOnMainThread
-  // experiment finishes.
-  template <typename FunctionType, typename... Ps>
-  void postTaskToLookaheadParser(LookaheadParserTaskSynchrony synchronyPolicy,
-                                 FunctionType,
-                                 Ps&&... parameters);
 
   HTMLToken& token() { return *m_token; }
 
@@ -246,21 +240,24 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
 
   std::unique_ptr<HTMLToken> m_token;
   std::unique_ptr<HTMLTokenizer> m_tokenizer;
-  Member<HTMLScriptRunner> m_scriptRunner;
+  Member<HTMLParserScriptRunner> m_scriptRunner;
   Member<HTMLTreeBuilder> m_treeBuilder;
+
   std::unique_ptr<HTMLPreloadScanner> m_preloadScanner;
+  // A scanner used only for input provided to the insert() method.
   std::unique_ptr<HTMLPreloadScanner> m_insertionPreloadScanner;
-  std::unique_ptr<WebTaskRunner> m_loadingTaskRunner;
+
+  RefPtr<WebTaskRunner> m_loadingTaskRunner;
   Member<HTMLParserScheduler> m_parserScheduler;
   HTMLSourceTracker m_sourceTracker;
   TextPosition m_textPosition;
   XSSAuditor m_xssAuditor;
   XSSAuditorDelegate m_xssAuditorDelegate;
 
-  // FIXME: m_lastChunkBeforeScript, m_tokenizer, m_token, and m_input should be
+  // FIXME: m_lastChunkBeforePause, m_tokenizer, m_token, and m_input should be
   // combined into a single state object so they can be set and cleared together
   // and passed between threads together.
-  std::unique_ptr<TokenizedChunk> m_lastChunkBeforeScript;
+  std::unique_ptr<TokenizedChunk> m_lastChunkBeforePause;
   Deque<std::unique_ptr<TokenizedChunk>> m_speculations;
   WeakPtrFactory<HTMLDocumentParser> m_weakFactory;
   WeakPtr<BackgroundHTMLParser> m_backgroundParser;
@@ -278,6 +275,8 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
   // would require keeping track of token positions of preload requests.
   CompactHTMLToken* m_pendingCSPMetaToken;
 
+  TaskHandle m_resumeParsingTaskHandle;
+
   bool m_shouldUseThreading;
   bool m_endWasDelayed;
   bool m_haveBackgroundParser;
@@ -286,6 +285,8 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
   unsigned m_pumpSpeculationsSessionNestingLevel;
   bool m_isParsingAtLineNumber;
   bool m_triedLoadingLinkHeaders;
+  bool m_addedPendingStylesheetInBody;
+  bool m_isWaitingForStylesheets;
 };
 
 }  // namespace blink

@@ -30,7 +30,7 @@
 import optparse
 import unittest
 
-from webkitpy.common.system.outputcapture import OutputCapture
+from webkitpy.common.system.output_capture import OutputCapture
 from webkitpy.tool.commands.queries import PrintBaselines, PrintExpectations
 from webkitpy.tool.mock_tool import MockWebKitPatch
 
@@ -104,7 +104,7 @@ class PrintExpectationsTest(unittest.TestCase):
 
     def test_paths(self):
         self.run_test([],
-                      ('/mock-checkout/LayoutTests/TestExpectations\n'
+                      ('LayoutTests/TestExpectations\n'
                        'LayoutTests/NeverFixTests\n'
                        'LayoutTests/StaleTestExpectations\n'
                        'LayoutTests/SlowTests\n'),

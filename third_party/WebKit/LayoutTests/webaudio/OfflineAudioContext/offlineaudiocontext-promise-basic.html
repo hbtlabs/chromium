@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+  <head>
+    <script src="../../resources/testharness.js"></script>
+    <script src="../../resources/testharnessreport.js"></script> 
+    <script src="../resources/audio-testing.js"></script>
+    <title>OfflineAudioContext.startRendering Promise</title>
+  </head>
+
+  <body>
+    <script>
+      var context;
+      var promiseData;
+
+      var sampleRate = 48000;
+      var renderSeconds = 1;
+      var renderFrames = sampleRate * renderSeconds;
+      var contextChannels = 2;
+
+      var audit = Audit.createTaskRunner();
+
+      audit.defineTask('reject-promise', function (done) {
+        // Create a context and verify that calling startRendering more than once causes a rejected
+        // promise.
+        var context = new OfflineAudioContext(contextChannels, renderFrames, sampleRate);
+        context.startRendering();
+        Should('Promise from calling startRendering twice',
+          context.startRendering())
+          .beRejected()
+          .then(done);
+      });
+
+      audit.defineTask('promise-results', function (done) {
+        // Create an offline context and verify that buffer returned by the promise matches the
+        // expected results.
+        context = new OfflineAudioContext(contextChannels, renderFrames, sampleRate);
+
+        var buffer = context.createBuffer(contextChannels, renderFrames, sampleRate);
+        for (var k = 0; k < renderFrames; ++k) {
+          buffer.getChannelData(0)[k] = 1;
+          buffer.getChannelData(1)[k] = 2;
+        }
+
+        var source = context.createBufferSource();
+        source.buffer = buffer;
+        source.connect(context.destination);
+        source.start();
+
+        context.startRendering().then(handlePromise).then(done);
+      });
+      
+      audit.runTasks();
+      
+      function handlePromise(buffer)
+      {
+        renderedData = buffer;
+        var success = true;
+
+        Should("context.state", context.state)
+          .beEqualTo("closed");
+        Should("renderedData.numberOfChannels", renderedData.numberOfChannels)
+          .beEqualTo(contextChannels);
+        Should("renderedData.length", renderedData.length)
+          .beEqualTo(renderFrames);
+
+        for (var channel = 0; channel < contextChannels; ++channel) {
+          var data = renderedData.getChannelData(channel);
+          for (var k = 0; k < renderFrames; ++k) {
+            if (data[k] != channel + 1) {
+              success = false;
+              badChannel = channel;
+              badFrame = k;
+              break;
+            }
+          }
+          if (!success)
+            break;
+        }
+
+        Should('OfflineAudioContext.startRendering promise rendered data',
+          success)
+          .summarize('correctly', 'incorrectly');
+      }
+    </script>
+    
+  </body>
+</html>

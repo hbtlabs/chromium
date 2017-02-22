@@ -21,7 +21,7 @@ class StartupMetric(Metric):
 
   HISTOGRAMS_TO_RECORD = {
       'messageloop_start_time': (
-          'Startup.BrowserMessageLoopStartTimeFromMainEntry'),
+          'Startup.BrowserMessageLoopStartTimeFromMainEntry2'),
       'window_display_time': 'Startup.BrowserWindowDisplay',
       'open_tabs_time': 'Startup.BrowserOpenTabs',
       'first_non_empty_paint_time': 'Startup.FirstWebContents.NonEmptyPaint2',
@@ -57,16 +57,16 @@ class StartupMetric(Metric):
 
     def RecordOneTab(t):
       def EvaluateInt(exp):
-        val = t.EvaluateJavaScript(exp)
+        val = t.EvaluateJavaScript2(exp)
         if not val:
           logging.warn('%s undefined', exp)
           return 0
         return int(val)
 
       try:
-        t.WaitForJavaScriptExpression(
+        t.WaitForJavaScriptCondition2(
             'window.performance.timing["loadEventEnd"] > 0',
-            self.DEFAULT_LOADING_TIMEOUT)
+            timeout=self.DEFAULT_LOADING_TIMEOUT)
 
         # EvaluateJavaScript(window.performance.timing) doesn't guarantee to
         # return the desired javascript object (crbug/472603). It may return an
@@ -104,10 +104,10 @@ class StartupMetric(Metric):
             foreground_tab_stats.request_start_ms - browser_main_entry_time_ms))
 
   def AddResults(self, tab, results):
-    get_histogram_js = 'statsCollectionController.getBrowserHistogram("%s")'
-
     for display_name, histogram_name in self.HISTOGRAMS_TO_RECORD.iteritems():
-      result = tab.EvaluateJavaScript(get_histogram_js % histogram_name)
+      result = tab.EvaluateJavaScript2(
+          'statsCollectionController.getBrowserHistogram({{ name }})',
+          name=histogram_name)
       result = json.loads(result)
       measured_time = 0
 

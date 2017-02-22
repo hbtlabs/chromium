@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_CHROMEOS_ARC_ARC_OPTIN_UMA_H_
 #define CHROME_BROWSER_CHROMEOS_ARC_ARC_OPTIN_UMA_H_
 
+#include <ostream>
+
 namespace base {
 class TimeDelta;
 }
@@ -14,11 +16,11 @@ namespace arc {
 // These enums are used to define the buckets for an enumerated UMA histogram
 // and need to be synced with histograms.xml
 enum class OptInActionType : int {
-  OPTED_OUT = 0,               // Arc was opted out by user.
-  OPTED_IN = 1,                // Arc was opted in by user.
-  NOTIFICATION_ACCEPTED = 2,   // Arc OptIn notification was accepted.
-  NOTIFICATION_DECLINED = 3,   // Arc OptIn notification was declined.
-  NOTIFICATION_TIMED_OUT = 4,  // Arc OptIn notification was timed out.
+  OPTED_OUT = 0,               // ARC was opted out by user.
+  OPTED_IN = 1,                // ARC was opted in by user.
+  NOTIFICATION_ACCEPTED = 2,   // ARC OptIn notification was accepted.
+  NOTIFICATION_DECLINED = 3,   // ARC OptIn notification was declined.
+  NOTIFICATION_TIMED_OUT = 4,  // ARC OptIn notification was timed out.
   RETRY = 5,                   // User asked to retry OptIn.
   SIZE,                        // The size of this enum; keep last.
 };
@@ -33,6 +35,29 @@ enum class OptInCancelReason {
   CLOUD_PROVISION_FLOW_FAIL = 6,    // Cloud provision flow failed.
   ANDROID_MANAGEMENT_REQUIRED = 7,  // Android management is required for user.
   SIZE,                             // The size of this enum; keep last.
+};
+
+enum class OptInSilentAuthCode {
+  // Silent auth code feature is disabled.
+  DISABLED = 0,
+  // Silent auth code fetched normally.
+  SUCCESS = 1,
+  // HTTP Context cannot be prepared.
+  CONTEXT_NOT_READY = 2,
+  // No LST token is available.
+  NO_LST_TOKEN = 3,
+  // Silent auth code failed due sever HTTP error 5XX.
+  HTTP_SERVER_FAILURE = 4,
+  // Silent auth code failed due client HTTP error 4XX.
+  HTTP_CLIENT_FAILURE = 5,
+  // Silent auth code failed due unknown HTTP error.
+  HTTP_UNKNOWN_FAILURE = 6,
+  // Cannot parse HTTP response.
+  RESPONSE_PARSE_FAILURE = 7,
+  // No Auth code in response.
+  NO_AUTH_CODE_IN_RESPONSE = 8,
+  // The size of this enum, keep last.
+  SIZE,
 };
 
 // The values should be listed in ascending order for SIZE a last, for safety.
@@ -95,6 +120,10 @@ void UpdateProvisioningResultUMA(ProvisioningResult result, bool managed);
 void UpdateProvisioningTiming(const base::TimeDelta& elapsed_time,
                               bool success,
                               bool managed);
+void UpdateSilentAuthCodeUMA(OptInSilentAuthCode state);
+
+// Outputs the stringified |result| to |os|. This is only for logging purposes.
+std::ostream& operator<<(std::ostream& os, const ProvisioningResult& result);
 
 }  // namespace arc
 

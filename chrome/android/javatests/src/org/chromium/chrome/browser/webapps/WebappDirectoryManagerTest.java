@@ -9,8 +9,8 @@ import android.content.pm.ApplicationInfo;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
+import android.support.test.filters.SmallTest;
 import android.test.InstrumentationTestCase;
-import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.FileUtils;
 import org.chromium.base.metrics.RecordHistogram;
@@ -75,7 +75,7 @@ public class WebappDirectoryManagerTest extends InstrumentationTestCase {
     @Override
     public void setUp() throws Exception {
         super.setUp();
-        RecordHistogram.disableForTests();
+        RecordHistogram.setDisabledForTests(true);
         mMockContext = new WebappMockContext();
         mWebappDirectoryManager = new TestWebappDirectoryManager();
 
@@ -88,6 +88,7 @@ public class WebappDirectoryManagerTest extends InstrumentationTestCase {
     @Override
     public void tearDown() throws Exception {
         FileUtils.recursivelyDeleteFile(new File(mMockContext.getBaseDirectory()));
+        RecordHistogram.setDisabledForTests(false);
         super.tearDown();
     }
 

@@ -42,6 +42,7 @@
 #include "core/html/HTMLVideoElement.h"
 #include "core/html/ImageData.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
+#include "core/offscreencanvas/OffscreenCanvas.h"
 #include "core/svg/graphics/SVGImage.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/CrossThreadFunctional.h"
@@ -93,6 +94,8 @@ static inline ImageBitmapSource* toImageBitmapSourceInternal(
     return value.getAsImageData();
   if (value.isImageBitmap())
     return value.getAsImageBitmap();
+  if (value.isOffscreenCanvas())
+    return value.getAsOffscreenCanvas();
   ASSERT_NOT_REACHED();
   return nullptr;
 }
@@ -196,12 +199,12 @@ ImageBitmapFactories& ImageBitmapFactories::fromInternal(GlobalObject& object) {
 }
 
 void ImageBitmapFactories::addLoader(ImageBitmapLoader* loader) {
-  m_pendingLoaders.add(loader);
+  m_pendingLoaders.insert(loader);
 }
 
 void ImageBitmapFactories::didFinishLoading(ImageBitmapLoader* loader) {
   ASSERT(m_pendingLoaders.contains(loader));
-  m_pendingLoaders.remove(loader);
+  m_pendingLoaders.erase(loader);
 }
 
 ImageBitmapFactories::ImageBitmapLoader::ImageBitmapLoader(
@@ -249,28 +252,19 @@ void ImageBitmapFactories::ImageBitmapLoader::didFail(FileError::ErrorCode) {
 
 void ImageBitmapFactories::ImageBitmapLoader::scheduleAsyncImageBitmapDecoding(
     DOMArrayBuffer* arrayBuffer) {
-  // For a 4000*4000 png image where each 10*10 tile is filled in by a random
-  // RGBA value, the byteLength is around 2M, and it typically takes around
-  // 4.5ms to decode on a current model of Linux desktop.
-  const int longTaskByteLengthThreshold = 2000000;
-  BackgroundTaskRunner::TaskSize taskSize =
-      BackgroundTaskRunner::TaskSizeShortRunningTask;
-  if (arrayBuffer->byteLength() >= longTaskByteLengthThreshold)
-    taskSize = BackgroundTaskRunner::TaskSizeLongRunningTask;
-  WebTaskRunner* taskRunner =
+  RefPtr<WebTaskRunner> taskRunner =
       Platform::current()->currentThread()->getWebTaskRunner();
   BackgroundTaskRunner::postOnBackgroundThread(
       BLINK_FROM_HERE,
       crossThreadBind(
           &ImageBitmapFactories::ImageBitmapLoader::decodeImageOnDecoderThread,
-          wrapCrossThreadPersistent(this), crossThreadUnretained(taskRunner),
+          wrapCrossThreadPersistent(this), std::move(taskRunner),
           wrapCrossThreadPersistent(arrayBuffer), m_options.premultiplyAlpha(),
-          m_options.colorSpaceConversion()),
-      taskSize);
+          m_options.colorSpaceConversion()));
 }
 
 void ImageBitmapFactories::ImageBitmapLoader::decodeImageOnDecoderThread(
-    WebTaskRunner* taskRunner,
+    RefPtr<WebTaskRunner> taskRunner,
     DOMArrayBuffer* arrayBuffer,
     const String& premultiplyAlphaOption,
     const String& colorSpaceConversionOption) {
@@ -279,13 +273,15 @@ void ImageBitmapFactories::ImageBitmapLoader::decodeImageOnDecoderThread(
   ImageDecoder::AlphaOption alphaOp = ImageDecoder::AlphaPremultiplied;
   if (premultiplyAlphaOption == "none")
     alphaOp = ImageDecoder::AlphaNotPremultiplied;
-  ImageDecoder::ColorSpaceOption colorSpaceOp = ImageDecoder::ColorSpaceApplied;
+  bool ignoreColorSpace = false;
   if (colorSpaceConversionOption == "none")
-    colorSpaceOp = ImageDecoder::ColorSpaceIgnored;
+    ignoreColorSpace = true;
   std::unique_ptr<ImageDecoder> decoder(ImageDecoder::create(
       SegmentReader::createFromSkData(SkData::MakeWithoutCopy(
           arrayBuffer->data(), arrayBuffer->byteLength())),
-      true, alphaOp, colorSpaceOp));
+      true, alphaOp,
+      ignoreColorSpace ? ColorBehavior::ignore()
+                       : ColorBehavior::transformToGlobalTarget()));
   sk_sp<SkImage> frame;
   if (decoder) {
     frame = ImageBitmap::getSkImageFromDecoder(std::move(decoder));

@@ -12,34 +12,36 @@ cr.define('settings_toggle_button', function() {
        */
       var testElement;
 
-      /**
-       * Pref value used in tests, should reflect the 'checked' attribute.
-       * @type {SettingsCheckbox}
-       */
-      var pref = {
-        key: 'test',
-        type: chrome.settingsPrivate.PrefType.BOOLEAN,
-        value: true
-      };
-
       // Initialize a checked control before each test.
       setup(function() {
+        /**
+         * Pref value used in tests, should reflect the 'checked' attribute.
+         * Create a new pref for each test() to prevent order (state)
+         * dependencies between tests.
+         * @type {chrome.settingsPrivate.PrefObject}
+         */
+        var pref = {
+          key: 'test',
+          type: chrome.settingsPrivate.PrefType.BOOLEAN,
+          value: true
+        };
         PolymerTest.clearBody();
         testElement = document.createElement('settings-toggle-button');
         testElement.set('pref', pref);
         document.body.appendChild(testElement);
       });
 
-      test('responds to checked attribute', function() {
+      test('value changes on tap', function() {
         assertTrue(testElement.checked);
+        assertTrue(testElement.pref.value);
 
-        testElement.removeAttribute('checked');
+        MockInteractions.tap(testElement.$.control);
         assertFalse(testElement.checked);
-        assertFalse(pref.value);
+        assertFalse(testElement.pref.value);
 
-        testElement.setAttribute('checked', '');
+        MockInteractions.tap(testElement.$.control);
         assertTrue(testElement.checked);
-        assertTrue(pref.value);
+        assertTrue(testElement.pref.value);
       });
 
       test('fires a change event', function(done) {
@@ -47,6 +49,7 @@ cr.define('settings_toggle_button', function() {
           assertFalse(testElement.checked);
           done();
         });
+        assertTrue(testElement.checked);
         MockInteractions.tap(testElement.$.control);
       });
 
@@ -71,11 +74,60 @@ cr.define('settings_toggle_button', function() {
         testElement.set('pref', prefNum);
         assertTrue(testElement.checked);
 
-        testElement.removeAttribute('checked');
+        MockInteractions.tap(testElement.$.control);
         assertFalse(testElement.checked);
         assertEquals(0, prefNum.value);
 
-        testElement.setAttribute('checked', '');
+        MockInteractions.tap(testElement.$.control);
+        assertTrue(testElement.checked);
+        assertEquals(1, prefNum.value);
+      });
+
+      test('numerical pref with custom values', function() {
+        var prefNum = {
+          key: 'test',
+          type: chrome.settingsPrivate.PrefType.NUMBER,
+          value: 5
+        };
+
+        testElement._setNumericUncheckedValue(5);
+
+        testElement.set('pref', prefNum);
+        assertFalse(testElement.checked);
+
+        MockInteractions.tap(testElement.$.control);
+        assertTrue(testElement.checked);
+        assertEquals(1, prefNum.value);
+
+        MockInteractions.tap(testElement.$.control);
+        assertFalse(testElement.checked);
+        assertEquals(5, prefNum.value);
+      });
+
+      test('numerical pref with unknown inital value', function() {
+        prefNum = {
+          key: 'test',
+          type: chrome.settingsPrivate.PrefType.NUMBER,
+          value: 3
+        };
+
+        testElement._setNumericUncheckedValue(5);
+
+        testElement.set('pref', prefNum);
+
+        // Unknown value should still count as checked.
+        assertTrue(testElement.checked);
+
+        // The control should not clobber an existing unknown value.
+        assertEquals(3, prefNum.value);
+
+        // Unchecking should still send the unchecked value to prefs.
+        MockInteractions.tap(testElement.$.control);
+        assertFalse(testElement.checked);
+        assertEquals(5, prefNum.value);
+
+        // Checking should still send the normal checked value to prefs.
+        MockInteractions.tap(testElement.$.control);
         assertTrue(testElement.checked);
         assertEquals(1, prefNum.value);
       });

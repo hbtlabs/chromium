@@ -17,7 +17,7 @@ function test()
         InspectorTest.addSniffer(Snippets.ScriptSnippetModel.prototype, "_printRunScriptResult", dumpResult);
         Snippets.scriptSnippetModel.evaluateScriptSnippet(context, uiSourceCode);
         var target = context.target();
-        var mapping = Snippets.scriptSnippetModel._mappingForTarget.get(target);
+        var mapping = Snippets.scriptSnippetModel._mappingForDebuggerModel.get(SDK.DebuggerModel.fromTarget(target));
         var evaluationSourceURL = mapping._evaluationSourceURL(uiSourceCode);
         var snippetId = Snippets.scriptSnippetModel._snippetIdForUISourceCode.get(uiSourceCode);
         InspectorTest.addResult("Last evaluation source url for snippet: " + evaluationSourceURL);
@@ -104,8 +104,8 @@ function test()
                 {
                     uiSourceCode1.addRevision("<snippet content>");
                     InspectorTest.addResult("Snippet content set.");
-                    delete uiSourceCode1._content;
-                    delete uiSourceCode1._contentLoaded;
+                    uiSourceCode1._requestContentPromise = null;
+                    uiSourceCode1.contentLoaded = false;
                     uiSourceCode1.requestContent()
                         .then(contentCallback)
                         .then(contentDumped2)
@@ -128,16 +128,16 @@ function test()
                 renameSnippetAndCheckWorkspace(uiSourceCode1, "foo");
                 renameSnippetAndCheckWorkspace(uiSourceCode2, "bar");
                 renameSnippetAndCheckWorkspace(uiSourceCode2, "foo");
-                delete uiSourceCode1._content;
-                delete uiSourceCode1._contentLoaded;
+                uiSourceCode1._requestContentPromise = null;
+                uiSourceCode1.contentLoaded = false;
                 uiSourceCode1.requestContent()
                     .then(contentCallback)
                     .then(onContentDumped);
 
                 function onContentDumped()
                 {
-                    Snippets.scriptSnippetModel.project().deleteFile(uiSourceCode1.url());
-                    Snippets.scriptSnippetModel.project().deleteFile(uiSourceCode2.url());
+                    Snippets.scriptSnippetModel.project().deleteFile(uiSourceCode1);
+                    Snippets.scriptSnippetModel.project().deleteFile(uiSourceCode2);
                     Snippets.scriptSnippetModel.project().createFile("", null, "", step4.bind(this));
                 }
             }
@@ -146,7 +146,7 @@ function test()
             {
                 var uiSourceCode3 = uiSourceCode;
                 InspectorTest.addResult("Snippet3 created.");
-                Snippets.scriptSnippetModel.project().deleteFile(uiSourceCode3.url());
+                Snippets.scriptSnippetModel.project().deleteFile(uiSourceCode3);
                 InspectorTest.addResult("Snippet3 deleted.");
 
                 InspectorTest.addResult("Number of uiSourceCodes in workspace: " + workspace.uiSourceCodes().filter(filterSnippet).length);
@@ -168,7 +168,7 @@ function test()
             var context = UI.context.flavor(SDK.ExecutionContext);
 
             resetSnippetsSettings();
-            var snippetScriptMapping = Snippets.scriptSnippetModel.snippetScriptMapping(SDK.targetManager.targets()[0]);
+            var snippetScriptMapping = Snippets.scriptSnippetModel.snippetScriptMapping(SDK.DebuggerModel.fromTarget(SDK.targetManager.targets()[0]));
 
             Snippets.scriptSnippetModel.project().createFile("", null, "", step2.bind(this));
 
@@ -241,7 +241,7 @@ function test()
             }
 
             resetSnippetsSettings();
-            var snippetScriptMapping = Snippets.scriptSnippetModel.snippetScriptMapping(SDK.targetManager.targets()[0]);
+            var snippetScriptMapping = Snippets.scriptSnippetModel.snippetScriptMapping(SDK.DebuggerModel.fromTarget(SDK.targetManager.targets()[0]));
 
             Snippets.scriptSnippetModel.project().createFile("", null, "", step3.bind(this));
 

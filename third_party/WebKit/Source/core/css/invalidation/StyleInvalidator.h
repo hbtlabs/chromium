@@ -18,7 +18,7 @@ class Element;
 class HTMLSlotElement;
 class InvalidationSet;
 
-class StyleInvalidator {
+class CORE_EXPORT StyleInvalidator {
   DISALLOW_NEW();
   WTF_MAKE_NONCOPYABLE(StyleInvalidator);
 
@@ -31,6 +31,7 @@ class StyleInvalidator {
   void scheduleSiblingInvalidationsAsDescendants(
       const InvalidationLists&,
       ContainerNode& schedulingParent);
+  void rescheduleSiblingInvalidationsAsDescendants(Element&);
   void clearInvalidation(ContainerNode&);
 
   DEFINE_INLINE_TRACE() { visitor->trace(m_pendingInvalidationMap); }

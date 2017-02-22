@@ -319,7 +319,8 @@ void GLManager::InitializeWithCommandLine(
         gpu_preferences_, mailbox_manager_.get(), nullptr,
         new gpu::gles2::ShaderTranslatorCache(gpu_preferences_),
         new gpu::gles2::FramebufferCompletenessCache, feature_info,
-        options.bind_generates_resource, options.image_factory, nullptr);
+        options.bind_generates_resource, options.image_factory, nullptr,
+        GpuFeatureInfo());
   }
 
   decoder_.reset(::gpu::gles2::GLES2Decoder::Create(context_group));
@@ -428,6 +429,7 @@ void GLManager::SetupBaseContext() {
 void GLManager::OnFenceSyncRelease(uint64_t release) {
   DCHECK(sync_point_client_);
   DCHECK(!sync_point_client_->client_state()->IsFenceSyncReleased(release));
+  command_buffer_->SetReleaseCount(release);
   sync_point_client_->ReleaseFenceSync(release);
 }
 
@@ -453,6 +455,10 @@ void GLManager::MakeCurrent() {
 
 void GLManager::SetSurface(gl::GLSurface* surface) {
   decoder_->SetSurface(surface);
+}
+
+void GLManager::PerformIdleWork() {
+  executor_->PerformIdleWork();
 }
 
 void GLManager::Destroy() {
@@ -577,16 +583,6 @@ int32_t GLManager::CreateImage(ClientBuffer buffer,
   return new_id;
 }
 
-int32_t GLManager::CreateGpuMemoryBufferImage(size_t width,
-                                              size_t height,
-                                              unsigned internalformat,
-                                              unsigned usage) {
-  DCHECK_EQ(usage, static_cast<unsigned>(GL_READ_WRITE_CHROMIUM));
-  std::unique_ptr<gfx::GpuMemoryBuffer> buffer = CreateGpuMemoryBuffer(
-      gfx::Size(width, height), gfx::BufferFormat::RGBA_8888);
-  return CreateImage(buffer->AsClientBuffer(), width, height, internalformat);
-}
-
 void GLManager::DestroyImage(int32_t id) {
   gpu::gles2::ImageManager* image_manager = decoder_->GetImageManager();
   DCHECK(image_manager);
@@ -631,6 +627,10 @@ bool GLManager::IsFenceSyncFlushed(uint64_t release) {
 
 bool GLManager::IsFenceSyncFlushReceived(uint64_t release) {
   return IsFenceSyncRelease(release);
+}
+
+bool GLManager::IsFenceSyncReleased(uint64_t release) {
+  return release <= command_buffer_->GetLastState().release_count;
 }
 
 void GLManager::SignalSyncToken(const gpu::SyncToken& sync_token,

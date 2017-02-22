@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/elapsed_timer.h"
@@ -23,6 +24,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/google/core/browser/google_util.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_ui.h"
@@ -46,12 +48,10 @@ class ExtensionWebUiTimer : public content::WebContentsObserver {
       : content::WebContentsObserver(web_contents), is_md_(is_md) {}
   ~ExtensionWebUiTimer() override {}
 
-  void DidStartProvisionalLoadForFrame(
-      content::RenderFrameHost* render_frame_host,
-      const GURL& validated_url,
-      bool is_error_page,
-      bool is_iframe_srcdoc) override {
-    timer_.reset(new base::ElapsedTimer());
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    if (navigation_handle->IsInMainFrame() && !navigation_handle->IsSamePage())
+      timer_.reset(new base::ElapsedTimer());
   }
 
   void DocumentLoadedInFrame(
@@ -70,12 +70,13 @@ class ExtensionWebUiTimer : public content::WebContentsObserver {
   }
 
   void DocumentOnLoadCompletedInMainFrame() override {
-    // Sometimes*, DidStartProvisionalLoadForFrame() isn't called before this
-    // or DocumentLoadedInFrame(). Don't log anything in those cases.
-    // *This appears to be for in-page navigations like hash changes.
     // TODO(devlin): The usefulness of these metrics remains to be seen.
-    if (!timer_)
+    if (!timer_) {
+      // This object could have been created for a child RenderFrameHost so it
+      // would never get a DidStartNavigation with the main frame. However it
+      // will receive this current callback.
       return;
+    }
     if (is_md_) {
       UMA_HISTOGRAM_TIMES("Extensions.WebUi.LoadCompletedInMainFrame.MD",
                           timer_->Elapsed());
@@ -107,6 +108,8 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
                              IDS_MANAGE_EXTENSIONS_SETTING_WINDOWS_TITLE);
   source->AddLocalizedString("toolbarTitle", IDS_MD_EXTENSIONS_TOOLBAR_TITLE);
   source->AddLocalizedString("search", IDS_MD_EXTENSIONS_SEARCH);
+  // TODO(dpapad): Use a single merged string resource for "Clear search".
+  source->AddLocalizedString("clearSearch", IDS_DOWNLOAD_CLEAR_SEARCH);
   source->AddLocalizedString("sidebarApps", IDS_MD_EXTENSIONS_SIDEBAR_APPS);
   source->AddLocalizedString("sidebarExtensions",
                              IDS_MD_EXTENSIONS_SIDEBAR_EXTENSIONS);
@@ -294,37 +297,43 @@ ExtensionsUI::ExtensionsUI(content::WebUI* web_ui) : WebUIController(web_ui) {
 
   if (is_md) {
     source = CreateMdExtensionsSource();
-    InstallExtensionHandler* install_extension_handler =
-        new InstallExtensionHandler();
-    install_extension_handler->GetLocalizedValues(source);
-    web_ui->AddMessageHandler(install_extension_handler);
+    auto install_extension_handler =
+        base::MakeUnique<InstallExtensionHandler>();
+    InstallExtensionHandler* handler = install_extension_handler.get();
+    web_ui->AddMessageHandler(std::move(install_extension_handler));
+    handler->GetLocalizedValues(source);
   } else {
     source = CreateExtensionsHTMLSource();
 
-    ExtensionSettingsHandler* handler = new ExtensionSettingsHandler();
-    web_ui->AddMessageHandler(handler);
-    handler->GetLocalizedValues(source);
+    auto extension_settings_handler =
+        base::MakeUnique<ExtensionSettingsHandler>();
+    ExtensionSettingsHandler* settings_handler =
+        extension_settings_handler.get();
+    web_ui->AddMessageHandler(std::move(extension_settings_handler));
+    settings_handler->GetLocalizedValues(source);
 
-    ExtensionLoaderHandler* extension_loader_handler =
-        new ExtensionLoaderHandler(profile);
-    extension_loader_handler->GetLocalizedValues(source);
-    web_ui->AddMessageHandler(extension_loader_handler);
+    auto extension_loader_handler =
+        base::MakeUnique<ExtensionLoaderHandler>(profile);
+    ExtensionLoaderHandler* loader_handler = extension_loader_handler.get();
+    web_ui->AddMessageHandler(std::move(extension_loader_handler));
+    loader_handler->GetLocalizedValues(source);
 
-    InstallExtensionHandler* install_extension_handler =
-        new InstallExtensionHandler();
-    install_extension_handler->GetLocalizedValues(source);
-    web_ui->AddMessageHandler(install_extension_handler);
+    auto install_extension_handler =
+        base::MakeUnique<InstallExtensionHandler>();
+    InstallExtensionHandler* install_handler = install_extension_handler.get();
+    web_ui->AddMessageHandler(std::move(install_extension_handler));
+    install_handler->GetLocalizedValues(source);
 
 #if defined(OS_CHROMEOS)
-    chromeos::KioskAppsHandler* kiosk_app_handler =
-        new chromeos::KioskAppsHandler(
-            chromeos::OwnerSettingsServiceChromeOSFactory::GetForBrowserContext(
-                profile));
-    kiosk_app_handler->GetLocalizedValues(source);
-    web_ui->AddMessageHandler(kiosk_app_handler);
+    auto kiosk_app_handler = base::MakeUnique<chromeos::KioskAppsHandler>(
+        chromeos::OwnerSettingsServiceChromeOSFactory::GetForBrowserContext(
+            profile));
+    chromeos::KioskAppsHandler* kiosk_handler = kiosk_app_handler.get();
+    web_ui->AddMessageHandler(std::move(kiosk_app_handler));
+    kiosk_handler->GetLocalizedValues(source);
 #endif
 
-    web_ui->AddMessageHandler(new MetricsHandler());
+    web_ui->AddMessageHandler(base::MakeUnique<MetricsHandler>());
   }
 
   // Need to allow <object> elements so that the <extensionoptions> browser

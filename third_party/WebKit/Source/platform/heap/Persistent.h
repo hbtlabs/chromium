@@ -109,11 +109,21 @@ class PersistentBase {
   }
 
   void clear() { assign(nullptr); }
-  T& operator*() const { return *m_raw; }
+  T& operator*() const {
+    checkPointer();
+    return *m_raw;
+  }
   explicit operator bool() const { return m_raw; }
-  operator T*() const { return m_raw; }
+  operator T*() const {
+    checkPointer();
+    return m_raw;
+  }
   T* operator->() const { return *this; }
-  T* get() const { return m_raw; }
+
+  T* get() const {
+    checkPointer();
+    return m_raw;
+  }
 
   template <typename U>
   PersistentBase& operator=(U* other) {
@@ -167,17 +177,20 @@ class PersistentBase {
  protected:
   NO_SANITIZE_ADDRESS
   T* atomicGet() {
-    return reinterpret_cast<T*>(
-        acquireLoad(reinterpret_cast<void* volatile*>(&m_raw)));
+    return reinterpret_cast<T*>(acquireLoad(reinterpret_cast<void* volatile*>(
+        const_cast<typename std::remove_const<T>::type**>(&m_raw))));
   }
 
  private:
   NO_SANITIZE_ADDRESS
   void assign(T* ptr) {
-    if (crossThreadnessConfiguration == CrossThreadPersistentConfiguration)
-      releaseStore(reinterpret_cast<void* volatile*>(&m_raw), ptr);
-    else
+    if (crossThreadnessConfiguration == CrossThreadPersistentConfiguration) {
+      CrossThreadPersistentRegion::LockScope persistentLock(
+          ProcessHeap::crossThreadPersistentRegion());
       m_raw = ptr;
+    } else {
+      m_raw = ptr;
+    }
     checkPointer();
     if (m_raw) {
       if (!m_persistentNode)
@@ -193,11 +206,7 @@ class PersistentBase {
     static_assert(IsGarbageCollectedType<T>::value,
                   "T needs to be a garbage collected object");
     if (weaknessConfiguration == WeakPersistentConfiguration) {
-      if (crossThreadnessConfiguration == CrossThreadPersistentConfiguration)
-        visitor->registerWeakCellWithCallback(reinterpret_cast<void**>(this),
-                                              handleWeakPersistent);
-      else
-        visitor->registerWeakMembers(this, m_raw, handleWeakPersistent);
+      visitor->registerWeakCallback(this, handleWeakPersistent);
     } else {
       visitor->mark(m_raw);
     }
@@ -221,20 +230,12 @@ class PersistentBase {
     ASSERT(state->checkThread());
     m_persistentNode = state->getPersistentRegion()->allocatePersistentNode(
         this, traceCallback);
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     m_state = state;
 #endif
   }
 
   void uninitialize() {
-    // TODO(haraken): This is a short-term hack to prevent use-after-frees
-    // during a shutdown sequence.
-    // 1) blink::shutdown() frees the underlying storage for persistent nodes.
-    // 2) ~MessageLoop() destructs some Chromium-side objects that hold
-    //    Persistent. It touches the underlying storage and crashes.
-    if (WTF::isShutdown())
-      return;
-
     if (crossThreadnessConfiguration == CrossThreadPersistentConfiguration) {
       if (acquireLoad(reinterpret_cast<void* volatile*>(&m_persistentNode)))
         ProcessHeap::crossThreadPersistentRegion().freePersistentNode(
@@ -252,7 +253,7 @@ class PersistentBase {
     m_persistentNode = nullptr;
   }
 
-  void checkPointer() {
+  void checkPointer() const {
 #if DCHECK_IS_ON()
     if (!m_raw || isHashTableDeletedValue())
       return;
@@ -271,18 +272,6 @@ class PersistentBase {
         DCHECK_EQ(&current->heap(), &m_creationThreadState->heap());
       }
     }
-
-#if defined(ADDRESS_SANITIZER)
-    // ThreadHeap::isHeapObjectAlive(m_raw) checks that m_raw is a traceable
-    // object. In other words, it checks that the pointer is either of:
-    //
-    //   (a) a pointer to the head of an on-heap object.
-    //   (b) a pointer to the head of an on-heap mixin object.
-    //
-    // Otherwise, ThreadHeap::isHeapObjectAlive will crash when it calls
-    // header->checkHeader().
-    ThreadHeap::isHeapObjectAlive(m_raw);
-#endif
 #endif
   }
 
@@ -310,10 +299,8 @@ class PersistentBase {
   // m_raw is accessed most, so put it at the first field.
   T* m_raw;
   PersistentNode* m_persistentNode = nullptr;
-#if ENABLE(ASSERT)
-  ThreadState* m_state = nullptr;
-#endif
 #if DCHECK_IS_ON()
+  ThreadState* m_state = nullptr;
   const ThreadState* m_creationThreadState;
 #endif
 };
@@ -556,7 +543,7 @@ class PersistentHeapCollectionBase : public Collection {
   // PartitionAllocator to ensure persistent heap collections are always
   // allocated off-heap. This allows persistent collections to be used in
   // DEFINE_STATIC_LOCAL et. al.
-  WTF_USE_ALLOCATOR(PersistentHeapCollectionBase, WTF::PartitionAllocator);
+  USE_ALLOCATOR(PersistentHeapCollectionBase, WTF::PartitionAllocator);
   IS_PERSISTENT_REFERENCE_TYPE();
 
  public:
@@ -613,7 +600,7 @@ class PersistentHeapCollectionBase : public Collection {
         TraceMethodDelegate<PersistentHeapCollectionBase<Collection>,
                             &PersistentHeapCollectionBase<
                                 Collection>::tracePersistent>::trampoline);
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     m_state = state;
 #endif
   }
@@ -630,7 +617,7 @@ class PersistentHeapCollectionBase : public Collection {
   }
 
   PersistentNode* m_persistentNode;
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   ThreadState* m_state;
 #endif
 };

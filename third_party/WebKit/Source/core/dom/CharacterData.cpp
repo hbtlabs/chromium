@@ -41,10 +41,7 @@ void CharacterData::atomize() {
 }
 
 void CharacterData::setData(const String& data) {
-  const String& nonNullData = !data.isNull() ? data : emptyString();
-  if (m_data == nonNullData)
-    return;
-
+  const String& nonNullData = !data.isNull() ? data : emptyString;
   unsigned oldLength = length();
 
   setDataAndUpdate(nonNullData, 0, oldLength, nonNullData.length(),
@@ -176,9 +173,6 @@ void CharacterData::setDataAndUpdate(const String& newData,
                                      unsigned oldLength,
                                      unsigned newLength,
                                      UpdateSource source) {
-  if (source != UpdateFromParser)
-    document().dataWillChange(*this);
-
   String oldData = m_data;
   m_data = newData;
 
@@ -192,10 +186,6 @@ void CharacterData::setDataAndUpdate(const String& newData,
 
     document().notifyUpdateCharacterData(this, offsetOfReplacedData, oldLength,
                                          newLength);
-
-    if (document().frame())
-      document().frame()->selection().didUpdateCharacterData(
-          this, offsetOfReplacedData, oldLength, newLength);
   }
 
   document().incDOMTreeVersion();

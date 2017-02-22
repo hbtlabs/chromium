@@ -31,10 +31,13 @@
 #include "platform/SharedBuffer.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/Color.h"
+#include "platform/graphics/ColorBehavior.h"
 #include "platform/graphics/GraphicsTypes.h"
 #include "platform/graphics/ImageAnimationPolicy.h"
 #include "platform/graphics/ImageObserver.h"
 #include "platform/graphics/ImageOrientation.h"
+#include "platform/graphics/paint/PaintCanvas.h"
+#include "platform/graphics/paint/PaintFlags.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "wtf/Assertions.h"
 #include "wtf/Noncopyable.h"
@@ -43,10 +46,8 @@
 #include "wtf/ThreadSafeRefCounted.h"
 #include "wtf/text/WTFString.h"
 
-class SkCanvas;
 class SkImage;
 class SkMatrix;
-class SkPaint;
 
 namespace blink {
 
@@ -83,8 +84,7 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
 
   virtual bool currentFrameIsComplete() { return false; }
   virtual bool currentFrameIsLazyDecoded() { return false; }
-  virtual bool isTextureBacked();
-  virtual void transfer() {}
+  virtual bool isTextureBacked() const { return false; }
 
   // Derived classes should override this if they can assure that the current
   // image frame contains only resources from its own security origin.
@@ -139,7 +139,7 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
   // animation update for CSS and advance the SMIL timeline by one frame.
   virtual void advanceAnimationForTesting() {}
 
-  // Typically the ImageResource that owns us.
+  // Typically the ImageResourceContent that owns us.
   ImageObserver* getImageObserver() const {
     return m_imageObserverDisabled ? nullptr : m_imageObserver;
   }
@@ -152,30 +152,25 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
 
   enum TileRule { StretchTile, RoundTile, SpaceTile, RepeatTile };
 
-  virtual sk_sp<SkImage> imageForCurrentFrame() = 0;
+  virtual sk_sp<SkImage> imageForCurrentFrame(const ColorBehavior&) = 0;
   virtual PassRefPtr<Image> imageForDefaultFrame();
-
-  virtual void drawPattern(GraphicsContext&,
-                           const FloatRect&,
-                           const FloatSize&,
-                           const FloatPoint& phase,
-                           SkBlendMode,
-                           const FloatRect&,
-                           const FloatSize& repeatSpacing = FloatSize());
 
   enum ImageClampingMode {
     ClampImageToSourceRect,
     DoNotClampImageToSourceRect
   };
 
-  virtual void draw(SkCanvas*,
-                    const SkPaint&,
+  virtual void draw(PaintCanvas*,
+                    const PaintFlags&,
                     const FloatRect& dstRect,
                     const FloatRect& srcRect,
                     RespectImageOrientationEnum,
-                    ImageClampingMode) = 0;
+                    ImageClampingMode,
+                    const ColorBehavior&) = 0;
 
-  virtual bool applyShader(SkPaint&, const SkMatrix& localMatrix);
+  virtual bool applyShader(PaintFlags&,
+                           const SkMatrix& localMatrix,
+                           const ColorBehavior&);
 
   // Compute the tile which contains a given point (assuming a repeating tile
   // grid). The point and returned value are in destination grid space.
@@ -195,27 +190,35 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
  protected:
   Image(ImageObserver* = 0);
 
-  void drawTiled(GraphicsContext&,
-                 const FloatRect& dstRect,
-                 const FloatPoint& srcPoint,
-                 const FloatSize& tileSize,
-                 SkBlendMode,
-                 const FloatSize& repeatSpacing);
-  void drawTiled(GraphicsContext&,
-                 const FloatRect& dstRect,
-                 const FloatRect& srcRect,
-                 const FloatSize& tileScaleFactor,
-                 TileRule hRule,
-                 TileRule vRule,
-                 SkBlendMode);
+  void drawTiledBackground(GraphicsContext&,
+                           const FloatRect& dstRect,
+                           const FloatPoint& srcPoint,
+                           const FloatSize& tileSize,
+                           SkBlendMode,
+                           const FloatSize& repeatSpacing);
+  void drawTiledBorder(GraphicsContext&,
+                       const FloatRect& dstRect,
+                       const FloatRect& srcRect,
+                       const FloatSize& tileScaleFactor,
+                       TileRule hRule,
+                       TileRule vRule,
+                       SkBlendMode);
+
+  virtual void drawPattern(GraphicsContext&,
+                           const FloatRect&,
+                           const FloatSize&,
+                           const FloatPoint& phase,
+                           SkBlendMode,
+                           const FloatRect&,
+                           const FloatSize& repeatSpacing = FloatSize());
 
  private:
   RefPtr<SharedBuffer> m_encodedImageData;
   // TODO(Oilpan): consider having Image on the Oilpan heap and
   // turn this into a Member<>.
   //
-  // The observer (an ImageResource) is an untraced member, with the
-  // ImageResource being responsible for clearing itself out.
+  // The observer (an ImageResourceContent) is an untraced member, with the
+  // ImageResourceContent being responsible for clearing itself out.
   UntracedMember<ImageObserver> m_imageObserver;
   bool m_imageObserverDisabled;
 };

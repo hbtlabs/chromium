@@ -12,9 +12,9 @@
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/scoped_task_scheduler.h"
 #include "chromeos/cert_loader.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/shill_device_client.h"
@@ -86,7 +86,6 @@ class AutoConnectHandlerTest : public testing::Test {
     test_nsscertdb_.reset(new net::NSSCertDatabaseChromeOS(
         crypto::ScopedPK11Slot(PK11_ReferenceSlot(test_nssdb_.slot())),
         crypto::ScopedPK11Slot(PK11_ReferenceSlot(test_nssdb_.slot()))));
-    test_nsscertdb_->SetSlowTaskRunnerForTest(message_loop_.task_runner());
 
     CertLoader::Initialize();
     CertLoader::ForceHardwareBackedForTesting();
@@ -127,8 +126,6 @@ class AutoConnectHandlerTest : public testing::Test {
     client_cert_resolver_.reset(new ClientCertResolver());
     client_cert_resolver_->Init(network_state_handler_.get(),
                                 managed_config_handler_.get());
-    client_cert_resolver_->SetSlowTaskRunnerForTest(
-        message_loop_.task_runner());
 
     auto_connect_handler_.reset(new AutoConnectHandler());
     auto_connect_handler_->Init(client_cert_resolver_.get(),
@@ -140,6 +137,7 @@ class AutoConnectHandlerTest : public testing::Test {
   }
 
   void TearDown() override {
+    network_state_handler_->Shutdown();
     auto_connect_handler_.reset();
     client_cert_resolver_.reset();
     managed_config_handler_.reset();
@@ -250,9 +248,10 @@ class AutoConnectHandlerTest : public testing::Test {
   ShillServiceClient::TestInterface* test_service_client_;
   crypto::ScopedTestNSSDB test_nssdb_;
   std::unique_ptr<net::NSSCertDatabaseChromeOS> test_nsscertdb_;
-  base::MessageLoopForUI message_loop_;
 
  private:
+  base::test::ScopedTaskScheduler scoped_task_scheduler_;
+
   DISALLOW_COPY_AND_ASSIGN(AutoConnectHandlerTest);
 };
 

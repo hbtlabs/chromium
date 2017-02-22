@@ -26,6 +26,7 @@
 #include "modules/webaudio/MediaElementAudioSourceNode.h"
 
 #include "core/dom/ExecutionContextTask.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "modules/webaudio/AudioNodeOutput.h"
@@ -69,6 +70,10 @@ MediaElementAudioSourceHandler::~MediaElementAudioSourceHandler() {
   uninitialize();
 }
 
+HTMLMediaElement* MediaElementAudioSourceHandler::mediaElement() const {
+  return m_mediaElement.get();
+}
+
 void MediaElementAudioSourceHandler::dispose() {
   m_mediaElement->setAudioSourceNode(nullptr);
   AudioHandler::dispose();
@@ -98,10 +103,10 @@ void MediaElementAudioSourceHandler::setFormat(size_t numberOfChannels,
     m_sourceNumberOfChannels = numberOfChannels;
     m_sourceSampleRate = sourceSampleRate;
 
-    if (sourceSampleRate != sampleRate()) {
-      double scaleFactor = sourceSampleRate / sampleRate();
+    if (sourceSampleRate != context()->sampleRate()) {
+      double scaleFactor = sourceSampleRate / context()->sampleRate();
       m_multiChannelResampler =
-          makeUnique<MultiChannelResampler>(scaleFactor, numberOfChannels);
+          WTF::makeUnique<MultiChannelResampler>(scaleFactor, numberOfChannels);
     } else {
       // Bypass resampling.
       m_multiChannelResampler.reset();
@@ -176,12 +181,12 @@ void MediaElementAudioSourceHandler::process(size_t numberOfFrames) {
     // Grab data from the provider so that the element continues to make
     // progress, even if we're going to output silence anyway.
     if (m_multiChannelResampler.get()) {
-      DCHECK_NE(m_sourceSampleRate, sampleRate());
+      DCHECK_NE(m_sourceSampleRate, context()->sampleRate());
       m_multiChannelResampler->process(&provider, outputBus, numberOfFrames);
     } else {
       // Bypass the resampler completely if the source is at the context's
       // sample-rate.
-      DCHECK_EQ(m_sourceSampleRate, sampleRate());
+      DCHECK_EQ(m_sourceSampleRate, context()->sampleRate());
       provider.provideInput(outputBus, numberOfFrames);
     }
     // Output silence if we don't have access to the element.
@@ -192,7 +197,7 @@ void MediaElementAudioSourceHandler::process(size_t numberOfFrames) {
         m_maybePrintCORSMessage = false;
         if (context()->getExecutionContext()) {
           context()->getExecutionContext()->postTask(
-              BLINK_FROM_HERE,
+              TaskType::MediaElementEvent, BLINK_FROM_HERE,
               createCrossThreadTask(
                   &MediaElementAudioSourceHandler::printCORSMessage,
                   PassRefPtr<MediaElementAudioSourceHandler>(this),
@@ -220,7 +225,7 @@ void MediaElementAudioSourceHandler::unlock() {
 MediaElementAudioSourceNode::MediaElementAudioSourceNode(
     BaseAudioContext& context,
     HTMLMediaElement& mediaElement)
-    : AudioSourceNode(context) {
+    : AudioNode(context) {
   setHandler(MediaElementAudioSourceHandler::create(*this, mediaElement));
 }
 
@@ -271,7 +276,7 @@ MediaElementAudioSourceNode* MediaElementAudioSourceNode::create(
 
 DEFINE_TRACE(MediaElementAudioSourceNode) {
   AudioSourceProviderClient::trace(visitor);
-  AudioSourceNode::trace(visitor);
+  AudioNode::trace(visitor);
 }
 
 MediaElementAudioSourceHandler&

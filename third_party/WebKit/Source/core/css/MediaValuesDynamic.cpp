@@ -132,6 +132,14 @@ bool MediaValuesDynamic::strictMode() const {
   return calculateStrictMode(m_frame);
 }
 
+DisplayShape MediaValuesDynamic::displayShape() const {
+  return calculateDisplayShape(m_frame);
+}
+
+ColorSpaceGamut MediaValuesDynamic::colorGamut() const {
+  return calculateColorGamut(m_frame);
+}
+
 Document* MediaValuesDynamic::document() const {
   return m_frame->document();
 }
