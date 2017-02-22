@@ -16,6 +16,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/history/core/browser/web_history_service_observer.h"
 #include "components/signin/core/browser/signin_manager.h"
@@ -178,6 +179,9 @@ class RequestImpl : public WebHistoryService::Request,
         net::URLFetcher::POST : net::URLFetcher::GET;
     std::unique_ptr<net::URLFetcher> fetcher =
         net::URLFetcher::Create(url_, request_type, this);
+    data_use_measurement::DataUseUserData::AttachToFetcher(
+        fetcher.get(),
+        data_use_measurement::DataUseUserData::WEB_HISTORY_SERVICE);
     fetcher->SetRequestContext(request_context_.get());
     fetcher->SetMaxRetriesOn5xx(kMaxRetries);
     fetcher->SetLoadFlags(net::LOAD_DO_NOT_SEND_COOKIES |
@@ -275,11 +279,15 @@ GURL GetQueryUrl(const base::string16& text_query,
   url = net::AppendQueryParameter(url, "titles", "1");
 
   // Take |begin_time|, |end_time|, and |max_count| from the original query
-  // options, and convert them to the equivalent URL parameters.
+  // options, and convert them to the equivalent URL parameters. Note that
+  // QueryOptions uses exclusive |end_time| while the history.google.com API
+  // uses it inclusively, so we subtract 1us during conversion.
 
   base::Time end_time =
-      std::min(base::Time::FromInternalValue(options.EffectiveEndTime()),
-               base::Time::Now());
+      options.end_time.is_null()
+          ? base::Time::Now()
+          : std::min(options.end_time - base::TimeDelta::FromMicroseconds(1),
+                     base::Time::Now());
   url = net::AppendQueryParameter(url, "max", ServerTimeString(end_time));
 
   if (!options.begin_time.is_null()) {
@@ -360,7 +368,7 @@ std::unique_ptr<base::DictionaryValue> WebHistoryService::ReadResponse(
   if (request->GetResponseCode() == net::HTTP_OK) {
     std::unique_ptr<base::Value> value =
         base::JSONReader::Read(request->GetResponseBody());
-    if (value.get() && value.get()->IsType(base::Value::TYPE_DICTIONARY))
+    if (value.get() && value.get()->IsType(base::Value::Type::DICTIONARY))
       result.reset(static_cast<base::DictionaryValue*>(value.release()));
     else
       DLOG(WARNING) << "Non-JSON response received from history server.";

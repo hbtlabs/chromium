@@ -11,15 +11,14 @@
 #include "base/time/time.h"
 #include "components/keyed_service/core/keyed_service.h"
 
+class PrefRegistrySimple;
 class PrefService;
 
-namespace user_prefs {
-class PrefRegistrySyncable;
-}  // namespace user_prefs
+namespace chromeos {
 
 class PinStorageTestApi;
 
-namespace chromeos {
+namespace quick_unlock {
 
 class PinStorage : public KeyedService {
  public:
@@ -27,7 +26,7 @@ class PinStorage : public KeyedService {
   static const int kMaximumUnlockAttempts = 3;
 
   // Registers profile prefs.
-  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
   explicit PinStorage(PrefService* pref_service);
   ~PinStorage() override;
@@ -68,7 +67,7 @@ class PinStorage : public KeyedService {
   std::string PinSalt() const;
   std::string PinSecret() const;
 
-  friend class ::PinStorageTestApi;
+  friend class chromeos::PinStorageTestApi;
 
   PrefService* pref_service_;
   int unlock_attempt_count_ = 0;
@@ -77,6 +76,7 @@ class PinStorage : public KeyedService {
   DISALLOW_COPY_AND_ASSIGN(PinStorage);
 };
 
+}  // namespace quick_unlock
 }  // namespace chromeos
 
 #endif  // CHROME_BROWSER_CHROMEOS_LOGIN_QUICK_UNLOCK_PIN_STORAGE_H_

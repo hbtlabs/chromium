@@ -545,22 +545,9 @@ IN_PROC_BROWSER_TEST_F(SRTFetcherTest, MultipleLaunches) {
   }
 }
 
-IN_PROC_BROWSER_TEST_F(SRTFetcherTest, ReporterLogging_FeatureDisabled) {
-  exit_code_to_report_ = kSwReporterNothingFound;
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(
-      kSwReporterExtendedSafeBrowsingFeature);
-  RunReporter();
-  TestReporterLaunchCycle({base::FilePath()});
-  ExpectLoggingSwitches({/*expect no switches*/});
-  ExpectLastTimeSentReportNotSet();
-}
-
 IN_PROC_BROWSER_TEST_F(SRTFetcherTest, ReporterLogging_NoSBExtendedReporting) {
   exit_code_to_report_ = kSwReporterNothingFound;
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      kSwReporterExtendedSafeBrowsingFeature);
   RunReporter();
   TestReporterLaunchCycle({base::FilePath()});
   ExpectLoggingSwitches({/*expect no switches*/});
@@ -570,8 +557,6 @@ IN_PROC_BROWSER_TEST_F(SRTFetcherTest, ReporterLogging_NoSBExtendedReporting) {
 IN_PROC_BROWSER_TEST_F(SRTFetcherTest, ReporterLogging_EnabledFirstRun) {
   exit_code_to_report_ = kSwReporterNothingFound;
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      kSwReporterExtendedSafeBrowsingFeature);
   EnableSBExtendedReporting();
   // Note: don't set last time sent logs in the local state.
   // SBER is enabled and there is no record in the local state of the last time
@@ -586,8 +571,6 @@ IN_PROC_BROWSER_TEST_F(SRTFetcherTest, ReporterLogging_EnabledFirstRun) {
 IN_PROC_BROWSER_TEST_F(SRTFetcherTest, ReporterLogging_EnabledNoRecentLogging) {
   exit_code_to_report_ = kSwReporterNothingFound;
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      kSwReporterExtendedSafeBrowsingFeature);
   // SBER is enabled and last time logs were sent was more than
   // |kDaysBetweenReporterLogsSent| day ago, so we should send logs in this run.
   EnableSBExtendedReporting();
@@ -602,8 +585,6 @@ IN_PROC_BROWSER_TEST_F(SRTFetcherTest, ReporterLogging_EnabledNoRecentLogging) {
 IN_PROC_BROWSER_TEST_F(SRTFetcherTest, ReporterLogging_EnabledRecentlyLogged) {
   exit_code_to_report_ = kSwReporterNothingFound;
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      kSwReporterExtendedSafeBrowsingFeature);
   // SBER is enabled, but logs have been sent less than
   // |kDaysBetweenReporterLogsSent| day ago, so we shouldn't send any logs in
   // this run.
@@ -614,6 +595,44 @@ IN_PROC_BROWSER_TEST_F(SRTFetcherTest, ReporterLogging_EnabledRecentlyLogged) {
   TestReporterLaunchCycle({base::FilePath()});
   ExpectLoggingSwitches(std::set<std::string>{/*expect no switches*/});
   EXPECT_EQ(last_time_sent_logs, GetLastTimeSentReport());
+}
+
+IN_PROC_BROWSER_TEST_F(SRTFetcherTest, ReporterLogging_MultipleLaunches) {
+  exit_code_to_report_ = kSwReporterNothingFound;
+  base::test::ScopedFeatureList scoped_feature_list;
+  EnableSBExtendedReporting();
+  SetLastTimeSentReport(kDaysBetweenReporterLogsSent + 3);
+
+  const base::FilePath path1(L"path1");
+  const base::FilePath path2(L"path2");
+  SwReporterQueue invocations;
+  for (const auto& path : {path1, path2}) {
+    auto invocation = SwReporterInvocation::FromFilePath(path);
+    invocation.supported_behaviours =
+        SwReporterInvocation::BEHAVIOUR_ALLOW_SEND_REPORTER_LOGS;
+    invocations.push(invocation);
+  }
+  RunReporterQueue(invocations);
+
+  // SBER is enabled and last time logs were sent was more than
+  // |kDaysBetweenReporterLogsSent| day ago, so we should send logs in this run.
+  {
+    SCOPED_TRACE("first launch");
+    TestPartialLaunchCycle({path1});
+    ExpectLoggingSwitches(std::set<std::string>(std::begin(kExpectedSwitches),
+                                                std::end(kExpectedSwitches)));
+    ExpectLastReportSentInTheLastHour();
+  }
+
+  // Logs should also be sent for the next run, even though LastTimeSentReport
+  // is now recent, because the run is part of the same set of invocations.
+  {
+    SCOPED_TRACE("second launch");
+    TestReporterLaunchCycle({path2});
+    ExpectLoggingSwitches(std::set<std::string>(std::begin(kExpectedSwitches),
+                                                std::end(kExpectedSwitches)));
+    ExpectLastReportSentInTheLastHour();
+  }
 }
 
 }  // namespace safe_browsing

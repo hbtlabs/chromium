@@ -59,6 +59,8 @@ Common.Settings = class {
     var isLocal = !!descriptor['local'];
     var setting = settingType === 'regex' ? this.createRegExpSetting(settingName, defaultValue, undefined, isLocal) :
                                             this.createSetting(settingName, defaultValue, isLocal);
+    if (descriptor['title'])
+      setting.setTitle(descriptor['title']);
     this._moduleSettings.set(settingName, setting);
   }
 
@@ -231,6 +233,8 @@ Common.Setting = class {
     this._defaultValue = defaultValue;
     this._eventSupport = eventSupport;
     this._storage = storage;
+    /** @type {string} */
+    this._title = '';
   }
 
   /**
@@ -251,6 +255,20 @@ Common.Setting = class {
 
   get name() {
     return this._name;
+  }
+
+  /**
+   * @return {string}
+   */
+  title() {
+    return this._title;
+  }
+
+  /**
+   * @param {string} title
+   */
+  setTitle(title) {
+    this._title = title;
   }
 
   /**
@@ -699,6 +717,20 @@ Common.VersionController = class {
     networkColumns.set(columns);
   }
 
+  _updateVersionFrom21To22() {
+    var breakpointsSetting = Common.settings.createLocalSetting('breakpoints', []);
+    var breakpoints = breakpointsSetting.get();
+    for (var breakpoint of breakpoints) {
+      breakpoint['url'] = breakpoint['sourceFileId'];
+      delete breakpoint['sourceFileId'];
+    }
+    breakpointsSetting.set(breakpoints);
+  }
+
+  _updateVersionFrom22To23() {
+    // This update is no-op.
+  }
+
   _migrateSettingsFromLocalStorage() {
     // This step migrates all the settings except for the ones below into the browser profile.
     var localSettings = new Set([
@@ -731,7 +763,7 @@ Common.VersionController = class {
 };
 
 Common.VersionController._currentVersionName = 'inspectorVersion';
-Common.VersionController.currentVersion = 21;
+Common.VersionController.currentVersion = 23;
 
 /**
  * @type {!Common.Settings}

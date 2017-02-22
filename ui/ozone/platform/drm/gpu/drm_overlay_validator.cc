@@ -43,10 +43,10 @@ scoped_refptr<ScanoutBuffer> GetBufferForPageFlipTest(
     }
   }
 
-  gfx::BufferFormat buffer_format = GetBufferFormatFromFourCCFormat(format);
   scoped_refptr<ScanoutBuffer> scanout_buffer =
-      buffer_generator->Create(drm_device, buffer_format, size);
-  reusable_buffers->push_back(scanout_buffer);
+      buffer_generator->Create(drm_device, format, size);
+  if (scanout_buffer)
+    reusable_buffers->push_back(scanout_buffer);
 
   return scanout_buffer;
 }
@@ -68,7 +68,6 @@ uint32_t FindOptimalBufferFormat(uint32_t original_format,
                                  const gfx::Rect& plane_bounds,
                                  const gfx::Rect& window_bounds,
                                  HardwareDisplayController* controller) {
-  bool force_primary_format = false;
   uint32_t z_order = plane_z_order;
   // If Overlay completely covers primary and isn't transparent, try to find
   // optimal format w.r.t primary plane. This guarantees that optimal format
@@ -76,16 +75,7 @@ uint32_t FindOptimalBufferFormat(uint32_t original_format,
   if (plane_bounds == window_bounds &&
       !NeedsAlphaComposition(original_format)) {
     z_order = 0;
-#if !defined(USE_DRM_ATOMIC)
-    // Page flip can fail when trying to flip a buffer of format other than
-    // what was used during Modeset on non atomic kernels. There is no
-    // definitive way to query this.
-    force_primary_format = true;
-#endif
   }
-
-  if (force_primary_format)
-    return DRM_FORMAT_XRGB8888;
 
   // YUV is preferable format if supported.
   if (controller->IsFormatSupported(DRM_FORMAT_UYVY, z_order)) {
@@ -143,15 +133,14 @@ std::vector<OverlayCheck_Params> DrmOverlayValidator::TestPageFlip(
 
     uint32_t original_format = GetFourCCFormatForFramebuffer(overlay.format);
     scoped_refptr<ScanoutBuffer> buffer =
-        GetBufferForPageFlipTest(drm, scaled_buffer_size, original_format,
+        GetBufferForPageFlipTest(drm, overlay.buffer_size, original_format,
                                  buffer_generator_, &reusable_buffers);
-    DCHECK(buffer);
 
     OverlayPlane plane(buffer, overlay.plane_z_order, overlay.transform,
                        overlay.display_rect, overlay.crop_rect);
     test_list.push_back(plane);
 
-    if (controller->TestPageFlip(test_list)) {
+    if (buffer && controller->TestPageFlip(test_list)) {
       overlay.is_overlay_candidate = true;
 
       // If size scaling is needed, find an optimal format.
@@ -191,7 +180,6 @@ std::vector<OverlayCheck_Params> DrmOverlayValidator::TestPageFlip(
       // hardware resources and they might be already in use by other planes.
       // For example this plane has requested scaling capabilities and all
       // available scalars are already in use by other planes.
-      DCHECK(test_list.size() > 1);
       overlay.is_overlay_candidate = false;
       test_list.pop_back();
     }

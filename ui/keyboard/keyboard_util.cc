@@ -9,9 +9,8 @@
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string16.h"
-#include "media/audio/audio_manager.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/ime/input_method.h"
@@ -198,8 +197,7 @@ bool IsSmartDeployEnabled() {
 }
 
 bool IsVoiceInputEnabled() {
-  return media::AudioManager::Get()->HasAudioInputDevices() &&
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kDisableVoiceInput);
 }
 
@@ -369,7 +367,7 @@ void MarkKeyboardLoadFinished() {
   if (!logged) {
     // Log the delta only once.
     UMA_HISTOGRAM_TIMES(
-        "VirtualKeyboard.FirstLoadTime",
+        "VirtualKeyboard.InitLatency.FirstLoad",
         base::Time::Now() - g_keyboard_load_time_start.Get());
     logged = true;
   }

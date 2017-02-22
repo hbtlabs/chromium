@@ -41,7 +41,11 @@ class CORE_EXPORT ImageDocument final : public HTMLDocument {
     return new ImageDocument(initializer);
   }
 
-  ImageResource* cachedImage();
+  ImageResourceContent* cachedImage();
+
+  // TODO(hiroshige): Remove this.
+  ImageResource* cachedImageResourceDeprecated();
+
   HTMLImageElement* imageElement() const { return m_imageElement.get(); }
 
   void windowSizeChanged();
@@ -49,6 +53,7 @@ class CORE_EXPORT ImageDocument final : public HTMLDocument {
   void imageClicked(int x, int y);
   void imageLoaded();
   void updateImageStyle();
+  bool shouldShrinkToFit() const;
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -66,7 +71,6 @@ class CORE_EXPORT ImageDocument final : public HTMLDocument {
   void resizeImageToFit();
   void restoreImageSize();
   bool imageFitsInWindow() const;
-  bool shouldShrinkToFit() const;
   // Calculates the image size multiplier that's needed to fit the image to
   // the window, taking into account page zoom and device scale.
   float scale() const;
@@ -87,7 +91,11 @@ class CORE_EXPORT ImageDocument final : public HTMLDocument {
   bool m_imageIsLoaded;
 
   // Size of the checkerboard background tiles
-  int m_checkerSize;
+  int m_styleCheckerSize;
+
+  // Desktop: State of the mouse cursor in the image style
+  enum MouseCursorMode { Default, ZoomIn, ZoomOut };
+  MouseCursorMode m_styleMouseCursorMode;
 
   enum ShrinkToFitMode { Viewport, Desktop };
   ShrinkToFitMode m_shrinkToFitMode;

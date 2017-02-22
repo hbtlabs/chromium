@@ -63,13 +63,15 @@ public class ContextualSearchBarControl
 
     /**
      * The opacity of the Bar's Search Context.
+     * This text control may not be initialized until the opacity is set beyond 0.
      */
-    private float mSearchBarContextOpacity = 1.f;
+    private float mSearchBarContextOpacity;
 
     /**
      * The opacity of the Bar's Search Term.
+     * This text control may not be initialized until the opacity is set beyond 0.
      */
-    private float mSearchBarTermOpacity = 1.f;
+    private float mSearchBarTermOpacity;
 
     // Dimensions used for laying out the search bar.
     private final float mTextLayerMinHeight;
@@ -182,6 +184,7 @@ public class ContextualSearchBarControl
         mContextControl.destroy();
         mSearchTermControl.destroy();
         mCaptionControl.destroy();
+        mQuickActionControl.destroy();
     }
 
     /**
@@ -319,9 +322,13 @@ public class ContextualSearchBarControl
      * Sets the quick action if one is available.
      * @param quickActionUri The URI for the intent associated with the quick action.
      * @param quickActionCategory The {@link QuickActionCategory} for the quick action.
+     * @param toolbarBackgroundColor The current toolbar background color. This may be used for
+     *                               icon tinting.
      */
-    public void setQuickAction(String quickActionUri, int quickActionCategory) {
-        mQuickActionControl.setQuickAction(quickActionUri, quickActionCategory);
+    public void setQuickAction(
+            String quickActionUri, int quickActionCategory, int toolbarBackgroundColor) {
+        mQuickActionControl.setQuickAction(
+                quickActionUri, quickActionCategory, toolbarBackgroundColor);
         if (mQuickActionControl.hasQuickAction()) {
             // TODO(twellington): should the quick action caption be stored separately from the
             // regular caption?

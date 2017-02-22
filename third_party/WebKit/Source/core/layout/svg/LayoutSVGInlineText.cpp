@@ -28,6 +28,7 @@
 #include "core/dom/StyleEngine.h"
 #include "core/editing/TextAffinity.h"
 #include "core/editing/VisiblePosition.h"
+#include "core/frame/FrameView.h"
 #include "core/layout/svg/LayoutSVGText.h"
 #include "core/layout/svg/SVGLayoutSupport.h"
 #include "core/layout/svg/line/SVGInlineTextBox.h"
@@ -67,8 +68,10 @@ void LayoutSVGInlineText::styleDidChange(StyleDifference diff,
   LayoutText::styleDidChange(diff, oldStyle);
   updateScaledFont();
 
-  bool newPreserves = style() ? style()->whiteSpace() == PRE : false;
-  bool oldPreserves = oldStyle ? oldStyle->whiteSpace() == PRE : false;
+  bool newPreserves =
+      style() ? style()->whiteSpace() == EWhiteSpace::kPre : false;
+  bool oldPreserves =
+      oldStyle ? oldStyle->whiteSpace() == EWhiteSpace::kPre : false;
   if (oldPreserves != newPreserves) {
     setText(originalText(), true);
     return;
@@ -109,18 +112,18 @@ LayoutRect LayoutSVGInlineText::localCaretRect(InlineBox* box,
   if (static_cast<unsigned>(caretOffset) < textBox->start() + textBox->len()) {
     LayoutRect rect = textBox->localSelectionRect(caretOffset, caretOffset + 1);
     LayoutUnit x = box->isLeftToRightDirection() ? rect.x() : rect.maxX();
-    return LayoutRect(x, rect.y(), caretWidth(), rect.height());
+    return LayoutRect(x, rect.y(), frameView()->caretWidth(), rect.height());
   }
 
   LayoutRect rect = textBox->localSelectionRect(caretOffset - 1, caretOffset);
   LayoutUnit x = box->isLeftToRightDirection() ? rect.maxX() : rect.x();
-  return LayoutRect(x, rect.y(), caretWidth(), rect.height());
+  return LayoutRect(x, rect.y(), frameView()->caretWidth(), rect.height());
 }
 
 FloatRect LayoutSVGInlineText::floatLinesBoundingBox() const {
   FloatRect boundingBox;
   for (InlineTextBox* box = firstTextBox(); box; box = box->nextTextBox())
-    boundingBox.unite(FloatRect(box->calculateBoundaries()));
+    boundingBox.unite(FloatRect(box->frameRect()));
   return boundingBox;
 }
 
@@ -225,7 +228,7 @@ TextRun constructTextRun(LayoutSVGInlineText& text,
       0,  // xPos, only relevant with allowTabs=true
       0,  // padding, only relevant for justified text, not relevant for SVG
       TextRun::AllowTrailingExpansion, textDirection,
-      isOverride(style.unicodeBidi()) /* directionalOverride */);
+      isOverride(style.getUnicodeBidi()) /* directionalOverride */);
 
   if (length) {
     if (text.is8Bit())
@@ -297,7 +300,7 @@ void LayoutSVGInlineText::addMetricsFromRun(const TextRun& run,
 
   const float cachedFontHeight =
       fontData->getFontMetrics().floatHeight() / m_scalingFactor;
-  const bool preserveWhiteSpace = styleRef().whiteSpace() == PRE;
+  const bool preserveWhiteSpace = styleRef().whiteSpace() == EWhiteSpace::kPre;
   const unsigned runLength = run.length();
 
   // TODO(pdr): Character-based iteration is ambiguous and error-prone. It
@@ -307,7 +310,7 @@ void LayoutSVGInlineText::addMetricsFromRun(const TextRun& run,
     bool currentCharacterIsWhiteSpace = run[characterIndex] == ' ';
     if (!preserveWhiteSpace && lastCharacterWasWhiteSpace &&
         currentCharacterIsWhiteSpace) {
-      m_metrics.append(SVGTextMetrics(SVGTextMetrics::SkippedSpaceMetrics));
+      m_metrics.push_back(SVGTextMetrics(SVGTextMetrics::SkippedSpaceMetrics));
       characterIndex++;
       continue;
     }
@@ -315,7 +318,7 @@ void LayoutSVGInlineText::addMetricsFromRun(const TextRun& run,
     unsigned length = isValidSurrogatePair(run, characterIndex) ? 2 : 1;
     float width = charRanges[characterIndex].width() / m_scalingFactor;
 
-    m_metrics.append(SVGTextMetrics(length, width, cachedFontHeight));
+    m_metrics.push_back(SVGTextMetrics(length, width, cachedFontHeight));
 
     lastCharacterWasWhiteSpace = currentCharacterIsWhiteSpace;
     characterIndex += length;
@@ -332,8 +335,8 @@ void LayoutSVGInlineText::updateMetricsList(bool& lastCharacterWasWhiteSpace) {
       constructTextRun(*this, 0, textLength(), styleRef().direction());
   BidiResolver<TextRunIterator, BidiCharacterRun> bidiResolver;
   BidiRunList<BidiCharacterRun>& bidiRuns = bidiResolver.runs();
-  bool bidiOverride = isOverride(styleRef().unicodeBidi());
-  BidiStatus status(LTR, bidiOverride);
+  bool bidiOverride = isOverride(styleRef().getUnicodeBidi());
+  BidiStatus status(TextDirection::kLtr, bidiOverride);
   if (run.is8Bit() || bidiOverride) {
     WTF::Unicode::CharDirection direction = WTF::Unicode::LeftToRight;
     // If BiDi override is in effect, use the specified direction.
@@ -365,38 +368,40 @@ void LayoutSVGInlineText::updateMetricsList(bool& lastCharacterWasWhiteSpace) {
 }
 
 void LayoutSVGInlineText::updateScaledFont() {
-  computeNewScaledFontForStyle(this, m_scalingFactor, m_scaledFont);
+  computeNewScaledFontForStyle(*this, m_scalingFactor, m_scaledFont);
 }
 
 void LayoutSVGInlineText::computeNewScaledFontForStyle(
-    LayoutObject* layoutObject,
+    const LayoutObject& layoutObject,
     float& scalingFactor,
     Font& scaledFont) {
-  const ComputedStyle* style = layoutObject->style();
-  ASSERT(style);
-  ASSERT(layoutObject);
+  const ComputedStyle& style = layoutObject.styleRef();
 
   // Alter font-size to the right on-screen value to avoid scaling the glyphs
   // themselves, except when GeometricPrecision is specified.
   scalingFactor =
-      SVGLayoutSupport::calculateScreenFontSizeScalingFactor(layoutObject);
-  if (style->effectiveZoom() == 1 && (scalingFactor == 1 || !scalingFactor)) {
+      SVGLayoutSupport::calculateScreenFontSizeScalingFactor(&layoutObject);
+  if (!scalingFactor) {
     scalingFactor = 1;
-    scaledFont = style->font();
+    scaledFont = style.font();
     return;
   }
 
-  if (style->getFontDescription().textRendering() == GeometricPrecision)
+  const FontDescription& unscaledFontDescription = style.getFontDescription();
+  if (unscaledFontDescription.textRendering() == GeometricPrecision)
     scalingFactor = 1;
 
-  FontDescription fontDescription(style->getFontDescription());
+  Document& document = layoutObject.document();
+  float scaledFontSize = FontSize::getComputedSizeFromSpecifiedSize(
+      &document, scalingFactor, unscaledFontDescription.isAbsoluteSize(),
+      unscaledFontDescription.specifiedSize(), DoNotApplyMinimumForFontSize);
+  if (scaledFontSize == unscaledFontDescription.computedSize()) {
+    scaledFont = style.font();
+    return;
+  }
 
-  Document& document = layoutObject->document();
-  // FIXME: We need to better handle the case when we compute very small fonts
-  // below (below 1pt).
-  fontDescription.setComputedSize(FontSize::getComputedSizeFromSpecifiedSize(
-      &document, scalingFactor, fontDescription.isAbsoluteSize(),
-      fontDescription.specifiedSize(), DoNotUseSmartMinimumForFontSize));
+  FontDescription fontDescription = unscaledFontDescription;
+  fontDescription.setComputedSize(scaledFontSize);
 
   scaledFont = Font(fontDescription);
   scaledFont.update(document.styleEngine().fontSelector());

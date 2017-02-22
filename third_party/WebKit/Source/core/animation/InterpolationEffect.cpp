@@ -28,7 +28,7 @@ void InterpolationEffect::getActiveInterpolations(
       if (resultIndex < existingSize)
         result[resultIndex++] = interpolation;
       else
-        result.append(interpolation);
+        result.push_back(interpolation);
     }
   }
   if (resultIndex < existingSize)
@@ -36,7 +36,7 @@ void InterpolationEffect::getActiveInterpolations(
 }
 
 void InterpolationEffect::addInterpolationsFromKeyframes(
-    PropertyHandle property,
+    const PropertyHandle& property,
     const Keyframe::PropertySpecificKeyframe& keyframeA,
     const Keyframe::PropertySpecificKeyframe& keyframeB,
     double applyFrom,

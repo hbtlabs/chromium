@@ -23,7 +23,6 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
@@ -1177,8 +1176,14 @@ bool TabsUpdateFunction::RunAsync() {
 
   int tab_index = -1;
   TabStripModel* tab_strip = NULL;
-  if (!GetTabById(tab_id, browser_context(), include_incognito(), NULL,
+  Browser* browser = nullptr;
+  if (!GetTabById(tab_id, browser_context(), include_incognito(), &browser,
                   &tab_strip, &contents, &tab_index, &error_)) {
+    return false;
+  }
+
+  if (!ExtensionTabUtil::BrowserSupportsTabs(browser)) {
+    error_ = keys::kNoCurrentWindowError;
     return false;
   }
 
@@ -1547,10 +1552,11 @@ ExtensionFunction::ResponseAction TabsReloadFunction::Run() {
                          WindowOpenDisposition::CURRENT_TAB,
                          ui::PAGE_TRANSITION_RELOAD, false);
     current_browser->OpenURL(params);
-  } else if (bypass_cache) {
-    web_contents->GetController().ReloadBypassingCache(true);
   } else {
-    web_contents->GetController().Reload(true);
+    web_contents->GetController().Reload(
+        bypass_cache ? content::ReloadType::BYPASSING_CACHE
+                     : content::ReloadType::NORMAL,
+        true);
   }
 
   return RespondNow(NoArguments());
@@ -1789,7 +1795,10 @@ ExecuteCodeInTabFunction::ExecuteCodeInTabFunction()
 ExecuteCodeInTabFunction::~ExecuteCodeInTabFunction() {}
 
 bool ExecuteCodeInTabFunction::HasPermission() {
-  if (Init() &&
+  if (Init() == SUCCESS &&
+      // TODO(devlin/lazyboy): Consider removing the following check as it isn't
+      // doing anything. The fallback to ExtensionFunction::HasPermission()
+      // below dictates what this function returns.
       extension_->permissions_data()->HasAPIPermissionForTab(
           execute_tab_id_, APIPermission::kTab)) {
     return true;
@@ -1797,38 +1806,40 @@ bool ExecuteCodeInTabFunction::HasPermission() {
   return ExtensionFunction::HasPermission();
 }
 
-bool ExecuteCodeInTabFunction::Init() {
-  if (details_.get())
-    return true;
+ExecuteCodeFunction::InitResult ExecuteCodeInTabFunction::Init() {
+  if (init_result_)
+    return init_result_.value();
 
   // |tab_id| is optional so it's ok if it's not there.
   int tab_id = -1;
-  if (args_->GetInteger(0, &tab_id))
-    EXTENSION_FUNCTION_VALIDATE(tab_id >= 0);
+  if (args_->GetInteger(0, &tab_id) && tab_id < 0)
+    return set_init_result(VALIDATION_FAILURE);
 
   // |details| are not optional.
   base::DictionaryValue* details_value = NULL;
   if (!args_->GetDictionary(1, &details_value))
-    return false;
+    return set_init_result(VALIDATION_FAILURE);
   std::unique_ptr<InjectDetails> details(new InjectDetails());
   if (!InjectDetails::Populate(*details_value, details.get()))
-    return false;
+    return set_init_result(VALIDATION_FAILURE);
 
   // If the tab ID wasn't given then it needs to be converted to the
   // currently active tab's ID.
   if (tab_id == -1) {
     Browser* browser = chrome_details_.GetCurrentBrowser();
+    // Can happen during shutdown.
     if (!browser)
-      return false;
+      return set_init_result_error(keys::kNoCurrentWindowError);
     content::WebContents* web_contents = NULL;
+    // Can happen during shutdown.
     if (!ExtensionTabUtil::GetDefaultTab(browser, &web_contents, &tab_id))
-      return false;
+      return set_init_result_error(keys::kNoTabInBrowserWindowError);
   }
 
   execute_tab_id_ = tab_id;
   details_ = std::move(details);
   set_host_id(HostID(HostID::EXTENSIONS, extension()->id()));
-  return true;
+  return set_init_result(SUCCESS);
 }
 
 bool ExecuteCodeInTabFunction::CanExecuteScriptOnPage() {

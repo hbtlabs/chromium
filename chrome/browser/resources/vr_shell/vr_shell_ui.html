@@ -31,17 +31,32 @@ found in the LICENSE file.
         <div>$i18n{insecureWebVrContentTransient}</div>
       </div>
     </div>
-    <div id="omni-container" class="ui-element">
-      <div id="omni" class="idle">
-        <div id="omni-content">
-          <img id="omni-insecure-icon" class="connection-security"
-               src="../../../../ui/webui/resources/images/i_circle.svg">
-          <img id="omni-secure-icon" class="connection-security"
-               src="../../../../ui/webui/resources/images/lock.svg">
-          <div id="url">
+    <div id="url-indicator-container" class="ui-element">
+      <div id="url-indicator-border">
+        <div id="url-indicator">
+          <div id="url-indicator-content">
+            <div id="url-indicator-info-icon" class="url-indicator-icon"></div>
+            <div id="url-indicator-lock-icon" class="url-indicator-icon"></div>
+            <div id="url-indicator-warning-icon" class="url-indicator-icon">
+            </div>
+            <div id="url">
               <span id="domain"></span><span id="path"></span>
+            </div>
           </div>
         </div>
+      </div>
+    </div>
+    <div id="omnibox-ui-element" class="ui-element">
+      <div id="suggestions">
+        <div id="suggestion-4" class="suggestion"></div>
+        <div id="suggestion-3" class="suggestion"></div>
+        <div id="suggestion-2" class="suggestion"></div>
+        <div id="suggestion-1" class="suggestion"></div>
+        <div id="suggestion-0" class="suggestion"></div>
+      </div>
+      <div id="omnibox-url-element">
+        <div id="omnibox-clear-button"></div>
+        <input id="omnibox-input-field" type="url"></input>
       </div>
     </div>
     <div id="back" class="round-button ui-element">
@@ -57,6 +72,16 @@ found in the LICENSE file.
       <div class="caption">$i18n{forward}</div>
     </div>
     <div id="reload-ui-button" class="ui-element">Reload UI</div>
+    <div id="tab-template" class="tab"></div>
+    <!--The tab container element behaves like a scroll view (in conjunction
+        with the clip view). -->
+    <div id="tab-container" class="ui-element">
+      <!--The tab clip element's width will be programmatically set to the total
+          width of all it's children (the tabs). By doing so, the tabs can be
+          scrolled horizontally in the tab container element.-->
+      <div id="tab-clip">
+      </div>
+    </div>
   </div>
 </body>
 

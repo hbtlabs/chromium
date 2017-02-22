@@ -13,10 +13,9 @@
 #include "platform/graphics/StaticBitmapImage.h"
 #include "platform/graphics/UnacceleratedImageBufferSurface.h"
 #include "platform/graphics/gpu/AcceleratedImageBufferSurface.h"
+#include "platform/graphics/paint/PaintCanvas.h"
 #include "wtf/Assertions.h"
 #include "wtf/CurrentTime.h"
-
-#define UNIMPLEMENTED ASSERT_NOT_REACHED
 
 namespace blink {
 
@@ -29,7 +28,7 @@ OffscreenCanvasRenderingContext2D::OffscreenCanvasRenderingContext2D(
     : CanvasRenderingContext(nullptr, canvas, attrs) {
   ExecutionContext* executionContext = scriptState->getExecutionContext();
   if (executionContext->isDocument()) {
-    if (toDocument(executionContext)->settings()->disableReadingFromCanvas())
+    if (toDocument(executionContext)->settings()->getDisableReadingFromCanvas())
       canvas->setDisableReadingFromCanvasTrue();
     return;
   }
@@ -45,11 +44,12 @@ DEFINE_TRACE(OffscreenCanvasRenderingContext2D) {
   BaseRenderingContext2D::trace(visitor);
 }
 
-void OffscreenCanvasRenderingContext2D::commit(ScriptState* scriptState,
-                                               ExceptionState& exceptionState) {
+ScriptPromise OffscreenCanvasRenderingContext2D::commit(
+    ScriptState* scriptState,
+    ExceptionState& exceptionState) {
   UseCounter::Feature feature = UseCounter::OffscreenCanvasCommit2D;
   UseCounter::count(scriptState->getExecutionContext(), feature);
-  if (!getOffscreenCanvas()->hasPlaceholderCanvas()) {
+  if (!offscreenCanvas()->hasPlaceholderCanvas()) {
     // If an OffscreenCanvas has no associated canvas Id, it indicates that
     // it is not an OffscreenCanvas created by transfering control from html
     // canvas.
@@ -57,30 +57,30 @@ void OffscreenCanvasRenderingContext2D::commit(ScriptState* scriptState,
                                      "Commit() was called on a context whose "
                                      "OffscreenCanvas is not associated with a "
                                      "canvas element.");
-    return;
+    return exceptionState.reject(scriptState);
   }
-  double commitStartTime = WTF::monotonicallyIncreasingTime();
-  RefPtr<StaticBitmapImage> image = this->transferToStaticBitmapImage();
-  getOffscreenCanvas()->getOrCreateFrameDispatcher()->dispatchFrame(
-      std::move(image), commitStartTime);
+
+  bool isWebGLSoftwareRendering = false;
+  return offscreenCanvas()->commit(transferToStaticBitmapImage(),
+                                   isWebGLSoftwareRendering, scriptState);
 }
 
 // BaseRenderingContext2D implementation
 bool OffscreenCanvasRenderingContext2D::originClean() const {
-  return getOffscreenCanvas()->originClean();
+  return offscreenCanvas()->originClean();
 }
 
 void OffscreenCanvasRenderingContext2D::setOriginTainted() {
-  return getOffscreenCanvas()->setOriginTainted();
+  return offscreenCanvas()->setOriginTainted();
 }
 
 bool OffscreenCanvasRenderingContext2D::wouldTaintOrigin(
     CanvasImageSource* source,
     ExecutionContext* executionContext) {
   if (executionContext->isWorkerGlobalScope()) {
-    // We only support passing in ImageBitmap and OffscreenCanvases as source
-    // images in drawImage() or createPattern() in a OffscreenCanvas2d in
-    // worker.
+    // We only support passing in ImageBitmap and OffscreenCanvases as
+    // source images in drawImage() or createPattern() in a
+    // OffscreenCanvas2d in worker.
     DCHECK(source->isImageBitmap() || source->isOffscreenCanvas());
   }
 
@@ -89,11 +89,11 @@ bool OffscreenCanvasRenderingContext2D::wouldTaintOrigin(
 }
 
 int OffscreenCanvasRenderingContext2D::width() const {
-  return getOffscreenCanvas()->width();
+  return offscreenCanvas()->width();
 }
 
 int OffscreenCanvasRenderingContext2D::height() const {
-  return getOffscreenCanvas()->height();
+  return offscreenCanvas()->height();
 }
 
 bool OffscreenCanvasRenderingContext2D::hasImageBuffer() const {
@@ -103,6 +103,11 @@ bool OffscreenCanvasRenderingContext2D::hasImageBuffer() const {
 void OffscreenCanvasRenderingContext2D::reset() {
   m_imageBuffer = nullptr;
   BaseRenderingContext2D::reset();
+}
+
+ColorBehavior OffscreenCanvasRenderingContext2D::drawImageColorBehavior()
+    const {
+  return CanvasRenderingContext::colorBehaviorForMediaDrawnToCanvas();
 }
 
 ImageBuffer* OffscreenCanvasRenderingContext2D::imageBuffer() const {
@@ -170,14 +175,14 @@ PassRefPtr<Image> OffscreenCanvasRenderingContext2D::getImage(
 }
 
 ImageData* OffscreenCanvasRenderingContext2D::toImageData(
-    SnapshotReason reason) const {
+    SnapshotReason reason) {
   if (!imageBuffer())
     return nullptr;
   sk_sp<SkImage> snapshot =
       m_imageBuffer->newSkImageSnapshot(PreferNoAcceleration, reason);
   ImageData* imageData = nullptr;
   if (snapshot) {
-    imageData = ImageData::create(this->getOffscreenCanvas()->size());
+    imageData = ImageData::create(offscreenCanvas()->size());
     SkImageInfo imageInfo =
         SkImageInfo::Make(this->width(), this->height(), kRGBA_8888_SkColorType,
                           kUnpremul_SkAlphaType);
@@ -198,14 +203,14 @@ bool OffscreenCanvasRenderingContext2D::parseColorOrCurrentColor(
   return ::blink::parseColorOrCurrentColor(color, colorString, nullptr);
 }
 
-SkCanvas* OffscreenCanvasRenderingContext2D::drawingCanvas() const {
+PaintCanvas* OffscreenCanvasRenderingContext2D::drawingCanvas() const {
   ImageBuffer* buffer = imageBuffer();
   if (!buffer)
     return nullptr;
   return imageBuffer()->canvas();
 }
 
-SkCanvas* OffscreenCanvasRenderingContext2D::existingDrawingCanvas() const {
+PaintCanvas* OffscreenCanvasRenderingContext2D::existingDrawingCanvas() const {
   if (!m_imageBuffer)
     return nullptr;
   return m_imageBuffer->canvas();
@@ -223,22 +228,16 @@ AffineTransform OffscreenCanvasRenderingContext2D::baseTransform() const {
 void OffscreenCanvasRenderingContext2D::didDraw(const SkIRect& dirtyRect) {}
 
 bool OffscreenCanvasRenderingContext2D::stateHasFilter() {
-  // TODO: crbug.com/593838 make hasFilter accept nullptr
-  // return state().hasFilter(nullptr, nullptr, IntSize(width(), height()),
-  // this);
-  return false;
+  return state().hasFilterForOffscreenCanvas(offscreenCanvas()->size());
 }
 
 sk_sp<SkImageFilter> OffscreenCanvasRenderingContext2D::stateGetFilter() {
-  // TODO: make getFilter accept nullptr
-  // return state().getFilter(nullptr, nullptr, IntSize(width(), height()),
-  // this);
-  return nullptr;
+  return state().getFilterForOffscreenCanvas(offscreenCanvas()->size());
 }
 
 void OffscreenCanvasRenderingContext2D::validateStateStack() const {
 #if DCHECK_IS_ON()
-  if (SkCanvas* skCanvas = existingDrawingCanvas()) {
+  if (PaintCanvas* skCanvas = existingDrawingCanvas()) {
     DCHECK_EQ(static_cast<size_t>(skCanvas->getSaveCount()),
               m_stateStack.size() + 1);
   }

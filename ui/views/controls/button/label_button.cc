@@ -99,7 +99,7 @@ LabelButton::LabelButton(ButtonListener* listener, const base::string16& text)
   SetTextInternal(text);
 
   AddChildView(ink_drop_container_);
-  ink_drop_container_->SetPaintToLayer(true);
+  ink_drop_container_->SetPaintToLayer();
   ink_drop_container_->layer()->SetFillsBoundsOpaquely(false);
   ink_drop_container_->SetVisible(false);
 
@@ -159,25 +159,13 @@ void LabelButton::SetTextSubpixelRenderingEnabled(bool enabled) {
   label_->SetSubpixelRenderingEnabled(enabled);
 }
 
-const gfx::FontList& LabelButton::GetFontList() const {
-  return label_->font_list();
-}
-
-void LabelButton::SetFontList(const gfx::FontList& font_list) {
-  cached_normal_font_list_ = font_list;
-  if (PlatformStyle::kDefaultLabelButtonHasBoldFont) {
-    cached_bold_font_list_ = font_list.DeriveWithWeight(
-        GetValueBolderThan(font_list.GetFontWeight()));
-    if (is_default_) {
-      label_->SetFontList(cached_bold_font_list_);
-      return;
-    }
-  }
-  label_->SetFontList(cached_normal_font_list_);
+void LabelButton::SetFontListDeprecated(const gfx::FontList& font_list) {
+  SetFontList(font_list);
 }
 
 void LabelButton::AdjustFontSize(int font_size_delta) {
-  LabelButton::SetFontList(GetFontList().DeriveWithSizeDelta(font_size_delta));
+  LabelButton::SetFontList(
+      label()->font_list().DeriveWithSizeDelta(font_size_delta));
 }
 
 void LabelButton::SetElideBehavior(gfx::ElideBehavior elide_behavior) {
@@ -249,7 +237,7 @@ gfx::Size LabelButton::GetPreferredSize() const {
     return cached_preferred_size_;
 
   // Use a temporary label copy for sizing to avoid calculation side-effects.
-  Label label(GetText(), cached_normal_font_list_);
+  Label label(GetText(), label_->font_list());
   label.SetShadows(label_->shadows());
 
   if (style_ == STYLE_BUTTON && PlatformStyle::kDefaultLabelButtonHasBoldFont) {
@@ -258,7 +246,7 @@ gfx::Size LabelButton::GetPreferredSize() const {
     const int current_width = label.GetPreferredSize().width();
     label.SetFontList(cached_bold_font_list_);
     if (label.GetPreferredSize().width() < current_width)
-      label.SetFontList(cached_normal_font_list_);
+      label.SetFontList(label_->font_list());
   }
 
   // Calculate the required size.
@@ -393,6 +381,19 @@ gfx::Rect LabelButton::GetChildAreaBounds() {
   return GetLocalBounds();
 }
 
+void LabelButton::SetFontList(const gfx::FontList& font_list) {
+  cached_normal_font_list_ = font_list;
+  if (PlatformStyle::kDefaultLabelButtonHasBoldFont) {
+    cached_bold_font_list_ = font_list.DeriveWithWeight(
+        GetValueBolderThan(font_list.GetFontWeight()));
+    if (is_default_) {
+      label_->SetFontList(cached_bold_font_list_);
+      return;
+    }
+  }
+  label_->SetFontList(cached_normal_font_list_);
+}
+
 void LabelButton::OnPaint(gfx::Canvas* canvas) {
   View::OnPaint(canvas);
   Painter::PaintFocusPainter(this, canvas, focus_painter_.get());
@@ -422,13 +423,13 @@ void LabelButton::OnNativeThemeChanged(const ui::NativeTheme* theme) {
 }
 
 void LabelButton::AddInkDropLayer(ui::Layer* ink_drop_layer) {
-  image()->SetPaintToLayer(true);
+  image()->SetPaintToLayer();
   image()->layer()->SetFillsBoundsOpaquely(false);
   ink_drop_container_->AddInkDropLayer(ink_drop_layer);
 }
 
 void LabelButton::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
-  image()->SetPaintToLayer(false);
+  image()->DestroyLayer();
   ink_drop_container_->RemoveInkDropLayer(ink_drop_layer);
 }
 
@@ -440,7 +441,7 @@ std::unique_ptr<InkDrop> LabelButton::CreateInkDrop() {
 std::unique_ptr<views::InkDropRipple> LabelButton::CreateInkDropRipple() const {
   return UseFloodFillInkDrop()
              ? base::MakeUnique<views::FloodFillInkDropRipple>(
-                   GetLocalBounds(), GetInkDropCenterBasedOnLastEvent(),
+                   size(), GetInkDropCenterBasedOnLastEvent(),
                    GetInkDropBaseColor(), ink_drop_visible_opacity())
              : CreateDefaultInkDropRipple(
                    image()->GetMirroredBounds().CenterPoint());
@@ -457,7 +458,7 @@ std::unique_ptr<views::InkDropHighlight> LabelButton::CreateInkDropHighlight()
                    gfx::RectF(image()->GetMirroredBounds()).CenterPoint());
 }
 
-void LabelButton::StateChanged() {
+void LabelButton::StateChanged(ButtonState old_state) {
   const gfx::Size previous_image_size(image_->GetPreferredSize());
   UpdateImage();
   ResetLabelEnabledColor();

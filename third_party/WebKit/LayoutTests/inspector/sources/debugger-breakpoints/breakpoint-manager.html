@@ -1,7 +1,6 @@
 <html>
 <head>
 <script src="../../../http/tests/inspector/inspector-test.js"></script>
-<script src="../../../http/tests/inspector/workspace-test.js"></script>
 <script src="breakpoint-manager.js"></script>
 <script>
 function test()
@@ -13,13 +12,13 @@ function test()
     {
         mockTarget.debuggerModel.reset();
         InspectorTest.addResult("  Resetting workspace.");
-        breakpointManager._debuggerWorkspaceBinding._reset(mockTarget);
+        breakpointManager._debuggerWorkspaceBinding._reset(mockTarget.debuggerModel);
         InspectorTest.testNetworkProject._reset();
     }
 
-    function createBreakpoint(uiSourceCodeId, lineNumber, condition, enabled)
+    function createBreakpoint(url, lineNumber, condition, enabled)
     {
-        return { sourceFileId: uiSourceCodeId, lineNumber: lineNumber, condition: condition, enabled: enabled };
+        return { url: url, lineNumber: lineNumber, condition: condition, enabled: enabled };
     }
 
     var serializedBreakpoints = [];
@@ -238,7 +237,7 @@ function test()
                 InspectorTest.addResult("  Resolving provisional breakpoint.");
                 InspectorTest.addScript(mockTarget, breakpointManager, "a.js");
                 mockTarget.debuggerModel._breakpointResolved("a.js:10", new SDK.DebuggerModel.Location(mockTarget.debuggerModel, "a.js", 11, 0));
-                var breakpoints = breakpointManager.allBreakpoints();
+                var breakpoints = breakpointManager._allBreakpoints();
                 InspectorTest.assertEquals(1, breakpoints.length, "Exactly one provisional breakpoint should be registered in breakpoint manager.");
                 InspectorTest.finishBreakpointTest(breakpointManager, next);
             }
@@ -279,7 +278,7 @@ function test()
             InspectorTest.addResult("\n  Toggling source mapping.");
             var sourceMapping = createSourceMapping(uiSourceCodeA, uiSourceCodeB);
             mockTarget.debuggerModel.pushSourceMapping(sourceMapping);
-            breakpointManager._debuggerWorkspaceBinding.setSourceMapping(mockTarget, uiSourceCodeB, sourceMapping);
+            breakpointManager._debuggerWorkspaceBinding.setSourceMapping(mockTarget.debuggerModel, uiSourceCodeB, sourceMapping);
             InspectorTest.runAfterPendingBreakpointUpdates(breakpointManager, breakpointActionsPerformedBeforeReload.bind(this));
 
             function breakpointActionsPerformedBeforeReload()
@@ -297,7 +296,7 @@ function test()
                 InspectorTest.addResult("\n  Toggling source mapping.");
                 var sourceMapping = createSourceMapping(uiSourceCodeA, uiSourceCodeB);
                 mockTarget.debuggerModel.pushSourceMapping(sourceMapping);
-                breakpointManager._debuggerWorkspaceBinding.setSourceMapping(mockTarget, uiSourceCodeB, sourceMapping);
+                breakpointManager._debuggerWorkspaceBinding.setSourceMapping(mockTarget.debuggerModel, uiSourceCodeB, sourceMapping);
                 InspectorTest.runAfterPendingBreakpointUpdates(breakpointManager, breakpointActionsPerformed.bind(this));
             }
 

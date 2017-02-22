@@ -63,6 +63,13 @@ SDK.CSSStyleSheetHeader = class {
   }
 
   /**
+   * @return {boolean}
+   */
+  isAnonymousInlineStyleSheet() {
+    return !this.resourceURL() && !this._cssModel.sourceMapForHeader(this);
+  }
+
+  /**
    * @return {string}
    */
   resourceURL() {
@@ -122,7 +129,7 @@ SDK.CSSStyleSheetHeader = class {
    * @return {!Promise<?string>}
    */
   requestContent() {
-    return /** @type {!Promise<?string>} */ (this._cssModel.getStyleSheetText(this.id));
+    return this._cssModel.getStyleSheetText(this.id);
   }
 
   /**

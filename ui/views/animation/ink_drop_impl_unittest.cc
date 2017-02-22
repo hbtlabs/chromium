@@ -8,12 +8,14 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/test/gtest_util.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/views/animation/test/ink_drop_impl_test_api.h"
 #include "ui/views/animation/test/test_ink_drop_host.h"
+#include "ui/views/test/views_test_base.h"
 
 namespace views {
 
@@ -231,21 +233,20 @@ TEST_F(InkDropImplTest, LayersArentRemovedWhenPreemptingFadeOut) {
   EXPECT_TRUE(AreLayersAddedToHost());
 }
 
-#if DCHECK_IS_ON()
-TEST_F(InkDropImplTest, SettingHighlightStateDuringStateExitIsntAllowed) {
+TEST_F(InkDropImplTest,
+       SettingHighlightStateDuringStateExitIsntAllowedDeathTest) {
+  ::testing::FLAGS_gtest_death_test_style = "threadsafe";
+
   test::InkDropImplTestApi::SetStateOnExitHighlightState::Install(
       test_api()->state_factory());
-  ASSERT_DEATH_IF_SUPPORTED(
+  EXPECT_DCHECK_DEATH(
       test::InkDropImplTestApi::AccessFactoryOnExitHighlightState::Install(
-          test_api()->state_factory()),
-      ".*HighlightStates should not be changed within a call to "
-      "HighlightState::Exit\\(\\)\\..*");
+          test_api()->state_factory()));
   // Need to set the |highlight_state_| directly because the
   // SetStateOnExitHighlightState will recursively try to set it during tear
   // down and cause a stack overflow.
   test_api()->SetHighlightState(nullptr);
 }
-#endif
 
 // Verifies there is no use after free errors.
 TEST_F(InkDropImplTest,

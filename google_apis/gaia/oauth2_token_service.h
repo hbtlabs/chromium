@@ -93,8 +93,12 @@ class OAuth2TokenService : public base::NonThreadSafe {
    public:
     // Called whenever a new login-scoped refresh token is available for
     // account |account_id|. Once available, access tokens can be retrieved for
-    // this account.  This is called during initial startup for each token
-    // loaded.
+    // this account. This is called during initial startup for each token
+    // loaded (and any time later when, e.g., credentials change). When called,
+    // any pending token request is cancelled and needs to be retried. Such a
+    // pending request can easily occur on Android, where refresh tokens are
+    // held by the OS and are thus often available on startup even before
+    // OnRefreshTokenAvailable() is called.
     virtual void OnRefreshTokenAvailable(const std::string& account_id) {}
     // Called whenever the login-scoped refresh token becomes unavailable for
     // account |account_id|.
@@ -132,7 +136,8 @@ class OAuth2TokenService : public base::NonThreadSafe {
                                 const ScopeSet& scopes) = 0;
   };
 
-  explicit OAuth2TokenService(OAuth2TokenServiceDelegate* delegate);
+  explicit OAuth2TokenService(
+      std::unique_ptr<OAuth2TokenServiceDelegate> delegate);
   virtual ~OAuth2TokenService();
 
   // Add or remove observers of this token service.
@@ -209,6 +214,7 @@ class OAuth2TokenService : public base::NonThreadSafe {
       const ScopeSet& scopes) const;
 
   OAuth2TokenServiceDelegate* GetDelegate();
+  const OAuth2TokenServiceDelegate* GetDelegate() const;
 
  protected:
   // Implements a cancelable |OAuth2TokenService::Request|, which should be

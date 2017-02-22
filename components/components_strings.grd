@@ -202,6 +202,7 @@
       <part file="omnibox_strings.grdp" />
       <part file="pageinfo_strings.grdp" />
       <part file="password_manager_strings.grdp" />
+      <part file="payments_strings.grdp" />
       <part file="pdf_strings.grdp" />
       <part file="physical_web_ui_strings.grdp" />
       <part file="policy_strings.grdp" />
@@ -278,6 +279,9 @@
       <message name="IDS_ACCNAME_FORWARD" desc="The accessible name for the forward button.">
         Forward
       </message>
+      <message name="IDS_ACCNAME_CANCEL" desc="The accessible name for the Cancel button.">
+        Cancel
+      </message>
       <message name="IDS_ACCNAME_CLOSE" desc="The accessible name for the Close button.">
         Close
       </message>
@@ -291,6 +295,10 @@
 
       <message name="IDS_SESSION_CRASHED_VIEW_RESTORE_BUTTON" desc="Title of the restore button in the session crashed view.">
         Restore
+      </message>
+
+      <message name="IDS_SESSION_CRASHED_VIEW_STARTUP_PAGES_BUTTON" desc="Title of the button in the session crashed view to open the set of startup pages.">
+        Open startup pages
       </message>
 
       <!-- Website Settings UI -->

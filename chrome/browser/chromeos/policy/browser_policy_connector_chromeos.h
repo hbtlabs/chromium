@@ -39,10 +39,9 @@ class AffiliatedCloudPolicyInvalidator;
 class AffiliatedInvalidationServiceProvider;
 class AffiliatedRemoteCommandsInvalidator;
 class BluetoothPolicyHandler;
-class DeviceActiveDirectoryPolicyManager;
+class ActiveDirectoryPolicyManager;
 class DeviceCloudPolicyInitializer;
 class DeviceLocalAccountPolicyService;
-class DeviceManagementService;
 struct EnrollmentConfig;
 class NetworkConfigurationUpdater;
 class ProxyPolicyProvider;
@@ -69,9 +68,14 @@ class BrowserPolicyConnectorChromeOS
 
   void Shutdown() override;
 
-  // Returns true if this device is managed by an enterprise (as opposed to
-  // a local owner).
+  // Checks whether this devices is under any kind of enterprise management.
   bool IsEnterpriseManaged() const;
+
+  // Checks whether this is a cloud (DM server) managed enterprise device.
+  bool IsCloudManaged() const;
+
+  // Checks whether this is an Active Directory managed enterprise device.
+  bool IsActiveDirectoryManaged() const;
 
   // Returns the enterprise domain if device is managed.
   std::string GetEnterpriseDomain() const;
@@ -103,8 +107,7 @@ class BrowserPolicyConnectorChromeOS
   }
 
   // May be nullptr, e.g. for cloud-managed devices.
-  DeviceActiveDirectoryPolicyManager* GetDeviceActiveDirectoryPolicyManager()
-      const {
+  ActiveDirectoryPolicyManager* GetDeviceActiveDirectoryPolicyManager() const {
     return device_active_directory_policy_manager_;
   }
 
@@ -177,7 +180,7 @@ class BrowserPolicyConnectorChromeOS
   std::unique_ptr<AffiliatedInvalidationServiceProvider>
       affiliated_invalidation_service_provider_;
   DeviceCloudPolicyManagerChromeOS* device_cloud_policy_manager_ = nullptr;
-  DeviceActiveDirectoryPolicyManager* device_active_directory_policy_manager_ =
+  ActiveDirectoryPolicyManager* device_active_directory_policy_manager_ =
       nullptr;
   PrefService* local_state_ = nullptr;
   std::unique_ptr<DeviceCloudPolicyInitializer>

@@ -40,8 +40,6 @@ class ProximityAuthPrefManager;
 class RemoteDeviceLoader;
 }
 
-class EasyUnlockAppManager;
-class EasyUnlockToggleFlow;
 class Profile;
 
 // EasyUnlockService instance that should be used for regular, non-signin
@@ -74,7 +72,7 @@ class EasyUnlockServiceRegular
 
   // Called when |remote_device_loader_| completes.
   void OnRemoteDevicesLoaded(
-      const std::vector<proximity_auth::RemoteDevice>& remote_devices);
+      const std::vector<cryptauth::RemoteDevice>& remote_devices);
 
   // EasyUnlockService implementation:
   EasyUnlockService::Type GetType() const override;

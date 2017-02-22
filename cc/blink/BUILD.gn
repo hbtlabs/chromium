@@ -2,9 +2,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//testing/test.gni")
+import("//cc/cc.gni")
 
-component("blink") {
+cc_component("blink") {
   output_name = "cc_blink"
 
   sources = [
@@ -39,6 +39,7 @@ component("blink") {
     "//base",
     "//base/third_party/dynamic_annotations",
     "//cc",
+    "//cc/paint",
     "//gpu",
     "//third_party/WebKit/public:blink",
     "//ui/gfx",
@@ -46,7 +47,7 @@ component("blink") {
   ]
 }
 
-test("cc_blink_unittests") {
+cc_test("cc_blink_unittests") {
   sources = [
     "web_layer_impl_fixed_bounds_unittest.cc",
 

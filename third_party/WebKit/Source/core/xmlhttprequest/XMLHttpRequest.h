@@ -27,8 +27,9 @@
 #include "bindings/core/v8/ScriptString.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/core/v8/TraceWrapperMember.h"
-#include "core/dom/ActiveDOMObject.h"
 #include "core/dom/DocumentParserClient.h"
+#include "core/dom/ExceptionCode.h"
+#include "core/dom/SuspendableObject.h"
 #include "core/loader/ThreadableLoaderClient.h"
 #include "core/xmlhttprequest/XMLHttpRequestEventTarget.h"
 #include "core/xmlhttprequest/XMLHttpRequestProgressEventThrottle.h"
@@ -42,7 +43,6 @@
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 #include "wtf/text/AtomicString.h"
-#include "wtf/text/StringBuilder.h"
 #include "wtf/text/WTFString.h"
 #include <memory>
 
@@ -65,15 +65,19 @@ class ThreadableLoader;
 class WebDataConsumerHandle;
 class XMLHttpRequestUpload;
 
-typedef int ExceptionCode;
-
 class XMLHttpRequest final : public XMLHttpRequestEventTarget,
                              private ThreadableLoaderClient,
                              public DocumentParserClient,
-                             public ActiveScriptWrappable,
-                             public ActiveDOMObject {
+                             public ActiveScriptWrappable<XMLHttpRequest>,
+                             public SuspendableObject {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(XMLHttpRequest);
+
+  // In some cases hasPendingActivity doesn't work correctly, i.e.,
+  // doesn't keep |this| alive. We need to cancel the loader in such cases,
+  // which is why we need this pre-finalizer.
+  // TODO(yhirano): Remove this pre-finalizer when the bug is fixed.
+  USING_PRE_FINALIZER(XMLHttpRequest, dispose);
 
  public:
   static XMLHttpRequest* create(ScriptState*);
@@ -98,8 +102,8 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
     ResponseTypeArrayBuffer,
   };
 
-  // ActiveDOMObject
-  void contextDestroyed() override;
+  // SuspendableObject
+  void contextDestroyed(ExecutionContext*) override;
   ExecutionContext* getExecutionContext() const override;
   void suspend() override;
   void resume() override;
@@ -132,6 +136,7 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
       const ArrayBufferOrArrayBufferViewOrBlobOrDocumentOrStringOrFormData&,
       ExceptionState&);
   void abort();
+  void dispose();
   void setRequestHeader(const AtomicString& name,
                         const AtomicString& value,
                         ExceptionState&);
@@ -158,17 +163,20 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(readystatechange);
 
-  // (Also) eagerly finalized so as to prevent access to the eagerly finalized
-  // progress event throttle.
-  EAGERLY_FINALIZE();
   DECLARE_VIRTUAL_TRACE();
   DECLARE_TRACE_WRAPPERS();
 
  private:
   class BlobLoader;
-  XMLHttpRequest(ExecutionContext*, PassRefPtr<SecurityOrigin>);
+  XMLHttpRequest(ExecutionContext*,
+                 bool isIsolatedWorld,
+                 PassRefPtr<SecurityOrigin>);
 
   Document* document() const;
+
+  // Returns the SecurityOrigin of the isolated world if the XMLHttpRequest was
+  // created in an isolated world. Otherwise, returns the SecurityOrigin of the
+  // execution context.
   SecurityOrigin* getSecurityOrigin() const;
 
   void didSendData(unsigned long long bytesSent,
@@ -312,6 +320,10 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
   // An enum corresponding to the allowed string values for the responseType
   // attribute.
   ResponseTypeCode m_responseTypeCode;
+
+  // Set to true if the XMLHttpRequest was created in an isolated world.
+  bool m_isIsolatedWorld;
+  // Stores the SecurityOrigin associated with the isolated world if any.
   RefPtr<SecurityOrigin> m_isolatedWorldSecurityOrigin;
 
   // This blob loader will be used if |m_downloadingToFile| is true and

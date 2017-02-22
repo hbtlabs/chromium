@@ -6,8 +6,9 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "third_party/skia/include/core/SkPaint.h"
+#include "cc/paint/paint_flags.h"
 #include "third_party/skia/include/core/SkPath.h"
+#include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/default_style.h"
 #include "ui/base/material_design/material_design_controller.h"
@@ -27,6 +28,8 @@
 #include "ui/views/layout/layout_manager.h"
 #include "ui/views/widget/widget.h"
 
+namespace views {
+
 namespace {
 
 // TODO(markusheintz|msw): Use NativeTheme colors.
@@ -42,9 +45,29 @@ const gfx::Font::Weight kInactiveWeight = gfx::Font::Weight::NORMAL;
 
 const int kHarmonyTabStripTabHeight = 40;
 
-}  // namespace
+// The View containing the text for each tab in the tab strip.
+class TabLabel : public Label {
+ public:
+  explicit TabLabel(const base::string16& tab_title)
+      : Label(tab_title,
+              ui::ResourceBundle::GetSharedInstance().GetFontListWithDelta(
+                  ui::kLabelFontSizeDelta,
+                  gfx::Font::NORMAL,
+                  kActiveWeight)) {}
 
-namespace views {
+  // Label:
+  void GetAccessibleNodeData(ui::AXNodeData* data) override {
+    // views::Tab shouldn't expose any of its children in the a11y tree.
+    // Instead, it should provide the a11y information itself. Normally,
+    // non-keyboard-focusable children of keyboard-focusable parents are
+    // ignored, but Tabs only mark the currently selected tab as
+    // keyboard-focusable. This means all unselected Tabs expose their children
+    // to the a11y tree. To fix, manually ignore the children.
+    data->role = ui::AX_ROLE_IGNORED;
+  }
+};
+
+}  // namespace
 
 // static
 const char TabbedPane::kViewClassName[] = "TabbedPane";
@@ -65,33 +88,6 @@ class MdTab : public Tab {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MdTab);
-};
-
-// The tab strip shown above the tab contents.
-class TabStrip : public View {
- public:
-  // Internal class name.
-  static const char kViewClassName[];
-
-  TabStrip();
-  ~TabStrip() override;
-
-  // Called by TabStrip when the selected tab changes. This function is only
-  // called if |from_tab| is not null, i.e., there was a previously selected
-  // tab.
-  virtual void OnSelectedTabChanged(Tab* from_tab, Tab* to_tab);
-
-  // Overridden from View:
-  const char* GetClassName() const override;
-  void OnPaintBorder(gfx::Canvas* canvas) override;
-
-  Tab* GetSelectedTab() const;
-  Tab* GetTabAtDeltaFromSelected(int delta) const;
-  Tab* GetTabAtIndex(int index) const;
-  int GetSelectedTabIndex() const;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TabStrip);
 };
 
 // A subclass of TabStrip that implements the Harmony visual styling. This
@@ -132,12 +128,7 @@ const char Tab::kViewClassName[] = "Tab";
 
 Tab::Tab(TabbedPane* tabbed_pane, const base::string16& title, View* contents)
     : tabbed_pane_(tabbed_pane),
-      title_(new Label(
-          title,
-          ui::ResourceBundle::GetSharedInstance().GetFontListWithDelta(
-              ui::kLabelFontSizeDelta,
-              gfx::Font::NORMAL,
-              kActiveWeight))),
+      title_(new TabLabel(title)),
       tab_state_(TAB_ACTIVE),
       contents_(contents) {
   // Calculate this now while the font list is guaranteed to be bold.
@@ -238,6 +229,24 @@ void Tab::SetState(TabState tab_state) {
   SchedulePaint();
 }
 
+void Tab::GetAccessibleNodeData(ui::AXNodeData* data) {
+  data->role = ui::AX_ROLE_TAB;
+  data->SetName(title()->text());
+  data->AddStateFlag(ui::AX_STATE_SELECTABLE);
+  if (selected())
+    data->AddStateFlag(ui::AX_STATE_SELECTED);
+}
+
+bool Tab::HandleAccessibleAction(const ui::AXActionData& action_data) {
+  if (action_data.action != ui::AX_ACTION_SET_SELECTION || !enabled())
+    return false;
+
+  // It's not clear what should happen if a tab is 'deselected', so the
+  // AX_ACTION_SET_SELECTION action will always select the tab.
+  tabbed_pane_->SelectTab(this);
+  return true;
+}
+
 void Tab::OnFocus() {
   OnStateChanged();
   // When the tab gains focus, send an accessibility event indicating that the
@@ -331,9 +340,9 @@ const char* TabStrip::GetClassName() const {
 }
 
 void TabStrip::OnPaintBorder(gfx::Canvas* canvas) {
-  SkPaint paint;
-  paint.setColor(kTabBorderColor);
-  paint.setStrokeWidth(kTabBorderThickness);
+  cc::PaintFlags fill_flags;
+  fill_flags.setColor(kTabBorderColor);
+  fill_flags.setStrokeWidth(kTabBorderThickness);
   SkScalar line_y = SkIntToScalar(height()) - (kTabBorderThickness / 2);
   SkScalar line_end = SkIntToScalar(width());
   int selected_tab_index = GetSelectedTabIndex();
@@ -352,13 +361,13 @@ void TabStrip::OnPaintBorder(gfx::Canvas* canvas) {
     path.rLineTo(0, tab_height);
     path.lineTo(line_end, line_y);
 
-    SkPaint paint;
-    paint.setStyle(SkPaint::kStroke_Style);
-    paint.setColor(kTabBorderColor);
-    paint.setStrokeWidth(kTabBorderThickness);
-    canvas->DrawPath(path, paint);
+    cc::PaintFlags fill_flags;
+    fill_flags.setStyle(cc::PaintFlags::kStroke_Style);
+    fill_flags.setColor(kTabBorderColor);
+    fill_flags.setStrokeWidth(kTabBorderThickness);
+    canvas->DrawPath(path, fill_flags);
   } else {
-    canvas->sk_canvas()->drawLine(0, line_y, line_end, line_y, paint);
+    canvas->sk_canvas()->drawLine(0, line_y, line_end, line_y, fill_flags);
   }
 }
 

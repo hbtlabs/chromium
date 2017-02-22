@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_set>
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
@@ -67,16 +68,19 @@ class ArcDefaultAppList {
   void MaybeMarkPackageUninstalled(const std::string& package_name,
                                    bool uninstalled);
 
+  // Returns set of packages which are marked not as uninstalled.
+  std::unordered_set<std::string> GetActivePackages() const;
+
   const AppInfoMap& app_map() const { return apps_; }
 
-  // Marks default apps as hidden for user, for example in case Arc is managed
+  // Marks default apps as hidden for user, for example in case ARC is managed
   // and disabled.
   void set_hidden(bool hidden) { hidden_ = hidden; }
   bool is_hidden() const { return hidden_; }
 
  private:
   // Defines mapping package name to uninstalled state.
-  using PacakageMap = std::map<std::string, bool>;
+  using PackageMap = std::map<std::string, bool>;
 
   // Called when default apps are read.
   void OnAppsReady(std::unique_ptr<AppInfoMap> apps);
@@ -87,7 +91,7 @@ class ArcDefaultAppList {
   bool hidden_ = true;
 
   AppInfoMap apps_;
-  PacakageMap packages_;
+  PackageMap packages_;
 
   base::WeakPtrFactory<ArcDefaultAppList> weak_ptr_factory_;
 

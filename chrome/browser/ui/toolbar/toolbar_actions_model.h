@@ -9,12 +9,11 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
-#include "chrome/browser/extensions/component_migration_helper.h"
 #include "chrome/browser/extensions/extension_action.h"
+#include "chrome/browser/ui/toolbar/component_action_delegate.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "extensions/browser/extension_prefs.h"
@@ -31,7 +30,6 @@ namespace extensions {
 class ExtensionActionManager;
 class ExtensionMessageBubbleController;
 class ExtensionRegistry;
-class ExtensionSet;
 }
 
 // Model for the browser actions toolbar. This is a per-profile instance, and
@@ -41,16 +39,14 @@ class ExtensionSet;
 // overflow menu on a per-window basis. Callers interested in the arrangement of
 // actions in a particular window should check that window's instance of
 // ToolbarActionsBar, which is responsible for the per-window layout.
-class ToolbarActionsModel
-    : public extensions::ExtensionActionAPI::Observer,
-      public extensions::ExtensionRegistryObserver,
-      public KeyedService,
-      public extensions::ComponentMigrationHelper::ComponentActionDelegate {
+class ToolbarActionsModel : public extensions::ExtensionActionAPI::Observer,
+                            public extensions::ExtensionRegistryObserver,
+                            public KeyedService,
+                            public ComponentActionDelegate {
  public:
   // The different options for highlighting.
   enum HighlightType {
     HIGHLIGHT_NONE,
-    HIGHLIGHT_INFO,
     HIGHLIGHT_WARNING,
   };
 
@@ -154,7 +150,7 @@ class ToolbarActionsModel
 
   bool actions_initialized() const { return actions_initialized_; }
 
-  ScopedVector<ToolbarActionViewController> CreateActions(
+  std::vector<std::unique_ptr<ToolbarActionViewController>> CreateActions(
       Browser* browser,
       ToolbarActionsBar* bar);
   std::unique_ptr<ToolbarActionViewController> CreateActionForItem(
@@ -164,10 +160,6 @@ class ToolbarActionsModel
 
   const std::vector<ToolbarItem>& toolbar_items() const {
     return is_highlighting() ? highlighted_items_ : toolbar_items_;
-  }
-
-  extensions::ComponentMigrationHelper* component_migration_helper() {
-    return component_migration_helper_.get();
   }
 
   bool is_highlighting() const { return highlight_type_ != HIGHLIGHT_NONE; }
@@ -180,7 +172,7 @@ class ToolbarActionsModel
 
   void SetActionVisibility(const std::string& action_id, bool visible);
 
-  // ComponentMigrationHelper::ComponentActionDelegate:
+  // ComponentActionDelegate:
   // AddComponentAction() is a no-op if |actions_initialized_| is false.
   void AddComponentAction(const std::string& action_id) override;
   void RemoveComponentAction(const std::string& action_id) override;
@@ -293,10 +285,6 @@ class ToolbarActionsModel
 
   // The ExtensionActionManager, cached for convenience.
   extensions::ExtensionActionManager* extension_action_manager_;
-
-  // The ComponentMigrationHelper.
-  std::unique_ptr<extensions::ComponentMigrationHelper>
-      component_migration_helper_;
 
   // True if we've handled the initial EXTENSIONS_READY notification.
   bool actions_initialized_;

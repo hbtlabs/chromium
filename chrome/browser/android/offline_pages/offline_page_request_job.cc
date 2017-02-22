@@ -11,14 +11,15 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/android/offline_pages/offline_page_model_factory.h"
 #include "chrome/browser/android/offline_pages/offline_page_tab_helper.h"
 #include "chrome/browser/android/offline_pages/offline_page_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "components/offline_pages/offline_page_model.h"
-#include "components/offline_pages/request_header/offline_page_header.h"
+#include "components/offline_pages/core/offline_page_model.h"
+#include "components/offline_pages/core/request_header/offline_page_header.h"
 #include "components/previews/core/previews_decider.h"
 #include "components/previews/core/previews_experiments.h"
 #include "content/public/browser/browser_thread.h"
@@ -58,10 +59,21 @@ enum class NetworkState {
 // This enum is used to tell all possible outcomes of handling network requests
 // that might serve offline contents.
 enum class RequestResult {
+  // Offline page was shown for current URL.
   OFFLINE_PAGE_SERVED,
+  // Redirected from original URL to final URL in preparation to show the
+  // offline page under final URL. OFFLINE_PAGE_SERVED is most likely to be
+  // reported next if no other error is encountered.
+  REDIRECTED,
+  // Tab was gone.
   NO_TAB_ID,
+  // Web contents was gone.
   NO_WEB_CONTENTS,
+  // The offline page found was not fresh enough, i.e. not created in the past
+  // day. This only applies in prohibitively slow network.
   PAGE_NOT_FRESH,
+  // Offline page was not found, by searching with either final URL or original
+  // URL.
   OFFLINE_PAGE_NOT_FOUND
 };
 
@@ -123,6 +135,14 @@ NetworkState GetNetworkState(net::URLRequest* request,
 
   if (net::NetworkChangeNotifier::IsOffline())
     return NetworkState::DISCONNECTED_NETWORK;
+
+  // If offline header contains a reason other than RELOAD, the offline page
+  // should be forced to load even when the network is connected.
+  if (offline_header.reason != OfflinePageHeader::Reason::NONE &&
+      offline_header.reason != OfflinePageHeader::Reason::RELOAD) {
+    return NetworkState::FORCE_OFFLINE_ON_CONNECTED_NETWORK;
+  }
+
   // Checks if previews are allowed, the network is slow, and the request is
   // allowed to be shown for previews.
   if (previews_decider &&
@@ -131,12 +151,8 @@ NetworkState GetNetworkState(net::URLRequest* request,
     return NetworkState::PROHIBITIVELY_SLOW_NETWORK;
   }
 
-  // If offline header contains a reason other than RELOAD, the offline page
-  // should be forced to load even when the network is connected.
-  return (offline_header.reason != OfflinePageHeader::Reason::NONE &&
-          offline_header.reason != OfflinePageHeader::Reason::RELOAD)
-             ? NetworkState::FORCE_OFFLINE_ON_CONNECTED_NETWORK
-             : NetworkState::CONNECTED_NETWORK;
+  // Otherwise, the network state is a good network.
+  return NetworkState::CONNECTED_NETWORK;
 }
 
 OfflinePageRequestJob::AggregatedRequestResult
@@ -168,6 +184,25 @@ RequestResultToAggregatedRequestResult(
       case NetworkState::FORCE_OFFLINE_ON_CONNECTED_NETWORK:
         return OfflinePageRequestJob::AggregatedRequestResult::
             PAGE_NOT_FOUND_ON_CONNECTED_NETWORK;
+      default:
+        NOTREACHED();
+    }
+  }
+
+  if (request_result == RequestResult::REDIRECTED) {
+    switch (network_state) {
+      case NetworkState::DISCONNECTED_NETWORK:
+        return OfflinePageRequestJob::AggregatedRequestResult::
+            REDIRECTED_ON_DISCONNECTED_NETWORK;
+      case NetworkState::PROHIBITIVELY_SLOW_NETWORK:
+        return OfflinePageRequestJob::AggregatedRequestResult::
+            REDIRECTED_ON_PROHIBITIVELY_SLOW_NETWORK;
+      case NetworkState::FLAKY_NETWORK:
+        return OfflinePageRequestJob::AggregatedRequestResult::
+            REDIRECTED_ON_FLAKY_NETWORK;
+      case NetworkState::FORCE_OFFLINE_ON_CONNECTED_NETWORK:
+        return OfflinePageRequestJob::AggregatedRequestResult::
+            REDIRECTED_ON_CONNECTED_NETWORK;
       default:
         NOTREACHED();
     }
@@ -282,10 +317,9 @@ RequestResult AccessOfflineFile(
 
   // If the page is being loaded on a slow network, only use the offline page
   // if it was created within the past day.
-  // TODO(romax): Make the constant be policy driven.
   if (network_state == NetworkState::PROHIBITIVELY_SLOW_NETWORK &&
       base::Time::Now() - offline_page->creation_time >
-          base::TimeDelta::FromDays(1)) {
+          previews::params::OfflinePreviewFreshnessDuration()) {
     return RequestResult::PAGE_NOT_FRESH;
   }
 
@@ -324,6 +358,7 @@ void SucceededToFindOfflinePage(
 
   // If the match is for original URL, trigger the redirect.
   if (offline_page && url == offline_page->original_url) {
+    ReportRequestResult(RequestResult::REDIRECTED, network_state);
     NotifyOfflineRedirectOnUI(job, offline_page->url);
     return;
   }
@@ -609,6 +644,25 @@ int OfflinePageRequestJob::GetResponseCode() const {
     return URLRequestFileJob::GetResponseCode();
 
   return net::URLRequestRedirectJob::REDIRECT_302_FOUND;
+}
+
+void OfflinePageRequestJob::OnOpenComplete(int result) {
+  UMA_HISTOGRAM_SPARSE_SLOWLY("OfflinePages.RequestJob.OpenFileErrorCode",
+                              -result);
+}
+
+void OfflinePageRequestJob::OnSeekComplete(int64_t result) {
+  if (result < 0) {
+    UMA_HISTOGRAM_SPARSE_SLOWLY("OfflinePages.RequestJob.SeekFileErrorCode",
+                                static_cast<int>(-result));
+  }
+}
+
+void OfflinePageRequestJob::OnReadComplete(net::IOBuffer* buf, int result) {
+  if (result < 0) {
+    UMA_HISTOGRAM_SPARSE_SLOWLY("OfflinePages.RequestJob.ReadFileErrorCode",
+                                -result);
+  }
 }
 
 void OfflinePageRequestJob::FallbackToDefault() {

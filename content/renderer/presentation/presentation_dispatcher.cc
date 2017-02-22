@@ -4,54 +4,64 @@
 
 #include "content/renderer/presentation/presentation_dispatcher.h"
 
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/public/common/presentation_constants.h"
 #include "content/public/renderer/render_frame.h"
-#include "content/renderer/presentation/presentation_connection_client.h"
+#include "content/renderer/presentation/presentation_connection_proxy.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/platform/modules/presentation/WebPresentationAvailabilityObserver.h"
+#include "third_party/WebKit/public/platform/modules/presentation/WebPresentationConnection.h"
+#include "third_party/WebKit/public/platform/modules/presentation/WebPresentationConnectionCallbacks.h"
 #include "third_party/WebKit/public/platform/modules/presentation/WebPresentationController.h"
 #include "third_party/WebKit/public/platform/modules/presentation/WebPresentationError.h"
 #include "third_party/WebKit/public/platform/modules/presentation/WebPresentationReceiver.h"
+#include "third_party/WebKit/public/platform/modules/presentation/WebPresentationSessionInfo.h"
 #include "third_party/WebKit/public/platform/modules/presentation/presentation.mojom.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "url/gurl.h"
 
+namespace content {
+
 namespace {
 
-blink::WebPresentationError::ErrorType GetWebPresentationErrorTypeFromMojo(
-    blink::mojom::PresentationErrorType mojoErrorType) {
-  switch (mojoErrorType) {
-    case blink::mojom::PresentationErrorType::NO_AVAILABLE_SCREENS:
+blink::WebPresentationError::ErrorType GetWebPresentationErrorType(
+    PresentationErrorType errorType) {
+  switch (errorType) {
+    case PresentationErrorType::PRESENTATION_ERROR_NO_AVAILABLE_SCREENS:
       return blink::WebPresentationError::ErrorTypeNoAvailableScreens;
-    case blink::mojom::PresentationErrorType::SESSION_REQUEST_CANCELLED:
+    case PresentationErrorType::PRESENTATION_ERROR_SESSION_REQUEST_CANCELLED:
       return blink::WebPresentationError::ErrorTypeSessionRequestCancelled;
-    case blink::mojom::PresentationErrorType::NO_PRESENTATION_FOUND:
+    case PresentationErrorType::PRESENTATION_ERROR_NO_PRESENTATION_FOUND:
       return blink::WebPresentationError::ErrorTypeNoPresentationFound;
-    case blink::mojom::PresentationErrorType::UNKNOWN:
+    case PresentationErrorType::PRESENTATION_ERROR_PREVIOUS_START_IN_PROGRESS:
+      return blink::WebPresentationError::ErrorTypePreviousStartInProgress;
+    case PresentationErrorType::PRESENTATION_ERROR_UNKNOWN:
     default:
       return blink::WebPresentationError::ErrorTypeUnknown;
   }
 }
 
-blink::WebPresentationConnectionState GetWebPresentationConnectionStateFromMojo(
-    blink::mojom::PresentationConnectionState mojoSessionState) {
-  switch (mojoSessionState) {
-    case blink::mojom::PresentationConnectionState::CONNECTING:
+blink::WebPresentationConnectionState GetWebPresentationConnectionState(
+    PresentationConnectionState sessionState) {
+  switch (sessionState) {
+    case PresentationConnectionState::PRESENTATION_CONNECTION_STATE_CONNECTING:
       return blink::WebPresentationConnectionState::Connecting;
-    case blink::mojom::PresentationConnectionState::CONNECTED:
+    case PresentationConnectionState::PRESENTATION_CONNECTION_STATE_CONNECTED:
       return blink::WebPresentationConnectionState::Connected;
-    case blink::mojom::PresentationConnectionState::CLOSED:
+    case PresentationConnectionState::PRESENTATION_CONNECTION_STATE_CLOSED:
       return blink::WebPresentationConnectionState::Closed;
-    case blink::mojom::PresentationConnectionState::TERMINATED:
+    case PresentationConnectionState::PRESENTATION_CONNECTION_STATE_TERMINATED:
       return blink::WebPresentationConnectionState::Terminated;
     default:
       NOTREACHED();
@@ -60,30 +70,30 @@ blink::WebPresentationConnectionState GetWebPresentationConnectionStateFromMojo(
 }
 
 blink::WebPresentationConnectionCloseReason
-GetWebPresentationConnectionCloseReasonFromMojo(
-    blink::mojom::PresentationConnectionCloseReason mojoConnectionCloseReason) {
-  switch (mojoConnectionCloseReason) {
-    case blink::mojom::PresentationConnectionCloseReason::CONNECTION_ERROR:
+GetWebPresentationConnectionCloseReason(
+    PresentationConnectionCloseReason connectionCloseReason) {
+  switch (connectionCloseReason) {
+    case PresentationConnectionCloseReason::
+        PRESENTATION_CONNECTION_CLOSE_REASON_CONNECTION_ERROR:
       return blink::WebPresentationConnectionCloseReason::Error;
-    case blink::mojom::PresentationConnectionCloseReason::CLOSED:
+    case PresentationConnectionCloseReason::
+        PRESENTATION_CONNECTION_CLOSE_REASON_CLOSED:
       return blink::WebPresentationConnectionCloseReason::Closed;
-    case blink::mojom::PresentationConnectionCloseReason::WENT_AWAY:
+    case PresentationConnectionCloseReason::
+        PRESENTATION_CONNECTION_CLOSE_REASON_WENT_AWAY:
       return blink::WebPresentationConnectionCloseReason::WentAway;
     default:
       NOTREACHED();
       return blink::WebPresentationConnectionCloseReason::Error;
   }
 }
-
 }  // namespace
-
-namespace content {
 
 PresentationDispatcher::PresentationDispatcher(RenderFrame* render_frame)
     : RenderFrameObserver(render_frame),
       controller_(nullptr),
-      binding_(this) {
-}
+      receiver_(nullptr),
+      binding_(this) {}
 
 PresentationDispatcher::~PresentationDispatcher() {
   // Controller should be destroyed before the dispatcher when frame is
@@ -103,7 +113,7 @@ void PresentationDispatcher::setController(
 
 void PresentationDispatcher::startSession(
     const blink::WebVector<blink::WebURL>& presentationUrls,
-    blink::WebPresentationConnectionClientCallbacks* callback) {
+    std::unique_ptr<blink::WebPresentationConnectionCallbacks> callback) {
   DCHECK(callback);
   ConnectToPresentationServiceIfNeeded();
 
@@ -116,13 +126,13 @@ void PresentationDispatcher::startSession(
   // to be destroyed so we transfer its ownership to the mojo callback.
   presentation_service_->StartSession(
       urls, base::Bind(&PresentationDispatcher::OnSessionCreated,
-                       base::Unretained(this), base::Owned(callback)));
+                       base::Unretained(this), base::Passed(&callback)));
 }
 
 void PresentationDispatcher::joinSession(
     const blink::WebVector<blink::WebURL>& presentationUrls,
     const blink::WebString& presentationId,
-    blink::WebPresentationConnectionClientCallbacks* callback) {
+    std::unique_ptr<blink::WebPresentationConnectionCallbacks> callback) {
   DCHECK(callback);
   ConnectToPresentationServiceIfNeeded();
 
@@ -136,13 +146,15 @@ void PresentationDispatcher::joinSession(
   presentation_service_->JoinSession(
       urls, presentationId.utf8(),
       base::Bind(&PresentationDispatcher::OnSessionCreated,
-                 base::Unretained(this), base::Owned(callback)));
+                 base::Unretained(this), base::Passed(&callback)));
 }
 
-void PresentationDispatcher::sendString(const blink::WebURL& presentationUrl,
-                                        const blink::WebString& presentationId,
-                                        const blink::WebString& message) {
-  if (message.utf8().size() > kMaxPresentationSessionMessageSize) {
+void PresentationDispatcher::sendString(
+    const blink::WebURL& presentationUrl,
+    const blink::WebString& presentationId,
+    const blink::WebString& message,
+    const blink::WebPresentationConnectionProxy* connection_proxy) {
+  if (message.utf8().size() > kMaxPresentationConnectionMessageSize) {
     // TODO(crbug.com/459008): Limit the size of individual messages to 64k
     // for now. Consider throwing DOMException or splitting bigger messages
     // into smaller chunks later.
@@ -150,8 +162,8 @@ void PresentationDispatcher::sendString(const blink::WebURL& presentationUrl,
     return;
   }
 
-  message_request_queue_.push(base::WrapUnique(
-      CreateSendTextMessageRequest(presentationUrl, presentationId, message)));
+  message_request_queue_.push(base::WrapUnique(CreateSendTextMessageRequest(
+      presentationUrl, presentationId, message, connection_proxy)));
   // Start processing request if only one in the queue.
   if (message_request_queue_.size() == 1)
     DoSendMessage(message_request_queue_.front().get());
@@ -161,9 +173,10 @@ void PresentationDispatcher::sendArrayBuffer(
     const blink::WebURL& presentationUrl,
     const blink::WebString& presentationId,
     const uint8_t* data,
-    size_t length) {
+    size_t length,
+    const blink::WebPresentationConnectionProxy* connection_proxy) {
   DCHECK(data);
-  if (length > kMaxPresentationSessionMessageSize) {
+  if (length > kMaxPresentationConnectionMessageSize) {
     // TODO(crbug.com/459008): Same as in sendString().
     LOG(WARNING) << "data size exceeded limit!";
     return;
@@ -171,7 +184,8 @@ void PresentationDispatcher::sendArrayBuffer(
 
   message_request_queue_.push(base::WrapUnique(CreateSendBinaryMessageRequest(
       presentationUrl, presentationId,
-      blink::mojom::PresentationMessageType::ARRAY_BUFFER, data, length)));
+      blink::mojom::PresentationMessageType::BINARY, data, length,
+      connection_proxy)));
   // Start processing request if only one in the queue.
   if (message_request_queue_.size() == 1)
     DoSendMessage(message_request_queue_.front().get());
@@ -181,9 +195,10 @@ void PresentationDispatcher::sendBlobData(
     const blink::WebURL& presentationUrl,
     const blink::WebString& presentationId,
     const uint8_t* data,
-    size_t length) {
+    size_t length,
+    const blink::WebPresentationConnectionProxy* connection_proxy) {
   DCHECK(data);
-  if (length > kMaxPresentationSessionMessageSize) {
+  if (length > kMaxPresentationConnectionMessageSize) {
     // TODO(crbug.com/459008): Same as in sendString().
     LOG(WARNING) << "data size exceeded limit!";
     return;
@@ -191,19 +206,22 @@ void PresentationDispatcher::sendBlobData(
 
   message_request_queue_.push(base::WrapUnique(CreateSendBinaryMessageRequest(
       presentationUrl, presentationId,
-      blink::mojom::PresentationMessageType::BLOB, data, length)));
+      blink::mojom::PresentationMessageType::BINARY, data, length,
+      connection_proxy)));
   // Start processing request if only one in the queue.
   if (message_request_queue_.size() == 1)
     DoSendMessage(message_request_queue_.front().get());
 }
 
 void PresentationDispatcher::DoSendMessage(SendMessageRequest* request) {
-  ConnectToPresentationServiceIfNeeded();
-
-  presentation_service_->SendSessionMessage(
-      std::move(request->session_info), std::move(request->message),
-      base::Bind(&PresentationDispatcher::HandleSendMessageRequests,
-                 base::Unretained(this)));
+  DCHECK(request->connection_proxy);
+  // TODO(crbug.com/684116): Remove static_cast after moving message queue logic
+  // from PresentationDispatcher to PresentationConnectionProxy.
+  static_cast<const PresentationConnectionProxy*>(request->connection_proxy)
+      ->SendConnectionMessage(
+          std::move(request->message),
+          base::Bind(&PresentationDispatcher::HandleSendMessageRequests,
+                     base::Unretained(this)));
 }
 
 void PresentationDispatcher::HandleSendMessageRequests(bool success) {
@@ -227,6 +245,20 @@ void PresentationDispatcher::HandleSendMessageRequests(bool success) {
   }
 }
 
+void PresentationDispatcher::SetControllerConnection(
+    const PresentationSessionInfo& session_info,
+    blink::WebPresentationConnection* connection) {
+  DCHECK(connection);
+
+  auto* controller_connection_proxy = new ControllerConnectionProxy(connection);
+  connection->bindProxy(base::WrapUnique(controller_connection_proxy));
+
+  ConnectToPresentationServiceIfNeeded();
+  presentation_service_->SetPresentationConnection(
+      session_info, controller_connection_proxy->Bind(),
+      controller_connection_proxy->MakeRemoteRequest());
+}
+
 void PresentationDispatcher::closeSession(
     const blink::WebURL& presentationUrl,
     const blink::WebString& presentationId) {
@@ -243,53 +275,83 @@ void PresentationDispatcher::terminateSession(
 }
 
 void PresentationDispatcher::getAvailability(
-    const blink::WebURL& availabilityUrl,
-    blink::WebPresentationAvailabilityCallbacks* callbacks) {
-  AvailabilityStatus* status = nullptr;
-  auto status_it = availability_status_.find(availabilityUrl);
-  if (status_it == availability_status_.end()) {
-    status = new AvailabilityStatus(availabilityUrl);
-    availability_status_[availabilityUrl] = base::WrapUnique(status);
-  } else {
-    status = status_it->second.get();
-  }
-  DCHECK(status);
+    const blink::WebVector<blink::WebURL>& availabilityUrls,
+    std::unique_ptr<blink::WebPresentationAvailabilityCallbacks> callback) {
+  DCHECK(!availabilityUrls.isEmpty());
 
-  if (status->listening_state == ListeningState::ACTIVE) {
+  std::vector<GURL> urls;
+  for (const auto& availability_url : availabilityUrls)
+    urls.push_back(availability_url);
+
+  auto screen_availability = GetScreenAvailability(urls);
+  // Reject Promise if screen availability is unsupported for all URLs.
+  if (screen_availability == ScreenAvailability::UNSUPPORTED) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(&blink::WebPresentationAvailabilityCallbacks::onSuccess,
-                   base::Owned(callbacks),
-                   status->last_known_availability));
+        base::Bind(
+            &blink::WebPresentationAvailabilityCallbacks::onError,
+            base::Passed(&callback),
+            blink::WebPresentationError(
+                blink::WebPresentationError::ErrorTypeAvailabilityNotSupported,
+                "Screen availability monitoring not supported")));
+    // Do not listen to urls if we reject the promise.
     return;
   }
 
-  status->availability_callbacks.Add(callbacks);
-  UpdateListeningState(status);
+  auto* listener = GetAvailabilityListener(urls);
+  if (!listener) {
+    listener = new AvailabilityListener(urls);
+    availability_set_.insert(base::WrapUnique(listener));
+  }
+
+  if (screen_availability != ScreenAvailability::UNKNOWN) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::Bind(&blink::WebPresentationAvailabilityCallbacks::onSuccess,
+                   base::Passed(&callback),
+                   screen_availability == ScreenAvailability::AVAILABLE));
+  } else {
+    listener->availability_callbacks.Add(std::move(callback));
+  }
+
+  for (const auto& availabilityUrl : urls)
+    StartListeningToURL(availabilityUrl);
 }
 
 void PresentationDispatcher::startListening(
     blink::WebPresentationAvailabilityObserver* observer) {
-  auto status_it = availability_status_.find(observer->url());
-  if (status_it == availability_status_.end()) {
-    DLOG(WARNING) << "Start listening for availability for unknown URL "
-                  << observer->url();
-    return;
+  std::vector<GURL> urls;
+  for (const auto& url : observer->urls())
+    urls.push_back(url);
+
+  auto* listener = GetAvailabilityListener(urls);
+  if (!listener) {
+    listener = new AvailabilityListener(urls);
+    availability_set_.insert(base::WrapUnique(listener));
   }
-  status_it->second->availability_observers.insert(observer);
-  UpdateListeningState(status_it->second.get());
+
+  listener->availability_observers.insert(observer);
+  for (const auto& availabilityUrl : urls)
+    StartListeningToURL(availabilityUrl);
 }
 
 void PresentationDispatcher::stopListening(
     blink::WebPresentationAvailabilityObserver* observer) {
-  auto status_it = availability_status_.find(observer->url());
-  if (status_it == availability_status_.end()) {
-    DLOG(WARNING) << "Stop listening for availability for unknown URL "
-                  << observer->url();
+  std::vector<GURL> urls;
+  for (const auto& url : observer->urls())
+    urls.push_back(url);
+
+  auto* listener = GetAvailabilityListener(urls);
+  if (!listener) {
+    DLOG(WARNING) << "Stop listening for availability for unknown URLs.";
     return;
   }
-  status_it->second->availability_observers.erase(observer);
-  UpdateListeningState(status_it->second.get());
+
+  listener->availability_observers.erase(observer);
+  for (const auto& availabilityUrl : urls)
+    MaybeStopListeningToURL(availabilityUrl);
+
+  TryRemoveAvailabilityListener(listener);
 }
 
 void PresentationDispatcher::setDefaultPresentationUrls(
@@ -328,138 +390,219 @@ void PresentationDispatcher::OnDestruct() {
 
 void PresentationDispatcher::OnScreenAvailabilityUpdated(const GURL& url,
                                                          bool available) {
-  auto status_it = availability_status_.find(url);
-  if (status_it == availability_status_.end())
+  auto* listening_status = GetListeningStatus(url);
+  if (!listening_status)
     return;
-  AvailabilityStatus* status = status_it->second.get();
-  DCHECK(status);
 
-  if (status->listening_state == ListeningState::WAITING)
-    status->listening_state = ListeningState::ACTIVE;
+  if (listening_status->listening_state == ListeningState::WAITING)
+    listening_status->listening_state = ListeningState::ACTIVE;
 
-  for (auto* observer : status->availability_observers)
-    observer->availabilityChanged(available);
+  auto new_screen_availability = available ? ScreenAvailability::AVAILABLE
+                                           : ScreenAvailability::UNAVAILABLE;
+  if (listening_status->last_known_availability == new_screen_availability)
+    return;
 
-  for (AvailabilityCallbacksMap::iterator iter(&status->availability_callbacks);
-       !iter.IsAtEnd(); iter.Advance()) {
-    iter.GetCurrentValue()->onSuccess(available);
+  listening_status->last_known_availability = new_screen_availability;
+
+  std::set<AvailabilityListener*> modified_listeners;
+  for (auto& listener : availability_set_) {
+    if (!base::ContainsValue(listener->urls, url))
+      continue;
+
+    auto screen_availability = GetScreenAvailability(listener->urls);
+    DCHECK(screen_availability == ScreenAvailability::AVAILABLE ||
+           screen_availability == ScreenAvailability::UNAVAILABLE);
+    bool is_available = (screen_availability == ScreenAvailability::AVAILABLE);
+
+    for (auto* observer : listener->availability_observers)
+      observer->availabilityChanged(is_available);
+
+    for (AvailabilityCallbacksMap::iterator iter(
+             &listener->availability_callbacks);
+         !iter.IsAtEnd(); iter.Advance()) {
+      iter.GetCurrentValue()->onSuccess(is_available);
+    }
+    listener->availability_callbacks.Clear();
+
+    for (const auto& availabilityUrl : listener->urls)
+      MaybeStopListeningToURL(availabilityUrl);
+
+    modified_listeners.insert(listener.get());
   }
-  status->last_known_availability = available;
-  status->availability_callbacks.Clear();
-  UpdateListeningState(status);
+
+  for (auto* listener : modified_listeners)
+    TryRemoveAvailabilityListener(listener);
 }
 
 void PresentationDispatcher::OnScreenAvailabilityNotSupported(const GURL& url) {
-  auto status_it = availability_status_.find(url);
-  if (status_it == availability_status_.end())
+  auto* listening_status = GetListeningStatus(url);
+  if (!listening_status)
     return;
-  AvailabilityStatus* status = status_it->second.get();
-  DCHECK(status);
-  DCHECK(status->listening_state == ListeningState::WAITING);
+
+  if (listening_status->listening_state == ListeningState::WAITING)
+    listening_status->listening_state = ListeningState::ACTIVE;
+
+  if (listening_status->last_known_availability ==
+      ScreenAvailability::UNSUPPORTED) {
+    return;
+  }
+
+  listening_status->last_known_availability = ScreenAvailability::UNSUPPORTED;
 
   const blink::WebString& not_supported_error = blink::WebString::fromUTF8(
       "getAvailability() isn't supported at the moment. It can be due to "
       "a permanent or temporary system limitation. It is recommended to "
       "try to blindly start a session in that case.");
-  for (AvailabilityCallbacksMap::iterator iter(&status->availability_callbacks);
-       !iter.IsAtEnd(); iter.Advance()) {
-    iter.GetCurrentValue()->onError(blink::WebPresentationError(
-        blink::WebPresentationError::ErrorTypeAvailabilityNotSupported,
-        not_supported_error));
+
+  std::set<AvailabilityListener*> modified_listeners;
+  for (auto& listener : availability_set_) {
+    if (!base::ContainsValue(listener->urls, url))
+      continue;
+
+    // ScreenAvailabilityNotSupported should be a browser side setting, which
+    // means all urls in PresentationAvailability should report NotSupported.
+    // It is not possible to change listening status from Available or
+    // Unavailable to NotSupported. No need to update observer.
+    auto screen_availability = GetScreenAvailability(listener->urls);
+    DCHECK_EQ(screen_availability, ScreenAvailability::UNSUPPORTED);
+
+    for (AvailabilityCallbacksMap::iterator iter(
+             &listener->availability_callbacks);
+         !iter.IsAtEnd(); iter.Advance()) {
+      iter.GetCurrentValue()->onError(blink::WebPresentationError(
+          blink::WebPresentationError::ErrorTypeAvailabilityNotSupported,
+          not_supported_error));
+    }
+    listener->availability_callbacks.Clear();
+
+    for (const auto& availability_url : listener->urls)
+      MaybeStopListeningToURL(availability_url);
+
+    modified_listeners.insert(listener.get());
   }
-  status->availability_callbacks.Clear();
-  UpdateListeningState(status);
+
+  for (auto* listener : modified_listeners)
+    TryRemoveAvailabilityListener(listener);
 }
 
 void PresentationDispatcher::OnDefaultSessionStarted(
-    blink::mojom::PresentationSessionInfoPtr session_info) {
+    const PresentationSessionInfo& session_info) {
   if (!controller_)
     return;
 
-  if (!session_info.is_null()) {
-    presentation_service_->ListenForSessionMessages(session_info.Clone());
-    controller_->didStartDefaultSession(
-        new PresentationConnectionClient(std::move(session_info)));
+  auto* connection =
+      controller_->didStartDefaultSession(blink::WebPresentationSessionInfo(
+          session_info.presentation_url,
+          blink::WebString::fromUTF8(session_info.presentation_id)));
+
+  if (connection) {
+    SetControllerConnection(session_info, connection);
+    // Change blink connection state to 'connected' before listening to
+    // connection message. Remove ListenForConnectionMessage() after
+    // TODO(crbug.com/687011): use BrowserPresentationConnectionProxy to send
+    // message from route to blink connection.
+    presentation_service_->ListenForConnectionMessages(session_info);
   }
 }
 
 void PresentationDispatcher::OnSessionCreated(
-    blink::WebPresentationConnectionClientCallbacks* callback,
-    blink::mojom::PresentationSessionInfoPtr session_info,
-    blink::mojom::PresentationErrorPtr error) {
+    std::unique_ptr<blink::WebPresentationConnectionCallbacks> callback,
+    const base::Optional<PresentationSessionInfo>& session_info,
+    const base::Optional<PresentationError>& error) {
   DCHECK(callback);
-  if (!error.is_null()) {
-    DCHECK(session_info.is_null());
+  if (error) {
+    DCHECK(!session_info);
     callback->onError(blink::WebPresentationError(
-        GetWebPresentationErrorTypeFromMojo(error->error_type),
+        GetWebPresentationErrorType(error->error_type),
         blink::WebString::fromUTF8(error->message)));
     return;
   }
 
-  DCHECK(!session_info.is_null());
-  presentation_service_->ListenForSessionMessages(session_info.Clone());
-  callback->onSuccess(
-      base::MakeUnique<PresentationConnectionClient>(std::move(session_info)));
+  DCHECK(session_info);
+  callback->onSuccess(blink::WebPresentationSessionInfo(
+      session_info->presentation_url,
+      blink::WebString::fromUTF8(session_info->presentation_id)));
+  // Change blink connection state to 'connected' before listening to
+  // connection message. Remove ListenForConnectionMessage() after
+  // TODO(crbug.com/687011): use BrowserPresentationConnectionProxy to send
+  // message from route to blink connection.
+  SetControllerConnection(session_info.value(), callback->getConnection());
+  presentation_service_->ListenForConnectionMessages(session_info.value());
 }
 
 void PresentationDispatcher::OnReceiverConnectionAvailable(
-    blink::mojom::PresentationSessionInfoPtr session_info) {
-  if (receiver_) {
-    receiver_->onReceiverConnectionAvailable(
-        new PresentationConnectionClient(std::move(session_info)));
-  }
+    const PresentationSessionInfo& session_info,
+    blink::mojom::PresentationConnectionPtr controller_connection_ptr,
+    blink::mojom::PresentationConnectionRequest receiver_connection_request) {
+  DCHECK(receiver_);
+
+  // Bind receiver_connection_proxy with PresentationConnection in receiver
+  // page.
+  auto* connection = receiver_->onReceiverConnectionAvailable(
+      blink::WebPresentationSessionInfo(
+          session_info.presentation_url,
+          blink::WebString::fromUTF8(session_info.presentation_id)));
+  auto* receiver_connection_proxy = new ReceiverConnectionProxy(connection);
+  connection->bindProxy(base::WrapUnique(receiver_connection_proxy));
+
+  receiver_connection_proxy->Bind(std::move(receiver_connection_request));
+  receiver_connection_proxy->BindControllerConnection(
+      std::move(controller_connection_ptr));
 }
 
 void PresentationDispatcher::OnConnectionStateChanged(
-    blink::mojom::PresentationSessionInfoPtr connection,
-    blink::mojom::PresentationConnectionState state) {
+    const PresentationSessionInfo& session_info,
+    PresentationConnectionState state) {
   if (!controller_)
     return;
 
-  DCHECK(!connection.is_null());
   controller_->didChangeSessionState(
-      new PresentationConnectionClient(std::move(connection)),
-      GetWebPresentationConnectionStateFromMojo(state));
+      blink::WebPresentationSessionInfo(
+          session_info.presentation_url,
+          blink::WebString::fromUTF8(session_info.presentation_id)),
+      GetWebPresentationConnectionState(state));
 }
 
 void PresentationDispatcher::OnConnectionClosed(
-    blink::mojom::PresentationSessionInfoPtr connection,
-    blink::mojom::PresentationConnectionCloseReason reason,
+    const PresentationSessionInfo& session_info,
+    PresentationConnectionCloseReason reason,
     const std::string& message) {
   if (!controller_)
     return;
 
-  DCHECK(!connection.is_null());
   controller_->didCloseConnection(
-      new PresentationConnectionClient(std::move(connection)),
-      GetWebPresentationConnectionCloseReasonFromMojo(reason),
+      blink::WebPresentationSessionInfo(
+          session_info.presentation_url,
+          blink::WebString::fromUTF8(session_info.presentation_id)),
+      GetWebPresentationConnectionCloseReason(reason),
       blink::WebString::fromUTF8(message));
 }
 
-void PresentationDispatcher::OnSessionMessagesReceived(
-    blink::mojom::PresentationSessionInfoPtr session_info,
-    std::vector<blink::mojom::SessionMessagePtr> messages) {
+void PresentationDispatcher::OnConnectionMessagesReceived(
+    const PresentationSessionInfo& session_info,
+    std::vector<blink::mojom::ConnectionMessagePtr> messages) {
   if (!controller_)
     return;
 
   for (size_t i = 0; i < messages.size(); ++i) {
     // Note: Passing batches of messages to the Blink layer would be more
     // efficient.
-    std::unique_ptr<PresentationConnectionClient> session_client(
-        new PresentationConnectionClient(session_info->url, session_info->id));
+    auto web_session_info = blink::WebPresentationSessionInfo(
+        session_info.presentation_url,
+        blink::WebString::fromUTF8(session_info.presentation_id));
+
     switch (messages[i]->type) {
       case blink::mojom::PresentationMessageType::TEXT: {
         // TODO(mfoltz): Do we need to DCHECK(messages[i]->message)?
         controller_->didReceiveSessionTextMessage(
-            session_client.release(),
+            web_session_info,
             blink::WebString::fromUTF8(messages[i]->message.value()));
         break;
       }
-      case blink::mojom::PresentationMessageType::ARRAY_BUFFER:
-      case blink::mojom::PresentationMessageType::BLOB: {
+      case blink::mojom::PresentationMessageType::BINARY: {
         // TODO(mfoltz): Do we need to DCHECK(messages[i]->data)?
         controller_->didReceiveSessionBinaryMessage(
-            session_client.release(), &(messages[i]->data->front()),
+            web_session_info, &(messages[i]->data->front()),
             messages[i]->data->size());
         break;
       }
@@ -479,28 +622,112 @@ void PresentationDispatcher::ConnectToPresentationServiceIfNeeded() {
   presentation_service_->SetClient(binding_.CreateInterfacePtrAndBind());
 }
 
-void PresentationDispatcher::UpdateListeningState(AvailabilityStatus* status) {
-  bool should_listen = !status->availability_callbacks.IsEmpty() ||
-                       !status->availability_observers.empty();
-  bool is_listening = status->listening_state != ListeningState::INACTIVE;
+void PresentationDispatcher::StartListeningToURL(const GURL& url) {
+  auto* listening_status = GetListeningStatus(url);
+  if (!listening_status) {
+    listening_status = new ListeningStatus(url);
+    listening_status_.insert(
+        std::make_pair(url, base::WrapUnique(listening_status)));
+  }
 
-  if (should_listen == is_listening)
+  // Already listening.
+  if (listening_status->listening_state != ListeningState::INACTIVE)
     return;
 
   ConnectToPresentationServiceIfNeeded();
-  if (should_listen) {
-    status->listening_state = ListeningState::WAITING;
-    presentation_service_->ListenForScreenAvailability(status->url);
-  } else {
-    status->listening_state = ListeningState::INACTIVE;
-    presentation_service_->StopListeningForScreenAvailability(status->url);
+  listening_status->listening_state = ListeningState::WAITING;
+  presentation_service_->ListenForScreenAvailability(url);
+}
+
+void PresentationDispatcher::MaybeStopListeningToURL(const GURL& url) {
+  for (const auto& listener : availability_set_) {
+    if (!base::ContainsValue(listener->urls, url))
+      continue;
+
+    // URL is still observed by some availability object.
+    if (!listener->availability_callbacks.IsEmpty() ||
+        !listener->availability_observers.empty()) {
+      return;
+    }
+  }
+
+  auto* listening_status = GetListeningStatus(url);
+  if (!listening_status) {
+    LOG(WARNING) << "Stop listening to unknown url: " << url;
+    return;
+  }
+
+  if (listening_status->listening_state == ListeningState::INACTIVE)
+    return;
+
+  ConnectToPresentationServiceIfNeeded();
+  listening_status->listening_state = ListeningState::INACTIVE;
+  presentation_service_->StopListeningForScreenAvailability(url);
+}
+
+PresentationDispatcher::ListeningStatus*
+PresentationDispatcher::GetListeningStatus(const GURL& url) const {
+  auto status_it = listening_status_.find(url);
+  return status_it == listening_status_.end() ? nullptr
+                                              : status_it->second.get();
+}
+
+PresentationDispatcher::AvailabilityListener*
+PresentationDispatcher::GetAvailabilityListener(
+    const std::vector<GURL>& urls) const {
+  auto listener_it =
+      std::find_if(availability_set_.begin(), availability_set_.end(),
+                   [&urls](const std::unique_ptr<AvailabilityListener>& x) {
+                     return x->urls == urls;
+                   });
+  return listener_it == availability_set_.end() ? nullptr : listener_it->get();
+}
+
+void PresentationDispatcher::TryRemoveAvailabilityListener(
+    AvailabilityListener* listener) {
+  // URL is still observed by some availability object.
+  if (!listener->availability_callbacks.IsEmpty() ||
+      !listener->availability_observers.empty()) {
+    return;
+  }
+
+  auto listener_it = availability_set_.begin();
+  while (listener_it != availability_set_.end()) {
+    if (listener_it->get() == listener) {
+      availability_set_.erase(listener_it);
+      return;
+    } else {
+      ++listener_it;
+    }
   }
 }
 
+// Given a screen availability vector and integer value for each availability:
+// UNKNOWN = 0, UNAVAILABLE = 1, UNSUPPORTED = 2, and AVAILABLE = 3, the max
+// value of the vector is the overall availability.
+PresentationDispatcher::ScreenAvailability
+PresentationDispatcher::GetScreenAvailability(
+    const std::vector<GURL>& urls) const {
+  int current_availability = 0;  // UNKNOWN;
+
+  for (const auto& url : urls) {
+    auto* status = GetListeningStatus(url);
+    auto screen_availability =
+        status ? status->last_known_availability : ScreenAvailability::UNKNOWN;
+    current_availability =
+        std::max(current_availability, static_cast<int>(screen_availability));
+  }
+
+  return static_cast<ScreenAvailability>(current_availability);
+}
+
 PresentationDispatcher::SendMessageRequest::SendMessageRequest(
-    blink::mojom::PresentationSessionInfoPtr session_info,
-    blink::mojom::SessionMessagePtr message)
-    : session_info(std::move(session_info)), message(std::move(message)) {}
+    const PresentationSessionInfo& session_info,
+    blink::mojom::ConnectionMessagePtr message,
+    const blink::WebPresentationConnectionProxy* connection_proxy)
+    : session_info(session_info),
+      message(std::move(message)),
+      connection_proxy(connection_proxy) {}
 
 PresentationDispatcher::SendMessageRequest::~SendMessageRequest() {}
 
@@ -509,18 +736,17 @@ PresentationDispatcher::SendMessageRequest*
 PresentationDispatcher::CreateSendTextMessageRequest(
     const blink::WebURL& presentationUrl,
     const blink::WebString& presentationId,
-    const blink::WebString& message) {
-  blink::mojom::PresentationSessionInfoPtr session_info =
-      blink::mojom::PresentationSessionInfo::New();
-  session_info->url = presentationUrl;
-  session_info->id = presentationId.utf8();
+    const blink::WebString& message,
+    const blink::WebPresentationConnectionProxy* connection_proxy) {
+  PresentationSessionInfo session_info(GURL(presentationUrl),
+                                       presentationId.utf8());
 
-  blink::mojom::SessionMessagePtr session_message =
-      blink::mojom::SessionMessage::New();
+  blink::mojom::ConnectionMessagePtr session_message =
+      blink::mojom::ConnectionMessage::New();
   session_message->type = blink::mojom::PresentationMessageType::TEXT;
   session_message->message = message.utf8();
-  return new SendMessageRequest(std::move(session_info),
-                                std::move(session_message));
+  return new SendMessageRequest(session_info, std::move(session_message),
+                                connection_proxy);
 }
 
 // static
@@ -530,27 +756,31 @@ PresentationDispatcher::CreateSendBinaryMessageRequest(
     const blink::WebString& presentationId,
     blink::mojom::PresentationMessageType type,
     const uint8_t* data,
-    size_t length) {
-  blink::mojom::PresentationSessionInfoPtr session_info =
-      blink::mojom::PresentationSessionInfo::New();
-  session_info->url = presentationUrl;
-  session_info->id = presentationId.utf8();
+    size_t length,
+    const blink::WebPresentationConnectionProxy* connection_proxy) {
+  PresentationSessionInfo session_info(GURL(presentationUrl),
+                                       presentationId.utf8());
 
-  blink::mojom::SessionMessagePtr session_message =
-      blink::mojom::SessionMessage::New();
+  blink::mojom::ConnectionMessagePtr session_message =
+      blink::mojom::ConnectionMessage::New();
   session_message->type = type;
   session_message->data = std::vector<uint8_t>(data, data + length);
-  return new SendMessageRequest(std::move(session_info),
-                                std::move(session_message));
+  return new SendMessageRequest(session_info, std::move(session_message),
+                                connection_proxy);
 }
 
-PresentationDispatcher::AvailabilityStatus::AvailabilityStatus(
+PresentationDispatcher::AvailabilityListener::AvailabilityListener(
+    const std::vector<GURL>& availability_urls)
+    : urls(availability_urls) {}
+
+PresentationDispatcher::AvailabilityListener::~AvailabilityListener() {}
+
+PresentationDispatcher::ListeningStatus::ListeningStatus(
     const GURL& availability_url)
     : url(availability_url),
-      last_known_availability(false),
+      last_known_availability(ScreenAvailability::UNKNOWN),
       listening_state(ListeningState::INACTIVE) {}
 
-PresentationDispatcher::AvailabilityStatus::~AvailabilityStatus() {
-}
+PresentationDispatcher::ListeningStatus::~ListeningStatus() {}
 
 }  // namespace content

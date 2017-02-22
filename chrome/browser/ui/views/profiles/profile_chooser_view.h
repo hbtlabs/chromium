@@ -28,10 +28,6 @@
 class EditableProfilePhoto;
 class EditableProfileName;
 
-namespace gfx {
-class Image;
-}
-
 namespace views {
 class GridLayout;
 class ImageButton;
@@ -66,6 +62,8 @@ class ProfileChooserView : public content::WebContentsDelegate,
       Browser* browser);
   static bool IsShowing();
   static void Hide();
+
+  const Browser* browser() const { return browser_; }
 
  private:
   friend class ProfileChooserViewExtensionsTest;

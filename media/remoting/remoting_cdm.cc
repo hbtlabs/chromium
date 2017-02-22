@@ -7,6 +7,7 @@
 #include "media/base/cdm_promise.h"
 
 namespace media {
+namespace remoting {
 
 // TODO(xjz): Merge this with erickung's implementation.
 RemotingCdm::RemotingCdm(
@@ -36,7 +37,7 @@ void RemotingCdm::SetServerCertificate(
 }
 
 void RemotingCdm::CreateSessionAndGenerateRequest(
-    SessionType session_type,
+    CdmSessionType session_type,
     EmeInitDataType init_data_type,
     const std::vector<uint8_t>& init_data,
     std::unique_ptr<NewSessionCdmPromise> promise) {
@@ -44,7 +45,7 @@ void RemotingCdm::CreateSessionAndGenerateRequest(
   NOTIMPLEMENTED();
 }
 
-void RemotingCdm::LoadSession(SessionType session_type,
+void RemotingCdm::LoadSession(CdmSessionType session_type,
                               const std::string& session_id,
                               std::unique_ptr<NewSessionCdmPromise> promise) {
   // TODO(xjz): Merge with erickung's implementation.
@@ -74,8 +75,5 @@ CdmContext* RemotingCdm::GetCdmContext() {
   return &remoting_cdm_context_;
 }
 
-RemotingSourceImpl* RemotingCdm::GetRemotingSource() {
-  return remoting_cdm_controller_->remoting_source();
-}
-
+}  // namespace remoting
 }  // namespace media

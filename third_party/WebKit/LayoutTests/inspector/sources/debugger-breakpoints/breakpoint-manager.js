@@ -1,5 +1,184 @@
 var initialize_BreakpointManagerTest = function() {
 
+InspectorTest.createWorkspace = function(ignoreEvents)
+{
+    if (InspectorTest.testFileSystemWorkspaceBinding)
+        InspectorTest.testFileSystemWorkspaceBinding.dispose();
+    Workspace.fileSystemMapping.resetForTesting();
+
+    InspectorTest.testTargetManager = new SDK.TargetManager();
+    InspectorTest.testWorkspace = new Workspace.Workspace();
+    InspectorTest.testFileSystemWorkspaceBinding = new Persistence.FileSystemWorkspaceBinding(Workspace.isolatedFileSystemManager, InspectorTest.testWorkspace);
+    InspectorTest.testNetworkProjectManager = new Bindings.NetworkProjectManager(InspectorTest.testTargetManager, InspectorTest.testWorkspace);
+    InspectorTest.testDebuggerWorkspaceBinding = new Bindings.DebuggerWorkspaceBinding(InspectorTest.testTargetManager, InspectorTest.testWorkspace);
+    InspectorTest.testCSSWorkspaceBinding = new Bindings.CSSWorkspaceBinding(InspectorTest.testTargetManager, InspectorTest.testWorkspace);
+
+    InspectorTest.testTargetManager.observeTargets({
+        targetAdded: function(target)
+        {
+            InspectorTest.testNetworkProject = Bindings.NetworkProject.forTarget(target);
+        },
+
+        targetRemoved: function(target)
+        {
+        }
+    });
+
+    if (ignoreEvents)
+        return;
+    InspectorTest.testWorkspace.addEventListener(Workspace.Workspace.Events.UISourceCodeAdded, InspectorTest._defaultWorkspaceEventHandler);
+    InspectorTest.testWorkspace.addEventListener(Workspace.Workspace.Events.UISourceCodeRemoved, InspectorTest._defaultWorkspaceEventHandler);
+}
+
+InspectorTest._mockTargetId = 1;
+InspectorTest._pageCapabilities =
+    SDK.Target.Capability.Browser | SDK.Target.Capability.DOM |
+    SDK.Target.Capability.JS | SDK.Target.Capability.Log |
+    SDK.Target.Capability.Network | SDK.Target.Capability.Worker;
+
+InspectorTest.createMockTarget = function(id, debuggerModelConstructor, capabilities)
+{
+    capabilities = capabilities || InspectorTest._pageCapabilities;
+    var target = InspectorTest.testTargetManager.createTarget("mock-target-" + id, capabilities & (~SDK.Target.Capability.JS), (params) => new SDK.StubConnection(params), null);
+    target._capabilitiesMask = capabilities;
+    target._inspectedURL = InspectorTest.mainTarget.inspectedURL();
+    target.resourceTreeModel = target.model(SDK.ResourceTreeModel);
+    target.resourceTreeModel._cachedResourcesProcessed = true;
+    target.resourceTreeModel._frameAttached("42", 0);
+    target.runtimeModel = /** @type {!SDK.RuntimeModel} */ (target.model(SDK.RuntimeModel));
+    if (debuggerModelConstructor) {
+        target.debuggerModel = new debuggerModelConstructor(target);
+        target._modelByConstructor.set(SDK.DebuggerModel, target.debuggerModel);
+        InspectorTest.testTargetManager.modelAdded(target, SDK.DebuggerModel, target.debuggerModel);
+    } else {
+        target.debuggerModel = target.model(SDK.DebuggerModel);
+    }
+    return target;
+}
+
+InspectorTest.createWorkspaceWithTarget = function(ignoreEvents)
+{
+    InspectorTest.createWorkspace(ignoreEvents);
+    var target = InspectorTest.createMockTarget(InspectorTest._mockTargetId++);
+    return target;
+}
+
+InspectorTest.waitForWorkspaceUISourceCodeAddedEvent = function(callback, count, projectType)
+{
+    InspectorTest.uiSourceCodeAddedEventsLeft = count || 1;
+    InspectorTest.testWorkspace.removeEventListener(Workspace.Workspace.Events.UISourceCodeAdded, InspectorTest._defaultWorkspaceEventHandler);
+    InspectorTest.testWorkspace.addEventListener(Workspace.Workspace.Events.UISourceCodeAdded, uiSourceCodeAdded);
+
+    function uiSourceCodeAdded(event)
+    {
+        if (projectType && event.data.project().type() !== projectType)
+            return;
+        if (!projectType && event.data.project().type() === Workspace.projectTypes.Service)
+            return;
+        if (!(--InspectorTest.uiSourceCodeAddedEventsLeft)) {
+            InspectorTest.testWorkspace.removeEventListener(Workspace.Workspace.Events.UISourceCodeAdded, uiSourceCodeAdded);
+            InspectorTest.testWorkspace.addEventListener(Workspace.Workspace.Events.UISourceCodeAdded, InspectorTest._defaultWorkspaceEventHandler);
+        }
+        callback(event.data);
+    }
+}
+
+InspectorTest.waitForWorkspaceUISourceCodeRemovedEvent = function(callback, count)
+{
+    InspectorTest.uiSourceCodeRemovedEventsLeft = count || 1;
+    InspectorTest.testWorkspace.removeEventListener(Workspace.Workspace.Events.UISourceCodeRemoved, InspectorTest._defaultWorkspaceEventHandler);
+    InspectorTest.testWorkspace.addEventListener(Workspace.Workspace.Events.UISourceCodeRemoved, uiSourceCodeRemoved);
+
+    function uiSourceCodeRemoved(event)
+    {
+        if (event.data.project().type() === Workspace.projectTypes.Service)
+            return;
+        if (!(--InspectorTest.uiSourceCodeRemovedEventsLeft)) {
+            InspectorTest.testWorkspace.removeEventListener(Workspace.Workspace.Events.UISourceCodeRemoved, uiSourceCodeRemoved);
+            InspectorTest.testWorkspace.addEventListener(Workspace.Workspace.Events.UISourceCodeRemoved, InspectorTest._defaultWorkspaceEventHandler);
+        }
+        callback(event.data);
+    }
+}
+
+InspectorTest.addMockUISourceCodeToWorkspace = function(url, type, content)
+{
+    var mockContentProvider = Common.StaticContentProvider.fromString(url, type, content);
+    InspectorTest.testNetworkProject.addFile(mockContentProvider, null, false);
+}
+
+InspectorTest.addMockUISourceCodeViaNetwork = function(url, type, content, target)
+{
+    var mockContentProvider = Common.StaticContentProvider.fromString(url, type, content);
+    InspectorTest.testNetworkProject.addFile(mockContentProvider, target.resourceTreeModel.mainFrame, false);
+}
+
+InspectorTest._defaultWorkspaceEventHandler = function(event)
+{
+    var uiSourceCode = event.data;
+    if (uiSourceCode.project().type() === Workspace.projectTypes.Service)
+        return;
+    InspectorTest.addResult(`Workspace event: ${event.type.toString()}: ${uiSourceCode.url()}.`);
+}
+
+InspectorTest.uiSourceCodeURL = function(uiSourceCode)
+{
+    return uiSourceCode.url().replace(/.*LayoutTests/, "LayoutTests");
+}
+
+InspectorTest.dumpUISourceCode = function(uiSourceCode, callback)
+{
+    InspectorTest.addResult("UISourceCode: " + InspectorTest.uiSourceCodeURL(uiSourceCode));
+    if (uiSourceCode.contentType() === Common.resourceTypes.Script || uiSourceCode.contentType() === Common.resourceTypes.Document)
+        InspectorTest.addResult("UISourceCode is content script: " + (uiSourceCode.project().type() === Workspace.projectTypes.ContentScripts));
+    uiSourceCode.requestContent().then(didRequestContent);
+
+    function didRequestContent(content, contentEncoded)
+    {
+        InspectorTest.addResult("Highlighter type: " + Bindings.NetworkProject.uiSourceCodeMimeType(uiSourceCode));
+        InspectorTest.addResult("UISourceCode content: " + content);
+        callback();
+    }
+}
+
+InspectorTest.fileSystemUISourceCodes = function()
+{
+    var uiSourceCodes = [];
+    var fileSystemProjects = Workspace.workspace.projectsForType(Workspace.projectTypes.FileSystem);
+    for (var project of fileSystemProjects)
+        uiSourceCodes = uiSourceCodes.concat(project.uiSourceCodes());
+    return uiSourceCodes;
+}
+
+InspectorTest.refreshFileSystemProjects = function(callback)
+{
+    var barrier = new CallbackBarrier();
+    var projects = Workspace.workspace.projects();
+    for (var i = 0; i < projects.length; ++i)
+        projects[i].refresh("/", barrier.createCallback());
+    barrier.callWhenDone(callback);
+}
+
+InspectorTest.waitForGivenUISourceCode = function(name, callback)
+{
+    var uiSourceCodes = Workspace.workspace.uiSourceCodes();
+    for (var i = 0; i < uiSourceCodes.length; ++i) {
+        if (uiSourceCodes[i].name() === name) {
+            setImmediate(callback);
+            return;
+        }
+    }
+    Workspace.workspace.addEventListener(Workspace.Workspace.Events.UISourceCodeAdded, uiSourceCodeAdded);
+
+    function uiSourceCodeAdded(event)
+    {
+        if (event.data.name() === name) {
+            Workspace.workspace.removeEventListener(Workspace.Workspace.Events.UISourceCodeAdded, uiSourceCodeAdded);
+            setImmediate(callback);
+        }
+    }
+}
+
 InspectorTest.uiSourceCodes = {};
 
 InspectorTest.dumpTargetIds = false;
@@ -35,7 +214,8 @@ InspectorTest.dumpTarget = function(targetAware)
 InspectorTest.DebuggerModelMock = class extends SDK.SDKModel {
     constructor(target)
     {
-        super(SDK.DebuggerModel, target);
+        super(target);
+        this._target = target;
         this._breakpointResolvedEventTarget = new Common.Object();
         this._scripts = {};
         this._breakpoints = {};
@@ -46,6 +226,8 @@ InspectorTest.DebuggerModelMock = class extends SDK.SDKModel {
     {
         return this._target;
     }
+
+    setBeforePausedCallback(callback) { }
 
     _targetDisposed() { }
 
@@ -64,13 +246,13 @@ InspectorTest.DebuggerModelMock = class extends SDK.SDKModel {
     {
         var script = new SDK.Script(this, scriptId, url);
         this._scripts[scriptId] = script;
-        this._debuggerWorkspaceBinding._targetToData.get(this._target)._parsedScriptSource({data: script});
+        this._debuggerWorkspaceBinding._debuggerModelToData.get(this)._parsedScriptSource({data: script});
     }
 
     _registerScript(script)
     {
         this._scripts[script.scriptId] = script;
-        this._debuggerWorkspaceBinding._targetToData.get(this._target)._parsedScriptSource({data: script});
+        this._debuggerWorkspaceBinding._debuggerModelToData.get(this)._parsedScriptSource({data: script});
     }
 
     _scriptForURL(url)
@@ -153,7 +335,7 @@ InspectorTest.DebuggerModelMock = class extends SDK.SDKModel {
     {
         InspectorTest.addResult("  Resetting debugger.");
         this._scripts = {};
-        this._debuggerWorkspaceBinding._reset(this._target);
+        this._debuggerWorkspaceBinding._reset(this);
     }
 
     pushSourceMapping(sourceMapping)
@@ -205,7 +387,7 @@ InspectorTest.addScript = function(target, breakpointManager, url)
     for (var i = 0; i < uiSourceCodes.length; ++i) {
         var uiSourceCode = uiSourceCodes[i];
         if (uiSourceCode.url() === url) {
-            breakpointManager._debuggerWorkspaceBinding.setSourceMapping(target, uiSourceCode, breakpointManager.defaultMapping);
+            breakpointManager._debuggerWorkspaceBinding.setSourceMapping(target.debuggerModel, uiSourceCode, breakpointManager.defaultMapping);
             InspectorTest.uiSourceCodes[url] = uiSourceCode;
             return uiSourceCode;
         }
@@ -222,7 +404,7 @@ InspectorTest.addUISourceCode = function(target, breakpointManager, url, doNotSe
     var uiSourceCode = InspectorTest.testNetworkProject.addFile(contentProvider, null);
     InspectorTest.uiSourceCodes[url] = uiSourceCode;
     if (!doNotSetSourceMapping) {
-        breakpointManager._debuggerWorkspaceBinding.setSourceMapping(target, uiSourceCode, breakpointManager.defaultMapping);
+        breakpointManager._debuggerWorkspaceBinding.setSourceMapping(target.debuggerModel, uiSourceCode, breakpointManager.defaultMapping);
         breakpointManager._debuggerWorkspaceBinding.updateLocations(target.debuggerModel.scriptForId(url));
     }
     return uiSourceCode;
@@ -231,8 +413,8 @@ InspectorTest.addUISourceCode = function(target, breakpointManager, url, doNotSe
 InspectorTest.createBreakpointManager = function(targetManager, debuggerWorkspaceBinding, persistentBreakpoints)
 {
     InspectorTest._pendingBreakpointUpdates = 0;
-    InspectorTest.addSniffer(Bindings.BreakpointManager.TargetBreakpoint.prototype, "_updateInDebugger", updateInDebugger, true);
-    InspectorTest.addSniffer(Bindings.BreakpointManager.TargetBreakpoint.prototype, "_didUpdateInDebugger", didUpdateInDebugger, true);
+    InspectorTest.addSniffer(Bindings.BreakpointManager.ModelBreakpoint.prototype, "_updateInDebugger", updateInDebugger, true);
+    InspectorTest.addSniffer(Bindings.BreakpointManager.ModelBreakpoint.prototype, "_didUpdateInDebugger", didUpdateInDebugger, true);
 
     function updateInDebugger()
     {
@@ -299,7 +481,7 @@ InspectorTest.dumpBreakpointStorage = function(breakpointManager)
     var breakpoints = breakpointManager._storage._setting.get();
     InspectorTest.addResult("  Dumping Storage");
     for (var i = 0; i < breakpoints.length; ++i)
-        InspectorTest.addResult("    " + breakpoints[i].sourceFileId + ":" + breakpoints[i].lineNumber  + " enabled:" + breakpoints[i].enabled + " condition:" + breakpoints[i].condition);
+        InspectorTest.addResult("    " + breakpoints[i].url + ":" + breakpoints[i].lineNumber  + " enabled:" + breakpoints[i].enabled + " condition:" + breakpoints[i].condition);
 }
 
 InspectorTest.dumpBreakpointLocations = function(breakpointManager)

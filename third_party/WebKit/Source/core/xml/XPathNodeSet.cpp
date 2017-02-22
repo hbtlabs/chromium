@@ -127,7 +127,8 @@ static void sortBlock(unsigned from,
   // each group.
   HeapHashSet<Member<Node>> parentNodes;
   for (unsigned i = from; i < to; ++i)
-    parentNodes.add(parentWithDepth(commonAncestorDepth + 1, parentMatrix[i]));
+    parentNodes.insert(
+        parentWithDepth(commonAncestorDepth + 1, parentMatrix[i]));
 
   unsigned previousGroupEnd = from;
   unsigned groupEnd = from;
@@ -147,7 +148,7 @@ static void sortBlock(unsigned from,
       DCHECK_NE(previousGroupEnd, groupEnd);
       previousGroupEnd = groupEnd;
 #if DCHECK_IS_ON()
-      parentNodes.remove(n);
+      parentNodes.erase(n);
 #endif
     }
   }
@@ -176,14 +177,14 @@ void NodeSet::sort() const {
   for (unsigned i = 0; i < nodeCount; ++i) {
     NodeSetVector& parentsVector = parentMatrix[i];
     Node* n = m_nodes[i].get();
-    parentsVector.append(n);
+    parentsVector.push_back(n);
     if (n->isAttributeNode()) {
       n = toAttr(n)->ownerElement();
-      parentsVector.append(n);
+      parentsVector.push_back(n);
       containsAttributeNodes = true;
     }
     for (n = n->parentNode(); n; n = n->parentNode())
-      parentsVector.append(n);
+      parentsVector.push_back(n);
   }
   sortBlock(0, nodeCount, parentMatrix, containsAttributeNodes);
 
@@ -192,7 +193,7 @@ void NodeSet::sort() const {
   HeapVector<Member<Node>> sortedNodes;
   sortedNodes.reserveInitialCapacity(nodeCount);
   for (unsigned i = 0; i < nodeCount; ++i)
-    sortedNodes.append(parentMatrix[i][0]);
+    sortedNodes.push_back(parentMatrix[i][0]);
 
   const_cast<HeapVector<Member<Node>>&>(m_nodes).swap(sortedNodes);
 }
@@ -217,7 +218,7 @@ void NodeSet::traversalSort() const {
   DCHECK_GT(nodeCount, 1u);
   for (unsigned i = 0; i < nodeCount; ++i) {
     Node* node = m_nodes[i].get();
-    nodes.add(node);
+    nodes.insert(node);
     if (node->isAttributeNode())
       containsAttributeNodes = true;
   }
@@ -225,9 +226,9 @@ void NodeSet::traversalSort() const {
   HeapVector<Member<Node>> sortedNodes;
   sortedNodes.reserveInitialCapacity(nodeCount);
 
-  for (Node& n : NodeTraversal::startsAt(*findRootNode(m_nodes.first()))) {
+  for (Node& n : NodeTraversal::startsAt(*findRootNode(m_nodes.front()))) {
     if (nodes.contains(&n))
-      sortedNodes.append(&n);
+      sortedNodes.push_back(&n);
 
     if (!containsAttributeNodes || !n.isElementNode())
       continue;
@@ -237,7 +238,7 @@ void NodeSet::traversalSort() const {
     for (auto& attribute : attributes) {
       Attr* attr = element->attrIfExists(attribute.name());
       if (attr && nodes.contains(attr))
-        sortedNodes.append(attr);
+        sortedNodes.push_back(attr);
     }
   }
 

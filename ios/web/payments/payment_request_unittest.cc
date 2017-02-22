@@ -65,6 +65,11 @@ TEST(PaymentRequestTest, PaymentCurrencyAmountFromDictionaryValueSuccess) {
   EXPECT_TRUE(actual.FromDictionaryValue(amount_dict));
 
   EXPECT_EQ(expected, actual);
+
+  expected.currency_system = base::ASCIIToUTF16("urn:iso:std:iso:123456789");
+  amount_dict.SetString("currencySystem", "urn:iso:std:iso:123456789");
+  EXPECT_TRUE(actual.FromDictionaryValue(amount_dict));
+  EXPECT_EQ(expected, actual);
 }
 
 // Tests the failure case when populating a PaymentCurrencyAmount from a
@@ -122,6 +127,65 @@ TEST(PaymentRequestTest, PaymentItemFromDictionaryValueFailure) {
   item_dict.Set("amount", std::move(amount_dict));
   item_dict.SetInteger("label", 42);
   EXPECT_FALSE(actual.FromDictionaryValue(item_dict));
+}
+
+// Tests the success case when populating a PaymentShippingOption from a
+// dictionary.
+TEST(PaymentRequestTest, PaymentShippingOptionFromDictionaryValueSuccess) {
+  PaymentShippingOption expected;
+  expected.id = base::ASCIIToUTF16("123");
+  expected.label = base::ASCIIToUTF16("Ground Shipping");
+  expected.amount.currency = base::ASCIIToUTF16("BRL");
+  expected.amount.value = base::ASCIIToUTF16("4,000.32");
+  expected.selected = true;
+
+  base::DictionaryValue shipping_option_dict;
+  shipping_option_dict.SetString("id", "123");
+  shipping_option_dict.SetString("label", "Ground Shipping");
+  std::unique_ptr<base::DictionaryValue> amount_dict(new base::DictionaryValue);
+  amount_dict->SetString("currency", "BRL");
+  amount_dict->SetString("value", "4,000.32");
+  shipping_option_dict.Set("amount", std::move(amount_dict));
+  shipping_option_dict.SetBoolean("selected", true);
+
+  PaymentShippingOption actual;
+  EXPECT_TRUE(actual.FromDictionaryValue(shipping_option_dict));
+
+  EXPECT_EQ(expected, actual);
+}
+
+// Tests the failure case when populating a PaymentShippingOption from a
+// dictionary.
+TEST(PaymentRequestTest, PaymentShippingOptionFromDictionaryValueFailure) {
+  PaymentShippingOption expected;
+  expected.id = base::ASCIIToUTF16("123");
+  expected.label = base::ASCIIToUTF16("Ground Shipping");
+  expected.amount.currency = base::ASCIIToUTF16("BRL");
+  expected.amount.value = base::ASCIIToUTF16("4,000.32");
+  expected.selected = true;
+
+  PaymentShippingOption actual;
+  base::DictionaryValue shipping_option_dict;
+
+  // Id, Label, and amount are required.
+  shipping_option_dict.SetString("id", "123");
+  EXPECT_FALSE(actual.FromDictionaryValue(shipping_option_dict));
+
+  shipping_option_dict.SetString("label", "Ground Shipping");
+  EXPECT_FALSE(actual.FromDictionaryValue(shipping_option_dict));
+
+  // Id must be a string.
+  std::unique_ptr<base::DictionaryValue> amount_dict(new base::DictionaryValue);
+  amount_dict->SetString("currency", "BRL");
+  amount_dict->SetString("value", "4,000.32");
+  shipping_option_dict.Set("amount", std::move(amount_dict));
+  shipping_option_dict.SetInteger("id", 123);
+  EXPECT_FALSE(actual.FromDictionaryValue(shipping_option_dict));
+
+  // Label must be a string.
+  shipping_option_dict.SetString("id", "123");
+  shipping_option_dict.SetInteger("label", 123);
+  EXPECT_FALSE(actual.FromDictionaryValue(shipping_option_dict));
 }
 
 // Tests that populating a PaymentRequest from an empty dictionary fails.
@@ -196,6 +260,7 @@ TEST(PaymentRequestTest, ParsingFullyPopulatedRequestDictionarySucceeds) {
   expected_request.details.total.label = base::ASCIIToUTF16("TOTAL");
   expected_request.details.total.amount.currency = base::ASCIIToUTF16("GBP");
   expected_request.details.total.amount.value = base::ASCIIToUTF16("6.66");
+  expected_request.details.error = base::ASCIIToUTF16("Error in details");
 
   std::unique_ptr<base::DictionaryValue> details_dict(
       new base::DictionaryValue);
@@ -206,6 +271,7 @@ TEST(PaymentRequestTest, ParsingFullyPopulatedRequestDictionarySucceeds) {
   amount_dict->SetString("value", "6.66");
   total_dict->Set("amount", std::move(amount_dict));
   details_dict->Set("total", std::move(total_dict));
+  details_dict->SetString("error", "Error in details");
   request_dict.Set("details", std::move(details_dict));
 
   EXPECT_TRUE(output_request.FromDictionaryValue(request_dict));
@@ -526,6 +592,13 @@ TEST(PaymentRequestTest, PaymentDetailsEquality) {
   details2.total.label = base::ASCIIToUTF16("Total");
   EXPECT_EQ(details1, details2);
 
+  details1.error = base::ASCIIToUTF16("Foo");
+  EXPECT_NE(details1, details2);
+  details2.error = base::ASCIIToUTF16("Bar");
+  EXPECT_NE(details1, details2);
+  details2.error = base::ASCIIToUTF16("Foo");
+  EXPECT_EQ(details1, details2);
+
   PaymentItem payment_item;
   payment_item.label = base::ASCIIToUTF16("Tax");
   std::vector<PaymentItem> display_items1;
@@ -601,13 +674,13 @@ TEST(PaymentRequestTest, PaymentRequestEquality) {
 
   PaymentAddress address1;
   address1.recipient = base::ASCIIToUTF16("Jessica Jones");
-  request1.payment_address = address1;
+  request1.shipping_address = address1;
   EXPECT_NE(request1, request2);
   PaymentAddress address2;
   address2.recipient = base::ASCIIToUTF16("Luke Cage");
-  request2.payment_address = address2;
+  request2.shipping_address = address2;
   EXPECT_NE(request1, request2);
-  request2.payment_address = address1;
+  request2.shipping_address = address1;
   EXPECT_EQ(request1, request2);
 
   request1.shipping_option = base::ASCIIToUTF16("2-Day");

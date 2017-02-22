@@ -9,7 +9,9 @@
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
-#include "ui/events/event.h"
+#include "ash/common/wm_window_property.h"
+#include "ash/wm/window_util.h"
+#include "ui/events/event_constants.h"
 
 namespace ash {
 
@@ -32,49 +34,35 @@ ShelfWindowWatcherItemDelegate::ShelfWindowWatcherItemDelegate(ShelfID id,
 
 ShelfWindowWatcherItemDelegate::~ShelfWindowWatcherItemDelegate() {}
 
-ShelfItemDelegate::PerformedAction ShelfWindowWatcherItemDelegate::ItemSelected(
-    const ui::Event& event) {
+ShelfAction ShelfWindowWatcherItemDelegate::ItemSelected(
+    ui::EventType event_type,
+    int event_flags,
+    int64_t display_id,
+    ShelfLaunchSource source) {
   // Move panels attached on another display to the current display.
   if (GetShelfItemType(id_) == TYPE_APP_PANEL &&
-      window_->GetWindowState()->panel_attached() &&
-      window_->MoveToEventRoot(event)) {
+      window_->GetBoolProperty(WmWindowProperty::PANEL_ATTACHED) &&
+      wm::MoveWindowToDisplay(window_->aura_window(), display_id)) {
     window_->Activate();
-    return kExistingWindowActivated;
+    return SHELF_ACTION_WINDOW_ACTIVATED;
   }
 
   if (window_->IsActive()) {
-    if (event.type() & ui::ET_KEY_RELEASED) {
+    if (event_type == ui::ET_KEY_RELEASED) {
       window_->Animate(::wm::WINDOW_ANIMATION_TYPE_BOUNCE);
-      return kNoAction;
+      return SHELF_ACTION_NONE;
     }
     window_->Minimize();
-    return kExistingWindowMinimized;
+    return SHELF_ACTION_WINDOW_MINIMIZED;
   }
   window_->Activate();
-  return kExistingWindowActivated;
+  return SHELF_ACTION_WINDOW_ACTIVATED;
 }
 
-base::string16 ShelfWindowWatcherItemDelegate::GetTitle() {
-  return window_->GetTitle();
-}
-
-ShelfMenuModel* ShelfWindowWatcherItemDelegate::CreateApplicationMenu(
+ShelfAppMenuItemList ShelfWindowWatcherItemDelegate::GetAppMenuItems(
     int event_flags) {
-  return nullptr;
-}
-
-bool ShelfWindowWatcherItemDelegate::IsDraggable() {
-  return true;
-}
-
-bool ShelfWindowWatcherItemDelegate::CanPin() const {
-  return GetShelfItemType(id_) != TYPE_APP_PANEL;
-}
-
-bool ShelfWindowWatcherItemDelegate::ShouldShowTooltip() {
-  // Do not show tooltips for visible attached app panel windows.
-  return GetShelfItemType(id_) != TYPE_APP_PANEL || !window_->IsVisible() ||
-         !window_->GetWindowState()->panel_attached();
+  // Return an empty item list to avoid showing an application menu.
+  return ShelfAppMenuItemList();
 }
 
 void ShelfWindowWatcherItemDelegate::Close() {

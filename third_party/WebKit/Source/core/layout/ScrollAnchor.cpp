@@ -76,24 +76,23 @@ static LayoutRect relativeBounds(const LayoutObject* layoutObject,
     localBounds = toLayoutBox(layoutObject)->borderBoxRect();
     if (!layoutObject->hasOverflowClip()) {
       // borderBoxRect doesn't include overflow content and floats.
-      LayoutUnit maxHeight =
-          std::max(localBounds.height(),
-                   toLayoutBox(layoutObject)->layoutOverflowRect().height());
+      LayoutUnit maxY =
+          std::max(localBounds.maxY(),
+                   toLayoutBox(layoutObject)->layoutOverflowRect().maxY());
       if (layoutObject->isLayoutBlockFlow() &&
           toLayoutBlockFlow(layoutObject)->containsFloats()) {
         // Note that lowestFloatLogicalBottom doesn't include floating
         // grandchildren.
-        maxHeight = std::max(
-            maxHeight,
-            toLayoutBlockFlow(layoutObject)->lowestFloatLogicalBottom());
+        maxY = std::max(
+            maxY, toLayoutBlockFlow(layoutObject)->lowestFloatLogicalBottom());
       }
-      localBounds.setHeight(maxHeight);
+      localBounds.shiftMaxYEdgeTo(maxY);
     }
   } else if (layoutObject->isText()) {
     // TODO(skobes): Use first and last InlineTextBox only?
     for (InlineTextBox* box = toLayoutText(layoutObject)->firstTextBox(); box;
          box = box->nextTextBox())
-      localBounds.unite(box->calculateBoundaries());
+      localBounds.unite(box->frameRect());
   } else {
     // Only LayoutBox and LayoutText are supported.
     ASSERT_NOT_REACHED();
@@ -119,9 +118,9 @@ static bool candidateMayMoveWithScroller(const LayoutObject* candidate,
       return false;
   }
 
-  bool skippedByContainerLookup = false;
-  candidate->container(scrollerLayoutBox(scroller), &skippedByContainerLookup);
-  return !skippedByContainerLookup;
+  LayoutObject::AncestorSkipInfo skipInfo(scrollerLayoutBox(scroller));
+  candidate->container(&skipInfo);
+  return !skipInfo.ancestorSkipped();
 }
 
 ScrollAnchor::ExamineResult ScrollAnchor::examine(
@@ -140,7 +139,7 @@ ScrollAnchor::ExamineResult ScrollAnchor::examine(
   if (!candidateMayMoveWithScroller(candidate, m_scroller))
     return ExamineResult(Skip);
 
-  if (candidate->style()->overflowAnchor() == AnchorNone)
+  if (candidate->style()->overflowAnchor() == EOverflowAnchor::kNone)
     return ExamineResult(Skip);
 
   LayoutRect candidateRect = relativeBounds(candidate, m_scroller);
@@ -208,7 +207,7 @@ void ScrollAnchor::notifyBeforeLayout() {
     return;
   }
   DCHECK(m_scroller);
-  ScrollOffset scrollOffset = m_scroller->scrollOffset();
+  ScrollOffset scrollOffset = m_scroller->getScrollOffset();
   float blockDirectionScrollOffset =
       scrollerLayoutBox(m_scroller)->isHorizontalWritingMode()
           ? scrollOffset.height()
@@ -285,7 +284,7 @@ void ScrollAnchor::adjust() {
   }
 
   m_scroller->setScrollOffset(
-      m_scroller->scrollOffset() + FloatSize(adjustment), AnchoringScroll);
+      m_scroller->getScrollOffset() + FloatSize(adjustment), AnchoringScroll);
 
   // Update UMA metric.
   DEFINE_STATIC_LOCAL(EnumerationHistogram, adjustedOffsetHistogram,

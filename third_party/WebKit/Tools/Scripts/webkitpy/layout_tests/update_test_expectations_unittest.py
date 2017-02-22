@@ -8,7 +8,7 @@ from collections import OrderedDict
 
 from webkitpy.common.host_mock import MockHost
 from webkitpy.common.system.filesystem_mock import MockFileSystem
-from webkitpy.common.system.logtesting import LoggingTestCase, LogTesting
+from webkitpy.common.system.log_testing import LoggingTestCase, LogTesting
 from webkitpy.layout_tests.builder_list import BuilderList
 from webkitpy.layout_tests.port.factory import PortFactory
 from webkitpy.layout_tests.port.test import LAYOUT_TEST_DIR
@@ -22,7 +22,7 @@ class FakeBotTestExpectations(object):
     def __init__(self, results_by_path):
         self._results = {}
 
-        # Make the results distinct like the real BotTestExpectations
+        # Make the results distinct like the real BotTestExpectations.
         for path, results in results_by_path.iteritems():
             self._results[path] = list(set(results))
 
@@ -34,22 +34,23 @@ class FakeBotTestExpectationsFactory(object):
 
     def __init__(self):
         """The distinct results seen in at least one run of the test.
-        E.g. if the bot results for mytest.html are:
+
+        For example, if the bot results for mytest.html are:
             PASS PASS FAIL PASS TIMEOUT
-        then _all_results_by_builder would be:
+        then |all_results_by_builder| would be:
             {
                 'WebKit Linux Trusty' : {
                     'mytest.html': ['FAIL', 'PASS', 'TIMEOUT']
                 }
             }
         """
-        self._all_results_by_builder = {}
+        self.all_results_by_builder = {}
 
     def expectations_for_builder(self, builder):
-        if builder not in self._all_results_by_builder:
+        if builder not in self.all_results_by_builder:
             return None
 
-        return FakeBotTestExpectations(self._all_results_by_builder[builder])
+        return FakeBotTestExpectations(self.all_results_by_builder[builder])
 
 
 class FakePortFactory(PortFactory):
@@ -179,7 +180,38 @@ class UpdateTestExpectationsTest(LoggingTestCase):
         self._port.all_systems = (('trusty', 'x86_64'),)
 
         self._parse_expectations(test_expectations_before)
-        self._expectation_factory._all_results_by_builder = {
+        self._expectation_factory.all_results_by_builder = {
+            'WebKit Linux Trusty': {
+                "test/a.html": ["PASS", "PASS"],
+                "test/b.html": ["PASS", "PASS"],
+                "test/c.html": ["PASS", "PASS"],
+                "test/d.html": ["PASS", "PASS"],
+                "test/e.html": ["PASS", "PASS"],
+                "test/f.html": ["PASS", "PASS"],
+            }
+        }
+        updated_expectations = (
+            self._flake_remover.get_updated_test_expectations())
+        self._assert_expectations_match(
+            updated_expectations, test_expectations_before)
+
+    def test_dont_remove_directory(self):
+        """Tests that lines with directories are untouched."""
+        test_expectations_before = """
+            # This expectation is for a whole directory.
+            Bug(test) test/ [ Failure Pass ]"""
+
+        self._define_builders({
+            "WebKit Linux Trusty": {
+                "port_name": "linux-trusty",
+                "specifiers": ['Trusty', 'Release']
+            },
+        })
+        self._port.all_build_types = ('release',)
+        self._port.all_systems = (('trusty', 'x86_64'),)
+
+        self._parse_expectations(test_expectations_before)
+        self._expectation_factory.all_results_by_builder = {
             'WebKit Linux Trusty': {
                 "test/a.html": ["PASS", "PASS"],
                 "test/b.html": ["PASS", "PASS"],
@@ -217,7 +249,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
         self._port.all_systems = (('trusty', 'x86_64'),)
 
         self._parse_expectations(test_expectations_before)
-        self._expectation_factory._all_results_by_builder = {
+        self._expectation_factory.all_results_by_builder = {
             'WebKit Linux Trusty': {
                 "test/a.html": ["PASS", "PASS"],
                 "test/b.html": ["PASS", "IMAGE"],
@@ -247,7 +279,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
         self._port.all_systems = (('trusty', 'x86_64'),)
 
         self._parse_expectations(test_expectations_before)
-        self._expectation_factory._all_results_by_builder = {
+        self._expectation_factory.all_results_by_builder = {
             'WebKit Linux Trusty': {
                 "test/a.html": ["PASS", "PASS"],
                 "test/b.html": ["PASS", "PASS"],
@@ -281,7 +313,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
         self._port.all_systems = (('trusty', 'x86_64'),)
 
         self._parse_expectations(test_expectations_before)
-        self._expectation_factory._all_results_by_builder = {
+        self._expectation_factory.all_results_by_builder = {
             'WebKit Linux Trusty': {
                 "test/a.html": ["PASS", "IMAGE"],
                 "test/b.html": ["PASS", "TEXT"],
@@ -303,7 +335,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
         """Tests basic functionality with a single builder.
 
         Test that flaky expectations with results from a single bot showing the
-        expected failure isn't occuring should be removed. Results with failures
+        expected failure isn't occurring should be removed. Results with failures
         of the expected type shouldn't be removed but other kinds of failures
         allow removal.
         """
@@ -325,7 +357,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
         self._port.all_systems = (('trusty', 'x86_64'),)
 
         self._parse_expectations(test_expectations_before)
-        self._expectation_factory._all_results_by_builder = {
+        self._expectation_factory.all_results_by_builder = {
             'WebKit Linux Trusty': {
                 "test/a.html": ["PASS", "PASS", "PASS"],
                 "test/b.html": ["PASS", "IMAGE", "PASS"],
@@ -354,7 +386,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
         self._port.all_systems = (('trusty', 'x86_64'),)
 
         self._parse_expectations(test_expectations_before)
-        self._expectation_factory._all_results_by_builder = {
+        self._expectation_factory.all_results_by_builder = {
             'WebKit Linux Trusty': {
                 "test/a.html": ["IMAGE", "IMAGE", "IMAGE"],
             }
@@ -379,7 +411,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
         self._port.all_systems = (('trusty', 'x86_64'),)
 
         self._parse_expectations(test_expectations_before)
-        self._expectation_factory._all_results_by_builder = {
+        self._expectation_factory.all_results_by_builder = {
             'WebKit Linux Trusty': {
                 "test/a.html": ["PASS", "PASS", "PASS"],
             }
@@ -414,7 +446,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
                                   ('trusty', 'x86_64'))
 
         self._parse_expectations(test_expectations_before)
-        self._expectation_factory._all_results_by_builder = {
+        self._expectation_factory.all_results_by_builder = {
             'WebKit Linux Trusty': {
                 "test/a.html": ["PASS", "PASS", "PASS"],
                 "test/b.html": ["PASS", "PASS", "PASS"],
@@ -466,7 +498,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
                                   ('trusty', 'x86_64'))
 
         self._parse_expectations(test_expectations_before)
-        self._expectation_factory._all_results_by_builder = {
+        self._expectation_factory.all_results_by_builder = {
             'WebKit Linux Trusty': {
                 "test/a.html": ["PASS", "PASS", "PASS"],
                 "test/b.html": ["PASS", "PASS", "PASS"],
@@ -531,7 +563,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
                                   ('trusty', 'x86_64'))
 
         self._parse_expectations(test_expectations_before)
-        self._expectation_factory._all_results_by_builder = {
+        self._expectation_factory.all_results_by_builder = {
             'WebKit Linux Trusty': {
                 "test/a.html": ["PASS", "PASS", "PASS"],
                 "test/b.html": ["PASS", "IMAGE", "PASS"],
@@ -620,7 +652,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
         self._port.all_systems = (('trusty', 'x86_64'),)
 
         self._parse_expectations(test_expectations_before)
-        self._expectation_factory._all_results_by_builder = {
+        self._expectation_factory.all_results_by_builder = {
             'WebKit Linux Trusty': {
                 "test/a.html": ["PASS", "PASS", "PASS"],
                 "test/b.html": ["PASS", "PASS", "PASS"],
@@ -670,7 +702,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
         self._port.all_systems = (('trusty', 'x86_64'),)
 
         self._parse_expectations(test_expectations_before)
-        self._expectation_factory._all_results_by_builder = {
+        self._expectation_factory.all_results_by_builder = {
             'WebKit Linux Trusty': {
             }
         }
@@ -730,7 +762,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
         )
 
         self._parse_expectations(test_expectations_before)
-        self._expectation_factory._all_results_by_builder = {
+        self._expectation_factory.all_results_by_builder = {
             'WebKit Linux Trusty': {
                 "test/a.html": ["PASS", "PASS", "PASS"],
                 "test/b.html": ["PASS", "PASS", "PASS"],
@@ -815,7 +847,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
                                   ('trusty', 'x86_64'))
 
         self._parse_expectations(test_expectations_before)
-        self._expectation_factory._all_results_by_builder = {
+        self._expectation_factory.all_results_by_builder = {
             'WebKit Linux Trusty': {
                 "test/a.html": ["PASS", "PASS", "PASS"],
                 "test/b.html": ["PASS", "IMAGE", "PASS"],
@@ -885,7 +917,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
 
         # Write out the fake builder bot results.
         expectation_factory = FakeBotTestExpectationsFactory()
-        expectation_factory._all_results_by_builder = {
+        expectation_factory.all_results_by_builder = {
             'WebKit Linux Trusty': {
                 "test/a.html": ["PASS", "PASS", "PASS"],
                 "test/b.html": ["PASS", "IMAGE", "PASS"],
@@ -915,7 +947,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
         doesn't exist.
         """
 
-        # Setup the mock host and port.
+        # Set up the mock host and port.
         host = MockHost()
         host.port_factory = FakePortFactory(host)
 
@@ -927,7 +959,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
 
         # Write out the fake builder bot results.
         expectation_factory = FakeBotTestExpectationsFactory()
-        expectation_factory._all_results_by_builder = {}
+        expectation_factory.all_results_by_builder = {}
 
         self.assertFalse(host.filesystem.isfile(test_expectation_path))
 
@@ -957,7 +989,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
             },
         })
 
-        # Setup the mock host and port.
+        # Set up the mock host and port.
         host = MockHost()
         host.port_factory = FakePortFactory(
             host,
@@ -979,7 +1011,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
 
         # Write out the fake builder bot results.
         expectation_factory = FakeBotTestExpectationsFactory()
-        expectation_factory._all_results_by_builder = {
+        expectation_factory.all_results_by_builder = {
             'WebKit Linux Trusty': {
                 "test/a.html": ["PASS", "PASS", "PASS"],
             },
@@ -996,9 +1028,9 @@ class UpdateTestExpectationsTest(LoggingTestCase):
     def test_show_results(self):
         """Tests that passing --show-results shows the removed results.
 
-        --show-results opens the removed tests in the layout dashboard using the default browser.
-        This tests mocks the webbrowser.open function and checks that it was called with the correct
-        url.
+        --show-results opens the removed tests in the layout dashboard using
+        the default browser. This tests mocks the webbrowser.open function and
+        checks that it was called with the correct URL.
         """
         test_expectations_before = (
             """# Remove this since it's passing all runs.
@@ -1018,7 +1050,7 @@ class UpdateTestExpectationsTest(LoggingTestCase):
         self._port.all_systems = (('trusty', 'x86_64'),)
 
         self._parse_expectations(test_expectations_before)
-        self._expectation_factory._all_results_by_builder = {
+        self._expectation_factory.all_results_by_builder = {
             'WebKit Linux': {
                 "test/a.html": ["PASS", "PASS", "PASS"],
                 "test/b.html": ["PASS", "IMAGE", "PASS"],

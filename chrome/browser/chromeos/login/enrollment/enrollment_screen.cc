@@ -7,7 +7,6 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
-#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/timer/elapsed_timer.h"
@@ -21,7 +20,6 @@
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/enrollment_status_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -52,6 +50,19 @@ const char * const kMetricEnrollmentTimeFailure =
 const char * const kMetricEnrollmentTimeSuccess =
     "Enterprise.EnrollmentTime.Success";
 
+// Retry policy constants.
+constexpr int kInitialDelayMS = 4 * 1000;  // 4 seconds
+constexpr double kMultiplyFactor = 1.5;
+constexpr double kJitterFactor = 0.1;           // +/- 10% jitter
+constexpr int64_t kMaxDelayMS = 8 * 60 * 1000;  // 8 minutes
+
+// Helper function. Returns true if we are using Hands Off Enrollment.
+bool UsingHandsOffEnrollment() {
+  return policy::DeviceCloudPolicyManagerChromeOS::
+             GetZeroTouchEnrollmentMode() ==
+         policy::ZeroTouchEnrollmentMode::HANDS_OFF;
+}
+
 }  // namespace
 
 namespace chromeos {
@@ -59,14 +70,23 @@ namespace chromeos {
 // static
 EnrollmentScreen* EnrollmentScreen::Get(ScreenManager* manager) {
   return static_cast<EnrollmentScreen*>(
-      manager->GetScreen(WizardController::kEnrollmentScreenName));
+      manager->GetScreen(OobeScreen::SCREEN_OOBE_ENROLLMENT));
 }
 
 EnrollmentScreen::EnrollmentScreen(BaseScreenDelegate* base_screen_delegate,
                                    EnrollmentScreenActor* actor)
-    : BaseScreen(base_screen_delegate),
+    : BaseScreen(base_screen_delegate, OobeScreen::SCREEN_OOBE_ENROLLMENT),
       actor_(actor),
-      weak_ptr_factory_(this) {}
+      weak_ptr_factory_(this) {
+  retry_policy_.num_errors_to_ignore = 0;
+  retry_policy_.initial_delay_ms = kInitialDelayMS;
+  retry_policy_.multiply_factor = kMultiplyFactor;
+  retry_policy_.jitter_factor = kJitterFactor;
+  retry_policy_.maximum_backoff_ms = kMaxDelayMS;
+  retry_policy_.entry_lifetime_ms = -1;
+  retry_policy_.always_use_initial_delay = true;
+  retry_backoff_.reset(new net::BackoffEntry(&retry_policy_));
+}
 
 EnrollmentScreen::~EnrollmentScreen() {
   DCHECK(!enrollment_helper_ || g_browser_process->IsShuttingDown());
@@ -122,7 +142,7 @@ bool EnrollmentScreen::AdvanceToNextAuth() {
 void EnrollmentScreen::CreateEnrollmentHelper() {
   if (!enrollment_helper_) {
     enrollment_helper_ = EnterpriseEnrollmentHelper::Create(
-        this, config_, enrolling_user_domain_);
+        this, this, config_, enrolling_user_domain_);
   }
 }
 
@@ -139,10 +159,6 @@ void EnrollmentScreen::ClearAuth(const base::Closure& callback) {
 void EnrollmentScreen::OnAuthCleared(const base::Closure& callback) {
   enrollment_helper_ = nullptr;
   callback.Run();
-}
-
-void EnrollmentScreen::PrepareToShow() {
-  actor_->PrepareToShow();
 }
 
 void EnrollmentScreen::Show() {
@@ -170,10 +186,6 @@ void EnrollmentScreen::Hide() {
   weak_ptr_factory_.InvalidateWeakPtrs();
 }
 
-std::string EnrollmentScreen::GetName() const {
-  return WizardController::kEnrollmentScreenName;
-}
-
 void EnrollmentScreen::AuthenticateUsingAttestation() {
   VLOG(1) << "Authenticating using attestation.";
   elapsed_timer_.reset(new base::ElapsedTimer());
@@ -187,17 +199,32 @@ void EnrollmentScreen::OnLoginDone(const std::string& user,
   LOG_IF(ERROR, auth_code.empty()) << "Auth code is empty.";
   elapsed_timer_.reset(new base::ElapsedTimer());
   enrolling_user_domain_ = gaia::ExtractDomainName(user);
-  auth_code_ = auth_code;
-  // TODO(rsorokin): Move ShowAdJoin after STEP_REGISTRATION
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          chromeos::switches::kEnableAd)) {
-    actor_->ShowAdJoin();
-  } else {
-    OnAdJoined("");
-  }
+  UMA(enrollment_failed_once_ ? policy::kMetricEnrollmentRestarted
+                              : policy::kMetricEnrollmentStarted);
+
+  actor_->ShowEnrollmentSpinnerScreen();
+  CreateEnrollmentHelper();
+  enrollment_helper_->EnrollUsingAuthCode(
+      auth_code, shark_controller_ != nullptr /* fetch_additional_token */);
 }
 
 void EnrollmentScreen::OnRetry() {
+  retry_task_.Cancel();
+  ProcessRetry();
+}
+
+void EnrollmentScreen::AutomaticRetry() {
+  retry_backoff_->InformOfRequest(false);
+  retry_task_.Reset(base::Bind(&EnrollmentScreen::ProcessRetry,
+                               weak_ptr_factory_.GetWeakPtr()));
+
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, retry_task_.callback(), retry_backoff_->GetTimeUntilRelease());
+}
+
+void EnrollmentScreen::ProcessRetry() {
+  ++num_retries_;
+  LOG(WARNING) << "Enrollment retry " << num_retries_;
   Show();
 }
 
@@ -224,16 +251,7 @@ void EnrollmentScreen::OnConfirmationClosed() {
 }
 
 void EnrollmentScreen::OnAdJoined(const std::string& realm) {
-  if (!realm.empty()) {
-    config_.management_realm = realm;
-  }
-  UMA(enrollment_failed_once_ ? policy::kMetricEnrollmentRestarted
-                              : policy::kMetricEnrollmentStarted);
-
-  actor_->ShowEnrollmentSpinnerScreen();
-  CreateEnrollmentHelper();
-  enrollment_helper_->EnrollUsingAuthCode(
-      auth_code_, shark_controller_ != NULL /* fetch_additional_token */);
+  std::move(on_joined_callback_).Run(realm);
 }
 
 void EnrollmentScreen::OnAuthError(const GoogleServiceAuthError& error) {
@@ -249,18 +267,23 @@ void EnrollmentScreen::OnEnrollmentError(policy::EnrollmentStatus status) {
   RecordEnrollmentErrorMetrics();
   // If the DM server does not have a device pre-provisioned for attestation-
   // based enrollment and we have a fallback authentication, show it.
-  if (status.status() == policy::EnrollmentStatus::STATUS_REGISTRATION_FAILED &&
+  if (status.status() == policy::EnrollmentStatus::REGISTRATION_FAILED &&
       status.client_status() == policy::DM_STATUS_SERVICE_DEVICE_NOT_FOUND &&
-      current_auth_ == AUTH_ATTESTATION && AdvanceToNextAuth())
+      current_auth_ == AUTH_ATTESTATION && AdvanceToNextAuth()) {
     Show();
-  else
+  } else {
     actor_->ShowEnrollmentStatus(status);
+    if (UsingHandsOffEnrollment())
+      AutomaticRetry();
+  }
 }
 
 void EnrollmentScreen::OnOtherError(
     EnterpriseEnrollmentHelper::OtherError error) {
   RecordEnrollmentErrorMetrics();
   actor_->ShowOtherError(error);
+  if (UsingHandsOffEnrollment())
+    AutomaticRetry();
 }
 
 void EnrollmentScreen::OnDeviceEnrolled(const std::string& additional_token) {
@@ -302,11 +325,11 @@ void EnrollmentScreen::OnDeviceAttributeUploadCompleted(bool success) {
     policy::BrowserPolicyConnectorChromeOS* connector =
         g_browser_process->platform_part()->browser_policy_connector_chromeos();
     connector->GetDeviceCloudPolicyManager()->core()->RefreshSoon();
-    actor_->ShowEnrollmentStatus(policy::EnrollmentStatus::ForStatus(
-        policy::EnrollmentStatus::STATUS_SUCCESS));
+    actor_->ShowEnrollmentStatus(
+        policy::EnrollmentStatus::ForStatus(policy::EnrollmentStatus::SUCCESS));
   } else {
     actor_->ShowEnrollmentStatus(policy::EnrollmentStatus::ForStatus(
-        policy::EnrollmentStatus::STATUS_ATTRIBUTE_UPDATE_FAILED));
+        policy::EnrollmentStatus::ATTRIBUTE_UPDATE_FAILED));
   }
 }
 
@@ -331,10 +354,15 @@ void EnrollmentScreen::SendEnrollmentAuthToken(const std::string& token) {
 }
 
 void EnrollmentScreen::ShowEnrollmentStatusOnSuccess() {
+  retry_backoff_->InformOfRequest(true);
   if (elapsed_timer_)
     UMA_ENROLLMENT_TIME(kMetricEnrollmentTimeSuccess, elapsed_timer_);
-  actor_->ShowEnrollmentStatus(policy::EnrollmentStatus::ForStatus(
-      policy::EnrollmentStatus::STATUS_SUCCESS));
+  if (UsingHandsOffEnrollment()) {
+    OnConfirmationClosed();
+  } else {
+    actor_->ShowEnrollmentStatus(
+        policy::EnrollmentStatus::ForStatus(policy::EnrollmentStatus::SUCCESS));
+  }
 }
 
 void EnrollmentScreen::UMA(policy::MetricEnrollment sample) {
@@ -351,6 +379,11 @@ void EnrollmentScreen::RecordEnrollmentErrorMetrics() {
   //  TODO(drcrash): Maybe create multiple metrics (http://crbug.com/640313)?
   if (elapsed_timer_)
     UMA_ENROLLMENT_TIME(kMetricEnrollmentTimeFailure, elapsed_timer_);
+}
+
+void EnrollmentScreen::JoinDomain(OnDomainJoinedCallback on_joined_callback) {
+  on_joined_callback_ = std::move(on_joined_callback);
+  actor_->ShowAdJoin();
 }
 
 }  // namespace chromeos

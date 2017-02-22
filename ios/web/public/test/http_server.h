@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
-#include "ios/web/public/test/response_providers/response_provider.h"
+#import "ios/web/public/test/response_providers/response_provider.h"
 
 @class GCDWebServer;
 
@@ -75,6 +75,9 @@ class HttpServer {
   // Must be called from the main thread.
   bool IsRunning() const;
 
+  // Returns the port that the server is running on. Thread Safe
+  NSUInteger GetPort() const;
+
   // Adds a ResponseProvider. Takes ownership of the ResponseProvider.
   // Note for using URLs inside of the |response_provider|:
   // The HttpServer cannot run on default HTTP port 80, so URLs used in
@@ -96,8 +99,6 @@ class HttpServer {
 
   // Sets the port that the server is running on. Thread Safe
   void SetPort(NSUInteger port);
-  // Returns the port that the server is running on. Thread Safe
-  NSUInteger GetPort() const;
 
   // Creates a GURL that the server can service based on the |url|
   // passed in.

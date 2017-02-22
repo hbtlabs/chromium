@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<script src="../../resources/testharness.js"></script>
+<script src="../../resources/testharnessreport.js"></script>
+<script src="../resources/audit-util.js"></script>
+<script src="../resources/audit.js"></script>
+</head>
+
+<body>
+<script>
+let audit = Audit.createTaskRunner();
+
+function doTest(fftSize, illegal, should) {
+  let c = new OfflineAudioContext(1, 1000, 44100);
+  let a = c.createAnalyser();
+  let message = "Setting fftSize to " + fftSize;
+  let tester = function () {
+    a.fftSize = fftSize;
+  };
+
+  if (illegal) {
+    should(tester, message)
+      .throw("IndexSizeError");
+  } else {
+    should(tester, message)
+      .notThrow();
+  }
+}
+
+audit.define("FFT size test", function (task, should) {
+  task.describe("Test that re-sizing the FFT arrays does not fail.");
+  doTest(-1, true, should);
+  doTest(0, true, should);
+  doTest(1, true, should);
+  for (let i = 2; i <= 0x20000; i *= 2) {
+    if (i >= 32 && i <= 32768)
+      doTest(i, false, should);
+    else
+      doTest(i, true, should);
+    doTest(i + 1, true, should);
+  }
+
+  task.done();
+});
+
+audit.run();
+</script>
+
+</body>
+</html>

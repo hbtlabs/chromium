@@ -5,6 +5,8 @@
 #ifndef CONTENT_PUBLIC_BROWSER_MEDIA_SESSION_OBSERVER_H_
 #define CONTENT_PUBLIC_BROWSER_MEDIA_SESSION_OBSERVER_H_
 
+#include <set>
+
 #include "base/macros.h"
 #include "base/optional.h"
 #include "content/common/content_export.h"
@@ -19,7 +21,6 @@ enum class MediaSessionAction;
 namespace content {
 
 class MediaSession;
-class MediaSessionImpl;
 
 // The observer for observing MediaSession events.
 class CONTENT_EXPORT MediaSessionObserver {
@@ -41,17 +42,13 @@ class CONTENT_EXPORT MediaSessionObserver {
   virtual void MediaSessionMetadataChanged(
       const base::Optional<MediaMetadata>& metadata) {}
 
-  // Called when media session action is enabled.
-  virtual void MediaSessionEnabledAction(
-      blink::mojom::MediaSessionAction action) {}
-
-  // Called when media session action is disabled.
-  virtual void MediaSessionDisabledAction(
-      blink::mojom::MediaSessionAction action) {}
+  // Called when the media session action list has changed.
+  virtual void MediaSessionActionsChanged(
+      const std::set<blink::mojom::MediaSessionAction>& action) {}
 
  protected:
   // Create a MediaSessionObserver and start observing a session.
-  MediaSessionObserver(MediaSession* media_session);
+  explicit MediaSessionObserver(MediaSession* media_session);
   // Destruct a MediaSessionObserver and remove it from the session if it's
   // still observing.
   virtual ~MediaSessionObserver();
@@ -62,7 +59,7 @@ class CONTENT_EXPORT MediaSessionObserver {
   void StopObserving();
 
   // Weak pointer to MediaSession
-  MediaSessionImpl* media_session_;
+  MediaSession* media_session_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaSessionObserver);
 };

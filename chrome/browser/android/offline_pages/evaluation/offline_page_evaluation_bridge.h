@@ -9,9 +9,10 @@
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
-#include "components/offline_pages/background/request_coordinator.h"
-#include "components/offline_pages/background/request_notifier.h"
-#include "components/offline_pages/offline_page_model.h"
+#include "components/offline_pages/core/background/request_coordinator.h"
+#include "components/offline_pages/core/background/request_notifier.h"
+#include "components/offline_pages/core/offline_event_logger.h"
+#include "components/offline_pages/core/offline_page_model.h"
 
 namespace content {
 class BrowserContext;
@@ -19,30 +20,30 @@ class BrowserContext;
 
 namespace offline_pages {
 
-struct OfflinePageItem;
-
 namespace android {
 
 /**
  * Bridge for exposing native implementation which are used by evaluation.
  */
 class OfflinePageEvaluationBridge : public OfflinePageModel::Observer,
-                                    public RequestCoordinator::Observer {
+                                    public RequestCoordinator::Observer,
+                                    public OfflineEventLogger::Client {
  public:
   static bool Register(JNIEnv* env);
-  static std::unique_ptr<KeyedService> GetTestingRequestCoordinator(
-      content::BrowserContext* context);
 
   OfflinePageEvaluationBridge(JNIEnv* env,
+                              const base::android::JavaParamRef<jobject>& obj,
                               content::BrowserContext* browser_context,
                               OfflinePageModel* offline_page_model,
                               RequestCoordinator* request_coordinator);
 
   ~OfflinePageEvaluationBridge() override;
+  void Destory(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
   // OfflinePageModel::Observer implementation.
   void OfflinePageModelLoaded(OfflinePageModel* model) override;
-  void OfflinePageModelChanged(OfflinePageModel* model) override;
+  void OfflinePageAdded(OfflinePageModel* model,
+                        const OfflinePageItem& added_page) override;
   void OfflinePageDeleted(int64_t offline_id,
                           const ClientId& client_id) override;
 
@@ -52,6 +53,10 @@ class OfflinePageEvaluationBridge : public OfflinePageModel::Observer,
                    RequestNotifier::BackgroundSavePageResult status) override;
   void OnChanged(const SavePageRequest& request) override;
 
+  // OfflineEventLogger::Client implementation.
+  void CustomLog(const std::string& message) override;
+
+  // Gets all pages in offline page model.
   void GetAllPages(JNIEnv* env,
                    const base::android::JavaParamRef<jobject>& obj,
                    const base::android::JavaParamRef<jobject>& j_result_obj,
@@ -84,8 +89,6 @@ class OfflinePageEvaluationBridge : public OfflinePageModel::Observer,
                      const base::android::JavaParamRef<jstring>& j_client_id,
                      jboolean user_requested);
 
-  base::android::ScopedJavaGlobalRef<jobject> java_ref() { return java_ref_; }
-
  private:
   void NotifyIfDoneLoading() const;
 
@@ -93,7 +96,7 @@ class OfflinePageEvaluationBridge : public OfflinePageModel::Observer,
       JNIEnv* env,
       const ClientId& clientId) const;
 
-  base::android::ScopedJavaGlobalRef<jobject> java_ref_;
+  JavaObjectWeakGlobalRef weak_java_ref_;
   // Not owned.
   content::BrowserContext* browser_context_;
   // Not owned.

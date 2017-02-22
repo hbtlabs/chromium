@@ -59,7 +59,15 @@ class OfflineAudioDestinationHandler final : public AudioDestinationHandler {
   void stopRendering() override;
   unsigned long maxChannelCount() const override;
 
-  float sampleRate() const override { return m_renderTarget->sampleRate(); }
+  // Returns the rendering callback buffer size.  This should never be
+  // called.
+  size_t callbackBufferSize() const override;
+
+  double sampleRate() const override { return m_renderTarget->sampleRate(); }
+  int framesPerBuffer() const override {
+    NOTREACHED();
+    return 0;
+  }
 
   size_t renderQuantumFrames() const {
     return AudioUtilities::kRenderQuantumFrames;
@@ -98,8 +106,8 @@ class OfflineAudioDestinationHandler final : public AudioDestinationHandler {
 
   // This AudioHandler renders into this AudioBuffer.
   // This Persistent doesn't make a reference cycle including the owner
-  // OfflineAudioDestinationNode.
-  Persistent<AudioBuffer> m_renderTarget;
+  // OfflineAudioDestinationNode. It is accessed by both audio and main thread.
+  CrossThreadPersistent<AudioBuffer> m_renderTarget;
   // Temporary AudioBus for each render quantum.
   RefPtr<AudioBus> m_renderBus;
 

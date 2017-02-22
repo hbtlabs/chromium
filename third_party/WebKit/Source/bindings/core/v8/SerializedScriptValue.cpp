@@ -34,7 +34,6 @@
 #include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptState.h"
-#include "bindings/core/v8/ScriptValueSerializer.h"
 #include "bindings/core/v8/SerializedScriptValueFactory.h"
 #include "bindings/core/v8/Transferables.h"
 #include "bindings/core/v8/V8ArrayBuffer.h"
@@ -70,16 +69,11 @@ PassRefPtr<SerializedScriptValue> SerializedScriptValue::serialize(
       isolate, value, transferables, blobInfo, exception);
 }
 
-PassRefPtr<SerializedScriptValue> SerializedScriptValue::serialize(
-    const String& str) {
-  return create(ScriptValueSerializer::serializeWTFString(str));
-}
-
 PassRefPtr<SerializedScriptValue>
 SerializedScriptValue::serializeAndSwallowExceptions(
     v8::Isolate* isolate,
     v8::Local<v8::Value> value) {
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   RefPtr<SerializedScriptValue> serialized =
       serialize(isolate, value, nullptr, nullptr, exceptionState);
   if (exceptionState.hadException())
@@ -132,7 +126,9 @@ SerializedScriptValue::~SerializedScriptValue() {
 }
 
 PassRefPtr<SerializedScriptValue> SerializedScriptValue::nullValue() {
-  return create(ScriptValueSerializer::serializeNullValue());
+  // UChar rather than uint8_t here to get host endian behavior.
+  static const UChar kNullData[] = {0xff09, 0x3000};
+  return create(reinterpret_cast<const char*>(kNullData), sizeof(kNullData));
 }
 
 String SerializedScriptValue::toWireString() const {
@@ -198,41 +194,51 @@ static void accumulateArrayBuffersForAllWorlds(
       v8::Local<v8::Object> wrapper =
           worlds[i]->domDataStore().get(object, isolate);
       if (!wrapper.IsEmpty())
-        buffers.append(v8::Local<v8::ArrayBuffer>::Cast(wrapper));
+        buffers.push_back(v8::Local<v8::ArrayBuffer>::Cast(wrapper));
     }
   } else {
     v8::Local<v8::Object> wrapper =
         DOMWrapperWorld::current(isolate).domDataStore().get(object, isolate);
     if (!wrapper.IsEmpty())
-      buffers.append(v8::Local<v8::ArrayBuffer>::Cast(wrapper));
+      buffers.push_back(v8::Local<v8::ArrayBuffer>::Cast(wrapper));
   }
 }
 
-void SerializedScriptValue::transferImageBitmaps(
+std::unique_ptr<SerializedScriptValue::ImageBitmapContentsArray>
+SerializedScriptValue::transferImageBitmapContents(
     v8::Isolate* isolate,
     const ImageBitmapArray& imageBitmaps,
     ExceptionState& exceptionState) {
   if (!imageBitmaps.size())
-    return;
+    return nullptr;
 
   for (size_t i = 0; i < imageBitmaps.size(); ++i) {
     if (imageBitmaps[i]->isNeutered()) {
       exceptionState.throwDOMException(
           DataCloneError, "ImageBitmap at index " + String::number(i) +
                               " is already detached.");
-      return;
+      return nullptr;
     }
   }
 
   std::unique_ptr<ImageBitmapContentsArray> contents =
-      wrapUnique(new ImageBitmapContentsArray);
+      WTF::wrapUnique(new ImageBitmapContentsArray);
   HeapHashSet<Member<ImageBitmap>> visited;
   for (size_t i = 0; i < imageBitmaps.size(); ++i) {
     if (visited.contains(imageBitmaps[i]))
       continue;
-    visited.add(imageBitmaps[i]);
-    contents->append(imageBitmaps[i]->transfer());
+    visited.insert(imageBitmaps[i]);
+    contents->push_back(imageBitmaps[i]->transfer());
   }
+  return contents;
+}
+
+void SerializedScriptValue::transferImageBitmaps(
+    v8::Isolate* isolate,
+    const ImageBitmapArray& imageBitmaps,
+    ExceptionState& exceptionState) {
+  std::unique_ptr<ImageBitmapContentsArray> contents =
+      transferImageBitmapContents(isolate, imageBitmaps, exceptionState);
   m_imageBitmapContentsArray = std::move(contents);
 }
 
@@ -259,7 +265,7 @@ void SerializedScriptValue::transferOffscreenCanvas(
                               " has an associated context.");
       return;
     }
-    visited.add(offscreenCanvases[i].get());
+    visited.insert(offscreenCanvases[i].get());
     offscreenCanvases[i].get()->setNeutered();
   }
 }
@@ -332,7 +338,7 @@ bool SerializedScriptValue::extractTransferables(
                                 " is a duplicate of an earlier port.");
         return false;
       }
-      transferables.messagePorts.append(port);
+      transferables.messagePorts.push_back(port);
     } else if (transferableObject->IsArrayBuffer()) {
       DOMArrayBuffer* arrayBuffer = V8ArrayBuffer::toImpl(
           v8::Local<v8::Object>::Cast(transferableObject));
@@ -342,7 +348,7 @@ bool SerializedScriptValue::extractTransferables(
                                 " is a duplicate of an earlier ArrayBuffer.");
         return false;
       }
-      transferables.arrayBuffers.append(arrayBuffer);
+      transferables.arrayBuffers.push_back(arrayBuffer);
     } else if (transferableObject->IsSharedArrayBuffer()) {
       DOMSharedArrayBuffer* sharedArrayBuffer = V8SharedArrayBuffer::toImpl(
           v8::Local<v8::Object>::Cast(transferableObject));
@@ -353,7 +359,7 @@ bool SerializedScriptValue::extractTransferables(
                 " is a duplicate of an earlier SharedArrayBuffer.");
         return false;
       }
-      transferables.arrayBuffers.append(sharedArrayBuffer);
+      transferables.arrayBuffers.push_back(sharedArrayBuffer);
     } else if (V8ImageBitmap::hasInstance(transferableObject, isolate)) {
       ImageBitmap* imageBitmap = V8ImageBitmap::toImpl(
           v8::Local<v8::Object>::Cast(transferableObject));
@@ -363,7 +369,7 @@ bool SerializedScriptValue::extractTransferables(
                                 " is a duplicate of an earlier ImageBitmap.");
         return false;
       }
-      transferables.imageBitmaps.append(imageBitmap);
+      transferables.imageBitmaps.push_back(imageBitmap);
     } else if (V8OffscreenCanvas::hasInstance(transferableObject, isolate)) {
       OffscreenCanvas* offscreenCanvas = V8OffscreenCanvas::toImpl(
           v8::Local<v8::Object>::Cast(transferableObject));
@@ -374,7 +380,7 @@ bool SerializedScriptValue::extractTransferables(
                 " is a duplicate of an earlier OffscreenCanvas.");
         return false;
       }
-      transferables.offscreenCanvases.append(offscreenCanvas);
+      transferables.offscreenCanvases.push_back(offscreenCanvas);
     } else {
       exceptionState.throwTypeError("Value at index " + String::number(i) +
                                     " does not have a transferable type.");
@@ -384,7 +390,7 @@ bool SerializedScriptValue::extractTransferables(
   return true;
 }
 
-std::unique_ptr<ArrayBufferContentsArray>
+std::unique_ptr<SerializedScriptValue::ArrayBufferContentsArray>
 SerializedScriptValue::transferArrayBufferContents(
     v8::Isolate* isolate,
     const ArrayBufferArray& arrayBuffers,
@@ -404,14 +410,14 @@ SerializedScriptValue::transferArrayBufferContents(
   }
 
   std::unique_ptr<ArrayBufferContentsArray> contents =
-      wrapUnique(new ArrayBufferContentsArray(arrayBuffers.size()));
+      WTF::wrapUnique(new ArrayBufferContentsArray(arrayBuffers.size()));
 
   HeapHashSet<Member<DOMArrayBufferBase>> visited;
   for (auto it = arrayBuffers.begin(); it != arrayBuffers.end(); ++it) {
     DOMArrayBufferBase* arrayBuffer = *it;
     if (visited.contains(arrayBuffer))
       continue;
-    visited.add(arrayBuffer);
+    visited.insert(arrayBuffer);
 
     size_t index = std::distance(arrayBuffers.begin(), it);
     if (arrayBuffer->isShared()) {

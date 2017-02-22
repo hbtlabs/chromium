@@ -13,25 +13,28 @@
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "content/browser/loader/netlog_observer.h"
 #include "content/browser/loader/resource_buffer.h"
+#include "content/browser/loader/resource_controller.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/loader/resource_message_filter.h"
 #include "content/browser/loader/resource_request_info_impl.h"
+#include "content/browser/loader/upload_progress_tracker.h"
 #include "content/common/resource_messages.h"
 #include "content/common/resource_request_completion_status.h"
 #include "content/common/view_messages.h"
-#include "content/public/browser/resource_controller.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/resource_response.h"
 #include "ipc/ipc_message_macros.h"
 #include "net/base/io_buffer.h"
 #include "net/base/load_flags.h"
+#include "net/base/upload_progress.h"
 #include "net/url_request/redirect_info.h"
 
 using base::TimeDelta;
@@ -43,8 +46,6 @@ namespace {
 static int kBufferSize = 1024 * 512;
 static int kMinAllocationSize = 1024 * 4;
 static int kMaxAllocationSize = 1024 * 32;
-// The interval for calls to ReportUploadProgress.
-static int kUploadProgressIntervalMsec = 100;
 
 // Used when kOptimizeLoadingIPCForSmallResources is enabled.
 // Small resource typically issues two Read call: one for the content itself
@@ -72,13 +73,16 @@ void InitializeResourceBufferConstants() {
   GetNumericArg("resource-buffer-max-allocation-size", &kMaxAllocationSize);
 }
 
-// Updates |*cached| to |updated| and returns the difference from the old
-// value.
-int TrackDifference(int64_t updated, int64_t* cached) {
-  int difference = updated - *cached;
-  *cached = updated;
-  return difference;
-}
+// This enum is used for logging a histogram and should not be reordered.
+enum ExpectedContentSizeResult {
+  EQ_RESPONSE_BODY = 0,
+  EQ_RESPONSE_BODY_GT_EQ_BUFFER_SIZE = 1,
+  GT_EQ_BUFFER_SIZE = 2,
+  LT_RESPONSE_BODY = 3,
+  GT_RESPONSE_BODY = 4,
+  UNKNOWN = 5,
+  EXPECTED_CONTENT_MAX,
+};
 
 }  // namespace
 
@@ -125,7 +129,6 @@ class AsyncResourceHandler::InliningHelper {
   // Returns true if the received data is sent to the consumer.
   bool SendInlinedDataIfApplicable(int bytes_read,
                                    int encoded_data_length,
-                                   int encoded_body_length,
                                    IPC::Sender* sender,
                                    int request_id) {
     DCHECK(sender);
@@ -138,7 +141,7 @@ class AsyncResourceHandler::InliningHelper {
     leading_chunk_buffer_ = nullptr;
 
     sender->Send(new ResourceMsg_InlinedDataChunkReceived(
-        request_id, data, encoded_data_length, encoded_body_length));
+        request_id, data, encoded_data_length));
     return true;
   }
 
@@ -200,23 +203,20 @@ class DependentIOBuffer : public net::WrappedIOBuffer {
   scoped_refptr<ResourceBuffer> backing_;
 };
 
-AsyncResourceHandler::AsyncResourceHandler(
-    net::URLRequest* request,
-    ResourceDispatcherHostImpl* rdh)
+AsyncResourceHandler::AsyncResourceHandler(net::URLRequest* request,
+                                           ResourceDispatcherHostImpl* rdh)
     : ResourceHandler(request),
       ResourceMessageDelegate(request),
       rdh_(rdh),
       pending_data_count_(0),
       allocation_size_(0),
-      did_defer_(false),
+      total_read_body_bytes_(0),
       has_checked_for_sufficient_resources_(false),
       sent_received_response_msg_(false),
       sent_data_buffer_msg_(false),
       inlining_helper_(new InliningHelper),
-      last_upload_position_(0),
-      waiting_for_upload_progress_ack_(false),
-      reported_transfer_size_(0),
-      reported_encoded_body_length_(0) {
+      reported_transfer_size_(0) {
+  DCHECK(GetRequestInfo()->requester_info()->IsRenderer());
   InitializeResourceBufferConstants();
 }
 
@@ -256,56 +256,19 @@ void AsyncResourceHandler::OnDataReceivedACK(int request_id) {
 }
 
 void AsyncResourceHandler::OnUploadProgressACK(int request_id) {
-  waiting_for_upload_progress_ack_ = false;
+  if (upload_progress_tracker_)
+    upload_progress_tracker_->OnAckReceived();
 }
 
-void AsyncResourceHandler::ReportUploadProgress() {
-  DCHECK(GetRequestInfo()->is_upload_progress_enabled());
-  if (waiting_for_upload_progress_ack_)
-    return;  // Send one progress event at a time.
-
-  net::UploadProgress progress = request()->GetUploadProgress();
-  if (!progress.size())
-    return;  // Nothing to upload.
-
-  if (progress.position() == last_upload_position_)
-    return;  // No progress made since last time.
-
-  const uint64_t kHalfPercentIncrements = 200;
-  const TimeDelta kOneSecond = TimeDelta::FromMilliseconds(1000);
-
-  uint64_t amt_since_last = progress.position() - last_upload_position_;
-  TimeDelta time_since_last = TimeTicks::Now() - last_upload_ticks_;
-
-  bool is_finished = (progress.size() == progress.position());
-  bool enough_new_progress =
-      (amt_since_last > (progress.size() / kHalfPercentIncrements));
-  bool too_much_time_passed = time_since_last > kOneSecond;
-
-  if (is_finished || enough_new_progress || too_much_time_passed) {
-    ResourceMessageFilter* filter = GetFilter();
-    if (filter) {
-      filter->Send(
-        new ResourceMsg_UploadProgress(GetRequestID(),
-                                       progress.position(),
-                                       progress.size()));
-    }
-    waiting_for_upload_progress_ack_ = true;
-    last_upload_ticks_ = TimeTicks::Now();
-    last_upload_position_ = progress.position();
-  }
-}
-
-bool AsyncResourceHandler::OnRequestRedirected(
+void AsyncResourceHandler::OnRequestRedirected(
     const net::RedirectInfo& redirect_info,
     ResourceResponse* response,
-    bool* defer) {
-  const ResourceRequestInfoImpl* info = GetRequestInfo();
-  if (!info->filter())
-    return false;
-
-  *defer = did_defer_ = true;
-  OnDefer();
+    std::unique_ptr<ResourceController> controller) {
+  ResourceMessageFilter* filter = GetFilter();
+  if (!filter) {
+    controller->Cancel();
+    return;
+  }
 
   NetLogObserver::PopulateResponseInfo(request(), response);
   response->head.encoded_data_length = request()->GetTotalReceivedBytes();
@@ -316,36 +279,44 @@ bool AsyncResourceHandler::OnRequestRedirected(
   // cookies? The only case where it can change is top-level navigation requests
   // and hopefully those will eventually all be owned by the browser. It's
   // possible this is still needed while renderer-owned ones exist.
-  return info->filter()->Send(new ResourceMsg_ReceivedRedirect(
-      GetRequestID(), redirect_info, response->head));
+  if (filter->Send(new ResourceMsg_ReceivedRedirect(
+          GetRequestID(), redirect_info, response->head))) {
+    OnDefer(std::move(controller));
+  } else {
+    controller->Cancel();
+  }
 }
 
-bool AsyncResourceHandler::OnResponseStarted(ResourceResponse* response,
-                                             bool* defer) {
+void AsyncResourceHandler::OnResponseStarted(
+    ResourceResponse* response,
+    std::unique_ptr<ResourceController> controller) {
   // For changes to the main frame, inform the renderer of the new URL's
   // per-host settings before the request actually commits.  This way the
   // renderer will be able to set these precisely at the time the
   // request commits, avoiding the possibility of e.g. zooming the old content
   // or of having to layout the new content twice.
+  DCHECK(!has_controller());
 
   response_started_ticks_ = base::TimeTicks::Now();
-
-  progress_timer_.Stop();
-  const ResourceRequestInfoImpl* info = GetRequestInfo();
-  if (!info->filter())
-    return false;
 
   // We want to send a final upload progress message prior to sending the
   // response complete message even if we're waiting for an ack to to a
   // previous upload progress message.
-  if (info->is_upload_progress_enabled()) {
-    waiting_for_upload_progress_ack_ = false;
-    ReportUploadProgress();
+  if (upload_progress_tracker_) {
+    upload_progress_tracker_->OnUploadCompleted();
+    upload_progress_tracker_ = nullptr;
   }
 
+  const ResourceRequestInfoImpl* info = GetRequestInfo();
   if (rdh_->delegate()) {
     rdh_->delegate()->OnResponseStarted(request(), info->GetContext(),
                                         response);
+  }
+
+  ResourceMessageFilter* filter = GetFilter();
+  if (!filter) {
+    controller->Cancel();
+    return;
   }
 
   NetLogObserver::PopulateResponseInfo(request(), response);
@@ -361,40 +332,46 @@ bool AsyncResourceHandler::OnResponseStarted(ResourceResponse* response,
 
   response->head.request_start = request()->creation_time();
   response->head.response_start = TimeTicks::Now();
-  info->filter()->Send(new ResourceMsg_ReceivedResponse(GetRequestID(),
-                                                        response->head));
+  filter->Send(
+      new ResourceMsg_ReceivedResponse(GetRequestID(), response->head));
   sent_received_response_msg_ = true;
 
   if (request()->response_info().metadata.get()) {
     std::vector<char> copy(request()->response_info().metadata->data(),
                            request()->response_info().metadata->data() +
                                request()->response_info().metadata->size());
-    info->filter()->Send(new ResourceMsg_ReceivedCachedMetadata(GetRequestID(),
-                                                                copy));
+    filter->Send(new ResourceMsg_ReceivedCachedMetadata(GetRequestID(), copy));
   }
 
   inlining_helper_->OnResponseReceived(*response);
-  return true;
+  controller->Resume();
 }
 
-bool AsyncResourceHandler::OnWillStart(const GURL& url, bool* defer) {
+void AsyncResourceHandler::OnWillStart(
+    const GURL& url,
+    std::unique_ptr<ResourceController> controller) {
+  ResourceMessageFilter* filter = GetFilter();
+  if (!filter) {
+    controller->Cancel();
+    return;
+  }
+
   if (GetRequestInfo()->is_upload_progress_enabled() &&
       request()->has_upload()) {
-    ReportUploadProgress();
-    progress_timer_.Start(
+    upload_progress_tracker_ = base::MakeUnique<UploadProgressTracker>(
         FROM_HERE,
-        base::TimeDelta::FromMilliseconds(kUploadProgressIntervalMsec),
-        this,
-        &AsyncResourceHandler::ReportUploadProgress);
+        base::BindRepeating(&AsyncResourceHandler::SendUploadProgress,
+                            base::Unretained(this)),
+        request());
   }
-  return true;
+  controller->Resume();
 }
 
 bool AsyncResourceHandler::OnWillRead(scoped_refptr<net::IOBuffer>* buf,
-                                      int* buf_size,
-                                      int min_size) {
-  DCHECK_EQ(-1, min_size);
+                                      int* buf_size) {
+  DCHECK(!has_controller());
 
+  // TODO(mmenke):  Should fail with ERR_INSUFFICIENT_RESOURCES here.
   if (!CheckForSufficientResource())
     return false;
 
@@ -416,36 +393,47 @@ bool AsyncResourceHandler::OnWillRead(scoped_refptr<net::IOBuffer>* buf,
   return true;
 }
 
-bool AsyncResourceHandler::OnReadCompleted(int bytes_read, bool* defer) {
+void AsyncResourceHandler::OnReadCompleted(
+    int bytes_read,
+    std::unique_ptr<ResourceController> controller) {
+  DCHECK(!has_controller());
   DCHECK_GE(bytes_read, 0);
 
-  if (!bytes_read)
-    return true;
+  if (!bytes_read) {
+    controller->Resume();
+    return;
+  }
 
   ResourceMessageFilter* filter = GetFilter();
-  if (!filter)
-    return false;
+  if (!filter) {
+    controller->Cancel();
+    return;
+  }
 
   int encoded_data_length = CalculateEncodedDataLengthToReport();
   if (!first_chunk_read_)
     encoded_data_length -= request()->raw_header_size();
 
-  int encoded_body_length = CalculateEncodedBodyLengthToReport();
   first_chunk_read_ = true;
 
   // Return early if InliningHelper handled the received data.
   if (inlining_helper_->SendInlinedDataIfApplicable(
-          bytes_read, encoded_data_length, encoded_body_length, filter,
-          GetRequestID()))
-    return true;
+          bytes_read, encoded_data_length, filter, GetRequestID())) {
+    controller->Resume();
+    return;
+  }
 
   buffer_->ShrinkLastAllocation(bytes_read);
+
+  total_read_body_bytes_ += bytes_read;
 
   if (!sent_data_buffer_msg_) {
     base::SharedMemoryHandle handle = base::SharedMemory::DuplicateHandle(
         buffer_->GetSharedMemory().handle());
-    if (!base::SharedMemory::IsHandleValid(handle))
-      return false;
+    if (!base::SharedMemory::IsHandleValid(handle)) {
+      controller->Cancel();
+      return;
+    }
     filter->Send(new ResourceMsg_SetDataBuffer(
         GetRequestID(), handle, buffer_->GetSharedMemory().mapped_size(),
         filter->peer_pid()));
@@ -455,16 +443,14 @@ bool AsyncResourceHandler::OnReadCompleted(int bytes_read, bool* defer) {
   int data_offset = buffer_->GetLastAllocationOffset();
 
   filter->Send(new ResourceMsg_DataReceived(GetRequestID(), data_offset,
-                                            bytes_read, encoded_data_length,
-                                            encoded_body_length));
+                                            bytes_read, encoded_data_length));
   ++pending_data_count_;
 
   if (!buffer_->CanAllocate()) {
-    *defer = did_defer_ = true;
-    OnDefer();
+    OnDefer(std::move(controller));
+  } else {
+    controller->Resume();
   }
-
-  return true;
 }
 
 void AsyncResourceHandler::OnDataDownloaded(int bytes_downloaded) {
@@ -479,10 +465,20 @@ void AsyncResourceHandler::OnDataDownloaded(int bytes_downloaded) {
 
 void AsyncResourceHandler::OnResponseCompleted(
     const net::URLRequestStatus& status,
-    bool* defer) {
-  const ResourceRequestInfoImpl* info = GetRequestInfo();
-  if (!info->filter())
+    std::unique_ptr<ResourceController> controller) {
+  ResourceMessageFilter* filter = GetFilter();
+  if (!filter) {
+    controller->Resume();
     return;
+  }
+
+  // Ensure sending the final upload progress message here, since
+  // OnResponseCompleted can be called without OnResponseStarted on cancellation
+  // or error cases.
+  if (upload_progress_tracker_) {
+    upload_progress_tracker_->OnUploadCompleted();
+    upload_progress_tracker_ = nullptr;
+  }
 
   // If we crash here, figure out what URL the renderer was requesting.
   // http://crbug.com/107692
@@ -499,6 +495,7 @@ void AsyncResourceHandler::OnResponseCompleted(
         sent_received_response_msg_);
 
   int error_code = status.error();
+  const ResourceRequestInfoImpl* info = GetRequestInfo();
   bool was_ignored_by_handler = info->WasIgnoredByHandler();
 
   DCHECK(status.status() != net::URLRequestStatus::IO_PENDING);
@@ -514,11 +511,13 @@ void AsyncResourceHandler::OnResponseCompleted(
   request_complete_data.completion_time = TimeTicks::Now();
   request_complete_data.encoded_data_length =
       request()->GetTotalReceivedBytes();
-  info->filter()->Send(
+  request_complete_data.encoded_body_length = request()->GetRawBodyBytes();
+  filter->Send(
       new ResourceMsg_RequestComplete(GetRequestID(), request_complete_data));
 
   if (status.is_success())
     RecordHistogram();
+  controller->Resume();
 }
 
 bool AsyncResourceHandler::EnsureResourceBufferIsInitialized() {
@@ -534,14 +533,15 @@ bool AsyncResourceHandler::EnsureResourceBufferIsInitialized() {
 }
 
 void AsyncResourceHandler::ResumeIfDeferred() {
-  if (did_defer_) {
-    did_defer_ = false;
+  if (has_controller()) {
     request()->LogUnblocked();
-    controller()->Resume();
+    Resume();
   }
 }
 
-void AsyncResourceHandler::OnDefer() {
+void AsyncResourceHandler::OnDefer(
+    std::unique_ptr<ResourceController> controller) {
+  HoldController(std::move(controller));
   request()->LogBlockedBy("AsyncResourceHandler");
 }
 
@@ -553,18 +553,14 @@ bool AsyncResourceHandler::CheckForSufficientResource() {
   if (rdh_->HasSufficientResourcesForRequest(request()))
     return true;
 
-  controller()->CancelWithError(net::ERR_INSUFFICIENT_RESOURCES);
   return false;
 }
 
 int AsyncResourceHandler::CalculateEncodedDataLengthToReport() {
-  return TrackDifference(request()->GetTotalReceivedBytes(),
-                         &reported_transfer_size_);
-}
-
-int AsyncResourceHandler::CalculateEncodedBodyLengthToReport() {
-  return TrackDifference(request()->GetRawBodyBytes(),
-                         &reported_encoded_body_length_);
+  const auto transfer_size = request()->GetTotalReceivedBytes();
+  const auto difference =  transfer_size - reported_transfer_size_;
+  reported_transfer_size_ = transfer_size;
+  return difference;
 }
 
 void AsyncResourceHandler::RecordHistogram() {
@@ -591,6 +587,43 @@ void AsyncResourceHandler::RecordHistogram() {
   }
 
   inlining_helper_->RecordHistogram(elapsed_time);
+
+  // Record if content size was known in advance.
+  int64_t expected_content_size = request()->GetExpectedContentSize();
+  ExpectedContentSizeResult expected_content_size_result =
+      ExpectedContentSizeResult::UNKNOWN;
+  if (expected_content_size >= 0) {
+    // Compare response body size to expected content size.
+    if (expected_content_size == total_read_body_bytes_ &&
+        expected_content_size >= kBufferSize) {
+      expected_content_size_result =
+          ExpectedContentSizeResult::EQ_RESPONSE_BODY_GT_EQ_BUFFER_SIZE;
+    } else if (expected_content_size >= kBufferSize) {
+      expected_content_size_result =
+          ExpectedContentSizeResult::GT_EQ_BUFFER_SIZE;
+    } else if (expected_content_size == total_read_body_bytes_) {
+      expected_content_size_result =
+          ExpectedContentSizeResult::EQ_RESPONSE_BODY;
+    } else if (expected_content_size < total_read_body_bytes_) {
+      expected_content_size_result =
+          ExpectedContentSizeResult::LT_RESPONSE_BODY;
+    } else {
+      expected_content_size_result =
+          ExpectedContentSizeResult::GT_RESPONSE_BODY;
+    }
+  }
+  UMA_HISTOGRAM_ENUMERATION("Net.ResourceLoader.ExpectedContentSizeResult",
+                            expected_content_size_result,
+                            ExpectedContentSizeResult::EXPECTED_CONTENT_MAX);
+}
+
+void AsyncResourceHandler::SendUploadProgress(
+    const net::UploadProgress& progress) {
+  ResourceMessageFilter* filter = GetFilter();
+  if (!filter)
+    return;
+  filter->Send(new ResourceMsg_UploadProgress(
+      GetRequestID(), progress.position(), progress.size()));
 }
 
 }  // namespace content

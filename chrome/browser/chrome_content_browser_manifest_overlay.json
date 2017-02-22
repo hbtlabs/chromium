@@ -7,8 +7,11 @@
         "renderer": [
           "autofill::mojom::AutofillDriver",
           "autofill::mojom::PasswordManagerDriver",
+          "chrome::mojom::NetBenchmarking",
+          "chrome::mojom::FieldTrialRecorder",
           "extensions::StashService",
           "metrics::mojom::LeakDetector",
+          "mojom::ModuleEventSink",
           "rappor::mojom::RapporRecorder",
           "startup_metric_utils::mojom::StartupMetricHost",
           "translate::mojom::ContentTranslateDriver"
@@ -16,27 +19,16 @@
         "gpu": [
           "metrics::mojom::CallStackProfileCollector"
         ],
-        "ash": [
-          // Under classic ash the browser provides some of the ash interfaces
-          // to itself.
-          "ash::mojom::LocaleNotificationController",
-          "ash::mojom::NewWindowClient",
-          "ash::mojom::ShelfController",
-          "ash::mojom::ShutdownController",
-          "ash::mojom::SystemTray",
-          "ash::mojom::SystemTrayClient",
-          "ash::mojom::WallpaperController",
-          "ash::mojom::WallpaperManager",
-          "ash::mojom::VolumeController",
-          "keyboard::mojom::Keyboard"
-        ],
-        "mash:launchable": [
-          "mash::mojom::Launchable"
-        ]
+        "ime:ime_driver": []
       },
       "requires": {
+        "accessibility_autoclick": [ "ash:autoclick" ],
         "ash": [ "ash" ],
-        "image_decoder": [ "decode" ]
+        "image_decoder": [ "decode" ],
+        "nacl_broker": [ "browser" ],
+        "nacl_loader": [ "browser" ],
+        "preferences": [ "preferences_manager" ],
+        "ui": [ "display_controller", "ime_registrar" ]
       }
     },
     "navigation:frame": {
@@ -46,6 +38,7 @@
           "autofill::mojom::PasswordManagerDriver",
           "blink::mojom::ShareService",
           "bluetooth::mojom::AdapterFactory",
+          "chrome::mojom::PrerenderCanceler",
           "device::usb::ChooserService",
           "device::usb::DeviceManager",
           "contextual_search::mojom::ContextualSearchJsApiService",
@@ -54,7 +47,6 @@
           "extensions::KeepAlive",
           "extensions::mime_handler::MimeHandlerService",
           "media_router::mojom::MediaRouter",
-          "mojom::OmniboxPageHandler",
           "password_manager::mojom::CredentialManager",
           "translate::mojom::ContentTranslateDriver",
 

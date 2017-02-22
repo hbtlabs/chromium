@@ -30,7 +30,6 @@ class PageNavigator;
 
 namespace views {
 class ImageButton;
-class ImageView;
 class MdTextButton;
 }
 
@@ -97,8 +96,10 @@ class DownloadShelfView : public views::AccessiblePaneView,
  protected:
   // Implementation of DownloadShelf.
   void DoAddDownload(content::DownloadItem* download) override;
-  void DoShow() override;
+  void DoOpen() override;
   void DoClose(CloseReason reason) override;
+  void DoHide() override;
+  void DoUnhide() override;
 
   // From AccessiblePaneView
   views::View* GetDefaultFocusableChild() override;

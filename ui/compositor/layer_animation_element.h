@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <set>
 
 #include "base/macros.h"
@@ -23,6 +24,12 @@ namespace ui {
 
 class InterpolatedTransform;
 class LayerAnimationDelegate;
+
+class AnimationMetricsReporter {
+ public:
+  virtual ~AnimationMetricsReporter() {}
+  virtual void Report(int value) = 0;
+};
 
 // LayerAnimationElements represent one segment of an animation between two
 // keyframes. They know how to update a LayerAnimationDelegate given a value
@@ -70,7 +77,7 @@ class COMPOSITOR_EXPORT LayerAnimationElement {
 
   // Creates an element that transitions to the given transform. The caller owns
   // the return value.
-  static LayerAnimationElement* CreateTransformElement(
+  static std::unique_ptr<LayerAnimationElement> CreateTransformElement(
       const gfx::Transform& transform,
       base::TimeDelta duration);
 
@@ -81,49 +88,50 @@ class COMPOSITOR_EXPORT LayerAnimationElement {
   // transform and the last value the interpolated transform will assume. It is
   // therefore important that the value of the interpolated at time 0 matches
   // the current transform.
-  static LayerAnimationElement* CreateInterpolatedTransformElement(
-      InterpolatedTransform* interpolated_transform,
+  static std::unique_ptr<LayerAnimationElement>
+  CreateInterpolatedTransformElement(
+      std::unique_ptr<InterpolatedTransform> interpolated_transform,
       base::TimeDelta duration);
 
   // Creates an element that transitions to the given bounds. The caller owns
   // the return value.
-  static LayerAnimationElement* CreateBoundsElement(
+  static std::unique_ptr<LayerAnimationElement> CreateBoundsElement(
       const gfx::Rect& bounds,
       base::TimeDelta duration);
 
   // Creates an element that transitions to the given opacity. The caller owns
   // the return value.
-  static LayerAnimationElement* CreateOpacityElement(
+  static std::unique_ptr<LayerAnimationElement> CreateOpacityElement(
       float opacity,
       base::TimeDelta duration);
 
   // Creates an element that sets visibily following a delay. The caller owns
   // the return value.
-  static LayerAnimationElement* CreateVisibilityElement(
+  static std::unique_ptr<LayerAnimationElement> CreateVisibilityElement(
       bool visibility,
       base::TimeDelta duration);
 
   // Creates an element that transitions to the given brightness.
   // The caller owns the return value.
-  static LayerAnimationElement* CreateBrightnessElement(
+  static std::unique_ptr<LayerAnimationElement> CreateBrightnessElement(
       float brightness,
       base::TimeDelta duration);
 
   // Creates an element that transitions to the given grayscale value.
   // The caller owns the return value.
-  static LayerAnimationElement* CreateGrayscaleElement(
+  static std::unique_ptr<LayerAnimationElement> CreateGrayscaleElement(
       float grayscale,
       base::TimeDelta duration);
 
   // Creates an element that pauses the given properties. The caller owns the
   // return value.
-  static LayerAnimationElement* CreatePauseElement(
+  static std::unique_ptr<LayerAnimationElement> CreatePauseElement(
       AnimatableProperties properties,
       base::TimeDelta duration);
 
   // Creates an element that transitions to the given color. The caller owns the
   // return value.
-  static LayerAnimationElement* CreateColorElement(
+  static std::unique_ptr<LayerAnimationElement> CreateColorElement(
       SkColor color,
       base::TimeDelta duration);
 
@@ -180,6 +188,10 @@ class COMPOSITOR_EXPORT LayerAnimationElement {
   gfx::Tween::Type tween_type() const { return tween_type_; }
   void set_tween_type(gfx::Tween::Type tween_type) { tween_type_ = tween_type; }
 
+  void set_animation_metrics_reporter(AnimationMetricsReporter* reporter) {
+    animation_metrics_reporter_ = reporter;
+  }
+
   // Each LayerAnimationElement has a unique animation_id. Elements belonging
   // to sequences that are supposed to start together have the same
   // animation_group_id.
@@ -225,6 +237,11 @@ class COMPOSITOR_EXPORT LayerAnimationElement {
   int animation_group_id_;
 
   double last_progressed_fraction_;
+
+  // To obtain metrics of animation performance tag animation elements and
+  // keep track of sequential compositor frame number.
+  AnimationMetricsReporter* animation_metrics_reporter_;
+  int start_frame_number_;
 
   base::WeakPtrFactory<LayerAnimationElement> weak_ptr_factory_;
 

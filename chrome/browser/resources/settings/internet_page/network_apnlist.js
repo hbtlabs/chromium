@@ -72,7 +72,7 @@ Polymer({
         return {
           'AccessPointName': 'String',
           'Username': 'String',
-          'Password': 'String'
+          'Password': 'Password'
         };
       },
       readOnly: true
@@ -181,7 +181,7 @@ Polymer({
    * @private
    */
   onSelectApnChange_: function(event) {
-    let target = /** @type {!HTMLSelectElement} */(event.target);
+    var target = /** @type {!HTMLSelectElement} */(event.target);
     var accessPointName = target.value;
     // When selecting 'Other', don't set a change event unless a valid
     // non-default value has been set for Other.
@@ -200,7 +200,7 @@ Polymer({
    * @private
    */
   onOtherApnChange_: function(event) {
-    this.set('otherApn.' + event.detail.field, event.detail.value);
+    this.set('otherApn_.' + event.detail.field, event.detail.value);
     // Don't send a change event for 'Other' until the 'Save' button is tapped.
   },
 
@@ -262,10 +262,8 @@ Polymer({
    * @private
    */
   findApnInList: function(apnList, accessPointName) {
-    for (let a of apnList) {
-      if (a.AccessPointName == accessPointName)
-        return a;
-    }
-    return undefined;
+    return apnList.find(function(a) {
+      return a.AccessPointName == accessPointName;
+    });
   }
 });

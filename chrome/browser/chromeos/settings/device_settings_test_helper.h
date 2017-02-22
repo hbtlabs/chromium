@@ -117,6 +117,7 @@ class DeviceSettingsTestHelper : public SessionManagerClient {
       const std::string& account_id,
       const std::string& policy_blob,
       const StorePolicyCallback& callback) override;
+  bool SupportsRestartToApplyUserFlags() const override;
   void SetFlagsForUser(const cryptohome::Identification& cryptohome_id,
                        const std::vector<std::string>& flags) override;
   void GetServerBackedStateKeys(const StateKeysCallback& callback) override;
@@ -126,8 +127,11 @@ class DeviceSettingsTestHelper : public SessionManagerClient {
                         bool disable_boot_completed_broadcast,
                         const StartArcInstanceCallback& callback) override;
   void StopArcInstance(const ArcCallback& callback) override;
-  void PrioritizeArcInstance(const ArcCallback& callback) override;
-  void EmitArcBooted() override;
+  void SetArcCpuRestriction(
+      login_manager::ContainerCpuRestrictionState restriction_state,
+      const ArcCallback& callback) override;
+  void EmitArcBooted(const cryptohome::Identification& cryptohome_id,
+                     const ArcCallback& callback) override;
   void GetArcStartTime(const GetArcStartTimeCallback& callback) override;
   void RemoveArcData(const cryptohome::Identification& cryptohome_id,
                      const ArcCallback& callback) override;

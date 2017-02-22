@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "ash/common/shell_delegate.h"
-#include "ash/mus/app_list_presenter_mus.h"
 #include "base/macros.h"
 
 namespace service_manager {
@@ -34,23 +33,25 @@ class ShellDelegateMus : public ShellDelegate {
   void Exit() override;
   keyboard::KeyboardUI* CreateKeyboardUI() override;
   void OpenUrlFromArc(const GURL& url) override;
-  app_list::AppListPresenter* GetAppListPresenter() override;
   ShelfDelegate* CreateShelfDelegate(ShelfModel* model) override;
   SystemTrayDelegate* CreateSystemTrayDelegate() override;
   std::unique_ptr<WallpaperDelegate> CreateWallpaperDelegate() override;
   SessionStateDelegate* CreateSessionStateDelegate() override;
   AccessibilityDelegate* CreateAccessibilityDelegate() override;
-  MediaDelegate* CreateMediaDelegate() override;
   std::unique_ptr<PaletteDelegate> CreatePaletteDelegate() override;
   ui::MenuModel* CreateContextMenu(WmShelf* wm_shelf,
                                    const ShelfItem* item) override;
   GPUSupport* CreateGPUSupport() override;
   base::string16 GetProductName() const override;
   gfx::Image GetDeprecatedAcceleratorImage() const override;
+  bool IsTouchscreenEnabledInPrefs(bool use_local_state) const override;
+  void SetTouchscreenEnabledInPrefs(bool enabled,
+                                    bool use_local_state) override;
+  void UpdateTouchscreenStatusFromPrefs() override;
 
  private:
+  // |connector_| may be null in tests.
   service_manager::Connector* connector_;
-  AppListPresenterMus app_list_presenter_;
 
   DISALLOW_COPY_AND_ASSIGN(ShellDelegateMus);
 };

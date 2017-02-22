@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "ui/display/manager/display_layout.h"
+#include "ui/display/display_layout.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/public/window_types.h"
 
@@ -37,7 +37,6 @@ class AshTestImpl {
   // These functions mirror that of AshTest, see it for details.
   virtual void SetUp() = 0;
   virtual void TearDown() = 0;
-  virtual bool SupportsMultipleDisplays() const = 0;
   virtual void UpdateDisplay(const std::string& display_spec) = 0;
   virtual std::unique_ptr<WindowOwner> CreateTestWindow(
       const gfx::Rect& bounds_in_screen,

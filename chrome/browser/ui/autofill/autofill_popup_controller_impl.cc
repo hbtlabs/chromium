@@ -13,7 +13,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view.h"
-#include "chrome/browser/ui/autofill/popup_constants.h"
 #include "components/autofill/core/browser/autofill_popup_delegate.h"
 #include "components/autofill/core/browser/popup_item_ids.h"
 #include "components/autofill/core/browser/suggestion.h"
@@ -70,7 +69,7 @@ AutofillPopupControllerImpl::AutofillPopupControllerImpl(
                                                    container_view,
                                                    web_contents)),
       view_(NULL),
-      layout_model_(this),
+      layout_model_(this, delegate->IsCreditCardPopup()),
       delegate_(delegate),
       weak_ptr_factory_(this) {
   ClearState();
@@ -231,7 +230,7 @@ bool AutofillPopupControllerImpl::HandleKeyPressEvent(
       Hide();
       return true;
     case ui::VKEY_DELETE:
-      return (event.modifiers & content::NativeWebKeyboardEvent::ShiftKey) &&
+      return (event.modifiers() & content::NativeWebKeyboardEvent::ShiftKey) &&
              RemoveSelectedLine();
     case ui::VKEY_TAB:
       // A tab press should cause the selected line to be accepted, but still
@@ -287,13 +286,6 @@ void AutofillPopupControllerImpl::AcceptSuggestion(size_t index) {
                                  index);
 }
 
-bool AutofillPopupControllerImpl::IsWarning(size_t index) const {
-  return suggestions_[index].frontend_id ==
-             POPUP_ITEM_ID_INSECURE_CONTEXT_PAYMENT_DISABLED_MESSAGE ||
-         suggestions_[index].frontend_id ==
-             POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE;
-}
-
 gfx::Rect AutofillPopupControllerImpl::popup_bounds() const {
   return layout_model_.popup_bounds();
 }
@@ -327,7 +319,7 @@ int AutofillPopupControllerImpl::GetElidedValueWidthForRow(size_t row) {
 
 int AutofillPopupControllerImpl::GetElidedLabelWidthForRow(size_t row) {
   return gfx::GetStringWidth(GetElidedLabelAt(row),
-                             layout_model_.GetLabelFontList());
+                             layout_model_.GetLabelFontListForRow(row));
 }
 #endif
 
@@ -382,11 +374,11 @@ bool AutofillPopupControllerImpl::RemoveSuggestion(int list_index) {
   return true;
 }
 
-SkColor AutofillPopupControllerImpl::GetBackgroundColorForRow(int index) const {
-  if (index == selected_line_)
-    return kHoveredBackgroundColor;
-
-  return SK_ColorTRANSPARENT;
+ui::NativeTheme::ColorId
+AutofillPopupControllerImpl::GetBackgroundColorIDForRow(int index) const {
+  return index == selected_line_ ?
+    ui::NativeTheme::kColorId_ResultsTableHoveredBackground :
+    ui::NativeTheme::kColorId_ResultsTableNormalBackground;
 }
 
 int AutofillPopupControllerImpl::selected_line() const {
@@ -463,21 +455,18 @@ bool AutofillPopupControllerImpl::RemoveSelectedLine() {
 }
 
 bool AutofillPopupControllerImpl::CanAccept(int id) {
-  // TODO(lshang): Make POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE clickable
-  // and redirect to chrome security connection help center page.
   return id != POPUP_ITEM_ID_SEPARATOR &&
          id != POPUP_ITEM_ID_INSECURE_CONTEXT_PAYMENT_DISABLED_MESSAGE &&
-         id != POPUP_ITEM_ID_TITLE &&
-         id != POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE;
+         id != POPUP_ITEM_ID_TITLE;
 }
 
 bool AutofillPopupControllerImpl::HasSuggestions() {
   if (suggestions_.empty())
     return false;
   int id = suggestions_[0].frontend_id;
-  return id > 0 ||
-         id == POPUP_ITEM_ID_AUTOCOMPLETE_ENTRY ||
+  return id > 0 || id == POPUP_ITEM_ID_AUTOCOMPLETE_ENTRY ||
          id == POPUP_ITEM_ID_PASSWORD_ENTRY ||
+         id == POPUP_ITEM_ID_USERNAME_ENTRY ||
          id == POPUP_ITEM_ID_DATALIST_ENTRY ||
          id == POPUP_ITEM_ID_SCAN_CREDIT_CARD;
 }
@@ -513,8 +502,8 @@ void AutofillPopupControllerImpl::ElideValueAndLabelForRow(
     int available_width) {
   int value_width = gfx::GetStringWidth(
       suggestions_[row].value, layout_model_.GetValueFontListForRow(row));
-  int label_width = gfx::GetStringWidth(suggestions_[row].label,
-                                        layout_model_.GetLabelFontList());
+  int label_width = gfx::GetStringWidth(
+      suggestions_[row].label, layout_model_.GetLabelFontListForRow(row));
   int total_text_length = value_width + label_width;
 
   // The line can have no strings if it represents a UI element, such as
@@ -529,9 +518,9 @@ void AutofillPopupControllerImpl::ElideValueAndLabelForRow(
       value_size, gfx::ELIDE_TAIL);
 
   int label_size = available_width * label_width / total_text_length;
-  elided_labels_[row] =
-      gfx::ElideText(suggestions_[row].label, layout_model_.GetLabelFontList(),
-                     label_size, gfx::ELIDE_TAIL);
+  elided_labels_[row] = gfx::ElideText(
+      suggestions_[row].label, layout_model_.GetLabelFontListForRow(row),
+      label_size, gfx::ELIDE_TAIL);
 }
 #endif
 

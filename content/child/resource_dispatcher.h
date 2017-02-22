@@ -29,10 +29,7 @@
 #include "net/base/request_priority.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "url/gurl.h"
-
-namespace mojo {
-class AssociatedGroup;
-}  // namespace mojo
+#include "url/origin.h"
 
 namespace net {
 struct RedirectInfo;
@@ -41,16 +38,15 @@ struct RedirectInfo;
 namespace content {
 class RequestPeer;
 class ResourceDispatcherDelegate;
-class ResourceRequestBodyImpl;
 class ResourceSchedulingFilter;
 struct ResourceResponseInfo;
-struct RequestInfo;
 struct ResourceRequest;
 struct ResourceRequestCompletionStatus;
 struct ResourceResponseHead;
 class SharedMemoryReceivedDataFactory;
 struct SiteIsolationResponseMetaData;
 struct SyncLoadResponse;
+class URLLoaderClientImpl;
 
 namespace mojom {
 class URLLoaderFactory;
@@ -99,11 +95,10 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
       std::unique_ptr<ResourceRequest> request,
       int routing_id,
       scoped_refptr<base::SingleThreadTaskRunner> loading_task_runner,
-      const GURL& frame_origin,
+      const url::Origin& frame_origin,
       std::unique_ptr<RequestPeer> peer,
       blink::WebURLRequest::LoadingIPCType ipc_type,
-      mojom::URLLoaderFactory* url_loader_factory,
-      mojo::AssociatedGroup* associated_group);
+      mojom::URLLoaderFactory* url_loader_factory);
 
   // Removes a request from the |pending_requests_| list, returning true if the
   // request was found and removed.
@@ -150,7 +145,10 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
     return weak_factory_.GetWeakPtr();
   }
 
+  void OnTransferSizeUpdated(int request_id, int32_t transfer_size_diff);
+
  private:
+  friend class URLLoaderClientImpl;
   friend class URLResponseBodyConsumer;
   friend class ResourceDispatcherTest;
 
@@ -159,7 +157,7 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
     PendingRequestInfo(std::unique_ptr<RequestPeer> peer,
                        ResourceType resource_type,
                        int origin_pid,
-                       const GURL& frame_origin,
+                       const url::Origin& frame_origin,
                        const GURL& request_url,
                        bool download_to_file);
 
@@ -176,7 +174,7 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
     // Original requested url.
     GURL url;
     // The security origin of the frame that initiates this request.
-    GURL frame_origin;
+    url::Origin frame_origin;
     // The url of the latest response even in case of redirection.
     GURL response_url;
     bool download_to_file;
@@ -191,7 +189,7 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
 
     // For mojo loading.
     mojom::URLLoaderAssociatedPtr url_loader;
-    std::unique_ptr<mojom::URLLoaderClient> url_loader_client;
+    std::unique_ptr<URLLoaderClientImpl> url_loader_client;
   };
   using PendingRequestMap = std::map<int, std::unique_ptr<PendingRequestInfo>>;
 
@@ -215,13 +213,11 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
                        base::ProcessId renderer_pid);
   void OnReceivedInlinedDataChunk(int request_id,
                                   const std::vector<char>& data,
-                                  int encoded_data_length,
-                                  int encoded_body_length);
+                                  int encoded_data_length);
   void OnReceivedData(int request_id,
                       int data_offset,
                       int data_length,
-                      int encoded_data_length,
-                      int encoded_body_length);
+                      int encoded_data_length);
   void OnDownloadedData(int request_id, int data_len, int encoded_data_length);
   void OnRequestComplete(
       int request_id,
@@ -260,11 +256,6 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
   // ReleaseResourcesInDataMessage and removing them from the queue. Intended
   // for use on deferred message queues that are no longer needed.
   static void ReleaseResourcesInMessageQueue(MessageQueue* queue);
-
-  std::unique_ptr<ResourceRequest> CreateRequest(
-      const RequestInfo& request_info,
-      ResourceRequestBodyImpl* request_body,
-      GURL* frame_origin);
 
   IPC::Sender* message_sender_;
 

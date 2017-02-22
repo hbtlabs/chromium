@@ -9,7 +9,7 @@
 
 namespace chromeos {
 
-class UpdateModel;
+class UpdateScreen;
 
 // Interface for dependency injection between NetworkScreen and its actual
 // representation. Owned by UpdateScreen.
@@ -17,19 +17,16 @@ class UpdateView {
  public:
   virtual ~UpdateView() {}
 
-  // Prepare the contents to showing.
-  virtual void PrepareToShow() = 0;
-
   // Shows the contents of the screen.
   virtual void Show() = 0;
 
   // Hides the contents of the screen.
   virtual void Hide() = 0;
 
-  // Binds |model| to the view.
-  virtual void Bind(UpdateModel& model) = 0;
+  // Binds |screen| to the view.
+  virtual void Bind(UpdateScreen* screen) = 0;
 
-  // Unbinds model from the view.
+  // Unbinds the screen from the view.
   virtual void Unbind() = 0;
 };
 

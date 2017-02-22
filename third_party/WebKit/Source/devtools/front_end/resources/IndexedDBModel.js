@@ -34,11 +34,10 @@
 Resources.IndexedDBModel = class extends SDK.SDKModel {
   /**
    * @param {!SDK.Target} target
-   * @param {!SDK.SecurityOriginManager} securityOriginManager
    */
-  constructor(target, securityOriginManager) {
-    super(Resources.IndexedDBModel, target);
-    this._securityOriginManager = securityOriginManager;
+  constructor(target) {
+    super(target);
+    this._securityOriginManager = SDK.SecurityOriginManager.fromTarget(target);
     this._agent = target.indexedDBAgent();
 
     /** @type {!Map.<!Resources.IndexedDBModel.DatabaseId, !Resources.IndexedDBModel.Database>} */
@@ -144,10 +143,7 @@ Resources.IndexedDBModel = class extends SDK.SDKModel {
    * @return {!Resources.IndexedDBModel}
    */
   static fromTarget(target) {
-    var model = /** @type {?Resources.IndexedDBModel} */ (target.model(Resources.IndexedDBModel));
-    if (!model)
-      model = new Resources.IndexedDBModel(target, SDK.SecurityOriginManager.fromTarget(target));
-    return model;
+    return /** @type {!Resources.IndexedDBModel} */ (target.model(Resources.IndexedDBModel));
   }
 
   enable() {
@@ -175,6 +171,19 @@ Resources.IndexedDBModel = class extends SDK.SDKModel {
 
     this._removeOrigin(origin);
     this._addOrigin(origin);
+  }
+
+  /**
+   * @param {!Resources.IndexedDBModel.DatabaseId} databaseId
+   */
+  deleteDatabase(databaseId) {
+    if (!this._enabled)
+      return;
+    this._agent.deleteDatabase(databaseId.securityOrigin, databaseId.name, error => {
+      if (error)
+        console.error('Unable to delete ' + databaseId.name, error);
+      this._loadDatabaseNames(databaseId.securityOrigin);
+    });
   }
 
   refreshDatabaseNames() {
@@ -272,7 +281,7 @@ Resources.IndexedDBModel = class extends SDK.SDKModel {
    */
   _databaseAdded(securityOrigin, databaseName) {
     var databaseId = new Resources.IndexedDBModel.DatabaseId(securityOrigin, databaseName);
-    this.dispatchEventToListeners(Resources.IndexedDBModel.Events.DatabaseAdded, databaseId);
+    this.dispatchEventToListeners(Resources.IndexedDBModel.Events.DatabaseAdded, {model: this, databaseId: databaseId});
   }
 
   /**
@@ -281,7 +290,8 @@ Resources.IndexedDBModel = class extends SDK.SDKModel {
    */
   _databaseRemoved(securityOrigin, databaseName) {
     var databaseId = new Resources.IndexedDBModel.DatabaseId(securityOrigin, databaseName);
-    this.dispatchEventToListeners(Resources.IndexedDBModel.Events.DatabaseRemoved, databaseId);
+    this.dispatchEventToListeners(
+        Resources.IndexedDBModel.Events.DatabaseRemoved, {model: this, databaseId: databaseId});
   }
 
   /**
@@ -341,7 +351,8 @@ Resources.IndexedDBModel = class extends SDK.SDKModel {
         databaseModel.objectStores[objectStoreModel.name] = objectStoreModel;
       }
 
-      this.dispatchEventToListeners(Resources.IndexedDBModel.Events.DatabaseLoaded, databaseModel);
+      this.dispatchEventToListeners(
+          Resources.IndexedDBModel.Events.DatabaseLoaded, {model: this, database: databaseModel});
     }
 
     this._agent.requestDatabase(databaseId.securityOrigin, databaseId.name, callback.bind(this));
@@ -414,6 +425,8 @@ Resources.IndexedDBModel = class extends SDK.SDKModel {
         keyRange ? keyRange : undefined, innerCallback.bind(this));
   }
 };
+
+SDK.SDKModel.register(Resources.IndexedDBModel, SDK.Target.Capability.None);
 
 Resources.IndexedDBModel.KeyTypes = {
   NumberType: 'number',

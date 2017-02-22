@@ -6,6 +6,7 @@
 
 #include "ash/common/wm/window_resizer.h"
 #include "ash/common/wm_window.h"
+#include "ash/common/wm_window_property.h"
 #include "ui/base/hit_test.h"
 #include "ui/compositor/layer.h"
 
@@ -49,7 +50,10 @@ DragDetails::DragDetails(WmWindow* window,
     : initial_state_type(window->GetWindowState()->GetStateType()),
       initial_bounds_in_parent(window->GetBounds()),
       initial_location_in_parent(location),
-      initial_opacity(window->GetLayer()->opacity()),
+      // When drag starts, we might be in the middle of a window opacity
+      // animation, on drag completion we must set the opacity to the target
+      // opacity rather than the current opacity (crbug.com/687003).
+      initial_opacity(window->GetLayer()->GetTargetOpacity()),
       window_component(window_component),
       bounds_change(
           WindowResizer::GetBoundsChangeForWindowComponent(window_component)),
@@ -60,8 +64,9 @@ DragDetails::DragDetails(WmWindow* window,
           GetSizeChangeDirectionForWindowComponent(window_component)),
       is_resizable(bounds_change != WindowResizer::kBoundsChangeDirection_None),
       source(source),
-      should_attach_to_shelf(window->GetType() == ui::wm::WINDOW_TYPE_PANEL &&
-                             window->GetWindowState()->panel_attached()) {
+      should_attach_to_shelf(
+          window->GetType() == ui::wm::WINDOW_TYPE_PANEL &&
+          window->GetBoolProperty(WmWindowProperty::PANEL_ATTACHED)) {
   wm::WindowState* window_state = window->GetWindowState();
   if ((window_state->IsNormalOrSnapped() || window_state->IsDocked()) &&
       window_state->HasRestoreBounds() && window_component == HTCAPTION) {

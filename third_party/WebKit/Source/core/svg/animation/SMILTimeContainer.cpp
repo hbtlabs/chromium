@@ -48,22 +48,21 @@ SMILTimeContainer::SMILTimeContainer(SVGSVGElement& owner)
       m_started(false),
       m_paused(false),
       m_documentOrderIndexesDirty(false),
-      m_wakeupTimer(this, &SMILTimeContainer::wakeupTimerFired),
-      m_animationPolicyOnceTimer(this,
-                                 &SMILTimeContainer::animationPolicyTimerFired),
-      m_ownerSVGElement(&owner)
-#if ENABLE(ASSERT)
-      ,
-      m_preventScheduledAnimationsChanges(false)
-#endif
-{
-}
+      m_wakeupTimer(
+          TaskRunnerHelper::get(TaskType::UnspecedTimer, &owner.document()),
+          this,
+          &SMILTimeContainer::wakeupTimerFired),
+      m_animationPolicyOnceTimer(
+          TaskRunnerHelper::get(TaskType::UnspecedTimer, &owner.document()),
+          this,
+          &SMILTimeContainer::animationPolicyTimerFired),
+      m_ownerSVGElement(&owner) {}
 
 SMILTimeContainer::~SMILTimeContainer() {
   cancelAnimationFrame();
   cancelAnimationPolicyTimer();
   ASSERT(!m_wakeupTimer.isActive());
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   ASSERT(!m_preventScheduledAnimationsChanges);
 #endif
 }
@@ -75,13 +74,13 @@ void SMILTimeContainer::schedule(SVGSMILElement* animation,
   DCHECK(target);
   DCHECK(animation->hasValidTarget());
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   ASSERT(!m_preventScheduledAnimationsChanges);
 #endif
 
   ElementAttributePair key(target, attributeName);
   Member<AnimationsLinkedHashSet>& scheduled =
-      m_scheduledAnimations.add(key, nullptr).storedValue->value;
+      m_scheduledAnimations.insert(key, nullptr).storedValue->value;
   if (!scheduled)
     scheduled = new AnimationsLinkedHashSet;
   ASSERT(!scheduled->contains(animation));
@@ -97,7 +96,7 @@ void SMILTimeContainer::unschedule(SVGSMILElement* animation,
                                    const QualifiedName& attributeName) {
   ASSERT(animation->timeContainer() == this);
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   ASSERT(!m_preventScheduledAnimationsChanges);
 #endif
 
@@ -233,7 +232,7 @@ void SMILTimeContainer::setElapsed(double elapsed) {
   if (!isPaused())
     synchronizeToDocumentTimeline();
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   m_preventScheduledAnimationsChanges = true;
 #endif
   for (const auto& entry : m_scheduledAnimations) {
@@ -244,7 +243,7 @@ void SMILTimeContainer::setElapsed(double elapsed) {
     for (SVGSMILElement* element : *scheduled)
       element->reset();
   }
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   m_preventScheduledAnimationsChanges = false;
 #endif
 
@@ -309,7 +308,7 @@ ImageAnimationPolicy SMILTimeContainer::animationPolicy() const {
   if (!settings)
     return ImageAnimationPolicyAllowed;
 
-  return settings->imageAnimationPolicy();
+  return settings->getImageAnimationPolicy();
 }
 
 bool SMILTimeContainer::handleAnimationPolicy(
@@ -423,7 +422,7 @@ SMILTime SMILTimeContainer::updateAnimations(double elapsed, bool seekToTime) {
   ASSERT(document().isActive());
   SMILTime earliestFireTime = SMILTime::unresolved();
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   // This boolean will catch any attempts to schedule/unschedule
   // scheduledAnimations during this critical section.  Similarly, any elements
   // removed will unschedule themselves, so this will catch modification of
@@ -440,7 +439,7 @@ SMILTime SMILTimeContainer::updateAnimations(double elapsed, bool seekToTime) {
   AnimationsVector scheduledAnimationsInSameGroup;
   for (const auto& entry : m_scheduledAnimations) {
     if (!entry.key.first || entry.value->isEmpty()) {
-      invalidKeys.add(entry.key);
+      invalidKeys.insert(entry.key);
       continue;
     }
 
@@ -461,7 +460,7 @@ SMILTime SMILTimeContainer::updateAnimations(double elapsed, bool seekToTime) {
       // This will calculate the contribution from the animation and update
       // timing.
       if (animation->progress(elapsed, seekToTime)) {
-        sandwich.append(animation);
+        sandwich.push_back(animation);
       } else {
         animation->clearAnimatedType();
       }
@@ -477,7 +476,7 @@ SMILTime SMILTimeContainer::updateAnimations(double elapsed, bool seekToTime) {
       // Only reset the animated type to the base value once for
       // the lowest priority animation that animates and
       // contributes to a particular element/attribute pair.
-      SVGSMILElement* resultElement = sandwich.first();
+      SVGSMILElement* resultElement = sandwich.front();
       resultElement->resetAnimatedType();
 
       // Go through the sandwich from lowest prio to highest and generate
@@ -485,13 +484,13 @@ SMILTime SMILTimeContainer::updateAnimations(double elapsed, bool seekToTime) {
       for (const auto& animation : sandwich)
         animation->updateAnimatedValue(resultElement);
 
-      animationsToApply.append(resultElement);
+      animationsToApply.push_back(resultElement);
     }
   }
   m_scheduledAnimations.removeAll(invalidKeys);
 
   if (animationsToApply.isEmpty()) {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     m_preventScheduledAnimationsChanges = false;
 #endif
     return earliestFireTime;
@@ -506,7 +505,7 @@ SMILTime SMILTimeContainer::updateAnimations(double elapsed, bool seekToTime) {
   for (const auto& timedElement : animationsToApply)
     timedElement->applyResultsToTarget();
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   m_preventScheduledAnimationsChanges = false;
 #endif
 
@@ -514,12 +513,12 @@ SMILTime SMILTimeContainer::updateAnimations(double elapsed, bool seekToTime) {
     if (timedElement->isConnected() && timedElement->isSVGDiscardElement()) {
       SVGElement* targetElement = timedElement->targetElement();
       if (targetElement && targetElement->isConnected()) {
-        targetElement->remove(IGNORE_EXCEPTION);
+        targetElement->remove(IGNORE_EXCEPTION_FOR_TESTING);
         DCHECK(!targetElement->isConnected());
       }
 
       if (timedElement->isConnected()) {
-        timedElement->remove(IGNORE_EXCEPTION);
+        timedElement->remove(IGNORE_EXCEPTION_FOR_TESTING);
         DCHECK(!timedElement->isConnected());
       }
     }

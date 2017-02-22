@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "platform/MIMETypeRegistry.h"
+#include "platform/network/mime/MIMETypeRegistry.h"
 
 #include "base/files/file_path.h"
 #include "base/strings/string_util.h"
@@ -24,7 +24,7 @@ struct MimeRegistryPtrHolder {
  public:
   MimeRegistryPtrHolder() {
     Platform::current()->interfaceProvider()->getInterface(
-        mojo::GetProxy(&mimeRegistry));
+        mojo::MakeRequest(&mimeRegistry));
   }
   ~MimeRegistryPtrHolder() {}
 

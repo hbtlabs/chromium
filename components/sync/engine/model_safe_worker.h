@@ -22,7 +22,7 @@ class DictionaryValue;
 
 namespace syncer {
 
-typedef base::Callback<enum SyncerError(void)> WorkCallback;
+using WorkCallback = base::Callback<enum SyncerError(void)>;
 
 enum ModelSafeGroup {
   GROUP_PASSIVE = 0,   // Models that are just "passively" being synced; e.g.
@@ -62,6 +62,9 @@ class ModelSafeWorker : public base::RefCountedThreadSafe<ModelSafeWorker> {
   // or browser is shutting down. Called on UI loop.
   virtual void RequestStop();
 
+  // Return true if the worker was stopped. Thread safe.
+  bool IsStopped();
+
   virtual ModelSafeGroup GetModelSafeGroup() = 0;
 
   // Returns true if called on the thread this worker works on.
@@ -76,9 +79,6 @@ class ModelSafeWorker : public base::RefCountedThreadSafe<ModelSafeWorker> {
   // from a model-safe thread.
   virtual SyncerError DoWorkAndWaitUntilDoneImpl(const WorkCallback& work) = 0;
 
-  // Return true if the worker was stopped. Thread safe.
-  bool IsStopped();
-
  private:
   friend class base::RefCountedThreadSafe<ModelSafeWorker>;
 
@@ -91,7 +91,7 @@ class ModelSafeWorker : public base::RefCountedThreadSafe<ModelSafeWorker> {
 // A map that details which ModelSafeGroup each ModelType
 // belongs to.  Routing info can change in response to the user enabling /
 // disabling sync for certain types, as well as model association completions.
-typedef std::map<ModelType, ModelSafeGroup> ModelSafeRoutingInfo;
+using ModelSafeRoutingInfo = std::map<ModelType, ModelSafeGroup>;
 
 // Caller takes ownership of return value.
 std::unique_ptr<base::DictionaryValue> ModelSafeRoutingInfoToValue(

@@ -18,13 +18,21 @@ struct SSLStatus {
   // Flags used for the page security content status.
   enum ContentStatusFlags {
     // HTTP page, or HTTPS page with no insecure content.
-    NORMAL_CONTENT             = 0,
+    NORMAL_CONTENT = 0,
 
     // HTTPS page containing "displayed" HTTP resources (e.g. images, CSS).
     DISPLAYED_INSECURE_CONTENT = 1 << 0,
 
     // The RAN_INSECURE_CONTENT flag is intentionally omitted on iOS because
     // there is no way to tell when insecure content is run in a web view.
+
+    // HTTP page containing a password input, used to adjust UI on nonsecure
+    // pages that collect sensitive data.
+    DISPLAYED_PASSWORD_FIELD_ON_HTTP = 1 << 4,
+
+    // HTTP page containing a credit card input, used to adjust UI on nonsecure
+    // pages that collect sensitive data.
+    DISPLAYED_CREDIT_CARD_FIELD_ON_HTTP = 1 << 5,
   };
 
   SSLStatus();
@@ -37,7 +45,6 @@ struct SSLStatus {
            (certificate ? certificate->Equals(status.certificate.get())
                         : true) &&
            cert_status == status.cert_status &&
-           security_bits == status.security_bits &&
            content_status == status.content_status;
     // |cert_status_host| is not used for comparison intentionally.
   }
@@ -45,7 +52,6 @@ struct SSLStatus {
   web::SecurityStyle security_style;
   scoped_refptr<net::X509Certificate> certificate;
   net::CertStatus cert_status;
-  int security_bits;
   int connection_status;
   // A combination of the ContentStatusFlags above.
   int content_status;

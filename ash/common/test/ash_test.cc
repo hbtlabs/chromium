@@ -9,9 +9,10 @@
 #include "ash/common/test/ash_test_impl.h"
 #include "ash/common/test/test_session_state_delegate.h"
 #include "ash/common/test/test_system_tray_delegate.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "ash/root_window_controller.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "ui/compositor/layer_type.h"
 #include "ui/display/display.h"
@@ -45,10 +46,6 @@ SystemTray* AshTest::GetPrimarySystemTray() {
 test::TestSystemTrayDelegate* AshTest::GetSystemTrayDelegate() {
   return static_cast<test::TestSystemTrayDelegate*>(
       WmShell::Get()->system_tray_delegate());
-}
-
-bool AshTest::SupportsMultipleDisplays() const {
-  return test_impl_->SupportsMultipleDisplays();
 }
 
 void AshTest::UpdateDisplay(const std::string& display_spec) {

@@ -14,7 +14,6 @@
 #include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/extensions/component_migration_helper.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_message_bubble_controller.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -51,8 +50,6 @@ ToolbarActionsModel::ToolbarActionsModel(
       extension_registry_(extensions::ExtensionRegistry::Get(profile_)),
       extension_action_manager_(
           extensions::ExtensionActionManager::Get(profile_)),
-      component_migration_helper_(
-          new extensions::ComponentMigrationHelper(profile_, this)),
       actions_initialized_(false),
       use_redesign_(
           extensions::FeatureSwitch::extension_action_redesign()->IsEnabled()),
@@ -61,8 +58,6 @@ ToolbarActionsModel::ToolbarActionsModel(
       extension_action_observer_(this),
       extension_registry_observer_(this),
       weak_ptr_factory_(this) {
-  ComponentToolbarActionsFactory::GetInstance()->RegisterComponentMigrations(
-      component_migration_helper_.get());
   extensions::ExtensionSystem::Get(profile_)->ready().Post(
       FROM_HERE, base::Bind(&ToolbarActionsModel::OnReady,
                             weak_ptr_factory_.GetWeakPtr()));
@@ -162,17 +157,16 @@ void ToolbarActionsModel::OnExtensionActionUpdated(
   }
 }
 
-ScopedVector<ToolbarActionViewController> ToolbarActionsModel::CreateActions(
-    Browser* browser,
-    ToolbarActionsBar* bar) {
+std::vector<std::unique_ptr<ToolbarActionViewController>>
+ToolbarActionsModel::CreateActions(Browser* browser, ToolbarActionsBar* bar) {
   DCHECK(browser);
   DCHECK(bar);
-  ScopedVector<ToolbarActionViewController> action_list;
+  std::vector<std::unique_ptr<ToolbarActionViewController>> action_list;
 
   // toolbar_items() might not equate to toolbar_items_ in the case where a
   // subset is highlighted.
   for (const ToolbarItem& item : toolbar_items())
-    action_list.push_back(CreateActionForItem(browser, bar, item).release());
+    action_list.push_back(CreateActionForItem(browser, bar, item));
 
   return action_list;
 }
@@ -276,11 +270,9 @@ void ToolbarActionsModel::OnReady() {
     observer.OnToolbarModelInitialized();
 
   if (use_redesign_) {
-    // Handle component action migrations.  We must make sure that observers are
-    // notified of initialization first, so that the associated widgets are
-    // created.
-    ComponentToolbarActionsFactory::GetInstance()->HandleComponentMigrations(
-        component_migration_helper_.get(), profile_);
+    ComponentToolbarActionsFactory::GetInstance()->UnloadMigratedExtensions(
+        extensions::ExtensionSystem::Get(profile_)->extension_service(),
+        extension_registry_);
   }
 }
 
@@ -388,7 +380,8 @@ void ToolbarActionsModel::AddItem(const ToolbarItem& item) {
       // nondeterministic, we can't just assume the main bar will have the
       // extension and look it up.
       size_t main_index = main_model->FindNewPositionFromLastKnownGood(item);
-      bool visible = main_index < main_model->visible_icon_count();
+      bool visible =
+          is_new_extension || main_index < main_model->visible_icon_count();
       // We may need to adjust the visible count if the incognito bar isn't
       // showing all icons and this one is visible, or if it is showing all
       // icons and this is hidden.

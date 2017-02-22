@@ -35,6 +35,9 @@
 #include "core/dom/Element.h"
 #include "core/html/HTMLInputElement.h"
 #include "platform/Timer.h"
+#include "public/platform/Platform.h"
+#include "public/platform/WebScheduler.h"
+#include "public/platform/WebThread.h"
 #include "wtf/HashFunctions.h"
 #include "wtf/HashMap.h"
 #include "wtf/text/CString.h"
@@ -76,6 +79,9 @@ static PresentationAttributeCache& presentationAttributeCache() {
   return cache;
 }
 
+// This is a singleton (held via DEFINE_STATIC_LOCAL).
+// Thus it is appropriate to use the main thread's timer task runner, rather
+// than one associated with a particular frame.
 class PresentationAttributeCacheCleaner {
   WTF_MAKE_NONCOPYABLE(PresentationAttributeCacheCleaner);
   USING_FAST_MALLOC(PresentationAttributeCacheCleaner);
@@ -83,7 +89,10 @@ class PresentationAttributeCacheCleaner {
  public:
   PresentationAttributeCacheCleaner()
       : m_hitCount(0),
-        m_cleanTimer(this, &PresentationAttributeCacheCleaner::cleanCache) {}
+        m_cleanTimer(
+            Platform::current()->mainThread()->scheduler()->timerTaskRunner(),
+            this,
+            &PresentationAttributeCacheCleaner::cleanCache) {}
 
   void didHitPresentationAttributeCache() {
     if (presentationAttributeCache().size() <
@@ -113,7 +122,7 @@ class PresentationAttributeCacheCleaner {
   }
 
   unsigned m_hitCount;
-  Timer<PresentationAttributeCacheCleaner> m_cleanTimer;
+  TaskRunnerTimer<PresentationAttributeCacheCleaner> m_cleanTimer;
 };
 
 static bool attributeNameSort(const std::pair<StringImpl*, AtomicString>& p1,
@@ -143,7 +152,7 @@ static void makePresentationAttributeCacheKey(
     // Disallow caching.
     if (attr.name() == backgroundAttr)
       return;
-    result.attributesAndValues.append(
+    result.attributesAndValues.push_back(
         std::make_pair(attr.localName().impl(), attr.value()));
   }
   if (result.attributesAndValues.isEmpty())
@@ -179,7 +188,7 @@ StylePropertySet* computePresentationAttributeStyle(Element& element) {
   PresentationAttributeCache::ValueType* cacheValue;
   if (cacheHash) {
     cacheValue =
-        presentationAttributeCache().add(cacheHash, nullptr).storedValue;
+        presentationAttributeCache().insert(cacheHash, nullptr).storedValue;
     if (cacheValue->value && cacheValue->value->key != cacheKey)
       cacheHash = 0;
   } else {
@@ -192,7 +201,7 @@ StylePropertySet* computePresentationAttributeStyle(Element& element) {
     cacheCleaner.didHitPresentationAttributeCache();
   } else {
     style = MutableStylePropertySet::create(
-        element.isSVGElement() ? SVGAttributeMode : HTMLAttributeMode);
+        element.isSVGElement() ? SVGAttributeMode : HTMLStandardMode);
     AttributeCollection attributes = element.attributesWithoutUpdate();
     for (const Attribute& attr : attributes)
       element.collectStyleForPresentationAttribute(

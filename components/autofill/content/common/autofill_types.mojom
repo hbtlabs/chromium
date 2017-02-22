@@ -4,7 +4,8 @@
 
 module autofill.mojom;
 
-import "mojo/common/common_custom_types.mojom";
+import "mojo/common/text_direction.mojom";
+import "mojo/common/time.mojom";
 import "url/mojo/origin.mojom";
 import "url/mojo/url.mojom";
 
@@ -19,14 +20,6 @@ enum CheckStatus {
 enum RoleAttribute {
   ROLE_ATTRIBUTE_PRESENTATION,
   ROLE_ATTRIBUTE_OTHER
-};
-
-// base::i18n::TextDirection
-enum TextDirection {
-  UNKNOWN_DIRECTION = 0,
-  RIGHT_TO_LEFT = 1,
-  LEFT_TO_RIGHT = 2,
-  TEXT_DIRECTION_NUM_DIRECTIONS = 3
 };
 
 // autofill::PasswordForm::GenerationUploadStatus
@@ -71,6 +64,7 @@ enum PasswordFormFieldPredictionType {
 struct FormFieldData {
   string label;
   string name;
+  string id;
   string value;
   string form_control_type;
   string autocomplete_attribute;
@@ -84,7 +78,7 @@ struct FormFieldData {
   bool is_focusable;
   bool should_autocomplete;
   RoleAttribute role;
-  TextDirection text_direction;
+  mojo.common.mojom.TextDirection text_direction;
 
   array<string> option_values;
   array<string> option_contents;
@@ -173,6 +167,7 @@ struct PasswordForm {
   string new_password_value;
   bool new_password_value_is_default;
   bool new_password_marked_by_site;
+  string confirmation_password_element;
   bool preferred;
   mojo.common.mojom.Time date_created;
   mojo.common.mojom.Time date_synced;

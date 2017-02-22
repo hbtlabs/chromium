@@ -26,7 +26,7 @@ class SyncSetupInProgressHandle;
 // to allow the complex sync setup flow on iOS.
 class SyncSetupService : public KeyedService {
  public:
-  typedef enum {
+  using SyncServiceState = enum {
     kNoSyncServiceError,
     kSyncServiceSignInNeedsUpdate,
     kSyncServiceCouldNotConnect,
@@ -34,18 +34,19 @@ class SyncSetupService : public KeyedService {
     kSyncServiceNeedsPassphrase,
     kSyncServiceUnrecoverableError,
     kLastSyncServiceError = kSyncServiceUnrecoverableError
-  } SyncServiceState;
+  };
 
   // The set of user-selectable datatypes handled by Chrome for iOS.
-  typedef enum {
+  using SyncableDatatype = enum {
     kSyncBookmarks,
     kSyncOmniboxHistory,
     kSyncPasswords,
     kSyncOpenTabs,
     kSyncAutofill,
     kSyncPreferences,
+    kSyncReadingList,
     kNumberOfSyncableDatatypes
-  } SyncableDatatype;
+  };
 
   SyncSetupService(syncer::SyncService* sync_service, PrefService* prefs);
   ~SyncSetupService() override;

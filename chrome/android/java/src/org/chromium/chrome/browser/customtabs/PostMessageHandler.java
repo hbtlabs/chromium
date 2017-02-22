@@ -4,17 +4,16 @@
 
 package org.chromium.chrome.browser.customtabs;
 
+import android.content.Context;
 import android.net.Uri;
 import android.support.customtabs.CustomTabsService;
 import android.support.customtabs.CustomTabsSessionToken;
+import android.support.customtabs.PostMessageServiceConnection;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.content.browser.AppWebMessagePort;
-import org.chromium.content.browser.AppWebMessagePortService;
-import org.chromium.content.browser.AppWebMessagePortService.MessageChannelObserver;
-import org.chromium.content.browser.PostMessageSender;
-import org.chromium.content.browser.PostMessageSender.PostMessageSenderDelegate;
 import org.chromium.content_public.browser.MessagePort;
 import org.chromium.content_public.browser.MessagePort.MessageCallback;
 import org.chromium.content_public.browser.WebContents;
@@ -23,20 +22,13 @@ import org.chromium.content_public.browser.WebContentsObserver;
 /**
  * A class that handles postMessage communications with a designated {@link CustomTabsSessionToken}.
  */
-public class PostMessageHandler {
-    private static AppWebMessagePortService sService;
-
-    private final CustomTabsSessionToken mSession;
+public class PostMessageHandler extends PostMessageServiceConnection {
     private final MessageCallback mMessageCallback;
+    private WebContents mWebContents;
+    private boolean mMessageChannelCreated;
+    private boolean mBoundToService;
     private AppWebMessagePort[] mChannel;
-    private PostMessageSender mPostMessageSender;
-    private PostMessageSenderDelegate mSenderDelegate;
     private Uri mOrigin;
-
-    private static AppWebMessagePortService getAppWebMessagePortService() {
-        if (sService == null) sService = new AppWebMessagePortService();
-        return sService;
-    }
 
     /**
      * Basic constructor. Everytime the given {@link CustomTabsSessionToken} is associated with a
@@ -47,11 +39,11 @@ public class PostMessageHandler {
      *                with.
      */
     public PostMessageHandler(CustomTabsSessionToken session) {
-        mSession = session;
+        super(session);
         mMessageCallback = new MessageCallback() {
             @Override
             public void onMessage(String message, MessagePort[] sentPorts) {
-                mSession.getCallback().onPostMessage(message, null);
+                if (mBoundToService) postMessage(message, null);
             }
         };
     }
@@ -60,74 +52,78 @@ public class PostMessageHandler {
      * Resets the internal state of the handler, linking the associated
      * {@link CustomTabsSessionToken} with a new {@link WebContents} and the {@link Tab} that
      * contains it.
-     * @param webContents The new {@link WebContents} that the session got associated with.
+     * @param webContents The new {@link WebContents} that the session got associated with. If this
+     *                    is null, the handler disconnects and unbinds from service.
      */
     public void reset(final WebContents webContents) {
+        if (webContents == null || webContents.isDestroyed()) {
+            disconnectChannel();
+            unbindFromContext(ContextUtils.getApplicationContext());
+            return;
+        }
+        // Can't reset with the same web contents twice.
+        if (webContents.equals(mWebContents)) return;
+        mWebContents = webContents;
         if (mOrigin == null) return;
-        webContents.addObserver(new WebContentsObserver() {
+        new WebContentsObserver(webContents) {
             private boolean mNavigatedOnce;
 
             @Override
-            public void didNavigateMainFrame(String url, String baseUrl,
-                    boolean isNavigationToDifferentPage, boolean isFragmentNavigation,
-                    int statusCode) {
-                if (mNavigatedOnce && isNavigationToDifferentPage && mChannel != null) {
-                    mChannel[0].close();
-                    mChannel = null;
-                    mSenderDelegate = null;
-                    mPostMessageSender = null;
+            public void didFinishNavigation(String url, boolean isInMainFrame, boolean isErrorPage,
+                    boolean hasCommitted, boolean isSamePage, boolean isFragmentNavigation,
+                    Integer pageTransition, int errorCode, String errorDescription,
+                    int httpStatusCode) {
+                if (mNavigatedOnce && hasCommitted && isInMainFrame && !isSamePage
+                        && mChannel != null) {
                     webContents.removeObserver(this);
+                    disconnectChannel();
+                    unbindFromContext(ContextUtils.getApplicationContext());
                     return;
                 }
                 mNavigatedOnce = true;
             }
 
             @Override
+            public void renderProcessGone(boolean wasOomProtected) {
+                disconnectChannel();
+                unbindFromContext(ContextUtils.getApplicationContext());
+            }
+
+            @Override
             public void documentLoadedInFrame(long frameId, boolean isMainFrame) {
                 if (!isMainFrame || mChannel != null) return;
-
-                final AppWebMessagePortService service = getAppWebMessagePortService();
-                mChannel = (AppWebMessagePort[]) webContents.createMessageChannel(service);
-                mChannel[0].setMessageCallback(mMessageCallback, null);
-                mSenderDelegate = new PostMessageSenderDelegate() {
-                    @Override
-                    public void postMessageToWeb(
-                            String frameName, String message, String targetOrigin,
-                            int[] sentPortIds) {
-                        webContents.postMessageToFrame(
-                                frameName, message, targetOrigin, sentPortIds);
-                    }
-
-                    @Override
-                    public void onPostMessageQueueEmpty() {}
-
-                    @Override
-                    public boolean isPostMessageSenderReady() {
-                        return true;
-                    }
-                };
-                mPostMessageSender = new PostMessageSender(
-                        mSenderDelegate, getAppWebMessagePortService());
-                service.addObserver(new MessageChannelObserver() {
-                    @Override
-                    public void onMessageChannelCreated() {
-                        service.removeObserver(this);
-                        if (mChannel == null) return;
-                        mPostMessageSender.postMessage(
-                                null, "", "", new AppWebMessagePort[] {mChannel[1]});
-                        mSession.getCallback().onMessageChannelReady(mOrigin, null);
-                    }
-                });
+                initializeWithWebContents(webContents);
             }
-        });
+        };
+    }
+
+    private void initializeWithWebContents(final WebContents webContents) {
+        mChannel = (AppWebMessagePort[]) webContents.createMessageChannel();
+        mChannel[0].setMessageCallback(mMessageCallback, null);
+
+        webContents.postMessageToFrame(
+                null, "", mOrigin.toString(), "", new AppWebMessagePort[] {mChannel[1]});
+
+        mMessageChannelCreated = true;
+        if (mBoundToService) notifyMessageChannelReady(null);
+    }
+
+    private void disconnectChannel() {
+        if (mChannel == null) return;
+        mChannel[0].close();
+        mChannel = null;
+        mWebContents = null;
     }
 
     /**
      * Sets the postMessage origin for this session to the given {@link Uri}.
      * @param origin The origin value to be set.
      */
-    public void setPostMessageOrigin(Uri origin) {
+    public void initializeWithOrigin(Uri origin) {
         mOrigin = origin;
+        if (mWebContents != null && !mWebContents.isDestroyed()) {
+            initializeWithWebContents(mWebContents);
+        }
     }
 
     /**
@@ -136,8 +132,11 @@ public class PostMessageHandler {
      * @return The result of the postMessage request. Returning true means the request was accepted,
      *         not necessarily that the postMessage was successful.
      */
-    public int postMessage(final String message) {
+    public int postMessageFromClientApp(final String message) {
         if (mChannel == null || !mChannel[0].isReady() || mChannel[0].isClosed()) {
+            return CustomTabsService.RESULT_FAILURE_MESSAGING_ERROR;
+        }
+        if (mWebContents == null || mWebContents.isDestroyed()) {
             return CustomTabsService.RESULT_FAILURE_MESSAGING_ERROR;
         }
         ThreadUtils.postOnUiThread(new Runnable() {
@@ -150,5 +149,21 @@ public class PostMessageHandler {
             }
         });
         return CustomTabsService.RESULT_SUCCESS;
+    }
+
+    @Override
+    public void unbindFromContext(Context context) {
+        if (mBoundToService) super.unbindFromContext(context);
+    }
+
+    @Override
+    public void onPostMessageServiceConnected() {
+        mBoundToService = true;
+        if (mMessageChannelCreated) notifyMessageChannelReady(null);
+    }
+
+    @Override
+    public void onPostMessageServiceDisconnected() {
+        mBoundToService = false;
     }
 }

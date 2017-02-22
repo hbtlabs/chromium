@@ -17,7 +17,6 @@
 #include "ash/common/system/tray/tray_details_view.h"
 #include "ash/common/system/tray/tray_item_more.h"
 #include "ash/common/system/tray/tray_popup_item_style.h"
-#include "ash/common/system/tray/tray_popup_label_button.h"
 #include "ash/common/system/tray/tray_popup_utils.h"
 #include "ash/common/system/tray/tri_view.h"
 #include "ash/common/wm_shell.h"
@@ -86,15 +85,9 @@ namespace tray {
 class DefaultAccessibilityView : public TrayItemMore {
  public:
   explicit DefaultAccessibilityView(SystemTrayItem* owner)
-      : TrayItemMore(owner, true) {
-    ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-    if (!MaterialDesignController::UseMaterialDesignSystemIcons()) {
-      // The icon doesn't change in non-md.
-      SetImage(*bundle.GetImageNamed(IDR_AURA_UBER_TRAY_ACCESSIBILITY_DARK)
-                    .ToImageSkia());
-    }
+      : TrayItemMore(owner) {
     base::string16 label =
-        bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_ACCESSIBILITY);
+        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_ACCESSIBILITY);
     SetLabel(label);
     SetAccessibleName(label);
     set_id(test::kAccessibilityTrayItemViewId);
@@ -106,10 +99,6 @@ class DefaultAccessibilityView : public TrayItemMore {
   // TrayItemMore:
   void UpdateStyle() override {
     TrayItemMore::UpdateStyle();
-
-    if (!UseMdMenu())
-      return;
-
     std::unique_ptr<TrayPopupItemStyle> style = CreateStyle();
     SetImage(gfx::CreateVectorIcon(kSystemMenuAccessibilityIcon,
                                    style->GetIconColor()));
@@ -236,33 +225,6 @@ void AccessibilityDetailedView::AppendAccessibilityList() {
 
 void AccessibilityDetailedView::AppendHelpEntries() {
   DCHECK(!UseMdMenu());
-  // Currently the help page requires a browser window.
-  // TODO(yoshiki): show this even on login/lock screen. crbug.com/158286
-  if (!TrayPopupUtils::CanOpenWebUISettings(login_))
-    return;
-
-  views::View* bottom_row = new View();
-  views::BoxLayout* layout = new views::BoxLayout(
-      views::BoxLayout::kHorizontal, kTrayMenuBottomRowPadding,
-      kTrayMenuBottomRowPadding, kTrayMenuBottomRowPaddingBetweenItems);
-  layout->SetDefaultFlex(1);
-  bottom_row->SetLayoutManager(layout);
-
-  ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-
-  TrayPopupLabelButton* help = new TrayPopupLabelButton(
-      this,
-      bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_ACCESSIBILITY_LEARN_MORE));
-  bottom_row->AddChildView(help);
-  help_view_ = help;
-
-  TrayPopupLabelButton* settings = new TrayPopupLabelButton(
-      this,
-      bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_ACCESSIBILITY_SETTINGS));
-  bottom_row->AddChildView(settings);
-  settings_view_ = settings;
-
-  AddChildView(bottom_row);
 }
 
 HoverHighlightView* AccessibilityDetailedView::AddScrollListItem(
@@ -350,7 +312,8 @@ void AccessibilityDetailedView::CreateExtraTitleRowButtons() {
     tri_view()->SetContainerVisible(TriView::Container::END, true);
 
     help_view_ = CreateHelpButton(login_);
-    settings_view_ = CreateSettingsButton(login_);
+    settings_view_ = CreateSettingsButton(
+        login_, IDS_ASH_STATUS_TRAY_ACCESSIBILITY_SETTINGS);
     tri_view()->AddView(TriView::Container::END, help_view_);
     tri_view()->AddView(TriView::Container::END, settings_view_);
   }
@@ -377,7 +340,7 @@ void AccessibilityDetailedView::ShowHelp() {
 
 TrayAccessibility::TrayAccessibility(SystemTray* system_tray)
     : TrayImageItem(system_tray,
-                    IDR_AURA_UBER_TRAY_ACCESSIBILITY,
+                    kSystemTrayAccessibilityIcon,
                     UMA_ACCESSIBILITY),
       default_(NULL),
       detailed_popup_(NULL),

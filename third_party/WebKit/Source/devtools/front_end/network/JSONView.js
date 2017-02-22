@@ -42,11 +42,11 @@ Network.JSONView = class extends UI.VBox {
 
     /** @type {?UI.SearchableView} */
     this._searchableView;
-    /** @type {!Components.ObjectPropertiesSection} */
+    /** @type {!ObjectUI.ObjectPropertiesSection} */
     this._treeOutline;
     /** @type {number} */
     this._currentSearchFocusIndex = 0;
-    /** @type {!Array.<!TreeElement>} */
+    /** @type {!Array.<!UI.TreeElement>} */
     this._currentSearchTreeElements = [];
     /** @type {?RegExp} */
     this._searchRegex = null;
@@ -76,16 +76,16 @@ Network.JSONView = class extends UI.VBox {
       returnObj = Network.JSONView._extractJSON(/** @type {string} */ (text));
     if (!returnObj)
       return Promise.resolve(/** @type {?Network.ParsedJSON} */ (null));
-    return Common.formatterWorkerPool.runTask('relaxedJSONParser', {content: returnObj.data}).then(handleReturnedJSON);
+    return Common.formatterWorkerPool.parseJSONRelaxed(returnObj.data).then(handleReturnedJSON);
 
     /**
-     * @param {?MessageEvent} event
+     * @param {*} data
      * @return {?Network.ParsedJSON}
      */
-    function handleReturnedJSON(event) {
-      if (!event || !event.data)
+    function handleReturnedJSON(data) {
+      if (!data)
         return null;
-      returnObj.data = event.data;
+      returnObj.data = data;
       return returnObj;
     }
   }
@@ -146,7 +146,7 @@ Network.JSONView = class extends UI.VBox {
 
     var obj = SDK.RemoteObject.fromLocalObject(this._parsedJSON.data);
     var title = this._parsedJSON.prefix + obj.description + this._parsedJSON.suffix;
-    this._treeOutline = new Components.ObjectPropertiesSection(obj, title);
+    this._treeOutline = new ObjectUI.ObjectPropertiesSection(obj, title);
     this._treeOutline.setEditable(false);
     this._treeOutline.expand();
     this.element.appendChild(this._treeOutline.element);
@@ -199,7 +199,7 @@ Network.JSONView = class extends UI.VBox {
     this._currentSearchTreeElements = [];
 
     for (var element = this._treeOutline.rootElement(); element; element = element.traverseNextTreeElement(false)) {
-      if (!(element instanceof Components.ObjectPropertyTreeElement))
+      if (!(element instanceof ObjectUI.ObjectPropertyTreeElement))
         continue;
       element.revertHighlightChanges();
     }
@@ -220,7 +220,7 @@ Network.JSONView = class extends UI.VBox {
     this._searchRegex = searchConfig.toSearchRegex(true);
 
     for (var element = this._treeOutline.rootElement(); element; element = element.traverseNextTreeElement(false)) {
-      if (!(element instanceof Components.ObjectPropertyTreeElement))
+      if (!(element instanceof ObjectUI.ObjectPropertyTreeElement))
         continue;
       var hasMatch = element.setSearchRegex(this._searchRegex);
       if (hasMatch)

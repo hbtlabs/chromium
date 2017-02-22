@@ -11,6 +11,7 @@
 #include <set>
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -318,12 +319,17 @@ void SurfaceHitTestReadyNotifier::WaitForSurfaceReady() {
 }
 
 bool SurfaceHitTestReadyNotifier::ContainsSurfaceId(
-    cc::SurfaceId container_surface_id) {
+    const cc::SurfaceId& container_surface_id) {
   if (!container_surface_id.is_valid())
     return false;
-  for (cc::SurfaceId id :
-       surface_manager_->GetSurfaceForId(container_surface_id)
-           ->referenced_surfaces()) {
+
+  cc::Surface* container_surface =
+      surface_manager_->GetSurfaceForId(container_surface_id);
+  if (!container_surface || !container_surface->active_referenced_surfaces())
+    return false;
+
+  for (const cc::SurfaceId& id :
+       *container_surface->active_referenced_surfaces()) {
     if (id == target_view_->SurfaceIdForTesting() || ContainsSurfaceId(id))
       return true;
   }
@@ -337,10 +343,10 @@ void NavigationStallDelegate::RequestBeginning(
     content::ResourceContext* resource_context,
     content::AppCacheService* appcache_service,
     ResourceType resource_type,
-    ScopedVector<content::ResourceThrottle>* throttles) {
+    std::vector<std::unique_ptr<content::ResourceThrottle>>* throttles) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   if (request->url() == url_)
-    throttles->push_back(new HttpRequestStallThrottle);
+    throttles->push_back(base::MakeUnique<HttpRequestStallThrottle>());
 }
 
 FileChooserDelegate::FileChooserDelegate(const base::FilePath& file)
@@ -378,13 +384,13 @@ UrlCommitObserver::UrlCommitObserver(FrameTreeNode* frame_tree_node,
                                        ->delegate()
                                        ->GetAsWebContents()),
       frame_tree_node_id_(frame_tree_node->frame_tree_node_id()),
-      url_(url),
-      message_loop_runner_(new MessageLoopRunner) {}
+      url_(url) {
+}
 
 UrlCommitObserver::~UrlCommitObserver() {}
 
 void UrlCommitObserver::Wait() {
-  message_loop_runner_->Run();
+  run_loop_.Run();
 }
 
 void UrlCommitObserver::DidFinishNavigation(
@@ -393,7 +399,7 @@ void UrlCommitObserver::DidFinishNavigation(
       !navigation_handle->IsErrorPage() &&
       navigation_handle->GetURL() == url_ &&
       navigation_handle->GetFrameTreeNodeId() == frame_tree_node_id_) {
-    message_loop_runner_->Quit();
+    run_loop_.Quit();
   }
 }
 

@@ -17,10 +17,8 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/sync/base/weak_handle.h"
 #include "components/sync/engine/engine_components_factory.h"
-#include "components/sync/engine/fake_model_type_connector.h"
 #include "components/sync/engine/net/http_post_provider_factory.h"
 #include "components/sync/syncable/directory.h"
-#include "components/sync/test/fake_sync_encryption_handler.h"
 
 class GURL;
 
@@ -33,28 +31,26 @@ FakeSyncManager::FakeSyncManager(ModelTypeSet initial_sync_ended_types,
       progress_marker_types_(progress_marker_types),
       configure_fail_types_(configure_fail_types),
       last_configure_reason_(CONFIGURE_REASON_UNKNOWN),
-      num_invalidations_received_(0) {
-  fake_encryption_handler_ = base::MakeUnique<FakeSyncEncryptionHandler>();
-}
+      num_invalidations_received_(0) {}
 
 FakeSyncManager::~FakeSyncManager() {}
 
-ModelTypeSet FakeSyncManager::GetAndResetCleanedTypes() {
-  ModelTypeSet cleaned_types = cleaned_types_;
-  cleaned_types_.Clear();
-  return cleaned_types;
+ModelTypeSet FakeSyncManager::GetAndResetPurgedTypes() {
+  ModelTypeSet purged_types = purged_types_;
+  purged_types_.Clear();
+  return purged_types;
+}
+
+ModelTypeSet FakeSyncManager::GetAndResetUnappliedTypes() {
+  ModelTypeSet unapplied_types = unapplied_types_;
+  unapplied_types_.Clear();
+  return unapplied_types;
 }
 
 ModelTypeSet FakeSyncManager::GetAndResetDownloadedTypes() {
   ModelTypeSet downloaded_types = downloaded_types_;
   downloaded_types_.Clear();
   return downloaded_types;
-}
-
-ModelTypeSet FakeSyncManager::GetAndResetEnabledTypes() {
-  ModelTypeSet enabled_types = enabled_types_;
-  enabled_types_.Clear();
-  return enabled_types;
 }
 
 ConfigureReason FakeSyncManager::GetAndResetConfigureReason() {
@@ -106,7 +102,7 @@ ModelTypeSet FakeSyncManager::GetTypesWithEmptyProgressMarkerToken(
   return empty_types;
 }
 
-bool FakeSyncManager::PurgePartiallySyncedTypes() {
+void FakeSyncManager::PurgePartiallySyncedTypes() {
   ModelTypeSet partial_types;
   for (ModelTypeSet::Iterator i = progress_marker_types_.First(); i.Good();
        i.Inc()) {
@@ -114,55 +110,58 @@ bool FakeSyncManager::PurgePartiallySyncedTypes() {
       partial_types.Put(i.Get());
   }
   progress_marker_types_.RemoveAll(partial_types);
-  cleaned_types_.PutAll(partial_types);
-  return true;
+  purged_types_.PutAll(partial_types);
+}
+
+void FakeSyncManager::PurgeDisabledTypes(ModelTypeSet to_purge,
+                                         ModelTypeSet to_journal,
+                                         ModelTypeSet to_unapply) {
+  // Simulate cleaning up disabled types.
+  // TODO(sync): consider only cleaning those types that were recently disabled,
+  // if this isn't the first cleanup, which more accurately reflects the
+  // behavior of the real cleanup logic.
+  GetUserShare()->directory->PurgeEntriesWithTypeIn(to_purge, to_journal,
+                                                    to_unapply);
+  purged_types_.PutAll(to_purge);
+  unapplied_types_.PutAll(to_unapply);
+  // Types from |to_unapply| should retain their server data and progress
+  // markers.
+  initial_sync_ended_types_.RemoveAll(Difference(to_purge, to_unapply));
+  progress_marker_types_.RemoveAll(Difference(to_purge, to_unapply));
 }
 
 void FakeSyncManager::UpdateCredentials(const SyncCredentials& credentials) {
   NOTIMPLEMENTED();
 }
 
-void FakeSyncManager::StartSyncingNormally(
-    const ModelSafeRoutingInfo& routing_info,
-    base::Time last_poll_time) {
+void FakeSyncManager::StartSyncingNormally(base::Time last_poll_time) {
+  // Do nothing.
+}
+
+void FakeSyncManager::StartConfiguration() {
   // Do nothing.
 }
 
 void FakeSyncManager::ConfigureSyncer(
     ConfigureReason reason,
     ModelTypeSet to_download,
-    ModelTypeSet to_purge,
-    ModelTypeSet to_journal,
-    ModelTypeSet to_unapply,
-    const ModelSafeRoutingInfo& new_routing_info,
     const base::Closure& ready_task,
     const base::Closure& retry_task) {
   last_configure_reason_ = reason;
-  enabled_types_ = GetRoutingInfoTypes(new_routing_info);
   ModelTypeSet success_types = to_download;
   success_types.RemoveAll(configure_fail_types_);
 
   DVLOG(1) << "Faking configuration. Downloading: "
-           << ModelTypeSetToString(success_types)
-           << ". Cleaning: " << ModelTypeSetToString(to_purge);
+           << ModelTypeSetToString(success_types);
 
   // Update our fake directory by clearing and fake-downloading as necessary.
   UserShare* share = GetUserShare();
-  share->directory->PurgeEntriesWithTypeIn(to_purge, to_journal, to_unapply);
   for (ModelTypeSet::Iterator it = success_types.First(); it.Good(); it.Inc()) {
     // We must be careful to not create the same root node twice.
     if (!initial_sync_ended_types_.Has(it.Get())) {
       TestUserShare::CreateRoot(it.Get(), share);
     }
   }
-
-  // Simulate cleaning up disabled types.
-  // TODO(sync): consider only cleaning those types that were recently disabled,
-  // if this isn't the first cleanup, which more accurately reflects the
-  // behavior of the real cleanup logic.
-  initial_sync_ended_types_.RemoveAll(to_purge);
-  progress_marker_types_.RemoveAll(to_purge);
-  cleaned_types_.PutAll(to_purge);
 
   // Now simulate the actual configuration for those types that successfully
   // download + apply.
@@ -199,6 +198,10 @@ UserShare* FakeSyncManager::GetUserShare() {
   return test_user_share_.user_share();
 }
 
+ModelTypeConnector* FakeSyncManager::GetModelTypeConnector() {
+  return &fake_model_type_connector_;
+}
+
 std::unique_ptr<ModelTypeConnector>
 FakeSyncManager::GetModelTypeConnectorProxy() {
   return base::MakeUnique<FakeModelTypeConnector>();
@@ -218,7 +221,7 @@ bool FakeSyncManager::HasUnsyncedItems() {
 }
 
 SyncEncryptionHandler* FakeSyncManager::GetEncryptionHandler() {
-  return fake_encryption_handler_.get();
+  return &fake_encryption_handler_;
 }
 
 std::vector<std::unique_ptr<ProtocolEvent>>
@@ -263,5 +266,9 @@ void FakeSyncManager::ClearServerData(const ClearServerDataCallback& callback) {
 
 void FakeSyncManager::OnCookieJarChanged(bool account_mismatch,
                                          bool empty_jar) {}
+
+void FakeSyncManager::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd) {
+  NOTIMPLEMENTED();
+}
 
 }  // namespace syncer

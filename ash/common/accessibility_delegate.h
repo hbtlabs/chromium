@@ -121,6 +121,10 @@ class ASH_EXPORT AccessibilityDelegate {
   // Gets the last accessibility alert that was triggered.
   virtual AccessibilityAlert GetLastAccessibilityAlert() = 0;
 
+  // Whether or not to enable toggling spoken feedback via holding down
+  // two fingers on the screen.
+  virtual bool ShouldToggleSpokenFeedbackViaTouch() = 0;
+
   // Play tick sound indicating spoken feedback will be toggled after countdown.
   virtual void PlaySpokenFeedbackToggleCountdown(int tick_count) = 0;
 

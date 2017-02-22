@@ -25,7 +25,6 @@
 #include "core/dom/Attr.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/Text.h"
@@ -96,7 +95,7 @@ void Attr::setNodeValue(const String& v) {
   setValue(v.isNull() ? emptyAtom : AtomicString(v));
 }
 
-Node* Attr::cloneNode(bool /*deep*/) {
+Node* Attr::cloneNode(bool /*deep*/, ExceptionState&) {
   return new Attr(document(), m_name, value());
 }
 

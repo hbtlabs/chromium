@@ -8,8 +8,8 @@
 #include "core/CoreExport.h"
 #include "core/css/CSSSelector.h"
 #include "platform/heap/Handle.h"
-#include "platform/tracing/TraceEvent.h"
-#include "platform/tracing/TracedValue.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TracedValue.h"
 #include "wtf/Forward.h"
 #include "wtf/Functional.h"
 #include <memory>
@@ -37,7 +37,7 @@ class GraphicsLayer;
 class HitTestLocation;
 class HitTestRequest;
 class HitTestResult;
-class ImageResource;
+class ImageResourceContent;
 class InvalidationSet;
 class PaintLayer;
 class LayoutRect;
@@ -65,6 +65,7 @@ extern const char Attribute[];
 extern const char Class[];
 extern const char Id[];
 extern const char Pseudo[];
+extern const char RuleSet[];
 
 std::unique_ptr<TracedValue> attributeChange(Element&,
                                              const InvalidationSet&,
@@ -78,6 +79,8 @@ std::unique_ptr<TracedValue> idChange(Element&,
 std::unique_ptr<TracedValue> pseudoChange(Element&,
                                           const InvalidationSet&,
                                           CSSSelector::PseudoType);
+std::unique_ptr<TracedValue> ruleSetInvalidation(ContainerNode&,
+                                                 const InvalidationSet&);
 }  // namespace InspectorScheduleStyleInvalidationTrackingEvent
 
 #define TRACE_SCHEDULE_STYLE_INVALIDATION(element, invalidationSet,          \
@@ -86,7 +89,7 @@ std::unique_ptr<TracedValue> pseudoChange(Element&,
       TRACE_DISABLED_BY_DEFAULT("devtools.timeline.invalidationTracking"),   \
       "ScheduleStyleInvalidationTracking", TRACE_EVENT_SCOPE_THREAD, "data", \
       InspectorScheduleStyleInvalidationTrackingEvent::changeType(           \
-          (element), (invalidationSet), __VA_ARGS__));
+          (element), (invalidationSet), ##__VA_ARGS__));
 
 namespace InspectorStyleRecalcInvalidationTrackingEvent {
 std::unique_ptr<TracedValue> data(Node*, const StyleChangeReasonForTracing&);
@@ -214,7 +217,8 @@ std::unique_ptr<TracedValue> data(unsigned long identifier,
 namespace InspectorResourceFinishEvent {
 std::unique_ptr<TracedValue> data(unsigned long identifier,
                                   double finishTime,
-                                  bool didFail);
+                                  bool didFail,
+                                  int64_t encodedDataLength);
 }
 
 namespace InspectorTimerInstallEvent {
@@ -293,7 +297,8 @@ std::unique_ptr<TracedValue> data(LayoutObject*,
 namespace InspectorPaintImageEvent {
 std::unique_ptr<TracedValue> data(const LayoutImage&);
 std::unique_ptr<TracedValue> data(const LayoutObject&, const StyleImage&);
-std::unique_ptr<TracedValue> data(const LayoutObject*, const ImageResource&);
+std::unique_ptr<TracedValue> data(const LayoutObject*,
+                                  const ImageResourceContent&);
 }
 
 namespace InspectorCommitLoadEvent {

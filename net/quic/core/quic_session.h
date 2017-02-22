@@ -4,30 +4,28 @@
 //
 // A QuicSession, which demuxes a single connection to individual streams.
 
-#ifndef NET_QUIC_QUIC_SESSION_H_
-#define NET_QUIC_QUIC_SESSION_H_
+#ifndef NET_QUIC_CORE_QUIC_SESSION_H_
+#define NET_QUIC_CORE_QUIC_SESSION_H_
 
-#include <stddef.h>
-
+#include <cstddef>
 #include <map>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 #include "base/compiler_specific.h"
-#include "base/containers/small_map.h"
 #include "base/macros.h"
 #include "base/strings/string_piece.h"
-#include "net/base/ip_endpoint.h"
-#include "net/base/net_export.h"
 #include "net/quic/core/quic_connection.h"
 #include "net/quic/core/quic_crypto_stream.h"
 #include "net/quic/core/quic_packet_creator.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_stream.h"
 #include "net/quic/core/quic_write_blocked_list.h"
+#include "net/quic/platform/api/quic_containers.h"
+#include "net/quic/platform/api/quic_export.h"
+#include "net/quic/platform/api/quic_socket_address.h"
 
 namespace net {
 
@@ -39,11 +37,11 @@ namespace test {
 class QuicSessionPeer;
 }  // namespace test
 
-class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
+class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
  public:
   // An interface from the session to the entity owning the session.
   // This lets the session notify its owner (the Dispatcher) when the connection
-  // is closed, blocked, or added/removed from the time-wait std::list.
+  // is closed, blocked, or added/removed from the time-wait list.
   class Visitor {
    public:
     virtual ~Visitor() {}
@@ -106,8 +104,8 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   void OnPathDegrading() override;
 
   // Called on every incoming packet. Passes |packet| through to |connection_|.
-  virtual void ProcessUdpPacket(const IPEndPoint& self_address,
-                                const IPEndPoint& peer_address,
+  virtual void ProcessUdpPacket(const QuicSocketAddress& self_address,
+                                const QuicSocketAddress& peer_address,
                                 const QuicReceivedPacket& packet);
 
   // Called by streams when they want to write data to the peer.
@@ -123,7 +121,7 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
       QuicIOVector iov,
       QuicStreamOffset offset,
       bool fin,
-      QuicAckListenerInterface* ack_notifier_delegate);
+      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener);
 
   // Called by streams when they want to close the stream in both directions.
   virtual void SendRstStream(QuicStreamId id,
@@ -177,26 +175,28 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   QuicConnection* connection() { return connection_; }
   const QuicConnection* connection() const { return connection_; }
   size_t num_active_requests() const { return dynamic_stream_map_.size(); }
-  const IPEndPoint& peer_address() const { return connection_->peer_address(); }
+  const QuicSocketAddress& peer_address() const {
+    return connection_->peer_address();
+  }
   QuicConnectionId connection_id() const {
     return connection_->connection_id();
   }
 
   // Returns the number of currently open streams, excluding the reserved
   // headers and crypto streams, and never counting unfinished streams.
-  virtual size_t GetNumActiveStreams() const;
+  size_t GetNumActiveStreams() const;
 
   // Returns the number of currently open peer initiated streams, excluding the
   // reserved headers and crypto streams.
-  virtual size_t GetNumOpenIncomingStreams() const;
+  size_t GetNumOpenIncomingStreams() const;
 
   // Returns the number of currently open self initiated streams, excluding the
   // reserved headers and crypto streams.
-  virtual size_t GetNumOpenOutgoingStreams() const;
+  size_t GetNumOpenOutgoingStreams() const;
 
   // Returns the number of "available" streams, the stream ids less than
   // largest_peer_created_stream_id_ that have not yet been opened.
-  virtual size_t GetNumAvailableStreams() const;
+  size_t GetNumAvailableStreams() const;
 
   // Add the stream to the session's write-blocked list because it is blocked by
   // connection-level flow control but not by its own stream-level flow control.
@@ -246,13 +246,13 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   // Returns true if this stream should yield writes to another blocked stream.
   bool ShouldYield(QuicStreamId stream_id);
 
- protected:
-  using StaticStreamMap =
-      base::SmallMap<std::unordered_map<QuicStreamId, QuicStream*>, 2>;
+  bool flow_control_invariant() { return flow_control_invariant_; }
 
-  using DynamicStreamMap = base::SmallMap<
-      std::unordered_map<QuicStreamId, std::unique_ptr<QuicStream>>,
-      10>;
+ protected:
+  using StaticStreamMap = QuicSmallMap<QuicStreamId, QuicStream*, 2>;
+
+  using DynamicStreamMap =
+      QuicSmallMap<QuicStreamId, std::unique_ptr<QuicStream>, 10>;
 
   using ClosedStreams = std::vector<std::unique_ptr<QuicStream>>;
 
@@ -354,10 +354,6 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   virtual void HandleRstOnValidNonexistentStream(
       const QuicRstStreamFrame& frame);
 
-  Visitor* visitor() { return visitor_; }
-
-  const Visitor* visitor() const { return visitor_; }
-
  private:
   friend class test::QuicSessionPeer;
 
@@ -374,6 +370,10 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   bool CheckStreamNotBusyLooping(QuicStream* stream,
                                  uint64_t previous_bytes_written,
                                  bool previous_fin_sent);
+
+  // Called in OnConfigNegotiated for Finch trials to measure performance of
+  // starting with larger flow control receive windows.
+  void AdjustInitialFlowControlWindows(size_t stream_window);
 
   // Keep track of highest received byte offset of locally closed streams, while
   // waiting for a definitive final highest offset from the peer.
@@ -439,9 +439,12 @@ class NET_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   // call stack of OnCanWrite.
   QuicStreamId currently_writing_stream_id_;
 
+  // Latched value of gfe2_reloadable_flag_quic_flow_control_invariant.
+  const bool flow_control_invariant_;
+
   DISALLOW_COPY_AND_ASSIGN(QuicSession);
 };
 
 }  // namespace net
 
-#endif  // NET_QUIC_QUIC_SESSION_H_
+#endif  // NET_QUIC_CORE_QUIC_SESSION_H_

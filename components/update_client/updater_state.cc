@@ -11,10 +11,15 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 
 namespace update_client {
 
-const char UpdaterState::kDomainJoined[] = "domainjoined";
+// The value of this constant does not reflect its name (i.e. "domainjoined"
+// vs something like "isenterprisemanaged") because it is used with omaha.
+// After discussion with omaha team it was decided to leave the value as is to
+// keep continuity with previous chrome versions.
+const char UpdaterState::kIsEnterpriseManaged[] = "domainjoined";
 
 UpdaterState::UpdaterState(bool is_machine) : is_machine_(is_machine) {}
 
@@ -33,7 +38,7 @@ std::unique_ptr<UpdaterState::Attributes> UpdaterState::GetState(
 
 #if defined(OS_WIN)
 void UpdaterState::ReadState() {
-  is_joined_to_domain_ = IsJoinedToDomain();
+  is_enterprise_managed_ = IsEnterpriseManaged();
 
 #if defined(GOOGLE_CHROME_BUILD)
   updater_name_ = GetUpdaterName();
@@ -49,7 +54,7 @@ void UpdaterState::ReadState() {
 UpdaterState::Attributes UpdaterState::BuildAttributes() const {
   Attributes attributes;
 
-  attributes[kDomainJoined] = is_joined_to_domain_ ? "1" : "0";
+  attributes[kIsEnterpriseManaged] = is_enterprise_managed_ ? "1" : "0";
 
   attributes["name"] = updater_name_;
 

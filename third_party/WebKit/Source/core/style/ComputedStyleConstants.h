@@ -33,6 +33,8 @@
 
 namespace blink {
 
+// Some enums are automatically generated in ComputedStyleBaseConstants
+
 // TODO(sashab): Change these enums to enum classes with an unsigned underlying
 // type. Enum classes provide better type safety, and forcing an unsigned
 // underlying type prevents msvc from interpreting enums as negative numbers.
@@ -50,12 +52,8 @@ enum StyleRecalcChange {
   IndependentInherit,
   Inherit,
   Force,
-  Reattach,
-  ReattachNoLayoutObject
+  Reattach
 };
-
-static const size_t PrintColorAdjustBits = 1;
-enum PrintColorAdjust { PrintColorAdjustEconomy, PrintColorAdjustExact };
 
 // Static pseudo styles. Dynamic ones are produced on the fly.
 enum PseudoId {
@@ -94,8 +92,6 @@ enum ColumnFill { ColumnFillBalance, ColumnFillAuto };
 
 enum ColumnSpan { ColumnSpanNone = 0, ColumnSpanAll };
 
-enum EBorderCollapse { BorderCollapseSeparate = 0, BorderCollapseCollapse = 1 };
-
 // These have been defined in the order of their precedence for
 // border-collapsing. Do not change this order! This order also must match the
 // order in CSSValueKeywords.in.
@@ -124,15 +120,6 @@ enum EBorderPrecedence {
 
 enum OutlineIsAuto { OutlineIsAutoOff = 0, OutlineIsAutoOn };
 
-enum EPosition {
-  StaticPosition = 0,
-  RelativePosition = 1,
-  AbsolutePosition = 2,
-  StickyPosition = 3,
-  // This value is required to pack our bits efficiently in LayoutObject.
-  FixedPosition = 6
-};
-
 enum EMarginCollapse {
   MarginCollapseCollapse,
   MarginCollapseSeparate,
@@ -145,38 +132,22 @@ enum EBoxDecorationBreak { BoxDecorationBreakSlice, BoxDecorationBreakClone };
 
 // Box attributes. Not inherited.
 
-enum EBoxSizing { BoxSizingContentBox, BoxSizingBorderBox };
+enum class EBoxSizing : unsigned { kContentBox, kBorderBox };
 
 // Random visual rendering model attributes. Not inherited.
 
-enum EOverflowAnchor { AnchorVisible, AnchorNone, AnchorAuto };
-
-enum EOverflow {
-  OverflowVisible,
-  OverflowHidden,
-  OverflowScroll,
-  OverflowAuto,
-  OverflowOverlay,
-  OverflowPagedX,
-  OverflowPagedY
+enum class EVerticalAlign : unsigned {
+  kBaseline,
+  kMiddle,
+  kSub,
+  kSuper,
+  kTextTop,
+  kTextBottom,
+  kTop,
+  kBottom,
+  kBaselineMiddle,
+  kLength
 };
-
-enum EVerticalAlign {
-  VerticalAlignBaseline,
-  VerticalAlignMiddle,
-  VerticalAlignSub,
-  VerticalAlignSuper,
-  VerticalAlignTextTop,
-  VerticalAlignTextBottom,
-  VerticalAlignTop,
-  VerticalAlignBottom,
-  VerticalAlignBaselineMiddle,
-  VerticalAlignLength
-};
-
-enum EClear { ClearNone = 0, ClearLeft = 1, ClearRight = 2, ClearBoth = 3 };
-
-enum ETableLayout { TableLayoutAuto, TableLayoutFixed };
 
 enum TextCombine { TextCombineNone, TextCombineAll };
 
@@ -217,7 +188,6 @@ enum EBoxPack { BoxPackStart, BoxPackCenter, BoxPackEnd, BoxPackJustify };
 enum EBoxAlignment { BSTRETCH, BSTART, BCENTER, BEND, BBASELINE };
 enum EBoxOrient { HORIZONTAL, VERTICAL };
 enum EBoxLines { SINGLE, MULTIPLE };
-enum EBoxDirection { BNORMAL, BREVERSE };
 
 // CSS3 Flexbox Properties
 
@@ -268,88 +238,9 @@ enum LineBreak {
 
 enum EResize { RESIZE_NONE, RESIZE_BOTH, RESIZE_HORIZONTAL, RESIZE_VERTICAL };
 
-// The order of this enum must match the order of the list style types in
-// CSSValueKeywords.in.
-enum class EListStyleType : unsigned {
-  Disc,
-  Circle,
-  Square,
-  DecimalListStyle,
-  DecimalLeadingZero,
-  ArabicIndic,
-  Bengali,
-  Cambodian,
-  Khmer,
-  Devanagari,
-  Gujarati,
-  Gurmukhi,
-  Kannada,
-  Lao,
-  Malayalam,
-  Mongolian,
-  Myanmar,
-  Oriya,
-  Persian,
-  Urdu,
-  Telugu,
-  Tibetan,
-  Thai,
-  LowerRoman,
-  UpperRoman,
-  LowerGreek,
-  LowerAlpha,
-  LowerLatin,
-  UpperAlpha,
-  UpperLatin,
-  CjkEarthlyBranch,
-  CjkHeavenlyStem,
-  EthiopicHalehame,
-  EthiopicHalehameAm,
-  EthiopicHalehameTiEr,
-  EthiopicHalehameTiEt,
-  Hangul,
-  HangulConsonant,
-  KoreanHangulFormal,
-  KoreanHanjaFormal,
-  KoreanHanjaInformal,
-  Hebrew,
-  Armenian,
-  LowerArmenian,
-  UpperArmenian,
-  Georgian,
-  CJKIdeographic,
-  SimpChineseFormal,
-  SimpChineseInformal,
-  TradChineseFormal,
-  TradChineseInformal,
-  Hiragana,
-  Katakana,
-  HiraganaIroha,
-  KatakanaIroha,
-  NoneListStyle
-};
-
 enum QuoteType { OPEN_QUOTE, CLOSE_QUOTE, NO_OPEN_QUOTE, NO_CLOSE_QUOTE };
 
 enum EAnimPlayState { AnimPlayStatePlaying, AnimPlayStatePaused };
-
-enum EWhiteSpace { NORMAL, PRE, PRE_WRAP, PRE_LINE, NOWRAP, KHTML_NOWRAP };
-
-// The order of this enum must match the order of the text align values in
-// CSSValueKeywords.in.
-enum class ETextAlign : unsigned {
-  Left,
-  Right,
-  Center,
-  Justify,
-  WebkitLeft,
-  WebkitRight,
-  WebkitCenter,
-  Start,
-  End,
-};
-
-enum ETextTransform { CAPITALIZE, UPPERCASE, LOWERCASE, TTNONE };
 
 static const size_t TextDecorationBits = 4;
 enum TextDecoration {
@@ -406,74 +297,45 @@ enum TextUnderlinePosition {
   TextUnderlinePositionUnder
 };
 
-enum EBreak {
-  BreakAuto,
-  BreakAvoid,
-  BreakAvoidColumn,
-  BreakAvoidPage,
-  // Values below are only allowed for break-after and break-before. Values
-  // above are also allowed for break-inside (in addition to break-after and
-  // break-before).
-  BreakValueLastAllowedForBreakInside = BreakAvoidPage,
-  BreakColumn,
-  BreakLeft,
-  BreakPage,
-  BreakRecto,
-  BreakRight,
-  BreakVerso,
-  BreakValueLastAllowedForBreakAfterAndBefore = BreakVerso,
-  BreakAlways  // Only needed by {page,-webkit-column}-break-{after,before}
-               // shorthands.
-};
-
-enum class ECaptionSide : unsigned { Top, Bottom, Left, Right };
-
-enum class EListStylePosition : unsigned { Outside, Inside };
-
 enum class ECursor : unsigned {
-  // The following must match the order in CSSValueKeywords.in.
-  Auto,
-  Cross,
-  Default,
-  Pointer,
-  Move,
-  VerticalText,
-  Cell,
-  ContextMenu,
-  Alias,
-  Progress,
-  NoDrop,
-  NotAllowed,
-  ZoomIn,
-  ZoomOut,
-  EResize,
-  NeResize,
-  NwResize,
-  NResize,
-  SeResize,
-  SwResize,
-  SResize,
-  WResize,
-  EwResize,
-  NsResize,
-  NeswResize,
-  NwseResize,
-  ColResize,
-  RowResize,
-  Text,
-  Wait,
-  Help,
-  AllScroll,
-  WebkitGrab,
-  WebkitGrabbing,
-
-  // The following are handled as exceptions so don't need to match.
-  Copy,
-  None
+  kAuto,
+  kCrosshair,
+  kDefault,
+  kPointer,
+  kMove,
+  kVerticalText,
+  kCell,
+  kContextMenu,
+  kAlias,
+  kProgress,
+  kNoDrop,
+  kNotAllowed,
+  kZoomIn,
+  kZoomOut,
+  kEResize,
+  kNeResize,
+  kNwResize,
+  kNResize,
+  kSeResize,
+  kSwResize,
+  kSResize,
+  kWResize,
+  kEwResize,
+  kNsResize,
+  kNeswResize,
+  kNwseResize,
+  kColResize,
+  kRowResize,
+  kText,
+  kWait,
+  kHelp,
+  kAllScroll,
+  kWebkitGrab,
+  kWebkitGrabbing,
+  kCopy,
+  kNone
 };
 
-// The order of this enum must match the order of the display values in
-// CSSValueKeywords.in.
 enum class EDisplay : unsigned {
   Inline,
   Block,
@@ -489,30 +351,21 @@ enum class EDisplay : unsigned {
   TableColumn,
   TableCell,
   TableCaption,
-  Box,
-  InlineBox,
+  WebkitBox,
+  WebkitInlineBox,
   Flex,
   InlineFlex,
   Grid,
   InlineGrid,
   Contents,
+  FlowRoot,
   None
 };
 
-enum EInsideLink { NotInsideLink, InsideUnvisitedLink, InsideVisitedLink };
-
-enum EPointerEvents {
-  PE_NONE,
-  PE_AUTO,
-  PE_STROKE,
-  PE_FILL,
-  PE_PAINTED,
-  PE_VISIBLE,
-  PE_VISIBLE_STROKE,
-  PE_VISIBLE_FILL,
-  PE_VISIBLE_PAINTED,
-  PE_BOUNDINGBOX,
-  PE_ALL
+enum class EInsideLink : unsigned {
+  kNotInsideLink,
+  kInsideUnvisitedLink,
+  kInsideVisitedLink
 };
 
 enum ETransformStyle3D { TransformStyle3DFlat, TransformStyle3DPreserve3D };
@@ -570,8 +423,6 @@ enum EImageRendering {
   ImageRenderingOptimizeContrast,
   ImageRenderingPixelated
 };
-
-enum Order { LogicalOrder = 0, VisualOrder };
 
 enum RubyPosition { RubyPositionBefore, RubyPositionAfter };
 

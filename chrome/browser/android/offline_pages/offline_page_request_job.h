@@ -50,6 +50,10 @@ class OfflinePageRequestJob : public net::URLRequestFileJob {
     NO_TAB_ID,
     NO_WEB_CONTENTS,
     SHOW_NET_ERROR_PAGE,
+    REDIRECTED_ON_DISCONNECTED_NETWORK,
+    REDIRECTED_ON_FLAKY_NETWORK,
+    REDIRECTED_ON_PROHIBITIVELY_SLOW_NETWORK,
+    REDIRECTED_ON_CONNECTED_NETWORK,
     AGGREGATED_REQUEST_RESULT_MAX
   };
 
@@ -88,6 +92,11 @@ class OfflinePageRequestJob : public net::URLRequestFileJob {
   void GetLoadTimingInfo(net::LoadTimingInfo* load_timing_info) const override;
   bool CopyFragmentOnRedirect(const GURL& location) const override;
   int GetResponseCode() const override;
+
+  // net::URLRequestFileJob overrides:
+  void OnOpenComplete(int result) override;
+  void OnSeekComplete(int64_t result) override;
+  void OnReadComplete(net::IOBuffer* buf, int result) override;
 
   void OnOfflineFilePathAvailable(const base::FilePath& offline_file_path);
   void OnOfflineRedirectAvailabe(const GURL& redirected_url);

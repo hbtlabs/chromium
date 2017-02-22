@@ -34,9 +34,11 @@ enum VideoCodec {
 };
 
 // Video codec profiles. Keep in sync with mojo::VideoCodecProfile (see
-// media/mojo/interfaces/media_types.mojom) and gpu::VideoCodecProfile (see
-// gpu/config/gpu_info.h), as well as PP_VideoDecoder_Profile (translation is
-// performed in content/renderer/pepper/ppb_video_decoder_impl.cc).
+// media/mojo/interfaces/media_types.mojom), gpu::VideoCodecProfile (see
+// gpu/config/gpu_info.h), and
+// media/base/android/java/src/org/chromium/media/CodecProfileLevelList.java,
+// as well as PP_VideoDecoder_Profile (translation is performed in
+// content/renderer/pepper/ppb_video_decoder_impl.cc).
 // NOTE: These values are histogrammed over time in UMA so the values must
 // never ever change (add new values to tools/metrics/histograms/histograms.xml)
 enum VideoCodecProfile {
@@ -75,8 +77,27 @@ enum VideoCodecProfile {
   VIDEO_CODEC_PROFILE_MAX = HEVCPROFILE_MAX,
 };
 
+struct CodecProfileLevel {
+  VideoCodec codec;
+  VideoCodecProfile profile;
+  int level;
+};
+
 std::string MEDIA_EXPORT GetCodecName(VideoCodec codec);
 std::string MEDIA_EXPORT GetProfileName(VideoCodecProfile profile);
+
+// ParseNewStyleVp9CodecID handles parsing of new style vp9 codec IDs per
+// proposed VP Codec ISO Media File Format Binding specification:
+// https://storage.googleapis.com/downloads.webmproject.org/docs/vp9/vp-codec-iso-media-file-format-binding-20160516-draft.pdf
+// ParseLegacyVp9CodecID handles parsing of legacy VP9 codec strings defined
+// for WebM.
+// TODO(kqyang): Consolidate the two functions once we address crbug.com/667834
+MEDIA_EXPORT bool ParseNewStyleVp9CodecID(const std::string& codec_id,
+                                          VideoCodecProfile* profile,
+                                          uint8_t* level_idc);
+MEDIA_EXPORT bool ParseLegacyVp9CodecID(const std::string& codec_id,
+                                        VideoCodecProfile* profile,
+                                        uint8_t* level_idc);
 
 // Handle parsing AVC/H.264 codec ids as outlined in RFC 6381 and ISO-14496-10.
 MEDIA_EXPORT bool ParseAVCCodecId(const std::string& codec_id,
@@ -90,6 +111,13 @@ MEDIA_EXPORT bool ParseHEVCCodecId(const std::string& codec_id,
 #endif
 
 MEDIA_EXPORT VideoCodec StringToVideoCodec(const std::string& codec_id);
+
+#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
+// Translate legacy avc1 codec ids (like avc1.66.30 or avc1.77.31) into a new
+// style standard avc1 codec ids like avc1.4D002F. If the input codec is not
+// recognized as a legacy codec id, then returns the input string unchanged.
+std::string TranslateLegacyAvc1CodecIds(const std::string& codec_id);
+#endif
 
 }  // namespace media
 

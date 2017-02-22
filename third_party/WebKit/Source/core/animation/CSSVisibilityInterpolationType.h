@@ -17,8 +17,8 @@ class CSSVisibilityInterpolationType : public CSSInterpolationType {
     DCHECK_EQ(cssProperty(), CSSPropertyVisibility);
   }
 
-  InterpolationValue maybeConvertUnderlyingValue(
-      const InterpolationEnvironment&) const final;
+  InterpolationValue maybeConvertStandardPropertyUnderlyingValue(
+      const ComputedStyle&) const final;
   PairwiseInterpolationValue maybeMergeSingles(
       InterpolationValue&& start,
       InterpolationValue&& end) const final;
@@ -26,9 +26,9 @@ class CSSVisibilityInterpolationType : public CSSInterpolationType {
                  double underlyingFraction,
                  const InterpolationValue&,
                  double interpolationFraction) const final;
-  void apply(const InterpolableValue&,
-             const NonInterpolableValue*,
-             InterpolationEnvironment&) const final;
+  void applyStandardPropertyValue(const InterpolableValue&,
+                                  const NonInterpolableValue*,
+                                  StyleResolverState&) const final;
 
  private:
   InterpolationValue createVisibilityValue(EVisibility) const;
@@ -39,7 +39,7 @@ class CSSVisibilityInterpolationType : public CSSInterpolationType {
   InterpolationValue maybeConvertInherit(const StyleResolverState&,
                                          ConversionCheckers&) const final;
   InterpolationValue maybeConvertValue(const CSSValue&,
-                                       const StyleResolverState&,
+                                       const StyleResolverState*,
                                        ConversionCheckers&) const final;
 };
 

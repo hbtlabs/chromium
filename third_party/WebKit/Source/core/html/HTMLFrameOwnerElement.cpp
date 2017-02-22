@@ -59,7 +59,7 @@ static WidgetSet& widgetsPendingDispose() {
 
 SubframeLoadingDisabler::SubtreeRootSet&
 SubframeLoadingDisabler::disabledSubtreeRoots() {
-  DEFINE_STATIC_LOCAL(SubtreeRootSet, nodes, (new SubtreeRootSet));
+  DEFINE_STATIC_LOCAL(SubtreeRootSet, nodes, ());
   return nodes;
 }
 
@@ -116,7 +116,7 @@ HTMLFrameOwnerElement::UpdateSuspendScope::~UpdateSuspendScope() {
 // Unlike moveWidgetToParentSoon, this will not call dispose the Widget.
 void temporarilyRemoveWidgetFromParentSoon(Widget* widget) {
   if (s_updateSuspendCount) {
-    widgetsPendingTemporaryRemovalFromParent().add(widget);
+    widgetsPendingTemporaryRemovalFromParent().insert(widget);
   } else {
     if (toFrameView(widget->parent()))
       toFrameView(widget->parent())->removeChild(widget);
@@ -215,7 +215,7 @@ bool HTMLFrameOwnerElement::isKeyboardFocusable() const {
 
 void HTMLFrameOwnerElement::disposeWidgetSoon(Widget* widget) {
   if (s_updateSuspendCount) {
-    widgetsPendingDispose().add(widget);
+    widgetsPendingDispose().insert(widget);
     return;
   }
   widget->dispose();
@@ -225,9 +225,9 @@ void HTMLFrameOwnerElement::dispatchLoad() {
   dispatchScopedEvent(Event::create(EventTypeNames::load));
 }
 
-const WebVector<WebPermissionType>&
+const WebVector<mojom::blink::PermissionName>&
 HTMLFrameOwnerElement::delegatedPermissions() const {
-  DEFINE_STATIC_LOCAL(WebVector<WebPermissionType>, permissions, ());
+  DEFINE_STATIC_LOCAL(WebVector<mojom::blink::PermissionName>, permissions, ());
   return permissions;
 }
 

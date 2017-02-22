@@ -204,10 +204,10 @@ void LayoutInline::styleDidChange(StyleDifference diff,
   // If we are changing to/from static, we need to reposition
   // out-of-flow positioned descendants.
   if (oldStyle && oldStyle->position() != newStyle.position() &&
-      (newStyle.position() == StaticPosition ||
-       oldStyle->position() == StaticPosition)) {
+      (newStyle.position() == EPosition::kStatic ||
+       oldStyle->position() == EPosition::kStatic)) {
     LayoutBlock* absContainingBlock = nullptr;
-    if (oldStyle->position() == StaticPosition) {
+    if (oldStyle->position() == EPosition::kStatic) {
       absContainingBlock = containingBlockForAbsolutePosition();
     } else {
       // When position was not static, containingBlockForAbsolutePosition
@@ -235,8 +235,8 @@ void LayoutInline::updateAlwaysCreateLineBoxes(bool fullLayout) {
   bool alwaysCreateLineBoxesNew =
       (parentLayoutInline && parentLayoutInline->alwaysCreateLineBoxes()) ||
       (parentLayoutInline &&
-       parentStyle.verticalAlign() != VerticalAlignBaseline) ||
-      style()->verticalAlign() != VerticalAlignBaseline ||
+       parentStyle.verticalAlign() != EVerticalAlign::kBaseline) ||
+      style()->verticalAlign() != EVerticalAlign::kBaseline ||
       style()->getTextEmphasisMark() != TextEmphasisMarkNone ||
       (checkFonts &&
        (!styleRef().hasIdenticalAscentDescentAndLineGap(parentStyle) ||
@@ -249,7 +249,7 @@ void LayoutInline::updateAlwaysCreateLineBoxes(bool fullLayout) {
     const ComputedStyle& childStyle = styleRef(true);
     alwaysCreateLineBoxesNew =
         !firstLineParentStyle.hasIdenticalAscentDescentAndLineGap(childStyle) ||
-        childStyle.verticalAlign() != VerticalAlignBaseline ||
+        childStyle.verticalAlign() != EVerticalAlign::kBaseline ||
         firstLineParentStyle.lineHeight() != childStyle.lineHeight();
   }
 
@@ -282,7 +282,7 @@ LayoutRect LayoutInline::localCaretRect(InlineBox* inlineBox,
       localCaretRectForEmptyElement(borderAndPaddingWidth(), LayoutUnit());
 
   if (InlineBox* firstBox = firstLineBox())
-    caretRect.moveBy(firstBox->topLeft());
+    caretRect.moveBy(firstBox->location());
 
   return caretRect;
 }
@@ -356,7 +356,7 @@ void LayoutInline::addChildIgnoringContinuation(LayoutObject* newChild,
       newStyle->setPosition(positionedAncestor->style()->position());
 
     LayoutBlockFlow* newBox = LayoutBlockFlow::createAnonymous(&document());
-    newBox->setStyle(newStyle.release());
+    newBox->setStyle(std::move(newStyle));
     LayoutBoxModelObject* oldContinuation = continuation();
     setContinuation(newBox);
 
@@ -420,7 +420,7 @@ void LayoutInline::splitInlines(LayoutBlockFlow* fromBlock,
   for (LayoutObject* o = this; o != fromBlock; o = o->parent()) {
     topMostInline = toLayoutInline(o);
     if (inlinesToClone.size() < cMaxSplitDepth)
-      inlinesToClone.append(topMostInline);
+      inlinesToClone.push_back(topMostInline);
     // Keep walking up the chain to ensure |topMostInline| is a child of
     // |fromBlock|, to avoid assertion failure when |fromBlock|'s children are
     // moved to |toBlock| below.
@@ -470,7 +470,7 @@ void LayoutInline::splitInlines(LayoutBlockFlow* fromBlock,
 
   // The last inline to clone is |this|, and the current |cloneInline| is cloned
   // from |this|.
-  ASSERT(this == inlinesToClone.first());
+  ASSERT(this == inlinesToClone.front());
 
   // Hook |cloneInline| up as the continuation of the middle block.
   cloneInline->setContinuation(oldCont);
@@ -571,29 +571,28 @@ void LayoutInline::addChildToContinuation(LayoutObject* newChild,
       beforeChildParent = flow;
   }
 
-  // TODO(rhogan): Should we treat out-of-flows and floats as through they're
-  // inline below?
-  if (newChild->isFloatingOrOutOfFlowPositioned())
-    return beforeChildParent->addChildIgnoringContinuation(newChild,
-                                                           beforeChild);
-
-  // A table part will be wrapped by an inline anonymous table when it is added
-  // to the layout tree, so treat it as inline when deciding where to add it.
-  bool childInline = newChild->isInline() || newChild->isTablePart();
-  bool bcpInline = beforeChildParent->isInline();
-  bool flowInline = flow->isInline();
-
+  // If the two candidates are the same, no further checking is necessary.
   if (flow == beforeChildParent)
     return flow->addChildIgnoringContinuation(newChild, beforeChild);
 
+  // A table part will be wrapped by an inline anonymous table when it is added
+  // to the layout tree, so treat it as inline when deciding where to add
+  // it. Floating and out-of-flow-positioned objects can also live under
+  // inlines, and since this about adding a child to an inline parent, we
+  // should not put them into a block continuation.
+  bool addInsideInline = newChild->isInline() || newChild->isTablePart() ||
+                         newChild->isFloatingOrOutOfFlowPositioned();
+
   // The goal here is to match up if we can, so that we can coalesce and create
   // the minimal # of continuations needed for the inline.
-  if (childInline == bcpInline || (beforeChild && beforeChild->isInline()))
+  if (addInsideInline == beforeChildParent->isInline() ||
+      (beforeChild && beforeChild->isInline())) {
     return beforeChildParent->addChildIgnoringContinuation(newChild,
                                                            beforeChild);
-  if (flowInline == childInline) {
+  }
+  if (addInsideInline == flow->isInline()) {
     // Just treat like an append.
-    return flow->addChildIgnoringContinuation(newChild, 0);
+    return flow->addChildIgnoringContinuation(newChild);
   }
   return beforeChildParent->addChildIgnoringContinuation(newChild, beforeChild);
 }
@@ -609,7 +608,7 @@ void LayoutInline::generateLineBoxRects(GeneratorContext& yield) const {
     generateCulledLineBoxRects(yield, this);
   } else if (InlineFlowBox* curr = firstLineBox()) {
     for (; curr; curr = curr->nextLineBox())
-      yield(LayoutRect(curr->topLeft(), curr->size()));
+      yield(LayoutRect(curr->location(), curr->size()));
   }
 }
 
@@ -721,7 +720,7 @@ class AbsoluteRectsGeneratorContext {
     IntRect intRect = enclosingIntRect(rect);
     intRect.move(m_accumulatedOffset.x().toInt(),
                  m_accumulatedOffset.y().toInt());
-    m_rects.append(intRect);
+    m_rects.push_back(intRect);
   }
 
  private:
@@ -758,13 +757,14 @@ namespace {
 class AbsoluteQuadsGeneratorContext {
  public:
   AbsoluteQuadsGeneratorContext(const LayoutInline* layoutObject,
-                                Vector<FloatQuad>& quads)
-      : m_quads(quads), m_geometryMap() {
+                                Vector<FloatQuad>& quads,
+                                MapCoordinatesFlags mode)
+      : m_quads(quads), m_geometryMap(mode) {
     m_geometryMap.pushMappingsToAncestor(layoutObject, 0);
   }
 
   void operator()(const FloatRect& rect) {
-    m_quads.append(m_geometryMap.absoluteRect(rect));
+    m_quads.push_back(m_geometryMap.absoluteRect(rect));
   }
   void operator()(const LayoutRect& rect) { operator()(FloatRect(rect)); }
 
@@ -775,8 +775,9 @@ class AbsoluteQuadsGeneratorContext {
 
 }  // unnamed namespace
 
-void LayoutInline::absoluteQuadsForSelf(Vector<FloatQuad>& quads) const {
-  AbsoluteQuadsGeneratorContext context(this, quads);
+void LayoutInline::absoluteQuadsForSelf(Vector<FloatQuad>& quads,
+                                        MapCoordinatesFlags mode) const {
+  AbsoluteQuadsGeneratorContext context(this, quads, mode);
   generateLineBoxRects(context);
   if (quads.isEmpty())
     context(FloatRect());
@@ -784,7 +785,7 @@ void LayoutInline::absoluteQuadsForSelf(Vector<FloatQuad>& quads) const {
 
 LayoutPoint LayoutInline::firstLineBoxTopLeft() const {
   if (InlineBox* firstBox = firstLineBoxIncludingCulling())
-    return firstBox->topLeft();
+    return firstBox->location();
   return LayoutPoint();
 }
 
@@ -874,12 +875,16 @@ class HitTestCulledInlinesGeneratorContext {
                                        const HitTestLocation& location)
       : m_intersected(false), m_region(region), m_location(location) {}
   void operator()(const FloatRect& rect) {
-    m_intersected = m_intersected || m_location.intersects(rect);
-    m_region.unite(enclosingIntRect(rect));
+    if (m_location.intersects(rect)) {
+      m_intersected = true;
+      m_region.unite(enclosingIntRect(rect));
+    }
   }
   void operator()(const LayoutRect& rect) {
-    m_intersected = m_intersected || m_location.intersects(rect);
-    m_region.unite(enclosingIntRect(rect));
+    if (m_location.intersects(rect)) {
+      m_intersected = true;
+      m_region.unite(enclosingIntRect(rect));
+    }
   }
   bool intersected() const { return m_intersected; }
 
@@ -1154,7 +1159,7 @@ LayoutRect LayoutInline::localVisualRect() const {
   if (!alwaysCreateLineBoxes())
     return LayoutRect();
 
-  if (style()->visibility() != EVisibility::Visible)
+  if (style()->visibility() != EVisibility::kVisible)
     return LayoutRect();
 
   return visualOverflowRect();
@@ -1418,7 +1423,7 @@ class AbsoluteLayoutRectsGeneratorContext {
   void operator()(const LayoutRect& rect) {
     LayoutRect layoutRect(rect);
     layoutRect.moveBy(m_accumulatedOffset);
-    m_rects.append(layoutRect);
+    m_rects.push_back(layoutRect);
   }
 
  private:
@@ -1482,7 +1487,7 @@ void LayoutInline::computeSelfHitTestRects(
 
 void LayoutInline::addAnnotatedRegions(Vector<AnnotatedRegionValue>& regions) {
   // Convert the style regions to absolute coordinates.
-  if (style()->visibility() != EVisibility::Visible)
+  if (style()->visibility() != EVisibility::kVisible)
     return;
 
   if (style()->getDraggableRegionMode() == DraggableRegionNone)
@@ -1500,7 +1505,7 @@ void LayoutInline::addAnnotatedRegions(Vector<AnnotatedRegionValue>& regions) {
   region.bounds.setX(LayoutUnit(absPos.x() + region.bounds.x()));
   region.bounds.setY(LayoutUnit(absPos.y() + region.bounds.y()));
 
-  regions.append(region);
+  regions.push_back(region);
 }
 
 void LayoutInline::invalidateDisplayItemClients(

@@ -6,6 +6,7 @@
 
 #include "base/i18n/rtl.h"
 #include "ipc/ipc_message_utils.h"
+#include "mojo/common/common_custom_types_struct_traits.h"
 #include "url/mojo/origin_struct_traits.h"
 #include "url/mojo/url_gurl_struct_traits.h"
 
@@ -75,48 +76,6 @@ bool EnumTraits<mojom::RoleAttribute, FormFieldData::RoleAttribute>::FromMojom(
       return true;
     case mojom::RoleAttribute::ROLE_ATTRIBUTE_OTHER:
       *output = FormFieldData::RoleAttribute::ROLE_ATTRIBUTE_OTHER;
-      return true;
-  }
-
-  NOTREACHED();
-  return false;
-}
-
-// static
-mojom::TextDirection
-EnumTraits<mojom::TextDirection, base::i18n::TextDirection>::ToMojom(
-    base::i18n::TextDirection input) {
-  switch (input) {
-    case base::i18n::TextDirection::UNKNOWN_DIRECTION:
-      return mojom::TextDirection::UNKNOWN_DIRECTION;
-    case base::i18n::TextDirection::RIGHT_TO_LEFT:
-      return mojom::TextDirection::RIGHT_TO_LEFT;
-    case base::i18n::TextDirection::LEFT_TO_RIGHT:
-      return mojom::TextDirection::LEFT_TO_RIGHT;
-    case base::i18n::TextDirection::TEXT_DIRECTION_NUM_DIRECTIONS:
-      return mojom::TextDirection::TEXT_DIRECTION_NUM_DIRECTIONS;
-  }
-
-  NOTREACHED();
-  return mojom::TextDirection::UNKNOWN_DIRECTION;
-}
-
-// static
-bool EnumTraits<mojom::TextDirection, base::i18n::TextDirection>::FromMojom(
-    mojom::TextDirection input,
-    base::i18n::TextDirection* output) {
-  switch (input) {
-    case mojom::TextDirection::UNKNOWN_DIRECTION:
-      *output = base::i18n::TextDirection::UNKNOWN_DIRECTION;
-      return true;
-    case mojom::TextDirection::RIGHT_TO_LEFT:
-      *output = base::i18n::TextDirection::RIGHT_TO_LEFT;
-      return true;
-    case mojom::TextDirection::LEFT_TO_RIGHT:
-      *output = base::i18n::TextDirection::LEFT_TO_RIGHT;
-      return true;
-    case mojom::TextDirection::TEXT_DIRECTION_NUM_DIRECTIONS:
-      *output = base::i18n::TextDirection::TEXT_DIRECTION_NUM_DIRECTIONS;
       return true;
   }
 
@@ -336,6 +295,8 @@ bool StructTraits<mojom::FormFieldDataDataView, FormFieldData>::Read(
     return false;
   if (!data.ReadName(&out->name))
     return false;
+  if (!data.ReadId(&out->id))
+    return false;
   if (!data.ReadValue(&out->value))
     return false;
 
@@ -545,6 +506,11 @@ bool StructTraits<mojom::PasswordFormDataView, PasswordForm>::Read(
 
   out->new_password_value_is_default = data.new_password_value_is_default();
   out->new_password_marked_by_site = data.new_password_marked_by_site();
+
+  if (!data.ReadConfirmationPasswordElement(
+          &out->confirmation_password_element))
+    return false;
+
   out->preferred = data.preferred();
 
   if (!data.ReadDateCreated(&out->date_created) ||

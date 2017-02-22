@@ -14,6 +14,7 @@
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+#include "ui/aura/window_observer.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace aura {
@@ -26,7 +27,8 @@ class ImmersiveModeControllerAsh
     : public ImmersiveModeController,
       public ash::ImmersiveFullscreenControllerDelegate,
       public ash::wm::WindowStateObserver,
-      public content::NotificationObserver {
+      public content::NotificationObserver,
+      public aura::WindowObserver {
  public:
   ImmersiveModeControllerAsh();
   ~ImmersiveModeControllerAsh() override;
@@ -37,7 +39,6 @@ class ImmersiveModeControllerAsh
   void Init(BrowserView* browser_view) override;
   void SetEnabled(bool enabled) override;
   bool IsEnabled() const override;
-  bool ShouldHideTabIndicators() const override;
   bool ShouldHideTopViews() const override;
   bool IsRevealed() const override;
   int GetTopContainerVerticalOffset(
@@ -46,6 +47,7 @@ class ImmersiveModeControllerAsh
       WARN_UNUSED_RESULT;
   void OnFindBarVisibleBoundsChanged(
       const gfx::Rect& new_visible_bounds_in_screen) override;
+  views::Widget* GetRevealWidget() override;
 
  private:
   // Enables or disables observers for window restore and entering / exiting
@@ -54,10 +56,6 @@ class ImmersiveModeControllerAsh
 
   // Updates the browser root view's layout including window caption controls.
   void LayoutBrowserRootView();
-
-  // Updates whether the tab strip is painted in a short "light bar" style.
-  // Returns true if the visibility of the tab indicators has changed.
-  bool UpdateTabIndicators();
 
   // Used when running in mash to create |mash_reveal_widget_|. Does nothing
   // if already null.
@@ -82,6 +80,11 @@ class ImmersiveModeControllerAsh
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
 
+  // aura::WindowObserver override:
+  void OnWindowPropertyChanged(aura::Window* window,
+                               const void* key,
+                               intptr_t old) override;
+
   std::unique_ptr<ash::ImmersiveFullscreenController> controller_;
 
   // Not owned.
@@ -92,18 +95,12 @@ class ImmersiveModeControllerAsh
   // fullscreen are enabled.
   bool observers_enabled_;
 
-  // Whether a short "light bar" version of the tab strip should be painted when
-  // the top-of-window views are closed. If |use_tab_indicators_| is false, the
-  // tab strip is not painted at all when the top-of-window views are closed.
-  bool use_tab_indicators_;
-
   // The current visible bounds of the find bar, in screen coordinates. This is
   // an empty rect if the find bar is not visible.
   gfx::Rect find_bar_visible_bounds_in_screen_;
 
   // The fraction of the TopContainerView's height which is visible. Zero when
-  // the top-of-window views are not revealed regardless of
-  // |use_tab_indicators_|.
+  // the top-of-window views are not revealed.
   double visible_fraction_;
 
   // When running in mash a widget is created to draw the top container. This

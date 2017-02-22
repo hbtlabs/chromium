@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/metrics/user_metrics.h"
 #include "base/time/default_tick_clock.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -24,8 +25,11 @@ namespace {
 // Delay between timer callbacks. Each one plays a tick sound.
 constexpr int kTimerDelayInMS = 500;
 
+// The number of ticks of the timer before the first sound is generated.
+constexpr int kTimerTicksOfFirstSoundFeedback = 6;
+
 // The number of ticks of the timer before toggling spoken feedback.
-constexpr int kTimerTicksToToggleSpokenFeedback = 7;
+constexpr int kTimerTicksToToggleSpokenFeedback = 10;
 
 }  // namespace
 
@@ -56,7 +60,7 @@ void TouchAccessibilityEnabler::HandleTouchEvent(const ui::TouchEvent& event) {
   DCHECK(!(event.flags() & ui::EF_TOUCH_ACCESSIBILITY));
   const ui::EventType type = event.type();
   const gfx::PointF& location = event.location_f();
-  const int touch_id = event.touch_id();
+  const int touch_id = event.pointer_details().id;
 
   if (type == ui::ET_TOUCH_PRESSED) {
     touch_locations_.insert(std::pair<int, gfx::PointF>(touch_id, location));
@@ -135,7 +139,14 @@ void TouchAccessibilityEnabler::OnTimer() {
   double tick_count_f =
       (now - two_finger_start_time_).InMillisecondsF() / kTimerDelayInMS;
   int tick_count = roundf(tick_count_f);
-  if (tick_count >= 1 && tick_count < kTimerTicksToToggleSpokenFeedback) {
+
+  if (tick_count == kTimerTicksOfFirstSoundFeedback) {
+    base::RecordAction(
+        base::UserMetricsAction("Accessibility.TwoFingersHeldDown"));
+  }
+
+  if (tick_count >= kTimerTicksOfFirstSoundFeedback &&
+      tick_count < kTimerTicksToToggleSpokenFeedback) {
     delegate_->PlaySpokenFeedbackToggleCountdown(tick_count);
   }
   if (tick_count == kTimerTicksToToggleSpokenFeedback) {

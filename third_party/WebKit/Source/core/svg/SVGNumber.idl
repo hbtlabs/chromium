@@ -20,11 +20,11 @@
  * Boston, MA 02110-1301, USA.
  */
 
-// http://www.w3.org/TR/SVG2/types.html#InterfaceSVGNumber
+// https://svgwg.org/svg2-draft/types.html#InterfaceSVGNumber
 
 [
+    DependentLifetime,
     ImplementedAs=SVGNumberTearOff,
-    SetWrapperReferenceTo(SVGElement contextElement),
 ] interface SVGNumber {
     [RaisesException=Setter] attribute float value;
 };

@@ -7,8 +7,8 @@
 // in an iframe. Iframes can be layered on top of each other, but not mixed in
 // with page content, so all overlapping content on uber must be framed.
 
-<include src="../../../../ui/webui/resources/js/util.js">
-<include src="uber_utils.js">
+// <include src="../../../../ui/webui/resources/js/util.js">
+// <include src="uber_utils.js">
 
 cr.define('uber_frame', function() {
 
@@ -120,7 +120,7 @@ cr.define('uber_frame', function() {
    */
   function adjustToScroll(scrollLeft) {
     assert(isRTL());
-    document.body.style.webkitTransform = 'translateX(' + -scrollLeft + 'px)';
+    document.body.style.transform = 'translateX(' + -scrollLeft + 'px)';
   }
 
   /**

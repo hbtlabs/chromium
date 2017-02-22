@@ -3,15 +3,36 @@
         {
             "type": "view",
             "location": "panel",
-            "id": "profiles",
-            "title": "Profiles",
+            "id": "heap_profiler",
+            "title": "Memory",
             "order": 60,
-            "className": "Profiler.ProfilesPanel"
+            "className": "Profiler.HeapProfilerPanel"
+        },
+        {
+            "type": "view",
+            "location": "panel",
+            "id": "js_profiler",
+            "title": "Profiler",
+            "order": 65,
+            "className": "Profiler.JSProfilerPanel",
+            "condition": "v8only"
+        },
+        {
+            "type": "view",
+            "location": "panel",
+            "id": "js_profiler",
+            "title": "JavaScript Profiler",
+            "persistence": "closeable",
+            "order": 65,
+            "className": "Profiler.JSProfilerPanel",
+            "condition": "!v8only"
         },
         {
             "type": "@UI.ContextMenu.Provider",
-            "contextTypes": ["SDK.RemoteObject"],
-            "className": "Profiler.ProfilesPanel.ContextMenuProvider"
+            "contextTypes": [
+                "SDK.RemoteObject"
+            ],
+            "className": "Profiler.HeapProfilerPanel"
         },
         {
             "type": "setting",
@@ -39,12 +60,35 @@
         },
         {
             "type": "@UI.ActionDelegate",
-            "actionId": "profiler.toggle-recording",
+            "actionId": "profiler.heap-toggle-recording",
             "iconClass": "largeicon-start-recording",
             "toggledIconClass": "largeicon-stop-recording",
             "toggleWithRedColor": true,
-            "contextTypes": ["Profiler.ProfilesPanel"],
-            "className": "Profiler.ProfilesPanel.RecordActionDelegate",
+            "contextTypes": [
+                "Profiler.HeapProfilerPanel"
+            ],
+            "className": "Profiler.HeapProfilerPanel",
+            "bindings": [
+                {
+                    "platform": "windows,linux",
+                    "shortcut": "Ctrl+E"
+                },
+                {
+                    "platform": "mac",
+                    "shortcut": "Meta+E"
+                }
+            ]
+        },
+        {
+            "type": "@UI.ActionDelegate",
+            "actionId": "profiler.js-toggle-recording",
+            "iconClass": "largeicon-start-recording",
+            "toggledIconClass": "largeicon-stop-recording",
+            "toggleWithRedColor": true,
+            "contextTypes": [
+                "Profiler.JSProfilerPanel"
+            ],
+            "className": "Profiler.JSProfilerPanel",
             "bindings": [
                 {
                     "platform": "windows,linux",
@@ -59,10 +103,14 @@
     ],
     "dependencies": [
         "components",
-        "components_lazy",
-        "ui_lazy"
+        "perf_ui",
+        "data_grid",
+        "heap_snapshot_model",
+        "object_ui"
     ],
     "scripts": [
+        "ProfileType.js",
+        "ProfileHeader.js",
         "ProfilesPanel.js",
         "ProfileView.js",
         "ProfileDataGrid.js",
@@ -71,11 +119,11 @@
         "CPUProfileFlameChart.js",
         "CPUProfileView.js",
         "HeapProfileView.js",
-        "HeapSnapshotCommon.js",
         "HeapSnapshotProxy.js",
         "HeapSnapshotDataGrids.js",
         "HeapSnapshotGridNodes.js",
         "HeapSnapshotView.js",
+        "HeapProfilerPanel.js",
         "ProfileLauncherView.js",
         "ProfileTypeRegistry.js",
         "TargetsComboBoxController.js"

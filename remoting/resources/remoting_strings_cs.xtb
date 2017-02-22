@@ -27,9 +27,6 @@ Informace ohledně ochrany soukromí naleznete v zásadách ochrany soukromí sp
 <translation id="1654128982815600832">Povolování vzdálených připojení k tomuto počítači…</translation>
 <translation id="170207782578677537">Registrace tohoto počítače se nezdařila.</translation>
 <translation id="1704090719919187045">Nastavení hostitele funkce Chromoting</translation>
-<translation id="1730409684442507495">• Byla vylepšena kvalita obrazu plochy a responzivita a snížena spotřeba energie.
-• Byla vylepšena responzivita operací kliknutí a přetažení.
-• Bylo vylepšeno několik efektů animace uživatelského rozhraní.</translation>
 <translation id="174018511426417793">Nemáte zaregistrované žádné počítače. Chcete-li umožnit vzdálené připojení k jinému počítači, nainstalujte do něj Vzdálenou plochu Chrome a klikněte na tlačítko <ph name="BUTTON_NAME" />.</translation>
 <translation id="1742469581923031760">Připojování...</translation>
 <translation id="1770394049404108959">Aplikaci nelze otevřít.</translation>
@@ -44,6 +41,10 @@ Informace ohledně ochrany soukromí naleznete v zásadách ochrany soukromí sp
 <translation id="2013996867038862849">Všichni spárovaní klienti byli smazáni.</translation>
 <translation id="2038229918502634450">Hostitel se restartujte za účelem zohlednění změny zásad.</translation>
 <translation id="2046651113449445291">Následující klienti byli spárováni s tímto počítačem a mohou se připojit bez zadávání kódu PIN. Toto oprávnění lze kdykoli zrušit (buď u jednotlivých, nebo u všech klientů).</translation>
+<translation id="2053901200959289492">• Byla přidána podpora režimu několika oken pro Android Nougat.
+• Byla vylepšena kvalita obrazu plochy a responzivita a snížena spotřeba energie.
+• Byla vylepšena responzivita operací kliknutí a přetažení.
+• Bylo vylepšeno několik efektů animace uživatelského rozhraní.</translation>
 <translation id="2078880767960296260">Proces hostitele</translation>
 <translation id="20876857123010370">Režim trackpadu</translation>
 <translation id="2089514346391228378">Vzdálená připojení k tomuto počítači byla povolena.</translation>
@@ -224,6 +225,7 @@ plochy Chrome</translation>
 <translation id="6640610550128933069">naposledy online <ph name="DATE" /></translation>
 <translation id="6668065415969892472">Váš kód PIN byl aktualizován.</translation>
 <translation id="6681800064886881394">Copyright 2013 Google Inc. Všechna práva vyhrazena.</translation>
+<translation id="6705482892455291412">Po zadání kódu budete vyzváni k přijetí připojení a zahájení relace sdílení.</translation>
 <translation id="6746493157771801606">Vymazat historii</translation>
 <translation id="6748108480210050150">Od</translation>
 <translation id="677755392401385740">Pro následujícího uživatele bylo zahájeno hostování: <ph name="HOST_USERNAME" />.</translation>
@@ -300,6 +302,7 @@ plochy Chrome</translation>
 <translation id="9188433529406846933">Autorizovat</translation>
 <translation id="9213184081240281106">Neplatná konfigurace hostitele.</translation>
 <translation id="951991426597076286">Odmítnout</translation>
+<translation id="962733587145768554">Proces dokončíte tím, že v dialogovém okně připojení vyberete možnost <ph name="SHARE" />.</translation>
 <translation id="979100198331752041">Vzdálená plocha Chrome v počítači <ph name="HOSTNAME" /> je zastaralá a potřebuje aktualizovat.</translation>
 <translation id="985602178874221306">Autoři prohlížeče Chromium</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" /> (naposledy online: <ph name="DATE_OR_TIME" />)</translation>

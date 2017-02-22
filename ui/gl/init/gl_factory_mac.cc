@@ -32,7 +32,7 @@ class NoOpGLSurface : public GLSurface {
   explicit NoOpGLSurface(const gfx::Size& size) : size_(size) {}
 
   // Implement GLSurface.
-  bool Initialize(GLSurface::Format format) override { return true; }
+  bool Initialize(GLSurfaceFormat format) override { return true; }
   void Destroy() override {}
   bool IsOffscreen() override { return true; }
   gfx::SwapResult SwapBuffers() override {
@@ -87,6 +87,12 @@ scoped_refptr<GLContext> CreateGLContext(GLShareGroup* share_group,
                                  compatible_surface, attribs);
     case kGLImplementationMockGL:
       return new GLContextStub(share_group);
+    case kGLImplementationStubGL: {
+      scoped_refptr<GLContextStub> stub_context =
+          new GLContextStub(share_group);
+      stub_context->SetUseStubApi(true);
+      return stub_context;
+    }
     default:
       NOTREACHED();
       return nullptr;
@@ -106,6 +112,7 @@ scoped_refptr<GLSurface> CreateViewGLSurface(gfx::AcceleratedWidget window) {
       return InitializeGLSurface(new GLSurfaceOSMesaHeadless());
     }
     case kGLImplementationMockGL:
+    case kGLImplementationStubGL:
       return new GLSurfaceStub;
     default:
       NOTREACHED();
@@ -113,17 +120,21 @@ scoped_refptr<GLSurface> CreateViewGLSurface(gfx::AcceleratedWidget window) {
   }
 }
 
-scoped_refptr<GLSurface> CreateOffscreenGLSurface(const gfx::Size& size) {
+scoped_refptr<GLSurface> CreateOffscreenGLSurfaceWithFormat(
+    const gfx::Size& size, GLSurfaceFormat format) {
   TRACE_EVENT0("gpu", "gl::init::CreateOffscreenGLSurface");
   switch (GetGLImplementation()) {
     case kGLImplementationOSMesaGL:
-      return InitializeGLSurface(
-          new GLSurfaceOSMesa(GLSurface::SURFACE_OSMESA_RGBA, size));
+      format.SetDefaultPixelLayout(GLSurfaceFormat::PIXEL_LAYOUT_RGBA);
+      return InitializeGLSurfaceWithFormat(
+          new GLSurfaceOSMesa(format, size), format);
     case kGLImplementationDesktopGL:
     case kGLImplementationDesktopGLCoreProfile:
     case kGLImplementationAppleGL:
-      return InitializeGLSurface(new NoOpGLSurface(size));
+      return InitializeGLSurfaceWithFormat(
+          new NoOpGLSurface(size), format);
     case kGLImplementationMockGL:
+    case kGLImplementationStubGL:
       return new GLSurfaceStub;
     default:
       NOTREACHED();

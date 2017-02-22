@@ -27,14 +27,20 @@ Polymer({
       type: Object,
       notify: true,
     },
+
+    /** @private */
+    isGuest_: {
+      type: Boolean,
+      value: function() { return loadTimeData.getBoolean('isGuest'); }
+    },
   },
 
-<if expr="chromeos">
+// <if expr="chromeos">
   /** @private */
   onManageAccessibilityFeaturesTap_: function() {
     settings.navigateTo(settings.Route.MANAGE_ACCESSIBILITY);
   },
-</if>
+// </if>
 
   /** @private */
   onMoreFeaturesTap_: function() {

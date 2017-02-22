@@ -12,13 +12,13 @@
 #include "base/callback_forward.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
+#include "chrome/browser/download/download_history.h"
 #include "components/ntp_snippets/callbacks.h"
 #include "components/ntp_snippets/category.h"
-#include "components/ntp_snippets/category_factory.h"
 #include "components/ntp_snippets/category_status.h"
 #include "components/ntp_snippets/content_suggestion.h"
 #include "components/ntp_snippets/content_suggestions_provider.h"
-#include "components/offline_pages/offline_page_model.h"
+#include "components/offline_pages/core/offline_page_model.h"
 #include "content/public/browser/download_manager.h"
 
 class PrefRegistrySimple;
@@ -26,6 +26,10 @@ class PrefService;
 
 namespace offline_pages {
 struct OfflinePageItem;
+}
+
+namespace base {
+class Clock;
 }
 
 // Provides download content suggestions from the offline pages model and the
@@ -38,15 +42,16 @@ class DownloadSuggestionsProvider
     : public ntp_snippets::ContentSuggestionsProvider,
       public offline_pages::OfflinePageModel::Observer,
       public content::DownloadManager::Observer,
-      public content::DownloadItem::Observer {
+      public content::DownloadItem::Observer,
+      public DownloadHistory::Observer {
  public:
   DownloadSuggestionsProvider(
       ContentSuggestionsProvider::Observer* observer,
-      ntp_snippets::CategoryFactory* category_factory,
       offline_pages::OfflinePageModel* offline_page_model,
       content::DownloadManager* download_manager,
+      DownloadHistory* download_history,
       PrefService* pref_service,
-      bool download_manager_ui_enabled);
+      std::unique_ptr<base::Clock> clock);
   ~DownloadSuggestionsProvider() override;
 
   // ContentSuggestionsProvider implementation.
@@ -84,7 +89,9 @@ class DownloadSuggestionsProvider
 
   // OfflinePageModel::Observer implementation.
   void OfflinePageModelLoaded(offline_pages::OfflinePageModel* model) override;
-  void OfflinePageModelChanged(offline_pages::OfflinePageModel* model) override;
+  void OfflinePageAdded(
+      offline_pages::OfflinePageModel* model,
+      const offline_pages::OfflinePageItem& added_page) override;
   void OfflinePageDeleted(int64_t offline_id,
                           const offline_pages::ClientId& client_id) override;
 
@@ -98,6 +105,10 @@ class DownloadSuggestionsProvider
   void OnDownloadOpened(content::DownloadItem* item) override;
   void OnDownloadRemoved(content::DownloadItem* item) override;
   void OnDownloadDestroyed(content::DownloadItem* item) override;
+
+  // DownloadHistory::Observer implementation.
+  void OnHistoryQueryComplete() override;
+  void OnDownloadHistoryDestroyed() override;
 
   // Updates the |category_status_| of the |provided_category_| and notifies the
   // |observer_|, if necessary.
@@ -130,6 +141,11 @@ class DownloadSuggestionsProvider
   ntp_snippets::ContentSuggestion ConvertDownloadItem(
       const content::DownloadItem& download_item) const;
 
+  // Returns true if a download published and last visited times are considered
+  // too old for the download to be shown.
+  bool IsDownloadOutdated(const base::Time& published_time,
+                          const base::Time& last_visited_time);
+
   // Adds |item| to the internal asset download cache if all of the following
   // holds:
   // - the download is completed;
@@ -154,13 +170,14 @@ class DownloadSuggestionsProvider
   void RemoveSuggestionFromCacheAndRetrieveMoreIfNeeded(
       const ntp_snippets::ContentSuggestion::ID& suggestion_id);
 
-  // Processes a list of offline pages (assuming that these are all the offline
-  // pages that currently exist), prunes dismissed IDs and updates internal
-  // cache. If |notify| is true, notifies
+  // Processes a list of offline pages (assuming that these are all the download
+  // offline pages that currently exist), prunes dismissed IDs and updates
+  // internal cache. If |notify| is true, notifies
   // |ContentSuggestionsProvider::Observer|.
   void UpdateOfflinePagesCache(
       bool notify,
-      const std::vector<offline_pages::OfflinePageItem>& all_offline_pages);
+      const std::vector<offline_pages::OfflinePageItem>&
+          all_download_offline_pages);
 
   // Fires the |OnSuggestionInvalidated| event for the suggestion corresponding
   // to the given |id_within_category| and clears it from the dismissed IDs
@@ -197,8 +214,9 @@ class DownloadSuggestionsProvider
   const ntp_snippets::Category provided_category_;
   offline_pages::OfflinePageModel* offline_page_model_;
   content::DownloadManager* download_manager_;
-
+  DownloadHistory* download_history_;
   PrefService* pref_service_;
+  std::unique_ptr<base::Clock> clock_;
 
   // Cached offline page downloads. If there are not enough asset downloads, all
   // of these could be shown (they are the most recently visited, not dismissed
@@ -213,9 +231,7 @@ class DownloadSuggestionsProvider
   // the criteria above are cached, otherwise only |kMaxSuggestionsCount|.
   std::vector<const content::DownloadItem*> cached_asset_downloads_;
 
-  // Whether the Download Manager UI is enabled, in which case the More button
-  // for the Downloads section can redirect there.
-  const bool download_manager_ui_enabled_;
+  bool is_asset_downloads_initialization_complete_;
 
   base::WeakPtrFactory<DownloadSuggestionsProvider> weak_ptr_factory_;
 

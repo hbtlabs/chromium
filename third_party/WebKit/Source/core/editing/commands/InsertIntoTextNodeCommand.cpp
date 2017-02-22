@@ -25,7 +25,7 @@
 
 #include "core/editing/commands/InsertIntoTextNodeCommand.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Document.h"
 #include "core/dom/Text.h"
 #include "core/editing/EditingUtilities.h"
@@ -48,7 +48,7 @@ InsertIntoTextNodeCommand::InsertIntoTextNodeCommand(Text* node,
 
 void InsertIntoTextNodeCommand::doApply(EditingState*) {
   bool passwordEchoEnabled =
-      document().settings() && document().settings()->passwordEchoEnabled();
+      document().settings() && document().settings()->getPasswordEchoEnabled();
   if (passwordEchoEnabled)
     document().updateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -62,16 +62,14 @@ void InsertIntoTextNodeCommand::doApply(EditingState*) {
                                                       m_text.length() - 1);
   }
 
-  m_node->insertData(m_offset, m_text, IGNORE_EXCEPTION);
-  document().updateStyleAndLayout();
+  m_node->insertData(m_offset, m_text, IGNORE_EXCEPTION_FOR_TESTING);
 }
 
 void InsertIntoTextNodeCommand::doUnapply() {
   if (!hasEditableStyle(*m_node))
     return;
 
-  m_node->deleteData(m_offset, m_text.length(), IGNORE_EXCEPTION);
-  document().updateStyleAndLayout();
+  m_node->deleteData(m_offset, m_text.length(), IGNORE_EXCEPTION_FOR_TESTING);
 }
 
 DEFINE_TRACE(InsertIntoTextNodeCommand) {

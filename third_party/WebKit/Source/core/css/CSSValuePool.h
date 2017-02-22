@@ -63,8 +63,7 @@ class CORE_EXPORT CSSValuePool
   CSSColorValue* whiteColor() { return m_colorWhite; }
   CSSColorValue* blackColor() { return m_colorBlack; }
   CSSInheritedValue* inheritedValue() { return m_inheritedValue; }
-  CSSInitialValue* implicitInitialValue() { return m_implicitInitialValue; }
-  CSSInitialValue* explicitInitialValue() { return m_explicitInitialValue; }
+  CSSInitialValue* initialValue() { return m_initialValue; }
   CSSUnsetValue* unsetValue() { return m_unsetValue; }
 
   // Vector caches.
@@ -102,18 +101,18 @@ class CORE_EXPORT CSSValuePool
     // Just wipe out the cache and start rebuilding if it gets too big.
     if (m_colorValueCache.size() > maximumColorCacheSize)
       m_colorValueCache.clear();
-    return m_colorValueCache.add(rgbValue, nullptr);
+    return m_colorValueCache.insert(rgbValue, nullptr);
   }
   FontFamilyValueCache::AddResult getFontFamilyCacheEntry(
       const String& familyName) {
-    return m_fontFamilyValueCache.add(familyName, nullptr);
+    return m_fontFamilyValueCache.insert(familyName, nullptr);
   }
   FontFaceValueCache::AddResult getFontFaceCacheEntry(
       const AtomicString& string) {
     // Just wipe out the cache and start rebuilding if it gets too big.
     if (m_fontFaceValueCache.size() > maximumFontFaceCacheSize)
       m_fontFaceValueCache.clear();
-    return m_fontFaceValueCache.add(string, nullptr);
+    return m_fontFaceValueCache.insert(string, nullptr);
   }
 
   DECLARE_TRACE();
@@ -123,8 +122,7 @@ class CORE_EXPORT CSSValuePool
 
   // Cached individual values.
   Member<CSSInheritedValue> m_inheritedValue;
-  Member<CSSInitialValue> m_implicitInitialValue;
-  Member<CSSInitialValue> m_explicitInitialValue;
+  Member<CSSInitialValue> m_initialValue;
   Member<CSSUnsetValue> m_unsetValue;
   Member<CSSColorValue> m_colorTransparent;
   Member<CSSColorValue> m_colorWhite;

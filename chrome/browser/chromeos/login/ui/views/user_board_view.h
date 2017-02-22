@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/values.h"
 #include "components/proximity_auth/screenlock_bridge.h"
@@ -16,7 +17,10 @@ class AccountId;
 
 namespace chromeos {
 
-class UserBoardModel;
+class UserSelectionScreen;
+
+// TODO(jdufault): Rename UserBoardView to UserSelectionView. See
+// crbug.com/672142.
 
 // Interface between user board screen and its representation, either WebUI
 // or Views one.
@@ -24,8 +28,10 @@ class UserBoardView {
  public:
   virtual ~UserBoardView() {}
 
-  virtual void Bind(UserBoardModel& model) = 0;
+  virtual void Bind(UserSelectionScreen* screen) = 0;
   virtual void Unbind() = 0;
+
+  virtual base::WeakPtr<UserBoardView> GetWeakPtr() = 0;
 
   virtual void SetPublicSessionDisplayName(const AccountId& account_id,
                                            const std::string& display_name) = 0;

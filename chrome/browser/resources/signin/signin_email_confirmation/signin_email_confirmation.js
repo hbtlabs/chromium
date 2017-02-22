@@ -11,10 +11,10 @@ cr.define('signin.emailConfirmation', function() {
     var newEmail = args.newEmail;
     $('dialogTitle').textContent = loadTimeData.getStringF(
         'signinEmailConfirmationTitle', lastEmail);
-    $('createNewUserRadioButton').innerHTML = loadTimeData.getStringF(
-        'signinEmailConfirmationCreateProfileButtonTitle', newEmail);
-    $('startSyncRadioButton').innerHTML = loadTimeData.getStringF(
-        'signinEmailConfirmationStartSyncButtonTitle', newEmail);
+    $('createNewUserRadioButtonSubtitle').textContent = loadTimeData.getStringF(
+        'signinEmailConfirmationCreateProfileButtonSubtitle', newEmail);
+    $('startSyncRadioButtonSubtitle').textContent = loadTimeData.getStringF(
+        'signinEmailConfirmationStartSyncButtonSubtitle', newEmail);
 
     document.addEventListener('keydown', onKeyDown);
     $('confirmButton').addEventListener('click', onConfirm);

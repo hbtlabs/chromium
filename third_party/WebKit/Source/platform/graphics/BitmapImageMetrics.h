@@ -48,8 +48,8 @@ class PLATFORM_EXPORT BitmapImageMetrics {
 
   static void countDecodedImageType(const String& type);
   static void countImageOrientation(const ImageOrientationEnum);
-  static void countImageGamma(SkColorSpace*);
-  static void countOutputGamma(SkColorSpace*);
+  static void countImageGammaAndGamut(SkColorSpace*);
+  static void countOutputGammaAndGamut(SkColorSpace*);
 
  private:
   static Gamma getColorSpaceGamma(SkColorSpace*);

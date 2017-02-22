@@ -7,26 +7,19 @@
 #include <utility>
 
 #include "ash/common/gpu_support_stub.h"
-#include "ash/common/media_delegate.h"
 #include "ash/common/palette_delegate.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/wm_shell.h"
 #include "ash/mus/accessibility_delegate_mus.h"
 #include "ash/mus/context_menu_mus.h"
 #include "ash/mus/shelf_delegate_mus.h"
+#include "ash/mus/system_tray_delegate_mus.h"
 #include "ash/mus/wallpaper_delegate_mus.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "components/user_manager/user_info_impl.h"
-#include "ui/app_list/presenter/app_list_presenter.h"
 #include "ui/gfx/image/image.h"
-
-#if defined(OS_CHROMEOS)
-#include "ash/mus/system_tray_delegate_mus.h"
-#else
-#include "ash/common/system/tray/default_system_tray_delegate.h"
-#endif
 
 namespace ash {
 namespace {
@@ -89,30 +82,10 @@ class SessionStateDelegateStub : public SessionStateDelegate {
   DISALLOW_COPY_AND_ASSIGN(SessionStateDelegateStub);
 };
 
-class MediaDelegateStub : public MediaDelegate {
- public:
-  MediaDelegateStub() {}
-  ~MediaDelegateStub() override {}
-
-  // MediaDelegate:
-  void HandleMediaNextTrack() override { NOTIMPLEMENTED(); }
-  void HandleMediaPlayPause() override { NOTIMPLEMENTED(); }
-  void HandleMediaPrevTrack() override { NOTIMPLEMENTED(); }
-  MediaCaptureState GetMediaCaptureState(UserIndex index) override {
-    NOTIMPLEMENTED();
-    return MEDIA_CAPTURE_NONE;
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MediaDelegateStub);
-};
-
 }  // namespace
 
 ShellDelegateMus::ShellDelegateMus(service_manager::Connector* connector)
-    : connector_(connector), app_list_presenter_(connector) {
-  // |connector_| may be null in tests.
-}
+    : connector_(connector) {}
 
 ShellDelegateMus::~ShellDelegateMus() {}
 
@@ -166,22 +139,12 @@ void ShellDelegateMus::OpenUrlFromArc(const GURL& url) {
   NOTIMPLEMENTED();
 }
 
-app_list::AppListPresenter* ShellDelegateMus::GetAppListPresenter() {
-  return &app_list_presenter_;
-}
-
 ShelfDelegate* ShellDelegateMus::CreateShelfDelegate(ShelfModel* model) {
   return new ShelfDelegateMus();
 }
 
 SystemTrayDelegate* ShellDelegateMus::CreateSystemTrayDelegate() {
-#if defined(OS_CHROMEOS)
   return new SystemTrayDelegateMus();
-#else
-  // Windows and Linux do not support the services required for most system tray
-  // items. Use the same stub delegate as ash_shell_with_content.
-  return new DefaultSystemTrayDelegate();
-#endif
 }
 
 std::unique_ptr<WallpaperDelegate> ShellDelegateMus::CreateWallpaperDelegate() {
@@ -196,12 +159,6 @@ SessionStateDelegate* ShellDelegateMus::CreateSessionStateDelegate() {
 
 AccessibilityDelegate* ShellDelegateMus::CreateAccessibilityDelegate() {
   return new AccessibilityDelegateMus(connector_);
-}
-
-MediaDelegate* ShellDelegateMus::CreateMediaDelegate() {
-  // TODO: http://crbug.com/647409.
-  NOTIMPLEMENTED() << " Using a stub MediaDelegate implementation";
-  return new MediaDelegateStub;
 }
 
 std::unique_ptr<PaletteDelegate> ShellDelegateMus::CreatePaletteDelegate() {
@@ -229,6 +186,20 @@ base::string16 ShellDelegateMus::GetProductName() const {
 gfx::Image ShellDelegateMus::GetDeprecatedAcceleratorImage() const {
   NOTIMPLEMENTED();
   return gfx::Image();
+}
+
+bool ShellDelegateMus::IsTouchscreenEnabledInPrefs(bool use_local_state) const {
+  NOTIMPLEMENTED();
+  return true;
+}
+
+void ShellDelegateMus::SetTouchscreenEnabledInPrefs(bool enabled,
+                                                    bool use_local_state) {
+  NOTIMPLEMENTED();
+}
+
+void ShellDelegateMus::UpdateTouchscreenStatusFromPrefs() {
+  NOTIMPLEMENTED();
 }
 
 }  // namespace ash

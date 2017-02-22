@@ -2,7 +2,6 @@
 <head>
 <script src="../inspector-test.js"></script>
 <script src="../debugger-test.js"></script>
-<script src="../workspace-test.js"></script>
 <script src="../isolated-filesystem-test.js"></script>
 <script src="./persistence-test.js"></script>
 <script src="./resources/foo.js"></script>
@@ -29,6 +28,8 @@ function test()
             function onNetworkTab(sourceFrame)
             {
                 networkSourceFrame = sourceFrame;
+                networkSourceFrame.setSelection(new Common.TextRange(2, 0, 2, 5));
+                networkSourceFrame.scrollToLine(2);
                 dumpSourceFrame(networkSourceFrame);
                 next();
             }
@@ -37,20 +38,12 @@ function test()
         function openFileSystemTab(next)
         {
             InspectorTest.waitForUISourceCode("foo.js", Workspace.projectTypes.FileSystem)
-                .then(onFileSystemSourceCode)
+                .then(code => InspectorTest.showUISourceCodePromise(code))
                 .then(onFileSystemTab);
-
-            function onFileSystemSourceCode(code)
-            {
-                code.setWorkingCopy("\n\nwindow.foo = ()=>'foo2';");
-                return InspectorTest.showUISourceCodePromise(code);
-            }
 
             function onFileSystemTab(sourceFrame)
             {
                 fileSystemSourceFrame = sourceFrame;
-                fileSystemSourceFrame.setSelection(new Common.TextRange(2, 0, 2, 5));
-                fileSystemSourceFrame.scrollToLine(2);
                 dumpSourceFrame(fileSystemSourceFrame);
                 dumpEditorTabs();
                 next();
@@ -65,7 +58,7 @@ function test()
             function onBindingCreated()
             {
                 dumpEditorTabs();
-                dumpSourceFrame(networkSourceFrame);
+                dumpSourceFrame(fileSystemSourceFrame);
                 next();
             }
         },
@@ -109,6 +102,6 @@ function test()
 </script>
 </head>
 <body onload="runTest()">
-<p>Verify that tabs get merged and split when binding is added and removed.</p>
+<p>Verify that tabs get merged when binding is added and removed.</p>
 </body>
 </html>

@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/security_interstitials/core/metrics_helper.h"
@@ -23,6 +23,10 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 using security_interstitials::SSLErrorUI;
 
 namespace {
@@ -34,11 +38,6 @@ enum SSLExpirationAndDecision {
   NOT_EXPIRED_AND_DO_NOT_PROCEED,
   END_OF_SSL_EXPIRATION_AND_DECISION,
 };
-
-// Rappor prefix, which is used for both overridable and non-overridable
-// interstitials so we don't leak the "overridable" bit.
-const char kDeprecatedSSLRapporPrefix[] = "ssl2";
-const char kSSLRapporPrefix[] = "ssl3";
 
 void RecordSSLExpirationPageEventState(bool expired_but_previously_allowed,
                                        bool proceed,
@@ -71,10 +70,6 @@ IOSChromeMetricsHelper* CreateMetricsHelper(web::WebState* web_state,
   security_interstitials::MetricsHelper::ReportDetails reporting_info;
   reporting_info.metric_prefix =
       overridable ? "ssl_overridable" : "ssl_nonoverridable";
-  reporting_info.rappor_prefix = kSSLRapporPrefix;
-  reporting_info.deprecated_rappor_prefix = kDeprecatedSSLRapporPrefix;
-  reporting_info.rappor_report_type = rappor::LOW_FREQUENCY_UMA_RAPPOR_TYPE;
-  reporting_info.deprecated_rappor_report_type = rappor::UMA_RAPPOR_TYPE;
   return new IOSChromeMetricsHelper(web_state, request_url, reporting_info);
 }
 

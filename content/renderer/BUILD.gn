@@ -2,24 +2,28 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chromecast_build.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
+import("//build/split_static_library.gni")
 import("//media/media_options.gni")
 import("//ppapi/features/features.gni")
 import("//printing/features/features.gni")
-import("//third_party/webrtc/build/webrtc.gni")
+import("//third_party/webrtc/webrtc.gni")
 import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
 if (is_component_build) {
   link_target_type = "source_set"
 } else {
-  link_target_type = "static_library"
+  link_target_type = "split_static_library"
 }
+
 target(link_target_type, "renderer") {
   # Only the public target should depend on this. All other targets (even
   # internal content ones) should depend on the public one.
   visibility = [
     ":for_content_tests",
+    "//content/app:*",
     "//content/public/renderer:renderer_sources",
   ]
 
@@ -32,8 +36,6 @@ target(link_target_type, "renderer") {
     "accessibility/render_accessibility_impl.h",
     "android/address_detector.cc",
     "android/address_detector.h",
-    "android/app_web_message_port_client.cc",
-    "android/app_web_message_port_client.h",
     "android/content_detector.cc",
     "android/content_detector.h",
     "android/disambiguation_popup_helper.cc",
@@ -51,12 +53,6 @@ target(link_target_type, "renderer") {
     "android/synchronous_compositor_proxy.cc",
     "android/synchronous_compositor_proxy.h",
     "android/synchronous_compositor_registry.h",
-    "background_sync/background_sync_client_impl.cc",
-    "background_sync/background_sync_client_impl.h",
-    "bluetooth/bluetooth_type_converters.cc",
-    "bluetooth/bluetooth_type_converters.h",
-    "bluetooth/web_bluetooth_impl.cc",
-    "bluetooth/web_bluetooth_impl.h",
     "browser_plugin/browser_plugin.cc",
     "browser_plugin/browser_plugin.h",
     "browser_plugin/browser_plugin_manager.cc",
@@ -73,6 +69,8 @@ target(link_target_type, "renderer") {
     "child_frame_compositing_helper.h",
     "clipboard_utils.cc",
     "clipboard_utils.h",
+    "content_security_policy_util.cc",
+    "content_security_policy_util.h",
     "context_menu_params_builder.cc",
     "context_menu_params_builder.h",
     "cursor_utils.cc",
@@ -128,8 +126,12 @@ target(link_target_type, "renderer") {
     "fetchers/resource_fetcher_impl.h",
     "frame_blame_context.cc",
     "frame_blame_context.h",
+    "frame_owner_properties.cc",
+    "frame_owner_properties.h",
     "gamepad_shared_memory_reader.cc",
     "gamepad_shared_memory_reader.h",
+    "gpu/actions_parser.cc",
+    "gpu/actions_parser.h",
     "gpu/compositor_dependencies.h",
     "gpu/compositor_external_begin_frame_source.cc",
     "gpu/compositor_external_begin_frame_source.h",
@@ -148,16 +150,18 @@ target(link_target_type, "renderer") {
     "gpu/renderer_compositor_frame_sink.h",
     "gpu/stream_texture_host_android.cc",
     "gpu/stream_texture_host_android.h",
-    "history_controller.cc",
-    "history_controller.h",
     "history_entry.cc",
     "history_entry.h",
     "history_serialization.cc",
     "history_serialization.h",
     "idle_user_detector.cc",
     "idle_user_detector.h",
+    "image_downloader/image_downloader_base.cc",
+    "image_downloader/image_downloader_base.h",
     "image_downloader/image_downloader_impl.cc",
     "image_downloader/image_downloader_impl.h",
+    "image_downloader/single_image_downloader.cc",
+    "image_downloader/single_image_downloader.h",
     "ime_event_guard.cc",
     "ime_event_guard.h",
     "in_process_renderer_thread.cc",
@@ -176,6 +180,10 @@ target(link_target_type, "renderer") {
     "input/render_widget_input_handler.cc",
     "input/render_widget_input_handler.h",
     "input/render_widget_input_handler_delegate.h",
+    "input/scoped_web_input_event_with_latency_info.cc",
+    "input/scoped_web_input_event_with_latency_info.h",
+    "installedapp/related_apps_fetcher.cc",
+    "installedapp/related_apps_fetcher.h",
     "internal_document_state_data.cc",
     "internal_document_state_data.h",
     "java/gin_java_bridge_dispatcher.cc",
@@ -208,8 +216,6 @@ target(link_target_type, "renderer") {
     "media/android/stream_texture_factory.h",
     "media/android/stream_texture_wrapper_impl.cc",
     "media/android/stream_texture_wrapper_impl.h",
-    "media/android/webmediaplayer_android.cc",
-    "media/android/webmediaplayer_android.h",
     "media/audio_decoder.cc",
     "media/audio_decoder.h",
     "media/audio_device_factory.cc",
@@ -280,16 +286,17 @@ target(link_target_type, "renderer") {
     "origin_trials/web_trial_token_validator_impl.h",
     "peripheral_content_heuristic.cc",
     "peripheral_content_heuristic.h",
-    "presentation/presentation_connection_client.cc",
-    "presentation/presentation_connection_client.h",
+    "presentation/presentation_connection_proxy.cc",
+    "presentation/presentation_connection_proxy.h",
     "presentation/presentation_dispatcher.cc",
     "presentation/presentation_dispatcher.h",
-    "push_messaging/push_messaging_dispatcher.cc",
-    "push_messaging/push_messaging_dispatcher.h",
+    "push_messaging/push_messaging_client.cc",
+    "push_messaging/push_messaging_client.h",
     "render_frame_impl.cc",
     "render_frame_impl.h",
     "render_frame_proxy.cc",
     "render_frame_proxy.h",
+    "render_process.cc",
     "render_process.h",
     "render_process_impl.cc",
     "render_process_impl.h",
@@ -302,8 +309,6 @@ target(link_target_type, "renderer") {
     "render_view_win.cc",
     "render_widget.cc",
     "render_widget.h",
-    "render_widget_fullscreen.cc",
-    "render_widget_fullscreen.h",
     "render_widget_mouse_lock_dispatcher.cc",
     "render_widget_mouse_lock_dispatcher.h",
     "render_widget_owner_delegate.h",
@@ -345,6 +350,8 @@ target(link_target_type, "renderer") {
     "service_worker/service_worker_context_client.h",
     "service_worker/service_worker_context_message_filter.cc",
     "service_worker/service_worker_context_message_filter.h",
+    "service_worker/service_worker_type_converters.cc",
+    "service_worker/service_worker_type_converters.h",
     "service_worker/service_worker_type_util.cc",
     "service_worker/service_worker_type_util.h",
     "shared_memory_seqlock_reader.cc",
@@ -353,8 +360,10 @@ target(link_target_type, "renderer") {
     "shared_worker/embedded_shared_worker_content_settings_client_proxy.h",
     "shared_worker/embedded_shared_worker_stub.cc",
     "shared_worker/embedded_shared_worker_stub.h",
-    "shared_worker_repository.cc",
-    "shared_worker_repository.h",
+    "shared_worker/shared_worker_repository.cc",
+    "shared_worker/shared_worker_repository.h",
+    "shared_worker/websharedworker_proxy.cc",
+    "shared_worker/websharedworker_proxy.h",
     "skia_benchmarking_extension.cc",
     "skia_benchmarking_extension.h",
     "speech_recognition_dispatcher.cc",
@@ -385,9 +394,16 @@ target(link_target_type, "renderer") {
     "webscrollbarbehavior_impl_aura.h",
     "webscrollbarbehavior_impl_mac.h",
     "webscrollbarbehavior_impl_mac.mm",
-    "websharedworker_proxy.cc",
-    "websharedworker_proxy.h",
   ]
+
+  if (!is_component_build) {
+    if (is_win && is_official_build) {
+      split_count = 2  # In certain configurations a full renderer.lib can
+                       # be 2+ GB which breaks some Windows tools.
+    } else {
+      split_count = 1
+    }
+  }
 
   configs += [
     "//content:content_implementation",
@@ -399,12 +415,15 @@ target(link_target_type, "renderer") {
   deps = [
     "//base:i18n",
     "//cc",
+    "//cc/animation",
     "//cc/blink",
     "//cc/ipc",
-    "//cc/proto",
+    "//cc/paint",
     "//cc/surfaces",
     "//cc/surfaces:surface_id",
+    "//cc/surfaces:surfaces",
     "//components/discardable_memory/client",
+    "//components/payments:payment_app",
     "//components/url_formatter",
     "//content:resources",
     "//content/child",
@@ -417,11 +436,12 @@ target(link_target_type, "renderer") {
     "//crypto:platform",
     "//device/base/synchronization",
     "//device/battery:mojo_bindings",
-    "//device/bluetooth",
+    "//device/gamepad/public/interfaces",
+    "//device/screen_orientation/public/interfaces",
     "//device/sensors/public/cpp",
+    "//device/sensors/public/interfaces",
     "//device/usb/public/interfaces",
     "//device/vibration:mojo_bindings",
-    "//device/vr:mojo_bindings",
     "//gin",
     "//gpu",
     "//gpu/command_buffer/client:gles2_interface",
@@ -433,7 +453,7 @@ target(link_target_type, "renderer") {
     "//media/gpu/ipc/client",
     "//media/gpu/ipc/common",
     "//media/midi",
-    "//media/midi:mojo_cpp_sources",
+    "//media/midi:mojo",
     "//media/mojo/interfaces:remoting",
     "//mojo/common",
     "//mojo/edk/js",
@@ -445,6 +465,7 @@ target(link_target_type, "renderer") {
     "//sandbox",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/interfaces",
+    "//services/ui/public/cpp/gpu",
     "//skia",
     "//storage/common",
     "//third_party/WebKit/public:blink",
@@ -523,10 +544,12 @@ target(link_target_type, "renderer") {
       "media/aec_dump_message_filter.h",
       "media/audio_repetition_detector.cc",
       "media/audio_repetition_detector.h",
-      "media/audio_track_recorder.cc",
-      "media/audio_track_recorder.h",
-      "media/canvas_capture_handler.cc",
-      "media/canvas_capture_handler.h",
+      "media/capturefromelement/canvas_capture_handler.cc",
+      "media/capturefromelement/canvas_capture_handler.h",
+      "media/capturefromelement/html_audio_element_capturer_source.cc",
+      "media/capturefromelement/html_audio_element_capturer_source.h",
+      "media/capturefromelement/html_video_element_capturer_source.cc",
+      "media/capturefromelement/html_video_element_capturer_source.h",
       "media/external_media_stream_audio_source.cc",
       "media/external_media_stream_audio_source.h",
       "media/gpu/rtc_video_decoder.cc",
@@ -537,10 +560,6 @@ target(link_target_type, "renderer") {
       "media/gpu/rtc_video_encoder.h",
       "media/gpu/rtc_video_encoder_factory.cc",
       "media/gpu/rtc_video_encoder_factory.h",
-      "media/html_audio_element_capturer_source.cc",
-      "media/html_audio_element_capturer_source.h",
-      "media/html_video_element_capturer_source.cc",
-      "media/html_video_element_capturer_source.h",
       "media/image_capture_frame_grabber.cc",
       "media/image_capture_frame_grabber.h",
       "media/local_media_stream_audio_source.cc",
@@ -549,8 +568,6 @@ target(link_target_type, "renderer") {
       "media/media_devices_event_dispatcher.h",
       "media/media_devices_listener_impl.cc",
       "media/media_devices_listener_impl.h",
-      "media/media_recorder_handler.cc",
-      "media/media_recorder_handler.h",
       "media/media_stream.cc",
       "media/media_stream.h",
       "media/media_stream_audio_deliverer.h",
@@ -568,6 +585,8 @@ target(link_target_type, "renderer") {
       "media/media_stream_center.h",
       "media/media_stream_constraints_util.cc",
       "media/media_stream_constraints_util.h",
+      "media/media_stream_constraints_util_video_source.cc",
+      "media/media_stream_constraints_util_video_source.h",
       "media/media_stream_dispatcher.cc",
       "media/media_stream_dispatcher.h",
       "media/media_stream_dispatcher_eventhandler.h",
@@ -588,6 +607,12 @@ target(link_target_type, "renderer") {
       "media/media_stream_video_track.h",
       "media/peer_connection_tracker.cc",
       "media/peer_connection_tracker.h",
+      "media/recorder/audio_track_recorder.cc",
+      "media/recorder/audio_track_recorder.h",
+      "media/recorder/media_recorder_handler.cc",
+      "media/recorder/media_recorder_handler.h",
+      "media/recorder/video_track_recorder.cc",
+      "media/recorder/video_track_recorder.h",
       "media/remote_media_stream_impl.cc",
       "media/remote_media_stream_impl.h",
       "media/rtc_certificate.cc",
@@ -609,8 +634,6 @@ target(link_target_type, "renderer") {
       "media/user_media_client_impl.h",
       "media/video_track_adapter.cc",
       "media/video_track_adapter.h",
-      "media/video_track_recorder.cc",
-      "media/video_track_recorder.h",
       "media/webaudio_media_stream_source.cc",
       "media/webaudio_media_stream_source.h",
       "media/webrtc/media_stream_remote_video_source.cc",
@@ -695,11 +718,14 @@ target(link_target_type, "renderer") {
       "//crypto",
       "//third_party/libjingle/webrtc:libjingle_webrtc",
       "//third_party/libvpx",
+      "//third_party/opus",
       "//third_party/webrtc/api:libjingle_peerconnection",
       "//third_party/webrtc/api:rtc_stats_api",
+      "//third_party/webrtc/api:video_frame_api",
       "//third_party/webrtc/base:rtc_base",
-      "//third_party/webrtc/common_video",
+      "//third_party/webrtc/base:rtc_task_runner",
       "//third_party/webrtc/media:rtc_media",
+      "//third_party/webrtc/media:rtc_media_base",
       "//third_party/webrtc/modules/audio_device",
       "//third_party/webrtc/modules/audio_processing",
       "//third_party/webrtc/modules/video_coding:webrtc_h264",
@@ -893,8 +919,8 @@ target(link_target_type, "renderer") {
     ]
   }
 
-  if (use_seccomp_bpf) {
-    defines += [ "USE_SECCOMP_BPF" ]
+  if (is_linux || is_android) {
+    deps += [ "//sandbox:sandbox_features" ]
   }
 
   if (use_ozone) {
@@ -903,6 +929,10 @@ target(link_target_type, "renderer") {
 
   if (enable_ipc_fuzzer) {
     configs += [ "//tools/ipc_fuzzer:ipc_fuzzer_config" ]
+  }
+
+  if (is_chromecast) {
+    defines += [ "MEDIA_EVENT_LOG_UTILITY=VLOG(1)" ]
   }
 }
 

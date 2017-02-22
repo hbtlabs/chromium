@@ -27,7 +27,7 @@ void AppBannerController::bindMojoRequest(
     mojom::blink::AppBannerControllerRequest request) {
   DCHECK(frame);
 
-  mojo::MakeStrongBinding(wrapUnique(new AppBannerController(*frame)),
+  mojo::MakeStrongBinding(WTF::wrapUnique(new AppBannerController(*frame)),
                           std::move(request));
 }
 
@@ -54,7 +54,7 @@ void AppBannerController::BannerPromptRequest(
                               m_frame->document()->outgoingReferrer())
                               .referrer;
 
-  callback.Run(reply, referrer.isNull() ? emptyString() : referrer);
+  callback.Run(reply, referrer.isNull() ? emptyString : referrer);
 }
 
 }  // namespace blink

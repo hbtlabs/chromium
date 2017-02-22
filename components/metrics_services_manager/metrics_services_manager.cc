@@ -11,7 +11,8 @@
 #include "components/metrics/metrics_service_client.h"
 #include "components/metrics/metrics_state_manager.h"
 #include "components/metrics_services_manager/metrics_services_manager_client.h"
-#include "components/rappor/rappor_service.h"
+#include "components/rappor/rappor_service_impl.h"
+#include "components/ukm/ukm_service.h"
 #include "components/variations/service/variations_service.h"
 
 namespace metrics_services_manager {
@@ -34,13 +35,18 @@ metrics::MetricsService* MetricsServicesManager::GetMetricsService() {
   return GetMetricsServiceClient()->GetMetricsService();
 }
 
-rappor::RapporService* MetricsServicesManager::GetRapporService() {
+rappor::RapporServiceImpl* MetricsServicesManager::GetRapporServiceImpl() {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (!rappor_service_) {
-    rappor_service_ = client_->CreateRapporService();
+    rappor_service_ = client_->CreateRapporServiceImpl();
     rappor_service_->Initialize(client_->GetURLRequestContext());
   }
   return rappor_service_.get();
+}
+
+ukm::UkmService* MetricsServicesManager::GetUkmService() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return GetMetricsServiceClient()->GetUkmService();
 }
 
 variations::VariationsService* MetricsServicesManager::GetVariationsService() {
@@ -62,20 +68,34 @@ void MetricsServicesManager::OnRendererProcessCrash() {
 metrics::MetricsServiceClient*
 MetricsServicesManager::GetMetricsServiceClient() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (!metrics_service_client_)
+  if (!metrics_service_client_) {
     metrics_service_client_ = client_->CreateMetricsServiceClient();
+    // base::Unretained is safe since |this| owns the metrics_service_client_.
+    metrics_service_client_->SetUpdateRunningServicesCallback(
+        base::Bind(&MetricsServicesManager::UpdateRunningServices,
+                   base::Unretained(this)));
+  }
   return metrics_service_client_.get();
 }
 
-void MetricsServicesManager::UpdatePermissions(bool may_record,
-                                               bool may_upload) {
+void MetricsServicesManager::UpdatePermissions(bool current_may_record,
+                                               bool current_may_upload) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  // Stash the current permissions so that we can update the RapporService
+  // If the user has opted out of metrics, delete local UKM state.
+  if (may_record_ && !current_may_record) {
+    ukm::UkmService* ukm = GetUkmService();
+    if (ukm) {
+      ukm->Purge();
+      ukm->ResetClientId();
+    }
+  }
+
+  // Stash the current permissions so that we can update the RapporServiceImpl
   // correctly when the Rappor preference changes.  The metrics recording
   // preference partially determines the initial rappor setting, and also
   // controls whether FINE metrics are sent.
-  may_record_ = may_record;
-  may_upload_ = may_upload;
+  may_record_ = current_may_record;
+  may_upload_ = current_may_upload;
   UpdateRunningServices();
 }
 
@@ -85,7 +105,7 @@ void MetricsServicesManager::UpdateRunningServices() {
 
   if (client_->OnlyDoMetricsRecording()) {
     metrics->StartRecordingForTests();
-    GetRapporService()->Update(
+    GetRapporServiceImpl()->Update(
         rappor::UMA_RAPPOR_GROUP | rappor::SAFEBROWSING_RAPPOR_GROUP, false);
     return;
   }
@@ -95,7 +115,6 @@ void MetricsServicesManager::UpdateRunningServices() {
   if (may_record_) {
     if (!metrics->recording_active())
       metrics->Start();
-
     if (may_upload_)
       metrics->EnableReporting();
     else
@@ -103,6 +122,8 @@ void MetricsServicesManager::UpdateRunningServices() {
   } else {
     metrics->Stop();
   }
+
+  UpdateUkmService();
 
   int recording_groups = 0;
 #if defined(GOOGLE_CHROME_BUILD)
@@ -119,7 +140,25 @@ void MetricsServicesManager::UpdateRunningServices() {
   if (client_->IsSafeBrowsingEnabled(on_safe_browsing_update_callback))
     recording_groups |= rappor::SAFEBROWSING_RAPPOR_GROUP;
 #endif  // defined(GOOGLE_CHROME_BUILD)
-  GetRapporService()->Update(recording_groups, may_upload_);
+  GetRapporServiceImpl()->Update(recording_groups, may_upload_);
+}
+
+void MetricsServicesManager::UpdateUkmService() {
+  ukm::UkmService* ukm = GetUkmService();
+  if (!ukm)
+    return;
+  bool sync_enabled =
+      metrics_service_client_->IsHistorySyncEnabledOnAllProfiles();
+  if (may_record_ && sync_enabled) {
+    ukm->EnableRecording();
+    if (may_upload_)
+      ukm->EnableReporting();
+    else
+      ukm->DisableReporting();
+  } else {
+    ukm->DisableRecording();
+    ukm->DisableReporting();
+  }
 }
 
 void MetricsServicesManager::UpdateUploadPermissions(bool may_upload) {

@@ -67,7 +67,6 @@ class Range;
 
 // This file contains a set of helper functions used by the editing commands
 
-CORE_EXPORT bool needsLayoutTreeUpdate(const Node&);
 CORE_EXPORT bool needsLayoutTreeUpdate(const Position&);
 CORE_EXPORT bool needsLayoutTreeUpdate(const PositionInFlatTree&);
 
@@ -187,7 +186,6 @@ bool isRenderedAsNonInlineTableImageOrHR(const Node*);
 CORE_EXPORT bool areIdenticalElements(const Node&, const Node&);
 bool isNonTableCellHTMLBlockElement(const Node*);
 bool isBlockFlowElement(const Node&);
-bool nodeIsUserSelectAll(const Node*);
 EUserSelect usedValueOfUserSelect(const Node&);
 bool isTextSecurityNode(const Node*);
 CORE_EXPORT TextDirection directionOfEnclosingBlock(const Position&);
@@ -415,20 +413,14 @@ const String& nonBreakingSpaceString();
 // -------------------------------------------------------------------------
 
 // Functions dispatch InputEvent
-DispatchEventResult dispatchBeforeInputInsertText(EventTarget*,
-                                                  const String& data);
-DispatchEventResult dispatchBeforeInputFromComposition(
-    EventTarget*,
-    InputEvent::InputType,
-    const String& data,
-    InputEvent::EventCancelable);
-DispatchEventResult dispatchBeforeInputEditorCommand(EventTarget*,
+const RangeVector* targetRangesForInputEvent(const Node&);
+DispatchEventResult dispatchBeforeInputInsertText(Node*, const String& data);
+DispatchEventResult dispatchBeforeInputEditorCommand(Node*,
                                                      InputEvent::InputType,
                                                      const RangeVector*);
-DispatchEventResult dispatchBeforeInputDataTransfer(EventTarget*,
+DispatchEventResult dispatchBeforeInputDataTransfer(Node*,
                                                     InputEvent::InputType,
-                                                    DataTransfer*,
-                                                    const RangeVector*);
+                                                    DataTransfer*);
 
 InputEvent::InputType deletionInputTypeFromTextGranularity(DeleteDirection,
                                                            TextGranularity);

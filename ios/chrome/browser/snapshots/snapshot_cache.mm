@@ -13,11 +13,14 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/mac/bind_objc_block.h"
+#include "base/mac/objc_property_releaser.h"
 #include "base/mac/scoped_cftyperef.h"
+#include "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "ios/chrome/browser/experimental_flags.h"
+#import "ios/chrome/browser/snapshots/lru_cache.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache_internal.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
@@ -129,7 +132,34 @@ void ConvertAndSaveGreyImage(
 
 }  // anonymous namespace
 
-@implementation SnapshotCache
+@implementation SnapshotCache {
+  // Dictionary to hold color snapshots in memory. n.b. Color snapshots are not
+  // kept in memory on tablets.
+  base::scoped_nsobject<NSMutableDictionary> imageDictionary_;
+
+  // Cache to hold color snapshots in memory. n.b. Color snapshots are not
+  // kept in memory on tablets. It is used in place of the imageDictionary_ when
+  // the LRU cache snapshot experiment is enabled.
+  base::scoped_nsobject<LRUCache> lruCache_;
+
+  // Temporary dictionary to hold grey snapshots for tablet side swipe. This
+  // will be nil before -createGreyCache is called and after -removeGreyCache
+  // is called.
+  base::scoped_nsobject<NSMutableDictionary> greyImageDictionary_;
+  NSSet* pinnedIDs_;
+
+  // Session ID of most recent pending grey snapshot request.
+  base::scoped_nsobject<NSString> mostRecentGreySessionId_;
+  // Block used by pending request for a grey snapshot.
+  base::scoped_nsprotocol<GreyBlock> mostRecentGreyBlock_;
+
+  // Session ID and correspoinding UIImage for the snapshot that will likely
+  // be requested to be saved to disk when the application is backgrounded.
+  base::scoped_nsobject<NSString> backgroundingImageSessionId_;
+  base::scoped_nsobject<UIImage> backgroundingColorImage_;
+
+  base::mac::ObjCPropertyReleaser propertyReleaser_SnapshotCache_;
+}
 
 @synthesize pinnedIDs = pinnedIDs_;
 
@@ -202,9 +232,6 @@ void ConvertAndSaveGreyImage(
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   DCHECK(sessionID);
 
-  if (![self inMemoryCacheIsEnabled] && !callback)
-    return;
-
   UIImage* img = nil;
   if (lruCache_)
     img = [lruCache_ objectForKey:sessionID];
@@ -226,7 +253,7 @@ void ConvertAndSaveGreyImage(
             [SnapshotCache imagePathForSessionID:sessionID]) retain]);
       }),
       base::BindBlock(^(base::scoped_nsobject<UIImage> image) {
-        if ([self inMemoryCacheIsEnabled] && image) {
+        if (image) {
           if (lruCache_)
             [lruCache_ setObject:image forKey:sessionID];
           else
@@ -242,12 +269,11 @@ void ConvertAndSaveGreyImage(
   if (!img || !sessionID)
     return;
 
-  if ([self inMemoryCacheIsEnabled]) {
-    if (lruCache_)
-      [lruCache_ setObject:img forKey:sessionID];
-    else
-      [imageDictionary_ setObject:img forKey:sessionID];
-  }
+  if (lruCache_)
+    [lruCache_ setObject:img forKey:sessionID];
+  else
+    [imageDictionary_ setObject:img forKey:sessionID];
+
   // Save the image to disk.
   web::WebThread::PostBlockingPoolSequencedTask(
       kSequenceToken, FROM_HERE,
@@ -373,15 +399,9 @@ void ConvertAndSaveGreyImage(
   }
 }
 
-- (BOOL)inMemoryCacheIsEnabled {
-  // In-memory cache on iPad is enabled only when the tab switcher is enabled.
-  return !IsIPadIdiom() || experimental_flags::IsTabSwitcherEnabled();
-}
-
 - (BOOL)usesLRUCache {
-  // Always use the LRUCache when the tab switcher is enabled.
-  return experimental_flags::IsTabSwitcherEnabled() ||
-         experimental_flags::IsLRUSnapshotCacheEnabled();
+  // TODO(crbug.com/687904): Remove the non-LRU cache code.
+  return true;
 }
 
 - (void)handleLowMemory {

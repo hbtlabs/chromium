@@ -21,18 +21,15 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
-#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/origin_util.h"
-#include "content/public/renderer/render_frame.h"
 #include "headless/lib/browser/headless_browser_context_impl.h"
 #include "headless/lib/browser/headless_browser_impl.h"
 #include "headless/lib/browser/headless_browser_main_parts.h"
 #include "headless/lib/browser/headless_devtools_client_impl.h"
 #include "services/service_manager/public/cpp/interface_registry.h"
-#include "ui/aura/window.h"
 
 namespace headless {
 
@@ -107,8 +104,7 @@ class HeadlessWebContentsImpl::Delegate : public content::WebContentsDelegate {
 
 // static
 std::unique_ptr<HeadlessWebContentsImpl> HeadlessWebContentsImpl::Create(
-    HeadlessWebContents::Builder* builder,
-    aura::Window* parent_window) {
+    HeadlessWebContents::Builder* builder) {
   content::WebContents::CreateParams create_params(builder->browser_context_,
                                                    nullptr);
   create_params.initial_size = builder->window_size_;
@@ -119,7 +115,7 @@ std::unique_ptr<HeadlessWebContentsImpl> HeadlessWebContentsImpl::Create(
           builder->browser_context_));
 
   headless_web_contents->mojo_services_ = std::move(builder->mojo_services_);
-  headless_web_contents->InitializeScreen(parent_window, builder->window_size_);
+  headless_web_contents->InitializeScreen(builder->window_size_);
   if (!headless_web_contents->OpenURL(builder->initial_url_))
     return nullptr;
   return headless_web_contents;
@@ -137,18 +133,8 @@ HeadlessWebContentsImpl::CreateFromWebContents(
   return headless_web_contents;
 }
 
-void HeadlessWebContentsImpl::InitializeScreen(aura::Window* parent_window,
-                                               const gfx::Size& initial_size) {
-  aura::Window* contents = web_contents_->GetNativeView();
-  DCHECK(!parent_window->Contains(contents));
-  parent_window->AddChild(contents);
-  contents->Show();
-
-  contents->SetBounds(gfx::Rect(initial_size));
-  content::RenderWidgetHostView* host_view =
-      web_contents_->GetRenderWidgetHostView();
-  if (host_view)
-    host_view->SetSize(initial_size);
+void HeadlessWebContentsImpl::InitializeScreen(const gfx::Size& initial_size) {
+  browser()->PlatformInitializeWebContents(initial_size, web_contents_.get());
 }
 
 HeadlessWebContentsImpl::HeadlessWebContentsImpl(
@@ -174,8 +160,7 @@ HeadlessWebContentsImpl::~HeadlessWebContentsImpl() {
 void HeadlessWebContentsImpl::RenderFrameCreated(
     content::RenderFrameHost* render_frame_host) {
   if (!mojo_services_.empty()) {
-    render_frame_host->GetRenderViewHost()->AllowBindings(
-        content::BINDINGS_POLICY_HEADLESS);
+    render_frame_host->AllowBindings(content::BINDINGS_POLICY_HEADLESS);
   }
 
   service_manager::InterfaceRegistry* interface_registry =
@@ -240,13 +225,25 @@ HeadlessDevToolsTarget* HeadlessWebContentsImpl::GetDevToolsTarget() {
   return web_contents()->GetMainFrame()->IsRenderFrameLive() ? this : nullptr;
 }
 
-void HeadlessWebContentsImpl::AttachClient(HeadlessDevToolsClient* client) {
-  HeadlessDevToolsClientImpl::From(client)->AttachToHost(agent_host_.get());
+bool HeadlessWebContentsImpl::AttachClient(HeadlessDevToolsClient* client) {
+  return HeadlessDevToolsClientImpl::From(client)->AttachToHost(
+      agent_host_.get());
+}
+
+void HeadlessWebContentsImpl::ForceAttachClient(
+    HeadlessDevToolsClient* client) {
+  HeadlessDevToolsClientImpl::From(client)->ForceAttachToHost(
+      agent_host_.get());
 }
 
 void HeadlessWebContentsImpl::DetachClient(HeadlessDevToolsClient* client) {
   DCHECK(agent_host_);
   HeadlessDevToolsClientImpl::From(client)->DetachFromHost(agent_host_.get());
+}
+
+bool HeadlessWebContentsImpl::IsAttached() {
+  DCHECK(agent_host_);
+  return agent_host_->IsAttached();
 }
 
 content::WebContents* HeadlessWebContentsImpl::web_contents() const {

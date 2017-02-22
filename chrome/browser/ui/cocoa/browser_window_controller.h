@@ -36,6 +36,7 @@ class Browser;
 class BrowserWindow;
 class BrowserWindowCocoa;
 @class BrowserWindowFullscreenTransition;
+@class BrowserWindowTouchBar;
 @class DevToolsController;
 @class DownloadShelfController;
 class ExtensionKeybindingRegistryCocoa;
@@ -50,7 +51,6 @@ class FullscreenLowPowerCoordinatorCocoa;
 @class InfoBarContainerController;
 class LocationBarViewMac;
 @class OverlayableContentsController;
-class PermissionBubbleCocoa;
 class StatusBubbleMac;
 @class TabStripController;
 @class TabStripView;
@@ -93,6 +93,7 @@ class Command;
       fullscreenTransition_;
   std::unique_ptr<FullscreenLowPowerCoordinatorCocoa>
       fullscreenLowPowerCoordinator_;
+  base::scoped_nsobject<BrowserWindowTouchBar> touchBar_;
 
   // Strong. StatusBubble is a special case of a strong reference that
   // we don't wrap in a scoped_ptr because it is acting the same
@@ -184,6 +185,10 @@ class Command;
   // used in fullscreen transition to prevent spurious resize messages from
   // being sent to the renderer, which causes the transition to be janky.
   BOOL blockLayoutSubviews_;
+
+  // Set when AppKit invokes -windowWillClose: to protect against possible
+  // crashes. See http://crbug.com/671213.
+  BOOL didWindowWillClose_;
 
   // The Extension Command Registry used to determine which keyboard events to
   // handle.
@@ -381,6 +386,9 @@ class Command;
 // Returns current alert state, determined by the alert state of tabs, set by
 // UpdateAlertState.
 - (TabAlertState)alertState;
+
+// Returns the BrowserWindowTouchBar object associated with the window.
+- (BrowserWindowTouchBar*)browserWindowTouchBar;
 
 @end  // @interface BrowserWindowController
 

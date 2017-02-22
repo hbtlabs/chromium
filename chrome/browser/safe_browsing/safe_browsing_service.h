@@ -20,7 +20,9 @@
 #include "base/observer_list.h"
 #include "base/sequenced_task_runner_helpers.h"
 #include "chrome/browser/safe_browsing/services_delegate.h"
+#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "components/safe_browsing_db/util.h"
+#include "components/safe_browsing_db/v4_feature_list.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -49,6 +51,7 @@ class DownloadProtectionService;
 struct ResourceRequestInfo;
 struct SafeBrowsingProtocolConfig;
 class SafeBrowsingDatabaseManager;
+class SafeBrowsingNavigationObserverManager;
 class SafeBrowsingPingManager;
 class SafeBrowsingProtocolManager;
 class SafeBrowsingProtocolManagerDelegate;
@@ -99,6 +102,15 @@ class SafeBrowsingService : public base::RefCountedThreadSafe<
   // Returns the client_name field for both V3 and V4 protocol manager configs.
   std::string GetProtocolConfigClientName() const;
 
+  // NOTE(vakh): This is not the most reliable way to find out if extended
+  // reporting has been enabled. That's why it starts with estimated_. It
+  // returns true if any of the profiles have extended reporting enabled. It may
+  // be called on any thread. That can lead to a race condition, but that's
+  // acceptable.
+  ExtendedReportingLevel estimated_extended_reporting_by_prefs() const {
+    return estimated_extended_reporting_by_prefs_;
+  }
+
   // Get current enabled status. Must be called on IO thread.
   bool enabled() const {
     DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
@@ -121,17 +133,28 @@ class SafeBrowsingService : public base::RefCountedThreadSafe<
     return services_delegate_->GetDownloadService();
   }
 
-  net::URLRequestContextGetter* url_request_context();
+  scoped_refptr<net::URLRequestContextGetter> url_request_context();
+
+  // Called on IO thread thread when QUIC should be disabled (e.g. because of
+  // policy). This should not be necessary anymore when http://crbug.com/678653
+  // is implemented.
+  void DisableQuicOnIOThread();
 
   const scoped_refptr<SafeBrowsingUIManager>& ui_manager() const;
 
+  // This returns either the v3 or the v4 database manager, depending on
+  // the experiment settings.
   const scoped_refptr<SafeBrowsingDatabaseManager>& database_manager() const;
+
+  scoped_refptr<SafeBrowsingNavigationObserverManager>
+  navigation_observer_manager();
 
   SafeBrowsingProtocolManager* protocol_manager() const;
 
   SafeBrowsingPingManager* ping_manager() const;
 
-  const scoped_refptr<V4LocalDatabaseManager>& v4_local_database_manager()
+  // This may be NULL if v4 is not enabled by experiment.
+  const scoped_refptr<SafeBrowsingDatabaseManager>& v4_local_database_manager()
       const;
 
   // Returns a preference validation delegate that adds incidents to the
@@ -144,8 +167,6 @@ class SafeBrowsingService : public base::RefCountedThreadSafe<
   // |callback| will be dropped if the service is not applicable for the
   // process.
   void RegisterDelayedAnalysisCallback(const DelayedAnalysisCallback& callback);
-  void RegisterExtendedReportingOnlyDelayedAnalysisCallback(
-      const DelayedAnalysisCallback& callback);
 
   // Adds |download_manager| to the set monitored by safe browsing.
   void AddDownloadManager(content::DownloadManager* download_manager);
@@ -156,6 +177,7 @@ class SafeBrowsingService : public base::RefCountedThreadSafe<
 
   // Type for subscriptions to SafeBrowsing service state.
   typedef base::CallbackList<void(void)>::Subscription StateSubscription;
+  typedef base::CallbackList<void(void)>::Subscription ShutdownSubscription;
 
   // Adds a listener for when SafeBrowsing preferences might have changed.
   // To get the current state, the callback should call enabled_by_prefs().
@@ -163,12 +185,19 @@ class SafeBrowsingService : public base::RefCountedThreadSafe<
   std::unique_ptr<StateSubscription> RegisterStateCallback(
       const base::Callback<void(void)>& callback);
 
+  // Adds a listener for when SafeBrowsingService starts shutting down.
+  // The callbacks run on the UI thread, and give the subscribers an opportunity
+  // to clean up any references they hold to SafeBrowsingService.
+  std::unique_ptr<ShutdownSubscription> RegisterShutdownCallback(
+      const base::Callback<void(void)>& callback);
+
   // Sends serialized download report to backend.
   virtual void SendSerializedDownloadReport(const std::string& report);
 
  protected:
   // Creates the safe browsing service.  Need to initialize before using.
-  SafeBrowsingService();
+  SafeBrowsingService(V4FeatureList::V4UsageStatus v4_usage_status =
+                          V4FeatureList::V4UsageStatus::V4_DISABLED);
 
   ~SafeBrowsingService() override;
 
@@ -255,6 +284,10 @@ class SafeBrowsingService : public base::RefCountedThreadSafe<
   // Provides phishing and malware statistics. Accessed on IO thread.
   std::unique_ptr<SafeBrowsingPingManager> ping_manager_;
 
+  // Whether SafeBrowsing Extended Reporting is enabled by the current set of
+  // profiles. Updated on the UI thread.
+  ExtendedReportingLevel estimated_extended_reporting_by_prefs_;
+
   // Whether the service is running. 'enabled_' is used by SafeBrowsingService
   // on the IO thread during normal operations.
   bool enabled_;
@@ -262,6 +295,15 @@ class SafeBrowsingService : public base::RefCountedThreadSafe<
   // Whether SafeBrowsing is enabled by the current set of profiles.
   // Accessed on UI thread.
   bool enabled_by_prefs_;
+
+  // Whether SafeBrowsing needs to be enabled in V4Only mode. In this mode, all
+  // SafeBrowsing decisions are made using the PVer4 implementation.
+  bool use_v4_only_;
+
+  // Whether the PVer4 implementation needs to be instantiated. Note that even
+  // if the PVer4 implementation has been instantiated, it is used only if
+  // |use_v4_only_| is true.
+  bool v4_enabled_;
 
   // Tracks existing PrefServices, and the safe browsing preference on each.
   // This is used to determine if any profile is currently using the safe
@@ -276,6 +318,10 @@ class SafeBrowsingService : public base::RefCountedThreadSafe<
   // Should only be accessed on the UI thread.
   base::CallbackList<void(void)> state_callback_list_;
 
+  // Callbacks when SafeBrowsing service starts shutting down.
+  // Should only be accessed on the UI thread.
+  base::CallbackList<void(void)> shutdown_callback_list_;
+
   // The UI manager handles showing interstitials.  Accessed on both UI and IO
   // thread.
   scoped_refptr<SafeBrowsingUIManager> ui_manager_;
@@ -283,6 +329,10 @@ class SafeBrowsingService : public base::RefCountedThreadSafe<
   // The database manager handles the database and download logic.  Accessed on
   // both UI and IO thread.
   scoped_refptr<SafeBrowsingDatabaseManager> database_manager_;
+
+  // The navigation observer manager handles download attribution.
+  scoped_refptr<SafeBrowsingNavigationObserverManager>
+  navigation_observer_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(SafeBrowsingService);
 };

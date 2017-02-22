@@ -11,10 +11,12 @@
 #include "base/memory/ref_counted.h"
 #include "base/observer_list_threadsafe.h"
 
-class GURL;
-
 namespace base {
 class SingleThreadTaskRunner;
+}
+
+namespace net {
+class URLRequestContextGetter;
 }
 
 namespace chromecast {
@@ -37,7 +39,8 @@ class ConnectivityChecker
   };
 
   static scoped_refptr<ConnectivityChecker> Create(
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
+      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
+      net::URLRequestContextGetter* url_request_context_getter);
 
   ConnectivityChecker();
 

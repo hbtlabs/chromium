@@ -15,13 +15,21 @@ namespace blink {
 
 namespace {
 
+InterpolationValue createNoneValue() {
+  return InterpolationValue(InterpolableList::create(0));
+}
+
+bool isNoneValue(const InterpolationValue& value) {
+  return toInterpolableList(*value.interpolableValue).length() == 0;
+}
+
 class InheritedTranslateChecker : public InterpolationType::ConversionChecker {
  public:
   ~InheritedTranslateChecker() {}
 
   static std::unique_ptr<InheritedTranslateChecker> create(
       PassRefPtr<TranslateTransformOperation> inheritedTranslate) {
-    return wrapUnique(
+    return WTF::wrapUnique(
         new InheritedTranslateChecker(std::move(inheritedTranslate)));
   }
 
@@ -51,7 +59,7 @@ enum TranslateComponentIndex : unsigned {
   TranslateComponentIndexCount,
 };
 
-InterpolationValue createNeutralValue() {
+std::unique_ptr<InterpolableValue> createIdentityInterpolableValue() {
   std::unique_ptr<InterpolableList> result =
       InterpolableList::create(TranslateComponentIndexCount);
   result->set(TranslateX,
@@ -60,14 +68,14 @@ InterpolationValue createNeutralValue() {
               LengthInterpolationFunctions::createNeutralInterpolableValue());
   result->set(TranslateZ,
               LengthInterpolationFunctions::createNeutralInterpolableValue());
-  return InterpolationValue(std::move(result));
+  return std::move(result);
 }
 
 InterpolationValue convertTranslateOperation(
     const TranslateTransformOperation* translate,
     double zoom) {
   if (!translate)
-    return createNeutralValue();
+    return createNoneValue();
 
   std::unique_ptr<InterpolableList> result =
       InterpolableList::create(TranslateComponentIndexCount);
@@ -88,13 +96,13 @@ InterpolationValue convertTranslateOperation(
 InterpolationValue CSSTranslateInterpolationType::maybeConvertNeutral(
     const InterpolationValue& underlying,
     ConversionCheckers&) const {
-  return createNeutralValue();
+  return InterpolationValue(createIdentityInterpolableValue());
 }
 
 InterpolationValue CSSTranslateInterpolationType::maybeConvertInitial(
     const StyleResolverState&,
     ConversionCheckers&) const {
-  return createNeutralValue();
+  return createNoneValue();
 }
 
 InterpolationValue CSSTranslateInterpolationType::maybeConvertInherit(
@@ -102,7 +110,7 @@ InterpolationValue CSSTranslateInterpolationType::maybeConvertInherit(
     ConversionCheckers& conversionCheckers) const {
   TranslateTransformOperation* inheritedTranslate =
       state.parentStyle()->translate();
-  conversionCheckers.append(
+  conversionCheckers.push_back(
       InheritedTranslateChecker::create(inheritedTranslate));
   return convertTranslateOperation(inheritedTranslate,
                                    state.parentStyle()->effectiveZoom());
@@ -110,10 +118,11 @@ InterpolationValue CSSTranslateInterpolationType::maybeConvertInherit(
 
 InterpolationValue CSSTranslateInterpolationType::maybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState&,
+    const StyleResolverState*,
     ConversionCheckers&) const {
-  if (!value.isBaseValueList())
-    return nullptr;
+  if (!value.isBaseValueList()) {
+    return createNoneValue();
+  }
 
   const CSSValueList& list = toCSSValueList(value);
   if (list.length() < 1 || list.length() > 3)
@@ -137,20 +146,56 @@ InterpolationValue CSSTranslateInterpolationType::maybeConvertValue(
   return InterpolationValue(std::move(result));
 }
 
-InterpolationValue CSSTranslateInterpolationType::maybeConvertUnderlyingValue(
-    const InterpolationEnvironment& environment) const {
-  return convertTranslateOperation(
-      environment.state().style()->translate(),
-      environment.state().style()->effectiveZoom());
+PairwiseInterpolationValue CSSTranslateInterpolationType::maybeMergeSingles(
+    InterpolationValue&& start,
+    InterpolationValue&& end) const {
+  size_t startListLength =
+      toInterpolableList(*start.interpolableValue).length();
+  size_t endListLength = toInterpolableList(*end.interpolableValue).length();
+  if (startListLength < endListLength)
+    start.interpolableValue = createIdentityInterpolableValue();
+  else if (endListLength < startListLength)
+    end.interpolableValue = createIdentityInterpolableValue();
+
+  return PairwiseInterpolationValue(std::move(start.interpolableValue),
+                                    std::move(end.interpolableValue));
 }
 
-void CSSTranslateInterpolationType::apply(
+InterpolationValue
+CSSTranslateInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
+    const ComputedStyle& style) const {
+  return convertTranslateOperation(style.translate(), style.effectiveZoom());
+}
+
+void CSSTranslateInterpolationType::composite(
+    UnderlyingValueOwner& underlyingValueOwner,
+    double underlyingFraction,
+    const InterpolationValue& value,
+    double interpolationFraction) const {
+  if (isNoneValue(value)) {
+    return;
+  }
+
+  if (isNoneValue(underlyingValueOwner.mutableValue())) {
+    underlyingValueOwner.mutableValue().interpolableValue =
+        createIdentityInterpolableValue();
+  }
+
+  return CSSInterpolationType::composite(
+      underlyingValueOwner, underlyingFraction, value, interpolationFraction);
+}
+
+void CSSTranslateInterpolationType::applyStandardPropertyValue(
     const InterpolableValue& interpolableValue,
     const NonInterpolableValue*,
-    InterpolationEnvironment& environment) const {
+    StyleResolverState& state) const {
   const InterpolableList& list = toInterpolableList(interpolableValue);
+  if (list.length() == 0) {
+    state.style()->setTranslate(nullptr);
+    return;
+  }
   const CSSToLengthConversionData& conversionData =
-      environment.state().cssToLengthConversionData();
+      state.cssToLengthConversionData();
   Length x = LengthInterpolationFunctions::createLength(
       *list.get(TranslateX), nullptr, conversionData, ValueRangeAll);
   Length y = LengthInterpolationFunctions::createLength(
@@ -159,11 +204,10 @@ void CSSTranslateInterpolationType::apply(
                 *list.get(TranslateZ), nullptr, conversionData, ValueRangeAll)
                 .pixels();
 
-  RefPtr<TranslateTransformOperation> result = nullptr;
-  if (!x.isZero() || !y.isZero() || z != 0)
-    result = TranslateTransformOperation::create(
-        x, y, z, TransformOperation::Translate3D);
-  environment.state().style()->setTranslate(result.release());
+  RefPtr<TranslateTransformOperation> result =
+      TranslateTransformOperation::create(x, y, z,
+                                          TransformOperation::Translate3D);
+  state.style()->setTranslate(std::move(result));
 }
 
 }  // namespace blink

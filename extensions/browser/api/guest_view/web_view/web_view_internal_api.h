@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef EXTENSIONS_BROWSER_API_WEB_VIEW_WEB_VIEW_INTERNAL_API_H_
-#define EXTENSIONS_BROWSER_API_WEB_VIEW_WEB_VIEW_INTERNAL_API_H_
+#ifndef EXTENSIONS_BROWSER_API_GUEST_VIEW_WEB_VIEW_WEB_VIEW_INTERNAL_API_H_
+#define EXTENSIONS_BROWSER_API_GUEST_VIEW_WEB_VIEW_WEB_VIEW_INTERNAL_API_H_
 
 #include <stdint.h>
 
@@ -97,7 +97,7 @@ class WebViewInternalExecuteCodeFunction
   ~WebViewInternalExecuteCodeFunction() override;
 
   // Initialize |details_| if it hasn't already been.
-  bool Init() override;
+  InitResult Init() override;
   bool ShouldInsertCSS() const override;
   bool CanExecuteScriptOnPage() override;
   // Guarded by a process ID check.
@@ -461,4 +461,4 @@ class WebViewInternalClearDataFunction
 
 }  // namespace extensions
 
-#endif  // CHROME_BROWSER_EXTENSIONS_API_WEB_VIEW_WEB_VIEW_INTERNAL_API_H_
+#endif  // EXTENSIONS_BROWSER_API_GUEST_VIEW_WEB_VIEW_WEB_VIEW_INTERNAL_API_H_

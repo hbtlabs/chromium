@@ -356,8 +356,14 @@ ClientSocketPoolManagerImpl::SocketPoolInfoToValue() const {
   return std::move(list);
 }
 
-void ClientSocketPoolManagerImpl::OnCertDBChanged(const X509Certificate* cert) {
+void ClientSocketPoolManagerImpl::OnCertDBChanged() {
   FlushSocketPoolsWithError(ERR_NETWORK_CHANGED);
+}
+
+void ClientSocketPoolManagerImpl::DumpMemoryStats(
+    base::trace_event::ProcessMemoryDump* pmd,
+    const std::string& parent_dump_absolute_name) const {
+  return ssl_socket_pool_->DumpMemoryStats(pmd, parent_dump_absolute_name);
 }
 
 }  // namespace net

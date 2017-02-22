@@ -137,7 +137,7 @@ This file contains the strings for ash.
         Launcher (syncing apps...)
       </message>
       <message name="IDS_ASH_SHELF_OVERFLOW_NAME" desc="The title used for the Ash overflow button in the shelf">
-        Overflow Button
+        Overflow button
       </message>
       <message name="IDS_ASH_SHELF_CONTEXT_MENU_AUTO_HIDE" desc="Title of the menu item in the context menu for auto-hiding the shelf when the current window is not maximized">
         Autohide shelf
@@ -159,7 +159,7 @@ This file contains the strings for ash.
       </message>
 
       <message name="IDS_ASH_KEYBOARD_OVERLAY_TITLE" desc="The title of the keyboard overlay.">
-        Keyboard Overlay
+        Keyboard overlay
       </message>
 
       <message name="IDS_ASH_LEARN_MORE" desc="Text of Learn more links.">
@@ -167,9 +167,6 @@ This file contains the strings for ash.
       </message>
 
       <!-- Status tray items -->
-      <message name="IDS_ASH_STATUS_TRAY_ACCESSIBLE_NAME" desc="The accessible name of the status tray.">
-        Status tray
-      </message>
       <message name="IDS_ASH_STATUS_TRAY_ACCESSIBLE_DESCRIPTION" desc="The accessible description of the status tray and the information on it.">
         Status tray, time <ph name="time">$1<ex>9:50</ex></ph>, <ph name="battery">$2<ex>Battery is full.</ex></ph>
       </message>
@@ -207,9 +204,6 @@ Press Ctrl+Alt+Z to disable.
       <message name="IDS_ASH_STATUS_TRAY_SIGN_IN_ANOTHER_ACCOUNT" desc="The string for the button which lets the user add another account to the current session.">
         Sign in another user...
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_CAPTION_CANNOT_ADD_USER" desc="The caption for the error message when the user has reached the limit of multi profile users.">
-        Can't sign in to another account.
-      </message>
       <message name="IDS_ASH_STATUS_TRAY_MESSAGE_CANNOT_ADD_USER" desc="The error message when the user has reached the limit of multi profile users.">
         You can only have up to three accounts in multiple sign-in.
       </message>
@@ -226,20 +220,23 @@ Press Ctrl+Alt+Z to disable.
       <message name="IDS_ASH_STATUS_TRAY_CAST_CAST_DESKTOP" desc="The label used in the tray popup to tell the user we are casting the desktop.">
         Casting screen to <ph name="RECEIVER_NAME">$1<ex>Living Room</ex></ph>
       </message>
+      <message name="IDS_ASH_STATUS_TRAY_CAST_CAST_DESKTOP_ACCESSIBILITY_STOP" desc="Stop button accessibility label used in the tray popup to tell the user to stop a cast to the desktop.">
+        Stop casting screen to <ph name="RECEIVER_NAME">$1<ex>Living Room</ex></ph>
+      </message>
       <message name="IDS_ASH_STATUS_TRAY_CAST_CAST_TAB" desc="The title label used in the tray popup to tell the user we are casting a tab.">
         Casting <ph name="TAB_NAME">$1<ex>YouTube</ex></ph> to <ph name="RECEIVER_NAME">$2<ex>Living Room</ex></ph>
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_CAST_CAST_TAB_ACCESSIBILITY_STOP" desc="Stop button accessibility label used in the tray popup to tell the user to stop a tab cast.">
+        Stop casting <ph name="TAB_NAME">$1<ex>YouTube</ex></ph> to <ph name="RECEIVER_NAME">$2<ex>Living Room</ex></ph>
       </message>
       <message name="IDS_ASH_STATUS_TRAY_CAST_CAST_UNKNOWN" desc="The label used when we have detected we are casting but do not know what we are casting or who we are casting to.">
         Casting to an unknown receiver
       </message>
+      <message name="IDS_ASH_STATUS_TRAY_CAST_CAST_UNKNOWN_ACCESSIBILITY_STOP" desc="Stop button accessibility label used in the tray popup to tell the user to stop a cast, but we do not know what we are casting or who we are casting to.">
+        Stop casting to an unknown receiver
+      </message>
       <message name="IDS_ASH_STATUS_TRAY_CAST_DESKTOP" desc="The label used in the tray popup to notify that desktop may be cast.">
         Cast devices available
-      </message>
-      <message name="IDS_ASH_STATUS_TRAY_CAST_NO_DEVICE" desc="The label used in the tray popup to notify that no cast devices are available.">
-        No cast devices
-      </message>
-      <message name="IDS_ASH_STATUS_TRAY_CAST_OPTIONS" desc="The label used in the tray popup to manage cast options.">
-        Options
       </message>
       <message name="IDS_ASH_STATUS_TRAY_CAST_STOP" desc="The label used in the tray popup to stop casting.">
         Stop
@@ -254,20 +251,17 @@ Press Ctrl+Alt+Z to disable.
       <message name="IDS_ASH_STATUS_TRAY_BLUETOOTH_DISABLED" desc="The label used in the tray popup to notify that bluetooth is disabled.">
         Bluetooth disabled
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_BLUETOOTH_CONNECTING" desc="Shows a connecting bluetooth device in the bluetooth list.">
-        <ph name="BLUETOOTH">$1<ex>Apple Magic Mouse</ex></ph>: Connecting...
-      </message>
-      <message name="IDS_ASH_STATUS_TRAY_DISABLE_BLUETOOTH" desc="The label used in the tray popup to disable bluetooth.">
-        Disable Bluetooth
-      </message>
-      <message name="IDS_ASH_STATUS_TRAY_ENABLE_BLUETOOTH" desc="The label used in the tray popup to enable bluetooth.">
-        Enable Bluetooth
-      </message>
-      <message name="IDS_ASH_STATUS_TRAY_BLUETOOTH_MANAGE_DEVICES" desc="The label used in the tray popup to manage bluetooth devices.">
-        Manage devices...
-      </message>
       <message name="IDS_ASH_STATUS_TRAY_BLUETOOTH_DISCOVERING" desc="The label used in the tray popup to show bluetooth is discovering devices.">
         Scanning for devices...
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_BLUETOOTH_PAIRED_DEVICES" desc="The sub-header label for paired devices in Bluetooth device list.">
+        Paired devices
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_BLUETOOTH_UNPAIRED_DEVICES" desc="The sub-header label for unpaired devices in Bluetooth device list.">
+        Unpaired devices
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_BLUETOOTH_SETTINGS" desc="The label used in the tray pop up to open Bluetooth setting page.">
+        Bluetooth settings
       </message>
 
       <message name="IDS_ASH_STATUS_TRAY_UPDATE" desc="The label used in the tray popup to notify that the user should restart to get system updates.">
@@ -285,15 +279,6 @@ Press Ctrl+Alt+Z to disable.
         Mute
       </message>
 
-      <message name="IDS_ASH_STATUS_TRAY_UNKNOWN_DISPLAY_NAME" desc="Label shown in tray for a display whose name is unknown.">
-        Unknown Display
-      </message>
-      <message name="IDS_ASH_STATUS_TRAY_DRIVE" desc="The label used for Google Drive tray details header.">
-        Google Drive
-      </message>
-      <message name="IDS_ASH_STATUS_TRAY_DRIVE_SETTINGS" desc="The label used for Google Drive settings entry.">
-        Google Drive settings...
-      </message>
       <message name="IDS_ASH_STATUS_TRAY_IME" desc="The label used as the header in the IME popup.">
         Input methods
       </message>
@@ -342,15 +327,8 @@ Press Ctrl+Alt+Z to disable.
       <message name="IDS_ASH_STATUS_TRAY_ACCESSIBILITY_VIRTUAL_KEYBOARD" desc="The label used in the accessibility menu of the system tray to toggle on/off the onscreen keyboard.">
         On-screen keyboard
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_ACCESSIBILITY_MONO_AUDIO" desc="The label used in the accessibility menu of the system tray to toggle on/off mono audio output.">
-        Play the same audio through all speakers (mono audio)
-      </message>
-      <message name="IDS_ASH_STATUS_TRAY_ACCESSIBILITY_LEARN_MORE" desc="The label used in the accessibility menu of the system tray
-     to open a webpage (article on help center) containing explanation about accessibility feature.">
-        Learn more...
-      </message>
-      <message name="IDS_ASH_STATUS_TRAY_ACCESSIBILITY_SETTINGS" desc="The label of the item 'Settings...' used in the accessibility menu of the system tray to open an accessibility setting page.">
-        Settings...
+      <message name="IDS_ASH_STATUS_TRAY_ACCESSIBILITY_SETTINGS" desc="The label used in the accessibility menu of system tray to open accessibility setting page.">
+        Accessibility settings
       </message>
       <message name="IDS_ASH_STATUS_TRAY_HELP" desc="The accessible text for the help button.">
         Help
@@ -394,25 +372,13 @@ Press Ctrl+Alt+Z to disable.
       <message name="IDS_ASH_STYLUS_TOOLS_TITLE" desc="The title of the stylus tools dialog in the ash shelf.">
         Stylus tools
       </message>
+      <message name="IDS_ASH_PALETTE_SETTINGS" desc="The label on the setting button used to open palette setting page.">
+        Stylus settings
+      </message>
+      
 
       <message name="IDS_ASH_TOAST_DISMISS_BUTTON" desc="The text button shown in toasts to close the toast immediately without waiting timeout.">
         DISMISS
-      </message>
-
-      <message name="IDS_ASH_NOTIFICATION_UNREAD_COUNT_NINE_PLUS" desc="The text shown in the notification icon for the unread count when the count is more than 9.">
-        9+
-      </message>
-      <message name="IDS_ASH_INTERNAL_DISPLAY_NAME" desc="The name used for internal displays, which is shown in the display settings.">
-        Internal Display
-      </message>
-      <message name="IDS_ASH_VIRTUAL_DISPLAY_NAME" desc="The name used for virtual displays, which is shown in the display settings. Virtual displays are not associated with a physical monitor.">
-        Virtual Display
-      </message>
-      <message name="IDS_ASH_EXIT_WARNING_POPUP_TEXT" desc="The text of the popup when the user preses the exit shortcut.">
-        Press Ctrl+Shift+Q twice to quit.
-      </message>
-      <message name="IDS_ASH_EXIT_WARNING_POPUP_TEXT_ACCESSIBLE" desc="The message used by accessibility to indicate the content of the popup when the user preses the exit shortcut.">
-        Press Control Shift Q twice to quit.
       </message>
 
       <message name="IDS_ASH_CONTROL_KEY" desc="Name of [Ctrl] key name. Shouldn't be translated in many languages actually. This name should be lower case.">
@@ -437,9 +403,6 @@ Press Ctrl+Alt+Z to disable.
       <!-- Overview Mode -->
       <message name="IDS_ASH_OVERVIEW_BUTTON_ACCESSIBLE_NAME" desc="The accessible name for the Overview button in the system tray.">
         Toggle window overview
-      </message>
-      <message name="IDS_ASH_OVERVIEW_CLOSE_ITEM_BUTTON_ACCESSIBLE_NAME" desc="The accessible name for the close button on windows while in Overview mode.">
-        Close <ph name="WINDOW_TITLE">$1</ph>
       </message>
 
       <!-- ChromeOS-specific strings -->

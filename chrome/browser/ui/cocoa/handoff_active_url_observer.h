@@ -16,7 +16,6 @@ class WebContents;
 
 class Browser;
 class HandoffActiveURLObserverDelegate;
-class TabStripModel;
 
 // This class observes changes to the "active URL". This is defined as the
 // visible URL of the WebContents of the selected tab of the most recently
@@ -40,9 +39,8 @@ class HandoffActiveURLObserver : public chrome::BrowserListObserver,
                         int reason) override;
 
   // content::WebContentsObserver
-  void DidNavigateMainFrame(
-      const content::LoadCommittedDetails& details,
-      const content::FrameNavigateParams& params) override;
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
 
   // Updates the active browser.
   void SetActiveBrowser(Browser* active_browser);

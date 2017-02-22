@@ -20,13 +20,10 @@ namespace {
 const char kLoadMediaRouterComponentExtensionFlag[] =
     "load-media-router-component-extension";
 
-const char kExtensionActionRedesignExperiment[] = "ExtensionActionRedesign";
-
 class CommonSwitches {
  public:
   CommonSwitches()
-      : easy_off_store_install(nullptr, FeatureSwitch::DEFAULT_DISABLED),
-        force_dev_mode_highlighting(switches::kForceDevModeHighlighting,
+      : force_dev_mode_highlighting(switches::kForceDevModeHighlighting,
                                     FeatureSwitch::DEFAULT_DISABLED),
         prompt_for_external_extensions(
 #if defined(CHROMIUM_BUILD)
@@ -34,7 +31,7 @@ class CommonSwitches {
 #else
             nullptr,
 #endif
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_MACOSX)
             FeatureSwitch::DEFAULT_ENABLED),
 #else
             FeatureSwitch::DEFAULT_DISABLED),
@@ -42,9 +39,7 @@ class CommonSwitches {
         error_console(switches::kErrorConsole, FeatureSwitch::DEFAULT_DISABLED),
         enable_override_bookmarks_ui(switches::kEnableOverrideBookmarksUI,
                                      FeatureSwitch::DEFAULT_DISABLED),
-        extension_action_redesign(switches::kExtensionActionRedesign,
-                                  kExtensionActionRedesignExperiment,
-                                  FeatureSwitch::DEFAULT_ENABLED),
+        extension_action_redesign(nullptr, FeatureSwitch::DEFAULT_ENABLED),
         scripts_require_action(switches::kScriptsRequireAction,
                                FeatureSwitch::DEFAULT_DISABLED),
         embedded_extension_options(switches::kEmbeddedExtensionOptions,
@@ -54,16 +49,13 @@ class CommonSwitches {
         load_media_router_component_extension(
             kLoadMediaRouterComponentExtensionFlag,
 #if defined(GOOGLE_CHROME_BUILD)
-            FeatureSwitch::DEFAULT_ENABLED)
+            FeatureSwitch::DEFAULT_ENABLED),
 #else
-            FeatureSwitch::DEFAULT_DISABLED)
+            FeatureSwitch::DEFAULT_DISABLED),
 #endif  // defined(GOOGLE_CHROME_BUILD)
-  {
+        native_crx_bindings(switches::kNativeCrxBindings,
+                            FeatureSwitch::DEFAULT_DISABLED) {
   }
-
-  // Enables extensions to be easily installed from sites other than the web
-  // store.
-  FeatureSwitch easy_off_store_install;
 
   FeatureSwitch force_dev_mode_highlighting;
 
@@ -78,6 +70,7 @@ class CommonSwitches {
   FeatureSwitch embedded_extension_options;
   FeatureSwitch trace_app_source;
   FeatureSwitch load_media_router_component_extension;
+  FeatureSwitch native_crx_bindings;
 };
 
 base::LazyInstance<CommonSwitches> g_common_switches =
@@ -87,9 +80,6 @@ base::LazyInstance<CommonSwitches> g_common_switches =
 
 FeatureSwitch* FeatureSwitch::force_dev_mode_highlighting() {
   return &g_common_switches.Get().force_dev_mode_highlighting;
-}
-FeatureSwitch* FeatureSwitch::easy_off_store_install() {
-  return &g_common_switches.Get().easy_off_store_install;
 }
 FeatureSwitch* FeatureSwitch::prompt_for_external_extensions() {
   return &g_common_switches.Get().prompt_for_external_extensions;
@@ -114,6 +104,9 @@ FeatureSwitch* FeatureSwitch::trace_app_source() {
 }
 FeatureSwitch* FeatureSwitch::load_media_router_component_extension() {
   return &g_common_switches.Get().load_media_router_component_extension;
+}
+FeatureSwitch* FeatureSwitch::native_crx_bindings() {
+  return &g_common_switches.Get().native_crx_bindings;
 }
 
 FeatureSwitch::ScopedOverride::ScopedOverride(FeatureSwitch* feature,

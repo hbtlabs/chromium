@@ -4,16 +4,17 @@
 
 #include "ui/aura/mus/window_port_mus.h"
 
+#include "base/memory/ptr_util.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/transient_window_client.h"
+#include "ui/aura/mus/client_surface_embedder.h"
 #include "ui/aura/mus/property_converter.h"
-#include "ui/aura/mus/surface_id_handler.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/mus/window_tree_client_delegate.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/aura/window_observer.h"
-#include "ui/aura/window_property.h"
+#include "ui/base/class_property.h"
 
 namespace aura {
 
@@ -31,8 +32,8 @@ WindowPortMus::WindowPortMus(WindowTreeClient* client,
     : WindowMus(window_mus_type), window_tree_client_(client) {}
 
 WindowPortMus::~WindowPortMus() {
-  if (surface_info_)
-    SetSurfaceIdFromServer(nullptr);
+  if (surface_info_.id().is_valid())
+    SetSurfaceInfoFromServer(cc::SurfaceInfo());
 
   // DESTROY is only scheduled from DestroyFromServer(), meaning if DESTROY is
   // present then the server originated the change.
@@ -58,34 +59,45 @@ void WindowPortMus::SetImeVisibility(bool visible,
 }
 
 void WindowPortMus::SetPredefinedCursor(ui::mojom::Cursor cursor_id) {
+  if (cursor_id == predefined_cursor_)
+    return;
+
   window_tree_client_->SetPredefinedCursor(this, predefined_cursor_, cursor_id);
   predefined_cursor_ = cursor_id;
 }
 
-std::unique_ptr<WindowCompositorFrameSink>
+void WindowPortMus::SetEventTargetingPolicy(
+    ui::mojom::EventTargetingPolicy policy) {
+  window_tree_client_->SetEventTargetingPolicy(this, policy);
+}
+
+void WindowPortMus::Embed(
+    ui::mojom::WindowTreeClientPtr client,
+    uint32_t flags,
+    const ui::mojom::WindowTree::EmbedCallback& callback) {
+  window_tree_client_->Embed(window_, std::move(client), flags, callback);
+}
+
+std::unique_ptr<ui::WindowCompositorFrameSink>
 WindowPortMus::RequestCompositorFrameSink(
-    ui::mojom::CompositorFrameSinkType type,
     scoped_refptr<cc::ContextProvider> context_provider,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager) {
-  std::unique_ptr<WindowCompositorFrameSinkBinding>
+  std::unique_ptr<ui::WindowCompositorFrameSinkBinding>
       compositor_frame_sink_binding;
-  std::unique_ptr<WindowCompositorFrameSink> compositor_frame_sink =
-      WindowCompositorFrameSink::Create(std::move(context_provider),
-                                        gpu_memory_buffer_manager,
-                                        &compositor_frame_sink_binding);
-  AttachCompositorFrameSink(type, std::move(compositor_frame_sink_binding));
+  std::unique_ptr<ui::WindowCompositorFrameSink> compositor_frame_sink =
+      ui::WindowCompositorFrameSink::Create(
+          cc::FrameSinkId(server_id(), 0), std::move(context_provider),
+          gpu_memory_buffer_manager, &compositor_frame_sink_binding);
+  AttachCompositorFrameSink(std::move(compositor_frame_sink_binding));
   return compositor_frame_sink;
 }
 
 void WindowPortMus::AttachCompositorFrameSink(
-    ui::mojom::CompositorFrameSinkType type,
-    std::unique_ptr<WindowCompositorFrameSinkBinding>
+    std::unique_ptr<ui::WindowCompositorFrameSinkBinding>
         compositor_frame_sink_binding) {
   window_tree_client_->AttachCompositorFrameSink(
-      server_id(), type,
-      std::move(compositor_frame_sink_binding->compositor_frame_sink_request_),
-      mojo::MakeProxy(std::move(
-          compositor_frame_sink_binding->compositor_frame_sink_client_)));
+      server_id(), compositor_frame_sink_binding->TakeFrameSinkRequest(),
+      mojo::MakeProxy(compositor_frame_sink_binding->TakeFrameSinkClient()));
 }
 
 WindowPortMus::ServerChangeIdType WindowPortMus::ScheduleChange(
@@ -111,8 +123,18 @@ void WindowPortMus::RemoveChangeById(ServerChangeIdType change_id) {
 
 bool WindowPortMus::RemoveChangeByTypeAndData(const ServerChangeType type,
                                               const ServerChangeData& data) {
-  for (auto iter = server_changes_.begin(); iter != server_changes_.end();
-       ++iter) {
+  auto iter = FindChangeByTypeAndData(type, data);
+  if (iter == server_changes_.end())
+    return false;
+  server_changes_.erase(iter);
+  return true;
+}
+
+WindowPortMus::ServerChanges::iterator WindowPortMus::FindChangeByTypeAndData(
+    const ServerChangeType type,
+    const ServerChangeData& data) {
+  auto iter = server_changes_.begin();
+  for (; iter != server_changes_.end(); ++iter) {
     if (iter->type != type)
       continue;
 
@@ -122,29 +144,28 @@ bool WindowPortMus::RemoveChangeByTypeAndData(const ServerChangeType type,
       case ServerChangeType::REMOVE:
       case ServerChangeType::REMOVE_TRANSIENT:
       case ServerChangeType::REORDER:
+      case ServerChangeType::TRANSIENT_REORDER:
         if (iter->data.child_id == data.child_id)
-          break;
-        continue;
+          return iter;
+        break;
       case ServerChangeType::BOUNDS:
-        if (iter->data.bounds == data.bounds)
-          break;
-        continue;
+        if (iter->data.bounds_in_dip == data.bounds_in_dip)
+          return iter;
+        break;
       case ServerChangeType::DESTROY:
         // No extra data for delete.
-        break;
+        return iter;
       case ServerChangeType::PROPERTY:
         if (iter->data.property_name == data.property_name)
-          break;
-        continue;
+          return iter;
+        break;
       case ServerChangeType::VISIBLE:
         if (iter->data.visible == data.visible)
-          break;
-        continue;
+          return iter;
+        break;
     }
-    server_changes_.erase(iter);
-    return true;
   }
-  return false;
+  return iter;
 }
 
 PropertyConverter* WindowPortMus::GetPropertyConverter() {
@@ -187,7 +208,7 @@ void WindowPortMus::ReorderFromServer(WindowMus* child,
 
 void WindowPortMus::SetBoundsFromServer(const gfx::Rect& bounds) {
   ServerChangeData data;
-  data.bounds = bounds;
+  data.bounds_in_dip = bounds;
   ScopedServerChange change(this, ServerChangeType::BOUNDS, data);
   window_->SetBounds(bounds);
 }
@@ -203,8 +224,6 @@ void WindowPortMus::SetVisibleFromServer(bool visible) {
 }
 
 void WindowPortMus::SetOpacityFromServer(float opacity) {
-  // TODO(sky): route to server.
-  // Changes to opacity don't make it back to the server.
   window_->layer()->SetOpacity(opacity);
 }
 
@@ -224,23 +243,28 @@ void WindowPortMus::SetPropertyFromServer(
                                                         property_data);
 }
 
-void WindowPortMus::SetSurfaceIdFromServer(
-    std::unique_ptr<SurfaceInfo> surface_info) {
-  if (surface_info_) {
-    const cc::SurfaceId& existing_surface_id = surface_info_->surface_id;
-    cc::SurfaceId new_surface_id =
-        surface_info ? surface_info->surface_id : cc::SurfaceId();
+void WindowPortMus::SetSurfaceInfoFromServer(
+    const cc::SurfaceInfo& surface_info) {
+  if (surface_info_.id().is_valid()) {
+    const cc::SurfaceId& existing_surface_id = surface_info_.id();
+    const cc::SurfaceId& new_surface_id = surface_info.id();
     if (existing_surface_id.is_valid() &&
         existing_surface_id != new_surface_id) {
       // TODO(kylechar): Start return reference here?
     }
   }
-  WindowPortMus* parent = Get(window_->parent());
-  if (parent && parent->surface_id_handler_) {
-    parent->surface_id_handler_->OnChildWindowSurfaceChanged(window_,
-                                                             &surface_info);
-  }
-  surface_info_ = std::move(surface_info);
+
+  // The fact that SetSurfaceIdFromServer was called means that this window
+  // corresponds to an embedded client.
+  if (!client_surface_embedder && surface_info.id().is_valid())
+    client_surface_embedder = base::MakeUnique<ClientSurfaceEmbedder>(window_);
+
+  if (surface_info.id().is_valid())
+    client_surface_embedder->UpdateSurface(surface_info);
+  else
+    client_surface_embedder.reset();
+
+  surface_info_ = surface_info;
 }
 
 void WindowPortMus::DestroyFromServer() {
@@ -303,7 +327,7 @@ WindowPortMus::PrepareForServerBoundsChange(const gfx::Rect& bounds) {
   std::unique_ptr<WindowMusChangeDataImpl> data(
       base::MakeUnique<WindowMusChangeDataImpl>());
   ServerChangeData change_data;
-  change_data.bounds = bounds;
+  change_data.bounds_in_dip = bounds;
   data->change = base::MakeUnique<ScopedServerChange>(
       this, ServerChangeType::BOUNDS, change_data);
   return std::move(data);
@@ -318,6 +342,24 @@ WindowPortMus::PrepareForServerVisibilityChange(bool value) {
   data->change = base::MakeUnique<ScopedServerChange>(
       this, ServerChangeType::VISIBLE, change_data);
   return std::move(data);
+}
+
+void WindowPortMus::PrepareForDestroy() {
+  ScheduleChange(ServerChangeType::DESTROY, ServerChangeData());
+}
+
+void WindowPortMus::PrepareForTransientRestack(WindowMus* window) {
+  ServerChangeData change_data;
+  change_data.child_id = window->server_id();
+  ScheduleChange(ServerChangeType::TRANSIENT_REORDER, change_data);
+}
+
+void WindowPortMus::OnTransientRestackDone(WindowMus* window) {
+  ServerChangeData change_data;
+  change_data.child_id = window->server_id();
+  const bool removed = RemoveChangeByTypeAndData(
+      ServerChangeType::TRANSIENT_REORDER, change_data);
+  DCHECK(removed);
 }
 
 void WindowPortMus::NotifyEmbeddedAppDisconnected() {
@@ -352,8 +394,13 @@ void WindowPortMus::OnWillRemoveChild(Window* child) {
 void WindowPortMus::OnWillMoveChild(size_t current_index, size_t dest_index) {
   ServerChangeData change_data;
   change_data.child_id = Get(window_->children()[current_index])->server_id();
-  if (!RemoveChangeByTypeAndData(ServerChangeType::REORDER, change_data))
+  // See description of TRANSIENT_REORDER for details on why it isn't removed
+  // here.
+  if (!RemoveChangeByTypeAndData(ServerChangeType::REORDER, change_data) &&
+      FindChangeByTypeAndData(ServerChangeType::TRANSIENT_REORDER,
+                              change_data) == server_changes_.end()) {
     window_tree_client_->OnWindowMusMoveChild(this, current_index, dest_index);
+  }
 }
 
 void WindowPortMus::OnVisibilityChanged(bool visible) {
@@ -366,19 +413,30 @@ void WindowPortMus::OnVisibilityChanged(bool visible) {
 void WindowPortMus::OnDidChangeBounds(const gfx::Rect& old_bounds,
                                       const gfx::Rect& new_bounds) {
   ServerChangeData change_data;
-  change_data.bounds = new_bounds;
+  change_data.bounds_in_dip = new_bounds;
   if (!RemoveChangeByTypeAndData(ServerChangeType::BOUNDS, change_data))
     window_tree_client_->OnWindowMusBoundsChanged(this, old_bounds, new_bounds);
 }
 
-std::unique_ptr<WindowPortPropertyData> WindowPortMus::OnWillChangeProperty(
+std::unique_ptr<ui::PropertyData> WindowPortMus::OnWillChangeProperty(
     const void* key) {
+  // |window_| is null if a property is set on the aura::Window before
+  // Window::Init() is called. It's safe to ignore the change in this case as
+  // once Window::Init() is called the Window is queried for the current set of
+  // properties.
+  if (!window_)
+    return nullptr;
+
   return window_tree_client_->OnWindowMusWillChangeProperty(this, key);
 }
 
 void WindowPortMus::OnPropertyChanged(
     const void* key,
-    std::unique_ptr<WindowPortPropertyData> data) {
+    std::unique_ptr<ui::PropertyData> data) {
+  // See comment in OnWillChangeProperty() as to why |window_| may be null.
+  if (!window_)
+    return;
+
   ServerChangeData change_data;
   change_data.property_name =
       GetPropertyConverter()->GetTransportNameForPropertyKey(key);

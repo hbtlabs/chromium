@@ -10,6 +10,7 @@
 #include "cc/output/context_provider.h"
 #include "cc/quads/draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
+#include "cc/test/fake_compositor_frame_sink.h"
 #include "cc/test/layer_test_common.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -148,9 +149,9 @@ TEST(TextureLayerImplTest, OutputIsSecure) {
 }
 
 TEST(TextureLayerImplTest, ResourceNotFreedOnGpuRasterToggle) {
-  LayerTreeSettings settings;
-  settings.gpu_rasterization_enabled = true;
-  LayerTestCommon::LayerImplTest impl(settings);
+  bool released = false;
+  LayerTestCommon::LayerImplTest impl(
+      FakeCompositorFrameSink::Create3dForGpuRasterization());
   impl.host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
 
   gfx::Size layer_size(1000, 1000);
@@ -171,7 +172,6 @@ TEST(TextureLayerImplTest, ResourceNotFreedOnGpuRasterToggle) {
       impl.AddChildToRoot<TextureLayerImpl>();
   texture_layer_impl->SetBounds(layer_size);
   texture_layer_impl->SetDrawsContent(true);
-  bool released = false;
   texture_layer_impl->SetTextureMailbox(
       texture_mailbox,
       SingleReleaseCallbackImpl::Create(base::Bind(

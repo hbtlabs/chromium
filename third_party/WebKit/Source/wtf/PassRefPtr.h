@@ -28,6 +28,7 @@
 
 #include "wtf/Allocator.h"
 #include "wtf/Assertions.h"
+#include "wtf/Compiler.h"
 #include "wtf/TypeTraits.h"
 
 namespace WTF {
@@ -85,7 +86,7 @@ class PassRefPtr {
 
   T* get() const { return m_ptr; }
 
-  T* leakRef() const WARN_UNUSED_RETURN;
+  WARN_UNUSED_RESULT T* leakRef() const;
 
   T& operator*() const { return *m_ptr; }
   T* operator->() const { return m_ptr; }
@@ -125,7 +126,7 @@ template <typename T>
 template <typename U>
 inline PassRefPtr<T>::PassRefPtr(RefPtr<U>&& o,
                                  EnsurePtrConvertibleArgDefn(U, T))
-    : m_ptr(o.release().leakRef()) {}
+    : m_ptr(o.leakRef()) {}
 
 template <typename T>
 inline T* PassRefPtr<T>::leakRef() const {

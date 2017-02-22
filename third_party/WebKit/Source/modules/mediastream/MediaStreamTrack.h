@@ -27,7 +27,7 @@
 #define MediaStreamTrack_h
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "modules/EventTargetModules.h"
 #include "modules/ModulesExport.h"
 #include "platform/mediastream/MediaStreamDescriptor.h"
@@ -42,13 +42,13 @@ class AudioSourceProvider;
 class ExceptionState;
 class MediaTrackConstraints;
 class MediaStream;
-class MediaStreamTrackSourcesCallback;
 class MediaTrackSettings;
 
-class MODULES_EXPORT MediaStreamTrack : public EventTargetWithInlineData,
-                                        public ActiveScriptWrappable,
-                                        public ActiveDOMObject,
-                                        public MediaStreamSource::Observer {
+class MODULES_EXPORT MediaStreamTrack
+    : public EventTargetWithInlineData,
+      public ActiveScriptWrappable<MediaStreamTrack>,
+      public ContextLifecycleObserver,
+      public MediaStreamSource::Observer {
   USING_GARBAGE_COLLECTED_MIXIN(MediaStreamTrack);
   DEFINE_WRAPPERTYPEINFO();
 
@@ -66,10 +66,13 @@ class MODULES_EXPORT MediaStreamTrack : public EventTargetWithInlineData,
 
   bool muted() const;
 
+  String contentHint() const;
+  void setContentHint(const String&);
+
   String readyState() const;
 
   void stopTrack(ExceptionState&);
-  virtual MediaStreamTrack* clone(ExecutionContext*);
+  virtual MediaStreamTrack* clone(ScriptState*);
 
   void getConstraints(MediaTrackConstraints&);
 
@@ -96,8 +99,8 @@ class MODULES_EXPORT MediaStreamTrack : public EventTargetWithInlineData,
   // ScriptWrappable
   bool hasPendingActivity() const final;
 
-  // ActiveDOMObject
-  void contextDestroyed() override;
+  // ContextLifecycleObserver
+  void contextDestroyed(ExecutionContext*) override;
 
   std::unique_ptr<AudioSourceProvider> createWebAudioSource();
 

@@ -2,7 +2,6 @@
 <head>
 <script src="../inspector-test.js"></script>
 <script src="../debugger-test.js"></script>
-<script src="../workspace-test.js"></script>
 <script src="../isolated-filesystem-test.js"></script>
 <script src="./persistence-test.js"></script>
 <script src="./resources/foo.js"></script>
@@ -32,7 +31,7 @@ function test()
 
             function onUISourceCodesAdded()
             {
-                InspectorTest.dumpNavigatorView(sourcesNavigator);
+                InspectorTest.dumpNavigatorView(sourcesNavigator, true);
                 next();
             }
         },
@@ -44,7 +43,7 @@ function test()
 
             function onBindingCreated(binding)
             {
-                InspectorTest.dumpNavigatorView(sourcesNavigator);
+                InspectorTest.dumpNavigatorView(sourcesNavigator, true);
                 next();
             }
         },
@@ -60,7 +59,7 @@ function test()
                 if (binding.network.name() !== "foo.js")
                     return
                 Persistence.persistence.removeEventListener(Persistence.Persistence.Events.BindingRemoved, onBindingRemoved);
-                InspectorTest.dumpNavigatorView(sourcesNavigator);
+                InspectorTest.dumpNavigatorView(sourcesNavigator, true);
                 next();
             }
         },

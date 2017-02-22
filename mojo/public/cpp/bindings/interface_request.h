@@ -9,10 +9,12 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "mojo/public/cpp/bindings/disconnect_reason.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
-#include "mojo/public/cpp/bindings/lib/control_message_proxy.h"
+#include "mojo/public/cpp/bindings/pipe_control_message_proxy.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 
 namespace mojo {
@@ -30,6 +32,19 @@ class InterfaceRequest {
   // requesting an implementation of Interface.
   InterfaceRequest() {}
   InterfaceRequest(decltype(nullptr)) {}
+
+  // Creates a new message pipe over which Interface is to be served, binding
+  // the specified InterfacePtr to one end of the message pipe and this
+  // InterfaceRequest to the other. For example usage, see comments on
+  // MakeRequest(InterfacePtr*) below.
+  explicit InterfaceRequest(InterfacePtr<Interface>* ptr,
+                            scoped_refptr<base::SingleThreadTaskRunner> runner =
+                                base::ThreadTaskRunnerHandle::Get()) {
+    MessagePipe pipe;
+    ptr->Bind(InterfacePtrInfo<Interface>(std::move(pipe.handle0), 0u),
+              std::move(runner));
+    Bind(std::move(pipe.handle1));
+  }
 
   // Takes the message pipe from another InterfaceRequest.
   InterfaceRequest(InterfaceRequest&& other) {
@@ -72,8 +87,8 @@ class InterfaceRequest {
       return;
 
     Message message =
-        internal::ControlMessageProxy::ConstructDisconnectReasonMessage(
-            custom_reason, description);
+        PipeControlMessageProxy::ConstructPeerEndpointClosedMessage(
+            kMasterInterfaceId, DisconnectReason(custom_reason, description));
     MojoResult result = WriteMessageNew(
         handle_.get(), message.TakeMojoMessage(), MOJO_WRITE_MESSAGE_FLAG_NONE);
     DCHECK_EQ(MOJO_RESULT_OK, result);
@@ -120,9 +135,9 @@ InterfaceRequest<Interface> MakeRequest(ScopedMessagePipeHandle handle) {
 //
 //   DatabasePtr database = ...;  // Connect to database.
 //   TablePtr table;
-//   database->OpenTable(GetProxy(&table));
+//   database->OpenTable(MakeRequest(&table));
 //
-// Upon return from GetProxy, |table| is ready to have methods called on it.
+// Upon return from MakeRequest, |table| is ready to have methods called on it.
 //
 // Example #2: Registering a local implementation with a remote service.
 // =====================================================================
@@ -136,19 +151,16 @@ InterfaceRequest<Interface> MakeRequest(ScopedMessagePipeHandle handle) {
 //
 //   CollectorPtr collector = ...;  // Connect to Collector.
 //   SourcePtr source;
-//   InterfaceRequest<Source> source_request = GetProxy(&source);
+//   InterfaceRequest<Source> source_request(&source);
 //   collector->RegisterSource(std::move(source));
 //   CreateSource(std::move(source_request));  // Create implementation locally.
 //
 template <typename Interface>
-InterfaceRequest<Interface> GetProxy(
+InterfaceRequest<Interface> MakeRequest(
     InterfacePtr<Interface>* ptr,
     scoped_refptr<base::SingleThreadTaskRunner> runner =
         base::ThreadTaskRunnerHandle::Get()) {
-  MessagePipe pipe;
-  ptr->Bind(InterfacePtrInfo<Interface>(std::move(pipe.handle0), 0u),
-            std::move(runner));
-  return MakeRequest<Interface>(std::move(pipe.handle1));
+  return InterfaceRequest<Interface>(ptr, runner);
 }
 
 // Fuses an InterfaceRequest<T> endpoint with an InterfacePtrInfo<T> endpoint.

@@ -19,12 +19,9 @@
 #include "extensions/browser/extension_function.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
-class GPUFeatureChecker;
-class GURL;
-
-namespace chrome {
-class BitmapFetcher;
-}  // namespace chrome
+namespace content {
+class GpuFeatureChecker;
+}
 
 namespace extensions {
 
@@ -212,7 +209,7 @@ class WebstorePrivateGetWebGLStatusFunction
 
   void OnFeatureCheck(bool feature_allowed);
 
-  scoped_refptr<GPUFeatureChecker> feature_checker_;
+  scoped_refptr<content::GpuFeatureChecker> feature_checker_;
 };
 
 class WebstorePrivateGetIsLauncherEnabledFunction

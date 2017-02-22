@@ -10,6 +10,7 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/command_line.h"
+#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/display/manager/display_manager.h"
@@ -243,9 +244,6 @@ TEST_F(LockLayoutManagerTest, KeyboardBounds) {
 }
 
 TEST_F(LockLayoutManagerTest, MultipleMonitors) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("300x400,400x500");
   gfx::Rect screen_bounds =
       display::Screen::GetScreen()->GetPrimaryDisplay().bounds();
@@ -256,7 +254,8 @@ TEST_F(LockLayoutManagerTest, MultipleMonitors) {
   widget_params.show_state = ui::SHOW_STATE_FULLSCREEN;
   std::unique_ptr<aura::Window> window(
       CreateTestLoginWindow(widget_params, false /* use_delegate */));
-  window->SetProperty(aura::client::kCanMaximizeKey, true);
+  window->SetProperty(aura::client::kResizeBehaviorKey,
+                      ui::mojom::kResizeBehaviorCanMaximize);
 
   EXPECT_EQ(screen_bounds.ToString(), window->GetBoundsInScreen().ToString());
 

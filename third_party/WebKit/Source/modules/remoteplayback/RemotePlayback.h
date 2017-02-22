@@ -8,6 +8,7 @@
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/TraceWrapperMember.h"
+#include "core/dom/ExecutionContext.h"
 #include "core/events/EventTarget.h"
 #include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
@@ -20,7 +21,6 @@
 
 namespace blink {
 
-class ExecutionContext;
 class HTMLMediaElement;
 class RemotePlaybackAvailabilityCallback;
 class ScriptPromiseResolver;
@@ -28,8 +28,8 @@ class ScriptState;
 
 class MODULES_EXPORT RemotePlayback final
     : public EventTargetWithInlineData,
-      public ActiveScriptWrappable,
-      WTF_NON_EXPORTED_BASE(public WebRemotePlaybackClient) {
+      public ActiveScriptWrappable<RemotePlayback>,
+      NON_EXPORTED_BASE(public WebRemotePlaybackClient) {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(RemotePlayback);
 
@@ -88,12 +88,6 @@ class MODULES_EXPORT RemotePlayback final
   void availabilityChanged(WebRemotePlaybackAvailability) override;
   void promptCancelled() override;
   bool remotePlaybackAvailable() const override;
-
-  // Prevent v8 from garbage collecting the availability callbacks.
-  // TODO(avayvod): remove when crbug.com/468240 is fixed and the references
-  // are maintained automatically.
-  void setV8ReferencesForCallbacks(v8::Isolate*,
-                                   const v8::Persistent<v8::Object>& wrapper);
 
   WebRemotePlaybackState m_state;
   WebRemotePlaybackAvailability m_availability;

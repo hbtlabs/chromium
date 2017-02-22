@@ -41,6 +41,7 @@ namespace blink {
 
 class DedicatedWorkerThread;
 class InProcessWorkerObjectProxy;
+class ScriptState;
 class WorkerThreadStartupData;
 
 class CORE_EXPORT DedicatedWorkerGlobalScope final : public WorkerGlobalScope {
@@ -54,18 +55,16 @@ class CORE_EXPORT DedicatedWorkerGlobalScope final : public WorkerGlobalScope {
   ~DedicatedWorkerGlobalScope() override;
 
   bool isDedicatedWorkerGlobalScope() const override { return true; }
-  void countFeature(UseCounter::Feature) const override;
-  void countDeprecation(UseCounter::Feature) const override;
 
   // EventTarget
   const AtomicString& interfaceName() const override;
 
-  void postMessage(ExecutionContext*,
+  void postMessage(ScriptState*,
                    PassRefPtr<SerializedScriptValue>,
                    const MessagePortArray&,
                    ExceptionState&);
 
-  static bool canTransferArrayBuffer() { return true; }
+  static bool canTransferArrayBuffersAndImageBitmaps() { return true; }
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(message);
 

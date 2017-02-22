@@ -19,26 +19,12 @@ ServerWindowCompositorFrameSinkManagerTestApi::
 
 void ServerWindowCompositorFrameSinkManagerTestApi::
     CreateEmptyDefaultCompositorFrameSink() {
-  manager_->type_to_compositor_frame_sink_map_
-      [mojom::CompositorFrameSinkType::DEFAULT] = CompositorFrameSinkData();
+  manager_->frame_sink_data_ = base::MakeUnique<CompositorFrameSinkData>();
 }
 
 void ServerWindowCompositorFrameSinkManagerTestApi::
     DestroyDefaultCompositorFrameSink() {
-  manager_->type_to_compositor_frame_sink_map_.erase(
-      mojom::CompositorFrameSinkType::DEFAULT);
-}
-
-void EnableHitTest(ServerWindow* window) {
-  ServerWindowCompositorFrameSinkManagerTestApi test_api(
-      window->GetOrCreateCompositorFrameSinkManager());
-  test_api.CreateEmptyDefaultCompositorFrameSink();
-}
-
-void DisableHitTest(ServerWindow* window) {
-  ServerWindowCompositorFrameSinkManagerTestApi test_api(
-      window->GetOrCreateCompositorFrameSinkManager());
-  test_api.DestroyDefaultCompositorFrameSink();
+  manager_->frame_sink_data_.reset();
 }
 
 }  // namespace ws

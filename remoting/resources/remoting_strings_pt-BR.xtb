@@ -27,9 +27,6 @@ Para ver mais informações sobre privacidade, consulte a Política de Privacida
 <translation id="1654128982815600832">Permitindo conexões remotas a este computador...</translation>
 <translation id="170207782578677537">Falha ao registrar este computador.</translation>
 <translation id="1704090719919187045">Preferências do host do Chromoting</translation>
-<translation id="1730409684442507495">• Melhoria na qualidade de imagem da área de trabalho, capacidade de resposta e consumo de bateria.
-• Melhoria na capacidade de resposta em operações de clicar e arrastar.
-• Melhoria em diversos efeitos de animações de IU.</translation>
 <translation id="174018511426417793">Você não tem computadores cadastrados. Para ativar conexões remotas a um computador, instale a Área de trabalho remota do Google Chrome no computador desejado e clique em "<ph name="BUTTON_NAME" />".</translation>
 <translation id="1742469581923031760">Conectando...</translation>
 <translation id="1770394049404108959">Não consigo abrir o aplicativo.</translation>
@@ -44,6 +41,10 @@ Para ver mais informações sobre privacidade, consulte a Política de Privacida
 <translation id="2013996867038862849">Todos os clientes pareados foram excluídos.</translation>
 <translation id="2038229918502634450">O host está reiniciando para levar em conta a alteração de uma política.</translation>
 <translation id="2046651113449445291">Os clientes a seguir foram pareados com este computador e podem se conectar sem o fornecimento de um PIN. Você pode revogar esta permissão a qualquer momento, individualmente ou para todos os clientes.</translation>
+<translation id="2053901200959289492">• Adição de compatibilidade com várias janelas no Android Nougat.
+• Melhoria na qualidade de imagem da área de trabalho, capacidade de resposta e consumo de bateria.
+• Melhoria na capacidade de resposta em operações de clicar e arrastar.
+• Melhoria em diversos efeitos de animações de IU.</translation>
 <translation id="2078880767960296260">Processo do host</translation>
 <translation id="20876857123010370">Modo de trackpad</translation>
 <translation id="2089514346391228378">As conexões remotas deste computador foram ativadas.</translation>
@@ -223,6 +224,7 @@ remota do Google Chrome</translation>
 <translation id="6640610550128933069">última vez on-line: <ph name="DATE" /></translation>
 <translation id="6668065415969892472">O PIN foi atualizado.</translation>
 <translation id="6681800064886881394">Copyright 2013 Google Inc. Todos os direitos reservados.</translation>
+<translation id="6705482892455291412">Depois que o código é informado, é solicitado que você aceite a conexão e inicie a sessão de compartilhamento.</translation>
 <translation id="6746493157771801606">Limpar histórico</translation>
 <translation id="6748108480210050150">De</translation>
 <translation id="677755392401385740">Host iniciado para o usuário <ph name="HOST_USERNAME" />.</translation>
@@ -299,6 +301,7 @@ remota do Google Chrome</translation>
 <translation id="9188433529406846933">Autorizar</translation>
 <translation id="9213184081240281106">Configuração de host inválida.</translation>
 <translation id="951991426597076286">Recusar</translation>
+<translation id="962733587145768554">Selecione "<ph name="SHARE" />" na caixa de diálogo de conexão para concluir o processo.</translation>
 <translation id="979100198331752041">A Área de trabalho remota do Google Chrome em <ph name="HOSTNAME" /> está desatualizada e precisa ser atualizada.</translation>
 <translation id="985602178874221306">Autores do Chromium</translation>
 <translation id="992215271654996353"><ph name="HOSTNAME" /> (última vez on-line em <ph name="DATE_OR_TIME" />)</translation>

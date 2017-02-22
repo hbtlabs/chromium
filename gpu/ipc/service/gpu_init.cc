@@ -17,6 +17,7 @@
 #include "gpu/config/gpu_util.h"
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
 #include "gpu/ipc/service/switches.h"
+#include "ui/gfx/switches.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/init/gl_factory.h"
@@ -127,6 +128,7 @@ bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line) {
   // to run slowly in that case.
   bool enable_watchdog =
       !command_line.HasSwitch(switches::kDisableGpuWatchdog) &&
+      !command_line.HasSwitch(switches::kHeadless) &&
       !RunningOnValgrind();
 
   // Disable the watchdog in debug builds because they tend to only be run by
@@ -157,6 +159,9 @@ bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line) {
     return false;
 #endif
   gpu_info_.in_process_gpu = false;
+
+  gpu_info_.passthrough_cmd_decoder =
+      command_line.HasSwitch(switches::kUsePassthroughCmdDecoder);
 
   sandbox_helper_->PreSandboxStartup();
 
@@ -208,6 +213,8 @@ bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line) {
   }
 #endif  // !defined(OS_MACOSX)
 
+  gpu_feature_info_ = gpu::GetGpuFeatureInfo(gpu_info_, command_line);
+
   base::TimeDelta collect_context_time =
       base::TimeTicks::Now() - before_collect_context_graphics_info;
   UMA_HISTOGRAM_TIMES("GPU.CollectContextGraphicsInfo", collect_context_time);
@@ -217,9 +224,9 @@ bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line) {
   UMA_HISTOGRAM_MEDIUM_TIMES("GPU.InitializeOneOffMediumTime",
                              initialize_one_off_time);
 
-  // OSMesa is expected to run very slowly, so disable the watchdog in that
-  // case.
-  if (gl::GetGLImplementation() == gl::kGLImplementationOSMesaGL) {
+  // Software GL is expected to run slowly, so disable the watchdog
+  // in that case.
+  if (gl::GetGLImplementation() == gl::GetSoftwareGLImplementation()) {
     if (watchdog_thread_)
       watchdog_thread_->Stop();
     watchdog_thread_ = nullptr;

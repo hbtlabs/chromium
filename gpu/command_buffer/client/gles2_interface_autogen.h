@@ -675,10 +675,6 @@ virtual GLuint CreateImageCHROMIUM(ClientBuffer buffer,
                                    GLsizei height,
                                    GLenum internalformat) = 0;
 virtual void DestroyImageCHROMIUM(GLuint image_id) = 0;
-virtual GLuint CreateGpuMemoryBufferImageCHROMIUM(GLsizei width,
-                                                  GLsizei height,
-                                                  GLenum internalformat,
-                                                  GLenum usage) = 0;
 virtual void DescheduleUntilFinishedCHROMIUM() = 0;
 virtual void GetTranslatedShaderSourceANGLE(GLuint shader,
                                             GLsizei bufsize,
@@ -689,14 +685,20 @@ virtual void PostSubBufferCHROMIUM(GLint x,
                                    GLint width,
                                    GLint height) = 0;
 virtual void CopyTextureCHROMIUM(GLenum source_id,
+                                 GLint source_level,
+                                 GLenum dest_target,
                                  GLenum dest_id,
+                                 GLint dest_level,
                                  GLint internalformat,
                                  GLenum dest_type,
                                  GLboolean unpack_flip_y,
                                  GLboolean unpack_premultiply_alpha,
                                  GLboolean unpack_unmultiply_alpha) = 0;
 virtual void CopySubTextureCHROMIUM(GLenum source_id,
+                                    GLint source_level,
+                                    GLenum dest_target,
                                     GLenum dest_id,
+                                    GLint dest_level,
                                     GLint xoffset,
                                     GLint yoffset,
                                     GLint x,
@@ -886,8 +888,10 @@ virtual void UniformMatrix4fvStreamTextureMatrixCHROMIUM(
     GLint location,
     GLboolean transpose,
     const GLfloat* transform) = 0;
-virtual void SwapBuffersWithDamageCHROMIUM(GLint x,
-                                           GLint y,
-                                           GLint width,
-                                           GLint height) = 0;
+virtual void OverlayPromotionHintCHROMIUM(GLuint texture,
+                                          GLboolean promotion_hint,
+                                          GLint display_x,
+                                          GLint display_y) = 0;
+virtual void SwapBuffersWithBoundsCHROMIUM(GLsizei count,
+                                           const GLint* rects) = 0;
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_INTERFACE_AUTOGEN_H_

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /**
- * @implements {SDK.TargetManager.Observer}
+ * @implements {SDK.SDKModelObserver<!Animation.AnimationModel>}
  * @unrestricted
  */
 Animation.AnimationTimeline = class extends UI.VBox {
@@ -33,7 +33,7 @@ Animation.AnimationTimeline = class extends UI.VBox {
     /** @type {!Map.<string, !Animation.AnimationModel.Animation>} */
     this._animationsMap = new Map();
     SDK.targetManager.addModelListener(SDK.DOMModel, SDK.DOMModel.Events.NodeRemoved, this._nodeRemoved, this);
-    SDK.targetManager.observeTargets(this, SDK.Target.Capability.DOM);
+    SDK.targetManager.observeModels(Animation.AnimationModel, this);
     UI.context.addFlavorChangeListener(SDK.DOMNode, this._nodeChanged, this);
   }
 
@@ -41,41 +41,40 @@ Animation.AnimationTimeline = class extends UI.VBox {
    * @override
    */
   wasShown() {
-    for (var target of SDK.targetManager.targets(SDK.Target.Capability.DOM))
-      this._addEventListeners(target);
+    for (var animationModel of SDK.targetManager.models(Animation.AnimationModel))
+      this._addEventListeners(animationModel);
   }
 
   /**
    * @override
    */
   willHide() {
-    for (var target of SDK.targetManager.targets(SDK.Target.Capability.DOM))
-      this._removeEventListeners(target);
+    for (var animationModel of SDK.targetManager.models(Animation.AnimationModel))
+      this._removeEventListeners(animationModel);
     this._popoverHelper.hidePopover();
   }
 
   /**
    * @override
-   * @param {!SDK.Target} target
+   * @param {!Animation.AnimationModel} animationModel
    */
-  targetAdded(target) {
+  modelAdded(animationModel) {
     if (this.isShowing())
-      this._addEventListeners(target);
+      this._addEventListeners(animationModel);
   }
 
   /**
    * @override
-   * @param {!SDK.Target} target
+   * @param {!Animation.AnimationModel} animationModel
    */
-  targetRemoved(target) {
-    this._removeEventListeners(target);
+  modelRemoved(animationModel) {
+    this._removeEventListeners(animationModel);
   }
 
   /**
-   * @param {!SDK.Target} target
+   * @param {!Animation.AnimationModel} animationModel
    */
-  _addEventListeners(target) {
-    var animationModel = Animation.AnimationModel.fromTarget(target);
+  _addEventListeners(animationModel) {
     animationModel.ensureEnabled();
     animationModel.addEventListener(
         Animation.AnimationModel.Events.AnimationGroupStarted, this._animationGroupStarted, this);
@@ -83,10 +82,9 @@ Animation.AnimationTimeline = class extends UI.VBox {
   }
 
   /**
-   * @param {!SDK.Target} target
+   * @param {!Animation.AnimationModel} animationModel
    */
-  _removeEventListeners(target) {
-    var animationModel = Animation.AnimationModel.fromTarget(target);
+  _removeEventListeners(animationModel) {
     animationModel.removeEventListener(
         Animation.AnimationModel.Events.AnimationGroupStarted, this._animationGroupStarted, this);
     animationModel.removeEventListener(Animation.AnimationModel.Events.ModelReset, this._reset, this);
@@ -112,12 +110,12 @@ Animation.AnimationTimeline = class extends UI.VBox {
     var toolbarContainer = this.contentElement.createChild('div', 'animation-timeline-toolbar-container');
     var topToolbar = new UI.Toolbar('animation-timeline-toolbar', toolbarContainer);
     var clearButton = new UI.ToolbarButton(Common.UIString('Clear all'), 'largeicon-clear');
-    clearButton.addEventListener('click', this._reset.bind(this));
+    clearButton.addEventListener(UI.ToolbarButton.Events.Click, this._reset.bind(this));
     topToolbar.appendToolbarItem(clearButton);
     topToolbar.appendSeparator();
 
     this._pauseButton = new UI.ToolbarToggle(Common.UIString('Pause all'), 'largeicon-pause', 'largeicon-resume');
-    this._pauseButton.addEventListener('click', this._togglePauseAll.bind(this));
+    this._pauseButton.addEventListener(UI.ToolbarButton.Events.Click, this._togglePauseAll.bind(this));
     topToolbar.appendToolbarItem(this._pauseButton);
 
     var playbackRateControl = toolbarContainer.createChild('div', 'animation-playback-rate-control');
@@ -147,7 +145,7 @@ Animation.AnimationTimeline = class extends UI.VBox {
     this._controlButton = new UI.ToolbarToggle(Common.UIString('Replay timeline'), 'largeicon-replay-animation');
     this._controlState = Animation.AnimationTimeline._ControlState.Replay;
     this._controlButton.setToggled(true);
-    this._controlButton.addEventListener('click', this._controlButtonToggle.bind(this));
+    this._controlButton.addEventListener(UI.ToolbarButton.Events.Click, this._controlButtonToggle.bind(this));
     toolbar.appendToolbarItem(this._controlButton);
 
     var gridHeader = container.createChild('div', 'animation-grid-header');
@@ -218,9 +216,8 @@ Animation.AnimationTimeline = class extends UI.VBox {
    */
   _setPlaybackRate(playbackRate) {
     this._playbackRate = playbackRate;
-    var target = SDK.targetManager.mainTarget();
-    if (target)
-      Animation.AnimationModel.fromTarget(target).setPlaybackRate(this._allPaused ? 0 : this._playbackRate);
+    for (var animationModel of SDK.targetManager.models(Animation.AnimationModel))
+      animationModel.setPlaybackRate(this._allPaused ? 0 : this._playbackRate);
     Host.userMetrics.actionTaken(Host.UserMetrics.Action.AnimationsPlaybackRateChanged);
     if (this._scrubberPlayer)
       this._scrubberPlayer.playbackRate = this._effectivePlaybackRate();
@@ -322,12 +319,11 @@ Animation.AnimationTimeline = class extends UI.VBox {
 
   _reset() {
     this._clearTimeline();
-    if (this._allPaused) {
-      this._playbackRate = 1;
+    if (this._allPaused)
       this._togglePauseAll();
-    } else {
-      this._setPlaybackRate(1);
-    }
+    else
+      this._setPlaybackRate(this._playbackRate);
+
     for (var group of this._groupBuffer)
       group.release();
     this._groupBuffer = [];

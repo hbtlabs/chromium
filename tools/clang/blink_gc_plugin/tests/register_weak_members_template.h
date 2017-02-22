@@ -11,30 +11,20 @@ namespace blink {
 
 class X : public GarbageCollected<X> {
  public:
-  void trace(Visitor* visitor) { traceImpl(visitor); }
-  void trace(InlinedGlobalMarkingVisitor visitor) { traceImpl(visitor); }
-
- private:
-  template <typename VisitorDispatcher>
-  void traceImpl(VisitorDispatcher visitor) {}
+  void Trace(Visitor* visitor) {}
 };
 
 class HasUntracedWeakMembers : public GarbageCollected<HasUntracedWeakMembers> {
  public:
-  void trace(Visitor* visitor) { traceImpl(visitor); }
-  void trace(InlinedGlobalMarkingVisitor visitor) { traceImpl(visitor); }
-
-  // Don't have to be defined for the purpose of this test.
-  void clearWeakMembers(Visitor* visitor);
-
- private:
-  template <typename VisitorDispatcher>
-  void traceImpl(VisitorDispatcher visitor) {
-    visitor->template registerWeakMembers<
-        HasUntracedWeakMembers,
-        &HasUntracedWeakMembers::clearWeakMembers>(this);
+  void Trace(Visitor* visitor) {
+    visitor->template RegisterWeakMembers<
+        HasUntracedWeakMembers, &HasUntracedWeakMembers::ClearWeakMembers>(
+        this);
   }
 
+  void ClearWeakMembers(Visitor* visitor);
+
+ private:
   WeakMember<X> x_;
 };
 

@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_QUIC_QUIC_FLOW_CONTROLLER_H_
-#define NET_QUIC_QUIC_FLOW_CONTROLLER_H_
+#ifndef NET_QUIC_CORE_QUIC_FLOW_CONTROLLER_H_
+#define NET_QUIC_CORE_QUIC_FLOW_CONTROLLER_H_
 
 #include "base/macros.h"
-#include "net/base/net_export.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
+#include "net/quic/platform/api/quic_export.h"
 
 namespace net {
 
@@ -19,20 +19,35 @@ class QuicConnection;
 
 const QuicStreamId kConnectionLevelId = 0;
 
+// How much larger the session flow control window needs to be relative to any
+// stream's flow control window.
+const float kSessionFlowControlMultiplier = 1.5;
+
+class QUIC_EXPORT_PRIVATE QuicFlowControllerInterface {
+ public:
+  virtual ~QuicFlowControllerInterface() {}
+
+  // Ensures the flow control window is at least |window_size| and send out an
+  // update frame if it is increased.
+  virtual void EnsureWindowAtLeast(QuicByteCount window_size) = 0;
+};
+
 // QuicFlowController allows a QUIC stream or connection to perform flow
 // control. The stream/connection owns a QuicFlowController which keeps track of
 // bytes sent/received, can tell the owner if it is flow control blocked, and
 // can send WINDOW_UPDATE or BLOCKED frames when needed.
-class NET_EXPORT_PRIVATE QuicFlowController {
+class QUIC_EXPORT_PRIVATE QuicFlowController
+    : public QuicFlowControllerInterface {
  public:
   QuicFlowController(QuicConnection* connection,
                      QuicStreamId id,
                      Perspective perspective,
-                     QuicStreamOffset send_window_offset,
-                     QuicStreamOffset receive_window_offset,
-                     bool should_auto_tune_receive_window);
+                     QuicStreamOffset send_window_size,
+                     QuicStreamOffset receive_window_size,
+                     bool should_auto_tune_receive_window,
+                     QuicFlowControllerInterface* session_flow_controller);
 
-  ~QuicFlowController() {}
+  ~QuicFlowController() override {}
 
   // Called when we see a new highest received byte offset from the peer, either
   // via a data frame or a RST.
@@ -50,6 +65,9 @@ class NET_EXPORT_PRIVATE QuicFlowController {
   // Set a new send window offset.
   // Returns true if this increases send_window_offset_ and is now blocked.
   bool UpdateSendWindowOffset(QuicStreamOffset new_send_window_offset);
+
+  // QuicFlowControllerInterface.
+  void EnsureWindowAtLeast(QuicByteCount window_size) override;
 
   // Returns the current available send window.
   QuicByteCount SendWindowSize() const;
@@ -91,6 +109,12 @@ class NET_EXPORT_PRIVATE QuicFlowController {
 
   // Auto-tune the max receive window size.
   void MaybeIncreaseMaxWindowSize();
+
+  // Updates the current offset and sends a window update frame.
+  void SendWindowUpdate(QuicStreamOffset available_window);
+
+  // Double the window size as long as we haven't hit the max window size.
+  void IncreaseWindowSize();
 
   // The parent connection, used to send connection close on flow control
   // violation, and WINDOW_UPDATE and BLOCKED frames when appropriate.
@@ -152,6 +176,11 @@ class NET_EXPORT_PRIVATE QuicFlowController {
   // Used to dynamically enable receive window auto-tuning.
   bool auto_tune_receive_window_;
 
+  // The session's flow controller.  null if this is stream id 0 or
+  // FLAGS_quic_reloadable_flag_quic_flow_control_invariant is false.
+  // Not owned.
+  QuicFlowControllerInterface* session_flow_controller_;
+
   // Send window update when receive window size drops below this.
   QuicByteCount WindowUpdateThreshold();
 
@@ -168,4 +197,4 @@ class NET_EXPORT_PRIVATE QuicFlowController {
 
 }  // namespace net
 
-#endif  // NET_QUIC_QUIC_FLOW_CONTROLLER_H_
+#endif  // NET_QUIC_CORE_QUIC_FLOW_CONTROLLER_H_

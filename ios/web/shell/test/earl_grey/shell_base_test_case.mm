@@ -14,15 +14,31 @@
 #endif
 
 using web::test::HttpServer;
-using web::webViewContainingText;
+using web::WebViewContainingText;
 
 @implementation ShellBaseTestCase
+
+// Overrides |testInvocations| to skip all tests if a system alert view is
+// shown, since this isn't a case a user would encounter (i.e. they would
+// dismiss the alert first).
++ (NSArray*)testInvocations {
+  // TODO(crbug.com/654085): Simply skipping all tests isn't the best way to
+  // handle this, it would be better to have something that is more obvious
+  // on the bots that this is wrong, without making it look like test flake.
+  NSError* error = nil;
+  [[EarlGrey selectElementWithMatcher:grey_systemAlertViewShown()]
+      assertWithMatcher:grey_nil()
+                  error:&error];
+  if (error != nil) {
+    NSLog(@"System alert view is present, so skipping all tests!");
+    return @[];
+  }
+  return [super testInvocations];
+}
 
 // Set up called once for the class.
 + (void)setUp {
   [super setUp];
-  [[EarlGrey selectElementWithMatcher:webViewContainingText("Chromium")]
-      assertWithMatcher:grey_notNil()];
   HttpServer::GetSharedInstance().StartOrDie();
 }
 

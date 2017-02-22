@@ -17,6 +17,8 @@
 #include "base/files/file_util.h"
 #include "base/json/json_writer.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chromeos/login/login_manager_test.h"
@@ -26,7 +28,7 @@
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/cloud_external_data_manager_base_test_util.h"
 #include "chrome/browser/chromeos/policy/user_cloud_policy_manager_chromeos.h"
-#include "chrome/browser/chromeos/policy/user_cloud_policy_manager_factory_chromeos.h"
+#include "chrome/browser/chromeos/policy/user_policy_manager_factory_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/stub_install_attributes.h"
 #include "chrome/browser/profiles/profile.h"
@@ -73,7 +75,8 @@ policy::CloudPolicyStore* GetStoreForUser(const user_manager::User* user) {
     return NULL;
   }
   policy::UserCloudPolicyManagerChromeOS* policy_manager =
-      policy::UserCloudPolicyManagerFactoryChromeOS::GetForProfile(profile);
+      policy::UserPolicyManagerFactoryChromeOS::GetCloudPolicyManagerForProfile(
+          profile);
   if (!policy_manager) {
     ADD_FAILURE();
     return NULL;
@@ -162,15 +165,13 @@ class WallpaperManagerPolicyTest : public LoginManagerTest,
     const base::FilePath user_key_file =
         user_keys_dir.AppendASCII(sanitized_user_id)
                      .AppendASCII("policy.pub");
-    std::vector<uint8_t> user_key_bits;
-    EXPECT_TRUE(user_policy_builder->GetSigningKey()->
-                ExportPublicKey(&user_key_bits));
+    std::string user_key_bits =
+        user_policy_builder->GetPublicSigningKeyAsString();
+    EXPECT_FALSE(user_key_bits.empty());
     EXPECT_TRUE(base::CreateDirectory(user_key_file.DirName()));
-    EXPECT_EQ(base::WriteFile(
-                  user_key_file,
-                  reinterpret_cast<const char*>(user_key_bits.data()),
-                  user_key_bits.size()),
-              static_cast<int>(user_key_bits.size()));
+    EXPECT_EQ(base::WriteFile(user_key_file, user_key_bits.data(),
+                              user_key_bits.length()),
+              base::checked_cast<int>(user_key_bits.length()));
     user_policy_builder->policy_data().set_username(account_id.GetUserEmail());
     return user_policy_builder;
   }

@@ -5,12 +5,18 @@
 #import "ios/chrome/browser/physical_web/ios_chrome_physical_web_data_source.h"
 
 #include "base/memory/ptr_util.h"
-#include "base/values.h"
+#import "ios/chrome/browser/physical_web/physical_web_initial_state_recorder.h"
 #import "ios/chrome/common/physical_web/physical_web_scanner.h"
 
-IOSChromePhysicalWebDataSource::IOSChromePhysicalWebDataSource() {}
+IOSChromePhysicalWebDataSource::IOSChromePhysicalWebDataSource(
+    PrefService* pref_service) {
+  initialStateRecorder_.reset([[PhysicalWebInitialStateRecorder alloc]
+      initWithPrefService:pref_service]);
+  [initialStateRecorder_ collectAndRecordState];
+}
 
 IOSChromePhysicalWebDataSource::~IOSChromePhysicalWebDataSource() {
+  [initialStateRecorder_ invalidate];
   StopDiscovery();
 }
 
@@ -38,11 +44,12 @@ void IOSChromePhysicalWebDataSource::StopDiscovery() {
   scanner_.reset();
 }
 
-std::unique_ptr<base::ListValue> IOSChromePhysicalWebDataSource::GetMetadata() {
+std::unique_ptr<physical_web::MetadataList>
+IOSChromePhysicalWebDataSource::GetMetadataList() {
   if (!scanner_) {
-    return base::MakeUnique<base::ListValue>();
+    return base::MakeUnique<physical_web::MetadataList>();
   }
-  return [scanner_ metadata];
+  return [scanner_ metadataList];
 }
 
 bool IOSChromePhysicalWebDataSource::HasUnresolvedDiscoveries() {

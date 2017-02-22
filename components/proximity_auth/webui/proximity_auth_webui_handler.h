@@ -8,12 +8,11 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
+#include "components/cryptauth/connection_observer.h"
 #include "components/cryptauth/cryptauth_client.h"
 #include "components/cryptauth/cryptauth_device_manager.h"
 #include "components/cryptauth/cryptauth_enrollment_manager.h"
 #include "components/cryptauth/cryptauth_gcm_manager.h"
-#include "components/proximity_auth/authenticator.h"
-#include "components/proximity_auth/connection_observer.h"
 #include "components/proximity_auth/logging/log_buffer.h"
 #include "components/proximity_auth/messenger_observer.h"
 #include "components/proximity_auth/proximity_auth_client.h"
@@ -99,7 +98,8 @@ class ProximityAuthWebUIHandler
       const std::vector<cryptauth::ExternalDeviceInfo>& reachable_phones);
 
   // Called when the RemoteDevice is loaded so we can create a connection.
-  void OnRemoteDevicesLoaded(const std::vector<RemoteDevice>& remote_devices);
+  void OnRemoteDevicesLoaded(
+      const std::vector<cryptauth::RemoteDevice>& remote_devices);
 
   // Converts an ExternalDeviceInfo proto to a JSON dictionary used in
   // JavaScript.
@@ -148,7 +148,7 @@ class ProximityAuthWebUIHandler
   // Member variables for connecting to and authenticating the remote device.
   // TODO(tengs): Support multiple simultaenous connections.
   std::unique_ptr<RemoteDeviceLoader> remote_device_loader_;
-  RemoteDevice selected_remote_device_;
+  cryptauth::RemoteDevice selected_remote_device_;
   std::unique_ptr<RemoteDeviceLifeCycle> life_cycle_;
   std::unique_ptr<RemoteStatusUpdate> last_remote_status_update_;
 

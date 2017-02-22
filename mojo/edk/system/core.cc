@@ -31,7 +31,6 @@
 #include "mojo/edk/system/platform_handle_dispatcher.h"
 #include "mojo/edk/system/ports/name.h"
 #include "mojo/edk/system/ports/node.h"
-#include "mojo/edk/system/remote_message_pipe_bootstrap.h"
 #include "mojo/edk/system/request_context.h"
 #include "mojo/edk/system/shared_buffer_dispatcher.h"
 #include "mojo/edk/system/wait_set_dispatcher.h"
@@ -45,8 +44,8 @@ namespace {
 // This is an unnecessarily large limit that is relatively easy to enforce.
 const uint32_t kMaxHandlesPerMessage = 1024 * 1024;
 
-// TODO: Maybe we could negotiate a debugging pipe ID for cross-process pipes
-// too; for now we just use a constant. This only affects bootstrap pipes.
+// TODO(rockot): Maybe we could negotiate a debugging pipe ID for cross-process
+// pipes too; for now we just use a constant. This only affects bootstrap pipes.
 const uint64_t kUnknownPipeIdForDebug = 0x7f7f7f7f7f7f7f7fUL;
 
 void CallWatchCallback(MojoWatchCallback callback,
@@ -332,32 +331,7 @@ MojoResult Core::PassSharedMemoryHandle(
 }
 
 void Core::RequestShutdown(const base::Closure& callback) {
-  base::Closure on_shutdown;
-  if (base::ThreadTaskRunnerHandle::IsSet()) {
-    on_shutdown = base::Bind(base::IgnoreResult(&base::TaskRunner::PostTask),
-                             base::ThreadTaskRunnerHandle::Get(),
-                             FROM_HERE, callback);
-  } else {
-    on_shutdown = callback;
-  }
-  GetNodeController()->RequestShutdown(on_shutdown);
-}
-
-ScopedMessagePipeHandle Core::CreateMessagePipe(
-    ScopedPlatformHandle platform_handle) {
-#if defined(OS_NACL)
-  NOTREACHED();
-  return ScopedMessagePipeHandle();
-#else
-  ports::PortRef port0, port1;
-  GetNodeController()->node()->CreatePortPair(&port0, &port1);
-  MojoHandle handle = AddDispatcher(
-    new MessagePipeDispatcher(GetNodeController(), port0,
-                              kUnknownPipeIdForDebug, 0));
-  RemoteMessagePipeBootstrap::Create(
-      GetNodeController(), std::move(platform_handle), port1);
-  return ScopedMessagePipeHandle(MessagePipeHandle(handle));
-#endif
+  GetNodeController()->RequestShutdown(callback);
 }
 
 ScopedMessagePipeHandle Core::CreateParentMessagePipe(
@@ -815,12 +789,12 @@ MojoResult Core::CreateDataPipe(
   create_options.struct_size = sizeof(MojoCreateDataPipeOptions);
   create_options.flags = options ? options->flags : 0;
   create_options.element_num_bytes = options ? options->element_num_bytes : 1;
-  // TODO: Use Configuration to get default data pipe capacity.
+  // TODO(rockot): Use Configuration to get default data pipe capacity.
   create_options.capacity_num_bytes =
       options && options->capacity_num_bytes ? options->capacity_num_bytes
                                              : 64 * 1024;
 
-  // TODO: Broker through the parent when necessary.
+  // TODO(rockot): Broker through the parent when necessary.
   scoped_refptr<PlatformSharedBuffer> ring_buffer =
       GetNodeController()->CreateSharedBuffer(
           create_options.capacity_num_bytes);
@@ -1126,7 +1100,7 @@ MojoResult Core::WaitManyInternal(const MojoHandle* handles,
                                   const MojoHandleSignals* signals,
                                   uint32_t num_handles,
                                   MojoDeadline deadline,
-                                  uint32_t *result_index,
+                                  uint32_t* result_index,
                                   HandleSignalsState* signals_states) {
   CHECK(handles);
   CHECK(signals);

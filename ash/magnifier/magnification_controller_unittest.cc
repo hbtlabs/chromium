@@ -65,15 +65,6 @@ class MagnificationControllerTest : public test::AshTestBase {
     AshTestBase::SetUp();
     UpdateDisplay(base::StringPrintf("%dx%d", kRootWidth, kRootHeight));
 
-#if defined(OS_WIN)
-    // RootWindow and Display can't resize on Windows Ash.
-    // http://crbug.com/165962
-    aura::Window* root = GetRootWindow();
-    gfx::Rect root_bounds(root->bounds());
-    EXPECT_EQ(kRootHeight, root_bounds.height());
-    EXPECT_EQ(kRootWidth, root_bounds.width());
-#endif
-
     GetMagnificationController()->DisableMoveMagnifierDelayForTesting();
   }
 
@@ -682,8 +673,6 @@ TEST_F(MagnificationControllerTest, CenterTextCaretInViewport) {
 
 // Make sure that unified desktop can enter magnified mode.
 TEST_F(MagnificationControllerTest, EnableMagnifierInUnifiedDesktop) {
-  if (!SupportsMultipleDisplays())
-    return;
   Shell::GetInstance()->display_manager()->SetUnifiedDesktopEnabled(true);
 
   EXPECT_EQ(1.0f, GetMagnificationController()->GetScale());

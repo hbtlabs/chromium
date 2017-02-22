@@ -33,8 +33,8 @@
 #include "core/events/MouseEvent.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
-#include "core/html/FormAssociatedElement.h"
 #include "core/html/HTMLFormControlElement.h"
+#include "core/html/ListedElement.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutObject.h"
 
@@ -68,6 +68,9 @@ LabelableElement* HTMLLabelElement::control() const {
     }
     return nullptr;
   }
+
+  if (!isInTreeScope())
+    return nullptr;
 
   if (Element* element = treeScope().getElementById(controlId)) {
     if (isLabelableElement(*element) &&
@@ -165,7 +168,9 @@ void HTMLLabelElement::defaultEventHandler(Event* evt) {
         // Check if there is a selection and click is not on the
         // selection.
         if (layoutObject() && layoutObject()->isSelectable() &&
-            frame->selection().isRange() &&
+            frame->selection()
+                .computeVisibleSelectionInDOMTreeDeprecated()
+                .isRange() &&
             !frame->eventHandler()
                  .selectionController()
                  .mouseDownWasSingleClickInSelection())

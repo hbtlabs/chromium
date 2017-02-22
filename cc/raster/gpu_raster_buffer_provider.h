@@ -35,6 +35,11 @@ class CC_EXPORT GpuRasterBufferProvider : public RasterBufferProvider {
   ResourceFormat GetResourceFormat(bool must_support_alpha) const override;
   bool IsResourceSwizzleRequired(bool must_support_alpha) const override;
   bool CanPartialRasterIntoProvidedResource() const override;
+  bool IsResourceReadyToDraw(ResourceId id) const override;
+  uint64_t SetReadyToDrawCallback(
+      const ResourceProvider::ResourceIdArray& resource_ids,
+      const base::Closure& callback,
+      uint64_t pending_callback_id) const override;
   void Shutdown() override;
 
   void PlaybackOnWorkerThread(
@@ -45,7 +50,7 @@ class CC_EXPORT GpuRasterBufferProvider : public RasterBufferProvider {
       const gfx::Rect& raster_full_rect,
       const gfx::Rect& raster_dirty_rect,
       uint64_t new_content_id,
-      const gfx::SizeF& scales,
+      float scale,
       const RasterSource::PlaybackSettings& playback_settings);
 
  private:
@@ -64,7 +69,7 @@ class CC_EXPORT GpuRasterBufferProvider : public RasterBufferProvider {
         const gfx::Rect& raster_full_rect,
         const gfx::Rect& raster_dirty_rect,
         uint64_t new_content_id,
-        const gfx::SizeF& scales,
+        float scale,
         const RasterSource::PlaybackSettings& playback_settings) override;
 
     void set_sync_token(const gpu::SyncToken& sync_token) {

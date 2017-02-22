@@ -7,7 +7,7 @@ package org.chromium.chrome.browser.prerender;
 import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE;
 
 import android.graphics.Rect;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 import android.util.Pair;
 
 import org.chromium.base.ThreadUtils;
@@ -114,8 +114,7 @@ public class ExternalPrerenderHandlerTest extends NativeLibraryTestBase {
             @Override
             public WebContents call() {
                 Pair<WebContents, WebContents> webContents =
-                        mExternalPrerenderHandler.addPrerender(
-                                mProfile, url, "", new Rect(), false);
+                        mExternalPrerenderHandler.addPrerender(mProfile, url, "", new Rect(), true);
                 assertNotNull(webContents);
                 assertNotNull(webContents.first);
                 assertNotNull(webContents.second);
@@ -127,8 +126,7 @@ public class ExternalPrerenderHandlerTest extends NativeLibraryTestBase {
         return ThreadUtils.runOnUiThreadBlocking(addPrerenderCallable);
     }
 
-    private void ensureCompletedPrerenderForUrl(final WebContents webContents, final String url)
-            throws Exception {
+    private void ensureCompletedPrerenderForUrl(final WebContents webContents, final String url) {
         CriteriaHelper.pollUiThread(new Criteria("No Prerender") {
             @Override
             public boolean isSatisfied() {

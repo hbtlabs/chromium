@@ -4,37 +4,41 @@
 
 #include "modules/sensor/Magnetometer.h"
 
-#include "modules/sensor/MagnetometerReading.h"
-
 using device::mojom::blink::SensorType;
 
 namespace blink {
 
 // static
-Magnetometer* Magnetometer::create(ScriptState* scriptState,
+Magnetometer* Magnetometer::create(ExecutionContext* executionContext,
                                    const SensorOptions& options,
                                    ExceptionState& exceptionState) {
-  return new Magnetometer(scriptState, options, exceptionState);
+  return new Magnetometer(executionContext, options, exceptionState);
 }
 
 // static
-Magnetometer* Magnetometer::create(ScriptState* scriptState,
+Magnetometer* Magnetometer::create(ExecutionContext* executionContext,
                                    ExceptionState& exceptionState) {
-  return create(scriptState, SensorOptions(), exceptionState);
+  return create(executionContext, SensorOptions(), exceptionState);
 }
 
-Magnetometer::Magnetometer(ScriptState* scriptState,
+Magnetometer::Magnetometer(ExecutionContext* executionContext,
                            const SensorOptions& options,
                            ExceptionState& exceptionState)
-    : Sensor(scriptState, options, exceptionState, SensorType::MAGNETOMETER) {}
+    : Sensor(executionContext,
+             options,
+             exceptionState,
+             SensorType::MAGNETOMETER) {}
 
-MagnetometerReading* Magnetometer::reading() const {
-  return static_cast<MagnetometerReading*>(Sensor::reading());
+double Magnetometer::x(bool& isNull) const {
+  return readingValue(0, isNull);
 }
 
-std::unique_ptr<SensorReadingFactory>
-Magnetometer::createSensorReadingFactory() {
-  return makeUnique<SensorReadingFactoryImpl<MagnetometerReading>>();
+double Magnetometer::y(bool& isNull) const {
+  return readingValue(1, isNull);
+}
+
+double Magnetometer::z(bool& isNull) const {
+  return readingValue(2, isNull);
 }
 
 DEFINE_TRACE(Magnetometer) {

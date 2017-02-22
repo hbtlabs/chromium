@@ -40,7 +40,11 @@ class VIEWS_EXPORT NativeWidgetAura
       public aura::client::FocusChangeObserver,
       public aura::client::DragDropDelegate {
  public:
-  explicit NativeWidgetAura(internal::NativeWidgetDelegate* delegate);
+  // |is_parallel_widget_in_window_manager| is true only when this
+  // NativeWidgetAura is created in the window manager to represent a client
+  // window, in all other cases it's false.
+  explicit NativeWidgetAura(internal::NativeWidgetDelegate* delegate,
+                            bool is_parallel_widget_in_window_manager = false);
 
   // Called internally by NativeWidgetAura and DesktopNativeWidgetAura to
   // associate |native_widget| with |window|.
@@ -52,6 +56,11 @@ class VIEWS_EXPORT NativeWidgetAura
   static void AssignIconToAuraWindow(aura::Window* window,
                                      const gfx::ImageSkia& window_icon,
                                      const gfx::ImageSkia& app_icon);
+
+  // If necessary, sets the ShadowElevation of |window| from |params|.
+  static void SetShadowElevationFromInitParams(
+      aura::Window* window,
+      const Widget::InitParams& params);
 
   // Overridden from internal::NativeWidgetPrivate:
   void InitNativeWidget(const Widget::InitParams& params) override;
@@ -134,8 +143,6 @@ class VIEWS_EXPORT NativeWidgetAura
   void SetVisibilityAnimationDuration(const base::TimeDelta& duration) override;
   void SetVisibilityAnimationTransition(
       Widget::VisibilityTransition transition) override;
-  ui::NativeTheme* GetNativeTheme() const override;
-  void OnRootViewLayout() override;
   bool IsTranslucentWindowOpacitySupported() const override;
   void OnSizeConstraintsChanged() override;
   void RepostNativeEvent(gfx::NativeEvent native_event) override;
@@ -202,6 +209,10 @@ class VIEWS_EXPORT NativeWidgetAura
 
   internal::NativeWidgetDelegate* delegate_;
 
+  // True if the Widget is created in the window-manager and another client is
+  // embedded in it. When true certain operations are not performed.
+  const bool is_parallel_widget_in_window_manager_;
+
   // WARNING: set to NULL when destroyed. As the Widget is not necessarily
   // destroyed along with |window_| all usage of |window_| should first verify
   // non-NULL.
@@ -214,9 +225,6 @@ class VIEWS_EXPORT NativeWidgetAura
   bool destroying_;
 
   gfx::NativeCursor cursor_;
-
-  // The saved window state for exiting full screen state.
-  ui::WindowShowState saved_window_state_;
 
   std::unique_ptr<TooltipManagerAura> tooltip_manager_;
 

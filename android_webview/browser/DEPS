@@ -20,6 +20,9 @@ include_rules = [
   "+components/pref_registry",
   "+components/printing/browser",
   "+components/printing/common",
+  "+components/safe_browsing",
+  "+components/safe_browsing_db",
+  "+components/security_interstitials/content",
   "+components/spellcheck/browser",
   "+components/spellcheck/common",
   "+components/url_formatter",
@@ -43,6 +46,8 @@ include_rules = [
   "+printing",
 
   "+services/service_manager/public/cpp",
+
+  "+storage/browser/quota",
 
   "+ui/gfx",
   "+ui/gl",

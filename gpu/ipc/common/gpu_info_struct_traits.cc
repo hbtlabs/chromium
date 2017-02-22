@@ -197,6 +197,8 @@ bool StructTraits<gpu::mojom::VideoDecodeAcceleratorCapabilitiesDataView,
                   gpu::VideoDecodeAcceleratorCapabilities>::
     Read(gpu::mojom::VideoDecodeAcceleratorCapabilitiesDataView data,
          gpu::VideoDecodeAcceleratorCapabilities* out) {
+  if (!data.ReadSupportedProfiles(&out->supported_profiles))
+    return false;
   out->flags = data.flags();
   return true;
 }
@@ -217,13 +219,12 @@ bool StructTraits<gpu::mojom::GpuInfoDataView, gpu::GPUInfo>::Read(
     gpu::GPUInfo* out) {
   out->optimus = data.optimus();
   out->amd_switchable = data.amd_switchable();
-  out->lenovo_dcute = data.lenovo_dcute();
-  out->adapter_luid = data.adapter_luid();
   out->gl_reset_notification_strategy = data.gl_reset_notification_strategy();
   out->software_rendering = data.software_rendering();
   out->direct_rendering = data.direct_rendering();
   out->sandboxed = data.sandboxed();
   out->in_process_gpu = data.in_process_gpu();
+  out->passthrough_cmd_decoder = data.passthrough_cmd_decoder();
   out->process_crash_count = data.process_crash_count();
   out->jpeg_decode_accelerator_supported =
       data.jpeg_decode_accelerator_supported();
@@ -234,7 +235,6 @@ bool StructTraits<gpu::mojom::GpuInfoDataView, gpu::GPUInfo>::Read(
 #endif
 
   return data.ReadInitializationTime(&out->initialization_time) &&
-         data.ReadDisplayLinkVersion(&out->display_link_version) &&
          data.ReadGpu(&out->gpu) &&
          data.ReadSecondaryGpus(&out->secondary_gpus) &&
          data.ReadDriverVendor(&out->driver_vendor) &&

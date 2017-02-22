@@ -61,6 +61,7 @@
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/signin/core/common/signin_pref_names.h"
 #include "components/strings/grit/components_strings.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_ui.h"
@@ -120,12 +121,14 @@ void CloseModalSigninIfNeeded(InlineLoginHandlerImpl* handler) {
 
 void UnlockProfileAndHideLoginUI(const base::FilePath profile_path,
                                  InlineLoginHandlerImpl* handler) {
-  ProfileManager* profile_manager = g_browser_process->profile_manager();
-  if (profile_manager) {
-    ProfileAttributesEntry* entry;
-    if (profile_manager->GetProfileAttributesStorage()
-            .GetProfileAttributesWithPath(profile_path, &entry)) {
-      entry->SetIsSigninRequired(false);
+  if (!profile_path.empty()) {
+    ProfileManager* profile_manager = g_browser_process->profile_manager();
+    if (profile_manager) {
+      ProfileAttributesEntry* entry;
+      if (profile_manager->GetProfileAttributesStorage()
+              .GetProfileAttributesWithPath(profile_path, &entry)) {
+        entry->SetIsSigninRequired(false);
+      }
     }
   }
   if (handler)
@@ -201,7 +204,8 @@ void InlineSigninHelper::OnClientOAuthSuccessAndBrowserOpened(
     const ClientOAuthResult& result,
     Profile* profile,
     Profile::CreateStatus status) {
-  UnlockProfileAndHideLoginUI(profile_->GetPath(), handler_.get());
+  if (signin::IsForceSigninEnabled())
+    UnlockProfileAndHideLoginUI(profile_->GetPath(), handler_.get());
   content::WebContents* contents = NULL;
   Browser* browser = NULL;
   if (handler_) {
@@ -282,7 +286,8 @@ void InlineSigninHelper::OnClientOAuthSuccessAndBrowserOpened(
     if (start_signin) {
       CreateSyncStarter(browser, contents, current_url_,
                         signin::GetNextPageURLForPromoURL(current_url_),
-                        result.refresh_token, start_mode,
+                        result.refresh_token,
+                        OneClickSigninSyncStarter::CURRENT_PROFILE, start_mode,
                         confirmation_required);
       base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
     }
@@ -295,12 +300,14 @@ void InlineSigninHelper::CreateSyncStarter(
     const GURL& current_url,
     const GURL& continue_url,
     const std::string& refresh_token,
+    OneClickSigninSyncStarter::ProfileMode profile_mode,
     OneClickSigninSyncStarter::StartSyncMode start_mode,
     OneClickSigninSyncStarter::ConfirmationRequired confirmation_required) {
   // OneClickSigninSyncStarter will delete itself once the job is done.
   new OneClickSigninSyncStarter(
-      profile_, browser, gaia_id_, email_, password_, refresh_token, start_mode,
-      contents, confirmation_required, current_url, continue_url,
+      profile_, browser, gaia_id_, email_, password_, refresh_token,
+      profile_mode, start_mode, contents, confirmation_required, current_url,
+      continue_url,
       base::Bind(&InlineLoginHandlerImpl::SyncStarterCallback, handler_));
 }
 
@@ -343,18 +350,17 @@ void InlineSigninHelper::ConfirmEmailAction(
     case SigninEmailConfirmationDialog::CREATE_NEW_USER:
       content::RecordAction(
           base::UserMetricsAction("Signin_ImportDataPrompt_DontImport"));
-      if (handler_) {
-        handler_->SyncStarterCallback(
-            OneClickSigninSyncStarter::SYNC_SETUP_FAILURE);
-      }
-      UserManager::Show(base::FilePath(), profiles::USER_MANAGER_NO_TUTORIAL,
-                        profiles::USER_MANAGER_OPEN_CREATE_USER_PAGE);
+      CreateSyncStarter(browser, web_contents, current_url_, GURL(),
+                        refresh_token, OneClickSigninSyncStarter::NEW_PROFILE,
+                        start_mode, confirmation_required);
       break;
     case SigninEmailConfirmationDialog::START_SYNC:
       content::RecordAction(
           base::UserMetricsAction("Signin_ImportDataPrompt_ImportData"));
       CreateSyncStarter(browser, web_contents, current_url_, GURL(),
-                        refresh_token, start_mode, confirmation_required);
+                        refresh_token,
+                        OneClickSigninSyncStarter::CURRENT_PROFILE, start_mode,
+                        confirmation_required);
       break;
     case SigninEmailConfirmationDialog::CLOSE:
       content::RecordAction(
@@ -390,26 +396,27 @@ InlineLoginHandlerImpl::InlineLoginHandlerImpl()
 InlineLoginHandlerImpl::~InlineLoginHandlerImpl() {}
 
 // This method is not called with webview sign in enabled.
-void InlineLoginHandlerImpl::DidCommitProvisionalLoadForFrame(
-    content::RenderFrameHost* render_frame_host,
-    const GURL& url,
-    ui::PageTransition transition_type) {
-  if (!web_contents())
+void InlineLoginHandlerImpl::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (!web_contents() ||
+      !navigation_handle->HasCommitted() ||
+      navigation_handle->IsErrorPage()) {
     return;
+  }
 
   // Returns early if this is not a gaia webview navigation.
   content::RenderFrameHost* gaia_frame =
       signin::GetAuthFrame(web_contents(), "signin-frame");
-  if (render_frame_host != gaia_frame)
+  if (navigation_handle->GetRenderFrameHost() != gaia_frame)
     return;
 
   // Loading any untrusted (e.g., HTTP) URLs in the privileged sign-in process
   // will require confirmation before the sign in takes effect.
   const GURL kGaiaExtOrigin(
       GaiaUrls::GetInstance()->signin_completed_continue_url().GetOrigin());
-  if (!url.is_empty()) {
-    GURL origin(url.GetOrigin());
-    if (url.spec() != url::kAboutBlankURL &&
+  if (!navigation_handle->GetURL().is_empty()) {
+    GURL origin(navigation_handle->GetURL().GetOrigin());
+    if (navigation_handle->GetURL().spec() != url::kAboutBlankURL &&
         origin != kGaiaExtOrigin &&
         !gaia::IsGaiaSignonRealm(origin)) {
       confirm_untrusted_signin_ = true;
@@ -795,7 +802,7 @@ void InlineLoginHandlerImpl::FinishCompleteLogin(
 
   // If opened from user manager to unlock a profile, make sure the user manager
   // is closed and that the profile is marked as unlocked.
-  if (!params.profile_path.empty() && !signin::IsForceSigninEnabled()) {
+  if (!signin::IsForceSigninEnabled()) {
     UnlockProfileAndHideLoginUI(params.profile_path, params.handler);
   }
 }

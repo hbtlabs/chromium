@@ -10,8 +10,6 @@
 
 #include "ui/native_theme/native_theme.h"
 
-class SkBitmap;
-
 namespace aura {
 class Window;
 }
@@ -21,11 +19,35 @@ class CommandLine;
 class Environment;
 }
 
+namespace color_utils {
+struct HSL;
+}
+
 namespace ui {
 class Accelerator;
 }
 
 namespace libgtkui {
+
+// Default frame tints
+extern const color_utils::HSL kDefaultTintFrameIncognito;
+extern const color_utils::HSL kDefaultTintFrameIncognitoInactive;
+
+extern const SkColor kInvalidColorIdColor;
+extern const SkColor kURLTextColor;
+
+// Generates the normal URL color, a green color used in unhighlighted URL
+// text. It is a mix of |kURLTextColor| and the current text color.  Unlike the
+// selected text color, it is more important to match the qualities of the
+// foreground typeface color instead of taking the background into account.
+SkColor NormalURLColor(SkColor foreground);
+
+// Generates the selected URL color, a green color used on URL text in the
+// currently highlighted entry in the autocomplete popup. It's a mix of
+// |kURLTextColor|, the current text color, and the background color (the
+// select highlight). It is more important to contrast with the background
+// saturation than to look exactly like the foreground color.
+SkColor SelectedURLColor(SkColor foreground, SkColor background);
 
 void GtkInitFromCommandLine(const base::CommandLine& command_line);
 
@@ -52,6 +74,155 @@ aura::Window* GetAuraTransientParent(GtkWidget* dialog);
 
 // Clears the transient parent for |dialog|.
 void ClearAuraTransientParent(GtkWidget* dialog);
+
+#if GTK_MAJOR_VERSION > 2
+// These constants are defined in gtk/gtkenums.h in Gtk3.12 or later.
+// They are added here as a convenience to avoid version checks, and
+// can be removed once the sysroot is switched from Wheezy to Jessie.
+#define GTK_STATE_FLAG_LINK static_cast<GtkStateFlags>(1 << 9)
+#define GTK_STATE_FLAG_VISITED static_cast<GtkStateFlags>(1 << 10)
+#define GTK_STATE_FLAG_CHECKED static_cast<GtkStateFlags>(1 << 11)
+
+class CairoSurface {
+ public:
+  // Attaches a cairo surface to an SkBitmap so that GTK can render
+  // into it.  |bitmap| must outlive this CairoSurface.
+  explicit CairoSurface(SkBitmap& bitmap);
+
+  // Creates a new cairo surface with the given size.  The memory for
+  // this surface is deallocated when this CairoSurface is destroyed.
+  explicit CairoSurface(const gfx::Size& size);
+
+  ~CairoSurface();
+
+  // Get the drawing context for GTK to use.
+  cairo_t* cairo() { return cairo_; }
+
+  // Returns the average of all pixels in the surface.  If |frame| is
+  // true, the resulting alpha will be the average alpha, otherwise it
+  // will be the max alpha across all pixels.
+  SkColor GetAveragePixelValue(bool frame);
+
+ private:
+  cairo_surface_t* surface_;
+  cairo_t* cairo_;
+};
+
+// Returns true iff the runtime version of Gtk used meets
+// |major|.|minor|.|micro|.
+bool GtkVersionCheck(int major, int minor = 0, int micro = 0);
+
+// Similar in spirit to a std::unique_ptr.
+template <typename T>
+class ScopedGObject {
+ public:
+  explicit ScopedGObject(T* obj) : obj_(obj) {
+    // Remove the floating reference from |obj_| if it has one.
+    if (g_object_is_floating(obj_))
+      g_object_ref_sink(obj_);
+    DCHECK(G_OBJECT(obj_)->ref_count == 1);
+  }
+
+  ScopedGObject(const ScopedGObject<T>& other) = delete;
+
+  ScopedGObject(ScopedGObject<T>&& other) : obj_(other.obj_) {
+    other.obj_ = nullptr;
+  }
+
+  ~ScopedGObject() {
+    if (obj_)
+      Unref();
+  }
+
+  ScopedGObject<T>& operator=(const ScopedGObject<T>& other) = delete;
+
+  ScopedGObject<T>& operator=(ScopedGObject<T>&& other) {
+    g_object_unref(obj_);
+    obj_ = other.obj_;
+    other.obj_ = nullptr;
+    return *this;
+  }
+
+  operator T*() { return obj_; }
+
+ private:
+  void Unref() { g_object_unref(obj_); }
+
+  T* obj_;
+};
+
+template <>
+inline void ScopedGObject<GtkStyleContext>::Unref() {
+  // Versions of GTK earlier than 3.15.4 had a bug where a g_assert
+  // would be triggered when trying to free a GtkStyleContext that had
+  // a parent whose only reference was the child context in question.
+  // This is a hack to work around that case.  See GTK commit
+  // "gtkstylecontext: Don't try to emit a signal when finalizing".
+  GtkStyleContext* context = obj_;
+  while (context) {
+    GtkStyleContext* parent = gtk_style_context_get_parent(context);
+    if (parent && G_OBJECT(context)->ref_count == 1 &&
+        !GtkVersionCheck(3, 15, 4)) {
+      g_object_ref(parent);
+      gtk_style_context_set_parent(context, nullptr);
+      g_object_unref(context);
+    } else {
+      g_object_unref(context);
+      return;
+    }
+    context = parent;
+  }
+}
+
+typedef ScopedGObject<GtkStyleContext> ScopedStyleContext;
+typedef ScopedGObject<GtkCssProvider> ScopedCssProvider;
+
+// If |context| is NULL, creates a new top-level style context
+// specified by parsing |css_node|.  Otherwise, creates the child
+// context with |context| as the parent.
+ScopedStyleContext AppendCssNodeToStyleContext(GtkStyleContext* context,
+                                               const std::string& css_node);
+
+// Parses |css_selector| into a GtkStyleContext.  The format is a
+// sequence of whitespace-separated objects.  Each object may have at
+// most one object name at the beginning of the string, and any number
+// of '.'-prefixed classes and ':'-prefixed pseudoclasses.  An example
+// is "GtkButton.button.suggested-action:hover:active".  The caller
+// must g_object_unref() the returned context.
+ScopedStyleContext GetStyleContextFromCss(const char* css_selector);
+
+SkColor GetFgColorFromStyleContext(GtkStyleContext* context);
+
+// Overrides properties on |context| and all its parents with those
+// provided by |css|.
+void ApplyCssToContext(GtkStyleContext* context, const char* css);
+
+// Get the 'color' property from the style context created by
+// GetStyleContextFromCss(|css_selector|).
+SkColor GetFgColor(const char* css_selector);
+
+// Renders the backgrounds of all ancestors of |context|, then renders
+// the background for |context| itself.
+void RenderBackground(const gfx::Size& size,
+                      cairo_t* cr,
+                      GtkStyleContext* context);
+
+// Renders a background from the style context created by
+// GetStyleContextFromCss(|css_selector|) into a 24x24 bitmap and
+// returns the average color.
+SkColor GetBgColor(const char* css_selector);
+
+// Renders the border from the style context created by
+// GetStyleContextFromCss(|css_selector|) into a 24x24 bitmap and
+// returns the average color.
+SkColor GetBorderColor(const char* css_selector);
+
+SkColor GetSelectedTextColor(const char* css_selector);
+SkColor GetSelectedBgColor(const char* css_selector);
+
+// Get the color of the GtkSeparator specified by |css_selector|.
+SkColor GetSeparatorColor(const char* css_selector);
+#endif
 
 }  // namespace libgtkui
 

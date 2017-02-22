@@ -21,7 +21,8 @@ namespace {
 
 // PPD reference fields
 const char kUserSuppliedPpdUrl[] = "user_supplied_ppd_url";
-const char kEffectiveManufacturer[] = "effective_manufacturer";
+// TODO(justincarlson) -- This should be changed to effective_make_and_model to
+// match the implementation.
 const char kEffectiveModel[] = "effective_model";
 
 // printer fields
@@ -33,12 +34,14 @@ const char kUri[] = "uri";
 const char kPpdReference[] = "ppd_reference";
 const char kUUID[] = "uuid";
 
+// The name of the PpdResource for policy printers.
+const char kPpdResource[] = "ppd_resource";
+
 Printer::PpdReference DictionaryToPpdReference(
     const base::DictionaryValue* value) {
   Printer::PpdReference ppd;
   value->GetString(kUserSuppliedPpdUrl, &ppd.user_supplied_ppd_url);
-  value->GetString(kEffectiveManufacturer, &ppd.effective_manufacturer);
-  value->GetString(kEffectiveModel, &ppd.effective_model);
+  value->GetString(kEffectiveModel, &ppd.effective_make_and_model);
   return ppd;
 }
 
@@ -49,24 +52,17 @@ std::unique_ptr<base::DictionaryValue> PpdReferenceToDictionary(
   if (!ppd.user_supplied_ppd_url.empty()) {
     dictionary->SetString(kUserSuppliedPpdUrl, ppd.user_supplied_ppd_url);
   }
-  if (!ppd.effective_manufacturer.empty()) {
-    dictionary->SetString(kEffectiveManufacturer, ppd.effective_manufacturer);
-  }
-  if (!ppd.effective_model.empty()) {
-    dictionary->SetString(kEffectiveModel, ppd.effective_model);
+  if (!ppd.effective_make_and_model.empty()) {
+    dictionary->SetString(kEffectiveModel, ppd.effective_make_and_model);
   }
   return dictionary;
 }
 
-}  // namespace
-
-namespace printing {
-
-const char kPrinterId[] = "id";
-
-std::unique_ptr<Printer> PrefToPrinter(const DictionaryValue& value) {
+// Converts |value| into a Printer object for the fields that are shared
+// between pref printers and policy printers.
+std::unique_ptr<Printer> DictionaryToPrinter(const DictionaryValue& value) {
   std::string id;
-  if (!value.GetString(kPrinterId, &id)) {
+  if (!value.GetString(printing::kPrinterId, &id)) {
     LOG(WARNING) << "Record id required";
     return nullptr;
   }
@@ -97,6 +93,24 @@ std::unique_ptr<Printer> PrefToPrinter(const DictionaryValue& value) {
   if (value.GetString(kUUID, &uuid))
     printer->set_uuid(uuid);
 
+  return printer;
+}
+
+}  // namespace
+
+namespace printing {
+
+const char kPrinterId[] = "id";
+
+std::unique_ptr<Printer> PrefToPrinter(const DictionaryValue& value) {
+  if (!value.HasKey(kPrinterId)) {
+    LOG(WARNING) << "Record id required";
+    return nullptr;
+  }
+
+  std::unique_ptr<Printer> printer = DictionaryToPrinter(value);
+  printer->set_source(Printer::SRC_USER_PREFS);
+
   const DictionaryValue* ppd;
   if (value.GetDictionary(kPpdReference, &ppd)) {
     *printer->mutable_ppd_reference() = DictionaryToPpdReference(ppd);
@@ -122,6 +136,18 @@ std::unique_ptr<base::DictionaryValue> PrinterToPref(const Printer& printer) {
   return dictionary;
 }
 
-}  // namespace printing
+std::unique_ptr<Printer> RecommendedPrinterToPrinter(
+    const base::DictionaryValue& pref) {
+  std::unique_ptr<Printer> printer = DictionaryToPrinter(pref);
+  printer->set_source(Printer::SRC_POLICY);
 
+  const DictionaryValue* ppd;
+  if (pref.GetDictionary(kPpdResource, &ppd)) {
+    *printer->mutable_ppd_reference() = DictionaryToPpdReference(ppd);
+  }
+
+  return printer;
+}
+
+}  // namespace printing
 }  // namespace chromeos

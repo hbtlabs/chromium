@@ -83,7 +83,7 @@ class AudioBufferSourceHandler final : public AudioScheduledSourceHandler {
   bool loop() const { return m_isLooping; }
   void setLoop(bool looping) {
     m_isLooping = looping;
-    m_didSetLooping = m_didSetLooping || looping;
+    setDidSetLooping(looping);
   }
 
   // Loop times in seconds.
@@ -124,7 +124,8 @@ class AudioBufferSourceHandler final : public AudioScheduledSourceHandler {
   // m_buffer holds the sample data which this node outputs.
   // This Persistent doesn't make a reference cycle including
   // AudioBufferSourceNode.
-  Persistent<AudioBuffer> m_buffer;
+  // It is cross-thread, as it will be accessed by the audio and main threads.
+  CrossThreadPersistent<AudioBuffer> m_buffer;
 
   // Pointers for the buffer and destination.
   std::unique_ptr<const float* []> m_sourceChannels;
@@ -133,6 +134,12 @@ class AudioBufferSourceHandler final : public AudioScheduledSourceHandler {
   RefPtr<AudioParamHandler> m_playbackRate;
   RefPtr<AudioParamHandler> m_detune;
 
+  bool didSetLooping() const { return acquireLoad(&m_didSetLooping); }
+  void setDidSetLooping(bool loop) {
+    bool newLooping = didSetLooping() || loop;
+    releaseStore(&m_didSetLooping, newLooping);
+  }
+
   // If m_isLooping is false, then this node will be done playing and become
   // inactive after it reaches the end of the sample data in the buffer.  If
   // true, it will wrap around to the start of the buffer each time it reaches
@@ -140,7 +147,7 @@ class AudioBufferSourceHandler final : public AudioScheduledSourceHandler {
   bool m_isLooping;
 
   // True if the source .loop attribute was ever set.
-  bool m_didSetLooping;
+  int m_didSetLooping;
 
   double m_loopStart;
   double m_loopEnd;

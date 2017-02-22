@@ -11,6 +11,7 @@
 #include <numeric>
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
@@ -269,7 +270,7 @@ void MessagePopupCollectionTest::CheckedAnimationDelegate::
     return;
   auto poorly_aligned = std::adjacent_find(
       toasts_->begin(), toasts_->end(),
-      [this](ToastContentsView* top, ToastContentsView* bottom) {
+      [](ToastContentsView* top, ToastContentsView* bottom) {
         return ComputeYDistance(*top, *bottom) != kMarginBetweenItems;
       });
   if (poorly_aligned != toasts_->end())
@@ -288,7 +289,7 @@ void MessagePopupCollectionTest::CheckedAnimationDelegate::
     return;
   auto poorly_aligned = std::adjacent_find(
       toasts_->begin(), toasts_->end(),
-      [this](ToastContentsView* top, ToastContentsView* bottom) {
+      [](ToastContentsView* top, ToastContentsView* bottom) {
         return ComputeYDistance(*top, *bottom) < 0;
       });
   if (poorly_aligned != toasts_->end())

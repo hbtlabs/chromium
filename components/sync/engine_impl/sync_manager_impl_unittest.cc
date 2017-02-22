@@ -5,7 +5,6 @@
 #include "components/sync/engine_impl/sync_manager_impl.h"
 
 #include <cstddef>
-#include <memory>
 #include <utility>
 
 #include "base/callback.h"
@@ -996,8 +995,7 @@ class SyncManagerTest : public testing::Test,
 
   virtual ~SyncManagerTest() {}
 
-  // Test implementation.
-  void SetUp() {
+  virtual void DoSetUp(bool enable_local_sync_backend) {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
 
     extensions_activity_ = new ExtensionsActivity();
@@ -1018,8 +1016,6 @@ class SyncManagerTest : public testing::Test,
     EXPECT_FALSE(js_backend_.IsInitialized());
 
     std::vector<scoped_refptr<ModelSafeWorker>> workers;
-    ModelSafeRoutingInfo routing_info;
-    GetModelSafeRoutingInfo(&routing_info);
 
     // This works only because all routing info types are GROUP_PASSIVE.
     // If we had types in other groups, we would need additional workers
@@ -1035,8 +1031,11 @@ class SyncManagerTest : public testing::Test,
     args.workers = workers;
     args.extensions_activity = extensions_activity_.get(),
     args.change_delegate = this;
-    args.credentials = credentials;
+    if (!enable_local_sync_backend)
+      args.credentials = credentials;
     args.invalidator_client_id = "fake_invalidator_client_id";
+    args.enable_local_sync_backend = enable_local_sync_backend;
+    args.local_sync_backend_folder = temp_dir_.GetPath();
     args.engine_components_factory.reset(GetFactory());
     args.encryptor = &encryptor_;
     args.unrecoverable_error_handler =
@@ -1050,15 +1049,18 @@ class SyncManagerTest : public testing::Test,
     EXPECT_EQ(EngineComponentsFactory::STORAGE_ON_DISK, storage_used_);
 
     if (initialization_succeeded_) {
-      for (ModelSafeRoutingInfo::iterator i = routing_info.begin();
-           i != routing_info.end(); ++i) {
-        type_roots_[i->first] =
-            MakeTypeRoot(sync_manager_.GetUserShare(), i->first);
+      ModelTypeSet enabled_types = GetEnabledTypes();
+      for (auto it = enabled_types.First(); it.Good(); it.Inc()) {
+        type_roots_[it.Get()] =
+            MakeTypeRoot(sync_manager_.GetUserShare(), it.Get());
       }
     }
 
     PumpLoop();
   }
+
+  // Test implementation.
+  void SetUp() { DoSetUp(false); }
 
   void TearDown() {
     sync_manager_.RemoveObserver(&manager_observer_);
@@ -1066,23 +1068,20 @@ class SyncManagerTest : public testing::Test,
     PumpLoop();
   }
 
-  void GetModelSafeRoutingInfo(ModelSafeRoutingInfo* out) {
-    (*out)[NIGORI] = GROUP_PASSIVE;
-    (*out)[DEVICE_INFO] = GROUP_PASSIVE;
-    (*out)[EXPERIMENTS] = GROUP_PASSIVE;
-    (*out)[BOOKMARKS] = GROUP_PASSIVE;
-    (*out)[THEMES] = GROUP_PASSIVE;
-    (*out)[SESSIONS] = GROUP_PASSIVE;
-    (*out)[PASSWORDS] = GROUP_PASSIVE;
-    (*out)[PREFERENCES] = GROUP_PASSIVE;
-    (*out)[PRIORITY_PREFERENCES] = GROUP_PASSIVE;
-    (*out)[ARTICLES] = GROUP_PASSIVE;
-  }
-
   ModelTypeSet GetEnabledTypes() {
-    ModelSafeRoutingInfo routing_info;
-    GetModelSafeRoutingInfo(&routing_info);
-    return GetRoutingInfoTypes(routing_info);
+    ModelTypeSet enabled_types;
+    enabled_types.Put(NIGORI);
+    enabled_types.Put(DEVICE_INFO);
+    enabled_types.Put(EXPERIMENTS);
+    enabled_types.Put(BOOKMARKS);
+    enabled_types.Put(THEMES);
+    enabled_types.Put(SESSIONS);
+    enabled_types.Put(PASSWORDS);
+    enabled_types.Put(PREFERENCES);
+    enabled_types.Put(PRIORITY_PREFERENCES);
+    enabled_types.Put(ARTICLES);
+
+    return enabled_types;
   }
 
   void OnChangesApplied(ModelType model_type,
@@ -2658,18 +2657,15 @@ TEST_F(SyncManagerTest, SetPreviouslyEncryptedSpecifics) {
 // Verify transaction version of a model type is incremented when node of
 // that type is updated.
 TEST_F(SyncManagerTest, IncrementTransactionVersion) {
-  ModelSafeRoutingInfo routing_info;
-  GetModelSafeRoutingInfo(&routing_info);
-
   {
     ReadTransaction read_trans(FROM_HERE, sync_manager_.GetUserShare());
-    for (ModelSafeRoutingInfo::iterator i = routing_info.begin();
-         i != routing_info.end(); ++i) {
+    ModelTypeSet enabled_types = GetEnabledTypes();
+    for (auto it = enabled_types.First(); it.Good(); it.Inc()) {
       // Transaction version is incremented when SyncManagerTest::SetUp()
       // creates a node of each type.
       EXPECT_EQ(1,
                 sync_manager_.GetUserShare()->directory->GetTransactionVersion(
-                    i->first));
+                    it.Get()));
     }
   }
 
@@ -2683,12 +2679,44 @@ TEST_F(SyncManagerTest, IncrementTransactionVersion) {
 
   {
     ReadTransaction read_trans(FROM_HERE, sync_manager_.GetUserShare());
-    for (ModelSafeRoutingInfo::iterator i = routing_info.begin();
-         i != routing_info.end(); ++i) {
-      EXPECT_EQ(i->first == BOOKMARKS ? 2 : 1,
+    ModelTypeSet enabled_types = GetEnabledTypes();
+    for (auto it = enabled_types.First(); it.Good(); it.Inc()) {
+      EXPECT_EQ(it.Get() == BOOKMARKS ? 2 : 1,
                 sync_manager_.GetUserShare()->directory->GetTransactionVersion(
-                    i->first));
+                    it.Get()));
     }
+  }
+}
+
+class SyncManagerWithLocalBackendTest : public SyncManagerTest {
+ protected:
+  void SetUp() override { DoSetUp(true); }
+};
+
+// This test checks that we can successfully initialize without credentials in
+// the local backend case.
+TEST_F(SyncManagerWithLocalBackendTest, StartSyncInLocalMode) {
+  EXPECT_TRUE(SetUpEncryption(WRITE_TO_NIGORI, DEFAULT_ENCRYPTION));
+  EXPECT_CALL(encryption_observer_, OnEncryptionComplete());
+  EXPECT_CALL(encryption_observer_, OnCryptographerStateChanged(_));
+  EXPECT_CALL(encryption_observer_, OnEncryptedTypesChanged(_, false));
+
+  sync_manager_.GetEncryptionHandler()->Init();
+  PumpLoop();
+
+  const ModelTypeSet encrypted_types = GetEncryptedTypes();
+  EXPECT_TRUE(encrypted_types.Has(PASSWORDS));
+  EXPECT_FALSE(IsEncryptEverythingEnabledForTest());
+
+  {
+    ReadTransaction trans(FROM_HERE, sync_manager_.GetUserShare());
+    ReadNode node(&trans);
+    EXPECT_EQ(BaseNode::INIT_OK, node.InitByIdLookup(GetIdForDataType(NIGORI)));
+    sync_pb::NigoriSpecifics nigori = node.GetNigoriSpecifics();
+    EXPECT_TRUE(nigori.has_encryption_keybag());
+    Cryptographer* cryptographer = trans.GetCryptographer();
+    EXPECT_TRUE(cryptographer->is_ready());
+    EXPECT_TRUE(cryptographer->CanDecrypt(nigori.encryption_keybag()));
   }
 }
 
@@ -2717,7 +2745,8 @@ class ComponentsFactory : public TestEngineComponentsFactory {
   std::unique_ptr<SyncScheduler> BuildScheduler(
       const std::string& name,
       SyncCycleContext* context,
-      CancelationSignal* stop_handle) override {
+      CancelationSignal* stop_handle,
+      bool local_sync_backend_enabled) override {
     *cycle_context_ = context;
     return std::move(scheduler_to_use_);
   }
@@ -2745,21 +2774,34 @@ class SyncManagerTestWithMockScheduler : public SyncManagerTest {
 };
 
 // Test that the configuration params are properly created and sent to
-// ScheduleConfigure. No callback should be invoked. Any disabled datatypes
-// should be purged.
+// ScheduleConfigure. No callback should be invoked.
 TEST_F(SyncManagerTestWithMockScheduler, BasicConfiguration) {
   ConfigureReason reason = CONFIGURE_REASON_RECONFIGURATION;
   ModelTypeSet types_to_download(BOOKMARKS, PREFERENCES);
-  ModelSafeRoutingInfo new_routing_info;
-  GetModelSafeRoutingInfo(&new_routing_info);
-  ModelTypeSet enabled_types = GetRoutingInfoTypes(new_routing_info);
-  ModelTypeSet disabled_types = Difference(ModelTypeSet::All(), enabled_types);
 
   ConfigurationParams params;
   EXPECT_CALL(*scheduler(), Start(SyncScheduler::CONFIGURATION_MODE, _));
   EXPECT_CALL(*scheduler(), ScheduleConfiguration(_))
       .WillOnce(SaveArg<0>(&params));
 
+  CallbackCounter ready_task_counter, retry_task_counter;
+  sync_manager_.ConfigureSyncer(
+      reason, types_to_download,
+      base::Bind(&CallbackCounter::Callback,
+                 base::Unretained(&ready_task_counter)),
+      base::Bind(&CallbackCounter::Callback,
+                 base::Unretained(&retry_task_counter)));
+  EXPECT_EQ(0, ready_task_counter.times_called());
+  EXPECT_EQ(0, retry_task_counter.times_called());
+  EXPECT_EQ(sync_pb::GetUpdatesCallerInfo::RECONFIGURATION, params.source);
+  EXPECT_EQ(types_to_download, params.types_to_download);
+}
+
+// Test that PurgeDisabledTypes only purges recently disabled types leaving
+// others intact.
+TEST_F(SyncManagerTestWithMockScheduler, PurgeDisabledTypes) {
+  ModelTypeSet enabled_types = GetEnabledTypes();
+  ModelTypeSet disabled_types = Difference(ModelTypeSet::All(), enabled_types);
   // Set data for all types.
   ModelTypeSet protocol_types = ProtocolTypes();
   for (ModelTypeSet::Iterator iter = protocol_types.First(); iter.Good();
@@ -2767,76 +2809,13 @@ TEST_F(SyncManagerTestWithMockScheduler, BasicConfiguration) {
     SetProgressMarkerForType(iter.Get(), true);
   }
 
-  CallbackCounter ready_task_counter, retry_task_counter;
-  sync_manager_.ConfigureSyncer(
-      reason, types_to_download, disabled_types, ModelTypeSet(), ModelTypeSet(),
-      new_routing_info, base::Bind(&CallbackCounter::Callback,
-                                   base::Unretained(&ready_task_counter)),
-      base::Bind(&CallbackCounter::Callback,
-                 base::Unretained(&retry_task_counter)));
-  EXPECT_EQ(0, ready_task_counter.times_called());
-  EXPECT_EQ(0, retry_task_counter.times_called());
-  EXPECT_EQ(sync_pb::GetUpdatesCallerInfo::RECONFIGURATION, params.source);
-  EXPECT_EQ(types_to_download, params.types_to_download);
-  EXPECT_EQ(new_routing_info, params.routing_info);
-
+  sync_manager_.PurgeDisabledTypes(disabled_types, ModelTypeSet(),
+                                   ModelTypeSet());
   // Verify all the disabled types were purged.
   EXPECT_EQ(enabled_types,
             sync_manager_.GetUserShare()->directory->InitialSyncEndedTypes());
   EXPECT_EQ(disabled_types, sync_manager_.GetTypesWithEmptyProgressMarkerToken(
                                 ModelTypeSet::All()));
-}
-
-// Test that on a reconfiguration (configuration where the session context
-// already has routing info), only those recently disabled types are purged.
-TEST_F(SyncManagerTestWithMockScheduler, ReConfiguration) {
-  ConfigureReason reason = CONFIGURE_REASON_RECONFIGURATION;
-  ModelTypeSet types_to_download(BOOKMARKS, PREFERENCES);
-  ModelTypeSet disabled_types = ModelTypeSet(THEMES, SESSIONS);
-  ModelSafeRoutingInfo old_routing_info;
-  ModelSafeRoutingInfo new_routing_info;
-  GetModelSafeRoutingInfo(&old_routing_info);
-  new_routing_info = old_routing_info;
-  new_routing_info.erase(THEMES);
-  new_routing_info.erase(SESSIONS);
-  ModelTypeSet enabled_types = GetRoutingInfoTypes(new_routing_info);
-
-  ConfigurationParams params;
-  EXPECT_CALL(*scheduler(), Start(SyncScheduler::CONFIGURATION_MODE, _));
-  EXPECT_CALL(*scheduler(), ScheduleConfiguration(_))
-      .WillOnce(SaveArg<0>(&params));
-
-  // Set data for all types except those recently disabled (so we can verify
-  // only those recently disabled are purged) .
-  ModelTypeSet protocol_types = ProtocolTypes();
-  for (ModelTypeSet::Iterator iter = protocol_types.First(); iter.Good();
-       iter.Inc()) {
-    if (!disabled_types.Has(iter.Get())) {
-      SetProgressMarkerForType(iter.Get(), true);
-    } else {
-      SetProgressMarkerForType(iter.Get(), false);
-    }
-  }
-
-  // Set the context to have the old routing info.
-  cycle_context()->SetRoutingInfo(old_routing_info);
-
-  CallbackCounter ready_task_counter, retry_task_counter;
-  sync_manager_.ConfigureSyncer(
-      reason, types_to_download, ModelTypeSet(), ModelTypeSet(), ModelTypeSet(),
-      new_routing_info, base::Bind(&CallbackCounter::Callback,
-                                   base::Unretained(&ready_task_counter)),
-      base::Bind(&CallbackCounter::Callback,
-                 base::Unretained(&retry_task_counter)));
-  EXPECT_EQ(0, ready_task_counter.times_called());
-  EXPECT_EQ(0, retry_task_counter.times_called());
-  EXPECT_EQ(sync_pb::GetUpdatesCallerInfo::RECONFIGURATION, params.source);
-  EXPECT_EQ(types_to_download, params.types_to_download);
-  EXPECT_EQ(new_routing_info, params.routing_info);
-
-  // Verify only the recently disabled types were purged.
-  EXPECT_EQ(disabled_types, sync_manager_.GetTypesWithEmptyProgressMarkerToken(
-                                ProtocolTypes()));
 }
 
 // Test that SyncManager::ClearServerData invokes the scheduler.
@@ -2852,9 +2831,7 @@ TEST_F(SyncManagerTestWithMockScheduler, ClearServerData) {
 // Test that PurgePartiallySyncedTypes purges only those types that have not
 // fully completed their initial download and apply.
 TEST_F(SyncManagerTest, PurgePartiallySyncedTypes) {
-  ModelSafeRoutingInfo routing_info;
-  GetModelSafeRoutingInfo(&routing_info);
-  ModelTypeSet enabled_types = GetRoutingInfoTypes(routing_info);
+  ModelTypeSet enabled_types = GetEnabledTypes();
 
   UserShare* share = sync_manager_.GetUserShare();
 
@@ -2908,7 +2885,7 @@ TEST_F(SyncManagerTest, PurgePartiallySyncedTypes) {
                                  pref_hashed_tag, pref_specifics);
 
   // And now, the purge.
-  EXPECT_TRUE(sync_manager_.PurgePartiallySyncedTypes());
+  sync_manager_.PurgePartiallySyncedTypes();
 
   // Ensure that autofill lost its progress marker, but preferences did not.
   ModelTypeSet empty_tokens =
@@ -2929,9 +2906,7 @@ TEST_F(SyncManagerTest, PurgePartiallySyncedTypes) {
 // Test CleanupDisabledTypes properly purges all disabled types as specified
 // by the previous and current enabled params.
 TEST_F(SyncManagerTest, PurgeDisabledTypes) {
-  ModelSafeRoutingInfo routing_info;
-  GetModelSafeRoutingInfo(&routing_info);
-  ModelTypeSet enabled_types = GetRoutingInfoTypes(routing_info);
+  ModelTypeSet enabled_types = GetEnabledTypes();
   ModelTypeSet disabled_types = Difference(ModelTypeSet::All(), enabled_types);
 
   // The harness should have initialized the enabled_types for us.
@@ -2972,10 +2947,8 @@ TEST_F(SyncManagerTest, PurgeDisabledTypes) {
 // Test PurgeDisabledTypes properly unapplies types by deleting their local data
 // and preserving their server data and progress marker.
 TEST_F(SyncManagerTest, PurgeUnappliedTypes) {
-  ModelSafeRoutingInfo routing_info;
-  GetModelSafeRoutingInfo(&routing_info);
   ModelTypeSet unapplied_types = ModelTypeSet(BOOKMARKS, PREFERENCES);
-  ModelTypeSet enabled_types = GetRoutingInfoTypes(routing_info);
+  ModelTypeSet enabled_types = GetEnabledTypes();
   ModelTypeSet disabled_types = Difference(ModelTypeSet::All(), enabled_types);
 
   // The harness should have initialized the enabled_types for us.

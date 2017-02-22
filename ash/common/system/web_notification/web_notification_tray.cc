@@ -9,6 +9,7 @@
 #include "ash/common/shelf/shelf_constants.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shelf/wm_shelf_util.h"
+#include "ash/common/system/status_area_widget.h"
 #include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/tray_bubble_wrapper.h"
@@ -16,11 +17,11 @@
 #include "ash/common/system/tray/tray_utils.h"
 #include "ash/common/system/web_notification/ash_popup_alignment_delegate.h"
 #include "ash/common/wm_lookup.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/root_window_controller.h"
 #include "base/auto_reset.h"
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/rtl.h"
@@ -44,19 +45,15 @@
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/layout/fill_layout.h"
 
-#if defined(OS_CHROMEOS)
-
 namespace message_center {
 
 MessageCenterTrayDelegate* CreateMessageCenterTray() {
-  // On Windows+Ash the Tray will not be hosted in ash::Shell.
+  // On non-CrOS, the Tray will not be hosted in ash::Shell.
   NOTREACHED();
   return nullptr;
 }
 
 }  // namespace message_center
-
-#endif  // defined(OS_CHROMEOS)
 
 namespace ash {
 namespace {
@@ -96,6 +93,7 @@ class WebNotificationBubbleWrapper {
  public:
   // Takes ownership of |bubble| and creates |bubble_wrapper_|.
   WebNotificationBubbleWrapper(WebNotificationTray* tray,
+                               TrayBackgroundView* anchor_tray,
                                message_center::MessageBubbleBase* bubble) {
     bubble_.reset(bubble);
     views::TrayBubbleView::AnchorAlignment anchor_alignment =
@@ -103,8 +101,8 @@ class WebNotificationBubbleWrapper {
     views::TrayBubbleView::InitParams init_params =
         bubble->GetInitParams(anchor_alignment);
     views::TrayBubbleView* bubble_view = views::TrayBubbleView::Create(
-        tray->GetBubbleAnchor(), tray, &init_params);
-    bubble_view->set_anchor_view_insets(tray->GetBubbleAnchorInsets());
+        anchor_tray->GetBubbleAnchor(), tray, &init_params);
+    bubble_view->set_anchor_view_insets(anchor_tray->GetBubbleAnchorInsets());
     bubble_wrapper_.reset(new TrayBubbleWrapper(tray, bubble_view));
     bubble->InitializeContents(bubble_view);
   }
@@ -126,7 +124,7 @@ class WebNotificationItem : public views::View, public gfx::AnimationDelegate {
   WebNotificationItem(gfx::AnimationContainer* container,
                       WebNotificationTray* tray)
       : tray_(tray) {
-    SetPaintToLayer(true);
+    SetPaintToLayer();
     layer()->SetFillsBoundsOpaquely(false);
     views::View::SetVisible(false);
     set_owned_by_client();
@@ -359,22 +357,27 @@ bool WebNotificationTray::ShowMessageCenterInternal(bool show_settings) {
       new message_center::MessageCenterBubble(message_center(),
                                               message_center_tray_.get());
 
-  int max_height;
-  if (IsHorizontalAlignment(shelf_alignment())) {
-    max_height = shelf()->GetIdealBounds().y();
-  } else {
-    // Assume the status area and bubble bottoms are aligned when vertical.
-    gfx::Rect bounds_in_root =
-        status_area_window_->GetRootWindow()->ConvertRectFromScreen(
-            status_area_window_->GetBoundsInScreen());
-    max_height = bounds_in_root.bottom();
-  }
-  message_center_bubble->SetMaxHeight(
-      std::max(0, max_height - GetTrayConstant(TRAY_SPACING)));
+  // In the horizontal case, message center starts from the top of the shelf.
+  // In the vertical case, it starts from the bottom of WebNotificationTray.
+  const int max_height = IsHorizontalAlignment(shelf_alignment())
+                             ? shelf()->GetIdealBounds().y()
+                             : GetBoundsInScreen().bottom();
+  message_center_bubble->SetMaxHeight(max_height);
+
   if (show_settings)
     message_center_bubble->SetSettingsVisible();
-  message_center_bubble_.reset(
-      new WebNotificationBubbleWrapper(this, message_center_bubble));
+
+  // For vertical shelf alignments, anchor to the WebNotificationTray, but for
+  // horizontal (i.e. bottom) shelves, anchor to the system tray.
+  TrayBackgroundView* anchor_tray = this;
+  if (IsHorizontalAlignment(shelf_alignment())) {
+    anchor_tray = WmShelf::ForWindow(status_area_window_)
+                      ->GetStatusAreaWidget()
+                      ->system_tray();
+  }
+
+  message_center_bubble_.reset(new WebNotificationBubbleWrapper(
+      this, anchor_tray, message_center_bubble));
 
   system_tray_->SetHideNotifications(true);
   shelf()->UpdateAutoHideState();
@@ -432,10 +435,6 @@ bool WebNotificationTray::ShouldBlockShelfAutoHide() const {
 bool WebNotificationTray::IsMessageCenterBubbleVisible() const {
   return (message_center_bubble() &&
           message_center_bubble()->bubble()->IsVisible());
-}
-
-bool WebNotificationTray::IsMouseInNotificationBubble() const {
-  return false;
 }
 
 void WebNotificationTray::ShowMessageCenterBubble() {
@@ -624,7 +623,7 @@ void WebNotificationTray::UpdateTrayContent() {
     counter_->SetVisible(false);
   }
 
-  SetVisible(IsLoggedIn());
+  SetVisible(IsLoggedIn() && ShouldShowMessageCenter());
   PreferredSizeChanged();
   Layout();
   SchedulePaint();

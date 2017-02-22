@@ -125,8 +125,8 @@ class MockMediaDeviceChangeSubscriber : public MediaDeviceChangeSubscriber {
 class MediaDevicesManagerTest : public ::testing::Test {
  public:
   MediaDevicesManagerTest()
-      : video_capture_device_factory_(nullptr),
-        thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP) {}
+      : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP),
+        video_capture_device_factory_(nullptr) {}
   ~MediaDevicesManagerTest() override {}
 
   MOCK_METHOD1(MockCallback, void(const MediaDeviceEnumeration&));
@@ -142,9 +142,9 @@ class MediaDevicesManagerTest : public ::testing::Test {
     audio_manager_.reset(new MockAudioManager());
     video_capture_manager_ = new VideoCaptureManager(
         std::unique_ptr<media::VideoCaptureDeviceFactory>(
-            new MockVideoCaptureDeviceFactory()));
-    video_capture_manager_->Register(nullptr,
-                                     base::ThreadTaskRunnerHandle::Get());
+            new MockVideoCaptureDeviceFactory()),
+        base::ThreadTaskRunnerHandle::Get());
+    video_capture_manager_->RegisterListener(nullptr);
     video_capture_device_factory_ = static_cast<MockVideoCaptureDeviceFactory*>(
         video_capture_manager_->video_capture_device_factory());
     media_devices_manager_.reset(new MediaDevicesManager(
@@ -156,10 +156,13 @@ class MediaDevicesManagerTest : public ::testing::Test {
         type, MediaDevicesManager::CachePolicy::SYSTEM_MONITOR);
   }
 
+  // Must outlive MediaDevicesManager as ~MediaDevicesManager() verifies it's
+  // running on the IO thread.
+  TestBrowserThreadBundle thread_bundle_;
+
   std::unique_ptr<MediaDevicesManager> media_devices_manager_;
   scoped_refptr<VideoCaptureManager> video_capture_manager_;
   MockVideoCaptureDeviceFactory* video_capture_device_factory_;
-  TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<MockAudioManager, media::AudioManagerDeleter> audio_manager_;
 
  private:

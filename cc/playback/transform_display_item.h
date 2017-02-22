@@ -21,16 +21,14 @@ namespace cc {
 class CC_EXPORT TransformDisplayItem : public DisplayItem {
  public:
   explicit TransformDisplayItem(const gfx::Transform& transform);
-  explicit TransformDisplayItem(const proto::DisplayItem& proto);
   ~TransformDisplayItem() override;
 
-  void ToProtobuf(proto::DisplayItem* proto) const override;
   void Raster(SkCanvas* canvas,
               SkPicture::AbortCallback* callback) const override;
   void AsValueInto(const gfx::Rect& visual_rect,
                    base::trace_event::TracedValue* array) const override;
-  size_t ExternalMemoryUsage() const override;
 
+  size_t ExternalMemoryUsage() const { return 0; }
   int ApproximateOpCount() const { return 1; }
 
  private:
@@ -42,19 +40,16 @@ class CC_EXPORT TransformDisplayItem : public DisplayItem {
 class CC_EXPORT EndTransformDisplayItem : public DisplayItem {
  public:
   EndTransformDisplayItem();
-  explicit EndTransformDisplayItem(const proto::DisplayItem& proto);
   ~EndTransformDisplayItem() override;
 
   static std::unique_ptr<EndTransformDisplayItem> Create() {
     return base::MakeUnique<EndTransformDisplayItem>();
   }
 
-  void ToProtobuf(proto::DisplayItem* proto) const override;
   void Raster(SkCanvas* canvas,
               SkPicture::AbortCallback* callback) const override;
   void AsValueInto(const gfx::Rect& visual_rect,
                    base::trace_event::TracedValue* array) const override;
-  size_t ExternalMemoryUsage() const override;
 
   int ApproximateOpCount() const { return 0; }
 };

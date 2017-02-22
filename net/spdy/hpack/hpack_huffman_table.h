@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_SPDY_HPACK_HUFFMAN_TABLE_H_
-#define NET_SPDY_HPACK_HUFFMAN_TABLE_H_
+#ifndef NET_SPDY_HPACK_HPACK_HUFFMAN_TABLE_H_
+#define NET_SPDY_HPACK_HPACK_HUFFMAN_TABLE_H_
 
 #include <stdint.h>
 
@@ -94,6 +94,9 @@ class NET_EXPORT_PRIVATE HpackHuffmanTable {
   bool GenericDecodeString(HpackInputStream* in,
                            std::string* out) const;
 
+  // Returns the estimate of dynamically allocated memory in bytes.
+  size_t EstimateMemoryUsage() const;
+
  private:
   // Expects symbols ordered on length & ID ascending.
   void BuildDecodeTables(const std::vector<Symbol>& symbols);
@@ -129,4 +132,4 @@ class NET_EXPORT_PRIVATE HpackHuffmanTable {
 
 }  // namespace net
 
-#endif  // NET_SPDY_HPACK_HUFFMAN_TABLE_H_
+#endif  // NET_SPDY_HPACK_HPACK_HUFFMAN_TABLE_H_

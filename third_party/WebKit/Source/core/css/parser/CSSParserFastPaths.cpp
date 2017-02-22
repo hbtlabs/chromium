@@ -23,6 +23,10 @@ namespace blink {
 static inline bool isSimpleLengthPropertyID(CSSPropertyID propertyId,
                                             bool& acceptsNegativeNumbers) {
   switch (propertyId) {
+    case CSSPropertyBlockSize:
+    case CSSPropertyInlineSize:
+    case CSSPropertyMinBlockSize:
+    case CSSPropertyMinInlineSize:
     case CSSPropertyFontSize:
     case CSSPropertyGridColumnGap:
     case CSSPropertyGridRowGap:
@@ -138,6 +142,7 @@ static CSSValue* parseSimpleLengthValue(CSSPropertyID propertyId,
 
 static inline bool isColorPropertyID(CSSPropertyID propertyId) {
   switch (propertyId) {
+    case CSSPropertyCaretColor:
     case CSSPropertyColor:
     case CSSPropertyBackgroundColor:
     case CSSPropertyBorderBottomColor:
@@ -364,8 +369,10 @@ static inline bool parseAlphaValue(const CharacterType*& string,
   }
 
   if (isTenthAlpha(string, length - 1)) {
-    static const int tenthAlphaValues[] = {0,   25,  51,  76,  102,
-                                           127, 153, 179, 204, 230};
+    // Fast conversions for 0.1 steps of alpha values between 0.0 and 0.9,
+    // where 0.1 alpha is value 26 (25.5 rounded) and so on.
+    static const int tenthAlphaValues[] = {0,   26,  51,  77,  102,
+                                           128, 153, 179, 204, 230};
     value = negative ? 0 : tenthAlphaValues[string[length - 2] - '0'];
     string = end;
     return true;
@@ -374,7 +381,8 @@ static inline bool parseAlphaValue(const CharacterType*& string,
   double alpha = 0;
   if (!parseDouble(string, end, terminator, alpha))
     return false;
-  value = negative ? 0 : static_cast<int>(alpha * nextafter(256.0, 0.0));
+  value =
+      negative ? 0 : static_cast<int>(roundf(std::min(alpha, 1.0) * 255.0f));
   string = end;
   return true;
 }

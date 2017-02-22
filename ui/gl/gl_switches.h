@@ -18,7 +18,9 @@ GL_EXPORT extern const char kGLImplementationAppleName[];
 GL_EXPORT extern const char kGLImplementationEGLName[];
 GL_EXPORT extern const char kGLImplementationANGLEName[];
 GL_EXPORT extern const char kGLImplementationSwiftShaderName[];
+GL_EXPORT extern const char kGLImplementationSwiftShaderForWebGLName[];
 extern const char kGLImplementationMockName[];
+extern const char kGLImplementationStubName[];
 
 GL_EXPORT extern const char kANGLEImplementationDefaultName[];
 GL_EXPORT extern const char kANGLEImplementationD3D9Name[];
@@ -51,11 +53,11 @@ GL_EXPORT extern const char kEnableES3APIs[];
 GL_EXPORT extern const char kDisableES3APIs[];
 GL_EXPORT extern const char kEnableSgiVideoSync[];
 GL_EXPORT extern const char kDisableGLExtensions[];
-GL_EXPORT extern const char kEnableSwapBuffersWithDamage[];
+GL_EXPORT extern const char kEnableSwapBuffersWithBounds[];
 
 // These flags are used by the test harness code, not passed in by users.
 GL_EXPORT extern const char kDisableGLDrawingForTests[];
-GL_EXPORT extern const char kOverrideUseGLWithOSMesaForTests[];
+GL_EXPORT extern const char kOverrideUseSoftwareGLForTests[];
 
 GL_EXPORT extern const char* kGLSwitchesCopiedFromGpuProcessHost[];
 GL_EXPORT extern const int kGLSwitchesCopiedFromGpuProcessHostNumSwitches;

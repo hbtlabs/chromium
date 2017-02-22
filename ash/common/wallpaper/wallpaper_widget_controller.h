@@ -8,13 +8,13 @@
 #include <memory>
 
 #include "ash/ash_export.h"
-#include "ash/common/wm_window_observer.h"
 #include "base/macros.h"
+#include "ui/aura/window_observer.h"
 #include "ui/views/widget/widget_observer.h"
 
 namespace ash {
 
-class WmRootWindowController;
+class RootWindowController;
 class WmWindow;
 
 // This class implements a widget-based wallpaper.
@@ -22,7 +22,7 @@ class WmWindow;
 // When the animation completes the old WallpaperWidgetController is
 // destroyed. Exported for tests.
 class ASH_EXPORT WallpaperWidgetController : public views::WidgetObserver,
-                                             public WmWindowObserver {
+                                             public aura::WindowObserver {
  public:
   explicit WallpaperWidgetController(views::Widget* widget);
   ~WallpaperWidgetController() override;
@@ -41,15 +41,15 @@ class ASH_EXPORT WallpaperWidgetController : public views::WidgetObserver,
   // Starts wallpaper fade in animation. |root_window_controller| is
   // the root window where the animation will happen. (This is
   // necessary this as |layer_| doesn't have access to the root window).
-  void StartAnimating(WmRootWindowController* root_window_controller);
+  void StartAnimating(RootWindowController* root_window_controller);
 
   views::Widget* widget() { return widget_; }
 
  private:
   void RemoveObservers();
 
-  // WmWindowObserver:
-  void OnWindowBoundsChanged(WmWindow* window,
+  // aura::WindowObserver:
+  void OnWindowBoundsChanged(aura::Window* window,
                              const gfx::Rect& old_bounds,
                              const gfx::Rect& new_bounds) override;
 

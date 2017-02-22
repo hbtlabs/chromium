@@ -196,7 +196,8 @@ DownloadItemImpl::DownloadItemImpl(DownloadItemImplDelegate* delegate,
       tab_referrer_url_(info.tab_referrer_url),
       suggested_filename_(base::UTF16ToUTF8(info.save_info->suggested_name)),
       forced_file_path_(info.save_info->file_path),
-      transition_type_(info.transition_type),
+      transition_type_(info.transition_type ? info.transition_type.value()
+                                            : ui::PAGE_TRANSITION_LINK),
       has_user_gesture_(info.has_user_gesture),
       content_disposition_(info.content_disposition),
       mime_type_(info.mime_type),
@@ -994,6 +995,9 @@ void DownloadItemImpl::UpdateValidatorsOnResumption(
   etag_ = new_create_info.etag;
   last_modified_time_ = new_create_info.last_modified;
   content_disposition_ = new_create_info.content_disposition;
+  // It is possible that the previous download attempt failed right before the
+  // response is received. Need to reset the MIME type.
+  mime_type_ = new_create_info.mime_type;
 
   // Don't update observers. This method is expected to be called just before a
   // DownloadFile is created and Start() is called. The observers will be

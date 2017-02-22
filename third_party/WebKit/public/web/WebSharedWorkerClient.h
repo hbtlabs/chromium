@@ -43,7 +43,6 @@ class WebNotificationPresenter;
 class WebSecurityOrigin;
 class WebServiceWorkerNetworkProvider;
 class WebString;
-class WebWorker;
 class WebWorkerContentSettingsClientProxy;
 
 // Provides an interface back to the in-page script object for a worker.
@@ -54,6 +53,7 @@ class WebWorkerContentSettingsClientProxy;
 // or workerContextDestroyed() is called).
 class WebSharedWorkerClient {
  public:
+  virtual void countFeature(uint32_t) = 0;
   virtual void workerContextClosed() = 0;
   virtual void workerContextDestroyed() = 0;
   virtual void workerReadyForInspection() {}

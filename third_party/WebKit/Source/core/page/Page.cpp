@@ -27,10 +27,9 @@
 #include "core/dom/StyleChangeReason.h"
 #include "core/dom/StyleEngine.h"
 #include "core/dom/VisitedLinkState.h"
-#include "core/editing/DragCaretController.h"
+#include "core/editing/DragCaret.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/events/Event.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/frame/DOMTimer.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/FrameHost.h"
@@ -49,11 +48,13 @@
 #include "core/page/DragController.h"
 #include "core/page/FocusController.h"
 #include "core/page/PointerLockController.h"
-#include "core/page/ScopedPageLoadDeferrer.h"
+#include "core/page/ScopedPageSuspender.h"
 #include "core/page/ValidationMessageClient.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/paint/PaintLayer.h"
+#include "platform/WebFrameScheduler.h"
 #include "platform/graphics/GraphicsLayer.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/plugins/PluginData.h"
 #include "public/platform/Platform.h"
 
@@ -62,13 +63,13 @@ namespace blink {
 // Set of all live pages; includes internal Page objects that are
 // not observable from scripts.
 static Page::PageSet& allPages() {
-  DEFINE_STATIC_LOCAL(Page::PageSet, allPages, ());
-  return allPages;
+  DEFINE_STATIC_LOCAL(Page::PageSet, pages, ());
+  return pages;
 }
 
 Page::PageSet& Page::ordinaryPages() {
-  DEFINE_STATIC_LOCAL(Page::PageSet, ordinaryPages, ());
-  return ordinaryPages;
+  DEFINE_STATIC_LOCAL(Page::PageSet, pages, ());
+  return pages;
 }
 
 void Page::networkStateChanged(bool online) {
@@ -81,7 +82,7 @@ void Page::networkStateChanged(bool online) {
       // FIXME: There is currently no way to dispatch events to out-of-process
       // frames.
       if (frame->isLocalFrame())
-        frames.append(toLocalFrame(frame));
+        frames.push_back(toLocalFrame(frame));
     }
   }
 
@@ -104,9 +105,9 @@ float deviceScaleFactor(LocalFrame* frame) {
 
 Page* Page::createOrdinary(PageClients& pageClients) {
   Page* page = create(pageClients);
-  ordinaryPages().add(page);
-  if (ScopedPageLoadDeferrer::isActive())
-    page->setDefersLoading(true);
+  ordinaryPages().insert(page);
+  if (ScopedPageSuspender::isActive())
+    page->setSuspended(true);
   return page;
 }
 
@@ -115,7 +116,7 @@ Page::Page(PageClients& pageClients)
       m_animator(PageAnimator::create(*this)),
       m_autoscrollController(AutoscrollController::create(*this)),
       m_chromeClient(pageClients.chromeClient),
-      m_dragCaretController(DragCaretController::create()),
+      m_dragCaret(DragCaret::create()),
       m_dragController(DragController::create(this)),
       m_focusController(FocusController::create(this)),
       m_contextMenuController(
@@ -130,23 +131,31 @@ Page::Page(PageClients& pageClients)
                        : UseCounter::DefaultContext),
       m_openedByDOM(false),
       m_tabKeyCyclesThroughElements(true),
-      m_defersLoading(false),
+      m_suspended(false),
       m_deviceScaleFactor(1),
       m_visibilityState(PageVisibilityStateVisible),
       m_isCursorVisible(true),
-#if ENABLE(ASSERT)
-      m_isPainting(false),
-#endif
       m_frameHost(FrameHost::create(*this)) {
   ASSERT(m_editorClient);
 
   ASSERT(!allPages().contains(this));
-  allPages().add(this);
+  allPages().insert(this);
 }
 
 Page::~Page() {
   // willBeDestroyed() must be called before Page destruction.
   ASSERT(!m_mainFrame);
+}
+
+void Page::closeSoon() {
+  // Make sure this Page can no longer be found by JS.
+  m_isClosing = true;
+
+  // TODO(dcheng): Try to remove this in a followup, it's not obviously needed.
+  if (m_mainFrame->isLocalFrame())
+    toLocalFrame(m_mainFrame)->loader().stopAllLoaders();
+
+  chromeClient().closeWindowSoon();
 }
 
 ViewportDescription Page::viewportDescription() const {
@@ -157,35 +166,26 @@ ViewportDescription Page::viewportDescription() const {
 }
 
 ScrollingCoordinator* Page::scrollingCoordinator() {
-  if (!m_scrollingCoordinator && m_settings->acceleratedCompositingEnabled())
+  if (!m_scrollingCoordinator && m_settings->getAcceleratedCompositingEnabled())
     m_scrollingCoordinator = ScrollingCoordinator::create(this);
 
   return m_scrollingCoordinator.get();
 }
 
-String Page::mainThreadScrollingReasonsAsText() {
-  if (ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator())
-    return scrollingCoordinator->mainThreadScrollingReasonsAsText();
-
-  return String();
-}
-
 ClientRectList* Page::nonFastScrollableRects(const LocalFrame* frame) {
+  DisableCompositingQueryAsserts disabler;
   if (ScrollingCoordinator* scrollingCoordinator =
           this->scrollingCoordinator()) {
     // Hits in compositing/iframes/iframe-composited-scrolling.html
-    DisableCompositingQueryAsserts disabler;
     scrollingCoordinator->updateAfterCompositingChangeIfNeeded();
   }
 
-  if (!frame->view()->layerForScrolling())
+  GraphicsLayer* layer =
+      frame->view()->layoutViewportScrollableArea()->layerForScrolling();
+  if (!layer)
     return ClientRectList::create();
-
-  // Now retain non-fast scrollable regions
-  return ClientRectList::create(frame->view()
-                                    ->layerForScrolling()
-                                    ->platformLayer()
-                                    ->nonFastScrollableRegion());
+  return ClientRectList::create(
+      layer->platformLayer()->nonFastScrollableRegion());
 }
 
 void Page::setMainFrame(Frame* mainFrame) {
@@ -253,15 +253,18 @@ void Page::setValidationMessageClient(ValidationMessageClient* client) {
   m_validationMessageClient = client;
 }
 
-void Page::setDefersLoading(bool defers) {
-  if (defers == m_defersLoading)
+void Page::setSuspended(bool suspended) {
+  if (suspended == m_suspended)
     return;
 
-  m_defersLoading = defers;
+  m_suspended = suspended;
   for (Frame* frame = mainFrame(); frame;
        frame = frame->tree().traverseNext()) {
-    if (frame->isLocalFrame())
-      toLocalFrame(frame)->loader().setDefersLoading(defers);
+    if (!frame->isLocalFrame())
+      continue;
+    LocalFrame* localFrame = toLocalFrame(frame);
+    localFrame->loader().setDefersLoading(suspended);
+    localFrame->frameScheduler()->setSuspended(suspended);
   }
 }
 
@@ -331,7 +334,7 @@ bool Page::isPageVisible() const {
 }
 
 bool Page::isCursorVisible() const {
-  return m_isCursorVisible && settings().deviceSupportsMouse();
+  return m_isCursorVisible;
 }
 
 void Page::settingsChanged(SettingsDelegate::ChangeType changeType) {
@@ -360,9 +363,9 @@ void Page::settingsChanged(SettingsDelegate::ChangeType changeType) {
            frame = frame->tree().traverseNext()) {
         if (frame->isLocalFrame()) {
           toLocalFrame(frame)->document()->fetcher()->setImagesEnabled(
-              settings().imagesEnabled());
+              settings().getImagesEnabled());
           toLocalFrame(frame)->document()->fetcher()->setAutoLoadImages(
-              settings().loadsImagesAutomatically());
+              settings().getLoadsImagesAutomatically());
         }
       }
       break;
@@ -419,7 +422,7 @@ void Page::settingsChanged(SettingsDelegate::ChangeType changeType) {
       }
       break;
     case SettingsDelegate::DOMWorldsChange: {
-      if (!settings().forceMainWorldInitialization())
+      if (!settings().getForceMainWorldInitialization())
         break;
       for (Frame* frame = mainFrame(); frame;
            frame = frame->tree().traverseNext()) {
@@ -429,10 +432,21 @@ void Page::settingsChanged(SettingsDelegate::ChangeType changeType) {
         if (localFrame->loader()
                 .stateMachine()
                 ->committedFirstRealDocumentLoad()) {
-          localFrame->script().initializeMainWorld();
+          // Forcibly instantiate WindowProxy.
+          localFrame->script().windowProxy(DOMWrapperWorld::mainWorld());
         }
       }
     } break;
+    case SettingsDelegate::MediaControlsChange:
+      for (Frame* frame = mainFrame(); frame;
+           frame = frame->tree().traverseNext()) {
+        if (!frame->isLocalFrame())
+          continue;
+        Document* doc = toLocalFrame(frame)->document();
+        if (doc)
+          HTMLMediaElement::onMediaControlsEnabledChange(doc);
+      }
+      break;
   }
 }
 
@@ -448,10 +462,14 @@ void Page::updateAcceleratedCompositingSettings() {
 
 void Page::didCommitLoad(LocalFrame* frame) {
   if (m_mainFrame == frame) {
+    KURL url;
+    if (frame->document())
+      url = frame->document()->url();
+
     // TODO(rbyers): Most of this doesn't appear to take into account that each
     // SVGImage gets it's own Page instance.
     frameHost().consoleMessageStorage().clear();
-    useCounter().didCommitLoad();
+    useCounter().didCommitLoad(url);
     deprecation().clearSuppression();
     frameHost().visualViewport().sendUMAMetrics();
 
@@ -473,18 +491,18 @@ void Page::acceptLanguagesChanged() {
   for (Frame* frame = mainFrame(); frame;
        frame = frame->tree().traverseNext()) {
     if (frame->isLocalFrame())
-      frames.append(toLocalFrame(frame));
+      frames.push_back(toLocalFrame(frame));
   }
 
   for (unsigned i = 0; i < frames.size(); ++i)
-    frames[i]->localDOMWindow()->acceptLanguagesChanged();
+    frames[i]->domWindow()->acceptLanguagesChanged();
 }
 
 DEFINE_TRACE(Page) {
   visitor->trace(m_animator);
   visitor->trace(m_autoscrollController);
   visitor->trace(m_chromeClient);
-  visitor->trace(m_dragCaretController);
+  visitor->trace(m_dragCaret);
   visitor->trace(m_dragController);
   visitor->trace(m_focusController);
   visitor->trace(m_contextMenuController);
@@ -492,23 +510,22 @@ DEFINE_TRACE(Page) {
   visitor->trace(m_scrollingCoordinator);
   visitor->trace(m_mainFrame);
   visitor->trace(m_validationMessageClient);
+  visitor->trace(m_useCounter);
   visitor->trace(m_frameHost);
   Supplementable<Page>::trace(visitor);
   PageVisibilityNotifier::trace(visitor);
 }
 
-void Page::layerTreeViewInitialized(WebLayerTreeView& layerTreeView) {
+void Page::layerTreeViewInitialized(WebLayerTreeView& layerTreeView,
+                                    FrameView* view) {
   if (scrollingCoordinator())
-    scrollingCoordinator()->layerTreeViewInitialized(layerTreeView);
+    scrollingCoordinator()->layerTreeViewInitialized(layerTreeView, view);
 }
 
-void Page::willCloseLayerTreeView(WebLayerTreeView& layerTreeView) {
+void Page::willCloseLayerTreeView(WebLayerTreeView& layerTreeView,
+                                  FrameView* view) {
   if (m_scrollingCoordinator)
-    m_scrollingCoordinator->willCloseLayerTreeView(layerTreeView);
-}
-
-void Page::willBeClosed() {
-  ordinaryPages().remove(this);
+    m_scrollingCoordinator->willCloseLayerTreeView(layerTreeView, view);
 }
 
 void Page::willBeDestroyed() {
@@ -517,8 +534,8 @@ void Page::willBeDestroyed() {
   mainFrame->detach(FrameDetachType::Remove);
 
   ASSERT(allPages().contains(this));
-  allPages().remove(this);
-  ordinaryPages().remove(this);
+  allPages().erase(this);
+  ordinaryPages().erase(this);
 
   if (m_scrollingCoordinator)
     m_scrollingCoordinator->willBeDestroyed();

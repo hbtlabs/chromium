@@ -7,9 +7,9 @@ import logging
 import chrome_proxy_metrics as metrics
 from common import chrome_proxy_measurements as measurements
 from telemetry.core import exceptions
-from telemetry.page import page_test
+from telemetry.page import legacy_page_test
 
-class ChromeProxyLatencyBase(page_test.PageTest):
+class ChromeProxyLatencyBase(legacy_page_test.LegacyPageTest):
   """Chrome latency measurement."""
 
   def __init__(self, *args, **kwargs):
@@ -22,7 +22,8 @@ class ChromeProxyLatencyBase(page_test.PageTest):
 
   def ValidateAndMeasurePage(self, page, tab, results):
     # Wait for the load event.
-    tab.WaitForJavaScriptExpression('performance.timing.loadEventStart', 300)
+    tab.WaitForJavaScriptCondition2(
+        'performance.timing.loadEventStart', timeout=300)
     self._metrics.Stop(page, tab)
     self._metrics.AddResultsForLatency(tab, results)
 
@@ -49,7 +50,7 @@ class ChromeProxyLatencyDirect(ChromeProxyLatencyBase):
     super(ChromeProxyLatencyDirect, self).__init__(*args, **kwargs)
 
 
-class ChromeProxyDataSavingBase(page_test.PageTest):
+class ChromeProxyDataSavingBase(legacy_page_test.LegacyPageTest):
   """Chrome data saving measurement."""
   def __init__(self, *args, **kwargs):
     super(ChromeProxyDataSavingBase, self).__init__(*args, **kwargs)
@@ -61,7 +62,8 @@ class ChromeProxyDataSavingBase(page_test.PageTest):
 
   def ValidateAndMeasurePage(self, page, tab, results):
     # Wait for the load event.
-    tab.WaitForJavaScriptExpression('performance.timing.loadEventStart', 300)
+    tab.WaitForJavaScriptCondition2(
+        'performance.timing.loadEventStart', timeout=300)
     self._metrics.Stop(page, tab)
     self._metrics.AddResultsForDataSaving(tab, results)
 

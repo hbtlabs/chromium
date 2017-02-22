@@ -46,6 +46,27 @@ self.addEventListener('message', function(workerEvent) {
         }).catch(makeErrorHandler(event.data.command));
         break;
 
+      case 'checkInterfaces':
+        let success = false;
+        let message = "";
+        try {
+          success = 'BudgetService' in self &&
+              WorkerNavigator.prototype.hasOwnProperty('budget') &&
+              BudgetService.prototype.hasOwnProperty('getCost') &&
+              BudgetService.prototype.hasOwnProperty('getBudget') &&
+              BudgetService.prototype.hasOwnProperty('reserve') &&
+              'BudgetState' in self &&
+              BudgetState.prototype.hasOwnProperty('budgetAt') &&
+              BudgetState.prototype.hasOwnProperty('time');
+        } catch(err) {
+          message = err.message;
+        }
+        port.postMessage({
+          command: event.data.command,
+          success: success,
+          message: message});
+        break;
+
       default:
         port.postMessage({
           command: 'error',

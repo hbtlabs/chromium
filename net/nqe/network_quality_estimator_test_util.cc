@@ -5,8 +5,12 @@
 #include "net/nqe/network_quality_estimator_test_util.h"
 
 #include "base/files/file_path.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "net/base/load_flags.h"
+#include "net/log/net_log_with_source.h"
+#include "net/log/test_net_log.h"
+#include "net/log/test_net_log_entry.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_test_util.h"
@@ -20,35 +24,45 @@ const base::FilePath::CharType kTestFilePath[] =
 
 namespace net {
 
+TestNetworkQualityEstimator::TestNetworkQualityEstimator()
+    : TestNetworkQualityEstimator(std::map<std::string, std::string>()) {}
+
+TestNetworkQualityEstimator::TestNetworkQualityEstimator(
+    const std::map<std::string, std::string>& variation_params)
+    : TestNetworkQualityEstimator(variation_params,
+                                  std::unique_ptr<ExternalEstimateProvider>()) {
+}
+
 TestNetworkQualityEstimator::TestNetworkQualityEstimator(
     const std::map<std::string, std::string>& variation_params,
     std::unique_ptr<net::ExternalEstimateProvider> external_estimate_provider)
     : TestNetworkQualityEstimator(std::move(external_estimate_provider),
                                   variation_params,
                                   true,
-                                  true) {}
+                                  true,
+                                  false,
+                                  base::MakeUnique<BoundTestNetLog>()) {}
 
 TestNetworkQualityEstimator::TestNetworkQualityEstimator(
     std::unique_ptr<net::ExternalEstimateProvider> external_estimate_provider,
     const std::map<std::string, std::string>& variation_params,
     bool allow_local_host_requests_for_tests,
-    bool allow_smaller_responses_for_tests)
+    bool allow_smaller_responses_for_tests,
+    bool add_default_platform_observations,
+    std::unique_ptr<BoundTestNetLog> net_log)
     : NetworkQualityEstimator(std::move(external_estimate_provider),
                               variation_params,
                               allow_local_host_requests_for_tests,
-                              allow_smaller_responses_for_tests),
+                              allow_smaller_responses_for_tests,
+                              add_default_platform_observations,
+                              net_log->bound()),
       current_network_type_(NetworkChangeNotifier::CONNECTION_UNKNOWN),
       accuracy_recording_intervals_set_(false),
       rand_double_(0.0),
-      embedded_test_server_(base::FilePath(kTestFilePath)) {
+      embedded_test_server_(base::FilePath(kTestFilePath)),
+      net_log_(std::move(net_log)) {
   // Set up the embedded test server.
   EXPECT_TRUE(embedded_test_server_.Start());
-}
-
-TestNetworkQualityEstimator::TestNetworkQualityEstimator(
-    const std::map<std::string, std::string>& variation_params)
-    : TestNetworkQualityEstimator(variation_params,
-                                  std::unique_ptr<ExternalEstimateProvider>()) {
 }
 
 TestNetworkQualityEstimator::~TestNetworkQualityEstimator() {}
@@ -184,6 +198,50 @@ TestNetworkQualityEstimator::GetAccuracyRecordingIntervals() const {
 
 double TestNetworkQualityEstimator::RandDouble() const {
   return rand_double_;
+}
+
+int TestNetworkQualityEstimator::GetEntriesCount(NetLogEventType type) const {
+  TestNetLogEntry::List entries;
+  net_log_->GetEntries(&entries);
+
+  int count = 0;
+  for (const auto& entry : entries) {
+    if (entry.type == type)
+      ++count;
+  }
+  return count;
+}
+
+std::string TestNetworkQualityEstimator::GetNetLogLastStringValue(
+    NetLogEventType type,
+    const std::string& key) const {
+  std::string return_value;
+  TestNetLogEntry::List entries;
+  net_log_->GetEntries(&entries);
+
+  for (int i = entries.size() - 1; i >= 0; --i) {
+    if (entries[i].type == type &&
+        entries[i].GetStringValue(key, &return_value)) {
+      return return_value;
+    }
+  }
+  return return_value;
+}
+
+int TestNetworkQualityEstimator::GetNetLogLastIntegerValue(
+    NetLogEventType type,
+    const std::string& key) const {
+  int return_value = 0;
+  TestNetLogEntry::List entries;
+  net_log_->GetEntries(&entries);
+
+  for (int i = entries.size() - 1; i >= 0; --i) {
+    if (entries[i].type == type &&
+        entries[i].GetIntegerValue(key, &return_value)) {
+      return return_value;
+    }
+  }
+  return return_value;
 }
 
 nqe::internal::NetworkID TestNetworkQualityEstimator::GetCurrentNetworkID()

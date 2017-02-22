@@ -30,10 +30,10 @@
 
 #include "core/html/forms/SearchInputType.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
-#include "core/dom/ExecutionContextTask.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/html/HTMLInputElement.h"
@@ -47,7 +47,10 @@ using namespace HTMLNames;
 
 inline SearchInputType::SearchInputType(HTMLInputElement& element)
     : BaseTextInputType(element),
-      m_searchEventTimer(this, &SearchInputType::searchEventTimerFired) {}
+      m_searchEventTimer(
+          TaskRunnerHelper::get(TaskType::UserInteraction, &element.document()),
+          this,
+          &SearchInputType::searchEventTimerFired) {}
 
 InputType* SearchInputType::create(HTMLInputElement& element) {
   return new SearchInputType(element);
@@ -103,8 +106,8 @@ void SearchInputType::startSearchEventTimer() {
 
   if (!length) {
     m_searchEventTimer.stop();
-    element().document().postTask(
-        BLINK_FROM_HERE, createSameThreadTask(&HTMLInputElement::onSearch,
+    TaskRunnerHelper::get(TaskType::UserInteraction, &element().document())
+        ->postTask(BLINK_FROM_HERE, WTF::bind(&HTMLInputElement::onSearch,
                                               wrapPersistent(&element())));
     return;
   }
@@ -150,7 +153,7 @@ const AtomicString& SearchInputType::defaultAutocapitalize() const {
 
 void SearchInputType::updateCancelButtonVisibility() {
   Element* button = element().userAgentShadowRoot()->getElementById(
-      ShadowElementNames::clearButton());
+      ShadowElementNames::searchClearButton());
   if (!button)
     return;
   if (element().value().isEmpty()) {

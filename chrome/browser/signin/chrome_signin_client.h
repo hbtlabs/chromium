@@ -17,10 +17,6 @@
 #include "net/base/network_change_notifier.h"
 #endif
 
-namespace content_settings {
-class CookieSettings;
-}
-
 class Profile;
 
 class ChromeSigninClient
@@ -112,6 +108,7 @@ class ChromeSigninClient
   void OnCloseBrowsersSuccess(const base::Callback<void()>& sign_out,
                               const base::FilePath& profile_path);
   void OnCloseBrowsersAborted(const base::FilePath& profile_path);
+
   Profile* profile_;
 
   SigninErrorController* signin_error_controller_;

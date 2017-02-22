@@ -55,11 +55,6 @@ IPC_STRUCT_TRAITS_BEGIN(picasa::FolderINIContents)
 IPC_STRUCT_TRAITS_END()
 #endif  // defined(OS_WIN) || defined(OS_MACOSX)
 
-IPC_STRUCT_TRAITS_BEGIN(metadata::AttachedImage)
-  IPC_STRUCT_TRAITS_MEMBER(type)
-  IPC_STRUCT_TRAITS_MEMBER(data)
-IPC_STRUCT_TRAITS_END()
-
 //------------------------------------------------------------------------------
 // Utility process messages:
 // These are messages from the browser to the utility process.
@@ -89,40 +84,6 @@ IPC_MESSAGE_CONTROL2(ChromeUtilityMsg_IndexPicasaAlbumsContents,
                      picasa::AlbumUIDSet /* album_uids */,
                      std::vector<picasa::FolderINIContents> /* folders_inis */)
 #endif  // defined(OS_WIN) || defined(OS_MACOSX)
-
-// Tell the utility process to attempt to validate the passed media file. The
-// file will undergo basic sanity checks and will be decoded for up to
-// |milliseconds_of_decoding| wall clock time. It is still not safe to decode
-// the file in the browser process after this check.
-IPC_MESSAGE_CONTROL2(ChromeUtilityMsg_CheckMediaFile,
-                     int64_t /* milliseconds_of_decoding */,
-                     IPC::PlatformFileForTransit /* Media file to parse */)
-
-IPC_MESSAGE_CONTROL3(ChromeUtilityMsg_ParseMediaMetadata,
-                     std::string /* mime_type */,
-                     int64_t /* total_size */,
-                     bool /* get_attached_images */)
-
-IPC_MESSAGE_CONTROL2(ChromeUtilityMsg_RequestBlobBytes_Finished,
-                     int64_t /* request_id */,
-                     std::string /* bytes */)
-
-// Requests that the utility process write the contents of the source file to
-// the removable drive listed in the target file. The target will be restricted
-// to removable drives by the utility process.
-IPC_MESSAGE_CONTROL2(ChromeUtilityMsg_ImageWriter_Write,
-                     base::FilePath /* source file */,
-                     base::FilePath /* target file */)
-
-// Requests that the utility process verify that the contents of the source file
-// was written to the target. As above the target will be restricted to
-// removable drives by the utility process.
-IPC_MESSAGE_CONTROL2(ChromeUtilityMsg_ImageWriter_Verify,
-                     base::FilePath /* source file */,
-                     base::FilePath /* target file */)
-
-// Cancels a pending write or verify operation.
-IPC_MESSAGE_CONTROL0(ChromeUtilityMsg_ImageWriter_Cancel)
 
 //------------------------------------------------------------------------------
 // Utility process host messages:
@@ -154,46 +115,3 @@ IPC_MESSAGE_CONTROL3(ChromeUtilityHostMsg_ParsePicasaPMPDatabase_Finished,
 IPC_MESSAGE_CONTROL1(ChromeUtilityHostMsg_IndexPicasaAlbumsContents_Finished,
                      picasa::AlbumImagesMap /* albums_images */)
 #endif  // defined(OS_WIN) || defined(OS_MACOSX)
-
-// Reply after checking the passed media file. A true result indicates that
-// the file appears to be a well formed media file.
-IPC_MESSAGE_CONTROL1(ChromeUtilityHostMsg_CheckMediaFile_Finished,
-                     bool /* passed_checks */)
-
-IPC_MESSAGE_CONTROL3(
-    ChromeUtilityHostMsg_ParseMediaMetadata_Finished,
-    bool /* parse_success */,
-    base::DictionaryValue /* metadata */,
-    std::vector<metadata::AttachedImage> /* attached_images */)
-
-IPC_MESSAGE_CONTROL3(ChromeUtilityHostMsg_RequestBlobBytes,
-                     int64_t /* request_id */,
-                     int64_t /* start_byte */,
-                     int64_t /* length */)
-
-// Reply when a write or verify operation succeeds.
-IPC_MESSAGE_CONTROL0(ChromeUtilityHostMsg_ImageWriter_Succeeded)
-
-// Reply when a write or verify operation has been fully cancelled.
-IPC_MESSAGE_CONTROL0(ChromeUtilityHostMsg_ImageWriter_Cancelled)
-
-// Reply when a write or verify operation fails to complete.
-IPC_MESSAGE_CONTROL1(ChromeUtilityHostMsg_ImageWriter_Failed,
-                     std::string /* message */)
-
-// Periodic status update about the progress of an operation.
-IPC_MESSAGE_CONTROL1(ChromeUtilityHostMsg_ImageWriter_Progress,
-                     int64_t /* number of bytes processed */)
-
-#if defined(OS_WIN)
-// Get plain-text WiFi credentials from the system (requires UAC privilege
-// elevation).
-IPC_MESSAGE_CONTROL1(ChromeUtilityHostMsg_GetWiFiCredentials,
-                     std::string /* ssid */)
-
-// Reply after getting WiFi credentials from the system. |success| is false if
-// error occurred.
-IPC_MESSAGE_CONTROL2(ChromeUtilityHostMsg_GotWiFiCredentials,
-                     std::string /* key_data */,
-                     bool /* success */)
-#endif  // defined(OS_WIN)

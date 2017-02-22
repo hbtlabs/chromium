@@ -7,8 +7,8 @@ package org.chromium.chrome.browser.customtabs;
 import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
-import android.test.suitebuilder.annotation.LargeTest;
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.LargeTest;
+import android.support.test.filters.MediumTest;
 import android.util.Base64;
 
 import org.chromium.base.ActivityState;
@@ -44,8 +44,8 @@ public class CustomTabFromChromeExternalNavigationTest extends CustomTabActivity
         mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
         super.setUp();
 
-        ChromePreferenceManager.getInstance(getInstrumentation().getTargetContext())
-                .setCachedHerbFlavor(ChromeSwitches.HERB_FLAVOR_ELDERBERRY);
+        ChromePreferenceManager.getInstance().setCachedHerbFlavor(
+                ChromeSwitches.HERB_FLAVOR_ELDERBERRY);
     }
 
     @Override

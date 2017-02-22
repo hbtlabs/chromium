@@ -35,6 +35,7 @@
 #include "bindings/core/v8/V8ArrayBuffer.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8Blob.h"
+#include "bindings/core/v8/V8EventTarget.h"
 #include "bindings/core/v8/V8MessagePort.h"
 #include "bindings/core/v8/V8PrivateProperty.h"
 #include "bindings/core/v8/V8Window.h"
@@ -78,12 +79,12 @@ void V8MessageEvent::dataAttributeGetterCustom(
       break;
 
     case MessageEvent::DataTypeBlob:
-      result = toV8(event->dataAsBlob(), info.Holder(), info.GetIsolate());
+      result = ToV8(event->dataAsBlob(), info.Holder(), info.GetIsolate());
       break;
 
     case MessageEvent::DataTypeArrayBuffer:
       result =
-          toV8(event->dataAsArrayBuffer(), info.Holder(), info.GetIsolate());
+          ToV8(event->dataAsArrayBuffer(), info.Holder(), info.GetIsolate());
       break;
   }
 
@@ -95,9 +96,9 @@ void V8MessageEvent::dataAttributeGetterCustom(
 
 void V8MessageEvent::initMessageEventMethodCustom(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  ExceptionState exceptionState(ExceptionState::ExecutionContext,
-                                "initMessageEvent", "MessageEvent",
-                                info.Holder(), info.GetIsolate());
+  ExceptionState exceptionState(info.GetIsolate(),
+                                ExceptionState::ExecutionContext,
+                                "MessageEvent", "initMessageEvent");
   MessageEvent* event = V8MessageEvent::toImpl(info.Holder());
   TOSTRING_VOID(V8StringResource<>, typeArg, info[0]);
   bool canBubbleArg = false;
@@ -110,7 +111,8 @@ void V8MessageEvent::initMessageEventMethodCustom(
   v8::Local<v8::Value> dataArg = info[3];
   TOSTRING_VOID(V8StringResource<>, originArg, info[4]);
   TOSTRING_VOID(V8StringResource<>, lastEventIdArg, info[5]);
-  DOMWindow* sourceArg = toDOMWindow(info.GetIsolate(), info[6]);
+  EventTarget* sourceArg =
+      V8EventTarget::toImplWithTypeCheck(info.GetIsolate(), info[6]);
   MessagePortArray* portArray = nullptr;
   const int portArrayIndex = 7;
   if (!isUndefinedOrNull(info[portArrayIndex])) {

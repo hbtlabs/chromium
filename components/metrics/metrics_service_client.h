@@ -10,7 +10,7 @@
 #include <memory>
 #include <string>
 
-#include "base/callback_forward.h"
+#include "base/callback.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "components/metrics/metrics_reporting_default_state.h"
@@ -18,6 +18,10 @@
 
 namespace base {
 class FilePath;
+}
+
+namespace ukm {
+class UkmService;
 }
 
 namespace metrics {
@@ -29,13 +33,17 @@ class MetricsService;
 // environment.
 class MetricsServiceClient {
  public:
-  virtual ~MetricsServiceClient() {}
+  MetricsServiceClient();
+  virtual ~MetricsServiceClient();
 
   // Returns the MetricsService instance that this client is associated with.
   // With the exception of testing contexts, the returned instance must be valid
   // for the lifetime of this object (typically, the embedder's client
   // implementation will own the MetricsService instance being returned).
   virtual MetricsService* GetMetricsService() = 0;
+
+  // Returns the UkmService instance that this client is associated with.
+  virtual ukm::UkmService* GetUkmService();
 
   // Registers the client id with other services (e.g. crash reporting), called
   // when metrics recording gets enabled.
@@ -65,8 +73,8 @@ class MetricsServiceClient {
   // ownership.
   virtual void OnEnvironmentUpdate(std::string* serialized_environment) {}
 
-  // Called by the metrics service when a log has been uploaded.
-  virtual void OnLogUploadComplete() = 0;
+  // Called by the metrics service to record a clean shutdown.
+  virtual void OnLogCleanShutdown() {}
 
   // Gathers metrics that will be filled into the system profile protobuf,
   // calling |done_callback| when complete.
@@ -79,9 +87,14 @@ class MetricsServiceClient {
   virtual void CollectFinalMetricsForLog(
       const base::Closure& done_callback) = 0;
 
+  // Get the URL of the metrics server.
+  virtual std::string GetMetricsServerUrl();
+
   // Creates a MetricsLogUploader with the specified parameters (see comments on
   // MetricsLogUploader for details).
   virtual std::unique_ptr<MetricsLogUploader> CreateUploader(
+      const std::string& server_url,
+      const std::string& mime_type,
       const base::Callback<void(int)>& on_upload_complete) = 0;
 
   // Returns the standard interval between upload attempts.
@@ -108,6 +121,21 @@ class MetricsServiceClient {
 
   // Returns whether cellular logic is enabled for metrics reporting.
   virtual bool IsUMACellularUploadLogicEnabled();
+
+  // Returns if history sync is enabled on all active profiles.
+  virtual bool IsHistorySyncEnabledOnAllProfiles();
+
+  // Sets the callback to run MetricsServiceManager::UpdateRunningServices.
+  void SetUpdateRunningServicesCallback(const base::Closure& callback);
+
+ protected:
+  // Notify MetricsServiceManager to UpdateRunningServices using callback.
+  void UpdateRunningServices();
+
+ private:
+  base::Closure update_running_services_;
+
+  DISALLOW_COPY_AND_ASSIGN(MetricsServiceClient);
 };
 
 }  // namespace metrics

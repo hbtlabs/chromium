@@ -39,6 +39,7 @@
     background-color: #f3f3f3;
     border-top: 1px solid #dadada;
     overflow: hidden;
+    z-index: 0;
 }
 
 .sources-toolbar .toolbar {
@@ -75,7 +76,6 @@
 .source-frame-breakpoint-message {
     background-color: transparent;
     font-weight: normal;
-    font-size: 11px;
     text-align: left;
     text-shadow: none;
     color: rgb(85, 85, 85);

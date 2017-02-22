@@ -27,12 +27,6 @@
 
 namespace blink {
 
-TreeScope& treeScopeForIdResolution(const SVGElement& element) {
-  if (SVGElement* correspondingElement = element.correspondingElement())
-    return correspondingElement->treeScope();
-  return element.treeScope();
-}
-
 PathPositionMapper::PathPositionMapper(const Path& path)
     : m_positionCalculator(path), m_pathLength(path.length()) {}
 
@@ -63,7 +57,7 @@ bool LayoutSVGTextPath::isChildAllowed(LayoutObject* child,
 std::unique_ptr<PathPositionMapper> LayoutSVGTextPath::layoutPath() const {
   const SVGTextPathElement& textPathElement = toSVGTextPathElement(*node());
   Element* targetElement = SVGURIReference::targetElementFromIRIString(
-      textPathElement.hrefString(), treeScopeForIdResolution(textPathElement));
+      textPathElement.hrefString(), textPathElement.treeScopeForIdResolution());
 
   if (!isSVGPathElement(targetElement))
     return nullptr;
@@ -78,7 +72,8 @@ std::unique_ptr<PathPositionMapper> LayoutSVGTextPath::layoutPath() const {
   // system for the current 'text' element, including any adjustments to the
   // current user coordinate system due to a possible transform attribute on the
   // current 'text' element. http://www.w3.org/TR/SVG/text.html#TextPathElement
-  pathData.transform(pathElement.calculateAnimatedLocalTransform());
+  pathData.transform(
+      pathElement.calculateTransform(SVGElement::IncludeMotionTransform));
 
   return PathPositionMapper::create(pathData);
 }

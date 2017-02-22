@@ -88,6 +88,8 @@ component("midi") {
     "midi_port_info.h",
     "midi_scheduler.cc",
     "midi_scheduler.h",
+    "midi_service.cc",
+    "midi_service.h",
     "midi_switches.cc",
     "midi_switches.h",
   ]
@@ -140,6 +142,8 @@ component("midi") {
   if (is_win) {
     deps += [ "//device/usb" ]
     sources += [
+      "dynamically_initialized_midi_manager_win.cc",
+      "dynamically_initialized_midi_manager_win.h",
       "midi_manager_win.cc",
       "midi_manager_win.h",
       "midi_manager_winrt.cc",
@@ -202,15 +206,11 @@ test("midi_unittests") {
 
   if (is_mac) {
     sources += [ "midi_manager_mac_unittest.cc" ]
-    libs = [ "CoreMidi.framework" ]
+    libs = [ "CoreMIDI.framework" ]
   }
 
   if (use_alsa && use_udev) {
     sources += [ "midi_manager_alsa_unittest.cc" ]
-  }
-
-  if (use_x11) {
-    deps += [ "//tools/xdisplaycheck" ]
   }
 
   # This target should not require the Chrome executable to run.

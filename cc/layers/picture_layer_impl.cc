@@ -92,7 +92,7 @@ namespace cc {
 
 PictureLayerImpl::PictureLayerImpl(LayerTreeImpl* tree_impl,
                                    int id,
-                                   bool is_mask)
+                                   Layer::LayerMaskType mask_type)
     : LayerImpl(tree_impl, id),
       twin_layer_(nullptr),
       tilings_(CreatePictureLayerTilingSet()),
@@ -107,7 +107,7 @@ PictureLayerImpl::PictureLayerImpl(LayerTreeImpl* tree_impl,
       low_res_raster_contents_scale_(0.f),
       was_screen_space_transform_animating_(false),
       only_used_low_res_last_append_quads_(false),
-      is_mask_(is_mask),
+      mask_type_(mask_type),
       nearest_neighbor_(false),
       is_directly_composited_image_(false) {
   layer_tree_impl()->RegisterPictureLayerImpl(this);
@@ -125,12 +125,12 @@ const char* PictureLayerImpl::LayerTypeAsString() const {
 
 std::unique_ptr<LayerImpl> PictureLayerImpl::CreateLayerImpl(
     LayerTreeImpl* tree_impl) {
-  return PictureLayerImpl::Create(tree_impl, id(), is_mask_);
+  return PictureLayerImpl::Create(tree_impl, id(), mask_type());
 }
 
 void PictureLayerImpl::PushPropertiesTo(LayerImpl* base_layer) {
   PictureLayerImpl* layer_impl = static_cast<PictureLayerImpl*>(base_layer);
-  DCHECK_EQ(layer_impl->is_mask_, is_mask_);
+  DCHECK_EQ(layer_impl->mask_type_, mask_type_);
 
   LayerImpl::PushPropertiesTo(base_layer);
 
@@ -202,7 +202,8 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
   }
 
   float max_contents_scale = MaximumTilingContentsScale();
-  PopulateScaledSharedQuadState(shared_quad_state, max_contents_scale);
+  PopulateScaledSharedQuadState(shared_quad_state, max_contents_scale,
+                                max_contents_scale);
   Occlusion scaled_occlusion =
       draw_properties()
           .occlusion_in_content_space.GetOcclusionWithGivenDrawTransform(
@@ -272,7 +273,7 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
         } else if (iter.resolution() == LOW_RESOLUTION) {
           color = DebugColors::LowResTileBorderColor();
           width = DebugColors::LowResTileBorderWidth(layer_tree_impl());
-        } else if (iter->contents_scale_key() > max_contents_scale) {
+        } else if (iter->contents_scale() > max_contents_scale) {
           color = DebugColors::ExtraHighResTileBorderColor();
           width = DebugColors::ExtraHighResTileBorderWidth(layer_tree_impl());
         } else {
@@ -340,8 +341,8 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
           // complete. But if a tile is ideal scale, we don't want to consider
           // it incomplete and trying to replace it with a tile at a worse
           // scale.
-          if (iter->contents_scale_key() != raster_contents_scale_ &&
-              iter->contents_scale_key() != ideal_contents_scale_ &&
+          if (iter->contents_scale() != raster_contents_scale_ &&
+              iter->contents_scale() != ideal_contents_scale_ &&
               geometry_rect.Intersects(scaled_viewport_for_tile_priority)) {
             append_quads_data->num_incomplete_tiles++;
           }
@@ -353,7 +354,6 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
                        texture_rect, draw_info.resource_size(),
                        draw_info.contents_swizzled(), nearest_neighbor_);
           ValidateQuadResources(quad);
-          iter->draw_info().set_was_ever_used_to_draw();
           has_draw_quad = true;
           break;
         }
@@ -363,7 +363,6 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
           quad->SetNew(shared_quad_state, geometry_rect, visible_geometry_rect,
                        draw_info.solid_color(), false);
           ValidateQuadResources(quad);
-          iter->draw_info().set_was_ever_used_to_draw();
           has_draw_quad = true;
           break;
         }
@@ -477,9 +476,6 @@ bool PictureLayerImpl::UpdateTiles() {
   was_screen_space_transform_animating_ =
       draw_properties().screen_space_transform_is_animating;
 
-  if (screen_space_transform_is_animating())
-    raster_source_->SetShouldAttemptToUseDistanceFieldText();
-
   double current_frame_time_in_seconds =
       (layer_tree_impl()->CurrentBeginFrameArgs().frame_time -
        base::TimeTicks()).InSecondsF();
@@ -577,8 +573,8 @@ void PictureLayerImpl::UpdateRasterSource(
 
   // Only set the image decode controller when we're committing.
   if (!pending_set) {
-    raster_source_->set_image_decode_controller(
-        layer_tree_impl()->image_decode_controller());
+    raster_source_->set_image_decode_cache(
+        layer_tree_impl()->image_decode_cache());
   }
 
   // The |new_invalidation| must be cleared before updating tilings since they
@@ -648,13 +644,12 @@ bool PictureLayerImpl::RasterSourceUsesLCDText() const {
 void PictureLayerImpl::NotifyTileStateChanged(const Tile* tile) {
   if (layer_tree_impl()->IsActiveTree()) {
     gfx::Rect layer_damage_rect = gfx::ScaleToEnclosingRect(
-        tile->content_rect(), 1.f / tile->raster_scales().width(),
-        1.f / tile->raster_scales().height());
+        tile->content_rect(), 1.f / tile->contents_scale());
     AddDamageRect(layer_damage_rect);
   }
   if (tile->draw_info().NeedsRaster()) {
     PictureLayerTiling* tiling =
-        tilings_->FindTilingWithScaleKey(tile->contents_scale_key());
+        tilings_->FindTilingWithScaleKey(tile->contents_scale());
     if (tiling)
       tiling->set_all_tiles_done(false);
   }
@@ -679,8 +674,8 @@ void PictureLayerImpl::ReleaseTileResources() {
 void PictureLayerImpl::RecreateTileResources() {
   tilings_ = CreatePictureLayerTilingSet();
   if (raster_source_) {
-    raster_source_->set_image_decode_controller(
-        layer_tree_impl()->image_decode_controller());
+    raster_source_->set_image_decode_cache(
+        layer_tree_impl()->image_decode_cache());
   }
 }
 
@@ -693,12 +688,17 @@ Region PictureLayerImpl::GetInvalidationRegionForDebugging() {
   return IntersectRegions(invalidation_, update_rect());
 }
 
-ScopedTilePtr PictureLayerImpl::CreateTile(const Tile::CreateInfo& info) {
+std::unique_ptr<Tile> PictureLayerImpl::CreateTile(
+    const Tile::CreateInfo& info) {
   int flags = 0;
 
   // We don't handle solid color masks, so we shouldn't bother analyzing those.
   // Otherwise, always analyze to maximize memory savings.
-  if (!is_mask_)
+  // TODO(sunxd): the condition should be (mask_type_ ==
+  // Layer::LayerMaskType::NOT_MASK
+  // || (layer_tree_impl()->settings().enable_mask_tiling && mask_type ==
+  // Layer::LayerMaskType::MULTI_TEXTURE_MASK)).
+  if (mask_type_ == Layer::LayerMaskType::NOT_MASK)
     flags = Tile::USE_PICTURE_ANALYSIS;
 
   if (contents_opaque())
@@ -724,8 +724,7 @@ const PictureLayerTiling* PictureLayerImpl::GetPendingOrActiveTwinTiling(
   PictureLayerImpl* twin_layer = GetPendingOrActiveTwinLayer();
   if (!twin_layer)
     return nullptr;
-  return twin_layer->tilings_->FindTilingWithScaleKey(
-      tiling->contents_scale_key());
+  return twin_layer->tilings_->FindTilingWithScaleKey(tiling->contents_scale());
 }
 
 bool PictureLayerImpl::RequiresHighResToDraw() const {
@@ -741,7 +740,11 @@ gfx::Size PictureLayerImpl::CalculateTileSize(
   int max_texture_size =
       layer_tree_impl()->resource_provider()->max_texture_size();
 
-  if (is_mask_) {
+  // TODO(sunxd): the condition should be mask_type_ == Layer::LayerMaskType::
+  // SINGLE_TEXTURE_MASK || (mask_type_ ==
+  // Layer::LayerMaskType::MULTI_TEXTURE_MASK &&
+  // !layer_tree_impl()->settings().enable_mask_tiling)
+  if (mask_type_ != Layer::LayerMaskType::NOT_MASK) {
     // Masks are not tiled, so if we can't cover the whole mask with one tile,
     // we shouldn't have such a tiling at all.
     DCHECK_LE(content_bounds.width(), max_texture_size);
@@ -1177,23 +1180,26 @@ float PictureLayerImpl::MinimumContentsScale() const {
 float PictureLayerImpl::MaximumContentsScale() const {
   // Masks can not have tilings that would become larger than the
   // max_texture_size since they use a single tile for the entire
-  // tiling. Other layers can have tilings of any scale.
-  if (!is_mask_)
-    return std::numeric_limits<float>::max();
-
-  int max_texture_size =
-      layer_tree_impl()->resource_provider()->max_texture_size();
-  float max_scale_width =
-      static_cast<float>(max_texture_size) / bounds().width();
-  float max_scale_height =
-      static_cast<float>(max_texture_size) / bounds().height();
+  // tiling. Other layers can have tilings such that dimension * scale
+  // does not overflow.
+  // TODO(sunxd): the condition should be:
+  // mask_type_ == Layer::LayerMaskType::SINGLE_TEXTURE_MASK || (mask_type_ ==
+  // Layer::LayerMaskType::MULTI_TEXTURE_MASK && !layer_tree_impl()->settings().
+  // enable_mask_tiling)
+  float max_dimension = static_cast<float>(
+      mask_type_ != Layer::LayerMaskType::NOT_MASK
+          ? layer_tree_impl()->resource_provider()->max_texture_size()
+          : std::numeric_limits<int>::max());
+  float max_scale_width = max_dimension / bounds().width();
+  float max_scale_height = max_dimension / bounds().height();
   float max_scale = std::min(max_scale_width, max_scale_height);
+
   // We require that multiplying the layer size by the contents scale and
-  // ceiling produces a value <= |max_texture_size|. Because for large layer
+  // ceiling produces a value <= |max_dimension|. Because for large layer
   // sizes floating point ambiguity may crop up, making the result larger or
   // smaller than expected, we use a slightly smaller floating point value for
   // the scale, to help ensure that the resulting content bounds will never end
-  // up larger than |max_texture_size|.
+  // up larger than |max_dimension|.
   return nextafterf(max_scale, 0.f);
 }
 
@@ -1312,8 +1318,8 @@ void PictureLayerImpl::AsValueInto(
 
   state->BeginArray("coverage_tiles");
   for (PictureLayerTilingSet::CoverageIterator iter(
-           tilings_.get(), 1.f, gfx::Rect(raster_source_->GetSize()),
-           ideal_contents_scale_);
+           tilings_.get(), MaximumTilingContentsScale(),
+           gfx::Rect(raster_source_->GetSize()), ideal_contents_scale_);
        iter; ++iter) {
     state->BeginDictionary();
 
@@ -1325,6 +1331,32 @@ void PictureLayerImpl::AsValueInto(
     state->EndDictionary();
   }
   state->EndArray();
+
+  state->BeginDictionary("can_have_tilings_state");
+  state->SetBoolean("can_have_tilings", CanHaveTilings());
+  state->SetBoolean("raster_source_solid_color",
+                    raster_source_->IsSolidColor());
+  state->SetBoolean("draws_content", DrawsContent());
+  state->SetBoolean("raster_source_has_recordings",
+                    raster_source_->HasRecordings());
+  state->SetDouble("max_contents_scale", MaximumTilingContentsScale());
+  state->SetDouble("min_contents_scale", MinimumContentsScale());
+  state->EndDictionary();
+
+  state->BeginDictionary("raster_scales");
+  state->SetDouble("page_scale", raster_page_scale_);
+  state->SetDouble("device_scale", raster_device_scale_);
+  state->SetDouble("source_scale", raster_source_scale_);
+  state->SetDouble("contents_scale", raster_contents_scale_);
+  state->SetDouble("low_res_contents_scale", low_res_raster_contents_scale_);
+  state->EndDictionary();
+
+  state->BeginDictionary("ideal_scales");
+  state->SetDouble("page_scale", ideal_page_scale_);
+  state->SetDouble("device_scale", ideal_device_scale_);
+  state->SetDouble("source_scale", ideal_source_scale_);
+  state->SetDouble("contents_scale", ideal_contents_scale_);
+  state->EndDictionary();
 }
 
 size_t PictureLayerImpl::GPUMemoryUsageInBytes() const {
@@ -1346,6 +1378,29 @@ bool PictureLayerImpl::IsOnActiveOrPendingTree() const {
 bool PictureLayerImpl::HasValidTilePriorities() const {
   return IsOnActiveOrPendingTree() &&
          is_drawn_render_surface_layer_list_member();
+}
+
+void PictureLayerImpl::InvalidateRegionForImages(
+    const ImageIdFlatSet& images_to_invalidate) {
+  TRACE_EVENT_BEGIN0("cc", "PictureLayerImpl::InvalidateRegionForImages");
+
+  InvalidationRegion image_invalidation;
+  for (auto image_id : images_to_invalidate)
+    image_invalidation.Union(raster_source_->GetRectForImage(image_id));
+  Region invalidation;
+  image_invalidation.Swap(&invalidation);
+
+  if (invalidation.IsEmpty()) {
+    TRACE_EVENT_END1("cc", "PictureLayerImpl::InvalidateRegionForImages",
+                     "Invalidation", invalidation.ToString());
+    return;
+  }
+
+  invalidation_.Union(invalidation);
+  tilings_->UpdateTilingsForImplSideInvalidation(invalidation);
+  SetNeedsPushProperties();
+  TRACE_EVENT_END1("cc", "PictureLayerImpl::InvalidateRegionForImages",
+                   "Invalidation", invalidation.ToString());
 }
 
 }  // namespace cc

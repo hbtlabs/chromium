@@ -15,19 +15,25 @@ class Window;
 namespace wm {
 
 // Different types of drop shadows that can be drawn under a window by the
-// shell.  Used as a value for the kShadowTypeKey property.
-enum ShadowType {
-  // Starts at 0 due to the cast in GetShadowType().
-  SHADOW_TYPE_NONE = 0,
-  SHADOW_TYPE_RECTANGULAR,
+// shell. Used as a value for the kShadowTypeKey property. The integer value of
+// each entry is directly used for determining the size of the shadow.
+enum class ShadowElevation {
+  // Indicates an elevation should be chosen based on the window. This is the
+  // default.
+  DEFAULT = -1,
+  NONE = 0,
+  SMALL = 6,
+  MEDIUM = 8,
+  LARGE = 24,
 };
 
-WM_EXPORT void SetShadowType(aura::Window* window, ShadowType shadow_type);
-WM_EXPORT ShadowType GetShadowType(aura::Window* window);
+WM_EXPORT void SetShadowElevation(aura::Window* window,
+                                  ShadowElevation elevation);
 
 // A property key describing the drop shadow that should be displayed under the
-// window.  If unset, no shadow is displayed.
-extern const aura::WindowProperty<ShadowType>* const kShadowTypeKey;
+// window. A null value is interpreted as using the default.
+WM_EXPORT extern const aura::WindowProperty<ShadowElevation>* const
+    kShadowElevationKey;
 
 }  // namespace wm
 

@@ -15,9 +15,9 @@
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base_observer.h"
+#include "content/browser/renderer_host/render_widget_host_view_frame_subscriber.h"
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/common/content_switches_internal.h"
-#include "content/public/browser/render_widget_host_view_frame_subscriber.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/point_conversions.h"
@@ -39,10 +39,6 @@ RenderWidgetHostViewBase::RenderWidgetHostViewBase()
       background_color_(SK_ColorBLACK),
       mouse_locked_(false),
       showing_context_menu_(false),
-#if !defined(USE_AURA)
-      selection_text_offset_(0),
-      selection_range_(gfx::Range::InvalidRange()),
-#endif
       current_device_scale_factor_(0),
       current_display_rotation_(display::Display::ROTATE_0),
       text_input_manager_(nullptr),
@@ -144,18 +140,8 @@ float RenderWidgetHostViewBase::GetBottomControlsHeight() const {
 void RenderWidgetHostViewBase::SelectionChanged(const base::string16& text,
                                                 size_t offset,
                                                 const gfx::Range& range) {
-// TODO(ekaramad): Use TextInputManager code paths for IME on other platforms.
-// Also, remove the following local variables when that happens
-// (https://crbug.com/578168 and https://crbug.com/602427).
-#if !defined(OS_ANDROID)
   if (GetTextInputManager())
     GetTextInputManager()->SelectionChanged(this, text, offset, range);
-#else
-  selection_text_ = text;
-  selection_text_offset_ = offset;
-  selection_range_.set_start(range.start());
-  selection_range_.set_end(range.end());
-#endif
 }
 
 gfx::Size RenderWidgetHostViewBase::GetRequestedRendererSize() const {
@@ -165,6 +151,15 @@ gfx::Size RenderWidgetHostViewBase::GetRequestedRendererSize() const {
 ui::TextInputClient* RenderWidgetHostViewBase::GetTextInputClient() {
   NOTREACHED();
   return NULL;
+}
+
+void RenderWidgetHostViewBase::SetIsInVR(bool is_in_vr) {
+  NOTIMPLEMENTED();
+}
+
+bool RenderWidgetHostViewBase::IsInVR() const {
+  NOTIMPLEMENTED();
+  return false;
 }
 
 bool RenderWidgetHostViewBase::IsShowingContextMenu() const {
@@ -177,10 +172,6 @@ void RenderWidgetHostViewBase::SetShowingContextMenu(bool showing) {
 }
 
 base::string16 RenderWidgetHostViewBase::GetSelectedText() {
-// TODO(ekaramad): Use TextInputManager code paths for IME on other platforms.
-// Also, remove the following local variables when that happens
-// (https://crbug.com/578168 and https://crbug.com/602427).
-#if !defined(OS_ANDROID)
   if (!GetTextInputManager())
     return base::string16();
 
@@ -192,13 +183,6 @@ base::string16 RenderWidgetHostViewBase::GetSelectedText() {
 
   return selection->text.substr(selection->range.GetMin() - selection->offset,
                                 selection->range.length());
-#else
-  if (!selection_range_.IsValid())
-    return base::string16();
-  return selection_text_.substr(
-      selection_range_.GetMin() - selection_text_offset_,
-      selection_range_.length());
-#endif
 }
 
 bool RenderWidgetHostViewBase::IsMouseLocked() {
@@ -475,31 +459,22 @@ bool RenderWidgetHostViewBase::IsRenderWidgetHostViewChildFrame() {
 
 void RenderWidgetHostViewBase::TextInputStateChanged(
     const TextInputState& text_input_state) {
-// TODO(ekaramad): Use TextInputManager code paths for IME on other platforms.
-#if !defined(OS_ANDROID)
   if (GetTextInputManager())
     GetTextInputManager()->UpdateTextInputState(this, text_input_state);
-#endif
 }
 
 void RenderWidgetHostViewBase::ImeCancelComposition() {
-// TODO(ekaramad): Use TextInputManager code paths for IME on other platforms.
-#if !defined(OS_ANDROID)
   if (GetTextInputManager())
     GetTextInputManager()->ImeCancelComposition(this);
-#endif
 }
 
 void RenderWidgetHostViewBase::ImeCompositionRangeChanged(
     const gfx::Range& range,
     const std::vector<gfx::Rect>& character_bounds) {
-// TODO(ekaramad): Use TextInputManager code paths for IME on other platforms.
-#if !defined(OS_ANDROID)
   if (GetTextInputManager()) {
     GetTextInputManager()->ImeCompositionRangeChanged(this, range,
                                                       character_bounds);
   }
-#endif
 }
 
 TextInputManager* RenderWidgetHostViewBase::GetTextInputManager() {

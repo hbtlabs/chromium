@@ -19,6 +19,7 @@ import android.widget.TextView;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
+import org.chromium.chrome.browser.payments.ui.DropdownFieldAdapter;
 import org.chromium.chrome.browser.preferences.autofill.AutofillProfileBridge.AddressField;
 import org.chromium.chrome.browser.preferences.autofill.AutofillProfileBridge.AddressUiComponent;
 import org.chromium.chrome.browser.preferences.autofill.AutofillProfileBridge.DropdownKeyValue;
@@ -124,8 +125,9 @@ public class AutofillProfileEditor extends AutofillEditorBase {
             mCountryCodes.add(country.getKey());
         }
 
-        ArrayAdapter<DropdownKeyValue> countriesAdapter = new ArrayAdapter<DropdownKeyValue>(
-                getActivity(), android.R.layout.simple_spinner_item, countries);
+        ArrayAdapter<DropdownKeyValue> countriesAdapter =
+                new DropdownFieldAdapter<DropdownKeyValue>(
+                        getActivity(), android.R.layout.simple_spinner_item, countries);
         countriesAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         mCountriesDropdown.setAdapter(countriesAdapter);
     }
@@ -240,7 +242,7 @@ public class AutofillProfileEditor extends AutofillEditorBase {
     @Override
     protected boolean saveEntry() {
         AutofillProfile profile = new PersonalDataManager.AutofillProfile(mGUID,
-                AutofillPreferences.SETTINGS_ORIGIN, true /* isLocal */,
+                AutofillAndPaymentsPreferences.SETTINGS_ORIGIN, true /* isLocal */,
                 getFieldText(AddressField.RECIPIENT), getFieldText(AddressField.ORGANIZATION),
                 getFieldText(AddressField.STREET_ADDRESS), getFieldText(AddressField.ADMIN_AREA),
                 getFieldText(AddressField.LOCALITY), getFieldText(AddressField.DEPENDENT_LOCALITY),

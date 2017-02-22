@@ -97,6 +97,7 @@ int main(int argc, char** argv) {
 #if defined(USE_AURA)
   std::unique_ptr<aura::Env> env = aura::Env::CreateInstance();
   aura::Env::GetInstance()->set_context_factory(context_factory.get());
+  aura::Env::GetInstance()->set_context_factory_private(context_factory.get());
 #endif
   ui::InitializeInputMethodForTesting();
   ui::MaterialDesignController::Initialize();
@@ -112,8 +113,7 @@ int main(int argc, char** argv) {
     display::Screen::SetScreenInstance(desktop_screen.get());
 #endif
 
-    views::examples::ShowExamplesWindow(views::examples::QUIT_ON_CLOSE, nullptr,
-                                        nullptr);
+    views::examples::ShowExamplesWindow(views::examples::QUIT_ON_CLOSE);
 
     base::RunLoop().Run();
 

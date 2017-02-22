@@ -25,7 +25,6 @@
 #include "base/strings/string_util.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread.h"
-#include "base/threading/worker_pool.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "components/net_log/chrome_net_log.h"
@@ -78,6 +77,10 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "url/url_constants.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 // The IOSChromeIOThread object must outlive any tasks posted to the IO thread
 // before the Quit task, so base::Bind() calls are not refcounted.
@@ -356,7 +359,8 @@ void IOSChromeIOThread::Init() {
   std::unique_ptr<net::ExternalEstimateProvider> external_estimate_provider;
   // Pass ownership.
   globals_->network_quality_estimator.reset(new net::NetworkQualityEstimator(
-      std::move(external_estimate_provider), network_quality_estimator_params));
+      std::move(external_estimate_provider), network_quality_estimator_params,
+      net_log_));
 
   globals_->cert_verifier = net::CertVerifier::CreateDefault();
 
@@ -380,8 +384,7 @@ void IOSChromeIOThread::Init() {
   globals_->system_cookie_store.reset(new net::CookieMonster(nullptr, nullptr));
   // In-memory channel ID store.
   globals_->system_channel_id_service.reset(
-      new net::ChannelIDService(new net::DefaultChannelIDStore(nullptr),
-                                base::WorkerPool::GetTaskRunner(true)));
+      new net::ChannelIDService(new net::DefaultChannelIDStore(nullptr)));
   globals_->system_cookie_store->SetChannelIDServiceID(
       globals_->system_channel_id_service->GetUniqueID());
   globals_->http_user_agent_settings.reset(new net::StaticHttpUserAgentSettings(
@@ -396,7 +399,6 @@ void IOSChromeIOThread::Init() {
   }
 
   params_.ignore_certificate_errors = false;
-  params_.enable_quic_port_selection = false;
   params_.enable_user_alternate_protocol_ports = false;
 
   std::string quic_user_agent_id = ::GetChannelString();

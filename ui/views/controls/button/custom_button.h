@@ -29,6 +29,14 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
     NOTIFY_ON_RELEASE,
   };
 
+  // An enum describing the events on which a button should be clicked for a
+  // given key event.
+  enum KeyClickAction {
+    CLICK_ON_KEY_PRESS,
+    CLICK_ON_KEY_RELEASE,
+    CLICK_NONE,
+  };
+
   // The menu button's class name.
   static const char kViewClassName[];
 
@@ -39,6 +47,10 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
 
   // Get/sets the current display state of the button.
   ButtonState state() const { return state_; }
+  // Clients passing in STATE_DISABLED should consider calling
+  // SetEnabled(false) instead because the enabled flag can affect other things
+  // like event dispatching, focus traversals, etc. Calling SetEnabled(false)
+  // will also set the state of |this| to STATE_DISABLED.
   void SetState(ButtonState state);
 
   // Starts throbbing. See HoverAnimation for a description of cycles_til_stop.
@@ -85,6 +97,9 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
   }
 
   void set_ink_drop_base_color(SkColor color) { ink_drop_base_color_ = color; }
+  void set_has_ink_drop_action_on_click(bool has_ink_drop_action_on_click) {
+    has_ink_drop_action_on_click_ = has_ink_drop_action_on_click;
+  }
 
   void SetHotTracked(bool is_hot_tracked);
   bool IsHotTracked() const;
@@ -130,7 +145,7 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
   // the current node_data. CustomButton's implementation of StateChanged() does
   // nothing; this method is provided for subclasses that wish to do something
   // on state changes.
-  virtual void StateChanged();
+  virtual void StateChanged(ButtonState old_state);
 
   // Returns true if the event is one that can trigger notifying the listener.
   // This implementation returns true if the left mouse button is down.
@@ -140,10 +155,6 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
   // holds the mouse down over the button. For this implementation,
   // we simply return IsTriggerableEvent(event).
   virtual bool ShouldEnterPushedState(const ui::Event& event);
-
-  void set_has_ink_drop_action_on_click(bool has_ink_drop_action_on_click) {
-    has_ink_drop_action_on_click_ = has_ink_drop_action_on_click;
-  }
 
   // Returns true if the button should enter hovered state; that is, if the
   // mouse is over the button, and no other window has capture (which would

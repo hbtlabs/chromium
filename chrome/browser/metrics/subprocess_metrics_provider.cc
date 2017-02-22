@@ -4,6 +4,8 @@
 
 #include "chrome/browser/metrics/subprocess_metrics_provider.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_base.h"
@@ -28,6 +30,8 @@ SubprocessMetricsProvider* g_subprocess_metrics_provider_for_testing;
 
 SubprocessMetricsProvider::SubprocessMetricsProvider()
     : scoped_observer_(this), weak_ptr_factory_(this) {
+  base::StatisticsRecorder::RegisterHistogramProvider(
+      weak_ptr_factory_.GetWeakPtr());
   content::BrowserChildProcessObserver::Add(this);
   registrar_.Add(this, content::NOTIFICATION_RENDERER_PROCESS_CREATED,
                  content::NotificationService::AllBrowserContextsAndSources());
@@ -59,7 +63,7 @@ void SubprocessMetricsProvider::RegisterSubprocessAllocator(
     return;
 
   // Map is "MapOwnPointer" so transfer ownership to it.
-  allocators_by_id_.AddWithID(allocator.release(), id);
+  allocators_by_id_.AddWithID(std::move(allocator), id);
 }
 
 void SubprocessMetricsProvider::DeregisterSubprocessAllocator(int id) {

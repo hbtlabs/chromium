@@ -24,7 +24,7 @@
 
 import unittest
 
-from webkitpy.common.system.logtesting import LoggingTestCase
+from webkitpy.common.system.log_testing import LoggingTestCase
 from webkitpy.style.optparser import ArgumentParser
 from webkitpy.style.optparser import ArgumentPrinter
 from webkitpy.style.optparser import CommandOptionValues as ProcessorOptions
@@ -40,7 +40,7 @@ class ArgumentPrinterTest(unittest.TestCase):
     def _create_options(self,
                         output_format='emacs',
                         min_confidence=3,
-                        filter_rules=[],
+                        filter_rules=None,
                         git_commit=None):
         return ProcessorOptions(filter_rules=filter_rules,
                                 git_commit=git_commit,

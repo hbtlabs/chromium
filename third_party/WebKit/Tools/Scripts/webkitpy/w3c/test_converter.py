@@ -45,24 +45,21 @@ def convert_for_webkit(new_path, filename, reference_support_info, host=Host()):
         reference_support_info: Dict of information about a related reference HTML, if any.
 
     Returns:
-        A pair of (list of modified CSS properties, modified text) if the file
-        should be modified; None, if the file is not modified.
+        A pair of (list of modified CSS properties, modified text).
     """
     # Conversion is not necessary for any tests in wpt now; see http://crbug.com/654081.
-    if re.search(r'[/\\]imported[/\\]wpt[/\\]', new_path):
-        return None
-
     contents = host.filesystem.read_binary_file(filename)
+    try:
+        contents = contents.decode('utf-8')
+    except UnicodeDecodeError:
+        contents = contents.decode('utf-16')
+
     converter = _W3CTestConverter(new_path, filename, reference_support_info, host)
     if filename.endswith('.css'):
-        return converter.add_webkit_prefix_to_unprefixed_properties(contents.decode('utf-8'))
-    else:
-        try:
-            converter.feed(contents.decode('utf-8'))
-        except UnicodeDecodeError:
-            converter.feed(contents.decode('utf-16'))
-        converter.close()
-        return converter.output()
+        return converter.add_webkit_prefix_to_unprefixed_properties(contents)
+    converter.feed(contents)
+    converter.close()
+    return converter.output()
 
 
 class _W3CTestConverter(HTMLParser):
@@ -90,8 +87,14 @@ class _W3CTestConverter(HTMLParser):
         self.resources_relpath = resources_relpath
 
         # These settings might vary between WebKit and Blink.
-        self._css_property_file = self.path_from_webkit_root('Source', 'core', 'css', 'CSSProperties.in')
-        self.prefixed_properties = self.read_webkit_prefixed_css_property_list()
+        # Only -webkit-text-emphasis is currently needed. See:
+        # https://bugs.chromium.org/p/chromium/issues/detail?id=614955#c1
+        self.prefixed_properties = [
+            '-webkit-text-emphasis',
+            '-webkit-text-emphasis-color',
+            '-webkit-text-emphasis-position',
+            '-webkit-text-emphasis-style',
+        ]
         prop_regex = r'([\s{]|^)(' + '|'.join(
             prop.replace('-webkit-', '') for prop in self.prefixed_properties) + r')(\s+:|:)'
         self.prop_re = re.compile(prop_regex)
@@ -102,26 +105,6 @@ class _W3CTestConverter(HTMLParser):
     def path_from_webkit_root(self, *comps):
         return self._filesystem.abspath(self._filesystem.join(self._webkit_root, *comps))
 
-    def read_webkit_prefixed_css_property_list(self):
-        prefixed_properties = []
-        unprefixed_properties = set()
-
-        contents = self._filesystem.read_text_file(self._css_property_file)
-        for line in contents.splitlines():
-            if re.match(r'^(#|//|$)', line):
-                # skip comments and preprocessor directives.
-                continue
-            prop = line.split()[0]
-            # Find properties starting with the -webkit- prefix.
-            match = re.match(r'-webkit-([\w|-]*)', prop)
-            if match:
-                prefixed_properties.append(match.group(1))
-            else:
-                unprefixed_properties.add(prop.strip())
-
-        # Ignore any prefixed properties for which an unprefixed version is supported.
-        return [prop for prop in prefixed_properties if prop not in unprefixed_properties]
-
     def add_webkit_prefix_to_unprefixed_properties(self, text):
         """Searches |text| for instances of properties requiring the -webkit- prefix and adds the prefix to them.
 
@@ -130,10 +113,15 @@ class _W3CTestConverter(HTMLParser):
         converted_properties = set()
         text_chunks = []
         cur_pos = 0
-        for m in self.prop_re.finditer(text):
-            text_chunks.extend([text[cur_pos:m.start()], m.group(1), '-webkit-', m.group(2), m.group(3)])
-            converted_properties.add(m.group(2))
-            cur_pos = m.end()
+        for match in self.prop_re.finditer(text):
+            text_chunks.extend([
+                text[cur_pos:match.start()],
+                match.group(1), '-webkit-',
+                match.group(2),
+                match.group(3)
+            ])
+            converted_properties.add(match.group(2))
+            cur_pos = match.end()
         text_chunks.append(text[cur_pos:])
 
         for prop in converted_properties:

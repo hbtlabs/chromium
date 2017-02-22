@@ -12,6 +12,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/libgtkui/gtk_ui.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/theme_profile_key.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "ui/aura/env.h"
@@ -33,20 +34,15 @@ ui::NativeTheme* GetNativeThemeForWindow(aura::Window* window) {
   if (!window)
     return nullptr;
 
-  Profile* profile = nullptr;
-  // Window types not listed here (such as tooltips) will never use Chrome
-  // theming.
-  if (window->type() == ui::wm::WINDOW_TYPE_NORMAL ||
-      window->type() == ui::wm::WINDOW_TYPE_POPUP) {
-    profile = reinterpret_cast<Profile*>(
-        window->GetNativeWindowProperty(Profile::kProfileKey));
-  }
+  Profile* profile = GetThemeProfileForWindow(window);
 
   // If using the system (GTK) theme, don't use an Aura NativeTheme at all.
   // NB: ThemeService::UsingSystemTheme() might lag behind this pref. See
   // http://crbug.com/585522
-  if (!profile || profile->GetPrefs()->GetBoolean(prefs::kUsesSystemTheme))
+  if (!profile || (!profile->IsSupervised() &&
+                   profile->GetPrefs()->GetBoolean(prefs::kUsesSystemTheme))) {
     return nullptr;
+  }
 
   // Use a dark theme for incognito browser windows that aren't
   // custom-themed. Otherwise, normal Aura theme.
@@ -56,7 +52,7 @@ ui::NativeTheme* GetNativeThemeForWindow(aura::Window* window) {
     return ui::NativeThemeDarkAura::instance();
   }
 
-  return ui::NativeThemeAura::instance();
+  return ui::NativeTheme::GetInstanceForNativeUi();
 }
 
 }  // namespace
@@ -66,14 +62,12 @@ ChromeBrowserMainExtraPartsViewsLinux::ChromeBrowserMainExtraPartsViewsLinux() {
 
 ChromeBrowserMainExtraPartsViewsLinux::
     ~ChromeBrowserMainExtraPartsViewsLinux() {
-  // X11DesktopHandler is destructed at this point, so we don't need to remove
-  // ourselves as an X11DesktopHandlerObserver
-  DCHECK(!aura::Env::GetInstanceDontCreate());
+  views::X11DesktopHandler::get()->RemoveObserver(this);
 }
 
 void ChromeBrowserMainExtraPartsViewsLinux::PreEarlyInitialization() {
   // TODO(erg): Refactor this into a dlopen call when we add a GTK3 port.
-  views::LinuxUI* gtk2_ui = BuildGtk2UI();
+  views::LinuxUI* gtk2_ui = BuildGtkUi();
   gtk2_ui->SetNativeThemeOverride(base::Bind(&GetNativeThemeForWindow));
   views::LinuxUI::SetInstance(gtk2_ui);
 }

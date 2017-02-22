@@ -16,15 +16,15 @@ class CSSImageInterpolationType : public CSSInterpolationType {
   CSSImageInterpolationType(PropertyHandle property)
       : CSSInterpolationType(property) {}
 
-  InterpolationValue maybeConvertUnderlyingValue(
-      const InterpolationEnvironment&) const final;
+  InterpolationValue maybeConvertStandardPropertyUnderlyingValue(
+      const ComputedStyle&) const final;
   void composite(UnderlyingValueOwner&,
                  double underlyingFraction,
                  const InterpolationValue&,
                  double interpolationFraction) const final;
-  void apply(const InterpolableValue&,
-             const NonInterpolableValue*,
-             InterpolationEnvironment&) const final;
+  void applyStandardPropertyValue(const InterpolableValue&,
+                                  const NonInterpolableValue*,
+                                  StyleResolverState&) const final;
 
   static InterpolationValue maybeConvertCSSValue(const CSSValue&,
                                                  bool acceptGradients);
@@ -54,7 +54,7 @@ class CSSImageInterpolationType : public CSSInterpolationType {
   InterpolationValue maybeConvertInherit(const StyleResolverState&,
                                          ConversionCheckers&) const final;
   InterpolationValue maybeConvertValue(const CSSValue&,
-                                       const StyleResolverState&,
+                                       const StyleResolverState*,
                                        ConversionCheckers&) const final;
 
   PairwiseInterpolationValue maybeMergeSingles(

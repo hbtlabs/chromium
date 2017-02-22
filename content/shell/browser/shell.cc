@@ -37,8 +37,10 @@
 #include "content/shell/browser/shell_content_browser_client.h"
 #include "content/shell/browser/shell_devtools_frontend.h"
 #include "content/shell/browser/shell_javascript_dialog_manager.h"
+#include "content/shell/common/layout_test/layout_test_switches.h"
 #include "content/shell/common/shell_messages.h"
 #include "content/shell/common/shell_switches.h"
+#include "media/media_features.h"
 
 namespace content {
 
@@ -125,7 +127,7 @@ Shell* Shell::CreateShell(WebContents* web_contents,
     web_contents->GetRenderViewHost()->SyncRendererPrefs();
   }
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kForceWebRtcIPHandlingPolicy)) {
     web_contents->GetMutableRendererPrefs()->webrtc_ip_handling_policy =
@@ -261,12 +263,12 @@ void Shell::GoBackOrForward(int offset) {
 }
 
 void Shell::Reload() {
-  web_contents_->GetController().Reload(false);
+  web_contents_->GetController().Reload(ReloadType::NORMAL, false);
   web_contents_->Focus();
 }
 
 void Shell::ReloadBypassingCache() {
-  web_contents_->GetController().ReloadBypassingCache(false);
+  web_contents_->GetController().Reload(ReloadType::BYPASSING_CACHE, false);
   web_contents_->Focus();
 }
 
@@ -477,6 +479,23 @@ void Shell::RendererUnresponsive(
 
 void Shell::ActivateContents(WebContents* contents) {
   contents->GetRenderViewHost()->GetWidget()->Focus();
+}
+
+bool Shell::ShouldAllowRunningInsecureContent(
+    content::WebContents* web_contents,
+    bool allowed_per_prefs,
+    const url::Origin& origin,
+    const GURL& resource_url) {
+  bool allowed_by_test = false;
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kRunLayoutTest)) {
+    const base::DictionaryValue& test_flags =
+        BlinkTestController::Get()
+            ->accumulated_layout_test_runtime_flags_changes();
+    test_flags.GetBoolean("running_insecure_content_allowed", &allowed_by_test);
+  }
+
+  return allowed_per_prefs || allowed_by_test;
 }
 
 gfx::Size Shell::GetShellDefaultSize() {

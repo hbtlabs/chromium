@@ -57,9 +57,9 @@ void GetAllContainersForModule(PluginModule* module, ContainerSet* containers) {
 WebConsoleMessage::Level LogLevelToWebLogLevel(PP_LogLevel level) {
   switch (level) {
     case PP_LOGLEVEL_TIP:
-      return WebConsoleMessage::LevelDebug;
+      return WebConsoleMessage::LevelVerbose;
     case PP_LOGLEVEL_LOG:
-      return WebConsoleMessage::LevelLog;
+      return WebConsoleMessage::LevelInfo;
     case PP_LOGLEVEL_WARNING:
       return WebConsoleMessage::LevelWarning;
     case PP_LOGLEVEL_ERROR:
@@ -76,7 +76,7 @@ WebConsoleMessage MakeLogMessage(PP_LogLevel level,
     result.append(": ");
   result.append(message);
   return WebConsoleMessage(LogLevelToWebLogLevel(level),
-                           WebString(base::UTF8ToUTF16(result)));
+                           WebString::fromUTF8(result));
 }
 
 }  // namespace

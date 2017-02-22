@@ -5,7 +5,7 @@
 #include "chrome/browser/ui/android/infobars/search_geolocation_disclosure_infobar.h"
 
 #include "base/android/jni_string.h"
-#include "chrome/browser/android/search_geolocation_disclosure_infobar_delegate.h"
+#include "chrome/browser/android/search_geolocation/search_geolocation_disclosure_infobar_delegate.h"
 #include "jni/SearchGeolocationDisclosureInfoBar_jni.h"
 
 using base::android::JavaParamRef;
@@ -35,8 +35,7 @@ void SearchGeolocationDisclosureInfoBar::OnLinkClicked(
   if (!owner())
     return;  // We're closing; don't call anything, it might access the owner.
 
-  // This counts as a dismissed so the dialog isn't shown again.
-  delegate()->InfoBarDismissed();
+  GetDelegate()->RecordSettingsClicked();
 
   ScopedJavaLocalRef<jstring> search_url =
       base::android::ConvertUTF8ToJavaString(

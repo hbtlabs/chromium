@@ -52,7 +52,7 @@ class ClientRectList;
 class ContextMenuClient;
 class ContextMenuController;
 class Document;
-class DragCaretController;
+class DragCaret;
 class DragController;
 class EditorClient;
 class FocusController;
@@ -60,6 +60,7 @@ class Frame;
 class FrameHost;
 class PluginData;
 class PointerLockController;
+class ScopedPageSuspender;
 class ScrollingCoordinator;
 class Settings;
 class SpellCheckerClient;
@@ -104,7 +105,8 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
 
   ~Page() override;
 
-  void willBeClosed();
+  void closeSoon();
+  bool isClosing() const { return m_isClosing; }
 
   using PageSet = PersistentHeapHashSet<WeakMember<Page>>;
 
@@ -153,9 +155,7 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   AutoscrollController& autoscrollController() const {
     return *m_autoscrollController;
   }
-  DragCaretController& dragCaretController() const {
-    return *m_dragCaretController;
-  }
+  DragCaret& dragCaret() const { return *m_dragCaret; }
   DragController& dragController() const { return *m_dragController; }
   FocusController& focusController() const { return *m_focusController; }
   ContextMenuController& contextMenuController() const {
@@ -171,7 +171,6 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
 
   ScrollingCoordinator* scrollingCoordinator();
 
-  String mainThreadScrollingReasonsAsText();
   ClientRectList* nonFastScrollableRects(const LocalFrame*);
 
   Settings& settings() const { return *m_settings; }
@@ -187,11 +186,14 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
     return m_tabKeyCyclesThroughElements;
   }
 
-  // DefersLoading is used to delay loads during modal dialogs.
-  // Modal dialogs are supposed to freeze all background processes
-  // in the page, including prevent additional loads from staring/continuing.
-  void setDefersLoading(bool);
-  bool defersLoading() const { return m_defersLoading; }
+  // Suspension is used to implement the "Optionally, pause while waiting for
+  // the user to acknowledge the message" step of simple dialog processing:
+  // https://html.spec.whatwg.org/multipage/webappapis.html#simple-dialogs
+  //
+  // Per https://html.spec.whatwg.org/multipage/webappapis.html#pause, no loads
+  // are allowed to start/continue in this state, and all background processing
+  // is also suspended.
+  bool suspended() const { return m_suspended; }
 
   void setPageScaleFactor(float);
   float pageScaleFactor() const;
@@ -209,7 +211,7 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   bool isCursorVisible() const;
   void setIsCursorVisible(bool isVisible) { m_isCursorVisible = isVisible; }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   void setIsPainting(bool painting) { m_isPainting = painting; }
   bool isPainting() const { return m_isPainting; }
 #endif
@@ -222,12 +224,14 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
 
   DECLARE_TRACE();
 
-  void layerTreeViewInitialized(WebLayerTreeView&);
-  void willCloseLayerTreeView(WebLayerTreeView&);
+  void layerTreeViewInitialized(WebLayerTreeView&, FrameView*);
+  void willCloseLayerTreeView(WebLayerTreeView&, FrameView*);
 
   void willBeDestroyed();
 
  private:
+  friend class ScopedPageSuspender;
+
   explicit Page(PageClients&);
 
   void initGroup();
@@ -235,10 +239,13 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   // SettingsDelegate overrides.
   void settingsChanged(SettingsDelegate::ChangeType) override;
 
+  // ScopedPageSuspender helpers.
+  void setSuspended(bool);
+
   Member<PageAnimator> m_animator;
   const Member<AutoscrollController> m_autoscrollController;
   Member<ChromeClient> m_chromeClient;
-  const Member<DragCaretController> m_dragCaretController;
+  const Member<DragCaret> m_dragCaret;
   const Member<DragController> m_dragController;
   const Member<FocusController> m_focusController;
   const Member<ContextMenuController> m_contextMenuController;
@@ -270,9 +277,15 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   HostsUsingFeatures m_hostsUsingFeatures;
 
   bool m_openedByDOM;
+  // Set to true when window.close() has been called and the Page will be
+  // destroyed. The browsing contexts in this page should no longer be
+  // discoverable via JS.
+  // TODO(dcheng): Try to remove |DOMWindow::m_windowIsClosing| in favor of
+  // this. However, this depends on resolving https://crbug.com/674641
+  bool m_isClosing;
 
   bool m_tabKeyCyclesThroughElements;
-  bool m_defersLoading;
+  bool m_suspended;
 
   float m_deviceScaleFactor;
 
@@ -280,8 +293,8 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
 
   bool m_isCursorVisible;
 
-#if ENABLE(ASSERT)
-  bool m_isPainting;
+#if DCHECK_IS_ON()
+  bool m_isPainting = false;
 #endif
 
   // A pointer to all the interfaces provided to in-process Frames for this

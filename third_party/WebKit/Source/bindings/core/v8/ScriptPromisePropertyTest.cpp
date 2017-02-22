@@ -23,7 +23,7 @@
 #include <memory>
 #include <v8.h>
 
-using namespace blink;
+namespace blink {
 
 namespace {
 
@@ -101,7 +101,7 @@ class ScriptPromisePropertyTestBase {
     v8::HandleScope handleScope(isolate());
     m_otherScriptState = ScriptStateForTesting::create(
         v8::Context::New(isolate()),
-        DOMWrapperWorld::ensureIsolatedWorld(isolate(), 1, -1));
+        DOMWrapperWorld::ensureIsolatedWorld(isolate(), 1));
   }
 
   virtual ~ScriptPromisePropertyTestBase() { destroyContext(); }
@@ -144,7 +144,7 @@ class ScriptPromisePropertyTestBase {
         ScriptState::from(toV8Context(&document(), world));
     ScriptState::Scope scope(scriptState);
     return ScriptValue(
-        scriptState, toV8(value, scriptState->context()->Global(), isolate()));
+        scriptState, ToV8(value, scriptState->context()->Global(), isolate()));
   }
 
  private:
@@ -173,6 +173,51 @@ class ScriptPromisePropertyGarbageCollectedTest
  private:
   Persistent<GarbageCollectedHolder> m_holder;
 };
+
+// Tests that ScriptPromiseProperty works with a non ScriptWrappable resolution
+// target.
+class ScriptPromisePropertyNonScriptWrappableResolutionTargetTest
+    : public ScriptPromisePropertyTestBase,
+      public ::testing::Test {
+ public:
+  template <typename T>
+  void test(const T& value,
+            const char* expected,
+            const char* file,
+            size_t line) {
+    typedef ScriptPromiseProperty<Member<GarbageCollectedScriptWrappable>, T,
+                                  ToV8UndefinedGenerator>
+        Property;
+    Property* property =
+        new Property(&document(), new GarbageCollectedScriptWrappable("holder"),
+                     Property::Ready);
+    size_t nResolveCalls = 0;
+    ScriptValue actualValue;
+    String actual;
+    {
+      ScriptState::Scope scope(mainScriptState());
+      property->promise(DOMWrapperWorld::mainWorld())
+          .then(stub(currentScriptState(), actualValue, nResolveCalls),
+                notReached(currentScriptState()));
+    }
+    property->resolve(value);
+    v8::MicrotasksScope::PerformCheckpoint(isolate());
+    {
+      ScriptState::Scope scope(mainScriptState());
+      actual = toCoreString(actualValue.v8Value()
+                                ->ToString(mainScriptState()->context())
+                                .ToLocalChecked());
+    }
+    if (expected != actual) {
+      ADD_FAILURE_AT(file, line)
+          << "toV8 returns an incorrect value.\n  Actual: "
+          << actual.utf8().data() << "\nExpected: " << expected;
+      return;
+    }
+  }
+};
+
+}  // namespace
 
 TEST_F(ScriptPromisePropertyGarbageCollectedTest,
        Promise_IsStableObjectInMainWorld) {
@@ -375,9 +420,8 @@ TEST_F(ScriptPromisePropertyGarbageCollectedTest, Resolve_DeadContext) {
   }
 
   destroyContext();
-  EXPECT_TRUE(
-      !getProperty()->getExecutionContext() ||
-      getProperty()->getExecutionContext()->activeDOMObjectsAreStopped());
+  EXPECT_TRUE(!getProperty()->getExecutionContext() ||
+              getProperty()->getExecutionContext()->isContextDestroyed());
 
   getProperty()->resolve(new GarbageCollectedScriptWrappable("value"));
   EXPECT_EQ(Property::Pending, getProperty()->getState());
@@ -425,49 +469,6 @@ TEST_F(ScriptPromisePropertyGarbageCollectedTest, Reset) {
   EXPECT_NE(oldActual, newActual);
 }
 
-// Tests that ScriptPromiseProperty works with a non ScriptWrappable resolution
-// target.
-class ScriptPromisePropertyNonScriptWrappableResolutionTargetTest
-    : public ScriptPromisePropertyTestBase,
-      public ::testing::Test {
- public:
-  template <typename T>
-  void test(const T& value,
-            const char* expected,
-            const char* file,
-            size_t line) {
-    typedef ScriptPromiseProperty<Member<GarbageCollectedScriptWrappable>, T,
-                                  ToV8UndefinedGenerator>
-        Property;
-    Property* property =
-        new Property(&document(), new GarbageCollectedScriptWrappable("holder"),
-                     Property::Ready);
-    size_t nResolveCalls = 0;
-    ScriptValue actualValue;
-    String actual;
-    {
-      ScriptState::Scope scope(mainScriptState());
-      property->promise(DOMWrapperWorld::mainWorld())
-          .then(stub(currentScriptState(), actualValue, nResolveCalls),
-                notReached(currentScriptState()));
-    }
-    property->resolve(value);
-    v8::MicrotasksScope::PerformCheckpoint(isolate());
-    {
-      ScriptState::Scope scope(mainScriptState());
-      actual = toCoreString(actualValue.v8Value()
-                                ->ToString(mainScriptState()->context())
-                                .ToLocalChecked());
-    }
-    if (expected != actual) {
-      ADD_FAILURE_AT(file, line)
-          << "toV8 returns an incorrect value.\n  Actual: "
-          << actual.utf8().data() << "\nExpected: " << expected;
-      return;
-    }
-  }
-};
-
 TEST_F(ScriptPromisePropertyNonScriptWrappableResolutionTargetTest,
        ResolveWithUndefined) {
   test(ToV8UndefinedGenerator(), "undefined", __FILE__, __LINE__);
@@ -483,4 +484,4 @@ TEST_F(ScriptPromisePropertyNonScriptWrappableResolutionTargetTest,
   test(-1, "-1", __FILE__, __LINE__);
 }
 
-}  // namespace
+}  // namespace blink

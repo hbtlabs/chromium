@@ -269,7 +269,7 @@ bool SigninManager::IsSigninAllowed() const {
 }
 
 void SigninManager::OnSigninAllowedPrefChanged() {
-  if (!IsSigninAllowed())
+  if (!IsSigninAllowed() && (IsAuthenticated() || AuthInProgress()))
     SignOut(signin_metrics::SIGNOUT_PREF_CHANGED,
             signin_metrics::SignoutDelete::IGNORE_METRIC);
 }
@@ -409,6 +409,9 @@ void SigninManager::PostSignedIn() {
 }
 
 void SigninManager::OnAccountUpdated(const AccountInfo& info) {
+  if (!info.IsValid())
+    return;
+
   user_info_fetched_by_account_tracker_ = true;
   PostSignedIn();
 }

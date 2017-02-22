@@ -20,9 +20,8 @@
 #include "net/test/cert_test_util.h"
 #include "net/test/gtest_util.h"
 #include "net/test/test_data_directory.h"
-#include "net/tools/quic/quic_in_memory_cache.h"
+#include "net/tools/quic/quic_http_response_cache.h"
 #include "net/tools/quic/quic_simple_server.h"
-#include "net/tools/quic/test_tools/quic_in_memory_cache_peer.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -36,7 +35,7 @@ namespace {
 // This must match the certificate used (quic_test.example.com.crt and
 // quic_test.example.com.key.pkcs8).
 const int kTestServerPort = 6121;
-const char kTestServerHost[] = "test.example.com:6121";
+const char kTestServerHost[] = "test.example.com";
 // Used as a simple response from the server.
 const char kHelloPath[] = "/hello.txt";
 const char kHelloBodyValue[] = "Hello from QUIC Server";
@@ -62,11 +61,10 @@ class URLRequestQuicTest : public ::testing::Test {
                                            OK);
     // To simplify the test, and avoid the race with the HTTP request, we force
     // QUIC for these requests.
-    params->origins_to_force_quic_on.insert(
-        HostPortPair::FromString(kTestServerHost));
+    params->origins_to_force_quic_on.insert(HostPortPair(kTestServerHost, 443));
     params->cert_verifier = &cert_verifier_;
     params->enable_quic = true;
-    params->host_resolver = host_resolver_.get();
+    context_->set_host_resolver(host_resolver_.get());
     context_->set_http_network_session_params(std::move(params));
     context_->set_cert_verifier(&cert_verifier_);
   }
@@ -93,9 +91,8 @@ class URLRequestQuicTest : public ::testing::Test {
  private:
   void StartQuicServer() {
     // Set up in-memory cache.
-    test::QuicInMemoryCachePeer::ResetForTests();
-    QuicInMemoryCache::GetInstance()->AddSimpleResponse(
-        kTestServerHost, kHelloPath, kHelloStatus, kHelloBodyValue);
+    response_cache_.AddSimpleResponse(kTestServerHost, kHelloPath, kHelloStatus,
+                                      kHelloBodyValue);
     net::QuicConfig config;
     // Set up server certs.
     std::unique_ptr<net::ProofSourceChromium> proof_source(
@@ -106,8 +103,9 @@ class URLRequestQuicTest : public ::testing::Test {
         directory.Append(FILE_PATH_LITERAL("quic_test.example.com.key.pkcs8")),
         directory.Append(FILE_PATH_LITERAL("quic_test.example.com.key.sct"))));
     server_.reset(new QuicSimpleServer(
-        test::CryptoTestUtils::ProofSourceForTesting(), config,
-        net::QuicCryptoServerConfig::ConfigOptions(), AllSupportedVersions()));
+        test::crypto_test_utils::ProofSourceForTesting(), config,
+        net::QuicCryptoServerConfig::ConfigOptions(), AllSupportedVersions(),
+        &response_cache_));
     int rv = server_->Listen(
         net::IPEndPoint(net::IPAddress::IPv4AllZeros(), kTestServerPort));
     EXPECT_GE(rv, 0) << "Quic server fails to start";
@@ -115,7 +113,7 @@ class URLRequestQuicTest : public ::testing::Test {
     std::unique_ptr<MockHostResolver> resolver(new MockHostResolver());
     resolver->rules()->AddRule("test.example.com", "127.0.0.1");
     host_resolver_.reset(new MappedHostResolver(std::move(resolver)));
-    // Use a mapped host resolver so that request for test.example.com (port 80)
+    // Use a mapped host resolver so that request for test.example.com
     // reach the server running on localhost.
     std::string map_rule = "MAP test.example.com test.example.com:" +
                            base::IntToString(server_->server_address().port());
@@ -125,6 +123,7 @@ class URLRequestQuicTest : public ::testing::Test {
   std::unique_ptr<MappedHostResolver> host_resolver_;
   std::unique_ptr<QuicSimpleServer> server_;
   std::unique_ptr<TestURLRequestContext> context_;
+  QuicHttpResponseCache response_cache_;
   MockCertVerifier cert_verifier_;
 };
 

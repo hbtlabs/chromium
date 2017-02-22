@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/synchronization/lock.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 
 namespace cc {
@@ -24,21 +25,19 @@ class TestGpuMemoryBufferManager : public gpu::GpuMemoryBufferManager {
   void OnGpuMemoryBufferDestroyed(gfx::GpuMemoryBufferId gpu_memory_buffer_id);
 
   // Overridden from gpu::GpuMemoryBufferManager:
-  std::unique_ptr<gfx::GpuMemoryBuffer> AllocateGpuMemoryBuffer(
+  std::unique_ptr<gfx::GpuMemoryBuffer> CreateGpuMemoryBuffer(
       const gfx::Size& size,
       gfx::BufferFormat format,
       gfx::BufferUsage usage,
       gpu::SurfaceHandle surface_handle) override;
-  std::unique_ptr<gfx::GpuMemoryBuffer> CreateGpuMemoryBufferFromHandle(
-      const gfx::GpuMemoryBufferHandle& handle,
-      const gfx::Size& size,
-      gfx::BufferFormat format) override;
   void SetDestructionSyncToken(gfx::GpuMemoryBuffer* buffer,
                                const gpu::SyncToken& sync_token) override;
 
  private:
   // Buffers allocated by this manager.
   int last_gpu_memory_buffer_id_ = 1000;
+  // Use of |buffers_| must be protected by the lock.
+  base::Lock buffers_lock_;
   std::map<int, gfx::GpuMemoryBuffer*> buffers_;
 
   // Parent information for child managers.

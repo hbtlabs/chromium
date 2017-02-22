@@ -17,16 +17,6 @@
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gpu_preference.h"
 
-namespace gfx {
-class Size;
-}
-
-#if defined(OS_ANDROID)
-namespace gl {
-class SurfaceTexture;
-}
-#endif
-
 namespace gpu {
 class InProcessCommandBuffer;
 struct SharedMemoryLimits;
@@ -58,6 +48,8 @@ class GL_IN_PROCESS_CONTEXT_EXPORT GLInProcessContext {
       GpuMemoryBufferManager* gpu_memory_buffer_manager,
       ImageFactory* image_factory,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
+
+  virtual gpu::Capabilities GetCapabilities() = 0;
 
   // Allows direct access to the GLES2 implementation so a GLInProcessContext
   // can be used without making it current.

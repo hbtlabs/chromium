@@ -64,23 +64,22 @@ InternalSettings::Backup::Backup(Settings* settings)
           RuntimeEnabledFeatures::cssStickyPositionEnabled()),
       m_originalOverlayScrollbarsEnabled(
           RuntimeEnabledFeatures::overlayScrollbarsEnabled()),
-      m_originalEditingBehavior(settings->editingBehaviorType()),
+      m_originalEditingBehavior(settings->getEditingBehaviorType()),
       m_originalTextAutosizingEnabled(settings->textAutosizingEnabled()),
       m_originalTextAutosizingWindowSizeOverride(
           settings->textAutosizingWindowSizeOverride()),
       m_originalAccessibilityFontScaleFactor(
-          settings->accessibilityFontScaleFactor()),
-      m_originalMediaTypeOverride(settings->mediaTypeOverride()),
-      m_originalDisplayModeOverride(settings->displayModeOverride()),
+          settings->getAccessibilityFontScaleFactor()),
+      m_originalMediaTypeOverride(settings->getMediaTypeOverride()),
+      m_originalDisplayModeOverride(settings->getDisplayModeOverride()),
       m_originalMockScrollbarsEnabled(settings->mockScrollbarsEnabled()),
       m_originalMockGestureTapHighlightsEnabled(
-          settings->mockGestureTapHighlightsEnabled()),
+          settings->getMockGestureTapHighlightsEnabled()),
       m_langAttributeAwareFormControlUIEnabled(
           RuntimeEnabledFeatures::langAttributeAwareFormControlUIEnabled()),
-      m_imagesEnabled(settings->imagesEnabled()),
-      m_defaultVideoPosterURL(settings->defaultVideoPosterURL()),
-      m_originalLayerSquashingEnabled(settings->layerSquashingEnabled()),
-      m_originalImageAnimationPolicy(settings->imageAnimationPolicy()),
+      m_imagesEnabled(settings->getImagesEnabled()),
+      m_defaultVideoPosterURL(settings->getDefaultVideoPosterURL()),
+      m_originalImageAnimationPolicy(settings->getImageAnimationPolicy()),
       m_originalScrollTopLeftInteropEnabled(
           RuntimeEnabledFeatures::scrollTopLeftInteropEnabled()),
       m_originalCompositorWorkerEnabled(
@@ -131,7 +130,7 @@ InternalSettings::~InternalSettings() {}
 
 InternalSettings::InternalSettings(Page& page)
     : InternalSettingsGenerated(&page),
-      m_page(&page),
+      Supplement<Page>(page),
       m_backup(&page.settings()) {}
 
 void InternalSettings::resetToConsistentState() {
@@ -371,7 +370,6 @@ void InternalSettings::setDefaultVideoPosterURL(
 }
 
 DEFINE_TRACE(InternalSettings) {
-  visitor->trace(m_page);
   InternalSettingsGenerated::trace(visitor);
   Supplement<Page>::trace(visitor);
 }
@@ -526,6 +524,12 @@ void InternalSettings::setCompositorWorkerEnabled(
     ExceptionState& exceptionState) {
   InternalSettingsGuardForSettings();
   RuntimeEnabledFeatures::setCompositorWorkerEnabled(enabled);
+}
+
+void InternalSettings::setPresentationReceiver(bool enabled,
+                                               ExceptionState& exceptionState) {
+  InternalSettingsGuardForSettings();
+  settings()->setPresentationReceiver(enabled);
 }
 
 }  // namespace blink

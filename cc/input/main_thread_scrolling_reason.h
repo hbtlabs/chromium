@@ -32,6 +32,17 @@ struct MainThreadScrollingReason {
     kHandlingScrollFromMainThread = 1 << 13,
     kCustomScrollbarScrolling = 1 << 15,
 
+    // Style-related scrolling on main reasons.
+    // These *AndLCDText reasons are due to subpixel text rendering which can
+    // only be applied by blending glyphs with the background at a specific
+    // screen position; transparency and transforms break this.
+    kHasOpacityAndLCDText = 1 << 16,
+    kHasTransformAndLCDText = 1 << 17,
+    kBackgroundNotOpaqueInRectAndLCDText = 1 << 18,
+    kHasBorderRadius = 1 << 19,
+    kHasClipRelatedProperty = 1 << 20,
+    kHasBoxShadowFromNonRootLayer = 1 << 21,
+
     // Transient scrolling reasons. These are computed for each scroll begin.
     kNonFastScrollableRegion = 1 << 5,
     kFailedHitTest = 1 << 7,
@@ -41,8 +52,11 @@ struct MainThreadScrollingReason {
     kNonInvertibleTransform = 1 << 11,
     kPageBasedScrolling = 1 << 12,
 
-    // The number of flags in this struct (excluding itself).
-    kMainThreadScrollingReasonCount = 17,
+    // The maximum number of flags in this struct (excluding itself).
+    // New flags should increment this number but it should never be decremented
+    // because the values are used in UMA histograms. It should also be noted
+    // that it excludes the kNotScrollingOnMain value.
+    kMainThreadScrollingReasonCount = 22,
   };
 
   // Returns true if the given MainThreadScrollingReason can be set by the main
@@ -52,7 +66,10 @@ struct MainThreadScrollingReason {
         kNotScrollingOnMain | kHasBackgroundAttachmentFixedObjects |
         kHasNonLayerViewportConstrainedObjects | kThreadedScrollingDisabled |
         kScrollbarScrolling | kPageOverlay | kHandlingScrollFromMainThread |
-        kCustomScrollbarScrolling;
+        kCustomScrollbarScrolling | kHasOpacityAndLCDText |
+        kHasTransformAndLCDText | kBackgroundNotOpaqueInRectAndLCDText |
+        kHasBorderRadius | kHasClipRelatedProperty |
+        kHasBoxShadowFromNonRootLayer;
     return (reasons & reasons_set_by_main_thread) == reasons;
   }
 
@@ -97,6 +114,21 @@ struct MainThreadScrollingReason {
       tracedValue->AppendString("Handling scroll from main thread");
     if (reasons & MainThreadScrollingReason::kCustomScrollbarScrolling)
       tracedValue->AppendString("Custom scrollbar scrolling");
+    if (reasons & MainThreadScrollingReason::kHasOpacityAndLCDText)
+      tracedValue->AppendString("Has opacity and LCD text");
+    if (reasons & MainThreadScrollingReason::kHasTransformAndLCDText)
+      tracedValue->AppendString("Has transform and LCD text");
+    if (reasons &
+        MainThreadScrollingReason::kBackgroundNotOpaqueInRectAndLCDText) {
+      tracedValue->AppendString(
+          "Background is not opaque in rect and LCD text");
+    }
+    if (reasons & MainThreadScrollingReason::kHasBorderRadius)
+      tracedValue->AppendString("Has border radius");
+    if (reasons & MainThreadScrollingReason::kHasClipRelatedProperty)
+      tracedValue->AppendString("Has clip related property");
+    if (reasons & MainThreadScrollingReason::kHasBoxShadowFromNonRootLayer)
+      tracedValue->AppendString("Has box shadow from non-root layer");
 
     // Transient scrolling reasons.
     if (reasons & MainThreadScrollingReason::kNonFastScrollableRegion)
@@ -114,6 +146,20 @@ struct MainThreadScrollingReason {
     if (reasons & MainThreadScrollingReason::kPageBasedScrolling)
       tracedValue->AppendString("Page-based scrolling");
     tracedValue->EndArray();
+  }
+
+  // For a given reason, return its index in enum
+  static int getReasonIndex(uint32_t reason) {
+    // Multiple reasons provided
+    if (reason & (reason - 1))
+      return -1;
+
+    int index = -1;
+    while (reason > 0) {
+      reason = reason >> 1;
+      ++index;
+    }
+    return index;
   }
 };
 

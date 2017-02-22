@@ -46,11 +46,13 @@
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/serializers/Serialization.h"
+#include "core/editing/spellcheck/SpellChecker.h"
 #include "core/events/EventListener.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLBRElement.h"
+#include "core/html/HTMLDimension.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLMenuElement.h"
@@ -134,24 +136,17 @@ String HTMLElement::nodeName() const {
   return Element::nodeName();
 }
 
-bool HTMLElement::ieForbidsInsertHTML() const {
-  // FIXME: Supposedly IE disallows settting innerHTML, outerHTML
-  // and createContextualFragment on these tags.  We have no tests to
-  // verify this however, so this list could be totally wrong.
-  // This list was moved from the previous endTagRequirement() implementation.
-  // This is also called from editing and assumed to be the list of tags
-  // for which no end tag should be serialized. It's unclear if the list for
-  // IE compat and the list for serialization sanity are the same.
+bool HTMLElement::shouldSerializeEndTag() const {
+  // See https://www.w3.org/TR/DOM-Parsing/
   if (hasTagName(areaTag) || hasTagName(baseTag) || hasTagName(basefontTag) ||
-      hasTagName(brTag) || hasTagName(colTag) || hasTagName(embedTag) ||
-      hasTagName(frameTag) || hasTagName(hrTag) || hasTagName(imageTag) ||
+      hasTagName(bgsoundTag) || hasTagName(brTag) || hasTagName(colTag) ||
+      hasTagName(embedTag) || hasTagName(frameTag) || hasTagName(hrTag) ||
       hasTagName(imgTag) || hasTagName(inputTag) || hasTagName(keygenTag) ||
-      hasTagName(linkTag) || (RuntimeEnabledFeatures::contextMenuEnabled() &&
-                              hasTagName(menuitemTag)) ||
-      hasTagName(metaTag) || hasTagName(paramTag) || hasTagName(sourceTag) ||
-      hasTagName(trackTag) || hasTagName(wbrTag))
-    return true;
-  return false;
+      hasTagName(linkTag) || hasTagName(menuitemTag) || hasTagName(metaTag) ||
+      hasTagName(paramTag) || hasTagName(sourceTag) || hasTagName(trackTag) ||
+      hasTagName(wbrTag))
+    return false;
+  return true;
 }
 
 static inline CSSValueID unicodeBidiAttributeForDirAuto(HTMLElement* element) {
@@ -325,6 +320,7 @@ const AtomicString& HTMLElement::eventNameForAttributeName(
         {onanimationendAttr, EventTypeNames::animationend},
         {onanimationiterationAttr, EventTypeNames::animationiteration},
         {onanimationstartAttr, EventTypeNames::animationstart},
+        {onauxclickAttr, EventTypeNames::auxclick},
         {onbeforecopyAttr, EventTypeNames::beforecopy},
         {onbeforecutAttr, EventTypeNames::beforecut},
         {onbeforepasteAttr, EventTypeNames::beforepaste},
@@ -377,6 +373,14 @@ const AtomicString& HTMLElement::eventNameForAttributeName(
         {onpauseAttr, EventTypeNames::pause},
         {onplayAttr, EventTypeNames::play},
         {onplayingAttr, EventTypeNames::playing},
+        {onpointercancelAttr, EventTypeNames::pointercancel},
+        {onpointerdownAttr, EventTypeNames::pointerdown},
+        {onpointerenterAttr, EventTypeNames::pointerenter},
+        {onpointerleaveAttr, EventTypeNames::pointerleave},
+        {onpointermoveAttr, EventTypeNames::pointermove},
+        {onpointeroutAttr, EventTypeNames::pointerout},
+        {onpointeroverAttr, EventTypeNames::pointerover},
+        {onpointerupAttr, EventTypeNames::pointerup},
         {onprogressAttr, EventTypeNames::progress},
         {onratechangeAttr, EventTypeNames::ratechange},
         {onresetAttr, EventTypeNames::reset},
@@ -409,30 +413,56 @@ const AtomicString& HTMLElement::eventNameForAttributeName(
         {onwheelAttr, EventTypeNames::wheel},
     };
 
-    for (size_t i = 0; i < WTF_ARRAY_LENGTH(attrToEventNames); i++)
-      attributeNameToEventNameMap.set(attrToEventNames[i].attr.localName(),
-                                      attrToEventNames[i].event);
+    for (const auto& name : attrToEventNames)
+      attributeNameToEventNameMap.set(name.attr.localName(), name.event);
   }
 
   return attributeNameToEventNameMap.get(attrName.localName());
 }
 
-void HTMLElement::parseAttribute(const QualifiedName& name,
-                                 const AtomicString& oldValue,
-                                 const AtomicString& value) {
-  if (name == tabindexAttr || name == XMLNames::langAttr)
-    return Element::parseAttribute(name, oldValue, value);
+void HTMLElement::attributeChanged(const AttributeModificationParams& params) {
+  Element::attributeChanged(params);
+  if (params.reason != AttributeModificationReason::kDirectly)
+    return;
+  // adjustedFocusedElementInTreeScope() is not trivial. We should check
+  // attribute names, then call adjustedFocusedElementInTreeScope().
+  if (params.name == hiddenAttr && !params.newValue.isNull()) {
+    if (adjustedFocusedElementInTreeScope() == this)
+      blur();
+  } else if (params.name == contenteditableAttr) {
+    if (document().frame()) {
+      document().frame()->spellChecker().removeSpellingAndGrammarMarkers(
+          *this, SpellChecker::ElementsType::kOnlyNonEditable);
+    }
+    if (adjustedFocusedElementInTreeScope() != this)
+      return;
+    // The attribute change may cause supportsFocus() to return false
+    // for the element which had focus.
+    //
+    // TODO(tkent): We should avoid updating style.  We'd like to check only
+    // DOM-level focusability here.
+    document().updateStyleAndLayoutTreeForNode(this);
+    if (!supportsFocus())
+      blur();
+  }
+}
 
-  if (name == dirAttr) {
-    dirAttributeChanged(value);
-  } else if (name == langAttr) {
+void HTMLElement::parseAttribute(const AttributeModificationParams& params) {
+  if (params.name == tabindexAttr || params.name == XMLNames::langAttr)
+    return Element::parseAttribute(params);
+
+  if (params.name == dirAttr) {
+    dirAttributeChanged(params.newValue);
+  } else if (params.name == langAttr) {
     pseudoStateChanged(CSSSelector::PseudoLang);
   } else {
-    const AtomicString& eventName = eventNameForAttributeName(name);
-    if (!eventName.isNull())
+    const AtomicString& eventName = eventNameForAttributeName(params.name);
+    if (!eventName.isNull()) {
       setAttributeEventListener(
-          eventName, createAttributeEventListener(this, name, value,
-                                                  eventParameterName()));
+          eventName,
+          createAttributeEventListener(this, params.name, params.newValue,
+                                       eventParameterName()));
+    }
   }
 }
 
@@ -470,29 +500,8 @@ DocumentFragment* HTMLElement::textToFragment(const String& text,
   return fragment;
 }
 
-static inline bool shouldProhibitSetInnerOuterText(const HTMLElement& element) {
-  return element.hasTagName(colTag) || element.hasTagName(colgroupTag) ||
-         element.hasTagName(framesetTag) || element.hasTagName(headTag) ||
-         element.hasTagName(htmlTag) || element.hasTagName(tableTag) ||
-         element.hasTagName(tbodyTag) || element.hasTagName(tfootTag) ||
-         element.hasTagName(theadTag) || element.hasTagName(trTag);
-}
-
 void HTMLElement::setInnerText(const String& text,
                                ExceptionState& exceptionState) {
-  if (ieForbidsInsertHTML()) {
-    exceptionState.throwDOMException(
-        NoModificationAllowedError,
-        "The '" + localName() + "' element does not support text insertion.");
-    return;
-  }
-  if (shouldProhibitSetInnerOuterText(*this)) {
-    exceptionState.throwDOMException(
-        NoModificationAllowedError,
-        "The '" + localName() + "' element does not support text insertion.");
-    return;
-  }
-
   // FIXME: This doesn't take whitespace collapsing into account at all.
 
   if (!text.contains('\n') && !text.contains('\r')) {
@@ -530,19 +539,6 @@ void HTMLElement::setInnerText(const String& text,
 
 void HTMLElement::setOuterText(const String& text,
                                ExceptionState& exceptionState) {
-  if (ieForbidsInsertHTML()) {
-    exceptionState.throwDOMException(
-        NoModificationAllowedError,
-        "The '" + localName() + "' element does not support text insertion.");
-    return;
-  }
-  if (shouldProhibitSetInnerOuterText(*this)) {
-    exceptionState.throwDOMException(
-        NoModificationAllowedError,
-        "The '" + localName() + "' element does not support text insertion.");
-    return;
-  }
-
   ContainerNode* parent = parentNode();
   if (!parent) {
     exceptionState.throwDOMException(NoModificationAllowedError,
@@ -673,7 +669,7 @@ void HTMLElement::setSpellcheck(bool enable) {
   setAttribute(spellcheckAttr, enable ? "true" : "false");
 }
 
-void HTMLElement::clickForBindings() {
+void HTMLElement::click() {
   dispatchSimulatedClick(0, SendNoEvents,
                          SimulatedClickCreationScope::FromScript);
 }
@@ -778,7 +774,7 @@ TextDirection HTMLElement::directionalityIfhasDirAutoAttribute(
     bool& isAuto) const {
   isAuto = hasDirectionAuto();
   if (!isAuto)
-    return LTR;
+    return TextDirection::kLtr;
   return directionality();
 }
 
@@ -832,7 +828,7 @@ TextDirection HTMLElement::directionality(
   }
   if (strongDirectionalityTextNode)
     *strongDirectionalityTextNode = 0;
-  return LTR;
+  return TextDirection::kLtr;
 }
 
 bool HTMLElement::selfOrAncestorHasDirAutoAttribute() const {
@@ -902,43 +898,24 @@ void HTMLElement::adjustDirectionalityIfNeededAfterChildrenChanged(
 
 void HTMLElement::addHTMLLengthToStyle(MutableStylePropertySet* style,
                                        CSSPropertyID propertyID,
-                                       const String& value) {
-  // FIXME: This function should not spin up the CSS parser, but should instead
-  // just figure out the correct length unit and make the appropriate parsed
-  // value.
-
-  // strip attribute garbage..
-  StringImpl* v = value.impl();
-  if (v) {
-    unsigned length = 0;
-
-    while (length < v->length() && (*v)[length] <= ' ')
-      length++;
-
-    for (; length < v->length(); length++) {
-      UChar cc = (*v)[length];
-      if (cc > '9')
-        break;
-      if (cc < '0') {
-        if (cc == '%' || cc == '*') {
-          if (propertyID == CSSPropertyWidth)
-            UseCounter::count(document(),
-                              UseCounter::HTMLElementDeprecatedWidth);
-          length++;
-        }
-        if (cc != '.')
-          break;
-      }
-    }
-
-    if (length != v->length()) {
-      addPropertyToPresentationAttributeStyle(style, propertyID,
-                                              v->substring(0, length));
-      return;
-    }
+                                       const String& value,
+                                       AllowPercentage allowPercentage) {
+  HTMLDimension dimension;
+  if (!parseDimensionValue(value, dimension))
+    return;
+  if (propertyID == CSSPropertyWidth &&
+      (dimension.isPercentage() || dimension.isRelative())) {
+    UseCounter::count(document(), UseCounter::HTMLElementDeprecatedWidth);
   }
-
-  addPropertyToPresentationAttributeStyle(style, propertyID, value);
+  if (dimension.isRelative())
+    return;
+  if (dimension.isPercentage() && allowPercentage != AllowPercentageValues)
+    return;
+  CSSPrimitiveValue::UnitType unit =
+      dimension.isPercentage() ? CSSPrimitiveValue::UnitType::Percentage
+                               : CSSPrimitiveValue::UnitType::Pixels;
+  addPropertyToPresentationAttributeStyle(style, propertyID, dimension.value(),
+                                          unit);
 }
 
 static RGBA32 parseColorStringWithCrazyLegacyRules(const String& colorString) {
@@ -958,17 +935,17 @@ static RGBA32 parseColorStringWithCrazyLegacyRules(const String& colorString) {
   // "characters" in the String.
   for (; i < colorString.length() && digitBuffer.size() < maxColorLength; i++) {
     if (!isASCIIHexDigit(colorString[i]))
-      digitBuffer.append('0');
+      digitBuffer.push_back('0');
     else
-      digitBuffer.append(colorString[i]);
+      digitBuffer.push_back(colorString[i]);
   }
 
   if (!digitBuffer.size())
     return Color::black;
 
   // Pad the buffer out to at least the next multiple of three in size.
-  digitBuffer.append('0');
-  digitBuffer.append('0');
+  digitBuffer.push_back('0');
+  digitBuffer.push_back('0');
 
   if (digitBuffer.size() < 6)
     return makeRGB(toASCIIHexValue(digitBuffer[0]),

@@ -4,6 +4,7 @@
 
 #include "chrome/installer/util/install_util.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -13,6 +14,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/test/scoped_path_override.h"
@@ -38,24 +40,22 @@ class MockRegistryValuePredicate : public InstallUtil::RegistryValuePredicate {
 class TestBrowserDistribution : public BrowserDistribution {
  public:
   TestBrowserDistribution()
-      : BrowserDistribution(CHROME_BROWSER,
-                            std::unique_ptr<AppRegistrationData>(
-                                new TestAppRegistrationData())) {}
+      : BrowserDistribution(base::MakeUnique<TestAppRegistrationData>()) {}
 };
 
 class InstallUtilTest : public testing::Test {
  protected:
   InstallUtilTest() {}
 
-  void SetUp() override {
-    ResetRegistryOverrides();
-  }
+  void SetUp() override { ASSERT_NO_FATAL_FAILURE(ResetRegistryOverrides()); }
 
   void ResetRegistryOverrides() {
     registry_override_manager_.reset(
         new registry_util::RegistryOverrideManager);
-    registry_override_manager_->OverrideRegistry(HKEY_CURRENT_USER);
-    registry_override_manager_->OverrideRegistry(HKEY_LOCAL_MACHINE);
+    ASSERT_NO_FATAL_FAILURE(
+        registry_override_manager_->OverrideRegistry(HKEY_CURRENT_USER));
+    ASSERT_NO_FATAL_FAILURE(
+        registry_override_manager_->OverrideRegistry(HKEY_LOCAL_MACHINE));
   }
 
  private:
@@ -207,7 +207,7 @@ TEST_F(InstallUtilTest, DeleteRegistryValueIf) {
   const wchar_t value[] = L"hi mom";
 
   {
-    ResetRegistryOverrides();
+    ASSERT_NO_FATAL_FAILURE(ResetRegistryOverrides());
     // Nothing to delete if the key isn't even there.
     {
       MockRegistryValuePredicate pred;
@@ -270,7 +270,7 @@ TEST_F(InstallUtilTest, DeleteRegistryValueIf) {
   }
 
   {
-    ResetRegistryOverrides();
+    ASSERT_NO_FATAL_FAILURE(ResetRegistryOverrides());
     // Default value matches: delete using empty string.
     {
       MockRegistryValuePredicate pred;
@@ -290,7 +290,7 @@ TEST_F(InstallUtilTest, DeleteRegistryValueIf) {
   }
 
   {
-    ResetRegistryOverrides();
+    ASSERT_NO_FATAL_FAILURE(ResetRegistryOverrides());
     // Default value matches: delete using NULL.
     {
       MockRegistryValuePredicate pred;

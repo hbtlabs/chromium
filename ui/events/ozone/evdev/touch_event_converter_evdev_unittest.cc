@@ -25,8 +25,8 @@
 #include "ui/events/ozone/evdev/device_event_dispatcher_evdev.h"
 #include "ui/events/ozone/evdev/event_device_test_util.h"
 #include "ui/events/ozone/evdev/touch_evdev_types.h"
-#include "ui/events/ozone/evdev/touch_noise/touch_noise_filter.h"
-#include "ui/events/ozone/evdev/touch_noise/touch_noise_finder.h"
+#include "ui/events/ozone/evdev/touch_filter/false_touch_finder.h"
+#include "ui/events/ozone/evdev/touch_filter/touch_filter.h"
 #include "ui/events/platform/platform_event_dispatcher.h"
 #include "ui/events/platform/platform_event_source.h"
 
@@ -80,7 +80,7 @@ struct GenericEventParams {
 
 class MockTouchEventConverterEvdev : public TouchEventConverterEvdev {
  public:
-  MockTouchEventConverterEvdev(int fd,
+  MockTouchEventConverterEvdev(ScopedInputDevice fd,
                                base::FilePath path,
                                const EventDeviceInfo& devinfo,
                                DeviceEventDispatcherEvdev* dispatcher);
@@ -102,7 +102,7 @@ class MockTouchEventConverterEvdev : public TouchEventConverterEvdev {
 
   void Reinitialize() override {}
 
-  TouchNoiseFinder* touch_noise_finder() { return touch_noise_finder_.get(); }
+  FalseTouchFinder* false_touch_finder() { return false_touch_finder_.get(); }
 
  private:
   int read_pipe_;
@@ -158,15 +158,11 @@ class MockDeviceEventDispatcherEvdev : public DeviceEventDispatcherEvdev {
 };
 
 MockTouchEventConverterEvdev::MockTouchEventConverterEvdev(
-    int fd,
+    ScopedInputDevice fd,
     base::FilePath path,
     const EventDeviceInfo& devinfo,
     DeviceEventDispatcherEvdev* dispatcher)
-    : TouchEventConverterEvdev(fd,
-                               path,
-                               1,
-                               devinfo,
-                               dispatcher) {
+    : TouchEventConverterEvdev(std::move(fd), path, 1, devinfo, dispatcher) {
   int fds[2];
 
   if (pipe(fds))
@@ -211,8 +207,8 @@ class TouchEventConverterEvdevTest : public testing::Test {
     int evdev_io[2];
     if (pipe(evdev_io))
       PLOG(FATAL) << "failed pipe";
-    events_in_ = evdev_io[0];
-    events_out_ = evdev_io[1];
+    ScopedInputDevice events_in(evdev_io[0]);
+    events_out_.reset(evdev_io[1]);
 
     // Device creation happens on a worker thread since it may involve blocking
     // operations. Simulate that by creating it before creating a UI message
@@ -222,8 +218,9 @@ class TouchEventConverterEvdevTest : public testing::Test {
         base::Bind(&TouchEventConverterEvdevTest::DispatchCallback,
                    base::Unretained(this))));
     device_.reset(new ui::MockTouchEventConverterEvdev(
-        events_in_, base::FilePath(kTestDevicePath), devinfo,
+        std::move(events_in), base::FilePath(kTestDevicePath), devinfo,
         dispatcher_.get()));
+    device_->Initialize(devinfo);
     loop_ = new base::MessageLoopForUI;
 
     ui::DeviceDataManager::CreateInstance();
@@ -264,8 +261,7 @@ class TouchEventConverterEvdevTest : public testing::Test {
   std::unique_ptr<ui::MockTouchEventConverterEvdev> device_;
   std::unique_ptr<ui::MockDeviceEventDispatcherEvdev> dispatcher_;
 
-  int events_out_;
-  int events_in_;
+  ScopedInputDevice events_out_;
 
   void DispatchCallback(const GenericEventParams& params) {
     dispatched_events_.push_back(params);
@@ -813,6 +809,8 @@ TEST_F(TouchEventConverterEvdevTest,
 TEST_F(TouchEventConverterEvdevTest, CheckSlotLimit) {
   ui::MockTouchEventConverterEvdev* dev = device();
 
+  InitPixelTouchscreen(dev);
+
   struct input_event mock_kernel_queue[] = {
       {{0, 0}, EV_ABS, ABS_MT_SLOT, 0},
       {{0, 0}, EV_ABS, ABS_MT_TRACKING_ID, 100},
@@ -833,16 +831,16 @@ TEST_F(TouchEventConverterEvdevTest, CheckSlotLimit) {
 
 namespace {
 
-// TouchNoiseFilter which:
+// TouchFilter which:
 // - Considers all events of type |noise_event_type| as noise.
 // - Keeps track of the events that it receives.
-class EventTypeTouchNoiseFilter : public TouchNoiseFilter {
+class EventTypeTouchNoiseFilter : public TouchFilter {
  public:
   explicit EventTypeTouchNoiseFilter(EventType noise_event_type)
       : noise_event_type_(noise_event_type) {}
   ~EventTypeTouchNoiseFilter() override {}
 
-  // TouchNoiseFilter:
+  // TouchFilter:
   void Filter(const std::vector<InProgressTouchEvdev>& touches,
               base::TimeTicks time,
               std::bitset<kNumTouchEvdevSlots>* slots_with_noise) override {
@@ -881,24 +879,29 @@ class TouchEventConverterEvdevTouchNoiseTest
   TouchEventConverterEvdevTouchNoiseTest() {}
   ~TouchEventConverterEvdevTouchNoiseTest() override {}
 
-  // Makes the TouchNoiseFinder use |filter| and only |filter| to filter out
-  // touch noise.
-  void SetTouchNoiseFilter(std::unique_ptr<TouchNoiseFilter> filter) {
-    TouchNoiseFinder* finder = device()->touch_noise_finder();
-    finder->filters_.clear();
-    finder->filters_.push_back(std::move(filter));
+  // Makes the FalseTouchFinder use |filter| and only |filter| to filter out
+  // touch noise. Also removes the edge touch filter.
+  void SetTouchNoiseFilter(std::unique_ptr<TouchFilter> filter) {
+    FalseTouchFinder* finder = device()->false_touch_finder();
+    finder->noise_filters_.clear();
+    finder->noise_filters_.push_back(std::move(filter));
+    finder->edge_touch_filter_.reset();
   }
 
-  // Returns the first of TouchNoiseFinder's filters.
-  ui::TouchNoiseFilter* first_filter() {
-    TouchNoiseFinder* finder = device()->touch_noise_finder();
-    return finder->filters_.empty() ? nullptr : finder->filters_.begin()->get();
+  // Returns the first of FalseTouchFinder's filters.
+  ui::TouchFilter* first_filter() {
+    FalseTouchFinder* finder = device()->false_touch_finder();
+    return finder->noise_filters_.empty() ?
+        nullptr :
+        finder->noise_filters_.begin()->get();
   }
 
   // TouchEventConverterEvdevTest:
   void SetUp() override {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kExtraTouchNoiseFiltering);
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kEdgeTouchFiltering);
     TouchEventConverterEvdevTest::SetUp();
   }
 
@@ -906,7 +909,7 @@ class TouchEventConverterEvdevTouchNoiseTest
   DISALLOW_COPY_AND_ASSIGN(TouchEventConverterEvdevTouchNoiseTest);
 };
 
-// Test that if TouchNoiseFinder identifies an event for an in-progress touch as
+// Test that if FalseTouchFinder identifies an event for an in-progress touch as
 // noise, that the event is converted to ET_TOUCH_CANCELLED and that all
 // subsequent events for the in-progress touch are cancelled.
 TEST_F(TouchEventConverterEvdevTouchNoiseTest, TouchNoiseFiltering) {
@@ -925,14 +928,14 @@ TEST_F(TouchEventConverterEvdevTouchNoiseTest, TouchNoiseFiltering) {
   };
 
   MockTouchEventConverterEvdev* dev = device();
-  SetTouchNoiseFilter(std::unique_ptr<TouchNoiseFilter>(
+  SetTouchNoiseFilter(std::unique_ptr<TouchFilter>(
       new EventTypeTouchNoiseFilter(ET_TOUCH_PRESSED)));
   dev->ConfigureReadMock(mock_kernel_queue, arraysize(mock_kernel_queue), 0);
   dev->ReadNow();
   ASSERT_EQ(0u, size());
 
   ClearDispatchedEvents();
-  SetTouchNoiseFilter(std::unique_ptr<TouchNoiseFilter>(
+  SetTouchNoiseFilter(std::unique_ptr<TouchFilter>(
       new EventTypeTouchNoiseFilter(ET_TOUCH_MOVED)));
   dev->ConfigureReadMock(mock_kernel_queue, arraysize(mock_kernel_queue), 0);
   dev->ReadNow();
@@ -944,7 +947,7 @@ TEST_F(TouchEventConverterEvdevTouchNoiseTest, TouchNoiseFiltering) {
   EXPECT_EQ(ET_TOUCH_CANCELLED, dispatched_touch_event(1).type);
 
   ClearDispatchedEvents();
-  SetTouchNoiseFilter(std::unique_ptr<TouchNoiseFilter>(
+  SetTouchNoiseFilter(std::unique_ptr<TouchFilter>(
       new EventTypeTouchNoiseFilter(ET_TOUCH_RELEASED)));
   dev->ConfigureReadMock(mock_kernel_queue, arraysize(mock_kernel_queue), 0);
   dev->ReadNow();
@@ -961,9 +964,9 @@ TEST_F(TouchEventConverterEvdevTouchNoiseTest, TouchNoiseFiltering) {
 }
 
 // Test that TouchEventConverterEvdev keeps sending events to
-// TouchNoiseFinder after the touch is canceled.
+// FalseTouchFinder after the touch is canceled.
 TEST_F(TouchEventConverterEvdevTouchNoiseTest,
-       DoNotSendTouchCancelsToTouchNoiseFinder) {
+       DoNotSendTouchCancelsToFalseTouchFinder) {
   struct input_event mock_kernel_queue[] = {
     {{0, 0}, EV_ABS, ABS_MT_TRACKING_ID, 684},
     {{0, 0}, EV_ABS, ABS_MT_POSITION_X, 40},
@@ -983,7 +986,7 @@ TEST_F(TouchEventConverterEvdevTouchNoiseTest,
   };
 
   MockTouchEventConverterEvdev* dev = device();
-  SetTouchNoiseFilter(std::unique_ptr<TouchNoiseFilter>(
+  SetTouchNoiseFilter(std::unique_ptr<TouchFilter>(
       new EventTypeTouchNoiseFilter(ET_TOUCH_PRESSED)));
   dev->ConfigureReadMock(mock_kernel_queue, arraysize(mock_kernel_queue), 0);
   dev->ReadNow();
@@ -1021,43 +1024,23 @@ TEST_F(TouchEventConverterEvdevTest, ActiveStylusTouchAndRelease) {
 
   dev->ConfigureReadMock(mock_kernel_queue, arraysize(mock_kernel_queue), 0);
   dev->ReadNow();
-  EXPECT_EQ(5u, size());
+  EXPECT_EQ(2u, size());
 
-  ui::MouseMoveEventParams move_event = dispatched_mouse_move_event(0);
-  EXPECT_EQ(9170, move_event.location.x());
-  EXPECT_EQ(3658, move_event.location.y());
+  auto down_event = dispatched_touch_event(0);
+  EXPECT_EQ(ET_TOUCH_PRESSED, down_event.type);
+  EXPECT_EQ(9170, down_event.location.x());
+  EXPECT_EQ(3658, down_event.location.y());
   EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
-            move_event.pointer_details.pointer_type);
+            down_event.pointer_details.pointer_type);
+  EXPECT_EQ(60.f / 1024, down_event.pointer_details.force);
 
-  ui::MouseButtonEventParams button_event = dispatched_mouse_button_event(1);
-  EXPECT_EQ(9170, button_event.location.x());
-  EXPECT_EQ(3658, button_event.location.y());
+  auto up_event = dispatched_touch_event(1);
+  EXPECT_EQ(ET_TOUCH_RELEASED, up_event.type);
+  EXPECT_EQ(9173, up_event.location.x());
+  EXPECT_EQ(3906, up_event.location.y());
   EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
-            button_event.pointer_details.pointer_type);
-  EXPECT_EQ(60.f / 1024, button_event.pointer_details.force);
-  EXPECT_EQ(button_event.button, static_cast<unsigned int>(BTN_LEFT));
-  EXPECT_EQ(button_event.down, true);
-
-  move_event = dispatched_mouse_move_event(2);
-  EXPECT_EQ(9170, move_event.location.x());
-  EXPECT_EQ(3658, move_event.location.y());
-  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
-            move_event.pointer_details.pointer_type);
-  EXPECT_EQ(60.f / 1024, move_event.pointer_details.force);
-
-  button_event = dispatched_mouse_button_event(3);
-  EXPECT_EQ(9173, button_event.location.x());
-  EXPECT_EQ(3906, button_event.location.y());
-  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
-            button_event.pointer_details.pointer_type);
-  EXPECT_EQ(button_event.button, static_cast<unsigned int>(BTN_LEFT));
-  EXPECT_EQ(button_event.down, false);
-
-  move_event = dispatched_mouse_move_event(4);
-  EXPECT_EQ(9173, move_event.location.x());
-  EXPECT_EQ(3906, move_event.location.y());
-  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
-            move_event.pointer_details.pointer_type);
+            up_event.pointer_details.pointer_type);
+  EXPECT_EQ(0.f, up_event.pointer_details.force);
 }
 
 TEST_F(TouchEventConverterEvdevTest, ActiveStylusMotion) {
@@ -1091,54 +1074,34 @@ TEST_F(TouchEventConverterEvdevTest, ActiveStylusMotion) {
 
   dev->ConfigureReadMock(mock_kernel_queue, arraysize(mock_kernel_queue), 0);
   dev->ReadNow();
-  EXPECT_EQ(7u, size());
+  EXPECT_EQ(4u, size());
 
-  ui::MouseMoveEventParams event = dispatched_mouse_move_event(0);
-  EXPECT_EQ(8921, event.location.x());
-  EXPECT_EQ(1072, event.location.y());
-  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
-            event.pointer_details.pointer_type);
-  EXPECT_EQ(0.f / 1024, event.pointer_details.force);
-
-  ui::MouseButtonEventParams button_event = dispatched_mouse_button_event(1);
-  EXPECT_EQ(8921, button_event.location.x());
-  EXPECT_EQ(1072, button_event.location.y());
-  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
-            button_event.pointer_details.pointer_type);
-  EXPECT_EQ(35.f / 1024, button_event.pointer_details.force);
-  EXPECT_EQ(button_event.button, static_cast<unsigned int>(BTN_LEFT));
-  EXPECT_EQ(button_event.down, true);
-
-  event = dispatched_mouse_move_event(2);
+  ui::TouchEventParams event = dispatched_touch_event(0);
+  EXPECT_EQ(ET_TOUCH_PRESSED, event.type);
   EXPECT_EQ(8921, event.location.x());
   EXPECT_EQ(1072, event.location.y());
   EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
             event.pointer_details.pointer_type);
   EXPECT_EQ(35.f / 1024, event.pointer_details.force);
 
-  event = dispatched_mouse_move_event(3);
+  event = dispatched_touch_event(1);
+  EXPECT_EQ(ET_TOUCH_MOVED, event.type);
   EXPECT_EQ(8934, event.location.x());
   EXPECT_EQ(981, event.location.y());
   EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
             event.pointer_details.pointer_type);
   EXPECT_EQ(184.f / 1024, event.pointer_details.force);
 
-  event = dispatched_mouse_move_event(4);
+  event = dispatched_touch_event(2);
+  EXPECT_EQ(ET_TOUCH_MOVED, event.type);
   EXPECT_EQ(8930, event.location.x());
   EXPECT_EQ(980, event.location.y());
   EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
             event.pointer_details.pointer_type);
   EXPECT_EQ(348.f / 1024, event.pointer_details.force);
 
-  button_event = dispatched_mouse_button_event(5);
-  EXPECT_EQ(8930, button_event.location.x());
-  EXPECT_EQ(980, button_event.location.y());
-  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
-            button_event.pointer_details.pointer_type);
-  EXPECT_EQ(button_event.button, static_cast<unsigned int>(BTN_LEFT));
-  EXPECT_EQ(button_event.down, false);
-
-  event = dispatched_mouse_move_event(6);
+  event = dispatched_touch_event(3);
+  EXPECT_EQ(ET_TOUCH_RELEASED, event.type);
   EXPECT_EQ(8930, event.location.x());
   EXPECT_EQ(980, event.location.y());
   EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,

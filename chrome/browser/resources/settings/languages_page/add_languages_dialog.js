@@ -34,10 +34,24 @@ Polymer({
 
   attached: function() {
     this.$.dialog.showModal();
-    // Fire iron-resize after the list initially displays to prevent flickering.
-    setTimeout(function() {
-      this.$$('iron-list').fire('iron-resize');
-    }.bind(this));
+
+    // Prevent flashing the Cancel button's focus state.
+    this.$$('.cancel-button').blur();
+    setTimeout(this.afterShown_.bind(this));
+  },
+
+  /**
+   * Re-initializes the dialog after it is shown.
+   * @private
+   */
+  afterShown_: function() {
+    // Only fire iron-resize after the list displayed to prevent flickering.
+    this.$$('iron-list').fire('iron-resize');
+
+    // Focus the top checkbox, assuming there are languages left to enable.
+    var firstCheckbox = this.$$('iron-list paper-checkbox');
+    if (firstCheckbox)
+      firstCheckbox.focus();
   },
 
   /**
@@ -96,7 +110,8 @@ Polymer({
    */
   onActionButtonTap_: function() {
     this.$.dialog.close();
-    for (var languageCode of this.languagesToAdd_)
-      this.languageHelper.enableLanguage(languageCode);
+    this.languagesToAdd_.forEach(function(language) {
+      this.languageHelper.enableLanguage(language);
+    }.bind(this));
   },
 });

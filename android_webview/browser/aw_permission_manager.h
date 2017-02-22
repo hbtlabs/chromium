@@ -47,9 +47,6 @@ class AwPermissionManager : public content::PermissionManager {
       content::PermissionType permission,
       const GURL& requesting_origin,
       const GURL& embedding_origin) override;
-  void RegisterPermissionUsage(content::PermissionType permission,
-                               const GURL& requesting_origin,
-                               const GURL& embedding_origin) override;
   int SubscribePermissionStatusChange(
       content::PermissionType permission,
       const GURL& requesting_origin,
@@ -63,7 +60,7 @@ class AwPermissionManager : public content::PermissionManager {
 
  private:
   class PendingRequest;
-  using PendingRequestsMap = IDMap<PendingRequest, IDMapOwnPointer>;
+  using PendingRequestsMap = IDMap<std::unique_ptr<PendingRequest>>;
 
   virtual int GetRenderProcessID(content::RenderFrameHost* render_frame_host);
   virtual int GetRenderFrameID(content::RenderFrameHost* render_frame_host);

@@ -4,8 +4,6 @@
 
 package org.chromium.chrome.browser.contextualsearch;
 
-import android.content.Context;
-
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 
@@ -29,10 +27,9 @@ public class CtrSuppression extends ContextualSearchHeuristic {
     /**
      * Constructs an object that tracks impressions and clicks per user to produce CTR and
      * impression metrics.
-     * @param context An Android Context.
      */
-    CtrSuppression(Context context) {
-        mPreferenceManager = ChromePreferenceManager.getInstance(context);
+    CtrSuppression() {
+        mPreferenceManager = ChromePreferenceManager.getInstance();
 
         // This needs to be done last in this constructor because the native code may call
         // into this object.
@@ -83,6 +80,27 @@ public class CtrSuppression extends ContextualSearchHeuristic {
     protected void logResultsSeen(boolean wasSearchContentViewSeen, boolean wasActivatedByTap) {
         if (wasActivatedByTap) {
             nativeRecordImpression(mNativePointer, wasSearchContentViewSeen);
+        }
+    }
+
+    @Override
+    protected void logRankerTapSuppression(ContextualSearchRankerLogger logger) {
+        if (nativeHasPreviousWeekData(mNativePointer)) {
+            int previousWeekImpressions = nativeGetPreviousWeekImpressions(mNativePointer);
+            int previousWeekCtr = (int) (100 * nativeGetPreviousWeekCtr(mNativePointer));
+            logger.log(ContextualSearchRankerLogger.Feature.PREVIOUS_WEEK_IMPRESSIONS_COUNT,
+                    previousWeekImpressions);
+            logger.log(ContextualSearchRankerLogger.Feature.PREVIOUS_WEEK_CTR_PERCENT,
+                    previousWeekCtr);
+        }
+
+        if (nativeHasPrevious28DayData(mNativePointer)) {
+            int previous28DayImpressions = nativeGetPrevious28DayImpressions(mNativePointer);
+            int previous28DayCtr = (int) (100 * nativeGetPrevious28DayCtr(mNativePointer));
+            logger.log(ContextualSearchRankerLogger.Feature.PREVIOUS_28DAY_IMPRESSIONS_COUNT,
+                    previous28DayImpressions);
+            logger.log(ContextualSearchRankerLogger.Feature.PREVIOUS_28DAY_CTR_PERCENT,
+                    previous28DayCtr);
         }
     }
 

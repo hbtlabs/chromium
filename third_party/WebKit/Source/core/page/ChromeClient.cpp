@@ -29,7 +29,7 @@
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/layout/HitTestResult.h"
 #include "core/page/FrameTree.h"
-#include "core/page/ScopedPageLoadDeferrer.h"
+#include "core/page/ScopedPageSuspender.h"
 #include "core/page/WindowFeatures.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/network/NetworkHints.h"
@@ -37,6 +37,11 @@
 #include <algorithm>
 
 namespace blink {
+
+DEFINE_TRACE(ChromeClient) {
+  visitor->trace(m_lastMouseOverNode);
+  HostWindow::trace(visitor);
+}
 
 void ChromeClient::setWindowRectWithAdjustment(const IntRect& pendingRect,
                                                LocalFrame& frame) {
@@ -68,11 +73,13 @@ bool ChromeClient::canOpenModalIfDuringPageDismissal(
   for (Frame* frame = mainFrame; frame; frame = frame->tree().traverseNext()) {
     if (!frame->isLocalFrame())
       continue;
+    LocalFrame& localFrame = toLocalFrame(*frame);
     Document::PageDismissalType dismissal =
-        toLocalFrame(frame)->document()->pageDismissalEventBeingDispatched();
-    if (dismissal != Document::NoDismissal)
-      return shouldOpenModalDialogDuringPageDismissal(dialog, message,
-                                                      dismissal);
+        localFrame.document()->pageDismissalEventBeingDispatched();
+    if (dismissal != Document::NoDismissal) {
+      return shouldOpenModalDialogDuringPageDismissal(localFrame, dialog,
+                                                      message, dismissal);
+    }
   }
   return true;
 }
@@ -90,10 +97,10 @@ static bool openJavaScriptDialog(LocalFrame* frame,
                                  const String& message,
                                  ChromeClient::DialogType dialogType,
                                  const Delegate& delegate) {
-  // Defer loads in case the client method runs a new event loop that would
+  // Suspend pages in case the client method runs a new event loop that would
   // otherwise cause the load to continue while we're in the middle of
   // executing JavaScript.
-  ScopedPageLoadDeferrer deferrer;
+  ScopedPageSuspender suspender;
   InspectorInstrumentation::willRunJavaScriptDialog(frame, message, dialogType);
   bool result = delegate();
   InspectorInstrumentation::didRunJavaScriptDialog(frame, result);
@@ -180,7 +187,7 @@ void ChromeClient::setToolTip(LocalFrame& frame, const HitTestResult& result) {
         // implementations don't use text direction information for
         // ChromeClient::setToolTip. We'll work on tooltip text
         // direction during bidi cleanup in form inputs.
-        toolTipDirection = LTR;
+        toolTipDirection = TextDirection::kLtr;
       }
     }
   }
@@ -188,15 +195,27 @@ void ChromeClient::setToolTip(LocalFrame& frame, const HitTestResult& result) {
   if (m_lastToolTipPoint == result.hitTestLocation().point() &&
       m_lastToolTipText == toolTip)
     return;
+
+  // If a tooltip was displayed earlier, and mouse cursor moves over
+  // a different node with the same tooltip text, make sure the previous
+  // tooltip is unset, so that it does not get stuck positioned relative
+  // to the previous node).
+  // The ::setToolTip overload, which is be called down the road,
+  // ensures a new tooltip to be displayed with the new context.
+  if (result.innerNodeOrImageMapImage() != m_lastMouseOverNode &&
+      !m_lastToolTipText.isEmpty() && toolTip == m_lastToolTipText)
+    clearToolTip(frame);
+
   m_lastToolTipPoint = result.hitTestLocation().point();
   m_lastToolTipText = toolTip;
+  m_lastMouseOverNode = result.innerNodeOrImageMapImage();
   setToolTip(frame, toolTip, toolTipDirection);
 }
 
 void ChromeClient::clearToolTip(LocalFrame& frame) {
   // Do not check m_lastToolTip* and do not update them intentionally.
   // We don't want to show tooltips with same content after clearToolTip().
-  setToolTip(frame, String(), LTR);
+  setToolTip(frame, String(), TextDirection::kLtr);
 }
 
 bool ChromeClient::print(LocalFrame* frame) {
@@ -209,10 +228,10 @@ bool ChromeClient::print(LocalFrame* frame) {
     return false;
   }
 
-  // Defer loads in case the client method runs a new event loop that would
+  // Suspend pages in case the client method runs a new event loop that would
   // otherwise cause the load to continue while we're in the middle of
   // executing JavaScript.
-  ScopedPageLoadDeferrer deferrer;
+  ScopedPageSuspender suspender;
 
   printDelegate(frame);
   return true;

@@ -40,14 +40,12 @@
 #error "Extensions must be enabled"
 #endif
 
-class GURL;
 class HostContentSettingsMap;
 class Profile;
 
 namespace base {
 class CommandLine;
 class SequencedTaskRunner;
-class Version;
 }
 
 namespace content {
@@ -59,8 +57,6 @@ class AppDataMigrator;
 class ComponentLoader;
 class CrxInstaller;
 class ExtensionActionStorageManager;
-class ExtensionDownloader;
-class ExtensionDownloaderDelegate;
 class ExtensionErrorController;
 class ExtensionRegistry;
 class ExtensionSystem;
@@ -296,7 +292,7 @@ class ExtensionService
   // Disable non-default and non-managed extensions with ids not in
   // |except_ids|. Default extensions are those from the Web Store with
   // |was_installed_by_default| flag.
-  void DisableUserExtensions(const std::vector<std::string>& except_ids);
+  void DisableUserExtensionsExcept(const std::vector<std::string>& except_ids);
 
   // Puts all extensions in a blocked state: Unloading every extension, and
   // preventing them from ever loading until UnblockAllExtensions is called.
@@ -393,11 +389,6 @@ class ExtensionService
 
   const extensions::ExtensionSet* delayed_installs() const {
     return &delayed_installs_;
-  }
-
-  bool show_extensions_prompts() const { return show_extensions_prompts_; }
-  void set_show_extensions_prompts(bool show_extensions_prompts) {
-    show_extensions_prompts_ = show_extensions_prompts;
   }
 
   Profile* profile() { return profile_; }
@@ -641,9 +632,6 @@ class ExtensionService
 
   // Whether or not extensions are enabled.
   bool extensions_enabled_ = true;
-
-  // Whether to notify users when they attempt to install an extension.
-  bool show_extensions_prompts_ = true;
 
   // Signaled when all extensions are loaded.
   extensions::OneShotEvent* const ready_;

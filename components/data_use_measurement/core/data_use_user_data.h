@@ -39,7 +39,7 @@ class DataUseUserData : public base::SupportsUserData::Data {
     AUTOFILL,
     POLICY,
     SPELL_CHECKER,
-    NTP_SNIPPETS,
+    NTP_SNIPPETS_OBSOLETE,
     SAFE_BROWSING,
     DATA_REDUCTION_PROXY,
     PRECACHE,
@@ -50,6 +50,39 @@ class DataUseUserData : public base::SupportsUserData::Data {
     CLOUD_PRINT,
     SEARCH_PROVIDER_LOGOS,
     UPDATE_CLIENT,
+    GCM_DRIVER,
+    WEB_HISTORY_SERVICE,
+    NETWORK_TIME_TRACKER,
+    SUPERVISED_USER,
+    IMAGE_FETCHER_UNTAGGED,
+    GAIA,
+    CAPTIVE_PORTAL,
+    WEB_RESOURCE_SERVICE,
+    SIGNIN,
+    NTP_SNIPPETS_SUGGESTIONS,
+    NTP_SNIPPETS_THUMBNAILS,
+    DOODLE,
+  };
+
+  // Data use broken by content type. This enum must remain synchronized
+  // with the enum of the same name in metrics/histograms/histograms.xml.
+  // These values are written to logs.  New enum values can be added, but
+  // existing enums must never be renumbered or deleted and reused.
+  enum DataUseContentType {
+    OTHER = 0,
+    MAIN_FRAME_HTML = 1,
+    NON_MAIN_FRAME_HTML = 2,
+    CSS = 3,
+    IMAGE = 4,
+    JAVASCRIPT = 5,
+    FONT = 6,
+    AUDIO_APPBACKGROUND = 7,
+    AUDIO_TABBACKGROUND = 8,
+    AUDIO = 9,
+    VIDEO_APPBACKGROUND = 10,
+    VIDEO_TABBACKGROUND = 11,
+    VIDEO = 12,
+    TYPE_MAX = 13,
   };
 
   // The state of the application. Only available on Android and on other
@@ -78,6 +111,12 @@ class DataUseUserData : public base::SupportsUserData::Data {
 
   void set_app_state(AppState app_state) { app_state_ = app_state; }
 
+  DataUseContentType content_type() { return content_type_; }
+
+  void set_content_type(DataUseContentType content_type) {
+    content_type_ = content_type;
+  }
+
   // The key for retrieving back this type of user data.
   static const void* const kUserDataKey;
 
@@ -86,6 +125,8 @@ class DataUseUserData : public base::SupportsUserData::Data {
 
   // App state when network access was performed for the request previously.
   AppState app_state_;
+
+  DataUseContentType content_type_;
 
   DISALLOW_COPY_AND_ASSIGN(DataUseUserData);
 };

@@ -4,7 +4,6 @@
 
 #include "cc/trees/layer_tree_settings.h"
 
-#include "cc/proto/gfx_conversions.h"
 #include "third_party/khronos/GLES2/gl2.h"
 
 namespace cc {
@@ -33,7 +32,6 @@ bool LayerTreeSettings::operator==(const LayerTreeSettings& other) const {
          enable_latency_recovery == other.enable_latency_recovery &&
          can_use_lcd_text == other.can_use_lcd_text &&
          use_distance_field_text == other.use_distance_field_text &&
-         gpu_rasterization_enabled == other.gpu_rasterization_enabled &&
          gpu_rasterization_forced == other.gpu_rasterization_forced &&
          async_worker_context_enabled == other.async_worker_context_enabled &&
          gpu_rasterization_msaa_sample_count ==
@@ -80,8 +78,7 @@ bool LayerTreeSettings::operator==(const LayerTreeSettings& other) const {
          gpu_memory_policy == other.gpu_memory_policy &&
          software_memory_policy == other.software_memory_policy &&
          LayerTreeDebugState::Equal(initial_debug_state,
-                                    other.initial_debug_state) &&
-         use_cached_picture_raster == other.use_cached_picture_raster;
+                                    other.initial_debug_state);
 }
 
 SchedulerSettings LayerTreeSettings::ToSchedulerSettings() const {
@@ -95,9 +92,16 @@ SchedulerSettings LayerTreeSettings::ToSchedulerSettings() const {
   scheduler_settings.enable_latency_recovery = enable_latency_recovery;
   scheduler_settings.background_frame_interval =
       base::TimeDelta::FromSecondsD(1.0 / background_animation_rate);
-  scheduler_settings.abort_commit_before_compositor_frame_sink_creation =
-      abort_commit_before_compositor_frame_sink_creation;
   return scheduler_settings;
+}
+
+TileManagerSettings LayerTreeSettings::ToTileManagerSettings() const {
+  TileManagerSettings tile_manager_settings;
+  tile_manager_settings.use_partial_raster = use_partial_raster;
+  tile_manager_settings.check_tile_priority_inversion =
+      check_tile_priority_inversion;
+  tile_manager_settings.enable_checker_imaging = enable_checker_imaging;
+  return tile_manager_settings;
 }
 
 }  // namespace cc

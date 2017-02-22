@@ -62,9 +62,12 @@ class BLINK_PLATFORM_EXPORT TimeDomain {
   // Evaluate this TimeDomain's Now. Can be called from any thread.
   virtual base::TimeTicks Now() const = 0;
 
-  // Some TimeDomains support virtual time, this method tells us to advance time
-  // if possible and return true if time was advanced.
-  virtual bool MaybeAdvanceTime() = 0;
+  // Computes the delay until the next task the TimeDomain is aware of, if any.
+  // Note virtual time domains may return base::TimeDelta() if they have any
+  // delayed tasks they deem eligible to run.  Virtual time domains are allowed
+  // to advance their internal clock when this method is called.
+  virtual base::Optional<base::TimeDelta> DelayTillNextTask(
+      LazyNow* lazy_now) = 0;
 
   // Returns the name of this time domain for tracing.
   virtual const char* GetName() const = 0;
@@ -79,18 +82,13 @@ class BLINK_PLATFORM_EXPORT TimeDomain {
 
   void AsValueInto(base::trace_event::TracedValue* state) const;
 
-  // Migrates |queue| from this time domain to |destination_time_domain|.
-  // Main-thread only.
-  void MigrateQueue(internal::TaskQueueImpl* queue,
-                    TimeDomain* destination_time_domain);
-
   // If there is a scheduled delayed task, |out_task_queue| is set to the queue
   // the next task was posted to and it returns true.  Returns false otherwise.
   bool NextScheduledTaskQueue(TaskQueue** out_task_queue) const;
 
-  // Adds |queue| to the set of task queues that UpdateWorkQueues calls
-  // UpdateWorkQueue on.
-  void RegisterAsUpdatableTaskQueue(internal::TaskQueueImpl* queue);
+  // Notifies the time domain observer (if any) that |queue| has incoming
+  // immediate work.
+  void OnQueueHasImmediateWork(internal::TaskQueueImpl* queue);
 
   // Schedules a call to TaskQueueImpl::WakeUpForDelayedWork when this
   // TimeDomain reaches |delayed_run_time|.  This supersedes any previously
@@ -99,29 +97,32 @@ class BLINK_PLATFORM_EXPORT TimeDomain {
                            base::TimeTicks delayed_run_time,
                            base::TimeTicks now);
 
+  // Cancels any scheduled calls to TaskQueueImpl::WakeUpForDelayedWork for
+  // |queue|.
+  void CancelDelayedWork(internal::TaskQueueImpl* queue);
+
   // Registers the |queue|.
   void RegisterQueue(internal::TaskQueueImpl* queue);
 
-  // Removes |queue| from the set of task queues that UpdateWorkQueues calls
-  // UpdateWorkQueue on. Returns true if |queue| was updatable.
-  bool UnregisterAsUpdatableTaskQueue(internal::TaskQueueImpl* queue);
-
   // Removes |queue| from all internal data structures.
   void UnregisterQueue(internal::TaskQueueImpl* queue);
-
-  // Updates active queues associated with this TimeDomain.
-  void UpdateWorkQueues(LazyNow lazy_now);
 
   // Called by the TaskQueueManager when the TimeDomain is registered.
   virtual void OnRegisterWithTaskQueueManager(
       TaskQueueManager* task_queue_manager) = 0;
 
-  // The implementaion will secedule task processing to run with |delay| with
-  // respect to the TimeDomain's time source.  Always called on the main thread.
+  // The implementation will schedule task processing to run at time |run_time|
+  // within the TimeDomain's time line. Only called from the main thread.
   // NOTE this is only called by ScheduleDelayedWork if the scheduled runtime
   // is sooner than any previously sheduled work or if there is no other
   // scheduled work.
-  virtual void RequestWakeup(base::TimeTicks now, base::TimeDelta delay) = 0;
+  virtual void RequestWakeupAt(base::TimeTicks now,
+                               base::TimeTicks run_time) = 0;
+
+  // The implementation will cancel a wake up previously requested by
+  // RequestWakeupAt.  It's expected this will be a NOP for most virtual time
+  // domains.
+  virtual void CancelWakeupAt(base::TimeTicks run_time) = 0;
 
   // For implementation specific tracing.
   virtual void AsValueIntoInternal(
@@ -136,8 +137,6 @@ class BLINK_PLATFORM_EXPORT TimeDomain {
   }
 
  private:
-  void MoveNewlyUpdatableQueuesIntoUpdatableQueueSet();
-
   struct DelayedWakeup {
     base::TimeTicks time;
     internal::TaskQueueImpl* queue;
@@ -164,16 +163,7 @@ class BLINK_PLATFORM_EXPORT TimeDomain {
 
   IntrusiveHeap<DelayedWakeup> delayed_wakeup_queue_;
 
-  // This lock guards only |newly_updatable_|.  It's not expected to be heavily
-  // contended.
-  base::Lock newly_updatable_lock_;
-  std::vector<internal::TaskQueueImpl*> newly_updatable_;
-
-  // Set of task queues with avaliable work on the incoming queue.  This should
-  // only be accessed from the main thread.
-  std::set<internal::TaskQueueImpl*> updatable_queue_set_;
-
-  Observer* observer_;  // NOT OWNED.
+  Observer* const observer_;  // NOT OWNED.
 
   base::ThreadChecker main_thread_checker_;
 

@@ -5,7 +5,6 @@
 #ifndef NavigatorServiceWorker_h
 #define NavigatorServiceWorker_h
 
-#include "core/dom/ContextLifecycleObserver.h"
 #include "core/frame/Navigator.h"
 #include "modules/ModulesExport.h"
 #include "platform/Supplementable.h"
@@ -16,32 +15,34 @@ namespace blink {
 class Document;
 class ExceptionState;
 class Navigator;
+class ScriptState;
 class ServiceWorkerContainer;
 
 class MODULES_EXPORT NavigatorServiceWorker final
     : public GarbageCollected<NavigatorServiceWorker>,
-      public Supplement<Navigator>,
-      public ContextLifecycleObserver {
+      public Supplement<Navigator> {
   USING_GARBAGE_COLLECTED_MIXIN(NavigatorServiceWorker);
 
  public:
   static NavigatorServiceWorker* from(Document&);
   static NavigatorServiceWorker& from(Navigator&);
   static NavigatorServiceWorker* toNavigatorServiceWorker(Navigator&);
-  static ServiceWorkerContainer* serviceWorker(ExecutionContext*,
+  static ServiceWorkerContainer* serviceWorker(ScriptState*,
                                                Navigator&,
                                                ExceptionState&);
+  static ServiceWorkerContainer* serviceWorker(ScriptState*,
+                                               Navigator&,
+                                               String& errorMessage);
+  void clearServiceWorker();
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
   explicit NavigatorServiceWorker(Navigator&);
   ServiceWorkerContainer* serviceWorker(LocalFrame*, ExceptionState&);
+  ServiceWorkerContainer* serviceWorker(LocalFrame*, String& errorMessage);
 
   static const char* supplementName();
-
-  // ContextLifecycleObserver override.
-  void contextDestroyed() override;
 
   Member<ServiceWorkerContainer> m_serviceWorker;
 };

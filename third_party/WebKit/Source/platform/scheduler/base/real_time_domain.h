@@ -23,13 +23,14 @@ class BLINK_PLATFORM_EXPORT RealTimeDomain : public TimeDomain {
   // TimeDomain implementation:
   LazyNow CreateLazyNow() const override;
   base::TimeTicks Now() const override;
-  bool MaybeAdvanceTime() override;
+  base::Optional<base::TimeDelta> DelayTillNextTask(LazyNow* lazy_now) override;
   const char* GetName() const override;
 
  protected:
   void OnRegisterWithTaskQueueManager(
       TaskQueueManager* task_queue_manager) override;
-  void RequestWakeup(base::TimeTicks now, base::TimeDelta delay) override;
+  void RequestWakeupAt(base::TimeTicks now, base::TimeTicks run_time) override;
+  void CancelWakeupAt(base::TimeTicks run_time) override;
   void AsValueIntoInternal(
       base::trace_event::TracedValue* state) const override;
 

@@ -23,12 +23,15 @@ config("bluetooth_config") {
 source_set("mojo") {
   sources = [
     "//device/bluetooth/public/interfaces/connect_result_type_converter.h",
+    "//device/bluetooth/public/interfaces/gatt_result_type_converter.h",
     "adapter.cc",
     "adapter.h",
     "adapter_factory.cc",
     "adapter_factory.h",
     "device.cc",
     "device.h",
+    "discovery_session.cc",
+    "discovery_session.h",
   ]
 
   public_deps = [
@@ -124,6 +127,8 @@ component("bluetooth") {
     "bluetooth_remote_gatt_descriptor.h",
     "bluetooth_remote_gatt_descriptor_android.cc",
     "bluetooth_remote_gatt_descriptor_android.h",
+    "bluetooth_remote_gatt_descriptor_mac.h",
+    "bluetooth_remote_gatt_descriptor_mac.mm",
     "bluetooth_remote_gatt_descriptor_win.cc",
     "bluetooth_remote_gatt_descriptor_win.h",
     "bluetooth_remote_gatt_service.cc",

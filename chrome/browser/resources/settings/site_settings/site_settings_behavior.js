@@ -33,124 +33,6 @@ var SiteSettingsBehaviorImpl = {
   },
 
   /**
-   * A utility function to compute the description for the category.
-   * @param {string} category The category to show the description for.
-   * @param {string} setting The string value of the setting.
-   * @param {boolean} showRecommendation Whether to show the '(recommended)'
-   *     label prefix.
-   * @return {string} The category description.
-   * @protected
-   */
-  computeCategoryDesc: function(category, setting, showRecommendation) {
-    var categoryEnabled = this.computeIsSettingEnabled(setting);
-    switch (category) {
-      case settings.ContentSettingsTypes.JAVASCRIPT:
-        // "Allowed (recommended)" vs "Blocked".
-        if (!categoryEnabled) {
-          return loadTimeData.getString('siteSettingsBlocked');
-        }
-        return showRecommendation ?
-            loadTimeData.getString('siteSettingsAllowedRecommended') :
-            loadTimeData.getString('siteSettingsAllowed');
-      case settings.ContentSettingsTypes.POPUPS:
-        // "Allowed" vs "Blocked (recommended)".
-        if (categoryEnabled) {
-          return loadTimeData.getString('siteSettingsAllowed');
-        }
-        return showRecommendation ?
-            loadTimeData.getString('siteSettingsBlockedRecommended') :
-            loadTimeData.getString('siteSettingsBlocked');
-      case settings.ContentSettingsTypes.NOTIFICATIONS:
-        // "Ask before sending (recommended)" vs "Blocked".
-        if (!categoryEnabled) {
-          return loadTimeData.getString('siteSettingsBlocked');
-        }
-        return showRecommendation ?
-            loadTimeData.getString('siteSettingsAskBeforeSendingRecommended') :
-            loadTimeData.getString('siteSettingsAskBeforeSending');
-      case settings.ContentSettingsTypes.CAMERA:
-      case settings.ContentSettingsTypes.GEOLOCATION:
-      case settings.ContentSettingsTypes.MIC:
-        // "Ask before accessing (recommended)" vs "Blocked".
-        if (!categoryEnabled) {
-          return loadTimeData.getString('siteSettingsBlocked');
-        }
-        return showRecommendation ?
-            loadTimeData.getString(
-                'siteSettingsAskBeforeAccessingRecommended') :
-            loadTimeData.getString('siteSettingsAskBeforeAccessing');
-      case settings.ContentSettingsTypes.COOKIES:
-        // Tri-state: "Allow sites to save and read cookie data" vs "Blocked"
-        //     vs "Keep local data only until you quit your browser".
-        if (setting == settings.PermissionValues.BLOCK)
-          return loadTimeData.getString('siteSettingsBlocked');
-        if (setting == settings.PermissionValues.SESSION_ONLY)
-          return loadTimeData.getString('deleteDataPostSession');
-        return showRecommendation ?
-            loadTimeData.getString('siteSettingsCookiesAllowedRecommended') :
-            loadTimeData.getString('siteSettingsCookiesAllowed');
-      case settings.ContentSettingsTypes.PROTOCOL_HANDLERS:
-        // "Allow sites to ask to become default handlers" vs "Blocked".
-        if (!categoryEnabled) {
-          return loadTimeData.getString('siteSettingsHandlersBlocked');
-        }
-        return showRecommendation ?
-            loadTimeData.getString('siteSettingsHandlersAskRecommended') :
-            loadTimeData.getString('siteSettingsHandlersAsk');
-      case settings.ContentSettingsTypes.IMAGES:
-        if (!categoryEnabled) {
-          return loadTimeData.getString('siteSettingsDontShowImages');
-        }
-        return showRecommendation ?
-            loadTimeData.getString('siteSettingsShowAllRecommended') :
-            loadTimeData.getString('siteSettingsShowAll');
-      case settings.ContentSettingsTypes.PLUGINS:
-        if (setting == settings.PermissionValues.ALLOW)
-          return loadTimeData.getString('siteSettingsFlashAllow');
-        if (setting == settings.PermissionValues.BLOCK)
-          return loadTimeData.getString('siteSettingsFlashBlock');
-        return loadTimeData.getString('siteSettingsFlashAskBefore');
-      case settings.ContentSettingsTypes.BACKGROUND_SYNC:
-        // "Allow sites to finish sending and receiving data" vs "Do not allow".
-        if (!categoryEnabled) {
-          return loadTimeData.getString('siteSettingsBackgroundSyncBlocked');
-        }
-        return showRecommendation ?
-            loadTimeData.getString(
-                 'siteSettingsAllowRecentlyClosedSitesRecommended') :
-            loadTimeData.getString('siteSettingsAllowRecentlyClosedSites');
-      case settings.ContentSettingsTypes.KEYGEN:
-        // "Allow sites to use keygen" vs "Do not allow".
-        if (categoryEnabled) {
-          return loadTimeData.getString('siteSettingsKeygenAllow');
-        }
-        return showRecommendation ?
-            loadTimeData.getString('siteSettingsKeygenBlockRecommended') :
-            loadTimeData.getString('siteSettingsKeygenBlock');
-      case settings.ContentSettingsTypes.AUTOMATIC_DOWNLOADS:
-        // "Ask when a site wants to auto-download multiple" vs "Do not allow".
-        if (!categoryEnabled) {
-          return loadTimeData.getString('siteSettingsAutoDownloadBlock');
-        }
-        return showRecommendation ?
-            loadTimeData.getString('siteSettingsAutoDownloadAskRecommended') :
-            loadTimeData.getString('siteSettingsAutoDownloadAsk');
-      case settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS:
-        // "Ask when a plugin accesses your computer" vs "Do not allow".
-        if (!categoryEnabled) {
-          return loadTimeData.getString('siteSettingsUnsandboxedPluginsBlock');
-        }
-        return showRecommendation ?
-            loadTimeData.getString(
-                'siteSettingsUnsandboxedPluginsAskRecommended') :
-            loadTimeData.getString('siteSettingsUnsandboxedPluginsAsk');
-      default:
-        assertNotReached('Invalid category: ' + category);
-        return '';
-    }
-  },
-
-  /**
    * Ensures the URL has a scheme (assumes http if omitted).
    * @param {string} url The URL with or without a scheme.
    * @return {string} The URL with a scheme, or an empty string.
@@ -176,25 +58,6 @@ var SiteSettingsBehaviorImpl = {
       return url.slice(0, -3);
     }
     return url;
-  },
-
-  /**
-   * Adds the wildcard prefix to a pattern string (if missing).
-   * @param {string} pattern The pattern to add the wildcard to.
-   * @return {string} The resulting pattern.
-   * @private
-   */
-  addPatternWildcard: function(pattern) {
-    if (pattern.indexOf('[*.]') > -1)
-      return pattern;
-    if (pattern.startsWith('http://'))
-      return pattern.replace('http://', 'http://[*.]');
-    else if (pattern.startsWith('https://'))
-      return pattern.replace('https://', 'https://[*.]');
-    else if (pattern.startsWith('chrome-extension://'))
-      return pattern;  // No need for a wildcard for this.
-    else
-      return '[*.]' + pattern;
   },
 
   /**
@@ -289,23 +152,18 @@ var SiteSettingsBehaviorImpl = {
    */
   expandSiteException: function(exception) {
     var origin = exception.origin;
-    // TODO(dschuyler): If orginForDisplay becomes different from origin in the
-    // site settings, that filtering would happen here. If that doesn't happen
-    // then originForDisplay should be removed (it's redundant with origin).
-    // e.g. var originForDisplay = someFilter(origin);
-
     var embeddingOrigin = exception.embeddingOrigin;
-    var embeddingOriginForDisplay = '';
+    var embeddingDisplayName = '';
     if (origin != embeddingOrigin) {
-      embeddingOriginForDisplay =
+      embeddingDisplayName =
           this.getEmbedderString(embeddingOrigin, this.category);
     }
 
     return {
       origin: origin,
-      originForDisplay: origin,
+      displayName: exception.displayName,
       embeddingOrigin: embeddingOrigin,
-      embeddingOriginForDisplay: embeddingOriginForDisplay,
+      embeddingDisplayName: embeddingDisplayName,
       incognito: exception.incognito,
       setting: exception.setting,
       source: exception.source,

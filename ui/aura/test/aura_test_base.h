@@ -5,6 +5,9 @@
 #ifndef UI_AURA_TEST_AURA_TEST_BASE_H_
 #define UI_AURA_TEST_AURA_TEST_BASE_H_
 
+#include <memory>
+#include <vector>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
@@ -87,7 +90,7 @@ class AuraTestBase : public testing::Test,
   // WindowTreeClientDelegate:
   void OnEmbed(std::unique_ptr<WindowTreeHostMus> window_tree_host) override;
   void OnUnembed(Window* root) override;
-  void OnEmbedRootDestroyed(Window* root) override;
+  void OnEmbedRootDestroyed(WindowTreeHostMus* window_tree_host) override;
   void OnLostConnection(WindowTreeClient* client) override;
   void OnPointerEventObserved(const ui::PointerEvent& event,
                               Window* target) override;
@@ -99,13 +102,16 @@ class AuraTestBase : public testing::Test,
       Window* window,
       const std::string& name,
       std::unique_ptr<std::vector<uint8_t>>* new_data) override;
+  void OnWmSetCanFocus(Window* window, bool can_focus) override;
   Window* OnWmCreateTopLevelWindow(
+      ui::mojom::WindowType window_type,
       std::map<std::string, std::vector<uint8_t>>* properties) override;
   void OnWmClientJankinessChanged(const std::set<Window*>& client_windows,
                                   bool janky) override;
+  void OnWmWillCreateDisplay(const display::Display& display) override;
   void OnWmNewDisplay(std::unique_ptr<WindowTreeHostMus> window_tree_host,
                       const display::Display& display) override;
-  void OnWmDisplayRemoved(Window* window) override;
+  void OnWmDisplayRemoved(WindowTreeHostMus* window_tree_host) override;
   void OnWmDisplayModified(const display::Display& display) override;
   ui::mojom::EventResult OnAccelerator(uint32_t id,
                                        const ui::Event& event) override;
@@ -114,7 +120,12 @@ class AuraTestBase : public testing::Test,
                            const gfx::Point& cursor_location,
                            const base::Callback<void(bool)>& on_done) override;
   void OnWmCancelMoveLoop(Window* window) override;
-  client::CaptureClient* GetCaptureClient() override;
+  void OnWmSetClientArea(
+      Window* window,
+      const gfx::Insets& insets,
+      const std::vector<gfx::Rect>& additional_client_areas) override;
+  bool IsWindowActive(aura::Window* window) override;
+  void OnWmDeactivateWindow(Window* window) override;
   PropertyConverter* GetPropertyConverter() override;
 
  private:
@@ -128,7 +139,7 @@ class AuraTestBase : public testing::Test,
   base::MessageLoopForUI message_loop_;
   PropertyConverter property_converter_;
   std::unique_ptr<AuraTestHelper> helper_;
-  std::unique_ptr<WindowTreeHostMus> window_tree_host_mus_;
+  std::vector<std::unique_ptr<WindowTreeHostMus>> window_tree_hosts_;
 
   DISALLOW_COPY_AND_ASSIGN(AuraTestBase);
 };
@@ -147,6 +158,18 @@ class AuraTestBaseWithType : public AuraTestBase,
   bool setup_called_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(AuraTestBaseWithType);
+};
+
+class AuraTestBaseMus : public AuraTestBase {
+ public:
+  AuraTestBaseMus();
+  ~AuraTestBaseMus() override;
+
+  // AuraTestBase:
+  void SetUp() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(AuraTestBaseMus);
 };
 
 }  // namespace test

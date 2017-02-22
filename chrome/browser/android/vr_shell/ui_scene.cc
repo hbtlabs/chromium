@@ -4,6 +4,9 @@
 
 #include "chrome/browser/android/vr_shell/ui_scene.h"
 
+#include <string>
+#include <utility>
+
 #include "base/values.h"
 #include "chrome/browser/android/vr_shell/animation.h"
 #include "chrome/browser/android/vr_shell/easing.h"
@@ -13,7 +16,19 @@ namespace vr_shell {
 
 namespace {
 
-void ParseRecti(const base::DictionaryValue& dict, const std::string& key,
+bool ParseFloat(const base::DictionaryValue& dict,
+                const std::string& key,
+                float* output) {
+  double value;
+  if (!dict.GetDouble(key, &value)) {
+    return false;
+  }
+  *output = value;
+  return true;
+}
+
+bool ParseRecti(const base::DictionaryValue& dict,
+                const std::string& key,
                 Recti* output) {
   const base::DictionaryValue* item_dict;
   if (dict.GetDictionary(key, &item_dict)) {
@@ -21,10 +36,14 @@ void ParseRecti(const base::DictionaryValue& dict, const std::string& key,
     CHECK(item_dict->GetInteger("y", &output->y));
     CHECK(item_dict->GetInteger("width", &output->width));
     CHECK(item_dict->GetInteger("height", &output->height));
+    return true;
+  } else {
+    return false;
   }
 }
 
-void Parse2DVec3f(const base::DictionaryValue& dict, const std::string& key,
+bool Parse2DVec3f(const base::DictionaryValue& dict,
+                  const std::string& key,
                   gvr::Vec3f* output) {
   const base::DictionaryValue* item_dict;
   if (dict.GetDictionary(key, &item_dict)) {
@@ -34,10 +53,14 @@ void Parse2DVec3f(const base::DictionaryValue& dict, const std::string& key,
     CHECK(item_dict->GetDouble("y", &value));
     output->y = value;
     output->z = 1.0f;
+    return true;
+  } else {
+    return false;
   }
 }
 
-void ParseVec3f(const base::DictionaryValue& dict, const std::string& key,
+bool ParseVec3f(const base::DictionaryValue& dict,
+                const std::string& key,
                 gvr::Vec3f* output) {
   const base::DictionaryValue* item_dict;
   if (dict.GetDictionary(key, &item_dict)) {
@@ -48,11 +71,35 @@ void ParseVec3f(const base::DictionaryValue& dict, const std::string& key,
     output->y = value;
     CHECK(item_dict->GetDouble("z", &value));
     output->z = value;
+    return true;
+  } else {
+    return false;
   }
 }
 
-void ParseRotationAxisAngle(const base::DictionaryValue& dict,
-                            const std::string& key, RotationAxisAngle* output) {
+bool ParseColorf(const base::DictionaryValue& dict,
+                 const std::string& key,
+                 Colorf* output) {
+  const base::DictionaryValue* item_dict;
+  if (dict.GetDictionary(key, &item_dict)) {
+    double value;
+    CHECK(item_dict->GetDouble("r", &value));
+    output->r = value;
+    CHECK(item_dict->GetDouble("g", &value));
+    output->g = value;
+    CHECK(item_dict->GetDouble("b", &value));
+    output->b = value;
+    CHECK(item_dict->GetDouble("a", &value));
+    output->a = value;
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool ParseRotationAxisAngle(const base::DictionaryValue& dict,
+                            const std::string& key,
+                            RotationAxisAngle* output) {
   const base::DictionaryValue* item_dict;
   if (dict.GetDictionary(key, &item_dict)) {
     double value;
@@ -64,6 +111,9 @@ void ParseRotationAxisAngle(const base::DictionaryValue& dict,
     output->z = value;
     CHECK(item_dict->GetDouble("a", &value));
     output->angle = value;
+    return true;
+  } else {
+    return false;
   }
 }
 
@@ -77,26 +127,30 @@ void ParseFloats(const base::DictionaryValue& dict,
   }
 }
 
-void ParseEndpointToFloats(Animation::Property property,
+bool ParseEndpointToFloats(Animation::Property property,
                            const base::DictionaryValue& dict,
                            std::vector<float>* vec) {
   switch (property) {
     case Animation::Property::COPYRECT:
       ParseFloats(dict, {"x", "y", "width", "height"}, vec);
-      break;
+      return true;
     case Animation::Property::SIZE:
       ParseFloats(dict, {"x", "y"}, vec);
-      break;
+      return true;
     case Animation::Property::SCALE:
       ParseFloats(dict, {"x", "y", "z"}, vec);
-      break;
+      return true;
     case Animation::Property::ROTATION:
       ParseFloats(dict, {"x", "y", "z", "a"}, vec);
-      break;
+      return true;
     case Animation::Property::TRANSLATION:
       ParseFloats(dict, {"x", "y", "z"}, vec);
-      break;
+      return true;
+    case Animation::Property::OPACITY:
+      ParseFloats(dict, {"x"}, vec);
+      return true;
   }
+  return false;
 }
 
 std::unique_ptr<easing::Easing> ParseEasing(
@@ -202,7 +256,7 @@ void UiScene::UpdateUiElementFromDict(const base::DictionaryValue& dict) {
 void UiScene::RemoveUiElement(int element_id) {
   for (auto it = ui_elements_.begin(); it != ui_elements_.end(); ++it) {
     if ((*it)->id == element_id) {
-      if ((*it)->content_quad) {
+      if ((*it)->fill == Fill::CONTENT) {
         content_element_ = nullptr;
       }
       ui_elements_.erase(it);
@@ -254,7 +308,7 @@ void UiScene::AddAnimationFromDict(const base::DictionaryValue& dict,
     ParseEndpointToFloats(property, *from_dict, &from);
   }
 
-  int64_t start = time_in_micro + (long)(start_time_ms * 1000.0);
+  int64_t start = time_in_micro + (start_time_ms * 1000.0);
   int64_t duration = duration_ms * 1000.0;
 
   ContentRectangle* element = GetUiElementById(element_id);
@@ -278,7 +332,12 @@ void UiScene::RemoveAnimation(int element_id, int animation_id) {
   }
 }
 
-void UiScene::HandleCommands(const base::ListValue* commands,
+void UiScene::UpdateBackgroundFromDict(const base::DictionaryValue& dict) {
+  ParseColorf(dict, "color", &background_color_);
+  ParseFloat(dict, "distance", &background_distance_);
+}
+
+void UiScene::HandleCommands(std::unique_ptr<base::ListValue> commands,
                              int64_t time_in_micro) {
   for (auto& item : *commands) {
     base::DictionaryValue* dict;
@@ -312,6 +371,9 @@ void UiScene::HandleCommands(const base::ListValue* commands,
         RemoveAnimation(element_id, animation_id);
         break;
       }
+      case Command::UPDATE_BACKGROUND:
+        UpdateBackgroundFromDict(*data);
+        break;
     }
   }
 }
@@ -324,7 +386,9 @@ void UiScene::UpdateTransforms(float screen_tilt, int64_t time_in_micro) {
   for (auto& element : ui_elements_) {
     element->transform.MakeIdentity();
     element->transform.Scale(element->size.x, element->size.y, element->size.z);
-    ApplyRecursiveTransforms(*element.get(), &element->transform);
+    element->computed_opacity = 1.0f;
+    ApplyRecursiveTransforms(*element.get(), &element->transform,
+                             &element->computed_opacity);
     element->transform.Rotate(1.0f, 0.0f, 0.0f, screen_tilt);
   }
 }
@@ -338,8 +402,12 @@ ContentRectangle* UiScene::GetUiElementById(int element_id) {
   return nullptr;
 }
 
-ContentRectangle* UiScene::GetContentQuad() {
-  return content_element_;
+const Colorf& UiScene::GetBackgroundColor() {
+  return background_color_;
+}
+
+float UiScene::GetBackgroundDistance() {
+  return background_distance_;
 }
 
 const std::vector<std::unique_ptr<ContentRectangle>>&
@@ -351,25 +419,22 @@ UiScene::UiScene() = default;
 
 UiScene::~UiScene() = default;
 
-int64_t UiScene::TimeInMicroseconds() {
-  return std::chrono::duration_cast<std::chrono::microseconds>(
-      std::chrono::steady_clock::now().time_since_epoch()).count();
-}
-
 void UiScene::ApplyRecursiveTransforms(const ContentRectangle& element,
-                                       ReversibleTransform* transform) {
+                                       ReversibleTransform* transform,
+                                       float* opacity) {
   transform->Scale(element.scale.x, element.scale.y, element.scale.z);
   transform->Rotate(element.rotation.x, element.rotation.y,
                     element.rotation.z, element.rotation.angle);
   transform->Translate(element.translation.x, element.translation.y,
                        element.translation.z);
+  *opacity *= element.opacity;
 
   if (element.parent_id >= 0) {
     const ContentRectangle* parent = GetUiElementById(element.parent_id);
     CHECK(parent != nullptr);
     ApplyAnchoring(*parent, element.x_anchoring, element.y_anchoring,
                    transform);
-    ApplyRecursiveTransforms(*parent, transform);
+    ApplyRecursiveTransforms(*parent, transform, opacity);
   }
 }
 
@@ -385,22 +450,15 @@ void UiScene::ApplyDictToElement(const base::DictionaryValue& dict,
   dict.GetBoolean("visible", &element->visible);
   dict.GetBoolean("hitTestable", &element->hit_testable);
   dict.GetBoolean("lockToFov", &element->lock_to_fov);
-  ParseRecti(dict, "copyRect", &element->copy_rect);
   Parse2DVec3f(dict, "size", &element->size);
   ParseVec3f(dict, "scale", &element->scale);
   ParseRotationAxisAngle(dict, "rotation", &element->rotation);
   ParseVec3f(dict, "translation", &element->translation);
-
-  if (dict.GetBoolean("contentQuad", &element->content_quad)) {
-    if (element->content_quad) {
-      CHECK_EQ(content_element_, nullptr);
-      content_element_ = element;
-    } else {
-      if (content_element_ == element) {
-        content_element_ = nullptr;
-      }
-    }
+  double opacity;
+  if (dict.GetDouble("opacity", &opacity)) {
+    element->opacity = opacity;
   }
+  dict.GetInteger("drawPhase", &element->draw_phase);
 
   if (dict.GetInteger("xAnchoring",
                       reinterpret_cast<int*>(&element->x_anchoring))) {
@@ -409,6 +467,38 @@ void UiScene::ApplyDictToElement(const base::DictionaryValue& dict,
   if (dict.GetInteger("yAnchoring",
                       reinterpret_cast<int*>(&element->y_anchoring))) {
     CHECK_GE(element->parent_id, 0);
+  }
+
+  // Parse the element fill.
+  if (dict.GetInteger("fillType", reinterpret_cast<int*>(&element->fill))) {
+    // If the previous content element has a new filling now make sure this is
+    // tracked correctly.
+    if (content_element_ == element && element->fill != Fill::CONTENT) {
+      content_element_ = nullptr;
+    }
+
+    switch (element->fill) {
+      case Fill::SPRITE:
+        CHECK(ParseRecti(dict, "copyRect", &element->copy_rect));
+        break;
+      case Fill::OPAQUE_GRADIENT:
+        CHECK(ParseColorf(dict, "edgeColor", &element->edge_color));
+        CHECK(ParseColorf(dict, "centerColor", &element->center_color));
+        break;
+      case Fill::GRID_GRADIENT:
+        CHECK(ParseColorf(dict, "edgeColor", &element->edge_color));
+        CHECK(ParseColorf(dict, "centerColor", &element->center_color));
+        CHECK(dict.GetInteger("gridlineCount", &element->gridline_count));
+        CHECK_GE(element->gridline_count, 0);
+        break;
+      case Fill::CONTENT:
+        CHECK_EQ(content_element_, nullptr);
+        content_element_ = element;
+        break;
+      default:
+        element->fill = Fill::NONE;
+        break;
+    }
   }
 }
 

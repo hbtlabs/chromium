@@ -121,6 +121,10 @@ class PaymentCurrencyAmount {
 
   // A string containing the decimal monetary value.
   base::string16 value;
+
+  // A URL that indicates the currency system that the currency identifier
+  // belongs to.
+  base::string16 currency_system;
 };
 
 // Information indicating what the payment request is for and the value asked
@@ -158,6 +162,10 @@ class PaymentShippingOption {
 
   bool operator==(const PaymentShippingOption& other) const;
   bool operator!=(const PaymentShippingOption& other) const;
+
+  // Populates the properties of this PaymentShippingOption from |value|.
+  // Returns true if the required values are present.
+  bool FromDictionaryValue(const base::DictionaryValue& value);
 
   // An identifier used to reference this PaymentShippingOption. It is unique
   // for a given PaymentRequest.
@@ -234,6 +242,10 @@ class PaymentDetails {
   // Modifiers for particular payment method identifiers. For example, it allows
   // adjustment to the total amount based on payment method.
   std::vector<PaymentDetailsModifier> modifiers;
+
+  // If non-empty, this is the error message the user agent should display to
+  // the user when the payment request is updated using updateWith.
+  base::string16 error;
 };
 
 // Information describing a shipping option.
@@ -278,7 +290,7 @@ class PaymentRequest {
   bool FromDictionaryValue(const base::DictionaryValue& value);
 
   // Properties set in order to communicate user choices back to the page.
-  PaymentAddress payment_address;
+  PaymentAddress shipping_address;
   base::string16 shipping_option;
 
   // Properties set via the constructor for communicating from the page to the

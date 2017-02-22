@@ -35,6 +35,8 @@ const BeginFrameArgs MockBeginFrameObserver::kDefaultBeginFrameArgs =
         FROM_HERE_WITH_EXPLICIT_FUNCTION(
             "MockBeginFrameObserver::kDefaultBeginFrameArgs"),
 #endif
+        UINT32_MAX,
+        BeginFrameArgs::kStartingFrameNumber,
         -1,
         -1,
         -1);

@@ -29,6 +29,7 @@
 
 #include "core/CoreExport.h"
 #include "core/dom/SynchronousMutationObserver.h"
+#include "core/editing/FrameSelection.h"
 #include "core/editing/TextGranularity.h"
 #include "core/editing/VisibleSelection.h"
 #include "core/page/EventWithHitTestResults.h"
@@ -36,7 +37,6 @@
 
 namespace blink {
 
-class FrameSelection;
 class HitTestResult;
 class LocalFrame;
 
@@ -62,9 +62,8 @@ class CORE_EXPORT SelectionController final
                                const IntPoint&);
   bool handleMouseReleaseEvent(const MouseEventWithHitTestResults&,
                                const LayoutPoint&);
-  bool handlePasteGlobalSelection(const PlatformMouseEvent&);
-  bool handleGestureLongPress(const PlatformGestureEvent&,
-                              const HitTestResult&);
+  bool handlePasteGlobalSelection(const WebMouseEvent&);
+  bool handleGestureLongPress(const WebGestureEvent&, const HitTestResult&);
   void handleGestureTwoFingerTap(const GestureEventWithHitTestResults&);
   void handleGestureLongTap(const GestureEventWithHitTestResults&);
 
@@ -113,19 +112,21 @@ class CORE_EXPORT SelectionController final
       const MouseEventWithHitTestResults&);
   void setNonDirectionalSelectionIfNeeded(const VisibleSelectionInFlatTree&,
                                           TextGranularity,
-                                          EndPointsAdjustmentMode);
-  bool setCaretAtHitTestResult(const HitTestResult&);
+                                          EndPointsAdjustmentMode,
+                                          HandleVisibility);
+  void setCaretAtHitTestResult(const HitTestResult&);
   bool updateSelectionForMouseDownDispatchingSelectStart(
       Node*,
       const VisibleSelectionInFlatTree&,
-      TextGranularity);
+      TextGranularity,
+      HandleVisibility);
 
   FrameSelection& selection() const;
 
   // Implements |SynchronousMutationObserver|.
   // TODO(yosin): We should relocate |m_originalBaseInFlatTree| when DOM tree
   // changed.
-  void contextDestroyed() final;
+  void contextDestroyed(Document*) final;
 
   Member<LocalFrame> const m_frame;
   // TODO(yosin): We should use |PositionWIthAffinityInFlatTree| since we

@@ -31,14 +31,14 @@
 #include "core/paint/PaintLayer.h"
 #include "core/paint/PaintLayerStackingNode.h"
 #include "core/paint/PaintLayerStackingNodeIterator.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 
 namespace blink {
 
 class OverlapMapContainer {
  public:
   void add(const IntRect& bounds) {
-    m_layerRects.append(bounds);
+    m_layerRects.push_back(bounds);
     m_boundingBox.unite(bounds);
   }
 
@@ -157,7 +157,7 @@ class CompositingRequirementsUpdater::RecursionData {
 };
 
 static bool requiresCompositingOrSquashing(CompositingReasons reasons) {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   bool fastAnswer = reasons != CompositingReasonNone;
   bool slowAnswer = requiresCompositing(reasons) || requiresSquashing(reasons);
   DCHECK_EQ(slowAnswer, fastAnswer);
@@ -187,10 +187,10 @@ static CompositingReasons subtreeReasonsForCompositing(
     // CompositingReasonFinder::potentialCompositingReasonsFromStyle, but theres
     // a poor interaction with LayoutTextControlSingleLine, which sets this
     // hasOverflowClip directly.
-    if (layer->layoutObject()->hasClipRelatedProperty())
+    if (layer->layoutObject().hasClipRelatedProperty())
       subtreeReasons |= CompositingReasonClipsCompositingDescendants;
 
-    if (layer->layoutObject()->style()->position() == FixedPosition)
+    if (layer->layoutObject().style()->position() == EPosition::kFixed)
       subtreeReasons |= CompositingReasonPositionFixedWithCompositedDescendants;
   }
 
@@ -255,7 +255,7 @@ void CompositingRequirementsUpdater::updateRecursive(
   // into. These children (the controls) always need to be promoted into their
   // own layers to draw on top of the accelerated video.
   if (currentRecursionData.m_compositingAncestor &&
-      currentRecursionData.m_compositingAncestor->layoutObject()->isVideo())
+      currentRecursionData.m_compositingAncestor->layoutObject().isVideo())
     directReasons |= CompositingReasonVideoOverlay;
 
   bool hasCompositedScrollingAncestor =
@@ -266,7 +266,7 @@ void CompositingRequirementsUpdater::updateRecursive(
 
   // TODO(chrishtr): use |hasCompositedScrollingAncestor| instead.
   if (currentRecursionData.m_hasCompositedScrollingAncestor &&
-      layer->layoutObject()->styleRef().hasViewportConstrainedPosition())
+      layer->layoutObject().styleRef().hasViewportConstrainedPosition())
     directReasons |= CompositingReasonScrollDependentPosition;
 
   bool canBeComposited = compositor->canBeComposited(layer);
@@ -319,9 +319,9 @@ void CompositingRequirementsUpdater::updateRecursive(
       // descendants, that element is no longer relevant to whether or not we
       // should opt in. Unfortunately we can't easily remove from the list
       // while we're iterating, so we have to store it for later removal.
-      if (unclippedDescendant->layoutObject()->containingBlock() ==
-          layer->layoutObject()) {
-        unclippedDescendantsToRemove.append(i);
+      if (unclippedDescendant->layoutObject().containingBlock() ==
+          &layer->layoutObject()) {
+        unclippedDescendantsToRemove.push_back(i);
         continue;
       }
       if (layer->scrollsWithRespectTo(unclippedDescendant))
@@ -339,7 +339,7 @@ void CompositingRequirementsUpdater::updateRecursive(
       // TODO(schenney): We only need to promote when the clipParent is not a
       // descendant of the ancestor scroller, which we do not check for here.
       // Hence we might be promoting needlessly.
-      unclippedDescendants.append(layer);
+      unclippedDescendants.push_back(layer);
     }
   }
 
@@ -379,7 +379,7 @@ void CompositingRequirementsUpdater::updateRecursive(
     childRecursionData.m_testingOverlap = true;
   }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   LayerListMutationDetector mutationChecker(layer->stackingNode());
 #endif
 
@@ -510,7 +510,7 @@ void CompositingRequirementsUpdater::updateRecursive(
     }
 
     if (willBeCompositedOrSquashed &&
-        layer->layoutObject()->style()->hasBlendMode())
+        layer->layoutObject().style()->hasBlendMode())
       currentRecursionData.m_hasUnisolatedCompositedBlendingDescendant = true;
 
     // Tell the parent it has compositing descendants.
@@ -528,7 +528,7 @@ void CompositingRequirementsUpdater::updateRecursive(
     bool isCompositedWithInlineTransform =
         reasonsToComposite & CompositingReasonInlineTransform;
     if ((!childRecursionData.m_testingOverlap && !isCompositedClippingLayer) ||
-        layer->layoutObject()->style()->hasCurrentTransformAnimation() ||
+        layer->layoutObject().style()->hasCurrentTransformAnimation() ||
         isCompositedWithInlineTransform)
       currentRecursionData.m_testingOverlap = false;
 

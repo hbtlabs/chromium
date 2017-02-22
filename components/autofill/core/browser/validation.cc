@@ -13,7 +13,10 @@
 #include "base/time/time.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/state_names.h"
+#include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_regexes.h"
+#include "grit/components_strings.h"
+#include "ui/base/l10n/l10n_util.h"
 
 namespace autofill {
 
@@ -43,6 +46,7 @@ bool IsValidCreditCardNumber(const base::string16& text) {
   // defined sizes.
   // [1] http://www.merriampark.com/anatomycc.htm
   // [2] http://en.wikipedia.org/wiki/Bank_card_number
+  // CardEditor.isCardNumberLengthMaxium() needs to be kept in sync.
   const char* const type = CreditCard::GetCreditCardType(text);
   if (type == kAmericanExpressCard && number.size() != 15)
     return false;
@@ -53,6 +57,8 @@ bool IsValidCreditCardNumber(const base::string16& text) {
   if (type == kJCBCard && number.size() != 16)
     return false;
   if (type == kMasterCard && number.size() != 16)
+    return false;
+  if (type == kMirCard && number.size() != 16)
     return false;
   if (type == kUnionPay && (number.size() < 16 || number.size() > 19))
     return false;
@@ -84,25 +90,11 @@ bool IsValidCreditCardNumber(const base::string16& text) {
   return (sum % 10) == 0;
 }
 
-bool IsValidCreditCardSecurityCode(const base::string16& text) {
-  if (text.size() < 3U || text.size() > 4U)
-    return false;
-
-  for (const base::char16& it : text) {
-    if (!base::IsAsciiDigit(it))
-      return false;
-  }
-  return true;
-}
-
 bool IsValidCreditCardSecurityCode(const base::string16& code,
-                                   const base::string16& number) {
-  const char* const type = CreditCard::GetCreditCardType(number);
-  size_t required_length = 3;
-  if (type == kAmericanExpressCard)
-    required_length = 4;
-
-  return code.length() == required_length;
+                                   const base::StringPiece card_type) {
+  size_t required_length = card_type == kAmericanExpressCard ? 4 : 3;
+  return code.length() == required_length &&
+         base::ContainsOnlyChars(code, base::ASCIIToUTF16("0123456789"));
 }
 
 bool IsValidEmailAddress(const base::string16& text) {
@@ -183,6 +175,114 @@ bool IsSSN(const base::string16& text) {
   }
 
   return true;
+}
+
+bool IsValidForType(const base::string16& value,
+                    ServerFieldType type,
+                    base::string16* error_message) {
+  switch (type) {
+    case CREDIT_CARD_NAME_FULL:
+      if (!value.empty())
+        return true;
+
+      if (error_message) {
+        *error_message =
+            l10n_util::GetStringUTF16(IDS_PAYMENTS_VALIDATION_INVALID_NAME);
+      }
+      break;
+
+    case CREDIT_CARD_EXP_MONTH: {
+      CreditCard temp;
+      // Expiration month was in an invalid format.
+      temp.SetExpirationMonthFromString(value, /* app_locale= */ std::string());
+      if (temp.expiration_month() == 0) {
+        if (error_message) {
+          *error_message = l10n_util::GetStringUTF16(
+              IDS_PAYMENTS_VALIDATION_INVALID_CREDIT_CARD_EXPIRATION_MONTH);
+        }
+        break;
+      }
+      return true;
+    }
+
+    case CREDIT_CARD_EXP_2_DIGIT_YEAR:
+    case CREDIT_CARD_EXP_4_DIGIT_YEAR: {
+      CreditCard temp;
+      temp.SetExpirationYearFromString(value);
+      // Expiration year was in an invalid format.
+      if ((temp.expiration_year() == 0) ||
+          (type == CREDIT_CARD_EXP_2_DIGIT_YEAR && value.size() != 2u) ||
+          (type == CREDIT_CARD_EXP_4_DIGIT_YEAR && value.size() != 4u)) {
+        if (error_message) {
+          *error_message = l10n_util::GetStringUTF16(
+              IDS_PAYMENTS_VALIDATION_INVALID_CREDIT_CARD_EXPIRATION_YEAR);
+        }
+        break;
+      }
+
+      base::Time::Exploded now_exploded;
+      AutofillClock::Now().LocalExplode(&now_exploded);
+      if (temp.expiration_year() >= now_exploded.year)
+        return true;
+
+      // If the year is before this year, it's expired.
+      if (error_message) {
+        *error_message = l10n_util::GetStringUTF16(
+            IDS_PAYMENTS_VALIDATION_INVALID_CREDIT_CARD_EXPIRED);
+      }
+      break;
+    }
+
+    case CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR:
+    case CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR: {
+      const base::string16 pattern =
+          type == CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR
+              ? base::UTF8ToUTF16("^[0-9]{1,2}[-/|]?[0-9]{2}$")
+              : base::UTF8ToUTF16("^[0-9]{1,2}[-/|]?[0-9]{4}$");
+
+      CreditCard temp;
+      temp.SetExpirationDateFromString(value);
+
+      // Expiration date was in an invalid format.
+      if (temp.expiration_month() == 0 || temp.expiration_year() == 0 ||
+          !MatchesPattern(value, pattern)) {
+        if (error_message) {
+          *error_message = l10n_util::GetStringUTF16(
+              IDS_PAYMENTS_CARD_EXPIRATION_INVALID_VALIDATION_MESSAGE);
+        }
+        break;
+      }
+
+      // Checking for card expiration.
+      if (IsValidCreditCardExpirationDate(temp.expiration_year(),
+                                          temp.expiration_month(),
+                                          AutofillClock::Now())) {
+        return true;
+      }
+
+      if (error_message) {
+        *error_message = l10n_util::GetStringUTF16(
+            IDS_PAYMENTS_VALIDATION_INVALID_CREDIT_CARD_EXPIRED);
+      }
+      break;
+    }
+
+    case CREDIT_CARD_NUMBER:
+      if (IsValidCreditCardNumber(value))
+        return true;
+
+      if (error_message)
+        *error_message =
+            l10n_util::GetStringUTF16(IDS_PAYMENTS_CARD_NUMBER_INVALID);
+      break;
+
+    default:
+      // Other types such as CREDIT_CARD_TYPE and CREDIT_CARD_VERIFICATION_CODE
+      // are not validated for now.
+      NOTREACHED() << "Attempting to validate unsupported type " << type;
+      break;
+  }
+  return false;
 }
 
 }  // namespace autofill

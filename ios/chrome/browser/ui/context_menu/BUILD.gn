@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 source_set("context_menu") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "context_menu_coordinator.h",
     "context_menu_coordinator.mm",
@@ -18,6 +19,7 @@ source_set("context_menu") {
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "context_menu_coordinator_unittest.mm",

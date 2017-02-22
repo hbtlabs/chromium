@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/i18n/message_formatter.h"
+#include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
@@ -26,15 +27,12 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/user_agent.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "v8/include/v8.h"
-
-#if defined(ENABLE_THEMES)
-#include "chrome/browser/ui/webui/theme_source.h"
-#endif
+#include "v8/include/v8-version-string.h"
 
 #if defined(OS_ANDROID)
-#include "base/android/build_info.h"
 #include "chrome/browser/ui/android/android_about_app_info.h"
+#else  // !defined(OS_ANDROID)
+#include "chrome/browser/ui/webui/theme_source.h"
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -57,24 +55,8 @@ WebUIDataSource* CreateVersionUIDataSource() {
                          version_info::GetVersionNumber());
   html_source->AddString(version_ui::kVersionModifier,
                          chrome::GetChannelString());
-  html_source->AddLocalizedString(version_ui::kOSName, IDS_VERSION_UI_OS);
-  html_source->AddLocalizedString(version_ui::kARC, IDS_ARC_LABEL);
-  html_source->AddLocalizedString(version_ui::kPlatform, IDS_PLATFORM_LABEL);
-  html_source->AddString(version_ui::kOSType, version_info::GetOSType());
   html_source->AddString(version_ui::kJSEngine, "V8");
-  html_source->AddString(version_ui::kJSVersion, v8::V8::GetVersion());
-
-#if defined(OS_ANDROID)
-  html_source->AddString(version_ui::kOSVersion,
-                         AndroidAboutAppInfo::GetOsInfo());
-#else
-  html_source->AddString(version_ui::kOSVersion, std::string());
-  html_source->AddString(version_ui::kFlashPlugin, "Flash");
-  // Note that the Flash version is retrieve asynchronously and returned in
-  // VersionHandler::OnGotPlugins. The area is initially blank.
-  html_source->AddString(version_ui::kFlashVersion, std::string());
-#endif  // defined(OS_ANDROID)
-
+  html_source->AddString(version_ui::kJSVersion, V8_VERSION_STRING);
   html_source->AddLocalizedString(version_ui::kCompany,
                                   IDS_ABOUT_VERSION_COMPANY_NAME);
   html_source->AddString(
@@ -89,6 +71,45 @@ WebUIDataSource* CreateVersionUIDataSource() {
                                   version_info::IsOfficialBuild()
                                       ? IDS_VERSION_UI_OFFICIAL
                                       : IDS_VERSION_UI_UNOFFICIAL);
+  html_source->AddLocalizedString(version_ui::kUserAgentName,
+                                  IDS_VERSION_UI_USER_AGENT);
+  html_source->AddString(version_ui::kUserAgent, GetUserAgent());
+  html_source->AddLocalizedString(version_ui::kCommandLineName,
+                                  IDS_VERSION_UI_COMMAND_LINE);
+  // Note that the executable path and profile path are retrieved asynchronously
+  // and returned in VersionHandler::OnGotFilePaths. The area is initially
+  // blank.
+  html_source->AddLocalizedString(version_ui::kExecutablePathName,
+                                  IDS_VERSION_UI_EXECUTABLE_PATH);
+  html_source->AddString(version_ui::kExecutablePath, std::string());
+  html_source->AddLocalizedString(version_ui::kProfilePathName,
+                                  IDS_VERSION_UI_PROFILE_PATH);
+  html_source->AddString(version_ui::kProfilePath, std::string());
+  html_source->AddLocalizedString(version_ui::kVariationsName,
+                                  IDS_VERSION_UI_VARIATIONS);
+
+#if defined(OS_CHROMEOS)
+  html_source->AddLocalizedString(version_ui::kARC, IDS_ARC_LABEL);
+  html_source->AddLocalizedString(version_ui::kPlatform, IDS_PLATFORM_LABEL);
+  html_source->AddLocalizedString(version_ui::kCustomizationId,
+                                  IDS_VERSION_UI_CUSTOMIZATION_ID);
+  html_source->AddLocalizedString(version_ui::kFirmwareVersion,
+                                  IDS_VERSION_UI_FIRMWARE_VERSION);
+#else
+  html_source->AddLocalizedString(version_ui::kOSName, IDS_VERSION_UI_OS);
+  html_source->AddString(version_ui::kOSType, version_info::GetOSType());
+#endif  // OS_CHROMEOS
+
+#if defined(OS_ANDROID)
+  html_source->AddString(version_ui::kOSVersion,
+                         AndroidAboutAppInfo::GetOsInfo());
+#else
+  html_source->AddString(version_ui::kFlashPlugin, "Flash");
+  // Note that the Flash version is retrieve asynchronously and returned in
+  // VersionHandler::OnGotPlugins. The area is initially blank.
+  html_source->AddString(version_ui::kFlashVersion, std::string());
+#endif  // OS_ANDROID
+
 #if defined(ARCH_CPU_64_BITS)
   html_source->AddLocalizedString(version_ui::kVersionBitSize,
                                   IDS_VERSION_UI_64BIT);
@@ -96,11 +117,6 @@ WebUIDataSource* CreateVersionUIDataSource() {
   html_source->AddLocalizedString(version_ui::kVersionBitSize,
                                   IDS_VERSION_UI_32BIT);
 #endif
-  html_source->AddLocalizedString(version_ui::kUserAgentName,
-                                  IDS_VERSION_UI_USER_AGENT);
-  html_source->AddString(version_ui::kUserAgent, GetUserAgent());
-  html_source->AddLocalizedString(version_ui::kCommandLineName,
-                                  IDS_VERSION_UI_COMMAND_LINE);
 
 #if defined(OS_WIN)
   html_source->AddString(
@@ -117,33 +133,25 @@ WebUIDataSource* CreateVersionUIDataSource() {
   html_source->AddString(version_ui::kCommandLine, command_line);
 #endif
 
-  // Note that the executable path and profile path are retrieved asynchronously
-  // and returned in VersionHandler::OnGotFilePaths. The area is initially
-  // blank.
-  html_source->AddLocalizedString(version_ui::kExecutablePathName,
-                                  IDS_VERSION_UI_EXECUTABLE_PATH);
-  html_source->AddString(version_ui::kExecutablePath, std::string());
-
-  html_source->AddLocalizedString(version_ui::kProfilePathName,
-                                  IDS_VERSION_UI_PROFILE_PATH);
-  html_source->AddString(version_ui::kProfilePath, std::string());
-
-  html_source->AddLocalizedString(version_ui::kVariationsName,
-                                  IDS_VERSION_UI_VARIATIONS);
-
 #if defined(OS_WIN)
 #if defined(__clang__)
-  html_source->AddString("compiler", "clang");
+  html_source->AddString(version_ui::kCompiler, "clang");
 #elif defined(_MSC_VER) && _MSC_VER == 1900
 #if BUILDFLAG(PGO_BUILD)
-  html_source->AddString("compiler", "MSVC 2015 (PGO)");
+  html_source->AddString(version_ui::kCompiler, "MSVC 2015 (PGO)");
 #else
-  html_source->AddString("compiler", "MSVC 2015");
+  html_source->AddString(version_ui::kCompiler, "MSVC 2015");
+#endif
+#elif defined(_MSC_VER) && _MSC_VER == 1910
+#if BUILDFLAG(PGO_BUILD)
+  html_source->AddString(version_ui::kCompiler, "MSVC 2017 (PGO)");
+#else
+  html_source->AddString(version_ui::kCompiler, "MSVC 2017");
 #endif
 #elif defined(_MSC_VER)
 #error "Unsupported version of MSVC."
 #else
-  html_source->AddString("compiler", "Unknown");
+  html_source->AddString(version_ui::kCompiler, "Unknown");
 #endif
 #endif  // defined(OS_WIN)
 
@@ -162,12 +170,12 @@ VersionUI::VersionUI(content::WebUI* web_ui)
   Profile* profile = Profile::FromWebUI(web_ui);
 
 #if defined(OS_CHROMEOS)
-  web_ui->AddMessageHandler(new VersionHandlerChromeOS());
+  web_ui->AddMessageHandler(base::MakeUnique<VersionHandlerChromeOS>());
 #else
-  web_ui->AddMessageHandler(new VersionHandler());
+  web_ui->AddMessageHandler(base::MakeUnique<VersionHandler>());
 #endif
 
-#if defined(ENABLE_THEMES)
+#if !defined(OS_ANDROID)
   // Set up the chrome://theme/ source.
   ThemeSource* theme = new ThemeSource(profile);
   content::URLDataSource::Add(profile, theme);

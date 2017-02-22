@@ -32,9 +32,9 @@ base::TimeTicks EventTimeFromNative(const base::NativeEvent& native_event) {
   return base::TimeTicks();
 }
 
-gfx::Point EventLocationFromNative(const base::NativeEvent& native_event) {
+gfx::PointF EventLocationFromNative(const base::NativeEvent& native_event) {
   NOTIMPLEMENTED();
-  return gfx::Point();
+  return gfx::PointF();
 }
 
 gfx::Point EventSystemLocationFromNative(

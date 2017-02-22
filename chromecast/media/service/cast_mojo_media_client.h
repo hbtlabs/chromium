@@ -12,6 +12,7 @@ namespace chromecast {
 namespace media {
 
 class MediaResourceTracker;
+class VideoModeSwitcher;
 class VideoResolutionPolicy;
 
 class CastMojoMediaClient : public ::media::MojoMediaClient {
@@ -21,21 +22,25 @@ class CastMojoMediaClient : public ::media::MojoMediaClient {
 
   CastMojoMediaClient(const CreateMediaPipelineBackendCB& create_backend_cb,
                       const CreateCdmFactoryCB& create_cdm_factory_cb,
+                      VideoModeSwitcher* video_mode_switcher,
                       VideoResolutionPolicy* video_resolution_policy,
                       MediaResourceTracker* media_resource_tracker);
   ~CastMojoMediaClient() override;
 
   // MojoMediaClient overrides.
+  void Initialize(service_manager::Connector* connector) override;
   scoped_refptr<::media::AudioRendererSink> CreateAudioRendererSink(
       const std::string& audio_device_id) override;
   std::unique_ptr<::media::RendererFactory> CreateRendererFactory(
       const scoped_refptr<::media::MediaLog>& media_log) override;
   std::unique_ptr<::media::CdmFactory> CreateCdmFactory(
-      service_manager::mojom::InterfaceProvider* interface_provider) override;
+      service_manager::mojom::InterfaceProvider* host_interfaces) override;
 
  private:
+  service_manager::Connector* connector_;
   const CreateMediaPipelineBackendCB create_backend_cb_;
   const CreateCdmFactoryCB create_cdm_factory_cb_;
+  VideoModeSwitcher* video_mode_switcher_;
   VideoResolutionPolicy* video_resolution_policy_;
   MediaResourceTracker* media_resource_tracker_;
 

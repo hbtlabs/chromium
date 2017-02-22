@@ -67,14 +67,17 @@ SourceFrame.SourceFrame = class extends UI.SimpleView {
      */
     this._searchableView = null;
     this._editable = false;
+    this._textEditor.setReadOnly(true);
   }
 
   /**
    * @param {boolean} editable
+   * @protected
    */
   setEditable(editable) {
     this._editable = editable;
-    this._textEditor.setReadOnly(editable);
+    if (this._loaded)
+      this._textEditor.setReadOnly(!editable);
   }
 
   /**
@@ -265,6 +268,7 @@ SourceFrame.SourceFrame = class extends UI.SimpleView {
       this._loaded = true;
       this._textEditor.setText(content || '');
       this._textEditor.markClean();
+      this._textEditor.setReadOnly(!this._editable);
     } else {
       var scrollTop = this._textEditor.scrollTop();
       var selection = this._textEditor.selection();

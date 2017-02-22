@@ -63,9 +63,8 @@ static void storeDetail(ScriptState* scriptState,
 
 void V8CustomEvent::constructorCustom(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  ExceptionState exceptionState(ExceptionState::ConstructionContext,
-                                "CustomEvent", info.Holder(),
-                                info.GetIsolate());
+  ExceptionState exceptionState(
+      info.GetIsolate(), ExceptionState::ConstructionContext, "CustomEvent");
   if (UNLIKELY(info.Length() < 1)) {
     exceptionState.throwTypeError(
         ExceptionMessages::notEnoughArguments(1, info.Length()));
@@ -108,6 +107,8 @@ void V8CustomEvent::initCustomEventMethodEpilogueCustom(
     const v8::FunctionCallbackInfo<v8::Value>& info,
     CustomEvent* impl) {
   ASSERT(info.Length() >= 3);
+  if (impl->isBeingDispatched())
+    return;
   v8::Local<v8::Value> detail = info[3];
   if (!detail.IsEmpty())
     storeDetail(ScriptState::current(info.GetIsolate()), impl, info.Holder(),

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ios/web/navigation/navigation_item_impl.h"
+#import "ios/web/navigation/navigation_item_impl.h"
 
 #include <stddef.h>
 
@@ -11,6 +11,7 @@
 
 #include "base/logging.h"
 #include "components/url_formatter/url_formatter.h"
+#import "ios/web/navigation/navigation_manager_impl.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/gfx/text_elider.h"
 
@@ -43,8 +44,9 @@ NavigationItemImpl::NavigationItemImpl()
       is_created_from_push_state_(false),
       has_state_been_replaced_(false),
       is_created_from_hash_change_(false),
-      should_skip_resubmit_data_confirmation_(false),
-      is_renderer_initiated_(false),
+      should_skip_repost_form_confirmation_(false),
+      navigation_initiation_type_(
+          web::NavigationInitiationType::USER_INITIATED),
       is_unsafe_(false),
       facade_delegate_(nullptr) {}
 
@@ -53,6 +55,7 @@ NavigationItemImpl::~NavigationItemImpl() {
 
 NavigationItemImpl::NavigationItemImpl(const NavigationItemImpl& item)
     : unique_id_(item.unique_id_),
+      original_request_url_(item.original_request_url_),
       url_(item.url_),
       referrer_(item.referrer_),
       virtual_url_(item.virtual_url_),
@@ -68,10 +71,10 @@ NavigationItemImpl::NavigationItemImpl(const NavigationItemImpl& item)
       is_created_from_push_state_(item.is_created_from_push_state_),
       has_state_been_replaced_(item.has_state_been_replaced_),
       is_created_from_hash_change_(item.is_created_from_hash_change_),
-      should_skip_resubmit_data_confirmation_(
-          item.should_skip_resubmit_data_confirmation_),
+      should_skip_repost_form_confirmation_(
+          item.should_skip_repost_form_confirmation_),
       post_data_([item.post_data_ copy]),
-      is_renderer_initiated_(item.is_renderer_initiated_),
+      navigation_initiation_type_(item.navigation_initiation_type_),
       is_unsafe_(item.is_unsafe_),
       cached_display_title_(item.cached_display_title_),
       facade_delegate_(nullptr) {}
@@ -87,6 +90,14 @@ NavigationItemFacadeDelegate* NavigationItemImpl::GetFacadeDelegate() const {
 
 int NavigationItemImpl::GetUniqueID() const {
   return unique_id_;
+}
+
+void NavigationItemImpl::SetOriginalRequestURL(const GURL& url) {
+  original_request_url_ = url;
+}
+
+const GURL& NavigationItemImpl::GetOriginalRequestURL() const {
+  return original_request_url_;
 }
 
 void NavigationItemImpl::SetURL(const GURL& url) {
@@ -241,6 +252,16 @@ bool NavigationItemImpl::IsCreatedFromPushState() const {
   return is_created_from_push_state_;
 }
 
+void NavigationItemImpl::SetNavigationInitiationType(
+    web::NavigationInitiationType navigation_initiation_type) {
+  navigation_initiation_type_ = navigation_initiation_type;
+}
+
+web::NavigationInitiationType NavigationItemImpl::NavigationInitiationType()
+    const {
+  return navigation_initiation_type_;
+}
+
 void NavigationItemImpl::SetHasStateBeenReplaced(bool replace_state) {
   has_state_been_replaced_ = replace_state;
 }
@@ -257,12 +278,12 @@ bool NavigationItemImpl::IsCreatedFromHashChange() const {
   return is_created_from_hash_change_;
 }
 
-void NavigationItemImpl::SetShouldSkipResubmitDataConfirmation(bool skip) {
-  should_skip_resubmit_data_confirmation_ = skip;
+void NavigationItemImpl::SetShouldSkipRepostFormConfirmation(bool skip) {
+  should_skip_repost_form_confirmation_ = skip;
 }
 
-bool NavigationItemImpl::ShouldSkipResubmitDataConfirmation() const {
-  return should_skip_resubmit_data_confirmation_;
+bool NavigationItemImpl::ShouldSkipRepostFormConfirmation() const {
+  return should_skip_repost_form_confirmation_;
 }
 
 void NavigationItemImpl::SetPostData(NSData* post_data) {
@@ -287,7 +308,7 @@ void NavigationItemImpl::ResetHttpRequestHeaders() {
 void NavigationItemImpl::ResetForCommit() {
   // Any state that only matters when a navigation item is pending should be
   // cleared here.
-  set_is_renderer_initiated(false);
+  SetNavigationInitiationType(web::NavigationInitiationType::USER_INITIATED);
 }
 
 }  // namespace web

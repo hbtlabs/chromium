@@ -4,8 +4,8 @@
 
 #include "core/paint/LayerClipRecorder.h"
 
-#include "core/layout/ClipRect.h"
 #include "core/layout/LayoutView.h"
+#include "core/paint/ClipRect.h"
 #include "core/paint/PaintLayer.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/GraphicsContext.h"
@@ -15,24 +15,22 @@
 
 namespace blink {
 
-LayerClipRecorder::LayerClipRecorder(
-    GraphicsContext& graphicsContext,
-    const LayoutBoxModelObject& layoutObject,
-    DisplayItem::Type clipType,
-    const ClipRect& clipRect,
-    const PaintLayerPaintingInfo* localPaintingInfo,
-    const LayoutPoint& fragmentOffset,
-    PaintLayerFlags paintFlags,
-    BorderRadiusClippingRule rule)
+LayerClipRecorder::LayerClipRecorder(GraphicsContext& graphicsContext,
+                                     const LayoutBoxModelObject& layoutObject,
+                                     DisplayItem::Type clipType,
+                                     const ClipRect& clipRect,
+                                     const PaintLayer* clipRoot,
+                                     const LayoutPoint& fragmentOffset,
+                                     PaintLayerFlags paintFlags,
+                                     BorderRadiusClippingRule rule)
     : m_graphicsContext(graphicsContext),
       m_layoutObject(layoutObject),
       m_clipType(clipType) {
   IntRect snappedClipRect = pixelSnappedIntRect(clipRect.rect());
   Vector<FloatRoundedRect> roundedRects;
-  if (localPaintingInfo && clipRect.hasRadius()) {
-    collectRoundedRectClips(*layoutObject.layer(), *localPaintingInfo,
-                            graphicsContext, fragmentOffset, paintFlags, rule,
-                            roundedRects);
+  if (clipRoot && clipRect.hasRadius()) {
+    collectRoundedRectClips(*layoutObject.layer(), clipRoot, graphicsContext,
+                            fragmentOffset, paintFlags, rule, roundedRects);
   }
 
   m_graphicsContext.getPaintController().createAndAppend<ClipDisplayItem>(
@@ -44,9 +42,9 @@ static bool inContainingBlockChain(PaintLayer* startLayer,
   if (startLayer == endLayer)
     return true;
 
-  LayoutView* view = startLayer->layoutObject()->view();
+  LayoutView* view = startLayer->layoutObject().view();
   for (const LayoutBlock* currentBlock =
-           startLayer->layoutObject()->containingBlock();
+           startLayer->layoutObject().containingBlock();
        currentBlock && currentBlock != view;
        currentBlock = currentBlock->containingBlock()) {
     if (currentBlock->layer() == endLayer)
@@ -58,7 +56,7 @@ static bool inContainingBlockChain(PaintLayer* startLayer,
 
 void LayerClipRecorder::collectRoundedRectClips(
     PaintLayer& paintLayer,
-    const PaintLayerPaintingInfo& localPaintingInfo,
+    const PaintLayer* clipRoot,
     GraphicsContext& context,
     const LayoutPoint& fragmentOffset,
     PaintLayerFlags paintFlags,
@@ -79,27 +77,28 @@ void LayerClipRecorder::collectRoundedRectClips(
     // is properly clipped so that it can in turn clip the scrolled contents in
     // the compositor.
     if (layer->needsCompositedScrolling() &&
-        !(paintFlags & PaintLayerPaintingChildClippingMaskPhase))
+        !(paintFlags & PaintLayerPaintingChildClippingMaskPhase ||
+          paintFlags & PaintLayerPaintingAncestorClippingMaskPhase))
       break;
 
-    if (layer->layoutObject()->hasOverflowClip() &&
-        layer->layoutObject()->style()->hasBorderRadius() &&
+    if (layer->layoutObject().hasOverflowClip() &&
+        layer->layoutObject().style()->hasBorderRadius() &&
         inContainingBlockChain(&paintLayer, layer)) {
       LayoutPoint delta(fragmentOffset);
-      layer->convertToLayerCoords(localPaintingInfo.rootLayer, delta);
+      layer->convertToLayerCoords(clipRoot, delta);
 
       // The PaintLayer's size is pixel-snapped if it is a LayoutBox. We can't
       // use a pre-snapped border rect for clipping, since
       // getRoundedInnerBorderFor assumes it has not been snapped yet.
       LayoutSize size(layer->layoutBox()
-                          ? toLayoutBox(layer->layoutObject())->size()
+                          ? toLayoutBox(layer->layoutObject()).size()
                           : LayoutSize(layer->size()));
-      roundedRectClips.append(
-          layer->layoutObject()->style()->getRoundedInnerBorderFor(
+      roundedRectClips.push_back(
+          layer->layoutObject().style()->getRoundedInnerBorderFor(
               LayoutRect(delta, size)));
     }
 
-    if (layer == localPaintingInfo.rootLayer)
+    if (layer == clipRoot)
       break;
   }
 }

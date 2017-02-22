@@ -28,6 +28,7 @@
 #include "content/public/browser/gpu_data_manager_observer.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_constants.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/web_preferences.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
@@ -40,11 +41,15 @@
 #include "gpu/config/gpu_util.h"
 #include "gpu/ipc/common/memory_stats.h"
 #include "gpu/ipc/service/switches.h"
+#include "media/media_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/gpu_switching_manager.h"
 
+#if defined(USE_OZONE)
+#include "ui/ozone/public/ozone_switches.h"
+#endif
 #if defined(OS_MACOSX)
 #include <ApplicationServices/ApplicationServices.h>
 #endif  // OS_MACOSX
@@ -55,13 +60,6 @@
 namespace content {
 
 namespace {
-
-enum GpuFeatureStatus {
-    kGpuFeatureEnabled = 0,
-    kGpuFeatureBlacklisted = 1,
-    kGpuFeatureDisabled = 2,  // disabled by user but not blacklisted
-    kGpuFeatureNumStatus
-};
 
 #if defined(OS_WIN)
 
@@ -77,7 +75,7 @@ enum WinSubVersion {
   kNumWinSubVersions
 };
 
-int GetGpuBlacklistHistogramValueWin(GpuFeatureStatus status) {
+int GetGpuBlacklistHistogramValueWin(gpu::GpuFeatureStatus status) {
   static WinSubVersion sub_version = kNumWinSubVersions;
   if (sub_version == kNumWinSubVersions) {
     sub_version = kWinOthers;
@@ -105,17 +103,18 @@ int GetGpuBlacklistHistogramValueWin(GpuFeatureStatus status) {
         break;
     }
   }
-  int entry_index = static_cast<int>(sub_version) * kGpuFeatureNumStatus;
+  int entry_index = static_cast<int>(sub_version) * gpu::kGpuFeatureStatusMax;
   switch (status) {
-    case kGpuFeatureEnabled:
+    case gpu::kGpuFeatureStatusEnabled:
       break;
-    case kGpuFeatureBlacklisted:
+    case gpu::kGpuFeatureStatusBlacklisted:
       entry_index++;
       break;
-    case kGpuFeatureDisabled:
+    case gpu::kGpuFeatureStatusDisabled:
       entry_index += 2;
       break;
-    case kGpuFeatureNumStatus:
+    case gpu::kGpuFeatureStatusUndefined:
+    case gpu::kGpuFeatureStatusMax:
       NOTREACHED();
       break;
   }
@@ -196,21 +195,21 @@ void UpdateStats(const gpu::GPUInfo& gpu_info,
   for (size_t i = 0; i < kNumFeatures; ++i) {
     // We can't use UMA_HISTOGRAM_ENUMERATION here because the same name is
     // expected if the macro is used within a loop.
-    GpuFeatureStatus value = kGpuFeatureEnabled;
+    gpu::GpuFeatureStatus value = gpu::kGpuFeatureStatusEnabled;
     if (blacklisted_features.count(kGpuFeatures[i]))
-      value = kGpuFeatureBlacklisted;
+      value = gpu::kGpuFeatureStatusBlacklisted;
     else if (kGpuFeatureUserFlags[i])
-      value = kGpuFeatureDisabled;
+      value = gpu::kGpuFeatureStatusDisabled;
     base::HistogramBase* histogram_pointer = base::LinearHistogram::FactoryGet(
-        kGpuBlacklistFeatureHistogramNames[i],
-        1, kGpuFeatureNumStatus, kGpuFeatureNumStatus + 1,
+        kGpuBlacklistFeatureHistogramNames[i], 1, gpu::kGpuFeatureStatusMax,
+        gpu::kGpuFeatureStatusMax + 1,
         base::HistogramBase::kUmaTargetedHistogramFlag);
     histogram_pointer->Add(value);
 #if defined(OS_WIN)
     histogram_pointer = base::LinearHistogram::FactoryGet(
-        kGpuBlacklistFeatureHistogramNamesWin[i],
-        1, kNumWinSubVersions * kGpuFeatureNumStatus,
-        kNumWinSubVersions * kGpuFeatureNumStatus + 1,
+        kGpuBlacklistFeatureHistogramNamesWin[i], 1,
+        kNumWinSubVersions * gpu::kGpuFeatureStatusMax,
+        kNumWinSubVersions * gpu::kGpuFeatureStatusMax + 1,
         base::HistogramBase::kUmaTargetedHistogramFlag);
     histogram_pointer->Add(GetGpuBlacklistHistogramValueWin(value));
 #endif
@@ -304,6 +303,13 @@ bool GpuDataManagerImplPrivate::IsFeatureBlacklisted(int feature) const {
   return (blacklisted_features_.count(feature) == 1);
 }
 
+bool GpuDataManagerImplPrivate::IsFeatureEnabled(int feature) const {
+  DCHECK_EQ(feature, gpu::GPU_FEATURE_TYPE_GPU_RASTERIZATION);
+  return gpu_feature_info_
+             .status_values[gpu::GPU_FEATURE_TYPE_GPU_RASTERIZATION] ==
+         gpu::kGpuFeatureStatusEnabled;
+}
+
 bool GpuDataManagerImplPrivate::IsDriverBugWorkaroundActive(int feature) const {
   return (gpu_driver_bugs_.count(feature) == 1);
 }
@@ -334,6 +340,9 @@ bool GpuDataManagerImplPrivate::GpuAccessAllowed(
     }
     return false;
   }
+
+  if (in_process_gpu_)
+    return true;
 
   if (card_blacklisted_) {
     if (reason) {
@@ -525,11 +534,13 @@ void GpuDataManagerImplPrivate::Initialize() {
   }
 
   gpu::GPUInfo gpu_info;
-  const bool force_osmesa =
+  const char* softwareGLImplementationName =
+      gl::GetGLImplementationName(gl::GetSoftwareGLImplementation());
+  const bool force_software_gl =
       (command_line->GetSwitchValueASCII(switches::kUseGL) ==
-       gl::kGLImplementationOSMesaName) ||
-      command_line->HasSwitch(switches::kOverrideUseGLWithOSMesaForTests);
-  if (force_osmesa) {
+       softwareGLImplementationName) ||
+      command_line->HasSwitch(switches::kOverrideUseSoftwareGLForTests);
+  if (force_software_gl) {
     // If using the OSMesa GL implementation, use fake vendor and device ids to
     // make sure it never gets blacklisted. This is better than simply
     // cancelling GPUInfo gathering as it allows us to proceed with loading the
@@ -538,9 +549,10 @@ void GpuDataManagerImplPrivate::Initialize() {
     gpu_info.gpu.vendor_id = 0xffff;
     gpu_info.gpu.device_id = 0xffff;
 
-    // Also declare the driver_vendor to be osmesa to be able to specify
-    // exceptions based on driver_vendor==osmesa for some blacklist rules.
-    gpu_info.driver_vendor = gl::kGLImplementationOSMesaName;
+    // Also declare the driver_vendor to be <software GL> to be able to
+    // specify exceptions based on driver_vendor==<software GL> for some
+    // blacklist rules.
+    gpu_info.driver_vendor = softwareGLImplementationName;
 
     // We are not going to call CollectBasicGraphicsInfo.
     // So mark it as collected.
@@ -585,12 +597,12 @@ void GpuDataManagerImplPrivate::Initialize() {
 
   std::string gpu_blacklist_string;
   std::string gpu_driver_bug_list_string;
-  if (!force_osmesa &&
+  if (!force_software_gl &&
       !command_line->HasSwitch(switches::kIgnoreGpuBlacklist) &&
       !command_line->HasSwitch(switches::kUseGpuInTests)) {
     gpu_blacklist_string = gpu::kSoftwareRenderingListJson;
   }
-  if (!force_osmesa &&
+  if (!force_software_gl &&
       !command_line->HasSwitch(switches::kDisableGpuDriverBugWorkarounds)) {
     gpu_driver_bug_list_string = gpu::kGpuDriverBugListJson;
   }
@@ -598,8 +610,7 @@ void GpuDataManagerImplPrivate::Initialize() {
                  gpu_driver_bug_list_string,
                  gpu_info);
 
-  if (command_line->HasSwitch(switches::kSingleProcess) ||
-      command_line->HasSwitch(switches::kInProcessGPU)) {
+  if (in_process_gpu_) {
     command_line->AppendSwitch(switches::kDisableGpuWatchdog);
     AppendGpuCommandLine(command_line, nullptr);
   }
@@ -675,6 +686,11 @@ void GpuDataManagerImplPrivate::UpdateGpuInfo(const gpu::GPUInfo& gpu_info) {
   UpdateGpuInfoHelper();
 }
 
+void GpuDataManagerImplPrivate::UpdateGpuFeatureInfo(
+    const gpu::GpuFeatureInfo& gpu_feature_info) {
+  gpu_feature_info_ = gpu_feature_info;
+}
+
 void GpuDataManagerImplPrivate::UpdateVideoMemoryUsageStats(
     const gpu::VideoMemoryUsageStats& video_memory_usage_stats) {
   GpuDataManagerImpl::UnlockedSession session(owner_);
@@ -689,10 +705,10 @@ void GpuDataManagerImplPrivate::AppendRendererCommandLine(
 
   if (ShouldDisableAcceleratedVideoDecode(command_line))
     command_line->AppendSwitch(switches::kDisableAcceleratedVideoDecode);
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   if (IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_ENCODE) &&
-      !command_line->HasSwitch(switches::kDisableWebRtcHWEncoding))
-    command_line->AppendSwitch(switches::kDisableWebRtcHWEncoding);
+      !command_line->HasSwitch(switches::kDisableWebRtcHWVP8Encoding))
+    command_line->AppendSwitch(switches::kDisableWebRtcHWVP8Encoding);
 #endif
 
 #if defined(USE_AURA)
@@ -720,14 +736,16 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
     command_line->AppendSwitch(switches::kDisableDirectComposition);
   }
   if (use_swiftshader_) {
-    command_line->AppendSwitchASCII(switches::kUseGL, "swiftshader");
+    command_line->AppendSwitchASCII(
+        switches::kUseGL, gl::kGLImplementationSwiftShaderForWebGLName);
   } else if ((IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_WEBGL) ||
               IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_GPU_COMPOSITING) ||
               IsFeatureBlacklisted(
                   gpu::GPU_FEATURE_TYPE_ACCELERATED_2D_CANVAS)) &&
              (use_gl == "any")) {
-    command_line->AppendSwitchASCII(switches::kUseGL,
-                                    gl::kGLImplementationOSMesaName);
+    command_line->AppendSwitchASCII(
+        switches::kUseGL,
+        gl::GetGLImplementationName(gl::GetSoftwareGLImplementation()));
   } else if (!use_gl.empty()) {
     command_line->AppendSwitchASCII(switches::kUseGL, use_gl);
   }
@@ -764,6 +782,12 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
     command_line->AppendSwitch(switches::kCreateDefaultGLContext);
   }
 
+#if defined(USE_OZONE)
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableDrmAtomic)) {
+    command_line->AppendSwitch(switches::kEnableDrmAtomic);
+  }
+#endif
 #if defined(OS_WIN)
   if (IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_ACCELERATED_VPX_DECODE) &&
       gpu_preferences) {
@@ -772,15 +796,23 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
   }
 #endif
 
-#if defined(ENABLE_WEBRTC)
-  if (IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_ENCODE) &&
-      !command_line->HasSwitch(switches::kDisableWebRtcHWEncoding)) {
-    if (gpu_preferences) {
-      gpu_preferences->disable_web_rtc_hw_encoding = true;
-    } else {
+#if BUILDFLAG(ENABLE_WEBRTC)
+if (IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_ENCODE)) {
+#if defined (OS_ANDROID)
+  // On Android HW H264 is enabled by default behind a flag now, regardless of
+  // the blacklist. Disable HW encoding if every single HW codec is disabled.
+  // TODO(braveyao): remove this once the blacklist is removed
+  // (crbug.com/638664).
+  if (!base::FeatureList::IsEnabled(features::kWebRtcHWH264Encoding)) {
+#endif
+    if (!command_line->HasSwitch(switches::kDisableWebRtcHWEncoding))
       command_line->AppendSwitch(switches::kDisableWebRtcHWEncoding);
-    }
+    if (gpu_preferences)
+      gpu_preferences->disable_web_rtc_hw_encoding = true;
+#if defined (OS_ANDROID)
   }
+#endif
+}
 #endif
 
   if (gpu_preferences) { // enable_es3_apis
@@ -877,8 +909,6 @@ void GpuDataManagerImplPrivate::UpdateRendererWebPrefs(
   prefs->disable_2d_canvas_copy_on_write =
       IsDriverBugWorkaroundActive(gpu::BROKEN_EGL_IMAGE_REF_COUNTING) &&
       command_line->HasSwitch(switches::kEnableThreadedTextureMailboxes);
-  prefs->force_software_readback_from_2d_canvas =
-      IsDriverBugWorkaroundActive(gpu::FORCE_SOFTWARE_READBACK_FROM_2D_CANVAS);
 }
 
 void GpuDataManagerImplPrivate::DisableHardwareAcceleration() {
@@ -1104,15 +1134,20 @@ GpuDataManagerImplPrivate::GpuDataManagerImplPrivate(GpuDataManagerImpl* owner)
       owner_(owner),
       gpu_process_accessible_(true),
       is_initialized_(false),
-      finalized_(false) {
+      finalized_(false),
+      in_process_gpu_(false) {
   DCHECK(owner_);
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
-  swiftshader_path_ =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
-          switches::kSwiftShaderPath);
+  swiftshader_path_ = command_line->GetSwitchValuePath(
+      switches::kSwiftShaderPath);
   if (ShouldDisableHardwareAcceleration())
     DisableHardwareAcceleration();
+
+  if (command_line->HasSwitch(switches::kSingleProcess) ||
+      command_line->HasSwitch(switches::kInProcessGPU)) {
+    in_process_gpu_ = true;
+  }
 
 #if defined(OS_MACOSX)
   CGDisplayRegisterReconfigurationCallback(DisplayReconfigCallback, owner_);

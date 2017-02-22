@@ -8,48 +8,53 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/weak_ptr.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/service_names.mojom.h"
 #include "content/public/test/test_launcher.h"
 #include "mojo/edk/embedder/embedder.h"
+#include "mojo/edk/embedder/pending_process_connection.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
-#include "mojo/edk/embedder/process_delegate.h"
+#include "mojo/edk/embedder/scoped_ipc_support.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "services/catalog/store.h"
-#include "services/service_manager/native_runner_delegate.h"
+#include "services/service_manager/background/background_service_manager.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/runner/common/client_util.h"
 #include "services/service_manager/runner/common/switches.h"
+#include "services/service_manager/runner/host/service_process_launcher.h"
 #include "services/service_manager/service_manager.h"
 #include "services/service_manager/switches.h"
 
 namespace {
 
 const char kTestRunnerName[] = "mash_browser_tests";
-const char kTestName[] = "content_browser";
 
-// BackgroundTestState maintains all the state necessary to bind the test to
-// mojo. This class is only used on the thread created by
-// BackgroundServiceManager.
-class BackgroundTestState {
+// State created per test to register a client process with the background
+// service manager.
+class MojoTestState : public content::TestState {
  public:
-  BackgroundTestState() : child_token_(mojo::edk::GenerateRandomToken()) {}
-  ~BackgroundTestState() {}
+  explicit MojoTestState(
+      service_manager::BackgroundServiceManager* background_service_manager)
+      : background_service_manager_(background_service_manager),
+        weak_factory_(this) {}
+  ~MojoTestState() override {}
 
-  // Prepares the command line and other setup for connecting the test to mojo.
-  // Must be paired with a call to ChildProcessLaunched().
-  void Connect(base::CommandLine* command_line,
-               service_manager::ServiceManager* service_manager,
-               base::TestLauncher::LaunchOptions* test_launch_options) {
+  void Init(base::CommandLine* command_line,
+            base::TestLauncher::LaunchOptions* test_launch_options) {
     command_line->AppendSwitch(MojoTestConnector::kTestSwitch);
     command_line->AppendSwitch(switches::kChildProcess);
-    mojo_ipc_channel_.reset(new mojo::edk::PlatformChannelPair);
-    mojo_ipc_channel_->PrepareToPassClientHandleToChildProcess(
+
+    platform_channel_ = base::MakeUnique<mojo::edk::PlatformChannelPair>();
+
+    platform_channel_->PrepareToPassClientHandleToChildProcess(
         command_line, &handle_passing_info_);
 #if defined(OS_WIN)
     test_launch_options->inherit_handles = true;
@@ -63,125 +68,51 @@ class BackgroundTestState {
 #error "Unsupported"
 #endif
     service_manager::mojom::ServicePtr service =
-        service_manager::PassServiceRequestOnCommandLine(command_line,
-                                                         child_token_);
+        service_manager::PassServiceRequestOnCommandLine(&process_connection_,
+                                                         command_line);
 
-    std::unique_ptr<service_manager::ConnectParams> params(
-        new service_manager::ConnectParams);
-    params->set_source(service_manager::CreateServiceManagerIdentity());
-    // Use the default instance name (which should be "browser"). Otherwise a
-    // service (e.g. ash) that connects to the default "content_browser"
-    // will spawn a new instance.
-    params->set_target(service_manager::Identity(
-        kTestName, service_manager::mojom::kRootUserID));
+    background_service_manager_->RegisterService(
+        service_manager::Identity(content::mojom::kPackagedServicesServiceName,
+                                  service_manager::mojom::kRootUserID),
+        std::move(service),
+        service_manager::mojom::PIDReceiverRequest(&pid_receiver_));
 
-    service_manager::mojom::ClientProcessConnectionPtr
-        client_process_connection =
-            service_manager::mojom::ClientProcessConnection::New();
-    client_process_connection->service =
-        service.PassInterface().PassHandle();
-    client_process_connection->pid_receiver_request =
-        mojo::GetProxy(&pid_receiver_).PassMessagePipe();
-    params->set_client_process_connection(std::move(client_process_connection));
-    service_manager->Connect(std::move(params));
-  }
-
-  // Called after the test process has launched. Completes the registration done
-  // in Connect().
-  void ChildProcessLaunched(base::ProcessHandle handle, base::ProcessId pid) {
-    pid_receiver_->SetPID(pid);
-    mojo_ipc_channel_->ChildProcessLaunched();
-    mojo::edk::ChildProcessLaunched(
-        handle, mojo::edk::ScopedPlatformHandle(mojo::edk::PlatformHandle(
-                    mojo_ipc_channel_->PassServerHandle().release().handle)),
-        child_token_);
-  }
-
- private:
-  // Used to back the NodeChannel between the parent and child node.
-  const std::string child_token_;
-  std::unique_ptr<mojo::edk::PlatformChannelPair> mojo_ipc_channel_;
-
-  mojo::edk::HandlePassingInformation handle_passing_info_;
-
-  service_manager::mojom::PIDReceiverPtr pid_receiver_;
-
-  DISALLOW_COPY_AND_ASSIGN(BackgroundTestState);
-};
-
-// Called used destroy BackgroundTestState on the background thread.
-void DestroyBackgroundStateOnBackgroundThread(
-    std::unique_ptr<BackgroundTestState> state,
-    service_manager::ServiceManager* service_manager) {}
-
-// State created per test. Manages creation of the corresponding
-// BackgroundTestState and making sure processing runs on the right threads.
-class MojoTestState : public content::TestState {
- public:
-  explicit MojoTestState(
-      service_manager::BackgroundServiceManager* background_service_manager)
-      : background_service_manager_(background_service_manager) {}
-
-  ~MojoTestState() override {
-    DCHECK(background_state_);
-    // BackgroundState needs to be destroyed on the background thread. We're
-    // guaranteed |background_service_manager_| has been created by the time we
-    // reach
-    // here as Init() blocks until |background_service_manager_| has been
-    // created.
-    background_service_manager_->ExecuteOnServiceManagerThread(
-        base::Bind(&DestroyBackgroundStateOnBackgroundThread,
-                   base::Passed(&background_state_)));
-  }
-
-  void Init(base::CommandLine* command_line,
-            base::TestLauncher::LaunchOptions* test_launch_options) {
-    base::WaitableEvent signal(base::WaitableEvent::ResetPolicy::MANUAL,
-                               base::WaitableEvent::InitialState::NOT_SIGNALED);
-    background_service_manager_->ExecuteOnServiceManagerThread(base::Bind(
-        &MojoTestState::BindOnBackgroundThread, base::Unretained(this), &signal,
-        command_line, test_launch_options));
-    signal.Wait();
+    // ChildProcessLaunched may be called on an arbitrary thread, so track the
+    // current TaskRunner and post back to it when we want to send the PID.
+    main_task_runner_ = base::ThreadTaskRunnerHandle::Get();
   }
 
  private:
   // content::TestState:
   void ChildProcessLaunched(base::ProcessHandle handle,
                             base::ProcessId pid) override {
-    // This is called on a random thread. We need to ensure BackgroundTestState
-    // is only called on the background thread, and we wait for
-    // ChildProcessLaunchedOnBackgroundThread() to be run before continuing so
-    // that |handle| is still valid.
-    base::WaitableEvent signal(base::WaitableEvent::ResetPolicy::MANUAL,
-                               base::WaitableEvent::InitialState::NOT_SIGNALED);
-    background_service_manager_->ExecuteOnServiceManagerThread(
-        base::Bind(&MojoTestState::ChildProcessLaunchedOnBackgroundThread,
-                   base::Unretained(this), handle, pid, &signal));
-    signal.Wait();
+    platform_channel_->ChildProcessLaunched();
+    process_connection_.Connect(handle, platform_channel_->PassServerHandle());
+
+    main_task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(&MojoTestState::SetPID, weak_factory_.GetWeakPtr(), pid));
   }
 
-  void ChildProcessLaunchedOnBackgroundThread(
-      base::ProcessHandle handle,
-      base::ProcessId pid,
-      base::WaitableEvent* signal,
-      service_manager::ServiceManager* service_manager) {
-    background_state_->ChildProcessLaunched(handle, pid);
-    signal->Signal();
+  // Called on the main thread only.
+  void SetPID(base::ProcessId pid) {
+    DCHECK(pid_receiver_.is_bound());
+    pid_receiver_->SetPID(pid);
+    pid_receiver_.reset();
   }
 
-  void BindOnBackgroundThread(
-      base::WaitableEvent* signal,
-      base::CommandLine* command_line,
-      base::TestLauncher::LaunchOptions* test_launch_options,
-      service_manager::ServiceManager* service_manager) {
-    background_state_.reset(new BackgroundTestState);
-    background_state_->Connect(command_line, service_manager,
-                               test_launch_options);
-    signal->Signal();
-  }
+  mojo::edk::PendingProcessConnection process_connection_;
+  service_manager::BackgroundServiceManager* const background_service_manager_;
 
-  service_manager::BackgroundServiceManager* background_service_manager_;
-  std::unique_ptr<BackgroundTestState> background_state_;
+  // NOTE: HandlePassingInformation must remain valid through process launch,
+  // hence it lives here instead of within Init()'s stack.
+  mojo::edk::HandlePassingInformation handle_passing_info_;
+
+  std::unique_ptr<mojo::edk::PlatformChannelPair> platform_channel_;
+  service_manager::mojom::PIDReceiverPtr pid_receiver_;
+  scoped_refptr<base::TaskRunner> main_task_runner_ = nullptr;
+
+  base::WeakPtrFactory<MojoTestState> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(MojoTestState);
 };
@@ -200,22 +131,25 @@ void RemoveMashFromBrowserTests(base::CommandLine* command_line) {
 
 }  // namespace
 
-// NativeRunnerDelegate that makes exe:mash_browser_tests to exe:browser_tests,
-// and removes '--run-in-mash'.
-class MojoTestConnector::NativeRunnerDelegateImpl
-    : public service_manager::NativeRunnerDelegate {
+// ServiceProcessLauncher::Delegate that makes exe:mash_browser_tests to
+// exe:browser_tests and removes '--run-in-mash'.
+class MojoTestConnector::ServiceProcessLauncherDelegateImpl
+    : public service_manager::ServiceProcessLauncher::Delegate {
  public:
-  NativeRunnerDelegateImpl() {}
-  ~NativeRunnerDelegateImpl() override {}
+  ServiceProcessLauncherDelegateImpl() {}
+  ~ServiceProcessLauncherDelegateImpl() override {}
 
  private:
-  // service_manager::NativeRunnerDelegate:
+  // service_manager::ServiceProcessLauncherDelegate:
   void AdjustCommandLineArgumentsForTarget(
       const service_manager::Identity& target,
       base::CommandLine* command_line) override {
-    if (target.name() != kTestName) {
-      if (target.name() == kTestRunnerName)
+    if (target.name() != content::mojom::kPackagedServicesServiceName) {
+      if (target.name() == kTestRunnerName) {
         RemoveMashFromBrowserTests(command_line);
+        command_line->SetProgram(
+            base::CommandLine::ForCurrentProcess()->GetProgram());
+      }
       command_line->AppendSwitch(MojoTestConnector::kMashApp);
       return;
     }
@@ -228,7 +162,7 @@ class MojoTestConnector::NativeRunnerDelegateImpl
     *command_line = base::CommandLine(argv);
   }
 
-  DISALLOW_COPY_AND_ASSIGN(NativeRunnerDelegateImpl);
+  DISALLOW_COPY_AND_ASSIGN(ServiceProcessLauncherDelegateImpl);
 };
 
 // static
@@ -236,19 +170,34 @@ const char MojoTestConnector::kTestSwitch[] = "is_test";
 // static
 const char MojoTestConnector::kMashApp[] = "mash-app";
 
-MojoTestConnector::MojoTestConnector() {}
+MojoTestConnector::MojoTestConnector(
+    std::unique_ptr<base::Value> catalog_contents)
+    : service_process_launcher_delegate_(
+          new ServiceProcessLauncherDelegateImpl),
+      background_service_manager_(service_process_launcher_delegate_.get(),
+                                  std::move(catalog_contents)) {}
 
 service_manager::mojom::ServiceRequest MojoTestConnector::Init() {
-  native_runner_delegate_ = base::MakeUnique<NativeRunnerDelegateImpl>();
+  // In single-process test mode, browser code will initialize the EDK and IPC.
+  // Otherwise we ensure it's initialized here.
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          content::kSingleProcessTestsFlag)) {
+    mojo::edk::Init();
+    ipc_thread_ = base::MakeUnique<base::Thread>("IPC thread");
+    ipc_thread_->StartWithOptions(base::Thread::Options(
+        base::MessageLoop::TYPE_IO, 0));
+    ipc_support_ = base::MakeUnique<mojo::edk::ScopedIPCSupport>(
+        ipc_thread_->task_runner(),
+        mojo::edk::ScopedIPCSupport::ShutdownPolicy::FAST);
+  }
 
-  std::unique_ptr<service_manager::BackgroundServiceManager::InitParams>
-      init_params(new service_manager::BackgroundServiceManager::InitParams);
-  // When running in single_process mode chrome initializes the edk.
-  init_params->init_edk = !base::CommandLine::ForCurrentProcess()->HasSwitch(
-      content::kSingleProcessTestsFlag);
-  init_params->native_runner_delegate = native_runner_delegate_.get();
-  background_service_manager_.Init(std::move(init_params));
-  return background_service_manager_.CreateServiceRequest(kTestRunnerName);
+  service_manager::mojom::ServicePtr service;
+  service_manager::mojom::ServiceRequest request(&service);
+  background_service_manager_.RegisterService(
+      service_manager::Identity(kTestRunnerName,
+                                service_manager::mojom::kRootUserID),
+      std::move(service), nullptr);
+  return request;
 }
 
 MojoTestConnector::~MojoTestConnector() {}
@@ -256,8 +205,8 @@ MojoTestConnector::~MojoTestConnector() {}
 std::unique_ptr<content::TestState> MojoTestConnector::PrepareForTest(
     base::CommandLine* command_line,
     base::TestLauncher::LaunchOptions* test_launch_options) {
-  std::unique_ptr<MojoTestState> test_state(
-      new MojoTestState(&background_service_manager_));
+  auto test_state =
+      base::MakeUnique<MojoTestState>(&background_service_manager_);
   test_state->Init(command_line, test_launch_options);
-  return std::move(test_state);
+  return test_state;
 }

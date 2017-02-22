@@ -19,13 +19,17 @@ private:
 
 class StackObject {
     STACK_ALLOCATED();
+
+    // Redundant trace() method, warning/error expected.
+    void Trace(Visitor* visitor) { visitor->Trace(m_obj); }
+
 private:
     Member<HeapObject> m_obj; // Does not need tracing.
 };
 
 class HeapObject : public GarbageCollected<HeapObject> {
 public:
-    void trace(Visitor*);
+    void Trace(Visitor*);
 private:
     StackObject m_part; // Cannot embed a stack allocated object.
 };

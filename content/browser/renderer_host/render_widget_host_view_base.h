@@ -67,7 +67,6 @@ class BrowserAccessibilityDelegate;
 class BrowserAccessibilityManager;
 class RenderWidgetHostImpl;
 class RenderWidgetHostViewBaseObserver;
-class SyntheticGesture;
 class SyntheticGestureTarget;
 class TextInputManager;
 class WebCursor;
@@ -98,6 +97,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   void WasOccluded() override {}
   bool IsShowingContextMenu() const override;
   void SetShowingContextMenu(bool showing_menu) override;
+  void SetIsInVR(bool is_in_vr) override;
   base::string16 GetSelectedText() override;
   bool IsMouseLocked() override;
   gfx::Size GetVisibleViewportSize() const override;
@@ -287,6 +287,9 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // need to also be resolved.
   virtual bool IsRenderWidgetHostViewChildFrame();
 
+  // Returns true if the current view is in virtual reality mode.
+  virtual bool IsInVR() const;
+
   //----------------------------------------------------------------------------
   // The following methods are related to IME.
   // TODO(ekaramad): Most of the IME methods should not stay virtual after IME
@@ -406,10 +409,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // main frame.
   virtual void OnDidNavigateMainFrameToNewPage();
 
-  // Instructs the view to not drop the surface even when the view is hidden.
-  virtual void LockCompositingSurface() = 0;
-  virtual void UnlockCompositingSurface() = 0;
-
   // Add and remove observers for lifetime event notifications. The order in
   // which notifications are sent to observers is undefined. Clients must be
   // sure to remove the observer before they go away.
@@ -459,22 +458,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
 
   // Whether we are showing a context menu.
   bool showing_context_menu_;
-
-// TODO(ekaramad): In aura, text selection tracking for IME is done through the
-// TextInputManager. We still need the following variables for other platforms.
-// Remove them when tracking is done by TextInputManager on all platforms
-// (https://crbug.com/578168 and https://crbug.com/602427).
-#if !defined(USE_AURA)
-  // A buffer containing the text inside and around the current selection range.
-  base::string16 selection_text_;
-
-  // The offset of the text stored in |selection_text_| relative to the start of
-  // the web page.
-  size_t selection_text_offset_;
-
-  // The current selection range relative to the start of the web page.
-  gfx::Range selection_range_;
-#endif
 
   // The scale factor of the display the renderer is currently on.
   float current_device_scale_factor_;

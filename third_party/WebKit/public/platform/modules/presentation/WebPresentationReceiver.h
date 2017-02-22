@@ -9,7 +9,8 @@
 
 namespace blink {
 
-class WebPresentationConnectionClient;
+struct WebPresentationSessionInfo;
+class WebPresentationConnection;
 
 // The delegate Blink provides to WebPresentationReceiverClient in order to get
 // updates.
@@ -18,8 +19,8 @@ class BLINK_PLATFORM_EXPORT WebPresentationReceiver {
   virtual ~WebPresentationReceiver() = default;
 
   // Called when receiver page gets an incoming connection.
-  virtual void onReceiverConnectionAvailable(
-      WebPresentationConnectionClient*) = 0;
+  virtual WebPresentationConnection* onReceiverConnectionAvailable(
+      const WebPresentationSessionInfo&) = 0;
 };
 
 }  // namespace blink

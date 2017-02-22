@@ -13,16 +13,13 @@
 #include "content/browser/loader/resource_handler.h"
 #include "content/public/common/resource_response.h"
 
-namespace IPC {
-class Message;
-}
-
 namespace net {
 class IOBuffer;
 class URLRequest;
 }
 
 namespace content {
+class ResourceController;
 
 // Used to complete a synchronous resource request in response to resource load
 // events from the resource dispatcher host.
@@ -36,17 +33,22 @@ class SyncResourceHandler : public ResourceHandler {
                       ResourceDispatcherHostImpl* resource_dispatcher_host);
   ~SyncResourceHandler() override;
 
-  bool OnRequestRedirected(const net::RedirectInfo& redirect_info,
-                           ResourceResponse* response,
-                           bool* defer) override;
-  bool OnResponseStarted(ResourceResponse* response, bool* defer) override;
-  bool OnWillStart(const GURL& url, bool* defer) override;
+  void OnRequestRedirected(
+      const net::RedirectInfo& redirect_info,
+      ResourceResponse* response,
+      std::unique_ptr<ResourceController> controller) override;
+  void OnResponseStarted(
+      ResourceResponse* response,
+      std::unique_ptr<ResourceController> controller) override;
+  void OnWillStart(const GURL& url,
+                   std::unique_ptr<ResourceController> controller) override;
   bool OnWillRead(scoped_refptr<net::IOBuffer>* buf,
-                  int* buf_size,
-                  int min_size) override;
-  bool OnReadCompleted(int bytes_read, bool* defer) override;
-  void OnResponseCompleted(const net::URLRequestStatus& status,
-                           bool* defer) override;
+                  int* buf_size) override;
+  void OnReadCompleted(int bytes_read,
+                       std::unique_ptr<ResourceController> controller) override;
+  void OnResponseCompleted(
+      const net::URLRequestStatus& status,
+      std::unique_ptr<ResourceController> controller) override;
   void OnDataDownloaded(int bytes_downloaded) override;
 
  private:

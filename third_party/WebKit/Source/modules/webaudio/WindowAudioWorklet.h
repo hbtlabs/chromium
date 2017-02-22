@@ -5,34 +5,32 @@
 #ifndef WindowAudioWorklet_h
 #define WindowAudioWorklet_h
 
-#include "core/frame/DOMWindowProperty.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "modules/ModulesExport.h"
+#include "modules/webaudio/AudioWorklet.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
 
-class AudioWorklet;
-class DOMWindow;
 class LocalDOMWindow;
-class Worklet;
 
 class MODULES_EXPORT WindowAudioWorklet final
     : public GarbageCollected<WindowAudioWorklet>,
       public Supplement<LocalDOMWindow>,
-      public DOMWindowProperty {
+      public ContextLifecycleObserver {
   USING_GARBAGE_COLLECTED_MIXIN(WindowAudioWorklet);
 
  public:
-  static WindowAudioWorklet& from(LocalDOMWindow&);
-  static Worklet* audioWorklet(DOMWindow&);
-  AudioWorklet* audioWorklet();
+  static AudioWorklet* audioWorklet(LocalDOMWindow&);
 
-  void frameDestroyed() override;
+  void contextDestroyed(ExecutionContext*) override;
 
   DECLARE_TRACE();
 
  private:
+  static WindowAudioWorklet& from(LocalDOMWindow&);
+
   explicit WindowAudioWorklet(LocalDOMWindow&);
   static const char* supplementName();
 

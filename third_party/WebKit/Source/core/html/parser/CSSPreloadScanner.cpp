@@ -28,13 +28,13 @@
 #include "core/html/parser/CSSPreloadScanner.h"
 
 #include "core/dom/Document.h"
-#include "core/fetch/CSSStyleSheetResource.h"
-#include "core/fetch/FetchInitiatorTypeNames.h"
 #include "core/frame/Settings.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/parser/HTMLResourcePreloader.h"
 #include "core/loader/DocumentLoader.h"
+#include "core/loader/resource/CSSStyleSheetResource.h"
 #include "platform/Histogram.h"
+#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/text/SegmentedString.h"
 #include <memory>
 
@@ -98,6 +98,9 @@ inline void CSSPreloadScanner::tokenize(UChar c,
                                         const SegmentedString& source) {
   // We are just interested in @import rules, no need for real tokenization here
   // Searching for other types of resources is probably low payoff.
+  // If we ever decide to preload fonts, we also need to change
+  // ResourceFetcher::resourceNeedsLoad to immediately load speculative font
+  // preloads.
   switch (m_state) {
     case Initial:
       if (isHTMLSpace<UChar>(c))
@@ -238,7 +241,7 @@ void CSSPreloadScanner::emitRule(const SegmentedString& source) {
         Resource::CSSStyleSheet, m_referrerPolicy);
     if (request) {
       // FIXME: Should this be including the charset in the preload request?
-      m_requests->append(std::move(request));
+      m_requests->push_back(std::move(request));
     }
     m_state = Initial;
   } else if (equalIgnoringCase(m_rule, "charset"))
@@ -252,12 +255,12 @@ void CSSPreloadScanner::emitRule(const SegmentedString& source) {
 CSSPreloaderResourceClient::CSSPreloaderResourceClient(
     Resource* resource,
     HTMLResourcePreloader* preloader)
-    : m_policy(preloader->document()->settings()->cssExternalScannerPreload()
+    : m_policy(preloader->document()->settings()->getCSSExternalScannerPreload()
                    ? ScanAndPreload
                    : ScanOnly),
       m_preloader(preloader),
       m_resource(toCSSStyleSheetResource(resource)) {
-  m_resource->addClient(this);
+  m_resource->addClient(this, Resource::DontMarkAsReferenced);
 }
 
 CSSPreloaderResourceClient::~CSSPreloaderResourceClient() {}
@@ -282,6 +285,12 @@ void CSSPreloaderResourceClient::didAppendFirstData(
 void CSSPreloaderResourceClient::scanCSS(
     const CSSStyleSheetResource* resource) {
   DCHECK(m_preloader);
+
+  // Early abort if there is no document loader. Do this early to ensure that
+  // scan histograms and preload histograms do not count different quantities.
+  if (!m_preloader->document()->loader())
+    return;
+
   // Passing an empty SegmentedString here results in PreloadRequest with no
   // file/line information.
   // TODO(csharrison): If this becomes an issue the CSSPreloadScanner may be
@@ -320,6 +329,18 @@ void CSSPreloaderResourceClient::fetchPreloads(PreloadRequestStream& preloads) {
 }
 
 void CSSPreloaderResourceClient::clearResource() {
+  // Do not remove the client for unused, speculative markup preloads. This will
+  // trigger cancellation of the request and potential removal from memory
+  // cache. Link preloads are an exception because they support dynamic removal
+  // cancelling the request (and have their own passive resource client).
+  // Note: Speculative preloads which remain unused for their lifetime will
+  // never have this client removed. This should be fine because we only hold
+  // weak references to the resource.
+  if (m_resource && m_resource->isUnusedPreload() &&
+      !m_resource->isLinkPreload()) {
+    return;
+  }
+
   if (m_resource)
     m_resource->removeClient(this);
   m_resource.clear();

@@ -14,13 +14,20 @@
 #include "ui/base/ui_base_types.h"
 
 namespace ui {
-class InputMethod;
+namespace mojom {
+enum class WindowType;
+}
 }
 
 namespace aura {
 namespace client {
 
 // Alphabetical sort.
+
+// A property key to store whether accessibility focus falls back to widget or
+// not.
+AURA_EXPORT extern const WindowProperty<bool>* const
+    kAccessibilityFocusFallsbackToWidgetKey;
 
 // A property key to store always-on-top flag.
 AURA_EXPORT extern const WindowProperty<bool>* const kAlwaysOnTopKey;
@@ -39,15 +46,6 @@ AURA_EXPORT extern const WindowProperty<std::string*>* const kAppIdKey;
 // pointer metrics. See AppType in ash/shared/app_types.h for more details.
 AURA_EXPORT extern const WindowProperty<int>* const kAppType;
 
-// A property key to store the can-maximize flag.
-AURA_EXPORT extern const WindowProperty<bool>* const kCanMaximizeKey;
-
-// A property key to store the can-minimize flag.
-AURA_EXPORT extern const WindowProperty<bool>* const kCanMinimizeKey;
-
-// A property key to store the can-resize flag.
-AURA_EXPORT extern const WindowProperty<bool>* const kCanResizeKey;
-
 // A property key to store if a window is a constrained window or not.
 AURA_EXPORT extern const WindowProperty<bool>* const kConstrainedWindowKey;
 
@@ -55,17 +53,20 @@ AURA_EXPORT extern const WindowProperty<bool>* const kConstrainedWindowKey;
 // attention.
 AURA_EXPORT extern const aura::WindowProperty<bool>* const kDrawAttentionKey;
 
-// A property key to indicate that a window should be excluded from the most
-// recently used windows list.
-AURA_EXPORT extern const aura::WindowProperty<bool>* const kExcludeFromMruKey;
+// A property key to store the host window of a window. This lets
+// WebContentsViews find the windows that should constrain NPAPI plugins.
+AURA_EXPORT extern const WindowProperty<Window*>* const kHostWindowKey;
+
+// A property key to indicate that a window should be in immersive mode when the
+// window enters the fullscreen mode. The immersive fullscreen mode is slightly
+// different from the normal fullscreen mode by allowing the user to reveal the
+// top portion of the window through a touch / mouse gesture.
+AURA_EXPORT extern const aura::WindowProperty<bool>* const
+    kImmersiveFullscreenKey;
 
 // A property key to indicate that a window is being "mirrored" and its contents
 // should render regardless of its actual visibility state.
 AURA_EXPORT extern const aura::WindowProperty<bool>* const kMirroringEnabledKey;
-
-// A property key to store the host window of a window. This lets
-// WebContentsViews find the windows that should constrain NPAPI plugins.
-AURA_EXPORT extern const WindowProperty<Window*>* const kHostWindowKey;
 
 // A property key to store the window modality.
 AURA_EXPORT extern const WindowProperty<ui::ModalType>* const kModalKey;
@@ -73,13 +74,27 @@ AURA_EXPORT extern const WindowProperty<ui::ModalType>* const kModalKey;
 // A property key to store the name of the window; mostly used for debugging.
 AURA_EXPORT extern const WindowProperty<std::string*>* const kNameKey;
 
-// A property key to store the restore bounds for a window.
-AURA_EXPORT extern const WindowProperty<gfx::Rect*>* const kRestoreBoundsKey;
+// A property key to store the preferred size of the window.
+AURA_EXPORT extern const WindowProperty<gfx::Size*>* const kPreferredSize;
 
-// A property key to store ui::WindowShowState for restoring a window.
+// A property key to store ui::WindowShowState for restoring a window from
+// minimized show state.
 // Used in Ash to remember the show state before the window was minimized.
 AURA_EXPORT extern const WindowProperty<ui::WindowShowState>* const
-    kRestoreShowStateKey;
+    kPreMinimizedShowStateKey;
+
+// A property key to store ui::WindowShowState for restoring a window from
+// fullscreen show state.
+// Used in Ash to remember the show state before the window was fullscreen.
+AURA_EXPORT extern const WindowProperty<ui::WindowShowState>* const
+    kPreFullscreenShowStateKey;
+
+// A property key to store the resize behavior, which is a bitmask of the
+// ui::mojom::kResizeBehavior values.
+AURA_EXPORT extern const WindowProperty<int32_t>* const kResizeBehaviorKey;
+
+// A property key to store the restore bounds for a window.
+AURA_EXPORT extern const WindowProperty<gfx::Rect*>* const kRestoreBoundsKey;
 
 // A property key to store ui::WindowShowState for a window.
 // See ui/base/ui_base_types.h for its definition.
@@ -100,6 +115,9 @@ AURA_EXPORT extern const aura::WindowProperty<SkColor>* const kTopViewColor;
 
 // A property key to store the window icon, typically 16x16 for title bars.
 AURA_EXPORT extern const WindowProperty<gfx::ImageSkia*>* const kWindowIconKey;
+
+AURA_EXPORT extern const aura::WindowProperty<ui::mojom::WindowType>* const
+    kWindowTypeKey;
 
 // Alphabetical sort.
 

@@ -93,6 +93,11 @@ public abstract class ChromeSwitches {
      */
     public static final String MARKET_URL_FOR_TESTING = "market-url-for-testing";
 
+    /**
+     * Disable multiwindow tab merging for testing.
+     */
+    public static final String DISABLE_TAB_MERGING_FOR_TESTING = "disable-tab-merging";
+
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // Native Switches
     ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -111,13 +116,6 @@ public abstract class ChromeSwitches {
      * Native switch - switches::kGoogleBaseURL.
      */
     public static final String GOOGLE_BASE_URL = "google-base-url";
-
-    /**
-     * Use fake device for Media Stream to replace actual camera and microphone.
-     * Native switch - switches::kUseFakeDeviceForMediaStream.
-     */
-    public static final String USE_FAKE_DEVICE_FOR_MEDIA_STREAM =
-            "use-fake-device-for-media-stream";
 
     /**
      * Disable domain reliability
@@ -187,18 +185,10 @@ public abstract class ChromeSwitches {
     public static final String HERB_FLAVOR_DISABLED = "Disabled";
     public static final String HERB_FLAVOR_ELDERBERRY = "Elderberry";
 
-    public static final String DISABLE_APP_LINK = "disable-app-link";
-    public static final String ENABLE_APP_LINK = "enable-app-link";
-
     /**
      * Set the partner-defined homepage URL, for testing.
      */
     public static final String PARTNER_HOMEPAGE_FOR_TESTING = "partner-homepage-for-testing";
-
-    /**
-     * Enables "Add to Home screen" to mint a WebApk.
-     */
-    public static final String ENABLE_WEBAPK = "enable-improved-a2hs";
 
     /**
      * Forces the WebAPK runtime dex to be extracted each time that Chrome is started.

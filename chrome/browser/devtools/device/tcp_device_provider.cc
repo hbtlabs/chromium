@@ -10,7 +10,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/devtools/device/adb/adb_client_socket.h"
 #include "net/base/net_errors.h"
@@ -56,8 +55,12 @@ class ResolveHostAndOpenSocket final {
     }
     std::unique_ptr<net::StreamSocket> socket(new net::TCPClientSocket(
         address_list_, NULL, NULL, net::NetLogSource()));
-    socket->Connect(
-        base::Bind(&RunSocketCallback, callback_, base::Passed(&socket)));
+    net::StreamSocket* socket_ptr = socket.get();
+    net::CompletionCallback on_connect =
+        base::Bind(&RunSocketCallback, callback_, base::Passed(&socket));
+    result = socket_ptr->Connect(on_connect);
+    if (result != net::ERR_IO_PENDING)
+      on_connect.Run(result);
     delete this;
   }
 

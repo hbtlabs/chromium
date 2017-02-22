@@ -34,16 +34,12 @@
 #include "ui/views/widget/widget_removals_observer.h"
 #include "ui/wm/public/scoped_drag_drop_disabler.h"
 
-class PrefService;
+class AccountId;
 class ScopedKeepAlive;
-
-namespace content {
-class RenderFrameHost;
-class WebContents;
-}
 
 namespace chromeos {
 
+class ArcKioskController;
 class DemoAppLauncher;
 class FocusRingController;
 class KeyboardDrivenOobeKeyHandler;
@@ -77,7 +73,7 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
   void OpenProxySettings() override;
   void SetStatusAreaVisible(bool visible) override;
   AutoEnrollmentController* GetAutoEnrollmentController() override;
-  void StartWizard(const std::string& first_screen_name) override;
+  void StartWizard(OobeScreen first_screen) override;
   WizardController* GetWizardController() override;
   AppLaunchController* GetAppLaunchController() override;
   void StartUserAdding(const base::Closure& completion_callback) override;
@@ -90,6 +86,7 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
       bool diagnostic_mode,
       bool auto_launch) override;
   void StartDemoAppLaunch() override;
+  void StartArcKiosk(const AccountId& account_id) override;
 
   // Creates WizardController instance.
   WizardController* CreateWizardController();
@@ -143,6 +140,8 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
   void OnUserSwitchAnimationFinished() override;
 
  private:
+  class LoginWidgetDelegate;
+
   // Way to restore if renderer have crashed.
   enum RestorePath {
     RESTORE_UNKNOWN,
@@ -223,39 +222,45 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
   // Demo app launcher.
   std::unique_ptr<DemoAppLauncher> demo_app_launcher_;
 
+  // ARC kiosk controller.
+  std::unique_ptr<ArcKioskController> arc_kiosk_controller_;
+
   // Make sure chrome won't exit while we are at login/oobe screen.
   std::unique_ptr<ScopedKeepAlive> keep_alive_;
 
   // Has ShutdownDisplayHost() already been called?  Used to avoid posting our
   // own deletion to the message loop twice if the user logs out while we're
   // still in the process of cleaning up after login (http://crbug.com/134463).
-  bool shutting_down_;
+  bool shutting_down_ = false;
 
   // Whether progress bar is shown on the OOBE page.
-  bool oobe_progress_bar_visible_;
+  bool oobe_progress_bar_visible_ = false;
 
   // True if session start is in progress.
-  bool session_starting_;
+  bool session_starting_ = false;
 
   // Container of the screen we are displaying.
-  views::Widget* login_window_;
+  views::Widget* login_window_ = nullptr;
+
+  // The delegate of |login_window_|; owned by |login_window_|.
+  LoginWidgetDelegate* login_window_delegate_ = nullptr;
 
   // Container of the view we are displaying.
-  WebUILoginView* login_view_;
+  WebUILoginView* login_view_ = nullptr;
 
   // Login display we are using.
-  WebUILoginDisplay* webui_login_display_;
+  WebUILoginDisplay* webui_login_display_ = nullptr;
 
   // True if the login display is the current screen.
-  bool is_showing_login_;
+  bool is_showing_login_ = false;
 
   // True if NOTIFICATION_WALLPAPER_ANIMATION_FINISHED notification has been
   // received.
-  bool is_wallpaper_loaded_;
+  bool is_wallpaper_loaded_ = false;
 
   // Stores status area current visibility to be applied once login WebUI
   // is shown.
-  bool status_area_saved_visibility_;
+  bool status_area_saved_visibility_ = false;
 
   // If true, WebUI is initialized in a hidden state and shown after the
   // wallpaper animation is finished (when it is enabled) or the user pods have
@@ -272,13 +277,13 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
   bool waiting_for_user_pods_;
 
   // How many times renderer has crashed.
-  int crash_count_;
+  int crash_count_ = 0;
 
   // Way to restore if renderer have crashed.
-  RestorePath restore_path_;
+  RestorePath restore_path_ = RESTORE_UNKNOWN;
 
   // Stored parameters for StartWizard, required to restore in case of crash.
-  std::string first_screen_name_;
+  OobeScreen first_screen_;
 
   // Called before host deletion.
   base::Closure completion_callback_;
@@ -294,7 +299,7 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
   std::unique_ptr<KeyboardDrivenOobeKeyHandler>
       keyboard_driven_oobe_key_handler_;
 
-  FinalizeAnimationType finalize_animation_type_;
+  FinalizeAnimationType finalize_animation_type_ = ANIMATION_WORKSPACE;
 
   // Time when login prompt visible signal is received. Used for
   // calculations of delay before startup sound.
@@ -302,15 +307,15 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
 
   // True when request to play startup sound was sent to
   // SoundsManager.
-  bool startup_sound_played_;
+  bool startup_sound_played_ = false;
 
   // When true, startup sound should be played only when spoken
   // feedback is enabled.  Otherwise, startup sound should be played
   // in any case.
-  bool startup_sound_honors_spoken_feedback_;
+  bool startup_sound_honors_spoken_feedback_ = false;
 
   // True is subscribed as keyboard controller observer.
-  bool is_observing_keyboard_;
+  bool is_observing_keyboard_ = false;
 
   // Keeps a copy of the old Drag'n'Drop client, so that it would be disabled
   // during a login session and restored afterwards.

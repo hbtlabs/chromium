@@ -68,9 +68,7 @@ class TranslateController : public web::WebStateObserver {
 
   // Changes the JsTranslateManager used by this TranslateController.
   // Only used for testing.
-  void SetJsTranslateManagerForTesting(JsTranslateManager* manager) {
-    js_manager_.reset([manager retain]);
-  }
+  void SetJsTranslateManagerForTesting(JsTranslateManager* manager);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(TranslateControllerTest,

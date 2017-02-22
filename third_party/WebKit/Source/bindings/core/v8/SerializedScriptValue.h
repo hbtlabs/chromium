@@ -79,7 +79,6 @@ class CORE_EXPORT SerializedScriptValue
                                                      Transferables*,
                                                      WebBlobInfoArray*,
                                                      ExceptionState&);
-  static PassRefPtr<SerializedScriptValue> serialize(const String&);
   static PassRefPtr<SerializedScriptValue> serializeAndSwallowExceptions(
       v8::Isolate*,
       v8::Local<v8::Value>);
@@ -121,6 +120,11 @@ class CORE_EXPORT SerializedScriptValue
   static std::unique_ptr<ArrayBufferContentsArray> transferArrayBufferContents(
       v8::Isolate*,
       const ArrayBufferArray&,
+      ExceptionState&);
+
+  static std::unique_ptr<ImageBitmapContentsArray> transferImageBitmapContents(
+      v8::Isolate*,
+      const ImageBitmapArray&,
       ExceptionState&);
 
   // Informs the V8 about external memory allocated and owned by this object.

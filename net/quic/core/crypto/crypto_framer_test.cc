@@ -8,10 +8,10 @@
 #include <memory>
 #include <vector>
 
-#include "base/logging.h"
 #include "net/quic/core/crypto/crypto_handshake.h"
 #include "net/quic/core/crypto/crypto_protocol.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
+#include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 
@@ -35,7 +35,7 @@ class TestCryptoVisitor : public CryptoFramerVisitorInterface {
   TestCryptoVisitor() : error_count_(0) {}
 
   void OnError(CryptoFramer* framer) override {
-    DLOG(ERROR) << "CryptoFramer Error: " << framer->error();
+    QUIC_DLOG(ERROR) << "CryptoFramer Error: " << framer->error();
     ++error_count_;
   }
 
@@ -274,8 +274,8 @@ TEST(CryptoFramerTest, ProcessInput) {
   const CryptoHandshakeMessage& message = visitor.messages_[0];
   EXPECT_EQ(0xFFAA7733, message.tag());
   EXPECT_EQ(2u, message.tag_value_map().size());
-  EXPECT_EQ("abcdef", CryptoTestUtils::GetValueForTag(message, 0x12345678));
-  EXPECT_EQ("ghijk", CryptoTestUtils::GetValueForTag(message, 0x12345679));
+  EXPECT_EQ("abcdef", crypto_test_utils::GetValueForTag(message, 0x12345678));
+  EXPECT_EQ("ghijk", crypto_test_utils::GetValueForTag(message, 0x12345679));
 }
 
 TEST(CryptoFramerTest, ProcessInputWithThreeKeys) {
@@ -318,9 +318,9 @@ TEST(CryptoFramerTest, ProcessInputWithThreeKeys) {
   const CryptoHandshakeMessage& message = visitor.messages_[0];
   EXPECT_EQ(0xFFAA7733, message.tag());
   EXPECT_EQ(3u, message.tag_value_map().size());
-  EXPECT_EQ("abcdef", CryptoTestUtils::GetValueForTag(message, 0x12345678));
-  EXPECT_EQ("ghijk", CryptoTestUtils::GetValueForTag(message, 0x12345679));
-  EXPECT_EQ("lmnopqr", CryptoTestUtils::GetValueForTag(message, 0x1234567A));
+  EXPECT_EQ("abcdef", crypto_test_utils::GetValueForTag(message, 0x12345678));
+  EXPECT_EQ("ghijk", crypto_test_utils::GetValueForTag(message, 0x12345679));
+  EXPECT_EQ("lmnopqr", crypto_test_utils::GetValueForTag(message, 0x1234567A));
 }
 
 TEST(CryptoFramerTest, ProcessInputIncrementally) {
@@ -357,8 +357,8 @@ TEST(CryptoFramerTest, ProcessInputIncrementally) {
   const CryptoHandshakeMessage& message = visitor.messages_[0];
   EXPECT_EQ(0xFFAA7733, message.tag());
   EXPECT_EQ(2u, message.tag_value_map().size());
-  EXPECT_EQ("abcdef", CryptoTestUtils::GetValueForTag(message, 0x12345678));
-  EXPECT_EQ("ghijk", CryptoTestUtils::GetValueForTag(message, 0x12345679));
+  EXPECT_EQ("abcdef", crypto_test_utils::GetValueForTag(message, 0x12345678));
+  EXPECT_EQ("ghijk", crypto_test_utils::GetValueForTag(message, 0x12345679));
 }
 
 TEST(CryptoFramerTest, ProcessInputTagsOutOfOrder) {

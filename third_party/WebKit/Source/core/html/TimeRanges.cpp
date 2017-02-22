@@ -27,11 +27,10 @@
 
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/ExceptionCode.h"
 #include <math.h>
 
-using namespace blink;
+namespace blink {
 
 TimeRanges::TimeRanges(double start, double end) {
   add(start, end);
@@ -65,7 +64,7 @@ void TimeRanges::invert() {
   if (!m_ranges.size()) {
     inverted->add(negInf, posInf);
   } else {
-    double start = m_ranges.first().m_start;
+    double start = m_ranges.front().m_start;
     if (start != negInf)
       inverted->add(negInf, start);
 
@@ -173,7 +172,8 @@ void TimeRanges::add(double start, double end) {
 
 bool TimeRanges::contain(double time) const {
   for (unsigned n = 0; n < length(); n++) {
-    if (time >= start(n, IGNORE_EXCEPTION) && time <= end(n, IGNORE_EXCEPTION))
+    if (time >= start(n, IGNORE_EXCEPTION_FOR_TESTING) &&
+        time <= end(n, IGNORE_EXCEPTION_FOR_TESTING))
       return true;
   }
   return false;
@@ -185,8 +185,8 @@ double TimeRanges::nearest(double newPlaybackPosition,
   double bestMatch = 0;
   double bestDelta = std::numeric_limits<double>::infinity();
   for (unsigned ndx = 0; ndx < count; ndx++) {
-    double startTime = start(ndx, IGNORE_EXCEPTION);
-    double endTime = end(ndx, IGNORE_EXCEPTION);
+    double startTime = start(ndx, IGNORE_EXCEPTION_FOR_TESTING);
+    double endTime = end(ndx, IGNORE_EXCEPTION_FOR_TESTING);
     if (newPlaybackPosition >= startTime && newPlaybackPosition <= endTime)
       return newPlaybackPosition;
 
@@ -209,3 +209,5 @@ double TimeRanges::nearest(double newPlaybackPosition,
   }
   return bestMatch;
 }
+
+}  // namespace blink

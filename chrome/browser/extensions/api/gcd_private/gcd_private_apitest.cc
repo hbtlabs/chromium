@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "base/command_line.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/extensions/api/gcd_private/gcd_private_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/local_discovery/test_service_discovery_client.h"
@@ -114,6 +115,7 @@ class GcdPrivateAPITest : public ExtensionApiTest {
 class GcdPrivateWithMdnsAPITest : public GcdPrivateAPITest {
  public:
   void SetUpOnMainThread() override {
+    GcdPrivateAPITest::SetUpOnMainThread();
     test_service_discovery_client_ =
         new local_discovery::TestServiceDiscoveryClient();
     test_service_discovery_client_->Start();
@@ -121,7 +123,7 @@ class GcdPrivateWithMdnsAPITest : public GcdPrivateAPITest {
 
   void TearDownOnMainThread() override {
     test_service_discovery_client_ = nullptr;
-    ExtensionApiTest::TearDownOnMainThread();
+    GcdPrivateAPITest::TearDownOnMainThread();
   }
 
  protected:
@@ -140,7 +142,8 @@ class GcdPrivateWithMdnsAPITest : public GcdPrivateAPITest {
       test_service_discovery_client_;
 };
 
-IN_PROC_BROWSER_TEST_F(GcdPrivateWithMdnsAPITest, DeviceInfo) {
+// Flaky on Linux(dbg). https://crbug.com/689305
+IN_PROC_BROWSER_TEST_F(GcdPrivateWithMdnsAPITest, DISABLED_DeviceInfo) {
   test_service_discovery_client_->SimulateReceive(kAnnouncePacket,
                                                   sizeof(kAnnouncePacket));
   url_fetcher_factory_.SetFakeResponse(GURL("http://1.2.3.4:8888/privet/info"),

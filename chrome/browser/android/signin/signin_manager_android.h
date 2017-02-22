@@ -19,10 +19,6 @@
 
 class Profile;
 
-namespace policy {
-class CloudPolicyClient;
-}
-
 // Android wrapper of the SigninManager which provides access from the Java
 // layer. Note that on Android, there's only a single profile, and therefore
 // a single instance of this wrapper. The name of the Java class is
@@ -72,6 +68,10 @@ class SigninManagerAndroid : public SigninManagerBase::Observer {
                              const base::android::JavaParamRef<jobject>& obj);
 
   jboolean IsSigninAllowedByPolicy(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+
+  jboolean IsForceSigninEnabled(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
 

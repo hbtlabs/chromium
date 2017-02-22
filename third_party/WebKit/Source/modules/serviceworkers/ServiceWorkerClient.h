@@ -16,8 +16,8 @@
 
 namespace blink {
 
-class ExecutionContext;
 class ScriptPromiseResolver;
+class ScriptState;
 
 class MODULES_EXPORT ServiceWorkerClient
     : public GarbageCollectedFinalized<ServiceWorkerClient>,
@@ -38,12 +38,12 @@ class MODULES_EXPORT ServiceWorkerClient
   String url() const { return m_url; }
   String frameType() const;
   String id() const { return m_uuid; }
-  void postMessage(ExecutionContext*,
+  void postMessage(ScriptState*,
                    PassRefPtr<SerializedScriptValue> message,
                    const MessagePortArray&,
                    ExceptionState&);
 
-  static bool canTransferArrayBuffer() { return false; }
+  static bool canTransferArrayBuffersAndImageBitmaps() { return false; }
 
   DEFINE_INLINE_VIRTUAL_TRACE() {}
 

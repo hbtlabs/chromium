@@ -10,8 +10,6 @@
 namespace headless {
 
 class HeadlessBrowserImpl;
-class HeadlessBrowserMainParts;
-class HeadlessDevToolsManagerDelegate;
 
 class HeadlessContentBrowserClient : public content::ContentBrowserClient {
  public:
@@ -25,7 +23,17 @@ class HeadlessContentBrowserClient : public content::ContentBrowserClient {
                            content::WebPreferences* prefs) override;
   content::DevToolsManagerDelegate* GetDevToolsManagerDelegate() override;
   std::unique_ptr<base::Value> GetServiceManifestOverlay(
-      const std::string& name) override;
+      base::StringPiece name) override;
+  void GetQuotaSettings(
+      content::BrowserContext* context,
+      content::StoragePartition* partition,
+      const storage::OptionalQuotaSettingsCallback& callback) override;
+  void GetAdditionalMappedFilesForChildProcess(
+      const base::CommandLine& command_line,
+      int child_process_id,
+      content::FileDescriptorInfo* mappings) override;
+  void AppendExtraCommandLineSwitches(base::CommandLine* command_line,
+                                      int child_process_id) override;
 
  private:
   HeadlessBrowserImpl* browser_;  // Not owned.

@@ -10,6 +10,8 @@ import org.chromium.base.CollectionUtil;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 
+import org.chromium.chrome.browser.UrlConstants;
+
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -30,7 +32,9 @@ public class UrlUtilities {
      * URI schemes that are internal to Chrome.
      */
     private static final HashSet<String> INTERNAL_SCHEMES = CollectionUtil.newHashSet(
-            "chrome", "chrome-native", "about");
+            UrlConstants.CHROME_SCHEME,
+            UrlConstants.CHROME_NATIVE_SCHEME,
+            UrlConstants.ABOUT_SCHEME);
 
     // Patterns used in validateIntentUrl.
     private static final Pattern DNS_HOSTNAME_PATTERN =
@@ -41,6 +45,27 @@ public class UrlUtilities {
             Pattern.compile("^[\\w\\./-]*$");
     private static final Pattern URL_SCHEME_PATTERN =
             Pattern.compile("^[a-zA-Z]+$");
+
+    private static final String TEL_URL_PREFIX = "tel:";
+
+    /**
+     * @param uri A URI.
+     *
+     * @return True if the URI's scheme is phone number scheme.
+     */
+    public static boolean isTelScheme(String uri) {
+        return uri != null && uri.startsWith(TEL_URL_PREFIX);
+    }
+
+    /**
+     * @param uri A URI.
+     *
+     * @return The string after tel: scheme. Normally, it should be a phone number, but isn't
+     *         guaranteed.
+     */
+    public static String getTelNumber(String uri) {
+        return uri.split(":")[1];
+    }
 
     /**
      * @param uri A URI.
@@ -127,6 +152,12 @@ public class UrlUtilities {
     public static String getDomainAndRegistry(String uri, boolean includePrivateRegistries) {
         if (TextUtils.isEmpty(uri)) return uri;
         return nativeGetDomainAndRegistry(uri, includePrivateRegistries);
+    }
+
+    /** Returns whether a URL is within another URL's scope. */
+    @VisibleForTesting
+    public static boolean isUrlWithinScope(String url, String scopeUrl) {
+        return nativeIsUrlWithinScope(url, scopeUrl);
     }
 
     /** @return whether two URLs match, ignoring the #fragment. */
@@ -301,6 +332,7 @@ public class UrlUtilities {
             boolean includePrivateRegistries);
     public static native boolean nativeIsGoogleSearchUrl(String url);
     public static native boolean nativeIsGoogleHomePageUrl(String url);
+    private static native boolean nativeIsUrlWithinScope(String url, String scopeUrl);
     private static native boolean nativeUrlsMatchIgnoringFragments(String url, String url2);
     private static native boolean nativeUrlsFragmentsDiffer(String url, String url2);
 }

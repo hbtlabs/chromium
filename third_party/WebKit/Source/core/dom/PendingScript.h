@@ -28,17 +28,31 @@
 
 #include "bindings/core/v8/ScriptStreamer.h"
 #include "core/CoreExport.h"
-#include "core/fetch/ResourceOwner.h"
 #include "core/loader/resource/ScriptResource.h"
 #include "platform/MemoryCoordinator.h"
 #include "platform/heap/Handle.h"
+#include "platform/loader/fetch/ResourceOwner.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/text/TextPosition.h"
 
 namespace blink {
 
 class Element;
+class PendingScript;
 class ScriptSourceCode;
+
+class CORE_EXPORT PendingScriptClient : public GarbageCollectedMixin {
+ public:
+  virtual ~PendingScriptClient() {}
+
+  // Invoked when the pending script has finished loading. This could be during
+  // |watchForLoad| (if the pending script was already ready), or when the
+  // resource loads (if script streaming is not occurring), or when script
+  // streaming finishes.
+  virtual void pendingScriptFinished(PendingScript*) = 0;
+
+  DEFINE_INLINE_VIRTUAL_TRACE() {}
+};
 
 // A container for an external script which may be loaded and executed.
 //
@@ -56,13 +70,16 @@ class CORE_EXPORT PendingScript final
   WTF_MAKE_NONCOPYABLE(PendingScript);
 
  public:
+  // For script from an external file.
   static PendingScript* create(Element*, ScriptResource*);
+  // For inline script.
+  static PendingScript* create(Element*, const TextPosition&);
+
+  static PendingScript* createForTesting(ScriptResource*);
+
   ~PendingScript() override;
 
   TextPosition startingPosition() const { return m_startingPosition; }
-  void setStartingPosition(const TextPosition& position) {
-    m_startingPosition = position;
-  }
   void markParserBlockingLoadStartTime();
   // Returns the time the load of this script started blocking the parser, or
   // zero if this script hasn't yet blocked the parser, in
@@ -71,18 +88,10 @@ class CORE_EXPORT PendingScript final
     return m_parserBlockingLoadStartTime;
   }
 
-  void watchForLoad(ScriptResourceClient*);
+  void watchForLoad(PendingScriptClient*);
   void stopWatchingForLoad();
 
-  Element* element() const { return m_element.get(); }
-  void setElement(Element*);
-  Element* releaseElementAndClear();
-
-  void setScriptResource(ScriptResource*);
-
-  void notifyFinished(Resource*) override;
-  String debugName() const override { return "PendingScript"; }
-  void notifyAppendData(ScriptResource*) override;
+  Element* element() const;
 
   DECLARE_TRACE();
 
@@ -98,19 +107,36 @@ class CORE_EXPORT PendingScript final
   void dispose();
 
  private:
-  PendingScript(Element*, ScriptResource*);
+  PendingScript(Element*,
+                ScriptResource*,
+                const TextPosition&,
+                bool isForTesting = false);
   PendingScript() = delete;
 
-  void onMemoryStateChange(MemoryState) override;
+  // ScriptResourceClient
+  void notifyFinished(Resource*) override;
+  String debugName() const override { return "PendingScript"; }
+  void notifyAppendData(ScriptResource*) override;
+
+  // MemoryCoordinatorClient
+  void onPurgeMemory() override;
 
   bool m_watchingForLoad;
+
+  // |m_element| must points to the corresponding ScriptLoader's element and
+  // thus must be non-null before dispose() is called (except for unit tests).
   Member<Element> m_element;
+
   TextPosition m_startingPosition;  // Only used for inline script tags.
   bool m_integrityFailure;
   double m_parserBlockingLoadStartTime;
 
   Member<ScriptStreamer> m_streamer;
-  Member<ScriptResourceClient> m_client;
+  Member<PendingScriptClient> m_client;
+
+  // This flag is used to skip non-null checks of |m_element| in unit tests,
+  // because |m_element| can be null in unit tests.
+  const bool m_isForTesting;
 };
 
 }  // namespace blink

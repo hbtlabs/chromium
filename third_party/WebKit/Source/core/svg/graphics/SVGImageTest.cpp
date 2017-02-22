@@ -8,6 +8,8 @@
 #include "platform/SharedBuffer.h"
 #include "platform/Timer.h"
 #include "platform/geometry/FloatRect.h"
+#include "platform/graphics/paint/PaintCanvas.h"
+#include "platform/graphics/paint/PaintFlags.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -27,12 +29,14 @@ class SVGImageTest : public ::testing::Test {
 
   void pumpFrame() {
     Image* image = m_image.get();
-    sk_sp<SkCanvas> nullCanvas(SkCreateNullCanvas());
-    SkPaint paint;
+    std::unique_ptr<SkCanvas> nullCanvas = SkMakeNullCanvas();
+    PaintCanvasPassThrough canvas(nullCanvas.get());
+    PaintFlags flags;
     FloatRect dummyRect(0, 0, 100, 100);
-    image->draw(nullCanvas.get(), paint, dummyRect, dummyRect,
+    image->draw(&canvas, flags, dummyRect, dummyRect,
                 DoNotRespectImageOrientation,
-                Image::DoNotClampImageToSourceRect);
+                Image::DoNotClampImageToSourceRect,
+                ColorBehavior::transformToGlobalTarget());
   }
 
  private:
@@ -45,7 +49,6 @@ class SVGImageTest : public ::testing::Test {
     PauseControlImageObserver(bool shouldPause) : m_shouldPause(shouldPause) {}
 
     void decodedSizeChangedTo(const Image*, size_t newSize) override {}
-    void didDraw(const Image*) override {}
 
     bool shouldPauseAnimation(const Image*) override { return m_shouldPause; }
     void animationAdvanced(const Image*) override {}
@@ -85,7 +88,7 @@ TEST_F(SVGImageTest, TimelineSuspendAndResume) {
   SVGImageChromeClient& chromeClient = image().chromeClientForTesting();
   Timer<SVGImageChromeClient>* timer = new Timer<SVGImageChromeClient>(
       &chromeClient, &SVGImageChromeClient::animationTimerFired);
-  chromeClient.setTimer(wrapUnique(timer));
+  chromeClient.setTimer(WTF::wrapUnique(timer));
 
   // Simulate a draw. Cause a frame (timer) to be scheduled.
   pumpFrame();
@@ -113,7 +116,7 @@ TEST_F(SVGImageTest, ResetAnimation) {
   SVGImageChromeClient& chromeClient = image().chromeClientForTesting();
   Timer<SVGImageChromeClient>* timer = new Timer<SVGImageChromeClient>(
       &chromeClient, &SVGImageChromeClient::animationTimerFired);
-  chromeClient.setTimer(wrapUnique(timer));
+  chromeClient.setTimer(WTF::wrapUnique(timer));
 
   // Simulate a draw. Cause a frame (timer) to be scheduled.
   pumpFrame();

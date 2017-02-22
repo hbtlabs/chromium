@@ -6,21 +6,20 @@
 #define NGInlineLayoutAlgorithm_h
 
 #include "core/CoreExport.h"
-#include "core/layout/ng/ng_inline_box.h"
+#include "core/layout/ng/ng_break_token.h"
 #include "core/layout/ng/ng_layout_algorithm.h"
-#include "wtf/RefPtr.h"
+#include "platform/heap/Handle.h"
 
 namespace blink {
 
-class ComputedStyle;
 class NGConstraintSpace;
-class NGPhysicalFragment;
-class NGBreakToken;
+class NGInlineNode;
+class NGLineBuilder;
 
-// A class for text layout. This takes a NGInlineBox which consists only
+// A class for text layout. This takes a NGInlineNode which consists only
 // non-atomic inlines and produces NGTextFragments.
 //
-// Unlike other layout algorithms this takes a NGInlineBox as its input instead
+// Unlike other layout algorithms this takes a NGInlineNode as its input instead
 // of the ComputedStyle as it operates over multiple inlines with different
 // style.
 class CORE_EXPORT NGTextLayoutAlgorithm : public NGLayoutAlgorithm {
@@ -29,20 +28,19 @@ class CORE_EXPORT NGTextLayoutAlgorithm : public NGLayoutAlgorithm {
   // @param inline_box The inline box to produce fragments from.
   // @param space The constraint space which the algorithm should generate a
   //              fragments within.
-  NGTextLayoutAlgorithm(NGInlineBox* inline_box,
+  NGTextLayoutAlgorithm(NGInlineNode* inline_box,
                         NGConstraintSpace* space,
                         NGBreakToken* break_token = nullptr);
 
-  NGLayoutStatus Layout(NGFragmentBase*,
-                        NGPhysicalFragmentBase**,
-                        NGLayoutAlgorithm**) override;
-
-  DECLARE_VIRTUAL_TRACE();
+  RefPtr<NGPhysicalFragment> Layout() override;
+  void LayoutInline(NGLineBuilder*);
 
  private:
-  Member<NGInlineBox> inline_box_;
-  Member<NGConstraintSpace> constraint_space_;
-  Member<NGBreakToken> break_token_;
+  Persistent<NGInlineNode> inline_box_;
+  Persistent<NGConstraintSpace> constraint_space_;
+  Persistent<NGBreakToken> break_token_;
+
+  friend class NGInlineNodeTest;
 };
 
 }  // namespace blink

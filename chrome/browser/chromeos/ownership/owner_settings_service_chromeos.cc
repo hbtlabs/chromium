@@ -16,6 +16,7 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_checker.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
@@ -59,7 +60,7 @@ bool IsOwnerInTests(const std::string& user_id) {
     return false;
   }
   const base::Value* value = CrosSettings::Get()->GetPref(kDeviceOwner);
-  if (!value || value->GetType() != base::Value::TYPE_STRING)
+  if (!value || value->GetType() != base::Value::Type::STRING)
     return false;
   return static_cast<const base::StringValue*>(value)->GetString() == user_id;
 }
@@ -251,7 +252,7 @@ bool OwnerSettingsServiceChromeOS::Set(const std::string& setting,
   if (!IsOwner() && !IsOwnerInTests(user_id_))
     return false;
 
-  pending_changes_.add(setting, base::WrapUnique(value.DeepCopy()));
+  pending_changes_[setting] = base::WrapUnique(value.DeepCopy());
 
   em::ChromeDeviceSettingsProto settings;
   if (tentative_settings_.get()) {
@@ -275,7 +276,7 @@ bool OwnerSettingsServiceChromeOS::AppendToList(const std::string& setting,
                                                 const base::Value& value) {
   DCHECK(thread_checker_.CalledOnValidThread());
   const base::Value* old_value = CrosSettings::Get()->GetPref(setting);
-  if (old_value && !old_value->IsType(base::Value::TYPE_LIST))
+  if (old_value && !old_value->IsType(base::Value::Type::LIST))
     return false;
   std::unique_ptr<base::ListValue> new_value(
       old_value ? static_cast<const base::ListValue*>(old_value)->DeepCopy()
@@ -288,7 +289,7 @@ bool OwnerSettingsServiceChromeOS::RemoveFromList(const std::string& setting,
                                                   const base::Value& value) {
   DCHECK(thread_checker_.CalledOnValidThread());
   const base::Value* old_value = CrosSettings::Get()->GetPref(setting);
-  if (old_value && !old_value->IsType(base::Value::TYPE_LIST))
+  if (old_value && !old_value->IsType(base::Value::Type::LIST))
     return false;
   std::unique_ptr<base::ListValue> new_value(
       old_value ? static_cast<const base::ListValue*>(old_value)->DeepCopy()
@@ -691,7 +692,7 @@ void OwnerSettingsServiceChromeOS::StorePendingChanges() {
   }
 
   for (const auto& change : pending_changes_)
-    UpdateDeviceSettings(change.first, *change.second, settings);
+    UpdateDeviceSettings(change.first, *change.second.get(), settings);
   pending_changes_.clear();
 
   std::unique_ptr<em::PolicyData> policy =

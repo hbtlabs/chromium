@@ -36,16 +36,12 @@ namespace blink {
 
 class Element;
 
-typedef int ExceptionCode;
-
 class ClassList final : public DOMTokenList {
  public:
   static ClassList* create(Element* element) { return new ClassList(element); }
 
   unsigned length() const override;
   const AtomicString item(unsigned index) const override;
-
-  Element* element() override { return m_element; }
 
   void clearValueForQuirksMode() { m_classNamesForQuirksMode = nullptr; }
 

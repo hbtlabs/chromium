@@ -9,11 +9,11 @@
 
 #include <memory>
 
-#include "base/mac/scoped_nsobject.h"
+#import "base/mac/scoped_nsobject.h"
 #include "base/strings/string16.h"
 #include "ios/web/navigation/navigation_item_facade_delegate.h"
 #include "ios/web/public/favicon_status.h"
-#include "ios/web/public/navigation_item.h"
+#import "ios/web/public/navigation_item.h"
 #include "ios/web/public/referrer.h"
 #include "ios/web/public/ssl_status.h"
 #include "url/gurl.h"
@@ -21,6 +21,8 @@
 namespace web {
 
 class NavigationItemFacadeDelegate;
+class NavigationItemStorageBuilder;
+enum class NavigationInitiationType;
 
 // Implementation of NavigationItem.
 class NavigationItemImpl : public web::NavigationItem {
@@ -42,6 +44,8 @@ class NavigationItemImpl : public web::NavigationItem {
 
   // NavigationItem implementation:
   int GetUniqueID() const override;
+  void SetOriginalRequestURL(const GURL& url) override;
+  const GURL& GetOriginalRequestURL() const override;
   void SetURL(const GURL& url) override;
   const GURL& GetURL() const override;
   void SetReferrer(const web::Referrer& referrer) override;
@@ -91,10 +95,16 @@ class NavigationItemImpl : public web::NavigationItem {
   void SetIsCreatedFromHashChange(bool hash_change);
   bool IsCreatedFromHashChange() const;
 
-  // Whether or not to bypass showing the resubmit data confirmation when
-  // loading a POST request. Set to YES for browser-generated POST requests.
-  void SetShouldSkipResubmitDataConfirmation(bool skip);
-  bool ShouldSkipResubmitDataConfirmation() const;
+  // The initiation type of this pending navigation. Resets to user-initiated
+  // after commit.
+  void SetNavigationInitiationType(
+      web::NavigationInitiationType navigation_initiation_type);
+  web::NavigationInitiationType NavigationInitiationType() const;
+
+  // Whether or not to bypass showing the repost form confirmation when loading
+  // a POST request. Set to YES for browser-generated POST requests.
+  void SetShouldSkipRepostFormConfirmation(bool skip);
+  bool ShouldSkipRepostFormConfirmation() const;
 
   // Data submitted with a POST request, persisted for resubmits.
   void SetPostData(NSData* post_data);
@@ -110,15 +120,13 @@ class NavigationItemImpl : public web::NavigationItem {
   // non-persisted state, as documented on the members below.
   void ResetForCommit();
 
-  // Whether this (pending) navigation is renderer-initiated.  Resets to false
-  // for all types of navigations after commit.
-  void set_is_renderer_initiated(bool is_renderer_initiated) {
-    is_renderer_initiated_ = is_renderer_initiated;
-  }
-  bool is_renderer_initiated() const { return is_renderer_initiated_; }
-
  private:
+  // The NavigationManItemStorageBuilder functions require access to
+  // private variables of NavigationItemImpl.
+  friend NavigationItemStorageBuilder;
+
   int unique_id_;
+  GURL original_request_url_;
   GURL url_;
   Referrer referrer_;
   GURL virtual_url_;
@@ -135,13 +143,13 @@ class NavigationItemImpl : public web::NavigationItem {
   bool is_created_from_push_state_;
   bool has_state_been_replaced_;
   bool is_created_from_hash_change_;
-  bool should_skip_resubmit_data_confirmation_;
+  bool should_skip_repost_form_confirmation_;
   base::scoped_nsobject<NSData> post_data_;
 
-  // Whether the item, while loading, was created for a renderer-initiated
-  // navigation.  This dictates whether the URL should be displayed before the
-  // navigation commits.  It is cleared in |ResetForCommit| and not persisted.
-  bool is_renderer_initiated_;
+  // The navigation initiation type of the item.  This decides whether the URL
+  // should be displayed before the navigation commits.  It is cleared in
+  // |ResetForCommit| and not persisted.
+  web::NavigationInitiationType navigation_initiation_type_;
 
   // Whether the navigation contains unsafe resources.
   bool is_unsafe_;

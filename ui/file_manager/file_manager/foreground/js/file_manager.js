@@ -277,12 +277,6 @@ function FileManager() {
    */
   this.quickViewController_ = null;
 
-  /**
-   * @type {MetadataBoxController}
-   * @private
-   */
-  this.metadataBoxController_ = null;
-
   // --------------------------------------------------------------------------
   // DOM elements.
 
@@ -292,6 +286,12 @@ function FileManager() {
    * @private
    */
   this.backgroundPage_ = null;
+
+  /**
+   * @type {FileBrowserBackgroundImpl}
+   * @private
+   */
+  this.fileBrowserBackground_ = null;
 
   /**
    * The root DOM element of this app.
@@ -466,9 +466,13 @@ FileManager.prototype = /** @struct */ {
    * @private
    */
   FileManager.prototype.startInitSettings_ = function() {
+    metrics.startInterval('Load.InitSettings');
     this.appStateController_ = new AppStateController(this.dialogType);
     return new Promise(function(resolve) {
-      this.appStateController_.loadInitialViewOptions().then(resolve);
+      this.appStateController_.loadInitialViewOptions().then(function() {
+        metrics.recordInterval('Load.InitSettings');
+        resolve();
+      });
     }.bind(this));
   };
 
@@ -536,32 +540,22 @@ FileManager.prototype = /** @struct */ {
     this.actionsController_ = new ActionsController(
         this.volumeManager_, assert(this.metadataModel_), this.directoryModel_,
         assert(this.folderShortcutsModel_),
-        this.backgroundPage_.background.driveSyncHandler,
+        this.fileBrowserBackground_.driveSyncHandler,
         this.selectionHandler_, assert(this.ui_));
 
     this.quickViewModel_ = new QuickViewModel();
-    /**@private {!FilesQuickView} */
-    var quickView = /** @type {!FilesQuickView} */
-        (queryRequiredElement('#quick-view'));
     var fileListSelectionModel = /** @type {!cr.ui.ListSelectionModel} */ (
         this.directoryModel_.getFileListSelection());
-    chrome.commandLinePrivate.hasSwitch(
-        'disable-files-quick-view', function(disabled) {
-          if (!disabled) {
-            this.quickViewUma_ =
-                new QuickViewUma(assert(this.volumeManager_));
-            this.quickViewController_ = new QuickViewController(
-                quickView, assert(this.metadataModel_),
-                assert(this.selectionHandler_),
-                assert(this.ui_.listContainer), assert(this.quickViewModel_),
-                assert(this.taskController_),
-                fileListSelectionModel,
-                assert(this.quickViewUma_));
-            this.metadataBoxController_ = new MetadataBoxController(
-                this.metadataModel_, quickView.getFilesMetadataBox(),
-                quickView, this.quickViewModel_, this.fileMetadataFormatter_);
-          }
-        }.bind(this));
+    this.quickViewUma_ =
+        new QuickViewUma(assert(this.volumeManager_), assert(this.dialogType));
+    var metadataBoxController = new MetadataBoxController(
+        this.metadataModel_, this.quickViewModel_, this.fileMetadataFormatter_);
+    this.quickViewController_ = new QuickViewController(
+        assert(this.metadataModel_), assert(this.selectionHandler_),
+        assert(this.ui_.listContainer), assert(this.quickViewModel_),
+        assert(this.taskController_), fileListSelectionModel,
+        assert(this.quickViewUma_), metadataBoxController, this.dialogType,
+        assert(this.volumeManager_));
 
     if (this.dialogType === DialogType.FULL_PAGE) {
       importer.importEnabled().then(
@@ -626,7 +620,7 @@ FileManager.prototype = /** @struct */ {
         assert(this.ui_.listContainer),
         assert(this.ui_.directoryTree),
         this.ui_.multiProfileShareDialog,
-        assert(this.backgroundPage_.background.progressCenter),
+        assert(this.fileBrowserBackground_.progressCenter),
         assert(this.fileOperationManager_),
         assert(this.metadataModel_),
         assert(this.thumbnailModel_),
@@ -715,16 +709,20 @@ FileManager.prototype = /** @struct */ {
     this.dialogDom_ = dialogDom;
     this.document_ = this.dialogDom_.ownerDocument;
 
+    metrics.startInterval('Load.InitDocuments');
     return Promise.all([
       this.initBackgroundPagePromise_,
       window.importElementsPromise
     ]).then(function() {
+      metrics.recordInterval('Load.InitDocuments');
+      metrics.startInterval('Load.InitUI');
       this.initEssentialUI_();
       this.initAdditionalUI_();
       return this.initSettingsPromise_;
     }.bind(this)).then(function() {
       this.initFileSystemUI_();
       this.initUIFocus_();
+      metrics.recordInterval('Load.InitUI');
     }.bind(this));
   };
 
@@ -770,23 +768,28 @@ FileManager.prototype = /** @struct */ {
    */
   FileManager.prototype.startInitBackgroundPage_ = function() {
     return new Promise(function(resolve) {
+      metrics.startInterval('Load.InitBackgroundPage');
       chrome.runtime.getBackgroundPage(/** @type {function(Window=)} */ (
           function(opt_backgroundPage) {
             assert(opt_backgroundPage);
             this.backgroundPage_ =
                 /** @type {!BackgroundWindow} */ (opt_backgroundPage);
-            this.backgroundPage_.background.ready(function() {
-              loadTimeData.data = this.backgroundPage_.background.stringData;
+            this.fileBrowserBackground_ =
+                /** @type {!FileBrowserBackgroundImpl} */ (
+                    this.backgroundPage_.background);
+            this.fileBrowserBackground_.ready(function() {
+              loadTimeData.data = this.fileBrowserBackground_.stringData;
               if (util.runningInBrowser())
                 this.backgroundPage_.registerDialog(window);
               this.fileOperationManager_ =
-                  this.backgroundPage_.background.fileOperationManager;
+                  this.fileBrowserBackground_.fileOperationManager;
               this.mediaImportHandler_ =
-                  this.backgroundPage_.background.mediaImportHandler;
+                  this.fileBrowserBackground_.mediaImportHandler;
               this.mediaScanner_ =
-                  this.backgroundPage_.background.mediaScanner;
+                  this.fileBrowserBackground_.mediaScanner;
               this.historyLoader_ =
-                  this.backgroundPage_.background.historyLoader;
+                  this.fileBrowserBackground_.historyLoader;
+              metrics.recordInterval('Load.InitBackgroundPage');
               resolve();
             }.bind(this));
           }.bind(this)));
@@ -799,9 +802,9 @@ FileManager.prototype = /** @struct */ {
    */
   FileManager.prototype.initVolumeManager_ = function() {
     var allowedPaths = this.launchParams_.allowedPaths;
-    // Files.app native implementation create snapshot files for non-native
-    // files. But it does not work for folders (e.g., dialog for loading
-    // unpacked extensions).
+    // The native implementation of the Files app creates snapshot files for
+    // non-native files. But it does not work for folders (e.g., dialog for
+    // loading unpacked extensions).
     if (allowedPaths === AllowedPaths.NATIVE_PATH &&
         !DialogType.isFolderDialog(this.launchParams_.type)) {
       if (this.launchParams_.type == DialogType.SELECT_SAVEAS_FILE) {
@@ -812,23 +815,26 @@ FileManager.prototype = /** @struct */ {
       }
     }
 
+    var writableOnly =
+        this.launchParams_.type === DialogType.SELECT_SAVEAS_FILE;
+
     // VolumeManagerWrapper hides virtual file system related event and data
     // even depends on the value of |supportVirtualPath|. If it is
     // VirtualPathSupport.NO_VIRTUAL_PATH, it hides Drive even if Drive is
     // enabled on preference.
-    // In other words, even if Drive is disabled on preference but Files.app
+    // In other words, even if Drive is disabled on preference but the Files app
     // should show Drive when it is re-enabled, then the value should be set to
     // true.
     // Note that the Drive enabling preference change is listened by
     // DriveIntegrationService, so here we don't need to take care about it.
     this.volumeManager_ = new VolumeManagerWrapper(
-        allowedPaths, this.backgroundPage_);
+        allowedPaths, writableOnly, this.backgroundPage_);
   };
 
   /**
-   * One time initialization of the Files.app's essential UI elements. These
-   * elements will be shown to the user. Only visible elements should be
-   * initialized here. Any heavy operation should be avoided. Files.app's
+   * One time initialization of the essential UI elements in the Files app.
+   * These elements will be shown to the user. Only visible elements should be
+   * initialized here. Any heavy operation should be avoided. The Files app's
    * window is shown at the end of this routine.
    * @private
    */
@@ -890,29 +896,17 @@ FileManager.prototype = /** @struct */ {
         this.volumeManager_,
         this.historyLoader_);
 
-    var singlePanel = queryRequiredElement('#single-file-details', dom);
-    SingleFileDetailsPanel.decorate(
-        assertInstanceof(singlePanel, HTMLDivElement),
-        this.metadataModel_);
-
-    var multiPanel = queryRequiredElement('#multi-file-details', dom);
-    MultiFileDetailsPanel.decorate(
-        assertInstanceof(multiPanel, HTMLDivElement),
-        this.metadataModel_);
-
     this.addHistoryObserver_();
 
     this.ui_.initAdditionalUI(
         assertInstanceof(table, FileTable),
         assertInstanceof(grid, FileGrid),
-        assertInstanceof(singlePanel, SingleFileDetailsPanel),
-        assertInstanceof(multiPanel, MultiFileDetailsPanel),
         new LocationLine(
             queryRequiredElement('#location-breadcrumbs', dom),
             this.volumeManager_));
 
     // Handle UI events.
-    this.backgroundPage_.background.progressCenter.addPanel(
+    this.fileBrowserBackground_.progressCenter.addPanel(
         this.ui_.progressCenterPanel);
 
     util.addIsFocusedMethod();
@@ -1043,7 +1037,6 @@ FileManager.prototype = /** @struct */ {
     // Create metadata update controller.
     this.metadataUpdateController_ = new MetadataUpdateController(
         this.ui_.listContainer,
-        assert(this.ui_.detailsContainer),
         this.directoryModel_,
         this.metadataModel_,
         this.fileMetadataFormatter_);
@@ -1439,14 +1432,14 @@ FileManager.prototype = /** @struct */ {
            i++) {
         var taskId = this.fileTransferController_.pendingTaskIds[i];
         var item =
-            this.backgroundPage_.background.progressCenter.getItemById(taskId);
+            this.fileBrowserBackground_.progressCenter.getItemById(taskId);
         item.message = '';
         item.state = ProgressItemState.CANCELED;
-        this.backgroundPage_.background.progressCenter.updateItem(item);
+        this.fileBrowserBackground_.progressCenter.updateItem(item);
       }
     }
     if (this.ui_ && this.ui_.progressCenterPanel) {
-      this.backgroundPage_.background.progressCenter.removePanel(
+      this.fileBrowserBackground_.progressCenter.removePanel(
           this.ui_.progressCenterPanel);
     }
   };

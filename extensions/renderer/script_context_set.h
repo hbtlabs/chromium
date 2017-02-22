@@ -20,10 +20,6 @@
 
 class GURL;
 
-namespace base {
-class ListValue;
-}
-
 namespace blink {
 class WebLocalFrame;
 class WebSecurityOrigin;
@@ -59,7 +55,6 @@ class ScriptContextSet {
   // Returns a weak reference to the new ScriptContext.
   ScriptContext* Register(blink::WebLocalFrame* frame,
                           const v8::Local<v8::Context>& v8_context,
-                          int extension_group,
                           int world_id);
 
   // If the specified context is contained in this set, remove it, then delete
@@ -80,6 +75,12 @@ class ScriptContextSet {
 
   // Returns the ScriptContext corresponding to the V8 context that created the
   // given |object|.
+  // Note: The provided |object| may belong to a v8::Context in another frame,
+  // as can happen when a parent frame uses an object of an embedded iframe.
+  // In this case, there may be no associated ScriptContext, since the child
+  // frame can be hosted in another process. Thus, callers of this need to
+  // null-check the result (and should also always check whether or not the
+  // context has access to the other context).
   static ScriptContext* GetContextByObject(const v8::Local<v8::Object>& object);
 
   // Synchronously runs |callback| with each ScriptContext that belongs to
@@ -125,7 +126,7 @@ class ScriptContextSet {
   // Returns the Feature::Context type of context for a JavaScript context.
   Feature::Context ClassifyJavaScriptContext(
       const Extension* extension,
-      int extension_group,
+      int world_id,
       const GURL& url,
       const blink::WebSecurityOrigin& origin);
 

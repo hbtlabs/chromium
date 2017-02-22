@@ -31,7 +31,6 @@
 #include "modules/indexeddb/InspectorIndexedDBAgent.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8PerIsolateData.h"
@@ -78,6 +77,8 @@ typedef blink::protocol::IndexedDB::Backend::RequestDataCallback
     RequestDataCallback;
 typedef blink::protocol::IndexedDB::Backend::ClearObjectStoreCallback
     ClearObjectStoreCallback;
+typedef blink::protocol::IndexedDB::Backend::DeleteDatabaseCallback
+    DeleteDatabaseCallback;
 
 namespace blink {
 
@@ -125,7 +126,7 @@ class GetDatabaseNamesCallback final : public EventListener {
     std::unique_ptr<protocol::Array<String>> databaseNames =
         protocol::Array<String>::create();
     for (size_t i = 0; i < databaseNamesList->length(); ++i)
-      databaseNames->addItem(databaseNamesList->anonymousIndexedGetter(i));
+      databaseNames->addItem(databaseNamesList->item(i));
     m_requestCallback->sendSuccess(std::move(databaseNames));
   }
 
@@ -139,6 +140,43 @@ class GetDatabaseNamesCallback final : public EventListener {
         m_requestCallback(std::move(requestCallback)),
         m_securityOrigin(securityOrigin) {}
   std::unique_ptr<RequestDatabaseNamesCallback> m_requestCallback;
+  String m_securityOrigin;
+};
+
+class DeleteCallback final : public EventListener {
+  WTF_MAKE_NONCOPYABLE(DeleteCallback);
+
+ public:
+  static DeleteCallback* create(
+      std::unique_ptr<DeleteDatabaseCallback> requestCallback,
+      const String& securityOrigin) {
+    return new DeleteCallback(std::move(requestCallback), securityOrigin);
+  }
+
+  ~DeleteCallback() override {}
+
+  bool operator==(const EventListener& other) const override {
+    return this == &other;
+  }
+
+  void handleEvent(ExecutionContext*, Event* event) override {
+    if (event->type() != EventTypeNames::success) {
+      m_requestCallback->sendFailure(
+          Response::Error("Failed to delete database."));
+      return;
+    }
+    m_requestCallback->sendSuccess();
+  }
+
+  DEFINE_INLINE_VIRTUAL_TRACE() { EventListener::trace(visitor); }
+
+ private:
+  DeleteCallback(std::unique_ptr<DeleteDatabaseCallback> requestCallback,
+                 const String& securityOrigin)
+      : EventListener(EventListener::CPPEventListenerType),
+        m_requestCallback(std::move(requestCallback)),
+        m_securityOrigin(securityOrigin) {}
+  std::unique_ptr<DeleteDatabaseCallback> m_requestCallback;
   String m_securityOrigin;
 };
 
@@ -161,7 +199,7 @@ class ExecutableWithDatabase
         OpenDatabaseCallback<RequestCallback>::create(this);
     UpgradeDatabaseCallback<RequestCallback>* upgradeCallback =
         UpgradeDatabaseCallback<RequestCallback>::create(this);
-    TrackExceptionState exceptionState;
+    DummyExceptionStateForTesting exceptionState;
     IDBOpenDBRequest* idbOpenDBRequest =
         idbFactory->open(getScriptState(), databaseName, exceptionState);
     if (exceptionState.hadException()) {
@@ -276,7 +314,7 @@ static IDBTransaction* transactionForDatabase(
     IDBDatabase* idbDatabase,
     const String& objectStoreName,
     const String& mode = IndexedDBNames::readonly) {
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   StringOrStringSequenceOrDOMStringList scope;
   scope.setString(objectStoreName);
   IDBTransaction* idbTransaction =
@@ -289,7 +327,7 @@ static IDBTransaction* transactionForDatabase(
 static IDBObjectStore* objectStoreForTransaction(
     IDBTransaction* idbTransaction,
     const String& objectStoreName) {
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   IDBObjectStore* idbObjectStore =
       idbTransaction->objectStore(objectStoreName, exceptionState);
   if (exceptionState.hadException())
@@ -299,7 +337,7 @@ static IDBObjectStore* objectStoreForTransaction(
 
 static IDBIndex* indexForObjectStore(IDBObjectStore* idbObjectStore,
                                      const String& indexName) {
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   IDBIndex* idbIndex = idbObjectStore->index(indexName, exceptionState);
   if (exceptionState.hadException())
     return nullptr;
@@ -434,7 +472,7 @@ static IDBKey* idbKeyFromInspectorObject(protocol::IndexedDB::Key* key) {
     IDBKey::KeyArray keyArray;
     auto array = key->getArray(nullptr);
     for (size_t i = 0; array && i < array->length(); ++i)
-      keyArray.append(idbKeyFromInspectorObject(array->get(i)));
+      keyArray.push_back(idbKeyFromInspectorObject(array->get(i)));
     idbKey = IDBKey::createArray(keyArray);
   } else {
     return nullptr;
@@ -505,7 +543,7 @@ class OpenCursorCallback final : public EventListener {
     IDBCursorWithValue* idbCursor = requestResult->idbCursorWithValue();
 
     if (m_skipCount) {
-      TrackExceptionState exceptionState;
+      DummyExceptionStateForTesting exceptionState;
       idbCursor->advance(m_skipCount, exceptionState);
       if (exceptionState.hadException()) {
         m_requestCallback->sendFailure(
@@ -522,7 +560,7 @@ class OpenCursorCallback final : public EventListener {
 
     // Continue cursor before making injected script calls, otherwise
     // transaction might be finished.
-    TrackExceptionState exceptionState;
+    DummyExceptionStateForTesting exceptionState;
     idbCursor->continueFunction(nullptr, nullptr, exceptionState);
     if (exceptionState.hadException()) {
       m_requestCallback->sendFailure(
@@ -735,7 +773,7 @@ void InspectorIndexedDBAgent::requestDatabaseNames(
     return;
   }
   ScriptState::Scope scope(scriptState);
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   IDBRequest* idbRequest =
       idbFactory->getDatabaseNames(scriptState, exceptionState);
   if (exceptionState.hadException()) {
@@ -896,7 +934,7 @@ class ClearObjectStore final
       return;
     }
 
-    TrackExceptionState exceptionState;
+    DummyExceptionStateForTesting exceptionState;
     idbObjectStore->clear(getScriptState(), exceptionState);
     ASSERT(!exceptionState.hadException());
     if (exceptionState.hadException()) {
@@ -950,6 +988,44 @@ void InspectorIndexedDBAgent::clearObjectStore(
       scriptState, objectStoreName, std::move(requestCallback));
   clearObjectStore->start(idbFactory, document->getSecurityOrigin(),
                           databaseName);
+}
+
+void InspectorIndexedDBAgent::deleteDatabase(
+    const String& securityOrigin,
+    const String& databaseName,
+    std::unique_ptr<DeleteDatabaseCallback> requestCallback) {
+  LocalFrame* frame =
+      m_inspectedFrames->frameWithSecurityOrigin(securityOrigin);
+  Document* document = frame ? frame->document() : nullptr;
+  if (!document) {
+    requestCallback->sendFailure(Response::Error(kNoDocumentError));
+    return;
+  }
+  IDBFactory* idbFactory = nullptr;
+  Response response = assertIDBFactory(document, idbFactory);
+  if (!response.isSuccess()) {
+    requestCallback->sendFailure(response);
+    return;
+  }
+
+  ScriptState* scriptState = ScriptState::forMainWorld(frame);
+  if (!scriptState) {
+    requestCallback->sendFailure(Response::InternalError());
+    return;
+  }
+  ScriptState::Scope scope(scriptState);
+  DummyExceptionStateForTesting exceptionState;
+  IDBRequest* idbRequest = idbFactory->closeConnectionsAndDeleteDatabase(
+      scriptState, databaseName, exceptionState);
+  if (exceptionState.hadException()) {
+    requestCallback->sendFailure(Response::Error("Could not delete database."));
+    return;
+  }
+  idbRequest->addEventListener(
+      EventTypeNames::success,
+      DeleteCallback::create(std::move(requestCallback),
+                             document->getSecurityOrigin()->toRawString()),
+      false);
 }
 
 DEFINE_TRACE(InspectorIndexedDBAgent) {

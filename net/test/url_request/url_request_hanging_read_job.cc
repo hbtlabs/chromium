@@ -65,12 +65,6 @@ int URLRequestHangingReadJob::ReadRawData(IOBuffer* buf, int buf_size) {
   return ERR_IO_PENDING;
 }
 
-int URLRequestHangingReadJob::GetResponseCode() const {
-  HttpResponseInfo info;
-  GetResponseInfoConst(&info);
-  return info.headers->response_code();
-}
-
 // Public virtual version.
 void URLRequestHangingReadJob::GetResponseInfo(HttpResponseInfo* info) {
   // Forward to private const version.
@@ -92,6 +86,8 @@ void URLRequestHangingReadJob::GetResponseInfoConst(
 }
 
 void URLRequestHangingReadJob::StartAsync() {
+  if (is_done())
+    return;
   set_expected_content_size(content_length_);
   NotifyHeadersComplete();
 }

@@ -112,37 +112,47 @@ WebMouseEventTypeToEventType(blink::WebInputEvent::Type web_type) {
   return ui::ET_UNKNOWN;
 }
 
-int WebMouseEventButtonToFlags(blink::WebMouseEvent::Button button) {
-  switch (button) {
-    case blink::WebMouseEvent::Button::Left:
-      return ui::EF_LEFT_MOUSE_BUTTON;
+int WebEventModifiersToEventFlags(int modifiers) {
+  int flags = 0;
 
-    case blink::WebMouseEvent::Button::Middle:
-      return ui::EF_MIDDLE_MOUSE_BUTTON;
+  if (modifiers & blink::WebInputEvent::LeftButtonDown)
+    flags |= ui::EF_LEFT_MOUSE_BUTTON;
+  if (modifiers & blink::WebInputEvent::MiddleButtonDown)
+    flags |= ui::EF_MIDDLE_MOUSE_BUTTON;
+  if (modifiers & blink::WebInputEvent::RightButtonDown)
+    flags |= ui::EF_RIGHT_MOUSE_BUTTON;
 
-    case blink::WebMouseEvent::Button::Right:
-      return ui::EF_RIGHT_MOUSE_BUTTON;
+  return flags;
+}
 
-    default:
-      NOTREACHED();
-  }
-
-  return 0;
+ui::EventPointerType WebMousePointerTypeToEventPointerType(
+    blink::WebPointerProperties::PointerType type) {
+    if (type == blink::WebPointerProperties::PointerType::Mouse)
+      return ui::EventPointerType::POINTER_TYPE_MOUSE;
+    if (type == blink::WebPointerProperties::PointerType::Pen)
+      return ui::EventPointerType::POINTER_TYPE_PEN;
+    NOTREACHED() << "Unexpected mouse event pointer type";
+    return ui::EventPointerType::POINTER_TYPE_UNKNOWN;
 }
 
 }  // namespace
 
 void SyntheticGestureTargetAura::DispatchWebMouseEventToPlatform(
-      const blink::WebMouseEvent& web_mouse,
-      const ui::LatencyInfo& latency_info) {
-  ui::EventType event_type = WebMouseEventTypeToEventType(web_mouse.type);
-  int flags = WebMouseEventButtonToFlags(web_mouse.button);
+    const blink::WebMouseEvent& web_mouse_event,
+    const ui::LatencyInfo& latency_info) {
+  ui::EventType event_type =
+      WebMouseEventTypeToEventType(web_mouse_event.type());
+  int flags = WebEventModifiersToEventFlags(web_mouse_event.modifiers());
   ui::MouseEvent mouse_event(event_type, gfx::Point(), gfx::Point(),
                              ui::EventTimeForNow(), flags, flags);
-  gfx::PointF location(web_mouse.x * device_scale_factor_,
-                       web_mouse.y * device_scale_factor_);
+  gfx::PointF location(web_mouse_event.x * device_scale_factor_,
+                       web_mouse_event.y * device_scale_factor_);
   mouse_event.set_location_f(location);
   mouse_event.set_root_location_f(location);
+  ui::PointerDetails pointer_details = mouse_event.pointer_details();
+  pointer_details.pointer_type =
+      WebMousePointerTypeToEventPointerType(web_mouse_event.pointerType);
+  mouse_event.set_pointer_details(pointer_details);
 
   aura::Window* window = GetWindow();
   mouse_event.ConvertLocationToTarget(window, window->GetRootWindow());

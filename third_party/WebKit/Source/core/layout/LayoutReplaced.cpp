@@ -132,8 +132,7 @@ bool LayoutReplaced::needsPreferredWidthsRecalculation() const {
   // If the height is a percentage and the width is auto, then the
   // containingBlocks's height changing can cause this node to change it's
   // preferred width because it maintains aspect ratio.
-  return hasRelativeLogicalHeight() && style()->logicalWidth().isAuto() &&
-         !hasAutoHeightOrContainingBlockWithAutoHeight();
+  return hasRelativeLogicalHeight() && style()->logicalWidth().isAuto();
 }
 
 static inline bool layoutObjectHasAspectRatio(
@@ -301,7 +300,7 @@ void LayoutReplaced::computePositionedLogicalWidth(
     } else {
       // Use the containing block's direction rather than the parent block's
       // per CSS 2.1 reference test abspos-replaced-width-margin-000.
-      if (containerDirection == LTR) {
+      if (containerDirection == TextDirection::kLtr) {
         marginLogicalLeftAlias = LayoutUnit();
         marginLogicalRightAlias = difference;  // will be negative
       } else {
@@ -366,7 +365,7 @@ void LayoutReplaced::computePositionedLogicalWidth(
     logicalLeftValue = valueForLength(logicalLeft, containerLogicalWidth);
     // If the containing block is right-to-left, then push the left position as
     // far to the right as possible
-    if (containerDirection == RTL) {
+    if (containerDirection == TextDirection::kRtl) {
       int totalLogicalWidth =
           (computedValues.m_extent + logicalLeftValue + logicalRightValue +
            marginLogicalLeftAlias + marginLogicalRightAlias)
@@ -923,16 +922,6 @@ void LayoutReplaced::setSelectionState(SelectionState state) {
 
   if (!inlineBoxWrapper())
     return;
-
-  // We only include the space below the baseline in our layer's cached paint
-  // invalidation rect if the image is selected. Since the selection state has
-  // changed update the rect.
-  if (hasLayer()) {
-    LayoutRect rect = localVisualRect();
-    PaintLayer::mapRectToPaintInvalidationBacking(
-        *this, containerForPaintInvalidation(), rect);
-    setPreviousVisualRect(rect);
-  }
 
   if (canUpdateSelectionOnRootLineBoxes())
     inlineBoxWrapper()->root().setHasSelectedChildren(state != SelectionNone);

@@ -7,7 +7,6 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "base/strings/stringprintf.h"
 #include "chrome/browser/media/router/media_source_helper.h"
 #include "chrome/browser/media/router/mock_media_router.h"
 #include "chrome/browser/media/router/mock_screen_availability_listener.h"
@@ -21,6 +20,10 @@ using testing::Return;
 
 namespace media_router {
 
+namespace {
+constexpr char kOrigin[] = "https://google.com";
+}  // namespace
+
 class PresentationMediaSinksObserverTest : public ::testing::Test {
  public:
   PresentationMediaSinksObserverTest()
@@ -32,7 +35,7 @@ class PresentationMediaSinksObserverTest : public ::testing::Test {
     observer_.reset(new PresentationMediaSinksObserver(
         &router_, &listener_, MediaSourceForPresentationUrl(
                                   GURL("http://example.com/presentation.html")),
-        GURL("https://google.com")));
+        url::Origin(GURL(kOrigin))));
     EXPECT_TRUE(observer_->Init());
   }
 

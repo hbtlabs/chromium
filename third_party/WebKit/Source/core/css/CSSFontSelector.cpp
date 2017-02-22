@@ -60,12 +60,12 @@ CSSFontSelector::~CSSFontSelector() {}
 
 void CSSFontSelector::registerForInvalidationCallbacks(
     CSSFontSelectorClient* client) {
-  m_clients.add(client);
+  m_clients.insert(client);
 }
 
 void CSSFontSelector::unregisterForInvalidationCallbacks(
     CSSFontSelectorClient* client) {
-  m_clients.remove(client);
+  m_clients.erase(client);
 }
 
 void CSSFontSelector::dispatchInvalidationCallbacks() {

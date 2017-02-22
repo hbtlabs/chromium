@@ -34,7 +34,6 @@ html.col-resize * {
 /* Outer frame of the dialog. */
 body {
   -webkit-tap-highlight-color: transparent;
-  -webkit-user-select: none;
   cursor: default;
   display: flex;
   flex: auto;
@@ -43,6 +42,7 @@ body {
   height: 100%;
   margin: 0;
   padding: 0;
+  user-select: none;
   width: 100%;
 }
 
@@ -122,129 +122,6 @@ a:focus {
   display: flex;
   flex: auto;
   flex-direction: column;
-}
-
-/* Details pane */
-.details-container {
-  background-color: rgb(250, 250, 250);
-  display: flex;
-  flex: none;
-  max-width: 30%;
-  min-width: 100px;
-  overflow: hidden;
-  position: relative;
-  width: 240px;
-}
-
-#list-details-splitter:not([activated]) {
-  display: none;
-}
-
-.details-container:not([activated]) {
-  display: none;
-}
-
-.details-container > div:not([activated]) {
-  display: none !important;
-}
-
-/* Filetype icons in details panel */
-
-.details-container .thumbnail-container {
-  box-sizing: border-box;
-  padding: 6px;
-  position: relative;
-  width: 100%;
-}
-
-.details-container .thumbnail-container:before {
-  content: "";
-  display: block;
-  padding-top: 100%;
-}
-
-.details-container .thumbnail-container > .thumbnail {
-  background-color: rgb(230, 230, 230);
-  background-position: center;
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  right: 0;
-}
-
-/* File thumbnails/quick previews in details panel */
-
-.details-container .thumbnail > img {
-  height: 100%;
-  object-fit: contain;
-  width: 100%;
-}
-
-.details-container .thumbnail > video {
-  height: 100%;
-  object-fit: contain;
-  width: 100%;
-}
-
-.details-container .thumbnail > audio {
-  bottom: 0px;
-  left: 0px;
-  height: auto;
-  position: absolute;
-  width: 100%;
-}
-
-/* Details panel for single file */
-
-.details-container > #single-file-details {
-  display: flex;
-  flex: auto;
-  flex-direction: column;
-  width: 100%;
-}
-
-#single-file-details > .filename-container {
-  align-items: center;
-  display: flex;
-  flex-direction: row;
-  height: 40px;
-  padding: 0 6px;
-  width: 100%;
-}
-
-#single-file-details > .filename-container > .filename {
-  -webkit-padding-end: 6px;
-  flex: auto;
-  font-weight: 500;
-  overflow: hidden;
-}
-
-#single-file-details > .thumbnail-container > .thumbnail.loaded {
-  background-image: none;
-}
-
-#single-file-details > .details-list {
-  flex: auto;
-  width: 100%;
-}
-
-#single-file-details > .details-list > li:not(.available) {
-  display: none;
-}
-
-/* Filetype icon of details panel for multiple files */
-
-.details-container > #multi-file-details {
-  display: flex;
-  flex: auto;
-  flex-direction: column;
-  width: 100%;
-}
-
-#multi-file-details > .details-list {
-  flex: auto;
-  width: 100%;
 }
 
 /* Directory tree at the left. */
@@ -577,24 +454,6 @@ body.check-select #sort-button {
   display: none;
 }
 
-#details-button {
-  /**
-   * TODO(ryoh): This should be removed after we finally implement details
-   *     panel.
-   */
-  display: none;
-}
-
-#details-button > .icon {
-  background-image: -webkit-image-set(
-      url(../images/files/ui/info_white.png) 1x,
-      url(../images/files/ui/2x/info_white.png) 2x);
-}
-
-body.check-select #details-button {
-  display: none;
-}
-
 #gear-button > .icon {
   background-image: -webkit-image-set(
       url(../images/files/ui/menu_white.png) 1x,
@@ -706,9 +565,8 @@ html[dir='rtl'] #cloud-import-details {
   color: #333333;
 }
 
-#cloud-import-details .status .destination-link {
+#cloud-import-details .status a[is='action-link'] {
   color: #3367D6;
-  cursor: pointer;
 }
 
 #cloud-import-details .progress {
@@ -862,9 +720,9 @@ html[dir='rtl'] #search-box .clear {
 
 /* Container for the detail and thumbnail list views. */
 .dialog-body {
-  -webkit-transition: all 180ms ease;
   flex: auto;
   position: relative;
+  transition: all 180ms ease;
 }
 
 .main-panel {
@@ -903,7 +761,6 @@ html[dir='rtl'] #search-box .clear {
 
 /* Copy style from paper-button for buttons on the footer. */
 .dialog-footer button {
-  -webkit-user-select: none;
   background: transparent;
   border: 0;
   border-image: none;
@@ -918,6 +775,7 @@ html[dir='rtl'] #search-box .clear {
   text-align: center;
   text-transform: uppercase;
   transition: box-shadow 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
   z-index: 0;
 }
 
@@ -1006,7 +864,8 @@ html[dir='rtl'] #search-box .clear {
 /* Draw outline using box-shadow to make them rounded. */
 .dialog-footer .primary:focus:not(:active),
 .dialog-footer .secondary:focus:not(:active),
-.dialog-footer select:focus:not(:active) {
+.dialog-footer select:focus:not(:active),
+#cloud-import-details paper-button.keyboard-focus {
   box-shadow: 0 0 0 2px rgba(51, 103, 214, 0.5);
 }
 
@@ -1227,7 +1086,7 @@ html[dir='rtl'] .breadcrumbs .separator {
   height: 0;
 }
 
-@-webkit-keyframes heightAnimation {
+@keyframes heightAnimation {
   0% {
     display: flex;
     height: 0;
@@ -1236,8 +1095,8 @@ html[dir='rtl'] .breadcrumbs .separator {
 
 /* Drive space warning banner. */
 .volume-warning {
-  -webkit-animation: heightAnimation 70ms linear;
   align-items: center;
+  animation: heightAnimation 70ms linear;
   background-color: rgb(79, 129, 232);
   color: white;
   display: flex;
@@ -1443,7 +1302,7 @@ body.check-select .thumbnail-grid .thumbnail-item[selected] .checkmark.active {
 }
 
 .thumbnail-grid .img-container > .thumbnail.animate {
-  -webkit-animation: fadeIn 250ms linear;
+  animation: fadeIn 250ms linear;
 }
 
 .thumbnail-grid .shield {
@@ -1563,10 +1422,10 @@ html[dir='rtl'] .badge {
 #directory-tree .tree-item.accepts > .tree-row,
 #list-container list > li.accepts,
 #list-container grid > li.accepts {
-  -webkit-animation: acceptsBlink 200ms linear 1s 3;
+  animation: acceptsBlink 200ms linear 1s 3;
 }
 
-@-webkit-keyframes acceptsBlink {
+@keyframes acceptsBlink {
   0% {
     color: rgb(90, 90, 90);
     background-color: transparent;
@@ -1636,7 +1495,7 @@ li[renaming=''] .badge {
   justify-content: flex-end;
 }
 
-@-webkit-keyframes fadeIn {
+@keyframes fadeIn {
   from {
     opacity: 0;
   }
@@ -1645,7 +1504,7 @@ li[renaming=''] .badge {
   }
 }
 
-@-webkit-keyframes fadeOut {
+@keyframes fadeOut {
   from {
     opacity: 1;
   }
@@ -1807,13 +1666,13 @@ body.check-select #list-container li[selected] .detail-checkmark {
 }
 
 #list-container list li .detail-thumbnail > .thumbnail.animate {
-  -webkit-animation: fadeIn 220ms ease;
+  animation: fadeIn 220ms ease;
 }
 
 body.check-select #list-container list li[selected] .detail-thumbnail
 > .thumbnail {
   /* Fade out after checkmark fades in. */
-  -webkit-animation: fadeOut 0ms 220ms ease backwards;
+  animation: fadeOut 0ms 220ms ease backwards;
   opacity: 0;
 }
 
@@ -2197,7 +2056,7 @@ list.autocomplete-suggestions > [lead] {
 
 /* Progress center */
 
-@-webkit-keyframes progress-center-toggle {
+@keyframes progress-center-toggle {
   /* Height values of each frame are set by script.
    * Keep the animation sync with JS. */
   from {
@@ -2216,7 +2075,7 @@ list.autocomplete-suggestions > [lead] {
 }
 
 #progress-center.animated {
-  -webkit-animation: progress-center-toggle 300ms ease-out;
+  animation: progress-center-toggle 300ms ease-out;
 }
 
 #progress-center-open-view {
@@ -2414,4 +2273,17 @@ files-toggle-ripple {
 /* Preventing FOUC */
 paper-input-container:unresolved {
   display: none;
+}
+
+#drop-label {
+  background-color: rgba(0, 0, 0, 0.8);
+  border-radius: 2px;
+  color: white;
+  display: none;  /* hidden until activaed */
+  font-size: 12px;
+  height: 24px;
+  line-height: 24px;
+  padding: 0 8px;
+  position: absolute;
+  z-index: 1000;  /* same height as files-tooltip */
 }

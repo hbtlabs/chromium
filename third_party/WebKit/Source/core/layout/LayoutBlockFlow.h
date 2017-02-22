@@ -162,6 +162,7 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
                                          LayoutUnit position) const override;
 
   RootInlineBox* createAndAppendRootInlineBox();
+  RootInlineBox* constructLine(BidiRunList<BidiRun>&, const LineInfo&);
 
   // Return the number of lines in *this* block flow. Does not recurse into
   // block flow children.
@@ -381,7 +382,7 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
 
   PositionWithAffinity positionForPoint(const LayoutPoint&) override;
 
-  LayoutUnit lowestFloatLogicalBottom(EClear = ClearBoth) const;
+  LayoutUnit lowestFloatLogicalBottom(EClear = EClear::kBoth) const;
 
   bool hasOverhangingFloats() const {
     return parent() && containsFloats() &&
@@ -393,7 +394,7 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
 
   LayoutUnit logicalHeightWithVisibleOverflow() const final;
 
-  // This function is only public so we can call it from NGBox while we're
+  // This function is only public so we can call it from NGBlockNode while we're
   // still working on LayoutNG.
   void updateIsSelfCollapsing() {
     m_isSelfCollapsing = checkIfIsSelfCollapsingBlock();
@@ -427,8 +428,10 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
 
   void absoluteRects(Vector<IntRect>&,
                      const LayoutPoint& accumulatedOffset) const override;
-  void absoluteQuads(Vector<FloatQuad>&) const override;
-  void absoluteQuadsForSelf(Vector<FloatQuad>& quads) const override;
+  void absoluteQuads(Vector<FloatQuad>&,
+                     MapCoordinatesFlags mode = 0) const override;
+  void absoluteQuadsForSelf(Vector<FloatQuad>& quads,
+                            MapCoordinatesFlags mode = 0) const override;
   LayoutObject* hoverAncestor() const final;
 
   LayoutUnit logicalRightOffsetForLine(
@@ -476,9 +479,9 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
   LayoutSize accumulateInFlowPositionOffsets() const override;
 
  private:
-  bool layoutBlockFlow(bool relayoutChildren,
-                       LayoutUnit& pageLogicalHeight,
-                       SubtreeLayoutScope&);
+  void resetLayout();
+  void layoutChildren(bool relayoutChildren, SubtreeLayoutScope&);
+  void addOverhangingFloatsFromChildren(LayoutUnit unconstrainedHeight);
   void layoutBlockChildren(bool relayoutChildren,
                            SubtreeLayoutScope&,
                            LayoutUnit beforeEdge,
@@ -505,7 +508,7 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
                                              LayoutUnit logicalTopOffset) const;
 
   void removeFloatingObject(LayoutBox*);
-  void removeFloatingObjectsBelow(FloatingObject*, int logicalOffset);
+  void removeFloatingObjectsBelow(FloatingObject*, LayoutUnit logicalOffset);
 
   LayoutUnit getClearDelta(LayoutBox* child, LayoutUnit yPos);
 
@@ -589,10 +592,6 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
                                       LayoutUnit& totalLogicalWidth,
                                       LayoutUnit& availableLogicalWidth,
                                       unsigned expansionOpportunityCount);
-  void checkForPaginationLogicalHeightChange(
-      LayoutUnit& pageLogicalHeight,
-      bool& pageLogicalHeightChanged,
-      bool& hasSpecifiedPageLogicalHeight);
 
   bool shouldBreakAtLineToAvoidWidow() const {
     return m_rareData && m_rareData->m_lineBreakToAvoidWidow >= 0;
@@ -678,8 +677,8 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
                     positiveMarginAfterDefault(block),
                     negativeMarginAfterDefault(block)),
           m_multiColumnFlowThread(nullptr),
-          m_breakBefore(BreakAuto),
-          m_breakAfter(BreakAuto),
+          m_breakBefore(static_cast<unsigned>(EBreakBetween::kAuto)),
+          m_breakAfter(static_cast<unsigned>(EBreakBetween::kAuto)),
           m_lineBreakToAvoidWidow(-1),
           m_didBreakAtLineToAvoidWidow(false),
           m_discardMarginBefore(false),
@@ -719,7 +718,8 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
     return m_floatingObjects.get();
   }
 
-  static void setAncestorShouldPaintFloatingObject(const LayoutBox& floatBox);
+  static void updateAncestorShouldPaintFloatingObject(
+      const LayoutBox& floatBox);
 
  protected:
   LayoutUnit maxPositiveMarginBefore() const {
@@ -781,8 +781,14 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
     return maxPositiveMarginAfter() - maxNegativeMarginAfter();
   }
 
+  LayoutUnit adjustedMarginBeforeForPagination(
+      const LayoutBox&,
+      LayoutUnit logicalTopMarginEdge,
+      LayoutUnit logicalTopBorderEdge,
+      const BlockChildrenLayoutInfo&) const;
+
   LayoutUnit collapseMargins(LayoutBox& child,
-                             MarginInfo&,
+                             BlockChildrenLayoutInfo&,
                              bool childIsSelfCollapsing,
                              bool childDiscardMarginBefore,
                              bool childDiscardMarginAfter);
@@ -808,12 +814,12 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
 
   // Apply any forced fragmentainer break that's set on the current class A
   // break point.
-  LayoutUnit applyForcedBreak(LayoutUnit logicalOffset, EBreak);
+  LayoutUnit applyForcedBreak(LayoutUnit logicalOffset, EBreakBetween);
 
-  void setBreakBefore(EBreak);
-  void setBreakAfter(EBreak);
-  EBreak breakBefore() const override;
-  EBreak breakAfter() const override;
+  void setBreakBefore(EBreakBetween);
+  void setBreakAfter(EBreakBetween);
+  EBreakBetween breakBefore() const override;
+  EBreakBetween breakAfter() const override;
 
   LayoutUnit adjustBlockChildForPagination(LayoutUnit logicalTop,
                                            LayoutBox& child,
@@ -868,7 +874,6 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
   InlineFlowBox* createLineBoxes(LineLayoutItem,
                                  const LineInfo&,
                                  InlineBox* childBox);
-  RootInlineBox* constructLine(BidiRunList<BidiRun>&, const LineInfo&);
   void setMarginsForRubyRun(BidiRun*,
                             LayoutRubyRun*,
                             LayoutObject*,

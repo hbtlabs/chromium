@@ -37,7 +37,8 @@
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/StringHash.h"
 
-using namespace blink;
+namespace blink {
+
 using namespace WTF;
 using namespace Unicode;
 using namespace XPath;
@@ -85,8 +86,8 @@ static void setUpAxisNamesMap(AxisNamesMap& axisNames) {
       {"preceding", Step::PrecedingAxis},
       {"preceding-sibling", Step::PrecedingSiblingAxis},
       {"self", Step::SelfAxis}};
-  for (unsigned i = 0; i < sizeof(axisNameList) / sizeof(axisNameList[0]); ++i)
-    axisNames.set(axisNameList[i].name, axisNameList[i].axis);
+  for (const auto& axisName : axisNameList)
+    axisNames.set(axisName.name, axisName.axis);
 }
 
 static bool isAxisName(const String& name, Step::Axis& type) {
@@ -507,7 +508,7 @@ void Parser::registerString(String* s) {
     return;
 
   DCHECK(!m_strings.contains(s));
-  m_strings.add(wrapUnique(s));
+  m_strings.insert(WTF::wrapUnique(s));
 }
 
 void Parser::deleteString(String* s) {
@@ -515,5 +516,7 @@ void Parser::deleteString(String* s) {
     return;
 
   DCHECK(m_strings.contains(s));
-  m_strings.remove(s);
+  m_strings.erase(s);
 }
+
+}  // namespace blink

@@ -5,11 +5,14 @@
 package org.chromium.chrome.browser.ntp.cards;
 
 import org.chromium.base.Log;
-import org.chromium.chrome.browser.ntp.NewTabPageView.NewTabPageManager;
+import org.chromium.chrome.browser.ntp.ContextMenuManager;
+import org.chromium.chrome.browser.ntp.ContextMenuManager.ContextMenuItemId;
 import org.chromium.chrome.browser.ntp.snippets.CategoryInt;
 import org.chromium.chrome.browser.ntp.snippets.ContentSuggestionsCardLayout.ContentSuggestionsCardLayoutEnum;
-
 import org.chromium.chrome.browser.ntp.snippets.KnownCategories;
+import org.chromium.chrome.browser.suggestions.SuggestionsNavigationDelegate;
+
+import javax.annotation.Nullable;
 
 /**
  * Contains meta information about a Category. Equivalent of the CategoryInfo class in
@@ -36,24 +39,17 @@ public class SuggestionsCategoryInfo {
     private final int mCardLayout;
 
     /**
-     * Whether the category supports a "More" action, that triggers fetching more suggestions for
-     * the category, while keeping the current ones.
+     * Whether the category supports a "Fetch" action, that triggers fetching more suggestions for
+     * the category.
      * @see ActionItem
      */
-    private final boolean mHasFetchMoreAction;
-
-    /**
-     * Whether the category supports a "Reload" action, that triggers fetching new suggestions to
-     * replace the current ones.
-     * @see ActionItem
-     */
-    private final boolean mHasReloadAction;
+    private final boolean mHasFetchAction;
 
     /**
      * Whether the category supports a "ViewAll" action, that triggers displaying all the content
      * related to the current categories.
      * @see ActionItem
-     * @see #performViewAllAction(NewTabPageManager)
+     * @see #performViewAllAction(SuggestionsNavigationDelegate)
      */
     private final boolean mHasViewAllAction;
 
@@ -66,14 +62,12 @@ public class SuggestionsCategoryInfo {
     private final String mNoSuggestionsMessage;
 
     public SuggestionsCategoryInfo(@CategoryInt int category, String title,
-            @ContentSuggestionsCardLayoutEnum int cardLayout, boolean hasMoreAction,
-            boolean hasReloadAction, boolean hasViewAllAction, boolean showIfEmpty,
-            String noSuggestionsMessage) {
+            @ContentSuggestionsCardLayoutEnum int cardLayout, boolean hasFetchAction,
+            boolean hasViewAllAction, boolean showIfEmpty, String noSuggestionsMessage) {
         mCategory = category;
         mTitle = title;
         mCardLayout = cardLayout;
-        mHasFetchMoreAction = hasMoreAction;
-        mHasReloadAction = hasReloadAction;
+        mHasFetchAction = hasFetchAction;
         mHasViewAllAction = hasViewAllAction;
         mShowIfEmpty = showIfEmpty;
         mNoSuggestionsMessage = noSuggestionsMessage;
@@ -93,12 +87,8 @@ public class SuggestionsCategoryInfo {
         return mCardLayout;
     }
 
-    public boolean hasFetchMoreAction() {
-        return mHasFetchMoreAction;
-    }
-
-    public boolean hasReloadAction() {
-        return mHasReloadAction;
+    public boolean hasFetchAction() {
+        return mHasFetchAction;
     }
 
     public boolean hasViewAllAction() {
@@ -110,27 +100,45 @@ public class SuggestionsCategoryInfo {
     }
 
     /**
-     * Returns the string to use as description for the status card that is displayed when there
-     * are no suggestions available for the provided category.
+     * Returns the string to use as description for the status card that is displayed when there are
+     * no suggestions available for the provided category.
      */
     public String getNoSuggestionsMessage() {
         return mNoSuggestionsMessage;
     }
 
     /**
+     * @param menuItemId The ID for a context menu item.
+     * @return Whether the given context menu item is supported by this category, or null if that
+     *         decision does not depend on the category.
+     */
+    @Nullable
+    public Boolean isContextMenuItemSupported(@ContextMenuItemId int menuItemId) {
+        if (menuItemId == ContextMenuManager.ID_REMOVE) return null;
+
+        if (mCategory == KnownCategories.RECENT_TABS) return false;
+
+        if (mCategory == KnownCategories.DOWNLOADS) {
+            if (menuItemId == ContextMenuManager.ID_OPEN_IN_INCOGNITO_TAB) return false;
+            if (menuItemId == ContextMenuManager.ID_SAVE_FOR_OFFLINE) return false;
+        }
+        return true;
+    }
+
+    /**
      * Performs the View All action for the provided category, navigating navigating to the view
      * showing all the content.
      */
-    public void performViewAllAction(NewTabPageManager manager) {
+    public void performViewAllAction(SuggestionsNavigationDelegate navigationDelegate) {
         switch (mCategory) {
             case KnownCategories.BOOKMARKS:
-                manager.navigateToBookmarks();
+                navigationDelegate.navigateToBookmarks();
                 break;
             case KnownCategories.DOWNLOADS:
-                manager.navigateToDownloadManager();
+                navigationDelegate.navigateToDownloadManager();
                 break;
             case KnownCategories.FOREIGN_TABS:
-                manager.navigateToRecentTabs();
+                navigationDelegate.navigateToRecentTabs();
                 break;
             case KnownCategories.PHYSICAL_WEB_PAGES:
             case KnownCategories.RECENT_TABS:

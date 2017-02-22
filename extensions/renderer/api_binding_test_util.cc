@@ -74,6 +74,22 @@ std::string ValueToString(const base::Value& value) {
   return json;
 }
 
+std::string V8ToString(v8::Local<v8::Value> value,
+                       v8::Local<v8::Context> context) {
+  if (value.IsEmpty())
+    return "empty";
+  if (value->IsNull())
+    return "null";
+  if (value->IsUndefined())
+    return "undefined";
+  if (value->IsFunction())
+    return "function";
+  std::unique_ptr<base::Value> json = V8ToBaseValue(value, context);
+  if (!json)
+    return "unserializable";
+  return ValueToString(*json);
+}
+
 v8::Local<v8::Value> V8ValueFromScriptSource(v8::Local<v8::Context> context,
                                              base::StringPiece source) {
   v8::MaybeLocal<v8::Script> maybe_script = v8::Script::Compile(
@@ -135,6 +151,16 @@ void RunFunctionOnGlobalAndIgnoreResult(v8::Local<v8::Function> function,
   RunFunction(function, context, context->Global(), argc, argv);
 }
 
+v8::Global<v8::Value> RunFunctionOnGlobalAndReturnHandle(
+    v8::Local<v8::Function> function,
+    v8::Local<v8::Context> context,
+    int argc,
+    v8::Local<v8::Value> argv[]) {
+  return v8::Global<v8::Value>(
+      context->GetIsolate(),
+      RunFunction(function, context, context->Global(), argc, argv));
+}
+
 void RunFunctionAndExpectError(v8::Local<v8::Function> function,
                                v8::Local<v8::Context> context,
                                v8::Local<v8::Value> receiver,
@@ -173,6 +199,12 @@ std::unique_ptr<base::Value> GetBaseValuePropertyFromObject(
     v8::Local<v8::Context> context,
     base::StringPiece key) {
   return V8ToBaseValue(GetPropertyFromObject(object, context, key), context);
+}
+
+std::string GetStringPropertyFromObject(v8::Local<v8::Object> object,
+                                        v8::Local<v8::Context> context,
+                                        base::StringPiece key) {
+  return V8ToString(GetPropertyFromObject(object, context, key), context);
 }
 
 }  // namespace extensions

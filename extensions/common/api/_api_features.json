@@ -4,7 +4,7 @@
 
 // This features file defines extension APIs implemented under src/extensions.
 // See chrome/common/extensions/api/_features.md to understand this file, as
-// well as feature.h, simple_feature.h, and base_feature_provider.h.
+// well as feature.h, simple_feature.h, and feature_provider.h.
 //
 // Note that specifying "web_page", "blessed_web_page", or "all" as a context
 // type will require manually updating chrome/renderer/resources/dispatcher.cc.
@@ -113,8 +113,14 @@
     "contexts": ["blessed_extension"]
   },
   "clipboard": {
-    "dependencies": ["permission:clipboard", "permission:clipboardRead"],
-    "contexts": ["blessed_extension"]       
+    "dependencies": ["permission:clipboard"],
+    "contexts": ["blessed_extension"]
+  },
+  "clipboard.onClipboardDataChanged": {
+    "dependencies": ["permission:clipboardRead"]
+  },
+  "clipboard.setImageData": {
+    "dependencies": ["permission:clipboardWrite"]
   },
   "declarativeWebRequest": {
     "dependencies": ["permission:declarativeWebRequest"],
@@ -266,11 +272,8 @@
       "896B85CC7E913E11C34892C1425A093C0701D386",  // http://crbug.com/456214
       "11A01C82EF355E674E4F9728A801F5C3CB40D83F",  // http://crbug.com/456214
       "F410C88469990EE7947450311D24B8AF2ADB2595",  // http://crbug.com/456214
-      "226CF815E39A363090A1E547D53063472B8279FA",  // http://crbug.com/574889
-      "C17CD9E6868D7B9C67926E0EC612EA25C768418F",  // http://crbug.com/504940
-      "A45DABDB47A31CC812E5490AB748C7D05E2D32E9",  // http://crbug.com/504940
-      "BFEE2E3B80BE21A645E63E9346DFC383E7CB3BDA",  // http://crbug.com/504940
-      "63ED55E43214C211F82122ED56407FF1A807F2A3",  // http://crbug.com/504940
+      "63ED55E43214C211F82122ED56407FF1A807F2A3",  // Media Router Dev
+      "226CF815E39A363090A1E547D53063472B8279FA",  // Media Router Stable
       // TODO (ntang) Remove the following 2 hashes by 12/31/2017.
       "B620CF4203315F9F2E046EDED22C7571A935958D",  // http://crbug.com/510270
       "B206D8716769728278D2D300349C6CB7D7DE2EF9",  // http://crbug.com/510270
@@ -289,20 +292,28 @@
     "channel": "stable",
     "extension_types": ["platform_app", "extension"],
     "whitelist": [
-      "226CF815E39A363090A1E547D53063472B8279FA",  // http://crbug.com/574889
-      "C17CD9E6868D7B9C67926E0EC612EA25C768418F",  // http://crbug.com/448569
-      "A45DABDB47A31CC812E5490AB748C7D05E2D32E9",
-      "BFEE2E3B80BE21A645E63E9346DFC383E7CB3BDA",
-      "63ED55E43214C211F82122ED56407FF1A807F2A3"
+      "63ED55E43214C211F82122ED56407FF1A807F2A3",   // Media Router Dev
+      "226CF815E39A363090A1E547D53063472B8279FA"    // Media Router Stable
     ]
   },
   "networking.config": {
     "dependencies": ["permission:networking.config"],
     "contexts": ["blessed_extension"]
   },
+  "networking.onc": {
+    "dependencies": ["permission:networking.onc"],
+    "contexts": ["blessed_extension"],
+    "source": "networkingPrivate"
+  },
   "networkingPrivate": [{
     "dependencies": ["permission:networkingPrivate"],
-    "contexts": ["blessed_extension"]
+    "contexts": ["blessed_extension"],
+    // TODO(tbarzic): networkingPrivate is being renamed to networking.onc.
+    // The goal is to eventually remove networkingPrivate API in favour of
+    // networking.onc, but until current usages are migrated to the new
+    // name, use API aliasing to expose the API under both names.
+    // (http://crbug.com/672186).
+    "alias": "networking.onc"
   }, {
     "channel": "stable",
     "contexts": ["webui"],

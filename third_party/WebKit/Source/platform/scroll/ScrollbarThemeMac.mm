@@ -27,7 +27,6 @@
 #include "platform/scroll/ScrollbarThemeMac.h"
 
 #include <Carbon/Carbon.h>
-#include "platform/PlatformMouseEvent.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
@@ -36,6 +35,7 @@
 #include "platform/mac/NSScrollerImpDetails.h"
 #include "platform/mac/ScrollAnimatorMac.h"
 #include "platform/scroll/ScrollbarThemeClient.h"
+#include "public/platform/WebMouseEvent.h"
 #include "public/platform/WebThemeEngine.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebRect.h"
@@ -172,8 +172,8 @@ double ScrollbarThemeMac::autoscrollTimerDelay() {
 
 bool ScrollbarThemeMac::shouldDragDocumentInsteadOfThumb(
     const ScrollbarThemeClient&,
-    const PlatformMouseEvent& event) {
-  return event.altKey();
+    const WebMouseEvent& event) {
+  return (event.modifiers() & WebInputEvent::Modifiers::AltKey) != 0;
 }
 
 int ScrollbarThemeMac::scrollbarPartToHIPressedState(ScrollbarPart part) {
@@ -204,7 +204,7 @@ ScrollbarPart ScrollbarThemeMac::invalidateOnThumbPositionChange(
 }
 
 void ScrollbarThemeMac::registerScrollbar(ScrollbarThemeClient& scrollbar) {
-  scrollbarSet().add(&scrollbar);
+  scrollbarSet().insert(&scrollbar);
 
   bool isHorizontal = scrollbar.orientation() == HorizontalScrollbar;
   RetainPtr<ScrollbarPainter> scrollbarPainter(
@@ -218,14 +218,14 @@ void ScrollbarThemeMac::registerScrollbar(ScrollbarThemeClient& scrollbar) {
       [[BlinkScrollbarObserver alloc] initWithScrollbar:&scrollbar
                                                 painter:scrollbarPainter]);
 
-  scrollbarPainterMap().add(&scrollbar, observer);
+  scrollbarPainterMap().insert(&scrollbar, observer);
   updateEnabledState(scrollbar);
   updateScrollbarOverlayColorTheme(scrollbar);
 }
 
 void ScrollbarThemeMac::unregisterScrollbar(ScrollbarThemeClient& scrollbar) {
   scrollbarPainterMap().remove(&scrollbar);
-  scrollbarSet().remove(&scrollbar);
+  scrollbarSet().erase(&scrollbar);
 }
 
 void ScrollbarThemeMac::setNewPainterForScrollbar(
@@ -293,7 +293,16 @@ void ScrollbarThemeMac::paintThumb(GraphicsContext& context,
 
   ScrollbarPainter scrollbarPainter = painterForScrollbar(scrollbar);
   [scrollbarPainter setEnabled:scrollbar.enabled()];
-  [scrollbarPainter setBoundsSize:NSSizeFromCGSize(rect.size())];
+  // drawKnob aligns the thumb to right side of the draw rect.
+  // If the vertical overlay scrollbar is on the left, use trackWidth instead
+  // of scrollbar width, to avoid the gap on the left side of the thumb.
+  IntRect drawRect = IntRect(rect);
+  if (usesOverlayScrollbars() && scrollbar.isLeftSideVerticalScrollbar()) {
+    int thumbWidth = [scrollbarPainter trackWidth];
+    drawRect.setWidth(thumbWidth);
+  }
+  [scrollbarPainter setBoundsSize:NSSizeFromCGSize(drawRect.size())];
+
   [scrollbarPainter setDoubleValue:0];
   [scrollbarPainter setKnobProportion:1];
 

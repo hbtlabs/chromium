@@ -97,7 +97,7 @@ void InputEventFilter::DidStopFlinging(int routing_id) {
 
 void InputEventFilter::DispatchNonBlockingEventToMainThread(
     int routing_id,
-    ui::ScopedWebInputEvent event,
+    ui::WebScopedInputEvent event,
     const ui::LatencyInfo& latency_info) {
   DCHECK(target_task_runner_->BelongsToCurrentThread());
   RouteQueueMap::iterator iter = route_queues_.find(routing_id);
@@ -108,9 +108,11 @@ void InputEventFilter::DispatchNonBlockingEventToMainThread(
   }
 }
 
-void InputEventFilter::NotifyInputEventHandled(int routing_id,
-                                               blink::WebInputEvent::Type type,
-                                               InputEventAckState ack_result) {
+void InputEventFilter::NotifyInputEventHandled(
+    int routing_id,
+    blink::WebInputEvent::Type type,
+    blink::WebInputEventResult result,
+    InputEventAckState ack_result) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   scoped_refptr<MainThreadEventQueue> queue;
   {
@@ -121,7 +123,7 @@ void InputEventFilter::NotifyInputEventHandled(int routing_id,
     queue = iter->second;
   }
 
-  queue->EventHandled(type, ack_result);
+  queue->EventHandled(type, result, ack_result);
 }
 
 void InputEventFilter::ProcessRafAlignedInput(int routing_id) {
@@ -179,10 +181,10 @@ bool InputEventFilter::OnMessageReceived(const IPC::Message& message) {
       return false;
   }
 
-  CHECK(target_task_runner_->PostTask(
+  bool postedTask = target_task_runner_->PostTask(
       FROM_HERE, base::Bind(&InputEventFilter::ForwardToHandler, this, message,
-                            received_time)))
-      << "PostTask failed";
+                            received_time));
+  LOG_IF(WARNING, !postedTask) << "PostTask failed";
   return true;
 }
 
@@ -210,17 +212,17 @@ void InputEventFilter::ForwardToHandler(const IPC::Message& message,
   InputMsg_HandleInputEvent::Param params;
   if (!InputMsg_HandleInputEvent::Read(&message, &params))
     return;
-  ui::ScopedWebInputEvent event =
+  ui::WebScopedInputEvent event =
       ui::WebInputEventTraits::Clone(*std::get<0>(params));
-  ui::LatencyInfo latency_info = std::get<1>(params);
-  InputEventDispatchType dispatch_type = std::get<2>(params);
+  ui::LatencyInfo latency_info = std::get<2>(params);
+  InputEventDispatchType dispatch_type = std::get<3>(params);
 
   DCHECK(event);
   DCHECK(dispatch_type == DISPATCH_TYPE_BLOCKING ||
          dispatch_type == DISPATCH_TYPE_NON_BLOCKING);
 
   if (!received_time.is_null())
-    event->timeStampSeconds = ui::EventTimeStampToSeconds(received_time);
+    event->setTimeStampSeconds(ui::EventTimeStampToSeconds(received_time));
 
   input_handler_manager_->HandleInputEvent(
       routing_id, std::move(event), latency_info,
@@ -232,13 +234,13 @@ void InputEventFilter::DidForwardToHandlerAndOverscroll(
     int routing_id,
     InputEventDispatchType dispatch_type,
     InputEventAckState ack_state,
-    ui::ScopedWebInputEvent event,
+    ui::WebScopedInputEvent event,
     const ui::LatencyInfo& latency_info,
     std::unique_ptr<DidOverscrollParams> overscroll_params) {
   bool send_ack = dispatch_type == DISPATCH_TYPE_BLOCKING;
   uint32_t unique_touch_event_id =
       ui::WebInputEventTraits::GetUniqueTouchEventId(*event);
-  WebInputEvent::Type type = event->type;
+  WebInputEvent::Type type = event->type();
 
   if (ack_state == INPUT_EVENT_ACK_STATE_SET_NON_BLOCKING ||
       ack_state == INPUT_EVENT_ACK_STATE_SET_NON_BLOCKING_DUE_TO_FLING ||
@@ -287,13 +289,14 @@ void InputEventFilter::SendMessageOnIOThread(
 
 void InputEventFilter::HandleEventOnMainThread(
     int routing_id,
-    const blink::WebInputEvent* event,
+    const blink::WebCoalescedInputEvent* event,
     const ui::LatencyInfo& latency_info,
     InputEventDispatchType dispatch_type) {
   TRACE_EVENT_INSTANT0("input", "InputEventFilter::HandlEventOnMainThread",
                        TRACE_EVENT_SCOPE_THREAD);
-  IPC::Message new_msg =
-      InputMsg_HandleInputEvent(routing_id, event, latency_info, dispatch_type);
+  IPC::Message new_msg = InputMsg_HandleInputEvent(
+      routing_id, &event->event(), event->getCoalescedEventsPointers(),
+      latency_info, dispatch_type);
   main_listener_.Run(new_msg);
 }
 

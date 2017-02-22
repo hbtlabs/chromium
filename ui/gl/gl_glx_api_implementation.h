@@ -20,7 +20,7 @@ struct GLWindowSystemBindingInfo;
 
 GL_EXPORT void InitializeStaticGLBindingsGLX();
 GL_EXPORT void InitializeDebugGLBindingsGLX();
-GL_EXPORT void ClearGLBindingsGLX();
+GL_EXPORT void ClearBindingsGLX();
 GL_EXPORT bool GetGLWindowSystemBindingInfoGLX(GLWindowSystemBindingInfo* info);
 
 class GL_EXPORT GLXApiBase : public GLXApi {
@@ -51,6 +51,21 @@ class GL_EXPORT RealGLXApi : public GLXApiBase {
 
   std::vector<std::string> disabled_exts_;
   std::string filtered_exts_;
+};
+
+// Logs debug information for every GLX call.
+class GL_EXPORT DebugGLXApi : public GLXApi {
+ public:
+  DebugGLXApi(GLXApi* glx_api);
+  ~DebugGLXApi() override;
+
+  // Include the auto-generated part of this class. We split this because
+  // it means we can easily edit the non-auto generated parts right here in
+  // this file instead of having to edit some template or the code generator.
+  #include "gl_bindings_api_autogen_glx.h"
+
+ private:
+  GLXApi* glx_api_;
 };
 
 // Inserts a TRACE for every GLX call.

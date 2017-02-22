@@ -4,9 +4,6 @@
 
 #include "net/quic/core/quic_socket_address_coder.h"
 
-#include "net/base/ip_address.h"
-#include "net/base/sys_addrinfo.h"
-
 using std::string;
 
 namespace net {
@@ -22,7 +19,7 @@ const uint16_t kIPv6 = 10;
 
 QuicSocketAddressCoder::QuicSocketAddressCoder() {}
 
-QuicSocketAddressCoder::QuicSocketAddressCoder(const IPEndPoint& address)
+QuicSocketAddressCoder::QuicSocketAddressCoder(const QuicSocketAddress& address)
     : address_(address) {}
 
 QuicSocketAddressCoder::~QuicSocketAddressCoder() {}
@@ -30,11 +27,11 @@ QuicSocketAddressCoder::~QuicSocketAddressCoder() {}
 string QuicSocketAddressCoder::Encode() const {
   string serialized;
   uint16_t address_family;
-  switch (address_.GetSockAddrFamily()) {
-    case AF_INET:
+  switch (address_.host().address_family()) {
+    case IpAddressFamily::IP_V4:
       address_family = kIPv4;
       break;
-    case AF_INET6:
+    case IpAddressFamily::IP_V6:
       address_family = kIPv6;
       break;
     default:
@@ -42,7 +39,7 @@ string QuicSocketAddressCoder::Encode() const {
   }
   serialized.append(reinterpret_cast<const char*>(&address_family),
                     sizeof(address_family));
-  serialized.append(IPAddressToPackedString(address_.address()));
+  serialized.append(address_.host().ToPackedString());
   uint16_t port = address_.port();
   serialized.append(reinterpret_cast<const char*>(&port), sizeof(port));
   return serialized;
@@ -60,10 +57,10 @@ bool QuicSocketAddressCoder::Decode(const char* data, size_t length) {
   size_t ip_length;
   switch (address_family) {
     case kIPv4:
-      ip_length = IPAddress::kIPv4AddressSize;
+      ip_length = QuicIpAddress::kIPv4AddressSize;
       break;
     case kIPv6:
-      ip_length = IPAddress::kIPv6AddressSize;
+      ip_length = QuicIpAddress::kIPv6AddressSize;
       break;
     default:
       return false;
@@ -82,7 +79,9 @@ bool QuicSocketAddressCoder::Decode(const char* data, size_t length) {
   }
   memcpy(&port, data, length);
 
-  address_ = IPEndPoint(IPAddress(ip), port);
+  QuicIpAddress ip_address;
+  ip_address.FromPackedString(reinterpret_cast<const char*>(&ip[0]), ip_length);
+  address_ = QuicSocketAddress(ip_address, port);
   return true;
 }
 

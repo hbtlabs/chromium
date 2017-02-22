@@ -25,7 +25,6 @@
 
 namespace blink {
 class WebInputElement;
-class WebKeyboardEvent;
 class WebSecurityOrigin;
 }
 
@@ -84,6 +83,10 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   bool DidClearAutofillSelection(
       const blink::WebFormControlElement& control_element);
 
+  // If the form is non-secure, show the "Not Secure" warning on username and
+  // password input fields.
+  bool ShouldShowNotSecureWarning(const blink::WebInputElement& element);
+
   // Shows an Autofill popup with username suggestions for |element|. If
   // |show_all| is |true|, will show all possible suggestions for that element,
   // otherwise shows suggestions based on current value of |element|.
@@ -94,6 +97,11 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   bool ShowSuggestions(const blink::WebInputElement& element,
                        bool show_all,
                        bool generation_popup_showing);
+
+  // Shows an Autofill-style popup with a warning that the form is not secure.
+  // This UI is shown when a username or password field is autofilled or edited
+  // on a non-secure page.
+  void ShowNotSecureWarning(const blink::WebInputElement& element);
 
   // Called when new form controls are inserted.
   void OnDynamicFormsSeen();
@@ -184,7 +192,7 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   void DidFinishDocumentLoad() override;
   void DidFinishLoad() override;
   void FrameDetached() override;
-  void DidStartProvisionalLoad() override;
+  void DidStartProvisionalLoad(blink::WebDataSource* data_source) override;
   void WillCommitProvisionalLoad() override;
   void DidCommitProvisionalLoad(bool is_new_navigation,
                                 bool is_same_page_navigation) override;

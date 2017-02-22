@@ -19,12 +19,14 @@ class GURL;
 
 // Parameters representing an x-callback-url request from another app.
 // Can be nil.
-@property(nonatomic, readonly, retain) XCallbackParameters* xCallbackParameters;
+@property(nonatomic, readonly, strong) XCallbackParameters* xCallbackParameters;
 
 // Boolean to track if a voice search is requested at startup.
 @property(nonatomic, readwrite, assign) BOOL launchVoiceSearch;
 // Boolean to track if the app should launch in incognito mode.
 @property(nonatomic, readwrite, assign) BOOL launchInIncognito;
+// Boolean to track if the omnibox should be focused on startup.
+@property(nonatomic, readwrite, assign) BOOL launchFocusOmnibox;
 // Boolean to track if a QR scanner is requested at startup.
 @property(nonatomic, readwrite, assign) BOOL launchQRScanner;
 

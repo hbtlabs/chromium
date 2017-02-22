@@ -4,12 +4,12 @@
 
 #include "modules/fetch/BlobBytesConsumer.h"
 
-#include "core/fetch/FetchInitiatorTypeNames.h"
 #include "core/loader/ThreadableLoader.h"
 #include "modules/fetch/BytesConsumerForDataConsumerHandle.h"
 #include "platform/blob/BlobData.h"
 #include "platform/blob/BlobRegistry.h"
 #include "platform/blob/BlobURL.h"
+#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/weborigin/KURL.h"
@@ -23,7 +23,6 @@ BlobBytesConsumer::BlobBytesConsumer(ExecutionContext* executionContext,
     : ContextLifecycleObserver(executionContext),
       m_blobDataHandle(blobDataHandle),
       m_loader(loader) {
-  ThreadState::current()->registerPreFinalizer(this);
   if (!m_blobDataHandle) {
     // Note that |m_loader| is non-null only in tests.
     if (m_loader) {
@@ -164,7 +163,7 @@ BytesConsumer::PublicState BlobBytesConsumer::getPublicState() const {
   return m_state;
 }
 
-void BlobBytesConsumer::contextDestroyed() {
+void BlobBytesConsumer::contextDestroyed(ExecutionContext*) {
   if (m_state != PublicState::ReadableOrWaiting)
     return;
 
@@ -231,8 +230,8 @@ void BlobBytesConsumer::didFinishLoading(unsigned long identifier,
 
 void BlobBytesConsumer::didFail(const ResourceError& e) {
   if (e.isCancellation()) {
-    DCHECK_EQ(PublicState::Closed, m_state);
-    return;
+    if (m_state != PublicState::ReadableOrWaiting)
+      return;
   }
   DCHECK_EQ(PublicState::ReadableOrWaiting, m_state);
   m_loader = nullptr;

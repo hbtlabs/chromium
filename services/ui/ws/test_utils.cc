@@ -63,8 +63,10 @@ class TestPlatformDisplay : public PlatformDisplay {
   const display::ViewportMetrics& GetViewportMetrics() const override {
     return display_metrics_;
   }
-  void OnGpuChannelEstablished(
-      scoped_refptr<gpu::GpuChannelHost> host) override {}
+  gfx::AcceleratedWidget GetAcceleratedWidget() const override {
+    return gfx::kNullAcceleratedWidget;
+  }
+  FrameGenerator* GetFrameGenerator() override { return nullptr; }
 
  private:
   const int64_t id_;
@@ -85,57 +87,73 @@ ClientWindowId NextUnusedClientWindowId(WindowTree* tree) {
   }
 }
 
+// Creates a Display with |id| and same attributes as |metrics|.
+display::Display CreateDisplay(int64_t id,
+                               const display::ViewportMetrics& metrics) {
+  display::Display display(id);
+  display.set_bounds(metrics.bounds);
+  display.set_work_area(metrics.work_area);
+  display.set_device_scale_factor(metrics.device_scale_factor);
+  display.set_rotation(metrics.rotation);
+  display.set_touch_support(metrics.touch_support);
+  return display;
+}
+
 }  // namespace
 
-// TestPlatformScreen  -------------------------------------------------
+// TestScreenManager  -------------------------------------------------
 
-TestPlatformScreen::TestPlatformScreen() {}
+TestScreenManager::TestScreenManager() {}
 
-TestPlatformScreen::~TestPlatformScreen() {}
+TestScreenManager::~TestScreenManager() {
+  display::Screen::SetScreenInstance(nullptr);
+}
 
-int64_t TestPlatformScreen::AddDisplay() {
+int64_t TestScreenManager::AddDisplay() {
   return AddDisplay(MakeViewportMetrics(0, 0, 100, 100, 1.0f));
 }
 
-int64_t TestPlatformScreen::AddDisplay(
-    const display::ViewportMetrics& metrics) {
+int64_t TestScreenManager::AddDisplay(const display::ViewportMetrics& metrics) {
   // Generate a unique display id.
   int64_t display_id = display_ids_.empty() ? 1 : *display_ids_.rbegin() + 1;
   display_ids_.insert(display_id);
 
+  // First display added will be the primary display.
+  display::DisplayList::Type type = display::DisplayList::Type::NOT_PRIMARY;
+  if (display_ids_.size() == 1)
+    type = display::DisplayList::Type::PRIMARY;
+
+  screen_->display_list().AddDisplay(CreateDisplay(display_id, metrics), type);
   delegate_->OnDisplayAdded(display_id, metrics);
 
-  // First display added will be the primary display.
-  if (primary_display_id_ == display::Display::kInvalidDisplayID) {
-    primary_display_id_ = display_id;
+  if (type == display::DisplayList::Type::PRIMARY)
     delegate_->OnPrimaryDisplayChanged(display_id);
-  }
 
   return display_id;
 }
 
-void TestPlatformScreen::ModifyDisplay(
-    int64_t id,
-    const display::ViewportMetrics& metrics) {
-  DCHECK(display_ids_.count(id) == 1);
-  delegate_->OnDisplayModified(id, metrics);
+void TestScreenManager::ModifyDisplay(int64_t display_id,
+                                      const display::ViewportMetrics& metrics) {
+  DCHECK(display_ids_.count(display_id) == 1);
+  screen_->display_list().UpdateDisplay(CreateDisplay(display_id, metrics));
+  delegate_->OnDisplayModified(display_id, metrics);
 }
 
-void TestPlatformScreen::RemoveDisplay(int64_t id) {
-  DCHECK(display_ids_.count(id) == 1);
-  delegate_->OnDisplayRemoved(id);
-  display_ids_.erase(id);
+void TestScreenManager::RemoveDisplay(int64_t display_id) {
+  DCHECK(display_ids_.count(display_id) == 1);
+  screen_->display_list().RemoveDisplay(display_id);
+  delegate_->OnDisplayRemoved(display_id);
+  display_ids_.erase(display_id);
 }
 
-void TestPlatformScreen::Init(display::PlatformScreenDelegate* delegate) {
-  // Reset
+void TestScreenManager::Init(display::ScreenManagerDelegate* delegate) {
   delegate_ = delegate;
-  display_ids_.clear();
-  primary_display_id_ = display::Display::kInvalidDisplayID;
-}
 
-int64_t TestPlatformScreen::GetPrimaryDisplayId() const {
-  return primary_display_id_;
+  // Reset everything.
+  display_ids_.clear();
+  display::Screen::SetScreenInstance(nullptr);
+  screen_ = base::MakeUnique<display::ScreenBase>();
+  display::Screen::SetScreenInstance(screen_.get());
 }
 
 // TestPlatformDisplayFactory  -------------------------------------------------
@@ -222,7 +240,7 @@ void TestWindowManager::WmDisplayRemoved(int64_t display_id) {
 void TestWindowManager::WmCreateTopLevelWindow(
     uint32_t change_id,
     ClientSpecificId requesting_client_id,
-    mojo::Map<mojo::String, mojo::Array<uint8_t>> properties) {
+    const std::unordered_map<std::string, std::vector<uint8_t>>& properties) {
   got_create_top_level_window_ = true;
   change_id_ = change_id;
 }
@@ -238,6 +256,14 @@ void TestWindowManager::WmPerformMoveLoop(uint32_t change_id,
 }
 
 void TestWindowManager::WmCancelMoveLoop(uint32_t window_id) {}
+
+void TestWindowManager::WmDeactivateWindow(uint32_t window_id) {}
+
+void TestWindowManager::WmStackAbove(uint32_t change_id,
+                                     uint32_t above_id,
+                                     uint32_t below_id) {}
+
+void TestWindowManager::WmStackAtTop(uint32_t change_id, uint32_t window_id) {}
 
 void TestWindowManager::OnAccelerator(uint32_t ack_id,
                                       uint32_t accelerator_id,
@@ -297,7 +323,7 @@ void TestWindowTreeClient::OnWindowBoundsChanged(uint32_t window,
 void TestWindowTreeClient::OnClientAreaChanged(
     uint32_t window_id,
     const gfx::Insets& new_client_area,
-    mojo::Array<gfx::Rect> new_additional_client_areas) {}
+    const std::vector<gfx::Rect>& new_additional_client_areas) {}
 
 void TestWindowTreeClient::OnTransientWindowAdded(
     uint32_t window_id,
@@ -311,7 +337,7 @@ void TestWindowTreeClient::OnWindowHierarchyChanged(
     uint32_t window,
     uint32_t old_parent,
     uint32_t new_parent,
-    mojo::Array<mojom::WindowDataPtr> windows) {
+    std::vector<mojom::WindowDataPtr> windows) {
   tracker_.OnWindowHierarchyChanged(window, old_parent, new_parent,
                                     std::move(windows));
 }
@@ -344,13 +370,14 @@ void TestWindowTreeClient::OnWindowParentDrawnStateChanged(uint32_t window,
 
 void TestWindowTreeClient::OnWindowSharedPropertyChanged(
     uint32_t window,
-    const mojo::String& name,
-    mojo::Array<uint8_t> new_data) {
-  tracker_.OnWindowSharedPropertyChanged(window, name, std::move(new_data));
+    const std::string& name,
+    const base::Optional<std::vector<uint8_t>>& new_data) {
+  tracker_.OnWindowSharedPropertyChanged(window, name, new_data);
 }
 
 void TestWindowTreeClient::OnWindowInputEvent(uint32_t event_id,
                                               uint32_t window,
+                                              int64_t display_id,
                                               std::unique_ptr<ui::Event> event,
                                               bool matches_pointer_watcher) {
   tracker_.OnWindowInputEvent(window, *event.get(), matches_pointer_watcher);
@@ -358,7 +385,8 @@ void TestWindowTreeClient::OnWindowInputEvent(uint32_t event_id,
 
 void TestWindowTreeClient::OnPointerEventObserved(
     std::unique_ptr<ui::Event> event,
-    uint32_t window_id) {
+    uint32_t window_id,
+    int64_t display_id) {
   tracker_.OnPointerEventObserved(*event.get(), window_id);
 }
 
@@ -374,12 +402,10 @@ void TestWindowTreeClient::OnWindowPredefinedCursorChanged(
 
 void TestWindowTreeClient::OnWindowSurfaceChanged(
     Id window_id,
-    const cc::SurfaceId& surface_id,
-    const gfx::Size& frame_size,
-    float device_scale_factor) {}
+    const cc::SurfaceInfo& surface_info) {}
 
 void TestWindowTreeClient::OnDragDropStart(
-    mojo::Map<mojo::String, mojo::Array<uint8_t>> mime_data) {}
+    const std::unordered_map<std::string, std::vector<uint8_t>>& mime_data) {}
 
 void TestWindowTreeClient::OnDragEnter(uint32_t window,
                                        uint32_t key_state,
@@ -477,6 +503,9 @@ bool TestWindowServerDelegate::IsTestConfig() const {
 WindowServerTestHelper::WindowServerTestHelper()
     : cursor_id_(mojom::Cursor::CURSOR_NULL),
       platform_display_factory_(&cursor_id_) {
+  // Some tests create their own message loop, for example to add a task runner.
+  if (!base::MessageLoop::current())
+    message_loop_ = base::MakeUnique<base::MessageLoop>();
   PlatformDisplay::set_factory_for_testing(&platform_display_factory_);
   window_server_ = base::MakeUnique<WindowServer>(&window_server_delegate_);
   window_server_delegate_.set_window_server(window_server_.get());
@@ -504,18 +533,21 @@ ServerWindow* WindowEventTargetingHelper::CreatePrimaryTree(
     const gfx::Rect& root_window_bounds,
     const gfx::Rect& window_bounds) {
   WindowTree* wm_tree = window_server()->GetTreeWithId(1);
-  const ClientWindowId embed_window_id(
-      WindowIdToTransportId(WindowId(wm_tree->id(), 1)));
+  const ClientWindowId embed_window_id(WindowIdToTransportId(
+      WindowId(wm_tree->id(), next_primary_tree_window_id_++)));
   EXPECT_TRUE(wm_tree->NewWindow(embed_window_id, ServerWindow::Properties()));
   EXPECT_TRUE(wm_tree->SetWindowVisibility(embed_window_id, true));
   EXPECT_TRUE(wm_tree->AddWindow(FirstRootId(wm_tree), embed_window_id));
   display_->root_window()->SetBounds(root_window_bounds);
   mojom::WindowTreeClientPtr client;
-  mojom::WindowTreeClientRequest client_request = GetProxy(&client);
-  wm_client_->Bind(std::move(client_request));
+  mojom::WindowTreeClientRequest client_request(&client);
+  ws_test_helper_.window_server_delegate()->last_client()->Bind(
+      std::move(client_request));
   const uint32_t embed_flags = 0;
   wm_tree->Embed(embed_window_id, std::move(client), embed_flags);
   ServerWindow* embed_window = wm_tree->GetWindowByClientId(embed_window_id);
+  embed_window->set_event_targeting_policy(
+      mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
   WindowTree* tree1 = window_server()->GetTreeWithRoot(embed_window);
   EXPECT_NE(nullptr, tree1);
   EXPECT_NE(tree1, wm_tree);
@@ -536,7 +568,7 @@ void WindowEventTargetingHelper::CreateSecondaryTree(
   ASSERT_TRUE(tree1 != nullptr);
   const ClientWindowId child1_id(
       WindowIdToTransportId(WindowId(tree1->id(), 1)));
-  EXPECT_TRUE(tree1->NewWindow(child1_id, ServerWindow::Properties()));
+  ASSERT_TRUE(tree1->NewWindow(child1_id, ServerWindow::Properties()));
   ServerWindow* child1 = tree1->GetWindowByClientId(child1_id);
   ASSERT_TRUE(child1);
   EXPECT_TRUE(tree1->AddWindow(ClientWindowIdForWindow(tree1, embed_window),
@@ -545,7 +577,6 @@ void WindowEventTargetingHelper::CreateSecondaryTree(
 
   child1->SetVisible(true);
   child1->SetBounds(window_bounds);
-  EnableHitTest(child1);
 
   TestWindowTreeClient* embed_client =
       ws_test_helper_.window_server_delegate()->last_client();
@@ -559,7 +590,7 @@ void WindowEventTargetingHelper::CreateSecondaryTree(
 
 void WindowEventTargetingHelper::SetTaskRunner(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-  ws_test_helper_.message_loop()->SetTaskRunner(task_runner);
+  base::MessageLoop::current()->SetTaskRunner(task_runner);
 }
 
 // ----------------------------------------------------------------------------
@@ -624,7 +655,8 @@ ServerWindow* NewWindowInTreeWithParent(WindowTree* tree,
     return nullptr;
   if (!tree->AddWindow(parent_client_id, client_window_id))
     return nullptr;
-  *client_id = client_window_id;
+  if (client_id)
+    *client_id = client_window_id;
   return tree->GetWindowByClientId(client_window_id);
 }
 

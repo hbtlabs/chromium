@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "base/memory/memory_coordinator_client.h"
 #include "base/observer_list.h"
 #include "base/process/kill.h"
 #include "base/process/process_handle.h"
@@ -19,7 +20,7 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/task_manager/providers/task.h"
 #include "chrome/browser/task_manager/task_manager_observer.h"
-#include "third_party/WebKit/public/web/WebCache.h"
+#include "third_party/WebKit/public/platform/WebCache.h"
 #include "ui/gfx/image/image_skia.h"
 
 class PrefRegistrySimple;
@@ -67,9 +68,18 @@ class TaskManagerInterface {
   // Kills the task with |task_id|.
   virtual void KillTask(TaskId task_id) = 0;
 
-  // returns the CPU usage in percent for the process on which the task with
+  // Returns the CPU usage in percent for the process on which the task with
   // |task_id| is running during the current refresh cycle.
   virtual double GetCpuUsage(TaskId task_id) const = 0;
+
+  // Returns the start time for the process on which the task
+  // with |task_id| is running. Only implemented in Windows now.
+  virtual base::Time GetStartTime(TaskId task_id) const = 0;
+
+  // Returns the CPU time for the process on which the task
+  // with |task_id| is running during the current refresh cycle.
+  // Only implemented in Windows now.
+  virtual base::TimeDelta GetCpuTime(TaskId task_id) const = 0;
 
   // Returns the current physical/private/shared memory usage of the task with
   // |task_id| in bytes. A value of -1 means no valid value is currently
@@ -85,6 +95,9 @@ class TaskManagerInterface {
   // inflated because it is counting other processes' resources.
   virtual int64_t GetGpuMemoryUsage(TaskId task_id,
                                     bool* has_duplicates) const = 0;
+
+  // Returns the memory state of the task with |task_id|.
+  virtual base::MemoryState GetMemoryState(TaskId task_id) const = 0;
 
   // Returns the number of average idle CPU wakeups per second since the last
   // refresh cycle. A value of -1 means no valid value is currently available.
@@ -117,7 +130,7 @@ class TaskManagerInterface {
   virtual const base::string16& GetTitle(TaskId task_id) const = 0;
 
   // Returns the canonicalized name of the task with |task_id| that can be used
-  // to represent this task in a Rappor sample via RapporService.
+  // to represent this task in a Rappor sample via RapporServiceImpl.
   virtual const std::string& GetTaskNameForRappor(TaskId task_id) const = 0;
 
   // Returns the name of the profile associated with the browser context of the
@@ -187,6 +200,9 @@ class TaskManagerInterface {
   virtual bool GetWebCacheStats(
       TaskId task_id,
       blink::WebCache::ResourceTypeStats* stats) const = 0;
+
+  // Returns the keep-alive counter if the Task is an event page, -1 otherwise.
+  virtual int GetKeepaliveCount(TaskId task_id) const = 0;
 
   // Gets the list of task IDs currently tracked by the task manager. Tasks that
   // share the same process id will always be consecutive. The list will be

@@ -33,8 +33,11 @@
 #include "components/safe_browsing_db/util.h"
 #include "url/gurl.h"
 
+namespace base {
+class SequencedTaskRunner;
+}
+
 namespace net {
-class URLRequestContext;
 class URLRequestContextGetter;
 }
 
@@ -42,8 +45,6 @@ namespace safe_browsing {
 
 class SafeBrowsingService;
 class SafeBrowsingDatabase;
-class ClientSideDetectionService;
-class DownloadProtectionService;
 struct V4ProtocolConfig;
 
 // Implementation that manages a local database on disk.
@@ -119,6 +120,7 @@ class LocalSafeBrowsingDatabaseManager
   bool CanCheckUrl(const GURL& url) const override;
 
   bool CheckBrowseUrl(const GURL& url, Client* client) override;
+  bool CheckUrlForSubresourceFilter(const GURL& url, Client* client) override;
   bool CheckDownloadUrl(const std::vector<GURL>& url_chain,
                         Client* client) override;
   bool CheckExtensionIDs(const std::set<std::string>& extension_ids,
@@ -332,10 +334,6 @@ class LocalSafeBrowsingDatabaseManager
 
   // Lock used to prevent possible data races due to compiler optimizations.
   mutable base::Lock database_lock_;
-
-  // Whether the service is running. 'enabled_' is used by the
-  // SafeBrowsingDatabaseManager on the IO thread during normal operations.
-  bool enabled_;
 
   // Indicate if download_protection is enabled by command switch
   // so we allow this feature to be exercised.

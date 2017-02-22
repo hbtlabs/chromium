@@ -29,7 +29,7 @@ class IncidentReportingService;
 class ResourceRequestDetector;
 struct ResourceRequestInfo;
 class SafeBrowsingService;
-class V4LocalDatabaseManager;
+class SafeBrowsingDatabaseManager;
 struct V4ProtocolConfig;
 
 // Abstraction to help organize code for mobile vs full safe browsing modes.
@@ -68,11 +68,11 @@ class ServicesDelegate {
 
   virtual ~ServicesDelegate() {}
 
-  virtual const scoped_refptr<V4LocalDatabaseManager>&
+  virtual const scoped_refptr<SafeBrowsingDatabaseManager>&
   v4_local_database_manager() const = 0;
 
   // Initializes internal state using the ServicesCreator.
-  virtual void Initialize() = 0;
+  virtual void Initialize(bool v4_enabled = false) = 0;
 
   // Creates the CSD service for the given |context_getter|.
   virtual void InitializeCsdService(
@@ -89,8 +89,6 @@ class ServicesDelegate {
   virtual std::unique_ptr<TrackedPreferenceValidationDelegate>
       CreatePreferenceValidationDelegate(Profile* profile) = 0;
   virtual void RegisterDelayedAnalysisCallback(
-      const DelayedAnalysisCallback& callback) = 0;
-  virtual void RegisterExtendedReportingOnlyDelayedAnalysisCallback(
       const DelayedAnalysisCallback& callback) = 0;
   virtual void AddDownloadManager(
       content::DownloadManager* download_manager) = 0;

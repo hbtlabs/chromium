@@ -61,14 +61,19 @@ scoped_refptr<base::RefCountedMemory> GetBuiltinModuleData(
     const char* path;
     const int id;
   } kBuiltinModuleResources[] = {
-    { mojo::kBindingsModuleName, IDR_MOJO_BINDINGS_JS },
-    { mojo::kBufferModuleName, IDR_MOJO_BUFFER_JS },
-    { mojo::kCodecModuleName, IDR_MOJO_CODEC_JS },
-    { mojo::kConnectionModuleName, IDR_MOJO_CONNECTION_JS },
-    { mojo::kConnectorModuleName, IDR_MOJO_CONNECTOR_JS },
-    { mojo::kRouterModuleName, IDR_MOJO_ROUTER_JS },
-    { mojo::kUnicodeModuleName, IDR_MOJO_UNICODE_JS },
-    { mojo::kValidatorModuleName, IDR_MOJO_VALIDATOR_JS },
+      {mojo::kBindingsModuleName, IDR_MOJO_BINDINGS_JS},
+      {mojo::kBufferModuleName, IDR_MOJO_BUFFER_JS},
+      {mojo::kCodecModuleName, IDR_MOJO_CODEC_JS},
+      {mojo::kConnectorModuleName, IDR_MOJO_CONNECTOR_JS},
+      {mojo::kControlMessageHandlerModuleName,
+       IDR_MOJO_CONTROL_MESSAGE_HANDLER_JS},
+      {mojo::kControlMessageProxyModuleName, IDR_MOJO_CONTROL_MESSAGE_PROXY_JS},
+      {mojo::kInterfaceControlMessagesMojom,
+       IDR_MOJO_INTERFACE_CONTROL_MESSAGES_MOJOM_JS},
+      {mojo::kInterfaceTypesModuleName, IDR_MOJO_INTERFACE_TYPES_JS},
+      {mojo::kRouterModuleName, IDR_MOJO_ROUTER_JS},
+      {mojo::kUnicodeModuleName, IDR_MOJO_UNICODE_JS},
+      {mojo::kValidatorModuleName, IDR_MOJO_VALIDATOR_JS},
   };
 
   std::unique_ptr<ModuleSourceMap>& module_sources = g_module_sources.Get();
@@ -122,13 +127,13 @@ MojoContextState::MojoContextState(blink::WebFrame* frame,
       ->EnsureMojoBuiltinsAreAvailable(context_holder->isolate(), context);
   v8::Local<v8::Object> install_target;
   if (bindings_type == MojoBindingsType::FOR_LAYOUT_TESTS) {
-    // In layout tests we install the module system under 'mojo.define'
+    // In layout tests we install the module system under 'gin.define'
     // for now to avoid globally exposing something as generic as 'define'.
     //
     // TODO(rockot): Remove this if/when we can integrate gin + ES6 modules.
     install_target = v8::Object::New(context->GetIsolate());
     gin::SetProperty(context->GetIsolate(), context->Global(),
-                     gin::StringToSymbol(context->GetIsolate(), "mojo"),
+                     gin::StringToSymbol(context->GetIsolate(), "gin"),
                      install_target);
   } else {
     // Otherwise we're fine installing a global 'define'.
@@ -180,7 +185,6 @@ void MojoContextState::FetchModule(const std::string& id) {
   module_fetchers_.push_back(fetcher);
   fetcher->Start(frame_,
                  blink::WebURLRequest::RequestContextScript,
-                 blink::WebURLRequest::FrameTypeNone,
                  base::Bind(&MojoContextState::OnFetchModuleComplete,
                             base::Unretained(this), fetcher, id));
 }

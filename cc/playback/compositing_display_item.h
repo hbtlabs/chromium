@@ -16,7 +16,6 @@
 #include "third_party/skia/include/core/SkColorFilter.h"
 #include "third_party/skia/include/core/SkRect.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
-#include "third_party/skia/include/core/SkXfermode.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 class SkCanvas;
@@ -26,31 +25,32 @@ namespace cc {
 class CC_EXPORT CompositingDisplayItem : public DisplayItem {
  public:
   CompositingDisplayItem(uint8_t alpha,
-                         SkXfermode::Mode xfermode,
+                         SkBlendMode xfermode,
                          SkRect* bounds,
                          sk_sp<SkColorFilter> color_filter,
                          bool lcd_text_requires_opaque_layer);
-  explicit CompositingDisplayItem(const proto::DisplayItem& proto);
   ~CompositingDisplayItem() override;
 
-  void ToProtobuf(proto::DisplayItem* proto) const override;
   void Raster(SkCanvas* canvas,
               SkPicture::AbortCallback* callback) const override;
   void AsValueInto(const gfx::Rect& visual_rect,
                    base::trace_event::TracedValue* array) const override;
-  size_t ExternalMemoryUsage() const override;
 
+  size_t ExternalMemoryUsage() const {
+    // TODO(pdr): Include color_filter's memory here.
+    return 0;
+  }
   int ApproximateOpCount() const { return 1; }
 
  private:
   void SetNew(uint8_t alpha,
-              SkXfermode::Mode xfermode,
+              SkBlendMode xfermode,
               SkRect* bounds,
               sk_sp<SkColorFilter> color_filter,
               bool lcd_text_requires_opaque_layer);
 
   uint8_t alpha_;
-  SkXfermode::Mode xfermode_;
+  SkBlendMode xfermode_;
   bool has_bounds_;
   SkRect bounds_;
   sk_sp<SkColorFilter> color_filter_;
@@ -60,19 +60,16 @@ class CC_EXPORT CompositingDisplayItem : public DisplayItem {
 class CC_EXPORT EndCompositingDisplayItem : public DisplayItem {
  public:
   EndCompositingDisplayItem();
-  explicit EndCompositingDisplayItem(const proto::DisplayItem& proto);
   ~EndCompositingDisplayItem() override;
 
   static std::unique_ptr<EndCompositingDisplayItem> Create() {
     return base::MakeUnique<EndCompositingDisplayItem>();
   }
 
-  void ToProtobuf(proto::DisplayItem* proto) const override;
   void Raster(SkCanvas* canvas,
               SkPicture::AbortCallback* callback) const override;
   void AsValueInto(const gfx::Rect& visual_rect,
                    base::trace_event::TracedValue* array) const override;
-  size_t ExternalMemoryUsage() const override;
 
   int ApproximateOpCount() const { return 0; }
 };

@@ -22,6 +22,7 @@
 
 #include "core/events/Event.h"
 
+#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/StaticNodeList.h"
 #include "core/events/EventDispatchMediator.h"
 #include "core/events/EventTarget.h"
@@ -30,7 +31,6 @@
 #include "core/svg/SVGElement.h"
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
-#include "wtf/CurrentTime.h"
 
 namespace blink {
 
@@ -57,7 +57,7 @@ Event::Event() : Event("", false, false) {
 Event::Event(const AtomicString& eventType,
              bool canBubbleArg,
              bool cancelableArg,
-             double platformTimeStamp)
+             TimeTicks platformTimeStamp)
     : Event(eventType,
             canBubbleArg,
             cancelableArg,
@@ -72,13 +72,13 @@ Event::Event(const AtomicString& eventType,
             canBubbleArg,
             cancelableArg,
             composedMode,
-            monotonicallyIncreasingTime()) {}
+            TimeTicks::Now()) {}
 
 Event::Event(const AtomicString& eventType,
              bool canBubbleArg,
              bool cancelableArg,
              ComposedMode composedMode,
-             double platformTimeStamp)
+             TimeTicks platformTimeStamp)
     : m_type(eventType),
       m_canBubble(canBubbleArg),
       m_cancelable(cancelableArg),
@@ -88,7 +88,6 @@ Event::Event(const AtomicString& eventType,
       m_immediatePropagationStopped(false),
       m_defaultPrevented(false),
       m_defaultHandled(false),
-      m_cancelBubble(false),
       m_wasInitialized(true),
       m_isTrusted(false),
       m_preventDefaultCalledOnUncancelableEvent(false),
@@ -103,7 +102,7 @@ Event::Event(const AtomicString& eventType, const EventInit& initializer)
             initializer.cancelable(),
             initializer.composed() ? ComposedMode::Composed
                                    : ComposedMode::Scoped,
-            monotonicallyIncreasingTime()) {}
+            TimeTicks::Now()) {}
 
 Event::~Event() {}
 
@@ -136,21 +135,26 @@ void Event::initEvent(const AtomicString& eventTypeArg,
   m_cancelable = cancelableArg;
 }
 
-bool Event::legacyReturnValue(ExecutionContext* executionContext) const {
+bool Event::legacyReturnValue(ScriptState* scriptState) const {
   bool returnValue = !defaultPrevented();
-  if (returnValue)
-    UseCounter::count(executionContext, UseCounter::EventGetReturnValueTrue);
-  else
-    UseCounter::count(executionContext, UseCounter::EventGetReturnValueFalse);
+  if (returnValue) {
+    UseCounter::count(scriptState->getExecutionContext(),
+                      UseCounter::EventGetReturnValueTrue);
+  } else {
+    UseCounter::count(scriptState->getExecutionContext(),
+                      UseCounter::EventGetReturnValueFalse);
+  }
   return returnValue;
 }
 
-void Event::setLegacyReturnValue(ExecutionContext* executionContext,
-                                 bool returnValue) {
-  if (returnValue)
-    UseCounter::count(executionContext, UseCounter::EventSetReturnValueTrue);
-  else
-    UseCounter::count(executionContext, UseCounter::EventSetReturnValueFalse);
+void Event::setLegacyReturnValue(ScriptState* scriptState, bool returnValue) {
+  if (returnValue) {
+    UseCounter::count(scriptState->getExecutionContext(),
+                      UseCounter::EventSetReturnValueTrue);
+  } else {
+    UseCounter::count(scriptState->getExecutionContext(),
+                      UseCounter::EventSetReturnValueFalse);
+  }
   setDefaultPrevented(!returnValue);
 }
 
@@ -225,28 +229,9 @@ void Event::preventDefault() {
 
     const LocalDOMWindow* window =
         m_eventPath ? m_eventPath->windowEventContext().window() : 0;
-    if (window) {
-      const char* devToolsMsg = nullptr;
-      switch (m_handlingPassive) {
-        case PassiveMode::NotPassive:
-        case PassiveMode::NotPassiveDefault:
-          NOTREACHED();
-          break;
-        case PassiveMode::Passive:
-        case PassiveMode::PassiveDefault:
-          devToolsMsg =
-              "Unable to preventDefault inside passive event listener "
-              "invocation.";
-          break;
-        case PassiveMode::PassiveForcedDocumentLevel:
-          devToolsMsg =
-              "Unable to preventDefault inside passive event listener due to "
-              "target being treated as passive. See "
-              "https://www.chromestatus.com/features/5093566007214080";
-          break;
-      }
-      if (devToolsMsg)
-        window->printErrorMessage(devToolsMsg);
+    if (window && m_handlingPassive == PassiveMode::Passive) {
+      window->printErrorMessage(
+          "Unable to preventDefault inside passive event listener invocation.");
     }
     return;
   }
@@ -320,12 +305,9 @@ HeapVector<Member<EventTarget>> Event::pathInternal(ScriptState* scriptState,
 
   if (Node* node = m_currentTarget->toNode()) {
     DCHECK(m_eventPath);
-    size_t eventPathSize = m_eventPath->size();
-    for (size_t i = 0; i < eventPathSize; ++i) {
-      if (node == (*m_eventPath)[i].node()) {
-        return (*m_eventPath)[i].treeScopeEventContext().ensureEventPath(
-            *m_eventPath);
-      }
+    for (auto& context : m_eventPath->nodeEventContexts()) {
+      if (node == context.node())
+        return context.treeScopeEventContext().ensureEventPath(*m_eventPath);
     }
     NOTREACHED();
   }
@@ -351,19 +333,17 @@ double Event::timeStamp(ScriptState* scriptState) const {
   if (scriptState && scriptState->domWindow()) {
     Performance* performance =
         DOMWindowPerformance::performance(*scriptState->domWindow());
+    double timestampSeconds = (m_platformTimeStamp - TimeTicks()).InSecondsF();
     timeStamp =
-        performance->monotonicTimeToDOMHighResTimeStamp(m_platformTimeStamp);
+        performance->monotonicTimeToDOMHighResTimeStamp(timestampSeconds);
   }
 
   return timeStamp;
 }
 
-void Event::setCancelBubble(ExecutionContext* context, bool cancel) {
-  if (!m_cancelBubble && cancel)
-    UseCounter::count(context, UseCounter::EventCancelBubbleWasChangedToTrue);
-  else if (m_cancelBubble && !cancel)
-    UseCounter::count(context, UseCounter::EventCancelBubbleWasChangedToFalse);
-  m_cancelBubble = cancel;
+void Event::setCancelBubble(ScriptState* scriptState, bool cancel) {
+  if (cancel)
+    m_propagationStopped = true;
 }
 
 DEFINE_TRACE(Event) {

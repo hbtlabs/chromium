@@ -57,7 +57,7 @@ HRTFDatabaseLoader::createAndLoadAsynchronouslyIfNecessary(float sampleRate) {
   }
 
   loader = adoptRef(new HRTFDatabaseLoader(sampleRate));
-  getLoaderMap().add(sampleRate, loader.get());
+  getLoaderMap().insert(sampleRate, loader.get());
   loader->loadAsynchronously();
   return loader.release();
 }
@@ -70,7 +70,7 @@ HRTFDatabaseLoader::HRTFDatabaseLoader(float sampleRate)
 HRTFDatabaseLoader::~HRTFDatabaseLoader() {
   ASSERT(isMainThread());
   ASSERT(!m_thread);
-  getLoaderMap().remove(m_databaseSampleRate);
+  getLoaderMap().erase(m_databaseSampleRate);
 }
 
 void HRTFDatabaseLoader::loadTask() {
@@ -95,8 +95,8 @@ void HRTFDatabaseLoader::loadAsynchronously() {
   DCHECK(!m_thread);
 
   // Start the asynchronous database loading process.
-  m_thread =
-      wrapUnique(Platform::current()->createThread("HRTF database loader"));
+  m_thread = WTF::wrapUnique(
+      Platform::current()->createThread("HRTF database loader"));
   // TODO(alexclarke): Should this be posted as a loading task?
   m_thread->getWebTaskRunner()->postTask(
       BLINK_FROM_HERE, crossThreadBind(&HRTFDatabaseLoader::loadTask,

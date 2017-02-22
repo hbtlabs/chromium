@@ -14,7 +14,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/threading/sequenced_worker_pool.h"
-#include "base/threading/worker_pool.h"
 #include "components/cookie_config/cookie_store_util.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/prefs/json_pref_store.h"
@@ -43,6 +42,10 @@
 #include "net/ssl/default_channel_id_store.h"
 #include "net/url_request/url_request_intercepting_job_factory.h"
 #include "net/url_request/url_request_job_factory_impl.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 
@@ -365,8 +368,7 @@ void ChromeBrowserStateImplIOData::InitializeInternal(
             web::WebThread::GetBlockingPool()->GetSequencedTaskRunner(
                 web::WebThread::GetBlockingPool()->GetSequenceToken()));
     channel_id_service = new net::ChannelIDService(
-        new net::DefaultChannelIDStore(channel_id_db.get()),
-        base::WorkerPool::GetTaskRunner(true));
+        new net::DefaultChannelIDStore(channel_id_db.get()));
   }
 
   set_channel_id_service(channel_id_service);
@@ -416,8 +418,7 @@ ChromeBrowserStateImplIOData::InitializeAppRequestContext(
 
   // Use a separate ChannelIDService.
   std::unique_ptr<net::ChannelIDService> channel_id_service(
-      new net::ChannelIDService(new net::DefaultChannelIDStore(nullptr),
-                                base::WorkerPool::GetTaskRunner(true)));
+      new net::ChannelIDService(new net::DefaultChannelIDStore(nullptr)));
 
   // Build a new HttpNetworkSession that uses the new ChannelIDService.
   net::HttpNetworkSession::Params network_params =

@@ -37,7 +37,7 @@ class ContextProvider;
 class DebugRectHistory;
 class FrameRateCounter;
 class HeadsUpDisplayLayerImpl;
-class ImageDecodeController;
+class ImageDecodeCache;
 class LayerTreeDebugState;
 class LayerTreeImpl;
 class LayerTreeSettings;
@@ -56,7 +56,7 @@ typedef SyncedProperty<AdditionGroup<gfx::Vector2dF>> SyncedElasticOverscroll;
 
 class CC_EXPORT LayerTreeImpl {
  public:
-  // This is the number of times a fixed point has to be hit contiuously by a
+  // This is the number of times a fixed point has to be hit continuously by a
   // layer to consider it as jittering.
   enum : int { kFixedPointHitsThreshold = 3 };
   LayerTreeImpl(LayerTreeHostImpl* layer_tree_host_impl,
@@ -77,7 +77,7 @@ class CC_EXPORT LayerTreeImpl {
   ContextProvider* context_provider() const;
   ResourceProvider* resource_provider() const;
   TileManager* tile_manager() const;
-  ImageDecodeController* image_decode_controller() const;
+  ImageDecodeCache* image_decode_cache() const;
   FrameRateCounter* frame_rate_counter() const;
   MemoryHistory* memory_history() const;
   gfx::Size device_viewport_size() const;
@@ -203,10 +203,6 @@ class CC_EXPORT LayerTreeImpl {
   }
 
   void UpdatePropertyTreeScrollingAndAnimationFromMainThread();
-  void UpdatePropertyTreeScrollOffset(PropertyTrees* property_trees) {
-    property_trees_.scroll_tree.UpdateScrollOffsetMap(
-        &property_trees->scroll_tree.scroll_offset_map(), this);
-  }
   void SetPageScaleOnActiveTree(float active_page_scale);
   void PushPageScaleFromMainThread(float page_scale_factor,
                                    float min_page_scale_factor,
@@ -369,6 +365,7 @@ class CC_EXPORT LayerTreeImpl {
   void AppendSwapPromises(
       std::vector<std::unique_ptr<SwapPromise>> new_swap_promises);
   void FinishSwapPromises(CompositorFrameMetadata* metadata);
+  void ClearSwapPromises();
   void BreakSwapPromises(SwapPromise::DidNotSwapReason reason);
 
   void DidModifyTilePriorities();
@@ -405,6 +402,8 @@ class CC_EXPORT LayerTreeImpl {
 
   void RegisterSelection(const LayerSelection& selection);
 
+  bool GetAndResetHandleVisibilityChanged();
+
   // Compute the current selection handle location and visbility with respect to
   // the viewport.
   void GetViewportSelection(Selection<gfx::SelectionBound>* selection);
@@ -430,8 +429,6 @@ class CC_EXPORT LayerTreeImpl {
   void DidUpdateScrollOffset(int layer_id);
   void DidUpdateScrollState(int layer_id);
 
-  void ScrollAnimationAbort(bool needs_completion);
-
   bool have_scroll_event_handlers() const {
     return have_scroll_event_handlers_;
   }
@@ -456,6 +453,8 @@ class CC_EXPORT LayerTreeImpl {
   void ClearLayerList();
 
   void BuildLayerListForTesting();
+
+  void InvalidateRegionForImages(const ImageIdFlatSet& images_to_invalidate);
 
  protected:
   float ClampPageScaleFactorToLimits(float page_scale_factor) const;
@@ -539,6 +538,8 @@ class CC_EXPORT LayerTreeImpl {
   bool next_activation_forces_redraw_;
 
   bool has_ever_been_drawn_;
+
+  bool handle_visibility_changed_;
 
   std::vector<std::unique_ptr<SwapPromise>> swap_promise_list_;
   std::vector<std::unique_ptr<SwapPromise>> pinned_swap_promise_list_;

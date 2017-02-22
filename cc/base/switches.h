@@ -17,7 +17,6 @@ namespace switches {
 
 // Switches for the renderer compositor only.
 CC_EXPORT extern const char kDisableThreadedAnimation[];
-CC_EXPORT extern const char kDisableCachedPictureRaster[];
 CC_EXPORT extern const char kDisableCompositedAntialiasing[];
 CC_EXPORT extern const char kDisableMainFrameBeforeActivation[];
 CC_EXPORT extern const char kEnableMainFrameBeforeActivation[];
@@ -30,6 +29,8 @@ CC_EXPORT extern const char kEnableTileCompression[];
 // Switches for both the renderer and ui compositors.
 CC_EXPORT extern const char kEnableColorCorrectRendering[];
 CC_EXPORT extern const char kEnableGpuBenchmarking[];
+CC_EXPORT extern const char kEnableTrueColorRendering[];
+CC_EXPORT extern const char kCheckTilePriorityInversion[];
 
 // Debug visualizations.
 CC_EXPORT extern const char kShowCompositedLayerBorders[];
@@ -47,6 +48,7 @@ CC_EXPORT extern const char kShowScreenSpaceRects[];
 CC_EXPORT extern const char kUIShowScreenSpaceRects[];
 CC_EXPORT extern const char kEnableLayerLists[];
 CC_EXPORT extern const char kUIEnableLayerLists[];
+CC_EXPORT extern const char kShowOverdrawFeedback[];
 
 // Unit test related.
 CC_EXPORT extern const char kCCLayerTreeTestNoTimeout[];

@@ -86,16 +86,6 @@ class CONTENT_EXPORT RenderViewHost : public IPC::Sender {
   // Returns the main frame for this render view.
   virtual RenderFrameHost* GetMainFrame() = 0;
 
-  // Tell the render view to enable a set of javascript bindings. The argument
-  // should be a combination of values from BindingsPolicy.
-  virtual void AllowBindings(int binding_flags) = 0;
-
-  // Tells the renderer to clear the focused element (if any).
-  virtual void ClearFocusedElement() = 0;
-
-  // Returns true if the current focused element is editable.
-  virtual bool IsFocusedElementEditable() = 0;
-
   // Notifies the listener that a directory enumeration is complete.
   virtual void DirectoryEnumerationFinished(
       int request_id,
@@ -129,10 +119,6 @@ class CONTENT_EXPORT RenderViewHost : public IPC::Sender {
 
   virtual RenderViewHostDelegate* GetDelegate() const = 0;
 
-  // Returns a bitwise OR of bindings types that have been enabled for this
-  // RenderView. See BindingsPolicy for details.
-  virtual int GetEnabledBindings() const = 0;
-
   virtual SiteInstance* GetSiteInstance() const = 0;
 
   // Returns true if the RenderView is active and has not crashed.
@@ -146,9 +132,6 @@ class CONTENT_EXPORT RenderViewHost : public IPC::Sender {
   // Must call AllowWebUIBindings() on this renderer first.
   virtual void SetWebUIProperty(const std::string& name,
                                 const std::string& value) = 0;
-
-  // Changes the zoom level for the current main frame.
-  virtual void Zoom(PageZoom zoom) = 0;
 
   // Send the renderer process the current preferences supplied by the
   // RenderViewHostDelegate.

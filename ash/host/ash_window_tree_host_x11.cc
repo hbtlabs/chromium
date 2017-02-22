@@ -22,6 +22,7 @@
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/x/x11_util.h"
 #include "ui/display/screen.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/events/devices/device_data_manager.h"
 #include "ui/events/devices/x11/device_list_cache_x11.h"
 #include "ui/events/devices/x11/touch_factory_x11.h"
@@ -120,8 +121,8 @@ void AshWindowTreeHostX11::PrepareForShutdown() {
   }
 }
 
-void AshWindowTreeHostX11::SetBounds(const gfx::Rect& bounds) {
-  WindowTreeHostX11::SetBounds(bounds);
+void AshWindowTreeHostX11::SetBoundsInPixels(const gfx::Rect& bounds) {
+  WindowTreeHostX11::SetBoundsInPixels(bounds);
   if (pointer_barriers_) {
     UnConfineCursor();
     ConfineCursorToRootWindow();
@@ -140,14 +141,13 @@ gfx::Transform AshWindowTreeHostX11::GetInverseRootTransform() const {
   return transformer_helper_.GetInverseTransform();
 }
 
-void AshWindowTreeHostX11::UpdateRootWindowSize(const gfx::Size& host_size) {
-  transformer_helper_.UpdateWindowSize(host_size);
+void AshWindowTreeHostX11::UpdateRootWindowSizeInPixels(
+    const gfx::Size& host_size_in_pixels) {
+  transformer_helper_.UpdateWindowSize(host_size_in_pixels);
 }
 
 void AshWindowTreeHostX11::OnCursorVisibilityChangedNative(bool show) {
-#if defined(OS_CHROMEOS)
   SetCrOSTapPaused(!show);
-#endif
 }
 
 void AshWindowTreeHostX11::OnWindowInitialized(aura::Window* window) {}
@@ -156,11 +156,9 @@ void AshWindowTreeHostX11::OnHostInitialized(aura::WindowTreeHost* host) {
   if (host != AsWindowTreeHost())
     return;
 
-#if defined(OS_CHROMEOS)
   // We have to enable Tap-to-click by default because the cursor is set to
   // visible in Shell::InitRootWindowController.
   SetCrOSTapPaused(false);
-#endif
 }
 
 void AshWindowTreeHostX11::OnConfigureNotify() {
@@ -184,7 +182,6 @@ bool AshWindowTreeHostX11::CanDispatchEvent(const ui::PlatformEvent& event) {
     case ui::ET_TOUCH_PRESSED:
     case ui::ET_TOUCH_CANCELLED:
     case ui::ET_TOUCH_RELEASED: {
-#if defined(OS_CHROMEOS)
       XIDeviceEvent* xiev = static_cast<XIDeviceEvent*>(xev->xcookie.data);
       int64_t touch_display_id =
           ui::DeviceDataManager::GetInstance()->GetTargetDisplayForTouchDevice(
@@ -193,22 +190,23 @@ bool AshWindowTreeHostX11::CanDispatchEvent(const ui::PlatformEvent& event) {
       // that if the event is within the bound of the root window. Note
       // that in multi-monitor case, the event position is in framebuffer
       // space so the bounds check will not work so well.
-      if (touch_display_id == display::Display::kInvalidDisplayID) {
+      if (touch_display_id == display::kInvalidDisplayId) {
         if (base::SysInfo::IsRunningOnChromeOS() &&
-            !bounds().Contains(ui::EventLocationFromNative(xev)))
+            !bounds().Contains(
+                gfx::ToFlooredPoint(ui::EventLocationFromNative(xev))))
           return false;
       } else {
         display::Screen* screen = display::Screen::GetScreen();
         display::Display display = screen->GetDisplayNearestWindow(window());
         return touch_display_id == display.id();
       }
-#endif  // defined(OS_CHROMEOS)
       return true;
     }
     default:
       return true;
   }
 }
+
 void AshWindowTreeHostX11::TranslateAndDispatchLocatedEvent(
     ui::LocatedEvent* event) {
   TranslateLocatedEvent(event);
@@ -225,7 +223,6 @@ ui::EventDispatchDetails AshWindowTreeHostX11::DispatchKeyEventPostIME(
   return details;
 }
 
-#if defined(OS_CHROMEOS)
 void AshWindowTreeHostX11::SetCrOSTapPaused(bool state) {
   if (!ui::IsXInput2Available())
     return;
@@ -253,6 +250,5 @@ void AshWindowTreeHostX11::SetCrOSTapPaused(bool state) {
     }
   }
 }
-#endif  // defined(OS_CHROMEOS)
 
 }  // namespace ash

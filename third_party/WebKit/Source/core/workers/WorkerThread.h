@@ -28,8 +28,8 @@
 #define WorkerThread_h
 
 #include "core/CoreExport.h"
-#include "core/dom/ExecutionContextTask.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
+#include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerThreadLifecycleObserver.h"
 #include "platform/LifecycleNotifier.h"
@@ -137,8 +137,7 @@ class CORE_EXPORT WorkerThread : public WebThread::TaskObserver {
   }
 
   void postTask(const WebTraceLocation&,
-                std::unique_ptr<ExecutionContextTask>,
-                bool isInstrumented = false);
+                std::unique_ptr<WTF::CrossThreadClosure>);
   void appendDebuggerTask(std::unique_ptr<CrossThreadClosure>);
 
   // Runs only debugger tasks while paused in debugger.
@@ -171,8 +170,14 @@ class CORE_EXPORT WorkerThread : public WebThread::TaskObserver {
 
   void waitForShutdownForTesting() { m_shutdownEvent->wait(); }
 
+  ParentFrameTaskRunners* getParentFrameTaskRunners() const {
+    return m_parentFrameTaskRunners.get();
+  }
+
  protected:
-  WorkerThread(PassRefPtr<WorkerLoaderProxy>, WorkerReportingProxy&);
+  WorkerThread(PassRefPtr<WorkerLoaderProxy>,
+               WorkerReportingProxy&,
+               ParentFrameTaskRunners*);
 
   // Factory method for creating a new worker context for the thread.
   // Called on the worker thread.
@@ -247,8 +252,7 @@ class CORE_EXPORT WorkerThread : public WebThread::TaskObserver {
   void initializeOnWorkerThread(std::unique_ptr<WorkerThreadStartupData>);
   void prepareForShutdownOnWorkerThread();
   void performShutdownOnWorkerThread();
-  void performTaskOnWorkerThread(std::unique_ptr<ExecutionContextTask>,
-                                 bool isInstrumented);
+  void performTaskOnWorkerThread(std::unique_ptr<CrossThreadClosure>);
   void performDebuggerTaskOnWorkerThread(std::unique_ptr<CrossThreadClosure>);
   void performDebuggerTaskDontWaitOnWorkerThread();
 
@@ -288,6 +292,7 @@ class CORE_EXPORT WorkerThread : public WebThread::TaskObserver {
 
   RefPtr<WorkerLoaderProxy> m_workerLoaderProxy;
   WorkerReportingProxy& m_workerReportingProxy;
+  CrossThreadPersistent<ParentFrameTaskRunners> m_parentFrameTaskRunners;
 
   // This lock protects |m_globalScope|, |m_requestedToTerminate|,
   // |m_threadState|, |m_runningDebuggerTask| and |m_exitCode|.
@@ -304,7 +309,10 @@ class CORE_EXPORT WorkerThread : public WebThread::TaskObserver {
   // mayForciblyTerminateExecution() for details.
   TaskHandle m_forcibleTerminationTaskHandle;
 
-  Persistent<WorkerThreadLifecycleContext> m_workerThreadLifecycleContext;
+  // Created on the main thread heap, but will be accessed cross-thread
+  // when worker thread posts tasks.
+  CrossThreadPersistent<WorkerThreadLifecycleContext>
+      m_workerThreadLifecycleContext;
 };
 
 }  // namespace blink

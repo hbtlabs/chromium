@@ -33,6 +33,8 @@ base::LazyInstance<std::unique_ptr<cronet::CronetEnvironment>>::Leaky
 
 BOOL gHttp2Enabled = YES;
 BOOL gQuicEnabled = NO;
+cronet::URLRequestContextConfig::HttpCacheType gHttpCache =
+    cronet::URLRequestContextConfig::HttpCacheType::DISK;
 ScopedVector<cronet::URLRequestContextConfig::QuicHint> gQuicHints;
 NSString* gUserAgent = nil;
 BOOL gUserAgentPartial = NO;
@@ -74,6 +76,8 @@ class CronetHttpProtocolHandlerDelegate
   // net::HTTPProtocolHandlerDelegate implementation:
   bool CanHandleRequest(NSURLRequest* request) override {
     base::AutoLock auto_lock(lock_);
+    if (!IsRequestSupported(request))
+      return false;
     if (filter_) {
       RequestFilterBlock block = filter_.get();
       return block(request);
@@ -108,7 +112,7 @@ class CronetHttpProtocolHandlerDelegate
   if (gEnableTestCertVerifierForTesting) {
     std::unique_ptr<TestCertVerifier> test_cert_verifier =
         base::MakeUnique<TestCertVerifier>();
-    cronetEnvironment->set_cert_verifier(std::move(test_cert_verifier));
+    cronetEnvironment->set_mock_cert_verifier(std::move(test_cert_verifier));
   }
 }
 
@@ -159,6 +163,23 @@ class CronetHttpProtocolHandlerDelegate
   gSslKeyLogFileName = sslKeyLogFileName;
 }
 
++ (void)setHttpCacheType:(CRNHttpCacheType)httpCacheType {
+  [self checkNotStarted];
+  switch (httpCacheType) {
+    case CRNHttpCacheTypeDisabled:
+      gHttpCache = cronet::URLRequestContextConfig::HttpCacheType::DISABLED;
+      break;
+    case CRNHttpCacheTypeDisk:
+      gHttpCache = cronet::URLRequestContextConfig::HttpCacheType::DISK;
+      break;
+    case CRNHttpCacheTypeMemory:
+      gHttpCache = cronet::URLRequestContextConfig::HttpCacheType::MEMORY;
+      break;
+    default:
+      DCHECK(NO) << "Invalid HTTP cache type: " << httpCacheType;
+  }
+}
+
 + (void)setRequestFilterBlock:(RequestFilterBlock)block {
   if (gHttpProtocolHandlerDelegate.get())
     gHttpProtocolHandlerDelegate.get()->SetRequestFilterBlock(block);
@@ -176,6 +197,7 @@ class CronetHttpProtocolHandlerDelegate
 
   gChromeNet.Get()->set_http2_enabled(gHttp2Enabled);
   gChromeNet.Get()->set_quic_enabled(gQuicEnabled);
+  gChromeNet.Get()->set_http_cache(gHttpCache);
   gChromeNet.Get()->set_ssl_key_log_file_name(
       base::SysNSStringToUTF8(gSslKeyLogFileName));
   for (const auto* quicHint : gQuicHints) {
@@ -230,10 +252,21 @@ class CronetHttpProtocolHandlerDelegate
   config.protocolClasses = @[ [CRNPauseableHTTPProtocolHandler class] ];
 }
 
-+ (void)startNetLogToFile:(NSString*)fileName logBytes:(BOOL)logBytes {
-  if (gChromeNet.Get().get() && [fileName length]) {
-    gChromeNet.Get()->StartNetLog([fileName UTF8String], logBytes);
++ (NSString*)getNetLogPathForFile:(NSString*)fileName {
+  return [[[[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory
+                                                   inDomains:NSUserDomainMask]
+      lastObject] URLByAppendingPathComponent:fileName] path];
+}
+
++ (BOOL)startNetLogToFile:(NSString*)fileName logBytes:(BOOL)logBytes {
+  if (gChromeNet.Get().get() && [fileName length] &&
+      ![fileName isAbsolutePath]) {
+    return gChromeNet.Get()->StartNetLog(
+        base::SysNSStringToUTF8([self getNetLogPathForFile:fileName]),
+        logBytes);
   }
+
+  return NO;
 }
 
 + (void)stopNetLog {

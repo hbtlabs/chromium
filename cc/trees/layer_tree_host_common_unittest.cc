@@ -49,7 +49,9 @@
 #include "cc/trees/task_runner_provider.h"
 #include "cc/trees/transform_node.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkImageFilter.h"
 #include "third_party/skia/include/effects/SkOffsetImageFilter.h"
+#include "third_party/skia/include/effects/SkXfermodeImageFilter.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
 #include "ui/gfx/transform.h"
@@ -186,28 +188,28 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
   const LayerList* GetUpdateLayerList() { return &update_layer_list_; }
 
   void ExecuteCalculateDrawPropertiesAndSaveUpdateLayerList(Layer* root_layer) {
-    DCHECK(root_layer->GetLayerTree());
+    DCHECK(root_layer->layer_tree_host());
     PropertyTreeBuilder::PreCalculateMetaInformation(root_layer);
 
     bool can_render_to_separate_surface = true;
 
     const Layer* page_scale_layer =
-        root_layer->GetLayerTree()->page_scale_layer();
+        root_layer->layer_tree_host()->page_scale_layer();
     Layer* inner_viewport_scroll_layer =
-        root_layer->GetLayerTree()->inner_viewport_scroll_layer();
+        root_layer->layer_tree_host()->inner_viewport_scroll_layer();
     Layer* outer_viewport_scroll_layer =
-        root_layer->GetLayerTree()->outer_viewport_scroll_layer();
+        root_layer->layer_tree_host()->outer_viewport_scroll_layer();
     const Layer* overscroll_elasticity_layer =
-        root_layer->GetLayerTree()->overscroll_elasticity_layer();
+        root_layer->layer_tree_host()->overscroll_elasticity_layer();
     gfx::Vector2dF elastic_overscroll =
-        root_layer->GetLayerTree()->elastic_overscroll();
+        root_layer->layer_tree_host()->elastic_overscroll();
     float page_scale_factor = 1.f;
     float device_scale_factor = 1.f;
     gfx::Size device_viewport_size =
         gfx::Size(root_layer->bounds().width() * device_scale_factor,
                   root_layer->bounds().height() * device_scale_factor);
     PropertyTrees* property_trees =
-        root_layer->GetLayerTree()->property_trees();
+        root_layer->layer_tree_host()->property_trees();
     update_layer_list_.clear();
     PropertyTreeBuilder::BuildPropertyTrees(
         root_layer, page_scale_layer, inner_viewport_scroll_layer,
@@ -217,7 +219,7 @@ class LayerTreeHostCommonTestBase : public LayerTestCommon::LayerImplTest {
     draw_property_utils::UpdatePropertyTrees(property_trees,
                                              can_render_to_separate_surface);
     draw_property_utils::FindLayersThatNeedUpdates(
-        root_layer->GetLayerTree(), property_trees, &update_layer_list_);
+        root_layer->layer_tree_host(), property_trees, &update_layer_list_);
   }
 
   void ExecuteCalculateDrawPropertiesAndSaveUpdateLayerList(
@@ -561,7 +563,6 @@ TEST_F(LayerTreeHostCommonTest, TransformsAboutScrollOffset) {
       LayerImpl::Create(host_impl.active_tree(), 3));
   root->SetBounds(gfx::Size(3, 4));
   root->test_properties()->AddChild(std::move(clip_layer_scoped_ptr));
-  root->SetHasRenderSurface(true);
   LayerImpl* root_layer = root.get();
   host_impl.active_tree()->SetRootLayerForTesting(std::move(root));
 
@@ -1567,7 +1568,7 @@ TEST_F(LayerTreeHostCommonTest, RenderSurfaceForBlendMode) {
   root->SetBounds(gfx::Size(10, 10));
   child->SetBounds(gfx::Size(10, 10));
   child->SetDrawsContent(true);
-  child->test_properties()->blend_mode = SkXfermode::kMultiply_Mode;
+  child->test_properties()->blend_mode = SkBlendMode::kMultiply;
   child->test_properties()->opacity = 0.5f;
   child->test_properties()->force_render_surface = true;
   ExecuteCalculateDrawProperties(root);
@@ -1579,7 +1580,7 @@ TEST_F(LayerTreeHostCommonTest, RenderSurfaceForBlendMode) {
   ASSERT_TRUE(child->render_surface());
   EXPECT_EQ(1.0f, child->draw_opacity());
   EXPECT_EQ(0.5f, child->render_surface()->draw_opacity());
-  EXPECT_EQ(SkXfermode::kSrcOver_Mode, child->draw_blend_mode());
+  EXPECT_EQ(SkBlendMode::kSrcOver, child->draw_blend_mode());
 }
 
 TEST_F(LayerTreeHostCommonTest, RenderSurfaceDrawOpacity) {
@@ -3119,6 +3120,180 @@ TEST_F(LayerTreeHostCommonTest, VisibleContentRectWithClippingAndScaling) {
   EXPECT_EQ(gfx::Rect(41, 41), grand_child->visible_layer_rect());
 }
 
+TEST_F(LayerTreeHostCommonTest, VisibleRectWithClippingAndFilters) {
+  LayerImpl* root = root_layer_for_testing();
+  LayerImpl* clip = AddChild<LayerImpl>(root);
+  LayerImpl* filter = AddChild<LayerImpl>(clip);
+  LayerImpl* filter_child = AddChild<LayerImpl>(filter);
+
+  root->SetBounds(gfx::Size(100, 100));
+  clip->SetBounds(gfx::Size(10, 10));
+  filter->test_properties()->force_render_surface = true;
+  filter_child->SetBounds(gfx::Size(2000, 2000));
+  filter_child->SetPosition(gfx::PointF(-50, -50));
+  filter_child->SetDrawsContent(true);
+
+  clip->SetMasksToBounds(true);
+
+  ExecuteCalculateDrawProperties(root);
+  EXPECT_EQ(gfx::Rect(50, 50, 10, 10), filter_child->visible_layer_rect());
+  EXPECT_EQ(gfx::Rect(10, 10), filter->render_surface()->content_rect());
+
+  FilterOperations blur_filter;
+  blur_filter.Append(FilterOperation::CreateBlurFilter(4.0f));
+  filter->test_properties()->filters = blur_filter;
+  host_impl()->active_tree()->property_trees()->needs_rebuild = true;
+
+  ExecuteCalculateDrawProperties(root);
+
+  EXPECT_EQ(gfx::Rect(38, 38, 34, 34), filter_child->visible_layer_rect());
+  EXPECT_EQ(gfx::Rect(-12, -12, 34, 34),
+            filter->render_surface()->content_rect());
+
+  gfx::Transform vertical_flip;
+  vertical_flip.Scale(1, -1);
+  sk_sp<SkImageFilter> flip_filter = SkImageFilter::MakeMatrixFilter(
+      vertical_flip.matrix(), kLow_SkFilterQuality, nullptr);
+  FilterOperations reflection_filter;
+  reflection_filter.Append(
+      FilterOperation::CreateReferenceFilter(SkXfermodeImageFilter::Make(
+          SkBlendMode::kSrcOver, std::move(flip_filter))));
+  filter->test_properties()->filters = reflection_filter;
+  host_impl()->active_tree()->property_trees()->needs_rebuild = true;
+
+  ExecuteCalculateDrawProperties(root);
+
+  EXPECT_EQ(gfx::Rect(50, 40, 10, 20), filter_child->visible_layer_rect());
+  EXPECT_EQ(gfx::Rect(0, -10, 10, 20),
+            filter->render_surface()->content_rect());
+}
+
+TEST_F(LayerTreeHostCommonTest, VisibleRectWithScalingClippingAndFilters) {
+  LayerImpl* root = root_layer_for_testing();
+  LayerImpl* scale = AddChild<LayerImpl>(root);
+  LayerImpl* clip = AddChild<LayerImpl>(scale);
+  LayerImpl* filter = AddChild<LayerImpl>(clip);
+  LayerImpl* filter_child = AddChild<LayerImpl>(filter);
+
+  root->SetBounds(gfx::Size(100, 100));
+  clip->SetBounds(gfx::Size(10, 10));
+  filter->test_properties()->force_render_surface = true;
+  filter_child->SetBounds(gfx::Size(2000, 2000));
+  filter_child->SetPosition(gfx::PointF(-50, -50));
+  filter_child->SetDrawsContent(true);
+
+  clip->SetMasksToBounds(true);
+
+  gfx::Transform scale_transform;
+  scale_transform.Scale(3, 3);
+  scale->test_properties()->transform = scale_transform;
+
+  ExecuteCalculateDrawProperties(root);
+  EXPECT_EQ(gfx::Rect(50, 50, 10, 10), filter_child->visible_layer_rect());
+  EXPECT_EQ(gfx::Rect(30, 30), filter->render_surface()->content_rect());
+
+  FilterOperations blur_filter;
+  blur_filter.Append(FilterOperation::CreateBlurFilter(4.0f));
+  filter->test_properties()->filters = blur_filter;
+  host_impl()->active_tree()->property_trees()->needs_rebuild = true;
+
+  ExecuteCalculateDrawProperties(root);
+
+  EXPECT_EQ(gfx::Rect(38, 38, 34, 34), filter_child->visible_layer_rect());
+  EXPECT_EQ(gfx::Rect(-36, -36, 102, 102),
+            filter->render_surface()->content_rect());
+
+  gfx::Transform vertical_flip;
+  vertical_flip.Scale(1, -1);
+  sk_sp<SkImageFilter> flip_filter = SkImageFilter::MakeMatrixFilter(
+      vertical_flip.matrix(), kLow_SkFilterQuality, nullptr);
+  FilterOperations reflection_filter;
+  reflection_filter.Append(
+      FilterOperation::CreateReferenceFilter(SkXfermodeImageFilter::Make(
+          SkBlendMode::kSrcOver, std::move(flip_filter))));
+  filter->test_properties()->filters = reflection_filter;
+  host_impl()->active_tree()->property_trees()->needs_rebuild = true;
+
+  ExecuteCalculateDrawProperties(root);
+
+  EXPECT_EQ(gfx::Rect(50, 40, 10, 20), filter_child->visible_layer_rect());
+  EXPECT_EQ(gfx::Rect(0, -30, 30, 60),
+            filter->render_surface()->content_rect());
+}
+
+TEST_F(LayerTreeHostCommonTest, ClipRectWithClipParentAndFilters) {
+  LayerImpl* root = root_layer_for_testing();
+  LayerImpl* clip = AddChild<LayerImpl>(root);
+  LayerImpl* filter = AddChild<LayerImpl>(clip);
+  LayerImpl* filter_child_1 = AddChild<LayerImpl>(filter);
+  LayerImpl* filter_child_2 = AddChild<LayerImpl>(filter);
+
+  root->SetBounds(gfx::Size(100, 100));
+  clip->SetBounds(gfx::Size(10, 10));
+  filter->test_properties()->force_render_surface = true;
+
+  filter_child_1->SetBounds(gfx::Size(20, 20));
+  filter_child_1->SetDrawsContent(true);
+  filter_child_2->SetBounds(gfx::Size(20, 20));
+  filter_child_2->SetDrawsContent(true);
+
+  root->SetMasksToBounds(true);
+  clip->SetMasksToBounds(true);
+
+  root->test_properties()->clip_children =
+      base::MakeUnique<std::set<LayerImpl*>>();
+  root->test_properties()->clip_children->insert(filter_child_1);
+  filter_child_1->test_properties()->clip_parent = root;
+
+  ExecuteCalculateDrawProperties(root);
+  EXPECT_TRUE(filter_child_1->is_clipped());
+  EXPECT_TRUE(filter_child_2->is_clipped());
+  EXPECT_EQ(gfx::Rect(100, 100), filter_child_1->clip_rect());
+  EXPECT_EQ(gfx::Rect(10, 10), filter_child_2->clip_rect());
+
+  FilterOperations blur_filter;
+  blur_filter.Append(FilterOperation::CreateBlurFilter(4.0f));
+  filter->test_properties()->filters = blur_filter;
+  host_impl()->active_tree()->property_trees()->needs_rebuild = true;
+
+  ExecuteCalculateDrawProperties(root);
+
+  EXPECT_TRUE(filter_child_1->is_clipped());
+  EXPECT_TRUE(filter_child_2->is_clipped());
+  EXPECT_EQ(gfx::Rect(100, 100), filter_child_1->clip_rect());
+  EXPECT_EQ(gfx::Rect(10, 10), filter_child_2->clip_rect());
+}
+
+TEST_F(LayerTreeHostCommonTest, ClipRectWithClippedDescendantOfFilter) {
+  LayerImpl* root = root_layer_for_testing();
+  LayerImpl* filter = AddChild<LayerImpl>(root);
+  LayerImpl* clip = AddChild<LayerImpl>(filter);
+  LayerImpl* filter_grand_child = AddChild<LayerImpl>(clip);
+
+  root->SetBounds(gfx::Size(100, 100));
+  filter->test_properties()->force_render_surface = true;
+
+  clip->SetBounds(gfx::Size(10, 10));
+  clip->SetMasksToBounds(true);
+
+  filter_grand_child->SetBounds(gfx::Size(20, 20));
+  filter_grand_child->SetDrawsContent(true);
+
+  ExecuteCalculateDrawProperties(root);
+  EXPECT_TRUE(filter_grand_child->is_clipped());
+  EXPECT_EQ(gfx::Rect(10, 10), filter_grand_child->clip_rect());
+
+  FilterOperations blur_filter;
+  blur_filter.Append(FilterOperation::CreateBlurFilter(4.0f));
+  filter->test_properties()->filters = blur_filter;
+  host_impl()->active_tree()->property_trees()->needs_rebuild = true;
+
+  ExecuteCalculateDrawProperties(root);
+
+  EXPECT_TRUE(filter_grand_child->is_clipped());
+  EXPECT_EQ(gfx::Rect(10, 10), filter_grand_child->clip_rect());
+}
+
 TEST_F(LayerTreeHostCommonTest,
        DrawableAndVisibleContentRectsForLayersInUnclippedRenderSurface) {
   LayerImpl* root = root_layer_for_testing();
@@ -3208,9 +3383,8 @@ TEST_F(LayerTreeHostCommonTest,
   // Each layer's drawable content rect is its bounds in target space; the only
   // thing that changes with surfaces disabled is that target space is always
   // screen space.
-  root->SetHasRenderSurface(true);
-  child1->SetHasRenderSurface(true);
-  child2->SetHasRenderSurface(true);
+  child1->test_properties()->force_render_surface = true;
+  child2->test_properties()->force_render_surface = true;
   ExecuteCalculateDrawProperties(root);
   EXPECT_EQ(gfx::Rect(100, 100), root->visible_layer_rect());
   EXPECT_EQ(gfx::Rect(0, 0, 98, 98), parent->visible_layer_rect());
@@ -3446,13 +3620,14 @@ TEST_F(LayerTreeHostCommonTest,
   child->SetPosition(gfx::PointF(10.f, 10.f));
   child->SetBounds(gfx::Size(100, 100));
   child->SetDrawsContent(true);
-  child->Set3dSortingContextId(1);
+  child->test_properties()->sorting_context_id = 1;
   child->test_properties()->should_flatten_transform = false;
   grand_child->test_properties()->transform = rotation;
   grand_child->SetBounds(gfx::Size(100, 100));
   grand_child->SetDrawsContent(true);
-  grand_child->Set3dSortingContextId(1);
+  child->test_properties()->sorting_context_id = 1;
   grand_child->test_properties()->should_flatten_transform = false;
+  grand_child->test_properties()->sorting_context_id = 1;
   ExecuteCalculateDrawProperties(root);
 
   // Though all layers have invertible transforms, matrix multiplication using
@@ -3611,11 +3786,11 @@ TEST_F(LayerTreeHostCommonTest,
   child->SetPosition(gfx::PointF(10.f, 10.f));
   child->SetBounds(gfx::Size(300, 300));
   child->test_properties()->should_flatten_transform = false;
-  child->Set3dSortingContextId(1);
+  child->test_properties()->sorting_context_id = 1;
   grand_child->test_properties()->transform = rotation;
   grand_child->SetBounds(gfx::Size(200, 200));
   grand_child->test_properties()->should_flatten_transform = false;
-  grand_child->Set3dSortingContextId(1);
+  grand_child->test_properties()->sorting_context_id = 1;
   occluding_child->SetBounds(gfx::Size(200, 200));
   occluding_child->test_properties()->should_flatten_transform = false;
 
@@ -4295,13 +4470,17 @@ TEST_F(LayerTreeHostCommonTest, BackFaceCullingWithPreserves3d) {
   // This 3d rendering context occurs when (a) parent's transform style is flat
   // and (b) the layer's transform style is preserve-3d.
   front_facing_surface->test_properties()->should_flatten_transform = false;
-  front_facing_surface->Set3dSortingContextId(1);
+  front_facing_surface->test_properties()->sorting_context_id = 1;
   back_facing_surface->test_properties()->should_flatten_transform = false;
-  back_facing_surface->Set3dSortingContextId(1);
-  front_facing_child_of_front_facing_surface->Set3dSortingContextId(1);
-  back_facing_child_of_front_facing_surface->Set3dSortingContextId(1);
-  front_facing_child_of_back_facing_surface->Set3dSortingContextId(1);
-  back_facing_child_of_back_facing_surface->Set3dSortingContextId(1);
+  back_facing_surface->test_properties()->sorting_context_id = 1;
+  front_facing_child_of_front_facing_surface->test_properties()
+      ->sorting_context_id = 1;
+  back_facing_child_of_front_facing_surface->test_properties()
+      ->sorting_context_id = 1;
+  front_facing_child_of_back_facing_surface->test_properties()
+      ->sorting_context_id = 1;
+  back_facing_child_of_back_facing_surface->test_properties()
+      ->sorting_context_id = 1;
 
   ExecuteCalculateDrawPropertiesAndSaveUpdateLayerList(root);
 
@@ -4435,8 +4614,8 @@ TEST_F(LayerTreeHostCommonTest,
   child1->SetBounds(gfx::Size(100, 100));
   child2->SetBounds(gfx::Size(100, 100));
 
-  front_facing_surface->Set3dSortingContextId(1);
-  back_facing_surface->Set3dSortingContextId(1);
+  front_facing_surface->test_properties()->sorting_context_id = 1;
+  back_facing_surface->test_properties()->sorting_context_id = 1;
 
   ExecuteCalculateDrawPropertiesAndSaveUpdateLayerList(root);
 
@@ -4715,8 +4894,8 @@ TEST_F(LayerTreeHostCommonTest, RenderSurfaceTransformsInHighDPI) {
   LayerImpl* parent = root_layer_for_testing();
   parent->SetBounds(gfx::Size(30, 30));
   parent->SetDrawsContent(true);
-  parent->Set3dSortingContextId(1);
   parent->test_properties()->should_flatten_transform = false;
+  parent->test_properties()->sorting_context_id = 1;
 
   LayerImpl* child = AddChildToRoot<LayerImpl>();
   child->SetBounds(gfx::Size(10, 10));
@@ -4828,12 +5007,11 @@ TEST_F(LayerTreeHostCommonTest, LayerSearch) {
   host()->SetRootLayer(root);
 
   int nonexistent_id = -1;
-  LayerTree* layer_tree = host()->GetLayerTree();
-  EXPECT_EQ(root.get(), layer_tree->LayerById(root->id()));
-  EXPECT_EQ(child.get(), layer_tree->LayerById(child->id()));
-  EXPECT_EQ(grand_child.get(), layer_tree->LayerById(grand_child->id()));
-  EXPECT_EQ(mask_layer.get(), layer_tree->LayerById(mask_layer->id()));
-  EXPECT_FALSE(layer_tree->LayerById(nonexistent_id));
+  EXPECT_EQ(root.get(), host()->LayerById(root->id()));
+  EXPECT_EQ(child.get(), host()->LayerById(child->id()));
+  EXPECT_EQ(grand_child.get(), host()->LayerById(grand_child->id()));
+  EXPECT_EQ(mask_layer.get(), host()->LayerById(mask_layer->id()));
+  EXPECT_FALSE(host()->LayerById(nonexistent_id));
 }
 
 TEST_F(LayerTreeHostCommonTest, TransparentChildRenderSurfaceCreation) {
@@ -4869,7 +5047,6 @@ TEST_F(LayerTreeHostCommonTest, OpacityAnimatingOnPendingTree) {
 
   const int child_id = child->id();
   root->test_properties()->AddChild(std::move(child));
-  root->SetHasRenderSurface(true);
   LayerImpl* root_layer = root.get();
   host_impl.pending_tree()->SetRootLayerForTesting(std::move(root));
   host_impl.pending_tree()->BuildLayerListAndPropertyTreesForTesting();
@@ -5194,7 +5371,6 @@ TEST_F(LayerTreeHostCommonTest, SubtreeHidden_SingleLayerImpl) {
 
   child->test_properties()->AddChild(std::move(grand_child));
   root->test_properties()->AddChild(std::move(child));
-  root->SetHasRenderSurface(true);
   host_impl.pending_tree()->SetRootLayerForTesting(std::move(root));
 
   LayerImplList render_surface_layer_list;
@@ -5888,14 +6064,14 @@ TEST_F(LayerTreeHostCommonTest,
   root->SetBounds(bounds);
   child1->SetBounds(bounds);
   child1->SetDrawsContent(true);
-  child1->Set3dSortingContextId(1);
   child1->test_properties()->should_flatten_transform = false;
+  child1->test_properties()->sorting_context_id = 1;
   child2->SetBounds(bounds);
   child2->SetDrawsContent(true);
-  child2->Set3dSortingContextId(1);
+  child2->test_properties()->sorting_context_id = 1;
   child3->SetBounds(bounds);
   child3->SetDrawsContent(true);
-  child3->Set3dSortingContextId(1);
+  child3->test_properties()->sorting_context_id = 1;
   ExecuteCalculateDrawPropertiesAndSaveUpdateLayerList(root);
 
   // Verify which render surfaces were created.
@@ -5928,14 +6104,14 @@ TEST_F(LayerTreeHostCommonTest, CanRenderToSeparateSurface) {
   // behavior.
   child1->SetBounds(bounds);
   child1->SetDrawsContent(true);
-  child1->Set3dSortingContextId(1);
   child1->test_properties()->should_flatten_transform = false;
+  child1->test_properties()->sorting_context_id = 1;
   child2->SetBounds(bounds);
   child2->SetDrawsContent(true);
-  child2->Set3dSortingContextId(1);
+  child2->test_properties()->sorting_context_id = 1;
   child3->SetBounds(bounds);
   child3->SetDrawsContent(true);
-  child3->Set3dSortingContextId(1);
+  child3->test_properties()->sorting_context_id = 1;
 
   child2->test_properties()->AddChild(std::move(child3));
   child1->test_properties()->AddChild(std::move(child2));
@@ -6109,8 +6285,8 @@ TEST_F(LayerTreeHostCommonTest, DoNotIncludeBackfaceInvisibleLayers) {
   rotation_transform.RotateAboutXAxis(180.0);
 
   child->test_properties()->transform = rotation_transform;
-  child->Set3dSortingContextId(1);
-  grand_child->Set3dSortingContextId(1);
+  child->test_properties()->sorting_context_id = 1;
+  grand_child->test_properties()->sorting_context_id = 1;
   child->layer_tree_impl()->property_trees()->needs_rebuild = true;
 
   ExecuteCalculateDrawProperties(root);
@@ -6170,22 +6346,22 @@ TEST_F(LayerTreeHostCommonTest, TransformAnimationUpdatesBackfaceVisibility) {
   rotate_about_y.RotateAboutYAxis(180.0);
 
   root->SetBounds(gfx::Size(50, 50));
-  root->Set3dSortingContextId(1);
   root->test_properties()->should_flatten_transform = false;
+  root->test_properties()->sorting_context_id = 1;
   back_facing->test_properties()->transform = rotate_about_y;
   back_facing->SetBounds(gfx::Size(50, 50));
-  back_facing->Set3dSortingContextId(1);
   back_facing->test_properties()->should_flatten_transform = false;
+  back_facing->test_properties()->sorting_context_id = 1;
   render_surface1->SetBounds(gfx::Size(30, 30));
-  render_surface1->Set3dSortingContextId(1);
   render_surface1->test_properties()->should_flatten_transform = false;
   render_surface1->test_properties()->double_sided = false;
   render_surface1->test_properties()->force_render_surface = true;
+  render_surface1->test_properties()->sorting_context_id = 1;
   render_surface2->SetBounds(gfx::Size(30, 30));
-  render_surface2->Set3dSortingContextId(1);
   render_surface2->test_properties()->should_flatten_transform = false;
   render_surface2->test_properties()->double_sided = false;
   render_surface2->test_properties()->force_render_surface = true;
+  render_surface2->test_properties()->sorting_context_id = 1;
   ExecuteCalculateDrawProperties(root);
 
   const EffectTree& tree =
@@ -6302,6 +6478,50 @@ TEST_F(LayerTreeHostCommonTest, ScrollChildAndScrollParentDifferentTargets) {
   EXPECT_TRANSFORMATION_MATRIX_EQ(scroll_child->DrawTransform(), scale);
 }
 
+TEST_F(LayerTreeHostCommonTest, TargetBetweenScrollChildandScrollParentTarget) {
+  LayerImpl* root = root_layer_for_testing();
+  LayerImpl* scroll_child_target = AddChildToRoot<LayerImpl>();
+  LayerImpl* scroll_child = AddChild<LayerImpl>(scroll_child_target);
+  LayerImpl* child_of_scroll_child = AddChild<LayerImpl>(scroll_child);
+  LayerImpl* intervening_target = AddChild<LayerImpl>(scroll_child_target);
+  LayerImpl* clip = AddChild<LayerImpl>(intervening_target);
+  LayerImpl* scroll_parent_target = AddChild<LayerImpl>(clip);
+  LayerImpl* scroll_parent = AddChild<LayerImpl>(scroll_parent_target);
+
+  scroll_parent->SetDrawsContent(true);
+  child_of_scroll_child->SetDrawsContent(true);
+
+  scroll_child->test_properties()->scroll_parent = scroll_parent;
+  scroll_parent->test_properties()->scroll_children =
+      base::MakeUnique<std::set<LayerImpl*>>();
+  scroll_parent->test_properties()->scroll_children->insert(scroll_child);
+
+  root->SetBounds(gfx::Size(50, 50));
+  scroll_child_target->SetBounds(gfx::Size(50, 50));
+  scroll_child_target->SetMasksToBounds(true);
+  scroll_child_target->test_properties()->force_render_surface = true;
+  scroll_child->SetBounds(gfx::Size(50, 50));
+  child_of_scroll_child->SetBounds(gfx::Size(50, 50));
+  child_of_scroll_child->test_properties()->force_render_surface = true;
+  intervening_target->SetBounds(gfx::Size(50, 50));
+  intervening_target->test_properties()->force_render_surface = true;
+  clip->SetBounds(gfx::Size(50, 50));
+  clip->SetMasksToBounds(true);
+  scroll_parent_target->SetBounds(gfx::Size(50, 50));
+  scroll_parent_target->SetMasksToBounds(true);
+  scroll_parent_target->test_properties()->force_render_surface = true;
+  scroll_parent->SetBounds(gfx::Size(50, 50));
+
+  ExecuteCalculateDrawProperties(root);
+  PropertyTrees* property_trees = root->layer_tree_impl()->property_trees();
+  ClipNode* clip_node =
+      property_trees->clip_tree.Node(child_of_scroll_child->clip_tree_index());
+  ClipNode* parent_clip_node = property_trees->clip_tree.parent(clip_node);
+  DCHECK_GT(parent_clip_node->target_transform_id,
+            property_trees->transform_tree.TargetId(
+                child_of_scroll_child->transform_tree_index()));
+}
+
 TEST_F(LayerTreeHostCommonTest, SingularTransformSubtreesDoNotDraw) {
   LayerImpl* root = root_layer_for_testing();
   LayerImpl* parent = AddChildToRoot<LayerImpl>();
@@ -6309,15 +6529,15 @@ TEST_F(LayerTreeHostCommonTest, SingularTransformSubtreesDoNotDraw) {
 
   root->SetBounds(gfx::Size(50, 50));
   root->SetDrawsContent(true);
-  root->Set3dSortingContextId(1);
+  root->test_properties()->sorting_context_id = 1;
   parent->SetBounds(gfx::Size(30, 30));
   parent->SetDrawsContent(true);
-  parent->Set3dSortingContextId(1);
   parent->test_properties()->force_render_surface = true;
+  parent->test_properties()->sorting_context_id = 1;
   child->SetBounds(gfx::Size(20, 20));
   child->SetDrawsContent(true);
-  child->Set3dSortingContextId(1);
   child->test_properties()->force_render_surface = true;
+  child->test_properties()->sorting_context_id = 1;
   ExecuteCalculateDrawProperties(root);
 
   EXPECT_EQ(3u, render_surface_layer_list_impl()->size());
@@ -7098,8 +7318,7 @@ TEST_F(LayerTreeHostCommonTest, StickyPositionBottomInnerViewportDelta) {
   scroller->AddChild(sticky_pos);
   host()->SetRootLayer(root);
   scroller->SetScrollClipLayerId(root->id());
-  host()->GetLayerTree()->RegisterViewportLayers(nullptr, root, scroller,
-                                                 nullptr);
+  host()->RegisterViewportLayers(nullptr, root, scroller, nullptr);
 
   LayerStickyPositionConstraint sticky_position;
   sticky_position.is_sticky = true;
@@ -7172,8 +7391,7 @@ TEST_F(LayerTreeHostCommonTest, StickyPositionBottomOuterViewportDelta) {
   host()->SetRootLayer(root);
   scroller->SetScrollClipLayerId(root->id());
   outer_viewport->SetScrollClipLayerId(outer_clip->id());
-  host()->GetLayerTree()->RegisterViewportLayers(nullptr, root, scroller,
-                                                 outer_viewport);
+  host()->RegisterViewportLayers(nullptr, root, scroller, outer_viewport);
 
   LayerStickyPositionConstraint sticky_position;
   sticky_position.is_sticky = true;
@@ -7718,7 +7936,8 @@ TEST_F(LayerTreeHostCommonTest, NonFlatContainerForFixedPosLayer) {
   container->SetTransform(rotate);
 
   ExecuteCalculateDrawProperties(root.get());
-  TransformTree& tree = root->GetLayerTree()->property_trees()->transform_tree;
+  TransformTree& tree =
+      root->layer_tree_host()->property_trees()->transform_tree;
   gfx::Transform transform;
   tree.ComputeTranslation(fixed_pos->transform_tree_index(),
                           container->transform_tree_index(), &transform);
@@ -8108,7 +8327,7 @@ TEST_F(LayerTreeHostCommonTest, RenderSurfaceLayerListMembership) {
 
   // If we force render surface, but none of the layers are in the layer list,
   // then this layer should not appear in RSLL.
-  grand_child1_raw->SetHasRenderSurface(true);
+  grand_child1_raw->test_properties()->force_render_surface = true;
   grand_child1_raw->layer_tree_impl()->property_trees()->needs_rebuild = true;
 
   ExecuteCalculateDrawProperties(grand_parent_raw);
@@ -8146,9 +8365,9 @@ TEST_F(LayerTreeHostCommonTest, RenderSurfaceLayerListMembership) {
   // Now child is forced to have a render surface, and one if its children draws
   // content.
   grand_child1_raw->SetDrawsContent(false);
-  grand_child1_raw->SetHasRenderSurface(false);
+  grand_child1_raw->test_properties()->force_render_surface = false;
   grand_child1_raw->layer_tree_impl()->property_trees()->needs_rebuild = true;
-  child_raw->SetHasRenderSurface(true);
+  child_raw->test_properties()->force_render_surface = true;
   grand_child2_raw->SetDrawsContent(true);
 
   ExecuteCalculateDrawProperties(grand_parent_raw);
@@ -8622,8 +8841,8 @@ TEST_F(LayerTreeHostCommonTest, NodesAffectedByBoundsDeltaGetUpdated) {
   outer_viewport_scroll_layer->SetIsContainerForFixedPositionLayers(true);
 
   host()->SetRootLayer(root);
-  host()->GetLayerTree()->RegisterViewportLayers(
-      nullptr, root, inner_viewport_scroll_layer, outer_viewport_scroll_layer);
+  host()->RegisterViewportLayers(nullptr, root, inner_viewport_scroll_layer,
+                                 outer_viewport_scroll_layer);
 
   scoped_refptr<Layer> fixed_to_inner = Layer::Create();
   scoped_refptr<Layer> fixed_to_outer = Layer::Create();
@@ -9107,7 +9326,7 @@ TEST_F(LayerTreeHostCommonTest, SkippingSubtreeMain) {
   child->AddChild(grandchild);
   grandchild->AddChild(greatgrandchild);
   host()->SetRootLayer(root);
-  host()->GetLayerTree()->SetElementIdsForTesting();
+  host()->SetElementIdsForTesting();
 
   // Check the non-skipped case.
   ExecuteCalculateDrawPropertiesAndSaveUpdateLayerList(root.get());
@@ -9286,7 +9505,7 @@ TEST_F(LayerTreeHostCommonTest, SkippingLayerImpl) {
 
   // A double sided render surface with backface visible should not be skipped
   grandchild_ptr->set_visible_layer_rect(gfx::Rect());
-  child_ptr->SetHasRenderSurface(true);
+  child_ptr->test_properties()->force_render_surface = true;
   child_ptr->test_properties()->double_sided = true;
   child_ptr->test_properties()->transform = rotate_back_and_translate;
   root_ptr->layer_tree_impl()->property_trees()->needs_rebuild = true;
@@ -9569,7 +9788,7 @@ TEST_F(LayerTreeHostCommonTest, RenderSurfaceClipsSubtree) {
       root->layer_tree_impl()->property_trees()->transform_tree;
   TransformNode* transform_node =
       transform_tree.Node(significant_transform->transform_tree_index());
-  EXPECT_EQ(transform_node->owner_id, significant_transform->id());
+  EXPECT_EQ(transform_node->owning_layer_id, significant_transform->id());
 
   EXPECT_TRUE(root->has_render_surface());
   EXPECT_FALSE(significant_transform->has_render_surface());
@@ -10215,8 +10434,8 @@ TEST_F(LayerTreeHostCommonTest, PropertyTreesRebuildWithOpacityChanges) {
   EXPECT_TRUE(property_trees->needs_rebuild);
 
   ExecuteCalculateDrawPropertiesAndSaveUpdateLayerList(root.get());
-  EXPECT_NE(property_trees->effect_id_to_index_map.find(child->id()),
-            property_trees->effect_id_to_index_map.end());
+  EXPECT_NE(property_trees->layer_id_to_effect_node_index.find(child->id()),
+            property_trees->layer_id_to_effect_node_index.end());
 
   // child already has an effect node. Changing its opacity shouldn't trigger
   // a property trees rebuild.
@@ -10225,8 +10444,8 @@ TEST_F(LayerTreeHostCommonTest, PropertyTreesRebuildWithOpacityChanges) {
   EXPECT_FALSE(property_trees->needs_rebuild);
 
   ExecuteCalculateDrawPropertiesAndSaveUpdateLayerList(root.get());
-  EXPECT_NE(property_trees->effect_id_to_index_map.find(child->id()),
-            property_trees->effect_id_to_index_map.end());
+  EXPECT_NE(property_trees->layer_id_to_effect_node_index.find(child->id()),
+            property_trees->layer_id_to_effect_node_index.end());
 
   // Changing the opacity from non-1 value to 1 should trigger a rebuild of
   // property trees as the effect node may no longer be needed.
@@ -10235,8 +10454,8 @@ TEST_F(LayerTreeHostCommonTest, PropertyTreesRebuildWithOpacityChanges) {
   EXPECT_TRUE(property_trees->needs_rebuild);
 
   ExecuteCalculateDrawPropertiesAndSaveUpdateLayerList(root.get());
-  EXPECT_EQ(property_trees->effect_id_to_index_map.find(child->id()),
-            property_trees->effect_id_to_index_map.end());
+  EXPECT_EQ(property_trees->layer_id_to_effect_node_index.find(child->id()),
+            property_trees->layer_id_to_effect_node_index.end());
 }
 
 TEST_F(LayerTreeHostCommonTest, OpacityAnimationsTrackingTest) {
@@ -10245,7 +10464,7 @@ TEST_F(LayerTreeHostCommonTest, OpacityAnimationsTrackingTest) {
       make_scoped_refptr(new LayerWithForcedDrawsContent());
   root->AddChild(animated);
   host()->SetRootLayer(root);
-  host()->GetLayerTree()->SetElementIdsForTesting();
+  host()->SetElementIdsForTesting();
 
   root->SetBounds(gfx::Size(100, 100));
   root->SetForceRenderSurfaceForTesting(true);
@@ -10270,7 +10489,7 @@ TEST_F(LayerTreeHostCommonTest, OpacityAnimationsTrackingTest) {
 
   ExecuteCalculateDrawPropertiesAndSaveUpdateLayerList(root.get());
 
-  EffectTree& tree = root->GetLayerTree()->property_trees()->effect_tree;
+  EffectTree& tree = root->layer_tree_host()->property_trees()->effect_tree;
   EffectNode* node = tree.Node(animated->effect_tree_index());
   EXPECT_FALSE(node->is_currently_animating_opacity);
   EXPECT_TRUE(node->has_potential_opacity_animation);
@@ -10294,7 +10513,7 @@ TEST_F(LayerTreeHostCommonTest, TransformAnimationsTrackingTest) {
       make_scoped_refptr(new LayerWithForcedDrawsContent());
   root->AddChild(animated);
   host()->SetRootLayer(root);
-  host()->GetLayerTree()->SetElementIdsForTesting();
+  host()->SetElementIdsForTesting();
 
   root->SetBounds(gfx::Size(100, 100));
   root->SetForceRenderSurfaceForTesting(true);
@@ -10327,7 +10546,8 @@ TEST_F(LayerTreeHostCommonTest, TransformAnimationsTrackingTest) {
 
   ExecuteCalculateDrawPropertiesAndSaveUpdateLayerList(root.get());
 
-  TransformTree& tree = root->GetLayerTree()->property_trees()->transform_tree;
+  TransformTree& tree =
+      root->layer_tree_host()->property_trees()->transform_tree;
   TransformNode* node = tree.Node(animated->transform_tree_index());
   EXPECT_FALSE(node->is_currently_animating);
   EXPECT_TRUE(node->has_potential_animation);
@@ -10427,11 +10647,9 @@ TEST_F(LayerTreeHostCommonTest, ScrollTreeBuilderTest) {
   parent5->SetNonFastScrollableRegion(gfx::Rect(0, 0, 50, 50));
   parent5->SetBounds(gfx::Size(10, 10));
 
-  host()->GetLayerTree()->RegisterViewportLayers(nullptr, page_scale_layer,
-                                                 parent2, nullptr);
+  host()->RegisterViewportLayers(nullptr, page_scale_layer, parent2, nullptr);
   ExecuteCalculateDrawPropertiesAndSaveUpdateLayerList(root1.get());
 
-  const int kInvalidPropertyTreeNodeId = -1;
   const int kRootPropertyTreeNodeId = 0;
 
   // Property tree root
@@ -10442,8 +10660,8 @@ TEST_F(LayerTreeHostCommonTest, ScrollTreeBuilderTest) {
   ScrollTree& expected_scroll_tree = property_trees.scroll_tree;
   ScrollNode* property_tree_root = expected_scroll_tree.Node(0);
   property_tree_root->id = kRootPropertyTreeNodeId;
-  property_tree_root->parent_id = kInvalidPropertyTreeNodeId;
-  property_tree_root->owner_id = kInvalidPropertyTreeNodeId;
+  property_tree_root->parent_id = ScrollTree::kInvalidNodeId;
+  property_tree_root->owning_layer_id = Layer::INVALID_ID;
   property_tree_root->scrollable = false;
   property_tree_root->main_thread_scrolling_reasons =
       MainThreadScrollingReason::kNotScrollingOnMain;
@@ -10453,7 +10671,7 @@ TEST_F(LayerTreeHostCommonTest, ScrollTreeBuilderTest) {
   // The node owned by root1
   ScrollNode scroll_root1;
   scroll_root1.id = 1;
-  scroll_root1.owner_id = root1->id();
+  scroll_root1.owning_layer_id = root1->id();
   scroll_root1.user_scrollable_horizontal = true;
   scroll_root1.user_scrollable_vertical = true;
   scroll_root1.transform_id = root1->transform_tree_index();
@@ -10462,7 +10680,7 @@ TEST_F(LayerTreeHostCommonTest, ScrollTreeBuilderTest) {
   // The node owned by parent2
   ScrollNode scroll_parent2;
   scroll_parent2.id = 2;
-  scroll_parent2.owner_id = parent2->id();
+  scroll_parent2.owning_layer_id = parent2->id();
   scroll_parent2.scrollable = true;
   scroll_parent2.main_thread_scrolling_reasons =
       parent2->main_thread_scrolling_reasons();
@@ -10478,7 +10696,7 @@ TEST_F(LayerTreeHostCommonTest, ScrollTreeBuilderTest) {
   // The node owned by child6
   ScrollNode scroll_child6;
   scroll_child6.id = 3;
-  scroll_child6.owner_id = child6->id();
+  scroll_child6.owning_layer_id = child6->id();
   scroll_child6.main_thread_scrolling_reasons =
       child6->main_thread_scrolling_reasons();
   scroll_child6.should_flatten = true;
@@ -10490,7 +10708,7 @@ TEST_F(LayerTreeHostCommonTest, ScrollTreeBuilderTest) {
   // The node owned by child7, child7 also owns a transform node
   ScrollNode scroll_child7;
   scroll_child7.id = 4;
-  scroll_child7.owner_id = child7->id();
+  scroll_child7.owning_layer_id = child7->id();
   scroll_child7.scrollable = true;
   scroll_child7.scroll_clip_layer_bounds = parent3->bounds();
   scroll_child7.bounds = child7->bounds();
@@ -10502,7 +10720,7 @@ TEST_F(LayerTreeHostCommonTest, ScrollTreeBuilderTest) {
   // The node owned by grand_child11, grand_child11 also owns a transform node
   ScrollNode scroll_grand_child11;
   scroll_grand_child11.id = 5;
-  scroll_grand_child11.owner_id = grand_child11->id();
+  scroll_grand_child11.owning_layer_id = grand_child11->id();
   scroll_grand_child11.scrollable = true;
   scroll_grand_child11.user_scrollable_horizontal = true;
   scroll_grand_child11.user_scrollable_vertical = true;
@@ -10512,7 +10730,7 @@ TEST_F(LayerTreeHostCommonTest, ScrollTreeBuilderTest) {
   // The node owned by parent5
   ScrollNode scroll_parent5;
   scroll_parent5.id = 8;
-  scroll_parent5.owner_id = parent5->id();
+  scroll_parent5.owning_layer_id = parent5->id();
   scroll_parent5.contains_non_fast_scrollable_region = true;
   scroll_parent5.bounds = gfx::Size(10, 10);
   scroll_parent5.should_flatten = true;

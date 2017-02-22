@@ -25,7 +25,7 @@
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/result_codes.h"
 #include "extensions/common/error_utils.h"
-#include "third_party/WebKit/public/web/WebCache.h"
+#include "third_party/WebKit/public/platform/WebCache.h"
 
 namespace extensions {
 
@@ -60,7 +60,7 @@ std::unique_ptr<api::processes::Cache> CreateCacheData(
     const blink::WebCache::ResourceTypeStat& stat) {
   std::unique_ptr<api::processes::Cache> cache(new api::processes::Cache());
   cache->size = static_cast<double>(stat.size);
-  cache->live_size = static_cast<double>(stat.liveSize);
+  cache->live_size = static_cast<double>(stat.size);
   return cache;
 }
 

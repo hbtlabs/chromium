@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<head>
+    <script src="../../resources/testharness.js"></script>
+    <script src="../../resources/testharnessreport.js"></script> 
+    <script src="../resources/audit-util.js"></script>
+    <script src="../resources/audit.js"></script>
+    <script src="../resources/audiobuffersource-testing.js"></script>
+</head>
+<body>
+    <script>
+        var audit = Audit.createTaskRunner();
+
+        var context;
+        var source;
+
+        audit.define("test", function (task, should) {
+
+            var sampleRate = 44100.0;
+            var lengthInSeconds = 0.1;
+            context = new OfflineAudioContext(1, sampleRate * lengthInSeconds, sampleRate);
+            osc = context.createOscillator();
+            osc.type = "sine"; 
+            osc.connect(context.destination);
+            osc.onended = function() 
+            {
+                should(true, "osc.onended was called")
+                  .beTrue();
+                task.done();
+            }
+            osc.start(0);
+            osc.stop(0.1);
+            context.startRendering();
+        });
+
+        audit.run();
+    </script>
+</body>

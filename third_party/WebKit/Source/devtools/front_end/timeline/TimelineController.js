@@ -2,9 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/** @typedef {!{range: !Protocol.CSS.SourceRange, styleSheetId: !Protocol.CSS.StyleSheetId, wasUsed: boolean}} */
-SDK.CSSModel.RuleUsage;
-
 /**
  * @implements {SDK.TargetManager.Observer}
  * @implements {SDK.TracingManagerClient}
@@ -13,64 +10,70 @@ SDK.CSSModel.RuleUsage;
 Timeline.TimelineController = class {
   /**
    * @param {!SDK.Target} target
-   * @param {!Timeline.TimelineLifecycleDelegate} delegate
-   * @param {!SDK.TracingModel} tracingModel
+   * @param {!Timeline.PerformanceModel} performanceModel
+   * @param {!Timeline.TimelineController.Client} client
    */
-  constructor(target, delegate, tracingModel) {
-    this._delegate = delegate;
+  constructor(target, performanceModel, client) {
     this._target = target;
-    this._tracingModel = tracingModel;
-    this._targets = [];
-    SDK.targetManager.observeTargets(this);
+    this._performanceModel = performanceModel;
+    this._client = client;
 
-    if (Runtime.experiments.isEnabled('timelineRuleUsageRecording'))
-      this._markUnusedCSS = Common.settings.createSetting('timelineMarkUnusedCSS', false);
+    this._tracingModelBackingStorage = new Bindings.TempFileBackingStorage('tracing');
+    this._tracingModel = new SDK.TracingModel(this._tracingModelBackingStorage);
+
+    this._performanceModel.setMainTarget(target);
+
+    /** @type {!Array<!SDK.Target>} */
+    this._targets = [];
+    /** @type {!Array<!Timeline.ExtensionTracingSession>} */
+    this._extensionSessions = [];
+    SDK.targetManager.observeTargets(this);
   }
 
   /**
-   * @param {boolean} captureCauses
-   * @param {boolean} enableJSSampling
-   * @param {boolean} captureMemory
-   * @param {boolean} capturePictures
-   * @param {boolean} captureFilmStrip
+   * @param {!Timeline.TimelineController.RecordingOptions} options
+   * @param {!Array<!Extensions.ExtensionTraceProvider>} providers
    */
-  startRecording(captureCauses, enableJSSampling, captureMemory, capturePictures, captureFilmStrip) {
+  startRecording(options, providers) {
     this._extensionTraceProviders = Extensions.extensionServer.traceProviders().slice();
 
+    /**
+     * @param {string} category
+     * @return {string}
+     */
     function disabledByDefault(category) {
       return 'disabled-by-default-' + category;
     }
-    var categoriesArray = [
+    const categoriesArray = [
       '-*', 'devtools.timeline', 'v8.execute', disabledByDefault('devtools.timeline'),
       disabledByDefault('devtools.timeline.frame'), SDK.TracingModel.TopLevelEventCategory,
       TimelineModel.TimelineModel.Category.Console, TimelineModel.TimelineModel.Category.UserTiming
     ];
     categoriesArray.push(TimelineModel.TimelineModel.Category.LatencyInfo);
 
-    if (Runtime.experiments.isEnabled('timelineV8RuntimeCallStats') && enableJSSampling)
+    if (Runtime.experiments.isEnabled('timelineV8RuntimeCallStats') && options.enableJSSampling)
       categoriesArray.push(disabledByDefault('v8.runtime_stats_sampling'));
-    if (Runtime.experiments.isEnabled('timelineTracingJSProfile') && enableJSSampling) {
+    if (Runtime.experiments.isEnabled('timelineTracingJSProfile') && options.enableJSSampling) {
       categoriesArray.push(disabledByDefault('v8.cpu_profiler'));
       if (Common.moduleSetting('highResolutionCpuProfiling').get())
         categoriesArray.push(disabledByDefault('v8.cpu_profiler.hires'));
     }
-    if (captureCauses || enableJSSampling)
-      categoriesArray.push(disabledByDefault('devtools.timeline.stack'));
-    if (captureCauses && Runtime.experiments.isEnabled('timelineInvalidationTracking'))
+    categoriesArray.push(disabledByDefault('devtools.timeline.stack'));
+    if (Runtime.experiments.isEnabled('timelineInvalidationTracking'))
       categoriesArray.push(disabledByDefault('devtools.timeline.invalidationTracking'));
-    if (capturePictures) {
+    if (options.capturePictures) {
       categoriesArray.push(
           disabledByDefault('devtools.timeline.layers'), disabledByDefault('devtools.timeline.picture'),
           disabledByDefault('blink.graphics_context_annotations'));
     }
-    if (captureFilmStrip)
+    if (options.captureFilmStrip)
       categoriesArray.push(disabledByDefault('devtools.screenshot'));
 
-    for (var traceProvider of this._extensionTraceProviders)
-      traceProvider.start();
-
-    var categories = categoriesArray.join(',');
-    this._startRecordingWithCategories(categories, enableJSSampling);
+    this._extensionSessions =
+        providers.map(provider => new Timeline.ExtensionTracingSession(provider, this._performanceModel));
+    this._extensionSessions.forEach(session => session.start());
+    this._startRecordingWithCategories(categoriesArray.join(','), options.enableJSSampling);
+    this._performanceModel.setRecordStartTime(Date.now());
   }
 
   stopRecording() {
@@ -78,18 +81,18 @@ Timeline.TimelineController = class {
     tracingStoppedPromises.push(new Promise(resolve => this._tracingCompleteCallback = resolve));
     tracingStoppedPromises.push(this._stopProfilingOnAllTargets());
     this._target.tracingManager.stop();
+    tracingStoppedPromises.push(SDK.targetManager.resumeAllTargets());
 
-    if (!Runtime.experiments.isEnabled('timelineRuleUsageRecording') || !this._markUnusedCSS.get())
-      tracingStoppedPromises.push(SDK.targetManager.resumeAllTargets());
-    else
-      this._addUnusedRulesToCoverage();
+    this._client.loadingStarted();
 
+    var extensionCompletionPromises = this._extensionSessions.map(session => session.stop());
+    if (extensionCompletionPromises.length) {
+      var timerId;
+      var timeoutPromise = new Promise(fulfill => timerId = setTimeout(fulfill, 5000));
+      tracingStoppedPromises.push(
+          Promise.race([Promise.all(extensionCompletionPromises).then(() => clearTimeout(timerId)), timeoutPromise]));
+    }
     Promise.all(tracingStoppedPromises).then(() => this._allSourcesFinished());
-
-    this._delegate.loadingStarted();
-
-    for (var traceProvider of this._extensionTraceProviders)
-      traceProvider.stop();
   }
 
   /**
@@ -110,30 +113,6 @@ Timeline.TimelineController = class {
     this._targets.remove(target, true);
     // FIXME: We'd like to stop profiling on the target and retrieve a profile
     // but it's too late. Backend connection is closed.
-  }
-
-  _addUnusedRulesToCoverage() {
-    var mainTarget = SDK.targetManager.mainTarget();
-    if (!mainTarget)
-      return;
-    var cssModel = SDK.CSSModel.fromTarget(mainTarget);
-
-    /**
-     * @param {!Array<!SDK.CSSModel.RuleUsage>} ruleUsageList
-     */
-    function ruleListReceived(ruleUsageList) {
-      for (var rule of ruleUsageList) {
-        if (rule.wasUsed)
-          continue;
-
-        var styleSheetHeader = cssModel.styleSheetHeaderForId(rule.styleSheetId);
-        var url = styleSheetHeader.sourceURL;
-
-        Components.CoverageProfile.instance().appendUnusedRule(url, Common.TextRange.fromObject(rule.range));
-      }
-    }
-
-    cssModel.ruleListPromise().then(ruleListReceived);
   }
 
   /**
@@ -193,9 +172,7 @@ Timeline.TimelineController = class {
    * @param {function(?string)=} callback
    */
   _startRecordingWithCategories(categories, enableJSSampling, callback) {
-    if (!Runtime.experiments.isEnabled('timelineRuleUsageRecording') || !this._markUnusedCSS.get())
-      SDK.targetManager.suspendAllTargets();
-
+    SDK.targetManager.suspendAllTargets();
     var profilingStartedPromise = enableJSSampling && !Runtime.experiments.isEnabled('timelineTracingJSProfile') ?
         this._startProfilingOnAllTargets() :
         Promise.resolve();
@@ -219,8 +196,7 @@ Timeline.TimelineController = class {
    * @override
    */
   tracingStarted() {
-    this._tracingModel.reset();
-    this._delegate.recordingStarted();
+    this._client.recordingStarted();
   }
 
   /**
@@ -240,9 +216,14 @@ Timeline.TimelineController = class {
   }
 
   _allSourcesFinished() {
+    this._client.processingStarted();
+    setTimeout(() => this._finalizeTrace(), 0);
+  }
+
+  _finalizeTrace() {
     this._injectCpuProfileEvents();
     this._tracingModel.tracingComplete();
-    this._delegate.loadingComplete(true);
+    this._client.loadingComplete(this._tracingModel, this._tracingModelBackingStorage);
   }
 
   /**
@@ -297,7 +278,7 @@ Timeline.TimelineController = class {
    * @override
    */
   tracingBufferUsage(usage) {
-    this._delegate.recordingProgress(usage);
+    this._client.recordingProgress(usage);
   }
 
   /**
@@ -305,6 +286,30 @@ Timeline.TimelineController = class {
    * @override
    */
   eventsRetrievalProgress(progress) {
-    this._delegate.loadingProgress(progress);
+    this._client.loadingProgress(progress);
   }
 };
+
+/**
+ * @interface
+ * @extends {Timeline.TimelineLoader.Client}
+ */
+Timeline.TimelineController.Client = function() {};
+
+Timeline.TimelineController.Client.prototype = {
+  recordingStarted() {},
+
+  /**
+   * @param {number} usage
+   */
+  recordingProgress(usage) {},
+};
+
+/**
+ * @typedef {!{
+ *   enableJSSampling: (boolean|undefined),
+ *   capturePictures: (boolean|undefined),
+ *   captureFilmStrip: (boolean|undefined)
+ * }}
+ */
+Timeline.TimelineController.RecordingOptions;

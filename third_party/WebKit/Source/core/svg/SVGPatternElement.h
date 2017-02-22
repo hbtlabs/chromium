@@ -48,8 +48,7 @@ class SVGPatternElement final : public SVGElement,
 
   void collectPatternAttributes(PatternAttributes&) const;
 
-  AffineTransform localCoordinateSpaceTransform(
-      SVGElement::CTMScope) const override;
+  AffineTransform localCoordinateSpaceTransform() const override;
 
   SVGAnimatedLength* x() const { return m_x.get(); }
   SVGAnimatedLength* y() const { return m_y.get(); }
@@ -83,6 +82,10 @@ class SVGPatternElement final : public SVGElement,
 
   bool isValid() const override { return SVGTests::isValid(); }
   bool needsPendingResourceHandling() const override { return false; }
+
+  void collectStyleForPresentationAttribute(const QualifiedName&,
+                                            const AtomicString&,
+                                            MutableStylePropertySet*) override;
 
   void svgAttributeChanged(const QualifiedName&) override;
   void childrenChanged(const ChildrenChange&) override;

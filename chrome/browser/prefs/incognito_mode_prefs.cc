@@ -10,12 +10,12 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
@@ -31,9 +31,9 @@
 #include "base/win/windows_version.h"
 #endif  // OS_WIN
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
 #include "chrome/browser/android/chrome_application.h"
-#endif  // BUILDFLAG(ANDROID_JAVA_UI)
+#endif  // defined(OS_ANDROID)
 
 using content::BrowserThread;
 
@@ -75,7 +75,6 @@ class PlatformParentalControlsValue {
   static bool IsParentalControlActivityLoggingOn() {
     // Since we can potentially block, make sure the thread is okay with this.
     base::ThreadRestrictions::AssertIOAllowed();
-    base::ThreadRestrictions::AssertWaitAllowed();
 
     // Query this info on Windows 7 and above.
     if (base::win::GetVersion() < base::win::VERSION_WIN7)
@@ -199,8 +198,11 @@ bool IncognitoModePrefs::CanOpenBrowser(Profile* profile) {
 #if defined(OS_WIN)
 // static
 void IncognitoModePrefs::InitializePlatformParentalControls() {
-  content::BrowserThread::PostBlockingPoolTask(
-      FROM_HERE,
+  // TODO(fdoray): This task uses COM. Add the WithCom() trait once supported.
+  // crbug.com/662122
+  base::PostTaskWithTraits(
+      FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
+                     base::TaskPriority::USER_VISIBLE),
       base::Bind(
           base::IgnoreResult(&PlatformParentalControlsValue::GetInstance)));
 }
@@ -210,7 +212,7 @@ void IncognitoModePrefs::InitializePlatformParentalControls() {
 bool IncognitoModePrefs::ArePlatformParentalControlsEnabled() {
 #if defined(OS_WIN)
   return PlatformParentalControlsValue::GetInstance()->is_enabled();
-#elif BUILDFLAG(ANDROID_JAVA_UI)
+#elif defined(OS_ANDROID)
   return chrome::android::ChromeApplication::AreParentalControlsEnabled();
 #else
   return false;

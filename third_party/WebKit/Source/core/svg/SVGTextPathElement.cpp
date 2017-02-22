@@ -21,7 +21,7 @@
 #include "core/svg/SVGTextPathElement.h"
 
 #include "core/layout/svg/LayoutSVGTextPath.h"
-#include "core/svg/SVGDocumentExtensions.h"
+#include "core/svg/SVGTreeScopeResources.h"
 
 namespace blink {
 
@@ -30,8 +30,8 @@ const SVGEnumerationStringEntries&
 getStaticStringEntries<SVGTextPathMethodType>() {
   DEFINE_STATIC_LOCAL(SVGEnumerationStringEntries, entries, ());
   if (entries.isEmpty()) {
-    entries.append(std::make_pair(SVGTextPathMethodAlign, "align"));
-    entries.append(std::make_pair(SVGTextPathMethodStretch, "stretch"));
+    entries.push_back(std::make_pair(SVGTextPathMethodAlign, "align"));
+    entries.push_back(std::make_pair(SVGTextPathMethodStretch, "stretch"));
   }
   return entries;
 }
@@ -41,8 +41,8 @@ const SVGEnumerationStringEntries&
 getStaticStringEntries<SVGTextPathSpacingType>() {
   DEFINE_STATIC_LOCAL(SVGEnumerationStringEntries, entries, ());
   if (entries.isEmpty()) {
-    entries.append(std::make_pair(SVGTextPathSpacingAuto, "auto"));
-    entries.append(std::make_pair(SVGTextPathSpacingExact, "exact"));
+    entries.push_back(std::make_pair(SVGTextPathSpacingAuto, "auto"));
+    entries.push_back(std::make_pair(SVGTextPathSpacingExact, "exact"));
   }
   return entries;
 }
@@ -112,7 +112,7 @@ LayoutObject* SVGTextPathElement::createLayoutObject(const ComputedStyle&) {
 bool SVGTextPathElement::layoutObjectIsNeeded(const ComputedStyle& style) {
   if (parentNode() &&
       (isSVGAElement(*parentNode()) || isSVGTextElement(*parentNode())))
-    return Element::layoutObjectIsNeeded(style);
+    return SVGElement::layoutObjectIsNeeded(style);
 
   return false;
 }
@@ -127,12 +127,12 @@ void SVGTextPathElement::buildPendingResource() {
       hrefString(), treeScope(), &id);
   if (!target) {
     // Do not register as pending if we are already pending this resource.
-    if (document().accessSVGExtensions().isElementPendingResource(this, id))
+    if (treeScope().ensureSVGTreeScopedResources().isElementPendingResource(
+            this, id))
       return;
-
     if (!id.isEmpty()) {
-      document().accessSVGExtensions().addPendingResource(id, this);
-      ASSERT(hasPendingResources());
+      treeScope().ensureSVGTreeScopedResources().addPendingResource(id, this);
+      DCHECK(hasPendingResources());
     }
   } else if (isSVGPathElement(*target)) {
     // Register us with the target in the dependencies map. Any change of

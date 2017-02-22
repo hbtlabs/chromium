@@ -39,16 +39,8 @@ SystemMenuButton::SystemMenuButton(views::ButtonListener* listener,
 
   SetTooltipText(l10n_util::GetStringUTF16(accessible_name_id));
 
-  // TODO(tdanderson): Update the focus rect color, border thickness, and
-  // location for material design.
-  SetFocusForPlatform();
-  SetFocusPainter(views::Painter::CreateSolidFocusPainter(
-      kFocusBorderColor, gfx::Insets(1, 1, 1, 1)));
-
-  SetInkDropMode(InkDropMode::ON);
-  set_has_ink_drop_action_on_click(true);
-  set_ink_drop_base_color(kTrayPopupInkDropBaseColor);
-  set_ink_drop_visible_opacity(kTrayPopupInkDropRippleOpacity);
+  SetFocusPainter(TrayPopupUtils::CreateFocusPainter());
+  TrayPopupUtils::ConfigureTrayPopupButton(this);
 }
 
 SystemMenuButton::SystemMenuButton(views::ButtonListener* listener,
@@ -63,19 +55,30 @@ SystemMenuButton::SystemMenuButton(views::ButtonListener* listener,
 
 SystemMenuButton::~SystemMenuButton() {}
 
+void SystemMenuButton::SetInkDropColor(SkColor color) {
+  ink_drop_color_ = color;
+}
+
 std::unique_ptr<views::InkDrop> SystemMenuButton::CreateInkDrop() {
   return TrayPopupUtils::CreateInkDrop(ink_drop_style_, this);
 }
 
 std::unique_ptr<views::InkDropRipple> SystemMenuButton::CreateInkDropRipple()
     const {
-  return TrayPopupUtils::CreateInkDropRipple(
-      ink_drop_style_, this, GetInkDropCenterBasedOnLastEvent());
+  return ink_drop_color_ == base::nullopt
+             ? TrayPopupUtils::CreateInkDropRipple(
+                   ink_drop_style_, this, GetInkDropCenterBasedOnLastEvent())
+             : TrayPopupUtils::CreateInkDropRipple(
+                   ink_drop_style_, this, GetInkDropCenterBasedOnLastEvent(),
+                   ink_drop_color_.value());
 }
 
 std::unique_ptr<views::InkDropHighlight>
 SystemMenuButton::CreateInkDropHighlight() const {
-  return TrayPopupUtils::CreateInkDropHighlight(ink_drop_style_, this);
+  return ink_drop_color_ == base::nullopt
+             ? TrayPopupUtils::CreateInkDropHighlight(ink_drop_style_, this)
+             : TrayPopupUtils::CreateInkDropHighlight(ink_drop_style_, this,
+                                                      ink_drop_color_.value());
 }
 
 std::unique_ptr<views::InkDropMask> SystemMenuButton::CreateInkDropMask()

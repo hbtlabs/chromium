@@ -47,8 +47,6 @@
 #include "core/dom/Element.h"
 #include "core/dom/Text.h"
 #include "core/editing/serializers/MarkupAccumulator.h"
-#include "core/fetch/FontResource.h"
-#include "core/fetch/ImageResource.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLImageElement.h"
@@ -57,13 +55,15 @@
 #include "core/html/HTMLMetaElement.h"
 #include "core/html/HTMLStyleElement.h"
 #include "core/html/ImageDocument.h"
+#include "core/loader/resource/FontResource.h"
+#include "core/loader/resource/ImageResourceContent.h"
 #include "core/style/StyleFetchedImage.h"
 #include "core/style/StyleImage.h"
 #include "platform/Histogram.h"
 #include "platform/SerializedResource.h"
 #include "platform/graphics/Image.h"
 #include "platform/heap/Handle.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "wtf/HashSet.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/StringBuilder.h"
@@ -79,15 +79,6 @@ const int32_t maxSerializationTimeUmaMicroseconds = 10 * secondsToMicroseconds;
 
 namespace blink {
 
-static bool shouldIgnoreElement(const Element& element) {
-  if (isHTMLScriptElement(element))
-    return true;
-  if (isHTMLNoScriptElement(element))
-    return true;
-  return isHTMLMetaElement(element) &&
-         toHTMLMetaElement(element).computeEncoding().isValid();
-}
-
 class SerializerMarkupAccumulator : public MarkupAccumulator {
   STACK_ALLOCATED();
 
@@ -98,9 +89,13 @@ class SerializerMarkupAccumulator : public MarkupAccumulator {
   ~SerializerMarkupAccumulator() override;
 
  protected:
+  void appendCustomAttributes(StringBuilder&,
+                              const Element&,
+                              Namespaces*) override;
   void appendText(StringBuilder& out, Text&) override;
-  bool shouldIgnoreAttribute(const Attribute&) override;
-  void appendElement(StringBuilder& out, Element&, Namespaces*) override;
+  bool shouldIgnoreAttribute(const Element&, const Attribute&) const override;
+  bool shouldIgnoreElement(const Element&) const override;
+  void appendElement(StringBuilder& out, const Element&, Namespaces*) override;
   void appendAttribute(StringBuilder& out,
                        const Element&,
                        const Attribute&,
@@ -139,23 +134,43 @@ SerializerMarkupAccumulator::SerializerMarkupAccumulator(
 
 SerializerMarkupAccumulator::~SerializerMarkupAccumulator() {}
 
+void SerializerMarkupAccumulator::appendCustomAttributes(
+    StringBuilder& result,
+    const Element& element,
+    Namespaces* namespaces) {
+  Vector<Attribute> attributes = m_delegate.getCustomAttributes(element);
+  for (const auto& attribute : attributes)
+    appendAttribute(result, element, attribute, namespaces);
+}
+
 void SerializerMarkupAccumulator::appendText(StringBuilder& result,
                                              Text& text) {
-  Element* parent = text.parentElement();
-  if (parent && !shouldIgnoreElement(*parent))
-    MarkupAccumulator::appendText(result, text);
+  MarkupAccumulator::appendText(result, text);
 }
 
 bool SerializerMarkupAccumulator::shouldIgnoreAttribute(
-    const Attribute& attribute) {
-  return m_delegate.shouldIgnoreAttribute(attribute);
+    const Element& element,
+    const Attribute& attribute) const {
+  return m_delegate.shouldIgnoreAttribute(element, attribute);
+}
+
+bool SerializerMarkupAccumulator::shouldIgnoreElement(
+    const Element& element) const {
+  if (isHTMLScriptElement(element))
+    return true;
+  if (isHTMLNoScriptElement(element))
+    return true;
+  if (isHTMLMetaElement(element) &&
+      toHTMLMetaElement(element).computeEncoding().isValid()) {
+    return true;
+  }
+  return m_delegate.shouldIgnoreElement(element);
 }
 
 void SerializerMarkupAccumulator::appendElement(StringBuilder& result,
-                                                Element& element,
+                                                const Element& element,
                                                 Namespaces* namespaces) {
-  if (!shouldIgnoreElement(element))
-    MarkupAccumulator::appendElement(result, element, namespaces);
+  MarkupAccumulator::appendElement(result, element, namespaces);
 
   // TODO(tiger): Refactor MarkupAccumulator so it is easier to append an
   // element like this, without special cases for XHTML
@@ -210,12 +225,11 @@ void SerializerMarkupAccumulator::appendAttribute(StringBuilder& out,
 void SerializerMarkupAccumulator::appendStartTag(Node& node,
                                                  Namespaces* namespaces) {
   MarkupAccumulator::appendStartTag(node, namespaces);
-  m_nodes.append(&node);
+  m_nodes.push_back(&node);
 }
 
 void SerializerMarkupAccumulator::appendEndTag(const Element& element) {
-  if (!shouldIgnoreElement(element))
-    MarkupAccumulator::appendEndTag(element);
+  MarkupAccumulator::appendEndTag(element);
 }
 
 void SerializerMarkupAccumulator::appendAttributeValue(
@@ -232,7 +246,7 @@ void SerializerMarkupAccumulator::appendRewrittenAttribute(
     const String& attributeValue) {
   if (m_elementsWithRewrittenLinks.contains(&element))
     return;
-  m_elementsWithRewrittenLinks.add(&element);
+  m_elementsWithRewrittenLinks.insert(&element);
 
   // Append the rewritten attribute.
   // TODO(tiger): Refactor MarkupAccumulator so it is easier to append an
@@ -251,7 +265,7 @@ void SerializerMarkupAccumulator::appendRewrittenAttribute(
 // "Webpage, Complete" method of saving a page. It will take some work but it
 // needs to be done if we want to continue to support non-MHTML saved pages.
 
-FrameSerializer::FrameSerializer(Vector<SerializedResource>& resources,
+FrameSerializer::FrameSerializer(Deque<SerializedResource>& resources,
                                  Delegate& delegate)
     : m_resources(&resources),
       m_isSerializingCss(false),
@@ -305,14 +319,14 @@ void FrameSerializer::serializeFrame(const LocalFrame& frame) {
       HTMLImageElement& imageElement = toHTMLImageElement(element);
       KURL url =
           document.completeURL(imageElement.getAttribute(HTMLNames::srcAttr));
-      ImageResource* cachedImage = imageElement.cachedImage();
+      ImageResourceContent* cachedImage = imageElement.cachedImage();
       addImageToResources(cachedImage, url);
     } else if (isHTMLInputElement(element)) {
       HTMLInputElement& inputElement = toHTMLInputElement(element);
       if (inputElement.type() == InputTypeNames::image &&
           inputElement.imageLoader()) {
         KURL url = inputElement.src();
-        ImageResource* cachedImage = inputElement.imageLoader()->image();
+        ImageResourceContent* cachedImage = inputElement.imageLoader()->image();
         addImageToResources(cachedImage, url);
       }
     } else if (isHTMLLinkElement(element)) {
@@ -377,7 +391,7 @@ void FrameSerializer::serializeCSSStyleSheet(CSSStyleSheet& styleSheet,
     m_resources->append(
         SerializedResource(url, String("text/css"),
                            SharedBuffer::create(text.data(), text.length())));
-    m_resourceURLs.add(url);
+    m_resourceURLs.insert(url);
   }
 
   // Sub resources need to be serialized even if the CSS definition doesn't
@@ -446,10 +460,12 @@ bool FrameSerializer::shouldAddURL(const KURL& url) {
          !url.protocolIsData() && !m_delegate.shouldSkipResourceWithURL(url);
 }
 
-void FrameSerializer::addToResources(const Resource& resource,
-                                     PassRefPtr<const SharedBuffer> data,
-                                     const KURL& url) {
-  if (m_delegate.shouldSkipResource(resource))
+void FrameSerializer::addToResources(
+    const String& mimeType,
+    ResourceHasCacheControlNoStoreHeader hasCacheControlNoStoreHeader,
+    PassRefPtr<const SharedBuffer> data,
+    const KURL& url) {
+  if (m_delegate.shouldSkipResource(hasCacheControlNoStoreHeader))
     return;
 
   if (!data) {
@@ -457,12 +473,11 @@ void FrameSerializer::addToResources(const Resource& resource,
     return;
   }
 
-  String mimeType = resource.response().mimeType();
   m_resources->append(SerializedResource(url, mimeType, std::move(data)));
-  m_resourceURLs.add(url);
+  m_resourceURLs.insert(url);
 }
 
-void FrameSerializer::addImageToResources(ImageResource* image,
+void FrameSerializer::addImageToResources(ImageResourceContent* image,
                                           const KURL& url) {
   if (!image || !image->hasImage() || image->errorOccurred() ||
       !shouldAddURL(url))
@@ -473,7 +488,11 @@ void FrameSerializer::addImageToResources(ImageResource* image,
   double imageStartTime = monotonicallyIncreasingTime();
 
   RefPtr<const SharedBuffer> data = image->getImage()->data();
-  addToResources(*image, data, url);
+  addToResources(image->response().mimeType(),
+                 image->hasCacheControlNoStoreHeader()
+                     ? HasCacheControlNoStoreHeader
+                     : NoCacheControlNoStoreHeader,
+                 data, url);
 
   // If we're already reporting time for CSS serialization don't report it for
   // this image to avoid reporting the same time twice.
@@ -494,7 +513,11 @@ void FrameSerializer::addFontToResources(FontResource* font) {
 
   RefPtr<const SharedBuffer> data(font->resourceBuffer());
 
-  addToResources(*font, data, font->url());
+  addToResources(font->response().mimeType(),
+                 font->hasCacheControlNoStoreHeader()
+                     ? HasCacheControlNoStoreHeader
+                     : NoCacheControlNoStoreHeader,
+                 data, font->url());
 }
 
 void FrameSerializer::retrieveResourcesForProperties(

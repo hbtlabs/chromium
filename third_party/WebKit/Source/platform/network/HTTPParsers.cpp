@@ -161,23 +161,23 @@ const UChar* parseSuboriginName(const UChar* begin,
                                 WTF::Vector<String>& messages) {
   // Parse the name of the suborigin (no spaces, single string)
   if (begin == end) {
-    messages.append(String("No Suborigin name specified."));
+    messages.push_back(String("No Suborigin name specified."));
     return nullptr;
   }
 
   const UChar* position = begin;
 
   if (!skipExactly<UChar, isASCIILower>(position, end)) {
-    messages.append("Invalid character \'" + String(position, 1) +
-                    "\' in suborigin. First character must be a lower case "
-                    "alphabetic character.");
+    messages.push_back("Invalid character \'" + String(position, 1) +
+                       "\' in suborigin. First character must be a lower case "
+                       "alphabetic character.");
     return nullptr;
   }
 
   skipWhile<UChar, isASCIILowerAlphaOrDigit>(position, end);
   if (position != end && !isASCIISpace(*position)) {
-    messages.append("Invalid character \'" + String(position, 1) +
-                    "\' in suborigin.");
+    messages.push_back("Invalid character \'" + String(position, 1) +
+                       "\' in suborigin.");
     return nullptr;
   }
 
@@ -193,22 +193,22 @@ const UChar* parseSuboriginPolicyOption(const UChar* begin,
   const UChar* position = begin;
 
   if (*position != '\'') {
-    messages.append("Invalid character \'" + String(position, 1) +
-                    "\' in suborigin policy. Suborigin policy options must "
-                    "start and end with a single quote.");
+    messages.push_back("Invalid character \'" + String(position, 1) +
+                       "\' in suborigin policy. Suborigin policy options must "
+                       "start and end with a single quote.");
     return nullptr;
   }
   position = position + 1;
 
   skipWhile<UChar, isASCIILowerAlphaOrDigitOrHyphen>(position, end);
   if (position == end || isASCIISpace(*position)) {
-    messages.append(String("Expected \' to end policy option."));
+    messages.push_back(String("Expected \' to end policy option."));
     return nullptr;
   }
 
   if (*position != '\'') {
-    messages.append("Invalid character \'" + String(position, 1) +
-                    "\' in suborigin policy.");
+    messages.push_back("Invalid character \'" + String(position, 1) +
+                       "\' in suborigin policy.");
     return nullptr;
   }
 
@@ -579,35 +579,6 @@ ContentTypeOptionsDisposition parseContentTypeOptionsHeader(
   return ContentTypeOptionsNone;
 }
 
-XFrameOptionsDisposition parseXFrameOptionsHeader(const String& header) {
-  XFrameOptionsDisposition result = XFrameOptionsInvalid;
-
-  if (header.isEmpty())
-    return result;
-
-  Vector<String> headers;
-  header.split(',', headers);
-
-  bool hasValue = false;
-  for (size_t i = 0; i < headers.size(); i++) {
-    String currentHeader = headers[i].stripWhiteSpace();
-    XFrameOptionsDisposition currentValue = XFrameOptionsInvalid;
-    if (equalIgnoringCase(currentHeader, "deny"))
-      currentValue = XFrameOptionsDeny;
-    else if (equalIgnoringCase(currentHeader, "sameorigin"))
-      currentValue = XFrameOptionsSameOrigin;
-    else if (equalIgnoringCase(currentHeader, "allowall"))
-      currentValue = XFrameOptionsAllowAll;
-
-    if (!hasValue)
-      result = currentValue;
-    else if (result != currentValue)
-      return XFrameOptionsConflict;
-    hasValue = true;
-  }
-  return result;
-}
-
 static bool isCacheHeaderSeparator(UChar c) {
   // See RFC 2616, Section 2.2
   switch (c) {
@@ -667,7 +638,7 @@ static void parseCacheHeader(const String& header,
         size_t nextDoubleQuotePosition = value.find('"', 1);
         if (nextDoubleQuotePosition != kNotFound) {
           // Store the value as a quoted string without quotes
-          result.append(std::pair<String, String>(
+          result.push_back(std::pair<String, String>(
               directive, value.substring(1, nextDoubleQuotePosition - 1)
                              .stripWhiteSpace()));
           pos +=
@@ -680,7 +651,7 @@ static void parseCacheHeader(const String& header,
             return;  // Parse error if there is anything left with no comma
         } else {
           // Parse error; just use the rest as the value
-          result.append(std::pair<String, String>(
+          result.push_back(std::pair<String, String>(
               directive,
               trimToNextSeparator(
                   value.substring(1, value.length() - 1).stripWhiteSpace())));
@@ -691,14 +662,14 @@ static void parseCacheHeader(const String& header,
         size_t nextCommaPosition2 = value.find(',');
         if (nextCommaPosition2 != kNotFound) {
           // The value is delimited by the next comma
-          result.append(std::pair<String, String>(
+          result.push_back(std::pair<String, String>(
               directive,
               trimToNextSeparator(
                   value.substring(0, nextCommaPosition2).stripWhiteSpace())));
           pos += (safeHeader.find(',', pos) - pos) + 1;
         } else {
           // The rest is the value; no change to value needed
-          result.append(
+          result.push_back(
               std::pair<String, String>(directive, trimToNextSeparator(value)));
           return;
         }
@@ -707,14 +678,14 @@ static void parseCacheHeader(const String& header,
                (nextCommaPosition < nextEqualSignPosition ||
                 nextEqualSignPosition == kNotFound)) {
       // Add directive to map with empty string as value
-      result.append(std::pair<String, String>(
+      result.push_back(std::pair<String, String>(
           trimToNextSeparator(safeHeader.substring(pos, nextCommaPosition - pos)
                                   .stripWhiteSpace()),
           ""));
       pos += nextCommaPosition - pos + 1;
     } else {
       // Add last directive to map with empty string as value
-      result.append(std::pair<String, String>(
+      result.push_back(std::pair<String, String>(
           trimToNextSeparator(
               safeHeader.substring(pos, max - pos).stripWhiteSpace()),
           ""));
@@ -732,13 +703,11 @@ CacheControlHeader parseCacheControlDirectives(
   cacheControlHeader.staleWhileRevalidate =
       std::numeric_limits<double>::quiet_NaN();
 
-  DEFINE_STATIC_LOCAL(const AtomicString, noCacheDirective, ("no-cache"));
-  DEFINE_STATIC_LOCAL(const AtomicString, noStoreDirective, ("no-store"));
-  DEFINE_STATIC_LOCAL(const AtomicString, mustRevalidateDirective,
-                      ("must-revalidate"));
-  DEFINE_STATIC_LOCAL(const AtomicString, maxAgeDirective, ("max-age"));
-  DEFINE_STATIC_LOCAL(const AtomicString, staleWhileRevalidateDirective,
-                      ("stale-while-revalidate"));
+  static const char noCacheDirective[] = "no-cache";
+  static const char noStoreDirective[] = "no-store";
+  static const char mustRevalidateDirective[] = "must-revalidate";
+  static const char maxAgeDirective[] = "max-age";
+  static const char staleWhileRevalidateDirective[] = "stale-while-revalidate";
 
   if (!cacheControlValue.isEmpty()) {
     Vector<std::pair<String, String>> directives;
@@ -795,7 +764,7 @@ void parseCommaDelimitedHeader(const String& headerValue,
   Vector<String> results;
   headerValue.split(",", results);
   for (auto& value : results)
-    headerSet.add(value.stripWhiteSpace(isWhitespace));
+    headerSet.insert(value.stripWhiteSpace(isWhitespace));
 }
 
 bool parseSuboriginHeader(const String& header,
@@ -805,7 +774,7 @@ bool parseSuboriginHeader(const String& header,
   header.split(',', true, headers);
 
   if (headers.size() > 1)
-    messages.append(
+    messages.push_back(
         "Multiple Suborigin headers found. Ignoring all but the first.");
 
   Vector<UChar> characters;
@@ -842,8 +811,8 @@ bool parseSuboriginHeader(const String& header,
     Suborigin::SuboriginPolicyOptions option =
         getSuboriginPolicyOptionFromString(optionName);
     if (option == Suborigin::SuboriginPolicyOptions::None)
-      messages.append("Ignoring unknown suborigin policy option " + optionName +
-                      ".");
+      messages.push_back("Ignoring unknown suborigin policy option " +
+                         optionName + ".");
     else
       suborigin->addPolicyOption(option);
   }
@@ -874,12 +843,9 @@ bool parseMultipartHeadersFromBody(const char* bytes,
       new net::HttpResponseHeaders(
           net::HttpUtil::AssembleRawHeaders(headers.data(), headers.length()));
 
-  std::string mimeType;
-  responseHeaders->GetMimeType(&mimeType);
+  std::string mimeType, charset;
+  responseHeaders->GetMimeTypeAndCharset(&mimeType, &charset);
   response->setMimeType(WebString::fromUTF8(mimeType));
-
-  std::string charset;
-  responseHeaders->GetCharset(&charset);
   response->setTextEncodingName(WebString::fromUTF8(charset));
 
   // Copy headers listed in replaceHeaders to the response.
@@ -899,13 +865,24 @@ bool parseMultipartHeadersFromBody(const char* bytes,
 }
 
 // See https://tools.ietf.org/html/draft-ietf-httpbis-jfv-01, Section 4.
-std::unique_ptr<JSONArray> parseJSONHeader(const String& header) {
+std::unique_ptr<JSONArray> parseJSONHeader(const String& header,
+                                           int maxParseDepth) {
   StringBuilder sb;
   sb.append("[");
   sb.append(header);
   sb.append("]");
-  std::unique_ptr<JSONValue> headerValue = parseJSON(sb.toString());
+  std::unique_ptr<JSONValue> headerValue =
+      parseJSON(sb.toString(), maxParseDepth);
   return JSONArray::from(std::move(headerValue));
+}
+
+bool parseContentRangeHeaderFor206(const String& contentRange,
+                                   int64_t* firstBytePosition,
+                                   int64_t* lastBytePosition,
+                                   int64_t* instanceLength) {
+  return net::HttpUtil::ParseContentRangeHeaderFor206(
+      StringUTF8Adaptor(contentRange).asStringPiece(), firstBytePosition,
+      lastBytePosition, instanceLength);
 }
 
 }  // namespace blink

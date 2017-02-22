@@ -9,7 +9,9 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "services/service_manager/public/cpp/interface_provider_spec.h"
@@ -40,14 +42,18 @@ ServiceContext::ServiceContext(
   } else {
     DCHECK(pending_connector_request_.is_pending());
   }
+  service_->SetContext(this);
 }
 
 ServiceContext::~ServiceContext() {}
 
-void ServiceContext::SetConnectionLostClosure(const base::Closure& closure) {
-  connection_lost_closure_ = closure;
-  if (service_quit_)
-    QuitNow();
+void ServiceContext::SetQuitClosure(const base::Closure& closure) {
+  if (service_quit_) {
+    // CAUTION: May delete |this|.
+    closure.Run();
+  } else {
+    quit_closure_ = closure;
+  }
 }
 
 void ServiceContext::RequestQuit() {
@@ -62,15 +68,13 @@ void ServiceContext::DisconnectFromServiceManager() {
 }
 
 void ServiceContext::QuitNow() {
+  service_quit_ = true;
   if (binding_.is_bound())
     binding_.Close();
-  if (!connection_lost_closure_.is_null())
-    base::ResetAndReturn(&connection_lost_closure_).Run();
-}
-
-void ServiceContext::DestroyService() {
-  QuitNow();
-  service_.reset();
+  if (!quit_closure_.is_null()) {
+    // CAUTION: May delete |this|.
+    base::ResetAndReturn(&quit_closure_).Run();
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -80,9 +84,7 @@ void ServiceContext::OnStart(const ServiceInfo& info,
                              const OnStartCallback& callback) {
   local_info_ = info;
   callback.Run(std::move(pending_connector_request_),
-               mojo::GetProxy(&service_control_, binding_.associated_group()));
-
-  service_->set_context(this);
+               mojo::MakeRequest(&service_control_));
   service_->OnStart();
 }
 
@@ -95,13 +97,36 @@ void ServiceContext::OnConnect(
                            local_info_.interface_provider_specs, &target_spec);
   GetInterfaceProviderSpec(mojom::kServiceManager_ConnectorSpec,
                            source_info.interface_provider_specs, &source_spec);
+
+  // Acknowledge the request regardless of whether it's accepted.
+  callback.Run();
+
+  CallOnConnect(source_info, source_spec, target_spec, std::move(interfaces));
+}
+
+void ServiceContext::OnBindInterface(
+    const ServiceInfo& source_info,
+    const std::string& interface_name,
+    mojo::ScopedMessagePipeHandle interface_pipe,
+    const OnBindInterfaceCallback& callback) {
+  // Acknowledge the request regardless of whether it's accepted.
+  callback.Run();
+
+  service_->OnBindInterface(source_info, interface_name,
+                            std::move(interface_pipe));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// ServiceContext, private:
+
+void ServiceContext::CallOnConnect(const ServiceInfo& source_info,
+                                   const InterfaceProviderSpec& source_spec,
+                                   const InterfaceProviderSpec& target_spec,
+                                   mojom::InterfaceProviderRequest interfaces) {
   auto registry =
       base::MakeUnique<InterfaceRegistry>(mojom::kServiceManager_ConnectorSpec);
   registry->Bind(std::move(interfaces), local_info_.identity, target_spec,
                  source_info.identity, source_spec);
-
-  // Acknowledge the request regardless of whether it's accepted.
-  callback.Run();
 
   if (!service_->OnConnect(source_info, registry.get()))
     return;
@@ -114,23 +139,11 @@ void ServiceContext::OnConnect(
       std::make_pair(raw_registry, std::move(registry)));
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// ServiceContext, private:
-
 void ServiceContext::OnConnectionError() {
-  // Note that the Service doesn't technically have to quit now, it may live
-  // on to service existing connections. All existing Connectors however are
-  // invalid.
-  service_quit_ = service_->OnStop();
-  if (service_quit_) {
+  if (service_->OnServiceManagerConnectionLost()) {
+    // CAUTION: May delete |this|.
     QuitNow();
-    // NOTE: This call may delete |this|, so don't access any ServiceContext
-    // state beyond this point.
-    return;
   }
-
-  // We don't reset the connector as clients may have taken a raw pointer to it.
-  // Connect() will return nullptr if they try to connect to anything.
 }
 
 void ServiceContext::OnRegistryConnectionError(InterfaceRegistry* registry) {

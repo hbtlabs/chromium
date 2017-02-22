@@ -17,7 +17,6 @@
 #include "ui/views/bubble/tray_bubble_view.h"
 
 namespace ash {
-class ShelfLayoutManager;
 class TrayEventFilter;
 class TrayBackground;
 class WmShelf;
@@ -130,7 +129,7 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   void UpdateShelfItemBackground(int alpha) override;
 
   // Updates the visibility of this tray's separator.
-  void SetSeparatorVisibility(bool is_show);
+  void set_separator_visibility(bool visible) { separator_visible_ = visible; }
 
   // Gets the anchor for bubbles, which is tray_container().
   views::View* GetBubbleAnchor() const;
@@ -146,7 +145,7 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   bool PerformAction(const ui::Event& event) override;
   void HandlePerformActionResult(bool action_performed,
                                  const ui::Event& event) override;
-  gfx::Rect GetFocusBounds() override;
+  void OnPaintFocus(gfx::Canvas* canvas) override;
 
  private:
   class TrayWidgetObserver;
@@ -162,9 +161,9 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   // Helper function that calculates background insets relative to local bounds.
   gfx::Insets GetBackgroundInsets() const;
 
-  // Helper function that calculates ink drop bounds relative to local bounds
-  // based on the background insets returned from GetBackgroundInsets().
-  gfx::Rect GetInkDropBounds() const;
+  // Helper function that calculates background bounds relative to local bounds
+  // based on background insets returned from GetBackgroundInsets().
+  gfx::Rect GetBackgroundBounds() const;
 
   // The shelf containing the system tray for this view.
   WmShelf* wm_shelf_;
@@ -185,7 +184,7 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
 
   // Visibility of this tray's separator which is a line of 1x32px and 4px to
   // right of tray.
-  bool is_separator_visible_;
+  bool separator_visible_;
 
   std::unique_ptr<TrayWidgetObserver> widget_observer_;
   std::unique_ptr<TrayEventFilter> tray_event_filter_;

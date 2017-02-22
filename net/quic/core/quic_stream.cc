@@ -4,15 +4,12 @@
 
 #include "net/quic/core/quic_stream.h"
 
-#include "base/logging.h"
-#include "net/quic/core/quic_bug_tracker.h"
-#include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_flow_controller.h"
 #include "net/quic/core/quic_session.h"
-#include "net/quic/core/quic_write_blocked_list.h"
+#include "net/quic/platform/api/quic_bug_tracker.h"
+#include "net/quic/platform/api/quic_logging.h"
 
 using base::StringPiece;
-using std::min;
 using std::string;
 
 namespace net {
@@ -42,9 +39,12 @@ size_t GetReceivedFlowControlWindow(QuicSession* session) {
 
 }  // namespace
 
-QuicStream::PendingData::PendingData(string data_in,
-                                     QuicAckListenerInterface* ack_listener_in)
-    : data(std::move(data_in)), offset(0), ack_listener(ack_listener_in) {}
+QuicStream::PendingData::PendingData(
+    string data_in,
+    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener)
+    : data(std::move(data_in)),
+      offset(0),
+      ack_listener(std::move(ack_listener)) {}
 
 QuicStream::PendingData::~PendingData() {}
 
@@ -70,7 +70,10 @@ QuicStream::QuicStream(QuicStreamId id, QuicSession* session)
                        perspective_,
                        GetReceivedFlowControlWindow(session),
                        GetInitialStreamFlowControlWindowToSend(session),
-                       session_->flow_controller()->auto_tune_receive_window()),
+                       session_->flow_controller()->auto_tune_receive_window(),
+                       session_->flow_control_invariant()
+                           ? session_->flow_controller()
+                           : nullptr),
       connection_flow_controller_(session_->flow_controller()),
       stream_contributes_to_connection_flow_control_(true),
       busy_counter_(0) {
@@ -94,8 +97,9 @@ void QuicStream::OnStreamFrame(const QuicStreamFrame& frame) {
   }
 
   if (read_side_closed_) {
-    DVLOG(1) << ENDPOINT << "Stream " << frame.stream_id
-             << " is closed for reading. Ignoring newly received stream data.";
+    QUIC_DLOG(INFO)
+        << ENDPOINT << "Stream " << frame.stream_id
+        << " is closed for reading. Ignoring newly received stream data.";
     // The subclass does not want to read data:  blackhole the data.
     return;
   }
@@ -177,9 +181,10 @@ void QuicStream::CloseConnectionWithDetails(QuicErrorCode error,
       error, details, ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
 }
 
-void QuicStream::WriteOrBufferData(StringPiece data,
-                                   bool fin,
-                                   QuicAckListenerInterface* ack_listener) {
+void QuicStream::WriteOrBufferData(
+    StringPiece data,
+    bool fin,
+    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
   if (data.empty() && !fin) {
     QUIC_BUG << "data.empty() && !fin";
     return;
@@ -190,7 +195,8 @@ void QuicStream::WriteOrBufferData(StringPiece data,
     return;
   }
   if (write_side_closed_) {
-    DLOG(ERROR) << ENDPOINT << "Attempt to write when the write side is closed";
+    QUIC_DLOG(ERROR) << ENDPOINT
+                     << "Attempt to write when the write side is closed";
     return;
   }
 
@@ -216,7 +222,8 @@ void QuicStream::OnCanWrite() {
   bool fin = false;
   while (!queued_data_.empty()) {
     PendingData* pending_data = &queued_data_.front();
-    QuicAckListenerInterface* ack_listener = pending_data->ack_listener.get();
+    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener =
+        pending_data->ack_listener;
     if (queued_data_.size() == 1 && fin_buffered_) {
       fin = true;
     }
@@ -266,9 +273,10 @@ QuicConsumedData QuicStream::WritevData(
     const struct iovec* iov,
     int iov_count,
     bool fin,
-    QuicAckListenerInterface* ack_listener) {
+    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
   if (write_side_closed_) {
-    DLOG(ERROR) << ENDPOINT << "Attempt to write when the write side is closed";
+    QUIC_DLOG(ERROR) << ENDPOINT
+                     << "Attempt to write when the write side is closed";
     return QuicConsumedData(0, false);
   }
 
@@ -287,7 +295,7 @@ QuicConsumedData QuicStream::WritevData(
   QuicByteCount send_window = flow_controller_.SendWindowSize();
   if (stream_contributes_to_connection_flow_control_) {
     send_window =
-        min(send_window, connection_flow_controller_->SendWindowSize());
+        std::min(send_window, connection_flow_controller_->SendWindowSize());
   }
 
   if (session_->ShouldYield(id())) {
@@ -307,13 +315,13 @@ QuicConsumedData QuicStream::WritevData(
 
     // Writing more data would be a violation of flow control.
     write_length = static_cast<size_t>(send_window);
-    DVLOG(1) << "stream " << id() << " shortens write length to "
-             << write_length << " due to flow control";
+    QUIC_DVLOG(1) << "stream " << id() << " shortens write length to "
+                  << write_length << " due to flow control";
   }
 
   QuicConsumedData consumed_data =
       WritevDataInner(QuicIOVector(iov, iov_count, write_length),
-                      stream_bytes_written_, fin, ack_listener);
+                      stream_bytes_written_, fin, std::move(ack_listener));
   stream_bytes_written_ += consumed_data.bytes_consumed;
 
   AddBytesSent(consumed_data.bytes_consumed);
@@ -340,6 +348,9 @@ QuicConsumedData QuicStream::WritevData(
   } else {
     session_->MarkConnectionLevelWriteBlocked(id());
   }
+  if (consumed_data.bytes_consumed > 0 || consumed_data.fin_consumed) {
+    busy_counter_ = 0;
+  }
   return consumed_data;
 }
 
@@ -347,22 +358,22 @@ QuicConsumedData QuicStream::WritevDataInner(
     QuicIOVector iov,
     QuicStreamOffset offset,
     bool fin,
-    QuicAckListenerInterface* ack_notifier_delegate) {
+    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
   return session()->WritevData(this, id(), iov, offset, fin,
-                               ack_notifier_delegate);
+                               std::move(ack_listener));
 }
 
 void QuicStream::CloseReadSide() {
   if (read_side_closed_) {
     return;
   }
-  DVLOG(1) << ENDPOINT << "Done reading from stream " << id();
+  QUIC_DLOG(INFO) << ENDPOINT << "Done reading from stream " << id();
 
   read_side_closed_ = true;
   sequencer_.ReleaseBuffer();
 
   if (write_side_closed_) {
-    DVLOG(1) << ENDPOINT << "Closing stream: " << id();
+    QUIC_DLOG(INFO) << ENDPOINT << "Closing stream: " << id();
     session_->CloseStream(id());
   }
 }
@@ -371,11 +382,11 @@ void QuicStream::CloseWriteSide() {
   if (write_side_closed_) {
     return;
   }
-  DVLOG(1) << ENDPOINT << "Done writing to stream " << id();
+  QUIC_DLOG(INFO) << ENDPOINT << "Done writing to stream " << id();
 
   write_side_closed_ = true;
   if (read_side_closed_) {
-    DVLOG(1) << ENDPOINT << "Closing stream: " << id();
+    QUIC_DLOG(INFO) << ENDPOINT << "Closing stream: " << id();
     session_->CloseStream(id());
   }
 }
@@ -389,11 +400,11 @@ QuicVersion QuicStream::version() const {
 }
 
 void QuicStream::StopReading() {
-  DVLOG(1) << ENDPOINT << "Stop reading from stream " << id();
+  QUIC_DLOG(INFO) << ENDPOINT << "Stop reading from stream " << id();
   sequencer_.StopReading();
 }
 
-const IPEndPoint& QuicStream::PeerAddressOfLatestPacket() const {
+const QuicSocketAddress& QuicStream::PeerAddressOfLatestPacket() const {
   return session_->connection()->last_packet_source_address();
 }
 
@@ -405,7 +416,7 @@ void QuicStream::OnClose() {
     // For flow control accounting, tell the peer how many bytes have been
     // written on this stream before termination. Done here if needed, using a
     // RST_STREAM frame.
-    DVLOG(1) << ENDPOINT << "Sending RST_STREAM in OnClose: " << id();
+    QUIC_DLOG(INFO) << ENDPOINT << "Sending RST_STREAM in OnClose: " << id();
     session_->SendRstStream(id(), QUIC_RST_ACKNOWLEDGEMENT,
                             stream_bytes_written_);
     rst_sent_ = true;

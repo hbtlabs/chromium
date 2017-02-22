@@ -8,9 +8,12 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Process;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
@@ -54,6 +57,17 @@ public class GSAAccountChangeListener {
         return sInstance;
     }
 
+    /**
+     * Returns whether the permission {@link ACCOUNT_UPDATE_BROADCAST_PERMISSION} is granted by the
+     * system.
+     */
+    static boolean holdsAccountUpdatePermission() {
+        Context context = ContextUtils.getApplicationContext();
+        int result = ApiCompatibilityUtils.checkPermission(
+                context, ACCOUNT_UPDATE_BROADCAST_PERMISSION, Process.myPid(), Process.myUid());
+        return result == PackageManager.PERMISSION_GRANTED;
+    }
+
     private GSAAccountChangeListener(Context context) {
         Context applicationContext = context.getApplicationContext();
         BroadcastReceiver accountChangeReceiver = new BroadcastReceiver() {
@@ -61,6 +75,9 @@ public class GSAAccountChangeListener {
             public void onReceive(Context context, Intent intent) {
                 if (!ACCOUNT_UPDATE_BROADCAST_INTENT.equals(intent.getAction())) return;
                 String accountName = intent.getStringExtra(BROADCAST_INTENT_ACCOUNT_NAME_EXTRA);
+                RecordHistogram.recordEnumeratedHistogram(GSAServiceClient.ACCOUNT_CHANGE_HISTOGRAM,
+                        GSAServiceClient.ACCOUNT_CHANGE_SOURCE_BROADCAST,
+                        GSAServiceClient.ACCOUNT_CHANGE_SOURCE_COUNT);
                 GSAState.getInstance(context.getApplicationContext()).setGsaAccount(accountName);
             }
         };
@@ -103,13 +120,28 @@ public class GSAAccountChangeListener {
         context.registerReceiver(gsaUpdatedReceiver, filter);
     }
 
-    private void createGsaClientAndConnect(Context context) {
+    private void createGsaClientAndConnect(final Context context) {
         Callback<Bundle> onMessageReceived = new Callback<Bundle>() {
             @Override
             public void onResult(Bundle result) {
                 boolean supportsBroadcast =
                         result.getBoolean(KEY_SSB_BROADCASTS_ACCOUNT_CHANGE_TO_CHROME);
-                if (supportsBroadcast) notifyGsaBroadcastsAccountChanges();
+
+                if (supportsBroadcast) {
+                    // So, GSA will broadcast the account changes. But the broadcast on GSA side
+                    // requires a permission to be granted to Chrome. This permission has the
+                    // "signature" level, meaning that if for whatever reason Chrome's certificate
+                    // is not the same one as GSA's, then the broadcasts will never arrive.
+                    // Query the package manager to know whether the permission was granted, and
+                    // only switch to the broadcast mechanism if that's the case.
+                    //
+                    // Note that this is technically not required, since Chrome tells GSA whether
+                    // it holds the permission when connecting to it in GSAServiceClient, but this
+                    // extra bit of paranoia protects from old versions of GSA that don't check
+                    // what Chrome sends.
+                    if (holdsAccountUpdatePermission()) notifyGsaBroadcastsAccountChanges();
+                }
+
                 // If GSA doesn't support the broadcast, we connect several times to the service per
                 // Chrome session (since there is a disconnect() call in
                 // ChromeActivity#onStopWithNative()). Only record the histogram once per startup to
@@ -142,6 +174,7 @@ public class GSAAccountChangeListener {
     }
 
     private void notifyGsaBroadcastsAccountChanges() {
+        if (mClient == null) return;
         mClient.disconnect();
         mClient = null;
     }

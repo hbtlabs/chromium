@@ -72,7 +72,7 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   // not the content of the Text node, updating text-transform property
   // doesn't re-transform the string.
   LayoutText(Node*, PassRefPtr<StringImpl>);
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   ~LayoutText() override;
 #endif
 
@@ -102,7 +102,8 @@ class CORE_EXPORT LayoutText : public LayoutObject {
                              unsigned endOffset = INT_MAX,
                              bool useSelectionHeight = false);
 
-  void absoluteQuads(Vector<FloatQuad>&) const final;
+  void absoluteQuads(Vector<FloatQuad>&,
+                     MapCoordinatesFlags mode = 0) const final;
   void absoluteQuadsForRange(Vector<FloatQuad>&,
                              unsigned startOffset = 0,
                              unsigned endOffset = INT_MAX,
@@ -113,7 +114,8 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   enum LocalOrAbsoluteOption { LocalQuads, AbsoluteQuads };
   void quads(Vector<FloatQuad>&,
              ClippingOption = NoClipping,
-             LocalOrAbsoluteOption = AbsoluteQuads) const;
+             LocalOrAbsoluteOption = AbsoluteQuads,
+             MapCoordinatesFlags mode = 0) const;
 
   PositionWithAffinity positionForPoint(const LayoutPoint&) override;
 
@@ -128,6 +130,7 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   unsigned textLength() const {
     return m_text.length();
   }  // non virtual implementation of length()
+  bool containsOnlyWhitespace(unsigned from, unsigned len) const;
   void positionLineBox(InlineBox*);
 
   virtual float width(unsigned from,
@@ -214,6 +217,10 @@ class CORE_EXPORT LayoutText : public LayoutObject {
 
   LayoutRect debugRect() const override;
 
+  void autosizingMultiplerChanged() {
+    m_knownToHaveNoOverflowAndNoFallbackFonts = false;
+  }
+
  protected:
   void willBeDestroyed() override;
 
@@ -247,20 +254,17 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   unsigned length() const final { return textLength(); }
 
   // See the class comment as to why we shouldn't call this function directly.
-  void paint(const PaintInfo&, const LayoutPoint&) const final {
-    ASSERT_NOT_REACHED();
-  }
-  void layout() final { ASSERT_NOT_REACHED(); }
+  void paint(const PaintInfo&, const LayoutPoint&) const final { NOTREACHED(); }
+  void layout() final { NOTREACHED(); }
   bool nodeAtPoint(HitTestResult&,
                    const HitTestLocation&,
                    const LayoutPoint&,
                    HitTestAction) final {
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return false;
   }
 
   void deleteTextBoxes();
-  bool containsOnlyWhitespace(unsigned from, unsigned len) const;
   float widthFromFont(const Font&,
                       int start,
                       int len,
@@ -343,7 +347,7 @@ inline float LayoutText::hyphenWidth(const Font& font,
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutText, isText());
 
-#if !ENABLE(ASSERT)
+#if !DCHECK_IS_ON()
 inline void LayoutText::checkConsistency() const {}
 #endif
 

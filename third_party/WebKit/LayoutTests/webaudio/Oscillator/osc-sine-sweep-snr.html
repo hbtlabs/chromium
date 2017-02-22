@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Test Oscillator Node: sine</title>
+    <script src="../../resources/testharness.js"></script>
+    <script src="../../resources/testharnessreport.js"></script> 
+    <script src="../resources/audit-util.js"></script>
+    <script src="../resources/audit.js"></script>
+    <script src="../resources/buffer-loader.js"></script>
+    <script src="../resources/oscillator-testing.js"></script>
+  </head>
+
+  <body>
+    <script>
+      let audit = Audit.createTaskRunner();
+      let tester = OscillatorTestingUtils;
+
+      audit.define("test", (task, should) => {
+        let context = new OfflineAudioContext(1, tester.sampleRate *
+          tester.lengthInSeconds, tester.sampleRate);
+
+        // The thresholds are experimentally determined.
+        tester.setThresholds({
+          snr: 81.05,
+          maxDiff: 6.78,
+          diffCount: 17608
+        });
+        tester.runTest(context, "sine",
+          "Sine Oscillator with Exponential Sweep",
+          task, should);
+      });
+
+      audit.run();
+    </script>
+  </body>
+</html>

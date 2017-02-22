@@ -48,6 +48,7 @@
 
 #include "SkFontMgr.h"
 
+class SkString;
 class SkTypeface;
 
 namespace base {
@@ -68,6 +69,7 @@ class SimpleFontData;
 
 enum ShouldRetain { Retain, DoNotRetain };
 enum PurgeSeverity { PurgeIfNeeded, ForcePurge };
+enum class AlternateFontName { AllowAlternate, NoAlternate, LastResort };
 
 class PLATFORM_EXPORT FontCache {
   friend class FontCachePurgePreventer;
@@ -91,10 +93,11 @@ class PLATFORM_EXPORT FontCache {
   // Also implemented by the platform.
   void platformInit();
 
-  PassRefPtr<SimpleFontData> getFontData(const FontDescription&,
-                                         const AtomicString&,
-                                         bool checkingAlternateName = false,
-                                         ShouldRetain = Retain);
+  PassRefPtr<SimpleFontData> getFontData(
+      const FontDescription&,
+      const AtomicString&,
+      AlternateFontName = AlternateFontName::AllowAlternate,
+      ShouldRetain = Retain);
   PassRefPtr<SimpleFontData> getLastResortFallbackFont(const FontDescription&,
                                                        ShouldRetain = Retain);
   SimpleFontData* getNonRetainedLastResortFallbackFont(const FontDescription&);
@@ -114,7 +117,7 @@ class PLATFORM_EXPORT FontCache {
   void invalidate();
 
   SkFontMgr* fontManager() { return m_fontManager.get(); }
-  static void setFontManager(const sk_sp<SkFontMgr>&);
+  static void setFontManager(sk_sp<SkFontMgr>);
 
 #if !OS(MACOSX)
   static const AtomicString& systemFontFamily();
@@ -190,6 +193,8 @@ class PLATFORM_EXPORT FontCache {
 
   void invalidateShapeCache();
 
+  static void crashWithFontInfo(const FontDescription*);
+
   // Memory reporting
   void dumpFontPlatformDataCache(base::trace_event::ProcessMemoryDump*);
   void dumpShapeResultCache(base::trace_event::ProcessMemoryDump*);
@@ -208,9 +213,10 @@ class PLATFORM_EXPORT FontCache {
   }
 
   // FIXME: This method should eventually be removed.
-  FontPlatformData* getFontPlatformData(const FontDescription&,
-                                        const FontFaceCreationParams&,
-                                        bool checkingAlternateName = false);
+  FontPlatformData* getFontPlatformData(
+      const FontDescription&,
+      const FontFaceCreationParams&,
+      AlternateFontName = AlternateFontName::AllowAlternate);
 #if !OS(MACOSX)
   FontPlatformData* systemFontPlatformData(const FontDescription&);
 #endif
@@ -219,7 +225,8 @@ class PLATFORM_EXPORT FontCache {
   std::unique_ptr<FontPlatformData> createFontPlatformData(
       const FontDescription&,
       const FontFaceCreationParams&,
-      float fontSize);
+      float fontSize,
+      AlternateFontName = AlternateFontName::AllowAlternate);
   std::unique_ptr<FontPlatformData> scaleFontPlatformData(
       const FontPlatformData&,
       const FontDescription&,
@@ -246,6 +253,7 @@ class PLATFORM_EXPORT FontCache {
 
   sk_sp<SkFontMgr> m_fontManager;
 
+  // A leaky owning bare pointer.
   static SkFontMgr* s_staticFontManager;
 
 #if OS(WIN)
@@ -275,6 +283,8 @@ class PLATFORM_EXPORT FontCachePurgePreventer {
   FontCachePurgePreventer() { FontCache::fontCache()->disablePurging(); }
   ~FontCachePurgePreventer() { FontCache::fontCache()->enablePurging(); }
 };
+
+AtomicString toAtomicString(const SkString&);
 
 }  // namespace blink
 

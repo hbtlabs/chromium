@@ -12,31 +12,6 @@ namespace blink {
 
 namespace {
 
-class UnparsedValueIterationSource final
-    : public ValueIterable<StringOrCSSVariableReferenceValue>::IterationSource {
- public:
-  explicit UnparsedValueIterationSource(CSSUnparsedValue* unparsedValue)
-      : m_unparsedValue(unparsedValue) {}
-
-  bool next(ScriptState*,
-            StringOrCSSVariableReferenceValue& value,
-            ExceptionState&) override {
-    if (m_index >= m_unparsedValue->size())
-      return false;
-    value = m_unparsedValue->fragmentAtIndex(m_index);
-    return true;
-  }
-
-  DEFINE_INLINE_VIRTUAL_TRACE() {
-    visitor->trace(m_unparsedValue);
-    ValueIterable<StringOrCSSVariableReferenceValue>::IterationSource::trace(
-        visitor);
-  }
-
- private:
-  const Member<CSSUnparsedValue> m_unparsedValue;
-};
-
 StringView findVariableName(CSSParserTokenRange& range) {
   range.consumeWhitespace();
   return range.consume().value();
@@ -65,7 +40,7 @@ HeapVector<StringOrCSSVariableReferenceValue> parserTokenRangeToFragments(
   while (!range.atEnd()) {
     if (range.peek().functionId() == CSSValueVar) {
       if (!builder.isEmpty()) {
-        fragments.append(
+        fragments.push_back(
             StringOrCSSVariableReferenceValue::fromString(builder.toString()));
         builder.clear();
       }
@@ -74,25 +49,20 @@ HeapVector<StringOrCSSVariableReferenceValue> parserTokenRangeToFragments(
       block.consumeWhitespace();
       if (block.peek().type() == CSSParserTokenType::CommaToken)
         block.consume();
-      fragments.append(variableReferenceValue(
+      fragments.push_back(variableReferenceValue(
           variableName, parserTokenRangeToFragments(block)));
     } else {
       range.consume().serialize(builder);
     }
   }
   if (!builder.isEmpty()) {
-    fragments.append(
+    fragments.push_back(
         StringOrCSSVariableReferenceValue::fromString(builder.toString()));
   }
   return fragments;
 }
 
 }  // namespace
-
-ValueIterable<StringOrCSSVariableReferenceValue>::IterationSource*
-CSSUnparsedValue::startIteration(ScriptState*, ExceptionState&) {
-  return new UnparsedValueIterationSource(this);
-}
 
 CSSUnparsedValue* CSSUnparsedValue::fromCSSValue(
     const CSSVariableReferenceValue& cssVariableReferenceValue) {

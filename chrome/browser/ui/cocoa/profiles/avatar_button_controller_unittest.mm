@@ -13,9 +13,9 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #import "chrome/browser/ui/cocoa/base_bubble_controller.h"
-#include "chrome/browser/ui/cocoa/cocoa_profile_test.h"
 #include "chrome/browser/ui/cocoa/info_bubble_window.h"
 #import "chrome/browser/ui/cocoa/profiles/profile_chooser_controller.h"
+#include "chrome/browser/ui/cocoa/test/cocoa_profile_test.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
@@ -27,31 +27,30 @@
 // Defined in the AvatarButtonController implementation.
 @interface AvatarButtonController (ExposedForTesting)
 - (void)setErrorStatus:(BOOL)hasError;
+- (void)updateAvatarButtonAndLayoutParent:(BOOL)layoutParent;
 @end
 
-// Subclassing AvatarButtonController to be able to control the state of
-// keyboard modifierFlags.
-@interface AvatarButtonControllerForTesting : AvatarButtonController {
- @private
-  bool isCtrlPressed_;
+// Mocks the AvatarButtonController class so that we can mock its browser
+// window's frame color.
+@interface MockAvatarButtonController : AvatarButtonController {
+  // True if the frame color is dark.
+  BOOL isFrameDark_;
 }
+
+- (void)setIsFrameDark:(BOOL)isDark;
+
 @end
 
-@interface AvatarButtonControllerForTesting (ExposedForTesting)
-- (void)setIsCtrlPressed:(BOOL)isPressed;
-- (BOOL)isCtrlPressed;
-@end
+@implementation MockAvatarButtonController
 
-@implementation AvatarButtonControllerForTesting
-- (void)setIsCtrlPressed:(BOOL)isPressed {
-  isCtrlPressed_ = isPressed;
+- (void)setIsFrameDark:(BOOL)isDark {
+  isFrameDark_ = isDark;
 }
 
-- (BOOL)isCtrlPressed {
- // Always report that Cmd is not pressed since that's the case we're testing
- // and otherwise running the test while holding the Cmd key makes it fail.
- return isCtrlPressed_;
+- (BOOL)isFrameColorDark {
+  return isFrameDark_;
 }
+
 @end
 
 class AvatarButtonControllerTest : public CocoaProfileTest {
@@ -62,9 +61,9 @@ class AvatarButtonControllerTest : public CocoaProfileTest {
     CocoaProfileTest::SetUp();
     ASSERT_TRUE(browser());
 
-    controller_.reset(
-        [[AvatarButtonControllerForTesting alloc] initWithBrowser:browser()]);
-    [controller_ setIsCtrlPressed:false];
+    controller_.reset([[MockAvatarButtonController alloc]
+        initWithBrowser:browser()
+                 window:nil]);
   }
 
   void TearDown() override {
@@ -76,10 +75,10 @@ class AvatarButtonControllerTest : public CocoaProfileTest {
 
   NSView* view() { return [controller_ view]; }
 
-  AvatarButtonControllerForTesting* controller() { return controller_.get(); }
+  MockAvatarButtonController* controller() { return controller_.get(); }
 
  private:
-  base::scoped_nsobject<AvatarButtonControllerForTesting> controller_;
+  base::scoped_nsobject<MockAvatarButtonController> controller_;
 };
 
 TEST_F(AvatarButtonControllerTest, GenericButtonShown) {
@@ -131,31 +130,26 @@ TEST_F(AvatarButtonControllerTest, DoubleOpen) {
   EXPECT_FALSE([controller() menuController]);
 }
 
-TEST_F(AvatarButtonControllerTest, DontOpenFastSwitcherWithoutTarget) {
-  EXPECT_FALSE([controller() menuController]);
-
-  [controller() setIsCtrlPressed:YES];
-  [button() performClick:button()];
-
-  // If there's only one profile and the fast user switcher is requested,
-  // nothing should happen.
-  EXPECT_FALSE([controller() menuController]);
-}
-
-TEST_F(AvatarButtonControllerTest, OpenFastUserSwitcherWithTarget) {
+TEST_F(AvatarButtonControllerTest, TitleColor) {
+  // Create a second profile, to force the button to display the profile name.
   testing_profile_manager()->CreateTestingProfile("batman");
-  EXPECT_FALSE([controller() menuController]);
 
-  [controller() setIsCtrlPressed:YES];
-  [button() performClick:button()];
+  // Set the frame color to be not dark. The button's title color should be
+  // black.
+  [controller() setIsFrameDark:NO];
+  [controller() updateAvatarButtonAndLayoutParent:NO];
+  NSColor* titleColor =
+      [[button() attributedTitle] attribute:NSForegroundColorAttributeName
+                                    atIndex:0
+                             effectiveRange:nil];
+  DCHECK_EQ(titleColor, [NSColor blackColor]);
 
-  BaseBubbleController* menu = [controller() menuController];
-  EXPECT_TRUE(menu);
-  EXPECT_TRUE([menu isKindOfClass:[ProfileChooserController class]]);
-
-  // Do not animate out because that is hard to test around.
-  static_cast<InfoBubbleWindow*>(menu.window).allowedAnimations =
-      info_bubble::kAnimateNone;
-  [menu close];
-  EXPECT_FALSE([controller() menuController]);
+  // Set the frame color to be dark. The button's title color should be white.
+  [controller() setIsFrameDark:YES];
+  [controller() updateAvatarButtonAndLayoutParent:NO];
+  titleColor =
+      [[button() attributedTitle] attribute:NSForegroundColorAttributeName
+                                    atIndex:0
+                             effectiveRange:nil];
+  DCHECK_EQ(titleColor, [NSColor whiteColor]);
 }

@@ -12,10 +12,12 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/test/test_simple_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/version.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/component_updater/mock_component_updater_service.h"
@@ -152,10 +154,26 @@ class SubresourceFilterComponentInstallerTest : public PlatformTest {
     base::RunLoop().RunUntilIdle();
   }
 
+  update_client::InstallerAttributes GetInstallerAttributes() {
+    return traits_->GetInstallerAttributes();
+  }
+
+  void ExpectInstallerTag(const char* expected_tag,
+                          const char* ruleset_flavor) {
+    base::FieldTrialList field_trial_list(nullptr /* entropy_provider */);
+    subresource_filter::testing::ScopedSubresourceFilterFeatureToggle
+        scoped_feature_toggle(base::FeatureList::OVERRIDE_ENABLE_FEATURE,
+                              {{subresource_filter::kRulesetFlavorParameterName,
+                                ruleset_flavor}});
+    EXPECT_EQ(expected_tag,
+              SubresourceFilterComponentInstallerTraits::GetInstallerTag());
+  }
+
  private:
-  content::TestBrowserThreadBundle thread_bundle_;
   base::ScopedTempDir component_install_dir_;
   base::ScopedTempDir ruleset_service_dir_;
+
+  content::TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<SubresourceFilterComponentInstallerTraits> traits_;
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
   TestingPrefServiceSimple pref_service_;
@@ -168,7 +186,7 @@ TEST_F(SubresourceFilterComponentInstallerTest,
   base::FieldTrialList field_trial_list(nullptr);
   subresource_filter::testing::ScopedSubresourceFilterFeatureToggle
       scoped_feature_toggle(base::FeatureList::OVERRIDE_DISABLE_FEATURE,
-                            subresource_filter::kActivationStateEnabled,
+                            subresource_filter::kActivationLevelEnabled,
                             subresource_filter::kActivationScopeNoSites);
   std::unique_ptr<SubresourceFilterMockComponentUpdateService>
       component_updater(new SubresourceFilterMockComponentUpdateService());
@@ -182,7 +200,7 @@ TEST_F(SubresourceFilterComponentInstallerTest,
   base::FieldTrialList field_trial_list(nullptr);
   subresource_filter::testing::ScopedSubresourceFilterFeatureToggle
       scoped_feature_toggle(base::FeatureList::OVERRIDE_ENABLE_FEATURE,
-                            subresource_filter::kActivationStateDisabled,
+                            subresource_filter::kActivationLevelDisabled,
                             subresource_filter::kActivationScopeNoSites);
   std::unique_ptr<SubresourceFilterMockComponentUpdateService>
       component_updater(new SubresourceFilterMockComponentUpdateService());
@@ -234,6 +252,49 @@ TEST_F(SubresourceFilterComponentInstallerTest, LoadFileWithData) {
   ASSERT_TRUE(base::ReadFileToString(service()->license_path(),
                                      &actual_license_contents));
   EXPECT_EQ(expected_license_contents, actual_license_contents);
+}
+
+TEST_F(SubresourceFilterComponentInstallerTest, InstallerTag) {
+  ExpectInstallerTag("", "");
+  ExpectInstallerTag("a", "a");
+  ExpectInstallerTag("b", "b");
+  ExpectInstallerTag("c", "c");
+  ExpectInstallerTag("d", "d");
+  ExpectInstallerTag("invalid", "e");
+  ExpectInstallerTag("invalid", "foo");
+}
+
+TEST_F(SubresourceFilterComponentInstallerTest, InstallerAttributesDefault) {
+  base::FieldTrialList field_trial_list(nullptr /* entropy_provider */);
+  subresource_filter::testing::ScopedSubresourceFilterFeatureToggle
+      scoped_feature_toggle(base::FeatureList::OVERRIDE_ENABLE_FEATURE,
+                            std::map<std::string, std::string>());
+  EXPECT_EQ(update_client::InstallerAttributes(), GetInstallerAttributes());
+}
+
+TEST_F(SubresourceFilterComponentInstallerTest, InstallerAttributesCustomTag) {
+  constexpr char kTagKey[] = "tag";
+  constexpr char kTagValue[] = "a";
+
+  base::FieldTrialList field_trial_list(nullptr /* entropy_provider */);
+  subresource_filter::testing::ScopedSubresourceFilterFeatureToggle
+      scoped_feature_toggle(
+          base::FeatureList::OVERRIDE_ENABLE_FEATURE,
+          {{subresource_filter::kRulesetFlavorParameterName, kTagValue}});
+  EXPECT_EQ(update_client::InstallerAttributes({{kTagKey, kTagValue}}),
+            GetInstallerAttributes());
+}
+
+TEST_F(SubresourceFilterComponentInstallerTest,
+       InstallerAttributesFeatureDisabled) {
+  constexpr char kTagValue[] = "test_value";
+
+  base::FieldTrialList field_trial_list(nullptr /* entropy_provider */);
+  subresource_filter::testing::ScopedSubresourceFilterFeatureToggle
+      scoped_feature_toggle(
+          base::FeatureList::OVERRIDE_USE_DEFAULT,
+          {{subresource_filter::kRulesetFlavorParameterName, kTagValue}});
+  EXPECT_EQ(update_client::InstallerAttributes(), GetInstallerAttributes());
 }
 
 }  // namespace component_updater

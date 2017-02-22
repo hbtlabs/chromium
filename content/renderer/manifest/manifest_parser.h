@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/strings/nullable_string16.h"
 #include "base/strings/string_piece.h"
 #include "content/common/content_export.h"
@@ -131,11 +132,33 @@ class CONTENT_EXPORT ManifestParser {
   // by gfx::Size(0, 0).
   std::vector<gfx::Size> ParseIconSizes(const base::DictionaryValue& icon);
 
+  // Parses the 'purpose' field of an icon, as defined in:
+  // https://w3c.github.io/manifest/#dfn-steps-for-processing-a-purpose-member-of-an-image
+  // Returns a vector of Manifest::Icon::IconPurpose with the successfully
+  // parsed icon purposes, and a vector with Manifest::Icon::IconPurpose::Any if
+  // the parsing failed.
+  std::vector<Manifest::Icon::IconPurpose> ParseIconPurpose(
+      const base::DictionaryValue& icon);
+
   // Parses the 'icons' field of a Manifest, as defined in:
   // https://w3c.github.io/manifest/#dfn-steps-for-processing-an-array-of-images
   // Returns a vector of Manifest::Icon with the successfully parsed icons, if
   // any. An empty vector if the field was not present or empty.
   std::vector<Manifest::Icon> ParseIcons(
+      const base::DictionaryValue& dictionary);
+
+  // Parses the 'url_template' field of a Share Target, as defined in:
+  // https://github.com/WICG/web-share-target/blob/master/docs/interface.md
+  // Returns the parsed string if any, or a null string if the field was not
+  // present, or didn't contain a string.
+  base::NullableString16 ParseShareTargetURLTemplate(
+      const base::DictionaryValue& share_target);
+
+  // Parses the 'share_target' field of a Manifest, as defined in:
+  // https://github.com/WICG/web-share-target/blob/master/docs/interface.md
+  // Returns the parsed Web Share target. The returned Share Target is null if
+  // the field didn't exist, parsing failed, or it was empty.
+  base::Optional<Manifest::ShareTarget> ParseShareTarget(
       const base::DictionaryValue& dictionary);
 
   // Parses the 'platform' field of a related application, as defined in:

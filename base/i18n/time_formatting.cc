@@ -12,6 +12,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "third_party/icu/source/i18n/unicode/datefmt.h"
+#include "third_party/icu/source/i18n/unicode/dtitvfmt.h"
 #include "third_party/icu/source/i18n/unicode/dtptngen.h"
 #include "third_party/icu/source/i18n/unicode/fmtable.h"
 #include "third_party/icu/source/i18n/unicode/measfmt.h"
@@ -81,6 +82,17 @@ UMeasureFormatWidth DurationWidthToMeasureWidth(DurationFormatWidth width) {
   return UMEASFMT_WIDTH_COUNT;
 }
 
+const char* DateFormatToString(DateFormat format) {
+  switch (format) {
+    case DATE_FORMAT_YEAR_MONTH:
+      return UDAT_YEAR_MONTH;
+    case DATE_FORMAT_MONTH_WEEKDAY_DAY:
+      return UDAT_MONTH_WEEKDAY_DAY;
+  }
+  NOTREACHED();
+  return UDAT_YEAR_MONTH_DAY;
+}
+
 }  // namespace
 
 string16 TimeFormatTimeOfDay(const Time& time) {
@@ -141,6 +153,12 @@ string16 TimeFormatShortDateAndTimeWithTimeZone(const Time& time) {
   return TimeFormat(formatter.get(), time);
 }
 
+string16 TimeFormatMonthAndYear(const Time& time) {
+  icu::SimpleDateFormat formatter =
+      CreateSimpleDateFormatter(DateFormatToString(DATE_FORMAT_YEAR_MONTH));
+  return TimeFormat(&formatter, time);
+}
+
 string16 TimeFormatFriendlyDateAndTime(const Time& time) {
   std::unique_ptr<icu::DateFormat> formatter(
       icu::DateFormat::createDateTimeInstance(icu::DateFormat::kFull));
@@ -153,12 +171,17 @@ string16 TimeFormatFriendlyDate(const Time& time) {
   return TimeFormat(formatter.get(), time);
 }
 
-string16 TimeDurationFormat(const TimeDelta& time,
+string16 TimeFormatWithPattern(const Time& time, const char* pattern) {
+  icu::SimpleDateFormat formatter = CreateSimpleDateFormatter(pattern);
+  return TimeFormat(&formatter, time);
+}
+
+string16 TimeDurationFormat(const TimeDelta time,
                             const DurationFormatWidth width) {
   UErrorCode status = U_ZERO_ERROR;
   const int total_minutes = static_cast<int>(time.InSecondsF() / 60 + 0.5);
-  int hours = total_minutes / 60;
-  int minutes = total_minutes % 60;
+  const int hours = total_minutes / 60;
+  const int minutes = total_minutes % 60;
   UMeasureFormatWidth u_width = DurationWidthToMeasureWidth(width);
 
   const icu::Measure measures[] = {
@@ -169,6 +192,45 @@ string16 TimeDurationFormat(const TimeDelta& time,
   icu::FieldPosition ignore(icu::FieldPosition::DONT_CARE);
   measure_format.formatMeasures(measures, 2, formatted, ignore, status);
   return base::string16(formatted.getBuffer(), formatted.length());
+}
+
+string16 TimeDurationFormatWithSeconds(const TimeDelta time,
+                                       const DurationFormatWidth width) {
+  UErrorCode status = U_ZERO_ERROR;
+  const int64_t total_seconds = static_cast<int>(time.InSecondsF() + 0.5);
+  const int hours = total_seconds / 3600;
+  const int minutes = (total_seconds - hours * 3600) / 60;
+  const int seconds = total_seconds % 60;
+  UMeasureFormatWidth u_width = DurationWidthToMeasureWidth(width);
+
+  const icu::Measure measures[] = {
+      icu::Measure(hours, icu::MeasureUnit::createHour(status), status),
+      icu::Measure(minutes, icu::MeasureUnit::createMinute(status), status),
+      icu::Measure(seconds, icu::MeasureUnit::createSecond(status), status)};
+  icu::MeasureFormat measure_format(icu::Locale::getDefault(), u_width, status);
+  icu::UnicodeString formatted;
+  icu::FieldPosition ignore(icu::FieldPosition::DONT_CARE);
+  measure_format.formatMeasures(measures, 3, formatted, ignore, status);
+  return base::string16(formatted.getBuffer(), formatted.length());
+}
+
+string16 DateIntervalFormat(const Time& begin_time,
+                            const Time& end_time,
+                            DateFormat format) {
+  UErrorCode status = U_ZERO_ERROR;
+
+  std::unique_ptr<icu::DateIntervalFormat> formatter(
+      icu::DateIntervalFormat::createInstance(DateFormatToString(format),
+                                              status));
+
+  icu::FieldPosition pos = 0;
+  UDate start_date = static_cast<UDate>(begin_time.ToDoubleT() * 1000);
+  UDate end_date = static_cast<UDate>(end_time.ToDoubleT() * 1000);
+  icu::DateInterval interval(start_date, end_date);
+  icu::UnicodeString formatted;
+  formatter->format(&interval, formatted, pos, status);
+  return string16(formatted.getBuffer(),
+                  static_cast<size_t>(formatted.length()));
 }
 
 HourClockType GetHourClockType() {

@@ -8,7 +8,6 @@ namespace device {
 
 FakeVRDevice::FakeVRDevice() {
   device_ = mojom::VRDisplayInfo::New();
-  pose_ = mojom::VRPose::New();
 
   InitBasicDevice();
 }
@@ -16,6 +15,7 @@ FakeVRDevice::FakeVRDevice() {
 FakeVRDevice::~FakeVRDevice() {}
 
 void FakeVRDevice::InitBasicDevice() {
+  device_->index = id();
   device_->displayName = "FakeVRDevice";
 
   device_->capabilities = mojom::VRDisplayCapabilities::New();
@@ -54,37 +54,30 @@ void FakeVRDevice::SetVRDevice(const mojom::VRDisplayInfoPtr& device) {
   device_ = device.Clone();
 }
 
-void FakeVRDevice::SetPose(const mojom::VRPosePtr& pose) {
-  pose_ = pose.Clone();
-}
-
-mojom::VRDisplayInfoPtr FakeVRDevice::GetVRDevice() {
+void FakeVRDevice::GetVRDevice(
+    const base::Callback<void(mojom::VRDisplayInfoPtr)>& callback) {
   mojom::VRDisplayInfoPtr display = device_.Clone();
-  return display.Clone();
-}
-
-mojom::VRPosePtr FakeVRDevice::GetPose() {
-  return pose_.Clone();
+  callback.Run(std::move(display));
 }
 
 void FakeVRDevice::ResetPose() {}
 
-// TODO(shaobo.yan@intel.com): Will implemenate for VRDeviceServiceImpl tests.
 void FakeVRDevice::RequestPresent(const base::Callback<void(bool)>& callback) {
   callback.Run(true);
 }
 
 void FakeVRDevice::SetSecureOrigin(bool secure_origin) {}
 
-void FakeVRDevice::ExitPresent() {}
+void FakeVRDevice::ExitPresent() {
+  OnExitPresent();
+}
 
 void FakeVRDevice::SubmitFrame(mojom::VRPosePtr pose) {}
 
-void FakeVRDevice::UpdateLayerBounds(mojom::VRLayerBoundsPtr leftBounds,
+void FakeVRDevice::UpdateLayerBounds(int16_t frame_index,
+                                     mojom::VRLayerBoundsPtr leftBounds,
                                      mojom::VRLayerBoundsPtr rightBounds) {}
 
-void FakeVRDevice::AddService(VRServiceImpl* service) {}
-
-void FakeVRDevice::RemoveService(VRServiceImpl* service) {}
+void FakeVRDevice::GetVRVSyncProvider(mojom::VRVSyncProviderRequest request) {}
 
 }  // namespace device

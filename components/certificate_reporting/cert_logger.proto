@@ -42,6 +42,9 @@ message CertLoggerInterstitialInfo {
   optional bool user_proceeded = 2;
   // True if the user was shown an option to click through
   optional bool overridable = 3;
+  // The time (in usec since the Windows epoch) when the client created the
+  // interstitial.
+  optional int64 interstitial_created_time_usec = 4;
 }
 
 // Contains information about features that are enabled/disabled that
@@ -64,6 +67,21 @@ message CertLoggerFeaturesInfo {
   }
 
   optional NetworkTimeQueryingInfo network_time_querying_info = 1;
+
+  // Records whether the Android AIA fetching feature is enabled.
+  //
+  // This is an enum rather than a boolean as a convenience to
+  // distinguish reports where fetching is disabled from reports that
+  // were sent before this field was present. (In other words, if it
+  // were a boolean, a value of false might mean that fetching was
+  // disabled, or it might mean that the browser version was older than
+  // when this field was added.)
+  enum AndroidAIAFetchingStatus {
+    ANDROID_AIA_FETCHING_UNKNOWN = 0;
+    ANDROID_AIA_FETCHING_ENABLED = 1;
+    ANDROID_AIA_FETCHING_DISABLED = 2;
+  }
+  optional AndroidAIAFetchingStatus android_aia_fetching_status = 2;
 }
 
 message CertLoggerRequest {
@@ -73,8 +91,7 @@ message CertLoggerRequest {
   // The certificate chain as a series of PEM-encoded certificates, including
   // intermediates but not necessarily the root.
   required string cert_chain = 2;
-  // The time (in usec since the epoch) when the client attempted to access the
-  // site generating the pinning error.
+  // The time (in usec since the epoch) when the client generated the report.
   required int64 time_usec = 3;
   // public_key_hash contains the string forms of the hashes calculated for
   // the chain. (I.e. "sha1/<base64 data>".)
@@ -124,4 +141,8 @@ message CertLoggerRequest {
   // Information about features that were enabled or disabled for the
   // user that might affect certificate validation.
   optional CertLoggerFeaturesInfo features_info = 10;
+
+  // False when the report is attempted to be uploaded for the first time. True
+  // in all other uploads.
+  optional bool is_retry_upload = 11;
 };

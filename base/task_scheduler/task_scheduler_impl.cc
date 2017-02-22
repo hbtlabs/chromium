@@ -14,7 +14,6 @@
 #include "base/task_scheduler/sequence_sort_key.h"
 #include "base/task_scheduler/task.h"
 #include "base/task_scheduler/task_tracker.h"
-#include "base/time/time.h"
 #include "build/build_config.h"
 
 #if defined(OS_POSIX) && !defined(OS_NACL_SFI)
@@ -41,13 +40,14 @@ TaskSchedulerImpl::~TaskSchedulerImpl() {
 #endif
 }
 
-void TaskSchedulerImpl::PostTaskWithTraits(
+void TaskSchedulerImpl::PostDelayedTaskWithTraits(
     const tracked_objects::Location& from_here,
     const TaskTraits& traits,
-    const Closure& task) {
+    const Closure& task,
+    TimeDelta delay) {
   // Post |task| as part of a one-off single-task Sequence.
   GetWorkerPoolForTraits(traits)->PostTaskWithSequence(
-      MakeUnique<Task>(from_here, task, traits, TimeDelta()),
+      MakeUnique<Task>(from_here, task, traits, delay),
       make_scoped_refptr(new Sequence), nullptr);
 }
 
@@ -78,6 +78,11 @@ std::vector<const HistogramBase*> TaskSchedulerImpl::GetHistograms() const {
   return histograms;
 }
 
+int TaskSchedulerImpl::GetMaxConcurrentTasksWithTraitsDeprecated(
+    const TaskTraits& traits) const {
+  return GetWorkerPoolForTraits(traits)->GetMaxConcurrentTasksDeprecated();
+}
+
 void TaskSchedulerImpl::Shutdown() {
   // TODO(fdoray): Increase the priority of BACKGROUND tasks blocking shutdown.
   DCHECK(task_tracker_);
@@ -93,6 +98,8 @@ void TaskSchedulerImpl::JoinForTesting() {
 #if DCHECK_IS_ON()
   DCHECK(!join_for_testing_returned_.IsSet());
 #endif
+  for (const auto& worker_pool : worker_pools_)
+    worker_pool->DisallowWorkerDetachmentForTesting();
   for (const auto& worker_pool : worker_pools_)
     worker_pool->JoinForTesting();
   service_thread_.Stop();
@@ -116,15 +123,15 @@ void TaskSchedulerImpl::Initialize(
   // Start the service thread. On platforms that support it (POSIX except NaCL
   // SFI), the service thread runs a MessageLoopForIO which is used to support
   // FileDescriptorWatcher in the scope in which tasks run.
-  constexpr MessageLoop::Type kServiceThreadMessageLoopType =
+  Thread::Options service_thread_options;
+  service_thread_options.message_loop_type =
 #if defined(OS_POSIX) && !defined(OS_NACL_SFI)
       MessageLoop::TYPE_IO;
 #else
       MessageLoop::TYPE_DEFAULT;
 #endif
-  constexpr size_t kDefaultStackSize = 0;
-  CHECK(service_thread_.StartWithOptions(
-      Thread::Options(kServiceThreadMessageLoopType, kDefaultStackSize)));
+  service_thread_options.timer_slack = TIMER_SLACK_MAXIMUM;
+  CHECK(service_thread_.StartWithOptions(service_thread_options));
 
   // Instantiate TaskTracker. Needs to happen after starting the service thread
   // to get its message_loop().
@@ -159,8 +166,8 @@ void TaskSchedulerImpl::Initialize(
   }
 }
 
-SchedulerWorkerPool* TaskSchedulerImpl::GetWorkerPoolForTraits(
-    const TaskTraits& traits) {
+SchedulerWorkerPoolImpl* TaskSchedulerImpl::GetWorkerPoolForTraits(
+    const TaskTraits& traits) const {
   const size_t index = worker_pool_index_for_traits_callback_.Run(traits);
   DCHECK_LT(index, worker_pools_.size());
   return worker_pools_[index].get();

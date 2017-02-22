@@ -15,7 +15,6 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/threading/sequenced_worker_pool.h"
-#include "base/threading/worker_pool.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
@@ -129,8 +128,9 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
         new net::URLRequestContextStorage(url_request_context_.get()));
     storage_->set_cookie_store(CreateCookieStore(CookieStoreConfig()));
     storage_->set_channel_id_service(base::WrapUnique(
-        new net::ChannelIDService(new net::DefaultChannelIDStore(NULL),
-                                  base::WorkerPool::GetTaskRunner(true))));
+        new net::ChannelIDService(new net::DefaultChannelIDStore(NULL))));
+    url_request_context_->cookie_store()->SetChannelIDServiceID(
+        url_request_context_->channel_id_service()->GetUniqueID());
     storage_->set_http_user_agent_settings(
         base::MakeUnique<net::StaticHttpUserAgentSettings>(
             "en-us,en", GetShellUserAgent()));
@@ -219,7 +219,7 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
         base::MakeUnique<net::HttpNetworkSession>(network_session_params));
     storage_->set_http_transaction_factory(base::MakeUnique<net::HttpCache>(
         storage_->http_network_session(), std::move(main_backend),
-        true /* set_up_quic_server_info */));
+        true /* is_main_cache */));
 
     std::unique_ptr<net::URLRequestJobFactoryImpl> job_factory(
         new net::URLRequestJobFactoryImpl());
@@ -241,14 +241,12 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
     // Set up interceptors in the reverse order.
     std::unique_ptr<net::URLRequestJobFactory> top_job_factory =
         std::move(job_factory);
-    for (URLRequestInterceptorScopedVector::reverse_iterator i =
-             request_interceptors_.rbegin();
-         i != request_interceptors_.rend();
-         ++i) {
+    for (auto i = request_interceptors_.rbegin();
+         i != request_interceptors_.rend(); ++i) {
       top_job_factory.reset(new net::URLRequestInterceptingJobFactory(
-          std::move(top_job_factory), base::WrapUnique(*i)));
+          std::move(top_job_factory), std::move(*i)));
     }
-    request_interceptors_.weak_clear();
+    request_interceptors_.clear();
 
     storage_->set_job_factory(std::move(top_job_factory));
   }

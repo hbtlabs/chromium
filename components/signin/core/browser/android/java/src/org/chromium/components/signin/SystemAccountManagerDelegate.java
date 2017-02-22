@@ -4,6 +4,7 @@
 
 package org.chromium.components.signin;
 
+import android.Manifest;
 import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.accounts.AccountManagerCallback;
@@ -13,14 +14,17 @@ import android.accounts.AuthenticatorException;
 import android.accounts.OperationCanceledException;
 import android.app.Activity;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Process;
 import android.os.SystemClock;
 
 import com.google.android.gms.auth.GoogleAuthException;
 import com.google.android.gms.auth.GoogleAuthUtil;
 import com.google.android.gms.auth.GooglePlayServicesAvailabilityException;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
@@ -48,7 +52,7 @@ public class SystemAccountManagerDelegate implements AccountManagerDelegate {
 
     @Override
     public Account[] getAccountsByType(String type) {
-        if (!AccountManagerHelper.get(mApplicationContext).hasGetAccountsPermission()) {
+        if (!hasGetAccountsPermission()) {
             return new Account[] {};
         }
         long now = SystemClock.elapsedRealtime();
@@ -110,7 +114,7 @@ public class SystemAccountManagerDelegate implements AccountManagerDelegate {
 
     @Override
     public void hasFeatures(Account account, String[] features, final Callback<Boolean> callback) {
-        if (!AccountManagerHelper.get(mApplicationContext).hasGetAccountsPermission()) {
+        if (!hasGetAccountsPermission()) {
             ThreadUtils.postOnUiThread(new Runnable() {
                 @Override
                 public void run() {
@@ -153,7 +157,7 @@ public class SystemAccountManagerDelegate implements AccountManagerDelegate {
     public void updateCredentials(
             Account account, Activity activity, final Callback<Boolean> callback) {
         ThreadUtils.assertOnUiThread();
-        if (!AccountManagerHelper.get(mApplicationContext).hasGetAccountsPermission()) {
+        if (!hasGetAccountsPermission()) {
             ThreadUtils.postOnUiThread(new Runnable() {
                 @Override
                 public void run() {
@@ -185,5 +189,11 @@ public class SystemAccountManagerDelegate implements AccountManagerDelegate {
                         }
                     }
                 }, null /* handler */);
+    }
+
+    protected boolean hasGetAccountsPermission() {
+        return ApiCompatibilityUtils.checkPermission(mApplicationContext,
+                       Manifest.permission.GET_ACCOUNTS, Process.myPid(), Process.myUid())
+                == PackageManager.PERMISSION_GRANTED;
     }
 }

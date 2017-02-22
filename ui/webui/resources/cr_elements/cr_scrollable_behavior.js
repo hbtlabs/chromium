@@ -36,27 +36,28 @@
 
 /** @polymerBehavior */
 var CrScrollableBehavior = {
-  properties: {
-    /** @private */
-    intervalId_: Number,
-  },
+
+  /** @private {number|null} */
+  intervalId_: null,
 
   ready: function() {
     var scrollableElements = this.root.querySelectorAll('[scrollable]');
 
     // Setup the intial scrolling related classes for each scrollable container.
     requestAnimationFrame(function() {
-      for (let scrollable of scrollableElements)
-        this.updateScroll_(scrollable);
+      for (var i = 0; i < scrollableElements.length; i++)
+        this.updateScroll_(scrollableElements[i]);
     }.bind(this));
 
     // Listen to the 'scroll' event for each scrollable container.
-    for (let scrollable of scrollableElements)
-      scrollable.addEventListener('scroll', this.updateScrollEvent_.bind(this));
+    for (var i = 0; i < scrollableElements.length; i++) {
+      scrollableElements[i].addEventListener(
+          'scroll', this.updateScrollEvent_.bind(this));
+    }
   },
 
   detached: function() {
-    if (this.intervalId_)
+    if (this.intervalId_ !== null)
       clearInterval(this.intervalId_);
   },
 
@@ -65,24 +66,50 @@ var CrScrollableBehavior = {
    * This ensures that the <iron-list> contents of dynamically sized
    * containers are resized correctly.
    */
-  updateScrollableContents() {
-    let nodeList = this.root.querySelectorAll('[scrollable] iron-list');
-    // Use setTimeout to avoid initial render / sizing issues.
-    this.intervalId_ = setInterval(function() {
-      let unreadyNodes = [];
-      for (let node of nodeList) {
+  updateScrollableContents: function() {
+    if (this.intervalId_ !== null)
+      return;  // notifyResize is arelady in progress.
+
+    var nodeList = this.root.querySelectorAll('[scrollable] iron-list');
+    // Use setInterval to avoid initial render / sizing issues.
+    this.intervalId_ = window.setInterval(function() {
+      var unreadyNodes = [];
+      for (var i = 0; i < nodeList.length; i++) {
+        var node = nodeList[i];
         if (node.parentNode.scrollHeight == 0) {
           unreadyNodes.push(node);
           continue;
         }
-        let ironList = /** @type {!IronListElement} */ (node);
+        var ironList = /** @type {!IronListElement} */ (node);
         ironList.notifyResize();
       }
-      if (unreadyNodes.length == 0)
-        clearInterval(this.intervalId_);
-      else
+      if (unreadyNodes.length == 0) {
+        window.clearInterval(this.intervalId_);
+        this.intervalId_ = null;
+      } else {
         nodeList = unreadyNodes;
+      }
     }.bind(this), 10);
+  },
+
+  /** @param {!IronListElement} list */
+  saveScroll: function(list) {
+    // Store a FIFO of saved scroll positions so that multiple updates in a
+    // frame are applied correctly. Specifically we need to track when '0' is
+    // saved (but not apply it), and still handle patterns like [30, 0, 32].
+    list.savedScrollTops = list.savedScrollTops || [];
+    list.savedScrollTops.push(list.scrollTarget.scrollTop);
+  },
+
+  /** @param {!IronListElement} list */
+  restoreScroll: function(list) {
+    this.async(function() {
+      var scrollTop = list.savedScrollTops.shift();
+      // Ignore scrollTop of 0 in case it was intermittent (we do not need to
+      // explicity scroll to 0).
+      if (scrollTop != 0)
+        list.scroll(0, scrollTop);
+    });
   },
 
   /**
@@ -90,8 +117,8 @@ var CrScrollableBehavior = {
    * @param {!Event} event
    * @private
    */
-  updateScrollEvent_(event) {
-    let scrollable = /** @type {!HTMLElement} */ (event.target);
+  updateScrollEvent_: function(event) {
+    var scrollable = /** @type {!HTMLElement} */ (event.target);
     this.updateScroll_(scrollable);
   },
 
@@ -100,7 +127,7 @@ var CrScrollableBehavior = {
    * @param {!HTMLElement} scrollable
    * @private
    */
-  updateScroll_(scrollable) {
+  updateScroll_: function(scrollable) {
     scrollable.classList.toggle(
         'can-scroll', scrollable.clientHeight < scrollable.scrollHeight);
     scrollable.classList.toggle('is-scrolled', scrollable.scrollTop > 0);

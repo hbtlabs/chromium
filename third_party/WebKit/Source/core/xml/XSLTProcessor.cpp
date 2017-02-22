@@ -84,8 +84,8 @@ Document* XSLTProcessor::createDocumentFromSource(const String& sourceString,
     // Re-create the FrameView if needed.
     if (hasView)
       frame->loader().client()->transitionToCommittedForNewPage();
-    result = frame->localDOMWindow()->installNewDocument(sourceMIMEType, init,
-                                                         forceXHTML);
+    result = frame->domWindow()->installNewDocument(sourceMIMEType, init,
+                                                    forceXHTML);
 
     if (oldDocument) {
       DocumentXSLT::from(*result).setTransformSourceDocument(oldDocument);
@@ -156,7 +156,7 @@ String XSLTProcessor::getParameter(const String& /*namespaceURI*/,
 void XSLTProcessor::removeParameter(const String& /*namespaceURI*/,
                                     const String& localName) {
   // FIXME: namespace support?
-  m_parameters.remove(localName);
+  m_parameters.erase(localName);
 }
 
 void XSLTProcessor::reset() {

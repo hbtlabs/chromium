@@ -2,7 +2,6 @@
 <head>
 <script src="../../../http/tests/inspector/inspector-test.js"></script>
 <script src="../../../http/tests/inspector/debugger-test.js"></script>
-<script src="../../../http/tests/inspector/workspace-test.js"></script>
 <script src="../debugger/resources/load-dynamic-script.js"></script>
 <script>
 function foobar()
@@ -35,13 +34,13 @@ function test()
         var breakpoints = breakpointManager._storage._setting.get();
         InspectorTest.addResult("    Dumping breakpoint storage");
         for (var i = 0; i < breakpoints.length; ++i)
-            InspectorTest.addResult("        " + pathToFileName(breakpoints[i].sourceFileId) + ":" + breakpoints[i].lineNumber);
+            InspectorTest.addResult("        " + pathToFileName(breakpoints[i].url) + ":" + breakpoints[i].lineNumber);
     }
 
     function didShowScriptSource(sourceFrame)
     {
         InspectorTest.addResult("Setting breakpoint:");
-        InspectorTest.addSniffer(Bindings.BreakpointManager.TargetBreakpoint.prototype, "_addResolvedLocation", breakpointResolved);
+        InspectorTest.addSniffer(Bindings.BreakpointManager.ModelBreakpoint.prototype, "_addResolvedLocation", breakpointResolved);
         InspectorTest.setBreakpoint(sourceFrame, 11, "", true);
     }
 

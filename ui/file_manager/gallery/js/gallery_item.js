@@ -346,7 +346,7 @@ GalleryItem.prototype.saveToFile = function(
 GalleryItem.prototype.getEntryToWrite_ = function(
     overwrite, fallbackDirectory, volumeManager) {
   return new Promise(function(resolve, reject) {
-    // Since in-place editing is not supported on MTP volume, Gallery.app
+    // Since in-place editing is not supported on MTP volume, the Gallery app
     // handles MTP volume as read only volume.
     if (this.locationInfo_.isReadOnly ||
         GalleryUtil.isOnMTPVolume(this.entry_, volumeManager)) {
@@ -439,4 +439,28 @@ GalleryItem.prototype.rename = function(displayName) {
   }.bind(this)).then(function(entry) {
     this.entry_ = entry;
   }.bind(this));
+};
+
+/**
+ * The threshold size of an image in pixels, which we always use thumbnail
+ * image for slide-in animation above this. This is a hack to avoid an UI
+ * unresponsiveness when switching between images.
+ * @type {number}
+ * @const
+ */
+GalleryItem.HEAVY_RENDERING_THRESHOLD_PIXELS = 4000 * 3000;
+
+/**
+ * Whether the image requires long rendering time.
+ *
+ * @return {boolean}
+ */
+GalleryItem.prototype.requireLongRenderingTime = function() {
+  // Check for undefined values.
+  if (!this.metadataItem_ ||
+      !this.metadataItem_.imageHeight || !this.metadataItem_.imageWidth)
+    return false;
+  var numPixels = this.metadataItem_.imageHeight *
+      this.metadataItem_.imageWidth;
+  return numPixels > GalleryItem.HEAVY_RENDERING_THRESHOLD_PIXELS;
 };

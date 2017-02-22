@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/memory/singleton.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner_util.h"
@@ -35,8 +36,9 @@
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
 #include "components/prefs/pref_service.h"
-#include "components/rappor/rappor_service.h"
+#include "components/rappor/rappor_service_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/plugin_service_filter.h"
@@ -65,6 +67,25 @@ using content::PluginService;
 using content::WebPluginInfo;
 
 namespace {
+
+class ShutdownNotifierFactory
+    : public BrowserContextKeyedServiceShutdownNotifierFactory {
+ public:
+  static ShutdownNotifierFactory* GetInstance() {
+    return base::Singleton<ShutdownNotifierFactory>::get();
+  }
+
+ private:
+  friend struct base::DefaultSingletonTraits<ShutdownNotifierFactory>;
+
+  ShutdownNotifierFactory()
+      : BrowserContextKeyedServiceShutdownNotifierFactory(
+          "PluginInfoMessageFilter") {}
+
+  ~ShutdownNotifierFactory() override {}
+
+  DISALLOW_COPY_AND_ASSIGN(ShutdownNotifierFactory);
+};
 
 #if BUILDFLAG(ENABLE_PEPPER_CDMS)
 
@@ -98,7 +119,8 @@ void ReportMetrics(const std::string& mime_type,
 
   if (chrome::IsIncognitoSessionActive())
     return;
-  rappor::RapporService* rappor_service = g_browser_process->rappor_service();
+  rappor::RapporServiceImpl* rappor_service =
+      g_browser_process->rappor_service();
   if (!rappor_service)
     return;
   if (main_frame_origin.unique())
@@ -106,16 +128,15 @@ void ReportMetrics(const std::string& mime_type,
 
   if (mime_type == content::kFlashPluginSwfMimeType ||
       mime_type == content::kFlashPluginSplMimeType) {
-    rappor_service->RecordSample(
+    rappor_service->RecordSampleString(
         "Plugins.FlashOriginUrl", rappor::ETLD_PLUS_ONE_RAPPOR_TYPE,
         net::registry_controlled_domains::GetDomainAndRegistry(
             main_frame_origin.GetURL(),
             net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES));
-    rappor_service->RecordSample(
+    rappor_service->RecordSampleString(
         "Plugins.FlashUrl", rappor::ETLD_PLUS_ONE_RAPPOR_TYPE,
         net::registry_controlled_domains::GetDomainAndRegistry(
-            url,
-            net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES));
+            url, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES));
   }
 }
 
@@ -178,12 +199,28 @@ PluginInfoMessageFilter::Context::Context(int render_process_id,
 PluginInfoMessageFilter::Context::~Context() {
 }
 
+void PluginInfoMessageFilter::Context::ShutdownOnUIThread() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  always_authorize_plugins_.Destroy();
+  allow_outdated_plugins_.Destroy();
+}
+
 PluginInfoMessageFilter::PluginInfoMessageFilter(int render_process_id,
                                                  Profile* profile)
     : BrowserMessageFilter(ChromeMsgStart),
       context_(render_process_id, profile),
       main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       weak_ptr_factory_(this) {
+  shutdown_notifier_ =
+      ShutdownNotifierFactory::GetInstance()->Get(profile)->Subscribe(
+          base::Bind(&PluginInfoMessageFilter::ShutdownOnUIThread,
+                     base::Unretained(this)));
+}
+
+void PluginInfoMessageFilter::ShutdownOnUIThread() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  context_.ShutdownOnUIThread();
+  shutdown_notifier_.reset();
 }
 
 bool PluginInfoMessageFilter::OnMessageReceived(const IPC::Message& message) {
@@ -243,8 +280,10 @@ void PluginInfoMessageFilter::PluginsLoaded(
                                  params.main_frame_origin, params.mime_type,
                                  &output->status, &output->plugin,
                                  &output->actual_mime_type, &plugin_metadata)) {
-    context_.DecidePluginStatus(params, output->plugin, plugin_metadata.get(),
-                                &output->status);
+    context_.DecidePluginStatus(
+        params.url, params.main_frame_origin, output->plugin,
+        plugin_metadata->GetSecurityStatus(output->plugin),
+        plugin_metadata->identifier(), &output->status);
   }
 
   if (output->status == ChromeViewHostMsg_GetPluginInfo_Status::kNotFound) {
@@ -303,14 +342,13 @@ void PluginInfoMessageFilter::OnIsInternalPluginAvailableForMimeType(
 #endif  // BUILDFLAG(ENABLE_PEPPER_CDMS)
 
 void PluginInfoMessageFilter::Context::DecidePluginStatus(
-    const GetPluginInfo_Params& params,
+    const GURL& url,
+    const url::Origin& main_frame_origin,
     const WebPluginInfo& plugin,
-    const PluginMetadata* plugin_metadata,
+    PluginMetadata::SecurityStatus security_status,
+    const std::string& plugin_identifier,
     ChromeViewHostMsg_GetPluginInfo_Status* status) const {
-  PluginMetadata::SecurityStatus plugin_status =
-      plugin_metadata->GetSecurityStatus(plugin);
-
-  if (plugin_status == PluginMetadata::SECURITY_STATUS_FULLY_TRUSTED) {
+  if (security_status == PluginMetadata::SECURITY_STATUS_FULLY_TRUSTED) {
     *status = ChromeViewHostMsg_GetPluginInfo_Status::kAllowed;
     return;
   }
@@ -321,9 +359,9 @@ void PluginInfoMessageFilter::Context::DecidePluginStatus(
   // Check plugin content settings. The primary URL is the top origin URL and
   // the secondary URL is the plugin URL.
   PluginUtils::GetPluginContentSetting(
-      host_content_settings_map_, plugin, params.main_frame_origin, params.url,
-      plugin_metadata->identifier(), &plugin_setting,
-      &uses_default_content_setting, &is_managed);
+      host_content_settings_map_, plugin, main_frame_origin, url,
+      plugin_identifier, &plugin_setting, &uses_default_content_setting,
+      &is_managed);
 
   // TODO(tommycli): Remove once we deprecate the plugin ASK policy.
   bool legacy_ask_user = plugin_setting == CONTENT_SETTING_ASK;
@@ -334,9 +372,19 @@ void PluginInfoMessageFilter::Context::DecidePluginStatus(
   DCHECK(plugin_setting != CONTENT_SETTING_DEFAULT);
   DCHECK(plugin_setting != CONTENT_SETTING_ASK);
 
+  if (*status ==
+      ChromeViewHostMsg_GetPluginInfo_Status::kFlashHiddenPreferHtml) {
+    if (plugin_setting == CONTENT_SETTING_BLOCK) {
+      *status = is_managed && !legacy_ask_user
+                    ? ChromeViewHostMsg_GetPluginInfo_Status::kBlockedByPolicy
+                    : ChromeViewHostMsg_GetPluginInfo_Status::kBlockedNoLoading;
+    }
+    return;
+  }
+
 #if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
   // Check if the plugin is outdated.
-  if (plugin_status == PluginMetadata::SECURITY_STATUS_OUT_OF_DATE &&
+  if (security_status == PluginMetadata::SECURITY_STATUS_OUT_OF_DATE &&
       !allow_outdated_plugins_.GetValue()) {
     if (allow_outdated_plugins_.IsManaged()) {
       *status = ChromeViewHostMsg_GetPluginInfo_Status::kOutdatedDisallowed;
@@ -360,10 +408,10 @@ void PluginInfoMessageFilter::Context::DecidePluginStatus(
   // If an app has explicitly made internal resources available by listing them
   // in |accessible_resources| in the manifest, then allow them to be loaded by
   // plugins inside a guest-view.
-  if (params.url.SchemeIs(extensions::kExtensionScheme) && !is_managed &&
+  if (url.SchemeIs(extensions::kExtensionScheme) && !is_managed &&
       plugin_setting == CONTENT_SETTING_BLOCK &&
-      IsPluginLoadingAccessibleResourceInWebView(
-          extension_registry_, render_process_id_, params.url)) {
+      IsPluginLoadingAccessibleResourceInWebView(extension_registry_,
+                                                 render_process_id_, url)) {
     plugin_setting = CONTENT_SETTING_ALLOW;
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
@@ -451,10 +499,11 @@ bool PluginInfoMessageFilter::Context::FindEnabledPlugin(
     if (PluginUtils::ShouldPreferHtmlOverPlugins(host_content_settings_map_) &&
         matching_plugins[0].name ==
             base::ASCIIToUTF16(content::kFlashPluginName)) {
-      // TODO(tommycli): This assumes that Flash can no longer be disabled
-      // via chrome://plugins. That should be fine since chrome://plugins is
-      // going away, but we should verify before launching HBD.
       *status = ChromeViewHostMsg_GetPluginInfo_Status::kFlashHiddenPreferHtml;
+
+      // In the Prefer HTML case, the plugin is actually enabled, but hidden.
+      // It will still be blocked in the body of DecidePluginStatus.
+      enabled = true;
     }
   }
 

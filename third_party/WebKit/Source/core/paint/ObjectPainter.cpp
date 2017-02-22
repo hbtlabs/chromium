@@ -174,7 +174,7 @@ void paintComplexOutline(GraphicsContext& graphicsContext,
   }
 
   DCHECK(count >= 4 && edges.size() == count);
-  int firstAdjacentWidth = adjustJoint(width, edges.back(), edges.first());
+  int firstAdjacentWidth = adjustJoint(width, edges.back(), edges.front());
 
   // The width of the angled part of starting and ending joint of the current
   // edge.
@@ -208,11 +208,11 @@ void fillQuad(GraphicsContext& context,
   path.lineTo(quad[1]);
   path.lineTo(quad[2]);
   path.lineTo(quad[3]);
-  SkPaint paint(context.fillPaint());
-  paint.setAntiAlias(antialias);
-  paint.setColor(color.rgb());
+  PaintFlags flags(context.fillFlags());
+  flags.setAntiAlias(antialias);
+  flags.setColor(color.rgb());
 
-  context.drawPath(path, paint);
+  context.drawPath(path, flags);
 }
 
 }  // namespace
@@ -223,7 +223,7 @@ void ObjectPainter::paintOutline(const PaintInfo& paintInfo,
 
   const ComputedStyle& styleToUse = m_layoutObject.styleRef();
   if (!styleToUse.hasOutline() ||
-      styleToUse.visibility() != EVisibility::Visible)
+      styleToUse.visibility() != EVisibility::kVisible)
     return;
 
   // Only paint the focus ring by hand if the theme isn't able to draw the focus
@@ -258,7 +258,7 @@ void ObjectPainter::paintOutline(const PaintInfo& paintInfo,
 
   Vector<IntRect> pixelSnappedOutlineRects;
   for (auto& r : outlineRects)
-    pixelSnappedOutlineRects.append(pixelSnappedIntRect(r));
+    pixelSnappedOutlineRects.push_back(pixelSnappedIntRect(r));
 
   IntRect unitedOutlineRect = unionRectEvenIfEmpty(pixelSnappedOutlineRects);
   IntRect bounds = unitedOutlineRect;
@@ -304,7 +304,7 @@ void ObjectPainter::addPDFURLRectIfNeeded(const PaintInfo& paintInfo,
   DCHECK(paintInfo.isPrinting());
   if (m_layoutObject.isElementContinuation() || !m_layoutObject.node() ||
       !m_layoutObject.node()->isLink() ||
-      m_layoutObject.styleRef().visibility() != EVisibility::Visible)
+      m_layoutObject.styleRef().visibility() != EVisibility::kVisible)
     return;
 
   KURL url = toElement(m_layoutObject.node())->hrefURL();
@@ -338,18 +338,18 @@ void ObjectPainter::addPDFURLRectIfNeeded(const PaintInfo& paintInfo,
 }
 
 void ObjectPainter::drawLineForBoxSide(GraphicsContext& graphicsContext,
-                                       int x1,
-                                       int y1,
-                                       int x2,
-                                       int y2,
+                                       float x1,
+                                       float y1,
+                                       float x2,
+                                       float y2,
                                        BoxSide side,
                                        Color color,
                                        EBorderStyle style,
                                        int adjacentWidth1,
                                        int adjacentWidth2,
                                        bool antialias) {
-  int thickness;
-  int length;
+  float thickness;
+  float length;
   if (side == BSTop || side == BSBottom) {
     thickness = y2 - y1;
     length = x2 - x1;
@@ -449,7 +449,7 @@ void ObjectPainter::drawDoubleBoxSide(GraphicsContext& graphicsContext,
                                       int length,
                                       BoxSide side,
                                       Color color,
-                                      int thickness,
+                                      float thickness,
                                       int adjacentWidth1,
                                       int adjacentWidth2,
                                       bool antialias) {
@@ -699,25 +699,18 @@ void ObjectPainter::doCheckPaintOffset(const PaintInfo& paintInfo,
                                        const LayoutPoint& paintOffset) {
   DCHECK(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
 
-  // Actual paint offsets of SVGInline and SVGInlineText include location()
-  // of the containing SVGText, but PaintPropertyTreeBuilder doesn't output
-  // the paint offsets. TODO(wangxianzhu): Avoid the special treatment.
-  if (m_layoutObject.isSVGInline() || m_layoutObject.isSVGInlineText())
-    return;
-
   // TODO(pdr): Let painter and paint property tree builder generate the same
   // paint offset for LayoutScrollbarPart. crbug.com/664249.
   if (m_layoutObject.isLayoutScrollbarPart())
     return;
 
   LayoutPoint adjustedPaintOffset = paintOffset;
-  // TODO(wangxianzhu): Avoid the special treatment for SVGText.
-  if (m_layoutObject.isBox() && !m_layoutObject.isSVGText())
+  if (m_layoutObject.isBox())
     adjustedPaintOffset += toLayoutBox(m_layoutObject).location();
-  DCHECK(m_layoutObject.previousPaintOffset() == adjustedPaintOffset)
+  DCHECK(m_layoutObject.paintOffset() == adjustedPaintOffset)
       << " Paint offset mismatch: " << m_layoutObject.debugName()
       << " from PaintPropertyTreeBuilder: "
-      << m_layoutObject.previousPaintOffset().toString()
+      << m_layoutObject.paintOffset().toString()
       << " from painter: " << adjustedPaintOffset.toString();
 }
 #endif

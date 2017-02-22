@@ -7,10 +7,9 @@
 #include "ash/common/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
-#include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item_v2app.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
-#include "chrome/browser/ui/ash/launcher/launcher_application_menu_item_model.h"
 #include "chrome/browser/ui/ash/launcher/launcher_context_menu.h"
 #include "chrome/browser/ui/ash/launcher/launcher_item_controller.h"
 #include "components/favicon/content/content_favicon_driver.h"
@@ -50,13 +49,10 @@ gfx::Image GetAppListIcon(extensions::AppWindow* app_window) {
 
 ExtensionAppWindowLauncherItemController::
     ExtensionAppWindowLauncherItemController(
-        Type type,
         const std::string& app_id,
         const std::string& launch_id,
         ChromeLauncherController* controller)
-    : AppWindowLauncherItemController(type, app_id, launch_id, controller) {
-  DCHECK_NE(TYPE_APP_PANEL, type);
-}
+    : AppWindowLauncherItemController(app_id, launch_id, controller) {}
 
 ExtensionAppWindowLauncherItemController::
     ~ExtensionAppWindowLauncherItemController() {}
@@ -70,21 +66,9 @@ void ExtensionAppWindowLauncherItemController::AddAppWindow(
   window_to_app_window_[app_window->GetBaseWindow()] = app_window;
 }
 
-void ExtensionAppWindowLauncherItemController::OnWindowRemoved(
-    ui::BaseWindow* window) {
-  WindowToAppWindow::iterator it = window_to_app_window_.find(window);
-  if (it == window_to_app_window_.end()) {
-    NOTREACHED();
-    return;
-  }
-
-  window_to_app_window_.erase(it);
-}
-
-ChromeLauncherAppMenuItems
-ExtensionAppWindowLauncherItemController::GetApplicationList(int event_flags) {
-  ChromeLauncherAppMenuItems items =
-      AppWindowLauncherItemController::GetApplicationList(event_flags);
+ash::ShelfAppMenuItemList
+ExtensionAppWindowLauncherItemController::GetAppMenuItems(int event_flags) {
+  ash::ShelfAppMenuItemList items;
   int index = 0;
   for (const auto* window : windows()) {
     extensions::AppWindow* app_window = window_to_app_window_[window];
@@ -99,25 +83,22 @@ ExtensionAppWindowLauncherItemController::GetApplicationList(int event_flags) {
     if (result.IsEmpty())
       result = GetAppListIcon(app_window);
 
-    items.push_back(new ChromeLauncherAppMenuItemV2App(
+    items.push_back(base::MakeUnique<ChromeLauncherAppMenuItemV2App>(
         app_window->GetTitle(),
         &result,  // Will be copied
-        app_id(), launcher_controller(), index,
-        index == 0 /* has_leading_separator */));
+        app_id(), launcher_controller(), index));
     ++index;
   }
   return items;
 }
 
-ash::ShelfItemDelegate::PerformedAction
-ExtensionAppWindowLauncherItemController::ItemSelected(const ui::Event& event) {
-  if (windows().empty())
-    return kNoAction;
-  return AppWindowLauncherItemController::ItemSelected(event);
-}
+void ExtensionAppWindowLauncherItemController::OnWindowRemoved(
+    ui::BaseWindow* window) {
+  WindowToAppWindow::iterator it = window_to_app_window_.find(window);
+  if (it == window_to_app_window_.end()) {
+    NOTREACHED();
+    return;
+  }
 
-ash::ShelfMenuModel*
-ExtensionAppWindowLauncherItemController::CreateApplicationMenu(
-    int event_flags) {
-  return new LauncherApplicationMenuItemModel(GetApplicationList(event_flags));
+  window_to_app_window_.erase(it);
 }

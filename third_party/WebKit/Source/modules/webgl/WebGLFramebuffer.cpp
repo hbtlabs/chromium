@@ -40,10 +40,12 @@ class WebGLRenderbufferAttachment final
   static WebGLFramebuffer::WebGLAttachment* create(WebGLRenderbuffer*);
 
   DECLARE_VIRTUAL_TRACE();
+  DEFINE_INLINE_VIRTUAL_TRACE_WRAPPERS() {
+    visitor->traceWrappers(m_renderbuffer);
+  }
 
  private:
   explicit WebGLRenderbufferAttachment(WebGLRenderbuffer*);
-  WebGLRenderbufferAttachment() {}
 
   WebGLSharedObject* object() const override;
   bool isSharedObject(WebGLSharedObject*) const override;
@@ -56,7 +58,7 @@ class WebGLRenderbufferAttachment final
                 GLenum target,
                 GLenum attachment) override;
 
-  Member<WebGLRenderbuffer> m_renderbuffer;
+  TraceWrapperMember<WebGLRenderbuffer> m_renderbuffer;
 };
 
 WebGLFramebuffer::WebGLAttachment* WebGLRenderbufferAttachment::create(
@@ -71,7 +73,7 @@ DEFINE_TRACE(WebGLRenderbufferAttachment) {
 
 WebGLRenderbufferAttachment::WebGLRenderbufferAttachment(
     WebGLRenderbuffer* renderbuffer)
-    : m_renderbuffer(renderbuffer) {}
+    : m_renderbuffer(this, renderbuffer) {}
 
 WebGLSharedObject* WebGLRenderbufferAttachment::object() const {
   return m_renderbuffer->object() ? m_renderbuffer.get() : 0;
@@ -111,13 +113,13 @@ class WebGLTextureAttachment final : public WebGLFramebuffer::WebGLAttachment {
                                                    GLint layer);
 
   DECLARE_VIRTUAL_TRACE();
+  DEFINE_INLINE_VIRTUAL_TRACE_WRAPPERS() { visitor->traceWrappers(m_texture); }
 
  private:
   WebGLTextureAttachment(WebGLTexture*,
                          GLenum target,
                          GLint level,
                          GLint layer);
-  WebGLTextureAttachment() {}
 
   WebGLSharedObject* object() const override;
   bool isSharedObject(WebGLSharedObject*) const override;
@@ -130,7 +132,7 @@ class WebGLTextureAttachment final : public WebGLFramebuffer::WebGLAttachment {
                 GLenum target,
                 GLenum attachment) override;
 
-  Member<WebGLTexture> m_texture;
+  TraceWrapperMember<WebGLTexture> m_texture;
   GLenum m_target;
   GLint m_level;
   GLint m_layer;
@@ -153,7 +155,10 @@ WebGLTextureAttachment::WebGLTextureAttachment(WebGLTexture* texture,
                                                GLenum target,
                                                GLint level,
                                                GLint layer)
-    : m_texture(texture), m_target(target), m_level(level), m_layer(layer) {}
+    : m_texture(this, texture),
+      m_target(target),
+      m_level(level),
+      m_layer(layer) {}
 
 WebGLSharedObject* WebGLTextureAttachment::object() const {
   return m_texture->object() ? m_texture.get() : 0;
@@ -197,8 +202,6 @@ void WebGLTextureAttachment::unattach(gpu::gles2::GLES2Interface* gl,
 
 WebGLFramebuffer::WebGLAttachment::WebGLAttachment() {}
 
-WebGLFramebuffer::WebGLAttachment::~WebGLAttachment() {}
-
 WebGLFramebuffer* WebGLFramebuffer::create(WebGLRenderingContextBase* ctx) {
   return new WebGLFramebuffer(ctx);
 }
@@ -206,7 +209,6 @@ WebGLFramebuffer* WebGLFramebuffer::create(WebGLRenderingContextBase* ctx) {
 WebGLFramebuffer::WebGLFramebuffer(WebGLRenderingContextBase* ctx)
     : WebGLContextObject(ctx),
       m_object(0),
-      m_destructionInProgress(false),
       m_hasEverBeenBound(false),
       m_webGL1DepthStencilConsistent(true),
       m_readBuffer(GL_COLOR_ATTACHMENT0) {
@@ -214,13 +216,7 @@ WebGLFramebuffer::WebGLFramebuffer(WebGLRenderingContextBase* ctx)
 }
 
 WebGLFramebuffer::~WebGLFramebuffer() {
-  // Attachments in |m_attachments| will be deleted from other
-  // places, and we must not touch that map in deleteObjectImpl once
-  // the destructor has been entered.
-  m_destructionInProgress = true;
-
-  // See the comment in WebGLObject::detachAndDeleteObject().
-  detachAndDeleteObject();
+  runDestructor();
 }
 
 void WebGLFramebuffer::setAttachmentForBoundFramebuffer(GLenum target,
@@ -383,7 +379,7 @@ void WebGLFramebuffer::deleteObjectImpl(gpu::gles2::GLES2Interface* gl) {
   // entered, as they may have been finalized already during the
   // same GC sweep. These attachments' OpenGL objects will be fully
   // destroyed once their JavaScript wrappers are collected.
-  if (!m_destructionInProgress) {
+  if (!destructionInProgress()) {
     for (const auto& attachment : m_attachments)
       attachment.value->onDetached(gl);
   }
@@ -439,7 +435,7 @@ void WebGLFramebuffer::setAttachmentInternal(GLenum target,
   DCHECK(m_object);
   removeAttachmentInternal(target, attachment);
   if (texture && texture->object()) {
-    m_attachments.add(
+    m_attachments.insert(
         attachment, TraceWrapperMember<WebGLAttachment>(
                         this, WebGLTextureAttachment::create(texture, texTarget,
                                                              level, layer)));
@@ -455,7 +451,7 @@ void WebGLFramebuffer::setAttachmentInternal(GLenum target,
   DCHECK(m_object);
   removeAttachmentInternal(target, attachment);
   if (renderbuffer && renderbuffer->object()) {
-    m_attachments.add(
+    m_attachments.insert(
         attachment,
         TraceWrapperMember<WebGLAttachment>(
             this, WebGLRenderbufferAttachment::create(renderbuffer)));
@@ -472,7 +468,7 @@ void WebGLFramebuffer::removeAttachmentInternal(GLenum target,
   WebGLAttachment* attachmentObject = getAttachment(attachment);
   if (attachmentObject) {
     attachmentObject->onDetached(context()->contextGL());
-    m_attachments.remove(attachment);
+    m_attachments.erase(attachment);
     drawBuffersIfNecessary(false);
   }
 }
@@ -510,18 +506,30 @@ void WebGLFramebuffer::commitWebGL1DepthStencilIfConsistent(GLenum target) {
 
   gpu::gles2::GLES2Interface* gl = context()->contextGL();
   if (depthAttachment) {
+    gl->FramebufferRenderbuffer(target, GL_DEPTH_STENCIL_ATTACHMENT,
+                                GL_RENDERBUFFER, 0);
     depthAttachment->attach(gl, target, GL_DEPTH_ATTACHMENT);
     gl->FramebufferRenderbuffer(target, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER,
                                 0);
   } else if (stencilAttachment) {
+    gl->FramebufferRenderbuffer(target, GL_DEPTH_STENCIL_ATTACHMENT,
+                                GL_RENDERBUFFER, 0);
     gl->FramebufferRenderbuffer(target, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER,
                                 0);
     stencilAttachment->attach(gl, target, GL_STENCIL_ATTACHMENT);
   } else if (depthStencilAttachment) {
+    gl->FramebufferRenderbuffer(target, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER,
+                                0);
+    gl->FramebufferRenderbuffer(target, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER,
+                                0);
     depthStencilAttachment->attach(gl, target, GL_DEPTH_STENCIL_ATTACHMENT);
   } else {
     gl->FramebufferRenderbuffer(target, GL_DEPTH_STENCIL_ATTACHMENT,
                                 GL_RENDERBUFFER, 0);
+    gl->FramebufferRenderbuffer(target, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER,
+                                0);
+    gl->FramebufferRenderbuffer(target, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER,
+                                0);
   }
 }
 
@@ -535,15 +543,6 @@ GLenum WebGLFramebuffer::getDrawBuffer(GLenum drawBuffer) {
   return GL_NONE;
 }
 
-void WebGLFramebuffer::visitChildDOMWrappers(
-    v8::Isolate* isolate,
-    const v8::Persistent<v8::Object>& wrapper) {
-  for (const auto& attachment : m_attachments) {
-    DOMWrapperWorld::setWrapperReferencesInAllWorlds(
-        wrapper, attachment.value->object(), isolate);
-  }
-}
-
 DEFINE_TRACE(WebGLFramebuffer) {
   visitor->trace(m_attachments);
   WebGLContextObject::trace(visitor);
@@ -551,7 +550,7 @@ DEFINE_TRACE(WebGLFramebuffer) {
 
 DEFINE_TRACE_WRAPPERS(WebGLFramebuffer) {
   for (const auto& attachment : m_attachments) {
-    visitor->traceWrappers(attachment.value->object());
+    visitor->traceWrappers(attachment.value);
   }
   WebGLContextObject::traceWrappers(visitor);
 }

@@ -237,24 +237,6 @@ TimelineModel.TimelineFrameModel = class {
   }
 
   /**
-   * @param {!Array.<string>} types
-   * @param {!TimelineModel.TimelineModel.Record} record
-   * @return {?TimelineModel.TimelineModel.Record} record
-   */
-  _findRecordRecursively(types, record) {
-    if (types.indexOf(record.type()) >= 0)
-      return record;
-    if (!record.children())
-      return null;
-    for (var i = 0; i < record.children().length; ++i) {
-      var result = this._findRecordRecursively(types, record.children()[i]);
-      if (result)
-        return result;
-    }
-    return null;
-  }
-
-  /**
    * @param {?SDK.Target} target
    * @param {!Array.<!SDK.TracingModel.Event>} events
    * @param {string} sessionId
@@ -323,8 +305,6 @@ TimelineModel.TimelineFrameModel = class {
    */
   _addMainThreadTraceEvent(event) {
     var eventNames = TimelineModel.TimelineModel.RecordType;
-    var timestamp = event.startTime;
-    var selfTime = event.selfTime || 0;
 
     if (SDK.TracingModel.isTopLevelEvent(event)) {
       this._currentTaskTimeByCategory = {};
@@ -444,8 +424,7 @@ TimelineModel.TimelineFrame = class {
    * @return {boolean}
    */
   hasWarnings() {
-    var /** @const */ longFrameDurationThresholdMs = 22;
-    return !this.idle && this.duration > longFrameDurationThresholdMs;
+    return false;
   }
 
   /**

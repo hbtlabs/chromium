@@ -10,18 +10,17 @@ import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.Message;
 import android.view.DragEvent;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.View.MeasureSpec;
 import android.view.ViewStructure;
 import android.view.accessibility.AccessibilityNodeProvider;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.widget.FrameLayout;
 
-import org.chromium.base.Log;
 import org.chromium.base.TraceEvent;
 
 /**
@@ -33,7 +32,18 @@ public class ContentView extends FrameLayout
 
     private static final String TAG = "cr.ContentView";
 
+    // Default value to signal that the ContentView's size need not be overridden.
+    public static final int DEFAULT_MEASURE_SPEC =
+            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
+
     protected final ContentViewCore mContentViewCore;
+
+    /**
+     * The desired size of this view in {@link MeasureSpec}. Set by the host
+     * when it should be different from that of the parent.
+     */
+    private int mDesiredWidthMeasureSpec = DEFAULT_MEASURE_SPEC;
+    private int mDesiredHeightMeasureSpec = DEFAULT_MEASURE_SPEC;
 
     /**
      * Constructs a new ContentView for the appropriate Android version.
@@ -78,6 +88,27 @@ public class ContentView extends FrameLayout
         return super.performAccessibilityAction(action, arguments);
     }
 
+    /**
+     * Set the desired size of the view. The values are in {@link MeasureSpec}.
+     * @param width The width of the content view.
+     * @param height The height of the content view.
+     */
+    public void setDesiredMeasureSpec(int width, int height) {
+        mDesiredWidthMeasureSpec = width;
+        mDesiredHeightMeasureSpec = height;
+    }
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        if (mDesiredWidthMeasureSpec != DEFAULT_MEASURE_SPEC) {
+            widthMeasureSpec = mDesiredWidthMeasureSpec;
+        }
+        if (mDesiredHeightMeasureSpec != DEFAULT_MEASURE_SPEC) {
+            heightMeasureSpec = mDesiredHeightMeasureSpec;
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+    }
+
     @Override
     public AccessibilityNodeProvider getAccessibilityNodeProvider() {
         AccessibilityNodeProvider provider = mContentViewCore.getAccessibilityNodeProvider();
@@ -120,7 +151,7 @@ public class ContentView extends FrameLayout
         try {
             TraceEvent.begin("ContentView.onFocusChanged");
             super.onFocusChanged(gainFocus, direction, previouslyFocusedRect);
-            mContentViewCore.onFocusChanged(gainFocus);
+            mContentViewCore.onFocusChanged(gainFocus, true /* hideKeyboardOnBlur */);
         } finally {
             TraceEvent.end("ContentView.onFocusChanged");
         }
@@ -191,7 +222,7 @@ public class ContentView extends FrameLayout
      */
     @Override
     public void scrollBy(int x, int y) {
-        mContentViewCore.scrollBy(x, y, false);
+        mContentViewCore.scrollBy(x, y);
     }
 
     @Override
@@ -231,25 +262,6 @@ public class ContentView extends FrameLayout
         return mContentViewCore.computeVerticalScrollRange();
     }
 
-    @Override
-    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        ContentViewClient client = mContentViewCore.getContentViewClient();
-
-        // Allow the ContentViewClient to override the ContentView's width.
-        int desiredWidthMeasureSpec = client.getDesiredWidthMeasureSpec();
-        if (MeasureSpec.getMode(desiredWidthMeasureSpec) != MeasureSpec.UNSPECIFIED) {
-            widthMeasureSpec = desiredWidthMeasureSpec;
-        }
-
-        // Allow the ContentViewClient to override the ContentView's height.
-        int desiredHeightMeasureSpec = client.getDesiredHeightMeasureSpec();
-        if (MeasureSpec.getMode(desiredHeightMeasureSpec) != MeasureSpec.UNSPECIFIED) {
-            heightMeasureSpec = desiredHeightMeasureSpec;
-        }
-
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-    }
-
     // End FrameLayout overrides.
 
     @Override
@@ -274,43 +286,19 @@ public class ContentView extends FrameLayout
         mContentViewCore.onDetachedFromWindow();
     }
 
-    @Override
-    protected void onVisibilityChanged(View changedView, int visibility) {
-        super.onVisibilityChanged(changedView, visibility);
-        mContentViewCore.onVisibilityChanged(changedView, visibility);
-    }
-
     // Implements SmartClipProvider
     @Override
     public void extractSmartClipData(int x, int y, int width, int height) {
-        mContentViewCore.extractSmartClipData(x, y, width, height);
+        float dpi = mContentViewCore.getRenderCoordinates().getDeviceScaleFactor();
+        y -= mContentViewCore.getRenderCoordinates().getContentOffsetYPix();
+        mContentViewCore.getWebContents().requestSmartClipExtract(
+                (int) (x / dpi), (int) (y / dpi), (int) (width / dpi), (int) (height / dpi));
     }
 
     // Implements SmartClipProvider
     @Override
     public void setSmartClipResultHandler(final Handler resultHandler) {
-        if (resultHandler == null) {
-            mContentViewCore.setSmartClipDataListener(null);
-            return;
-        }
-        mContentViewCore.setSmartClipDataListener(new ContentViewCore.SmartClipDataListener() {
-            @Override
-            public void onSmartClipDataExtracted(String text, String html, Rect clipRect) {
-                Bundle bundle = new Bundle();
-                bundle.putString("url", mContentViewCore.getWebContents().getVisibleUrl());
-                bundle.putString("title", mContentViewCore.getWebContents().getTitle());
-                bundle.putParcelable("rect", clipRect);
-                bundle.putString("text", text);
-                bundle.putString("html", html);
-                try {
-                    Message msg = Message.obtain(resultHandler, 0);
-                    msg.setData(bundle);
-                    msg.sendToTarget();
-                } catch (Exception e) {
-                    Log.e(TAG, "Error calling handler for smart clip data: ", e);
-                }
-            }
-        });
+        mContentViewCore.getWebContents().setSmartClipResultHandler(resultHandler);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////

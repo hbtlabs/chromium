@@ -77,7 +77,8 @@ String CSSStyleRule::selectorText() const {
 }
 
 void CSSStyleRule::setSelectorText(const String& selectorText) {
-  CSSParserContext context(parserContext(), nullptr);
+  const CSSParserContext* context =
+      CSSParserContext::create(parserContext(), nullptr);
   CSSSelectorList selectorList = CSSParser::parseSelector(
       context, parentStyleSheet() ? parentStyleSheet()->contents() : nullptr,
       selectorText);
@@ -89,7 +90,7 @@ void CSSStyleRule::setSelectorText(const String& selectorText) {
   m_styleRule->wrapperAdoptSelectorList(std::move(selectorList));
 
   if (hasCachedSelectorText()) {
-    selectorTextCache().remove(this);
+    selectorTextCache().erase(this);
     setHasCachedSelectorText(false);
   }
 }

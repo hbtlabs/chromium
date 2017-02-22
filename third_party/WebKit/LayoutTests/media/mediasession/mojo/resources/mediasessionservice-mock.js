@@ -5,6 +5,7 @@
 "use strict";
 
 var MediaSessionAction;
+var MediaSessionPlaybackState;
 
 function mojoString16ToJS(mojoString16) {
   return String.fromCharCode.apply(null, mojoString16.data);
@@ -41,25 +42,22 @@ function mojoMetadataToJS(mojoMetadata) {
 let mediaSessionServiceMock = loadMojoModules(
     'mediaSessionServiceMock',
     ['third_party/WebKit/public/platform/modules/mediasession/media_session.mojom',
-     'mojo/public/js/router',
+     'mojo/public/js/bindings',
     ]).then(mojo => {
-      let [mediaSessionService, router] = mojo.modules;
+      let [mediaSessionService, bindings] = mojo.modules;
 
       MediaSessionAction = mediaSessionService.MediaSessionAction;
+      MediaSessionPlaybackState = mediaSessionService.MediaSessionPlaybackState;
 
       class MediaSessionServiceMock {
         constructor(interfaceProvider) {
           interfaceProvider.addInterfaceOverrideForTesting(
               mediaSessionService.MediaSessionService.name,
-              handle => this.connectMediaSessionService_(handle));
+              handle => this.bindingSet_.addBinding(this, handle));
           this.interfaceProvider_ = interfaceProvider;
           this.pendingResponse_ = null;
-        }
-
-        connectMediaSessionService_(handle) {
-          this.mediaSessionServiceStub_ = new mediaSessionService.MediaSessionService.stubClass(this);
-          this.mediaSessionServiceRouter_ = new router.Router(handle);
-          this.mediaSessionServiceRouter_.setIncomingReceiver(this.mediaSessionServiceStub_);
+          this.bindingSet_ = new bindings.BindingSet(
+              mediaSessionService.MediaSessionService);
         }
 
         setMetadata(metadata) {
@@ -69,6 +67,15 @@ let mediaSessionServiceMock = loadMojoModules(
 
         setMetadataCallback(callback) {
           this.metadataCallback_ = callback;
+        }
+
+        setPlaybackState(state) {
+          if (!!this.setPlaybackStateCallback_)
+            this.setPlaybackStateCallback_(state);
+        }
+
+        setPlaybackStateCallback(callback) {
+          this.setPlaybackStateCallback_ = callback;
         }
 
         enableAction(action) {

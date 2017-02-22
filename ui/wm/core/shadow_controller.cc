@@ -9,14 +9,13 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "base/scoped_observer.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/env_observer.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
-#include "ui/aura/window_property.h"
+#include "ui/base/class_property.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/compositor/layer.h"
 #include "ui/wm/core/shadow.h"
@@ -26,46 +25,53 @@
 
 using std::make_pair;
 
-DECLARE_WINDOW_PROPERTY_TYPE(wm::Shadow*);
-DEFINE_OWNED_WINDOW_PROPERTY_KEY(wm::Shadow, kShadowLayerKey, nullptr);
+DECLARE_UI_CLASS_PROPERTY_TYPE(::wm::Shadow*);
+DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(::wm::Shadow, kShadowLayerKey, nullptr);
 
 namespace wm {
 
 namespace {
 
-ShadowType GetShadowTypeFromWindow(aura::Window* window) {
+constexpr ShadowElevation kActiveNormalShadowElevation = ShadowElevation::LARGE;
+constexpr ShadowElevation kInactiveNormalShadowElevation =
+    ShadowElevation::MEDIUM;
+
+ShadowElevation GetDefaultShadowElevationForWindow(aura::Window* window) {
   switch (window->type()) {
     case ui::wm::WINDOW_TYPE_NORMAL:
     case ui::wm::WINDOW_TYPE_PANEL:
+      return kInactiveNormalShadowElevation;
+
     case ui::wm::WINDOW_TYPE_MENU:
     case ui::wm::WINDOW_TYPE_TOOLTIP:
-      return SHADOW_TYPE_RECTANGULAR;
+      return ShadowElevation::SMALL;
+
     default:
       break;
   }
-  return SHADOW_TYPE_NONE;
+  return ShadowElevation::NONE;
 }
 
-bool ShouldUseSmallShadowForWindow(aura::Window* window) {
-  switch (window->type()) {
-    case ui::wm::WINDOW_TYPE_MENU:
-    case ui::wm::WINDOW_TYPE_TOOLTIP:
-      return true;
-    default:
-      break;
-  }
-  return false;
+// Returns the ShadowElevation for |window|, converting |DEFAULT| to the
+// appropriate ShadowElevation.
+ShadowElevation GetShadowElevationConvertDefault(aura::Window* window) {
+  ShadowElevation elevation = window->GetProperty(kShadowElevationKey);
+  return elevation == ShadowElevation::DEFAULT
+             ? GetDefaultShadowElevationForWindow(window)
+             : elevation;
 }
 
-Shadow::Style GetShadowStyleForWindow(aura::Window* window) {
-  return ShouldUseSmallShadowForWindow(window) ? Shadow::STYLE_SMALL :
-      (IsActiveWindow(window) ? Shadow::STYLE_ACTIVE : Shadow::STYLE_INACTIVE);
+ShadowElevation GetShadowElevationForActiveState(aura::Window* window) {
+  if (IsActiveWindow(window))
+    return kActiveNormalShadowElevation;
+
+  return GetShadowElevationConvertDefault(window);
 }
 
 // Returns the shadow style to be applied to |losing_active| when it is losing
 // active to |gaining_active|. |gaining_active| may be of a type that hides when
 // inactive, and as such we do not want to render |losing_active| as inactive.
-Shadow::Style GetShadowStyleForWindowLosingActive(
+ShadowElevation GetShadowElevationForWindowLosingActive(
     aura::Window* losing_active,
     aura::Window* gaining_active) {
   if (gaining_active && aura::client::GetHideOnDeactivate(gaining_active)) {
@@ -74,9 +80,9 @@ Shadow::Style GetShadowStyleForWindowLosingActive(
                   GetTransientChildren(losing_active).end(),
                   gaining_active);
     if (it != GetTransientChildren(losing_active).end())
-      return Shadow::STYLE_ACTIVE;
+      return kActiveNormalShadowElevation;
   }
-  return Shadow::STYLE_INACTIVE;
+  return kInactiveNormalShadowElevation;
 }
 
 }  // namespace
@@ -122,7 +128,7 @@ class ShadowController::Impl :
   // Checks if |window| is visible and contains a property requesting a shadow.
   bool ShouldShowShadowForWindow(aura::Window* window) const;
 
-  // Updates the shadow styles for windows when activation changes.
+  // Updates the shadow for windows when activation changes.
   void HandleWindowActivationChange(aura::Window* gaining_active,
                                     aura::Window* losing_active);
 
@@ -154,15 +160,15 @@ ShadowController::Impl* ShadowController::Impl::GetInstance() {
 
 void ShadowController::Impl::OnWindowInitialized(aura::Window* window) {
   observer_manager_.Add(window);
-  SetShadowType(window, GetShadowTypeFromWindow(window));
   HandlePossibleShadowVisibilityChange(window);
 }
 
 void ShadowController::Impl::OnWindowPropertyChanged(aura::Window* window,
                                                      const void* key,
                                                      intptr_t old) {
-  if (key == kShadowTypeKey) {
-    if (window->GetProperty(kShadowTypeKey) == static_cast<ShadowType>(old))
+  if (key == kShadowElevationKey) {
+    if (window->GetProperty(kShadowElevationKey) ==
+        static_cast<ShadowElevation>(old))
       return;
   } else if (key == aura::client::kShowStateKey) {
     if (window->GetProperty(aura::client::kShowStateKey) ==
@@ -194,14 +200,16 @@ void ShadowController::Impl::OnWindowActivated(ActivationReason reason,
                                                aura::Window* lost_active) {
   if (gained_active) {
     Shadow* shadow = GetShadowForWindow(gained_active);
-    if (shadow && !ShouldUseSmallShadowForWindow(gained_active))
-      shadow->SetStyle(Shadow::STYLE_ACTIVE);
+    if (shadow)
+      shadow->SetElevation(GetShadowElevationForActiveState(gained_active));
   }
   if (lost_active) {
     Shadow* shadow = GetShadowForWindow(lost_active);
-    if (shadow && !ShouldUseSmallShadowForWindow(lost_active)) {
-      shadow->SetStyle(GetShadowStyleForWindowLosingActive(lost_active,
-                                                           gained_active));
+    if (shadow &&
+        GetShadowElevationConvertDefault(lost_active) ==
+            kInactiveNormalShadowElevation) {
+      shadow->SetElevation(
+          GetShadowElevationForWindowLosingActive(lost_active, gained_active));
     }
   }
 }
@@ -212,19 +220,10 @@ bool ShadowController::Impl::ShouldShowShadowForWindow(
       window->GetProperty(aura::client::kShowStateKey);
   if (show_state == ui::SHOW_STATE_FULLSCREEN ||
       show_state == ui::SHOW_STATE_MAXIMIZED) {
-    return SHADOW_TYPE_NONE;
+    return false;
   }
 
-  const ShadowType type = GetShadowType(window);
-  switch (type) {
-    case SHADOW_TYPE_NONE:
-      return false;
-    case SHADOW_TYPE_RECTANGULAR:
-      return true;
-    default:
-      NOTREACHED() << "Unknown shadow type " << type;
-      return false;
-  }
+  return static_cast<int>(GetShadowElevationConvertDefault(window)) > 0;
 }
 
 void ShadowController::Impl::HandlePossibleShadowVisibilityChange(
@@ -232,7 +231,7 @@ void ShadowController::Impl::HandlePossibleShadowVisibilityChange(
   const bool should_show = ShouldShowShadowForWindow(window);
   Shadow* shadow = GetShadowForWindow(window);
   if (shadow) {
-    shadow->SetStyle(GetShadowStyleForWindow(window));
+    shadow->SetElevation(GetShadowElevationForActiveState(window));
     shadow->layer()->SetVisible(should_show);
   } else if (should_show && !shadow) {
     CreateShadowForWindow(window);
@@ -242,7 +241,7 @@ void ShadowController::Impl::HandlePossibleShadowVisibilityChange(
 void ShadowController::Impl::CreateShadowForWindow(aura::Window* window) {
   Shadow* shadow = new Shadow();
   window->SetProperty(kShadowLayerKey, shadow);
-  shadow->Init(GetShadowStyleForWindow(window));
+  shadow->Init(GetShadowElevationForActiveState(window));
   shadow->SetContentBounds(gfx::Rect(window->bounds().size()));
   shadow->layer()->SetVisible(ShouldShowShadowForWindow(window));
   window->layer()->Add(shadow->layer());

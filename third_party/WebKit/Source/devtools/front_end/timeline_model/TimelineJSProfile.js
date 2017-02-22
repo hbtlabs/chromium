@@ -53,7 +53,9 @@ TimelineModel.TimelineJSProfileProcessor = class {
      * @return {boolean}
      */
     function equalFrames(frame1, frame2) {
-      return frame1.scriptId === frame2.scriptId && frame1.functionName === frame2.functionName;
+      return frame1.scriptId === frame2.scriptId &&
+             frame1.functionName === frame2.functionName &&
+             frame1.lineNumber === frame2.lineNumber;
     }
 
     /**
@@ -65,6 +67,7 @@ TimelineModel.TimelineJSProfileProcessor = class {
         case TimelineModel.TimelineModel.RecordType.RunMicrotasks:
         case TimelineModel.TimelineModel.RecordType.FunctionCall:
         case TimelineModel.TimelineModel.RecordType.EvaluateScript:
+        case TimelineModel.TimelineModel.RecordType.EventDispatch:
           return true;
       }
       return false;

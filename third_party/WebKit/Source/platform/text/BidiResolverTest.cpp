@@ -48,14 +48,14 @@ TEST(BidiResolver, Basic) {
   TextDirection direction =
       bidiResolver.determineParagraphDirectionality(&hasStrongDirectionality);
   EXPECT_TRUE(hasStrongDirectionality);
-  EXPECT_EQ(LTR, direction);
+  EXPECT_EQ(TextDirection::kLtr, direction);
 }
 
 TextDirection determineParagraphDirectionality(
     const TextRun& textRun,
     bool* hasStrongDirectionality = 0) {
   BidiResolver<TextRunIterator, BidiCharacterRun> resolver;
-  resolver.setStatus(BidiStatus(LTR, false));
+  resolver.setStatus(BidiStatus(TextDirection::kLtr, false));
   resolver.setPositionIgnoringNestedIsolates(TextRunIterator(&textRun, 0));
   return resolver.determineParagraphDirectionality(hasStrongDirectionality);
 }
@@ -78,33 +78,34 @@ void testDirectionality(const TestData& entry) {
 }
 
 TEST(BidiResolver, ParagraphDirectionSurrogates) {
-  const TestData testData[] = {// Test strong RTL, non-BMP. (U+10858 Imperial
-                               // Aramaic number one, strong RTL)
-                               {{0xD802, 0xDC58}, 2, RTL, true},
+  const TestData testData[] = {
+      // Test strong RTL, non-BMP. (U+10858 Imperial
+      // Aramaic number one, strong RTL)
+      {{0xD802, 0xDC58}, 2, TextDirection::kRtl, true},
 
-                               // Test strong LTR, non-BMP. (U+1D15F Musical
-                               // symbol quarter note, strong LTR)
-                               {{0xD834, 0xDD5F}, 2, LTR, true},
+      // Test strong LTR, non-BMP. (U+1D15F Musical
+      // symbol quarter note, strong LTR)
+      {{0xD834, 0xDD5F}, 2, TextDirection::kLtr, true},
 
-                               // Test broken surrogate: valid leading, invalid
-                               // trail. (Lead of U+10858, space)
-                               {{0xD802, ' '}, 2, LTR, false},
+      // Test broken surrogate: valid leading, invalid
+      // trail. (Lead of U+10858, space)
+      {{0xD802, ' '}, 2, TextDirection::kLtr, false},
 
-                               // Test broken surrogate: invalid leading. (Trail
-                               // of U+10858, U+05D0 Hebrew Alef)
-                               {{0xDC58, 0x05D0}, 2, RTL, true},
+      // Test broken surrogate: invalid leading. (Trail
+      // of U+10858, U+05D0 Hebrew Alef)
+      {{0xDC58, 0x05D0}, 2, TextDirection::kRtl, true},
 
-                               // Test broken surrogate: valid leading, invalid
-                               // trail/valid lead, valid trail.
-                               {{0xD802, 0xD802, 0xDC58}, 3, RTL, true},
+      // Test broken surrogate: valid leading, invalid
+      // trail/valid lead, valid trail.
+      {{0xD802, 0xD802, 0xDC58}, 3, TextDirection::kRtl, true},
 
-                               // Test broken surrogate: valid leading, no trail
-                               // (string too short). (Lead of U+10858)
-                               {{0xD802, 0xDC58}, 1, LTR, false},
+      // Test broken surrogate: valid leading, no trail
+      // (string too short). (Lead of U+10858)
+      {{0xD802, 0xDC58}, 1, TextDirection::kLtr, false},
 
-                               // Test broken surrogate: trail appearing before
-                               // lead. (U+10858 units reversed)
-                               {{0xDC58, 0xD802}, 2, LTR, false}};
+      // Test broken surrogate: trail appearing before
+      // lead. (U+10858 units reversed)
+      {{0xDC58, 0xD802}, 2, TextDirection::kLtr, false}};
   for (size_t i = 0; i < WTF_ARRAY_LENGTH(testData); ++i)
     testDirectionality(testData[i]);
 }
@@ -184,10 +185,12 @@ void BidiTestRunner::runTest(const std::basic_string<UChar>& input,
       textRun.setDirection(determineParagraphDirectionality(textRun));
       break;
     case bidi_test::DirectionLTR:
-      textRun.setDirection(LTR);
+      textRun.setDirection(TextDirection::kLtr);
       break;
     case bidi_test::DirectionRTL:
-      textRun.setDirection(RTL);
+      textRun.setDirection(TextDirection::kRtl);
+      break;
+    default:
       break;
   }
   BidiResolver<TextRunIterator, BidiCharacterRun> resolver;
@@ -251,7 +254,7 @@ void BidiTestRunner::runTest(const std::basic_string<UChar>& input,
   runs.deleteRuns();
 }
 
-TEST(BidiResolver, BidiTest_txt) {
+TEST(BidiResolver, DISABLED_BidiTest_txt) {
   BidiTestRunner runner;
   // Blink's Unicode Bidi Algorithm (UBA) doesn't yet support the
   // new isolate directives from Unicode 6.3:
@@ -261,32 +264,18 @@ TEST(BidiResolver, BidiTest_txt) {
   runner.skipTestsWith(0x2068);  // FSI
   runner.skipTestsWith(0x2069);  // PDI
 
-  // This code wants to use PathService from base/path_service.h
-  // but we aren't allowed to depend on base/ directly from Blink yet.
-  // Alternatively we could use:
-  // blink::Platform::current()->unitTestSupport()->webKitRootDir()
-  // and a relative path, but that would require running inside
-  // webkit_unit_tests (to have a functioning Platform object).
-  // The file we want is:
-  // src/third_party/icu/source/test/testdata/BidiTest.txt
-  // but we don't have any good way to find it from this unittest.
-  // Just assume we're running this test manually for now. On the
-  // bots we just print a warning that we can't find the test file.
   std::string bidiTestPath = "BidiTest.txt";
   std::ifstream bidiTestFile(bidiTestPath.c_str());
-  if (!bidiTestFile.is_open()) {
-    printf("ERROR: Failed to open BidiTest.txt, cannot run tests.\n");
-    return;
-  }
-
+  EXPECT_TRUE(bidiTestFile.is_open());
   bidi_test::Harness<BidiTestRunner> harness(runner);
   harness.parse(bidiTestFile);
   bidiTestFile.close();
 
   if (runner.m_testsSkipped)
-    printf("WARNING: Skipped %zu tests.\n", runner.m_testsSkipped);
-  printf("Ran %zu tests: %zu level failures %zu order failures.\n",
-         runner.m_testsRun, runner.m_levelFailures, runner.m_orderFailures);
+    LOG(WARNING) << "WARNING: Skipped " << runner.m_testsSkipped << " tests.";
+  LOG(INFO) << "Ran " << runner.m_testsRun
+            << " tests: " << runner.m_levelFailures << " level failures "
+            << runner.m_orderFailures << " order failures.";
 
   // The unittest harness only pays attention to GTest output, so we verify
   // that the tests behaved as expected:
@@ -295,6 +284,36 @@ TEST(BidiResolver, BidiTest_txt) {
   EXPECT_EQ(0u, runner.m_ignoredCharFailures);
   EXPECT_EQ(44882u, runner.m_levelFailures);
   EXPECT_EQ(19151u, runner.m_orderFailures);
+}
+
+TEST(BidiResolver, DISABLED_BidiCharacterTest_txt) {
+  BidiTestRunner runner;
+  // Blink's Unicode Bidi Algorithm (UBA) doesn't yet support the
+  // new isolate directives from Unicode 6.3:
+  // http://www.unicode.org/reports/tr9/#Explicit_Directional_Isolates
+  runner.skipTestsWith(0x2066);  // LRI
+  runner.skipTestsWith(0x2067);  // RLI
+  runner.skipTestsWith(0x2068);  // FSI
+  runner.skipTestsWith(0x2069);  // PDI
+
+  std::string bidiTestPath = "BidiCharacterTest.txt";
+  std::ifstream bidiTestFile(bidiTestPath.c_str());
+  EXPECT_TRUE(bidiTestFile.is_open());
+  bidi_test::CharacterHarness<BidiTestRunner> harness(runner);
+  harness.parse(bidiTestFile);
+  bidiTestFile.close();
+
+  if (runner.m_testsSkipped)
+    LOG(WARNING) << "WARNING: Skipped " << runner.m_testsSkipped << " tests.";
+  LOG(INFO) << "Ran " << runner.m_testsRun
+            << " tests: " << runner.m_levelFailures << " level failures "
+            << runner.m_orderFailures << " order failures.";
+
+  EXPECT_EQ(91660u, runner.m_testsRun);
+  EXPECT_EQ(39u, runner.m_testsSkipped);
+  EXPECT_EQ(0u, runner.m_ignoredCharFailures);
+  EXPECT_EQ(14533u, runner.m_levelFailures);
+  EXPECT_EQ(14533u, runner.m_orderFailures);
 }
 
 }  // namespace blink

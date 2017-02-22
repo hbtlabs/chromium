@@ -33,6 +33,7 @@
 #include "core/layout/line/InlineTextBox.h"
 #include "core/layout/svg/LayoutSVGGradientStop.h"
 #include "core/layout/svg/LayoutSVGImage.h"
+#include "core/layout/svg/LayoutSVGInline.h"
 #include "core/layout/svg/LayoutSVGResourceClipper.h"
 #include "core/layout/svg/LayoutSVGResourceFilter.h"
 #include "core/layout/svg/LayoutSVGResourceLinearGradient.h"
@@ -327,8 +328,7 @@ static void writeStyle(TextStream& ts, const LayoutObject& object) {
 
 static TextStream& writePositionAndStyle(TextStream& ts,
                                          const LayoutObject& object) {
-  ts << " " << enclosingIntRect(
-                   const_cast<LayoutObject&>(object).absoluteVisualRect());
+  ts << " " << object.objectBoundingBox();
   writeStyle(ts, object);
   return ts;
 }
@@ -394,7 +394,9 @@ static TextStream& operator<<(TextStream& ts, const LayoutSVGShape& shape) {
 }
 
 static TextStream& operator<<(TextStream& ts, const LayoutSVGRoot& root) {
-  return writePositionAndStyle(ts, root);
+  ts << " " << root.frameRect();
+  writeStyle(ts, root);
+  return ts;
 }
 
 static void writeLayoutSVGTextBox(TextStream& ts, const LayoutSVGText& text) {
@@ -402,19 +404,16 @@ static void writeLayoutSVGTextBox(TextStream& ts, const LayoutSVGText& text) {
   if (!box)
     return;
 
-  ts << " " << enclosingIntRect(LayoutRect(
-                   LayoutPoint(text.location()),
-                   LayoutSize(box->logicalWidth(), box->logicalHeight())));
-
   // FIXME: Remove this hack, once the new text layout engine is completly
   // landed. We want to preserve the old layout test results for now.
   ts << " contains 1 chunk(s)";
 
   if (text.parent() && (text.parent()->resolveColor(CSSPropertyColor) !=
-                        text.resolveColor(CSSPropertyColor)))
+                        text.resolveColor(CSSPropertyColor))) {
     writeNameValuePair(
         ts, "color",
         text.resolveColor(CSSPropertyColor).nameForLayoutTreeAsText());
+  }
 }
 
 static inline void writeSVGInlineTextBox(TextStream& ts,
@@ -655,7 +654,16 @@ void write(TextStream& ts, const LayoutSVGRoot& root, int indent) {
 
 void writeSVGText(TextStream& ts, const LayoutSVGText& text, int indent) {
   writeStandardPrefix(ts, text, indent);
+  writePositionAndStyle(ts, text);
   writeLayoutSVGTextBox(ts, text);
+  ts << "\n";
+  writeResources(ts, text, indent);
+  writeChildren(ts, text, indent);
+}
+
+void writeSVGInline(TextStream& ts, const LayoutSVGInline& text, int indent) {
+  writeStandardPrefix(ts, text, indent);
+  writePositionAndStyle(ts, text);
   ts << "\n";
   writeResources(ts, text, indent);
   writeChildren(ts, text, indent);
@@ -665,9 +673,8 @@ void writeSVGInlineText(TextStream& ts,
                         const LayoutSVGInlineText& text,
                         int indent) {
   writeStandardPrefix(ts, text, indent);
-  ts << " " << enclosingIntRect(FloatRect(text.firstRunOrigin(),
-                                          text.floatLinesBoundingBox().size()))
-     << "\n";
+  writePositionAndStyle(ts, text);
+  ts << "\n";
   writeResources(ts, text, indent);
   writeSVGInlineTextBoxes(ts, text, indent);
 }
@@ -701,6 +708,9 @@ void writeSVGGradientStop(TextStream& ts,
 void writeResources(TextStream& ts, const LayoutObject& object, int indent) {
   const ComputedStyle& style = object.styleRef();
   const SVGComputedStyle& svgStyle = style.svgStyle();
+  TreeScope& treeScope = object.document();
+  SVGTreeScopeResources& treeScopeResources =
+      treeScope.ensureSVGTreeScopedResources();
 
   // FIXME: We want to use SVGResourcesCache to determine which resources are
   // present, instead of quering the resource <-> id cache.
@@ -709,7 +719,7 @@ void writeResources(TextStream& ts, const LayoutObject& object, int indent) {
   if (!svgStyle.maskerResource().isEmpty()) {
     if (LayoutSVGResourceMasker* masker =
             getLayoutSVGResourceById<LayoutSVGResourceMasker>(
-                object.document(), svgStyle.maskerResource())) {
+                treeScopeResources, svgStyle.maskerResource())) {
       writeIndent(ts, indent);
       ts << " ";
       writeNameAndQuotedValue(ts, "masker", svgStyle.maskerResource());
@@ -723,10 +733,10 @@ void writeResources(TextStream& ts, const LayoutObject& object, int indent) {
       const ReferenceClipPathOperation& clipPathReference =
           toReferenceClipPathOperation(*clipPathOperation);
       AtomicString id = SVGURIReference::fragmentIdentifierFromIRIString(
-          clipPathReference.url(), object.document());
+          clipPathReference.url(), treeScope);
       if (LayoutSVGResourceClipper* clipper =
               getLayoutSVGResourceById<LayoutSVGResourceClipper>(
-                  object.document(), id)) {
+                  treeScopeResources, id)) {
         writeIndent(ts, indent);
         ts << " ";
         writeNameAndQuotedValue(ts, "clipPath", id);
@@ -745,10 +755,10 @@ void writeResources(TextStream& ts, const LayoutObject& object, int indent) {
         const auto& referenceFilterOperation =
             toReferenceFilterOperation(filterOperation);
         AtomicString id = SVGURIReference::fragmentIdentifierFromIRIString(
-            referenceFilterOperation.url(), object.document());
+            referenceFilterOperation.url(), treeScope);
         if (LayoutSVGResourceFilter* filter =
                 getLayoutSVGResourceById<LayoutSVGResourceFilter>(
-                    object.document(), id)) {
+                    treeScopeResources, id)) {
           writeIndent(ts, indent);
           ts << " ";
           writeNameAndQuotedValue(ts, "filter", id);

@@ -4,10 +4,12 @@
 
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs_factory.h"
 
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_service_manager.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "content/public/browser/browser_context.h"
 
@@ -48,7 +50,7 @@ ArcAppListPrefsFactory::~ArcAppListPrefsFactory() {
 KeyedService* ArcAppListPrefsFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   Profile* profile = static_cast<Profile*>(context);
-  if (!arc::ArcSessionManager::IsAllowedForProfile(profile))
+  if (!arc::IsArcAllowedForProfile(profile))
     return nullptr;
 
   if (is_sync_test_) {
@@ -58,11 +60,12 @@ KeyedService* ArcAppListPrefsFactory::BuildServiceInstanceFor(
         profile, sync_test_app_instance_holders_[context].get());
   }
 
-  arc::ArcBridgeService* bridge_service = arc::ArcBridgeService::Get();
-  if (!bridge_service)
+  auto* arc_service_manager = arc::ArcServiceManager::Get();
+  if (!arc_service_manager)
     return nullptr;
 
-  return ArcAppListPrefs::Create(profile, bridge_service->app());
+  return ArcAppListPrefs::Create(
+      profile, arc_service_manager->arc_bridge_service()->app());
 }
 
 content::BrowserContext* ArcAppListPrefsFactory::GetBrowserContextToUse(

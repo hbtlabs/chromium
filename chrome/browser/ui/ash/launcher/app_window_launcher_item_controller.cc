@@ -7,8 +7,8 @@
 #include <algorithm>
 
 #include "ash/wm/window_util.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
-#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
 #include "chrome/browser/ui/ash/launcher/launcher_controller_helper.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -16,13 +16,10 @@
 #include "ui/wm/core/window_animations.h"
 
 AppWindowLauncherItemController::AppWindowLauncherItemController(
-    Type type,
     const std::string& app_id,
     const std::string& launch_id,
     ChromeLauncherController* controller)
-    : LauncherItemController(type, app_id, launch_id, controller),
-      app_id_(app_id),
-      launch_id_(launch_id),
+    : LauncherItemController(app_id, launch_id, controller),
       observed_windows_(this) {}
 
 AppWindowLauncherItemController::~AppWindowLauncherItemController() {}
@@ -72,27 +69,34 @@ void AppWindowLauncherItemController::SetActiveWindow(aura::Window* window) {
     last_active_window_ = app_window;
 }
 
-bool AppWindowLauncherItemController::IsVisible() const {
-  // Return true if any windows are visible.
-  for (const auto* window : windows_) {
-    if (window->GetNativeWindow()->IsVisible())
-      return true;
+AppWindowLauncherItemController*
+AppWindowLauncherItemController::AsAppWindowLauncherItemController() {
+  return this;
+}
+
+ash::ShelfAction AppWindowLauncherItemController::ItemSelected(
+    ui::EventType event_type,
+    int event_flags,
+    int64_t display_id,
+    ash::ShelfLaunchSource source) {
+  if (windows_.empty())
+    return ash::SHELF_ACTION_NONE;
+
+  ui::BaseWindow* window_to_show =
+      last_active_window_ ? last_active_window_ : windows_.front();
+  // If the event was triggered by a keystroke, we try to advance to the next
+  // item if the window we are trying to activate is already active.
+  if (windows_.size() >= 1 && window_to_show->IsActive() &&
+      event_type == ui::ET_KEY_RELEASED) {
+    return ActivateOrAdvanceToNextAppWindow(window_to_show);
   }
-  return false;
+
+  return ShowAndActivateOrMinimize(window_to_show);
 }
 
-void AppWindowLauncherItemController::Launch(ash::LaunchSource source,
-                                             int event_flags) {
-  launcher_controller()->LaunchApp(app_id(), source, ui::EF_NONE);
-}
-
-ash::ShelfItemDelegate::PerformedAction
-AppWindowLauncherItemController::Activate(ash::LaunchSource source) {
-  DCHECK(!windows_.empty());
-  ui::BaseWindow* window_to_activate =
-      last_active_window_ ? last_active_window_ : windows_.back();
-  window_to_activate->Activate();
-  return kExistingWindowActivated;
+ash::ShelfAppMenuItemList AppWindowLauncherItemController::GetAppMenuItems(
+    int event_flags) {
+  return ash::ShelfAppMenuItemList();
 }
 
 void AppWindowLauncherItemController::Close() {
@@ -108,51 +112,6 @@ void AppWindowLauncherItemController::ActivateIndexedApp(size_t index) {
   auto it = windows_.begin();
   std::advance(it, index);
   ShowAndActivateOrMinimize(*it);
-}
-
-ChromeLauncherAppMenuItems AppWindowLauncherItemController::GetApplicationList(
-    int event_flags) {
-  ChromeLauncherAppMenuItems items;
-  items.push_back(new ChromeLauncherAppMenuItem(GetTitle(), NULL, false));
-  return items;
-}
-
-ash::ShelfItemDelegate::PerformedAction
-AppWindowLauncherItemController::ItemSelected(const ui::Event& event) {
-  if (windows_.empty())
-    return kNoAction;
-
-  DCHECK_EQ(TYPE_APP, type());
-  ui::BaseWindow* window_to_show =
-      last_active_window_ ? last_active_window_ : windows_.front();
-  // If the event was triggered by a keystroke, we try to advance to the next
-  // item if the window we are trying to activate is already active.
-  if (windows_.size() >= 1 && window_to_show->IsActive() &&
-      event.type() == ui::ET_KEY_RELEASED) {
-    return ActivateOrAdvanceToNextAppWindow(window_to_show);
-  } else {
-    return ShowAndActivateOrMinimize(window_to_show);
-  }
-}
-
-base::string16 AppWindowLauncherItemController::GetTitle() {
-  return LauncherControllerHelper::GetAppTitle(launcher_controller()->profile(),
-                                               app_id());
-}
-
-bool AppWindowLauncherItemController::IsDraggable() {
-  DCHECK_EQ(TYPE_APP, type());
-  return true;
-}
-
-bool AppWindowLauncherItemController::CanPin() const {
-  return GetPinnableForAppID(app_id(), launcher_controller()->profile()) ==
-         AppListControllerDelegate::PIN_EDITABLE;
-}
-
-bool AppWindowLauncherItemController::ShouldShowTooltip() {
-  DCHECK_EQ(TYPE_APP, type());
-  return true;
 }
 
 void AppWindowLauncherItemController::OnWindowPropertyChanged(
@@ -172,15 +131,14 @@ void AppWindowLauncherItemController::OnWindowPropertyChanged(
   }
 }
 
-ash::ShelfItemDelegate::PerformedAction
-AppWindowLauncherItemController::ShowAndActivateOrMinimize(
+ash::ShelfAction AppWindowLauncherItemController::ShowAndActivateOrMinimize(
     ui::BaseWindow* app_window) {
   // Either show or minimize windows when shown from the launcher.
   return launcher_controller()->ActivateWindowOrMinimizeIfActive(
-      app_window, GetApplicationList(0).size() == 2);
+      app_window, GetAppMenuItems(0).size() == 1);
 }
 
-ash::ShelfItemDelegate::PerformedAction
+ash::ShelfAction
 AppWindowLauncherItemController::ActivateOrAdvanceToNextAppWindow(
     ui::BaseWindow* window_to_show) {
   WindowList::iterator i(
@@ -199,5 +157,5 @@ AppWindowLauncherItemController::ActivateOrAdvanceToNextAppWindow(
   } else {
     return ShowAndActivateOrMinimize(window_to_show);
   }
-  return kNoAction;
+  return ash::SHELF_ACTION_NONE;
 }

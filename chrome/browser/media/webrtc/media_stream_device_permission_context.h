@@ -8,18 +8,12 @@
 #include "base/macros.h"
 #include "chrome/browser/permissions/permission_context_base.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "content/public/browser/permission_type.h"
 
 // Common class which handles the mic and camera permissions.
-// MediaStreamMicPermissionContextFactory and
-// MediaStreamCameraPermissionContextFactory will instantiate this with
-// corresponding |permission_type|.
 class MediaStreamDevicePermissionContext : public PermissionContextBase {
  public:
-  MediaStreamDevicePermissionContext(
-      Profile* profile,
-      const content::PermissionType permission_type,
-      const ContentSettingsType content_settings_type);
+  MediaStreamDevicePermissionContext(Profile* profile,
+                                     ContentSettingsType content_settings_type);
   ~MediaStreamDevicePermissionContext() override;
 
   // PermissionContextBase:
@@ -31,7 +25,7 @@ class MediaStreamDevicePermissionContext : public PermissionContextBase {
 
   // TODO(xhwang): GURL.GetOrigin() shouldn't be used as the origin. Need to
   // refactor to use url::Origin. crbug.com/527149 is filed for this.
-  ContentSetting GetPermissionStatus(
+  ContentSetting GetPermissionStatusInternal(
       const GURL& requesting_origin,
       const GURL& embedding_origin) const override;
 

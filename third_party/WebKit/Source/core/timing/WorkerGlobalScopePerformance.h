@@ -32,6 +32,7 @@
 #define WorkerGlobalScopePerformance_h
 
 #include "core/timing/WorkerPerformance.h"
+#include "core/workers/WorkerGlobalScope.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
 
@@ -52,7 +53,7 @@ class WorkerGlobalScopePerformance final
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  WorkerGlobalScopePerformance();
+  explicit WorkerGlobalScopePerformance(WorkerGlobalScope&);
 
   WorkerPerformance* performance(WorkerGlobalScope*);
   static const char* supplementName();

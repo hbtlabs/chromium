@@ -11,7 +11,6 @@
 #include "chrome/browser/supervised_user/supervised_user_navigation_observer.h"
 #include "chrome/browser/supervised_user/supervised_user_url_filter.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/resource_controller.h"
 #include "content/public/browser/resource_request_info.h"
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/url_request.h"
@@ -72,6 +71,9 @@ int GetHistogramValueForFilteringBehavior(
           return FILTERING_BEHAVIOR_BLOCK_MANUAL;
         case supervised_user_error_page::DEFAULT:
           return FILTERING_BEHAVIOR_BLOCK_DEFAULT;
+        case supervised_user_error_page::NOT_SIGNED_IN:
+          // Should never happen, only used for requests from Webview
+          NOTREACHED();
       }
     case SupervisedUserURLFilter::INVALID:
       NOTREACHED();
@@ -106,6 +108,18 @@ void RecordFilterResultEvent(
     UMA_HISTOGRAM_SPARSE_SLOWLY("ManagedUsers.SafetyFilter", value);
   else
     UMA_HISTOGRAM_SPARSE_SLOWLY("ManagedUsers.FilteringResult", value);
+}
+
+// Helper function to wrap a given callback in one that will post it to the
+// IO thread.
+base::Callback<void(bool)> ResultTrampoline(
+    const base::Callback<void(bool)>& callback) {
+  return base::Bind(
+      [](const base::Callback<void(bool)>& callback, bool result) {
+        BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                                base::Bind(callback, result));
+      },
+      callback);
 }
 
 }  // namespace
@@ -159,11 +173,11 @@ void SupervisedUserResourceThrottle::ShowInterstitial(
       content::ResourceRequestInfo::ForRequest(request_);
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(
-          &SupervisedUserNavigationObserver::OnRequestBlocked,
-          info->GetWebContentsGetterForRequest(), url, reason,
-          base::Bind(&SupervisedUserResourceThrottle::OnInterstitialResult,
-                     weak_ptr_factory_.GetWeakPtr())));
+      base::Bind(&SupervisedUserNavigationObserver::OnRequestBlocked,
+                 info->GetWebContentsGetterForRequest(), url, reason,
+                 ResultTrampoline(base::Bind(
+                     &SupervisedUserResourceThrottle::OnInterstitialResult,
+                     weak_ptr_factory_.GetWeakPtr()))));
 }
 
 void SupervisedUserResourceThrottle::WillStartRequest(bool* defer) {
@@ -206,13 +220,13 @@ void SupervisedUserResourceThrottle::OnCheckDone(
   if (behavior == SupervisedUserURLFilter::BLOCK)
     ShowInterstitial(url, reason);
   else if (deferred_)
-    controller()->Resume();
+    Resume();
 }
 
 void SupervisedUserResourceThrottle::OnInterstitialResult(
     bool continue_request) {
   if (continue_request)
-    controller()->Resume();
+    Resume();
   else
-    controller()->Cancel();
+    Cancel();
 }

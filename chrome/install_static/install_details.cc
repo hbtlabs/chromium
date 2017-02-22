@@ -22,20 +22,16 @@ namespace {
 constexpr char kProductVersion[] = PRODUCT_VERSION;
 
 // This module's instance (intentionally leaked at shutdown).
-InstallDetails* g_module_details = nullptr;
+const InstallDetails* g_module_details = nullptr;
 
 }  // namespace
 
-std::wstring InstallDetails::GetClientStateKeyPath(bool binaries) const {
-  return binaries && multi_install()
-             ? GetBinariesClientStateKeyPath()
-             : install_static::GetClientStateKeyPath(app_guid());
+std::wstring InstallDetails::GetClientStateKeyPath() const {
+  return install_static::GetClientStateKeyPath(app_guid());
 }
 
-std::wstring InstallDetails::GetClientStateMediumKeyPath(bool binaries) const {
-  return binaries && multi_install()
-             ? GetBinariesClientStateMediumKeyPath()
-             : install_static::GetClientStateMediumKeyPath(app_guid());
+std::wstring InstallDetails::GetClientStateMediumKeyPath() const {
+  return install_static::GetClientStateMediumKeyPath(app_guid());
 }
 
 bool InstallDetails::VersionMismatch() const {
@@ -71,16 +67,19 @@ const InstallDetails::Payload* InstallDetails::GetPayload() {
 }
 
 // static
-void InstallDetails::InitializeFromPrimaryModule(
-    const wchar_t* primary_module_name) {
+void InstallDetails::InitializeFromPayload(
+    const InstallDetails::Payload* payload) {
   assert(!g_module_details);
-  using GetInstallDetailsPayloadFunction = const Payload*(__cdecl*)();
-  GetInstallDetailsPayloadFunction payload_getter =
-      reinterpret_cast<GetInstallDetailsPayloadFunction>(::GetProcAddress(
-          ::GetModuleHandle(primary_module_name), "GetInstallDetailsPayload"));
-  assert(payload_getter);
   // Intentionally leaked at shutdown.
-  g_module_details = new InstallDetails(payload_getter());
+  g_module_details = new InstallDetails(payload);
+}
+
+// static
+std::unique_ptr<const InstallDetails> InstallDetails::Swap(
+    std::unique_ptr<const InstallDetails> install_details) {
+  std::unique_ptr<const InstallDetails> previous_value(g_module_details);
+  g_module_details = install_details.release();
+  return previous_value;
 }
 
 PrimaryInstallDetails::PrimaryInstallDetails() : InstallDetails(&payload_) {

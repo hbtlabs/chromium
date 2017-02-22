@@ -160,8 +160,18 @@ bool IsTemplateParameterString(const std::string& param) {
       (*(param.rbegin()) == kEndParameter);
 }
 
-}  // namespace
+// Special case for search_terms_replacement_key comparison, because of
+// its special initialization in TemplateUrl constructor.
+bool SearchTermsReplacementKeysMatch(const std::string& key1,
+                                     const std::string& key2) {
+  const auto IsInstantExtended = [](const std::string& key) {
+    return (key == google_util::kInstantExtendedAPIParam) ||
+           (key == google_util::kGoogleInstantExtendedEnabledKeyFull);
+  };
+  return (key1 == key2) || (IsInstantExtended(key1) && IsInstantExtended(key2));
+}
 
+}  // namespace
 
 // TemplateURLRef::SearchTermsArgs --------------------------------------------
 
@@ -186,39 +196,15 @@ TemplateURLRef::SearchTermsArgs::~SearchTermsArgs() {
 TemplateURLRef::SearchTermsArgs::ContextualSearchParams::
     ContextualSearchParams()
     : version(-1),
-      start(base::string16::npos),
-      end(base::string16::npos),
       contextual_cards_version(0) {}
 
 TemplateURLRef::SearchTermsArgs::ContextualSearchParams::ContextualSearchParams(
     int version,
-    const std::string& selection,
-    const std::string& base_page_url,
-    int contextual_cards_version)
+    int contextual_cards_version,
+    const std::string& home_country)
     : version(version),
-      start(base::string16::npos),
-      end(base::string16::npos),
-      selection(selection),
-      base_page_url(base_page_url),
-      contextual_cards_version(contextual_cards_version) {}
-
-TemplateURLRef::SearchTermsArgs::ContextualSearchParams::ContextualSearchParams(
-    int version,
-    size_t start,
-    size_t end,
-    const std::string& selection,
-    const std::string& content,
-    const std::string& base_page_url,
-    const std::string& encoding,
-    int contextual_cards_version)
-    : version(version),
-      start(start),
-      end(end),
-      selection(selection),
-      content(content),
-      base_page_url(base_page_url),
-      encoding(encoding),
-      contextual_cards_version(contextual_cards_version) {}
+      contextual_cards_version(contextual_cards_version),
+      home_country(home_country) {}
 
 TemplateURLRef::SearchTermsArgs::ContextualSearchParams::ContextualSearchParams(
     const ContextualSearchParams& other) = default;
@@ -629,7 +615,7 @@ bool TemplateURLRef::ParseParameter(size_t start,
   } else if (parameter == "google:instantExtendedEnabledParameter") {
     replacements->push_back(Replacement(GOOGLE_INSTANT_EXTENDED_ENABLED,
                                         start));
-  } else if (parameter == "google:instantExtendedEnabledKey") {
+  } else if (parameter == google_util::kGoogleInstantExtendedEnabledKey) {
     url->insert(start, google_util::kInstantExtendedAPIParam);
   } else if (parameter == "google:iOSSearchLanguage") {
     replacements->push_back(Replacement(GOOGLE_IOS_SEARCH_LANGUAGE, start));
@@ -967,11 +953,13 @@ std::string TemplateURLRef::HandleReplacements(
 
       case GOOGLE_INSTANT_EXTENDED_ENABLED:
         DCHECK(!i->is_post_param);
+        // Regular search requests don't use Instant, so only add the param for
+        // other types.
         HandleReplacement(std::string(),
-                          search_terms_data.InstantExtendedEnabledParam(
-                              type_ == SEARCH),
-                          *i,
-                          &url);
+                          type_ == SEARCH
+                              ? std::string()
+                              : search_terms_data.InstantExtendedEnabledParam(),
+                          *i, &url);
         break;
 
       case GOOGLE_CONTEXTUAL_SEARCH_VERSION:
@@ -992,24 +980,12 @@ std::string TemplateURLRef::HandleReplacements(
             search_terms_args.contextual_search_params;
         std::vector<std::string> args;
 
-        if (params.start != std::string::npos)
-          args.push_back("ctxs_start=" + base::SizeTToString(params.start));
-        if (params.end != std::string::npos)
-          args.push_back("ctxs_end=" + base::SizeTToString(params.end));
-
-        if (!params.selection.empty())
-          args.push_back("q=" + params.selection);
-        if (!params.content.empty())
-          args.push_back("ctxs_content=" + params.content);
-        if (!params.base_page_url.empty())
-          args.push_back("ctxsl_url=" + params.base_page_url);
-        if (!params.encoding.empty())
-          args.push_back("ctxs_encoding=" + params.encoding);
-
         if (params.contextual_cards_version > 0) {
           args.push_back("ctxsl_coca=" +
                          base::IntToString(params.contextual_cards_version));
         }
+        if (!params.home_country.empty())
+          args.push_back("ctxs_hc=" + params.home_country);
 
         HandleReplacement(std::string(), base::JoinString(args, "&"), *i, &url);
         break;
@@ -1193,9 +1169,8 @@ TemplateURL::TemplateURL(const TemplateURLData& data, Type type)
   SetPrepopulateId(data_.prepopulate_id);
 
   if (data_.search_terms_replacement_key ==
-      "{google:instantExtendedEnabledKey}") {
+      google_util::kGoogleInstantExtendedEnabledKeyFull)
     data_.search_terms_replacement_key = google_util::kInstantExtendedAPIParam;
-  }
 }
 
 TemplateURL::~TemplateURL() {
@@ -1240,23 +1215,23 @@ bool TemplateURL::MatchesData(const TemplateURL* t_url,
     return !t_url && !data;
 
   return (t_url->short_name() == data->short_name()) &&
-      t_url->HasSameKeywordAs(*data, search_terms_data) &&
-      (t_url->url() == data->url()) &&
-      (t_url->suggestions_url() == data->suggestions_url) &&
-      (t_url->instant_url() == data->instant_url) &&
-      (t_url->image_url() == data->image_url) &&
-      (t_url->new_tab_url() == data->new_tab_url) &&
-      (t_url->search_url_post_params() == data->search_url_post_params) &&
-      (t_url->suggestions_url_post_params() ==
+         t_url->HasSameKeywordAs(*data, search_terms_data) &&
+         (t_url->url() == data->url()) &&
+         (t_url->suggestions_url() == data->suggestions_url) &&
+         (t_url->instant_url() == data->instant_url) &&
+         (t_url->image_url() == data->image_url) &&
+         (t_url->new_tab_url() == data->new_tab_url) &&
+         (t_url->search_url_post_params() == data->search_url_post_params) &&
+         (t_url->suggestions_url_post_params() ==
           data->suggestions_url_post_params) &&
-      (t_url->instant_url_post_params() == data->instant_url_post_params) &&
-      (t_url->image_url_post_params() == data->image_url_post_params) &&
-      (t_url->favicon_url() == data->favicon_url) &&
-      (t_url->safe_for_autoreplace() == data->safe_for_autoreplace) &&
-      (t_url->input_encodings() == data->input_encodings) &&
-      (t_url->alternate_urls() == data->alternate_urls) &&
-      (t_url->search_terms_replacement_key() ==
-          data->search_terms_replacement_key);
+         (t_url->instant_url_post_params() == data->instant_url_post_params) &&
+         (t_url->image_url_post_params() == data->image_url_post_params) &&
+         (t_url->favicon_url() == data->favicon_url) &&
+         (t_url->safe_for_autoreplace() == data->safe_for_autoreplace) &&
+         (t_url->input_encodings() == data->input_encodings) &&
+         (t_url->alternate_urls() == data->alternate_urls) &&
+         SearchTermsReplacementKeysMatch(t_url->search_terms_replacement_key(),
+                                         data->search_terms_replacement_key);
 }
 
 base::string16 TemplateURL::AdjustedShortNameForLocaleDirection() const {

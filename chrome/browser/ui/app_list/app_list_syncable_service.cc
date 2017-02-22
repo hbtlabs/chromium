@@ -41,6 +41,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
 #include "chrome/browser/chromeos/genius_app/app_id.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_item.h"
@@ -260,11 +261,11 @@ class AppListSyncableService::ModelObserver : public AppListModelObserver {
 
 #if defined(OS_CHROMEOS)
     if (item->GetItemType() == ArcAppItem::kItemType) {
-      // Don't sync remove changes coming as result of disabling Arc.
+      // Don't sync remove changes coming as result of disabling ARC.
       const arc::ArcSessionManager* arc_session_manager =
           arc::ArcSessionManager::Get();
       DCHECK(arc_session_manager);
-      if (!arc_session_manager->IsArcEnabled())
+      if (!arc_session_manager->IsArcPlayStoreEnabled())
         return;
     }
 #endif
@@ -395,7 +396,7 @@ void AppListSyncableService::BuildModel() {
     controller = service->GetControllerDelegate();
   apps_builder_.reset(new ExtensionAppModelBuilder(controller));
 #if defined(OS_CHROMEOS)
-  if (arc::ArcSessionManager::IsAllowedForProfile(profile_))
+  if (arc::IsArcAllowedForProfile(profile_))
     arc_apps_builder_.reset(new ArcAppModelBuilder(controller));
 #endif
   DCHECK(profile_);
@@ -567,6 +568,7 @@ AppListSyncableService::CreateSyncItemFromAppItem(AppListItem* app_item) {
     return NULL;
   VLOG(2) << this << " CreateSyncItemFromAppItem:" << app_item->ToDebugString();
   SyncItem* sync_item = CreateSyncItem(app_item->id(), type);
+  DCHECK(app_item->position().IsValid());
   UpdateSyncItemFromAppItem(app_item, sync_item);
   UpdateSyncItemInLocalStorage(profile_, sync_item);
   SendSyncChange(sync_item, SyncChange::ACTION_ADD);
@@ -584,6 +586,8 @@ syncer::StringOrdinal AppListSyncableService::GetPinPosition(
 void AppListSyncableService::SetPinPosition(
     const std::string& app_id,
     const syncer::StringOrdinal& item_pin_ordinal) {
+  // Pin position can be set only after model is built.
+  DCHECK(IsInitialized());
   SyncItem* sync_item = FindSyncItem(app_id);
   SyncChange::SyncChangeType sync_change_type;
   if (sync_item) {
@@ -604,9 +608,15 @@ void AppListSyncableService::AddOrUpdateFromSyncItem(AppListItem* app_item) {
   if (app_item->id() == kOemFolderId)
     return;
 
+  DCHECK(app_item->position().IsValid());
+
   SyncItem* sync_item = FindSyncItem(app_item->id());
   if (sync_item) {
     UpdateAppItemFromSyncItem(sync_item, app_item);
+    if (!sync_item->item_ordinal.IsValid()) {
+      UpdateSyncItem(app_item);
+      VLOG(2) << "Flushing position to sync item " << sync_item;
+    }
     return;
   }
   CreateSyncItemFromAppItem(app_item);
@@ -840,6 +850,33 @@ syncer::SyncMergeResult AppListSyncableService::MergeDataAndStartSyncing(
     change_list.push_back(SyncChange(FROM_HERE,  SyncChange::ACTION_ADD,
                                      GetSyncDataFromSyncItem(sync_item)));
   }
+
+  // Fix items that do not contain valid app list position, required for
+  // builds prior to M53 (crbug.com/677647).
+  for (const auto& sync_pair : sync_items_) {
+    SyncItem* sync_item = sync_pair.second.get();
+    if (sync_item->item_type != sync_pb::AppListSpecifics::TYPE_APP ||
+        sync_item->item_ordinal.IsValid()) {
+      continue;
+    }
+    const AppListItem* app_item = model_->FindItem(sync_item->item_id);
+    if (app_item) {
+      if (UpdateSyncItemFromAppItem(app_item, sync_item)) {
+        VLOG(1) << "Fixing sync item from existing app: " << sync_item;
+      } else {
+        sync_item->item_ordinal = syncer::StringOrdinal::CreateInitialOrdinal();
+        VLOG(1) << "Failed to fix sync item from existing app. "
+                << "Generating new position ordinal: " << sync_item;
+      }
+    } else {
+      sync_item->item_ordinal = syncer::StringOrdinal::CreateInitialOrdinal();
+      VLOG(1) << "Fixing sync item by generating new position ordinal: "
+              << sync_item;
+    }
+    change_list.push_back(SyncChange(FROM_HERE,  SyncChange::ACTION_UPDATE,
+                                     GetSyncDataFromSyncItem(sync_item)));
+  }
+
   sync_processor_->ProcessSyncChanges(FROM_HERE, change_list);
 
   HandleUpdateFinished();

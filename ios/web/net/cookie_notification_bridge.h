@@ -5,9 +5,8 @@
 #ifndef IOS_WEB_NET_COOKIE_NOTIFICATION_BRIDGE_H_
 #define IOS_WEB_NET_COOKIE_NOTIFICATION_BRIDGE_H_
 
-#include "base/mac/scoped_nsobject.h"
+#import "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
-#include "base/threading/thread_checker.h"
 
 @class NSNotification;
 
@@ -22,9 +21,8 @@ class CookieNotificationBridge {
   ~CookieNotificationBridge();
 
  private:
-  void OnNotificationReceived(NSNotification* notification);
+  static void OnNotificationReceived(NSNotification* notification);
   base::scoped_nsprotocol<id> observer_;
-  base::ThreadChecker thread_checker_;
 
   DISALLOW_COPY_AND_ASSIGN(CookieNotificationBridge);
 };

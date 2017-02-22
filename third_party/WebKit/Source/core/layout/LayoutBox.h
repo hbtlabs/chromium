@@ -27,6 +27,7 @@
 #include "core/layout/LayoutBoxModelObject.h"
 #include "core/layout/OverflowModel.h"
 #include "platform/scroll/ScrollTypes.h"
+#include "wtf/Compiler.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
 
@@ -93,7 +94,7 @@ struct LayoutBoxRareData {
 
   SnapAreaSet& ensureSnapAreas() {
     if (!m_snapAreas)
-      m_snapAreas = wrapUnique(new SnapAreaSet);
+      m_snapAreas = WTF::wrapUnique(new SnapAreaSet);
 
     return *m_snapAreas;
   }
@@ -211,25 +212,25 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     if (x == m_frameRect.x())
       return;
     m_frameRect.setX(x);
-    frameRectChanged();
+    locationChanged();
   }
   void setY(LayoutUnit y) {
     if (y == m_frameRect.y())
       return;
     m_frameRect.setY(y);
-    frameRectChanged();
+    locationChanged();
   }
   void setWidth(LayoutUnit width) {
     if (width == m_frameRect.width())
       return;
     m_frameRect.setWidth(width);
-    frameRectChanged();
+    sizeChanged();
   }
   void setHeight(LayoutUnit height) {
     if (height == m_frameRect.height())
       return;
     m_frameRect.setHeight(height);
-    frameRectChanged();
+    sizeChanged();
   }
 
   LayoutUnit logicalLeft() const {
@@ -317,16 +318,17 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     return LayoutSize(m_frameRect.x(), m_frameRect.y());
   }
   LayoutSize size() const { return m_frameRect.size(); }
+  LayoutSize previousSize() const { return m_previousSize; }
   IntSize pixelSnappedSize() const { return m_frameRect.pixelSnappedSize(); }
 
   void setLocation(const LayoutPoint& location) {
     if (location == m_frameRect.location())
       return;
     m_frameRect.setLocation(location);
-    frameRectChanged();
+    locationChanged();
   }
 
-  // The ancestor box that this object's location and topLeftLocation are
+  // The ancestor box that this object's location and physicalLocation are
   // relative to.
   virtual LayoutBox* locationContainer() const;
 
@@ -341,13 +343,13 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     if (size == m_frameRect.size())
       return;
     m_frameRect.setSize(size);
-    frameRectChanged();
+    sizeChanged();
   }
   void move(LayoutUnit dx, LayoutUnit dy) {
     if (!dx && !dy)
       return;
     m_frameRect.move(dx, dy);
-    frameRectChanged();
+    locationChanged();
   }
 
   // This function is in the container's coordinate system, meaning
@@ -355,18 +357,15 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   // inline-start/block-start margins.
   LayoutRect frameRect() const { return m_frameRect; }
   void setFrameRect(const LayoutRect& rect) {
-    if (rect == m_frameRect)
-      return;
-    m_frameRect = rect;
-    frameRectChanged();
+    setLocation(rect.location());
+    setSize(rect.size());
   }
 
   // Note that those functions have their origin at this box's CSS border box.
   // As such their location doesn't account for 'top'/'left'.
   LayoutRect borderBoxRect() const { return LayoutRect(LayoutPoint(), size()); }
   LayoutRect paddingBoxRect() const {
-    return LayoutRect(LayoutUnit(borderLeft()), LayoutUnit(borderTop()),
-                      clientWidth(), clientHeight());
+    return LayoutRect(borderLeft(), borderTop(), clientWidth(), clientHeight());
   }
   IntRect pixelSnappedBorderBoxRect() const {
     return IntRect(IntPoint(), m_frameRect.pixelSnappedSize());
@@ -390,7 +389,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   IntSize absoluteContentBoxOffset() const;
   // The content box converted to absolute coords (taking transforms into
   // account).
-  FloatQuad absoluteContentQuad() const;
+  FloatQuad absoluteContentQuad(MapCoordinatesFlags = 0) const;
   // The enclosing rectangle of the background with given opacity requirement.
   LayoutRect backgroundRect(BackgroundRectType) const;
 
@@ -481,7 +480,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   void addContentsVisualOverflow(const LayoutRect&);
 
   void addVisualEffectOverflow();
-  LayoutRectOutsets computeVisualEffectOverflowOutsets() const;
+  LayoutRectOutsets computeVisualEffectOverflowOutsets();
   void addOverflowFromChild(LayoutBox* child) {
     addOverflowFromChild(child, child->locationOffset());
   }
@@ -527,9 +526,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
                            ? verticalScrollbarWidth()
                            : 0));
   }
-  DISABLE_CFI_PERF LayoutUnit clientTop() const {
-    return LayoutUnit(borderTop());
-  }
+  DISABLE_CFI_PERF LayoutUnit clientTop() const { return borderTop(); }
   LayoutUnit clientWidth() const;
   LayoutUnit clientHeight() const;
   DISABLE_CFI_PERF LayoutUnit clientLogicalWidth() const {
@@ -665,7 +662,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   void absoluteRects(Vector<IntRect>&,
                      const LayoutPoint& accumulatedOffset) const override;
-  void absoluteQuads(Vector<FloatQuad>&) const override;
+  void absoluteQuads(Vector<FloatQuad>&,
+                     MapCoordinatesFlags mode = 0) const override;
   FloatRect localBoundingBoxRectForAccessibility() const final;
 
   void layout() override;
@@ -778,6 +776,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   // exactly at a page or column boundary.
   enum PageBoundaryRule { AssociateWithFormerPage, AssociateWithLatterPage };
   LayoutUnit pageLogicalHeightForOffset(LayoutUnit) const;
+  bool isPageLogicalHeightKnown() const;
   LayoutUnit pageRemainingLogicalHeightForOffset(LayoutUnit,
                                                  PageBoundaryRule) const;
 
@@ -835,15 +834,15 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   // Is the specified break-before or break-after value supported on this
   // object? It needs to be in-flow all the way up to a fragmentation context
   // that supports the specified value.
-  bool isBreakBetweenControllable(EBreak) const;
+  bool isBreakBetweenControllable(EBreakBetween) const;
 
   // Is the specified break-inside value supported on this object? It needs to
   // be contained by a fragmentation context that supports the specified value.
-  bool isBreakInsideControllable(EBreak) const;
+  bool isBreakInsideControllable(EBreakInside) const;
 
-  virtual EBreak breakAfter() const;
-  virtual EBreak breakBefore() const;
-  EBreak breakInside() const;
+  virtual EBreakBetween breakAfter() const;
+  virtual EBreakBetween breakBefore() const;
+  EBreakInside breakInside() const;
 
   // Join two adjacent break values specified on break-before and/or break-
   // after. avoid* values win over auto values, and forced break values win over
@@ -855,18 +854,19 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   // break-after values on last children to their container.
   //
   // [1] https://drafts.csswg.org/css-break/#possible-breaks
-  static EBreak joinFragmentainerBreakValues(EBreak firstValue,
-                                             EBreak secondValue);
+  static EBreakBetween joinFragmentainerBreakValues(EBreakBetween firstValue,
+                                                    EBreakBetween secondValue);
 
-  static bool isForcedFragmentainerBreakValue(EBreak);
+  static bool isForcedFragmentainerBreakValue(EBreakBetween);
 
-  EBreak classABreakPointValue(EBreak previousBreakAfterValue) const;
+  EBreakBetween classABreakPointValue(
+      EBreakBetween previousBreakAfterValue) const;
 
   // Return true if we should insert a break in front of this box. The box needs
   // to start at a valid class A break point in order to allow a forced break.
   // To determine whether or not to break, we also need to know the break-after
   // value of the previous in-flow sibling.
-  bool needsForcedBreakBefore(EBreak previousBreakAfterValue) const;
+  bool needsForcedBreakBefore(EBreakBetween previousBreakAfterValue) const;
 
   bool paintedOutputOfObjectHasNoEffectRegardlessOfSize() const override;
   LayoutRect localVisualRect() const override;
@@ -1000,13 +1000,14 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   virtual void stopAutoscroll() {}
 
   DISABLE_CFI_PERF bool hasAutoVerticalScrollbar() const {
-    return hasOverflowClip() && (style()->overflowY() == OverflowAuto ||
-                                 style()->overflowY() == OverflowPagedY ||
-                                 style()->overflowY() == OverflowOverlay);
+    return hasOverflowClip() &&
+           (style()->overflowY() == EOverflow::kAuto ||
+            style()->overflowY() == EOverflow::kWebkitPagedY ||
+            style()->overflowY() == EOverflow::kOverlay);
   }
   DISABLE_CFI_PERF bool hasAutoHorizontalScrollbar() const {
-    return hasOverflowClip() && (style()->overflowX() == OverflowAuto ||
-                                 style()->overflowX() == OverflowOverlay);
+    return hasOverflowClip() && (style()->overflowX() == EOverflow::kAuto ||
+                                 style()->overflowX() == EOverflow::kOverlay);
   }
   DISABLE_CFI_PERF bool scrollsOverflow() const {
     return scrollsOverflowX() || scrollsOverflowY();
@@ -1024,11 +1025,11 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
            pixelSnappedScrollHeight() != pixelSnappedClientHeight();
   }
   virtual bool scrollsOverflowX() const {
-    return hasOverflowClip() && (style()->overflowX() == OverflowScroll ||
+    return hasOverflowClip() && (style()->overflowX() == EOverflow::kScroll ||
                                  hasAutoHorizontalScrollbar());
   }
   virtual bool scrollsOverflowY() const {
-    return hasOverflowClip() && (style()->overflowY() == OverflowScroll ||
+    return hasOverflowClip() && (style()->overflowY() == EOverflow::kScroll ||
                                  hasAutoVerticalScrollbar());
   }
 
@@ -1057,14 +1058,16 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
       int caretOffset,
       LayoutUnit* extraWidthToEndOfLine = nullptr) override;
 
+  // Returns whether content which overflows should be clipped. This is not just
+  // because of overflow clip, but other types of clip as well, such as
+  // control clips or contain: paint.
+  virtual bool shouldClipOverflow() const;
+
+  // Returns the intersection of all overflow clips which apply.
   virtual LayoutRect overflowClipRect(
       const LayoutPoint& location,
       OverlayScrollbarClipBehavior = IgnoreOverlayScrollbarSize) const;
   LayoutRect clipRect(const LayoutPoint& location) const;
-  virtual bool hasControlClip() const { return false; }
-  virtual LayoutRect controlClipRect(const LayoutPoint&) const {
-    return LayoutRect();
-  }
 
   // Returns the combination of overflow clip, contain: paint clip and CSS clip
   // for this object, in local space.
@@ -1095,6 +1098,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   bool shrinkToAvoidFloats() const;
   virtual bool avoidsFloats() const;
+  bool shouldBeConsideredAsReplaced() const;
 
   void updateFragmentationInfoForChild(LayoutBox&);
   bool childNeedsRelayoutForPagination(const LayoutBox&) const;
@@ -1141,23 +1145,23 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   LayoutPoint flipForWritingModeForChild(const LayoutBox* child,
                                          const LayoutPoint&) const;
-  LayoutUnit flipForWritingMode(LayoutUnit position) const WARN_UNUSED_RETURN {
+  WARN_UNUSED_RESULT LayoutUnit flipForWritingMode(LayoutUnit position) const {
     // The offset is in the block direction (y for horizontal writing modes, x
     // for vertical writing modes).
     if (!UNLIKELY(hasFlippedBlocksWritingMode()))
       return position;
     return logicalHeight() - position;
   }
-  LayoutPoint flipForWritingMode(const LayoutPoint& position) const
-      WARN_UNUSED_RETURN {
+  WARN_UNUSED_RESULT LayoutPoint
+  flipForWritingMode(const LayoutPoint& position) const {
     if (!UNLIKELY(hasFlippedBlocksWritingMode()))
       return position;
     return isHorizontalWritingMode()
                ? LayoutPoint(position.x(), m_frameRect.height() - position.y())
                : LayoutPoint(m_frameRect.width() - position.x(), position.y());
   }
-  LayoutSize flipForWritingMode(const LayoutSize& offset) const
-      WARN_UNUSED_RETURN {
+  WARN_UNUSED_RESULT LayoutSize
+  flipForWritingMode(const LayoutSize& offset) const {
     if (!UNLIKELY(hasFlippedBlocksWritingMode()))
       return offset;
     return LayoutSize(m_frameRect.width() - offset.width(), offset.height());
@@ -1167,8 +1171,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
       return;
     rect.setX(m_frameRect.width() - rect.maxX());
   }
-  FloatPoint flipForWritingMode(const FloatPoint& position) const
-      WARN_UNUSED_RETURN {
+  WARN_UNUSED_RESULT FloatPoint
+  flipForWritingMode(const FloatPoint& position) const {
     if (!UNLIKELY(hasFlippedBlocksWritingMode()))
       return position;
     return FloatPoint(m_frameRect.width() - position.x(), position.y());
@@ -1178,14 +1182,13 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
       return;
     rect.setX(m_frameRect.width() - rect.maxX());
   }
-  // These represent your location relative to your container as a physical
-  // offset. In layout related methods you almost always want the logical
-  // location (e.g. x() and y()). Passing |container| causes flipped-block
-  // flipping w.r.t. that container, or containingBlock() otherwise.
-  LayoutPoint topLeftLocation(
+
+  // Passing |container| causes flipped-block flipping w.r.t. that container,
+  // or containingBlock() otherwise.
+  LayoutPoint physicalLocation(
       const LayoutBox* flippedBlocksContainer = nullptr) const;
-  LayoutSize topLeftLocationOffset() const {
-    return toLayoutSize(topLeftLocation());
+  LayoutSize physicalLocationOffset() const {
+    return toLayoutSize(physicalLocation());
   }
 
   LayoutRect logicalVisualOverflowRectForPropagation(
@@ -1243,7 +1246,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   virtual LayoutBox* createAnonymousBoxWithSameTypeAs(
       const LayoutObject*) const {
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return nullptr;
   }
 
@@ -1288,9 +1291,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   SnapAreaSet* snapAreas() const;
   void clearSnapAreas();
 
-  bool hitTestClippedOutByRoundedBorder(
-      const HitTestLocation& locationInContainer,
-      const LayoutPoint& borderBoxLocation) const;
+  bool hitTestClippedOutByBorder(const HitTestLocation& locationInContainer,
+                                 const LayoutPoint& borderBoxLocation) const;
 
   static bool mustInvalidateFillLayersPaintOnWidthChange(const FillLayer&);
   static bool mustInvalidateFillLayersPaintOnHeightChange(const FillLayer&);
@@ -1305,7 +1307,28 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   void ensureIsReadyForPaintInvalidation() override;
 
+  virtual bool hasControlClip() const { return false; }
+
+  class MutableForPainting : public LayoutObject::MutableForPainting {
+   public:
+    void setPreviousSize(const LayoutSize& size) {
+      static_cast<LayoutBox&>(m_layoutObject).m_previousSize = size;
+    }
+
+   protected:
+    friend class LayoutBox;
+    MutableForPainting(const LayoutBox& box)
+        : LayoutObject::MutableForPainting(box) {}
+  };
+  MutableForPainting getMutableForPainting() const {
+    return MutableForPainting(*this);
+  }
+
  protected:
+  virtual LayoutRect controlClipRect(const LayoutPoint&) const {
+    return LayoutRect();
+  }
+
   void willBeDestroyed() override;
 
   void insertedIntoTree() override;
@@ -1482,7 +1505,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   LayoutBoxRareData& ensureRareData() {
     if (!m_rareData)
-      m_rareData = makeUnique<LayoutBoxRareData>();
+      m_rareData = WTF::makeUnique<LayoutBoxRareData>();
     return *m_rareData.get();
   }
 
@@ -1491,28 +1514,14 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   bool isBox() const =
       delete;  // This will catch anyone doing an unnecessary check.
 
-  void frameRectChanged();
+  void locationChanged();
+  void sizeChanged();
 
   virtual bool isInSelfHitTestingPhase(HitTestAction hitTestAction) const {
     return hitTestAction == HitTestForeground;
   }
 
   void updateBackgroundAttachmentFixedStatusAfterStyleChange();
-
-  // The CSS border box rect for this box.
-  //
-  // The rectangle is in this box's physical coordinates but with a
-  // flipped block-flow direction (see the COORDINATE SYSTEMS section
-  // in LayoutBoxModelObject). The location is the distance from this
-  // object's border edge to the container's border edge (which is not
-  // always the parent). Thus it includes any logical top/left along
-  // with this box's margins.
-  LayoutRect m_frameRect;
-
-  // Our intrinsic height, used for min-height: min-content etc. Maintained by
-  // updateLogicalHeight. This is logicalHeight() before it is clamped to
-  // min/max.
-  mutable LayoutUnit m_intrinsicContentLogicalHeight;
 
   void inflateVisualRectForFilter(LayoutRect&) const;
   void inflateVisualRectForFilterUnderContainer(
@@ -1526,6 +1535,24 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   void removeSnapArea(const LayoutBox&);
 
   LayoutRect debugRect() const override;
+
+  // The CSS border box rect for this box.
+  //
+  // The rectangle is in this box's physical coordinates but with a
+  // flipped block-flow direction (see the COORDINATE SYSTEMS section
+  // in LayoutBoxModelObject). The location is the distance from this
+  // object's border edge to the container's border edge (which is not
+  // always the parent). Thus it includes any logical top/left along
+  // with this box's margins.
+  LayoutRect m_frameRect;
+
+  // Previous size of m_frameRect, updated after paint invalidation.
+  LayoutSize m_previousSize;
+
+  // Our intrinsic height, used for min-height: min-content etc. Maintained by
+  // updateLogicalHeight. This is logicalHeight() before it is clamped to
+  // min/max.
+  mutable LayoutUnit m_intrinsicContentLogicalHeight;
 
  protected:
   // The logical width of the element if it were to break its lines at every
@@ -1620,10 +1647,14 @@ inline void LayoutBox::setInlineBoxWrapper(InlineBox* boxWrapper) {
   m_inlineBoxWrapper = boxWrapper;
 }
 
-inline bool LayoutBox::isForcedFragmentainerBreakValue(EBreak breakValue) {
-  return breakValue == BreakColumn || breakValue == BreakLeft ||
-         breakValue == BreakPage || breakValue == BreakRecto ||
-         breakValue == BreakRight || breakValue == BreakVerso;
+inline bool LayoutBox::isForcedFragmentainerBreakValue(
+    EBreakBetween breakValue) {
+  return breakValue == EBreakBetween::kColumn ||
+         breakValue == EBreakBetween::kLeft ||
+         breakValue == EBreakBetween::kPage ||
+         breakValue == EBreakBetween::kRecto ||
+         breakValue == EBreakBetween::kRight ||
+         breakValue == EBreakBetween::kVerso;
 }
 
 }  // namespace blink

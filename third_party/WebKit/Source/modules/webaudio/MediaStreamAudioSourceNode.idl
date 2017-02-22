@@ -27,7 +27,8 @@
 [
     Constructor(BaseAudioContext context, MediaStreamAudioSourceOptions options),
     RaisesException=Constructor,
+    Measure
 ]
-interface MediaStreamAudioSourceNode : AudioSourceNode {
+interface MediaStreamAudioSourceNode : AudioNode {
     [ImplementedAs=getMediaStream] readonly attribute MediaStream mediaStream;
 };

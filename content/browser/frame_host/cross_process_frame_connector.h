@@ -20,6 +20,7 @@ class WebInputEvent;
 
 namespace cc {
 class SurfaceId;
+class SurfaceInfo;
 struct SurfaceSequence;
 }
 
@@ -85,9 +86,7 @@ class CONTENT_EXPORT CrossProcessFrameConnector {
 
   void RenderProcessGone();
 
-  virtual void SetChildFrameSurface(const cc::SurfaceId& surface_id,
-                                    const gfx::Size& frame_size,
-                                    float scale_factor,
+  virtual void SetChildFrameSurface(const cc::SurfaceInfo& surface_info,
                                     const cc::SurfaceSequence& sequence);
 
   gfx::Rect ChildFrameRect();
@@ -144,6 +143,7 @@ class CONTENT_EXPORT CrossProcessFrameConnector {
   // Handlers for messages received from the parent frame.
   void OnForwardInputEvent(const blink::WebInputEvent* event);
   void OnFrameRectChanged(const gfx::Rect& frame_rect);
+  void OnUpdateViewportIntersection(const gfx::Rect& viewport_intersection);
   void OnVisibilityChanged(bool visible);
   void OnSatisfySequence(const cc::SurfaceSequence& sequence);
   void OnRequireSequence(const cc::SurfaceId& id,

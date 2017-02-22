@@ -10,169 +10,169 @@
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/display/screen.h"
-#include "ui/display/test/test_screen.h"
+
+using IconPurpose = content::Manifest::Icon::IconPurpose;
 
 namespace {
-const int DEFAULT_PREFERRED_ICON_SIZE = 48;
+
+const int kIdealIconSize = 144;
+const int kMinimumIconSize = 0;
+
+static content::Manifest::Icon CreateIcon(const std::string& url,
+                                          const std::string& type,
+                                          const std::vector<gfx::Size> sizes,
+                                          IconPurpose purpose) {
+  content::Manifest::Icon icon;
+  icon.src = GURL(url);
+  icon.type = base::UTF8ToUTF16(type);
+  icon.sizes = sizes;
+  icon.purpose.push_back(purpose);
+
+  return icon;
 }
 
-class ManifestIconSelectorTest : public testing::Test  {
- protected:
-  ManifestIconSelectorTest() {
-    const display::Display test_display = test_screen_.GetPrimaryDisplay();
-    display::Display display(test_display);
-    display.set_id(0x1337);
-    display.set_bounds(gfx::Rect(0, 0, 2560, 1440));
-    test_screen_.display_list().RemoveDisplay(test_display.id());
-    test_screen_.display_list().AddDisplay(display,
-                                           display::DisplayList::Type::PRIMARY);
-    display::Screen::SetScreenInstance(&test_screen_);
-  }
+}  // anonymous namespace
 
-  ~ManifestIconSelectorTest() override {
-    display::Screen::SetScreenInstance(nullptr);
-  }
-
-  void SetUp() override {
-    SetPreferredIconSizeInDp(DEFAULT_PREFERRED_ICON_SIZE);
-  }
-
-  GURL FindBestMatchingIconWithMinimum(
-      const std::vector<content::Manifest::Icon>& icons,
-      int minimum_icon_size_in_dp) {
-    return ManifestIconSelector::FindBestMatchingIcon(
-        icons, GetPreferredIconSizeInDp(), minimum_icon_size_in_dp);
-  }
-
-  GURL FindBestMatchingIcon(const std::vector<content::Manifest::Icon>& icons) {
-    return FindBestMatchingIconWithMinimum(icons, 0);
-  }
-
-  void SetDisplayDeviceScaleFactor(float device_scale_factor) {
-    display::Display display(test_screen_.GetPrimaryDisplay());
-    display.set_device_scale_factor(device_scale_factor);
-    test_screen_.display_list().UpdateDisplay(display);
-  }
-
-  int GetPreferredIconSizeInDp() {
-    return preferred_icon_size_;
-  }
-
-  void SetPreferredIconSizeInDp(int new_size) {
-    preferred_icon_size_ = new_size;
-  }
-
-  static content::Manifest::Icon CreateIcon(
-      const std::string& url,
-      const std::string& type,
-      const std::vector<gfx::Size> sizes) {
-    content::Manifest::Icon icon;
-    icon.src = GURL(url);
-    icon.type = base::UTF8ToUTF16(type);
-    icon.sizes = sizes;
-
-    return icon;
-  }
-
- private:
-  display::test::TestScreen test_screen_;
-  int preferred_icon_size_ = DEFAULT_PREFERRED_ICON_SIZE;
-
-  DISALLOW_COPY_AND_ASSIGN(ManifestIconSelectorTest);
-};
-
-TEST_F(ManifestIconSelectorTest, NoIcons) {
+TEST(ManifestIconSelector, NoIcons) {
   // No icons should return the empty URL.
   std::vector<content::Manifest::Icon> icons;
-  GURL url = FindBestMatchingIcon(icons);
+  GURL url = ManifestIconSelector::FindBestMatchingIcon(
+      icons, kIdealIconSize, kMinimumIconSize, IconPurpose::ANY);
   EXPECT_TRUE(url.is_empty());
 }
 
-TEST_F(ManifestIconSelectorTest, NoSizes) {
+TEST(ManifestIconSelector, NoSizes) {
   // Icon with no sizes are ignored.
   std::vector<content::Manifest::Icon> icons;
-  icons.push_back(
-      CreateIcon("http://foo.com/icon.png", "", std::vector<gfx::Size>()));
+  icons.push_back(CreateIcon("http://foo.com/icon.png", "",
+                             std::vector<gfx::Size>(), IconPurpose::ANY));
 
-  GURL url = FindBestMatchingIcon(icons);
+  GURL url = ManifestIconSelector::FindBestMatchingIcon(
+      icons, kIdealIconSize, kMinimumIconSize, IconPurpose::ANY);
   EXPECT_TRUE(url.is_empty());
 }
 
-TEST_F(ManifestIconSelectorTest, MIMETypeFiltering) {
+TEST(ManifestIconSelector, MIMETypeFiltering) {
   // Icons with type specified to a MIME type that isn't a valid image MIME type
   // are ignored.
   std::vector<gfx::Size> sizes;
   sizes.push_back(gfx::Size(1024, 1024));
 
   std::vector<content::Manifest::Icon> icons;
+  icons.push_back(CreateIcon("http://foo.com/icon.png", "image/foo_bar", sizes,
+                             IconPurpose::ANY));
   icons.push_back(
-      CreateIcon("http://foo.com/icon.png", "image/foo_bar", sizes));
-  icons.push_back(CreateIcon("http://foo.com/icon.png", "image/", sizes));
-  icons.push_back(CreateIcon("http://foo.com/icon.png", "image/", sizes));
-  icons.push_back(CreateIcon("http://foo.com/icon.png", "video/mp4", sizes));
+      CreateIcon("http://foo.com/icon.png", "image/", sizes, IconPurpose::ANY));
+  icons.push_back(
+      CreateIcon("http://foo.com/icon.png", "image/", sizes, IconPurpose::ANY));
+  icons.push_back(CreateIcon("http://foo.com/icon.png", "video/mp4", sizes,
+                             IconPurpose::ANY));
 
-  GURL url = FindBestMatchingIcon(icons);
+  GURL url = ManifestIconSelector::FindBestMatchingIcon(
+      icons, kIdealIconSize, kMinimumIconSize, IconPurpose::ANY);
   EXPECT_TRUE(url.is_empty());
 
   icons.clear();
-  icons.push_back(CreateIcon("http://foo.com/icon.png", "image/png", sizes));
-  url = FindBestMatchingIcon(icons);
+  icons.push_back(CreateIcon("http://foo.com/icon.png", "image/png", sizes,
+                             IconPurpose::ANY));
+  url = ManifestIconSelector::FindBestMatchingIcon(
+      icons, kIdealIconSize, kMinimumIconSize, IconPurpose::ANY);
   EXPECT_EQ("http://foo.com/icon.png", url.spec());
 
   icons.clear();
-  icons.push_back(CreateIcon("http://foo.com/icon.png", "image/gif", sizes));
-  url = FindBestMatchingIcon(icons);
+  icons.push_back(CreateIcon("http://foo.com/icon.png", "image/gif", sizes,
+                             IconPurpose::ANY));
+  url = ManifestIconSelector::FindBestMatchingIcon(
+      icons, kIdealIconSize, kMinimumIconSize, IconPurpose::ANY);
   EXPECT_EQ("http://foo.com/icon.png", url.spec());
 
   icons.clear();
-  icons.push_back(CreateIcon("http://foo.com/icon.png", "image/jpeg", sizes));
-  url = FindBestMatchingIcon(icons);
+  icons.push_back(CreateIcon("http://foo.com/icon.png", "image/jpeg", sizes,
+                             IconPurpose::ANY));
+  url = ManifestIconSelector::FindBestMatchingIcon(
+      icons, kIdealIconSize, kMinimumIconSize, IconPurpose::ANY);
   EXPECT_EQ("http://foo.com/icon.png", url.spec());
 }
 
-TEST_F(ManifestIconSelectorTest, PreferredSizeIsUsedFirst) {
-  // Each icon is marked with sizes that match the preferred icon size.
-  std::vector<gfx::Size> sizes_1;
-  sizes_1.push_back(gfx::Size(GetPreferredIconSizeInDp(),
-                              GetPreferredIconSizeInDp()));
+TEST(ManifestIconSelector, PurposeFiltering) {
+  // Icons with purpose specified to non-matching purpose are ignored.
+  std::vector<gfx::Size> sizes_48;
+  sizes_48.push_back(gfx::Size(48, 48));
 
-  std::vector<gfx::Size> sizes_2;
-  sizes_2.push_back(gfx::Size(GetPreferredIconSizeInDp() * 2,
-                              GetPreferredIconSizeInDp() * 2));
+  std::vector<gfx::Size> sizes_96;
+  sizes_96.push_back(gfx::Size(96, 96));
 
-  std::vector<gfx::Size> sizes_3;
-  sizes_3.push_back(gfx::Size(GetPreferredIconSizeInDp() * 3,
-                              GetPreferredIconSizeInDp() * 3));
+  std::vector<gfx::Size> sizes_144;
+  sizes_144.push_back(gfx::Size(144, 144));
 
   std::vector<content::Manifest::Icon> icons;
-  icons.push_back(CreateIcon("http://foo.com/icon_x1.png", "", sizes_1));
-  icons.push_back(CreateIcon("http://foo.com/icon_x2.png", "", sizes_2));
-  icons.push_back(CreateIcon("http://foo.com/icon_x3.png", "", sizes_3));
+  icons.push_back(
+      CreateIcon("http://foo.com/icon_48.png", "", sizes_48, IconPurpose::BADGE));
+  icons.push_back(
+      CreateIcon("http://foo.com/icon_96.png", "", sizes_96, IconPurpose::ANY));
+  icons.push_back(CreateIcon("http://foo.com/icon_144.png", "", sizes_144,
+                             IconPurpose::ANY));
 
-  SetDisplayDeviceScaleFactor(1.0f);
-  GURL url = FindBestMatchingIcon(icons);
-  EXPECT_EQ("http://foo.com/icon_x1.png", url.spec());
+  GURL url = ManifestIconSelector::FindBestMatchingIcon(
+      icons, 48, kMinimumIconSize, IconPurpose::BADGE);
+  EXPECT_EQ("http://foo.com/icon_48.png", url.spec());
 
-  SetDisplayDeviceScaleFactor(2.0f);
-  url = FindBestMatchingIcon(icons);
-  EXPECT_EQ("http://foo.com/icon_x2.png", url.spec());
+  url = ManifestIconSelector::FindBestMatchingIcon(
+      icons, 48, kMinimumIconSize, IconPurpose::ANY);
+  EXPECT_EQ("http://foo.com/icon_96.png", url.spec());
 
-  SetDisplayDeviceScaleFactor(3.0f);
-  url = FindBestMatchingIcon(icons);
-  EXPECT_EQ("http://foo.com/icon_x3.png", url.spec());
+  url = ManifestIconSelector::FindBestMatchingIcon(icons, 96, kMinimumIconSize,
+                                                   IconPurpose::BADGE);
+  EXPECT_EQ("http://foo.com/icon_48.png", url.spec());
+
+  url = ManifestIconSelector::FindBestMatchingIcon(icons, 96, 96,
+                                                   IconPurpose::BADGE);
+  EXPECT_TRUE(url.is_empty());
+
+  url = ManifestIconSelector::FindBestMatchingIcon(icons, 144, kMinimumIconSize,
+                                                   IconPurpose::ANY);
+  EXPECT_EQ("http://foo.com/icon_144.png", url.spec());
 }
 
-TEST_F(ManifestIconSelectorTest, FirstIconWithPreferredSizeIsUsedFirst) {
+TEST(ManifestIconSelector, IdealSizeIsUsedFirst) {
+  // Each icon is marked with sizes that match the ideal icon size.
+  std::vector<gfx::Size> sizes_48;
+  sizes_48.push_back(gfx::Size(48, 48));
+
+  std::vector<gfx::Size> sizes_96;
+  sizes_96.push_back(gfx::Size(96, 96));
+
+  std::vector<gfx::Size> sizes_144;
+  sizes_144.push_back(gfx::Size(144, 144));
+
+  std::vector<content::Manifest::Icon> icons;
+  icons.push_back(
+      CreateIcon("http://foo.com/icon_48.png", "", sizes_48, IconPurpose::ANY));
+  icons.push_back(
+      CreateIcon("http://foo.com/icon_96.png", "", sizes_96, IconPurpose::ANY));
+  icons.push_back(CreateIcon("http://foo.com/icon_144.png", "", sizes_144,
+                             IconPurpose::ANY));
+
+  GURL url = ManifestIconSelector::FindBestMatchingIcon(
+      icons, 48, kMinimumIconSize, IconPurpose::ANY);
+  EXPECT_EQ("http://foo.com/icon_48.png", url.spec());
+
+  url = ManifestIconSelector::FindBestMatchingIcon(icons, 96, kMinimumIconSize,
+                                                   IconPurpose::ANY);
+  EXPECT_EQ("http://foo.com/icon_96.png", url.spec());
+
+  url = ManifestIconSelector::FindBestMatchingIcon(icons, 144, kMinimumIconSize,
+                                                   IconPurpose::ANY);
+  EXPECT_EQ("http://foo.com/icon_144.png", url.spec());
+}
+
+TEST(ManifestIconSelector, FirstIconWithIdealSizeIsUsedFirst) {
   // This test has three icons. The first icon is going to be used because it
-  // has sizes which matches the preferred size for each device scale factor.
+  // contains the ideal size.
   std::vector<gfx::Size> sizes_1;
-  sizes_1.push_back(gfx::Size(GetPreferredIconSizeInDp(),
-                              GetPreferredIconSizeInDp()));
-  sizes_1.push_back(gfx::Size(GetPreferredIconSizeInDp() * 2,
-                              GetPreferredIconSizeInDp() * 2));
-  sizes_1.push_back(gfx::Size(GetPreferredIconSizeInDp() * 3,
-                              GetPreferredIconSizeInDp() * 3));
+  sizes_1.push_back(gfx::Size(kIdealIconSize, kIdealIconSize));
+  sizes_1.push_back(gfx::Size(kIdealIconSize * 2, kIdealIconSize * 2));
+  sizes_1.push_back(gfx::Size(kIdealIconSize * 3, kIdealIconSize * 3));
 
   std::vector<gfx::Size> sizes_2;
   sizes_2.push_back(gfx::Size(1024, 1024));
@@ -181,24 +181,27 @@ TEST_F(ManifestIconSelectorTest, FirstIconWithPreferredSizeIsUsedFirst) {
   sizes_3.push_back(gfx::Size(1024, 1024));
 
   std::vector<content::Manifest::Icon> icons;
-  icons.push_back(CreateIcon("http://foo.com/icon_x1.png", "", sizes_1));
-  icons.push_back(CreateIcon("http://foo.com/icon_x2.png", "", sizes_2));
-  icons.push_back(CreateIcon("http://foo.com/icon_x3.png", "", sizes_3));
+  icons.push_back(
+      CreateIcon("http://foo.com/icon_x1.png", "", sizes_1, IconPurpose::ANY));
+  icons.push_back(
+      CreateIcon("http://foo.com/icon_x2.png", "", sizes_2, IconPurpose::ANY));
+  icons.push_back(
+      CreateIcon("http://foo.com/icon_x3.png", "", sizes_3, IconPurpose::ANY));
 
-  SetDisplayDeviceScaleFactor(1.0f);
-  GURL url = FindBestMatchingIcon(icons);
+  GURL url = ManifestIconSelector::FindBestMatchingIcon(
+      icons, kIdealIconSize, kMinimumIconSize, IconPurpose::ANY);
   EXPECT_EQ("http://foo.com/icon_x1.png", url.spec());
 
-  SetDisplayDeviceScaleFactor(2.0f);
-  url = FindBestMatchingIcon(icons);
+  url = ManifestIconSelector::FindBestMatchingIcon(
+      icons, kIdealIconSize * 2, kMinimumIconSize, IconPurpose::ANY);
   EXPECT_EQ("http://foo.com/icon_x1.png", url.spec());
 
-  SetDisplayDeviceScaleFactor(3.0f);
-  url = FindBestMatchingIcon(icons);
+  url = ManifestIconSelector::FindBestMatchingIcon(
+      icons, kIdealIconSize * 3, kMinimumIconSize, IconPurpose::ANY);
   EXPECT_EQ("http://foo.com/icon_x1.png", url.spec());
 }
 
-TEST_F(ManifestIconSelectorTest, UseDeviceDensity) {
+TEST(ManifestIconSelector, FallbackToSmallestLargerIcon) {
   // If there is no perfect icon, the smallest larger icon will be chosen.
   std::vector<gfx::Size> sizes_1;
   sizes_1.push_back(gfx::Size(90, 90));
@@ -209,26 +212,28 @@ TEST_F(ManifestIconSelectorTest, UseDeviceDensity) {
   std::vector<gfx::Size> sizes_3;
   sizes_3.push_back(gfx::Size(192, 192));
 
-
   std::vector<content::Manifest::Icon> icons;
-  icons.push_back(CreateIcon("http://foo.com/icon_x1.png", "", sizes_1));
-  icons.push_back(CreateIcon("http://foo.com/icon_x2.png", "", sizes_2));
-  icons.push_back(CreateIcon("http://foo.com/icon_x3.png", "", sizes_3));
+  icons.push_back(
+      CreateIcon("http://foo.com/icon_x1.png", "", sizes_1, IconPurpose::ANY));
+  icons.push_back(
+      CreateIcon("http://foo.com/icon_x2.png", "", sizes_2, IconPurpose::ANY));
+  icons.push_back(
+      CreateIcon("http://foo.com/icon_x3.png", "", sizes_3, IconPurpose::ANY));
 
-  SetDisplayDeviceScaleFactor(1.0f);
-  GURL url = FindBestMatchingIcon(icons);
+  GURL url = ManifestIconSelector::FindBestMatchingIcon(
+      icons, 48, kMinimumIconSize, IconPurpose::ANY);
   EXPECT_EQ("http://foo.com/icon_x1.png", url.spec());
 
-  SetDisplayDeviceScaleFactor(2.0f);
-  url = FindBestMatchingIcon(icons);
+  url = ManifestIconSelector::FindBestMatchingIcon(icons, 96, kMinimumIconSize,
+                                                   IconPurpose::ANY);
   EXPECT_EQ("http://foo.com/icon_x2.png", url.spec());
 
-  SetDisplayDeviceScaleFactor(3.0f);
-  url = FindBestMatchingIcon(icons);
+  url = ManifestIconSelector::FindBestMatchingIcon(icons, 144, kMinimumIconSize,
+                                                   IconPurpose::ANY);
   EXPECT_EQ("http://foo.com/icon_x3.png", url.spec());
 }
 
-TEST_F(ManifestIconSelectorTest, CheckDifferentDeviceScaleFactors) {
+TEST(ManifestIconSelector, FallbackToLargestIconLargerThanMinimum) {
   // When an icon of the correct size has not been found, we fall back to the
   // closest non-matching sizes. Make sure that the minimum passed is enforced.
   std::vector<gfx::Size> sizes_1_2;
@@ -237,80 +242,74 @@ TEST_F(ManifestIconSelectorTest, CheckDifferentDeviceScaleFactors) {
   sizes_1_2.push_back(gfx::Size(47, 47));
   sizes_3.push_back(gfx::Size(95, 95));
 
-  // Set to a value which will not affect the calculations.
-  SetPreferredIconSizeInDp(1024);
-
   std::vector<content::Manifest::Icon> icons;
-  icons.push_back(CreateIcon("http://foo.com/icon_x1.png", "", sizes_1_2));
-  icons.push_back(CreateIcon("http://foo.com/icon_x2.png", "", sizes_1_2));
-  icons.push_back(CreateIcon("http://foo.com/icon_x3.png", "", sizes_3));
+  icons.push_back(CreateIcon("http://foo.com/icon_x1.png", "", sizes_1_2,
+                             IconPurpose::ANY));
+  icons.push_back(CreateIcon("http://foo.com/icon_x2.png", "", sizes_1_2,
+                             IconPurpose::ANY));
+  icons.push_back(
+      CreateIcon("http://foo.com/icon_x3.png", "", sizes_3, IconPurpose::ANY));
 
   // Icon 3 should match.
-  SetDisplayDeviceScaleFactor(1.0f);
-  GURL url = FindBestMatchingIconWithMinimum(icons, 48);
+  GURL url = ManifestIconSelector::FindBestMatchingIcon(icons, 1024, 48,
+                                                        IconPurpose::ANY);
   EXPECT_EQ("http://foo.com/icon_x3.png", url.spec());
 
-  // Nothing matches here because the minimum is 48 and all icon sizes are now
-  // too small.
-  SetDisplayDeviceScaleFactor(2.0f);
-  url = FindBestMatchingIconWithMinimum(icons, 48);
-  EXPECT_TRUE(url.is_empty());
-
   // Nothing matches here as the minimum is 96.
-  SetDisplayDeviceScaleFactor(3.0f);
-  url = FindBestMatchingIconWithMinimum(icons, 96);
+  url = ManifestIconSelector::FindBestMatchingIcon(icons, 1024, 96,
+                                                   IconPurpose::ANY);
   EXPECT_TRUE(url.is_empty());
 }
 
-TEST_F(ManifestIconSelectorTest, IdealVeryCloseToMinimumMatches) {
-  std::vector<gfx::Size> sizes;
-  sizes.push_back(gfx::Size(2, 2));
-  SetPreferredIconSizeInDp(2);
-
-  std::vector<content::Manifest::Icon> icons;
-  icons.push_back(CreateIcon("http://foo.com/icon_x1.png", "", sizes));
-
-  SetDisplayDeviceScaleFactor(1.0f);
-  GURL url = FindBestMatchingIconWithMinimum(icons, 1);
-  EXPECT_EQ("http://foo.com/icon_x1.png", url.spec());
-}
-
-TEST_F(ManifestIconSelectorTest, SizeVeryCloseToMinimumMatches) {
+TEST(ManifestIconSelector, IdealVeryCloseToMinimumMatches) {
   std::vector<gfx::Size> sizes;
   sizes.push_back(gfx::Size(2, 2));
 
-  SetPreferredIconSizeInDp(200);
-
   std::vector<content::Manifest::Icon> icons;
-  icons.push_back(CreateIcon("http://foo.com/icon_x1.png", "", sizes));
+  icons.push_back(
+      CreateIcon("http://foo.com/icon_x1.png", "", sizes, IconPurpose::ANY));
 
-  SetDisplayDeviceScaleFactor(1.0f);
-  GURL url = FindBestMatchingIconWithMinimum(icons, 1);
+  GURL url =
+      ManifestIconSelector::FindBestMatchingIcon(icons, 2, 1, IconPurpose::ANY);
   EXPECT_EQ("http://foo.com/icon_x1.png", url.spec());
 }
 
-TEST_F(ManifestIconSelectorTest, NotSquareIconsAreIgnored) {
+TEST(ManifestIconSelector, SizeVeryCloseToMinimumMatches) {
+  std::vector<gfx::Size> sizes;
+  sizes.push_back(gfx::Size(2, 2));
+
+  std::vector<content::Manifest::Icon> icons;
+  icons.push_back(
+      CreateIcon("http://foo.com/icon_x1.png", "", sizes, IconPurpose::ANY));
+
+  GURL url = ManifestIconSelector::FindBestMatchingIcon(icons, 200, 1,
+                                                        IconPurpose::ANY);
+  EXPECT_EQ("http://foo.com/icon_x1.png", url.spec());
+}
+
+TEST(ManifestIconSelector, NotSquareIconsAreIgnored) {
   std::vector<gfx::Size> sizes;
   sizes.push_back(gfx::Size(1024, 1023));
 
   std::vector<content::Manifest::Icon> icons;
-  icons.push_back(CreateIcon("http://foo.com/icon.png", "", sizes));
+  icons.push_back(
+      CreateIcon("http://foo.com/icon.png", "", sizes, IconPurpose::ANY));
 
-  GURL url = FindBestMatchingIcon(icons);
+  GURL url = ManifestIconSelector::FindBestMatchingIcon(
+      icons, kIdealIconSize, kMinimumIconSize, IconPurpose::ANY);
   EXPECT_TRUE(url.is_empty());
 }
 
-TEST_F(ManifestIconSelectorTest, ClosestIconToPreferred) {
+TEST(ManifestIconSelector, ClosestIconToIdeal) {
   // Ensure ManifestIconSelector::FindBestMatchingIcon selects the closest icon
-  // to the preferred size when presented with a number of options.
-  int very_small = GetPreferredIconSizeInDp() / 4;
-  int small_size = GetPreferredIconSizeInDp() / 2;
-  int bit_small = GetPreferredIconSizeInDp() - 1;
-  int bit_big = GetPreferredIconSizeInDp() + 1;
-  int big = GetPreferredIconSizeInDp() * 2;
-  int very_big = GetPreferredIconSizeInDp() * 4;
+  // to the ideal size when presented with a number of options.
+  int very_small = kIdealIconSize / 4;
+  int small_size = kIdealIconSize / 2;
+  int bit_small = kIdealIconSize - 1;
+  int bit_big = kIdealIconSize + 1;
+  int big = kIdealIconSize * 2;
+  int very_big = kIdealIconSize * 4;
 
-  SetDisplayDeviceScaleFactor(1.0f);
   // (very_small, bit_small) => bit_small
   {
     std::vector<gfx::Size> sizes_1;
@@ -320,10 +319,13 @@ TEST_F(ManifestIconSelectorTest, ClosestIconToPreferred) {
     sizes_2.push_back(gfx::Size(bit_small, bit_small));
 
     std::vector<content::Manifest::Icon> icons;
-    icons.push_back(CreateIcon("http://foo.com/icon_no.png", "", sizes_1));
-    icons.push_back(CreateIcon("http://foo.com/icon.png", "", sizes_2));
+    icons.push_back(CreateIcon("http://foo.com/icon_no.png", "", sizes_1,
+                               IconPurpose::ANY));
+    icons.push_back(
+        CreateIcon("http://foo.com/icon.png", "", sizes_2, IconPurpose::ANY));
 
-    GURL url = FindBestMatchingIcon(icons);
+    GURL url = ManifestIconSelector::FindBestMatchingIcon(
+        icons, kIdealIconSize, kMinimumIconSize, IconPurpose::ANY);
     EXPECT_EQ("http://foo.com/icon.png", url.spec());
   }
 
@@ -339,11 +341,15 @@ TEST_F(ManifestIconSelectorTest, ClosestIconToPreferred) {
     sizes_3.push_back(gfx::Size(small_size, small_size));
 
     std::vector<content::Manifest::Icon> icons;
-    icons.push_back(CreateIcon("http://foo.com/icon_no_1.png", "", sizes_1));
-    icons.push_back(CreateIcon("http://foo.com/icon.png", "", sizes_2));
-    icons.push_back(CreateIcon("http://foo.com/icon_no_2.png", "", sizes_3));
+    icons.push_back(CreateIcon("http://foo.com/icon_no_1.png", "", sizes_1,
+                               IconPurpose::ANY));
+    icons.push_back(
+        CreateIcon("http://foo.com/icon.png", "", sizes_2, IconPurpose::ANY));
+    icons.push_back(CreateIcon("http://foo.com/icon_no_2.png", "", sizes_3,
+                               IconPurpose::ANY));
 
-    GURL url = FindBestMatchingIcon(icons);
+    GURL url = ManifestIconSelector::FindBestMatchingIcon(
+        icons, kIdealIconSize, kMinimumIconSize, IconPurpose::ANY);
     EXPECT_EQ("http://foo.com/icon.png", url.spec());
   }
 
@@ -356,10 +362,13 @@ TEST_F(ManifestIconSelectorTest, ClosestIconToPreferred) {
     sizes_2.push_back(gfx::Size(big, big));
 
     std::vector<content::Manifest::Icon> icons;
-    icons.push_back(CreateIcon("http://foo.com/icon_no.png", "", sizes_1));
-    icons.push_back(CreateIcon("http://foo.com/icon.png", "", sizes_2));
+    icons.push_back(CreateIcon("http://foo.com/icon_no.png", "", sizes_1,
+                               IconPurpose::ANY));
+    icons.push_back(
+        CreateIcon("http://foo.com/icon.png", "", sizes_2, IconPurpose::ANY));
 
-    GURL url = FindBestMatchingIcon(icons);
+    GURL url = ManifestIconSelector::FindBestMatchingIcon(
+        icons, kIdealIconSize, kMinimumIconSize, IconPurpose::ANY);
     EXPECT_EQ("http://foo.com/icon.png", url.spec());
   }
 
@@ -375,11 +384,15 @@ TEST_F(ManifestIconSelectorTest, ClosestIconToPreferred) {
     sizes_3.push_back(gfx::Size(bit_big, bit_big));
 
     std::vector<content::Manifest::Icon> icons;
-    icons.push_back(CreateIcon("http://foo.com/icon_no.png", "", sizes_1));
-    icons.push_back(CreateIcon("http://foo.com/icon_no.png", "", sizes_2));
-    icons.push_back(CreateIcon("http://foo.com/icon.png", "", sizes_3));
+    icons.push_back(CreateIcon("http://foo.com/icon_no.png", "", sizes_1,
+                               IconPurpose::ANY));
+    icons.push_back(CreateIcon("http://foo.com/icon_no.png", "", sizes_2,
+                               IconPurpose::ANY));
+    icons.push_back(
+        CreateIcon("http://foo.com/icon.png", "", sizes_3, IconPurpose::ANY));
 
-    GURL url = FindBestMatchingIcon(icons);
+    GURL url = ManifestIconSelector::FindBestMatchingIcon(
+        icons, kIdealIconSize, kMinimumIconSize, IconPurpose::ANY);
     EXPECT_EQ("http://foo.com/icon.png", url.spec());
   }
 
@@ -392,10 +405,13 @@ TEST_F(ManifestIconSelectorTest, ClosestIconToPreferred) {
     sizes_2.push_back(gfx::Size(very_big, very_big));
 
     std::vector<content::Manifest::Icon> icons;
-    icons.push_back(CreateIcon("http://foo.com/icon_no.png", "", sizes_1));
-    icons.push_back(CreateIcon("http://foo.com/icon.png", "", sizes_2));
+    icons.push_back(CreateIcon("http://foo.com/icon_no.png", "", sizes_1,
+                               IconPurpose::ANY));
+    icons.push_back(
+        CreateIcon("http://foo.com/icon.png", "", sizes_2, IconPurpose::ANY));
 
-    GURL url = FindBestMatchingIcon(icons);
+    GURL url = ManifestIconSelector::FindBestMatchingIcon(
+        icons, kIdealIconSize, kMinimumIconSize, IconPurpose::ANY);
     EXPECT_EQ("http://foo.com/icon.png", url.spec());
   }
 
@@ -408,48 +424,54 @@ TEST_F(ManifestIconSelectorTest, ClosestIconToPreferred) {
     sizes_2.push_back(gfx::Size(bit_big, bit_big));
 
     std::vector<content::Manifest::Icon> icons;
-    icons.push_back(CreateIcon("http://foo.com/icon_no.png", "", sizes_1));
-    icons.push_back(CreateIcon("http://foo.com/icon.png", "", sizes_2));
+    icons.push_back(CreateIcon("http://foo.com/icon_no.png", "", sizes_1,
+                               IconPurpose::ANY));
+    icons.push_back(
+        CreateIcon("http://foo.com/icon.png", "", sizes_2, IconPurpose::ANY));
 
-    GURL url = FindBestMatchingIcon(icons);
+    GURL url = ManifestIconSelector::FindBestMatchingIcon(
+        icons, kIdealIconSize, kMinimumIconSize, IconPurpose::ANY);
     EXPECT_EQ("http://foo.com/icon.png", url.spec());
   }
 }
 
-TEST_F(ManifestIconSelectorTest, UseAnyIfNoPreferredSize) {
+TEST(ManifestIconSelector, UseAnyIfNoIdealSize) {
   // 'any' (ie. gfx::Size(0,0)) should be used if there is no icon of a
-  // preferred size. An icon with the current device scale factor is preferred
-  // over one with the default density.
+  // ideal size.
 
-  // Icon with 'any' and icon with preferred size => preferred size is chosen.
+  // Icon with 'any' and icon with ideal size => ideal size is chosen.
   {
     std::vector<gfx::Size> sizes_1;
-    sizes_1.push_back(gfx::Size(GetPreferredIconSizeInDp(),
-                                GetPreferredIconSizeInDp()));
+    sizes_1.push_back(gfx::Size(kIdealIconSize, kIdealIconSize));
     std::vector<gfx::Size> sizes_2;
     sizes_2.push_back(gfx::Size(0, 0));
 
     std::vector<content::Manifest::Icon> icons;
-    icons.push_back(CreateIcon("http://foo.com/icon.png", "", sizes_1));
-    icons.push_back(CreateIcon("http://foo.com/icon_no.png", "", sizes_2));
+    icons.push_back(
+        CreateIcon("http://foo.com/icon.png", "", sizes_1, IconPurpose::ANY));
+    icons.push_back(CreateIcon("http://foo.com/icon_no.png", "", sizes_2,
+                               IconPurpose::ANY));
 
-    GURL url = FindBestMatchingIcon(icons);
+    GURL url = ManifestIconSelector::FindBestMatchingIcon(
+        icons, kIdealIconSize, kMinimumIconSize, IconPurpose::ANY);
     EXPECT_EQ("http://foo.com/icon.png", url.spec());
   }
 
-  // Icon with 'any' and icon larger than preferred size => any is chosen.
+  // Icon with 'any' and icon larger than ideal size => any is chosen.
   {
     std::vector<gfx::Size> sizes_1;
-    sizes_1.push_back(gfx::Size(GetPreferredIconSizeInDp() + 1,
-                                GetPreferredIconSizeInDp() + 1));
+    sizes_1.push_back(gfx::Size(kIdealIconSize + 1, kIdealIconSize + 1));
     std::vector<gfx::Size> sizes_2;
     sizes_2.push_back(gfx::Size(0, 0));
 
     std::vector<content::Manifest::Icon> icons;
-    icons.push_back(CreateIcon("http://foo.com/icon_no.png", "", sizes_1));
-    icons.push_back(CreateIcon("http://foo.com/icon.png", "", sizes_2));
+    icons.push_back(CreateIcon("http://foo.com/icon_no.png", "", sizes_1,
+                               IconPurpose::ANY));
+    icons.push_back(
+        CreateIcon("http://foo.com/icon.png", "", sizes_2, IconPurpose::ANY));
 
-    GURL url = FindBestMatchingIcon(icons);
+    GURL url = ManifestIconSelector::FindBestMatchingIcon(
+        icons, kIdealIconSize, kMinimumIconSize, IconPurpose::ANY);
     EXPECT_EQ("http://foo.com/icon.png", url.spec());
   }
 
@@ -459,12 +481,15 @@ TEST_F(ManifestIconSelectorTest, UseAnyIfNoPreferredSize) {
     sizes.push_back(gfx::Size(0, 0));
 
     std::vector<content::Manifest::Icon> icons;
-    icons.push_back(CreateIcon("http://foo.com/icon_no1.png", "", sizes));
-    icons.push_back(CreateIcon("http://foo.com/icon_no2.png", "", sizes));
-    icons.push_back(CreateIcon("http://foo.com/icon.png", "", sizes));
+    icons.push_back(
+        CreateIcon("http://foo.com/icon_no1.png", "", sizes, IconPurpose::ANY));
+    icons.push_back(
+        CreateIcon("http://foo.com/icon_no2.png", "", sizes, IconPurpose::ANY));
+    icons.push_back(
+        CreateIcon("http://foo.com/icon.png", "", sizes, IconPurpose::ANY));
 
-    SetDisplayDeviceScaleFactor(3.0f);
-    GURL url = FindBestMatchingIcon(icons);
+    GURL url = ManifestIconSelector::FindBestMatchingIcon(
+        icons, kIdealIconSize * 3, kMinimumIconSize, IconPurpose::ANY);
     EXPECT_EQ("http://foo.com/icon.png", url.spec());
   }
 }

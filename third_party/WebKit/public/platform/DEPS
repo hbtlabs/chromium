@@ -3,6 +3,7 @@ include_rules = [
     "+base/location.h",
     "+base/logging.h",
     "+base/metrics",
+    "+base/strings",
     "+base/trace_event",
     "-bindings",
     "+cc",
@@ -18,7 +19,9 @@ include_rules = [
     "+platform/weborigin",
     "+public/platform",
     "-public/web",
+    "+services/service_manager/public/interfaces",
     "+third_party/skia",
+    "+ui/gfx",
     "+url",
     "-web",
 ]

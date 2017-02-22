@@ -12,6 +12,8 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -21,12 +23,14 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/browser_window_state.h"
+#include "chrome/browser/ui/views/harmony/harmony_layout_delegate.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/context_factory.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/display/display.h"
@@ -40,7 +44,6 @@
 #include <dwmapi.h>
 #include <shellapi.h>
 #include "base/profiler/scoped_tracker.h"
-#include "base/task_runner_util.h"
 #include "base/win/windows_version.h"
 #include "chrome/browser/win/app_icon.h"
 #include "ui/base/win/shell.h"
@@ -48,6 +51,7 @@
 
 #if defined(USE_AURA)
 #include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
+#include "chrome/browser/ui/views/theme_profile_key.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #endif
@@ -97,14 +101,14 @@ PrefService* GetPrefsForWindow(const views::Widget* window) {
 }
 
 #if defined(OS_WIN)
-bool MonitorHasTopmostAutohideTaskbarForEdge(UINT edge, HMONITOR monitor) {
+bool MonitorHasAutohideTaskbarForEdge(UINT edge, HMONITOR monitor) {
   APPBARDATA taskbar_data = { sizeof(APPBARDATA), NULL, 0, edge };
   taskbar_data.hWnd = ::GetForegroundWindow();
 
   // TODO(robliao): Remove ScopedTracker below once crbug.com/462368 is fixed.
   tracked_objects::ScopedTracker tracking_profile(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "462368 MonitorHasTopmostAutohideTaskbarForEdge"));
+          "462368 MonitorHasAutohideTaskbarForEdge"));
 
   // MSDN documents an ABM_GETAUTOHIDEBAREX, which supposedly takes a monitor
   // rect and returns autohide bars on that monitor.  This sounds like a good
@@ -137,8 +141,25 @@ bool MonitorHasTopmostAutohideTaskbarForEdge(UINT edge, HMONITOR monitor) {
       taskbar = taskbar_data.hWnd;
   }
 
-  if (::IsWindow(taskbar) &&
-      (GetWindowLong(taskbar, GWL_EXSTYLE) & WS_EX_TOPMOST)) {
+  // There is a potential race condition here:
+  // 1. A maximized chrome window is fullscreened.
+  // 2. It is switched back to maximized.
+  // 3. In the process the window gets a WM_NCCACLSIZE message which calls us to
+  //    get the autohide state.
+  // 4. The worker thread is invoked. It calls the API to get the autohide
+  //    state. On Windows versions  earlier than Windows 7, taskbars could
+  //    easily be always on top or not.
+  //    This meant that we only want to look for taskbars which have the topmost
+  //    bit set.  However this causes problems in cases where the window on the
+  //    main thread is still in the process of switching away from fullscreen.
+  //    In this case the taskbar might not yet have the topmost bit set.
+  // 5. The main thread resumes and does not leave space for the taskbar and
+  //    hence it does not pop when hovered.
+  //
+  // To address point 4 above, it is best to not check for the WS_EX_TOPMOST
+  // window style on the taskbar, as starting from Windows 7, the topmost
+  // style is always set. We don't support XP and Vista anymore.
+  if (::IsWindow(taskbar)) {
     if (MonitorFromWindow(taskbar, MONITOR_DEFAULTTONEAREST) == monitor)
       return true;
     // In some cases like when the autohide taskbar is on the left of the
@@ -157,13 +178,13 @@ int GetAppbarAutohideEdgesOnWorkerThread(HMONITOR monitor) {
   DCHECK(monitor);
 
   int edges = 0;
-  if (MonitorHasTopmostAutohideTaskbarForEdge(ABE_LEFT, monitor))
+  if (MonitorHasAutohideTaskbarForEdge(ABE_LEFT, monitor))
     edges |= views::ViewsDelegate::EDGE_LEFT;
-  if (MonitorHasTopmostAutohideTaskbarForEdge(ABE_TOP, monitor))
+  if (MonitorHasAutohideTaskbarForEdge(ABE_TOP, monitor))
     edges |= views::ViewsDelegate::EDGE_TOP;
-  if (MonitorHasTopmostAutohideTaskbarForEdge(ABE_RIGHT, monitor))
+  if (MonitorHasAutohideTaskbarForEdge(ABE_RIGHT, monitor))
     edges |= views::ViewsDelegate::EDGE_RIGHT;
-  if (MonitorHasTopmostAutohideTaskbarForEdge(ABE_BOTTOM, monitor))
+  if (MonitorHasAutohideTaskbarForEdge(ABE_BOTTOM, monitor))
     edges |= views::ViewsDelegate::EDGE_BOTTOM;
   return edges;
 }
@@ -212,7 +233,9 @@ void ChromeViewsDelegate::SaveWindowPlacement(const views::Widget* window,
   window_preferences->SetInteger("bottom", bounds.bottom());
   window_preferences->SetBoolean("maximized",
                                  show_state == ui::SHOW_STATE_MAXIMIZED);
+  // TODO(afakhry): Remove Docked Windows in M58.
   window_preferences->SetBoolean("docked", show_state == ui::SHOW_STATE_DOCKED);
+
   gfx::Rect work_area(display::Screen::GetScreen()
                           ->GetDisplayNearestWindow(window->GetNativeView())
                           .work_area());
@@ -429,9 +452,19 @@ void ChromeViewsDelegate::OnBeforeWidgetInit(
   // While the majority of the time, context wasn't plumbed through due to the
   // existence of a global WindowParentingClient, if this window is toplevel,
   // it's possible that there is no contextual state that we can use.
-  if (params->parent == NULL && params->context == NULL && !params->child) {
-    params->native_widget = new views::DesktopNativeWidgetAura(delegate);
-  } else if (use_non_toplevel_window) {
+  gfx::NativeWindow parent_or_context =
+      params->parent ? params->parent : params->context;
+  Profile* profile = nullptr;
+  if (parent_or_context)
+    profile = GetThemeProfileForWindow(parent_or_context);
+  aura::Window* window = nullptr;
+  if ((!params->parent && !params->context && !params->child) ||
+      !use_non_toplevel_window) {
+    views::DesktopNativeWidgetAura* native_widget =
+        new views::DesktopNativeWidgetAura(delegate);
+    params->native_widget = native_widget;
+    window = native_widget->GetNativeWindow();
+  } else {
     views::NativeWidgetAura* native_widget =
         new views::NativeWidgetAura(delegate);
     if (params->parent) {
@@ -441,9 +474,9 @@ void ChromeViewsDelegate::OnBeforeWidgetInit(
                                              parent_profile);
     }
     params->native_widget = native_widget;
-  } else {
-    params->native_widget = new views::DesktopNativeWidgetAura(delegate);
+    window = native_widget->GetNativeWindow();
   }
+  SetThemeProfileForWindow(window, profile);
 #endif
 }
 
@@ -458,6 +491,10 @@ bool ChromeViewsDelegate::WindowManagerProvidesTitleBar(bool maximized) {
 
 ui::ContextFactory* ChromeViewsDelegate::GetContextFactory() {
   return content::GetContextFactory();
+}
+
+ui::ContextFactoryPrivate* ChromeViewsDelegate::GetContextFactoryPrivate() {
+  return content::GetContextFactoryPrivate();
 }
 
 std::string ChromeViewsDelegate::GetApplicationName() {
@@ -475,16 +512,19 @@ int ChromeViewsDelegate::GetAppbarAutohideEdges(HMONITOR monitor,
   // edges.
   if (!appbar_autohide_edge_map_.count(monitor))
     appbar_autohide_edge_map_[monitor] = EDGE_BOTTOM;
+
+  // We use the SHAppBarMessage API to get the taskbar autohide state. This API
+  // spins a modal loop which could cause callers to be reentered. To avoid
+  // that we retrieve the taskbar state in a worker thread.
   if (monitor && !in_autohide_edges_callback_) {
-    base::PostTaskAndReplyWithResult(
-        content::BrowserThread::GetBlockingPool(),
-        FROM_HERE,
-        base::Bind(&GetAppbarAutohideEdgesOnWorkerThread,
-                   monitor),
+    // TODO(robliao): Annotate this task with .WithCOM() once supported.
+    // https://crbug.com/662122
+    base::PostTaskWithTraitsAndReplyWithResult(
+        FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
+                       base::TaskPriority::USER_BLOCKING),
+        base::Bind(&GetAppbarAutohideEdgesOnWorkerThread, monitor),
         base::Bind(&ChromeViewsDelegate::OnGotAppbarAutohideEdges,
-                   weak_factory_.GetWeakPtr(),
-                   callback,
-                   monitor,
+                   weak_factory_.GetWeakPtr(), callback, monitor,
                    appbar_autohide_edge_map_[monitor]));
   }
   return appbar_autohide_edge_map_[monitor];
@@ -507,6 +547,55 @@ void ChromeViewsDelegate::OnGotAppbarAutohideEdges(
 scoped_refptr<base::TaskRunner>
 ChromeViewsDelegate::GetBlockingPoolTaskRunner() {
   return content::BrowserThread::GetBlockingPool();
+}
+
+gfx::Insets ChromeViewsDelegate::GetDialogButtonInsets() const {
+  const LayoutDelegate* layout_delegate = LayoutDelegate::Get();
+  const int top = layout_delegate->GetMetric(
+      LayoutDelegate::Metric::DIALOG_BUTTON_TOP_SPACING);
+  const int margin = layout_delegate->GetMetric(
+      LayoutDelegate::Metric::DIALOG_BUTTON_MARGIN);
+  return gfx::Insets(top, margin, margin, margin);
+}
+
+int ChromeViewsDelegate::GetDialogCloseButtonMargin() const {
+  return LayoutDelegate::Get()->GetMetric(
+      LayoutDelegate::Metric::DIALOG_CLOSE_BUTTON_MARGIN);
+}
+
+int ChromeViewsDelegate::GetDialogRelatedButtonHorizontalSpacing() const {
+  return LayoutDelegate::Get()->GetMetric(
+      LayoutDelegate::Metric::RELATED_BUTTON_HORIZONTAL_SPACING);
+}
+
+int ChromeViewsDelegate::GetDialogRelatedControlVerticalSpacing() const {
+  return LayoutDelegate::Get()->GetMetric(
+      LayoutDelegate::Metric::RELATED_CONTROL_VERTICAL_SPACING);
+}
+
+gfx::Insets ChromeViewsDelegate::GetDialogFrameViewInsets() const {
+  const LayoutDelegate* layout_delegate = LayoutDelegate::Get();
+  const int top = layout_delegate->GetMetric(
+      LayoutDelegate::Metric::PANEL_CONTENT_MARGIN);
+  const int side = layout_delegate->GetMetric(
+      LayoutDelegate::Metric::DIALOG_BUTTON_MARGIN);
+  // Titles are inset at the top and sides, but not at the bottom.
+  return gfx::Insets(top, side, 0, side);
+}
+
+gfx::Insets ChromeViewsDelegate::GetBubbleDialogMargins() const {
+  return gfx::Insets(LayoutDelegate::Get()->GetMetric(
+      LayoutDelegate::Metric::PANEL_CONTENT_MARGIN));
+}
+
+int ChromeViewsDelegate::GetDialogButtonMinimumWidth() const {
+  return LayoutDelegate::Get()->GetMetric(
+      LayoutDelegate::Metric::DIALOG_BUTTON_MINIMUM_WIDTH);
+}
+
+int ChromeViewsDelegate::GetButtonHorizontalPadding() const {
+  return LayoutDelegate::Get()->GetMetric(
+      LayoutDelegate::Metric::BUTTON_HORIZONTAL_PADDING);
 }
 
 #if !defined(USE_ASH)

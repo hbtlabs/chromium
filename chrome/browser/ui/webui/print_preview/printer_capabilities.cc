@@ -10,7 +10,9 @@
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/values.h"
 #include "chrome/common/cloud_print/cloud_print_cdd_conversion.h"
 #include "chrome/common/crash_keys.h"
@@ -94,6 +96,10 @@ std::unique_ptr<base::DictionaryValue> GetSettingsOnBlockingPool(
   printer_info->SetString(kPrinterId, device_name);
   printer_info->SetString(kSettingPrinterName, printer_name);
   printer_info->SetString(kSettingPrinterDescription, printer_description);
+  printer_info->SetBoolean(
+      kCUPSEnterprisePrinter,
+      base::ContainsKey(basic_info.options, kCUPSEnterprisePrinter) &&
+          basic_info.options.at(kCUPSEnterprisePrinter) == kValueTrue);
 
   auto capabilities = GetPrinterCapabilitiesOnBlockingPoolThread(device_name);
   if (!capabilities)

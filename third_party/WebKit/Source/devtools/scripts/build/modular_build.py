@@ -3,11 +3,11 @@
 # Copyright 2014 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-
 """
 Utilities for the modular DevTools build.
 """
 
+import collections
 from os import path
 import os
 
@@ -55,6 +55,7 @@ def concatenate_scripts(file_names, module_dir, output_dir, output):
 
 
 class Descriptors:
+
     def __init__(self, application_dir, application_descriptor, module_descriptors, has_html):
         self.application_dir = application_dir
         self.application = application_descriptor
@@ -69,8 +70,8 @@ class Descriptors:
         return json.dumps(result)
 
     def all_compiled_files(self):
-        files = {}
-        for name in self.modules:
+        files = collections.OrderedDict()
+        for name in self.sorted_modules():
             module = self.modules[name]
             skipped_files = set(module.get('skip_compilation', []))
             for script in module.get('scripts', []):
@@ -146,6 +147,7 @@ class Descriptors:
 
 
 class DescriptorLoader:
+
     def __init__(self, application_dir):
         self.application_dir = application_dir
 
@@ -177,7 +179,8 @@ class DescriptorLoader:
                 deps = module.get('dependencies', [])
                 for dep in deps:
                     if dep not in application_descriptor:
-                        bail_error('Module "%s" (dependency of "%s") not listed in application descriptor %s' % (dep, module['name'], application_descriptor_filename))
+                        bail_error('Module "%s" (dependency of "%s") not listed in application descriptor %s' %
+                                   (dep, module['name'], application_descriptor_filename))
 
         return Descriptors(self.application_dir, merged_application_descriptor, all_module_descriptors, has_html)
 

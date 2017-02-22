@@ -23,7 +23,7 @@
 #include "base/bind_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/time/time.h"
 #include "base/win/windows_version.h"
 #include "chrome/browser/browser_process.h"
@@ -207,16 +207,14 @@ void GetOsPasswordStatus() {
       new OsPasswordStatus(PASSWORD_STATUS_UNKNOWN));
   PasswordCheckPrefs* prefs_weak = prefs.get();
   OsPasswordStatus* status_weak = status.get();
-  bool posted = base::WorkerPool::PostTaskAndReply(
-      FROM_HERE,
+  // This task calls ::LogonUser(), hence MayBlock().
+  base::PostTaskWithTraitsAndReply(
+      FROM_HERE, base::TaskTraits()
+                     .WithPriority(base::TaskPriority::BACKGROUND)
+                     .MayBlock(),
       base::Bind(&GetOsPasswordStatusInternal, prefs_weak, status_weak),
       base::Bind(&ReplyOsPasswordStatus, base::Passed(&prefs),
-                 base::Passed(&status)),
-      true);
-  if (!posted) {
-    UMA_HISTOGRAM_ENUMERATION("PasswordManager.OsPasswordStatus",
-                              PASSWORD_STATUS_UNKNOWN, MAX_PASSWORD_STATUS);
-  }
+                 base::Passed(&status)));
 }
 
 }  // namespace
@@ -242,12 +240,6 @@ bool AuthenticateUser(gfx::NativeWindow window) {
   bool use_displayname = false;
   bool use_principalname = false;
   DWORD logon_result = 0;
-
-  // Disable password manager reauthentication before Windows 7.
-  // This is because of an interaction between LogonUser() and the sandbox.
-  // http://crbug.com/345916
-  if (base::win::GetVersion() < base::win::VERSION_WIN7)
-    return true;
 
   // On a domain, we obtain the User Principal Name
   // for domain authentication.

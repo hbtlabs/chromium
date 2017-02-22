@@ -1,8 +1,9 @@
 include_rules = [
-  "+crypto",
   "+components/gcm_driver",
   "+components/prefs",
-  "+components/proximity_auth",
+  "+components/proximity_auth/logging",
+  "+crypto",
+  "+device/bluetooth",
   "+google_apis",
   "+net",
 ]

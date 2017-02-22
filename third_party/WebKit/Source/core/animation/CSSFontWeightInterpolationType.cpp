@@ -52,7 +52,7 @@ class InheritedFontWeightChecker : public InterpolationType::ConversionChecker {
  public:
   static std::unique_ptr<InheritedFontWeightChecker> create(
       FontWeight fontWeight) {
-    return wrapUnique(new InheritedFontWeightChecker(fontWeight));
+    return WTF::wrapUnique(new InheritedFontWeightChecker(fontWeight));
   }
 
  private:
@@ -91,14 +91,14 @@ InterpolationValue CSSFontWeightInterpolationType::maybeConvertInherit(
   if (!state.parentStyle())
     return nullptr;
   FontWeight inheritedFontWeight = state.parentStyle()->fontWeight();
-  conversionCheckers.append(
+  conversionCheckers.push_back(
       InheritedFontWeightChecker::create(inheritedFontWeight));
   return createFontWeightValue(inheritedFontWeight);
 }
 
 InterpolationValue CSSFontWeightInterpolationType::maybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState& state,
+    const StyleResolverState* state,
     ConversionCheckers& conversionCheckers) const {
   if (!value.isIdentifierValue())
     return nullptr;
@@ -112,8 +112,9 @@ InterpolationValue CSSFontWeightInterpolationType::maybeConvertValue(
 
     case CSSValueBolder:
     case CSSValueLighter: {
-      FontWeight inheritedFontWeight = state.parentStyle()->fontWeight();
-      conversionCheckers.append(
+      DCHECK(state);
+      FontWeight inheritedFontWeight = state->parentStyle()->fontWeight();
+      conversionCheckers.push_back(
           InheritedFontWeightChecker::create(inheritedFontWeight));
       if (keyword == CSSValueBolder)
         return createFontWeightValue(
@@ -127,16 +128,17 @@ InterpolationValue CSSFontWeightInterpolationType::maybeConvertValue(
   }
 }
 
-InterpolationValue CSSFontWeightInterpolationType::maybeConvertUnderlyingValue(
-    const InterpolationEnvironment& environment) const {
-  return createFontWeightValue(environment.state().style()->fontWeight());
+InterpolationValue
+CSSFontWeightInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
+    const ComputedStyle& style) const {
+  return createFontWeightValue(style.fontWeight());
 }
 
-void CSSFontWeightInterpolationType::apply(
+void CSSFontWeightInterpolationType::applyStandardPropertyValue(
     const InterpolableValue& interpolableValue,
     const NonInterpolableValue*,
-    InterpolationEnvironment& environment) const {
-  environment.state().fontBuilder().setWeight(
+    StyleResolverState& state) const {
+  state.fontBuilder().setWeight(
       doubleToFontWeight(toInterpolableNumber(interpolableValue).value()));
 }
 

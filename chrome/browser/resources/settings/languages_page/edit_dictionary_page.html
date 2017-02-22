@@ -5,7 +5,7 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-input.html">
-<link rel="import" href="/settings_shared_css.html">
+<link rel="import" href="../settings_shared_css.html">
 
 <dom-module id="settings-edit-dictionary-page">
   <template>
@@ -16,7 +16,10 @@
       }
 
       #newWord {
-        flex: .5;
+        width: var(--paper-input-max-width);
+        --paper-input-container-label: {
+          font-size: inherit;
+        };
       }
 
       iron-list {
@@ -32,23 +35,27 @@
         -webkit-margin-start: 16px;
       }
     </style>
-    <div class="settings-box">
+    <div class="settings-box first">
       <iron-a11y-keys id="keys" keys="enter esc"
           on-keys-pressed="onKeysPress_"></iron-a11y-keys>
-      <paper-input id="newWord" no-label-float
-          label="$i18n{addDictionaryWordLabel}"></paper-input>
-      <paper-button on-tap="onAddWordTap_">
+      <div class="start">
+        <paper-input id="newWord" no-label-float value="{{newWordValue_}}"
+            label="$i18n{addDictionaryWordLabel}"></paper-input>
+      </div>
+      <paper-button class="secondary-button" on-tap="onAddWordTap_"
+          disabled="[[!validateWord_(newWordValue_)]]">
         $i18n{addDictionaryWordButton}
       </paper-button>
     </div>
-    <div class="settings-box block">
+    <div class="settings-box continuation block">
       <h2>$i18n{customDictionaryWords}</h2>
       <div class="list-frame">
         <iron-list id="list" items="{{words_}}">
           <template>
             <div class="list-item">
-              <div class="word">[[item]]</div>
-              <paper-icon-button icon="cr:clear" on-tap="onRemoveWordTap_">
+              <div class="word text-elide">[[item]]</div>
+              <paper-icon-button icon="cr:clear" on-tap="onRemoveWordTap_"
+                  tabindex$="[[tabIndex]]">
               </paper-icon-button>
             </div>
           </template>

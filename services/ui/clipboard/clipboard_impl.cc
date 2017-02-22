@@ -8,9 +8,6 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "mojo/common/common_type_converters.h"
-#include "mojo/public/cpp/bindings/array.h"
-#include "mojo/public/cpp/bindings/string.h"
 
 namespace ui {
 namespace clipboard {

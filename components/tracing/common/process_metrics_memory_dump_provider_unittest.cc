@@ -9,11 +9,18 @@
 #include <memory>
 
 #include "base/files/file_util.h"
+#include "base/memory/ptr_util.h"
+#include "base/process/process_metrics.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/process_memory_maps.h"
 #include "base/trace_event/process_memory_totals.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+#if defined(OS_MACOSX)
+#include <libgen.h>
+#include <mach-o/dyld.h>
+#endif
 
 namespace tracing {
 
@@ -107,15 +114,16 @@ const char kTestSmaps2[] =
     "Locked:                0 kB\n"
     "VmFlags: rd wr mr mw me ac sd\n";
 
-void CreateAndSetSmapsFileForTesting(const char* smaps_string,
-                                     base::ScopedFILE& file) {
+const char kTestStatm[] = "200 100 20 2 3 4";
+
+void CreateTempFileWithContents(const char* contents, base::ScopedFILE* file) {
   base::FilePath temp_path;
   FILE* temp_file = CreateAndOpenTemporaryFile(&temp_path);
-  file.reset(temp_file);
+  file->reset(temp_file);
   ASSERT_TRUE(temp_file);
 
-  ASSERT_TRUE(base::WriteFileDescriptor(fileno(temp_file), smaps_string,
-                                        strlen(smaps_string)));
+  ASSERT_TRUE(
+      base::WriteFileDescriptor(fileno(temp_file), contents, strlen(contents)));
 }
 
 }  // namespace
@@ -182,7 +190,7 @@ TEST(ProcessMetricsMemoryDumpProviderTest, ParseProcSmaps) {
   base::trace_event::ProcessMemoryDump pmd_1(nullptr /* session_state */,
                                              dump_args);
   base::ScopedFILE temp_file1;
-  CreateAndSetSmapsFileForTesting(kTestSmaps1, temp_file1);
+  CreateTempFileWithContents(kTestSmaps1, &temp_file1);
   ProcessMetricsMemoryDumpProvider::proc_smaps_for_testing = temp_file1.get();
   pmmdp->OnMemoryDump(dump_args, &pmd_1);
   ASSERT_TRUE(pmd_1.has_process_mmaps());
@@ -215,7 +223,7 @@ TEST(ProcessMetricsMemoryDumpProviderTest, ParseProcSmaps) {
   base::trace_event::ProcessMemoryDump pmd_2(nullptr /* session_state */,
                                              dump_args);
   base::ScopedFILE temp_file2;
-  CreateAndSetSmapsFileForTesting(kTestSmaps2, temp_file2);
+  CreateTempFileWithContents(kTestSmaps2, &temp_file2);
   ProcessMetricsMemoryDumpProvider::proc_smaps_for_testing = temp_file2.get();
   pmmdp->OnMemoryDump(dump_args, &pmd_2);
   ASSERT_TRUE(pmd_2.has_process_mmaps());
@@ -233,5 +241,102 @@ TEST(ProcessMetricsMemoryDumpProviderTest, ParseProcSmaps) {
   EXPECT_EQ(0 * 1024UL, regions_2[0].byte_stats_swapped);
 }
 #endif  // defined(OS_LINUX) || defined(OS_ANDROID)
+
+TEST(ProcessMetricsMemoryDumpProviderTest, TestPollFastMemoryTotal) {
+  ProcessMetricsMemoryDumpProvider mdp(base::kNullProcessId);
+
+  uint64_t total1, total2;
+  mdp.PollFastMemoryTotal(&total1);
+  ASSERT_GT(total1, 0u);
+  size_t kBufSize = 16 * 1024 * 1024;
+  auto buf = base::MakeUnique<char[]>(kBufSize);
+  for (size_t i = 0; i < kBufSize; i++)
+    buf[i] = *((volatile char*)&buf[i]) + 1;
+  mdp.PollFastMemoryTotal(&total2);
+  ASSERT_GT(total2, 0u);
+  EXPECT_GT(total2, total1 + kBufSize / 2);
+
+#if defined(OS_LINUX) || defined(OS_ANDROID)
+  EXPECT_GE(mdp.fast_polling_statm_fd_.get(), 0);
+
+  base::ScopedFILE temp_file;
+  CreateTempFileWithContents(kTestStatm, &temp_file);
+  mdp.fast_polling_statm_fd_for_testing = fileno(temp_file.get());
+  size_t page_size = base::GetPageSize();
+  uint64_t value;
+  mdp.PollFastMemoryTotal(&value);
+  EXPECT_EQ(100 * page_size, value);
+
+  mdp.SuspendFastMemoryPolling();
+  EXPECT_FALSE(mdp.fast_polling_statm_fd_.is_valid());
+#else
+  mdp.SuspendFastMemoryPolling();
+#endif
+}
+
+#if defined(OS_MACOSX)
+TEST(ProcessMetricsMemoryDumpProviderTest, TestMachOReading) {
+  using VMRegion = base::trace_event::ProcessMemoryMaps::VMRegion;
+  ProcessMetricsMemoryDumpProvider mdp(base::kNullProcessId);
+  base::trace_event::MemoryDumpArgs args;
+  base::trace_event::ProcessMemoryDump dump(nullptr, args);
+  ASSERT_TRUE(mdp.DumpProcessMemoryMaps(args, &dump));
+  ASSERT_TRUE(dump.has_process_mmaps());
+  uint32_t size = 100;
+  char full_path[size];
+  int result = _NSGetExecutablePath(full_path, &size);
+  ASSERT_EQ(0, result);
+  std::string name = basename(full_path);
+
+  uint64_t components_unittests_resident_pages = 0;
+  bool found_appkit = false;
+  for (const VMRegion& region : dump.process_mmaps()->vm_regions()) {
+    EXPECT_NE(0u, region.start_address);
+    EXPECT_NE(0u, region.size_in_bytes);
+
+    EXPECT_LT(region.size_in_bytes, 1ull << 32);
+    uint32_t required_protection_flags =
+        VMRegion::kProtectionFlagsRead | VMRegion::kProtectionFlagsExec;
+    if (region.mapped_file.find(name) != std::string::npos &&
+        region.protection_flags == required_protection_flags) {
+      components_unittests_resident_pages +=
+          region.byte_stats_private_dirty_resident +
+          region.byte_stats_shared_dirty_resident +
+          region.byte_stats_private_clean_resident +
+          region.byte_stats_shared_clean_resident;
+    }
+
+    if (region.mapped_file.find("AppKit") != std::string::npos) {
+      found_appkit = true;
+    }
+  }
+  EXPECT_GT(components_unittests_resident_pages, 0u);
+  EXPECT_TRUE(found_appkit);
+}
+
+TEST(ProcessMetricsMemoryDumpProviderTest, NoDuplicateRegions) {
+  using VMRegion = base::trace_event::ProcessMemoryMaps::VMRegion;
+  ProcessMetricsMemoryDumpProvider mdp(base::kNullProcessId);
+  base::trace_event::MemoryDumpArgs args;
+  base::trace_event::ProcessMemoryDump dump(nullptr, args);
+  ASSERT_TRUE(mdp.DumpProcessMemoryMaps(args, &dump));
+  ASSERT_TRUE(dump.has_process_mmaps());
+
+  std::vector<VMRegion> regions;
+  regions.reserve(dump.process_mmaps()->vm_regions().size());
+  for (const VMRegion& region : dump.process_mmaps()->vm_regions())
+    regions.push_back(region);
+  std::sort(regions.begin(), regions.end(),
+            [](const VMRegion& a, const VMRegion& b) -> bool {
+              return a.start_address < b.start_address;
+            });
+  uint64_t last_address = 0;
+  for (const VMRegion& region : regions) {
+    EXPECT_GE(region.start_address, last_address);
+    last_address = region.start_address + region.size_in_bytes;
+  }
+}
+
+#endif  // defined(OS_MACOSX)
 
 }  // namespace tracing

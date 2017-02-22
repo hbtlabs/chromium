@@ -58,8 +58,8 @@ TEST_F(WebIDBDatabaseImplTest, ValueSizeTest) {
   StrictMock<MockWebIDBCallbacks> callbacks;
   EXPECT_CALL(callbacks, onError(_)).Times(1);
 
-  WebIDBDatabaseImpl database_impl(nullptr, base::ThreadTaskRunnerHandle::Get(),
-                                   nullptr);
+  WebIDBDatabaseImpl database_impl(nullptr,
+                                   base::ThreadTaskRunnerHandle::Get());
   database_impl.max_put_value_size_ = kMaxValueSizeForTesting;
   database_impl.put(transaction_id, object_store_id, value, web_blob_info,
                     WebIDBKey::createNumber(0), blink::WebIDBPutModeAddOrUpdate,
@@ -76,8 +76,8 @@ TEST_F(WebIDBDatabaseImplTest, KeyAndValueSizeTest) {
   const std::vector<char> data(kMaxValueSizeForTesting - kKeySize);
   const WebData value(&data.front(), data.size());
   const WebVector<WebBlobInfo> web_blob_info;
-  const WebIDBKey key = WebIDBKey::createString(
-      base::string16(kKeySize / sizeof(base::string16::value_type), 'x'));
+  const WebIDBKey key = WebIDBKey::createString(blink::WebString::fromUTF16(
+      base::string16(kKeySize / sizeof(base::string16::value_type), 'x')));
 
   const int64_t transaction_id = 1;
   const int64_t object_store_id = 2;
@@ -85,8 +85,8 @@ TEST_F(WebIDBDatabaseImplTest, KeyAndValueSizeTest) {
   StrictMock<MockWebIDBCallbacks> callbacks;
   EXPECT_CALL(callbacks, onError(_)).Times(1);
 
-  WebIDBDatabaseImpl database_impl(nullptr, base::ThreadTaskRunnerHandle::Get(),
-                                   nullptr);
+  WebIDBDatabaseImpl database_impl(nullptr,
+                                   base::ThreadTaskRunnerHandle::Get());
   database_impl.max_put_value_size_ = kMaxValueSizeForTesting;
   database_impl.put(transaction_id, object_store_id, value, web_blob_info, key,
                     blink::WebIDBPutModeAddOrUpdate, &callbacks,

@@ -73,6 +73,7 @@ class RenderingTest : public testing::Test {
   virtual FrameSettingOverrideFunction settingOverrider() const {
     return nullptr;
   }
+  virtual ChromeClient& chromeClient() const;
 
   RenderingTest(FrameLoaderClient* = nullptr);
 
@@ -110,6 +111,8 @@ class RenderingTest : public testing::Test {
     Node* node = document().getElementById(id);
     return node ? node->layoutObject() : nullptr;
   }
+
+  void loadAhem();
 
  private:
   Persistent<FrameLoaderClient> m_frameLoaderClient;

@@ -40,6 +40,11 @@ public class DropdownItemBase implements DropdownItem {
     }
 
     @Override
+    public boolean isBoldLabel() {
+        return false;
+    }
+
+    @Override
     public int getLabelFontColorResId() {
         return R.drawable.dropdown_label_color;
     }
@@ -47,5 +52,30 @@ public class DropdownItemBase implements DropdownItem {
     @Override
     public int getLabelFontSizeResId() {
         return R.dimen.dropdown_item_label_font_size;
+    }
+
+    @Override
+    public int getSublabelFontSizeResId() {
+        return R.dimen.dropdown_item_sublabel_font_size;
+    }
+
+    @Override
+    public boolean isLabelAndSublabelOnSameLine() {
+        return false;
+    }
+
+    @Override
+    public boolean isIconAtStart() {
+        return false;
+    }
+
+    @Override
+    public int getIconSizeResId() {
+        return 0;
+    }
+
+    @Override
+    public int getIconMarginResId() {
+        return R.dimen.dropdown_icon_margin;
     }
 }

@@ -38,6 +38,24 @@ class TypeDebugInfoObserver;
 struct SyncStatus;
 struct UserShare;
 
+// Events in ClearServerData flow to be recorded in histogram. Existing
+// constants should not be deleted or reordered. New ones shold be added at the
+// end, before CLEAR_SERVER_DATA_MAX.
+enum ClearServerDataEvents {
+  // ClearServerData started after user switched to custom passphrase.
+  CLEAR_SERVER_DATA_STARTED,
+  // DataTypeManager reported that catchup configuration failed.
+  CLEAR_SERVER_DATA_CATCHUP_FAILED,
+  // ClearServerData flow restarted after browser restart.
+  CLEAR_SERVER_DATA_RETRIED,
+  // Success.
+  CLEAR_SERVER_DATA_SUCCEEDED,
+  // Client received RECET_LOCAL_SYNC_DATA after custom passphrase was enabled
+  // on different client.
+  CLEAR_SERVER_DATA_RESET_LOCAL_DATA_RECEIVED,
+  CLEAR_SERVER_DATA_MAX
+};
+
 // UIs that need to prevent Sync startup should hold an instance of this class
 // until the user has finished modifying sync settings. This is not an inner
 // class of SyncService to enable forward declarations.
@@ -64,7 +82,7 @@ class SyncService : public DataTypeEncryptionHandler {
   };
 
   // Passed as an argument to RequestStop to control whether or not the sync
-  // backend should clear its data directory when it shuts down. See
+  // engine should clear its data directory when it shuts down. See
   // RequestStop for more information.
   enum SyncStopDataFate {
     KEEP_DATA,
@@ -75,7 +93,7 @@ class SyncService : public DataTypeEncryptionHandler {
   struct SyncTokenStatus {
     SyncTokenStatus();
 
-    // Sync server connection status reported by sync backend.
+    // Sync server connection status reported by sync engine.
     base::Time connection_status_update_time;
     ConnectionStatus connection_status;
 
@@ -107,6 +125,12 @@ class SyncService : public DataTypeEncryptionHandler {
   // be datatype specific, auth, or other transient errors. To see which
   // datetypes are actually syncing, see GetActiveTypes() below.
   virtual bool IsSyncActive() const = 0;
+
+  // Returns true if the local sync backend server has been enabled through a
+  // command line flag or policy. In this case sync is considered active but any
+  // implied consent for further related services e.g. Suggestions, Web History
+  // etc. is considered not granted.
+  virtual bool IsLocalSyncEnabled() const = 0;
 
   // Triggers a GetUpdates call for the specified |types|, pulling any new data
   // from the sync server.
@@ -147,7 +171,7 @@ class SyncService : public DataTypeEncryptionHandler {
   virtual bool CanSyncStart() const = 0;
 
   // Stops sync at the user's request. |data_fate| controls whether the sync
-  // backend should clear its data directory when it shuts down. Generally
+  // engine should clear its data directory when it shuts down. Generally
   // KEEP_DATA is used when the user just stops sync, and CLEAR_DATA is used
   // when they sign out of the profile entirely.
   virtual void RequestStop(SyncStopDataFate data_fate) = 0;
@@ -200,10 +224,8 @@ class SyncService : public DataTypeEncryptionHandler {
   virtual const GoogleServiceAuthError& GetAuthError() const = 0;
   virtual bool HasUnrecoverableError() const = 0;
 
-  // Returns true if the SyncBackendHost has told us it's ready to accept
-  // changes. This should only be used for sync's internal configuration logic
-  // (such as deciding when to prompt for an encryption passphrase).
-  virtual bool IsBackendInitialized() const = 0;
+  // Returns true if the SyncEngine has told us it's ready to accept changes.
+  virtual bool IsEngineInitialized() const = 0;
 
   // Return the active OpenTabsUIDelegate. If open/proxy tabs is not enabled or
   // not currently syncing, returns nullptr.
@@ -219,7 +241,7 @@ class SyncService : public DataTypeEncryptionHandler {
   virtual base::Time GetExplicitPassphraseTime() const = 0;
 
   // Returns true if a secondary (explicit) passphrase is being used. It is not
-  // legal to call this method before the backend is initialized.
+  // legal to call this method before the engine is initialized.
   virtual bool IsUsingSecondaryPassphrase() const = 0;
 
   // Turns on encryption for all data. Callers must call OnUserChoseDatatypes()
@@ -275,16 +297,16 @@ class SyncService : public DataTypeEncryptionHandler {
   // Get a description of the sync status for displaying in the user interface.
   virtual std::string QuerySyncStatusSummaryString() = 0;
 
-  // Initializes a struct of status indicators with data from the backend.
-  // Returns false if the backend was not available for querying; in that case
+  // Initializes a struct of status indicators with data from the engine.
+  // Returns false if the engine was not available for querying; in that case
   // the struct will be filled with default data.
   virtual bool QueryDetailedSyncStatus(SyncStatus* result) = 0;
 
   // Returns a user-friendly string form of last synced time (in minutes).
   virtual base::string16 GetLastSyncedTimeString() const = 0;
 
-  // Returns a human readable string describing backend initialization state.
-  virtual std::string GetBackendInitializationStateString() const = 0;
+  // Returns a human readable string describing engine initialization state.
+  virtual std::string GetEngineInitializationStateString() const = 0;
 
   virtual SyncCycleSnapshot GetLastCycleSnapshot() const = 0;
 
@@ -299,7 +321,7 @@ class SyncService : public DataTypeEncryptionHandler {
   // This function is used by about_sync_util.cc to help populate the about:sync
   // page.  It returns a ListValue rather than a DictionaryValue in part to make
   // it easier to iterate over its elements when constructing that page.
-  virtual base::Value* GetTypeStatusMap() = 0;
+  virtual std::unique_ptr<base::Value> GetTypeStatusMap() = 0;
 
   virtual const GURL& sync_service_url() const = 0;
 

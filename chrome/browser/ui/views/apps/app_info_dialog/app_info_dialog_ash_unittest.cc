@@ -13,8 +13,10 @@
 #include "ui/views/window/dialog_delegate.h"
 
 #if defined(OS_CHROMEOS)
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
-#include "components/arc/test/fake_arc_bridge_service.h"
+#include "components/arc/arc_session_runner.h"
+#include "components/arc/test/fake_arc_session.h"
 #endif
 
 namespace {
@@ -33,9 +35,9 @@ class AppInfoDialogAshTest : public ash::test::AshTestBase {
     ash::test::AshTestBase::SetUp();
 #if defined(OS_CHROMEOS)
     arc::ArcSessionManager::DisableUIForTesting();
-    bridge_service_ = base::MakeUnique<arc::FakeArcBridgeService>();
-    arc_session_manager_ =
-        base::MakeUnique<arc::ArcSessionManager>(bridge_service_.get());
+    arc_session_manager_ = base::MakeUnique<arc::ArcSessionManager>(
+        base::MakeUnique<arc::ArcSessionRunner>(
+            base::Bind(arc::FakeArcSession::Create)));
     arc_session_manager_->OnPrimaryUserProfilePrepared(
         extension_environment_.profile());
 #endif
@@ -62,7 +64,6 @@ class AppInfoDialogAshTest : public ash::test::AshTestBase {
   views::Widget* widget_ = nullptr;
   AppInfoDialog* dialog_ = nullptr;  // Owned by |widget_|'s views hierarchy.
 #if defined(OS_CHROMEOS)
-  std::unique_ptr<arc::FakeArcBridgeService> bridge_service_;
   std::unique_ptr<arc::ArcSessionManager> arc_session_manager_;
 #endif
 

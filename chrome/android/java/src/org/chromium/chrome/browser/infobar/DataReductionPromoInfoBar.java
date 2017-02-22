@@ -75,7 +75,7 @@ public class DataReductionPromoInfoBar extends ConfirmInfoBar {
         if (DataReductionPromoUtils.getDisplayedInfoBarPromo()) return false;
 
         // Only show the promo on HTTP pages.
-        if (!GURLUtils.getScheme(url).concat("://").equals(UrlConstants.HTTP_SCHEME)) return false;
+        if (!GURLUtils.getScheme(url).equals(UrlConstants.HTTP_SCHEME)) return false;
 
         int currentMilestone = VersionNumberGetter.getMilestoneFromVersionNumber(
                 PrefServiceBridge.getInstance().getAboutVersionStrings().getApplicationVersion());
@@ -111,7 +111,8 @@ public class DataReductionPromoInfoBar extends ConfirmInfoBar {
             }
 
             DataReductionPromoInfoBar.launch(webContents,
-                    BitmapFactory.decodeResource(context.getResources(), R.mipmap.app_icon),
+                    BitmapFactory.decodeResource(context.getResources(),
+                            R.drawable.infobar_chrome),
                     context.getString(R.string.data_reduction_promo_infobar_title),
                     context.getString(R.string.data_reduction_promo_infobar_text),
                     context.getString(R.string.data_reduction_promo_infobar_button),

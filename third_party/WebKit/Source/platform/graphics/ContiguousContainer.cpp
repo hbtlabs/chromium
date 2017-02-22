@@ -7,7 +7,6 @@
 #include "wtf/Allocator.h"
 #include "wtf/ContainerAnnotations.h"
 #include "wtf/PtrUtil.h"
-#include "wtf/allocator/PartitionAlloc.h"
 #include "wtf/allocator/Partitions.h"
 #include <algorithm>
 #include <memory>
@@ -126,7 +125,7 @@ void* ContiguousContainerBase::allocate(size_t objectSize,
   }
 
   void* element = bufferForAlloc->allocate(objectSize);
-  m_elements.append(element);
+  m_elements.push_back(element);
   return element;
 }
 
@@ -170,9 +169,10 @@ ContiguousContainerBase::allocateNewBufferForNextAllocation(
     size_t bufferSize,
     const char* typeName) {
   ASSERT(m_buffers.isEmpty() || m_endIndex == m_buffers.size() - 1);
-  std::unique_ptr<Buffer> newBuffer = makeUnique<Buffer>(bufferSize, typeName);
+  std::unique_ptr<Buffer> newBuffer =
+      WTF::makeUnique<Buffer>(bufferSize, typeName);
   Buffer* bufferToReturn = newBuffer.get();
-  m_buffers.append(std::move(newBuffer));
+  m_buffers.push_back(std::move(newBuffer));
   m_endIndex = m_buffers.size() - 1;
   return bufferToReturn;
 }

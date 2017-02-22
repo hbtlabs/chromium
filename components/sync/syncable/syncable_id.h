@@ -12,9 +12,11 @@
 #include <string>
 
 #include "base/containers/hash_tables.h"
+#include "base/trace_event/memory_usage_estimator.h"
 
 namespace base {
-class StringValue;
+class Value;
+using StringValue = Value;
 }  // namespace base
 
 namespace sql {
@@ -96,6 +98,10 @@ class Id {
 
   std::string s_;
 };
+
+inline size_t EstimateMemoryUsage(const Id& id) {
+  return base::trace_event::EstimateMemoryUsage(id.value());
+}
 
 }  // namespace syncable
 }  // namespace syncer

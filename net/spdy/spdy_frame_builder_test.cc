@@ -4,74 +4,63 @@
 
 #include "net/spdy/spdy_frame_builder.h"
 
+#include "net/spdy/array_output_buffer.h"
 #include "net/spdy/spdy_framer.h"
 #include "net/spdy/spdy_protocol.h"
 #include "testing/platform_test.h"
 
 namespace net {
 
-class SpdyFrameBuilderTest : public ::testing::TestWithParam<SpdyMajorVersion> {
- protected:
-  void SetUp() override { spdy_version_ = GetParam(); }
+namespace {
 
-  // Major version of SPDY protocol to be used.
-  SpdyMajorVersion spdy_version_;
-};
+const int64_t kSize = 64 * 1024;
+char output_buffer[kSize] = "";
 
-// All tests are run with SPDY/3 and HTTP/2.
-INSTANTIATE_TEST_CASE_P(SpdyFrameBuilderTests,
-                        SpdyFrameBuilderTest,
-                        ::testing::Values(SPDY3, HTTP2));
+}  // namespace
 
-TEST_P(SpdyFrameBuilderTest, GetWritableBuffer) {
-  const size_t builder_size = 10;
-  SpdyFrameBuilder builder(builder_size, spdy_version_);
-  char* writable_buffer = builder.GetWritableBuffer(builder_size);
-  memset(writable_buffer, ~1, builder_size);
-  EXPECT_TRUE(builder.Seek(builder_size));
+// Verifies that SpdyFrameBuilder::GetWritableBuffer() can be used to build a
+// SpdySerializedFrame.
+TEST(SpdyFrameBuilderTest, GetWritableBuffer) {
+  const size_t kBuilderSize = 10;
+  SpdyFrameBuilder builder(kBuilderSize);
+  char* writable_buffer = builder.GetWritableBuffer(kBuilderSize);
+  memset(writable_buffer, ~1, kBuilderSize);
+  EXPECT_TRUE(builder.Seek(kBuilderSize));
   SpdySerializedFrame frame(builder.take());
-  char expected[builder_size];
-  memset(expected, ~1, builder_size);
-  EXPECT_EQ(base::StringPiece(expected, builder_size),
-            base::StringPiece(frame.data(), builder_size));
+  char expected[kBuilderSize];
+  memset(expected, ~1, kBuilderSize);
+  EXPECT_EQ(base::StringPiece(expected, kBuilderSize),
+            base::StringPiece(frame.data(), kBuilderSize));
 }
 
-TEST_P(SpdyFrameBuilderTest, RewriteLength) {
-  // Create an empty SETTINGS frame both via framer and manually via builder.
-  // The one created via builder is initially given the incorrect length, but
-  // then is corrected via RewriteLength().
-  SpdyFramer framer(spdy_version_);
-  SpdySettingsIR settings_ir;
-  SpdySerializedFrame expected(framer.SerializeSettings(settings_ir));
-  SpdyFrameBuilder builder(expected.size() + 1, spdy_version_);
-  if (spdy_version_ == SPDY3) {
-    builder.WriteControlFrameHeader(framer, SETTINGS, 0);
-    builder.WriteUInt32(0);  // Write the number of settings.
-  } else {
-    builder.BeginNewFrame(framer, SETTINGS, 0, 0);
-  }
-  EXPECT_TRUE(builder.GetWritableBuffer(1) != NULL);
-  builder.RewriteLength(framer);
-  SpdySerializedFrame built(builder.take());
-  EXPECT_EQ(base::StringPiece(expected.data(), expected.size()),
-            base::StringPiece(built.data(), expected.size()));
+// Verifies that SpdyFrameBuilder::GetWritableBuffer() can be used to build a
+// SpdySerializedFrame to the output buffer.
+TEST(SpdyFrameBuilderTest, GetWritableOutput) {
+  ArrayOutputBuffer output(output_buffer, kSize);
+  const size_t kBuilderSize = 10;
+  SpdyFrameBuilder builder(kBuilderSize, &output);
+  size_t actual_size = 0;
+  char* writable_buffer = builder.GetWritableOutput(kBuilderSize, &actual_size);
+  memset(writable_buffer, ~1, kBuilderSize);
+  EXPECT_TRUE(builder.Seek(kBuilderSize));
+  SpdySerializedFrame frame(output.Begin(), kBuilderSize, false);
+  char expected[kBuilderSize];
+  memset(expected, ~1, kBuilderSize);
+  EXPECT_EQ(base::StringPiece(expected, kBuilderSize),
+            base::StringPiece(frame.data(), kBuilderSize));
 }
 
-TEST_P(SpdyFrameBuilderTest, OverwriteFlags) {
-  // Create a HEADERS frame both via framer and manually via builder with
-  // different flags set, then make them match using OverwriteFlags().
-  SpdyFramer framer(spdy_version_);
-  if (spdy_version_ == SPDY3) {
-    return;
-  }
-  SpdyHeadersIR headers_ir(1);
-  SpdySerializedFrame expected(framer.SerializeHeaders(headers_ir));
-  SpdyFrameBuilder builder(expected.size(), spdy_version_);
-  builder.BeginNewFrame(framer, HEADERS, 0, 1);
-  builder.OverwriteFlags(framer, HEADERS_FLAG_END_HEADERS);
-  SpdySerializedFrame built(builder.take());
-  EXPECT_EQ(base::StringPiece(expected.data(), expected.size()),
-            base::StringPiece(built.data(), built.size()));
+// Verifies the case that the buffer's capacity is too small.
+TEST(SpdyFrameBuilderTest, GetWritableOutputNegative) {
+  size_t small_cap = 1;
+  ArrayOutputBuffer output(output_buffer, small_cap);
+  const size_t kBuilderSize = 10;
+  SpdyFrameBuilder builder(kBuilderSize, &output);
+  size_t actual_size = 0;
+  char* writable_buffer = builder.GetWritableOutput(kBuilderSize, &actual_size);
+  builder.GetWritableOutput(kBuilderSize, &actual_size);
+  EXPECT_EQ((uint64_t)0, actual_size);
+  EXPECT_EQ(nullptr, writable_buffer);
 }
 
 }  // namespace net

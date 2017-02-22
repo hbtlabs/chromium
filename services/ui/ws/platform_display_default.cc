@@ -4,11 +4,12 @@
 
 #include "services/ui/ws/platform_display_default.h"
 
+#include "base/memory/ptr_util.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
-#include "services/ui/display/platform_screen.h"
+#include "services/ui/display/screen_manager.h"
 #include "services/ui/ws/platform_display_init_params.h"
 #include "services/ui/ws/server_window.h"
-#include "ui/base/cursor/cursor_loader.h"
+#include "ui/base/cursor/image_cursors.h"
 #include "ui/display/display.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
@@ -17,7 +18,7 @@
 
 #if defined(OS_WIN)
 #include "ui/platform_window/win/win_window.h"
-#elif defined(USE_X11)
+#elif defined(USE_X11) && !defined(OS_CHROMEOS)
 #include "ui/platform_window/x11/x11_window.h"
 #elif defined(OS_ANDROID)
 #include "ui/platform_window/android/platform_window_android.h"
@@ -32,10 +33,13 @@ PlatformDisplayDefault::PlatformDisplayDefault(
     const PlatformDisplayInitParams& init_params)
     : display_id_(init_params.display_id),
 #if !defined(OS_ANDROID)
-      cursor_loader_(ui::CursorLoader::Create()),
+      image_cursors_(new ImageCursors),
 #endif
       frame_generator_(new FrameGenerator(this, init_params.root_window)),
-      metrics_(init_params.metrics) {
+      metrics_(init_params.metrics),
+      widget_(gfx::kNullAcceleratedWidget) {
+  frame_generator_->SetDeviceScaleFactor(
+      init_params.metrics.device_scale_factor);
 }
 
 PlatformDisplayDefault::~PlatformDisplayDefault() {
@@ -59,9 +63,8 @@ void PlatformDisplayDefault::Init(PlatformDisplayDelegate* delegate) {
   gfx::Rect bounds(metrics_.bounds.origin(), metrics_.pixel_size);
 #if defined(OS_WIN)
   platform_window_ = base::MakeUnique<ui::WinWindow>(this, bounds);
-#elif defined(USE_X11)
-  platform_window_ = base::MakeUnique<ui::X11Window>(this);
-  platform_window_->SetBounds(bounds);
+#elif defined(USE_X11) && !defined(OS_CHROMEOS)
+  platform_window_ = base::MakeUnique<ui::X11Window>(this, bounds);
 #elif defined(OS_ANDROID)
   platform_window_ = base::MakeUnique<ui::PlatformWindowAndroid>(this);
   platform_window_->SetBounds(bounds);
@@ -73,6 +76,10 @@ void PlatformDisplayDefault::Init(PlatformDisplayDelegate* delegate) {
 #endif
 
   platform_window_->Show();
+#if !defined(OS_ANDROID)
+  image_cursors_->SetDisplay(delegate_->GetDisplay(),
+                             metrics_.device_scale_factor);
+#endif
 }
 
 int64_t PlatformDisplayDefault::GetId() const {
@@ -103,7 +110,7 @@ void PlatformDisplayDefault::SetCursorById(mojom::Cursor cursor_id) {
   //
   // We probably also need to deal with different DPIs.
   ui::Cursor cursor(static_cast<int32_t>(cursor_id));
-  cursor_loader_->SetPlatformCursor(&cursor);
+  image_cursors_->SetPlatformCursor(&cursor);
   platform_window_->SetCursor(cursor.platform());
 #endif
 }
@@ -125,9 +132,8 @@ gfx::Rect PlatformDisplayDefault::GetBounds() const {
   return metrics_.bounds;
 }
 
-void PlatformDisplayDefault::OnGpuChannelEstablished(
-    scoped_refptr<gpu::GpuChannelHost> channel) {
-  frame_generator_->OnGpuChannelEstablished(channel);
+FrameGenerator* PlatformDisplayDefault::GetFrameGenerator() {
+  return frame_generator_.get();
 }
 
 bool PlatformDisplayDefault::UpdateViewportMetrics(
@@ -142,12 +148,17 @@ bool PlatformDisplayDefault::UpdateViewportMetrics(
   }
 
   metrics_ = metrics;
+  frame_generator_->SetDeviceScaleFactor(metrics_.device_scale_factor);
   return true;
 }
 
 const display::ViewportMetrics& PlatformDisplayDefault::GetViewportMetrics()
     const {
   return metrics_;
+}
+
+gfx::AcceleratedWidget PlatformDisplayDefault::GetAcceleratedWidget() const {
+  return widget_;
 }
 
 void PlatformDisplayDefault::UpdateEventRootLocation(ui::LocatedEvent* event) {
@@ -166,7 +177,9 @@ void PlatformDisplayDefault::OnBoundsChanged(const gfx::Rect& new_bounds) {
   // something but that isn't fully flushed out.
 }
 
-void PlatformDisplayDefault::OnDamageRect(const gfx::Rect& damaged_region) {}
+void PlatformDisplayDefault::OnDamageRect(const gfx::Rect& damaged_region) {
+  frame_generator_->OnWindowDamaged();
+}
 
 void PlatformDisplayDefault::DispatchEvent(ui::Event* event) {
   if (event->IsLocatedEvent())
@@ -213,7 +226,7 @@ void PlatformDisplayDefault::DispatchEvent(ui::Event* event) {
 }
 
 void PlatformDisplayDefault::OnCloseRequest() {
-  display::PlatformScreen::GetInstance()->RequestCloseDisplay(GetId());
+  display::ScreenManager::GetInstance()->RequestCloseDisplay(GetId());
 }
 
 void PlatformDisplayDefault::OnClosed() {}
@@ -231,6 +244,8 @@ void PlatformDisplayDefault::OnAcceleratedWidgetAvailable(
   // This will get called after Init() is called, either synchronously as part
   // of the Init() callstack or async after Init() has returned, depending on
   // the platform.
+  DCHECK_EQ(gfx::kNullAcceleratedWidget, widget_);
+  widget_ = widget;
   delegate_->OnAcceleratedWidgetAvailable();
   frame_generator_->OnAcceleratedWidgetAvailable(widget);
 }

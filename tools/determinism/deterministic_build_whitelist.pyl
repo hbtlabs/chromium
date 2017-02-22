@@ -2,6 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 #
+# This is a .pyl, or "Python Literal", file. You can treat it just like a
+# .json file, with the following exceptions:
+# * all keys must be quoted (use single quotes, please);
+# * comments are allowed, using '#' syntax; and
+# * trailing commas are allowed.
+#
 # List of files that are known to be non deterministic. This is a "temporary"
 # workaround to find regression on the deterministic builders.
 #
@@ -11,15 +17,10 @@
 {
   # https://crbug.com/383340
   'android': [
-    'flatc',
   ],
 
   # https://crbug.com/330263
   'linux': [
-    'flatc',
-    # https://crbug.com/654989
-    'ppapi_nacl_tests_pnacl_newlib_x32_nonsfi.nexe',
-    'ppapi_nacl_tests_pnacl_newlib_x64.nexe',
   ],
 
   # https://crbug.com/330262
@@ -76,7 +77,6 @@
     'ffmpeg_regression_tests',
     'filesystem_service_unittests',
     'filter_fuzz_stub',
-    'flatc',
     'gcm_unit_tests',
     'generate_barcode_video',
     'generate_timecode_audio',
@@ -110,7 +110,7 @@
     'mac_installer_unittests',
     'macviews_interactive_ui_tests',
     'media_blink_unittests',
-    'media_mojo_shell_unittests',
+    'media_service_unittests',
     'media_mojo_unittests',
     'media_perftests',
     'media_pipeline_integration_unittests',
@@ -122,7 +122,6 @@
     'mojo_js_unittests',
     'mojo_public_bindings_unittests',
     'mojo_public_system_unittests',
-    'mojo_runner_host_unittests',
     'mojo_system_unittests',
     'nacl_loader_unittests',
     'native_theme_unittests',
@@ -176,9 +175,6 @@
     'app_shell.exe',
     'app_shell_unittests.exe',
     'ar_sample_test_driver.exe',
-    'ash_library.dll',
-    'ash_shell_with_content.exe',
-    'ash_unittests.exe',
     'audio_unittests.exe',
     'aura_demo.exe',
     'aura_unittests.exe',
@@ -269,10 +265,9 @@
     'libaddressinput_unittests.exe',
     'login_library.dll',
     'mash_init_library.dll',
-    'mash_unittests.exe',
     'media_blink_unittests.exe',
     'media_library.dll',
-    'media_mojo_shell_unittests.exe',
+    'media_service_unittests.exe',
     'media_mojo_unittests.exe',
     'media_perftests.exe',
     'media_pipeline_integration_unittests.exe',

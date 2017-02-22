@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
-#include "base/memory/ref_counted_delete_on_message_loop.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_number_conversions.h"
 #include "content/browser/devtools/devtools_io_context.h"
@@ -20,7 +19,8 @@ namespace content {
 namespace protocol {
 
 IOHandler::IOHandler(DevToolsIOContext* io_context)
-    : io_context_(io_context)
+    : DevToolsDomainHandler(IO::Metainfo::domainName),
+      io_context_(io_context)
     , weak_factory_(this) {}
 
 IOHandler::~IOHandler() {}
@@ -28,10 +28,6 @@ IOHandler::~IOHandler() {}
 void IOHandler::Wire(UberDispatcher* dispatcher) {
   frontend_.reset(new IO::Frontend(dispatcher->channel()));
   IO::Dispatcher::wire(dispatcher, this);
-}
-
-Response IOHandler::Disable() {
-  return Response::OK();
 }
 
 void IOHandler::Read(

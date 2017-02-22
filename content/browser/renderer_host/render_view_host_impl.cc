@@ -38,7 +38,6 @@
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/host_zoom_map_impl.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
-#include "content/browser/renderer_host/dip_util.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_delegate.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
@@ -60,7 +59,6 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/content_browser_client.h"
-#include "content/public/browser/focused_node_details.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
@@ -74,18 +72,18 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/context_menu_params.h"
-#include "content/public/common/drop_data.h"
 #include "content/public/common/file_chooser_file_info.h"
 #include "content/public/common/file_chooser_params.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
+#include "media/base/media_switches.h"
 #include "net/base/url_util.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard.h"
+#include "ui/base/device_form_factor.h"
 #include "ui/base/touch/touch_device.h"
-#include "ui/base/touch/touch_enabled.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/color_space.h"
@@ -202,14 +200,12 @@ RenderViewHostImpl::RenderViewHostImpl(
       frames_ref_count_(0),
       delegate_(delegate),
       instance_(static_cast<SiteInstanceImpl*>(instance)),
-      enabled_bindings_(0),
       is_active_(!swapped_out),
       is_swapped_out_(swapped_out),
       main_frame_routing_id_(main_frame_routing_id),
       is_waiting_for_close_ack_(false),
       sudden_termination_allowed_(false),
       render_view_termination_status_(base::TERMINATION_STATUS_STILL_RUNNING),
-      is_focused_element_editable_(false),
       updating_web_preferences_(false),
       render_view_ready_on_process_launch_(false),
       weak_factory_(this) {
@@ -321,11 +317,6 @@ bool RenderViewHostImpl::CreateRenderView(
 
   GetProcess()->GetRendererInterface()->CreateView(std::move(params));
 
-  // If it's enabled, tell the renderer to set up the Javascript bindings for
-  // sending messages back to the browser.
-  if (GetProcess()->IsForGuestsOnly())
-    DCHECK_EQ(0, enabled_bindings_);
-  Send(new ViewMsg_AllowBindings(GetRoutingID(), enabled_bindings_));
   // Let our delegate know that we created a RenderView.
   delegate_->RenderViewCreated(this);
 
@@ -433,26 +424,31 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
   // On Android, user gestures are normally required, unless that requirement
   // is disabled with a command-line switch or the equivalent field trial is
   // is set to "Enabled".
-  const std::string autoplay_group_name = base::FieldTrialList::FindFullName(
-      "MediaElementAutoplay");
   prefs.user_gesture_required_for_media_playback = !command_line.HasSwitch(
-      switches::kDisableGestureRequirementForMediaPlayback) &&
-          (autoplay_group_name.empty() || autoplay_group_name != "Enabled");
+      switches::kDisableGestureRequirementForMediaPlayback);
 
   prefs.progress_bar_completion = GetProgressBarCompletionPolicy();
 
   prefs.use_solid_color_scrollbars = true;
-#endif
+#else  // defined(OS_ANDROID)
+  prefs.cross_origin_media_playback_requires_user_gesture =
+      base::FeatureList::GetInstance()->IsEnabled(
+          features::kCrossOriginMediaPlaybackRequiresUserGesture);
+#endif  // defined(OS_ANDROID)
 
-  // Handle autoplay gesture override experiment.
-  // Note that anything but a well-formed string turns the experiment off.
-  prefs.autoplay_experiment_mode = base::FieldTrialList::FindFullName(
-      "MediaElementGestureOverrideExperiment");
-
-  prefs.touch_enabled = ui::AreTouchEventsEnabled();
-  prefs.device_supports_touch = prefs.touch_enabled &&
-      ui::GetTouchScreensAvailability() ==
-          ui::TouchScreensAvailability::ENABLED;
+  prefs.device_supports_touch = ui::GetTouchScreensAvailability() ==
+                                ui::TouchScreensAvailability::ENABLED;
+  const std::string touch_enabled_switch =
+      command_line.HasSwitch(switches::kTouchEventFeatureDetection)
+          ? command_line.GetSwitchValueASCII(
+                switches::kTouchEventFeatureDetection)
+          : switches::kTouchEventFeatureDetectionAuto;
+  prefs.touch_event_feature_detection_enabled =
+      (touch_enabled_switch == switches::kTouchEventFeatureDetectionAuto)
+          ? prefs.device_supports_touch
+          : (touch_enabled_switch.empty() ||
+             touch_enabled_switch ==
+                 switches::kTouchEventFeatureDetectionEnabled);
   std::tie(prefs.available_pointer_types, prefs.available_hover_types) =
       ui::GetAvailablePointerAndHoverTypes();
   prefs.primary_pointer_type =
@@ -461,7 +457,9 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
       ui::GetPrimaryHoverType(prefs.available_hover_types);
 
 #if defined(OS_ANDROID)
-  prefs.device_supports_mouse = false;
+  prefs.video_fullscreen_orientation_lock_enabled =
+      base::FeatureList::IsEnabled(media::kVideoFullscreenOrientationLock) &&
+      ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE;
 #endif
 
   prefs.pointer_events_max_touch_points = ui::MaxTouchPoints();
@@ -494,7 +492,15 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
       command_line.HasSwitch(switches::kMainFrameResizesAreOrientationChanges);
 
   prefs.color_correct_rendering_enabled =
-      command_line.HasSwitch(cc::switches::kEnableColorCorrectRendering);
+      command_line.HasSwitch(cc::switches::kEnableColorCorrectRendering) ||
+      command_line.HasSwitch(cc::switches::kEnableTrueColorRendering);
+
+  prefs.color_correct_rendering_default_mode_enabled =
+      command_line.HasSwitch(
+          switches::kEnableColorCorrectRenderingDefaultMode);
+
+  prefs.true_color_rendering_enabled =
+      command_line.HasSwitch(cc::switches::kEnableTrueColorRendering);
 
   prefs.spatial_navigation_enabled = command_line.HasSwitch(
       switches::kEnableSpatialNavigation);
@@ -525,6 +531,29 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
 
   if (delegate_ && delegate_->HideDownloadUI())
     prefs.hide_download_ui = true;
+
+  // `media_controls_enabled` is `true` by default.
+  if (delegate_ && delegate_->HasPersistentVideo())
+    prefs.media_controls_enabled = false;
+
+  prefs.background_video_track_optimization_enabled =
+      base::FeatureList::IsEnabled(media::kBackgroundVideoTrackOptimization);
+
+  // TODO(avayvod, asvitkine): Query the value directly when it is available in
+  // the renderer process. See https://crbug.com/681160.
+  prefs.max_keyframe_distance_to_disable_background_video =
+      base::TimeDelta::FromMilliseconds(
+          variations::GetVariationParamByFeatureAsInt(
+              media::kBackgroundVideoTrackOptimization,
+              "max_keyframe_distance_ms",
+              base::TimeDelta::FromSeconds(10).InMilliseconds()));
+
+  // TODO(servolk, asvitkine): Query the value directly when it is available in
+  // the renderer process. See https://crbug.com/681160.
+  prefs.enable_instant_source_buffer_gc =
+      variations::GetVariationParamByFeatureAsBool(
+          media::kMemoryPressureBasedSourceBufferGC,
+          "enable_instant_source_buffer_gc", false);
 
   std::map<std::string, std::string> expensive_background_throttling_prefs;
   variations::GetVariationParamsByFeature(
@@ -622,49 +651,13 @@ RenderFrameHost* RenderViewHostImpl::GetMainFrame() {
   return RenderFrameHost::FromID(GetProcess()->GetID(), main_frame_routing_id_);
 }
 
-void RenderViewHostImpl::AllowBindings(int bindings_flags) {
-  // Never grant any bindings to browser plugin guests.
-  if (GetProcess()->IsForGuestsOnly()) {
-    NOTREACHED() << "Never grant bindings to a guest process.";
-    return;
-  }
-
-  // Ensure we aren't granting WebUI bindings to a process that has already
-  // been used for non-privileged views.
-  if (bindings_flags & BINDINGS_POLICY_WEB_UI &&
-      GetProcess()->HasConnection() &&
-      !ChildProcessSecurityPolicyImpl::GetInstance()->HasWebUIBindings(
-          GetProcess()->GetID())) {
-    // This process has no bindings yet. Make sure it does not have more
-    // than this single active view.
-    // --single-process only has one renderer.
-    if (GetProcess()->GetActiveViewCount() > 1 &&
-        !base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kSingleProcess))
-      return;
-  }
-
-  if (bindings_flags & BINDINGS_POLICY_WEB_UI) {
-    ChildProcessSecurityPolicyImpl::GetInstance()->GrantWebUIBindings(
-        GetProcess()->GetID());
-  }
-
-  enabled_bindings_ |= bindings_flags;
-  if (GetWidget()->renderer_initialized())
-    Send(new ViewMsg_AllowBindings(GetRoutingID(), enabled_bindings_));
-}
-
-int RenderViewHostImpl::GetEnabledBindings() const {
-  return enabled_bindings_;
-}
-
 void RenderViewHostImpl::SetWebUIProperty(const std::string& name,
                                           const std::string& value) {
   // This is a sanity check before telling the renderer to enable the property.
   // It could lie and send the corresponding IPC messages anyway, but we will
   // not act on them if enabled_bindings_ doesn't agree. If we get here without
   // WebUI bindings, kill the renderer process.
-  if (enabled_bindings_ & BINDINGS_POLICY_WEB_UI) {
+  if (GetMainFrame()->GetEnabledBindings() & BINDINGS_POLICY_WEB_UI) {
     Send(new ViewMsg_SetWebUIProperty(GetRoutingID(), name, value));
   } else {
     RecordAction(
@@ -742,11 +735,9 @@ bool RenderViewHostImpl::OnMessageReceived(const IPC::Message& msg) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(RenderViewHostImpl, msg)
     IPC_MESSAGE_HANDLER(FrameHostMsg_RenderProcessGone, OnRenderProcessGone)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_ShowView, OnShowView)
     IPC_MESSAGE_HANDLER(ViewHostMsg_ShowWidget, OnShowWidget)
     IPC_MESSAGE_HANDLER(ViewHostMsg_ShowFullscreenWidget,
                         OnShowFullscreenWidget)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_UpdateState, OnUpdateState)
     IPC_MESSAGE_HANDLER(ViewHostMsg_UpdateTargetURL, OnUpdateTargetURL)
     IPC_MESSAGE_HANDLER(ViewHostMsg_Close, OnClose)
     IPC_MESSAGE_HANDLER(ViewHostMsg_RequestMove, OnRequestMove)
@@ -757,11 +748,8 @@ bool RenderViewHostImpl::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(ViewHostMsg_RouteCloseEvent,
                         OnRouteCloseEvent)
     IPC_MESSAGE_HANDLER(ViewHostMsg_TakeFocus, OnTakeFocus)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_FocusedNodeChanged, OnFocusedNodeChanged)
     IPC_MESSAGE_HANDLER(ViewHostMsg_ClosePage_ACK, OnClosePageACK)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_DidZoomURL, OnDidZoomURL)
     IPC_MESSAGE_HANDLER(ViewHostMsg_Focus, OnFocus)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_FocusedNodeTouched, OnFocusedNodeTouched)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -786,22 +774,6 @@ void RenderViewHostImpl::ShutdownAndDestroy() {
   delete this;
 }
 
-void RenderViewHostImpl::CreateNewWindow(
-    int32_t route_id,
-    int32_t main_frame_route_id,
-    int32_t main_frame_widget_route_id,
-    const mojom::CreateNewWindowParams& params,
-    SessionStorageNamespace* session_storage_namespace) {
-  mojom::CreateNewWindowParamsPtr validated_params(params.Clone());
-  GetProcess()->FilterURL(false, &validated_params->target_url);
-  GetProcess()->FilterURL(false, &validated_params->opener_url);
-  GetProcess()->FilterURL(true, &validated_params->opener_security_origin);
-
-  delegate_->CreateNewWindow(GetSiteInstance(), route_id, main_frame_route_id,
-                             main_frame_widget_route_id, *validated_params,
-                             session_storage_namespace);
-}
-
 void RenderViewHostImpl::CreateNewWidget(int32_t route_id,
                                          blink::WebPopupType popup_type) {
   delegate_->CreateNewWidget(GetProcess()->GetID(), route_id, popup_type);
@@ -809,15 +781,6 @@ void RenderViewHostImpl::CreateNewWidget(int32_t route_id,
 
 void RenderViewHostImpl::CreateNewFullscreenWidget(int32_t route_id) {
   delegate_->CreateNewFullscreenWidget(GetProcess()->GetID(), route_id);
-}
-
-void RenderViewHostImpl::OnShowView(int route_id,
-                                    WindowOpenDisposition disposition,
-                                    const gfx::Rect& initial_rect,
-                                    bool user_gesture) {
-  delegate_->ShowCreatedWindow(GetProcess()->GetID(), route_id, disposition,
-                               initial_rect, user_gesture);
-  Send(new ViewMsg_Move_ACK(route_id));
 }
 
 void RenderViewHostImpl::OnShowWidget(int route_id,
@@ -836,20 +799,6 @@ void RenderViewHostImpl::OnRenderProcessGone(int status, int exit_code) {
   // RenderViewHostImpl and destroy itself.
   // TODO(nasko): Remove this hack once RenderViewHost and RenderWidgetHost are
   // decoupled.
-}
-
-void RenderViewHostImpl::OnUpdateState(const PageState& state) {
-  // Without this check, the renderer can trick the browser into using
-  // filenames it can't access in a future session restore.
-  auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
-  int child_id = GetProcess()->GetID();
-  if (!policy->CanReadAllFiles(child_id, state.GetReferencedFiles())) {
-    bad_message::ReceivedBadMessage(
-        GetProcess(), bad_message::RVH_CAN_ACCESS_FILES_OF_PAGE_STATE);
-    return;
-  }
-
-  delegate_->UpdateState(this, state);
 }
 
 void RenderViewHostImpl::OnUpdateTargetURL(const GURL& url) {
@@ -903,32 +852,6 @@ void RenderViewHostImpl::OnTakeFocus(bool reverse) {
     view->TakeFocus(reverse);
 }
 
-void RenderViewHostImpl::OnFocusedNodeChanged(
-    bool is_editable_node,
-    const gfx::Rect& node_bounds_in_viewport) {
-  is_focused_element_editable_ = is_editable_node;
-
-  // None of the rest makes sense without a view.
-  if (!GetWidget()->GetView())
-    return;
-
-  // Convert node_bounds to screen coordinates.
-  gfx::Rect view_bounds_in_screen = GetWidget()->GetView()->GetViewBounds();
-  gfx::Point origin = node_bounds_in_viewport.origin();
-  origin.Offset(view_bounds_in_screen.x(), view_bounds_in_screen.y());
-  gfx::Rect node_bounds_in_screen(origin.x(), origin.y(),
-                                  node_bounds_in_viewport.width(),
-                                  node_bounds_in_viewport.height());
-
-  GetWidget()->GetView()->FocusedNodeChanged(
-      is_editable_node, node_bounds_in_screen);
-
-  FocusedNodeDetails details = {is_editable_node, node_bounds_in_screen};
-  NotificationService::current()->Notify(NOTIFICATION_FOCUS_CHANGED_IN_PAGE,
-                                         Source<RenderViewHost>(this),
-                                         Details<FocusedNodeDetails>(&details));
-}
-
 void RenderViewHostImpl::OnClosePageACK() {
   GetWidget()->decrement_in_flight_event_count();
   ClosePageIgnoringUnloadEvents();
@@ -942,7 +865,7 @@ void RenderViewHostImpl::OnFocus() {
 
 void RenderViewHostImpl::RenderWidgetDidForwardMouseEvent(
     const blink::WebMouseEvent& mouse_event) {
-  if (mouse_event.type == WebInputEvent::MouseWheel &&
+  if (mouse_event.type() == WebInputEvent::MouseWheel &&
       GetWidget()->ignore_input_events()) {
     delegate_->OnIgnoredUIEvent();
   }
@@ -951,7 +874,7 @@ void RenderViewHostImpl::RenderWidgetDidForwardMouseEvent(
 bool RenderViewHostImpl::MayRenderWidgetForwardKeyboardEvent(
     const NativeWebKeyboardEvent& key_event) {
   if (GetWidget()->ignore_input_events()) {
-    if (key_event.type == WebInputEvent::RawKeyDown)
+    if (key_event.type() == WebInputEvent::RawKeyDown)
       delegate_->OnIgnoredUIEvent();
     return false;
   }
@@ -979,19 +902,6 @@ void RenderViewHostImpl::OnWebkitPreferencesChanged() {
   updating_web_preferences_ = true;
   UpdateWebkitPreferences(ComputeWebkitPrefs());
   updating_web_preferences_ = false;
-}
-
-void RenderViewHostImpl::ClearFocusedElement() {
-  is_focused_element_editable_ = false;
-  Send(new ViewMsg_ClearFocusedElement(GetRoutingID()));
-}
-
-bool RenderViewHostImpl::IsFocusedElementEditable() {
-  return is_focused_element_editable_;
-}
-
-void RenderViewHostImpl::Zoom(PageZoom zoom) {
-  Send(new ViewMsg_Zoom(GetRoutingID(), zoom));
 }
 
 void RenderViewHostImpl::DisableScrollbarsForThreshold(const gfx::Size& size) {
@@ -1027,36 +937,6 @@ void RenderViewHostImpl::ExecutePluginActionAtLocation(
 
 void RenderViewHostImpl::NotifyMoveOrResizeStarted() {
   Send(new ViewMsg_MoveOrResizeStarted(GetRoutingID()));
-}
-
-void RenderViewHostImpl::OnDidZoomURL(double zoom_level,
-                                      const GURL& url) {
-  HostZoomMapImpl* host_zoom_map =
-      static_cast<HostZoomMapImpl*>(HostZoomMap::Get(GetSiteInstance()));
-
-  host_zoom_map->SetZoomLevelForView(GetProcess()->GetID(),
-                                     GetRoutingID(),
-                                     zoom_level,
-                                     net::GetHostOrSpecFromURL(url));
-}
-
-void RenderViewHostImpl::OnFocusedNodeTouched(bool editable) {
-#if defined(OS_WIN)
-  // We use the cursor position to determine where the touch occurred.
-  // TODO(ananta)
-  // Pass this information from blink.
-  // In site isolation mode, we may not have a RenderViewHostImpl instance
-  // which means that displaying the OSK is not going to work. We should
-  // probably move this to RenderWidgetHostImpl and call the view from there.
-  // https://bugs.chromium.org/p/chromium/issues/detail?id=613326
-  POINT cursor_pos = {};
-  ::GetCursorPos(&cursor_pos);
-  float scale = GetScaleFactorForView(GetWidget()->GetView());
-  gfx::Point location_dips_screen =
-      gfx::ConvertPointToDIP(scale, gfx::Point(cursor_pos));
-  if (GetWidget()->GetView())
-    GetWidget()->GetView()->FocusedNodeTouched(location_dips_screen, editable);
-#endif
 }
 
 void RenderViewHostImpl::SelectWordAroundCaret() {

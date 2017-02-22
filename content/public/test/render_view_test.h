@@ -13,23 +13,29 @@
 #include "base/command_line.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string16.h"
+#include "base/test/scoped_async_task_scheduler.h"
 #include "base/test/test_io_thread.h"
 #include "build/build_config.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/common/main_function_params.h"
 #include "content/public/common/page_state.h"
 #include "content/public/test/mock_render_thread.h"
-#include "mojo/edk/test/scoped_ipc_support.h"
+#include "mojo/edk/embedder/scoped_ipc_support.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebLeakDetector.h"
+
+namespace base {
+class FieldTrialList;
+}
 
 namespace blink {
 namespace scheduler {
 class RendererScheduler;
 }
 class WebInputElement;
+class WebMouseEvent;
 class WebWidget;
 }
 
@@ -185,7 +191,14 @@ class RenderViewTest : public testing::Test, blink::WebLeakDetectorClient {
   // blink::WebLeakDetectorClient implementation.
   void onLeakDetectionComplete(const Result& result) override;
 
+ private:
   base::MessageLoop msg_loop_;
+
+  // Required by gin::V8Platform::CallOnBackgroundThread(). Can't be a
+  // ScopedTaskScheduler because v8 synchronously waits for tasks to run.
+  base::test::ScopedAsyncTaskScheduler scoped_async_task_scheduler_;
+
+ protected:
   std::unique_ptr<FakeCompositorDependencies> compositor_deps_;
   std::unique_ptr<MockRenderProcess> mock_process_;
   // We use a naked pointer because we don't want to expose RenderViewImpl in
@@ -201,10 +214,11 @@ class RenderViewTest : public testing::Test, blink::WebLeakDetectorClient {
   std::unique_ptr<RendererMainPlatformDelegate> platform_;
   std::unique_ptr<MainFunctionParams> params_;
   std::unique_ptr<base::CommandLine> command_line_;
+  std::unique_ptr<base::FieldTrialList> field_trial_list_;
 
   // For Mojo.
   std::unique_ptr<base::TestIOThread> test_io_thread_;
-  std::unique_ptr<mojo::edk::test::ScopedIPCSupport> ipc_support_;
+  std::unique_ptr<mojo::edk::ScopedIPCSupport> ipc_support_;
 
 #if defined(OS_MACOSX)
   std::unique_ptr<base::mac::ScopedNSAutoreleasePool> autorelease_pool_;

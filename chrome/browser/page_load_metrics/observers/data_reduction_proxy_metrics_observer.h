@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_PAGE_LOAD_METRICS_OBSERVERS_DATA_REDUCTION_PROXY_METRICS_OBSERVER_H_
 #define CHROME_BROWSER_PAGE_LOAD_METRICS_OBSERVERS_DATA_REDUCTION_PROXY_METRICS_OBSERVER_H_
 
+#include <stdint.h>
+
 #include <memory>
 
 #include "base/macros.h"
@@ -41,6 +43,21 @@ extern const char kHistogramParseStartSuffix[];
 extern const char kHistogramParseBlockedOnScriptLoadSuffix[];
 extern const char kHistogramParseDurationSuffix[];
 
+// Byte and request specific histogram suffixes.
+extern const char kResourcesPercentProxied[];
+extern const char kBytesPercentProxied[];
+extern const char kBytesCompressionRatio[];
+extern const char kBytesInflationPercent[];
+extern const char kNetworkResources[];
+extern const char kResourcesProxied[];
+extern const char kResourcesNotProxied[];
+extern const char kNetworkBytes[];
+extern const char kBytesProxied[];
+extern const char kBytesNotProxied[];
+extern const char kBytesOriginal[];
+extern const char kBytesSavings[];
+extern const char kBytesInflation[];
+
 }  // namespace internal
 
 // Observer responsible for recording core page load metrics releveant to
@@ -56,7 +73,7 @@ class DataReductionProxyMetricsObserver
                         const GURL& currently_committed_url,
                         bool started_in_foreground) override;
   ObservePolicy OnCommit(content::NavigationHandle* navigation_handle) override;
-  ObservePolicy OnHidden(
+  ObservePolicy FlushMetricsOnAppEnterBackground(
       const page_load_metrics::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& info) override;
   void OnComplete(const page_load_metrics::PageLoadTiming& timing,
@@ -87,11 +104,16 @@ class DataReductionProxyMetricsObserver
                     const page_load_metrics::PageLoadExtraInfo& info) override;
   void OnParseStop(const page_load_metrics::PageLoadTiming& timing,
                    const page_load_metrics::PageLoadExtraInfo& info) override;
+  void OnLoadedResource(
+      const page_load_metrics::ExtraRequestInfo& extra_request_info) override;
 
  private:
   // Sends the page load information to the pingback client.
   void SendPingback(const page_load_metrics::PageLoadTiming& timing,
                     const page_load_metrics::PageLoadExtraInfo& info);
+
+  // Records UMA of page size when the observer is about to be deleted.
+  void RecordPageSizeUMA() const;
 
   // Gets the default DataReductionProxyPingbackClient. Overridden in testing.
   virtual DataReductionProxyPingbackClient* GetPingbackClient() const;
@@ -101,6 +123,22 @@ class DataReductionProxyMetricsObserver
 
   // The browser context this navigation is operating in.
   content::BrowserContext* browser_context_;
+
+  // The number of resources that used data reduction proxy.
+  int num_data_reduction_proxy_resources_;
+
+  // The number of resources that did not come from cache.
+  int num_network_resources_;
+
+  // The total content network bytes that the user would have downloaded if they
+  // were not using data reduction proxy.
+  int64_t original_network_bytes_;
+
+  // The total network bytes loaded through data reduction proxy.
+  int64_t network_bytes_proxied_;
+
+  // The total network bytes used.
+  int64_t network_bytes_;
 
   DISALLOW_COPY_AND_ASSIGN(DataReductionProxyMetricsObserver);
 };

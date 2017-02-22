@@ -20,9 +20,10 @@ class StyleDifference {
     ZIndexChanged = 1 << 2,
     FilterChanged = 1 << 3,
     BackdropFilterChanged = 1 << 4,
+    CSSClipChanged = 1 << 5,
     // The object needs to issue paint invalidations if it is affected by text
     // decorations or properties dependent on color (e.g., border or outline).
-    TextDecorationOrColorChanged = 1 << 5,
+    TextDecorationOrColorChanged = 1 << 6,
     // If you add a value here, be sure to update the number of bits on
     // m_propertySpecificDifferences.
   };
@@ -35,8 +36,13 @@ class StyleDifference {
         m_scrollAnchorDisablingPropertyChanged(false) {}
 
   bool hasDifference() const {
-    return m_paintInvalidationType || m_layoutType ||
-           m_propertySpecificDifferences;
+    bool result = m_paintInvalidationType || m_layoutType ||
+                  m_propertySpecificDifferences;
+    // m_recomputeOverflow, m_scrollAnchorDisablingPropertyChanged and
+    // are never set without other flags set.
+    DCHECK(result ||
+           (!m_recomputeOverflow && !m_scrollAnchorDisablingPropertyChanged));
+    return result;
   }
 
   bool hasAtMostPropertySpecificDifferences(
@@ -49,12 +55,21 @@ class StyleDifference {
     return m_paintInvalidationType != NoPaintInvalidation;
   }
 
+  // The text selection needs paint invalidation.
+  bool needsPaintInvalidationSelection() const {
+    return m_paintInvalidationType == PaintInvalidationSelection;
+  }
+  void setNeedsPaintInvalidationSelection() {
+    if (!needsPaintInvalidation())
+      m_paintInvalidationType = PaintInvalidationSelection;
+  }
+
   // The object just needs to issue paint invalidations.
   bool needsPaintInvalidationObject() const {
     return m_paintInvalidationType == PaintInvalidationObject;
   }
   void setNeedsPaintInvalidationObject() {
-    ASSERT(!needsPaintInvalidationSubtree());
+    DCHECK(!needsPaintInvalidationSubtree());
     m_paintInvalidationType = PaintInvalidationObject;
   }
 
@@ -113,6 +128,11 @@ class StyleDifference {
     m_propertySpecificDifferences |= BackdropFilterChanged;
   }
 
+  bool cssClipChanged() const {
+    return m_propertySpecificDifferences & CSSClipChanged;
+  }
+  void setCSSClipChanged() { m_propertySpecificDifferences |= CSSClipChanged; }
+
   bool textDecorationOrColorChanged() const {
     return m_propertySpecificDifferences & TextDecorationOrColorChanged;
   }
@@ -129,16 +149,17 @@ class StyleDifference {
 
  private:
   enum PaintInvalidationType {
-    NoPaintInvalidation = 0,
+    NoPaintInvalidation,
+    PaintInvalidationSelection,
     PaintInvalidationObject,
-    PaintInvalidationSubtree
+    PaintInvalidationSubtree,
   };
   unsigned m_paintInvalidationType : 2;
 
   enum LayoutType { NoLayout = 0, PositionedMovement, FullLayout };
   unsigned m_layoutType : 2;
   unsigned m_recomputeOverflow : 1;
-  unsigned m_propertySpecificDifferences : 6;
+  unsigned m_propertySpecificDifferences : 7;
   unsigned m_scrollAnchorDisablingPropertyChanged : 1;
 };
 

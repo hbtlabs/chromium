@@ -112,6 +112,7 @@ class CORE_EXPORT InspectorPageAgent final
   Response reload(Maybe<bool> bypassCache,
                   Maybe<String> scriptToEvaluateOnLoad) override;
   Response navigate(const String& url, String* frameId) override;
+  Response stopLoading() override;
   Response getResourceTree(
       std::unique_ptr<protocol::Page::FrameResourceTree>* frameTree) override;
   void getResourceContent(const String& frameId,
@@ -144,7 +145,7 @@ class CORE_EXPORT InspectorPageAgent final
   void didCommitLoad(LocalFrame*, DocumentLoader*);
   void frameAttachedToParent(LocalFrame*);
   void frameDetachedFromParent(LocalFrame*);
-  void frameStartedLoading(LocalFrame*);
+  void frameStartedLoading(LocalFrame*, FrameLoadType);
   void frameStoppedLoading(LocalFrame*);
   void frameScheduledNavigation(LocalFrame*, double delay);
   void frameClearedScheduledNavigation(LocalFrame*);

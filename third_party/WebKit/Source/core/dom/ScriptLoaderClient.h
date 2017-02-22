@@ -22,6 +22,7 @@
 #define ScriptLoaderClient_h
 
 #include "core/CoreExport.h"
+#include "wtf/text/AtomicString.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
@@ -41,6 +42,12 @@ class CORE_EXPORT ScriptLoaderClient {
   virtual bool asyncAttributeValue() const = 0;
   virtual bool deferAttributeValue() const = 0;
   virtual bool hasSourceAttribute() const = 0;
+
+  AtomicString nonce() const { return m_nonce; }
+  void setNonce(const String& nonce) { m_nonce = AtomicString(nonce); }
+
+ private:
+  AtomicString m_nonce;
 };
 
 }  // namespace blink

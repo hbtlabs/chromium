@@ -30,7 +30,8 @@ class PolicyFetchResponse;
 namespace policy {
 
 // CloudPolicyStore implementation for device policy on Chrome OS. Policy is
-// stored/loaded via DBus to/from session_manager.
+// stored/loaded via D-Bus to/from session_manager.
+// TODO(tnagel): Either drop "Cloud" from the name or refactor.
 class DeviceCloudPolicyStoreChromeOS
     : public CloudPolicyStore,
       public chromeos::DeviceSettingsService::Observer {
@@ -42,6 +43,8 @@ class DeviceCloudPolicyStoreChromeOS
   ~DeviceCloudPolicyStoreChromeOS() override;
 
   // CloudPolicyStore:
+  // Note that Store() must not be called before the store gets initialized (by
+  // means of either Load() or InstallInitialPolicy()).
   void Store(const enterprise_management::PolicyFetchResponse& policy) override;
   void Load() override;
 

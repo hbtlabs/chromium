@@ -30,6 +30,7 @@
 
 #include "wtf/allocator/Partitions.h"
 
+#include "base/allocator/partition_allocator/page_allocator.h"
 #include "base/debug/alias.h"
 #include "wtf/allocator/PartitionAllocator.h"
 
@@ -38,39 +39,28 @@ namespace WTF {
 const char* const Partitions::kAllocatedObjectPoolName =
     "partition_alloc/allocated_objects";
 
-SpinLock Partitions::s_initializationLock;
+base::subtle::SpinLock Partitions::s_initializationLock;
 bool Partitions::s_initialized = false;
 
-PartitionAllocatorGeneric Partitions::m_fastMallocAllocator;
-PartitionAllocatorGeneric Partitions::m_bufferAllocator;
-SizeSpecificPartitionAllocator<1024> Partitions::m_layoutAllocator;
+base::PartitionAllocatorGeneric Partitions::m_fastMallocAllocator;
+base::PartitionAllocatorGeneric Partitions::m_arrayBufferAllocator;
+base::PartitionAllocatorGeneric Partitions::m_bufferAllocator;
+base::SizeSpecificPartitionAllocator<1024> Partitions::m_layoutAllocator;
 Partitions::ReportPartitionAllocSizeFunction Partitions::m_reportSizeFunction =
     nullptr;
 
 void Partitions::initialize(
     ReportPartitionAllocSizeFunction reportSizeFunction) {
-  SpinLock::Guard guard(s_initializationLock);
+  base::subtle::SpinLock::Guard guard(s_initializationLock);
 
   if (!s_initialized) {
-    partitionAllocGlobalInit(&Partitions::handleOutOfMemory);
+    base::PartitionAllocGlobalInit(&Partitions::handleOutOfMemory);
     m_fastMallocAllocator.init();
+    m_arrayBufferAllocator.init();
     m_bufferAllocator.init();
     m_layoutAllocator.init();
     m_reportSizeFunction = reportSizeFunction;
     s_initialized = true;
-  }
-}
-
-void Partitions::shutdown() {
-  SpinLock::Guard guard(s_initializationLock);
-
-  // We could ASSERT here for a memory leak within the partition, but it leads
-  // to very hard to diagnose ASSERTs, so it's best to leave leak checking for
-  // the valgrind and heapcheck bots, which run without partitions.
-  if (s_initialized) {
-    (void)m_layoutAllocator.shutdown();
-    (void)m_bufferAllocator.shutdown();
-    (void)m_fastMallocAllocator.shutdown();
   }
 }
 
@@ -79,11 +69,14 @@ void Partitions::decommitFreeableMemory() {
   if (!s_initialized)
     return;
 
-  partitionPurgeMemoryGeneric(bufferPartition(),
-                              PartitionPurgeDecommitEmptyPages);
-  partitionPurgeMemoryGeneric(fastMallocPartition(),
-                              PartitionPurgeDecommitEmptyPages);
-  partitionPurgeMemory(layoutPartition(), PartitionPurgeDecommitEmptyPages);
+  PartitionPurgeMemoryGeneric(arrayBufferPartition(),
+                              base::PartitionPurgeDecommitEmptyPages);
+  PartitionPurgeMemoryGeneric(bufferPartition(),
+                              base::PartitionPurgeDecommitEmptyPages);
+  PartitionPurgeMemoryGeneric(fastMallocPartition(),
+                              base::PartitionPurgeDecommitEmptyPages);
+  PartitionPurgeMemory(layoutPartition(),
+                       base::PartitionPurgeDecommitEmptyPages);
 }
 
 void Partitions::reportMemoryUsageHistogram() {
@@ -102,18 +95,21 @@ void Partitions::reportMemoryUsageHistogram() {
   }
 }
 
-void Partitions::dumpMemoryStats(bool isLightDump,
-                                 PartitionStatsDumper* partitionStatsDumper) {
+void Partitions::dumpMemoryStats(
+    bool isLightDump,
+    base::PartitionStatsDumper* partitionStatsDumper) {
   // Object model and rendering partitions are not thread safe and can be
   // accessed only on the main thread.
-  ASSERT(isMainThread());
+  DCHECK(isMainThread());
 
   decommitFreeableMemory();
-  partitionDumpStatsGeneric(fastMallocPartition(), "fast_malloc", isLightDump,
+  PartitionDumpStatsGeneric(fastMallocPartition(), "fast_malloc", isLightDump,
                             partitionStatsDumper);
-  partitionDumpStatsGeneric(bufferPartition(), "buffer", isLightDump,
+  PartitionDumpStatsGeneric(arrayBufferPartition(), "array_buffer", isLightDump,
                             partitionStatsDumper);
-  partitionDumpStats(layoutPartition(), "layout", isLightDump,
+  PartitionDumpStatsGeneric(bufferPartition(), "buffer", isLightDump,
+                            partitionStatsDumper);
+  PartitionDumpStats(layoutPartition(), "layout", isLightDump,
                      partitionStatsDumper);
 }
 
@@ -169,12 +165,12 @@ static NEVER_INLINE void partitionsOutOfMemoryUsingLessThan16M() {
   size_t signature = 16 * 1024 * 1024 - 1;
   base::debug::Alias(&signature);
   DLOG(FATAL) << "ParitionAlloc: out of memory with < 16M usage (error:"
-              << getAllocPageErrorCode() << ")";
+              << GetAllocPageErrorCode() << ")";
 }
 
 void Partitions::handleOutOfMemory() {
   volatile size_t totalUsage = totalSizeOfCommittedPages();
-  uint32_t allocPageErrorCode = getAllocPageErrorCode();
+  uint32_t allocPageErrorCode = GetAllocPageErrorCode();
   base::debug::Alias(&allocPageErrorCode);
 
   if (totalUsage >= 2UL * 1024 * 1024 * 1024)

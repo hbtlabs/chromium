@@ -113,7 +113,8 @@ class {{config.lib.export_macro}} UberDispatcher {
 public:
     explicit UberDispatcher(FrontendChannel*);
     void registerBackend(const String& name, std::unique_ptr<protocol::DispatcherBase>);
-    DispatchResponse::Status dispatch(std::unique_ptr<Value> message);
+    void setupRedirects(const HashMap<String, String>&);
+    DispatchResponse::Status dispatch(std::unique_ptr<Value> message, int* callId = nullptr, String* method = nullptr);
     FrontendChannel* channel() { return m_frontendChannel; }
     bool fallThroughForNotFound() { return m_fallThroughForNotFound; }
     void setFallThroughForNotFound(bool);
@@ -122,7 +123,48 @@ public:
 private:
     FrontendChannel* m_frontendChannel;
     bool m_fallThroughForNotFound;
+    HashMap<String, String> m_redirects;
     protocol::HashMap<String, std::unique_ptr<protocol::DispatcherBase>> m_dispatchers;
+};
+
+class InternalResponse : public Serializable {
+    PROTOCOL_DISALLOW_COPY(InternalResponse);
+public:
+    static std::unique_ptr<InternalResponse> createResponse(int callId, std::unique_ptr<Serializable> params);
+    static std::unique_ptr<InternalResponse> createNotification(const String& notification, std::unique_ptr<Serializable> params = nullptr);
+
+    String serialize() override;
+
+    ~InternalResponse() override {}
+
+private:
+    InternalResponse(int callId, const String& notification, std::unique_ptr<Serializable> params);
+
+    int m_callId;
+    String m_notification;
+    std::unique_ptr<Serializable> m_params;
+};
+
+class InternalRawNotification : public Serializable {
+public:
+    static std::unique_ptr<InternalRawNotification> create(const String& notification)
+    {
+        return std::unique_ptr<InternalRawNotification>(new InternalRawNotification(notification));
+    }
+    ~InternalRawNotification() override {}
+
+    String serialize() override
+    {
+        return m_notification;
+    }
+
+private:
+  explicit InternalRawNotification(const String& notification)
+    : m_notification(notification)
+  {
+  }
+
+  String m_notification;
 };
 
 {% for namespace in config.protocol.namespace %}

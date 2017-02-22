@@ -93,7 +93,7 @@ void TextCodecLatin1::registerEncodingNames(EncodingNameRegistrar registrar) {
 static std::unique_ptr<TextCodec> newStreamingTextDecoderWindowsLatin1(
     const TextEncoding&,
     const void*) {
-  return wrapUnique(new TextCodecLatin1);
+  return WTF::wrapUnique(new TextCodecLatin1);
 }
 
 void TextCodecLatin1::registerCodecs(TextCodecRegistrar registrar) {
@@ -112,7 +112,7 @@ String TextCodecLatin1::decode(const char* bytes,
                                bool&) {
   LChar* characters;
   if (!length)
-    return emptyString();
+    return emptyString;
   String result = String::createUninitialized(length, characters);
 
   const uint8_t* source = reinterpret_cast<const uint8_t*>(bytes);

@@ -61,7 +61,7 @@ void LinkSelectionTestBase::emulateMouseDrag(const IntPoint& downPoint,
     const auto& downEvent = FrameTestHelpers::createMouseEvent(
         WebMouseEvent::MouseDown, WebMouseEvent::Button::Left, downPoint,
         modifiers);
-    m_webView->handleInputEvent(downEvent);
+    m_webView->handleInputEvent(WebCoalescedInputEvent(downEvent));
   }
 
   const int kMoveEventsNumber = 10;
@@ -73,14 +73,14 @@ void LinkSelectionTestBase::emulateMouseDrag(const IntPoint& downPoint,
     const auto& moveEvent = FrameTestHelpers::createMouseEvent(
         WebMouseEvent::MouseMove, WebMouseEvent::Button::Left, movePoint,
         modifiers);
-    m_webView->handleInputEvent(moveEvent);
+    m_webView->handleInputEvent(WebCoalescedInputEvent(moveEvent));
   }
 
   if (dragFlags & SendUpEvent) {
     const auto& upEvent = FrameTestHelpers::createMouseEvent(
         WebMouseEvent::MouseUp, WebMouseEvent::Button::Left, upPoint,
         modifiers);
-    m_webView->handleInputEvent(upEvent);
+    m_webView->handleInputEvent(WebCoalescedInputEvent(upEvent));
   }
 }
 
@@ -91,9 +91,9 @@ void LinkSelectionTestBase::emulateMouseClick(const IntPoint& clickPoint,
   auto event = FrameTestHelpers::createMouseEvent(
       WebMouseEvent::MouseDown, button, clickPoint, modifiers);
   event.clickCount = count;
-  m_webView->handleInputEvent(event);
-  event.type = WebMouseEvent::MouseUp;
-  m_webView->handleInputEvent(event);
+  m_webView->handleInputEvent(WebCoalescedInputEvent(event));
+  event.setType(WebMouseEvent::MouseUp);
+  m_webView->handleInputEvent(WebCoalescedInputEvent(event));
 }
 
 void LinkSelectionTestBase::emulateMouseDown(const IntPoint& clickPoint,
@@ -103,7 +103,7 @@ void LinkSelectionTestBase::emulateMouseDown(const IntPoint& clickPoint,
   auto event = FrameTestHelpers::createMouseEvent(
       WebMouseEvent::MouseDown, button, clickPoint, modifiers);
   event.clickCount = count;
-  m_webView->handleInputEvent(event);
+  m_webView->handleInputEvent(WebCoalescedInputEvent(event));
 }
 
 String LinkSelectionTestBase::getSelectionText() {
@@ -127,11 +127,8 @@ class LinkSelectionTest : public LinkSelectionTestBase {
         "foobar</a>"
         "<div id='page_text'>Lorem ipsum dolor sit amet</div>";
 
-    // We need to set deviceSupportsMouse setting to true and page's focus
-    // controller to active so that FrameView can set the mouse cursor.
-    m_webView = m_helper.initialize(
-        false, &m_testFrameClient, nullptr, nullptr,
-        [](WebSettings* settings) { settings->setDeviceSupportsMouse(true); });
+    m_webView = m_helper.initialize(false, &m_testFrameClient, nullptr, nullptr,
+                                    [](WebSettings* settings) {});
     m_mainFrame = m_webView->mainFrameImpl();
     FrameTestHelpers::loadHTMLString(
         m_mainFrame, kHTMLString, URLTestHelpers::toKURL("http://foobar.com"));

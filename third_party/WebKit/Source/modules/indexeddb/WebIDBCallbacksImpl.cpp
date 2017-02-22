@@ -57,7 +57,7 @@ namespace blink {
 // static
 std::unique_ptr<WebIDBCallbacksImpl> WebIDBCallbacksImpl::create(
     IDBRequest* request) {
-  return wrapUnique(new WebIDBCallbacksImpl(request));
+  return WTF::wrapUnique(new WebIDBCallbacksImpl(request));
 }
 
 WebIDBCallbacksImpl::WebIDBCallbacksImpl(IDBRequest* request)
@@ -89,7 +89,7 @@ void WebIDBCallbacksImpl::onSuccess(const WebVector<WebString>& webStringList) {
 
   Vector<String> stringList;
   for (size_t i = 0; i < webStringList.size(); ++i)
-    stringList.append(webStringList[i]);
+    stringList.push_back(webStringList[i]);
   InspectorInstrumentation::AsyncTask asyncTask(
       m_request->getExecutionContext(), this);
   m_request->onSuccess(stringList);
@@ -104,13 +104,13 @@ void WebIDBCallbacksImpl::onSuccess(WebIDBCursor* cursor,
 
   InspectorInstrumentation::AsyncTask asyncTask(
       m_request->getExecutionContext(), this);
-  m_request->onSuccess(wrapUnique(cursor), key, primaryKey,
-                       IDBValue::create(value));
+  m_request->onSuccess(WTF::wrapUnique(cursor), key, primaryKey,
+                       IDBValue::create(value, m_request->isolate()));
 }
 
 void WebIDBCallbacksImpl::onSuccess(WebIDBDatabase* backend,
                                     const WebIDBMetadata& metadata) {
-  std::unique_ptr<WebIDBDatabase> db = wrapUnique(backend);
+  std::unique_ptr<WebIDBDatabase> db = WTF::wrapUnique(backend);
   if (m_request) {
     InspectorInstrumentation::AsyncTask asyncTask(
         m_request->getExecutionContext(), this);
@@ -135,7 +135,7 @@ void WebIDBCallbacksImpl::onSuccess(const WebIDBValue& value) {
 
   InspectorInstrumentation::AsyncTask asyncTask(
       m_request->getExecutionContext(), this);
-  m_request->onSuccess(IDBValue::create(value));
+  m_request->onSuccess(IDBValue::create(value, m_request->isolate()));
 }
 
 void WebIDBCallbacksImpl::onSuccess(const WebVector<WebIDBValue>& values) {
@@ -146,7 +146,7 @@ void WebIDBCallbacksImpl::onSuccess(const WebVector<WebIDBValue>& values) {
       m_request->getExecutionContext(), this);
   Vector<RefPtr<IDBValue>> idbValues(values.size());
   for (size_t i = 0; i < values.size(); ++i)
-    idbValues[i] = IDBValue::create(values[i]);
+    idbValues[i] = IDBValue::create(values[i], m_request->isolate());
   m_request->onSuccess(idbValues);
 }
 
@@ -176,7 +176,8 @@ void WebIDBCallbacksImpl::onSuccess(const WebIDBKey& key,
 
   InspectorInstrumentation::AsyncTask asyncTask(
       m_request->getExecutionContext(), this);
-  m_request->onSuccess(key, primaryKey, IDBValue::create(value));
+  m_request->onSuccess(key, primaryKey,
+                       IDBValue::create(value, m_request->isolate()));
 }
 
 void WebIDBCallbacksImpl::onBlocked(long long oldVersion) {
@@ -193,7 +194,7 @@ void WebIDBCallbacksImpl::onUpgradeNeeded(long long oldVersion,
                                           const WebIDBMetadata& metadata,
                                           unsigned short dataLoss,
                                           WebString dataLossMessage) {
-  std::unique_ptr<WebIDBDatabase> db = wrapUnique(database);
+  std::unique_ptr<WebIDBDatabase> db = WTF::wrapUnique(database);
   if (m_request) {
     InspectorInstrumentation::AsyncTask asyncTask(
         m_request->getExecutionContext(), this);

@@ -14,6 +14,7 @@
 
 namespace media {
 
+class DecoderBuffer;
 class MojoDecoderBufferReader;
 class MojoMediaClient;
 class VideoDecoder;
@@ -28,7 +29,8 @@ class MojoVideoDecoderService : public mojom::VideoDecoder {
 
   // mojom::VideoDecoder implementation
   void Construct(mojom::VideoDecoderClientAssociatedPtrInfo client,
-                 mojo::ScopedDataPipeConsumerHandle decoder_buffer_pipe) final;
+                 mojo::ScopedDataPipeConsumerHandle decoder_buffer_pipe,
+                 mojom::CommandBufferIdPtr command_buffer_id) final;
   void Initialize(mojom::VideoDecoderConfigPtr config,
                   bool low_delay,
                   const InitializeCallback& callback) final;

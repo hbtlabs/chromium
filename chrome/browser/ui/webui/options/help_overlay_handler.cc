@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/options/help_overlay_handler.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/browser/ui/webui/help/help_handler.h"
 #include "chrome/common/chrome_switches.h"
@@ -20,13 +21,14 @@ HelpOverlayHandler::~HelpOverlayHandler() {
 
 void HelpOverlayHandler::GetLocalizedValues(
     base::DictionaryValue* localized_strings) {
-  RegisterTitle(localized_strings, "aboutOverlay", IDS_ABOUT_TITLE);
+  if (::switches::SettingsWindowEnabled())
+    RegisterTitle(localized_strings, "aboutOverlay", IDS_ABOUT_TITLE);
   HelpHandler::GetLocalizedValues(localized_strings);
 }
 
 void HelpOverlayHandler::RegisterMessages() {
-  if (::switches::AboutInSettingsEnabled())
-    web_ui()->AddMessageHandler(new HelpHandler());
+  if (::switches::SettingsWindowEnabled())
+    web_ui()->AddMessageHandler(base::MakeUnique<HelpHandler>());
 }
 
 }  // namespace options

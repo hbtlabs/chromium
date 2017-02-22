@@ -30,6 +30,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -64,14 +65,14 @@
 #include "net/http/http_response_headers.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_status.h"
-#include "third_party/brotli/dec/decode.h"
+#include "third_party/brotli/include/brotli/decode.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/webui/jstemplate_builder.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "url/gurl.h"
 
-#if defined(ENABLE_THEMES)
+#if !defined(OS_ANDROID)
 #include "chrome/browser/ui/webui/theme_source.h"
 #endif
 
@@ -322,15 +323,14 @@ class ChromeOSCreditsHandler
       return;
     }
     // Load local Chrome OS credits from the disk.
-    BrowserThread::PostBlockingPoolTaskAndReply(
-        FROM_HERE,
-        base::Bind(&ChromeOSCreditsHandler::LoadCreditsFileOnBlockingPool,
-                   this),
+    base::PostTaskWithTraitsAndReply(
+        FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
+                       base::TaskPriority::BACKGROUND),
+        base::Bind(&ChromeOSCreditsHandler::LoadCreditsFileAsync, this),
         base::Bind(&ChromeOSCreditsHandler::ResponseOnUIThread, this));
   }
 
-  void LoadCreditsFileOnBlockingPool() {
-    DCHECK(BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
+  void LoadCreditsFileAsync() {
     base::FilePath credits_file_path(chrome::kChromeOSCreditsPath);
     if (!base::ReadFileToString(credits_file_path, &contents_)) {
       // File with credits not found, ResponseOnUIThread will load credits
@@ -764,19 +764,26 @@ void AboutUIHTMLSource::StartDataRequest(
     base::StringPiece raw_response =
         ResourceBundle::GetSharedInstance().GetRawDataResource(idr);
     if (idr == IDR_ABOUT_UI_CREDITS_HTML) {
-      size_t decoded_size;
-      const uint8_t* encoded_response_buffer =
+      const uint8_t* next_encoded_byte =
           reinterpret_cast<const uint8_t*>(raw_response.data());
-      CHECK(BrotliDecompressedSize(raw_response.size(), encoded_response_buffer,
-                                   &decoded_size));
-
-      // Resizing the response and using it as the buffer Brotli decompresses
-      // into.
-      response.resize(decoded_size);
-      CHECK(BrotliDecompressBuffer(raw_response.size(), encoded_response_buffer,
-                                   &decoded_size,
-                                   reinterpret_cast<uint8_t*>(&response[0])) ==
-            BROTLI_RESULT_SUCCESS);
+      size_t input_size_remaining = raw_response.size();
+      BrotliDecoderState* decoder =
+          BrotliDecoderCreateInstance(nullptr /* no custom allocator */,
+                                      nullptr /* no custom deallocator */,
+                                      nullptr /* no custom memory handle */);
+      CHECK(!!decoder);
+      while (!BrotliDecoderIsFinished(decoder)) {
+        size_t output_size_remaining = 0;
+        CHECK(BrotliDecoderDecompressStream(
+                  decoder, &input_size_remaining, &next_encoded_byte,
+                  &output_size_remaining, nullptr,
+                  nullptr) != BROTLI_DECODER_RESULT_ERROR);
+        const uint8_t* output_buffer =
+            BrotliDecoderTakeOutput(decoder, &output_size_remaining);
+        response.insert(response.end(), output_buffer,
+                        output_buffer + output_size_remaining);
+      }
+      BrotliDecoderDestroyInstance(decoder);
     } else {
       response = raw_response.as_string();
     }
@@ -855,7 +862,7 @@ AboutUI::AboutUI(content::WebUI* web_ui, const std::string& name)
     : WebUIController(web_ui) {
   Profile* profile = Profile::FromWebUI(web_ui);
 
-#if defined(ENABLE_THEMES)
+#if !defined(OS_ANDROID)
   // Set up the chrome://theme/ source.
   ThemeSource* theme = new ThemeSource(profile);
   content::URLDataSource::Add(profile, theme);

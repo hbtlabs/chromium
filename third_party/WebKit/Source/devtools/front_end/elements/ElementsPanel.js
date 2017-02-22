@@ -112,6 +112,7 @@ Elements.ElementsPanel = class extends UI.Panel {
     var filterContainerElement = hbox.createChild('div', 'styles-sidebar-pane-filter-box');
     var filterInput = Elements.StylesSidebarPane.createPropertyFilterElement(
         Common.UIString('Filter'), hbox, this._stylesWidget.onFilterChanged.bind(this._stylesWidget));
+    UI.ARIAUtils.setAccessibleName(filterInput, Common.UIString('Filter Styles'));
     filterContainerElement.appendChild(filterInput);
     var toolbar = new UI.Toolbar('styles-pane-toolbar', hbox);
     toolbar.makeToggledGray();
@@ -362,8 +363,8 @@ Elements.ElementsPanel = class extends UI.Panel {
    * @param {!Common.Event} event
    */
   _documentUpdatedEvent(event) {
-    this._documentUpdated(
-        /** @type {!SDK.DOMModel} */ (event.target), /** @type {?SDK.DOMDocument} */ (event.data));
+    var domModel = /** @type {!SDK.DOMModel} */ (event.data);
+    this._documentUpdated(domModel, domModel.existingDocument());
   }
 
   /**
@@ -444,7 +445,7 @@ Elements.ElementsPanel = class extends UI.Panel {
    * @override
    */
   searchCanceled() {
-    delete this._searchQuery;
+    delete this._searchConfig;
     this._hideSearchHighlights();
 
     this._searchableView.updateSearchMatchesCount(0);
@@ -463,14 +464,17 @@ Elements.ElementsPanel = class extends UI.Panel {
    */
   performSearch(searchConfig, shouldJump, jumpBackwards) {
     var query = searchConfig.query;
-    // Call searchCanceled since it will reset everything we need before doing a new search.
-    this.searchCanceled();
 
     const whitespaceTrimmedQuery = query.trim();
     if (!whitespaceTrimmedQuery.length)
       return;
 
-    this._searchQuery = query;
+    if (!this._searchConfig || this._searchConfig.query !== query)
+      this.searchCanceled();
+    else
+      this._hideSearchHighlights();
+
+    this._searchConfig = searchConfig;
 
     var promises = [];
     var domModels = SDK.DOMModel.instances();
@@ -497,10 +501,18 @@ Elements.ElementsPanel = class extends UI.Panel {
       this._searchableView.updateSearchMatchesCount(this._searchResults.length);
       if (!this._searchResults.length)
         return;
-      this._currentSearchResultIndex = -1;
+      if (this._currentSearchResultIndex >= this._searchResults.length)
+        this._currentSearchResultIndex = undefined;
 
-      if (shouldJump)
-        this._jumpToSearchResult(jumpBackwards ? -1 : 0);
+      var index = this._currentSearchResultIndex;
+
+      if (shouldJump) {
+        if (this._currentSearchResultIndex === undefined)
+          index = jumpBackwards ? -1 : 0;
+        else
+          index = jumpBackwards ? index - 1 : index + 1;
+        this._jumpToSearchResult(index);
+      }
     }
   }
 
@@ -523,21 +535,22 @@ Elements.ElementsPanel = class extends UI.Panel {
    * @return {!Element|!AnchorBox|undefined}
    */
   _getPopoverAnchor(element, event) {
-    var anchor = element.enclosingNodeOrSelfWithClass('webkit-html-resource-link');
-    if (!anchor || !anchor.href)
-      return;
-
-    return anchor;
+    var link = element;
+    while (link && !link[Elements.ElementsTreeElement.HrefSymbol])
+      link = link.parentElementOrShadowHost();
+    return link ? link : undefined;
   }
 
   /**
-   * @param {!Element} anchor
+   * @param {!Element} link
    * @param {!UI.Popover} popover
    */
-  _showPopover(anchor, popover) {
+  _showPopover(link, popover) {
     var node = this.selectedDOMNode();
-    if (node)
-      Components.DOMPresentationUtils.buildImagePreviewContents(node.target(), anchor.href, true, showPopover);
+    if (node) {
+      Components.DOMPresentationUtils.buildImagePreviewContents(
+          node.target(), link[Elements.ElementsTreeElement.HrefSymbol], true, showPopover);
+    }
 
     /**
      * @param {!Element=} contents
@@ -546,12 +559,11 @@ Elements.ElementsPanel = class extends UI.Panel {
       if (!contents)
         return;
       popover.setCanShrink(false);
-      popover.showForAnchor(contents, anchor);
+      popover.showForAnchor(contents, link);
     }
   }
 
   _jumpToSearchResult(index) {
-    this._hideSearchHighlights();
     this._currentSearchResultIndex = (index + this._searchResults.length) % this._searchResults.length;
     this._highlightCurrentSearchResult();
   }
@@ -562,7 +574,7 @@ Elements.ElementsPanel = class extends UI.Panel {
   jumpToNextSearchResult() {
     if (!this._searchResults)
       return;
-    this._jumpToSearchResult(this._currentSearchResultIndex + 1);
+    this.performSearch(this._searchConfig, true);
   }
 
   /**
@@ -571,7 +583,7 @@ Elements.ElementsPanel = class extends UI.Panel {
   jumpToPreviousSearchResult() {
     if (!this._searchResults)
       return;
-    this._jumpToSearchResult(this._currentSearchResultIndex - 1);
+    this.performSearch(this._searchConfig, true, true);
   }
 
   /**
@@ -619,7 +631,7 @@ Elements.ElementsPanel = class extends UI.Panel {
 
     var treeElement = this._treeElementForNode(searchResult.node);
     if (treeElement) {
-      treeElement.highlightSearchResults(this._searchQuery);
+      treeElement.highlightSearchResults(this._searchConfig.query);
       treeElement.reveal();
       var matches = treeElement.listItemElement.getElementsByClassName(UI.highlightedSearchResultClassName);
       if (matches.length)
@@ -628,7 +640,7 @@ Elements.ElementsPanel = class extends UI.Panel {
   }
 
   _hideSearchHighlights() {
-    if (!this._searchResults || !this._searchResults.length || this._currentSearchResultIndex < 0)
+    if (!this._searchResults || !this._searchResults.length || this._currentSearchResultIndex === undefined)
       return;
     var searchResult = this._searchResults[this._currentSearchResultIndex];
     if (!searchResult.node)
@@ -785,12 +797,6 @@ Elements.ElementsPanel = class extends UI.Panel {
     });
   }
 
-  _sidebarContextMenuEventFired(event) {
-    var contextMenu = new UI.ContextMenu(event);
-    contextMenu.appendApplicableItems(/** @type {!Object} */ (event.deepElementFromPoint()));
-    contextMenu.show();
-  }
-
   _showUAShadowDOMChanged() {
     for (var i = 0; i < this._treeOutlines.length; ++i)
       this._treeOutlines[i].update();
@@ -857,7 +863,6 @@ Elements.ElementsPanel = class extends UI.Panel {
 
     this.sidebarPaneView = UI.viewManager.createTabbedLocation(() => UI.viewManager.showView('elements'));
     var tabbedPane = this.sidebarPaneView.tabbedPane();
-    tabbedPane.element.addEventListener('contextmenu', this._sidebarContextMenuEventFired.bind(this), false);
     if (this._popoverHelper)
       this._popoverHelper.hidePopover();
     this._popoverHelper = new UI.PopoverHelper(tabbedPane.element);

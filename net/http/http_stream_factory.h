@@ -22,10 +22,10 @@
 // introduce any link dependency to net/websockets.
 #include "net/websockets/websocket_handshake_stream_base.h"
 
-class GURL;
-
 namespace base {
-class Value;
+namespace trace_event {
+class ProcessMemoryDump;
+}
 }
 
 namespace net {
@@ -33,12 +33,10 @@ namespace net {
 class AuthCredentials;
 class BidirectionalStreamImpl;
 class HostMappingRules;
-class HostPortPair;
 class HttpAuthController;
 class HttpNetworkSession;
 class HttpResponseHeaders;
 class HttpResponseInfo;
-class HttpServerProperties;
 class HttpStream;
 class NetLogWithSource;
 class ProxyInfo;
@@ -242,6 +240,12 @@ class NET_EXPORT HttpStreamFactory {
                                  const HttpRequestInfo& info) = 0;
 
   virtual const HostMappingRules* GetHostMappingRules() const = 0;
+
+  // Dumps memory allocation stats. |parent_dump_absolute_name| is the name
+  // used by the parent MemoryAllocatorDump in the memory dump hierarchy.
+  virtual void DumpMemoryStats(
+      base::trace_event::ProcessMemoryDump* pmd,
+      const std::string& parent_absolute_name) const = 0;
 
  protected:
   HttpStreamFactory();

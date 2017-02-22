@@ -4,6 +4,9 @@
 
 #include "content/child/service_worker/web_service_worker_provider_impl.h"
 
+#include <memory>
+#include <utility>
+
 #include "content/child/service_worker/service_worker_dispatcher.h"
 #include "content/child/service_worker/service_worker_handle_reference.h"
 #include "content/child/service_worker/service_worker_provider_context.h"
@@ -50,6 +53,10 @@ void WebServiceWorkerProviderImpl::setClient(
       GetDispatcher()->GetOrCreateServiceWorker(
           ServiceWorkerHandleReference::Create(context_->controller()->info(),
                                                thread_safe_sender_.get()));
+
+  // Sync the controllee's use counter with the service worker's one.
+  for (uint32_t feature : context_->used_features())
+    client->countFeature(feature);
   client->setController(WebServiceWorkerImpl::CreateHandle(controller),
                         false /* shouldNotifyControllerChange */);
 }
@@ -57,27 +64,29 @@ void WebServiceWorkerProviderImpl::setClient(
 void WebServiceWorkerProviderImpl::registerServiceWorker(
     const WebURL& pattern,
     const WebURL& script_url,
-    WebServiceWorkerRegistrationCallbacks* callbacks) {
-  GetDispatcher()->RegisterServiceWorker(
-      context_->provider_id(), pattern, script_url, callbacks);
+    std::unique_ptr<WebServiceWorkerRegistrationCallbacks> callbacks) {
+  GetDispatcher()->RegisterServiceWorker(context_->provider_id(), pattern,
+                                         script_url, std::move(callbacks));
 }
 
 void WebServiceWorkerProviderImpl::getRegistration(
     const blink::WebURL& document_url,
-    WebServiceWorkerGetRegistrationCallbacks* callbacks) {
-  GetDispatcher()->GetRegistration(
-      context_->provider_id(), document_url, callbacks);
+    std::unique_ptr<WebServiceWorkerGetRegistrationCallbacks> callbacks) {
+  GetDispatcher()->GetRegistration(context_->provider_id(), document_url,
+                                   std::move(callbacks));
 }
 
 void WebServiceWorkerProviderImpl::getRegistrations(
-    WebServiceWorkerGetRegistrationsCallbacks* callbacks) {
-  GetDispatcher()->GetRegistrations(
-      context_->provider_id(), callbacks);
+    std::unique_ptr<WebServiceWorkerGetRegistrationsCallbacks> callbacks) {
+  GetDispatcher()->GetRegistrations(context_->provider_id(),
+                                    std::move(callbacks));
 }
 
 void WebServiceWorkerProviderImpl::getRegistrationForReady(
-    WebServiceWorkerGetRegistrationForReadyCallbacks* callbacks) {
-  GetDispatcher()->GetRegistrationForReady(context_->provider_id(), callbacks);
+    std::unique_ptr<WebServiceWorkerGetRegistrationForReadyCallbacks>
+        callbacks) {
+  GetDispatcher()->GetRegistrationForReady(context_->provider_id(),
+                                           std::move(callbacks));
 }
 
 bool WebServiceWorkerProviderImpl::validateScopeAndScriptURL(

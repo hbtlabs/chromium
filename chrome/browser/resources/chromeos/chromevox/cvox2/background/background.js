@@ -17,6 +17,7 @@ goog.require('ChromeVoxState');
 goog.require('CommandHandler');
 goog.require('FindHandler');
 goog.require('LiveRegions');
+goog.require('MediaAutomationHandler');
 goog.require('NextEarcons');
 goog.require('Notifications');
 goog.require('Output');
@@ -37,6 +38,7 @@ var AutomationNode = chrome.automation.AutomationNode;
 var Dir = constants.Dir;
 var EventType = chrome.automation.EventType;
 var RoleType = chrome.automation.RoleType;
+var StateType = chrome.automation.StateType;
 
 /**
  * ChromeVox2 background page.
@@ -86,12 +88,6 @@ Background = function() {
    * @private
    */
   this.currentRange_ = null;
-
-  /**
-   * @type {cursors.Range}
-   * @private
-   */
-  this.savedRange_ = null;
 
   // Manually bind all functions to |this|.
   for (var func in this) {
@@ -155,9 +151,6 @@ Background = function() {
   /** @type {!LiveRegions} @private */
   this.liveRegions_ = new LiveRegions(this);
 
-  /** @type {boolean} @private */
-  this.inExcursion_ = false;
-
   /**
    * Stores the mode as computed the last time a current range was set.
    * @type {?ChromeVoxMode}
@@ -176,8 +169,13 @@ Background = function() {
    */
   this.focusRecoveryMap_ = new WeakMap();
 
+  chrome.automation.getDesktop(function(desktop) {
+    /** @type {string} */
+    this.chromeChannel_ = desktop.chromeChannel;
+  }.bind(this));
+
   // Record a metric with the mode we're in on startup.
-  var useNext = localStorage['useNext'] !== 'false';
+  var useNext = localStorage['useClassic'] != 'true';
   chrome.metricsPrivate.recordValue(
       { metricName: 'Accessibility.CrosChromeVoxNext',
         type: chrome.metricsPrivate.MetricTypeType.HISTOGRAM_LINEAR,
@@ -221,6 +219,7 @@ Background.GESTURE_NEXT_COMMAND_MAP = {
 
 Background.prototype = {
   __proto__: ChromeVoxState.prototype,
+
   /**
    * Maps the last node with range in a given root.
    * @type {WeakMap<AutomationNode>}
@@ -233,7 +232,7 @@ Background.prototype = {
    * @override
    */
   getMode: function() {
-    var useNext = localStorage['useNext'] !== 'false';
+    var useNext = localStorage['useClassic'] !== 'true';
 
     var target;
     if (!this.getCurrentRange()) {
@@ -254,10 +253,12 @@ Background.prototype = {
       return useNext ? ChromeVoxMode.FORCE_NEXT :
           ChromeVoxMode.CLASSIC_COMPAT;
 
-    var nextSite = this.isWhitelistedForNext_(topLevelRoot.docUrl);
-    var nextCompat = this.nextCompatRegExp_.test(topLevelRoot.docUrl);
+    var docUrl = topLevelRoot.docUrl || '';
+    var nextSite = this.isWhitelistedForNext_(docUrl);
+    var nextCompat = this.nextCompatRegExp_.test(docUrl) &&
+        this.chromeChannel_ != 'dev';
     var classicCompat =
-        this.isWhitelistedForClassicCompat_(topLevelRoot.docUrl);
+        this.isWhitelistedForClassicCompat_(docUrl);
     if (nextCompat && useNext)
       return ChromeVoxMode.NEXT_COMPAT;
     else if (classicCompat && !useNext)
@@ -357,7 +358,7 @@ Background.prototype = {
     if (opt_setValue !== undefined)
       useNext = opt_setValue;
     else
-      useNext = localStorage['useNext'] !== 'true';
+      useNext = localStorage['useClassic'] == 'true';
 
     if (useNext) {
       chrome.metricsPrivate.recordUserAction(
@@ -367,7 +368,7 @@ Background.prototype = {
           'Accessibility.ChromeVox.ToggleNextOff');
     }
 
-    localStorage['useNext'] = useNext;
+    localStorage['useClassic'] = !useNext;
     if (useNext)
       this.setCurrentRangeToFocus_();
     else
@@ -396,9 +397,6 @@ Background.prototype = {
    * @override
    */
   setCurrentRange: function(newRange) {
-    if (!this.inExcursion_ && newRange)
-      this.savedRange_ = new cursors.Range(newRange.start, newRange.end);
-
     if (newRange && !newRange.isValid())
       return;
 
@@ -415,7 +413,7 @@ Background.prototype = {
       start.makeVisible();
 
       var root = start.root;
-      if (!root || root.role == RoleType.desktop)
+      if (!root || root.role == RoleType.DESKTOP)
         return;
 
       var position = {};
@@ -498,7 +496,8 @@ Background.prototype = {
         lca = AutomationUtil.getLeastCommonAncestor(prevRange.start.node,
                                                     range.start.node);
       }
-      if (!lca || lca.state.editable || !range.start.node.state.editable)
+      if (!lca || lca.state[StateType.EDITABLE] ||
+          !range.start.node.state[StateType.EDITABLE])
         range.select();
     }
 
@@ -578,7 +577,7 @@ Background.prototype = {
    * @private
    */
   shouldEnableClassicForUrl_: function(url) {
-    return this.nextCompatRegExp_.test(url) ||
+    return (this.nextCompatRegExp_.test(url) &&this.chromeChannel_ != 'dev') ||
         (this.mode != ChromeVoxMode.FORCE_NEXT &&
          !this.isBlacklistedForClassic_(url) &&
          !this.isWhitelistedForNext_(url));
@@ -592,9 +591,9 @@ Background.prototype = {
    * @return {boolean}
    */
   isWhitelistedForClassicCompat_: function(url) {
-    return this.isBlacklistedForClassic_(url) || (this.getCurrentRange() &&
+    return (this.isBlacklistedForClassic_(url) || (this.getCurrentRange() &&
         !this.getCurrentRange().isWebRange() &&
-        this.getCurrentRange().start.node.state.focused);
+        this.getCurrentRange().start.node.state[StateType.FOCUSED])) || false;
   },
 
   /**
@@ -671,7 +670,7 @@ Background.prototype = {
     if (!actionNodeSpan)
       return;
     var actionNode = actionNodeSpan.node;
-    if (actionNode.role === RoleType.inlineTextBox)
+    if (actionNode.role === RoleType.INLINE_TEXT_BOX)
       actionNode = actionNode.parent;
     actionNode.doDefault();
     if (selectionSpan) {
@@ -791,28 +790,28 @@ Background.prototype = {
       var entered = AutomationUtil.getUniqueAncestors(
           prevRange.start.node, start);
       var embeddedObject = entered.find(function(f) {
-        return f.role == RoleType.embeddedObject; });
-      if (embeddedObject && !embeddedObject.state.focused)
+        return f.role == RoleType.EMBEDDED_OBJECT; });
+      if (embeddedObject && !embeddedObject.state[StateType.FOCUSED])
         embeddedObject.focus();
     }
 
-    if (start.state.focused || end.state.focused)
+    if (start.state[StateType.FOCUSED] || end.state[StateType.FOCUSED])
       return;
 
     var isFocusableLinkOrControl = function(node) {
-      return node.state.focusable &&
+      return node.state[StateType.FOCUSABLE] &&
           AutomationPredicate.linkOrControl(node);
     };
 
     // Next, try to focus the start or end node.
     if (!AutomationPredicate.structuralContainer(start) &&
-        start.state.focusable) {
-      if (!start.state.focused)
+        start.state[StateType.FOCUSABLE]) {
+      if (!start.state[StateType.FOCUSED])
         start.focus();
       return;
     } else if (!AutomationPredicate.structuralContainer(end) &&
-        end.state.focusable) {
-      if (!end.state.focused)
+        end.state[StateType.FOCUSABLE]) {
+      if (!end.state[StateType.FOCUSED])
         end.focus();
       return;
     }
@@ -821,7 +820,7 @@ Background.prototype = {
     var ancestor = AutomationUtil.getLeastCommonAncestor(start, end);
     while (ancestor && ancestor.root == start.root) {
       if (isFocusableLinkOrControl(ancestor)) {
-        if (!ancestor.state.focused)
+        if (!ancestor.state[StateType.FOCUSED])
           ancestor.focus();
         return;
       }
@@ -831,7 +830,7 @@ Background.prototype = {
     // If nothing is focusable, set the sequential focus navigation starting
     // point, which ensures that the next time you press Tab, you'll reach
     // the next or previous focusable node from |start|.
-    if (!start.state.offscreen)
+    if (!start.state[StateType.OFFSCREEN])
       start.setSequentialFocusNavigationStartingPoint();
   }
 };

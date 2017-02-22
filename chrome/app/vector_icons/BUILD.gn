@@ -1,0 +1,81 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/util/branding.gni")
+import("//ui/vector_icons/vector_icons.gni")
+
+aggregate_vector_icons("chrome_vector_icons") {
+  icon_directory = "."
+
+  icons = [
+    "autologin.icon",
+    "bluetooth_connected.icon",
+    "browser_tools.icon",
+    "browser_tools_error.icon",
+    "browser_tools_update.icon",
+    "caret_down.1x.icon",
+    "caret_down.icon",
+    "caret_up.1x.icon",
+    "caret_up.icon",
+    "crashed_tab.icon",
+    "credit_card.1x.icon",
+    "credit_card.icon",
+    "file_download.icon",
+    "file_download_incognito.1x.icon",
+    "file_download_incognito.icon",
+    "file_download_shelf.icon",
+    "folder.1x.icon",
+    "folder.icon",
+    "folder_managed.1x.icon",
+    "folder_managed.icon",
+    "folder_supervised.1x.icon",
+    "folder_supervised.icon",
+    "incognito.1x.icon",
+    "incognito.icon",
+    "laptop.icon",
+    "navigate_home.1x.icon",
+    "navigate_home.icon",
+    "navigate_reload.1x.icon",
+    "navigate_reload.icon",
+    "navigate_stop.1x.icon",
+    "navigate_stop.icon",
+    "overflow_chevron.1x.icon",
+    "overflow_chevron.icon",
+    "smartphone.icon",
+    "tab.icon",
+    "tab_audio.1x.icon",
+    "tab_audio.icon",
+    "tab_audio_muting.1x.icon",
+    "tab_audio_muting.icon",
+    "tab_bluetooth_connected.icon",
+    "tab_close_hovered_pressed.1x.icon",
+    "tab_close_hovered_pressed.icon",
+    "tab_close_normal.1x.icon",
+    "tab_close_normal.icon",
+    "tab_media_capturing.icon",
+    "tab_media_recording.icon",
+    "tab_usb_connected.1x.icon",
+    "tab_usb_connected.icon",
+    "tablet.icon",
+    "translate.icon",
+    "zoom_minus.icon",
+    "zoom_plus.icon",
+    "${branding_path_component}/product.icon",
+  ]
+
+  if (is_mac) {
+    icons += [ "new_tab_mac_touchbar.icon" ]
+  }
+}
+
+source_set("vector_icons") {
+  sources = get_target_outputs(":chrome_vector_icons")
+  sources += [ "//ui/gfx/vector_icon_types.h" ]
+
+  deps = [
+    ":chrome_vector_icons",
+    "//base",
+    "//skia",
+  ]
+}

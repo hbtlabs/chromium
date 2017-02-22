@@ -15,9 +15,7 @@
 class Browser;
 class ChromeExtensionFunctionDetails;
 class ChromeUIThreadExtensionFunction;
-class ExtensionFunction;
 class GURL;
-class Profile;
 class TabStripModel;
 class UIThreadExtensionFunction;
 
@@ -168,6 +166,13 @@ class ExtensionTabUtil {
 
   static WindowController* GetWindowControllerOfTab(
       const content::WebContents* web_contents);
+
+  // Open the extension's options page. Returns true if an options page was
+  // successfully opened (though it may not necessarily *load*, e.g. if the
+  // URL does not exist). This call to open the options page is iniatiated by
+  // the extension via chrome.runtime.openOptionsPage.
+  static bool OpenOptionsPageFromAPI(const Extension* extension,
+                                     content::BrowserContext* browser_context);
 
   // Open the extension's options page. Returns true if an options page was
   // successfully opened (though it may not necessarily *load*, e.g. if the

@@ -5,8 +5,12 @@
 #include "components/arc/bluetooth/bluetooth_struct_traits.h"
 
 #include <algorithm>
+#include <map>
+#include <string>
+#include <utility>
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "device/bluetooth/bluetooth_advertisement.h"

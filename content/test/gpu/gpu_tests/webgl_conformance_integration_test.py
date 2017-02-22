@@ -2,7 +2,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import logging
 import os
+import sys
 
 from gpu_tests import gpu_integration_test
 from gpu_tests import path_util
@@ -89,6 +91,7 @@ def _CompareVersion(version1, version2):
 class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
 
   _webgl_version = None
+  _is_asan = False
 
   @classmethod
   def Name(cls):
@@ -102,6 +105,9 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     parser.add_option('--webgl2-only',
         help='Whether we include webgl 1 tests if version is 2.0.0 or above.',
         default='false')
+    parser.add_option('--is-asan',
+        help='Indicates whether currently running an ASAN build',
+        action='store_true')
 
   @classmethod
   def GenerateGpuTests(cls, options):
@@ -115,6 +121,7 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         None)
     cls._webgl_version = [
         int(x) for x in options.webgl_conformance_version.split('.')][0]
+    cls._is_asan = options.is_asan
     for test_path in test_paths:
       # generated test name cannot contain '.'
       name = _GenerateTestNameFromTestPath(test_path).replace(
@@ -200,8 +207,8 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     self.tab.Navigate(url, script_to_evaluate_on_commit=harness_script)
 
   def _CheckTestCompletion(self):
-    self.tab.action_runner.WaitForJavaScriptCondition(
-        'webglTestHarness._finished', timeout_in_seconds=300)
+    self.tab.action_runner.WaitForJavaScriptCondition2(
+        'webglTestHarness._finished', timeout=300)
     if not self._DidWebGLTestSucceed(self.tab):
       self.fail(self._WebGLTestMessages(self.tab))
 
@@ -215,8 +222,8 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
 
   def _RunExtensionCoverageTest(self, test_path, *args):
     self._NavigateTo(test_path, self._GetExtensionHarnessScript())
-    self.tab.action_runner.WaitForJavaScriptCondition(
-        'window._loaded', timeout_in_seconds=300)
+    self.tab.action_runner.WaitForJavaScriptCondition2(
+        'window._loaded', timeout=300)
     extension_list = args[0]
     webgl_version = args[1]
     context_type = "webgl2" if webgl_version == 2 else "webgl"
@@ -224,20 +231,21 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     for extension in extension_list:
       extension_list_string = extension_list_string + extension + ", "
     extension_list_string = extension_list_string + "]"
-    self.tab.action_runner.EvaluateJavaScript(
-      'checkSupportedExtensions("%s", "%s")' % (
-        extension_list_string, context_type))
+    self.tab.action_runner.EvaluateJavaScript2(
+        'checkSupportedExtensions({{ extensions_string }}, {{context_type}})',
+        extensions_string=extension_list_string, context_type=context_type)
     self._CheckTestCompletion()
 
   def _RunExtensionTest(self, test_path, *args):
     self._NavigateTo(test_path, self._GetExtensionHarnessScript())
-    self.tab.action_runner.WaitForJavaScriptCondition(
-        'window._loaded', timeout_in_seconds=300)
+    self.tab.action_runner.WaitForJavaScriptCondition2(
+        'window._loaded', timeout=300)
     extension = args[0]
     webgl_version = args[1]
     context_type = "webgl2" if webgl_version == 2 else "webgl"
-    self.tab.action_runner.EvaluateJavaScript(
-      'checkExtension("%s", "%s")' % (extension, context_type))
+    self.tab.action_runner.EvaluateJavaScript2(
+      'checkExtension({{ extension }}, {{ context_type }})',
+      extension=extension, context_type=context_type)
     self._CheckTestCompletion()
 
   @classmethod
@@ -250,7 +258,6 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         '--disable-gesture-requirement-for-media-playback',
         '--disable-domain-blocking-for-3d-apis',
         '--disable-gpu-process-crash-limit',
-        '--js-flags=--expose-gc',
         '--test-type=gpu',
         '--enable-experimental-canvas-features',
         # Try disabling the GPU watchdog to see if this affects the
@@ -258,6 +265,23 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         # waterfall. crbug.com/596622 crbug.com/609252
         '--disable-gpu-watchdog'
     ])
+
+    builtin_js_flags = '--js-flags=--expose-gc'
+    found_js_flags = False
+    user_js_flags = ''
+    if browser_options.extra_browser_args:
+      for o in browser_options.extra_browser_args:
+        if o.startswith('--js-flags'):
+          found_js_flags = True
+          user_js_flags = o
+          break
+    if found_js_flags:
+      logging.warning('Overriding built-in JavaScript flags:')
+      logging.warning(' Original flags: ' + builtin_js_flags)
+      logging.warning(' New flags: ' + user_js_flags)
+    else:
+      browser_options.AppendExtraBrowserArgs([builtin_js_flags])
+
     if cls._webgl_version == 2:
       browser_options.AppendExtraBrowserArgs([
         '--enable-es3-apis',
@@ -281,14 +305,16 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     assert cls._webgl_version == 1 or cls._webgl_version == 2
     if cls._webgl_version == 1:
       return webgl_conformance_expectations.WebGLConformanceExpectations(
-          conformance_path, url_prefixes=url_prefixes_to_trim)
+        conformance_path, url_prefixes=url_prefixes_to_trim,
+        is_asan=cls._is_asan)
     else:
       return webgl2_conformance_expectations.WebGL2ConformanceExpectations(
-          conformance_path, url_prefixes=url_prefixes_to_trim)
+        conformance_path, url_prefixes=url_prefixes_to_trim,
+        is_asan=cls._is_asan)
 
   @classmethod
   def setUpClass(cls):
-    super(cls, WebGLConformanceIntegrationTest).setUpClass()
+    super(WebGLConformanceIntegrationTest, cls).setUpClass()
     cls.CustomizeOptions()
     cls.SetBrowserOptions(cls._finder_options)
     cls.StartBrowser()
@@ -303,11 +329,11 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
 
   @staticmethod
   def _DidWebGLTestSucceed(tab):
-    return tab.EvaluateJavaScript('webglTestHarness._allTestSucceeded')
+    return tab.EvaluateJavaScript2('webglTestHarness._allTestSucceeded')
 
   @staticmethod
   def _WebGLTestMessages(tab):
-    return tab.EvaluateJavaScript('webglTestHarness._messages')
+    return tab.EvaluateJavaScript2('webglTestHarness._messages')
 
   @classmethod
   def _ParseTests(cls, path, version, webgl2_only, folder_min_version):
@@ -372,3 +398,7 @@ class WebGLConformanceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
           test_paths.append(test)
 
     return test_paths
+
+def load_tests(loader, tests, pattern):
+  del loader, tests, pattern  # Unused.
+  return gpu_integration_test.LoadAllTestsInModule(sys.modules[__name__])

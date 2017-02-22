@@ -27,7 +27,6 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_test.h"
 #include "components/arc/test/fake_app_instance.h"
-#include "components/arc/test/fake_arc_bridge_service.h"
 #endif
 
 namespace {
@@ -386,8 +385,8 @@ TEST_F(AppContextMenuTest, ArcMenu) {
   EXPECT_TRUE(launch_requests[0]->IsForApp(app_info));
 
   controller()->SetAppOpen(app_id, true);
-  // It is not expected that menu model is unchanged on GetContextMenuModel. Arc
-  // app menu requires model to be recalculated.
+  // It is not expected that menu model is unchanged on GetContextMenuModel.
+  // ARC app menu requires model to be recalculated.
   menu = item.GetContextMenuModel();
   ASSERT_EQ(4, menu->GetItemCount());
   ValidateItemState(menu, 0, MenuState(app_list::AppContextMenu::TOGGLE_PIN));

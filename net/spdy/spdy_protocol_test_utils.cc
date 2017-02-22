@@ -66,7 +66,7 @@ namespace test {
   DVLOG(1) << "VerifySpdyFrameIREquals SpdyGoAwayIR";
   if (expected.last_good_stream_id() != actual.last_good_stream_id())
     return ::testing::AssertionFailure();
-  if (expected.status() != actual.status())
+  if (expected.error_code() != actual.error_code())
     return ::testing::AssertionFailure();
   if (expected.description() != actual.description())
     return ::testing::AssertionFailure();
@@ -141,7 +141,7 @@ namespace test {
   DVLOG(1) << "VerifySpdyFrameIREquals SpdyRstStreamIR";
   if (expected.stream_id() != actual.stream_id())
     return ::testing::AssertionFailure();
-  if (expected.status() != actual.status())
+  if (expected.error_code() != actual.error_code())
     return ::testing::AssertionFailure();
 
   return ::testing::AssertionSuccess();
@@ -164,8 +164,8 @@ namespace test {
       DVLOG(1) << "actual doesn't contain param: " << param;
       return ::testing::AssertionFailure();
     }
-    uint32_t expected_value = entry.second.value;
-    uint32_t actual_value = actual_itr->second.value;
+    uint32_t expected_value = entry.second;
+    uint32_t actual_value = actual_itr->second;
     if (expected_value != actual_value) {
       DVLOG(1) << "Values don't match for parameter: " << param;
       return ::testing::AssertionFailure();

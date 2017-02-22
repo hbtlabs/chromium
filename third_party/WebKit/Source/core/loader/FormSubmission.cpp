@@ -129,7 +129,7 @@ String FormSubmission::Attributes::methodString(SubmitMethod method) {
       return "dialog";
   }
   NOTREACHED();
-  return emptyString();
+  return emptyString;
 }
 
 void FormSubmission::Attributes::copyFrom(const Attributes& other) {
@@ -227,8 +227,8 @@ FormSubmission* FormSubmission::create(HTMLFormElement* form,
   if (submitButton)
     submitButton->setActivatedSubmit(true);
   bool containsPasswordData = false;
-  for (unsigned i = 0; i < form->associatedElements().size(); ++i) {
-    FormAssociatedElement* control = form->associatedElements()[i];
+  for (unsigned i = 0; i < form->listedElements().size(); ++i) {
+    ListedElement* control = form->listedElements()[i];
     DCHECK(control);
     HTMLElement& element = toHTMLElement(*control);
     if (!element.isDisabledFormControl())
@@ -267,7 +267,7 @@ FormSubmission* FormSubmission::create(HTMLFormElement* form,
                                         : copiedAttributes.target();
   return new FormSubmission(copiedAttributes.method(), actionURL,
                             targetOrBaseTarget, encodingType, form,
-                            formData.release(), boundary, event);
+                            std::move(formData), boundary, event);
 }
 
 DEFINE_TRACE(FormSubmission) {

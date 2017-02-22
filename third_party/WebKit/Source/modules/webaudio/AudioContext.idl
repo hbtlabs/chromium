@@ -24,17 +24,30 @@
  * DAMAGE.
  */
 
+enum AudioContextLatencyCategory {
+    "balanced",
+    "interactive",
+    "playback"
+};
+
 // See https://webaudio.github.io/web-audio-api/#AudioContext
 [
     ActiveScriptWrappable,
-    Constructor,
+    Constructor(optional AudioContextOptions contextOptions),
     ConstructorCallWith=Document,
     DependentLifetime,
-    NoInterfaceObject,
     RaisesException=Constructor,
+    Measure
 ] interface AudioContext : BaseAudioContext {
     [MeasureAs=AudioContextSuspend, CallWith=ScriptState, ImplementedAs=suspendContext] Promise<void> suspend();
     [MeasureAs=AudioContextClose, CallWith=ScriptState, ImplementedAs=closeContext] Promise<void> close();
+
+    // Output timestamp
+    [MeasureAs=AudioContextGetOutputTimestamp, CallWith=ScriptState] AudioTimestamp getOutputTimestamp();
+
+    // Number of seconds of processing latency incurred by the AudioContext
+    // passing the audio from the AudioDestinationNode to the audio subsystem
+    readonly attribute double baseLatency;
 
     // Sources
     // TODO(rtoy): The following methods should be here instead of in BaseAudioContext:

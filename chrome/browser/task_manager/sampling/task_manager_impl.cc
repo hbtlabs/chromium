@@ -10,8 +10,8 @@
 #include <unordered_set>
 #include <vector>
 
-#include "base/command_line.h"
 #include "base/containers/adapters.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "build/build_config.h"
 #include "chrome/browser/task_manager/providers/browser_process_task_provider.h"
 #include "chrome/browser/task_manager/providers/child_process_task_provider.h"
@@ -25,7 +25,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/task_manager/providers/arc/arc_process_task_provider.h"
-#include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_util.h"
 #endif  // defined(OS_CHROMEOS)
 
 namespace task_manager {
@@ -57,10 +57,8 @@ TaskManagerImpl::TaskManagerImpl()
   task_providers_.emplace_back(new ChildProcessTaskProvider());
   task_providers_.emplace_back(new WebContentsTaskProvider());
 #if defined(OS_CHROMEOS)
-  if (arc::ArcBridgeService::GetEnabled(
-          base::CommandLine::ForCurrentProcess())) {
+  if (arc::IsArcAvailable())
     task_providers_.emplace_back(new ArcProcessTaskProvider());
-  }
 #endif  // defined(OS_CHROMEOS)
 
   content::GpuDataManager::GetInstance()->AddObserver(this);
@@ -93,6 +91,24 @@ double TaskManagerImpl::GetCpuUsage(TaskId task_id) const {
   return GetTaskGroupByTaskId(task_id)->cpu_usage();
 }
 
+base::Time TaskManagerImpl::GetStartTime(TaskId task_id) const {
+#if defined(OS_WIN)
+  return GetTaskGroupByTaskId(task_id)->start_time();
+#else
+  NOTIMPLEMENTED();
+  return base::Time();
+#endif
+}
+
+base::TimeDelta TaskManagerImpl::GetCpuTime(TaskId task_id) const {
+#if defined(OS_WIN)
+  return GetTaskGroupByTaskId(task_id)->cpu_time();
+#else
+  NOTIMPLEMENTED();
+  return base::TimeDelta();
+#endif
+}
+
 int64_t TaskManagerImpl::GetPhysicalMemoryUsage(TaskId task_id) const {
   return GetTaskGroupByTaskId(task_id)->physical_bytes();
 }
@@ -119,6 +135,10 @@ int64_t TaskManagerImpl::GetGpuMemoryUsage(TaskId task_id,
   if (has_duplicates)
     *has_duplicates = task_group->gpu_memory_has_duplicates();
   return task_group->gpu_memory();
+}
+
+base::MemoryState TaskManagerImpl::GetMemoryState(TaskId task_id) const {
+  return GetTaskGroupByTaskId(task_id)->memory_state();
 }
 
 int TaskManagerImpl::GetIdleWakeupsPerSecond(TaskId task_id) const {
@@ -249,6 +269,14 @@ bool TaskManagerImpl::GetWebCacheStats(
   *stats = task->GetWebCacheStats();
 
   return true;
+}
+
+int TaskManagerImpl::GetKeepaliveCount(TaskId task_id) const {
+  const Task* task = GetTaskByTaskId(task_id);
+  if (!task)
+    return -1;
+
+  return task->GetKeepaliveCount();
 }
 
 const TaskIdList& TaskManagerImpl::GetTaskIdsList() const {

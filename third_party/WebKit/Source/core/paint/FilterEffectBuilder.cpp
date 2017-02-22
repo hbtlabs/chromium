@@ -67,9 +67,8 @@ inline void lastMatrixRow(Vector<float>& matrix) {
 Vector<float> grayscaleMatrix(double amount) {
   double oneMinusAmount = clampTo(1 - amount, 0.0, 1.0);
 
-  // See
-  // https://dvcs.w3.org/hg/FXTF/raw-file/tip/filters/index.html#grayscaleEquivalent
-  // for information on parameters.
+  // See https://drafts.fxtf.org/filters/#grayscaleEquivalent for information on
+  // parameters.
   Vector<float> matrix;
   matrix.reserveInitialCapacity(20);
 
@@ -95,9 +94,8 @@ Vector<float> grayscaleMatrix(double amount) {
 Vector<float> sepiaMatrix(double amount) {
   double oneMinusAmount = clampTo(1 - amount, 0.0, 1.0);
 
-  // See
-  // https://dvcs.w3.org/hg/FXTF/raw-file/tip/filters/index.html#sepiaEquivalent
-  // for information on parameters.
+  // See https://drafts.fxtf.org/filters/#sepiaEquivalent for information on
+  // parameters.
   Vector<float> matrix;
   matrix.reserveInitialCapacity(20);
 
@@ -122,11 +120,21 @@ Vector<float> sepiaMatrix(double amount) {
 
 }  // namespace
 
-FilterEffectBuilder::FilterEffectBuilder(Node* target,
-                                         const FloatRect& zoomedReferenceBox,
+FilterEffectBuilder::FilterEffectBuilder(const FloatRect& zoomedReferenceBox,
                                          float zoom,
                                          const SkPaint* fillPaint,
                                          const SkPaint* strokePaint)
+    : FilterEffectBuilder(nullptr,
+                          zoomedReferenceBox,
+                          zoom,
+                          fillPaint,
+                          strokePaint) {}
+
+FilterEffectBuilder::FilterEffectBuilder(Node* target,
+                                         const FloatRect& zoomedReferenceBox,
+                                         float zoom,
+                                         const PaintFlags* fillPaint,
+                                         const PaintFlags* strokePaint)
     : m_targetContext(target),
       m_referenceBox(zoomedReferenceBox),
       m_zoom(zoom),
@@ -177,7 +185,7 @@ FilterEffect* FilterEffectBuilder::buildFilterEffect(
       }
       case FilterOperation::SATURATE: {
         Vector<float> inputParameters;
-        inputParameters.append(clampTo<float>(
+        inputParameters.push_back(clampTo<float>(
             toBasicColorMatrixFilterOperation(filterOperation)->amount()));
         effect = FEColorMatrix::create(
             parentFilter, FECOLORMATRIX_TYPE_SATURATE, inputParameters);
@@ -185,7 +193,7 @@ FilterEffect* FilterEffectBuilder::buildFilterEffect(
       }
       case FilterOperation::HUE_ROTATE: {
         Vector<float> inputParameters;
-        inputParameters.append(clampTo<float>(
+        inputParameters.push_back(clampTo<float>(
             toBasicColorMatrixFilterOperation(filterOperation)->amount()));
         effect = FEColorMatrix::create(
             parentFilter, FECOLORMATRIX_TYPE_HUEROTATE, inputParameters);
@@ -197,9 +205,9 @@ FilterEffect* FilterEffectBuilder::buildFilterEffect(
         ComponentTransferFunction transferFunction;
         transferFunction.type = FECOMPONENTTRANSFER_TYPE_TABLE;
         Vector<float> transferParameters;
-        transferParameters.append(
+        transferParameters.push_back(
             clampTo<float>(componentTransferOperation->amount()));
-        transferParameters.append(
+        transferParameters.push_back(
             clampTo<float>(1 - componentTransferOperation->amount()));
         transferFunction.tableValues = transferParameters;
 
@@ -213,8 +221,8 @@ FilterEffect* FilterEffectBuilder::buildFilterEffect(
         ComponentTransferFunction transferFunction;
         transferFunction.type = FECOMPONENTTRANSFER_TYPE_TABLE;
         Vector<float> transferParameters;
-        transferParameters.append(0);
-        transferParameters.append(clampTo<float>(
+        transferParameters.push_back(0);
+        transferParameters.push_back(clampTo<float>(
             toBasicComponentTransferFilterOperation(filterOperation)
                 ->amount()));
         transferFunction.tableValues = transferParameters;
@@ -260,13 +268,11 @@ FilterEffect* FilterEffectBuilder::buildFilterEffect(
         break;
       }
       case FilterOperation::DROP_SHADOW: {
-        DropShadowFilterOperation* dropShadowOperation =
-            toDropShadowFilterOperation(filterOperation);
-        float stdDeviation = dropShadowOperation->stdDeviation();
-        float x = dropShadowOperation->x();
-        float y = dropShadowOperation->y();
-        effect = FEDropShadow::create(parentFilter, stdDeviation, stdDeviation,
-                                      x, y, dropShadowOperation->getColor(), 1);
+        const ShadowData& shadow =
+            toDropShadowFilterOperation(*filterOperation).shadow();
+        effect = FEDropShadow::create(parentFilter, shadow.blur(),
+                                      shadow.blur(), shadow.x(), shadow.y(),
+                                      shadow.color().getColor(), 1);
         break;
       }
       case FilterOperation::BOX_REFLECT: {
@@ -286,7 +292,7 @@ FilterEffect* FilterEffectBuilder::buildFilterEffect(
         // subregions.
         effect->setClipsToBounds(false);
         effect->setOperatingColorSpace(ColorSpaceDeviceRGB);
-        effect->inputEffects().append(previousEffect);
+        effect->inputEffects().push_back(previousEffect);
       }
       if (previousEffect->originTainted())
         effect->setOriginTainted();
@@ -373,11 +379,10 @@ CompositorFilterOperations FilterEffectBuilder::buildFilterOperations(
         break;
       }
       case FilterOperation::DROP_SHADOW: {
-        const DropShadowFilterOperation& drop =
-            toDropShadowFilterOperation(*op);
-        filters.appendDropShadowFilter(WebPoint(drop.x(), drop.y()),
-                                       drop.stdDeviation(),
-                                       drop.getColor().rgb());
+        const ShadowData& shadow = toDropShadowFilterOperation(*op).shadow();
+        filters.appendDropShadowFilter(WebPoint(shadow.x(), shadow.y()),
+                                       shadow.blur(),
+                                       shadow.color().getColor());
         break;
       }
       case FilterOperation::BOX_REFLECT: {

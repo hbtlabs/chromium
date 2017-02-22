@@ -2,36 +2,40 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ios/web/web_state/web_state_impl.h"
+#import "ios/web/web_state/web_state_impl.h"
 
 #include <stddef.h>
 #include <stdint.h>
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/sys_string_conversions.h"
-#include "ios/web/interstitials/web_interstitial_impl.h"
+#import "ios/web/interstitials/web_interstitial_impl.h"
 #import "ios/web/navigation/crw_session_controller.h"
 #import "ios/web/navigation/crw_session_entry.h"
-#include "ios/web/navigation/navigation_item_impl.h"
-#include "ios/web/net/request_group_util.h"
+#import "ios/web/navigation/navigation_item_impl.h"
+#import "ios/web/navigation/session_storage_builder.h"
 #include "ios/web/public/browser_state.h"
+#import "ios/web/public/crw_session_storage.h"
 #import "ios/web/public/java_script_dialog_presenter.h"
-#include "ios/web/public/navigation_item.h"
+#import "ios/web/public/navigation_item.h"
 #include "ios/web/public/url_util.h"
-#include "ios/web/public/web_client.h"
+#import "ios/web/public/web_client.h"
 #import "ios/web/public/web_state/context_menu_params.h"
 #include "ios/web/public/web_state/credential.h"
-#include "ios/web/public/web_state/ui/crw_content_view.h"
-#include "ios/web/public/web_state/web_state_delegate.h"
+#import "ios/web/public/web_state/ui/crw_content_view.h"
+#import "ios/web/public/web_state/web_state_delegate.h"
 #include "ios/web/public/web_state/web_state_observer.h"
-#include "ios/web/public/web_state/web_state_policy_decider.h"
+#import "ios/web/public/web_state/web_state_policy_decider.h"
+#include "ios/web/public/web_thread.h"
+#include "ios/web/public/webui/web_ui_ios_controller.h"
 #include "ios/web/web_state/global_web_state_event_tracker.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
 #import "ios/web/web_state/ui/crw_web_controller_container_view.h"
 #include "ios/web/web_state/web_state_facade_delegate.h"
-#import "ios/web/webui/web_ui_ios_controller_factory_registry.h"
-#import "ios/web/webui/web_ui_ios_impl.h"
+#include "ios/web/webui/web_ui_ios_controller_factory_registry.h"
+#include "ios/web/webui/web_ui_ios_impl.h"
 #include "net/http/http_response_headers.h"
 #include "services/service_manager/public/cpp/interface_registry.h"
 
@@ -42,6 +46,7 @@ std::unique_ptr<WebState> WebState::Create(const CreateParams& params) {
   std::unique_ptr<WebStateImpl> web_state(
       new WebStateImpl(params.browser_state));
 
+  // Initialized the new session.
   NSString* window_name = nil;
   NSString* opener_id = nil;
   BOOL opened_by_dom = NO;
@@ -49,18 +54,46 @@ std::unique_ptr<WebState> WebState::Create(const CreateParams& params) {
   web_state->GetNavigationManagerImpl().InitializeSession(
       window_name, opener_id, opened_by_dom, opener_navigation_index);
 
-  return std::unique_ptr<WebState>(web_state.release());
+  // This std::move is required to compile with the version of clang shipping
+  // with Xcode 8.0+. Evalute whether the issue is fixed once a new version of
+  // Xcode is released.
+  return std::move(web_state);
+}
+
+/* static */
+std::unique_ptr<WebState> WebState::Create(const CreateParams& params,
+                                           CRWSessionStorage* session_storage) {
+  std::unique_ptr<WebStateImpl> web_state(
+      new WebStateImpl(params.browser_state, session_storage));
+
+  // This std::move is required to compile with the version of clang shipping
+  // with Xcode 8.0+. Evalute whether the issue is fixed once a new version of
+  // Xcode is released.
+  return std::move(web_state);
 }
 
 WebStateImpl::WebStateImpl(BrowserState* browser_state)
+    : WebStateImpl(browser_state, nullptr) {}
+
+WebStateImpl::WebStateImpl(BrowserState* browser_state,
+                           CRWSessionStorage* session_storage)
     : delegate_(nullptr),
       is_loading_(false),
       is_being_destroyed_(false),
       facade_delegate_(nullptr),
       web_controller_(nil),
-      navigation_manager_(this, browser_state),
       interstitial_(nullptr),
       weak_factory_(this) {
+  // Create or deserialize the NavigationManager.
+  if (session_storage) {
+    SessionStorageBuilder session_storage_builder;
+    session_storage_builder.ExtractSessionState(this, session_storage);
+  } else {
+    navigation_manager_.reset(new NavigationManagerImpl());
+  }
+  navigation_manager_->SetDelegate(this);
+  navigation_manager_->SetBrowserState(browser_state);
+  // Send creation event and create the web controller.
   GlobalWebStateEventTracker::GetInstance()->OnWebStateCreated(this);
   web_controller_.reset([[CRWWebController alloc] initWithWebState:this]);
 }
@@ -86,8 +119,6 @@ WebStateImpl::~WebStateImpl() {
   for (auto& observer : policy_deciders_)
     observer.ResetWebState();
   DCHECK(script_command_callbacks_.empty());
-  if (request_tracker_.get())
-    CloseRequestTracker();
   SetDelegate(nullptr);
 }
 
@@ -153,12 +184,6 @@ void WebStateImpl::SetFacadeDelegate(WebStateFacadeDelegate* facade_delegate) {
   facade_delegate_ = facade_delegate;
 }
 
-WebStateImpl* WebStateImpl::CopyForSessionWindow() {
-  WebStateImpl* copy = new WebStateImpl(GetBrowserState());
-  copy->GetNavigationManagerImpl().CopyState(&navigation_manager_);
-  return copy;
-}
-
 void WebStateImpl::OnNavigationCommitted(const GURL& url) {
   UpdateHttpResponseHeaders(url);
 }
@@ -171,6 +196,11 @@ void WebStateImpl::OnUrlHashChanged() {
 void WebStateImpl::OnHistoryStateChanged() {
   for (auto& observer : observers_)
     observer.HistoryStateChanged();
+}
+
+void WebStateImpl::OnRenderProcessGone() {
+  for (auto& observer : observers_)
+    observer.RenderProcessGone();
 }
 
 bool WebStateImpl::OnScriptCommandReceived(const std::string& command,
@@ -233,11 +263,10 @@ void WebStateImpl::OnFormActivityRegistered(const std::string& form_name,
                                             const std::string& field_name,
                                             const std::string& type,
                                             const std::string& value,
-                                            int key_code,
                                             bool input_missing) {
   for (auto& observer : observers_) {
     observer.FormActivityRegistered(form_name, field_name, type, value,
-                                    key_code, input_missing);
+                                    input_missing);
   }
 }
 
@@ -295,18 +324,15 @@ void WebStateImpl::OnDocumentSubmitted(const std::string& form_name,
 }
 
 NavigationManagerImpl& WebStateImpl::GetNavigationManagerImpl() {
-  return navigation_manager_;
+  return *navigation_manager_;
 }
 
 const NavigationManagerImpl& WebStateImpl::GetNavigationManagerImpl() const {
-  return navigation_manager_;
+  return *navigation_manager_;
 }
 
-// There are currently two kinds of WebUI: those that have been adapted to
-// web::WebUIIOS, and those that are still using content::WebUI. Try to create
-// it as the first, and then fall back to the latter if necessary.
 void WebStateImpl::CreateWebUI(const GURL& url) {
-  web_ui_.reset(CreateWebUIIOS(url));
+  web_ui_ = CreateWebUIIOS(url);
 }
 
 void WebStateImpl::ClearWebUI() {
@@ -334,7 +360,7 @@ const base::string16& WebStateImpl::GetTitle() const {
   // TODO(stuartmorgan): Implement the NavigationManager logic necessary to
   // match the WebContents implementation of this method.
   DCHECK(Configured());
-  web::NavigationItem* item = navigation_manager_.GetLastCommittedItem();
+  web::NavigationItem* item = navigation_manager_->GetLastCommittedItem();
   return item ? item->GetTitleForDisplay() : empty_string16_;
 }
 
@@ -353,6 +379,14 @@ bool WebStateImpl::IsShowingWebInterstitial() const {
 
 WebInterstitial* WebStateImpl::GetWebInterstitial() const {
   return interstitial_;
+}
+
+void WebStateImpl::OnPasswordInputShownOnHttp() {
+  [web_controller_ didShowPasswordInputOnHTTP];
+}
+
+void WebStateImpl::OnCreditCardInputShownOnHttp() {
+  [web_controller_ didShowCreditCardInputOnHTTP];
 }
 
 net::HttpResponseHeaders* WebStateImpl::GetHttpResponseHeaders() const {
@@ -420,15 +454,14 @@ void WebStateImpl::ClearTransientContentView() {
     // Don't access |interstitial| after calling |DontProceed()|, as it triggers
     // deletion.
     for (auto& observer : observers_)
-      observer.InsterstitialDismissed();
+      observer.InterstitialDismissed();
   }
   [web_controller_ clearTransientContentView];
 }
 
 void WebStateImpl::SendChangeLoadProgress(double progress) {
-  if (delegate_) {
-    delegate_->LoadProgressChanged(this, progress);
-  }
+  for (auto& observer : observers_)
+    observer.LoadProgressChanged(progress);
 }
 
 bool WebStateImpl::HandleContextMenu(const web::ContextMenuParams& params) {
@@ -436,6 +469,15 @@ bool WebStateImpl::HandleContextMenu(const web::ContextMenuParams& params) {
     return delegate_->HandleContextMenu(this, params);
   }
   return false;
+}
+
+void WebStateImpl::ShowRepostFormWarningDialog(
+    const base::Callback<void(bool)>& callback) {
+  if (delegate_) {
+    delegate_->ShowRepostFormWarningDialog(this, callback);
+  } else {
+    callback.Run(true);
+  }
 }
 
 void WebStateImpl::RunJavaScriptDialog(
@@ -454,6 +496,18 @@ void WebStateImpl::RunJavaScriptDialog(
                                  message_text, default_prompt_text, callback);
 }
 
+void WebStateImpl::OnAuthRequired(
+    NSURLProtectionSpace* protection_space,
+    NSURLCredential* proposed_credential,
+    const WebStateDelegate::AuthCallback& callback) {
+  if (delegate_) {
+    delegate_->OnAuthRequired(this, protection_space, proposed_credential,
+                              callback);
+  } else {
+    callback.Run(nil, nil);
+  }
+}
+
 void WebStateImpl::CancelDialogs() {
   if (delegate_) {
     JavaScriptDialogPresenter* presenter =
@@ -464,21 +518,18 @@ void WebStateImpl::CancelDialogs() {
   }
 }
 
-WebUIIOS* WebStateImpl::CreateWebUIIOS(const GURL& url) {
+std::unique_ptr<web::WebUIIOS> WebStateImpl::CreateWebUIIOS(const GURL& url) {
   WebUIIOSControllerFactory* factory =
       WebUIIOSControllerFactoryRegistry::GetInstance();
   if (!factory)
-    return NULL;
-  WebUIIOSImpl* web_ui = new WebUIIOSImpl(this);
-  WebUIIOSController* controller =
-      factory->CreateWebUIIOSControllerForURL(web_ui, url);
-  if (controller) {
-    web_ui->SetController(controller);
-    return web_ui;
-  }
+    return nullptr;
+  std::unique_ptr<web::WebUIIOS> web_ui = base::MakeUnique<WebUIIOSImpl>(this);
+  auto controller = factory->CreateWebUIIOSControllerForURL(web_ui.get(), url);
+  if (!controller)
+    return nullptr;
 
-  delete web_ui;
-  return NULL;
+  web_ui->SetController(std::move(controller));
+  return web_ui;
 }
 
 void WebStateImpl::SetContentsMimeType(const std::string& mime_type) {
@@ -503,50 +554,10 @@ bool WebStateImpl::ShouldAllowResponse(NSURLResponse* response) {
 
 #pragma mark - RequestTracker management
 
-void WebStateImpl::InitializeRequestTracker(
-    id<CRWRequestTrackerDelegate> delegate) {
-  BrowserState* browser_state = navigation_manager_.GetBrowserState();
-  request_tracker_ = RequestTrackerImpl::CreateTrackerForRequestGroupID(
-      GetRequestGroupID(), browser_state, browser_state->GetRequestContext(),
-      delegate);
-}
-
-void WebStateImpl::CloseRequestTracker() {
-  request_tracker_->Close();
-  request_tracker_ = NULL;
-}
-
-RequestTrackerImpl* WebStateImpl::GetRequestTracker() {
-  DCHECK(request_tracker_.get());
-  return request_tracker_.get();
-}
-
-NSString* WebStateImpl::GetRequestGroupID() {
-  if (request_group_id_.get() == nil)
-    request_group_id_.reset([GenerateNewRequestGroupID() copy]);
-
-  return request_group_id_;
-}
-
-int WebStateImpl::DownloadImage(
-    const GURL& url,
-    bool is_favicon,
-    uint32_t max_bitmap_size,
-    bool bypass_cache,
-    const ImageDownloadCallback& callback) {
-  // |is_favicon| specifies whether the download of the image occurs with
-  // cookies or not. Currently, only downloads without cookies are supported.
-  // |bypass_cache| is ignored since the downloads never go through a cache.
-  DCHECK(is_favicon);
-  return [[web_controller_ delegate] downloadImageAtUrl:url
-                                          maxBitmapSize:max_bitmap_size
-                                              callback:callback];
-}
-
 service_manager::InterfaceRegistry* WebStateImpl::GetMojoInterfaceRegistry() {
   if (!mojo_interface_registry_) {
-    mojo_interface_registry_.reset(
-        new service_manager::InterfaceRegistry(std::string()));
+    mojo_interface_registry_ =
+        base::MakeUnique<service_manager::InterfaceRegistry>(std::string());
   }
   return mojo_interface_registry_.get();
 }
@@ -578,13 +589,14 @@ UIView* WebStateImpl::GetView() {
 }
 
 BrowserState* WebStateImpl::GetBrowserState() const {
-  return navigation_manager_.GetBrowserState();
+  return navigation_manager_->GetBrowserState();
 }
 
 void WebStateImpl::OpenURL(const WebState::OpenURLParams& params) {
   DCHECK(Configured());
   ClearTransientContentView();
-  [[web_controller_ delegate] openURLWithParams:params];
+  if (delegate_)
+    delegate_->OpenURLFromWebState(this, params);
 }
 
 void WebStateImpl::Stop() {
@@ -597,6 +609,11 @@ const NavigationManager* WebStateImpl::GetNavigationManager() const {
 
 NavigationManager* WebStateImpl::GetNavigationManager() {
   return &GetNavigationManagerImpl();
+}
+
+CRWSessionStorage* WebStateImpl::BuildSessionStorage() {
+  SessionStorageBuilder session_storage_builder;
+  return session_storage_builder.BuildStorage(this);
 }
 
 CRWJSInjectionReceiver* WebStateImpl::GetJSInjectionReceiver() const {
@@ -636,12 +653,12 @@ bool WebStateImpl::ContentIsHTML() const {
 }
 
 const GURL& WebStateImpl::GetVisibleURL() const {
-  web::NavigationItem* item = navigation_manager_.GetVisibleItem();
+  web::NavigationItem* item = navigation_manager_->GetVisibleItem();
   return item ? item->GetVirtualURL() : GURL::EmptyGURL();
 }
 
 const GURL& WebStateImpl::GetLastCommittedURL() const {
-  web::NavigationItem* item = navigation_manager_.GetLastCommittedItem();
+  web::NavigationItem* item = navigation_manager_->GetLastCommittedItem();
   return item ? item->GetVirtualURL() : GURL::EmptyGURL();
 }
 

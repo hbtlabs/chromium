@@ -12,7 +12,7 @@ namespace blink {
 
 DeviceSingleWindowEventController::DeviceSingleWindowEventController(
     Document& document)
-    : PlatformEventController(document.page()),
+    : PlatformEventController(document.frame()),
       m_needsCheckingNullEvents(true),
       m_document(document) {
   document.domWindow()->registerEventListenerObserver(this);
@@ -25,8 +25,8 @@ void DeviceSingleWindowEventController::didUpdateData() {
 }
 
 void DeviceSingleWindowEventController::dispatchDeviceEvent(Event* event) {
-  if (!document().domWindow() || document().activeDOMObjectsAreSuspended() ||
-      document().activeDOMObjectsAreStopped())
+  if (!document().domWindow() || document().isContextSuspended() ||
+      document().isContextDestroyed())
     return;
 
   document().domWindow()->dispatchEvent(event);

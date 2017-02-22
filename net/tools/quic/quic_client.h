@@ -14,12 +14,10 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/strings/string_piece.h"
-#include "net/base/ip_address.h"
-#include "net/base/ip_endpoint.h"
 #include "net/quic/core/quic_client_push_promise_index.h"
 #include "net/quic/core/quic_config.h"
 #include "net/quic/core/quic_spdy_stream.h"
+#include "net/quic/platform/api/quic_containers.h"
 #include "net/tools/epoll_server/epoll_server.h"
 #include "net/tools/quic/quic_client_base.h"
 #include "net/tools/quic/quic_client_session.h"
@@ -29,8 +27,6 @@
 namespace net {
 
 class QuicServerId;
-
-class QuicEpollConnectionHelper;
 
 namespace test {
 class QuicClientPeer;
@@ -42,12 +38,12 @@ class QuicClient : public QuicClientBase,
  public:
   // Create a quic client, which will have events managed by an externally owned
   // EpollServer.
-  QuicClient(IPEndPoint server_address,
+  QuicClient(QuicSocketAddress server_address,
              const QuicServerId& server_id,
              const QuicVersionVector& supported_versions,
              EpollServer* epoll_server,
              std::unique_ptr<ProofVerifier> proof_verifier);
-  QuicClient(IPEndPoint server_address,
+  QuicClient(QuicSocketAddress server_address,
              const QuicServerId& server_id,
              const QuicVersionVector& supported_versions,
              const QuicConfig& config,
@@ -71,20 +67,20 @@ class QuicClient : public QuicClientBase,
   int GetLatestFD() const;
 
   // From QuicClientBase
-  IPEndPoint GetLatestClientAddress() const override;
+  QuicSocketAddress GetLatestClientAddress() const override;
 
   // Implements ProcessPacketInterface. This will be called for each received
   // packet.
-  void ProcessPacket(const IPEndPoint& self_address,
-                     const IPEndPoint& peer_address,
+  void ProcessPacket(const QuicSocketAddress& self_address,
+                     const QuicSocketAddress& peer_address,
                      const QuicReceivedPacket& packet) override;
 
  protected:
   // From QuicClientBase
   QuicPacketWriter* CreateQuicPacketWriter() override;
   void RunEventLoop() override;
-  bool CreateUDPSocketAndBind(IPEndPoint server_address,
-                              IPAddress bind_to_address,
+  bool CreateUDPSocketAndBind(QuicSocketAddress server_address,
+                              QuicIpAddress bind_to_address,
                               int bind_to_port) override;
   void CleanUpAllUDPSockets() override;
 
@@ -94,12 +90,12 @@ class QuicClient : public QuicClientBase,
 
   EpollServer* epoll_server() { return epoll_server_; }
 
-  const linked_hash_map<int, IPEndPoint>& fd_address_map() const {
+  const QuicLinkedHashMap<int, QuicSocketAddress>& fd_address_map() const {
     return fd_address_map_;
   }
 
  private:
-  friend class net::test::QuicClientPeer;
+  friend class test::QuicClientPeer;
 
   // Actually clean up |fd|.
   void CleanUpUDPSocketImpl(int fd);
@@ -109,7 +105,7 @@ class QuicClient : public QuicClientBase,
 
   // Map mapping created UDP sockets to their addresses. By using linked hash
   // map, the order of socket creation can be recorded.
-  linked_hash_map<int, IPEndPoint> fd_address_map_;
+  QuicLinkedHashMap<int, QuicSocketAddress> fd_address_map_;
 
   // If overflow_supported_ is true, this will be the number of packets dropped
   // during the lifetime of the server.

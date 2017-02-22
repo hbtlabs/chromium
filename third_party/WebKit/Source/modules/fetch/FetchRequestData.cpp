@@ -6,7 +6,6 @@
 
 #include "bindings/core/v8/ScriptState.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/fetch/ResourceLoaderOptions.h"
 #include "core/loader/ThreadableLoader.h"
 #include "modules/credentialmanager/PasswordCredential.h"
 #include "modules/fetch/BlobBytesConsumer.h"
@@ -14,6 +13,7 @@
 #include "modules/fetch/BytesConsumer.h"
 #include "modules/fetch/FetchHeaderList.h"
 #include "platform/HTTPNames.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/network/ResourceRequest.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerRequest.h"
@@ -40,7 +40,7 @@ FetchRequestData* FetchRequestData::create(
   request->setContext(webRequest.requestContext());
   request->setReferrer(
       Referrer(webRequest.referrerUrl().string(),
-               static_cast<ReferrerPolicy>(webRequest.referrerPolicy())));
+               static_cast<ReferrerPolicy>(webRequest.getReferrerPolicy())));
   request->setMode(webRequest.mode());
   request->setCredentials(webRequest.credentialsMode());
   request->setRedirect(webRequest.redirectMode());

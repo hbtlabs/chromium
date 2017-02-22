@@ -50,17 +50,17 @@ class NodeMutationObserverData final
   }
 
   void addTransientRegistration(MutationObserverRegistration* registration) {
-    m_transientRegistry.add(
+    m_transientRegistry.insert(
         TraceWrapperMember<MutationObserverRegistration>(this, registration));
   }
 
   void removeTransientRegistration(MutationObserverRegistration* registration) {
     DCHECK(m_transientRegistry.contains(registration));
-    m_transientRegistry.remove(registration);
+    m_transientRegistry.erase(registration);
   }
 
   void addRegistration(MutationObserverRegistration* registration) {
-    m_registry.append(
+    m_registry.push_back(
         TraceWrapperMember<MutationObserverRegistration>(this, registration));
   }
 

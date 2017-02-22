@@ -30,6 +30,7 @@
 
 #include "core/inspector/MainThreadDebugger.h"
 
+#include <memory>
 #include "bindings/core/v8/BindingSecurity.h"
 #include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ScriptController.h"
@@ -65,7 +66,6 @@
 #include "platform/UserGestureIndicator.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/ThreadingPrimitives.h"
-#include <memory>
 
 namespace blink {
 
@@ -96,7 +96,7 @@ MainThreadDebugger* MainThreadDebugger::s_instance = nullptr;
 
 MainThreadDebugger::MainThreadDebugger(v8::Isolate* isolate)
     : ThreadDebugger(isolate),
-      m_taskRunner(makeUnique<InspectorTaskRunner>()),
+      m_taskRunner(WTF::makeUnique<InspectorTaskRunner>()),
       m_paused(false) {
   MutexLocker locker(creationMutex());
   ASSERT(!s_instance);
@@ -146,7 +146,7 @@ void MainThreadDebugger::contextCreated(ScriptState* scriptState,
       protocol::DictionaryValue::create();
   auxDataValue->setBoolean("isDefault", world.isMainWorld());
   auxDataValue->setString("frameId", IdentifiersFactory::frameId(frame));
-  String auxData = auxDataValue->toJSONString();
+  String auxData = auxDataValue->serialize();
   String humanReadableName = world.isIsolatedWorld()
                                  ? world.isolatedWorldHumanReadableName()
                                  : String();
@@ -216,11 +216,11 @@ int MainThreadDebugger::contextGroupId(LocalFrame* frame) {
 }
 
 MainThreadDebugger* MainThreadDebugger::instance() {
-  ASSERT(isMainThread());
-  V8PerIsolateData* data =
-      V8PerIsolateData::from(V8PerIsolateData::mainThreadIsolate());
-  ASSERT(data->threadDebugger() && !data->threadDebugger()->isWorker());
-  return static_cast<MainThreadDebugger*>(data->threadDebugger());
+  DCHECK(isMainThread());
+  ThreadDebugger* debugger =
+      ThreadDebugger::from(V8PerIsolateData::mainThreadIsolate());
+  DCHECK(debugger && !debugger->isWorker());
+  return static_cast<MainThreadDebugger*>(debugger);
 }
 
 void MainThreadDebugger::interruptMainThreadAndRun(
@@ -290,7 +290,7 @@ void MainThreadDebugger::endEnsureAllContextsInGroup(int contextGroupId) {
 
 bool MainThreadDebugger::canExecuteScripts(int contextGroupId) {
   LocalFrame* frame = WeakIdentifierMap<LocalFrame>::lookup(contextGroupId);
-  return frame->script().canExecuteScripts(NotAboutToExecuteScript);
+  return frame->document()->canExecuteScripts(NotAboutToExecuteScript);
 }
 
 void MainThreadDebugger::runIfWaitingForDebugger(int contextGroupId) {
@@ -301,7 +301,7 @@ void MainThreadDebugger::runIfWaitingForDebugger(int contextGroupId) {
 
 void MainThreadDebugger::consoleAPIMessage(
     int contextGroupId,
-    v8_inspector::V8ConsoleAPIType type,
+    v8::Isolate::MessageErrorLevel level,
     const v8_inspector::StringView& message,
     const v8_inspector::StringView& url,
     unsigned lineNumber,
@@ -310,16 +310,22 @@ void MainThreadDebugger::consoleAPIMessage(
   LocalFrame* frame = WeakIdentifierMap<LocalFrame>::lookup(contextGroupId);
   if (!frame)
     return;
-  if (type == v8_inspector::V8ConsoleAPIType::kClear && frame->host())
-    frame->host()->consoleMessageStorage().clear();
   // TODO(dgozman): we can save a copy of message and url here by making
   // FrameConsole work with StringView.
   std::unique_ptr<SourceLocation> location =
       SourceLocation::create(toCoreString(url), lineNumber, columnNumber,
                              stackTrace ? stackTrace->clone() : nullptr, 0);
   frame->console().reportMessageToClient(ConsoleAPIMessageSource,
-                                         consoleAPITypeToMessageLevel(type),
+                                         v8MessageLevelToMessageLevel(level),
                                          toCoreString(message), location.get());
+}
+
+void MainThreadDebugger::consoleClear(int contextGroupId) {
+  LocalFrame* frame = WeakIdentifierMap<LocalFrame>::lookup(contextGroupId);
+  if (!frame)
+    return;
+  if (frame->host())
+    frame->host()->consoleMessageStorage().clear();
 }
 
 v8::MaybeLocal<v8::Value> MainThreadDebugger::memoryInfo(
@@ -328,7 +334,7 @@ v8::MaybeLocal<v8::Value> MainThreadDebugger::memoryInfo(
   ExecutionContext* executionContext = toExecutionContext(context);
   DCHECK(executionContext);
   ASSERT(executionContext->isDocument());
-  return toV8(MemoryInfo::create(), context->Global(), isolate);
+  return ToV8(MemoryInfo::create(), context->Global(), isolate);
 }
 
 void MainThreadDebugger::installAdditionalCommandLineAPI(
@@ -369,15 +375,15 @@ void MainThreadDebugger::querySelectorCallback(
   Node* node = secondArgumentAsNode(info);
   if (!node || !node->isContainerNode())
     return;
-  ExceptionState exceptionState(ExceptionState::ExecutionContext, "$",
-                                "CommandLineAPI", info.Holder(),
-                                info.GetIsolate());
+  ExceptionState exceptionState(info.GetIsolate(),
+                                ExceptionState::ExecutionContext,
+                                "CommandLineAPI", "$");
   Element* element = toContainerNode(node)->querySelector(
       AtomicString(selector), exceptionState);
   if (exceptionState.hadException())
     return;
   if (element)
-    info.GetReturnValue().Set(toV8(element, info.Holder(), info.GetIsolate()));
+    info.GetReturnValue().Set(ToV8(element, info.Holder(), info.GetIsolate()));
   else
     info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
 }
@@ -392,10 +398,10 @@ void MainThreadDebugger::querySelectorAllCallback(
   Node* node = secondArgumentAsNode(info);
   if (!node || !node->isContainerNode())
     return;
-  ExceptionState exceptionState(ExceptionState::ExecutionContext, "$$",
-                                "CommandLineAPI", info.Holder(),
-                                info.GetIsolate());
-  // toV8(elementList) doesn't work here, since we need a proper Array instance,
+  ExceptionState exceptionState(info.GetIsolate(),
+                                ExceptionState::ExecutionContext,
+                                "CommandLineAPI", "$$");
+  // ToV8(elementList) doesn't work here, since we need a proper Array instance,
   // not NodeList.
   StaticElementList* elementList = toContainerNode(node)->querySelectorAll(
       AtomicString(selector), exceptionState);
@@ -407,7 +413,7 @@ void MainThreadDebugger::querySelectorAllCallback(
   for (size_t i = 0; i < elementList->length(); ++i) {
     Element* element = elementList->item(i);
     if (!createDataPropertyInArray(
-             context, nodes, i, toV8(element, info.Holder(), info.GetIsolate()))
+             context, nodes, i, ToV8(element, info.Holder(), info.GetIsolate()))
              .FromMaybe(false))
       return;
   }
@@ -425,22 +431,22 @@ void MainThreadDebugger::xpathSelectorCallback(
   if (!node || !node->isContainerNode())
     return;
 
-  ExceptionState exceptionState(ExceptionState::ExecutionContext, "$x",
-                                "CommandLineAPI", info.Holder(),
-                                info.GetIsolate());
+  ExceptionState exceptionState(info.GetIsolate(),
+                                ExceptionState::ExecutionContext,
+                                "CommandLineAPI", "$x");
   XPathResult* result = XPathEvaluator::create()->evaluate(
       selector, node, nullptr, XPathResult::kAnyType, ScriptValue(),
       exceptionState);
   if (exceptionState.hadException() || !result)
     return;
   if (result->resultType() == XPathResult::kNumberType) {
-    info.GetReturnValue().Set(toV8(result->numberValue(exceptionState),
+    info.GetReturnValue().Set(ToV8(result->numberValue(exceptionState),
                                    info.Holder(), info.GetIsolate()));
   } else if (result->resultType() == XPathResult::kStringType) {
-    info.GetReturnValue().Set(toV8(result->stringValue(exceptionState),
+    info.GetReturnValue().Set(ToV8(result->stringValue(exceptionState),
                                    info.Holder(), info.GetIsolate()));
   } else if (result->resultType() == XPathResult::kBooleanType) {
-    info.GetReturnValue().Set(toV8(result->booleanValue(exceptionState),
+    info.GetReturnValue().Set(ToV8(result->booleanValue(exceptionState),
                                    info.Holder(), info.GetIsolate()));
   } else {
     v8::Isolate* isolate = info.GetIsolate();
@@ -452,7 +458,7 @@ void MainThreadDebugger::xpathSelectorCallback(
         return;
       if (!createDataPropertyInArray(
                context, nodes, index++,
-               toV8(node, info.Holder(), info.GetIsolate()))
+               ToV8(node, info.Holder(), info.GetIsolate()))
                .FromMaybe(false))
         return;
     }

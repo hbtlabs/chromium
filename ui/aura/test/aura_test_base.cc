@@ -5,6 +5,7 @@
 #include "ui/aura/test/aura_test_base.h"
 
 #include "ui/aura/client/window_parenting_client.h"
+#include "ui/aura/mus/property_utils.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/mus/window_tree_host_mus.h"
 #include "ui/aura/test/test_window_delegate.h"
@@ -73,15 +74,17 @@ void AuraTestBase::SetUp() {
 
   // The ContextFactory must exist before any Compositors are created.
   bool enable_pixel_output = false;
-  ui::ContextFactory* context_factory =
-      ui::InitializeContextFactoryForTests(enable_pixel_output);
+  ui::ContextFactory* context_factory = nullptr;
+  ui::ContextFactoryPrivate* context_factory_private = nullptr;
+  ui::InitializeContextFactoryForTests(enable_pixel_output, &context_factory,
+                                       &context_factory_private);
 
   helper_.reset(new AuraTestHelper(&message_loop_));
   if (use_mus_) {
     helper_->EnableMusWithTestWindowTree(window_tree_client_delegate_,
                                          window_manager_delegate_);
   }
-  helper_->SetUp(context_factory);
+  helper_->SetUp(context_factory, context_factory_private);
 }
 
 void AuraTestBase::TearDown() {
@@ -90,6 +93,8 @@ void AuraTestBase::TearDown() {
   // Flush the message loop because we have pending release tasks
   // and these tasks if un-executed would upset Valgrind.
   RunAllPendingInMessageLoop();
+
+  window_tree_hosts_.clear();
 
   helper_->TearDown();
   ui::TerminateContextFactoryForTests();
@@ -144,7 +149,7 @@ void AuraTestBase::OnEmbed(
 
 void AuraTestBase::OnUnembed(Window* root) {}
 
-void AuraTestBase::OnEmbedRootDestroyed(Window* root) {}
+void AuraTestBase::OnEmbedRootDestroyed(WindowTreeHostMus* window_tree_host) {}
 
 void AuraTestBase::OnLostConnection(WindowTreeClient* client) {}
 
@@ -164,23 +169,40 @@ bool AuraTestBase::OnWmSetProperty(
   return true;
 }
 
+void AuraTestBase::OnWmSetCanFocus(Window* window, bool can_focus) {}
+
 Window* AuraTestBase::OnWmCreateTopLevelWindow(
+    ui::mojom::WindowType window_type,
     std::map<std::string, std::vector<uint8_t>>* properties) {
-  return new Window(nullptr);
+  Window* window = new Window(nullptr);
+  SetWindowType(window, window_type);
+  window->Init(ui::LAYER_NOT_DRAWN);
+  return window;
 }
 
 void AuraTestBase::OnWmClientJankinessChanged(
     const std::set<Window*>& client_windows,
     bool janky) {}
 
+void AuraTestBase::OnWmWillCreateDisplay(const display::Display& display) {}
+
 void AuraTestBase::OnWmNewDisplay(
     std::unique_ptr<WindowTreeHostMus> window_tree_host,
     const display::Display& display) {
   // Take ownership of the WindowTreeHost.
-  window_tree_host_mus_ = std::move(window_tree_host);
+  window_tree_hosts_.push_back(std::move(window_tree_host));
 }
 
-void AuraTestBase::OnWmDisplayRemoved(Window* window) {}
+void AuraTestBase::OnWmDisplayRemoved(WindowTreeHostMus* window_tree_host) {
+  for (auto iter = window_tree_hosts_.begin(); iter != window_tree_hosts_.end();
+       ++iter) {
+    if (iter->get() == window_tree_host) {
+      window_tree_hosts_.erase(iter);
+      return;
+    }
+  }
+  NOTREACHED();
+}
 
 void AuraTestBase::OnWmDisplayModified(const display::Display& display) {}
 
@@ -197,9 +219,14 @@ void AuraTestBase::OnWmPerformMoveLoop(
 
 void AuraTestBase::OnWmCancelMoveLoop(Window* window) {}
 
-client::CaptureClient* AuraTestBase::GetCaptureClient() {
-  return helper_->capture_client();
-}
+void AuraTestBase::OnWmSetClientArea(
+    Window* window,
+    const gfx::Insets& insets,
+    const std::vector<gfx::Rect>& additional_client_areas) {}
+
+bool AuraTestBase::IsWindowActive(aura::Window* window) { return false; }
+
+void AuraTestBase::OnWmDeactivateWindow(Window* window) {}
 
 PropertyConverter* AuraTestBase::GetPropertyConverter() {
   return &property_converter_;
@@ -215,6 +242,15 @@ void AuraTestBaseWithType::SetUp() {
   DCHECK(!setup_called_);
   setup_called_ = true;
   ConfigureBackend(GetParam());
+  AuraTestBase::SetUp();
+}
+
+AuraTestBaseMus::AuraTestBaseMus() {}
+
+AuraTestBaseMus::~AuraTestBaseMus() {}
+
+void AuraTestBaseMus::SetUp() {
+  ConfigureBackend(test::BackendType::MUS);
   AuraTestBase::SetUp();
 }
 

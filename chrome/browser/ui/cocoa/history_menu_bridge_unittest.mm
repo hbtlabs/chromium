@@ -17,7 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/sessions/chrome_tab_restore_service_client.h"
-#include "chrome/browser/ui/cocoa/cocoa_profile_test.h"
+#include "chrome/browser/ui/cocoa/test/cocoa_profile_test.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/favicon_base/favicon_types.h"
 #include "components/sessions/core/persistent_tab_restore_service.h"
@@ -55,6 +55,8 @@ class HistoryMenuBridgeTest : public CocoaProfileTest {
  public:
   void SetUp() override {
     CocoaProfileTest::SetUp();
+    ASSERT_TRUE(profile()->CreateHistoryService(/*delete_file=*/true,
+                                                /*no_db=*/false));
     profile()->CreateFaviconService();
     bridge_.reset(new MockBridge(profile()));
   }

@@ -18,8 +18,8 @@
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/task_runner_util.h"
-#include "base/threading/worker_pool.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/chromeos_paths.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/blocking_method_caller.h"
@@ -276,6 +276,8 @@ class SessionManagerClientImpl : public SessionManagerClient {
         callback);
   }
 
+  bool SupportsRestartToApplyUserFlags() const override { return true; }
+
   void SetFlagsForUser(const cryptohome::Identification& cryptohome_id,
                        const std::vector<std::string>& flags) override {
     dbus::MethodCall method_call(login_manager::kSessionManagerInterface,
@@ -294,12 +296,16 @@ class SessionManagerClientImpl : public SessionManagerClient {
         login_manager::kSessionManagerInterface,
         login_manager::kSessionManagerGetServerBackedStateKeys);
 
+    // Infinite timeout needed because the state keys are not generated as long
+    // as the time sync hasn't been done (which requires network).
+    // TODO(igorcov): Since this is a resource allocated that could last a long
+    // time, we will need to change the behavior to either listen to
+    // LastSyncInfo event from tlsdated or communicate through signals with
+    // session manager in this particular flow.
     session_manager_proxy_->CallMethod(
-        &method_call,
-        dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        &method_call, dbus::ObjectProxy::TIMEOUT_INFINITE,
         base::Bind(&SessionManagerClientImpl::OnGetServerBackedStateKeys,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   callback));
+                   weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
   void CheckArcAvailability(const ArcCallback& callback) override {
@@ -340,21 +346,33 @@ class SessionManagerClientImpl : public SessionManagerClient {
                    login_manager::kSessionManagerStopArcInstance, callback));
   }
 
-  void PrioritizeArcInstance(const ArcCallback& callback) override {
+  void SetArcCpuRestriction(
+      login_manager::ContainerCpuRestrictionState restriction_state,
+      const ArcCallback& callback) override {
     dbus::MethodCall method_call(
         login_manager::kSessionManagerInterface,
-        login_manager::kSessionManagerPrioritizeArcInstance);
+        login_manager::kSessionManagerSetArcCpuRestriction);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendUint32(restriction_state);
     session_manager_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
         base::Bind(&SessionManagerClientImpl::OnArcMethod,
                    weak_ptr_factory_.GetWeakPtr(),
-                   login_manager::kSessionManagerPrioritizeArcInstance,
+                   login_manager::kSessionManagerSetArcCpuRestriction,
                    callback));
   }
 
-  void EmitArcBooted() override {
-    SimpleMethodCallToSessionManager(
-        login_manager::kSessionManagerEmitArcBooted);
+  void EmitArcBooted(const cryptohome::Identification& cryptohome_id,
+                     const ArcCallback& callback) override {
+    dbus::MethodCall method_call(login_manager::kSessionManagerInterface,
+                                 login_manager::kSessionManagerEmitArcBooted);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendString(cryptohome_id.id());
+    session_manager_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::Bind(&SessionManagerClientImpl::OnArcMethod,
+                   weak_ptr_factory_.GetWeakPtr(),
+                   login_manager::kSessionManagerEmitArcBooted, callback));
   }
 
   void GetArcStartTime(const GetArcStartTimeCallback& callback) override {
@@ -818,16 +836,20 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
     }
     base::FilePath device_policy_path =
         owner_key_path.DirName().AppendASCII("stub_device_policy");
-    base::PostTaskAndReplyWithResult(
-        base::WorkerPool::GetTaskRunner(false).get(),
-        FROM_HERE,
-        base::Bind(&GetFileContent, device_policy_path),
-        callback);
+    base::PostTaskWithTraitsAndReplyWithResult(
+        FROM_HERE, base::TaskTraits()
+                       .WithShutdownBehavior(
+                           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
+                       .MayBlock(),
+        base::Bind(&GetFileContent, device_policy_path), callback);
   }
   void RetrievePolicyForUser(const cryptohome::Identification& cryptohome_id,
                              const RetrievePolicyCallback& callback) override {
-    base::PostTaskAndReplyWithResult(
-        base::WorkerPool::GetTaskRunner(false).get(), FROM_HERE,
+    base::PostTaskWithTraitsAndReplyWithResult(
+        FROM_HERE, base::TaskTraits()
+                       .WithShutdownBehavior(
+                           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
+                       .MayBlock(),
         base::Bind(&GetFileContent,
                    GetUserFilePath(cryptohome_id, "stub_policy")),
         callback);
@@ -853,10 +875,12 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
     }
 
     if (response.has_new_public_key()) {
-      base::WorkerPool::PostTask(
-          FROM_HERE,
-          base::Bind(&StoreFile, owner_key_path, response.new_public_key()),
-          false);
+      base::PostTaskWithTraits(
+          FROM_HERE, base::TaskTraits()
+                         .WithShutdownBehavior(
+                             base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
+                         .MayBlock(),
+          base::Bind(&StoreFile, owner_key_path, response.new_public_key()));
     }
 
     // Chrome will attempt to retrieve the device policy right after storing
@@ -866,11 +890,13 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
     // if it was present in the blob.
     base::FilePath device_policy_path =
         owner_key_path.DirName().AppendASCII("stub_device_policy");
-    base::WorkerPool::PostTaskAndReply(
-        FROM_HERE,
+    base::PostTaskWithTraitsAndReply(
+        FROM_HERE, base::TaskTraits()
+                       .WithShutdownBehavior(
+                           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
+                       .MayBlock(),
         base::Bind(&StoreFile, device_policy_path, policy_blob),
-        base::Bind(callback, true),
-        false);
+        base::Bind(callback, true));
   }
   void StorePolicyForUser(const cryptohome::Identification& cryptohome_id,
                           const std::string& policy_blob,
@@ -886,21 +912,25 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
 
     if (response.has_new_public_key()) {
       base::FilePath key_path = GetUserFilePath(cryptohome_id, "policy.pub");
-      base::WorkerPool::PostTask(
-          FROM_HERE,
-          base::Bind(&StoreFile, key_path, response.new_public_key()),
-          false);
+      base::PostTaskWithTraits(
+          FROM_HERE, base::TaskTraits()
+                         .WithShutdownBehavior(
+                             base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
+                         .MayBlock(),
+          base::Bind(&StoreFile, key_path, response.new_public_key()));
     }
 
     // This file isn't read directly by Chrome, but is used by this class to
     // reload the user policy across restarts.
     base::FilePath stub_policy_path =
         GetUserFilePath(cryptohome_id, "stub_policy");
-    base::WorkerPool::PostTaskAndReply(
-        FROM_HERE,
+    base::PostTaskWithTraitsAndReply(
+        FROM_HERE, base::TaskTraits()
+                       .WithShutdownBehavior(
+                           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
+                       .MayBlock(),
         base::Bind(&StoreFile, stub_policy_path, policy_blob),
-        base::Bind(callback, true),
-        false);
+        base::Bind(callback, true));
   }
   void StoreDeviceLocalAccountPolicy(
       const std::string& account_id,
@@ -909,6 +939,9 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
     StorePolicyForUser(cryptohome::Identification::FromString(account_id),
                        policy_blob, callback);
   }
+
+  bool SupportsRestartToApplyUserFlags() const override { return false; }
+
   void SetFlagsForUser(const cryptohome::Identification& cryptohome_id,
                        const std::vector<std::string>& flags) override {}
 
@@ -931,11 +964,16 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
     callback.Run(StartArcInstanceResult::UNKNOWN_ERROR);
   }
 
-  void PrioritizeArcInstance(const ArcCallback& callback) override {
+  void SetArcCpuRestriction(
+      login_manager::ContainerCpuRestrictionState restriction_state,
+      const ArcCallback& callback) override {
     callback.Run(false);
   }
 
-  void EmitArcBooted() override {}
+  void EmitArcBooted(const cryptohome::Identification& cryptohome_id,
+                     const ArcCallback& callback) override {
+    callback.Run(false);
+  }
 
   void StopArcInstance(const ArcCallback& callback) override {
     callback.Run(false);
@@ -947,8 +985,10 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
 
   void RemoveArcData(const cryptohome::Identification& cryptohome_id,
                      const ArcCallback& callback) override {
-    if (!callback.is_null())
-      callback.Run(false);
+    if (callback.is_null())
+      return;
+    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                  base::Bind(callback, false));
   }
 
  private:

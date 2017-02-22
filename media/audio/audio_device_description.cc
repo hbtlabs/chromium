@@ -4,7 +4,7 @@
 
 #include "base/logging.h"
 #include "media/audio/audio_device_description.h"
-#include "media/base/media_resources.h"
+#include "media/base/localized_strings.h"
 
 namespace media {
 const char AudioDeviceDescription::kDefaultDeviceId[] = "default";
@@ -45,5 +45,10 @@ std::string AudioDeviceDescription::GetCommunicationsDeviceName() {
   return "";
 #endif
 }
+
+AudioDeviceDescription::AudioDeviceDescription(const std::string& device_name,
+                                               const std::string& unique_id,
+                                               const std::string& group_id)
+    : device_name(device_name), unique_id(unique_id), group_id(group_id) {}
 
 }  // namespace media

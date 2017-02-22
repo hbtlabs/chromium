@@ -23,7 +23,6 @@
 class GURL;
 
 namespace blink {
-class WebFrame;
 class WebURLResponse;
 struct WebURLError;
 }
@@ -57,7 +56,7 @@ class NetErrorHelper
   void TrackClick(int tracking_id) override;
 
   // RenderFrameObserver implementation.
-  void DidStartProvisionalLoad() override;
+  void DidStartProvisionalLoad(blink::WebDataSource* data_source) override;
   void DidCommitProvisionalLoad(bool is_new_navigation,
                                 bool is_same_page_navigation) override;
   void DidFinishLoad() override;
@@ -113,6 +112,7 @@ class NetErrorHelper
   void LoadPageFromCache(const GURL& page_url) override;
   void DiagnoseError(const GURL& page_url) override;
   void DownloadPageLater() override;
+  void SetIsShowingDownloadButton(bool show) override;
 
   void OnNetErrorInfo(int status);
   void OnSetNavigationCorrectionInfo(const GURL& navigation_correction_url,

@@ -4,15 +4,14 @@
 
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_chromeos.h"
 
-#include "ash/aura/wm_window_aura.h"
+#include "ash/common/media_controller.h"
 #include "ash/common/multi_profile_uma.h"
 #include "ash/common/session/session_state_delegate.h"
-#include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
-#include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/auto_reset.h"
@@ -21,7 +20,6 @@
 #include "base/strings/string_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_notification_blocker_chromeos.h"
@@ -34,10 +32,10 @@
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
-#include "google_apis/gaia/gaia_auth_util.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
+#include "ui/aura/window_tree_host.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/events/event.h"
 #include "ui/message_center/message_center.h"
@@ -445,7 +443,7 @@ void MultiUserWindowManagerChromeOS::ActiveUserChanged(
       this, account_id, GetAdjustedAnimationTimeInMS(kUserFadeTimeMS)));
   // Call notifier here instead of observing ActiveUserChanged because
   // this must happen after MultiUserWindowManagerChromeOS is notified.
-  ash::WmShell::Get()->system_tray_notifier()->NotifyMediaCaptureChanged();
+  ash::WmShell::Get()->media_controller()->RequestCaptureState();
 }
 
 void MultiUserWindowManagerChromeOS::OnWindowDestroyed(aura::Window* window) {
@@ -743,7 +741,7 @@ void MultiUserWindowManagerChromeOS::SetWindowVisible(
   // reduce animation jank from multiple resizes.
   if (visible) {
     ash::WmShell::Get()->maximize_mode_controller()->AddWindow(
-        ash::WmWindowAura::Get(window));
+        ash::WmWindow::Get(window));
   }
 
   AnimationSetter animation_setter(

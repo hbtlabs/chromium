@@ -8,6 +8,7 @@ Initial fileSystem content:
 
  Initial network content:
     (function (exports, require, module, __filename, __dirname) { 
+    
     var express = require("express");
     //TODO
     });
@@ -17,9 +18,10 @@ Binding created: {
     exactMatch: false
 }
 
-Running: Edit network uiSourceCode
+Running: addNetworkUISourceCodeRevision
 Network:
     (function (exports, require, module, __filename, __dirname) { 
+    
     var express = require("express");
     network();
     //TODO
@@ -33,9 +35,27 @@ FileSystem:
     //TODO
 
 
-Running: Edit fileSystem uiSourceCode
+Running: setNetworkUISourceCodeWorkingCopy
 Network:
     (function (exports, require, module, __filename, __dirname) { 
+    
+    var express = require("express");
+    workingCopy1();
+    //TODO
+    });
+
+FileSystem:
+    #!/usr/bin/env node
+    
+    var express = require("express");
+    workingCopy1();
+    //TODO
+
+
+Running: changeFileSystemFile
+Network:
+    (function (exports, require, module, __filename, __dirname) { 
+    
     var express = require("express");
     filesystem();
     //TODO
@@ -46,6 +66,23 @@ FileSystem:
     
     var express = require("express");
     filesystem();
+    //TODO
+
+
+Running: setFileSystemUISourceCodeWorkingCopy
+Network:
+    (function (exports, require, module, __filename, __dirname) { 
+    
+    var express = require("express");
+    workingCopy2();
+    //TODO
+    });
+
+FileSystem:
+    #!/usr/bin/env node
+    
+    var express = require("express");
+    workingCopy2();
     //TODO
 
 

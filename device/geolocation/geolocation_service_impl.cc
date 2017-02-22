@@ -60,11 +60,9 @@ void RecordGeopositionErrorCode(Geoposition::ErrorCode error_code) {
 
 GeolocationServiceImpl::GeolocationServiceImpl(
     mojo::InterfaceRequest<GeolocationService> request,
-    GeolocationServiceContext* context,
-    const base::Closure& update_callback)
+    GeolocationServiceContext* context)
     : binding_(this, std::move(request)),
       context_(context),
-      update_callback_(update_callback),
       high_accuracy_(false),
       has_position_to_report_(false) {
   DCHECK(context_);
@@ -78,7 +76,7 @@ GeolocationServiceImpl::~GeolocationServiceImpl() {
     if (!current_position_.valid) {
       current_position_.error_code = mojom::Geoposition::ErrorCode(
           GEOPOSITION_ERROR_CODE_POSITION_UNAVAILABLE);
-      current_position_.error_message = mojo::String("");
+      current_position_.error_message.clear();
     }
     ReportCurrentPosition();
   }
@@ -159,8 +157,6 @@ void GeolocationServiceImpl::OnConnectionError() {
 void GeolocationServiceImpl::OnLocationUpdate(const Geoposition& position) {
   RecordGeopositionErrorCode(position.error_code);
   DCHECK(context_);
-
-  update_callback_.Run();
 
   current_position_.valid = position.Validate();
   current_position_.latitude = position.latitude;

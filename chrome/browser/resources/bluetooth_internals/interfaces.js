@@ -25,12 +25,12 @@ cr.define('interfaces', function() {
         'content/public/renderer/frame_interfaces',
         'device/bluetooth/public/interfaces/adapter.mojom',
         'device/bluetooth/public/interfaces/device.mojom',
-        'mojo/public/js/connection',
+        'mojo/public/js/bindings',
       ]).then(function([frameInterfaces, bluetoothAdapter, bluetoothDevice,
-          connection]) {
+          bindings]) {
         interfaces.BluetoothAdapter = bluetoothAdapter;
         interfaces.BluetoothDevice = bluetoothDevice;
-        interfaces.Connection = connection;
+        interfaces.Bindings = bindings;
         interfaces.FrameInterfaces = frameInterfaces;
       });
     });

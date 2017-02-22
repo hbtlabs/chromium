@@ -13,7 +13,10 @@ component("keyboard") {
     "keyboard_controller.cc",
     "keyboard_controller.h",
     "keyboard_controller_observer.h",
+    "keyboard_event_filter.cc",
+    "keyboard_event_filter.h",
     "keyboard_export.h",
+    "keyboard_layout_delegate.h",
     "keyboard_layout_manager.cc",
     "keyboard_layout_manager.h",
     "keyboard_switches.cc",
@@ -31,12 +34,12 @@ component("keyboard") {
   deps = [
     "//base",
     "//base/third_party/dynamic_annotations",
-    "//media",
     "//skia",
     "//ui/aura",
     "//ui/base",
     "//ui/base/ime",
     "//ui/compositor",
+    "//ui/display:display",
     "//ui/events",
     "//ui/events:dom_keycode_converter",
     "//ui/events:events_base",
@@ -145,6 +148,7 @@ mojom("mojom") {
 test("keyboard_unittests") {
   sources = [
     "keyboard_controller_unittest.cc",
+    "keyboard_event_filter_unittest.cc",
     "keyboard_util_unittest.cc",
     "test/run_all_unittests.cc",
   ]
@@ -164,6 +168,7 @@ test("keyboard_unittests") {
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/gl:test_support",
+    "//ui/resources:ui_test_pak",
     "//ui/wm",
   ]
 }

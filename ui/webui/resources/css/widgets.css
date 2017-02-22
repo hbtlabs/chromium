@@ -17,7 +17,6 @@ select,
 input[type='checkbox'],
 input[type='radio'] {
   -webkit-appearance: none;
-  -webkit-user-select: none;
   background-image: -webkit-linear-gradient(#ededed, #ededed 38%, #dedede);
   border: 1px solid rgba(0, 0, 0, 0.25);
   border-radius: 2px;
@@ -28,6 +27,7 @@ input[type='radio'] {
   margin: 0 1px 0 0;
   outline: none;
   text-shadow: 0 1px 0 rgb(240, 240, 240);
+  user-select: none;
 }
 
 :-webkit-any(button,
@@ -36,7 +36,6 @@ input[type='radio'] {
 select {
   min-height: 2em;
   min-width: 4em;
-  padding-top: 1px;
   padding-bottom: 1px;
 <if expr="is_win or is_macosx">
   /* The following platform-specific rule is necessary to get adjacent
@@ -44,6 +43,7 @@ select {
    * aligning on the text's baselines. */
   padding-bottom: 2px;
 </if>
+  padding-top: 1px;
 }
 
 :-webkit-any(button,
@@ -100,8 +100,8 @@ textarea {
   margin: 0;
   /* Use min-height to accommodate addditional padding for touch as needed. */
   min-height: 2em;
-  padding: 3px;
   outline: none;
+  padding: 3px;
 <if expr="is_win or is_macosx or is_ios">
   /* For better alignment between adjacent buttons and inputs. */
   padding-bottom: 4px;
@@ -118,12 +118,12 @@ input[type='search'] {
 /* Checked ********************************************************************/
 
 input[type='checkbox']:checked::before {
-  -webkit-user-select: none;
   background-image: url(../images/check.png);
   background-size: 100% 100%;
   content: '';
   display: block;
   height: 100%;
+  user-select: none;
   width: 100%;
 }
 
@@ -234,12 +234,12 @@ input:disabled:-webkit-any([type='password'],
          button,
          input[type='button'],
          input[type='submit']):not(.custom-appearance)) {
-  /* OVERRIDE */
-  -webkit-transition: border-color 200ms;
   /* We use border color because it follows the border radius (unlike outline).
    * This is particularly noticeable on mac. */
   border-color: rgb(77, 144, 254);
   outline: none;
+  /* OVERRIDE */
+  transition: border-color 200ms;
 }
 
 /* Checkbox/radio helpers ******************************************************
@@ -256,12 +256,12 @@ input:disabled:-webkit-any([type='password'],
  */
 
 :-webkit-any(.checkbox, .radio) label {
-  -webkit-user-select: none;
   /* Don't expand horizontally: <http://crbug.com/112091>. */
   align-items: center;
   display: inline-flex;
   padding-bottom: 7px;
   padding-top: 7px;
+  user-select: none;
 }
 
 :-webkit-any(.checkbox, .radio) label input {

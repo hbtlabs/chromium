@@ -13,10 +13,10 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
 #include "base/tracked_objects.h"
-#include "components/component_updater/component_updater_service.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/gcm_driver/gcm_client_factory.h"
 #include "components/gcm_driver/gcm_desktop_utils.h"
@@ -228,9 +228,9 @@ variations::VariationsService* ApplicationContextImpl::GetVariationsService() {
   return GetMetricsServicesManager()->GetVariationsService();
 }
 
-rappor::RapporService* ApplicationContextImpl::GetRapporService() {
+rappor::RapporServiceImpl* ApplicationContextImpl::GetRapporServiceImpl() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return GetMetricsServicesManager()->GetRapporService();
+  return GetMetricsServicesManager()->GetRapporServiceImpl();
 }
 
 net_log::ChromeNetLog* ApplicationContextImpl::GetNetLog() {
@@ -286,10 +286,12 @@ CRLSetFetcher* ApplicationContextImpl::GetCRLSetFetcher() {
   return crl_set_fetcher_.get();
 }
 
-PhysicalWebDataSource* ApplicationContextImpl::GetPhysicalWebDataSource() {
+physical_web::PhysicalWebDataSource*
+ApplicationContextImpl::GetPhysicalWebDataSource() {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (!physical_web_data_source_) {
-    physical_web_data_source_ = CreateIOSChromePhysicalWebDataSource();
+    physical_web_data_source_ =
+        CreateIOSChromePhysicalWebDataSource(GetLocalState());
     DCHECK(physical_web_data_source_);
   }
   return physical_web_data_source_.get();

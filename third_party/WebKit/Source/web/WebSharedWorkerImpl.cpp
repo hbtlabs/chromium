@@ -51,6 +51,7 @@
 #include "platform/CrossThreadFunctional.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/heap/Handle.h"
+#include "platform/heap/Persistent.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/network/ResourceResponse.h"
 #include "platform/weborigin/KURL.h"
@@ -131,7 +132,8 @@ void WebSharedWorkerImpl::initializeLoader() {
   // Browser process when the worker is created (similar to
   // RenderThread::OnCreateNewView).
   m_mainFrame = toWebLocalFrameImpl(
-      WebLocalFrame::create(WebTreeScopeType::Document, this));
+      WebLocalFrame::create(WebTreeScopeType::Document, this,
+                            Platform::current()->interfaceProvider(), nullptr));
   m_webView->setMainFrame(m_mainFrame.get());
   m_mainFrame->setDevToolsAgentClient(this);
 
@@ -170,14 +172,19 @@ void WebSharedWorkerImpl::willSendRequest(WebLocalFrame* frame,
 void WebSharedWorkerImpl::didFinishDocumentLoad(WebLocalFrame* frame) {
   DCHECK(!m_loadingDocument);
   DCHECK(!m_mainScriptLoader);
-  m_networkProvider = wrapUnique(
+  m_networkProvider = WTF::wrapUnique(
       m_client->createServiceWorkerNetworkProvider(frame->dataSource()));
   m_mainScriptLoader = WorkerScriptLoader::create();
   m_mainScriptLoader->setRequestContext(
       WebURLRequest::RequestContextSharedWorker);
   m_loadingDocument = toWebLocalFrameImpl(frame)->frame()->document();
+
+  CrossOriginRequestPolicy crossOriginRequestPolicy =
+      (static_cast<KURL>(m_url)).protocolIsData() ? AllowCrossOriginRequests
+                                                  : DenyCrossOriginRequests;
+
   m_mainScriptLoader->loadAsynchronously(
-      *m_loadingDocument.get(), m_url, DenyCrossOriginRequests,
+      *m_loadingDocument.get(), m_url, crossOriginRequestPolicy,
       m_creationAddressSpace,
       bind(&WebSharedWorkerImpl::didReceiveScriptLoaderResponse,
            WTF::unretained(this)),
@@ -197,10 +204,6 @@ int64_t WebSharedWorkerImpl::serviceWorkerID(WebDataSource& dataSource) {
   if (!m_networkProvider)
     return -1;
   return m_networkProvider->serviceWorkerID(dataSource);
-}
-
-InterfaceProvider* WebSharedWorkerImpl::interfaceProvider() {
-  return Platform::current()->interfaceProvider();
 }
 
 void WebSharedWorkerImpl::sendProtocolMessage(int sessionId,
@@ -224,6 +227,20 @@ WebSharedWorkerImpl::createClientMessageLoop() {
 
 // WorkerReportingProxy --------------------------------------------------------
 
+void WebSharedWorkerImpl::countFeature(UseCounter::Feature feature) {
+  m_parentFrameTaskRunners->get(TaskType::UnspecedTimer)
+      ->postTask(BLINK_FROM_HERE,
+                 crossThreadBind(&WebSharedWorkerClient::countFeature,
+                                 crossThreadUnretained(m_client), feature));
+}
+
+void WebSharedWorkerImpl::countDeprecation(UseCounter::Feature feature) {
+  // Go through the same code path with countFeature() because a deprecation
+  // message is already shown on the worker console and a remaining work is just
+  // to record an API use.
+  countFeature(feature);
+}
+
 void WebSharedWorkerImpl::reportException(const String& errorMessage,
                                           std::unique_ptr<SourceLocation>,
                                           int exceptionId) {
@@ -238,11 +255,14 @@ void WebSharedWorkerImpl::reportConsoleMessage(MessageSource,
 }
 
 void WebSharedWorkerImpl::postMessageToPageInspector(const String& message) {
-  m_mainFrame->frame()->document()->postInspectorTask(
-      BLINK_FROM_HERE,
-      createCrossThreadTask(
-          &WebSharedWorkerImpl::postMessageToPageInspectorOnMainThread,
-          crossThreadUnretained(this), message));
+  // The TaskType of Inspector tasks need to be Unthrottled because they need to
+  // run even on a suspended page.
+  m_parentFrameTaskRunners->get(TaskType::Unthrottled)
+      ->postTask(
+          BLINK_FROM_HERE,
+          crossThreadBind(
+              &WebSharedWorkerImpl::postMessageToPageInspectorOnMainThread,
+              crossThreadUnretained(this), message));
 }
 
 void WebSharedWorkerImpl::postMessageToPageInspectorOnMainThread(
@@ -251,11 +271,12 @@ void WebSharedWorkerImpl::postMessageToPageInspectorOnMainThread(
 }
 
 void WebSharedWorkerImpl::didCloseWorkerGlobalScope() {
-  Platform::current()->mainThread()->getWebTaskRunner()->postTask(
-      BLINK_FROM_HERE,
-      crossThreadBind(
-          &WebSharedWorkerImpl::didCloseWorkerGlobalScopeOnMainThread,
-          crossThreadUnretained(this)));
+  m_parentFrameTaskRunners->get(TaskType::UnspecedTimer)
+      ->postTask(
+          BLINK_FROM_HERE,
+          crossThreadBind(
+              &WebSharedWorkerImpl::didCloseWorkerGlobalScopeOnMainThread,
+              crossThreadUnretained(this)));
 }
 
 void WebSharedWorkerImpl::didCloseWorkerGlobalScopeOnMainThread() {
@@ -265,11 +286,11 @@ void WebSharedWorkerImpl::didCloseWorkerGlobalScopeOnMainThread() {
 }
 
 void WebSharedWorkerImpl::didTerminateWorkerThread() {
-  Platform::current()->mainThread()->getWebTaskRunner()->postTask(
-      BLINK_FROM_HERE,
-      crossThreadBind(
-          &WebSharedWorkerImpl::didTerminateWorkerThreadOnMainThread,
-          crossThreadUnretained(this)));
+  m_parentFrameTaskRunners->get(TaskType::UnspecedTimer)
+      ->postTask(BLINK_FROM_HERE,
+                 crossThreadBind(
+                     &WebSharedWorkerImpl::didTerminateWorkerThreadOnMainThread,
+                     crossThreadUnretained(this)));
 }
 
 void WebSharedWorkerImpl::didTerminateWorkerThreadOnMainThread() {
@@ -283,32 +304,37 @@ void WebSharedWorkerImpl::didTerminateWorkerThreadOnMainThread() {
 void WebSharedWorkerImpl::postTaskToLoader(
     const WebTraceLocation& location,
     std::unique_ptr<ExecutionContextTask> task) {
-  // TODO(hiroshige,yuryu): Make this not use ExecutionContextTask and
-  // consider using m_mainThreadTaskRunners->get(TaskType::Networking)
-  // instead.
-  m_mainFrame->frame()->document()->postTask(location, std::move(task));
+  m_parentFrameTaskRunners->get(TaskType::Networking)
+      ->postTask(FROM_HERE,
+                 crossThreadBind(
+                     &ExecutionContextTask::performTaskIfContextIsValid,
+                     WTF::passed(std::move(task)),
+                     wrapCrossThreadWeakPersistent(m_loadingDocument.get())));
 }
 
 void WebSharedWorkerImpl::postTaskToWorkerGlobalScope(
     const WebTraceLocation& location,
-    std::unique_ptr<ExecutionContextTask> task) {
+    std::unique_ptr<WTF::CrossThreadClosure> task) {
   m_workerThread->postTask(location, std::move(task));
 }
 
 void WebSharedWorkerImpl::connect(WebMessagePortChannel* webChannel) {
+  DCHECK(isMainThread());
   workerThread()->postTask(
       BLINK_FROM_HERE,
-      createCrossThreadTask(
-          &connectTask, passed(WebMessagePortChannelUniquePtr(webChannel))));
+      crossThreadBind(&WebSharedWorkerImpl::connectTask,
+                      WTF::crossThreadUnretained(this),
+                      WTF::passed(WebMessagePortChannelUniquePtr(webChannel))));
 }
 
-void WebSharedWorkerImpl::connectTask(WebMessagePortChannelUniquePtr channel,
-                                      ExecutionContext* context) {
+void WebSharedWorkerImpl::connectTask(WebMessagePortChannelUniquePtr channel) {
   // Wrap the passed-in channel in a MessagePort, and send it off via a connect
   // event.
-  MessagePort* port = MessagePort::create(*context);
+  DCHECK(m_workerThread->isCurrentThread());
+  WorkerGlobalScope* workerGlobalScope =
+      toWorkerGlobalScope(m_workerThread->globalScope());
+  MessagePort* port = MessagePort::create(*workerGlobalScope);
   port->entangle(std::move(channel));
-  WorkerGlobalScope* workerGlobalScope = toWorkerGlobalScope(context);
   SECURITY_DCHECK(workerGlobalScope->isSharedWorkerGlobalScope());
   workerGlobalScope->dispatchEvent(createConnectEvent(port));
 }
@@ -327,7 +353,7 @@ void WebSharedWorkerImpl::startWorkerContext(
 
 void WebSharedWorkerImpl::didReceiveScriptLoaderResponse() {
   InspectorInstrumentation::didReceiveScriptResponse(
-      m_loadingDocument.get(), m_mainScriptLoader->identifier());
+      m_loadingDocument, m_mainScriptLoader->identifier());
   m_client->selectAppCacheID(m_mainScriptLoader->appCacheID());
 }
 
@@ -357,41 +383,46 @@ void WebSharedWorkerImpl::onScriptLoaderFinished() {
   WebSecurityOrigin webSecurityOrigin(m_loadingDocument->getSecurityOrigin());
   provideContentSettingsClientToWorker(
       workerClients,
-      wrapUnique(
+      WTF::wrapUnique(
           m_client->createWorkerContentSettingsClientProxy(webSecurityOrigin)));
-  provideIndexedDBClientToWorker(workerClients, IndexedDBClientImpl::create());
+  provideIndexedDBClientToWorker(workerClients,
+                                 IndexedDBClientImpl::create(*workerClients));
   ContentSecurityPolicy* contentSecurityPolicy =
       m_mainScriptLoader->releaseContentSecurityPolicy();
   WorkerThreadStartMode startMode =
       m_workerInspectorProxy->workerStartMode(document);
   std::unique_ptr<WorkerSettings> workerSettings =
-      wrapUnique(new WorkerSettings(document->settings()));
+      WTF::wrapUnique(new WorkerSettings(document->settings()));
   std::unique_ptr<WorkerThreadStartupData> startupData =
       WorkerThreadStartupData::create(
           m_url, m_loadingDocument->userAgent(), m_mainScriptLoader->script(),
           nullptr, startMode,
           contentSecurityPolicy ? contentSecurityPolicy->headers().get()
                                 : nullptr,
-          m_mainScriptLoader->referrerPolicy(), starterOrigin, workerClients,
+          m_mainScriptLoader->getReferrerPolicy(), starterOrigin, workerClients,
           m_mainScriptLoader->responseAddressSpace(),
-          m_mainScriptLoader->originTrialTokens(), std::move(workerSettings));
+          m_mainScriptLoader->originTrialTokens(), std::move(workerSettings),
+          WorkerV8Settings::Default());
 
-  // We have a dummy document here for loading but it doesn't really represent
-  // the document/frame of associated document(s) for this worker. Here we
-  // populate the task runners with null document not to confuse the frame
-  // scheduler (which will end up using the thread's default task runner).
-  m_mainThreadTaskRunners = ParentFrameTaskRunners::create(nullptr);
+  // SharedWorker can sometimes run tasks that are initiated by/associated with
+  // a document's frame but these documents can be from a different process. So
+  // we intentionally populate the task runners with null document in order to
+  // use the thread's default task runner. Note that |m_document| should not be
+  // used as it's a dummy document for loading that doesn't represent the frame
+  // of any associated document.
+  m_parentFrameTaskRunners = ParentFrameTaskRunners::create(nullptr);
 
   m_loaderProxy = WorkerLoaderProxy::create(this);
-  m_workerThread = SharedWorkerThread::create(m_name, m_loaderProxy, *this);
-  InspectorInstrumentation::scriptImported(m_loadingDocument.get(),
+  m_workerThread = SharedWorkerThread::create(m_name, m_loaderProxy, *this,
+                                              m_parentFrameTaskRunners.get());
+  InspectorInstrumentation::scriptImported(m_loadingDocument,
                                            m_mainScriptLoader->identifier(),
                                            m_mainScriptLoader->script());
   m_mainScriptLoader.clear();
 
   workerThread()->start(std::move(startupData));
-  m_workerInspectorProxy->workerThreadCreated(
-      toDocument(m_loadingDocument.get()), workerThread(), m_url);
+  m_workerInspectorProxy->workerThreadCreated(toDocument(m_loadingDocument),
+                                              workerThread(), m_url);
   m_client->workerScriptLoaded();
 }
 

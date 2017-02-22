@@ -189,7 +189,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
 
   // ContextSupport implementation.
   void Swap() override;
-  void SwapWithDamage(const gfx::Rect& damage) override;
+  void SwapWithBounds(const std::vector<gfx::Rect>& rects) override;
   void PartialSwapBuffers(const gfx::Rect& sub_buffer) override;
   void CommitOverlayPlanes() override;
   void ScheduleOverlayPlane(int plane_z_order,
@@ -251,6 +251,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   // ContextSupport implementation.
   void SignalSyncToken(const gpu::SyncToken& sync_token,
                        const base::Closure& callback) override;
+  bool IsSyncTokenSignalled(const gpu::SyncToken& sync_token) override;
   void SignalQuery(uint32_t query, const base::Closure& callback) override;
   void SetAggressivelyFreeResources(bool aggressively_free_resources) override;
 
@@ -533,10 +534,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation
                                    GLsizei height,
                                    GLenum internalformat);
   void DestroyImageCHROMIUMHelper(GLuint image_id);
-  GLuint CreateGpuMemoryBufferImageCHROMIUMHelper(GLsizei width,
-                                                  GLsizei height,
-                                                  GLenum internalformat,
-                                                  GLenum usage);
 
   // Helper for GetVertexAttrib
   bool GetVertexAttribHelper(GLuint index, GLenum pname, uint32_t* param);
@@ -816,7 +813,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
 
   int current_trace_stack_;
 
-  GpuControl* gpu_control_;
+  GpuControl* const gpu_control_;
 
   Capabilities capabilities_;
 

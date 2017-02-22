@@ -36,7 +36,7 @@ SDK.RuntimeModel = class extends SDK.SDKModel {
    * @param {!SDK.Target} target
    */
   constructor(target) {
-    super(SDK.RuntimeModel, target);
+    super(target);
 
     this._agent = target.runtimeAgent();
     this.target().registerRuntimeDispatcher(new SDK.RuntimeDispatcher(this));
@@ -96,11 +96,6 @@ SDK.RuntimeModel = class extends SDK.SDKModel {
    * @param {!Protocol.Runtime.ExecutionContextDescription} context
    */
   _executionContextCreated(context) {
-    // The private script context should be hidden behind an experiment.
-    if (context.name === SDK.RuntimeModel._privateScript && !context.origin &&
-        !Runtime.experiments.isEnabled('privateScriptInspection'))
-      return;
-
     var data = context.auxData || {isDefault: true};
     var executionContext = new SDK.ExecutionContext(
         this.target(), context.id, context.name, context.origin, data['isDefault'], data['frameId']);
@@ -328,6 +323,9 @@ SDK.RuntimeModel = class extends SDK.SDKModel {
   }
 };
 
+// TODO(dgozman): should be JS.
+SDK.SDKModel.register(SDK.RuntimeModel, SDK.Target.Capability.None);
+
 /** @enum {symbol} */
 SDK.RuntimeModel.Events = {
   ExecutionContextCreated: Symbol('ExecutionContextCreated'),
@@ -335,8 +333,6 @@ SDK.RuntimeModel.Events = {
   ExecutionContextChanged: Symbol('ExecutionContextChanged'),
   ExecutionContextOrderChanged: Symbol('ExecutionContextOrderChanged')
 };
-
-SDK.RuntimeModel._privateScript = 'private script';
 
 /**
  * @implements {Protocol.RuntimeDispatcher}
@@ -391,12 +387,7 @@ SDK.RuntimeDispatcher = class {
    * @param {number} exceptionId
    */
   exceptionRevoked(reason, exceptionId) {
-    var consoleMessage = new SDK.ConsoleMessage(
-        this._runtimeModel.target(), SDK.ConsoleMessage.MessageSource.JS, SDK.ConsoleMessage.MessageLevel.RevokedError,
-        reason, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
-        undefined);
-    consoleMessage.setRevokedExceptionId(exceptionId);
-    this._runtimeModel.target().consoleModel.addMessage(consoleMessage);
+    this._runtimeModel.target().consoleModel.revokeException(exceptionId);
   }
 
   /**
@@ -408,14 +399,14 @@ SDK.RuntimeDispatcher = class {
    * @param {!Protocol.Runtime.StackTrace=} stackTrace
    */
   consoleAPICalled(type, args, executionContextId, timestamp, stackTrace) {
-    var level = SDK.ConsoleMessage.MessageLevel.Log;
+    var level = SDK.ConsoleMessage.MessageLevel.Info;
     if (type === SDK.ConsoleMessage.MessageType.Debug)
-      level = SDK.ConsoleMessage.MessageLevel.Debug;
+      level = SDK.ConsoleMessage.MessageLevel.Verbose;
     if (type === SDK.ConsoleMessage.MessageType.Error || type === SDK.ConsoleMessage.MessageType.Assert)
       level = SDK.ConsoleMessage.MessageLevel.Error;
     if (type === SDK.ConsoleMessage.MessageType.Warning)
       level = SDK.ConsoleMessage.MessageLevel.Warning;
-    if (type === SDK.ConsoleMessage.MessageType.Info)
+    if (type === SDK.ConsoleMessage.MessageType.Info || type === SDK.ConsoleMessage.MessageType.Log)
       level = SDK.ConsoleMessage.MessageLevel.Info;
     var message = '';
     if (args.length && typeof args[0].value === 'string')
@@ -480,6 +471,8 @@ SDK.ExecutionContext = class extends SDK.SDKObject {
      * @return {number}
      */
     function targetWeight(target) {
+      if (!target.parentTarget())
+        return 4;
       if (target.hasBrowserCapability())
         return 3;
       if (target.hasJSCapability())
@@ -610,8 +603,8 @@ SDK.EventListener = class extends SDK.SDKObject {
    * @param {?SDK.RemoteObject} handler
    * @param {?SDK.RemoteObject} originalHandler
    * @param {!SDK.DebuggerModel.Location} location
-   * @param {?SDK.RemoteObject} removeFunction
-   * @param {string=} listenerType
+   * @param {?SDK.RemoteObject} customRemoveFunction
+   * @param {!SDK.EventListener.Origin=} origin
    */
   constructor(
       target,
@@ -623,8 +616,8 @@ SDK.EventListener = class extends SDK.SDKObject {
       handler,
       originalHandler,
       location,
-      removeFunction,
-      listenerType) {
+      customRemoveFunction,
+      origin) {
     super(target);
     this._eventTarget = eventTarget;
     this._type = type;
@@ -636,8 +629,8 @@ SDK.EventListener = class extends SDK.SDKObject {
     this._location = location;
     var script = location.script();
     this._sourceURL = script ? script.contentURL() : '';
-    this._removeFunction = removeFunction;
-    this._listenerType = listenerType || 'normal';
+    this._customRemoveFunction = customRemoveFunction;
+    this._origin = origin || SDK.EventListener.Origin.Raw;
   }
 
   /**
@@ -697,19 +690,40 @@ SDK.EventListener = class extends SDK.SDKObject {
   }
 
   /**
-   * @return {?SDK.RemoteObject}
+   * @return {boolean}
    */
-  removeFunction() {
-    return this._removeFunction;
+  canRemove() {
+    return !!this._customRemoveFunction || this._origin !== SDK.EventListener.Origin.FrameworkUser;
   }
 
   /**
    * @return {!Promise<undefined>}
    */
   remove() {
-    if (!this._removeFunction)
+    if (!this.canRemove())
       return Promise.resolve();
-    return this._removeFunction
+
+    if (this._origin !== SDK.EventListener.Origin.FrameworkUser) {
+      /**
+       * @param {string} type
+       * @param {function()} listener
+       * @param {boolean} useCapture
+       * @this {Object}
+       * @suppressReceiverCheck
+       */
+      function removeListener(type, listener, useCapture) {
+        this.removeEventListener(type, listener, useCapture);
+        if (this['on' + type])
+          this['on' + type] = undefined;
+      }
+
+      return /** @type {!Promise<undefined>} */ (this._eventTarget.callFunctionPromise(removeListener, [
+        SDK.RemoteObject.toCallArgument(this._type), SDK.RemoteObject.toCallArgument(this._originalHandler),
+        SDK.RemoteObject.toCallArgument(this._useCapture)
+      ]));
+    }
+
+    return this._customRemoveFunction
         .callFunctionPromise(
             callCustomRemove,
             [
@@ -734,54 +748,46 @@ SDK.EventListener = class extends SDK.SDKObject {
   }
 
   /**
+   * @return {boolean}
+   */
+  canTogglePassive() {
+    return this._origin !== SDK.EventListener.Origin.FrameworkUser;
+  }
+
+  /**
    * @return {!Promise<undefined>}
    */
   togglePassive() {
-    return new Promise(promiseConstructor.bind(this));
+    return /** @type {!Promise<undefined>} */ (this._eventTarget.callFunctionPromise(callTogglePassive, [
+      SDK.RemoteObject.toCallArgument(this._type),
+      SDK.RemoteObject.toCallArgument(this._originalHandler),
+      SDK.RemoteObject.toCallArgument(this._useCapture),
+      SDK.RemoteObject.toCallArgument(this._passive),
+    ]));
 
     /**
-     * @param {function()} success
-     * @this {SDK.EventListener}
+     * @param {string} type
+     * @param {function()} listener
+     * @param {boolean} useCapture
+     * @param {boolean} passive
+     * @this {Object}
+     * @suppressReceiverCheck
      */
-    function promiseConstructor(success) {
-      this._eventTarget
-          .callFunctionPromise(
-              callTogglePassive,
-              [
-                SDK.RemoteObject.toCallArgument(this._type),
-                SDK.RemoteObject.toCallArgument(this._originalHandler),
-                SDK.RemoteObject.toCallArgument(this._useCapture),
-                SDK.RemoteObject.toCallArgument(this._passive),
-              ])
-          .then(success);
-
-      /**
-       * @param {string} type
-       * @param {function()} listener
-       * @param {boolean} useCapture
-       * @param {boolean} passive
-       * @this {Object}
-       * @suppressReceiverCheck
-       */
-      function callTogglePassive(type, listener, useCapture, passive) {
-        this.removeEventListener(type, listener, {capture: useCapture});
-        this.addEventListener(type, listener, {capture: useCapture, passive: !passive});
-      }
+    function callTogglePassive(type, listener, useCapture, passive) {
+      this.removeEventListener(type, listener, {capture: useCapture});
+      this.addEventListener(type, listener, {capture: useCapture, passive: !passive});
     }
   }
 
   /**
-   * @return {string}
+   * @return {!SDK.EventListener.Origin}
    */
-  listenerType() {
-    return this._listenerType;
+  origin() {
+    return this._origin;
   }
 
-  /**
-   * @param {string} listenerType
-   */
-  setListenerType(listenerType) {
-    this._listenerType = listenerType;
+  markAsFramework() {
+    this._origin = SDK.EventListener.Origin.Framework;
   }
 
   /**
@@ -791,79 +797,11 @@ SDK.EventListener = class extends SDK.SDKObject {
     return this._type === 'touchstart' || this._type === 'touchmove' || this._type === 'mousewheel' ||
         this._type === 'wheel';
   }
-
-  /**
-   * @return {boolean}
-   */
-  isNormalListenerType() {
-    return this._listenerType === 'normal';
-  }
 };
 
-/**
- * @unrestricted
- */
-SDK.RuntimeModel.CallFrame = class extends SDK.SDKObject {
-  /**
-   * @param {!SDK.Target} target
-   * @param {!Protocol.Runtime.CallFrame} payload
-   */
-  constructor(target, payload) {
-    super(target);
-
-    this.functionName = payload.functionName;
-    this.scriptId = payload.scriptId;
-    this.lineNumber = payload.lineNumber;
-    this.columnNumber = payload.columnNumber;
-    this.url = payload.url;
-  }
-};
-
-/**
- * @unrestricted
- */
-SDK.RuntimeModel.StackTrace = class extends SDK.SDKObject {
-  /**
-   * @param {!SDK.Target} target
-   * @param {!Protocol.Runtime.StackTrace} payload
-   */
-  constructor(target, payload) {
-    super(target);
-    this.description = payload.description;
-    this.callFrames = payload.callFrames.map(callFrame => new SDK.RuntimeModel.CallFrame(target, callFrame));
-  }
-
-  /**
-   * @param {!SDK.Target} target
-   * @param {!Protocol.Runtime.StackTrace} payload
-   * @return {!Array<!SDK.RuntimeModel.StackTrace>}
-   */
-  static fromPayload(target, payload) {
-    var stackTraces = [];
-    var stackTrace = SDK.RuntimeModel.StackTrace._cleanRedundantFrames(payload);
-    while (stackTrace) {
-      stackTraces.push(new SDK.RuntimeModel.StackTrace(target, stackTrace));
-      stackTrace = stackTrace.parent;
-    }
-    return stackTraces;
-  }
-
-  /**
-   * @param {!Protocol.Runtime.StackTrace} asyncStackTrace
-   * @return {!Protocol.Runtime.StackTrace}
-   */
-  static _cleanRedundantFrames(asyncStackTrace) {
-    var stack = asyncStackTrace;
-    var previous = null;
-    while (stack) {
-      if (stack.description === 'async function' && stack.callFrames.length)
-        stack.callFrames.shift();
-      if (previous && !stack.callFrames.length)
-        previous.parent = stack.parent;
-      else
-        previous = stack;
-      stack = stack.parent;
-    }
-    return asyncStackTrace;
-  }
+/** @enum {string} */
+SDK.EventListener.Origin = {
+  Raw: 'Raw',
+  Framework: 'Framework',
+  FrameworkUser: 'FrameworkUser'
 };

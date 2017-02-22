@@ -17,6 +17,7 @@
 #include "base/values.h"
 #include "components/cryptauth/cryptauth_enrollment_manager.h"
 #include "components/cryptauth/proto/cryptauth_api.pb.h"
+#include "components/cryptauth/secure_context.h"
 #include "components/cryptauth/secure_message_delegate.h"
 #include "components/prefs/pref_service.h"
 #include "components/proximity_auth/ble/pref_names.h"
@@ -26,7 +27,6 @@
 #include "components/proximity_auth/remote_device_life_cycle_impl.h"
 #include "components/proximity_auth/remote_device_loader.h"
 #include "components/proximity_auth/remote_status_update.h"
-#include "components/proximity_auth/secure_context.h"
 #include "components/proximity_auth/webui/reachable_phone_flow.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_ui.h"
@@ -341,7 +341,7 @@ void ProximityAuthWebUIHandler::ToggleConnection(const base::ListValue* args) {
     return;
   }
 
-  for (const auto& unlock_key : device_manager->unlock_keys()) {
+  for (const auto& unlock_key : device_manager->GetUnlockKeys()) {
     if (unlock_key.public_key() == public_key) {
       if (life_cycle_ && selected_remote_device_.public_key == public_key) {
         CleanUpRemoteDeviceLifeCycle();
@@ -463,7 +463,7 @@ ProximityAuthWebUIHandler::GetUnlockKeysList() {
   if (!device_manager)
     return unlock_keys;
 
-  for (const auto& unlock_key : device_manager->unlock_keys()) {
+  for (const auto& unlock_key : device_manager->GetUnlockKeys()) {
     unlock_keys->Append(ExternalDeviceInfoToDictionary(unlock_key));
   }
 
@@ -471,7 +471,7 @@ ProximityAuthWebUIHandler::GetUnlockKeysList() {
 }
 
 void ProximityAuthWebUIHandler::OnRemoteDevicesLoaded(
-    const std::vector<RemoteDevice>& remote_devices) {
+    const std::vector<cryptauth::RemoteDevice>& remote_devices) {
   if (remote_devices[0].persistent_symmetric_key.empty()) {
     PA_LOG(ERROR) << "Failed to derive PSK.";
     return;
@@ -514,13 +514,13 @@ ProximityAuthWebUIHandler::ExternalDeviceInfoToDictionary(
   // status updates).
   std::string public_key = device_info.public_key();
   auto iterator = std::find_if(
-      device_manager->unlock_keys().begin(),
-      device_manager->unlock_keys().end(),
+      device_manager->GetUnlockKeys().begin(),
+      device_manager->GetUnlockKeys().end(),
       [&public_key](const cryptauth::ExternalDeviceInfo& unlock_key) {
         return unlock_key.public_key() == public_key;
       });
 
-  if (iterator == device_manager->unlock_keys().end() ||
+  if (iterator == device_manager->GetUnlockKeys().end() ||
       selected_remote_device_.public_key != device_info.public_key())
     return dictionary;
 
@@ -571,7 +571,7 @@ void ProximityAuthWebUIHandler::CleanUpRemoteDeviceLifeCycle() {
   PA_LOG(INFO) << "Cleaning up connection to " << selected_remote_device_.name
                << " [" << selected_remote_device_.bluetooth_address << "]";
   life_cycle_.reset();
-  selected_remote_device_ = RemoteDevice();
+  selected_remote_device_ = cryptauth::RemoteDevice();
   last_remote_status_update_.reset();
   web_ui()->CallJavascriptFunctionUnsafe(
       "LocalStateInterface.onUnlockKeysChanged", *GetUnlockKeysList());

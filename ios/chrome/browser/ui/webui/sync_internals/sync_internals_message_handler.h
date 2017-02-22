@@ -17,6 +17,10 @@
 #include "components/sync/js/js_event_handler.h"
 #include "ios/web/public/webui/web_ui_ios_message_handler.h"
 
+namespace base {
+class DictionaryValue;
+}  // namespace base
+
 namespace syncer {
 class SyncService;
 }  // namespace syncer
@@ -57,7 +61,7 @@ class SyncInternalsMessageHandler : public web::WebUIIOSMessageHandler,
                           std::unique_ptr<base::ListValue> nodes);
 
   // syncer::SyncServiceObserver implementation.
-  void OnStateChanged() override;
+  void OnStateChanged(syncer::SyncService* sync) override;
 
   // ProtocolEventObserver implementation.
   void OnProtocolEvent(const syncer::ProtocolEvent& e) override;

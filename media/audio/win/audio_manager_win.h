@@ -36,6 +36,7 @@ class MEDIA_EXPORT AudioManagerWin : public AudioManagerBase {
       const std::string& device_id) override;
   std::string GetAssociatedOutputDeviceID(
       const std::string& input_device_id) override;
+  const char* GetName() override;
 
   // Implementation of AudioManagerBase.
   AudioOutputStream* MakeLinearOutputStream(
@@ -63,32 +64,8 @@ class MEDIA_EXPORT AudioManagerWin : public AudioManagerBase {
       const AudioParameters& input_params) override;
 
  private:
-  enum EnumerationType {
-    kMMDeviceEnumeration,
-    kWaveEnumeration,
-  };
-
   // Allow unit test to modify the utilized enumeration API.
   friend class AudioManagerTest;
-
-  EnumerationType enumeration_type_;
-  EnumerationType enumeration_type() { return enumeration_type_; }
-  void SetEnumerationType(EnumerationType type) {
-    enumeration_type_ = type;
-  }
-
-  inline bool core_audio_supported() const {
-    return enumeration_type_ == kMMDeviceEnumeration;
-  }
-
-  // Returns a PCMWaveInAudioInputStream instance or NULL on failure.
-  // This method converts MMDevice-style device ID to WaveIn-style device ID if
-  // necessary.
-  // (Please see device_enumeration_win.h for more info about the two kinds of
-  // device IDs.)
-  AudioInputStream* CreatePCMWaveInAudioInputStream(
-      const AudioParameters& params,
-      const std::string& device_id);
 
   // Helper methods for performing expensive initialization tasks on the audio
   // thread instead of on the UI thread which AudioManager is constructed on.

@@ -8,7 +8,6 @@ import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.SearchManager;
 import android.content.ClipboardManager;
-import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -87,7 +86,6 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
 
     private View mView;
     private ActionMode mActionMode;
-    private boolean mDraggingSelection;
 
     // Bit field for mappings from menu item to a flag indicating it is allowed.
     private int mAllowedMenuItems;
@@ -98,8 +96,6 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
     private boolean mEditable;
     private boolean mIsPasswordType;
     private boolean mIsInsertion;
-
-    private boolean mFloatingActionModeCreationFailed;
 
     // Indicates whether the action mode needs to be redrawn since last invalidation.
     private boolean mNeedsPrepare;
@@ -192,12 +188,10 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
      * Show (activate) android action mode by starting it.
      *
      * <p>Action mode in floating mode is tried first, and then falls back to
-     * a normal one if allowed.
-     * @param allowFallback A flag indicating if we allow for falling back to
-     *    normal action mode in case floating action mode creation fails.
+     * a normal one.
      * @return {@code true} if the action mode started successfully or is already on.
      */
-    public boolean showActionMode(boolean allowFallback) {
+    public boolean showActionMode() {
         if (isEmpty()) return false;
 
         // Just refreshes the view if it is already showing.
@@ -206,18 +200,19 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
             return true;
         }
 
-        // On ICS, startActionMode throws an NPE when getParent() is null.
-        ActionMode actionMode = null;
         if (mView.getParent() != null) {
+             // On ICS, startActionMode throws an NPE when getParent() is null.
             assert mWebContents != null;
-            if (supportsFloatingActionMode()) actionMode = startFloatingActionMode();
-            if (actionMode == null && allowFallback) actionMode = mView.startActionMode(mCallback);
+            ActionMode actionMode = supportsFloatingActionMode()
+                    ? startFloatingActionMode()
+                    : mView.startActionMode(mCallback);
+            if (actionMode != null) {
+                // This is to work around an LGE email issue. See crbug.com/651706 for more details.
+                LGEmailActionModeWorkaround.runIfNecessary(mContext, actionMode);
+            }
+            mActionMode = actionMode;
         }
-        if (actionMode != null) {
-            // This is to work around an LGE email issue. See crbug.com/651706 for more details.
-            LGEmailActionModeWorkaround.runIfNecessary(mContext, actionMode);
-        }
-        mActionMode = actionMode;
+        mUnselectAllOnDismiss = true;
         return isActionModeValid();
     }
 
@@ -225,7 +220,6 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
     private ActionMode startFloatingActionMode() {
         ActionMode actionMode = mView.startActionMode(
                 new FloatingActionModeCallback(this, mCallback), ActionMode.TYPE_FLOATING);
-        if (actionMode == null) setFloatingActionModeCreationFailed();
         return actionMode;
     }
 
@@ -252,12 +246,7 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
 
     @Override
     public boolean supportsFloatingActionMode() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false;
-        return !mFloatingActionModeCreationFailed;
-    }
-
-    private void setFloatingActionModeCreationFailed() {
-        mFloatingActionModeCreationFailed = true;
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.M;
     }
 
     void hidePastePopup() {
@@ -294,10 +283,6 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
         return mPastePopupMenu != null && mPastePopupMenu.isShowing();
     }
 
-    private Context getContext() {
-        return mContext;
-    }
-
     // Composition methods for android.view.ActionMode
 
     /**
@@ -305,7 +290,12 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
      */
     @Override
     public void finishActionMode() {
-        if (isActionModeValid()) mActionMode.finish();
+        if (isActionModeValid()) {
+            mActionMode.finish();
+
+            // Should be nulled out in case #onDestroyActionMode() is not invoked in response.
+            mActionMode = null;
+        }
     }
 
     /**
@@ -334,7 +324,7 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
      * @see ActionMode#invalidateContentRect()
      */
     public void invalidateContentRect() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        if (supportsFloatingActionMode()) {
             if (mHidden) {
                 mPendingInvalidateContentRect = true;
             } else {
@@ -348,7 +338,7 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
      * @see ActionMode#onWindowFocusChanged()
      */
     void onWindowFocusChanged(boolean hasWindowFocus) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && isActionModeValid()) {
+        if (supportsFloatingActionMode() && isActionModeValid()) {
             mActionMode.onWindowFocusChanged(hasWindowFocus);
         }
     }
@@ -358,7 +348,7 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
      * side-effects if the underlying ActionMode supports hiding.
      * @param hide whether to hide or show the ActionMode.
      */
-    private void hideActionMode(boolean hide) {
+    void hideActionMode(boolean hide) {
         if (!canHideActionMode()) return;
         if (mHidden == hide) return;
         mHidden = hide;
@@ -386,13 +376,13 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
     }
 
     private boolean canHideActionMode() {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+        return supportsFloatingActionMode()
                 && isActionModeValid()
                 && mActionMode.getType() == ActionMode.TYPE_FLOATING;
     }
 
     private long getDefaultHideDuration() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        if (supportsFloatingActionMode()) {
             return ViewConfiguration.getDefaultActionModeHideDuration();
         }
         return 2000;
@@ -402,8 +392,8 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
 
     @Override
     public void onCreateActionMode(ActionMode mode, Menu menu) {
-        mode.setTitle(DeviceFormFactor.isTablet(getContext())
-                        ? getContext().getString(R.string.actionbar_textselection_title)
+        mode.setTitle(DeviceFormFactor.isTablet(mContext)
+                        ? mContext.getString(R.string.actionbar_textselection_title)
                         : null);
         mode.setSubtitle(null);
         createActionMenu(mode, menu);
@@ -474,7 +464,7 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
 
     private boolean canPaste() {
         ClipboardManager clipMgr = (ClipboardManager)
-                getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+                mContext.getSystemService(Context.CLIPBOARD_SERVICE);
         return clipMgr.hasPrimaryClip();
     }
 
@@ -487,12 +477,12 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
             return;
         }
 
-        PackageManager packageManager = getContext().getPackageManager();
+        PackageManager packageManager = mContext.getPackageManager();
         List<ResolveInfo> supportedActivities =
                 packageManager.queryIntentActivities(createProcessTextIntent(), 0);
         for (int i = 0; i < supportedActivities.size(); i++) {
             ResolveInfo resolveInfo = supportedActivities.get(i);
-            CharSequence label = resolveInfo.loadLabel(getContext().getPackageManager());
+            CharSequence label = resolveInfo.loadLabel(mContext.getPackageManager());
             menu.add(R.id.select_action_menu_text_processing_menus, Menu.NONE, i, label)
                     .setIntent(createProcessTextIntentForResolveInfo(resolveInfo))
                     .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
@@ -551,7 +541,7 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
         mActionMode = null;
         if (mUnselectAllOnDismiss) {
             mWebContents.dismissTextHandles();
-            mWebContents.unselect();
+            clearSelection();
         }
     }
 
@@ -652,12 +642,11 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
         // Intent is sent by WindowAndroid by default.
         try {
             mWindowAndroid.showIntent(intent, new WindowAndroid.IntentCallback() {
-                    @Override
-                    public void onIntentCompleted(WindowAndroid window,
-                            int resultCode, ContentResolver contentResolver, Intent data) {
-                        onReceivedProcessTextResult(resultCode, data);
-                    }
-                }, null);
+                @Override
+                public void onIntentCompleted(WindowAndroid window, int resultCode, Intent data) {
+                    onReceivedProcessTextResult(resultCode, data);
+                }
+            }, null);
         } catch (android.content.ActivityNotFoundException ex) {
             // If no app handles it, do nothing.
         }
@@ -736,9 +725,6 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
         if (actionModeItem == MENU_ITEM_SHARE) {
             return isAllowedByClient && isShareAvailable();
         }
-        if (actionModeItem == MENU_ITEM_WEB_SEARCH) {
-            return isAllowedByClient && isWebSearchAvailable();
-        }
         return isAllowedByClient;
     }
 
@@ -759,7 +745,7 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
 
     void restoreSelectionPopupsIfNecessary() {
         if (mHasSelection && !isActionModeValid()) {
-            if (!showActionMode(true)) clearSelection();
+            if (!showActionMode()) clearSelection();
         }
     }
 
@@ -776,7 +762,7 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
                 mSelectionRect.set(left, top, right, bottom);
                 mHasSelection = true;
                 mUnselectAllOnDismiss = true;
-                if (!showActionMode(true)) clearSelection();
+                if (!showActionMode()) clearSelection();
                 break;
 
             case SelectionEventType.SELECTION_HANDLES_MOVED:
@@ -789,17 +775,14 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
                 mUnselectAllOnDismiss = false;
                 mSelectionRect.setEmpty();
                 finishActionMode();
-                mDraggingSelection = false;
                 break;
 
             case SelectionEventType.SELECTION_HANDLE_DRAG_STARTED:
-                mDraggingSelection = true;
-                updateActionModeVisibility(touchScrollInProgress);
+                hideActionMode(true);
                 break;
 
             case SelectionEventType.SELECTION_HANDLE_DRAG_STOPPED:
-                mDraggingSelection = false;
-                updateActionModeVisibility(touchScrollInProgress);
+                hideActionMode(false);
                 break;
 
             case SelectionEventType.INSERTION_HANDLE_SHOWN:
@@ -841,10 +824,6 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
                     showPastePopup(xAnchor, yAnchor);
                 }
                 mWasPastePopupShowingOnInsertionDragStart = false;
-                break;
-
-            case SelectionEventType.SELECTION_ESTABLISHED:
-            case SelectionEventType.SELECTION_DISSOLVED:
                 break;
 
             default:
@@ -902,13 +881,14 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
 
     void updateSelectionState(boolean editable, boolean isPassword) {
         if (!editable) hidePastePopup();
-        if (isActionModeValid()
-                && (editable != isSelectionEditable() || isPassword != isSelectionPassword())) {
-            mActionMode.invalidate();
-            mNeedsPrepare = true;
+        if (editable != isSelectionEditable() || isPassword != isSelectionPassword()) {
+            mEditable = editable;
+            mIsPasswordType = isPassword;
+            if (isActionModeValid()) {
+                mNeedsPrepare = true;
+                mActionMode.invalidate();
+            }
         }
-        mEditable = editable;
-        mIsPasswordType = isPassword;
     }
 
     /**
@@ -917,13 +897,6 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
     @VisibleForTesting
     public boolean hasSelection() {
         return mHasSelection;
-    }
-
-    void updateActionModeVisibility(boolean touchScrollInProgress) {
-        // The active fling count isn't reliable with WebView, so only use the
-        // active touch scroll signal for hiding. The fling animation movement
-        // will naturally hide the ActionMode by invalidating its content rect.
-        hideActionMode(mDraggingSelection || touchScrollInProgress);
     }
 
     @Override
@@ -939,13 +912,6 @@ public class SelectionPopupController extends ActionModeCallbackHelper {
     private boolean isShareAvailable() {
         Intent intent = new Intent(Intent.ACTION_SEND);
         intent.setType("text/plain");
-        return mContext.getPackageManager().queryIntentActivities(intent,
-                PackageManager.MATCH_DEFAULT_ONLY).size() > 0;
-    }
-
-    private boolean isWebSearchAvailable() {
-        Intent intent = new Intent(Intent.ACTION_WEB_SEARCH);
-        intent.putExtra(SearchManager.EXTRA_NEW_SEARCH, true);
         return mContext.getPackageManager().queryIntentActivities(intent,
                 PackageManager.MATCH_DEFAULT_ONLY).size() > 0;
     }

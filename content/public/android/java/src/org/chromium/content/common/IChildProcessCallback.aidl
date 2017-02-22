@@ -9,19 +9,8 @@ import android.view.Surface;
 
 interface IChildProcessCallback {
 
-  // Conduit to pass a Surface from the sandboxed renderer to the plugin.
-  void establishSurfacePeer(
-      int pid, in Surface surface, int primaryID, int secondaryID);
-
   void forwardSurfaceForSurfaceRequest(
-      long requestTokenHigh, long requestTokenLow, in Surface surface);
+      in UnguessableToken requestToken, in Surface surface);
 
   SurfaceWrapper getViewSurface(int surfaceId);
-
-  void registerSurfaceTextureSurface(
-      int surfaceTextureId, int clientId, in Surface surface);
-
-  void unregisterSurfaceTextureSurface(int surfaceTextureId, int clientId);
-
-  SurfaceWrapper getSurfaceTextureSurface(int surfaceTextureId);
 }

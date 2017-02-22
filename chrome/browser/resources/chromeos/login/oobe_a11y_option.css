@@ -9,12 +9,12 @@
 }
 
 #elementBox {
+  padding: 0 10px;
   width: inherit;
 }
 
 paper-toggle-button {
-  min-height: 20px;
-  min-width: 36px;
+  width: 36px;
 }
 
 #titleContainer {

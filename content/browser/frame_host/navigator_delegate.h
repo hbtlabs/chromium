@@ -5,7 +5,6 @@
 #ifndef CONTENT_BROWSER_FRAME_HOST_NAVIGATOR_DELEGATE_H_
 #define CONTENT_BROWSER_FRAME_HOST_NAVIGATOR_DELEGATE_H_
 
-#include "base/memory/scoped_vector.h"
 #include "base/strings/string16.h"
 #include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/navigation_controller.h"
@@ -48,14 +47,6 @@ class CONTENT_EXPORT NavigatorDelegate {
   // TODO(clamy): all methods below that are related to navigation
   // events should go away in favor of the ones above.
 
-  // The RenderFrameHost started a provisional load for the frame
-  // represented by |render_frame_host|.
-  virtual void DidStartProvisionalLoad(
-      RenderFrameHostImpl* render_frame_host,
-      const GURL& validated_url,
-      bool is_error_page,
-      bool is_iframe_srcdoc) {}
-
   // A provisional load in |render_frame_host| failed.
   virtual void DidFailProvisionalLoadWithError(
       RenderFrameHostImpl* render_frame_host,
@@ -71,12 +62,6 @@ class CONTENT_EXPORT NavigatorDelegate {
       int error_code,
       const base::string16& error_description,
       bool was_ignored_by_handler) {}
-
-  // A navigation was committed in |render_frame_host|.
-  virtual void DidCommitProvisionalLoad(
-      RenderFrameHostImpl* render_frame_host,
-      const GURL& url,
-      ui::PageTransition transition_type) {}
 
   // Handles post-navigation tasks in navigation BEFORE the entry has been
   // committed to the NavigationController.
@@ -138,8 +123,8 @@ class CONTENT_EXPORT NavigatorDelegate {
   // Returns the NavigationThrottles to add to this navigation. Normally these
   // are defined by the content/ embedder, except in the case of interstitials
   // where no NavigationThrottles are added to the navigation.
-  virtual ScopedVector<NavigationThrottle> CreateThrottlesForNavigation(
-      NavigationHandle* navigation_handle);
+  virtual std::vector<std::unique_ptr<NavigationThrottle>>
+  CreateThrottlesForNavigation(NavigationHandle* navigation_handle);
 
   // PlzNavigate
   // Called at the start of the navigation to get opaque data the embedder

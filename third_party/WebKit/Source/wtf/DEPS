@@ -1,6 +1,8 @@
 include_rules = [
     # To whitelist base/ stuff Blink is allowed to include, we list up all
     # directories and files instead of writing 'base/'.
+    "+base/allocator/oom.h",
+    "+base/allocator/partition_allocator",
     "+base/auto_reset.h",
     "+base/bind.h",
     "+base/bits.h",
@@ -18,4 +20,7 @@ include_rules = [
     "+base/time/time.h",
     "+base/tuple.h",
     "+build",
+    # Allow redirection to platform/newwtf. See crbug.com/691465.
+    "+platform/newwtf",
+    "-v8",
 ]

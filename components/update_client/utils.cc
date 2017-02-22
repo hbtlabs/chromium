@@ -23,7 +23,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
-#include "base/win/windows_version.h"
 #include "build/build_config.h"
 #include "components/crx_file/id_util.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
@@ -40,6 +39,10 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_status.h"
 #include "url/gurl.h"
+
+#if defined(OS_WIN)
+#include "base/win/windows_version.h"
+#endif
 
 namespace update_client {
 
@@ -134,11 +137,12 @@ std::string BuildProtocolRequest(
     base::StringAppendF(&request, " dlpref=\"%s\"",
                         download_preference.c_str());
   if (updater_state_attributes &&
-      updater_state_attributes->count(UpdaterState::kDomainJoined)) {
+      updater_state_attributes->count(UpdaterState::kIsEnterpriseManaged)) {
     base::StringAppendF(
         &request, " %s=\"%s\"",  // domainjoined
-        UpdaterState::kDomainJoined,
-        (*updater_state_attributes)[UpdaterState::kDomainJoined].c_str());
+        UpdaterState::kIsEnterpriseManaged,
+        (*updater_state_attributes)[UpdaterState::kIsEnterpriseManaged]
+            .c_str());
   }
   base::StringAppendF(&request, ">");
 
@@ -164,7 +168,7 @@ std::string BuildProtocolRequest(
   if (updater_state_attributes) {
     base::StringAppendF(&request, "<updater");
     for (const auto& attr : *updater_state_attributes) {
-      if (attr.first != UpdaterState::kDomainJoined) {
+      if (attr.first != UpdaterState::IsEnterpriseManaged) {
         base::StringAppendF(&request, " %s=\"%s\"", attr.first.c_str(),
                           attr.second.c_str());
       }

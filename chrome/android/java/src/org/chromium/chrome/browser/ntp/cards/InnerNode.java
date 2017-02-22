@@ -4,59 +4,65 @@
 
 package org.chromium.chrome.browser.ntp.cards;
 
+import android.support.annotation.Nullable;
+
+import org.chromium.base.Callback;
+import org.chromium.base.VisibleForTesting;
+import org.chromium.chrome.browser.ntp.cards.NewTabPageViewHolder.PartialBindCallback;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * An inner node in the tree: the root of a subtree, with a list of child nodes.
  */
-public abstract class InnerNode extends ChildNode implements NodeParent {
-    public InnerNode(NodeParent parent) {
-        super(parent);
-    }
-
-    protected abstract List<TreeNode> getChildren();
+public class InnerNode extends ChildNode implements NodeParent {
+    private final List<TreeNode> mChildren = new ArrayList<>();
 
     private int getChildIndexForPosition(int position) {
-        List<TreeNode> children = getChildren();
+        checkIndex(position);
         int numItems = 0;
-        int numChildren = children.size();
+        int numChildren = mChildren.size();
         for (int i = 0; i < numChildren; i++) {
-            numItems += children.get(i).getItemCount();
+            numItems += mChildren.get(i).getItemCount();
             if (position < numItems) return i;
         }
+        // checkIndex() will have caught this case already.
+        assert false;
         return -1;
     }
 
     private int getStartingOffsetForChildIndex(int childIndex) {
-        List<TreeNode> children = getChildren();
-        if (childIndex < 0 || childIndex >= children.size()) {
-            throw new IndexOutOfBoundsException(childIndex + "/" + children.size());
+        if (childIndex < 0 || childIndex >= mChildren.size()) {
+            throw new IndexOutOfBoundsException(childIndex + "/" + mChildren.size());
         }
 
         int offset = 0;
         for (int i = 0; i < childIndex; i++) {
-            offset += children.get(i).getItemCount();
+            offset += mChildren.get(i).getItemCount();
         }
         return offset;
     }
 
     int getStartingOffsetForChild(TreeNode child) {
-        return getStartingOffsetForChildIndex(getChildren().indexOf(child));
+        return getStartingOffsetForChildIndex(mChildren.indexOf(child));
     }
 
     /**
      * Returns the child whose subtree contains the item at the given position.
      */
     TreeNode getChildForPosition(int position) {
-        return getChildren().get(getChildIndexForPosition(position));
+        return mChildren.get(getChildIndexForPosition(position));
     }
 
     @Override
-    public int getItemCount() {
+    protected int getItemCountForDebugging() {
         int numItems = 0;
-        for (TreeNode child : getChildren()) {
+        for (TreeNode child : mChildren) {
             numItems += child.getItemCount();
         }
         return numItems;
@@ -66,34 +72,44 @@ public abstract class InnerNode extends ChildNode implements NodeParent {
     @ItemViewType
     public int getItemViewType(int position) {
         int index = getChildIndexForPosition(position);
-        return getChildren().get(index).getItemViewType(
+        return mChildren.get(index).getItemViewType(
                 position - getStartingOffsetForChildIndex(index));
     }
 
     @Override
     public void onBindViewHolder(NewTabPageViewHolder holder, int position) {
         int index = getChildIndexForPosition(position);
-        getChildren().get(index).onBindViewHolder(
+        mChildren.get(index).onBindViewHolder(
                 holder, position - getStartingOffsetForChildIndex(index));
     }
 
     @Override
     public SnippetArticle getSuggestionAt(int position) {
         int index = getChildIndexForPosition(position);
-        return getChildren().get(index).getSuggestionAt(
+        return mChildren.get(index).getSuggestionAt(
                 position - getStartingOffsetForChildIndex(index));
     }
 
     @Override
-    public int getDismissSiblingPosDelta(int position) {
+    public Set<Integer> getItemDismissalGroup(int position) {
         int index = getChildIndexForPosition(position);
-        return getChildren().get(index).getDismissSiblingPosDelta(
-                position - getStartingOffsetForChildIndex(index));
+        int offset = getStartingOffsetForChildIndex(index);
+        Set<Integer> itemDismissalGroup =
+                getChildren().get(index).getItemDismissalGroup(position - offset);
+        return offsetBy(itemDismissalGroup, offset);
     }
 
     @Override
-    public void onItemRangeChanged(TreeNode child, int index, int count) {
-        notifyItemRangeChanged(getStartingOffsetForChild(child) + index, count);
+    public void dismissItem(int position, Callback<String> itemRemovedCallback) {
+        int index = getChildIndexForPosition(position);
+        getChildren().get(index).dismissItem(
+                position - getStartingOffsetForChildIndex(index), itemRemovedCallback);
+    }
+
+    @Override
+    public void onItemRangeChanged(
+            TreeNode child, int index, int count, @Nullable PartialBindCallback callback) {
+        notifyItemRangeChanged(getStartingOffsetForChild(child) + index, count, callback);
     }
 
     @Override
@@ -104,5 +120,88 @@ public abstract class InnerNode extends ChildNode implements NodeParent {
     @Override
     public void onItemRangeRemoved(TreeNode child, int index, int count) {
         notifyItemRangeRemoved(getStartingOffsetForChild(child) + index, count);
+    }
+
+    /**
+     * Helper method that adds a new child node and notifies about its insertion.
+     *
+     * @param child The child node to be added.
+     */
+    protected void addChild(TreeNode child) {
+        int insertedIndex = getItemCount();
+        mChildren.add(child);
+        child.setParent(this);
+
+        int count = child.getItemCount();
+        if (count > 0) notifyItemRangeInserted(insertedIndex, count);
+    }
+
+    /**
+     * Helper method that adds all the children and notifies about the inserted items.
+     */
+    protected void addChildren(TreeNode... children) {
+        int initialCount = getItemCount();
+        int addedCount = 0;
+        for (TreeNode child : children) {
+            mChildren.add(child);
+            child.setParent(this);
+            addedCount += child.getItemCount();
+        }
+
+        if (addedCount > 0) notifyItemRangeInserted(initialCount, addedCount);
+    }
+
+    /**
+     * Helper method that removes a child node and notifies about the removed items.
+     *
+     * @param child The child node to be removed.
+     */
+    protected void removeChild(TreeNode child) {
+        int removedIndex = mChildren.indexOf(child);
+        if (removedIndex == -1) throw new IndexOutOfBoundsException();
+
+        int count = child.getItemCount();
+        int childStartingOffset = getStartingOffsetForChildIndex(removedIndex);
+
+        child.detach();
+        mChildren.remove(removedIndex);
+        if (count > 0) notifyItemRangeRemoved(childStartingOffset, count);
+    }
+
+    /**
+     * Helper method that removes all the children and notifies about the removed items.
+     */
+    protected void removeChildren() {
+        int itemCount = getItemCount();
+        if (itemCount == 0) return;
+
+        for (TreeNode child : mChildren) child.detach();
+        mChildren.clear();
+        notifyItemRangeRemoved(0, itemCount);
+    }
+
+    @VisibleForTesting
+    final List<TreeNode> getChildren() {
+        return mChildren;
+    }
+
+    /**
+     * Helper method that adds an offset value to a set of integers.
+     * @param set a set of integers
+     * @param offset the offset to add to the set.
+     * @return a set of integers with the {@code offset} value added to the input {@code set}.
+     */
+    private static Set<Integer> offsetBy(Set<Integer> set, int offset) {
+        // Optimizations for empty and singleton sets:
+        if (set.isEmpty()) return Collections.emptySet();
+        if (set.size() == 1) {
+            return Collections.singleton(set.iterator().next() + offset);
+        }
+
+        Set<Integer> offsetSet = new HashSet<>();
+        for (int value : set) {
+            offsetSet.add(value + offset);
+        }
+        return offsetSet;
     }
 }

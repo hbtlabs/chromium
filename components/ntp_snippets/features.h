@@ -5,9 +5,16 @@
 #ifndef COMPONENTS_NTP_SNIPPETS_FEATURES_H_
 #define COMPONENTS_NTP_SNIPPETS_FEATURES_H_
 
+#include <memory>
 #include <string>
 
 #include "base/feature_list.h"
+#include "components/ntp_snippets/category_rankers/category_ranker.h"
+#include "components/prefs/pref_service.h"
+
+namespace base {
+class Clock;
+}
 
 namespace ntp_snippets {
 
@@ -25,29 +32,53 @@ extern const base::Feature kSaveToOfflineFeature;
 // Feature to allow offline badges to appear on snippets.
 extern const base::Feature kOfflineBadgeFeature;
 
-// Feature to allow dismissing sections.
-extern const base::Feature kSectionDismissalFeature;
-
-// Global toggle for the whole content suggestions feature. If this is set to
-// false, all the per-provider features are ignored.
-extern const base::Feature kContentSuggestionsFeature;
+// Feature to allow specification of content suggestions source.
+// TODO(peconn): Figure out how to remove this, it is useful to specify the
+// source, but you shouldn't be able to disable it.
+extern const base::Feature kContentSuggestionsSource;
 
 // Feature to allow UI as specified here: https://crbug.com/660837.
 extern const base::Feature kIncreasedVisibility;
 
-// Feature to enable the Fetch More action
-extern const base::Feature kFetchMoreFeature;
+// Feature to prefer AMP URLs over regular URLs when available.
+extern const base::Feature kPreferAmpUrlsFeature;
 
-// Returns a feature param as an int instead of a string.
-int GetParamAsInt(const base::Feature& feature,
-                  const std::string& param_name,
-                  int default_value);
+// Feature to choose a category ranker.
+extern const base::Feature kCategoryRanker;
 
-// Returns a feature param as a bool instead of a string.
-// TODO(jkrcal): Use this function in other code in the ntp_snippets component.
-bool GetParamAsBool(const base::Feature& feature,
-                    const std::string& param_name,
-                    bool default_value);
+// Parameter and its values for the kCategoryRanker feature flag.
+extern const char kCategoryRankerParameter[];
+extern const char kCategoryRankerConstantRanker[];
+extern const char kCategoryRankerClickBasedRanker[];
+
+enum class CategoryRankerChoice {
+  CONSTANT,
+  CLICK_BASED,
+};
+
+// Returns which CategoryRanker to use according to kCategoryRanker feature.
+CategoryRankerChoice GetSelectedCategoryRanker();
+
+// Builds a CategoryRanker according to kCategoryRanker feature.
+std::unique_ptr<CategoryRanker> BuildSelectedCategoryRanker(
+    PrefService* pref_service,
+    std::unique_ptr<base::Clock> clock);
+
+// Feature to choose a default category order.
+extern const base::Feature kCategoryOrder;
+
+// Parameter and its values for the kCategoryOrder feature flag.
+extern const char kCategoryOrderParameter[];
+extern const char kCategoryOrderGeneral[];
+extern const char kCategoryOrderEmergingMarketsOriented[];
+
+enum class CategoryOrderChoice {
+  GENERAL,
+  EMERGING_MARKETS_ORIENTED,
+};
+
+// Returns which category order to use according to kCategoryOrder feature.
+CategoryOrderChoice GetSelectedCategoryOrder();
 
 }  // namespace ntp_snippets
 

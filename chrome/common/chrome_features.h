@@ -10,12 +10,17 @@
 
 #include "base/feature_list.h"
 #include "extensions/features/features.h"
+#include "ppapi/features/features.h"
 #include "printing/features/features.h"
 
 namespace features {
 
 // All features in alphabetical order. The features should be documented
 // alongside the definition of their values in the .cc file.
+
+#if defined(OS_ANDROID)
+extern const base::Feature kAllowAutoplayUnmutedInWebappManifestScope;
+#endif  // defined(OS_ANDROID)
 
 #if defined(OS_MACOSX)
 extern const base::Feature kAppleScriptExecuteJavaScript;
@@ -43,15 +48,18 @@ extern const base::Feature kBackspaceGoesBackFeature;
 
 extern const base::Feature kBlockPromptsIfDismissedOften;
 
-extern const base::Feature kBlockSmallContent;
-
 extern const base::Feature kBrowserHangFixesExperiment;
+
+#if defined(OS_MACOSX)
+extern const base::Feature kBrowserTouchBar;
+#endif  // defined(OS_MACOSX)
 
 #if defined(OS_ANDROID)
 extern const base::Feature kConsistentOmniboxGeolocation;
 #endif
 
 #if defined(OS_WIN)
+extern const base::Feature kDesktopIOSPromotion;
 extern const base::Feature kDisableFirstRunAutoImportWin;
 #endif  // defined(OS_WIN)
 
@@ -61,18 +69,27 @@ extern const base::Feature kExpectCTReporting;
 
 extern const base::Feature kExperimentalKeyboardLockUI;
 
+#if defined(OS_WIN)
+extern const base::Feature kGdiTextPrinting;
+#endif
+
 #if defined(OS_CHROMEOS)
 extern const base::Feature kHappinessTrackingSystem;
 #endif
+
+extern const base::Feature kImprovedRecoveryComponent;
 
 #if defined(GOOGLE_CHROME_BUILD) && defined(OS_LINUX) && !defined(OS_CHROMEOS)
 extern const base::Feature kLinuxObsoleteSystemIsEndOfTheLine;
 #endif
 
+extern const base::Feature kLsdPermissionPrompt;
+
 extern const base::Feature kMaterialDesignBookmarks;
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 extern const base::Feature kMaterialDesignExtensions;
+extern const base::Feature kAcknowledgeNtpOverrideOnDeactivate;
 #endif
 
 extern const base::Feature kMaterialDesignHistory;
@@ -86,19 +103,35 @@ extern const base::Feature kMediaRemotingEncrypted;
 
 extern const base::Feature kModalPermissionPrompts;
 
+#if defined(OS_WIN)
+extern const base::Feature kModuleDatabase;
+#endif
+
 #if defined(OS_MACOSX)
 extern const base::Feature kNativeNotifications;
 #endif  // defined(OS_MACOSX)
 
 extern const base::Feature kOfflinePageDownloadSuggestionsFeature;
 
-extern const base::Feature kOverrideYouTubeFlashEmbed;
+extern const base::Feature kPermissionsBlacklist;
 
-#if defined(ENABLE_PLUGINS)
+#if defined(OS_WIN)
+extern const base::Feature kPostScriptPrinting;
+#endif
+
+#if BUILDFLAG(ENABLE_PLUGINS)
 extern const base::Feature kPreferHtmlOverPlugins;
 #endif
 
+extern const base::Feature kPrefService;
+
+#if defined(OS_CHROMEOS)
+extern const base::Feature kPreloadLockScreen;
+#endif
+
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+extern const base::Feature kPrintPdfAsImage;
+
 extern const base::Feature kPrintScaling;
 #endif
 
@@ -108,17 +141,13 @@ extern const base::Feature kPushMessagingBackgroundMode;
 extern const base::Feature kRuntimeMemoryLeakDetector;
 #endif  // defined(OS_CHROMEOS)
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 extern const base::Feature kRunAllFlashInAllowMode;
 #endif
 
 extern const base::Feature kSafeSearchUrlReporting;
 
 extern const base::Feature kSimplifiedFullscreenUI;
-
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
-extern const base::Feature kSecurityChip;
-#endif
 
 #if defined(SYZYASAN)
 extern const base::Feature kSyzyasanDeferredFree;
@@ -131,7 +160,11 @@ extern const base::Feature kOptInImeMenu;
 
 extern const base::Feature kQuickUnlockPin;
 
+extern const base::Feature kQuickUnlockFingerprint;
+
 extern const base::Feature kEHVInputOnImeMenu;
+
+extern const base::Feature kCrosCompUpdates;
 #endif  // defined(OS_CHROMEOS)
 
 // DON'T ADD RANDOM STUFF HERE. Put it in the main section above in

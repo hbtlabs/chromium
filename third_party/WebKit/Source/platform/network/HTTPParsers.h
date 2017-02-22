@@ -39,6 +39,7 @@
 #include "wtf/Vector.h"
 #include "wtf/text/StringHash.h"
 
+#include <stdint.h>
 #include <memory>
 
 namespace blink {
@@ -56,14 +57,6 @@ typedef enum {
 enum ContentTypeOptionsDisposition {
   ContentTypeOptionsNone,
   ContentTypeOptionsNosniff
-};
-
-enum XFrameOptionsDisposition {
-  XFrameOptionsInvalid,
-  XFrameOptionsDeny,
-  XFrameOptionsSameOrigin,
-  XFrameOptionsAllowAll,
-  XFrameOptionsConflict
 };
 
 // Be sure to update the behavior of
@@ -135,8 +128,6 @@ parseXSSProtectionHeader(const String& header,
                          String& failureReason,
                          unsigned& failurePosition,
                          String& reportURL);
-PLATFORM_EXPORT XFrameOptionsDisposition
-parseXFrameOptionsHeader(const String&);
 PLATFORM_EXPORT CacheControlHeader
 parseCacheControlDirectives(const AtomicString& cacheControlHeader,
                             const AtomicString& pragmaHeader);
@@ -162,9 +153,23 @@ PLATFORM_EXPORT bool parseMultipartHeadersFromBody(const char* bytes,
 
 // Parses a header value containing JSON data, according to
 // https://tools.ietf.org/html/draft-ietf-httpbis-jfv-01
-// Returns an empty unique_ptr if the header cannot be parsed as JSON.
-PLATFORM_EXPORT std::unique_ptr<JSONArray> parseJSONHeader(
-    const String& header);
+// Returns an empty unique_ptr if the header cannot be parsed as JSON. JSON
+// strings which represent object nested deeper than |maxParseDepth| will also
+// cause an empty return value.
+PLATFORM_EXPORT std::unique_ptr<JSONArray> parseJSONHeader(const String& header,
+                                                           int maxParseDepth);
+
+// Extracts the values in a Content-Range header and returns true if all three
+// values are present and valid for a 206 response; otherwise returns false.
+// The following values will be outputted:
+// |*first_byte_position| = inclusive position of the first byte of the range
+// |*last_byte_position| = inclusive position of the last byte of the range
+// |*instance_length| = size in bytes of the object requested
+// If this method returns false, then all of the outputs will be -1.
+PLATFORM_EXPORT bool parseContentRangeHeaderFor206(const String& contentRange,
+                                                   int64_t* firstBytePosition,
+                                                   int64_t* lastBytePosition,
+                                                   int64_t* instanceLength);
 
 }  // namespace blink
 

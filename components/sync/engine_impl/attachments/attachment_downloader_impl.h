@@ -22,10 +22,6 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "url/gurl.h"
 
-namespace base {
-class RefCountedMemory;
-}  // namespace base
-
 namespace net {
 class HttpResponseHeaders;
 }  // namespace net
@@ -86,10 +82,10 @@ class AttachmentDownloaderImpl : public AttachmentDownloader,
   FRIEND_TEST_ALL_PREFIXES(AttachmentDownloaderImplTest, ExtractCrc32c_Empty);
 
   struct DownloadState;
-  typedef std::string AttachmentUrl;
-  typedef std::unordered_map<AttachmentUrl, std::unique_ptr<DownloadState>>
-      StateMap;
-  typedef std::vector<DownloadState*> StateList;
+  using AttachmentUrl = std::string;
+  using StateMap =
+      std::unordered_map<AttachmentUrl, std::unique_ptr<DownloadState>>;
+  using StateList = std::vector<DownloadState*>;
 
   std::unique_ptr<net::URLFetcher> CreateFetcher(
       const AttachmentUrl& url,

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/login/screens/arc_terms_of_service_screen.h"
 
+#include "chrome/browser/chromeos/login/screens/arc_terms_of_service_screen_actor.h"
 #include "chrome/browser/chromeos/login/screens/base_screen_delegate.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/metrics/metrics_reporting_state.h"
@@ -17,18 +18,17 @@ namespace chromeos {
 ArcTermsOfServiceScreen::ArcTermsOfServiceScreen(
     BaseScreenDelegate* base_screen_delegate,
     ArcTermsOfServiceScreenActor* actor)
-    : BaseScreen(base_screen_delegate), actor_(actor) {
+    : BaseScreen(base_screen_delegate, OobeScreen::SCREEN_ARC_TERMS_OF_SERVICE),
+      actor_(actor) {
   DCHECK(actor_);
   if (actor_)
-    actor_->SetDelegate(this);
+    actor_->AddObserver(this);
 }
 
 ArcTermsOfServiceScreen::~ArcTermsOfServiceScreen() {
   if (actor_)
-    actor_->SetDelegate(nullptr);
+    actor_->RemoveObserver(this);
 }
-
-void ArcTermsOfServiceScreen::PrepareToShow() {}
 
 void ArcTermsOfServiceScreen::Show() {
   if (!actor_)
@@ -43,23 +43,11 @@ void ArcTermsOfServiceScreen::Hide() {
     actor_->Hide();
 }
 
-std::string ArcTermsOfServiceScreen::GetName() const {
-  return WizardController::kArcTermsOfServiceScreenName;
-}
-
 void ArcTermsOfServiceScreen::OnSkip() {
-  ApplyTerms(false);
+  Finish(BaseScreenDelegate::ARC_TERMS_OF_SERVICE_FINISHED);
 }
 
 void ArcTermsOfServiceScreen::OnAccept() {
-  ApplyTerms(true);
-}
-
-void ArcTermsOfServiceScreen::ApplyTerms(bool accepted) {
-  Profile* profile = ProfileManager::GetActiveUserProfile();
-  profile->GetPrefs()->SetBoolean(prefs::kArcTermsAccepted, accepted);
-  profile->GetPrefs()->SetBoolean(prefs::kArcEnabled, accepted);
-
   Finish(BaseScreenDelegate::ARC_TERMS_OF_SERVICE_FINISHED);
 }
 

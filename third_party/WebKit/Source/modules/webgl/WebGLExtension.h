@@ -49,12 +49,11 @@ class WebGLExtensionScopedContext final {
   Member<WebGLRenderingContextBase> m_context;
 };
 
-class WebGLExtension : public GarbageCollectedFinalized<WebGLExtension>,
+class WebGLExtension : public GarbageCollected<WebGLExtension>,
                        public ScriptWrappable {
   WTF_MAKE_NONCOPYABLE(WebGLExtension);
 
  public:
-  virtual ~WebGLExtension();
   virtual WebGLExtensionName name() const = 0;
 
   // Lose this extension. Passing true = force loss. Some extensions
@@ -65,13 +64,6 @@ class WebGLExtension : public GarbageCollectedFinalized<WebGLExtension>,
   bool isLost() { return !m_context; }
 
   DECLARE_VIRTUAL_TRACE();
-
-  // For use by V8 bindings only.
-  HTMLCanvasElement* canvas() const {
-    if (m_context)
-      return m_context->canvas();
-    return nullptr;
-  }
 
  protected:
   explicit WebGLExtension(WebGLRenderingContextBase*);

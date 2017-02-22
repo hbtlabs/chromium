@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="../../resources/testharness.js"></script>
+<script src="../../resources/testharnessreport.js"></script> 
+<script src="../resources/audit.js"></script>
+</head>
+<body>
+<script>
+let audit = Audit.createTaskRunner();
+
+audit.define('test', (task, should) => {
+  task.describe('OfflineAudioContext constructor');
+  let context;
+  // Make sure we don't crash when giving 0 as number of frames.
+  should(
+      () => new OfflineAudioContext(1, 0, 44100),
+      'new OfflineAudioContext(1, 0, 44100)')
+      .throw();
+  // Make sure we don't throw exceptions for supported ranges of sample rates
+  // for an OfflineAudioContext.
+  should(
+      () => context = new OfflineAudioContext(2, 512, 2999),
+      'context = new OfflineAudioContext(2, 512, 2999)')
+      .throw();
+  should(
+      () => context = new OfflineAudioContext(2, 512, 3000),
+      'context = new OfflineAudioContext(2, 512, 3000)')
+      .notThrow();
+  should(context.length, 'context.length').beEqualTo(512);
+  should(
+      () => context = new OfflineAudioContext(2, 1024, 384000),
+      'context = new OfflineAudioContext(2, 1024, 384000)')
+      .notThrow();
+  should(context.length, 'context.length').beEqualTo(1024);
+  should(
+      () => context = new OfflineAudioContext(2, 1024, 384001),
+      'context = new OfflineAudioContext(2, 1024, 384001)')
+      .throw();
+  should(
+      () => context = new OfflineAudioContext(2, 2048, 8000),
+      'context = new OfflineAudioContext(2, 2048, 8000)')
+      .notThrow();
+  should(context.length, 'context.length').beEqualTo(2048);
+  should(
+      () => context = new OfflineAudioContext(2, 4096, 11025),
+      'context = new OfflineAudioContext(2, 4096, 11025)')
+      .notThrow();
+  should(context.length, 'context.length').beEqualTo(4096);
+  should(
+      () => context = new OfflineAudioContext(2, 512, 22050),
+      'context = new OfflineAudioContext(2, 512, 22050)')
+      .notThrow();
+  should(context.length, 'context.length').beEqualTo(512);
+  should(
+      () => context = new OfflineAudioContext(2, 512, 44100),
+      'context = new OfflineAudioContext(2, 512, 44100)')
+      .notThrow();
+  should(context.length, 'context.length').beEqualTo(512);
+  should(
+      () => context = new OfflineAudioContext(2, 512, 48000),
+      'context = new OfflineAudioContext(2, 512, 48000)')
+      .notThrow();
+  should(context.length, 'context.length').beEqualTo(512);
+
+  should(
+      () => context = new OfflineAudioContext(2, 512, 88200),
+      'context = new OfflineAudioContext(2, 512, 88200)')
+      .notThrow();
+  should(context.length, 'context.length').beEqualTo(512);
+
+  // Make sure length is read-only.
+  should(() => context.length = 99, 'context.length = 99').notThrow();
+  should(context.length, 'context.length').beEqualTo(512);
+  should(
+      () => context = new OfflineAudioContext(2, 512, 96000),
+      'context = new OfflineAudioContext(2, 512, 96000)')
+      .notThrow();
+  // Make sure we throw exceptions for non-finite sample rates.
+  should(
+      () => context = new OfflineAudioContext(1, 0, NaN),
+      'context = new OfflineAudioContext(1, 0, NaN)')
+      .throw();
+  should(
+      () => context = new OfflineAudioContext(1, 0, Infinity),
+      'context = new OfflineAudioContext(1, 0, Infinity)')
+      .throw();
+  // Verify channel counts and other destination attributes are set correctly.
+  should(
+      () => context = new OfflineAudioContext(7, 512, 48000),
+      'context = new OfflineAudioContext(7, 512, 48000)')
+      .notThrow();
+  should(context.destination.channelCount, 'context.destination.channelCount')
+      .beEqualTo(7);
+  should(
+      context.destination.maxChannelCount,
+      'context.destination.maxChannelCount')
+      .beEqualTo(7);
+  should(
+      context.destination.channelCountMode,
+      'context.destination.channelCountMode')
+      .beEqualTo('explicit');
+  should(
+      context.destination.channelInterpretation,
+      'context.destination.channelInterpretation')
+      .beEqualTo('speakers');
+
+  task.done();
+});
+
+audit.run();
+</script>
+</body>
+</html>

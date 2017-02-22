@@ -13,8 +13,9 @@
 // This class mocks the behavior of a CBCharacteristic.
 @interface MockCBCharacteristic : NSObject
 
-@property(readonly, nonatomic) CBUUID* UUID;
-@property(readonly, nonatomic) CBCharacteristic* characteristic;
+@property(nonatomic, readonly) CBUUID* UUID;
+@property(nonatomic, readonly) CBCharacteristic* characteristic;
+@property(nonatomic, readonly) NSArray* descriptors;
 
 - (instancetype)initWithService:(CBService*)service
                          CBUUID:(CBUUID*)uuid
@@ -25,7 +26,11 @@
 - (void)simulateWriteWithError:(NSError*)error;
 - (void)simulateGattNotifySessionStarted;
 - (void)simulateGattNotifySessionFailedWithError:(NSError*)error;
+- (void)simulateGattNotifySessionStopped;
+- (void)simulateGattNotifySessionStoppedWithError:(NSError*)error;
 - (void)simulateGattCharacteristicChangedWithValue:(NSData*)value;
+- (void)simulateDescriptorWithUUID:(CBUUID*)uuid;
+- (void)discoverDescriptors;
 
 @end
 

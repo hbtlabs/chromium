@@ -8,12 +8,15 @@
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "core/frame/LocalFrame.h"
 #include "core/testing/DummyPageHolder.h"
+#include "modules/presentation/PresentationConnection.h"
 #include "modules/presentation/PresentationConnectionList.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "public/platform/modules/presentation/WebPresentationClient.h"
-#include "public/platform/modules/presentation/WebPresentationConnectionClient.h"
+#include "public/platform/modules/presentation/WebPresentationConnectionCallbacks.h"
+#include "public/platform/modules/presentation/WebPresentationConnectionProxy.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include <memory>
 #include <v8.h>
 
 namespace blink {
@@ -30,36 +33,57 @@ class MockEventListener : public EventListener {
 };
 
 class MockWebPresentationClient : public WebPresentationClient {
+  void startSession(
+      const WebVector<WebURL>& presentationUrls,
+      std::unique_ptr<WebPresentationConnectionCallbacks> callbacks) override {
+    return startSession_(presentationUrls, callbacks);
+  }
+  void joinSession(
+      const WebVector<WebURL>& presentationUrls,
+      const WebString& presentationId,
+      std::unique_ptr<WebPresentationConnectionCallbacks> callbacks) override {
+    return joinSession_(presentationUrls, presentationId, callbacks);
+  }
+
+  void getAvailability(const WebVector<WebURL>& availabilityURLs,
+                       std::unique_ptr<WebPresentationAvailabilityCallbacks>
+                           callbacks) override {
+    return getAvailability_(availabilityURLs, callbacks);
+  }
+
  public:
   MOCK_METHOD1(setController, void(WebPresentationController*));
 
   MOCK_METHOD1(setReceiver, void(WebPresentationReceiver*));
 
-  MOCK_METHOD2(startSession,
+  MOCK_METHOD2(startSession_,
                void(const WebVector<WebURL>& presentationUrls,
-                    WebPresentationConnectionClientCallbacks*));
+                    std::unique_ptr<WebPresentationConnectionCallbacks>&));
 
-  MOCK_METHOD3(joinSession,
+  MOCK_METHOD3(joinSession_,
                void(const WebVector<WebURL>& presentationUrls,
                     const WebString& presentationId,
-                    WebPresentationConnectionClientCallbacks*));
+                    std::unique_ptr<WebPresentationConnectionCallbacks>&));
 
-  MOCK_METHOD3(sendString,
+  MOCK_METHOD4(sendString,
                void(const WebURL& presentationUrl,
                     const WebString& presentationId,
-                    const WebString& message));
+                    const WebString& message,
+                    const WebPresentationConnectionProxy* proxy));
 
-  MOCK_METHOD4(sendArrayBuffer,
+  MOCK_METHOD5(sendArrayBuffer,
                void(const WebURL& presentationUrl,
                     const WebString& presentationId,
                     const uint8_t* data,
-                    size_t length));
+                    size_t length,
+                    const WebPresentationConnectionProxy* proxy));
 
-  MOCK_METHOD4(sendBlobData,
+  MOCK_METHOD5(sendBlobData,
                void(const WebURL& presentationUrl,
                     const WebString& presentationId,
                     const uint8_t* data,
-                    size_t length));
+                    size_t length,
+                    const WebPresentationConnectionProxy* proxy));
 
   MOCK_METHOD2(closeSession,
                void(const WebURL& presentationUrl,
@@ -69,24 +93,15 @@ class MockWebPresentationClient : public WebPresentationClient {
                void(const WebURL& presentationUrl,
                     const WebString& presentationId));
 
-  MOCK_METHOD2(getAvailability,
-               void(const WebURL& availabilityUrl,
-                    WebPresentationAvailabilityCallbacks*));
+  MOCK_METHOD2(getAvailability_,
+               void(const WebVector<WebURL>& availabilityUrls,
+                    std::unique_ptr<WebPresentationAvailabilityCallbacks>&));
 
   MOCK_METHOD1(startListening, void(WebPresentationAvailabilityObserver*));
 
   MOCK_METHOD1(stopListening, void(WebPresentationAvailabilityObserver*));
 
   MOCK_METHOD1(setDefaultPresentationUrls, void(const WebVector<WebURL>&));
-};
-
-class TestWebPresentationConnectionClient
-    : public WebPresentationConnectionClient {
- public:
-  WebString getId() override { return WebString::fromUTF8("id"); }
-  WebURL getUrl() override {
-    return URLTestHelpers::toKURL("http://www.example.com");
-  }
 };
 
 class PresentationReceiverTest : public ::testing::Test {
@@ -146,8 +161,8 @@ TEST_F(PresentationReceiverTest, OneConnectionResolvedConnectionListNoEvent) {
   receiver->connectionList(scope.getScriptState());
 
   // Receive first connection.
-  auto connectionClient = new TestWebPresentationConnectionClient();
-  receiver->onReceiverConnectionAvailable(connectionClient);
+  receiver->onReceiverConnectionAvailable(
+      WebPresentationSessionInfo(KURL(KURL(), "http://example.com"), "id"));
 
   verifyConnectionListPropertyState(ScriptPromisePropertyBase::Resolved,
                                     receiver);
@@ -164,13 +179,13 @@ TEST_F(PresentationReceiverTest, TwoConnectionsFireOnconnectionavailableEvent) {
   EXPECT_CALL(*eventHandler, handleEvent(testing::_, testing::_)).Times(1);
 
   receiver->connectionList(scope.getScriptState());
-  // Receive first connection.
-  auto connectionClient1 = new TestWebPresentationConnectionClient();
-  receiver->onReceiverConnectionAvailable(connectionClient1);
 
+  WebPresentationSessionInfo sessionInfo(KURL(KURL(), "http://example.com"),
+                                         "id");
+  // Receive first connection.
+  receiver->onReceiverConnectionAvailable(sessionInfo);
   // Receive second connection.
-  auto connectionClient2 = new TestWebPresentationConnectionClient();
-  receiver->onReceiverConnectionAvailable(connectionClient2);
+  receiver->onReceiverConnectionAvailable(sessionInfo);
 
   verifyConnectionListSize(2, receiver);
 }
@@ -184,13 +199,12 @@ TEST_F(PresentationReceiverTest, TwoConnectionsNoEvent) {
   addConnectionavailableEventListener(eventHandler, receiver);
   EXPECT_CALL(*eventHandler, handleEvent(testing::_, testing::_)).Times(0);
 
+  WebPresentationSessionInfo sessionInfo(KURL(KURL(), "http://example.com"),
+                                         "id");
   // Receive first connection.
-  auto connectionClient1 = new TestWebPresentationConnectionClient();
-  receiver->onReceiverConnectionAvailable(connectionClient1);
-
+  receiver->onReceiverConnectionAvailable(sessionInfo);
   // Receive second connection.
-  auto connectionClient2 = new TestWebPresentationConnectionClient();
-  receiver->onReceiverConnectionAvailable(connectionClient2);
+  receiver->onReceiverConnectionAvailable(sessionInfo);
 
   receiver->connectionList(scope.getScriptState());
   verifyConnectionListPropertyState(ScriptPromisePropertyBase::Resolved,

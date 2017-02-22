@@ -139,6 +139,14 @@ Accessibility.AccessibilityNode = class extends SDK.SDKObject {
     return this._deferredDOMNode;
   }
 
+  highlightDOMNode() {
+    if (!this.isDOMNode())
+      return;
+    this.deferredDOMNode().resolvePromise().then((node) => {
+      SDK.DOMModel.fromTarget(this.target()).nodeHighlightRequested(node.id);
+    });
+  }
+
   /**
    * @return {!Array<!Accessibility.AccessibilityNode>}
    */
@@ -207,7 +215,7 @@ Accessibility.AccessibilityModel = class extends SDK.SDKModel {
    * @param {!SDK.Target} target
    */
   constructor(target) {
-    super(Accessibility.AccessibilityModel, target);
+    super(target);
     this._agent = target.accessibilityAgent();
 
     /** @type {!Map<string, !Accessibility.AccessibilityNode>} */
@@ -217,13 +225,10 @@ Accessibility.AccessibilityModel = class extends SDK.SDKModel {
 
   /**
    * @param {!SDK.Target} target
-   * @return {!Accessibility.AccessibilityModel}
+   * @return {?Accessibility.AccessibilityModel}
    */
   static fromTarget(target) {
-    if (!target[Accessibility.AccessibilityModel._symbol])
-      target[Accessibility.AccessibilityModel._symbol] = new Accessibility.AccessibilityModel(target);
-
-    return target[Accessibility.AccessibilityModel._symbol];
+    return target.model(Accessibility.AccessibilityModel);
   }
 
   clear() {
@@ -302,8 +307,8 @@ Accessibility.AccessibilityModel = class extends SDK.SDKModel {
     var rootNode = inspectedNode;
     while (rootNode.parentNode())
       rootNode = rootNode.parentNode();
-    console.log(rootNode.printSelfAndChildren(inspectedNode));
+    console.log(rootNode.printSelfAndChildren(inspectedNode));  // eslint-disable-line no-console
   }
 };
 
-Accessibility.AccessibilityModel._symbol = Symbol('AccessibilityModel');
+SDK.SDKModel.register(Accessibility.AccessibilityModel, SDK.Target.Capability.DOM);

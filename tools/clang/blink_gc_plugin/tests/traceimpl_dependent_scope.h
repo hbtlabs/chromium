@@ -11,49 +11,26 @@ namespace blink {
 
 class X : public GarbageCollected<X> {
  public:
-  virtual void trace(Visitor*) {}
+  virtual void Trace(Visitor*) {}
 };
 
 template <typename T>
 class Base : public GarbageCollected<Base<T> > {
  public:
-  virtual void trace(Visitor* visitor) { traceImpl(visitor); }
-  virtual void trace(InlinedGlobalMarkingVisitor visitor) {
-    traceImpl(visitor);
-  }
-
- private:
-  template <typename VisitorDispatcher>
-  void traceImpl(VisitorDispatcher visitor) {}
+  virtual void Trace(Visitor* visitor) {}
 };
 
 template <typename T>
 class Derived : public Base<T> {
  public:
-  void trace(Visitor* visitor) override { traceImpl(visitor); }
-  void trace(InlinedGlobalMarkingVisitor visitor) override {
-    traceImpl(visitor);
-  }
-
- private:
-  template <typename VisitorDispatcher>
-  void traceImpl(VisitorDispatcher visitor) {
-    Base<T>::trace(visitor);
-  }
+  void Trace(Visitor* visitor) override { Base<T>::Trace(visitor); }
 };
 
 template <typename T>
 class DerivedMissingTrace : public Base<T> {
  public:
-  void trace(Visitor* visitor) override { traceImpl(visitor); }
-  void trace(InlinedGlobalMarkingVisitor visitor) override {
-    traceImpl(visitor);
-  }
-
- private:
-  template <typename VisitorDispatcher>
-  void traceImpl(VisitorDispatcher visitor) {
-    // Missing Base<T>::trace(visitor).
+  void Trace(Visitor* visitor) override {
+    // Missing Base<T>::Trace(visitor).
   }
 };
 

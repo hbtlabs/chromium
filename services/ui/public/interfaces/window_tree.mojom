@@ -4,8 +4,7 @@
 
 module ui.mojom;
 
-import "cc/ipc/surface_id.mojom";
-import "cc/ipc/surface_sequence.mojom";
+import "cc/ipc/surface_info.mojom";
 import "cc/ipc/mojo_compositor_frame_sink.mojom";
 import "services/ui/public/interfaces/cursor.mojom";
 import "services/ui/public/interfaces/event_matcher.mojom";
@@ -140,7 +139,6 @@ interface WindowTree {
   // Attaches a CompositorFrameSink to a particular window.
   AttachCompositorFrameSink(
       uint32 window_id,
-      CompositorFrameSinkType type,
       cc.mojom.MojoCompositorFrameSink& compositor_frame_sink,
       cc.mojom.MojoCompositorFrameSinkClient client);
 
@@ -255,12 +253,22 @@ interface WindowTree {
   // Otherwise the existing state is used.
   SetImeVisibility(uint32 window_id, bool visible, mojo.TextInputState? state);
 
-  // Set whether the specified window can accept events. If a window does not
-  // accept events, none of its descendant windows accept events either.
-  SetCanAcceptEvents(uint32 window_id, bool accept_events);
+  // Sets the EventTargetingPolicy. See EventTargetingPolicy for details.
+  SetEventTargetingPolicy(uint32 window_id, EventTargetingPolicy policy);
 
   // See documentation for WindowTreeClient::OnWindowInputEvent().
   OnWindowInputEventAck(uint32 event_id, EventResult result);
+
+  // If the current focus is (or is a child of) |window_id|, requests that the
+  // window manager change the focus to the next activatable window.
+  DeactivateWindow(uint32 window_id);
+
+  // Stacks the window |above_id| above |below_id|. These two windows must
+  // share the same parent.
+  StackAbove(uint32 change_id, uint32 above_id, uint32 below_id);
+
+  // Stacks the window above all sibling windows.
+  StackAtTop(uint32 change_id, uint32 window_id);
 
   // See description of WindowManager for details.
   GetWindowManagerClient(associated WindowManagerClient& internal);
@@ -357,7 +365,7 @@ interface WindowTreeClient {
   // If |window| was not visible to this client, but is visible now because
   // |new_parent| is visible to this client, then |windows| contains details
   // about |window|, and all its descendants. |windows| includes any windows
-  // that client may already know about, but did not know the parent because
+  // the client may already know about, but did not know the parent because
   // the parent was previously not visible to this client.
   // This is not sent for hierarchy changes of windows not known to this client
   // or not attached to the tree.
@@ -408,6 +416,7 @@ interface WindowTreeClient {
   // |matches_pointer_watcher|.
   OnWindowInputEvent(uint32 event_id,
                      uint32 window,
+                     int64 display_id,
                      ui.mojom.Event event,
                      bool matches_pointer_watcher);
 
@@ -416,7 +425,9 @@ interface WindowTreeClient {
   // StartPointerWatcher() for details. |window_id| is the window id of the
   // event target, or 0 if the window is not known to this client. The
   // client should not acknowledge these events.
-  OnPointerEventObserved(ui.mojom.Event event, uint32 window_id);
+  OnPointerEventObserved(ui.mojom.Event event,
+                         uint32 window_id,
+                         int64 display_id);
 
   // Called in two distinct cases: when a window known to the connection gains
   // focus, or when focus moves from a window known to the connection to a
@@ -434,9 +445,7 @@ interface WindowTreeClient {
   // TODO(fsamuel): Surface IDs should be passed to parents directly instead of
   // going through the window server. http://crbug.com/655231
   OnWindowSurfaceChanged(uint32 window_id,
-                         cc.mojom.SurfaceId surface_id,
-                         gfx.mojom.Size frame_size,
-                         float device_scale_factor);
+                         cc.mojom.SurfaceInfo surface_info);
                          
   // Called when the mouse cursor enters a window on this connection for the
   // first time, providing a list of available mime types. We want to send this

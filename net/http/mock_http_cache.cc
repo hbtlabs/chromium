@@ -540,14 +540,21 @@ int MockBackendFactory::CreateBackend(
 
 //-----------------------------------------------------------------------------
 
-MockHttpCache::MockHttpCache()
-    : MockHttpCache(base::MakeUnique<MockBackendFactory>()) {}
+MockHttpCache::MockHttpCache() : MockHttpCache(false) {}
 
 MockHttpCache::MockHttpCache(
     std::unique_ptr<HttpCache::BackendFactory> disk_cache_factory)
+    : MockHttpCache(std::move(disk_cache_factory), false) {}
+
+MockHttpCache::MockHttpCache(bool is_main_cache)
+    : MockHttpCache(base::MakeUnique<MockBackendFactory>(), is_main_cache) {}
+
+MockHttpCache::MockHttpCache(
+    std::unique_ptr<HttpCache::BackendFactory> disk_cache_factory,
+    bool is_main_cache)
     : http_cache_(base::MakeUnique<MockNetworkLayer>(),
                   std::move(disk_cache_factory),
-                  true) {}
+                  is_main_cache) {}
 
 disk_cache::Backend* MockHttpCache::backend() {
   TestCompletionCallback cb;
@@ -565,8 +572,8 @@ int MockHttpCache::CreateTransaction(std::unique_ptr<HttpTransaction>* trans) {
   return http_cache_.CreateTransaction(DEFAULT_PRIORITY, trans);
 }
 
-void MockHttpCache::BypassCacheLock() {
-  http_cache_.BypassLockForTest();
+void MockHttpCache::SimulateCacheLockTimeout() {
+  http_cache_.SimulateCacheLockTimeout();
 }
 
 void MockHttpCache::FailConditionalizations() {

@@ -11,7 +11,37 @@
         "service_manager:service_factory": [
           "service_manager::mojom::ServiceFactory"
         ]
+      },
+      "requires": {
+        "device": [
+          "device:power_monitor",
+          "device:time_zone_monitor"
+        ]
       }
     }
+  },
+  "required_files" : {
+    "v8_natives_data" : [
+      {
+        "path": "natives_blob.bin",
+        "platform": "linux"
+      },
+      {
+        "path": "assets/natives_blob.bin",
+        "platform": "android"
+      }
+    ],
+    "v8_snapshot_data" : [{
+      "path": "snapshot_blob.bin",
+      "platform": "linux"
+    }],
+    "v8_snapshot_32_data" : [{
+      "path": "assets/snapshot_blob_32.bin",
+      "platform": "android"
+    }],
+    "v8_snapshot_64_data" : [{
+      "path": "assets/snapshot_blob_64.bin",
+      "platform": "android"
+    }]
   }
 }

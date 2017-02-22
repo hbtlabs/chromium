@@ -32,12 +32,11 @@ bool PluginsEnterpriseSettingEnabled(
 
 FlashPermissionContext::FlashPermissionContext(Profile* profile)
     : PermissionContextBase(profile,
-                            content::PermissionType::FLASH,
                             CONTENT_SETTINGS_TYPE_PLUGINS) {}
 
 FlashPermissionContext::~FlashPermissionContext() {}
 
-ContentSetting FlashPermissionContext::GetPermissionStatus(
+ContentSetting FlashPermissionContext::GetPermissionStatusInternal(
     const GURL& requesting_origin,
     const GURL& embedding_origin) const {
   HostContentSettingsMap* host_content_settings_map =
@@ -71,7 +70,7 @@ void FlashPermissionContext::UpdateTabContext(const PermissionRequestID& id,
   }
 
   // Automatically refresh the page.
-  web_contents->GetController().Reload(true /* check_for_repost */);
+  web_contents->GetController().Reload(content::ReloadType::NORMAL, true);
 }
 
 void FlashPermissionContext::UpdateContentSetting(

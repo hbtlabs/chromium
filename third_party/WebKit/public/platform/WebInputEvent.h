@@ -187,6 +187,11 @@ class WebInputEvent {
 
     ScrollLockOn = 1 << 18,
 
+    // Whether this is a compatibility event generated due to a
+    // native touch event. Mouse events generated from touch
+    // events will set this.
+    IsCompatibilityEventForTouch = 1 << 19,
+
     // The set of non-stateful modifiers that specifically change the
     // interpretation of the key being pressed. For example; IsLeft,
     // IsRight, IsComposing don't change the meaning of the key
@@ -194,10 +199,11 @@ class WebInputEvent {
     // and don't indicate explicit depressed state.
     KeyModifiers =
         SymbolKey | FnKey | AltGrKey | MetaKey | AltKey | ControlKey | ShiftKey,
+    NoModifiers = 0,
   };
 
   // Indicates whether the browser needs to block on the ACK result for
-  // this event, and if not why note (for metrics/diagnostics purposes).
+  // this event, and if not, why (for metrics/diagnostics purposes).
   // These values are direct mappings of the values in PlatformEvent
   // so the values can be cast between the enumerations. static_asserts
   // checking this are in web/WebInputEventConversion.cpp.
@@ -211,6 +217,10 @@ class WebInputEvent {
     // This value represents a state which would have normally blocking
     // but was forced to be non-blocking during fling; not cancelable.
     ListenersForcedNonBlockingDueToFling,
+    // This value represents a state which would have normally blocking but
+    // was forced to be non-blocking due to the main thread being
+    // unresponsive.
+    ListenersForcedNonBlockingDueToMainThreadResponsiveness,
   };
 
   // The rail mode for a wheel event specifies the axis on which scrolling is
@@ -224,11 +234,7 @@ class WebInputEvent {
 
   static const int InputModifiers = ShiftKey | ControlKey | AltKey | MetaKey;
 
-  double timeStampSeconds;  // Seconds since platform start with microsecond
-                            // resolution.
-  unsigned size;            // The size of this structure, for serialization.
-  Type type;
-  int modifiers;
+  static constexpr double TimeStampForTesting = 123.0;
 
   // Returns true if the WebInputEvent |type| is a mouse event.
   static bool isMouseEventType(int type) {
@@ -251,250 +257,130 @@ class WebInputEvent {
   }
 
   bool isSameEventClass(const WebInputEvent& other) const {
-    if (isMouseEventType(type))
-      return isMouseEventType(other.type);
-    if (isGestureEventType(type))
-      return isGestureEventType(other.type);
-    if (isTouchEventType(type))
-      return isTouchEventType(other.type);
-    if (isKeyboardEventType(type))
-      return isKeyboardEventType(other.type);
-    return type == other.type;
+    if (isMouseEventType(m_type))
+      return isMouseEventType(other.m_type);
+    if (isGestureEventType(m_type))
+      return isGestureEventType(other.m_type);
+    if (isTouchEventType(m_type))
+      return isTouchEventType(other.m_type);
+    if (isKeyboardEventType(m_type))
+      return isKeyboardEventType(other.m_type);
+    return m_type == other.m_type;
   }
 
-  BLINK_COMMON_EXPORT static const char* GetName(WebInputEvent::Type);
-
- protected:
-  explicit WebInputEvent(unsigned sizeParam) {
-    memset(this, 0, sizeParam);
-    timeStampSeconds = 0.0;
-    size = sizeParam;
-    type = Undefined;
-    modifiers = 0;
-  }
-};
-
-// WebKeyboardEvent -----------------------------------------------------------
-
-class WebKeyboardEvent : public WebInputEvent {
- public:
-  // Caps on string lengths so we can make them static arrays and keep
-  // them PODs.
-  static const size_t textLengthCap = 4;
-
-  // |windowsKeyCode| is the Windows key code associated with this key
-  // event.  Sometimes it's direct from the event (i.e. on Windows),
-  // sometimes it's via a mapping function.  If you want a list, see
-  // WebCore/platform/chromium/KeyboardCodes* . Note that this should
-  // ALWAYS store the non-locational version of a keycode as this is
-  // what is returned by the Windows API. For example, it should
-  // store VK_SHIFT instead of VK_RSHIFT. The location information
-  // should be stored in |modifiers|.
-  int windowsKeyCode;
-
-  // The actual key code genenerated by the platform.  The DOM spec runs
-  // on Windows-equivalent codes (thus |windowsKeyCode| above) but it
-  // doesn't hurt to have this one around.
-  int nativeKeyCode;
-
-  // The DOM code enum of the key pressed as passed by the embedder. DOM
-  // code enum are defined in ui/events/keycodes/dom4/keycode_converter_data.h.
-  int domCode;
-
-  // The DOM key enum of the key pressed as passed by the embedder. DOM
-  // key enum are defined in ui/events/keycodes/dom3/dom_key_data.h
-  int domKey;
-
-  // This identifies whether this event was tagged by the system as being
-  // a "system key" event (see
-  // http://msdn.microsoft.com/en-us/library/ms646286(VS.85).aspx for
-  // details). Other platforms don't have this concept, but it's just
-  // easier to leave it always false than ifdef.
-  bool isSystemKey;
-
-  // Whether the event forms part of a browser-handled keyboard shortcut.
-  // This can be used to conditionally suppress Char events after a
-  // shortcut-triggering RawKeyDown goes unhandled.
-  bool isBrowserShortcut;
-
-  // |text| is the text generated by this keystroke.  |unmodifiedText| is
-  // |text|, but unmodified by an concurrently-held modifiers (except
-  // shift).  This is useful for working out shortcut keys.  Linux and
-  // Windows guarantee one character per event.  The Mac does not, but in
-  // reality that's all it ever gives.  We're generous, and cap it a bit
-  // longer.
-  WebUChar text[textLengthCap];
-  WebUChar unmodifiedText[textLengthCap];
-
-  WebKeyboardEvent()
-      : WebInputEvent(sizeof(WebKeyboardEvent)),
-        windowsKeyCode(0),
-        nativeKeyCode(0),
-        isSystemKey(false),
-        isBrowserShortcut(false) {
-  }
-
-  // Please refer to bug http://b/issue?id=961192, which talks about Webkit
-  // keyboard event handling changes. It also mentions the list of keys
-  // which don't have associated character events.
-  bool isCharacterKey() const {
-    // TODO(dtapuska): Determine if we can remove this method and just
-    // not actually generate events for these instead of filtering them out.
-    switch (windowsKeyCode) {
-      case 0x08:  // VK_BACK
-      case 0x1b:  // VK_ESCAPE
-        return false;
+  static const char* GetName(WebInputEvent::Type type) {
+#define CASE_TYPE(t)     \
+  case WebInputEvent::t: \
+    return #t
+    switch (type) {
+      CASE_TYPE(Undefined);
+      CASE_TYPE(MouseDown);
+      CASE_TYPE(MouseUp);
+      CASE_TYPE(MouseMove);
+      CASE_TYPE(MouseEnter);
+      CASE_TYPE(MouseLeave);
+      CASE_TYPE(ContextMenu);
+      CASE_TYPE(MouseWheel);
+      CASE_TYPE(RawKeyDown);
+      CASE_TYPE(KeyDown);
+      CASE_TYPE(KeyUp);
+      CASE_TYPE(Char);
+      CASE_TYPE(GestureScrollBegin);
+      CASE_TYPE(GestureScrollEnd);
+      CASE_TYPE(GestureScrollUpdate);
+      CASE_TYPE(GestureFlingStart);
+      CASE_TYPE(GestureFlingCancel);
+      CASE_TYPE(GestureShowPress);
+      CASE_TYPE(GestureTap);
+      CASE_TYPE(GestureTapUnconfirmed);
+      CASE_TYPE(GestureTapDown);
+      CASE_TYPE(GestureTapCancel);
+      CASE_TYPE(GestureDoubleTap);
+      CASE_TYPE(GestureTwoFingerTap);
+      CASE_TYPE(GestureLongPress);
+      CASE_TYPE(GestureLongTap);
+      CASE_TYPE(GesturePinchBegin);
+      CASE_TYPE(GesturePinchEnd);
+      CASE_TYPE(GesturePinchUpdate);
+      CASE_TYPE(TouchStart);
+      CASE_TYPE(TouchMove);
+      CASE_TYPE(TouchEnd);
+      CASE_TYPE(TouchCancel);
+      CASE_TYPE(TouchScrollStarted);
+      default:
+        NOTREACHED();
+        return "";
     }
-    return true;
+#undef CASE_TYPE
   }
-};
 
-// WebMouseEvent --------------------------------------------------------------
+  float frameScale() const { return m_frameScale; }
+  void setFrameScale(float scale) { m_frameScale = scale; }
 
-class WebMouseEvent : public WebInputEvent, public WebPointerProperties {
- public:
-  // Renderer coordinates. Similar to viewport coordinates but without
-  // DevTools emulation transform or overscroll applied. i.e. the coordinates
-  // in Chromium's RenderView bounds.
-  int x;
-  int y;
+  WebFloatPoint frameTranslate() const { return m_frameTranslate; }
+  void setFrameTranslate(WebFloatPoint translate) {
+    m_frameTranslate = translate;
+  }
 
-  // DEPRECATED (crbug.com/507787)
-  int windowX;
-  int windowY;
+  Type type() const { return m_type; }
+  void setType(Type typeParam) { m_type = typeParam; }
 
-  // Screen coordinate
-  int globalX;
-  int globalY;
+  int modifiers() const { return m_modifiers; }
+  void setModifiers(int modifiersParam) { m_modifiers = modifiersParam; }
 
-  int movementX;
-  int movementY;
-  int clickCount;
+  double timeStampSeconds() const { return m_timeStampSeconds; }
+  void setTimeStampSeconds(double seconds) { m_timeStampSeconds = seconds; }
 
-  WebMouseEvent()
-      : WebInputEvent(sizeof(WebMouseEvent)),
-        WebPointerProperties(),
-        x(0),
-        y(0),
-        windowX(0),
-        windowY(0),
-        globalX(0),
-        globalY(0),
-        movementX(0),
-        movementY(0),
-        clickCount(0) {}
+  unsigned size() const { return m_size; }
 
  protected:
-  explicit WebMouseEvent(unsigned sizeParam)
-      : WebInputEvent(sizeParam),
-        WebPointerProperties(),
-        x(0),
-        y(0),
-        windowX(0),
-        windowY(0),
-        globalX(0),
-        globalY(0),
-        movementX(0),
-        movementY(0),
-        clickCount(0) {}
-};
+  // The root frame scale.
+  float m_frameScale;
 
-// WebMouseWheelEvent ---------------------------------------------------------
+  // The root frame translation (applied post scale).
+  WebFloatPoint m_frameTranslate;
 
-class WebMouseWheelEvent : public WebMouseEvent {
- public:
-  enum Phase {
-    PhaseNone = 0,
-    PhaseBegan = 1 << 0,
-    PhaseStationary = 1 << 1,
-    PhaseChanged = 1 << 2,
-    PhaseEnded = 1 << 3,
-    PhaseCancelled = 1 << 4,
-    PhaseMayBegin = 1 << 5,
-  };
+  WebInputEvent(unsigned sizeParam,
+                Type typeParam,
+                int modifiersParam,
+                double timeStampSecondsParam) {
+    // TODO(dtapuska): Remove this memset when we remove the chrome IPC of this
+    // struct.
+    memset(this, 0, sizeParam);
+    m_timeStampSeconds = timeStampSecondsParam;
+    m_size = sizeParam;
+    m_type = typeParam;
+    m_modifiers = modifiersParam;
+#if DCHECK_IS_ON()
+    // If dcheck is on force failures if frame scale is not initialized
+    // correctly by causing DIV0.
+    m_frameScale = 0;
+#else
+    m_frameScale = 1;
+#endif
+  }
 
-  float deltaX;
-  float deltaY;
-  float wheelTicksX;
-  float wheelTicksY;
+  WebInputEvent(unsigned sizeParam) {
+    // TODO(dtapuska): Remove this memset when we remove the chrome IPC of this
+    // struct.
+    memset(this, 0, sizeParam);
+    m_timeStampSeconds = 0.0;
+    m_size = sizeParam;
+    m_type = Undefined;
+#if DCHECK_IS_ON()
+    // If dcheck is on force failures if frame scale is not initialized
+    // correctly by causing DIV0.
+    m_frameScale = 0;
+#else
+    m_frameScale = 1;
+#endif
+  }
 
-  float accelerationRatioX;
-  float accelerationRatioY;
-
-  // This field exists to allow BrowserPlugin to mark MouseWheel events as
-  // 'resent' to handle the case where an event is not consumed when first
-  // encountered; it should be handled differently by the plugin when it is
-  // sent for thesecond time. No code within Blink touches this, other than to
-  // plumb it through event conversions.
-  int resendingPluginId;
-
-  Phase phase;
-  Phase momentumPhase;
-
-  bool scrollByPage;
-  bool hasPreciseScrollingDeltas;
-
-  RailsMode railsMode;
-
-  // Whether the event is blocking, non-blocking, all event
-  // listeners were passive or was forced to be non-blocking.
-  DispatchType dispatchType;
-
-  WebMouseWheelEvent()
-      : WebMouseEvent(sizeof(WebMouseWheelEvent)),
-        deltaX(0.0f),
-        deltaY(0.0f),
-        wheelTicksX(0.0f),
-        wheelTicksY(0.0f),
-        accelerationRatioX(1.0f),
-        accelerationRatioY(1.0f),
-        resendingPluginId(-1),
-        phase(PhaseNone),
-        momentumPhase(PhaseNone),
-        scrollByPage(false),
-        hasPreciseScrollingDeltas(false),
-        railsMode(RailsModeFree),
-        dispatchType(Blocking) {}
-};
-
-
-// WebTouchEvent --------------------------------------------------------------
-
-// TODO(e_hakkinen): Replace with WebPointerEvent. crbug.com/508283
-class WebTouchEvent : public WebInputEvent {
- public:
-  // Maximum number of simultaneous touches supported on
-  // Ash/Aura.
-  enum { kTouchesLengthCap = 16 };
-
-  unsigned touchesLength;
-  // List of all touches, regardless of state.
-  WebTouchPoint touches[kTouchesLengthCap];
-
-  // Whether the event is blocking, non-blocking, all event
-  // listeners were passive or was forced to be non-blocking.
-  DispatchType dispatchType;
-
-  // For a single touch, this is true after the touch-point has moved beyond
-  // the platform slop region. For a multitouch, this is true after any
-  // touch-point has moved (by whatever amount).
-  bool movedBeyondSlopRegion;
-
-  // Whether this touch event is a touchstart or a first touchmove event per
-  // scroll.
-  bool touchStartOrFirstTouchMove;
-
-  // A unique identifier for the touch event. Valid ids start at one and
-  // increase monotonically. Zero means an unknown id.
-  uint32_t uniqueTouchEventId;
-
-  WebTouchEvent()
-      : WebInputEvent(sizeof(WebTouchEvent)),
-        touchesLength(0),
-        dispatchType(Blocking),
-        movedBeyondSlopRegion(false),
-        touchStartOrFirstTouchMove(false),
-        uniqueTouchEventId(0) {}
+  double m_timeStampSeconds;  // Seconds since platform start with microsecond
+                              // resolution.
+  unsigned m_size;            // The size of this structure, for serialization.
+  Type m_type;
+  int m_modifiers;
 };
 
 #pragma pack(pop)

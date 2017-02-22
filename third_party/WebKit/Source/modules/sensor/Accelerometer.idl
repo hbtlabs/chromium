@@ -8,9 +8,11 @@
 [
     RuntimeEnabled=Sensor,
     Constructor(optional AccelerometerOptions sensorOptions),
-    ConstructorCallWith=ScriptState,
+    ConstructorCallWith=ExecutionContext,
     RaisesException=Constructor,
 ] interface Accelerometer : Sensor {
-    readonly attribute AccelerometerReading? reading;
+    readonly attribute unrestricted double? x;
+    readonly attribute unrestricted double? y;
+    readonly attribute unrestricted double? z;
     readonly attribute boolean includesGravity;
 };

@@ -8,7 +8,6 @@
 #include "core/css/CSSFontFace.h"
 #include "core/css/CSSFontSelector.h"
 #include "core/dom/Document.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/FrameLoaderClient.h"
 #include "core/page/NetworkStateNotifier.h"
@@ -17,6 +16,7 @@
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/FontDescription.h"
 #include "platform/fonts/SimpleFontData.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/network/ResourceLoadPriority.h"
 #include "public/platform/WebEffectiveConnectionType.h"
 #include "wtf/CurrentTime.h"
@@ -64,7 +64,6 @@ RemoteFontFaceSource::RemoteFontFaceSource(FontResource* font,
                                           : FontLoadHistograms::FromUnknown,
                    m_display),
       m_isInterventionTriggered(false) {
-  ThreadState::current()->registerPreFinalizer(this);
   m_font->addClient(this);
 
   if (shouldTriggerWebFontsIntervention()) {
@@ -115,13 +114,13 @@ void RemoteFontFaceSource::notifyFinished(Resource*) {
                                     : FontLoadHistograms::FromNetwork);
   m_histograms.recordRemoteFont(m_font.get(), m_isInterventionTriggered);
   m_histograms.fontLoaded(m_font->isCORSFailed(),
-                          m_font->getStatus() == Resource::LoadError,
+                          m_font->getStatus() == ResourceStatus::LoadError,
                           m_isInterventionTriggered);
 
   m_font->ensureCustomFontData();
   // FIXME: Provide more useful message such as OTS rejection reason.
   // See crbug.com/97467
-  if (m_font->getStatus() == Resource::DecodeError &&
+  if (m_font->getStatus() == ResourceStatus::DecodeError &&
       m_fontSelector->document()) {
     m_fontSelector->document()->addConsoleMessage(ConsoleMessage::create(
         OtherMessageSource, WarningMessageLevel,
@@ -219,7 +218,8 @@ PassRefPtr<SimpleFontData> RemoteFontFaceSource::createFontData(
       m_font->platformDataFromCustomData(fontDescription.effectiveFontSize(),
                                          fontDescription.isSyntheticBold(),
                                          fontDescription.isSyntheticItalic(),
-                                         fontDescription.orientation()),
+                                         fontDescription.orientation(),
+                                         fontDescription.variationSettings()),
       CustomFontData::create());
 }
 
@@ -249,10 +249,12 @@ void RemoteFontFaceSource::beginLoadIfNeeded() {
       // for painting the text.
       m_font->didChangePriority(ResourceLoadPriorityVeryLow, 0);
     }
-    m_fontSelector->document()->fetcher()->startLoad(m_font);
-    if (!m_font->isLoaded())
-      m_font->startLoadLimitTimers();
-    m_histograms.loadStarted();
+    if (m_fontSelector->document()->fetcher()->startLoad(m_font)) {
+      // Start timers only when load is actually started asynchronously.
+      if (!m_font->isLoaded())
+        m_font->startLoadLimitTimers();
+      m_histograms.loadStarted();
+    }
   }
 
   if (m_face)

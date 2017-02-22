@@ -25,8 +25,7 @@ HistoryFocusRow.prototype = {
       equivalent = this.getFirstFocusable('title');
 
     return equivalent ||
-        cr.ui.FocusRow.prototype.getCustomEquivalent.call(
-            this, sampleElement);
+        cr.ui.FocusRow.prototype.getCustomEquivalent.call(this, sampleElement);
   },
 
   addItems: function() {
@@ -81,29 +80,25 @@ cr.define('md_history', function() {
     properties: {
       // Underlying HistoryEntry data for this item. Contains read-only fields
       // from the history backend, as well as fields computed by history-list.
-      item: {type: Object, observer: 'showIcon_'},
+      item: {
+        type: Object,
+        observer: 'showIcon_',
+      },
 
-      // Search term used to obtain this history-item.
-      searchTerm: {type: String},
+      selected: {
+        type: Boolean,
+        reflectToAttribute: true,
+      },
 
-      selected: {type: Boolean, reflectToAttribute: true},
+      isCardStart: {
+        type: Boolean,
+        reflectToAttribute: true,
+      },
 
-      isCardStart: {type: Boolean, reflectToAttribute: true},
-
-      isCardEnd: {type: Boolean, reflectToAttribute: true},
-
-      // True if the item is being displayed embedded in another element and
-      // should not manage its own borders or size.
-      embedded: {type: Boolean, reflectToAttribute: true},
-
-      hasTimeGap: {type: Boolean},
-
-      numberOfItems: {type: Number},
-
-      // The path of this history item inside its parent.
-      path: String,
-
-      index: Number,
+      isCardEnd: {
+        type: Boolean,
+        reflectToAttribute: true,
+      },
 
       /** @type {Element} */
       lastFocused: {
@@ -115,6 +110,20 @@ cr.define('md_history', function() {
         type: Number,
         observer: 'ironListTabIndexChanged_',
       },
+
+      selectionNotAllowed_: {
+        type: Boolean,
+        value: !loadTimeData.getBoolean('allowDeletingHistory'),
+      },
+
+      hasTimeGap: Boolean,
+
+      index: Number,
+
+      numberOfItems: Number,
+
+      // Search term used to obtain this history-item.
+      searchTerm: String,
     },
 
     /** @private {?HistoryFocusRow} */
@@ -182,12 +191,12 @@ cr.define('md_history', function() {
         }
       }
 
-      if (this.selectionNotAllowed_())
+      if (this.selectionNotAllowed_)
         return;
 
       this.$.checkbox.focus();
       this.fire('history-checkbox-select', {
-        element: this,
+        index: this.index,
         shiftKey: e.shiftKey,
       });
     },
@@ -246,11 +255,10 @@ cr.define('md_history', function() {
      * of the history item and where the menu should appear.
      */
     onMenuButtonTap_: function(e) {
-      this.fire('toggle-menu', {
+      this.fire('open-menu', {
         target: Polymer.dom(e).localTarget,
         index: this.index,
         item: this.item,
-        path: this.path,
       });
 
       // Stops the 'tap' event from closing the menu when it opens.
@@ -295,10 +303,6 @@ cr.define('md_history', function() {
       this.$.icon.style.backgroundImage = cr.icon.getFavicon(this.item.url);
     },
 
-    selectionNotAllowed_: function() {
-      return !loadTimeData.getBoolean('allowDeletingHistory');
-    },
-
     /**
      * @param {number} numberOfItems The number of items in the card.
      * @param {string} historyDate Date of the current result.
@@ -321,37 +325,16 @@ cr.define('md_history', function() {
   });
 
   /**
-   * Check whether the time difference between the given history item and the
-   * next one is large enough for a spacer to be required.
-   * @param {Array<HistoryEntry>} visits
-   * @param {number} currentIndex
-   * @param {string} searchedTerm
-   * @return {boolean} Whether or not time gap separator is required.
-   */
-  HistoryItem.needsTimeGap = function(visits, currentIndex, searchedTerm) {
-    if (currentIndex >= visits.length - 1 || visits.length == 0)
-      return false;
-
-    var currentItem = visits[currentIndex];
-    var nextItem = visits[currentIndex + 1];
-
-    if (searchedTerm)
-      return currentItem.dateShort != nextItem.dateShort;
-
-    return currentItem.time - nextItem.time > BROWSING_GAP_TIME &&
-        currentItem.dateRelativeDay == nextItem.dateRelativeDay;
-  };
-
-  /**
    * @param {number} numberOfResults
    * @param {string} searchTerm
    * @return {string} The title for a page of search results.
    */
   HistoryItem.searchResultsTitle = function(numberOfResults, searchTerm) {
     var resultId = numberOfResults == 1 ? 'searchResult' : 'searchResults';
-    return loadTimeData.getStringF('foundSearchResults', numberOfResults,
-        loadTimeData.getString(resultId), searchTerm);
+    return loadTimeData.getStringF(
+        'foundSearchResults', numberOfResults, loadTimeData.getString(resultId),
+        searchTerm);
   };
 
-  return { HistoryItem: HistoryItem };
+  return {HistoryItem: HistoryItem};
 });

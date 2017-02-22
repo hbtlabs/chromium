@@ -17,6 +17,7 @@ message Study {
   // Ex: "my_study"
   required string name = 1;
 
+  // DEPRECATED: Prefer end_date instead.
   // The expiry date of the study in Unix time format. (Seconds since midnight
   // January 1, 1970 UTC). See: http://en.wikipedia.org/wiki/Unix_time
   //
@@ -38,13 +39,14 @@ message Study {
   optional Consistency consistency = 7 [default = SESSION];
 
   // Name of the experiment that gets the default experience. This experiment
-  // must be included in the list below.
+  // must be included in the list below. If not specified, a generic default
+  // experiment name is used.
   // Ex: "default"
   optional string default_experiment_name = 8;
 
   // An experiment within the study.
   //
-  // Next tag: 13
+  // Next tag: 14
   message Experiment {
     // A named parameter value for this experiment.
     //
@@ -190,20 +192,34 @@ message Study {
 
   // Possible form factors Chrome is running on.
   enum FormFactor {
+    // Chrome Desktop on Windows, Mac, Linux, or ChromeOS.
     DESKTOP = 0;
+    // Phone-based mobile Chrome, e.g. an Android phone or iPhone.
     PHONE   = 1;
+    // Tablet-based mobile Chrome, e.g. an Android tablet or iPad.
     TABLET  = 2;
+    // ChromeOS running in single-app Kiosk mode.
+    KIOSK   = 3;
   }
 
   // Filtering criteria specifying whether this study is applicable to a given
   // Chrome instance.
   //
-  // Next tag: 13
+  // Next tag: 15
   message Filter {
     // The start date of the study in Unix time format. (Seconds since midnight
     // January 1, 1970 UTC). See: http://en.wikipedia.org/wiki/Unix_time
     // Ex: 1330893974  (corresponds to 2012-03-04 20:46:14Z)
     optional int64 start_date = 1;
+
+    // The end date of the study in Unix time format. (Seconds since midnight
+    // January 1, 1970 UTC). See: http://en.wikipedia.org/wiki/Unix_time
+    // Ex: 1330893974  (corresponds to 2012-03-04 20:46:14Z)
+    // Mutually exclusive with expiry_date. The difference between end_date and
+    // expiry_date is that, when end_date is past, the field trial will not be
+    // created. When expiry_date is past, the trial is still created, but will
+    // be disabled, causing it to select its default group.
+    optional int64 end_date = 13;
 
     // The minimum Chrome version for this study, allowing a trailing '*'
     // character for pattern matching. Inclusive. (To check for a match, iterate
@@ -242,9 +258,16 @@ message Study {
     repeated string exclude_locale = 12;
 
     // List of form factors that will receive this study. If omitted, the study
-    // applies to all form factors.
+    // applies to all form factors, unless |exclude_form_factor| is specified.
+    // Mutually exclusive with |exclude_form_factor|.
     // Ex: [PHONE, TABLET]
     repeated FormFactor form_factor = 7;
+
+    // List of form factors that will be excluded from this study. If omitted,
+    // the study applies to all form factors unless |form_factor| is specified.
+    // Mutually exclusive with |form_factor|.
+    // Takes the same range of values as form_factor, e.g. [PHONE, TABLET].
+    repeated FormFactor exclude_form_factor = 14;
 
     // List of ChromeOS hardware classes that will receive this study. Each
     // entry is treated as a substring of the actual device hardware_class,

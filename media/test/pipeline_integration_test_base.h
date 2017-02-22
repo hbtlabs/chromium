@@ -14,7 +14,6 @@
 #include "media/audio/clockless_audio_sink.h"
 #include "media/audio/null_audio_sink.h"
 #include "media/base/demuxer.h"
-#include "media/base/media_keys.h"
 #include "media/base/null_video_sink.h"
 #include "media/base/pipeline_impl.h"
 #include "media/base/pipeline_status.h"
@@ -23,10 +22,6 @@
 #include "media/base/video_frame.h"
 #include "media/renderers/video_renderer_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
-
-namespace base {
-class FilePath;
-}
 
 namespace media {
 
@@ -73,7 +68,8 @@ class PipelineIntegrationTestBase : public Pipeline::Client {
     kNormal = 0,
     kHashed = 1,
     kClockless = 2,
-    kExpectDemuxerFailure = 4
+    kExpectDemuxerFailure = 4,
+    kUnreliableDuration = 8,
   };
 
   // Starts the pipeline with a file specified by |filename|, optionally with a
@@ -210,6 +206,7 @@ class PipelineIntegrationTestBase : public Pipeline::Client {
   MOCK_METHOD0(OnWaitingForDecryptionKey, void(void));
   MOCK_METHOD1(OnVideoNaturalSizeChange, void(const gfx::Size&));
   MOCK_METHOD1(OnVideoOpacityChange, void(bool));
+  MOCK_METHOD0(OnVideoAverageKeyframeDistanceUpdate, void());
 };
 
 }  // namespace media

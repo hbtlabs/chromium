@@ -9,10 +9,12 @@
 #include "core/HTMLNames.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
-#include "core/dom/ExecutionContextTask.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/Event.h"
 #include "core/html/HTMLMediaElement.h"
+#include "core/inspector/InspectorInstrumentation.h"
 #include "modules/EventTargetModules.h"
+#include "platform/MemoryCoordinator.h"
 #include "platform/UserGestureIndicator.h"
 
 namespace blink {
@@ -37,6 +39,12 @@ const AtomicString& remotePlaybackStateToString(WebRemotePlaybackState state) {
   return disconnectedValue;
 }
 
+void runNotifyInitialAvailabilityTask(ExecutionContext* context,
+                                      std::unique_ptr<WTF::Closure> task) {
+  InspectorInstrumentation::AsyncTask asyncTask(context, task.get());
+  (*task)();
+}
+
 }  // anonymous namespace
 
 // static
@@ -45,8 +53,7 @@ RemotePlayback* RemotePlayback::create(HTMLMediaElement& element) {
 }
 
 RemotePlayback::RemotePlayback(HTMLMediaElement& element)
-    : ActiveScriptWrappable(this),
-      m_state(element.isPlayingRemotely()
+    : m_state(element.isPlayingRemotely()
                   ? WebRemotePlaybackState::Connected
                   : WebRemotePlaybackState::Disconnected),
       m_availability(WebRemotePlaybackAvailability::Unknown),
@@ -72,22 +79,35 @@ ScriptPromise RemotePlayback::watchAvailability(
     return promise;
   }
 
-  // TODO(avayvod): implement steps 4 and 5 of the algorithm.
-  // https://crbug.com/655233
+  if (MemoryCoordinator::isLowEndDevice()) {
+    resolver->reject(DOMException::create(
+        NotSupportedError,
+        "Availability monitoring is not supported on this device."));
+    return promise;
+  }
+
   int id;
   do {
     id = getExecutionContext()->circularSequentialID();
-  } while (!m_availabilityCallbacks
-                .add(id, TraceWrapperMember<RemotePlaybackAvailabilityCallback>(
-                             this, callback))
-                .isNewEntry);
+  } while (
+      !m_availabilityCallbacks
+           .insert(id, TraceWrapperMember<RemotePlaybackAvailabilityCallback>(
+                           this, callback))
+           .isNewEntry);
 
   // Report the current availability via the callback.
-  getExecutionContext()->postTask(
-      BLINK_FROM_HERE,
-      createSameThreadTask(&RemotePlayback::notifyInitialAvailability,
-                           wrapPersistent(this), id),
-      "watchAvailabilityCallback");
+  // TODO(yuryu): Wrapping notifyInitialAvailability with WTF::Closure as
+  // InspectorInstrumentation requires a globally unique pointer to track tasks.
+  // We can remove the wrapper if InspectorInstrumentation returns a task id.
+  std::unique_ptr<WTF::Closure> task = WTF::bind(
+      &RemotePlayback::notifyInitialAvailability, wrapPersistent(this), id);
+  InspectorInstrumentation::asyncTaskScheduled(
+      getExecutionContext(), "watchAvailabilityCallback", task.get());
+  TaskRunnerHelper::get(TaskType::MediaElementEvent, getExecutionContext())
+      ->postTask(BLINK_FROM_HERE,
+                 WTF::bind(runNotifyInitialAvailabilityTask,
+                           wrapPersistent(getExecutionContext()),
+                           WTF::passed(std::move(task))));
 
   // TODO(avayvod): Currently the availability is tracked for each media element
   // as soon as it's created, we probably want to limit that to when the
@@ -284,13 +304,6 @@ void RemotePlayback::remotePlaybackDisabled() {
 
   if (m_state != WebRemotePlaybackState::Disconnected)
     m_mediaElement->requestRemotePlaybackStop();
-}
-
-void RemotePlayback::setV8ReferencesForCallbacks(
-    v8::Isolate* isolate,
-    const v8::Persistent<v8::Object>& wrapper) {
-  for (auto callback : m_availabilityCallbacks.values())
-    callback->setWrapperReference(isolate, wrapper);
 }
 
 DEFINE_TRACE(RemotePlayback) {

@@ -38,8 +38,8 @@ Sources.FilePathScoreFunction = class {
   constructor(query) {
     this._query = query;
     this._queryUpperCase = query.toUpperCase();
-    this._score = null;
-    this._sequence = null;
+    this._score = new Int32Array(20 * 100);
+    this._sequence = new Int32Array(20 * 100);
     this._dataUpperCase = '';
     this._fileNameIndex = 0;
   }
@@ -79,7 +79,8 @@ Sources.FilePathScoreFunction = class {
     }
     if (matchIndexes)
       this._restoreMatchIndexes(sequence, n, m, matchIndexes);
-    return score[n * m - 1];
+    var maxDataLength = 256;
+    return score[n * m - 1] * maxDataLength + (maxDataLength - data.length);
   }
 
   /**
@@ -88,8 +89,11 @@ Sources.FilePathScoreFunction = class {
    * @return {boolean}
    */
   _testWordStart(data, j) {
+    if (j === 0)
+      return true;
+
     var prevChar = data.charAt(j - 1);
-    return j === 0 || prevChar === '_' || prevChar === '-' || prevChar === '/' ||
+    return prevChar === '_' || prevChar === '-' || prevChar === '/' ||
         (data[j - 1] !== this._dataUpperCase[j - 1] && data[j] === this._dataUpperCase[j]);
   }
 

@@ -116,6 +116,7 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
     return !isNone() && !start().isOrphan() && !end().isOrphan();
   }
 
+  // True if base() <= extent().
   bool isBaseFirst() const { return m_baseIsFirst; }
   bool isDirectional() const { return m_isDirectional; }
   void setIsDirectional(bool isDirectional) { m_isDirectional = isDirectional; }
@@ -137,12 +138,7 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
   void setWithoutValidation(const PositionTemplate<Strategy>&,
                             const PositionTemplate<Strategy>&);
 
-  DEFINE_INLINE_TRACE() {
-    visitor->trace(m_base);
-    visitor->trace(m_extent);
-    visitor->trace(m_start);
-    visitor->trace(m_end);
-  }
+  DECLARE_TRACE();
 
   void updateIfNeeded();
 

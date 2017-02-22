@@ -4,7 +4,7 @@
 
 #include "core/paint/BlockPainter.h"
 
-#include "core/editing/DragCaretController.h"
+#include "core/editing/DragCaret.h"
 #include "core/editing/FrameSelection.h"
 #include "core/layout/LayoutFlexibleBox.h"
 #include "core/layout/LayoutInline.h"
@@ -42,8 +42,8 @@ void BlockPainter::paint(const PaintInfo& paintInfo,
   // for.
   // FIXME: reduce the number of such cases.
   ContentsClipBehavior contentsClipBehavior = ForceContentsClip;
-  if (m_layoutBlock.hasOverflowClip() && !m_layoutBlock.hasControlClip() &&
-      !m_layoutBlock.hasCaret())
+  if (m_layoutBlock.shouldClipOverflow() && !m_layoutBlock.hasControlClip() &&
+      !m_layoutBlock.shouldPaintCarets())
     contentsClipBehavior = SkipContentsClipIfPossible;
 
   if (originalPhase == PaintPhaseOutline) {
@@ -78,7 +78,7 @@ void BlockPainter::paintOverflowControlsIfNeeded(
     const PaintInfo& paintInfo,
     const LayoutPoint& paintOffset) {
   if (m_layoutBlock.hasOverflowClip() &&
-      m_layoutBlock.style()->visibility() == EVisibility::Visible &&
+      m_layoutBlock.style()->visibility() == EVisibility::kVisible &&
       shouldPaintSelfBlockBackground(paintInfo.phase) &&
       !paintInfo.paintRootBackgroundOnly()) {
     Optional<ClipRecorder> clipRecorder;
@@ -170,7 +170,7 @@ void BlockPainter::paintObject(const PaintInfo& paintInfo,
   const PaintPhase paintPhase = paintInfo.phase;
 
   if (shouldPaintSelfBlockBackground(paintPhase)) {
-    if (m_layoutBlock.style()->visibility() == EVisibility::Visible &&
+    if (m_layoutBlock.style()->visibility() == EVisibility::kVisible &&
         m_layoutBlock.hasBoxDecorationBackground())
       m_layoutBlock.paintBoxDecorationBackground(paintInfo, paintOffset);
     // We're done. We don't bother painting any children.
@@ -182,13 +182,13 @@ void BlockPainter::paintObject(const PaintInfo& paintInfo,
     return;
 
   if (paintPhase == PaintPhaseMask &&
-      m_layoutBlock.style()->visibility() == EVisibility::Visible) {
+      m_layoutBlock.style()->visibility() == EVisibility::kVisible) {
     m_layoutBlock.paintMask(paintInfo, paintOffset);
     return;
   }
 
   if (paintPhase == PaintPhaseClippingMask &&
-      m_layoutBlock.style()->visibility() == EVisibility::Visible) {
+      m_layoutBlock.style()->visibility() == EVisibility::kVisible) {
     BoxPainter(m_layoutBlock).paintClippingMask(paintInfo, paintOffset);
     return;
   }
@@ -202,14 +202,12 @@ void BlockPainter::paintObject(const PaintInfo& paintInfo,
     Optional<PaintInfo> scrolledPaintInfo;
     if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
       const auto* objectProperties = m_layoutBlock.paintProperties();
-      if (auto* scroll =
-              objectProperties ? objectProperties->scroll() : nullptr) {
+      auto* scrollTranslation =
+          objectProperties ? objectProperties->scrollTranslation() : nullptr;
+      if (scrollTranslation) {
         PaintChunkProperties properties(paintInfo.context.getPaintController()
                                             .currentPaintChunkProperties());
-        auto* scrollTranslation = objectProperties->scrollTranslation();
-        DCHECK(scrollTranslation);
-        properties.transform = scrollTranslation;
-        properties.scroll = scroll;
+        properties.propertyTreeState.setTransform(scrollTranslation);
         m_scopedScrollProperty.emplace(
             paintInfo.context.getPaintController(), m_layoutBlock,
             DisplayItem::paintPhaseToDrawingType(paintPhase), properties);
@@ -248,7 +246,7 @@ void BlockPainter::paintObject(const PaintInfo& paintInfo,
 
   // If the caret's node's layout object's containing block is this block, and
   // the paint action is PaintPhaseForeground, then paint the caret.
-  if (paintPhase == PaintPhaseForeground && m_layoutBlock.hasCaret())
+  if (paintPhase == PaintPhaseForeground && m_layoutBlock.shouldPaintCarets())
     paintCarets(paintInfo, paintOffset);
 }
 
@@ -256,12 +254,13 @@ void BlockPainter::paintCarets(const PaintInfo& paintInfo,
                                const LayoutPoint& paintOffset) {
   LocalFrame* frame = m_layoutBlock.frame();
 
-  if (m_layoutBlock.hasCursorCaret())
+  if (m_layoutBlock.shouldPaintCursorCaret())
     frame->selection().paintCaret(paintInfo.context, paintOffset);
 
-  if (m_layoutBlock.hasDragCaret())
-    frame->page()->dragCaretController().paintDragCaret(
-        frame, paintInfo.context, paintOffset);
+  if (m_layoutBlock.shouldPaintDragCaret()) {
+    frame->page()->dragCaret().paintDragCaret(frame, paintInfo.context,
+                                              paintOffset);
+  }
 }
 
 DISABLE_CFI_PERF

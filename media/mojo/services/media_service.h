@@ -41,7 +41,7 @@ class MEDIA_MOJO_EXPORT MediaService
   void OnStart() final;
   bool OnConnect(const service_manager::ServiceInfo& remote_info,
                  service_manager::InterfaceRegistry* registry) final;
-  bool OnStop() final;
+  bool OnServiceManagerConnectionLost() final;
 
   // service_manager::InterfaceFactory<mojom::MediaService> implementation.
   void Create(const service_manager::Identity& remote_identity,
@@ -50,7 +50,7 @@ class MEDIA_MOJO_EXPORT MediaService
   // mojom::MediaService implementation.
   void CreateInterfaceFactory(
       mojom::InterfaceFactoryRequest request,
-      service_manager::mojom::InterfaceProviderPtr remote_interfaces) final;
+      service_manager::mojom::InterfaceProviderPtr host_interfaces) final;
 
   // Note: Since each instance runs on a different thread, do not share a common
   // MojoMediaClient with other instances to avoid threading issues. Hence using

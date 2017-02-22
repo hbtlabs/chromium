@@ -12,6 +12,10 @@ class PixelExpectations(GpuTestExpectations):
     # self.Fail('Pixel_Canvas2DRedBox',
     #     ['mac', 'amd', ('nvidia', 0x1234)], bug=123)
 
+    # Seems to be flaky on the new AMD R7 240 drivers.
+    self.Flaky('Pixel_GpuRasterization_BlueBox',
+        ['win', ('amd', 0x6613)], bug=653538)
+
     # Software compositing is not supported on Android; so we skip these tests
     # that disables gpu compositing on Android platforms.
     self.Skip('Pixel_OffscreenCanvasUnaccelerated2D', ['android'])
@@ -32,6 +36,8 @@ class PixelExpectations(GpuTestExpectations):
 
     self.Fail('Pixel_OffscreenCanvasUnaccelerated2DGPUCompositingWorker',
               ['mac', ('nvidia', 0xfe9)], bug=652931)
+    self.Fail('Pixel_CSSFilterEffects',
+        ['mac', ('nvidia', 0xfe9)], bug=690277)
 
     # TODO(kbr): flakily timing out on this configuration.
     self.Flaky('*', ['linux', 'intel', 'debug'], bug=648369)
@@ -41,8 +47,5 @@ class PixelExpectations(GpuTestExpectations):
     self.Flaky('Pixel_ScissorTestWithPreserveDrawingBuffer', ['mac'],
                bug=660461)
 
-    # TODO(zakerinasab): Check / generate reference images. Remove the Fail
-    # lines after fixing 657946 and comment out the Skip line.
-    self.Fail('Pixel_CanvasDisplayLinearRGBAccelerated2D', bug=657946)
-    self.Fail('Pixel_CanvasDisplayLinearRGBUnaccelerated2D', bug=657946)
-    self.Fail('Pixel_CanvasDisplayLinearRGBUnaccelerated2DGPUCompositing', bug=657946)
+    self.Flaky('Pixel_OffscreenCanvas2DResizeOnWorker',
+        ['win10', ('intel', 0x1912)], bug=690663)

@@ -43,9 +43,9 @@ namespace blink {
 
 void V8MutationObserver::constructorCustom(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  ExceptionState exceptionState(ExceptionState::ConstructionContext,
-                                "MutationObserver", info.Holder(),
-                                info.GetIsolate());
+  ExceptionState exceptionState(info.GetIsolate(),
+                                ExceptionState::ConstructionContext,
+                                "MutationObserver");
   if (info.Length() < 1) {
     exceptionState.throwTypeError(
         ExceptionMessages::notEnoughArguments(1, info.Length()));
@@ -68,20 +68,6 @@ void V8MutationObserver::constructorCustom(
   v8SetReturnValue(info,
                    V8DOMWrapper::associateObjectWithWrapper(
                        info.GetIsolate(), observer, &wrapperTypeInfo, wrapper));
-}
-
-void V8MutationObserver::visitDOMWrapperCustom(
-    v8::Isolate* isolate,
-    ScriptWrappable* scriptWrappable,
-    const v8::Persistent<v8::Object>& wrapper) {
-  MutationObserver* observer = scriptWrappable->toImpl<MutationObserver>();
-  HeapHashSet<Member<Node>> observedNodes = observer->getObservedNodes();
-  for (HeapHashSet<Member<Node>>::iterator it = observedNodes.begin();
-       it != observedNodes.end(); ++it) {
-    v8::UniqueId id(reinterpret_cast<intptr_t>(
-        V8GCController::opaqueRootForGC(isolate, *it)));
-    isolate->SetReferenceFromGroup(id, wrapper);
-  }
 }
 
 }  // namespace blink

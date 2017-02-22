@@ -51,7 +51,6 @@ import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
 import org.chromium.chrome.browser.pageinfo.WebsiteSettingsPopup;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.toolbar.ActionModeController.ActionBarDelegate;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.widget.TintedDrawable;
 import org.chromium.chrome.browser.widget.TintedImageButton;
@@ -128,7 +127,7 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
     private CustomTabToolbarAnimationDelegate mAnimDelegate;
     private int mState = STATE_DOMAIN_ONLY;
     private String mFirstUrl;
-    private boolean mShowsOfflinePage = false;
+    private boolean mShowsOfflinePage;
 
     private Runnable mTitleAnimationStarter = new Runnable() {
         @Override
@@ -322,7 +321,7 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
         // always return the url. We postpone the title animation until the title is authentic.
         if ((mState == STATE_DOMAIN_AND_TITLE || mState == STATE_TITLE_ONLY)
                 && !title.equals(currentTab.getUrl())
-                && !title.equals(UrlConstants.ABOUT_BLANK)) {
+                && !title.equals(UrlConstants.ABOUT_BLANK_DISPLAY_URL)) {
             // Delay the title animation until security icon animation finishes.
             ThreadUtils.postOnUiThreadDelayed(mTitleAnimationStarter, TITLE_ANIM_DELAY_MS);
         }
@@ -358,7 +357,7 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
         // If we have taken a pre-initialized WebContents, then the starting URL
         // is "about:blank". We should not display it.
         if (NativePageFactory.isNativePageUrl(url, getCurrentTab().isIncognito())
-                || UrlConstants.ABOUT_BLANK.equals(url)) {
+                || UrlConstants.ABOUT_BLANK_DISPLAY_URL.equals(url)) {
             mUrlBar.setUrl("", null);
             return;
         }
@@ -482,8 +481,7 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
     }
 
     @Override
-    public void initializeControls(WindowDelegate windowDelegate, ActionBarDelegate delegate,
-            WindowAndroid windowAndroid) {
+    public void initializeControls(WindowDelegate windowDelegate, WindowAndroid windowAndroid) {
     }
 
     private int getSecurityLevel() {

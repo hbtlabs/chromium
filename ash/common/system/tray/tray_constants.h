@@ -34,16 +34,23 @@ extern const int kTrayLabelItemVerticalPaddingVerticalAlignment;
 extern const int kTrayMenuBottomRowPadding;
 extern const int kTrayMenuBottomRowPaddingBetweenItems;
 
+// The minimum width of the tray menu.
+extern const int kTrayMenuMinimumWidth;
+extern const int kTrayMenuMinimumWidthMd;
+
 extern const int kTrayPopupAutoCloseDelayInSeconds;
 extern const int kTrayPopupAutoCloseDelayForTextInSeconds;
 extern const int kTrayPopupPaddingHorizontal;
 extern const int kTrayPopupPaddingBetweenItems;
 // Used for buttons that have borders.
 extern const int kTrayPopupButtonEndMargin;
-extern const int kTrayPopupUserCardVerticalPadding;
 // The padding used on the left and right of labels. This applies to all labels
 // in the system menu.
 extern const int kTrayPopupLabelHorizontalPadding;
+
+// When transitioning between a detailed and a default view, this delay is used
+// before the transition starts.
+ASH_EXPORT extern const int kTrayDetailedViewTransitionDelayMs;
 
 // Padding used to adjust the slider position in volume row and brightness
 // row horizontally.
@@ -64,7 +71,6 @@ extern const int kTrayToggleButtonWidth;
 
 extern const SkColor kBackgroundColor;
 extern const SkColor kHoverBackgroundColor;
-extern const SkColor kPublicAccountBackgroundColor;
 extern const SkColor kPublicAccountUserCardTextColor;
 extern const SkColor kPublicAccountUserCardNameColor;
 
@@ -87,13 +93,11 @@ extern const int kTrayNotificationContentsWidth;
 extern const int kHitRegionPadding;
 
 // Color and width of a line used to separate tray items in the shelf.
-extern const SkColor kSeparatorColor;
-extern const int kSeparatorWidth;
+extern const SkColor kTraySeparatorColor;
+ASH_EXPORT extern const int kSeparatorWidth;
 
-// The color and height of the horizontal separator used in the material design
-// system menu (i.e., the vertical line used to separate elements horizontally).
-extern const SkColor kHorizontalSeparatorColor;
-extern const int kHorizontalSeparatorHeight;
+// The color of the separators used in the system menu.
+extern const SkColor kMenuSeparatorColor;
 
 // The size and foreground color of the icons appearing in the material design
 // system tray.
@@ -110,7 +114,7 @@ extern const int kMenuIconSize;
 extern const SkColor kMenuIconColor;
 extern const SkColor kMenuIconColorDisabled;
 // The size of buttons in the system menu.
-extern const int kMenuButtonSize;
+ASH_EXPORT extern const int kMenuButtonSize;
 // The vertical padding for the system menu separator.
 extern const int kMenuSeparatorVerticalPadding;
 // The horizontal padding for the system menu separator.
@@ -135,13 +139,13 @@ extern const int kTrayPopupInkDropInset;
 // The radius used to draw the corners of the rounded rect style ink drops.
 extern const int kTrayPopupInkDropCornerRadius;
 
+// The height of the system info row.
+extern const int kTrayPopupSystemInfoRowHeight;
+
 enum TrayConstant {
   // A legacy height value used in non-MD calculations for applying additional
   // borders on tray items.
   TRAY_ITEM_HEIGHT_LEGACY,
-
-  // Padding between items in the status tray area.
-  TRAY_SPACING,
 
   // Padding between the edge of shelf and the item in status tray area.
   TRAY_PADDING_FROM_EDGE_OF_SHELF,
@@ -165,20 +169,11 @@ enum TrayConstant {
   // The left inset for all tray system menu rows.
   TRAY_POPUP_ITEM_LEFT_INSET,
 
-  // The right inset for all tray system menu rows.
-  TRAY_POPUP_ITEM_RIGHT_INSET,
-
   // The minimum default width for the left container of the system menu rows.
   TRAY_POPUP_ITEM_MIN_START_WIDTH,
 
   // The minimum default width for the right container of the system menu rows.
   TRAY_POPUP_ITEM_MIN_END_WIDTH,
-
-  // Duration to delay transitions to the default view.
-  TRAY_POPUP_TRANSITION_TO_DEFAULT_DELAY,
-
-  // Duration to delay transitions to the detailed view.
-  TRAY_POPUP_TRANSITION_TO_DETAILED_DELAY,
 
   // The width and height of the virtual keyboard button in the status tray
   // area. For non-MD, adjustments are made to the button dimensions based on

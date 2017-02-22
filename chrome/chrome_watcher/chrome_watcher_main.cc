@@ -34,8 +34,7 @@
 #include "base/win/scoped_handle.h"
 #include "base/win/win_util.h"
 #include "chrome/chrome_watcher/chrome_watcher_main_api.h"
-#include "chrome/common/chrome_constants.h"
-#include "chrome/install_static/install_details.h"
+#include "chrome/install_static/initialize_from_primary_module.h"
 #include "components/browser_watcher/endsession_watcher_window_win.h"
 #include "components/browser_watcher/exit_code_watcher_win.h"
 #include "components/browser_watcher/window_hang_monitor_win.h"
@@ -143,8 +142,8 @@ void BrowserMonitor::Watch(base::win::ScopedHandle on_initialized_event) {
   // This needs to run on an IO thread.
   DCHECK_NE(main_thread_, base::ThreadTaskRunnerHandle::Get());
 
-  // Signal our client now that the Kasko reporter is initialized and we have
-  // cleared all of the obstacles that might lead to an early exit.
+  // Signal our client that we have cleared all of the obstacles that might lead
+  // to an early exit.
   ::SetEvent(on_initialized_event.Get());
   on_initialized_event.Close();
 
@@ -188,8 +187,7 @@ extern "C" int WatcherMain(const base::char16* registry_path,
                            DWORD main_thread_id,
                            HANDLE on_initialized_event_handle,
                            const base::char16* browser_data_directory) {
-  install_static::InstallDetails::InitializeFromPrimaryModule(
-      chrome::kChromeElfDllName);
+  install_static::InitializeFromPrimaryModule();
   base::Process process(process_handle);
   base::win::ScopedHandle on_initialized_event(on_initialized_event_handle);
 

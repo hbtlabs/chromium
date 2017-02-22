@@ -27,9 +27,12 @@
 
 #include "core/workers/WorkerScriptLoader.h"
 
+#include <memory>
 #include "core/dom/ExecutionContext.h"
 #include "core/html/parser/TextResourceDecoder.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/loader/WorkerThreadableLoader.h"
+#include "core/loader/resource/ScriptResource.h"
 #include "core/origin_trials/OriginTrialContext.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/HTTPNames.h"
@@ -41,7 +44,6 @@
 #include "public/platform/WebURLRequest.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/RefPtr.h"
-#include <memory>
 
 namespace blink {
 
@@ -66,6 +68,7 @@ void WorkerScriptLoader::loadSynchronously(
     CrossOriginRequestPolicy crossOriginRequestPolicy,
     WebAddressSpace creationAddressSpace) {
   m_url = url;
+  m_executionContext = &executionContext;
 
   ResourceRequest request(createResourceRequest(creationAddressSpace));
   SECURITY_DCHECK(executionContext.isWorkerGlobalScope());
@@ -94,6 +97,7 @@ void WorkerScriptLoader::loadAsynchronously(
   m_responseCallback = std::move(responseCallback);
   m_finishedCallback = std::move(finishedCallback);
   m_url = url;
+  m_executionContext = &executionContext;
 
   ResourceRequest request(createResourceRequest(creationAddressSpace));
   ThreadableLoaderOptions options;
@@ -139,6 +143,15 @@ void WorkerScriptLoader::didReceiveResponse(
     notifyError();
     return;
   }
+  if (!ScriptResource::mimeTypeAllowedByNosniff(response)) {
+    m_executionContext->addConsoleMessage(ConsoleMessage::create(
+        SecurityMessageSource, ErrorMessageLevel,
+        "Refused to execute script from '" + m_url.elidedString() +
+            "' because its MIME type ('" + response.httpContentType() +
+            "') is not executable, and strict MIME type checking is enabled."));
+    notifyError();
+    return;
+  }
   m_identifier = identifier;
   m_responseURL = response.url();
   m_responseEncoding = response.textEncodingName();
@@ -179,7 +192,7 @@ void WorkerScriptLoader::didReceiveData(const char* data, unsigned len) {
 }
 
 void WorkerScriptLoader::didReceiveCachedMetadata(const char* data, int size) {
-  m_cachedMetadata = makeUnique<Vector<char>>(size);
+  m_cachedMetadata = WTF::makeUnique<Vector<char>>(size);
   memcpy(m_cachedMetadata->data(), data, size);
 }
 

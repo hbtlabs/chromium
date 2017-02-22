@@ -7,15 +7,19 @@
 #include <string>
 
 #include "base/feature_list.h"
+#include "base/memory/ptr_util.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/startup/startup_features.h"
 #include "chrome/browser/ui/webui/welcome_win10_handler.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "net/base/url_util.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -88,33 +92,45 @@ WelcomeWin10UI::WelcomeWin10UI(content::WebUI* web_ui, const GURL& url)
     : content::WebUIController(web_ui) {
   static const char kCssFilePath[] = "welcome.css";
   static const char kJsFilePath[] = "welcome.js";
+  static const char kDefaultFilePath[] = "default.webp";
+  static const char kPinFilePath[] = "pin.webp";
 
-  web_ui->AddMessageHandler(new WelcomeWin10Handler());
-
-  content::WebUIDataSource* html_source =
-      content::WebUIDataSource::Create(url.host());
+  // Remember that the Win10 promo page has been shown.
+  g_browser_process->local_state()->SetBoolean(prefs::kHasSeenWin10PromoPage,
+                                               true);
 
   // Determine which variation to show.
   bool is_first_run = !UrlContainsKeyValueInQuery(url, "text", "faster");
   bool is_inline_style = ShouldShowInlineStyleVariant(url);
+
+  web_ui->AddMessageHandler(
+      base::MakeUnique<WelcomeWin10Handler>(is_inline_style));
+
+  content::WebUIDataSource* html_source =
+      content::WebUIDataSource::Create(url.host());
 
   AddLocalizedStrings(html_source, is_first_run);
 
   if (is_inline_style) {
     html_source->AddResourcePath(kCssFilePath, IDR_WELCOME_WIN10_INLINE_CSS);
     html_source->AddResourcePath(kJsFilePath, IDR_WELCOME_WIN10_INLINE_JS);
+    html_source->AddResourcePath(kDefaultFilePath,
+                                 IDR_WELCOME_WIN10_DEFAULT_SMALL_WEBP);
+    html_source->AddResourcePath(kPinFilePath,
+                                 IDR_WELCOME_WIN10_PIN_SMALL_WEBP);
     html_source->SetDefaultResource(IDR_WELCOME_WIN10_INLINE_HTML);
   } else {
     html_source->AddResourcePath(kCssFilePath, IDR_WELCOME_WIN10_SECTIONED_CSS);
     html_source->AddResourcePath(kJsFilePath, IDR_WELCOME_WIN10_SECTIONED_JS);
+    html_source->AddResourcePath(kDefaultFilePath,
+                                 IDR_WELCOME_WIN10_DEFAULT_LARGE_WEBP);
+    html_source->AddResourcePath(kPinFilePath,
+                                 IDR_WELCOME_WIN10_PIN_LARGE_WEBP);
     html_source->SetDefaultResource(IDR_WELCOME_WIN10_SECTIONED_HTML);
   }
 
-  // Logo images of all scales.
-  html_source->AddResourcePath("logo-small.png", IDR_PRODUCT_LOGO_32);
-  html_source->AddResourcePath("logo-small2x.png", IDR_PRODUCT_LOGO_64);
-  html_source->AddResourcePath("logo-large.png", IDR_PRODUCT_LOGO_64);
-  html_source->AddResourcePath("logo-large2x.png", IDR_PRODUCT_LOGO_128);
+  html_source->AddResourcePath("logo-small.png", IDR_PRODUCT_LOGO_64);
+  html_source->AddResourcePath("logo-large.png", IDR_PRODUCT_LOGO_128);
 
   content::WebUIDataSource::Add(Profile::FromWebUI(web_ui), html_source);
 }

@@ -83,7 +83,7 @@ inline SearchBuffer::SearchBuffer(const String& target, FindOptions options)
     }
   }
 
-  m_textSearcher = makeUnique<TextSearcherICU>();
+  m_textSearcher = WTF::makeUnique<TextSearcherICU>();
   m_textSearcher->setPattern(StringView(m_target.data(), m_target.size()),
                              !(m_options & CaseInsensitive));
 
@@ -373,11 +373,6 @@ static size_t findPlainTextInternal(CharacterIteratorAlgorithm<Strategy>& it,
   return matchLength;
 }
 
-static const TextIteratorBehaviorFlags iteratorFlagsForFindPlainText =
-    TextIteratorEntersTextControls | TextIteratorEntersOpenShadowRoots |
-    TextIteratorDoesNotBreakAtReplacedElement |
-    TextIteratorCollapseTrailingSpace;
-
 template <typename Strategy>
 static EphemeralRangeTemplate<Strategy> findPlainTextAlgorithm(
     const EphemeralRangeTemplate<Strategy>& inputRange,
@@ -389,13 +384,22 @@ static EphemeralRangeTemplate<Strategy> findPlainTextAlgorithm(
   DCHECK_EQ(inputRange.startPosition().document(),
             inputRange.endPosition().document());
 
+  const TextIteratorBehavior& iteratorFlagsForFindPlainText =
+      TextIteratorBehavior::Builder()
+          .setEntersTextControls(true)
+          .setEntersOpenShadowRoots(true)
+          .setDoesNotBreakAtReplacedElement(true)
+          .setCollapseTrailingSpace(true)
+          .build();
+
   // FIXME: Reduce the code duplication with above (but how?).
   size_t matchStart;
   size_t matchLength;
   {
-    TextIteratorBehaviorFlags behavior = iteratorFlagsForFindPlainText;
-    if (options & FindAPICall)
-      behavior |= TextIteratorForWindowFind;
+    const TextIteratorBehavior& behavior =
+        TextIteratorBehavior::Builder(iteratorFlagsForFindPlainText)
+            .setForWindowFind(options & FindAPICall)
+            .build();
     CharacterIteratorAlgorithm<Strategy> findIterator(inputRange, behavior);
     matchLength =
         findPlainTextInternal(findIterator, target, options, matchStart);

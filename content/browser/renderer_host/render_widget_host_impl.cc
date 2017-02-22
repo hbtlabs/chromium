@@ -24,12 +24,12 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
 #include "cc/output/compositor_frame.h"
-#include "content/browser/accessibility/accessibility_mode_helper.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
@@ -88,9 +88,14 @@
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
+#include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/skbitmap_operations.h"
 #include "ui/snapshot/snapshot.h"
+
+#if defined(OS_ANDROID)
+#include "ui/android/view_android.h"
+#endif
 
 #if defined(OS_MACOSX)
 #include "device/power_save_blocker/power_save_blocker.h"
@@ -157,11 +162,11 @@ class RenderWidgetHostIteratorImpl : public RenderWidgetHostIterator {
 
 inline blink::WebGestureEvent CreateScrollBeginForWrapping(
     const blink::WebGestureEvent& gesture_event) {
-  DCHECK(gesture_event.type == blink::WebInputEvent::GestureScrollUpdate);
+  DCHECK(gesture_event.type() == blink::WebInputEvent::GestureScrollUpdate);
 
-  blink::WebGestureEvent wrap_gesture_scroll_begin;
-  wrap_gesture_scroll_begin.type = blink::WebInputEvent::GestureScrollBegin;
-  wrap_gesture_scroll_begin.timeStampSeconds = gesture_event.timeStampSeconds;
+  blink::WebGestureEvent wrap_gesture_scroll_begin(
+      blink::WebInputEvent::GestureScrollBegin, gesture_event.modifiers(),
+      gesture_event.timeStampSeconds());
   wrap_gesture_scroll_begin.sourceDevice = gesture_event.sourceDevice;
   wrap_gesture_scroll_begin.data.scrollBegin.deltaXHint = 0;
   wrap_gesture_scroll_begin.data.scrollBegin.deltaYHint = 0;
@@ -174,11 +179,11 @@ inline blink::WebGestureEvent CreateScrollBeginForWrapping(
 
 inline blink::WebGestureEvent CreateScrollEndForWrapping(
     const blink::WebGestureEvent& gesture_event) {
-  DCHECK(gesture_event.type == blink::WebInputEvent::GestureScrollUpdate);
+  DCHECK(gesture_event.type() == blink::WebInputEvent::GestureScrollUpdate);
 
-  blink::WebGestureEvent wrap_gesture_scroll_end;
-  wrap_gesture_scroll_end.type = blink::WebInputEvent::GestureScrollEnd;
-  wrap_gesture_scroll_end.timeStampSeconds = gesture_event.timeStampSeconds;
+  blink::WebGestureEvent wrap_gesture_scroll_end(
+      blink::WebInputEvent::GestureScrollEnd, gesture_event.modifiers(),
+      gesture_event.timeStampSeconds());
   wrap_gesture_scroll_end.sourceDevice = gesture_event.sourceDevice;
   wrap_gesture_scroll_end.resendingPluginId = gesture_event.resendingPluginId;
   wrap_gesture_scroll_end.data.scrollEnd.deltaUnits =
@@ -273,6 +278,7 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
       is_in_touchpad_gesture_scroll_(false),
       is_in_touchscreen_gesture_scroll_(false),
       received_paint_after_load_(false),
+      latency_tracker_(),
       next_browser_snapshot_id_(1),
       owned_by_render_frame_host_(false),
       is_focused_(false),
@@ -287,13 +293,15 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
       weak_factory_(this) {
   CHECK(delegate_);
   CHECK_NE(MSG_ROUTING_NONE, routing_id_);
+  latency_tracker_.SetDelegate(delegate_);
 
 #if defined(OS_WIN)
   // Update the display color profile cache so that it is likely to be up to
   // date when the renderer process requests the color profile.
   if (gfx::ICCProfile::CachedProfilesNeedUpdate()) {
-    BrowserThread::PostBlockingPoolTask(
-        FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
+                       base::TaskPriority::BACKGROUND),
         base::Bind(&gfx::ICCProfile::UpdateCachedProfilesOnBackgroundThread));
   }
 #endif
@@ -448,10 +456,6 @@ void RenderWidgetHostImpl::SendScreenRects() {
   waiting_for_screen_rects_ack_ = true;
 }
 
-void RenderWidgetHostImpl::SuppressEventsUntilKeyDown() {
-  suppress_events_until_keydown_ = true;
-}
-
 void RenderWidgetHostImpl::FlushInput() {
   input_router_->RequestNotificationWhenFlushed();
   if (synthetic_gesture_controller_)
@@ -542,9 +546,8 @@ bool RenderWidgetHostImpl::OnMessageReceived(const IPC::Message &msg) {
                         OnImeCompositionRangeChanged)
     IPC_MESSAGE_HANDLER(ViewHostMsg_DidFirstPaintAfterLoad,
                         OnFirstPaintAfterLoad)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_ForwardCompositorProto,
-                        OnForwardCompositorProto)
     IPC_MESSAGE_HANDLER(ViewHostMsg_SetNeedsBeginFrames, OnSetNeedsBeginFrames)
+    IPC_MESSAGE_HANDLER(ViewHostMsg_FocusedNodeTouched, OnFocusedNodeTouched)
     IPC_MESSAGE_HANDLER(DragHostMsg_StartDragging, OnStartDragging)
     IPC_MESSAGE_HANDLER(DragHostMsg_UpdateDragCursor, OnUpdateDragCursor)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -832,16 +835,6 @@ bool RenderWidgetHostImpl::CanCopyFromBackingStore() {
   return false;
 }
 
-void RenderWidgetHostImpl::LockBackingStore() {
-  if (view_)
-    view_->LockCompositingSurface();
-}
-
-void RenderWidgetHostImpl::UnlockBackingStore() {
-  if (view_)
-    view_->UnlockCompositingSurface();
-}
-
 #if defined(OS_MACOSX)
 void RenderWidgetHostImpl::PauseForPendingResizeOrRepaints() {
   TRACE_EVENT0("browser",
@@ -1100,20 +1093,20 @@ void RenderWidgetHostImpl::ForwardGestureEventWithLatencyInfo(
               blink::WebGestureDevice::WebGestureDeviceTouchpad
           ? &is_in_touchpad_gesture_scroll_
           : &is_in_touchscreen_gesture_scroll_;
-  if (gesture_event.type == blink::WebInputEvent::GestureScrollBegin) {
+  if (gesture_event.type() == blink::WebInputEvent::GestureScrollBegin) {
     DCHECK(!(*is_in_gesture_scroll));
     *is_in_gesture_scroll = true;
-  } else if (gesture_event.type == blink::WebInputEvent::GestureScrollEnd ||
-             gesture_event.type == blink::WebInputEvent::GestureFlingStart) {
+  } else if (gesture_event.type() == blink::WebInputEvent::GestureScrollEnd ||
+             gesture_event.type() == blink::WebInputEvent::GestureFlingStart) {
     DCHECK(*is_in_gesture_scroll ||
-           (gesture_event.type == blink::WebInputEvent::GestureFlingStart &&
+           (gesture_event.type() == blink::WebInputEvent::GestureFlingStart &&
             gesture_event.sourceDevice ==
                 blink::WebGestureDevice::WebGestureDeviceTouchpad));
     *is_in_gesture_scroll = false;
   }
 
   bool scroll_update_needs_wrapping =
-      gesture_event.type == blink::WebInputEvent::GestureScrollUpdate &&
+      gesture_event.type() == blink::WebInputEvent::GestureScrollUpdate &&
       gesture_event.resendingPluginId != -1 && !(*is_in_gesture_scroll);
 
   // TODO(crbug.com/544782): Fix WebViewGuestScrollTest.TestGuestWheelScrolls-
@@ -1175,6 +1168,12 @@ void RenderWidgetHostImpl::ForwardTouchEventWithLatencyInfo(
 
 void RenderWidgetHostImpl::ForwardKeyboardEvent(
     const NativeWebKeyboardEvent& key_event) {
+  ForwardKeyboardEventWithCommands(key_event, nullptr);
+}
+
+void RenderWidgetHostImpl::ForwardKeyboardEventWithCommands(
+    const NativeWebKeyboardEvent& key_event,
+    const std::vector<EditCommand>* commands) {
   TRACE_EVENT0("input", "RenderWidgetHostImpl::ForwardKeyboardEvent");
   if (owner_delegate_ &&
       !owner_delegate_->MayRenderWidgetForwardKeyboardEvent(key_event)) {
@@ -1192,25 +1191,25 @@ void RenderWidgetHostImpl::ForwardKeyboardEvent(
   if (KeyPressListenersHandleEvent(key_event)) {
     // Some keypresses that are accepted by the listener may be followed by Char
     // and KeyUp events, which should be ignored.
-    if (key_event.type == WebKeyboardEvent::RawKeyDown)
+    if (key_event.type() == WebKeyboardEvent::RawKeyDown)
       suppress_events_until_keydown_ = true;
     return;
   }
 
   // Double check the type to make sure caller hasn't sent us nonsense that
   // will mess up our key queue.
-  if (!WebInputEvent::isKeyboardEventType(key_event.type))
+  if (!WebInputEvent::isKeyboardEventType(key_event.type()))
     return;
 
   if (suppress_events_until_keydown_) {
     // If the preceding RawKeyDown event was handled by the browser, then we
     // need to suppress all events generated by it until the next RawKeyDown or
     // KeyDown event.
-    if (key_event.type == WebKeyboardEvent::KeyUp ||
-        key_event.type == WebKeyboardEvent::Char)
+    if (key_event.type() == WebKeyboardEvent::KeyUp ||
+        key_event.type() == WebKeyboardEvent::Char)
       return;
-    DCHECK(key_event.type == WebKeyboardEvent::RawKeyDown ||
-           key_event.type == WebKeyboardEvent::KeyDown);
+    DCHECK(key_event.type() == WebKeyboardEvent::RawKeyDown ||
+           key_event.type() == WebKeyboardEvent::KeyDown);
     suppress_events_until_keydown_ = false;
   }
 
@@ -1222,7 +1221,7 @@ void RenderWidgetHostImpl::ForwardKeyboardEvent(
     // PreHandleKeyboardEvent() returns true, but |this| may already be
     // destroyed at that time. So set |suppress_events_until_keydown_| true
     // here, then revert it afterwards when necessary.
-    if (key_event.type == WebKeyboardEvent::RawKeyDown)
+    if (key_event.type() == WebKeyboardEvent::RawKeyDown)
       suppress_events_until_keydown_ = true;
 
     // Tab switching/closing accelerators aren't sent to the renderer to avoid
@@ -1230,7 +1229,7 @@ void RenderWidgetHostImpl::ForwardKeyboardEvent(
     if (delegate_->PreHandleKeyboardEvent(key_event, &is_shortcut))
       return;
 
-    if (key_event.type == WebKeyboardEvent::RawKeyDown)
+    if (key_event.type() == WebKeyboardEvent::RawKeyDown)
       suppress_events_until_keydown_ = false;
   }
 
@@ -1241,6 +1240,15 @@ void RenderWidgetHostImpl::ForwardKeyboardEvent(
                                                                latency_info);
   key_event_with_latency.event.isBrowserShortcut = is_shortcut;
   DispatchInputEventWithLatencyInfo(key_event, &key_event_with_latency.latency);
+  // TODO(foolip): |InputRouter::SendKeyboardEvent()| may filter events, in
+  // which the commands will be treated as belonging to the next key event.
+  // InputMsg_SetEditCommandsForNextKeyEvent should only be sent if
+  // InputMsg_HandleInputEvent is, but has to be sent first.
+  // https://crbug.com/684298
+  if (commands && !commands->empty()) {
+    Send(
+        new InputMsg_SetEditCommandsForNextKeyEvent(GetRoutingID(), *commands));
+  }
   input_router_->SendKeyboardEvent(key_event_with_latency);
 }
 
@@ -1337,12 +1345,6 @@ void RenderWidgetHostImpl::GetScreenInfo(ScreenInfo* result) {
     input_router_->SetDeviceScaleFactor(result->device_scale_factor);
 }
 
-void RenderWidgetHostImpl::HandleCompositorProto(
-    const std::vector<uint8_t>& proto) {
-  DCHECK(!proto.empty());
-  Send(new ViewMsg_HandleCompositorProto(GetRoutingID(), proto));
-}
-
 void RenderWidgetHostImpl::DragTargetDragEnter(
     const DropData& drop_data,
     const gfx::Point& client_pt,
@@ -1373,8 +1375,9 @@ void RenderWidgetHostImpl::DragTargetDragOver(
                                   operations_allowed, key_modifiers));
 }
 
-void RenderWidgetHostImpl::DragTargetDragLeave() {
-  Send(new DragMsg_TargetDragLeave(GetRoutingID()));
+void RenderWidgetHostImpl::DragTargetDragLeave(const gfx::Point& client_point,
+                                               const gfx::Point& screen_point) {
+  Send(new DragMsg_TargetDragLeave(GetRoutingID(), client_point, screen_point));
 }
 
 void RenderWidgetHostImpl::DragTargetDrop(const DropData& drop_data,
@@ -1420,6 +1423,11 @@ void RenderWidgetHostImpl::NotifyScreenInfoChanged() {
   // the screen info as well as the new size (if the screen has changed scale
   // factor).
   WasResized();
+
+  if (touch_emulator_) {
+    touch_emulator_->SetDeviceScaleFactor(
+        view_.get() ? content::GetScaleFactorForView(view_.get()) : 1.0f);
+  }
 }
 
 void RenderWidgetHostImpl::GetSnapshotFromBrowser(
@@ -1465,12 +1473,6 @@ void RenderWidgetHostImpl::OnSelectionBoundsChanged(
   }
 }
 
-void RenderWidgetHostImpl::OnForwardCompositorProto(
-    const std::vector<uint8_t>& proto) {
-  if (delegate_)
-    delegate_->ForwardCompositorProto(this, proto);
-}
-
 void RenderWidgetHostImpl::OnSetNeedsBeginFrames(bool needs_begin_frames) {
   if (needs_begin_frames_ == needs_begin_frames)
     return;
@@ -1478,6 +1480,11 @@ void RenderWidgetHostImpl::OnSetNeedsBeginFrames(bool needs_begin_frames) {
   needs_begin_frames_ = needs_begin_frames;
   if (view_)
     view_->SetNeedsBeginFrames(needs_begin_frames);
+}
+
+void RenderWidgetHostImpl::OnFocusedNodeTouched(bool editable) {
+  if (delegate_)
+    delegate_->FocusedNodeTouched(editable);
 }
 
 void RenderWidgetHostImpl::OnStartDragging(
@@ -1621,11 +1628,13 @@ void RenderWidgetHostImpl::ImeSetComposition(
             selection_start, selection_end));
 }
 
-void RenderWidgetHostImpl::ImeCommitText(const base::string16& text,
-                                         const gfx::Range& replacement_range,
-                                         int relative_cursor_pos) {
-  Send(new InputMsg_ImeCommitText(GetRoutingID(), text, replacement_range,
-                                  relative_cursor_pos));
+void RenderWidgetHostImpl::ImeCommitText(
+    const base::string16& text,
+    const std::vector<blink::WebCompositionUnderline>& underlines,
+    const gfx::Range& replacement_range,
+    int relative_cursor_pos) {
+  Send(new InputMsg_ImeCommitText(GetRoutingID(), text, underlines,
+                                  replacement_range, relative_cursor_pos));
 }
 
 void RenderWidgetHostImpl::ImeFinishComposingText(bool keep_selection) {
@@ -1747,6 +1756,9 @@ void RenderWidgetHostImpl::OnClose() {
 void RenderWidgetHostImpl::OnSetTooltipText(
     const base::string16& tooltip_text,
     WebTextDirection text_direction_hint) {
+  if (!GetView())
+    return;
+
   // First, add directionality marks around tooltip text if necessary.
   // A naive solution would be to simply always wrap the text. However, on
   // windows, Unicode directional embedding characters can't be displayed on
@@ -1772,8 +1784,7 @@ void RenderWidgetHostImpl::OnSetTooltipText(
       base::i18n::WrapStringWithRTLFormatting(&wrapped_tooltip_text);
     }
   }
-  if (GetView())
-    view_->SetTooltipText(wrapped_tooltip_text);
+  view_->SetTooltipText(wrapped_tooltip_text);
 }
 
 void RenderWidgetHostImpl::OnUpdateScreenRectsAck() {
@@ -2045,7 +2056,7 @@ void RenderWidgetHostImpl::SetIgnoreInputEvents(bool ignore_input_events) {
 
 bool RenderWidgetHostImpl::KeyPressListenersHandleEvent(
     const NativeWebKeyboardEvent& event) {
-  if (event.skip_in_browser || event.type != WebKeyboardEvent::RawKeyDown)
+  if (event.skip_in_browser || event.type() != WebKeyboardEvent::RawKeyDown)
     return false;
 
   for (size_t i = 0; i < key_press_event_callbacks_.size(); i++) {
@@ -2070,22 +2081,22 @@ InputEventAckState RenderWidgetHostImpl::FilterInputEvent(
   // Don't ignore touch cancel events, since they may be sent while input
   // events are being ignored in order to keep the renderer from getting
   // confused about how many touches are active.
-  if (ShouldDropInputEvents() && event.type != WebInputEvent::TouchCancel)
+  if (ShouldDropInputEvents() && event.type() != WebInputEvent::TouchCancel)
     return INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS;
 
   if (!process_->HasConnection())
     return INPUT_EVENT_ACK_STATE_UNKNOWN;
 
   if (delegate_) {
-    if (event.type == WebInputEvent::MouseDown ||
-        event.type == WebInputEvent::TouchStart) {
+    if (event.type() == WebInputEvent::MouseDown ||
+        event.type() == WebInputEvent::TouchStart) {
       delegate_->FocusOwningWebContents(this);
     }
-    if (event.type == WebInputEvent::MouseDown ||
-        event.type == WebInputEvent::GestureScrollBegin ||
-        event.type == WebInputEvent::TouchStart ||
-        event.type == WebInputEvent::RawKeyDown) {
-      delegate_->OnUserInteraction(this, event.type);
+    if (event.type() == WebInputEvent::MouseDown ||
+        event.type() == WebInputEvent::GestureScrollBegin ||
+        event.type() == WebInputEvent::TouchStart ||
+        event.type() == WebInputEvent::RawKeyDown) {
+      delegate_->OnUserInteraction(this, event.type());
     }
   }
 
@@ -2148,6 +2159,8 @@ void RenderWidgetHostImpl::OnKeyboardEventAck(
       const NativeWebKeyboardEventWithLatencyInfo& event,
       InputEventAckState ack_result) {
   latency_tracker_.OnInputEventAck(event.event, &event.latency, ack_result);
+  for (auto& input_event_observer : input_event_observers_)
+    input_event_observer.OnInputEventAck(event.event);
 
   const bool processed = (INPUT_EVENT_ACK_STATE_CONSUMED == ack_result);
 
@@ -2168,6 +2181,8 @@ void RenderWidgetHostImpl::OnMouseEventAck(
     InputEventAckState ack_result) {
   latency_tracker_.OnInputEventAck(mouse_event.event, &mouse_event.latency,
                                    ack_result);
+  for (auto& input_event_observer : input_event_observers_)
+    input_event_observer.OnInputEventAck(mouse_event.event);
 }
 
 void RenderWidgetHostImpl::OnWheelEventAck(
@@ -2175,6 +2190,8 @@ void RenderWidgetHostImpl::OnWheelEventAck(
     InputEventAckState ack_result) {
   latency_tracker_.OnInputEventAck(wheel_event.event, &wheel_event.latency,
                                    ack_result);
+  for (auto& input_event_observer : input_event_observers_)
+    input_event_observer.OnInputEventAck(wheel_event.event);
 
   if (!is_hidden() && view_) {
     if (ack_result != INPUT_EVENT_ACK_STATE_CONSUMED &&
@@ -2189,6 +2206,8 @@ void RenderWidgetHostImpl::OnGestureEventAck(
     const GestureEventWithLatencyInfo& event,
     InputEventAckState ack_result) {
   latency_tracker_.OnInputEventAck(event.event, &event.latency, ack_result);
+  for (auto& input_event_observer : input_event_observers_)
+    input_event_observer.OnInputEventAck(event.event);
 
   if (view_)
     view_->GestureEventAck(event.event, ack_result);
@@ -2198,6 +2217,8 @@ void RenderWidgetHostImpl::OnTouchEventAck(
     const TouchEventWithLatencyInfo& event,
     InputEventAckState ack_result) {
   latency_tracker_.OnInputEventAck(event.event, &event.latency, ack_result);
+  for (auto& input_event_observer : input_event_observers_)
+    input_event_observer.OnInputEventAck(event.event);
 
   if (touch_emulator_ &&
       touch_emulator_->HandleTouchEventAck(event.event, ack_result)) {
@@ -2227,11 +2248,6 @@ bool RenderWidgetHostImpl::ShouldDropInputEvents() const {
 
 void RenderWidgetHostImpl::SetBackgroundOpaque(bool opaque) {
   Send(new ViewMsg_SetBackgroundOpaque(GetRoutingID(), opaque));
-}
-
-void RenderWidgetHostImpl::SetEditCommandsForNextKeyEvent(
-    const std::vector<EditCommand>& commands) {
-  Send(new InputMsg_SetEditCommandsForNextKeyEvent(GetRoutingID(), commands));
 }
 
 void RenderWidgetHostImpl::ExecuteEditCommand(const std::string& command,
@@ -2299,6 +2315,7 @@ void RenderWidgetHostImpl::DelayedAutoResized() {
 
 void RenderWidgetHostImpl::DetachDelegate() {
   delegate_ = NULL;
+  latency_tracker_.SetDelegate(nullptr);
 }
 
 void RenderWidgetHostImpl::FrameSwapped(const ui::LatencyInfo& latency_info) {
@@ -2338,52 +2355,45 @@ void RenderWidgetHostImpl::DidReceiveRendererFrame() {
 void RenderWidgetHostImpl::WindowSnapshotReachedScreen(int snapshot_id) {
   DCHECK(base::MessageLoopForUI::IsCurrent());
 
-  gfx::Rect view_bounds = GetView()->GetViewBounds();
-  gfx::Rect snapshot_bounds(view_bounds.size());
+#if defined(OS_ANDROID)
+  // On Android, call sites should pass in the bounds with correct offset
+  // to capture the intended content area.
+  gfx::Rect snapshot_bounds(GetView()->GetViewBounds());
+  snapshot_bounds.Offset(0, GetView()->GetNativeView()->content_offset().y());
+#else
+  gfx::Rect snapshot_bounds(GetView()->GetViewBounds().size());
+#endif
 
-  std::vector<unsigned char> png;
-  if (ui::GrabViewSnapshot(
-      GetView()->GetNativeView(), &png, snapshot_bounds)) {
-    OnSnapshotDataReceived(snapshot_id, &png.front(), png.size());
+  gfx::Image image;
+  if (ui::GrabViewSnapshot(GetView()->GetNativeView(), snapshot_bounds,
+                           &image)) {
+    OnSnapshotReceived(snapshot_id, image);
     return;
   }
 
   ui::GrabViewSnapshotAsync(
-      GetView()->GetNativeView(),
-      snapshot_bounds,
-      base::ThreadTaskRunnerHandle::Get(),
-      base::Bind(&RenderWidgetHostImpl::OnSnapshotDataReceivedAsync,
-                 weak_factory_.GetWeakPtr(),
-                 snapshot_id));
+      GetView()->GetNativeView(), snapshot_bounds,
+      base::Bind(&RenderWidgetHostImpl::OnSnapshotReceived,
+                 weak_factory_.GetWeakPtr(), snapshot_id));
 }
 
-void RenderWidgetHostImpl::OnSnapshotDataReceived(int snapshot_id,
-                                                  const unsigned char* data,
-                                                  size_t size) {
+void RenderWidgetHostImpl::OnSnapshotReceived(int snapshot_id,
+                                              const gfx::Image& image) {
   // Any pending snapshots with a lower ID than the one received are considered
   // to be implicitly complete, and returned the same snapshot data.
   PendingSnapshotMap::iterator it = pending_browser_snapshots_.begin();
   while (it != pending_browser_snapshots_.end()) {
-      if (it->first <= snapshot_id) {
-        it->second.Run(data, size);
-        pending_browser_snapshots_.erase(it++);
-      } else {
-        ++it;
-      }
+    if (it->first <= snapshot_id) {
+      it->second.Run(image);
+      pending_browser_snapshots_.erase(it++);
+    } else {
+      ++it;
+    }
   }
 #if defined(OS_MACOSX)
   if (pending_browser_snapshots_.empty())
     power_save_blocker_.reset();
 #endif
-}
-
-void RenderWidgetHostImpl::OnSnapshotDataReceivedAsync(
-    int snapshot_id,
-    scoped_refptr<base::RefCountedBytes> png_data) {
-  if (png_data.get())
-    OnSnapshotDataReceived(snapshot_id, png_data->front(), png_data->size());
-  else
-    OnSnapshotDataReceived(snapshot_id, NULL, 0);
 }
 
 // static
@@ -2501,6 +2511,7 @@ void RenderWidgetHostImpl::GrantFileAccessFromDropData(DropData* drop_data) {
         GURL(storage::GetIsolatedFileSystemRootURIString(
                  file_system_url.origin(), filesystem_id, std::string())
                  .append(register_name));
+    file_system_file.filesystem_id = filesystem_id;
   }
 }
 

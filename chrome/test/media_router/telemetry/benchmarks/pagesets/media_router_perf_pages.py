@@ -9,8 +9,11 @@ from telemetry import story
 from benchmarks.pagesets import media_router_page
 from telemetry.core import exceptions
 from telemetry.page import shared_page_state
+from telemetry.util import js_template
+
 
 SESSION_TIME = 300  # 5 minutes
+
 
 class SharedState(shared_page_state.SharedPageState):
   """Shared state that restarts the browser for every single story."""
@@ -59,7 +62,7 @@ class CastIdlePage(CastDialogPage):
     # Wait for 5s after Chrome is opened in order to get consistent results.
     action_runner.Wait(5)
     with action_runner.CreateInteraction('Idle'):
-      action_runner.ExecuteJavaScript('collectPerfData();')
+      action_runner.ExecuteJavaScript2('collectPerfData();')
       action_runner.Wait(SESSION_TIME)
 
 
@@ -80,7 +83,7 @@ class CastFlingingPage(media_router_page.CastPage):
 
       self._WaitForResult(
           action_runner,
-          lambda: action_runner.EvaluateJavaScript('initialized'),
+          lambda: action_runner.EvaluateJavaScript2('initialized'),
           'Failed to initialize',
           timeout=30)
       self.CloseExistingRoute(action_runner, sink_name)
@@ -100,26 +103,27 @@ class CastFlingingPage(media_router_page.CastPage):
 
       self._WaitForResult(
         action_runner,
-        lambda: action_runner.EvaluateJavaScript('currentSession'),
+        lambda: action_runner.EvaluateJavaScript2('currentSession'),
          'Failed to start session',
          timeout=10)
 
       # Load Media
       self.ExecuteAsyncJavaScript(
           action_runner,
-          'loadMedia("%s");' % utils.GetInternalVideoURL(),
-          lambda: action_runner.EvaluateJavaScript('currentMedia'),
+          js_template.Render(
+              'loadMedia({{ url }});', url=utils.GetInternalVideoURL()),
+          lambda: action_runner.EvaluateJavaScript2('currentMedia'),
           'Failed to load media',
           timeout=120)
 
       action_runner.Wait(5)
-      action_runner.ExecuteJavaScript('collectPerfData();')
+      action_runner.ExecuteJavaScript2('collectPerfData();')
       action_runner.Wait(SESSION_TIME)
       # Stop session
       self.ExecuteAsyncJavaScript(
           action_runner,
           'stopSession();',
-          lambda: not action_runner.EvaluateJavaScript('currentSession'),
+          lambda: not action_runner.EvaluateJavaScript2('currentSession'),
           'Failed to stop session',
           timeout=30)
 
@@ -156,12 +160,17 @@ class CastMirroringPage(media_router_page.CastPage):
       # Wait for 5s to make sure the route is created.
       action_runner.Wait(5)
       action_runner.TapElement(selector='#start_session_button')
-      action_runner.Wait(2)
+      self._WaitForResult(
+          action_runner,
+          lambda: len(action_runner.tab.browser.tabs) >= 2,
+          'MR dialog never showed up.')
+
       for tab in action_runner.tab.browser.tabs:
         if tab.url == 'chrome://media-router/':
+          self.WaitUntilDialogLoaded(action_runner, tab)
           if not self.CheckIfExistingRoute(tab, sink_name):
             raise page.page_test.Failure('Failed to start mirroring session.')
-      action_runner.ExecuteJavaScript('collectPerfData();')
+      action_runner.ExecuteJavaScript2('collectPerfData();')
       action_runner.Wait(SESSION_TIME)
       self.CloseExistingRoute(action_runner, sink_name)
 

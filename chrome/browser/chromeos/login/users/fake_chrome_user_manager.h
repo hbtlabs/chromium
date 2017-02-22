@@ -95,13 +95,6 @@ class FakeChromeUserManager : public ChromeUserManager {
   bool IsLoggedInAsStub() const override;
   bool IsUserNonCryptohomeDataEphemeral(
       const AccountId& account_id) const override;
-  void AddObserver(UserManager::Observer* obs) override;
-  void RemoveObserver(UserManager::Observer* obs) override;
-  void AddSessionStateObserver(
-      UserManager::UserSessionStateObserver* obs) override;
-  void RemoveSessionStateObserver(
-      UserManager::UserSessionStateObserver* obs) override;
-  void NotifyLocalStateChanged() override;
   void ChangeUserChildStatus(user_manager::User* user, bool is_child) override;
   bool AreSupervisedUsersAllowed() const override;
   PrefService* GetLocalState() const override;
@@ -183,6 +176,8 @@ class FakeChromeUserManager : public ChromeUserManager {
     multi_profile_user_controller_ = controller;
   }
 
+  void set_current_user_new(bool new_user) { current_user_new_ = new_user; }
+
  private:
   // Lazily creates default user flow.
   UserFlow* GetDefaultUserFlow() const;
@@ -193,6 +188,7 @@ class FakeChromeUserManager : public ChromeUserManager {
   std::unique_ptr<FakeSupervisedUserManager> supervised_user_manager_;
   AccountId owner_account_id_ = EmptyAccountId();
   bool fake_ephemeral_users_enabled_ = false;
+  bool current_user_new_ = false;
 
   BootstrapManager* bootstrap_manager_ = nullptr;
   MultiProfileUserController* multi_profile_user_controller_ = nullptr;

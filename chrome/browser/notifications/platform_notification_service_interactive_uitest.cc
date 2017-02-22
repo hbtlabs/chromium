@@ -7,8 +7,11 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/path_service.h"
+#include "base/strings/string_piece.h"
+#include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
@@ -28,7 +31,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "content/public/browser/permission_type.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
@@ -161,7 +164,7 @@ void PlatformNotificationServiceBrowserTest::
   DesktopNotificationProfileUtil::GrantPermission(browser()->profile(), origin);
   ASSERT_EQ(blink::mojom::PermissionStatus::GRANTED,
             PermissionManager::Get(browser()->profile())
-                ->GetPermissionStatus(content::PermissionType::NOTIFICATIONS,
+                ->GetPermissionStatus(CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
                                       origin, origin));
 }
 
@@ -362,8 +365,12 @@ IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_TRUE(content::WaitForLoadStop(web_contents));
-  ASSERT_EQ("chrome://settings/contentExceptions#notifications",
-            web_contents->GetLastCommittedURL().spec());
+
+  std::string url = web_contents->GetLastCommittedURL().spec();
+  if (base::FeatureList::IsEnabled(features::kMaterialDesignSettings))
+    ASSERT_EQ("chrome://settings/content/notifications", url);
+  else
+    ASSERT_EQ("chrome://settings/contentExceptions#notifications", url);
 }
 
 IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
@@ -464,13 +471,13 @@ IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
 
   EXPECT_EQ(blink::mojom::PermissionStatus::ASK,
             permission_manager->GetPermissionStatus(
-                content::PermissionType::NOTIFICATIONS, TestPageUrl(),
+                CONTENT_SETTINGS_TYPE_NOTIFICATIONS, TestPageUrl(),
                 TestPageUrl()));
 
   RequestAndAcceptPermission();
   EXPECT_EQ(blink::mojom::PermissionStatus::GRANTED,
             permission_manager->GetPermissionStatus(
-                content::PermissionType::NOTIFICATIONS, TestPageUrl(),
+                CONTENT_SETTINGS_TYPE_NOTIFICATIONS, TestPageUrl(),
                 TestPageUrl()));
 
   // This case should fail because a file URL is used.
@@ -484,12 +491,12 @@ IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
 
   EXPECT_EQ(blink::mojom::PermissionStatus::ASK,
             permission_manager->GetPermissionStatus(
-                content::PermissionType::NOTIFICATIONS, file_url, file_url));
+                CONTENT_SETTINGS_TYPE_NOTIFICATIONS, file_url, file_url));
 
   RequestAndAcceptPermission();
   EXPECT_EQ(blink::mojom::PermissionStatus::ASK,
             permission_manager->GetPermissionStatus(
-                content::PermissionType::NOTIFICATIONS, file_url, file_url))
+                CONTENT_SETTINGS_TYPE_NOTIFICATIONS, file_url, file_url))
       << "If this test fails, you may have fixed a bug preventing file origins "
       << "from sending their origin from Blink; if so you need to update the "
       << "display function for notification origins to show the file path.";
@@ -574,6 +581,52 @@ IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
   notification.delegate()->ButtonClickWithReply(0, base::ASCIIToUTF16("hello"));
   ASSERT_TRUE(RunScript("GetMessageFromWorker()", &script_result));
   EXPECT_EQ("action_button_click actionId1 hello", script_result);
+}
+
+IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
+                       GetDisplayedNotifications) {
+  RequestAndAcceptPermission();
+
+  std::string script_result;
+  std::string script_message;
+  ASSERT_TRUE(RunScript("DisplayNonPersistentNotification('NonPersistent')",
+                        &script_result));
+  EXPECT_EQ("ok", script_result);
+  ASSERT_TRUE(RunScript("DisplayPersistentNotification('PersistentI')",
+                        &script_result));
+  EXPECT_EQ("ok", script_result);
+  ASSERT_TRUE(RunScript("DisplayPersistentNotification('PersistentII')",
+                        &script_result));
+  EXPECT_EQ("ok", script_result);
+
+  // Only the persistent ones should show.
+  ASSERT_TRUE(RunScript("GetDisplayedNotifications()", &script_result));
+  EXPECT_EQ("ok", script_result);
+
+  ASSERT_TRUE(RunScript("GetMessageFromWorker()", &script_message));
+
+  std::vector<std::string> notifications = base::SplitString(
+      script_message, ",", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
+  ASSERT_EQ(2u, notifications.size());
+
+  // Now remove one of the notifications straight from the ui manager
+  // without going through the database.
+  const Notification& notification = ui_manager()->GetNotificationAt(1);
+
+  // p: is the prefix for persistent notifications. See
+  //  content/browser/notifications/notification_id_generator.{h,cc} for details
+  ASSERT_TRUE(
+      base::StartsWith(notification.id(), "p:", base::CompareCase::SENSITIVE));
+  ASSERT_TRUE(ui_manager()->SilentDismissById(
+      notification.delegate_id(),
+      NotificationUIManager::GetProfileID(browser()->profile())));
+  ASSERT_TRUE(RunScript("GetDisplayedNotifications()", &script_result));
+  EXPECT_EQ("ok", script_result);
+
+  ASSERT_TRUE(RunScript("GetMessageFromWorker()", &script_message));
+  notifications = base::SplitString(script_message, ",", base::KEEP_WHITESPACE,
+                                    base::SPLIT_WANT_ALL);
+  ASSERT_EQ(1u, notifications.size());
 }
 
 IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,

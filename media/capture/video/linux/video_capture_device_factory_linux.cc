@@ -22,6 +22,7 @@
 #endif
 
 #if defined(OS_CHROMEOS)
+#include "media/capture/video/linux/camera_config_chromeos.h"
 #include "media/capture/video/linux/video_capture_device_chromeos.h"
 #endif
 #include "media/capture/video/linux/video_capture_device_linux.h"
@@ -205,11 +206,24 @@ void VideoCaptureDeviceFactoryLinux::GetDeviceDescriptors(
          !(cap.capabilities & V4L2_CAP_VIDEO_OUTPUT)) &&
         HasUsableFormats(fd.get(), cap.capabilities)) {
       const std::string model_id = GetDeviceModelId(unique_id);
+#if defined(OS_CHROMEOS)
+      static CameraConfigChromeOS* config = new CameraConfigChromeOS();
+      device_descriptors->emplace_back(
+          reinterpret_cast<char*>(cap.card), unique_id, model_id,
+          VideoCaptureApi::LINUX_V4L2_SINGLE_PLANE,
+          VideoCaptureTransportType::OTHER_TRANSPORT,
+          config->GetCameraFacing(unique_id, model_id));
+#else
       device_descriptors->emplace_back(
           reinterpret_cast<char*>(cap.card), unique_id, model_id,
           VideoCaptureApi::LINUX_V4L2_SINGLE_PLANE);
+#endif
     }
   }
+  // Since JS doesn't have API to get camera facing, we sort the list to make
+  // sure apps use the front camera by default.
+  // TODO(henryhsu): remove this after JS API completed (crbug.com/543997).
+  std::sort(device_descriptors->begin(), device_descriptors->end());
 }
 
 void VideoCaptureDeviceFactoryLinux::GetSupportedFormats(

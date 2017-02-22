@@ -5,6 +5,7 @@
 #include "headless/public/util/testing/generic_url_request_mocks.h"
 
 #include "base/logging.h"
+#include "base/threading/thread_task_runner_handle.h"
 
 namespace net {
 class URLRequestJob;
@@ -64,7 +65,6 @@ void MockCookieStore::SetCookieWithDetailsAsync(
     bool secure,
     bool http_only,
     net::CookieSameSite same_site,
-    bool enforce_strict_secure,
     net::CookiePriority priority,
     const SetCookiesCallback& callback) {
   CHECK(false);

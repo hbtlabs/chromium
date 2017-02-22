@@ -36,6 +36,7 @@ shouldBeNull("foreignSel.anchorNode");
 shouldBeNull("mainSel.anchorNode");
 
 clear();
+// An element in a different root should not throw.
 mainSel.extend(foreignElement, 1);
 shouldBeNull("foreignSel.anchorNode");
 shouldBeNull("mainSel.anchorNode");

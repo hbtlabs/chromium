@@ -218,14 +218,18 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
     return m_grid[row].row[effectiveColumn];
   }
   LayoutTableCell* primaryCellAt(unsigned row, unsigned effectiveColumn) {
-    CellStruct& c = m_grid[row].row[effectiveColumn];
-    return c.primaryCell();
+    Row& rowVector = m_grid[row].row;
+    if (effectiveColumn >= rowVector.size())
+      return nullptr;
+    return rowVector[effectiveColumn].primaryCell();
   }
   const LayoutTableCell* primaryCellAt(unsigned row,
                                        unsigned effectiveColumn) const {
     return const_cast<LayoutTableSection*>(this)->primaryCellAt(
         row, effectiveColumn);
   }
+
+  unsigned numCols(unsigned row) const { return m_grid[row].row.size(); }
 
   // Returns null for cells with a rowspan that exceed the last row. Possibly
   // others.
@@ -318,19 +322,14 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
 
   int paginationStrutForRow(LayoutTableRow*, LayoutUnit logicalOffset) const;
 
-  void setOffsetForRepeatingHeader(LayoutUnit offset) {
-    m_offsetForRepeatingHeader = offset;
-  }
-  LayoutUnit offsetForRepeatingHeader() const {
-    return m_offsetForRepeatingHeader;
-  }
-
   bool mapToVisualRectInAncestorSpace(
       const LayoutBoxModelObject* ancestor,
       LayoutRect&,
       VisualRectFlags = DefaultVisualRectFlags) const override;
 
   bool isRepeatingHeaderGroup() const;
+
+  void layout() override;
 
  protected:
   void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) override;
@@ -346,13 +345,19 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
 
   void willBeRemovedFromTree() override;
 
-  void layout() override;
-
   int borderSpacingForRow(unsigned row) const {
     return m_grid[row].rowLayoutObject ? table()->vBorderSpacing() : 0;
   }
 
-  void ensureRows(unsigned);
+  void ensureRows(unsigned numRows) {
+    if (numRows > m_grid.size())
+      m_grid.grow(numRows);
+  }
+
+  void ensureCols(unsigned rowIndex, unsigned numCols) {
+    if (numCols > this->numCols(rowIndex))
+      m_grid[rowIndex].row.grow(numCols);
+  }
 
   bool rowHasOnlySpanningCells(unsigned);
   unsigned calcRowHeightHavingOnlySpanningCells(unsigned,
@@ -470,8 +475,6 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
   // The use is to disable a painting optimization where we just paint the
   // invalidated cells.
   bool m_hasMultipleCellLevels;
-
-  LayoutUnit m_offsetForRepeatingHeader;
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutTableSection, isTableSection());

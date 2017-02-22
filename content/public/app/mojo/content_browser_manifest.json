@@ -4,11 +4,9 @@
   "interface_provider_specs": {
     "service_manager:connector": {
       "provides": {
-        "gpu": [
-          "device::mojom::PowerMonitor"
-        ],
         "plugin": [
-          "device::mojom::PowerMonitor"
+          "discardable_memory::mojom::DiscardableSharedMemoryManager",
+          "ui::mojom::Gpu"
         ],
         "renderer": [
           "blink::mojom::BackgroundSyncService",
@@ -18,24 +16,29 @@
           "blink::mojom::MimeRegistry",
           "blink::mojom::NotificationService",
           "blink::mojom::OffscreenCanvasCompositorFrameSinkProvider",
-          "blink::mojom::OffscreenCanvasSurface",
+          "blink::mojom::OffscreenCanvasSurfaceFactory",
           "blink::mojom::PermissionService",
-          "blink::mojom::ShapeDetection",
           "blink::mojom::WebSocket",
           "content::mojom::MemoryCoordinatorHandle",
+          "content::mojom::PushMessaging",
           "content::mojom::ServiceWorkerDispatcherHost",
           "content::mojom::StoragePartitionService",
           "content::mojom::URLLoaderFactory",
           "content::mojom::VideoCaptureHost",
           "device::BatteryMonitor",
+          "device::mojom::GamepadMonitor",
           "device::mojom::LightSensor",
           "device::mojom::MotionSensor",
+          "device::mojom::OrientationAbsoluteSensor",
           "device::mojom::OrientationSensor",
-          "device::mojom::PowerMonitor",
-          "device::mojom::TimeZoneMonitor",
+          "discardable_memory::mojom::DiscardableSharedMemoryManager",
           "media::mojom::ImageCapture",
           "memory_coordinator::mojom::MemoryCoordinatorHandle",
-          "payments::mojom::PaymentAppManager"
+          "payments::mojom::PaymentAppManager",
+          "shape_detection::mojom::BarcodeDetection",
+          "shape_detection::mojom::FaceDetectionProvider",
+          "shape_detection::mojom::TextDetection",
+          "ui::mojom::Gpu"
         ],
         "service_manager:service_factory": [
           "service_manager::mojom::ServiceFactory"
@@ -49,13 +52,18 @@
         "content_plugin": [ "browser" ],
         "content_renderer": [ "browser" ],
         "content_utility": [ "browser" ],
+        "file": [ "file:filesystem", "file:leveldb" ],
+        "media": [ "media:media" ],
+        "ui": [ "display_output_protection" ],
         "service_manager": [
           "service_manager:client_process",
           "service_manager:instance_name",
           "service_manager:user_id"
         ],
-        "file": [ "file:filesystem", "file:leveldb" ],
-        "media": [ "media:media" ]
+        "shape_detection": [
+          "barcode_detection",
+          "face_detection"
+        ]
       }
     },
     "navigation:frame": {
@@ -70,23 +78,24 @@
           "blink::mojom::PermissionService",
           "blink::mojom::PresentationService",
           "blink::mojom::SensitiveInputVisibilityService",
-          "blink::mojom::ShapeDetection",
           "blink::mojom::WebBluetoothService",
           "blink::mojom::WebSocket",
           // TODO(beng): figure out how to overlay test interfaces like this.
           "content::mojom::BrowserTarget",
           "device::mojom::VRService",
-          "device::VibrationManager",
+          "device::mojom::VibrationManager",
           "device::mojom::GeolocationService",
           "device::mojom::SensorProvider",
           "device::mojom::WakeLockService",
           "device::nfc::mojom::NFC",
           "device::usb::DeviceManager",
+          "discardable_memory::mojom::DiscardableSharedMemoryManager",
           "media::mojom::InterfaceFactory",
           "media::mojom::RemoterFactory",
           "media::mojom::Renderer",
           "mojom::MediaDevicesDispatcherHost",
-          "payments::mojom::PaymentRequest"
+          "payments::mojom::PaymentRequest",
+          "ui::mojom::Gpu"
         ]
       },
       "requires": {

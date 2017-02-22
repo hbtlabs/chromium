@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_SYNC_SESSIONS_SYNCED_TAB_DELEGATE_H__
 #define COMPONENTS_SYNC_SESSIONS_SYNCED_TAB_DELEGATE_H__
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -12,8 +13,6 @@
 #include "components/sessions/core/session_id.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
-
-class Profile;
 
 namespace sync_sessions {
 class SyncSessionsClient;

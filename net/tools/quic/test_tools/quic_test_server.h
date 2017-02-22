@@ -5,10 +5,6 @@
 #ifndef NET_TOOLS_QUIC_TEST_TOOLS_QUIC_TEST_SERVER_H_
 #define NET_TOOLS_QUIC_TEST_TOOLS_QUIC_TEST_SERVER_H_
 
-#include <memory>
-#include <string>
-
-#include "net/base/ip_endpoint.h"
 #include "net/quic/core/quic_session.h"
 #include "net/tools/quic/quic_dispatcher.h"
 #include "net/tools/quic/quic_server.h"
@@ -16,7 +12,6 @@
 #include "net/tools/quic/quic_simple_server_stream.h"
 
 namespace net {
-
 
 namespace test {
 
@@ -37,7 +32,8 @@ class QuicTestServer : public QuicServer {
         QuicSession::Visitor* visitor,
         QuicCryptoServerStream::Helper* helper,
         const QuicCryptoServerConfig* crypto_config,
-        QuicCompressedCertsCache* compressed_certs_cache) = 0;
+        QuicCompressedCertsCache* compressed_certs_cache,
+        QuicHttpResponseCache* response_cache) = 0;
   };
 
   // Factory for creating QuicSimpleServerStreams.
@@ -46,8 +42,10 @@ class QuicTestServer : public QuicServer {
     virtual ~StreamFactory() {}
 
     // Returns a new stream owned by the caller.
-    virtual QuicSimpleServerStream* CreateStream(QuicStreamId id,
-                                                 QuicSpdySession* session) = 0;
+    virtual QuicSimpleServerStream* CreateStream(
+        QuicStreamId id,
+        QuicSpdySession* session,
+        QuicHttpResponseCache* response_cache) = 0;
   };
 
   class CryptoStreamFactory {
@@ -60,10 +58,12 @@ class QuicTestServer : public QuicServer {
         QuicServerSessionBase* session) = 0;
   };
 
-  explicit QuicTestServer(std::unique_ptr<ProofSource> proof_source);
+  QuicTestServer(std::unique_ptr<ProofSource> proof_source,
+                 QuicHttpResponseCache* response_cache);
   QuicTestServer(std::unique_ptr<ProofSource> proof_source,
                  const QuicConfig& config,
-                 const QuicVersionVector& supported_versions);
+                 const QuicVersionVector& supported_versions,
+                 QuicHttpResponseCache* response_cache);
 
   // Create a custom dispatcher which creates custom sessions.
   QuicDispatcher* CreateQuicDispatcher() override;
@@ -93,13 +93,14 @@ class ImmediateGoAwaySession : public QuicSimpleServerSession {
                          QuicSession::Visitor* visitor,
                          QuicCryptoServerStream::Helper* helper,
                          const QuicCryptoServerConfig* crypto_config,
-                         QuicCompressedCertsCache* compressed_certs_cache);
+                         QuicCompressedCertsCache* compressed_certs_cache,
+                         QuicHttpResponseCache* response_cache);
+
   // Override to send GoAway.
   void OnStreamFrame(const QuicStreamFrame& frame) override;
 };
 
 }  // namespace test
-
 
 }  // namespace net
 

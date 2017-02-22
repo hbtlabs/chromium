@@ -13,9 +13,12 @@
 #include "device/bluetooth/bluetooth_remote_gatt_characteristic.h"
 #include "device/bluetooth/bluetooth_remote_gatt_descriptor.h"
 
+namespace base {
+class SequencedTaskRunner;
+}
+
 namespace device {
 
-class BluetoothAdapterWin;
 class BluetoothRemoteGattCharacteristicWin;
 class BluetoothTaskManagerWin;
 

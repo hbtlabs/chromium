@@ -38,7 +38,7 @@ Resources.ResourcesPanel = class extends UI.PanelWithSidebar {
 
     this._resourcesLastSelectedItemSetting = Common.settings.createSetting('resourcesLastSelectedItem', {});
 
-    this._sidebarTree = new TreeOutlineInShadow();
+    this._sidebarTree = new UI.TreeOutlineInShadow();
     this._sidebarTree.element.classList.add('resources-sidebar');
     this._sidebarTree.registerRequiredCSS('resources/resourcesSidebar.css');
     this._sidebarTree.element.classList.add('filter-all');
@@ -53,27 +53,39 @@ Resources.ResourcesPanel = class extends UI.PanelWithSidebar {
     this._applicationTreeElement.appendChild(clearStorageTreeElement);
 
     var storageTreeElement = this._addSidebarSection(Common.UIString('Storage'));
-    this.localStorageListTreeElement = new Resources.StorageCategoryTreeElement(
-        this, Common.UIString('Local Storage'), 'LocalStorage', ['table-tree-item', 'resource-tree-item']);
+    this.localStorageListTreeElement =
+        new Resources.StorageCategoryTreeElement(this, Common.UIString('Local Storage'), 'LocalStorage');
+    var localStorageIcon = UI.Icon.create('mediumicon-table', 'resource-tree-item');
+    this.localStorageListTreeElement.setLeadingIcons([localStorageIcon]);
+
     storageTreeElement.appendChild(this.localStorageListTreeElement);
-    this.sessionStorageListTreeElement = new Resources.StorageCategoryTreeElement(
-        this, Common.UIString('Session Storage'), 'SessionStorage', ['table-tree-item', 'resource-tree-item']);
+    this.sessionStorageListTreeElement =
+        new Resources.StorageCategoryTreeElement(this, Common.UIString('Session Storage'), 'SessionStorage');
+    var sessionStorageIcon = UI.Icon.create('mediumicon-table', 'resource-tree-item');
+    this.sessionStorageListTreeElement.setLeadingIcons([sessionStorageIcon]);
+
     storageTreeElement.appendChild(this.sessionStorageListTreeElement);
     this.indexedDBListTreeElement = new Resources.IndexedDBTreeElement(this);
     storageTreeElement.appendChild(this.indexedDBListTreeElement);
-    this.databasesListTreeElement = new Resources.StorageCategoryTreeElement(
-        this, Common.UIString('Web SQL'), 'Databases', ['database-tree-item', 'resource-tree-item']);
+    this.databasesListTreeElement =
+        new Resources.StorageCategoryTreeElement(this, Common.UIString('Web SQL'), 'Databases');
+    var databaseIcon = UI.Icon.create('mediumicon-database', 'resource-tree-item');
+    this.databasesListTreeElement.setLeadingIcons([databaseIcon]);
+
     storageTreeElement.appendChild(this.databasesListTreeElement);
-    this.cookieListTreeElement = new Resources.StorageCategoryTreeElement(
-        this, Common.UIString('Cookies'), 'Cookies', ['cookie-tree-item', 'resource-tree-item']);
+    this.cookieListTreeElement = new Resources.StorageCategoryTreeElement(this, Common.UIString('Cookies'), 'Cookies');
+    var cookieIcon = UI.Icon.create('mediumicon-cookie', 'resource-tree-item');
+    this.cookieListTreeElement.setLeadingIcons([cookieIcon]);
     storageTreeElement.appendChild(this.cookieListTreeElement);
 
     var cacheTreeElement = this._addSidebarSection(Common.UIString('Cache'));
     this.cacheStorageListTreeElement = new Resources.ServiceWorkerCacheTreeElement(this);
     cacheTreeElement.appendChild(this.cacheStorageListTreeElement);
-    this.applicationCacheListTreeElement = new Resources.StorageCategoryTreeElement(
-        this, Common.UIString('Application Cache'), 'ApplicationCache',
-        ['appcache-tree-item', 'table-tree-item', 'resource-tree-item']);
+    this.applicationCacheListTreeElement =
+        new Resources.StorageCategoryTreeElement(this, Common.UIString('Application Cache'), 'ApplicationCache');
+    var applicationCacheIcon = UI.Icon.create('mediumicon-table', 'resource-tree-item');
+    this.applicationCacheListTreeElement.setLeadingIcons([applicationCacheIcon]);
+
     cacheTreeElement.appendChild(this.applicationCacheListTreeElement);
 
     this.resourcesListTreeElement = this._addSidebarSection(Common.UIString('Frames'));
@@ -113,10 +125,10 @@ Resources.ResourcesPanel = class extends UI.PanelWithSidebar {
 
   /**
    * @param {string} title
-   * @return {!TreeElement}
+   * @return {!UI.TreeElement}
    */
   _addSidebarSection(title) {
-    var treeElement = new TreeElement(title, true);
+    var treeElement = new UI.TreeElement(title, true);
     treeElement.listItemElement.classList.add('storage-group-list-item');
     treeElement.setCollapsible(false);
     treeElement.selectable = false;
@@ -134,8 +146,8 @@ Resources.ResourcesPanel = class extends UI.PanelWithSidebar {
     this._target = target;
     this._databaseModel = Resources.DatabaseModel.fromTarget(target);
 
-    this._databaseModel.addEventListener(Resources.DatabaseModel.Events.DatabaseAdded, this._databaseAdded, this);
-    this._databaseModel.addEventListener(Resources.DatabaseModel.Events.DatabasesRemoved, this._resetWebSQL, this);
+    this._databaseModel.on(Resources.DatabaseModel.DatabaseAddedEvent, this._databaseAdded, this);
+    this._databaseModel.on(Resources.DatabaseModel.DatabasesRemovedEvent, this._resetWebSQL, this);
 
     var resourceTreeModel = SDK.ResourceTreeModel.fromTarget(target);
     if (!resourceTreeModel)
@@ -164,8 +176,8 @@ Resources.ResourcesPanel = class extends UI.PanelWithSidebar {
       resourceTreeModel.removeEventListener(
           SDK.ResourceTreeModel.Events.WillLoadCachedResources, this._resetWithFrames, this);
     }
-    this._databaseModel.removeEventListener(Resources.DatabaseModel.Events.DatabaseAdded, this._databaseAdded, this);
-    this._databaseModel.removeEventListener(Resources.DatabaseModel.Events.DatabasesRemoved, this._resetWebSQL, this);
+    this._databaseModel.off(Resources.DatabaseModel.DatabaseAddedEvent, this._databaseAdded, this);
+    this._databaseModel.off(Resources.DatabaseModel.DatabasesRemovedEvent, this._resetWebSQL, this);
 
     this._resetWithFrames();
   }
@@ -382,31 +394,26 @@ Resources.ResourcesPanel = class extends UI.PanelWithSidebar {
   }
 
   /**
-   * @param {!Common.Event} event
+   * @param {!Resources.DatabaseModel.DatabaseAddedEvent} event
    */
   _databaseAdded(event) {
-    var database = /** @type {!Resources.Database} */ (event.data);
-    this._addDatabase(database);
-  }
-
-  /**
-   * @param {!Resources.Database} database
-   */
-  _addDatabase(database) {
-    var databaseTreeElement = new Resources.DatabaseTreeElement(this, database);
-    this._databaseTreeElements.set(database, databaseTreeElement);
+    var databaseTreeElement = new Resources.DatabaseTreeElement(this, event.database);
+    this._databaseTreeElements.set(event.database, databaseTreeElement);
     this.databasesListTreeElement.appendChild(databaseTreeElement);
   }
 
-  addDocumentURL(url) {
-    var parsedURL = url.asParsedURL();
-    if (!parsedURL)
+  /**
+   * @param {!SDK.ResourceTreeFrame} frame
+   */
+  addCookieDocument(frame) {
+    var parsedURL = frame.url.asParsedURL();
+    if (!parsedURL || (parsedURL.scheme !== 'http' && parsedURL.scheme !== 'https' && parsedURL.scheme !== 'file'))
       return;
 
     var domain = parsedURL.securityOrigin();
     if (!this._domains[domain]) {
       this._domains[domain] = true;
-      var cookieDomainTreeElement = new Resources.CookieTreeElement(this, domain);
+      var cookieDomainTreeElement = new Resources.CookieTreeElement(this, frame, domain);
       this.cookieListTreeElement.appendChild(cookieDomainTreeElement);
     }
   }
@@ -590,11 +597,12 @@ Resources.ResourcesPanel = class extends UI.PanelWithSidebar {
   /**
    * @param {!Resources.CookieTreeElement} treeElement
    * @param {string} cookieDomain
+   * @param {!SDK.Target} cookieFrameTarget
    */
-  showCookies(treeElement, cookieDomain) {
+  showCookies(treeElement, cookieDomain, cookieFrameTarget) {
     var view = this._cookieViews[cookieDomain];
     if (!view) {
-      view = new Resources.CookieItemsView(treeElement, cookieDomain);
+      view = new Resources.CookieItemsView(treeElement, cookieFrameTarget, cookieDomain);
       this._cookieViews[cookieDomain] = view;
     }
 
@@ -606,7 +614,7 @@ Resources.ResourcesPanel = class extends UI.PanelWithSidebar {
    */
   clearCookies(cookieDomain) {
     if (this._cookieViews[cookieDomain])
-      this._cookieViews[cookieDomain].clear();
+      this._cookieViews[cookieDomain].deleteAllItems();
   }
 
   showApplicationCache(frameId) {
@@ -643,9 +651,10 @@ Resources.ResourcesPanel = class extends UI.PanelWithSidebar {
     this.visibleView = view;
 
     this._storageViewToolbar.removeToolbarItems();
-    var toolbarItems = view instanceof UI.SimpleView ? view.syncToolbarItems() : null;
-    for (var i = 0; toolbarItems && i < toolbarItems.length; ++i)
+    var toolbarItems = (view instanceof UI.SimpleView && view.syncToolbarItems()) || [];
+    for (var i = 0; i < toolbarItems.length; ++i)
       this._storageViewToolbar.appendToolbarItem(toolbarItems[i]);
+    this._storageViewToolbar.element.classList.toggle('hidden', !toolbarItems.length);
   }
 
   closeVisibleView() {
@@ -703,24 +712,24 @@ Resources.ResourcesPanel = class extends UI.PanelWithSidebar {
    * @param {!SDK.ResourceTreeModel} resourceTreeModel
    */
   _populateApplicationCacheTree(resourceTreeModel) {
-    this._applicationCacheModel = new SDK.ApplicationCacheModel(this._target, resourceTreeModel);
+    this._applicationCacheModel = Resources.ApplicationCacheModel.fromTarget(this._target);
 
     this._applicationCacheViews = {};
     this._applicationCacheFrameElements = {};
     this._applicationCacheManifestElements = {};
 
     this._applicationCacheModel.addEventListener(
-        SDK.ApplicationCacheModel.Events.FrameManifestAdded, this._applicationCacheFrameManifestAdded, this);
+        Resources.ApplicationCacheModel.Events.FrameManifestAdded, this._applicationCacheFrameManifestAdded, this);
     this._applicationCacheModel.addEventListener(
-        SDK.ApplicationCacheModel.Events.FrameManifestRemoved, this._applicationCacheFrameManifestRemoved, this);
+        Resources.ApplicationCacheModel.Events.FrameManifestRemoved, this._applicationCacheFrameManifestRemoved, this);
     this._applicationCacheModel.addEventListener(
-        SDK.ApplicationCacheModel.Events.FrameManifestsReset, this._resetAppCache, this);
+        Resources.ApplicationCacheModel.Events.FrameManifestsReset, this._resetAppCache, this);
 
     this._applicationCacheModel.addEventListener(
-        SDK.ApplicationCacheModel.Events.FrameManifestStatusUpdated, this._applicationCacheFrameManifestStatusChanged,
-        this);
+        Resources.ApplicationCacheModel.Events.FrameManifestStatusUpdated,
+        this._applicationCacheFrameManifestStatusChanged, this);
     this._applicationCacheModel.addEventListener(
-        SDK.ApplicationCacheModel.Events.NetworkStateChanged, this._applicationCacheNetworkStateChanged, this);
+        Resources.ApplicationCacheModel.Events.NetworkStateChanged, this._applicationCacheNetworkStateChanged, this);
   }
 
   _applicationCacheFrameManifestAdded(event) {
@@ -836,23 +845,15 @@ Resources.ResourcesPanel.ResourceRevealer = class {
 /**
  * @unrestricted
  */
-Resources.BaseStorageTreeElement = class extends TreeElement {
+Resources.BaseStorageTreeElement = class extends UI.TreeElement {
   /**
    * @param {!Resources.ResourcesPanel} storagePanel
    * @param {string} title
-   * @param {?Array.<string>=} iconClasses
-   * @param {boolean=} expandable
-   * @param {boolean=} noIcon
+   * @param {boolean} expandable
    */
-  constructor(storagePanel, title, iconClasses, expandable, noIcon) {
+  constructor(storagePanel, title, expandable) {
     super(title, expandable);
     this._storagePanel = storagePanel;
-    for (var i = 0; iconClasses && i < iconClasses.length; ++i)
-      this.listItemElement.classList.add(iconClasses[i]);
-
-    this._iconClasses = iconClasses;
-    if (!noIcon)
-      this.createIcon();
   }
 
   /**
@@ -877,11 +878,9 @@ Resources.StorageCategoryTreeElement = class extends Resources.BaseStorageTreeEl
    * @param {!Resources.ResourcesPanel} storagePanel
    * @param {string} categoryName
    * @param {string} settingsKey
-   * @param {?Array.<string>=} iconClasses
-   * @param {boolean=} noIcon
    */
-  constructor(storagePanel, categoryName, settingsKey, iconClasses, noIcon) {
-    super(storagePanel, categoryName, iconClasses, false, noIcon);
+  constructor(storagePanel, categoryName, settingsKey) {
+    super(storagePanel, categoryName, false);
     this._expandedSetting =
         Common.settings.createSetting('resources' + settingsKey + 'Expanded', settingsKey === 'Frames');
     this._categoryName = categoryName;
@@ -941,9 +940,13 @@ Resources.FrameTreeElement = class extends Resources.BaseStorageTreeElement {
    * @param {!SDK.ResourceTreeFrame} frame
    */
   constructor(storagePanel, frame) {
-    super(storagePanel, '', ['navigator-tree-item', 'navigator-frame-tree-item']);
+    super(storagePanel, '', false);
     this._frame = frame;
     this.frameNavigated(frame);
+
+    var icon = UI.Icon.create('largeicon-navigator-frame', 'navigator-tree-item');
+    icon.classList.add('navigator-frame-tree-item');
+    this.setLeadingIcons([icon]);
   }
 
   frameNavigated(frame) {
@@ -953,7 +956,7 @@ Resources.FrameTreeElement = class extends Resources.BaseStorageTreeElement {
     this._categoryElements = {};
     this._treeElementForResource = {};
 
-    this._storagePanel.addDocumentURL(frame.url);
+    this._storagePanel.addCookieDocument(frame);
   }
 
   get itemURL() {
@@ -994,7 +997,7 @@ Resources.FrameTreeElement = class extends Resources.BaseStorageTreeElement {
     var categoryElement = resourceType === Common.resourceTypes.Document ? this : this._categoryElements[categoryName];
     if (!categoryElement) {
       categoryElement = new Resources.StorageCategoryTreeElement(
-          this._storagePanel, resource.resourceType().category().title, categoryName, null, true);
+          this._storagePanel, resource.resourceType().category().title, categoryName);
       this._categoryElements[resourceType.name()] = categoryElement;
       this._insertInPresentationOrder(this, categoryElement);
     }
@@ -1062,13 +1065,16 @@ Resources.FrameResourceTreeElement = class extends Resources.BaseStorageTreeElem
    * @param {!SDK.Resource} resource
    */
   constructor(storagePanel, resource) {
-    super(storagePanel, resource.displayName, [
-      'navigator-tree-item', 'navigator-file-tree-item', 'navigator-' + resource.resourceType().name() + '-tree-item'
-    ]);
+    super(storagePanel, resource.displayName, false);
     /** @type {!SDK.Resource} */
     this._resource = resource;
     this.tooltip = resource.url;
     this._resource[Resources.FrameResourceTreeElement._symbol] = this;
+
+    var icon = UI.Icon.create('largeicon-navigator-file', 'navigator-tree-item');
+    icon.classList.add('navigator-file-tree-item');
+    icon.classList.add('navigator-' + resource.resourceType().name() + '-tree-item');
+    this.setLeadingIcons([icon]);
   }
 
   get itemURL() {
@@ -1144,8 +1150,11 @@ Resources.DatabaseTreeElement = class extends Resources.BaseStorageTreeElement {
    * @param {!Resources.Database} database
    */
   constructor(storagePanel, database) {
-    super(storagePanel, database.name, ['database-tree-item', 'resource-tree-item'], true);
+    super(storagePanel, database.name, true);
     this._database = database;
+
+    var icon = UI.Icon.create('mediumicon-database', 'resource-tree-item');
+    this.setLeadingIcons([icon]);
   }
 
   get itemURL() {
@@ -1190,9 +1199,11 @@ Resources.DatabaseTreeElement = class extends Resources.BaseStorageTreeElement {
  */
 Resources.DatabaseTableTreeElement = class extends Resources.BaseStorageTreeElement {
   constructor(storagePanel, database, tableName) {
-    super(storagePanel, tableName, ['table-tree-item', 'resource-tree-item']);
+    super(storagePanel, tableName, false);
     this._database = database;
     this._tableName = tableName;
+    var icon = UI.Icon.create('mediumicon-table', 'resource-tree-item');
+    this.setLeadingIcons([icon]);
   }
 
   get itemURL() {
@@ -1218,7 +1229,9 @@ Resources.ServiceWorkerCacheTreeElement = class extends Resources.StorageCategor
    * @param {!Resources.ResourcesPanel} storagePanel
    */
   constructor(storagePanel) {
-    super(storagePanel, Common.UIString('Cache Storage'), 'CacheStorage', ['database-tree-item', 'resource-tree-item']);
+    super(storagePanel, Common.UIString('Cache Storage'), 'CacheStorage');
+    var icon = UI.Icon.create('mediumicon-database', 'resource-tree-item');
+    this.setLeadingIcons([icon]);
   }
 
   _initialize() {
@@ -1264,8 +1277,8 @@ Resources.ServiceWorkerCacheTreeElement = class extends Resources.StorageCategor
    * @param {!Common.Event} event
    */
   _cacheAdded(event) {
-    var cache = /** @type {!SDK.ServiceWorkerCacheModel.Cache} */ (event.data);
-    var model = /** @type {!SDK.ServiceWorkerCacheModel} */ (event.target);
+    var cache = /** @type {!SDK.ServiceWorkerCacheModel.Cache} */ (event.data.cache);
+    var model = /** @type {!SDK.ServiceWorkerCacheModel} */ (event.data.model);
     this._addCache(model, cache);
   }
 
@@ -1283,8 +1296,8 @@ Resources.ServiceWorkerCacheTreeElement = class extends Resources.StorageCategor
    * @param {!Common.Event} event
    */
   _cacheRemoved(event) {
-    var cache = /** @type {!SDK.ServiceWorkerCacheModel.Cache} */ (event.data);
-    var model = /** @type {!SDK.ServiceWorkerCacheModel} */ (event.target);
+    var cache = /** @type {!SDK.ServiceWorkerCacheModel.Cache} */ (event.data.cache);
+    var model = /** @type {!SDK.ServiceWorkerCacheModel} */ (event.data.model);
 
     var swCacheTreeElement = this._cacheTreeElement(model, cache);
     if (!swCacheTreeElement)
@@ -1324,9 +1337,11 @@ Resources.SWCacheTreeElement = class extends Resources.BaseStorageTreeElement {
    * @param {!SDK.ServiceWorkerCacheModel.Cache} cache
    */
   constructor(storagePanel, model, cache) {
-    super(storagePanel, cache.cacheName + ' - ' + cache.securityOrigin, ['table-tree-item', 'resource-tree-item']);
+    super(storagePanel, cache.cacheName + ' - ' + cache.securityOrigin, false);
     this._model = model;
     this._cache = cache;
+    var icon = UI.Icon.create('mediumicon-table', 'resource-tree-item');
+    this.setLeadingIcons([icon]);
   }
 
   get itemURL() {
@@ -1388,7 +1403,9 @@ Resources.ServiceWorkersTreeElement = class extends Resources.BaseStorageTreeEle
    * @param {!Resources.ResourcesPanel} storagePanel
    */
   constructor(storagePanel) {
-    super(storagePanel, Common.UIString('Service Workers'), ['service-worker-tree-item', 'resource-tree-item'], false);
+    super(storagePanel, Common.UIString('Service Workers'), false);
+    var icon = UI.Icon.create('mediumicon-service-worker', 'resource-tree-item');
+    this.setLeadingIcons([icon]);
   }
 
   /**
@@ -1419,7 +1436,9 @@ Resources.AppManifestTreeElement = class extends Resources.BaseStorageTreeElemen
    * @param {!Resources.ResourcesPanel} storagePanel
    */
   constructor(storagePanel) {
-    super(storagePanel, Common.UIString('Manifest'), ['manifest-tree-item', 'resource-tree-item'], false, false);
+    super(storagePanel, Common.UIString('Manifest'), false);
+    var icon = UI.Icon.create('mediumicon-manifest', 'resource-tree-item');
+    this.setLeadingIcons([icon]);
   }
 
   /**
@@ -1450,9 +1469,9 @@ Resources.ClearStorageTreeElement = class extends Resources.BaseStorageTreeEleme
    * @param {!Resources.ResourcesPanel} storagePanel
    */
   constructor(storagePanel) {
-    super(
-        storagePanel, Common.UIString('Clear storage'), ['clear-storage-tree-item', 'resource-tree-item'], false,
-        false);
+    super(storagePanel, Common.UIString('Clear storage'), false);
+    var icon = UI.Icon.create('mediumicon-clear-storage', 'resource-tree-item');
+    this.setLeadingIcons([icon]);
   }
 
   /**
@@ -1483,7 +1502,9 @@ Resources.IndexedDBTreeElement = class extends Resources.StorageCategoryTreeElem
    * @param {!Resources.ResourcesPanel} storagePanel
    */
   constructor(storagePanel) {
-    super(storagePanel, Common.UIString('IndexedDB'), 'IndexedDB', ['database-tree-item', 'resource-tree-item']);
+    super(storagePanel, Common.UIString('IndexedDB'), 'IndexedDB');
+    var icon = UI.Icon.create('mediumicon-database', 'resource-tree-item');
+    this.setLeadingIcons([icon]);
   }
 
   _initialize() {
@@ -1529,8 +1550,8 @@ Resources.IndexedDBTreeElement = class extends Resources.StorageCategoryTreeElem
    * @param {!Common.Event} event
    */
   _indexedDBAdded(event) {
-    var databaseId = /** @type {!Resources.IndexedDBModel.DatabaseId} */ (event.data);
-    var model = /** @type {!Resources.IndexedDBModel} */ (event.target);
+    var databaseId = /** @type {!Resources.IndexedDBModel.DatabaseId} */ (event.data.databaseId);
+    var model = /** @type {!Resources.IndexedDBModel} */ (event.data.model);
     this._addIndexedDB(model, databaseId);
   }
 
@@ -1549,8 +1570,8 @@ Resources.IndexedDBTreeElement = class extends Resources.StorageCategoryTreeElem
    * @param {!Common.Event} event
    */
   _indexedDBRemoved(event) {
-    var databaseId = /** @type {!Resources.IndexedDBModel.DatabaseId} */ (event.data);
-    var model = /** @type {!Resources.IndexedDBModel} */ (event.target);
+    var databaseId = /** @type {!Resources.IndexedDBModel.DatabaseId} */ (event.data.databaseId);
+    var model = /** @type {!Resources.IndexedDBModel} */ (event.data.model);
 
     var idbDatabaseTreeElement = this._idbDatabaseTreeElement(model, databaseId);
     if (!idbDatabaseTreeElement)
@@ -1565,8 +1586,8 @@ Resources.IndexedDBTreeElement = class extends Resources.StorageCategoryTreeElem
    * @param {!Common.Event} event
    */
   _indexedDBLoaded(event) {
-    var database = /** @type {!Resources.IndexedDBModel.Database} */ (event.data);
-    var model = /** @type {!Resources.IndexedDBModel} */ (event.target);
+    var database = /** @type {!Resources.IndexedDBModel.Database} */ (event.data.database);
+    var model = /** @type {!Resources.IndexedDBModel} */ (event.data.model);
 
     var idbDatabaseTreeElement = this._idbDatabaseTreeElement(model, database.databaseId);
     if (!idbDatabaseTreeElement)
@@ -1605,12 +1626,12 @@ Resources.IDBDatabaseTreeElement = class extends Resources.BaseStorageTreeElemen
    * @param {!Resources.IndexedDBModel.DatabaseId} databaseId
    */
   constructor(storagePanel, model, databaseId) {
-    super(
-        storagePanel, databaseId.name + ' - ' + databaseId.securityOrigin,
-        ['database-tree-item', 'resource-tree-item']);
+    super(storagePanel, databaseId.name + ' - ' + databaseId.securityOrigin, false);
     this._model = model;
     this._databaseId = databaseId;
     this._idbObjectStoreTreeElements = {};
+    var icon = UI.Icon.create('mediumicon-database', 'resource-tree-item');
+    this.setLeadingIcons([icon]);
   }
 
   get itemURL() {
@@ -1674,7 +1695,7 @@ Resources.IDBDatabaseTreeElement = class extends Resources.BaseStorageTreeElemen
   onselect(selectedByUser) {
     super.onselect(selectedByUser);
     if (!this._view)
-      this._view = new Resources.IDBDatabaseView(this._database);
+      this._view = new Resources.IDBDatabaseView(this._model, this._database);
 
     this._storagePanel._innerShowView(this._view);
     return false;
@@ -1707,10 +1728,12 @@ Resources.IDBObjectStoreTreeElement = class extends Resources.BaseStorageTreeEle
    * @param {!Resources.IndexedDBModel.ObjectStore} objectStore
    */
   constructor(storagePanel, model, databaseId, objectStore) {
-    super(storagePanel, objectStore.name, ['table-tree-item', 'resource-tree-item']);
+    super(storagePanel, objectStore.name, false);
     this._model = model;
     this._databaseId = databaseId;
     this._idbIndexTreeElements = {};
+    var icon = UI.Icon.create('mediumicon-table', 'resource-tree-item');
+    this.setLeadingIcons([icon]);
   }
 
   get itemURL() {
@@ -1831,7 +1854,7 @@ Resources.IDBIndexTreeElement = class extends Resources.BaseStorageTreeElement {
    * @param {!Resources.IndexedDBModel.Index} index
    */
   constructor(storagePanel, model, databaseId, objectStore, index) {
-    super(storagePanel, index.name, ['index-tree-item', 'resource-tree-item']);
+    super(storagePanel, index.name, false);
     this._model = model;
     this._databaseId = databaseId;
     this._objectStore = objectStore;
@@ -1890,10 +1913,10 @@ Resources.IDBIndexTreeElement = class extends Resources.BaseStorageTreeElement {
  */
 Resources.DOMStorageTreeElement = class extends Resources.BaseStorageTreeElement {
   constructor(storagePanel, domStorage) {
-    super(
-        storagePanel, domStorage.securityOrigin ? domStorage.securityOrigin : Common.UIString('Local Files'),
-        ['table-tree-item', 'resource-tree-item']);
+    super(storagePanel, domStorage.securityOrigin ? domStorage.securityOrigin : Common.UIString('Local Files'), false);
     this._domStorage = domStorage;
+    var icon = UI.Icon.create('mediumicon-table', 'resource-tree-item');
+    this.setLeadingIcons([icon]);
   }
 
   get itemURL() {
@@ -1910,17 +1933,32 @@ Resources.DOMStorageTreeElement = class extends Resources.BaseStorageTreeElement
     this._storagePanel._showDOMStorage(this._domStorage);
     return false;
   }
+
+  /**
+   * @override
+   */
+  onattach() {
+    super.onattach();
+    this.listItemElement.addEventListener('contextmenu', this._handleContextMenuEvent.bind(this), true);
+  }
+
+  _handleContextMenuEvent(event) {
+    var contextMenu = new UI.ContextMenu(event);
+    contextMenu.appendItem(Common.UIString('Clear'), () => this._domStorage.clear());
+    contextMenu.show();
+  }
 };
 
 /**
  * @unrestricted
  */
 Resources.CookieTreeElement = class extends Resources.BaseStorageTreeElement {
-  constructor(storagePanel, cookieDomain) {
-    super(
-        storagePanel, cookieDomain ? cookieDomain : Common.UIString('Local Files'),
-        ['cookie-tree-item', 'resource-tree-item']);
+  constructor(storagePanel, frame, cookieDomain) {
+    super(storagePanel, cookieDomain ? cookieDomain : Common.UIString('Local Files'), false);
+    this._frame = frame;
     this._cookieDomain = cookieDomain;
+    var icon = UI.Icon.create('mediumicon-cookie', 'resource-tree-item');
+    this.setLeadingIcons([icon]);
   }
 
   get itemURL() {
@@ -1957,7 +1995,7 @@ Resources.CookieTreeElement = class extends Resources.BaseStorageTreeElement {
    */
   onselect(selectedByUser) {
     super.onselect(selectedByUser);
-    this._storagePanel.showCookies(this, this._cookieDomain);
+    this._storagePanel.showCookies(this, this._cookieDomain, this._frame.target());
     return false;
   }
 };
@@ -1968,7 +2006,7 @@ Resources.CookieTreeElement = class extends Resources.BaseStorageTreeElement {
 Resources.ApplicationCacheManifestTreeElement = class extends Resources.BaseStorageTreeElement {
   constructor(storagePanel, manifestURL) {
     var title = new Common.ParsedURL(manifestURL).displayName;
-    super(storagePanel, title, ['application-cache-storage-tree-item']);
+    super(storagePanel, title, false);
     this.tooltip = manifestURL;
     this._manifestURL = manifestURL;
   }
@@ -2002,10 +2040,14 @@ Resources.ApplicationCacheFrameTreeElement = class extends Resources.BaseStorage
    * @param {string} manifestURL
    */
   constructor(storagePanel, frameId, manifestURL) {
-    super(storagePanel, '', ['navigator-tree-item', 'navigator-folder-tree-item']);
+    super(storagePanel, '', false);
     this._frameId = frameId;
     this._manifestURL = manifestURL;
     this._refreshTitles();
+
+    var icon = UI.Icon.create('largeicon-navigator-folder', 'navigator-tree-item');
+    icon.classList.add('navigator-folder-tree-item');
+    this.setLeadingIcons([icon]);
   }
 
   get itemURL() {

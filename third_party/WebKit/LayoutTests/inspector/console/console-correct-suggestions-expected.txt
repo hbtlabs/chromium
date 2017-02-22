@@ -7,7 +7,7 @@ Checking 'win'
 Found: window
 
 Checking 'window["doc'
-Found: "document"]
+Found: "document"], displayed as "document"
 
 Checking 'window["document"].bo'
 Found: body
@@ -64,5 +64,71 @@ Found: document
 
 Checking '// do'
 Not Found: document
+
+Checking '["should'
+Not Found: shouldNotFindThisFunction
+
+Checking 'shou'
+Not Found: should not find this
+
+Checking 'myMap.get('
+Found: "first"), displayed as "first"
+Found: "second"), displayed as "second"
+Found: "third"), displayed as "third"
+
+Checking 'myMap.get(''
+Found: 'first'), displayed as 'first'
+Found: 'second'), displayed as 'second'
+Found: 'third'), displayed as 'third'
+
+Checking 'myMap.set('firs'
+Found: 'first', , displayed as 'first'
+
+Checking 'myMap.set(should'
+Found: shouldFindThisFunction
+Not Found: shouldNotFindThis
+Not Found: "shouldNotFindThis")
+
+Checking 'myMap.delete(''
+Found: 'first'), displayed as 'first'
+Found: 'second'), displayed as 'second'
+Found: 'third'), displayed as 'third'
+
+Checking 'document.   bo'
+Found: body
+
+Checking 'document.	bo'
+Found: body
+
+Checking 'document.\nbo'
+Found: body
+
+Checking 'document.\r\nbo'
+Found: body
+
+Checking 'document   [    'bo'
+Not Found: 'body']
+
+Checking 'function hey(should'
+Not Found: shouldNotFindThisFunction
+
+Checking 'var should'
+Not Found: shouldNotFindThisFunction
+
+Checking 'document[[win'
+Found: window
+
+Checking 'document[   [win'
+Found: window
+
+Checking 'document[   [  win'
+Found: window
+
+Checking 'I|mag'
+Found: Image
+Found: Infinity
+
+Checking 'var x = (do|);'
+Found: document
 
 

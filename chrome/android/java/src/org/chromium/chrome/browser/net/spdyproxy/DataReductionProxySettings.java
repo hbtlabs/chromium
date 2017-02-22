@@ -126,11 +126,6 @@ public class DataReductionProxySettings {
         mNativeDataReductionProxySettings = nativeInit();
     }
 
-    /** Returns true if the SPDY proxy is allowed to be used. */
-    public boolean isDataReductionProxyAllowed() {
-        return nativeIsDataReductionProxyAllowed(mNativeDataReductionProxySettings);
-    }
-
     /** Returns true if the SPDY proxy promo is allowed to be shown. */
     public boolean isDataReductionProxyPromoAllowed() {
         return nativeIsDataReductionProxyPromoAllowed(mNativeDataReductionProxySettings);
@@ -138,7 +133,7 @@ public class DataReductionProxySettings {
 
     /** Returns true if the snackbar promo is allowed to be shown. */
     public boolean isSnackbarPromoAllowed(String url) {
-        return url.startsWith(UrlConstants.HTTP_SCHEME) && isDataReductionProxyEnabled()
+        return url.startsWith(UrlConstants.HTTP_URL_PREFIX) && isDataReductionProxyEnabled()
                 && isDataReductionProxyPromoAllowed();
     }
 
@@ -284,7 +279,8 @@ public class DataReductionProxySettings {
         }
         String rewritten = extractUrlFromWebliteQueryParams(url);
         if (rewritten == null
-                || !TextUtils.equals(Uri.parse(rewritten).getScheme(), "http")) {
+                || !TextUtils.equals(Uri.parse(rewritten).getScheme(),
+                        UrlConstants.HTTP_SCHEME)) {
             return url;
         }
 
@@ -302,8 +298,6 @@ public class DataReductionProxySettings {
     }
 
     private native long nativeInit();
-    private native boolean nativeIsDataReductionProxyAllowed(
-            long nativeDataReductionProxySettingsAndroid);
     private native boolean nativeIsDataReductionProxyPromoAllowed(
             long nativeDataReductionProxySettingsAndroid);
     private native boolean nativeIsDataReductionProxyEnabled(

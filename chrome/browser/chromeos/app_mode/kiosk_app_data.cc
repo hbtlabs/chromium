@@ -11,6 +11,7 @@
 #include "base/json/json_writer.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -426,8 +427,9 @@ void KioskAppData::ClearCache() {
   dict_update->Remove(app_key, NULL);
 
   if (!icon_path_.empty()) {
-    BrowserThread::PostBlockingPoolTask(
-        FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, base::TaskTraits().MayBlock().WithPriority(
+                       base::TaskPriority::BACKGROUND),
         base::Bind(base::IgnoreResult(&base::DeleteFile), icon_path_, false));
   }
 }
@@ -662,8 +664,8 @@ void KioskAppData::OnWebstoreResponseParseSuccess(
                              &icon_url_string))
     return;
 
-  GURL icon_url = GURL(extension_urls::GetWebstoreLaunchURL()).Resolve(
-      icon_url_string);
+  GURL icon_url =
+      extension_urls::GetWebstoreLaunchURL().Resolve(icon_url_string);
   if (!icon_url.is_valid()) {
     LOG(ERROR) << "Webstore response error (icon url): "
                << ValueToString(*webstore_data);

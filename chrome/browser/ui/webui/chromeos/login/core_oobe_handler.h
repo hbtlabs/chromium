@@ -13,19 +13,15 @@
 #include "base/macros.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
+#include "chrome/browser/chromeos/login/demo_mode/demo_mode_detector.h"
 #include "chrome/browser/chromeos/login/screens/core_oobe_actor.h"
 #include "chrome/browser/chromeos/login/version_info_updater.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/demo_mode_detector.h"
 #include "ui/events/event_source.h"
 #include "ui/keyboard/scoped_keyboard_disabler.h"
 
 namespace base {
 class ListValue;
-}
-
-namespace gfx {
-class Rect;
 }
 
 namespace ui {
@@ -46,7 +42,7 @@ class CoreOobeHandler : public BaseScreenHandler,
   class Delegate {
    public:
     // Called when current screen is changed.
-    virtual void OnCurrentScreenChanged(const std::string& screen) = 0;
+    virtual void OnCurrentScreenChanged(OobeScreen screen) = 0;
   };
 
   explicit CoreOobeHandler(OobeUI* oobe_ui);
@@ -123,6 +119,8 @@ class CoreOobeHandler : public BaseScreenHandler,
   void SetClientAreaSize(int width, int height) override;
   void ShowDeviceResetScreen() override;
   void ShowEnableDebuggingScreen() override;
+  void ShowActiveDirectoryPasswordChangeScreen(
+      const std::string& username) override;
 
   void InitDemoModeDetection() override;
   void StopDemoModeDetection() override;

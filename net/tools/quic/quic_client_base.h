@@ -8,20 +8,13 @@
 #ifndef NET_TOOLS_QUIC_QUIC_CLIENT_BASE_H_
 #define NET_TOOLS_QUIC_QUIC_CLIENT_BASE_H_
 
-#include <memory>
 #include <string>
 
 #include "base/macros.h"
-#include "net/base/ip_endpoint.h"
 #include "net/quic/core/crypto/crypto_handshake.h"
-#include "net/quic/core/crypto/quic_crypto_client_config.h"
-#include "net/quic/core/quic_alarm_factory.h"
-#include "net/quic/core/quic_bandwidth.h"
 #include "net/quic/core/quic_client_push_promise_index.h"
 #include "net/quic/core/quic_config.h"
-#include "net/quic/core/quic_connection.h"
-#include "net/quic/core/quic_packet_writer.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/platform/api/quic_socket_address.h"
 #include "net/tools/quic/quic_client_session.h"
 #include "net/tools/quic/quic_spdy_client_stream.h"
 
@@ -128,14 +121,15 @@ class QuicClientBase : public QuicClientPushPromiseIndex::Delegate,
   void WaitForStreamToClose(QuicStreamId id);
 
   // Wait for events until the handshake is confirmed.
-  void WaitForCryptoHandshakeConfirmed();
+  // Returns true if the crypto handshake succeeds, false otherwise.
+  bool WaitForCryptoHandshakeConfirmed() WARN_UNUSED_RESULT;
 
   // Wait up to 50ms, and handle any events which occur.
   // Returns true if there are any outstanding requests.
   bool WaitForEvents();
 
   // Migrate to a new socket during an active connection.
-  bool MigrateSocket(const IPAddress& new_host);
+  bool MigrateSocket(const QuicIpAddress& new_host);
 
   QuicClientSession* session() { return session_.get(); }
 
@@ -261,6 +255,7 @@ class QuicClientBase : public QuicClientPushPromiseIndex::Delegate,
 
   size_t latest_response_code() const;
   const std::string& latest_response_headers() const;
+  const std::string& preliminary_response_headers() const;
   const SpdyHeaderBlock& latest_response_header_block() const;
   const std::string& latest_response_body() const;
   const std::string& latest_response_trailers() const;
@@ -269,17 +264,19 @@ class QuicClientBase : public QuicClientPushPromiseIndex::Delegate,
     response_listener_ = std::move(listener);
   }
 
-  void set_bind_to_address(IPAddress address) { bind_to_address_ = address; }
+  void set_bind_to_address(QuicIpAddress address) {
+    bind_to_address_ = address;
+  }
 
-  IPAddress bind_to_address() const { return bind_to_address_; }
+  QuicIpAddress bind_to_address() const { return bind_to_address_; }
 
   void set_local_port(int local_port) { local_port_ = local_port; }
 
   int local_port() const { return local_port_; }
 
-  const IPEndPoint& server_address() const { return server_address_; }
+  const QuicSocketAddress& server_address() const { return server_address_; }
 
-  void set_server_address(const IPEndPoint& server_address) {
+  void set_server_address(const QuicSocketAddress& server_address) {
     server_address_ = server_address;
   }
 
@@ -296,8 +293,8 @@ class QuicClientBase : public QuicClientPushPromiseIndex::Delegate,
 
   // Used during initialization: creates the UDP socket FD, sets socket options,
   // and binds the socket to our address.
-  virtual bool CreateUDPSocketAndBind(IPEndPoint server_address,
-                                      IPAddress bind_to_address,
+  virtual bool CreateUDPSocketAndBind(QuicSocketAddress server_address,
+                                      QuicIpAddress bind_to_address,
                                       int bind_to_port) = 0;
 
   // Unregister and close all open UDP sockets.
@@ -305,7 +302,7 @@ class QuicClientBase : public QuicClientPushPromiseIndex::Delegate,
 
   // If the client has at least one UDP socket, return address of the latest
   // created one. Otherwise, return an empty socket address.
-  virtual IPEndPoint GetLatestClientAddress() const = 0;
+  virtual QuicSocketAddress GetLatestClientAddress() const = 0;
 
   // Generates the next ConnectionId for |server_id_|.  By default, if the
   // cached server config contains a server-designated ID, that ID will be
@@ -377,10 +374,10 @@ class QuicClientBase : public QuicClientPushPromiseIndex::Delegate,
   bool initialized_;
 
   // Address of the server.
-  IPEndPoint server_address_;
+  QuicSocketAddress server_address_;
 
   // If initialized, the address to bind to.
-  IPAddress bind_to_address_;
+  QuicIpAddress bind_to_address_;
 
   // Local port to bind to. Initialize to 0.
   int local_port_;
@@ -443,6 +440,8 @@ class QuicClientBase : public QuicClientPushPromiseIndex::Delegate,
   int latest_response_code_;
   // HTTP/2 headers from most recent response.
   std::string latest_response_headers_;
+  // preliminary 100 Continue HTTP/2 headers from most recent response, if any.
+  std::string preliminary_response_headers_;
   // HTTP/2 headers from most recent response.
   SpdyHeaderBlock latest_response_header_block_;
   // Body of most recent response.

@@ -62,7 +62,7 @@ void LayoutGeometryMap::mapToAncestor(
   }
 
   bool inFixed = false;
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   bool foundAncestor = !ancestor || (m_mapping.size() &&
                                      m_mapping[0].m_layoutObject == ancestor);
 #endif
@@ -73,7 +73,7 @@ void LayoutGeometryMap::mapToAncestor(
     // If container is the root LayoutView (step 0) we want to apply its fixed
     // position offset.
     if (i > 0 && currentStep.m_layoutObject == ancestor) {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
       foundAncestor = true;
 #endif
       break;
@@ -153,7 +153,7 @@ FloatQuad LayoutGeometryMap::mapToAncestor(
     result = transformState.lastPlanarQuad();
   }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   if (m_mapping.size() > 0) {
     const LayoutObject* lastLayoutObject = m_mapping.back().m_layoutObject;
 
@@ -190,20 +190,24 @@ void LayoutGeometryMap::pushMappingsToAncestor(
          isTopmostLayoutView(m_mapping[0].m_layoutObject));
 }
 
-static bool canMapBetweenLayoutObjects(const LayoutObject* layoutObject,
-                                       const LayoutObject* ancestor) {
-  for (const LayoutObject* current = layoutObject;;
+static bool canMapBetweenLayoutObjects(const LayoutObject& layoutObject,
+                                       const LayoutObject& ancestor) {
+  for (const LayoutObject* current = &layoutObject;;
        current = current->parent()) {
     const ComputedStyle& style = current->styleRef();
-    if (style.position() == FixedPosition || style.isFlippedBlocksWritingMode())
+    if (style.position() == EPosition::kFixed ||
+        style.isFlippedBlocksWritingMode())
       return false;
 
     if (current->style()->canContainFixedPositionObjects() ||
         current->isLayoutFlowThread() || current->isSVGRoot())
       return false;
 
-    if (current == ancestor)
+    if (current == &ancestor)
       break;
+
+    if (current->isFloatingWithNonContainingBlockParent())
+      return false;
   }
 
   return true;
@@ -212,18 +216,18 @@ static bool canMapBetweenLayoutObjects(const LayoutObject* layoutObject,
 void LayoutGeometryMap::pushMappingsToAncestor(
     const PaintLayer* layer,
     const PaintLayer* ancestorLayer) {
-  const LayoutObject* layoutObject = layer->layoutObject();
+  const LayoutObject& layoutObject = layer->layoutObject();
 
   bool crossDocument =
       ancestorLayer &&
-      layer->layoutObject()->frame() != ancestorLayer->layoutObject()->frame();
+      layoutObject.frame() != ancestorLayer->layoutObject().frame();
   ASSERT(!crossDocument || m_mapCoordinatesFlags & TraverseDocumentBoundaries);
 
   // We have to visit all the layoutObjects to detect flipped blocks. This might
   // defeat the gains from mapping via layers.
   bool canConvertInLayerTree =
       (ancestorLayer && !crossDocument)
-          ? canMapBetweenLayoutObjects(layer->layoutObject(),
+          ? canMapBetweenLayoutObjects(layoutObject,
                                        ancestorLayer->layoutObject())
           : false;
 
@@ -238,21 +242,21 @@ void LayoutGeometryMap::pushMappingsToAncestor(
 
     // The LayoutView must be pushed first.
     if (!m_mapping.size()) {
-      ASSERT(ancestorLayer->layoutObject()->isLayoutView());
-      pushMappingsToAncestor(ancestorLayer->layoutObject(), 0);
+      DCHECK(ancestorLayer->layoutObject().isLayoutView());
+      pushMappingsToAncestor(&ancestorLayer->layoutObject(), 0);
     }
 
     AutoReset<size_t> positionChange(&m_insertionPosition, m_mapping.size());
     bool accumulatingTransform =
-        layer->layoutObject()->style()->preserves3D() ||
-        ancestorLayer->layoutObject()->style()->preserves3D();
-    push(layoutObject, toLayoutSize(layerOffset),
+        layoutObject.style()->preserves3D() ||
+        ancestorLayer->layoutObject().style()->preserves3D();
+    push(&layoutObject, toLayoutSize(layerOffset),
          accumulatingTransform ? AccumulatingTransform : 0);
     return;
   }
   const LayoutBoxModelObject* ancestorLayoutObject =
-      ancestorLayer ? ancestorLayer->layoutObject() : 0;
-  pushMappingsToAncestor(layoutObject, ancestorLayoutObject);
+      ancestorLayer ? &ancestorLayer->layoutObject() : 0;
+  pushMappingsToAncestor(&layoutObject, ancestorLayoutObject);
 }
 
 void LayoutGeometryMap::push(const LayoutObject* layoutObject,
@@ -324,7 +328,7 @@ void LayoutGeometryMap::popMappingsToAncestor(
 
 void LayoutGeometryMap::popMappingsToAncestor(const PaintLayer* ancestorLayer) {
   const LayoutBoxModelObject* ancestorLayoutObject =
-      ancestorLayer ? ancestorLayer->layoutObject() : 0;
+      ancestorLayer ? &ancestorLayer->layoutObject() : 0;
   popMappingsToAncestor(ancestorLayoutObject);
 }
 
@@ -360,7 +364,7 @@ void LayoutGeometryMap::stepRemoved(const LayoutGeometryMapStep& step) {
   }
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 bool LayoutGeometryMap::isTopmostLayoutView(
     const LayoutObject* layoutObject) const {
   if (!layoutObject->isLayoutView())

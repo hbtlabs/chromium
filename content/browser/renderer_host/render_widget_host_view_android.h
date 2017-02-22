@@ -20,16 +20,19 @@
 #include "base/process/process.h"
 #include "cc/input/selection.h"
 #include "cc/output/begin_frame_args.h"
+#include "cc/scheduler/begin_frame_source.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/android/content_view_core_impl_observer.h"
 #include "content/browser/renderer_host/delegated_frame_evictor.h"
 #include "content/browser/renderer_host/ime_adapter_android.h"
 #include "content/browser/renderer_host/input/stylus_text_selector.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
+#include "content/browser/renderer_host/text_input_manager.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/readback_types.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/android/delegated_frame_host_android.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android_observer.h"
 #include "ui/events/android/motion_event_android.h"
@@ -41,20 +44,8 @@
 
 class GURL;
 
-namespace cc {
-class Layer;
-}
-
 namespace ui {
 struct DidOverscrollParams;
-}
-
-namespace blink {
-class WebMouseEvent;
-}
-
-namespace ui {
-class DelegatedFrameHostAndroid;
 }
 
 namespace content {
@@ -65,7 +56,6 @@ class RenderWidgetHostImpl;
 class SynchronousCompositorHost;
 class SynchronousCompositorClient;
 struct NativeWebKeyboardEvent;
-struct TextInputState;
 
 // -----------------------------------------------------------------------------
 // See comments in render_widget_host_view.h about this class and its members.
@@ -77,7 +67,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       public DelegatedFrameEvictorClient,
       public StylusTextSelectorClient,
       public ui::TouchSelectionControllerClient,
-      public content::ContentViewCoreImplObserver {
+      public content::ContentViewCoreImplObserver,
+      public content::TextInputManager::Observer,
+      public ui::DelegatedFrameHostAndroid::Client,
+      public cc::BeginFrameObserver {
  public:
   RenderWidgetHostViewAndroid(RenderWidgetHostImpl* widget,
                               ContentViewCoreImpl* content_view_core);
@@ -111,20 +104,12 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   float GetBottomControlsHeight() const override;
   void UpdateCursor(const WebCursor& cursor) override;
   void SetIsLoading(bool is_loading) override;
-  void TextInputStateChanged(const TextInputState& params) override;
-  void ImeCancelComposition() override;
-  void ImeCompositionRangeChanged(
-      const gfx::Range& range,
-      const std::vector<gfx::Rect>& character_bounds) override;
   void FocusedNodeChanged(bool is_editable_node,
                           const gfx::Rect& node_bounds_in_screen) override;
   void RenderProcessGone(base::TerminationStatus status,
                          int error_code) override;
   void Destroy() override;
   void SetTooltipText(const base::string16& tooltip_text) override;
-  void SelectionChanged(const base::string16& text,
-                        size_t offset,
-                        const gfx::Range& range) override;
   bool HasAcceleratedSurface(const gfx::Size& desired_size) override;
   void SetBackgroundColor(SkColor color) override;
   void CopyFromCompositingSurface(
@@ -152,6 +137,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnSwapCompositorFrame(uint32_t compositor_frame_sink_id,
                              cc::CompositorFrame frame) override;
   void ClearCompositorFrame() override;
+  void SetIsInVR(bool is_in_vr) override;
+  bool IsInVR() const override;
   void DidOverscroll(const ui::DidOverscrollParams& params) override;
   void DidStopFlinging() override;
   cc::FrameSinkId GetFrameSinkId() override;
@@ -159,8 +146,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
                                const SkBitmap& zoomed_bitmap) override;
   std::unique_ptr<SyntheticGestureTarget> CreateSyntheticGestureTarget()
       override;
-  void LockCompositingSurface() override;
-  void UnlockCompositingSurface() override;
   void OnDidNavigateMainFrameToNewPage() override;
   void SetNeedsBeginFrames(bool needs_begin_frames) override;
 
@@ -168,12 +153,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnGestureEvent(const ui::GestureEventData& gesture) override;
 
   // ui::WindowAndroidObserver implementation.
-  void OnCompositingDidCommit() override;
+  void OnCompositingDidCommit() override {}
   void OnRootWindowVisibilityChanged(bool visible) override;
   void OnAttachCompositor() override;
   void OnDetachCompositor() override;
-  void OnVSync(base::TimeTicks frame_time,
-               base::TimeDelta vsync_period) override;
   void OnAnimate(base::TimeTicks begin_frame_time) override;
   void OnActivityStopped() override;
   void OnActivityStarted() override;
@@ -189,7 +172,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // StylusTextSelectorClient implementation.
   void OnStylusSelectBegin(float x0, float y0, float x1, float y1) override;
   void OnStylusSelectUpdate(float x, float y) override;
-  void OnStylusSelectEnd() override;
+  void OnStylusSelectEnd() override {};
   void OnStylusSelectTap(base::TimeTicks time, float x, float y) override;
 
   // ui::TouchSelectionControllerClient implementation.
@@ -202,6 +185,15 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnSelectionEvent(ui::SelectionEventType event) override;
   std::unique_ptr<ui::TouchHandleDrawable> CreateDrawable() override;
 
+  // DelegatedFrameHostAndroid::Client implementation.
+  void SetBeginFrameSource(cc::BeginFrameSource* begin_frame_source) override;
+  void ReturnResources(const cc::ReturnedResourceArray& resources) override;
+
+  // cc::BeginFrameObserver implementation.
+  void OnBeginFrame(const cc::BeginFrameArgs& args) override;
+  const cc::BeginFrameArgs& LastUsedBeginFrameArgs() const override;
+  void OnBeginFrameSourcePausedChanged(bool paused) override;
+
   // Non-virtual methods
   void SetContentViewCore(ContentViewCoreImpl* content_view_core);
   SkColor GetCachedBackgroundColor() const;
@@ -211,9 +203,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void SendGestureEvent(const blink::WebGestureEvent& event);
 
   void OnStartContentIntent(const GURL& content_url, bool is_main_frame);
-  void OnSmartClipDataExtracted(const base::string16& text,
-                                const base::string16& html,
-                                const gfx::Rect rect);
 
   bool OnTouchEvent(const ui::MotionEvent& event);
   bool OnTouchHandleEvent(const ui::MotionEvent& event);
@@ -245,7 +234,21 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
     return synchronous_compositor_client_;
   }
 
+  void OnOverscrollRefreshHandlerAvailable();
+
   static void OnContextLost();
+
+  // TextInputManager::Observer overrides.
+  void OnUpdateTextInputStateCalled(TextInputManager* text_input_manager,
+                                    RenderWidgetHostViewBase* updated_view,
+                                    bool did_change_state) override;
+  void OnImeCompositionRangeChanged(
+      TextInputManager* text_input_manager,
+      RenderWidgetHostViewBase* updated_view) override;
+  void OnImeCancelComposition(TextInputManager* text_input_manager,
+                              RenderWidgetHostViewBase* updated_view) override;
+  void OnTextSelectionChanged(TextInputManager* text_input_manager,
+                              RenderWidgetHostViewBase* updated_view) override;
 
  private:
   void RunAckCallbacks();
@@ -271,11 +274,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
                                const ReadbackRequestCallback& callback,
                                const SkColorType color_type);
 
-  // If we have locks on a frame during a ContentViewCore swap or a context
-  // lost, the frame is no longer valid and we can safely release all the locks.
-  // Use this method to release all the locks.
-  void ReleaseLocksOnSurface();
-
   // Drop any incoming frames from the renderer when there are locks on the
   // current frame.
   void RetainFrame(uint32_t compositor_frame_sink_id,
@@ -286,17 +284,16 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void DestroyDelegatedContent();
   void OnLostResources();
 
-  void ReturnResources(const cc::ReturnedResourceArray& resources);
-
-  enum VSyncRequestType {
+  enum BeginFrameRequestType {
     FLUSH_INPUT = 1 << 0,
     BEGIN_FRAME = 1 << 1,
     PERSISTENT_BEGIN_FRAME = 1 << 2
   };
-  void RequestVSyncUpdate(uint32_t requests);
+  void AddBeginFrameRequest(BeginFrameRequestType request);
+  void ClearBeginFrameRequest(BeginFrameRequestType request);
   void StartObservingRootWindow();
   void StopObservingRootWindow();
-  void SendBeginFrame(base::TimeTicks frame_time, base::TimeDelta vsync_period);
+  void SendBeginFrame(cc::BeginFrameArgs args);
   bool Animate(base::TimeTicks frame_time);
   void RequestDisallowInterceptTouchEvent();
 
@@ -304,17 +301,28 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   void ComputeEventLatencyOSTouchHistograms(const ui::MotionEvent& event);
 
+  void CreateOverscrollControllerIfPossible();
+
   // The model object.
   RenderWidgetHostImpl* host_;
 
-  // Used to control action dispatch at the next |OnVSync()| call.
-  uint32_t outstanding_vsync_requests_;
+  // The begin frame source being observed.  Null if none.
+  cc::BeginFrameSource* begin_frame_source_;
+  cc::BeginFrameArgs last_begin_frame_args_;
+
+  // Indicates whether and for what reason a request for begin frames has been
+  // issued. Used to control action dispatch at the next |OnBeginFrame()| call.
+  uint32_t outstanding_begin_frame_requests_;
 
   bool is_showing_;
 
   // Window-specific bits that affect widget visibility.
   bool is_window_visible_;
   bool is_window_activity_started_;
+
+  // Used to customize behavior for virtual reality mode, such as the
+  // appearance of overscroll glow and the keyboard.
+  bool is_in_vr_;
 
   // ContentViewCoreImpl is our interface to the view system.
   ContentViewCoreImpl* content_view_core_;
@@ -363,18 +371,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   std::unique_ptr<DelegatedFrameEvictor> frame_evictor_;
 
-  size_t locks_on_frame_count_;
   bool observing_root_window_;
-
-  struct LastFrameInfo {
-    LastFrameInfo(uint32_t compositor_frame_sink_id,
-                  cc::CompositorFrame output_frame);
-    ~LastFrameInfo();
-    uint32_t compositor_frame_sink_id;
-    cc::CompositorFrame frame;
-  };
-
-  std::unique_ptr<LastFrameInfo> last_frame_info_;
 
   // The last scroll offset of the view.
   gfx::Vector2dF last_scroll_offset_;

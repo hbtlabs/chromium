@@ -94,6 +94,7 @@ class NotificationViewTest : public views::ViewsTestBase,
   void ClickOnNotificationButton(const std::string& notification_id,
                                  int button_index) override;
   void ClickOnSettingsButton(const std::string& notification_id) override;
+  void UpdateNotificationSize(const std::string& notification_id) override;
 
  protected:
   // Used to fill bitmaps returned by CreateBitmap().
@@ -167,11 +168,11 @@ class NotificationViewTest : public views::ViewsTestBase,
     std::vector<views::View*>::iterator current = vertical_order.begin();
     std::vector<views::View*>::iterator last = current++;
     while (current != vertical_order.end()) {
-      gfx::Point last_point = (*last)->bounds().origin();
+      gfx::Point last_point = (*last)->origin();
       views::View::ConvertPointToTarget(
           (*last), notification_view(), &last_point);
 
-      gfx::Point current_point = (*current)->bounds().origin();
+      gfx::Point current_point = (*current)->origin();
       views::View::ConvertPointToTarget(
           (*current), notification_view(), &current_point);
 
@@ -280,6 +281,12 @@ void NotificationViewTest::ClickOnNotificationButton(
 }
 
 void NotificationViewTest::ClickOnSettingsButton(
+    const std::string& notification_id) {
+  // For this test, this method should not be invoked.
+  NOTREACHED();
+}
+
+void NotificationViewTest::UpdateNotificationSize(
     const std::string& notification_id) {
   // For this test, this method should not be invoked.
   NOTREACHED();

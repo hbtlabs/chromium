@@ -51,8 +51,8 @@ struct FrameHostMsg_ShowPopup_Params;
 #endif
 
 namespace cc {
-class CompositorFrame;
 class SurfaceId;
+class SurfaceInfo;
 struct SurfaceSequence;
 }  // namespace cc
 
@@ -167,10 +167,7 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   BrowserPluginGuestManager* GetBrowserPluginGuestManager() const;
 
   // WebContentsObserver implementation.
-  void DidCommitProvisionalLoadForFrame(
-      RenderFrameHost* render_frame_host,
-      const GURL& url,
-      ui::PageTransition transition_type) override;
+  void DidFinishNavigation(NavigationHandle* navigation_handle) override;
 
   void RenderViewReady() override;
   void RenderProcessGone(base::TerminationStatus status) override;
@@ -240,9 +237,7 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   void PointerLockPermissionResponse(bool allow);
 
   // The next function is virtual for test purposes.
-  virtual void SetChildFrameSurface(const cc::SurfaceId& surface_id,
-                                    const gfx::Size& frame_size,
-                                    float scale_factor,
+  virtual void SetChildFrameSurface(const cc::SurfaceInfo& surface_info,
                                     const cc::SurfaceSequence& sequence);
 
   // Find the given |search_text| in the page. Returns true if the find request
@@ -258,6 +253,9 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   bool can_use_cross_process_frames() const {
     return can_use_cross_process_frames_;
   }
+
+  gfx::Point GetCoordinatesInEmbedderWebContents(
+      const gfx::Point& relative_point);
 
  protected:
 
@@ -348,9 +346,11 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
       const std::vector<blink::WebCompositionUnderline>& underlines,
       int selection_start,
       int selection_end);
-  void OnImeCommitText(int instance_id,
-                       const std::string& text,
-                       int relative_cursor_pos);
+  void OnImeCommitText(
+      int instance_id,
+      const std::string& text,
+      const std::vector<blink::WebCompositionUnderline>& underlines,
+      int relative_cursor_pos);
   void OnImeFinishComposingText(bool keep_selection);
   void OnExtendSelectionAndDelete(int instance_id, int before, int after);
   void OnImeCancelComposition();

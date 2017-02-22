@@ -115,6 +115,7 @@ break-before: auto
 break-inside: auto
 buffered-rendering: auto
 caption-side: top
+caret-color: rgb(0, 0, 0)
 clear: none
 clip: auto
 clip-path: none
@@ -205,10 +206,11 @@ min-width: 0px
 mix-blend-mode: normal
 object-fit: fill
 object-position: 50% 50%
-offset-anchor: 50% 50%
+offset-anchor: auto
 offset-distance: 0px
 offset-path: none
 offset-position: auto
+offset-rotate: auto 0deg
 offset-rotation: auto 0deg
 opacity: 1
 order: 0
@@ -234,10 +236,10 @@ position: static
 r: 0px
 resize: none
 right: auto
-rotate: 0deg
+rotate: none
 rx: auto
 ry: auto
-scale: 1
+scale: none
 scroll-behavior: auto
 scroll-snap-coordinate: none
 scroll-snap-destination: 0px 0px
@@ -287,7 +289,7 @@ transition-delay: 0s
 transition-duration: 0s
 transition-property: all
 transition-timing-function: ease
-translate: 0px
+translate: none
 unicode-bidi: normal
 user-select: text
 vector-effect: none

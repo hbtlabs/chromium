@@ -40,7 +40,8 @@ static const char kManifestDisplayNotSupportedMessage[] =
     "the manifest display property must be set to 'standalone' or 'fullscreen'";
 static const char kManifestMissingSuitableIconMessage[] =
     "the manifest does not contain a suitable icon - PNG format of at least "
-    "%spx is required, and the sizes attribute must be set";
+    "%spx is required, the sizes attribute must be set, and the purpose "
+    "attribute, if set, must include \"any\".";
 static const char kNoMatchingServiceWorkerMessage[] =
     "no matching service worker detected. You may need to reload the page, or "
     "check that the service worker for the current page also controls the "
@@ -61,6 +62,8 @@ static const char kIdsDoNotMatchMessage[] =
     "but they do not match";
 static const char kUrlNotSupportedForWebApkMessage[] =
     "a URL in the web manifest contains a username, password, or port";
+static const char kInIncognitoMessage[] =
+    "the page is loaded in an incognito window";
 
 }  // namespace
 
@@ -90,7 +93,7 @@ void LogErrorToConsole(content::WebContents* web_contents,
       break;
     case RENDERER_CANCELLED:
       pattern = kRendererCancelledMessage;
-      severity = content::CONSOLE_MESSAGE_LEVEL_LOG;
+      severity = content::CONSOLE_MESSAGE_LEVEL_INFO;
       break;
     case USER_NAVIGATED:
       pattern = kUserNavigatedMessage;
@@ -144,6 +147,9 @@ void LogErrorToConsole(content::WebContents* web_contents,
       break;
     case URL_NOT_SUPPORTED_FOR_WEBAPK:
       pattern = kUrlNotSupportedForWebApkMessage;
+      break;
+    case IN_INCOGNITO:
+      pattern = kInIncognitoMessage;
       break;
   }
 

@@ -38,7 +38,7 @@ class CORE_EXPORT PaintInvalidationCapableScrollableArea
     return scrollCornerRect();
   }
 
-  LayoutRect visualRectForScrollbarParts() const override;
+  void didScrollWithScrollbar(ScrollbarPart, ScrollbarOrientation) override;
 
  private:
   virtual LayoutScrollbarPart* scrollCorner() const = 0;
@@ -46,11 +46,15 @@ class CORE_EXPORT PaintInvalidationCapableScrollableArea
 
   void scrollControlWasSetNeedsPaintInvalidation() override;
 
+  void setHorizontalScrollbarVisualRect(const LayoutRect&);
+  void setVerticalScrollbarVisualRect(const LayoutRect&);
+  void setScrollCornerAndResizerVisualRect(const LayoutRect&);
+
   bool m_horizontalScrollbarPreviouslyWasOverlay;
   bool m_verticalScrollbarPreviouslyWasOverlay;
-  LayoutRect m_horizontalScrollbarPreviousVisualRect;
-  LayoutRect m_verticalScrollbarPreviousVisualRect;
-  LayoutRect m_scrollCornerAndResizerPreviousVisualRect;
+  LayoutRect m_horizontalScrollbarVisualRect;
+  LayoutRect m_verticalScrollbarVisualRect;
+  LayoutRect m_scrollCornerAndResizerVisualRect;
 };
 
 }  // namespace blink

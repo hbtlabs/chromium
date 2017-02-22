@@ -7,7 +7,6 @@
 #include "ash/common/accelerators/accelerator_controller.h"
 #include "ash/common/accelerators/accelerator_table.h"
 #include "ash/common/accessibility_types.h"
-#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/system/tray/system_tray.h"
 #include "ash/common/wm_shell.h"
 #include "ash/shell.h"
@@ -438,13 +437,6 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, NavigateSystemTray) {
   }
   SendKeyPress(ui::VKEY_RETURN);
 
-  if (!ash::MaterialDesignController::IsSystemTrayMenuMaterial()) {
-    while (true) {
-      if (base::MatchPattern(speech_monitor_.GetNextUtterance(), "*Bluetooth"))
-        break;
-    }
-  }
-
   // Navigate to return to previous menu button and press it.
   while (true) {
     std::string utterance = speech_monitor_.GetNextUtterance();
@@ -456,13 +448,8 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, NavigateSystemTray) {
 
   while (true) {
     std::string utterance = speech_monitor_.GetNextUtterance();
-    if (ash::MaterialDesignController::IsSystemTrayMenuMaterial()) {
-      if (base::MatchPattern(utterance, "Bluetooth*"))
-        break;
-    } else {
-      if (base::MatchPattern(utterance, "*Bluetooth"))
-        break;
-    }
+    if (base::MatchPattern(utterance, "Bluetooth*"))
+      break;
   }
 }
 
@@ -500,7 +487,11 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, OverviewMode) {
       break;
   }
 
-  EXPECT_EQ("Entered window overview mode", speech_monitor_.GetNextUtterance());
+  while (true) {
+    std::string utterance = speech_monitor_.GetNextUtterance();
+    if (utterance == "Entered window overview mode")
+      break;
+  }
 
   SendKeyPress(ui::VKEY_TAB);
   // On Chrome OS accessibility title for tabbed browser windows contains app
@@ -534,9 +525,12 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, MAYBE_ChromeVoxShiftSearch) {
 
   // Press Search+/ to enter ChromeVox's "find in page".
   SendKeyPressWithSearch(ui::VKEY_OEM_2);
-  EXPECT_EQ(", window", speech_monitor_.GetNextUtterance());
-  EXPECT_EQ("webView", speech_monitor_.GetNextUtterance());
-  EXPECT_EQ("Find in page.", speech_monitor_.GetNextUtterance());
+
+  while (true) {
+    std::string utterance = speech_monitor_.GetNextUtterance();
+    if (utterance == "Find in page.")
+      break;
+  }
 }
 
 #if defined(MEMORY_SANITIZER)
@@ -575,7 +569,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, MAYBE_ChromeVoxNavigateAndSelect) {
   EXPECT_EQ("Title", speech_monitor_.GetNextUtterance());
 }
 
-IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ChromeVoxNextStickyMode) {
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_ChromeVoxNextStickyMode) {
   EnableChromeVox();
 
   ui_test_utils::NavigateToURL(

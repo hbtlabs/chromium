@@ -109,27 +109,25 @@ TEST_F(TooltipControllerTest, HideTooltipWhenCursorHidden) {
                                 view->bounds().CenterPoint());
   base::string16 expected_tooltip = base::ASCIIToUTF16("Tooltip Text");
 
-  // Fire tooltip timer so tooltip becomes visible.
-  helper_->FireTooltipTimer();
+  // Mouse event triggers tooltip update so it becomes visible.
   EXPECT_TRUE(helper_->IsTooltipVisible());
 
-  // Hide the cursor and check again.
+  // Disable mouse event which hides the cursor and check again.
   ash::Shell::GetInstance()->cursor_manager()->DisableMouseEvents();
-  helper_->FireTooltipTimer();
+  RunAllPendingInMessageLoop();
+  EXPECT_FALSE(ash::Shell::GetInstance()->cursor_manager()->IsCursorVisible());
+  helper_->UpdateIfRequired();
   EXPECT_FALSE(helper_->IsTooltipVisible());
 
-  // Show the cursor and re-check.
-  RunAllPendingInMessageLoop();
+  // Enable mouse event which shows the cursor and re-check.
   ash::Shell::GetInstance()->cursor_manager()->EnableMouseEvents();
   RunAllPendingInMessageLoop();
-  helper_->FireTooltipTimer();
+  EXPECT_TRUE(ash::Shell::GetInstance()->cursor_manager()->IsCursorVisible());
+  helper_->UpdateIfRequired();
   EXPECT_TRUE(helper_->IsTooltipVisible());
 }
 
 TEST_F(TooltipControllerTest, TooltipsOnMultiDisplayShouldNotCrash) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("1000x600,600x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   std::unique_ptr<views::Widget> widget1(
@@ -150,18 +148,12 @@ TEST_F(TooltipControllerTest, TooltipsOnMultiDisplayShouldNotCrash) {
   ui::test::EventGenerator generator(root_windows[1]);
   generator.MoveMouseRelativeTo(widget2->GetNativeView(),
                                 view2->bounds().CenterPoint());
-  helper_->FireTooltipTimer();
   EXPECT_TRUE(helper_->IsTooltipVisible());
 
   // Get rid of secondary display. This destroy's the tooltip's aura window. If
   // we have handled this case, we will not crash in the following statement.
   UpdateDisplay("1000x600");
-#if !defined(OS_WIN)
-  // TODO(cpu): Detangle the window destruction notification. Currently
-  // the TooltipController::OnWindowDestroyed is not being called then the
-  // display is torn down so the tooltip is is still there.
   EXPECT_FALSE(helper_->IsTooltipVisible());
-#endif
   EXPECT_EQ(widget2->GetNativeView()->GetRootWindow(), root_windows[0]);
 
   // The tooltip should create a new aura window for itself, so we should still
@@ -169,7 +161,6 @@ TEST_F(TooltipControllerTest, TooltipsOnMultiDisplayShouldNotCrash) {
   ui::test::EventGenerator generator1(root_windows[0]);
   generator1.MoveMouseRelativeTo(widget1->GetNativeView(),
                                  view1->bounds().CenterPoint());
-  helper_->FireTooltipTimer();
   EXPECT_TRUE(helper_->IsTooltipVisible());
 }
 

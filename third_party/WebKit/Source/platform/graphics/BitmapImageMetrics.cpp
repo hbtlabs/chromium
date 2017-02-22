@@ -5,6 +5,7 @@
 #include "platform/graphics/BitmapImageMetrics.h"
 
 #include "platform/Histogram.h"
+#include "platform/graphics/ColorSpace.h"
 #include "wtf/Threading.h"
 #include "wtf/text/WTFString.h"
 
@@ -42,18 +43,32 @@ void BitmapImageMetrics::countImageOrientation(
   orientationHistogram.count(orientation);
 }
 
-void BitmapImageMetrics::countImageGamma(SkColorSpace* colorSpace) {
+void BitmapImageMetrics::countImageGammaAndGamut(SkColorSpace* colorSpace) {
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
       EnumerationHistogram, gammaNamedHistogram,
       new EnumerationHistogram("Blink.ColorSpace.Source", GammaEnd));
   gammaNamedHistogram.count(getColorSpaceGamma(colorSpace));
+
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(
+      EnumerationHistogram, gamutNamedHistogram,
+      new EnumerationHistogram("Blink.ColorGamut.Source",
+                               static_cast<int>(ColorSpaceGamut::End)));
+  gamutNamedHistogram.count(
+      static_cast<int>(ColorSpaceUtilities::getColorSpaceGamut(colorSpace)));
 }
 
-void BitmapImageMetrics::countOutputGamma(SkColorSpace* colorSpace) {
+void BitmapImageMetrics::countOutputGammaAndGamut(SkColorSpace* colorSpace) {
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
       EnumerationHistogram, gammaNamedHistogram,
       new EnumerationHistogram("Blink.ColorSpace.Destination", GammaEnd));
   gammaNamedHistogram.count(getColorSpaceGamma(colorSpace));
+
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(
+      EnumerationHistogram, gamutNamedHistogram,
+      new EnumerationHistogram("Blink.ColorGamut.Destination",
+                               static_cast<int>(ColorSpaceGamut::End)));
+  gamutNamedHistogram.count(
+      static_cast<int>(ColorSpaceUtilities::getColorSpaceGamut(colorSpace)));
 }
 
 BitmapImageMetrics::Gamma BitmapImageMetrics::getColorSpaceGamma(

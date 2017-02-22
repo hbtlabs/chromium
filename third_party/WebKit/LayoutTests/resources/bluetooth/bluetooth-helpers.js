@@ -2,13 +2,15 @@
 
 // Bluetooth UUID constants:
 // Services:
-var blacklist_test_service_uuid = "611c954a-263b-4f4a-aab6-01ddb953f985";
+var blocklist_test_service_uuid = "611c954a-263b-4f4a-aab6-01ddb953f985";
 var request_disconnection_service_uuid = "01d7d889-7451-419f-aeb8-d65e7b9277af";
 // Characteristics:
-var blacklist_exclude_reads_characteristic_uuid =
+var blocklist_exclude_reads_characteristic_uuid =
   "bad1c9a2-9a5b-4015-8b60-1579bbbf2135";
 var request_disconnection_characteristic_uuid =
   "01d7d88a-7451-419f-aeb8-d65e7b9277af";
+// Descriptors:
+var blocklist_test_descriptor_uuid = "bad2ddcf-60db-45cd-bef9-fd72b153cf7c";
 
 // Sometimes we need to test that using either the name, alias, or UUID
 // produces the same result. The following objects help us do that.
@@ -51,6 +53,16 @@ var battery_level = {
   alias: 0x2A19,
   name: 'battery_level',
   uuid: '00002a19-0000-1000-8000-00805f9b34fb'
+};
+var user_description = {
+  alias: 0x2901,
+  name: 'gatt.characteristic_user_description',
+  uuid: '00002901-0000-1000-8000-00805f9b34fb'
+};
+var client_characteristic_configuration = {
+  alias: 0x2902,
+  name: 'gatt.client_characteristic_configuration',
+  uuid: '00002902-0000-1000-8000-00805f9b34fb'
 };
 
 // The following tests make sure the Web Bluetooth implementation
@@ -136,9 +148,20 @@ function requestDeviceWithKeyDown() {
   return callWithKeyDown(() => navigator.bluetooth.requestDevice.apply(navigator.bluetooth, args));
 }
 
+function assert_testRunner() {
+  assert_true(window.testRunner instanceof Object,
+    "window.testRunner is required for this test, it will not work manually.");
+}
+
+function setBluetoothManualChooser(enable) {
+  assert_testRunner();
+  testRunner.setBluetoothManualChooser(enable);
+}
+
 // Calls testRunner.getBluetoothManualChooserEvents() until it's returned
 // |expected_count| events. Or just once if |expected_count| is undefined.
 function getBluetoothManualChooserEvents(expected_count) {
+  assert_testRunner();
   return new Promise((resolve, reject) => {
     let events = [];
     let accumulate_events = new_events => {
@@ -153,7 +176,13 @@ function getBluetoothManualChooserEvents(expected_count) {
   });
 }
 
+function sendBluetoothManualChooserEvent(event, argument) {
+  assert_testRunner();
+  testRunner.sendBluetoothManualChooserEvent(event, argument);
+}
+
 function setBluetoothFakeAdapter(adapter_name) {
+  assert_testRunner();
   return new Promise(resolve => {
     testRunner.setBluetoothFakeAdapter(adapter_name, resolve);
   });
@@ -234,7 +263,10 @@ function eventPromise(target, type, options) {
 // reject if the event is fired before |object|.|func|() resolves.
 // Returns a promise that fulfills with the result of |object|.|func()|
 // and |event.target.value| of each of the other promises.
-function assert_event_fires_after_promise(object, func, event, num_listeners) {
+// If |ignore_event_promise_order| is set true, this function will ignore
+// the relative order of the event and the promise; otherwise it will assert
+// the event is triggered after the promise is resolved.
+function assert_event_fires_after_promise(object, func, event, num_listeners, ignore_event_promise_order) {
   num_listeners = num_listeners !== undefined ? num_listeners : 1;
 
   if (object[func] === undefined) {
@@ -246,7 +278,7 @@ function assert_event_fires_after_promise(object, func, event, num_listeners) {
     event_promises.push(new Promise((resolve, reject) => {
       let event_listener = (e) => {
         object.removeEventListener(event, event_listener);
-        if (should_resolve) {
+        if (should_resolve || ignore_event_promise_order) {
           resolve(e.target.value);
         } else {
           reject(event + ' was triggered before the promise resolved.');
@@ -310,7 +342,7 @@ function generate_string(size, char) {
 class EventCatcher {
   constructor(object, event) {
     this.eventFired = false;
-    let event_listener = e => {
+    let event_listener = () => {
       object.removeEventListener(event, event_listener);
       this.eventFired = true;
     }

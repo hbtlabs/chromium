@@ -2,22 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_QUIC_QUIC_SERVER_ID_H_
-#define NET_QUIC_QUIC_SERVER_ID_H_
+#ifndef NET_QUIC_CORE_QUIC_SERVER_ID_H_
+#define NET_QUIC_CORE_QUIC_SERVER_ID_H_
 
 #include <stdint.h>
 
 #include <string>
 
 #include "net/base/host_port_pair.h"
-#include "net/base/net_export.h"
 #include "net/base/privacy_mode.h"
+#include "net/quic/platform/api/quic_export.h"
 
 namespace net {
 
 // The id used to identify sessions. Includes the hostname, port, scheme and
 // privacy_mode.
-class NET_EXPORT_PRIVATE QuicServerId {
+class QUIC_EXPORT_PRIVATE QuicServerId {
  public:
   QuicServerId();
   QuicServerId(const HostPortPair& host_port_pair, PrivacyMode privacy_mode);
@@ -31,15 +31,11 @@ class NET_EXPORT_PRIVATE QuicServerId {
   bool operator<(const QuicServerId& other) const;
   bool operator==(const QuicServerId& other) const;
 
-  // Creates a QuicServerId from a string formatted in same manner as
-  // ToString().
-  static QuicServerId FromString(const std::string& str);
-
   // ToString() will convert the QuicServerId to "scheme:hostname:port" or
   // "scheme:hostname:port/private". "scheme" will be "https".
   std::string ToString() const;
 
-  // Used in Chromium, but not in the server.
+  // Used in Chromium, but not internally.
   const HostPortPair& host_port_pair() const { return host_port_pair_; }
 
   const std::string& host() const { return host_port_pair_.host(); }
@@ -55,4 +51,4 @@ class NET_EXPORT_PRIVATE QuicServerId {
 
 }  // namespace net
 
-#endif  // NET_QUIC_QUIC_SERVER_ID_H_
+#endif  // NET_QUIC_CORE_QUIC_SERVER_ID_H_

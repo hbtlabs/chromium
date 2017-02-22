@@ -115,10 +115,9 @@ static void setGradientAttributes(SVGGradientElement* element,
         element->gradientUnits()->currentValue()->enumValue());
 
   if (!attributes.hasGradientTransform() &&
-      element->gradientTransform()->isSpecified()) {
-    AffineTransform transform;
-    element->gradientTransform()->currentValue()->concatenate(transform);
-    attributes.setGradientTransform(transform);
+      element->hasTransform(SVGElement::ExcludeMotionTransform)) {
+    attributes.setGradientTransform(
+        element->calculateTransform(SVGElement::ExcludeMotionTransform));
   }
 
   if (!attributes.hasStops()) {
@@ -159,7 +158,7 @@ bool SVGRadialGradientElement::collectGradientAttributes(
   SVGGradientElement* current = this;
 
   setGradientAttributes(current, attributes);
-  processedGradients.add(current);
+  processedGradients.insert(current);
 
   while (true) {
     // Respect xlink:href, take attributes from referenced element
@@ -177,7 +176,7 @@ bool SVGRadialGradientElement::collectGradientAttributes(
 
       setGradientAttributes(current, attributes,
                             isSVGRadialGradientElement(*current));
-      processedGradients.add(current);
+      processedGradients.insert(current);
     } else {
       break;
     }

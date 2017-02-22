@@ -8,6 +8,8 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/app/vector_icons/vector_icons.h"
+#import "chrome/browser/ui/cocoa/l10n_util.h"
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field.h"
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_cell.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
@@ -17,12 +19,9 @@
 #include "components/zoom/zoom_controller.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
 #include "ui/base/l10n/l10n_util_mac.h"
-#include "ui/base/material_design/material_design_controller.h"
 
 ZoomDecoration::ZoomDecoration(LocationBarViewMac* owner)
-    : owner_(owner),
-      bubble_(nil),
-      vector_icon_id_(gfx::VectorIconId::VECTOR_ICON_NONE) {}
+    : owner_(owner), bubble_(nullptr), vector_icon_(nullptr) {}
 
 ZoomDecoration::~ZoomDecoration() {
   [bubble_ closeWithoutAnimation];
@@ -40,21 +39,24 @@ bool ZoomDecoration::UpdateIfNecessary(zoom::ZoomController* zoom_controller,
     return true;
   }
 
+  BOOL old_visibility = IsVisible();
+  SetVisible(ShouldShowDecoration() && !zoom_controller->IsAtDefaultZoom());
+
   base::string16 zoom_percent =
       base::FormatPercent(zoom_controller->GetZoomPercent());
-  // In Material Design there is no icon at the default zoom factor (100%), so
-  // don't display a tooltip either.
+  // There is no icon at the default zoom factor (100%), so don't display a
+  // tooltip either.
   NSString* tooltip_string =
       zoom_controller->IsAtDefaultZoom()
           ? @""
           : l10n_util::GetNSStringF(IDS_TOOLTIP_ZOOM, zoom_percent);
 
-  if (IsVisible() && [tooltip_ isEqualToString:tooltip_string] &&
-      !default_zoom_changed) {
+  if ([tooltip_ isEqualToString:tooltip_string] && !default_zoom_changed &&
+      old_visibility == IsVisible()) {
     return false;
   }
 
-  ShowAndUpdateUI(zoom_controller, tooltip_string, location_bar_is_dark);
+  UpdateUI(zoom_controller, tooltip_string, location_bar_is_dark);
   return true;
 }
 
@@ -94,29 +96,31 @@ void ZoomDecoration::HideUI() {
   SetVisible(false);
 }
 
-void ZoomDecoration::ShowAndUpdateUI(zoom::ZoomController* zoom_controller,
-                                     NSString* tooltip_string,
-                                     bool location_bar_is_dark) {
-  vector_icon_id_ = gfx::VectorIconId::VECTOR_ICON_NONE;
+void ZoomDecoration::UpdateUI(zoom::ZoomController* zoom_controller,
+                              NSString* tooltip_string,
+                              bool location_bar_is_dark) {
+  vector_icon_ = nullptr;
   zoom::ZoomController::RelativeZoom relative_zoom =
       zoom_controller->GetZoomRelativeToDefault();
-  // In Material Design there is no icon at the default zoom factor.
+  // There is no icon at the default zoom factor.
   if (relative_zoom == zoom::ZoomController::ZOOM_BELOW_DEFAULT_ZOOM) {
-    vector_icon_id_ = gfx::VectorIconId::ZOOM_MINUS;
+    vector_icon_ = &kZoomMinusIcon;
   } else if (relative_zoom == zoom::ZoomController::ZOOM_ABOVE_DEFAULT_ZOOM) {
-    vector_icon_id_ = gfx::VectorIconId::ZOOM_PLUS;
+    vector_icon_ = &kZoomPlusIcon;
   }
 
   SetImage(GetMaterialIcon(location_bar_is_dark));
 
   tooltip_.reset([tooltip_string retain]);
 
-  SetVisible(true);
   [bubble_ onZoomChanged];
 }
 
 NSPoint ZoomDecoration::GetBubblePointInFrame(NSRect frame) {
-  return NSMakePoint(NSMaxX(frame), NSMaxY(frame));
+  return NSMakePoint(cocoa_l10n_util::ShouldDoExperimentalRTLLayout()
+                         ? NSMinX(frame)
+                         : NSMaxX(frame),
+                     NSMaxY(frame));
 }
 
 bool ZoomDecoration::IsAtDefaultZoom() const {
@@ -143,7 +147,7 @@ bool ZoomDecoration::OnMousePressed(NSRect frame, NSPoint location) {
   if (bubble_)
     CloseBubble();
   else
-    ShowBubble(NO);
+    ShowBubble(YES);
   return true;
 }
 
@@ -168,6 +172,6 @@ void ZoomDecoration::OnClose() {
   }
 }
 
-gfx::VectorIconId ZoomDecoration::GetMaterialVectorIconId() const {
-  return vector_icon_id_;
+const gfx::VectorIcon* ZoomDecoration::GetMaterialVectorIcon() const {
+  return vector_icon_;
 }

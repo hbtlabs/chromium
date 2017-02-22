@@ -31,158 +31,65 @@
 #ifndef HarfBuzzShaper_h
 #define HarfBuzzShaper_h
 
-#include "platform/fonts/FontDescription.h"
+#include "platform/fonts/shaping/RunSegmenter.h"
 #include "platform/fonts/shaping/ShapeResult.h"
-#include "platform/geometry/FloatPoint.h"
-#include "platform/geometry/FloatRect.h"
-#include "platform/text/TextRun.h"
 #include "wtf/Allocator.h"
 #include "wtf/Deque.h"
-#include "wtf/HashSet.h"
 #include "wtf/Vector.h"
-#include "wtf/text/CharacterNames.h"
-#include <hb.h>
-#include <memory>
-#include <unicode/uscript.h>
 
 namespace blink {
 
 class Font;
 class SimpleFontData;
 class HarfBuzzShaper;
-class UnicodeRangeSet;
+struct HolesQueueItem;
 
-// Shaping text runs is split into several stages: Run segmentation, shaping the
-// initial segment, identify shaped and non-shaped sequences of the shaping
-// result, and processing sub-runs by trying to shape them with a fallback font
-// until the last resort font is reached.
-//
-// If caps formatting is requested, an additional lowercase/uppercase
-// segmentation stage is required. In this stage, OpenType features in the font
-// are matched against the requested formatting and formatting is synthesized as
-// required by the CSS Level 3 Fonts Module.
-//
-// Going through one example - for simplicity without caps formatting - to
-// illustrate the process: The following is a run of vertical text to be
-// shaped. After run segmentation in RunSegmenter it is split into 4
-// segments. The segments indicated by the segementation results showing the
-// script, orientation information and small caps handling of the individual
-// segment. The Japanese text at the beginning has script "Hiragana", does not
-// need rotation when laid out vertically and does not need uppercasing when
-// small caps is requested.
-//
-// 0 い
-// 1 ろ
-// 2 は USCRIPT_HIRAGANA,
-//     OrientationIterator::OrientationKeep,
-//     SmallCapsIterator::SmallCapsSameCase
-//
-// 3 a
-// 4 ̄ (Combining Macron)
-// 5 a
-// 6 A USCRIPT_LATIN,
-//     OrientationIterator::OrientationRotateSideways,
-//     SmallCapsIterator::SmallCapsUppercaseNeeded
-//
-// 7 い
-// 8 ろ
-// 9 は USCRIPT_HIRAGANA,
-//      OrientationIterator::OrientationKeep,
-//      SmallCapsIterator::SmallCapsSameCase
-//
-//
-// Let's assume the CSS for this text run is as follows:
-//     font-family: "Heiti SC", Tinos, sans-serif;
-// where Tinos is a web font, defined as a composite font, with two sub ranges,
-// one for Latin U+00-U+FF and one unrestricted unicode-range.
-//
-// FontFallbackIterator provides the shaper with Heiti SC, then Tinos of the
-// restricted unicode-range, then the unrestricted full unicode-range Tinos,
-// then a system sans-serif.
-//
-// The initial segment 0-2 to the shaper, together with the segmentation
-// properties and the initial Heiti SC font. Characters 0-2 are shaped
-// successfully with Heiti SC. The next segment, 3-5 is passed to the shaper.
-// The shaper attempts to shape it with Heiti SC, which fails for the Combining
-// Macron. So the shaping result for this segment would look similar to this.
-//
-// Glyphpos: 0 1 2 3
-// Cluster:  0 0 2 3
-// Glyph:    a x a A (where x is .notdef)
-//
-// Now in the extractShapeResults() step we notice that there is more work to
-// do, since Heiti SC does not have a glyph for the Combining Macron combined
-// with an a. So, this cluster together with a Todo item for switching to the
-// next font is put into HolesQueue.
-//
-// After shaping the initial segment, the remaining items in the HolesQueue are
-// processed, picking them from the head of the queue. So, first, the next font
-// is requested from the FontFallbackIterator. In this case, Tinos (for the
-// range U+00-U+FF) comes back. Shaping using this font, assuming it is
-// subsetted, fails again since there is no combining mark available. This
-// triggers requesting yet another font. This time, the Tinos font for the full
-// range. With this, shaping succeeds with the following HarfBuzz result:
-//
-//  Glyphpos 0 1 2 3
-//  Cluster: 0 0 2 3
-//  Glyph:   a ̄ a A (with glyph coordinates placing the ̄ above the first a)
-//
-// Now this sub run is successfully processed and can be appended to
-// ShapeResult. A new ShapeResult::RunInfo is created. The logic in
-// insertRunIntoShapeResult then takes care of merging the shape result into
-// the right position the vector of RunInfos in ShapeResult.
-//
-// Shaping then continues analogously for the remaining Hiragana Japanese
-// sub-run, and the result is inserted into ShapeResult as well.
 class PLATFORM_EXPORT HarfBuzzShaper final {
  public:
-  HarfBuzzShaper(const TextRun&);
-  PassRefPtr<ShapeResult> shapeResult(const Font*);
+  HarfBuzzShaper(const UChar*, unsigned length);
+
+  // Shape a range, defined by the start and end parameters, of the string
+  // supplied to the constructor.
+  // The start and end positions should represent boundaries where a break may
+  // occur, such as at the beginning or end of lines or at element boundaries.
+  // If given arbitrary positions the results are not guaranteed to be correct.
+  // May be called multiple times; font and direction may vary between calls.
+  PassRefPtr<ShapeResult> shape(const Font*,
+                                TextDirection,
+                                unsigned start,
+                                unsigned end) const;
+
+  // Shape the entire string with a single font and direction.
+  // Equivalent to calling the range version with a start offset of zero and an
+  // end offset equal to the length.
+  PassRefPtr<ShapeResult> shape(const Font*, TextDirection) const;
+
   ~HarfBuzzShaper() {}
 
-  enum HolesQueueItemAction { HolesQueueNextFont, HolesQueueRange };
-
-  struct HolesQueueItem {
-    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
-    HolesQueueItemAction m_action;
-    unsigned m_startIndex;
-    unsigned m_numCharacters;
-    HolesQueueItem(HolesQueueItemAction action, unsigned start, unsigned num)
-        : m_action(action), m_startIndex(start), m_numCharacters(num){};
-  };
-
-  using FeaturesVector = Vector<hb_feature_t, 6>;
-
  private:
-  inline bool shapeRange(hb_buffer_t*,
-                         const Font*,
-                         const FeaturesVector&,
-                         const SimpleFontData*,
-                         PassRefPtr<UnicodeRangeSet>,
-                         UScriptCode,
-                         hb_language_t);
-  bool extractShapeResults(hb_buffer_t*,
-                           ShapeResult*,
+  struct RangeData;
+
+  // Shapes a single seqment, as identified by the RunSegmenterRange parameter,
+  // one or more times taking font fallback into account. The start and end
+  // parameters are for the entire text run, not the segment, and are used to
+  // determine pre- and post-context for shaping.
+  void shapeSegment(RangeData*,
+                    RunSegmenter::RunSegmenterRange,
+                    ShapeResult*) const;
+
+  bool extractShapeResults(RangeData*,
                            bool& fontCycleQueued,
-                           Deque<HolesQueueItem>*,
                            const HolesQueueItem&,
-                           const Font*,
                            const SimpleFontData*,
                            UScriptCode,
-                           bool isLastResort);
+                           bool isLastResort,
+                           ShapeResult*) const;
+
   bool collectFallbackHintChars(const Deque<HolesQueueItem>&,
-                                Vector<UChar32>& hint);
+                                Vector<UChar32>& hint) const;
 
-  void insertRunIntoShapeResult(
-      ShapeResult*,
-      std::unique_ptr<ShapeResult::RunInfo> runToInsert,
-      unsigned startGlyph,
-      unsigned numGlyphs,
-      hb_buffer_t*);
-
-  const TextRun& m_textRun;
-  std::unique_ptr<UChar[]> m_normalizedBuffer;
-  unsigned m_normalizedBufferLength;
+  const UChar* m_text;
+  unsigned m_textLength;
 };
 
 }  // namespace blink

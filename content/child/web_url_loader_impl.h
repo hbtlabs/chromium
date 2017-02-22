@@ -14,10 +14,6 @@
 #include "third_party/WebKit/public/platform/WebURLLoader.h"
 #include "url/gurl.h"
 
-namespace mojo {
-class AssociatedGroup;
-}  // namespace mojo
-
 namespace content {
 
 class ResourceDispatcher;
@@ -34,6 +30,11 @@ struct CONTENT_EXPORT StreamOverrideParameters {
   ResourceResponseHead response;
   std::vector<GURL> redirects;
   std::vector<ResourceResponseInfo> redirect_responses;
+  std::vector<net::RedirectInfo> redirect_infos;
+
+  // The delta between the actual transfer size and the one reported by the
+  // AsyncResourceLoader due to not having the ResourceResponse.
+  int total_transfer_size_delta;
 };
 
 class CONTENT_EXPORT WebURLLoaderImpl
@@ -42,8 +43,7 @@ class CONTENT_EXPORT WebURLLoaderImpl
 
   // Takes ownership of |web_task_runner|.
   WebURLLoaderImpl(ResourceDispatcher* resource_dispatcher,
-                   mojom::URLLoaderFactory* url_loader_factory,
-                   mojo::AssociatedGroup* associated_group);
+                   mojom::URLLoaderFactory* url_loader_factory);
   ~WebURLLoaderImpl() override;
 
   static void PopulateURLResponse(const GURL& url,
@@ -60,7 +60,8 @@ class CONTENT_EXPORT WebURLLoaderImpl
                          blink::WebURLResponse& response,
                          blink::WebURLError& error,
                          blink::WebData& data,
-                         int64_t& encoded_data_length) override;
+                         int64_t& encoded_data_length,
+                         int64_t& encoded_body_length) override;
   void loadAsynchronously(
       const blink::WebURLRequest& request,
       blink::WebURLLoaderClient* client) override;

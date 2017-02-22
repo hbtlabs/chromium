@@ -29,6 +29,7 @@
 
 #include "core/timing/SharedWorkerPerformance.h"
 
+#include "bindings/core/v8/ScriptState.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/loader/DocumentLoadTiming.h"
@@ -37,8 +38,9 @@
 
 namespace blink {
 
-SharedWorkerPerformance::SharedWorkerPerformance()
-    : m_timeOrigin(monotonicallyIncreasingTime()) {}
+SharedWorkerPerformance::SharedWorkerPerformance(SharedWorker& sharedWorker)
+    : Supplement<SharedWorker>(sharedWorker),
+      m_timeOrigin(monotonicallyIncreasingTime()) {}
 
 const char* SharedWorkerPerformance::supplementName() {
   return "SharedWorkerPerformance";
@@ -49,16 +51,16 @@ SharedWorkerPerformance& SharedWorkerPerformance::from(
   SharedWorkerPerformance* supplement = static_cast<SharedWorkerPerformance*>(
       Supplement<SharedWorker>::from(sharedWorker, supplementName()));
   if (!supplement) {
-    supplement = new SharedWorkerPerformance();
+    supplement = new SharedWorkerPerformance(sharedWorker);
     provideTo(sharedWorker, supplementName(), supplement);
   }
   return *supplement;
 }
 
-double SharedWorkerPerformance::workerStart(ExecutionContext* context,
+double SharedWorkerPerformance::workerStart(ScriptState* scriptState,
                                             SharedWorker& sharedWorker) {
   return SharedWorkerPerformance::from(sharedWorker)
-      .getWorkerStart(context, sharedWorker);
+      .getWorkerStart(scriptState->getExecutionContext(), sharedWorker);
 }
 
 double SharedWorkerPerformance::getWorkerStart(ExecutionContext* context,

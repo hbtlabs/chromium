@@ -60,12 +60,12 @@ void LayoutMedia::layout() {
 // out before the text track container. This is to ensure that the text
 // track rendering has an up-to-date position of the media controls for
 // overlap checking, see LayoutVTTCue.
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   bool seenTextTrackContainer = false;
 #endif
   for (LayoutObject* child = m_children.lastChild(); child;
        child = child->previousSibling()) {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     if (child->node()->isMediaControls())
       ASSERT(!seenTextTrackContainer);
     else if (child->node()->isTextTrackContainer())
@@ -83,8 +83,7 @@ void LayoutMedia::layout() {
     LayoutUnit width = newRect.width();
     if (child->node()->isMediaControls()) {
       width = computePanelWidth(newRect);
-      if (width != oldSize.width())
-        newPanelWidth = width;
+      newPanelWidth = width;
     }
 
     LayoutBox* layoutBox = toLayoutBox(child);
@@ -102,16 +101,26 @@ void LayoutMedia::layout() {
   // Notify our MediaControls that a layout has happened.
   if (mediaElement() && mediaElement()->mediaControls() &&
       newPanelWidth.has_value()) {
-    mediaElement()->mediaControls()->notifyPanelWidthChanged(
-        newPanelWidth.value());
+    if (!m_lastReportedPanelWidth.has_value() ||
+        m_lastReportedPanelWidth.value() != newPanelWidth.value()) {
+      mediaElement()->mediaControls()->notifyPanelWidthChanged(
+          newPanelWidth.value());
+      // Store the last value we reported, so we know if it has changed.
+      m_lastReportedPanelWidth = newPanelWidth.value();
+    }
   }
 }
 
 bool LayoutMedia::isChildAllowed(LayoutObject* child,
-                                 const ComputedStyle&) const {
+                                 const ComputedStyle& style) const {
   // Two types of child layout objects are allowed: media controls
   // and the text track container. Filter children by node type.
   ASSERT(child->node());
+
+  // Out-of-flow positioned or floating child breaks layout hierarchy.
+  // This check can be removed if ::-webkit-media-controls is made internal.
+  if (style.hasOutOfFlowPosition() || style.isFloating())
+    return false;
 
   // The user agent stylesheet (mediaControls.css) has
   // ::-webkit-media-controls { display: flex; }. If author style
@@ -130,38 +139,16 @@ bool LayoutMedia::isChildAllowed(LayoutObject* child,
 
 void LayoutMedia::paintReplaced(const PaintInfo&, const LayoutPoint&) const {}
 
-void LayoutMedia::willBeDestroyed() {
-  if (view())
-    view()->unregisterMediaForPositionChangeNotification(*this);
-  LayoutImage::willBeDestroyed();
-}
-
-void LayoutMedia::insertedIntoTree() {
-  LayoutImage::insertedIntoTree();
-
-  // Note that if we don't want them and aren't registered, then this
-  // will do nothing.
-  if (HTMLMediaElement* element = mediaElement())
-    element->updatePositionNotificationRegistration();
-}
-
-void LayoutMedia::notifyPositionMayHaveChanged(const IntRect& visibleRect) {
-  // Tell our element about it.
-  if (HTMLMediaElement* element = mediaElement())
-    element->notifyPositionMayHaveChanged(visibleRect);
-}
-
-void LayoutMedia::setRequestPositionUpdates(bool want) {
-  if (want)
-    view()->registerMediaForPositionChangeNotification(*this);
-  else
-    view()->unregisterMediaForPositionChangeNotification(*this);
-}
-
 LayoutUnit LayoutMedia::computePanelWidth(const LayoutRect& mediaRect) const {
   // TODO(mlamouri): we don't know if the main frame has an horizontal scrollbar
   // if it is out of process. See https://crbug.com/662480
   if (document().page()->mainFrame()->isRemoteFrame())
+    return mediaRect.width();
+
+  // TODO(foolip): when going fullscreen, the animation sometimes does not clear
+  // up properly and the last `absoluteXOffset` received is incorrect. This is
+  // a shortcut that we could ideally avoid. See https://crbug.com/663680
+  if (mediaElement() && mediaElement()->isFullscreen())
     return mediaRect.width();
 
   FrameHost* frameHost = document().frameHost();

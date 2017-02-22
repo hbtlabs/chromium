@@ -4,8 +4,9 @@
 
 #include "chrome/browser/android/vr_shell/ui_elements.h"
 
+#include <utility>
+
 #include "base/macros.h"
-#include "base/strings/stringprintf.h"
 #include "chrome/browser/android/vr_shell/animation.h"
 #include "chrome/browser/android/vr_shell/easing.h"
 #include "testing/gtest/include/gtest/gtest.h"

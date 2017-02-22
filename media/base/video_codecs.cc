@@ -84,6 +84,91 @@ std::string GetProfileName(VideoCodecProfile profile) {
   return "";
 }
 
+bool ParseNewStyleVp9CodecID(const std::string& codec_id,
+                             VideoCodecProfile* profile,
+                             uint8_t* level_idc) {
+  std::vector<std::string> fields = base::SplitString(
+      codec_id, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
+
+  // TODO(kqyang): The spec specifies 8 fields. We do not allow missing or extra
+  // fields. See crbug.com/667834.
+  if (fields.size() != 8)
+    return false;
+
+  if (fields[0] != "vp09")
+    return false;
+
+  std::vector<int> values;
+  for (size_t i = 1; i < fields.size(); ++i) {
+    // Missing value is not allowed.
+    if (fields[i] == "")
+      return false;
+    int value;
+    if (!base::StringToInt(fields[i], &value))
+      return false;
+    if (value < 0)
+      return false;
+    values.push_back(value);
+  }
+
+  const int profile_idc = values[0];
+  switch (profile_idc) {
+    case 0:
+      *profile = VP9PROFILE_PROFILE0;
+      break;
+    case 1:
+      *profile = VP9PROFILE_PROFILE1;
+      break;
+    case 2:
+      *profile = VP9PROFILE_PROFILE2;
+      break;
+    case 3:
+      *profile = VP9PROFILE_PROFILE3;
+      break;
+    default:
+      return false;
+  }
+
+  *level_idc = values[1];
+  // TODO(kqyang): Check if |level_idc| is valid. See crbug.com/667834.
+
+  const int bit_depth = values[2];
+  if (bit_depth != 8 && bit_depth != 10 && bit_depth != 12)
+    return false;
+
+  const int color_space = values[3];
+  if (color_space > 7)
+    return false;
+
+  const int chroma_subsampling = values[4];
+  if (chroma_subsampling > 3)
+    return false;
+
+  const int transfer_function = values[5];
+  if (transfer_function > 1)
+    return false;
+
+  const int video_full_range_flag = values[6];
+  if (video_full_range_flag > 1)
+    return false;
+
+  return true;
+}
+
+bool ParseLegacyVp9CodecID(const std::string& codec_id,
+                           VideoCodecProfile* profile,
+                           uint8_t* level_idc) {
+  if (codec_id == "vp9" || codec_id == "vp9.0") {
+    // Profile is not included in the codec string. Assuming profile 0 to be
+    // backward compatible.
+    *profile = VP9PROFILE_PROFILE0;
+    // Use 0 to indicate unknown level.
+    *level_idc = 0;
+    return true;
+  }
+  return false;
+}
+
 bool ParseAVCCodecId(const std::string& codec_id,
                      VideoCodecProfile* profile,
                      uint8_t* level_idc) {
@@ -174,6 +259,55 @@ bool ParseAVCCodecId(const std::string& codec_id,
 
   return true;
 }
+
+#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
+static const char kHexString[] = "0123456789ABCDEF";
+static char IntToHex(int i) {
+  DCHECK_GE(i, 0) << i << " not a hex value";
+  DCHECK_LE(i, 15) << i << " not a hex value";
+  return kHexString[i];
+}
+
+std::string TranslateLegacyAvc1CodecIds(const std::string& codec_id) {
+  // Special handling for old, pre-RFC 6381 format avc1 strings, which are still
+  // being used by some HLS apps to preserve backward compatibility with older
+  // iOS devices. The old format was avc1.<profile>.<level>
+  // Where <profile> is H.264 profile_idc encoded as a decimal number, i.e.
+  // 66 is baseline profile (0x42)
+  // 77 is main profile (0x4d)
+  // 100 is high profile (0x64)
+  // And <level> is H.264 level multiplied by 10, also encoded as decimal number
+  // E.g. <level> 31 corresponds to H.264 level 3.1
+  // See, for example, http://qtdevseed.apple.com/qadrift/testcases/tc-0133.php
+  uint32_t level_start = 0;
+  std::string result;
+  if (base::StartsWith(codec_id, "avc1.66.", base::CompareCase::SENSITIVE)) {
+    level_start = 8;
+    result = "avc1.4200";
+  } else if (base::StartsWith(codec_id, "avc1.77.",
+                              base::CompareCase::SENSITIVE)) {
+    level_start = 8;
+    result = "avc1.4D00";
+  } else if (base::StartsWith(codec_id, "avc1.100.",
+                              base::CompareCase::SENSITIVE)) {
+    level_start = 9;
+    result = "avc1.6400";
+  }
+
+  uint32_t level = 0;
+  if (level_start > 0 &&
+      base::StringToUint(codec_id.substr(level_start), &level) && level < 256) {
+    // This is a valid legacy avc1 codec id - return the codec id translated
+    // into RFC 6381 format.
+    result.push_back(IntToHex(level >> 4));
+    result.push_back(IntToHex(level & 0xf));
+    return result;
+  }
+
+  // This is not a valid legacy avc1 codec id - return the original codec id.
+  return codec_id;
+}
+#endif
 
 #if BUILDFLAG(ENABLE_HEVC_DEMUXING)
 // The specification for HEVC codec id strings can be found in ISO IEC 14496-15
@@ -292,14 +426,20 @@ VideoCodec StringToVideoCodec(const std::string& codec_id) {
     return kUnknownVideoCodec;
   VideoCodecProfile profile = VIDEO_CODEC_PROFILE_UNKNOWN;
   uint8_t level = 0;
-  if (ParseAVCCodecId(codec_id, &profile, &level))
-    return kCodecH264;
   if (codec_id == "vp8" || codec_id == "vp8.0")
     return kCodecVP8;
-  if (codec_id == "vp9" || codec_id == "vp9.0")
+  if (ParseNewStyleVp9CodecID(codec_id, &profile, &level) ||
+      ParseLegacyVp9CodecID(codec_id, &profile, &level)) {
     return kCodecVP9;
+  }
   if (codec_id == "theora")
     return kCodecTheora;
+  if (ParseAVCCodecId(codec_id, &profile, &level))
+    return kCodecH264;
+#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
+  if (ParseAVCCodecId(TranslateLegacyAvc1CodecIds(codec_id), &profile, &level))
+    return kCodecH264;
+#endif
 #if BUILDFLAG(ENABLE_HEVC_DEMUXING)
   if (ParseHEVCCodecId(codec_id, &profile, &level))
     return kCodecHEVC;

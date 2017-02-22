@@ -302,20 +302,26 @@ void AbstractPropertySetCSSStyleDeclaration::setPropertyInternal(
   StyleAttributeMutationScope mutationScope(this);
   willMutate();
 
-  bool changed = false;
+  bool didChange = false;
   if (unresolvedProperty == CSSPropertyVariable) {
+    AtomicString atomicName(customPropertyName);
+
     bool isAnimationTainted = isKeyframeStyle();
-    changed = propertySet().setProperty(AtomicString(customPropertyName), value,
-                                        important, contextStyleSheet(),
-                                        isAnimationTainted);
+    didChange =
+        propertySet()
+            .setProperty(atomicName, propertyRegistry(), value, important,
+                         contextStyleSheet(), isAnimationTainted)
+            .didChange;
   } else {
-    changed = propertySet().setProperty(unresolvedProperty, value, important,
-                                        contextStyleSheet());
+    didChange = propertySet()
+                    .setProperty(unresolvedProperty, value, important,
+                                 contextStyleSheet())
+                    .didChange;
   }
 
-  didMutate(changed ? PropertyChanged : NoChanges);
+  didMutate(didChange ? PropertyChanged : NoChanges);
 
-  if (!changed)
+  if (!didChange)
     return;
 
   Element* parent = parentElement();
@@ -371,6 +377,16 @@ void StyleRuleCSSStyleDeclaration::reattach(
   m_propertySet = &propertySet;
 }
 
+PropertyRegistry* StyleRuleCSSStyleDeclaration::propertyRegistry() const {
+  CSSStyleSheet* sheet = m_parentRule->parentStyleSheet();
+  if (!sheet)
+    return nullptr;
+  Node* node = sheet->ownerNode();
+  if (!node)
+    return nullptr;
+  return node->document().propertyRegistry();
+}
+
 DEFINE_TRACE(StyleRuleCSSStyleDeclaration) {
   visitor->trace(m_parentRule);
   PropertySetCSSStyleDeclaration::trace(visitor);
@@ -397,6 +413,11 @@ void InlineCSSStyleDeclaration::didMutate(MutationType type) {
 
 CSSStyleSheet* InlineCSSStyleDeclaration::parentStyleSheet() const {
   return m_parentElement ? &m_parentElement->document().elementSheet()
+                         : nullptr;
+}
+
+PropertyRegistry* InlineCSSStyleDeclaration::propertyRegistry() const {
+  return m_parentElement ? m_parentElement->document().propertyRegistry()
                          : nullptr;
 }
 

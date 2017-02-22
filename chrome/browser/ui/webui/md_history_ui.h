@@ -10,13 +10,10 @@
 #include "content/public/browser/web_ui_controller.h"
 #include "ui/base/layout.h"
 
-class Profile;
-
 namespace base {
 class ListValue;
 class RefCountedMemory;
 }
-
 
 namespace user_prefs {
 class PrefRegistrySyncable;
@@ -26,11 +23,6 @@ class MdHistoryUI : public content::WebUIController {
  public:
   explicit MdHistoryUI(content::WebUI* web_ui);
   ~MdHistoryUI() override;
-
-  static bool IsEnabled(Profile* profile);
-
-  // Reset the current list of features and explicitly set MD History enabled.
-  static void SetEnabledForTesting(bool enabled);
 
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
@@ -42,7 +34,7 @@ class MdHistoryUI : public content::WebUIController {
 
   static bool use_test_title_;
 
-  void CreateDataSource();
+  void UpdateDataSource();
 
   // Handler for the "menuPromoShown" message from the page. No arguments.
   void HandleMenuPromoShown(const base::ListValue* args);

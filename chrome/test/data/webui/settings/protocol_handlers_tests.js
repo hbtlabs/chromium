@@ -54,12 +54,6 @@ cr.define('protocol_handlers', function() {
        */
       var browserProxy = null;
 
-      // Import necessary html before running suite.
-      suiteSetup(function() {
-        return PolymerTest.importHtml(
-           'chrome://md-settings/site_settings/protocol_handlers.html');
-      });
-
       setup(function() {
         browserProxy = new TestSiteSettingsPrefsBrowserProxy();
         settings.SiteSettingsPrefsBrowserProxyImpl.instance_ = browserProxy;
@@ -76,7 +70,7 @@ cr.define('protocol_handlers', function() {
         PolymerTest.clearBody();
         testElement = document.createElement('protocol-handlers');
         document.body.appendChild(testElement);
-        return browserProxy.whenCalled('initializeProtocolHandlerList').
+        return browserProxy.whenCalled('observeProtocolHandlers').
             then(Polymer.dom.flush.bind(Polymer.dom));
       }
 
@@ -114,8 +108,8 @@ cr.define('protocol_handlers', function() {
 
       /**
        * A reusable function to test different action buttons.
-       * @param {!string} button id of the button to test.
-       * @param {!string} handler name of browserProxy handler to react.
+       * @param {string} button id of the button to test.
+       * @param {string} handler name of browserProxy handler to react.
        * @return {!Promise}
        */
       function testButtonFlow(button, browserProxyHandler) {

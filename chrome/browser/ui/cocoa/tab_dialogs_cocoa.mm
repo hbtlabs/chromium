@@ -9,14 +9,23 @@
 #import "chrome/browser/ui/cocoa/hung_renderer_controller.h"
 #import "chrome/browser/ui/cocoa/passwords/passwords_bubble_cocoa.h"
 #import "chrome/browser/ui/cocoa/profiles/profile_signin_confirmation_dialog_cocoa.h"
+#include "chrome/browser/ui/cocoa/tab_dialogs_views_mac.h"
 #import "chrome/browser/ui/cocoa/validation_message_bubble_cocoa.h"
+#include "chrome/browser/ui/sync/profile_signin_confirmation_helper.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/base/material_design/material_design_controller.h"
 
 // static
 void TabDialogs::CreateForWebContents(content::WebContents* contents) {
   DCHECK(contents);
-  if (!FromWebContents(contents))
-    contents->SetUserData(UserDataKey(), new TabDialogsCocoa(contents));
+
+  if (!FromWebContents(contents)) {
+    TabDialogs* tab_dialogs =
+        ui::MaterialDesignController::IsSecondaryUiMaterial()
+            ? new TabDialogsViewsMac(contents)
+            : new TabDialogsCocoa(contents);
+    contents->SetUserData(UserDataKey(), tab_dialogs);
+  }
 }
 
 TabDialogsCocoa::TabDialogsCocoa(content::WebContents* contents)
@@ -56,9 +65,9 @@ void TabDialogsCocoa::ShowProfileSigninConfirmation(
     Browser* browser,
     Profile* profile,
     const std::string& username,
-    ui::ProfileSigninConfirmationDelegate* delegate) {
-  ProfileSigninConfirmationDialogCocoa::Show(
-      browser, web_contents_, profile, username, delegate);
+    std::unique_ptr<ui::ProfileSigninConfirmationDelegate> delegate) {
+  ProfileSigninConfirmationDialogCocoa::Show(browser, web_contents_, profile,
+                                             username, std::move(delegate));
 }
 
 void TabDialogsCocoa::ShowManagePasswordsBubble(bool user_action) {

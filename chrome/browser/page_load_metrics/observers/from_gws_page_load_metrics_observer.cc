@@ -39,56 +39,62 @@ const char kHistogramFromGWSParseStart[] =
     "PageLoad.Clients.FromGoogleSearch.ParseTiming.NavigationToParseStart";
 
 const char kHistogramFromGWSAbortNewNavigationBeforeCommit[] =
-    "PageLoad.Clients.FromGoogleSearch.AbortTiming.NewNavigation.BeforeCommit";
-const char kHistogramFromGWSAbortNewNavigationBeforePaint[] =
-    "PageLoad.Clients.FromGoogleSearch.AbortTiming.NewNavigation.AfterCommit."
-    "BeforePaint";
-const char kHistogramFromGWSAbortNewNavigationBeforeInteraction[] =
-    "PageLoad.Clients.FromGoogleSearch.AbortTiming.NewNavigation.AfterPaint."
-    "BeforeInteraction";
-const char kHistogramFromGWSAbortStopBeforeCommit[] =
-    "PageLoad.Clients.FromGoogleSearch.AbortTiming.Stop.BeforeCommit";
-const char kHistogramFromGWSAbortStopBeforePaint[] =
-    "PageLoad.Clients.FromGoogleSearch.AbortTiming.Stop.AfterCommit."
-    "BeforePaint";
-const char kHistogramFromGWSAbortStopBeforeInteraction[] =
-    "PageLoad.Clients.FromGoogleSearch.AbortTiming.Stop.AfterPaint."
-    "BeforeInteraction";
-const char kHistogramFromGWSAbortCloseBeforeCommit[] =
-    "PageLoad.Clients.FromGoogleSearch.AbortTiming.Close.BeforeCommit";
-const char kHistogramFromGWSAbortCloseBeforePaint[] =
-    "PageLoad.Clients.FromGoogleSearch.AbortTiming.Close.AfterCommit."
-    "BeforePaint";
-const char kHistogramFromGWSAbortCloseBeforeInteraction[] =
-    "PageLoad.Clients.FromGoogleSearch.AbortTiming.Close.AfterPaint."
-    "BeforeInteraction";
-const char kHistogramFromGWSAbortOtherBeforeCommit[] =
-    "PageLoad.Clients.FromGoogleSearch.AbortTiming.Other.BeforeCommit";
-const char kHistogramFromGWSAbortReloadBeforeCommit[] =
-    "PageLoad.Clients.FromGoogleSearch.AbortTiming.Reload.BeforeCommit";
-const char kHistogramFromGWSAbortReloadBeforePaint[] =
-    "PageLoad.Clients.FromGoogleSearch.AbortTiming.Reload.AfterCommit."
-    "BeforePaint";
-const char kHistogramFromGWSAbortReloadBeforeInteraction[] =
-    "PageLoad.Clients.FromGoogleSearch.AbortTiming.Reload.AfterPaint."
-    "Before1sDelayedInteraction";
-const char kHistogramFromGWSAbortForwardBackBeforeCommit[] =
-    "PageLoad.Clients.FromGoogleSearch.AbortTiming.ForwardBackNavigation."
+    "PageLoad.Clients.FromGoogleSearch.Experimental.AbortTiming.NewNavigation."
     "BeforeCommit";
-const char kHistogramFromGWSAbortForwardBackBeforePaint[] =
-    "PageLoad.Clients.FromGoogleSearch.AbortTiming.ForwardBackNavigation."
+const char kHistogramFromGWSAbortNewNavigationBeforePaint[] =
+    "PageLoad.Clients.FromGoogleSearch.Experimental.AbortTiming.NewNavigation."
     "AfterCommit.BeforePaint";
-const char kHistogramFromGWSAbortForwardBackBeforeInteraction[] =
-    "PageLoad.Clients.FromGoogleSearch.AbortTiming.ForwardBackNavigation."
+const char kHistogramFromGWSAbortNewNavigationBeforeInteraction[] =
+    "PageLoad.Clients.FromGoogleSearch.Experimental.AbortTiming.NewNavigation."
+    "AfterPaint.BeforeInteraction";
+const char kHistogramFromGWSAbortStopBeforeCommit[] =
+    "PageLoad.Clients.FromGoogleSearch.Experimental.AbortTiming.Stop."
+    "BeforeCommit";
+const char kHistogramFromGWSAbortStopBeforePaint[] =
+    "PageLoad.Clients.FromGoogleSearch.Experimental.AbortTiming.Stop."
+    "AfterCommit.BeforePaint";
+const char kHistogramFromGWSAbortStopBeforeInteraction[] =
+    "PageLoad.Clients.FromGoogleSearch.Experimental.AbortTiming.Stop."
+    "AfterPaint.BeforeInteraction";
+const char kHistogramFromGWSAbortCloseBeforeCommit[] =
+    "PageLoad.Clients.FromGoogleSearch.Experimental.AbortTiming.Close."
+    "BeforeCommit";
+const char kHistogramFromGWSAbortCloseBeforePaint[] =
+    "PageLoad.Clients.FromGoogleSearch.Experimental.AbortTiming.Close."
+    "AfterCommit.BeforePaint";
+const char kHistogramFromGWSAbortCloseBeforeInteraction[] =
+    "PageLoad.Clients.FromGoogleSearch.Experimental.AbortTiming.Close."
+    "AfterPaint.BeforeInteraction";
+const char kHistogramFromGWSAbortOtherBeforeCommit[] =
+    "PageLoad.Clients.FromGoogleSearch.Experimental.AbortTiming.Other."
+    "BeforeCommit";
+const char kHistogramFromGWSAbortReloadBeforeCommit[] =
+    "PageLoad.Clients.FromGoogleSearch.Experimental.AbortTiming.Reload."
+    "BeforeCommit";
+const char kHistogramFromGWSAbortReloadBeforePaint[] =
+    "PageLoad.Clients.FromGoogleSearch.Experimental.AbortTiming.Reload."
+    "AfterCommit.BeforePaint";
+const char kHistogramFromGWSAbortReloadBeforeInteraction[] =
+    "PageLoad.Clients.FromGoogleSearch.Experimental.AbortTiming.Reload."
     "AfterPaint.Before1sDelayedInteraction";
+const char kHistogramFromGWSAbortForwardBackBeforeCommit[] =
+    "PageLoad.Clients.FromGoogleSearch.Experimental.AbortTiming."
+    "ForwardBackNavigation.BeforeCommit";
+const char kHistogramFromGWSAbortForwardBackBeforePaint[] =
+    "PageLoad.Clients.FromGoogleSearch.Experimental.AbortTiming."
+    "ForwardBackNavigation.AfterCommit.BeforePaint";
+const char kHistogramFromGWSAbortForwardBackBeforeInteraction[] =
+    "PageLoad.Clients.FromGoogleSearch.Experimental.AbortTiming."
+    "ForwardBackNavigation.AfterPaint.Before1sDelayedInteraction";
 const char kHistogramFromGWSAbortBackgroundBeforeCommit[] =
-    "PageLoad.Clients.FromGoogleSearch.AbortTiming.Background.BeforeCommit";
+    "PageLoad.Clients.FromGoogleSearch.Experimental.AbortTiming.Background."
+    "BeforeCommit";
 const char kHistogramFromGWSAbortBackgroundBeforePaint[] =
-    "PageLoad.Clients.FromGoogleSearch.AbortTiming.Background.AfterCommit."
-    "BeforePaint";
+    "PageLoad.Clients.FromGoogleSearch.Experimental.AbortTiming.Background."
+    "AfterCommit.BeforePaint";
 const char kHistogramFromGWSAbortBackgroundBeforeInteraction[] =
-    "PageLoad.Clients.FromGoogleSearch.AbortTiming.Background.AfterPaint."
-    "BeforeInteraction";
+    "PageLoad.Clients.FromGoogleSearch.Experimental.AbortTiming.Background."
+    "AfterPaint.BeforeInteraction";
 
 }  // namespace internal
 
@@ -523,7 +529,7 @@ void FromGWSPageLoadMetricsObserver::OnUserInput(
 void FromGWSPageLoadMetricsLogger::OnComplete(
     const page_load_metrics::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& extra_info) {
-  if (!ShouldLogPostCommitMetrics(extra_info.committed_url))
+  if (!ShouldLogPostCommitMetrics(extra_info.url))
     return;
 
   UserAbortType abort_type = extra_info.abort_type;
@@ -573,9 +579,8 @@ bool FromGWSPageLoadMetricsLogger::ShouldLogFailedProvisionalLoadMetrics() {
          previously_committed_url_is_search_redirector_;
 }
 
-bool FromGWSPageLoadMetricsLogger::ShouldLogPostCommitMetrics(
-    const GURL& committed_url) {
-  DCHECK(!committed_url.is_empty());
+bool FromGWSPageLoadMetricsLogger::ShouldLogPostCommitMetrics(const GURL& url) {
+  DCHECK(!url.is_empty());
 
   // If this page has a URL on a known google search hostname, then it may be a
   // page associated with search (either a search results page, or a search
@@ -586,7 +591,7 @@ bool FromGWSPageLoadMetricsLogger::ShouldLogPostCommitMetrics(
   // these cases are relatively uncommon, and we run the risk of logging metrics
   // for some search redirector URLs. Thus we choose the more conservative
   // approach of ignoring all urls on known search hostnames.
-  if (IsGoogleSearchHostname(committed_url.host_piece()))
+  if (IsGoogleSearchHostname(url.host_piece()))
     return false;
 
   // We're only interested in tracking navigations (e.g. clicks) initiated via
@@ -608,9 +613,9 @@ bool FromGWSPageLoadMetricsLogger::ShouldLogPostCommitMetrics(
 bool FromGWSPageLoadMetricsLogger::ShouldLogForegroundEventAfterCommit(
     const base::Optional<base::TimeDelta>& event,
     const page_load_metrics::PageLoadExtraInfo& info) {
-  DCHECK(!info.committed_url.is_empty())
+  DCHECK(info.did_commit)
       << "ShouldLogForegroundEventAfterCommit called without committed URL.";
-  return ShouldLogPostCommitMetrics(info.committed_url) &&
+  return ShouldLogPostCommitMetrics(info.url) &&
          WasStartedInForegroundOptionalEventInForeground(event, info);
 }
 

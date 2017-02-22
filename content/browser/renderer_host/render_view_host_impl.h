@@ -26,25 +26,16 @@
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/render_view_host.h"
-#include "content/public/common/window_container_type.h"
 #include "net/base/load_states.h"
 #include "third_party/WebKit/public/web/WebAXEnums.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
 #include "third_party/WebKit/public/web/WebPopupType.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "ui/base/window_open_disposition.h"
-
-class SkBitmap;
+#include "ui/base/mojo/window_open_disposition.mojom.h"
 
 namespace content {
 
-class PageState;
-class SessionStorageNamespace;
 struct FrameReplicationState;
-
-namespace mojom {
-class CreateNewWindowParams;
-}
 
 // This implements the RenderViewHost interface that is exposed to
 // embedders of content, and adds things only visible to content.
@@ -94,9 +85,6 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   RenderProcessHost* GetProcess() const override;
   int GetRoutingID() const override;
   RenderFrameHost* GetMainFrame() override;
-  void AllowBindings(int binding_flags) override;
-  void ClearFocusedElement() override;
-  bool IsFocusedElementEditable() override;
   void DirectoryEnumerationFinished(
       int request_id,
       const std::vector<base::FilePath>& files) override;
@@ -112,13 +100,11 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
       const gfx::Point& location,
       const blink::WebPluginAction& action) override;
   RenderViewHostDelegate* GetDelegate() const override;
-  int GetEnabledBindings() const override;
   SiteInstanceImpl* GetSiteInstance() const override;
   bool IsRenderViewLive() const override;
   void NotifyMoveOrResizeStarted() override;
   void SetWebUIProperty(const std::string& name,
                         const std::string& value) override;
-  void Zoom(PageZoom zoom) override;
   void SyncRendererPrefs() override;
   WebPreferences GetWebkitPreferences() override;
   void UpdateWebkitPreferences(const WebPreferences& prefs) override;
@@ -188,13 +174,6 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
     sudden_termination_allowed_ = enabled;
   }
 
-  // Creates a new RenderView with the given route id.
-  void CreateNewWindow(int32_t route_id,
-                       int32_t main_frame_route_id,
-                       int32_t main_frame_widget_route_id,
-                       const mojom::CreateNewWindowParams& params,
-                       SessionStorageNamespace* session_storage_namespace);
-
   // Creates a new RenderWidget with the given route id.  |popup_type| indicates
   // if this widget is a popup and what kind of popup it is (select, autofill).
   void CreateNewWidget(int32_t route_id, blink::WebPopupType popup_type);
@@ -251,7 +230,6 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   void OnShowWidget(int route_id, const gfx::Rect& initial_rect);
   void OnShowFullscreenWidget(int route_id);
   void OnRenderProcessGone(int status, int error_code);
-  void OnUpdateState(const PageState& state);
   void OnUpdateTargetURL(const GURL& url);
   void OnClose();
   void OnRequestMove(const gfx::Rect& pos);
@@ -260,11 +238,8 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   void OnPasteFromSelectionClipboard();
   void OnRouteCloseEvent();
   void OnTakeFocus(bool reverse);
-  void OnFocusedNodeChanged(bool is_editable_node,
-                            const gfx::Rect& node_bounds_in_viewport);
   void OnClosePageACK();
   void OnDidZoomURL(double zoom_level, const GURL& url);
-  void OnFocusedNodeTouched(bool editable);
   void OnFocus();
 
  private:
@@ -307,10 +282,6 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   // over time.
   scoped_refptr<SiteInstanceImpl> instance_;
 
-  // A bitwise OR of bindings types that have been enabled for this RenderView.
-  // See BindingsPolicy for details.
-  int enabled_bindings_;
-
   // Tracks whether this RenderViewHost is in an active state.  False if the
   // main frame is pending swap out, pending deletion, or swapped out, because
   // it is not visible to the user in any of these cases.
@@ -335,9 +306,6 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
 
   // The termination status of the last render view that terminated.
   base::TerminationStatus render_view_termination_status_;
-
-  // True if the current focused element is editable.
-  bool is_focused_element_editable_;
 
   // This is updated every time UpdateWebkitPreferences is called. That method
   // is in turn called when any of the settings change that the WebPreferences

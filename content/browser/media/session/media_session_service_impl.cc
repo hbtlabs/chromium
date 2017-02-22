@@ -14,16 +14,17 @@ namespace content {
 
 MediaSessionServiceImpl::MediaSessionServiceImpl(
     RenderFrameHost* render_frame_host)
-    : render_frame_host_(render_frame_host) {
+    : render_frame_host_(render_frame_host),
+      playback_state_(blink::mojom::MediaSessionPlaybackState::NONE) {
   MediaSessionImpl* session = GetMediaSession();
   if (session)
-    session->SetMediaSessionService(this);
+    session->OnServiceCreated(this);
 }
 
 MediaSessionServiceImpl::~MediaSessionServiceImpl() {
   MediaSessionImpl* session = GetMediaSession();
-  if (session && session->GetMediaSessionService() == this)
-    session->SetMediaSessionService(nullptr);
+  if (session)
+    session->OnServiceDestroyed(this);
 }
 
 // static
@@ -40,6 +41,14 @@ void MediaSessionServiceImpl::SetClient(
   client_ = std::move(client);
 }
 
+void MediaSessionServiceImpl::SetPlaybackState(
+    blink::mojom::MediaSessionPlaybackState state) {
+  playback_state_ = state;
+  MediaSessionImpl* session = GetMediaSession();
+  if (session)
+    session->OnMediaSessionPlaybackStateChanged(this);
+}
+
 void MediaSessionServiceImpl::SetMetadata(
     const base::Optional<content::MediaMetadata>& metadata) {
   // When receiving a MediaMetadata, the browser process can't trust that it is
@@ -50,32 +59,33 @@ void MediaSessionServiceImpl::SetMetadata(
         RenderProcessHost::CrashReportMode::GENERATE_CRASH_DUMP);
     return;
   }
+  metadata_ = metadata;
 
   MediaSessionImpl* session = GetMediaSession();
   if (session)
-    session->SetMetadata(metadata);
+    session->OnMediaSessionMetadataChanged(this);
 }
 
 void MediaSessionServiceImpl::EnableAction(
     blink::mojom::MediaSessionAction action) {
+  actions_.insert(action);
   MediaSessionImpl* session = GetMediaSession();
   if (session)
-    session->OnMediaSessionEnabledAction(action);
+    session->OnMediaSessionActionsChanged(this);
 }
 
 void MediaSessionServiceImpl::DisableAction(
     blink::mojom::MediaSessionAction action) {
+  actions_.erase(action);
   MediaSessionImpl* session = GetMediaSession();
   if (session)
-    session->OnMediaSessionDisabledAction(action);
+    session->OnMediaSessionActionsChanged(this);
 }
 
 MediaSessionImpl* MediaSessionServiceImpl::GetMediaSession() {
   WebContentsImpl* contents = static_cast<WebContentsImpl*>(
       WebContentsImpl::FromRenderFrameHost(render_frame_host_));
   if (!contents)
-    return nullptr;
-  if (render_frame_host_ != contents->GetMainFrame())
     return nullptr;
   return MediaSessionImpl::Get(contents);
 }

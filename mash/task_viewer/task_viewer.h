@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "mash/public/interfaces/launchable.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/tracing/public/cpp/provider.h"
@@ -19,7 +20,6 @@
 namespace views {
 class AuraInit;
 class Widget;
-class WindowManagerConnection;
 }
 
 namespace mash {
@@ -38,8 +38,9 @@ class TaskViewer
  private:
   // service_manager::Service:
   void OnStart() override;
-  bool OnConnect(const service_manager::ServiceInfo& remote_info,
-                 service_manager::InterfaceRegistry* registry) override;
+  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+                       const std::string& interface_name,
+                       mojo::ScopedMessagePipeHandle interface_pipe) override;
 
   // ::mash::mojom::Launchable:
   void Launch(uint32_t what, ::mash::mojom::LaunchMode how) override;
@@ -51,9 +52,10 @@ class TaskViewer
   mojo::BindingSet<::mash::mojom::Launchable> bindings_;
   std::vector<views::Widget*> windows_;
 
+  service_manager::BinderRegistry registry_;
+
   tracing::Provider tracing_;
   std::unique_ptr<views::AuraInit> aura_init_;
-  std::unique_ptr<views::WindowManagerConnection> window_manager_connection_;
 
   DISALLOW_COPY_AND_ASSIGN(TaskViewer);
 };

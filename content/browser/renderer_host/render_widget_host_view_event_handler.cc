@@ -97,8 +97,8 @@ bool IsXButtonUpEvent(const ui::MouseEvent* event) {
 // touchcancel.
 void MarkUnchangedTouchPointsAsStationary(blink::WebTouchEvent* event,
                                           int changed_touch_id) {
-  if (event->type == blink::WebInputEvent::TouchMove ||
-      event->type == blink::WebInputEvent::TouchCancel) {
+  if (event->type() == blink::WebInputEvent::TouchMove ||
+      event->type() == blink::WebInputEvent::TouchCancel) {
     for (size_t i = 0; i < event->touchesLength; ++i) {
       if (event->touches[i].id != changed_touch_id)
         event->touches[i].state = blink::WebTouchPoint::StateStationary;
@@ -413,7 +413,6 @@ void RenderWidgetHostViewEventHandler::OnScrollEvent(ui::ScrollEvent* event) {
       host_->ForwardWheelEventWithLatencyInfo(mouse_wheel_event,
                                               *event->latency());
     }
-    RecordAction(base::UserMetricsAction("TrackpadScroll"));
   } else if (event->type() == ui::ET_SCROLL_FLING_START ||
              event->type() == ui::ET_SCROLL_FLING_CANCEL) {
     blink::WebGestureEvent gesture_event = ui::MakeWebGestureEvent(
@@ -470,7 +469,8 @@ void RenderWidgetHostViewEventHandler::OnTouchEvent(ui::TouchEvent* event) {
 
   // Set unchanged touch point to StateStationary for touchmove and
   // touchcancel to make sure only send one ack per WebTouchEvent.
-  MarkUnchangedTouchPointsAsStationary(&touch_event, event->touch_id());
+  MarkUnchangedTouchPointsAsStationary(&touch_event,
+                                       event->pointer_details().id);
   if (ShouldRouteEvent(event)) {
     host_->delegate()->GetInputEventRouter()->RouteTouchEvent(
         host_view_, &touch_event, *event->latency());
@@ -505,7 +505,7 @@ void RenderWidgetHostViewEventHandler::OnGestureEvent(ui::GestureEvent* event) {
     // Webkit does not stop a fling-scroll on tap-down. So explicitly send an
     // event to stop any in-progress flings.
     blink::WebGestureEvent fling_cancel = gesture;
-    fling_cancel.type = blink::WebInputEvent::GestureFlingCancel;
+    fling_cancel.setType(blink::WebInputEvent::GestureFlingCancel);
     fling_cancel.sourceDevice = blink::WebGestureDeviceTouchscreen;
     if (ShouldRouteEvent(event)) {
       host_->delegate()->GetInputEventRouter()->RouteGestureEvent(
@@ -516,7 +516,7 @@ void RenderWidgetHostViewEventHandler::OnGestureEvent(ui::GestureEvent* event) {
     }
   }
 
-  if (gesture.type != blink::WebInputEvent::Undefined) {
+  if (gesture.type() != blink::WebInputEvent::Undefined) {
     if (ShouldRouteEvent(event)) {
       host_->delegate()->GetInputEventRouter()->RouteGestureEvent(
           host_view_, &gesture, *event->latency());
@@ -524,9 +524,7 @@ void RenderWidgetHostViewEventHandler::OnGestureEvent(ui::GestureEvent* event) {
       host_->ForwardGestureEventWithLatencyInfo(gesture, *event->latency());
     }
 
-    if (event->type() == ui::ET_GESTURE_SCROLL_BEGIN ||
-        event->type() == ui::ET_GESTURE_SCROLL_UPDATE ||
-        event->type() == ui::ET_GESTURE_SCROLL_END) {
+    if (event->type() == ui::ET_GESTURE_SCROLL_BEGIN) {
       RecordAction(base::UserMetricsAction("TouchscreenScroll"));
     } else if (event->type() == ui::ET_SCROLL_FLING_START) {
       RecordAction(base::UserMetricsAction("TouchscreenScrollFling"));
@@ -548,7 +546,7 @@ bool RenderWidgetHostViewEventHandler::CanRendererHandleEvent(
   if (event->type() == ui::ET_MOUSE_EXITED) {
     if (mouse_locked || selection_popup)
       return false;
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_LINUX)
     // Don't forward the mouse leave message which is received when the context
     // menu is displayed by the page. This confuses the page and causes state
     // changes.
@@ -641,16 +639,12 @@ void RenderWidgetHostViewEventHandler::HandleGestureForTouchSelection(
     ui::GestureEvent* event) {
   switch (event->type()) {
     case ui::ET_GESTURE_LONG_PRESS:
-      if (delegate_->selection_controller()->WillHandleLongPressEvent(
-              event->time_stamp(), event->location_f())) {
-        event->SetHandled();
-      }
+      delegate_->selection_controller()->HandleLongPressEvent(
+          event->time_stamp(), event->location_f());
       break;
     case ui::ET_GESTURE_TAP:
-      if (delegate_->selection_controller()->WillHandleTapEvent(
-              event->location_f(), event->details().tap_count())) {
-        event->SetHandled();
-      }
+      delegate_->selection_controller()->HandleTapEvent(
+          event->location_f(), event->details().tap_count());
       break;
     case ui::ET_GESTURE_SCROLL_BEGIN:
       delegate_->selection_controller_client()->OnScrollStarted();
@@ -697,8 +691,14 @@ void RenderWidgetHostViewEventHandler::HandleMouseEventWhileLocked(
     blink::WebMouseWheelEvent mouse_wheel_event =
         ui::MakeWebMouseWheelEvent(static_cast<ui::MouseWheelEvent&>(*event),
                                    base::Bind(&GetScreenLocationFromEvent));
-    if (mouse_wheel_event.deltaX != 0 || mouse_wheel_event.deltaY != 0)
-      host_->ForwardWheelEvent(mouse_wheel_event);
+    if (mouse_wheel_event.deltaX != 0 || mouse_wheel_event.deltaY != 0) {
+      if (ShouldRouteEvent(event)) {
+        host_->delegate()->GetInputEventRouter()->RouteMouseWheelEvent(
+            host_view_, &mouse_wheel_event, *event->latency());
+      } else {
+        ProcessMouseWheelEvent(mouse_wheel_event, *event->latency());
+      }
+    }
     return;
   }
 
@@ -756,7 +756,12 @@ void RenderWidgetHostViewEventHandler::HandleMouseEventWhileLocked(
     // Forward event to renderer.
     if (CanRendererHandleEvent(event, mouse_locked_, is_selection_popup) &&
         !(event->flags() & ui::EF_FROM_TOUCH)) {
-      host_->ForwardMouseEvent(mouse_event);
+      if (ShouldRouteEvent(event)) {
+        host_->delegate()->GetInputEventRouter()->RouteMouseEvent(
+            host_view_, &mouse_event, *event->latency());
+      } else {
+        ProcessMouseEvent(mouse_event, *event->latency());
+      }
       // Ensure that we get keyboard focus on mouse down as a plugin window
       // may have grabbed keyboard focus.
       if (event->type() == ui::ET_MOUSE_PRESSED)

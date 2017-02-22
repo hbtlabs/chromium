@@ -27,7 +27,7 @@ OutputProtectionProxy::~OutputProtectionProxy() {
 }
 
 void OutputProtectionProxy::QueryStatus(const QueryStatusCallback& callback) {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
 #if defined(OS_CHROMEOS)
@@ -42,11 +42,11 @@ void OutputProtectionProxy::QueryStatus(const QueryStatusCallback& callback) {
 void OutputProtectionProxy::EnableProtection(
     uint32_t desired_method_mask,
     const EnableProtectionCallback& callback) {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
 #if defined(OS_CHROMEOS)
-  output_protection_delegate_.EnableProtection(desired_method_mask, callback);
+  output_protection_delegate_.SetProtection(desired_method_mask, callback);
 #else   // defined(OS_CHROMEOS)
   NOTIMPLEMENTED();
   callback.Run(false);
@@ -58,7 +58,7 @@ void OutputProtectionProxy::ProcessQueryStatusResult(
     bool success,
     uint32_t link_mask,
     uint32_t protection_mask) {
-  DVLOG(1) << __FUNCTION__ << ": " << success << ", " << link_mask;
+  DVLOG(1) << __func__ << ": " << success << ", " << link_mask;
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   content::RenderFrameHost* rfh =
@@ -79,7 +79,7 @@ void OutputProtectionProxy::ProcessQueryStatusResult(
             ->IsInsecureCapturingInProgress(render_process_id_,
                                             render_frame_id_);
     if (is_insecure_capture_detected)
-      new_link_mask |= ui::DISPLAY_CONNECTION_TYPE_NETWORK;
+      new_link_mask |= display::DISPLAY_CONNECTION_TYPE_NETWORK;
   }
 
   callback.Run(success, new_link_mask, protection_mask);

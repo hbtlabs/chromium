@@ -23,7 +23,6 @@
 #include "content/public/browser/web_contents.h"
 #include "storage/common/quota/quota_types.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "url/gurl.h"
 
 #if defined(OS_ANDROID)
@@ -33,6 +32,7 @@
 #include "components/infobars/core/infobar.h"
 #else
 #include "chrome/browser/permissions/permission_request_manager.h"
+#include "ui/vector_icons/vector_icons.h"
 #endif
 
 namespace {
@@ -87,7 +87,7 @@ PermissionRequest::IconId QuotaPermissionRequest::GetIconId() const {
 #if defined(OS_ANDROID)
   return IDR_ANDROID_INFOBAR_WARNING;
 #else
-  return gfx::VectorIconId::WARNING;
+  return ui::kWarningIcon;
 #endif
 }
 
@@ -254,13 +254,12 @@ void ChromeQuotaPermissionContext::RequestQuotaPermission(
     return;
   }
 
-  content::WebContents* web_contents =
-      tab_util::GetWebContentsByID(render_process_id,
-                                   params.render_view_id);
+  content::WebContents* web_contents = tab_util::GetWebContentsByFrameID(
+      render_process_id, params.render_frame_id);
   if (!web_contents) {
     // The tab may have gone away or the request may not be from a tab.
     LOG(WARNING) << "Attempt to request quota tabless renderer: "
-                 << render_process_id << "," << params.render_view_id;
+                 << render_process_id << "," << params.render_frame_id;
     DispatchCallbackOnIOThread(callback, QUOTA_PERMISSION_RESPONSE_CANCELLED);
     return;
   }
@@ -286,7 +285,7 @@ void ChromeQuotaPermissionContext::RequestQuotaPermission(
 
   // The tab has no UI service for presenting the permissions request.
   LOG(WARNING) << "Attempt to request quota from a background page: "
-               << render_process_id << "," << params.render_view_id;
+               << render_process_id << "," << params.render_frame_id;
   DispatchCallbackOnIOThread(callback, QUOTA_PERMISSION_RESPONSE_CANCELLED);
 }
 

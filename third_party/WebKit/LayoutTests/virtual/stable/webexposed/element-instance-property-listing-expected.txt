@@ -1,4 +1,3 @@
-CONSOLE WARNING: line 18: The <keygen> element is deprecated and will be removed in M57, around March 2017. See https://www.chromestatus.com/features/5716060992962560 for more details.
 This test documents all properties on all element instances.
 
 On success, you will see a series of "PASS" messages, followed by "TEST COMPLETE".
@@ -329,6 +328,7 @@ html element audio
     property played
     property preload
     property readyState
+    property remote
     property seekable
     property seeking
     property setMediaKeys
@@ -646,20 +646,6 @@ html element ins
     property dateTime
 html element kbd
 html element keygen
-    property autofocus
-    property challenge
-    property checkValidity
-    property disabled
-    property form
-    property keytype
-    property labels
-    property name
-    property reportValidity
-    property setCustomValidity
-    property type
-    property validationMessage
-    property validity
-    property willValidate
 html element label
     property control
     property form
@@ -681,6 +667,7 @@ html element link
     property import
     property integrity
     property media
+    property referrerPolicy
     property rel
     property relList
     property rev
@@ -1058,6 +1045,7 @@ html element video
     property poster
     property preload
     property readyState
+    property remote
     property seekable
     property seeking
     property setMediaKeys
@@ -1349,7 +1337,6 @@ svg element animateMotion
 svg element animateTransform
 svg element circle
 svg element clipPath
-svg element cursor
 svg element defs
 svg element desc
 svg element discard

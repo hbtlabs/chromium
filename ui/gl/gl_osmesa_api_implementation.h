@@ -13,7 +13,7 @@ namespace gl {
 
 GL_EXPORT void InitializeStaticGLBindingsOSMESA();
 GL_EXPORT void InitializeDebugGLBindingsOSMESA();
-GL_EXPORT void ClearGLBindingsOSMESA();
+GL_EXPORT void ClearBindingsOSMESA();
 
 class GL_EXPORT OSMESAApiBase : public OSMESAApi {
  public:
@@ -35,6 +35,21 @@ class GL_EXPORT RealOSMESAApi : public OSMESAApiBase {
   RealOSMESAApi();
   ~RealOSMESAApi() override;
   void Initialize(DriverOSMESA* driver);
+};
+
+// Logs debug information for every OSMESA call.
+class GL_EXPORT DebugOSMESAApi : public OSMESAApi {
+ public:
+  DebugOSMESAApi(OSMESAApi* osmesa_api);
+  ~DebugOSMESAApi() override;
+
+  // Include the auto-generated part of this class. We split this because
+  // it means we can easily edit the non-auto generated parts right here in
+  // this file instead of having to edit some template or the code generator.
+  #include "gl_bindings_api_autogen_osmesa.h"
+
+ private:
+  OSMESAApi* osmesa_api_;
 };
 
 // Inserts a TRACE for every OSMESA call.

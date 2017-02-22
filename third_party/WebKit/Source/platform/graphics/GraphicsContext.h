@@ -30,27 +30,25 @@
 
 #include "platform/PlatformExport.h"
 #include "platform/fonts/Font.h"
+#include "platform/graphics/ColorBehavior.h"
 #include "platform/graphics/DashArray.h"
 #include "platform/graphics/DrawLooperBuilder.h"
 #include "platform/graphics/GraphicsContextState.h"
 #include "platform/graphics/ImageOrientation.h"
+#include "platform/graphics/paint/PaintRecord.h"
+#include "platform/graphics/paint/PaintRecorder.h"
 #include "platform/graphics/skia/SkiaUtils.h"
+#include "third_party/skia/include/core/SkClipOp.h"
+#include "third_party/skia/include/core/SkImageFilter.h"
 #include "third_party/skia/include/core/SkMetaData.h"
-#include "third_party/skia/include/core/SkPictureRecorder.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
-#include "third_party/skia/include/core/SkRegion.h"
 #include "wtf/Allocator.h"
 #include "wtf/Forward.h"
 #include "wtf/Noncopyable.h"
 #include <memory>
 
-class SkBitmap;
-class SkImage;
-class SkPaint;
 class SkPath;
-class SkPicture;
 class SkRRect;
-struct SkImageInfo;
 struct SkRect;
 
 namespace blink {
@@ -72,16 +70,19 @@ class PLATFORM_EXPORT GraphicsContext {
                           // the context from performance tests.
   };
 
-  explicit GraphicsContext(PaintController&,
-                           DisabledMode = NothingDisabled,
-                           SkMetaData* = 0);
+  explicit GraphicsContext(
+      PaintController&,
+      DisabledMode = NothingDisabled,
+      SkMetaData* = 0,
+      ColorBehavior = ColorBehavior::transformToGlobalTarget());
 
   ~GraphicsContext();
 
-  SkCanvas* canvas() { return m_canvas; }
-  const SkCanvas* canvas() const { return m_canvas; }
+  PaintCanvas* canvas() { return m_canvas; }
+  const PaintCanvas* canvas() const { return m_canvas; }
 
   PaintController& getPaintController() { return m_paintController; }
+  const ColorBehavior& getColorBehavior() const { return m_colorBehavior; }
 
   bool contextDisabled() const { return m_disabledState; }
 
@@ -89,7 +90,7 @@ class PLATFORM_EXPORT GraphicsContext {
   void save();
   void restore();
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   unsigned saveCount() const;
 #endif
 
@@ -180,11 +181,11 @@ class PLATFORM_EXPORT GraphicsContext {
 
   void strokeRect(const FloatRect&, float lineWidth);
 
-  void drawPicture(const SkPicture*);
-  void compositePicture(sk_sp<SkPicture>,
-                        const FloatRect& dest,
-                        const FloatRect& src,
-                        SkBlendMode);
+  void drawRecord(const PaintRecord*);
+  void compositeRecord(sk_sp<PaintRecord>,
+                       const FloatRect& dest,
+                       const FloatRect& src,
+                       SkBlendMode);
 
   void drawImage(Image*,
                  const FloatRect& destRect,
@@ -214,36 +215,36 @@ class PLATFORM_EXPORT GraphicsContext {
   // These methods write to the canvas.
   // Also drawLine(const IntPoint& point1, const IntPoint& point2) and
   // fillRoundedRect().
-  void drawOval(const SkRect&, const SkPaint&);
-  void drawPath(const SkPath&, const SkPaint&);
-  void drawRect(const SkRect&, const SkPaint&);
-  void drawRRect(const SkRRect&, const SkPaint&);
+  void drawOval(const SkRect&, const PaintFlags&);
+  void drawPath(const SkPath&, const PaintFlags&);
+  void drawRect(const SkRect&, const PaintFlags&);
+  void drawRRect(const SkRRect&, const PaintFlags&);
 
   void clip(const IntRect& rect) { clipRect(rect); }
   void clip(const FloatRect& rect) { clipRect(rect); }
   void clipRoundedRect(const FloatRoundedRect&,
-                       SkRegion::Op = SkRegion::kIntersect_Op,
+                       SkClipOp = SkClipOp::kIntersect,
                        AntiAliasingMode = AntiAliased);
   void clipOut(const IntRect& rect) {
-    clipRect(rect, NotAntiAliased, SkRegion::kDifference_Op);
+    clipRect(rect, NotAntiAliased, SkClipOp::kDifference);
   }
   void clipOut(const FloatRect& rect) {
-    clipRect(rect, NotAntiAliased, SkRegion::kDifference_Op);
+    clipRect(rect, NotAntiAliased, SkClipOp::kDifference);
   }
   void clipOut(const Path&);
   void clipOutRoundedRect(const FloatRoundedRect&);
   void clipPath(const SkPath&,
                 AntiAliasingMode = NotAntiAliased,
-                SkRegion::Op = SkRegion::kIntersect_Op);
+                SkClipOp = SkClipOp::kIntersect);
   void clipRect(const SkRect&,
                 AntiAliasingMode = NotAntiAliased,
-                SkRegion::Op = SkRegion::kIntersect_Op);
+                SkClipOp = SkClipOp::kIntersect);
 
   void drawText(const Font&, const TextRunPaintInfo&, const FloatPoint&);
   void drawText(const Font&,
                 const TextRunPaintInfo&,
                 const FloatPoint&,
-                const SkPaint&);
+                const PaintFlags&);
   void drawEmphasisMarks(const Font&,
                          const TextRunPaintInfo&,
                          const AtomicString& mark,
@@ -261,14 +262,15 @@ class PLATFORM_EXPORT GraphicsContext {
                             int from = 0,
                             int to = -1);
 
-  void drawLineForText(const FloatPoint&, float width, bool printing);
+  void drawLineForText(const FloatPoint&, float width);
   enum DocumentMarkerLineStyle {
     DocumentMarkerSpellingLineStyle,
     DocumentMarkerGrammarLineStyle
   };
   void drawLineForDocumentMarker(const FloatPoint&,
                                  float width,
-                                 DocumentMarkerLineStyle);
+                                 DocumentMarkerLineStyle,
+                                 float zoom);
 
   // beginLayer()/endLayer() behave like save()/restore() for CTM and clip
   // states. Apply SkBlendMode when the layer is composited on the backdrop
@@ -285,10 +287,10 @@ class PLATFORM_EXPORT GraphicsContext {
   // later time. Pass in the bounding rectangle for the content in the list.
   void beginRecording(const FloatRect&);
 
-  // Returns a picture with any recorded draw commands since the prerequisite
-  // call to beginRecording().  The picture is guaranteed to be non-null (but
+  // Returns a record with any recorded draw commands since the prerequisite
+  // call to beginRecording().  The record is guaranteed to be non-null (but
   // not necessarily non-empty), even when the context is disabled.
-  sk_sp<SkPicture> endRecording();
+  sk_sp<PaintRecord> endRecording();
 
   void setShadow(const FloatSize& offset,
                  float blur,
@@ -322,8 +324,10 @@ class PLATFORM_EXPORT GraphicsContext {
                        float shadowSpread,
                        Edges clippedEdges = NoEdge);
 
-  const SkPaint& fillPaint() const { return immutableState()->fillPaint(); }
-  const SkPaint& strokePaint() const { return immutableState()->strokePaint(); }
+  const PaintFlags& fillFlags() const { return immutableState()->fillFlags(); }
+  const PaintFlags& strokeFlags() const {
+    return immutableState()->strokeFlags();
+  }
 
   // ---------- Transformation methods -----------------
   void concatCTM(const AffineTransform&);
@@ -354,12 +358,7 @@ class PLATFORM_EXPORT GraphicsContext {
                                           float strokeWidth,
                                           StrokeStyle);
 
-  static int focusRingOutsetExtent(int offset, int width) {
-    // Unlike normal outlines (whole width is outside of the offset), focus
-    // rings are drawn with the center of the path aligned with the offset, so
-    // only half of the width is outside of the offset.
-    return focusRingOffset(offset) + (width + 1) / 2;
-  }
+  static int focusRingOutsetExtent(int offset, int width);
 
 #if DCHECK_IS_ON()
   void setInDrawingRecorder(bool);
@@ -378,18 +377,7 @@ class PLATFORM_EXPORT GraphicsContext {
   template <typename DrawTextFunc>
   void drawTextPasses(const DrawTextFunc&);
 
-#if OS(MACOSX)
-  static inline int focusRingOffset(int offset) { return offset + 2; }
-#else
-  static inline int focusRingOffset(int offset) { return 0; }
-  static SkPMColor lineColors(int);
-  static SkPMColor antiColors1(int);
-  static SkPMColor antiColors2(int);
-  static void draw1xMarker(SkBitmap*, int);
-  static void draw2xMarker(SkBitmap*, int);
-#endif
-
-  void saveLayer(const SkRect* bounds, const SkPaint*);
+  void saveLayer(const SkRect* bounds, const PaintFlags*);
   void restoreLayer();
 
   // Helpers for drawing a focus ring (drawFocusRing)
@@ -399,7 +387,7 @@ class PLATFORM_EXPORT GraphicsContext {
   // SkCanvas wrappers.
   void clipRRect(const SkRRect&,
                  AntiAliasingMode = NotAntiAliased,
-                 SkRegion::Op = SkRegion::kIntersect_Op);
+                 SkClipOp = SkClipOp::kIntersect);
   void concat(const SkMatrix&);
 
   // Apply deferred paint state saves
@@ -411,7 +399,7 @@ class PLATFORM_EXPORT GraphicsContext {
       m_paintState->decrementSaveCount();
       ++m_paintStateIndex;
       if (m_paintStateStack.size() == m_paintStateIndex) {
-        m_paintStateStack.append(
+        m_paintStateStack.push_back(
             GraphicsContextState::createAndCopy(*m_paintState));
         m_paintState = m_paintStateStack[m_paintStateIndex].get();
       } else {
@@ -429,7 +417,7 @@ class PLATFORM_EXPORT GraphicsContext {
   const SkMetaData& metaData() const { return m_metaData; }
 
   // null indicates painting is contextDisabled. Never delete this object.
-  SkCanvas* m_canvas;
+  PaintCanvas* m_canvas;
 
   PaintController& m_paintController;
 
@@ -444,12 +432,14 @@ class PLATFORM_EXPORT GraphicsContext {
   // Raw pointer to the current state.
   GraphicsContextState* m_paintState;
 
-  SkPictureRecorder m_pictureRecorder;
+  PaintRecorder m_paintRecorder;
 
   SkMetaData m_metaData;
 
+  const ColorBehavior m_colorBehavior;
+
 #if DCHECK_IS_ON()
-  unsigned m_layerCount;
+  int m_layerCount;
   bool m_disableDestructionChecks;
   bool m_inDrawingRecorder;
 #endif

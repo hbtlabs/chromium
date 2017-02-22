@@ -77,10 +77,23 @@ class WebContentsObserverProxy extends WebContentsObserver {
 
     @Override
     @CalledByNative
-    public void didFinishNavigation(
-            boolean isMainFrame, boolean isErrorPage, boolean hasCommitted) {
+    public void didStartNavigation(
+            String url, boolean isInMainFrame, boolean isSamePage, boolean isErrorPage) {
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
-            mObserversIterator.next().didFinishNavigation(isMainFrame, isErrorPage, hasCommitted);
+            mObserversIterator.next().didStartNavigation(
+                    url, isInMainFrame, isSamePage, isErrorPage);
+        }
+    }
+
+    @CalledByNative
+    public void didFinishNavigation(String url, boolean isInMainFrame, boolean isErrorPage,
+            boolean hasCommitted, boolean isSamePage, boolean isFragmentNavigation, int transition,
+            int errorCode, String errorDescription, int httpStatusCode) {
+        Integer pageTransition = transition == -1 ? null : transition;
+        for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
+            mObserversIterator.next().didFinishNavigation(url, isInMainFrame, isErrorPage,
+                    hasCommitted, isSamePage, isFragmentNavigation, pageTransition, errorCode,
+                    errorDescription, httpStatusCode);
         }
     }
 
@@ -102,21 +115,10 @@ class WebContentsObserverProxy extends WebContentsObserver {
 
     @Override
     @CalledByNative
-    public void didFailLoad(boolean isProvisionalLoad, boolean isMainFrame, int errorCode,
-            String description, String failingUrl, boolean wasIgnoredByHandler) {
+    public void didFailLoad(
+            boolean isMainFrame, int errorCode, String description, String failingUrl) {
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
-            mObserversIterator.next().didFailLoad(isProvisionalLoad, isMainFrame, errorCode,
-                    description, failingUrl, wasIgnoredByHandler);
-        }
-    }
-
-    @Override
-    @CalledByNative
-    public void didNavigateMainFrame(String url, String baseUrl,
-            boolean isNavigationToDifferentPage, boolean isFragmentNavigation, int statusCode) {
-        for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
-            mObserversIterator.next().didNavigateMainFrame(
-                    url, baseUrl, isNavigationToDifferentPage, isFragmentNavigation, statusCode);
+            mObserversIterator.next().didFailLoad(isMainFrame, errorCode, description, failingUrl);
         }
     }
 
@@ -146,9 +148,9 @@ class WebContentsObserverProxy extends WebContentsObserver {
 
     @Override
     @CalledByNative
-    public void didNavigateAnyFrame(String url, String baseUrl, boolean isReload) {
+    public void titleWasSet(String title) {
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
-            mObserversIterator.next().didNavigateAnyFrame(url, baseUrl, isReload);
+            mObserversIterator.next().titleWasSet(title);
         }
     }
 
@@ -157,26 +159,6 @@ class WebContentsObserverProxy extends WebContentsObserver {
     public void documentAvailableInMainFrame() {
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
             mObserversIterator.next().documentAvailableInMainFrame();
-        }
-    }
-
-    @Override
-    @CalledByNative
-    public void didStartProvisionalLoadForFrame(long frameId, long parentFrameId,
-            boolean isMainFrame, String validatedUrl, boolean isErrorPage, boolean isIframeSrcdoc) {
-        for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
-            mObserversIterator.next().didStartProvisionalLoadForFrame(
-                    frameId, parentFrameId, isMainFrame, validatedUrl, isErrorPage, isIframeSrcdoc);
-        }
-    }
-
-    @Override
-    @CalledByNative
-    public void didCommitProvisionalLoadForFrame(
-            long frameId, boolean isMainFrame, String url, int transitionType) {
-        for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
-            mObserversIterator.next().didCommitProvisionalLoadForFrame(
-                    frameId, isMainFrame, url, transitionType);
         }
     }
 
@@ -225,14 +207,6 @@ class WebContentsObserverProxy extends WebContentsObserver {
     public void didChangeThemeColor(int color) {
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
             mObserversIterator.next().didChangeThemeColor(color);
-        }
-    }
-
-    @Override
-    @CalledByNative
-    public void didStartNavigationToPendingEntry(String url) {
-        for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
-            mObserversIterator.next().didStartNavigationToPendingEntry(url);
         }
     }
 

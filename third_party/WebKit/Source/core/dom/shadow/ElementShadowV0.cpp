@@ -71,9 +71,9 @@ inline void DistributionPool::populateChildren(const ContainerNode& parent) {
     if (isActiveInsertionPoint(*child)) {
       InsertionPoint* insertionPoint = toInsertionPoint(child);
       for (size_t i = 0; i < insertionPoint->distributedNodesSize(); ++i)
-        m_nodes.append(insertionPoint->distributedNodeAt(i));
+        m_nodes.push_back(insertionPoint->distributedNodeAt(i));
     } else {
-      m_nodes.append(child);
+      m_nodes.push_back(child);
     }
   }
   m_distributed.resize(m_nodes.size());
@@ -164,16 +164,13 @@ void ElementShadowV0::distribute() {
   for (ShadowRoot* root = &youngestShadowRoot(); root;
        root = root->olderShadowRoot()) {
     HTMLShadowElement* shadowInsertionPoint = 0;
-    const HeapVector<Member<InsertionPoint>>& insertionPoints =
-        root->descendantInsertionPoints();
-    for (size_t i = 0; i < insertionPoints.size(); ++i) {
-      InsertionPoint* point = insertionPoints[i];
+    for (const auto& point : root->descendantInsertionPoints()) {
       if (!point->isActive())
         continue;
       if (isHTMLShadowElement(*point)) {
         DCHECK(!shadowInsertionPoint);
         shadowInsertionPoint = toHTMLShadowElement(point);
-        shadowInsertionPoints.append(shadowInsertionPoint);
+        shadowInsertionPoints.push_back(shadowInsertionPoint);
       } else {
         pool.distributeTo(point, this);
         if (ElementShadow* shadow =
@@ -208,10 +205,10 @@ void ElementShadowV0::distribute() {
 void ElementShadowV0::didDistributeNode(const Node* node,
                                         InsertionPoint* insertionPoint) {
   NodeToDestinationInsertionPoints::AddResult result =
-      m_nodeToInsertionPoints.add(node, nullptr);
+      m_nodeToInsertionPoints.insert(node, nullptr);
   if (result.isNewEntry)
     result.storedValue->value = new DestinationInsertionPoints;
-  result.storedValue->value->append(insertionPoint);
+  result.storedValue->value->push_back(insertionPoint);
 }
 
 const SelectRuleFeatureSet& ElementShadowV0::ensureSelectFeatureSet() {

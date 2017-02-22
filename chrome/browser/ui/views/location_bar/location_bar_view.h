@@ -29,16 +29,13 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/drag_controller.h"
 
-class ActionBoxButtonView;
 class CommandUpdater;
 class ContentSettingBubbleModelDelegate;
 class ContentSettingImageView;
 class ExtensionAction;
 class GURL;
-class InstantController;
 class KeywordHintView;
 class LocationIconView;
-class OpenPDFInReaderView;
 class ManagePasswordsIconViews;
 class PageActionWithBadgeView;
 class PageActionImageView;
@@ -55,7 +52,6 @@ class SaveCardIconView;
 
 namespace views {
 class Label;
-class Widget;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -94,10 +90,7 @@ class LocationBarView : public LocationBar,
         GetContentSettingBubbleModelDelegate() = 0;
 
     // Shows permissions and settings for the given web contents.
-    virtual void ShowWebsiteSettings(
-        content::WebContents* web_contents,
-        const GURL& virtual_url,
-        const security_state::SecurityInfo& security_info) = 0;
+    virtual void ShowWebsiteSettings(content::WebContents* web_contents) = 0;
 
    protected:
     virtual ~Delegate() {}
@@ -111,8 +104,16 @@ class LocationBarView : public LocationBar,
     SECURITY_CHIP_TEXT,
   };
 
-  // Width (and height) of icons in location bar.
+  // Visual width (and height) of icons in location bar.
   static constexpr int kIconWidth = 16;
+
+  // The amount of padding between the visual edge of an icon and the edge of
+  // its click target, for all all sides of the icon. The total edge length of
+  // each icon view should be kIconWidth + 2 * kIconInteriorPadding.
+  static constexpr int kIconInteriorPadding = 4;
+
+  // The additional vertical padding of a bubble.
+  static constexpr int kBubbleVerticalPadding = 3;
 
   // The location bar view's class name.
   static const char kViewClassName[];
@@ -125,10 +126,6 @@ class LocationBarView : public LocationBar,
 
   ~LocationBarView() override;
 
-  // Returns the color for the location bar border given the window's
-  // |incognito| state.
-  static SkColor GetBorderColor(bool incognito);
-
   // Initializes the LocationBarView.
   void Init();
 
@@ -139,6 +136,10 @@ class LocationBarView : public LocationBar,
   // Returns the appropriate color for the desired kind, based on the user's
   // system theme.
   SkColor GetColor(ColorKind kind) const;
+
+  // Returns the location bar border color blended with the toolbar color.
+  // It's guaranteed to be opaque.
+  SkColor GetOpaqueBorderColor(bool incognito) const;
 
   // Returns the color to be used for security text in the context of
   // |security_level|.
@@ -158,14 +159,6 @@ class LocationBarView : public LocationBar,
   ManagePasswordsIconViews* manage_passwords_icon_view() {
     return manage_passwords_icon_view_;
   }
-
-  // Sets |preview_enabled| for the PageAction View associated with this
-  // |page_action|. If |preview_enabled| is true, the view will display the
-  // PageActions icon even though it has not been activated by the extension.
-  // This is used by the ExtensionInstalledBubble to preview what the icon
-  // will look like for the user upon installation of the extension.
-  void SetPreviewEnabledPageAction(ExtensionAction* page_action,
-                                   bool preview_enabled);
 
   // Retrieves the PageAction View which is associated with |page_action|.
   PageActionWithBadgeView* GetPageActionView(ExtensionAction* page_action);
@@ -193,12 +186,6 @@ class LocationBarView : public LocationBar,
   // comments on |ime_inline_autocomplete_view_|.
   void SetImeInlineAutocompletion(const base::string16& text);
 
-  // Invoked from OmniboxViewWin to show gray text autocompletion.
-  void SetGrayTextAutocompletion(const base::string16& text);
-
-  // Returns the current gray text autocompletion.
-  base::string16 GetGrayTextAutocompletion() const;
-
   // Set if we should show a focus rect while the location entry field is
   // focused. Used when the toolbar is in full keyboard accessibility mode.
   // Repaints if necessary.
@@ -210,9 +197,13 @@ class LocationBarView : public LocationBar,
 
   LocationIconView* location_icon_view() { return location_icon_view_; }
 
-  // Return the point suitable for anchoring location-bar-anchored bubbles at.
-  // The point will be returned in the coordinates of the LocationBarView.
-  gfx::Point GetLocationBarAnchorPoint() const;
+  // Where InfoBar arrows should point. The point will be returned in the
+  // coordinates of the LocationBarView.
+  gfx::Point GetInfoBarAnchorPoint() const;
+
+  // The anchor view for security-related bubbles. That is, those anchored to
+  // the leading edge of the Omnibox, under the padlock.
+  views::View* GetSecurityBubbleAnchorView();
 
   OmniboxViewViews* omnibox_view() { return omnibox_view_; }
   const OmniboxViewViews* omnibox_view() const { return omnibox_view_; }
@@ -268,6 +259,9 @@ class LocationBarView : public LocationBar,
   // |view| should add to the trailing width after the omnibox.
   int IncrementalMinimumWidth(views::View* view) const;
 
+  // The border color, drawn on top of the toolbar.
+  SkColor GetBorderColor() const;
+
   // Returns the thickness of any visible edge, in pixels.
   int GetHorizontalEdgeThickness() const;
   int GetVerticalEdgeThickness() const;
@@ -313,21 +307,22 @@ class LocationBarView : public LocationBar,
   // Helper to show the first run info bubble.
   void ShowFirstRunBubbleInternal();
 
-  // Returns true if the suggest text is valid.
-  bool HasValidSuggestText() const;
-
-  // Returns text describing the URL's security level, to be placed in the
-  // security chip.
-  base::string16 GetSecurityText() const;
+  // Returns text to be placed in the location icon view.
+  // - For secure/insecure pages, returns text describing the URL's security
+  // level.
+  // - For extension URLs, returns the extension name.
+  // - For chrome:// URLs, returns the short product name (e.g. Chrome).
+  base::string16 GetLocationIconText() const;
 
   bool ShouldShowKeywordBubble() const;
 
-  // Returns true when the current page is explicitly secure or insecure.
-  // In these cases, we should show the state of the security chip.
-  bool ShouldShowSecurityChip() const;
+  // Returns true if any of the following is true:
+  // - the current page is explicitly secure or insecure.
+  // - the current page URL is a chrome-extension:// URL.
+  bool ShouldShowLocationIconText() const;
 
-  // Returns true if the chip should be animated
-  bool ShouldAnimateSecurityChip() const;
+  // Returns true if the location icon text should be animated.
+  bool ShouldAnimateLocationIconTextVisibilityChange() const;
 
   // Used to "reverse" the URL showing/hiding animations, since we use separate
   // animations whose curves are not true inverses of each other.  Based on the
@@ -354,7 +349,6 @@ class LocationBarView : public LocationBar,
   void UpdateLocationBarVisibility(bool visible, bool animation) override;
   bool ShowPageActionPopup(const extensions::Extension* extension,
                            bool grant_active_tab) override;
-  void UpdateOpenPDFInReaderPrompt() override;
   void SaveStateToContents(content::WebContents* contents) override;
   const OmniboxView* GetOmniboxView() const override;
   LocationBarTesting* GetLocationBarForTesting() override;
@@ -366,12 +360,14 @@ class LocationBarView : public LocationBar,
   ExtensionAction* GetVisiblePageAction(size_t index) override;
   void TestPageActionPressed(size_t index) override;
   bool GetBookmarkStarVisibility() override;
+  bool TestContentSettingImagePressed(size_t index) override;
 
   // views::View:
   const char* GetClassName() const override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   void OnFocus() override;
   void OnPaint(gfx::Canvas* canvas) override;
+  void OnPaintBorder(gfx::Canvas* canvas) override;
 
   // views::DragController:
   void WriteDragDataForView(View* sender,
@@ -425,10 +421,6 @@ class LocationBarView : public LocationBar,
   // Shown if the user has selected a keyword.
   SelectedKeywordView* selected_keyword_view_;
 
-  // View responsible for showing suggested text. This is NULL when there is no
-  // suggested text.
-  views::Label* suggested_text_view_;
-
   // Shown if the selected url has a corresponding keyword.
   KeywordHintView* keyword_hint_view_;
 
@@ -437,9 +429,6 @@ class LocationBarView : public LocationBar,
 
   // The zoom icon.
   ZoomView* zoom_view_;
-
-  // The icon to open a PDF in Reader.
-  OpenPDFInReaderView* open_pdf_in_reader_view_;
 
   // The manage passwords icon.
   ManagePasswordsIconViews* manage_passwords_icon_view_;
@@ -477,12 +466,6 @@ class LocationBarView : public LocationBar,
   // This is a debug state variable that stores if the WebContents was null
   // during the last RefreshPageAction.
   bool web_contents_null_at_last_refresh_;
-
-  // These allow toggling the verbose security state behavior via flags.
-  bool should_show_secure_state_;
-  bool should_show_nonsecure_state_;
-  bool should_animate_secure_state_;
-  bool should_animate_nonsecure_state_;
 
   DISALLOW_COPY_AND_ASSIGN(LocationBarView);
 };

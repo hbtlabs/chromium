@@ -7,9 +7,9 @@
 #include <utility>
 
 #include "base/guid.h"
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/time/time.h"
-#include "content/browser/message_port_message_filter.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_request_handler.h"
@@ -27,6 +27,7 @@
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/origin_util.h"
+#include "net/base/url_util.h"
 
 namespace content {
 
@@ -36,6 +37,38 @@ namespace {
 // Next ServiceWorkerProviderHost ID for navigations, starts at -2 and keeps
 // going down.
 int g_next_navigation_provider_id = -2;
+
+// A request handler derivative used to handle navigation requests when
+// skip_service_worker flag is set. It tracks the document URL and sets the url
+// to the provider host.
+class ServiceWorkerURLTrackingRequestHandler
+    : public ServiceWorkerRequestHandler {
+ public:
+  ServiceWorkerURLTrackingRequestHandler(
+      base::WeakPtr<ServiceWorkerContextCore> context,
+      base::WeakPtr<ServiceWorkerProviderHost> provider_host,
+      base::WeakPtr<storage::BlobStorageContext> blob_storage_context,
+      ResourceType resource_type)
+      : ServiceWorkerRequestHandler(context,
+                                    provider_host,
+                                    blob_storage_context,
+                                    resource_type) {}
+  ~ServiceWorkerURLTrackingRequestHandler() override {}
+
+  // Called via custom URLRequestJobFactory.
+  net::URLRequestJob* MaybeCreateJob(
+      net::URLRequest* request,
+      net::NetworkDelegate* network_delegate,
+      ResourceContext* resource_context) override {
+    const GURL stripped_url = net::SimplifyUrlForRequest(request->url());
+    provider_host_->SetDocumentUrl(stripped_url);
+    provider_host_->SetTopmostFrameUrl(request->first_party_for_cookies());
+    return nullptr;
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerURLTrackingRequestHandler);
+};
 
 }  // anonymous namespace
 
@@ -52,17 +85,28 @@ ServiceWorkerProviderHost::OneShotGetReadyCallback::~OneShotGetReadyCallback() {
 std::unique_ptr<ServiceWorkerProviderHost>
 ServiceWorkerProviderHost::PreCreateNavigationHost(
     base::WeakPtr<ServiceWorkerContextCore> context,
-    bool are_ancestors_secure) {
+    bool are_ancestors_secure,
+    const WebContentsGetter& web_contents_getter) {
   CHECK(IsBrowserSideNavigationEnabled());
   // Generate a new browser-assigned id for the host.
   int provider_id = g_next_navigation_provider_id--;
-  return std::unique_ptr<ServiceWorkerProviderHost>(
-      new ServiceWorkerProviderHost(
-          ChildProcessHost::kInvalidUniqueID, MSG_ROUTING_NONE, provider_id,
-          SERVICE_WORKER_PROVIDER_FOR_WINDOW,
-          are_ancestors_secure ? FrameSecurityLevel::SECURE
-                               : FrameSecurityLevel::INSECURE,
-          context, nullptr));
+  auto host = base::WrapUnique(new ServiceWorkerProviderHost(
+      ChildProcessHost::kInvalidUniqueID, MSG_ROUTING_NONE, provider_id,
+      SERVICE_WORKER_PROVIDER_FOR_WINDOW, are_ancestors_secure, context,
+      nullptr));
+  host->web_contents_getter_ = web_contents_getter;
+  return host;
+}
+
+// static
+std::unique_ptr<ServiceWorkerProviderHost> ServiceWorkerProviderHost::Create(
+    int process_id,
+    ServiceWorkerProviderHostInfo info,
+    base::WeakPtr<ServiceWorkerContextCore> context,
+    ServiceWorkerDispatcherHost* dispatcher_host) {
+  return base::WrapUnique(new ServiceWorkerProviderHost(
+      process_id, info.route_id, info.provider_id, info.type,
+      info.is_parent_frame_secure, context, dispatcher_host));
 }
 
 ServiceWorkerProviderHost::ServiceWorkerProviderHost(
@@ -70,7 +114,7 @@ ServiceWorkerProviderHost::ServiceWorkerProviderHost(
     int route_id,
     int provider_id,
     ServiceWorkerProviderType provider_type,
-    FrameSecurityLevel parent_frame_security_level,
+    bool is_parent_frame_secure,
     base::WeakPtr<ServiceWorkerContextCore> context,
     ServiceWorkerDispatcherHost* dispatcher_host)
     : client_uuid_(base::GenerateGUID()),
@@ -79,7 +123,7 @@ ServiceWorkerProviderHost::ServiceWorkerProviderHost(
       render_thread_id_(kDocumentMainThreadId),
       provider_id_(provider_id),
       provider_type_(provider_type),
-      parent_frame_security_level_(parent_frame_security_level),
+      is_parent_frame_secure_(is_parent_frame_secure),
       context_(context),
       dispatcher_host_(dispatcher_host),
       allow_association_(true) {
@@ -174,6 +218,7 @@ void ServiceWorkerProviderHost::OnSkippedWaiting(
   if (!controlling_version_)
     return;
   ServiceWorkerVersion* active_version = registration->active_version();
+  DCHECK(active_version);
   DCHECK_EQ(active_version->status(), ServiceWorkerVersion::ACTIVATING);
   SetControllerVersionAttribute(active_version,
                                 true /* notify_controllerchange */);
@@ -211,7 +256,8 @@ void ServiceWorkerProviderHost::SetControllerVersionAttribute(
   DCHECK(IsProviderForClient());
   Send(new ServiceWorkerMsg_SetControllerServiceWorker(
       render_thread_id_, provider_id(), GetOrCreateServiceWorkerHandle(version),
-      notify_controllerchange));
+      notify_controllerchange,
+      version ? version->used_features() : std::set<uint32_t>()));
 }
 
 void ServiceWorkerProviderHost::SetHostedVersion(
@@ -333,19 +379,38 @@ ServiceWorkerProviderHost::CreateRequestHandler(
     RequestContextType request_context_type,
     RequestContextFrameType frame_type,
     base::WeakPtr<storage::BlobStorageContext> blob_storage_context,
-    scoped_refptr<ResourceRequestBodyImpl> body) {
+    scoped_refptr<ResourceRequestBodyImpl> body,
+    bool skip_service_worker) {
+  // |skip_service_worker| is meant to apply to requests that could be handled
+  // by a service worker, as opposed to requests for the service worker script
+  // itself. So ignore it here for the service worker script and its imported
+  // scripts.
+  // TODO(falken): Really it should be treated as an error to set
+  // |skip_service_worker| for requests to start the service worker, but it's
+  // difficult to fix that renderer-side, since we don't know whether a request
+  // is for a service worker without access to IsHostToRunningServiceWorker() as
+  // that state is stored browser-side.
+  if (IsHostToRunningServiceWorker() &&
+      (resource_type == RESOURCE_TYPE_SERVICE_WORKER ||
+       resource_type == RESOURCE_TYPE_SCRIPT)) {
+    skip_service_worker = false;
+  }
+  if (skip_service_worker) {
+    if (!ServiceWorkerUtils::IsMainResourceType(resource_type))
+      return std::unique_ptr<ServiceWorkerRequestHandler>();
+    return base::MakeUnique<ServiceWorkerURLTrackingRequestHandler>(
+        context_, AsWeakPtr(), blob_storage_context, resource_type);
+  }
   if (IsHostToRunningServiceWorker()) {
-    return std::unique_ptr<ServiceWorkerRequestHandler>(
-        new ServiceWorkerContextRequestHandler(
-            context_, AsWeakPtr(), blob_storage_context, resource_type));
+    return base::MakeUnique<ServiceWorkerContextRequestHandler>(
+        context_, AsWeakPtr(), blob_storage_context, resource_type);
   }
   if (ServiceWorkerUtils::IsMainResourceType(resource_type) ||
       controlling_version()) {
-    return std::unique_ptr<ServiceWorkerRequestHandler>(
-        new ServiceWorkerControlleeRequestHandler(
-            context_, AsWeakPtr(), blob_storage_context, request_mode,
-            credentials_mode, redirect_mode, resource_type,
-            request_context_type, frame_type, body));
+    return base::MakeUnique<ServiceWorkerControlleeRequestHandler>(
+        context_, AsWeakPtr(), blob_storage_context, request_mode,
+        credentials_mode, redirect_mode, resource_type, request_context_type,
+        frame_type, body);
   }
   return std::unique_ptr<ServiceWorkerRequestHandler>();
 }
@@ -384,14 +449,9 @@ bool ServiceWorkerProviderHost::CanAssociateRegistration(
 void ServiceWorkerProviderHost::PostMessageToClient(
     ServiceWorkerVersion* version,
     const base::string16& message,
-    const std::vector<int>& sent_message_ports) {
+    const std::vector<MessagePort>& sent_message_ports) {
   if (!dispatcher_host_)
     return;  // Could be NULL in some tests.
-
-  std::vector<int> new_routing_ids;
-  dispatcher_host_->message_port_message_filter()->
-      UpdateMessagePortsWithNewRoutes(sent_message_ports,
-                                      &new_routing_ids);
 
   ServiceWorkerMsg_MessageToDocument_Params params;
   params.thread_id = kDocumentMainThreadId;
@@ -399,8 +459,17 @@ void ServiceWorkerProviderHost::PostMessageToClient(
   params.service_worker_info = GetOrCreateServiceWorkerHandle(version);
   params.message = message;
   params.message_ports = sent_message_ports;
-  params.new_routing_ids = new_routing_ids;
   Send(new ServiceWorkerMsg_MessageToDocument(params));
+}
+
+void ServiceWorkerProviderHost::CountFeature(uint32_t feature) {
+  if (!dispatcher_host_)
+    return;  // Could be nullptr in some tests.
+
+  // CountFeature message should be sent only for controllees.
+  DCHECK(IsProviderForClient());
+  Send(new ServiceWorkerMsg_CountFeature(render_thread_id_, provider_id(),
+                                         feature));
 }
 
 void ServiceWorkerProviderHost::AddScopedProcessReferenceToPattern(
@@ -430,11 +499,17 @@ bool ServiceWorkerProviderHost::GetRegistrationForReady(
   return true;
 }
 
-void ServiceWorkerProviderHost::PrepareForCrossSiteTransfer() {
+std::unique_ptr<ServiceWorkerProviderHost>
+ServiceWorkerProviderHost::PrepareForCrossSiteTransfer() {
   DCHECK_NE(ChildProcessHost::kInvalidUniqueID, render_process_id_);
   DCHECK_NE(MSG_ROUTING_NONE, route_id_);
   DCHECK_EQ(kDocumentMainThreadId, render_thread_id_);
   DCHECK_NE(SERVICE_WORKER_PROVIDER_UNKNOWN, provider_type_);
+
+  std::unique_ptr<ServiceWorkerProviderHost> new_provider_host =
+      base::WrapUnique(new ServiceWorkerProviderHost(
+          process_id(), frame_id(), provider_id(), provider_type(),
+          is_parent_frame_secure(), context_, dispatcher_host()));
 
   for (const GURL& pattern : associated_patterns_)
     DecreaseProcessReference(pattern);
@@ -455,6 +530,7 @@ void ServiceWorkerProviderHost::PrepareForCrossSiteTransfer() {
   provider_id_ = kInvalidServiceWorkerProviderId;
   provider_type_ = SERVICE_WORKER_PROVIDER_UNKNOWN;
   dispatcher_host_ = nullptr;
+  return new_provider_host;
 }
 
 void ServiceWorkerProviderHost::CompleteCrossSiteTransfer(
@@ -675,7 +751,8 @@ void ServiceWorkerProviderHost::FinalizeInitialization(
           render_thread_id_, provider_id(),
           GetOrCreateServiceWorkerHandle(
               associated_registration_->active_version()),
-          false /* shouldNotifyControllerChange */));
+          false /* shouldNotifyControllerChange */,
+          associated_registration_->active_version()->used_features()));
     }
   }
 }

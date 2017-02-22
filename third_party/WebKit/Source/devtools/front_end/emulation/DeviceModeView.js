@@ -132,7 +132,7 @@ Emulation.DeviceModeView = class extends UI.VBox {
    */
   _onResizeStart(event) {
     this._slowPositionStart = null;
-    /** @type {!Size} */
+    /** @type {!UI.Size} */
     this._resizeStart = this._model.screenRect().size();
   }
 
@@ -182,7 +182,7 @@ Emulation.DeviceModeView = class extends UI.VBox {
   _updateUI() {
     /**
      * @param {!Element} element
-     * @param {!Common.Rect} rect
+     * @param {!UI.Rect} rect
      */
     function applyRect(element, rect) {
       element.style.left = rect.left + 'px';
@@ -310,8 +310,8 @@ Emulation.DeviceModeView = class extends UI.VBox {
   _contentAreaResized() {
     var zoomFactor = UI.zoomManager.zoomFactor();
     var rect = this._contentArea.getBoundingClientRect();
-    var availableSize = new Size(Math.max(rect.width * zoomFactor, 1), Math.max(rect.height * zoomFactor, 1));
-    var preferredSize = new Size(
+    var availableSize = new UI.Size(Math.max(rect.width * zoomFactor, 1), Math.max(rect.height * zoomFactor, 1));
+    var preferredSize = new UI.Size(
         Math.max((rect.width - 2 * this._handleWidth) * zoomFactor, 1),
         Math.max((rect.height - this._handleHeight) * zoomFactor, 1));
     this._model.setAvailableSize(availableSize, preferredSize);
@@ -360,14 +360,17 @@ Emulation.DeviceModeView = class extends UI.VBox {
   }
 
   captureScreenshot() {
-    var mainTarget = SDK.targetManager.mainTarget();
-    if (!mainTarget)
+    var target = this._model.target();
+    if (!target)
+      return;
+    var screenCaptureModel = target.model(SDK.ScreenCaptureModel);
+    if (!screenCaptureModel)
       return;
     SDK.DOMModel.muteHighlight();
 
     var zoomFactor = UI.zoomManager.zoomFactor();
     var rect = this._contentArea.getBoundingClientRect();
-    var availableSize = new Size(Math.max(rect.width * zoomFactor, 1), Math.max(rect.height * zoomFactor, 1));
+    var availableSize = new UI.Size(Math.max(rect.width * zoomFactor, 1), Math.max(rect.height * zoomFactor, 1));
     var outlineVisible = this._model.deviceOutlineSetting().get();
 
     if (availableSize.width < this._model.screenRect().width ||
@@ -376,14 +379,13 @@ Emulation.DeviceModeView = class extends UI.VBox {
       this._model.deviceOutlineSetting().set(false);
     }
 
-    mainTarget.pageAgent().captureScreenshot(screenshotCaptured.bind(this));
+    screenCaptureModel.captureScreenshot('png', 100).then(screenshotCaptured.bind(this));
 
     /**
-     * @param {?Protocol.Error} error
-     * @param {string} content
+     * @param {?string} content
      * @this {Emulation.DeviceModeView}
      */
-    function screenshotCaptured(error, content) {
+    function screenshotCaptured(content) {
       this._model.deviceOutlineSetting().set(outlineVisible);
       var dpr = window.devicePixelRatio;
       var outlineRect = this._model.outlineRect().scale(dpr);
@@ -399,10 +401,8 @@ Emulation.DeviceModeView = class extends UI.VBox {
       SDK.DOMModel.unmuteHighlight();
       UI.inspectorView.restore();
 
-      if (error) {
-        console.error(error);
+      if (content === null)
         return;
-      }
 
       // Create a canvas to splice the images together.
       var canvas = createElement('canvas');
@@ -421,7 +421,7 @@ Emulation.DeviceModeView = class extends UI.VBox {
 
       /**
        * @param {string} src
-       * @param {!Common.Rect} rect
+       * @param {!UI.Rect} rect
        * @return {!Promise<undefined>}
        */
       function paintImage(src, rect) {
@@ -453,18 +453,20 @@ Emulation.DeviceModeView = class extends UI.VBox {
       function paintScreenshot() {
         var pageImage = new Image();
         pageImage.src = 'data:image/png;base64,' + content;
-        ctx.drawImage(
-            pageImage, visiblePageRect.left, visiblePageRect.top, Math.min(pageImage.naturalWidth, screenRect.width),
-            Math.min(pageImage.naturalHeight, screenRect.height));
-        var url = mainTarget && mainTarget.inspectedURL();
-        var fileName = url ? url.trimURL().removeURLFragment() : '';
-        if (this._model.type() === Emulation.DeviceModeModel.Type.Device)
-          fileName += Common.UIString('(%s)', this._model.device().title);
-        // Trigger download.
-        var link = createElement('a');
-        link.download = fileName + '.png';
-        link.href = canvas.toDataURL('image/png');
-        link.click();
+        pageImage.onload = () => {
+          ctx.drawImage(
+              pageImage, visiblePageRect.left, visiblePageRect.top, Math.min(pageImage.naturalWidth, screenRect.width),
+              Math.min(pageImage.naturalHeight, screenRect.height));
+          var url = target.inspectedURL();
+          var fileName = url ? url.trimURL().removeURLFragment() : '';
+          if (this._model.type() === Emulation.DeviceModeModel.Type.Device)
+            fileName += Common.UIString('(%s)', this._model.device().title);
+          // Trigger download.
+          var link = createElement('a');
+          link.download = fileName + '.png';
+          link.href = canvas.toDataURL('image/png');
+          link.click();
+        };
       }
     }
   }

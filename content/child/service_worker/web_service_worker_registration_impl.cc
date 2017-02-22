@@ -125,26 +125,26 @@ blink::WebURL WebServiceWorkerRegistrationImpl::scope() const {
 
 void WebServiceWorkerRegistrationImpl::update(
     blink::WebServiceWorkerProvider* provider,
-    WebServiceWorkerUpdateCallbacks* callbacks) {
+    std::unique_ptr<WebServiceWorkerUpdateCallbacks> callbacks) {
   WebServiceWorkerProviderImpl* provider_impl =
       static_cast<WebServiceWorkerProviderImpl*>(provider);
   ServiceWorkerDispatcher* dispatcher =
       ServiceWorkerDispatcher::GetThreadSpecificInstance();
   DCHECK(dispatcher);
   dispatcher->UpdateServiceWorker(provider_impl->provider_id(),
-                                  registrationId(), callbacks);
+                                  registrationId(), std::move(callbacks));
 }
 
 void WebServiceWorkerRegistrationImpl::unregister(
     blink::WebServiceWorkerProvider* provider,
-    WebServiceWorkerUnregistrationCallbacks* callbacks) {
+    std::unique_ptr<WebServiceWorkerUnregistrationCallbacks> callbacks) {
   WebServiceWorkerProviderImpl* provider_impl =
       static_cast<WebServiceWorkerProviderImpl*>(provider);
   ServiceWorkerDispatcher* dispatcher =
       ServiceWorkerDispatcher::GetThreadSpecificInstance();
   DCHECK(dispatcher);
   dispatcher->UnregisterServiceWorker(provider_impl->provider_id(),
-                                      registrationId(), callbacks);
+                                      registrationId(), std::move(callbacks));
 }
 
 void WebServiceWorkerRegistrationImpl::enableNavigationPreload(
@@ -198,14 +198,6 @@ WebServiceWorkerRegistrationImpl::CreateHandle(
   if (!registration)
     return nullptr;
   return base::MakeUnique<HandleImpl>(registration);
-}
-
-blink::WebServiceWorkerRegistration::Handle*
-WebServiceWorkerRegistrationImpl::CreateLeakyHandle(
-    const scoped_refptr<WebServiceWorkerRegistrationImpl>& registration) {
-  if (!registration)
-    return nullptr;
-  return new HandleImpl(registration);
 }
 
 WebServiceWorkerRegistrationImpl::~WebServiceWorkerRegistrationImpl() {

@@ -33,7 +33,6 @@ namespace blink {
 class ExceptionState;
 class HTMLDataListElement;
 class HTMLSelectElement;
-class ComputedStyle;
 
 class CORE_EXPORT HTMLOptionElement final : public HTMLElement {
   DEFINE_WRAPPERTYPEINFO();
@@ -100,19 +99,13 @@ class CORE_EXPORT HTMLOptionElement final : public HTMLElement {
   bool matchesEnabledPseudoClass() const override;
   void attachLayoutTree(const AttachContext& = AttachContext()) override;
   void detachLayoutTree(const AttachContext& = AttachContext()) override;
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+  void parseAttribute(const AttributeModificationParams&) override;
   InsertionNotificationRequest insertedInto(ContainerNode*) override;
   void removedFrom(ContainerNode*) override;
   void accessKeyAction(bool) override;
   void childrenChanged(const ChildrenChange&) override;
   String innerText() override;
 
-  // <option> never has a layoutObject so we manually manage a cached style.
-  void updateNonComputedStyle();
-  ComputedStyle* nonLayoutObjectComputedStyle() const override;
-  PassRefPtr<ComputedStyle> customStyleForLayoutObject() override;
   void didAddUserAgentShadowRoot(ShadowRoot&) override;
 
   String collectOptionInnerText() const;
@@ -125,7 +118,6 @@ class CORE_EXPORT HTMLOptionElement final : public HTMLElement {
   // Represents 'dirtiness'.
   // https://html.spec.whatwg.org/multipage/forms.html#concept-option-dirtiness
   bool m_isDirty = false;
-  RefPtr<ComputedStyle> m_style;
 };
 
 }  // namespace blink

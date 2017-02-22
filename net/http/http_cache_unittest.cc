@@ -70,6 +70,34 @@ using CacheEntryStatus = HttpResponseInfo::CacheEntryStatus;
 
 namespace {
 
+// Returns a simple text serialization of the given
+// |HttpResponseHeaders|. This is used by tests to verify that an
+// |HttpResponseHeaders| matches an expectation string.
+//
+//  * One line per header, written as:
+//        HEADER_NAME: HEADER_VALUE\n
+//  * The original case of header names is preserved.
+//  * Whitespace around head names/values is stripped.
+//  * Repeated headers are not aggregated.
+//  * Headers are listed in their original order.
+// TODO(tfarina): this is a duplicate function from
+// http_response_headers_unittest.cc:ToSimpleString(). Figure out how to merge
+// them. crbug.com/488593
+std::string ToSimpleString(const scoped_refptr<HttpResponseHeaders>& parsed) {
+  std::string result = parsed->GetStatusLine() + "\n";
+
+  size_t iter = 0;
+  std::string name;
+  std::string value;
+  while (parsed->EnumerateHeaderLines(&iter, &name, &value)) {
+    std::string new_line = name + ": " + value + "\n";
+
+    result += new_line;
+  }
+
+  return result;
+}
+
 // Tests the load timing values of a request that goes through a
 // MockNetworkTransaction.
 void TestLoadTimingNetworkRequest(const LoadTimingInfo& load_timing_info) {
@@ -262,7 +290,7 @@ void RunTransactionTestWithResponse(HttpCache* cache,
                                     std::string* response_headers) {
   HttpResponseInfo response;
   RunTransactionTestWithResponseInfo(cache, trans_info, &response);
-  response.headers->GetNormalizedHeaders(response_headers);
+  *response_headers = ToSimpleString(response.headers);
 }
 
 void RunTransactionTestWithResponseAndGetTiming(
@@ -275,7 +303,7 @@ void RunTransactionTestWithResponseAndGetTiming(
   RunTransactionTestBase(cache, trans_info, MockHttpRequest(trans_info),
                          &response, log, load_timing_info, nullptr, nullptr,
                          nullptr);
-  response.headers->GetNormalizedHeaders(response_headers);
+  *response_headers = ToSimpleString(response.headers);
 }
 
 // This class provides a handler for kFastNoStoreGET_Transaction so that the
@@ -501,7 +529,7 @@ void Verify206Response(const std::string& response, int start, int end) {
 
   int64_t range_start, range_end, object_size;
   ASSERT_TRUE(
-      headers->GetContentRange(&range_start, &range_end, &object_size));
+      headers->GetContentRangeFor206(&range_start, &range_end, &object_size));
   int64_t content_length = headers->GetContentLength();
 
   int length = end - start + 1;
@@ -1221,6 +1249,50 @@ TEST(HttpCache, SimpleGET_LoadValidateCache_Implicit) {
   EXPECT_EQ(1, cache.disk_cache()->create_count());
 }
 
+// Tests that |unused_since_prefetch| is updated accordingly (e.g. it is set to
+// true after a prefetch and set back to false when the prefetch is used).
+TEST(HttpCache, SimpleGET_UnusedSincePrefetch) {
+  MockHttpCache cache;
+  HttpResponseInfo response_info;
+
+  // A normal load does not have |unused_since_prefetch| set.
+  RunTransactionTestWithResponseInfoAndGetTiming(
+      cache.http_cache(), kSimpleGET_Transaction, &response_info,
+      BoundTestNetLog().bound(), nullptr);
+  EXPECT_FALSE(response_info.unused_since_prefetch);
+  EXPECT_FALSE(response_info.was_cached);
+
+  // The prefetch itself does not have |unused_since_prefetch| set.
+  MockTransaction prefetch_transaction(kSimpleGET_Transaction);
+  prefetch_transaction.load_flags |= LOAD_PREFETCH;
+  RunTransactionTestWithResponseInfoAndGetTiming(
+      cache.http_cache(), prefetch_transaction, &response_info,
+      BoundTestNetLog().bound(), nullptr);
+  EXPECT_FALSE(response_info.unused_since_prefetch);
+  EXPECT_TRUE(response_info.was_cached);
+
+  // A duplicated prefetch has |unused_since_prefetch| set.
+  RunTransactionTestWithResponseInfoAndGetTiming(
+      cache.http_cache(), prefetch_transaction, &response_info,
+      BoundTestNetLog().bound(), nullptr);
+  EXPECT_TRUE(response_info.unused_since_prefetch);
+  EXPECT_TRUE(response_info.was_cached);
+
+  // |unused_since_prefetch| is still true after two prefetches in a row.
+  RunTransactionTestWithResponseInfoAndGetTiming(
+      cache.http_cache(), kSimpleGET_Transaction, &response_info,
+      BoundTestNetLog().bound(), nullptr);
+  EXPECT_TRUE(response_info.unused_since_prefetch);
+  EXPECT_TRUE(response_info.was_cached);
+
+  // The resource has now been used, back to normal behavior.
+  RunTransactionTestWithResponseInfoAndGetTiming(
+      cache.http_cache(), kSimpleGET_Transaction, &response_info,
+      BoundTestNetLog().bound(), nullptr);
+  EXPECT_FALSE(response_info.unused_since_prefetch);
+  EXPECT_TRUE(response_info.was_cached);
+}
+
 static void PreserveRequestHeaders_Handler(const HttpRequestInfo* request,
                                            std::string* response_status,
                                            std::string* response_headers,
@@ -1704,7 +1776,7 @@ TEST(HttpCache, SimpleGET_ManyWriters_BypassCache) {
 // lock to continue.
 TEST(HttpCache, SimpleGET_WriterTimeout) {
   MockHttpCache cache;
-  cache.BypassCacheLock();
+  cache.SimulateCacheLockTimeout();
 
   MockHttpRequest request(kSimpleGET_Transaction);
   Context c1, c2;
@@ -1719,6 +1791,34 @@ TEST(HttpCache, SimpleGET_WriterTimeout) {
 
   c2.callback.WaitForResult();
   ReadAndVerifyTransaction(c2.trans.get(), kSimpleGET_Transaction);
+
+  // Complete the first transaction.
+  c1.callback.WaitForResult();
+  ReadAndVerifyTransaction(c1.trans.get(), kSimpleGET_Transaction);
+}
+
+// Tests that a (simulated) timeout allows transactions waiting on the cache
+// lock to continue but read only transactions to error out.
+TEST(HttpCache, SimpleGET_WriterTimeoutReadOnlyError) {
+  MockHttpCache cache;
+
+  // Simulate timeout.
+  cache.SimulateCacheLockTimeout();
+
+  MockHttpRequest request(kSimpleGET_Transaction);
+  Context c1, c2;
+  ASSERT_THAT(cache.CreateTransaction(&c1.trans), IsOk());
+  ASSERT_EQ(ERR_IO_PENDING, c1.trans->Start(&request, c1.callback.callback(),
+                                            NetLogWithSource()));
+
+  request.load_flags = LOAD_ONLY_FROM_CACHE;
+  ASSERT_THAT(cache.CreateTransaction(&c2.trans), IsOk());
+  ASSERT_EQ(ERR_IO_PENDING, c2.trans->Start(&request, c2.callback.callback(),
+                                            NetLogWithSource()));
+
+  // The second request is queued after the first one.
+  int res = c2.callback.WaitForResult();
+  ASSERT_EQ(ERR_CACHE_MISS, res);
 
   // Complete the first transaction.
   c1.callback.WaitForResult();
@@ -6662,13 +6762,10 @@ TEST(HttpCache, UpdatesRequestResponseTimeOn304) {
   EXPECT_EQ(response_time.ToInternalValue(),
             response.response_time.ToInternalValue());
 
-  std::string headers;
-  response.headers->GetNormalizedHeaders(&headers);
-
   EXPECT_EQ("HTTP/1.1 200 OK\n"
             "Date: Wed, 22 Jul 2009 03:15:26 GMT\n"
             "Last-Modified: Wed, 06 Feb 2008 22:38:21 GMT\n",
-            headers);
+            ToSimpleString(response.headers));
 
   RemoveMockTransaction(&mock_network_response);
 }
@@ -6742,6 +6839,110 @@ TEST(HttpCache, WriteMetadata_Fail) {
   EXPECT_EQ(1, cache.network_layer()->transaction_count());
   EXPECT_EQ(2, cache.disk_cache()->open_count());
   EXPECT_EQ(1, cache.disk_cache()->create_count());
+}
+
+// Tests that if a metadata writer transaction hits cache lock timeout, it will
+// error out.
+TEST(HttpCache, WriteMetadata_CacheLockTimeout) {
+  MockHttpCache cache;
+
+  // Write to the cache
+  HttpResponseInfo response;
+  RunTransactionTestWithResponseInfo(cache.http_cache(), kSimpleGET_Transaction,
+                                     &response);
+  EXPECT_FALSE(response.metadata.get());
+
+  MockHttpRequest request(kSimpleGET_Transaction);
+  Context c1;
+  ASSERT_THAT(cache.CreateTransaction(&c1.trans), IsOk());
+  ASSERT_EQ(ERR_IO_PENDING, c1.trans->Start(&request, c1.callback.callback(),
+                                            NetLogWithSource()));
+
+  cache.SimulateCacheLockTimeout();
+
+  // Write meta data to the same entry.
+  scoped_refptr<IOBufferWithSize> buf(new IOBufferWithSize(50));
+  memset(buf->data(), 0, buf->size());
+  base::strlcpy(buf->data(), "Hi there", buf->size());
+  cache.http_cache()->WriteMetadata(GURL(kSimpleGET_Transaction.url),
+                                    DEFAULT_PRIORITY, response.response_time,
+                                    buf.get(), buf->size());
+
+  // Release the buffer before the operation takes place.
+  buf = NULL;
+
+  // Makes sure we finish pending operations.
+  base::RunLoop().RunUntilIdle();
+
+  RunTransactionTestWithResponseInfo(cache.http_cache(), kSimpleGET_Transaction,
+                                     &response);
+
+  // The writer transaction should fail due to cache lock timeout.
+  ASSERT_FALSE(response.metadata.get());
+}
+
+// Tests that we ignore VARY checks when writing metadata since the request
+// headers for the WriteMetadata transaction are made up.
+TEST(HttpCache, WriteMetadata_IgnoreVary) {
+  MockHttpCache cache;
+
+  // Write to the cache
+  HttpResponseInfo response;
+  ScopedMockTransaction transaction(kSimpleGET_Transaction);
+  transaction.request_headers = "accept-encoding: gzip\r\n";
+  transaction.response_headers =
+      "Vary: accept-encoding\n"
+      "Cache-Control: max-age=10000\n";
+
+  RunTransactionTestWithResponseInfo(cache.http_cache(), transaction,
+                                     &response);
+  EXPECT_FALSE(response.metadata);
+
+  // Attempt to write meta data to the same entry.
+  scoped_refptr<IOBufferWithSize> buf(new IOBufferWithSize(50));
+  memset(buf->data(), 0, buf->size());
+  base::strlcpy(buf->data(), "Hi there", buf->size());
+  cache.http_cache()->WriteMetadata(GURL(transaction.url), DEFAULT_PRIORITY,
+                                    response.response_time, buf.get(),
+                                    buf->size());
+
+  // Makes sure we finish pending operations.
+  base::RunLoop().RunUntilIdle();
+
+  RunTransactionTestWithResponseInfo(cache.http_cache(), transaction,
+                                     &response);
+  ASSERT_TRUE(response.metadata);
+  EXPECT_EQ(50, response.metadata->size());
+  EXPECT_EQ(0, strcmp(response.metadata->data(), "Hi there"));
+
+  EXPECT_EQ(1, cache.network_layer()->transaction_count());
+  EXPECT_EQ(2, cache.disk_cache()->open_count());
+  EXPECT_EQ(1, cache.disk_cache()->create_count());
+}
+
+TEST(HttpCache, SkipVaryCheck) {
+  MockHttpCache cache;
+
+  // Write a simple vary transaction to the cache.
+  HttpResponseInfo response;
+  ScopedMockTransaction transaction(kSimpleGET_Transaction);
+  transaction.request_headers = "accept-encoding: gzip\r\n";
+  transaction.response_headers =
+      "Vary: accept-encoding\n"
+      "Cache-Control: max-age=10000\n";
+  RunTransactionTest(cache.http_cache(), transaction);
+
+  // Change the request headers so that the request doesn't match due to vary.
+  // The request should fail.
+  transaction.load_flags = LOAD_ONLY_FROM_CACHE;
+  transaction.request_headers = "accept-encoding: foo\r\n";
+  transaction.return_code = ERR_CACHE_MISS;
+  RunTransactionTest(cache.http_cache(), transaction);
+
+  // Change the load flags to ignore vary checks, the request should now hit.
+  transaction.load_flags = LOAD_ONLY_FROM_CACHE | LOAD_SKIP_VARY_CHECK;
+  transaction.return_code = OK;
+  RunTransactionTest(cache.http_cache(), transaction);
 }
 
 // Tests that we only return valid entries with LOAD_ONLY_FROM_CACHE
@@ -7630,6 +7831,7 @@ TEST(HttpCache, NetworkBytesRange) {
 
 class HttpCachePrefetchValidationTest : public ::testing::Test {
  protected:
+  static const int kNumSecondsPerMinute = 60;
   static const int kMaxAgeSecs = 100;
   static const int kRequireValidationSecs = kMaxAgeSecs + 1;
 

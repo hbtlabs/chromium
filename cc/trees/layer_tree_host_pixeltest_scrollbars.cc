@@ -9,6 +9,8 @@
 #include "cc/input/scrollbar.h"
 #include "cc/layers/painted_scrollbar_layer.h"
 #include "cc/layers/solid_color_layer.h"
+#include "cc/paint/paint_canvas.h"
+#include "cc/paint/paint_flags.h"
 #include "cc/test/layer_tree_pixel_test.h"
 #include "cc/test/test_in_process_context_provider.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -27,8 +29,7 @@ class LayerTreeHostScrollbarsPixelTest : public LayerTreePixelTest {
   }
 
   void SetupTree() override {
-    layer_tree_host()->GetLayerTree()->SetDeviceScaleFactor(
-        device_scale_factor_);
+    layer_tree_host()->SetDeviceScaleFactor(device_scale_factor_);
     LayerTreePixelTest::SetupTree();
   }
 
@@ -49,20 +50,20 @@ class PaintedScrollbar : public Scrollbar {
   gfx::Rect TrackRect() const override { return rect_; }
   float ThumbOpacity() const override { return 1.f; }
   bool NeedsPaintPart(ScrollbarPart part) const override { return true; }
-  void PaintPart(SkCanvas* canvas,
+  void PaintPart(PaintCanvas* canvas,
                  ScrollbarPart part,
                  const gfx::Rect& content_rect) override {
-    SkPaint paint;
-    paint.setStyle(SkPaint::kStroke_Style);
-    paint.setStrokeWidth(SkIntToScalar(paint_scale_));
-    paint.setColor(color_);
+    PaintFlags flags;
+    flags.setStyle(PaintFlags::kStroke_Style);
+    flags.setStrokeWidth(SkIntToScalar(paint_scale_));
+    flags.setColor(color_);
 
     gfx::Rect inset_rect = content_rect;
     while (!inset_rect.IsEmpty()) {
       int big = paint_scale_ + 2;
       int small = paint_scale_;
       inset_rect.Inset(big, big, small, small);
-      canvas->drawRect(RectToSkRect(inset_rect), paint);
+      canvas->drawRect(RectToSkRect(inset_rect), flags);
       inset_rect.Inset(big, big, small, small);
     }
   }

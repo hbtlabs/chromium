@@ -41,7 +41,6 @@
 namespace blink {
 
 class DOMWrapperWorld;
-class EventTarget;
 class ScriptWrappable;
 
 ScriptWrappable* toScriptWrappable(
@@ -61,7 +60,7 @@ typedef v8::Local<v8::FunctionTemplate> (
     *DomTemplateFunction)(v8::Isolate*, const DOMWrapperWorld&);
 typedef void (*TraceFunction)(Visitor*, ScriptWrappable*);
 typedef void (*TraceWrappersFunction)(WrapperVisitor*, ScriptWrappable*);
-typedef ActiveScriptWrappable* (*ToActiveScriptWrappableFunction)(
+typedef ActiveScriptWrappableBase* (*ToActiveScriptWrappableFunction)(
     v8::Local<v8::Object>);
 typedef void (*ResolveWrapperReachabilityFunction)(
     v8::Isolate*,
@@ -73,13 +72,6 @@ typedef void (*PreparePrototypeAndInterfaceObjectFunction)(
     v8::Local<v8::Object>,
     v8::Local<v8::Function>,
     v8::Local<v8::FunctionTemplate>);
-
-inline void setObjectGroup(v8::Isolate* isolate,
-                           ScriptWrappable* scriptWrappable,
-                           const v8::Persistent<v8::Object>& wrapper) {
-  isolate->SetObjectGroupId(
-      wrapper, v8::UniqueId(reinterpret_cast<intptr_t>(scriptWrappable)));
-}
 
 // This struct provides a way to store a bunch of information that is helpful
 // when unwrapping v8 objects. Each v8 bindings class has exactly one static
@@ -101,11 +93,6 @@ struct WrapperTypeInfo {
   enum ActiveScriptWrappableInheritance {
     NotInheritFromActiveScriptWrappable,
     InheritFromActiveScriptWrappable,
-  };
-
-  enum EventTargetInheritance {
-    NotInheritFromEventTarget,
-    InheritFromEventTarget,
   };
 
   enum Lifetime {
@@ -178,17 +165,6 @@ struct WrapperTypeInfo {
     return activeScriptWrappableInheritance == InheritFromActiveScriptWrappable;
   }
 
-  EventTarget* toEventTarget(v8::Local<v8::Object>) const;
-
-  void visitDOMWrapper(v8::Isolate* isolate,
-                       ScriptWrappable* scriptWrappable,
-                       const v8::Persistent<v8::Object>& wrapper) const {
-    if (!visitDOMWrapperFunction)
-      setObjectGroup(isolate, scriptWrappable, wrapper);
-    else
-      visitDOMWrapperFunction(isolate, scriptWrappable, wrapper);
-  }
-
   // This field must be the first member of the struct WrapperTypeInfo.
   // See also static_assert() in .cpp file.
   const gin::GinEmbedder ginEmbedder;
@@ -196,7 +172,6 @@ struct WrapperTypeInfo {
   DomTemplateFunction domTemplateFunction;
   const TraceFunction traceFunction;
   const TraceWrappersFunction traceWrappersFunction;
-  const ResolveWrapperReachabilityFunction visitDOMWrapperFunction;
   PreparePrototypeAndInterfaceObjectFunction
       preparePrototypeAndInterfaceObjectFunction;
   const char* const interfaceName;
@@ -205,7 +180,6 @@ struct WrapperTypeInfo {
   const unsigned wrapperClassId : 2;        // WrapperClassId
   const unsigned
       activeScriptWrappableInheritance : 1;  // ActiveScriptWrappableInheritance
-  const unsigned eventTargetInheritance : 1;  // EventTargetInheritance
   const unsigned lifetime : 1;                // Lifetime
 };
 

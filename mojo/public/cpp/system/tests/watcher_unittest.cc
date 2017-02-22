@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -35,16 +36,10 @@ class WatcherTest : public testing::Test {
   WatcherTest() {}
   ~WatcherTest() override {}
 
-  void SetUp() override {
-    message_loop_.reset(new base::MessageLoop);
-  }
+ private:
+  base::MessageLoop message_loop_;
 
-  void TearDown() override {
-    message_loop_.reset();
-  }
-
- protected:
-  std::unique_ptr<base::MessageLoop> message_loop_;
+  DISALLOW_COPY_AND_ASSIGN(WatcherTest);
 };
 
 TEST_F(WatcherTest, WatchBasic) {
@@ -53,7 +48,7 @@ TEST_F(WatcherTest, WatchBasic) {
 
   bool notified = false;
   base::RunLoop run_loop;
-  Watcher b_watcher;
+  Watcher b_watcher(FROM_HERE);
   EXPECT_EQ(MOJO_RESULT_OK,
             b_watcher.Start(b.get(), MOJO_HANDLE_SIGNAL_READABLE,
                             OnReady([&] (MojoResult result) {
@@ -76,7 +71,7 @@ TEST_F(WatcherTest, WatchUnsatisfiable) {
   CreateMessagePipe(nullptr, &a, &b);
   a.reset();
 
-  Watcher b_watcher;
+  Watcher b_watcher(FROM_HERE);
   EXPECT_EQ(MOJO_RESULT_FAILED_PRECONDITION,
             b_watcher.Start(b.get(), MOJO_HANDLE_SIGNAL_READABLE,
                             NotReached()));
@@ -89,7 +84,7 @@ TEST_F(WatcherTest, WatchInvalidHandle) {
   a.reset();
   b.reset();
 
-  Watcher b_watcher;
+  Watcher b_watcher(FROM_HERE);
   EXPECT_EQ(MOJO_RESULT_INVALID_ARGUMENT,
             b_watcher.Start(b.get(), MOJO_HANDLE_SIGNAL_READABLE,
                             NotReached()));
@@ -101,7 +96,7 @@ TEST_F(WatcherTest, Cancel) {
   CreateMessagePipe(nullptr, &a, &b);
 
   base::RunLoop run_loop;
-  Watcher b_watcher;
+  Watcher b_watcher(FROM_HERE);
   EXPECT_EQ(MOJO_RESULT_OK,
             b_watcher.Start(b.get(), MOJO_HANDLE_SIGNAL_READABLE,
                             NotReached()));
@@ -123,7 +118,7 @@ TEST_F(WatcherTest, CancelOnClose) {
   CreateMessagePipe(nullptr, &a, &b);
 
   base::RunLoop run_loop;
-  Watcher b_watcher;
+  Watcher b_watcher(FROM_HERE);
   EXPECT_EQ(MOJO_RESULT_OK,
             b_watcher.Start(b.get(), MOJO_HANDLE_SIGNAL_READABLE,
                             OnReady([&] (MojoResult result) {
@@ -145,7 +140,7 @@ TEST_F(WatcherTest, CancelOnDestruction) {
   CreateMessagePipe(nullptr, &a, &b);
   base::RunLoop run_loop;
   {
-    Watcher b_watcher;
+    Watcher b_watcher(FROM_HERE);
     EXPECT_EQ(MOJO_RESULT_OK,
               b_watcher.Start(b.get(), MOJO_HANDLE_SIGNAL_READABLE,
                               NotReached()));
@@ -162,33 +157,11 @@ TEST_F(WatcherTest, CancelOnDestruction) {
   run_loop.Run();
 }
 
-TEST_F(WatcherTest, NotifyOnMessageLoopDestruction) {
-  ScopedMessagePipeHandle a, b;
-  CreateMessagePipe(nullptr, &a, &b);
-
-  bool notified = false;
-  Watcher b_watcher;
-  EXPECT_EQ(MOJO_RESULT_OK,
-            b_watcher.Start(b.get(), MOJO_HANDLE_SIGNAL_READABLE,
-                            OnReady([&] (MojoResult result) {
-                              EXPECT_EQ(MOJO_RESULT_ABORTED, result);
-                              notified = true;
-                            })));
-  EXPECT_TRUE(b_watcher.IsWatching());
-
-  message_loop_.reset();
-
-  EXPECT_TRUE(notified);
-
-  EXPECT_TRUE(b_watcher.IsWatching());
-  b_watcher.Cancel();
-}
-
 TEST_F(WatcherTest, CloseAndCancel) {
   ScopedMessagePipeHandle a, b;
   CreateMessagePipe(nullptr, &a, &b);
 
-  Watcher b_watcher;
+  Watcher b_watcher(FROM_HERE);
   EXPECT_EQ(MOJO_RESULT_OK,
             b_watcher.Start(b.get(), MOJO_HANDLE_SIGNAL_READABLE,
                             OnReady([](MojoResult result) { FAIL(); })));

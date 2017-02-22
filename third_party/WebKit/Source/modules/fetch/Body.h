@@ -29,8 +29,8 @@ class ScriptState;
 // implementation.
 class MODULES_EXPORT Body : public GarbageCollected<Body>,
                             public ScriptWrappable,
-                            public ActiveScriptWrappable,
-                            public ContextLifecycleObserver {
+                            public ActiveScriptWrappable<Body>,
+                            public ContextClient {
   WTF_MAKE_NONCOPYABLE(Body);
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(Body);
@@ -43,7 +43,7 @@ class MODULES_EXPORT Body : public GarbageCollected<Body>,
   ScriptPromise formData(ScriptState*);
   ScriptPromise json(ScriptState*);
   ScriptPromise text(ScriptState*);
-  ScriptValue bodyWithUseCounter(ScriptState*);
+  ScriptValue body(ScriptState*);
   virtual BodyStreamBuffer* bodyBuffer() = 0;
   virtual const BodyStreamBuffer* bodyBuffer() const = 0;
 
@@ -53,7 +53,7 @@ class MODULES_EXPORT Body : public GarbageCollected<Body>,
   // ScriptWrappable override.
   bool hasPendingActivity() const override;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { ContextLifecycleObserver::trace(visitor); }
+  DEFINE_INLINE_VIRTUAL_TRACE() { ContextClient::trace(visitor); }
 
  private:
   virtual String mimeType() const = 0;

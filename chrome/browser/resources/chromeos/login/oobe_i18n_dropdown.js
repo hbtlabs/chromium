@@ -28,12 +28,9 @@ Polymer({
     },
 
     /**
-     * Accessibility label.
-     * @type {!string}
+     * ARIA-label for the selection menu.
      */
-    label: {
-      type: String,
-    },
+    labelForAria: String,
   },
 
   /**
@@ -41,6 +38,10 @@ Polymer({
    * @type {!Map<string,I18nMenuItem>}
    */
   idToItem_: null,
+
+  focus: function() {
+    this.$.select.focus();
+  },
 
   /**
    * @param {string} value Option value.

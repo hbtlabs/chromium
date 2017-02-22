@@ -10,7 +10,7 @@
 #include "core/frame/PerformanceMonitor.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "platform/Histogram.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebScheduler.h"
 #include "public/platform/WebTraceLocation.h"
@@ -62,14 +62,14 @@ class IdleRequestCallbackWrapper
       : m_id(id), m_controller(controller) {}
 
   ScriptedIdleTaskController::CallbackId m_id;
-  Persistent<ScriptedIdleTaskController> m_controller;
+  WeakPersistent<ScriptedIdleTaskController> m_controller;
 };
 
 }  // namespace internal
 
 ScriptedIdleTaskController::ScriptedIdleTaskController(
     ExecutionContext* context)
-    : ActiveDOMObject(context),
+    : SuspendableObject(context),
       m_scheduler(Platform::current()->currentThread()->scheduler()),
       m_nextCallbackId(0),
       m_suspended(false) {
@@ -80,7 +80,7 @@ ScriptedIdleTaskController::~ScriptedIdleTaskController() {}
 
 DEFINE_TRACE(ScriptedIdleTaskController) {
   visitor->trace(m_callbacks);
-  ActiveDOMObject::trace(visitor);
+  SuspendableObject::trace(visitor);
 }
 
 int ScriptedIdleTaskController::nextCallbackId() {
@@ -130,7 +130,7 @@ void ScriptedIdleTaskController::cancelCallback(CallbackId id) {
   if (!isValidCallbackId(id))
     return;
 
-  m_callbacks.remove(id);
+  m_callbacks.erase(id);
 }
 
 void ScriptedIdleTaskController::callbackFired(
@@ -143,7 +143,7 @@ void ScriptedIdleTaskController::callbackFired(
   if (m_suspended) {
     if (callbackType == IdleDeadline::CallbackType::CalledByTimeout) {
       // Queue for execution when we are resumed.
-      m_pendingTimeouts.append(id);
+      m_pendingTimeouts.push_back(id);
     }
     // Just drop callbacks called while suspended, these will be reposted on the
     // idle task queue when we are resumed.
@@ -188,7 +188,7 @@ void ScriptedIdleTaskController::runCallback(
   idleCallbackOverrunHistogram.count(overrunMillis);
 }
 
-void ScriptedIdleTaskController::contextDestroyed() {
+void ScriptedIdleTaskController::contextDestroyed(ExecutionContext*) {
   m_callbacks.clear();
 }
 

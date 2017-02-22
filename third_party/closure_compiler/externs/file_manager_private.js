@@ -510,7 +510,7 @@ chrome.fileManagerPrivate.validatePathNameLength = function(
     parentEntry, name, callback) {};
 
 /**
- * Changes the zoom factor of the Files.app. |operation| Zooming mode.
+ * Changes the zoom factor of the Files app. |operation| Zooming mode.
  * @param {string} operation
  */
 chrome.fileManagerPrivate.zoom = function(operation) {};
@@ -691,6 +691,9 @@ chrome.fileManagerPrivate.onDeviceChanged;
 
 /** @type {!ChromeEvent} */
 chrome.fileManagerPrivate.onDriveSyncError;
+
+/** @type {!ChromeEvent} */
+chrome.fileManagerPrivate.onAppsUpdated;
 
 /** @enum {string} */
 chrome.fileManagerPrivate.Verb = {

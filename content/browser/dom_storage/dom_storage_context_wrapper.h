@@ -33,6 +33,7 @@ class SpecialStoragePolicy;
 namespace content {
 
 class DOMStorageContextImpl;
+class LocalStorageContextMojo;
 
 // This is owned by Storage Partition and encapsulates all its dom storage
 // state.
@@ -74,13 +75,13 @@ class CONTENT_EXPORT DOMStorageContextWrapper :
 
   // See mojom::StoragePartitionService interface.
   void OpenLocalStorage(const url::Origin& origin,
-                        mojom::LevelDBObserverPtr observer,
                         mojom::LevelDBWrapperRequest request);
 
  private:
   friend class DOMStorageMessageFilter;  // for access to context()
   friend class SessionStorageNamespaceImpl;  // ditto
   friend class base::RefCountedThreadSafe<DOMStorageContextWrapper>;
+  friend class MojoDOMStorageBrowserTest;
 
   ~DOMStorageContextWrapper() override;
   DOMStorageContextImpl* context() const { return context_.get(); }
@@ -90,14 +91,16 @@ class CONTENT_EXPORT DOMStorageContextWrapper :
       base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level);
 
   // base::MemoryCoordinatorClient implementation:
-  void OnMemoryStateChange(base::MemoryState state) override;
+  void OnPurgeMemory() override;
 
   void PurgeMemory(DOMStorageContextImpl::PurgeOption purge_option);
 
-  // An inner class to keep all mojo-ish details together and not bleed them
-  // through the public interface.
-  class MojoState;
-  std::unique_ptr<MojoState> mojo_state_;
+  void GotMojoLocalStorageUsage(GetLocalStorageUsageCallback callback,
+                                std::vector<LocalStorageUsageInfo> usage);
+
+  // Keep all mojo-ish details together and not bleed them through the public
+  // interface.
+  std::unique_ptr<LocalStorageContextMojo> mojo_state_;
 
   // To receive memory pressure signals.
   std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;

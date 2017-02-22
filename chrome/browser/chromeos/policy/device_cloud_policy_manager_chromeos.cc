@@ -243,7 +243,9 @@ void DeviceCloudPolicyManagerChromeOS::StartConnection(
   if (ForcedReEnrollmentEnabled())
     client_to_connect->SetStateKeysToUpload(state_keys_broker_->state_keys());
 
-  if (is_component_policy_enabled_) {
+  // Create the component cloud policy service for fetching, caching and
+  // exposing policy for extensions.
+  if (!component_policy_disabled_for_testing_) {
     base::FilePath component_policy_cache_dir;
     CHECK(PathService::Get(chromeos::DIR_SIGNIN_PROFILE_COMPONENT_POLICY,
                            &component_policy_cache_dir));
@@ -265,12 +267,12 @@ void DeviceCloudPolicyManagerChromeOS::StartConnection(
   attestation_policy_observer_.reset(
       new chromeos::attestation::AttestationPolicyObserver(client()));
 
-  // Enable device reporting and status monitoring for enterprise enrolled
-  // devices. We want to create these objects for enrolled devices, even if
-  // monitoring is currently inactive, in case monitoring is turned back on in
-  // a future policy fetch - the classes themselves track the current state of
-  // the monitoring settings and only perform monitoring if it is active.
-  if (install_attributes->IsEnterpriseManaged()) {
+  // Enable device reporting and status monitoring for cloud managed devices. We
+  // want to create these objects even if monitoring is currently inactive, in
+  // case monitoring is turned back on in a future policy fetch - the classes
+  // themselves track the current state of the monitoring settings and only
+  // perform monitoring if it is active.
+  if (install_attributes->IsCloudManaged()) {
     CreateStatusUploader();
     syslog_uploader_.reset(new SystemLogUploader(nullptr, task_runner_));
     heartbeat_scheduler_.reset(new HeartbeatScheduler(

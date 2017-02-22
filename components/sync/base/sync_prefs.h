@@ -23,7 +23,6 @@
 #include "components/sync/protocol/sync.pb.h"
 
 class PrefService;
-class ProfileIOData;
 
 namespace user_prefs {
 class PrefRegistrySyncable;
@@ -181,6 +180,15 @@ class SyncPrefs : NON_EXPORTED_BASE(public base::NonThreadSafe),
   void GetNigoriSpecificsForPassphraseTransition(
       sync_pb::NigoriSpecifics* nigori_specifics) const;
 
+  // Gets the local sync backend enabled state and its database location.
+  bool IsLocalSyncEnabled() const;
+  base::FilePath GetLocalSyncBackendDir() const;
+
+  // Returns a ModelTypeSet based on |types| expanded to include pref groups
+  // (see |pref_groups_|), but as a subset of |registered_types|.
+  ModelTypeSet ResolvePrefGroups(ModelTypeSet registered_types,
+                                 ModelTypeSet types) const;
+
  private:
   void RegisterPrefGroups();
 
@@ -190,11 +198,6 @@ class SyncPrefs : NON_EXPORTED_BASE(public base::NonThreadSafe),
       bool is_preferred);
   bool GetDataTypePreferred(ModelType type) const;
   void SetDataTypePreferred(ModelType type, bool is_preferred);
-
-  // Returns a ModelTypeSet based on |types| expanded to include pref groups
-  // (see |pref_groups_|), but as a subset of |registered_types|.
-  ModelTypeSet ResolvePrefGroups(ModelTypeSet registered_types,
-                                 ModelTypeSet types) const;
 
   void OnSyncManagedPrefChanged();
 
@@ -214,7 +217,7 @@ class SyncPrefs : NON_EXPORTED_BASE(public base::NonThreadSafe),
   //                                          APP_SETTINGS }
   //   pref_groups_[EXTENSIONS] = { EXTENSION_SETTINGS }
   // etc.
-  typedef std::map<ModelType, ModelTypeSet> PrefGroupsMap;
+  using PrefGroupsMap = std::map<ModelType, ModelTypeSet>;
   PrefGroupsMap pref_groups_;
 
   DISALLOW_COPY_AND_ASSIGN(SyncPrefs);

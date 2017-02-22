@@ -20,24 +20,6 @@ function test()
 {
     UI.viewManager.showView("resources");
     InspectorTest.runDebuggerTestSuite([
-        function testSetBreakpoint(next)
-        {
-            InspectorTest.showScriptSource("source-frame.html", didShowScriptSource);
-
-            function didShowScriptSource(sourceFrame)
-            {
-                InspectorTest.addResult("Script source was shown.");
-                InspectorTest.addSniffer(Sources.JavaScriptSourceFrame.prototype, "_addBreakpointDecoration", didAddBreakpoint);
-                InspectorTest.setBreakpoint(sourceFrame, 14, "", true);
-            }
-
-            function didAddBreakpoint(lineNumber)
-            {
-                InspectorTest.addResult("Breakpoint added to source frame at line " + lineNumber);
-                next();
-            }
-        },
-
         function testConsoleMessage(next)
         {
             InspectorTest.showScriptSource("source-frame.html", didShowScriptSource);
@@ -47,8 +29,8 @@ function test()
             {
                 InspectorTest.addResult("Script source was shown.");
                 shownSourceFrame = sourceFrame;
-                InspectorTest.addSniffer(Sources.UISourceCodeFrame.prototype, "_addMessageToSource", didAddMessage);
-                InspectorTest.addSniffer(Sources.UISourceCodeFrame.prototype, "_removeMessageFromSource", didRemoveMessage);
+                InspectorTest.addSniffer(SourceFrame.UISourceCodeFrame.prototype, "_addMessageToSource", didAddMessage);
+                InspectorTest.addSniffer(SourceFrame.UISourceCodeFrame.prototype, "_removeMessageFromSource", didRemoveMessage);
                 InspectorTest.evaluateInPage("addErrorToConsole()");
             }
 

@@ -19,7 +19,6 @@
 
 namespace blink {
 class WebElement;
-class WebFrame;
 class WebFrameWidget;
 class WebView;
 struct WebRect;
@@ -87,10 +86,6 @@ class CONTENT_EXPORT RenderView : public IPC::Sender {
   // Returns true if we should display scrollbars for the given view size and
   // false if the scrollbars should be hidden.
   virtual bool ShouldDisplayScrollbars(int width, int height) const = 0;
-
-  // Bitwise-ORed set of extra bindings that have been enabled.  See
-  // BindingsPolicy for details.
-  virtual int GetEnabledBindings() const = 0;
 
   // Whether content state (such as form state, scroll position and page
   // contents) should be sent to the browser immediately. This is normally

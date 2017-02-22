@@ -22,8 +22,8 @@ html {
 }
 
 html.loading * {
-  -webkit-transition-delay: 0ms !important;
-  -webkit-transition-duration: 0ms !important;
+  transition-delay: 0ms !important;
+  transition-duration: 0ms !important;
 }
 
 body {
@@ -38,10 +38,10 @@ p {
 h1,
 h2,
 h3 {
-  -webkit-user-select: none;
   font-weight: normal;
   /* Makes the vertical size of the text the same for all fonts. */
   line-height: 1;
+  user-select: none;
 }
 
 h1 {

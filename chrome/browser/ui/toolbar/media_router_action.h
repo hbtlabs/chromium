@@ -17,11 +17,14 @@
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar_observer.h"
-#include "ui/gfx/vector_icons_public.h"
 
 class Browser;
 class MediaRouterActionPlatformDelegate;
 class TabStripModel;
+
+namespace gfx {
+struct VectorIcon;
+}
 
 namespace media_router {
 class MediaRouterDialogControllerImpl;
@@ -38,7 +41,7 @@ class MediaRouterAction : public ToolbarActionViewController,
   MediaRouterAction(Browser* browser, ToolbarActionsBar* toolbar_actions_bar);
   ~MediaRouterAction() override;
 
-  static SkColor GetIconColor(gfx::VectorIconId icon_id);
+  static SkColor GetIconColor(const gfx::VectorIcon& icon_id);
 
   // ToolbarActionViewController implementation.
   std::string GetId() const override;
@@ -56,12 +59,14 @@ class MediaRouterAction : public ToolbarActionViewController,
   void HidePopup() override;
   gfx::NativeView GetPopupNativeView() override;
   ui::MenuModel* GetContextMenu() override;
+  void OnContextMenuClosed() override;
   bool ExecuteAction(bool by_user) override;
   void UpdateState() override;
   bool DisabledClickOpensMenu() const override;
 
   // media_router::IssuesObserver:
-  void OnIssueUpdated(const media_router::Issue* issue) override;
+  void OnIssue(const media_router::Issue& issue) override;
+  void OnIssuesCleared() override;
 
   // media_router::MediaRoutesObserver:
   void OnRoutesUpdated(const std::vector<media_router::MediaRoute>& routes,
@@ -105,15 +110,15 @@ class MediaRouterAction : public ToolbarActionViewController,
   // updates |current_icon_|.
   void MaybeUpdateIcon();
 
-  gfx::VectorIconId GetCurrentIcon() const;
+  const gfx::VectorIcon& GetCurrentIcon() const;
 
   // The current icon to show. This is updated based on the current issues and
   // routes since |this| is an IssueObserver and MediaRoutesObserver.
-  gfx::VectorIconId current_icon_;
+  const gfx::VectorIcon* current_icon_;
 
-  // The current issue shown in the Media Router WebUI. Can be null. It is set
-  // in OnIssueUpdated(), which is called by the IssueManager.
-  std::unique_ptr<media_router::Issue> issue_;
+  // The current issue shown in the Media Router WebUI, set in OnIssue() and
+  // cleared in OnIssuesCleared().
+  std::unique_ptr<media_router::IssueInfo> current_issue_;
 
   // Whether a local displayable active route exists.
   bool has_local_display_route_;

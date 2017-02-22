@@ -39,7 +39,6 @@
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPath.h"
-#include "third_party/skia/include/core/SkPicture.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "third_party/skia/include/core/SkRect.h"
 #include "wtf/HexNumber.h"
@@ -325,8 +324,8 @@ std::unique_ptr<JSONObject> objectForSkShader(const SkShader& shader) {
 String stringForSkColor(const SkColor& color) {
   // #AARRGGBB.
   Vector<LChar, 9> result;
-  result.append('#');
-  appendUnsignedAsHex(color, result);
+  result.push_back('#');
+  HexNumber::appendUnsignedAsHex(color, result);
   return String(result.data(), result.size());
 }
 
@@ -344,8 +343,6 @@ String stringForSkPaintFlags(const SkPaint& paint) {
   String flagsString = "";
   appendFlagToString(&flagsString, paint.isAntiAlias(), "AntiAlias");
   appendFlagToString(&flagsString, paint.isDither(), "Dither");
-  appendFlagToString(&flagsString, paint.isUnderlineText(), "UnderlinText");
-  appendFlagToString(&flagsString, paint.isStrikeThruText(), "StrikeThruText");
   appendFlagToString(&flagsString, paint.isFakeBoldText(), "FakeBoldText");
   appendFlagToString(&flagsString, paint.isLinearText(), "LinearText");
   appendFlagToString(&flagsString, paint.isSubpixelText(), "SubpixelText");
@@ -493,20 +490,12 @@ std::unique_ptr<JSONArray> arrayForSkScalars(size_t n,
   return scalarsArray;
 }
 
-String regionOpName(SkRegion::Op op) {
+String clipOpName(SkClipOp op) {
   switch (op) {
-    case SkRegion::kDifference_Op:
+    case SkClipOp::kDifference:
       return "kDifference_Op";
-    case SkRegion::kIntersect_Op:
+    case SkClipOp::kIntersect:
       return "kIntersect_Op";
-    case SkRegion::kUnion_Op:
-      return "kUnion_Op";
-    case SkRegion::kXOR_Op:
-      return "kXOR_Op";
-    case SkRegion::kReverseDifference_Op:
-      return "kReverseDifference_Op";
-    case SkRegion::kReplace_Op:
-      return "kReplace_Op";
     default:
       return "Unknown type";
   };
@@ -818,42 +807,42 @@ void LoggingCanvas::onDrawTextBlob(const SkTextBlob* blob,
 }
 
 void LoggingCanvas::onClipRect(const SkRect& rect,
-                               SkRegion::Op op,
+                               SkClipOp op,
                                ClipEdgeStyle style) {
   AutoLogger logger(this);
   JSONObject* params = logger.logItemWithParams("clipRect");
   params->setObject("rect", objectForSkRect(rect));
-  params->setString("SkRegion::Op", regionOpName(op));
+  params->setString("SkRegion::Op", clipOpName(op));
   params->setBoolean("softClipEdgeStyle", kSoft_ClipEdgeStyle == style);
   this->SkCanvas::onClipRect(rect, op, style);
 }
 
 void LoggingCanvas::onClipRRect(const SkRRect& rrect,
-                                SkRegion::Op op,
+                                SkClipOp op,
                                 ClipEdgeStyle style) {
   AutoLogger logger(this);
   JSONObject* params = logger.logItemWithParams("clipRRect");
   params->setObject("rrect", objectForSkRRect(rrect));
-  params->setString("SkRegion::Op", regionOpName(op));
+  params->setString("SkRegion::Op", clipOpName(op));
   params->setBoolean("softClipEdgeStyle", kSoft_ClipEdgeStyle == style);
   this->SkCanvas::onClipRRect(rrect, op, style);
 }
 
 void LoggingCanvas::onClipPath(const SkPath& path,
-                               SkRegion::Op op,
+                               SkClipOp op,
                                ClipEdgeStyle style) {
   AutoLogger logger(this);
   JSONObject* params = logger.logItemWithParams("clipPath");
   params->setObject("path", objectForSkPath(path));
-  params->setString("SkRegion::Op", regionOpName(op));
+  params->setString("SkRegion::Op", clipOpName(op));
   params->setBoolean("softClipEdgeStyle", kSoft_ClipEdgeStyle == style);
   this->SkCanvas::onClipPath(path, op, style);
 }
 
-void LoggingCanvas::onClipRegion(const SkRegion& region, SkRegion::Op op) {
+void LoggingCanvas::onClipRegion(const SkRegion& region, SkClipOp op) {
   AutoLogger logger(this);
   JSONObject* params = logger.logItemWithParams("clipRegion");
-  params->setString("op", regionOpName(op));
+  params->setString("op", clipOpName(op));
   this->SkCanvas::onClipRegion(region, op);
 }
 
@@ -923,18 +912,18 @@ std::unique_ptr<JSONArray> LoggingCanvas::log() {
 }
 
 #ifndef NDEBUG
-String pictureAsDebugString(const SkPicture* picture) {
-  const SkIRect bounds = picture->cullRect().roundOut();
+String recordAsDebugString(const PaintRecord* record) {
+  const SkIRect bounds = record->cullRect().roundOut();
   LoggingCanvas canvas(bounds.width(), bounds.height());
-  picture->playback(&canvas);
-  std::unique_ptr<JSONObject> pictureAsJSON = JSONObject::create();
-  pictureAsJSON->setObject("cullRect", objectForSkRect(picture->cullRect()));
-  pictureAsJSON->setArray("operations", canvas.log());
-  return pictureAsJSON->toPrettyJSONString();
+  record->playback(&canvas);
+  std::unique_ptr<JSONObject> recordAsJSON = JSONObject::create();
+  recordAsJSON->setObject("cullRect", objectForSkRect(record->cullRect()));
+  recordAsJSON->setArray("operations", canvas.log());
+  return recordAsJSON->toPrettyJSONString();
 }
 
-void showSkPicture(const SkPicture* picture) {
-  WTFLogAlways("%s\n", pictureAsDebugString(picture).utf8().data());
+void showPaintRecord(const PaintRecord* record) {
+  WTFLogAlways("%s\n", recordAsDebugString(record).utf8().data());
 }
 #endif
 

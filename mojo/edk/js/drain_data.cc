@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "gin/array_buffer.h"
 #include "gin/converter.h"
 #include "gin/dictionary.h"
@@ -20,7 +21,9 @@ namespace edk {
 namespace js {
 
 DrainData::DrainData(v8::Isolate* isolate, mojo::Handle handle)
-    : isolate_(isolate), handle_(DataPipeConsumerHandle(handle.value())) {
+    : isolate_(isolate),
+      handle_(DataPipeConsumerHandle(handle.value())),
+      handle_watcher_(FROM_HERE) {
   v8::Handle<v8::Context> context(isolate_->GetCurrentContext());
   runner_ = gin::PerContextData::From(context)->runner()->GetWeakPtr();
 
@@ -67,8 +70,7 @@ MojoResult DrainData::ReadData() {
   if (result != MOJO_RESULT_OK)
     return result;
   const char* p = static_cast<const char*>(buffer);
-  DataBuffer* data_buffer = new DataBuffer(p, p + num_bytes);
-  data_buffers_.push_back(data_buffer);
+  data_buffers_.push_back(base::MakeUnique<DataBuffer>(p, p + num_bytes));
   return EndReadDataRaw(handle_.get(), num_bytes);
 }
 

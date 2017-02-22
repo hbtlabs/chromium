@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/macros.h"
 #include "chrome/browser/media/router/media_route.h"
@@ -15,12 +16,14 @@
 #include "chrome/browser/media/router/render_frame_host_id.h"
 #include "content/public/browser/presentation_service_delegate.h"
 
-class GURL;
-
 namespace content {
 struct PresentationError;
 struct PresentationSessionInfo;
 }  // namespace content
+
+namespace url {
+class Origin;
+}  // namespace url
 
 namespace media_router {
 
@@ -41,13 +44,14 @@ class CreatePresentationConnectionRequest {
       content::PresentationSessionErrorCallback;
   // |presentation_url|: The presentation URL of the request. Must be a valid
   //                     URL.
-  // |frame_url|: The URL of the frame that initiated the presentation request.
+  // |frame_origin|: The origin of the frame that initiated the presentation
+  // request.
   // |success_cb|: Callback to invoke when the request succeeds. Must be valid.
   // |erorr_cb|: Callback to invoke when the request fails. Must be valid.
   CreatePresentationConnectionRequest(
       const RenderFrameHostId& render_frame_host_id,
-      const GURL& presentation_url,
-      const GURL& frame_url,
+      const std::vector<GURL>& presentation_urls,
+      const url::Origin& frame_origin,
       const PresentationSessionSuccessCallback& success_cb,
       const PresentationSessionErrorCallback& error_cb);
   ~CreatePresentationConnectionRequest();
@@ -60,6 +64,7 @@ class CreatePresentationConnectionRequest {
   // These functions can only be invoked once per instance. It is an error
   // to invoke these functions more than once.
   void InvokeSuccessCallback(const std::string& presentation_id,
+                             const GURL& presentation_url,
                              const MediaRoute& route);
   void InvokeErrorCallback(const content::PresentationError& error);
 

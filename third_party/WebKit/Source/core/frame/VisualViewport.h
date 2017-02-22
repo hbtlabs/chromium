@@ -132,7 +132,6 @@ class CORE_EXPORT VisualViewport final
   // Convert the given rect in the main FrameView's coordinates into a rect
   // in the viewport. The given and returned rects are in CSS pixels, meaning
   // scale isn't applied.
-  FloatRect mainViewToViewportCSSPixels(const FloatRect&) const;
   FloatPoint viewportCSSPixelsToRootFrame(const FloatPoint&) const;
 
   // Clamp the given point, in document coordinates, to the maximum/minimum
@@ -147,6 +146,7 @@ class CORE_EXPORT VisualViewport final
   // necessary adjustments so that we don't incorrectly clamp scroll offsets
   // coming from the compositor. crbug.com/422328
   void setBrowserControlsAdjustment(float);
+  float browserControlsAdjustment() const;
 
   // Adjust the viewport's offset so that it remains bounded by the outer
   // viepwort.
@@ -168,16 +168,12 @@ class CORE_EXPORT VisualViewport final
   void setScrollOffset(const ScrollOffset&,
                        ScrollType,
                        ScrollBehavior = ScrollBehaviorInstant) override;
-  LayoutRect visualRectForScrollbarParts() const override {
-    ASSERT_NOT_REACHED();
-    return LayoutRect();
-  }
   bool isActive() const override { return false; }
   int scrollSize(ScrollbarOrientation) const override;
   bool isScrollCornerVisible() const override { return false; }
   IntRect scrollCornerRect() const override { return IntRect(); }
   IntSize scrollOffsetInt() const override { return flooredIntSize(m_offset); }
-  ScrollOffset scrollOffset() const override { return m_offset; }
+  ScrollOffset getScrollOffset() const override { return m_offset; }
   IntSize minimumScrollOffsetInt() const override;
   IntSize maximumScrollOffsetInt() const override;
   ScrollOffset maximumScrollOffset() const override;
@@ -196,9 +192,11 @@ class CORE_EXPORT VisualViewport final
   GraphicsLayer* layerForHorizontalScrollbar() const override;
   GraphicsLayer* layerForVerticalScrollbar() const override;
   Widget* getWidget() override;
+  CompositorAnimationHost* compositorAnimationHost() const override;
   CompositorAnimationTimeline* compositorAnimationTimeline() const override;
   IntRect visibleContentRect(
       IncludeScrollbarsInRect = ExcludeScrollbars) const override;
+  RefPtr<WebTaskRunner> getTimerTaskRunner() const final;
 
   // Visual Viewport API implementation.
   double scrollLeft();

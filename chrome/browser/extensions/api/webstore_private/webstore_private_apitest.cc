@@ -7,7 +7,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -111,18 +110,14 @@ class ExtensionWebstorePrivateApiTest : public ExtensionApiTest {
         "http://www.example.com/extensions/api_test");
   }
 
-  void SetUpInProcessBrowserTestFixture() override {
-    ExtensionApiTest::SetUpInProcessBrowserTestFixture();
+  void SetUpOnMainThread() override {
+    ExtensionApiTest::SetUpOnMainThread();
 
     // Start up the test server and get us ready for calling the install
     // API functions.
     host_resolver()->AddRule("www.example.com", "127.0.0.1");
     ASSERT_TRUE(StartEmbeddedTestServer());
     extensions::ExtensionInstallUI::set_disable_failure_ui_for_tests();
-  }
-
-  void SetUpOnMainThread() override {
-    ExtensionApiTest::SetUpOnMainThread();
 
     auto_confirm_install_.reset(
         new ScopedTestDialogAutoConfirm(ScopedTestDialogAutoConfirm::ACCEPT));
@@ -403,7 +398,7 @@ class ExtensionWebstoreGetWebGLStatusTest : public InProcessBrowserTest {
     std::unique_ptr<base::Value> result(utils::RunFunctionAndReturnSingleResult(
         function.get(), kEmptyArgs, browser()));
     ASSERT_TRUE(result);
-    EXPECT_EQ(base::Value::TYPE_STRING, result->GetType());
+    EXPECT_EQ(base::Value::Type::STRING, result->GetType());
     std::string webgl_status;
     EXPECT_TRUE(result->GetAsString(&webgl_status));
     EXPECT_STREQ(webgl_allowed ? kWebGLStatusAllowed : kWebGLStatusBlocked,

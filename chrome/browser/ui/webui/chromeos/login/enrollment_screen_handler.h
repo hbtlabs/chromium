@@ -11,11 +11,12 @@
 #include "base/macros.h"
 #include "chrome/browser/chromeos/login/enrollment/enrollment_screen_actor.h"
 #include "chrome/browser/chromeos/login/enrollment/enterprise_enrollment_helper.h"
-#include "chrome/browser/chromeos/login/screens/network_error_model.h"
+#include "chrome/browser/chromeos/login/screens/error_screen.h"
 #include "chrome/browser/chromeos/policy/enrollment_config.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
 #include "net/base/net_errors.h"
+#include "third_party/cros_system_api/dbus/service_constants.h"
 
 namespace chromeos {
 
@@ -31,7 +32,7 @@ class EnrollmentScreenHandler
  public:
   EnrollmentScreenHandler(
       const scoped_refptr<NetworkStateInformer>& network_state_informer,
-      NetworkErrorModel* network_error_model);
+      ErrorScreen* error_screen);
   ~EnrollmentScreenHandler() override;
 
   // Implements WebUIMessageHandler:
@@ -40,7 +41,6 @@ class EnrollmentScreenHandler
   // Implements EnrollmentScreenActor:
   void SetParameters(Controller* controller,
                      const policy::EnrollmentConfig& config) override;
-  void PrepareToShow() override;
   void Show() override;
   void Hide() override;
   void ShowSigninScreen() override;
@@ -117,27 +117,27 @@ class EnrollmentScreenHandler
   // Handler callback from AuthPolicyClient.
   void HandleAdDomainJoin(const std::string& machine_name,
                           const std::string& user_name,
-                          int code);
+                          authpolicy::ErrorType code);
 
   // Keeps the controller for this actor.
-  Controller* controller_;
+  Controller* controller_ = nullptr;
 
-  bool show_on_init_;
+  bool show_on_init_ = false;
 
   // The enrollment configuration.
   policy::EnrollmentConfig config_;
 
   // True if screen was not shown yet.
-  bool first_show_;
+  bool first_show_ = true;
 
   // Whether we should handle network errors on enrollment screen.
   // True when signin screen step is shown.
-  bool observe_network_failure_;
+  bool observe_network_failure_ = false;
 
   // Network state informer used to keep signin screen up.
   scoped_refptr<NetworkStateInformer> network_state_informer_;
 
-  NetworkErrorModel* network_error_model_;
+  ErrorScreen* error_screen_ = nullptr;
 
   std::unique_ptr<ErrorScreensHistogramHelper> histogram_helper_;
 

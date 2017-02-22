@@ -6,12 +6,16 @@ Loaded modules:
     bindings
     common
     components
+    dom_extension
     emulation
     extensions
     host
     main
+    network_conditions
+    object_ui
     persistence
     platform
+    protocol
     sdk
     services
     ui
@@ -20,15 +24,22 @@ Loaded modules:
 Running: testCreateElementsPanel
 Loaded modules:
     bindings
+    color_picker
     common
     components
+    dom_extension
     elements
     emulation
+    event_listeners
     extensions
     host
+    inline_editor
     main
+    network_conditions
+    object_ui
     persistence
     platform
+    protocol
     sdk
     services
     ui
@@ -38,44 +49,62 @@ Running: testCreateNetworkPanel
 Loaded modules:
     animation
     bindings
+    cm
+    color_picker
     common
     components
-    components_lazy
+    cookie_table
+    data_grid
     diff
+    dom_extension
     elements
     emulation
+    event_listeners
     extensions
     host
+    inline_editor
     main
     network
+    network_conditions
+    object_ui
+    perf_ui
     persistence
     platform
+    protocol
     sdk
     services
-    snippets
     source_frame
-    sources
     text_editor
     ui
-    ui_lazy
     workspace
 
 Running: testShowSourcesPanel
 Loaded modules:
     animation
     bindings
+    cm
+    color_picker
     common
     components
-    components_lazy
+    cookie_table
+    data_grid
     diff
+    dom_extension
     elements
     emulation
+    event_listeners
     extensions
     host
+    inline_editor
     main
     network
+    network_conditions
+    object_ui
+    perf_ui
     persistence
     platform
+    protocol
+    quick_open
     sdk
     services
     snippets
@@ -83,25 +112,35 @@ Loaded modules:
     sources
     text_editor
     ui
-    ui_lazy
     workspace
 
 Running: testOpenUISourceCode
 Loaded modules:
     animation
     bindings
+    cm
+    color_picker
     common
     components
-    components_lazy
+    cookie_table
+    data_grid
     diff
+    dom_extension
     elements
     emulation
+    event_listeners
     extensions
     host
+    inline_editor
     main
     network
+    network_conditions
+    object_ui
+    perf_ui
     persistence
     platform
+    protocol
+    quick_open
     sdk
     services
     snippets
@@ -109,6 +148,5 @@ Loaded modules:
     sources
     text_editor
     ui
-    ui_lazy
     workspace
 

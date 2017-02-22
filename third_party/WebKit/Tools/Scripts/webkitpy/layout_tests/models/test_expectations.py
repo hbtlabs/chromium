@@ -50,6 +50,7 @@ BASELINE_SUFFIX_LIST = ('png', 'wav', 'txt')
 
 WEBKIT_BUG_PREFIX = 'webkit.org/b/'
 CHROMIUM_BUG_PREFIX = 'crbug.com/'
+SKIA_BUG_PREFIX = 'skbug.com/'
 V8_BUG_PREFIX = 'code.google.com/p/v8/issues/detail?id='
 NAMED_BUG_PREFIX = 'Bug('
 
@@ -103,7 +104,7 @@ class TestExpectationParser(object):
     def parse(self, filename, expectations_string):
         expectation_lines = []
         line_number = 0
-        for line in expectations_string.split("\n"):
+        for line in expectations_string.split('\n'):
             line_number += 1
             test_expectation = TestExpectationLine.tokenize_line(filename, line, line_number)
             self._parse_line(test_expectation)
@@ -229,7 +230,7 @@ class TestExpectationLine(object):
         """Initializes a blank-line equivalent of an expectation."""
         self.original_string = None
         self.filename = None  # this is the path to the expectations file for this line
-        self.line_numbers = "0"
+        self.line_numbers = '0'
         self.name = None  # this is the path in the line itself
         self.path = None  # this is the normpath of self.name
         self.bugs = []
@@ -244,7 +245,7 @@ class TestExpectationLine(object):
         self.is_extra_skipped_test = False
 
     def __str__(self):
-        return "TestExpectationLine{name=%s, matching_configurations=%s, original_string=%s}" % (
+        return 'TestExpectationLine{name=%s, matching_configurations=%s, original_string=%s}' % (
             self.name, self.matching_configurations, self.original_string)
 
     def __eq__(self, other):
@@ -276,12 +277,11 @@ class TestExpectationLine(object):
     def is_whitespace(self):
         return not self.original_string.strip()
 
-
     # FIXME: Update the original specifiers and remove this once the old syntax is gone.
     _configuration_tokens_list = [
         'Mac', 'Mac10.9', 'Mac10.10', 'Mac10.11', 'Retina',
         'Win', 'Win7', 'Win10',
-        'Linux', 'Precise', 'Trusty',
+        'Linux', 'Trusty',
         'Android',
         'Release',
         'Debug',
@@ -325,13 +325,13 @@ class TestExpectationLine(object):
         expectation_line.filename = filename
         expectation_line.line_numbers = str(line_number)
 
-        comment_index = expectation_string.find("#")
+        comment_index = expectation_string.find('#')
         if comment_index == -1:
             comment_index = len(expectation_string)
         else:
             expectation_line.comment = expectation_string[comment_index + 1:]
 
-        remaining_string = re.sub(r"\s+", " ", expectation_string[:comment_index].strip())
+        remaining_string = re.sub(r"\s+", ' ', expectation_string[:comment_index].strip())
         if len(remaining_string) == 0:
             return expectation_line
 
@@ -352,6 +352,7 @@ class TestExpectationLine(object):
         for token in tokens:
             if (token.startswith(WEBKIT_BUG_PREFIX) or
                     token.startswith(CHROMIUM_BUG_PREFIX) or
+                    token.startswith(SKIA_BUG_PREFIX) or
                     token.startswith(V8_BUG_PREFIX) or
                     token.startswith(NAMED_BUG_PREFIX)):
                 if state != 'start':
@@ -360,6 +361,8 @@ class TestExpectationLine(object):
                 if token.startswith(WEBKIT_BUG_PREFIX):
                     bugs.append(token)
                 elif token.startswith(CHROMIUM_BUG_PREFIX):
+                    bugs.append(token)
+                elif token.startswith(SKIA_BUG_PREFIX):
                     bugs.append(token)
                 elif token.startswith(V8_BUG_PREFIX):
                     bugs.append(token)
@@ -420,11 +423,11 @@ class TestExpectationLine(object):
             warnings.append('A test marked Skip or WontFix must not have other expectations.')
 
         if 'SLOW' in expectations and 'SlowTests' not in filename:
-            warnings.append('SLOW tests should ony be added to SlowTests and not to TestExpectations.')
+            warnings.append('SLOW tests should only be added to SlowTests and not to TestExpectations.')
 
         if 'WONTFIX' in expectations and ('NeverFixTests' not in filename and 'StaleTestExpectations' not in filename):
             warnings.append(
-                'WONTFIX tests should ony be added to NeverFixTests or StaleTestExpectations and not to TestExpectations.')
+                'WONTFIX tests should only be added to NeverFixTests or StaleTestExpectations and not to TestExpectations.')
 
         if 'NeverFixTests' in filename and expectations != ['WONTFIX', 'SKIP']:
             warnings.append('Only WONTFIX expectations are allowed in NeverFixTests')
@@ -438,7 +441,7 @@ class TestExpectationLine(object):
         if 'MISSING' in expectations:
             warnings.append(
                 '"Missing" expectations are not allowed; either download new baselines '
-                '(see https://goo.gl/SHVYrZ) or use "NeedsRebaseline" expecatations.')
+                '(see https://goo.gl/SHVYrZ) or use "NeedsRebaseline" expectations.')
 
         expectation_line.bugs = bugs
         expectation_line.specifiers = specifiers
@@ -473,7 +476,7 @@ class TestExpectationLine(object):
         # Not clear that there's anything better to do when not linting and the filenames are different.
         if model_all_expectations:
             result.filename = line2.filename
-        result.line_numbers = line1.line_numbers + "," + line2.line_numbers
+        result.line_numbers = line1.line_numbers + ',' + line2.line_numbers
         result.name = line1.name
         result.path = line1.path
         result.parsed_expectations = set(line1.parsed_expectations) | set(line2.parsed_expectations)
@@ -497,7 +500,7 @@ class TestExpectationLine(object):
             return self.original_string or ''
 
         if self.name is None:
-            return '' if self.comment is None else "#%s" % self.comment
+            return '' if self.comment is None else '#%s' % self.comment
 
         if test_configuration_converter and self.bugs:
             specifiers_list = test_configuration_converter.to_specifiers_list(self.matching_configurations)
@@ -507,7 +510,7 @@ class TestExpectationLine(object):
                 specifiers = self._serialize_parsed_specifiers(test_configuration_converter, specifiers).split()
                 expectations = self._serialize_parsed_expectations(parsed_expectation_to_string).split()
                 result.append(self._format_line(self.bugs, specifiers, self.name, expectations, self.comment))
-            return "\n".join(result) if result else None
+            return '\n'.join(result) if result else None
 
         return self._format_line(self.bugs, self.specifiers, self.name, self.expectations, self.comment,
                                  include_specifiers, include_expectations, include_comment)
@@ -562,7 +565,7 @@ class TestExpectationLine(object):
             new_expectations = TestExpectationLine._filter_redundant_expectations(new_expectations)
             result += ' [ %s ]' % ' '.join(sorted(set(new_expectations)))
         if include_comment and comment is not None:
-            result += " #%s" % comment
+            result += ' #%s' % comment
         return result
 
 
@@ -626,13 +629,11 @@ class TestExpectationsModel(object):
         self._merge_dict_of_sets(self._result_type_to_tests, other._result_type_to_tests)
 
     def _dict_of_sets(self, strings_to_constants):
-        """Takes a dict of strings->constants and returns a dict mapping
-        each constant to an empty set.
-        """
-        d = {}
-        for c in strings_to_constants.values():
-            d[c] = set()
-        return d
+        """Takes a dictionary of keys to values and returns a dict mapping each value to an empty set."""
+        result = {}
+        for value in strings_to_constants.values():
+            result[value] = set()
+        return result
 
     def get_test_set(self, expectation, include_skips=True):
         tests = self._expectation_to_tests[expectation]
@@ -683,7 +684,7 @@ class TestExpectationsModel(object):
         for expectation in expectations:
             retval.append(self.expectation_to_string(expectation))
 
-        return " ".join(retval)
+        return ' '.join(retval)
 
     def expectation_to_string(self, expectation):
         """Return the uppercased string equivalent of a given expectation."""
@@ -867,50 +868,57 @@ class TestExpectations(object):
     """
 
     # FIXME: Update to new syntax once the old format is no longer supported.
-    EXPECTATIONS = {'pass': PASS,
-                    'audio': AUDIO,
-                    'fail': FAIL,
-                    'image': IMAGE,
-                    'image+text': IMAGE_PLUS_TEXT,
-                    'text': TEXT,
-                    'timeout': TIMEOUT,
-                    'crash': CRASH,
-                    'leak': LEAK,
-                    'missing': MISSING,
-                    TestExpectationParser.SKIP_MODIFIER: SKIP,
-                    TestExpectationParser.NEEDS_REBASELINE_MODIFIER: NEEDS_REBASELINE,
-                    TestExpectationParser.NEEDS_MANUAL_REBASELINE_MODIFIER: NEEDS_MANUAL_REBASELINE,
-                    TestExpectationParser.WONTFIX_MODIFIER: WONTFIX,
-                    TestExpectationParser.SLOW_MODIFIER: SLOW,
-                    TestExpectationParser.REBASELINE_MODIFIER: REBASELINE,
-                    }
+    EXPECTATIONS = {
+        'pass': PASS,
+        'audio': AUDIO,
+        'fail': FAIL,
+        'image': IMAGE,
+        'image+text': IMAGE_PLUS_TEXT,
+        'text': TEXT,
+        'timeout': TIMEOUT,
+        'crash': CRASH,
+        'leak': LEAK,
+        'missing': MISSING,
+        TestExpectationParser.SKIP_MODIFIER: SKIP,
+        TestExpectationParser.NEEDS_REBASELINE_MODIFIER: NEEDS_REBASELINE,
+        TestExpectationParser.NEEDS_MANUAL_REBASELINE_MODIFIER: NEEDS_MANUAL_REBASELINE,
+        TestExpectationParser.WONTFIX_MODIFIER: WONTFIX,
+        TestExpectationParser.SLOW_MODIFIER: SLOW,
+        TestExpectationParser.REBASELINE_MODIFIER: REBASELINE,
+    }
 
     EXPECTATIONS_TO_STRING = dict((k, v) for (v, k) in EXPECTATIONS.iteritems())
 
     # (aggregated by category, pass/fail/skip, type)
-    EXPECTATION_DESCRIPTIONS = {SKIP: 'skipped',
-                                PASS: 'passes',
-                                FAIL: 'failures',
-                                IMAGE: 'image-only failures',
-                                TEXT: 'text-only failures',
-                                IMAGE_PLUS_TEXT: 'image and text failures',
-                                AUDIO: 'audio failures',
-                                CRASH: 'crashes',
-                                LEAK: 'leaks',
-                                TIMEOUT: 'timeouts',
-                                MISSING: 'missing results'}
+    EXPECTATION_DESCRIPTIONS = {
+        SKIP: 'skipped',
+        PASS: 'passes',
+        FAIL: 'failures',
+        IMAGE: 'image-only failures',
+        TEXT: 'text-only failures',
+        IMAGE_PLUS_TEXT: 'image and text failures',
+        AUDIO: 'audio failures',
+        CRASH: 'crashes',
+        LEAK: 'leaks',
+        TIMEOUT: 'timeouts',
+        MISSING: 'missing results',
+    }
 
     NON_TEST_OUTCOME_EXPECTATIONS = (REBASELINE, SKIP, SLOW, WONTFIX)
 
     BUILD_TYPES = ('debug', 'release')
 
-    TIMELINES = {TestExpectationParser.WONTFIX_MODIFIER: WONTFIX,
-                 'now': NOW}
+    TIMELINES = {
+        TestExpectationParser.WONTFIX_MODIFIER: WONTFIX,
+        'now': NOW,
+    }
 
-    RESULT_TYPES = {'skip': SKIP,
-                    'pass': PASS,
-                    'fail': FAIL,
-                    'flaky': FLAKY}
+    RESULT_TYPES = {
+        'skip': SKIP,
+        'pass': PASS,
+        'fail': FAIL,
+        'flaky': FLAKY,
+    }
 
     @classmethod
     def expectation_from_string(cls, string):
@@ -967,10 +975,6 @@ class TestExpectations(object):
         return expected_results
 
     @staticmethod
-    def has_pixel_failures(actual_results):
-        return IMAGE in actual_results or FAIL in actual_results
-
-    @staticmethod
     def suffixes_for_expectations(expectations):
         suffixes = set()
         if IMAGE in expectations:
@@ -982,7 +986,7 @@ class TestExpectations(object):
         return set(suffixes)
 
     @staticmethod
-    # test_result is an instance of webkitpy.common.net.layouttestresults.LayoutTestResult
+    # test_result is an instance of webkitpy.common.net.layout_test_results.LayoutTestResult
     def suffixes_for_test_result(test_result):
         suffixes = set()
         actual_results = test_result.actual_results()
@@ -1174,6 +1178,11 @@ class TestExpectations(object):
             model.add_expectation_line(expectation_line)
         self._model.merge_model(model)
 
+    def remove_tests(self, tests_to_remove):
+        for test in self._expectations:
+            if test.name and test.name in tests_to_remove:
+                self.remove_expectation_line(test)
+
     def add_expectations_from_bot(self):
         # FIXME: With mode 'very-flaky' and 'maybe-flaky', this will show the expectations entry in the flakiness
         # dashboard rows for each test to be whatever the bot thinks they should be. Is this a good thing?
@@ -1208,4 +1217,4 @@ class TestExpectations(object):
         def nones_out(expectation_line):
             return expectation_line is not None
 
-        return "\n".join(filter(nones_out, map(serialize, expectation_lines)))
+        return '\n'.join(filter(nones_out, map(serialize, expectation_lines)))

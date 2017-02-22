@@ -14,10 +14,6 @@
 
 class Profile;
 
-namespace base {
-class RefCountedMemory;
-}
-
 class ThemeSource : public content::URLDataSource {
  public:
   explicit ThemeSource(Profile* profile);
@@ -32,6 +28,7 @@ class ThemeSource : public content::URLDataSource {
   std::string GetMimeType(const std::string& path) const override;
   scoped_refptr<base::SingleThreadTaskRunner> TaskRunnerForRequestPath(
       const std::string& path) const override;
+  bool AllowCaching() const override;
   bool ShouldServiceRequest(const net::URLRequest* request) const override;
 
  private:

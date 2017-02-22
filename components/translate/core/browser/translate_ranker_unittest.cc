@@ -11,8 +11,8 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/metrics/proto/translate_event.pb.h"
-#include "components/pref_registry/testing_pref_service_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/translate/core/browser/proto/translate_ranker_model.pb.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_prefs.h"
@@ -32,7 +32,7 @@ class TranslateRankerTest : public ::testing::Test {
     // prefs and translate prefs.
     base::DictionaryValue lang_count;
     lang_count.SetInteger("en", 50);
-    prefs_.reset(new user_prefs::TestingPrefServiceSyncable());
+    prefs_.reset(new sync_preferences::TestingPrefServiceSyncable());
     TranslatePrefs::RegisterProfilePrefs(prefs_->registry());
     prefs_->Set(TranslatePrefs::kPrefTranslateAcceptedCount, lang_count);
     prefs_->Set(TranslatePrefs::kPrefTranslateDeniedCount, lang_count);
@@ -57,6 +57,8 @@ class TranslateRankerTest : public ::testing::Test {
     details->set_bias(bias);
     details->set_accept_ratio_weight(0.02f);
     details->set_decline_ratio_weight(0.03f);
+    details->set_accept_count_weight(0.13f);
+    details->set_decline_count_weight(-0.14f);
 
     auto& src_language_weight = *details->mutable_source_language_weight();
     src_language_weight["en"] = 0.04f;
@@ -98,7 +100,7 @@ class TranslateRankerTest : public ::testing::Test {
 
   static const char* const kPreferredLanguagePrefs;
 
-  std::unique_ptr<user_prefs::TestingPrefServiceSyncable> prefs_;
+  std::unique_ptr<sync_preferences::TestingPrefServiceSyncable> prefs_;
   std::unique_ptr<translate::TranslatePrefs> translate_prefs_;
 
  private:
@@ -156,9 +158,12 @@ TEST_F(TranslateRankerTest, CalculateScore) {
   std::unique_ptr<translate::TranslateRanker> ranker = GetRankerForTest(0.01f);
   // Calculate the score using: a 50:50 accept/decline ratio; the one-hot
   // values for the src lang, dest lang, locale and counry; and, the bias.
-  double expected = Sigmoid(0.5 * 0.02f +  // accept ratio * weight
-                            0.5 * 0.03f +  // decline ratio * weight
-                            0.0 * 0.00f +  // ignore ratio * (default) weight
+  double expected = Sigmoid(0.5 * 0.02f +    // accept ratio * weight
+                            0.5 * 0.03f +    // decline ratio * weight
+                            0.0 * 0.00f +    // ignore ratio * (default) weight
+                            50.0 * 0.13f +   // accept count * weight
+                            50.0 * -0.14f +  // decline count * weight
+                            0.0 * 0.00f +    // ignore count * (default) weight
                             1.0 * 0.04f +  // one-hot src-language "en" * weight
                             1.0 * 0.00f +  // one-hot dst-language "fr" * weight
                             1.0 * 0.07f +  // one-hot country * weight
@@ -166,7 +171,7 @@ TEST_F(TranslateRankerTest, CalculateScore) {
                             0.01f);        // bias
 
   EXPECT_NEAR(expected,
-              ranker->CalculateScore(0.5, 0.5, 0.0, "en", "fr", "zh-CN", "us"),
+              ranker->CalculateScore(50, 50, 0, "en", "fr", "zh-CN", "us"),
               0.000001);
 }
 

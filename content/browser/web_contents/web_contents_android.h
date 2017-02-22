@@ -136,13 +136,9 @@ class CONTENT_EXPORT WebContentsAndroid
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jstring>& jframe_name,
       const base::android::JavaParamRef<jstring>& jmessage,
+      const base::android::JavaParamRef<jstring>& jsource_origin,
       const base::android::JavaParamRef<jstring>& jtarget_origin,
-      const base::android::JavaParamRef<jintArray>& jsent_ports);
-
-  void CreateMessageChannel(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jobjectArray>& ports);
+      const base::android::JavaParamRef<jobjectArray>& jports);
 
   jboolean HasAccessedInitialDocument(
       JNIEnv* env,
@@ -150,6 +146,15 @@ class CONTENT_EXPORT WebContentsAndroid
 
   jint GetThemeColor(JNIEnv* env,
                      const base::android::JavaParamRef<jobject>& obj);
+
+  void RequestSmartClipExtract(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& callback,
+      jint x,
+      jint y,
+      jint width,
+      jint height);
 
   void RequestAccessibilitySnapshot(
       JNIEnv* env,
@@ -159,6 +164,11 @@ class CONTENT_EXPORT WebContentsAndroid
   base::android::ScopedJavaLocalRef<jstring> GetEncoding(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj) const;
+
+  void SetOverscrollRefreshHandler(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& overscroll_refresh_handler);
 
   // Relay the access from Java layer to GetScaledContentBitmap through JNI.
   void GetContentBitmap(JNIEnv* env,
@@ -183,6 +193,9 @@ class CONTENT_EXPORT WebContentsAndroid
                     const base::android::JavaParamRef<jobject>& jcallback);
   void DismissTextHandles(JNIEnv* env,
                           const base::android::JavaParamRef<jobject>& obj);
+  void SetHasPersistentVideo(JNIEnv* env,
+                             const base::android::JavaParamRef<jobject>& obj,
+                             jboolean value);
 
   void SetMediaSession(
       const base::android::ScopedJavaLocalRef<jobject>& j_media_session);
@@ -190,20 +203,18 @@ class CONTENT_EXPORT WebContentsAndroid
  private:
   RenderWidgetHostViewAndroid* GetRenderWidgetHostViewAndroid();
 
-  void OnFinishGetContentBitmap(
-      base::android::ScopedJavaGlobalRef<jobject>* obj,
-      base::android::ScopedJavaGlobalRef<jobject>* callback,
-      const SkBitmap& bitmap,
-      ReadbackResponse response);
+  void OnFinishGetContentBitmap(const base::android::JavaRef<jobject>& obj,
+                                const base::android::JavaRef<jobject>& callback,
+                                const SkBitmap& bitmap,
+                                ReadbackResponse response);
 
-  void OnFinishDownloadImage(
-      base::android::ScopedJavaGlobalRef<jobject>* obj,
-      base::android::ScopedJavaGlobalRef<jobject>* callback,
-      int id,
-      int http_status_code,
-      const GURL& url,
-      const std::vector<SkBitmap>& bitmaps,
-      const std::vector<gfx::Size>& sizes);
+  void OnFinishDownloadImage(const base::android::JavaRef<jobject>& obj,
+                             const base::android::JavaRef<jobject>& callback,
+                             int id,
+                             int http_status_code,
+                             const GURL& url,
+                             const std::vector<SkBitmap>& bitmaps,
+                             const std::vector<gfx::Size>& sizes);
 
   WebContentsImpl* web_contents_;
   NavigationControllerAndroid navigation_controller_;

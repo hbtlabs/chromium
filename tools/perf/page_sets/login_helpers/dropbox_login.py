@@ -32,12 +32,13 @@ def LoginAccount(action_runner, credential,
 
   # Wait until the "Sign in" button is enabled and then click it.
   login_button_selector = '.login-form .login-button'
-  action_runner.WaitForJavaScriptCondition('''
+  action_runner.WaitForJavaScriptCondition2('''
       (function() {
-        var loginButton = document.querySelector("%s");
+        var loginButton = document.querySelector({{ selector }});
         if (!loginButton)
           return false;
         return !loginButton.disabled;
-      })();''' % login_button_selector)
+      })();''',
+      selector=login_button_selector)
   action_runner.ClickElement(selector=login_button_selector)
   action_runner.WaitForNavigate()

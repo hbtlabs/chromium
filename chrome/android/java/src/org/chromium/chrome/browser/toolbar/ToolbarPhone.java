@@ -60,6 +60,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.chrome.browser.widget.TintedImageButton;
+import org.chromium.chrome.browser.widget.animation.CancelAwareAnimatorListener;
 import org.chromium.chrome.browser.widget.newtab.NewTabButton;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
@@ -79,7 +80,7 @@ public class ToolbarPhone extends ToolbarLayout
     /** The amount of time transitioning from one theme color to another should take in ms. */
     public static final long THEME_COLOR_TRANSITION_DURATION = 250;
 
-    public static final int URL_FOCUS_CHANGE_ANIMATION_DURATION_MS = 250;
+    public static final int URL_FOCUS_CHANGE_ANIMATION_DURATION_MS = 225;
     private static final int URL_FOCUS_TOOLBAR_BUTTONS_TRANSLATION_X_DP = 10;
     private static final int URL_FOCUS_TOOLBAR_BUTTONS_DURATION_MS = 100;
     private static final int URL_CLEAR_FOCUS_TABSTACK_DELAY_MS = 200;
@@ -153,7 +154,7 @@ public class ToolbarPhone extends ToolbarLayout
     // mode.  0 = entirely in normal mode and 1.0 = entirely in TabSwitcher mode.  In between values
     // can be used for animating between the two view modes.
     @ViewDebug.ExportedProperty(category = "chrome")
-    private float mTabSwitcherModePercent = 0;
+    private float mTabSwitcherModePercent;
 
     // Used to clip the toolbar during the fade transition into and out of TabSwitcher mode.  Only
     // used when |mAnimateNormalToolbar| is false.
@@ -334,7 +335,7 @@ public class ToolbarPhone extends ToolbarLayout
                 new ColorDrawable(getToolbarColorForVisualState(VisualState.NORMAL));
 
         mLocationBarBackground =
-                ApiCompatibilityUtils.getDrawable(getResources(), R.drawable.textbox);
+                ApiCompatibilityUtils.getDrawable(getResources(), R.drawable.card_single);
         mLocationBarBackground.getPadding(mLocationBarBackgroundPadding);
         mLocationBar.setPadding(
                 mLocationBarBackgroundPadding.left, mLocationBarBackgroundPadding.top,
@@ -726,18 +727,6 @@ public class ToolbarPhone extends ToolbarLayout
     // NewTabPage.OnSearchBoxScrollListener
     @Override
     public void onNtpScrollChanged(float scrollPercentage) {
-        // TODO(peconn): Clear up the animation transition calculations so that the parts that
-        // depend on the absolute scroll value (such as the Toolbar location) are separate from the
-        // parts that depend on the fakebox transition percentage (such as the omnibox width and
-        // opacity).
-        // At the moment, we disable the check below because these two concepts are not
-        // separate and we want to still update the parts that depend on scroll value when the
-        // transition percentage is not changed.
-        if (scrollPercentage == mNtpSearchBoxScrollPercent
-                && !getToolbarDataProvider().getNewTabPageForCurrentTab().isCardsUiEnabled()) {
-            return;
-        }
-
         mNtpSearchBoxScrollPercent = scrollPercentage;
         updateUrlExpansionPercent();
         updateUrlExpansionAnimation();
@@ -920,15 +909,8 @@ public class ToolbarPhone extends ToolbarLayout
         // Linearly interpolate between the bounds of the search box on the NTP and the omnibox
         // background bounds. |shrinkage| is the scaling factor for the offset -- if it's 1, we are
         // shrinking the omnibox down to the size of the search box.
-        float shrinkage;
-        if (ntp.isCardsUiEnabled()) {
-            shrinkage = 1f
-                    - NTP_SEARCH_BOX_EXPANSION_INTERPOLATOR.getInterpolation(mUrlExpansionPercent);
-        } else {
-            // During the transition from middle of the NTP to the top, keep the omnibox drawing
-            // at the same size of the search box for first 40% of the scroll transition.
-            shrinkage = Math.min(1f, (1f - mUrlExpansionPercent) * 1.66667f);
-        }
+        float shrinkage =
+                1f - NTP_SEARCH_BOX_EXPANSION_INTERPOLATOR.getInterpolation(mUrlExpansionPercent);
 
         int leftBoundDifference = mNtpSearchBoxBounds.left - mLocationBarBackgroundBounds.left;
         int rightBoundDifference = mNtpSearchBoxBounds.right - mLocationBarBackgroundBounds.right;
@@ -953,10 +935,6 @@ public class ToolbarPhone extends ToolbarLayout
 
         // The search box on the NTP is visible if our omnibox is invisible, and vice-versa.
         ntp.setSearchBoxAlpha(1f - relativeAlpha);
-
-        if (!ntp.isCardsUiEnabled()) {
-            ntp.setSearchProviderLogoAlpha(Math.max(1f - mUrlExpansionPercent * 2.5f, 0f));
-        }
     }
 
     /**
@@ -1757,7 +1735,7 @@ public class ToolbarPhone extends ToolbarLayout
         }
     }
 
-    private void triggerUrlFocusAnimation(final boolean hasFocus) {
+    protected void triggerUrlFocusAnimation(final boolean hasFocus) {
         if (mUrlFocusLayoutAnimator != null && mUrlFocusLayoutAnimator.isRunning()) {
             mUrlFocusLayoutAnimator.cancel();
             mUrlFocusLayoutAnimator = null;
@@ -1773,11 +1751,9 @@ public class ToolbarPhone extends ToolbarLayout
         mUrlFocusLayoutAnimator.playTogether(animators);
 
         mUrlFocusChangeInProgress = true;
-        mUrlFocusLayoutAnimator.addListener(new AnimatorListenerAdapter() {
-            private boolean mCanceled;
-
+        mUrlFocusLayoutAnimator.addListener(new CancelAwareAnimatorListener() {
             @Override
-            public void onAnimationStart(Animator animation) {
+            public void onStart(Animator animation) {
                 if (!hasFocus) {
                     mDisableLocationBarRelayout = true;
                 } else {
@@ -1787,14 +1763,12 @@ public class ToolbarPhone extends ToolbarLayout
             }
 
             @Override
-            public void onAnimationCancel(Animator animation) {
-                mCanceled = true;
+            public void onCancel(Animator animation) {
+                if (!hasFocus) mDisableLocationBarRelayout = false;
             }
 
             @Override
-            public void onAnimationEnd(Animator animation) {
-                if (mCanceled) return;
-
+            public void onEnd(Animator animation) {
                 if (!hasFocus) {
                     mDisableLocationBarRelayout = false;
                     mLayoutLocationBarInFocusedMode = false;

@@ -106,6 +106,15 @@ Variables
 
       The secondary source root must be inside the main source tree.
 
+  default_args [optional]
+      Scope containing the default overrides for declared arguments. These
+      overrides take precedence over the default values specified in the
+      declare_args() block, but can be overriden using --args or the
+      args.gn file.
+
+      This is intended to be used when subprojects declare arguments with
+      default values that need to be changed for whatever reason.
+
 Example .gn file contents
 
   buildconfig = "//build/config/BUILDCONFIG.gn"
@@ -118,6 +127,12 @@ Example .gn file contents
   root = "//:root"
 
   secondary_source = "//build/config/temporary_buildfiles/"
+
+  default_args = {
+    # Default to release builds for this project.
+    is_debug = false
+    is_component_build = false
+  }
 )";
 
 namespace {
@@ -137,15 +152,31 @@ base::FilePath FindDotFile(const base::FilePath& current_dir) {
   return FindDotFile(up_one_dir);
 }
 
+void ForwardItemDefinedToBuilderInMainThread(
+    Builder* builder_call_on_main_thread_only,
+    std::unique_ptr<Item> item) {
+  builder_call_on_main_thread_only->ItemDefined(std::move(item));
+
+  // Pair to the Increment in ItemDefinedCallback.
+  g_scheduler->DecrementWorkCount();
+}
+
 // Called on any thread. Post the item to the builder on the main thread.
 void ItemDefinedCallback(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     Builder* builder_call_on_main_thread_only,
     std::unique_ptr<Item> item) {
   DCHECK(item);
+
+  // Increment the work count for the duration of defining the item with the
+  // builder. Otherwise finishing this callback will race finishing loading
+  // files. If there is no other pending work at any point in the middle of
+  // this call completing on the main thread, the 'Complete' function will
+  // be signaled and we'll stop running with an incomplete build.
+  g_scheduler->IncrementWorkCount();
   task_runner->PostTask(
       FROM_HERE,
-      base::Bind(&Builder::ItemDefined,
+      base::Bind(&ForwardItemDefinedToBuilderInMainThread,
                  base::Unretained(builder_call_on_main_thread_only),
                  base::Passed(&item)));
 }
@@ -257,6 +288,7 @@ Setup::Setup()
       check_public_headers_(false),
       dotfile_settings_(&build_settings_, std::string()),
       dotfile_scope_(&dotfile_settings_),
+      default_args_(nullptr),
       fill_arguments_(true) {
   dotfile_settings_.set_toolchain_label(Label());
 
@@ -300,6 +332,14 @@ bool Setup::DoSetup(const std::string& build_dir, bool force_create) {
     return false;
   }
 
+  // Apply project-specific default (if specified).
+  // Must happen before FillArguments().
+  if (default_args_) {
+    Scope::KeyValueMap overrides;
+    default_args_->GetCurrentScopeValues(&overrides);
+    build_settings_.build_args().AddArgOverrides(overrides);
+  }
+
   if (fill_arguments_) {
     if (!FillArguments(*cmdline))
       return false;
@@ -321,11 +361,11 @@ SourceFile Setup::GetBuildArgFile() const {
 }
 
 void Setup::RunPreMessageLoop() {
-  // Load the root build file.
-  loader_->Load(root_build_file_, LocationRange(), Label());
-
   // Will be decremented with the loader is drained.
   g_scheduler->IncrementWorkCount();
+
+  // Load the root build file.
+  loader_->Load(root_build_file_, LocationRange(), Label());
 }
 
 bool Setup::RunPostMessageLoop() {
@@ -736,6 +776,18 @@ bool Setup::FillOtherConfig(const base::CommandLine& cmdline) {
       }
     }
     build_settings_.set_exec_script_whitelist(std::move(whitelist));
+  }
+
+  // Fill optional default_args.
+  const Value* default_args_value =
+      dotfile_scope_.GetValue("default_args", true);
+  if (default_args_value) {
+    if (!default_args_value->VerifyTypeIs(Value::SCOPE, &err)) {
+      err.PrintToStdout();
+      return false;
+    }
+
+    default_args_ = default_args_value->scope_value();
   }
 
   return true;

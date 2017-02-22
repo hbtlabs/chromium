@@ -55,7 +55,7 @@ class WebViewFrameWidget : public WebFrameWidgetBase {
   void compositeAndReadbackAsync(
       WebCompositeAndReadbackAsyncCallback*) override;
   void themeChanged() override;
-  WebInputEventResult handleInputEvent(const WebInputEvent&) override;
+  WebInputEventResult handleInputEvent(const WebCoalescedInputEvent&) override;
   void setCursorVisibilityState(bool isVisible) override;
   bool hasTouchEventHandlersAt(const WebPoint&) override;
   void applyViewportDeltas(const WebFloatSize& visualViewportDelta,
@@ -66,8 +66,6 @@ class WebViewFrameWidget : public WebFrameWidgetBase {
   void mouseCaptureLost() override;
   void setFocus(bool) override;
   WebRange compositionRange() override;
-  WebTextInputInfo textInputInfo() override;
-  WebTextInputType textInputType() override;
   bool selectionBounds(WebRect& anchor, WebRect& focus) const override;
   bool selectionTextDirection(WebTextDirection& start,
                               WebTextDirection& end) const override;
@@ -78,13 +76,9 @@ class WebViewFrameWidget : public WebFrameWidgetBase {
   bool isWebView() const override { return false; }
   bool isPagePopup() const override { return false; }
   void willCloseLayerTreeView() override;
-  void didAcquirePointerLock() override;
-  void didNotAcquirePointerLock() override;
-  void didLosePointerLock() override;
   WebColor backgroundColor() const override;
   WebPagePopup* pagePopup() const override;
   bool getCompositionCharacterBounds(WebVector<WebRect>& bounds) override;
-  void applyReplacementRange(const WebRange&) override;
   void updateBrowserControlsState(WebBrowserControlsState constraints,
                                   WebBrowserControlsState current,
                                   bool animate) override;
@@ -99,11 +93,12 @@ class WebViewFrameWidget : public WebFrameWidgetBase {
   // WebFrameWidgetBase overrides:
   bool forSubframe() const override { return false; }
   void scheduleAnimation() override;
-  CompositorProxyClient* createCompositorProxyClient() override;
+  CompositorWorkerProxyClient* createCompositorWorkerProxyClient() override;
+  AnimationWorkletProxyClient* createAnimationWorkletProxyClient() override;
   void setRootGraphicsLayer(GraphicsLayer*) override;
   void setRootLayer(WebLayer*) override;
-  void attachCompositorAnimationTimeline(CompositorAnimationTimeline*) override;
-  void detachCompositorAnimationTimeline(CompositorAnimationTimeline*) override;
+  WebLayerTreeView* getLayerTreeView() const override;
+  CompositorAnimationHost* animationHost() const override;
   WebWidgetClient* client() const override { return m_client; }
   HitTestResult coreHitTestResultAt(const WebPoint&) override;
 

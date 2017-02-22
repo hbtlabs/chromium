@@ -25,10 +25,7 @@ class ASH_EXPORT PowerStatusView : public views::View,
   ~PowerStatusView() override;
 
   // views::View:
-  gfx::Size GetPreferredSize() const override;
-  int GetHeightForWidth(int width) const override;
   void Layout() override;
-  void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
   // PowerStatus::Observer:
@@ -39,7 +36,6 @@ class ASH_EXPORT PowerStatusView : public views::View,
 
   void LayoutView();
   void UpdateText();
-  void UpdateStyle();
 
   // views::View:
   void ChildPreferredSizeChanged(views::View* child) override;

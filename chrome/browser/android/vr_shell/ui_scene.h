@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "chrome/browser/android/vr_shell/vr_math.h"
 
 namespace base {
 class DictionaryValue;
@@ -29,6 +30,7 @@ class UiScene {
     REMOVE_ELEMENT,
     ADD_ANIMATION,
     REMOVE_ANIMATION,
+    UPDATE_BACKGROUND,
   };
 
   UiScene();
@@ -54,31 +56,35 @@ class UiScene {
   // Remove |animation_id| from element |element_id|.
   void RemoveAnimation(int element_id, int animation_id);
 
+  void UpdateBackgroundFromDict(const base::DictionaryValue& dict);
+
   // Update the positions of all elements in the scene, according to active
   // animations, desired screen tilt and time.  The units of time are
   // arbitrary, but must match the unit used in animations.
   void UpdateTransforms(float screen_tilt, int64_t time_in_micro);
 
   // Handle a batch of commands passed from the UI HTML.
-  void HandleCommands(const base::ListValue* commands, int64_t time_in_micro);
+  void HandleCommands(std::unique_ptr<base::ListValue> commands,
+                      int64_t time_in_micro);
 
   const std::vector<std::unique_ptr<ContentRectangle>>& GetUiElements() const;
 
   ContentRectangle* GetUiElementById(int element_id);
 
-  ContentRectangle* GetContentQuad();
-
-  // Return a monotonic time in microseconds for coordinating animations.
-  static int64_t TimeInMicroseconds();
+  const Colorf& GetBackgroundColor();
+  float GetBackgroundDistance();
 
  private:
   void ApplyRecursiveTransforms(const ContentRectangle& element,
-                                ReversibleTransform* transform);
+                                ReversibleTransform* transform,
+                                float* opacity);
   void ApplyDictToElement(const base::DictionaryValue& dict,
                           ContentRectangle *element);
 
   std::vector<std::unique_ptr<ContentRectangle>> ui_elements_;
   ContentRectangle* content_element_ = nullptr;
+  Colorf background_color_ = {0.1f, 0.1f, 0.1f, 1.0f};
+  float background_distance_ = 10.0f;
 
   DISALLOW_COPY_AND_ASSIGN(UiScene);
 };

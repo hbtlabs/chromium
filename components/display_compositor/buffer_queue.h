@@ -37,9 +37,9 @@ namespace display_compositor {
 class GLHelper;
 
 // Provides a surface that manages its own buffers, backed by GpuMemoryBuffers
-// created using CHROMIUM_gpu_memory_buffer_image. Double/triple buffering is
-// implemented internally. Doublebuffering occurs if PageFlipComplete is called
-// before the next BindFramebuffer call, otherwise it creates extra buffers.
+// created using CHROMIUM_image. Double/triple buffering is implemented
+// internally. Doublebuffering occurs if PageFlipComplete is called before the
+// next BindFramebuffer call, otherwise it creates extra buffers.
 class DISPLAY_COMPOSITOR_EXPORT BufferQueue {
  public:
   BufferQueue(gpu::gles2::GLES2Interface* gl,
@@ -58,7 +58,8 @@ class DISPLAY_COMPOSITOR_EXPORT BufferQueue {
   void PageFlipComplete();
   void Reshape(const gfx::Size& size,
                float scale_factor,
-               const gfx::ColorSpace& color_space);
+               const gfx::ColorSpace& color_space,
+               bool use_stencil);
 
   void RecreateBuffers();
 
@@ -77,12 +78,14 @@ class DISPLAY_COMPOSITOR_EXPORT BufferQueue {
                      std::unique_ptr<gfx::GpuMemoryBuffer> buffer,
                      uint32_t texture,
                      uint32_t image,
+                     uint32_t stencil,
                      const gfx::Rect& rect);
     ~AllocatedSurface();
     BufferQueue* const buffer_queue;
     std::unique_ptr<gfx::GpuMemoryBuffer> buffer;
     const uint32_t texture;
     const uint32_t image;
+    const uint32_t stencil;
     gfx::Rect damage;  // This is the damage for this frame from the previous.
   };
 
@@ -108,6 +111,7 @@ class DISPLAY_COMPOSITOR_EXPORT BufferQueue {
   gpu::gles2::GLES2Interface* const gl_;
   gfx::Size size_;
   gfx::ColorSpace color_space_;
+  bool use_stencil_ = false;
   uint32_t fbo_;
   size_t allocated_count_;
   uint32_t texture_target_;

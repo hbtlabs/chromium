@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <gtest/gtest.h>
+#include <memory>
 #include "core/frame/FrameView.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
@@ -12,28 +14,27 @@
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/URLTestHelpers.h"
+#include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebLayer.h"
 #include "public/platform/WebLayerTreeView.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
-#include "public/web/WebCache.h"
 #include "public/web/WebSettings.h"
 #include "public/web/WebViewClient.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebViewImpl.h"
 #include "web/tests/FrameTestHelpers.h"
 #include "wtf/PtrUtil.h"
-#include <gtest/gtest.h>
-#include <memory>
 
 namespace blink {
 
 typedef bool TestParamRootLayerScrolling;
 class CompositorWorkerTest
-    : public testing::WithParamInterface<TestParamRootLayerScrolling>,
+    : public ::testing::WithParamInterface<TestParamRootLayerScrolling>,
       private ScopedRootLayerScrollingForTest,
       private ScopedCompositorWorkerForTest,
-      public testing::Test {
+      public ::testing::Test {
  public:
   CompositorWorkerTest()
       : ScopedRootLayerScrollingForTest(GetParam()),
@@ -47,8 +48,9 @@ class CompositorWorkerTest
   }
 
   ~CompositorWorkerTest() override {
-    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
-    WebCache::clear();
+    Platform::current()
+        ->getURLLoaderMockFactory()
+        ->unregisterAllURLsAndClearMemoryCache();
   }
 
   void navigateTo(const String& url) {
@@ -60,8 +62,8 @@ class CompositorWorkerTest
   }
 
   void registerMockedHttpURLLoad(const std::string& fileName) {
-    URLTestHelpers::registerMockedURLFromBaseURL(
-        m_baseURL, WebString::fromUTF8(fileName.c_str()));
+    URLTestHelpers::registerMockedURLLoadFromBase(
+        m_baseURL, testing::webTestDataPath(), WebString::fromUTF8(fileName));
   }
 
   WebLayer* getRootScrollLayer() {
@@ -326,7 +328,7 @@ TEST_P(CompositorWorkerTest, applyingMutationsMultipleProperties) {
   TransformationMatrix transformMatrix(11, 12, 13, 14, 21, 22, 23, 24, 31, 32,
                                        33, 34, 41, 42, 43, 44);
   std::unique_ptr<CompositorMutation> mutation =
-      wrapUnique(new CompositorMutation);
+      WTF::wrapUnique(new CompositorMutation);
   mutation->setTransform(TransformationMatrix::toSkMatrix44(transformMatrix));
   mutation->setOpacity(0.5);
 
@@ -349,7 +351,7 @@ TEST_P(CompositorWorkerTest, applyingMutationsMultipleProperties) {
   }
 
   // Verify that updating one property does not impact others
-  mutation = wrapUnique(new CompositorMutation);
+  mutation = WTF::wrapUnique(new CompositorMutation);
   mutation->setOpacity(0.8);
 
   proxiedElement->updateFromCompositorMutation(*mutation);

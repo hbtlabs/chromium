@@ -18,11 +18,19 @@ struct NGPhysicalOffset;
 struct NGPhysicalSize;
 struct NGBoxStrut;
 
-struct MinAndMaxContentSizes {
+#define NGSizeIndefinite LayoutUnit(-1)
+
+struct CORE_EXPORT MinAndMaxContentSizes {
   LayoutUnit min_content;
   LayoutUnit max_content;
   LayoutUnit ShrinkToFit(LayoutUnit available_size) const;
+  bool operator==(const MinAndMaxContentSizes& other) const;
 };
+
+inline std::ostream& operator<<(std::ostream& stream,
+                                const MinAndMaxContentSizes& value) {
+  return stream << "(" << value.min_content << ", " << value.max_content << ")";
+}
 
 struct NGLogicalSize {
   NGLogicalSize() {}
@@ -57,6 +65,9 @@ struct NGLogicalOffset {
 
   // Converts a logical offset to a physical offset. See:
   // https://drafts.csswg.org/css-writing-modes-3/#logical-to-physical
+  // PhysicalOffset will be the physical top left point of the rectangle
+  // described by offset + inner_size. Setting inner_size to 0,0 will return
+  // the same point.
   // @param outer_size the size of the rect (typically a fragment).
   // @param inner_size the size of the inner rect (typically a child fragment).
   CORE_EXPORT NGPhysicalOffset
@@ -64,11 +75,14 @@ struct NGLogicalOffset {
                     TextDirection,
                     NGPhysicalSize outer_size,
                     NGPhysicalSize inner_size) const;
+
   bool operator==(const NGLogicalOffset& other) const;
 
   NGLogicalOffset operator+(const NGLogicalOffset& other) const;
-
   NGLogicalOffset& operator+=(const NGLogicalOffset& other);
+
+  NGLogicalOffset operator-(const NGLogicalOffset& other) const;
+  NGLogicalOffset& operator-=(const NGLogicalOffset& other);
 
   bool operator>(const NGLogicalOffset& other) const;
   bool operator>=(const NGLogicalOffset& other) const;
@@ -86,15 +100,27 @@ CORE_EXPORT inline std::ostream& operator<<(std::ostream& os,
 
 // NGPhysicalOffset is the position of a rect (typically a fragment) relative to
 // its parent rect in the physical coordinate system.
-struct NGPhysicalOffset {
+struct CORE_EXPORT NGPhysicalOffset {
   NGPhysicalOffset() {}
   NGPhysicalOffset(LayoutUnit left, LayoutUnit top) : left(left), top(top) {}
 
   LayoutUnit left;
   LayoutUnit top;
+
+  NGPhysicalOffset operator+(const NGPhysicalOffset& other) const;
+  NGPhysicalOffset& operator+=(const NGPhysicalOffset& other);
+
+  NGPhysicalOffset operator-(const NGPhysicalOffset& other) const;
+  NGPhysicalOffset& operator-=(const NGPhysicalOffset& other);
+
+  bool operator==(const NGPhysicalOffset& other) const;
+
+  String ToString() const {
+    return String::format("%dx%d", left.toInt(), top.toInt());
+  }
 };
 
-struct NGPhysicalSize {
+struct CORE_EXPORT NGPhysicalSize {
   NGPhysicalSize() {}
   NGPhysicalSize(LayoutUnit width, LayoutUnit height)
       : width(width), height(height) {}
@@ -104,10 +130,17 @@ struct NGPhysicalSize {
 
   NGLogicalSize ConvertToLogical(NGWritingMode mode) const;
 
+  bool operator==(const NGPhysicalSize& other) const;
+
   String ToString() const {
     return String::format("%dx%d", width.toInt(), height.toInt());
   }
 };
+
+inline std::ostream& operator<<(std::ostream& stream,
+                                const NGPhysicalSize& value) {
+  return stream << value.ToString();
+}
 
 // NGPhysicalLocation is the position of a rect (typically a fragment) relative
 // to the root document.
@@ -124,6 +157,8 @@ struct NGPhysicalRect {
 // TODO(glebl): move to a separate file in layout/ng/units.
 struct CORE_EXPORT NGLogicalRect {
   NGLogicalRect() {}
+  NGLogicalRect(const NGLogicalOffset& offset, const NGLogicalSize& size)
+      : offset(offset), size(size) {}
   NGLogicalRect(LayoutUnit inline_offset,
                 LayoutUnit block_offset,
                 LayoutUnit inline_size,
@@ -170,11 +205,11 @@ struct CORE_EXPORT NGExclusion {
   enum Type {
     // Undefined exclusion type.
     // At this moment it's also used to represent CSS3 exclusion.
-    NG_EXCLUSION_TYPE_UNDEFINED = 0,
+    kExclusionTypeUndefined = 0,
     // Exclusion that is created by LEFT float.
-    NG_FLOAT_LEFT = 1,
+    kFloatLeft = 1,
     // Exclusion that is created by RIGHT float.
-    NG_FLOAT_RIGHT = 2
+    kFloatRight = 2
   };
 
   // Rectangle in logical coordinates the represents this exclusion.
@@ -182,6 +217,33 @@ struct CORE_EXPORT NGExclusion {
 
   // Type of this exclusion.
   Type type;
+
+  bool operator==(const NGExclusion& other) const;
+  String ToString() const;
+};
+
+inline std::ostream& operator<<(std::ostream& stream,
+                                const NGExclusion& value) {
+  return stream << value.ToString();
+}
+
+struct CORE_EXPORT NGExclusions {
+  // Default constructor.
+  NGExclusions();
+
+  // Copy constructor.
+  NGExclusions(const NGExclusions& other);
+
+  Vector<std::unique_ptr<const NGExclusion>> storage;
+
+  // Last left/right float exclusions are used to enforce the top edge alignment
+  // rule for floats and for the support of CSS "clear" property.
+  const NGExclusion* last_left_float;   // Owned by storage.
+  const NGExclusion* last_right_float;  // Owned by storage.
+
+  NGExclusions& operator=(const NGExclusions& other);
+
+  void Add(const NGExclusion& exclusion);
 };
 
 struct NGPixelSnappedPhysicalRect {
@@ -232,28 +294,32 @@ struct CORE_EXPORT NGBoxStrut {
   }
 
   bool operator==(const NGBoxStrut& other) const;
+
+  String ToString() const {
+    return String::format("Inline: (%d %d) Block: (%d %d)",
+                          inline_start.toInt(), inline_end.toInt(),
+                          block_start.toInt(), block_end.toInt());
+  }
 };
+
+inline std::ostream& operator<<(std::ostream& stream, const NGBoxStrut& value) {
+  return stream << value.ToString();
+}
 
 // This struct is used for the margin collapsing calculation.
 struct CORE_EXPORT NGMarginStrut {
-  LayoutUnit margin_block_start;
-  LayoutUnit margin_block_end;
+  LayoutUnit margin;
+  LayoutUnit negative_margin;
 
-  LayoutUnit negative_margin_block_start;
-  LayoutUnit negative_margin_block_end;
+  // Appends negative or positive value to the current margin strut.
+  void Append(const LayoutUnit& value);
 
-  LayoutUnit BlockEndSum() const;
-
-  void AppendMarginBlockStart(const LayoutUnit& value);
-  void AppendMarginBlockEnd(const LayoutUnit& value);
-  void SetMarginBlockStart(const LayoutUnit& value);
-  void SetMarginBlockEnd(const LayoutUnit& value);
-
-  bool IsEmpty() const;
-
-  String ToString() const;
+  // Sum up negative and positive margins of this strut.
+  LayoutUnit Sum() const;
 
   bool operator==(const NGMarginStrut& other) const;
+
+  String ToString() const;
 };
 
 inline std::ostream& operator<<(std::ostream& stream,
@@ -265,6 +331,61 @@ inline std::ostream& operator<<(std::ostream& stream,
 struct NGEdge {
   LayoutUnit start;
   LayoutUnit end;
+};
+
+// Represents static position of an out of flow descendant.
+struct CORE_EXPORT NGStaticPosition {
+  enum Type { kTopLeft, kTopRight, kBottomLeft, kBottomRight };
+
+  Type type;  // Logical corner that corresponds to physical top left.
+  NGPhysicalOffset offset;
+
+  // Creates a position with proper type wrt writing mode and direction.
+  static NGStaticPosition Create(NGWritingMode,
+                                 TextDirection,
+                                 NGPhysicalOffset);
+  // Left/Right/TopPosition functions map static position to
+  // left/right/top edge wrt container space.
+  // The function arguments are required to solve the equation:
+  // contaner_size = left + margin_left + width + margin_right + right
+  LayoutUnit LeftPosition(LayoutUnit container_size,
+                          LayoutUnit width,
+                          LayoutUnit margin_left,
+                          LayoutUnit margin_right) const {
+    return GenericPosition(HasLeft(), offset.left, container_size, width,
+                           margin_left, margin_right);
+  }
+  LayoutUnit RightPosition(LayoutUnit container_size,
+                           LayoutUnit width,
+                           LayoutUnit margin_left,
+                           LayoutUnit margin_right) const {
+    return GenericPosition(!HasLeft(), offset.left, container_size, width,
+                           margin_left, margin_right);
+  }
+  LayoutUnit TopPosition(LayoutUnit container_size,
+                         LayoutUnit height,
+                         LayoutUnit margin_top,
+                         LayoutUnit margin_bottom) const {
+    return GenericPosition(HasTop(), offset.top, container_size, height,
+                           margin_top, margin_bottom);
+  }
+
+ private:
+  bool HasTop() const { return type == kTopLeft || type == kTopRight; }
+  bool HasLeft() const { return type == kTopLeft || type == kBottomLeft; }
+  LayoutUnit GenericPosition(bool position_matches,
+                             LayoutUnit position,
+                             LayoutUnit container_size,
+                             LayoutUnit length,
+                             LayoutUnit margin_start,
+                             LayoutUnit margin_end) const {
+    DCHECK_GE(container_size, LayoutUnit());
+    DCHECK_GE(length, LayoutUnit());
+    if (position_matches)
+      return position;
+    else
+      return container_size - position - length - margin_start - margin_end;
+  }
 };
 
 }  // namespace blink

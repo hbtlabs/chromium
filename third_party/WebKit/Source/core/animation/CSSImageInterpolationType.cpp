@@ -132,7 +132,7 @@ class UnderlyingImageChecker : public InterpolationType::ConversionChecker {
 
   static std::unique_ptr<UnderlyingImageChecker> create(
       const InterpolationValue& underlying) {
-    return wrapUnique(new UnderlyingImageChecker(underlying));
+    return WTF::wrapUnique(new UnderlyingImageChecker(underlying));
   }
 
  private:
@@ -158,7 +158,7 @@ class UnderlyingImageChecker : public InterpolationType::ConversionChecker {
 InterpolationValue CSSImageInterpolationType::maybeConvertNeutral(
     const InterpolationValue& underlying,
     ConversionCheckers& conversionCheckers) const {
-  conversionCheckers.append(UnderlyingImageChecker::create(underlying));
+  conversionCheckers.push_back(UnderlyingImageChecker::create(underlying));
   return InterpolationValue(underlying.clone());
 }
 
@@ -176,7 +176,7 @@ class InheritedImageChecker : public InterpolationType::ConversionChecker {
   static std::unique_ptr<InheritedImageChecker> create(
       CSSPropertyID property,
       StyleImage* inheritedImage) {
-    return wrapUnique(new InheritedImageChecker(property, inheritedImage));
+    return WTF::wrapUnique(new InheritedImageChecker(property, inheritedImage));
   }
 
  private:
@@ -207,24 +207,23 @@ InterpolationValue CSSImageInterpolationType::maybeConvertInherit(
   const StyleImage* inheritedImage = ImagePropertyFunctions::getStyleImage(
       cssProperty(), *state.parentStyle());
   StyleImage* refableImage = const_cast<StyleImage*>(inheritedImage);
-  conversionCheckers.append(
+  conversionCheckers.push_back(
       InheritedImageChecker::create(cssProperty(), refableImage));
   return maybeConvertStyleImage(inheritedImage, true);
 }
 
 InterpolationValue CSSImageInterpolationType::maybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState&,
+    const StyleResolverState*,
     ConversionCheckers&) const {
   return maybeConvertCSSValue(value, true);
 }
 
-InterpolationValue CSSImageInterpolationType::maybeConvertUnderlyingValue(
-    const InterpolationEnvironment& environment) const {
+InterpolationValue
+CSSImageInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
+    const ComputedStyle& style) const {
   return maybeConvertStyleImage(
-      ImagePropertyFunctions::getStyleImage(cssProperty(),
-                                            *environment.state().style()),
-      true);
+      ImagePropertyFunctions::getStyleImage(cssProperty(), style), true);
 }
 
 void CSSImageInterpolationType::composite(
@@ -235,14 +234,14 @@ void CSSImageInterpolationType::composite(
   underlyingValueOwner.set(*this, value);
 }
 
-void CSSImageInterpolationType::apply(
+void CSSImageInterpolationType::applyStandardPropertyValue(
     const InterpolableValue& interpolableValue,
     const NonInterpolableValue* nonInterpolableValue,
-    InterpolationEnvironment& environment) const {
+    StyleResolverState& state) const {
   ImagePropertyFunctions::setStyleImage(
-      cssProperty(), *environment.state().style(),
+      cssProperty(), *state.style(),
       resolveStyleImage(cssProperty(), interpolableValue, nonInterpolableValue,
-                        environment.state()));
+                        state));
 }
 
 }  // namespace blink

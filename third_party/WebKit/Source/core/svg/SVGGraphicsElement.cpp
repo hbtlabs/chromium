@@ -22,7 +22,10 @@
 #include "core/svg/SVGGraphicsElement.h"
 
 #include "core/SVGNames.h"
-#include "core/layout/svg/LayoutSVGPath.h"
+#include "core/dom/StyleChangeReason.h"
+#include "core/frame/FrameView.h"
+#include "core/layout/LayoutObject.h"
+#include "core/layout/svg/LayoutSVGRoot.h"
 #include "core/svg/SVGElementRareData.h"
 #include "core/svg/SVGMatrixTearOff.h"
 #include "core/svg/SVGRectTearOff.h"
@@ -35,8 +38,9 @@ SVGGraphicsElement::SVGGraphicsElement(const QualifiedName& tagName,
                                        ConstructionType constructionType)
     : SVGElement(tagName, document, constructionType),
       SVGTests(this),
-      m_transform(
-          SVGAnimatedTransformList::create(this, SVGNames::transformAttr)) {
+      m_transform(SVGAnimatedTransformList::create(this,
+                                                   SVGNames::transformAttr,
+                                                   CSSPropertyTransform)) {
   addToPropertyMap(m_transform);
 }
 
@@ -69,7 +73,7 @@ AffineTransform SVGGraphicsElement::computeCTM(
       break;
 
     ctm = toSVGElement(currentElement)
-              ->localCoordinateSpaceTransform(mode)
+              ->localCoordinateSpaceTransform()
               .multiply(ctm);
 
     switch (mode) {
@@ -82,7 +86,7 @@ AffineTransform SVGGraphicsElement::computeCTM(
         done = currentElement == ancestor;
         break;
       default:
-        ASSERT(mode == ScreenScope);
+        NOTREACHED();
         break;
     }
   }
@@ -97,7 +101,38 @@ AffineTransform SVGGraphicsElement::getCTM(
 
 AffineTransform SVGGraphicsElement::getScreenCTM(
     StyleUpdateStrategy styleUpdateStrategy) {
-  return computeCTM(ScreenScope, styleUpdateStrategy);
+  if (styleUpdateStrategy == AllowStyleUpdate)
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
+  TransformationMatrix transform;
+  if (LayoutObject* layoutObject = this->layoutObject()) {
+    // Adjust for the zoom level factored into CSS coordinates (WK bug #96361).
+    transform.scale(1.0 / layoutObject->styleRef().effectiveZoom());
+
+    // Origin in the document. (This, together with the inverse-scale above,
+    // performs the same operation as
+    // Document::adjustFloatRectForScrollAndAbsoluteZoom, but in transformation
+    // matrix form.)
+    if (FrameView* view = document().view()) {
+      LayoutRect visibleContentRect(view->visibleContentRect());
+      transform.translate(-visibleContentRect.x(), -visibleContentRect.y());
+    }
+
+    // Apply transforms from our ancestor coordinate space, including any
+    // non-SVG ancestor transforms.
+    transform.multiply(layoutObject->localToAbsoluteTransform());
+
+    // At the SVG/HTML boundary (aka LayoutSVGRoot), we need to apply the
+    // localToBorderBoxTransform to map an element from SVG viewport
+    // coordinates to CSS box coordinates.
+    if (layoutObject->isSVGRoot()) {
+      transform.multiply(
+          toLayoutSVGRoot(layoutObject)->localToBorderBoxTransform());
+    }
+  }
+  // Drop any potential non-affine parts, because we're not able to convey that
+  // information further anyway until getScreenCTM returns a DOMMatrix (4x4
+  // matrix.)
+  return transform.toAffineTransform();
 }
 
 SVGMatrixTearOff* SVGGraphicsElement::getCTMFromJavascript() {
@@ -108,75 +143,16 @@ SVGMatrixTearOff* SVGGraphicsElement::getScreenCTMFromJavascript() {
   return SVGMatrixTearOff::create(getScreenCTM());
 }
 
-bool SVGGraphicsElement::hasAnimatedLocalTransform() const {
-  const ComputedStyle* style =
-      layoutObject() ? layoutObject()->style() : nullptr;
-
-  // Each of these is used in
-  // SVGGraphicsElement::calculateAnimatedLocalTransform to create an animated
-  // local transform.
-  return (style && style->hasTransform()) ||
-         !m_transform->currentValue()->isEmpty() || hasSVGRareData();
-}
-
-AffineTransform SVGGraphicsElement::calculateAnimatedLocalTransform() const {
-  AffineTransform matrix;
-  const ComputedStyle* style =
-      layoutObject() ? layoutObject()->style() : nullptr;
-
-  // If CSS property was set, use that, otherwise fallback to attribute (if
-  // set).
-  if (style && style->hasTransform()) {
-    TransformationMatrix transform;
-    float zoom = style->effectiveZoom();
-
-    // SVGTextElements need special handling for the text positioning code.
-    if (isSVGTextElement(this)) {
-      // Do not take into account SVG's zoom rules, transform-origin, or
-      // percentage values.
-      style->applyTransform(
-          transform, LayoutSize(0, 0), ComputedStyle::ExcludeTransformOrigin,
-          ComputedStyle::IncludeMotionPath,
-          ComputedStyle::IncludeIndependentTransformProperties);
-    } else {
-      // CSS transforms operate with pre-scaled lengths. To make this work with
-      // SVG (which applies the zoom factor globally, at the root level) we
-      //
-      //   * pre-scale the bounding box (to bring it into the same space as the
-      //     other CSS values)
-      //   * invert the zoom factor (to effectively compute the CSS transform
-      //     under a 1.0 zoom)
-      //
-      // Note: objectBoundingBox is an emptyRect for elements like pattern or
-      // clipPath.  See the "Object bounding box units" section of
-      // http://dev.w3.org/csswg/css3-transforms/
-      if (zoom != 1) {
-        FloatRect scaledBBox = layoutObject()->objectBoundingBox();
-        scaledBBox.scale(zoom);
-        transform.scale(1 / zoom);
-        style->applyTransform(
-            transform, scaledBBox, ComputedStyle::IncludeTransformOrigin,
-            ComputedStyle::IncludeMotionPath,
-            ComputedStyle::IncludeIndependentTransformProperties);
-        transform.scale(zoom);
-      } else {
-        style->applyTransform(
-            transform, layoutObject()->objectBoundingBox(),
-            ComputedStyle::IncludeTransformOrigin,
-            ComputedStyle::IncludeMotionPath,
-            ComputedStyle::IncludeIndependentTransformProperties);
-      }
-    }
-
-    // Flatten any 3D transform.
-    matrix = transform.toAffineTransform();
-  } else {
-    m_transform->currentValue()->concatenate(matrix);
+void SVGGraphicsElement::collectStyleForPresentationAttribute(
+    const QualifiedName& name,
+    const AtomicString& value,
+    MutableStylePropertySet* style) {
+  if (name == SVGNames::transformAttr) {
+    addPropertyToPresentationAttributeStyle(
+        style, CSSPropertyTransform, m_transform->currentValue()->cssValue());
+    return;
   }
-
-  if (hasSVGRareData())
-    return *svgRareData()->animateMotionTransform() * matrix;
-  return matrix;
+  SVGElement::collectStyleForPresentationAttribute(name, value, style);
 }
 
 AffineTransform* SVGGraphicsElement::animateMotionTransform() {
@@ -197,8 +173,15 @@ void SVGGraphicsElement::svgAttributeChanged(const QualifiedName& attrName) {
     if (!object)
       return;
 
+    invalidateSVGPresentationAttributeStyle();
+
     SVGElement::InvalidationGuard invalidationGuard(this);
-    object->setNeedsTransformUpdate();
+    // TODO(fs): The InvalidationGuard will make sure all instances are
+    // invalidated, but the style recalc will propagate to instances too. So
+    // there is some redundant operations being performed here. Could we get
+    // away with removing the InvalidationGuard?
+    setNeedsStyleRecalc(LocalStyleChange,
+                        StyleChangeReasonForTracing::fromAttribute(attrName));
     markForLayoutAndParentResourceInvalidation(object);
     return;
   }

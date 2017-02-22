@@ -28,6 +28,7 @@
 #include "core/html/HTMLOListElement.h"
 #include "core/layout/LayoutListMarker.h"
 #include "core/paint/ListItemPainter.h"
+#include "wtf/SaturatedArithmetic.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -52,7 +53,7 @@ void LayoutListItem::styleDidChange(StyleDifference diff,
   LayoutBlockFlow::styleDidChange(diff, oldStyle);
 
   StyleImage* currentImage = style()->listStyleImage();
-  if (style()->listStyleType() != EListStyleType::NoneListStyle ||
+  if (style()->listStyleType() != EListStyleType::kNone ||
       (currentImage && !currentImage->errorOccurred())) {
     if (!m_marker)
       m_marker = LayoutListMarker::createAnonymous(this);
@@ -227,7 +228,7 @@ inline int LayoutListItem::calcValue() const {
   // FIXME: This recurses to a possible depth of the length of the list.
   // That's not good -- we need to change this to an iterative algorithm.
   if (LayoutListItem* previousItem = previousListItem(list, this))
-    return previousItem->value() + valueStep;
+    return SaturatedAddition(previousItem->value(), valueStep);
 
   if (oListElement)
     return oListElement->start();
@@ -358,10 +359,7 @@ void LayoutListItem::positionListMarker() {
     // pretty wrong (https://crbug.com/554160).
     // FIXME: Need to account for relative positioning in the layout overflow.
     if (style()->isLeftToRightDirection()) {
-      LayoutUnit leftLineOffset = logicalLeftOffsetForLine(
-          blockOffset, logicalLeftOffsetForLine(blockOffset, DoNotIndentText),
-          DoNotIndentText);
-      markerLogicalLeft = leftLineOffset - lineOffset - paddingStart() -
+      markerLogicalLeft = m_marker->lineOffset() - lineOffset - paddingStart() -
                           borderStart() + m_marker->marginStart();
       m_marker->inlineBoxWrapper()->moveInInlineDirection(markerLogicalLeft -
                                                           markerOldLogicalLeft);
@@ -393,10 +391,7 @@ void LayoutListItem::positionListMarker() {
           hitSelfPaintingLayer = true;
       }
     } else {
-      LayoutUnit rightLineOffset = logicalRightOffsetForLine(
-          blockOffset, logicalRightOffsetForLine(blockOffset, DoNotIndentText),
-          DoNotIndentText);
-      markerLogicalLeft = rightLineOffset - lineOffset + paddingStart() +
+      markerLogicalLeft = m_marker->lineOffset() - lineOffset + paddingStart() +
                           borderStart() + m_marker->marginEnd();
       m_marker->inlineBoxWrapper()->moveInInlineDirection(markerLogicalLeft -
                                                           markerOldLogicalLeft);

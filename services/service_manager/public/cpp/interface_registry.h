@@ -24,6 +24,16 @@ namespace service_manager {
 class Connection;
 class InterfaceBinder;
 
+// Returns the set of capabilities required from the target.
+CapabilitySet GetRequestedCapabilities(const InterfaceProviderSpec& source_spec,
+                                       const Identity& target);
+
+// Generates a single set of interfaces that is the union of all interfaces
+// exposed by the target for the capabilities requested by the source.
+InterfaceSet GetInterfacesToExpose(const InterfaceProviderSpec& source_spec,
+                                   const Identity& target,
+                                   const InterfaceProviderSpec& target_spec);
+
 // An implementation of mojom::InterfaceProvider that allows the user to
 // register services to be exposed to another application.
 //
@@ -154,6 +164,10 @@ class InterfaceRegistry : public mojom::InterfaceProvider {
   // that by the time any added closure is invoked, the InterfaceRegistry may
   // have been deleted.
   void AddConnectionLostClosure(const base::Closure& connection_lost_closure);
+
+  // Binds a local interface request.
+  void BindInterface(const std::string& name,
+                     mojo::ScopedMessagePipeHandle handle);
 
  private:
   using InterfaceNameToBinderMap =

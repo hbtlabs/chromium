@@ -383,6 +383,13 @@ class AutofillMetrics {
     FORM_EVENT_LOCAL_SUGGESTION_WILL_SUBMIT_ONCE,
     FORM_EVENT_SERVER_SUGGESTION_WILL_SUBMIT_ONCE,
     FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_WILL_SUBMIT_ONCE,
+    // A dropdown with suggestions was shown and a form was submitted after
+    // that.
+    FORM_EVENT_SUGGESTION_SHOWN_SUBMITTED_ONCE,
+    // A dropdown with suggestions was shown and a form is about to be
+    // submitted. If the submission is not interrupted by JavaScript, the "form
+    // submitted" event above will also be logged.
+    FORM_EVENT_SUGGESTION_SHOWN_WILL_SUBMIT_ONCE,
 
     NUM_FORM_EVENTS,
   };
@@ -509,6 +516,15 @@ class AutofillMetrics {
     INVALID_FORM_FIELD,
     REQUIRE_PHONE_NUMBER,
     NUM_WALLET_REQUIRED_ACTIONS
+  };
+
+  // For mesuring how wallet addresses are converted to local profiles.
+  enum WalletAddressConversionType : int {
+    // The converted wallet address was merged into an existing local profile.
+    CONVERTED_ADDRESS_MERGED,
+    // The converted wallet address was added as a new local profile.
+    CONVERTED_ADDRESS_ADDED,
+    NUM_CONVERTED_ADDRESS_CONVERSION_TYPES
   };
 
   static void LogCardUploadDecisionMetric(CardUploadDecisionMetric metric);
@@ -656,6 +672,14 @@ class AutofillMetrics {
   // context.
   static void LogIsQueriedCreditCardFormSecure(bool is_secure);
 
+  // Log how the converted wallet address was added to the local autofill
+  // profiles.
+  static void LogWalletAddressConversionType(WalletAddressConversionType type);
+
+  // This should be called when the user selects the Form-Not-Secure warning
+  // suggestion to show an explanation of the warning.
+  static void LogShowedHttpNotSecureExplanation();
+
   // Utility to autofill form events in the relevant histograms depending on
   // the presence of server and/or local data.
   class FormEventLogger {
@@ -668,6 +692,10 @@ class AutofillMetrics {
 
     inline void set_is_local_data_available(bool is_local_data_available) {
       is_local_data_available_ = is_local_data_available;
+    }
+
+    inline void set_is_context_secure(bool is_context_secure) {
+      is_context_secure_ = is_context_secure;
     }
 
     void OnDidInteractWithAutofillableForm();
@@ -694,6 +722,7 @@ class AutofillMetrics {
     bool is_for_credit_card_;
     bool is_server_data_available_;
     bool is_local_data_available_;
+    bool is_context_secure_;
     bool has_logged_interacted_;
     bool has_logged_suggestions_shown_;
     bool has_logged_masked_server_card_suggestion_selected_;

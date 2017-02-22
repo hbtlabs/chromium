@@ -8,11 +8,11 @@
 #include <string>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/weak_ptr.h"
-#include "base/run_loop.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 namespace chromeos {
@@ -24,7 +24,7 @@ class ScreenshotTester {
   ScreenshotTester();
   virtual ~ScreenshotTester();
 
-  typedef scoped_refptr<base::RefCountedBytes> PNGFile;
+  typedef scoped_refptr<base::RefCountedMemory> PNGFile;
 
   // Contains the results of comparison
   struct Result {
@@ -106,7 +106,7 @@ class ScreenshotTester {
   void LogComparisonResults(const ScreenshotTester::Result& result);
 
   // Saves |png_data| as a current screenshot.
-  void ReturnScreenshot(const PNGFile& screenshot, PNGFile png_data);
+  void ReturnScreenshot(PNGFile* screenshot, PNGFile png_data);
 
   // Loads golden screenshot from the disk, assuming it lies at |image_path|.
   // Fails if there is no such a file.
@@ -137,9 +137,8 @@ class ScreenshotTester {
   // and difference between them and golden ones will be stored.
   base::FilePath artifacts_dir_;
 
-  // |run_loop_| and |run_loop_quitter_| are used to synchronize
-  // with ui::GrabWindowSnapshotAsync.
-  base::RunLoop run_loop_;
+  // |run_loop_quitter_| is used to stop waiting when
+  // ui::GrabWindowSnapshotAsyncPNG completes.
   base::Closure run_loop_quitter_;
 
   // Is true when we're in test mode:

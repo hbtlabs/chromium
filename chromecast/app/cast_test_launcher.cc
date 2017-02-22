@@ -7,6 +7,8 @@
 #include "base/test/test_suite.h"
 #include "chromecast/app/cast_main_delegate.h"
 #include "content/public/test/test_launcher.h"
+#include "ipc/ipc_channel.h"
+#include "mojo/edk/embedder/embedder.h"
 
 namespace chromecast {
 namespace shell {
@@ -41,5 +43,7 @@ class CastTestLauncherDelegate : public content::TestLauncherDelegate {
 int main(int argc, char** argv) {
   int default_jobs = std::max(1, base::SysInfo::NumberOfProcessors() / 2);
   chromecast::shell::CastTestLauncherDelegate launcher_delegate;
+  mojo::edk::SetMaxMessageSize(IPC::Channel::kMaximumMessageSize);
+  mojo::edk::Init();
   return content::LaunchTests(&launcher_delegate, default_jobs, argc, argv);
 }

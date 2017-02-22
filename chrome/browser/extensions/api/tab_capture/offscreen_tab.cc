@@ -10,10 +10,13 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/extensions/api/tab_capture/tab_capture_registry.h"
+#include "chrome/browser/media/router/receiver_presentation_service_delegate_impl.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/web_contents_sizer.h"
+#include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/web_preferences.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/process_manager.h"
 
@@ -115,11 +118,21 @@ void OffscreenTab::Start(const GURL& start_url,
   // automatically unmuted, but will be captured into the MediaStream.
   offscreen_tab_web_contents_->SetAudioMuted(true);
 
-  // TODO(imcheng): If |optional_presentation_id| is not empty, register it with
-  // the PresentationRouter.  http://crbug.com/513859
   if (!optional_presentation_id.empty()) {
-    NOTIMPLEMENTED()
-        << "Register with PresentationRouter, id=" << optional_presentation_id;
+    DVLOG(1) << " Register with ReceiverPresentationServiceDelegateImpl, "
+             << "[presentation_id]: " << optional_presentation_id;
+    // Create a ReceiverPSDImpl associated with the offscreen tab's WebContents.
+    // The new instance will set up the necessary infrastructure to allow
+    // controlling peers the ability to connect to the offscreen tab.
+    media_router::ReceiverPresentationServiceDelegateImpl::CreateForWebContents(
+        offscreen_tab_web_contents_.get(), optional_presentation_id);
+
+    if (auto* render_view_host =
+            offscreen_tab_web_contents_->GetRenderViewHost()) {
+      auto web_prefs = render_view_host->GetWebkitPreferences();
+      web_prefs.presentation_receiver = true;
+      render_view_host->UpdateWebkitPreferences(web_prefs);
+    }
   }
 
   // Navigate to the initial URL.
@@ -206,16 +219,18 @@ bool OffscreenTab::CanDragEnter(
 }
 
 bool OffscreenTab::ShouldCreateWebContents(
-    WebContents* contents,
+    content::WebContents* web_contents,
+    content::SiteInstance* source_site_instance,
     int32_t route_id,
     int32_t main_frame_route_id,
     int32_t main_frame_widget_route_id,
-    WindowContainerType window_container_type,
+    content::mojom::WindowContainerType window_container_type,
+    const GURL& opener_url,
     const std::string& frame_name,
     const GURL& target_url,
     const std::string& partition_id,
     content::SessionStorageNamespace* session_storage_namespace) {
-  DCHECK_EQ(offscreen_tab_web_contents_.get(), contents);
+  DCHECK_EQ(offscreen_tab_web_contents_.get(), web_contents);
   // Disallow creating separate WebContentses.  The WebContents implementation
   // uses this to spawn new windows/tabs, which is also not allowed for
   // offscreen tabs.

@@ -19,6 +19,13 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/url_constants.h"
+#include "extensions/common/constants.h"
+
+#if !defined(OS_ANDROID)
+#include "components/omnibox/browser/vector_icons.h" // nogncheck
+#include "components/toolbar/vector_icons.h"  // nogncheck
+#endif
 
 ChromeToolbarModelDelegate::ChromeToolbarModelDelegate() {}
 
@@ -101,6 +108,22 @@ bool ChromeToolbarModelDelegate::FailsMalwareCheck() const {
       ->GetSecurityInfo(&security_info);
   return security_info.malicious_content_status !=
          security_state::MALICIOUS_CONTENT_STATUS_NONE;
+}
+
+const gfx::VectorIcon* ChromeToolbarModelDelegate::GetVectorIconOverride()
+    const {
+#if !defined(OS_ANDROID)
+  GURL url;
+  GetURL(&url);
+
+  if (url.SchemeIs(content::kChromeUIScheme))
+    return &toolbar::kProductIcon;
+
+  if (url.SchemeIs(extensions::kExtensionScheme))
+    return &omnibox::kExtensionAppIcon;
+#endif
+
+  return nullptr;
 }
 
 content::NavigationController*

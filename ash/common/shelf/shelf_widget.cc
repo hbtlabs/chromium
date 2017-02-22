@@ -4,32 +4,27 @@
 
 #include "ash/common/shelf/shelf_widget.h"
 
+#include "ash/animation/animation_change_type.h"
 #include "ash/common/focus_cycler.h"
-#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shelf/app_list_button.h"
 #include "ash/common/shelf/shelf_background_animator_observer.h"
 #include "ash/common/shelf/shelf_constants.h"
 #include "ash/common/shelf/shelf_delegate.h"
 #include "ash/common/shelf/shelf_layout_manager.h"
 #include "ash/common/shelf/shelf_view.h"
-#include "ash/common/shelf/wm_dimmer_view.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shelf/wm_shelf_util.h"
 #include "ash/common/system/status_area_layout_manager.h"
 #include "ash/common/system/status_area_widget.h"
 #include "ash/common/wm_lookup.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/common/wm_window_property.h"
+#include "ash/root_window_controller.h"
 #include "base/memory/ptr_util.h"
-#include "grit/ash_resources.h"
-#include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
-#include "ui/gfx/canvas.h"
-#include "ui/gfx/image/image.h"
-#include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/skbitmap_operations.h"
 #include "ui/views/accessible_pane_view.h"
 #include "ui/views/layout/fill_layout.h"
@@ -38,20 +33,13 @@
 
 namespace ash {
 
-namespace {
-
-// Size of black border at bottom (or side) of shelf.
-const int kNumBlackPixels = 3;
-
-}  // namespace
-
 // The contents view of the Shelf. This view contains ShelfView and
 // sizes it to the width of the shelf minus the size of the status area.
 class ShelfWidget::DelegateView : public views::WidgetDelegate,
                                   public views::AccessiblePaneView,
                                   public ShelfBackgroundAnimatorObserver {
  public:
-  DelegateView(WmShelf* wm_shelf, ShelfWidget* shelf);
+  explicit DelegateView(ShelfWidget* shelf);
   ~DelegateView() override;
 
   void set_focus_cycler(FocusCycler* focus_cycler) {
@@ -62,14 +50,7 @@ class ShelfWidget::DelegateView : public views::WidgetDelegate,
   ui::Layer* opaque_background() { return &opaque_background_; }
   ui::Layer* opaque_foreground() { return &opaque_foreground_; }
 
-  // Set if the shelf area is dimmed (eg when a window is maximized).
-  void SetDimmed(bool dimmed);
-  bool GetDimmed() const;
-
   void SetParentLayer(ui::Layer* layer);
-
-  // views::View overrides:
-  void OnPaintBackground(gfx::Canvas* canvas) override;
 
   // views::WidgetDelegateView overrides:
   views::Widget* GetWidget() override { return View::GetWidget(); }
@@ -81,60 +62,28 @@ class ShelfWidget::DelegateView : public views::WidgetDelegate,
   void OnBoundsChanged(const gfx::Rect& old_bounds) override;
 
   // ShelfBackgroundAnimatorObserver:
-  void UpdateShelfOpaqueBackground(int alpha) override;
-  void UpdateShelfAssetBackground(int alpha) override;
-
-  // Force the shelf to be presented in an undimmed state.
-  void ForceUndimming(bool force);
-
-  // A function to test the current alpha used by the dimming bar. If there is
-  // no dimmer active, the function will return -1.
-  int GetDimmingAlphaForTest();
-
-  // A function to test the bounds of the dimming bar. Returns gfx::Rect() if
-  // the dimmer is inactive.
-  gfx::Rect GetDimmerBoundsForTest();
-
-  // Disable dimming animations for running tests. This needs to be called
-  // prior to the creation of of the dimmer.
-  void disable_dimming_animations_for_test() {
-    disable_dimming_animations_for_test_ = true;
-  }
+  void UpdateShelfBackground(int alpha) override;
 
  private:
-  WmShelf* wm_shelf_;
   ShelfWidget* shelf_widget_;
   FocusCycler* focus_cycler_;
-  int asset_background_alpha_;
+  // A black background layer that may be visible depending on a
+  // ShelfBackgroundAnimator.
   // TODO(bruthig): Remove opaque_background_ (see https://crbug.com/621551).
-  // A black background layer which is shown when a maximized window is visible.
   ui::Layer opaque_background_;
   // A black foreground layer which is shown while transitioning between users.
   // Note: Since the back- and foreground layers have different functions they
   // can be used simultaneously - so no repurposing possible.
   ui::Layer opaque_foreground_;
 
-  // The interface for the view which does the dimming. Null if the shelf is not
-  // being dimmed, or if dimming is not supported (e.g. for mus).
-  WmDimmerView* dimmer_view_;
-
-  // True if dimming animations should be turned off.
-  bool disable_dimming_animations_for_test_;
-
   DISALLOW_COPY_AND_ASSIGN(DelegateView);
 };
 
-ShelfWidget::DelegateView::DelegateView(WmShelf* wm_shelf,
-                                        ShelfWidget* shelf_widget)
-    : wm_shelf_(wm_shelf),
-      shelf_widget_(shelf_widget),
+ShelfWidget::DelegateView::DelegateView(ShelfWidget* shelf_widget)
+    : shelf_widget_(shelf_widget),
       focus_cycler_(nullptr),
-      asset_background_alpha_(0),
       opaque_background_(ui::LAYER_SOLID_COLOR),
-      opaque_foreground_(ui::LAYER_SOLID_COLOR),
-      dimmer_view_(nullptr),
-      disable_dimming_animations_for_test_(false) {
-  DCHECK(wm_shelf_);
+      opaque_foreground_(ui::LAYER_SOLID_COLOR) {
   DCHECK(shelf_widget_);
   SetLayoutManager(new views::FillLayout());
   set_allow_deactivate_on_esc(true);
@@ -146,93 +95,12 @@ ShelfWidget::DelegateView::DelegateView(WmShelf* wm_shelf,
   opaque_foreground_.SetOpacity(0.0f);
 }
 
-ShelfWidget::DelegateView::~DelegateView() {
-  // Make sure that the dimmer goes away since it might have set an observer.
-  SetDimmed(false);
-}
-
-void ShelfWidget::DelegateView::SetDimmed(bool dimmed) {
-  // When starting dimming, attempt to create a dimmer view.
-  if (dimmed) {
-    if (!dimmer_view_) {
-      dimmer_view_ =
-          wm_shelf_->CreateDimmerView(disable_dimming_animations_for_test_);
-    }
-    return;
-  }
-
-  // Close the dimmer widget when stopping dimming.
-  if (dimmer_view_) {
-    dimmer_view_->GetDimmerWidget()->CloseNow();
-    dimmer_view_ = nullptr;
-  }
-}
-
-bool ShelfWidget::DelegateView::GetDimmed() const {
-  return dimmer_view_ && dimmer_view_->GetDimmerWidget()->IsVisible();
-}
+ShelfWidget::DelegateView::~DelegateView() {}
 
 void ShelfWidget::DelegateView::SetParentLayer(ui::Layer* layer) {
   layer->Add(&opaque_background_);
   layer->Add(&opaque_foreground_);
   ReorderLayers();
-}
-
-void ShelfWidget::DelegateView::OnPaintBackground(gfx::Canvas* canvas) {
-  if (MaterialDesignController::IsShelfMaterial())
-    return;
-
-  ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
-  gfx::ImageSkia shelf_background =
-      *rb->GetImageSkiaNamed(IDR_ASH_SHELF_BACKGROUND);
-  const bool horizontal = wm_shelf_->IsHorizontalAlignment();
-  if (!horizontal) {
-    shelf_background = gfx::ImageSkiaOperations::CreateRotatedImage(
-        shelf_background, wm_shelf_->GetAlignment() == SHELF_ALIGNMENT_LEFT
-                              ? SkBitmapOperations::ROTATION_90_CW
-                              : SkBitmapOperations::ROTATION_270_CW);
-  }
-  const gfx::Rect dock_bounds(
-      shelf_widget_->shelf_layout_manager()->dock_bounds());
-  SkPaint paint;
-  paint.setAlpha(asset_background_alpha_);
-  canvas->DrawImageInt(
-      shelf_background, 0, 0, shelf_background.width(),
-      shelf_background.height(),
-      (horizontal && dock_bounds.x() == 0 && dock_bounds.width() > 0)
-          ? dock_bounds.width()
-          : 0,
-      0, horizontal ? width() - dock_bounds.width() : width(), height(), false,
-      paint);
-  if (horizontal && dock_bounds.width() > 0) {
-    // The part of the shelf background that is in the corner below the docked
-    // windows close to the work area is an arched gradient that blends
-    // vertically oriented docked background and horizontal shelf.
-    gfx::ImageSkia shelf_corner = *rb->GetImageSkiaNamed(IDR_ASH_SHELF_CORNER);
-    if (dock_bounds.x() == 0) {
-      shelf_corner = gfx::ImageSkiaOperations::CreateRotatedImage(
-          shelf_corner, SkBitmapOperations::ROTATION_90_CW);
-    }
-    canvas->DrawImageInt(
-        shelf_corner, 0, 0, shelf_corner.width(), shelf_corner.height(),
-        dock_bounds.x() > 0 ? dock_bounds.x() : dock_bounds.width() - height(),
-        0, height(), height(), false, paint);
-    // The part of the shelf background that is just below the docked windows
-    // is drawn using the last (lowest) 1-pixel tall strip of the image asset.
-    // This avoids showing the border 3D shadow between the shelf and the
-    // dock.
-    canvas->DrawImageInt(shelf_background, 0, shelf_background.height() - 1,
-                         shelf_background.width(), 1,
-                         dock_bounds.x() > 0 ? dock_bounds.x() + height() : 0,
-                         0, dock_bounds.width() - height(), height(), false,
-                         paint);
-  }
-  gfx::Rect black_rect =
-      shelf_widget_->shelf_layout_manager()->SelectValueForShelfAlignment(
-          gfx::Rect(0, height() - kNumBlackPixels, width(), kNumBlackPixels),
-          gfx::Rect(0, 0, kNumBlackPixels, height()),
-          gfx::Rect(width() - kNumBlackPixels, 0, kNumBlackPixels, height()));
-  canvas->FillRect(black_rect, SK_ColorBLACK);
 }
 
 bool ShelfWidget::DelegateView::CanActivate() const {
@@ -255,44 +123,21 @@ void ShelfWidget::DelegateView::ReorderChildLayers(ui::Layer* parent_layer) {
 void ShelfWidget::DelegateView::OnBoundsChanged(const gfx::Rect& old_bounds) {
   opaque_background_.SetBounds(GetLocalBounds());
   opaque_foreground_.SetBounds(GetLocalBounds());
-  if (dimmer_view_)
-    dimmer_view_->GetDimmerWidget()->SetBounds(GetBoundsInScreen());
 }
 
-void ShelfWidget::DelegateView::ForceUndimming(bool force) {
-  if (GetDimmed())
-    dimmer_view_->ForceUndimming(force);
-}
-
-int ShelfWidget::DelegateView::GetDimmingAlphaForTest() {
-  if (GetDimmed())
-    return dimmer_view_->GetDimmingAlphaForTest();
-  return -1;
-}
-
-gfx::Rect ShelfWidget::DelegateView::GetDimmerBoundsForTest() {
-  if (GetDimmed())
-    return dimmer_view_->GetDimmerWidget()->GetWindowBoundsInScreen();
-  return gfx::Rect();
-}
-
-void ShelfWidget::DelegateView::UpdateShelfOpaqueBackground(int alpha) {
+void ShelfWidget::DelegateView::UpdateShelfBackground(int alpha) {
   const float kMaxAlpha = 255.0f;
   opaque_background_.SetOpacity(alpha / kMaxAlpha);
-}
-
-void ShelfWidget::DelegateView::UpdateShelfAssetBackground(int alpha) {
-  asset_background_alpha_ = alpha;
-  SchedulePaint();
 }
 
 ShelfWidget::ShelfWidget(WmWindow* shelf_container, WmShelf* wm_shelf)
     : wm_shelf_(wm_shelf),
       status_area_widget_(nullptr),
-      delegate_view_(new DelegateView(wm_shelf, this)),
+      delegate_view_(new DelegateView(this)),
       shelf_view_(nullptr),
       background_animator_(SHELF_BACKGROUND_DEFAULT, wm_shelf_),
       activating_as_fallback_(false) {
+  DCHECK(wm_shelf_);
   background_animator_.AddObserver(this);
   background_animator_.AddObserver(delegate_view_);
 
@@ -317,7 +162,7 @@ ShelfWidget::ShelfWidget(WmWindow* shelf_container, WmShelf* wm_shelf)
   shelf_container->SetLayoutManager(base::WrapUnique(shelf_layout_manager_));
   background_animator_.PaintBackground(
       shelf_layout_manager_->GetShelfBackgroundType(),
-      BACKGROUND_CHANGE_IMMEDIATE);
+      AnimationChangeType::IMMEDIATE);
 
   views::Widget::AddObserver(this);
 }
@@ -346,9 +191,8 @@ void ShelfWidget::CreateStatusAreaWidget(WmWindow* status_container) {
       base::MakeUnique<StatusAreaLayoutManager>(this));
 }
 
-void ShelfWidget::SetPaintsBackground(
-    ShelfBackgroundType background_type,
-    BackgroundAnimatorChangeType change_type) {
+void ShelfWidget::SetPaintsBackground(ShelfBackgroundType background_type,
+                                      AnimationChangeType change_type) {
   background_animator_.PaintBackground(background_type, change_type);
 }
 
@@ -377,27 +221,11 @@ bool ShelfWidget::IsShelfHiddenBehindBlackBar() const {
   return delegate_view_->opaque_foreground()->GetTargetOpacity() != 0.0f;
 }
 
-ShelfAlignment ShelfWidget::GetAlignment() const {
-  return wm_shelf_->GetAlignment();
-}
-
 void ShelfWidget::OnShelfAlignmentChanged() {
   shelf_view_->OnShelfAlignmentChanged();
-  status_area_widget_->SetShelfAlignment(GetAlignment());
+  // TODO(jamescook): Status area should not cache alignment.
+  status_area_widget_->SetShelfAlignment(wm_shelf_->GetAlignment());
   delegate_view_->SchedulePaint();
-}
-
-void ShelfWidget::SetDimsShelf(bool dimming) {
-  delegate_view_->SetDimmed(dimming);
-  // Repaint all children, allowing updates to reflect dimmed state eg:
-  // status area background, app list button and overflow button.
-  if (shelf_view_)
-    shelf_view_->SchedulePaintForAllButtons();
-  status_area_widget_->SchedulePaint();
-}
-
-bool ShelfWidget::GetDimsShelf() const {
-  return delegate_view_->GetDimmed();
 }
 
 ShelfView* ShelfWidget::CreateShelfView() {
@@ -415,8 +243,14 @@ void ShelfWidget::PostCreateShelf() {
   SetFocusCycler(WmShell::Get()->focus_cycler());
 
   // Ensure the newly created |shelf_| gets current values.
-  background_animator_.Initialize(this);
+  background_animator_.NotifyObserver(this);
 
+  // TODO(jamescook): The IsActiveUserSessionStarted() check may not be needed
+  // because the shelf is only created after the first user session is active.
+  // The ShelfView seems to always be visible after login. At the lock screen
+  // the shelf is hidden because its container is hidden. During auto-hide it is
+  // hidden because ShelfWidget is transparent. Some of the ShelfView visibility
+  // code could be simplified. http://crbug.com/674773
   shelf_view_->SetVisible(
       WmShell::Get()->GetSessionStateDelegate()->IsActiveUserSessionStarted());
   shelf_layout_manager_->LayoutShelf();
@@ -428,9 +262,8 @@ bool ShelfWidget::IsShelfVisible() const {
   return shelf_view_ && shelf_view_->visible();
 }
 
-void ShelfWidget::SetShelfVisibility(bool visible) {
-  if (shelf_view_)
-    shelf_view_->SetVisible(visible);
+bool ShelfWidget::IsShowingAppList() const {
+  return GetAppListButton() && GetAppListButton()->is_showing_app_list();
 }
 
 bool ShelfWidget::IsShowingContextMenu() const {
@@ -452,10 +285,6 @@ FocusCycler* ShelfWidget::GetFocusCycler() {
 }
 
 void ShelfWidget::Shutdown() {
-  // Tear down the dimmer before |shelf_layout_manager_|, since the dimmer uses
-  // |shelf_layout_manager_| to get the shelf's WmWindow, via WmShelf.
-  delegate_view_->SetDimmed(false);
-
   // Shutting down the status area widget may cause some widgets (e.g. bubbles)
   // to close, so uninstall the ShelfLayoutManager event filters first. Don't
   // reset the pointer until later because other widgets (e.g. app list) may
@@ -473,11 +302,10 @@ void ShelfWidget::Shutdown() {
   CloseNow();
 }
 
-void ShelfWidget::ForceUndimming(bool force) {
-  delegate_view_->ForceUndimming(force);
-}
-
 void ShelfWidget::UpdateIconPositionForPanel(WmWindow* panel) {
+  if (!shelf_view_)
+    return;
+
   WmWindow* shelf_window = WmLookup::Get()->GetWindowForWidget(this);
   shelf_view_->UpdatePanelIconPosition(
       panel->GetIntProperty(WmWindowProperty::SHELF_ID),
@@ -486,6 +314,11 @@ void ShelfWidget::UpdateIconPositionForPanel(WmWindow* panel) {
 }
 
 gfx::Rect ShelfWidget::GetScreenBoundsOfItemIconForWindow(WmWindow* window) {
+  // Window animations can be triggered during session restore before the shelf
+  // view is created. In that case, return default empty bounds.
+  if (!shelf_view_)
+    return gfx::Rect();
+
   ShelfID id = window->GetIntProperty(WmWindowProperty::SHELF_ID);
   gfx::Rect bounds(shelf_view_->GetIdealBoundsOfItemIcon(id));
   gfx::Point screen_origin;
@@ -496,7 +329,7 @@ gfx::Rect ShelfWidget::GetScreenBoundsOfItemIconForWindow(WmWindow* window) {
 }
 
 AppListButton* ShelfWidget::GetAppListButton() const {
-  return shelf_view_->GetAppListButton();
+  return shelf_view_ ? shelf_view_->GetAppListButton() : nullptr;
 }
 
 app_list::ApplicationDragAndDropHost*
@@ -511,23 +344,6 @@ void ShelfWidget::OnWidgetActivationChanged(views::Widget* widget,
     delegate_view_->SetPaneFocusAndFocusDefault();
   else
     delegate_view_->GetFocusManager()->ClearFocus();
-}
-
-int ShelfWidget::GetDimmingAlphaForTest() {
-  if (delegate_view_)
-    return delegate_view_->GetDimmingAlphaForTest();
-  return -1;
-}
-
-gfx::Rect ShelfWidget::GetDimmerBoundsForTest() {
-  if (delegate_view_)
-    return delegate_view_->GetDimmerBoundsForTest();
-  return gfx::Rect();
-}
-
-void ShelfWidget::DisableDimmingAnimationsForTest() {
-  DCHECK(delegate_view_);
-  delegate_view_->disable_dimming_animations_for_test();
 }
 
 void ShelfWidget::UpdateShelfItemBackground(int alpha) {

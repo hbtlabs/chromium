@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/strings/string_util.h"
 #include "content/public/common/manifest.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -71,9 +72,9 @@ const GURL ManifestParserTest::default_manifest_url(
 
 TEST_F(ManifestParserTest, CrashTest) {
   // Passing temporary variables should not crash.
-  ManifestParser parser("{\"start_url\": \"/\"}",
-                        GURL("http://example.com"),
-                        GURL("http://example.com"));
+  const base::StringPiece json = "{\"start_url\": \"/\"}";
+  GURL url("http://example.com");
+  ManifestParser parser(json, url, url);
   parser.Parse();
   std::vector<ManifestDebugInfo::Error> errors;
   parser.TakeErrors(&errors);
@@ -875,6 +876,190 @@ TEST_F(ManifestParserTest, IconSizesParseRules) {
     EXPECT_EQ(1u, GetErrorCount());
     EXPECT_EQ("found icon with no valid size.",
               errors()[0]);
+  }
+}
+
+TEST_F(ManifestParserTest, IconPurposeParseRules) {
+  const std::string kPurposeParseStringError =
+      "property 'purpose' ignored, type string expected.";
+  const std::string kPurposeInvalidValueError =
+      "found icon with invalid purpose. "
+      "Using default value 'any'.";
+
+  // Smoke test.
+  {
+    Manifest manifest = ParseManifest("{ \"icons\": [ {\"src\": \"\","
+        "\"purpose\": \"any\" } ] }");
+    EXPECT_EQ(manifest.icons[0].purpose.size(), 1u);
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Trim leading and trailing whitespaces.
+  {
+    Manifest manifest = ParseManifest("{ \"icons\": [ {\"src\": \"\","
+        "\"purpose\": \"  any  \" } ] }");
+    EXPECT_EQ(manifest.icons[0].purpose.size(), 1u);
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // 'any' is added when property isn't present.
+  {
+    Manifest manifest = ParseManifest("{ \"icons\": [ {\"src\": \"\" } ] }");
+    EXPECT_EQ(manifest.icons[0].purpose.size(), 1u);
+    EXPECT_EQ(manifest.icons[0].purpose[0], Manifest::Icon::IconPurpose::ANY);
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // 'any' is added with error message when property isn't a string (is a
+  // number).
+  {
+    Manifest manifest = ParseManifest("{ \"icons\": [ {\"src\": \"\","
+        "\"purpose\": 42 } ] }");
+    EXPECT_EQ(manifest.icons[0].purpose.size(), 1u);
+    EXPECT_EQ(manifest.icons[0].purpose[0], Manifest::Icon::IconPurpose::ANY);
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ(kPurposeParseStringError, errors()[0]);
+  }
+
+  // 'any' is added with error message when property isn't a string (is a
+  // dictionary).
+  {
+    Manifest manifest = ParseManifest("{ \"icons\": [ {\"src\": \"\","
+        "\"purpose\": {} } ] }");
+    EXPECT_EQ(manifest.icons[0].purpose.size(), 1u);
+    EXPECT_EQ(manifest.icons[0].purpose[0], Manifest::Icon::IconPurpose::ANY);
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ(kPurposeParseStringError, errors()[0]);
+  }
+
+  // Smoke test: values correctly parsed.
+  {
+    Manifest manifest = ParseManifest("{ \"icons\": [ {\"src\": \"\","
+        "\"purpose\": \"Any Badge\" } ] }");
+    ASSERT_EQ(manifest.icons[0].purpose.size(), 2u);
+    EXPECT_EQ(manifest.icons[0].purpose[0], Manifest::Icon::IconPurpose::ANY);
+    EXPECT_EQ(manifest.icons[0].purpose[1], Manifest::Icon::IconPurpose::BADGE);
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Trim whitespaces between values.
+  {
+    Manifest manifest = ParseManifest("{ \"icons\": [ {\"src\": \"\","
+        "\"purpose\": \"  Any   Badge  \" } ] }");
+    ASSERT_EQ(manifest.icons[0].purpose.size(), 2u);
+    EXPECT_EQ(manifest.icons[0].purpose[0], Manifest::Icon::IconPurpose::ANY);
+    EXPECT_EQ(manifest.icons[0].purpose[1], Manifest::Icon::IconPurpose::BADGE);
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Twice the same value is parsed twice.
+  {
+    Manifest manifest = ParseManifest("{ \"icons\": [ {\"src\": \"\","
+        "\"purpose\": \"badge badge\" } ] }");
+    ASSERT_EQ(manifest.icons[0].purpose.size(), 2u);
+    EXPECT_EQ(manifest.icons[0].purpose[0], Manifest::Icon::IconPurpose::BADGE);
+    EXPECT_EQ(manifest.icons[0].purpose[1], Manifest::Icon::IconPurpose::BADGE);
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Invalid icon purpose is ignored.
+  {
+    Manifest manifest = ParseManifest("{ \"icons\": [ {\"src\": \"\","
+        "\"purpose\": \"badge notification\" } ] }");
+    ASSERT_EQ(manifest.icons[0].purpose.size(), 1u);
+    EXPECT_EQ(manifest.icons[0].purpose[0], Manifest::Icon::IconPurpose::BADGE);
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ(kPurposeInvalidValueError, errors()[0]);
+  }
+
+  // 'any' is added when developer-supplied purpose is invalid.
+  {
+    Manifest manifest = ParseManifest("{ \"icons\": [ {\"src\": \"\","
+        "\"purpose\": \"notification\" } ] }");
+    ASSERT_EQ(manifest.icons[0].purpose.size(), 1u);
+    EXPECT_EQ(manifest.icons[0].purpose[0], Manifest::Icon::IconPurpose::ANY);
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ(kPurposeInvalidValueError, errors()[0]);
+  }
+}
+
+TEST_F(ManifestParserTest, ShareTargetParseRules) {
+  // Contains share_target field but no keys.
+  {
+    Manifest manifest = ParseManifest("{ \"share_target\": {} }");
+    EXPECT_FALSE(manifest.share_target.has_value());
+    EXPECT_TRUE(manifest.IsEmpty());
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Key in share_target that isn't valid.
+  {
+    Manifest manifest = ParseManifest(
+        "{ \"share_target\": {\"incorrect_key\": \"some_value\" } }");
+    ASSERT_FALSE(manifest.share_target.has_value());
+    EXPECT_TRUE(manifest.IsEmpty());
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+}
+
+TEST_F(ManifestParserTest, ShareTargetUrlTemplateParseRules) {
+  // Contains share_target and url_template, but url_template is empty.
+  {
+    Manifest manifest =
+        ParseManifest("{ \"share_target\": { \"url_template\": \"\" } }");
+    ASSERT_TRUE(manifest.share_target.has_value());
+    EXPECT_TRUE(base::EqualsASCII(
+        manifest.share_target.value().url_template.string(), ""));
+    EXPECT_FALSE(manifest.IsEmpty());
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Don't parse if property isn't a string.
+  {
+    Manifest manifest =
+        ParseManifest("{ \"share_target\": { \"url_template\": {} } }");
+    EXPECT_FALSE(manifest.share_target.has_value());
+    EXPECT_TRUE(manifest.IsEmpty());
+    EXPECT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("property 'url_template' ignored, type string expected.",
+              errors()[0]);
+  }
+
+  // Don't parse if property isn't a string.
+  {
+    Manifest manifest =
+        ParseManifest("{ \"share_target\": { \"url_template\": 42 } }");
+    EXPECT_FALSE(manifest.share_target.has_value());
+    EXPECT_TRUE(manifest.IsEmpty());
+    EXPECT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("property 'url_template' ignored, type string expected.",
+              errors()[0]);
+  }
+
+  // Smoke test: Contains share_target and url_template, and url_template is
+  // valid template.
+  {
+    Manifest manifest = ParseManifest(
+        "{ \"share_target\": {\"url_template\": \"share/?title={title}\" } }");
+    ASSERT_TRUE(manifest.share_target.has_value());
+    EXPECT_TRUE(
+        base::EqualsASCII(manifest.share_target.value().url_template.string(),
+                          "share/?title={title}"));
+    EXPECT_FALSE(manifest.IsEmpty());
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Smoke test: Contains share_target and url_template, and url_template is
+  // invalid template.
+  {
+    Manifest manifest = ParseManifest(
+        "{ \"share_target\": {\"url_template\": \"share/?title={title\" } }");
+    ASSERT_TRUE(manifest.share_target.has_value());
+    EXPECT_TRUE(
+        base::EqualsASCII(manifest.share_target.value().url_template.string(),
+                          "share/?title={title"));
+    EXPECT_FALSE(manifest.IsEmpty());
+    EXPECT_EQ(0u, GetErrorCount());
   }
 }
 

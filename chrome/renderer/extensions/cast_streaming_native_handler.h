@@ -17,12 +17,9 @@ class CastRtpStream;
 class CastUdpTransport;
 
 namespace base {
-class BinaryValue;
 class DictionaryValue;
-}
-
-namespace blink {
-class WebMediaStream;
+class Value;
+using BinaryValue = Value;
 }
 
 namespace net {

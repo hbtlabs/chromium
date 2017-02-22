@@ -3,17 +3,37 @@
 // found in the LICENSE file.
 
 /**
- * @fileoverview This file has two parts:
+ * @fileoverview This file has three parts:
  *
- * 1. Typedefs for network properties. Note: These 'types' define a subset of
+ * 1. A dictionary of strings for network element translations.
+ *
+ * 2. Typedefs for network properties. Note: These 'types' define a subset of
  * ONC properties in the ONC data dictionary. The first letter is capitalized to
  * match the ONC spec and avoid an extra layer of translation.
  * See components/onc/docs/onc_spec.html for the complete spec.
  * TODO(stevenjb): Replace with chrome.networkingPrivate.NetworkStateProperties
  * once that is fully defined.
  *
- * 2. Helper functions to facilitate extracting and setting ONC properties.
+ * 3. Helper functions to facilitate extracting and setting ONC properties.
  */
+
+/**
+ * Strings required for networking elements. These must be set at runtime.
+ * @type {{
+ *   OncTypeCellular: string,
+ *   OncTypeEthernet: string,
+ *   OncTypeVPN: string,
+ *   OncTypeWiFi: string,
+ *   OncTypeWiMAX: string,
+ *   networkDisabled: string,
+ *   networkListItemConnected: string,
+ *   networkListItemConnecting: string,
+ *   networkListItemConnectingTo: string,
+ *   networkListItemNotConnected: string,
+ *   vpnNameTemplate: string,
+ * }}
+ */
+var CrOncStrings;
 
 var CrOnc = {};
 
@@ -80,10 +100,19 @@ CrOnc.IPConfigUIProperties;
 /** @typedef {chrome.networkingPrivate.PaymentPortal} */
 CrOnc.PaymentPortal;
 
+/** @enum {string} */
 CrOnc.ActivationState = chrome.networkingPrivate.ActivationStateType;
+
+/** @enum {string} */
 CrOnc.ConnectionState = chrome.networkingPrivate.ConnectionStateType;
+
+/** @enum {string} */
 CrOnc.IPConfigType = chrome.networkingPrivate.IPConfigType;
+
+/** @enum {string} */
 CrOnc.ProxySettingsType = chrome.networkingPrivate.ProxySettingsType;
+
+/** @enum {string} */
 CrOnc.Type = chrome.networkingPrivate.NetworkType;
 
 /** @enum {string} */
@@ -209,7 +238,8 @@ CrOnc.getSimpleActiveProperties = function(properties) {
     return undefined;
   var result = {};
   var keys = Object.keys(properties);
-  for (let k of keys) {
+  for (var i = 0; i < keys.length; ++i) {
+    var k = keys[i];
     var prop = CrOnc.getActiveValue(properties[k]);
     if (prop == undefined) {
       console.error(
@@ -235,7 +265,7 @@ CrOnc.getIPConfigForType = function(properties, type) {
   /** @type {!CrOnc.IPConfigProperties|undefined} */ var ipConfig = undefined;
   var ipConfigs = properties.IPConfigs;
   if (ipConfigs) {
-    for (let i = 0; i < ipConfigs.length; ++i) {
+    for (var i = 0; i < ipConfigs.length; ++i) {
       ipConfig = ipConfigs[i];
       if (ipConfig.Type == type)
         break;
@@ -321,22 +351,23 @@ CrOnc.getAutoConnect = function(properties) {
 /**
  * @param {!CrOnc.NetworkProperties|!CrOnc.NetworkStateProperties|undefined}
  *     properties The ONC network properties or state properties.
- * @param {!I18nBehavior.Proto} i18nBehavior An I18nBehavior instance.
  * @return {string} The name to display for |network|.
  */
-CrOnc.getNetworkName = function(properties, i18nBehavior) {
+CrOnc.getNetworkName = function(properties) {
   if (!properties)
     return '';
-  let name = CrOnc.getStateOrActiveString(properties.Name);
-  let type = CrOnc.getStateOrActiveString(properties.Type);
+  var name = CrOnc.getStateOrActiveString(properties.Name);
+  var type = CrOnc.getStateOrActiveString(properties.Type);
   if (!name)
-    return i18nBehavior.i18n('OncType' + type);
+    return CrOncStrings['OncType' + type];
   if (type == 'VPN' && properties.VPN) {
-    let vpnType = CrOnc.getStateOrActiveString(properties.VPN.Type);
+    var vpnType = CrOnc.getStateOrActiveString(properties.VPN.Type);
     if (vpnType == 'ThirdPartyVPN' && properties.VPN.ThirdPartyVPN) {
-      let providerName = properties.VPN.ThirdPartyVPN.ProviderName;
-      if (providerName)
-        return i18nBehavior.i18n('vpnNameTemplate', providerName, name);
+      var providerName = properties.VPN.ThirdPartyVPN.ProviderName;
+      if (providerName) {
+        return CrOncStrings.vpnNameTemplate.replace('$1', providerName)
+            .replace('$2', name);
+      }
     }
   }
   return name;
@@ -453,8 +484,8 @@ CrOnc.getRoutingPrefixAsNetmask = function(prefixLength) {
   if (prefixLength < 0 || prefixLength > 32)
     return '';
   var netmask = '';
-  for (let i = 0; i < 4; ++i) {
-    let remainder = 8;
+  for (var i = 0; i < 4; ++i) {
+    var remainder = 8;
     if (prefixLength >= 8) {
       prefixLength -= 8;
     } else {
@@ -463,7 +494,7 @@ CrOnc.getRoutingPrefixAsNetmask = function(prefixLength) {
     }
     if (i > 0)
       netmask += '.';
-    let value = 0;
+    var value = 0;
     if (remainder != 0)
       value = ((2 << (remainder - 1)) - 1) << (8 - remainder);
     netmask += value.toString();
@@ -482,8 +513,8 @@ CrOnc.getRoutingPrefixAsLength = function(netmask) {
   var tokens = netmask.split('.');
   if (tokens.length != 4)
     return -1;
-  for (let i = 0; i < tokens.length; ++i) {
-    let token = tokens[i];
+  for (var i = 0; i < tokens.length; ++i) {
+    var token = tokens[i];
     // If we already found the last mask and the current one is not
     // '0' then the netmask is invalid. For example, 255.224.255.0
     if (prefixLength / 8 != i) {
@@ -513,4 +544,13 @@ CrOnc.getRoutingPrefixAsLength = function(netmask) {
     }
   }
   return prefixLength;
+};
+
+/**
+ * @param {!CrOnc.ProxyLocation} a
+ * @param {!CrOnc.ProxyLocation} b
+ * @return {boolean}
+ */
+CrOnc.proxyMatches = function(a, b) {
+  return a.Host == b.Host && a.Port == b.Port;
 };

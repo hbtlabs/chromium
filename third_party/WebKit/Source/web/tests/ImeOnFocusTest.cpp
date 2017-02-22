@@ -10,7 +10,6 @@
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
-#include "public/web/WebCache.h"
 #include "public/web/WebDocument.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "web/WebLocalFrameImpl.h"
@@ -18,25 +17,27 @@
 
 using blink::FrameTestHelpers::loadFrame;
 using blink::testing::runPendingTasks;
-using blink::URLTestHelpers::registerMockedURLFromBaseURL;
+using blink::URLTestHelpers::registerMockedURLLoadFromBase;
 
 namespace blink {
 
 class ImeRequestTrackingWebViewClient
     : public FrameTestHelpers::TestWebViewClient {
  public:
-  ImeRequestTrackingWebViewClient() : m_imeRequestCount(0) {}
+  ImeRequestTrackingWebViewClient() : m_virtualKeyboardRequestCount(0) {}
 
   // WebWidgetClient methods
-  void showImeIfNeeded() override { ++m_imeRequestCount; }
+  void showVirtualKeyboardOnElementFocus() override {
+    ++m_virtualKeyboardRequestCount;
+  }
 
   // Local methds
-  void reset() { m_imeRequestCount = 0; }
+  void reset() { m_virtualKeyboardRequestCount = 0; }
 
-  int imeRequestCount() { return m_imeRequestCount; }
+  int virtualKeyboardRequestCount() { return m_virtualKeyboardRequestCount; }
 
  private:
-  int m_imeRequestCount;
+  int m_virtualKeyboardRequestCount;
 };
 
 class ImeOnFocusTest : public ::testing::Test {
@@ -44,8 +45,9 @@ class ImeOnFocusTest : public ::testing::Test {
   ImeOnFocusTest() : m_baseURL("http://www.test.com/") {}
 
   void TearDown() override {
-    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
-    WebCache::clear();
+    Platform::current()
+        ->getURLLoaderMockFactory()
+        ->unregisterAllURLsAndClearMemoryCache();
   }
 
  protected:
@@ -63,8 +65,9 @@ class ImeOnFocusTest : public ::testing::Test {
 };
 
 void ImeOnFocusTest::sendGestureTap(WebView* webView, IntPoint clientPoint) {
-  WebGestureEvent webGestureEvent;
-  webGestureEvent.type = WebInputEvent::GestureTap;
+  WebGestureEvent webGestureEvent(WebInputEvent::GestureTap,
+                                  WebInputEvent::NoModifiers,
+                                  WebInputEvent::TimeStampForTesting);
   // GestureTap is only ever from touch screens.
   webGestureEvent.sourceDevice = WebGestureDeviceTouchscreen;
   webGestureEvent.x = clientPoint.x();
@@ -75,7 +78,7 @@ void ImeOnFocusTest::sendGestureTap(WebView* webView, IntPoint clientPoint) {
   webGestureEvent.data.tap.width = 10;
   webGestureEvent.data.tap.height = 10;
 
-  webView->handleInputEvent(webGestureEvent);
+  webView->handleInputEvent(WebCoalescedInputEvent(webGestureEvent));
   runPendingTasks();
 }
 
@@ -84,13 +87,14 @@ void ImeOnFocusTest::focus(const AtomicString& element) {
 }
 
 void ImeOnFocusTest::runImeOnFocusTest(std::string fileName,
-                                       int expectedImeRequestCount,
+                                       int expectedVirtualKeyboardRequestCount,
                                        IntPoint tapPoint,
                                        const AtomicString& focusElement,
                                        std::string frame) {
   ImeRequestTrackingWebViewClient client;
-  registerMockedURLFromBaseURL(WebString::fromUTF8(m_baseURL),
-                               WebString::fromUTF8(fileName));
+  registerMockedURLLoadFromBase(WebString::fromUTF8(m_baseURL),
+                                testing::webTestDataPath(),
+                                WebString::fromUTF8(fileName));
   WebViewImpl* webView = m_webViewHelper.initialize(true, 0, &client);
   webView->resize(WebSize(800, 1200));
   loadFrame(webView->mainFrame(), m_baseURL + fileName);
@@ -99,21 +103,23 @@ void ImeOnFocusTest::runImeOnFocusTest(std::string fileName,
 
   if (!focusElement.isNull())
     focus(focusElement);
-  EXPECT_EQ(0, client.imeRequestCount());
+  EXPECT_EQ(0, client.virtualKeyboardRequestCount());
 
   if (tapPoint.x() >= 0 && tapPoint.y() >= 0)
     sendGestureTap(webView, tapPoint);
 
   if (!frame.empty()) {
-    registerMockedURLFromBaseURL(WebString::fromUTF8(m_baseURL),
-                                 WebString::fromUTF8(frame));
+    registerMockedURLLoadFromBase(WebString::fromUTF8(m_baseURL),
+                                  testing::webTestDataPath(),
+                                  WebString::fromUTF8(frame));
     WebFrame* childFrame = webView->mainFrame()->firstChild();
     loadFrame(childFrame, m_baseURL + frame);
   }
 
   if (!focusElement.isNull())
     focus(focusElement);
-  EXPECT_EQ(expectedImeRequestCount, client.imeRequestCount());
+  EXPECT_EQ(expectedVirtualKeyboardRequestCount,
+            client.virtualKeyboardRequestCount());
 
   m_webViewHelper.reset();
 }

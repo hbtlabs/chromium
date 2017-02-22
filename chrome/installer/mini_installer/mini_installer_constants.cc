@@ -50,19 +50,28 @@ const wchar_t kCleanupRegistryValue[] = L"ChromeInstallerCleanup";
 const wchar_t kInstallerErrorRegistryValue[] = L"InstallerError";
 const wchar_t kInstallerExtraCode1RegistryValue[] = L"InstallerExtraCode1";
 const wchar_t kInstallerResultRegistryValue[] = L"InstallerResult";
+const wchar_t kPvRegistryValue[] = L"pv";
+const wchar_t kUninstallArgumentsRegistryValue[] = L"UninstallArguments";
 // The name of an app's Client State registry value that holds the path to its
 // uninstaller.
 const wchar_t kUninstallRegistryValue[] = L"UninstallString";
 
 // Registry key paths.
 #if defined(GOOGLE_CHROME_BUILD)
-// The path to the key containing each app's Client State registry key.
+// The path to the key containing each app's Clients registry key. The trailing
+// slash is required.
+const wchar_t kClientsKeyBase[] = L"Software\\Google\\Update\\Clients\\";
+// The path to the key containing each app's Client State registry key. The
+// trailing slash is required.
 const wchar_t kClientStateKeyBase[] =
     L"Software\\Google\\Update\\ClientState\\";
 // The path to the key in which kCleanupRegistryValue is found.
 const wchar_t kCleanupRegistryKey[] =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Google Chrome";
 #else
+// The path to the key containing each app's Clients registry key.
+// No trailing slash on this one because the app's GUID is not appended.
+const wchar_t kClientsKeyBase[] = L"Software\\Chromium";
 // The path to the key containing each app's Client State registry key.
 // No trailing slash on this one because the app's GUID is not appended.
 const wchar_t kClientStateKeyBase[] = L"Software\\Chromium";

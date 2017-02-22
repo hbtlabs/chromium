@@ -1,4 +1,4 @@
-  // Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright (c) 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,15 +50,13 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
   using DoneCB =
       base::Callback<void(const base::WeakPtr<VideoCaptureController>&)>;
 
-  explicit VideoCaptureManager(
-      std::unique_ptr<media::VideoCaptureDeviceFactory> factory);
-
-  void Unregister();
+  VideoCaptureManager(
+      std::unique_ptr<media::VideoCaptureDeviceFactory> factory,
+      scoped_refptr<base::SingleThreadTaskRunner> device_task_runner);
 
   // Implements MediaStreamProvider.
-  void Register(MediaStreamProviderListener* listener,
-                const scoped_refptr<base::SingleThreadTaskRunner>&
-                    device_task_runner) override;
+  void RegisterListener(MediaStreamProviderListener* listener) override;
+  void UnregisterListener() override;
   int Open(const StreamDeviceInfo& device) override;
   void Close(int capture_session_id) override;
 
@@ -122,12 +120,25 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
   bool GetDeviceSupportedFormats(
       media::VideoCaptureSessionId capture_session_id,
       media::VideoCaptureFormats* supported_formats);
+  // Retrieves all capture supported formats for a particular device. Returns
+  // false if the  |device_id| is not found. The supported formats are cached
+  // during device(s) enumeration, and depending on the underlying
+  // implementation, could be an empty list.
+  bool GetDeviceSupportedFormats(const std::string& device_id,
+                                 media::VideoCaptureFormats* supported_formats);
 
   // Retrieves the format(s) currently in use.  Returns false if the
   // |capture_session_id| is not found. Returns true and |formats_in_use|
   // otherwise. |formats_in_use| is empty if the device is not in use.
   bool GetDeviceFormatsInUse(media::VideoCaptureSessionId capture_session_id,
                              media::VideoCaptureFormats* formats_in_use);
+  // Retrieves the format(s) currently in use.  Returns false if the
+  // |stream_type|, |device_id| pair is not found. Returns true and
+  // |formats_in_use| otherwise. |formats_in_use| is empty if the device is not
+  // in use.
+  bool GetDeviceFormatsInUse(MediaStreamType stream_type,
+                             const std::string& device_id,
+                             media::VideoCaptureFormats* supported_formats);
 
   // Sets the platform-dependent window ID for the desktop capture notification
   // UI for the given session.
@@ -172,9 +183,16 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
       base::Callback<void(const media::VideoCaptureDeviceDescriptors&)>;
   void EnumerateDevices(const EnumerationCallback& client_callback);
 
+  // Retrieves camera calibration information for a particular device. Returns
+  // nullopt_t if the |device_id| is not found or camera calibration information
+  // is not available for the device.  Camera calibration is cached during
+  // device(s) enumeration.
+  base::Optional<CameraCalibration> GetCameraCalibration(
+      const std::string& device_id);
+
  private:
   class CaptureDeviceStartRequest;
-  class DeviceEntry;
+  struct DeviceEntry;
   struct DeviceInfo;
 
   using SessionMap = std::map<media::VideoCaptureSessionId, MediaStreamDevice>;
@@ -239,8 +257,10 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
   void QueueStartDevice(media::VideoCaptureSessionId session_id,
                         DeviceEntry* entry,
                         const media::VideoCaptureParams& params);
-  void OnDeviceStarted(int serial_id,
-                       std::unique_ptr<VideoCaptureDevice> device);
+  void OnDeviceStarted(
+      int serial_id,
+      std::unique_ptr<media::FrameBufferPool> frame_buffer_pool,
+      std::unique_ptr<VideoCaptureDevice> device);
   void DoStopDevice(DeviceEntry* entry);
   void HandleQueuedStartRequest();
 
@@ -281,26 +301,6 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
       VideoCaptureDevice* device);
   void DoTakePhoto(VideoCaptureDevice::TakePhotoCallback callback,
                    VideoCaptureDevice* device);
-
-#if defined(OS_MACOSX)
-  // Called on the IO thread after the device layer has been initialized on Mac.
-  // Sets |capture_device_api_initialized_| to true and then executes and_then.
-  void OnDeviceLayerInitialized(const base::Closure& and_then);
-
-  // Returns true if the current operation needs to be preempted by a call to
-  // InitializeCaptureDeviceApiOnUIThread.
-  // Called on the IO thread.
-  bool NeedToInitializeCaptureDeviceApi(MediaStreamType stream_type);
-
-  // Called on the IO thread to do async initialization of the capture api.
-  // Once initialization is done, and_then will be run on the IO thread.
-  void InitializeCaptureDeviceApiOnUIThread(const base::Closure& and_then);
-
-  // Due to initialization issues with AVFoundation on Mac, we need
-  // to make sure we initialize the APIs on the UI thread before we can reliably
-  // use them.  This variable is only checked and set on the IO thread.
-  bool capture_device_api_initialized_ = false;
-#endif
 
 #if defined(OS_ANDROID)
   void ReleaseDevices();

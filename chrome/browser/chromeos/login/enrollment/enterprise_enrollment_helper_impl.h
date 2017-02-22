@@ -17,8 +17,6 @@
 #include "components/policy/core/common/cloud/enterprise_metrics.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 
-class Profile;
-
 namespace policy {
 class PolicyOAuth2TokenFetcher;
 }
@@ -29,6 +27,7 @@ class EnterpriseEnrollmentHelperImpl : public EnterpriseEnrollmentHelper {
  public:
   EnterpriseEnrollmentHelperImpl(
       EnrollmentStatusConsumer* status_consumer,
+      ActiveDirectoryJoinDelegate* ad_join_delegate,
       const policy::EnrollmentConfig& enrollment_config,
       const std::string& enrolling_user_domain);
   ~EnterpriseEnrollmentHelperImpl() override;
@@ -90,6 +89,7 @@ class EnterpriseEnrollmentHelperImpl : public EnterpriseEnrollmentHelper {
   bool oauth_data_cleared_ = false;
   std::string oauth_token_;
   bool success_ = false;
+  ActiveDirectoryJoinDelegate* ad_join_delegate_ = nullptr;
 
   std::unique_ptr<policy::PolicyOAuth2TokenFetcher> oauth_fetcher_;
 

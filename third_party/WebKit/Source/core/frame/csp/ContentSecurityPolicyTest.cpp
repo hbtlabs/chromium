@@ -5,13 +5,13 @@
 #include "core/frame/csp/ContentSecurityPolicy.h"
 
 #include "core/dom/Document.h"
-#include "core/fetch/IntegrityMetadata.h"
 #include "core/frame/csp/CSPDirectiveList.h"
 #include "core/html/HTMLScriptElement.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/testing/DummyPageHolder.h"
 #include "platform/Crypto.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/loader/fetch/IntegrityMetadata.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/weborigin/KURL.h"
@@ -383,7 +383,7 @@ TEST_F(ContentSecurityPolicyTest, RequireSRIForInHeaderMissingIntegrity) {
 TEST_F(ContentSecurityPolicyTest, RequireSRIForInHeaderPresentIntegrity) {
   KURL url(KURL(), "https://example.test");
   IntegrityMetadataSet integrityMetadata;
-  integrityMetadata.add(
+  integrityMetadata.insert(
       IntegrityMetadata("1234", HashAlgorithmSha384).toPair());
   csp->bindToExecutionContext(document.get());
   // Enforce
@@ -551,7 +551,7 @@ TEST_F(ContentSecurityPolicyTest, RequireSRIForInMetaMissingIntegrity) {
 TEST_F(ContentSecurityPolicyTest, RequireSRIForInMetaPresentIntegrity) {
   KURL url(KURL(), "https://example.test");
   IntegrityMetadataSet integrityMetadata;
-  integrityMetadata.add(
+  integrityMetadata.insert(
       IntegrityMetadata("1234", HashAlgorithmSha384).toPair());
   csp->bindToExecutionContext(document.get());
   // Enforce
@@ -909,6 +909,84 @@ TEST_F(ContentSecurityPolicyTest, ShouldEnforceEmbeddersPolicy) {
     EXPECT_TRUE(ContentSecurityPolicy::shouldEnforceEmbeddersPolicy(
         response, secureOrigin.get()));
   }
+}
+
+TEST_F(ContentSecurityPolicyTest, DirectiveType) {
+  struct TestCase {
+    ContentSecurityPolicy::DirectiveType type;
+    const String& name;
+  } cases[] = {
+      {ContentSecurityPolicy::DirectiveType::BaseURI, "base-uri"},
+      {ContentSecurityPolicy::DirectiveType::BlockAllMixedContent,
+       "block-all-mixed-content"},
+      {ContentSecurityPolicy::DirectiveType::ChildSrc, "child-src"},
+      {ContentSecurityPolicy::DirectiveType::ConnectSrc, "connect-src"},
+      {ContentSecurityPolicy::DirectiveType::DefaultSrc, "default-src"},
+      {ContentSecurityPolicy::DirectiveType::FrameAncestors, "frame-ancestors"},
+      {ContentSecurityPolicy::DirectiveType::FrameSrc, "frame-src"},
+      {ContentSecurityPolicy::DirectiveType::FontSrc, "font-src"},
+      {ContentSecurityPolicy::DirectiveType::FormAction, "form-action"},
+      {ContentSecurityPolicy::DirectiveType::ImgSrc, "img-src"},
+      {ContentSecurityPolicy::DirectiveType::ManifestSrc, "manifest-src"},
+      {ContentSecurityPolicy::DirectiveType::MediaSrc, "media-src"},
+      {ContentSecurityPolicy::DirectiveType::ObjectSrc, "object-src"},
+      {ContentSecurityPolicy::DirectiveType::PluginTypes, "plugin-types"},
+      {ContentSecurityPolicy::DirectiveType::ReportURI, "report-uri"},
+      {ContentSecurityPolicy::DirectiveType::RequireSRIFor, "require-sri-for"},
+      {ContentSecurityPolicy::DirectiveType::Sandbox, "sandbox"},
+      {ContentSecurityPolicy::DirectiveType::ScriptSrc, "script-src"},
+      {ContentSecurityPolicy::DirectiveType::StyleSrc, "style-src"},
+      {ContentSecurityPolicy::DirectiveType::TreatAsPublicAddress,
+       "treat-as-public-address"},
+      {ContentSecurityPolicy::DirectiveType::UpgradeInsecureRequests,
+       "upgrade-insecure-requests"},
+      {ContentSecurityPolicy::DirectiveType::WorkerSrc, "worker-src"},
+  };
+
+  EXPECT_EQ(ContentSecurityPolicy::DirectiveType::Undefined,
+            ContentSecurityPolicy::getDirectiveType("random"));
+
+  for (const auto& test : cases) {
+    const String& nameFromType =
+        ContentSecurityPolicy::getDirectiveName(test.type);
+    ContentSecurityPolicy::DirectiveType typeFromName =
+        ContentSecurityPolicy::getDirectiveType(test.name);
+    EXPECT_EQ(nameFromType, test.name);
+    EXPECT_EQ(typeFromName, test.type);
+    EXPECT_EQ(test.type, ContentSecurityPolicy::getDirectiveType(nameFromType));
+    EXPECT_EQ(test.name, ContentSecurityPolicy::getDirectiveName(typeFromName));
+  }
+}
+
+TEST_F(ContentSecurityPolicyTest, Subsumes) {
+  ContentSecurityPolicy* other = ContentSecurityPolicy::create();
+  EXPECT_TRUE(csp->subsumes(*other));
+  EXPECT_TRUE(other->subsumes(*csp));
+
+  csp->didReceiveHeader("default-src http://example.com;",
+                        ContentSecurityPolicyHeaderTypeEnforce,
+                        ContentSecurityPolicyHeaderSourceHTTP);
+  // If this CSP is not empty, the other must not be empty either.
+  EXPECT_FALSE(csp->subsumes(*other));
+  EXPECT_TRUE(other->subsumes(*csp));
+
+  // Report-only policies do not impact subsumption.
+  other->didReceiveHeader("default-src http://example.com;",
+                          ContentSecurityPolicyHeaderTypeReport,
+                          ContentSecurityPolicyHeaderSourceHTTP);
+  EXPECT_FALSE(csp->subsumes(*other));
+
+  // CSPDirectiveLists have to subsume.
+  other->didReceiveHeader("default-src http://example.com https://another.com;",
+                          ContentSecurityPolicyHeaderTypeEnforce,
+                          ContentSecurityPolicyHeaderSourceHTTP);
+  EXPECT_FALSE(csp->subsumes(*other));
+
+  // `other` is stricter than `this`.
+  other->didReceiveHeader("default-src https://example.com;",
+                          ContentSecurityPolicyHeaderTypeEnforce,
+                          ContentSecurityPolicyHeaderSourceHTTP);
+  EXPECT_TRUE(csp->subsumes(*other));
 }
 
 }  // namespace blink

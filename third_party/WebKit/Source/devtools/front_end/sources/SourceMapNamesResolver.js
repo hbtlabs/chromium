@@ -31,7 +31,8 @@ Sources.SourceMapNamesResolver._scopeIdentifiers = function(scope) {
   var endLocation = scope.endLocation();
 
   if (scope.type() === Protocol.Debugger.ScopeType.Global || !startLocation || !endLocation ||
-      !startLocation.script().sourceMapURL || (startLocation.script() !== endLocation.script()))
+      !startLocation.script() || !startLocation.script().sourceMapURL ||
+      (startLocation.script() !== endLocation.script()))
     return Promise.resolve(/** @type {!Array<!Sources.SourceMapNamesResolver.Identifier>}*/ ([]));
 
   var script = startLocation.script();
@@ -51,7 +52,7 @@ Sources.SourceMapNamesResolver._scopeIdentifiers = function(scope) {
     var scopeText = text.extract(scopeRange);
     var scopeStart = text.toSourceRange(scopeRange).offset;
     var prefix = 'function fui';
-    return Common.formatterWorkerPool.runTask('javaScriptIdentifiers', {content: prefix + scopeText})
+    return Common.formatterWorkerPool.javaScriptIdentifiers(prefix + scopeText)
         .then(onIdentifiers.bind(null, text, scopeStart, prefix));
   }
 
@@ -59,14 +60,12 @@ Sources.SourceMapNamesResolver._scopeIdentifiers = function(scope) {
    * @param {!Common.Text} text
    * @param {number} scopeStart
    * @param {string} prefix
-   * @param {?MessageEvent} event
+   * @param {!Array<!{name: string, offset: number}>} identifiers
    * @return {!Array<!Sources.SourceMapNamesResolver.Identifier>}
    */
-  function onIdentifiers(text, scopeStart, prefix, event) {
-    var identifiers = event ? /** @type {!Array<!{name: string, offset: number}>} */ (event.data) : [];
+  function onIdentifiers(text, scopeStart, prefix, identifiers) {
     var result = [];
     var cursor = new Common.TextCursor(text.lineEndings());
-    var promises = [];
     for (var i = 0; i < identifiers.length; ++i) {
       var id = identifiers[i];
       if (id.offset < prefix.length)
@@ -225,7 +224,7 @@ Sources.SourceMapNamesResolver._allVariablesInCallFrame = function(callFrame) {
  */
 Sources.SourceMapNamesResolver.resolveExpression = function(
     callFrame, originalText, uiSourceCode, lineNumber, startColumnNumber, endColumnNumber) {
-  if (!Runtime.experiments.isEnabled('resolveVariableNames') || !uiSourceCode.contentType().isFromSourceMap())
+  if (!uiSourceCode.contentType().isFromSourceMap())
     return Promise.resolve('');
 
   return Sources.SourceMapNamesResolver._allVariablesInCallFrame(callFrame).then(findCompiledName);
@@ -253,9 +252,8 @@ Sources.SourceMapNamesResolver.resolveExpression = function(
  */
 Sources.SourceMapNamesResolver._resolveExpression = function(
     callFrame, uiSourceCode, lineNumber, startColumnNumber, endColumnNumber) {
-  var target = callFrame.target();
-  var rawLocation =
-      Bindings.debuggerWorkspaceBinding.uiLocationToRawLocation(target, uiSourceCode, lineNumber, startColumnNumber);
+  var rawLocation = Bindings.debuggerWorkspaceBinding.uiLocationToRawLocation(
+      callFrame.debuggerModel, uiSourceCode, lineNumber, startColumnNumber);
   if (!rawLocation)
     return Promise.resolve('');
 
@@ -282,15 +280,7 @@ Sources.SourceMapNamesResolver._resolveExpression = function(
     var originalText = text.extract(textRange);
     if (!originalText)
       return Promise.resolve('');
-    return Common.formatterWorkerPool.runTask('evaluatableJavaScriptSubstring', {content: originalText}).then(onResult);
-  }
-
-  /**
-   * @param {?MessageEvent} event
-   * @return {string}
-   */
-  function onResult(event) {
-    return event ? /** @type {string} */ (event.data) : '';
+    return Common.formatterWorkerPool.evaluatableJavaScriptSubstring(originalText);
   }
 };
 
@@ -301,7 +291,7 @@ Sources.SourceMapNamesResolver._resolveExpression = function(
 Sources.SourceMapNamesResolver.resolveThisObject = function(callFrame) {
   if (!callFrame)
     return Promise.resolve(/** @type {?SDK.RemoteObject} */ (null));
-  if (!Runtime.experiments.isEnabled('resolveVariableNames') || !callFrame.scopeChain().length)
+  if (!callFrame.scopeChain().length)
     return Promise.resolve(callFrame.thisObject());
 
   return Sources.SourceMapNamesResolver._resolveScope(callFrame.scopeChain()[0]).then(onScopeResolved);
@@ -327,8 +317,9 @@ Sources.SourceMapNamesResolver.resolveThisObject = function(callFrame) {
    * @param {?Protocol.Runtime.RemoteObject} evaluateResult
    */
   function onEvaluated(callback, evaluateResult) {
-    var remoteObject =
-        evaluateResult ? callFrame.target().runtimeModel.createRemoteObject(evaluateResult) : callFrame.thisObject();
+    var remoteObject = evaluateResult ?
+        callFrame.debuggerModel.target().runtimeModel.createRemoteObject(evaluateResult) :
+        callFrame.thisObject();
     callback(remoteObject);
   }
 };
@@ -338,14 +329,12 @@ Sources.SourceMapNamesResolver.resolveThisObject = function(callFrame) {
  * @return {!SDK.RemoteObject}
  */
 Sources.SourceMapNamesResolver.resolveScopeInObject = function(scope) {
-  if (!Runtime.experiments.isEnabled('resolveVariableNames'))
-    return scope.object();
-
   var startLocation = scope.startLocation();
   var endLocation = scope.endLocation();
 
   if (scope.type() === Protocol.Debugger.ScopeType.Global || !startLocation || !endLocation ||
-      !startLocation.script().sourceMapURL || startLocation.script() !== endLocation.script())
+      !startLocation.script() || !startLocation.script().sourceMapURL ||
+      startLocation.script() !== endLocation.script())
     return scope.object();
 
   return new Sources.SourceMapNamesResolver.RemoteObject(scope);
@@ -414,18 +403,20 @@ Sources.SourceMapNamesResolver.RemoteObject = class extends SDK.RemoteObject {
 
   /**
    * @override
+   * @param {boolean} generatePreview
    * @param {function(?Array.<!SDK.RemoteObjectProperty>, ?Array.<!SDK.RemoteObjectProperty>)} callback
    */
-  getOwnProperties(callback) {
-    this._object.getOwnProperties(callback);
+  getOwnProperties(generatePreview, callback) {
+    this._object.getOwnProperties(generatePreview, callback);
   }
 
   /**
    * @override
    * @param {boolean} accessorPropertiesOnly
+   * @param {boolean} generatePreview
    * @param {function(?Array<!SDK.RemoteObjectProperty>, ?Array<!SDK.RemoteObjectProperty>)} callback
    */
-  getAllProperties(accessorPropertiesOnly, callback) {
+  getAllProperties(accessorPropertiesOnly, generatePreview, callback) {
     /**
      * @param {?Array.<!SDK.RemoteObjectProperty>} properties
      * @param {?Array.<!SDK.RemoteObjectProperty>} internalProperties
@@ -456,7 +447,7 @@ Sources.SourceMapNamesResolver.RemoteObject = class extends SDK.RemoteObject {
       callback(newProperties, internalProperties);
     }
 
-    this._object.getAllProperties(accessorPropertiesOnly, wrappedCallback.bind(this));
+    this._object.getAllProperties(accessorPropertiesOnly, generatePreview, wrappedCallback.bind(this));
   }
 
   /**

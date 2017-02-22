@@ -17,11 +17,18 @@ class AudioServiceImpl : public AudioService {
 
   // Start to query audio device information.
   bool GetInfo(OutputInfo* output_info_out, InputInfo* input_info_out) override;
+  bool GetDevices(const api::audio::DeviceFilter* filter,
+                  DeviceInfoList* devices_out) override;
   void SetActiveDevices(const DeviceIdList& device_list) override;
-  bool SetDeviceProperties(const std::string& device_id,
-                           bool muted,
+  bool SetActiveDeviceLists(
+      const std::unique_ptr<DeviceIdList>& input_devices,
+      const std::unique_ptr<DeviceIdList>& output_devives) override;
+  bool SetDeviceSoundLevel(const std::string& device_id,
                            int volume,
                            int gain) override;
+  bool SetMuteForDevice(const std::string& device_id, bool value) override;
+  bool SetMute(bool is_input, bool value) override;
+  bool GetMute(bool is_input, bool* value) override;
 };
 
 void AudioServiceImpl::AddObserver(Observer* observer) {
@@ -42,13 +49,36 @@ bool AudioServiceImpl::GetInfo(OutputInfo* output_info_out,
   return false;
 }
 
+bool AudioServiceImpl::GetDevices(const api::audio::DeviceFilter* filter,
+                                  DeviceInfoList* devices_out) {
+  return false;
+}
+
+bool AudioServiceImpl::SetActiveDeviceLists(
+    const std::unique_ptr<DeviceIdList>& input_devices,
+    const std::unique_ptr<DeviceIdList>& output_devives) {
+  return false;
+}
+
 void AudioServiceImpl::SetActiveDevices(const DeviceIdList& device_list) {
 }
 
-bool AudioServiceImpl::SetDeviceProperties(const std::string& device_id,
-                                           bool muted,
+bool AudioServiceImpl::SetDeviceSoundLevel(const std::string& device_id,
                                            int volume,
                                            int gain) {
+  return false;
+}
+
+bool AudioServiceImpl::SetMuteForDevice(const std::string& device_id,
+                                        bool value) {
+  return false;
+}
+
+bool AudioServiceImpl::SetMute(bool is_input, bool value) {
+  return false;
+}
+
+bool AudioServiceImpl::GetMute(bool is_input, bool* value) {
   return false;
 }
 

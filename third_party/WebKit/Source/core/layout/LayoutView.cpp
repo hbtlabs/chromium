@@ -21,6 +21,7 @@
 
 #include "core/layout/LayoutView.h"
 
+#include <inttypes.h>
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/editing/FrameSelection.h"
@@ -30,7 +31,6 @@
 #include "core/html/HTMLIFrameElement.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutGeometryMap.h"
-#include "core/layout/LayoutMedia.h"
 #include "core/layout/LayoutPart.h"
 #include "core/layout/ViewFragmentationContext.h"
 #include "core/layout/api/LayoutAPIShim.h"
@@ -39,17 +39,17 @@
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/Page.h"
 #include "core/paint/PaintLayer.h"
+#include "core/paint/ViewPaintInvalidator.h"
 #include "core/paint/ViewPainter.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "platform/Histogram.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/TransformState.h"
 #include "platform/graphics/paint/PaintController.h"
-#include "platform/tracing/TraceEvent.h"
-#include "platform/tracing/TracedValue.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TracedValue.h"
 #include "public/platform/Platform.h"
 #include "wtf/PtrUtil.h"
-#include <inttypes.h>
 
 namespace blink {
 
@@ -104,7 +104,7 @@ LayoutView::LayoutView(Document* document)
 
   setPreferredLogicalWidthsDirty(MarkOnlyThis);
 
-  setPositionState(AbsolutePosition);  // to 0,0 :)
+  setPositionState(EPosition::kAbsolute);  // to 0,0 :)
 }
 
 LayoutView::~LayoutView() {}
@@ -193,12 +193,12 @@ void LayoutView::layoutContent() {
 
   LayoutBlockFlow::layout();
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   checkLayoutState();
 #endif
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 void LayoutView::checkLayoutState() {
   ASSERT(!m_layoutState->next());
 }
@@ -227,17 +227,20 @@ void LayoutView::layout() {
   if (!document().paginated())
     setPageLogicalHeight(LayoutUnit());
 
+  // TODO(wangxianzhu): Move this into ViewPaintInvalidator when
+  // rootLayerScrolling is permanently enabled.
   IncludeScrollbarsInRect includeScrollbars =
       RuntimeEnabledFeatures::rootLayerScrollingEnabled() ? IncludeScrollbars
                                                           : ExcludeScrollbars;
-  FloatSize viewSize(frameView()->visibleContentSize(includeScrollbars));
   setShouldDoFullPaintInvalidationOnResizeIfNeeded(
-      offsetWidth() != viewSize.width(), offsetHeight() != viewSize.height());
+      offsetWidth() != layoutSize(includeScrollbars).width(),
+      offsetHeight() != layoutSize(includeScrollbars).height());
 
   if (pageLogicalHeight() && shouldUsePrintingLayout()) {
     m_minPreferredLogicalWidth = m_maxPreferredLogicalWidth = logicalWidth();
     if (!m_fragmentationContext) {
-      m_fragmentationContext = wrapUnique(new ViewFragmentationContext(*this));
+      m_fragmentationContext =
+          WTF::wrapUnique(new ViewFragmentationContext(*this));
       m_paginationStateChanged = true;
     }
   } else if (m_fragmentationContext) {
@@ -277,11 +280,11 @@ void LayoutView::layout() {
   if (!needsLayout())
     return;
 
-  LayoutState rootLayoutState(pageLogicalHeight(), *this);
+  LayoutState rootLayoutState(*this);
 
   layoutContent();
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   checkLayoutState();
 #endif
   clearNeedsLayout();
@@ -307,7 +310,9 @@ LayoutRect LayoutView::localVisualRect() const {
   // TODO(wangxianzhu): This is only required without rootLayerScrolls (though
   // it is also correct but unnecessary with rootLayerScrolls) because of the
   // special LayoutView overflow model.
-  return visualOverflowRect();
+  LayoutRect rect = visualOverflowRect();
+  rect.unite(LayoutRect(rect.location(), viewRect().size()));
+  return rect;
 }
 
 void LayoutView::mapLocalToAncestor(const LayoutBoxModelObject* ancestor,
@@ -332,7 +337,7 @@ void LayoutView::mapLocalToAncestor(const LayoutBoxModelObject* ancestor,
     LayoutPartItem parentDocLayoutItem = frame()->ownerLayoutItem();
     if (!parentDocLayoutItem.isNull()) {
       if (!(mode & InputIsInFrameCoordinates)) {
-        transformState.move(LayoutSize(-frame()->view()->scrollOffset()));
+        transformState.move(LayoutSize(-frame()->view()->getScrollOffset()));
       } else {
         // The flag applies to immediate LayoutView only.
         mode &= ~InputIsInFrameCoordinates;
@@ -341,6 +346,8 @@ void LayoutView::mapLocalToAncestor(const LayoutBoxModelObject* ancestor,
       transformState.move(parentDocLayoutItem.contentBoxOffset());
 
       parentDocLayoutItem.mapLocalToAncestor(ancestor, transformState, mode);
+    } else {
+      frameView()->applyTransformForTopFrameSpace(transformState);
     }
   }
 }
@@ -354,7 +361,7 @@ const LayoutObject* LayoutView::pushMappingToContainer(
   if (geometryMap.getMapCoordinatesFlags() & TraverseDocumentBoundaries) {
     if (LayoutPart* parentDocLayoutObject = toLayoutPart(
             LayoutAPIShim::layoutObjectFrom(frame()->ownerLayoutItem()))) {
-      offset = -LayoutSize(m_frameView->scrollOffset());
+      offset = -LayoutSize(m_frameView->getScrollOffset());
       offset += parentDocLayoutObject->contentBoxOffset();
       container = parentDocLayoutObject;
     }
@@ -388,7 +395,7 @@ void LayoutView::mapAncestorToLocal(const LayoutBoxModelObject* ancestor,
                                                 mode & ~IsFixed);
 
       transformState.move(parentDocLayoutObject->contentBoxOffset());
-      transformState.move(LayoutSize(-frame()->view()->scrollOffset()));
+      transformState.move(LayoutSize(-frame()->view()->getScrollOffset()));
     }
   } else {
     DCHECK(this == ancestor || !ancestor);
@@ -404,8 +411,18 @@ void LayoutView::computeSelfHitTestRects(Vector<LayoutRect>& rects,
   // just use the viewport size (containing block) here because we want to
   // ensure this includes all children (so we can avoid walking them
   // explicitly).
-  rects.append(
+  rects.push_back(
       LayoutRect(LayoutPoint::zero(), LayoutSize(frameView()->contentsSize())));
+}
+
+PaintInvalidationReason LayoutView::invalidatePaintIfNeeded(
+    const PaintInvalidationState& paintInvalidationState) {
+  return LayoutBlockFlow::invalidatePaintIfNeeded(paintInvalidationState);
+}
+
+PaintInvalidationReason LayoutView::invalidatePaintIfNeeded(
+    const PaintInvalidatorContext& context) const {
+  return ViewPaintInvalidator(*this, context).invalidatePaintIfNeeded();
 }
 
 void LayoutView::paint(const PaintInfo& paintInfo,
@@ -428,7 +445,10 @@ static void setShouldDoFullPaintInvalidationForViewAndAllDescendantsInternal(
 }
 
 void LayoutView::setShouldDoFullPaintInvalidationForViewAndAllDescendants() {
-  setShouldDoFullPaintInvalidationForViewAndAllDescendantsInternal(this);
+  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+    setShouldDoFullPaintInvalidationIncludingNonCompositingDescendants();
+  else
+    setShouldDoFullPaintInvalidationForViewAndAllDescendantsInternal(this);
 }
 
 void LayoutView::invalidatePaintForViewAndCompositedLayers() {
@@ -458,16 +478,15 @@ bool LayoutView::mapToVisualRectInAncestorSpace(
     rect.move(offsetForFixedPosition(true));
 
   // Apply our transform if we have one (because of full page zooming).
-  if (!ancestor && layer() && layer()->transform())
+  if (layer() && layer()->transform())
     rect = layer()->transform()->mapRect(rect);
 
-  ASSERT(ancestor);
   if (ancestor == this)
     return true;
 
   Element* owner = document().localOwner();
   if (!owner)
-    return true;
+    return frameView()->mapToVisualRectInTopFrameSpace(rect);
 
   if (LayoutBox* obj = owner->layoutBox()) {
     if (!(mode & InputIsInFrameCoordinates)) {
@@ -502,7 +521,7 @@ bool LayoutView::mapToVisualRectInAncestorSpace(
 LayoutSize LayoutView::offsetForFixedPosition(bool includePendingScroll) const {
   FloatSize adjustment;
   if (m_frameView) {
-    adjustment += m_frameView->scrollOffset();
+    adjustment += m_frameView->getScrollOffset();
 
     // FIXME: Paint invalidation should happen after scroll updates, so there
     // should be no pending scroll delta.
@@ -522,12 +541,14 @@ LayoutSize LayoutView::offsetForFixedPosition(bool includePendingScroll) const {
 
 void LayoutView::absoluteRects(Vector<IntRect>& rects,
                                const LayoutPoint& accumulatedOffset) const {
-  rects.append(
+  rects.push_back(
       pixelSnappedIntRect(accumulatedOffset, LayoutSize(layer()->size())));
 }
 
-void LayoutView::absoluteQuads(Vector<FloatQuad>& quads) const {
-  quads.append(FloatRect(FloatPoint(), FloatSize(layer()->size())));
+void LayoutView::absoluteQuads(Vector<FloatQuad>& quads,
+                               MapCoordinatesFlags mode) const {
+  quads.push_back(localToAbsoluteQuad(
+      FloatRect(FloatPoint(), FloatSize(layer()->size())), mode));
 }
 
 static LayoutObject* layoutObjectAfterPosition(LayoutObject* object,
@@ -571,7 +592,7 @@ IntRect LayoutView::selectionBounds() {
       while (cb && !cb->isLayoutView()) {
         selRect.unite(selectionRectForLayoutObject(cb));
         VisitedContainingBlockSet::AddResult addResult =
-            visitedContainingBlocks.add(cb);
+            visitedContainingBlocks.insert(cb);
         if (!addResult.isNewEntry)
           break;
         cb = cb->containingBlock();
@@ -585,8 +606,6 @@ IntRect LayoutView::selectionBounds() {
 }
 
 void LayoutView::invalidatePaintForSelection() {
-  HashSet<LayoutBlock*> processedBlocks;
-
   LayoutObject* end =
       layoutObjectAfterPosition(m_selectionEnd, m_selectionEndPos);
   for (LayoutObject* o = m_selectionStart; o && o != end;
@@ -689,7 +708,7 @@ void LayoutView::setSelection(
         LayoutBlock* cb = os->containingBlock();
         while (cb && !cb->isLayoutView()) {
           SelectedBlockMap::AddResult result =
-              oldSelectedBlocks.add(cb, cb->getSelectionState());
+              oldSelectedBlocks.insert(cb, cb->getSelectionState());
           if (!result.isNewEntry)
             break;
           cb = cb->containingBlock();
@@ -745,7 +764,7 @@ void LayoutView::setSelection(
       LayoutBlock* cb = o->containingBlock();
       while (cb && !cb->isLayoutView()) {
         SelectedBlockMap::AddResult result =
-            newSelectedBlocks.add(cb, cb->getSelectionState());
+            newSelectedBlocks.insert(cb, cb->getSelectionState());
         if (!result.isNewEntry)
           break;
         cb = cb->containingBlock();
@@ -769,7 +788,7 @@ void LayoutView::setSelection(
         (m_selectionStart == obj && oldStartPos != m_selectionStartPos) ||
         (m_selectionEnd == obj && oldEndPos != m_selectionEndPos)) {
       obj->setShouldInvalidateSelection();
-      newSelectedObjects.remove(obj);
+      newSelectedObjects.erase(obj);
     }
   }
 
@@ -789,7 +808,7 @@ void LayoutView::setSelection(
     SelectionState oldSelectionState = i->value;
     if (newSelectionState != oldSelectionState) {
       block->setShouldInvalidateSelection();
-      newSelectedBlocks.remove(block);
+      newSelectedBlocks.erase(block);
     }
   }
 
@@ -815,6 +834,7 @@ bool LayoutView::hasPendingSelection() const {
 }
 
 void LayoutView::commitPendingSelection() {
+  TRACE_EVENT0("blink", "LayoutView::commitPendingSelection");
   m_frameView->frame().selection().commitAppearanceIfNeeded(*this);
 }
 
@@ -941,7 +961,7 @@ bool LayoutView::usesCompositing() const {
 
 PaintLayerCompositor* LayoutView::compositor() {
   if (!m_compositor)
-    m_compositor = wrapUnique(new PaintLayerCompositor(*this));
+    m_compositor = WTF::wrapUnique(new PaintLayerCompositor(*this));
 
   return m_compositor.get();
 }
@@ -986,26 +1006,6 @@ void LayoutView::willBeDestroyed() {
   m_compositor.reset();
 }
 
-void LayoutView::registerMediaForPositionChangeNotification(
-    LayoutMedia& media) {
-  if (!m_mediaForPositionNotification.contains(&media))
-    m_mediaForPositionNotification.append(&media);
-}
-
-void LayoutView::unregisterMediaForPositionChangeNotification(
-    LayoutMedia& media) {
-  size_t at = m_mediaForPositionNotification.find(&media);
-  if (at != kNotFound)
-    m_mediaForPositionNotification.remove(at);
-}
-
-void LayoutView::sendMediaPositionChangeNotifications(
-    const IntRect& visibleRect) {
-  for (auto& media : m_mediaForPositionNotification) {
-    media->notifyPositionMayHaveChanged(visibleRect);
-  }
-}
-
 void LayoutView::updateFromStyle() {
   LayoutBlockFlow::updateFromStyle();
 
@@ -1042,6 +1042,15 @@ LayoutRect LayoutView::debugRect() const {
   rect.setHeight(LayoutUnit(viewHeight(IncludeScrollbars)));
 
   return rect;
+}
+
+bool LayoutView::paintedOutputOfObjectHasNoEffectRegardlessOfSize() const {
+  // Frame scroll corner is painted using LayoutView as the display item client.
+  if (!RuntimeEnabledFeatures::rootLayerScrollingEnabled() &&
+      (frameView()->horizontalScrollbar() || frameView()->verticalScrollbar()))
+    return false;
+
+  return LayoutBlockFlow::paintedOutputOfObjectHasNoEffectRegardlessOfSize();
 }
 
 }  // namespace blink

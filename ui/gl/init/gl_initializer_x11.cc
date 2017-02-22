@@ -9,6 +9,7 @@
 #include "base/path_service.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
+#include "ui/gfx/switches.h"
 #include "ui/gfx/x/x11_types.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_egl_api_implementation.h"
@@ -37,6 +38,9 @@ const char kEGLLibraryName[] = "libEGL.so.1";
 
 const char kGLESv2ANGLELibraryName[] = "libGLESv2.so";
 const char kEGLANGLELibraryName[] = "libEGL.so";
+
+const char kGLESv2SwiftShaderLibraryName[] = "libGLESv2.so";
+const char kEGLSwiftShaderLibraryName[] = "libEGL.so";
 
 bool InitializeStaticGLXInternal() {
   base::NativeLibrary library = NULL;
@@ -88,6 +92,15 @@ bool InitializeStaticEGLInternal() {
 
     glesv2_path = module_path.Append(kGLESv2ANGLELibraryName);
     egl_path = module_path.Append(kEGLANGLELibraryName);
+  } else if (command_line->GetSwitchValueASCII(switches::kUseGL) ==
+             kGLImplementationSwiftShaderName) {
+    base::FilePath module_path;
+    if (!command_line->HasSwitch(switches::kSwiftShaderPath))
+      return false;
+    module_path = command_line->GetSwitchValuePath(switches::kSwiftShaderPath);
+
+    glesv2_path = module_path.Append(kGLESv2SwiftShaderLibraryName);
+    egl_path = module_path.Append(kEGLSwiftShaderLibraryName);
   }
 
   base::NativeLibrary gles_library = LoadLibraryAndPrintError(glesv2_path);
@@ -124,6 +137,11 @@ bool InitializeStaticEGLInternal() {
 }  // namespace
 
 bool InitializeGLOneOffPlatform() {
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kHeadless))
+    return true;
+
   switch (GetGLImplementation()) {
     case kGLImplementationDesktopGL:
       if (!GLSurfaceGLX::InitializeOneOff()) {
@@ -137,6 +155,7 @@ bool InitializeGLOneOffPlatform() {
         return false;
       }
       return true;
+    case kGLImplementationSwiftShaderGL:
     case kGLImplementationEGLGLES2:
       if (!GLSurfaceEGL::InitializeOneOff(gfx::GetXDisplay())) {
         LOG(ERROR) << "GLSurfaceEGL::InitializeOneOff failed.";
@@ -165,10 +184,12 @@ bool InitializeStaticGLBindings(GLImplementation implementation) {
       return InitializeStaticGLBindingsOSMesaGL();
     case kGLImplementationDesktopGL:
       return InitializeStaticGLXInternal();
+    case kGLImplementationSwiftShaderGL:
     case kGLImplementationEGLGLES2:
       return InitializeStaticEGLInternal();
     case kGLImplementationMockGL:
-      SetGLImplementation(kGLImplementationMockGL);
+    case kGLImplementationStubGL:
+      SetGLImplementation(implementation);
       InitializeStaticGLBindingsGL();
       return true;
     default:
@@ -185,11 +206,12 @@ void InitializeDebugGLBindings() {
   InitializeDebugGLBindingsOSMESA();
 }
 
-void ClearGLBindingsPlatform() {
-  ClearGLBindingsEGL();
-  ClearGLBindingsGL();
-  ClearGLBindingsGLX();
-  ClearGLBindingsOSMESA();
+void ShutdownGLPlatform() {
+  GLSurfaceEGL::ShutdownOneOff();
+  ClearBindingsEGL();
+  ClearBindingsGL();
+  ClearBindingsGLX();
+  ClearBindingsOSMESA();
 }
 
 }  // namespace init

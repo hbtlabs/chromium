@@ -11,7 +11,6 @@
 #include "services/ui/common/types.h"
 #include "services/ui/common/util.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
-#include "services/ui/surfaces/display_compositor.h"
 #include "services/ui/ws/display_manager.h"
 #include "services/ui/ws/ids.h"
 #include "services/ui/ws/platform_display.h"
@@ -49,8 +48,8 @@ class CursorTest : public testing::Test {
  protected:
   // testing::Test:
   void SetUp() override {
-    platform_screen_.Init(window_server()->display_manager());
-    platform_screen_.AddDisplay();
+    screen_manager_.Init(window_server()->display_manager());
+    screen_manager_.AddDisplay();
 
     // As a side effect, this allocates Displays.
     AddWindowManager(window_server(), kTestId1);
@@ -96,21 +95,22 @@ class CursorTest : public testing::Test {
     WindowManagerDisplayRoot* active_display_root =
         display->GetActiveWindowManagerDisplayRoot();
     ASSERT_TRUE(active_display_root);
-    static_cast<PlatformDisplayDelegate*>(display)->OnEvent(ui::PointerEvent(
-        ui::MouseEvent(ui::ET_MOUSE_MOVED, p, p, base::TimeTicks(), 0, 0)));
+    static_cast<PlatformDisplayDelegate*>(display)->OnEvent(PointerEvent(
+        MouseEvent(ET_MOUSE_MOVED, p, p, base::TimeTicks(), 0, 0)));
     WindowManagerState* wms = active_display_root->window_manager_state();
     wms->OnEventAck(wms->window_tree(), mojom::EventResult::HANDLED);
   }
 
  private:
   WindowServerTestHelper ws_test_helper_;
-  TestPlatformScreen platform_screen_;
+  TestScreenManager screen_manager_;
   DISALLOW_COPY_AND_ASSIGN(CursorTest);
 };
 
 TEST_F(CursorTest, ChangeByMouseMove) {
   ServerWindow* win = BuildServerWindow();
   win->SetPredefinedCursor(mojom::Cursor::IBEAM);
+  win->parent()->SetPredefinedCursor(mojom::Cursor::CELL);
   EXPECT_EQ(mojom::Cursor::IBEAM, win->cursor());
   win->SetNonClientCursor(mojom::Cursor::EAST_RESIZE);
   EXPECT_EQ(mojom::Cursor::EAST_RESIZE, win->non_client_cursor());
@@ -119,13 +119,14 @@ TEST_F(CursorTest, ChangeByMouseMove) {
   MoveCursorTo(gfx::Point(15, 15));
   EXPECT_EQ(mojom::Cursor::EAST_RESIZE, cursor());
 
-  // Client area
+  // Client area, which comes from win->parent().
   MoveCursorTo(gfx::Point(25, 25));
-  EXPECT_EQ(mojom::Cursor::IBEAM, cursor());
+  EXPECT_EQ(mojom::Cursor::CELL, cursor());
 }
 
 TEST_F(CursorTest, ChangeByClientAreaChange) {
   ServerWindow* win = BuildServerWindow();
+  win->parent()->SetPredefinedCursor(mojom::Cursor::CROSS);
   win->SetPredefinedCursor(mojom::Cursor::IBEAM);
   EXPECT_EQ(mojom::Cursor::IBEAM, mojom::Cursor(win->cursor()));
   win->SetNonClientCursor(mojom::Cursor::EAST_RESIZE);
@@ -135,9 +136,10 @@ TEST_F(CursorTest, ChangeByClientAreaChange) {
   MoveCursorTo(gfx::Point(15, 15));
   EXPECT_EQ(mojom::Cursor::EAST_RESIZE, cursor());
 
-  // Changing the client area should cause a change.
+  // Changing the client area should cause a change. The cursor for the client
+  // area comes from root ancestor, which is win->parent().
   win->SetClientArea(gfx::Insets(1, 1), std::vector<gfx::Rect>());
-  EXPECT_EQ(mojom::Cursor::IBEAM, cursor());
+  EXPECT_EQ(mojom::Cursor::CROSS, cursor());
 }
 
 TEST_F(CursorTest, NonClientCursorChange) {
@@ -170,6 +172,7 @@ TEST_F(CursorTest, IgnoreClientCursorChangeInNonClientArea) {
 
 TEST_F(CursorTest, NonClientToClientByBoundsChange) {
   ServerWindow* win = BuildServerWindow();
+  win->parent()->SetPredefinedCursor(mojom::Cursor::COPY);
   win->SetPredefinedCursor(mojom::Cursor::IBEAM);
   EXPECT_EQ(mojom::Cursor::IBEAM, win->cursor());
   win->SetNonClientCursor(mojom::Cursor::EAST_RESIZE);
@@ -180,7 +183,7 @@ TEST_F(CursorTest, NonClientToClientByBoundsChange) {
   EXPECT_EQ(mojom::Cursor::EAST_RESIZE, cursor());
 
   win->SetBounds(gfx::Rect(0, 0, 30, 30));
-  EXPECT_EQ(mojom::Cursor::IBEAM, cursor());
+  EXPECT_EQ(mojom::Cursor::COPY, cursor());
 }
 
 }  // namespace test

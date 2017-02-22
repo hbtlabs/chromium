@@ -50,8 +50,12 @@ class CORE_EXPORT StyleResolverState {
  public:
   StyleResolverState(Document&,
                      const ElementResolveContext&,
-                     const ComputedStyle* parentStyle);
-  StyleResolverState(Document&, Element*, const ComputedStyle* parentStyle = 0);
+                     const ComputedStyle* parentStyle,
+                     const ComputedStyle* layoutParentStyle);
+  StyleResolverState(Document&,
+                     Element*,
+                     const ComputedStyle* parentStyle = nullptr,
+                     const ComputedStyle* layoutParentStyle = nullptr);
   ~StyleResolverState();
 
   // In FontFaceSet and CanvasRenderingContext2D, we don't have an element to
@@ -80,7 +84,7 @@ class CORE_EXPORT StyleResolverState {
   void setStyle(PassRefPtr<ComputedStyle>);
   const ComputedStyle* style() const { return m_style.get(); }
   ComputedStyle* style() { return m_style.get(); }
-  PassRefPtr<ComputedStyle> takeStyle() { return m_style.release(); }
+  PassRefPtr<ComputedStyle> takeStyle() { return std::move(m_style); }
 
   ComputedStyle& mutableStyleRef() const { return *m_style; }
   const ComputedStyle& styleRef() const { return mutableStyleRef(); }
@@ -100,11 +104,32 @@ class CORE_EXPORT StyleResolverState {
 
   CSSAnimationUpdate& animationUpdate() { return m_animationUpdate; }
 
+  bool isAnimationInterpolationMapReady() const {
+    return m_isAnimationInterpolationMapReady;
+  }
+  void setIsAnimationInterpolationMapReady() {
+    m_isAnimationInterpolationMapReady = true;
+  }
+
+  bool isAnimatingCustomProperties() const {
+    return m_isAnimatingCustomProperties;
+  }
+  void setIsAnimatingCustomProperties(bool value) {
+    m_isAnimatingCustomProperties = value;
+  }
+
   void setParentStyle(PassRefPtr<ComputedStyle> parentStyle) {
     m_parentStyle = parentStyle;
   }
   const ComputedStyle* parentStyle() const { return m_parentStyle.get(); }
   ComputedStyle* parentStyle() { return m_parentStyle.get(); }
+
+  void setLayoutParentStyle(PassRefPtr<ComputedStyle> parentStyle) {
+    m_layoutParentStyle = parentStyle;
+  }
+  const ComputedStyle* layoutParentStyle() const {
+    return m_layoutParentStyle.get();
+  }
 
   // FIXME: These are effectively side-channel "out parameters" for the various
   // map functions. When we map from CSS to style objects we use this state
@@ -168,9 +193,12 @@ class CORE_EXPORT StyleResolverState {
     if (m_style->setEffectiveZoom(f))
       m_fontBuilder.didChangeEffectiveZoom();
   }
-  void setWritingMode(WritingMode writingMode) {
-    if (m_style->setWritingMode(writingMode))
-      m_fontBuilder.didChangeWritingMode();
+  void setWritingMode(WritingMode newWritingMode) {
+    if (m_style->getWritingMode() == newWritingMode) {
+      return;
+    }
+    m_style->setWritingMode(newWritingMode);
+    m_fontBuilder.didChangeWritingMode();
   }
   void setTextOrientation(TextOrientation textOrientation) {
     if (m_style->setTextOrientation(textOrientation))
@@ -199,8 +227,14 @@ class CORE_EXPORT StyleResolverState {
   // m_parentStyle is not always just ElementResolveContext::parentStyle,
   // so we keep it separate.
   RefPtr<ComputedStyle> m_parentStyle;
+  // This will almost-always be the same that m_parentStyle, except in the
+  // presence of display: contents. This is the style against which we have to
+  // do adjustment.
+  RefPtr<const ComputedStyle> m_layoutParentStyle;
 
   CSSAnimationUpdate m_animationUpdate;
+  bool m_isAnimationInterpolationMapReady;
+  bool m_isAnimatingCustomProperties;
 
   bool m_applyPropertyToRegularStyle;
   bool m_applyPropertyToVisitedLinkStyle;

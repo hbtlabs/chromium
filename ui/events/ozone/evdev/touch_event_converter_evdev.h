@@ -19,18 +19,19 @@
 #include "ui/events/ozone/evdev/event_converter_evdev.h"
 #include "ui/events/ozone/evdev/event_device_info.h"
 #include "ui/events/ozone/evdev/events_ozone_evdev_export.h"
+#include "ui/events/ozone/evdev/scoped_input_device.h"
 #include "ui/events/ozone/evdev/touch_evdev_debug_buffer.h"
 
 namespace ui {
 
 class DeviceEventDispatcherEvdev;
-class TouchNoiseFinder;
+class FalseTouchFinder;
 struct InProgressTouchEvdev;
 
 class EVENTS_OZONE_EVDEV_EXPORT TouchEventConverterEvdev
     : public EventConverterEvdev {
  public:
-  TouchEventConverterEvdev(int fd,
+  TouchEventConverterEvdev(ScopedInputDevice fd,
                            base::FilePath path,
                            int id,
                            const EventDeviceInfo& devinfo,
@@ -78,21 +79,19 @@ class EVENTS_OZONE_EVDEV_EXPORT TouchEventConverterEvdev
   void ReportTouchEvent(const InProgressTouchEvdev& event,
                         EventType event_type,
                         base::TimeTicks timestamp);
-  void ReportStylusEvent(const InProgressTouchEvdev& event,
-                         base::TimeTicks timestamp);
-  void ReportButton(unsigned int button,
-                    bool down,
-                    const InProgressTouchEvdev& event,
-                    base::TimeTicks timestamp);
   void ReportEvents(base::TimeTicks timestamp);
 
   void UpdateTrackingId(int slot, int tracking_id);
   void ReleaseTouches();
   void ReleaseButtons();
+  void CancelAllTouches();
   // Normalize pressure value to [0, 1].
   float ScalePressure(int32_t value);
 
   int NextTrackingId();
+
+  // Input device file descriptor.
+  ScopedInputDevice input_device_fd_;
 
   // Dispatcher for events.
   DeviceEventDispatcherEvdev* dispatcher_;
@@ -139,8 +138,8 @@ class EVENTS_OZONE_EVDEV_EXPORT TouchEventConverterEvdev
   // In-progress touch points.
   std::vector<InProgressTouchEvdev> events_;
 
-  // Finds touch noise.
-  std::unique_ptr<TouchNoiseFinder> touch_noise_finder_;
+  // Finds touches that need to be filtered.
+  std::unique_ptr<FalseTouchFinder> false_touch_finder_;
 
   // Records the recent touch events. It is used to fill the feedback reports
   TouchEventLogEvdev touch_evdev_debug_buffer_;

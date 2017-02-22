@@ -202,7 +202,8 @@ ui::NativeTheme::State ScrollBarThumb::GetNativeThemeState() const {
 const char ScrollBarViews::kViewClassName[] = "ScrollBarViews";
 
 ScrollBarViews::ScrollBarViews(bool horizontal)
-    : BaseScrollBar(horizontal, new ScrollBarThumb(this)) {
+    : BaseScrollBar(horizontal) {
+  SetThumb(new ScrollBarThumb(this));
   if (horizontal) {
     prev_button_ = new ScrollBarButton(this, ScrollBarButton::LEFT);
     next_button_ = new ScrollBarButton(this, ScrollBarButton::RIGHT);
@@ -277,15 +278,15 @@ void ScrollBarViews::OnPaint(gfx::Canvas* canvas) {
 }
 
 gfx::Size ScrollBarViews::GetPreferredSize() const {
-  return gfx::Size(IsHorizontal() ? 0 : GetLayoutSize(),
-                   IsHorizontal() ? GetLayoutSize() : 0);
+  return gfx::Size(IsHorizontal() ? 0 : GetThickness(),
+                   IsHorizontal() ? GetThickness() : 0);
 }
 
 const char* ScrollBarViews::GetClassName() const {
   return kViewClassName;
 }
 
-int ScrollBarViews::GetLayoutSize() const {
+int ScrollBarViews::GetThickness() const {
   const ui::NativeTheme* theme = GetNativeTheme();
   return IsHorizontal() ? GetHorizontalScrollBarHeight(theme)
                         : GetVerticalScrollBarWidth(theme);

@@ -65,14 +65,6 @@ cr.define('site_details', function() {
               source: 'preference',
             },
           ],
-          keygen: [
-            {
-              embeddingOrigin: 'https://foo-allow.com:443',
-              origin: 'https://foo-allow.com:443',
-              setting: 'allow',
-              source: 'preference',
-            },
-          ],
           mic: [
             {
               embeddingOrigin: 'https://foo-allow.com:443',
@@ -116,13 +108,6 @@ cr.define('site_details', function() {
         }
       };
 
-      // Import necessary html before running suite.
-      suiteSetup(function() {
-        return PolymerTest.importHtml(
-            'chrome://md-settings/site_settings/site_details.html'
-            );
-      });
-
       // Initialize a site-details before each test.
       setup(function() {
         browserProxy = new TestSiteSettingsPrefsBrowserProxy();
@@ -136,7 +121,7 @@ cr.define('site_details', function() {
         var category = settings.ContentSettingsTypes.NOTIFICATIONS;
         var site = {
           origin: 'http://www.google.com',
-          originForDisplay: 'http://www.google.com',
+          displayName: 'http://www.google.com',
           embeddingOrigin: '',
         };
         browserProxy.setPrefs(prefsEmpty);
@@ -163,7 +148,7 @@ cr.define('site_details', function() {
         var category = settings.ContentSettingsTypes.NOTIFICATIONS;
         var site = {
           origin: 'https://foo-allow.com:443',
-          originForDisplay: 'https://foo-allow.com:443',
+          displayName: 'https://foo-allow.com:443',
           embeddingOrigin: '',
         };
 
@@ -201,7 +186,7 @@ cr.define('site_details', function() {
         browserProxy.setPrefs(prefs);
         testElement.site = {
           origin: 'https://foo-allow.com:443',
-          originForDisplay: 'https://foo-allow.com:443',
+          displayName: 'https://foo-allow.com:443',
           embeddingOrigin: '',
         };
 

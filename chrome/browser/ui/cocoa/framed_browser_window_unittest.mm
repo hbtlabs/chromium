@@ -8,8 +8,8 @@
 #include "base/mac/scoped_nsobject.h"
 #include "chrome/app/chrome_command_ids.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
-#import "chrome/browser/ui/cocoa/cocoa_test_helper.h"
 #import "chrome/browser/ui/cocoa/framed_browser_window.h"
+#import "chrome/browser/ui/cocoa/test/cocoa_test_helper.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
 #include "testing/platform_test.h"
@@ -77,8 +77,7 @@ TEST_F(FramedBrowserWindowTest, ShowAndClose) {
 }
 
 // Test that undocumented title-hiding API we're using does the job.
-// TODO(crbug.com/655112): Fails on Mac 10.11 Tests.
-TEST_F(FramedBrowserWindowTest, DISABLED_DoesHideTitle) {
+TEST_F(FramedBrowserWindowTest, DoesHideTitle) {
   // The -display calls are not strictly necessary, but they do
   // make it easier to see what's happening when debugging (without
   // them the changes are never flushed to the screen).

@@ -29,6 +29,7 @@
 #include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/MessageEvent.h"
 #include "core/fileapi/Blob.h"
 #include "modules/peerconnection/RTCPeerConnection.h"
@@ -69,7 +70,7 @@ RTCDataChannel* RTCDataChannel::create(
     const WebRTCDataChannelInit& init,
     ExceptionState& exceptionState) {
   std::unique_ptr<WebRTCDataChannelHandler> handler =
-      wrapUnique(peerConnectionHandler->createDataChannel(label, init));
+      WTF::wrapUnique(peerConnectionHandler->createDataChannel(label, init));
   if (!handler) {
     exceptionState.throwDOMException(NotSupportedError,
                                      "RTCDataChannel is not supported");
@@ -84,15 +85,16 @@ RTCDataChannel* RTCDataChannel::create(
 RTCDataChannel::RTCDataChannel(
     ExecutionContext* context,
     std::unique_ptr<WebRTCDataChannelHandler> handler)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(context),
+    : SuspendableObject(context),
       m_handler(std::move(handler)),
       m_readyState(ReadyStateConnecting),
       m_binaryType(BinaryTypeArrayBuffer),
-      m_scheduledEventTimer(this, &RTCDataChannel::scheduledEventTimerFired),
+      m_scheduledEventTimer(
+          TaskRunnerHelper::get(TaskType::Networking, context),
+          this,
+          &RTCDataChannel::scheduledEventTimerFired),
       m_bufferedAmountLowThreshold(0U),
       m_stopped(false) {
-  ThreadState::current()->registerPreFinalizer(this);
   m_handler->setClient(this);
 }
 
@@ -296,10 +298,10 @@ const AtomicString& RTCDataChannel::interfaceName() const {
 }
 
 ExecutionContext* RTCDataChannel::getExecutionContext() const {
-  return ActiveDOMObject::getExecutionContext();
+  return SuspendableObject::getExecutionContext();
 }
 
-// ActiveDOMObject
+// SuspendableObject
 void RTCDataChannel::suspend() {
   m_scheduledEventTimer.stop();
 }
@@ -309,7 +311,7 @@ void RTCDataChannel::resume() {
     m_scheduledEventTimer.startOneShot(0, BLINK_FROM_HERE);
 }
 
-void RTCDataChannel::contextDestroyed() {
+void RTCDataChannel::contextDestroyed(ExecutionContext*) {
   if (m_stopped)
     return;
 
@@ -355,7 +357,7 @@ bool RTCDataChannel::hasPendingActivity() const {
 }
 
 void RTCDataChannel::scheduleDispatchEvent(Event* event) {
-  m_scheduledEvents.append(event);
+  m_scheduledEvents.push_back(event);
 
   if (!m_scheduledEventTimer.isActive())
     m_scheduledEventTimer.startOneShot(0, BLINK_FROM_HERE);
@@ -375,7 +377,7 @@ void RTCDataChannel::scheduledEventTimerFired(TimerBase*) {
 DEFINE_TRACE(RTCDataChannel) {
   visitor->trace(m_scheduledEvents);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  SuspendableObject::trace(visitor);
 }
 
 }  // namespace blink

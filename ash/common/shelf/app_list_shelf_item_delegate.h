@@ -15,20 +15,18 @@ class ShelfModel;
 class AppListShelfItemDelegate : public ShelfItemDelegate {
  public:
   // Initializes the app list item in the shelf data model and creates an
-  // AppListShelfItemDelegate which will be owned by |shelf_model|.
-  static void CreateAppListItemAndDelegate(ShelfModel* shelf_model);
+  // AppListShelfItemDelegate which will be owned by |model|.
+  static void CreateAppListItemAndDelegate(ShelfModel* model);
 
   AppListShelfItemDelegate();
   ~AppListShelfItemDelegate() override;
 
   // ShelfItemDelegate:
-  ShelfItemDelegate::PerformedAction ItemSelected(
-      const ui::Event& event) override;
-  base::string16 GetTitle() override;
-  ShelfMenuModel* CreateApplicationMenu(int event_flags) override;
-  bool IsDraggable() override;
-  bool CanPin() const override;
-  bool ShouldShowTooltip() override;
+  ShelfAction ItemSelected(ui::EventType event_type,
+                           int event_flags,
+                           int64_t display_id,
+                           ShelfLaunchSource source) override;
+  ShelfAppMenuItemList GetAppMenuItems(int event_flags) override;
   void Close() override;
 
  private:

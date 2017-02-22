@@ -21,7 +21,6 @@
 @class BackForwardMenuController;
 class Browser;
 @class BrowserActionsContainerView;
-class BrowserActionsContainerViewSizeDelegate;
 @class BrowserActionsController;
 class CommandUpdater;
 class LocationBarViewMac;
@@ -29,6 +28,7 @@ class LocationBarViewMac;
 class Profile;
 @class ReloadButton;
 @class ToolbarButton;
+@class ToolbarView;
 @class AppMenuController;
 
 namespace content {
@@ -71,8 +71,6 @@ class NotificationBridge;
   base::scoped_nsobject<BackForwardMenuController> backMenuController_;
   base::scoped_nsobject<BackForwardMenuController> forwardMenuController_;
   base::scoped_nsobject<BrowserActionsController> browserActionsController_;
-  std::unique_ptr<BrowserActionsContainerViewSizeDelegate>
-      browserActionsContainerDelegate_;
 
   // Lazily-instantiated menu controller.
   base::scoped_nsobject<AppMenuController> appMenuController_;
@@ -102,12 +100,13 @@ class NotificationBridge;
 
 // Initialize the toolbar and register for command updates. The profile is
 // needed for initializing the location bar. The browser is needed for
-// the toolbar model and back/forward menus. The resizeDelegate is used
-// to smoothly animate height changes for the toolbar.
+// the toolbar model and back/forward menus.
 - (id)initWithCommands:(CommandUpdater*)commands
                profile:(Profile*)profile
-               browser:(Browser*)browser
-        resizeDelegate:(id<ViewResizer>)resizeDelegate;
+               browser:(Browser*)browser;
+
+// Strongly typed controlled view.
+- (ToolbarView*)toolbarView;
 
 // Get the C++ bridge object representing the location bar for this tab.
 - (LocationBarViewMac*)locationBarBridge;
@@ -165,8 +164,8 @@ class NotificationBridge;
 // Point on the save credit card icon for the save credit card bubble.
 - (NSPoint)saveCreditCardBubblePoint;
 
-// Point on the translate icon for the Translate bubble.
-- (NSPoint)translateBubblePoint;
+// Point in the window's coordinate system for bubbles attached to the app menu.
+- (NSPoint)appMenuBubblePoint;
 
 // Returns the desired toolbar height for the given compression factor.
 - (CGFloat)desiredHeightForCompression:(CGFloat)compressByHeight;
@@ -203,6 +202,10 @@ class NotificationBridge;
 - (void)installAppMenu;
 // Return a hover button for the current event.
 - (NSButton*)hoverButtonForEvent:(NSEvent*)theEvent;
+// Adjusts browser actions container view in response to toolbar frame changes.
+// Outside of tests, called in response to frame changed/new window
+// notifications.
+- (void)toolbarFrameChanged;
 @end
 
 #endif  // CHROME_BROWSER_UI_COCOA_TOOLBAR_TOOLBAR_CONTROLLER_H_

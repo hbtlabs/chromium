@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -50,7 +51,8 @@ GpuChannelManager::GpuChannelManager(
     base::SingleThreadTaskRunner* io_task_runner,
     base::WaitableEvent* shutdown_event,
     SyncPointManager* sync_point_manager,
-    GpuMemoryBufferFactory* gpu_memory_buffer_factory)
+    GpuMemoryBufferFactory* gpu_memory_buffer_factory,
+    const GpuFeatureInfo& gpu_feature_info)
     : task_runner_(task_runner),
       io_task_runner_(io_task_runner),
       gpu_preferences_(gpu_preferences),
@@ -65,6 +67,7 @@ GpuChannelManager::GpuChannelManager(
       sync_point_client_waiter_(
           sync_point_manager->CreateSyncPointClientWaiter()),
       gpu_memory_buffer_factory_(gpu_memory_buffer_factory),
+      gpu_feature_info_(gpu_feature_info),
       exiting_for_lost_context_(false),
       weak_factory_(this) {
   DCHECK(task_runner);
@@ -84,14 +87,15 @@ GpuChannelManager::~GpuChannelManager() {
 
 gles2::ProgramCache* GpuChannelManager::program_cache() {
   if (!program_cache_.get() &&
-      (gl::g_driver_gl.ext.b_GL_ARB_get_program_binary ||
-       gl::g_driver_gl.ext.b_GL_OES_get_program_binary) &&
       !gpu_preferences_.disable_gpu_program_cache) {
+    const GpuDriverBugWorkarounds& workarounds = gpu_driver_bug_workarounds_;
     bool disable_disk_cache =
         gpu_preferences_.disable_gpu_shader_disk_cache ||
-        gpu_driver_bug_workarounds_.disable_program_disk_cache;
+        workarounds.disable_program_disk_cache;
     program_cache_.reset(new gles2::MemoryProgramCache(
-        gpu_preferences_.gpu_program_cache_size, disable_disk_cache));
+        gpu_preferences_.gpu_program_cache_size,
+        disable_disk_cache,
+        workarounds.disable_program_caching_for_transform_feedback));
   }
   return program_cache_.get();
 }
@@ -120,7 +124,7 @@ void GpuChannelManager::RemoveChannel(int client_id) {
 
 GpuChannel* GpuChannelManager::LookupChannel(int32_t client_id) const {
   const auto& it = gpu_channels_.find(client_id);
-  return it != gpu_channels_.end() ? it->second : nullptr;
+  return it != gpu_channels_.end() ? it->second.get() : nullptr;
 }
 
 std::unique_ptr<GpuChannel> GpuChannelManager::CreateGpuChannel(
@@ -147,7 +151,7 @@ IPC::ChannelHandle GpuChannelManager::EstablishChannel(
       CreateGpuChannel(client_id, client_tracing_id, preempts,
                        allow_view_command_buffers, allow_real_time_streams));
   IPC::ChannelHandle channel_handle = channel->Init(shutdown_event_);
-  gpu_channels_.set(client_id, std::move(channel));
+  gpu_channels_[client_id] = std::move(channel);
   return channel_handle;
 }
 
@@ -275,7 +279,7 @@ void GpuChannelManager::ScheduleWakeUpGpu() {
 void GpuChannelManager::DoWakeUpGpu() {
   const GpuCommandBufferStub* stub = nullptr;
   for (const auto& kv : gpu_channels_) {
-    const GpuChannel* channel = kv.second;
+    const GpuChannel* channel = kv.second.get();
     stub = channel->GetOneStub();
     if (stub) {
       DCHECK(stub->decoder());

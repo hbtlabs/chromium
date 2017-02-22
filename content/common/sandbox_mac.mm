@@ -36,7 +36,7 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "media/gpu/vt_video_decode_accelerator_mac.h"
-#include "sandbox/mac/seatbelt.h"
+#include "sandbox/mac/sandbox_compiler.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "ui/base/layout.h"
 #include "ui/gl/init/gl_factory.h"
@@ -44,6 +44,7 @@
 extern "C" {
 void CGSSetDenyWindowServerConnections(bool);
 void CGSShutdownServerConnections();
+OSStatus SetApplicationIsDaemon(Boolean isDaemon);
 };
 
 namespace content {
@@ -116,43 +117,6 @@ NOINLINE void FatalStringQuoteException(const std::string& str) {
 }
 
 }  // namespace
-
-SandboxCompiler::SandboxCompiler(const std::string& profile_str)
-    : params_map_(), profile_str_(profile_str) {
-}
-
-SandboxCompiler::~SandboxCompiler() {
-}
-
-bool SandboxCompiler::InsertBooleanParam(const std::string& key, bool value) {
-  return params_map_.insert(std::make_pair(key, value ? "TRUE" : "FALSE"))
-      .second;
-}
-
-bool SandboxCompiler::InsertStringParam(const std::string& key,
-                                        const std::string& value) {
-  return params_map_.insert(std::make_pair(key, value)).second;
-}
-
-bool SandboxCompiler::CompileAndApplyProfile(std::string* error) {
-  char* error_internal = nullptr;
-  std::vector<const char*> params;
-
-  for (const auto& kv : params_map_) {
-    params.push_back(kv.first.c_str());
-    params.push_back(kv.second.c_str());
-  }
-  // The parameters array must be null terminated.
-  params.push_back(static_cast<const char*>(0));
-
-  if (sandbox::Seatbelt::InitWithParams(profile_str_.c_str(), 0, params.data(),
-                                        &error_internal)) {
-    error->assign(error_internal);
-    sandbox::Seatbelt::FreeError(error_internal);
-    return false;
-  }
-  return true;
-}
 
 // static
 bool Sandbox::QuotePlainString(const std::string& src_utf8, std::string* dst) {
@@ -348,12 +312,18 @@ void Sandbox::SandboxWarmup(int sandbox_type) {
     // messages to be printed to the system logger on certain OS versions.
     CGSSetDenyWindowServerConnections(true);
     CGSShutdownServerConnections();
+
+    // Allow the process to continue without a LaunchServices ASN. The
+    // INIT_Process function in HIServices will abort if it cannot connect to
+    // launchservicesd to get an ASN. By setting this flag, HIServices skips
+    // that.
+    SetApplicationIsDaemon(true);
   }
 }
 
 // Load the appropriate template for the given sandbox type.
-// Returns the template as an NSString or nil on error.
-NSString* LoadSandboxTemplate(int sandbox_type) {
+// Returns the template as a string or an empty string on error.
+std::string LoadSandboxTemplate(int sandbox_type) {
   // We use a custom sandbox definition to lock things down as tightly as
   // possible.
   int sandbox_profile_resource_id = -1;
@@ -383,7 +353,7 @@ NSString* LoadSandboxTemplate(int sandbox_type) {
   if (sandbox_definition.empty()) {
     LOG(FATAL) << "Failed to load the sandbox profile (resource id "
                << sandbox_profile_resource_id << ")";
-    return nil;
+    return std::string();
   }
 
   base::StringPiece common_sandbox_definition =
@@ -391,21 +361,13 @@ NSString* LoadSandboxTemplate(int sandbox_type) {
           IDR_COMMON_SANDBOX_PROFILE, ui::SCALE_FACTOR_NONE);
   if (common_sandbox_definition.empty()) {
     LOG(FATAL) << "Failed to load the common sandbox profile";
-    return nil;
+    return std::string();
   }
 
-  base::scoped_nsobject<NSString> common_sandbox_prefix_data(
-      [[NSString alloc] initWithBytes:common_sandbox_definition.data()
-                               length:common_sandbox_definition.length()
-                             encoding:NSUTF8StringEncoding]);
-
-  base::scoped_nsobject<NSString> sandbox_data(
-      [[NSString alloc] initWithBytes:sandbox_definition.data()
-                               length:sandbox_definition.length()
-                             encoding:NSUTF8StringEncoding]);
-
   // Prefix sandbox_data with common_sandbox_prefix_data.
-  return [common_sandbox_prefix_data stringByAppendingString:sandbox_data];
+  std::string sandbox_profile = common_sandbox_definition.as_string();
+  sandbox_definition.AppendToString(&sandbox_profile);
+  return sandbox_profile;
 }
 
 // Turns on the OS X sandbox for this process.
@@ -421,12 +383,12 @@ bool Sandbox::EnableSandbox(int sandbox_type,
         << "Only SANDBOX_TYPE_UTILITY allows a custom directory parameter.";
   }
 
-  NSString* sandbox_data = LoadSandboxTemplate(sandbox_type);
-  if (!sandbox_data) {
+  std::string sandbox_data = LoadSandboxTemplate(sandbox_type);
+  if (sandbox_data.empty()) {
     return false;
   }
 
-  SandboxCompiler compiler([sandbox_data UTF8String]);
+  sandbox::SandboxCompiler compiler(sandbox_data);
 
   if (!allowed_dir.empty()) {
     // Add the sandbox parameters necessary to access the given directory.

@@ -32,10 +32,10 @@
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/filters/Filter.h"
 #include "platform/graphics/filters/SkiaImageFilterBuilder.h"
-#include "platform/graphics/paint/SkPictureBuilder.h"
+#include "platform/graphics/paint/PaintRecord.h"
+#include "platform/graphics/paint/PaintRecordBuilder.h"
 #include "platform/text/TextStream.h"
 #include "platform/transforms/AffineTransform.h"
-#include "third_party/skia/include/core/SkPicture.h"
 #include "third_party/skia/include/effects/SkImageSource.h"
 #include "third_party/skia/include/effects/SkPictureImageFilter.h"
 
@@ -178,21 +178,27 @@ sk_sp<SkImageFilter> FEImage::createImageFilterForLayoutObject(
     transform.translate(dstRect.x(), dstRect.y());
   }
 
-  SkPictureBuilder filterPicture(dstRect);
+  PaintRecordBuilder builder(dstRect);
   {
-    TransformRecorder transformRecorder(filterPicture.context(), layoutObject,
+    TransformRecorder transformRecorder(builder.context(), layoutObject,
                                         transform);
-    SVGPaintContext::paintSubtree(filterPicture.context(), &layoutObject);
+    SVGPaintContext::paintSubtree(builder.context(), &layoutObject);
   }
 
-  return SkPictureImageFilter::Make(filterPicture.endRecording(), dstRect);
+  return SkPictureImageFilter::Make(ToSkPicture(builder.endRecording()),
+                                    dstRect);
 }
 
 sk_sp<SkImageFilter> FEImage::createImageFilter() {
   if (auto* layoutObject = referencedLayoutObject())
     return createImageFilterForLayoutObject(*layoutObject);
 
-  sk_sp<SkImage> image = m_image ? m_image->imageForCurrentFrame() : nullptr;
+  // TODO(ccameron): Determine the correct color behavior for this function.
+  // https://crbug.com/667431
+  sk_sp<SkImage> image = m_image
+                             ? m_image->imageForCurrentFrame(
+                                   ColorBehavior::transformToGlobalTarget())
+                             : nullptr;
   if (!image) {
     // "A href reference that is an empty image (zero width or zero height),
     //  that fails to download, is non-existent, or that cannot be displayed

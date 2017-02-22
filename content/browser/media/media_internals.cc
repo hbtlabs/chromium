@@ -33,9 +33,6 @@
 
 namespace {
 
-static base::LazyInstance<content::MediaInternals>::Leaky g_media_internals =
-    LAZY_INSTANCE_INITIALIZER;
-
 base::string16 SerializeUpdate(const std::string& function,
                                const base::Value* value) {
   return content::WebUI::GetJavascriptCall(
@@ -81,6 +78,10 @@ std::string FormatToString(media::AudioParameters::Format format) {
       return "pcm_linear";
     case media::AudioParameters::AUDIO_PCM_LOW_LATENCY:
       return "pcm_low_latency";
+    case media::AudioParameters::AUDIO_BITSTREAM_AC3:
+      return "ac3";
+    case media::AudioParameters::AUDIO_BITSTREAM_EAC3:
+      return "eac3";
     case media::AudioParameters::AUDIO_FAKE:
       return "fake";
   }
@@ -592,7 +593,8 @@ void MediaInternals::MediaInternalsUMAHandler::OnProcessTerminated(
 }
 
 MediaInternals* MediaInternals::GetInstance() {
-  return g_media_internals.Pointer();
+  static content::MediaInternals* internals = new content::MediaInternals();
+  return internals;
 }
 
 MediaInternals::MediaInternals()

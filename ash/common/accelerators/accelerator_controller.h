@@ -10,14 +10,16 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <vector>
 
 #include "ash/ash_export.h"
 #include "ash/common/accelerators/accelerator_table.h"
 #include "ash/common/accelerators/exit_warning_handler.h"
-#include "ash/public/interfaces/volume.mojom.h"
+#include "ash/public/interfaces/accelerator_controller.mojom.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "mojo/public/cpp/bindings/binding_set.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/accelerator_history.h"
 
@@ -36,7 +38,9 @@ class ImeControlDelegate;
 // AcceleratorController provides functions for registering or unregistering
 // global keyboard accelerators, which are handled earlier than any windows. It
 // also implements several handlers as an accelerator target.
-class ASH_EXPORT AcceleratorController : public ui::AcceleratorTarget {
+class ASH_EXPORT AcceleratorController
+    : public ui::AcceleratorTarget,
+      NON_EXPORTED_BASE(public mojom::AcceleratorController) {
  public:
   AcceleratorController(AcceleratorControllerDelegate* delegate,
                         ui::AcceleratorManagerDelegate* manager_delegate);
@@ -57,10 +61,10 @@ class ASH_EXPORT AcceleratorController : public ui::AcceleratorTarget {
     RESTRICTION_PREVENT_PROCESSING_AND_PROPAGATION
   };
 
-  // Registers a global keyboard accelerator for the specified target. If
-  // multiple targets are registered for an accelerator, a target registered
-  // later has higher priority.
-  void Register(const ui::Accelerator& accelerator,
+  // Registers global keyboard accelerators for the specified target. If
+  // multiple targets are registered for any given accelerator, a target
+  // registered later has higher priority.
+  void Register(const std::vector<ui::Accelerator>& accelerators,
                 ui::AcceleratorTarget* target);
 
   // Unregisters the specified keyboard accelerator for the specified target.
@@ -121,6 +125,12 @@ class ASH_EXPORT AcceleratorController : public ui::AcceleratorTarget {
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
   bool CanHandleAccelerators() const override;
 
+  // Binds the mojom::AcceleratorController interface to this object.
+  void BindRequest(mojom::AcceleratorControllerRequest request);
+
+  // mojom::AcceleratorController:
+  void SetVolumeController(mojom::VolumeControllerPtr controller) override;
+
  private:
   FRIEND_TEST_ALL_PREFIXES(AcceleratorControllerTest, GlobalAccelerators);
   FRIEND_TEST_ALL_PREFIXES(AcceleratorControllerTest,
@@ -156,9 +166,16 @@ class ASH_EXPORT AcceleratorController : public ui::AcceleratorTarget {
   AcceleratorProcessingRestriction GetAcceleratorProcessingRestriction(
       int action);
 
-  // Returns the volume controller interface raw pointer, may be null in tests.
-  mojom::VolumeController* GetVolumeController();
-  void OnVolumeControllerConnectionError();
+  // If |accelerator| is a deprecated accelerator, it performs the appropriate
+  // deprecated accelerator pre-handling.
+  // Returns PROCEED if the accelerator's action should be performed (i.e. if
+  // |accelerator| is not a deprecated accelerator, or it's an enabled
+  // deprecated accelerator), and STOP otherwise (if the accelerator is a
+  // disabled deprecated accelerator).
+  enum class AcceleratorProcessingStatus { PROCEED, STOP };
+  AcceleratorProcessingStatus MaybeDeprecatedAcceleratorPressed(
+      AcceleratorAction action,
+      const ui::Accelerator& accelerator) const;
 
   AcceleratorControllerDelegate* delegate_;
 
@@ -181,7 +198,11 @@ class ASH_EXPORT AcceleratorController : public ui::AcceleratorTarget {
       actions_with_deprecations_;
   std::set<ui::Accelerator> deprecated_accelerators_;
 
-  // The cached volume controller interface pointer.
+  // Bindings for the mojom::AcceleratorController interface.
+  mojo::BindingSet<mojom::AcceleratorController> bindings_;
+
+  // Volume controller interface in chrome browser. May be null in tests. Exists
+  // because chrome owns the CrasAudioHandler dbus communication.
   mojom::VolumeControllerPtr volume_controller_;
 
   // Actions allowed when the user is not signed in.

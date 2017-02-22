@@ -9,6 +9,9 @@
 #include "content/common/content_export.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
+#include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
+#include "third_party/WebKit/public/platform/WebTouchEvent.h"
 
 // Provides sensible creation of default WebInputEvents for testing purposes.
 
@@ -17,10 +20,13 @@ namespace content {
 class CONTENT_EXPORT SyntheticWebMouseEventBuilder {
  public:
   static blink::WebMouseEvent Build(blink::WebInputEvent::Type type);
-  static blink::WebMouseEvent Build(blink::WebInputEvent::Type type,
-                                    int window_x,
-                                    int window_y,
-                                    int modifiers);
+  static blink::WebMouseEvent Build(
+      blink::WebInputEvent::Type type,
+      int window_x,
+      int window_y,
+      int modifiers,
+      blink::WebPointerProperties::PointerType pointer_type =
+          blink::WebPointerProperties::PointerType::Mouse);
 };
 
 class CONTENT_EXPORT SyntheticWebMouseWheelEventBuilder {
@@ -51,7 +57,8 @@ class CONTENT_EXPORT SyntheticWebKeyboardEventBuilder {
 class CONTENT_EXPORT SyntheticWebGestureEventBuilder {
  public:
   static blink::WebGestureEvent Build(blink::WebInputEvent::Type type,
-                                      blink::WebGestureDevice source_device);
+                                      blink::WebGestureDevice source_device,
+                                      int modifiers = 0);
   static blink::WebGestureEvent BuildScrollBegin(
       float dx_hint,
       float dy_hint,
@@ -88,6 +95,8 @@ class CONTENT_EXPORT SyntheticWebTouchEvent
   void CancelPoint(int index);
 
   void SetTimestamp(base::TimeTicks timestamp);
+
+  int FirstFreeIndex();
 };
 
 }  // namespace content

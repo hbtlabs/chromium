@@ -191,13 +191,19 @@ void V4Store::Initialize() {
   DCHECK(state_.empty());
 
   StoreReadResult store_read_result = ReadFromDisk();
+  has_valid_data_ = (store_read_result == READ_SUCCESS);
   RecordStoreReadResult(store_read_result);
+}
+
+bool V4Store::HasValidData() const {
+  return has_valid_data_;
 }
 
 V4Store::V4Store(const scoped_refptr<base::SequencedTaskRunner>& task_runner,
                  const base::FilePath& store_path,
                  const int64_t old_file_size)
     : file_size_(old_file_size),
+      has_valid_data_(false),
       store_path_(store_path),
       task_runner_(task_runner) {}
 
@@ -370,11 +376,12 @@ void V4Store::ApplyUpdate(
   }
 
   if (apply_update_result == APPLY_UPDATE_SUCCESS) {
+    new_store->has_valid_data_ = true;
     RecordApplyUpdateTime(metric, TimeTicks::Now() - before, store_path_);
   } else {
     new_store.reset();
-    DVLOG(1) << "Failure: ApplyUpdate: reason: " << apply_update_result
-             << "; store: " << *this;
+    DLOG(WARNING) << "Failure: ApplyUpdate: reason: " << apply_update_result
+                  << "; store: " << *this;
   }
 
   RecordApplyUpdateResult(metric, apply_update_result, store_path_);
@@ -738,7 +745,10 @@ StoreWriteResult V4Store::WriteToDisk(const Checksum& checksum) {
   file_format.SerializeToString(&file_format_string);
   size_t written = base::WriteFile(new_filename, file_format_string.data(),
                                    file_format_string.size());
-  DCHECK_EQ(file_format_string.size(), written);
+
+  if (file_format_string.size() != written) {
+    return UNEXPECTED_BYTES_WRITTEN_FAILURE;
+  }
 
   if (!base::Move(new_filename, store_path_)) {
     return UNABLE_TO_RENAME_FAILURE;
@@ -754,7 +764,7 @@ HashPrefix V4Store::GetMatchingHashPrefix(const FullHash& full_hash) {
   // It should never be the case that more than one hash prefixes match a given
   // full hash. However, if that happens, this method returns any one of them.
   // It does not guarantee which one of those will be returned.
-  DCHECK_EQ(32u, full_hash.size());
+  DCHECK(full_hash.size() == 32u || full_hash.size() == 21u);
   for (const auto& pair : hash_prefix_map_) {
     const PrefixSize& prefix_size = pair.first;
     const HashPrefixes& hash_prefixes = pair.second;

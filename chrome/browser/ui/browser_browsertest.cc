@@ -116,7 +116,7 @@
 
 #if defined(OS_MACOSX)
 #include "base/mac/scoped_nsautorelease_pool.h"
-#include "chrome/browser/ui/cocoa/run_loop_testing.h"
+#include "chrome/browser/ui/cocoa/test/run_loop_testing.h"
 #endif
 
 #if defined(OS_WIN)
@@ -283,11 +283,23 @@ class RenderViewSizeObserver : public content::WebContentsObserver {
         render_view_host->GetWidget()->GetView()->GetViewBounds().size();
   }
 
-  // Enlarge WebContentsView by |wcv_resize_insets_| while the navigation entry
-  // is pending.
   void DidStartNavigationToPendingEntry(
       const GURL& url,
       content::ReloadType reload_type) override {
+    // TODO: remove this method when PlzNavigate is turned on by default.
+    if (!content::IsBrowserSideNavigationEnabled())
+      Resize();
+  }
+
+  // Enlarge WebContentsView by |wcv_resize_insets_| while the navigation entry
+  // is pending.
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    if (content::IsBrowserSideNavigationEnabled())
+      Resize();
+  }
+
+  void Resize() {
     if (wcv_resize_insets_.IsEmpty())
       return;
     // Resizing the main browser window by |wcv_resize_insets_| will
@@ -327,7 +339,7 @@ class RenderViewSizeObserver : public content::WebContentsObserver {
   typedef std::map<content::RenderViewHost*, Sizes> RenderViewSizes;
   RenderViewSizes render_view_sizes_;
   // Enlarge WebContentsView by this size insets in
-  // DidStartNavigationToPendingEntry.
+  // DidStartNavigation.
   gfx::Size wcv_resize_insets_;
   BrowserWindow* browser_window_;  // Weak ptr.
 
@@ -709,14 +721,16 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, ReloadThenCancelBeforeUnload) {
 class RedirectObserver : public content::WebContentsObserver {
  public:
   explicit RedirectObserver(content::WebContents* web_contents)
-      : WebContentsObserver(web_contents) {
+      : WebContentsObserver(web_contents),
+        transition_(ui::PageTransition::PAGE_TRANSITION_LINK) {
   }
 
-  void DidNavigateAnyFrame(
-      content::RenderFrameHost* render_frame_host,
-      const content::LoadCommittedDetails& details,
-      const content::FrameNavigateParams& params) override {
-    params_ = params;
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    if (!navigation_handle->HasCommitted())
+      return;
+    transition_ = navigation_handle->GetPageTransition();
+    redirects_ = navigation_handle->GetRedirectChain();
   }
 
   void WebContentsDestroyed() override {
@@ -725,12 +739,12 @@ class RedirectObserver : public content::WebContentsObserver {
     FAIL() << "WebContents closed during navigation (http://crbug.com/314036).";
   }
 
-  const content::FrameNavigateParams& params() const {
-    return params_;
-  }
+  ui::PageTransition transition() const { return transition_; }
+  const std::vector<GURL> redirects() const { return redirects_; }
 
  private:
-  content::FrameNavigateParams params_;
+  ui::PageTransition transition_;
+  std::vector<GURL> redirects_;
 
   DISALLOW_COPY_AND_ASSIGN(RedirectObserver);
 };
@@ -777,11 +791,11 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, NoStopDuringTransferUntilCommit) {
     // history autocomplete to work.
     EXPECT_EQ(redirect_url, contents->GetController().GetLastCommittedEntry()->
                   GetOriginalRequestURL());
-    EXPECT_EQ(2U, redirect_observer.params().redirects.size());
-    EXPECT_EQ(redirect_url, redirect_observer.params().redirects.at(0));
-    EXPECT_EQ(dest_url, redirect_observer.params().redirects.at(1));
+    EXPECT_EQ(2U, redirect_observer.redirects().size());
+    EXPECT_EQ(redirect_url, redirect_observer.redirects().at(0));
+    EXPECT_EQ(dest_url, redirect_observer.redirects().at(1));
     EXPECT_TRUE(ui::PageTransitionCoreTypeIs(
-        redirect_observer.params().transition, ui::PAGE_TRANSITION_TYPED));
+        redirect_observer.transition(), ui::PAGE_TRANSITION_TYPED));
   }
 
   // Restore previous browser client.
@@ -1628,15 +1642,9 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, StartMaximized) {
   }
 }
 
-// Aura doesn't support minimized window. crbug.com/104571.
-#if defined(USE_AURA)
-#define MAYBE_StartMinimized DISABLED_StartMinimized
-#else
-#define MAYBE_StartMinimized StartMinimized
-#endif
 // Makes sure the browser doesn't crash when
 // set_show_state(ui::SHOW_STATE_MINIMIZED) has been invoked.
-IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_StartMinimized) {
+IN_PROC_BROWSER_TEST_F(BrowserTest, StartMinimized) {
   Browser::Type types[] = { Browser::TYPE_TABBED, Browser::TYPE_POPUP };
   for (size_t i = 0; i < arraysize(types); ++i) {
     Browser::CreateParams params(types[i], browser()->profile());
@@ -2359,6 +2367,9 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, AboutVersion) {
   ASSERT_GT(ui_test_utils::FindInPage(tab, ASCIIToUTF16("JavaScript"), true,
                                       true, NULL, NULL),
             0);
+  ASSERT_GT(ui_test_utils::FindInPage(tab, ASCIIToUTF16("Flash"), true,
+                                      true, NULL, NULL),
+            0);
 }
 
 static const base::FilePath::CharType* kTestDir =
@@ -2386,11 +2397,11 @@ class ClickModifierTest : public InProcessBrowserTest {
       base::FilePath(FILE_PATH_LITERAL("href.html")));
   }
 
-  base::string16 getFirstPageTitle() {
+  base::string16 GetFirstPageTitle() {
     return ASCIIToUTF16(kFirstPageTitle);
   }
 
-  base::string16 getSecondPageTitle() {
+  base::string16 GetSecondPageTitle() {
     return ASCIIToUTF16(kSecondPageTitle);
   }
 
@@ -2418,15 +2429,14 @@ class ClickModifierTest : public InProcessBrowserTest {
       same_tab_observer.Wait();
       EXPECT_EQ(1u, chrome::GetBrowserCount(browser->profile()));
       EXPECT_EQ(1, browser->tab_strip_model()->count());
-      EXPECT_EQ(getSecondPageTitle(), web_contents->GetTitle());
+      EXPECT_EQ(GetSecondPageTitle(), web_contents->GetTitle());
       return;
     }
 
-    content::WindowedNotificationObserver observer(
-        chrome::NOTIFICATION_TAB_ADDED,
-        content::NotificationService::AllSources());
+    content::TestNavigationObserver new_tab_observer(nullptr);
+    new_tab_observer.StartWatchingNewWebContents();
     SimulateMouseClick(web_contents, modifiers, button);
-    observer.Wait();
+    new_tab_observer.Wait();
 
     if (disposition == WindowOpenDisposition::NEW_WINDOW) {
       EXPECT_EQ(2u, chrome::GetBrowserCount(browser->profile()));
@@ -2436,12 +2446,11 @@ class ClickModifierTest : public InProcessBrowserTest {
     EXPECT_EQ(1u, chrome::GetBrowserCount(browser->profile()));
     EXPECT_EQ(2, browser->tab_strip_model()->count());
     web_contents = browser->tab_strip_model()->GetActiveWebContents();
-    WaitForLoadStop(web_contents);
     if (disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB) {
-      EXPECT_EQ(getSecondPageTitle(), web_contents->GetTitle());
+      EXPECT_EQ(GetSecondPageTitle(), web_contents->GetTitle());
     } else {
       ASSERT_EQ(WindowOpenDisposition::NEW_BACKGROUND_TAB, disposition);
-      EXPECT_EQ(getFirstPageTitle(), web_contents->GetTitle());
+      EXPECT_EQ(GetFirstPageTitle(), web_contents->GetTitle());
     }
   }
 
@@ -2562,6 +2571,13 @@ IN_PROC_BROWSER_TEST_F(ClickModifierTest, DISABLED_HrefShiftMiddleClickTest) {
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserTest, GetSizeForNewRenderView) {
+  // Force an initial resize. This works around a test-only problem on Chrome OS
+  // where the shelf may not be created before the initial test browser window
+  // opens, which leads to sizing issues in WebContents resize.
+  browser()->window()->SetBounds(gfx::Rect(10, 20, 600, 400));
+  // Let the message loop run so that resize actually takes effect.
+  content::RunAllPendingInMessageLoop();
+
   // The instant extended NTP has javascript that does not work with
   // ui_test_utils::NavigateToURL.  The NTP rvh reloads when the browser tries
   // to navigate away from the page, which causes the WebContents to end up in
@@ -2685,6 +2701,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, GetSizeForNewRenderView) {
 #endif
   EXPECT_EQ(exp_commit_size, rwhv_commit_size2);
   EXPECT_EQ(exp_commit_size, wcv_commit_size2);
+
   gfx::Size exp_final_size(initial_wcv_size);
   exp_final_size.Enlarge(wcv_resize_insets.width(),
                          wcv_resize_insets.height() + height_inset);
@@ -2732,6 +2749,37 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, CanDuplicateTab) {
   EXPECT_TRUE(chrome::CanDuplicateTab(browser()));
   EXPECT_TRUE(chrome::CanDuplicateTabAt(browser(), 0));
   EXPECT_TRUE(chrome::CanDuplicateTabAt(browser(), 1));
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserTest, DefaultMediaDevices) {
+  const std::string kDefaultAudioCapture1 = "test_default_audio_capture";
+  const std::string kDefaultVideoCapture1 = "test_default_video_capture";
+  auto SetString = [this](const std::string& path, const std::string& value) {
+    browser()->profile()->GetPrefs()->SetString(path, value);
+  };
+  SetString(prefs::kDefaultAudioCaptureDevice, kDefaultAudioCapture1);
+  SetString(prefs::kDefaultVideoCaptureDevice, kDefaultVideoCapture1);
+
+  ui_test_utils::NavigateToURL(browser(), GURL("chrome://newtab"));
+  WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  auto GetDeviceID = [web_contents](content::MediaStreamType type) {
+    return web_contents->GetDelegate()->GetDefaultMediaDeviceID(web_contents,
+                                                                type);
+  };
+  EXPECT_EQ(kDefaultAudioCapture1,
+            GetDeviceID(content::MEDIA_DEVICE_AUDIO_CAPTURE));
+  EXPECT_EQ(kDefaultVideoCapture1,
+            GetDeviceID(content::MEDIA_DEVICE_VIDEO_CAPTURE));
+
+  const std::string kDefaultAudioCapture2 = "test_default_audio_capture_2";
+  const std::string kDefaultVideoCapture2 = "test_default_video_capture_2";
+  SetString(prefs::kDefaultAudioCaptureDevice, kDefaultAudioCapture2);
+  SetString(prefs::kDefaultVideoCaptureDevice, kDefaultVideoCapture2);
+  EXPECT_EQ(kDefaultAudioCapture2,
+            GetDeviceID(content::MEDIA_DEVICE_AUDIO_CAPTURE));
+  EXPECT_EQ(kDefaultVideoCapture2,
+            GetDeviceID(content::MEDIA_DEVICE_VIDEO_CAPTURE));
 }
 
 namespace {

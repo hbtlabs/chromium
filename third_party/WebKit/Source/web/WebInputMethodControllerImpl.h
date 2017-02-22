@@ -15,6 +15,7 @@ class InputMethodController;
 class LocalFrame;
 class WebLocalFrameImpl;
 class WebPlugin;
+class WebRange;
 class WebString;
 
 class WebInputMethodControllerImpl : public WebInputMethodController {
@@ -29,18 +30,17 @@ class WebInputMethodControllerImpl : public WebInputMethodController {
   // WebInputMethodController overrides.
   bool setComposition(const WebString& text,
                       const WebVector<WebCompositionUnderline>& underlines,
+                      const WebRange& replacementRange,
                       int selectionStart,
                       int selectionEnd) override;
-
-  // Used to ask the WebInputMethodController to either delete and ongoing
-  // composition, or insert the specified text, or move the caret according to
-  // relativeCaretPosition.
-  bool commitText(const WebString& text, int relativeCaretPosition) override;
-
-  // Called to ask the WebInputMethodController to confirm an ongoing
-  // composition.
+  bool commitText(const WebString& text,
+                  const WebVector<WebCompositionUnderline>& underlines,
+                  const WebRange& replacementRange,
+                  int relativeCaretPosition) override;
   bool finishComposingText(
       ConfirmCompositionBehavior selectionBehavior) override;
+  WebTextInputInfo textInputInfo() override;
+  WebTextInputType textInputType() override;
 
   void setSuppressNextKeypressEvent(bool suppress) {
     m_suppressNextKeypressEvent = suppress;

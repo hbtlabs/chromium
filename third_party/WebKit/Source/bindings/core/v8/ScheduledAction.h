@@ -51,11 +51,16 @@ class ScheduledAction final
 
  public:
   static ScheduledAction* create(ScriptState*,
+                                 ExecutionContext* target,
                                  const ScriptValue& handler,
                                  const Vector<ScriptValue>& arguments);
-  static ScheduledAction* create(ScriptState*, const String& handler);
+  static ScheduledAction* create(ScriptState*,
+                                 ExecutionContext* target,
+                                 const String& handler);
 
   ~ScheduledAction();
+  void dispose();
+
   DECLARE_TRACE();
 
   void execute(ExecutionContext*);

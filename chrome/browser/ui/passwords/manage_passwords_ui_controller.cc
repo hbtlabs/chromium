@@ -28,7 +28,7 @@
 #include "components/password_manager/core/browser/password_manager_constants.h"
 #include "components/password_manager/core/browser/statistics_table.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
-#include "content/public/browser/navigation_details.h"
+#include "content/public/browser/navigation_handle.h"
 
 using password_manager::PasswordFormManager;
 
@@ -96,25 +96,26 @@ void ManagePasswordsUIController::OnUpdatePasswordSubmitted(
 
 bool ManagePasswordsUIController::OnChooseCredentials(
     std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials,
-    std::vector<std::unique_ptr<autofill::PasswordForm>> federated_credentials,
     const GURL& origin,
     const ManagePasswordsState::CredentialsCallback& callback) {
-  DCHECK(!local_credentials.empty() || !federated_credentials.empty());
+  DCHECK(!local_credentials.empty());
   if (!HasBrowserWindow())
     return false;
-  PasswordDialogController::FormsVector locals =
-      CopyFormVector(local_credentials);
-  PasswordDialogController::FormsVector federations =
-      CopyFormVector(federated_credentials);
-  passwords_data_.OnRequestCredentials(
-      std::move(local_credentials), std::move(federated_credentials), origin);
+  // If |local_credentials| contains PSL matches they shouldn't be propagated to
+  // the state because PSL matches aren't saved for current page. This logic is
+  // implemented here because Android uses ManagePasswordsState as a data source
+  // for account chooser.
+  PasswordDialogController::FormsVector locals;
+  if (!local_credentials[0]->is_public_suffix_match)
+    locals = CopyFormVector(local_credentials);
+  passwords_data_.OnRequestCredentials(std::move(locals), origin);
   passwords_data_.set_credentials_callback(callback);
   dialog_controller_.reset(new PasswordDialogControllerImpl(
       Profile::FromBrowserContext(web_contents()->GetBrowserContext()),
       this));
   dialog_controller_->ShowAccountChooser(
       CreateAccountChooser(dialog_controller_.get()),
-      std::move(locals), std::move(federations));
+      std::move(local_credentials));
   UpdateBubbleAndIconVisibility();
   return true;
 }
@@ -236,11 +237,6 @@ ManagePasswordsUIController::GetCurrentForms() const {
   return passwords_data_.GetCurrentForms();
 }
 
-const std::vector<std::unique_ptr<autofill::PasswordForm>>&
-ManagePasswordsUIController::GetFederatedForms() const {
-  return passwords_data_.federation_providers_forms();
-}
-
 const password_manager::InteractionsStats*
 ManagePasswordsUIController::GetCurrentInteractionStats() const {
   DCHECK_EQ(password_manager::ui::PENDING_PASSWORD_STATE, GetState());
@@ -267,16 +263,19 @@ void ManagePasswordsUIController::OnBubbleHidden() {
     UpdateBubbleAndIconVisibility();
 }
 
-void ManagePasswordsUIController::OnNoInteractionOnUpdate() {
-  if (GetState() != password_manager::ui::PENDING_PASSWORD_UPDATE_STATE) {
+void ManagePasswordsUIController::OnNoInteraction() {
+  if (GetState() != password_manager::ui::PENDING_PASSWORD_UPDATE_STATE &&
+      GetState() != password_manager::ui::PENDING_PASSWORD_STATE) {
     // Do nothing if the state was changed. It can happen for example when the
-    // update bubble is active and a page navigation happens.
+    // bubble is active and a page navigation happens.
     return;
   }
+  bool is_update =
+      GetState() == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE;
   password_manager::PasswordFormManager* form_manager =
       passwords_data_.form_manager();
   DCHECK(form_manager);
-  form_manager->OnNoInteractionOnUpdate();
+  form_manager->OnNoInteraction(is_update);
 }
 
 void ManagePasswordsUIController::OnNopeUpdateClicked() {
@@ -324,15 +323,6 @@ void ManagePasswordsUIController::ChooseCredential(
   UpdateBubbleAndIconVisibility();
 }
 
-void ManagePasswordsUIController::NavigateToExternalPasswordManager() {
-  chrome::NavigateParams params(
-      chrome::FindBrowserWithWebContents(web_contents()),
-      GURL(password_manager::kPasswordManagerAccountDashboardURL),
-      ui::PAGE_TRANSITION_LINK);
-  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-  chrome::Navigate(&params);
-}
-
 void ManagePasswordsUIController::NavigateToSmartLockHelpPage() {
   chrome::NavigateParams params(
       chrome::FindBrowserWithWebContents(web_contents()),
@@ -368,7 +358,7 @@ void ManagePasswordsUIController::SavePasswordInternal() {
       GetPasswordStore(web_contents());
   password_manager::PasswordFormManager* form_manager =
       passwords_data_.form_manager();
-  for (const auto& form : form_manager->blacklisted_matches()) {
+  for (auto* form : form_manager->blacklisted_matches()) {
     password_store->RemoveLogin(*form);
   }
 
@@ -386,14 +376,14 @@ void ManagePasswordsUIController::NeverSavePasswordInternal() {
   password_manager::PasswordFormManager* form_manager =
       passwords_data_.form_manager();
   DCHECK(form_manager);
-  form_manager->PermanentlyBlacklist();
+  form_manager->OnNeverClicked();
 }
 
 void ManagePasswordsUIController::UpdateBubbleAndIconVisibility() {
   // If we're not on a "webby" URL (e.g. "chrome://sign-in"), we shouldn't
   // display either the bubble or the icon.
-  if (!BrowsingDataHelper::IsWebScheme(
-          web_contents()->GetLastCommittedURL().scheme())) {
+  if (!ChromePasswordManagerClient::CanShowBubbleOnURL(
+          web_contents()->GetLastCommittedURL())) {
     passwords_data_.OnInactive();
   }
 
@@ -419,12 +409,14 @@ bool ManagePasswordsUIController::HasBrowserWindow() const {
   return chrome::FindBrowserWithWebContents(web_contents()) != nullptr;
 }
 
-void ManagePasswordsUIController::DidNavigateMainFrame(
-    const content::LoadCommittedDetails& details,
-    const content::FrameNavigateParams& params) {
-  // Don't react to in-page (fragment) navigations.
-  if (details.is_in_page)
+void ManagePasswordsUIController::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (!navigation_handle->IsInMainFrame() ||
+      !navigation_handle->HasCommitted() ||
+      // Don't react to in-page (fragment) navigations.
+      navigation_handle->IsSamePage()) {
     return;
+  }
 
   // It is possible that the user was not able to interact with the password
   // bubble.

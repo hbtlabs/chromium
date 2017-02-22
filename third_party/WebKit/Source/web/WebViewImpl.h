@@ -72,7 +72,7 @@
 namespace blink {
 
 class BrowserControls;
-class DataObject;
+class CompositorAnimationHost;
 class DevToolsEmulator;
 class Frame;
 class FullscreenController;
@@ -89,7 +89,6 @@ class WebInputMethodControllerImpl;
 class WebLayerTreeView;
 class WebLocalFrame;
 class WebLocalFrameImpl;
-class WebImage;
 class CompositorMutatorImpl;
 class WebPagePopupImpl;
 class WebPlugin;
@@ -98,9 +97,9 @@ class WebSettingsImpl;
 class WebViewScheduler;
 
 class WEB_EXPORT WebViewImpl final
-    : WTF_NON_EXPORTED_BASE(public WebView),
+    : NON_EXPORTED_BASE(public WebView),
       public RefCounted<WebViewImpl>,
-      WTF_NON_EXPORTED_BASE(public WebGestureCurveTarget),
+      NON_EXPORTED_BASE(public WebGestureCurveTarget),
       public PageWidgetEventHandler,
       public WebScheduler::InterventionReporter,
       public WebViewScheduler::WebViewSchedulerSettings {
@@ -141,7 +140,7 @@ class WEB_EXPORT WebViewImpl final
   void compositeAndReadbackAsync(
       WebCompositeAndReadbackAsyncCallback*) override;
   void themeChanged() override;
-  WebInputEventResult handleInputEvent(const WebInputEvent&) override;
+  WebInputEventResult handleInputEvent(const WebCoalescedInputEvent&) override;
   void setCursorVisibilityState(bool isVisible) override;
   bool hasTouchEventHandlersAt(const WebPoint&) override;
 
@@ -153,8 +152,6 @@ class WEB_EXPORT WebViewImpl final
   void mouseCaptureLost() override;
   void setFocus(bool enable) override;
   WebRange compositionRange() override;
-  WebTextInputInfo textInputInfo() override;
-  WebTextInputType textInputType() override;
   WebColor backgroundColor() const override;
   WebPagePopup* pagePopup() const override;
   bool selectionBounds(WebRect& anchor, WebRect& focus) const override;
@@ -227,7 +224,7 @@ class WEB_EXPORT WebViewImpl final
   void setDeviceScaleFactor(float) override;
   void setZoomFactorForDeviceScaleFactor(float) override;
 
-  void setDeviceColorProfile(const WebVector<char>&) override;
+  void setDeviceColorProfile(const gfx::ICCProfile&) override;
 
   void enableAutoResizeMode(const WebSize& minSize,
                             const WebSize& maxSize) override;
@@ -253,7 +250,6 @@ class WEB_EXPORT WebViewImpl final
   void performCustomContextMenuAction(unsigned action) override;
   void showContextMenu() override;
   void didCloseContextMenu() override;
-  void extractSmartClipData(WebRect, WebString&, WebString&, WebRect&) override;
   void hidePopups() override;
   void setPageOverlayColor(WebColor) override;
   WebPageImportanceSignals* pageImportanceSignals() override;
@@ -288,16 +284,16 @@ class WEB_EXPORT WebViewImpl final
   HitTestResult coreHitTestResultAt(const WebPoint&);
   void invalidateRect(const IntRect&);
 
-  void setIgnoreInputEvents(bool newValue);
   void setBaseBackgroundColor(WebColor);
+  void setBaseBackgroundColorOverride(WebColor);
+  void clearBaseBackgroundColorOverride();
   void setBackgroundColorOverride(WebColor);
   void setZoomFactorOverride(float);
   void setCompositorDeviceScaleFactorOverride(float);
   void setDeviceEmulationTransform(const TransformationMatrix&);
   TransformationMatrix getDeviceEmulationTransformForTesting() const;
 
-  Color baseBackgroundColor() const { return m_baseBackgroundColor; }
-
+  Color baseBackgroundColor() const;
   WebColor backgroundColorOverride() const { return m_backgroundColorOverride; }
 
   Frame* focusedCoreFrame() const;
@@ -335,8 +331,6 @@ class WEB_EXPORT WebViewImpl final
                                bool useAnchor,
                                float newScale,
                                double durationInSeconds);
-
-  void hasTouchEventHandlers(bool);
 
   // WebGestureCurveTarget implementation for fling.
   bool scrollBy(const WebFloatSize& delta,
@@ -447,8 +441,9 @@ class WEB_EXPORT WebViewImpl final
     return m_fakePageScaleAnimationUseAnchor;
   }
 
-  void enterFullscreenForElement(Element*);
-  void exitFullscreen(LocalFrame*);
+  void enterFullscreen(LocalFrame&);
+  void exitFullscreen(LocalFrame&);
+  void fullscreenElementChanged(Element*, Element*);
 
   // Exposed for the purpose of overriding device metrics.
   void sendResizeEventAndRepaint();
@@ -469,6 +464,9 @@ class WEB_EXPORT WebViewImpl final
   WebRect computeBlockBound(const WebPoint&, bool ignoreClipping);
 
   WebLayerTreeView* layerTreeView() const { return m_layerTreeView; }
+  CompositorAnimationHost* animationHost() const {
+    return m_animationHost.get();
+  }
 
   bool matchesHeuristicsForGpuRasterizationForTesting() const {
     return m_matchesHeuristicsForGpuRasterization;
@@ -486,7 +484,9 @@ class WEB_EXPORT WebViewImpl final
   void forceNextWebGLContextCreationToFail() override;
   void forceNextDrawingBufferCreationToFail() override;
 
-  CompositorProxyClient* createCompositorProxyClient();
+  CompositorWorkerProxyClient* createCompositorWorkerProxyClient();
+  AnimationWorkletProxyClient* createAnimationWorkletProxyClient();
+
   IntSize mainFrameSize();
   WebDisplayMode displayMode() const { return m_displayMode; }
 
@@ -501,9 +501,10 @@ class WEB_EXPORT WebViewImpl final
 
   ChromeClientImpl& chromeClient() const { return *m_chromeClientImpl.get(); }
 
-  // Returns the currently active WebInputMethodController which the one
-  // corresponding to the focused frame. It will return nullptr if there are
-  // none or |m_imeAcceptEvents| is false.
+  // Returns the currently active WebInputMethodController which is the one
+  // corresponding to the focused frame. It will return nullptr if there is no
+  // focused frame, or if the there is one but it belongs to a different local
+  // root.
   WebInputMethodControllerImpl* getActiveWebInputMethodController() const;
 
  private:
@@ -521,8 +522,7 @@ class WEB_EXPORT WebViewImpl final
   IntSize contentsSize() const;
 
   void performResize();
-  void resizeViewWhileAnchored(FrameView*,
-                               float browserControlsHeight,
+  void resizeViewWhileAnchored(float browserControlsHeight,
                                bool browserControlsShrinkLayout);
 
   // Overrides the compositor visibility. See the description of
@@ -532,7 +532,8 @@ class WEB_EXPORT WebViewImpl final
   // TODO(lfg): Remove once WebViewFrameWidget is deleted.
   void scheduleAnimationForWidget();
   bool getCompositionCharacterBounds(WebVector<WebRect>&) override;
-  void applyReplacementRange(const WebRange&) override;
+
+  void updateBaseBackgroundColor();
 
   friend class WebView;  // So WebView::Create can call our constructor
   friend class WebViewFrameWidget;
@@ -564,8 +565,6 @@ class WEB_EXPORT WebViewImpl final
   WebRect widenRectWithinPageBounds(const WebRect& source,
                                     int targetMargin,
                                     int minimumMargin);
-
-  void pointerLockMouseEvent(const WebInputEvent&);
 
   // PageWidgetEventHandler functions
   void handleMouseLeave(LocalFrame&, const WebMouseEvent&) override;
@@ -600,6 +599,8 @@ class WEB_EXPORT WebViewImpl final
 
   LocalFrame* focusedLocalFrameInWidget() const;
   LocalFrame* focusedLocalFrameAvailableForIme() const;
+
+  CompositorMutatorImpl& mutator();
 
   WebViewClient* m_client;  // Can be 0 (e.g. unittests, shared workers, etc.)
   WebSpellCheckClient* m_spellCheckClient;
@@ -651,8 +652,6 @@ class WEB_EXPORT WebViewImpl final
   float m_fakePageScaleAnimationPageScaleFactor;
   bool m_fakePageScaleAnimationUseAnchor;
 
-  bool m_ignoreInputEvents;
-
   float m_compositorDeviceScaleFactorOverride;
   TransformationMatrix m_deviceEmulationTransform;
 
@@ -662,11 +661,18 @@ class WEB_EXPORT WebViewImpl final
   // this behavior by setting this flag if the keyDown was handled.
   bool m_suppressNextKeypressEvent;
 
+  // TODO(ekaramad): Can we remove this and make sure IME events are not called
+  // when there is no page focus?
   // Represents whether or not this object should process incoming IME events.
   bool m_imeAcceptEvents;
 
   // The popup associated with an input/select element.
   RefPtr<WebPagePopupImpl> m_pagePopup;
+
+  // This stores the last hidden page popup. If a GestureTap attempts to open
+  // the popup that is closed by its previous GestureTapDown, the popup remains
+  // closed.
+  RefPtr<WebPagePopupImpl> m_lastHiddenPagePopup;
 
   Persistent<DevToolsEmulator> m_devToolsEmulator;
   std::unique_ptr<PageOverlay> m_pageColorOverlay;
@@ -681,9 +687,9 @@ class WEB_EXPORT WebViewImpl final
   Persistent<Node> m_mouseCaptureNode;
   RefPtr<UserGestureToken> m_mouseCaptureGestureToken;
 
-  RefPtr<UserGestureToken> m_pointerLockGestureToken;
-
   WebLayerTreeView* m_layerTreeView;
+  std::unique_ptr<CompositorAnimationHost> m_animationHost;
+
   WebLayer* m_rootLayer;
   GraphicsLayer* m_rootGraphicsLayer;
   GraphicsLayer* m_visualViewportContainerLayer;
@@ -698,9 +704,11 @@ class WEB_EXPORT WebViewImpl final
   WebGestureDevice m_flingSourceDevice;
   Vector<std::unique_ptr<LinkHighlightImpl>> m_linkHighlights;
   std::unique_ptr<CompositorAnimationTimeline> m_linkHighlightsTimeline;
-  Persistent<FullscreenController> m_fullscreenController;
+  std::unique_ptr<FullscreenController> m_fullscreenController;
 
   WebColor m_baseBackgroundColor;
+  bool m_baseBackgroundColorOverrideEnabled;
+  WebColor m_baseBackgroundColorOverride;
   WebColor m_backgroundColorOverride;
   float m_zoomFactorOverride;
 

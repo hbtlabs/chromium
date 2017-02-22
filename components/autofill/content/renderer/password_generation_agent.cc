@@ -8,6 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/autofill/content/renderer/form_autofill_util.h"
 #include "components/autofill/content/renderer/form_classifier.h"
 #include "components/autofill/content/renderer/password_autofill_agent.h"
@@ -79,7 +80,7 @@ std::vector<blink::WebInputElement> FindPasswordElementsForGeneration(
       all_password_elements.begin(), all_password_elements.end(),
       [&field_signature](const blink::WebInputElement& input) {
         FieldSignature signature = CalculateFieldSignatureByNameAndType(
-            input.nameForAutofill(), input.formControlType().utf8());
+            input.nameForAutofill().utf16(), input.formControlType().utf8());
         return signature == field_signature;
       });
   std::vector<blink::WebInputElement> passwords;
@@ -304,7 +305,8 @@ void PasswordGenerationAgent::GeneratedPasswordAccepted(
   password_generation::LogPasswordGenerationEvent(
       password_generation::PASSWORD_ACCEPTED);
   for (auto& password_element : generation_form_data_->password_elements) {
-    password_element.setValue(password, true /* sendEvents */);
+    password_element.setValue(blink::WebString::fromUTF16(password),
+                              true /* sendEvents */);
     // setValue() above may have resulted in JavaScript closing the frame.
     if (!render_frame())
       return;
@@ -342,7 +344,7 @@ PasswordGenerationAgent::CreatePasswordFormToPresave() {
     // TODO(kolos): when we are good in username detection, save username
     // as well.
     password_form->username_value = base::string16();
-    password_form->password_value = generation_element_.value();
+    password_form->password_value = generation_element_.value().utf16();
   }
 
   return password_form;
@@ -514,8 +516,9 @@ void PasswordGenerationAgent::ShowGenerationPopup() {
   GetPasswordManagerClient()->ShowPasswordGenerationPopup(
       render_frame()->GetRenderView()->ElementBoundsInWindow(
           generation_element_),
-      generation_element_.maxLength(), generation_element_.nameForAutofill(),
-      is_manually_triggered_, *generation_form_data_->form);
+      generation_element_.maxLength(),
+      generation_element_.nameForAutofill().utf16(), is_manually_triggered_,
+      *generation_form_data_->form);
   generation_popup_shown_ = true;
 }
 
@@ -563,7 +566,7 @@ void PasswordGenerationAgent::UserTriggeredGeneratePassword() {
   password_elements = FindPasswordElementsForGeneration(
       password_elements,
       CalculateFieldSignatureByNameAndType(
-          last_focused_password_element_.nameForAutofill(),
+          last_focused_password_element_.nameForAutofill().utf16(),
           last_focused_password_element_.formControlType().utf8()));
   generation_form_data_.reset(new AccountCreationFormData(
       make_linked_ptr(password_form.release()), password_elements));

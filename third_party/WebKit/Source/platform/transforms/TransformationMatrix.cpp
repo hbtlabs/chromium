@@ -163,7 +163,7 @@ static double determinant4x4(const TransformationMatrix::Matrix4& m) {
          d1 * determinant3x3(a2, a3, a4, b2, b3, b4, c2, c3, c4);
 }
 
-#if !CPU(ARM64)
+#if !CPU(ARM64) && !HAVE(MIPS_MSA_INTRINSICS)
 // adjoint( original_matrix, inverse_matrix )
 //
 //   calculate the adjoint of a 4x4 matrix
@@ -497,10 +497,12 @@ static bool inverse(const TransformationMatrix::Matrix4& matrix,
   // Calculate the adjoint matrix
   adjoint(matrix, result);
 
+  double rdet = 1 / det;
+
   // Scale the adjoint matrix to get the inverse
   for (int i = 0; i < 4; i++)
     for (int j = 0; j < 4; j++)
-      result[i][j] = result[i][j] / det;
+      result[i][j] = result[i][j] * rdet;
 #endif
   return true;
 }

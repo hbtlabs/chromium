@@ -9,7 +9,6 @@ tree {
 }
 
 .tree-item > .tree-row {
-  -webkit-user-select: none;
   background-color: rgba(255, 255, 255, 0);
   border: 1px solid rgba(255, 255, 255, 0); /* transparent white */
   border-radius: 2px;
@@ -18,12 +17,11 @@ tree {
   line-height: 28px;
   padding: 0 3px;
   position: relative;
+  user-select: none;
   white-space: nowrap;
 }
 
 .expand-icon {
-  transform: rotate(-90deg);
-  -webkit-transition: all 150ms;
   background: url(../images/tree_triangle.svg) no-repeat center center;
   background-size: 8px 5px;
   display: inline-block;
@@ -31,6 +29,8 @@ tree {
   opacity: .6;
   position: relative;
   top: 6px;
+  transform: rotate(-90deg);
+  transition: all 150ms;
   vertical-align: top;
   width: 16px;
 }
@@ -40,9 +40,9 @@ html[dir=rtl] .expand-icon {
 }
 
 .tree-item[expanded] > .tree-row > .expand-icon {
-  transform: rotate(0);
   background-image: url(../images/tree_triangle.svg);
   opacity: .5;
+  transform: rotate(0);
 }
 
 .tree-row .expand-icon {
@@ -152,10 +152,10 @@ tree[icon-visibility=parent] .tree-row[has-children=false] > .tree-label {
 
 .tree-rename > .tree-row > .tree-label {
   -webkit-user-modify: read-write-plaintext-only;
-  -webkit-user-select: auto;
   background: white;
   color: black;
   outline: 1px solid black;
+  user-select: auto;
 }
 
 .tree-item[editing] input {

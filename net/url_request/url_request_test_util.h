@@ -165,6 +165,7 @@ class TestDelegate : public URLRequest::Delegate {
   const std::string& data_received() const { return data_received_; }
   int bytes_received() const { return static_cast<int>(data_received_.size()); }
   int response_started_count() const { return response_started_count_; }
+  int received_bytes_count() const { return received_bytes_count_; }
   int received_redirect_count() const { return received_redirect_count_; }
   bool received_data_before_response() const {
     return received_data_before_response_;
@@ -357,7 +358,6 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
   bool OnCanAccessFile(const URLRequest& request,
                        const base::FilePath& path) const override;
   bool OnAreExperimentalCookieFeaturesEnabled() const override;
-  bool OnAreStrictSecureCookiesEnabled() const override;
   bool OnCancelURLRequestWithPolicyViolatingReferrerHeader(
       const URLRequest& request,
       const GURL& target_url,

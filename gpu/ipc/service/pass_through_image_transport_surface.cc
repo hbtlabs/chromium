@@ -23,7 +23,7 @@ PassThroughImageTransportSurface::PassThroughImageTransportSurface(
       weak_ptr_factory_(this) {}
 
 bool PassThroughImageTransportSurface::Initialize(
-    gl::GLSurface::Format format) {
+    gl::GLSurfaceFormat format) {
   // The surface is assumed to have already been initialized.
   delegate_->SetLatencyInfoCallback(
       base::Bind(&PassThroughImageTransportSurface::SetLatencyInfo,
@@ -57,15 +57,11 @@ void PassThroughImageTransportSurface::SwapBuffersAsync(
       weak_ptr_factory_.GetWeakPtr(), base::Passed(&latency_info), callback));
 }
 
-gfx::SwapResult PassThroughImageTransportSurface::SwapBuffersWithDamage(
-    int x,
-    int y,
-    int width,
-    int height) {
+gfx::SwapResult PassThroughImageTransportSurface::SwapBuffersWithBounds(
+    const std::vector<gfx::Rect>& rects) {
   std::unique_ptr<std::vector<ui::LatencyInfo>> latency_info =
       StartSwapBuffers();
-  gfx::SwapResult result =
-      gl::GLSurfaceAdapter::SwapBuffersWithDamage(x, y, width, height);
+  gfx::SwapResult result = gl::GLSurfaceAdapter::SwapBuffersWithBounds(rects);
   FinishSwapBuffers(std::move(latency_info), result);
   return result;
 }

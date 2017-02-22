@@ -40,18 +40,22 @@ namespace blink {
 
 std::unique_ptr<ServiceWorkerThread> ServiceWorkerThread::create(
     PassRefPtr<WorkerLoaderProxy> workerLoaderProxy,
-    WorkerReportingProxy& workerReportingProxy) {
-  return wrapUnique(new ServiceWorkerThread(std::move(workerLoaderProxy),
-                                            workerReportingProxy));
+    WorkerReportingProxy& workerReportingProxy,
+    ParentFrameTaskRunners* parentFrameTaskRunners) {
+  return WTF::wrapUnique(new ServiceWorkerThread(std::move(workerLoaderProxy),
+                                                 workerReportingProxy,
+                                                 parentFrameTaskRunners));
 }
 
 ServiceWorkerThread::ServiceWorkerThread(
     PassRefPtr<WorkerLoaderProxy> workerLoaderProxy,
-    WorkerReportingProxy& workerReportingProxy)
-    : WorkerThread(std::move(workerLoaderProxy), workerReportingProxy),
+    WorkerReportingProxy& workerReportingProxy,
+    ParentFrameTaskRunners* parentFrameTaskRunners)
+    : WorkerThread(std::move(workerLoaderProxy),
+                   workerReportingProxy,
+                   parentFrameTaskRunners),
       m_workerBackingThread(
-          WorkerBackingThread::create("ServiceWorker Thread",
-                                      BlinkGC::PerThreadHeapMode)) {}
+          WorkerBackingThread::create("ServiceWorker Thread")) {}
 
 ServiceWorkerThread::~ServiceWorkerThread() {}
 

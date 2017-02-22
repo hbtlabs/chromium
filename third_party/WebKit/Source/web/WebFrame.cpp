@@ -5,6 +5,7 @@
 #include "public/web/WebFrame.h"
 
 #include "bindings/core/v8/WindowProxyManager.h"
+#include "core/HTMLNames.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -104,6 +105,9 @@ bool WebFrame::swap(WebFrame* frame) {
                                                      uniqueName);
   }
 
+  if (oldFrame->hasReceivedUserGesture())
+    frame->toImplBase()->frame()->setDocumentHasReceivedUserGesture();
+
   frame->toImplBase()->frame()->getWindowProxyManager()->setGlobals(globals);
 
   m_parent = nullptr;
@@ -138,10 +142,22 @@ void WebFrame::setFrameOwnerProperties(
   // for frames with a remote owner.
   RemoteFrameOwner* owner = toRemoteFrameOwner(toImplBase()->frame()->owner());
   DCHECK(owner);
+
+  Frame* frame = toImplBase()->frame();
+  DCHECK(frame);
+
+  if (frame->isLocalFrame()) {
+    toLocalFrame(frame)->document()->willChangeFrameOwnerProperties(
+        properties.marginWidth, properties.marginHeight,
+        static_cast<ScrollbarMode>(properties.scrollingMode));
+  }
+
+  owner->setBrowsingContextContainerName(properties.name);
   owner->setScrollingMode(properties.scrollingMode);
   owner->setMarginWidth(properties.marginWidth);
   owner->setMarginHeight(properties.marginHeight);
   owner->setAllowFullscreen(properties.allowFullscreen);
+  owner->setAllowPaymentRequest(properties.allowPaymentRequest);
   owner->setCsp(properties.requiredCsp);
   owner->setDelegatedpermissions(properties.delegatedPermissions);
 }
@@ -285,9 +301,7 @@ ALWAYS_INLINE bool WebFrame::isFrameAlive(const WebFrame* frame) {
   return ThreadHeap::isHeapObjectAlive(toWebRemoteFrameImpl(frame));
 }
 
-template <typename VisitorDispatcher>
-ALWAYS_INLINE void WebFrame::traceFrameImpl(VisitorDispatcher visitor,
-                                            WebFrame* frame) {
+void WebFrame::traceFrame(Visitor* visitor, WebFrame* frame) {
   if (!frame)
     return;
 
@@ -297,9 +311,7 @@ ALWAYS_INLINE void WebFrame::traceFrameImpl(VisitorDispatcher visitor,
     visitor->trace(toWebRemoteFrameImpl(frame));
 }
 
-template <typename VisitorDispatcher>
-ALWAYS_INLINE void WebFrame::traceFramesImpl(VisitorDispatcher visitor,
-                                             WebFrame* frame) {
+void WebFrame::traceFrames(Visitor* visitor, WebFrame* frame) {
   DCHECK(frame);
   traceFrame(visitor, frame->m_parent);
   for (WebFrame* child = frame->firstChild(); child;
@@ -309,26 +321,9 @@ ALWAYS_INLINE void WebFrame::traceFramesImpl(VisitorDispatcher visitor,
   frame->m_openedFrameTracker->traceFrames(visitor);
 }
 
-template <typename VisitorDispatcher>
-ALWAYS_INLINE void WebFrame::clearWeakFramesImpl(VisitorDispatcher visitor) {
+void WebFrame::clearWeakFrames(Visitor* visitor) {
   if (!isFrameAlive(m_opener))
     m_opener = nullptr;
 }
-
-#define DEFINE_VISITOR_METHOD(VisitorDispatcher)                           \
-  void WebFrame::traceFrame(VisitorDispatcher visitor, WebFrame* frame) {  \
-    traceFrameImpl(visitor, frame);                                        \
-  }                                                                        \
-  void WebFrame::traceFrames(VisitorDispatcher visitor, WebFrame* frame) { \
-    traceFramesImpl(visitor, frame);                                       \
-  }                                                                        \
-  void WebFrame::clearWeakFrames(VisitorDispatcher visitor) {              \
-    clearWeakFramesImpl(visitor);                                          \
-  }
-
-DEFINE_VISITOR_METHOD(Visitor*)
-DEFINE_VISITOR_METHOD(InlinedGlobalMarkingVisitor)
-
-#undef DEFINE_VISITOR_METHOD
 
 }  // namespace blink

@@ -44,13 +44,16 @@ void MediaRouterDialogControllerAndroid::OnSinkSelected(
     const JavaParamRef<jstring>& jsink_id) {
   std::unique_ptr<CreatePresentationConnectionRequest>
       create_connection_request = TakeCreateConnectionRequest();
+  if (!create_connection_request)
+    return;
+
   const PresentationRequest& presentation_request =
       create_connection_request->presentation_request();
 
   // TODO(crbug.com/627655): Support multiple URLs.
   const MediaSource::Id source_id =
       presentation_request.GetMediaSources()[0].id();
-  const GURL origin = presentation_request.frame_url().GetOrigin();
+  const auto& origin = presentation_request.frame_origin();
 
   std::vector<MediaRouteResponseCallback> route_response_callbacks;
   route_response_callbacks.push_back(
@@ -88,7 +91,8 @@ void MediaRouterDialogControllerAndroid::OnDialogCancelled(
 void MediaRouterDialogControllerAndroid::CancelPresentationRequest() {
   std::unique_ptr<CreatePresentationConnectionRequest> request =
       TakeCreateConnectionRequest();
-  DCHECK(request);
+  if (!request)
+    return;
 
   request->InvokeErrorCallback(content::PresentationError(
       content::PRESENTATION_ERROR_SESSION_REQUEST_CANCELLED,

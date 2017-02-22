@@ -10,8 +10,8 @@
 #include "base/auto_reset.h"
 #include "ui/aura/client/transient_window_client_observer.h"
 #include "ui/aura/window.h"
-#include "ui/aura/window_property.h"
 #include "ui/aura/window_tracker.h"
+#include "ui/base/class_property.h"
 #include "ui/wm/core/transient_window_controller.h"
 #include "ui/wm/core/transient_window_observer.h"
 #include "ui/wm/core/transient_window_stacking_client.h"
@@ -19,12 +19,12 @@
 
 using aura::Window;
 
-DECLARE_WINDOW_PROPERTY_TYPE(wm::TransientWindowManager*);
+DECLARE_UI_CLASS_PROPERTY_TYPE(::wm::TransientWindowManager*);
 
 namespace wm {
 namespace {
 
-DEFINE_OWNED_WINDOW_PROPERTY_KEY(TransientWindowManager, kPropertyKey, NULL);
+DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(TransientWindowManager, kPropertyKey, NULL);
 
 }  // namespace
 
@@ -137,7 +137,15 @@ void TransientWindowManager::RestackTransientDescendants() {
       base::AutoReset<Window*> resetter(
           &descendant_manager->stacking_target_,
           window_);
+      for (aura::client::TransientWindowClientObserver& observer :
+           TransientWindowController::Get()->observers_) {
+        observer.OnWillRestackTransientChildAbove(window_, *it);
+      }
       parent->StackChildAbove((*it), window_);
+      for (aura::client::TransientWindowClientObserver& observer :
+           TransientWindowController::Get()->observers_) {
+        observer.OnDidRestackTransientChildAbove(window_, *it);
+      }
     }
   }
 }

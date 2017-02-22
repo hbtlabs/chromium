@@ -51,6 +51,9 @@ class AuraTestHelper {
   explicit AuraTestHelper(base::MessageLoopForUI* message_loop);
   ~AuraTestHelper();
 
+  // Returns the current AuraTestHelper, or nullptr if it's not alive.
+  static AuraTestHelper* GetInstance();
+
   // Makes aura target mus with a mock WindowTree (TestWindowTree). Must be
   // called before SetUp().
   void EnableMusWithTestWindowTree(
@@ -62,7 +65,8 @@ class AuraTestHelper {
   void EnableMusWithWindowTreeClient(WindowTreeClient* window_tree_client);
 
   // Creates and initializes (shows and sizes) the RootWindow for use in tests.
-  void SetUp(ui::ContextFactory* context_factory);
+  void SetUp(ui::ContextFactory* context_factory,
+             ui::ContextFactoryPrivate* context_factory_private);
 
   // Clean up objects that are created for tests. This also deletes the Env
   // object.

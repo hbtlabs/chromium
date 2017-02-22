@@ -5,10 +5,10 @@
 #include "chrome/browser/ui/sync/profile_signin_confirmation_helper.h"
 
 #include <memory>
+#include <string>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -136,8 +136,9 @@ class ProfileSigninConfirmationHelperTest : public testing::Test {
     user_prefs_ = new TestingPrefStoreWithCustomReadError;
     sync_preferences::TestingPrefServiceSyncable* pref_service =
         new sync_preferences::TestingPrefServiceSyncable(
-            new TestingPrefStore(), user_prefs_, new TestingPrefStore(),
-            new user_prefs::PrefRegistrySyncable(), new PrefNotifierImpl());
+            new TestingPrefStore(), new TestingPrefStore(), user_prefs_,
+            new TestingPrefStore(), new user_prefs::PrefRegistrySyncable(),
+            new PrefNotifierImpl());
     chrome::RegisterUserProfilePrefs(pref_service->registry());
     builder.SetPrefService(
         base::WrapUnique<sync_preferences::PrefServiceSyncable>(pref_service));

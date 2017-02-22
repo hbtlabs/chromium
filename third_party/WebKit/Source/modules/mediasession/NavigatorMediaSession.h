@@ -12,6 +12,7 @@
 namespace blink {
 
 class Navigator;
+class ScriptState;
 
 // Provides MediaSession as a supplement of Navigator as an attribute.
 class NavigatorMediaSession final
@@ -26,7 +27,7 @@ class NavigatorMediaSession final
   DECLARE_TRACE();
 
  private:
-  NavigatorMediaSession(Navigator&);
+  explicit NavigatorMediaSession(Navigator&);
   static const char* supplementName();
 
   // The MediaSession instance of this Navigator.

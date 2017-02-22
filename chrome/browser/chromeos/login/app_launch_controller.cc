@@ -21,6 +21,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/startup_app_launcher.h"
+#include "chrome/browser/chromeos/login/enterprise_user_session_metrics.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
@@ -36,6 +37,7 @@
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
+#include "extensions/common/features/feature_session_type.h"
 #include "net/base/network_change_notifier.h"
 
 namespace chromeos {
@@ -57,9 +59,9 @@ enum KioskLaunchType {
 const int kAppInstallSplashScreenMinTimeMS = 3000;
 
 bool IsEnterpriseManaged() {
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  return connector->IsEnterpriseManaged();
+  return g_browser_process->platform_part()
+      ->browser_policy_connector_chromeos()
+      ->IsEnterpriseManaged();
 }
 
 void RecordKioskLaunchUMA(bool is_auto_launch) {
@@ -72,6 +74,13 @@ void RecordKioskLaunchUMA(bool is_auto_launch) {
 
   UMA_HISTOGRAM_ENUMERATION("Kiosk.LaunchType", launch_type,
                             KIOSK_LAUNCH_TYPE_COUNT);
+
+  if (IsEnterpriseManaged()) {
+    enterprise_user_session_metrics::RecordSignInEvent(
+        is_auto_launch
+            ? enterprise_user_session_metrics::SignInEventType::AUTOMATIC_KIOSK
+            : enterprise_user_session_metrics::SignInEventType::MANUAL_KIOSK);
+  }
 }
 
 }  // namespace
@@ -171,18 +180,26 @@ void AppLaunchController::StartAppLaunch(bool is_auto_launch) {
   CHECK(KioskAppManager::Get());
   CHECK(KioskAppManager::Get()->GetApp(app_id_, &app));
 
+  int auto_launch_delay = -1;
   if (is_auto_launch) {
-    int delay;
     if (!CrosSettings::Get()->GetInteger(
-            kAccountsPrefDeviceLocalAccountAutoLoginDelay, &delay)) {
-      delay = 0;
+            kAccountsPrefDeviceLocalAccountAutoLoginDelay,
+            &auto_launch_delay)) {
+      auto_launch_delay = 0;
     }
-    DCHECK_EQ(0, delay) << "Kiosks do not support non-zero auto-login delays";
+    DCHECK_EQ(0, auto_launch_delay)
+        << "Kiosks do not support non-zero auto-login delays";
 
     // If we are launching a kiosk app with zero delay, mark it appropriately.
-    if (delay == 0)
+    if (auto_launch_delay == 0)
       KioskAppManager::Get()->SetAppWasAutoLaunchedWithZeroDelay(app_id_);
   }
+
+  extensions::SetCurrentFeatureSessionType(
+      is_auto_launch && auto_launch_delay == 0
+          ? extensions::FeatureSessionType::AUTOLAUNCHED_KIOSK
+          : extensions::FeatureSessionType::KIOSK);
+
   kiosk_profile_loader_.reset(
       new KioskProfileLoader(app.account_id, false, this));
   kiosk_profile_loader_->Start();
@@ -405,6 +422,10 @@ bool AppLaunchController::IsNetworkReady() {
   return app_launch_splash_screen_actor_->IsNetworkReady();
 }
 
+bool AppLaunchController::ShouldSkipAppInstallation() {
+  return false;
+}
+
 void AppLaunchController::OnLoadingOAuthFile() {
   app_launch_splash_screen_actor_->UpdateAppLaunchState(
       AppLaunchSplashScreenActor::APP_LAUNCH_STATE_LOADING_AUTH_FILE);
@@ -475,9 +496,17 @@ void AppLaunchController::OnLaunchSucceeded() {
 }
 
 void AppLaunchController::OnLaunchFailed(KioskAppLaunchError::Error error) {
-  LOG(ERROR) << "Kiosk launch failed. Will now shut down."
-             << ", error=" << error;
   DCHECK_NE(KioskAppLaunchError::NONE, error);
+  LOG(ERROR) << "Kiosk launch failed, error=" << error;
+
+  // Reboot on the recoverable cryptohome errors.
+  if (error == KioskAppLaunchError::CRYPTOHOMED_NOT_RUNNING ||
+      error == KioskAppLaunchError::ALREADY_MOUNTED) {
+    // Do not save the error because saved errors would stop app from launching
+    // on the next run.
+    chrome::AttemptRelaunch();
+    return;
+  }
 
   // Saves the error and ends the session to go back to login screen.
   KioskAppLaunchError::Save(error);

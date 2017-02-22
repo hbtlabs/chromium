@@ -22,7 +22,7 @@ ScriptValue IDBObserverChanges::records(ScriptState* scriptState) {
   for (const auto& it : m_records) {
     v8::Local<v8::String> key =
         v8String(isolate, m_database->getObjectStoreName(it.key));
-    v8::Local<v8::Value> value = toV8(it.value, context->Global(), isolate);
+    v8::Local<v8::Value> value = ToV8(it.value, context->Global(), isolate);
     map->Set(context, key, value).ToLocalChecked();
   }
   return ScriptValue::from(scriptState, map);
@@ -31,27 +31,44 @@ ScriptValue IDBObserverChanges::records(ScriptState* scriptState) {
 IDBObserverChanges* IDBObserverChanges::create(
     IDBDatabase* database,
     const WebVector<WebIDBObservation>& observations,
-    const WebVector<int32_t>& observationIndex) {
-  return new IDBObserverChanges(database, observations, observationIndex);
+    const WebVector<int32_t>& observationIndices,
+    v8::Isolate* isolate) {
+  return new IDBObserverChanges(database, nullptr, observations,
+                                observationIndices, isolate);
+}
+
+IDBObserverChanges* IDBObserverChanges::create(
+    IDBDatabase* database,
+    IDBTransaction* transaction,
+    const WebVector<WebIDBObservation>& observations,
+    const WebVector<int32_t>& observationIndices,
+    v8::Isolate* isolate) {
+  return new IDBObserverChanges(database, transaction, observations,
+                                observationIndices, isolate);
 }
 
 IDBObserverChanges::IDBObserverChanges(
     IDBDatabase* database,
+    IDBTransaction* transaction,
     const WebVector<WebIDBObservation>& observations,
-    const WebVector<int32_t>& observationIndex)
-    : m_database(database) {
-  extractChanges(observations, observationIndex);
+    const WebVector<int32_t>& observationIndices,
+    v8::Isolate* isolate)
+    : m_database(database), m_transaction(transaction) {
+  extractChanges(observations, observationIndices, isolate);
 }
 
 void IDBObserverChanges::extractChanges(
     const WebVector<WebIDBObservation>& observations,
-    const WebVector<int32_t>& observationIndex) {
+    const WebVector<int32_t>& observationIndices,
+    v8::Isolate* isolate) {
   // TODO(dmurph): Avoid getting and setting repeated times.
-  for (const auto& idx : observationIndex)
+  for (const auto& idx : observationIndices) {
     m_records
-        .add(observations[idx].objectStoreId,
-             HeapVector<Member<IDBObservation>>())
-        .storedValue->value.append(IDBObservation::create(observations[idx]));
+        .insert(observations[idx].objectStoreId,
+                HeapVector<Member<IDBObservation>>())
+        .storedValue->value.push_back(
+            IDBObservation::create(observations[idx], isolate));
+  }
 }
 
 DEFINE_TRACE(IDBObserverChanges) {

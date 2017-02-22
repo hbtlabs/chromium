@@ -11,11 +11,14 @@
 
 #include "base/macros.h"
 #include "base/time/time.h"
-#include "content/browser/devtools/protocol/network_handler.h"
 #include "content/browser/devtools/service_worker_devtools_manager.h"
 #include "content/browser/devtools/worker_devtools_agent_host.h"
 
 namespace content {
+
+struct ResourceRequest;
+struct ResourceResponseHead;
+struct ResourceRequestCompletionStatus;
 
 class ServiceWorkerDevToolsAgentHost : public WorkerDevToolsAgentHost {
  public:
@@ -45,6 +48,15 @@ class ServiceWorkerDevToolsAgentHost : public WorkerDevToolsAgentHost {
   void WorkerVersionInstalled();
   void WorkerVersionDoomed();
 
+  void NavigationPreloadRequestSent(const std::string& request_id,
+                                    const ResourceRequest& request);
+  void NavigationPreloadResponseReceived(const std::string& request_id,
+                                         const GURL& url,
+                                         const ResourceResponseHead& head);
+  void NavigationPreloadCompleted(
+      const std::string& request_id,
+      const ResourceRequestCompletionStatus& completion_status);
+
   int64_t service_worker_version_id() const;
   GURL scope() const;
 
@@ -61,7 +73,6 @@ class ServiceWorkerDevToolsAgentHost : public WorkerDevToolsAgentHost {
  private:
   ~ServiceWorkerDevToolsAgentHost() override;
   std::unique_ptr<ServiceWorkerIdentifier> service_worker_;
-  std::unique_ptr<devtools::network::NetworkHandler> network_handler_;
   base::Time version_installed_time_;
   base::Time version_doomed_time_;
 

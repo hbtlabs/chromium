@@ -17,11 +17,6 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_message_handler.h"
 
-namespace sessions {
-struct SessionTab;
-struct SessionWindow;
-}
-
 namespace syncer {
 class SyncService;
 }
@@ -62,12 +57,8 @@ class ForeignSessionHandler : public content::WebUIMessageHandler,
 
  private:
   // syncer::SyncServiceObserver:
-  void OnStateChanged() override {}
-  void OnSyncConfigurationCompleted() override;
-  void OnForeignSessionUpdated() override;
-
-  // Returns true if tab sync is enabled for this profile, otherwise false.
-  bool IsTabSyncEnabled();
+  void OnSyncConfigurationCompleted(syncer::SyncService* sync) override;
+  void OnForeignSessionUpdated(syncer::SyncService* sync) override;
 
   // Returns a string used to show the user when a session was last modified.
   base::string16 FormatSessionTime(const base::Time& time);

@@ -34,6 +34,16 @@ static const float kDefaultVolume = 1.0f;
 
 namespace media {
 
+namespace {
+
+gfx::Size GetRotatedVideoSize(VideoRotation rotation, gfx::Size natural_size) {
+  if (rotation == VIDEO_ROTATION_90 || rotation == VIDEO_ROTATION_270)
+    return gfx::Size(natural_size.height(), natural_size.width());
+  return natural_size;
+}
+
+}  // namespace
+
 class PipelineImpl::RendererWrapper : public DemuxerHost,
                                       public RendererClient {
  public:
@@ -571,6 +581,16 @@ void PipelineImpl::RendererWrapper::OnEnabledAudioTracksChanged(
     const std::vector<MediaTrack::Id>& enabledTrackIds) {
   DCHECK(media_task_runner_->BelongsToCurrentThread());
 
+  // If the pipeline has been created, but not started yet, we may still receive
+  // track notifications from blink level (e.g. when video track gets deselected
+  // due to player/pipeline belonging to a background tab). We can safely ignore
+  // these, since WebMediaPlayerImpl will ensure that demuxer stream / track
+  // status is in sync with blink after pipeline is started.
+  if (state_ == kCreated) {
+    DCHECK(!demuxer_);
+    return;
+  }
+
   // Track status notifications might be delivered asynchronously. If we receive
   // a notification when pipeline is stopped/shut down, it's safe to ignore it.
   if (state_ == kStopping || state_ == kStopped) {
@@ -589,6 +609,16 @@ void PipelineImpl::RendererWrapper::OnEnabledAudioTracksChanged(
 void PipelineImpl::RendererWrapper::OnSelectedVideoTrackChanged(
     const std::vector<MediaTrack::Id>& selectedTrackId) {
   DCHECK(media_task_runner_->BelongsToCurrentThread());
+
+  // If the pipeline has been created, but not started yet, we may still receive
+  // track notifications from blink level (e.g. when video track gets deselected
+  // due to player/pipeline belonging to a background tab). We can safely ignore
+  // these, since WebMediaPlayerImpl will ensure that demuxer stream / track
+  // status is in sync with blink after pipeline is started.
+  if (state_ == kCreated) {
+    DCHECK(!demuxer_);
+    return;
+  }
 
   // Track status notifications might be delivered asynchronously. If we receive
   // a notification when pipeline is stopped/shut down, it's safe to ignore it.
@@ -617,6 +647,20 @@ void PipelineImpl::RendererWrapper::OnStatisticsUpdate(
   shared_state_.statistics.video_frames_dropped += stats.video_frames_dropped;
   shared_state_.statistics.audio_memory_usage += stats.audio_memory_usage;
   shared_state_.statistics.video_memory_usage += stats.video_memory_usage;
+
+  base::TimeDelta old_average =
+      shared_state_.statistics.video_keyframe_distance_average;
+  if (stats.video_keyframe_distance_average != kNoTimestamp) {
+    shared_state_.statistics.video_keyframe_distance_average =
+        stats.video_keyframe_distance_average;
+  }
+
+  if (shared_state_.statistics.video_keyframe_distance_average != old_average) {
+    main_task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(&PipelineImpl::OnVideoAverageKeyframeDistanceUpdate,
+                   weak_pipeline_));
+  }
 }
 
 void PipelineImpl::RendererWrapper::OnBufferingStateChange(
@@ -824,16 +868,15 @@ void PipelineImpl::RendererWrapper::InitializeRenderer(
   DCHECK(media_task_runner_->BelongsToCurrentThread());
 
   switch (demuxer_->GetType()) {
-    case DemuxerStreamProvider::Type::STREAM:
-      if (!demuxer_->GetStream(DemuxerStream::AUDIO) &&
-          !demuxer_->GetStream(DemuxerStream::VIDEO)) {
+    case MediaResource::Type::STREAM:
+      if (demuxer_->GetAllStreams().empty()) {
         DVLOG(1) << "Error: demuxer does not have an audio or a video stream.";
         done_cb.Run(PIPELINE_ERROR_COULD_NOT_RENDER);
         return;
       }
       break;
 
-    case DemuxerStreamProvider::Type::URL:
+    case MediaResource::Type::URL:
       // NOTE: Empty GURL are not valid.
       if (!demuxer_->GetMediaUrlParams().media_url.is_valid()) {
         DVLOG(1) << "Error: demuxer does not have a valid URL.";
@@ -866,26 +909,30 @@ void PipelineImpl::RendererWrapper::ReportMetadata() {
   DCHECK(media_task_runner_->BelongsToCurrentThread());
 
   PipelineMetadata metadata;
-  DemuxerStream* stream;
+  std::vector<DemuxerStream*> streams;
 
   switch (demuxer_->GetType()) {
-    case DemuxerStreamProvider::Type::STREAM:
+    case MediaResource::Type::STREAM:
       metadata.timeline_offset = demuxer_->GetTimelineOffset();
-      stream = demuxer_->GetStream(DemuxerStream::VIDEO);
-      if (stream) {
-        metadata.has_video = true;
-        metadata.natural_size = stream->video_decoder_config().natural_size();
-        metadata.video_rotation = stream->video_rotation();
-        metadata.video_decoder_config = stream->video_decoder_config();
-      }
-      stream = demuxer_->GetStream(DemuxerStream::AUDIO);
-      if (stream) {
-        metadata.has_audio = true;
-        metadata.audio_decoder_config = stream->audio_decoder_config();
+      // TODO(servolk): What should we do about metadata for multiple streams?
+      streams = demuxer_->GetAllStreams();
+      for (const auto& stream : streams) {
+        if (stream->type() == DemuxerStream::VIDEO && !metadata.has_video) {
+          metadata.has_video = true;
+          metadata.natural_size = GetRotatedVideoSize(
+              stream->video_rotation(),
+              stream->video_decoder_config().natural_size());
+          metadata.video_rotation = stream->video_rotation();
+          metadata.video_decoder_config = stream->video_decoder_config();
+        }
+        if (stream->type() == DemuxerStream::AUDIO && !metadata.has_audio) {
+          metadata.has_audio = true;
+          metadata.audio_decoder_config = stream->audio_decoder_config();
+        }
       }
       break;
 
-    case DemuxerStreamProvider::Type::URL:
+    case MediaResource::Type::URL:
       // We don't know if the MediaPlayerRender has Audio/Video until we start
       // playing. Conservatively assume that they do.
       metadata.has_video = true;
@@ -938,6 +985,7 @@ void PipelineImpl::Start(Demuxer* demuxer,
   client_ = client;
   seek_cb_ = seek_cb;
   last_media_time_ = base::TimeDelta();
+  seek_time_ = kNoTimestamp;
 
   std::unique_ptr<TextRenderer> text_renderer;
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -1019,6 +1067,7 @@ void PipelineImpl::Seek(base::TimeDelta time, const PipelineStatusCB& seek_cb) {
 
   DCHECK(seek_cb_.is_null());
   seek_cb_ = seek_cb;
+  seek_time_ = time;
   last_media_time_ = base::TimeDelta();
   media_task_runner_->PostTask(
       FROM_HERE, base::Bind(&RendererWrapper::Seek,
@@ -1049,6 +1098,7 @@ void PipelineImpl::Resume(std::unique_ptr<Renderer> renderer,
   DCHECK(IsRunning());
   DCHECK(seek_cb_.is_null());
   seek_cb_ = seek_cb;
+  seek_time_ = time;
   last_media_time_ = base::TimeDelta();
 
   media_task_runner_->PostTask(
@@ -1103,6 +1153,14 @@ void PipelineImpl::SetVolume(float volume) {
 base::TimeDelta PipelineImpl::GetMediaTime() const {
   DCHECK(thread_checker_.CalledOnValidThread());
 
+  // Don't trust renderer time during a pending seek. Renderer may return
+  // pre-seek time which may corrupt |last_media_time_| used for clamping.
+  if (seek_time_ != kNoTimestamp) {
+    DVLOG(3) << __func__ << ": (seeking) " << seek_time_.InMilliseconds()
+             << " ms";
+    return seek_time_;
+  }
+
   base::TimeDelta media_time = renderer_wrapper_->GetMediaTime();
 
   // Clamp current media time to the last reported value, this prevents higher
@@ -1117,7 +1175,7 @@ base::TimeDelta PipelineImpl::GetMediaTime() const {
     return last_media_time_;
   }
 
-  DVLOG(3) << __FUNCTION__ << ": " << media_time.InMilliseconds() << " ms";
+  DVLOG(3) << __func__ << ": " << media_time.InMilliseconds() << " ms";
   last_media_time_ = media_time;
   return last_media_time_;
 }
@@ -1276,10 +1334,21 @@ void PipelineImpl::OnVideoOpacityChange(bool opaque) {
   client_->OnVideoOpacityChange(opaque);
 }
 
+void PipelineImpl::OnVideoAverageKeyframeDistanceUpdate() {
+  DVLOG(2) << __func__;
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(IsRunning());
+
+  DCHECK(client_);
+  client_->OnVideoAverageKeyframeDistanceUpdate();
+}
+
 void PipelineImpl::OnSeekDone() {
   DVLOG(3) << __func__;
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(IsRunning());
+
+  seek_time_ = kNoTimestamp;
 
   DCHECK(!seek_cb_.is_null());
   base::ResetAndReturn(&seek_cb_).Run(PIPELINE_OK);

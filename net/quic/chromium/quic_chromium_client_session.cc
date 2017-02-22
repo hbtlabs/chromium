@@ -15,6 +15,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/trace_event/memory_usage_estimator.h"
 #include "base/values.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
@@ -26,10 +27,10 @@
 #include "net/quic/chromium/crypto/proof_verifier_chromium.h"
 #include "net/quic/chromium/quic_chromium_connection_helper.h"
 #include "net/quic/chromium/quic_chromium_packet_writer.h"
+#include "net/quic/chromium/quic_crypto_client_stream_factory.h"
+#include "net/quic/chromium/quic_server_info.h"
 #include "net/quic/chromium/quic_stream_factory.h"
-#include "net/quic/core/crypto/quic_server_info.h"
 #include "net/quic/core/quic_client_promised_info.h"
-#include "net/quic/core/quic_crypto_client_stream_factory.h"
 #include "net/quic/core/spdy_utils.h"
 #include "net/socket/datagram_client_socket.h"
 #include "net/spdy/spdy_http_utils.h"
@@ -147,7 +148,7 @@ std::unique_ptr<base::Value> NetLogQuicPushPromiseReceivedCallback(
   return std::move(dict);
 }
 
-class HpackEncoderDebugVisitor : public QuicHeadersStream::HpackDebugVisitor {
+class HpackEncoderDebugVisitor : public QuicHpackDebugVisitor {
   void OnUseEntry(QuicTime::Delta elapsed) override {
     UMA_HISTOGRAM_TIMES(
         "Net.QuicHpackEncoder.IndexedEntryAge",
@@ -155,7 +156,7 @@ class HpackEncoderDebugVisitor : public QuicHeadersStream::HpackDebugVisitor {
   }
 };
 
-class HpackDecoderDebugVisitor : public QuicHeadersStream::HpackDebugVisitor {
+class HpackDecoderDebugVisitor : public QuicHpackDebugVisitor {
   void OnUseEntry(QuicTime::Delta elapsed) override {
     UMA_HISTOGRAM_TIMES(
         "Net.QuicHpackDecoder.IndexedEntryAge",
@@ -176,7 +177,7 @@ class QuicServerPushHelper : public ServerPushDelegate::ServerPushHelper {
     }
   }
 
-  const GURL& GetURL() override { return request_url_; }
+  const GURL& GetURL() const override { return request_url_; }
 
  private:
   base::WeakPtr<QuicChromiumClientSession> session_;
@@ -234,6 +235,7 @@ QuicChromiumClientSession::QuicChromiumClientSession(
     TransportSecurityState* transport_security_state,
     std::unique_ptr<QuicServerInfo> server_info,
     const QuicServerId& server_id,
+    bool require_confirmation,
     int yield_after_packets,
     QuicTime::Delta yield_after_duration,
     int cert_verify_flags,
@@ -243,12 +245,13 @@ QuicChromiumClientSession::QuicChromiumClientSession(
     base::TimeTicks dns_resolution_start_time,
     base::TimeTicks dns_resolution_end_time,
     QuicClientPushPromiseIndex* push_promise_index,
+    ServerPushDelegate* push_delegate,
     base::TaskRunner* task_runner,
     std::unique_ptr<SocketPerformanceWatcher> socket_performance_watcher,
     NetLog* net_log)
     : QuicClientSessionBase(connection, push_promise_index, config),
       server_id_(server_id),
-      require_confirmation_(false),
+      require_confirmation_(require_confirmation),
       stream_factory_(stream_factory),
       transport_security_state_(transport_security_state),
       server_info_(std::move(server_info)),
@@ -263,7 +266,7 @@ QuicChromiumClientSession::QuicChromiumClientSession(
       going_away_(false),
       port_migration_detected_(false),
       token_binding_signatures_(kTokenBindingSignatureMapSize),
-      push_delegate_(nullptr),
+      push_delegate_(push_delegate),
       streams_pushed_count_(0),
       streams_pushed_and_claimed_count_(0),
       bytes_pushed_count_(0),
@@ -311,7 +314,9 @@ QuicChromiumClientSession::~QuicChromiumClientSession() {
     CloseAllObservers(ERR_UNEXPECTED);
 
     connection()->set_debug_visitor(nullptr);
-    net_log_.EndEvent(NetLogEventType::QUIC_SESSION);
+
+    UMA_HISTOGRAM_COUNTS_1000("Net.QuicSession.AbortedPendingStreamRequests",
+                              stream_requests_.size());
 
     while (!stream_requests_.empty()) {
       StreamRequest* request = stream_requests_.front();
@@ -356,18 +361,15 @@ QuicChromiumClientSession::~QuicChromiumClientSession() {
   if (round_trip_handshakes < 0 || !stream_factory_)
     return;
 
-  bool port_selected = stream_factory_->enable_port_selection();
   SSLInfo ssl_info;
   // QUIC supports only secure urls.
   if (GetSSLInfo(&ssl_info) && ssl_info.cert.get()) {
-    if (!port_selected) {
-      UMA_HISTOGRAM_CUSTOM_COUNTS("Net.QuicSession.ConnectRandomPortForHTTPS",
-                                  round_trip_handshakes, 1, 3, 4);
-      if (require_confirmation_) {
-        UMA_HISTOGRAM_CUSTOM_COUNTS(
-            "Net.QuicSession.ConnectRandomPortRequiringConfirmationForHTTPS",
-            round_trip_handshakes, 1, 3, 4);
-      }
+    UMA_HISTOGRAM_CUSTOM_COUNTS("Net.QuicSession.ConnectRandomPortForHTTPS",
+                                round_trip_handshakes, 1, 3, 4);
+    if (require_confirmation_) {
+      UMA_HISTOGRAM_CUSTOM_COUNTS(
+          "Net.QuicSession.ConnectRandomPortRequiringConfirmationForHTTPS",
+          round_trip_handshakes, 1, 3, 4);
     }
   }
   const QuicConnectionStats stats = connection()->GetStats();
@@ -424,13 +426,14 @@ QuicChromiumClientSession::~QuicChromiumClientSession() {
   UMA_HISTOGRAM_COUNTS(
       "Net.QuicSession.MaxReordering",
       static_cast<base::HistogramBase::Sample>(stats.max_sequence_reordering));
+  net_log_.EndEvent(NetLogEventType::QUIC_SESSION);
 }
 
 void QuicChromiumClientSession::Initialize() {
   QuicClientSessionBase::Initialize();
-  headers_stream()->SetHpackEncoderDebugVisitor(
+  SetHpackEncoderDebugVisitor(
       base::MakeUnique<HpackEncoderDebugVisitor>());
-  headers_stream()->SetHpackDecoderDebugVisitor(
+  SetHpackDecoderDebugVisitor(
       base::MakeUnique<HpackDecoderDebugVisitor>());
 }
 
@@ -490,7 +493,10 @@ int QuicChromiumClientSession::TryCreateStream(
     return OK;
   }
 
+  request->pending_start_time_ = base::TimeTicks::Now();
   stream_requests_.push_back(request);
+  UMA_HISTOGRAM_COUNTS_1000("Net.QuicSession.NumPendingStreamRequests",
+                            stream_requests_.size());
   return ERR_IO_PENDING;
 }
 
@@ -555,6 +561,11 @@ QuicChromiumClientSession::CreateOutgoingReliableStreamImpl() {
 
 QuicCryptoClientStream* QuicChromiumClientSession::GetCryptoStream() {
   return crypto_stream_.get();
+}
+
+bool QuicChromiumClientSession::GetRemoteEndpoint(IPEndPoint* endpoint) {
+  *endpoint = peer_address().impl().socket_address();
+  return true;
 }
 
 // TODO(rtenneti): Add unittests for GetSSLInfo which exercise the various ways
@@ -653,9 +664,7 @@ Error QuicChromiumClientSession::GetTokenBindingSignature(
 }
 
 int QuicChromiumClientSession::CryptoConnect(
-    bool require_confirmation,
     const CompletionCallback& callback) {
-  require_confirmation_ = require_confirmation;
   connect_timing_.connect_start = base::TimeTicks::Now();
   RecordHandshakeState(STATE_STARTED);
   DCHECK(flow_controller());
@@ -796,6 +805,10 @@ void QuicChromiumClientSession::OnClosedStream() {
       !stream_requests_.empty() && crypto_stream_->encryption_established() &&
       !goaway_received() && !going_away_ && connection()->connected()) {
     StreamRequest* request = stream_requests_.front();
+    // TODO(ckrasic) - analyze data and then add logic to mark QUIC
+    // broken if wait times are excessive.
+    UMA_HISTOGRAM_TIMES("Net.QuicSession.PendingStreamsWaitTime",
+                        base::TimeTicks::Now() - request->pending_start_time_);
     stream_requests_.pop_front();
     request->OnRequestCompleteSuccess(CreateOutgoingReliableStreamImpl());
   }
@@ -811,7 +824,8 @@ void QuicChromiumClientSession::OnConfigNegotiated() {
     return;
 
   // Server has sent an alternate address to connect to.
-  IPEndPoint new_address = config()->ReceivedAlternateServerAddress();
+  IPEndPoint new_address =
+      config()->ReceivedAlternateServerAddress().impl().socket_address();
   IPEndPoint old_address;
   GetDefaultSocket()->GetPeerAddress(&old_address);
 
@@ -1303,7 +1317,6 @@ std::unique_ptr<base::Value> QuicChromiumClientSession::GetInfoAsValue(
   dict->SetInteger("packets_received", stats.packets_received);
   dict->SetInteger("packets_lost", stats.packets_lost);
   SSLInfo ssl_info;
-  dict->SetBoolean("secure", GetSSLInfo(&ssl_info) && ssl_info.cert.get());
 
   std::unique_ptr<base::ListValue> alias_list(new base::ListValue());
   for (std::set<HostPortPair>::const_iterator it = aliases.begin();
@@ -1339,7 +1352,9 @@ void QuicChromiumClientSession::OnReadError(
 bool QuicChromiumClientSession::OnPacket(const QuicReceivedPacket& packet,
                                          IPEndPoint local_address,
                                          IPEndPoint peer_address) {
-  ProcessUdpPacket(local_address, peer_address, packet);
+  ProcessUdpPacket(QuicSocketAddress(QuicSocketAddressImpl(local_address)),
+                   QuicSocketAddress(QuicSocketAddressImpl(peer_address)),
+                   packet);
   if (!connection()->connected()) {
     NotifyFactoryOfSessionClosedLater();
     return false;
@@ -1450,7 +1465,8 @@ bool QuicChromiumClientSession::HandlePromised(QuicStreamId id,
     GURL pushed_url = GetUrlFromHeaderBlock(headers);
     if (push_delegate_) {
       push_delegate_->OnPush(base::MakeUnique<QuicServerPushHelper>(
-          weak_factory_.GetWeakPtr(), pushed_url));
+                                 weak_factory_.GetWeakPtr(), pushed_url),
+                             net_log_);
     }
   }
   net_log_.AddEvent(NetLogEventType::QUIC_SESSION_PUSH_PROMISE_RECEIVED,
@@ -1501,6 +1517,13 @@ QuicChromiumClientSession::GetConnectTiming() {
 
 QuicVersion QuicChromiumClientSession::GetQuicVersion() const {
   return connection()->version();
+}
+
+size_t QuicChromiumClientSession::EstimateMemoryUsage() const {
+  // TODO(xunjieli): Estimate |crypto_stream_|, QuicSpdySession's
+  // QuicHeaderList, QuicSession's QuiCWriteBlockedList, open streams and
+  // unacked packet map.
+  return base::trace_event::EstimateMemoryUsage(packet_readers_);
 }
 
 }  // namespace net

@@ -92,6 +92,7 @@ public class LayoutManagerChrome
             if (type == TabLaunchType.FROM_RESTORE) return;
             if (type == TabLaunchType.FROM_REPARENTING) return;
             if (type == TabLaunchType.FROM_EXTERNAL_APP) return;
+            if (type == TabLaunchType.FROM_LAUNCHER_SHORTCUT) return;
 
             tabCreating(getTabModelSelector().getCurrentTabId(), tab.getUrl(), tab.isIncognito());
         }
@@ -105,11 +106,11 @@ public class LayoutManagerChrome
                 boolean incognito = tab.isIncognito();
                 boolean willBeSelected = launchType != TabLaunchType.FROM_LONGPRESS_BACKGROUND
                         || (!getTabModelSelector().isIncognitoSelected() && incognito);
-                float lastTapX = LocalizationUtils.isLayoutRtl() ? mLastContentWidthDp : 0.f;
+                float lastTapX = LocalizationUtils.isLayoutRtl()
+                        ? mHost.getWidth() * mPxToDp : 0.f;
                 float lastTapY = 0.f;
                 if (launchType != TabLaunchType.FROM_CHROME_UI) {
-                    float heightDelta =
-                            mLastFullscreenViewportDp.height() - mLastVisibleViewportDp.height();
+                    float heightDelta = mHost.getHeightMinusBrowserControls() * mPxToDp;
                     lastTapX = mPxToDp * mLastTapX;
                     lastTapY = mPxToDp * mLastTapY - heightDelta;
                 }

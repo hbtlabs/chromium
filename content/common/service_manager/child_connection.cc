@@ -91,16 +91,15 @@ class ChildConnection::IOThreadContext
     service_manager::mojom::ServicePtr service;
     service.Bind(mojo::InterfacePtrInfo<service_manager::mojom::Service>(
         std::move(service_pipe), 0u));
-    service_manager::mojom::PIDReceiverRequest pid_receiver_request =
-        mojo::GetProxy(&pid_receiver_);
+    service_manager::mojom::PIDReceiverRequest pid_receiver_request(
+        &pid_receiver_);
 
-    service_manager::Connector::ConnectParams params(child_identity);
-    params.set_client_process_connection(std::move(service),
-                                         std::move(pid_receiver_request));
-
-    // In some unit testing scenarios a null connector is passed.
-    if (connector)
-      connection_ = connector->Connect(&params);
+    if (connector) {
+      connector->StartService(child_identity,
+                              std::move(service),
+                              std::move(pid_receiver_request));
+      connection_ = connector->Connect(child_identity);
+    }
   }
 
   void ShutDownOnIOThread() {
@@ -124,19 +123,16 @@ class ChildConnection::IOThreadContext
 ChildConnection::ChildConnection(
     const std::string& service_name,
     const std::string& instance_id,
-    const std::string& child_token,
+    mojo::edk::PendingProcessConnection* process_connection,
     service_manager::Connector* connector,
     scoped_refptr<base::SequencedTaskRunner> io_task_runner)
     : context_(new IOThreadContext),
       child_identity_(service_name,
                       service_manager::mojom::kInheritUserID,
                       instance_id),
-      service_token_(mojo::edk::GenerateRandomToken()),
       weak_factory_(this) {
-  mojo::ScopedMessagePipeHandle service_pipe =
-      mojo::edk::CreateParentMessagePipe(service_token_, child_token);
-
-  context_->Initialize(child_identity_, connector, std::move(service_pipe),
+  context_->Initialize(child_identity_, connector,
+                       process_connection->CreateMessagePipe(&service_token_),
                        io_task_runner);
   remote_interfaces_.Forward(
       base::Bind(&CallBinderOnTaskRunner,
@@ -149,6 +145,7 @@ ChildConnection::~ChildConnection() {
 }
 
 void ChildConnection::SetProcessHandle(base::ProcessHandle handle) {
+  process_handle_ = handle;
   context_->SetProcessHandle(handle);
 }
 

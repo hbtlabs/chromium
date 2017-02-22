@@ -61,6 +61,16 @@ static inline bool featureWithValidIdent(const String& mediaFeature,
   if (mediaFeature == scanMediaFeature)
     return ident == CSSValueInterlace || ident == CSSValueProgressive;
 
+  if (RuntimeEnabledFeatures::mediaQueryShapeEnabled()) {
+    if (mediaFeature == shapeMediaFeature)
+      return ident == CSSValueRect || ident == CSSValueRound;
+  }
+
+  if (mediaFeature == colorGamutMediaFeature) {
+    return ident == CSSValueSRGB || ident == CSSValueP3 ||
+           ident == CSSValueRec2020;
+  }
+
   return false;
 }
 
@@ -164,7 +174,9 @@ static inline bool featureWithoutValue(const String& mediaFeature) {
          mediaFeature == devicePixelRatioMediaFeature ||
          mediaFeature == resolutionMediaFeature ||
          mediaFeature == displayModeMediaFeature ||
-         mediaFeature == scanMediaFeature;
+         mediaFeature == scanMediaFeature ||
+         mediaFeature == shapeMediaFeature ||
+         mediaFeature == colorGamutMediaFeature;
 }
 
 bool MediaQueryExp::isViewportDependent() const {
@@ -193,7 +205,8 @@ bool MediaQueryExp::isDeviceDependent() const {
          m_mediaFeature == minDeviceHeightMediaFeature ||
          m_mediaFeature == maxDeviceAspectRatioMediaFeature ||
          m_mediaFeature == maxDeviceWidthMediaFeature ||
-         m_mediaFeature == maxDeviceHeightMediaFeature;
+         m_mediaFeature == maxDeviceHeightMediaFeature ||
+         m_mediaFeature == shapeMediaFeature;
 }
 
 MediaQueryExp::MediaQueryExp(const MediaQueryExp& other)
@@ -215,7 +228,7 @@ MediaQueryExp* MediaQueryExp::createIfValid(
   if (tokenList.size() == 0 && featureWithoutValue(lowerMediaFeature)) {
     // Valid, creates a MediaQueryExp with an 'invalid' MediaQueryExpValue
   } else if (tokenList.size() == 1) {
-    CSSParserToken token = tokenList.first();
+    CSSParserToken token = tokenList.front();
 
     if (token.type() == IdentToken) {
       CSSValueID ident = token.id();

@@ -20,8 +20,6 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 
-struct RendererContentSettingRules;
-
 namespace guest_view {
 
 class GuestViewEvent;
@@ -232,9 +230,8 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
                  bool final_update) override;
 
   // WebContentsObserver implementation.
-  void DidNavigateMainFrame(
-      const content::LoadCommittedDetails& details,
-      const content::FrameNavigateParams& params) override;
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
 
   // Given a set of initialization parameters, a concrete subclass of
   // GuestViewBase can create a specialized WebContents that it returns back to

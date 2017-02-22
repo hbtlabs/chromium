@@ -69,6 +69,7 @@ void ManifestParser::Parse() {
   manifest_.display = ParseDisplay(*dictionary);
   manifest_.orientation = ParseOrientation(*dictionary);
   manifest_.icons = ParseIcons(*dictionary);
+  manifest_.share_target = ParseShareTarget(*dictionary);
   manifest_.related_applications = ParseRelatedApplications(*dictionary);
   manifest_.prefer_related_applications =
       ParsePreferRelatedApplications(*dictionary);
@@ -136,7 +137,8 @@ int64_t ManifestParser::ParseColor(
     return Manifest::kInvalidOrMissingColor;
 
   blink::WebColor color;
-  if (!blink::WebCSSParser::parseColor(&color, parsed_color.string())) {
+  if (!blink::WebCSSParser::parseColor(
+          &color, blink::WebString::fromUTF16(parsed_color.string()))) {
     AddErrorInfo("property '" + key + "' ignored, '" +
                  base::UTF16ToUTF8(parsed_color.string()) + "' is not a " +
                  "valid color.");
@@ -266,7 +268,8 @@ std::vector<gfx::Size> ManifestParser::ParseIconSizes(
     return sizes;
 
   blink::WebVector<blink::WebSize> web_sizes =
-      blink::WebIconSizesParser::parseIconSizes(sizes_str.string());
+      blink::WebIconSizesParser::parseIconSizes(
+          blink::WebString::fromUTF16(sizes_str.string()));
   sizes.resize(web_sizes.size());
   for (size_t i = 0; i < web_sizes.size(); ++i)
     sizes[i] = web_sizes[i];
@@ -274,6 +277,38 @@ std::vector<gfx::Size> ManifestParser::ParseIconSizes(
     AddErrorInfo("found icon with no valid size.");
   }
   return sizes;
+}
+
+std::vector<Manifest::Icon::IconPurpose> ManifestParser::ParseIconPurpose(
+    const base::DictionaryValue& icon) {
+  base::NullableString16 purpose_str = ParseString(icon, "purpose", NoTrim);
+  std::vector<Manifest::Icon::IconPurpose> purposes;
+
+  if (purpose_str.is_null()) {
+    purposes.push_back(Manifest::Icon::IconPurpose::ANY);
+    return purposes;
+  }
+
+  std::vector<base::string16> keywords = base::SplitString(
+      purpose_str.string(), base::ASCIIToUTF16(" "),
+      base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  for (const base::string16& keyword : keywords) {
+    if (base::LowerCaseEqualsASCII(keyword, "any")) {
+      purposes.push_back(Manifest::Icon::IconPurpose::ANY);
+    } else if (base::LowerCaseEqualsASCII(keyword, "badge")) {
+      purposes.push_back(Manifest::Icon::IconPurpose::BADGE);
+    } else {
+      AddErrorInfo(
+          "found icon with invalid purpose. "
+          "Using default value 'any'.");
+    }
+  }
+
+  if (purposes.empty()) {
+    purposes.push_back(Manifest::Icon::IconPurpose::ANY);
+  }
+
+  return purposes;
 }
 
 std::vector<Manifest::Icon> ManifestParser::ParseIcons(
@@ -300,11 +335,33 @@ std::vector<Manifest::Icon> ManifestParser::ParseIcons(
       continue;
     icon.type = ParseIconType(*icon_dictionary);
     icon.sizes = ParseIconSizes(*icon_dictionary);
+    icon.purpose = ParseIconPurpose(*icon_dictionary);
 
     icons.push_back(icon);
   }
 
   return icons;
+}
+
+base::NullableString16 ManifestParser::ParseShareTargetURLTemplate(
+    const base::DictionaryValue& share_target) {
+  return ParseString(share_target, "url_template", Trim);
+}
+
+base::Optional<Manifest::ShareTarget> ManifestParser::ParseShareTarget(
+    const base::DictionaryValue& dictionary) {
+  if (!dictionary.HasKey("share_target"))
+    return base::nullopt;
+
+  Manifest::ShareTarget share_target;
+  const base::DictionaryValue* share_target_dict = nullptr;
+  dictionary.GetDictionary("share_target", &share_target_dict);
+  share_target.url_template = ParseShareTargetURLTemplate(*share_target_dict);
+
+  if (share_target.url_template.is_null()) {
+    return base::nullopt;
+  }
+  return base::Optional<Manifest::ShareTarget>(share_target);
 }
 
 base::NullableString16 ManifestParser::ParseRelatedApplicationPlatform(

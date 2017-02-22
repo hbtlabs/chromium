@@ -5,6 +5,7 @@
 #ifndef ShapeResultBuffer_h
 #define ShapeResultBuffer_h
 
+#include "platform/PlatformExport.h"
 #include "platform/fonts/shaping/ShapeResult.h"
 #include "wtf/Allocator.h"
 #include "wtf/RefPtr.h"
@@ -14,9 +15,10 @@ namespace blink {
 
 struct CharacterRange;
 class GlyphBuffer;
+struct GlyphData;
 class TextRun;
 
-class ShapeResultBuffer {
+class PLATFORM_EXPORT ShapeResultBuffer {
   WTF_MAKE_NONCOPYABLE(ShapeResultBuffer);
   STACK_ALLOCATED();
 
@@ -25,7 +27,7 @@ class ShapeResultBuffer {
 
   void appendResult(PassRefPtr<const ShapeResult> result) {
     m_hasVerticalOffsets |= result->hasVerticalOffsets();
-    m_results.append(result);
+    m_results.push_back(result);
   }
 
   bool hasVerticalOffsets() const { return m_hasVerticalOffsets; }
@@ -49,12 +51,26 @@ class ShapeResultBuffer {
   Vector<CharacterRange> individualCharacterRanges(TextDirection,
                                                    float totalWidth) const;
 
+  static CharacterRange getCharacterRange(RefPtr<const ShapeResult>,
+                                          TextDirection,
+                                          float totalWidth,
+                                          unsigned from,
+                                          unsigned to);
+
  private:
-  float fillFastHorizontalGlyphBuffer(GlyphBuffer*, TextDirection) const;
+  static CharacterRange getCharacterRangeInternal(
+      const Vector<RefPtr<const ShapeResult>, 64>&,
+      TextDirection,
+      float totalWidth,
+      unsigned from,
+      unsigned to);
+
+  float fillFastHorizontalGlyphBuffer(GlyphBuffer*, const TextRun&) const;
 
   template <TextDirection>
   static float fillGlyphBufferForRun(GlyphBuffer*,
                                      const ShapeResult::RunInfo*,
+                                     const TextRun&,
                                      float initialAdvance,
                                      unsigned from,
                                      unsigned to,

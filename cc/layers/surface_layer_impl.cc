@@ -16,7 +16,7 @@
 namespace cc {
 
 SurfaceLayerImpl::SurfaceLayerImpl(LayerTreeImpl* tree_impl, int id)
-    : LayerImpl(tree_impl, id), surface_scale_(0.f) {
+    : LayerImpl(tree_impl, id) {
   layer_tree_impl()->AddSurfaceLayer(this);
 }
 
@@ -29,59 +29,95 @@ std::unique_ptr<LayerImpl> SurfaceLayerImpl::CreateLayerImpl(
   return SurfaceLayerImpl::Create(tree_impl, id());
 }
 
-void SurfaceLayerImpl::SetSurfaceId(const SurfaceId& surface_id) {
-  if (surface_id_ == surface_id)
+void SurfaceLayerImpl::SetPrimarySurfaceInfo(const SurfaceInfo& surface_info) {
+  if (primary_surface_info_ == surface_info)
     return;
 
-  surface_id_ = surface_id;
+  primary_surface_info_ = surface_info;
   NoteLayerPropertyChanged();
 }
 
-void SurfaceLayerImpl::SetSurfaceScale(float scale) {
-  if (surface_scale_ == scale)
+void SurfaceLayerImpl::SetFallbackSurfaceInfo(const SurfaceInfo& surface_info) {
+  if (fallback_surface_info_ == surface_info)
     return;
 
-  surface_scale_ = scale;
+  fallback_surface_info_ = surface_info;
   NoteLayerPropertyChanged();
 }
 
-void SurfaceLayerImpl::SetSurfaceSize(const gfx::Size& size) {
-  if (surface_size_ == size)
+void SurfaceLayerImpl::SetStretchContentToFillBounds(bool stretch_content) {
+  if (stretch_content_to_fill_bounds_ == stretch_content)
     return;
 
-  surface_size_ = size;
+  stretch_content_to_fill_bounds_ = stretch_content;
   NoteLayerPropertyChanged();
 }
 
 void SurfaceLayerImpl::PushPropertiesTo(LayerImpl* layer) {
   LayerImpl::PushPropertiesTo(layer);
   SurfaceLayerImpl* layer_impl = static_cast<SurfaceLayerImpl*>(layer);
-
-  layer_impl->SetSurfaceId(surface_id_);
-  layer_impl->SetSurfaceSize(surface_size_);
-  layer_impl->SetSurfaceScale(surface_scale_);
+  layer_impl->SetPrimarySurfaceInfo(primary_surface_info_);
+  layer_impl->SetFallbackSurfaceInfo(fallback_surface_info_);
+  layer_impl->SetStretchContentToFillBounds(stretch_content_to_fill_bounds_);
 }
 
 void SurfaceLayerImpl::AppendQuads(RenderPass* render_pass,
                                    AppendQuadsData* append_quads_data) {
   AppendRainbowDebugBorder(render_pass);
+  auto* primary = CreateSurfaceDrawQuad(
+      render_pass, SurfaceDrawQuadType::PRIMARY, primary_surface_info_);
+  // Emitting a fallback SurfaceDrawQuad is unnecessary if the primary and
+  // fallback surface Ids match.
+  if (primary && fallback_surface_info_.id() != primary_surface_info_.id()) {
+    primary->fallback_quad = CreateSurfaceDrawQuad(
+        render_pass, SurfaceDrawQuadType::FALLBACK, fallback_surface_info_);
+  }
+}
+
+SurfaceDrawQuad* SurfaceLayerImpl::CreateSurfaceDrawQuad(
+    RenderPass* render_pass,
+    SurfaceDrawQuadType surface_draw_quad_type,
+    const SurfaceInfo& surface_info) {
+  if (!surface_info.id().is_valid())
+    return nullptr;
+
+  gfx::Rect quad_rect(surface_info.size_in_pixels());
+  gfx::Rect visible_quad_rect =
+      draw_properties().occlusion_in_content_space.GetUnoccludedContentRect(
+          gfx::Rect(bounds()));
+
+  float layer_to_content_scale_x, layer_to_content_scale_y;
+  if (stretch_content_to_fill_bounds_) {
+    // Stretches the surface contents to exactly fill the layer bounds,
+    // regardless of scale or aspect ratio differences.
+    layer_to_content_scale_x =
+        static_cast<float>(surface_info.size_in_pixels().width()) /
+        bounds().width();
+    layer_to_content_scale_y =
+        static_cast<float>(surface_info.size_in_pixels().height()) /
+        bounds().height();
+  } else {
+    layer_to_content_scale_x = layer_to_content_scale_y =
+        surface_info.device_scale_factor();
+  }
+
+  visible_quad_rect = gfx::ScaleToEnclosedRect(
+      visible_quad_rect, layer_to_content_scale_x, layer_to_content_scale_y);
+  visible_quad_rect = gfx::IntersectRects(quad_rect, visible_quad_rect);
+
+  if (visible_quad_rect.IsEmpty())
+    return nullptr;
 
   SharedQuadState* shared_quad_state =
       render_pass->CreateAndAppendSharedQuadState();
-  PopulateScaledSharedQuadState(shared_quad_state, surface_scale_);
+  PopulateScaledSharedQuadState(shared_quad_state, layer_to_content_scale_x,
+                                layer_to_content_scale_y);
 
-  if (!surface_id_.is_valid())
-    return;
-
-  gfx::Rect quad_rect(surface_size_);
-  gfx::Rect visible_quad_rect =
-      draw_properties().occlusion_in_content_space.GetUnoccludedContentRect(
-          quad_rect);
-  if (visible_quad_rect.IsEmpty())
-    return;
-  SurfaceDrawQuad* quad =
+  SurfaceDrawQuad* surface_draw_quad =
       render_pass->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
-  quad->SetNew(shared_quad_state, quad_rect, visible_quad_rect, surface_id_);
+  surface_draw_quad->SetNew(shared_quad_state, quad_rect, visible_quad_rect,
+                            surface_info.id(), surface_draw_quad_type, nullptr);
+  return surface_draw_quad;
 }
 
 void SurfaceLayerImpl::GetDebugBorderProperties(SkColor* color,
@@ -179,7 +215,9 @@ void SurfaceLayerImpl::AppendRainbowDebugBorder(RenderPass* render_pass) {
 
 void SurfaceLayerImpl::AsValueInto(base::trace_event::TracedValue* dict) const {
   LayerImpl::AsValueInto(dict);
-  dict->SetString("surface_id", surface_id_.ToString());
+  dict->SetString("surface_id", primary_surface_info_.id().ToString());
+  dict->SetString("fallback_surface_id",
+                  fallback_surface_info_.id().ToString());
 }
 
 const char* SurfaceLayerImpl::LayerTypeAsString() const {

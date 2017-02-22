@@ -111,13 +111,7 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   virtual const GURL& GetLastCommittedURL() = 0;
 
   // Returns the last committed origin of the frame.
-  //
-  // The origin is only available if this RenderFrameHost is current in the
-  // frame tree -- i.e., it would be visited by WebContents::ForEachFrame. In
-  // particular, this method may CHECK if called from
-  // WebContentsObserver::RenderFrameCreated, since non-current frames can be
-  // passed to that observer method.
-  virtual url::Origin GetLastCommittedOrigin() = 0;
+  virtual const url::Origin& GetLastCommittedOrigin() = 0;
 
   // Returns the associated widget's native view.
   virtual gfx::NativeView GetNativeView() = 0;
@@ -227,6 +221,14 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
 
   // Retrieves the text input info associated with the current form field.
   virtual void RequestFocusedFormFieldData(FormFieldDataCallback& callback) = 0;
+
+  // Tell the render frame to enable a set of javascript bindings. The argument
+  // should be a combination of values from BindingsPolicy.
+  virtual void AllowBindings(int binding_flags) = 0;
+
+  // Returns a bitwise OR of bindings types that have been enabled for this
+  // RenderFrame. See BindingsPolicy for details.
+  virtual int GetEnabledBindings() const = 0;
 
  private:
   // This interface should only be implemented inside content.

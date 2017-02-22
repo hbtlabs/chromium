@@ -15,7 +15,7 @@ using blink::WebGestureEvent;
 namespace ui {
 
 EventWithCallback::EventWithCallback(
-    ScopedWebInputEvent event,
+    WebScopedInputEvent event,
     const LatencyInfo& latency,
     base::TimeTicks timestamp_now,
     const InputHandlerProxy::EventDispositionCallback& callback)
@@ -24,6 +24,20 @@ EventWithCallback::EventWithCallback(
       creation_timestamp_(timestamp_now),
       last_coalesced_timestamp_(timestamp_now) {
   original_events_.emplace_back(std::move(event), callback);
+}
+
+EventWithCallback::EventWithCallback(
+    WebScopedInputEvent event,
+    const LatencyInfo& latency,
+    base::TimeTicks creation_timestamp,
+    base::TimeTicks last_coalesced_timestamp,
+    std::unique_ptr<OriginalEventList> original_events)
+    : event_(std::move(event)),
+      latency_(latency),
+      creation_timestamp_(creation_timestamp),
+      last_coalesced_timestamp_(last_coalesced_timestamp) {
+  if (original_events)
+    original_events_.splice(original_events_.end(), *original_events);
 }
 
 EventWithCallback::~EventWithCallback() {}
@@ -40,9 +54,9 @@ void EventWithCallback::CoalesceWith(EventWithCallback* other,
 
   // New events get coalesced into older events, and the newer timestamp
   // should always be preserved.
-  const double time_stamp_seconds = other->event().timeStampSeconds;
+  const double time_stamp_seconds = other->event().timeStampSeconds();
   Coalesce(other->event(), event_.get());
-  event_->timeStampSeconds = time_stamp_seconds;
+  event_->setTimeStampSeconds(time_stamp_seconds);
 
   // When coalescing two input events, we keep the oldest LatencyInfo
   // since it will represent the longest latency.
@@ -70,7 +84,7 @@ void EventWithCallback::RunCallbacks(
 }
 
 EventWithCallback::OriginalEventWithCallback::OriginalEventWithCallback(
-    ScopedWebInputEvent event,
+    WebScopedInputEvent event,
     const InputHandlerProxy::EventDispositionCallback& callback)
     : event_(std::move(event)), callback_(callback) {}
 

@@ -135,7 +135,7 @@ if (!use_system_sqlite) {
       defines += [
         "SQLITE_MAX_LENGTH=128000000",
         "SQLITE_MAX_SQL_LENGTH=128000000",
-        "SQLITE_PRINTF_PRECISION_LIMIT=128000000",
+        "SQLITE_PRINTF_PRECISION_LIMIT=1280000",
       ]
     }
 
@@ -275,4 +275,15 @@ fuzzer_test("sqlite3_prepare_v2_fuzzer") {
     ":sqlite",
   ]
   dict = "fuzz/sqlite3_prepare_v2_fuzzer.dict"
+}
+
+fuzzer_test("sqlite3_ossfuzz_fuzzer") {
+  # TODO(mmoroz, shess): remove fuzz/ossfuzz.c after next sqlite3 update.
+  sources = [
+    "fuzz/ossfuzz.c",
+  ]
+  deps = [
+    ":sqlite",
+  ]
+  dict = "fuzz/sql.dict"
 }

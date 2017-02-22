@@ -39,6 +39,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/Event.h"
 #include "core/events/MessageEvent.h"
 #include "core/frame/LocalDOMWindow.h"
@@ -65,13 +66,14 @@ const unsigned long long EventSource::defaultReconnectDelay = 3000;
 inline EventSource::EventSource(ExecutionContext* context,
                                 const KURL& url,
                                 const EventSourceInit& eventSourceInit)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(context),
+    : ContextLifecycleObserver(context),
       m_url(url),
       m_currentURL(url),
       m_withCredentials(eventSourceInit.withCredentials()),
       m_state(kConnecting),
-      m_connectTimer(this, &EventSource::connectTimerFired),
+      m_connectTimer(TaskRunnerHelper::get(TaskType::RemoteEvent, context),
+                     this,
+                     &EventSource::connectTimerFired),
       m_reconnectDelay(defaultReconnectDelay) {}
 
 EventSource* EventSource::create(ExecutionContext* context,
@@ -112,13 +114,16 @@ EventSource* EventSource::create(ExecutionContext* context,
   EventSource* source = new EventSource(context, fullURL, eventSourceInit);
 
   source->scheduleInitialConnect();
-  source->suspendIfNeeded();
   return source;
 }
 
 EventSource::~EventSource() {
   DCHECK_EQ(kClosed, m_state);
   DCHECK(!m_loader);
+}
+
+void EventSource::dispose() {
+  InspectorInstrumentation::detachClientRequest(getExecutionContext(), this);
 }
 
 void EventSource::scheduleInitialConnect() {
@@ -223,7 +228,7 @@ void EventSource::close() {
     m_parser->stop();
 
   // Stop trying to reconnect if EventSource was explicitly closed or if
-  // ActiveDOMObject::stop() was called.
+  // contextDestroyed() was called.
   if (m_connectTimer.isActive()) {
     m_connectTimer.stop();
   }
@@ -241,7 +246,7 @@ const AtomicString& EventSource::interfaceName() const {
 }
 
 ExecutionContext* EventSource::getExecutionContext() const {
-  return ActiveDOMObject::getExecutionContext();
+  return ContextLifecycleObserver::getExecutionContext();
 }
 
 void EventSource::didReceiveResponse(
@@ -345,9 +350,8 @@ void EventSource::onMessageEvent(const AtomicString& eventType,
                                  const String& data,
                                  const AtomicString& lastEventId) {
   MessageEvent* e = MessageEvent::create();
-  e->initMessageEvent(eventType, false, false,
-                      SerializedScriptValue::serialize(data),
-                      m_eventStreamOrigin, lastEventId, 0, nullptr);
+  e->initMessageEvent(eventType, false, false, data, m_eventStreamOrigin,
+                      lastEventId, 0, nullptr);
 
   InspectorInstrumentation::willDispatchEventSourceEvent(
       getExecutionContext(), this, eventType, lastEventId, data);
@@ -368,7 +372,8 @@ void EventSource::abortConnectionAttempt() {
   dispatchEvent(Event::create(EventTypeNames::error));
 }
 
-void EventSource::contextDestroyed() {
+void EventSource::contextDestroyed(ExecutionContext*) {
+  InspectorInstrumentation::detachClientRequest(getExecutionContext(), this);
   close();
 }
 
@@ -380,7 +385,7 @@ DEFINE_TRACE(EventSource) {
   visitor->trace(m_parser);
   visitor->trace(m_loader);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
   EventSourceParser::Client::trace(visitor);
 }
 

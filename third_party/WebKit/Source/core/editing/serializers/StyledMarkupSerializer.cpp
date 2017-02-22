@@ -35,6 +35,7 @@
 #include "core/dom/Text.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/editing/EditingStyle.h"
+#include "core/editing/EditingStyleUtilities.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/VisibleSelection.h"
 #include "core/editing/VisibleUnits.h"
@@ -96,7 +97,7 @@ class StyledMarkupTraverser {
 
  private:
   bool shouldAnnotate() const;
-  bool convertBlocksToInlines() const;
+  bool shouldConvertBlocksToInlines() const;
   void appendStartMarkup(Node&);
   void appendEndMarkup(Node&);
   EditingStyle* createInlineStyle(Element&);
@@ -114,8 +115,8 @@ bool StyledMarkupTraverser<Strategy>::shouldAnnotate() const {
 }
 
 template <typename Strategy>
-bool StyledMarkupTraverser<Strategy>::convertBlocksToInlines() const {
-  return m_accumulator->convertBlocksToInlines();
+bool StyledMarkupTraverser<Strategy>::shouldConvertBlocksToInlines() const {
+  return m_accumulator->shouldConvertBlocksToInlines();
 }
 
 template <typename Strategy>
@@ -242,7 +243,7 @@ String StyledMarkupSerializer<Strategy>::createMarkup() {
     for (ContainerNode* ancestor = Strategy::parent(*lastClosed); ancestor;
          ancestor = Strategy::parent(*ancestor)) {
       if (ancestor == fullySelectedRoot &&
-          !markupAccumulator.convertBlocksToInlines()) {
+          !markupAccumulator.shouldConvertBlocksToInlines()) {
         EditingStyle* fullySelectedRootStyle =
             styleFromMatchedRulesAndInlineDecl(fullySelectedRoot);
 
@@ -322,10 +323,12 @@ StyledMarkupTraverser<Strategy>::StyledMarkupTraverser(
     return;
   if (shouldAnnotate()) {
     m_wrappingStyle =
-        EditingStyle::wrappingStyleForAnnotatedSerialization(parent);
+        EditingStyleUtilities::createWrappingStyleForAnnotatedSerialization(
+            parent);
     return;
   }
-  m_wrappingStyle = EditingStyle::wrappingStyleForSerialization(parent);
+  m_wrappingStyle =
+      EditingStyleUtilities::createWrappingStyleForSerialization(parent);
 }
 
 template <typename Strategy>
@@ -362,7 +365,7 @@ Node* StyledMarkupTraverser<Strategy>::traverse(Node* startNode,
 
         // If node has no children, close the tag now.
         if (Strategy::hasChildren(*n)) {
-          ancestorsToClose.append(toContainerNode(n));
+          ancestorsToClose.push_back(toContainerNode(n));
           continue;
         }
         appendEndMarkup(*n);
@@ -424,7 +427,7 @@ bool StyledMarkupTraverser<Strategy>::needsInlineStyle(const Element& element) {
     return false;
   if (shouldAnnotate())
     return true;
-  return convertBlocksToInlines() && isEnclosingBlock(&element);
+  return shouldConvertBlocksToInlines() && isEnclosingBlock(&element);
 }
 
 template <typename Strategy>
@@ -457,7 +460,7 @@ EditingStyle* StyledMarkupTraverser<Strategy>::createInlineStyleIfNeeded(
   if (!node.isElementNode())
     return nullptr;
   EditingStyle* inlineStyle = createInlineStyle(toElement(node));
-  if (convertBlocksToInlines() && isEnclosingBlock(&node))
+  if (shouldConvertBlocksToInlines() && isEnclosingBlock(&node))
     inlineStyle->forceInline();
   return inlineStyle;
 }

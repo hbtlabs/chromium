@@ -28,13 +28,16 @@ crbug.com/454267 [ Linux ] virtual/gpu/fast/canvas/canvas-arc-360-winding.html [
 crbug.com/454267 [ Linux ] virtual/gpu/fast/canvas/canvas-ellipse-360-winding.html [ Crash ]
 crbug.com/522315 [ Linux ] virtual/gpu/fast/canvas/quadraticCurveTo.xml [ Crash ]
 
-crbug.com/517704 [ Linux ] imported/wpt/encoding/api-invalid-label.html [ Timeout Pass ]
+crbug.com/517704 [ Linux ] external/wpt/encoding/api-invalid-label.html [ Timeout Pass ]
 
 # Times out on MSAN
 crbug.com/462190 [ Linux ] inspector-protocol/heap-profiler/heap-samples-in-snapshot.html [ Timeout ]
 crbug.com/462190 [ Linux ] inspector-protocol/heap-profiler/heap-snapshot-with-active-dom-object.html [ Timeout ]
 crbug.com/462190 [ Linux ] inspector-protocol/heap-profiler/heap-snapshot-with-detached-dom-tree.html [ Timeout ]
 crbug.com/462190 [ Linux ] inspector-protocol/heap-profiler/heap-snapshot-with-event-listener.html [ Timeout ]
+
+crbug.com/671556 [ Linux ] virtual/mojo-loading/http/tests/security/xssAuditor/report-script-tag-replace-state.html [ Timeout Pass ]
+crbug.com/671556 [ Linux ] virtual/mojo-loading/http/tests/security/xssAuditor/report-script-tag.html [ Timeout Pass ]
 
 # Intentionally failed allocations, via partitionAllocGenericFlags()
 crbug.com/577889 [ Linux ] fast/js/typed-array-allocation-failure.html [ Crash ]

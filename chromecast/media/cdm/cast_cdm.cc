@@ -40,14 +40,19 @@ class CastCdmContextImpl : public CastCdmContext {
   }
 
   std::unique_ptr<DecryptContextImpl> GetDecryptContext(
-      const std::string& key_id) override {
-    return cast_cdm_->GetDecryptContext(key_id);
+      const std::string& key_id,
+      const EncryptionScheme& encryption_scheme) override {
+    return cast_cdm_->GetDecryptContext(key_id, encryption_scheme);
   }
 
   void SetKeyStatus(const std::string& key_id,
                     CastKeyStatus key_status,
                     uint32_t system_code) override {
     cast_cdm_->SetKeyStatus(key_id, key_status, system_code);
+  }
+
+  void SetVideoResolution(int width, int height) override {
+    cast_cdm_->SetVideoResolution(width, height);
   }
 
  private:
@@ -106,9 +111,10 @@ void CastCdm::UnregisterPlayer(int registration_id) {
   return cast_cdm_context_.get();
 }
 
-void CastCdm::OnSessionMessage(const std::string& session_id,
-                               const std::vector<uint8_t>& message,
-                               ::media::MediaKeys::MessageType message_type) {
+void CastCdm::OnSessionMessage(
+    const std::string& session_id,
+    const std::vector<uint8_t>& message,
+    ::media::ContentDecryptionModule::MessageType message_type) {
   session_message_cb_.Run(session_id, message_type, message);
 }
 

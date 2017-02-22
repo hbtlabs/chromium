@@ -2,18 +2,34 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// https://wicg.github.io/mediasession/#enumdef-mediasessionplaybackstate
+
+enum MediaSessionPlaybackState {
+    "none",
+    "paused",
+    "playing"
+};
+
 // https://wicg.github.io/mediasession/#the-mediasession-interface
+
+enum MediaSessionAction {
+  "play",
+  "pause",
+  "previoustrack",
+  "nexttrack",
+  "seekbackward",
+  "seekforward"
+};
+
+callback MediaSessionActionHandler = void ();
 
 [
     RuntimeEnabled=MediaSession,
-] interface MediaSession : EventTarget {
-    attribute MediaMetadata? metadata;
+    DependentLifetime,
+] interface MediaSession {
+    [Measure] attribute MediaMetadata? metadata;
+    [Measure] attribute MediaSessionPlaybackState playbackState;
 
-    attribute EventHandler onplay;
-    attribute EventHandler onpause;
-    attribute EventHandler onplaypause;
-    attribute EventHandler onprevioustrack;
-    attribute EventHandler onnexttrack;
-    attribute EventHandler onseekforward;
-    attribute EventHandler onseekbackward;
+    [Measure] void setActionHandler(MediaSessionAction action,
+                                    MediaSessionActionHandler? handler);
 };

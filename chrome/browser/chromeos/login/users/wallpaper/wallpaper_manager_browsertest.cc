@@ -9,8 +9,6 @@
 #include "ash/common/wallpaper/wallpaper_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/shell.h"
-#include "ash/test/ash_test_base.h"
-#include "ash/test/ash_test_helper.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
@@ -27,6 +25,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/session_manager/core/session_manager.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
@@ -40,6 +39,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image_skia.h"
 
+using session_manager::SessionManager;
 using wallpaper::WallpaperInfo;
 using wallpaper::WALLPAPER_LAYOUT_CENTER;
 using wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED;
@@ -114,19 +114,17 @@ class WallpaperManagerBrowserTest : public InProcessBrowserTest {
 
   // Logs in |account_id|.
   void LogIn(const AccountId& account_id, const std::string& user_id_hash) {
-    user_manager::UserManager::Get()->UserLoggedIn(account_id, user_id_hash,
-                                                   false);
+    SessionManager::Get()->CreateSession(account_id, user_id_hash);
     // Adding a secondary display creates a shelf on that display, which
     // assumes a shelf on the primary display if the user was logged in.
-    ash::WmShell::Get()->CreateShelf();
+    ash::WmShell::Get()->CreateShelfView();
     WaitAsyncWallpaperLoadStarted();
   }
 
   // Logs in |account_id| and sets it as child account.
   void LogInAsChild(const AccountId& account_id,
                     const std::string& user_id_hash) {
-    user_manager::UserManager::Get()->UserLoggedIn(account_id, user_id_hash,
-                                                   false);
+    SessionManager::Get()->CreateSession(account_id, user_id_hash);
     user_manager::User* user =
         user_manager::UserManager::Get()->FindUserAndModify(account_id);
     user_manager::UserManager::Get()->ChangeUserChildStatus(
@@ -454,7 +452,7 @@ class WallpaperManagerBrowserTestCrashRestore
 
 IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTestCrashRestore,
                        PRE_RestoreWallpaper) {
-  LogIn(test_account_id1_, kTestUser1Hash);
+  // No need to explicitly login for crash-n-restore.
   wallpaper_manager_test_utils::WaitAsyncWallpaperLoadFinished();
 }
 
@@ -473,12 +471,6 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTestCrashRestore,
 
 class WallpaperManagerBrowserTestCacheUpdate
     : public WallpaperManagerBrowserTest {
- public:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitchASCII(switches::kLoginUser,
-                                    test_account_id1_.GetUserEmail());
-    command_line->AppendSwitchASCII(switches::kLoginProfile, "user");
-  }
  protected:
   // Creates a test image of size 1x1.
   gfx::ImageSkia CreateTestImage(SkColor color) {
@@ -544,6 +536,8 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTestCacheUpdate,
 // wallpaper cache should not be deleted.
 IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTestCacheUpdate,
                        VerifyWallpaperCache) {
+  LogIn(test_account_id1_, kTestUser1Hash);
+
   WallpaperManager* wallpaper_manager = WallpaperManager::Get();
 
   // Force load initial wallpaper
@@ -633,7 +627,12 @@ class TestObserver : public WallpaperManager::Observer {
   DISALLOW_COPY_AND_ASSIGN(TestObserver);
 };
 
-IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, DisplayChange) {
+#if defined(OS_CHROMEOS) && defined(USE_OZONE)
+#define MAYBE_DisplayChange DISABLED_DisplayChange
+#else
+#define MAYBE_DisplayChange DisplayChange
+#endif
+IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, MAYBE_DisplayChange) {
   TestObserver observer(WallpaperManager::Get());
 
   // Set the wallpaper to ensure that UpdateWallpaper() will be called when the
@@ -721,9 +720,6 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, DisplayChange) {
 // Splitting these into separate tests avoids needing to run animations.
 // TODO(derat): Combine these into a single test
 IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, SmallDefaultWallpaper) {
-  if (!ash::test::AshTestHelper::SupportsMultipleDisplays())
-    return;
-
   CreateCmdlineWallpapers();
 
   // At 800x600, the small wallpaper should be loaded.
@@ -736,9 +732,6 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, SmallDefaultWallpaper) {
 }
 
 IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, LargeDefaultWallpaper) {
-  if (!ash::test::AshTestHelper::SupportsMultipleDisplays())
-    return;
-
   CreateCmdlineWallpapers();
   UpdateDisplay("1600x1200");
   WallpaperManager::Get()->SetDefaultWallpaperNow(EmptyAccountId());
@@ -750,8 +743,6 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, LargeDefaultWallpaper) {
 
 IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest,
                        LargeDefaultWallpaperWhenRotated) {
-  if (!ash::test::AshTestHelper::SupportsMultipleDisplays())
-    return;
   CreateCmdlineWallpapers();
 
   UpdateDisplay("1200x800/r");
@@ -763,11 +754,9 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, SmallGuestWallpaper) {
-  if (!ash::test::AshTestHelper::SupportsMultipleDisplays())
-    return;
   CreateCmdlineWallpapers();
-  user_manager::UserManager::Get()->UserLoggedIn(
-      user_manager::GuestAccountId(), user_manager::kGuestUserName, false);
+  SessionManager::Get()->CreateSession(user_manager::GuestAccountId(),
+                                       user_manager::kGuestUserName);
   UpdateDisplay("800x600");
   WallpaperManager::Get()->SetDefaultWallpaperNow(EmptyAccountId());
   wallpaper_manager_test_utils::WaitAsyncWallpaperLoadFinished();
@@ -777,12 +766,9 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, SmallGuestWallpaper) {
 }
 
 IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, LargeGuestWallpaper) {
-  if (!ash::test::AshTestHelper::SupportsMultipleDisplays())
-    return;
-
   CreateCmdlineWallpapers();
-  user_manager::UserManager::Get()->UserLoggedIn(
-      user_manager::GuestAccountId(), user_manager::kGuestUserName, false);
+  SessionManager::Get()->CreateSession(user_manager::GuestAccountId(),
+                                       user_manager::kGuestUserName);
   UpdateDisplay("1600x1200");
   WallpaperManager::Get()->SetDefaultWallpaperNow(EmptyAccountId());
   wallpaper_manager_test_utils::WaitAsyncWallpaperLoadFinished();
@@ -792,8 +778,6 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, LargeGuestWallpaper) {
 }
 
 IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, SmallChildWallpaper) {
-  if (!ash::test::AshTestHelper::SupportsMultipleDisplays())
-    return;
   CreateCmdlineWallpapers();
   LogInAsChild(test_account_id1_, kTestUser1Hash);
   UpdateDisplay("800x600");
@@ -805,9 +789,6 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, SmallChildWallpaper) {
 }
 
 IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest, LargeChildWallpaper) {
-  if (!ash::test::AshTestHelper::SupportsMultipleDisplays())
-    return;
-
   CreateCmdlineWallpapers();
   LogInAsChild(test_account_id1_, kTestUser1Hash);
   UpdateDisplay("1600x1200");
@@ -823,8 +804,8 @@ IN_PROC_BROWSER_TEST_F(WallpaperManagerBrowserTest,
   // Start loading the default wallpaper.
   UpdateDisplay("640x480");
   CreateCmdlineWallpapers();
-  user_manager::UserManager::Get()->UserLoggedIn(user_manager::StubAccountId(),
-                                                 "test_hash", false);
+  SessionManager::Get()->CreateSession(user_manager::StubAccountId(),
+                                       "test_hash");
 
   WallpaperManager::Get()->SetDefaultWallpaperNow(EmptyAccountId());
 

@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/task_runner.h"
 #include "cc/output/copy_output_request.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/android/view_android.h"
@@ -21,17 +22,17 @@
 
 namespace ui {
 
+// Sync versions are not supported in Android.  Callers should fall back
+// to the async version.
 bool GrabViewSnapshot(gfx::NativeView view,
-                      std::vector<unsigned char>* png_representation,
-                      const gfx::Rect& snapshot_bounds) {
-  return GrabWindowSnapshot(
-      view->GetWindowAndroid(), png_representation, snapshot_bounds);
+                      const gfx::Rect& snapshot_bounds,
+                      gfx::Image* image) {
+  return GrabWindowSnapshot(view->GetWindowAndroid(), snapshot_bounds, image);
 }
 
 bool GrabWindowSnapshot(gfx::NativeWindow window,
-                        std::vector<unsigned char>* png_representation,
-                        const gfx::Rect& snapshot_bounds) {
-  // Not supported in Android.  Callers should fall back to the async version.
+                        const gfx::Rect& snapshot_bounds,
+                        gfx::Image* image) {
   return false;
 }
 
@@ -43,21 +44,9 @@ static void MakeAsyncCopyRequest(
       cc::CopyOutputRequest::CreateBitmapRequest(callback);
 
   const display::Display& display =
-      display::Screen::GetScreen()->GetPrimaryDisplay();
-  float device_scale_factor = display.device_scale_factor();
-  gfx::Rect source_rect_in_pixel =
-      gfx::ScaleToEnclosingRect(source_rect, device_scale_factor);
-
-  // Account for the toolbar offset.
-  gfx::Vector2dF offset_in_pixel =
-      gfx::ScaleVector2d(window->content_offset(), device_scale_factor);
-  gfx::Rect adjusted_source_rect(
-      gfx::ToRoundedPoint(
-          gfx::PointF(source_rect_in_pixel.x() + offset_in_pixel.x(),
-                      source_rect_in_pixel.y() + offset_in_pixel.y())),
-      source_rect_in_pixel.size());
-
-  request->set_area(adjusted_source_rect);
+      display::Screen::GetScreen()->GetDisplayNearestWindow(window);
+  float scale = display.device_scale_factor();
+  request->set_area(gfx::ScaleToEnclosingRect(source_rect, scale));
   window->GetCompositor()->RequestCopyOfOutputOnRootLayer(std::move(request));
 }
 
@@ -75,25 +64,20 @@ void GrabWindowSnapshotAndScaleAsync(
                                   background_task_runner));
 }
 
-void GrabWindowSnapshotAsync(
-    gfx::NativeWindow window,
-    const gfx::Rect& source_rect,
-    scoped_refptr<base::TaskRunner> background_task_runner,
-    const GrabWindowSnapshotAsyncPNGCallback& callback) {
-  MakeAsyncCopyRequest(window,
-                       source_rect,
-                       base::Bind(&SnapshotAsync::EncodeCopyOutputResult,
-                                  callback,
-                                  background_task_runner));
+void GrabWindowSnapshotAsync(gfx::NativeWindow window,
+                             const gfx::Rect& source_rect,
+                             const GrabWindowSnapshotAsyncCallback& callback) {
+  MakeAsyncCopyRequest(
+      window, source_rect,
+      base::Bind(&SnapshotAsync::RunCallbackWithCopyOutputResult, callback));
 }
 
-void GrabViewSnapshotAsync(
-    gfx::NativeView view,
-    const gfx::Rect& source_rect,
-    scoped_refptr<base::TaskRunner> background_task_runner,
-    const GrabWindowSnapshotAsyncPNGCallback& callback) {
-  GrabWindowSnapshotAsync(
-      view->GetWindowAndroid(), source_rect, background_task_runner, callback);
+void GrabViewSnapshotAsync(gfx::NativeView view,
+                           const gfx::Rect& source_rect,
+                           const GrabWindowSnapshotAsyncCallback& callback) {
+  MakeAsyncCopyRequest(
+      view->GetWindowAndroid(), source_rect,
+      base::Bind(&SnapshotAsync::RunCallbackWithCopyOutputResult, callback));
 }
 
 }  // namespace ui

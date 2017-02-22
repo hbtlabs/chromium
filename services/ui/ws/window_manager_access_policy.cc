@@ -87,14 +87,7 @@ bool WindowManagerAccessPolicy::CanChangeWindowOpacity(
 }
 
 bool WindowManagerAccessPolicy::CanSetWindowCompositorFrameSink(
-    const ServerWindow* window,
-    ui::mojom::CompositorFrameSinkType compositor_frame_sink_type) const {
-  // Allow the window manager to always provide the underlay. This is important
-  // when the window manager is asked to paint the title area to windows it did
-  // not create.
-  if (compositor_frame_sink_type == mojom::CompositorFrameSinkType::UNDERLAY)
-    return true;
-
+    const ServerWindow* window) const {
   if (delegate_->IsWindowRootOfAnotherTreeForAccessPolicy(window))
     return false;
 
@@ -143,10 +136,27 @@ bool WindowManagerAccessPolicy::CanSetAcceptDrops(
   return true;
 }
 
-bool WindowManagerAccessPolicy::CanSetAcceptEvents(
+bool WindowManagerAccessPolicy::CanSetEventTargetingPolicy(
     const ServerWindow* window) const {
   return WasCreatedByThisClient(window) ||
          delegate_->HasRootForAccessPolicy(window);
+}
+
+bool WindowManagerAccessPolicy::CanStackAbove(
+    const ServerWindow* above,
+    const ServerWindow* below) const {
+  // This API is for clients. Window managers can perform any arbitrary
+  // reordering of the windows and don't need to go through this constrained
+  // API.
+  return false;
+}
+
+bool WindowManagerAccessPolicy::CanStackAtTop(
+    const ServerWindow* window) const {
+  // This API is for clients. Window managers can perform any arbitrary
+  // reordering of the windows and don't need to go through this constrained
+  // API.
+  return false;
 }
 
 bool WindowManagerAccessPolicy::CanSetCursorProperties(

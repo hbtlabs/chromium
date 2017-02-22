@@ -5,6 +5,7 @@
 #include "content/browser/web_contents/web_contents_view_child_frame.h"
 
 #include "build/build_config.h"
+#include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/web_contents_view_delegate.h"
@@ -33,6 +34,13 @@ WebContentsView* WebContentsViewChildFrame::GetOuterView() {
 
 const WebContentsView* WebContentsViewChildFrame::GetOuterView() const {
   return web_contents_->GetOuterWebContents()->GetView();
+}
+
+RenderViewHostDelegateView* WebContentsViewChildFrame::GetOuterDelegateView() {
+  RenderViewHostImpl* outer_rvh = static_cast<RenderViewHostImpl*>(
+      web_contents_->GetOuterWebContents()->GetRenderViewHost());
+  CHECK(outer_rvh);
+  return outer_rvh->GetDelegate()->GetDelegateView();
 }
 
 gfx::NativeView WebContentsViewChildFrame::GetNativeView() const {
@@ -144,7 +152,8 @@ DropData* WebContentsViewChildFrame::GetDropData() const {
 }
 
 void WebContentsViewChildFrame::UpdateDragCursor(WebDragOperation operation) {
-  NOTREACHED();
+  if (auto view = GetOuterDelegateView())
+    view->UpdateDragCursor(operation);
 }
 
 void WebContentsViewChildFrame::GotFocus() {
@@ -152,8 +161,17 @@ void WebContentsViewChildFrame::GotFocus() {
 }
 
 void WebContentsViewChildFrame::TakeFocus(bool reverse) {
-  // TODO(avallee): http://crbug.com/610819 Advance focus to next element in
-  // outer WebContents.
+  RenderFrameProxyHost* rfp = web_contents_->GetMainFrame()
+                                  ->frame_tree_node()
+                                  ->render_manager()
+                                  ->GetProxyToOuterDelegate();
+  FrameTreeNode* outer_node = FrameTreeNode::GloballyFindByID(
+      web_contents_->GetOuterDelegateFrameTreeNodeId());
+  RenderFrameHostImpl* rfhi =
+      outer_node->parent()->render_manager()->current_frame_host();
+
+  rfhi->AdvanceFocus(
+      reverse ? blink::WebFocusTypeBackward : blink::WebFocusTypeForward, rfp);
 }
 
 void WebContentsViewChildFrame::ShowContextMenu(
@@ -169,7 +187,12 @@ void WebContentsViewChildFrame::StartDragging(
     const gfx::Vector2d& image_offset,
     const DragEventSourceInfo& event_info,
     RenderWidgetHostImpl* source_rwh) {
-  NOTREACHED();
+  if (auto view = GetOuterDelegateView()) {
+    view->StartDragging(
+        drop_data, ops, image, image_offset, event_info, source_rwh);
+  } else {
+    web_contents_->GetOuterWebContents()->SystemDragEnded(source_rwh);
+  }
 }
 
 }  // namespace content

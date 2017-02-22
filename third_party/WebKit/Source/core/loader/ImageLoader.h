@@ -24,8 +24,9 @@
 #define ImageLoader_h
 
 #include "core/CoreExport.h"
-#include "core/fetch/ImageResource.h"
-#include "core/fetch/ImageResourceObserver.h"
+#include "core/loader/resource/ImageResource.h"
+#include "core/loader/resource/ImageResourceContent.h"
+#include "core/loader/resource/ImageResourceObserver.h"
 #include "platform/heap/Handle.h"
 #include "wtf/HashSet.h"
 #include "wtf/WeakPtr.h"
@@ -35,7 +36,6 @@
 namespace blink {
 
 class IncrementLoadEventDelayCount;
-class Document;
 class Element;
 class ImageLoader;
 class LayoutImageResource;
@@ -82,9 +82,12 @@ class CORE_EXPORT ImageLoader : public GarbageCollectedFinalized<ImageLoader>,
   Element* element() const { return m_element; }
   bool imageComplete() const { return m_imageComplete && !m_pendingTask; }
 
-  ImageResource* image() const { return m_image.get(); }
+  ImageResourceContent* image() const { return m_image.get(); }
+  ImageResource* imageResourceForImageDocument() const {
+    return m_imageResourceForImageDocument;
+  }
   // Cancels pending load events, and doesn't dispatch new ones.
-  void setImage(ImageResource*);
+  void setImage(ImageResourceContent*);
 
   bool isLoadingImageDocument() { return m_loadingImageDocument; }
   void setLoadingImageDocument() { m_loadingImageDocument = true; }
@@ -105,7 +108,7 @@ class CORE_EXPORT ImageLoader : public GarbageCollectedFinalized<ImageLoader>,
   bool getImageAnimationPolicy(ImageAnimationPolicy&) final;
 
  protected:
-  void imageNotifyFinished(ImageResource*) override;
+  void imageNotifyFinished(ImageResourceContent*) override;
 
  private:
   class Task;
@@ -127,7 +130,7 @@ class CORE_EXPORT ImageLoader : public GarbageCollectedFinalized<ImageLoader>,
   LayoutImageResource* layoutImageResource();
   void updateLayoutObject();
 
-  void setImageWithoutConsideringPendingLoadEvent(ImageResource*);
+  void setImageWithoutConsideringPendingLoadEvent(ImageResourceContent*);
   void clearFailedLoadURL();
   void dispatchErrorEvent();
   void crossSiteOrCSPViolationOccurred(AtomicString);
@@ -149,7 +152,8 @@ class CORE_EXPORT ImageLoader : public GarbageCollectedFinalized<ImageLoader>,
   void dispose();
 
   Member<Element> m_element;
-  Member<ImageResource> m_image;
+  Member<ImageResourceContent> m_image;
+  Member<ImageResource> m_imageResourceForImageDocument;
   // FIXME: Oilpan: We might be able to remove this Persistent hack when
   // ImageResourceClient is traceable.
   GC_PLUGIN_IGNORE("http://crbug.com/383741")

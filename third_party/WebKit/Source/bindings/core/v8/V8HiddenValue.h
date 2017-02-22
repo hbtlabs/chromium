@@ -35,7 +35,6 @@ class ScriptWrappable;
   V(internalBodyStream)                      \
   V(port1)                                   \
   V(port2)                                   \
-  V(readableStreamReaderInResponse)          \
   V(requestInFetchEvent)                     \
   V(state)                                   \
   V(testInterfaces)                          \
@@ -51,7 +50,7 @@ class CORE_EXPORT V8HiddenValue {
 
  public:
   static std::unique_ptr<V8HiddenValue> create() {
-    return wrapUnique(new V8HiddenValue());
+    return WTF::wrapUnique(new V8HiddenValue());
   }
 
 #define V8_DECLARE_METHOD(name) \

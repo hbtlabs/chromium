@@ -32,9 +32,9 @@
 
 #include "platform/geometry/FloatRect.h"
 #include "platform/graphics/GraphicsContext.h"
-#include "platform/graphics/paint/SkPictureBuilder.h"
+#include "platform/graphics/paint/PaintController.h"
+#include "platform/graphics/paint/PaintRecord.h"
 #include "third_party/skia/include/core/SkImage.h"
-#include "third_party/skia/include/core/SkPicture.h"
 
 namespace blink {
 
@@ -48,27 +48,29 @@ void GeneratedImage::drawPattern(GraphicsContext& destContext,
   FloatRect tileRect = srcRect;
   tileRect.expand(FloatSize(repeatSpacing));
 
-  SkPictureBuilder builder(tileRect, nullptr, &destContext);
-  builder.context().beginRecording(tileRect);
-  drawTile(builder.context(), srcRect);
-  sk_sp<SkPicture> tilePicture = builder.endRecording();
+  std::unique_ptr<PaintController> paintController = PaintController::create();
+  GraphicsContext context(*paintController);
+  context.beginRecording(tileRect);
+  drawTile(context, srcRect);
+  sk_sp<PaintRecord> record = context.endRecording();
 
   SkMatrix patternMatrix = SkMatrix::MakeTrans(phase.x(), phase.y());
   patternMatrix.preScale(scale.width(), scale.height());
   patternMatrix.preTranslate(tileRect.x(), tileRect.y());
 
-  RefPtr<Pattern> picturePattern =
-      Pattern::createPicturePattern(std::move(tilePicture));
+  RefPtr<Pattern> pattern =
+      Pattern::createPaintRecordPattern(std::move(record));
 
-  SkPaint fillPaint = destContext.fillPaint();
-  picturePattern->applyToPaint(fillPaint, patternMatrix);
-  fillPaint.setColor(SK_ColorBLACK);
-  fillPaint.setBlendMode(static_cast<SkBlendMode>(compositeOp));
+  PaintFlags fillFlags = destContext.fillFlags();
+  pattern->applyToFlags(fillFlags, patternMatrix);
+  fillFlags.setColor(SK_ColorBLACK);
+  fillFlags.setBlendMode(compositeOp);
 
-  destContext.drawRect(destRect, fillPaint);
+  destContext.drawRect(destRect, fillFlags);
 }
 
-sk_sp<SkImage> GeneratedImage::imageForCurrentFrame() {
+sk_sp<SkImage> GeneratedImage::imageForCurrentFrame(
+    const ColorBehavior& colorBehavior) {
   return nullptr;
 }
 

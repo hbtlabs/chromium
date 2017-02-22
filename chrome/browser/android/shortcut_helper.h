@@ -5,11 +5,15 @@
 #ifndef CHROME_BROWSER_ANDROID_SHORTCUT_HELPER_H_
 #define CHROME_BROWSER_ANDROID_SHORTCUT_HELPER_H_
 
+#include <string>
+#include <vector>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "chrome/browser/android/shortcut_info.h"
+#include "chrome/browser/android/webapk/webapk_info.h"
 #include "chrome/browser/android/webapk/webapk_installer.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
@@ -22,6 +26,9 @@ class WebContents;
 // ShortcutHelper in Java.
 class ShortcutHelper {
  public:
+  using WebApkInfoCallback =
+      base::Callback<void(const std::vector<WebApkInfo>&)>;
+
   // Registers JNI hooks.
   static bool RegisterShortcutHelper(JNIEnv* env);
 
@@ -55,23 +62,30 @@ class ShortcutHelper {
       const base::Closure& splash_image_callback);
 
   // Adds a shortcut which opens in a browser tab to the launcher.
-  static void AddShortcutWithSkBitmap(
-      const ShortcutInfo& info,
-      const SkBitmap& icon_bitmap);
+  static void AddShortcutWithSkBitmap(const ShortcutInfo& info,
+                                      const std::string& id,
+                                      const SkBitmap& icon_bitmap);
 
-  // Returns the ideal size for an icon representing a web app.
-  static int GetIdealHomescreenIconSizeInDp();
+  // Shows toast notifying user that a WebAPK install is already in progress
+  // when user tries to queue a new install for the same WebAPK.
+  static void ShowWebApkInstallInProgressToast();
 
-  // Returns the minimum size for an icon representing a web app.
-  static int GetMinimumHomescreenIconSizeInDp();
+  // Returns the ideal size for an icon representing a web app or a WebAPK.
+  static int GetIdealHomescreenIconSizeInPx();
+
+  // Returns the minimum size for an icon representing a web app or a WebAPK.
+  static int GetMinimumHomescreenIconSizeInPx();
 
   // Returns the ideal size for an image displayed on a web app's splash
   // screen.
-  static int GetIdealSplashImageSizeInDp();
+  static int GetIdealSplashImageSizeInPx();
 
   // Returns the minimum size for an image displayed on a web app's splash
   // screen.
-  static int GetMinimumSplashImageSizeInDp();
+  static int GetMinimumSplashImageSizeInPx();
+
+  // Returns the ideal size for a badge icon of a WebAPK.
+  static int GetIdealBadgeIconSizeInPx();
 
   // Fetches the splash screen image and stores it inside the WebappDataStorage
   // of the webapp. The WebappDataStorage object *must* have been previously
@@ -101,12 +115,18 @@ class ShortcutHelper {
   static std::string QueryWebApkPackage(const GURL& url);
 
   // Returns true if WebAPKs are enabled and there is an installed WebAPK which
-  // can handle |url|.
-  static bool IsWebApkInstalled(const GURL& url);
+  // can handle |start_url|, or there is one is being installed.
+  static bool IsWebApkInstalled(content::BrowserContext* browser_context,
+                                const GURL& start_url,
+                                const GURL& manifest_url);
 
   // Generates a scope URL based on the passed in |url|. It should be used
   // when the Web Manifest does not specify a scope URL.
   static GURL GetScopeFromURL(const GURL& url);
+
+  // Fetches information on all the WebAPKs installed on the device and returns
+  // the info to the |callback|.
+  static void RetrieveWebApks(const WebApkInfoCallback& callback);
 
  private:
   ShortcutHelper() = delete;

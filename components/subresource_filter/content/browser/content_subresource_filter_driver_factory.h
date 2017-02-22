@@ -13,8 +13,11 @@
 
 #include "base/macros.h"
 #include "base/supports_user_data.h"
+#include "base/time/time.h"
 #include "components/safe_browsing_db/util.h"
+#include "components/subresource_filter/core/common/document_load_statistics.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -22,46 +25,74 @@ class WebContents;
 class RenderFrameHost;
 }  // namespace content
 
+namespace safe_browsing {
+class SafeBrowsingServiceTest;
+};
+
 namespace subresource_filter {
 
-using HostSet = std::set<std::string>;
-
-class ContentSubresourceFilterDriver;
 class SubresourceFilterClient;
-enum class ActivationState;
+enum class ActivationLevel;
+enum class ActivationList;
+
+using HostPathSet = std::set<std::string>;
+using URLToActivationListsMap =
+    std::unordered_map<std::string, std::set<ActivationList>>;
 
 // Controls the activation of subresource filtering for each page load in a
-// WebContents and manufactures the per-frame ContentSubresourceFilterDrivers.
-// TODO(melandory): Once https://crbug.com/621856 is fixed this class should
-// take care of passing the activation information not only to the main frame,
-// but also to the subframes.
+// WebContents and is responsible for sending the activation signal to all the
+// per-frame SubresourceFilterAgents on the renderer side.
 class ContentSubresourceFilterDriverFactory
     : public base::SupportsUserData::Data,
       public content::WebContentsObserver {
  public:
+  // NOTE: ActivationDecision backs a UMA histogram, so it is append-only.
+  enum class ActivationDecision {
+    // The activation decision is unknown, or not known yet.
+    UNKNOWN,
+
+    // Subresource filtering was activated.
+    ACTIVATED,
+
+    // Did not activate because subresource filtering was disabled.
+    ACTIVATION_DISABLED,
+
+    // Did not activate because the main frame document URL had an unsupported
+    // scheme.
+    UNSUPPORTED_SCHEME,
+
+    // Did not activate because the main frame document URL was whitelisted.
+    URL_WHITELISTED,
+
+    // Did not activate because the main frame document URL did not match the
+    // activation list.
+    ACTIVATION_LIST_NOT_MATCHED,
+
+    // Max value for enum.
+    ACTIVATION_DECISION_MAX
+  };
+
   static void CreateForWebContents(
       content::WebContents* web_contents,
       std::unique_ptr<SubresourceFilterClient> client);
   static ContentSubresourceFilterDriverFactory* FromWebContents(
       content::WebContents* web_contents);
 
+  // Whether the |url|, |referrer|, and |transition| are considered to be
+  // associated with a page reload.
+  static bool NavigationIsPageReload(const GURL& url,
+                                     const content::Referrer& referrer,
+                                     ui::PageTransition transition);
+
   explicit ContentSubresourceFilterDriverFactory(
       content::WebContents* web_contents,
       std::unique_ptr<SubresourceFilterClient> client);
   ~ContentSubresourceFilterDriverFactory() override;
 
-  ContentSubresourceFilterDriver* DriverFromFrameHost(
-      content::RenderFrameHost* render_frame_host);
-
-  bool IsWhitelisted(const GURL& url) const;
-  bool IsBlacklisted(const GURL& url) const;
-
   // Whitelists the host of |url|, so that page loads with the main-frame
   // document being loaded from this host will be exempted from subresource
   // filtering for the lifetime of this WebContents.
   void AddHostOfURLToWhitelistSet(const GURL& url);
-
-  void AddToActivationHitsSet(const GURL& url);
 
   // Called when Safe Browsing detects that the |url| corresponding to the load
   // of the main frame belongs to the blacklist with |threat_type|. If the
@@ -73,44 +104,43 @@ class ContentSubresourceFilterDriverFactory
       safe_browsing::SBThreatType threat_type,
       safe_browsing::ThreatPatternType threat_type_metadata);
 
-  // Reloads the page and inserts the url to the whitelist.
+  // Reloads the page and inserts the host of its URL to the whitelist.
   void OnReloadRequested();
 
-  const HostSet& safe_browsing_blacklisted_patterns_set() const {
-    return safe_browsing_blacklisted_patterns_;
+  // Returns the |ActivationDecision| for the current main frame
+  // document.
+  ActivationDecision GetActivationDecisionForLastCommittedPageLoad() const {
+    return activation_decision_;
   }
-  ActivationState activation_state() { return activation_state_; }
 
  private:
   friend class ContentSubresourceFilterDriverFactoryTest;
-  friend class SubresourceFilterNavigationThrottleTest;
+  friend class safe_browsing::SafeBrowsingServiceTest;
 
-  typedef std::map<content::RenderFrameHost*,
-                   std::unique_ptr<ContentSubresourceFilterDriver>>
-      FrameHostToOwnedDriverMap;
-
-  void SetDriverForFrameHostForTesting(
-      content::RenderFrameHost* render_frame_host,
-      std::unique_ptr<ContentSubresourceFilterDriver> driver);
-
-  void CreateDriverForFrameHostIfNeeded(
-      content::RenderFrameHost* render_frame_host);
+  void ResetActivationState();
 
   void OnFirstSubresourceLoadDisallowed();
 
+  void OnDocumentLoadStatistics(const DocumentLoadStatistics& statistics);
+
+  bool IsWhitelisted(const GURL& url) const;
+
   // content::WebContentsObserver:
-  void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
-  void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;
   void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override;
+  void DidRedirectNavigation(
       content::NavigationHandle* navigation_handle) override;
   void ReadyToCommitNavigation(
       content::NavigationHandle* navigation_handle) override;
+  void DidFinishLoad(content::RenderFrameHost* render_frame_host,
+                     const GURL& validated_url) override;
   bool OnMessageReceived(const IPC::Message& message,
                          content::RenderFrameHost* render_frame_host) override;
 
-  // Checks base on the value of |urr| and current activation scope if
+  // Checks base on the value of |url| and current activation scope if
   // activation signal should be sent.
-  bool ShouldActivateForMainFrameURL(const GURL& url) const;
+  ActivationDecision ComputeActivationDecisionForMainFrameURL(
+      const GURL& url) const;
   void ActivateForFrameHostIfNeeded(content::RenderFrameHost* render_frame_host,
                                     const GURL& url);
 
@@ -118,25 +148,31 @@ class ContentSubresourceFilterDriverFactory
   // NavigationHandle to ease unit tests.
   void ReadyToCommitNavigationInternal(
       content::RenderFrameHost* render_frame_host,
-      const GURL& url);
+      const GURL& url,
+      const content::Referrer& referrer,
+      ui::PageTransition page_transition);
 
-  bool IsHit(const GURL& url) const;
+  bool DidURLMatchCurrentActivationList(const GURL& url) const;
 
-  static const char kWebContentsUserDataKey[];
+  void AddActivationListMatch(const GURL& url, ActivationList match_type);
+  void RecordRedirectChainMatchPattern() const;
 
-  FrameHostToOwnedDriverMap frame_drivers_;
   std::unique_ptr<SubresourceFilterClient> client_;
 
-  HostSet whitelisted_hosts_;
+  HostPathSet whitelisted_hosts_;
 
-  // Host+path list of the URLs, where the Safe Browsing detected hit to the
-  // threat list of interest. When the navigation is commited
-  // |safe_browsing_blacklisted_patterns_| is used to determine whenever
-  // the activation signal should be sent. All entities are deleted from the
-  // list on navigation commit event.
-  HostSet safe_browsing_blacklisted_patterns_;
+  ActivationLevel activation_level_;
+  ActivationDecision activation_decision_;
+  bool measure_performance_;
 
-  ActivationState activation_state_;
+  // The URLs in the navigation chain.
+  std::vector<GURL> navigation_chain_;
+
+  URLToActivationListsMap activation_list_matches_;
+
+  // Statistics about subresource loads, aggregated across all frames of the
+  // current page.
+  DocumentLoadStatistics aggregated_document_statistics_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentSubresourceFilterDriverFactory);
 };

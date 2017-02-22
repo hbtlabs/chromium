@@ -26,15 +26,13 @@
 
 [
     DoNotCheckConstants,
-    ConstructorCallWith=ScriptState,
 ] interface Internals {
-    DOMString address(Node node);
-
     GCObservation observeGC(any observed);
 
     [RaisesException] DOMString elementLayoutTreeAsText(Element element);
     boolean isPreloaded(DOMString url);
     boolean isPreloadedBy(DOMString url, Document document);
+    boolean isLoading(DOMString url);
     boolean isLoadingFromMemoryCache(DOMString url);
     unsigned long getResourcePriority (DOMString url, Document document);
     DOMString getResourceHeader (DOMString url, DOMString header, Document document);
@@ -145,7 +143,9 @@
     sequence<DOMString> userPreferredLanguages();
     void setUserPreferredLanguages(sequence<DOMString> languages);
 
-    unsigned long activeDOMObjectCount(Document document);
+    unsigned long mediaKeysCount();
+    unsigned long mediaKeySessionCount();
+    unsigned long suspendableObjectCount(Document document);
     unsigned long wheelEventHandlerCount(Document document);
     unsigned long scrollEventHandlerCount(Document document);
     unsigned long touchStartOrMoveEventHandlerCount(Document document);
@@ -231,12 +231,10 @@
 
     TypeConversions typeConversions();
 
-    // This is enabled only in Debug builds.
-    // This is because we want to avoid putting the byte stream of testing private scripts
-    // into the binary of Release builds.
-    PrivateScriptTest privateScriptTest();
-
     sequence<DOMString> getReferencedFilePaths();
+
+    [RaisesException] void startStoringCompositedLayerDebugInfo(Document document);
+    [RaisesException] void stopStoringCompositedLayerDebugInfo(Document document);
 
     // These functions both reset the tracked repaint rects. They are intended to be used in the following order:
     //  startTrackingRepaints(), repaintRectsAsText(), stopTrackingRepaints().
@@ -274,7 +272,12 @@
     long selectPopupItemStyleFontHeight(Node select, long itemIndex);
     void resetTypeAheadSession(HTMLSelectElement select);
 
+    readonly attribute Node? visibleSelectionAnchorNode;
+    readonly attribute unsigned long visibleSelectionAnchorOffset;
+    readonly attribute Node? visibleSelectionFocusNode;
+    readonly attribute unsigned long visibleSelectionFocusOffset;
     [RaisesException] ClientRect selectionBounds();
+    readonly attribute DOMString textAffinity;
 
     boolean loseSharedGraphicsContext3D();
 
@@ -330,9 +333,16 @@
 
     bool magnifyScaleAroundAnchor(float offset, float x, float y);
 
-    boolean isUseCounted(Document document, long useCounterId);
+    boolean isUseCounted(Document document, unsigned long feature);
     boolean isCSSPropertyUseCounted(Document document, DOMString propertyName);
 
+    // Returns a promise that is resolved when |feature| is counted on
+    // |document|'s UseCounter. When |feature| was already counted, it's
+    // immediately resolved.
+    [CallWith=ScriptState] Promise<bool> observeUseCounter(Document document, unsigned long feature);
+
+    readonly attribute unsigned long length;
+    getter long (unsigned long index);
     iterable<long>;
 
     [Unscopable] readonly attribute DOMString unscopableAttribute;
@@ -350,9 +360,6 @@
 
     void setMediaElementNetworkState(HTMLMediaElement element, long state);
 
-    // TODO(liberato): remove once autoplay gesture override experiment concludes.
-    void triggerAutoplayViewportCheck(HTMLMediaElement mediaElement);
-
     DOMString getScrollAnimationState(Node node);
 
     DOMString getProgrammaticScrollAnimationState(Node node);
@@ -362,4 +369,6 @@
     OriginTrialsTest originTrialsTest();
 
     void crash();
+
+    void setIsLowEndDevice(boolean isLowEndDevice);
 };

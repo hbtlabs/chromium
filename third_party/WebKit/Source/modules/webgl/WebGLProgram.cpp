@@ -47,27 +47,21 @@ WebGLProgram::WebGLProgram(WebGLRenderingContextBase* ctx)
 }
 
 WebGLProgram::~WebGLProgram() {
-  // These heap objects handle detachment on their own. Clear out
-  // the references to prevent deleteObjectImpl() from trying to do
-  // same, as we cannot safely access other heap objects from this
-  // destructor.
-  m_vertexShader = nullptr;
-  m_fragmentShader = nullptr;
-
-  // See the comment in WebGLObject::detachAndDeleteObject().
-  detachAndDeleteObject();
+  runDestructor();
 }
 
 void WebGLProgram::deleteObjectImpl(gpu::gles2::GLES2Interface* gl) {
   gl->DeleteProgram(m_object);
   m_object = 0;
-  if (m_vertexShader) {
-    m_vertexShader->onDetached(gl);
-    m_vertexShader = nullptr;
-  }
-  if (m_fragmentShader) {
-    m_fragmentShader->onDetached(gl);
-    m_fragmentShader = nullptr;
+  if (!destructionInProgress()) {
+    if (m_vertexShader) {
+      m_vertexShader->onDetached(gl);
+      m_vertexShader = nullptr;
+    }
+    if (m_fragmentShader) {
+      m_fragmentShader->onDetached(gl);
+      m_fragmentShader = nullptr;
+    }
   }
 }
 
@@ -136,15 +130,6 @@ bool WebGLProgram::detachShader(WebGLShader* shader) {
     default:
       return false;
   }
-}
-
-void WebGLProgram::visitChildDOMWrappers(
-    v8::Isolate* isolate,
-    const v8::Persistent<v8::Object>& wrapper) {
-  DOMWrapperWorld::setWrapperReferencesInAllWorlds(wrapper, m_vertexShader,
-                                                   isolate);
-  DOMWrapperWorld::setWrapperReferencesInAllWorlds(wrapper, m_fragmentShader,
-                                                   isolate);
 }
 
 void WebGLProgram::cacheInfoIfNeeded(WebGLRenderingContextBase* context) {

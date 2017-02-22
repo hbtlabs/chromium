@@ -23,12 +23,12 @@
 #include "content/child/child_process.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/gpu_host_messages.h"
-#include "content/common/sandbox_linux/sandbox_linux.h"
 #include "content/gpu/gpu_child_thread.h"
 #include "content/gpu/gpu_process.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
+#include "content/public/common/result_codes.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/config/gpu_driver_bug_list.h"
 #include "gpu/config/gpu_info_collector.h"
@@ -40,6 +40,7 @@
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
 #include "ui/events/platform/platform_event_source.h"
+#include "ui/gfx/switches.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_surface.h"
@@ -71,12 +72,17 @@
 #endif
 
 #if defined(OS_LINUX)
+#include "content/common/sandbox_linux/sandbox_linux.h"
 #include "content/public/common/sandbox_init.h"
 #endif
 
 #if defined(OS_MACOSX)
 #include "base/message_loop/message_pump_mac.h"
 #include "content/common/sandbox_mac.h"
+#endif
+
+#if defined(USE_OZONE)
+#include "ui/ozone/public/ozone_platform.h"
 #endif
 
 #if defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)
@@ -105,10 +111,11 @@ bool GpuProcessLogMessageHandler(int severity,
                                  const char* file, int line,
                                  size_t message_start,
                                  const std::string& str) {
-  std::string header = str.substr(0, message_start);
-  std::string message = str.substr(message_start);
-  deferred_messages.Get().push(
-      new GpuHostMsg_OnLogMessage(severity, header, message));
+  GpuChildThread::LogMessage log;
+  log.severity = severity;
+  log.header = str.substr(0, message_start);
+  log.message = str.substr(message_start);
+  deferred_messages.Get().push(std::move(log));
   return false;
 }
 
@@ -193,32 +200,45 @@ int GpuMain(const MainFunctionParams& parameters) {
 
   logging::SetLogMessageHandler(GpuProcessLogMessageHandler);
 
+  // We are experiencing what appear to be memory-stomp issues in the GPU
+  // process. These issues seem to be impacting the message loop and listeners
+  // registered to it. Create the message loop on the heap to guard against
+  // this.
+  // TODO(ericrk): Revisit this once we assess its impact on crbug.com/662802
+  // and crbug.com/609252.
+  std::unique_ptr<base::MessageLoop> main_message_loop;
+  std::unique_ptr<ui::PlatformEventSource> event_source;
+  if (command_line.HasSwitch(switches::kHeadless)) {
+    main_message_loop.reset(
+        new base::MessageLoop(base::MessageLoop::TYPE_DEFAULT));
+  } else {
 #if defined(OS_WIN)
-  // OK to use default non-UI message loop because all GPU windows run on
-  // dedicated thread.
-  base::MessageLoop main_message_loop(base::MessageLoop::TYPE_DEFAULT);
+    // OK to use default non-UI message loop because all GPU windows run on
+    // dedicated thread.
+    main_message_loop.reset(
+        new base::MessageLoop(base::MessageLoop::TYPE_DEFAULT));
 #elif defined(USE_X11)
-  // We need a UI loop so that we can grab the Expose events. See GLSurfaceGLX
-  // and https://crbug.com/326995.
-  base::MessageLoop main_message_loop(base::MessageLoop::TYPE_UI);
-  std::unique_ptr<ui::PlatformEventSource> event_source =
-      ui::PlatformEventSource::CreateDefault();
-#elif defined(USE_OZONE) && defined(OZONE_X11)
-  // If we might be running Ozone X11 we need a UI loop to grab Expose events.
-  // See GLSurfaceGLX and https://crbug.com/326995.
-  base::MessageLoop main_message_loop(base::MessageLoop::TYPE_UI);
+    // We need a UI loop so that we can grab the Expose events. See GLSurfaceGLX
+    // and https://crbug.com/326995.
+    main_message_loop.reset(new base::MessageLoop(base::MessageLoop::TYPE_UI));
+    event_source = ui::PlatformEventSource::CreateDefault();
 #elif defined(USE_OZONE)
-  base::MessageLoop main_message_loop(base::MessageLoop::TYPE_DEFAULT);
+    // The MessageLoop type required depends on the Ozone platform selected at
+    // runtime.
+    main_message_loop.reset(new base::MessageLoop(
+        ui::OzonePlatform::EnsureInstance()->GetMessageLoopTypeForGpu()));
 #elif defined(OS_LINUX)
 #error "Unsupported Linux platform."
 #elif defined(OS_MACOSX)
-  // This is necessary for CoreAnimation layers hosted in the GPU process to be
-  // drawn. See http://crbug.com/312462.
-  std::unique_ptr<base::MessagePump> pump(new base::MessagePumpCFRunLoop());
-  base::MessageLoop main_message_loop(std::move(pump));
+    // This is necessary for CoreAnimation layers hosted in the GPU process to
+    // be drawn. See http://crbug.com/312462.
+    std::unique_ptr<base::MessagePump> pump(new base::MessagePumpCFRunLoop());
+    main_message_loop.reset(new base::MessageLoop(std::move(pump)));
 #else
-  base::MessageLoop main_message_loop(base::MessageLoop::TYPE_IO);
+    main_message_loop.reset(
+        new base::MessageLoop(base::MessageLoop::TYPE_DEFAULT));
 #endif
+  }
 
   base::PlatformThread::SetName("CrGpuMain");
 
@@ -244,8 +264,8 @@ int GpuMain(const MainFunctionParams& parameters) {
   // is implemented using an IPC channel error. If the IPC channel is not fully
   // set up between the browser and GPU process, and the GPU process crashes or
   // exits early, the browser process will never detect it.  For this reason we
-  // defer tearing down the GPU process until receiving the GpuMsg_Initialize
-  // message from the browser.
+  // defer tearing down the GPU process until receiving the initialization
+  // message from the browser (through mojom::GpuMain::CreateGpuService()).
   const bool init_success = gpu_init.InitializeAndStartSandbox(command_line);
   const bool dead_on_arrival = !init_success;
 
@@ -265,7 +285,8 @@ int GpuMain(const MainFunctionParams& parameters) {
   GpuProcess gpu_process(io_thread_priority);
   GpuChildThread* child_thread = new GpuChildThread(
       gpu_init.TakeWatchdogThread(), dead_on_arrival, gpu_init.gpu_info(),
-      deferred_messages.Get(), gpu_memory_buffer_factory.get());
+      gpu_init.gpu_feature_info(), deferred_messages.Get(),
+      gpu_memory_buffer_factory.get());
   while (!deferred_messages.Get().empty())
     deferred_messages.Get().pop();
 
@@ -287,7 +308,7 @@ int GpuMain(const MainFunctionParams& parameters) {
     base::RunLoop().Run();
   }
 
-  return dead_on_arrival ? 2 : 0;
+  return dead_on_arrival ? RESULT_CODE_GPU_DEAD_ON_ARRIVAL : 0;
 }
 
 namespace {

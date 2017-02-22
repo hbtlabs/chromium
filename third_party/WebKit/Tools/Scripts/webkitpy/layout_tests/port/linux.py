@@ -39,11 +39,10 @@ _log = logging.getLogger(__name__)
 class LinuxPort(base.Port):
     port_name = 'linux'
 
-    SUPPORTED_VERSIONS = ('precise', 'trusty')
+    SUPPORTED_VERSIONS = ('trusty',)
 
     FALLBACK_PATHS = {}
     FALLBACK_PATHS['trusty'] = ['linux'] + win.WinPort.latest_platform_fallback_path()
-    FALLBACK_PATHS['precise'] = ['linux-precise'] + FALLBACK_PATHS['trusty']
 
     DEFAULT_BUILD_DIRECTORIES = ('out',)
 
@@ -142,17 +141,6 @@ class LinuxPort(base.Port):
         assert dummy_home != self._original_home
         self._filesystem.rmtree(dummy_home)
         self.host.environ['HOME'] = self._original_home
-
-    def _check_apache_install(self):
-        result = self._check_file_exists(self.path_to_apache(), "apache2")
-        result = self._check_file_exists(self.path_to_apache_config_file(), "apache2 config file") and result
-        if not result:
-            _log.error('    Please install using: "sudo apt-get install apache2 libapache2-mod-php5"')
-            _log.error('')
-        return result
-
-    def _wdiff_missing_message(self):
-        return 'wdiff is not installed; please install using "sudo apt-get install wdiff"'
 
     def _path_to_driver(self, target=None):
         binary_name = self.driver_name()

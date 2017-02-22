@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "base/callback.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "chrome/browser/chromeos/arc/extensions/arc_support_message_host.h"
@@ -51,14 +52,15 @@ class ArcSupportHost : public arc::ArcSupportMessageHost::Observer,
     virtual void OnWindowClosed() {}
 
     // Called when the user press AGREE button on ToS page.
-    // TODO(hidehiko): Currently, due to implementation reason,
-    // this is also called when RETRY on error page is clicked. Fix this.
     virtual void OnTermsAgreed(bool is_metrics_enabled,
                                bool is_backup_and_restore_enabled,
                                bool is_location_service_enabled) {}
 
     // Called when LSO auth token fetch is successfully completed.
     virtual void OnAuthSucceeded(const std::string& auth_code) {}
+
+    // Called when LSO auth token fetch has failed.
+    virtual void OnAuthFailed() {}
 
     // Called when "RETRY" button on the error page is clicked.
     virtual void OnRetryClicked() {}
@@ -69,6 +71,8 @@ class ArcSupportHost : public arc::ArcSupportMessageHost::Observer,
 
   static const char kHostAppId[];
   static const char kStorageId[];
+
+  using RequestOpenAppCallback = base::Callback<void(Profile* profile)>;
 
   explicit ArcSupportHost(Profile* profile);
   ~ArcSupportHost() override;
@@ -124,6 +128,9 @@ class ArcSupportHost : public arc::ArcSupportMessageHost::Observer,
   // TODO(hidehiko): Remove this exposure.
   UIPage ui_page() const { return ui_page_; }
 
+  void SetRequestOpenAppCallbackForTesting(
+      const RequestOpenAppCallback& callback);
+
  private:
   struct PreferenceCheckboxData {
     PreferenceCheckboxData() : PreferenceCheckboxData(false, false) {}
@@ -155,6 +162,7 @@ class ArcSupportHost : public arc::ArcSupportMessageHost::Observer,
   void DisconnectMessageHost();
 
   Profile* const profile_;
+  RequestOpenAppCallback request_open_app_callback_;
 
   base::ObserverList<Observer> observer_list_;
 

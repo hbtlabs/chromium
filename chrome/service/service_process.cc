@@ -21,8 +21,10 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task_scheduler/task_scheduler.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_constants.h"
@@ -157,13 +159,21 @@ bool ServiceProcess::Initialize(base::MessageLoopForUI* message_loop,
     Teardown();
     return false;
   }
+
+  // Initialize TaskScheduler and redirect SequencedWorkerPool tasks to it.
+  constexpr int kMaxTaskSchedulerThreads = 3;
+  base::TaskScheduler::CreateAndSetSimpleTaskScheduler(
+      kMaxTaskSchedulerThreads);
+  base::SequencedWorkerPool::EnableWithRedirectionToTaskSchedulerForProcess();
+
   blocking_pool_ = new base::SequencedWorkerPool(
       3, "ServiceBlocking", base::TaskPriority::USER_VISIBLE);
 
   // Initialize Mojo early so things can use it.
   mojo::edk::Init();
-  mojo_ipc_support_.reset(
-      new mojo::edk::ScopedIPCSupport(io_thread_->task_runner()));
+  mojo_ipc_support_.reset(new mojo::edk::ScopedIPCSupport(
+      io_thread_->task_runner(),
+      mojo::edk::ScopedIPCSupport::ShutdownPolicy::FAST));
 
   request_context_getter_ = new ServiceURLRequestContextGetter();
 
@@ -257,6 +267,9 @@ bool ServiceProcess::Teardown() {
     blocking_pool_->Shutdown(kMaxNewShutdownBlockingTasks);
     blocking_pool_ = NULL;
   }
+
+  if (base::TaskScheduler::GetInstance())
+    base::TaskScheduler::GetInstance()->Shutdown();
 
   // The NetworkChangeNotifier must be destroyed after all other threads that
   // might use it have been shut down.

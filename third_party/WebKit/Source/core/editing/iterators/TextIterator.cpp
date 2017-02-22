@@ -27,7 +27,7 @@
 
 #include "core/editing/iterators/TextIterator.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
 #include "core/dom/Document.h"
@@ -64,24 +64,30 @@ using namespace HTMLNames;
 
 namespace {
 
+const int kInvalidOffset = -1;
+
 template <typename Strategy>
-TextIteratorBehaviorFlags adjustBehaviorFlags(TextIteratorBehaviorFlags);
+TextIteratorBehavior adjustBehaviorFlags(const TextIteratorBehavior&);
 
 template <>
-TextIteratorBehaviorFlags adjustBehaviorFlags<EditingStrategy>(
-    TextIteratorBehaviorFlags flags) {
-  if (flags & TextIteratorForSelectionToString)
-    return flags | TextIteratorExcludeAutofilledValue;
-  return flags;
+TextIteratorBehavior adjustBehaviorFlags<EditingStrategy>(
+    const TextIteratorBehavior& behavior) {
+  if (!behavior.forSelectionToString())
+    return behavior;
+  return TextIteratorBehavior::Builder(behavior)
+      .setExcludeAutofilledValue(true)
+      .build();
 }
 
 template <>
-TextIteratorBehaviorFlags adjustBehaviorFlags<EditingInFlatTreeStrategy>(
-    TextIteratorBehaviorFlags flags) {
-  if (flags & TextIteratorForSelectionToString)
-    flags |= TextIteratorExcludeAutofilledValue;
-  return flags &
-         ~(TextIteratorEntersOpenShadowRoots | TextIteratorEntersTextControls);
+TextIteratorBehavior adjustBehaviorFlags<EditingInFlatTreeStrategy>(
+    const TextIteratorBehavior& behavior) {
+  return TextIteratorBehavior::Builder(behavior)
+      .setExcludeAutofilledValue(behavior.forSelectionToString() ||
+                                 behavior.excludeAutofilledValue())
+      .setEntersOpenShadowRoots(false)
+      .setEntersTextControls(false)
+      .build();
 }
 
 // Checks if |advance()| skips the descendants of |node|, which is the case if
@@ -147,7 +153,7 @@ template <typename Strategy>
 TextIteratorAlgorithm<Strategy>::TextIteratorAlgorithm(
     const PositionTemplate<Strategy>& start,
     const PositionTemplate<Strategy>& end,
-    TextIteratorBehaviorFlags behavior)
+    const TextIteratorBehavior& behavior)
     : m_offset(0),
       m_startContainer(nullptr),
       m_startOffset(0),
@@ -164,9 +170,9 @@ TextIteratorAlgorithm<Strategy>::TextIteratorAlgorithm(
       m_handledFirstLetter(false),
       m_shouldStop(false),
       m_handleShadowRoot(false),
-      // The call to emitsOriginalText() must occur after m_behavior is
-      // initialized.
-      m_textState(emitsOriginalText()) {
+      m_firstLetterStartOffset(kInvalidOffset),
+      m_remainingTextStartOffset(kInvalidOffset),
+      m_textState(m_behavior) {
   DCHECK(start.isNotNull());
   DCHECK(end.isNotNull());
 
@@ -184,6 +190,43 @@ TextIteratorAlgorithm<Strategy>::TextIteratorAlgorithm(
   }
   initialize(start.computeContainerNode(), start.computeOffsetInContainerNode(),
              end.computeContainerNode(), end.computeOffsetInContainerNode());
+}
+
+template <typename Strategy>
+bool TextIteratorAlgorithm<Strategy>::prepareForFirstLetterInitialization() {
+  if (m_node != m_startContainer)
+    return false;
+
+  if (m_node->getNodeType() != Node::kTextNode)
+    return false;
+
+  Text* textNode = toText(m_node);
+  LayoutText* layoutObject = textNode->layoutObject();
+  if (!layoutObject || !layoutObject->isTextFragment())
+    return false;
+
+  LayoutTextFragment* textFragment = toLayoutTextFragment(layoutObject);
+  if (!textFragment->isRemainingTextLayoutObject())
+    return false;
+
+  if (static_cast<unsigned>(m_startOffset) >= textFragment->textStartOffset()) {
+    m_remainingTextStartOffset =
+        m_startOffset - textFragment->textStartOffset();
+  } else {
+    m_firstLetterStartOffset = m_startOffset;
+  }
+  m_offset = 0;
+
+  return true;
+}
+
+template <typename Strategy>
+bool TextIteratorAlgorithm<Strategy>::hasNotAdvancedToStartPosition() {
+  if (atEnd())
+    return false;
+  if (m_remainingTextStartOffset == kInvalidOffset)
+    return false;
+  return m_node == m_startContainer;
 }
 
 template <typename Strategy>
@@ -220,7 +263,8 @@ void TextIteratorAlgorithm<Strategy>::initialize(Node* startContainer,
     return;
 
   m_fullyClippedStack.setUpFullyClippedStack(m_node);
-  m_offset = m_node == m_startContainer ? m_startOffset : 0;
+  if (!prepareForFirstLetterInitialization())
+    m_offset = m_node == m_startContainer ? m_startOffset : 0;
   m_iterationProgress = HandledNone;
 
   // Calculate first out of bounds node.
@@ -229,6 +273,16 @@ void TextIteratorAlgorithm<Strategy>::initialize(Node* startContainer,
 
   // Identify the first run.
   advance();
+
+  // The current design cannot start in a text node with arbitrary offset, if
+  // the node has :first-letter. Instead, we start with offset 0, and have extra
+  // advance() calls until we have moved to/past the starting position.
+  while (hasNotAdvancedToStartPosition())
+    advance();
+
+  // Clear temporary data for initialization with :first-letter.
+  m_firstLetterStartOffset = kInvalidOffset;
+  m_remainingTextStartOffset = kInvalidOffset;
 }
 
 template <typename Strategy>
@@ -238,11 +292,11 @@ TextIteratorAlgorithm<Strategy>::~TextIteratorAlgorithm() {
   Document* document = ownerDocument();
   if (!document)
     return;
-  if (m_behavior & TextIteratorForInnerText)
+  if (m_behavior.forInnerText())
     UseCounter::count(document, UseCounter::InnerTextWithShadowTree);
-  if (m_behavior & TextIteratorForSelectionToString)
+  if (m_behavior.forSelectionToString())
     UseCounter::count(document, UseCounter::SelectionToStringWithShadowTree);
-  if (m_behavior & TextIteratorForWindowFind)
+  if (m_behavior.forWindowFind())
     UseCounter::count(document, UseCounter::WindowFindWithShadowTree);
 }
 
@@ -480,7 +534,7 @@ void TextIteratorAlgorithm<Strategy>::advance() {
 }
 
 static bool hasVisibleTextNode(LayoutText* layoutObject) {
-  if (layoutObject->style()->visibility() == EVisibility::Visible)
+  if (layoutObject->style()->visibility() == EVisibility::kVisible)
     return true;
 
   if (!layoutObject->isTextFragment())
@@ -495,7 +549,7 @@ static bool hasVisibleTextNode(LayoutText* layoutObject) {
       fragment->firstLetterPseudoElement()->layoutObject();
   return pseudoElementLayoutObject &&
          pseudoElementLayoutObject->style()->visibility() ==
-             EVisibility::Visible;
+             EVisibility::kVisible;
 }
 
 template <typename Strategy>
@@ -519,7 +573,7 @@ bool TextIteratorAlgorithm<Strategy>::handleTextNode() {
     int runStart = m_offset;
     if (m_lastTextNodeEndedWithCollapsedSpace &&
         hasVisibleTextNode(layoutObject)) {
-      if (m_behavior & TextIteratorCollapseTrailingSpace) {
+      if (m_behavior.collapseTrailingSpace()) {
         if (runStart > 0 && str[runStart - 1] == ' ') {
           spliceBuffer(spaceCharacter, textNode, 0, runStart, runStart);
           return false;
@@ -540,7 +594,7 @@ bool TextIteratorAlgorithm<Strategy>::handleTextNode() {
         return false;
       }
     }
-    if (layoutObject->style()->visibility() != EVisibility::Visible &&
+    if (layoutObject->style()->visibility() != EVisibility::kVisible &&
         !ignoresStyleVisibility())
       return false;
     int strLength = str.length();
@@ -564,7 +618,7 @@ bool TextIteratorAlgorithm<Strategy>::handleTextNode() {
 
   if (!layoutObject->firstTextBox() && str.length() > 0 &&
       !shouldHandleFirstLetter) {
-    if (layoutObject->style()->visibility() != EVisibility::Visible &&
+    if (layoutObject->style()->visibility() != EVisibility::kVisible &&
         !ignoresStyleVisibility())
       return false;
     m_lastTextNodeEndedWithCollapsedSpace =
@@ -580,7 +634,7 @@ bool TextIteratorAlgorithm<Strategy>::handleTextNode() {
     m_sortedTextBoxes.clear();
     for (InlineTextBox* textBox = layoutObject->firstTextBox(); textBox;
          textBox = textBox->nextTextBox()) {
-      m_sortedTextBoxes.append(textBox);
+      m_sortedTextBoxes.push_back(textBox);
     }
     std::sort(m_sortedTextBoxes.begin(), m_sortedTextBoxes.end(),
               InlineTextBox::compareByStart);
@@ -646,7 +700,7 @@ void TextIteratorAlgorithm<Strategy>::handleTextBox() {
                                  ? m_firstLetterText
                                  : toLayoutText(m_node->layoutObject());
 
-  if (layoutObject->style()->visibility() != EVisibility::Visible &&
+  if (layoutObject->style()->visibility() != EVisibility::kVisible &&
       !ignoresStyleVisibility()) {
     m_textBox = nullptr;
   } else {
@@ -713,9 +767,9 @@ void TextIteratorAlgorithm<Strategy>::handleTextBox() {
         // This effectively translates newlines to spaces without copying the
         // text.
         if (str[runStart] == '\n') {
-          // We need to preserve new lines in case of PRE_LINE.
+          // We need to preserve new lines in case of PreLine.
           // See bug crbug.com/317365.
-          if (layoutObject->style()->whiteSpace() == PRE_LINE)
+          if (layoutObject->style()->whiteSpace() == EWhiteSpace::kPreLine)
             spliceBuffer('\n', m_node, 0, runStart, runStart);
           else
             spliceBuffer(spaceCharacter, m_node, 0, runStart, runStart + 1);
@@ -780,17 +834,17 @@ void TextIteratorAlgorithm<Strategy>::handleTextNodeFirstLetter(
     return;
 
   LayoutObject* pseudoLayoutObject = firstLetterElement->layoutObject();
-  if (pseudoLayoutObject->style()->visibility() != EVisibility::Visible &&
+  if (pseudoLayoutObject->style()->visibility() != EVisibility::kVisible &&
       !ignoresStyleVisibility())
     return;
 
   LayoutObject* firstLetter = pseudoLayoutObject->slowFirstChild();
-  DCHECK(firstLetter);
 
-  m_remainingTextBox = m_textBox;
-  m_textBox = toLayoutText(firstLetter)->firstTextBox();
   m_sortedTextBoxes.clear();
+  m_remainingTextBox = m_textBox;
+  CHECK(firstLetter && firstLetter->isText());
   m_firstLetterText = toLayoutText(firstLetter);
+  m_textBox = m_firstLetterText->firstTextBox();
 }
 
 template <typename Strategy>
@@ -814,7 +868,7 @@ bool TextIteratorAlgorithm<Strategy>::handleReplacedElement() {
     return false;
 
   LayoutObject* layoutObject = m_node->layoutObject();
-  if (layoutObject->style()->visibility() != EVisibility::Visible &&
+  if (layoutObject->style()->visibility() != EVisibility::kVisible &&
       !ignoresStyleVisibility())
     return false;
 
@@ -824,7 +878,7 @@ bool TextIteratorAlgorithm<Strategy>::handleReplacedElement() {
     return true;
   }
 
-  if (m_behavior & TextIteratorCollapseTrailingSpace) {
+  if (m_behavior.collapseTrailingSpace()) {
     if (m_lastTextNode) {
       String str = m_lastTextNode->layoutObject()->text();
       if (m_lastTextNodeEndedWithCollapsedSpace && m_offset > 0 &&
@@ -1031,7 +1085,7 @@ bool TextIteratorAlgorithm<Strategy>::shouldRepresentNodeOffsetZero() {
   // unrendered content, we would create VisiblePositions on every call to this
   // function without this check.
   if (!m_node->layoutObject() ||
-      m_node->layoutObject()->style()->visibility() != EVisibility::Visible ||
+      m_node->layoutObject()->style()->visibility() != EVisibility::kVisible ||
       (m_node->layoutObject()->isLayoutBlockFlow() &&
        !toLayoutBlock(m_node->layoutObject())->size().height() &&
        !isHTMLBodyElement(*m_node)))
@@ -1152,10 +1206,56 @@ void TextIteratorAlgorithm<Strategy>::spliceBuffer(UChar c,
 }
 
 template <typename Strategy>
+int TextIteratorAlgorithm<Strategy>::adjustedStartForFirstLetter(
+    const Node& textNode,
+    const LayoutText& layoutObject,
+    int textStartOffset,
+    int textEndOffset) {
+  if (m_firstLetterStartOffset == kInvalidOffset)
+    return textStartOffset;
+  if (textNode != m_startContainer)
+    return textStartOffset;
+  if (!layoutObject.isTextFragment())
+    return textStartOffset;
+  if (toLayoutTextFragment(layoutObject).isRemainingTextLayoutObject())
+    return textStartOffset;
+  if (textEndOffset <= m_firstLetterStartOffset)
+    return textStartOffset;
+  int adjustedOffset = std::max(textStartOffset, m_firstLetterStartOffset);
+  m_firstLetterStartOffset = kInvalidOffset;
+  return adjustedOffset;
+}
+
+template <typename Strategy>
+int TextIteratorAlgorithm<Strategy>::adjustedStartForRemainingText(
+    const Node& textNode,
+    const LayoutText& layoutObject,
+    int textStartOffset,
+    int textEndOffset) {
+  if (m_remainingTextStartOffset == kInvalidOffset)
+    return textStartOffset;
+  if (textNode != m_startContainer)
+    return textStartOffset;
+  if (!layoutObject.isTextFragment())
+    return textStartOffset;
+  if (!toLayoutTextFragment(layoutObject).isRemainingTextLayoutObject())
+    return textStartOffset;
+  if (textEndOffset <= m_remainingTextStartOffset)
+    return textStartOffset;
+  int adjustedOffset = std::max(textStartOffset, m_remainingTextStartOffset);
+  m_remainingTextStartOffset = kInvalidOffset;
+  return adjustedOffset;
+}
+
+template <typename Strategy>
 void TextIteratorAlgorithm<Strategy>::emitText(Node* textNode,
                                                LayoutText* layoutObject,
                                                int textStartOffset,
                                                int textEndOffset) {
+  textStartOffset = adjustedStartForFirstLetter(*textNode, *layoutObject,
+                                                textStartOffset, textEndOffset);
+  textStartOffset = adjustedStartForRemainingText(
+      *textNode, *layoutObject, textStartOffset, textEndOffset);
   // Since m_lastTextNodeEndedWithCollapsedSpace seems better placed in
   // TextIterator, but is always reset when we call spliceBuffer, we
   // wrap TextIteratorTextState::spliceBuffer() with this function.
@@ -1168,12 +1268,8 @@ EphemeralRangeTemplate<Strategy> TextIteratorAlgorithm<Strategy>::range()
     const {
   // use the current run information, if we have it
   if (m_textState.positionNode()) {
-    m_textState.flushPositionOffsets();
-    return EphemeralRangeTemplate<Strategy>(
-        PositionTemplate<Strategy>(m_textState.positionNode(),
-                                   m_textState.positionStartOffset()),
-        PositionTemplate<Strategy>(m_textState.positionNode(),
-                                   m_textState.positionEndOffset()));
+    return EphemeralRangeTemplate<Strategy>(startPositionInCurrentContainer(),
+                                            endPositionInCurrentContainer());
   }
 
   // otherwise, return the end of the overall range we were given
@@ -1208,7 +1304,7 @@ template <typename Strategy>
 int TextIteratorAlgorithm<Strategy>::startOffsetInCurrentContainer() const {
   if (m_textState.positionNode()) {
     m_textState.flushPositionOffsets();
-    return m_textState.positionStartOffset();
+    return m_textState.positionStartOffset() + m_textState.textStartOffset();
   }
   DCHECK(m_endContainer);
   return m_endOffset;
@@ -1218,7 +1314,7 @@ template <typename Strategy>
 int TextIteratorAlgorithm<Strategy>::endOffsetInCurrentContainer() const {
   if (m_textState.positionNode()) {
     m_textState.flushPositionOffsets();
-    return m_textState.positionEndOffset();
+    return m_textState.positionEndOffset() + m_textState.textStartOffset();
   }
   DCHECK(m_endContainer);
   return m_endOffset;
@@ -1257,12 +1353,14 @@ int TextIteratorAlgorithm<Strategy>::rangeLength(
       start.document()->lifecycle());
 
   int length = 0;
-  TextIteratorBehaviorFlags behaviorFlags =
-      TextIteratorEmitsObjectReplacementCharacter;
-  if (forSelectionPreservation)
-    behaviorFlags |= TextIteratorEmitsCharactersBetweenAllVisiblePositions;
-  for (TextIteratorAlgorithm<Strategy> it(start, end, behaviorFlags);
-       !it.atEnd(); it.advance())
+  const TextIteratorBehavior& behavior =
+      TextIteratorBehavior::Builder()
+          .setEmitsObjectReplacementCharacter(true)
+          .setEmitsCharactersBetweenAllVisiblePositions(
+              forSelectionPreservation)
+          .build();
+  for (TextIteratorAlgorithm<Strategy> it(start, end, behavior); !it.atEnd();
+       it.advance())
     length += it.length();
 
   return length;
@@ -1312,9 +1410,9 @@ void TextIteratorAlgorithm<Strategy>::copyCodeUnitsTo(
 
 template <typename Strategy>
 static String createPlainText(const EphemeralRangeTemplate<Strategy>& range,
-                              TextIteratorBehaviorFlags behavior) {
+                              const TextIteratorBehavior& behavior) {
   if (range.isNull())
-    return emptyString();
+    return emptyString;
 
   DocumentLifecycle::DisallowTransitionScope disallowTransition(
       range.startPosition().document()->lifecycle());
@@ -1323,7 +1421,7 @@ static String createPlainText(const EphemeralRangeTemplate<Strategy>& range,
                                      behavior);
 
   if (it.atEnd())
-    return emptyString();
+    return emptyString;
 
   // The initial buffer size can be critical for performance:
   // https://bugs.webkit.org/show_bug.cgi?id=81192
@@ -1336,18 +1434,18 @@ static String createPlainText(const EphemeralRangeTemplate<Strategy>& range,
     it.text().appendTextToStringBuilder(builder);
 
   if (builder.isEmpty())
-    return emptyString();
+    return emptyString;
 
   return builder.toString();
 }
 
 String plainText(const EphemeralRange& range,
-                 TextIteratorBehaviorFlags behavior) {
+                 const TextIteratorBehavior& behavior) {
   return createPlainText<EditingStrategy>(range, behavior);
 }
 
 String plainText(const EphemeralRangeInFlatTree& range,
-                 TextIteratorBehaviorFlags behavior) {
+                 const TextIteratorBehavior& behavior) {
   return createPlainText<EditingInFlatTreeStrategy>(range, behavior);
 }
 

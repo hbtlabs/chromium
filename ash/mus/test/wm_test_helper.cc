@@ -4,23 +4,23 @@
 
 #include "ash/mus/test/wm_test_helper.h"
 
-#include "ash/common/material_design/material_design_controller.h"
-#include "ash/common/test/material_design_controller_test_api.h"
-#include "ash/common/test/test_new_window_client.h"
-#include "ash/common/test/test_system_tray_delegate.h"
 #include "ash/common/test/wm_shell_test_api.h"
 #include "ash/common/wm_shell.h"
-#include "ash/mus/root_window_controller.h"
+#include "ash/common/wm_window.h"
+#include "ash/mus/screen_mus.h"
 #include "ash/mus/window_manager.h"
 #include "ash/mus/window_manager_application.h"
+#include "ash/test/test_shell_delegate.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/test/sequenced_worker_pool_owner.h"
 #include "services/ui/public/cpp/property_type_converters.h"
-#include "services/ui/public/cpp/tests/window_tree_client_private.h"
-#include "services/ui/public/cpp/window_tree_client.h"
+#include "ui/aura/mus/window_tree_client.h"
+#include "ui/aura/test/env_test_helper.h"
+#include "ui/aura/test/mus/window_tree_client_private.h"
+#include "ui/aura/window.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/test/material_design_controller_test_api.h"
 #include "ui/display/display.h"
@@ -32,9 +32,10 @@ namespace ash {
 namespace mus {
 namespace {
 
-bool CompareByDisplayId(const RootWindowController* root1,
-                        const RootWindowController* root2) {
-  return root1->display().id() < root2->display().id();
+bool CompareByDisplayId(RootWindowController* root1,
+                        RootWindowController* root2) {
+  return root1->GetWindow()->GetDisplayNearestWindow().id() <
+         root2->GetWindow()->GetDisplayNearestWindow().id();
 }
 
 // TODO(sky): at some point this needs to support everything in DisplayInfo,
@@ -79,13 +80,11 @@ WmTestHelper::~WmTestHelper() {
   blocking_pool_owner_.reset();
   base::RunLoop().RunUntilIdle();
 
-  ash::test::MaterialDesignControllerTestAPI::Uninitialize();
   ui::test::MaterialDesignControllerTestAPI::Uninitialize();
 }
 
 void WmTestHelper::Init() {
   ui::MaterialDesignController::Initialize();
-  ash::MaterialDesignController::Initialize();
 
   views_delegate_ = base::MakeUnique<views::TestViewsDelegate>();
 
@@ -99,24 +98,22 @@ void WmTestHelper::Init() {
       kMaxNumberThreads, kThreadNamePrefix);
 
   window_manager_app_->window_manager_.reset(new WindowManager(nullptr));
+  window_manager_app_->window_manager()->shell_delegate_for_test_ =
+      base::MakeUnique<test::TestShellDelegate>();
 
   window_tree_client_setup_.InitForWindowManager(
       window_manager_app_->window_manager_.get(),
       window_manager_app_->window_manager_.get());
+  aura::test::EnvTestHelper().SetWindowTreeClient(
+      window_tree_client_setup_.window_tree_client());
   window_manager_app_->InitWindowManager(
       window_tree_client_setup_.OwnWindowTreeClient(),
       blocking_pool_owner_->pool());
 
-  // TODO(jamescook): Pass a TestShellDelegate into WindowManager and use it to
-  // create the various test delegates.
-  WmShellTestApi().SetSystemTrayDelegate(
-      base::MakeUnique<test::TestSystemTrayDelegate>());
-  WmShellTestApi().SetNewWindowClient(base::MakeUnique<TestNewWindowClient>());
-
-  ui::WindowTreeClient* window_tree_client =
+  aura::WindowTreeClient* window_tree_client =
       window_manager_app_->window_manager()->window_tree_client();
   window_tree_client_private_ =
-      base::MakeUnique<ui::WindowTreeClientPrivate>(window_tree_client);
+      base::MakeUnique<aura::WindowTreeClientPrivate>(window_tree_client);
   int next_x = 0;
   CreateRootWindowController("800x600", &next_x);
 }
@@ -145,9 +142,10 @@ void WmTestHelper::UpdateDisplay(const std::string& display_spec) {
     root_window_controllers.push_back(
         CreateRootWindowController(parts[i], &next_x));
   }
+  const bool in_shutdown = false;
   while (root_window_controllers.size() > parts.size()) {
     window_manager_app_->window_manager()->DestroyRootWindowController(
-        root_window_controllers.back());
+        root_window_controllers.back(), in_shutdown);
     root_window_controllers.pop_back();
   }
 }
@@ -174,20 +172,19 @@ void WmTestHelper::UpdateDisplay(RootWindowController* root_window_controller,
   gfx::Rect bounds = ParseDisplayBounds(display_spec);
   bounds.set_x(*next_x);
   *next_x += bounds.size().width();
-  gfx::Insets work_area_insets =
-      root_window_controller->display_.GetWorkAreaInsets();
-  root_window_controller->display_.set_bounds(bounds);
-  root_window_controller->display_.UpdateWorkAreaFromInsets(work_area_insets);
-  root_window_controller->root()->SetBounds(gfx::Rect(bounds.size()));
-  display::ScreenBase* screen =
-      window_manager_app_->window_manager()->screen_.get();
-  const bool is_primary = screen->display_list().FindDisplayById(
-                              root_window_controller->display().id()) ==
-                          screen->display_list().GetPrimaryDisplayIterator();
+  display::Display updated_display =
+      root_window_controller->GetWindow()->GetDisplayNearestWindow();
+  gfx::Insets work_area_insets = updated_display.GetWorkAreaInsets();
+  updated_display.set_bounds(bounds);
+  updated_display.UpdateWorkAreaFromInsets(work_area_insets);
+  root_window_controller->GetWindow()->SetBounds(gfx::Rect(bounds.size()));
+  ScreenMus* screen = window_manager_app_->window_manager()->screen_.get();
+  const bool is_primary =
+      screen->display_list().FindDisplayById(updated_display.id()) ==
+      screen->display_list().GetPrimaryDisplayIterator();
   screen->display_list().UpdateDisplay(
-      root_window_controller->display(),
-      is_primary ? display::DisplayList::Type::PRIMARY
-                 : display::DisplayList::Type::NOT_PRIMARY);
+      updated_display, is_primary ? display::DisplayList::Type::PRIMARY
+                                  : display::DisplayList::Type::NOT_PRIMARY);
 }
 
 }  // namespace mus

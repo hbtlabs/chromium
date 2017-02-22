@@ -8,6 +8,8 @@
 #include <windows.h>
 
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
+#include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
 
 namespace ui {
 

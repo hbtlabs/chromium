@@ -15,7 +15,6 @@
 #include "base/atomic_sequence_num.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -98,16 +97,14 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
 
   // CommandBuffer implementation:
   State GetLastState() override;
-  int32_t GetLastToken() override;
   void Flush(int32_t put_offset) override;
   void OrderingBarrier(int32_t put_offset) override;
-  void WaitForTokenInRange(int32_t start, int32_t end) override;
-  void WaitForGetOffsetInRange(int32_t start, int32_t end) override;
+  State WaitForTokenInRange(int32_t start, int32_t end) override;
+  State WaitForGetOffsetInRange(int32_t start, int32_t end) override;
   void SetGetBuffer(int32_t shm_id) override;
   scoped_refptr<gpu::Buffer> CreateTransferBuffer(size_t size,
                                                   int32_t* id) override;
   void DestroyTransferBuffer(int32_t id) override;
-  gpu::error::Error GetLastError() override;
 
   // GpuControl implementation:
   // NOTE: The GpuControlClient will be called on the client thread.
@@ -118,10 +115,6 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
                       size_t height,
                       unsigned internalformat) override;
   void DestroyImage(int32_t id) override;
-  int32_t CreateGpuMemoryBufferImage(size_t width,
-                                     size_t height,
-                                     unsigned internalformat,
-                                     unsigned usage) override;
   void SignalQuery(uint32_t query_id, const base::Closure& callback) override;
   void SetLock(base::Lock*) override;
   void EnsureWorkVisible() override;
@@ -132,6 +125,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   bool IsFenceSyncRelease(uint64_t release) override;
   bool IsFenceSyncFlushed(uint64_t release) override;
   bool IsFenceSyncFlushReceived(uint64_t release) override;
+  bool IsFenceSyncReleased(uint64_t release) override;
   void SignalSyncToken(const SyncToken& sync_token,
                        const base::Closure& callback) override;
   bool CanWaitUnverifiedSyncToken(const SyncToken* sync_token) override;
@@ -148,6 +142,9 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   void UpdateVSyncParameters(base::TimeTicks timebase,
                              base::TimeDelta interval) override;
 
+  void AddFilter(IPC::MessageFilter* message_filter) override;
+  int32_t GetRouteID() const override;
+
   using SwapBuffersCompletionCallback = base::Callback<void(
       const std::vector<ui::LatencyInfo>& latency_info,
       gfx::SwapResult result,
@@ -160,10 +157,13 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   void SetUpdateVSyncParametersCallback(
       const UpdateVSyncParametersCallback& callback);
 
+  void DidSwapBuffersCompleteOnOriginThread(SwapBuffersCompleteParams params);
+  void UpdateVSyncParametersOnOriginThread(base::TimeTicks timebase,
+                                           base::TimeDelta interval);
+
   // The serializer interface to the GPU service (i.e. thread).
   class Service {
    public:
-    Service();
     Service(const gpu::GpuPreferences& gpu_preferences);
     Service(gpu::gles2::MailboxManager* mailbox_manager,
             scoped_refptr<gl::GLShareGroup> share_group);
@@ -229,10 +229,10 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   void Destroy();
   bool DestroyOnGpuThread();
   void FlushOnGpuThread(int32_t put_offset);
+  void UpdateLastStateOnGpuThread();
   void ScheduleDelayedWorkOnGpuThread();
   bool MakeCurrent();
   base::Closure WrapCallback(const base::Closure& callback);
-  State GetStateFast();
   void QueueTask(bool out_of_order, const base::Closure& task);
   void ProcessTasksOnGpuThread();
   void CheckSequencedThread();
@@ -291,6 +291,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   bool context_lost_;
 #endif
   State last_state_;
+  base::Lock last_state_lock_;
   int32_t last_put_offset_;
   gpu::Capabilities capabilities_;
   GpuMemoryBufferManager* gpu_memory_buffer_manager_;
@@ -303,8 +304,6 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   base::Lock command_buffer_lock_;
   base::WaitableEvent flush_event_;
   scoped_refptr<Service> service_;
-  State state_after_last_flush_;
-  base::Lock state_after_last_flush_lock_;
 
   // The group of contexts that share namespaces with this context.
   scoped_refptr<gles2::ContextGroup> context_group_;

@@ -27,6 +27,7 @@
 #define ProgressTracker_h
 
 #include "core/CoreExport.h"
+#include "core/loader/FrameLoaderTypes.h"
 #include "platform/heap/Handle.h"
 #include "platform/network/ResourceLoadPriority.h"
 #include "wtf/Allocator.h"
@@ -37,8 +38,8 @@
 
 namespace blink {
 
+class FrameLoaderClient;
 class LocalFrame;
-class Resource;
 class ResourceResponse;
 struct ProgressItem;
 
@@ -58,7 +59,7 @@ class CORE_EXPORT ProgressTracker final
 
   double estimatedProgress() const;
 
-  void progressStarted();
+  void progressStarted(FrameLoadType);
   void progressCompleted();
 
   void finishedParsing();
@@ -71,8 +72,8 @@ class CORE_EXPORT ProgressTracker final
  private:
   explicit ProgressTracker(LocalFrame*);
 
-  void incrementProgressForMainResourceOnly(unsigned long identifier,
-                                            int length);
+  FrameLoaderClient* frameLoaderClient() const;
+
   void maybeSendProgress();
   void sendFinalProgress();
   void reset();

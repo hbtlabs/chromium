@@ -95,6 +95,7 @@ class CustomTabObserver extends EmptyTabObserver {
             mPageLoadStartedTimestamp = SystemClock.elapsedRealtime();
         }
         if (mCustomTabsConnection != null) {
+            mCustomTabsConnection.setSendNavigationInfoForSession(mSession, false);
             mCustomTabsConnection.notifyNavigationEvent(
                     mSession, CustomTabsCallback.NAVIGATION_STARTED);
             mScreenshotTakenForCurrentNavigation = false;
@@ -188,6 +189,7 @@ class CustomTabObserver extends EmptyTabObserver {
             @Override
             public void run() {
                 if (!tab.isHidden() && mCurrentState != STATE_RESET) return;
+                if (tab.getWebContents() == null) return;
                 tab.getWebContents().getContentBitmapAsync(
                         Bitmap.Config.ARGB_8888, mScaleForNavigationInfo, new Rect(), callback);
                 mScreenshotTakenForCurrentNavigation = true;

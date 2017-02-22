@@ -28,7 +28,7 @@
 
 #include "core/html/track/TextTrack.h"
 #include "platform/heap/Handle.h"
-#include "wtf/PassRefPtr.h"
+#include "wtf/Assertions.h"
 
 namespace blink {
 
@@ -44,7 +44,6 @@ class LoadableTextTrack final : public TextTrack {
   // TextTrack method.
   void setMode(const AtomicString&) override;
 
-  void addRegions(const HeapVector<Member<VTTRegion>>&);
   using TextTrack::addListOfCues;
 
   size_t trackElementIndex() const;
@@ -59,6 +58,12 @@ class LoadableTextTrack final : public TextTrack {
 
   Member<HTMLTrackElement> m_trackElement;
 };
+
+DEFINE_TYPE_CASTS(LoadableTextTrack,
+                  TextTrack,
+                  track,
+                  track->trackType() == TextTrack::TrackElement,
+                  track.trackType() == TextTrack::TrackElement);
 
 }  // namespace blink
 

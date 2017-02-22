@@ -6,14 +6,14 @@
 #define COMPONENTS_WEBDATA_COMMON_WEB_DATABASE_BACKEND_H_
 
 #include <memory>
+#include <vector>
 
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/ref_counted_delete_on_message_loop.h"
-#include "base/memory/scoped_vector.h"
+#include "base/memory/ref_counted_delete_on_sequence.h"
 #include "base/single_thread_task_runner.h"
 #include "components/webdata/common/web_database_service.h"
 #include "components/webdata/common/webdata_export.h"
@@ -23,16 +23,12 @@ class WebDatabaseTable;
 class WebDataRequest;
 class WebDataRequestManager;
 
-namespace tracked_objects {
-class Location;
-}
-
 // WebDatabaseBackend handles all database tasks posted by
 // WebDatabaseService. It is refcounted to allow asynchronous destruction on the
 // DB thread.
 
 class WEBDATA_EXPORT WebDatabaseBackend
-    : public base::RefCountedDeleteOnMessageLoop<WebDatabaseBackend> {
+    : public base::RefCountedDeleteOnSequence<WebDatabaseBackend> {
  public:
   class Delegate {
    public:
@@ -82,7 +78,7 @@ class WEBDATA_EXPORT WebDatabaseBackend
   WebDatabase* database() { return db_.get(); }
 
  protected:
-  friend class base::RefCountedDeleteOnMessageLoop<WebDatabaseBackend>;
+  friend class base::RefCountedDeleteOnSequence<WebDatabaseBackend>;
   friend class base::DeleteHelper<WebDatabaseBackend>;
 
   virtual ~WebDatabaseBackend();
@@ -110,7 +106,7 @@ class WEBDATA_EXPORT WebDatabaseBackend
   // object, or they themselves would need to be refcounted. Owning
   // them here rather than having WebDatabase own them makes for
   // easier unit testing of WebDatabase.
-  ScopedVector<WebDatabaseTable> tables_;
+  std::vector<std::unique_ptr<WebDatabaseTable>> tables_;
 
   std::unique_ptr<WebDatabase> db_;
 

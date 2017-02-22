@@ -74,10 +74,7 @@ std::unique_ptr<UrlDownloader> UrlDownloader::BeginDownload(
     base::WeakPtr<DownloadManagerImpl> download_manager,
     std::unique_ptr<net::URLRequest> request,
     const Referrer& referrer) {
-  if (!referrer.url.is_valid())
-    request->SetReferrer(std::string());
-  else
-    request->SetReferrer(referrer.url.spec());
+  Referrer::SetReferrerForRequest(request.get(), referrer);
 
   if (request->url().SchemeIs(url::kBlobScheme))
     return nullptr;
@@ -146,7 +143,7 @@ void UrlDownloader::StartReading(bool is_continuation) {
   // doesn't use the buffer.
   scoped_refptr<net::IOBuffer> buf;
   int buf_size;
-  if (!core_.OnWillRead(&buf, &buf_size, -1)) {
+  if (!core_.OnWillRead(&buf, &buf_size)) {
     int result = request_->CancelWithError(net::ERR_ABORTED);
     base::SequencedTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(&UrlDownloader::ResponseCompleted,

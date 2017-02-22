@@ -22,7 +22,6 @@ var SettingsBooleanControlBehaviorImpl = {
       type: Boolean,
       value: false,
       notify: true,
-      observer: 'checkedChanged_',
       reflectToAttribute: true,
     },
 
@@ -55,11 +54,31 @@ var SettingsBooleanControlBehaviorImpl = {
       type: String,
       value: '',
     },
+
+    /**
+     * For numeric prefs only, the integer value equivalent to the unchecked
+     * state. This is the value sent to prefs if the user unchecks the control.
+     * During initialization, the control is unchecked if and only if the pref
+     * value is equal to the this value. (Values 2, 3, 4, etc. all are checked.)
+     */
+    numericUncheckedValue: {
+      type: Number,
+      readOnly: true,
+      value: 0,
+    }
   },
 
   observers: [
     'prefValueChanged_(pref.value)',
   ],
+
+  notifyChangedByUserInteraction: function() {
+    this.fire('settings-boolean-control-change');
+
+    if (!this.pref || this.noSetPref)
+      return;
+    this.sendPrefChange();
+  },
 
   /** Reset the checked state to match the current pref value. */
   resetToPrefValue: function() {
@@ -68,14 +87,13 @@ var SettingsBooleanControlBehaviorImpl = {
 
   /** Update the pref to the current |checked| value. */
   sendPrefChange: function() {
-    /** @type {boolean} */ var newValue = this.getNewValue_(this.checked);
     // Ensure that newValue is the correct type for the pref type, either
     // a boolean or a number.
     if (this.pref.type == chrome.settingsPrivate.PrefType.NUMBER) {
-      this.set('pref.value', newValue ? 1 : 0);
+      this.set('pref.value', this.checked ? 1 : this.numericUncheckedValue);
       return;
     }
-    this.set('pref.value', newValue);
+    this.set('pref.value', this.checked);
   },
 
   /**
@@ -88,32 +106,25 @@ var SettingsBooleanControlBehaviorImpl = {
   },
 
   /**
-   * Polymer observer for checked.
-   * @private
-   */
-  checkedChanged_: function() {
-    if (!this.pref || this.noSetPref)
-      return;
-    this.sendPrefChange();
-  },
-
-  /**
    * @param {*} value
    * @return {boolean} The value as a boolean, inverted if |inverted| is true.
    * @private
    */
   getNewValue_: function(value) {
+    // For numeric prefs, the control is only false if the value is exactly
+    // equal to the unchecked-equivalent value.
+    if (this.pref.type == chrome.settingsPrivate.PrefType.NUMBER)
+      value = value != this.numericUncheckedValue;
+
     return this.inverted ? !value : !!value;
   },
 
   /**
-   * @param {boolean} disabled
-   * @param {!chrome.settingsPrivate.PrefObject} pref
    * @return {boolean} Whether the checkbox should be disabled.
    * @private
    */
-  controlDisabled_: function(disabled, pref) {
-    return disabled || this.isPrefPolicyControlled(pref);
+  controlDisabled_: function() {
+    return this.disabled || this.isPrefPolicyControlled(assert(this.pref));
   },
 };
 

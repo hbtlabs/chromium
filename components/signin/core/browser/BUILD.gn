@@ -10,6 +10,8 @@ static_library("browser") {
   sources = [
     "about_signin_internals.cc",
     "about_signin_internals.h",
+    "access_token_fetcher.cc",
+    "access_token_fetcher.h",
     "account_fetcher_service.cc",
     "account_fetcher_service.h",
     "account_info.cc",
@@ -83,6 +85,7 @@ static_library("browser") {
     "//base:i18n",
     "//components/content_settings/core/browser",
     "//components/content_settings/core/common",
+    "//components/data_use_measurement/core",
     "//components/google/core/browser",
     "//components/invalidation/public",
     "//components/keyed_service/core",
@@ -146,6 +149,7 @@ static_library("test_support") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "access_token_fetcher_unittest.cc",
     "account_info_unittest.cc",
     "account_investigator_unittest.cc",
     "account_tracker_service_unittest.cc",
@@ -160,10 +164,12 @@ source_set("unit_tests") {
 
   deps = [
     ":test_support",
+    "//base/test:test_support",
     "//components/content_settings/core/browser",
     "//components/os_crypt:test_support",
-    "//components/pref_registry:test_support",
+    "//components/pref_registry:pref_registry",
     "//components/signin/core/common",
+    "//components/sync_preferences:test_support",
     "//testing/gmock",
   ]
 

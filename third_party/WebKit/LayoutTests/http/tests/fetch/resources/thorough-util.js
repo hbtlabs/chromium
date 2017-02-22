@@ -65,6 +65,25 @@ var checkFetchResponseType = function(type, url, data) {
                 type,
                 'type must match. url: ' + url);
 };
+var checkFetchResponseRedirected = function(expected, url, data) {
+  assert_equals(data.fetchResult,
+                'resolved',
+                'fetchResult must be resolved. url = ' + url);
+  assert_equals(data.redirected,
+                expected,
+                url + ' redirected flag should match');
+};
+var checkURLList = function(redirectedURLList, url, data) {
+  if (!self.internals)
+    return;
+  var expectedURLList = [url].concat(redirectedURLList);
+  assert_equals(data.fetchResult,
+                'resolved',
+                'fetchResult must be resolved. url = ' + url);
+  assert_array_equals(data.urlList,
+                      expectedURLList,
+                      url + ' URL list should match');
+};
 
 var showComment = function(url, data) {
   assert_true(!data.comment, 'Show comment: ' + data.comment + ' url: ' + url);
@@ -91,6 +110,8 @@ var noServerHeader =
 var typeBasic = checkFetchResponseType.bind(this, 'basic');
 var typeCors = checkFetchResponseType.bind(this, 'cors');
 var typeOpaque = checkFetchResponseType.bind(this, 'opaque');
+var responseRedirected = checkFetchResponseRedirected.bind(this, true);
+var responseNotRedirected = checkFetchResponseRedirected.bind(this, false);
 
 // Functions to check the result of JSONP which is evaluated in
 // thorough-iframe.html by appending <script> element.
@@ -298,6 +319,12 @@ function getRequestInit(params) {
                        ['X-ServiceWorker-s', 'test1'],
                        ['X-ServiceWorker-Test', 'test3'],
                        ['X-ServiceWorker-U', 'test5']];
+  } else if (params['headers'] === 'SAFE') {
+    init['headers'] = [['Accept', '*/*'],
+                       ['Accept-Language', 'en-us,de'],
+                       ['Content-Language', 'en-us'],
+                       ['Content-Type', 'text/plain'],
+                       ['Save-data', 'on']];
   } else if (params['headers'] === '{}') {
     init['headers'] = {};
   }
@@ -354,6 +381,10 @@ function doFetch(request) {
                   status: response.status,
                   headers: headersToArray(response.headers),
                   type: response.type,
+                  redirected: response.redirected,
+                  urlList: self.internals ?
+                           self.internals.getInternalResponseURLList(response) :
+                           [],
                   response: response,
                   originalURL: originalURL
                 });
@@ -375,6 +406,12 @@ function report(data) {
   report_data = data;
 }
 
+// |test_target| is an array. The first element of |test_target| is the URL to
+// be fetched. The second element of |test_target| is an array of test functions
+// which will be called with the result of doFetch(). The third element of
+// |test_target| is an array of test functions which will be called with
+// |report_data| set by report() which is called while executing
+// "eval(message.body)".
 function executeTest(test_target) {
   if (test_target.length == 0) {
     return Promise.resolve();

@@ -25,11 +25,11 @@ function test()
         if (eventUISourceCode.url().indexOf("style.css") == -1)
             return;
         var request = InspectorTest.networkRequests().pop();
-        uiSourceCode = Workspace.workspace.uiSourceCodeForURL(request.url);
+        uiSourceCode = Workspace.workspace.uiSourceCodeForURL(request.url());
         if (!uiSourceCode)
             return;
         uiSourceCode.addRevision("");
-        uiSourceCode.history[0].requestContent().then(step3);
+        uiSourceCode.history()[0].requestContent().then(step3);
     }
 
     function step3(content)

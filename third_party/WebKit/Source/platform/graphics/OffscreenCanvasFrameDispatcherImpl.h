@@ -9,38 +9,42 @@
 #include "cc/output/begin_frame_args.h"
 #include "cc/resources/shared_bitmap.h"
 #include "cc/surfaces/surface_id.h"
+#include "cc/surfaces/surface_id_allocator.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "platform/graphics/OffscreenCanvasFrameDispatcher.h"
 #include "platform/graphics/StaticBitmapImage.h"
+#include "wtf/Compiler.h"
 #include <memory>
 
 namespace blink {
 
 class PLATFORM_EXPORT OffscreenCanvasFrameDispatcherImpl final
     : public OffscreenCanvasFrameDispatcher,
-      WTF_NON_EXPORTED_BASE(
+      NON_EXPORTED_BASE(
           public cc::mojom::blink::MojoCompositorFrameSinkClient) {
  public:
-  OffscreenCanvasFrameDispatcherImpl(uint32_t clientId,
+  OffscreenCanvasFrameDispatcherImpl(OffscreenCanvasFrameDispatcherClient*,
+                                     uint32_t clientId,
                                      uint32_t sinkId,
-                                     uint32_t localId,
-                                     uint64_t nonceHigh,
-                                     uint64_t nonceLow,
                                      int canvasId,
                                      int width,
                                      int height);
 
   // OffscreenCanvasFrameDispatcher implementation.
-  ~OffscreenCanvasFrameDispatcherImpl() override {}
+  ~OffscreenCanvasFrameDispatcherImpl() final;
+  void setNeedsBeginFrame(bool) final;
   void dispatchFrame(RefPtr<StaticBitmapImage>,
                      double commitStartTime,
-                     bool isWebGLSoftwareRendering = false) override;
-  void reclaimResource(unsigned resourceId) override;
+                     bool isWebGLSoftwareRendering = false) final;
+  void reclaimResource(unsigned resourceId) final;
+  void reshape(int width, int height) final;
 
   // cc::mojom::blink::MojoCompositorFrameSinkClient implementation.
-  void DidReceiveCompositorFrameAck() override;
-  void OnBeginFrame(const cc::BeginFrameArgs&) override;
-  void ReclaimResources(const cc::ReturnedResourceArray& resources) override;
+  void DidReceiveCompositorFrameAck() final;
+  void OnBeginFrame(const cc::BeginFrameArgs&) final;
+  void ReclaimResources(const cc::ReturnedResourceArray& resources) final;
+  void WillDrawSurface(const cc::LocalSurfaceId&,
+                       ::gfx::mojom::blink::RectPtr damageRect) final;
 
   // This enum is used in histogram, so it should be append-only.
   enum OffscreenCanvasCommitType {
@@ -52,9 +56,15 @@ class PLATFORM_EXPORT OffscreenCanvasFrameDispatcherImpl final
   };
 
  private:
-  const cc::SurfaceId m_surfaceId;
-  const int m_width;
-  const int m_height;
+  // Surface-related
+  cc::SurfaceIdAllocator m_surfaceIdAllocator;
+  const cc::FrameSinkId m_frameSinkId;
+  cc::LocalSurfaceId m_currentLocalSurfaceId;
+
+  int m_width;
+  int m_height;
+  bool m_changeSizeForNextCommit;
+  bool m_needsBeginFrame;
 
   unsigned m_nextResourceId;
   HashMap<unsigned, RefPtr<StaticBitmapImage>> m_cachedImages;
@@ -63,6 +73,7 @@ class PLATFORM_EXPORT OffscreenCanvasFrameDispatcherImpl final
   HashSet<unsigned> m_spareResourceLocks;
 
   bool verifyImageSize(const IntSize);
+  void postImageToPlaceholder(RefPtr<StaticBitmapImage>);
 
   cc::mojom::blink::MojoCompositorFrameSinkPtr m_sink;
   mojo::Binding<cc::mojom::blink::MojoCompositorFrameSinkClient> m_binding;

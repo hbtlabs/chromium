@@ -80,7 +80,8 @@ bool InitializeStaticGLBindings(GLImplementation implementation) {
     case kGLImplementationOSMesaGL:
       return InitializeStaticGLBindingsOSMesaGL();
     case kGLImplementationMockGL:
-      SetGLImplementation(kGLImplementationMockGL);
+    case kGLImplementationStubGL:
+      SetGLImplementation(implementation);
       InitializeStaticGLBindingsGL();
       return true;
     default:
@@ -96,10 +97,11 @@ void InitializeDebugGLBindings() {
   InitializeDebugGLBindingsOSMESA();
 }
 
-void ClearGLBindingsPlatform() {
-  ClearGLBindingsEGL();
-  ClearGLBindingsGL();
-  ClearGLBindingsOSMESA();
+void ShutdownGLPlatform() {
+  GLSurfaceEGL::ShutdownOneOff();
+  ClearBindingsEGL();
+  ClearBindingsGL();
+  ClearBindingsOSMESA();
 }
 
 }  // namespace init

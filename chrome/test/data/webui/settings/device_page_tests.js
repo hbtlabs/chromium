@@ -9,6 +9,8 @@ cr.define('device_page_tests', function() {
     Display: 'display',
     Keyboard: 'keyboard',
     Pointers: 'pointers',
+    Power: 'power',
+    Stylus: 'stylus',
   };
 
   /**
@@ -17,6 +19,10 @@ cr.define('device_page_tests', function() {
    */
   function TestDevicePageBrowserProxy() {
     this.keyboardShortcutsOverlayShown_ = 0;
+    this.updatePowerStatusCalled_ = 0;
+    this.onNoteTakingAppsUpdated_ = null;
+    this.requestNoteTakingApps_ = 0;
+    this.setPreferredNoteTakingApp_ = '';
   }
 
   TestDevicePageBrowserProxy.prototype = {
@@ -25,6 +31,12 @@ cr.define('device_page_tests', function() {
       // Enable mouse and touchpad.
       cr.webUIListenerCallback('has-mouse-changed', true);
       cr.webUIListenerCallback('has-touchpad-changed', true);
+    },
+
+    /** override */
+    initializeStylus: function() {
+      // Enable stylus.
+      cr.webUIListenerCallback('has-stylus-changed', true);
     },
 
     /** @override */
@@ -41,6 +53,31 @@ cr.define('device_page_tests', function() {
     /** override */
     showKeyboardShortcutsOverlay: function() {
       this.keyboardShortcutsOverlayShown_++;
+    },
+
+    /** @override */
+    updatePowerStatus: function() {
+      this.updatePowerStatusCalled_++;
+    },
+
+    /** @override */
+    setPowerSource: function(powerSourceId) {
+      this.powerSourceId_ = powerSourceId;
+    },
+
+    /** @override */
+    setNoteTakingAppsUpdatedCallback: function(callback) {
+      this.onNoteTakingAppsUpdated_ = callback;
+    },
+
+    /** @override */
+    requestNoteTakingApps: function() {
+      this.requestNoteTakingApps_++;
+    },
+
+    /** @override */
+    setPreferredNoteTakingApp: function(appId) {
+      this.setPreferredNoteTakingApp_ = appId;
     },
   };
 
@@ -159,6 +196,8 @@ cr.define('device_page_tests', function() {
       settings.display.systemDisplayApi = fakeSystemDisplay;
 
       PolymerTest.clearBody();
+      settings.navigateTo(settings.Route.BASIC);
+
       devicePage = document.createElement('settings-device-page');
       devicePage.prefs = getFakePrefs();
       settings.DevicePageBrowserProxyImpl.instance_ =
@@ -272,7 +311,7 @@ cr.define('device_page_tests', function() {
       test('mouse', function() {
         expectLT(0, pointersPage.$.mouse.offsetHeight);
 
-        expectFalse(pointersPage.$$('#mouse settings-checkbox').checked);
+        expectFalse(pointersPage.$$('#mouse settings-toggle-button').checked);
 
         var slider = assert(pointersPage.$$('#mouse cr-slider'));
         expectEquals(4, slider.value);
@@ -389,10 +428,10 @@ cr.define('device_page_tests', function() {
         // Test sliders round to nearest value when prefs change.
         devicePage.set(
             'prefs.settings.language.xkb_auto_repeat_delay_r2.value', 600);
-        expectEquals(600, keyboardPage.$.delaySlider.value);
+        expectEquals(500, keyboardPage.$.delaySlider.value);
         devicePage.set(
             'prefs.settings.language.xkb_auto_repeat_interval_r2.value', 45);
-        expectEquals(45, keyboardPage.$.repeatRateSlider.value);
+        expectEquals(50, keyboardPage.$.repeatRateSlider.value);
 
         devicePage.set(
             'prefs.settings.language.xkb_auto_repeat_enabled_r2.value',
@@ -521,6 +560,245 @@ cr.define('device_page_tests', function() {
         expectTrue(displayPage.displays[0].isPrimary);
         expectTrue(displayPage.showMirror_(displayPage.displays));
         expectTrue(displayPage.isMirrored_(displayPage.displays));
+      });
+    });
+
+    suite(assert(TestNames.Power), function() {
+      /**
+       * Sets power sources using a deep copy of |sources|.
+       * @param {Array<settings.PowerSource>} sources
+       * @param {string} powerSourceId
+       * @param {bool} isLowPowerCharger
+       */
+      function setPowerSources(sources, powerSourceId, isLowPowerCharger) {
+        var sourcesCopy = sources.map(function(source) {
+          return Object.assign({}, source);
+        });
+        cr.webUIListenerCallback('power-sources-changed',
+            sourcesCopy, powerSourceId, isLowPowerCharger);
+      }
+
+      suite('no power settings', function() {
+        test('power row hidden', function() {
+          assertEquals(null, devicePage.$$('#powerRow'));
+          assertEquals(0,
+              settings.DevicePageBrowserProxyImpl.getInstance()
+              .updatePowerStatusCalled_);
+        });
+      });
+
+      suite('power settings', function() {
+        var powerRow;
+        var powerSourceWrapper;
+        var powerSourceSelect;
+
+        suiteSetup(function() {
+          // Always show power settings.
+          loadTimeData.overrideValues({
+            enablePowerSettings: true,
+          });
+        });
+
+        setup(function() {
+          powerRow = assert(devicePage.$$('#powerRow'));
+          powerSourceWrapper =
+              assert(powerRow.querySelector('.md-select-wrapper'));
+          powerSourceSelect = assert(devicePage.$$('#powerSource'));
+          assertEquals(1,
+              settings.DevicePageBrowserProxyImpl.getInstance()
+              .updatePowerStatusCalled_);
+        });
+
+        test('power sources', function() {
+          var batteryStatus = {
+            charging: false,
+            calculating: false,
+            percent: 50,
+            statusText: '5 hours left',
+          };
+          cr.webUIListenerCallback(
+              'battery-status-changed', Object.assign({}, batteryStatus));
+          setPowerSources([], '', false);
+          Polymer.dom.flush();
+
+          // Power sources dropdown is hidden.
+          assertTrue(powerSourceWrapper.hidden);
+
+          // Attach a dual-role USB device.
+          var powerSource = {
+            id: '2',
+            type: settings.PowerDeviceType.DUAL_ROLE_USB,
+            description: 'USB-C device',
+          };
+          setPowerSources([powerSource], '', false);
+          Polymer.dom.flush();
+
+          // "Battery" should be selected.
+          assertFalse(powerSourceWrapper.hidden);
+          assertEquals('', powerSourceSelect.value);
+
+          // Select the power source.
+          setPowerSources([powerSource], powerSource.id, true);
+          Polymer.dom.flush();
+          assertFalse(powerSourceWrapper.hidden);
+          assertEquals(powerSource.id, powerSourceSelect.value);
+
+          // Send another power source; the first should still be selected.
+          var otherPowerSource = Object.assign({}, powerSource);
+          otherPowerSource.id = '3';
+          setPowerSources(
+              [otherPowerSource, powerSource], powerSource.id, true);
+          Polymer.dom.flush();
+          assertFalse(powerSourceWrapper.hidden);
+          assertEquals(powerSource.id, powerSourceSelect.value);
+        });
+
+        test('choose power source', function() {
+          var batteryStatus = {
+            charging: false,
+            calculating: false,
+            percent: 50,
+            statusText: '5 hours left',
+          };
+          cr.webUIListenerCallback(
+              'battery-status-changed', Object.assign({}, batteryStatus));
+
+          // Attach a dual-role USB device.
+          var powerSource = {
+            id: '3',
+            type: settings.PowerDeviceType.DUAL_ROLE_USB,
+            description: 'USB-C device',
+          };
+          setPowerSources([powerSource], '', false);
+          Polymer.dom.flush();
+
+          // Select the device.
+          powerSourceSelect.value = powerSourceSelect.children[1].value;
+          powerSourceSelect.dispatchEvent(new CustomEvent('change'));
+          Polymer.dom.flush();
+          expectEquals(
+              powerSource.id,
+              settings.DevicePageBrowserProxyImpl.getInstance().powerSourceId_);
+        });
+      });
+    });
+
+    suite(assert(TestNames.Stylus), function() {
+      var stylusPage;
+      var appSelector;
+      var browserProxy;
+      var noAppsDiv;
+      var waitingDiv;
+      var selectAppDiv;
+
+      suiteSetup(function() {
+        // Always show stylus settings.
+        loadTimeData.overrideValues({
+          stylusAllowed: true,
+        });
+      });
+
+      setup(function() {
+        return showAndGetDeviceSubpage('stylus', settings.Route.STYLUS).then(
+            function(page) {
+              stylusPage = page;
+              browserProxy = settings.DevicePageBrowserProxyImpl.getInstance();
+              appSelector = assert(page.$$('#menu'));
+              noAppsDiv = assert(page.$$('#no-apps'));
+              waitingDiv = assert(page.$$('#waiting'));
+              selectAppDiv = assert(page.$$('#select-app'));
+
+              assertEquals(1, browserProxy.requestNoteTakingApps_);
+              assertEquals('', browserProxy.setPreferredNoteTakingApp_);
+              assert(browserProxy.onNoteTakingAppsUpdated_);
+            });
+      });
+
+      // Helper function to allocate a note app entry.
+      function entry(name, value, preferred) {
+        return {
+          name: name,
+          value: value,
+          preferred: preferred
+        };
+      }
+
+      test('initial app choice selector value', function() {
+        // Selector chooses the first value in list if there is no preferred
+        // value set.
+        browserProxy.onNoteTakingAppsUpdated_(
+            [entry('n1', 'v1', false), entry('n2', 'v2', false)], false);
+        Polymer.dom.flush();
+        assertEquals('v1', appSelector.value);
+
+        // Selector chooses the preferred value if set.
+        browserProxy.onNoteTakingAppsUpdated_(
+            [entry('n1', 'v1', false), entry('n2', 'v2', true)], false);
+        Polymer.dom.flush();
+        assertEquals('v2', appSelector.value);
+      });
+
+      test('change preferred app', function() {
+        // Load app list.
+        browserProxy.onNoteTakingAppsUpdated_(
+            [entry('n1', 'v1', false), entry('n2', 'v2', true)], false);
+        Polymer.dom.flush();
+        assertEquals('', browserProxy.setPreferredNoteTakingApp_);
+
+        // Update select element to new value, verify browser proxy is called.
+        appSelector.value = 'v1';
+        stylusPage.onSelectedAppChanged_();
+        assertEquals('v1', browserProxy.setPreferredNoteTakingApp_);
+      });
+
+      test('preferred app does not change without interaction', function() {
+        // Pass various types of data to page, verify the preferred note-app
+        // does not change.
+        browserProxy.onNoteTakingAppsUpdated_([], false);
+        Polymer.dom.flush();
+        assertEquals('', browserProxy.setPreferredNoteTakingApp_);
+
+        browserProxy.onNoteTakingAppsUpdated_([], true);
+        Polymer.dom.flush();
+        assertEquals('', browserProxy.setPreferredNoteTakingApp_);
+
+        browserProxy.onNoteTakingAppsUpdated_([entry('n', 'v', false)], true);
+        Polymer.dom.flush();
+        assertEquals('', browserProxy.setPreferredNoteTakingApp_);
+
+        browserProxy.onNoteTakingAppsUpdated_([entry('n', 'v', false)], false);
+        Polymer.dom.flush();
+        assertEquals('', browserProxy.setPreferredNoteTakingApp_);
+
+        browserProxy.onNoteTakingAppsUpdated_(
+            [entry('n1', 'v1', false), entry('n2', 'v2', true)], false);
+        Polymer.dom.flush();
+        assertEquals('', browserProxy.setPreferredNoteTakingApp_);
+      });
+
+      test('app-visibility', function() {
+        // No apps available.
+        browserProxy.onNoteTakingAppsUpdated_([], false);
+        assert(!noAppsDiv.hidden);
+        assert(waitingDiv.hidden);
+        assert(selectAppDiv.hidden);
+
+        // Waiting for apps to finish loading.
+        browserProxy.onNoteTakingAppsUpdated_([], true);
+        assert(noAppsDiv.hidden);
+        assert(!waitingDiv.hidden);
+        assert(selectAppDiv.hidden);
+
+        browserProxy.onNoteTakingAppsUpdated_([entry('n', 'v', false)], true);
+        assert(noAppsDiv.hidden);
+        assert(!waitingDiv.hidden);
+        assert(selectAppDiv.hidden);
+
+        // Apps loaded, show selector.
+        browserProxy.onNoteTakingAppsUpdated_([entry('n', 'v', false)], false);
+        assert(noAppsDiv.hidden);
+        assert(waitingDiv.hidden);
+        assert(!selectAppDiv.hidden);
       });
     });
   });

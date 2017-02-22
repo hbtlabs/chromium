@@ -49,14 +49,14 @@ private:
 std::unique_ptr<base::Value> AsValue(bool b) {
   std::unique_ptr<base::FundamentalValue> val(new base::FundamentalValue(b));
 
-  return std::move(val);
+  return val;
 }
 
 std::unique_ptr<base::Value> AsValue(SkScalar scalar) {
   std::unique_ptr<base::FundamentalValue> val(
       new base::FundamentalValue(scalar));
 
-  return std::move(val);
+  return val;
 }
 
 std::unique_ptr<base::Value> AsValue(const SkSize& size) {
@@ -119,9 +119,9 @@ std::unique_ptr<base::Value> AsValue(SkColor color) {
 
 std::unique_ptr<base::Value> AsValue(SkBlendMode mode) {
   std::unique_ptr<base::StringValue> val(
-      new base::StringValue(SkXfermode::ModeName(mode)));
+      new base::StringValue(SkBlendMode_Name(mode)));
 
-  return std::move(val);
+  return val;
 }
 
 std::unique_ptr<base::Value> AsValue(SkCanvas::PointMode mode) {
@@ -131,7 +131,7 @@ std::unique_ptr<base::Value> AsValue(SkCanvas::PointMode mode) {
   std::unique_ptr<base::StringValue> val(
       new base::StringValue(gModeStrings[mode]));
 
-  return std::move(val);
+  return val;
 }
 
 std::unique_ptr<base::Value> AsValue(const SkColorFilter& filter) {
@@ -210,8 +210,6 @@ std::unique_ptr<base::Value> AsValue(const SkPaint& paint) {
     FlagsBuilder builder('|');
     builder.addFlag(paint.isAntiAlias(), "AntiAlias");
     builder.addFlag(paint.isDither(), "Dither");
-    builder.addFlag(paint.isUnderlineText(), "UnderlineText");
-    builder.addFlag(paint.isStrikeThruText(), "StrikeThruText");
     builder.addFlag(paint.isFakeBoldText(), "FakeBoldText");
     builder.addFlag(paint.isLinearText(), "LinearText");
     builder.addFlag(paint.isSubpixelText(), "SubpixelText");
@@ -261,10 +259,10 @@ std::unique_ptr<base::Value> SaveLayerFlagsAsValue(
 
   std::unique_ptr<base::StringValue> val(new base::StringValue(builder.str()));
 
-  return std::move(val);
+  return val;
 }
 
-std::unique_ptr<base::Value> AsValue(SkRegion::Op op) {
+std::unique_ptr<base::Value> AsValue(SkClipOp op) {
   static const char* gOpStrings[] = { "Difference",
                                       "Intersect",
                                       "Union",
@@ -272,9 +270,11 @@ std::unique_ptr<base::Value> AsValue(SkRegion::Op op) {
                                       "ReverseDifference",
                                       "Replace"
                                     };
-  DCHECK_LT(static_cast<size_t>(op), SK_ARRAY_COUNT(gOpStrings));
-  std::unique_ptr<base::StringValue> val(new base::StringValue(gOpStrings[op]));
-  return std::move(val);
+  size_t index = static_cast<size_t>(op);
+  DCHECK_LT(index, SK_ARRAY_COUNT(gOpStrings));
+  std::unique_ptr<base::StringValue> val(
+      new base::StringValue(gOpStrings[index]));
+  return val;
 }
 
 std::unique_ptr<base::Value> AsValue(const SkRegion& region) {
@@ -493,7 +493,7 @@ void BenchmarkingCanvas::didSetMatrix(const SkMatrix& m) {
 }
 
 void BenchmarkingCanvas::onClipRect(const SkRect& rect,
-                                    SkRegion::Op region_op,
+                                    SkClipOp region_op,
                                     SkCanvas::ClipEdgeStyle style) {
   AutoOp op(this, "ClipRect");
   op.addParam("rect", AsValue(rect));
@@ -504,7 +504,7 @@ void BenchmarkingCanvas::onClipRect(const SkRect& rect,
 }
 
 void BenchmarkingCanvas::onClipRRect(const SkRRect& rrect,
-                                     SkRegion::Op region_op,
+                                     SkClipOp region_op,
                                      SkCanvas::ClipEdgeStyle style) {
   AutoOp op(this, "ClipRRect");
   op.addParam("rrect", AsValue(rrect));
@@ -515,7 +515,7 @@ void BenchmarkingCanvas::onClipRRect(const SkRRect& rrect,
 }
 
 void BenchmarkingCanvas::onClipPath(const SkPath& path,
-                                    SkRegion::Op region_op,
+                                    SkClipOp region_op,
                                     SkCanvas::ClipEdgeStyle style) {
   AutoOp op(this, "ClipPath");
   op.addParam("path", AsValue(path));
@@ -526,7 +526,7 @@ void BenchmarkingCanvas::onClipPath(const SkPath& path,
 }
 
 void BenchmarkingCanvas::onClipRegion(const SkRegion& region,
-                                      SkRegion::Op region_op) {
+                                      SkClipOp region_op) {
   AutoOp op(this, "ClipRegion");
   op.addParam("region", AsValue(region));
   op.addParam("op", AsValue(region_op));

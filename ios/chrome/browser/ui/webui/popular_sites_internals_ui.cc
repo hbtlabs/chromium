@@ -4,6 +4,7 @@
 
 #include "ios/chrome/browser/ui/webui/popular_sites_internals_ui.h"
 
+#include "base/memory/ptr_util.h"
 #include "components/grit/components_resources.h"
 #include "components/ntp_tiles/popular_sites.h"
 #include "components/ntp_tiles/webui/popular_sites_internals_message_handler.h"
@@ -30,7 +31,6 @@ class IOSPopularSitesInternalsMessageHandlerBridge
   void RegisterMessages() override;
 
   // ntp_tiles::PopularSitesInternalsMessageHandlerClient
-  base::SequencedWorkerPool* GetBlockingPool() override;
   std::unique_ptr<ntp_tiles::PopularSites> MakePopularSites() override;
   PrefService* GetPrefs() override;
   void RegisterMessageCallback(
@@ -47,11 +47,6 @@ class IOSPopularSitesInternalsMessageHandlerBridge
 
 void IOSPopularSitesInternalsMessageHandlerBridge::RegisterMessages() {
   handler_.RegisterMessages();
-}
-
-base::SequencedWorkerPool*
-IOSPopularSitesInternalsMessageHandlerBridge::GetBlockingPool() {
-  return web::WebThread::GetBlockingPool();
 }
 
 std::unique_ptr<ntp_tiles::PopularSites>
@@ -94,7 +89,8 @@ PopularSitesInternalsUI::PopularSitesInternalsUI(web::WebUIIOS* web_ui)
     : web::WebUIIOSController(web_ui) {
   web::WebUIIOSDataSource::Add(ios::ChromeBrowserState::FromWebUIIOS(web_ui),
                                CreatePopularSitesInternalsHTMLSource());
-  web_ui->AddMessageHandler(new IOSPopularSitesInternalsMessageHandlerBridge);
+  web_ui->AddMessageHandler(
+      base::MakeUnique<IOSPopularSitesInternalsMessageHandlerBridge>());
 }
 
 PopularSitesInternalsUI::~PopularSitesInternalsUI() {}

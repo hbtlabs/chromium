@@ -9,10 +9,17 @@
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/frame/UseCounter.h"
+#include "core/timing/DOMWindowPerformance.h"
+#include "core/timing/Performance.h"
 #include "modules/webaudio/AudioBufferCallback.h"
+#include "modules/webaudio/AudioContextOptions.h"
+#include "modules/webaudio/AudioTimestamp.h"
+#include "modules/webaudio/DefaultAudioDestinationNode.h"
 #include "platform/Histogram.h"
 #include "platform/audio/AudioUtilities.h"
+#include "public/platform/WebAudioLatencyHint.h"
 
 #if DEBUG_AUDIONODE_REFERENCES
 #include <stdio.h>
@@ -27,6 +34,7 @@ static unsigned s_hardwareContextCount = 0;
 static unsigned s_contextId = 0;
 
 AudioContext* AudioContext::create(Document& document,
+                                   const AudioContextOptions& contextOptions,
                                    ExceptionState& exceptionState) {
   DCHECK(isMainThread());
 
@@ -41,7 +49,14 @@ AudioContext* AudioContext::create(Document& document,
     return nullptr;
   }
 
-  AudioContext* audioContext = new AudioContext(document);
+  WebAudioLatencyHint latencyHint(WebAudioLatencyHint::kCategoryInteractive);
+  if (contextOptions.latencyHint().isAudioContextLatencyCategory()) {
+    latencyHint = WebAudioLatencyHint(
+        contextOptions.latencyHint().getAsAudioContextLatencyCategory());
+  }
+  // TODO: add support for latencyHint().isDouble()
+
+  AudioContext* audioContext = new AudioContext(document, latencyHint);
   audioContext->suspendIfNeeded();
 
   if (!AudioUtilities::isValidAudioBufferSampleRate(
@@ -83,8 +98,12 @@ AudioContext* AudioContext::create(Document& document,
   return audioContext;
 }
 
-AudioContext::AudioContext(Document& document)
-    : BaseAudioContext(&document), m_contextId(s_contextId++) {}
+AudioContext::AudioContext(Document& document,
+                           const WebAudioLatencyHint& latencyHint)
+    : BaseAudioContext(&document), m_contextId(s_contextId++) {
+  m_destinationNode = DefaultAudioDestinationNode::create(this, latencyHint);
+  initialize();
+}
 
 AudioContext::~AudioContext() {
 #if DEBUG_AUDIONODE_REFERENCES
@@ -145,10 +164,37 @@ ScriptPromise AudioContext::resumeContext(ScriptState* scriptState) {
   // pulling on the graph again.
   {
     AutoLocker locker(this);
-    m_resumeResolvers.append(resolver);
+    m_resumeResolvers.push_back(resolver);
   }
 
   return promise;
+}
+
+void AudioContext::getOutputTimestamp(ScriptState* scriptState,
+                                      AudioTimestamp& result) {
+  DCHECK(isMainThread());
+  LocalDOMWindow* window = scriptState->domWindow();
+  if (!window)
+    return;
+
+  if (!destination()) {
+    result.setContextTime(0.0);
+    result.setPerformanceTime(0.0);
+    return;
+  }
+
+  Performance* performance = DOMWindowPerformance::performance(*window);
+  DCHECK(performance);
+
+  AudioIOPosition position = outputPosition();
+
+  double performanceTime =
+      performance->monotonicTimeToDOMHighResTimeStamp(position.timestamp);
+  if (performanceTime < 0.0)
+    performanceTime = 0.0;
+
+  result.setContextTime(position.position);
+  result.setPerformanceTime(performanceTime);
 }
 
 ScriptPromise AudioContext::closeContext(ScriptState* scriptState) {
@@ -203,6 +249,10 @@ void AudioContext::stopRendering() {
     setContextState(Suspended);
     deferredTaskHandler().clearHandlersToBeDeleted();
   }
+}
+
+double AudioContext::baseLatency() const {
+  return framesPerBuffer() * 2 / static_cast<double>(sampleRate());
 }
 
 }  // namespace blink

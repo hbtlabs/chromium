@@ -15,6 +15,7 @@
 #include "chrome/browser/chromeos/arc/intent_helper/arc_settings_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/shill_profile_client.h"
@@ -23,8 +24,8 @@
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/proxy/proxy_config_handler.h"
+#include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service_manager.h"
-#include "components/arc/test/fake_arc_bridge_service.h"
 #include "components/arc/test/fake_intent_helper_instance.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
@@ -174,19 +175,35 @@ constexpr char kWifi1Guid[] = "{wifi1_guid}";
 
 constexpr char kONCPacUrl[] = "http://domain.com/x";
 
-// Returns an amount of |broadcasts| matched with |proxy_settings|.
-int CountProxyBroadcasts(
+constexpr char kBackupBroadcastAction[] =
+    "org.chromium.arc.intent_helper.SET_BACKUP_ENABLED";
+constexpr char kLocationServiceBroadcastAction[] =
+    "org.chromium.arc.intent_helper.SET_LOCATION_SERVICE_ENABLED";
+constexpr char kSetProxyBroadcastAction[] =
+    "org.chromium.arc.intent_helper.SET_PROXY";
+
+// Returns the number of |broadcasts| having the |action| action, and checks
+// that all their extras match with |extras|.
+int CountBroadcasts(
     const std::vector<FakeIntentHelperInstance::Broadcast>& broadcasts,
-    const base::DictionaryValue* proxy_settings) {
-  size_t count = 0;
+    const std::string& action,
+    const base::DictionaryValue* extras) {
+  int count = 0;
   for (const FakeIntentHelperInstance::Broadcast& broadcast : broadcasts) {
-    if (broadcast.action == "org.chromium.arc.intent_helper.SET_PROXY") {
-      EXPECT_TRUE(
-          base::JSONReader::Read(broadcast.extras)->Equals(proxy_settings));
+    if (broadcast.action == action) {
+      EXPECT_TRUE(base::JSONReader::Read(broadcast.extras)->Equals(extras));
       count++;
     }
   }
   return count;
+}
+
+// Returns the number of |broadcasts| having the proxy action, and checks that
+// all their extras match with |extras|.
+int CountProxyBroadcasts(
+    const std::vector<FakeIntentHelperInstance::Broadcast>& broadcasts,
+    const base::DictionaryValue* proxy_settings) {
+  return CountBroadcasts(broadcasts, kSetProxyBroadcastAction, proxy_settings);
 }
 
 void RunUntilIdle() {
@@ -209,21 +226,23 @@ class ArcSettingsServiceTest : public InProcessBrowserTest {
         .WillRepeatedly(Return(true));
     policy::BrowserPolicyConnector::SetPolicyProviderForTesting(&provider_);
     fake_intent_helper_instance_.reset(new FakeIntentHelperInstance());
-
-    ArcServiceManager::SetArcBridgeServiceForTesting(
-        base::MakeUnique<FakeArcBridgeService>());
   }
 
   void SetUpOnMainThread() override {
     SetupNetworkEnvironment();
     RunUntilIdle();
 
-    ArcBridgeService::Get()->intent_helper()->SetInstance(
-        fake_intent_helper_instance_.get());
+    ArcServiceManager::Get()
+        ->arc_bridge_service()
+        ->intent_helper()
+        ->SetInstance(fake_intent_helper_instance_.get());
   }
 
   void TearDownOnMainThread() override {
-    ArcBridgeService::Get()->intent_helper()->SetInstance(nullptr);
+    ArcServiceManager::Get()
+        ->arc_bridge_service()
+        ->intent_helper()
+        ->SetInstance(nullptr);
   }
 
   void UpdatePolicy(const policy::PolicyMap& policy) {
@@ -300,6 +319,135 @@ class ArcSettingsServiceTest : public InProcessBrowserTest {
 
   DISALLOW_COPY_AND_ASSIGN(ArcSettingsServiceTest);
 };
+
+IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest, BackupRestorePolicyTest) {
+  PrefService* const prefs = browser()->profile()->GetPrefs();
+
+  // Set the user pref as initially enabled.
+  prefs->SetBoolean(prefs::kArcBackupRestoreEnabled, true);
+  EXPECT_TRUE(prefs->GetBoolean(prefs::kArcBackupRestoreEnabled));
+
+  fake_intent_helper_instance_->clear_broadcasts();
+
+  // The policy is set to false.
+  policy::PolicyMap policy;
+  policy.Set(policy::key::kArcBackupRestoreEnabled,
+             policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
+             policy::POLICY_SOURCE_CLOUD, base::MakeUnique<base::Value>(false),
+             nullptr);
+  UpdatePolicy(policy);
+
+  // The pref is disabled and managed, and the corresponding broadcast is sent
+  // at least once.
+  EXPECT_FALSE(prefs->GetBoolean(prefs::kArcBackupRestoreEnabled));
+  EXPECT_TRUE(prefs->IsManagedPreference(prefs::kArcBackupRestoreEnabled));
+  base::DictionaryValue expected_broadcast_extras;
+  expected_broadcast_extras.SetBoolean("enabled", false);
+  expected_broadcast_extras.SetBoolean("managed", true);
+  EXPECT_GE(CountBroadcasts(fake_intent_helper_instance_->broadcasts(),
+                            kBackupBroadcastAction, &expected_broadcast_extras),
+            1);
+
+  fake_intent_helper_instance_->clear_broadcasts();
+
+  // The policy is set to true.
+  policy.Set(policy::key::kArcBackupRestoreEnabled,
+             policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
+             policy::POLICY_SOURCE_CLOUD, base::MakeUnique<base::Value>(true),
+             nullptr);
+  UpdatePolicy(policy);
+
+  // The pref is enabled and managed, and the corresponding broadcast is sent at
+  // least once.
+  EXPECT_TRUE(prefs->GetBoolean(prefs::kArcBackupRestoreEnabled));
+  EXPECT_TRUE(prefs->IsManagedPreference(prefs::kArcBackupRestoreEnabled));
+  expected_broadcast_extras.SetBoolean("enabled", true);
+  EXPECT_GE(CountBroadcasts(fake_intent_helper_instance_->broadcasts(),
+                            kBackupBroadcastAction, &expected_broadcast_extras),
+            1);
+
+  fake_intent_helper_instance_->clear_broadcasts();
+
+  // The policy is unset.
+  policy.Erase(policy::key::kArcBackupRestoreEnabled);
+  UpdatePolicy(policy);
+
+  // The pref is disabled and unmanaged, and the corresponding broadcast is
+  // sent.
+  EXPECT_FALSE(prefs->GetBoolean(prefs::kArcBackupRestoreEnabled));
+  EXPECT_FALSE(prefs->IsManagedPreference(prefs::kArcBackupRestoreEnabled));
+  expected_broadcast_extras.SetBoolean("enabled", false);
+  expected_broadcast_extras.SetBoolean("managed", false);
+  EXPECT_EQ(CountBroadcasts(fake_intent_helper_instance_->broadcasts(),
+                            kBackupBroadcastAction, &expected_broadcast_extras),
+            1);
+}
+
+IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest, LocationServicePolicyTest) {
+  PrefService* const prefs = browser()->profile()->GetPrefs();
+
+  // Set the user pref as initially enabled.
+  prefs->SetBoolean(prefs::kArcLocationServiceEnabled, true);
+  EXPECT_TRUE(prefs->GetBoolean(prefs::kArcLocationServiceEnabled));
+
+  fake_intent_helper_instance_->clear_broadcasts();
+
+  // The policy is set to false.
+  policy::PolicyMap policy;
+  policy.Set(policy::key::kArcLocationServiceEnabled,
+             policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
+             policy::POLICY_SOURCE_CLOUD, base::MakeUnique<base::Value>(false),
+             nullptr);
+  UpdatePolicy(policy);
+
+  // The pref is disabled and managed, and the corresponding broadcast is sent
+  // at least once.
+  EXPECT_FALSE(prefs->GetBoolean(prefs::kArcLocationServiceEnabled));
+  EXPECT_TRUE(prefs->IsManagedPreference(prefs::kArcLocationServiceEnabled));
+  base::DictionaryValue expected_broadcast_extras;
+  expected_broadcast_extras.SetBoolean("enabled", false);
+  expected_broadcast_extras.SetBoolean("managed", true);
+  EXPECT_GE(CountBroadcasts(fake_intent_helper_instance_->broadcasts(),
+                            kLocationServiceBroadcastAction,
+                            &expected_broadcast_extras),
+            1);
+
+  fake_intent_helper_instance_->clear_broadcasts();
+
+  // The policy is set to true.
+  policy.Set(policy::key::kArcLocationServiceEnabled,
+             policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
+             policy::POLICY_SOURCE_CLOUD, base::MakeUnique<base::Value>(true),
+             nullptr);
+  UpdatePolicy(policy);
+
+  // The pref is enabled and managed, and the corresponding broadcast is sent at
+  // least once.
+  EXPECT_TRUE(prefs->GetBoolean(prefs::kArcLocationServiceEnabled));
+  EXPECT_TRUE(prefs->IsManagedPreference(prefs::kArcLocationServiceEnabled));
+  expected_broadcast_extras.SetBoolean("enabled", true);
+  EXPECT_GE(CountBroadcasts(fake_intent_helper_instance_->broadcasts(),
+                            kLocationServiceBroadcastAction,
+                            &expected_broadcast_extras),
+            1);
+
+  fake_intent_helper_instance_->clear_broadcasts();
+
+  // The policy is unset.
+  policy.Erase(policy::key::kArcLocationServiceEnabled);
+  UpdatePolicy(policy);
+
+  // The pref is disabled and unmanaged, and the corresponding broadcast is
+  // sent.
+  EXPECT_FALSE(prefs->GetBoolean(prefs::kArcLocationServiceEnabled));
+  EXPECT_FALSE(prefs->IsManagedPreference(prefs::kArcLocationServiceEnabled));
+  expected_broadcast_extras.SetBoolean("enabled", false);
+  expected_broadcast_extras.SetBoolean("managed", false);
+  EXPECT_EQ(CountBroadcasts(fake_intent_helper_instance_->broadcasts(),
+                            kLocationServiceBroadcastAction,
+                            &expected_broadcast_extras),
+            1);
+}
 
 IN_PROC_BROWSER_TEST_F(ArcSettingsServiceTest, ProxyModePolicyTest) {
   fake_intent_helper_instance_->clear_broadcasts();

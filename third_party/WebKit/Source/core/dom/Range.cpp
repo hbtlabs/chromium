@@ -36,6 +36,8 @@
 #include "core/dom/ProcessingInstruction.h"
 #include "core/dom/Text.h"
 #include "core/editing/EditingUtilities.h"
+#include "core/editing/EphemeralRange.h"
+#include "core/editing/FrameSelection.h"
 #include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/iterators/TextIterator.h"
@@ -68,9 +70,9 @@ Range* Range::create(Document& ownerDocument) {
 
 inline Range::Range(Document& ownerDocument,
                     Node* startContainer,
-                    int startOffset,
+                    unsigned startOffset,
                     Node* endContainer,
-                    int endOffset)
+                    unsigned endOffset)
     : m_ownerDocument(&ownerDocument),
       m_start(m_ownerDocument),
       m_end(m_ownerDocument) {
@@ -84,9 +86,9 @@ inline Range::Range(Document& ownerDocument,
 
 Range* Range::create(Document& ownerDocument,
                      Node* startContainer,
-                     int startOffset,
+                     unsigned startOffset,
                      Node* endContainer,
-                     int endOffset) {
+                     unsigned endOffset) {
   return new Range(ownerDocument, startContainer, startOffset, endContainer,
                    endOffset);
 }
@@ -100,25 +102,19 @@ Range* Range::create(Document& ownerDocument,
                    end.computeOffsetInContainerNode());
 }
 
+// TODO(yosin): We should move |Range::createAdjustedToTreeScope()| to
+// "Document.cpp" since it is use only one place in "Document.cpp".
 Range* Range::createAdjustedToTreeScope(const TreeScope& treeScope,
                                         const Position& position) {
-  Range* range = create(treeScope.document(), position, position);
-
-  // Make sure the range is in this scope.
-  Node* firstNode = range->firstNode();
-  DCHECK(firstNode);
-  Node* shadowHostInThisScopeOrFirstNode =
-      treeScope.ancestorInThisScope(firstNode);
-  DCHECK(shadowHostInThisScopeOrFirstNode);
-  if (shadowHostInThisScopeOrFirstNode == firstNode)
-    return range;
-
-  // If not, create a range for the shadow host in this scope.
-  ContainerNode* container = shadowHostInThisScopeOrFirstNode->parentNode();
-  DCHECK(container);
-  unsigned offset = shadowHostInThisScopeOrFirstNode->nodeIndex();
-  return Range::create(treeScope.document(), container, offset, container,
-                       offset);
+  DCHECK(position.isNotNull());
+  // Note: Since |Position::computeContanerNode()| returns |nullptr| if
+  // |position| is |BeforeAnchor| or |AfterAnchor|.
+  Node* const anchorNode = position.anchorNode();
+  if (anchorNode->treeScope() == treeScope)
+    return create(treeScope.document(), position, position);
+  Node* const shadowHost = treeScope.ancestorInThisScope(anchorNode);
+  return Range::create(treeScope.document(), Position::beforeNode(shadowHost),
+                       Position::beforeNode(shadowHost));
 }
 
 void Range::dispose() {
@@ -167,7 +163,7 @@ static inline bool checkForDifferentRootContainer(
 }
 
 void Range::setStart(Node* refNode,
-                     int offset,
+                     unsigned offset,
                      ExceptionState& exceptionState) {
   if (!refNode) {
     // FIXME: Generated bindings code never calls with null, and neither should
@@ -176,6 +172,7 @@ void Range::setStart(Node* refNode,
     return;
   }
 
+  Document& oldDocument = ownerDocument();
   bool didMoveDocument = false;
   if (refNode->document() != m_ownerDocument) {
     setDocument(refNode->document());
@@ -188,11 +185,17 @@ void Range::setStart(Node* refNode,
 
   m_start.set(refNode, offset, childNode);
 
-  if (didMoveDocument || checkForDifferentRootContainer(m_start, m_end))
+  if (didMoveDocument || checkForDifferentRootContainer(m_start, m_end)) {
+    removeFromSelectionIfInDifferentRoot(oldDocument);
     collapse(true);
+    return;
+  }
+  updateSelectionIfAddedToSelection();
 }
 
-void Range::setEnd(Node* refNode, int offset, ExceptionState& exceptionState) {
+void Range::setEnd(Node* refNode,
+                   unsigned offset,
+                   ExceptionState& exceptionState) {
   if (!refNode) {
     // FIXME: Generated bindings code never calls with null, and neither should
     // other callers!
@@ -201,6 +204,7 @@ void Range::setEnd(Node* refNode, int offset, ExceptionState& exceptionState) {
   }
 
   bool didMoveDocument = false;
+  Document& oldDocument = ownerDocument();
   if (refNode->document() != m_ownerDocument) {
     setDocument(refNode->document());
     didMoveDocument = true;
@@ -212,8 +216,12 @@ void Range::setEnd(Node* refNode, int offset, ExceptionState& exceptionState) {
 
   m_end.set(refNode, offset, childNode);
 
-  if (didMoveDocument || checkForDifferentRootContainer(m_start, m_end))
+  if (didMoveDocument || checkForDifferentRootContainer(m_start, m_end)) {
+    removeFromSelectionIfInDifferentRoot(oldDocument);
     collapse(false);
+    return;
+  }
+  updateSelectionIfAddedToSelection();
 }
 
 void Range::setStart(const Position& start, ExceptionState& exceptionState) {
@@ -233,18 +241,21 @@ void Range::collapse(bool toStart) {
     m_end = m_start;
   else
     m_start = m_end;
+  updateSelectionIfAddedToSelection();
 }
 
 bool Range::isNodeFullyContained(Node& node) const {
   ContainerNode* parentNode = node.parentNode();
-  int nodeIndex = node.nodeIndex();
-  return isPointInRange(parentNode, nodeIndex,
-                        IGNORE_EXCEPTION)  // starts in the middle of this
-                                           // range, or on the boundary points.
-         && isPointInRange(parentNode, nodeIndex + 1,
-                           IGNORE_EXCEPTION);  // ends in the middle of this
-                                               // range, or on the boundary
-                                               // points.
+  unsigned nodeIndex = node.nodeIndex();
+  return isPointInRange(
+             parentNode, nodeIndex,
+             IGNORE_EXCEPTION_FOR_TESTING)  // starts in the middle of this
+                                            // range, or on the boundary points.
+         && isPointInRange(
+                parentNode, nodeIndex + 1,
+                IGNORE_EXCEPTION_FOR_TESTING);  // ends in the middle of this
+                                                // range, or on the boundary
+                                                // points.
 }
 
 bool Range::hasSameRoot(const Node& node) const {
@@ -259,7 +270,7 @@ bool Range::hasSameRoot(const Node& node) const {
 }
 
 bool Range::isPointInRange(Node* refNode,
-                           int offset,
+                           unsigned offset,
                            ExceptionState& exceptionState) const {
   if (!refNode) {
     // FIXME: Generated bindings code never calls with null, and neither should
@@ -283,7 +294,7 @@ bool Range::isPointInRange(Node* refNode,
 }
 
 short Range::comparePoint(Node* refNode,
-                          int offset,
+                          unsigned offset,
                           ExceptionState& exceptionState) const {
   // http://developer.mozilla.org/en/docs/DOM:range.comparePoint
   // This method returns -1, 0 or 1 depending on if the point described by the
@@ -370,9 +381,9 @@ short Range::compareBoundaryPoints(unsigned how,
 }
 
 short Range::compareBoundaryPoints(Node* containerA,
-                                   int offsetA,
+                                   unsigned offsetA,
                                    Node* containerB,
-                                   int offsetB,
+                                   unsigned offsetB,
                                    ExceptionState& exceptionState) {
   bool disconnected = false;
   short result = comparePositionsInDOMTree(containerA, offsetA, containerB,
@@ -394,7 +405,7 @@ short Range::compareBoundaryPoints(const RangeBoundaryPoint& boundaryA,
 }
 
 bool Range::boundaryPointsValid() const {
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   return compareBoundaryPoints(m_start, m_end, exceptionState) <= 0 &&
          !exceptionState.hadException();
 }
@@ -596,7 +607,7 @@ DocumentFragment* Range::processContents(ActionType action,
   if (processStart) {
     NodeVector nodes;
     for (Node* n = processStart; n && n != processEnd; n = n->nextSibling())
-      nodes.append(n);
+      nodes.push_back(n);
     processNodes(action, nodes, commonRoot, fragment, exceptionState);
   }
 
@@ -668,7 +679,7 @@ Node* Range::processContentsBetweenOffsets(ActionType action,
         n = n->nextSibling();
       for (unsigned i = startOffset; n && i < endOffset;
            i++, n = n->nextSibling())
-        nodes.append(n);
+        nodes.push_back(n);
 
       processNodes(action, nodes, container, result, exceptionState);
       break;
@@ -711,7 +722,7 @@ Node* Range::processAncestorsAndTheirSiblings(
   for (Node& runner : NodeTraversal::ancestorsOf(*container)) {
     if (runner == commonRoot)
       break;
-    ancestors.append(runner);
+    ancestors.push_back(runner);
   }
 
   Node* firstChildInAncestorToProcess = direction == ProcessContentsForward
@@ -737,7 +748,7 @@ Node* Range::processAncestorsAndTheirSiblings(
          child = (direction == ProcessContentsForward)
                      ? child->nextSibling()
                      : child->previousSibling())
-      nodes.append(child);
+      nodes.push_back(child);
 
     for (const auto& node : nodes) {
       Node* child = node.get();
@@ -780,6 +791,7 @@ DocumentFragment* Range::extractContents(ExceptionState& exceptionState) {
   if (exceptionState.hadException())
     return nullptr;
 
+  EventQueueScope scope;
   return processContents(EXTRACT_CONTENTS, exceptionState);
 }
 
@@ -920,11 +932,15 @@ void Range::insertNode(Node* newNode, ExceptionState& exceptionState) {
     }
 
     container = m_start.container();
-    container->insertBefore(
-        newNode, NodeTraversal::childAt(*container, m_start.offset()),
-        exceptionState);
-    if (exceptionState.hadException())
-      return;
+    Node* referenceNode = NodeTraversal::childAt(*container, m_start.offset());
+    // TODO(tkent): The following check must be unnecessary if we follow the
+    // algorithm defined in the specification.
+    // https://dom.spec.whatwg.org/#concept-range-insert
+    if (newNode != referenceNode) {
+      container->insertBefore(newNode, referenceNode, exceptionState);
+      if (exceptionState.hadException())
+        return;
+    }
 
     // Note that m_start.offset() may have changed as a result of
     // container->insertBefore, when the node we are inserting comes before the
@@ -943,13 +959,12 @@ String Range::toString() const {
     Node::NodeType type = n->getNodeType();
     if (type == Node::kTextNode || type == Node::kCdataSectionNode) {
       String data = toCharacterData(n)->data();
-      int length = data.length();
-      int start = (n == m_start.container())
-                      ? std::min(std::max(0, m_start.offset()), length)
-                      : 0;
-      int end = (n == m_end.container())
-                    ? std::min(std::max(start, m_end.offset()), length)
-                    : length;
+      unsigned length = data.length();
+      unsigned start =
+          (n == m_start.container()) ? std::min(m_start.offset(), length) : 0;
+      unsigned end = (n == m_end.container())
+                         ? std::min(std::max(start, m_end.offset()), length)
+                         : length;
       builder.append(data, start, end - start);
     }
   }
@@ -960,7 +975,9 @@ String Range::toString() const {
 String Range::text() const {
   DCHECK(!m_ownerDocument->needsLayoutTreeUpdate());
   return plainText(EphemeralRange(this),
-                   TextIteratorEmitsObjectReplacementCharacter);
+                   TextIteratorBehavior::Builder()
+                       .setEmitsObjectReplacementCharacter(true)
+                       .build());
 }
 
 DocumentFragment* Range::createContextualFragment(
@@ -1009,7 +1026,7 @@ void Range::detach() {
 }
 
 Node* Range::checkNodeWOffset(Node* n,
-                              int offset,
+                              unsigned offset,
                               ExceptionState& exceptionState) {
   switch (n->getNodeType()) {
     case Node::kDocumentTypeNode:
@@ -1020,22 +1037,33 @@ Node* Range::checkNodeWOffset(Node* n,
     case Node::kCdataSectionNode:
     case Node::kCommentNode:
     case Node::kTextNode:
-      if (static_cast<unsigned>(offset) > toCharacterData(n)->length())
+      if (offset > toCharacterData(n)->length()) {
+        exceptionState.throwDOMException(
+            IndexSizeError, "The offset " + String::number(offset) +
+                                " is larger than the node's length (" +
+                                String::number(toCharacterData(n)->length()) +
+                                ").");
+      } else if (offset >
+                 static_cast<unsigned>(std::numeric_limits<int>::max())) {
         exceptionState.throwDOMException(
             IndexSizeError,
-            "The offset " + String::number(offset) +
-                " is larger than or equal to the node's length (" +
-                String::number(toCharacterData(n)->length()) + ").");
+            "The offset " + String::number(offset) + " is invalid.");
+      }
       return nullptr;
     case Node::kProcessingInstructionNode:
-      if (static_cast<unsigned>(offset) >
-          toProcessingInstruction(n)->data().length())
+      if (offset > toProcessingInstruction(n)->data().length()) {
         exceptionState.throwDOMException(
             IndexSizeError,
             "The offset " + String::number(offset) +
-                " is larger than or equal to than the node's length (" +
+                " is larger than the node's length (" +
                 String::number(toProcessingInstruction(n)->data().length()) +
                 ").");
+      } else if (offset >
+                 static_cast<unsigned>(std::numeric_limits<int>::max())) {
+        exceptionState.throwDOMException(
+            IndexSizeError,
+            "The offset " + String::number(offset) + " is invalid.");
+      }
       return nullptr;
     case Node::kAttributeNode:
     case Node::kDocumentFragmentNode:
@@ -1043,11 +1071,18 @@ Node* Range::checkNodeWOffset(Node* n,
     case Node::kElementNode: {
       if (!offset)
         return nullptr;
+      if (offset > static_cast<unsigned>(std::numeric_limits<int>::max())) {
+        exceptionState.throwDOMException(
+            IndexSizeError,
+            "The offset " + String::number(offset) + " is invalid.");
+        return nullptr;
+      }
       Node* childBefore = NodeTraversal::childAt(*n, offset - 1);
-      if (!childBefore)
+      if (!childBefore) {
         exceptionState.throwDOMException(
             IndexSizeError,
             "There is no child at offset " + String::number(offset) + ".");
+      }
       return childBefore;
     }
   }
@@ -1173,9 +1208,6 @@ void Range::selectNode(Node* refNode, ExceptionState& exceptionState) {
       return;
   }
 
-  if (m_ownerDocument != refNode->document())
-    setDocument(refNode->document());
-
   setStartBefore(refNode);
   setEndAfter(refNode);
 }
@@ -1210,11 +1242,14 @@ void Range::selectNodeContents(Node* refNode, ExceptionState& exceptionState) {
     }
   }
 
+  Document& oldDocument = ownerDocument();
   if (m_ownerDocument != refNode->document())
     setDocument(refNode->document());
 
   m_start.setToStartOfNode(*refNode);
   m_end.setToEndOfNode(*refNode);
+  removeFromSelectionIfInDifferentRoot(oldDocument);
+  updateSelectionIfAddedToSelection();
 }
 
 bool Range::selectNodeContents(Node* refNode, Position& start, Position& end) {
@@ -1408,9 +1443,10 @@ void Range::textRects(Vector<IntRect>& rects, bool useSelectionHeight) const {
     if (!r || !r->isText())
       continue;
     LayoutText* layoutText = toLayoutText(r);
-    int startOffset = node == startContainer ? m_start.offset() : 0;
-    int endOffset =
-        node == endContainer ? m_end.offset() : std::numeric_limits<int>::max();
+    unsigned startOffset = node == startContainer ? m_start.offset() : 0;
+    unsigned endOffset = node == endContainer
+                             ? m_end.offset()
+                             : std::numeric_limits<unsigned>::max();
     layoutText->absoluteRectsForRange(rects, startOffset, endOffset,
                                       useSelectionHeight);
   }
@@ -1429,9 +1465,10 @@ void Range::textQuads(Vector<FloatQuad>& quads, bool useSelectionHeight) const {
     if (!r || !r->isText())
       continue;
     LayoutText* layoutText = toLayoutText(r);
-    int startOffset = node == startContainer ? m_start.offset() : 0;
-    int endOffset =
-        node == endContainer ? m_end.offset() : std::numeric_limits<int>::max();
+    unsigned startOffset = node == startContainer ? m_start.offset() : 0;
+    unsigned endOffset = node == endContainer
+                             ? m_end.offset()
+                             : std::numeric_limits<unsigned>::max();
     layoutText->absoluteQuadsForRange(quads, startOffset, endOffset,
                                       useSelectionHeight);
   }
@@ -1548,7 +1585,7 @@ static inline void boundaryTextNodesMerged(RangeBoundaryPoint& boundary,
     boundary.set(oldNode.node().previousSibling(), boundary.offset() + offset,
                  0);
   else if (boundary.container() == oldNode.node().parentNode() &&
-           boundary.offset() == oldNode.index())
+           boundary.offset() == static_cast<unsigned>(oldNode.index()))
     boundary.set(oldNode.node().previousSibling(), offset, 0);
 }
 
@@ -1575,7 +1612,7 @@ void Range::updateOwnerDocumentIfNeeded() {
 }
 
 static inline void boundaryTextNodeSplit(RangeBoundaryPoint& boundary,
-                                         Text& oldNode) {
+                                         const Text& oldNode) {
   Node* boundaryContainer = boundary.container();
   unsigned boundaryOffset = boundary.offset();
   if (boundary.childBefore() == &oldNode)
@@ -1585,7 +1622,7 @@ static inline void boundaryTextNodeSplit(RangeBoundaryPoint& boundary,
     boundary.set(oldNode.nextSibling(), boundaryOffset - oldNode.length(), 0);
 }
 
-void Range::didSplitTextNode(Text& oldNode) {
+void Range::didSplitTextNode(const Text& oldNode) {
   DCHECK_EQ(oldNode.document(), m_ownerDocument);
   DCHECK(oldNode.parentNode());
   DCHECK(oldNode.nextSibling());
@@ -1644,7 +1681,7 @@ void Range::getBorderAndTextQuads(Vector<FloatQuad>& quads) const {
   for (Node* node = firstNode(); node != stopNode;
        node = NodeTraversal::next(*node)) {
     if (node->isElementNode())
-      nodeSet.add(node);
+      nodeSet.insert(node);
   }
 
   for (Node* node = firstNode(); node != stopNode;
@@ -1666,8 +1703,10 @@ void Range::getBorderAndTextQuads(Vector<FloatQuad>& quads) const {
       }
     } else if (node->isTextNode()) {
       if (LayoutText* layoutText = toText(node)->layoutObject()) {
-        int startOffset = (node == startContainer) ? m_start.offset() : 0;
-        int endOffset = (node == endContainer) ? m_end.offset() : INT_MAX;
+        unsigned startOffset = (node == startContainer) ? m_start.offset() : 0;
+        unsigned endOffset = (node == endContainer)
+                                 ? m_end.offset()
+                                 : std::numeric_limits<unsigned>::max();
 
         Vector<FloatQuad> textQuads;
         layoutText->absoluteQuadsForRange(textQuads, startOffset, endOffset);
@@ -1692,9 +1731,36 @@ FloatRect Range::boundingRect() const {
 
   // If all rects are empty, return the first rect.
   if (result.isEmpty() && !quads.isEmpty())
-    return quads.first().boundingBox();
+    return quads.front().boundingBox();
 
   return result;
+}
+
+void Range::updateSelectionIfAddedToSelection() {
+  if (!ownerDocument().frame())
+    return;
+  FrameSelection& selection = ownerDocument().frame()->selection();
+  if (this != selection.documentCachedRange())
+    return;
+  DCHECK(startContainer()->isConnected());
+  DCHECK(startContainer()->document() == ownerDocument());
+  DCHECK(endContainer()->isConnected());
+  DCHECK(endContainer()->document() == ownerDocument());
+  selection.setSelectedRange(EphemeralRange(this), VP_DEFAULT_AFFINITY);
+  selection.cacheRangeOfDocument(this);
+}
+
+void Range::removeFromSelectionIfInDifferentRoot(Document& oldDocument) {
+  if (!oldDocument.frame())
+    return;
+  FrameSelection& selection = oldDocument.frame()->selection();
+  if (this != selection.documentCachedRange())
+    return;
+  if (ownerDocument() == oldDocument && startContainer()->isConnected() &&
+      endContainer()->isConnected())
+    return;
+  selection.clear();
+  selection.clearDocumentCachedRange();
 }
 
 DEFINE_TRACE(Range) {

@@ -39,7 +39,7 @@ class ImageTransportSurfaceOverlayMac : public gl::GLSurface,
       base::WeakPtr<ImageTransportSurfaceDelegate> delegate);
 
   // GLSurface implementation
-  bool Initialize(gl::GLSurface::Format format) override;
+  bool Initialize(gl::GLSurfaceFormat format) override;
   void Destroy() override;
   bool Resize(const gfx::Size& size,
               float scale_factor,
@@ -92,8 +92,7 @@ class ImageTransportSurfaceOverlayMac : public gl::GLSurface,
   std::vector<CALayerInUseQuery> ca_layer_in_use_queries_;
 
   // A GLFence marking the end of the previous frame. Must only be accessed
-  // while in a ScopedSetGLToRealGLApi, and while the associated
-  // |previous_frame_context_| is bound.
+  // while the associated |previous_frame_context_| is bound.
   std::unique_ptr<gl::GLFence> previous_frame_fence_;
   base::ScopedTypeRef<CGLContextObj> fence_context_obj_;
 

@@ -6,16 +6,15 @@
 #define CHROME_BROWSER_PERMISSIONS_PERMISSION_CONTEXT_BASE_H_
 
 #include <memory>
+#include <unordered_map>
 
 #include "base/callback_forward.h"
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "chrome/browser/permissions/permission_request.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "content/public/browser/permission_type.h"
 
 #if defined(OS_ANDROID)
 class PermissionQueueController;
@@ -29,6 +28,32 @@ class WebContents;
 }
 
 using BrowserPermissionCallback = base::Callback<void(ContentSetting)>;
+
+// Identifies the source or reason for a permission status being returned.
+// TODO(raymes): Add more reasons here and return them correctly.
+enum class PermissionStatusSource {
+  // The status is the result of being blocked due to the user dismissing a
+  // permission prompt multiple times.
+  MULTIPLE_DISMISSALS,
+
+  // The status is the resultof being blocked because the permission is on the
+  // safe browsing blacklist.
+  SAFE_BROWSING_BLACKLIST,
+
+  // The reason for the status is not specified. Avoid returning this value. It
+  // only exists until code has been added to correctly return a source in all
+  // cases.
+  UNSPECIFIED
+};
+
+struct PermissionResult {
+  PermissionResult(ContentSetting content_setting,
+                   PermissionStatusSource source);
+  ~PermissionResult();
+
+  ContentSetting content_setting;
+  PermissionStatusSource source;
+};
 
 // This base class contains common operations for granting permissions.
 // It offers the following functionality:
@@ -57,7 +82,6 @@ using BrowserPermissionCallback = base::Callback<void(ContentSetting)>;
 class PermissionContextBase : public KeyedService {
  public:
   PermissionContextBase(Profile* profile,
-                        const content::PermissionType permission_type,
                         const ContentSettingsType content_settings_type);
   ~PermissionContextBase() override;
 
@@ -80,10 +104,11 @@ class PermissionContextBase : public KeyedService {
                                  bool user_gesture,
                                  const BrowserPermissionCallback& callback);
 
-  // Returns whether the permission has been granted, denied...
-  virtual ContentSetting GetPermissionStatus(
-      const GURL& requesting_origin,
-      const GURL& embedding_origin) const;
+  // Returns whether the permission has been granted, denied etc.
+  // TODO(meredithl): Ensure that the result accurately reflects whether the
+  // origin is blacklisted for this permission.
+  PermissionResult GetPermissionStatus(const GURL& requesting_origin,
+                                       const GURL& embedding_origin) const;
 
   // Resets the permission to its default value.
   virtual void ResetPermission(const GURL& requesting_origin,
@@ -100,6 +125,10 @@ class PermissionContextBase : public KeyedService {
   bool IsPermissionKillSwitchOn() const;
 
  protected:
+  virtual ContentSetting GetPermissionStatusInternal(
+      const GURL& requesting_origin,
+      const GURL& embedding_origin) const;
+
   // Decide whether the permission should be granted.
   // Calls PermissionDecided if permission can be decided non-interactively,
   // or NotifyPermissionSet if permission decided by presenting an infobar.
@@ -150,10 +179,14 @@ class PermissionContextBase : public KeyedService {
   // Whether the permission should be restricted to secure origins.
   virtual bool IsRestrictedToSecureOrigins() const = 0;
 
-  content::PermissionType permission_type() const { return permission_type_; }
   ContentSettingsType content_settings_type() const {
     return content_settings_type_;
   }
+
+  // TODO(timloh): The CONTENT_SETTINGS_TYPE_NOTIFICATIONS type is used to
+  // store both push messaging and notifications permissions. Remove this
+  // once we've unified these types (crbug.com/563297).
+  ContentSettingsType content_settings_storage_type() const;
 
  private:
   friend class PermissionContextBaseTests;
@@ -161,13 +194,23 @@ class PermissionContextBase : public KeyedService {
   // Called when a request is no longer used so it can be cleaned up.
   void CleanUpRequest(const PermissionRequestID& id);
 
+  // Called when the requesting origin and permission have been checked by Safe
+  // Browsing. |permission_blocked| determines whether to auto-block the
+  // permission request without prompting the user for a decision.
+  void ContinueRequestPermission(content::WebContents* web_contents,
+                                 const PermissionRequestID& id,
+                                 const GURL& requesting_origin,
+                                 const GURL& embedding_origin,
+                                 bool user_gesture,
+                                 const BrowserPermissionCallback& callback,
+                                 bool permission_blocked);
+
   Profile* profile_;
-  const content::PermissionType permission_type_;
   const ContentSettingsType content_settings_type_;
 #if defined(OS_ANDROID)
   std::unique_ptr<PermissionQueueController> permission_queue_controller_;
 #endif
-  base::ScopedPtrHashMap<std::string, std::unique_ptr<PermissionRequest>>
+  std::unordered_map<std::string, std::unique_ptr<PermissionRequest>>
       pending_requests_;
 
   // Must be the last member, to ensure that it will be

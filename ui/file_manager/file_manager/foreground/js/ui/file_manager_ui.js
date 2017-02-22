@@ -3,10 +3,10 @@
 // found in the LICENSE file.
 
 /**
- * The root of the file manager's view managing the DOM of Files.app.
+ * The root of the file manager's view managing the DOM of the Files app.
  *
  * @param {!ProvidersModel} providersModel Model for providers.
- * @param {!HTMLElement} element Top level element of Files.app.
+ * @param {!HTMLElement} element Top level element of the Files app.
  * @param {!LaunchParam} launchParam Launch param.
  * @constructor
  * @struct
@@ -21,7 +21,7 @@ function FileManagerUI(providersModel, element, launchParam) {
   cr.ui.dialogs.BaseDialog.CANCEL_LABEL = str('CANCEL_LABEL');
 
   /**
-   * Top level element of Files.app.
+   * Top level element of the Files app.
    * @type {!HTMLElement}
    */
   this.element = element;
@@ -162,23 +162,6 @@ function FileManagerUI(providersModel, element, launchParam) {
       '#sort-button', cr.ui.MenuButton);
 
   /**
-   * The button to open the details panel.
-   * @type {!Element}
-   * @const
-   */
-  this.detailsButton = queryRequiredElement(
-      '#details-button', this.element);
-
-  /**
-   * Ripple effect of details button.
-   * @private {!FilesToggleRipple}
-   * @const
-   */
-  this.detailsButtonToggleRipple_ =
-      /** @type {!FilesToggleRipple} */ (queryRequiredElement(
-          'files-toggle-ripple', this.detailsButton));
-
-  /**
    * Ripple effect of sort button.
    * @private {!FilesToggleRipple}
    * @const
@@ -229,12 +212,6 @@ function FileManagerUI(providersModel, element, launchParam) {
    * @type {ListContainer}
    */
   this.listContainer = null;
-
-  /**
-   * Details container.
-   * @type {DetailsContainer}
-   */
-  this.detailsContainer = null;
 
   /**
    * @type {!HTMLElement}
@@ -306,7 +283,7 @@ function FileManagerUI(providersModel, element, launchParam) {
   // Initialize attributes.
   this.element.setAttribute('type', this.dialogType_);
 
-  // Hack: make menuitems focusable. Since the menuitems in Files.app is not
+  // Hack: make menuitems focusable. Since the menuitems in the Files app is not
   // button so it doesn't have a tabfocus in nature. It prevents Chromevox from
   // speeaching because the opened menu is closed when the non-focusable object
   // tries to get the focus.
@@ -337,12 +314,9 @@ function FileManagerUI(providersModel, element, launchParam) {
  *
  * @param {!FileTable} table
  * @param {!FileGrid} grid
- * @param {!SingleFileDetailsPanel} singlePanel
- * @param {!MultiFileDetailsPanel} multiPanel
  * @param {!LocationLine} locationLine
  */
-FileManagerUI.prototype.initAdditionalUI = function(
-    table, grid, singlePanel, multiPanel, locationLine) {
+FileManagerUI.prototype.initAdditionalUI = function(table, grid, locationLine) {
   // List container.
   this.listContainer = new ListContainer(
       queryRequiredElement('#list-container', this.element), table, grid);
@@ -350,25 +324,6 @@ FileManagerUI.prototype.initAdditionalUI = function(
   // Splitter.
   this.decorateSplitter_(
       queryRequiredElement('#navigation-list-splitter', this.element));
-
-  // Details container.
-  var listDetailsSplitter =
-      queryRequiredElement('#list-details-splitter', this.element);
-  this.decorateSplitter_(listDetailsSplitter, true);
-  this.detailsContainer = new DetailsContainer(
-      queryRequiredElement('#details-container', this.element),
-      singlePanel,
-      multiPanel,
-      listDetailsSplitter,
-      this.detailsButton,
-      this.detailsButtonToggleRipple_);
-
-  chrome.commandLinePrivate.hasSwitch('enable-files-details-panel',
-      function(enabled) {
-    if (enabled) {
-      this.detailsButton.style.display = 'block';
-    }
-  }.bind(this));
 
   // Location line.
   this.locationLine = locationLine;
@@ -487,17 +442,6 @@ FileManagerUI.prototype.setCurrentListType = function(listType) {
                            str('CHANGE_TO_LISTVIEW_BUTTON_LABEL');
   this.toggleViewButton.setAttribute('aria-label', label);
   this.relayout();
-};
-
-/**
- * Sets the details panel visibility
- * @param {boolean} visibility True if the details panel is visible.
- */
-FileManagerUI.prototype.setDetailsVisibility = function(visibility) {
-  if (this.detailsContainer) {
-    this.detailsContainer.setVisibility(visibility);
-    this.relayout();
-  }
 };
 
 /**

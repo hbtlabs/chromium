@@ -8,18 +8,13 @@
 #include <stdint.h>
 
 #include <string>
-#include <utility>
-#include <vector>
 
-#include "base/strings/string16.h"
 #include "base/strings/string_split.h"
-
-class GURL;
-class TemplateURL;
 
 namespace search {
 
-// Returns whether the Instant Extended API is enabled.
+// Returns whether the Instant Extended API is enabled. This is always true on
+// desktop and false on mobile.
 bool IsInstantExtendedAPIEnabled();
 
 // Returns the value to pass to the &espv CGI parameter when loading the
@@ -39,13 +34,6 @@ typedef base::StringPairs FieldTrialFlags;
 // Exposed for testing only.
 bool GetFieldTrialInfo(FieldTrialFlags* flags);
 
-// Given a FieldTrialFlags object, returns the string value of the provided
-// flag.
-// Exposed for testing only.
-std::string GetStringValueForFlagWithDefault(const std::string& flag,
-                                             const std::string& default_value,
-                                             const FieldTrialFlags& flags);
-
 // Given a FieldTrialFlags object, returns the uint64_t value of the provided
 // flag.
 // Exposed for testing only.
@@ -53,19 +41,9 @@ uint64_t GetUInt64ValueForFlagWithDefault(const std::string& flag,
                                           uint64_t default_value,
                                           const FieldTrialFlags& flags);
 
-// Given a FieldTrialFlags object, returns the bool value of the provided flag.
-// Exposed for testing only.
-bool GetBoolValueForFlagWithDefault(const std::string& flag,
-                                    bool default_value,
-                                    const FieldTrialFlags& flags);
-
 // Returns a string indicating whether InstantExtended is enabled, suitable
 // for adding as a query string param to the homepage or search requests.
-// Returns an empty string otherwise.
-//
-// |for_search| should be set to true for search requests, in which case this
-// returns a non-empty string only if query extraction is enabled.
-std::string InstantExtendedEnabledParam(bool for_search);
+std::string InstantExtendedEnabledParam();
 
 // Returns a string that will cause the search results page to update
 // incrementally. Currently, Instant Extended passes a different param to
@@ -76,19 +54,6 @@ std::string InstantExtendedEnabledParam(bool for_search);
 // prerender page. Callers should set |for_prerender| in this case to force
 // the returned string to be non-empty.
 std::string ForceInstantResultsParam(bool for_prerender);
-
-// Returns true if 'prefetch_results' flag is set to true in field trials to
-// prefetch high-confidence search suggestions.
-bool ShouldPrefetchSearchResults();
-
-// Returns true if 'reuse_instant_search_base_page' flag is set to true in field
-// trials to reuse the prerendered page to commit any search query.
-bool ShouldReuseInstantSearchBasePage();
-
-// |url| should either have a secure scheme or have a non-HTTPS base URL that
-// the user specified using --google-base-url. (This allows testers to use
-// --google-base-url to point at non-HTTPS servers, which eases testing.)
-bool IsSuitableURLForInstant(const GURL& url, const TemplateURL* template_url);
 
 }  // namespace search
 

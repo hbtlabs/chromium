@@ -12,7 +12,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
 #include "content/public/common/service_manager_connection.h"
-#include "mojo/public/cpp/bindings/string.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "services/service_manager/public/cpp/identity.h"
 #include "services/service_manager/public/interfaces/service.mojom.h"
@@ -37,7 +36,6 @@ class ServiceManagerConnectionImpl : public ServiceManagerConnection {
 
   // ServiceManagerConnection:
   void Start() override;
-  void SetInitializeHandler(const base::Closure& handler) override;
   service_manager::Connector* GetConnector() override;
   const service_manager::Identity& GetIdentity() const override;
   void SetConnectionLostClosure(const base::Closure& closure) override;
@@ -71,7 +69,6 @@ class ServiceManagerConnectionImpl : public ServiceManagerConnection {
   std::unique_ptr<service_manager::Connector> connector_;
   scoped_refptr<IOThreadContext> context_;
 
-  base::Closure initialize_handler_;
   base::Closure connection_lost_handler_;
 
   std::unordered_map<std::string, std::unique_ptr<EmbeddedServiceRunner>>

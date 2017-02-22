@@ -10,6 +10,7 @@
 
 #include <vector>
 
+#include "base/optional.h"
 #include "base/strings/nullable_string16.h"
 #include "base/strings/string16.h"
 #include "content/common/content_export.h"
@@ -27,6 +28,12 @@ struct CONTENT_EXPORT Manifest {
   // Structure representing an icon as per the Manifest specification, see:
   // http://w3c.github.io/manifest/#dfn-icon-object
   struct CONTENT_EXPORT Icon {
+    enum IconPurpose {
+      ANY = 0,
+      BADGE,
+      ICON_PURPOSE_LAST = BADGE,
+    };
+
     Icon();
     Icon(const Icon& other);
     ~Icon();
@@ -46,6 +53,21 @@ struct CONTENT_EXPORT Manifest {
     // Empty if the parsing failed, the field was not present or empty.
     // The special value "any" is represented by gfx::Size(0, 0).
     std::vector<gfx::Size> sizes;
+
+    // Empty if the field was not present or not of type "string". Defaults to
+    // a vector with a single value, IconPurpose::ANY, for all other parsing
+    // exceptions.
+    std::vector<IconPurpose> purpose;
+  };
+
+  // Structure representing how a Web Share target handles an incoming share.
+  struct CONTENT_EXPORT ShareTarget {
+    ShareTarget();
+    ~ShareTarget();
+
+    // The URL template that contains placeholders to be replaced with shared
+    // data. Null if the parsing failed.
+    base::NullableString16 url_template;
   };
 
   // Structure representing a related application.
@@ -96,6 +118,13 @@ struct CONTENT_EXPORT Manifest {
   // Empty if the parsing failed, the field was not present, empty or all the
   // icons inside the JSON array were invalid.
   std::vector<Icon> icons;
+
+  // Null if parsing failed or the field was not present.
+  // TODO(constantina): This field is non-standard and part of a Chrome
+  // experiment. See:
+  // https://github.com/WICG/web-share-target/blob/master/docs/interface.md
+  // As such, this field should not be exposed to web contents.
+  base::Optional<ShareTarget> share_target;
 
   // Empty if the parsing failed, the field was not present, empty or all the
   // applications inside the array were invalid. The order of the array

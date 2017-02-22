@@ -8,11 +8,11 @@
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "build/build_config.h"
+#include "cc/paint/paint_canvas.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/models/menu_separator_types.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/native_theme/native_theme_export.h"
-
-class SkCanvas;
 
 namespace gfx {
 class Rect;
@@ -45,6 +45,9 @@ class NATIVE_THEME_EXPORT NativeTheme {
   // The part to be painted / sized.
   enum Part {
     kCheckbox,
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+    kFrameTopArea,
+#endif
     kInnerSpinButton,
     kMenuList,
     kMenuPopupBackground,
@@ -53,8 +56,8 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kMenuCheckBackground,
     kMenuPopupArrow,
     kMenuPopupGutter,
-    kMenuPopupSeparator,
 #endif
+    kMenuPopupSeparator,
     kMenuItemBackground,
     kProgressBar,
     kPushButton,
@@ -109,6 +112,19 @@ class NATIVE_THEME_EXPORT NativeTheme {
     SkColor background_color;
   };
 
+  struct FrameTopAreaExtraParams {
+    // Distinguishes between active (foreground) and inactive
+    // (background) window frame styles.
+    bool is_active;
+    bool incognito;
+    // True when Chromium renders the titlebar.  False when the window
+    // manager renders the titlebar.
+    bool use_custom_frame;
+    // If the NativeTheme will paint a solid color, it should use
+    // |default_background_color|.
+    SkColor default_background_color;
+  };
+
   struct InnerSpinButtonExtraParams {
     bool spin_up;
     bool read_only;
@@ -127,6 +143,11 @@ class NATIVE_THEME_EXPORT NativeTheme {
     // Used for the disabled state to indicate if the item is both disabled and
     // selected.
     bool is_selected;
+  };
+
+  struct MenuSeparatorExtraParams {
+    const gfx::Rect* paint_rect;
+    MenuSeparatorType type;
   };
 
   struct MenuItemExtraParams {
@@ -207,10 +228,12 @@ class NATIVE_THEME_EXPORT NativeTheme {
     ExtraParams(const ExtraParams& other);
 
     ButtonExtraParams button;
+    FrameTopAreaExtraParams frame_top_area;
     InnerSpinButtonExtraParams inner_spin;
     MenuArrowExtraParams menu_arrow;
     MenuCheckExtraParams menu_check;
     MenuItemExtraParams menu_item;
+    MenuSeparatorExtraParams menu_separator;
     MenuListExtraParams menu_list;
     MenuBackgroundExtraParams menu_background;
     ProgressBarExtraParams progress_bar;
@@ -228,7 +251,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
                                 const ExtraParams& extra) const = 0;
 
   // Paint the part to the canvas.
-  virtual void Paint(SkCanvas* canvas,
+  virtual void Paint(cc::PaintCanvas* canvas,
                      Part part,
                      State state,
                      const gfx::Rect& rect,
@@ -236,7 +259,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
 
   // Paint part during state transition, used for overlay scrollbar state
   // transition animation.
-  virtual void PaintStateTransition(SkCanvas* canvas,
+  virtual void PaintStateTransition(cc::PaintCanvas* canvas,
                                     Part part,
                                     State startState,
                                     State endState,
@@ -276,6 +299,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kColorId_DisabledMenuItemForegroundColor,
     kColorId_SelectedMenuItemForegroundColor,
     kColorId_FocusedMenuItemBackgroundColor,
+    kColorId_MenuItemSubtitleColor,
     kColorId_MenuSeparatorColor,
     kColorId_MenuBackgroundColor,
     kColorId_MenuBorderColor,
@@ -292,6 +316,8 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kColorId_LinkDisabled,
     kColorId_LinkEnabled,
     kColorId_LinkPressed,
+    // Separator
+    kColorId_SeparatorColor,
     // Textfield
     kColorId_TextfieldDefaultColor,
     kColorId_TextfieldDefaultBackground,
@@ -309,7 +335,6 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kColorId_TreeSelectedTextUnfocused,
     kColorId_TreeSelectionBackgroundFocused,
     kColorId_TreeSelectionBackgroundUnfocused,
-    kColorId_TreeArrow,
     // Table
     kColorId_TableBackground,
     kColorId_TableText,
@@ -318,6 +343,10 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kColorId_TableSelectionBackgroundFocused,
     kColorId_TableSelectionBackgroundUnfocused,
     kColorId_TableGroupingIndicatorColor,
+    // Table Header
+    kColorId_TableHeaderText,
+    kColorId_TableHeaderBackground,
+    kColorId_TableHeaderSeparator,
     // Results Tables, such as the omnibox.
     kColorId_ResultsTableNormalBackground,
     kColorId_ResultsTableHoveredBackground,

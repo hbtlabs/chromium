@@ -78,31 +78,58 @@
 
             // Tests for trivial configurations.
             expect_error('org.w3.clearkey', [], 'TypeError', 'Empty supportedConfigurations');
-            expect_config('org.w3.clearkey', [{}], {}, 'Empty configuration');
+            expect_error('org.w3.clearkey', [{}], 'NotSupportedError', 'Empty configuration');
 
-            // Various combinations of supportedConfigurations.
-            // TODO(jrummell): Specifying contentType without codecs is
-            // deprecated, so this test should fail. http://crbug.com/605661.
-            expect_config('org.w3.clearkey', [{
+            // contentType without codecs is not supported.
+            expect_error('org.w3.clearkey', [{
                 initDataTypes: ['webm'],
                 audioCapabilities: [{contentType: 'audio/webm'}],
                 videoCapabilities: [{contentType: 'video/webm'}],
-            }], {
+            }], 'NotSupportedError', 'Basic supported configuration without codecs');
+
+            expect_error('org.w3.clearkey', [{
                 initDataTypes: ['webm'],
                 audioCapabilities: [{contentType: 'audio/webm'}],
-                videoCapabilities: [{contentType: 'video/webm'}],
-            }, 'Basic supported configuration');
+                videoCapabilities: [{contentType: 'video/webm; codecs=vp8'}],
+            }], 'NotSupportedError', 'Basic supported configuration without audio codecs');
 
-            // TODO(jrummell): Specifying contentType without codecs is
-            // deprecated, so this test should fail. http://crbug.com/605661.
-            expect_config('org.w3.clearkey', [{
+            expect_error('org.w3.clearkey', [{
+                initDataTypes: ['webm'],
+                audioCapabilities: [{contentType: 'audio/webm; codecs=vorbis'}],
+                videoCapabilities: [{contentType: 'video/webm'}],
+            }], 'NotSupportedError', 'Basic supported configuration without video codecs');
+
+            expect_error('org.w3.clearkey', [{
                 initDataTypes: ['fakeidt', 'webm'],
                 audioCapabilities: [{contentType: 'audio/fake'}, {contentType: 'audio/webm'}],
                 videoCapabilities: [{contentType: 'video/fake'}, {contentType: 'video/webm'}],
+            }], 'NotSupportedError', 'Partially supported configuration without codecs');
+
+            // Various combinations of supportedConfigurations.
+            expect_config('org.w3.clearkey', [{
+                initDataTypes: ['webm'],
+                audioCapabilities: [{contentType: 'audio/webm; codecs=vorbis'}],
+                videoCapabilities: [{contentType: 'video/webm; codecs=vp8'}],
             }], {
                 initDataTypes: ['webm'],
-                audioCapabilities: [{contentType: 'audio/webm'}],
-                videoCapabilities: [{contentType: 'video/webm'}],
+                audioCapabilities: [{contentType: 'audio/webm; codecs=vorbis'}],
+                videoCapabilities: [{contentType: 'video/webm; codecs=vp8'}],
+            }, 'Basic supported configuration');
+
+            expect_config('org.w3.clearkey', [{
+                initDataTypes: ['fakeidt', 'webm'],
+                audioCapabilities: [
+                    {contentType: 'audio/fake; codecs=vorbis'},
+                    {contentType: 'audio/webm; codecs=vorbis'}
+                ],
+                videoCapabilities: [
+                    {contentType: 'video/fake; codecs=vp8'},
+                    {contentType: 'video/webm; codecs=vp8'}
+                ],
+            }], {
+                initDataTypes: ['webm'],
+                audioCapabilities: [{contentType: 'audio/webm; codecs=vorbis'}],
+                videoCapabilities: [{contentType: 'video/webm; codecs=vp8'}],
             }, 'Partially supported configuration');
 
             expect_config('org.w3.clearkey', [{
@@ -154,13 +181,20 @@
             }], 'NotSupportedError', 'Mismatched video container/codec');
 
             expect_config('org.w3.clearkey', [
-                {initDataTypes: ['fakeidt']},
-                {initDataTypes: ['webm']}
+                { initDataTypes: ['fakeidt'],
+                  audioCapabilities: [{contentType: 'audio/webm; codecs=vorbis'}]
+                },
+                { initDataTypes: ['webm'],
+                  audioCapabilities: [{contentType: 'audio/webm; codecs=vorbis'}]
+                }
             ], {initDataTypes: ['webm']}, 'Two configurations, one supported');
 
             expect_config('org.w3.clearkey', [
-                {initDataTypes: ['webm']},
-                {}
+                { initDataTypes: ['webm'],
+                  audioCapabilities: [{contentType: 'audio/webm; codecs=vorbis'}]
+                },
+                { audioCapabilities: [{contentType: 'audio/webm; codecs=vorbis'}]
+                }
             ], {initDataTypes: ['webm']}, 'Two configurations, both supported');
 
             // Audio MIME type does not support video codecs.
@@ -238,39 +272,45 @@
             }, 'Space at end of codecs parameter');
 
             // contentType is not case sensitive (except the codec names).
+            // From RFC 2045: "All media type values, subtype values, and
+            // parameter names as defined are case-insensitive.  However,
+            // parameter values are case-sensitive unless otherwise specified
+            // for the specific parameter."
             expect_config('org.w3.clearkey', [{
                 videoCapabilities: [{contentType: 'Video/webm; codecs="vp8"'}],
             }], {
                 videoCapabilities: [{contentType: 'Video/webm; codecs="vp8"'}],
-            }, 'Video/webm');
+            }, 'Media type value is case-insensitive');
 
             expect_config('org.w3.clearkey', [{
                 videoCapabilities: [{contentType: 'video/Webm; codecs="vp8"'}],
             }], {
                 videoCapabilities: [{contentType: 'video/Webm; codecs="vp8"'}],
-            }, 'video/Webm');
-
-            expect_config('org.w3.clearkey', [{
-                videoCapabilities: [{contentType: 'video/webm; Codecs="vp8"'}],
-            }], {
-                videoCapabilities: [{contentType: 'video/webm; Codecs="vp8"'}],
-            }, 'Codecs=');
+            }, 'Media subtype value is case-insensitive');
 
             expect_config('org.w3.clearkey', [{
                 videoCapabilities: [{contentType: 'VIDEO/WEBM; codecs="vp8"'}],
             }], {
                 videoCapabilities: [{contentType: 'VIDEO/WEBM; codecs="vp8"'}],
-            }, 'VIDEO/WEBM');
+            }, 'Media type values and subtype values are case-insensitive');
 
             expect_config('org.w3.clearkey', [{
                 videoCapabilities: [{contentType: 'video/webm; CODECS="vp8"'}],
             }], {
                 videoCapabilities: [{contentType: 'video/webm; CODECS="vp8"'}],
-            }, 'CODECS=');
+            }, 'Media parameter name is case-insensitive');
+
+            expect_error('org.w3.clearkey', [{
+                videoCapabilities: [{contentType: 'video/webm; CODECS="foo"'}],
+            }], 'NotSupportedError', 'Unsupported codec');
+
+            expect_error('org.w3.clearkey', [{
+                videoCapabilities: [{contentType: 'video/webm; codecs="VP8"'}],
+            }], 'NotSupportedError', 'Codec is case-sensitive');
 
             // Unrecognized attributes are not allowed.
             // TODO(jrummell): Unrecognized attributes are ignored currently.
-            // http://crbug.com/449690
+            // http://crbug.com/690131
 //          expect_error('org.w3.clearkey', [{
 //              videoCapabilities: [{contentType: 'video/webm; foo="bar"'}],
 //          }], 'NotSupportedError', 'Unrecognized foo');
@@ -315,19 +355,23 @@
 
             // Verify 'temporary' sessionType.
             expect_config('org.w3.clearkey', [{
-                sessionTypes: [ 'temporary' ]
+                sessionTypes: [ 'temporary' ],
+                audioCapabilities: [{contentType: 'audio/webm; codecs=vorbis'}]
             }], {
-                sessionTypes: [ 'temporary' ]
+                sessionTypes: [ 'temporary' ],
+                audioCapabilities: [{contentType: 'audio/webm; codecs=vorbis'}]
             }, 'temporary sessionType');
 
             // Clear Key doesn't support persistent sessions.
             expect_error('org.w3.clearkey', [{
-                sessionTypes: [ 'persistent-license' ]
+                sessionTypes: [ 'persistent-license' ],
+                audioCapabilities: [{contentType: 'audio/webm; codecs=vorbis'}]
             }], 'NotSupportedError', 'persistent-license sessionType');
 
             // Verify invalid sessionTypes.
             expect_error('org.w3.clearkey', [{
-                sessionTypes: [ 'foo' ]
+                sessionTypes: [ 'foo' ],
+                audioCapabilities: [{contentType: 'audio/webm; codecs=vorbis'}]
             }], 'NotSupportedError', 'invalid sessionType');
         </script>
     </body>

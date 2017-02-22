@@ -28,6 +28,7 @@
 
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "core/frame/Navigator.h"
 #include "core/frame/PlatformEventController.h"
 #include "modules/ModulesExport.h"
 #include "platform/AsyncMethodRunner.h"
@@ -65,7 +66,7 @@ class MODULES_EXPORT NavigatorGamepad final
                                      bool connected);
 
  private:
-  explicit NavigatorGamepad(LocalFrame*);
+  explicit NavigatorGamepad(Navigator&);
 
   static const char* supplementName();
 
@@ -73,15 +74,15 @@ class MODULES_EXPORT NavigatorGamepad final
   void didRemoveGamepadEventListeners();
   bool startUpdatingIfAttached();
 
-  // ContextLifecycleObserver
-  void contextDestroyed() override;
+  // ContextLifecycleObserver and PageVisibilityObserver
+  void contextDestroyed(ExecutionContext*) override;
+  void pageVisibilityChanged() override;
 
   // PlatformEventController
   void registerWithDispatcher() override;
   void unregisterWithDispatcher() override;
   bool hasLastData() override;
   void didUpdateData() override;
-  void pageVisibilityChanged() override;
 
   // LocalDOMWindow::EventListenerObserver
   void didAddEventListener(LocalDOMWindow*, const AtomicString&) override;

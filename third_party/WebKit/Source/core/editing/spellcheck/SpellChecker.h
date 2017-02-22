@@ -73,6 +73,9 @@ class CORE_EXPORT SpellChecker final : public GarbageCollected<SpellChecker> {
   void replaceMisspelledRange(const String&);
   void removeSpellingMarkers();
   void removeSpellingMarkersUnderWords(const Vector<String>& words);
+  enum class ElementsType { kAll, kOnlyNonEditable };
+  void removeSpellingAndGrammarMarkers(const HTMLElement&,
+                                       ElementsType = ElementsType::kAll);
   void spellCheckAfterBlur();
 
   void didEndEditingOnTextField(Element*);
@@ -83,9 +86,8 @@ class CORE_EXPORT SpellChecker final : public GarbageCollected<SpellChecker> {
   void updateMarkersForWordsAffectedByEditing(
       bool onlyHandleWordsContainingSelection);
   void cancelCheck();
-  void requestTextChecking(const Element&);
 
-  // Exposed for testing only
+  // Exposed for testing and idle time spell checker
   SpellCheckRequester& spellCheckRequester() const {
     return *m_spellCheckRequester;
   }
@@ -125,6 +127,9 @@ class CORE_EXPORT SpellChecker final : public GarbageCollected<SpellChecker> {
                               const VisibleSelection& newAdjacentWords);
 
   Member<LocalFrame> m_frame;
+
+  // TODO(xiaochengh): Move it to IdleSpellCheckCallback after idle time spell
+  // checking reaches status=stable.
   const Member<SpellCheckRequester> m_spellCheckRequester;
 };
 

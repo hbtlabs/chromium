@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<script src="../resources/testharness.js"></script>
+<script src="../resources/testharnessreport.js"></script>
+<script src="../resources/mojo-helpers.js"></script>
+<script src="resources/mock-vr-service.js"></script>
+<script>
+
+vr_test( (t) => {
+  return  navigator.getVRDisplays().then( (displays) => {
+    t.step( () => {
+      assert_true(displays != null);
+      assert_equals(displays.length, 0);
+    }, "getVRDisplays returned correct results");
+  }, (err) => {
+    t.step( () => {
+      assert_unreached("getVRDisplays rejected");
+    });
+  }).then( () => {
+    t.done();
+  });
+}, [],
+"WebVR properly returns zero displays");
+
+</script>

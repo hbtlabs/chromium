@@ -48,10 +48,13 @@ Bindings.PresentationConsoleMessageHelper = class {
     SDK.multitargetConsoleModel.addEventListener(
         SDK.ConsoleModel.Events.MessageAdded, this._onConsoleMessageAdded, this);
     SDK.multitargetConsoleModel.messages().forEach(this._consoleMessageAdded, this);
+    // TODO(dgozman): setImmediate because we race with DebuggerWorkspaceBinding on ParsedScriptSource event delivery.
     SDK.targetManager.addModelListener(
-        SDK.DebuggerModel, SDK.DebuggerModel.Events.ParsedScriptSource, this._parsedScriptSource, this);
+        SDK.DebuggerModel, SDK.DebuggerModel.Events.ParsedScriptSource,
+        event => setImmediate(this._parsedScriptSource.bind(this, event)));
     SDK.targetManager.addModelListener(
-        SDK.DebuggerModel, SDK.DebuggerModel.Events.FailedToParseScriptSource, this._parsedScriptSource, this);
+        SDK.DebuggerModel, SDK.DebuggerModel.Events.FailedToParseScriptSource,
+        event => setImmediate(this._parsedScriptSource.bind(this, event)));
     SDK.targetManager.addModelListener(
         SDK.DebuggerModel, SDK.DebuggerModel.Events.GlobalObjectCleared, this._debuggerReset, this);
 
@@ -105,6 +108,8 @@ Bindings.PresentationConsoleMessageHelper = class {
    * @param {!SDK.DebuggerModel.Location} rawLocation
    */
   _addConsoleMessageToScript(message, rawLocation) {
+    if (message.source === SDK.ConsoleMessage.MessageSource.Violation)
+      return;
     this._presentationConsoleMessages.push(
         new Bindings.PresentationConsoleMessage(message, rawLocation, this._locationPool));
   }
@@ -136,7 +141,7 @@ Bindings.PresentationConsoleMessageHelper = class {
       var rawLocation = this._rawLocation(message);
       if (!rawLocation)
         continue;
-      if (script.target() === message.target() && script.scriptId === rawLocation.scriptId)
+      if (script.debuggerModel.target() === message.target() && script.scriptId === rawLocation.scriptId)
         this._addConsoleMessageToScript(message, rawLocation);
       else
         pendingMessages.push(message);

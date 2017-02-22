@@ -41,7 +41,6 @@
 
 namespace blink {
 
-class WebAXObject;
 class WebDateTimeChooserCompletion;
 class WebFileChooserCompletion;
 class WebHitTestResult;
@@ -54,7 +53,6 @@ class WebView;
 class WebWidget;
 struct WebDateTimeChooserParams;
 struct WebPoint;
-struct WebPopupMenuInfo;
 struct WebRect;
 struct WebSize;
 struct WebWindowFeatures;
@@ -116,7 +114,6 @@ class WebViewClient : protected WebWidgetClient {
 
   // These methods allow the client to intercept and overrule editing
   // operations.
-  virtual void didCancelCompositionOnSelectionChange() {}
   virtual void didChangeContents() {}
 
   // Dialogs -------------------------------------------------------------
@@ -274,11 +271,10 @@ class WebViewClient : protected WebWidgetClient {
                      const WebFloatPoint& positionInViewport,
                      const WebFloatSize& velocityInViewport) override {}
   void hasTouchEventHandlers(bool) override {}
-  void initializeLayerTreeView() override {}
-  void resetInputMethod() override {}
+  WebLayerTreeView* initializeLayerTreeView() override { return nullptr; }
   WebScreenInfo screenInfo() override { return WebScreenInfo(); }
   void setTouchAction(WebTouchAction touchAction) override {}
-  void showImeIfNeeded() override {}
+  void showVirtualKeyboardOnElementFocus() override {}
   void showUnhandledTapUIIfNeeded(const WebPoint& tappedPosition,
                                   const WebNode& tappedNode,
                                   bool pageChanged) override {}

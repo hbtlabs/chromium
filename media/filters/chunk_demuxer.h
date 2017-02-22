@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/memory_pressure_listener.h"
 #include "base/synchronization/lock.h"
 #include "media/base/byte_queue.h"
 #include "media/base/demuxer.h"
@@ -27,8 +28,6 @@
 #include "media/filters/source_buffer_stream.h"
 
 namespace media {
-
-class FFmpegURLProtocol;
 
 class MEDIA_EXPORT ChunkDemuxerStream : public DemuxerStream {
  public:
@@ -67,6 +66,11 @@ class MEDIA_EXPORT ChunkDemuxerStream : public DemuxerStream {
   // Returns false iff buffer is still full after running eviction.
   // https://w3c.github.io/media-source/#sourcebuffer-coded-frame-eviction
   bool EvictCodedFrames(DecodeTimestamp media_time, size_t newDataSize);
+
+  void OnMemoryPressure(
+      DecodeTimestamp media_time,
+      base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level,
+      bool force_instant_gc);
 
   // Signal to the stream that duration has changed to |duration|.
   void OnSetDuration(base::TimeDelta duration);
@@ -110,9 +114,11 @@ class MEDIA_EXPORT ChunkDemuxerStream : public DemuxerStream {
   VideoDecoderConfig video_decoder_config() override;
   bool SupportsConfigChanges() override;
   VideoRotation video_rotation() override;
-  bool enabled() const override;
-  void set_enabled(bool enabled, base::TimeDelta timestamp) override;
-  void SetStreamStatusChangeCB(const StreamStatusChangeCB& cb) override;
+
+  bool enabled() const;
+  void set_enabled(bool enabled, base::TimeDelta timestamp);
+
+  void SetStreamStatusChangeCB(const StreamStatusChangeCB& cb);
 
   // Returns the text track configuration.  It is an error to call this method
   // if type() != TEXT.
@@ -192,7 +198,8 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
   void Stop() override;
   void Seek(base::TimeDelta time, const PipelineStatusCB& cb) override;
   base::Time GetTimelineOffset() const override;
-  DemuxerStream* GetStream(DemuxerStream::Type type) override;
+  std::vector<DemuxerStream*> GetAllStreams() override;
+  void SetStreamStatusChangeCB(const StreamStatusChangeCB& cb) override;
   base::TimeDelta GetStartTime() const override;
   int64_t GetMemoryUsage() const override;
   void AbortPendingReads() override;
@@ -271,6 +278,11 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
   bool EvictCodedFrames(const std::string& id,
                         base::TimeDelta currentMediaTime,
                         size_t newDataSize);
+
+  void OnMemoryPressure(
+      base::TimeDelta currentMediaTime,
+      base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level,
+      bool force_instant_gc);
 
   // Returns the current presentation duration.
   double GetDuration();
@@ -442,7 +454,7 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
   int detected_video_track_count_;
   int detected_text_track_count_;
 
-  std::map<MediaTrack::Id, DemuxerStream*> track_id_to_demux_stream_map_;
+  std::map<MediaTrack::Id, ChunkDemuxerStream*> track_id_to_demux_stream_map_;
 
   DISALLOW_COPY_AND_ASSIGN(ChunkDemuxer);
 };

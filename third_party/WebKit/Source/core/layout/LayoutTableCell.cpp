@@ -27,6 +27,7 @@
 
 #include "core/HTMLNames.h"
 #include "core/css/StylePropertySet.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/html/HTMLTableCellElement.h"
 #include "core/layout/LayoutAnalyzer.h"
 #include "core/layout/LayoutTableCol.h"
@@ -68,12 +69,12 @@ LayoutTableCell::LayoutTableCell(Element* element)
 }
 
 LayoutTableCell::CollapsedBorderValues::CollapsedBorderValues(
-    const LayoutTable& layoutTable,
+    const LayoutTableCell& layoutTableCell,
     const CollapsedBorderValue& startBorder,
     const CollapsedBorderValue& endBorder,
     const CollapsedBorderValue& beforeBorder,
     const CollapsedBorderValue& afterBorder)
-    : m_layoutTable(layoutTable),
+    : m_layoutTableCell(layoutTableCell),
       m_startBorder(startBorder),
       m_endBorder(endBorder),
       m_beforeBorder(beforeBorder),
@@ -92,7 +93,7 @@ String LayoutTableCell::CollapsedBorderValues::debugName() const {
 }
 
 LayoutRect LayoutTableCell::CollapsedBorderValues::visualRect() const {
-  return m_layoutTable.visualRect();
+  return m_layoutTableCell.table()->visualRect();
 }
 
 void LayoutTableCell::willBeRemovedFromTree() {
@@ -122,6 +123,8 @@ void LayoutTableCell::willBeRemovedFromTree() {
 
 unsigned LayoutTableCell::parseColSpanFromDOM() const {
   ASSERT(node());
+  // TODO(dgrogan): HTMLTableCellElement::colSpan() already clamps to something
+  // smaller than maxColumnIndex; can we just DCHECK here?
   if (isHTMLTableCellElement(*node()))
     return std::min<unsigned>(toHTMLTableCellElement(*node()).colSpan(),
                               maxColumnIndex);
@@ -246,28 +249,28 @@ void LayoutTableCell::computeIntrinsicPadding(int rowHeight,
 
   int intrinsicPaddingBefore = 0;
   switch (verticalAlign) {
-    case VerticalAlignSub:
-    case VerticalAlignSuper:
-    case VerticalAlignTextTop:
-    case VerticalAlignTextBottom:
-    case VerticalAlignLength:
-    case VerticalAlignBaseline: {
+    case EVerticalAlign::kSub:
+    case EVerticalAlign::kSuper:
+    case EVerticalAlign::kTextTop:
+    case EVerticalAlign::kTextBottom:
+    case EVerticalAlign::kLength:
+    case EVerticalAlign::kBaseline: {
       int baseline = cellBaselinePosition();
       if (baseline > borderBefore() + paddingBefore())
         intrinsicPaddingBefore = section()->rowBaseline(rowIndex()) -
                                  (baseline - oldIntrinsicPaddingBefore);
       break;
     }
-    case VerticalAlignTop:
+    case EVerticalAlign::kTop:
       break;
-    case VerticalAlignMiddle:
+    case EVerticalAlign::kMiddle:
       intrinsicPaddingBefore =
           (rowHeight - logicalHeightWithoutIntrinsicPadding) / 2;
       break;
-    case VerticalAlignBottom:
+    case EVerticalAlign::kBottom:
       intrinsicPaddingBefore = rowHeight - logicalHeightWithoutIntrinsicPadding;
       break;
-    case VerticalAlignBaselineMiddle:
+    case EVerticalAlign::kBaselineMiddle:
       break;
   }
 
@@ -333,7 +336,7 @@ void LayoutTableCell::layout() {
 LayoutUnit LayoutTableCell::paddingTop() const {
   LayoutUnit result = computedCSSPaddingTop();
   if (isHorizontalWritingMode())
-    result += (style()->getWritingMode() == TopToBottomWritingMode
+    result += (blink::isHorizontalWritingMode(style()->getWritingMode())
                    ? intrinsicPaddingBefore()
                    : intrinsicPaddingAfter());
   // TODO(leviw): The floor call should be removed when Table is sub-pixel
@@ -344,7 +347,7 @@ LayoutUnit LayoutTableCell::paddingTop() const {
 LayoutUnit LayoutTableCell::paddingBottom() const {
   LayoutUnit result = computedCSSPaddingBottom();
   if (isHorizontalWritingMode())
-    result += (style()->getWritingMode() == TopToBottomWritingMode
+    result += (blink::isHorizontalWritingMode(style()->getWritingMode())
                    ? intrinsicPaddingAfter()
                    : intrinsicPaddingBefore());
   // TODO(leviw): The floor call should be removed when Table is sub-pixel
@@ -355,7 +358,7 @@ LayoutUnit LayoutTableCell::paddingBottom() const {
 LayoutUnit LayoutTableCell::paddingLeft() const {
   LayoutUnit result = computedCSSPaddingLeft();
   if (!isHorizontalWritingMode())
-    result += (style()->getWritingMode() == LeftToRightWritingMode
+    result += (isFlippedLinesWritingMode(style()->getWritingMode())
                    ? intrinsicPaddingBefore()
                    : intrinsicPaddingAfter());
   // TODO(leviw): The floor call should be removed when Table is sub-pixel
@@ -366,7 +369,7 @@ LayoutUnit LayoutTableCell::paddingLeft() const {
 LayoutUnit LayoutTableCell::paddingRight() const {
   LayoutUnit result = computedCSSPaddingRight();
   if (!isHorizontalWritingMode())
-    result += (style()->getWritingMode() == LeftToRightWritingMode
+    result += (isFlippedLinesWritingMode(style()->getWritingMode())
                    ? intrinsicPaddingAfter()
                    : intrinsicPaddingBefore());
   // TODO(leviw): The floor call should be removed when Table is sub-pixel
@@ -412,11 +415,11 @@ LayoutRect LayoutTableCell::localVisualRect() const {
     return LayoutBlockFlow::localVisualRect();
 
   bool rtl = !styleForCellFlow().isLeftToRightDirection();
-  int outlineOutset = style()->outlineOutsetExtent();
-  int left = std::max(borderHalfLeft(true), outlineOutset);
-  int right = std::max(borderHalfRight(true), outlineOutset);
-  int top = std::max(borderHalfTop(true), outlineOutset);
-  int bottom = std::max(borderHalfBottom(true), outlineOutset);
+  LayoutUnit outlineOutset(style()->outlineOutsetExtent());
+  LayoutUnit left(std::max(borderHalfLeft(true), outlineOutset));
+  LayoutUnit right(std::max(borderHalfRight(true), outlineOutset));
+  LayoutUnit top(std::max(borderHalfTop(true), outlineOutset));
+  LayoutUnit bottom(std::max(borderHalfBottom(true), outlineOutset));
   if ((left && !rtl) || (right && rtl)) {
     if (LayoutTableCell* before = table()->cellBefore(this)) {
       top = std::max(top, before->borderHalfTop(true));
@@ -469,8 +472,8 @@ void LayoutTableCell::ensureIsReadyForPaintInvalidation() {
   if (!usesCompositedCellDisplayItemClients())
     return;
   if (!m_rowBackgroundDisplayItemClient) {
-    m_rowBackgroundDisplayItemClient =
-        wrapUnique(new LayoutTableCell::RowBackgroundDisplayItemClient(*row()));
+    m_rowBackgroundDisplayItemClient = WTF::wrapUnique(
+        new LayoutTableCell::RowBackgroundDisplayItemClient(*this));
   }
 }
 
@@ -520,15 +523,15 @@ void LayoutTableCell::styleDidChange(StyleDifference diff,
 }
 
 LayoutTableCell::RowBackgroundDisplayItemClient::RowBackgroundDisplayItemClient(
-    const LayoutTableRow& layoutTableRow)
-    : m_layoutTableRow(layoutTableRow) {}
+    const LayoutTableCell& layoutTableCell)
+    : m_layoutTableCell(layoutTableCell) {}
 
 String LayoutTableCell::RowBackgroundDisplayItemClient::debugName() const {
   return "RowBackground";
 }
 
 LayoutRect LayoutTableCell::RowBackgroundDisplayItemClient::visualRect() const {
-  return m_layoutTableRow.visualRect();
+  return m_layoutTableCell.row()->visualRect();
 }
 
 // The following rules apply for resolving conflicts and figuring out which
@@ -1174,22 +1177,22 @@ CollapsedBorderValue LayoutTableCell::computeCollapsedAfterBorder(
   return result;
 }
 
-int LayoutTableCell::borderLeft() const {
+LayoutUnit LayoutTableCell::borderLeft() const {
   return table()->collapseBorders() ? borderHalfLeft(false)
                                     : LayoutBlockFlow::borderLeft();
 }
 
-int LayoutTableCell::borderRight() const {
+LayoutUnit LayoutTableCell::borderRight() const {
   return table()->collapseBorders() ? borderHalfRight(false)
                                     : LayoutBlockFlow::borderRight();
 }
 
-int LayoutTableCell::borderTop() const {
+LayoutUnit LayoutTableCell::borderTop() const {
   return table()->collapseBorders() ? borderHalfTop(false)
                                     : LayoutBlockFlow::borderTop();
 }
 
-int LayoutTableCell::borderBottom() const {
+LayoutUnit LayoutTableCell::borderBottom() const {
   return table()->collapseBorders() ? borderHalfBottom(false)
                                     : LayoutBlockFlow::borderBottom();
 }
@@ -1197,27 +1200,27 @@ int LayoutTableCell::borderBottom() const {
 // FIXME: https://bugs.webkit.org/show_bug.cgi?id=46191, make the collapsed
 // border drawing work with different block flow values instead of being
 // hard-coded to top-to-bottom.
-int LayoutTableCell::borderStart() const {
+LayoutUnit LayoutTableCell::borderStart() const {
   return table()->collapseBorders() ? borderHalfStart(false)
                                     : LayoutBlockFlow::borderStart();
 }
 
-int LayoutTableCell::borderEnd() const {
+LayoutUnit LayoutTableCell::borderEnd() const {
   return table()->collapseBorders() ? borderHalfEnd(false)
                                     : LayoutBlockFlow::borderEnd();
 }
 
-int LayoutTableCell::borderBefore() const {
+LayoutUnit LayoutTableCell::borderBefore() const {
   return table()->collapseBorders() ? borderHalfBefore(false)
                                     : LayoutBlockFlow::borderBefore();
 }
 
-int LayoutTableCell::borderAfter() const {
+LayoutUnit LayoutTableCell::borderAfter() const {
   return table()->collapseBorders() ? borderHalfAfter(false)
                                     : LayoutBlockFlow::borderAfter();
 }
 
-int LayoutTableCell::borderHalfLeft(bool outer) const {
+LayoutUnit LayoutTableCell::borderHalfLeft(bool outer) const {
   const ComputedStyle& styleForCellFlow = this->styleForCellFlow();
   if (styleForCellFlow.isHorizontalWritingMode())
     return styleForCellFlow.isLeftToRightDirection() ? borderHalfStart(outer)
@@ -1227,7 +1230,7 @@ int LayoutTableCell::borderHalfLeft(bool outer) const {
              : borderHalfBefore(outer);
 }
 
-int LayoutTableCell::borderHalfRight(bool outer) const {
+LayoutUnit LayoutTableCell::borderHalfRight(bool outer) const {
   const ComputedStyle& styleForCellFlow = this->styleForCellFlow();
   if (styleForCellFlow.isHorizontalWritingMode())
     return styleForCellFlow.isLeftToRightDirection() ? borderHalfEnd(outer)
@@ -1236,7 +1239,7 @@ int LayoutTableCell::borderHalfRight(bool outer) const {
                                                        : borderHalfAfter(outer);
 }
 
-int LayoutTableCell::borderHalfTop(bool outer) const {
+LayoutUnit LayoutTableCell::borderHalfTop(bool outer) const {
   const ComputedStyle& styleForCellFlow = this->styleForCellFlow();
   if (styleForCellFlow.isHorizontalWritingMode())
     return styleForCellFlow.isFlippedBlocksWritingMode()
@@ -1246,7 +1249,7 @@ int LayoutTableCell::borderHalfTop(bool outer) const {
                                                    : borderHalfEnd(outer);
 }
 
-int LayoutTableCell::borderHalfBottom(bool outer) const {
+LayoutUnit LayoutTableCell::borderHalfBottom(bool outer) const {
   const ComputedStyle& styleForCellFlow = this->styleForCellFlow();
   if (styleForCellFlow.isHorizontalWritingMode())
     return styleForCellFlow.isFlippedBlocksWritingMode()
@@ -1256,46 +1259,52 @@ int LayoutTableCell::borderHalfBottom(bool outer) const {
                                                    : borderHalfStart(outer);
 }
 
-int LayoutTableCell::borderHalfStart(bool outer) const {
+LayoutUnit LayoutTableCell::borderHalfStart(bool outer) const {
   CollapsedBorderValue border =
       computeCollapsedStartBorder(DoNotIncludeBorderColor);
-  if (border.exists())
-    return (border.width() +
-            ((styleForCellFlow().isLeftToRightDirection() ^ outer) ? 1 : 0)) /
-           2;  // Give the extra pixel to top and left.
-  return 0;
+  if (border.exists()) {
+    return LayoutUnit(
+        (border.width() +
+         ((styleForCellFlow().isLeftToRightDirection() ^ outer) ? 1 : 0)) /
+        2);  // Give the extra pixel to top and left.
+  }
+  return LayoutUnit();
 }
 
-int LayoutTableCell::borderHalfEnd(bool outer) const {
+LayoutUnit LayoutTableCell::borderHalfEnd(bool outer) const {
   CollapsedBorderValue border =
       computeCollapsedEndBorder(DoNotIncludeBorderColor);
-  if (border.exists())
-    return (border.width() +
-            ((styleForCellFlow().isLeftToRightDirection() ^ outer) ? 0 : 1)) /
-           2;
-  return 0;
+  if (border.exists()) {
+    return LayoutUnit(
+        (border.width() +
+         ((styleForCellFlow().isLeftToRightDirection() ^ outer) ? 0 : 1)) /
+        2);
+  }
+  return LayoutUnit();
 }
 
-int LayoutTableCell::borderHalfBefore(bool outer) const {
+LayoutUnit LayoutTableCell::borderHalfBefore(bool outer) const {
   CollapsedBorderValue border =
       computeCollapsedBeforeBorder(DoNotIncludeBorderColor);
-  if (border.exists())
-    return (border.width() +
-            ((styleForCellFlow().isFlippedBlocksWritingMode() ^ outer) ? 0
-                                                                       : 1)) /
-           2;  // Give the extra pixel to top and left.
-  return 0;
+  if (border.exists()) {
+    return LayoutUnit(
+        (border.width() +
+         ((styleForCellFlow().isFlippedBlocksWritingMode() ^ outer) ? 0 : 1)) /
+        2);  // Give the extra pixel to top and left.
+  }
+  return LayoutUnit();
 }
 
-int LayoutTableCell::borderHalfAfter(bool outer) const {
+LayoutUnit LayoutTableCell::borderHalfAfter(bool outer) const {
   CollapsedBorderValue border =
       computeCollapsedAfterBorder(DoNotIncludeBorderColor);
-  if (border.exists())
-    return (border.width() +
-            ((styleForCellFlow().isFlippedBlocksWritingMode() ^ outer) ? 1
-                                                                       : 0)) /
-           2;
-  return 0;
+  if (border.exists()) {
+    return LayoutUnit(
+        (border.width() +
+         ((styleForCellFlow().isFlippedBlocksWritingMode() ^ outer) ? 1 : 0)) /
+        2);
+  }
+  return LayoutUnit();
 }
 
 void LayoutTableCell::paint(const PaintInfo& paintInfo,
@@ -1312,13 +1321,13 @@ static void addBorderStyle(LayoutTable::CollapsedBorderValues& borderValues,
     if (borderValues[i].isSameIgnoringColor(borderValue))
       return;
   }
-  borderValues.append(borderValue);
+  borderValues.push_back(borderValue);
 }
 
 void LayoutTableCell::collectBorderValues(
     LayoutTable::CollapsedBorderValues& borderValues) {
   CollapsedBorderValues newValues(
-      *table(), computeCollapsedStartBorder(), computeCollapsedEndBorder(),
+      *this, computeCollapsedStartBorder(), computeCollapsedEndBorder(),
       computeCollapsedBeforeBorder(), computeCollapsedAfterBorder());
 
   bool changed = false;
@@ -1330,8 +1339,8 @@ void LayoutTableCell::collectBorderValues(
     m_collapsedBorderValues = nullptr;
   } else if (!m_collapsedBorderValues) {
     changed = true;
-    m_collapsedBorderValues = wrapUnique(new CollapsedBorderValues(
-        *table(), newValues.startBorder(), newValues.endBorder(),
+    m_collapsedBorderValues = WTF::wrapUnique(new CollapsedBorderValues(
+        *this, newValues.startBorder(), newValues.endBorder(),
         newValues.beforeBorder(), newValues.afterBorder()));
   } else {
     // We check visuallyEquals so that the table cell is invalidated only if a
@@ -1352,10 +1361,11 @@ void LayoutTableCell::collectBorderValues(
   // the table's backing.
   // TODO(crbug.com/451090#c5): Need a way to invalidate/repaint the borders
   // only.
-  if (changed)
+  if (changed) {
     ObjectPaintInvalidator(*table())
         .slowSetPaintingLayerNeedsRepaintAndInvalidateDisplayItemClient(
             *this, PaintInvalidationStyleChange);
+  }
 
   addBorderStyle(borderValues, newValues.startBorder());
   addBorderStyle(borderValues, newValues.endBorder());
@@ -1380,9 +1390,13 @@ void LayoutTableCell::paintMask(const PaintInfo& paintInfo,
 }
 
 void LayoutTableCell::scrollbarsChanged(bool horizontalScrollbarChanged,
-                                        bool verticalScrollbarChanged) {
+                                        bool verticalScrollbarChanged,
+                                        ScrollbarChangeContext context) {
   LayoutBlock::scrollbarsChanged(horizontalScrollbarChanged,
                                  verticalScrollbarChanged);
+  if (context != Layout)
+    return;
+
   int scrollbarHeight = scrollbarLogicalHeight();
   // Not sure if we should be doing something when a scrollbar goes away or not.
   if (!scrollbarHeight)
@@ -1396,7 +1410,7 @@ void LayoutTableCell::scrollbarsChanged(bool horizontalScrollbarChanged,
 
   // Shrink our intrinsic padding as much as possible to accommodate the
   // scrollbar.
-  if (style()->verticalAlign() == VerticalAlignMiddle) {
+  if (style()->verticalAlign() == EVerticalAlign::kMiddle) {
     LayoutUnit totalHeight = logicalHeight();
     LayoutUnit heightWithoutIntrinsicPadding =
         totalHeight - intrinsicPaddingBefore() - intrinsicPaddingAfter();
@@ -1425,7 +1439,7 @@ LayoutTableCell* LayoutTableCell::createAnonymousWithParent(
   RefPtr<ComputedStyle> newStyle =
       ComputedStyle::createAnonymousStyleWithDisplay(parent->styleRef(),
                                                      EDisplay::TableCell);
-  newCell->setStyle(newStyle.release());
+  newCell->setStyle(std::move(newStyle));
   return newCell;
 }
 
@@ -1481,6 +1495,13 @@ LayoutRect LayoutTableCell::debugRect() const {
 
 void LayoutTableCell::adjustChildDebugRect(LayoutRect& r) const {
   r.move(0, -intrinsicPaddingBefore());
+}
+
+bool LayoutTableCell::hasLineIfEmpty() const {
+  if (node() && hasEditableStyle(*node()))
+    return true;
+
+  return LayoutBlock::hasLineIfEmpty();
 }
 
 }  // namespace blink

@@ -100,13 +100,6 @@ UI.InplaceEditor = class {
     var moveDirection = '';
     var self = this;
 
-    /**
-     * @param {!Event} e
-     */
-    function consumeCopy(e) {
-      e.consume();
-    }
-
     this.setUpEditor(editingContext);
 
     editingContext.oldText = isMultiline ? config.initialValue : this.editorContent(editingContext);
@@ -173,8 +166,9 @@ UI.InplaceEditor = class {
         event.consume(true);
       } else if (result && result.startsWith('move-')) {
         moveDirection = result.substring(5);
-        if (event.key !== 'Tab')
-          blurEventListener();
+        if (event.key === 'Tab')
+          event.consume(true);
+        blurEventListener();
       }
     }
 

@@ -1,0 +1,30 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<script src="../../resources/testharness.js"></script>
+<script src="../../resources/testharnessreport.js"></script> 
+<script src="../resources/audit-util.js"></script>
+<script src="../resources/audit.js"></script>
+</head>
+
+<body>
+<script>
+let audit = Audit.createTaskRunner();
+
+audit.define('test', function(task, should) {
+  let context = new AudioContext();
+  let conv = context.createConvolver();
+
+  should(() => {
+    conv.buffer = null;
+  }, 'Setting ConvolverNode impulse response buffer to null').notThrow();
+  should(conv.buffer === null, 'conv.buffer === null').beTrue();
+
+  task.done();
+});
+
+audit.run();
+</script>
+
+</body>
+</html>

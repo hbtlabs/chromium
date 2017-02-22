@@ -13,37 +13,36 @@ namespace {
 const char kSessionIdAlphabet[] =
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
 const int kSessionIdLength = 20;
-
 const int kMaxSessionIdAgeDays = 1;
 
 }  // namespace
 
 namespace remoting {
 
-ClientTelemetryLogger::ClientTelemetryLogger(ChromotingEvent::Mode mode)
-    : mode_(mode) {}
+struct ClientTelemetryLogger::HostInfo {
+  const std::string host_version;
+  const ChromotingEvent::Os host_os;
+  const std::string host_os_version;
+};
+
+ClientTelemetryLogger::ClientTelemetryLogger(
+    ChromotingEventLogWriter* log_writer,
+    ChromotingEvent::Mode mode)
+    : mode_(mode), log_writer_(log_writer) {}
 
 ClientTelemetryLogger::~ClientTelemetryLogger() {}
 
-void ClientTelemetryLogger::Start(
-    std::unique_ptr<UrlRequestFactory> request_factory,
-    const std::string& telemetry_base_url) {
-  DCHECK(!log_writer_);
-  DCHECK(thread_checker_.CalledOnValidThread());
-  log_writer_.reset(
-      new TelemetryLogWriter(telemetry_base_url, std::move(request_factory)));
+void ClientTelemetryLogger::SetHostInfo(const std::string& host_version,
+                                        ChromotingEvent::Os host_os,
+                                        const std::string& host_os_version) {
+  host_info_.reset(new HostInfo{host_version, host_os, host_os_version});
 }
 
 void ClientTelemetryLogger::LogSessionStateChange(
     ChromotingEvent::SessionState state,
     ChromotingEvent::ConnectionError error) {
-  DCHECK(log_writer_) << "Please call Start before posting logs.";
   DCHECK(thread_checker_.CalledOnValidThread());
-  ExpireSessionIdIfOutdated();
-
-  if (session_id_.empty()) {
-    GenerateSessionId();
-  }
+  RefreshSessionIdIfOutdated();
   if (session_start_time_.is_null()) {
     session_start_time_ = base::TimeTicks::Now();
   }
@@ -60,35 +59,16 @@ void ClientTelemetryLogger::LogSessionStateChange(
 
 void ClientTelemetryLogger::LogStatistics(
     protocol::PerformanceTracker* perf_tracker) {
-  DCHECK(log_writer_) << "Please call Start before posting logs.";
   DCHECK(thread_checker_.CalledOnValidThread());
-  ExpireSessionIdIfOutdated();
+  RefreshSessionIdIfOutdated();
 
   ChromotingEvent event = MakeStatsEvent(perf_tracker);
   log_writer_->Log(event);
 }
 
-void ClientTelemetryLogger::SetAuthToken(const std::string& token) {
-  DCHECK(log_writer_) << "Please call Start before setting the token.";
-  DCHECK(thread_checker_.CalledOnValidThread());
-  log_writer_->SetAuthToken(token);
-}
-
-void ClientTelemetryLogger::SetAuthClosure(const base::Closure& closure) {
-  DCHECK(log_writer_) << "Please call Start before setting the closure.";
-  DCHECK(thread_checker_.CalledOnValidThread());
-  log_writer_->SetAuthClosure(closure);
-}
-
 void ClientTelemetryLogger::SetSessionIdGenerationTimeForTest(
     base::TimeTicks gen_time) {
   session_id_generation_time_ = gen_time;
-}
-
-void ClientTelemetryLogger::StartForTest(
-    std::unique_ptr<ChromotingEventLogWriter> writer) {
-  DCHECK(!log_writer_);
-  log_writer_ = std::move(writer);
 }
 
 // static
@@ -152,6 +132,13 @@ ChromotingEvent::ConnectionError ClientTelemetryLogger::TranslateError(
 void ClientTelemetryLogger::FillEventContext(ChromotingEvent* event) const {
   event->SetEnum(ChromotingEvent::kModeKey, mode_);
   event->SetEnum(ChromotingEvent::kRoleKey, ChromotingEvent::Role::CLIENT);
+  if (host_info_) {
+    event->SetString(ChromotingEvent::kHostVersionKey,
+                     host_info_->host_version);
+    event->SetEnum(ChromotingEvent::kHostOsKey, host_info_->host_os);
+    event->SetString(ChromotingEvent::kHostOsVersionKey,
+                     host_info_->host_os_version);
+  }
   event->AddSystemInfo();
   if (!session_id_.empty()) {
     event->SetString(ChromotingEvent::kSessionIdKey, session_id_);
@@ -172,8 +159,9 @@ void ClientTelemetryLogger::GenerateSessionId() {
   session_id_generation_time_ = base::TimeTicks::Now();
 }
 
-void ClientTelemetryLogger::ExpireSessionIdIfOutdated() {
+void ClientTelemetryLogger::RefreshSessionIdIfOutdated() {
   if (session_id_.empty()) {
+    GenerateSessionId();
     return;
   }
 

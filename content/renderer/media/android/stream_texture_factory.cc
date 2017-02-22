@@ -5,17 +5,19 @@
 #include "content/renderer/media/android/stream_texture_factory.h"
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "cc/output/context_provider.h"
-#include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "gpu/ipc/common/gpu_messages.h"
+#include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace content {
 
-StreamTextureProxy::StreamTextureProxy(StreamTextureHost* host) : host_(host) {}
+StreamTextureProxy::StreamTextureProxy(std::unique_ptr<StreamTextureHost> host)
+    : host_(std::move(host)) {}
 
 StreamTextureProxy::~StreamTextureProxy() {}
 
@@ -66,10 +68,6 @@ void StreamTextureProxy::OnFrameAvailable() {
     received_frame_cb_.Run();
 }
 
-void StreamTextureProxy::EstablishPeer(int player_id, int frame_id) {
-  host_->EstablishPeer(player_id, frame_id);
-}
-
 void StreamTextureProxy::SetStreamTextureSize(const gfx::Size& size) {
   host_->SetStreamTextureSize(size);
 }
@@ -81,12 +79,12 @@ void StreamTextureProxy::ForwardStreamTextureForSurfaceRequest(
 
 // static
 scoped_refptr<StreamTextureFactory> StreamTextureFactory::Create(
-    scoped_refptr<ContextProviderCommandBuffer> context_provider) {
+    scoped_refptr<ui::ContextProviderCommandBuffer> context_provider) {
   return new StreamTextureFactory(std::move(context_provider));
 }
 
 StreamTextureFactory::StreamTextureFactory(
-    scoped_refptr<ContextProviderCommandBuffer> context_provider)
+    scoped_refptr<ui::ContextProviderCommandBuffer> context_provider)
     : context_provider_(std::move(context_provider)),
       channel_(context_provider_->GetCommandBufferProxy()->channel()) {
   DCHECK(channel_);
@@ -94,16 +92,16 @@ StreamTextureFactory::StreamTextureFactory(
 
 StreamTextureFactory::~StreamTextureFactory() {}
 
-StreamTextureProxy* StreamTextureFactory::CreateProxy(
+ScopedStreamTextureProxy StreamTextureFactory::CreateProxy(
     unsigned texture_target,
     unsigned* texture_id,
     gpu::Mailbox* texture_mailbox) {
   int32_t route_id =
       CreateStreamTexture(texture_target, texture_id, texture_mailbox);
   if (!route_id)
-    return nullptr;
-  StreamTextureHost* host = new StreamTextureHost(channel_, route_id);
-  return new StreamTextureProxy(host);
+    return ScopedStreamTextureProxy();
+  return ScopedStreamTextureProxy(new StreamTextureProxy(
+      base::MakeUnique<StreamTextureHost>(channel_, route_id)));
 }
 
 unsigned StreamTextureFactory::CreateStreamTexture(

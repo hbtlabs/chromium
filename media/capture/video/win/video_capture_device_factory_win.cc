@@ -10,7 +10,7 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/win/scoped_co_mem.h"
@@ -148,7 +148,7 @@ static std::string GetDeviceModelId(const std::string& device_id) {
 
 static void GetDeviceDescriptorsDirectShow(Descriptors* device_descriptors) {
   DCHECK(device_descriptors);
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
 
   ScopedComPtr<ICreateDevEnum> dev_enum;
   HRESULT hr =

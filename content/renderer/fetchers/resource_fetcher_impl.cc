@@ -12,6 +12,7 @@
 #include "base/time/time.h"
 #include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/platform/WebHTTPBody.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
@@ -71,37 +72,31 @@ class ResourceFetcherImpl::ClientImpl : public blink::WebURLLoaderClient {
   }
 
   // WebURLLoaderClient methods:
-  void didReceiveResponse(blink::WebURLLoader* loader,
-                          const blink::WebURLResponse& response) override {
+  void didReceiveResponse(const blink::WebURLResponse& response) override {
     DCHECK(!completed_);
 
     response_ = response;
   }
-  void didReceiveCachedMetadata(blink::WebURLLoader* loader,
-                                const char* data,
-                                int data_length) override {
+  void didReceiveCachedMetadata(const char* data, int data_length) override {
     DCHECK(!completed_);
     DCHECK_GT(data_length, 0);
   }
-  void didReceiveData(blink::WebURLLoader* loader,
-                      const char* data,
-                      int data_length,
-                      int encoded_data_length,
-                      int encoded_body_length) override {
+  void didReceiveData(const char* data, int data_length) override {
     DCHECK(!completed_);
     DCHECK_GT(data_length, 0);
 
     data_.append(data, data_length);
   }
-  void didFinishLoading(blink::WebURLLoader* loader,
-                        double finishTime,
-                        int64_t total_encoded_data_length) override {
+  void didFinishLoading(double finishTime,
+                        int64_t total_encoded_data_length,
+                        int64_t total_encoded_body_length) override {
     DCHECK(!completed_);
 
     OnLoadCompleteInternal(LOAD_SUCCEEDED);
   }
-  void didFail(blink::WebURLLoader* loader,
-               const blink::WebURLError& error) override {
+  void didFail(const blink::WebURLError& error,
+               int64_t total_encoded_data_length,
+               int64_t total_encoded_body_length) override {
     OnLoadCompleteInternal(LOAD_FAILED);
   }
 
@@ -177,7 +172,6 @@ void ResourceFetcherImpl::SetHeader(const std::string& header,
 void ResourceFetcherImpl::Start(
     blink::WebFrame* frame,
     blink::WebURLRequest::RequestContext request_context,
-    blink::WebURLRequest::FrameType frame_type,
     const Callback& callback) {
   DCHECK(!loader_);
   DCHECK(!client_);
@@ -186,9 +180,8 @@ void ResourceFetcherImpl::Start(
     DCHECK_NE("GET", request_.httpMethod().utf8()) << "GETs can't have bodies.";
 
   request_.setRequestContext(request_context);
-  request_.setFrameType(frame_type);
   request_.setFirstPartyForCookies(frame->document().firstPartyForCookies());
-  frame->dispatchWillSendRequest(request_);
+  request_.addHTTPOriginIfNeeded(blink::WebSecurityOrigin::createUnique());
 
   client_.reset(new ClientImpl(this, callback));
 

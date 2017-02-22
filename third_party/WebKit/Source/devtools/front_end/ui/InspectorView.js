@@ -34,7 +34,7 @@
 UI.InspectorView = class extends UI.VBox {
   constructor() {
     super();
-    UI.Dialog.setModalHostView(this);
+    UI.GlassPane.setContainer(this.element);
     this.setMinimumSize(240, 72);
 
     // DevTools sidebar is a vertical split of panels tabbed pane and a drawer.
@@ -51,20 +51,23 @@ UI.InspectorView = class extends UI.VBox {
     this._drawerTabbedPane = this._drawerTabbedLocation.tabbedPane();
     this._drawerTabbedPane.setMinimumSize(0, 27);
     var closeDrawerButton = new UI.ToolbarButton(Common.UIString('Close drawer'), 'largeicon-delete');
-    closeDrawerButton.addEventListener('click', this._closeDrawer.bind(this));
+    closeDrawerButton.addEventListener(UI.ToolbarButton.Events.Click, this._closeDrawer, this);
     this._drawerTabbedPane.rightToolbar().appendToolbarItem(closeDrawerButton);
     this._drawerSplitWidget.installResizer(this._drawerTabbedPane.headerElement());
     this._drawerSplitWidget.setSidebarWidget(this._drawerTabbedPane);
 
     // Create main area tabbed pane.
     this._tabbedLocation = UI.viewManager.createTabbedLocation(
-        InspectorFrontendHost.bringToFront.bind(InspectorFrontendHost), 'panel', true, true);
+        InspectorFrontendHost.bringToFront.bind(InspectorFrontendHost), 'panel', true, true,
+        Runtime.queryParam('panel'));
+
     this._tabbedPane = this._tabbedLocation.tabbedPane();
     this._tabbedPane.registerRequiredCSS('ui/inspectorViewTabbedPane.css');
     this._tabbedPane.setTabSlider(true);
     this._tabbedPane.addEventListener(UI.TabbedPane.Events.TabSelected, this._tabSelected, this);
+    this._tabbedPane.setAccessibleName(Common.UIString('Panels'));
 
-    if (InspectorFrontendHost.isUnderTest())
+    if (Host.isUnderTest())
       this._tabbedPane.setAutoSelectFirstItemOnShow(false);
     this._drawerSplitWidget.setMainWidget(this._tabbedPane);
 
@@ -167,11 +170,10 @@ UI.InspectorView = class extends UI.VBox {
 
   /**
    * @param {string} panelName
-   * @param {string} iconType
-   * @param {string=} iconTooltip
+   * @param {?UI.Icon} icon
    */
-  setPanelIcon(panelName, iconType, iconTooltip) {
-    this._tabbedPane.setTabIcon(panelName, iconType, iconTooltip);
+  setPanelIcon(panelName, icon) {
+    this._tabbedPane.setTabIcon(panelName, icon);
   }
 
   /**
@@ -224,14 +226,17 @@ UI.InspectorView = class extends UI.VBox {
     return this._drawerSplitWidget.isSidebarMinimized();
   }
 
+  /**
+   * @param {!Event} event
+   */
   _keyDown(event) {
-    if (!UI.KeyboardShortcut.eventHasCtrlOrMeta(event))
+    var keyboardEvent = /** @type {!KeyboardEvent} */ (event);
+    if (!UI.KeyboardShortcut.eventHasCtrlOrMeta(keyboardEvent) || event.altKey || event.shiftKey)
       return;
 
-    var keyboardEvent = /** @type {!KeyboardEvent} */ (event);
     // Ctrl/Cmd + 1-9 should show corresponding panel.
     var panelShortcutEnabled = Common.moduleSetting('shortcutPanelSwitch').get();
-    if (panelShortcutEnabled && !event.shiftKey && !event.altKey) {
+    if (panelShortcutEnabled) {
       var panelIndex = -1;
       if (event.keyCode > 0x30 && event.keyCode < 0x3A)
         panelIndex = event.keyCode - 0x31;
@@ -248,13 +253,23 @@ UI.InspectorView = class extends UI.VBox {
         }
       }
     }
+
+    if (event.key === '[') {
+      this._tabbedPane.selectPrevTab();
+      event.consume(true);
+    }
+
+    if (event.key === ']') {
+      this._tabbedPane.selectNextTab();
+      event.consume(true);
+    }
   }
 
   /**
    * @override
    */
   onResize() {
-    UI.Dialog.modalHostRepositioned();
+    UI.GlassPane.containerMoved(this.element);
   }
 
   /**

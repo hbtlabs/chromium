@@ -117,6 +117,8 @@ static_library("browser") {
     "ui/card_unmask_prompt_view.h",
     "validation.cc",
     "validation.h",
+    "webdata/autocomplete_sync_bridge.cc",
+    "webdata/autocomplete_sync_bridge.h",
     "webdata/autocomplete_syncable_service.cc",
     "webdata/autocomplete_syncable_service.h",
     "webdata/autofill_change.cc",
@@ -125,6 +127,8 @@ static_library("browser") {
     "webdata/autofill_data_type_controller.h",
     "webdata/autofill_entry.cc",
     "webdata/autofill_entry.h",
+    "webdata/autofill_metadata_change_list.cc",
+    "webdata/autofill_metadata_change_list.h",
     "webdata/autofill_profile_data_type_controller.cc",
     "webdata/autofill_profile_data_type_controller.h",
     "webdata/autofill_profile_syncable_service.cc",
@@ -142,6 +146,8 @@ static_library("browser") {
     "webdata/autofill_webdata_service.cc",
     "webdata/autofill_webdata_service.h",
     "webdata/autofill_webdata_service_observer.h",
+    "webdata/web_data_model_type_controller.cc",
+    "webdata/web_data_model_type_controller.h",
   ]
 
   if (is_ios) {
@@ -221,6 +227,8 @@ static_library("test_support") {
     "suggestion_test_helpers.h",
     "test_autofill_client.cc",
     "test_autofill_client.h",
+    "test_autofill_clock.cc",
+    "test_autofill_clock.h",
     "test_autofill_driver.cc",
     "test_autofill_driver.h",
     "test_autofill_external_delegate.cc",
@@ -316,10 +324,12 @@ source_set("unit_tests") {
     "phone_number_unittest.cc",
     "ui/card_unmask_prompt_controller_impl_unittest.cc",
     "validation_unittest.cc",
+    "webdata/autocomplete_sync_bridge_unittest.cc",
     "webdata/autofill_data_type_controller_unittest.cc",
     "webdata/autofill_profile_syncable_service_unittest.cc",
     "webdata/autofill_table_unittest.cc",
     "webdata/autofill_wallet_metadata_syncable_service_unittest.cc",
+    "webdata/autofill_wallet_syncable_service_unittest.cc",
     "webdata/web_data_service_unittest.cc",
   ]
 
@@ -348,6 +358,7 @@ source_set("unit_tests") {
     "//components/sync:test_support_driver",
     "//components/sync:test_support_model",
     "//components/variations",
+    "//components/variations:test_support",
     "//components/webdata/common",
     "//components/webdata_services:test_support",
     "//google_apis",

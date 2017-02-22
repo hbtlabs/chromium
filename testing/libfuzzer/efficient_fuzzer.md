@@ -58,6 +58,19 @@ fuzzer_test("my_protocol_fuzzer") {
 }
 ```
 
+You may specify multiple seed corpus directories via `seed_corpuses` attribute:
+
+```
+fuzzer_test("my_protocol_fuzzer") {
+  ...
+  seed_corpuses = [ "src/fuzz/testcases", "src/unittest/data" ]
+  ...
+}
+```
+
+All files found in the directories and their subdirectories will be archived
+into `%YOUR_FUZZER_NAME%_seed_corpus.zip` output archive.
+
 If you don't want to store seed corpus in Chromium repository, you can upload
 corpus to Google Cloud Storage bucket used by ClusterFuzz:
 
@@ -199,7 +212,7 @@ ASAN_OPTIONS=coverage=1 ./out/libfuzzer/my_fuzzer -runs=0 ~/tmp/my_fuzzer_corpus
 ./third_party/llvm-build/Release+Asserts/bin/sancov \
   -symbolize my_fuzzer my_fuzzer.123.sancov > my_fuzzer.symcov
 # Launch coverage report server
-curl http://llvm.org/svn/llvm-project/llvm/trunk/tools/sancov/coverage-report-server.py | python3 \
+curl https://llvm.org/svn/llvm-project/llvm/trunk/tools/sancov/coverage-report-server.py | python3 \
   --symcov my_fuzzer.symcov --srcpath path_to_chromium_sources
 # Navigate to http://localhost:8001/ to view coverage report
 ```

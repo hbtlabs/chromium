@@ -9,6 +9,7 @@
 #include <stddef.h>
 
 #include "base/logging.h"
+#include "base/mac/foundation_util.h"
 #include "base/mac/sdk_forward_declarations.h"
 #include "chrome/browser/global_keyboard_shortcuts_mac.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
@@ -16,6 +17,7 @@
 #include "chrome/browser/themes/theme_service.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/browser_window_layout.h"
+#import "chrome/browser/ui/cocoa/browser_window_touch_bar.h"
 #import "chrome/browser/ui/cocoa/browser_window_utils.h"
 #include "chrome/browser/ui/cocoa/l10n_util.h"
 #import "chrome/browser/ui/cocoa/tabs/tab_strip_controller.h"
@@ -24,7 +26,7 @@
 #include "ui/base/cocoa/cocoa_base_utils.h"
 #include "ui/base/cocoa/nsgraphics_context_additions.h"
 #import "ui/base/cocoa/nsview_additions.h"
-#include "ui/base/material_design/material_design_controller.h"
+#import "ui/base/cocoa/touch_bar_forward_declarations.h"
 
 // Implementer's note: Moving the window controls is tricky. When altering the
 // code, ensure that:
@@ -58,7 +60,7 @@ const CGFloat kWindowGradientHeight = 24.0;
 // location (frame bottom is moved down so the buttons are moved down as well).
 - (void)adjustTitlebarContainer:(NSView*)titlebarContainer;
 // Adds layout constraints to window buttons, respecting flag returned by
-// |ShouldDoExperimentalRTLLayout| method.
+// |ShouldFlipWindowControlsInRTL| method.
 - (void)setWindowButtonsConstraints;
 // Replaces -[NSThemeFrame addTrackingArea:] with implementation that ignores
 // tracking rect if its size is the same as the size of window buttons rect
@@ -71,7 +73,7 @@ const CGFloat kWindowGradientHeight = 24.0;
 // titlebar container with correct frame.
 - (void)titlebarDidChangeFrameNotification:(NSNotification*)notification;
 // Adds layout constraints to the given window button so it displayed at correct
-// location. This respects flag returned by |ShouldDoExperimentalRTLLayout|
+// location. This respects flag returned by |ShouldFlipWindowControlsInRTL|
 // method.
 - (void)setLeadingOffset:(CGFloat)leadingOffset
                 toButton:(NSWindowButton)buttonType;
@@ -271,11 +273,11 @@ const CGFloat kWindowGradientHeight = 24.0;
   NSButton* button = [self standardWindowButton:buttonType];
   [button setTranslatesAutoresizingMaskIntoConstraints:NO];
 
-  // Do not use leadingAnchor because |ShouldDoExperimentalRTLLayout|
+  // Do not use leadingAnchor because |ShouldFlipWindowControlsInRTL|
   // should determine if current locale is RTL.
   NSLayoutXAxisAnchor* leadingSourceAnchor = [button leftAnchor];
   NSLayoutXAxisAnchor* leadingTargetAnchor = [[button superview] leftAnchor];
-  if (cocoa_l10n_util::ShouldDoExperimentalRTLLayout()) {
+  if (cocoa_l10n_util::ShouldFlipWindowControlsInRTL()) {
     leadingSourceAnchor = [button rightAnchor];
     leadingTargetAnchor = [[button superview] rightAnchor];
     leadingOffset = -leadingOffset;
@@ -338,7 +340,7 @@ const CGFloat kWindowGradientHeight = 24.0;
       break;
   }
 
-  if (cocoa_l10n_util::ShouldDoExperimentalRTLLayout()) {
+  if (cocoa_l10n_util::ShouldFlipWindowControlsInRTL()) {
     buttonFrame.origin.x =
         NSWidth([self frame]) - buttonFrame.origin.x - NSWidth([button frame]);
   }
@@ -408,7 +410,8 @@ const CGFloat kWindowGradientHeight = 24.0;
   // width and some padding. The new avatar button is displayed to the right
   // of the fullscreen icon, so it doesn't need to be shifted.
   BrowserWindowController* bwc =
-      static_cast<BrowserWindowController*>([self windowController]);
+      base::mac::ObjCCastStrict<BrowserWindowController>(
+          [self windowController]);
   if ([bwc shouldShowAvatar] && ![bwc shouldUseNewAvatarButton]) {
     NSView* avatarButton = [[bwc avatarButtonController] view];
     origin.x = -(NSWidth([avatarButton frame]) + 3);
@@ -498,6 +501,13 @@ const CGFloat kWindowGradientHeight = 24.0;
   }
 
   return themed;
+}
+
+- (NSTouchBar*)makeTouchBar {
+  BrowserWindowController* bwc =
+      base::mac::ObjCCastStrict<BrowserWindowController>(
+          [self windowController]);
+  return [[bwc browserWindowTouchBar] makeTouchBar];
 }
 
 - (NSColor*)titleColor {

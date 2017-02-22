@@ -15,7 +15,6 @@
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "components/crash/core/common/crash_keys.h"
-#include "third_party/kasko/kasko_features.h"
 
 namespace base {
 class CommandLine;
@@ -68,6 +67,11 @@ extern const char kNumExtensionsCount[];
 // "exit" for BROWSER_EXIT, or "end" for END_SESSION.
 extern const char kShutdownType[];
 
+// Stack trace associated to the browser being unpinned and starting the
+// shutdown sequence. The value is set when we trigger a browser crash due to an
+// invalid attempt to Pin the browser process after that.
+extern const char kBrowserUnpinTrace[];
+
 // GPU information.
 #if !defined(OS_ANDROID)
 extern const char kGPUVendorID[];
@@ -95,6 +99,9 @@ extern const char kHungRendererReason[];
 // Third-party module crash keys are sent only on Windows.
 extern const char kThirdPartyModulesLoaded[];
 extern const char kThirdPartyModulesNotLoaded[];
+
+// Whether the machine is enterprise managed (only sent on Windows).
+extern const char kIsEnterpriseManaged[];
 #endif
 
 // Number of input event send IPC failures. Added to debug
@@ -109,6 +116,10 @@ extern const char kPrinterInfo[];
 #if defined(OS_CHROMEOS)
 // The number of simultaneous users in multi profile sessions.
 extern const char kNumberOfUsers[];
+
+// The stack trace of the last good close of a fd that just fails a close.
+// Temporary for https://crbug.com/660960
+extern const char kLastGoodCloseStack[];
 #endif
 
 #if defined(OS_MACOSX)
@@ -130,13 +141,14 @@ extern const char kNSExceptionTrace[];
 // target-action.
 extern const char kSendAction[];
 
-}  // namespace mac
-#endif
+// In the CrApplication, records information about the current event.
+extern const char kNSEvent[];
 
-#if BUILDFLAG(ENABLE_KASKO)
-// Used to correlate a report sent via Kasko with one sent via Breakpad.
-extern const char kKaskoGuid[];
-extern const char kKaskoEquivalentGuid[];
+// TEMPORARY: Information about Toolbar.nib, stored right after it's supposed
+// to have loaded.  https://crbug.com/685985
+extern const char kToolbarNibInfo[];
+
+}  // namespace mac
 #endif
 
 // Numbers of active views.

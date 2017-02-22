@@ -4,6 +4,8 @@
 
 #include "base/task_scheduler/post_task.h"
 
+#include <utility>
+
 #include "base/task_scheduler/task_scheduler.h"
 #include "base/threading/post_task_and_reply_impl.h"
 
@@ -30,26 +32,42 @@ class PostTaskAndReplyTaskRunner : public internal::PostTaskAndReplyImpl {
 }  // namespace
 
 void PostTask(const tracked_objects::Location& from_here, const Closure& task) {
-  PostTaskWithTraits(from_here, TaskTraits(), task);
+  PostDelayedTask(from_here, task, TimeDelta());
+}
+
+void PostDelayedTask(const tracked_objects::Location& from_here,
+                     const Closure& task,
+                     TimeDelta delay) {
+  PostDelayedTaskWithTraits(from_here, TaskTraits(), task, delay);
 }
 
 void PostTaskAndReply(const tracked_objects::Location& from_here,
-                      const Closure& task,
-                      const Closure& reply) {
-  PostTaskWithTraitsAndReply(from_here, TaskTraits(), task, reply);
+                      Closure task,
+                      Closure reply) {
+  PostTaskWithTraitsAndReply(from_here, TaskTraits(), std::move(task),
+                             std::move(reply));
 }
 
 void PostTaskWithTraits(const tracked_objects::Location& from_here,
                         const TaskTraits& traits,
                         const Closure& task) {
-  TaskScheduler::GetInstance()->PostTaskWithTraits(from_here, traits, task);
+  PostDelayedTaskWithTraits(from_here, traits, task, TimeDelta());
+}
+
+void PostDelayedTaskWithTraits(const tracked_objects::Location& from_here,
+                               const TaskTraits& traits,
+                               const Closure& task,
+                               TimeDelta delay) {
+  TaskScheduler::GetInstance()->PostDelayedTaskWithTraits(from_here, traits,
+                                                          task, delay);
 }
 
 void PostTaskWithTraitsAndReply(const tracked_objects::Location& from_here,
                                 const TaskTraits& traits,
-                                const Closure& task,
-                                const Closure& reply) {
-  PostTaskAndReplyTaskRunner(traits).PostTaskAndReply(from_here, task, reply);
+                                Closure task,
+                                Closure reply) {
+  PostTaskAndReplyTaskRunner(traits).PostTaskAndReply(
+      from_here, std::move(task), std::move(reply));
 }
 
 scoped_refptr<TaskRunner> CreateTaskRunnerWithTraits(const TaskTraits& traits) {

@@ -26,7 +26,7 @@
 #ifndef Range_h
 #define Range_h
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/dom/RangeBoundaryPoint.h"
@@ -56,9 +56,9 @@ class CORE_EXPORT Range final : public GarbageCollected<Range>,
   static Range* create(Document&);
   static Range* create(Document&,
                        Node* startContainer,
-                       int startOffset,
+                       unsigned startOffset,
                        Node* endContainer,
-                       int endOffset);
+                       unsigned endOffset);
   static Range* create(Document&, const Position&, const Position&);
   static Range* createAdjustedToTreeScope(const TreeScope&, const Position&);
 
@@ -69,9 +69,9 @@ class CORE_EXPORT Range final : public GarbageCollected<Range>,
     return *m_ownerDocument.get();
   }
   Node* startContainer() const { return m_start.container(); }
-  int startOffset() const { return m_start.offset(); }
+  unsigned startOffset() const { return m_start.offset(); }
   Node* endContainer() const { return m_end.container(); }
-  int endOffset() const { return m_end.offset(); }
+  unsigned endOffset() const { return m_end.offset(); }
 
   bool collapsed() const { return m_start == m_end; }
   bool isConnected() const;
@@ -80,15 +80,15 @@ class CORE_EXPORT Range final : public GarbageCollected<Range>,
   static Node* commonAncestorContainer(const Node* containerA,
                                        const Node* containerB);
   void setStart(Node* container,
-                int offset,
+                unsigned offset,
                 ExceptionState& = ASSERT_NO_EXCEPTION);
   void setEnd(Node* container,
-              int offset,
+              unsigned offset,
               ExceptionState& = ASSERT_NO_EXCEPTION);
   void collapse(bool toStart);
   bool isNodeFullyContained(Node&) const;
-  bool isPointInRange(Node* refNode, int offset, ExceptionState&) const;
-  short comparePoint(Node* refNode, int offset, ExceptionState&) const;
+  bool isPointInRange(Node* refNode, unsigned offset, ExceptionState&) const;
+  short comparePoint(Node* refNode, unsigned offset, ExceptionState&) const;
   enum CompareResults {
     NODE_BEFORE,
     NODE_AFTER,
@@ -100,9 +100,9 @@ class CORE_EXPORT Range final : public GarbageCollected<Range>,
                               const Range* sourceRange,
                               ExceptionState&) const;
   static short compareBoundaryPoints(Node* containerA,
-                                     int offsetA,
+                                     unsigned offsetA,
                                      Node* containerB,
-                                     int offsetB,
+                                     unsigned offsetB,
                                      ExceptionState&);
   static short compareBoundaryPoints(const RangeBoundaryPoint& boundaryA,
                                      const RangeBoundaryPoint& boundaryB,
@@ -155,7 +155,7 @@ class CORE_EXPORT Range final : public GarbageCollected<Range>,
   void didInsertText(Node*, unsigned offset, unsigned length);
   void didRemoveText(Node*, unsigned offset, unsigned length);
   void didMergeTextNodes(const NodeWithIndex& oldNode, unsigned offset);
-  void didSplitTextNode(Text& oldNode);
+  void didSplitTextNode(const Text& oldNode);
   void updateOwnerDocumentIfNeeded();
 
   // Expand range to a unit (word or sentence or block or document) boundary.
@@ -166,7 +166,7 @@ class CORE_EXPORT Range final : public GarbageCollected<Range>,
   ClientRectList* getClientRects() const;
   ClientRect* getBoundingClientRect() const;
 
-  static Node* checkNodeWOffset(Node*, int offset, ExceptionState&);
+  static Node* checkNodeWOffset(Node*, unsigned offset, ExceptionState&);
 
   DECLARE_TRACE();
 
@@ -174,9 +174,9 @@ class CORE_EXPORT Range final : public GarbageCollected<Range>,
   explicit Range(Document&);
   Range(Document&,
         Node* startContainer,
-        int startOffset,
+        unsigned startOffset,
         Node* endContainer,
-        int endOffset);
+        unsigned endOffset);
 
   void setDocument(Document&);
 
@@ -207,6 +207,8 @@ class CORE_EXPORT Range final : public GarbageCollected<Range>,
                                                 Node* clonedContainer,
                                                 Node* commonRoot,
                                                 ExceptionState&);
+  void updateSelectionIfAddedToSelection();
+  void removeFromSelectionIfInDifferentRoot(Document& oldDocument);
 
   Member<Document> m_ownerDocument;  // Cannot be null.
   RangeBoundaryPoint m_start;

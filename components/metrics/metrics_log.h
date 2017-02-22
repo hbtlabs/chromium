@@ -10,6 +10,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -22,12 +23,7 @@ class PrefRegistrySimple;
 class PrefService;
 
 namespace base {
-class DictionaryValue;
 class HistogramSamples;
-}
-
-namespace content {
-struct WebPluginInfo;
 }
 
 namespace variations {
@@ -79,6 +75,10 @@ class MetricsLog {
   // always incrementing for use in measuring time durations.
   static int64_t GetCurrentTime();
 
+  // Record core profile settings into the SystemProfileProto.
+  static void RecordCoreSystemProfile(MetricsServiceClient* client,
+                                      SystemProfileProto* system_profile);
+
   // Records a user-initiated action.
   void RecordUserAction(const std::string& key);
 
@@ -86,6 +86,9 @@ class MetricsLog {
   void RecordHistogramDelta(const std::string& histogram_name,
                             const base::HistogramSamples& snapshot);
 
+
+  // TODO(rkaplow): I think this can be a little refactored as it currently
+  // records a pretty arbitrary set of things.
   // Records the current operating environment, including metrics provided by
   // the specified set of |metrics_providers|.  Takes the list of synthetic
   // trial IDs as a parameter. A synthetic trial is one that is set up
@@ -93,7 +96,7 @@ class MetricsLog {
   // synthetic trial such that the group is determined by the pref value. The
   // current environment is returned serialized as a string.
   std::string RecordEnvironment(
-      const std::vector<MetricsProvider*>& metrics_providers,
+      const std::vector<std::unique_ptr<MetricsProvider>>& metrics_providers,
       const std::vector<variations::ActiveGroupId>& synthetic_trials,
       int64_t install_date,
       int64_t metrics_reporting_enabled_date);
@@ -114,13 +117,13 @@ class MetricsLog {
   // as number of incomplete shutdowns as well as extra breakpad and debugger
   // stats.
   void RecordStabilityMetrics(
-      const std::vector<MetricsProvider*>& metrics_providers,
+      const std::vector<std::unique_ptr<MetricsProvider>>& metrics_providers,
       base::TimeDelta incremental_uptime,
       base::TimeDelta uptime);
 
   // Records general metrics based on the specified |metrics_providers|.
   void RecordGeneralMetrics(
-      const std::vector<MetricsProvider*>& metrics_providers);
+      const std::vector<std::unique_ptr<MetricsProvider>>& metrics_providers);
 
   // Stop writing to this record and generate the encoded representation.
   // None of the Record* methods can be called after this is called.

@@ -15,35 +15,36 @@
 class ArcAppDeferredLauncherController;
 class ChromeLauncherController;
 
+// ArcAppDeferredLauncherItemController displays the icon of the ARC app that
+// cannot be launched immediately (due to ARC not being ready) on Chrome OS'
+// shelf, with an overlaid spinner to provide visual feedback.
 class ArcAppDeferredLauncherItemController : public LauncherItemController {
  public:
   ArcAppDeferredLauncherItemController(
       const std::string& arc_app_id,
       ChromeLauncherController* controller,
+      int event_flags,
       const base::WeakPtr<ArcAppDeferredLauncherController>& host);
 
   ~ArcAppDeferredLauncherItemController() override;
 
   base::TimeDelta GetActiveTime() const;
 
+  int event_flags() const { return event_flags_; }
+
   // ash::ShelfItemDelegate
-  ash::ShelfItemDelegate::PerformedAction ItemSelected(
-      const ui::Event& event) override;
-  base::string16 GetTitle() override;
-  bool CanPin() const override;
-  ash::ShelfMenuModel* CreateApplicationMenu(int event_flags) override;
-  bool IsDraggable() override;
-  bool ShouldShowTooltip() override;
+  ash::ShelfAction ItemSelected(ui::EventType event_type,
+                                int event_flags,
+                                int64_t display_id,
+                                ash::ShelfLaunchSource source) override;
+  ash::ShelfAppMenuItemList GetAppMenuItems(int event_flags) override;
   void Close() override;
 
-  // LauncherItemController overrides:
-  bool IsVisible() const override;
-  void Launch(ash::LaunchSource source, int event_flags) override;
-  ash::ShelfItemDelegate::PerformedAction Activate(
-      ash::LaunchSource source) override;
-  ChromeLauncherAppMenuItems GetApplicationList(int event_flags) override;
-
  private:
+  // The flags of the event that caused the ARC app to be activated. These will
+  // be propagated to the launch event once the app is actually launched.
+  const int event_flags_;
+
   base::WeakPtr<ArcAppDeferredLauncherController> host_;
   const base::Time start_time_;
 

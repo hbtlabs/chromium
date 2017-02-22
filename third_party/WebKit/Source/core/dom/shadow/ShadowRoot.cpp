@@ -101,6 +101,24 @@ SlotAssignment& ShadowRoot::ensureSlotAssignment() {
   return *m_slotAssignment;
 }
 
+HTMLSlotElement* ShadowRoot::assignedSlotFor(const Node& node) {
+  if (!m_slotAssignment)
+    return nullptr;
+  return m_slotAssignment->findSlot(node);
+}
+
+void ShadowRoot::didAddSlot(HTMLSlotElement& slot) {
+  DCHECK(isV1());
+  ensureSlotAssignment().didAddSlot(slot);
+}
+
+void ShadowRoot::didChangeHostChildSlotName(const AtomicString& oldValue,
+                                            const AtomicString& newValue) {
+  if (!m_slotAssignment)
+    return;
+  m_slotAssignment->didChangeHostChildSlotName(oldValue, newValue);
+}
+
 Node* ShadowRoot::cloneNode(bool, ExceptionState& exceptionState) {
   exceptionState.throwDOMException(NotSupportedError,
                                    "ShadowRoot nodes are not clonable.");
@@ -129,10 +147,19 @@ void ShadowRoot::recalcStyle(StyleRecalcChange change) {
 
   // There's no style to update so just calling recalcStyle means we're updated.
   clearNeedsStyleRecalc();
-  clearNeedsReattachLayoutTree();
 
   recalcDescendantStyles(change);
   clearChildNeedsStyleRecalc();
+}
+
+void ShadowRoot::rebuildLayoutTree() {
+  // ShadowRoot doesn't support custom callbacks.
+  DCHECK(!hasCustomStyleCallbacks());
+
+  StyleSharingDepthScope sharingScope(*this);
+
+  clearNeedsReattachLayoutTree();
+  rebuildChildrenLayoutTrees();
   clearChildNeedsReattachLayoutTree();
 }
 
@@ -274,7 +301,7 @@ ShadowRoot::descendantInsertionPoints() {
   HeapVector<Member<InsertionPoint>> insertionPoints;
   for (InsertionPoint& insertionPoint :
        Traversal<InsertionPoint>::descendantsOf(*this))
-    insertionPoints.append(&insertionPoint);
+    insertionPoints.push_back(&insertionPoint);
 
   ensureShadowRootRareDataV0().setDescendantInsertionPoints(insertionPoints);
 

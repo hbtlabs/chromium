@@ -4,14 +4,14 @@
 
 #include "core/loader/LinkLoader.h"
 
-#include "core/fetch/MemoryCache.h"
-#include "core/fetch/ResourceFetcher.h"
 #include "core/frame/Settings.h"
 #include "core/html/LinkRelAttribute.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/LinkLoaderClient.h"
 #include "core/loader/NetworkHintsInterface.h"
 #include "core/testing/DummyPageHolder.h"
+#include "platform/loader/fetch/MemoryCache.h"
+#include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/network/ResourceLoadPriority.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "public/platform/Platform.h"
@@ -43,15 +43,19 @@ class MockLinkLoaderClient final
   void didSendLoadForLinkPrerender() override {}
   void didSendDOMContentLoadedForLinkPrerender() override {}
 
+  RefPtr<WebTaskRunner> getLoadingTaskRunner() override {
+    return Platform::current()->currentThread()->getWebTaskRunner();
+  }
+
  private:
   explicit MockLinkLoaderClient(bool shouldLoad) : m_shouldLoad(shouldLoad) {}
 
-  bool m_shouldLoad;
+  const bool m_shouldLoad;
 };
 
 class NetworkHintsMock : public NetworkHintsInterface {
  public:
-  NetworkHintsMock() : m_didDnsPrefetch(false), m_didPreconnect(false) {}
+  NetworkHintsMock() {}
 
   void dnsPrefetchHost(const String& host) const override {
     m_didDnsPrefetch = true;
@@ -71,10 +75,10 @@ class NetworkHintsMock : public NetworkHintsInterface {
   bool isCrossOrigin() { return m_isCrossOrigin; }
 
  private:
-  mutable bool m_didDnsPrefetch;
-  mutable bool m_didPreconnect;
-  mutable bool m_isHTTPS;
-  mutable bool m_isCrossOrigin;
+  mutable bool m_didDnsPrefetch = false;
+  mutable bool m_didPreconnect = false;
+  mutable bool m_isHTTPS = false;
+  mutable bool m_isCrossOrigin = false;
 };
 
 TEST(LinkLoaderTest, Preload) {
@@ -247,8 +251,9 @@ TEST(LinkLoaderTest, Preload) {
       }
       dummyPageHolder->document().fetcher()->clearPreloads();
     }
-    memoryCache()->evictResources();
-    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
+    Platform::current()
+        ->getURLLoaderMockFactory()
+        ->unregisterAllURLsAndClearMemoryCache();
   }
 }
 
@@ -299,7 +304,9 @@ TEST(LinkLoaderTest, Prefetch) {
                   resource->resourceRequest().getReferrerPolicy());
       }
     }
-    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
+    Platform::current()
+        ->getURLLoaderMockFactory()
+        ->unregisterAllURLsAndClearMemoryCache();
   }
 }
 

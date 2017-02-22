@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "skia/ext/analysis_canvas.h"
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
-#include "skia/ext/analysis_canvas.h"
-#include "third_party/skia/include/core/SkDraw.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkRRect.h"
+#include "third_party/skia/include/core/SkRegion.h"
 #include "third_party/skia/include/core/SkShader.h"
 
 namespace {
@@ -52,7 +52,7 @@ bool IsFullQuad(SkCanvas* canvas, const SkRect& drawn_rect) {
     return false;
 
   SkIRect clip_irect;
-  if (!canvas->getClipDeviceBounds(&clip_irect))
+  if (!canvas->getDeviceClipBounds(&clip_irect))
     return false;
 
   // if the clip is smaller than the canvas, we're partly clipped, so abort.
@@ -91,7 +91,7 @@ void AnalysisCanvas::SetForceNotTransparent(bool flag) {
 void AnalysisCanvas::onDrawPaint(const SkPaint& paint) {
   TRACE_EVENT0("disabled-by-default-skia", "AnalysisCanvas::onDrawPaint");
   SkRect rect;
-  if (getClipBounds(&rect))
+  if (getLocalClipBounds(&rect))
     drawRect(rect, paint);
 }
 
@@ -332,16 +332,8 @@ void AnalysisCanvas::onDrawVertices(SkCanvas::VertexMode,
   ++draw_op_count_;
 }
 
-// Needed for now, since SkCanvas requires a bitmap, even if it is not backed
-// by any pixels
-static SkBitmap MakeEmptyBitmap(int width, int height) {
-  SkBitmap bitmap;
-  bitmap.setInfo(SkImageInfo::MakeUnknown(width, height));
-  return bitmap;
-}
-
 AnalysisCanvas::AnalysisCanvas(int width, int height)
-    : INHERITED(MakeEmptyBitmap(width, height)),
+    : INHERITED(width, height),
       saved_stack_size_(0),
       force_not_solid_stack_level_(kNoLayer),
       force_not_transparent_stack_level_(kNoLayer),
@@ -351,8 +343,7 @@ AnalysisCanvas::AnalysisCanvas(int width, int height)
       color_(SK_ColorTRANSPARENT),
       is_transparent_(true),
       draw_op_count_(0),
-      rejected_op_count_(0) {
-}
+      rejected_op_count_(0) {}
 
 AnalysisCanvas::~AnalysisCanvas() {}
 
@@ -400,13 +391,13 @@ void AnalysisCanvas::OnComplexClip() {
 }
 
 void AnalysisCanvas::onClipRect(const SkRect& rect,
-                                SkRegion::Op op,
+                                SkClipOp op,
                                 ClipEdgeStyle edge_style) {
   INHERITED::onClipRect(rect, op, edge_style);
 }
 
 void AnalysisCanvas::onClipPath(const SkPath& path,
-                                SkRegion::Op op,
+                                SkClipOp op,
                                 ClipEdgeStyle edge_style) {
   OnComplexClip();
   INHERITED::onClipRect(path.getBounds(), op, edge_style);
@@ -433,10 +424,10 @@ bool doesCoverCanvas(const SkRRect& rr,
 }
 
 void AnalysisCanvas::onClipRRect(const SkRRect& rrect,
-                                 SkRegion::Op op,
+                                 SkClipOp op,
                                  ClipEdgeStyle edge_style) {
   SkIRect clip_device_bounds;
-  if (getClipDeviceBounds(&clip_device_bounds) &&
+  if (getDeviceClipBounds(&clip_device_bounds) &&
       doesCoverCanvas(rrect, getTotalMatrix(), clip_device_bounds)) {
     // If the canvas is fully contained within the clip, it is as if we weren't
     // clipped at all, so bail early.
@@ -447,7 +438,7 @@ void AnalysisCanvas::onClipRRect(const SkRRect& rrect,
   INHERITED::onClipRect(rrect.getBounds(), op, edge_style);
 }
 
-void AnalysisCanvas::onClipRegion(const SkRegion& deviceRgn, SkRegion::Op op) {
+void AnalysisCanvas::onClipRegion(const SkRegion& deviceRgn, SkClipOp op) {
   const ClipEdgeStyle edge_style = kHard_ClipEdgeStyle;
   if (deviceRgn.isRect()) {
     onClipRect(SkRect::MakeFromIRect(deviceRgn.getBounds()), op, edge_style);

@@ -7,7 +7,7 @@ package org.chromium.chrome.browser.media.ui;
 import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE;
 
 import android.app.Notification;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 import android.view.View;
 import android.widget.TextView;
 
@@ -27,6 +27,7 @@ import org.chromium.content.browser.test.util.JavaScriptUtils;
 import org.chromium.content_public.browser.MediaSession;
 import org.chromium.content_public.browser.MediaSessionObserver;
 import org.chromium.content_public.common.MediaMetadata;
+import org.chromium.net.test.EmbeddedTestServer;
 
 /**
  * Test of media notifications to see whether the text updates when the tab title changes or the
@@ -35,8 +36,10 @@ import org.chromium.content_public.common.MediaMetadata;
 @RetryOnFailure
 public class NotificationTitleUpdatedTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     private static final int NOTIFICATION_ID = R.id.media_playback_notification;
+    private static final String SIMPLE_PAGE_URL = "/simple_page.html";
 
     private Tab mTab;
+    private EmbeddedTestServer mTestServer;
 
     public NotificationTitleUpdatedTest() {
         super(ChromeActivity.class);
@@ -49,34 +52,45 @@ public class NotificationTitleUpdatedTest extends ChromeActivityTestCaseBase<Chr
         simulateUpdateTitle(mTab, "title1");
     }
 
-    private void doTestSessionStatePlaying() throws InterruptedException {
+    @Override
+    protected void tearDown() throws Exception {
+        if (mTestServer != null) mTestServer.stopAndDestroyServer();
+        super.tearDown();
+    }
+
+    @SmallTest
+    public void testSessionStatePlaying() {
         simulateMediaSessionStateChanged(mTab, true, false);
         assertTitleMatches("title1");
         simulateUpdateTitle(mTab, "title2");
         assertTitleMatches("title2");
     }
 
-    private void doTestSessionStatePaused() throws InterruptedException {
+    @SmallTest
+    public void testSessionStatePaused() {
         simulateMediaSessionStateChanged(mTab, true, true);
         assertTitleMatches("title1");
         simulateUpdateTitle(mTab, "title2");
         assertTitleMatches("title2");
     }
 
-    private void doTestSessionStateUncontrollable() throws InterruptedException {
+    @SmallTest
+    public void testSessionStateUncontrollable() {
         simulateMediaSessionStateChanged(mTab, true, false);
         assertTitleMatches("title1");
         simulateMediaSessionStateChanged(mTab, false, false);
         simulateUpdateTitle(mTab, "title2");
     }
 
-    private void doTestMediaMetadataSetsTitle() throws InterruptedException {
+    @SmallTest
+    public void testMediaMetadataSetsTitle() {
         simulateMediaSessionStateChanged(mTab, true, false);
         simulateMediaSessionMetadataChanged(mTab, new MediaMetadata("title2", "", ""));
         assertTitleMatches("title2");
     }
 
-    private void doTestMediaMetadataOverridesTitle() throws InterruptedException {
+    @SmallTest
+    public void testMediaMetadataOverridesTitle() {
         simulateMediaSessionStateChanged(mTab, true, false);
         simulateMediaSessionMetadataChanged(mTab, new MediaMetadata("title2", "", ""));
         assertTitleMatches("title2");
@@ -94,7 +108,9 @@ public class NotificationTitleUpdatedTest extends ChromeActivityTestCaseBase<Chr
      *   4. change the title of newTab and then mTab to different names,
      *      the notification should have the title of newTab.
      */
-    private void doTestMultipleTabs() throws Throwable {
+    @SmallTest
+    @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    public void testMultipleTabs() throws Throwable {
         simulateMediaSessionStateChanged(mTab, true, false);
         assertTitleMatches("title1");
         simulateMediaSessionStateChanged(mTab, false, false);
@@ -109,36 +125,27 @@ public class NotificationTitleUpdatedTest extends ChromeActivityTestCaseBase<Chr
     }
 
     @SmallTest
-    public void testSessionStatePlaying_MediaStyleNotification() throws InterruptedException {
-        doTestSessionStatePlaying();
+    public void testMediaMetadataResetsAfterNavigation() throws Throwable {
+        loadUrl("about:blank");
+        simulateMediaSessionStateChanged(mTab, true, false);
+        simulateMediaSessionMetadataChanged(mTab, new MediaMetadata("title2", "", ""));
+        assertTitleMatches("title2");
+
+        loadUrl("data:text/html;charset=utf-8,"
+                + "<html><head><title>title1</title></head><body/></html>");
+        assertTitleMatches("title1");
     }
 
     @SmallTest
-    public void testSessionStatePaused_MediaStyleNotification() throws InterruptedException {
-        doTestSessionStatePaused();
-    }
+    public void testMediaMetadataPersistsAfterInPageNavigation() throws Throwable {
+        ensureTestServer();
+        loadUrl(mTestServer.getURL(SIMPLE_PAGE_URL));
+        simulateMediaSessionStateChanged(mTab, true, false);
+        simulateMediaSessionMetadataChanged(mTab, new MediaMetadata("title2", "", ""));
+        assertTitleMatches("title2");
 
-    @SmallTest
-    public void testSessionStateUncontrollable_MediaStyleNotification()
-            throws InterruptedException {
-        doTestSessionStateUncontrollable();
-    }
-
-    @SmallTest
-    public void testMediaMetadataSetsTitle_MediaStyleNotification() throws InterruptedException {
-        doTestMediaMetadataSetsTitle();
-    }
-
-    @SmallTest
-    public void testMediaMetadataOverridesTitle_MediaStyleNotification()
-            throws InterruptedException {
-        doTestMediaMetadataOverridesTitle();
-    }
-
-    @SmallTest
-    @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
-    public void testMultipleTabs_MediaStyleNotification() throws Throwable {
-        doTestMultipleTabs();
+        loadUrl(mTestServer.getURL(SIMPLE_PAGE_URL + "#some-anchor"));
+        assertTitleMatches("title2");
     }
 
     @Override
@@ -186,7 +193,7 @@ public class NotificationTitleUpdatedTest extends ChromeActivityTestCaseBase<Chr
         }
     }
 
-    void assertTitleMatches(final String title) throws InterruptedException {
+    private void assertTitleMatches(final String title) {
         // The service might still not be created which delays the creation of the notification
         // builder.
         CriteriaHelper.pollUiThread(new Criteria() {
@@ -219,5 +226,14 @@ public class NotificationTitleUpdatedTest extends ChromeActivityTestCaseBase<Chr
                     assertEquals(title, observedText);
                 }
             });
+    }
+
+    private void ensureTestServer() {
+        try {
+            mTestServer = EmbeddedTestServer.createAndStartServer(
+                getInstrumentation().getContext());
+        } catch (Exception e) {
+            fail("Failed to start test server");
+        }
     }
 }

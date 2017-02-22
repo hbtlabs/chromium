@@ -29,6 +29,7 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "modules/mediastream/MediaStreamTrack.h"
 #include "modules/peerconnection/RTCDTMFToneChangeEvent.h"
 #include "public/platform/WebMediaStreamTrack.h"
@@ -50,8 +51,8 @@ RTCDTMFSender* RTCDTMFSender::create(
     WebRTCPeerConnectionHandler* peerConnectionHandler,
     MediaStreamTrack* track,
     ExceptionState& exceptionState) {
-  std::unique_ptr<WebRTCDTMFSenderHandler> handler =
-      wrapUnique(peerConnectionHandler->createDTMFSender(track->component()));
+  std::unique_ptr<WebRTCDTMFSenderHandler> handler = WTF::wrapUnique(
+      peerConnectionHandler->createDTMFSender(track->component()));
   if (!handler) {
     exceptionState.throwDOMException(NotSupportedError,
                                      "The MediaStreamTrack provided is not an "
@@ -60,23 +61,22 @@ RTCDTMFSender* RTCDTMFSender::create(
     return nullptr;
   }
 
-  RTCDTMFSender* dtmfSender =
-      new RTCDTMFSender(context, track, std::move(handler));
-  dtmfSender->suspendIfNeeded();
-  return dtmfSender;
+  return new RTCDTMFSender(context, track, std::move(handler));
 }
 
 RTCDTMFSender::RTCDTMFSender(ExecutionContext* context,
                              MediaStreamTrack* track,
                              std::unique_ptr<WebRTCDTMFSenderHandler> handler)
-    : ActiveDOMObject(context),
+    : ContextLifecycleObserver(context),
       m_track(track),
       m_duration(defaultToneDurationMs),
       m_interToneGap(defaultInterToneGapMs),
       m_handler(std::move(handler)),
       m_stopped(false),
-      m_scheduledEventTimer(this, &RTCDTMFSender::scheduledEventTimerFired) {
-  ThreadState::current()->registerPreFinalizer(this);
+      m_scheduledEventTimer(
+          TaskRunnerHelper::get(TaskType::Networking, context),
+          this,
+          &RTCDTMFSender::scheduledEventTimerFired) {
   m_handler->setClient(this);
 }
 
@@ -157,16 +157,16 @@ const AtomicString& RTCDTMFSender::interfaceName() const {
 }
 
 ExecutionContext* RTCDTMFSender::getExecutionContext() const {
-  return ActiveDOMObject::getExecutionContext();
+  return ContextLifecycleObserver::getExecutionContext();
 }
 
-void RTCDTMFSender::contextDestroyed() {
+void RTCDTMFSender::contextDestroyed(ExecutionContext*) {
   m_stopped = true;
   m_handler->setClient(nullptr);
 }
 
 void RTCDTMFSender::scheduleDispatchEvent(Event* event) {
-  m_scheduledEvents.append(event);
+  m_scheduledEvents.push_back(event);
 
   if (!m_scheduledEventTimer.isActive())
     m_scheduledEventTimer.startOneShot(0, BLINK_FROM_HERE);
@@ -188,7 +188,7 @@ DEFINE_TRACE(RTCDTMFSender) {
   visitor->trace(m_track);
   visitor->trace(m_scheduledEvents);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
 }
 
 }  // namespace blink

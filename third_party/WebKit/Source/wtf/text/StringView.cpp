@@ -16,8 +16,9 @@ StringView::StringView(const UChar* chars)
 #if DCHECK_IS_ON()
 StringView::~StringView() {
   DCHECK(m_impl);
-  DCHECK(!m_impl->hasOneRef()) << "StringView does not own the StringImpl, it "
-                                  "must not have the last ref.";
+  DCHECK(!m_impl->hasOneRef() || m_impl->isStatic())
+      << "StringView does not own the StringImpl, it "
+         "must not have the last ref.";
 }
 #endif
 
@@ -25,7 +26,7 @@ String StringView::toString() const {
   if (isNull())
     return String();
   if (isEmpty())
-    return emptyString();
+    return emptyString;
   if (StringImpl* impl = sharedImpl())
     return impl;
   if (is8Bit())

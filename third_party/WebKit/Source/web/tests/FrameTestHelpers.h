@@ -34,6 +34,7 @@
 #include "core/frame/Settings.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/scroll/ScrollbarTheme.h"
+#include "public/platform/WebMouseEvent.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/web/WebFrameClient.h"
@@ -75,7 +76,7 @@ void loadHistoryItem(WebFrame*,
                      WebCachePolicy);
 // Same as above, but for WebFrame::reload().
 void reloadFrame(WebFrame*);
-void reloadFrameIgnoringCache(WebFrame*);
+void reloadFrameBypassingCache(WebFrame*);
 
 // Pumps pending resource requests while waiting for a frame to load. Consider
 // using one of the above helper methods whenever possible.
@@ -140,6 +141,10 @@ class TestWebWidgetClient : public WebWidgetClient {
  public:
   virtual ~TestWebWidgetClient() {}
   bool allowsBrokenNullLayerTreeView() const override { return true; }
+  WebLayerTreeView* initializeLayerTreeView() override;
+
+ private:
+  std::unique_ptr<WebLayerTreeView> m_layerTreeView;
 };
 
 class TestWebViewWidgetClient : public TestWebWidgetClient {
@@ -148,8 +153,7 @@ class TestWebViewWidgetClient : public TestWebWidgetClient {
       : m_testWebViewClient(testWebViewClient) {}
   virtual ~TestWebViewWidgetClient() {}
 
-  void initializeLayerTreeView() override;
-  WebLayerTreeView* layerTreeView() override;
+  WebLayerTreeView* initializeLayerTreeView() override;
   void scheduleAnimation() override;
   void didMeaningfulLayout(WebMeaningfulLayout) override;
 
@@ -162,8 +166,7 @@ class TestWebViewClient : public WebViewClient {
   TestWebViewClient()
       : m_testWebWidgetClient(this), m_animationScheduled(false) {}
   virtual ~TestWebViewClient() {}
-  void initializeLayerTreeView() override;
-  WebLayerTreeView* layerTreeView() override { return m_layerTreeView.get(); }
+  WebLayerTreeView* initializeLayerTreeView() override;
 
   void scheduleAnimation() override { m_animationScheduled = true; }
   bool animationScheduled() { return m_animationScheduled; }
@@ -238,6 +241,7 @@ class TestWebFrameClient : public WebFrameClient {
  public:
   TestWebFrameClient();
 
+  void frameDetached(WebLocalFrame*, DetachType) override;
   WebLocalFrame* createChildFrame(WebLocalFrame* parent,
                                   WebTreeScopeType,
                                   const WebString& name,
@@ -248,6 +252,9 @@ class TestWebFrameClient : public WebFrameClient {
   void didStopLoading() override;
 
   bool isLoading() { return m_loadsInProgress > 0; }
+
+  // Tests can override the virtual method below to mock the interface provider.
+  virtual blink::InterfaceProvider* interfaceProvider() { return nullptr; }
 
  private:
   int m_loadsInProgress = 0;

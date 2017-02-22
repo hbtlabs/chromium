@@ -62,6 +62,42 @@
 
 namespace blink {
 
+class WebAXSparseAttributeClientAdapter : public AXSparseAttributeClient {
+ public:
+  WebAXSparseAttributeClientAdapter(WebAXSparseAttributeClient& attributeMap)
+      : m_attributeMap(attributeMap) {}
+  virtual ~WebAXSparseAttributeClientAdapter() {}
+
+ private:
+  WebAXSparseAttributeClient& m_attributeMap;
+
+  void addBoolAttribute(AXBoolAttribute attribute, bool value) override {
+    m_attributeMap.addBoolAttribute(static_cast<WebAXBoolAttribute>(attribute),
+                                    value);
+  }
+
+  void addStringAttribute(AXStringAttribute attribute,
+                          const String& value) override {
+    m_attributeMap.addStringAttribute(
+        static_cast<WebAXStringAttribute>(attribute), value);
+  }
+
+  void addObjectAttribute(AXObjectAttribute attribute,
+                          AXObject& value) override {
+    m_attributeMap.addObjectAttribute(
+        static_cast<WebAXObjectAttribute>(attribute), WebAXObject(&value));
+  }
+
+  void addObjectVectorAttribute(AXObjectVectorAttribute attribute,
+                                HeapVector<Member<AXObject>>& value) override {
+    WebVector<WebAXObject> result(value.size());
+    for (size_t i = 0; i < value.size(); i++)
+      result[i] = WebAXObject(value[i]);
+    m_attributeMap.addObjectVectorAttribute(
+        static_cast<WebAXObjectVectorAttribute>(attribute), result);
+  }
+};
+
 #if DCHECK_IS_ON()
 // It's not safe to call some WebAXObject APIs if a layout is pending.
 // Clients should call updateLayoutAndCheckValidity first.
@@ -133,11 +169,11 @@ bool WebAXObject::updateLayoutAndCheckValidity() {
   return !isDetached();
 }
 
-WebString WebAXObject::actionVerb() const {
+WebAXSupportedAction WebAXObject::action() const {
   if (isDetached())
-    return WebString();
+    return WebAXSupportedAction::None;
 
-  return m_private->actionVerb();
+  return static_cast<WebAXSupportedAction>(m_private->action());
 }
 
 bool WebAXObject::canDecrement() const {
@@ -198,6 +234,15 @@ WebAXObject WebAXObject::parentObject() const {
     return WebAXObject();
 
   return WebAXObject(m_private->parentObject());
+}
+
+void WebAXObject::getSparseAXAttributes(
+    WebAXSparseAttributeClient& client) const {
+  if (isDetached())
+    return;
+
+  WebAXSparseAttributeClientAdapter adapter(client);
+  m_private->getSparseAXAttributes(adapter);
 }
 
 bool WebAXObject::canSetSelectedAttribute() const {
@@ -311,6 +356,13 @@ bool WebAXObject::isLoaded() const {
     return false;
 
   return m_private->isLoaded();
+}
+
+bool WebAXObject::isModal() const {
+  if (isDetached())
+    return false;
+
+  return m_private->isModal();
 }
 
 bool WebAXObject::isMultiSelectable() const {
@@ -432,41 +484,11 @@ WebAXObject WebAXObject::ariaActiveDescendant() const {
   return WebAXObject(m_private->activeDescendant());
 }
 
-bool WebAXObject::ariaControls(WebVector<WebAXObject>& controlsElements) const {
-  if (isDetached())
-    return false;
-
-  AXObject::AXObjectVector controls;
-  m_private->ariaControlsElements(controls);
-
-  WebVector<WebAXObject> result(controls.size());
-  for (size_t i = 0; i < controls.size(); i++)
-    result[i] = WebAXObject(controls[i]);
-  controlsElements.swap(result);
-
-  return true;
-}
-
 bool WebAXObject::ariaHasPopup() const {
   if (isDetached())
     return false;
 
   return m_private->ariaHasPopup();
-}
-
-bool WebAXObject::ariaFlowTo(WebVector<WebAXObject>& flowToElements) const {
-  if (isDetached())
-    return false;
-
-  AXObject::AXObjectVector flowTo;
-  m_private->ariaFlowToElements(flowTo);
-
-  WebVector<WebAXObject> result(flowTo.size());
-  for (size_t i = 0; i < flowTo.size(); i++)
-    result[i] = WebAXObject(flowTo[i]);
-  flowToElements.swap(result);
-
-  return true;
 }
 
 bool WebAXObject::isEditable() const {
@@ -606,6 +628,13 @@ bool WebAXObject::canvasHasFallbackContent() const {
     return false;
 
   return m_private->canvasHasFallbackContent();
+}
+
+WebString WebAXObject::imageDataUrl(const WebSize& maxSize) const {
+  if (isDetached())
+    return WebString();
+
+  return m_private->imageDataUrl(maxSize);
 }
 
 WebAXInvalidState WebAXObject::invalidState() const {
@@ -978,14 +1007,11 @@ WebString WebAXObject::description(
   return result;
 }
 
-WebString WebAXObject::placeholder(WebAXNameFrom nameFrom,
-                                   WebAXDescriptionFrom descriptionFrom) const {
+WebString WebAXObject::placeholder(WebAXNameFrom nameFrom) const {
   if (isDetached())
     return WebString();
 
-  return m_private->placeholder(
-      static_cast<AXNameFrom>(nameFrom),
-      static_cast<AXDescriptionFrom>(descriptionFrom));
+  return m_private->placeholder(static_cast<AXNameFrom>(nameFrom));
 }
 
 bool WebAXObject::supportsRangeValue() const {
@@ -1103,6 +1129,49 @@ bool WebAXObject::lineBreaks(WebVector<int>& result) const {
   return true;
 }
 
+int WebAXObject::ariaColumnCount() const {
+  if (isDetached())
+    return 0;
+
+  if (!m_private->isAXTable())
+    return 0;
+
+  return toAXTable(m_private.get())->ariaColumnCount();
+}
+
+unsigned WebAXObject::ariaColumnIndex() const {
+  if (isDetached())
+    return 0;
+
+  if (!m_private->isTableCell())
+    return 0;
+
+  return toAXTableCell(m_private.get())->ariaColumnIndex();
+}
+
+int WebAXObject::ariaRowCount() const {
+  if (isDetached())
+    return 0;
+
+  if (!m_private->isAXTable())
+    return 0;
+
+  return toAXTable(m_private.get())->ariaRowCount();
+}
+
+unsigned WebAXObject::ariaRowIndex() const {
+  if (isDetached())
+    return 0;
+
+  if (m_private->isTableCell())
+    return toAXTableCell(m_private.get())->ariaRowIndex();
+
+  if (m_private->isTableRow())
+    return toAXTableRow(m_private.get())->ariaRowIndex();
+
+  return 0;
+}
+
 unsigned WebAXObject::columnCount() const {
   if (isDetached())
     return false;
@@ -1115,7 +1184,7 @@ unsigned WebAXObject::columnCount() const {
 
 unsigned WebAXObject::rowCount() const {
   if (isDetached())
-    return false;
+    return 0;
 
   if (!m_private->isAXTable())
     return 0;
@@ -1397,11 +1466,11 @@ bool WebAXObject::isScrollableContainer() const {
   return m_private->isScrollableContainer();
 }
 
-WebPoint WebAXObject::scrollOffset() const {
+WebPoint WebAXObject::getScrollOffset() const {
   if (isDetached())
     return WebPoint();
 
-  return m_private->scrollOffset();
+  return m_private->getScrollOffset();
 }
 
 WebPoint WebAXObject::minimumScrollOffset() const {

@@ -7,6 +7,7 @@
 #include "ash/common/accelerators/accelerator_table.h"
 #include "ash/common/accessibility_delegate.h"
 #include "ash/common/accessibility_types.h"
+#include "ash/common/ash_switches.h"
 #include "ash/common/ime_control_delegate.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/system/brightness_control_delegate.h"
@@ -18,15 +19,19 @@
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/wm_event.h"
 #include "ash/common/wm_lookup.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
 #include "ash/mus/accelerators/accelerator_controller_registrar_test_api.h"
 #include "ash/mus/bridge/wm_shell_mus_test_api.h"
-#include "ash/mus/bridge/wm_window_mus.h"
 #include "ash/mus/property_util.h"
 #include "ash/mus/test/wm_test_base.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/root_window_controller.h"
+#include "base/command_line.h"
 #include "base/test/user_action_tester.cc"
+#include "services/ui/public/interfaces/window_manager.mojom.h"
+#include "ui/aura/client/aura_constants.h"
+#include "ui/aura/window.h"
 #include "ui/events/event.h"
 #include "ui/events/event_processor.h"
 #include "ui/events/test/event_generator.h"
@@ -256,7 +261,7 @@ class AcceleratorControllerTest : public mus::WmTestBase {
         test::TestShelfDelegate::instance();
     shelf_delegate->AddShelfItem(window);
     PanelLayoutManager* manager =
-        PanelLayoutManager::Get(WmWindowAura::Get(window));
+        PanelLayoutManager::Get(WmWindow::Get(window));
     manager->Relayout();
     return window;
   }
@@ -339,21 +344,30 @@ TEST_F(AcceleratorControllerTest, LingeringExitWarningBubble) {
 #endif  // !defined(OS_WIN)
 
 TEST_F(AcceleratorControllerTest, Register) {
-  const ui::Accelerator accelerator_a(ui::VKEY_A, ui::EF_NONE);
   TestTarget target;
-  GetController()->Register(accelerator_a, &target);
+  const ui::Accelerator accelerator_a(ui::VKEY_A, ui::EF_NONE);
+  const ui::Accelerator accelerator_b(ui::VKEY_B, ui::EF_NONE);
+  const ui::Accelerator accelerator_c(ui::VKEY_C, ui::EF_NONE);
+  const ui::Accelerator accelerator_d(ui::VKEY_D, ui::EF_NONE);
 
-  // The registered accelerator is processed.
+  GetController()->Register(
+      {accelerator_a, accelerator_b, accelerator_c, accelerator_d}, &target);
+
+  // The registered accelerators are processed.
   EXPECT_TRUE(ProcessInController(accelerator_a));
-  EXPECT_EQ(1, target.accelerator_pressed_count());
+  EXPECT_TRUE(ProcessInController(accelerator_b));
+  EXPECT_TRUE(ProcessInController(accelerator_c));
+  EXPECT_TRUE(ProcessInController(accelerator_d));
+  EXPECT_EQ(4, target.accelerator_pressed_count());
 }
 
 TEST_F(AcceleratorControllerTest, RegisterMultipleTarget) {
   const ui::Accelerator accelerator_a(ui::VKEY_A, ui::EF_NONE);
   TestTarget target1;
-  GetController()->Register(accelerator_a, &target1);
+  GetController()->Register({accelerator_a}, &target1);
+
   TestTarget target2;
-  GetController()->Register(accelerator_a, &target2);
+  GetController()->Register({accelerator_a}, &target2);
 
   // If multiple targets are registered with the same accelerator, the target
   // registered later processes the accelerator.
@@ -363,11 +377,10 @@ TEST_F(AcceleratorControllerTest, RegisterMultipleTarget) {
 }
 
 TEST_F(AcceleratorControllerTest, Unregister) {
-  const ui::Accelerator accelerator_a(ui::VKEY_A, ui::EF_NONE);
   TestTarget target;
-  GetController()->Register(accelerator_a, &target);
+  const ui::Accelerator accelerator_a(ui::VKEY_A, ui::EF_NONE);
   const ui::Accelerator accelerator_b(ui::VKEY_B, ui::EF_NONE);
-  GetController()->Register(accelerator_b, &target);
+  GetController()->Register({accelerator_a, accelerator_b}, &target);
 
   // Unregistering a different accelerator does not affect the other
   // accelerator.
@@ -383,14 +396,13 @@ TEST_F(AcceleratorControllerTest, Unregister) {
 }
 
 TEST_F(AcceleratorControllerTest, UnregisterAll) {
-  const ui::Accelerator accelerator_a(ui::VKEY_A, ui::EF_NONE);
   TestTarget target1;
-  GetController()->Register(accelerator_a, &target1);
+  const ui::Accelerator accelerator_a(ui::VKEY_A, ui::EF_NONE);
   const ui::Accelerator accelerator_b(ui::VKEY_B, ui::EF_NONE);
-  GetController()->Register(accelerator_b, &target1);
+  GetController()->Register({accelerator_a, accelerator_b}, &target1);
   const ui::Accelerator accelerator_c(ui::VKEY_C, ui::EF_NONE);
   TestTarget target2;
-  GetController()->Register(accelerator_c, &target2);
+  GetController()->Register({accelerator_c}, &target2);
   GetController()->UnregisterAll(&target1);
 
   // All the accelerators registered for |target1| are no longer processed.
@@ -406,7 +418,7 @@ TEST_F(AcceleratorControllerTest, UnregisterAll) {
 TEST_F(AcceleratorControllerTest, Process) {
   const ui::Accelerator accelerator_a(ui::VKEY_A, ui::EF_NONE);
   TestTarget target1;
-  GetController()->Register(accelerator_a, &target1);
+  GetController()->Register({accelerator_a}, &target1);
 
   // The registered accelerator is processed.
   EXPECT_TRUE(ProcessInController(accelerator_a));
@@ -421,7 +433,7 @@ TEST_F(AcceleratorControllerTest, IsRegistered) {
   const ui::Accelerator accelerator_a(ui::VKEY_A, ui::EF_NONE);
   const ui::Accelerator accelerator_shift_a(ui::VKEY_A, ui::EF_SHIFT_DOWN);
   TestTarget target;
-  GetController()->Register(accelerator_a, &target);
+  GetController()->Register({accelerator_a}, &target);
   EXPECT_TRUE(GetController()->IsRegistered(accelerator_a));
   EXPECT_FALSE(GetController()->IsRegistered(accelerator_shift_a));
   GetController()->UnregisterAll(&target);
@@ -429,8 +441,8 @@ TEST_F(AcceleratorControllerTest, IsRegistered) {
 }
 
 TEST_F(AcceleratorControllerTest, WindowSnap) {
-  ui::Window* ui_window = CreateTestWindow(gfx::Rect(5, 5, 20, 20));
-  WmWindow* window = mus::WmWindowMus::Get(ui_window);
+  aura::Window* aura_window = CreateTestWindow(gfx::Rect(5, 5, 20, 20));
+  WmWindow* window = WmWindow::Get(aura_window);
   wm::WindowState* window_state = window->GetWindowState();
 
   window_state->Activate();
@@ -482,10 +494,63 @@ TEST_F(AcceleratorControllerTest, WindowSnap) {
   }
 }
 
-TEST_F(AcceleratorControllerTest, WindowSnapLeftDockLeftRestore) {
+// Tests that when window docking is disabled, only snapping windows works.
+TEST_F(AcceleratorControllerTest, WindowSnapWithoutDocking) {
+  ASSERT_FALSE(ash::switches::DockedWindowsEnabled());
+  WmWindow* window = WmWindow::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20)));
+  wm::WindowState* window_state = window->GetWindowState();
+  window_state->Activate();
+
+  // Snap right.
+  GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_RIGHT);
+  gfx::Rect normal_bounds = window_state->GetRestoreBoundsInParent();
+  gfx::Rect expected_bounds =
+      wm::GetDefaultRightSnappedWindowBoundsInParent(window);
+  EXPECT_EQ(expected_bounds.ToString(), window->GetBounds().ToString());
+  EXPECT_TRUE(window_state->IsSnapped());
+  // Snap right again ->> becomes normal.
+  GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_RIGHT);
+  EXPECT_TRUE(window_state->IsNormalStateType());
+  EXPECT_FALSE(window_state->IsDocked());
+  EXPECT_EQ(normal_bounds.ToString(), window->GetBounds().ToString());
+  // Snap right.
+  GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_RIGHT);
+  EXPECT_TRUE(window_state->IsSnapped());
+  EXPECT_FALSE(window_state->IsDocked());
+  // Snap left.
+  GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
+  EXPECT_TRUE(window_state->IsSnapped());
+  EXPECT_FALSE(window_state->IsDocked());
+  expected_bounds = wm::GetDefaultLeftSnappedWindowBoundsInParent(window);
+  EXPECT_EQ(expected_bounds.ToString(), window->GetBounds().ToString());
+  // Snap left again ->> becomes normal.
+  GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
+  EXPECT_TRUE(window_state->IsNormalStateType());
+  EXPECT_FALSE(window_state->IsDocked());
+  EXPECT_EQ(normal_bounds.ToString(), window->GetBounds().ToString());
+}
+
+// Test class used for testing docked windows.
+class EnabledDockedWindowsAcceleratorControllerTest
+    : public AcceleratorControllerTest {
+ public:
+  EnabledDockedWindowsAcceleratorControllerTest() = default;
+  ~EnabledDockedWindowsAcceleratorControllerTest() override = default;
+
+  void SetUp() override {
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        ash::switches::kAshEnableDockedWindows);
+    AcceleratorControllerTest::SetUp();
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(EnabledDockedWindowsAcceleratorControllerTest);
+};
+
+TEST_F(EnabledDockedWindowsAcceleratorControllerTest,
+       WindowSnapLeftDockLeftRestore) {
   CreateTestWindow(gfx::Rect(5, 5, 20, 20));
-  WmWindow* window1 =
-      mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20)));
+  WmWindow* window1 = WmWindow::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20)));
   wm::WindowState* window1_state = window1->GetWindowState();
   window1_state->Activate();
 
@@ -503,10 +568,10 @@ TEST_F(AcceleratorControllerTest, WindowSnapLeftDockLeftRestore) {
   EXPECT_EQ(normal_bounds.ToString(), window1->GetBounds().ToString());
 }
 
-TEST_F(AcceleratorControllerTest, WindowSnapRightDockRightRestore) {
+TEST_F(EnabledDockedWindowsAcceleratorControllerTest,
+       WindowSnapRightDockRightRestore) {
   CreateTestWindow(gfx::Rect(5, 5, 20, 20));
-  WmWindow* window1 =
-      mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20)));
+  WmWindow* window1 = WmWindow::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20)));
 
   wm::WindowState* window1_state = window1->GetWindowState();
   window1_state->Activate();
@@ -525,10 +590,10 @@ TEST_F(AcceleratorControllerTest, WindowSnapRightDockRightRestore) {
   EXPECT_EQ(normal_bounds.ToString(), window1->GetBounds().ToString());
 }
 
-TEST_F(AcceleratorControllerTest, WindowSnapLeftDockLeftSnapRight) {
-  mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20)));
-  WmWindow* window1 =
-      mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20)));
+TEST_F(EnabledDockedWindowsAcceleratorControllerTest,
+       WindowSnapLeftDockLeftSnapRight) {
+  CreateTestWindow(gfx::Rect(5, 5, 20, 20));
+  WmWindow* window1 = WmWindow::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20)));
 
   wm::WindowState* window1_state = window1->GetWindowState();
   window1_state->Activate();
@@ -549,24 +614,25 @@ TEST_F(AcceleratorControllerTest, WindowSnapLeftDockLeftSnapRight) {
   EXPECT_EQ(expected_bounds2.ToString(), window1->GetBounds().ToString());
 }
 
-TEST_F(AcceleratorControllerTest, WindowDockLeftMinimizeWindowWithRestore) {
+TEST_F(EnabledDockedWindowsAcceleratorControllerTest,
+       WindowDockLeftMinimizeWindowWithRestore) {
   WindowOwner window_owner(
-      mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20))));
+      WmWindow::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20))));
   WindowOwner window1_owner(
-      mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20))));
+      WmWindow::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20))));
   WmWindow* window1 = window1_owner.window();
 
   wm::WindowState* window1_state = window1->GetWindowState();
   window1_state->Activate();
 
   WindowOwner window2_owner(
-      mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20))));
+      WmWindow::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20))));
   WmWindow* window2 = window2_owner.window();
 
   wm::WindowState* window2_state = window2->GetWindowState();
 
   WindowOwner window3_owner(
-      mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20))));
+      WmWindow::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20))));
   WmWindow* window3 = window3_owner.window();
 
   wm::WindowState* window3_state = window3->GetWindowState();
@@ -601,9 +667,10 @@ TEST_F(AcceleratorControllerTest, WindowDockLeftMinimizeWindowWithRestore) {
 
 // TODO: Needs CreatePanel(): http://crbug.com/632209.
 /*
-TEST_F(AcceleratorControllerTest, WindowPanelDockLeftDockRightRestore) {
+TEST_F(EnabledDockedWindowsAcceleratorControllerTest,
+       WindowPanelDockLeftDockRightRestore) {
   WmWndow* window0 =
-      mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20)));
+      WmWindow::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20)));
 
   std::unique_ptr<aura::Window> window(CreatePanel());
   wm::WindowState* window_state = wm::GetWindowState(window.get());
@@ -612,7 +679,7 @@ TEST_F(AcceleratorControllerTest, WindowPanelDockLeftDockRightRestore) {
   gfx::Rect window_restore_bounds2 = window->bounds();
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
   gfx::Rect expected_bounds = wm::GetDefaultLeftSnappedWindowBoundsInParent(
-      WmWindowAura::Get(window.get()));
+      WmWindow::Get(window.get()));
   gfx::Rect window_restore_bounds = window_state->GetRestoreBoundsInScreen();
   EXPECT_NE(expected_bounds.ToString(), window->bounds().ToString());
   EXPECT_FALSE(window_state->IsSnapped());
@@ -629,9 +696,9 @@ TEST_F(AcceleratorControllerTest, WindowPanelDockLeftDockRightRestore) {
 }
 */
 
-TEST_F(AcceleratorControllerTest, CenterWindowAccelerator) {
+TEST_F(EnabledDockedWindowsAcceleratorControllerTest, CenterWindowAccelerator) {
   WindowOwner window_owner(
-      mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20))));
+      WmWindow::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20))));
   WmWindow* window = window_owner.window();
   wm::WindowState* window_state = window->GetWindowState();
   window_state->Activate();
@@ -737,15 +804,14 @@ TEST_F(AcceleratorControllerTest, DontRepeatToggleFullscreen) {
 
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
   params.bounds = gfx::Rect(5, 5, 20, 20);
-  mus::SetResizeBehavior(
-      &params.mus_properties,
-      static_cast<uint32_t>(ui::mojom::kResizeBehaviorCanMaximize));
   views::Widget* widget = new views::Widget;
-  mus::WmWindowMus::Get(GetPrimaryRootWindow())
+  WmWindow::Get(GetPrimaryRootWindow())
       ->GetRootWindowController()
       ->ConfigureWidgetInitParamsForContainer(
           widget, kShellWindowId_DefaultContainer, &params);
   widget->Init(params);
+  widget->GetNativeView()->SetProperty(aura::client::kResizeBehaviorKey,
+                                       ui::mojom::kResizeBehaviorCanMaximize);
   widget->Show();
   widget->Activate();
 
@@ -776,7 +842,6 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
   EXPECT_TRUE(ProcessInController(
       ui::Accelerator(ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_NONE)));
 
-#if defined(OS_CHROMEOS)
   // The "Take Screenshot", "Take Partial Screenshot", volume, brightness, and
   // keyboard brightness accelerators are only defined on ChromeOS.
   // TODO: needs ScreenShotDelegate converted: http://crbug.com/612331.
@@ -866,9 +931,7 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
     EXPECT_EQ(1, delegate->handle_keyboard_brightness_up_count());
     EXPECT_EQ(alt_brightness_up, delegate->last_accelerator());
   }
-#endif
 
-#if !defined(OS_WIN)
   // Exit
   ExitWarningHandler* ewh = GetController()->GetExitWarningHandlerForTest();
   ASSERT_TRUE(ewh);
@@ -883,16 +946,13 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
   EXPECT_TRUE(is_idle(ewh));
   EXPECT_FALSE(is_ui_shown(ewh));
   Reset(ewh);
-#endif
 
   // New tab
   EXPECT_TRUE(
       ProcessInController(ui::Accelerator(ui::VKEY_T, ui::EF_CONTROL_DOWN)));
 
   // New incognito window
-  // TODO(sky): this should be true but fails because WmTestBase is not using
-  // TestShellDelegate: http://crbug.com/632211.
-  EXPECT_FALSE(ProcessInController(
+  EXPECT_TRUE(ProcessInController(
       ui::Accelerator(ui::VKEY_N, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)));
 
   // New window
@@ -907,18 +967,14 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
   EXPECT_TRUE(
       ProcessInController(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_SHIFT_DOWN)));
 
-#if defined(OS_CHROMEOS)
   // Open file manager
   EXPECT_TRUE(ProcessInController(
       ui::Accelerator(ui::VKEY_M, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN)));
 
   // Lock screen
-  // NOTE: Accelerators that do not work on the lock screen need to be
-  // tested before the sequence below is invoked because it causes a side
-  // effect of locking the screen.
-  EXPECT_TRUE(
+  // TODO(derat): Reenable this once user sessions work in mash.
+  EXPECT_FALSE(
       ProcessInController(ui::Accelerator(ui::VKEY_L, ui::EF_COMMAND_DOWN)));
-#endif
 }
 
 // TODO: fails in mash, http://crbug.com/632180.
@@ -963,7 +1019,6 @@ TEST_F(AcceleratorControllerTest, DISABLED_GlobalAcceleratorsToggleAppList) {
   delegate->ToggleSpokenFeedback(A11Y_NOTIFICATION_NONE);
   EXPECT_FALSE(WmShell::Get()->GetAppListTargetVisibility());
 
-#if defined(OS_CHROMEOS)
   // The press of VKEY_BROWSER_SEARCH should toggle the AppList
   EXPECT_TRUE(ProcessInController(
       ui::Accelerator(ui::VKEY_BROWSER_SEARCH, ui::EF_NONE)));
@@ -971,7 +1026,6 @@ TEST_F(AcceleratorControllerTest, DISABLED_GlobalAcceleratorsToggleAppList) {
   EXPECT_FALSE(ProcessInController(
       ReleaseAccelerator(ui::VKEY_BROWSER_SEARCH, ui::EF_NONE)));
   EXPECT_TRUE(WmShell::Get()->GetAppListTargetVisibility());
-#endif
 }
 
 TEST_F(AcceleratorControllerTest, ImeGlobalAccelerators) {
@@ -1026,13 +1080,11 @@ TEST_F(AcceleratorControllerTest, ImeGlobalAcceleratorsWorkaround139556) {
 }
 
 TEST_F(AcceleratorControllerTest, PreferredReservedAccelerators) {
-#if defined(OS_CHROMEOS)
   // Power key is reserved on chromeos.
   EXPECT_TRUE(GetController()->IsReserved(
       ui::Accelerator(ui::VKEY_POWER, ui::EF_NONE)));
   EXPECT_FALSE(GetController()->IsPreferred(
       ui::Accelerator(ui::VKEY_POWER, ui::EF_NONE)));
-#endif
   // ALT+Tab are not reserved but preferred.
   EXPECT_FALSE(GetController()->IsReserved(
       ui::Accelerator(ui::VKEY_TAB, ui::EF_ALT_DOWN)));
@@ -1081,8 +1133,8 @@ class PreferredReservedAcceleratorsTest : public test::AshTestBase {
 
 // TODO: needs LockStateController ported: http://crbug.com/632189.
 TEST_F(PreferredReservedAcceleratorsTest, AcceleratorsWithFullscreen) {
-  WmWindow* w1 = mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect()));
-  WmWindow* w2 = mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect()));
+  WmWindow* w1 = WmWindow::Get(CreateTestWindow(gfx::Rect()));
+  WmWindow* w2 = WmWindow::Get(CreateTestWindow(gfx::Rect()));
   wm::ActivateWindow(w1);
 
   wm::WMEvent fullscreen(wm::WM_EVENT_FULLSCREEN);
@@ -1091,14 +1143,12 @@ TEST_F(PreferredReservedAcceleratorsTest, AcceleratorsWithFullscreen) {
   ASSERT_TRUE(w1_state->IsFullscreen());
 
   ui::test::EventGenerator& generator = GetEventGenerator();
-#if defined(OS_CHROMEOS)
   // Power key (reserved) should always be handled.
   LockStateController::TestApi test_api(
       Shell::GetInstance()->lock_state_controller());
   EXPECT_FALSE(test_api.is_animating_lock());
   generator.PressKey(ui::VKEY_POWER, ui::EF_NONE);
   EXPECT_TRUE(test_api.is_animating_lock());
-#endif
 
   // A fullscreen window can consume ALT-TAB (preferred).
   ASSERT_EQ(w1, wm::GetActiveWindow());
@@ -1136,14 +1186,12 @@ TEST_F(PreferredReservedAcceleratorsTest, AcceleratorsWithPinned) {
   }
 
   ui::test::EventGenerator& generator = GetEventGenerator();
-#if defined(OS_CHROMEOS)
   // Power key (reserved) should always be handled.
   LockStateController::TestApi test_api(
       Shell::GetInstance()->lock_state_controller());
   EXPECT_FALSE(test_api.is_animating_lock());
   generator.PressKey(ui::VKEY_POWER, ui::EF_NONE);
   EXPECT_TRUE(test_api.is_animating_lock());
-#endif
 
   // A pinned window can consume ALT-TAB (preferred), but no side effect.
   ASSERT_EQ(w1, wm::GetActiveWindow());
@@ -1154,7 +1202,6 @@ TEST_F(PreferredReservedAcceleratorsTest, AcceleratorsWithPinned) {
 }
 */
 
-#if defined(OS_CHROMEOS)
 TEST_F(AcceleratorControllerTest, DisallowedAtModalWindow) {
   std::set<AcceleratorAction> all_actions;
   for (size_t i = 0; i < kAcceleratorDataLength; ++i)
@@ -1177,8 +1224,7 @@ TEST_F(AcceleratorControllerTest, DisallowedAtModalWindow) {
         << " not found in kAcceleratorData, kDebugAcceleratorData or"
         << " kDeveloperAcceleratorData action: " << action;
   }
-  WmWindow* window =
-      mus::WmWindowMus::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20)));
+  WmWindow* window = WmWindow::Get(CreateTestWindow(gfx::Rect(5, 5, 20, 20)));
   window->Activate();
   WmShell::Get()->SimulateModalWindowOpenForTesting(true);
   for (const auto& action : all_actions) {
@@ -1259,7 +1305,6 @@ TEST_F(AcceleratorControllerTest, DisallowedAtModalWindow) {
     EXPECT_EQ(1, user_action_tester.GetActionCount("Accel_VolumeUp_F10"));
   }
 }
-#endif
 
 // TODO: reenable. Disabled because shelf asynchronously created:
 // http://crbug.com/632192.
@@ -1275,27 +1320,26 @@ TEST_F(AcceleratorControllerTest, DISABLED_DisallowedWithNoWindow) {
 
   // Make sure we don't alert if we do have a window.
   for (size_t i = 0; i < kActionsNeedingWindowLength; ++i) {
-    ui::Window* ui_window = CreateTestWindow(gfx::Rect(5, 5, 20, 20));
-    mus::WmWindowMus::Get(ui_window)->Activate();
+    aura::Window* aura_window = CreateTestWindow(gfx::Rect(5, 5, 20, 20));
+    WmWindow::Get(aura_window)->Activate();
     delegate->TriggerAccessibilityAlert(A11Y_ALERT_NONE);
     GetController()->PerformActionIfEnabled(kActionsNeedingWindow[i]);
     EXPECT_NE(delegate->GetLastAccessibilityAlert(), A11Y_ALERT_WINDOW_NEEDED);
-    ui_window->Destroy();
+    delete aura_window;
   }
 
   // Don't alert if we have a minimized window either.
   for (size_t i = 0; i < kActionsNeedingWindowLength; ++i) {
-    ui::Window* ui_window = CreateTestWindow(gfx::Rect(5, 5, 20, 20));
-    mus::WmWindowMus::Get(ui_window)->Activate();
+    aura::Window* aura_window = CreateTestWindow(gfx::Rect(5, 5, 20, 20));
+    WmWindow::Get(aura_window)->Activate();
     GetController()->PerformActionIfEnabled(WINDOW_MINIMIZE);
     delegate->TriggerAccessibilityAlert(A11Y_ALERT_NONE);
     GetController()->PerformActionIfEnabled(kActionsNeedingWindow[i]);
     EXPECT_NE(delegate->GetLastAccessibilityAlert(), A11Y_ALERT_WINDOW_NEEDED);
-    ui_window->Destroy();
+    delete aura_window;
   }
 }
 
-#if defined(OS_CHROMEOS)
 namespace {
 
 // defines a class to test the behavior of deprecated accelerators.
@@ -1406,6 +1450,5 @@ TEST_F(DeprecatedAcceleratorTester, DISABLED_TestNewAccelerators) {
     ResetStateIfNeeded();
   }
 }
-#endif  // defined(OS_CHROMEOS)
 
 }  // namespace ash

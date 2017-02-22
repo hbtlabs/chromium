@@ -109,7 +109,7 @@ UI.TextPrompt = class extends Common.Object {
     this._boundClearAutocomplete = this.clearAutocomplete.bind(this);
     this._proxyElement = element.ownerDocument.createElement('span');
     var shadowRoot = UI.createShadowRootWithCoreStyles(this._proxyElement, 'ui/textPrompt.css');
-    this._contentElement = shadowRoot.createChild('div');
+    this._contentElement = shadowRoot.createChild('div', 'text-prompt-root');
     this._contentElement.createChild('content');
     this._proxyElement.style.display = this._proxyElementDisplay;
     element.parentElement.insertBefore(this._proxyElement, element);
@@ -120,7 +120,6 @@ UI.TextPrompt = class extends Common.Object {
     this._element.addEventListener('mousewheel', this._boundOnMouseWheel, false);
     this._element.addEventListener('selectstart', this._boundClearAutocomplete, false);
     this._element.addEventListener('blur', this._boundClearAutocomplete, false);
-    this._element.ownerDocument.defaultView.addEventListener('resize', this._boundClearAutocomplete, false);
 
     this._suggestBox = new UI.SuggestBox(this, 20, true);
 
@@ -132,11 +131,11 @@ UI.TextPrompt = class extends Common.Object {
 
   detach() {
     this._removeFromElement();
+    this._focusRestorer.restore();
     this._proxyElement.parentElement.insertBefore(this._element, this._proxyElement);
     this._proxyElement.remove();
     delete this._proxyElement;
     this._element.classList.remove('text-prompt');
-    this._focusRestorer.restore();
   }
 
   /**
@@ -196,17 +195,26 @@ UI.TextPrompt = class extends Common.Object {
       this._proxyElement.title = title;
   }
 
+  /**
+   * @param {string} placeholder
+   */
+  setPlaceholder(placeholder) {
+    if (placeholder)
+      this._element.setAttribute('data-placeholder', placeholder);
+    else
+      this._element.removeAttribute('data-placeholder');
+  }
+
   _removeFromElement() {
     this.clearAutocomplete();
     this._element.removeEventListener('keydown', this._boundOnKeyDown, false);
     this._element.removeEventListener('input', this._boundOnInput, false);
     this._element.removeEventListener('selectstart', this._boundClearAutocomplete, false);
     this._element.removeEventListener('blur', this._boundClearAutocomplete, false);
-    this._element.ownerDocument.defaultView.removeEventListener('resize', this._boundClearAutocomplete, false);
     if (this._isEditing)
       this._stopEditing();
     if (this._suggestBox)
-      this._suggestBox.removeFromElement();
+      this._suggestBox.hide();
   }
 
   /**
@@ -299,6 +307,7 @@ UI.TextPrompt = class extends Common.Object {
       this._queryRange.endColumn += text.length - this._previousText.length;
     this._refreshGhostText();
     this._previousText = text;
+    this.emit(new UI.TextPrompt.TextChangedEvent());
 
     this.autoCompleteSoon();
   }
@@ -317,11 +326,16 @@ UI.TextPrompt = class extends Common.Object {
   }
 
   clearAutocomplete() {
+    var beforeText = this.textWithCurrentSuggestion();
+
     if (this._isSuggestBoxVisible())
       this._suggestBox.hide();
     this._clearAutocompleteTimeout();
     this._queryRange = null;
     this._refreshGhostText();
+
+    if (beforeText !== this.textWithCurrentSuggestion())
+      this.emit(new UI.TextPrompt.TextChangedEvent());
   }
 
   _refreshGhostText() {
@@ -447,7 +461,7 @@ UI.TextPrompt = class extends Common.Object {
 
     // Filter out dupes.
     var store = new Set();
-    completions = completions.filter(item => !store.has(item.title) && !!store.add(item.title));
+    completions = completions.filter(item => !store.has(item.text) && !!store.add(item.text));
 
     if (query || force) {
       if (query)
@@ -495,7 +509,7 @@ UI.TextPrompt = class extends Common.Object {
     this._currentSuggestion = suggestion;
     this._refreshGhostText();
     if (isIntermediateSuggestion)
-      this.dispatchEventToListeners(UI.TextPrompt.Events.ItemApplied);
+      this.emit(new UI.TextPrompt.TextChangedEvent());
   }
 
   /**
@@ -518,7 +532,7 @@ UI.TextPrompt = class extends Common.Object {
         this._queryRange.startColumn + this._currentSuggestion.length);
 
     this.clearAutocomplete();
-    this.dispatchEventToListeners(UI.TextPrompt.Events.ItemAccepted);
+    this.emit(new UI.TextPrompt.TextChangedEvent());
 
     return true;
   }
@@ -625,8 +639,5 @@ UI.TextPrompt = class extends Common.Object {
 
 UI.TextPrompt.DefaultAutocompletionTimeout = 250;
 
-/** @enum {symbol} */
-UI.TextPrompt.Events = {
-  ItemApplied: Symbol('text-prompt-item-applied'),
-  ItemAccepted: Symbol('text-prompt-item-accepted')
-};
+/** @implements {Common.Emittable} */
+UI.TextPrompt.TextChangedEvent = class {};

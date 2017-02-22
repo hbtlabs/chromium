@@ -19,7 +19,6 @@
 #include "base/synchronization/lock.h"
 #include "base/task_scheduler/scheduler_worker_pool_params.h"
 #include "base/task_scheduler/task_scheduler.h"
-#include "base/task_scheduler/task_scheduler_impl.h"
 #include "base/test/sequenced_task_runner_test_template.h"
 #include "base/test/sequenced_worker_pool_owner.h"
 #include "base/test/task_runner_test_template.h"
@@ -248,14 +247,17 @@ class SequencedWorkerPoolTest
       std::vector<SchedulerWorkerPoolParams> worker_pool_params;
       worker_pool_params.emplace_back(
           "SchedulerWorkerPoolName", ThreadPriority::NORMAL,
-          SchedulerWorkerPoolParams::IORestriction::ALLOWED,
           SchedulerWorkerPoolParams::StandbyThreadPolicy::LAZY,
           kNumWorkerThreads, TimeDelta::Max());
       TaskScheduler::CreateAndSetDefaultTaskScheduler(
           std::move(worker_pool_params),
           base::Bind([](const TaskTraits&) -> size_t { return 0U; }));
-      SequencedWorkerPool::ResetRedirectToTaskSchedulerForProcessForTesting();
-      SequencedWorkerPool::RedirectToTaskSchedulerForProcess();
+
+      // Unit tests run in an environment where SequencedWorkerPool is enabled
+      // without redirection to TaskScheduler. For the current unit test,
+      // disable it and re-enable it with redirection to TaskScheduler.
+      SequencedWorkerPool::DisableForProcessForTesting();
+      SequencedWorkerPool::EnableWithRedirectionToTaskSchedulerForProcess();
     }
   }
 
@@ -267,7 +269,12 @@ class SequencedWorkerPoolTest
     DeletePool();
 
     if (RedirectedToTaskScheduler()) {
-      SequencedWorkerPool::ResetRedirectToTaskSchedulerForProcessForTesting();
+      // Reset SequencedWorkerPool to its original state (i.e. enabled without
+      // redirection to TaskScheduler).
+      SequencedWorkerPool::DisableForProcessForTesting();
+      SequencedWorkerPool::EnableForProcess();
+
+      // Delete the registered TaskScheduler.
       DeleteTaskScheduler();
     }
   }
@@ -288,8 +295,7 @@ class SequencedWorkerPoolTest
   // Destroys and unregisters the registered TaskScheduler, if any.
   void DeleteTaskScheduler() {
     if (TaskScheduler::GetInstance()) {
-      static_cast<internal::TaskSchedulerImpl*>(TaskScheduler::GetInstance())
-          ->JoinForTesting();
+      TaskScheduler::GetInstance()->JoinForTesting();
       TaskScheduler::SetInstance(nullptr);
     }
   }

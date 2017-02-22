@@ -27,7 +27,7 @@
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/clipboard/DataTransferAccessPolicy.h"
-#include "core/fetch/ImageResource.h"
+#include "core/loader/resource/ImageResourceContent.h"
 #include "core/page/DragActions.h"
 #include "platform/geometry/IntPoint.h"
 #include "platform/heap/Handle.h"
@@ -56,10 +56,12 @@ class CORE_EXPORT DataTransfer final
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  // Whether this transfer is serving a drag-drop or copy-paste request.
+  // Whether this transfer is serving a drag-drop, copy-paste, spellcheck,
+  // auto-correct or similar request.
   enum DataTransferType {
     CopyAndPaste,
     DragAndDrop,
+    InsertReplacementText,
   };
 
   static DataTransfer* create(DataTransferType,
@@ -91,12 +93,15 @@ class CORE_EXPORT DataTransfer final
   IntPoint dragLocation() const { return m_dragLoc; }
   void setDragImage(Element*, int x, int y);
   void clearDragImage();
-  void setDragImageResource(ImageResource*, const IntPoint&);
+  void setDragImageResource(ImageResourceContent*, const IntPoint&);
   void setDragImageElement(Node*, const IntPoint&);
 
   std::unique_ptr<DragImage> createDragImage(IntPoint& dragLocation,
                                              LocalFrame*) const;
-  void declareAndWriteDragImage(Element*, const KURL&, const String& title);
+  void declareAndWriteDragImage(Element*,
+                                const KURL& linkURL,
+                                const KURL& imageURL,
+                                const String& title);
   void writeURL(Node*, const KURL&, const String&);
   void writeSelection(const FrameSelection&);
 
@@ -127,7 +132,7 @@ class CORE_EXPORT DataTransfer final
  private:
   DataTransfer(DataTransferType, DataTransferAccessPolicy, DataObject*);
 
-  void setDragImage(ImageResource*, Node*, const IntPoint&);
+  void setDragImage(ImageResourceContent*, Node*, const IntPoint&);
 
   bool hasFileOfType(const String&) const;
   bool hasStringOfType(const String&) const;
@@ -141,7 +146,7 @@ class CORE_EXPORT DataTransfer final
   Member<DataObject> m_dataObject;
 
   IntPoint m_dragLoc;
-  Member<ImageResource> m_dragImage;
+  Member<ImageResourceContent> m_dragImage;
   Member<Node> m_dragImageElement;
 };
 

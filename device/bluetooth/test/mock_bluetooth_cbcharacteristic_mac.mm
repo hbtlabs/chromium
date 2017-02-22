@@ -7,6 +7,7 @@
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_nsobject.h"
 #include "device/bluetooth/bluetooth_gatt_characteristic.h"
+#include "device/bluetooth/test/mock_bluetooth_cbdescriptor_mac.h"
 
 using base::mac::ObjCCast;
 using base::scoped_nsobject;
@@ -93,7 +94,9 @@ CBCharacteristicProperties GattCharacteristicPropertyToCBCharacteristicProperty(
   CBService* _service;
   scoped_nsobject<CBUUID> _UUID;
   CBCharacteristicProperties _cb_properties;
-  base::scoped_nsobject<NSData> _value;
+  scoped_nsobject<NSMutableArray> _simulatedDescriptors;
+  scoped_nsobject<NSArray> _descriptors;
+  scoped_nsobject<NSData> _value;
   BOOL _notifying;
 }
 @end
@@ -110,6 +113,7 @@ CBCharacteristicProperties GattCharacteristicPropertyToCBCharacteristicProperty(
     _cb_properties =
         device::GattCharacteristicPropertyToCBCharacteristicProperty(
             properties);
+    _simulatedDescriptors.reset([[NSMutableArray alloc] init]);
   }
   return self;
 }
@@ -154,6 +158,23 @@ CBCharacteristicProperties GattCharacteristicPropertyToCBCharacteristicProperty(
 }
 
 - (void)simulateGattNotifySessionFailedWithError:(NSError*)error {
+  _notifying = NO;
+  CBPeripheral* peripheral = _service.peripheral;
+  [peripheral.delegate peripheral:peripheral
+      didUpdateNotificationStateForCharacteristic:self.characteristic
+                                            error:error];
+}
+
+- (void)simulateGattNotifySessionStopped {
+  _notifying = NO;
+  CBPeripheral* peripheral = _service.peripheral;
+  [peripheral.delegate peripheral:peripheral
+      didUpdateNotificationStateForCharacteristic:self.characteristic
+                                            error:nil];
+}
+
+- (void)simulateGattNotifySessionStoppedWithError:(NSError*)error {
+  _notifying = NO;
   CBPeripheral* peripheral = _service.peripheral;
   [peripheral.delegate peripheral:peripheral
       didUpdateNotificationStateForCharacteristic:self.characteristic
@@ -166,6 +187,17 @@ CBCharacteristicProperties GattCharacteristicPropertyToCBCharacteristicProperty(
   [peripheral.delegate peripheral:peripheral
       didUpdateValueForCharacteristic:self.characteristic
                                 error:nil];
+}
+
+- (void)simulateDescriptorWithUUID:(CBUUID*)uuid {
+  scoped_nsobject<MockCBDescriptor> descriptor_mock([[MockCBDescriptor alloc]
+      initWithCharacteristic:self.characteristic
+                      CBUUID:uuid]);
+  [_simulatedDescriptors.get() addObject:descriptor_mock];
+}
+
+- (void)discoverDescriptors {
+  _descriptors.reset([_simulatedDescriptors copy]);
 }
 
 - (CBUUID*)UUID {
@@ -182,6 +214,10 @@ CBCharacteristicProperties GattCharacteristicPropertyToCBCharacteristicProperty(
 
 - (CBCharacteristicProperties)properties {
   return _cb_properties;
+}
+
+- (NSArray*)descriptors {
+  return _descriptors;
 }
 
 - (NSData*)value {

@@ -28,8 +28,8 @@
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ScriptLoader.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "platform/heap/Handle.h"
-#include "platform/scheduler/CancellableTaskFactory.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
@@ -38,10 +38,7 @@ namespace blink {
 
 ScriptRunner::ScriptRunner(Document* document)
     : m_document(document),
-      m_taskRunner(Platform::current()
-                       ->currentThread()
-                       ->scheduler()
-                       ->loadingTaskRunner()),
+      m_taskRunner(TaskRunnerHelper::get(TaskType::Networking, document)),
       m_numberOfInOrderScriptsWithPendingNotification(0),
       m_isSuspended(false) {
   DCHECK(document);
@@ -56,7 +53,7 @@ void ScriptRunner::queueScriptForExecution(ScriptLoader* scriptLoader,
   m_document->incrementLoadEventDelayCount();
   switch (executionType) {
     case Async:
-      m_pendingAsyncScripts.add(scriptLoader);
+      m_pendingAsyncScripts.insert(scriptLoader);
       break;
 
     case InOrder:
@@ -118,7 +115,7 @@ void ScriptRunner::notifyScriptReady(ScriptLoader* scriptLoader,
       // to detach).
       SECURITY_CHECK(m_pendingAsyncScripts.contains(scriptLoader));
 
-      m_pendingAsyncScripts.remove(scriptLoader);
+      m_pendingAsyncScripts.erase(scriptLoader);
       m_asyncScriptsToExecuteSoon.append(scriptLoader);
 
       postTask(BLINK_FROM_HERE);
@@ -160,7 +157,7 @@ void ScriptRunner::notifyScriptLoadError(ScriptLoader* scriptLoader,
       // (otherwise we'd cause a use-after-free in ~ScriptRunner when it tries
       // to detach).
       SECURITY_CHECK(m_pendingAsyncScripts.contains(scriptLoader));
-      m_pendingAsyncScripts.remove(scriptLoader);
+      m_pendingAsyncScripts.erase(scriptLoader);
       break;
     }
     case InOrder:
@@ -206,7 +203,7 @@ void ScriptRunner::movePendingScript(ScriptRunner* newRunner,
                                      ScriptLoader* scriptLoader) {
   if (m_pendingAsyncScripts.contains(scriptLoader)) {
     newRunner->queueScriptForExecution(scriptLoader, Async);
-    m_pendingAsyncScripts.remove(scriptLoader);
+    m_pendingAsyncScripts.erase(scriptLoader);
     m_document->decrementLoadEventDelayCount();
     return;
   }

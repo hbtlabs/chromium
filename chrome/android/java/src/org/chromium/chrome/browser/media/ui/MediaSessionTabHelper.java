@@ -30,7 +30,6 @@ import org.chromium.ui.base.WindowAndroid;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.HashSet;
 import java.util.Set;
 
 import javax.annotation.Nullable;
@@ -47,21 +46,21 @@ public class MediaSessionTabHelper implements MediaImageCallback {
     private static final int HIDE_NOTIFICATION_DELAY_MILLIS = 1000;
 
     private Tab mTab;
-    private Bitmap mPageMediaImage = null;
-    private Bitmap mFavicon = null;
-    private Bitmap mCurrentMediaImage = null;
-    private String mOrigin = null;
+    private Bitmap mPageMediaImage;
+    private Bitmap mFavicon;
+    private Bitmap mCurrentMediaImage;
+    private String mOrigin;
     private MediaSessionObserver mMediaSessionObserver;
     private int mPreviousVolumeControlStream = AudioManager.USE_DEFAULT_STREAM_TYPE;
-    private MediaNotificationInfo.Builder mNotificationInfoBuilder = null;
+    private MediaNotificationInfo.Builder mNotificationInfoBuilder;
     // The fallback title if |mPageMetadata| is null or its title is empty.
-    private String mFallbackTitle = null;
+    private String mFallbackTitle;
     // The metadata set by the page.
-    private MediaMetadata mPageMetadata = null;
+    private MediaMetadata mPageMetadata;
     // The currently showing metadata.
-    private MediaMetadata mCurrentMetadata = null;
-    private MediaImageManager mMediaImageManager = null;
-    private Set<Integer> mMediaSessionActions = new HashSet<Integer>();
+    private MediaMetadata mCurrentMetadata;
+    private MediaImageManager mMediaImageManager;
+    private Set<Integer> mMediaSessionActions;
     private Handler mHandler;
     // The delayed task to hide notification. Hiding notification can be immediate or delayed.
     // Delayed hiding will schedule this delayed task to |mHandler|. The task will be canceled when
@@ -83,7 +82,13 @@ public class MediaSessionTabHelper implements MediaImageCallback {
                     MediaSessionTabHelper.convertMediaActionSourceToUMA(actionSource));
 
             if (mMediaSessionObserver.getMediaSession() != null) {
-                mMediaSessionObserver.getMediaSession().resume();
+                if (mMediaSessionActions != null
+                        && mMediaSessionActions.contains(MediaSessionAction.PLAY)) {
+                    mMediaSessionObserver.getMediaSession()
+                            .didReceiveAction(MediaSessionAction.PLAY);
+                } else {
+                    mMediaSessionObserver.getMediaSession().resume();
+                }
             }
         }
 
@@ -95,7 +100,13 @@ public class MediaSessionTabHelper implements MediaImageCallback {
                     MediaSessionTabHelper.convertMediaActionSourceToUMA(actionSource));
 
             if (mMediaSessionObserver.getMediaSession() != null) {
-                mMediaSessionObserver.getMediaSession().suspend();
+                if (mMediaSessionActions != null
+                        && mMediaSessionActions.contains(MediaSessionAction.PAUSE)) {
+                    mMediaSessionObserver.getMediaSession()
+                            .didReceiveAction(MediaSessionAction.PAUSE);
+                } else {
+                    mMediaSessionObserver.getMediaSession().suspend();
+                }
             }
         }
 
@@ -200,9 +211,10 @@ public class MediaSessionTabHelper implements MediaImageCallback {
                                 .setOrigin(mOrigin)
                                 .setTabId(mTab.getId())
                                 .setPrivate(mTab.isIncognito())
-                                .setIcon(R.drawable.audio_playing)
-                                .setLargeIcon(mCurrentMediaImage)
-                                .setDefaultLargeIcon(R.drawable.audio_playing_square)
+                                .setNotificationSmallIcon(R.drawable.audio_playing)
+                                .setNotificationLargeIcon(mCurrentMediaImage)
+                                .setDefaultNotificationLargeIcon(R.drawable.audio_playing_square)
+                                .setMediaSessionImage(mPageMediaImage)
                                 .setActions(MediaNotificationInfo.ACTION_PLAY_PAUSE
                                         | MediaNotificationInfo.ACTION_SWIPEAWAY)
                                 .setContentIntent(contentIntent)
@@ -220,24 +232,15 @@ public class MediaSessionTabHelper implements MediaImageCallback {
             @Override
             public void mediaSessionMetadataChanged(MediaMetadata metadata) {
                 mPageMetadata = metadata;
-                if (mPageMetadata != null) {
-                    mMediaImageManager.downloadImage(mPageMetadata.getArtwork(),
-                            MediaSessionTabHelper.this);
-                }
+                mMediaImageManager.downloadImage(
+                        (mPageMetadata != null) ? mPageMetadata.getArtwork() : null,
+                        MediaSessionTabHelper.this);
                 updateNotificationMetadata();
             }
 
             @Override
-            public void mediaSessionEnabledAction(int action) {
-                if (!MediaSessionAction.isKnownValue(action)) return;
-                mMediaSessionActions.add(action);
-                updateNotificationActions();
-            }
-
-            @Override
-            public void mediaSessionDisabledAction(int action) {
-                if (!MediaSessionAction.isKnownValue(action)) return;
-                mMediaSessionActions.remove(action);
+            public void mediaSessionActionsChanged(Set<Integer> actions) {
+                mMediaSessionActions = actions;
                 updateNotificationActions();
             }
         };
@@ -261,7 +264,7 @@ public class MediaSessionTabHelper implements MediaImageCallback {
         if (mMediaSessionObserver == null) return;
         mMediaSessionObserver.stopObserving();
         mMediaSessionObserver = null;
-        mMediaSessionActions.clear();
+        mMediaSessionActions = null;
     }
 
     private final TabObserver mTabObserver = new EmptyTabObserver() {
@@ -281,8 +284,13 @@ public class MediaSessionTabHelper implements MediaImageCallback {
         }
 
         @Override
-        public void onUrlUpdated(Tab tab) {
+        public void onDidFinishNavigation(Tab tab, String url, boolean isInMainFrame,
+                boolean isErrorPage, boolean hasCommitted, boolean isSamePage,
+                boolean isFragmentNavigation, Integer pageTransition, int errorCode,
+                int httpStatusCode) {
             assert tab == mTab;
+
+            if (!hasCommitted || !isInMainFrame || isSamePage) return;
 
             String origin = mTab.getUrl();
             try {
@@ -296,11 +304,22 @@ public class MediaSessionTabHelper implements MediaImageCallback {
             mOrigin = origin;
             mFavicon = null;
             mPageMediaImage = null;
+            mPageMetadata = null;
+            // |mCurrentMetadata| selects either |mPageMetadata| or |mFallbackTitle|. As there is no
+            // guarantee {@link #onTitleUpdated()} will be called before or after this method,
+            // |mFallbackTitle| is not reset in this callback, i.e. relying solely on
+            // {@link #onTitleUpdated()}. The following assignment is to keep |mCurrentMetadata| up
+            // to date as |mPageMetadata| may have changed.
+            mCurrentMetadata = getMetadata();
+            mMediaSessionActions = null;
 
             if (isNotificationHiddingOrHidden()) return;
 
             mNotificationInfoBuilder.setOrigin(mOrigin);
-            mNotificationInfoBuilder.setLargeIcon(mFavicon);
+            mNotificationInfoBuilder.setNotificationLargeIcon(mFavicon);
+            mNotificationInfoBuilder.setMediaSessionImage(mPageMediaImage);
+            mNotificationInfoBuilder.setMetadata(mCurrentMetadata);
+            mNotificationInfoBuilder.setMediaSessionActions(mMediaSessionActions);
             showNotification();
         }
 
@@ -312,6 +331,13 @@ public class MediaSessionTabHelper implements MediaImageCallback {
                 mFallbackTitle = newFallbackTitle;
                 updateNotificationMetadata();
             }
+        }
+
+        @Override
+        public void onShown(Tab tab) {
+            assert tab == mTab;
+            MediaNotificationManager.activateAndroidMediaSession(
+                    tab.getId(), R.id.media_playback_notification);
         }
 
         @Override
@@ -330,7 +356,7 @@ public class MediaSessionTabHelper implements MediaImageCallback {
         mTab = tab;
         mTab.addObserver(mTabObserver);
         mMediaImageManager = new MediaImageManager(
-            MINIMAL_FAVICON_SIZE, MediaNotificationManager.getMaximumLargeIconSize());
+                MINIMAL_FAVICON_SIZE, MediaNotificationManager.getIdealMediaImageSize());
         if (mTab.getWebContents() != null) setWebContents(tab.getWebContents());
 
         Activity activity = getActivityFromTab(mTab);
@@ -401,7 +427,7 @@ public class MediaSessionTabHelper implements MediaImageCallback {
                                         || icon.getHeight() < mFavicon.getHeight())) {
             return false;
         }
-        mFavicon = MediaNotificationManager.scaleIconForDisplay(icon);
+        mFavicon = MediaNotificationManager.downscaleIconToIdealSize(icon);
         return true;
     }
 
@@ -454,7 +480,7 @@ public class MediaSessionTabHelper implements MediaImageCallback {
 
     @Override
     public void onImageDownloaded(Bitmap image) {
-        mPageMediaImage = MediaNotificationManager.scaleIconForDisplay(image);
+        mPageMediaImage = MediaNotificationManager.downscaleIconToIdealSize(image);
         updateNotificationImage();
     }
 
@@ -465,7 +491,8 @@ public class MediaSessionTabHelper implements MediaImageCallback {
         mCurrentMediaImage = newMediaImage;
 
         if (isNotificationHiddingOrHidden()) return;
-        mNotificationInfoBuilder.setLargeIcon(mCurrentMediaImage);
+        mNotificationInfoBuilder.setNotificationLargeIcon(mCurrentMediaImage);
+        mNotificationInfoBuilder.setMediaSessionImage(mPageMediaImage);
         showNotification();
     }
 

@@ -11,23 +11,14 @@
 #include "media/base/timestamp_constants.h"
 
 namespace media {
+namespace {
 
-// Declaring these as constexpr variables doesn't work in windows -- they
-// always are 0.  The exception is FromMicroseconds, which doesn't do any
-// conversion.  However, declaring these as constexpr functions seesm to work
-// fine everywhere.  We care that this works in windows because our unit tests
-// run on non-android platforms.
-constexpr base::TimeDelta DecodePollDelay() {
-  return base::TimeDelta::FromMilliseconds(10);
-}
+constexpr base::TimeDelta kDecodePollDelay =
+    base::TimeDelta::FromMilliseconds(10);
+constexpr base::TimeDelta kNoWaitTimeout = base::TimeDelta::FromMicroseconds(0);
+constexpr base::TimeDelta kIdleTimerTimeout = base::TimeDelta::FromSeconds(1);
 
-constexpr base::TimeDelta NoWaitTimeout() {
-  return base::TimeDelta::FromMicroseconds(0);
-}
-
-constexpr base::TimeDelta IdleTimerTimeout() {
-  return base::TimeDelta::FromSeconds(1);
-}
+}  // namespace
 
 MediaCodecLoop::InputData::InputData() {}
 
@@ -39,7 +30,7 @@ MediaCodecLoop::InputData::InputData(const InputData& other)
       subsamples(other.subsamples),
       presentation_time(other.presentation_time),
       is_eos(other.is_eos),
-      is_encrypted(other.is_encrypted) {}
+      encryption_scheme(other.encryption_scheme) {}
 
 MediaCodecLoop::InputData::~InputData() {}
 
@@ -142,7 +133,7 @@ bool MediaCodecLoop::ProcessOneInputBuffer() {
 }
 
 MediaCodecLoop::InputBuffer MediaCodecLoop::DequeueInputBuffer() {
-  DVLOG(2) << __FUNCTION__;
+  DVLOG(2) << __func__;
 
   // Do not dequeue a new input buffer if we failed with MEDIA_CODEC_NO_KEY.
   // That status does not return the input buffer back to the pool of
@@ -157,14 +148,13 @@ MediaCodecLoop::InputBuffer MediaCodecLoop::DequeueInputBuffer() {
   int input_buf_index = kInvalidBufferIndex;
 
   media::MediaCodecStatus status =
-      media_codec_->DequeueInputBuffer(NoWaitTimeout(), &input_buf_index);
+      media_codec_->DequeueInputBuffer(kNoWaitTimeout, &input_buf_index);
   switch (status) {
     case media::MEDIA_CODEC_DEQUEUE_INPUT_AGAIN_LATER:
       break;
 
     case media::MEDIA_CODEC_ERROR:
-      DLOG(ERROR) << __FUNCTION__
-                  << ": MEDIA_CODEC_ERROR from DequeInputBuffer";
+      DLOG(ERROR) << __func__ << ": MEDIA_CODEC_ERROR from DequeInputBuffer";
       SetState(STATE_ERROR);
       break;
 
@@ -200,14 +190,14 @@ void MediaCodecLoop::EnqueueInputBuffer(const InputBuffer& input_buffer) {
 
   media::MediaCodecStatus status = MEDIA_CODEC_OK;
 
-  if (input_data.is_encrypted) {
+  if (input_data.encryption_scheme.is_encrypted()) {
     // Note that input_data might not have a valid memory ptr if this is a
     // re-send of a buffer that was sent before decryption keys arrived.
 
     status = media_codec_->QueueSecureInputBuffer(
         input_buffer.index, input_data.memory, input_data.length,
         input_data.key_id, input_data.iv, input_data.subsamples,
-        input_data.presentation_time);
+        input_data.encryption_scheme, input_data.presentation_time);
 
   } else {
     status = media_codec_->QueueInputBuffer(
@@ -217,8 +207,7 @@ void MediaCodecLoop::EnqueueInputBuffer(const InputBuffer& input_buffer) {
 
   switch (status) {
     case MEDIA_CODEC_ERROR:
-      DLOG(ERROR) << __FUNCTION__
-                  << ": MEDIA_CODEC_ERROR from QueueInputBuffer";
+      DLOG(ERROR) << __func__ << ": MEDIA_CODEC_ERROR from QueueInputBuffer";
       client_->OnInputDataQueued(false);
       // Transition to the error state after running the completion cb, to keep
       // it in order if the client chooses to flush its queue.
@@ -259,8 +248,8 @@ bool MediaCodecLoop::ProcessOneOutputBuffer() {
 
   OutputBuffer out;
   MediaCodecStatus status = media_codec_->DequeueOutputBuffer(
-      NoWaitTimeout(), &out.index, &out.offset, &out.size, &out.pts,
-      &out.is_eos, &out.is_key_frame);
+      kNoWaitTimeout, &out.index, &out.offset, &out.size, &out.pts, &out.is_eos,
+      &out.is_key_frame);
 
   bool did_work = false;
   switch (status) {
@@ -303,8 +292,7 @@ bool MediaCodecLoop::ProcessOneOutputBuffer() {
       break;
 
     case MEDIA_CODEC_ERROR:
-      DLOG(ERROR) << __FUNCTION__
-                  << ": MEDIA_CODEC_ERROR from DequeueOutputBuffer";
+      DLOG(ERROR) << __func__ << ": MEDIA_CODEC_ERROR from DequeueOutputBuffer";
       SetState(STATE_ERROR);
       break;
 
@@ -327,12 +315,12 @@ void MediaCodecLoop::ManageTimer(bool did_work) {
     idle_time_begin_ = now;
   } else {
     // Make sure that we have done work recently enough, else stop the timer.
-    if (now - idle_time_begin_ > IdleTimerTimeout())
+    if (now - idle_time_begin_ > kIdleTimerTimeout)
       should_be_running = false;
   }
 
   if (should_be_running && !io_timer_.IsRunning()) {
-    io_timer_.Start(FROM_HERE, DecodePollDelay(), this,
+    io_timer_.Start(FROM_HERE, kDecodePollDelay, this,
                     &MediaCodecLoop::DoPendingWork);
   } else if (!should_be_running && io_timer_.IsRunning()) {
     io_timer_.Stop();

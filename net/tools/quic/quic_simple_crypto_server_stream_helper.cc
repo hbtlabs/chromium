@@ -13,14 +13,14 @@ QuicSimpleCryptoServerStreamHelper::QuicSimpleCryptoServerStreamHelper(
 QuicSimpleCryptoServerStreamHelper::~QuicSimpleCryptoServerStreamHelper() {}
 
 QuicConnectionId
-    QuicSimpleCryptoServerStreamHelper::GenerateConnectionIdForReject(
-        QuicConnectionId /*connection_id*/) const {
+QuicSimpleCryptoServerStreamHelper::GenerateConnectionIdForReject(
+    QuicConnectionId /*connection_id*/) const {
   return random_->RandUint64();
 }
 
 bool QuicSimpleCryptoServerStreamHelper::CanAcceptClientHello(
     const CryptoHandshakeMessage& message,
-    const IPEndPoint& self_address,
+    const QuicSocketAddress& self_address,
     std::string* error_details) const {
   return true;
 }

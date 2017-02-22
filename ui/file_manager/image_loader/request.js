@@ -261,8 +261,8 @@ ImageRequest.prototype.downloadOriginal_ = function(onSuccess, onFailure) {
       this.image_.src = url;
       this.request_.orientation = data.orientation;
       this.request_.colorSpace = data.colorSpace;
-    }.bind(this), function(error) {
-      console.error('PiexLoaderError: ', error);
+    }.bind(this), function() {
+      // The error has already been logged in PiexLoader.
       onFailure();
     });
     return;
@@ -533,11 +533,11 @@ ImageRequest.prototype.onImageLoad_ = function() {
   // Perform processing if the url is not a data url, or if there are some
   // operations requested.
   if (!this.request_.url.match(/^data/) ||
-      ImageLoader.shouldProcess(this.image_.width,
-                                this.image_.height,
-                                this.request_)) {
-    ImageLoader.resizeAndCrop(this.image_, this.canvas_, this.request_);
-    ImageLoader.convertColorSpace(
+      ImageLoaderUtil.shouldProcess(this.image_.width,
+                                    this.image_.height,
+                                    this.request_)) {
+    ImageLoaderUtil.resizeAndCrop(this.image_, this.canvas_, this.request_);
+    ImageLoaderUtil.convertColorSpace(
         this.canvas_, this.request_.colorSpace || ColorSpace.SRGB);
     this.sendImage_(true);  // Image changed.
   } else {

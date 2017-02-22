@@ -110,7 +110,7 @@ Polymer({
   setNameservers_: function(nameserversType, nameservers) {
     if (nameserversType == 'custom') {
       // Add empty entries for unset custom nameservers.
-      for (let i = nameservers.length; i < this.MAX_NAMESERVERS; ++i)
+      for (var i = nameservers.length; i < this.MAX_NAMESERVERS; ++i)
         nameservers[i] = '';
     }
     this.nameservers_ = nameservers;
@@ -135,11 +135,13 @@ Polymer({
   },
 
   /**
+   * @param {boolean} editable
+   * @param {string} nameserversType
    * @return {boolean} True if the nameservers are editable.
    * @private
    */
-  canEdit_: function() {
-    return this.editable && this.nameserversType_ == 'custom';
+  canEdit_: function(editable, nameserversType) {
+    return editable && nameserversType == 'custom';
   },
 
   /**
@@ -151,8 +153,8 @@ Polymer({
   onTypeChange_: function(event) {
     if (this.nameserversType_ == 'custom')
       this.savedNameservers_ = this.nameservers_;
-    let target = /** @type {!HTMLSelectElement} */ (event.target);
-    let type = target.value;
+    var target = /** @type {!HTMLSelectElement} */ (event.target);
+    var type = target.value;
     this.nameserversType_ = type;
     if (type == 'custom') {
       // Restore the saved nameservers.
@@ -185,24 +187,19 @@ Polymer({
     var type = this.nameserversType_;
 
     if (type == 'custom') {
-      let nameservers = [];
-      for (let i = 0; i < this.MAX_NAMESERVERS; ++i) {
-        let id = 'nameserver' + i;
-        let nameserverInput = this.$$('#' + id);
-        let nameserver = '';
-        if (nameserverInput)
-          nameserver = this.$$('#' + id).value;
-        nameservers.push(nameserver);
+      var nameservers = new Array(this.MAX_NAMESERVERS);
+      for (var i = 0; i < this.MAX_NAMESERVERS; ++i) {
+        var nameserverInput = this.$$('#nameserver' + i);
+        nameservers[i] = nameserverInput ? nameserverInput.value : '';
       }
       this.fire('nameservers-change', {
         field: 'NameServers',
         value: nameservers,
       });
     } else if (type == 'google') {
-      let nameservers = this.GOOGLE_NAMESERVERS;
       this.fire('nameservers-change', {
         field: 'NameServers',
-        value: nameservers,
+        value: this.GOOGLE_NAMESERVERS,
       });
     } else {
       // automatic

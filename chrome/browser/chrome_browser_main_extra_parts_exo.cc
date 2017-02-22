@@ -90,7 +90,8 @@ class ChromeBrowserMainExtraPartsExo::WaylandWatcher {
 class ChromeBrowserMainExtraPartsExo::WaylandWatcher
     : public base::MessagePumpLibevent::Watcher {
  public:
-  explicit WaylandWatcher(exo::wayland::Server* server) : server_(server) {
+  explicit WaylandWatcher(exo::wayland::Server* server)
+      : controller_(FROM_HERE), server_(server) {
     base::MessageLoopForUI::current()->WatchFileDescriptor(
         server_->GetFileDescriptor(),
         true,  // persistent
@@ -131,7 +132,9 @@ void ChromeBrowserMainExtraPartsExo::PreProfileInit() {
   display_ =
       base::MakeUnique<exo::Display>(arc_notification_surface_manager_.get());
   wayland_server_ = exo::wayland::Server::Create(display_.get());
-  wayland_watcher_ = base::MakeUnique<WaylandWatcher>(wayland_server_.get());
+  // Wayland server creation can fail if XDG_RUNTIME_DIR is not set correctly.
+  if (wayland_server_)
+    wayland_watcher_ = base::MakeUnique<WaylandWatcher>(wayland_server_.get());
 }
 
 void ChromeBrowserMainExtraPartsExo::PostMainMessageLoopRun() {

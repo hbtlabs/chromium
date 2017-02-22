@@ -8,6 +8,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/permissions/permission_decision_auto_blocker.h"
 #include "chrome/browser/permissions/permission_dialog_delegate.h"
 #include "chrome/browser/permissions/permission_infobar_delegate.h"
 #include "chrome/browser/permissions/permission_request.h"
@@ -53,7 +54,7 @@ bool ArePermissionRequestsForSameTab(
 
 class PermissionQueueController::PendingInfobarRequest {
  public:
-  PendingInfobarRequest(content::PermissionType type,
+  PendingInfobarRequest(ContentSettingsType type,
                         const PermissionRequestID& id,
                         const GURL& requesting_frame,
                         const GURL& embedder,
@@ -84,7 +85,7 @@ class PermissionQueueController::PendingInfobarRequest {
   void CreatePrompt(PermissionQueueController* controller, bool show_dialog);
 
  private:
-  content::PermissionType type_;
+  ContentSettingsType type_;
   PermissionRequestID id_;
   GURL requesting_frame_;
   GURL embedder_;
@@ -98,7 +99,7 @@ class PermissionQueueController::PendingInfobarRequest {
 };
 
 PermissionQueueController::PendingInfobarRequest::PendingInfobarRequest(
-    content::PermissionType type,
+    ContentSettingsType type,
     const PermissionRequestID& id,
     const GURL& requesting_frame,
     const GURL& embedder,
@@ -159,10 +160,8 @@ void PermissionQueueController::PendingInfobarRequest::CreatePrompt(
 
 PermissionQueueController::PermissionQueueController(
     Profile* profile,
-    content::PermissionType permission_type,
     ContentSettingsType content_settings_type)
     : profile_(profile),
-      permission_type_(permission_type),
       content_settings_type_(content_settings_type),
       in_shutdown_(false) {}
 
@@ -186,8 +185,8 @@ void PermissionQueueController::CreateInfoBarRequest(
     return;
 
   pending_infobar_requests_.push_back(
-      PendingInfobarRequest(permission_type_, id, requesting_frame, embedder,
-                            user_gesture, profile_, callback));
+      PendingInfobarRequest(content_settings_type_, id, requesting_frame,
+                            embedder, user_gesture, profile_, callback));
   if (!AlreadyShowingInfoBarForTab(id))
     ShowQueuedInfoBarForTab(id);
 }
@@ -219,25 +218,38 @@ void PermissionQueueController::OnPermissionSet(const PermissionRequestID& id,
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   PermissionRequestType request_type =
-      PermissionUtil::GetRequestType(permission_type_);
+      PermissionUtil::GetRequestType(content_settings_type_);
   PermissionRequestGestureType gesture_type =
       PermissionUtil::GetGestureType(user_gesture);
   switch (decision) {
     case GRANTED:
-      PermissionUmaUtil::PermissionGranted(permission_type_, gesture_type,
+      PermissionUmaUtil::PermissionGranted(content_settings_type_, gesture_type,
                                            requesting_frame, profile_);
       PermissionUmaUtil::RecordPermissionPromptAccepted(request_type,
                                                         gesture_type);
+      PermissionUmaUtil::RecordPermissionEmbargoStatus(
+          PermissionEmbargoStatus::NOT_EMBARGOED);
       break;
     case DENIED:
-      PermissionUmaUtil::PermissionDenied(permission_type_, gesture_type,
+      PermissionUmaUtil::PermissionDenied(content_settings_type_, gesture_type,
                                           requesting_frame, profile_);
       PermissionUmaUtil::RecordPermissionPromptDenied(request_type,
                                                       gesture_type);
+      PermissionUmaUtil::RecordPermissionEmbargoStatus(
+          PermissionEmbargoStatus::NOT_EMBARGOED);
       break;
     case DISMISSED:
-      PermissionUmaUtil::PermissionDismissed(permission_type_, gesture_type,
-                                             requesting_frame, profile_);
+      PermissionUmaUtil::PermissionDismissed(
+          content_settings_type_, gesture_type, requesting_frame, profile_);
+      if (PermissionDecisionAutoBlocker::GetForProfile(profile_)
+              ->RecordDismissAndEmbargo(requesting_frame,
+                                        content_settings_type_)) {
+        PermissionUmaUtil::RecordPermissionEmbargoStatus(
+            PermissionEmbargoStatus::REPEATED_DISMISSALS);
+      } else {
+        PermissionUmaUtil::RecordPermissionEmbargoStatus(
+            PermissionEmbargoStatus::NOT_EMBARGOED);
+      }
       break;
     default:
       NOTREACHED();
@@ -435,8 +447,13 @@ void PermissionQueueController::UpdateContentSetting(
   ContentSetting content_setting =
       (decision == GRANTED) ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK;
 
+  // TODO(timloh): Remove this logic when push and notification permissions
+  // are reconciled, see crbug.com/563297.
+  ContentSettingsType type_for_map = content_settings_type_;
+  if (type_for_map == CONTENT_SETTINGS_TYPE_PUSH_MESSAGING)
+    type_for_map = CONTENT_SETTINGS_TYPE_NOTIFICATIONS;
   HostContentSettingsMapFactory::GetForProfile(profile_)
       ->SetContentSettingDefaultScope(
           requesting_frame.GetOrigin(), embedder.GetOrigin(),
-          content_settings_type_, std::string(), content_setting);
+          type_for_map, std::string(), content_setting);
 }

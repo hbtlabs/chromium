@@ -19,6 +19,10 @@ bool PasswordManagerClient::IsFillingEnabledForCurrentPage() const {
   return true;
 }
 
+bool PasswordManagerClient::IsHSTSActiveForHost(const GURL& origin) const {
+  return false;
+}
+
 bool PasswordManagerClient::OnCredentialManagerUsed() {
   return true;
 }
@@ -66,6 +70,10 @@ PasswordManagerClient::GetAutofillManagerForMainFrame() {
 
 const GURL& PasswordManagerClient::GetMainFrameURL() const {
   return GURL::EmptyGURL();
+}
+
+bool PasswordManagerClient::IsMainFrameSecure() const {
+  return false;
 }
 
 const LogManager* PasswordManagerClient::GetLogManager() const {

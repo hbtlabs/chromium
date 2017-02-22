@@ -122,13 +122,13 @@ template_instrumenting_agent_accessor = string.Template("""
 template_instrumenting_agent_impl = string.Template("""
 void InstrumentingAgents::add${class_name}(${class_name}* agent)
 {
-    ${member_name}.add(agent);
+    ${member_name}.insert(agent);
     ${has_member_name} = true;
 }
 
 void InstrumentingAgents::remove${class_name}(${class_name}* agent)
 {
-    ${member_name}.remove(agent);
+    ${member_name}.erase(agent);
     ${has_member_name} = !${member_name}.isEmpty();
 }
 """)

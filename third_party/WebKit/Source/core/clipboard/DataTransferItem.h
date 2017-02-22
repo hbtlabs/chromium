@@ -38,11 +38,11 @@
 
 namespace blink {
 
-class Blob;
 class DataObjectItem;
 class DataTransfer;
+class File;
+class ScriptState;
 class StringCallback;
-class ExecutionContext;
 
 class CORE_EXPORT DataTransferItem final
     : public GarbageCollected<DataTransferItem>,
@@ -56,8 +56,8 @@ class CORE_EXPORT DataTransferItem final
   String kind() const;
   String type() const;
 
-  void getAsString(ExecutionContext*, StringCallback*) const;
-  Blob* getAsFile() const;
+  void getAsString(ScriptState*, StringCallback*) const;
+  File* getAsFile() const;
 
   DataTransfer* getDataTransfer() { return m_dataTransfer.get(); }
   DataObjectItem* getDataObjectItem() { return m_item.get(); }

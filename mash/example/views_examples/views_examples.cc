@@ -3,12 +3,14 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "mash/public/interfaces/launchable.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/service_manager/public/c/main.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/connection.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_factory.h"
@@ -20,19 +22,15 @@
 #include "ui/views/examples/example_base.h"
 #include "ui/views/examples/examples_window.h"
 #include "ui/views/mus/aura_init.h"
-#include "ui/views/mus/window_manager_connection.h"
-
-namespace views {
-class AuraInit;
-class WindowManagerConnection;
-}
 
 class ViewsExamples
     : public service_manager::Service,
       public mash::mojom::Launchable,
       public service_manager::InterfaceFactory<mash::mojom::Launchable> {
  public:
-  ViewsExamples() {}
+  ViewsExamples() {
+    registry_.AddInterface<mash::mojom::Launchable>(this);
+  }
   ~ViewsExamples() override {}
 
  private:
@@ -41,20 +39,19 @@ class ViewsExamples
     tracing_.Initialize(context()->connector(), context()->identity().name());
     aura_init_ = base::MakeUnique<views::AuraInit>(
         context()->connector(), context()->identity(),
-        "views_mus_resources.pak");
-    window_manager_connection_ = views::WindowManagerConnection::Create(
-        context()->connector(), context()->identity());
+        "views_mus_resources.pak", std::string(), nullptr,
+        views::AuraInit::Mode::AURA_MUS);
   }
-  bool OnConnect(const service_manager::ServiceInfo& remote_info,
-                 service_manager::InterfaceRegistry* registry) override {
-    registry->AddInterface<mash::mojom::Launchable>(this);
-    return true;
+  void OnBindInterface(const service_manager::ServiceInfo& source_info,
+                       const std::string& interface_name,
+                       mojo::ScopedMessagePipeHandle interface_pipe) override {
+    registry_.BindInterface(source_info.identity, interface_name,
+                            std::move(interface_pipe));
   }
 
   // mash::mojom::Launchable:
   void Launch(uint32_t what, mash::mojom::LaunchMode how) override {
-    views::examples::ShowExamplesWindow(views::examples::QUIT_ON_CLOSE,
-                                        nullptr, nullptr);
+    views::examples::ShowExamplesWindow(views::examples::QUIT_ON_CLOSE);
   }
 
   // service_manager::InterfaceFactory<mash::mojom::Launchable>:
@@ -65,9 +62,10 @@ class ViewsExamples
 
   mojo::BindingSet<mash::mojom::Launchable> bindings_;
 
+  service_manager::BinderRegistry registry_;
+
   tracing::Provider tracing_;
   std::unique_ptr<views::AuraInit> aura_init_;
-  std::unique_ptr<views::WindowManagerConnection> window_manager_connection_;
 
   DISALLOW_COPY_AND_ASSIGN(ViewsExamples);
 };

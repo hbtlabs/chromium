@@ -10,8 +10,10 @@
 #include <limits>
 
 #include "base/containers/adapters.h"
+#include "base/memory/ptr_util.h"
 #include "cc/base/math_util.h"
 #include "cc/playback/display_item_list.h"
+#include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/utils/SkNWayCanvas.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/skia_util.h"
@@ -61,10 +63,10 @@ class DiscardableImagesMetadataCanvas : public SkNWayCanvas {
       int width,
       int height,
       std::vector<std::pair<DrawImage, gfx::Rect>>* image_set,
-      DiscardableImageMap::ImageToRegionMap* image_to_region)
+      std::unordered_map<ImageId, gfx::Rect>* image_id_to_rect)
       : SkNWayCanvas(width, height),
         image_set_(image_set),
-        image_id_to_region_(image_to_region),
+        image_id_to_rect_(image_id_to_rect),
         canvas_bounds_(SkRect::MakeIWH(width, height)),
         canvas_size_(width, height) {}
 
@@ -101,7 +103,7 @@ class DiscardableImagesMetadataCanvas : public SkNWayCanvas {
     }
     SkMatrix matrix;
     matrix.setRectToRect(*src, dst, SkMatrix::kFill_ScaleToFit);
-    matrix.postConcat(ctm);
+    matrix.preConcat(ctm);
     AddImage(sk_ref_sp(image), *src, MapRect(ctm, dst), matrix, paint);
   }
 
@@ -111,6 +113,30 @@ class DiscardableImagesMetadataCanvas : public SkNWayCanvas {
                        const SkPaint* paint) override {
     // No cc embedder issues image nine calls.
     NOTREACHED();
+  }
+
+  void onDrawRect(const SkRect& r, const SkPaint& paint) override {
+    AddPaintImage(r, paint);
+  }
+
+  void onDrawPath(const SkPath& path, const SkPaint& paint) override {
+    AddPaintImage(path.getBounds(), paint);
+  }
+
+  void onDrawOval(const SkRect& r, const SkPaint& paint) override {
+    AddPaintImage(r, paint);
+  }
+
+  void onDrawArc(const SkRect& r,
+                 SkScalar start_angle,
+                 SkScalar sweep_angle,
+                 bool use_center,
+                 const SkPaint& paint) override {
+    AddPaintImage(r, paint);
+  }
+
+  void onDrawRRect(const SkRRect& rr, const SkPaint& paint) override {
+    AddPaintImage(rr.rect(), paint);
   }
 
   SaveLayerStrategy getSaveLayerStrategy(const SaveLayerRec& rec) override {
@@ -176,16 +202,34 @@ class DiscardableImagesMetadataCanvas : public SkNWayCanvas {
     src_rect.roundOut(&src_irect);
     gfx::Rect image_rect = SafeClampPaintRectToSize(paint_rect, canvas_size_);
 
-    Region& region = (*image_id_to_region_)[image->uniqueID()];
-    region.Union(image_rect);
-
+    (*image_id_to_rect_)[image->uniqueID()].Union(image_rect);
     image_set_->push_back(std::make_pair(
         DrawImage(std::move(image), src_irect, filter_quality, matrix),
         image_rect));
   }
 
+  // Currently this function only handles extracting images from SkImageShaders
+  // embedded in SkPaints. Other embedded image cases, such as SkPictures,
+  // are not yet handled.
+  void AddPaintImage(const SkRect& rect, const SkPaint& paint) {
+    SkShader* shader = paint.getShader();
+    if (shader) {
+      SkMatrix matrix;
+      SkShader::TileMode xy[2];
+      SkImage* image = shader->isAImage(&matrix, xy);
+      if (image) {
+        const SkMatrix& ctm = getTotalMatrix();
+        matrix.postConcat(ctm);
+        // TODO(ericrk): Handle cases where we only need a sub-rect from the
+        // image. crbug.com/671821
+        AddImage(sk_ref_sp(image), SkRect::MakeFromIRect(image->bounds()),
+                 MapRect(ctm, rect), matrix, &paint);
+      }
+    }
+  }
+
   std::vector<std::pair<DrawImage, gfx::Rect>>* image_set_;
-  DiscardableImageMap::ImageToRegionMap* image_id_to_region_;
+  std::unordered_map<ImageId, gfx::Rect>* image_id_to_rect_;
   const SkRect canvas_bounds_;
   const gfx::Size canvas_size_;
   std::vector<SkPaint> saved_paints_;
@@ -197,11 +241,11 @@ DiscardableImageMap::DiscardableImageMap() {}
 
 DiscardableImageMap::~DiscardableImageMap() {}
 
-sk_sp<SkCanvas> DiscardableImageMap::BeginGeneratingMetadata(
+std::unique_ptr<SkCanvas> DiscardableImageMap::BeginGeneratingMetadata(
     const gfx::Size& bounds) {
   DCHECK(all_images_.empty());
-  return sk_make_sp<DiscardableImagesMetadataCanvas>(
-      bounds.width(), bounds.height(), &all_images_, &image_id_to_region_);
+  return base::MakeUnique<DiscardableImagesMetadataCanvas>(
+      bounds.width(), bounds.height(), &all_images_, &image_id_to_rect_);
 }
 
 void DiscardableImageMap::EndGeneratingMetadata() {
@@ -213,17 +257,17 @@ void DiscardableImageMap::EndGeneratingMetadata() {
 
 void DiscardableImageMap::GetDiscardableImagesInRect(
     const gfx::Rect& rect,
-    const gfx::SizeF& raster_scales,
+    float contents_scale,
     std::vector<DrawImage>* images) const {
   std::vector<size_t> indices;
   images_rtree_.Search(rect, &indices);
   for (size_t index : indices)
-    images->push_back(all_images_[index].first.ApplyScale(raster_scales));
+    images->push_back(all_images_[index].first.ApplyScale(contents_scale));
 }
 
-Region DiscardableImageMap::GetRegionForImage(uint32_t image_id) const {
-  const auto& it = image_id_to_region_.find(image_id);
-  return it == image_id_to_region_.end() ? Region() : it->second;
+gfx::Rect DiscardableImageMap::GetRectForImage(ImageId image_id) const {
+  const auto& it = image_id_to_rect_.find(image_id);
+  return it == image_id_to_rect_.end() ? gfx::Rect() : it->second;
 }
 
 DiscardableImageMap::ScopedMetadataGenerator::ScopedMetadataGenerator(

@@ -9,7 +9,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/memory/linked_ptr.h"
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
@@ -348,6 +347,11 @@ FileSystemProviderInternalOperationRequestedErrorFunction::Run() {
   using api::file_system_provider_internal::OperationRequestedError::Params;
   std::unique_ptr<Params> params(Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
+
+  if (params->error == api::file_system_provider::PROVIDER_ERROR_OK) {
+    // It's incorrect to pass OK as an error code.
+    return ValidationFailure(this);
+  }
 
   const base::File::Error error = ProviderErrorToFileError(params->error);
   return RejectRequest(RequestValue::CreateForOperationError(std::move(params)),

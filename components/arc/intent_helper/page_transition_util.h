@@ -14,9 +14,9 @@ bool ShouldIgnoreNavigation(ui::PageTransition page_transition,
                             bool allow_form_submit,
                             bool allow_client_redirect);
 
-ui::PageTransition MaskOutPageTransitionForTesting(
-    ui::PageTransition page_transition,
-    ui::PageTransition mask);
+// Removes |mask| bits from |page_transition|.
+ui::PageTransition MaskOutPageTransition(ui::PageTransition page_transition,
+                                         ui::PageTransition mask);
 
 }  // namespace arc
 

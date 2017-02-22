@@ -14,12 +14,11 @@ class Profile;
 
 class NotificationPermissionContext : public PermissionContextBase {
  public:
-  NotificationPermissionContext(Profile* profile,
-                                content::PermissionType permission_type);
+  NotificationPermissionContext(Profile* profile, ContentSettingsType);
   ~NotificationPermissionContext() override;
 
   // PermissionContextBase implementation.
-  ContentSetting GetPermissionStatus(
+  ContentSetting GetPermissionStatusInternal(
       const GURL& requesting_origin,
       const GURL& embedding_origin) const override;
   void ResetPermission(const GURL& requesting_origin,

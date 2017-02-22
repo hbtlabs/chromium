@@ -19,6 +19,9 @@ import gtest_utils
 import xctest_utils
 
 
+DERIVED_DATA = os.path.expanduser('~/Library/Developer/Xcode/DerivedData')
+
+
 XCTEST_PROJECT = os.path.abspath(os.path.join(
   os.path.dirname(__file__),
   'TestProject',
@@ -69,6 +72,12 @@ class SimulatorNotFoundError(TestRunnerError):
   def __init__(self, iossim_path):
     super(SimulatorNotFoundError, self).__init__(
         'Simulator does not exist: %s' % iossim_path)
+
+
+class TestDataExtractionError(TestRunnerError):
+  """Error extracting test data or crash reports from a device."""
+  def __init__(self):
+    super(TestDataExtractionError, self).__init__('Failed to extract test data')
 
 
 class XcodeVersionNotFoundError(TestRunnerError):
@@ -178,6 +187,13 @@ class TestRunner(object):
     self.xcode_version = xcode_version
     self.xctest_path = ''
 
+    self.test_results = {}
+    self.test_results['version'] = 3
+    self.test_results['path_delimiter'] = '.'
+    self.test_results['seconds_since_epoch'] = int(time.time())
+    # This will be overwritten when the tests complete successfully.
+    self.test_results['interrupted'] = True
+
     if xctest:
       plugins_dir = os.path.join(self.app_path, 'PlugIns')
       if not os.path.exists(plugins_dir):
@@ -223,6 +239,26 @@ class TestRunner(object):
         'screencapture',
         os.path.join(self.out_dir, 'desktop_%s.png' % time.time()),
     ])
+
+  def retrieve_derived_data(self):
+    """Retrieves the contents of DerivedData"""
+    # DerivedData contains some logs inside workspace-specific directories.
+    # Since we don't control the name of the workspace or project, most of
+    # the directories are just called "temporary", making it hard to tell
+    # which directory we need to retrieve. Instead we just delete the
+    # entire contents of this directory before starting and return the
+    # entire contents after the test is over.
+    if os.path.exists(DERIVED_DATA):
+      os.mkdir(os.path.join(self.out_dir, 'DerivedData'))
+      derived_data = os.path.join(self.out_dir, 'DerivedData')
+      for directory in os.listdir(DERIVED_DATA):
+        shutil.move(os.path.join(DERIVED_DATA, directory), derived_data)
+
+  def wipe_derived_data(self):
+    """Removes the contents of Xcode's DerivedData directory."""
+    if os.path.exists(DERIVED_DATA):
+      shutil.rmtree(DERIVED_DATA)
+      os.mkdir(DERIVED_DATA)
 
   def _run(self, cmd):
     """Runs the specified command, parsing GTest output.
@@ -319,6 +355,21 @@ class TestRunner(object):
           print
         else:
           raise
+
+      # Build test_results.json.
+      self.test_results['interrupted'] = result.crashed
+      self.test_results['num_failures_by_type'] = {
+        'FAIL': len(failed) + len(flaked),
+        'PASS': len(passed),
+      }
+      tests = collections.OrderedDict()
+      for test in passed:
+        tests[test] = { 'expected': 'PASS', 'actual': 'PASS' }
+      for test in failed:
+        tests[test] = { 'expected': 'PASS', 'actual': 'FAIL' }
+      for test in flaked:
+        tests[test] = { 'expected': 'PASS', 'actual': 'FAIL' }
+      self.test_results['tests'] = tests
 
       self.logs['passed tests'] = passed
       for test, log_lines in failed.iteritems():
@@ -430,6 +481,7 @@ class SimulatorTestRunner(TestRunner):
     """Performs setup actions which must occur prior to every test launch."""
     self.kill_simulators()
     self.wipe_simulator()
+    self.wipe_derived_data()
     self.homedir = self.get_home_directory()
     # Crash reports have a timestamp in their file name, formatted as
     # YYYY-MM-DD-HHMMSS. Save the current time in the same format so
@@ -487,6 +539,7 @@ class SimulatorTestRunner(TestRunner):
     """Performs cleanup actions which must occur after every test launch."""
     self.extract_test_data()
     self.retrieve_crash_reports()
+    self.retrieve_derived_data()
     self.screenshot_desktop()
     self.kill_simulators()
     self.wipe_simulator()
@@ -510,26 +563,22 @@ class SimulatorTestRunner(TestRunner):
         '-d', self.platform,
         '-s', self.version,
     ]
-    args = []
 
     if test_filter:
       kif_filter = get_kif_test_filter(test_filter, invert=invert)
       gtest_filter = get_gtest_filter(test_filter, invert=invert)
       cmd.extend(['-e', 'GKIF_SCENARIO_FILTER=%s' % kif_filter])
-
-      if self.xcode_version == '8.0':
-        args.extend(['-c', '--gtest_filter=%s' % gtest_filter])
-      else:
-        args.append('--gtest_filter=%s' % gtest_filter)
+      cmd.extend(['-c', '--gtest_filter=%s' % gtest_filter])
 
     for env_var in self.env_vars:
       cmd.extend(['-e', env_var])
 
+    for test_arg in self.test_args:
+      cmd.extend(['-c', test_arg])
+
     cmd.append(self.app_path)
     if self.xctest_path:
       cmd.append(self.xctest_path)
-    cmd.extend(self.test_args)
-    cmd.extend(args)
     return cmd
 
   def get_launch_env(self):
@@ -601,22 +650,42 @@ class DeviceTestRunner(TestRunner):
   def set_up(self):
     """Performs setup actions which must occur prior to every test launch."""
     self.uninstall_apps()
+    self.wipe_derived_data()
     self.install_app()
 
   def extract_test_data(self):
     """Extracts data emitted by the test."""
-    subprocess.check_call([
-      'idevicefs',
-      '--udid', self.udid,
-      'pull',
-      '@%s/Documents' % self.cfbundleid,
-      os.path.join(self.out_dir, 'Documents'),
-    ])
+    try:
+      subprocess.check_call([
+        'idevicefs',
+        '--udid', self.udid,
+        'pull',
+        '@%s/Documents' % self.cfbundleid,
+        os.path.join(self.out_dir, 'Documents'),
+      ])
+    except subprocess.CalledProcessError:
+      raise TestDataExtractionError()
+
+  def retrieve_crash_reports(self):
+    """Retrieves crash reports produced by the test."""
+    logs_dir = os.path.join(self.out_dir, 'Logs')
+    os.mkdir(logs_dir)
+    try:
+      subprocess.check_call([
+        'idevicecrashreport',
+        '--extract',
+        '--udid', self.udid,
+        logs_dir,
+      ])
+    except subprocess.CalledProcessError:
+      raise TestDataExtractionError()
 
   def tear_down(self):
     """Performs cleanup actions which must occur after every test launch."""
-    self.extract_test_data()
     self.screenshot_desktop()
+    self.retrieve_derived_data()
+    self.extract_test_data()
+    self.retrieve_crash_reports()
     self.uninstall_apps()
 
   def get_launch_command(self, test_filter=None, invert=False):

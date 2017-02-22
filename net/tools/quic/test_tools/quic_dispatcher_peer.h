@@ -5,10 +5,8 @@
 #ifndef NET_TOOLS_QUIC_TEST_TOOLS_QUIC_DISPATCHER_PEER_H_
 #define NET_TOOLS_QUIC_TEST_TOOLS_QUIC_DISPATCHER_PEER_H_
 
-#include "net/tools/quic/quic_dispatcher.h"
-
 #include "base/macros.h"
-#include "net/base/ip_endpoint.h"
+#include "net/tools/quic/quic_dispatcher.h"
 
 namespace net {
 
@@ -52,8 +50,8 @@ class QuicDispatcherPeer {
       size_t num_session_allowed);
 
   static void SendPublicReset(QuicDispatcher* dispatcher,
-                              const IPEndPoint& server_address,
-                              const IPEndPoint& client_address,
+                              const QuicSocketAddress& server_address,
+                              const QuicSocketAddress& client_address,
                               QuicConnectionId connection_id,
                               QuicPacketNumber rejected_packet_number);
 

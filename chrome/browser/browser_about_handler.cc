@@ -20,10 +20,15 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "components/url_formatter/url_fixer.h"
+#include "content/public/common/content_features.h"
 #include "extensions/features/features.h"
 
 #if !defined(OS_ANDROID)
 #include "chrome/browser/ui/webui/md_history_ui.h"
+#endif
+
+#if defined(OS_ANDROID)
+#include "chrome/browser/android/chrome_feature_list.h"
 #endif
 
 bool FixupBrowserAboutURL(GURL* url,
@@ -75,20 +80,25 @@ bool WillHandleBrowserAboutURL(GURL* url,
     }
   // Redirect chrome://settings/extensions (legacy URL).
   } else if (host == chrome::kChromeUISettingsHost &&
-      url->path() == std::string("/") + chrome::kExtensionsSubPage) {
+             url->path() ==
+                 std::string("/") + chrome::kDeprecatedExtensionsSubPage) {
     host = chrome::kChromeUIUberHost;
     path = chrome::kChromeUIExtensionsHost;
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
   // Redirect chrome://history.
   } else if (host == chrome::kChromeUIHistoryHost) {
 #if defined(OS_ANDROID)
-    // On Android, redirect directly to chrome://history-frame since
-    // uber page is unsupported.
-    host = chrome::kChromeUIHistoryFrameHost;
+    // TODO(twellington): remove this after native Android history launches.
+    // See http://crbug.com/654071.
+    if (!base::FeatureList::IsEnabled(features::kNativeAndroidHistoryManager)) {
+      // On Android, redirect directly to chrome://history-frame since
+      // uber page is unsupported.
+      host = chrome::kChromeUIHistoryFrameHost;
+    }
 #else
     // Material design history is handled on the top-level chrome://history
     // host.
-    if (MdHistoryUI::IsEnabled(Profile::FromBrowserContext(browser_context))) {
+    if (base::FeatureList::IsEnabled(features::kMaterialDesignHistory)) {
       host = chrome::kChromeUIHistoryHost;
       path = url->path();
     } else {
@@ -100,7 +110,7 @@ bool WillHandleBrowserAboutURL(GURL* url,
   } else if (host == chrome::kChromeUISettingsHost) {
     if (base::FeatureList::IsEnabled(features::kMaterialDesignSettings)) {
       return true;  // Prevent further rewriting - this is a valid URL.
-    } else if (::switches::AboutInSettingsEnabled()) {
+    } else if (::switches::SettingsWindowEnabled()) {
       host = chrome::kChromeUISettingsFrameHost;
     } else {
       host = chrome::kChromeUIUberHost;
@@ -109,9 +119,8 @@ bool WillHandleBrowserAboutURL(GURL* url,
   // Redirect chrome://help, unless MD settings is enabled.
   } else if (host == chrome::kChromeUIHelpHost) {
     if (base::FeatureList::IsEnabled(features::kMaterialDesignSettings)) {
-      host = chrome::kChromeUISettingsHost;
-      path = chrome::kChromeUIHelpHost;
-    } else if (::switches::AboutInSettingsEnabled()) {
+      return false;  // Handled in the HandleWebUI handler.
+    } else if (::switches::SettingsWindowEnabled()) {
       host = chrome::kChromeUISettingsFrameHost;
       if (url->path().empty() || url->path() == "/")
         path = chrome::kChromeUIHelpHost;

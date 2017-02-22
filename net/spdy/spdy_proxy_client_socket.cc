@@ -5,6 +5,7 @@
 #include "net/spdy/spdy_proxy_client_socket.h"
 
 #include <algorithm>  // min
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -167,7 +168,7 @@ bool SpdyProxyClientSocket::WasEverUsed() const {
   return was_ever_used_ || (spdy_stream_.get() && spdy_stream_->WasEverUsed());
 }
 
-bool SpdyProxyClientSocket::WasNpnNegotiated() const {
+bool SpdyProxyClientSocket::WasAlpnNegotiated() const {
   return false;
 }
 
@@ -406,7 +407,7 @@ int SpdyProxyClientSocket::DoReadReplyComplete(int result) {
 
       redirect_has_load_timing_info_ =
           spdy_stream_->GetLoadTimingInfo(&redirect_load_timing_info_);
-      // Note that this triggers a RST_STREAM_CANCEL.
+      // Note that this triggers a ERROR_CODE_CANCEL.
       spdy_stream_->DetachDelegate();
       next_state_ = STATE_DISCONNECTED;
       return ERR_HTTPS_PROXY_TUNNEL_RESPONSE;
@@ -430,26 +431,26 @@ int SpdyProxyClientSocket::DoReadReplyComplete(int result) {
 // SpdyStream::Delegate methods:
 // Called when SYN frame has been sent.
 // Returns true if no more data to be sent after SYN frame.
-void SpdyProxyClientSocket::OnRequestHeadersSent() {
+void SpdyProxyClientSocket::OnHeadersSent() {
   DCHECK_EQ(next_state_, STATE_SEND_REQUEST_COMPLETE);
 
   OnIOComplete(OK);
 }
 
-SpdyResponseHeadersStatus SpdyProxyClientSocket::OnResponseHeadersUpdated(
+void SpdyProxyClientSocket::OnHeadersReceived(
     const SpdyHeaderBlock& response_headers) {
   // If we've already received the reply, existing headers are too late.
   // TODO(mbelshe): figure out a way to make HEADERS frames useful after the
   //                initial response.
   if (next_state_ != STATE_READ_REPLY_COMPLETE)
-    return RESPONSE_HEADERS_ARE_COMPLETE;
+    return;
 
   // Save the response
-  if (!SpdyHeadersToHttpResponse(response_headers, &response_))
-    return RESPONSE_HEADERS_ARE_INCOMPLETE;
+  const bool headers_valid =
+      SpdyHeadersToHttpResponse(response_headers, &response_);
+  DCHECK(headers_valid);
 
   OnIOComplete(OK);
-  return RESPONSE_HEADERS_ARE_COMPLETE;
 }
 
 // Called when data is received or on EOF (if |buffer| is NULL).

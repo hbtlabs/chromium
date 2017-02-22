@@ -17,10 +17,8 @@
 #include "mojo/public/cpp/bindings/binding.h"
 
 namespace content {
-class BrowserContext;
+class NavigationHandle;
 class RenderFrameHost;
-struct FrameNavigateParams;
-struct LoadCommittedDetails;
 }
 
 namespace autofill {
@@ -84,7 +82,6 @@ class ContentAutofillDriver : public AutofillDriver,
                               const FormFieldData& field,
                               const gfx::RectF& bounding_box) override;
   void HidePopup() override;
-  void PingAck() override;
   void FocusNoLongerOnForm() override;
   void DidFillAutofillFormData(const FormData& form,
                                base::TimeTicks timestamp) override;
@@ -94,8 +91,7 @@ class ContentAutofillDriver : public AutofillDriver,
                    const std::vector<base::string16>& labels) override;
 
   // Called when the frame has navigated.
-  void DidNavigateFrame(const content::LoadCommittedDetails& details,
-                        const content::FrameNavigateParams& params);
+  void DidNavigateFrame(content::NavigationHandle* navigation_handle);
 
   // Tells the render frame that a user gesture was observed
   // somewhere in the tab (including in a different frame).

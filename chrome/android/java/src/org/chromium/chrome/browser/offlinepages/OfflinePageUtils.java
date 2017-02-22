@@ -8,6 +8,8 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.BatteryManager;
@@ -22,6 +24,7 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.snackbar.Snackbar;
@@ -146,9 +149,9 @@ public class OfflinePageUtils {
     public static String stripSchemeFromOnlineUrl(String onlineUrl) {
         onlineUrl = onlineUrl.trim();
         // Offline pages are only saved for https:// and http:// schemes.
-        if (onlineUrl.startsWith("https://")) {
+        if (onlineUrl.startsWith(UrlConstants.HTTPS_URL_PREFIX)) {
             return onlineUrl.substring(8);
-        } else if (onlineUrl.startsWith("http://")) {
+        } else if (onlineUrl.startsWith(UrlConstants.HTTP_URL_PREFIX)) {
             return onlineUrl.substring(7);
         } else {
             return onlineUrl;
@@ -161,11 +164,14 @@ public class OfflinePageUtils {
      * @param tab The current tab.
      */
     public static void showOfflineSnackbarIfNecessary(ChromeActivity activity, Tab tab) {
-        if (OfflinePageTabObserver.getInstance() == null) {
+        if (OfflinePageTabObserver.getInstance() == null
+                || !OfflinePageTabObserver.getInstance().isCurrentContext(
+                           activity.getBaseContext())) {
             SnackbarController snackbarController =
                     createReloadSnackbarController(activity.getTabModelSelector());
-            OfflinePageTabObserver.init(
-                    activity.getBaseContext(), activity.getSnackbarManager(), snackbarController);
+            OfflinePageTabObserver.init(activity.getBaseContext(),
+                    activity.getTabModelSelector().getModel(false), activity.getSnackbarManager(),
+                    snackbarController);
         }
 
         showOfflineSnackbarIfNecessary(tab);
@@ -231,8 +237,34 @@ public class OfflinePageUtils {
         };
     }
 
+    /**
+     * Returns a class encapsulating the current power, battery, and network conditions.
+     */
     public static DeviceConditions getDeviceConditions(Context context) {
         return getInstance().getDeviceConditionsImpl(context);
+    }
+
+    /**
+     * Return true if the device is plugged into wall power.
+     */
+    public static boolean getPowerConditions(Context context) {
+        // TODO(petewil): refactor to get power, network, and battery directly from both here and
+        // getDeviceConditionsImpl instead of always making a DeviceConditions object.
+        return getInstance().getDeviceConditionsImpl(context).isPowerConnected();
+    }
+
+    /**
+     * Get the percentage of battery remaining
+     */
+    public static int getBatteryConditions(Context context) {
+        return getInstance().getDeviceConditionsImpl(context).getBatteryPercentage();
+    }
+
+    /**
+     * Returns an enum representing the type of the network connection.
+     */
+    public static int getNetworkConditions(Context context) {
+        return getInstance().getDeviceConditionsImpl(context).getNetConnectionType();
     }
 
     /**
@@ -634,9 +666,41 @@ public class OfflinePageUtils {
         Intent batteryStatus = context.registerReceiver(null, filter);
         if (batteryStatus == null) return null;
 
-        return new DeviceConditions(isPowerConnected(batteryStatus),
-                batteryPercentage(batteryStatus),
-                NetworkChangeNotifier.getInstance().getCurrentConnectionType());
+        // Get the connection type from chromium's internal object.
+        int connectionType = NetworkChangeNotifier.getInstance().getCurrentConnectionType();
+
+        // Sometimes the NetworkConnectionNotifier lags the actual connection type, especially when
+        // the GCM NM wakes us from doze state.  If we are really connected, report the connection
+        // type from android.
+        if (connectionType == ConnectionType.CONNECTION_NONE) {
+            // Get the connection type from android in case chromium's type is not yet set.
+            ConnectivityManager cm =
+                    (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+            NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
+            boolean isConnected = activeNetwork != null && activeNetwork.isConnectedOrConnecting();
+            if (isConnected) {
+                connectionType = convertAndroidNetworkTypeToConnectionType(activeNetwork.getType());
+            }
+        }
+
+        return new DeviceConditions(
+                isPowerConnected(batteryStatus), batteryPercentage(batteryStatus), connectionType);
+    }
+
+    /** Returns the NCN network type corresponding to the connectivity manager network type */
+    protected int convertAndroidNetworkTypeToConnectionType(int connectivityManagerNetworkType) {
+        if (connectivityManagerNetworkType == ConnectivityManager.TYPE_WIFI) {
+            return ConnectionType.CONNECTION_WIFI;
+        }
+        // for mobile, we don't know if it is 2G, 3G, or 4G, default to worst case of 2G.
+        if (connectivityManagerNetworkType == ConnectivityManager.TYPE_MOBILE) {
+            return ConnectionType.CONNECTION_2G;
+        }
+        if (connectivityManagerNetworkType == ConnectivityManager.TYPE_BLUETOOTH) {
+            return ConnectionType.CONNECTION_BLUETOOTH;
+        }
+        // Since NetworkConnectivityManager doesn't understand the other types, call them UNKNOWN.
+        return ConnectionType.CONNECTION_UNKNOWN;
     }
 
     @VisibleForTesting

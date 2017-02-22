@@ -8,9 +8,11 @@
 #import <Foundation/Foundation.h>
 
 #include <memory>
+#include <vector>
 
-namespace base {
-class ListValue;
+namespace physical_web {
+struct Metadata;
+using MetadataList = std::vector<Metadata>;
 }
 
 @protocol PhysicalWebScannerDelegate;
@@ -53,9 +55,9 @@ class ListValue;
 - (NSArray*)devices;
 
 // Returns the metadata for all resolved physical web URLs. The returned value
-// will never be nil; if no metadata has been received then an empty list is
+// will never be null; if no metadata has been received then an empty list is
 // returned.
-- (std::unique_ptr<base::ListValue>)metadata;
+- (std::unique_ptr<physical_web::MetadataList>)metadataList;
 
 @end
 

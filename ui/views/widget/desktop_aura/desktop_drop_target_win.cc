@@ -5,7 +5,7 @@
 #include "ui/views/widget/desktop_aura/desktop_drop_target_win.h"
 
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/win/win_util.h"
 #include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/client/drag_drop_delegate.h"
@@ -129,8 +129,7 @@ void DesktopDropTargetWin::Translate(
     DragDropDelegate** delegate) {
   gfx::Point location(position.x, position.y);
   gfx::Point root_location = location;
-  root_window_->GetHost()->ConvertPointFromNativeScreen(
-      &root_location);
+  root_window_->GetHost()->ConvertScreenInPixelsToDIP(&root_location);
   aura::Window* target_window =
       root_window_->GetEventHandlerForPoint(root_location);
   bool target_window_changed = false;

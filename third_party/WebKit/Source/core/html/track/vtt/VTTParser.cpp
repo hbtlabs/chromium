@@ -34,6 +34,7 @@
 #include "core/dom/ProcessingInstruction.h"
 #include "core/dom/Text.h"
 #include "core/html/track/vtt/VTTElement.h"
+#include "core/html/track/vtt/VTTRegion.h"
 #include "core/html/track/vtt/VTTScanner.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/text/SegmentedString.h"
@@ -94,11 +95,6 @@ void VTTParser::getNewCues(HeapVector<Member<TextTrackCue>>& outputCues) {
   outputCues.swap(m_cueList);
 }
 
-void VTTParser::getNewRegions(HeapVector<Member<VTTRegion>>& outputRegions) {
-  DCHECK(outputRegions.isEmpty());
-  outputRegions.swap(m_regionList);
-}
-
 void VTTParser::parseBytes(const char* data, size_t length) {
   String textData = m_decoder->decode(data, length);
   m_lineReader.append(textData);
@@ -111,6 +107,7 @@ void VTTParser::flush() {
   m_lineReader.setEndOfStream();
   parse();
   flushPendingCue();
+  m_regionMap.clear();
 }
 
 void VTTParser::parse() {
@@ -136,9 +133,6 @@ void VTTParser::parse() {
         collectMetadataHeader(line);
 
         if (line.isEmpty()) {
-          if (m_client && m_regionList.size())
-            m_client->newRegionsParsed();
-
           m_state = Id;
           break;
         }
@@ -220,7 +214,6 @@ bool VTTParser::hasRequiredFileIdentifier(const String& line) {
 
 void VTTParser::collectMetadataHeader(const String& line) {
   // WebVTT header parsing (WebVTT parser algorithm step 12)
-  DEFINE_STATIC_LOCAL(const AtomicString, regionHeaderName, ("Region"));
 
   // The only currently supported header is the "Region" header.
   if (!RuntimeEnabledFeatures::webVTTRegionsEnabled())
@@ -236,7 +229,7 @@ void VTTParser::collectMetadataHeader(const String& line) {
   String headerName = line.substring(0, colonPosition);
 
   // Steps 12.5 If metadata's name equals "Region":
-  if (headerName == regionHeaderName) {
+  if (headerName == "Region") {
     String headerValue = line.substring(colonPosition + 1);
     // Steps 12.5.1 - 12.5.11 Region creation: Let region be a new text track
     // region [...]
@@ -376,16 +369,16 @@ void VTTParser::createNewCue() {
   VTTCue* cue = VTTCue::create(*m_document, m_currentStartTime,
                                m_currentEndTime, m_currentContent.toString());
   cue->setId(m_currentId);
-  cue->parseSettings(m_currentSettings);
+  cue->parseSettings(&m_regionMap, m_currentSettings);
 
-  m_cueList.append(cue);
+  m_cueList.push_back(cue);
   if (m_client)
     m_client->newCuesParsed();
 }
 
 void VTTParser::resetCueValues() {
   m_currentId = emptyAtom;
-  m_currentSettings = emptyString();
+  m_currentSettings = emptyString;
   m_currentStartTime = 0;
   m_currentEndTime = 0;
   m_currentContent.clear();
@@ -399,17 +392,9 @@ void VTTParser::createNewRegion(const String& headerValue) {
   VTTRegion* region = VTTRegion::create();
   region->setRegionSettings(headerValue);
 
-  // Step 12.5.10 If the text track list of regions regions contains a region
-  // with the same region identifier value as region, remove that region.
-  for (size_t i = 0; i < m_regionList.size(); ++i) {
-    if (m_regionList[i]->id() == region->id()) {
-      m_regionList.remove(i);
-      break;
-    }
-  }
-
-  // Step 12.5.11
-  m_regionList.append(region);
+  if (region->id().isEmpty())
+    return;
+  m_regionMap.set(region->id(), region);
 }
 
 bool VTTParser::collectTimeStamp(const String& line, double& timeStamp) {
@@ -522,7 +507,7 @@ void VTTTreeBuilder::constructTreeFromToken(Document& document) {
         child->setAttribute(VTTElement::voiceAttributeName(),
                             m_token.annotation());
       } else if (nodeType == VTTNodeTypeLanguage) {
-        m_languageStack.append(m_token.annotation());
+        m_languageStack.push_back(m_token.annotation());
         child->setAttribute(VTTElement::langAttributeName(),
                             m_languageStack.back());
       }
@@ -577,7 +562,7 @@ DEFINE_TRACE(VTTParser) {
   visitor->trace(m_document);
   visitor->trace(m_client);
   visitor->trace(m_cueList);
-  visitor->trace(m_regionList);
+  visitor->trace(m_regionMap);
 }
 
 }  // namespace blink

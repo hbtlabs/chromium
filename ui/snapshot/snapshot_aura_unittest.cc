@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/test/test_simple_task_runner.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkPixelRef.h"
 #include "ui/aura/test/aura_test_helper.h"
 #include "ui/aura/test/test_screen.h"
 #include "ui/aura/test/test_window_delegate.h"
@@ -97,12 +98,15 @@ class SnapshotAuraTest : public testing::Test {
     // The ContextFactory must exist before any Compositors are created.
     // Snapshot test tests real drawing and readback, so needs pixel output.
     bool enable_pixel_output = true;
-    ui::ContextFactory* context_factory =
-        ui::InitializeContextFactoryForTests(enable_pixel_output);
+    ui::ContextFactory* context_factory = nullptr;
+    ui::ContextFactoryPrivate* context_factory_private = nullptr;
+
+    ui::InitializeContextFactoryForTests(enable_pixel_output, &context_factory,
+                                         &context_factory_private);
 
     helper_.reset(
         new aura::test::AuraTestHelper(base::MessageLoopForUI::current()));
-    helper_->SetUp(context_factory);
+    helper_->SetUp(context_factory, context_factory_private);
     new ::wm::DefaultActivationClient(helper_->root_window());
   }
 
@@ -137,28 +141,14 @@ class SnapshotAuraTest : public testing::Test {
     aura::Window::ConvertRectToTarget(
         test_window(), root_window(), &source_rect);
 
-    scoped_refptr<base::TestSimpleTaskRunner> task_runner(
-        new base::TestSimpleTaskRunner());
     scoped_refptr<SnapshotHolder> holder(new SnapshotHolder);
     ui::GrabWindowSnapshotAsync(
-        root_window(),
-        source_rect,
-        task_runner,
+        root_window(), source_rect,
         base::Bind(&SnapshotHolder::SnapshotCallback, holder));
 
-    // Wait for copy response.
-    WaitForDraw();
-    // Run internal snapshot callback to scale/rotate response image.
-    task_runner->RunUntilIdle();
-    // Run SnapshotHolder callback.
-    helper_->RunAllPendingInMessageLoop();
-
-    if (holder->completed())
-      return holder->image();
-
-    // Callback never called.
-    NOTREACHED();
-    return gfx::Image();
+    holder->WaitForSnapshot();
+    DCHECK(holder->completed());
+    return holder->image();
   }
 
  private:
@@ -166,12 +156,13 @@ class SnapshotAuraTest : public testing::Test {
    public:
     SnapshotHolder() : completed_(false) {}
 
-    void SnapshotCallback(scoped_refptr<base::RefCountedBytes> png_data) {
+    void SnapshotCallback(const gfx::Image& image) {
       DCHECK(!completed_);
-      image_ = gfx::Image::CreateFrom1xPNGBytes(&(png_data->data()[0]),
-                                                png_data->size());
+      image_ = image;
       completed_ = true;
+      run_loop_.Quit();
     }
+    void WaitForSnapshot() { run_loop_.Run(); }
     bool completed() const {
       return completed_;
     };
@@ -182,6 +173,7 @@ class SnapshotAuraTest : public testing::Test {
 
     virtual ~SnapshotHolder() {}
 
+    base::RunLoop run_loop_;
     gfx::Image image_;
     bool completed_;
   };
@@ -227,7 +219,7 @@ TEST_F(SnapshotAuraTest, Rotated) {
 }
 
 TEST_F(SnapshotAuraTest, UIScale) {
-  const float kUIScale = 1.25f;
+  const float kUIScale = 0.5f;
   test_screen()->SetUIScale(kUIScale);
 
   gfx::Rect test_bounds(100, 100, 300, 200);
@@ -236,11 +228,12 @@ TEST_F(SnapshotAuraTest, UIScale) {
 
   // Snapshot always captures the physical pixels.
   gfx::SizeF snapshot_size(test_bounds.size());
+  snapshot_size.Scale(1 / kUIScale);
 
   gfx::Image snapshot = GrabSnapshotForTestWindow();
   EXPECT_EQ(gfx::ToRoundedSize(snapshot_size).ToString(),
             snapshot.Size().ToString());
-  EXPECT_EQ(0u, GetFailedPixelsCount(snapshot));
+  EXPECT_EQ(0u, GetFailedPixelsCountWithScaleFactor(snapshot, 1 / kUIScale));
 }
 
 TEST_F(SnapshotAuraTest, DeviceScaleFactor) {
@@ -261,7 +254,7 @@ TEST_F(SnapshotAuraTest, DeviceScaleFactor) {
 }
 
 TEST_F(SnapshotAuraTest, RotateAndUIScale) {
-  const float kUIScale = 1.25f;
+  const float kUIScale = 0.5f;
   test_screen()->SetUIScale(kUIScale);
   test_screen()->SetDisplayRotation(display::Display::ROTATE_90);
 
@@ -271,16 +264,17 @@ TEST_F(SnapshotAuraTest, RotateAndUIScale) {
 
   // Snapshot always captures the physical pixels.
   gfx::SizeF snapshot_size(test_bounds.size());
+  snapshot_size.Scale(1 / kUIScale);
 
   gfx::Image snapshot = GrabSnapshotForTestWindow();
   EXPECT_EQ(gfx::ToRoundedSize(snapshot_size).ToString(),
             snapshot.Size().ToString());
-  EXPECT_EQ(0u, GetFailedPixelsCount(snapshot));
+  EXPECT_EQ(0u, GetFailedPixelsCountWithScaleFactor(snapshot, 1 / kUIScale));
 }
 
 TEST_F(SnapshotAuraTest, RotateAndUIScaleAndScaleFactor) {
   test_screen()->SetDeviceScaleFactor(2.0f);
-  const float kUIScale = 1.25f;
+  const float kUIScale = 0.5f;
   test_screen()->SetUIScale(kUIScale);
   test_screen()->SetDisplayRotation(display::Display::ROTATE_90);
 
@@ -290,12 +284,12 @@ TEST_F(SnapshotAuraTest, RotateAndUIScaleAndScaleFactor) {
 
   // Snapshot always captures the physical pixels.
   gfx::SizeF snapshot_size(test_bounds.size());
-  snapshot_size.Scale(2.0f);
+  snapshot_size.Scale(2.0f / kUIScale);
 
   gfx::Image snapshot = GrabSnapshotForTestWindow();
   EXPECT_EQ(gfx::ToRoundedSize(snapshot_size).ToString(),
             snapshot.Size().ToString());
-  EXPECT_EQ(0u, GetFailedPixelsCountWithScaleFactor(snapshot, 2));
+  EXPECT_EQ(0u, GetFailedPixelsCountWithScaleFactor(snapshot, 2 / kUIScale));
 }
 
 }  // namespace ui

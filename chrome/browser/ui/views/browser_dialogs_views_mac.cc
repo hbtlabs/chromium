@@ -10,6 +10,7 @@
 #include "chrome/browser/ui/views/bookmarks/bookmark_bubble_view.h"
 #include "chrome/browser/ui/views/content_setting_bubble_contents.h"
 #include "chrome/browser/ui/views/task_manager_view.h"
+#include "chrome/browser/ui/views/update_recommended_message_box.h"
 #include "chrome/browser/ui/views/website_settings/website_settings_popup_view.h"
 
 // This file provides definitions of desktop browser dialog-creation methods for
@@ -59,9 +60,6 @@ void ShowBookmarkBubbleViewsAtPoint(const gfx::Point& anchor_point,
 }
 
 task_manager::TaskManagerTableModel* ShowTaskManagerViews(Browser* browser) {
-  // On platforms other than Mac, the Views task manager is shown unless
-  // explicitly disabled. Assume that running with ToolkitViewsDialogsEnabled()
-  // on Mac also means the Views task manager is desired.
   return task_manager::TaskManagerView::Show(browser);
 }
 
@@ -79,6 +77,10 @@ void ContentSettingBubbleViewsBridge::Show(gfx::NativeView parent_view,
   contents->set_parent_window(parent_view);
   contents->SetAnchorRect(gfx::Rect(anchor, gfx::Size()));
   views::BubbleDialogDelegateView::CreateBubble(contents)->Show();
+}
+
+void ShowUpdateChromeDialogViews(gfx::NativeWindow parent) {
+  UpdateRecommendedMessageBox::Show(parent);
 }
 
 }  // namespace chrome

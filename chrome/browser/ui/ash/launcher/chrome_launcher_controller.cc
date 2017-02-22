@@ -4,15 +4,16 @@
 
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 
+#include "base/auto_reset.h"
 #include "base/memory/ptr_util.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/extensions/extension_app_icon_loader.h"
-#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_icon_loader.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/ash/chrome_launcher_prefs.h"
 #include "chrome/browser/ui/ash/launcher/launcher_controller_helper.h"
 #include "content/public/common/service_manager_connection.h"
-#include "content/public/common/service_names.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -25,21 +26,25 @@ ChromeLauncherController::~ChromeLauncherController() {
     instance_ = nullptr;
 }
 
-void ChromeLauncherController::LaunchApp(const std::string& app_id,
-                                         ash::LaunchSource source,
+void ChromeLauncherController::Init() {
+  // Start observing the shelf controller.
+  if (ConnectToShelfController()) {
+    ash::mojom::ShelfObserverAssociatedPtrInfo ptr_info;
+    observer_binding_.Bind(&ptr_info);
+    shelf_controller_->AddObserver(std::move(ptr_info));
+  }
+  OnInit();
+}
+
+void ChromeLauncherController::LaunchApp(ash::AppLauncherId id,
+                                         ash::ShelfLaunchSource source,
                                          int event_flags) {
-  launcher_controller_helper_->LaunchApp(app_id, source, event_flags);
+  launcher_controller_helper_->LaunchApp(id, source, event_flags);
 }
 
 ChromeLauncherController::ChromeLauncherController() : observer_binding_(this) {
   DCHECK(!instance_);
   instance_ = this;
-  // Start observing the shelf controller immediately.
-  if (ConnectToShelfController()) {
-    ash::mojom::ShelfObserverAssociatedPtrInfo ptr_info;
-    observer_binding_.Bind(&ptr_info, shelf_controller_.associated_group());
-    shelf_controller_->AddObserver(std::move(ptr_info));
-  }
 }
 
 bool ChromeLauncherController::ConnectToShelfController() {
@@ -52,14 +57,7 @@ bool ChromeLauncherController::ConnectToShelfController() {
   if (!connector)
     return false;
 
-  // Under mash the ShelfController interface is in the ash process. In classic
-  // ash we provide it to ourself.
-  if (chrome::IsRunningInMash()) {
-    connector->ConnectToInterface("ash", &shelf_controller_);
-  } else {
-    connector->ConnectToInterface(content::mojom::kBrowserServiceName,
-                                  &shelf_controller_);
-  }
+  connector->BindInterface(ash_util::GetAshServiceName(), &shelf_controller_);
   return true;
 }
 
@@ -74,11 +72,11 @@ AppIconLoader* ChromeLauncherController::GetAppIconLoaderForApp(
 }
 
 void ChromeLauncherController::SetShelfAutoHideBehaviorFromPrefs() {
-  if (!ConnectToShelfController())
+  if (!ConnectToShelfController() || updating_shelf_pref_from_observer_)
     return;
 
   // The pref helper functions return default values for invalid display ids.
-  PrefService* prefs = ProfileManager::GetActiveUserProfile()->GetPrefs();
+  PrefService* prefs = profile_->GetPrefs();
   for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
     shelf_controller_->SetAutoHideBehavior(
         ash::launcher::GetShelfAutoHideBehaviorPref(prefs, display.id()),
@@ -87,11 +85,11 @@ void ChromeLauncherController::SetShelfAutoHideBehaviorFromPrefs() {
 }
 
 void ChromeLauncherController::SetShelfAlignmentFromPrefs() {
-  if (!ConnectToShelfController())
+  if (!ConnectToShelfController() || updating_shelf_pref_from_observer_)
     return;
 
   // The pref helper functions return default values for invalid display ids.
-  PrefService* prefs = ProfileManager::GetActiveUserProfile()->GetPrefs();
+  PrefService* prefs = profile_->GetPrefs();
   for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
     shelf_controller_->SetAlignment(
         ash::launcher::GetShelfAlignmentPref(prefs, display.id()),
@@ -141,12 +139,14 @@ void ChromeLauncherController::AttachProfile(Profile* profile_to_attach) {
           profile_, extension_misc::EXTENSION_ICON_SMALL, this);
   app_icon_loaders_.push_back(std::move(extension_app_icon_loader));
 
-  if (arc::ArcSessionManager::IsAllowedForProfile(profile_)) {
+  if (arc::IsArcAllowedForProfile(profile_)) {
     std::unique_ptr<AppIconLoader> arc_app_icon_loader =
         base::MakeUnique<ArcAppIconLoader>(
             profile_, extension_misc::EXTENSION_ICON_SMALL, this);
     app_icon_loaders_.push_back(std::move(arc_app_icon_loader));
   }
+
+  SetShelfBehaviorsFromPrefs();
 }
 
 void ChromeLauncherController::OnShelfCreated(int64_t display_id) {
@@ -167,8 +167,9 @@ void ChromeLauncherController::OnAlignmentChanged(ash::ShelfAlignment alignment,
   // The locked alignment is set temporarily and not saved to preferences.
   if (alignment == ash::SHELF_ALIGNMENT_BOTTOM_LOCKED)
     return;
+  DCHECK(!updating_shelf_pref_from_observer_);
+  base::AutoReset<bool> updating(&updating_shelf_pref_from_observer_, true);
   // This will uselessly store a preference value for invalid display ids.
-  // TODO(msw): Avoid handling this pref change and forwarding the value to ash.
   ash::launcher::SetShelfAlignmentPref(profile_->GetPrefs(), display_id,
                                        alignment);
 }
@@ -176,8 +177,9 @@ void ChromeLauncherController::OnAlignmentChanged(ash::ShelfAlignment alignment,
 void ChromeLauncherController::OnAutoHideBehaviorChanged(
     ash::ShelfAutoHideBehavior auto_hide,
     int64_t display_id) {
+  DCHECK(!updating_shelf_pref_from_observer_);
+  base::AutoReset<bool> updating(&updating_shelf_pref_from_observer_, true);
   // This will uselessly store a preference value for invalid display ids.
-  // TODO(msw): Avoid handling this pref change and forwarding the value to ash.
   ash::launcher::SetShelfAutoHideBehaviorPref(profile_->GetPrefs(), display_id,
                                               auto_hide);
 }

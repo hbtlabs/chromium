@@ -264,6 +264,11 @@ bool Process::CanBackgroundProcesses() {
 }
 #endif  // !defined(OS_LINUX) && !defined(OS_MACOSX)
 
+// static
+void Process::TerminateCurrentProcessImmediately(int exit_code) {
+  _exit(exit_code);
+}
+
 bool Process::IsValid() const {
   return process_ != kNullProcessHandle;
 }
@@ -350,11 +355,11 @@ bool Process::Terminate(int exit_code, bool wait) const {
 }
 #endif  // !defined(OS_NACL_NONSFI)
 
-bool Process::WaitForExit(int* exit_code) {
+bool Process::WaitForExit(int* exit_code) const {
   return WaitForExitWithTimeout(TimeDelta::Max(), exit_code);
 }
 
-bool Process::WaitForExitWithTimeout(TimeDelta timeout, int* exit_code) {
+bool Process::WaitForExitWithTimeout(TimeDelta timeout, int* exit_code) const {
   // Record the event that this thread is blocking upon (for hang diagnosis).
   base::debug::ScopedProcessWaitActivity process_activity(this);
 

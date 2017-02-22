@@ -16,7 +16,6 @@ class SingleThreadTaskRunner;
 }
 
 namespace cc {
-class ImageSerializationProcessor;
 class TaskGraphRunner;
 }
 
@@ -31,7 +30,6 @@ namespace content {
 class CompositorDependencies {
  public:
   virtual bool IsGpuRasterizationForced() = 0;
-  virtual bool IsGpuRasterizationEnabled() = 0;
   virtual bool IsAsyncWorkerContextEnabled() = 0;
   virtual int GetGpuRasterizationMSAASampleCount() = 0;
   virtual bool IsLcdTextEnabled() = 0;
@@ -48,10 +46,10 @@ class CompositorDependencies {
   virtual scoped_refptr<base::SingleThreadTaskRunner>
   GetCompositorImplThreadTaskRunner() = 0;
   virtual blink::scheduler::RendererScheduler* GetRendererScheduler() = 0;
-  virtual cc::ImageSerializationProcessor* GetImageSerializationProcessor() = 0;
   virtual cc::TaskGraphRunner* GetTaskGraphRunner() = 0;
   virtual bool AreImageDecodeTasksEnabled() = 0;
   virtual bool IsThreadedAnimationEnabled() = 0;
+  virtual bool IsScrollAnimatorEnabled() = 0;
 
   virtual ~CompositorDependencies() {}
 };

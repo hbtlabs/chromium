@@ -203,6 +203,11 @@ extern const char kSelectToSpeakExtensionId[];
 // Path to preinstalled Select-to-speak extension (relative to
 // |chrome::DIR_RESOURCES|).
 extern const char kSelectToSpeakExtensionPath[];
+// The extension id of the Switch access extension.
+extern const char kSwitchAccessExtensionId[];
+// Path to preinstalled Switch access extension (relative to
+// |chrome::DIR_RESOURCES|).
+extern const char kSwitchAccessExtensionPath[];
 // Name of the manifest file in an extension when a special manifest is used
 // for guest mode.
 extern const char kGuestManifestFilename[];
@@ -250,12 +255,6 @@ extern const char kAppStateReadyToRun[];
 
 // The path part of the file system url used for media file systems.
 extern const char kMediaFileSystemPathPart[];
-
-#if defined(OS_CHROMEOS)
-// Returns true if |extension_id| is one of the IME extensions that will create
-// IME menu.
-bool IsImeMenuExtensionId(const std::string& extension_id);
-#endif
 }  // namespace extension_misc
 
 #endif  // CHROME_COMMON_EXTENSIONS_EXTENSION_CONSTANTS_H_

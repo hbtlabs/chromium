@@ -25,39 +25,39 @@
 
 #include "bindings/core/v8/V8PerIsolateData.h"
 
+#include <v8-debug.h>
+#include <memory>
 #include "bindings/core/v8/DOMDataStore.h"
 #include "bindings/core/v8/ScriptSourceCode.h"
-#include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8HiddenValue.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
 #include "bindings/core/v8/V8PrivateProperty.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
-#include "core/frame/Deprecation.h"
-#include "core/inspector/MainThreadDebugger.h"
+#include "bindings/core/v8/V8ValueCache.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "public/platform/Platform.h"
 #include "wtf/LeakAnnotations.h"
 #include "wtf/PtrUtil.h"
-#include <memory>
-#include <v8-debug.h>
 
 namespace blink {
 
 static V8PerIsolateData* mainThreadPerIsolateData = 0;
 
 static void beforeCallEnteredCallback(v8::Isolate* isolate) {
-  RELEASE_ASSERT(!ScriptForbiddenScope::isScriptForbidden() ||
-                 isolate->GetCurrentContext() ==
-                     v8::Debug::GetDebugContext(isolate));
+  RELEASE_ASSERT(!ScriptForbiddenScope::isScriptForbidden());
 }
 
 static void microtasksCompletedCallback(v8::Isolate* isolate) {
   V8PerIsolateData::from(isolate)->runEndOfScopeTasks();
 }
 
-V8PerIsolateData::V8PerIsolateData()
-    : m_isolateHolder(makeUnique<gin::IsolateHolder>()),
-      m_stringCache(wrapUnique(new StringCache(isolate()))),
+V8PerIsolateData::V8PerIsolateData(WebTaskRunner* taskRunner)
+    : m_isolateHolder(WTF::makeUnique<gin::IsolateHolder>(
+          taskRunner ? taskRunner->toSingleThreadTaskRunner() : nullptr,
+          gin::IsolateHolder::kSingleThread,
+          isMainThread() ? gin::IsolateHolder::kDisallowAtomicsWait
+                         : gin::IsolateHolder::kAllowAtomicsWait)),
+      m_stringCache(WTF::wrapUnique(new StringCache(isolate()))),
       m_hiddenValue(V8HiddenValue::create()),
       m_privateProperty(V8PrivateProperty::create()),
       m_constructorMode(ConstructorMode::CreateNewObject),
@@ -70,7 +70,6 @@ V8PerIsolateData::V8PerIsolateData()
   isolate()->AddMicrotasksCompletedCallback(&microtasksCompletedCallback);
   if (isMainThread())
     mainThreadPerIsolateData = this;
-  isolate()->SetUseCounterCallback(&useCounterCallback);
 }
 
 V8PerIsolateData::~V8PerIsolateData() {}
@@ -80,8 +79,8 @@ v8::Isolate* V8PerIsolateData::mainThreadIsolate() {
   return mainThreadPerIsolateData->isolate();
 }
 
-v8::Isolate* V8PerIsolateData::initialize() {
-  V8PerIsolateData* data = new V8PerIsolateData();
+v8::Isolate* V8PerIsolateData::initialize(WebTaskRunner* taskRunner) {
+  V8PerIsolateData* data = new V8PerIsolateData(taskRunner);
   v8::Isolate* isolate = data->isolate();
   isolate->SetData(gin::kEmbedderBlink, data);
   return isolate;
@@ -92,120 +91,6 @@ void V8PerIsolateData::enableIdleTasks(
     std::unique_ptr<gin::V8IdleTaskRunner> taskRunner) {
   from(isolate)->m_isolateHolder->EnableIdleTasks(
       std::unique_ptr<gin::V8IdleTaskRunner>(taskRunner.release()));
-}
-
-void V8PerIsolateData::useCounterCallback(
-    v8::Isolate* isolate,
-    v8::Isolate::UseCounterFeature feature) {
-  if (V8PerIsolateData::from(isolate)->m_useCounterDisabled)
-    return;
-
-  UseCounter::Feature blinkFeature;
-  bool deprecated = false;
-  switch (feature) {
-    case v8::Isolate::kUseAsm:
-      blinkFeature = UseCounter::UseAsm;
-      break;
-    case v8::Isolate::kBreakIterator:
-      blinkFeature = UseCounter::BreakIterator;
-      break;
-    case v8::Isolate::kLegacyConst:
-      blinkFeature = UseCounter::LegacyConst;
-      break;
-    case v8::Isolate::kSloppyMode:
-      blinkFeature = UseCounter::V8SloppyMode;
-      break;
-    case v8::Isolate::kStrictMode:
-      blinkFeature = UseCounter::V8StrictMode;
-      break;
-    case v8::Isolate::kStrongMode:
-      blinkFeature = UseCounter::V8StrongMode;
-      break;
-    case v8::Isolate::kRegExpPrototypeStickyGetter:
-      blinkFeature = UseCounter::V8RegExpPrototypeStickyGetter;
-      break;
-    case v8::Isolate::kRegExpPrototypeToString:
-      blinkFeature = UseCounter::V8RegExpPrototypeToString;
-      break;
-    case v8::Isolate::kRegExpPrototypeUnicodeGetter:
-      blinkFeature = UseCounter::V8RegExpPrototypeUnicodeGetter;
-      break;
-    case v8::Isolate::kIntlV8Parse:
-      blinkFeature = UseCounter::V8IntlV8Parse;
-      break;
-    case v8::Isolate::kIntlPattern:
-      blinkFeature = UseCounter::V8IntlPattern;
-      break;
-    case v8::Isolate::kIntlResolved:
-      blinkFeature = UseCounter::V8IntlResolved;
-      break;
-    case v8::Isolate::kPromiseChain:
-      blinkFeature = UseCounter::V8PromiseChain;
-      break;
-    case v8::Isolate::kPromiseAccept:
-      blinkFeature = UseCounter::V8PromiseAccept;
-      break;
-    case v8::Isolate::kPromiseDefer:
-      blinkFeature = UseCounter::V8PromiseDefer;
-      break;
-    case v8::Isolate::kHtmlCommentInExternalScript:
-      blinkFeature = UseCounter::V8HTMLCommentInExternalScript;
-      break;
-    case v8::Isolate::kHtmlComment:
-      blinkFeature = UseCounter::V8HTMLComment;
-      break;
-    case v8::Isolate::kSloppyModeBlockScopedFunctionRedefinition:
-      blinkFeature = UseCounter::V8SloppyModeBlockScopedFunctionRedefinition;
-      break;
-    case v8::Isolate::kForInInitializer:
-      blinkFeature = UseCounter::V8ForInInitializer;
-      break;
-    case v8::Isolate::kArrayProtectorDirtied:
-      blinkFeature = UseCounter::V8ArrayProtectorDirtied;
-      break;
-    case v8::Isolate::kArraySpeciesModified:
-      blinkFeature = UseCounter::V8ArraySpeciesModified;
-      break;
-    case v8::Isolate::kArrayPrototypeConstructorModified:
-      blinkFeature = UseCounter::V8ArrayPrototypeConstructorModified;
-      break;
-    case v8::Isolate::kArrayInstanceProtoModified:
-      blinkFeature = UseCounter::V8ArrayInstanceProtoModified;
-      break;
-    case v8::Isolate::kArrayInstanceConstructorModified:
-      blinkFeature = UseCounter::V8ArrayInstanceConstructorModified;
-      break;
-    case v8::Isolate::kLegacyFunctionDeclaration:
-      blinkFeature = UseCounter::V8LegacyFunctionDeclaration;
-      break;
-    case v8::Isolate::kRegExpPrototypeSourceGetter:
-      blinkFeature = UseCounter::V8RegExpPrototypeSourceGetter;
-      break;
-    case v8::Isolate::kRegExpPrototypeOldFlagGetter:
-      blinkFeature = UseCounter::V8RegExpPrototypeOldFlagGetter;
-      break;
-    case v8::Isolate::kDecimalWithLeadingZeroInStrictMode:
-      blinkFeature = UseCounter::V8DecimalWithLeadingZeroInStrictMode;
-      break;
-    case v8::Isolate::kLegacyDateParser:
-      blinkFeature = UseCounter::V8LegacyDateParser;
-      break;
-    case v8::Isolate::kDefineGetterOrSetterWouldThrow:
-      blinkFeature = UseCounter::V8DefineGetterOrSetterWouldThrow;
-      break;
-    case v8::Isolate::kFunctionConstructorReturnedUndefined:
-      blinkFeature = UseCounter::V8FunctionConstructorReturnedUndefined;
-      break;
-    default:
-      // This can happen if V8 has added counters that this version of Blink
-      // does not know about. It's harmless.
-      return;
-  }
-  if (deprecated)
-    Deprecation::countDeprecation(currentExecutionContext(isolate),
-                                  blinkFeature);
-  else
-    UseCounter::count(currentExecutionContext(isolate), blinkFeature);
 }
 
 v8::Persistent<v8::Value>& V8PerIsolateData::ensureLiveRoot() {
@@ -281,7 +166,7 @@ v8::Local<v8::FunctionTemplate> V8PerIsolateData::findOrCreateOperationTemplate(
   v8::Local<v8::FunctionTemplate> templ =
       v8::FunctionTemplate::New(isolate(), callback, data, signature, length);
   templ->RemovePrototype();
-  map.add(key, v8::Eternal<v8::FunctionTemplate>(isolate(), templ));
+  map.insert(key, v8::Eternal<v8::FunctionTemplate>(isolate(), templ));
   return templ;
 }
 
@@ -300,7 +185,7 @@ void V8PerIsolateData::setInterfaceTemplate(
     const void* key,
     v8::Local<v8::FunctionTemplate> value) {
   auto& map = selectInterfaceTemplateMap(world);
-  map.add(key, v8::Eternal<v8::FunctionTemplate>(isolate(), value));
+  map.insert(key, v8::Eternal<v8::FunctionTemplate>(isolate(), value));
 }
 
 v8::Local<v8::Context> V8PerIsolateData::ensureScriptRegexpContext() {
@@ -365,7 +250,7 @@ v8::Local<v8::Object> V8PerIsolateData::findInstanceInPrototypeChain(
 }
 
 void V8PerIsolateData::addEndOfScopeTask(std::unique_ptr<EndOfScopeTask> task) {
-  m_endOfScopeTasks.append(std::move(task));
+  m_endOfScopeTasks.push_back(std::move(task));
 }
 
 void V8PerIsolateData::runEndOfScopeTasks() {
@@ -381,21 +266,33 @@ void V8PerIsolateData::clearEndOfScopeTasks() {
 }
 
 void V8PerIsolateData::setThreadDebugger(
-    std::unique_ptr<ThreadDebugger> threadDebugger) {
+    std::unique_ptr<V8PerIsolateData::Data> threadDebugger) {
   ASSERT(!m_threadDebugger);
   m_threadDebugger = std::move(threadDebugger);
 }
 
-ThreadDebugger* V8PerIsolateData::threadDebugger() {
+V8PerIsolateData::Data* V8PerIsolateData::threadDebugger() {
   return m_threadDebugger.get();
 }
 
 void V8PerIsolateData::addActiveScriptWrappable(
-    ActiveScriptWrappable* wrappable) {
+    ActiveScriptWrappableBase* wrappable) {
   if (!m_activeScriptWrappables)
     m_activeScriptWrappables = new ActiveScriptWrappableSet();
 
-  m_activeScriptWrappables->add(wrappable);
+  m_activeScriptWrappables->insert(wrappable);
+}
+
+void V8PerIsolateData::TemporaryScriptWrappableVisitorScope::
+    swapWithV8PerIsolateDataVisitor(
+        std::unique_ptr<ScriptWrappableVisitor>& visitor) {
+  ScriptWrappableVisitor* current = currentVisitor();
+  if (current)
+    current->performCleanup();
+
+  V8PerIsolateData::from(m_isolate)->m_scriptWrappableVisitor.swap(
+      m_savedVisitor);
+  m_isolate->SetEmbedderHeapTracer(currentVisitor());
 }
 
 }  // namespace blink

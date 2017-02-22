@@ -13,7 +13,6 @@
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/media_galleries/fileapi/picasa_finder.h"
@@ -194,7 +193,8 @@ void EnsureMediaDirectoriesExists::Init() {
   local_app_data_override_.reset(new base::ScopedPathOverride(
       base::DIR_LOCAL_APP_DATA, GetFakeLocalAppDataPath()));
   // Picasa also looks in the registry for an alternate path.
-  registry_override_.OverrideRegistry(HKEY_CURRENT_USER);
+  ASSERT_NO_FATAL_FAILURE(
+      registry_override_.OverrideRegistry(HKEY_CURRENT_USER));
 #endif  // OS_WIN
 
 #if defined(OS_MACOSX)

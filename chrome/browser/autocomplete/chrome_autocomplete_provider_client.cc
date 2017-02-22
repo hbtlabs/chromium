@@ -17,6 +17,7 @@
 #include "chrome/browser/bitmap_fetcher/bitmap_fetcher_service.h"
 #include "chrome/browser/bitmap_fetcher/bitmap_fetcher_service_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/history/top_sites_factory.h"
@@ -44,17 +45,18 @@ namespace {
 // This list should be kept in sync with chrome/common/url_constants.h.
 // Only include useful sub-pages, confirmation alerts are not useful.
 const char* const kChromeSettingsSubPages[] = {
-    chrome::kAutofillSubPage,
-    chrome::kClearBrowserDataSubPage,
-    chrome::kContentSettingsSubPage,
-    chrome::kImportDataSubPage,
-    chrome::kLanguageOptionsSubPage,
-    chrome::kPasswordManagerSubPage,
-    chrome::kResetProfileSettingsSubPage,
-    chrome::kSearchEnginesSubPage,
-    chrome::kSyncSetupSubPage,
+    chrome::kAutofillSubPage,        chrome::kClearBrowserDataSubPage,
+    chrome::kContentSettingsSubPage, chrome::kLanguageOptionsSubPage,
+    chrome::kPasswordManagerSubPage, chrome::kResetProfileSettingsSubPage,
+    chrome::kSearchEnginesSubPage,   chrome::kSyncSetupSubPage,
 #if defined(OS_CHROMEOS)
-    chrome::kInternetOptionsSubPage,
+    chrome::kAccessibilitySubPage,   chrome::kBluetoothSubPage,
+    chrome::kDateTimeSubPage,        chrome::kDisplaySubPage,
+    chrome::kInternetSubPage,        chrome::kPowerSubPage,
+    chrome::kStylusSubPage,
+#else
+    chrome::kCreateProfileSubPage,   chrome::kImportDataSubPage,
+    chrome::kManageProfileSubPage,
 #endif
 };
 
@@ -151,9 +153,9 @@ ChromeAutocompleteProviderClient::GetKeywordExtensionsDelegate(
 #endif
 }
 
-PhysicalWebDataSource*
+physical_web::PhysicalWebDataSource*
 ChromeAutocompleteProviderClient::GetPhysicalWebDataSource() {
-  return nullptr;
+  return g_browser_process->GetPhysicalWebDataSource();
 }
 
 std::string ChromeAutocompleteProviderClient::GetAcceptLanguages() const {

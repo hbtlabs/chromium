@@ -66,7 +66,7 @@ class VolumeButton : public ButtonListenerActionableView {
                views::ButtonListener* listener,
                system::TrayAudioDelegate* audio_delegate)
       : ButtonListenerActionableView(owner,
-                                     TrayPopupInkDropStyle::INSET_BOUNDS,
+                                     TrayPopupInkDropStyle::HOST_CENTERED,
                                      listener),
         audio_delegate_(audio_delegate),
         image_(TrayPopupUtils::CreateMainImageView()),
@@ -126,7 +126,7 @@ class VolumeButton : public ButtonListenerActionableView {
   }
 
   // views::CustomButton:
-  void StateChanged() override {
+  void StateChanged(ButtonState old_state) override {
     if (state() == STATE_HOVERED || state() == STATE_PRESSED) {
       if (!MaterialDesignController::IsSystemTrayMenuMaterial()) {
         set_background(
@@ -185,9 +185,8 @@ VolumeView::VolumeView(SystemTrayItem* owner,
   more_button_->SetFocusBehavior(FocusBehavior::NEVER);
 
   device_type_ = TrayPopupUtils::CreateMoreImageView();
-  more_button_->SetBorder(views::CreateEmptyBorder(
-      0, GetTrayConstant(TRAY_POPUP_ITEM_MORE_REGION_HORIZONTAL_INSET), 0,
-      GetTrayConstant(TRAY_POPUP_ITEM_MORE_REGION_HORIZONTAL_INSET)));
+  more_button_->SetBorder(views::CreateEmptyBorder(gfx::Insets(
+      0, GetTrayConstant(TRAY_POPUP_ITEM_MORE_REGION_HORIZONTAL_INSET))));
   more_button_->AddChildView(device_type_);
 
   views::ImageView* more_arrow = TrayPopupUtils::CreateMoreImageView();
@@ -205,9 +204,8 @@ VolumeView::VolumeView(SystemTrayItem* owner,
     more_button_->SetInkDropMode(views::InkDropHostView::InkDropMode::ON);
     tri_view_->AddView(TriView::Container::END, more_button_);
   } else {
-    separator_ = new views::Separator(views::Separator::VERTICAL);
+    separator_ = new views::Separator();
     separator_->SetColor(kButtonStrokeColor);
-    separator_->SetPreferredSize(kSeparatorSize);
     separator_->SetBorder(views::CreateEmptyBorder(kSeparatorVerticalInset, 0,
                                                    kSeparatorVerticalInset,
                                                    kBoxLayoutPadding));
@@ -256,15 +254,14 @@ void VolumeView::UpdateDeviceTypeAndMore() {
   if (!show_more)
     return;
 
-  // Show output device icon if necessary.
-  device_type_->SetVisible(false);
+  bool target_visibility = false;
   if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
     const gfx::VectorIcon& device_icon =
         audio_delegate_->GetActiveOutputDeviceVectorIcon();
     if (!device_icon.is_empty()) {
       device_type_->SetImage(
           gfx::CreateVectorIcon(device_icon, kMenuIconColor));
-      device_type_->SetVisible(true);
+      target_visibility = true;
     }
   } else {
     int device_icon = audio_delegate_->GetActiveOutputDeviceIconId();
@@ -272,8 +269,12 @@ void VolumeView::UpdateDeviceTypeAndMore() {
       device_type_->SetImage(ui::ResourceBundle::GetSharedInstance()
                                  .GetImageNamed(device_icon)
                                  .ToImageSkia());
-      device_type_->SetVisible(true);
+      target_visibility = true;
     }
+  }
+  if (device_type_->visible() != target_visibility) {
+    device_type_->SetVisible(target_visibility);
+    device_type_->InvalidateLayout();
   }
 }
 

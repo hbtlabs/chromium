@@ -4,17 +4,21 @@
 
 #include "core/layout/ng/ng_units.h"
 
-#include "core/layout/ng/ng_writing_mode.h"
-
 namespace blink {
 
 LayoutUnit MinAndMaxContentSizes::ShrinkToFit(LayoutUnit available_size) const {
+  DCHECK_GE(max_content, min_content);
   return std::min(max_content, std::max(min_content, available_size));
 }
 
+bool MinAndMaxContentSizes::operator==(
+    const MinAndMaxContentSizes& other) const {
+  return min_content == other.min_content && max_content == other.max_content;
+}
+
 NGPhysicalSize NGLogicalSize::ConvertToPhysical(NGWritingMode mode) const {
-  return mode == HorizontalTopBottom ? NGPhysicalSize(inline_size, block_size)
-                                     : NGPhysicalSize(block_size, inline_size);
+  return mode == kHorizontalTopBottom ? NGPhysicalSize(inline_size, block_size)
+                                      : NGPhysicalSize(block_size, inline_size);
 }
 
 bool NGLogicalSize::operator==(const NGLogicalSize& other) const {
@@ -22,9 +26,13 @@ bool NGLogicalSize::operator==(const NGLogicalSize& other) const {
          std::tie(inline_size, block_size);
 }
 
+bool NGPhysicalSize::operator==(const NGPhysicalSize& other) const {
+  return std::tie(other.width, other.height) == std::tie(width, height);
+}
+
 NGLogicalSize NGPhysicalSize::ConvertToLogical(NGWritingMode mode) const {
-  return mode == HorizontalTopBottom ? NGLogicalSize(width, height)
-                                     : NGLogicalSize(height, width);
+  return mode == kHorizontalTopBottom ? NGLogicalSize(width, height)
+                                      : NGLogicalSize(height, width);
 }
 
 bool NGLogicalRect::IsEmpty() const {
@@ -57,30 +65,30 @@ NGPhysicalOffset NGLogicalOffset::ConvertToPhysical(
     NGPhysicalSize outer_size,
     NGPhysicalSize inner_size) const {
   switch (mode) {
-    case HorizontalTopBottom:
-      if (direction == LTR)
+    case kHorizontalTopBottom:
+      if (direction == TextDirection::kLtr)
         return NGPhysicalOffset(inline_offset, block_offset);
       else
         return NGPhysicalOffset(
             outer_size.width - inline_offset - inner_size.width, block_offset);
-    case VerticalRightLeft:
-    case SidewaysRightLeft:
-      if (direction == LTR)
+    case kVerticalRightLeft:
+    case kSidewaysRightLeft:
+      if (direction == TextDirection::kLtr)
         return NGPhysicalOffset(
             outer_size.width - block_offset - inner_size.width, inline_offset);
       else
         return NGPhysicalOffset(
             outer_size.width - block_offset - inner_size.width,
             outer_size.height - inline_offset - inner_size.height);
-    case VerticalLeftRight:
-      if (direction == LTR)
+    case kVerticalLeftRight:
+      if (direction == TextDirection::kLtr)
         return NGPhysicalOffset(block_offset, inline_offset);
       else
         return NGPhysicalOffset(
             block_offset,
             outer_size.height - inline_offset - inner_size.height);
-    case SidewaysLeftRight:
-      if (direction == LTR)
+    case kSidewaysLeftRight:
+      if (direction == TextDirection::kLtr)
         return NGPhysicalOffset(
             block_offset,
             outer_size.height - inline_offset - inner_size.height);
@@ -129,8 +137,42 @@ bool NGLogicalOffset::operator<=(const NGLogicalOffset& other) const {
          block_offset <= other.block_offset;
 }
 
+NGLogicalOffset NGLogicalOffset::operator-(const NGLogicalOffset& other) const {
+  return NGLogicalOffset{this->inline_offset - other.inline_offset,
+                         this->block_offset - other.block_offset};
+}
+
+NGLogicalOffset& NGLogicalOffset::operator-=(const NGLogicalOffset& other) {
+  *this = *this - other;
+  return *this;
+}
+
 String NGLogicalOffset::ToString() const {
   return String::format("%dx%d", inline_offset.toInt(), block_offset.toInt());
+}
+
+NGPhysicalOffset NGPhysicalOffset::operator+(
+    const NGPhysicalOffset& other) const {
+  return NGPhysicalOffset{this->left + other.left, this->top + other.top};
+}
+
+NGPhysicalOffset& NGPhysicalOffset::operator+=(const NGPhysicalOffset& other) {
+  *this = *this + other;
+  return *this;
+}
+
+NGPhysicalOffset NGPhysicalOffset::operator-(
+    const NGPhysicalOffset& other) const {
+  return NGPhysicalOffset{this->left - other.left, this->top - other.top};
+}
+
+NGPhysicalOffset& NGPhysicalOffset::operator-=(const NGPhysicalOffset& other) {
+  *this = *this - other;
+  return *this;
+}
+
+bool NGPhysicalOffset::operator==(const NGPhysicalOffset& other) const {
+  return other.left == left && other.top == top;
 }
 
 bool NGBoxStrut::IsEmpty() const {
@@ -149,80 +191,104 @@ NGBoxStrut NGPhysicalBoxStrut::ConvertToLogical(NGWritingMode writing_mode,
                                                 TextDirection direction) const {
   NGBoxStrut strut;
   switch (writing_mode) {
-    case HorizontalTopBottom:
+    case kHorizontalTopBottom:
       strut = {left, right, top, bottom};
       break;
-    case VerticalRightLeft:
-    case SidewaysRightLeft:
+    case kVerticalRightLeft:
+    case kSidewaysRightLeft:
       strut = {top, bottom, right, left};
       break;
-    case VerticalLeftRight:
+    case kVerticalLeftRight:
       strut = {top, bottom, left, right};
       break;
-    case SidewaysLeftRight:
+    case kSidewaysLeftRight:
       strut = {bottom, top, left, right};
       break;
   }
-  if (direction == RTL)
+  if (direction == TextDirection::kRtl)
     std::swap(strut.inline_start, strut.inline_end);
   return strut;
 }
 
-LayoutUnit NGMarginStrut::BlockEndSum() const {
-  return margin_block_end + negative_margin_block_end;
+LayoutUnit NGMarginStrut::Sum() const {
+  return margin + negative_margin;
 }
 
-void NGMarginStrut::AppendMarginBlockStart(const LayoutUnit& value) {
-  if (value < 0) {
-    negative_margin_block_start =
-        -std::max(value.abs(), negative_margin_block_start.abs());
-  } else {
-    margin_block_start = std::max(value, margin_block_start);
-  }
+bool NGMarginStrut::operator==(const NGMarginStrut& other) const {
+  return margin == other.margin && negative_margin == other.negative_margin;
 }
 
-void NGMarginStrut::AppendMarginBlockEnd(const LayoutUnit& value) {
+void NGMarginStrut::Append(const LayoutUnit& value) {
   if (value < 0) {
-    negative_margin_block_end =
-        -std::max(value.abs(), negative_margin_block_end.abs());
+    negative_margin = std::min(value, negative_margin);
   } else {
-    margin_block_end = std::max(value, margin_block_end);
-  }
-}
-
-void NGMarginStrut::SetMarginBlockStart(const LayoutUnit& value) {
-  if (value < 0) {
-    negative_margin_block_start = value;
-  } else {
-    margin_block_start = value;
-  }
-}
-
-void NGMarginStrut::SetMarginBlockEnd(const LayoutUnit& value) {
-  if (value < 0) {
-    negative_margin_block_end = value;
-  } else {
-    margin_block_end = value;
+    margin = std::max(value, margin);
   }
 }
 
 String NGMarginStrut::ToString() const {
-  return String::format("Start: (%d %d) End: (%d %d)",
-                        margin_block_start.toInt(), margin_block_end.toInt(),
-                        negative_margin_block_start.toInt(),
-                        negative_margin_block_end.toInt());
+  return String::format("%d %d", margin.toInt(), negative_margin.toInt());
 }
 
-bool NGMarginStrut::IsEmpty() const {
-  return *this == NGMarginStrut();
+bool NGExclusion::operator==(const NGExclusion& other) const {
+  return std::tie(other.rect, other.type) == std::tie(rect, type);
 }
 
-bool NGMarginStrut::operator==(const NGMarginStrut& other) const {
-  return std::tie(other.margin_block_start, other.margin_block_end,
-                  other.negative_margin_block_start,
-                  other.negative_margin_block_end) ==
-         std::tie(margin_block_start, margin_block_end,
-                  negative_margin_block_start, negative_margin_block_end);
+String NGExclusion::ToString() const {
+  return String::format("Rect: %s Type: %d", rect.ToString().ascii().data(),
+                        type);
+}
+
+NGExclusions::NGExclusions()
+    : last_left_float(nullptr), last_right_float(nullptr) {}
+
+NGExclusions::NGExclusions(const NGExclusions& other) {
+  for (const auto& exclusion : other.storage)
+    Add(*exclusion);
+}
+
+void NGExclusions::Add(const NGExclusion& exclusion) {
+  storage.push_back(WTF::makeUnique<NGExclusion>(exclusion));
+  if (exclusion.type == NGExclusion::kFloatLeft) {
+    last_left_float = storage.rbegin()->get();
+  } else if (exclusion.type == NGExclusion::kFloatRight) {
+    last_right_float = storage.rbegin()->get();
+  }
+}
+
+inline NGExclusions& NGExclusions::operator=(const NGExclusions& other) {
+  storage.clear();
+  last_left_float = nullptr;
+  last_right_float = nullptr;
+  for (const auto& exclusion : other.storage)
+    Add(*exclusion);
+  return *this;
+}
+
+NGStaticPosition NGStaticPosition::Create(NGWritingMode writing_mode,
+                                          TextDirection direction,
+                                          NGPhysicalOffset offset) {
+  NGStaticPosition position;
+  position.offset = offset;
+  switch (writing_mode) {
+    case kHorizontalTopBottom:
+      position.type = (direction == TextDirection::kLtr) ? kTopLeft : kTopRight;
+      break;
+    case kVerticalRightLeft:
+    case kSidewaysRightLeft:
+      position.type =
+          (direction == TextDirection::kLtr) ? kTopRight : kBottomRight;
+      break;
+    case kVerticalLeftRight:
+      position.type =
+          (direction == TextDirection::kLtr) ? kTopLeft : kBottomLeft;
+      break;
+    case kSidewaysLeftRight:
+      position.type =
+          (direction == TextDirection::kLtr) ? kBottomLeft : kTopLeft;
+      break;
+  }
+  return position;
 }
 
 }  // namespace blink

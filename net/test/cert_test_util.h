@@ -10,6 +10,7 @@
 #include "base/memory/ref_counted.h"
 #include "net/cert/x509_cert_types.h"
 #include "net/cert/x509_certificate.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(USE_NSS_CERTS)
 // From <pk11pub.h>
@@ -18,10 +19,6 @@ typedef struct PK11SlotInfoStr PK11SlotInfo;
 
 namespace base {
 class FilePath;
-}
-
-namespace crypto {
-class RSAPrivateKey;
 }
 
 namespace net {
@@ -51,6 +48,13 @@ scoped_refptr<X509Certificate> ImportClientCertAndKeyFromFile(
 CertificateList CreateCertificateListFromFile(const base::FilePath& certs_dir,
                                               const std::string& cert_file,
                                               int format);
+
+// Imports all the certificates given a list of filenames, and assigns the
+// result to |*certs|. The filenames are relative to the test certificates
+// directory.
+::testing::AssertionResult LoadCertificateFiles(
+    const std::vector<std::string>& cert_filenames,
+    CertificateList* certs);
 
 // Imports all of the certificates in |cert_file|, a file in |certs_dir|, into
 // a new X509Certificate. The first certificate in the chain will be used for

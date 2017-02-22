@@ -17,6 +17,7 @@
 #include "base/process/process_handle.h"
 #include "base/sequence_checker.h"
 #include "base/sequenced_task_runner.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 
 namespace task_manager {
@@ -41,6 +42,8 @@ class SharedSampler : public base::RefCountedThreadSafe<SharedSampler> {
   // These callbacks are passed via RegisterCallbacks.
   using OnIdleWakeupsCallback = base::Callback<void(int)>;
   using OnPhysicalMemoryCallback = base::Callback<void(int64_t)>;
+  using OnStartTimeCallback = base::Callback<void(base::Time)>;
+  using OnCpuTimeCallback = base::Callback<void(base::TimeDelta)>;
 
   // Returns a combination of refresh flags supported by the shared sampler.
   int64_t GetSupportedFlags() const;
@@ -48,7 +51,9 @@ class SharedSampler : public base::RefCountedThreadSafe<SharedSampler> {
   // Registers task group specific callbacks.
   void RegisterCallbacks(base::ProcessId process_id,
                          const OnIdleWakeupsCallback& on_idle_wakeups,
-                         const OnPhysicalMemoryCallback& on_physical_memory);
+                         const OnPhysicalMemoryCallback& on_physical_memory,
+                         const OnStartTimeCallback& on_start_time,
+                         const OnCpuTimeCallback& on_cpu_time);
 
   // Unregisters task group specific callbacks.
   void UnregisterCallbacks(base::ProcessId process_id);
@@ -56,6 +61,14 @@ class SharedSampler : public base::RefCountedThreadSafe<SharedSampler> {
   // Refreshes the expensive process' stats (for now only idle wakeups per
   // second) on the worker thread.
   void Refresh(base::ProcessId process_id, int64_t refresh_flags);
+
+#if defined(OS_WIN)
+  // Specifies a function to use in place of NtQuerySystemInformation.
+  typedef int (*QuerySystemInformationForTest)(unsigned char* buffer,
+                                               int buffer_size);
+  static void SetQuerySystemInformationForTest(
+      QuerySystemInformationForTest query_system_information);
+#endif  // defined(OS_WIN)
 
  private:
   friend class base::RefCountedThreadSafe<SharedSampler>;
@@ -71,6 +84,8 @@ class SharedSampler : public base::RefCountedThreadSafe<SharedSampler> {
 
     OnIdleWakeupsCallback on_idle_wakeups;
     OnPhysicalMemoryCallback on_physical_memory;
+    OnStartTimeCallback on_start_time;
+    OnCpuTimeCallback on_cpu_time;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(Callbacks);
@@ -83,6 +98,8 @@ class SharedSampler : public base::RefCountedThreadSafe<SharedSampler> {
     base::ProcessId process_id;
     int idle_wakeups_per_second;
     int64_t physical_bytes;
+    base::Time start_time;
+    base::TimeDelta cpu_time;
   };
 
   typedef std::vector<RefreshResult> RefreshResults;

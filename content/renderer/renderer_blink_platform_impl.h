@@ -114,12 +114,8 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
                            long long size) override;
   blink::WebString databaseCreateOriginIdentifier(
       const blink::WebSecurityOrigin& origin) override;
+  cc::FrameSinkId generateFrameSinkId() override;
 
-  blink::WebString signedPublicKeyAndChallengeString(
-      unsigned key_size_index,
-      const blink::WebString& challenge,
-      const blink::WebURL& url,
-      const blink::WebURL& top_origin) override;
   void getPluginList(bool refresh,
                      const blink::WebSecurityOrigin& mainFrameOrigin,
                      blink::WebPluginListBuilder* builder) override;
@@ -141,10 +137,9 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   blink::WebDatabaseObserver* databaseObserver() override;
 
   blink::WebAudioDevice* createAudioDevice(
-      size_t buffer_size,
       unsigned input_channels,
       unsigned channels,
-      double sample_rate,
+      const blink::WebAudioLatencyHint& latency_hint,
       blink::WebAudioDevice::RenderCallback* callback,
       const blink::WebString& input_device_id,
       const blink::WebSecurityOrigin& security_origin) override;
@@ -236,13 +231,15 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
 
   blink::WebURLLoader* createURLLoader() override;
 
+  void requestPurgeMemory() override;
+
  private:
   bool CheckPreparsedJsCachingEnabled() const;
 
   // Factory that takes a type and return PlatformEventObserverBase that matches
   // it.
-  static PlatformEventObserverBase* CreatePlatformEventObserverFromType(
-      blink::WebPlatformEventType type);
+  static std::unique_ptr<PlatformEventObserverBase>
+  CreatePlatformEventObserverFromType(blink::WebPlatformEventType type);
 
   // Use the data previously set via SetMockDevice...DataForTesting() and send
   // them to the registered listener.
@@ -289,7 +286,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
 
   std::unique_ptr<blink::WebScrollbarBehavior> web_scrollbar_behavior_;
 
-  IDMap<PlatformEventObserverBase, IDMapOwnPointer> platform_event_observers_;
+  IDMap<std::unique_ptr<PlatformEventObserverBase>> platform_event_observers_;
 
   blink::scheduler::RendererScheduler* renderer_scheduler_;  // NOT OWNED
   TopLevelBlameContext top_level_blame_context_;

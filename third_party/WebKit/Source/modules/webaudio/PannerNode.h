@@ -75,6 +75,7 @@ class PannerHandler final : public AudioHandler {
   void processSampleAccurateValues(AudioBus* destination,
                                    const AudioBus* source,
                                    size_t framesToProcess);
+  void processOnlyAudioParams(size_t framesToProcess) override;
   void initialize() override;
   void uninitialize() override;
 
@@ -157,8 +158,8 @@ class PannerHandler final : public AudioHandler {
   void updateDirtyState();
 
   // This Persistent doesn't make a reference cycle including the owner
-  // PannerNode.
-  Persistent<AudioListener> m_listener;
+  // PannerNode. It is accessed by both audio and main thread.
+  CrossThreadPersistent<AudioListener> m_listener;
   std::unique_ptr<Panner> m_panner;
   unsigned m_panningModel;
   unsigned m_distanceModel;
@@ -233,9 +234,9 @@ class PannerNode final : public AudioNode {
   String distanceModel() const;
   void setDistanceModel(const String&);
   double refDistance() const;
-  void setRefDistance(double);
+  void setRefDistance(double, ExceptionState&);
   double maxDistance() const;
-  void setMaxDistance(double);
+  void setMaxDistance(double, ExceptionState&);
   double rolloffFactor() const;
   void setRolloffFactor(double);
   double coneInnerAngle() const;

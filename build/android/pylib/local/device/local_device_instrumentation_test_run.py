@@ -10,14 +10,18 @@ import time
 
 from devil.android import device_errors
 from devil.android import flag_changer
+from devil.android.sdk import shared_prefs
 from devil.utils import reraiser_thread
 from pylib import valgrind_tools
+from pylib.android import logdog_logcat_monitor
 from pylib.base import base_test_result
 from pylib.instrumentation import instrumentation_test_instance
 from pylib.local.device import local_device_environment
 from pylib.local.device import local_device_test_run
+from pylib.utils import logdog_helper
+from py_trace_event import trace_event
+from py_utils import contextlib_ext
 import tombstones
-
 
 _TAG = 'test_runner_py'
 
@@ -68,6 +72,7 @@ class LocalDeviceInstrumentationTestRun(
   def SetUp(self):
     @local_device_environment.handle_shard_failures_with(
         self._env.BlacklistDevice)
+    @trace_event.traced
     def individual_device_set_up(dev, host_device_tuples):
       def install_apk():
         if self._test_instance.apk_under_test:
@@ -105,6 +110,30 @@ class LocalDeviceInstrumentationTestRun(
                                   self._test_instance.package_info.package],
                                 check_return=True)
 
+      def edit_shared_prefs():
+        for pref in self._test_instance.edit_shared_prefs:
+          prefs = shared_prefs.SharedPrefs(dev, pref['package'],
+                                           pref['filename'])
+          prefs.Load()
+          for key in pref.get('remove', []):
+            try:
+              prefs.Remove(key)
+            except KeyError:
+              logging.warning("Attempted to remove non-existent key %s", key)
+          for key, value in pref.get('set', {}).iteritems():
+            if isinstance(value, bool):
+              prefs.SetBoolean(key, value)
+            elif isinstance(value, basestring):
+              prefs.SetString(key, value)
+            elif isinstance(value, long) or isinstance(value, int):
+              prefs.SetLong(key, value)
+            elif isinstance(value, list):
+              prefs.SetStringSet(key, value)
+            else:
+              raise ValueError("Given invalid value type %s for key %s" % (
+                  str(type(value)), key))
+          prefs.Commit()
+
       def push_test_data():
         device_root = posixpath.join(dev.GetExternalStoragePath(),
                                      'chromium_tests_root')
@@ -135,7 +164,8 @@ class LocalDeviceInstrumentationTestRun(
         valgrind_tools.SetChromeTimeoutScale(
             dev, self._test_instance.timeout_scale)
 
-      steps = (install_apk, push_test_data, create_flag_changer)
+      steps = (install_apk, edit_shared_prefs, push_test_data,
+               create_flag_changer)
       if self._env.concurrent_adb:
         reraiser_thread.RunAsync(steps)
       else:
@@ -152,6 +182,7 @@ class LocalDeviceInstrumentationTestRun(
   def TearDown(self):
     @local_device_environment.handle_shard_failures_with(
         self._env.BlacklistDevice)
+    @trace_event.traced
     def individual_device_tear_down(dev):
       if str(dev) in self._flag_changers:
         self._flag_changers[str(dev)].Restore()
@@ -200,6 +231,8 @@ class LocalDeviceInstrumentationTestRun(
       if not self._test_instance.driver_apk:
         raise Exception('driver_apk does not exist. '
                         'Please build it and try again.')
+      if any(t.get('is_junit4') for t in test):
+        raise Exception('driver apk does not support JUnit4 tests')
 
       def name_and_timeout(t):
         n = instrumentation_test_instance.GetTestName(t)
@@ -220,8 +253,13 @@ class LocalDeviceInstrumentationTestRun(
     else:
       test_name = instrumentation_test_instance.GetTestName(test)
       test_display_name = self._GetUniqueTestName(test)
-      target = '%s/%s' % (
-          self._test_instance.test_package, self._test_instance.test_runner)
+      if test['is_junit4']:
+        target = '%s/%s' % (
+            self._test_instance.test_package,
+            self._test_instance.test_runner_junit4)
+      else:
+        target = '%s/%s' % (
+            self._test_instance.test_package, self._test_instance.test_runner)
       extras['class'] = test_name
       if 'flags' in test:
         flags = test['flags']
@@ -247,8 +285,21 @@ class LocalDeviceInstrumentationTestRun(
           check_return=True)
       time_ms = lambda: int(time.time() * 1e3)
       start_ms = time_ms()
-      output = device.StartInstrumentation(
-          target, raw=True, extras=extras, timeout=timeout, retries=0)
+
+      stream_name = 'logcat_%s_%s_%s' % (
+          test_name.replace('#', '.'),
+          time.strftime('%Y%m%dT%H%M%S', time.localtime()),
+          device.serial)
+      logmon = logdog_logcat_monitor.LogdogLogcatMonitor(
+          device.adb, stream_name)
+      with contextlib_ext.Optional(
+          logmon, self._test_instance.should_save_logcat):
+        with contextlib_ext.Optional(
+            trace_event.trace(test_name),
+            self._env.trace_output):
+          output = device.StartInstrumentation(
+              target, raw=True, extras=extras, timeout=timeout, retries=0)
+      logcat_url = logmon.GetLogcatURL()
     finally:
       device.RunShellCommand(
           ['log', '-p', 'i', '-t', _TAG, 'END %s' % test_name],
@@ -266,6 +317,9 @@ class LocalDeviceInstrumentationTestRun(
         self._test_instance.ParseAmInstrumentRawOutput(output))
     results = self._test_instance.GenerateTestResults(
         result_code, result_bundle, statuses, start_ms, duration_ms)
+    for result in results:
+      if logcat_url:
+        result.SetLink('logcat', logcat_url)
 
     # Update the result name if the test used flags.
     if flags:
@@ -325,17 +379,22 @@ class LocalDeviceInstrumentationTestRun(
       device.RunShellCommand('rm -f %s' % os.path.join(coverage_directory,
           '*'))
     if self._test_instance.store_tombstones:
-      resolved_tombstones = None
+      tombstones_url = None
       for result in results:
         if result.GetType() == base_test_result.ResultType.CRASH:
-          if not resolved_tombstones:
-            resolved_tombstones = '\n'.join(tombstones.ResolveTombstones(
+          if not tombstones_url:
+            resolved_tombstones = tombstones.ResolveTombstones(
                 device,
                 resolve_all_tombstones=True,
                 include_stack_symbols=False,
-                wipe_tombstones=True))
-          result.SetTombstones(resolved_tombstones)
-    return results
+                wipe_tombstones=True)
+            stream_name = 'tombstones_%s_%s' % (
+                time.strftime('%Y%m%dT%H%M%S', time.localtime()),
+                device.serial)
+            tombstones_url = logdog_helper.text(
+                stream_name, resolved_tombstones)
+          result.SetLink('tombstones', tombstones_url)
+    return results, None
 
   #override
   def _ShouldRetry(self, test):
@@ -354,7 +413,7 @@ class LocalDeviceInstrumentationTestRun(
   @classmethod
   def _GetTimeoutScaleFromAnnotations(cls, annotations):
     try:
-      return int(annotations.get('TimeoutScale', 1))
+      return int(annotations.get('TimeoutScale', {}).get('value', 1))
     except ValueError as e:
       logging.warning("Non-integer value of TimeoutScale ignored. (%s)", str(e))
       return 1

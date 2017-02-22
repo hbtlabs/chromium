@@ -38,8 +38,6 @@
 #include "core/page/EventWithHitTestResults.h"
 #include "core/style/ComputedStyleConstants.h"
 #include "platform/Cursor.h"
-#include "platform/PlatformMouseEvent.h"
-#include "platform/PlatformTouchPoint.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/geometry/LayoutPoint.h"
 #include "platform/heap/Handle.h"
@@ -53,7 +51,6 @@
 
 namespace blink {
 
-class ContainerNode;
 class DataTransfer;
 class PaintLayer;
 class Element;
@@ -70,21 +67,21 @@ class LayoutObject;
 class LocalFrame;
 class Node;
 class OptionalCursor;
-class PlatformGestureEvent;
-class PlatformTouchEvent;
-class PlatformWheelEvent;
 class ScrollableArea;
 class Scrollbar;
 class SelectionController;
 class TextEvent;
-class WheelEvent;
+class WebGestureEvent;
+class WebMouseEvent;
+class WebMouseWheelEvent;
+class WebTouchEvent;
 
 class CORE_EXPORT EventHandler final
     : public GarbageCollectedFinalized<EventHandler> {
   WTF_MAKE_NONCOPYABLE(EventHandler);
 
  public:
-  explicit EventHandler(LocalFrame*);
+  explicit EventHandler(LocalFrame&);
   DECLARE_TRACE();
 
   void clear();
@@ -109,15 +106,16 @@ class CORE_EXPORT EventHandler final
       const LayoutSize& padding = LayoutSize());
 
   bool mousePressed() const { return m_mouseEventManager->mousePressed(); }
-
+  bool isMousePositionUnknown() const {
+    return m_mouseEventManager->isMousePositionUnknown();
+  }
+  void clearMouseEventManager() const { m_mouseEventManager->clear(); }
   void setCapturingMouseEventsNode(
       Node*);  // A caller is responsible for resetting capturing node to 0.
 
-  WebInputEventResult updateDragAndDrop(const PlatformMouseEvent&,
-                                        DataTransfer*);
-  void cancelDragAndDrop(const PlatformMouseEvent&, DataTransfer*);
-  WebInputEventResult performDragAndDrop(const PlatformMouseEvent&,
-                                         DataTransfer*);
+  WebInputEventResult updateDragAndDrop(const WebMouseEvent&, DataTransfer*);
+  void cancelDragAndDrop(const WebMouseEvent&, DataTransfer*);
+  WebInputEventResult performDragAndDrop(const WebMouseEvent&, DataTransfer*);
   void updateDragStateAfterEditDragIfNeeded(Element* rootEditableElement);
 
   void scheduleHoverStateUpdate();
@@ -141,15 +139,17 @@ class CORE_EXPORT EventHandler final
                       ScrollGranularity,
                       Node* startingNode = nullptr);
 
-  WebInputEventResult handleMouseMoveEvent(const PlatformMouseEvent&);
-  void handleMouseLeaveEvent(const PlatformMouseEvent&);
+  WebInputEventResult handleMouseMoveEvent(
+      const WebMouseEvent&,
+      const Vector<WebMouseEvent>& coalescedEvents);
+  void handleMouseLeaveEvent(const WebMouseEvent&);
 
-  WebInputEventResult handleMousePressEvent(const PlatformMouseEvent&);
-  WebInputEventResult handleMouseReleaseEvent(const PlatformMouseEvent&);
-  WebInputEventResult handleWheelEvent(const PlatformWheelEvent&);
+  WebInputEventResult handleMousePressEvent(const WebMouseEvent&);
+  WebInputEventResult handleMouseReleaseEvent(const WebMouseEvent&);
+  WebInputEventResult handleWheelEvent(const WebMouseWheelEvent&);
 
   // Called on the local root frame exactly once per gesture event.
-  WebInputEventResult handleGestureEvent(const PlatformGestureEvent&);
+  WebInputEventResult handleGestureEvent(const WebGestureEvent&);
   WebInputEventResult handleGestureEvent(const GestureEventWithHitTestResults&);
 
   // Clear the old hover/active state within frames before moving the hover
@@ -162,10 +162,10 @@ class CORE_EXPORT EventHandler final
   // frame.
   // Note: This is similar to (the less clearly named) prepareMouseEvent.
   // FIXME: Remove readOnly param when there is only ever a single call to this.
-  GestureEventWithHitTestResults targetGestureEvent(const PlatformGestureEvent&,
+  GestureEventWithHitTestResults targetGestureEvent(const WebGestureEvent&,
                                                     bool readOnly = false);
   GestureEventWithHitTestResults hitTestResultForGestureEvent(
-      const PlatformGestureEvent&,
+      const WebGestureEvent&,
       HitTestRequest::HitTestRequestType);
   // Handle the provided non-scroll gesture event. Should be called only on the
   // inner frame.
@@ -174,8 +174,8 @@ class CORE_EXPORT EventHandler final
 
   // Handle the provided scroll gesture event, propagating down to child frames
   // as necessary.
-  WebInputEventResult handleGestureScrollEvent(const PlatformGestureEvent&);
-  WebInputEventResult handleGestureScrollEnd(const PlatformGestureEvent&);
+  WebInputEventResult handleGestureScrollEvent(const WebGestureEvent&);
+  WebInputEventResult handleGestureScrollEnd(const WebGestureEvent&);
   bool isScrollbarHandlingGestures() const;
 
   bool bestClickableNodeForHitTestResult(const HitTestResult&,
@@ -191,7 +191,7 @@ class CORE_EXPORT EventHandler final
                                      IntRect& targetArea,
                                      Node*& targetNode);
 
-  WebInputEventResult sendContextMenuEvent(const PlatformMouseEvent&,
+  WebInputEventResult sendContextMenuEvent(const WebMouseEvent&,
                                            Node* overrideTargetNode = nullptr);
   WebInputEventResult sendContextMenuEventForKey(
       Element* overrideTargetElement = nullptr);
@@ -217,18 +217,20 @@ class CORE_EXPORT EventHandler final
                             TextEventInputType = TextEventInputKeyboard);
   void defaultTextInputEventHandler(TextEvent*);
 
-  void dragSourceEndedAt(const PlatformMouseEvent&, DragOperation);
+  void dragSourceEndedAt(const WebMouseEvent&, DragOperation);
 
   void capsLockStateMayHaveChanged();  // Only called by FrameSelection
 
-  WebInputEventResult handleTouchEvent(const PlatformTouchEvent&);
+  WebInputEventResult handleTouchEvent(
+      const WebTouchEvent&,
+      const Vector<WebTouchEvent>& coalescedEvents);
 
   bool useHandCursor(Node*, bool isOverLink);
 
   void notifyElementActivated();
 
   PassRefPtr<UserGestureToken> takeLastMouseDownGestureToken() {
-    return m_lastMouseDownUserGestureToken.release();
+    return std::move(m_lastMouseDownUserGestureToken);
   }
 
   SelectionController& selectionController() const {
@@ -256,14 +258,13 @@ class CORE_EXPORT EventHandler final
 
  private:
   WebInputEventResult handleMouseMoveOrLeaveEvent(
-      const PlatformMouseEvent&,
+      const WebMouseEvent&,
+      const Vector<WebMouseEvent>&,
       HitTestResult* hoveredNode = nullptr,
       bool onlyUpdateScrollbars = false,
       bool forceLeave = false);
 
-  HitTestRequest::HitTestRequestType getHitTypeForGestureType(
-      PlatformEvent::EventType);
-  void applyTouchAdjustment(PlatformGestureEvent*, HitTestResult*);
+  void applyTouchAdjustment(WebGestureEvent*, HitTestResult*);
   WebInputEventResult handleGestureTapDown(
       const GestureEventWithHitTestResults&);
   WebInputEventResult handleGestureTap(const GestureEventWithHitTestResults&);
@@ -275,7 +276,7 @@ class CORE_EXPORT EventHandler final
   void updateGestureTargetNodeForMouseEvent(
       const GestureEventWithHitTestResults&);
 
-  bool shouldApplyTouchAdjustment(const PlatformGestureEvent&) const;
+  bool shouldApplyTouchAdjustment(const WebGestureEvent&) const;
 
   OptionalCursor selectCursor(const HitTestResult&);
   OptionalCursor selectAutoCursor(const HitTestResult&,
@@ -297,12 +298,14 @@ class CORE_EXPORT EventHandler final
   // preventDefaulted pointerdown (i.e., one of
   // {mousedown, mousemove, mouseup}).
   // TODO(mustaq): Can we avoid the clickCount param, instead use
-  // PlatformMouseEvent's count?
+  // WebmMouseEvent's count?
   //     Same applied to dispatchMouseEvent() above.
   WebInputEventResult updatePointerTargetAndDispatchEvents(
       const AtomicString& mouseEventType,
       Node* target,
-      const PlatformMouseEvent&);
+      const String& canvasRegionId,
+      const WebMouseEvent&,
+      const Vector<WebMouseEvent>& coalescedEvents);
 
   // Clears drag target and related states. It is called when drag is done or
   // canceled.
@@ -313,6 +316,7 @@ class CORE_EXPORT EventHandler final
       LocalFrame* subframe);
   WebInputEventResult passMouseMoveEventToSubframe(
       MouseEventWithHitTestResults&,
+      const Vector<WebMouseEvent>&,
       LocalFrame* subframe,
       HitTestResult* hoveredNode = nullptr);
   WebInputEventResult passMouseReleaseEventToSubframe(
@@ -344,12 +348,12 @@ class CORE_EXPORT EventHandler final
 
   const Member<SelectionController> m_selectionController;
 
-  Timer<EventHandler> m_hoverTimer;
+  TaskRunnerTimer<EventHandler> m_hoverTimer;
 
   // TODO(rbyers): Mouse cursor update is page-wide, not per-frame.  Page-wide
   // state should move out of EventHandler to a new PageEventHandler class.
   // crbug.com/449649
-  Timer<EventHandler> m_cursorUpdateTimer;
+  TaskRunnerTimer<EventHandler> m_cursorUpdateTimer;
 
   Member<Node> m_capturingMouseEventsNode;
   bool m_eventHandlerWillResetCapturingMouseEventsNode;
@@ -374,7 +378,7 @@ class CORE_EXPORT EventHandler final
 
   bool m_longTapShouldInvokeContextMenu;
 
-  Timer<EventHandler> m_activeIntervalTimer;
+  TaskRunnerTimer<EventHandler> m_activeIntervalTimer;
   double m_lastShowPressTimestamp;
   Member<Element> m_lastDeferredTapElement;
 

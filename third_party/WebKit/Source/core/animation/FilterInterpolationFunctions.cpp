@@ -25,7 +25,7 @@ class FilterNonInterpolableValue : public NonInterpolableValue {
         type, std::move(typeNonInterpolableValue)));
   }
 
-  FilterOperation::OperationType type() const { return m_type; }
+  FilterOperation::OperationType operationType() const { return m_type; }
   const NonInterpolableValue* typeNonInterpolableValue() const {
     return m_typeNonInterpolableValue.get();
   }
@@ -155,7 +155,7 @@ InterpolationValue FilterInterpolationFunctions::maybeConvertCSSFilter(
     return nullptr;
 
   result.nonInterpolableValue = FilterNonInterpolableValue::create(
-      type, result.nonInterpolableValue.release());
+      type, std::move(result.nonInterpolableValue));
   return result;
 }
 
@@ -187,12 +187,8 @@ InterpolationValue FilterInterpolationFunctions::maybeConvertFilter(
       break;
 
     case FilterOperation::DROP_SHADOW: {
-      const DropShadowFilterOperation& blurFilter =
-          toDropShadowFilterOperation(filter);
-      ShadowData shadowData(blurFilter.location(), blurFilter.stdDeviation(), 0,
-                            Normal, blurFilter.getColor());
-      result =
-          ShadowInterpolationFunctions::convertShadowData(shadowData, zoom);
+      result = ShadowInterpolationFunctions::convertShadowData(
+          toDropShadowFilterOperation(filter).shadow(), zoom);
       break;
     }
 
@@ -208,14 +204,14 @@ InterpolationValue FilterInterpolationFunctions::maybeConvertFilter(
     return nullptr;
 
   result.nonInterpolableValue = FilterNonInterpolableValue::create(
-      filter.type(), result.nonInterpolableValue.release());
+      filter.type(), std::move(result.nonInterpolableValue));
   return result;
 }
 
 std::unique_ptr<InterpolableValue>
 FilterInterpolationFunctions::createNoneValue(
-    const NonInterpolableValue& untypedNonInterpolableValue) {
-  switch (toFilterNonInterpolableValue(untypedNonInterpolableValue).type()) {
+    const NonInterpolableValue& untypedValue) {
+  switch (toFilterNonInterpolableValue(untypedValue).operationType()) {
     case FilterOperation::GRAYSCALE:
     case FilterOperation::INVERT:
     case FilterOperation::SEPIA:
@@ -243,8 +239,8 @@ FilterInterpolationFunctions::createNoneValue(
 bool FilterInterpolationFunctions::filtersAreCompatible(
     const NonInterpolableValue& a,
     const NonInterpolableValue& b) {
-  return toFilterNonInterpolableValue(a).type() ==
-         toFilterNonInterpolableValue(b).type();
+  return toFilterNonInterpolableValue(a).operationType() ==
+         toFilterNonInterpolableValue(b).operationType();
 }
 
 FilterOperation* FilterInterpolationFunctions::createFilter(
@@ -253,7 +249,7 @@ FilterOperation* FilterInterpolationFunctions::createFilter(
     const StyleResolverState& state) {
   const FilterNonInterpolableValue& nonInterpolableValue =
       toFilterNonInterpolableValue(untypedNonInterpolableValue);
-  FilterOperation::OperationType type = nonInterpolableValue.type();
+  FilterOperation::OperationType type = nonInterpolableValue.operationType();
 
   switch (type) {
     case FilterOperation::GRAYSCALE:
@@ -285,11 +281,9 @@ FilterOperation* FilterInterpolationFunctions::createFilter(
       ShadowData shadowData = ShadowInterpolationFunctions::createShadowData(
           interpolableValue, nonInterpolableValue.typeNonInterpolableValue(),
           state);
-      Color color = shadowData.color().isCurrentColor()
-                        ? Color::black
-                        : shadowData.color().getColor();
-      return DropShadowFilterOperation::create(
-          IntPoint(shadowData.x(), shadowData.y()), shadowData.blur(), color);
+      if (shadowData.color().isCurrentColor())
+        shadowData.overrideColor(Color::black);
+      return DropShadowFilterOperation::create(shadowData);
     }
 
     default:

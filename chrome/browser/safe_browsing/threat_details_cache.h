@@ -21,7 +21,6 @@
 
 namespace net {
 class URLFetcher;
-class URLRequestContext;
 }
 
 namespace safe_browsing {
@@ -29,7 +28,7 @@ namespace safe_browsing {
 // Maps a URL to its Resource.
 typedef base::hash_map<
     std::string,
-    linked_ptr<ClientSafeBrowsingReportRequest::Resource>>
+    std::unique_ptr<ClientSafeBrowsingReportRequest::Resource>>
     ResourceMap;
 
 class ThreatDetailsCacheCollector

@@ -123,9 +123,9 @@ SecurityOrigin::SecurityOrigin(const KURL& url)
       m_blockLocalAccessFromLocalOrigin(false),
       m_isUniqueOriginPotentiallyTrustworthy(false) {
   if (m_protocol.isNull())
-    m_protocol = emptyString();
+    m_protocol = emptyString;
   if (m_host.isNull())
-    m_host = emptyString();
+    m_host = emptyString;
 
   // Suborigins are serialized into the host, so extract it if necessary.
   String suboriginName;
@@ -148,9 +148,9 @@ SecurityOrigin::SecurityOrigin(const KURL& url)
 }
 
 SecurityOrigin::SecurityOrigin()
-    : m_protocol(emptyString()),
-      m_host(emptyString()),
-      m_domain(emptyString()),
+    : m_protocol(emptyString),
+      m_host(emptyString),
+      m_domain(emptyString),
       m_port(InvalidPort),
       m_effectivePort(InvalidPort),
       m_isUnique(true),
@@ -203,7 +203,7 @@ PassRefPtr<SecurityOrigin> SecurityOrigin::isolatedCopy() const {
 
 void SecurityOrigin::setDomainFromDOM(const String& newDomain) {
   m_domainWasSetInDOM = true;
-  m_domain = newDomain.lower();
+  m_domain = newDomain;
 }
 
 bool SecurityOrigin::isSecure(const KURL& url) {
@@ -571,6 +571,12 @@ bool SecurityOrigin::isSameSchemeHostPortAndSuborigin(
   return isSameSchemeHostPort(other) && sameSuborigins;
 }
 
+bool SecurityOrigin::areSameSchemeHostPort(const KURL& a, const KURL& b) {
+  RefPtr<SecurityOrigin> originA = SecurityOrigin::create(a);
+  RefPtr<SecurityOrigin> originB = SecurityOrigin::create(b);
+  return originB->isSameSchemeHostPort(originA.get());
+}
+
 const KURL& SecurityOrigin::urlWithUniqueSecurityOrigin() {
   ASSERT(isMainThread());
   DEFINE_STATIC_LOCAL(const KURL, uniqueSecurityOriginURL,
@@ -580,7 +586,8 @@ const KURL& SecurityOrigin::urlWithUniqueSecurityOrigin() {
 
 std::unique_ptr<SecurityOrigin::PrivilegeData>
 SecurityOrigin::createPrivilegeData() const {
-  std::unique_ptr<PrivilegeData> privilegeData = wrapUnique(new PrivilegeData);
+  std::unique_ptr<PrivilegeData> privilegeData =
+      WTF::wrapUnique(new PrivilegeData);
   privilegeData->m_universalAccess = m_universalAccess;
   privilegeData->m_canLoadLocalResources = m_canLoadLocalResources;
   privilegeData->m_blockLocalAccessFromLocalOrigin =

@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 // Changes to analytics reporting structures can have disruptive effects on the
-// analytics history of Files.app (e.g. making it hard or impossible to detect
-// trending).
+// analytics history of the Files app (e.g. making it hard or impossible to
+// detect trending).
 //
 // In general, treat changes to analytics like histogram changes, i.e. make
 // additive changes, don't remove or rename existing Dimensions, Events, Labels,
@@ -57,7 +57,9 @@ metrics.FileSystemProviders = {
   pmnllmkmjilbojkpgplbdmckghmaocjh: 'Scan (FB)',
   mfhnnfciefdpolbelmfkpmhhmlkehbdf: 'File System for SMB/CIFS (YT)',
   plmanjiaoflhcilcfdnjeffklbgejmje: 'Add MY Documents (KA)',
-  mljpablpddhocfbnokacjggdbmafjnon: 'Wicked Good Unarchiver (MF)'
+  mljpablpddhocfbnokacjggdbmafjnon: 'Wicked Good Unarchiver (MF)',
+  ndjpildffkeodjdaeebdhnncfhopkajk: 'Network File Share for Chrome OS',
+  gmhmnhjihabohahcllfgjooaoecglhpi: 'LanFolder'
 };
 
 /**

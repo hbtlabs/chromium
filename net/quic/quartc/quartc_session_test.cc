@@ -18,8 +18,10 @@
 #include "net/quic/core/quic_crypto_client_stream.h"
 #include "net/quic/core/quic_crypto_server_stream.h"
 #include "net/quic/core/quic_simple_buffer_allocator.h"
+#include "net/quic/platform/impl/quic_chromium_clock.h"
 #include "net/quic/quartc/quartc_alarm_factory.h"
 #include "net/quic/quartc/quartc_packet_writer.h"
+#include "net/quic/test_tools/quic_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
@@ -51,33 +53,23 @@ class FakeProofSource : public net::ProofSource {
   explicit FakeProofSource(bool success) : success_(success) {}
 
   // ProofSource override.
-  bool GetProof(const IPAddress& server_ip,
-                const std::string& hostname,
-                const std::string& server_config,
-                net::QuicVersion quic_version,
-                base::StringPiece chlo_hash,
-                const net::QuicTagVector& connection_options,
-                scoped_refptr<net::ProofSource::Chain>* out_certs,
-                std::string* out_signature,
-                std::string* out_leaf_cert_sct) override {
-    if (success_) {
-      std::vector<std::string> certs;
-      certs.push_back("Required to establish handshake");
-      *out_certs = new ProofSource::Chain(certs);
-      *out_signature = "Signature";
-      *out_leaf_cert_sct = "Time";
-    }
-    return success_;
-  }
-
-  void GetProof(const net::IPAddress& server_ip,
+  void GetProof(const QuicSocketAddress& server_ip,
                 const std::string& hostname,
                 const std::string& server_config,
                 net::QuicVersion quic_version,
                 base::StringPiece chlo_hash,
                 const net::QuicTagVector& connection_options,
                 std::unique_ptr<Callback> callback) override {
-    LOG(INFO) << "GetProof() providing dummy credentials for insecure QUIC";
+    QuicReferenceCountedPointer<net::ProofSource::Chain> chain;
+    net::QuicCryptoProof proof;
+    if (success_) {
+      std::vector<std::string> certs;
+      certs.push_back("Required to establish handshake");
+      chain = new ProofSource::Chain(certs);
+      proof.signature = "Signature";
+      proof.leaf_cert_scts = "Time";
+    }
+    callback->Run(success_, chain, proof, nullptr /* details */);
   }
 
  private:
@@ -354,12 +346,13 @@ class QuartcSessionTest : public ::testing::Test,
     QuartcPacketWriter* writer = perspective == Perspective::IS_CLIENT
                                      ? client_writer_.get()
                                      : server_writer_.get();
-    IPAddress ip(0, 0, 0, 0);
+    QuicIpAddress ip;
+    ip.FromString("0.0.0.0");
     bool owns_writer = false;
     alarm_factory_.reset(new QuartcAlarmFactory(
         base::ThreadTaskRunnerHandle::Get().get(), GetClock()));
     return std::unique_ptr<QuicConnection>(new QuicConnection(
-        0, IPEndPoint(ip, 0), this /*QuicConnectionHelperInterface*/,
+        0, QuicSocketAddress(ip, 0), this /*QuicConnectionHelperInterface*/,
         alarm_factory_.get(), writer, owns_writer, perspective,
         AllSupportedVersions()));
   }
@@ -448,7 +441,8 @@ class QuartcSessionTest : public ::testing::Test,
  protected:
   std::unique_ptr<QuicAlarmFactory> alarm_factory_;
   SimpleBufferAllocator buffer_allocator_;
-  QuicClock clock_;
+  QuicChromiumClock clock_;
+  QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
 
   std::unique_ptr<FakeTransportChannel> client_channel_;
   std::unique_ptr<FakeTransportChannel> server_channel_;

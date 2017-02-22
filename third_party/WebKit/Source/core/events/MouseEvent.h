@@ -27,45 +27,35 @@
 #include "core/CoreExport.h"
 #include "core/events/EventDispatchMediator.h"
 #include "core/events/MouseEventInit.h"
-#include "core/events/MouseRelatedEvent.h"
-#include "platform/PlatformMouseEvent.h"
+#include "core/events/UIEventWithKeyState.h"
+#include "public/platform/WebMouseEvent.h"
 
 namespace blink {
 class DataTransfer;
 class EventDispatcher;
 
-class CORE_EXPORT MouseEvent : public MouseRelatedEvent {
+class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static MouseEvent* create() { return new MouseEvent; }
+  enum SyntheticEventType {
+    // Real mouse input events or synthetic events that behave just like real
+    // events
+    RealOrIndistinguishable,
+    // Synthetic mouse events derived from touch input
+    FromTouch,
+    // Synthetic mouse events generated without a position, for example those
+    // generated from keyboard input.
+    Positionless,
+  };
 
-  // TODO(mustaq): Should replace most/all of these params with a
-  // MouseEventInit.
-  static MouseEvent* create(const AtomicString& type,
-                            bool canBubble,
-                            bool cancelable,
-                            AbstractView*,
-                            int detail,
-                            int screenX,
-                            int screenY,
-                            int windowX,
-                            int windowY,
-                            int movementX,
-                            int movementY,
-                            PlatformEvent::Modifiers,
-                            short button,
-                            unsigned short buttons,
-                            EventTarget* relatedTarget,
-                            double platformTimeStamp,
-                            PlatformMouseEvent::SyntheticEventType,
-                            const String& region,
-                            const PlatformMouseEvent*);
+  static MouseEvent* create() { return new MouseEvent; }
 
   static MouseEvent* create(const AtomicString& eventType,
                             AbstractView*,
-                            const PlatformMouseEvent&,
+                            const WebMouseEvent&,
                             int detail,
+                            const String& canvasRegionId,
                             Node* relatedTarget);
 
   static MouseEvent* create(ScriptState*,
@@ -79,7 +69,7 @@ class CORE_EXPORT MouseEvent : public MouseRelatedEvent {
 
   ~MouseEvent() override;
 
-  static unsigned short platformModifiersToButtons(unsigned modifiers);
+  static unsigned short webInputEventModifiersToButtons(unsigned modifiers);
 
   void initMouseEvent(ScriptState*,
                       const AtomicString& type,
@@ -108,20 +98,17 @@ class CORE_EXPORT MouseEvent : public MouseRelatedEvent {
   void setRelatedTarget(EventTarget* relatedTarget) {
     m_relatedTarget = relatedTarget;
   }
-  PlatformMouseEvent::SyntheticEventType getSyntheticEventType() const {
+  SyntheticEventType getSyntheticEventType() const {
     return m_syntheticEventType;
   }
   const String& region() const { return m_region; }
-  void setRegion(const String& region) { m_region = region; }
 
   Node* toElement() const;
   Node* fromElement() const;
 
   virtual DataTransfer* getDataTransfer() const { return nullptr; }
 
-  bool fromTouch() const {
-    return m_syntheticEventType == PlatformMouseEvent::FromTouch;
-  }
+  bool fromTouch() const { return m_syntheticEventType == FromTouch; }
 
   const AtomicString& interfaceName() const override;
 
@@ -132,11 +119,78 @@ class CORE_EXPORT MouseEvent : public MouseRelatedEvent {
 
   int clickCount() { return detail(); }
 
-  const PlatformMouseEvent* mouseEvent() const { return m_mouseEvent.get(); }
+  const WebMouseEvent* nativeEvent() const { return m_nativeEvent.get(); }
+
+  enum class PositionType {
+    Position,
+    // Positionless mouse events are used, for example, for 'click' events from
+    // keyboard input.  It's kind of surprising for a mouse event not to have a
+    // position.
+    Positionless
+  };
+
+  // Note that these values are adjusted to counter the effects of zoom, so that
+  // values exposed via DOM APIs are invariant under zooming.
+  // TODO(mustaq): Remove the PointerEvent specific code when mouse has
+  // fractional coordinates. See crbug.com/655786.
+  double screenX() const {
+    return isPointerEvent() ? m_screenLocation.x()
+                            : static_cast<int>(m_screenLocation.x());
+  }
+  double screenY() const {
+    return isPointerEvent() ? m_screenLocation.y()
+                            : static_cast<int>(m_screenLocation.y());
+  }
+
+  double clientX() const {
+    return isPointerEvent() ? m_clientLocation.x()
+                            : static_cast<int>(m_clientLocation.x());
+  }
+  double clientY() const {
+    return isPointerEvent() ? m_clientLocation.y()
+                            : static_cast<int>(m_clientLocation.y());
+  }
+
+  int movementX() const { return m_movementDelta.x(); }
+  int movementY() const { return m_movementDelta.y(); }
+
+  int layerX();
+  int layerY();
+
+  int offsetX();
+  int offsetY();
+
+  double pageX() const {
+    return isPointerEvent() ? m_pageLocation.x()
+                            : static_cast<int>(m_pageLocation.x());
+  }
+  double pageY() const {
+    return isPointerEvent() ? m_pageLocation.y()
+                            : static_cast<int>(m_pageLocation.y());
+  }
+
+  double x() const { return clientX(); }
+  double y() const { return clientY(); }
+
+  bool hasPosition() const { return m_positionType == PositionType::Position; }
+
+  // Page point in "absolute" coordinates (i.e. post-zoomed, page-relative
+  // coords, usable with LayoutObject::absoluteToLocal) relative to view(), i.e.
+  // the local frame.
+  const DoublePoint& absoluteLocation() const { return m_absoluteLocation; }
 
   DECLARE_VIRTUAL_TRACE();
 
  protected:
+  MouseEvent(const AtomicString& type,
+             bool canBubble,
+             bool cancelable,
+             AbstractView*,
+             const WebMouseEvent&,
+             int detail,
+             const String& region,
+             EventTarget* relatedTarget);
+
   MouseEvent(const AtomicString& type,
              bool canBubble,
              bool cancelable,
@@ -148,14 +202,13 @@ class CORE_EXPORT MouseEvent : public MouseRelatedEvent {
              int windowY,
              int movementX,
              int movementY,
-             PlatformEvent::Modifiers,
+             WebInputEvent::Modifiers,
              short button,
              unsigned short buttons,
              EventTarget* relatedTarget,
-             double platformTimeStamp,
-             PlatformMouseEvent::SyntheticEventType,
-             const String& region,
-             const PlatformMouseEvent*);
+             TimeTicks platformTimeStamp,
+             SyntheticEventType,
+             const String& region);
 
   MouseEvent(const AtomicString& type, const MouseEventInit&);
 
@@ -174,18 +227,35 @@ class CORE_EXPORT MouseEvent : public MouseRelatedEvent {
                               int screenY,
                               int clientX,
                               int clientY,
-                              PlatformEvent::Modifiers,
+                              WebInputEvent::Modifiers,
                               short button,
                               EventTarget* relatedTarget,
                               InputDeviceCapabilities* sourceCapabilities,
                               unsigned short buttons = 0);
 
+  void initCoordinates(const double clientX, const double clientY);
+  void initCoordinatesFromRootFrame(int windowX, int windowY);
+  void receivedTarget() final;
+
+  void computePageLocation();
+  void computeRelativePosition();
+
+  DoublePoint m_screenLocation;
+  DoublePoint m_clientLocation;
+  DoublePoint m_movementDelta;
+
+  DoublePoint m_pageLocation;
+  DoublePoint m_layerLocation;
+  DoublePoint m_offsetLocation;
+  DoublePoint m_absoluteLocation;
+  PositionType m_positionType;
+  bool m_hasCachedRelativePosition;
   short m_button;
   unsigned short m_buttons;
   Member<EventTarget> m_relatedTarget;
-  PlatformMouseEvent::SyntheticEventType m_syntheticEventType;
+  SyntheticEventType m_syntheticEventType;
   String m_region;
-  std::unique_ptr<PlatformMouseEvent> m_mouseEvent;
+  std::unique_ptr<WebMouseEvent> m_nativeEvent;
 };
 
 class MouseEventDispatchMediator final : public EventDispatchMediator {

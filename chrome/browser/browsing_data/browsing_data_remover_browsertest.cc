@@ -15,8 +15,8 @@
 #include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "chrome/browser/browsing_data/browsing_data_remover_test_util.h"
 #include "chrome/browser/browsing_data/cache_counter.h"
-#include "chrome/browser/browsing_data/origin_filter_builder.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -27,6 +27,7 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_paths.h"
@@ -40,6 +41,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 using content::BrowserThread;
+using content::BrowsingDataFilterBuilder;
 
 namespace {
 static const char* kExampleHost = "example.com";
@@ -116,7 +118,7 @@ class BrowsingDataRemoverBrowserTest : public InProcessBrowserTest {
         BrowsingDataRemoverFactory::GetForBrowserContext(browser()->profile());
     BrowsingDataRemoverCompletionObserver completion_observer(remover);
     remover->RemoveAndReply(
-        BrowsingDataRemover::Period(browsing_data::LAST_HOUR), remove_mask,
+        base::Time(), base::Time::Max(), remove_mask,
         BrowsingDataHelper::UNPROTECTED_WEB, &completion_observer);
     completion_observer.BlockUntilCompletion();
   }
@@ -128,7 +130,7 @@ class BrowsingDataRemoverBrowserTest : public InProcessBrowserTest {
         BrowsingDataRemoverFactory::GetForBrowserContext(browser()->profile());
     BrowsingDataRemoverCompletionObserver completion_observer(remover);
     remover->RemoveWithFilterAndReply(
-        BrowsingDataRemover::Period(browsing_data::LAST_HOUR), remove_mask,
+        base::Time(), base::Time::Max(), remove_mask,
         BrowsingDataHelper::UNPROTECTED_WEB, std::move(filter_builder),
         &completion_observer);
     completion_observer.BlockUntilCompletion();
@@ -248,8 +250,8 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, Cache) {
 
   // Partially delete cache data. Delete data for localhost, which is the origin
   // of |url1|, but not for |kExampleHost|, which is the origin of |url2|.
-  std::unique_ptr<OriginFilterBuilder> filter_builder(
-      new OriginFilterBuilder(OriginFilterBuilder::WHITELIST));
+  std::unique_ptr<BrowsingDataFilterBuilder> filter_builder =
+      BrowsingDataFilterBuilder::Create(BrowsingDataFilterBuilder::WHITELIST);
   filter_builder->AddOrigin(url::Origin(url1));
   RemoveWithFilterAndWait(BrowsingDataRemover::REMOVE_CACHE,
                           std::move(filter_builder));
@@ -259,7 +261,8 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, Cache) {
   EXPECT_LT(new_size, original_size);
 
   // Another partial deletion with the same filter should have no effect.
-  filter_builder.reset(new OriginFilterBuilder(OriginFilterBuilder::WHITELIST));
+  filter_builder =
+      BrowsingDataFilterBuilder::Create(BrowsingDataFilterBuilder::WHITELIST);
   filter_builder->AddOrigin(url::Origin(url1));
   RemoveWithFilterAndWait(BrowsingDataRemover::REMOVE_CACHE,
                           std::move(filter_builder));
@@ -270,6 +273,20 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, Cache) {
 
   // The cache is empty.
   EXPECT_EQ(0, GetCacheSize());
+}
+
+IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
+                       ExternalProtocolHandlerPrefs) {
+  Profile* profile = browser()->profile();
+  base::DictionaryValue prefs;
+  prefs.SetBoolean("tel", true);
+  profile->GetPrefs()->Set(prefs::kExcludedSchemes, prefs);
+  ExternalProtocolHandler::BlockState block_state =
+      ExternalProtocolHandler::GetBlockState("tel", profile);
+  ASSERT_EQ(ExternalProtocolHandler::BLOCK, block_state);
+  RemoveAndWait(BrowsingDataRemover::REMOVE_SITE_DATA);
+  block_state = ExternalProtocolHandler::GetBlockState("tel", profile);
+  ASSERT_EQ(ExternalProtocolHandler::UNKNOWN, block_state);
 }
 
 // Verify that TransportSecurityState data is cleared for REMOVE_CACHE.

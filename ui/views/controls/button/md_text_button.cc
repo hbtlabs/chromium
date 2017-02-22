@@ -5,6 +5,7 @@
 #include "ui/views/controls/button/md_text_button.h"
 
 #include "base/i18n/case_conversion.h"
+#include "base/memory/ptr_util.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
@@ -20,13 +21,11 @@
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/painter.h"
 #include "ui/views/style/platform_style.h"
+#include "ui/views/views_delegate.h"
 
 namespace views {
 
 namespace {
-
-// Minimum size to reserve for the button contents.
-const int kMinWidth = 48;
 
 LabelButton* CreateButton(ButtonListener* listener,
                           const base::string16& text,
@@ -130,12 +129,12 @@ std::unique_ptr<views::InkDropRipple> MdTextButton::CreateInkDropRipple()
     const {
   return std::unique_ptr<views::InkDropRipple>(
       new views::FloodFillInkDropRipple(
-          GetLocalBounds(), GetInkDropCenterBasedOnLastEvent(),
-          GetInkDropBaseColor(), ink_drop_visible_opacity()));
+          size(), GetInkDropCenterBasedOnLastEvent(), GetInkDropBaseColor(),
+          ink_drop_visible_opacity()));
 }
 
-void MdTextButton::StateChanged() {
-  LabelButton::StateChanged();
+void MdTextButton::StateChanged(ButtonState old_state) {
+  LabelButton::StateChanged(old_state);
   UpdateColors();
 }
 
@@ -194,7 +193,9 @@ MdTextButton::MdTextButton(ButtonListener* listener)
   set_has_ink_drop_action_on_click(true);
   SetHorizontalAlignment(gfx::ALIGN_CENTER);
   SetFocusForPlatform();
-  SetMinSize(gfx::Size(kMinWidth, 0));
+  const int minimum_width =
+      ViewsDelegate::GetInstance()->GetDialogButtonMinimumWidth();
+  SetMinSize(gfx::Size(minimum_width, 0));
   SetFocusPainter(nullptr);
   label()->SetAutoColorReadabilityEnabled(false);
   set_request_focus_on_press(false);
@@ -204,7 +205,7 @@ MdTextButton::MdTextButton(ButtonListener* listener)
 
   // Paint to a layer so that the canvas is snapped to pixel boundaries (useful
   // for fractional DSF).
-  SetPaintToLayer(true);
+  SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 }
 
@@ -239,9 +240,10 @@ void MdTextButton::UpdatePadding() {
 
   // TODO(estade): can we get rid of the platform style border hoopla if
   // we apply the MD treatment to all buttons, even GTK buttons?
-  const int kHorizontalPadding = 16;
-  SetBorder(CreateEmptyBorder(top_padding, kHorizontalPadding, bottom_padding,
-                              kHorizontalPadding));
+  const int horizontal_padding =
+      ViewsDelegate::GetInstance()->GetButtonHorizontalPadding();
+  SetBorder(CreateEmptyBorder(top_padding, horizontal_padding, bottom_padding,
+                              horizontal_padding));
 }
 
 void MdTextButton::UpdateColors() {
@@ -250,8 +252,11 @@ void MdTextButton::UpdateColors() {
                     : ui::NativeTheme::kColorId_ButtonEnabledColor;
 
   ui::NativeTheme* theme = GetNativeTheme();
-  if (!explicitly_set_normal_color())
+  if (!explicitly_set_normal_color()) {
+    const auto colors = explicitly_set_colors();
     LabelButton::SetEnabledTextColors(theme->GetSystemColor(fg_color_id));
+    set_explicitly_set_colors(colors);
+  }
 
   // Prominent buttons keep their enabled text color; disabled state is conveyed
   // by shading the background instead.
@@ -295,8 +300,8 @@ void MdTextButton::UpdateColors() {
 
   DCHECK_EQ(SK_AlphaOPAQUE, static_cast<int>(SkColorGetA(bg_color)));
   set_background(Background::CreateBackgroundPainter(
-      true, Painter::CreateRoundRectWith1PxBorderPainter(
-                bg_color, stroke_color, kInkDropSmallCornerRadius)));
+      Painter::CreateRoundRectWith1PxBorderPainter(bg_color, stroke_color,
+                                                   kInkDropSmallCornerRadius)));
 }
 
 }  // namespace views

@@ -26,6 +26,7 @@
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/embedder/named_platform_handle.h"
 #include "mojo/edk/embedder/named_platform_handle_utils.h"
+#include "mojo/edk/embedder/pending_process_connection.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -114,11 +115,6 @@ ScopedMessagePipeHandle MultiprocessTestHelper::StartChildWithExtraSwitch(
     command_line.AppendSwitchNative(kMojoNamedPipeName, named_pipe.name);
   }
 
-  std::string pipe_token = mojo::edk::GenerateRandomToken();
-  if (launch_type == LaunchType::CHILD ||
-      launch_type == LaunchType::NAMED_CHILD)
-    command_line.AppendSwitchASCII(kMojoPrimordialPipeToken, pipe_token);
-
   if (!switch_string.empty()) {
     CHECK(!command_line.HasSwitch(switch_string));
     if (!switch_value.empty())
@@ -140,17 +136,28 @@ ScopedMessagePipeHandle MultiprocessTestHelper::StartChildWithExtraSwitch(
 #error "Not supported yet."
 #endif
 
+  // NOTE: In the case of named pipes, it's important that the server handle be
+  // created before the child process is launched; otherwise the server binding
+  // the pipe path can race with child's connection to the pipe.
+  ScopedPlatformHandle server_handle;
+  if (launch_type == LaunchType::CHILD || launch_type == LaunchType::PEER) {
+    server_handle = channel.PassServerHandle();
+  } else if (launch_type == LaunchType::NAMED_CHILD ||
+             launch_type == LaunchType::NAMED_PEER) {
+    server_handle = CreateServerHandle(named_pipe);
+  }
+
+  PendingProcessConnection process;
   ScopedMessagePipeHandle pipe;
-  std::string child_token = mojo::edk::GenerateRandomToken();
   if (launch_type == LaunchType::CHILD ||
       launch_type == LaunchType::NAMED_CHILD) {
-    pipe = CreateParentMessagePipe(pipe_token, child_token);
-  } else if (launch_type == LaunchType::PEER) {
+    std::string pipe_token;
+    pipe = process.CreateMessagePipe(&pipe_token);
+    command_line.AppendSwitchASCII(kMojoPrimordialPipeToken, pipe_token);
+  } else if (launch_type == LaunchType::PEER ||
+             launch_type == LaunchType::NAMED_PEER) {
     peer_token_ = mojo::edk::GenerateRandomToken();
-    pipe = ConnectToPeerProcess(channel.PassServerHandle(), peer_token_);
-  } else if (launch_type == LaunchType::NAMED_PEER) {
-    peer_token_ = mojo::edk::GenerateRandomToken();
-    pipe = ConnectToPeerProcess(CreateServerHandle(named_pipe), peer_token_);
+    pipe = ConnectToPeerProcess(std::move(server_handle), peer_token_);
   }
 
   test_child_ =
@@ -158,12 +165,11 @@ ScopedMessagePipeHandle MultiprocessTestHelper::StartChildWithExtraSwitch(
   if (launch_type == LaunchType::CHILD || launch_type == LaunchType::PEER)
     channel.ChildProcessLaunched();
 
-  if (launch_type == LaunchType::CHILD) {
-    ChildProcessLaunched(test_child_.Handle(), channel.PassServerHandle(),
-                         child_token, process_error_callback_);
-  } else if (launch_type == LaunchType::NAMED_CHILD) {
-    ChildProcessLaunched(test_child_.Handle(), CreateServerHandle(named_pipe),
-                         child_token, process_error_callback_);
+  if (launch_type == LaunchType::CHILD ||
+      launch_type == LaunchType::NAMED_CHILD) {
+    DCHECK(server_handle.is_valid());
+    process.Connect(test_child_.Handle(), std::move(server_handle),
+                    process_error_callback_);
   }
 
   CHECK(test_child_.IsValid());
@@ -174,14 +180,8 @@ int MultiprocessTestHelper::WaitForChildShutdown() {
   CHECK(test_child_.IsValid());
 
   int rv = -1;
-#if defined(OS_ANDROID)
-  // On Android, we need to use a special function to wait for the child.
-  CHECK(AndroidWaitForChildExitWithTimeout(
-      test_child_, TestTimeouts::action_timeout(), &rv));
-#else
-  CHECK(
-      test_child_.WaitForExitWithTimeout(TestTimeouts::action_timeout(), &rv));
-#endif
+  WaitForMultiprocessTestChildExit(test_child_, TestTimeouts::action_timeout(),
+                                   &rv);
   test_child_.Close();
   return rv;
 }

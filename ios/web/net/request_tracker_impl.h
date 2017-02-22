@@ -7,13 +7,15 @@
 
 #import <Foundation/Foundation.h>
 #include <stdint.h>
+
 #include <map>
+#include <memory>
 #include <set>
+#include <vector>
 
 #include "base/callback_forward.h"
-#include "base/mac/scoped_nsobject.h"
+#import "base/mac/scoped_nsobject.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #import "ios/net/request_tracker.h"
 #import "ios/web/net/crw_request_tracker_delegate.h"
@@ -24,10 +26,6 @@
 @class SSLCarrier;
 @class CRWSSLCarrier;
 struct TrackerCounts;
-
-namespace content {
-struct SSLStatus;
-}
 
 namespace net {
 class HttpResponseHeaders;
@@ -164,9 +162,6 @@ class RequestTrackerImpl
   static RequestTrackerImpl* GetTrackerForRequestGroupID(
       NSString* request_group_id);
 
-  // Callback from the UI to allow  or deny a particular certificate.
-  void ErrorCallback(CRWSSLCarrier* carrier, bool allow);
-
   // Utility method for clients to post tasks to the IO thread from the UI
   // thread.
   void PostIOTask(const base::Closure& task);
@@ -183,9 +178,6 @@ class RequestTrackerImpl
   // passed as a base::WeakPtr<RequestTracker>.
   static void PostUITaskIfOpen(const base::WeakPtr<RequestTracker> tracker,
                                const base::Closure& task);
-
-  // Sets the cache mode. Must be called from the UI thread.
-  void SetCacheModeFromUIThread(RequestTracker::CacheMode mode);
 
 #pragma mark Testing methods
 
@@ -286,9 +278,6 @@ class RequestTrackerImpl
   // |load_success| indicates if the page successfully loaded.
   void StopPageLoad(const GURL& url, bool load_success);
 
-  // Cancels all the requests in |live_requests_|.
-  void CancelRequests();
-
 #pragma mark Private Consumer API
   // Private methods that call into delegate methods.
 
@@ -313,10 +302,6 @@ class RequestTrackerImpl
   // Notifies the delegate of an SSL status update.
   void NotifyUpdatedSSLStatus(base::scoped_nsobject<CRWSSLCarrier> carrier);
 
-  // Calls the delegate method to present an SSL error interstitial.
-  void NotifyPresentSSLError(base::scoped_nsobject<CRWSSLCarrier> carrier,
-                             bool recoverable);
-
 #pragma mark Internal utilities for task posting
   // Posts |task| to |thread|. Must not be called from |thread|. If |thread| is
   // the IO thread, silently returns if |is_closing_| is true.
@@ -333,10 +318,6 @@ class RequestTrackerImpl
   // only from the IO thread.
   NSString* UnsafeDescription();
 
-  // Generates a string unique to this RequestTrackerImpl to use with the
-  // CRWNetworkActivityIndicatorManager.
-  NSString* GetNetworkActivityKey();
-
 #pragma mark Non thread-safe fields, only accessed from the main thread.
   // The RequestTrackerImpl delegate. All changes and access to this object
   // should be done on the main thread.
@@ -349,18 +330,14 @@ class RequestTrackerImpl
   // progress, and thus requests corresponding to old navigation events are not
   // in it.
   std::map<const void*, TrackerCounts*> counts_by_request_;
-  // All the live requests associated with the tracker.
-  std::set<net::URLRequest*> live_requests_;
   // A list of all the TrackerCounts, including the finished ones.
-  ScopedVector<TrackerCounts> counts_;
+  std::vector<std::unique_ptr<TrackerCounts>> counts_;
   // The system shall never allow the page load estimate to go back.
   float previous_estimate_;
   // Index of the first request to consider for building the estimation.
   unsigned int estimate_start_index_;
   // How many notifications are currently queued, to avoid notifying too often.
   int notification_depth_;
-  // The tracker containing the error currently presented to the user.
-  TrackerCounts* current_ssl_error_;
   // Set to |YES| if the page has mixed content
   bool has_mixed_content_;
   // Set to true if between TrimToURL and StopPageLoad.
@@ -371,11 +348,6 @@ class RequestTrackerImpl
 
 #pragma mark Other fields.
   scoped_refptr<web::CertificatePolicyCache> policy_cache_;
-  // If |true| all the requests should be static file requests, otherwise all
-  // the requests should be network requests. This is a constant initialized
-  // in the constructor and read in IO and UI threads.
-  const bool is_for_static_file_requests_;
-
   scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
   // Current page URL, as far as we know.
   GURL page_url_;

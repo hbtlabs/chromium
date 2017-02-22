@@ -13,6 +13,7 @@ import android.support.annotation.UiThread;
 
 import org.chromium.base.BuildConfig;
 import org.chromium.base.CommandLine;
+import org.chromium.base.JavaExceptionReporter;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.SuppressFBWarnings;
@@ -32,7 +33,7 @@ public class ChromeStrictMode {
     private static final double UPLOAD_PROBABILITY = 0.01;
     private static final double MAX_UPLOADS_PER_SESSION = 3;
 
-    private static boolean sIsStrictModeAlreadyConfigured = false;
+    private static boolean sIsStrictModeAlreadyConfigured;
     private static List<Object> sCachedStackTraces =
             Collections.synchronizedList(new ArrayList<Object>());
     private static AtomicInteger sNumUploads = new AtomicInteger();

@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
@@ -21,6 +22,7 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gl/angle_platform_impl.h"
 #include "ui/gl/egl_util.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_context_egl.h"
@@ -29,6 +31,7 @@
 #include "ui/gl/gl_surface_stub.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/scoped_make_current.h"
+#include "ui/gl/sync_control_vsync_provider.h"
 
 #if defined(USE_X11) && !defined(OS_CHROMEOS)
 extern "C" {
@@ -134,6 +137,41 @@ bool g_egl_surfaceless_context_supported = false;
 bool g_egl_surface_orientation_supported = false;
 bool g_use_direct_composition = false;
 
+class EGLSyncControlVSyncProvider : public SyncControlVSyncProvider {
+ public:
+  explicit EGLSyncControlVSyncProvider(EGLSurface surface)
+      : SyncControlVSyncProvider(),
+        surface_(surface) {
+  }
+
+  ~EGLSyncControlVSyncProvider() override {}
+
+ protected:
+  bool GetSyncValues(int64_t* system_time,
+                     int64_t* media_stream_counter,
+                     int64_t* swap_buffer_counter) override {
+    uint64_t u_system_time, u_media_stream_counter, u_swap_buffer_counter;
+    bool result = eglGetSyncValuesCHROMIUM(
+        g_display, surface_, &u_system_time,
+        &u_media_stream_counter, &u_swap_buffer_counter) == EGL_TRUE;
+    if (result) {
+      *system_time = static_cast<int64_t>(u_system_time);
+      *media_stream_counter = static_cast<int64_t>(u_media_stream_counter);
+      *swap_buffer_counter = static_cast<int64_t>(u_swap_buffer_counter);
+    }
+    return result;
+  }
+
+  bool GetMscRate(int32_t* numerator, int32_t* denominator) override {
+    return false;
+  }
+
+ private:
+  EGLSurface surface_;
+
+  DISALLOW_COPY_AND_ASSIGN(EGLSyncControlVSyncProvider);
+};
+
 EGLDisplay GetPlatformANGLEDisplay(EGLNativeDisplayType native_display,
                                    EGLenum platform_type,
                                    bool warpDevice) {
@@ -148,11 +186,15 @@ EGLDisplay GetPlatformANGLEDisplay(EGLNativeDisplayType native_display,
   }
 
 #if defined(USE_X11) && !defined(OS_CHROMEOS)
-  Visual* visual;
-  ui::XVisualManager::GetInstance()->ChooseVisualForWindow(
-      true, &visual, nullptr, nullptr, nullptr);
-  display_attribs.push_back(EGL_X11_VISUAL_ID_ANGLE);
-  display_attribs.push_back(static_cast<EGLint>(XVisualIDFromVisual(visual)));
+  // ANGLE_NULL doesn't use the visual, and may run without X11 where we can't
+  // get it anyway.
+  if (platform_type != EGL_PLATFORM_ANGLE_TYPE_NULL_ANGLE) {
+    Visual* visual;
+    ui::XVisualManager::GetInstance()->ChooseVisualForWindow(
+        true, &visual, nullptr, nullptr, nullptr);
+    display_attribs.push_back(EGL_X11_VISUAL_ID_ANGLE);
+    display_attribs.push_back(static_cast<EGLint>(XVisualIDFromVisual(visual)));
+  }
 #endif
 
   display_attribs.push_back(EGL_NONE);
@@ -229,9 +271,10 @@ bool ValidateEglConfig(EGLDisplay display,
   return true;
 }
 
-EGLConfig ChooseConfig(GLSurface::Format format) {
+EGLConfig ChooseConfig(GLSurfaceFormat format) {
   // Choose an EGL configuration.
   // On X this is only used for PBuffer surfaces.
+
   std::vector<EGLint> renderable_types;
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableES3GLContext)) {
@@ -239,18 +282,26 @@ EGLConfig ChooseConfig(GLSurface::Format format) {
   }
   renderable_types.push_back(EGL_OPENGL_ES2_BIT);
 
-  EGLint buffer_size = 32;
+  EGLint buffer_size = format.GetBufferSize();
   EGLint alpha_size = 8;
+  bool want_rgb565 = buffer_size == 16;
+  EGLint depth_size = format.GetDepthBits();
+  EGLint stencil_size = format.GetStencilBits();
+  EGLint samples = format.GetSamples();
 
 #if defined(USE_X11) && !defined(OS_CHROMEOS)
-  ui::XVisualManager::GetInstance()->ChooseVisualForWindow(
-      true, nullptr, &buffer_size, nullptr, nullptr);
-  alpha_size = buffer_size == 32 ? 8 : 0;
+  // If we're using ANGLE_NULL, we may not have a display, in which case we
+  // can't use XVisualManager.
+  if (g_native_display) {
+    ui::XVisualManager::GetInstance()->ChooseVisualForWindow(
+        true, nullptr, &buffer_size, nullptr, nullptr);
+    alpha_size = buffer_size == 32 ? 8 : 0;
+  }
 #endif
 
-  EGLint surface_type = (format == GLSurface::SURFACE_SURFACELESS)
+  EGLint surface_type = (format.IsSurfaceless()
                             ? EGL_DONT_CARE
-                            : EGL_WINDOW_BIT | EGL_PBUFFER_BIT;
+                            : EGL_WINDOW_BIT | EGL_PBUFFER_BIT);
 
   for (auto renderable_type : renderable_types) {
     EGLint config_attribs_8888[] = {EGL_BUFFER_SIZE,
@@ -263,6 +314,12 @@ EGLConfig ChooseConfig(GLSurface::Format format) {
                                     8,
                                     EGL_RED_SIZE,
                                     8,
+                                    EGL_SAMPLES,
+                                    samples,
+                                    EGL_DEPTH_SIZE,
+                                    depth_size,
+                                    EGL_STENCIL_SIZE,
+                                    stencil_size,
                                     EGL_RENDERABLE_TYPE,
                                     renderable_type,
                                     EGL_SURFACE_TYPE,
@@ -277,6 +334,12 @@ EGLConfig ChooseConfig(GLSurface::Format format) {
                                    6,
                                    EGL_RED_SIZE,
                                    5,
+                                   EGL_SAMPLES,
+                                   samples,
+                                   EGL_DEPTH_SIZE,
+                                   depth_size,
+                                   EGL_STENCIL_SIZE,
+                                   stencil_size,
                                    EGL_RENDERABLE_TYPE,
                                    renderable_type,
                                    EGL_SURFACE_TYPE,
@@ -284,7 +347,7 @@ EGLConfig ChooseConfig(GLSurface::Format format) {
                                    EGL_NONE};
 
     EGLint* choose_attributes = config_attribs_8888;
-    if (format == GLSurface::SURFACE_RGB565) {
+    if (want_rgb565) {
       choose_attributes = config_attribs_565;
     }
 
@@ -299,7 +362,7 @@ EGLConfig ChooseConfig(GLSurface::Format format) {
     }
 
     std::unique_ptr<EGLConfig[]> matching_configs(new EGLConfig[num_configs]);
-    if (format == GLSurface::SURFACE_RGB565) {
+    if (want_rgb565) {
       config_size = num_configs;
       config_data = matching_configs.get();
     }
@@ -311,7 +374,7 @@ EGLConfig ChooseConfig(GLSurface::Format format) {
       return config;
     }
 
-    if (format == GLSurface::SURFACE_RGB565) {
+    if (want_rgb565) {
       // Because of the EGL config sort order, we have to iterate
       // through all of them (it'll put higher sum(R,G,B) bits
       // first with the above attribs).
@@ -364,7 +427,7 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
                         std::vector<DisplayType>* init_displays) {
   // SwiftShader does not use the platform extensions
   if (command_line->GetSwitchValueASCII(switches::kUseGL) ==
-      kGLImplementationSwiftShaderName) {
+      kGLImplementationSwiftShaderForWebGLName) {
     init_displays->push_back(SWIFT_SHADER);
     return;
   }
@@ -420,34 +483,9 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
   }
 }
 
-EGLSyncControlVSyncProvider::EGLSyncControlVSyncProvider(EGLSurface surface)
-    : SyncControlVSyncProvider(), surface_(surface) {}
-
-EGLSyncControlVSyncProvider::~EGLSyncControlVSyncProvider() {}
-
-bool EGLSyncControlVSyncProvider::GetSyncValues(int64_t* system_time,
-                                                int64_t* media_stream_counter,
-                                                int64_t* swap_buffer_counter) {
-  uint64_t u_system_time, u_media_stream_counter, u_swap_buffer_counter;
-  bool result = eglGetSyncValuesCHROMIUM(g_display, surface_, &u_system_time,
-                                         &u_media_stream_counter,
-                                         &u_swap_buffer_counter) == EGL_TRUE;
-  if (result) {
-    *system_time = static_cast<int64_t>(u_system_time);
-    *media_stream_counter = static_cast<int64_t>(u_media_stream_counter);
-    *swap_buffer_counter = static_cast<int64_t>(u_swap_buffer_counter);
-  }
-  return result;
-}
-
-bool EGLSyncControlVSyncProvider::GetMscRate(int32_t* numerator,
-                                             int32_t* denominator) {
-  return false;
-}
-
 GLSurfaceEGL::GLSurfaceEGL() {}
 
-GLSurface::Format GLSurfaceEGL::GetFormat() {
+GLSurfaceFormat GLSurfaceEGL::GetFormat() {
   return format_;
 }
 
@@ -533,7 +571,9 @@ bool GLSurfaceEGL::InitializeOneOff(EGLNativeDisplayType native_display) {
 }
 
 // static
-void GLSurfaceEGL::ResetForTesting() {
+void GLSurfaceEGL::ShutdownOneOff() {
+  ResetANGLEPlatform(g_display);
+
   if (g_display != EGL_NO_DISPLAY)
     eglTerminate(g_display);
   g_display = EGL_NO_DISPLAY;
@@ -640,6 +680,13 @@ EGLDisplay GLSurfaceEGL::InitializeDisplay(
                  << GetLastEGLErrorString();
     }
 
+    // Init ANGLE platform now that we have the global display.
+    if (supports_angle_d3d || supports_angle_opengl || supports_angle_null) {
+      if (!InitializeANGLEPlatform(display)) {
+        LOG(ERROR) << "ANGLE Platform initialization failed.";
+      }
+    }
+
     if (!eglInitialize(display, nullptr, nullptr)) {
       bool is_last = disp_index == init_displays.size() - 1;
 
@@ -680,7 +727,7 @@ NativeViewGLSurfaceEGL::NativeViewGLSurfaceEGL(EGLNativeWindowType window)
 #endif
 }
 
-bool NativeViewGLSurfaceEGL::Initialize(GLSurface::Format format) {
+bool NativeViewGLSurfaceEGL::Initialize(GLSurfaceFormat format) {
   format_ = format;
   return Initialize(nullptr);
 }
@@ -757,12 +804,10 @@ bool NativeViewGLSurfaceEGL::Initialize(
   }
 
   supports_swap_buffer_with_damage_ =
-      g_driver_egl.ext.b_EGL_KHR_swap_buffers_with_damage &&
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableSwapBuffersWithDamage);
+      g_driver_egl.ext.b_EGL_KHR_swap_buffers_with_damage;
 
   if (sync_provider)
-    vsync_provider_.reset(sync_provider.release());
+    vsync_provider_ = std::move(sync_provider);
   else if (g_egl_sync_control_supported)
     vsync_provider_.reset(new EGLSyncControlVSyncProvider(surface_));
   return true;
@@ -900,10 +945,6 @@ EGLSurface NativeViewGLSurfaceEGL::GetHandle() {
   return surface_;
 }
 
-bool NativeViewGLSurfaceEGL::SupportsSwapBuffersWithDamage() {
-  return supports_swap_buffer_with_damage_;
-}
-
 bool NativeViewGLSurfaceEGL::SupportsPostSubBuffer() {
   return supports_post_sub_buffer_;
 }
@@ -916,25 +957,18 @@ bool NativeViewGLSurfaceEGL::BuffersFlipped() const {
   return g_use_direct_composition;
 }
 
-gfx::SwapResult NativeViewGLSurfaceEGL::SwapBuffersWithDamage(int x,
-                                                              int y,
-                                                              int width,
-                                                              int height) {
+gfx::SwapResult NativeViewGLSurfaceEGL::SwapBuffersWithDamage(
+    const std::vector<int>& rects) {
   DCHECK(supports_swap_buffer_with_damage_);
   UpdateSwapInterval();
   if (!CommitAndClearPendingOverlays()) {
     DVLOG(1) << "Failed to commit pending overlay planes.";
     return gfx::SwapResult::SWAP_FAILED;
   }
-  if (flips_vertically_) {
-    // With EGL_SURFACE_ORIENTATION_INVERT_Y_ANGLE the contents are rendered
-    // inverted, but the damage rectangle is still measured from the
-    // bottom left.
-    y = GetSize().height() - y - height;
-  }
 
-  EGLint damage_rect[4] = {x, y, width, height};
-  if (!eglSwapBuffersWithDamageKHR(GetDisplay(), surface_, damage_rect, 1)) {
+  if (!eglSwapBuffersWithDamageKHR(GetDisplay(), surface_,
+                                   const_cast<EGLint*>(rects.data()),
+                                   static_cast<EGLint>(rects.size() / 4))) {
     DVLOG(1) << "eglSwapBuffersWithDamageKHR failed with error "
              << GetLastEGLErrorString();
     return gfx::SwapResult::SWAP_FAILED;
@@ -1035,21 +1069,18 @@ PbufferGLSurfaceEGL::PbufferGLSurfaceEGL(const gfx::Size& size)
     size_.SetSize(1, 1);
 }
 
-bool PbufferGLSurfaceEGL::Initialize() {
-  GLSurface::Format format = SURFACE_DEFAULT;
+bool PbufferGLSurfaceEGL::Initialize(GLSurfaceFormat format) {
+  EGLSurface old_surface = surface_;
+
 #if defined(OS_ANDROID)
   // This is to allow context virtualization which requires on- and offscreen
   // to use a compatible config. We expect the client to request RGB565
   // onscreen surface also for this to work (with the exception of
   // fullscreen video).
   if (base::SysInfo::IsLowEndDevice())
-    format = SURFACE_RGB565;
+    format.SetRGB565();
 #endif
-  return Initialize(format);
-}
 
-bool PbufferGLSurfaceEGL::Initialize(GLSurface::Format format) {
-  EGLSurface old_surface = surface_;
   format_ = format;
 
   EGLDisplay display = GetDisplay();
@@ -1172,14 +1203,12 @@ PbufferGLSurfaceEGL::~PbufferGLSurfaceEGL() {
 
 SurfacelessEGL::SurfacelessEGL(const gfx::Size& size)
     : size_(size) {
-  format_ = GLSurface::SURFACE_SURFACELESS;
+  format_ = GLSurfaceFormat();
+  format_.SetIsSurfaceless();
 }
 
-bool SurfacelessEGL::Initialize() {
-  return Initialize(SURFACE_SURFACELESS);
-}
-
-bool SurfacelessEGL::Initialize(GLSurface::Format format) {
+bool SurfacelessEGL::Initialize(GLSurfaceFormat format) {
+  format.SetIsSurfaceless();
   format_ = format;
   return true;
 }

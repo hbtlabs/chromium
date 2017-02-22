@@ -27,36 +27,10 @@ Polymer({
   ],
 
   properties: {
-    // Used to display notices for profile sign-in status.
-    showSidebarFooter: Boolean,
-
-    hasSyncedResults: Boolean,
-
     // The id of the currently selected page.
-    selectedPage_: {type: String, observer: 'selectedPageChanged_'},
-
-    // Whether domain-grouped history is enabled.
-    grouped_: {type: Boolean, reflectToAttribute: true},
-
-    /** @type {!QueryState} */
-    queryState_: {
-      type: Object,
-      value: function() {
-        return {
-          // Whether the most recent query was incremental.
-          incremental: false,
-          // A query is initiated by page load.
-          querying: true,
-          queryingDisabled: false,
-          _range: HistoryRange.ALL_TIME,
-          searchTerm: '',
-          // TODO(calamity): Make history toolbar buttons change the offset
-          groupedOffset: 0,
-
-          set range(val) { this._range = Number(val); },
-          get range() { return this._range; },
-        };
-      }
+    selectedPage_: {
+      type: String,
+      observer: 'selectedPageChanged_',
     },
 
     /** @type {!QueryResult} */
@@ -70,9 +44,6 @@ Polymer({
         };
       }
     },
-
-    // True if the window is narrow enough for the page to have a drawer.
-    hasDrawer_: Boolean,
 
     isUserSignedIn_: {
       type: Boolean,
@@ -93,6 +64,20 @@ Polymer({
         return loadTimeData.getBoolean('showMenuPromo');
       },
     },
+
+    /** @type {!QueryState} */
+    queryState_: Object,
+
+    // True if the window is narrow enough for the page to have a drawer.
+    hasDrawer_: {
+      type: Boolean,
+      observer: 'hasDrawerChanged_',
+    },
+
+    // Used to display notices for profile sign-in status.
+    showSidebarFooter: Boolean,
+
+    hasSyncedResults: Boolean,
   },
 
   listeners: {
@@ -115,8 +100,6 @@ Polymer({
 
   /** @override */
   attached: function() {
-    this.grouped_ = loadTimeData.getBoolean('groupByDomain');
-
     cr.ui.decorate('command', cr.ui.Command);
     this.boundOnCanExecute_ = this.onCanExecute_.bind(this);
     this.boundOnCommand_ = this.onCommand_.bind(this);
@@ -172,9 +155,9 @@ Polymer({
 
   /** @private */
   onCrToolbarMenuTap_: function() {
-    var drawer = this.$$('#drawer');
-    if (drawer)
-      drawer.toggle();
+    var drawer = /** @type {!CrDrawerElement} */ (this.$.drawer.get());
+    drawer.align = document.documentElement.dir == 'ltr' ? 'left' : 'right';
+    drawer.toggle();
   },
 
   /**
@@ -193,7 +176,7 @@ Polymer({
    */
   checkboxSelected: function(e) {
     var toolbar = /** @type {HistoryToolbarElement} */ (this.$.toolbar);
-    toolbar.count = /** @type {HistoryListContainerElement} */ (this.$.history)
+    toolbar.count = /** @type {HistoryListElement} */ (this.$.history)
                         .getSelectedItemCount();
   },
 
@@ -203,14 +186,15 @@ Polymer({
    * @private
    */
   unselectAll: function() {
-    var listContainer =
-        /** @type {HistoryListContainerElement} */ (this.$.history);
+    var list = /** @type {HistoryListElement} */ (this.$.history);
     var toolbar = /** @type {HistoryToolbarElement} */ (this.$.toolbar);
-    listContainer.unselectAllItems(toolbar.count);
+    list.unselectAllItems();
     toolbar.count = 0;
   },
 
-  deleteSelected: function() { this.$.history.deleteSelectedWithPrompt(); },
+  deleteSelected: function() {
+    this.$.history.deleteSelectedWithPrompt();
+  },
 
   /**
    * @param {HistoryQuery} info An object containing information about the
@@ -221,26 +205,25 @@ Polymer({
     this.set('queryState_.querying', false);
     this.set('queryResult_.info', info);
     this.set('queryResult_.results', results);
-    var listContainer =
-        /** @type {HistoryListContainerElement} */ (this.$['history']);
-    listContainer.historyResult(info, results);
+    var list = /** @type {HistoryListElement} */ (this.$['history']);
+    list.historyResult(info, results);
   },
 
   /**
    * Shows and focuses the search bar in the toolbar.
    */
-  focusToolbarSearchField: function() { this.$.toolbar.showSearchField(); },
+  focusToolbarSearchField: function() {
+    this.$.toolbar.showSearchField();
+  },
 
   /**
    * @param {Event} e
    * @private
    */
   onCanExecute_: function(e) {
-    e = /** @type {cr.ui.CanExecuteEvent} */(e);
+    e = /** @type {cr.ui.CanExecuteEvent} */ (e);
     switch (e.command.id) {
       case 'find-command':
-        e.canExecute = true;
-        break;
       case 'slash-command':
         e.canExecute = !this.$.toolbar.searchField.isSearchFocused();
         break;
@@ -257,28 +240,15 @@ Polymer({
   onCommand_: function(e) {
     if (e.command.id == 'find-command' || e.command.id == 'slash-command')
       this.focusToolbarSearchField();
-    if (e.command.id == 'delete-command')
+    else if (e.command.id == 'delete-command')
       this.deleteSelected();
   },
 
   /**
    * @param {!Array<!ForeignSession>} sessionList Array of objects describing
    *     the sessions from other devices.
-   * @param {boolean} isTabSyncEnabled Is tab sync enabled for this profile?
    */
-  setForeignSessions: function(sessionList, isTabSyncEnabled) {
-    if (!isTabSyncEnabled) {
-      var syncedDeviceManagerElem =
-      /** @type {HistorySyncedDeviceManagerElement} */this
-          .$$('history-synced-device-manager');
-      if (syncedDeviceManagerElem) {
-        md_history.ensureLazyLoaded().then(function() {
-          syncedDeviceManagerElem.tabSyncDisabled();
-        });
-      }
-      return;
-    }
-
+  setForeignSessions: function(sessionList) {
     this.set('queryResult_.sessionList', sessionList);
   },
 
@@ -328,9 +298,7 @@ Polymer({
     return hasSyncedResults && selectedPage != 'syncedTabs';
   },
 
-  /**
-   * @private
-   */
+  /** @private */
   selectedPageChanged_: function() {
     this.unselectAll();
     this.historyViewChanged_();
@@ -341,17 +309,16 @@ Polymer({
     // This allows the synced-device-manager to render so that it can be set as
     // the scroll target.
     requestAnimationFrame(function() {
-      md_history.ensureLazyLoaded().then(function() {
-        // <iron-pages> can occasionally end up with no item selected during
-        // tests.
-        if (!this.$.content.selectedItem)
-          return;
-        this.scrollTarget =
-            this.$.content.selectedItem.getContentScrollTarget();
-        this._scrollHandler();
-      }.bind(this));
+      this._scrollHandler();
     }.bind(this));
     this.recordHistoryPageView_();
+  },
+
+  /** @private */
+  hasDrawerChanged_: function() {
+    var drawer = /** @type {?CrDrawerElement} */ (this.$.drawer.getIfExists());
+    if (!this.hasDrawer_ && drawer && drawer.open)
+      drawer.closeDrawer();
   },
 
   /**
@@ -364,13 +331,15 @@ Polymer({
    * @return {string}
    * @private
    */
-  getSelectedPage_: function(selectedPage, items) { return selectedPage; },
+  getSelectedPage_: function(selectedPage, items) {
+    return selectedPage;
+  },
 
   /** @private */
   closeDrawer_: function() {
-    var drawer = this.$$('#drawer');
-    if (drawer)
-      drawer.close();
+    var drawer = this.$.drawer.get();
+    if (drawer && drawer.open)
+      drawer.closeDrawer();
   },
 
   /** @private */
@@ -383,22 +352,12 @@ Polymer({
             HistoryPageViewHistogram.SIGNIN_PROMO;
         break;
       default:
-        switch (this.queryState_.range) {
-          case HistoryRange.ALL_TIME:
-            histogramValue = HistoryPageViewHistogram.HISTORY;
-            break;
-          case HistoryRange.WEEK:
-            histogramValue = HistoryPageViewHistogram.GROUPED_WEEK;
-            break;
-          case HistoryRange.MONTH:
-            histogramValue = HistoryPageViewHistogram.GROUPED_MONTH;
-            break;
-        }
+        histogramValue = HistoryPageViewHistogram.HISTORY;
         break;
     }
 
     md_history.BrowserService.getInstance().recordHistogram(
-      'History.HistoryPageView', histogramValue, HistoryPageViewHistogram.END
-    );
+        'History.HistoryPageView', histogramValue,
+        HistoryPageViewHistogram.END);
   },
 });

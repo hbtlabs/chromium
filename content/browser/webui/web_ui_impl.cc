@@ -55,17 +55,21 @@ const WebUI::TypeID WebUI::kNoWebUI = NULL;
 base::string16 WebUI::GetJavascriptCall(
     const std::string& function_name,
     const std::vector<const base::Value*>& arg_list) {
-  base::string16 parameters;
+  base::string16 result(base::ASCIIToUTF16(function_name));
+  result.push_back('(');
+
   std::string json;
   for (size_t i = 0; i < arg_list.size(); ++i) {
     if (i > 0)
-      parameters += base::char16(',');
+      result.push_back(',');
 
     base::JSONWriter::Write(*arg_list[i], &json);
-    parameters += base::UTF8ToUTF16(json);
+    result.append(base::UTF8ToUTF16(json));
   }
-  return base::ASCIIToUTF16(function_name) +
-      base::char16('(') + parameters + base::char16(')') + base::char16(';');
+
+  result.push_back(')');
+  result.push_back(';');
+  return result;
 }
 
 WebUIImpl::WebUIImpl(WebContents* contents, const std::string& frame_name)
@@ -247,17 +251,19 @@ void WebUIImpl::ProcessWebUIMessage(const GURL& source_url,
   }
 }
 
-ScopedVector<WebUIMessageHandler>* WebUIImpl::GetHandlersForTesting() {
+std::vector<std::unique_ptr<WebUIMessageHandler>>*
+WebUIImpl::GetHandlersForTesting() {
   return &handlers_;
 }
 
 // WebUIImpl, protected: -------------------------------------------------------
 
-void WebUIImpl::AddMessageHandler(WebUIMessageHandler* handler) {
+void WebUIImpl::AddMessageHandler(
+    std::unique_ptr<WebUIMessageHandler> handler) {
   DCHECK(!handler->web_ui());
   handler->set_web_ui(this);
   handler->RegisterMessages();
-  handlers_.push_back(handler);
+  handlers_.push_back(std::move(handler));
 }
 
 void WebUIImpl::ExecuteJavascript(const base::string16& javascript) {
@@ -294,7 +300,7 @@ void WebUIImpl::AddToSetIfFrameNameMatches(
 }
 
 void WebUIImpl::DisallowJavascriptOnAllHandlers() {
-  for (WebUIMessageHandler* handler : handlers_)
+  for (const std::unique_ptr<WebUIMessageHandler>& handler : handlers_)
     handler->DisallowJavascript();
 }
 

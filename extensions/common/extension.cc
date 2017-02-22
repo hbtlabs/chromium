@@ -15,6 +15,7 @@
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -22,9 +23,11 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/timer/elapsed_timer.h"
 #include "base/values.h"
 #include "base/version.h"
 #include "components/crx_file/id_util.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/error_utils.h"
@@ -84,11 +87,10 @@ const int Extension::kValidBookmarkAppSchemes = URLPattern::SCHEME_HTTP |
                                                 URLPattern::SCHEME_HTTPS |
                                                 URLPattern::SCHEME_EXTENSION;
 
-const int Extension::kValidHostPermissionSchemes = URLPattern::SCHEME_CHROMEUI |
-                                                   URLPattern::SCHEME_HTTP |
-                                                   URLPattern::SCHEME_HTTPS |
-                                                   URLPattern::SCHEME_FILE |
-                                                   URLPattern::SCHEME_FTP;
+const int Extension::kValidHostPermissionSchemes =
+    URLPattern::SCHEME_CHROMEUI | URLPattern::SCHEME_HTTP |
+    URLPattern::SCHEME_HTTPS | URLPattern::SCHEME_FILE |
+    URLPattern::SCHEME_FTP | URLPattern::SCHEME_WS | URLPattern::SCHEME_WSS;
 
 //
 // Extension
@@ -116,6 +118,7 @@ scoped_refptr<Extension> Extension::Create(const base::FilePath& path,
                                            int flags,
                                            const std::string& explicit_id,
                                            std::string* utf8_error) {
+  base::ElapsedTimer timer;
   DCHECK(utf8_error);
   base::string16 error;
   std::unique_ptr<extensions::Manifest> manifest(new extensions::Manifest(
@@ -137,6 +140,27 @@ scoped_refptr<Extension> Extension::Create(const base::FilePath& path,
   if (!extension->InitFromValue(flags, &error)) {
     *utf8_error = base::UTF16ToUTF8(error);
     return NULL;
+  }
+
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  std::string process_type =
+      command_line.GetSwitchValueASCII(::switches::kProcessType);
+  // Use microsecond accuracy for increased granularity. Max at 10 seconds.
+  base::TimeDelta elapsed_time = timer.Elapsed();
+  const int kMaxTimeInMicroseconds = 10000000;
+  if (process_type.empty()) {
+    UMA_HISTOGRAM_CUSTOM_COUNTS(
+        "Extensions.ExtensionCreationTime.BrowserProcess",
+        elapsed_time.InMicroseconds(), 1, kMaxTimeInMicroseconds, 100);
+  } else if (command_line.HasSwitch(switches::kExtensionProcess)) {
+    UMA_HISTOGRAM_CUSTOM_COUNTS(
+        "Extensions.ExtensionCreationTime.ExtensionProcess",
+        elapsed_time.InMicroseconds(), 1, kMaxTimeInMicroseconds, 100);
+  } else if (process_type == ::switches::kRendererProcess) {
+    UMA_HISTOGRAM_CUSTOM_COUNTS(
+        "Extensions.ExtensionCreationTime.RendererProcess",
+        elapsed_time.InMicroseconds(), 1, kMaxTimeInMicroseconds, 100);
   }
 
   return extension;
@@ -281,18 +305,6 @@ GURL Extension::GetBaseURLFromExtensionId(const std::string& extension_id) {
               url::kStandardSchemeSeparator + extension_id + "/");
 }
 
-bool Extension::ShowConfigureContextMenus() const {
-  // Normally we don't show a context menu for component actions, but when
-  // re-design is enabled we show them in the toolbar (if they have an action),
-  // and it is weird to have a random button that has no context menu when the
-  // rest do.
-  if (location() == Manifest::COMPONENT ||
-      location() == Manifest::EXTERNAL_COMPONENT)
-    return FeatureSwitch::extension_action_redesign()->IsEnabled();
-
-  return true;
-}
-
 bool Extension::OverlapsWithOrigin(const GURL& origin) const {
   if (url() == origin)
     return true;
@@ -332,43 +344,29 @@ bool Extension::ShouldDisplayInExtensionSettings() const {
   if (is_theme())
     return false;
 
-  // Don't show component extensions and invisible apps.
-  if (ShouldNotBeVisible())
+  // Hide component extensions because they are only extensions as an
+  // implementation detail of Chrome.
+  if (extensions::Manifest::IsComponentLocation(location()) &&
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kShowComponentExtensionOptions)) {
     return false;
-
-  // Always show unpacked extensions and apps.
-  if (Manifest::IsUnpackedLocation(location()))
-    return true;
+  }
 
   // Unless they are unpacked, never show hosted apps. Note: We intentionally
   // show packaged apps and platform apps because there are some pieces of
   // functionality that are only available in chrome://extensions/ but which
   // are needed for packaged and platform apps. For example, inspecting
   // background pages. See http://crbug.com/116134.
-  if (is_hosted_app())
+  if (!Manifest::IsUnpackedLocation(location()) && is_hosted_app())
     return false;
 
   return true;
 }
 
-bool Extension::ShouldNotBeVisible() const {
-  // Don't show component extensions because they are only extensions as an
+bool Extension::ShouldExposeViaManagementAPI() const {
+  // Hide component extensions because they are only extensions as an
   // implementation detail of Chrome.
-  if (extensions::Manifest::IsComponentLocation(location()) &&
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kShowComponentExtensionOptions)) {
-    return true;
-  }
-
-  // Always show unpacked extensions and apps.
-  if (Manifest::IsUnpackedLocation(location()))
-    return false;
-
-  // Don't show apps that aren't visible in either launcher or ntp.
-  if (is_app() && !ShouldDisplayInAppLauncher() && !ShouldDisplayInNewTabPage())
-    return true;
-
-  return false;
+  return !extensions::Manifest::IsComponentLocation(location());
 }
 
 Extension::ManifestData* Extension::GetManifestData(const std::string& key)

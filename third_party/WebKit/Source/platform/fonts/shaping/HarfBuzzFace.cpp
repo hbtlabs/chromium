@@ -124,7 +124,7 @@ class HbFontCacheEntry : public RefCounted<HbFontCacheEntry> {
  private:
   explicit HbFontCacheEntry(hb_font_t* font)
       : m_hbFont(HbFontUniquePtr(font)),
-        m_hbFontData(makeUnique<HarfBuzzFontData>()){};
+        m_hbFontData(WTF::makeUnique<HarfBuzzFontData>()){};
 
   HbFontUniquePtr m_hbFont;
   std::unique_ptr<HarfBuzzFontData> m_hbFontData;
@@ -146,7 +146,7 @@ static PassRefPtr<HbFontCacheEntry> createHbFontCacheEntry(hb_face_t*);
 HarfBuzzFace::HarfBuzzFace(FontPlatformData* platformData, uint64_t uniqueID)
     : m_platformData(platformData), m_uniqueID(uniqueID) {
   HarfBuzzFontCache::AddResult result =
-      harfBuzzFontCache()->add(m_uniqueID, nullptr);
+      harfBuzzFontCache()->insert(m_uniqueID, nullptr);
   if (result.isNewEntry) {
     HbFaceUniquePtr face(createFace());
     result.storedValue->value = createHbFontCacheEntry(face.get());
@@ -162,7 +162,7 @@ HarfBuzzFace::~HarfBuzzFace() {
   ASSERT(result.get()->value->refCount() > 1);
   result.get()->value->deref();
   if (result.get()->value->refCount() == 1)
-    harfBuzzFontCache()->remove(m_uniqueID);
+    harfBuzzFontCache()->erase(m_uniqueID);
 }
 
 static hb_position_t SkiaScalarToHarfBuzzPosition(SkScalar value) {
@@ -258,8 +258,8 @@ static hb_position_t harfBuzzGetGlyphHorizontalKerning(
   if (typeface->getKerningPairAdjustments(glyphs, 2, kerningAdjustments)) {
     SkScalar upm = SkIntToScalar(typeface->getUnitsPerEm());
     SkScalar size = hbFontData->m_paint.getTextSize();
-    return SkiaScalarToHarfBuzzPosition(
-        SkScalarMulDiv(SkIntToScalar(kerningAdjustments[0]), size, upm));
+    return SkiaScalarToHarfBuzzPosition(SkIntToScalar(kerningAdjustments[0]) *
+                                        size / upm);
   }
 
   return 0;
@@ -386,6 +386,9 @@ hb_font_t* HarfBuzzFace::getScaledFont(
   m_harfBuzzFontData->m_paint.setTextEncoding(SkPaint::kGlyphID_TextEncoding);
   m_harfBuzzFontData->m_rangeSet = rangeSet;
   m_harfBuzzFontData->updateSimpleFontData(m_platformData);
+
+  // TODO crbug.com/674879 - Connect variation axis parameters to future
+  // HarfBuzz API here.
   ASSERT(m_harfBuzzFontData->m_simpleFontData);
   int scale = SkiaScalarToHarfBuzzPosition(m_platformData->size());
   hb_font_set_scale(m_unscaledFont, scale, scale);

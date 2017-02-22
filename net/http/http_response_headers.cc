@@ -307,6 +307,19 @@ void HttpResponseHeaders::RemoveHeader(const std::string& name) {
   MergeWithHeaders(new_raw_headers, to_remove);
 }
 
+void HttpResponseHeaders::RemoveHeaders(
+    const std::unordered_set<std::string>& header_names) {
+  // Copy up to the null byte.  This just copies the status line.
+  std::string new_raw_headers(raw_headers_.c_str());
+  new_raw_headers.push_back('\0');
+
+  HeaderSet to_remove;
+  for (const auto& header_name : header_names) {
+    to_remove.insert(base::ToLowerASCII(header_name));
+  }
+  MergeWithHeaders(new_raw_headers, to_remove);
+}
+
 void HttpResponseHeaders::RemoveHeaderLine(const std::string& name,
                                            const std::string& value) {
   std::string name_lowercase = base::ToLowerASCII(name);
@@ -445,60 +458,6 @@ void HttpResponseHeaders::Parse(const std::string& raw_input) {
 
   DCHECK_EQ('\0', raw_headers_[raw_headers_.size() - 2]);
   DCHECK_EQ('\0', raw_headers_[raw_headers_.size() - 1]);
-}
-
-// Append all of our headers to the final output string.
-void HttpResponseHeaders::GetNormalizedHeaders(std::string* output) const {
-  // copy up to the null byte.  this just copies the status line.
-  output->assign(raw_headers_.c_str());
-
-  // headers may appear multiple times (not necessarily in succession) in the
-  // header data, so we build a map from header name to generated header lines.
-  // to preserve the order of the original headers, the actual values are kept
-  // in a separate list.  finally, the list of headers is flattened to form
-  // the normalized block of headers.
-  //
-  // NOTE: We take special care to preserve the whitespace around any commas
-  // that may occur in the original response headers.  Because our consumer may
-  // be a web app, we cannot be certain of the semantics of commas despite the
-  // fact that RFC 2616 says that they should be regarded as value separators.
-  //
-  using HeadersMap = std::unordered_map<std::string, size_t>;
-  HeadersMap headers_map;
-  HeadersMap::iterator iter = headers_map.end();
-
-  std::vector<std::string> headers;
-
-  for (size_t i = 0; i < parsed_.size(); ++i) {
-    DCHECK(!parsed_[i].is_continuation());
-
-    std::string name(parsed_[i].name_begin, parsed_[i].name_end);
-    std::string lower_name = base::ToLowerASCII(name);
-
-    iter = headers_map.find(lower_name);
-    if (iter == headers_map.end()) {
-      iter = headers_map.insert(
-          HeadersMap::value_type(lower_name, headers.size())).first;
-      headers.push_back(name + ": ");
-    } else {
-      headers[iter->second].append(", ");
-    }
-
-    std::string::const_iterator value_begin = parsed_[i].value_begin;
-    std::string::const_iterator value_end = parsed_[i].value_end;
-    while (++i < parsed_.size() && parsed_[i].is_continuation())
-      value_end = parsed_[i].value_end;
-    --i;
-
-    headers[iter->second].append(value_begin, value_end);
-  }
-
-  for (size_t i = 0; i < headers.size(); ++i) {
-    output->push_back('\n');
-    output->append(headers[i]);
-  }
-
-  output->push_back('\n');
 }
 
 bool HttpResponseHeaders::GetNormalizedHeader(const std::string& name,
@@ -1103,31 +1062,48 @@ HttpResponseHeaders::GetFreshnessLifetimes(const Time& response_time) const {
   return lifetimes;
 }
 
-// From RFC 2616 section 13.2.3:
+// From RFC 7234 section 4.2.3:
 //
-// Summary of age calculation algorithm, when a cache receives a response:
+// The following data is used for the age calculation:
 //
-//   /*
-//    * age_value
-//    *      is the value of Age: header received by the cache with
-//    *              this response.
-//    * date_value
-//    *      is the value of the origin server's Date: header
-//    * request_time
-//    *      is the (local) time when the cache made the request
-//    *              that resulted in this cached response
-//    * response_time
-//    *      is the (local) time when the cache received the
-//    *              response
-//    * now
-//    *      is the current (local) time
-//    */
-//   apparent_age = max(0, response_time - date_value);
-//   corrected_received_age = max(apparent_age, age_value);
-//   response_delay = response_time - request_time;
-//   corrected_initial_age = corrected_received_age + response_delay;
-//   resident_time = now - response_time;
-//   current_age   = corrected_initial_age + resident_time;
+//    age_value
+//
+//       The term "age_value" denotes the value of the Age header field
+//       (Section 5.1), in a form appropriate for arithmetic operation; or
+//       0, if not available.
+//
+//    date_value
+//
+//       The term "date_value" denotes the value of the Date header field,
+//       in a form appropriate for arithmetic operations.  See Section
+//       7.1.1.2 of [RFC7231] for the definition of the Date header field,
+//       and for requirements regarding responses without it.
+//
+//    now
+//
+//       The term "now" means "the current value of the clock at the host
+//       performing the calculation".  A host ought to use NTP ([RFC5905])
+//       or some similar protocol to synchronize its clocks to Coordinated
+//       Universal Time.
+//
+//    request_time
+//
+//       The current value of the clock at the host at the time the request
+//       resulting in the stored response was made.
+//
+//    response_time
+//
+//       The current value of the clock at the host at the time the
+//       response was received.
+//
+//    The age is then calculated as
+//
+//     apparent_age = max(0, response_time - date_value);
+//     response_delay = response_time - request_time;
+//     corrected_age_value = age_value + response_delay;
+//     corrected_initial_age = max(apparent_age, corrected_age_value);
+//     resident_time = now - response_time;
+//     current_age = corrected_initial_age + resident_time;
 //
 TimeDelta HttpResponseHeaders::GetCurrentAge(const Time& request_time,
                                              const Time& response_time,
@@ -1144,9 +1120,9 @@ TimeDelta HttpResponseHeaders::GetCurrentAge(const Time& request_time,
   GetAgeValue(&age_value);
 
   TimeDelta apparent_age = std::max(TimeDelta(), response_time - date_value);
-  TimeDelta corrected_received_age = std::max(apparent_age, age_value);
   TimeDelta response_delay = response_time - request_time;
-  TimeDelta corrected_initial_age = corrected_received_age + response_delay;
+  TimeDelta corrected_age_value = age_value + response_delay;
+  TimeDelta corrected_initial_age = std::max(apparent_age, corrected_age_value);
   TimeDelta resident_time = current_time - response_time;
   TimeDelta current_age = corrected_initial_age + resident_time;
 
@@ -1303,118 +1279,20 @@ int64_t HttpResponseHeaders::GetInt64HeaderValue(
   return result;
 }
 
-// From RFC 2616 14.16:
-// content-range-spec =
-//     bytes-unit SP byte-range-resp-spec "/" ( instance-length | "*" )
-// byte-range-resp-spec = (first-byte-pos "-" last-byte-pos) | "*"
-// instance-length = 1*DIGIT
-// bytes-unit = "bytes"
-bool HttpResponseHeaders::GetContentRange(int64_t* first_byte_position,
-                                          int64_t* last_byte_position,
-                                          int64_t* instance_length) const {
+bool HttpResponseHeaders::GetContentRangeFor206(
+    int64_t* first_byte_position,
+    int64_t* last_byte_position,
+    int64_t* instance_length) const {
   size_t iter = 0;
   std::string content_range_spec;
-  *first_byte_position = *last_byte_position = *instance_length = -1;
-  if (!EnumerateHeader(&iter, kContentRange, &content_range_spec))
-    return false;
-
-  // If the header value is empty, we have an invalid header.
-  if (content_range_spec.empty())
-    return false;
-
-  size_t space_position = content_range_spec.find(' ');
-  if (space_position == std::string::npos)
-    return false;
-
-  // Invalid header if it doesn't contain "bytes-unit".
-  std::string::const_iterator content_range_spec_begin =
-      content_range_spec.begin();
-  std::string::const_iterator content_range_spec_end =
-      content_range_spec.begin() + space_position;
-  HttpUtil::TrimLWS(&content_range_spec_begin, &content_range_spec_end);
-  if (!base::LowerCaseEqualsASCII(
-          base::StringPiece(content_range_spec_begin, content_range_spec_end),
-          "bytes")) {
+  if (!EnumerateHeader(&iter, kContentRange, &content_range_spec)) {
+    *first_byte_position = *last_byte_position = *instance_length = -1;
     return false;
   }
 
-  size_t slash_position = content_range_spec.find('/', space_position + 1);
-  if (slash_position == std::string::npos)
-    return false;
-
-  // Obtain the part behind the space and before slash.
-  std::string::const_iterator byte_range_resp_spec_begin =
-      content_range_spec.begin() + space_position + 1;
-  std::string::const_iterator byte_range_resp_spec_end =
-      content_range_spec.begin() + slash_position;
-  HttpUtil::TrimLWS(&byte_range_resp_spec_begin, &byte_range_resp_spec_end);
-
-  // Parse the byte-range-resp-spec part.
-  std::string byte_range_resp_spec(byte_range_resp_spec_begin,
-                                   byte_range_resp_spec_end);
-  // If byte-range-resp-spec != "*".
-  if (!base::LowerCaseEqualsASCII(byte_range_resp_spec, "*")) {
-    size_t minus_position = byte_range_resp_spec.find('-');
-    if (minus_position != std::string::npos) {
-      // Obtain first-byte-pos.
-      std::string::const_iterator first_byte_pos_begin =
-          byte_range_resp_spec.begin();
-      std::string::const_iterator first_byte_pos_end =
-          byte_range_resp_spec.begin() + minus_position;
-      HttpUtil::TrimLWS(&first_byte_pos_begin, &first_byte_pos_end);
-
-      bool ok = base::StringToInt64(StringPiece(first_byte_pos_begin,
-                                                first_byte_pos_end),
-                                    first_byte_position);
-
-      // Obtain last-byte-pos.
-      std::string::const_iterator last_byte_pos_begin =
-          byte_range_resp_spec.begin() + minus_position + 1;
-      std::string::const_iterator last_byte_pos_end =
-          byte_range_resp_spec.end();
-      HttpUtil::TrimLWS(&last_byte_pos_begin, &last_byte_pos_end);
-
-      ok &= base::StringToInt64(StringPiece(last_byte_pos_begin,
-                                            last_byte_pos_end),
-                                last_byte_position);
-      if (!ok) {
-        *first_byte_position = *last_byte_position = -1;
-        return false;
-      }
-      if (*first_byte_position < 0 || *last_byte_position < 0 ||
-          *first_byte_position > *last_byte_position)
-        return false;
-    } else {
-      return false;
-    }
-  }
-
-  // Parse the instance-length part.
-  // If instance-length == "*".
-  std::string::const_iterator instance_length_begin =
-      content_range_spec.begin() + slash_position + 1;
-  std::string::const_iterator instance_length_end =
-      content_range_spec.end();
-  HttpUtil::TrimLWS(&instance_length_begin, &instance_length_end);
-
-  if (base::StartsWith(
-          base::StringPiece(instance_length_begin, instance_length_end), "*",
-          base::CompareCase::SENSITIVE)) {
-    return false;
-  } else if (!base::StringToInt64(StringPiece(instance_length_begin,
-                                              instance_length_end),
-                                  instance_length)) {
-    *instance_length = -1;
-    return false;
-  }
-
-  // We have all the values; let's verify that they make sense for a 206
-  // response.
-  if (*first_byte_position < 0 || *last_byte_position < 0 ||
-      *instance_length < 0 || *instance_length - 1 < *last_byte_position)
-    return false;
-
-  return true;
+  return HttpUtil::ParseContentRangeHeaderFor206(
+      content_range_spec, first_byte_position, last_byte_position,
+      instance_length);
 }
 
 std::unique_ptr<base::Value> HttpResponseHeaders::NetLogCallback(

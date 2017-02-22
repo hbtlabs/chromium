@@ -29,6 +29,7 @@
 #include "content/public/browser/user_metrics.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/child_process_host.h"
+#include "content/public/common/resource_type.h"
 #include "extensions/browser/api/activity_log/web_request_constants.h"
 #include "extensions/browser/api/declarative/rules_registry_service.h"
 #include "extensions/browser/api/declarative_webrequest/request_stage.h"
@@ -39,6 +40,7 @@
 #include "extensions/browser/api/web_request/web_request_api_helpers.h"
 #include "extensions/browser/api/web_request/web_request_event_details.h"
 #include "extensions/browser/api/web_request/web_request_event_router_delegate.h"
+#include "extensions/browser/api/web_request/web_request_resource_type.h"
 #include "extensions/browser/api/web_request/web_request_time_tracker.h"
 #include "extensions/browser/api_activity_monitor.h"
 #include "extensions/browser/event_router.h"
@@ -350,6 +352,13 @@ bool IsPublicSession() {
   return false;
 }
 
+// Returns event details for a given request.
+std::unique_ptr<WebRequestEventDetails> CreateEventDetails(
+    const net::URLRequest* request,
+    int extra_info_spec) {
+  return base::MakeUnique<WebRequestEventDetails>(request, extra_info_spec);
+}
+
 }  // namespace
 
 WebRequestAPI::WebRequestAPI(content::BrowserContext* context)
@@ -491,10 +500,10 @@ bool ExtensionWebRequestEventRouter::RequestFilter::InitFromValue(
         return false;
       for (size_t i = 0; i < urls_value->GetSize(); ++i) {
         std::string url;
-        URLPattern pattern(
-            URLPattern::SCHEME_HTTP | URLPattern::SCHEME_HTTPS |
-            URLPattern::SCHEME_FTP | URLPattern::SCHEME_FILE |
-            URLPattern::SCHEME_EXTENSION);
+        URLPattern pattern(URLPattern::SCHEME_HTTP | URLPattern::SCHEME_HTTPS |
+                           URLPattern::SCHEME_FTP | URLPattern::SCHEME_FILE |
+                           URLPattern::SCHEME_EXTENSION |
+                           URLPattern::SCHEME_WS | URLPattern::SCHEME_WSS);
         if (!urls_value->GetString(i, &url) ||
             pattern.Parse(url) != URLPattern::PARSE_SUCCESS) {
           *error = ErrorUtils::FormatErrorMessage(
@@ -509,8 +518,9 @@ bool ExtensionWebRequestEventRouter::RequestFilter::InitFromValue(
         return false;
       for (size_t i = 0; i < types_value->GetSize(); ++i) {
         std::string type_str;
+        types.push_back(WebRequestResourceType::OTHER);
         if (!types_value->GetString(i, &type_str) ||
-            !helpers::ParseResourceType(type_str, &types)) {
+            !ParseWebRequestResourceType(type_str, &types.back())) {
           return false;
         }
       }
@@ -573,16 +583,6 @@ void ExtensionWebRequestEventRouter::RegisterRulesRegistry(
     rules_registries_[key] = rules_registry;
   else
     rules_registries_.erase(key);
-}
-
-std::unique_ptr<WebRequestEventDetails>
-ExtensionWebRequestEventRouter::CreateEventDetails(
-    const net::URLRequest* request,
-    int extra_info_spec) {
-  std::unique_ptr<WebRequestEventDetails> event_details(
-      new WebRequestEventDetails(request, extra_info_spec));
-
-  return event_details;
 }
 
 int ExtensionWebRequestEventRouter::OnBeforeRequest(
@@ -940,7 +940,8 @@ void ExtensionWebRequestEventRouter::OnCompleted(
   request_time_tracker_->LogRequestEndTime(request->identifier(),
                                            base::Time::Now());
 
-  DCHECK_EQ(net::OK, net_error);
+  // See comment in OnErrorOccurred regarding net::ERR_WS_UPGRADE.
+  DCHECK(net_error == net::OK || net_error == net::ERR_WS_UPGRADE);
 
   DCHECK(!GetAndSetSignaled(request->identifier(), kOnCompleted));
 
@@ -978,6 +979,14 @@ void ExtensionWebRequestEventRouter::OnErrorOccurred(
     net::URLRequest* request,
     bool started,
     int net_error) {
+  // When WebSocket handshake request finishes, URLRequest is cancelled with an
+  // ERR_WS_UPGRADE code (see WebSocketStreamRequestImpl::PerformUpgrade).
+  // WebRequest API reports this as a completed request.
+  if (net_error == net::ERR_WS_UPGRADE) {
+    OnCompleted(browser_context, extension_info_map, request, net_error);
+    return;
+  }
+
   ExtensionsBrowserClient* client = ExtensionsBrowserClient::Get();
   if (!client) {
     // |client| could be NULL during shutdown.
@@ -1333,10 +1342,7 @@ void ExtensionWebRequestEventRouter::AddCallbackForPageLoad(
 bool ExtensionWebRequestEventRouter::IsPageLoad(
     const net::URLRequest* request) const {
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
-  if (!info)
-    return false;
-
-  return info->GetResourceType() == content::RESOURCE_TYPE_MAIN_FRAME;
+  return info && info->GetResourceType() == content::RESOURCE_TYPE_MAIN_FRAME;
 }
 
 void ExtensionWebRequestEventRouter::NotifyPageLoad() {
@@ -1380,7 +1386,7 @@ void ExtensionWebRequestEventRouter::GetMatchingListenersImpl(
     const GURL& url,
     int render_process_host_id,
     int routing_id,
-    content::ResourceType resource_type,
+    WebRequestResourceType resource_type,
     bool is_async_request,
     bool is_request_from_extension,
     int* extra_info_spec,
@@ -1452,7 +1458,7 @@ void ExtensionWebRequestEventRouter::GetMatchingListenersImpl(
       continue;
     }
 
-    const std::vector<content::ResourceType>& types = listener->filter.types;
+    const std::vector<WebRequestResourceType>& types = listener->filter.types;
     if (!types.empty() &&
         std::find(types.begin(), types.end(), resource_type) == types.end()) {
       continue;
@@ -1486,7 +1492,7 @@ void ExtensionWebRequestEventRouter::GetMatchingListenersImpl(
     // http://crbug.com/105656
     bool synchronous_xhr_from_extension =
         !is_async_request && is_request_from_extension &&
-        resource_type == content::RESOURCE_TYPE_XHR;
+        resource_type == WebRequestResourceType::XHR;
 
     // Only send webRequest events for URLs the extension has access to.
     if (blocking_listener && synchronous_xhr_from_extension)
@@ -1512,7 +1518,7 @@ ExtensionWebRequestEventRouter::GetMatchingListeners(
   const GURL& url = request->url();
   int render_process_host_id = content::ChildProcessHost::kInvalidUniqueID;
   int routing_id = MSG_ROUTING_NONE;
-  content::ResourceType resource_type = content::RESOURCE_TYPE_LAST_TYPE;
+  auto resource_type = GetWebRequestResourceType(request);
   // We are conservative here and assume requests are asynchronous in case
   // we don't have an info object. We don't want to risk a deadlock.
   bool is_async_request = false;
@@ -1522,8 +1528,6 @@ ExtensionWebRequestEventRouter::GetMatchingListeners(
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
   if (info) {
     is_async_request = info->IsAsync();
-    if (helpers::IsRelevantResourceType(info->GetResourceType()))
-      resource_type = info->GetResourceType();
     render_process_host_id = info->GetChildID();
     routing_id = info->GetRouteID();
   }
@@ -1808,10 +1812,8 @@ int ExtensionWebRequestEventRouter::ExecuteDeltas(
   if (blocked_request.event == kOnBeforeRequest) {
     CHECK(!blocked_request.callback.is_null());
     helpers::MergeOnBeforeRequestResponses(
-        blocked_request.response_deltas,
-        blocked_request.new_url,
-        &warnings,
-        blocked_request.net_log);
+        blocked_request.request->url(), blocked_request.response_deltas,
+        blocked_request.new_url, &warnings, blocked_request.net_log);
   } else if (blocked_request.event == kOnBeforeSendHeaders) {
     CHECK(!blocked_request.callback.is_null());
     helpers::MergeOnBeforeSendHeadersResponses(
@@ -1822,12 +1824,10 @@ int ExtensionWebRequestEventRouter::ExecuteDeltas(
   } else if (blocked_request.event == kOnHeadersReceived) {
     CHECK(!blocked_request.callback.is_null());
     helpers::MergeOnHeadersReceivedResponses(
-        blocked_request.response_deltas,
+        blocked_request.request->url(), blocked_request.response_deltas,
         blocked_request.original_response_headers.get(),
-        blocked_request.override_response_headers,
-        blocked_request.new_url,
-        &warnings,
-        blocked_request.net_log);
+        blocked_request.override_response_headers, blocked_request.new_url,
+        &warnings, blocked_request.net_log);
   } else if (blocked_request.event == kOnAuthRequired) {
     CHECK(blocked_request.callback.is_null());
     CHECK(!blocked_request.auth_callback.is_null());
@@ -2299,9 +2299,9 @@ WebRequestInternalEventHandledFunction::Run() {
           response_headers->push_back(helpers::ResponseHeader(name, value));
       }
       if (has_request_headers)
-        response->request_headers.reset(request_headers.release());
+        response->request_headers = std::move(request_headers);
       else
-        response->response_headers.reset(response_headers.release());
+        response->response_headers = std::move(response_headers);
     }
 
     if (value->HasKey(keys::kAuthCredentialsKey)) {

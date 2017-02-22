@@ -4,7 +4,6 @@
 
 #include "ash/ash_touch_exploration_manager_chromeos.h"
 
-#include "ash/aura/wm_root_window_controller_aura.h"
 #include "ash/common/accessibility_delegate.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/wm_shell.h"
@@ -13,6 +12,7 @@
 #include "ash/shell.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "chromeos/audio/chromeos_sounds.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/chromeos_switches.h"
@@ -95,22 +95,22 @@ void AshTouchExplorationManager::HandleAccessibilityGesture(
 void AshTouchExplorationManager::OnDisplayMetricsChanged(
     const display::Display& display,
     uint32_t changed_metrics) {
-  if (root_window_controller_->wm_root_window_controller()
-          ->GetWindow()
-          ->GetDisplayNearestWindow()
-          .id() == display.id())
+  if (root_window_controller_->GetWindow()->GetDisplayNearestWindow().id() ==
+      display.id())
     UpdateTouchExplorationState();
 }
 
 void AshTouchExplorationManager::PlaySpokenFeedbackToggleCountdown(
     int tick_count) {
-  WmShell::Get()->accessibility_delegate()->PlaySpokenFeedbackToggleCountdown(
-      tick_count);
+  AccessibilityDelegate* delegate = WmShell::Get()->accessibility_delegate();
+  if (delegate->ShouldToggleSpokenFeedbackViaTouch())
+    delegate->PlaySpokenFeedbackToggleCountdown(tick_count);
 }
 
 void AshTouchExplorationManager::ToggleSpokenFeedback() {
-  WmShell::Get()->accessibility_delegate()->ToggleSpokenFeedback(
-      ash::A11Y_NOTIFICATION_SHOW);
+  AccessibilityDelegate* delegate = WmShell::Get()->accessibility_delegate();
+  if (delegate->ShouldToggleSpokenFeedbackViaTouch())
+    delegate->ToggleSpokenFeedback(ash::A11Y_NOTIFICATION_SHOW);
 }
 
 void AshTouchExplorationManager::OnWindowActivated(
@@ -154,11 +154,9 @@ void AshTouchExplorationManager::UpdateTouchExplorationState() {
               touch_accessibility_enabler_.get());
     }
     if (pass_through_surface) {
-      const gfx::Rect& work_area =
-          root_window_controller_->wm_root_window_controller()
-              ->GetWindow()
-              ->GetDisplayNearestWindow()
-              .work_area();
+      const gfx::Rect& work_area = root_window_controller_->GetWindow()
+                                       ->GetDisplayNearestWindow()
+                                       .work_area();
       touch_exploration_controller_->SetExcludeBounds(work_area);
       SilenceSpokenFeedback();
       WmShell::Get()->accessibility_delegate()->ClearFocusHighlight();

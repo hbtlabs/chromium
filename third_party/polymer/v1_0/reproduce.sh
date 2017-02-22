@@ -26,6 +26,8 @@ check_dep "which polymer-css-build" "polymer-css-build" \
     "npm install -g polymer-css-build"
 check_dep "which rsync" "rsync" "apt-get install rsync"
 check_dep "python -c 'import bs4'" "bs4" "apt-get install python-bs4"
+check_dep "sed --version | grep GNU" \
+    "GNU sed as 'sed'" "'brew install gnu-sed --with-default-names'"
 
 set -e
 
@@ -106,10 +108,7 @@ python create_components_summary.py > components_summary.txt
 echo 'Creating GYP files for interfaces and externs...'
 ./generate_gyp.sh
 
-echo 'Vulcanizing dependent UIs...'
-python ../../../chrome/browser/resources/vulcanize.py
-
 popd > /dev/null
 
 echo 'Searching for unused elements...'
-"$(dirname "$0")"/find_unused_elements.py
+python "$(dirname "$0")"/find_unused_elements.py

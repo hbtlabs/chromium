@@ -56,7 +56,7 @@ Components.DOMBreakpointsSidebarPane = class extends Components.BreakpointsSideb
     mainElement.appendChild(createTextNode(
         String.sprintf('Paused on %s', Components.DOMBreakpointsSidebarPane.BreakpointTypeNouns[auxData['type']])));
 
-    var domModel = SDK.DOMModel.fromTarget(details.target());
+    var domModel = SDK.DOMModel.fromTarget(details.debuggerModel.target());
     if (domModel) {
       var subElement = messageWrapper.createChild('div', 'status-sub monospace');
       var node = domModel.nodeForId(auxData['nodeId']);
@@ -186,7 +186,7 @@ Components.DOMBreakpointsSidebarPane = class extends Components.BreakpointsSideb
     element._type = type;
     element.addEventListener('contextmenu', this._contextMenu.bind(this, node, type), true);
 
-    var checkboxLabel = createCheckboxLabel('', enabled);
+    var checkboxLabel = UI.createCheckboxLabel('', enabled);
     var checkboxElement = checkboxLabel.checkboxElement;
     checkboxElement.addEventListener('click', this._checkboxClicked.bind(this, node, type), false);
     element._checkboxElement = checkboxElement;

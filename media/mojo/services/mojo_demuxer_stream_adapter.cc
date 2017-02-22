@@ -24,17 +24,17 @@ MojoDemuxerStreamAdapter::MojoDemuxerStreamAdapter(
       stream_ready_cb_(stream_ready_cb),
       type_(UNKNOWN),
       weak_factory_(this) {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   demuxer_stream_->Initialize(base::Bind(
       &MojoDemuxerStreamAdapter::OnStreamReady, weak_factory_.GetWeakPtr()));
 }
 
 MojoDemuxerStreamAdapter::~MojoDemuxerStreamAdapter() {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
 }
 
 void MojoDemuxerStreamAdapter::Read(const ReadCB& read_cb) {
-  DVLOG(3) << __FUNCTION__;
+  DVLOG(3) << __func__;
   // We shouldn't be holding on to a previous callback if a new Read() came in.
   DCHECK(read_cb_.is_null());
 
@@ -70,27 +70,13 @@ VideoRotation MojoDemuxerStreamAdapter::video_rotation() {
   return VIDEO_ROTATION_0;
 }
 
-bool MojoDemuxerStreamAdapter::enabled() const {
-  return true;
-}
-
-void MojoDemuxerStreamAdapter::set_enabled(bool enabled,
-                                           base::TimeDelta timestamp) {
-  NOTIMPLEMENTED();
-}
-
-void MojoDemuxerStreamAdapter::SetStreamStatusChangeCB(
-    const StreamStatusChangeCB& cb) {
-  NOTIMPLEMENTED();
-}
-
 // TODO(xhwang): Pass liveness here.
 void MojoDemuxerStreamAdapter::OnStreamReady(
     Type type,
     mojo::ScopedDataPipeConsumerHandle consumer_handle,
     mojom::AudioDecoderConfigPtr audio_config,
     mojom::VideoDecoderConfigPtr video_config) {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   DCHECK_EQ(UNKNOWN, type_);
   DCHECK(consumer_handle.is_valid());
 
@@ -109,7 +95,7 @@ void MojoDemuxerStreamAdapter::OnBufferReady(
     mojom::DecoderBufferPtr buffer,
     mojom::AudioDecoderConfigPtr audio_config,
     mojom::VideoDecoderConfigPtr video_config) {
-  DVLOG(3) << __FUNCTION__;
+  DVLOG(3) << __func__;
   DCHECK(!read_cb_.is_null());
   DCHECK_NE(type_, UNKNOWN);
 

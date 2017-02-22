@@ -20,10 +20,10 @@ function test()
 
     function requestFinished(event)
     {
-        if (!event.data.url.endsWith("resources/image.png"))
+        if (!event.data.url().endsWith("resources/image.png"))
             return;
 
-        var initiatorInfo = event.data.initiatorInfo();
+        var initiatorInfo = SDK.NetworkLog.initiatorInfoForRequest(event.data);
         var element = new Components.Linkifier().linkifyScriptLocation(InspectorTest.mainTarget, initiatorInfo.scriptId, initiatorInfo.url, initiatorInfo.lineNumber - 1, initiatorInfo.columnNumber - 1);
         InspectorTest.addResult(element.textContent);
         Common.settingForTest("enableAsyncStackTraces").set(false);

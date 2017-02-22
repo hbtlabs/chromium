@@ -6,7 +6,7 @@ import("//build/config/android/rules.gni")
 import("//chrome/common/features.gni")
 import("//testing/test.gni")
 
-assert(enable_vr_shell || enable_webvr)
+assert(enable_webvr)
 
 if (current_cpu == "arm" || current_cpu == "arm64") {
   static_library("vr_common") {
@@ -17,6 +17,8 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
       "animation.h",
       "easing.cc",
       "easing.h",
+      "non_presenting_gvr_delegate.cc",
+      "non_presenting_gvr_delegate.h",
       "ui_elements.cc",
       "ui_elements.h",
       "ui_interface.cc",
@@ -28,16 +30,22 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
       "vr_controller.cc",
       "vr_controller.h",
       "vr_gesture.h",
+      "vr_gl_thread.cc",
+      "vr_gl_thread.h",
       "vr_gl_util.cc",
       "vr_gl_util.h",
       "vr_input_manager.cc",
       "vr_input_manager.h",
       "vr_math.cc",
       "vr_math.h",
+      "vr_omnibox.cc",
+      "vr_omnibox.h",
       "vr_shell.cc",
       "vr_shell.h",
       "vr_shell_delegate.cc",
       "vr_shell_delegate.h",
+      "vr_shell_gl.cc",
+      "vr_shell_gl.h",
       "vr_shell_renderer.cc",
       "vr_shell_renderer.h",
       "vr_usage_monitor.cc",
@@ -46,11 +54,7 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
       "vr_web_contents_observer.h",
     ]
 
-    if (enable_vr_shell) {
-      defines += [ "ENABLE_VR_SHELL" ]
-    }
     if (enable_vr_shell_ui_dev) {
-      assert(enable_vr_shell)
       defines += [ "ENABLE_VR_SHELL_UI_DEV" ]
     }
 
@@ -58,8 +62,12 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
       ":vr_shell_jni_headers",
       "//base",
       "//cc",
+      "//components/omnibox/browser",
+      "//components/rappor",
+      "//components/security_state/core",
       "//content/public/browser",
       "//content/public/common",
+      "//device/gamepad",
       "//device/vr",
       "//ui/android",
       "//ui/base",
@@ -68,8 +76,10 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
       "//ui/gl/init",
     ]
 
-    libs =
-        [ "//third_party/gvr-android-sdk/libgvr_shim_static_${current_cpu}.a" ]
+    libs = [
+      "//third_party/gvr-android-sdk/libgvr_shim_static_${current_cpu}.a",
+      "android",
+    ]
     configs += [ "//third_party/gvr-android-sdk:libgvr_config" ]
   }
 
@@ -82,7 +92,7 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
   }
 }
 
-if (enable_vr_shell) {
+if (enable_webvr) {
   test("vr_shell_unittests") {
     sources = [
       "ui_elements_unittest.cc",
@@ -93,7 +103,9 @@ if (enable_vr_shell) {
       ":vr_common",
       "//base/test:run_all_unittests",
       "//base/test:test_support",
+      "//chrome/browser",
       "//testing/gtest",
+      "//third_party/WebKit/public:blink",
       "//ui/gfx/geometry",
     ]
   }

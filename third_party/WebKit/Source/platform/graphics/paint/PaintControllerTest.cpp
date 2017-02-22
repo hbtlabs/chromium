@@ -14,15 +14,19 @@
 #include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/SubsequenceRecorder.h"
 #include "platform/testing/FakeDisplayItemClient.h"
+#include "platform/testing/PaintPropertyTestHelpers.h"
+#include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include <memory>
 
+using blink::testing::createOpacityOnlyEffect;
+using blink::testing::defaultPaintChunkProperties;
 using testing::UnorderedElementsAre;
 
 namespace blink {
 
-class PaintControllerTestBase : public testing::Test {
+class PaintControllerTestBase : public ::testing::Test {
  public:
   PaintControllerTestBase() : m_paintController(PaintController::create()) {}
 
@@ -47,21 +51,9 @@ class PaintControllerTestBase : public testing::Test {
   int numIndexedItems() const { return m_paintController->m_numIndexedItems; }
 #endif
 
-  void TearDown() override { m_featuresBackup.restore(); }
-
  private:
   std::unique_ptr<PaintController> m_paintController;
-  RuntimeEnabledFeatures::Backup m_featuresBackup;
 };
-
-PaintChunkProperties rootPaintChunkProperties() {
-  PaintChunkProperties rootProperties;
-  rootProperties.transform = TransformPaintPropertyNode::root();
-  rootProperties.clip = ClipPaintPropertyNode::root();
-  rootProperties.effect = EffectPaintPropertyNode::root();
-  rootProperties.scroll = ScrollPaintPropertyNode::root();
-  return rootProperties;
-}
 
 const DisplayItem::Type foregroundDrawingType =
     static_cast<DisplayItem::Type>(DisplayItem::kDrawingPaintPhaseFirst + 4);
@@ -126,40 +118,25 @@ void drawClippedRect(GraphicsContext& context,
 }
 
 enum TestConfigurations {
-  SPv1,
-  SPv2,
-  UnderInvalidationCheckingSPv1,
-  UnderInvalidationCheckingSPv2,
+  SPv2 = 1 << 0,
+  UnderInvalidationChecking = 1 << 1,
 };
 
 // Tests using this class will be tested with under-invalidation-checking
 // enabled and disabled.
 class PaintControllerTest
     : public PaintControllerTestBase,
-      public testing::WithParamInterface<TestConfigurations> {
+      public ::testing::WithParamInterface<TestConfigurations>,
+      private ScopedSlimmingPaintV2ForTest,
+      private ScopedPaintUnderInvalidationCheckingForTest {
  public:
   PaintControllerTest()
-      : m_rootPaintPropertyClient("root"),
+      : ScopedSlimmingPaintV2ForTest(GetParam() & SPv2),
+        ScopedPaintUnderInvalidationCheckingForTest(GetParam() &
+                                                    UnderInvalidationChecking),
+        m_rootPaintPropertyClient("root"),
         m_rootPaintChunkId(m_rootPaintPropertyClient,
                            DisplayItem::kUninitializedType) {}
-
- protected:
-  void SetUp() override {
-    switch (GetParam()) {
-      case SPv1:
-        break;
-      case SPv2:
-        RuntimeEnabledFeatures::setSlimmingPaintV2Enabled(true);
-        break;
-      case UnderInvalidationCheckingSPv1:
-        RuntimeEnabledFeatures::setPaintUnderInvalidationCheckingEnabled(true);
-        break;
-      case UnderInvalidationCheckingSPv2:
-        RuntimeEnabledFeatures::setSlimmingPaintV2Enabled(true);
-        RuntimeEnabledFeatures::setPaintUnderInvalidationCheckingEnabled(true);
-        break;
-    }
-  }
 
   FakeDisplayItemClient m_rootPaintPropertyClient;
   PaintChunk::Id m_rootPaintChunkId;
@@ -167,17 +144,14 @@ class PaintControllerTest
 
 INSTANTIATE_TEST_CASE_P(All,
                         PaintControllerTest,
-                        ::testing::Values(SPv1,
-                                          SPv2,
-                                          UnderInvalidationCheckingSPv1,
-                                          UnderInvalidationCheckingSPv2));
+                        ::testing::Values(SPv2, UnderInvalidationChecking));
 
 TEST_P(PaintControllerTest, NestedRecorders) {
   GraphicsContext context(getPaintController());
   FakeDisplayItemClient client("client", LayoutRect(100, 100, 200, 200));
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   drawClippedRect(context, client, clipType, backgroundDrawingType,
@@ -203,7 +177,7 @@ TEST_P(PaintControllerTest, UpdateBasic) {
   GraphicsContext context(getPaintController());
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   drawRect(context, first, backgroundDrawingType,
@@ -228,7 +202,7 @@ TEST_P(PaintControllerTest, UpdateBasic) {
                 UnorderedElementsAre(FloatRect(LayoutRect::infiniteIntRect())));
 
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   drawRect(context, first, backgroundDrawingType,
@@ -265,7 +239,7 @@ TEST_P(PaintControllerTest, UpdateSwapOrder) {
   GraphicsContext context(getPaintController());
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   drawRect(context, first, backgroundDrawingType,
@@ -292,7 +266,7 @@ TEST_P(PaintControllerTest, UpdateSwapOrder) {
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
   drawRect(context, second, backgroundDrawingType,
            FloatRect(100, 100, 50, 200));
@@ -339,7 +313,7 @@ TEST_P(PaintControllerTest, UpdateSwapOrderWithInvalidation) {
   GraphicsContext context(getPaintController());
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   drawRect(context, first, backgroundDrawingType,
@@ -366,7 +340,7 @@ TEST_P(PaintControllerTest, UpdateSwapOrderWithInvalidation) {
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   first.setDisplayItemsUncached();
@@ -418,7 +392,7 @@ TEST_P(PaintControllerTest, UpdateNewItemInMiddle) {
   GraphicsContext context(getPaintController());
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   drawRect(context, first, backgroundDrawingType,
@@ -433,7 +407,7 @@ TEST_P(PaintControllerTest, UpdateNewItemInMiddle) {
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   drawRect(context, first, backgroundDrawingType,
@@ -472,7 +446,7 @@ TEST_P(PaintControllerTest, UpdateInvalidationWithPhases) {
   GraphicsContext context(getPaintController());
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   drawRect(context, first, backgroundDrawingType,
@@ -497,7 +471,7 @@ TEST_P(PaintControllerTest, UpdateInvalidationWithPhases) {
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   second.setDisplayItemsUncached();
@@ -544,7 +518,7 @@ TEST_P(PaintControllerTest, UpdateAddFirstOverlap) {
   GraphicsContext context(getPaintController());
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   drawRect(context, second, backgroundDrawingType, FloatRect(200, 200, 50, 50));
@@ -557,7 +531,7 @@ TEST_P(PaintControllerTest, UpdateAddFirstOverlap) {
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   first.setDisplayItemsUncached();
@@ -590,7 +564,7 @@ TEST_P(PaintControllerTest, UpdateAddFirstOverlap) {
                     FloatRect(150, 150, 100, 100)));  // New bounds of |second|.
 
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   drawRect(context, second, backgroundDrawingType,
@@ -626,7 +600,7 @@ TEST_P(PaintControllerTest, UpdateAddLastOverlap) {
   GraphicsContext context(getPaintController());
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   drawRect(context, first, backgroundDrawingType,
@@ -641,7 +615,7 @@ TEST_P(PaintControllerTest, UpdateAddLastOverlap) {
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   first.setDisplayItemsUncached();
@@ -672,7 +646,7 @@ TEST_P(PaintControllerTest, UpdateAddLastOverlap) {
                               50)));  // |second| newly appeared in the chunk.
 
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   first.setDisplayItemsUncached();
@@ -705,12 +679,14 @@ TEST_P(PaintControllerTest, UpdateClip) {
   FakeDisplayItemClient second("second", LayoutRect(100, 100, 200, 200));
   GraphicsContext context(getPaintController());
 
+  RefPtr<ClipPaintPropertyNode> clip = ClipPaintPropertyNode::create(
+      nullptr, nullptr, FloatRoundedRect(1, 1, 2, 2));
+
   {
     if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
       PaintChunk::Id id(first, clipType);
-      PaintChunkProperties properties = rootPaintChunkProperties();
-      properties.clip = ClipPaintPropertyNode::create(
-          nullptr, nullptr, FloatRoundedRect(1, 1, 2, 2));
+      PaintChunkProperties properties = defaultPaintChunkProperties();
+      properties.propertyTreeState.setClip(clip.get());
       getPaintController().updateCurrentPaintChunkProperties(&id, properties);
     }
     ClipRecorder clipRecorder(context, first, clipType, IntRect(1, 1, 2, 2));
@@ -730,7 +706,7 @@ TEST_P(PaintControllerTest, UpdateClip) {
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   first.setDisplayItemsUncached();
@@ -759,18 +735,22 @@ TEST_P(PaintControllerTest, UpdateClip) {
                     LayoutRect::infiniteIntRect())));  // This is a new chunk.
 
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   second.setDisplayItemsUncached();
   drawRect(context, first, backgroundDrawingType,
            FloatRect(100, 100, 150, 150));
+
+  RefPtr<ClipPaintPropertyNode> clip2 = ClipPaintPropertyNode::create(
+      nullptr, nullptr, FloatRoundedRect(1, 1, 2, 2));
+
   {
     if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
       PaintChunk::Id id(second, clipType);
-      PaintChunkProperties properties = rootPaintChunkProperties();
-      properties.clip = ClipPaintPropertyNode::create(
-          nullptr, nullptr, FloatRoundedRect(1, 1, 2, 2));
+      PaintChunkProperties properties = defaultPaintChunkProperties();
+      properties.propertyTreeState.setClip(clip2.get());
+
       getPaintController().updateCurrentPaintChunkProperties(&id, properties);
     }
     ClipRecorder clipRecorder(context, second, clipType, IntRect(1, 1, 2, 2));
@@ -804,7 +784,7 @@ TEST_P(PaintControllerTest, CachedDisplayItems) {
   GraphicsContext context(getPaintController());
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   drawRect(context, first, backgroundDrawingType,
@@ -818,14 +798,14 @@ TEST_P(PaintControllerTest, CachedDisplayItems) {
                       TestDisplayItem(second, backgroundDrawingType));
   EXPECT_TRUE(getPaintController().clientCacheIsValid(first));
   EXPECT_TRUE(getPaintController().clientCacheIsValid(second));
-  const SkPicture* firstPicture =
+  const PaintRecord* firstPaintRecord =
       static_cast<const DrawingDisplayItem&>(
           getPaintController().getDisplayItemList()[0])
-          .picture();
-  const SkPicture* secondPicture =
+          .GetPaintRecord();
+  const PaintRecord* secondPaintRecord =
       static_cast<const DrawingDisplayItem&>(
           getPaintController().getDisplayItemList()[1])
-          .picture();
+          .GetPaintRecord();
 
   first.setDisplayItemsUncached();
   EXPECT_FALSE(getPaintController().clientCacheIsValid(first));
@@ -833,7 +813,7 @@ TEST_P(PaintControllerTest, CachedDisplayItems) {
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
   drawRect(context, first, backgroundDrawingType,
            FloatRect(100, 100, 150, 150));
@@ -845,14 +825,16 @@ TEST_P(PaintControllerTest, CachedDisplayItems) {
                       TestDisplayItem(first, backgroundDrawingType),
                       TestDisplayItem(second, backgroundDrawingType));
   // The first display item should be updated.
-  EXPECT_NE(firstPicture, static_cast<const DrawingDisplayItem&>(
-                              getPaintController().getDisplayItemList()[0])
-                              .picture());
+  EXPECT_NE(firstPaintRecord, static_cast<const DrawingDisplayItem&>(
+                                  getPaintController().getDisplayItemList()[0])
+                                  .GetPaintRecord());
   // The second display item should be cached.
-  if (!RuntimeEnabledFeatures::paintUnderInvalidationCheckingEnabled())
-    EXPECT_EQ(secondPicture, static_cast<const DrawingDisplayItem&>(
-                                 getPaintController().getDisplayItemList()[1])
-                                 .picture());
+  if (!RuntimeEnabledFeatures::paintUnderInvalidationCheckingEnabled()) {
+    EXPECT_EQ(secondPaintRecord,
+              static_cast<const DrawingDisplayItem&>(
+                  getPaintController().getDisplayItemList()[1])
+                  .GetPaintRecord());
+  }
   EXPECT_TRUE(getPaintController().clientCacheIsValid(first));
   EXPECT_TRUE(getPaintController().clientCacheIsValid(second));
 
@@ -871,7 +853,7 @@ TEST_P(PaintControllerTest, UpdateSwapOrderWithChildren) {
   GraphicsContext context(getPaintController());
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   drawRect(context, container1, backgroundDrawingType,
@@ -904,7 +886,7 @@ TEST_P(PaintControllerTest, UpdateSwapOrderWithChildren) {
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   // Simulate the situation when |container1| gets a z-index that is greater
@@ -959,7 +941,7 @@ TEST_P(PaintControllerTest, UpdateSwapOrderWithChildrenAndInvalidation) {
   GraphicsContext context(getPaintController());
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   drawRect(context, container1, backgroundDrawingType,
@@ -992,7 +974,7 @@ TEST_P(PaintControllerTest, UpdateSwapOrderWithChildrenAndInvalidation) {
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   // Simulate the situation when |container1| gets a z-index that is greater
@@ -1049,15 +1031,14 @@ TEST_P(PaintControllerTest, CachedSubsequenceSwapOrder) {
   FakeDisplayItemClient content2("content2", LayoutRect(100, 200, 50, 200));
   GraphicsContext context(getPaintController());
 
-  PaintChunkProperties container1Properties = rootPaintChunkProperties();
-  PaintChunkProperties container2Properties = rootPaintChunkProperties();
+  PaintChunkProperties container1Properties = defaultPaintChunkProperties();
+  PaintChunkProperties container2Properties = defaultPaintChunkProperties();
 
   {
     if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
       PaintChunk::Id id(container1, backgroundDrawingType);
-      container1Properties.effect = EffectPaintPropertyNode::create(
-          EffectPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
-          ClipPaintPropertyNode::root(), CompositorFilterOperations(), 0.5);
+      container1Properties.propertyTreeState.setEffect(
+          createOpacityOnlyEffect(EffectPaintPropertyNode::root(), 0.5).get());
       getPaintController().updateCurrentPaintChunkProperties(
           &id, container1Properties);
     }
@@ -1074,9 +1055,8 @@ TEST_P(PaintControllerTest, CachedSubsequenceSwapOrder) {
   {
     if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
       PaintChunk::Id id(container2, backgroundDrawingType);
-      container2Properties.effect = EffectPaintPropertyNode::create(
-          EffectPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
-          ClipPaintPropertyNode::root(), CompositorFilterOperations(), 0.5);
+      container2Properties.propertyTreeState.setEffect(
+          createOpacityOnlyEffect(EffectPaintPropertyNode::root(), 0.5).get());
       getPaintController().updateCurrentPaintChunkProperties(
           &id, container2Properties);
     }
@@ -1221,15 +1201,14 @@ TEST_P(PaintControllerTest, UpdateSwapOrderCrossingChunks) {
   FakeDisplayItemClient content2("content2", LayoutRect(100, 200, 50, 200));
   GraphicsContext context(getPaintController());
 
-  PaintChunkProperties container1Properties = rootPaintChunkProperties();
-  PaintChunkProperties container2Properties = rootPaintChunkProperties();
+  PaintChunkProperties container1Properties = defaultPaintChunkProperties();
+  PaintChunkProperties container2Properties = defaultPaintChunkProperties();
 
   {
     if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
       PaintChunk::Id id(container1, backgroundDrawingType);
-      container1Properties.effect = EffectPaintPropertyNode::create(
-          EffectPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
-          ClipPaintPropertyNode::root(), CompositorFilterOperations(), 0.5);
+      container1Properties.propertyTreeState.setEffect(
+          createOpacityOnlyEffect(EffectPaintPropertyNode::root(), 0.5).get());
       getPaintController().updateCurrentPaintChunkProperties(
           &id, container1Properties);
     }
@@ -1241,9 +1220,8 @@ TEST_P(PaintControllerTest, UpdateSwapOrderCrossingChunks) {
   {
     if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
       PaintChunk::Id id(container2, backgroundDrawingType);
-      container2Properties.effect = EffectPaintPropertyNode::create(
-          EffectPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
-          ClipPaintPropertyNode::root(), CompositorFilterOperations(), 0.5);
+      container2Properties.propertyTreeState.setEffect(
+          createOpacityOnlyEffect(EffectPaintPropertyNode::root(), 0.5).get());
       getPaintController().updateCurrentPaintChunkProperties(
           &id, container2Properties);
     }
@@ -1335,7 +1313,7 @@ TEST_P(PaintControllerTest, OutOfOrderNoCrash) {
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
   drawRect(context, client, type1, FloatRect(100, 100, 100, 100));
   drawRect(context, client, type2, FloatRect(100, 100, 50, 200));
@@ -1346,7 +1324,7 @@ TEST_P(PaintControllerTest, OutOfOrderNoCrash) {
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
   drawRect(context, client, type2, FloatRect(100, 100, 50, 200));
   drawRect(context, client, type3, FloatRect(100, 100, 50, 200));
@@ -1366,20 +1344,19 @@ TEST_P(PaintControllerTest, CachedNestedSubsequenceUpdate) {
   GraphicsContext context(getPaintController());
 
   PaintChunkProperties container1BackgroundProperties =
-      rootPaintChunkProperties();
-  PaintChunkProperties content1Properties = rootPaintChunkProperties();
+      defaultPaintChunkProperties();
+  PaintChunkProperties content1Properties = defaultPaintChunkProperties();
   PaintChunkProperties container1ForegroundProperties =
-      rootPaintChunkProperties();
+      defaultPaintChunkProperties();
   PaintChunkProperties container2BackgroundProperties =
-      rootPaintChunkProperties();
-  PaintChunkProperties content2Properties = rootPaintChunkProperties();
+      defaultPaintChunkProperties();
+  PaintChunkProperties content2Properties = defaultPaintChunkProperties();
 
   {
     if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
       PaintChunk::Id id(container1, backgroundDrawingType);
-      container1BackgroundProperties.effect = EffectPaintPropertyNode::create(
-          EffectPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
-          ClipPaintPropertyNode::root(), CompositorFilterOperations(), 0.5);
+      container1BackgroundProperties.propertyTreeState.setEffect(
+          createOpacityOnlyEffect(EffectPaintPropertyNode::root(), 0.5).get());
       getPaintController().updateCurrentPaintChunkProperties(
           &id, container1BackgroundProperties);
     }
@@ -1389,9 +1366,9 @@ TEST_P(PaintControllerTest, CachedNestedSubsequenceUpdate) {
     {
       if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
         PaintChunk::Id id(content1, backgroundDrawingType);
-        content1Properties.effect = EffectPaintPropertyNode::create(
-            EffectPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
-            ClipPaintPropertyNode::root(), CompositorFilterOperations(), 0.6);
+        content1Properties.propertyTreeState.setEffect(
+            createOpacityOnlyEffect(EffectPaintPropertyNode::root(), 0.6)
+                .get());
         getPaintController().updateCurrentPaintChunkProperties(
             &id, content1Properties);
       }
@@ -1403,9 +1380,8 @@ TEST_P(PaintControllerTest, CachedNestedSubsequenceUpdate) {
     }
     if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
       PaintChunk::Id id(container1, foregroundDrawingType);
-      container1ForegroundProperties.effect = EffectPaintPropertyNode::create(
-          EffectPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
-          ClipPaintPropertyNode::root(), CompositorFilterOperations(), 0.5);
+      container1ForegroundProperties.propertyTreeState.setEffect(
+          createOpacityOnlyEffect(EffectPaintPropertyNode::root(), 0.5).get());
       getPaintController().updateCurrentPaintChunkProperties(
           &id, container1ForegroundProperties);
     }
@@ -1415,9 +1391,8 @@ TEST_P(PaintControllerTest, CachedNestedSubsequenceUpdate) {
   {
     if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
       PaintChunk::Id id(container2, backgroundDrawingType);
-      container2BackgroundProperties.effect = EffectPaintPropertyNode::create(
-          EffectPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
-          ClipPaintPropertyNode::root(), CompositorFilterOperations(), 0.7);
+      container2BackgroundProperties.propertyTreeState.setEffect(
+          createOpacityOnlyEffect(EffectPaintPropertyNode::root(), 0.7).get());
       getPaintController().updateCurrentPaintChunkProperties(
           &id, container2BackgroundProperties);
     }
@@ -1427,9 +1402,9 @@ TEST_P(PaintControllerTest, CachedNestedSubsequenceUpdate) {
     {
       if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
         PaintChunk::Id id(content2, backgroundDrawingType);
-        content2Properties.effect = EffectPaintPropertyNode::create(
-            EffectPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
-            ClipPaintPropertyNode::root(), CompositorFilterOperations(), 0.8);
+        content2Properties.propertyTreeState.setEffect(
+            createOpacityOnlyEffect(EffectPaintPropertyNode::root(), 0.8)
+                .get());
         getPaintController().updateCurrentPaintChunkProperties(
             &id, content2Properties);
       }
@@ -1596,7 +1571,7 @@ TEST_P(PaintControllerTest, SkipCache) {
   GraphicsContext context(getPaintController());
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   FloatRect rect1(100, 100, 50, 50);
@@ -1617,15 +1592,15 @@ TEST_P(PaintControllerTest, SkipCache) {
                       TestDisplayItem(multicol, backgroundDrawingType),
                       TestDisplayItem(content, foregroundDrawingType),
                       TestDisplayItem(content, foregroundDrawingType));
-  sk_sp<const SkPicture> picture1 =
+  sk_sp<const PaintRecord> record1 =
       sk_ref_sp(static_cast<const DrawingDisplayItem&>(
                     getPaintController().getDisplayItemList()[1])
-                    .picture());
-  sk_sp<const SkPicture> picture2 =
+                    .GetPaintRecord());
+  sk_sp<const PaintRecord> record2 =
       sk_ref_sp(static_cast<const DrawingDisplayItem&>(
                     getPaintController().getDisplayItemList()[2])
-                    .picture());
-  EXPECT_NE(picture1, picture2);
+                    .GetPaintRecord());
+  EXPECT_NE(record1, record2);
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     EXPECT_EQ(1u, getPaintController().paintChunks().size());
@@ -1633,7 +1608,7 @@ TEST_P(PaintControllerTest, SkipCache) {
                 UnorderedElementsAre(FloatRect(LayoutRect::infiniteIntRect())));
 
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   // Draw again with nothing invalidated.
@@ -1659,12 +1634,12 @@ TEST_P(PaintControllerTest, SkipCache) {
                       TestDisplayItem(multicol, backgroundDrawingType),
                       TestDisplayItem(content, foregroundDrawingType),
                       TestDisplayItem(content, foregroundDrawingType));
-  EXPECT_NE(picture1.get(), static_cast<const DrawingDisplayItem&>(
-                                getPaintController().getDisplayItemList()[1])
-                                .picture());
-  EXPECT_NE(picture2.get(), static_cast<const DrawingDisplayItem&>(
-                                getPaintController().getDisplayItemList()[2])
-                                .picture());
+  EXPECT_NE(record1.get(), static_cast<const DrawingDisplayItem&>(
+                               getPaintController().getDisplayItemList()[1])
+                               .GetPaintRecord());
+  EXPECT_NE(record2.get(), static_cast<const DrawingDisplayItem&>(
+                               getPaintController().getDisplayItemList()[2])
+                               .GetPaintRecord());
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     EXPECT_EQ(1u, getPaintController().paintChunks().size());
@@ -1675,7 +1650,7 @@ TEST_P(PaintControllerTest, SkipCache) {
             FloatRect(100, 100, 100, 100)));  // New bounds of |content|.
 
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
 
   // Now the multicol becomes 3 columns and repaints.
@@ -1695,12 +1670,12 @@ TEST_P(PaintControllerTest, SkipCache) {
                       TestDisplayItem(content, foregroundDrawingType),
                       TestDisplayItem(content, foregroundDrawingType),
                       TestDisplayItem(content, foregroundDrawingType));
-  EXPECT_NE(picture1.get(), static_cast<const DrawingDisplayItem&>(
-                                getPaintController().newDisplayItemList()[1])
-                                .picture());
-  EXPECT_NE(picture2.get(), static_cast<const DrawingDisplayItem&>(
-                                getPaintController().newDisplayItemList()[2])
-                                .picture());
+  EXPECT_NE(record1.get(), static_cast<const DrawingDisplayItem&>(
+                               getPaintController().newDisplayItemList()[1])
+                               .GetPaintRecord());
+  EXPECT_NE(record2.get(), static_cast<const DrawingDisplayItem&>(
+                               getPaintController().newDisplayItemList()[2])
+                               .GetPaintRecord());
 
   getPaintController().commitNewDisplayItems();
 
@@ -1726,7 +1701,7 @@ TEST_P(PaintControllerTest, PartialSkipCache) {
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
   drawRect(context, content, backgroundDrawingType, rect1);
   getPaintController().beginSkippingCache();
@@ -1740,19 +1715,19 @@ TEST_P(PaintControllerTest, PartialSkipCache) {
                       TestDisplayItem(content, backgroundDrawingType),
                       TestDisplayItem(content, foregroundDrawingType),
                       TestDisplayItem(content, foregroundDrawingType));
-  sk_sp<const SkPicture> picture0 =
+  sk_sp<const PaintRecord> record0 =
       sk_ref_sp(static_cast<const DrawingDisplayItem&>(
                     getPaintController().getDisplayItemList()[0])
-                    .picture());
-  sk_sp<const SkPicture> picture1 =
+                    .GetPaintRecord());
+  sk_sp<const PaintRecord> record1 =
       sk_ref_sp(static_cast<const DrawingDisplayItem&>(
                     getPaintController().getDisplayItemList()[1])
-                    .picture());
-  sk_sp<const SkPicture> picture2 =
+                    .GetPaintRecord());
+  sk_sp<const PaintRecord> record2 =
       sk_ref_sp(static_cast<const DrawingDisplayItem&>(
                     getPaintController().getDisplayItemList()[2])
-                    .picture());
-  EXPECT_NE(picture1, picture2);
+                    .GetPaintRecord());
+  EXPECT_NE(record1, record2);
 
   // Content's cache is invalid because it has display items skipped cache.
   EXPECT_FALSE(getPaintController().clientCacheIsValid(content));
@@ -1760,7 +1735,7 @@ TEST_P(PaintControllerTest, PartialSkipCache) {
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        &m_rootPaintChunkId, rootPaintChunkProperties());
+        &m_rootPaintChunkId, defaultPaintChunkProperties());
   }
   // Draw again with nothing invalidated.
   drawRect(context, content, backgroundDrawingType, rect1);
@@ -1782,15 +1757,15 @@ TEST_P(PaintControllerTest, PartialSkipCache) {
                       TestDisplayItem(content, backgroundDrawingType),
                       TestDisplayItem(content, foregroundDrawingType),
                       TestDisplayItem(content, foregroundDrawingType));
-  EXPECT_NE(picture0.get(), static_cast<const DrawingDisplayItem&>(
-                                getPaintController().getDisplayItemList()[0])
-                                .picture());
-  EXPECT_NE(picture1.get(), static_cast<const DrawingDisplayItem&>(
-                                getPaintController().getDisplayItemList()[1])
-                                .picture());
-  EXPECT_NE(picture2.get(), static_cast<const DrawingDisplayItem&>(
-                                getPaintController().getDisplayItemList()[2])
-                                .picture());
+  EXPECT_NE(record0.get(), static_cast<const DrawingDisplayItem&>(
+                               getPaintController().getDisplayItemList()[0])
+                               .GetPaintRecord());
+  EXPECT_NE(record1.get(), static_cast<const DrawingDisplayItem&>(
+                               getPaintController().getDisplayItemList()[1])
+                               .GetPaintRecord());
+  EXPECT_NE(record2.get(), static_cast<const DrawingDisplayItem&>(
+                               getPaintController().getDisplayItemList()[2])
+                               .GetPaintRecord());
 }
 
 TEST_F(PaintControllerTestBase, OptimizeNoopPairs) {
@@ -1846,12 +1821,12 @@ TEST_F(PaintControllerTestBase, OptimizeNoopPairs) {
 }
 
 TEST_F(PaintControllerTestBase, SmallPaintControllerHasOnePaintChunk) {
-  RuntimeEnabledFeatures::setSlimmingPaintV2Enabled(true);
+  ScopedSlimmingPaintV2ForTest enableSPv2(true);
   FakeDisplayItemClient client("test client");
 
   if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
     getPaintController().updateCurrentPaintChunkProperties(
-        nullptr, rootPaintChunkProperties());
+        nullptr, defaultPaintChunkProperties());
   }
   GraphicsContext context(getPaintController());
   drawRect(context, client, backgroundDrawingType, FloatRect(0, 0, 100, 100));
@@ -1891,10 +1866,10 @@ void drawPath(GraphicsContext& context,
   path.lineTo(100, 100);
   path.lineTo(100, 0);
   path.close();
-  SkPaint paint;
-  paint.setAntiAlias(true);
+  PaintFlags flags;
+  flags.setAntiAlias(true);
   for (unsigned i = 0; i < count; i++)
-    context.drawPath(path, paint);
+    context.drawPath(path, flags);
 }
 
 TEST_F(PaintControllerTestBase, IsSuitableForGpuRasterizationSinglePath) {
@@ -1907,7 +1882,7 @@ TEST_F(PaintControllerTestBase, IsSuitableForGpuRasterizationSinglePath) {
 }
 
 TEST_F(PaintControllerTestBase,
-       IsNotSuitableForGpuRasterizationSinglePictureManyPaths) {
+       IsNotSuitableForGpuRasterizationSinglePaintRecordManyPaths) {
   FakeDisplayItemClient client("test client", LayoutRect(0, 0, 200, 100));
   GraphicsContext context(getPaintController());
 
@@ -1918,7 +1893,7 @@ TEST_F(PaintControllerTestBase,
 }
 
 TEST_F(PaintControllerTestBase,
-       IsNotSuitableForGpuRasterizationMultiplePicturesSinglePathEach) {
+       IsNotSuitableForGpuRasterizationMultiplePaintRecordsSinglePathEach) {
   FakeDisplayItemClient client("test client", LayoutRect(0, 0, 200, 100));
   GraphicsContext context(getPaintController());
   getPaintController().beginSkippingCache();
@@ -1933,7 +1908,7 @@ TEST_F(PaintControllerTestBase,
 }
 
 TEST_F(PaintControllerTestBase,
-       IsNotSuitableForGpuRasterizationSinglePictureManyPathsTwoPaints) {
+       IsNotSuitableForGpuRasterizationSinglePaintRecordManyPathsTwoPaints) {
   FakeDisplayItemClient client("test client", LayoutRect(0, 0, 200, 100));
 
   {
@@ -1956,7 +1931,7 @@ TEST_F(PaintControllerTestBase,
 }
 
 TEST_F(PaintControllerTestBase,
-       IsNotSuitableForGpuRasterizationSinglePictureManyPathsCached) {
+       IsNotSuitableForGpuRasterizationSinglePaintRecordManyPathsCached) {
   FakeDisplayItemClient client("test client", LayoutRect(0, 0, 200, 100));
 
   {
@@ -1978,7 +1953,7 @@ TEST_F(PaintControllerTestBase,
 
 TEST_F(
     PaintControllerTestBase,
-    IsNotSuitableForGpuRasterizationSinglePictureManyPathsCachedSubsequence) {
+    IsNotSuitableForGpuRasterizationSinglePaintRecordManyPathsCachedSubsequence) {
   FakeDisplayItemClient client("test client", LayoutRect(0, 0, 200, 100));
   FakeDisplayItemClient container("container", LayoutRect(0, 0, 200, 100));
 
@@ -2032,13 +2007,15 @@ TEST_F(PaintControllerTestBase,
 // Death tests don't work properly on Android.
 #if defined(GTEST_HAS_DEATH_TEST) && !OS(ANDROID)
 
-class PaintControllerUnderInvalidationTest : public PaintControllerTestBase {
- protected:
-  void SetUp() override {
-    PaintControllerTestBase::SetUp();
-    RuntimeEnabledFeatures::setPaintUnderInvalidationCheckingEnabled(true);
-  }
+class PaintControllerUnderInvalidationTest
+    : public PaintControllerTestBase,
+      private ScopedPaintUnderInvalidationCheckingForTest {
+ public:
+  PaintControllerUnderInvalidationTest()
+      : PaintControllerTestBase(),
+        ScopedPaintUnderInvalidationCheckingForTest(true) {}
 
+ protected:
   void testChangeDrawing() {
     FakeDisplayItemClient first("first");
     GraphicsContext context(getPaintController());

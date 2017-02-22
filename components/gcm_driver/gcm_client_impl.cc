@@ -82,6 +82,7 @@ enum ResetStoreError {
 const char kGCMScope[] = "GCM";
 const int kMaxRegistrationRetries = 5;
 const int kMaxUnregistrationRetries = 5;
+const char kDeletedCountKey[] = "total_deleted";
 const char kMessageTypeDataMessage[] = "gcm";
 const char kMessageTypeDeletedMessagesKey[] = "deleted_messages";
 const char kMessageTypeKey[] = "message_type";
@@ -960,14 +961,17 @@ void GCMClientImpl::OnRegisterCompleted(
   Result result;
   PendingRegistrationRequests::const_iterator iter =
       pending_registration_requests_.find(registration_info);
-  if (iter == pending_registration_requests_.end())
+  if (iter == pending_registration_requests_.end()) {
     result = UNKNOWN_ERROR;
-  else if (status == RegistrationRequest::INVALID_SENDER)
+  } else if (status == RegistrationRequest::INVALID_SENDER) {
     result = INVALID_PARAMETER;
-  else if (registration_id.empty())
+  } else if (registration_id.empty()) {
+    // All other errors are currently treated as SERVER_ERROR (including
+    // REACHED_MAX_RETRIES due to the device being offline!).
     result = SERVER_ERROR;
-  else
+  } else {
     result = SUCCESS;
+  }
 
   if (result == SUCCESS) {
     // Cache it.
@@ -1113,7 +1117,8 @@ void GCMClientImpl::OnUnregisterCompleted(
       result = INVALID_PARAMETER;
       break;
     default:
-      // All other errors are treated as SERVER_ERROR.
+      // All other errors are currently treated as SERVER_ERROR (including
+      // REACHED_MAX_RETRIES due to the device being offline!).
       result = SERVER_ERROR;
       break;
   }
@@ -1335,10 +1340,7 @@ void GCMClientImpl::HandleIncomingMessage(const gcm::MCSMessage& message) {
                                 message_data);
       break;
     case DELETED_MESSAGES:
-      recorder_.RecordDataMessageReceived(app_id, data_message_stanza.from(),
-                                          data_message_stanza.ByteSize(), true,
-                                          GCMStatsRecorder::DELETED_MESSAGES);
-      delegate_->OnMessagesDeleted(app_id);
+      HandleIncomingDeletedMessages(app_id, data_message_stanza, message_data);
       break;
     case SEND_ERROR:
       HandleIncomingSendError(app_id, data_message_stanza, message_data);
@@ -1401,6 +1403,14 @@ void GCMClientImpl::HandleIncomingDataMessage(
     }
   }
 
+  UMA_HISTOGRAM_BOOLEAN("GCM.DataMessageReceivedHasRegisteredApp", registered);
+  if (registered) {
+    UMA_HISTOGRAM_BOOLEAN("GCM.DataMessageReceived", true);
+    bool has_collapse_key =
+        data_message_stanza.has_token() && !data_message_stanza.token().empty();
+    UMA_HISTOGRAM_BOOLEAN("GCM.DataMessageReceivedHasCollapseKey",
+                          has_collapse_key);
+  }
   recorder_.RecordDataMessageReceived(app_id, sender,
       data_message_stanza.ByteSize(), registered,
       GCMStatsRecorder::DATA_MESSAGE);
@@ -1415,6 +1425,25 @@ void GCMClientImpl::HandleIncomingDataMessage(
   incoming_message.raw_data = data_message_stanza.raw_data();
 
   delegate_->OnMessageReceived(app_id, incoming_message);
+}
+
+void GCMClientImpl::HandleIncomingDeletedMessages(
+    const std::string& app_id,
+    const mcs_proto::DataMessageStanza& data_message_stanza,
+    MessageData& message_data) {
+  int deleted_count = 0;
+  MessageData::iterator count_iter = message_data.find(kDeletedCountKey);
+  if (count_iter != message_data.end()) {
+    if (!base::StringToInt(count_iter->second, &deleted_count))
+      deleted_count = 0;
+  }
+  UMA_HISTOGRAM_COUNTS_1000("GCM.DeletedMessagesReceived", deleted_count);
+
+  recorder_.RecordDataMessageReceived(app_id, data_message_stanza.from(),
+                                      data_message_stanza.ByteSize(),
+                                      true /* to_registered_app */,
+                                      GCMStatsRecorder::DELETED_MESSAGES);
+  delegate_->OnMessagesDeleted(app_id);
 }
 
 void GCMClientImpl::HandleIncomingSendError(

@@ -16,8 +16,9 @@ namespace gpu {
 scoped_refptr<gl::GLSurface> ImageTransportSurface::CreateNativeSurface(
     base::WeakPtr<ImageTransportSurfaceDelegate> delegate,
     SurfaceHandle surface_handle,
-    gl::GLSurface::Format format) {
-  if (gl::GetGLImplementation() == gl::kGLImplementationMockGL)
+    gl::GLSurfaceFormat format) {
+  if (gl::GetGLImplementation() == gl::kGLImplementationMockGL ||
+      gl::GetGLImplementation() == gl::kGLImplementationStubGL)
     return new gl::GLSurfaceStub;
   DCHECK(GpuSurfaceLookup::GetInstance());
   DCHECK_NE(surface_handle, kNullSurfaceHandle);

@@ -5,42 +5,59 @@
 #ifndef InstalledAppController_h
 #define InstalledAppController_h
 
-#include "core/frame/DOMWindowProperty.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/frame/LocalFrame.h"
 #include "modules/ModulesExport.h"
 #include "platform/Supplementable.h"
-#include "public/platform/modules/installedapp/WebInstalledAppClient.h"
+#include "public/platform/WebVector.h"
+#include "public/platform/modules/installedapp/WebRelatedApplication.h"
+#include "public/platform/modules/installedapp/WebRelatedAppsFetcher.h"
+#include "wtf/RefPtr.h"
+#include "wtf/Vector.h"
+
+#include <memory>
 
 namespace blink {
 
-class WebSecurityOrigin;
+class SecurityOrigin;
 
 class MODULES_EXPORT InstalledAppController final
     : public GarbageCollectedFinalized<InstalledAppController>,
       public Supplement<LocalFrame>,
-      public DOMWindowProperty {
+      public ContextLifecycleObserver {
   USING_GARBAGE_COLLECTED_MIXIN(InstalledAppController);
   WTF_MAKE_NONCOPYABLE(InstalledAppController);
 
  public:
   virtual ~InstalledAppController();
 
-  void getInstalledApps(const WebSecurityOrigin&,
-                        std::unique_ptr<AppInstalledCallbacks>);
+  // Gets a list of related apps from a particular origin's manifest that belong
+  // to the current underlying platform, and are installed.
+  void getInstalledRelatedApps(WTF::RefPtr<SecurityOrigin>,
+                               std::unique_ptr<AppInstalledCallbacks>);
 
-  static void provideTo(LocalFrame&, WebInstalledAppClient*);
+  static void provideTo(LocalFrame&, WebRelatedAppsFetcher*);
   static InstalledAppController* from(LocalFrame&);
   static const char* supplementName();
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  InstalledAppController(LocalFrame&, WebInstalledAppClient*);
+  class GetRelatedAppsCallbacks;
 
-  // Inherited from DOMWindowProperty.
-  void frameDestroyed() override;
+  InstalledAppController(LocalFrame&, WebRelatedAppsFetcher*);
 
-  WebInstalledAppClient* m_client;
+  // Inherited from ContextLifecycleObserver.
+  void contextDestroyed(ExecutionContext*) override;
+
+  // For a given security origin, takes a set of related applications and
+  // filters them by those which belong to the current underlying platform, and
+  // are actually installed. Passes the filtered list to the callback.
+  void filterByInstalledApps(WTF::RefPtr<SecurityOrigin>,
+                             const WebVector<WebRelatedApplication>&,
+                             std::unique_ptr<AppInstalledCallbacks>);
+
+  WebRelatedAppsFetcher* m_relatedAppsFetcher;
 };
 
 }  // namespace blink

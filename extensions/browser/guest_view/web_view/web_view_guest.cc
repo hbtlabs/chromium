@@ -62,6 +62,7 @@
 #include "ipc/ipc_message_macros.h"
 #include "net/base/escape.h"
 #include "net/base/net_errors.h"
+#include "net/cookies/canonical_cookie.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "url/url_constants.h"
@@ -70,7 +71,6 @@ using base::UserMetricsAction;
 using content::GlobalRequestID;
 using content::RenderFrameHost;
 using content::RenderProcessHost;
-using content::ResourceType;
 using content::StoragePartition;
 using content::WebContents;
 using guest_view::GuestViewBase;
@@ -88,8 +88,12 @@ uint32_t GetStoragePartitionRemovalMask(uint32_t web_view_removal_mask) {
   uint32_t mask = 0;
   if (web_view_removal_mask & webview::WEB_VIEW_REMOVE_DATA_MASK_APPCACHE)
     mask |= StoragePartition::REMOVE_DATA_MASK_APPCACHE;
-  if (web_view_removal_mask & webview::WEB_VIEW_REMOVE_DATA_MASK_COOKIES)
+  if (web_view_removal_mask &
+      (webview::WEB_VIEW_REMOVE_DATA_MASK_COOKIES |
+       webview::WEB_VIEW_REMOVE_DATA_MASK_SESSION_COOKIES |
+       webview::WEB_VIEW_REMOVE_DATA_MASK_PERSISTENT_COOKIES)) {
     mask |= StoragePartition::REMOVE_DATA_MASK_COOKIES;
+  }
   if (web_view_removal_mask & webview::WEB_VIEW_REMOVE_DATA_MASK_FILE_SYSTEMS)
     mask |= StoragePartition::REMOVE_DATA_MASK_FILE_SYSTEMS;
   if (web_view_removal_mask & webview::WEB_VIEW_REMOVE_DATA_MASK_INDEXEDDB)
@@ -402,8 +406,6 @@ void WebViewGuest::DidInitialize(const base::DictionaryValue& create_params) {
                               content::NOTIFICATION_RESOURCE_RECEIVED_REDIRECT,
                               content::Source<WebContents>(web_contents()));
 
-  if (web_view_guest_delegate_)
-    web_view_guest_delegate_->OnDidInitialize();
   ExtensionsAPIClient::Get()->AttachWebContentsHelpers(web_contents());
   web_view_permission_helper_.reset(new WebViewPermissionHelper(this));
 
@@ -428,15 +430,41 @@ void WebViewGuest::ClearDataInternal(base::Time remove_since,
     callback.Run();
     return;
   }
+
+  content::StoragePartition::CookieMatcherFunction cookie_matcher;
+
+  bool remove_session_cookies =
+      !!(removal_mask & webview::WEB_VIEW_REMOVE_DATA_MASK_SESSION_COOKIES);
+  bool remove_persistent_cookies =
+      !!(removal_mask & webview::WEB_VIEW_REMOVE_DATA_MASK_PERSISTENT_COOKIES);
+  bool remove_all_cookies =
+      (!!(removal_mask & webview::WEB_VIEW_REMOVE_DATA_MASK_COOKIES)) ||
+      (remove_session_cookies && remove_persistent_cookies);
+
+  // Leaving the cookie_matcher unset will cause all cookies to be purged.
+  if (!remove_all_cookies) {
+    if (remove_session_cookies) {
+      cookie_matcher =
+          base::Bind([](const net::CanonicalCookie& cookie) -> bool {
+            return !cookie.IsPersistent();
+          });
+    } else if (remove_persistent_cookies) {
+      cookie_matcher =
+          base::Bind([](const net::CanonicalCookie& cookie) -> bool {
+            return cookie.IsPersistent();
+          });
+    }
+  }
+
   content::StoragePartition* partition =
       content::BrowserContext::GetStoragePartition(
           web_contents()->GetBrowserContext(),
           web_contents()->GetSiteInstance());
   partition->ClearData(
       storage_partition_removal_mask,
-      content::StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL, GURL(),
-      content::StoragePartition::OriginMatcherFunction(), remove_since,
-      base::Time::Now(), callback);
+      content::StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL,
+      content::StoragePartition::OriginMatcherFunction(), cookie_matcher,
+      remove_since, base::Time::Now(), callback);
 }
 
 void WebViewGuest::GuestViewDidStopLoading() {
@@ -474,7 +502,8 @@ void WebViewGuest::GuestDestroyed() {
 void WebViewGuest::GuestReady() {
   // The guest RenderView should always live in an isolated guest process.
   CHECK(web_contents()->GetRenderProcessHost()->IsForGuestsOnly());
-  Send(new ExtensionMsg_SetFrameName(web_contents()->GetRoutingID(), name_));
+  Send(new ExtensionMsg_SetFrameName(
+      web_contents()->GetRenderViewHost()->GetRoutingID(), name_));
 
   // We don't want to accidentally set the opacity of an interstitial page.
   // WebContents::GetRenderWidgetHostView will return the RWHV of an
@@ -726,7 +755,7 @@ void WebViewGuest::Reload() {
   // TODO(fsamuel): Don't check for repost because we don't want to show
   // Chromium's repost warning. We might want to implement a separate API
   // for registering a callback if a repost is about to happen.
-  web_contents()->GetController().Reload(false);
+  web_contents()->GetController().Reload(content::ReloadType::NORMAL, false);
 }
 
 void WebViewGuest::SetUserAgentOverride(
@@ -862,6 +891,10 @@ void WebViewGuest::DidFinishNavigation(
 
 void WebViewGuest::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
+  // loadStart shouldn't be sent for same page navigations.
+  if (navigation_handle->IsSamePage())
+    return;
+
   std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
   args->SetString(guest_view::kUrl, navigation_handle->GetURL().spec());
   args->SetBoolean(guest_view::kIsTopLevel, navigation_handle->IsInMainFrame());
@@ -887,7 +920,7 @@ void WebViewGuest::UserAgentOverrideSet(const std::string& user_agent) {
   if (!entry)
     return;
   entry->SetIsOverridingUserAgent(!user_agent.empty());
-  web_contents()->GetController().Reload(false);
+  web_contents()->GetController().Reload(content::ReloadType::NORMAL, false);
 }
 
 void WebViewGuest::FrameNameChanged(RenderFrameHost* render_frame_host,
@@ -953,12 +986,11 @@ void WebViewGuest::PushWebViewStateToIOThread() {
       web_view_info.embedder_process_id, web_view_info.instance_id);
 
   content::BrowserThread::PostTask(
-      content::BrowserThread::IO,
-      FROM_HERE,
+      content::BrowserThread::IO, FROM_HERE,
       base::Bind(&WebViewRendererState::AddGuest,
                  base::Unretained(WebViewRendererState::GetInstance()),
                  web_contents()->GetRenderProcessHost()->GetID(),
-                 web_contents()->GetRoutingID(),
+                 web_contents()->GetRenderViewHost()->GetRoutingID(),
                  web_view_info));
 }
 
@@ -967,11 +999,10 @@ void WebViewGuest::RemoveWebViewStateFromIOThread(
     WebContents* web_contents) {
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(
-          &WebViewRendererState::RemoveGuest,
-          base::Unretained(WebViewRendererState::GetInstance()),
-          web_contents->GetRenderProcessHost()->GetID(),
-          web_contents->GetRoutingID()));
+      base::Bind(&WebViewRendererState::RemoveGuest,
+                 base::Unretained(WebViewRendererState::GetInstance()),
+                 web_contents->GetRenderProcessHost()->GetID(),
+                 web_contents->GetRenderViewHost()->GetRoutingID()));
 }
 
 void WebViewGuest::RequestMediaAccessPermission(
@@ -1063,18 +1094,18 @@ bool WebViewGuest::HandleKeyboardShortcuts(
     return false;
   }
 
-  if (event.type != blink::WebInputEvent::RawKeyDown)
+  if (event.type() != blink::WebInputEvent::RawKeyDown)
     return false;
 
   // If the user hits the escape key without any modifiers then unlock the
   // mouse if necessary.
   if ((event.windowsKeyCode == ui::VKEY_ESCAPE) &&
-      !(event.modifiers & blink::WebInputEvent::InputModifiers)) {
+      !(event.modifiers() & blink::WebInputEvent::InputModifiers)) {
     return web_contents()->GotResponseToLockMouseRequest(false);
   }
 
 #if defined(OS_MACOSX)
-  if (event.modifiers != blink::WebInputEvent::MetaKey)
+  if (event.modifiers() != blink::WebInputEvent::MetaKey)
     return false;
 
   if (event.windowsKeyCode == ui::VKEY_OEM_4) {
@@ -1375,6 +1406,16 @@ void WebViewGuest::ExitFullscreenModeForTab(WebContents* web_contents) {
 bool WebViewGuest::IsFullscreenForTabOrPending(
     const WebContents* web_contents) const {
   return is_guest_fullscreen_;
+}
+
+void WebViewGuest::RequestToLockMouse(WebContents* web_contents,
+                                      bool user_gesture,
+                                      bool last_unlocked_by_target) {
+  RequestPointerLockPermission(
+      user_gesture, last_unlocked_by_target,
+      base::Bind(
+          base::IgnoreResult(&WebContents::GotResponseToLockMouseRequest),
+          base::Unretained(web_contents)));
 }
 
 void WebViewGuest::LoadURLWithParams(

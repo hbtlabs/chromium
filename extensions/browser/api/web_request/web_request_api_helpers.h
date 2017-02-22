@@ -16,7 +16,6 @@
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
-#include "content/public/common/resource_type.h"
 #include "extensions/browser/warning_set.h"
 #include "net/base/auth.h"
 #include "net/http/http_request_headers.h"
@@ -25,12 +24,7 @@
 
 namespace base {
 class ListValue;
-class Value;
 class DictionaryValue;
-}
-
-namespace content {
-class RenderProcessHost;
 }
 
 namespace extensions {
@@ -39,7 +33,6 @@ class Extension;
 
 namespace net {
 class NetLogWithSource;
-class URLRequest;
 }
 
 namespace extension_web_request_api_helpers {
@@ -264,7 +257,8 @@ void MergeCancelOfResponses(const EventResponseDeltas& deltas,
 // Stores in |*new_url| the redirect request of the extension with highest
 // precedence. Extensions that did not command to redirect the request are
 // ignored in this logic.
-void MergeRedirectUrlOfResponses(const EventResponseDeltas& deltas,
+void MergeRedirectUrlOfResponses(const GURL& url,
+                                 const EventResponseDeltas& deltas,
                                  GURL* new_url,
                                  extensions::WarningSet* conflicting_extensions,
                                  const net::NetLogWithSource* net_log);
@@ -272,6 +266,7 @@ void MergeRedirectUrlOfResponses(const EventResponseDeltas& deltas,
 // precedence. Extensions that did not command to redirect the request are
 // ignored in this logic.
 void MergeOnBeforeRequestResponses(
+    const GURL& url,
     const EventResponseDeltas& deltas,
     GURL* new_url,
     extensions::WarningSet* conflicting_extensions,
@@ -308,6 +303,7 @@ void MergeCookiesInOnHeadersReceivedResponses(
 // (to request redirection) and |*allowed_unsafe_redirect_url| (to make sure
 // that the request is not cancelled with net::ERR_UNSAFE_REDIRECT).
 void MergeOnHeadersReceivedResponses(
+    const GURL& url,
     const EventResponseDeltas& deltas,
     const net::HttpResponseHeaders* original_response_headers,
     scoped_refptr<net::HttpResponseHeaders>* override_response_headers,
@@ -334,20 +330,6 @@ void ClearCacheOnNavigation();
 std::unique_ptr<base::DictionaryValue> CreateHeaderDictionary(
     const std::string& name,
     const std::string& value);
-
-// Returns whether |type| is a ResourceType that is handled by the web request
-// API.
-bool IsRelevantResourceType(content::ResourceType type);
-
-// Returns a string representation of |type| or |other| if |type| is not handled
-// by the web request API.
-const char* ResourceTypeToString(content::ResourceType type);
-
-// Stores a |content::ResourceType| representation in |types| if |type_str| is
-// a resource type handled by the web request API. Returns true in case of
-// success.
-bool ParseResourceType(const std::string& type_str,
-                       std::vector<content::ResourceType>* types);
 
 }  // namespace extension_web_request_api_helpers
 

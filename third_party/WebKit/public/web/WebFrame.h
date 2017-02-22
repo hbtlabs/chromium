@@ -39,12 +39,9 @@
 #include "public/web/WebTreeScopeType.h"
 #include <memory>
 
-struct NPObject;
-
 namespace v8 {
 class Context;
 class Function;
-class Object;
 class Value;
 template <class T>
 class Local;
@@ -63,7 +60,6 @@ class WebDataSource;
 class WebDocument;
 class WebElement;
 class WebFrameImplBase;
-class WebLayer;
 class WebLocalFrame;
 class WebPerformance;
 class WebRemoteFrame;
@@ -74,7 +70,6 @@ class WebURL;
 class WebURLRequest;
 class WebView;
 enum class WebSandboxFlags;
-struct WebConsoleMessage;
 struct WebFrameOwnerProperties;
 struct WebPrintParams;
 struct WebRect;
@@ -142,11 +137,6 @@ class WebFrame {
   // URLs
   virtual WebVector<WebIconURL> iconURLs(int iconTypesMask) const = 0;
 
-  // For a WebFrame with contents being rendered in another process, this
-  // sets a layer for use by the in-process compositor. WebLayer should be
-  // null if the content is being rendered in the current process.
-  virtual void setRemoteWebLayer(WebLayer*) = 0;
-
   // Initializes the various client interfaces.
   virtual void setSharedWorkerRepositoryClient(
       WebSharedWorkerRepositoryClient*) = 0;
@@ -179,7 +169,7 @@ class WebFrame {
   virtual void setCanHaveScrollbars(bool) = 0;
 
   // The scroll offset from the top-left corner of the frame in pixels.
-  virtual WebSize scrollOffset() const = 0;
+  virtual WebSize getScrollOffset() const = 0;
   virtual void setScrollOffset(const WebSize&) = 0;
 
   // The size of the contents area.
@@ -254,16 +244,12 @@ class WebFrame {
   // The script gets its own global scope and its own prototypes for
   // intrinsic JavaScript objects (String, Array, and so-on). It also
   // gets its own wrappers for all DOM nodes and DOM constructors.
-  // extensionGroup is an embedder-provided specifier that controls which
-  // v8 extensions are loaded into the new context - see
-  // blink::registerExtension for the corresponding specifier.
   //
   // worldID must be > 0 (as 0 represents the main world).
   // worldID must be < EmbedderWorldIdLimit, high number used internally.
   virtual void executeScriptInIsolatedWorld(int worldID,
                                             const WebScriptSource* sources,
-                                            unsigned numSources,
-                                            int extensionGroup) = 0;
+                                            unsigned numSources) = 0;
 
   // Associates an isolated world (see above for description) with a security
   // origin. XMLHttpRequest instances used in that world will be considered
@@ -281,9 +267,6 @@ class WebFrame {
   virtual void setIsolatedWorldContentSecurityPolicy(int worldID,
                                                      const WebString&) = 0;
 
-  // Logs to the console associated with this frame.
-  virtual void addMessageToConsole(const WebConsoleMessage&) = 0;
-
   // Calls window.gc() if it is defined.
   virtual void collectGarbage() = 0;
 
@@ -300,7 +283,6 @@ class WebFrame {
       int worldID,
       const WebScriptSource* sourcesIn,
       unsigned numSources,
-      int extensionGroup,
       WebVector<v8::Local<v8::Value>>* results) = 0;
 
   // Call the function with the given receiver and arguments, bypassing
@@ -329,13 +311,12 @@ class WebFrame {
   // Reload the current document.
   // Note: reload() and reloadWithOverrideURL() will be deprecated.
   // Do not use these APIs any more, but use loadRequest() instead.
-  virtual void reload(WebFrameLoadType = WebFrameLoadType::Reload) = 0;
+  virtual void reload(WebFrameLoadType) = 0;
 
   // This is used for situations where we want to reload a different URL because
   // of a redirect.
-  virtual void reloadWithOverrideURL(
-      const WebURL& overrideUrl,
-      WebFrameLoadType = WebFrameLoadType::Reload) = 0;
+  virtual void reloadWithOverrideURL(const WebURL& overrideUrl,
+                                     WebFrameLoadType) = 0;
 
   // Load the given URL.
   virtual void loadRequest(const WebURLRequest&) = 0;
@@ -367,12 +348,6 @@ class WebFrame {
   // out invalid referrers (e.g., it is invalid to send a HTTPS URL as
   // the referrer for a HTTP request).
   virtual void setReferrerForRequest(WebURLRequest&, const WebURL&) = 0;
-
-  // Called to associate the WebURLRequest with this frame.  The request
-  // will be modified to inherit parameters that allow it to be loaded.
-  // This method ends up triggering WebFrameClient::willSendRequest.
-  // DEPRECATED: Please use createAssociatedURLLoader instead.
-  virtual void dispatchWillSendRequest(WebURLRequest&) = 0;
 
   // Returns an AssociatedURLLoader that is associated with this frame.  The
   // loader will, for example, be cancelled when WebFrame::stopLoading is
@@ -458,9 +433,7 @@ class WebFrame {
   bool inShadowTree() const { return m_scope == WebTreeScopeType::Shadow; }
 
   static void traceFrames(Visitor*, WebFrame*);
-  static void traceFrames(InlinedGlobalMarkingVisitor, WebFrame*);
   void clearWeakFrames(Visitor*);
-  void clearWeakFrames(InlinedGlobalMarkingVisitor);
 #endif
 
  protected:
@@ -479,15 +452,7 @@ class WebFrame {
   friend class WebFrameTest;
 
   static void traceFrame(Visitor*, WebFrame*);
-  static void traceFrame(InlinedGlobalMarkingVisitor, WebFrame*);
   static bool isFrameAlive(const WebFrame*);
-
-  template <typename VisitorDispatcher>
-  static void traceFramesImpl(VisitorDispatcher, WebFrame*);
-  template <typename VisitorDispatcher>
-  void clearWeakFramesImpl(VisitorDispatcher);
-  template <typename VisitorDispatcher>
-  static void traceFrameImpl(VisitorDispatcher, WebFrame*);
 #endif
 
   const WebTreeScopeType m_scope;

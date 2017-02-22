@@ -139,9 +139,6 @@ class VIEWS_EXPORT Textfield : public View,
   void SetSelectionBackgroundColor(SkColor color);
   void UseDefaultSelectionBackgroundColor();
 
-  // Set drop shadows underneath the text.
-  void SetShadows(const gfx::ShadowValues& shadows);
-
   // Gets/Sets whether or not the cursor is enabled.
   bool GetCursorEnabled() const;
   void SetCursorEnabled(bool enabled);
@@ -320,7 +317,7 @@ class VIEWS_EXPORT Textfield : public View,
   bool ChangeTextDirectionAndLayoutAlignment(
       base::i18n::TextDirection direction) override;
   void ExtendSelectionAndDelete(size_t before, size_t after) override;
-  void EnsureCaretInRect(const gfx::Rect& rect) override;
+  void EnsureCaretNotInRect(const gfx::Rect& rect) override;
   bool IsTextEditCommandEnabled(ui::TextEditCommand command) const override;
   void SetTextEditCommandForNextKeyEvent(ui::TextEditCommand command) override;
 
@@ -376,8 +373,8 @@ class VIEWS_EXPORT Textfield : public View,
   // A callback function to periodically update the cursor node_data.
   void UpdateCursor();
 
-  // Repaint the cursor.
-  void RepaintCursor();
+  // Update the cursor position in the text field.
+  void UpdateCursorView();
 
   void PaintTextAndCursor(gfx::Canvas* canvas);
 
@@ -526,6 +523,9 @@ class VIEWS_EXPORT Textfield : public View,
   // Context menu related members.
   std::unique_ptr<ui::SimpleMenuModel> context_menu_contents_;
   std::unique_ptr<views::MenuRunner> context_menu_runner_;
+
+  // View containing the text cursor.
+  View cursor_view_;
 
   // Used to bind callback functions to this object.
   base::WeakPtrFactory<Textfield> weak_ptr_factory_;

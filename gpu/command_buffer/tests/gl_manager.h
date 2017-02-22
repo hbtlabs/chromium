@@ -10,7 +10,6 @@
 
 #include <memory>
 
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/memory/ref_counted.h"
 #include "gpu/command_buffer/client/gpu_control.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
@@ -43,13 +42,10 @@ class TransferBuffer;
 
 namespace gles2 {
 
-class ContextGroup;
 class MailboxManager;
 class GLES2Decoder;
 class GLES2CmdHelper;
 class GLES2Implementation;
-class ImageManager;
-class ShareGroup;
 
 };
 
@@ -103,6 +99,8 @@ class GLManager : private GpuControl {
 
   void SetSurface(gl::GLSurface* surface);
 
+  void PerformIdleWork();
+
   void set_use_iosurface_memory_buffers(bool use_iosurface_memory_buffers) {
     use_iosurface_memory_buffers_ = use_iosurface_memory_buffers;
   }
@@ -135,10 +133,6 @@ class GLManager : private GpuControl {
                       size_t height,
                       unsigned internalformat) override;
   void DestroyImage(int32_t id) override;
-  int32_t CreateGpuMemoryBufferImage(size_t width,
-                                     size_t height,
-                                     unsigned internalformat,
-                                     unsigned usage) override;
   void SignalQuery(uint32_t query, const base::Closure& callback) override;
   void SetLock(base::Lock*) override;
   void EnsureWorkVisible() override;
@@ -149,6 +143,7 @@ class GLManager : private GpuControl {
   bool IsFenceSyncRelease(uint64_t release) override;
   bool IsFenceSyncFlushed(uint64_t release) override;
   bool IsFenceSyncFlushReceived(uint64_t release) override;
+  bool IsFenceSyncReleased(uint64_t release) override;
   void SignalSyncToken(const gpu::SyncToken& sync_token,
                        const base::Closure& callback) override;
   bool CanWaitUnverifiedSyncToken(const gpu::SyncToken* sync_token) override;

@@ -14,12 +14,12 @@ var CrPolicyPrefBehavior = {
    */
   isPrefPolicyControlled: function(pref) {
     return pref.enforcement == chrome.settingsPrivate.Enforcement.ENFORCED &&
-           pref.controlledBy != chrome.settingsPrivate.ControlledBy.EXTENSION;
+        pref.controlledBy != chrome.settingsPrivate.ControlledBy.EXTENSION;
   },
 
   /**
-   * @param {chrome.settingsPrivate.ControlledBy} controlledBy
-   * @param {chrome.settingsPrivate.Enforcement} enforcement
+   * @param {!chrome.settingsPrivate.ControlledBy|undefined} controlledBy
+   * @param {!chrome.settingsPrivate.Enforcement|undefined} enforcement
    * @return {CrPolicyIndicatorType} The indicator type based on |controlledBy|
    *     and |enforcement|.
    */

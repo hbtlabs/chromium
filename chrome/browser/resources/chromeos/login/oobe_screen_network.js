@@ -43,10 +43,15 @@ login.createScreen('NetworkScreen', 'connect', function() {
 
       var languageList = loadTimeData.getValue('languageList');
       welcomeScreen.languages = languageList;
-      welcomeScreen.currentLanguage = Oobe.getSelectedTitle(languageList);
 
       var inputMethodsList = loadTimeData.getValue('inputMethodsList');
       welcomeScreen.keyboards = inputMethodsList;
+
+      var timezoneList = loadTimeData.getValue('timezoneList');
+      welcomeScreen.timezones = timezoneList;
+
+      welcomeScreen.highlightStrength =
+          loadTimeData.getValue('highlightStrength');
       // -------------------------
 
       this.dropdown_ = $('networks-list');
@@ -99,8 +104,11 @@ login.createScreen('NetworkScreen', 'connect', function() {
     onBeforeShow: function(data) {
       this.setMDMode_();
       cr.ui.DropDown.show('networks-list', true, -1);
-      this.classList.toggle('connect-debugging-view',
-        data && 'isDeveloperMode' in data && data['isDeveloperMode']);
+      var debuggingLinkVisible =
+        data && 'isDeveloperMode' in data && data['isDeveloperMode'];
+
+      this.classList.toggle('connect-debugging-view', debuggingLinkVisible);
+      $('oobe-welcome-md').debuggingLinkVisible = debuggingLinkVisible;
     },
 
     onBeforeHide: function() {
@@ -138,6 +146,9 @@ login.createScreen('NetworkScreen', 'connect', function() {
      * Returns a control which should receive an initial focus.
      */
     get defaultControl() {
+      if (loadTimeData.getString('newOobeUI') == 'on')
+        return $('oobe-welcome-md');
+
       return $('language-select');
     },
 
@@ -178,11 +189,16 @@ login.createScreen('NetworkScreen', 'connect', function() {
       if (useMDOobe) {
         var welcomeScreen = $('oobe-welcome-md');
         var languageList = loadTimeData.getValue('languageList');
-        welcomeScreen.currentLanguage = Oobe.getSelectedTitle(languageList);
         welcomeScreen.languages = languageList;
 
         welcomeScreen.keyboards = loadTimeData.getValue('inputMethodsList');
         welcomeScreen.enabled = true;
+
+        var timezoneList = loadTimeData.getValue('timezoneList');
+        welcomeScreen.timezones = timezoneList;
+
+        welcomeScreen.highlightStrength =
+            loadTimeData.getValue('highlightStrength');
       }
     },
   };

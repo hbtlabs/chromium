@@ -3,9 +3,8 @@
 # found in the LICENSE file.
 
 source_set("suggestions") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
-    "image_fetcher_impl.h",
-    "image_fetcher_impl.mm",
     "ios_image_decoder_impl.h",
     "ios_image_decoder_impl.mm",
     "suggestions_service_factory.h",
@@ -15,16 +14,14 @@ source_set("suggestions") {
     "//base",
     "//components/browser_sync",
     "//components/image_fetcher",
+    "//components/image_fetcher/ios",
     "//components/keyed_service/ios",
     "//components/leveldb_proto",
     "//components/signin/core/browser",
     "//components/suggestions",
     "//ios/chrome/browser/browser_state",
-    "//ios/chrome/browser/net",
-    "//ios/chrome/browser/net",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/sync",
-    "//ios/chrome/browser/webp_transcode",
     "//ios/web",
     "//net",
     "//skia",
@@ -33,6 +30,7 @@ source_set("suggestions") {
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "ios_image_decoder_impl_unittest.mm",

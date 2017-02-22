@@ -52,8 +52,6 @@ class ChloExtractorTest : public ::testing::Test {
     header_.public_header.reset_flag = false;
     header_.public_header.packet_number_length = PACKET_6BYTE_PACKET_NUMBER;
     header_.packet_number = 1;
-    header_.entropy_flag = false;
-    header_.entropy_hash = 0;
   }
 
   void MakePacket(QuicStreamFrame* stream_frame) {
@@ -65,9 +63,9 @@ class ChloExtractorTest : public ::testing::Test {
     std::unique_ptr<QuicPacket> packet(
         BuildUnsizedDataPacket(&framer, header_, frames));
     EXPECT_TRUE(packet != nullptr);
-    size_t encrypted_length = framer.EncryptPayload(
-        ENCRYPTION_NONE, header_.path_id, header_.packet_number, *packet,
-        buffer_, arraysize(buffer_));
+    size_t encrypted_length =
+        framer.EncryptPayload(ENCRYPTION_NONE, header_.packet_number, *packet,
+                              buffer_, arraysize(buffer_));
     ASSERT_NE(0u, encrypted_length);
     packet_.reset(new QuicEncryptedPacket(buffer_, encrypted_length));
     EXPECT_TRUE(packet_ != nullptr);

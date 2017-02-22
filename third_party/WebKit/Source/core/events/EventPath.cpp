@@ -119,7 +119,7 @@ void EventPath::calculatePath() {
     current = correspondingUseElement;
   }
 
-  nodesInPath.append(current);
+  nodesInPath.push_back(current);
   while (current) {
     if (m_event && current->keepEventInNode(m_event))
       break;
@@ -132,9 +132,9 @@ void EventPath::calculatePath() {
               insertionPoint->containingShadowRoot();
           DCHECK(containingShadowRoot);
           if (!containingShadowRoot->isOldest())
-            nodesInPath.append(containingShadowRoot->olderShadowRoot());
+            nodesInPath.push_back(containingShadowRoot->olderShadowRoot());
         }
-        nodesInPath.append(insertionPoint);
+        nodesInPath.push_back(insertionPoint);
       }
       current = insertionPoints.back();
       continue;
@@ -142,7 +142,7 @@ void EventPath::calculatePath() {
     if (current->isChildOfV1ShadowHost()) {
       if (HTMLSlotElement* slot = current->assignedSlot()) {
         current = slot;
-        nodesInPath.append(current);
+        nodesInPath.push_back(current);
         continue;
       }
     }
@@ -151,17 +151,17 @@ void EventPath::calculatePath() {
           shouldStopAtShadowRoot(*m_event, *toShadowRoot(current), *m_node))
         break;
       current = current->ownerShadowHost();
-      nodesInPath.append(current);
+      nodesInPath.push_back(current);
     } else {
       current = current->parentNode();
       if (current)
-        nodesInPath.append(current);
+        nodesInPath.push_back(current);
     }
   }
 
   m_nodeEventContexts.reserveCapacity(nodesInPath.size());
   for (Node* nodeInPath : nodesInPath) {
-    m_nodeEventContexts.append(NodeEventContext(
+    m_nodeEventContexts.push_back(NodeEventContext(
         nodeInPath, eventTargetRespectingTargetRules(*nodeInPath)));
   }
 }
@@ -174,8 +174,8 @@ void EventPath::calculateTreeOrderAndSetNearestAncestorClosedTree() {
   HeapHashMap<Member<const TreeScope>, Member<TreeScopeEventContext>>
       treeScopeEventContextMap;
   for (const auto& treeScopeEventContext : m_treeScopeEventContexts)
-    treeScopeEventContextMap.add(&treeScopeEventContext->treeScope(),
-                                 treeScopeEventContext.get());
+    treeScopeEventContextMap.insert(&treeScopeEventContext->treeScope(),
+                                    treeScopeEventContext.get());
   TreeScopeEventContext* rootTree = nullptr;
   for (const auto& treeScopeEventContext : m_treeScopeEventContexts) {
     // Use olderShadowRootOrParentTreeScope here for parent-child relationships.
@@ -208,7 +208,7 @@ TreeScopeEventContext* EventPath::ensureTreeScopeEventContext(
   bool isNewEntry;
   {
     TreeScopeEventContextMap::AddResult addResult =
-        treeScopeEventContextMap.add(treeScope, nullptr);
+        treeScopeEventContextMap.insert(treeScope, nullptr);
     isNewEntry = addResult.isNewEntry;
     if (isNewEntry)
       addResult.storedValue->value = TreeScopeEventContext::create(*treeScope);
@@ -238,15 +238,15 @@ void EventPath::calculateAdjustedTargets() {
   TreeScopeEventContextMap treeScopeEventContextMap;
   TreeScopeEventContext* lastTreeScopeEventContext = nullptr;
 
-  for (size_t i = 0; i < size(); ++i) {
-    Node* currentNode = at(i).node();
+  for (auto& context : m_nodeEventContexts) {
+    Node* currentNode = context.node();
     TreeScope& currentTreeScope = currentNode->treeScope();
     if (lastTreeScope != &currentTreeScope) {
       lastTreeScopeEventContext = ensureTreeScopeEventContext(
           currentNode, &currentTreeScope, treeScopeEventContextMap);
     }
     DCHECK(lastTreeScopeEventContext);
-    at(i).setTreeScopeEventContext(lastTreeScopeEventContext);
+    context.setTreeScopeEventContext(lastTreeScopeEventContext);
     lastTreeScope = &currentTreeScope;
   }
   m_treeScopeEventContexts.appendRange(
@@ -258,12 +258,10 @@ void EventPath::buildRelatedNodeMap(const Node& relatedNode,
                                     RelatedTargetMap& relatedTargetMap) {
   EventPath* relatedTargetEventPath =
       new EventPath(const_cast<Node&>(relatedNode));
-  for (size_t i = 0;
-       i < relatedTargetEventPath->m_treeScopeEventContexts.size(); ++i) {
-    TreeScopeEventContext* treeScopeEventContext =
-        relatedTargetEventPath->m_treeScopeEventContexts[i].get();
-    relatedTargetMap.add(&treeScopeEventContext->treeScope(),
-                         treeScopeEventContext->target());
+  for (const auto& treeScopeEventContext :
+       relatedTargetEventPath->m_treeScopeEventContexts) {
+    relatedTargetMap.insert(&treeScopeEventContext->treeScope(),
+                            treeScopeEventContext->target());
   }
   // Oilpan: It is important to explicitly clear the vectors to reuse
   // the memory in subsequent event dispatchings.
@@ -276,7 +274,7 @@ EventTarget* EventPath::findRelatedNode(TreeScope& scope,
   EventTarget* relatedNode = nullptr;
   for (TreeScope* current = &scope; current;
        current = current->olderShadowRootOrParentTreeScope()) {
-    parentTreeScopes.append(current);
+    parentTreeScopes.push_back(current);
     RelatedTargetMap::const_iterator iter = relatedTargetMap.find(current);
     if (iter != relatedTargetMap.end() && iter->value) {
       relatedNode = iter->value;
@@ -285,7 +283,7 @@ EventTarget* EventPath::findRelatedNode(TreeScope& scope,
   }
   DCHECK(relatedNode);
   for (const auto& entry : parentTreeScopes)
-    relatedTargetMap.add(entry, relatedNode);
+    relatedTargetMap.insert(entry, relatedNode);
 
   return relatedNode;
 }
@@ -346,10 +344,10 @@ void EventPath::adjustForTouchEvent(TouchEvent& touchEvent) {
   for (const auto& treeScopeEventContext : m_treeScopeEventContexts) {
     TouchEventContext* touchEventContext =
         treeScopeEventContext->ensureTouchEventContext();
-    adjustedTouches.append(&touchEventContext->touches());
-    adjustedTargetTouches.append(&touchEventContext->targetTouches());
-    adjustedChangedTouches.append(&touchEventContext->changedTouches());
-    treeScopes.append(&treeScopeEventContext->treeScope());
+    adjustedTouches.push_back(&touchEventContext->touches());
+    adjustedTargetTouches.push_back(&touchEventContext->targetTouches());
+    adjustedChangedTouches.push_back(&touchEventContext->changedTouches());
+    treeScopes.push_back(&treeScopeEventContext->treeScope());
   }
 
   adjustTouchList(touchEvent.touches(), adjustedTouches, treeScopes);

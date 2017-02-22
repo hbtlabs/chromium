@@ -25,6 +25,8 @@
 #include "core/layout/svg/SVGResources.h"
 #include "core/layout/svg/SVGResourcesCache.h"
 #include "core/style/ComputedStyle.h"
+#include "platform/graphics/paint/PaintCanvas.h"
+#include "platform/graphics/paint/PaintFlags.h"
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "third_party/skia/include/core/SkPaint.h"
 
@@ -40,15 +42,15 @@ SVGPaintServer::SVGPaintServer(PassRefPtr<Pattern> pattern,
                                const AffineTransform& transform)
     : m_pattern(pattern), m_transform(transform), m_color(Color::black) {}
 
-void SVGPaintServer::applyToSkPaint(SkPaint& paint, float paintAlpha) {
+void SVGPaintServer::applyToPaintFlags(PaintFlags& flags, float alpha) {
   SkColor baseColor = m_gradient || m_pattern ? SK_ColorBLACK : m_color.rgb();
-  paint.setColor(scaleAlpha(baseColor, paintAlpha));
+  flags.setColor(scaleAlpha(baseColor, alpha));
   if (m_pattern) {
-    m_pattern->applyToPaint(paint, affineTransformToSkMatrix(m_transform));
+    m_pattern->applyToFlags(flags, affineTransformToSkMatrix(m_transform));
   } else if (m_gradient) {
-    m_gradient->applyToPaint(paint, affineTransformToSkMatrix(m_transform));
+    m_gradient->applyToFlags(flags, affineTransformToSkMatrix(m_transform));
   } else {
-    paint.setShader(nullptr);
+    flags.setShader(nullptr);
   }
 }
 
@@ -96,7 +98,7 @@ static SVGPaintDescription requestPaint(const LayoutObject& object,
       break;
   }
 
-  if (style.insideLink() == InsideVisitedLink) {
+  if (style.insideLink() == EInsideLink::kInsideVisitedLink) {
     // FIXME: This code doesn't support the uri component of the visited link
     // paint, https://bugs.webkit.org/show_bug.cgi?id=70006
     SVGPaintType visitedPaintType = applyToFill

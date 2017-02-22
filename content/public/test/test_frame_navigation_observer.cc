@@ -4,16 +4,11 @@
 
 #include "content/public/test/test_frame_navigation_observer.h"
 
-#include "base/bind.h"
-#include "base/message_loop/message_loop.h"
-#include "base/run_loop.h"
-#include "base/stl_util.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/public/browser/web_contents_observer.h"
-#include "testing/gtest/include/gtest/gtest.h"
+#include "content/public/browser/navigation_handle.h"
 
 namespace content {
 
@@ -32,8 +27,7 @@ TestFrameNavigationObserver::TestFrameNavigationObserver(
       frame_tree_node_id_(ToRenderFrameHostImpl(adapter)->GetFrameTreeNodeId()),
       navigation_started_(false),
       has_committed_(false),
-      wait_for_commit_(false),
-      message_loop_runner_(new MessageLoopRunner) {
+      wait_for_commit_(false) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
@@ -42,7 +36,7 @@ TestFrameNavigationObserver::~TestFrameNavigationObserver() {}
 void TestFrameNavigationObserver::Wait() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   wait_for_commit_ = false;
-  message_loop_runner_->Run();
+  run_loop_.Run();
 }
 
 void TestFrameNavigationObserver::WaitForCommit() {
@@ -52,37 +46,32 @@ void TestFrameNavigationObserver::WaitForCommit() {
     return;
 
   wait_for_commit_ = true;
-  message_loop_runner_->Run();
+  run_loop_.Run();
 }
 
-void TestFrameNavigationObserver::DidStartProvisionalLoadForFrame(
-    RenderFrameHost* render_frame_host,
-    const GURL& validated_url,
-    bool is_error_page,
-    bool is_iframe_srcdoc) {
-  RenderFrameHostImpl* rfh =
-      static_cast<RenderFrameHostImpl*>(render_frame_host);
-  if (rfh->frame_tree_node()->frame_tree_node_id() == frame_tree_node_id_) {
+void TestFrameNavigationObserver::DidStartNavigation(
+    NavigationHandle* navigation_handle) {
+  if (!navigation_handle->IsSamePage() &&
+      navigation_handle->GetFrameTreeNodeId() == frame_tree_node_id_) {
     navigation_started_ = true;
     has_committed_ = false;
   }
 }
 
-void TestFrameNavigationObserver::DidCommitProvisionalLoadForFrame(
-    RenderFrameHost* render_frame_host,
-    const GURL& url,
-    ui::PageTransition transition_type) {
+void TestFrameNavigationObserver::DidFinishNavigation(
+    NavigationHandle* navigation_handle) {
   if (!navigation_started_)
     return;
 
-  RenderFrameHostImpl* rfh =
-      static_cast<RenderFrameHostImpl*>(render_frame_host);
-  if (rfh->frame_tree_node()->frame_tree_node_id() != frame_tree_node_id_)
+  if (!navigation_handle->HasCommitted() ||
+      navigation_handle->IsErrorPage() ||
+      navigation_handle->GetFrameTreeNodeId() != frame_tree_node_id_) {
     return;
+  }
 
   has_committed_ = true;
   if (wait_for_commit_)
-    message_loop_runner_->Quit();
+    run_loop_.Quit();
 }
 
 void TestFrameNavigationObserver::DidStopLoading() {
@@ -90,7 +79,7 @@ void TestFrameNavigationObserver::DidStopLoading() {
     return;
 
   navigation_started_ = false;
-  message_loop_runner_->Quit();
+  run_loop_.Quit();
 }
 
 }  // namespace content

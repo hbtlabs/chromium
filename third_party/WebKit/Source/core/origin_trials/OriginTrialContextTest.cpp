@@ -73,8 +73,8 @@ class OriginTrialContextTest : public ::testing::Test {
   OriginTrialContextTest()
       : m_frameworkWasEnabled(RuntimeEnabledFeatures::originTrialsEnabled()),
         m_executionContext(new NullExecutionContext()),
-        m_tokenValidator(makeUnique<MockTokenValidator>()),
-        m_originTrialContext(new OriginTrialContext(m_executionContext.get(),
+        m_tokenValidator(WTF::makeUnique<MockTokenValidator>()),
+        m_originTrialContext(new OriginTrialContext(*m_executionContext,
                                                     m_tokenValidator.get())),
         m_histogramTester(new HistogramTester()) {
     RuntimeEnabledFeatures::setOriginTrialsEnabled(true);

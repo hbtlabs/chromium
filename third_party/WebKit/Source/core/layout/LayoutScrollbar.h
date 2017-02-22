@@ -34,21 +34,21 @@
 namespace blink {
 
 class ComputedStyle;
+class Element;
 class LayoutBox;
 class LayoutScrollbarPart;
-class LocalFrame;
-class Node;
 
 class LayoutScrollbar final : public Scrollbar {
  public:
   static Scrollbar* createCustomScrollbar(ScrollableArea*,
                                           ScrollbarOrientation,
-                                          Node*,
-                                          LocalFrame* owningFrame = nullptr);
+                                          Element*);
   ~LayoutScrollbar() override;
 
-  LayoutBox* owningLayoutObject() const;
-  LayoutBox* owningLayoutObjectWithinFrame() const;
+  // The LayoutBox that supplies our style information. If the scrollbar is for
+  // a document, this is either the <body> or <html> element. Otherwise, it is
+  // the element that owns our PaintLayerScrollableArea.
+  LayoutBox* styleSource() const;
 
   IntRect buttonRect(ScrollbarPart) const;
   IntRect trackRect(int startLength, int endLength) const;
@@ -67,10 +67,12 @@ class LayoutScrollbar final : public Scrollbar {
 
   void invalidateDisplayItemClientsOfScrollbarParts();
 
+  void setVisualRect(const LayoutRect&) final;
+
   DECLARE_VIRTUAL_TRACE();
 
  protected:
-  LayoutScrollbar(ScrollableArea*, ScrollbarOrientation, Node*, LocalFrame*);
+  LayoutScrollbar(ScrollableArea*, ScrollbarOrientation, Element*);
 
  private:
   friend class Scrollbar;
@@ -90,15 +92,8 @@ class LayoutScrollbar final : public Scrollbar {
   PassRefPtr<ComputedStyle> getScrollbarPseudoStyle(ScrollbarPart, PseudoId);
   void updateScrollbarPart(ScrollbarPart, bool destroy = false);
 
-  // This Scrollbar(Widget) may outlive the DOM which created it (during tear
-  // down), so we keep a reference to the Node which caused this custom
-  // scrollbar creation.
-  // This will not create a reference cycle as the Widget tree is owned by our
-  // containing FrameView which this Node pointer can in no way keep alive.
-  // See webkit bug 80610.
-  Member<Node> m_owner;
-
-  Member<LocalFrame> m_owningFrame;
+  // The element that supplies our style information.
+  Member<Element> m_styleSource;
 
   HashMap<unsigned, LayoutScrollbarPart*> m_parts;
 };

@@ -42,15 +42,6 @@ static ScopedJavaLocalRef<jstring> GetDownloadWarningText(
                base::android::ConvertJavaStringToUTF16(env, filename)));
 }
 
-// Returns true if a file name is dangerous, or false otherwise.
-static jboolean IsDownloadDangerous(JNIEnv* env,
-                                    const JavaParamRef<jclass>& clazz,
-                                    const JavaParamRef<jstring>& filename) {
-  base::FilePath path(base::android::ConvertJavaStringToUTF8(env, filename));
-  return safe_browsing::FileTypePolicies::GetInstance()->GetFileDangerLevel(
-             path) != safe_browsing::DownloadFileType::NOT_DANGEROUS;
-}
-
 // static
 bool ChromeDownloadDelegate::EnqueueDownloadManagerRequest(
     jobject chrome_download_delegate,
@@ -135,6 +126,31 @@ void ChromeDownloadDelegate::RequestFileAccess(intptr_t callback_id) {
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_ChromeDownloadDelegate_requestFileAccess(
       env, java_ref_, callback_id);
+}
+
+void ChromeDownloadDelegate::EnqueueDownloadManagerRequest(
+    const std::string& url,
+    const std::string& user_agent,
+    const std::string& content_disposition,
+    const std::string& mime_type,
+    const std::string& cookie,
+    const std::string& referer) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jstring> jurl =
+      ConvertUTF8ToJavaString(env, url);
+  ScopedJavaLocalRef<jstring> juser_agent =
+      ConvertUTF8ToJavaString(env, user_agent);
+  ScopedJavaLocalRef<jstring> jcontent_disposition =
+      ConvertUTF8ToJavaString(env, content_disposition);
+  ScopedJavaLocalRef<jstring> jmime_type =
+      ConvertUTF8ToJavaString(env, mime_type);
+  ScopedJavaLocalRef<jstring> jcookie =
+      ConvertUTF8ToJavaString(env, cookie);
+  ScopedJavaLocalRef<jstring> jreferer =
+      ConvertUTF8ToJavaString(env, referer);
+  Java_ChromeDownloadDelegate_enqueueAndroidDownloadManagerRequest(
+      env, java_ref_, jurl, juser_agent, jcontent_disposition, jmime_type,
+      jcookie, jreferer);
 }
 
 void Init(JNIEnv* env,

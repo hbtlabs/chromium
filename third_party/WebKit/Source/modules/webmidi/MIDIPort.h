@@ -34,7 +34,7 @@
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/TraceWrapperMember.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/ExceptionCode.h"
 #include "media/midi/midi_service.mojom-blink.h"
 #include "modules/EventTargetModules.h"
@@ -46,8 +46,8 @@ namespace blink {
 class MIDIAccess;
 
 class MIDIPort : public EventTargetWithInlineData,
-                 public ActiveScriptWrappable,
-                 public ActiveDOMObject {
+                 public ActiveScriptWrappable<MIDIPort>,
+                 public ContextLifecycleObserver {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(MIDIPort);
 
@@ -73,7 +73,6 @@ class MIDIPort : public EventTargetWithInlineData,
   ScriptPromise open(ScriptState*);
   ScriptPromise close(ScriptState*);
 
-  MIDIAccess* midiAccess() const { return m_access; }
   midi::mojom::PortState getState() const { return m_state; }
   void setState(midi::mojom::PortState);
   ConnectionState getConnection() const { return m_connection; }
@@ -93,8 +92,8 @@ class MIDIPort : public EventTargetWithInlineData,
   // ScriptWrappable
   bool hasPendingActivity() const final;
 
-  // ActiveDOMObject
-  void contextDestroyed() override;
+  // ContextLifecycleObserver
+  void contextDestroyed(ExecutionContext*) override;
 
  protected:
   MIDIPort(MIDIAccess*,
@@ -106,6 +105,7 @@ class MIDIPort : public EventTargetWithInlineData,
            midi::mojom::PortState);
 
   void open();
+  MIDIAccess* midiAccess() const { return m_access; }
 
  private:
   ScriptPromise accept(ScriptState*);

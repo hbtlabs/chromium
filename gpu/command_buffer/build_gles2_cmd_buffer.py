@@ -76,6 +76,8 @@ _CAPABILITY_FLAGS = [
   {'name': 'cull_face'},
   {'name': 'depth_test', 'state_flag': 'framebuffer_state_.clear_state_dirty'},
   {'name': 'dither', 'default': True},
+  {'name': 'framebuffer_srgb_ext', 'default': True, 'no_init': True,
+   'extension_flag': 'ext_srgb_write_control'},
   {'name': 'polygon_offset_fill'},
   {'name': 'sample_alpha_to_coverage'},
   {'name': 'sample_coverage'},
@@ -1370,6 +1372,7 @@ _NAMED_TYPE_INFO = {
     'type': 'GLenum',
     'is_complete': True,
     'valid': [
+      'GL_SAMPLES_PASSED_ARB',
       'GL_ANY_SAMPLES_PASSED_EXT',
       'GL_ANY_SAMPLES_PASSED_CONSERVATIVE_EXT',
       'GL_COMMANDS_ISSUED_CHROMIUM',
@@ -1535,6 +1538,14 @@ _NAMED_TYPE_INFO = {
     'valid': [
       'GL_NONE',
       'GL_COMPARE_REF_TO_TEXTURE',
+    ],
+  },
+  'TextureSrgbDecodeExt': {
+    'type': 'GLenum',
+    'is_complete': True,
+    'valid': [
+      'GL_DECODE_EXT',
+      'GL_SKIP_DECODE_EXT',
     ],
   },
   'TextureSwizzle': {
@@ -2135,12 +2146,6 @@ _NAMED_TYPE_INFO = {
       'GL_RGBA',
     ],
   },
-  'ImageUsage': {
-    'type': 'GLenum',
-    'valid': [
-      'GL_READ_WRITE_CHROMIUM',
-    ],
-  },
   'UniformParameter': {
     'type': 'GLenum',
     'is_complete': True,
@@ -2492,6 +2497,9 @@ _FUNCTION_INFO = {
     'decoder_func': 'DoClear',
     'defer_draws': True,
     'trace_level': 2,
+    'valid_args': {
+      '0': 'GL_COLOR_BUFFER_BIT'
+    },
   },
   'ClearBufferiv': {
     'type': 'PUT',
@@ -2654,14 +2662,6 @@ _FUNCTION_INFO = {
   'DestroyImageCHROMIUM': {
     'type': 'NoCommand',
     'extension': "CHROMIUM_image",
-    'trace_level': 1,
-  },
-  'CreateGpuMemoryBufferImageCHROMIUM': {
-    'type': 'NoCommand',
-    'cmd_args':
-        'GLsizei width, GLsizei height, GLenum internalformat, GLenum usage',
-    'result': ['GLuint'],
-    'extension': "CHROMIUM_gpu_memory_buffer_image",
     'trace_level': 1,
   },
   'DescheduleUntilFinishedCHROMIUM': {
@@ -3359,7 +3359,6 @@ _FUNCTION_INFO = {
     'type': 'PUTn',
     'count': 1,
     'decoder_func': 'DoInvalidateFramebuffer',
-    'client_test': False,
     'unit_test': False,
     'es3': True,
   },
@@ -3367,7 +3366,6 @@ _FUNCTION_INFO = {
     'type': 'PUTn',
     'count': 1,
     'decoder_func': 'DoInvalidateSubFramebuffer',
-    'client_test': False,
     'unit_test': False,
     'es3': True,
   },
@@ -3466,6 +3464,12 @@ _FUNCTION_INFO = {
     'es3': True,
     'result': ['uint32_t'],
     'trace_level': 1,
+  },
+  'OverlayPromotionHintCHROMIUM': {
+    'decoder_func': 'DoOverlayPromotionHintCHROMIUM',
+    'extension': "CHROMIUM_uniform_stream_texture_matrix",
+    'unit_test': False,
+    'client_test': False,
   },
   'PauseTransformFeedback': {
     'decoder_func': 'DoPauseTransformFeedback',
@@ -3634,8 +3638,10 @@ _FUNCTION_INFO = {
     'extension': True,
     'trace_level': 1,
   },
-  'SwapBuffersWithDamageCHROMIUM': {
-    'type': 'Custom',
+  'SwapBuffersWithBoundsCHROMIUM': {
+    'type': 'PUTn',
+    'count': 4,
+    'decoder_func': 'DoSwapBuffersWithBoundsCHROMIUM',
     'impl_func': False,
     'client_test': False,
     'extension': True,
@@ -4001,6 +4007,7 @@ _FUNCTION_INFO = {
     'state': 'Scissor',
   },
   'Viewport': {
+    'impl_func': False,
     'decoder_func': 'DoViewport',
   },
   'ResizeCHROMIUM': {
@@ -4060,7 +4067,6 @@ _FUNCTION_INFO = {
     'type': 'PUTn',
     'decoder_func': 'DoDrawBuffersEXT',
     'count': 1,
-    'client_test': False,
     'unit_test': False,
     # could use 'extension_flag': 'ext_draw_buffers' but currently expected to
     # work without.
@@ -4307,7 +4313,6 @@ _FUNCTION_INFO = {
     'count': 1,
     'decoder_func': 'DoDiscardFramebufferEXT',
     'unit_test': False,
-    'client_test': False,
     'extension': 'EXT_discard_framebuffer',
     'extension_flag': 'ext_discard_framebuffer',
     'trace_level': 2,
@@ -4991,6 +4996,7 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
     """Writes the service implementation for a command."""
     self.WritePassthroughServiceFunctionHeader(func, f)
     self.WriteServiceHandlerArgGetCode(func, f)
+    func.WritePassthroughHandlerValidation(f)
     self.WritePassthroughServiceFunctionDoerCall(func, f)
     f.write("  return error::kNoError;\n")
     f.write("}\n")
@@ -5000,6 +5006,7 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
     """Writes the service implementation for a command."""
     self.WritePassthroughServiceFunctionHeader(func, f)
     self.WriteImmediateServiceHandlerArgGetCode(func, f)
+    func.WritePassthroughHandlerValidation(f)
     self.WritePassthroughServiceFunctionDoerCall(func, f)
     f.write("  return error::kNoError;\n")
     f.write("}\n")
@@ -5009,6 +5016,7 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
     """Writes the service implementation for a command."""
     self.WritePassthroughServiceFunctionHeader(func, f)
     self.WriteBucketServiceHandlerArgGetCode(func, f)
+    func.WritePassthroughHandlerValidation(f)
     self.WritePassthroughServiceFunctionDoerCall(func, f)
     f.write("  return error::kNoError;\n")
     f.write("}\n")
@@ -7314,6 +7322,9 @@ TEST_P(%(test_name)s, %(name)sInvalidArgs%(arg_index)d_%(value_index)d) {
 
   def WriteGLES2Implementation(self, func, f):
     """Overrriden from TypeHandler."""
+    impl_func = func.GetInfo('impl_func')
+    if (impl_func != None and impl_func != True):
+      return;
     f.write("%s GLES2Implementation::%s(%s) {\n" %
                (func.return_type, func.original_name,
                 func.MakeTypedOriginalArgString("")))
@@ -7340,6 +7351,10 @@ TEST_P(%(test_name)s, %(name)sInvalidArgs%(arg_index)d_%(value_index)d) {
 
   def WriteGLES2ImplementationUnitTest(self, func, f):
     """Writes the GLES2 Implemention unit test."""
+    client_test = func.GetInfo('client_test', True)
+    if not client_test:
+      return;
+
     code = """
 TEST_F(GLES2ImplementationTest, %(name)s) {
   %(type)s data[%(count_param)d][%(count)d] = {{0}};
@@ -8574,6 +8589,10 @@ class Argument(object):
     """Writes the validation code for an argument."""
     pass
 
+  def WritePassthroughValidationCode(self, f, func):
+    """Writes the passthrough validation code for an argument."""
+    pass
+
   def WriteClientSideValidationCode(self, f, func):
     """Writes the validation code for an argument."""
     pass
@@ -8858,6 +8877,14 @@ class ImmediatePointerArgument(Argument):
     if self.optional:
       return
     f.write("  if (%s == NULL) {\n" % self.name)
+    f.write("    return error::kOutOfBounds;\n")
+    f.write("  }\n")
+
+  def WritePassthroughValidationCode(self, f, func):
+    """Overridden from Argument."""
+    if self.optional:
+      return
+    f.write("  if (%s == nullptr) {\n" % self.name)
     f.write("    return error::kOutOfBounds;\n")
     f.write("  }\n")
 
@@ -9489,6 +9516,11 @@ class Function(object):
     for arg in self.GetOriginalArgs():
       arg.WriteValidationCode(f, self)
     self.WriteValidationCode(f)
+
+  def WritePassthroughHandlerValidation(self, f):
+    """Writes validation code for the function."""
+    for arg in self.GetOriginalArgs():
+      arg.WritePassthroughValidationCode(f, self)
 
   def WriteHandlerImplementation(self, f):
     """Writes the handler implementation for this command."""
@@ -10174,6 +10206,10 @@ void ContextState::InitCapabilities(const ContextState* prev_state) const {
       def WriteCapabilities(test_prev, es3_caps):
         for capability in _CAPABILITY_FLAGS:
           capability_name = capability['name']
+          capability_no_init = 'no_init' in capability and \
+              capability['no_init'] == True
+          if capability_no_init:
+            continue
           capability_es3 = 'es3' in capability and capability['es3'] == True
           if capability_es3 and not es3_caps or not capability_es3 and es3_caps:
             continue
@@ -10459,6 +10495,10 @@ namespace gles2 {
 """void GLES2DecoderTestBase::SetupInitCapabilitiesExpectations(
       bool es3_capable) {""")
       for capability in _CAPABILITY_FLAGS:
+        capability_no_init = 'no_init' in capability and \
+            capability['no_init'] == True
+        if capability_no_init:
+            continue
         capability_es3 = 'es3' in capability and capability['es3'] == True
         if capability_es3:
           continue

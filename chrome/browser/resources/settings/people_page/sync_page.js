@@ -47,7 +47,6 @@ Polymer({
   is: 'settings-sync-page',
 
   behaviors: [
-    I18nBehavior,
     WebUIListenerBehavior,
     settings.RouteObserverBehavior,
   ],
@@ -239,7 +238,8 @@ Polymer({
 
       // Cache the previously selected preference before checking every box.
       this.cachedSyncPrefs_ = {};
-      for (var dataType of SyncPrefsIndividualDataTypes) {
+      for (var i = 0; i < SyncPrefsIndividualDataTypes.length; i++) {
+        var dataType = SyncPrefsIndividualDataTypes[i];
         // These are all booleans, so this shallow copy is sufficient.
         this.cachedSyncPrefs_[dataType] = this.syncPrefs[dataType];
 
@@ -247,7 +247,8 @@ Polymer({
       }
     } else if (this.cachedSyncPrefs_) {
       // Restore the previously selected preference.
-      for (dataType of SyncPrefsIndividualDataTypes) {
+      for (var i = 0; i < SyncPrefsIndividualDataTypes.length; i++) {
+        var dataType = SyncPrefsIndividualDataTypes[i];
         this.set(['syncPrefs', dataType], this.cachedSyncPrefs_[dataType]);
       }
     }
@@ -420,6 +421,18 @@ Polymer({
 
     return !emptyPassphrase && !mismatchedPassphrase;
   },
+
+  /**
+   * @param {!Event} event
+   * @private
+   */
+  onLearnMoreTap_: function(event) {
+    if (event.target.tagName == 'A') {
+      // Stop the propagation of events, so that clicking on links inside
+      // checkboxes or radio buttons won't change the value.
+      event.stopPropagation();
+    }
+  }
 });
 
 })();

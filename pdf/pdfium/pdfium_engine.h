@@ -34,7 +34,6 @@
 namespace pp {
 class KeyboardInputEvent;
 class MouseInputEvent;
-class VarDictionary;
 }
 
 namespace chrome_pdf {
@@ -108,16 +107,17 @@ class PDFiumEngine : public PDFEngine,
 #if defined(PDF_ENABLE_XFA)
   void SetScrollPosition(const pp::Point& position) override;
 #endif
+  bool IsProgressiveLoad() override;
   std::string GetMetadata(const std::string& key) override;
 
   // DocumentLoader::Client implementation.
   pp::Instance* GetPluginInstance() override;
-  std::unique_ptr<URLLoaderWrapper> CreateURLLoader() override;
+  pp::URLLoader CreateURLLoader() override;
+  void OnPartialDocumentLoaded() override;
   void OnPendingRequestComplete() override;
   void OnNewDataAvailable() override;
+  void OnDocumentFailed() override;
   void OnDocumentComplete() override;
-  void OnDocumentCanceled() override;
-  void CancelBrowserDownload() override;
 
   void UnsupportedFeature(int type);
   void FontSubstituted();
@@ -191,11 +191,11 @@ class PDFiumEngine : public PDFEngine,
   friend class SelectionChangeInvalidator;
 
   struct FileAvail : public FX_FILEAVAIL {
-    PDFiumEngine* engine;
+    DocumentLoader* loader;
   };
 
   struct DownloadHints : public FX_DOWNLOADHINTS {
-    PDFiumEngine* engine;
+    DocumentLoader* loader;
   };
 
   // PDFium interface to get block of data.
@@ -274,7 +274,7 @@ class PDFiumEngine : public PDFEngine,
   // Called to continue searching so we don't block the main thread.
   void ContinueFind(int32_t result);
 
-  // Inserts a find result into find_results_, which is sorted.
+  // Inserts a find result into |find_results_|, which is sorted.
   void AddFindResult(const PDFiumRange& result);
 
   // Search a page using PDFium's methods.  Doesn't work with unicode.  This
@@ -602,7 +602,7 @@ class PDFiumEngine : public PDFEngine,
   double current_zoom_;
   unsigned int current_rotation_;
 
-  std::unique_ptr<DocumentLoader> doc_loader_;  // Main document's loader.
+  DocumentLoader doc_loader_;  // Main document's loader.
   std::string url_;
   std::string headers_;
   pp::CompletionCallbackFactory<PDFiumEngine> find_factory_;
@@ -644,8 +644,7 @@ class PDFiumEngine : public PDFEngine,
   MouseDownState mouse_down_state_;
 
   // Used for searching.
-  typedef std::vector<PDFiumRange> FindResults;
-  FindResults find_results_;
+  std::vector<PDFiumRange> find_results_;
   // Which page to search next.
   int next_page_to_search_;
   // Where to stop searching.
@@ -731,11 +730,6 @@ class PDFiumEngine : public PDFEngine,
   // to false after the user finishes getting their password.
   bool getting_password_;
 
-  // While true, the document try to be opened and parsed after download each
-  // part. Else the document will be opened and parsed only on finish of
-  // downloading.
-  bool process_when_pending_request_complete_ = true;
-
   DISALLOW_COPY_AND_ASSIGN(PDFiumEngine);
 };
 
@@ -771,7 +765,8 @@ class PDFiumEngineExports : public PDFEngineExports {
 
 // PDFEngineExports:
 #if defined(OS_WIN)
-  bool RenderPDFPageToDC(void* pdf_handle,
+  bool RenderPDFPageToDC(const void* pdf_buffer,
+                         int buffer_size,
                          int page_number,
                          const RenderingSettings& settings,
                          HDC dc) override;
@@ -779,18 +774,20 @@ class PDFiumEngineExports : public PDFEngineExports {
       PDFEnsureTypefaceCharactersAccessible func) override;
 
   void SetPDFUseGDIPrinting(bool enable) override;
+
+  void SetPDFPostscriptPrintingLevel(int postscript_level) override;
 #endif  // defined(OS_WIN)
-  bool RenderPDFPageToBitmap(void* pdf_handle,
+  bool RenderPDFPageToBitmap(const void* pdf_buffer,
+                             int pdf_buffer_size,
                              int page_number,
                              const RenderingSettings& settings,
                              void* bitmap_buffer) override;
   bool GetPDFDocInfo(const void* pdf_buffer,
                      int buffer_size,
                      int* page_count,
-                     double* max_page_width,
-                     void** pdf_handle) override;
-  void ReleasePDFHandle(void* pdf_handle) override;
-  bool GetPDFPageSizeByIndex(void* pdf_handle,
+                     double* max_page_width) override;
+  bool GetPDFPageSizeByIndex(const void* pdf_buffer,
+                             int pdf_buffer_size,
                              int page_number,
                              double* width,
                              double* height) override;

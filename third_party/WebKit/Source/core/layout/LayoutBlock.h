@@ -281,8 +281,10 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
   LayoutUnit collapsedMarginBeforeForChild(const LayoutBox& child) const;
   LayoutUnit collapsedMarginAfterForChild(const LayoutBox& child) const;
 
-  virtual void scrollbarsChanged(bool /*horizontalScrollbarChanged*/,
-                                 bool /*verticalScrollbarChanged*/);
+  enum ScrollbarChangeContext { StyleChange, Layout };
+  virtual void scrollbarsChanged(bool horizontalScrollbarChanged,
+                                 bool verticalScrollbarChanged,
+                                 ScrollbarChangeContext = Layout);
 
   LayoutUnit availableLogicalWidthForContent() const {
     return (logicalRightOffsetForContent() - logicalLeftOffsetForContent())
@@ -311,7 +313,7 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
   virtual LayoutUnit logicalRightSelectionOffset(const LayoutBlock* rootBlock,
                                                  LayoutUnit position) const;
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   void checkPositionedObjectsNeedLayout();
 #endif
 
@@ -361,6 +363,9 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
   virtual void layoutPositionedObjects(
       bool relayoutChildren,
       PositionedLayoutBehavior = DefaultLayout);
+  void layoutPositionedObject(LayoutBox*,
+                              bool relayoutChildren,
+                              PositionedLayoutBehavior info);
   void markFixedPositionObjectForLayoutIfNeeded(LayoutObject* child,
                                                 SubtreeLayoutScope&);
 
@@ -481,15 +486,19 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
   bool isSelectionRoot() const;
 
  public:
-  bool hasCursorCaret() const;
-  bool hasDragCaret() const;
-  bool hasCaret() const { return hasCursorCaret() || hasDragCaret(); }
+  bool shouldPaintCursorCaret() const;
+  bool shouldPaintDragCaret() const;
+  bool shouldPaintCarets() const {
+    return shouldPaintCursorCaret() || shouldPaintDragCaret();
+  }
 
  protected:
   PaintInvalidationReason invalidatePaintIfNeeded(
       const PaintInvalidationState&) override;
   PaintInvalidationReason invalidatePaintIfNeeded(
       const PaintInvalidatorContext&) const override;
+
+  void clearPreviousVisualRects() override;
 
  private:
   LayoutRect localCaretRect(InlineBox*,
@@ -505,13 +514,6 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
   bool widthAvailableToChildrenHasChanged();
 
  protected:
-  bool isPageLogicalHeightKnown() const {
-    return pageLogicalHeightForOffset(LayoutUnit());
-  }
-
-  // Returns the logical offset at the top of the next page, for a given offset.
-  LayoutUnit nextPageLogicalTop(LayoutUnit logicalOffset) const;
-
   // Paginated content inside this block was laid out.
   // |logicalBottomOffsetAfterPagination| is the logical bottom offset of the
   // child content after applying any forced or unforced breaks as needed.
@@ -560,7 +562,7 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
 
   // This is necessary for now for interoperability between the old and new
   // layout code. Primarily for calling layoutPositionedObjects at the moment.
-  friend class NGBox;
+  friend class NGBlockNode;
 
  public:
   // TODO(lunalu): Temporary in order to ensure compatibility with existing

@@ -31,20 +31,6 @@ namespace extensions {
 
 namespace {
 
-// Helper to convert an enum to a V8 object.
-template <typename EnumType>
-v8::Local<v8::Object> ToEnumObject(v8::Isolate* isolate,
-                                   EnumType start_after,
-                                   EnumType end_at) {
-  v8::Local<v8::Object> object = v8::Object::New(isolate);
-  for (int i = start_after + 1; i <= end_at; ++i) {
-    v8::Local<v8::String> value = v8::String::NewFromUtf8(
-        isolate, ui::ToString(static_cast<EnumType>(i)).c_str());
-    object->Set(value, value);
-  }
-  return object;
-}
-
 void ThrowInvalidArgumentsException(
     AutomationInternalCustomBindings* automation_bindings) {
   v8::Isolate* isolate = automation_bindings->GetIsolate();
@@ -717,6 +703,14 @@ AutomationInternalCustomBindings::AutomationInternalCustomBindings(
 
         result.Set(v8::String::NewFromUtf8(isolate, attr_value.c_str()));
       });
+  RouteNodeIDFunction(
+      "GetNameFrom", [](v8::Isolate* isolate, v8::ReturnValue<v8::Value> result,
+                        TreeCache* cache, ui::AXNode* node) {
+        ui::AXNameFrom name_from = static_cast<ui::AXNameFrom>(
+            node->data().GetIntAttribute(ui::AX_ATTR_NAME_FROM));
+        std::string name_from_str = ui::ToString(name_from);
+        result.Set(v8::String::NewFromUtf8(isolate, name_from_str.c_str()));
+      });
 }
 
 AutomationInternalCustomBindings::~AutomationInternalCustomBindings() {}
@@ -780,22 +774,6 @@ void AutomationInternalCustomBindings::StartCachingAccessibilityTrees(
 void AutomationInternalCustomBindings::GetSchemaAdditions(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
   v8::Local<v8::Object> additions = v8::Object::New(GetIsolate());
-
-  additions->Set(
-      v8::String::NewFromUtf8(GetIsolate(), "EventType"),
-      ToEnumObject(GetIsolate(), ui::AX_EVENT_NONE, ui::AX_EVENT_LAST));
-
-  additions->Set(
-      v8::String::NewFromUtf8(GetIsolate(), "RoleType"),
-      ToEnumObject(GetIsolate(), ui::AX_ROLE_NONE, ui::AX_ROLE_LAST));
-
-  additions->Set(
-      v8::String::NewFromUtf8(GetIsolate(), "StateType"),
-      ToEnumObject(GetIsolate(), ui::AX_STATE_NONE, ui::AX_STATE_LAST));
-
-  additions->Set(
-      v8::String::NewFromUtf8(GetIsolate(), "TreeChangeType"),
-      ToEnumObject(GetIsolate(), ui::AX_MUTATION_NONE, ui::AX_MUTATION_LAST));
 
   v8::Local<v8::Object> name_from_type(v8::Object::New(GetIsolate()));
   for (int i = ui::AX_NAME_FROM_NONE; i <= ui::AX_NAME_FROM_LAST; ++i) {
@@ -1157,8 +1135,15 @@ void AutomationInternalCustomBindings::OnAccessibilityEvent(
   // Update the internal state whether it's the active profile or not.
   cache->location_offset = params.location_offset;
   deleted_node_ids_.clear();
+  v8::Isolate* isolate = GetIsolate();
+  v8::HandleScope handle_scope(isolate);
+  v8::Context::Scope context_scope(context()->v8_context());
+  v8::Local<v8::Array> args(v8::Array::New(GetIsolate(), 1U));
   if (!cache->tree.Unserialize(params.update)) {
     LOG(ERROR) << cache->tree.error();
+    args->Set(0U, v8::Number::New(isolate, tree_id));
+    context()->DispatchEvent(
+        "automationInternal.onAccessibilityTreeSerializationError", args);
     return;
   }
 
@@ -1169,10 +1154,6 @@ void AutomationInternalCustomBindings::OnAccessibilityEvent(
   SendNodesRemovedEvent(&cache->tree, deleted_node_ids_);
   deleted_node_ids_.clear();
 
-  v8::Isolate* isolate = GetIsolate();
-  v8::HandleScope handle_scope(isolate);
-  v8::Context::Scope context_scope(context()->v8_context());
-  v8::Local<v8::Array> args(v8::Array::New(GetIsolate(), 1U));
   v8::Local<v8::Object> event_params(v8::Object::New(GetIsolate()));
   event_params->Set(CreateV8String(isolate, "treeID"),
                     v8::Integer::New(GetIsolate(), params.tree_id));

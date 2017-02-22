@@ -69,19 +69,23 @@ class V4StoreTest : public PlatformTest {
     } else {
       ASSERT_FALSE(store);
     }
+
+    updated_store_ = std::move(store);
   }
 
   base::ScopedTempDir temp_dir_;
   base::FilePath store_path_;
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
   content::TestBrowserThreadBundle thread_bundle_;
+  std::unique_ptr<V4Store> updated_store_;
 };
 
 TEST_F(V4StoreTest, TestReadFromEmptyFile) {
   base::CloseFile(base::OpenFile(store_path_, "wb+"));
 
-  EXPECT_EQ(FILE_EMPTY_FAILURE,
-            V4Store(task_runner_, store_path_).ReadFromDisk());
+  V4Store store(task_runner_, store_path_);
+  EXPECT_EQ(FILE_EMPTY_FAILURE, store.ReadFromDisk());
+  EXPECT_FALSE(store.HasValidData());
 }
 
 TEST_F(V4StoreTest, TestReadFromAbsentFile) {
@@ -136,6 +140,7 @@ TEST_F(V4StoreTest, TestReadFromNoHashPrefixesFile) {
   EXPECT_EQ(READ_SUCCESS, store.ReadFromDisk());
   EXPECT_TRUE(store.hash_prefix_map_.empty());
   EXPECT_EQ(14, store.file_size_);
+  EXPECT_FALSE(store.HasValidData());
 }
 
 TEST_F(V4StoreTest, TestAddUnlumpedHashesWithInvalidAddition) {
@@ -668,6 +673,22 @@ TEST_F(V4StoreTest, TestHashPrefixDoesNotExistInMapWithDifferentSizes) {
   EXPECT_TRUE(store.GetMatchingHashPrefix(full_hash).empty());
 }
 
+TEST_F(V4StoreTest, GetMatchingHashPrefixSize32Or21) {
+  HashPrefix prefix = "0123";
+  V4Store store(task_runner_, store_path_);
+  store.hash_prefix_map_[4] = prefix;
+
+  FullHash full_hash_21 = "0123456789ABCDEF01234";
+  EXPECT_EQ(prefix, store.GetMatchingHashPrefix(full_hash_21));
+  FullHash full_hash_32 = "0123456789ABCDEF0123456789ABCDEF";
+  EXPECT_EQ(prefix, store.GetMatchingHashPrefix(full_hash_32));
+#if defined(NDEBUG) && !defined(DCHECK_ALWAYS_ON)
+  // This hits a DCHECK so it is release mode only.
+  FullHash full_hash_22 = "0123456789ABCDEF012345";
+  EXPECT_EQ(prefix, store.GetMatchingHashPrefix(full_hash_22));
+#endif
+}
+
 #if defined(NDEBUG) && !defined(DCHECK_ALWAYS_ON)
 // This test hits a NOTREACHED so it is a release mode only test.
 TEST_F(V4StoreTest, TestAdditionsWithRiceEncodingFailsWithInvalidInput) {
@@ -724,6 +745,7 @@ TEST_F(V4StoreTest, TestRemovalsWithRiceEncodingSucceeds) {
   EXPECT_EQ(APPLY_UPDATE_SUCCESS,
             store.MergeUpdate(prefix_map_old, prefix_map_additions, nullptr,
                               expected_checksum));
+  EXPECT_FALSE(store.HasValidData());  // Never actually read from disk.
 
   // At this point, the store map looks like this:
   // 4: 1111abcdefgh
@@ -754,6 +776,9 @@ TEST_F(V4StoreTest, TestRemovalsWithRiceEncodingSucceeds) {
 
   // This ensures that the callback was called.
   EXPECT_TRUE(called_back);
+  // ApplyUpdate was successful, so we have valid data.
+  ASSERT_TRUE(updated_store_);
+  EXPECT_TRUE(updated_store_->HasValidData());
 }
 
 TEST_F(V4StoreTest, TestMergeUpdatesFailsChecksum) {
@@ -825,6 +850,14 @@ TEST_F(V4StoreTest, WriteToDiskFails) {
   // the temp store file to |store_path_| it fails.
   EXPECT_EQ(UNABLE_TO_RENAME_FAILURE,
             V4Store(task_runner_, temp_dir_.GetPath()).WriteToDisk(Checksum()));
+
+  // Give a location that isn't writable, even for the tmp file.
+  base::FilePath non_writable_dir =
+      temp_dir_.GetPath()
+          .Append(FILE_PATH_LITERAL("nonexistent_dir"))
+          .Append(FILE_PATH_LITERAL("some.store"));
+  EXPECT_EQ(UNEXPECTED_BYTES_WRITTEN_FAILURE,
+            V4Store(task_runner_, non_writable_dir).WriteToDisk(Checksum()));
 }
 
 TEST_F(V4StoreTest, FullUpdateFailsChecksumSynchronously) {
@@ -834,6 +867,7 @@ TEST_F(V4StoreTest, FullUpdateFailsChecksumSynchronously) {
       base::Bind(&V4StoreTest::UpdatedStoreReady, base::Unretained(this),
                  &called_back, false /* expect_store */);
   EXPECT_FALSE(base::PathExists(store.store_path_));
+  EXPECT_FALSE(store.HasValidData());  // Never actually read from disk.
 
   // Now create a response with invalid checksum.
   std::unique_ptr<ListUpdateResponse> lur(new ListUpdateResponse);
@@ -851,6 +885,7 @@ TEST_F(V4StoreTest, FullUpdateFailsChecksumSynchronously) {
   EXPECT_TRUE(called_back);
   // Ensure that the file is still not created.
   EXPECT_FALSE(base::PathExists(store.store_path_));
+  EXPECT_FALSE(updated_store_);
 }
 
 }  // namespace safe_browsing

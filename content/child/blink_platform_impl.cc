@@ -41,14 +41,16 @@
 #include "content/child/content_child_helpers.h"
 #include "content/child/notifications/notification_dispatcher.h"
 #include "content/child/notifications/notification_manager.h"
-#include "content/child/push_messaging/push_dispatcher.h"
 #include "content/child/push_messaging/push_provider.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/child/web_url_loader_impl.h"
 #include "content/child/web_url_request_util.h"
 #include "content/child/worker_thread_registry.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/service_manager_connection.h"
 #include "net/base/net_errors.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/interfaces/connector.mojom.h"
 #include "third_party/WebKit/public/platform/WebData.h"
 #include "third_party/WebKit/public/platform/WebFloatPoint.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
@@ -71,17 +73,10 @@ using blink::scheduler::WebThreadImplForWorkerScheduler;
 
 namespace content {
 
-namespace {
-
-
-}  // namespace
-
 static int ToMessageID(WebLocalizedString::Name name) {
   switch (name) {
     case WebLocalizedString::AXAMPMFieldText:
       return IDS_AX_AM_PM_FIELD_TEXT;
-    case WebLocalizedString::AXButtonActionVerb:
-      return IDS_AX_BUTTON_ACTION_VERB;
     case WebLocalizedString::AXCalendarShowMonthSelector:
       return IDS_AX_CALENDAR_SHOW_MONTH_SELECTOR;
     case WebLocalizedString::AXCalendarShowNextMonth:
@@ -90,20 +85,14 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_AX_CALENDAR_SHOW_PREVIOUS_MONTH;
     case WebLocalizedString::AXCalendarWeekDescription:
       return IDS_AX_CALENDAR_WEEK_DESCRIPTION;
-    case WebLocalizedString::AXCheckedCheckBoxActionVerb:
-      return IDS_AX_CHECKED_CHECK_BOX_ACTION_VERB;
     case WebLocalizedString::AXDayOfMonthFieldText:
       return IDS_AX_DAY_OF_MONTH_FIELD_TEXT;
-    case WebLocalizedString::AXDefaultActionVerb:
-      return IDS_AX_DEFAULT_ACTION_VERB;
     case WebLocalizedString::AXHeadingText:
       return IDS_AX_ROLE_HEADING;
     case WebLocalizedString::AXHourFieldText:
       return IDS_AX_HOUR_FIELD_TEXT;
     case WebLocalizedString::AXImageMapText:
       return IDS_AX_ROLE_IMAGE_MAP;
-    case WebLocalizedString::AXLinkActionVerb:
-      return IDS_AX_LINK_ACTION_VERB;
     case WebLocalizedString::AXLinkText:
       return IDS_AX_ROLE_LINK;
     case WebLocalizedString::AXListMarkerText:
@@ -192,16 +181,8 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_AX_MINUTE_FIELD_TEXT;
     case WebLocalizedString::AXMonthFieldText:
       return IDS_AX_MONTH_FIELD_TEXT;
-    case WebLocalizedString::AXPopUpButtonActionVerb:
-      return IDS_AX_POP_UP_BUTTON_ACTION_VERB;
-    case WebLocalizedString::AXRadioButtonActionVerb:
-      return IDS_AX_RADIO_BUTTON_ACTION_VERB;
     case WebLocalizedString::AXSecondFieldText:
       return IDS_AX_SECOND_FIELD_TEXT;
-    case WebLocalizedString::AXTextFieldActionVerb:
-      return IDS_AX_TEXT_FIELD_ACTION_VERB;
-    case WebLocalizedString::AXUncheckedCheckBoxActionVerb:
-      return IDS_AX_UNCHECKED_CHECK_BOX_ACTION_VERB;
     case WebLocalizedString::AXWebAreaText:
       return IDS_AX_ROLE_WEB_AREA;
     case WebLocalizedString::AXWeekOfYearFieldText:
@@ -230,10 +211,6 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_FORM_FILE_NO_FILE_LABEL;
     case WebLocalizedString::InputElementAltText:
       return IDS_FORM_INPUT_ALT;
-    case WebLocalizedString::KeygenMenuHighGradeKeySize:
-      return IDS_KEYGEN_HIGH_GRADE_KEY;
-    case WebLocalizedString::KeygenMenuMediumGradeKeySize:
-      return IDS_KEYGEN_MED_GRADE_KEY;
     case WebLocalizedString::MissingPluginText:
       return IDS_PLUGIN_INITIALIZATION_ERROR;
     case WebLocalizedString::MultipleFileUploadText:
@@ -387,7 +364,6 @@ void BlinkPlatformImpl::InternalInit() {
     thread_safe_sender_ = ChildThreadImpl::current()->thread_safe_sender();
     notification_dispatcher_ =
         ChildThreadImpl::current()->notification_dispatcher();
-    push_dispatcher_ = ChildThreadImpl::current()->push_dispatcher();
   }
 }
 
@@ -623,20 +599,11 @@ const DataResource kDataResources[] = {
     {"InspectorOverlayPage.html",
      IDR_INSPECTOR_OVERLAY_PAGE_HTML,
      ui::SCALE_FACTOR_NONE},
-    {"DocumentExecCommand.js",
-     IDR_PRIVATE_SCRIPT_DOCUMENTEXECCOMMAND_JS,
-     ui::SCALE_FACTOR_NONE},
     {"DocumentXMLTreeViewer.css",
-     IDR_PRIVATE_SCRIPT_DOCUMENTXMLTREEVIEWER_CSS,
+     IDR_DOCUMENTXMLTREEVIEWER_CSS,
      ui::SCALE_FACTOR_NONE},
     {"DocumentXMLTreeViewer.js",
-     IDR_PRIVATE_SCRIPT_DOCUMENTXMLTREEVIEWER_JS,
-     ui::SCALE_FACTOR_NONE},
-    {"HTMLMarqueeElement.js",
-     IDR_PRIVATE_SCRIPT_HTMLMARQUEEELEMENT_JS,
-     ui::SCALE_FACTOR_NONE},
-    {"PrivateScriptRunner.js",
-     IDR_PRIVATE_SCRIPT_PRIVATESCRIPTRUNNER_JS,
+     IDR_DOCUMENTXMLTREEVIEWER_JS,
      ui::SCALE_FACTOR_NONE},
 #ifdef IDR_PICKER_COMMON_JS
     {"pickerCommon.js", IDR_PICKER_COMMON_JS, ui::SCALE_FACTOR_NONE},
@@ -690,12 +657,14 @@ WebString BlinkPlatformImpl::queryLocalizedString(
   int message_id = ToMessageID(name);
   if (message_id < 0)
     return WebString();
-  return GetContentClient()->GetLocalizedString(message_id);
+  return WebString::fromUTF16(
+      GetContentClient()->GetLocalizedString(message_id));
 }
 
 WebString BlinkPlatformImpl::queryLocalizedString(
     WebLocalizedString::Name name, int numeric_value) {
-  return queryLocalizedString(name, base::IntToString16(numeric_value));
+  return queryLocalizedString(
+      name, WebString::fromUTF16(base::IntToString16(numeric_value)));
 }
 
 WebString BlinkPlatformImpl::queryLocalizedString(
@@ -703,8 +672,8 @@ WebString BlinkPlatformImpl::queryLocalizedString(
   int message_id = ToMessageID(name);
   if (message_id < 0)
     return WebString();
-  return base::ReplaceStringPlaceholders(
-      GetContentClient()->GetLocalizedString(message_id), value, NULL);
+  return WebString::fromUTF16(base::ReplaceStringPlaceholders(
+      GetContentClient()->GetLocalizedString(message_id), value.utf16(), NULL));
 }
 
 WebString BlinkPlatformImpl::queryLocalizedString(
@@ -716,10 +685,10 @@ WebString BlinkPlatformImpl::queryLocalizedString(
     return WebString();
   std::vector<base::string16> values;
   values.reserve(2);
-  values.push_back(value1);
-  values.push_back(value2);
-  return base::ReplaceStringPlaceholders(
-      GetContentClient()->GetLocalizedString(message_id), values, NULL);
+  values.push_back(value1.utf16());
+  values.push_back(value2.utf16());
+  return WebString::fromUTF16(base::ReplaceStringPlaceholders(
+      GetContentClient()->GetLocalizedString(message_id), values, NULL));
 }
 
 blink::WebThread* BlinkPlatformImpl::compositorThread() const {
@@ -764,11 +733,7 @@ BlinkPlatformImpl::notificationManager() {
 }
 
 blink::WebPushProvider* BlinkPlatformImpl::pushProvider() {
-  if (!thread_safe_sender_.get() || !push_dispatcher_.get())
-    return nullptr;
-
-  return PushProvider::ThreadSpecificInstance(thread_safe_sender_.get(),
-                                              push_dispatcher_.get());
+  return PushProvider::ThreadSpecificInstance(main_thread_task_runner_);
 }
 
 WebThemeEngine* BlinkPlatformImpl::themeEngine() {
@@ -813,12 +778,17 @@ bool BlinkPlatformImpl::databaseSetFileSize(
   return false;
 }
 
-blink::WebString BlinkPlatformImpl::signedPublicKeyAndChallengeString(
-    unsigned key_size_index,
-    const blink::WebString& challenge,
-    const blink::WebURL& url,
-    const blink::WebURL& top_origin) {
-  return blink::WebString("");
+void BlinkPlatformImpl::bindServiceConnector(
+    mojo::ScopedMessagePipeHandle remote_handle) {
+  if (!ChildThreadImpl::current())
+    return;
+
+  service_manager::mojom::ConnectorRequest chromium_request;
+  chromium_request.Bind(std::move(remote_handle));
+  ChildThreadImpl::current()
+      ->GetServiceManagerConnection()
+      ->GetConnector()
+      ->BindConnectorRequest(std::move(chromium_request));
 }
 
 size_t BlinkPlatformImpl::actualMemoryUsageMB() {

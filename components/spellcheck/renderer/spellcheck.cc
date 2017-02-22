@@ -263,7 +263,7 @@ void SpellCheck::OnRequestDocumentMarkers() {
 // AddSpellcheckLanguage() is called.
 void SpellCheck::AddSpellcheckLanguage(base::File file,
                                        const std::string& language) {
-  languages_.push_back(new SpellcheckLanguage());
+  languages_.push_back(base::MakeUnique<SpellcheckLanguage>());
   languages_.back()->Init(std::move(file), language);
 }
 
@@ -307,9 +307,7 @@ bool SpellCheck::SpellCheckWord(
     *misspelling_len = 0;
     suggestions_list.clear();
 
-    for (ScopedVector<SpellcheckLanguage>::iterator language =
-             languages_.begin();
-         language != languages_.end();) {
+    for (auto language = languages_.begin(); language != languages_.end();) {
       language_suggestions.clear();
       SpellcheckLanguage::SpellcheckWordResult result =
           (*language)->SpellCheckWord(
@@ -399,12 +397,9 @@ bool SpellCheck::SpellCheckParagraph(
 
     if (!custom_dictionary_.SpellCheckWord(
             text, misspelling_start, misspelling_length)) {
-      base::string16 replacement;
-      textcheck_results.push_back(WebTextCheckingResult(
-          blink::WebTextDecorationTypeSpelling,
-          misspelling_start,
-          misspelling_length,
-          replacement));
+      textcheck_results.push_back(
+          WebTextCheckingResult(blink::WebTextDecorationTypeSpelling,
+                                misspelling_start, misspelling_length));
     }
     position_in_text = misspelling_start + misspelling_length;
   }
@@ -442,7 +437,7 @@ bool SpellCheck::InitializeIfNeeded() {
     return true;
 
   bool initialize_if_needed = false;
-  for (SpellcheckLanguage* language : languages_)
+  for (auto& language : languages_)
     initialize_if_needed |= language->InitializeIfNeeded();
 
   return initialize_if_needed;
@@ -467,7 +462,7 @@ void SpellCheck::PerformSpellCheck(SpellcheckRequest* param) {
 
   if (languages_.empty() ||
       std::find_if(languages_.begin(), languages_.end(),
-                   [](SpellcheckLanguage* language) {
+                   [](std::unique_ptr<SpellcheckLanguage>& language) {
                      return !language->IsEnabled();
                    }) != languages_.end()) {
     param->completion()->didCancelCheckingText();
@@ -531,7 +526,7 @@ void SpellCheck::CreateTextCheckingResults(
     results.push_back(WebTextCheckingResult(
         static_cast<WebTextDecorationType>(decoration),
         line_offset + spellcheck_result.location, spellcheck_result.length,
-        replacement, spellcheck_result.hash));
+        blink::WebString::fromUTF16(replacement), spellcheck_result.hash));
   }
 
   textcheck_results->assign(results);

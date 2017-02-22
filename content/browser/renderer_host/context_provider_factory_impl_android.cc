@@ -7,6 +7,7 @@
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
 #include "cc/output/context_provider.h"
@@ -14,28 +15,28 @@
 #include "cc/surfaces/surface_manager.h"
 #include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/browser/gpu/compositor_util.h"
-#include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/common/host_shared_bitmap_manager.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
+#include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 
 namespace content {
 
 namespace {
 
-command_buffer_metrics::ContextType ToCommandBufferContextType(
+ui::command_buffer_metrics::ContextType ToCommandBufferContextType(
     ui::ContextProviderFactory::ContextType context_type) {
   switch (context_type) {
     case ui::ContextProviderFactory::ContextType::
         BLIMP_RENDER_COMPOSITOR_CONTEXT:
-      return command_buffer_metrics::BLIMP_RENDER_COMPOSITOR_CONTEXT;
+      return ui::command_buffer_metrics::BLIMP_RENDER_COMPOSITOR_CONTEXT;
     case ui::ContextProviderFactory::ContextType::BLIMP_RENDER_WORKER_CONTEXT:
-      return command_buffer_metrics::BLIMP_RENDER_WORKER_CONTEXT;
+      return ui::command_buffer_metrics::BLIMP_RENDER_WORKER_CONTEXT;
   }
   NOTREACHED();
-  return command_buffer_metrics::CONTEXT_TYPE_UNKNOWN;
+  return ui::command_buffer_metrics::CONTEXT_TYPE_UNKNOWN;
 }
 
 ContextProviderFactoryImpl* instance = nullptr;
@@ -65,7 +66,7 @@ ContextProviderFactoryImpl::ContextProviderFactoryImpl(
     : gpu_channel_factory_(gpu_channel_factory),
       in_handle_pending_requests_(false),
       in_shutdown_(false),
-      next_client_id_(1u),
+      next_sink_id_(1u),
       weak_factory_(this) {
   DCHECK(gpu_channel_factory_);
 }
@@ -107,7 +108,7 @@ ContextProviderFactoryImpl::CreateDisplayContextProvider(
     scoped_refptr<gpu::GpuChannelHost> gpu_channel_host) {
   DCHECK(surface_handle != gpu::kNullSurfaceHandle);
   return CreateContextProviderInternal(
-      command_buffer_metrics::DISPLAY_COMPOSITOR_ONSCREEN_CONTEXT,
+      ui::command_buffer_metrics::DISPLAY_COMPOSITOR_ONSCREEN_CONTEXT,
       surface_handle, shared_memory_limits, attributes, support_locking,
       automatic_flushes, nullptr, std::move(gpu_channel_host));
 }
@@ -135,7 +136,12 @@ cc::SurfaceManager* ContextProviderFactoryImpl::GetSurfaceManager() {
 }
 
 cc::FrameSinkId ContextProviderFactoryImpl::AllocateFrameSinkId() {
-  return cc::FrameSinkId(++next_client_id_, 0 /* sink_id */);
+  // The FrameSinkId generated here must be unique with
+  // RenderWidgetHostViewAndroid's
+  // FrameSinkId allocation.
+  // TODO(crbug.com/685777): Centralize allocation in one place for easier
+  // maintenance.
+  return cc::FrameSinkId(0 /* client_id */, next_sink_id_++);
 }
 
 gpu::GpuMemoryBufferManager*
@@ -145,7 +151,7 @@ ContextProviderFactoryImpl::GetGpuMemoryBufferManager() {
 
 scoped_refptr<cc::ContextProvider>
 ContextProviderFactoryImpl::CreateContextProviderInternal(
-    command_buffer_metrics::ContextType context_type,
+    ui::command_buffer_metrics::ContextType context_type,
     gpu::SurfaceHandle surface_handle,
     gpu::SharedMemoryLimits shared_memory_limits,
     gpu::gles2::ContextCreationAttribHelper attributes,
@@ -153,13 +159,13 @@ ContextProviderFactoryImpl::CreateContextProviderInternal(
     bool automatic_flushes,
     cc::ContextProvider* shared_context_provider,
     scoped_refptr<gpu::GpuChannelHost> gpu_channel_host) {
-  return make_scoped_refptr(new ContextProviderCommandBuffer(
+  return make_scoped_refptr(new ui::ContextProviderCommandBuffer(
       std::move(gpu_channel_host), gpu::GPU_STREAM_DEFAULT,
       gpu::GpuStreamPriority::NORMAL, surface_handle,
       GURL(std::string("chrome://gpu/ContextProviderFactoryImpl::") +
            std::string("CompositorContextProvider")),
       automatic_flushes, support_locking, shared_memory_limits, attributes,
-      static_cast<ContextProviderCommandBuffer*>(shared_context_provider),
+      static_cast<ui::ContextProviderCommandBuffer*>(shared_context_provider),
       context_type));
 }
 
@@ -197,7 +203,10 @@ void ContextProviderFactoryImpl::EstablishGpuChannel() {
     defined(SYZYASAN) || defined(CYGPROFILE_INSTRUMENTATION)
   const int64_t kGpuChannelTimeoutInSeconds = 40;
 #else
-  const int64_t kGpuChannelTimeoutInSeconds = 10;
+  // The GPU watchdog timeout is 15 seconds (1.5x the kGpuTimeout value due to
+  // logic in GpuWatchdogThread). Make this slightly longer to give the GPU a
+  // chance to crash itself before crashing the browser.
+  const int64_t kGpuChannelTimeoutInSeconds = 20;
 #endif
 
   // Start the timer first, if the result comes synchronously, we want it to

@@ -2,11 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <Foundation/Foundation.h>
+#import <Foundation/Foundation.h>
 
 #include "ios/chrome/browser/crash_loop_detection_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 // The key used to store the count in the implementation.
@@ -15,6 +19,8 @@ NSString* const kAppStartupAttemptCountKey = @"AppStartupFailureCount";
 typedef PlatformTest CrashLoopDetectionUtilTest;
 
 TEST_F(CrashLoopDetectionUtilTest, FullCycle) {
+  crash_util::ResetFailedStartupAttemptCountForTests();
+
   // Simulate one prior crash.
   NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
   [defaults setInteger:1 forKey:kAppStartupAttemptCountKey];

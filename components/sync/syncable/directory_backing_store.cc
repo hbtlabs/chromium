@@ -1646,7 +1646,7 @@ bool DirectoryBackingStore::CreateShareInfoTableVersion71(
 bool DirectoryBackingStore::VerifyReferenceIntegrity(
     const Directory::MetahandlesMap* handles_map) {
   TRACE_EVENT0("sync", "SyncDatabaseIntegrityCheck");
-  typedef std::unordered_set<std::string> IdsSet;
+  using IdsSet = std::unordered_set<std::string>;
 
   IdsSet ids_set;
   bool is_ok = true;
@@ -1715,6 +1715,12 @@ bool DirectoryBackingStore::GetDatabasePageSize(int* page_size) {
     return false;
   *page_size = s.ColumnInt(0);
   return true;
+}
+
+bool DirectoryBackingStore::ReportMemoryUsage(
+    base::trace_event::ProcessMemoryDump* pmd,
+    const std::string& dump_name) {
+  return db_ && db_->ReportMemoryUsage(pmd, dump_name);
 }
 
 bool DirectoryBackingStore::UpdatePageSizeIfNecessary() {

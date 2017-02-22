@@ -11,9 +11,6 @@
 namespace ash {
 
 enum ShelfConstant {
-  // The alpha value for the shelf background when a window is overlapping.
-  SHELF_BACKGROUND_ALPHA,
-
   // Size of the shelf when visible (height when the shelf is horizontal and
   // width when the shelf is vertical).
   SHELF_SIZE,
@@ -43,8 +40,6 @@ ASH_EXPORT extern const int kShelfAutoHideSize;
 // the shelf items, notifications, status area etc.
 extern const int kShelfItemInset;
 
-const int kInvalidShelfID = 0;
-
 // Animation duration for switching black shelf and dock background on and off.
 ASH_EXPORT extern const int kTimeToSwitchBackgroundMs;
 
@@ -66,6 +61,9 @@ extern const float kShelfInkDropVisibleOpacity;
 // The foreground color of the icons used in the shelf (launcher,
 // notifications, etc).
 ASH_EXPORT extern const SkColor kShelfIconColor;
+
+// The alpha value for the shelf background when a window is overlapping.
+ASH_EXPORT extern const int kShelfTranslucentAlpha;
 
 // The width and height of the material design overflow button.
 // TODO(tdanderson): Refactor constants which are common between the shelf

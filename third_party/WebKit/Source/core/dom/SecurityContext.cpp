@@ -99,4 +99,15 @@ void SecurityContext::enforceSuborigin(const Suborigin& suborigin) {
   didUpdateSecurityOrigin();
 }
 
+void SecurityContext::setFeaturePolicyFromHeader(
+    const WebParsedFeaturePolicyHeader& parsedHeader,
+    FeaturePolicy* parentFeaturePolicy) {
+  DCHECK(!m_featurePolicy);
+  // TODO(iclelland): Use the frame owner properties here to pass the frame
+  // policy, if it exists.
+  m_featurePolicy = FeaturePolicy::createFromParentPolicy(
+      parentFeaturePolicy, nullptr, m_securityOrigin);
+  m_featurePolicy->setHeaderPolicy(parsedHeader);
+}
+
 }  // namespace blink

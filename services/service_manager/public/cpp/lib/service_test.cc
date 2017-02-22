@@ -7,6 +7,10 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/threading/thread.h"
+#include "base/values.h"
+#include "mojo/edk/embedder/embedder.h"
+#include "mojo/edk/embedder/scoped_ipc_support.h"
 #include "services/service_manager/background/background_service_manager.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
@@ -31,8 +35,8 @@ bool ServiceTestClient::OnConnect(const ServiceInfo& remote_info,
 
 ServiceTest::ServiceTest() {}
 
-ServiceTest::ServiceTest(const std::string& test_name)
-    : test_name_(test_name) {}
+ServiceTest::ServiceTest(const std::string& test_name, bool init_edk)
+    : test_name_(test_name), init_edk_(init_edk) {}
 
 ServiceTest::~ServiceTest() {}
 
@@ -60,9 +64,12 @@ void ServiceTest::OnStartCalled(Connector* connector,
 
 void ServiceTest::SetUp() {
   message_loop_ = CreateMessageLoop();
-  background_service_manager_.reset(
-      new service_manager::BackgroundServiceManager);
-  background_service_manager_->Init(nullptr);
+
+  DCHECK(!init_edk_);
+
+  background_service_manager_ =
+      base::MakeUnique<service_manager::BackgroundServiceManager>(
+          nullptr, nullptr);
 
   // Create the service manager connection. We don't proceed until we get our
   // Service's OnStart() method is called.
@@ -71,11 +78,12 @@ void ServiceTest::SetUp() {
       base::MessageLoop::current());
   initialize_called_ = run_loop.QuitClosure();
 
-  context_.reset(new ServiceContext(
-      CreateService(),
-      background_service_manager_->CreateServiceRequest(test_name_)));
+  mojom::ServicePtr service;
+  context_ = base::MakeUnique<ServiceContext>(CreateService(),
+                                              mojom::ServiceRequest(&service));
+  background_service_manager_->RegisterService(
+      Identity(test_name_, mojom::kRootUserID), std::move(service), nullptr);
   connector_ = context_->connector();
-
   run_loop.Run();
 }
 

@@ -56,6 +56,9 @@
 
 namespace base {
 class DictionaryValue;
+namespace trace_event {
+class ProcessMemoryDump;
+}
 }
 
 namespace net {
@@ -193,6 +196,7 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
     ClientSocketHandle* handle() const { return handle_; }
     const CompletionCallback& callback() const { return callback_; }
     RequestPriority priority() const { return priority_; }
+    void set_priority(RequestPriority priority) { priority_ = priority; }
     ClientSocketPool::RespectLimits respect_limits() const {
       return respect_limits_;
     }
@@ -211,8 +215,7 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
 
     ClientSocketHandle* const handle_;
     const CompletionCallback callback_;
-    // TODO(akalin): Support reprioritization.
-    const RequestPriority priority_;
+    RequestPriority priority_;
     const ClientSocketPool::RespectLimits respect_limits_;
     const Flags flags_;
     const NetLogWithSource net_log_;
@@ -263,12 +266,17 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
 
   // See ClientSocketPool::RequestSocket for documentation on this function.
   int RequestSocket(const std::string& group_name,
-                    std::unique_ptr<const Request> request);
+                    std::unique_ptr<Request> request);
 
-  // See ClientSocketPool::RequestSocket for documentation on this function.
+  // See ClientSocketPool::RequestSockets for documentation on this function.
   void RequestSockets(const std::string& group_name,
                       const Request& request,
                       int num_sockets);
+
+  // See ClientSocketPool::SetPriority for documentation on this function.
+  void SetPriority(const std::string& group_name,
+                   ClientSocketHandle* handle,
+                   RequestPriority priority);
 
   // See ClientSocketPool::CancelRequest for documentation on this function.
   void CancelRequest(const std::string& group_name,
@@ -338,6 +346,11 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
       const std::string& name,
       const std::string& type) const;
 
+  // Dumps memory allocation stats. |parent_dump_absolute_name| is the name
+  // used by the parent MemoryAllocatorDump in the memory dump hierarchy.
+  void DumpMemoryStats(base::trace_event::ProcessMemoryDump* pmd,
+                       const std::string& parent_dump_absolute_name) const;
+
   base::TimeDelta ConnectionTimeout() const {
     return connect_job_factory_->ConnectionTimeout();
   }
@@ -368,17 +381,12 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
     // SETTINGS frame.
     bool IsUsable() const;
 
-    // An idle socket should be removed if it can't be reused, or has been idle
-    // for too long. |now| is the current time value (TimeTicks::Now()).
-    // |timeout| is the length of time to wait before timing out an idle socket.
-    bool ShouldCleanup(base::TimeTicks now, base::TimeDelta timeout) const;
-
     StreamSocket* socket;
     base::TimeTicks start_time;
   };
 
-  typedef PriorityQueue<const Request*> RequestQueue;
-  typedef std::map<const ClientSocketHandle*, const Request*> RequestMap;
+  typedef PriorityQueue<Request*> RequestQueue;
+  typedef std::map<const ClientSocketHandle*, Request*> RequestMap;
 
   // A Group is allocated per group_name when there are idle sockets or pending
   // requests.  Otherwise, the Group object is removed from the map.
@@ -456,16 +464,21 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
     // Inserts the request into the queue based on priority
     // order. Older requests are prioritized over requests of equal
     // priority.
-    void InsertPendingRequest(std::unique_ptr<const Request> request);
+    void InsertPendingRequest(std::unique_ptr<Request> request);
 
     // Gets and removes the next pending request. Returns NULL if
     // there are no pending requests.
-    std::unique_ptr<const Request> PopNextPendingRequest();
+    std::unique_ptr<Request> PopNextPendingRequest();
 
     // Finds the pending request for |handle| and removes it. Returns
     // the removed pending request, or NULL if there was none.
-    std::unique_ptr<const Request> FindAndRemovePendingRequest(
+    std::unique_ptr<Request> FindAndRemovePendingRequest(
         ClientSocketHandle* handle);
+
+    // Change the priority of the request named by |*handle|.  |*handle|
+    // must refer to a request currently present in the group.  If |priority|
+    // is the same as the current priority of the request, this is a no-op.
+    void SetPriority(ClientSocketHandle* handle, RequestPriority priority);
 
     void IncrementActiveSocketCount() { active_socket_count_++; }
     void DecrementActiveSocketCount() { active_socket_count_--; }
@@ -479,7 +492,7 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
    private:
     // Returns the iterator's pending request after removing it from
     // the queue.
-    std::unique_ptr<const Request> RemovePendingRequest(
+    std::unique_ptr<Request> RemovePendingRequest(
         const RequestQueue::Pointer& pointer);
 
     // Called when the backup socket timer fires.
@@ -750,7 +763,7 @@ class ClientSocketPoolBase {
                     ClientSocketHandle* handle,
                     const CompletionCallback& callback,
                     const NetLogWithSource& net_log) {
-    std::unique_ptr<const Request> request(new Request(
+    std::unique_ptr<Request> request(new Request(
         handle, callback, priority, respect_limits,
         internal::ClientSocketPoolBaseHelper::NORMAL, params, net_log));
     return helper_.RequestSocket(group_name, std::move(request));
@@ -768,6 +781,12 @@ class ClientSocketPoolBase {
                           internal::ClientSocketPoolBaseHelper::NO_IDLE_SOCKETS,
                           params, net_log);
     helper_.RequestSockets(group_name, request, num_sockets);
+  }
+
+  void SetPriority(const std::string& group_name,
+                   ClientSocketHandle* handle,
+                   RequestPriority priority) {
+    return helper_.SetPriority(group_name, handle, priority);
   }
 
   void CancelRequest(const std::string& group_name,
@@ -796,6 +815,11 @@ class ClientSocketPoolBase {
   LoadState GetLoadState(const std::string& group_name,
                          const ClientSocketHandle* handle) const {
     return helper_.GetLoadState(group_name, handle);
+  }
+
+  void DumpMemoryStats(base::trace_event::ProcessMemoryDump* pmd,
+                       const std::string& parent_dump_absolute_name) const {
+    return helper_.DumpMemoryStats(pmd, parent_dump_absolute_name);
   }
 
   virtual void OnConnectJobComplete(int result, ConnectJob* job) {

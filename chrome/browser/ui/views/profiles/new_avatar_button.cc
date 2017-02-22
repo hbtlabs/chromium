@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "base/win/windows_version.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -25,6 +24,10 @@
 #include "ui/views/border.h"
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/painter.h"
+
+#if defined(OS_WIN)
+#include "base/win/windows_version.h"
+#endif
 
 namespace {
 
@@ -70,7 +73,8 @@ NewAvatarButton::NewAvatarButton(AvatarButtonDelegate* delegate,
   // is larger than this, it will be shrunk to match it.
   // TODO(noms): Calculate this constant algorithmically from the button's size.
   const int kDisplayFontHeight = 16;
-  SetFontList(GetFontList().DeriveWithHeightUpperBound(kDisplayFontHeight));
+  SetFontList(
+      label()->font_list().DeriveWithHeightUpperBound(kDisplayFontHeight));
 
   ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
   if (button_style == AvatarButtonStyle::THEMED) {
@@ -188,7 +192,7 @@ void NewAvatarButton::Update() {
       use_generic_button
           ? gfx::ShadowValues()
           : gfx::ShadowValues(
-                10, gfx::ShadowValue(gfx::Vector2d(), 1.0f, SK_ColorDKGRAY)));
+                10, gfx::ShadowValue(gfx::Vector2d(), 2.0f, SK_ColorDKGRAY)));
 
   // We want the button to resize if the new text is shorter.
   SetMinSize(gfx::Size());

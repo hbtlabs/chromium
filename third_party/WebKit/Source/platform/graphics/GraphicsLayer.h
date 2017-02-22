@@ -34,6 +34,7 @@
 #include "platform/geometry/FloatSize.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/Color.h"
+#include "platform/graphics/ColorBehavior.h"
 #include "platform/graphics/CompositorElementId.h"
 #include "platform/graphics/ContentLayerDelegate.h"
 #include "platform/graphics/GraphicsContext.h"
@@ -47,7 +48,6 @@
 #include "platform/transforms/TransformationMatrix.h"
 #include "public/platform/WebContentLayer.h"
 #include "public/platform/WebImageLayer.h"
-#include "public/platform/WebLayerScrollClient.h"
 #include "public/platform/WebLayerStickyPositionConstraint.h"
 #include "third_party/skia/include/core/SkFilterQuality.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
@@ -69,9 +69,7 @@ typedef Vector<GraphicsLayer*, 64> GraphicsLayerVector;
 
 // GraphicsLayer is an abstraction for a rendering surface with backing store,
 // which may have associated transformation and animations.
-
-class PLATFORM_EXPORT GraphicsLayer : public WebLayerScrollClient,
-                                      public cc::LayerClient,
+class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
                                       public DisplayItemClient {
   WTF_MAKE_NONCOPYABLE(GraphicsLayer);
   USING_FAST_MALLOC(GraphicsLayer);
@@ -253,9 +251,6 @@ class PLATFORM_EXPORT GraphicsLayer : public WebLayerScrollClient,
   void paint(const IntRect* interestRect,
              GraphicsContext::DisabledMode = GraphicsContext::NothingDisabled);
 
-  // WebLayerScrollClient implementation.
-  void didScroll() override;
-
   // cc::LayerClient implementation.
   std::unique_ptr<base::trace_event::ConvertableToTraceFormat> TakeDebugInfo(
       cc::Layer*) override;
@@ -286,6 +281,8 @@ class PLATFORM_EXPORT GraphicsLayer : public WebLayerScrollClient,
   void setPreferredRasterBounds(const IntSize&);
   void clearPreferredRasterBounds();
 
+  const ColorBehavior& colorBehavior() const { return m_colorBehavior; }
+
  protected:
   String debugName(cc::Layer*) const;
   bool shouldFlattenTransform() const { return m_shouldFlattenTransform; }
@@ -305,13 +302,11 @@ class PLATFORM_EXPORT GraphicsLayer : public WebLayerScrollClient,
   // can be batched before updating.
   void addChildInternal(GraphicsLayer*);
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   bool hasAncestor(GraphicsLayer*) const;
 #endif
 
   void incrementPaintCount() { ++m_paintCount; }
-
-  void notifyFirstPaintToClient();
 
   // Helper functions used by settors to keep layer's the state consistent.
   void updateChildList();
@@ -334,8 +329,8 @@ class PLATFORM_EXPORT GraphicsLayer : public WebLayerScrollClient,
   std::unique_ptr<JSONObject> layerAsJSONInternal(LayerTreeFlags,
                                                   RenderingContextMap&) const;
 
-  sk_sp<SkPicture> capturePicture();
-  void checkPaintUnderInvalidations(const SkPicture&);
+  sk_sp<PaintRecord> captureRecord();
+  void checkPaintUnderInvalidations(const PaintRecord&);
 
   GraphicsLayerClient* m_client;
 
@@ -401,6 +396,8 @@ class PLATFORM_EXPORT GraphicsLayer : public WebLayerScrollClient,
   int m_renderingContext3d;
 
   std::unique_ptr<PaintController> m_paintController;
+
+  ColorBehavior m_colorBehavior;
 
   IntRect m_previousInterestRect;
   IntSize m_preferredRasterBounds;

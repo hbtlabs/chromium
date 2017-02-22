@@ -27,6 +27,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/network_activity_monitor.h"
 #include "net/base/sockaddr_storage.h"
+#include "net/base/trace_constants.h"
 #include "net/log/net_log.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source.h"
@@ -161,6 +162,8 @@ UDPSocketPosix::UDPSocketPosix(DatagramSocket::BindType bind_type,
       multicast_time_to_live_(1),
       bind_type_(bind_type),
       rand_int_cb_(rand_int_cb),
+      read_socket_watcher_(FROM_HERE),
+      write_socket_watcher_(FROM_HERE),
       read_watcher_(this),
       write_watcher_(this),
       read_buf_len_(0),
@@ -244,7 +247,7 @@ int UDPSocketPosix::GetPeerAddress(IPEndPoint* address) const {
     std::unique_ptr<IPEndPoint> address(new IPEndPoint());
     if (!address->FromSockAddr(storage.addr, storage.addr_len))
       return ERR_ADDRESS_INVALID;
-    remote_address_.reset(address.release());
+    remote_address_ = std::move(address);
   }
 
   *address = *remote_address_;
@@ -264,7 +267,7 @@ int UDPSocketPosix::GetLocalAddress(IPEndPoint* address) const {
     std::unique_ptr<IPEndPoint> address(new IPEndPoint());
     if (!address->FromSockAddr(storage.addr, storage.addr_len))
       return ERR_ADDRESS_INVALID;
-    local_address_.reset(address.release());
+    local_address_ = std::move(address);
     net_log_.AddEvent(
         NetLogEventType::UDP_LOCAL_ADDRESS,
         CreateNetLogUDPConnectCallback(local_address_.get(), bound_network_));
@@ -574,7 +577,7 @@ int UDPSocketPosix::SetBroadcast(bool broadcast) {
 }
 
 void UDPSocketPosix::ReadWatcher::OnFileCanReadWithoutBlocking(int) {
-  TRACE_EVENT0("net",
+  TRACE_EVENT0(kNetTracingCategory,
                "UDPSocketPosix::ReadWatcher::OnFileCanReadWithoutBlocking");
   if (!socket_->read_callback_.is_null())
     socket_->DidCompleteRead();

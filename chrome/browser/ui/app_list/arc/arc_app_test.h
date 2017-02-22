@@ -17,8 +17,8 @@ namespace mojom {
 class AppInfo;
 class ArcPackageInfo;
 }
+class ArcServiceManager;
 class ArcSessionManager;
-class FakeArcBridgeService;
 class FakeAppInstance;
 }
 
@@ -73,8 +73,6 @@ class ArcAppTest {
 
   chromeos::FakeChromeUserManager* GetUserManager();
 
-  arc::FakeArcBridgeService* bridge_service() { return bridge_service_.get(); }
-
   arc::FakeAppInstance* app_instance() { return app_instance_.get(); }
 
   ArcAppListPrefs* arc_app_list_prefs() { return arc_app_list_pref_; }
@@ -82,19 +80,24 @@ class ArcAppTest {
   arc::ArcSessionManager* arc_session_manager() {
     return arc_session_manager_.get();
   }
+  arc::ArcServiceManager* arc_service_manager() {
+    return arc_service_manager_.get();
+  }
 
  private:
   const user_manager::User* CreateUserAndLogin();
   bool FindPackage(const arc::mojom::ArcPackageInfo& package);
+  void CreateFakeAppsAndPackages();
 
   // Unowned pointer.
   Profile* profile_ = nullptr;
 
   ArcAppListPrefs* arc_app_list_pref_ = nullptr;
 
-  std::unique_ptr<arc::FakeArcBridgeService> bridge_service_;
-  std::unique_ptr<arc::FakeAppInstance> app_instance_;
+  std::unique_ptr<arc::ArcServiceManager> arc_service_manager_;
   std::unique_ptr<arc::ArcSessionManager> arc_session_manager_;
+  std::unique_ptr<arc::FakeAppInstance> app_instance_;
+
   std::unique_ptr<chromeos::ScopedUserManagerEnabler> user_manager_enabler_;
   std::vector<arc::mojom::AppInfo> fake_apps_;
   std::vector<arc::mojom::AppInfo> fake_default_apps_;

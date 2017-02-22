@@ -4,6 +4,7 @@
 
 #include "components/spellcheck/renderer/spellcheck_provider_test.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "components/spellcheck/common/spellcheck_marker.h"
 #include "components/spellcheck/common/spellcheck_messages.h"
@@ -62,7 +63,7 @@ bool TestingSpellCheckProvider::Send(IPC::Message* message)  {
   }
 #endif
 
-  messages_.push_back(message);
+  messages_.push_back(base::WrapUnique<IPC::Message>(message));
   return true;
 }
 
@@ -94,6 +95,19 @@ void TestingSpellCheckProvider::OnCallSpellingService(int route_id,
 
 void TestingSpellCheckProvider::ResetResult() {
   text_.clear();
+}
+
+void TestingSpellCheckProvider::SetLastResults(
+    const base::string16 last_request,
+    blink::WebVector<blink::WebTextCheckingResult>& last_results) {
+  last_request_ = last_request;
+  last_results_ = last_results;
+}
+
+bool TestingSpellCheckProvider::SatisfyRequestFromCache(
+    const base::string16& text,
+    blink::WebTextCheckingCompletion* completion) {
+  return SpellCheckProvider::SatisfyRequestFromCache(text, completion);
 }
 
 SpellCheckProviderTest::SpellCheckProviderTest() {}

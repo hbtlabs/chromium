@@ -11,14 +11,18 @@
 namespace blink {
 
 enum NGWritingMode {
-  HorizontalTopBottom = 0,
-  VerticalRightLeft = 1,
-  VerticalLeftRight = 2,
-  SidewaysRightLeft = 3,
-  SidewaysLeftRight = 4
+  kHorizontalTopBottom = 0,
+  kVerticalRightLeft = 1,
+  kVerticalLeftRight = 2,
+  kSidewaysRightLeft = 3,
+  kSidewaysLeftRight = 4
 };
 
 CORE_EXPORT NGWritingMode FromPlatformWritingMode(WritingMode);
+
+// Whether the child and the containing block are parallel to each other.
+// Example: vertical-rl and vertical-lr
+bool IsParallelWritingMode(NGWritingMode a, NGWritingMode b);
 
 }  // namespace blink
 

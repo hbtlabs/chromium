@@ -24,6 +24,20 @@
 #include "base/trace_event/process_memory_totals.h"
 #include "build/build_config.h"
 
+#if defined(OS_MACOSX)
+#include <libproc.h>
+#include <mach/mach.h>
+#include <mach/mach_vm.h>
+#include <mach/shared_region.h>
+#include <sys/param.h>
+
+#include <mach-o/dyld_images.h>
+#include <mach-o/loader.h>
+#include <mach/mach.h>
+
+#include "base/numerics/safe_math.h"
+#endif  // defined(OS_MACOSX)
+
 namespace tracing {
 
 namespace {
@@ -155,6 +169,18 @@ uint32_t ReadLinuxProcSmapsFile(FILE* smaps_file,
   }
   return num_valid_regions;
 }
+
+bool GetResidentSizeFromStatmFile(int fd, uint64_t* resident_pages) {
+  lseek(fd, 0, SEEK_SET);
+  char line[kMaxLineSize];
+  int res = read(fd, line, kMaxLineSize - 1);
+  if (res <= 0)
+    return false;
+  line[res] = '\0';
+  int num_scanned = sscanf(line, "%*s %" SCNu64, resident_pages);
+  return num_scanned == 1;
+}
+
 #endif  // defined(OS_LINUX) || defined(OS_ANDROID)
 
 std::unique_ptr<base::ProcessMetrics> CreateProcessMetrics(
@@ -183,6 +209,9 @@ uint64_t ProcessMetricsMemoryDumpProvider::rss_bytes_for_testing = 0;
 // static
 FILE* ProcessMetricsMemoryDumpProvider::proc_smaps_for_testing = nullptr;
 
+// static
+int ProcessMetricsMemoryDumpProvider::fast_polling_statm_fd_for_testing = -1;
+
 bool ProcessMetricsMemoryDumpProvider::DumpProcessMemoryMaps(
     const base::trace_event::MemoryDumpArgs& args,
     base::trace_event::ProcessMemoryDump* pmd) {
@@ -204,6 +233,272 @@ bool ProcessMetricsMemoryDumpProvider::DumpProcessMemoryMaps(
 }
 #endif  // defined(OS_LINUX) || defined(OS_ANDROID)
 
+#if defined(OS_MACOSX)
+
+namespace {
+
+using VMRegion = base::trace_event::ProcessMemoryMaps::VMRegion;
+
+bool IsAddressInSharedRegion(uint64_t address) {
+  return address >= SHARED_REGION_BASE_X86_64 &&
+         address < (SHARED_REGION_BASE_X86_64 + SHARED_REGION_SIZE_X86_64);
+}
+
+bool IsRegionContainedInRegion(const VMRegion& containee,
+                               const VMRegion& container) {
+  uint64_t containee_end_address =
+      containee.start_address + containee.size_in_bytes;
+  uint64_t container_end_address =
+      container.start_address + container.size_in_bytes;
+  return containee.start_address >= container.start_address &&
+         containee_end_address <= container_end_address;
+}
+
+bool DoRegionsIntersect(const VMRegion& a, const VMRegion& b) {
+  uint64_t a_end_address = a.start_address + a.size_in_bytes;
+  uint64_t b_end_address = b.start_address + b.size_in_bytes;
+  return a.start_address < b_end_address && b.start_address < a_end_address;
+}
+
+// Creates VMRegions for all dyld images. Returns whether the operation
+// succeeded.
+bool GetDyldRegions(std::vector<VMRegion>* regions) {
+  task_dyld_info_data_t dyld_info;
+  mach_msg_type_number_t count = TASK_DYLD_INFO_COUNT;
+  kern_return_t kr =
+      task_info(mach_task_self(), TASK_DYLD_INFO,
+                reinterpret_cast<task_info_t>(&dyld_info), &count);
+  if (kr != KERN_SUCCESS)
+    return false;
+
+  const struct dyld_all_image_infos* all_image_infos =
+      reinterpret_cast<const struct dyld_all_image_infos*>(
+          dyld_info.all_image_info_addr);
+
+  bool emitted_linkedit_from_dyld_shared_cache = false;
+  for (size_t i = 0; i < all_image_infos->infoArrayCount; i++) {
+    const char* image_name = all_image_infos->infoArray[i].imageFilePath;
+
+    // The public definition for dyld_all_image_infos/dyld_image_info is wrong
+    // for 64-bit platforms. We explicitly cast to struct mach_header_64 even
+    // though the public definition claims that this is a struct mach_header.
+    const struct mach_header_64* const header =
+        reinterpret_cast<const struct mach_header_64* const>(
+            all_image_infos->infoArray[i].imageLoadAddress);
+
+    uint64_t next_command = reinterpret_cast<uint64_t>(header + 1);
+    uint64_t command_end = next_command + header->sizeofcmds;
+    uint64_t slide = 0;
+    for (unsigned int j = 0; j < header->ncmds; ++j) {
+      // Ensure that next_command doesn't run past header->sizeofcmds.
+      if (next_command + sizeof(struct load_command) > command_end)
+        return false;
+      const struct load_command* load_cmd =
+          reinterpret_cast<const struct load_command*>(next_command);
+      next_command += load_cmd->cmdsize;
+
+      if (load_cmd->cmd == LC_SEGMENT_64) {
+        if (load_cmd->cmdsize < sizeof(segment_command_64))
+          return false;
+        const segment_command_64* seg =
+            reinterpret_cast<const segment_command_64*>(load_cmd);
+        if (strcmp(seg->segname, SEG_PAGEZERO) == 0)
+          continue;
+        if (strcmp(seg->segname, SEG_TEXT) == 0) {
+          slide = reinterpret_cast<uint64_t>(header) - seg->vmaddr;
+        }
+
+        // Avoid emitting LINKEDIT regions in the dyld shared cache, since they
+        // all overlap.
+        if (IsAddressInSharedRegion(seg->vmaddr) &&
+            strcmp(seg->segname, SEG_LINKEDIT) == 0) {
+          if (emitted_linkedit_from_dyld_shared_cache) {
+            continue;
+          } else {
+            emitted_linkedit_from_dyld_shared_cache = true;
+            image_name = "dyld shared cache combined __LINKEDIT";
+          }
+        }
+
+        uint32_t protection_flags = 0;
+        if (seg->initprot & VM_PROT_READ)
+          protection_flags |= VMRegion::kProtectionFlagsRead;
+        if (seg->initprot & VM_PROT_WRITE)
+          protection_flags |= VMRegion::kProtectionFlagsWrite;
+        if (seg->initprot & VM_PROT_EXECUTE)
+          protection_flags |= VMRegion::kProtectionFlagsExec;
+
+        VMRegion region;
+        region.size_in_bytes = seg->vmsize;
+        region.protection_flags = protection_flags;
+        region.mapped_file = image_name;
+        region.start_address = slide + seg->vmaddr;
+
+        // We intentionally avoid setting any page information, which is not
+        // available from dyld. The fields will be populated later.
+        regions->push_back(region);
+      }
+    }
+  }
+  return true;
+}
+
+void PopulateByteStats(VMRegion* region, const vm_region_submap_info_64& info) {
+  uint32_t share_mode = info.share_mode;
+  if (share_mode == SM_COW && info.ref_count == 1)
+    share_mode = SM_PRIVATE;
+
+  uint64_t dirty_bytes = info.pages_dirtied * PAGE_SIZE;
+  uint64_t clean_bytes =
+      (info.pages_resident - info.pages_reusable - info.pages_dirtied) *
+      PAGE_SIZE;
+  switch (share_mode) {
+    case SM_LARGE_PAGE:
+    case SM_PRIVATE:
+      region->byte_stats_private_dirty_resident = dirty_bytes;
+      region->byte_stats_private_clean_resident = clean_bytes;
+      break;
+    case SM_COW:
+      region->byte_stats_private_dirty_resident = dirty_bytes;
+      region->byte_stats_shared_clean_resident = clean_bytes;
+      break;
+    case SM_SHARED:
+    case SM_PRIVATE_ALIASED:
+    case SM_TRUESHARED:
+    case SM_SHARED_ALIASED:
+      region->byte_stats_shared_dirty_resident = dirty_bytes;
+      region->byte_stats_shared_clean_resident = clean_bytes;
+      break;
+    case SM_EMPTY:
+      break;
+    default:
+      NOTREACHED();
+      break;
+  }
+}
+
+// Creates VMRegions from mach_vm_region_recurse. Returns whether the operation
+// succeeded.
+bool GetAllRegions(std::vector<VMRegion>* regions) {
+  const int pid = getpid();
+  task_t task = mach_task_self();
+  mach_vm_size_t size = 0;
+  vm_region_submap_info_64 info;
+  natural_t depth = 1;
+  mach_msg_type_number_t count = sizeof(info);
+  for (mach_vm_address_t address = MACH_VM_MIN_ADDRESS;; address += size) {
+    memset(&info, 0, sizeof(info));
+    kern_return_t kr = mach_vm_region_recurse(
+        task, &address, &size, &depth,
+        reinterpret_cast<vm_region_info_t>(&info), &count);
+    if (kr == KERN_INVALID_ADDRESS)  // nothing else left
+      break;
+    if (kr != KERN_SUCCESS)  // something bad
+      return false;
+    if (info.is_submap) {
+      size = 0;
+      ++depth;
+      continue;
+    }
+
+    VMRegion region;
+    PopulateByteStats(&region, info);
+
+    if (info.protection & VM_PROT_READ)
+      region.protection_flags |= VMRegion::kProtectionFlagsRead;
+    if (info.protection & VM_PROT_WRITE)
+      region.protection_flags |= VMRegion::kProtectionFlagsWrite;
+    if (info.protection & VM_PROT_EXECUTE)
+      region.protection_flags |= VMRegion::kProtectionFlagsExec;
+
+    char buffer[MAXPATHLEN];
+    int length = proc_regionfilename(pid, address, buffer, MAXPATHLEN);
+    if (length != 0)
+      region.mapped_file.assign(buffer, length);
+
+    region.byte_stats_swapped = info.pages_swapped_out * PAGE_SIZE;
+    region.start_address = address;
+    region.size_in_bytes = size;
+    regions->push_back(region);
+
+    base::CheckedNumeric<mach_vm_address_t> numeric(address);
+    numeric += size;
+    if (!numeric.IsValid())
+      return false;
+    address = numeric.ValueOrDie();
+  }
+  return true;
+}
+
+void AddRegionByteStats(VMRegion* dest, const VMRegion& source) {
+  dest->byte_stats_private_dirty_resident +=
+      source.byte_stats_private_dirty_resident;
+  dest->byte_stats_private_clean_resident +=
+      source.byte_stats_private_clean_resident;
+  dest->byte_stats_shared_dirty_resident +=
+      source.byte_stats_shared_dirty_resident;
+  dest->byte_stats_shared_clean_resident +=
+      source.byte_stats_shared_clean_resident;
+  dest->byte_stats_swapped += source.byte_stats_swapped;
+  dest->byte_stats_proportional_resident +=
+      source.byte_stats_proportional_resident;
+}
+
+}  // namespace
+
+bool ProcessMetricsMemoryDumpProvider::DumpProcessMemoryMaps(
+    const base::trace_event::MemoryDumpArgs& args,
+    base::trace_event::ProcessMemoryDump* pmd) {
+  using VMRegion = base::trace_event::ProcessMemoryMaps::VMRegion;
+
+  std::vector<VMRegion> dyld_regions;
+  if (!GetDyldRegions(&dyld_regions))
+    return false;
+  std::vector<VMRegion> all_regions;
+  if (!GetAllRegions(&all_regions))
+    return false;
+
+  // Merge information from dyld regions and all regions.
+  for (const VMRegion& region : all_regions) {
+    bool skip = false;
+    const bool in_shared_region = IsAddressInSharedRegion(region.start_address);
+    for (VMRegion& dyld_region : dyld_regions) {
+      // If this region is fully contained in a dyld region, then add the bytes
+      // stats.
+      if (IsRegionContainedInRegion(region, dyld_region)) {
+        AddRegionByteStats(&dyld_region, region);
+        skip = true;
+        break;
+      }
+
+      // Check to see if the region is likely used for the dyld shared cache.
+      if (in_shared_region) {
+        // This region is likely used for the dyld shared cache. Don't record
+        // any byte stats since:
+        //   1. It's not possible to figure out which dyld regions the byte
+        //      stats correspond to.
+        //   2. The region is likely shared by non-Chrome processes, so there's
+        //      no point in charging the pages towards Chrome.
+        if (DoRegionsIntersect(region, dyld_region)) {
+          skip = true;
+          break;
+        }
+      }
+    }
+    if (skip)
+      continue;
+    pmd->process_mmaps()->AddVMRegion(region);
+  }
+
+  for (VMRegion& region : dyld_regions) {
+    pmd->process_mmaps()->AddVMRegion(region);
+  }
+
+  pmd->set_has_process_mmaps();
+  return true;
+}
+#endif  // defined(OS_MACOSX)
+
 // static
 void ProcessMetricsMemoryDumpProvider::RegisterForProcess(
     base::ProcessId process) {
@@ -211,6 +506,7 @@ void ProcessMetricsMemoryDumpProvider::RegisterForProcess(
       new ProcessMetricsMemoryDumpProvider(process));
   base::trace_event::MemoryDumpProvider::Options options;
   options.target_pid = process;
+  options.is_fast_polling_supported = true;
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
       metrics_provider.get(), "ProcessMemoryMetrics", nullptr, options);
   bool did_insert =
@@ -229,9 +525,8 @@ void ProcessMetricsMemoryDumpProvider::RegisterForProcess(
 void ProcessMetricsMemoryDumpProvider::UnregisterForProcess(
     base::ProcessId process) {
   auto iter = g_dump_providers_map.Get().find(process);
-  if (iter == g_dump_providers_map.Get().end()) {
+  if (iter == g_dump_providers_map.Get().end())
     return;
-  }
   base::trace_event::MemoryDumpManager::GetInstance()
       ->UnregisterAndDeleteDumpProviderSoon(std::move(iter->second));
   g_dump_providers_map.Get().erase(iter);
@@ -252,11 +547,11 @@ bool ProcessMetricsMemoryDumpProvider::OnMemoryDump(
     base::trace_event::ProcessMemoryDump* pmd) {
   bool res = DumpProcessTotals(args, pmd);
 
-#if defined(OS_LINUX) || defined(OS_ANDROID)
+#if defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_MACOSX)
   if (args.level_of_detail ==
       base::trace_event::MemoryDumpLevelOfDetail::DETAILED)
     res &= DumpProcessMemoryMaps(args, pmd);
-#endif
+#endif  // defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_MACOSX)
   return res;
 }
 
@@ -298,7 +593,20 @@ bool ProcessMetricsMemoryDumpProvider::DumpProcessTotals(
                                               nullptr /* shared_bytes */);
   if (res)
     pmd->process_totals()->SetExtraFieldInBytes("private_bytes", private_bytes);
-#endif  // defined(OS_LINUX) || defined(OS_ANDROID)
+#elif defined(OS_WIN)
+  if (args.level_of_detail ==
+      base::trace_event::MemoryDumpLevelOfDetail::DETAILED) {
+    uint64_t pss_bytes = 0;
+    bool res = process_metrics_->GetProportionalSetSizeBytes(&pss_bytes);
+    if (res) {
+      base::trace_event::ProcessMemoryMaps::VMRegion region;
+      region.byte_stats_proportional_resident = pss_bytes;
+      pmd->process_mmaps()->AddVMRegion(region);
+      pmd->set_has_process_mmaps();
+    }
+  }
+
+#endif
 #endif  // !defined(OS_IOS)
 
   pmd->process_totals()->set_resident_set_bytes(rss_bytes);
@@ -307,6 +615,42 @@ bool ProcessMetricsMemoryDumpProvider::DumpProcessTotals(
 
   // Returns true even if other metrics failed, since rss is reported.
   return true;
+}
+
+void ProcessMetricsMemoryDumpProvider::PollFastMemoryTotal(
+    uint64_t* memory_total) {
+  *memory_total = 0;
+#if defined(OS_LINUX) || defined(OS_ANDROID)
+  int statm_fd = fast_polling_statm_fd_for_testing;
+  if (statm_fd == -1) {
+    if (!fast_polling_statm_fd_.is_valid()) {
+      std::string name = "/proc/" + (process_ == base::kNullProcessId
+                                         ? "self"
+                                         : base::IntToString(process_)) +
+                         "/statm";
+      fast_polling_statm_fd_.reset(open(name.c_str(), O_RDONLY));
+      DCHECK(fast_polling_statm_fd_.is_valid());
+    }
+    statm_fd = fast_polling_statm_fd_.get();
+  }
+  if (statm_fd == -1)
+    return;
+
+  uint64_t rss_pages = 0;
+  if (!GetResidentSizeFromStatmFile(statm_fd, &rss_pages))
+    return;
+
+  static size_t page_size = base::GetPageSize();
+  *memory_total = rss_pages * page_size;
+#else
+  *memory_total = process_metrics_->GetWorkingSetSize();
+#endif
+}
+
+void ProcessMetricsMemoryDumpProvider::SuspendFastMemoryPolling() {
+#if defined(OS_LINUX) || defined(OS_ANDROID)
+  fast_polling_statm_fd_.reset();
+#endif
 }
 
 }  // namespace tracing

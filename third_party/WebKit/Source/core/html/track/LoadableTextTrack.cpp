@@ -27,7 +27,6 @@
 
 #include "core/dom/ElementTraversal.h"
 #include "core/html/HTMLTrackElement.h"
-#include "core/html/track/vtt/VTTRegionList.h"
 
 namespace blink {
 
@@ -51,14 +50,6 @@ void LoadableTextTrack::setMode(const AtomicString& mode) {
   TextTrack::setMode(mode);
   if (m_trackElement->getReadyState() == HTMLTrackElement::kNone)
     m_trackElement->scheduleLoad();
-}
-
-void LoadableTextTrack::addRegions(
-    const HeapVector<Member<VTTRegion>>& newRegions) {
-  for (size_t i = 0; i < newRegions.size(); ++i) {
-    newRegions[i]->setTrack(this);
-    regions()->add(newRegions[i]);
-  }
 }
 
 size_t LoadableTextTrack::trackElementIndex() const {

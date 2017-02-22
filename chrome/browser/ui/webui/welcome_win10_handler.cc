@@ -5,22 +5,73 @@
 #include "chrome/browser/ui/webui/welcome_win10_handler.h"
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
+#include "base/strings/stringprintf.h"
+#include "base/values.h"
 #include "chrome/browser/shell_integration.h"
+#include "chrome/browser/shell_integration_win.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/grit/generated_resources.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
-#include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
-WelcomeWin10Handler::WelcomeWin10Handler() {
+namespace {
+
+void RecordDefaultBrowserResult(
+    const std::string& histogram_suffix,
+    shell_integration::DefaultWebClientState default_browser_state) {
+  base::UmaHistogramBoolean(
+      base::StringPrintf("Welcome.Win10.DefaultPromptResult_%s",
+                         histogram_suffix.c_str()),
+      default_browser_state == shell_integration::IS_DEFAULT);
+}
+
+void RecordPinnedResult(const std::string& histogram_suffix,
+                        bool succeeded,
+                        bool is_pinned) {
+  if (!succeeded)
+    return;
+
+  base::UmaHistogramBoolean(
+      base::StringPrintf("Welcome.Win10.PinnedPromptResult_%s",
+                         histogram_suffix.c_str()),
+      is_pinned);
+}
+
+}  // namespace
+
+WelcomeWin10Handler::WelcomeWin10Handler(bool inline_style_variant)
+    : inline_style_variant_(inline_style_variant), weak_ptr_factory_(this) {
   // The check is started as early as possible because waiting for the page to
   // be fully loaded is unnecessarily wasting time.
   StartIsPinnedToTaskbarCheck();
 }
 
-WelcomeWin10Handler::~WelcomeWin10Handler() = default;
+WelcomeWin10Handler::~WelcomeWin10Handler() {
+  // The instructions for pinning Chrome to the taskbar were only displayed if
+  // Chrome wasn't pinned to the taskbar at page construction time.
+  bool pin_instructions_shown =
+      pinned_state_result_.has_value() && !pinned_state_result_.value();
+
+  std::string histogram_suffix;
+  histogram_suffix += inline_style_variant_ ? "Inline" : "Sectioned";
+  histogram_suffix += pin_instructions_shown ? "Combined" : "Default";
+
+  // Closing the page. Record whether the instructions were useful.
+  (new shell_integration::DefaultBrowserWorker(
+       base::Bind(&RecordDefaultBrowserResult, histogram_suffix)))
+      ->StartCheckIsDefault();
+
+  if (pin_instructions_shown) {
+    // On error, call RecordPinnedResult() with |succeeded| == false.
+    base::Closure error_callback =
+        base::Bind(&RecordPinnedResult, histogram_suffix, false, false);
+    shell_integration::win::GetIsPinnedToTaskbarState(
+        error_callback, base::Bind(&RecordPinnedResult, histogram_suffix));
+  }
+}
 
 void WelcomeWin10Handler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
@@ -47,21 +98,25 @@ void WelcomeWin10Handler::HandleGetPinnedToTaskbarState(
   DCHECK(callback_id_found);
 
   // Send back the result if it is already available.
-  if (pinned_state_result_) {
+  if (pinned_state_result_.has_value()) {
     SendPinnedToTaskbarStateResult();
     return;
   }
 
   // Only wait for a small amount of time for the result. If the timer fires,
-  // it will be assumed that Chrome is pinned to the taskbar.
+  // it will be assumed that Chrome is pinned to the taskbar. This is to make
+  // sure the instructions are never displayed in case it was impossible to
+  // determine the pinned state.
   constexpr base::TimeDelta kPinnedToTaskbarTimeout =
       base::TimeDelta::FromMilliseconds(200);
   timer_.Start(FROM_HERE, kPinnedToTaskbarTimeout,
                base::Bind(&WelcomeWin10Handler::OnIsPinnedToTaskbarDetermined,
-                          base::Unretained(this), true));
+                          base::Unretained(this), true, true));
 }
 
 void WelcomeWin10Handler::HandleSetDefaultBrowser(const base::ListValue* args) {
+  base::RecordAction(
+      base::UserMetricsAction("Win10WelcomePage_SetAsDefaultBrowser"));
   // The worker owns itself.
   (new shell_integration::DefaultBrowserWorker(
        shell_integration::DefaultWebClientWorkerCallback()))
@@ -75,37 +130,39 @@ void WelcomeWin10Handler::HandleContinue(const base::ListValue* args) {
 }
 
 void WelcomeWin10Handler::StartIsPinnedToTaskbarCheck() {
-  // Start the utility process that will handle the IsPinnedToTaskbar() call.
-  client_ = base::MakeUnique<
-      content::UtilityProcessMojoClient<chrome::mojom::ShellHandler>>(
-      l10n_util::GetStringUTF16(IDS_UTILITY_PROCESS_SHELL_HANDLER_NAME));
-
   // Assume that Chrome is pinned to the taskbar if an error occurs.
-  client_->set_error_callback(
+  base::Closure error_callback =
       base::Bind(&WelcomeWin10Handler::OnIsPinnedToTaskbarDetermined,
-                 base::Unretained(this), true));
-  client_->set_disable_sandbox();
-  client_->Start();
+                 weak_ptr_factory_.GetWeakPtr(), false, true);
 
-  client_->service()->IsPinnedToTaskbar(base::Bind(
-      &WelcomeWin10Handler::OnIsPinnedToTaskbarResult, base::Unretained(this)));
+  shell_integration::win::GetIsPinnedToTaskbarState(
+      error_callback,
+      base::Bind(&WelcomeWin10Handler::OnIsPinnedToTaskbarResult,
+                 weak_ptr_factory_.GetWeakPtr()));
 }
 
 void WelcomeWin10Handler::OnIsPinnedToTaskbarResult(bool succeeded,
                                                     bool is_pinned_to_taskbar) {
-  OnIsPinnedToTaskbarDetermined(succeeded && is_pinned_to_taskbar);
+  // Assume that Chrome is pinned to the taskbar if an error occured.
+  OnIsPinnedToTaskbarDetermined(false, !succeeded || is_pinned_to_taskbar);
 }
 
 void WelcomeWin10Handler::OnIsPinnedToTaskbarDetermined(
+    bool timed_out,
     bool is_pinned_to_taskbar) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  // Reset the client and the timer to make sure this function only gets called
-  // once.
-  client_.reset();
+  // Early exit if the pinned_state was already determined.
+  if (pinned_state_result_.has_value())
+    return;
+
+  UMA_HISTOGRAM_BOOLEAN("Welcome.Win10.PinCheckTimedOut", timed_out);
+
+  // Stop the timer if it's still running.
   timer_.Stop();
 
-  pinned_state_result_ = is_pinned_to_taskbar;
+  // Cache the value.
+  pinned_state_result_.emplace(is_pinned_to_taskbar);
 
   // If the page already called getPinnedToTaskbarState(), the result can be
   // sent back.

@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/callback_forward.h"
+#include "base/cancelable_callback.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -16,9 +17,11 @@
 #include "chrome/browser/chromeos/login/enrollment/enrollment_screen_actor.h"
 #include "chrome/browser/chromeos/login/enrollment/enterprise_enrollment_helper.h"
 #include "chrome/browser/chromeos/login/screens/base_screen.h"
+#include "chrome/browser/chromeos/policy/active_directory_join_delegate.h"
 #include "chrome/browser/chromeos/policy/enrollment_config.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/enterprise_metrics.h"
+#include "net/base/backoff_entry.h"
 
 namespace base {
 class ElapsedTimer;
@@ -38,7 +41,8 @@ class ScreenManager;
 class EnrollmentScreen
     : public BaseScreen,
       public EnterpriseEnrollmentHelper::EnrollmentStatusConsumer,
-      public EnrollmentScreenActor::Controller {
+      public EnrollmentScreenActor::Controller,
+      public ActiveDirectoryJoinDelegate {
  public:
   EnrollmentScreen(BaseScreenDelegate* base_screen_delegate,
                    EnrollmentScreenActor* actor);
@@ -54,10 +58,8 @@ class EnrollmentScreen
       pairing_chromeos::ControllerPairingController* shark_controller);
 
   // BaseScreen implementation:
-  void PrepareToShow() override;
   void Show() override;
   void Hide() override;
-  std::string GetName() const override;
 
   // EnrollmentScreenActor::Controller implementation:
   void OnLoginDone(const std::string& user,
@@ -77,12 +79,16 @@ class EnrollmentScreen
   void OnDeviceAttributeUploadCompleted(bool success) override;
   void OnDeviceAttributeUpdatePermission(bool granted) override;
 
+  // ActiveDirectoryJoinDelegate implementation:
+  void JoinDomain(OnDomainJoinedCallback on_joined_callback) override;
+
   // Used for testing.
   EnrollmentScreenActor* GetActor() {
     return actor_;
   }
 
  private:
+  friend class EnrollmentScreenUnitTest;
   FRIEND_TEST_ALL_PREFIXES(EnrollmentScreenTest, TestSuccess);
   FRIEND_TEST_ALL_PREFIXES(AttestationAuthEnrollmentScreenTest, TestCancel);
   FRIEND_TEST_ALL_PREFIXES(ForcedAttestationAuthEnrollmentScreenTest,
@@ -95,6 +101,10 @@ class EnrollmentScreen
   FRIEND_TEST_ALL_PREFIXES(EnterpriseEnrollmentTest,
                            TestAuthCodeGetsProperlyReceivedFromGaia);
   FRIEND_TEST_ALL_PREFIXES(HandsOffNetworkScreenTest, RequiresNoInput);
+  FRIEND_TEST_ALL_PREFIXES(HandsOffNetworkScreenTest, ContinueClickedOnlyOnce);
+  FRIEND_TEST_ALL_PREFIXES(EnrollmentScreenUnitTest, Retries);
+  FRIEND_TEST_ALL_PREFIXES(EnrollmentScreenUnitTest, DoesNotRetryOnTopOfUser);
+  FRIEND_TEST_ALL_PREFIXES(EnrollmentScreenUnitTest, DoesNotRetryAfterSuccess);
 
   // The authentication mechanisms that this class can use.
   enum Auth {
@@ -146,6 +156,14 @@ class EnrollmentScreen
   // Advance to the next authentication mechanism if possible.
   bool AdvanceToNextAuth();
 
+  // Similar to OnRetry(), but responds to a timer instead of the user
+  // pressing the Retry button.
+  void AutomaticRetry();
+
+  // Processes a request to retry enrollment.
+  // Called by OnRetry() and AutomaticRetry().
+  void ProcessRetry();
+
   pairing_chromeos::ControllerPairingController* shark_controller_ = nullptr;
 
   EnrollmentScreenActor* actor_;
@@ -155,9 +173,13 @@ class EnrollmentScreen
   Auth last_auth_ = AUTH_OAUTH;
   bool enrollment_failed_once_ = false;
   std::string enrolling_user_domain_;
-  std::string auth_code_;
   std::unique_ptr<base::ElapsedTimer> elapsed_timer_;
+  net::BackoffEntry::Policy retry_policy_;
+  std::unique_ptr<net::BackoffEntry> retry_backoff_;
+  base::CancelableClosure retry_task_;
+  int num_retries_ = 0;
   std::unique_ptr<EnterpriseEnrollmentHelper> enrollment_helper_;
+  OnDomainJoinedCallback on_joined_callback_;
   base::WeakPtrFactory<EnrollmentScreen> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(EnrollmentScreen);

@@ -38,7 +38,6 @@ Bindings.ResourceScriptMapping = class {
    * @param {!Bindings.DebuggerWorkspaceBinding} debuggerWorkspaceBinding
    */
   constructor(debuggerModel, workspace, debuggerWorkspaceBinding) {
-    this._target = debuggerModel.target();
     this._debuggerModel = debuggerModel;
     this._workspace = workspace;
     this._debuggerWorkspaceBinding = debuggerWorkspaceBinding;
@@ -154,7 +153,7 @@ Bindings.ResourceScriptMapping = class {
    */
   _uiSourceCodeAdded(event) {
     var uiSourceCode = /** @type {!Workspace.UISourceCode} */ (event.data);
-    if (uiSourceCode.isFromServiceProject())
+    if (uiSourceCode.project().isServiceProject())
       return;
     var scripts = this._scriptsForUISourceCode(uiSourceCode);
     if (!scripts.length)
@@ -168,7 +167,7 @@ Bindings.ResourceScriptMapping = class {
    */
   _uiSourceCodeRemoved(event) {
     var uiSourceCode = /** @type {!Workspace.UISourceCode} */ (event.data);
-    if (uiSourceCode.isFromServiceProject() || !this._boundUISourceCodes.has(uiSourceCode))
+    if (uiSourceCode.project().isServiceProject() || !this._boundUISourceCodes.has(uiSourceCode))
       return;
 
     this._unbindUISourceCode(uiSourceCode);
@@ -222,7 +221,7 @@ Bindings.ResourceScriptMapping = class {
     this._setScriptFile(uiSourceCode, scriptFile);
     for (var i = 0; i < scripts.length; ++i)
       this._debuggerWorkspaceBinding.updateLocations(scripts[i]);
-    this._debuggerWorkspaceBinding.setSourceMapping(this._target, uiSourceCode, this);
+    this._debuggerWorkspaceBinding.setSourceMapping(this._debuggerModel, uiSourceCode, this);
     this._boundUISourceCodes.add(uiSourceCode);
   }
 
@@ -235,7 +234,7 @@ Bindings.ResourceScriptMapping = class {
       scriptFile.dispose();
       this._setScriptFile(uiSourceCode, null);
     }
-    this._debuggerWorkspaceBinding.setSourceMapping(this._target, uiSourceCode, null);
+    this._debuggerWorkspaceBinding.setSourceMapping(this._debuggerModel, uiSourceCode, null);
     this._boundUISourceCodes.delete(uiSourceCode);
   }
 
@@ -296,6 +295,8 @@ Bindings.ResourceScriptFile = class extends Common.Object {
     if (typeof this._scriptSource === 'undefined')
       return false;
     var workingCopy = this._uiSourceCode.workingCopy();
+    if (!workingCopy)
+      return false;
 
     // Match ignoring sourceURL.
     if (!workingCopy.startsWith(this._scriptSource.trimRight()))
@@ -311,8 +312,11 @@ Bindings.ResourceScriptFile = class extends Common.Object {
     this._update();
   }
 
+  /**
+   * @param {!Common.Event} event
+   */
   _workingCopyCommitted(event) {
-    if (this._uiSourceCode.project().type() === Workspace.projectTypes.Snippets)
+    if (this._uiSourceCode.project().canSetFileContent())
       return;
     if (!this._script)
       return;
@@ -406,15 +410,6 @@ Bindings.ResourceScriptFile = class extends Common.Object {
   }
 
   _mappingCheckedForTest() {
-  }
-
-  /**
-   * @return {?SDK.Target}
-   */
-  target() {
-    if (!this._script)
-      return null;
-    return this._script.target();
   }
 
   dispose() {

@@ -6,6 +6,7 @@
 #define MOJO_EDK_SYSTEM_CORE_H_
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/callback.h"
@@ -39,7 +40,7 @@ namespace edk {
 // are thread-safe.
 class MOJO_SYSTEM_IMPL_EXPORT Core {
  public:
-  explicit Core();
+  Core();
   virtual ~Core();
 
   // Called exactly once, shortly after construction, and before any other
@@ -72,12 +73,6 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
 
   // Called in a child process exactly once during early initialization.
   void InitChild(ScopedPlatformHandle platform_handle);
-
-  // Creates a message pipe endpoint connected to an endpoint in a remote
-  // embedder. |platform_handle| is used as a channel to negotiate the
-  // connection.
-  ScopedMessagePipeHandle CreateMessagePipe(
-      ScopedPlatformHandle platform_handle);
 
   // Creates a message pipe endpoint associated with |token|, which a child
   // holding the token can later locate and connect to.
@@ -278,7 +273,7 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
                               const MojoHandleSignals* signals,
                               uint32_t num_handles,
                               MojoDeadline deadline,
-                              uint32_t *result_index,
+                              uint32_t* result_index,
                               HandleSignalsState* signals_states);
 
   // Used to pass ownership of our NodeController over to the IO thread in the

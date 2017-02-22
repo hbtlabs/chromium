@@ -18,6 +18,7 @@ test(function() {
     assert_equals(response.type, 'default',
                   'Default Response.type should be \'default\'');
     assert_equals(response.url, '', 'Response.url should be the empty string');
+    assert_false(response.redirected, 'Response.redirected should be false.');
     assert_equals(response.status, 200,
                   'Default Response.status should be 200');
     assert_true(response.ok, 'Default Response.ok must be true');
@@ -25,6 +26,11 @@ test(function() {
                   'Default Response.statusText should be \'OK\'');
     assert_equals(size(response.headers), 0,
                   'Default Response should not have any header.');
+    if (self.internals) {
+      var urlList = self.internals.getInternalResponseURLList(response);
+      assert_equals(urlList.length, 0,
+                    'The URL list of Default Response should be empty.');
+    }
 
     response.status = 394;
     response.statusText = 'Sesame Street';
@@ -98,6 +104,11 @@ test(function() {
                   'Response.headers should have Content-Type');
     assert_equals(response.headers.get('Content-Type'), 'audio/wav',
                   'Content-Type of Response.headers should be set');
+    if (self.internals) {
+      var urlList = self.internals.getInternalResponseURLList(response);
+      assert_equals(urlList.length, 0,
+                    'The URL list of generated Response should be empty.');
+    }
 
     response = new Response(new Blob(['dummy'], {type: 'audio/wav'}),
                             {
@@ -454,5 +465,104 @@ test(function() {
                       'Location header value must not contain CR or LF');
       });
   }, 'Response.redirect() with URLs with CR or LF');
+
+test(() => {
+    var controller;
+    var stream = new ReadableStream({start: c => controller = c});
+
+    var response = new Response(stream);
+    assert_equals(response.body, stream);
+  }, 'Response constructed with a stream');
+
+promise_test(() => {
+    var controller;
+    var stream = new ReadableStream({start: c => controller = c});
+    controller.enqueue(new Uint8Array([0x68, 0x65, 0x6c, 0x6c, 0x6f]));
+    controller.enqueue(new Uint8Array([0x77, 0x6f, 0x72, 0x6c, 0x64]));
+    controller.close();
+    assert_false(stream.locked);
+    var response = new Response(stream);
+    var p = response.text().then(t => {
+        assert_equals(t, 'helloworld');
+      });
+    assert_true(stream.locked);
+    return p;
+  }, 'Response constructed with a stream');
+
+promise_test(() => {
+    var response = new Response('helloworld');
+    return readableStreamToArray(response.body).then(chunks => {
+        const decoder = new TextDecoder('utf-8');
+        let r = '';
+        for (const chunk of chunks) {
+          r += decoder.decode(chunk, {stream: true});
+        }
+        r += decoder.decode();
+        assert_equals(r, 'helloworld');
+      });
+  }, 'Response constructed with a String / Read from body stream');
+
+promise_test(() => {
+    var controller;
+    var stream = new ReadableStream({start: c => controller = c});
+    controller.enqueue(new Uint8Array([0x68, 0x65, 0x6c, 0x6c, 0x6f]));
+    controller.enqueue(new Uint8Array([0x77, 0x6f, 0x72, 0x6c, 0x64]));
+    controller.close();
+
+    var response = new Response(stream);
+    return readableStreamToArray(response.body).then(chunks => {
+        var decoder = new TextDecoder('utf-8');
+        var r = '';
+        for (var chunk of chunks) {
+          r += decoder.decode(chunk, {stream: true});
+        }
+        r += decoder.decode();
+        assert_equals(r, 'helloworld');
+      });
+  }, 'Response constructed with a stream / Read from body stream');
+
+promise_test(t => {
+    var controller;
+    var stream = new ReadableStream({start: c => controller = c});
+    setTimeout(() => {
+        controller.enqueue(new Uint8Array([0x68, 0x65, 0x6c, 0x6c, 0x6f]));
+        controller.enqueue(new Uint8Array([0x77, 0x6f, 0x72, 0x6c, 0x64]));
+        controller.error();
+    }, 1);
+    var response = new Response(stream);
+    return promise_rejects(t, TypeError(), response.text());
+  }, 'Response constructed with an errored stream');
+
+promise_test(t => {
+    var controller;
+    var stream = new ReadableStream({start: c => controller = c});
+    stream.getReader();
+    var response = new Response(stream);
+    return promise_rejects(t, TypeError(), response.text());
+  }, 'Response constructed with a locked stream');
+
+promise_test(t => {
+    var controller;
+    var stream = new ReadableStream({start: c => controller = c});
+    setTimeout(() => controller.enqueue(), 1);
+    var response = new Response(stream);
+    return promise_rejects(t, TypeError(), response.text());
+  }, 'Response constructed stream with an undefined chunk');
+
+promise_test(t => {
+    var controller;
+    var stream = new ReadableStream({start: c => controller = c});
+    setTimeout(() => controller.enqueue(null), 1);
+    var response = new Response(stream);
+    return promise_rejects(t, TypeError(), response.text());
+  }, 'Response constructed stream with a null chunk');
+
+promise_test(t => {
+    var controller;
+    var stream = new ReadableStream({start: c => controller = c});
+    setTimeout(() => controller.enqueue('hello'), 1);
+    var response = new Response(stream);
+    return promise_rejects(t, TypeError(), response.text());
+  }, 'Response constructed stream with a string chunk');
 
 done();

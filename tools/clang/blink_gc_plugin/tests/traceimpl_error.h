@@ -11,16 +11,13 @@ namespace blink {
 
 class X : public GarbageCollected<X> {
  public:
-  virtual void trace(Visitor*) {}
+  virtual void Trace(Visitor*) {}
 };
 
 class TraceImplInlinedWithUntracedMember
     : public GarbageCollected<TraceImplInlinedWithUntracedMember> {
  public:
-  void trace(Visitor* visitor) { traceImpl(visitor); }
-
-  template <typename VisitorDispatcher>
-  void traceImpl(VisitorDispatcher visitor) {
+  void Trace(Visitor* visitor) {
     // Empty; should get complaints from the plugin for untraced x_.
   }
 
@@ -31,10 +28,7 @@ class TraceImplInlinedWithUntracedMember
 class TraceImplExternWithUntracedMember
     : public GarbageCollected<TraceImplExternWithUntracedMember> {
  public:
-  void trace(Visitor* visitor);
-
-  template <typename VisitorDispatcher>
-  inline void traceImpl(VisitorDispatcher);
+  void Trace(Visitor* visitor);
 
  private:
   Member<X> x_;
@@ -42,25 +36,19 @@ class TraceImplExternWithUntracedMember
 
 class Base : public GarbageCollected<Base> {
  public:
-  virtual void trace(Visitor*) {}
+  virtual void Trace(Visitor*) {}
 };
 
 class TraceImplInlineWithUntracedBase : public Base {
  public:
-  void trace(Visitor* visitor) override { traceImpl(visitor); }
-
-  template <typename VisitorDispatcher>
-  void traceImpl(VisitorDispatcher visitor) {
+  void Trace(Visitor* visitor) override {
     // Empty; should get complaints from the plugin for untraced Base.
   }
 };
 
 class TraceImplExternWithUntracedBase : public Base {
  public:
-  void trace(Visitor*) override;
-
-  template <typename VisitorDispatcher>
-  void traceImpl(VisitorDispatcher visitor);
+  void Trace(Visitor*) override;
 };
 
 }

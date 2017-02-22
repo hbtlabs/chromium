@@ -8,8 +8,8 @@
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ui/display/display.h"
-#include "ui/display/manager/display_layout.h"
-#include "ui/display/manager/display_layout_builder.h"
+#include "ui/display/display_layout.h"
+#include "ui/display/display_layout_builder.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
@@ -50,9 +50,6 @@ class ExtendedMouseWarpControllerTest : public test::AshTestBase {
 
 // Verifies if MouseCursorEventFilter's bounds calculation works correctly.
 TEST_F(ExtendedMouseWarpControllerTest, IndicatorBoundsTestOnRight) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("360x360,700x700");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   int64_t display_0_id = display::Screen::GetScreen()
@@ -123,9 +120,6 @@ TEST_F(ExtendedMouseWarpControllerTest, IndicatorBoundsTestOnRight) {
 }
 
 TEST_F(ExtendedMouseWarpControllerTest, IndicatorBoundsTestOnLeft) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("360x360,700x700");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
@@ -167,9 +161,6 @@ TEST_F(ExtendedMouseWarpControllerTest, IndicatorBoundsTestOnLeft) {
 }
 
 TEST_F(ExtendedMouseWarpControllerTest, IndicatorBoundsTestOnTopBottom) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("360x360,700x700");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   int64_t display_0_id = display::Screen::GetScreen()
@@ -223,9 +214,6 @@ TEST_F(ExtendedMouseWarpControllerTest, IndicatorBoundsTestOnTopBottom) {
 
 // Verify indicators show up as expected with 3+ displays.
 TEST_F(ExtendedMouseWarpControllerTest, IndicatorBoundsTestThreeDisplays) {
-  if (!SupportsMultipleDisplays())
-    return;
-
   UpdateDisplay("360x360,700x700,1000x1000");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   display::Screen* screen = display::Screen::GetScreen();
@@ -280,8 +268,6 @@ TEST_F(ExtendedMouseWarpControllerTest, IndicatorBoundsTestThreeDisplays) {
 
 TEST_F(ExtendedMouseWarpControllerTest,
        IndicatorBoundsTestThreeDisplaysWithLayout) {
-  if (!SupportsMultipleDisplays())
-    return;
   UpdateDisplay("700x500,500x500,1000x1000");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   display::Screen* screen = display::Screen::GetScreen();
@@ -330,8 +316,6 @@ TEST_F(ExtendedMouseWarpControllerTest,
 
 TEST_F(ExtendedMouseWarpControllerTest,
        IndicatorBoundsTestThreeDisplaysWithLayout2) {
-  if (!SupportsMultipleDisplays())
-    return;
   UpdateDisplay("700x500,500x500,1000x1000");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   display::Screen* screen = display::Screen::GetScreen();

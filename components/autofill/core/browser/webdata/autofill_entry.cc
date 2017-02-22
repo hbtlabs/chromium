@@ -4,6 +4,7 @@
 
 #include "components/autofill/core/browser/webdata/autofill_entry.h"
 
+#include <string>
 #include <tuple>
 
 #include "base/strings/utf_string_conversions.h"
@@ -18,7 +19,8 @@ AutofillKey::AutofillKey(const base::string16& name,
       value_(value) {
 }
 
-AutofillKey::AutofillKey(const char* name, const char* value)
+AutofillKey::AutofillKey(const std::string& name,
+                         const std::string& value)
     : name_(base::UTF8ToUTF16(name)),
       value_(base::UTF8ToUTF16(value)) {
 }
@@ -38,6 +40,8 @@ bool AutofillKey::operator<(const AutofillKey& key) const {
   return std::tie(name_, value_) < std::tie(key.name(), key.value());
 }
 
+AutofillEntry::AutofillEntry() {}
+
 AutofillEntry::AutofillEntry(const AutofillKey& key,
                              const base::Time& date_created,
                              const base::Time& date_last_used)
@@ -51,6 +55,10 @@ bool AutofillEntry::operator==(const AutofillEntry& entry) const {
   return key() == entry.key() &&
          date_created() == entry.date_created() &&
          date_last_used() == entry.date_last_used();
+}
+
+bool AutofillEntry::operator!=(const AutofillEntry& entry) const {
+  return !(*this == entry);
 }
 
 bool AutofillEntry::operator<(const AutofillEntry& entry) const {

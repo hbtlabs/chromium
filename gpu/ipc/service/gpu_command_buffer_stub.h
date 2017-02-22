@@ -41,20 +41,14 @@ namespace gpu {
 struct Mailbox;
 struct SyncToken;
 class SyncPointClient;
-class SyncPointManager;
-namespace gles2 {
-class MailboxManager;
-}
 }
 
 struct GPUCreateCommandBufferConfig;
 struct GpuCommandBufferMsg_CreateImage_Params;
-struct GpuCommandBufferMsg_SwapBuffersCompleted_Params;
 
 namespace gpu {
 
 class GpuChannel;
-class GpuWatchdogThread;
 struct WaitForCommandState;
 
 class GPU_EXPORT GpuCommandBufferStub
@@ -102,6 +96,9 @@ class GPU_EXPORT GpuCommandBufferStub
   void UpdateVSyncParameters(base::TimeTicks timebase,
                              base::TimeDelta interval) override;
 
+  void AddFilter(IPC::MessageFilter* message_filter) override;
+  int32_t GetRouteID() const override;
+
   gles2::MemoryTracker* GetMemoryTracker() const;
 
   // Whether this command buffer can currently handle IPC messages.
@@ -116,10 +113,6 @@ class GPU_EXPORT GpuCommandBufferStub
 
   // Unique command buffer ID for this command buffer stub.
   CommandBufferId command_buffer_id() const { return command_buffer_id_; }
-
-  // Identifies the various GpuCommandBufferStubs in the GPU process belonging
-  // to the same renderer process.
-  int32_t route_id() const { return route_id_; }
 
   // Identifies the stream for this command buffer.
   int32_t stream_id() const { return stream_id_; }

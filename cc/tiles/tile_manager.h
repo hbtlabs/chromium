@@ -21,11 +21,14 @@
 #include "cc/raster/raster_buffer_provider.h"
 #include "cc/resources/memory_history.h"
 #include "cc/resources/resource_pool.h"
+#include "cc/tiles/checker_image_tracker.h"
+#include "cc/tiles/decoded_image_tracker.h"
 #include "cc/tiles/eviction_tile_priority_queue.h"
-#include "cc/tiles/image_manager.h"
+#include "cc/tiles/image_controller.h"
 #include "cc/tiles/raster_tile_priority_queue.h"
 #include "cc/tiles/tile.h"
 #include "cc/tiles/tile_draw_info.h"
+#include "cc/tiles/tile_manager_settings.h"
 #include "cc/tiles/tile_task_manager.h"
 
 namespace base {
@@ -36,7 +39,7 @@ class TracedValue;
 }
 
 namespace cc {
-class ImageDecodeController;
+class ImageDecodeCache;
 
 class CC_EXPORT TileManagerClient {
  public:
@@ -78,6 +81,11 @@ class CC_EXPORT TileManagerClient {
   // Requests the color space into which tiles should be rasterized.
   virtual gfx::ColorSpace GetTileColorSpace() const = 0;
 
+  // Requests that a pending tree be scheduled to invalidate content on the
+  // pending on active tree. This is currently used when tiles that are
+  // rasterized with missing images need to be invalidated.
+  virtual void RequestImplSideInvalidation() = 0;
+
  protected:
   virtual ~TileManagerClient() {}
 };
@@ -95,13 +103,14 @@ RasterTaskCompletionStatsAsValue(const RasterTaskCompletionStats& stats);
 // should no longer have any memory assigned to them. Tile objects are "owned"
 // by layers; they automatically register with the manager when they are
 // created, and unregister from the manager when they are deleted.
-class CC_EXPORT TileManager {
+class CC_EXPORT TileManager : CheckerImageTrackerClient {
  public:
   TileManager(TileManagerClient* client,
-              base::SequencedTaskRunner* task_runner,
+              base::SequencedTaskRunner* origin_task_runner,
+              scoped_refptr<base::SequencedTaskRunner> image_worker_task_runner,
               size_t scheduled_raster_task_limit,
-              bool use_partial_raster);
-  virtual ~TileManager();
+              const TileManagerSettings& tile_manager_settings);
+  ~TileManager() override;
 
   // Assigns tile memory and schedules work to prepare tiles for drawing.
   // - Runs client_->NotifyReadyToActivate() when all tiles required for
@@ -119,7 +128,7 @@ class CC_EXPORT TileManager {
   // FinishTasksAndCleanUp must be called in between consecutive calls to
   // SetResources.
   void SetResources(ResourcePool* resource_pool,
-                    ImageDecodeController* image_decode_controller,
+                    ImageDecodeCache* image_decode_cache,
                     TaskGraphRunner* task_graph_runner,
                     RasterBufferProvider* raster_buffer_provider,
                     size_t scheduled_raster_task_limit,
@@ -129,13 +138,20 @@ class CC_EXPORT TileManager {
   // date draw information.
   void Flush();
 
-  ScopedTilePtr CreateTile(const Tile::CreateInfo& info,
-                           int layer_id,
-                           int source_frame_number,
-                           int flags);
+  // Called when the required-for-activation/required-for-draw state of tiles
+  // may have changed.
+  void DidModifyTilePriorities();
+
+  std::unique_ptr<Tile> CreateTile(const Tile::CreateInfo& info,
+                                   int layer_id,
+                                   int source_frame_number,
+                                   int flags);
 
   bool IsReadyToActivate() const;
   bool IsReadyToDraw() const;
+
+  const ImageIdFlatSet& TakeImagesToInvalidateOnSyncTree();
+  void DidActivateSyncTree();
 
   std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
   BasicStateAsValue() const;
@@ -148,10 +164,11 @@ class CC_EXPORT TileManager {
   void InitializeTilesWithResourcesForTesting(const std::vector<Tile*>& tiles) {
     for (size_t i = 0; i < tiles.size(); ++i) {
       TileDrawInfo& draw_info = tiles[i]->draw_info();
-      draw_info.resource_ = resource_pool_->AcquireResource(
+      draw_info.set_resource(resource_pool_->AcquireResource(
           tiles[i]->desired_texture_size(),
           raster_buffer_provider_->GetResourceFormat(false),
-          client_->GetTileColorSpace());
+          client_->GetTileColorSpace()));
+      draw_info.set_resource_ready_for_draw();
     }
   }
 
@@ -177,11 +194,6 @@ class CC_EXPORT TileManager {
     raster_buffer_provider_ = raster_buffer_provider;
   }
 
-  void FreeResourcesAndCleanUpReleasedTilesForTesting() {
-    FreeResourcesForReleasedTiles();
-    CleanUpReleasedTiles();
-  }
-
   std::vector<Tile*> AllTilesForTesting() const {
     std::vector<Tile*> tiles;
     for (auto& tile_pair : tiles_)
@@ -201,22 +213,26 @@ class CC_EXPORT TileManager {
     all_tiles_that_need_to_be_rasterized_are_scheduled_ = false;
   }
 
+  void ResetSignalsForTesting();
+
   bool HasScheduledTileTasksForTesting() const {
     return has_scheduled_tile_tasks_;
   }
 
   void OnRasterTaskCompleted(std::unique_ptr<RasterBuffer> raster_buffer,
-                             Tile* tile,
+                             Tile::Id tile_id,
                              Resource* resource,
                              bool was_canceled);
 
- protected:
-  void FreeResourcesForReleasedTiles();
-  void CleanUpReleasedTiles();
+  void SetDecodedImageTracker(DecodedImageTracker* decoded_image_tracker);
 
+  // CheckerImageTrackerClient implementation.
+  void NeedsInvalidationForCheckerImagedTiles() override;
+
+ protected:
   friend class Tile;
-  // Virtual for testing.
-  virtual void Release(Tile* tile);
+  // Must be called by tile during destruction.
+  void Release(Tile* tile);
   Tile::Id GetUniqueTileId() { return ++next_tile_id_; }
 
  private:
@@ -283,7 +299,7 @@ class CC_EXPORT TileManager {
   bool AreRequiredTilesReadyToDraw(RasterTilePriorityQueue::Type type) const;
   void CheckIfMoreTilesNeedToBePrepared();
   void CheckAndIssueSignals();
-  bool MarkTilesOutOfMemory(
+  void MarkTilesOutOfMemory(
       std::unique_ptr<RasterTilePriorityQueue> queue) const;
 
   ResourceFormat DetermineResourceFormat(const Tile* tile) const;
@@ -303,6 +319,8 @@ class CC_EXPORT TileManager {
 
   bool UsePartialRaster() const;
 
+  void CheckPendingGpuWorkTiles(bool issue_signals);
+
   TileManagerClient* client_;
   base::SequencedTaskRunner* task_runner_;
   ResourcePool* resource_pool_;
@@ -310,7 +328,8 @@ class CC_EXPORT TileManager {
   RasterBufferProvider* raster_buffer_provider_;
   GlobalStateThatImpactsTilePriority global_state_;
   size_t scheduled_raster_task_limit_;
-  const bool use_partial_raster_;
+
+  const TileManagerSettings tile_manager_settings_;
   bool use_gpu_rasterization_;
 
   std::unordered_map<Tile::Id, Tile*> tiles_;
@@ -321,18 +340,12 @@ class CC_EXPORT TileManager {
   bool did_check_for_completed_tasks_since_last_schedule_tasks_;
   bool did_oom_on_last_assign_;
 
-  ImageManager image_manager_;
+  ImageController image_controller_;
+  CheckerImageTracker checker_image_tracker_;
 
   RasterTaskCompletionStats flush_stats_;
 
-  std::vector<Tile*> released_tiles_;
-
-  std::vector<scoped_refptr<TileTask>> orphan_tasks_;
-
   TaskGraph graph_;
-  scoped_refptr<TileTask> required_for_activation_done_task_;
-  scoped_refptr<TileTask> required_for_draw_done_task_;
-  scoped_refptr<TileTask> all_done_task_;
 
   UniqueNotifier more_tiles_need_prepare_check_notifier_;
 
@@ -345,10 +358,23 @@ class CC_EXPORT TileManager {
   uint64_t prepare_tiles_count_;
   uint64_t next_tile_id_;
 
+  std::unordered_set<Tile*> pending_gpu_work_tiles_;
+  uint64_t pending_required_for_activation_callback_id_ = 0;
+  uint64_t pending_required_for_draw_callback_id_ = 0;
+  // If true, we should re-compute tile requirements in
+  // CheckPendingGpuWorkTiles.
+  bool pending_tile_requirements_dirty_ = false;
+
   std::unordered_map<Tile::Id, std::vector<DrawImage>> scheduled_draw_images_;
   std::vector<scoped_refptr<TileTask>> locked_image_tasks_;
 
+  // We need two WeakPtrFactory objects as the invalidation pattern of each is
+  // different. The |task_set_finished_weak_ptr_factory_| is invalidated any
+  // time new tasks are scheduled, preventing a race when the callback has
+  // been scheduled but not yet executed.
   base::WeakPtrFactory<TileManager> task_set_finished_weak_ptr_factory_;
+  // The |ready_to_draw_callback_weak_ptr_factory_| is never invalidated.
+  base::WeakPtrFactory<TileManager> ready_to_draw_callback_weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(TileManager);
 };

@@ -14,7 +14,7 @@
 namespace blink {
 
 WaitableEvent::WaitableEvent(ResetPolicy policy, InitialState state) {
-  m_impl = wrapUnique(new base::WaitableEvent(
+  m_impl = WTF::wrapUnique(new base::WaitableEvent(
       policy == ResetPolicy::Manual
           ? base::WaitableEvent::ResetPolicy::MANUAL
           : base::WaitableEvent::ResetPolicy::AUTOMATIC,
@@ -30,15 +30,7 @@ void WaitableEvent::reset() {
 }
 
 void WaitableEvent::wait() {
-  if (ThreadState::current()) {
-    // We only enter a safe point scope if the thread is attached, ex. never
-    // during shutdown.
-    // TODO(esprehn): Why can't SafePointScope do this for us?
-    SafePointScope scope(BlinkGC::HeapPointersOnStack);
-    m_impl->Wait();
-  } else {
-    m_impl->Wait();
-  }
+  m_impl->Wait();
 }
 
 void WaitableEvent::signal() {

@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 
+#include <cstdint>
 #include <memory>
 
 #include "base/strings/string_piece.h"
@@ -54,9 +55,10 @@ class SpdyFramerDecoderAdapter {
     return process_single_input_frame_;
   }
 
-  // Decode the |len| bytes of encoded HTTP/2 starting at |*data|. Returns the
-  // number of bytes consumed. It is safe to pass more bytes in than may be
-  // consumed.
+  // Decode the |len| bytes of encoded HTTP/2 starting at |*data|. Returns
+  // the number of bytes consumed. It is safe to pass more bytes in than
+  // may be consumed. Should process (or otherwise buffer) as much as
+  // available, unless process_single_input_frame is true.
   virtual size_t ProcessInput(const char* data, size_t len) = 0;
 
   // Reset the decoder (used just for tests at this time).
@@ -66,12 +68,15 @@ class SpdyFramerDecoderAdapter {
   virtual SpdyFramer::SpdyState state() const = 0;
 
   // Current error code (NO_ERROR if state != ERROR).
-  virtual SpdyFramer::SpdyError error_code() const = 0;
+  virtual SpdyFramer::SpdyFramerError spdy_framer_error() const = 0;
 
-  // Did the most recently decoded frame header appear to be the start of an
-  // HTTP/1.1 (or earlier) response? Used to detect if a backend/server that
-  // we sent a request to, responded with an HTTP/1.1 response?
+  // Has any frame header looked like the start of an HTTP/1.1 (or earlier)
+  // response? Used to detect if a backend/server that we sent a request to
+  // has responded with an HTTP/1.1 (or earlier) response.
   virtual bool probable_http_response() const = 0;
+
+  // Returns the estimate of dynamically allocated memory in bytes.
+  virtual size_t EstimateMemoryUsage() const = 0;
 
  private:
   SpdyFramerVisitorInterface* visitor_ = nullptr;
@@ -99,6 +104,10 @@ class SpdyFramerVisitorAdapter : public SpdyFramerVisitorInterface {
   // The visitor needs the original SpdyFramer, not the SpdyFramerDecoderAdapter
   // instance.
   void OnError(SpdyFramer* framer) override;
+  void OnCommonHeader(SpdyStreamId stream_id,
+                      size_t length,
+                      uint8_t type,
+                      uint8_t flags) override;
   void OnDataFrameHeader(SpdyStreamId stream_id,
                          size_t length,
                          bool fin) override;
@@ -110,20 +119,14 @@ class SpdyFramerVisitorAdapter : public SpdyFramerVisitorInterface {
   SpdyHeadersHandlerInterface* OnHeaderFrameStart(
       SpdyStreamId stream_id) override;
   void OnHeaderFrameEnd(SpdyStreamId stream_id, bool end_headers) override;
-  void OnSynStream(SpdyStreamId stream_id,
-                   SpdyStreamId associated_stream_id,
-                   SpdyPriority priority,
-                   bool fin,
-                   bool unidirectional) override;
-  void OnSynReply(SpdyStreamId stream_id, bool fin) override;
-  void OnRstStream(SpdyStreamId stream_id, SpdyRstStreamStatus status) override;
-  void OnSetting(SpdySettingsIds id, uint8_t flags, uint32_t value) override;
+  void OnRstStream(SpdyStreamId stream_id, SpdyErrorCode error_code) override;
+  void OnSetting(SpdySettingsIds id, uint32_t value) override;
   void OnPing(SpdyPingId unique_id, bool is_ack) override;
   void OnSettings(bool clear_persisted) override;
   void OnSettingsAck() override;
   void OnSettingsEnd() override;
   void OnGoAway(SpdyStreamId last_accepted_stream_id,
-                SpdyGoAwayStatus status) override;
+                SpdyErrorCode error_code) override;
   void OnHeaders(SpdyStreamId stream_id,
                  bool has_priority,
                  int weight,
@@ -133,7 +136,6 @@ class SpdyFramerVisitorAdapter : public SpdyFramerVisitorInterface {
                  bool end) override;
   void OnWindowUpdate(SpdyStreamId stream_id, int delta_window_size) override;
   bool OnGoAwayFrameData(const char* goaway_data, size_t len) override;
-  bool OnRstStreamFrameData(const char* rst_stream_data, size_t len) override;
   void OnBlocked(SpdyStreamId stream_id) override;
   void OnPushPromise(SpdyStreamId stream_id,
                      SpdyStreamId promised_stream_id,
@@ -147,7 +149,7 @@ class SpdyFramerVisitorAdapter : public SpdyFramerVisitorInterface {
                 base::StringPiece origin,
                 const SpdyAltSvcWireFormat::AlternativeServiceVector&
                     altsvc_vector) override;
-  bool OnUnknownFrame(SpdyStreamId stream_id, int frame_type) override;
+  bool OnUnknownFrame(SpdyStreamId stream_id, uint8_t frame_type) override;
 
  protected:
   SpdyFramerVisitorInterface* visitor() const { return visitor_; }

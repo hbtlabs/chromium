@@ -21,6 +21,7 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/save_page_type.h"
+#include "content/public/browser/screen_orientation_delegate.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/stop_find_action.h"
@@ -191,6 +192,10 @@ class WebContents : public PageNavigator,
   CONTENT_EXPORT static WebContents* FromFrameTreeNodeId(
       int frame_tree_node_id);
 
+  // Sets delegate for platform specific screen orientation functionality.
+  CONTENT_EXPORT static void SetScreenOrientationDelegate(
+      ScreenOrientationDelegate* delegate);
+
   ~WebContents() override {}
 
   // Intrinsic tab state -------------------------------------------------------
@@ -263,10 +268,6 @@ class WebContents : public PageNavigator,
   // Gets the current RenderViewHost for this tab.
   virtual RenderViewHost* GetRenderViewHost() const = 0;
 
-  // Gets the current RenderViewHost's routing id. Returns
-  // MSG_ROUTING_NONE when there is no RenderViewHost.
-  virtual int GetRoutingID() const = 0;
-
   // Returns the currently active RenderWidgetHostView. This may change over
   // time and can be nullptr (during setup and teardown).
   virtual RenderWidgetHostView* GetRenderWidgetHostView() const = 0;
@@ -306,13 +307,13 @@ class WebContents : public PageNavigator,
   virtual void SetUserAgentOverride(const std::string& override) = 0;
   virtual const std::string& GetUserAgentOverride() const = 0;
 
-  // Enable the accessibility tree for this WebContents in the renderer,
-  // but don't enable creating a native accessibility tree on the browser
-  // side.
-  virtual void EnableTreeOnlyAccessibilityMode() = 0;
+  // Set the accessibility mode so that accessibility events are forwarded
+  // to each WebContentsObserver.
+  virtual void EnableWebContentsOnlyAccessibilityMode() = 0;
 
-  // Returns true only if "tree only" accessibility mode is on.
-  virtual bool IsTreeOnlyAccessibilityModeForTesting() const = 0;
+  // Returns true only if the WebContentsObserver accessibility mode is
+  // enabled.
+  virtual bool IsWebContentsOnlyAccessibilityModeForTesting() const = 0;
 
   // Returns true only if complete accessibility mode is on, meaning there's
   // both renderer accessibility, and a native browser accessibility tree.
@@ -636,11 +637,22 @@ class WebContents : public PageNavigator,
   // to see what it should do.
   virtual bool FocusLocationBarByDefault() = 0;
 
-  // Does this have an opener associated with it?
+  // Does this have an opener (corresponding to window.opener in JavaScript)
+  // associated with it?
   virtual bool HasOpener() const = 0;
 
   // Returns the opener if HasOpener() is true, or nullptr otherwise.
   virtual WebContents* GetOpener() const = 0;
+
+  // Returns true if this WebContents was opened by another WebContents, even
+  // if the opener was suppressed. In contrast to HasOpener/GetOpener, the
+  // original opener doesn't reflect window.opener which can be suppressed or
+  // updated.
+  virtual bool HasOriginalOpener() const = 0;
+
+  // Returns the original opener if HasOriginalOpener() is true, or nullptr
+  // otherwise.
+  virtual WebContents* GetOriginalOpener() const = 0;
 
   typedef base::Callback<void(
       int, /* id */
@@ -734,6 +746,12 @@ class WebContents : public PageNavigator,
 
   virtual int GetCurrentlyPlayingVideoCount() = 0;
   virtual bool IsFullscreen() = 0;
+
+  // Tells the renderer to clear the focused element (if any).
+  virtual void ClearFocusedElement() = 0;
+
+  // Returns true if the current focused element is editable.
+  virtual bool IsFocusedElementEditable() = 0;
 
 #if defined(OS_ANDROID)
   CONTENT_EXPORT static WebContents* FromJavaWebContents(

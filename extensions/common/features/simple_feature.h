@@ -26,7 +26,7 @@
 
 namespace extensions {
 
-class BaseFeatureProviderTest;
+class FeatureProviderTest;
 class ExtensionAPITest;
 class ManifestUnitTest;
 class SimpleFeatureTest;
@@ -170,8 +170,8 @@ class SimpleFeature : public Feature {
  private:
   friend struct FeatureComparator;
   friend class SimpleFeatureTest;
-  FRIEND_TEST_ALL_PREFIXES(BaseFeatureProviderTest, ManifestFeatureTypes);
-  FRIEND_TEST_ALL_PREFIXES(BaseFeatureProviderTest, PermissionFeatureTypes);
+  FRIEND_TEST_ALL_PREFIXES(FeatureProviderTest, ManifestFeatureTypes);
+  FRIEND_TEST_ALL_PREFIXES(FeatureProviderTest, PermissionFeatureTypes);
   FRIEND_TEST_ALL_PREFIXES(ExtensionAPITest, DefaultConfigurationFeatures);
   FRIEND_TEST_ALL_PREFIXES(FeaturesGenerationTest, FeaturesTest);
   FRIEND_TEST_ALL_PREFIXES(ManifestUnitTest, Extension);
@@ -205,6 +205,10 @@ class SimpleFeature : public Feature {
                          const std::vector<std::string>& list);
 
   bool MatchesManifestLocation(Manifest::Location manifest_location) const;
+
+  // Checks if the feature is allowed in a session of type |session_type|
+  // (based on session type feature restrictions).
+  bool MatchesSessionTypes(FeatureSessionType session_type) const;
 
   Availability CheckDependencies(
       const base::Callback<Availability(const Feature*)>& checker) const;

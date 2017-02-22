@@ -147,12 +147,6 @@ public class TabWebContentsObserver extends WebContentsObserver {
     }
 
     @Override
-    public void didFinishNavigation(
-            boolean isMainFrame, boolean isErrorPage, boolean hasCommitted) {
-        if (isMainFrame && hasCommitted) mTab.setIsShowingErrorPage(isErrorPage);
-    }
-
-    @Override
     public void didFinishLoad(long frameId, String validatedUrl, boolean isMainFrame) {
         if (isMainFrame) mTab.didFinishPageLoad();
         PolicyAuditor auditor =
@@ -162,17 +156,20 @@ public class TabWebContentsObserver extends WebContentsObserver {
     }
 
     @Override
-    public void didFailLoad(boolean isProvisionalLoad, boolean isMainFrame, int errorCode,
-            String description, String failingUrl, boolean wasIgnoredByHandler) {
+    public void didFailLoad(
+            boolean isMainFrame, int errorCode, String description, String failingUrl) {
         mTab.updateThemeColorIfNeeded(true);
         RewindableIterator<TabObserver> observers = mTab.getTabObservers();
         while (observers.hasNext()) {
-            observers.next().onDidFailLoad(mTab, isProvisionalLoad, isMainFrame, errorCode,
-                    description, failingUrl);
+            observers.next().onDidFailLoad(mTab, isMainFrame, errorCode, description, failingUrl);
         }
 
         if (isMainFrame) mTab.didFailPageLoad(errorCode);
 
+        recordErrorInPolicyAuditor(failingUrl, description, errorCode);
+    }
+
+    private void recordErrorInPolicyAuditor(String failingUrl, String description, int errorCode) {
         PolicyAuditor auditor =
                 ((ChromeApplication) mTab.getApplicationContext()).getPolicyAuditor();
         auditor.notifyAuditEvent(mTab.getApplicationContext(), AuditEvent.OPEN_URL_FAILURE,
@@ -184,41 +181,64 @@ public class TabWebContentsObserver extends WebContentsObserver {
     }
 
     @Override
-    public void didStartProvisionalLoadForFrame(long frameId, long parentFrameId,
-            boolean isMainFrame, String validatedUrl, boolean isErrorPage,
-            boolean isIframeSrcdoc) {
-        if (isMainFrame) mTab.didStartPageLoad(validatedUrl, isErrorPage);
-
-        mTab.handleDidStartProvisionalLoadForFrame(isMainFrame, validatedUrl);
+    public void titleWasSet(String title) {
+        mTab.updateTitle(title);
     }
 
     @Override
-    public void didCommitProvisionalLoadForFrame(long frameId, boolean isMainFrame, String url,
-            int transitionType) {
-        if (isMainFrame && UmaUtils.isRunningApplicationStart()) {
-            // Currently it takes about 2000ms to commit a navigation if the measurement
-            // begins very early in the browser start. How many buckets (b) are needed to
-            // explore the _typical_ values with granularity 100ms and a maximum duration
-            // of 1 minute?
-            //   s^{n+1} / s^{n} = 2100 / 2000
-            //   s = 1.05
-            //   s^b = 60000
-            //   b = ln(60000) / ln(1.05) ~= 225
-            RecordHistogram.recordCustomTimesHistogram("Startup.FirstCommitNavigationTime2",
-                    SystemClock.uptimeMillis() - UmaUtils.getForegroundStartTime(),
-                    1, 60000 /* 1 minute */, TimeUnit.MILLISECONDS, 225);
-            UmaUtils.setRunningApplicationStart(false);
-        }
-
-        if (isMainFrame) {
-            mTab.setIsTabStateDirty(true);
-            mTab.updateTitle();
+    public void didStartNavigation(
+            String url, boolean isInMainFrame, boolean isSamePage, boolean isErrorPage) {
+        if (isInMainFrame && !isSamePage) {
+            mTab.didStartPageLoad(url, isErrorPage);
         }
 
         RewindableIterator<TabObserver> observers = mTab.getTabObservers();
         while (observers.hasNext()) {
-            observers.next().onDidCommitProvisionalLoadForFrame(
-                    mTab, frameId, isMainFrame, url, transitionType);
+            observers.next().onDidStartNavigation(
+                    mTab, url, isInMainFrame, isSamePage, isErrorPage);
+        }
+    }
+
+    @Override
+    public void didFinishNavigation(String url, boolean isInMainFrame, boolean isErrorPage,
+            boolean hasCommitted, boolean isSamePage, boolean isFragmentNavigation,
+            Integer pageTransition, int errorCode, String errorDescription, int httpStatusCode) {
+        RewindableIterator<TabObserver> observers = mTab.getTabObservers();
+        while (observers.hasNext()) {
+            observers.next().onDidFinishNavigation(mTab, url, isInMainFrame, isErrorPage,
+                    hasCommitted, isSamePage, isFragmentNavigation, pageTransition, errorCode,
+                    httpStatusCode);
+        }
+
+        if (errorCode != 0) {
+            mTab.updateThemeColorIfNeeded(true);
+            if (isInMainFrame) mTab.didFailPageLoad(errorCode);
+
+            recordErrorInPolicyAuditor(url, errorDescription, errorCode);
+        }
+
+        if (!hasCommitted) return;
+        if (isInMainFrame && UmaUtils.isRunningApplicationStart()) {
+            // Current median is 550ms, and long tail is very long. ZoomedIn gives good view of the
+            // median and ZoomedOut gives a good overview.
+            RecordHistogram.recordCustomTimesHistogram(
+                    "Startup.FirstCommitNavigationTime2.ZoomedIn",
+                    SystemClock.uptimeMillis() - UmaUtils.getForegroundStartTime(),
+                    200, 1000, TimeUnit.MILLISECONDS, 100);
+            // For ZoomedOut very rarely is it under 50ms and this range matches
+            // CustomTabs.IntentToFirstCommitNavigationTime2.ZoomedOut.
+            RecordHistogram.recordCustomTimesHistogram(
+                    "Startup.FirstCommitNavigationTime2.ZoomedOut",
+                    SystemClock.uptimeMillis() - UmaUtils.getForegroundStartTime(),
+                    50, TimeUnit.MINUTES.toMillis(10), TimeUnit.MILLISECONDS, 50);
+            UmaUtils.setRunningApplicationStart(false);
+        }
+
+        if (isInMainFrame) {
+            mTab.setIsTabStateDirty(true);
+            mTab.updateTitle();
+            mTab.handleDidFinishNavigation(url, pageTransition);
+            mTab.setIsShowingErrorPage(isErrorPage);
         }
 
         observers.rewind();
@@ -226,26 +246,14 @@ public class TabWebContentsObserver extends WebContentsObserver {
             observers.next().onUrlUpdated(mTab);
         }
 
-        if (!isMainFrame) return;
-        mTab.handleDidCommitProvisonalLoadForFrame(url, transitionType);
-    }
-
-    @Override
-    public void didNavigateMainFrame(String url, String baseUrl,
-            boolean isNavigationToDifferentPage, boolean isFragmentNavigation, int statusCode) {
         FullscreenManager fullscreenManager = mTab.getFullscreenManager();
-        if (isNavigationToDifferentPage && fullscreenManager != null) {
+        if (isInMainFrame && !isSamePage && fullscreenManager != null) {
             fullscreenManager.setPersistentFullscreenMode(false);
         }
 
-        RewindableIterator<TabObserver> observers = mTab.getTabObservers();
-        while (observers.hasNext()) {
-            observers.next().onDidNavigateMainFrame(
-                    mTab, url, baseUrl, isNavigationToDifferentPage,
-                    isFragmentNavigation, statusCode);
+        if (isInMainFrame) {
+            mTab.stopSwipeRefreshHandler();
         }
-
-        mTab.stopSwipeRefreshHandler();
     }
 
     @Override
@@ -297,14 +305,6 @@ public class TabWebContentsObserver extends WebContentsObserver {
 
         if (!mTab.maybeShowNativePage(mTab.getUrl(), false)) {
             mTab.showRenderedPage();
-        }
-    }
-
-    @Override
-    public void didStartNavigationToPendingEntry(String url) {
-        RewindableIterator<TabObserver> observers = mTab.getTabObservers();
-        while (observers.hasNext()) {
-            observers.next().onDidStartNavigationToPendingEntry(mTab, url);
         }
     }
 

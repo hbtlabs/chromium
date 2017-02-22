@@ -34,16 +34,23 @@ class PowerTypical10Mobile(perf_benchmark.PerfBenchmark):
     options.full_performance_mode = False
 
   @classmethod
-  def ShouldDisable(cls, possible_browser):  # http://crbug.com/597656
-    return (possible_browser.browser_type == 'reference' and
-            possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X')
+  def ShouldDisable(cls, possible_browser):
+    # http://crbug.com/597656
+    if (possible_browser.browser_type == 'reference' and
+        possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X'):
+      return True
+
+    # crbug.com/671631
+    return possible_browser.platform.GetDeviceTypeName() == 'Nexus 9'
 
   @classmethod
   def Name(cls):
     return 'power.typical_10_mobile'
 
-
-@benchmark.Enabled('android')
+# This benchmark runs only on android but it is disabled on android as well
+# because of http://crbug.com/683238
+# @benchmark.Enabled('android')
+@benchmark.Disabled('all')
 @benchmark.Disabled('android-webview')  # http://crbug.com/622300
 class PowerToughAdCases(perf_benchmark.PerfBenchmark):
   """Android power test with tough ad pages."""
@@ -97,10 +104,18 @@ class PowerGpuRasterizationTypical10Mobile(perf_benchmark.PerfBenchmark):
 
   @classmethod
   def ShouldDisable(cls, possible_browser):
-     # http://crbug.com/563968, http://crbug.com/593973
-    return (cls.IsSvelte(possible_browser) or
-      (possible_browser.browser_type ==  'reference' and
-       possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X'))
+    # http://crbug.com/563968
+    if cls.IsSvelte(possible_browser):
+      return True
+
+
+    # http://crbug.com/593973
+    if (possible_browser.browser_type ==  'reference' and
+        possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X'):
+      return True
+
+    # http://crbug.com/671631
+    return possible_browser.platform.GetDeviceTypeName() == 'Nexus 9'
 
 
 @benchmark.Enabled('mac')
@@ -184,7 +199,7 @@ class PowerGpuRasterizationTop25(PowerTop25):
 class PowerScrollingTrivialPage(perf_benchmark.PerfBenchmark):
   """Measure power consumption for some very simple pages."""
   test = power.QuiescentPower
-  page_set = page_sets.MacGpuTrivialPagesStorySet
+  page_set = page_sets.TrivialSitesStorySet
 
   @classmethod
   def Name(cls):

@@ -18,12 +18,8 @@
         width: var(--side-bar-width);
       }
 
-      :host([drawer]) {
-        height: calc(100% - var(--toolbar-height));
-      }
-
       div.separator {
-        background-color: rgba(0, 0, 0, 0.08);
+        background-color: var(--separator-color);
         flex-shrink: 0;
         height: 1px;
         margin: 8px 0;
@@ -45,7 +41,7 @@
       iron-selector {
         -webkit-user-select: none;
         background-color: transparent;
-        color: #5a5a5a;
+        color: var(--sidebar-unselected-color);
         display: flex;
         flex: 1;
         flex-direction: column;
@@ -53,7 +49,6 @@
       }
 
       iron-selector > a {
-        @apply(--paper-font-subhead);
         /* Ensure the focus outline appears correctly (crbug.com/655503). */
         -webkit-margin-end: 4px;
         -webkit-padding-start: 24px;
@@ -62,15 +57,14 @@
         color: inherit;
         cursor: pointer;
         display: flex;
-        font-size: 14px;
         font-weight: 500;
-        min-height: 48px;
+        min-height: 40px;
         position: relative;
         text-decoration: none;
       }
 
       iron-selector > a.iron-selected {
-        color: var(--google-blue-500);
+        color: var(--link-color);
       }
 
       #spacer {
@@ -78,7 +72,7 @@
       }
 
       #footer {
-        color: var(--paper-grey-600);
+        color: var(--sidebar-footer-text-color);
         width: var(--side-bar-width);
       }
 
@@ -90,14 +84,12 @@
       }
 
       #footer a {
-        color: var(--google-blue-700);
         text-decoration: none;
       }
     </style>
 
     <iron-selector id="menu" selected="{{selectedPage}}"
         selectable=".page-item" attr-for-selected="path"
-        fallback-selection="history"
         on-iron-activate="onSelectorActivate_">
       <a href="/" class="page-item" path="history" on-click="onItemClick_">
         $i18n{historyMenuItem}

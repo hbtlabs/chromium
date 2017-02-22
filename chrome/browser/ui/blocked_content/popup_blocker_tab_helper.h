@@ -20,10 +20,6 @@ namespace chrome {
 struct NavigateParams;
 }
 
-namespace blink {
-struct WebWindowFeatures;
-}
-
 class GURL;
 
 // Per-tab class to manage blocked popups.
@@ -39,7 +35,7 @@ class PopupBlockerTabHelper
   // Returns true if the popup request defined by |params| should be blocked.
   // In that case, it is also added to the |blocked_popups_| container.
   bool MaybeBlockPopup(const chrome::NavigateParams& params,
-                       const blink::WebWindowFeatures& window_features);
+                       const blink::mojom::WindowFeatures& window_features);
 
   // Adds a popup request to the |blocked_popups_| container.
   void AddBlockedPopup(const BlockedWindowParams& params);
@@ -53,9 +49,8 @@ class PopupBlockerTabHelper
   PopupIdMap GetBlockedPopupRequests();
 
   // content::WebContentsObserver overrides:
-  void DidNavigateMainFrame(
-      const content::LoadCommittedDetails& details,
-      const content::FrameNavigateParams& params) override;
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
 
  private:
   struct BlockedRequest;
@@ -64,12 +59,12 @@ class PopupBlockerTabHelper
   explicit PopupBlockerTabHelper(content::WebContents* web_contents);
 
   void AddBlockedPopup(const chrome::NavigateParams& params,
-                       const blink::WebWindowFeatures& window_features);
+                       const blink::mojom::WindowFeatures& window_features);
 
   // Called when the blocked popup notification is shown or hidden.
   void PopupNotificationVisibilityChanged(bool visible);
 
-  IDMap<BlockedRequest, IDMapOwnPointer> blocked_popups_;
+  IDMap<std::unique_ptr<BlockedRequest>> blocked_popups_;
 
   DISALLOW_COPY_AND_ASSIGN(PopupBlockerTabHelper);
 };

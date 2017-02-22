@@ -7,15 +7,17 @@
 
 #include <string>
 
+#include "base/time/time.h"
 #include "media/base/cdm_promise.h"
 #include "media/blink/media_blink_export.h"
 #include "third_party/WebKit/public/platform/WebContentDecryptionModuleResult.h"
 
 namespace media {
 
-// A superset of media::MediaKeys::Exception for UMA reporting. These values
-// should never be changed as it will affect existing reporting, and must match
-// the values for CdmPromiseResult in tools/metrics/histograms/histograms.xml.
+// A superset of media::ContentDecryptionModule::Exception for UMA reporting.
+// These values should never be changed as it will affect existing reporting,
+// and must match the values for CdmPromiseResult in
+// tools/metrics/histograms/histograms.xml.
 enum CdmResultForUMA {
   SUCCESS = 0,
   NOT_SUPPORTED_ERROR = 1,

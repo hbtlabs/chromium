@@ -22,13 +22,11 @@ class WindowWatcherShelfItemDelegate : public ShelfItemDelegate {
   ~WindowWatcherShelfItemDelegate() override;
 
   // ShelfItemDelegate:
-  ShelfItemDelegate::PerformedAction ItemSelected(
-      const ui::Event& event) override;
-  base::string16 GetTitle() override;
-  ShelfMenuModel* CreateApplicationMenu(int event_flags) override;
-  bool IsDraggable() override;
-  bool CanPin() const override;
-  bool ShouldShowTooltip() override;
+  ShelfAction ItemSelected(ui::EventType event_type,
+                           int event_flags,
+                           int64_t display_id,
+                           ShelfLaunchSource source) override;
+  ShelfAppMenuItemList GetAppMenuItems(int event_flags) override;
   void Close() override;
 
  private:

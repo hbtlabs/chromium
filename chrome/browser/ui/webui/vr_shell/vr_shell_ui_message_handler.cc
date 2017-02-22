@@ -35,6 +35,13 @@ void VrShellUIMessageHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "doAction", base::Bind(&VrShellUIMessageHandler::HandleDoAction,
                              base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "setContentCssSize",
+      base::Bind(&VrShellUIMessageHandler::HandleSetContentCssSize,
+                 base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "setUiCssSize", base::Bind(&VrShellUIMessageHandler::HandleSetUiCssSize,
+                                 base::Unretained(this)));
 }
 
 void VrShellUIMessageHandler::HandleDomLoaded(const base::ListValue* args) {
@@ -55,20 +62,43 @@ void VrShellUIMessageHandler::OnJavascriptAllowed() {
 void VrShellUIMessageHandler::HandleUpdateScene(const base::ListValue* args) {
   if (!vr_shell_)
     return;
-
-  // Copy the update instructions and handle them on the render thread.
-  auto cb = base::Bind(&vr_shell::UiScene::HandleCommands,
-                       base::Unretained(vr_shell_->GetScene()),
-                       base::Owned(args->CreateDeepCopy().release()),
-                       vr_shell::UiScene::TimeInMicroseconds());
-  vr_shell_->QueueTask(cb);
+  vr_shell_->UpdateScene(args);
 }
 
 void VrShellUIMessageHandler::HandleDoAction(const base::ListValue* args) {
   int action;
+  const base::DictionaryValue* arguments = nullptr;
   CHECK(args->GetInteger(0, &action));
+  args->GetDictionary(1, &arguments);
   if (vr_shell_) {
-    vr_shell_->DoUiAction((vr_shell::UiAction) action);
+    vr_shell_->DoUiAction((vr_shell::UiAction) action, arguments);
+  }
+}
+
+void VrShellUIMessageHandler::HandleSetContentCssSize(
+    const base::ListValue* args) {
+  if (!vr_shell_)
+    return;
+  SetSize(args, false);
+}
+
+void VrShellUIMessageHandler::HandleSetUiCssSize(const base::ListValue* args) {
+  if (!vr_shell_)
+    return;
+  SetSize(args, true);
+}
+
+void VrShellUIMessageHandler::SetSize(const base::ListValue* args,
+                                      bool for_ui) {
+  CHECK(args->GetSize() == 3);
+  double width, height, dpr;
+  CHECK(args->GetDouble(0, &width));
+  CHECK(args->GetDouble(1, &height));
+  CHECK(args->GetDouble(2, &dpr));
+  if (for_ui) {
+    vr_shell_->SetUiCssSize(width, height, dpr);
+  } else  {
+    vr_shell_->SetContentCssSize(width, height, dpr);
   }
 }
 

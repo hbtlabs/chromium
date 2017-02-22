@@ -325,15 +325,19 @@
 ```
 
 ### **Usage**
+
 ```
   gn args <out_dir>
-      Open the arguments for the given build directory in an editor (as
-      specified by the EDITOR environment variable). If the given build
-      directory doesn't exist, it will be created and an empty args file will
-      be opened in the editor. You would type something like this into that
-      file:
+      Open the arguments for the given build directory in an editor. If the
+      given build directory doesn't exist, it will be created and an empty args
+      file will be opened in the editor. You would type something like this
+      into that file:
           enable_doom_melon=false
           os="android"
+
+      To find your editor on Posix, GN will search the environment variables in
+      order: GN_EDITOR, VISUAL, and EDITOR. On Windows GN will open the command
+      associated with .txt files.
 
       Note: you can edit the build args manually by editing the file "args.gn"
       in the build directory and then running "gn gen <out_dir>".
@@ -343,20 +347,12 @@
       an exact_arg is specified for the list flag, just that one build
       argument.
 
-      The output will list the declaration location, default value, and comment
-      preceeding the declaration. If --short is specified, only the names and
-      values will be printed.
+      The output will list the declaration location, current value for the
+      build, default value (if different than the current value), and comment
+      preceeding the declaration.
 
-      If the out_dir is specified, the build configuration will be taken from
-      that build directory. The reason this is needed is that the definition of
-      some arguments is dependent on the build configuration, so setting some
-      values might add, remove, or change the default values for other
-      arguments. Specifying your exact configuration allows the proper
-      arguments to be displayed.
-
-      Instead of specifying the out_dir, you can also use the command-line flag
-      to specify the build configuration:
-        --args=<exact list of args to use>
+      If --short is specified, only the names and current values will be
+      printed.
 
 ```
 
@@ -1641,8 +1637,9 @@
 
   The precise behavior of declare args is:
 
-   1. The declare_arg block executes. Any variables in the enclosing scope are
-      available for reading.
+   1. The declare_args() block executes. Any variable defined in the enclosing
+      scope is available for reading, but any variable defined earlier in
+      the current scope is not (since the overrides haven't been applied yet).
 
    2. At the end of executing the block, any variables set within that scope
       are saved globally as build arguments, with their current values being
@@ -1661,12 +1658,10 @@
       like [], "", or -1, and after the declare_args block, call exec_script if
       the value is unset by the user.
 
-    - Any code inside of the declare_args block will see the default values of
-      previous variables defined in the block rather than the user-overridden
-      value. This can be surprising because you will be used to seeing the
-      overridden value. If you need to make the default value of one arg
-      dependent on the possibly-overridden value of another, write two separate
-      declare_args blocks:
+    - Because you cannot read the value of a variable defined in the same
+      block, if you need to make the default value of one arg depend
+      on the possibly-overridden value of another, write two separate
+      declare_args() blocks:
 
         declare_args() {
           enable_foo = true
@@ -3967,7 +3962,7 @@
   This addition happens in a second phase once a target and all of its
   dependencies have been resolved. Therefore, a target will not see these
   force-added configs in their "configs" variable while the script is running,
-  and then can not be removed. As a result, this capability should generally
+  and they can not be removed. As a result, this capability should generally
   only be used to add defines and include directories necessary to compile a
   target's headers.
 
@@ -5434,7 +5429,7 @@
   This addition happens in a second phase once a target and all of its
   dependencies have been resolved. Therefore, a target will not see these
   force-added configs in their "configs" variable while the script is running,
-  and then can not be removed. As a result, this capability should generally
+  and they can not be removed. As a result, this capability should generally
   only be used to add defines and include directories necessary to compile a
   target's headers.
 
@@ -5731,6 +5726,9 @@
    - target_cpu
    - target_os
 
+  Next, project-specific overrides are applied. These are specified inside
+  the default_args variable of //.gn. See "gn help dotfile" for more.
+
   If specified, arguments from the --args command line flag are used. If that
   flag is not specified, args from previous builds in the build directory will
   be used (this is in the file args.gn in the build directory).
@@ -5846,6 +5844,15 @@
 
       The secondary source root must be inside the main source tree.
 
+  default_args [optional]
+      Scope containing the default overrides for declared arguments. These
+      overrides take precedence over the default values specified in the
+      declare_args() block, but can be overriden using --args or the
+      args.gn file.
+
+      This is intended to be used when subprojects declare arguments with
+      default values that need to be changed for whatever reason.
+
 ```
 
 ### **Example .gn file contents**
@@ -5861,6 +5868,12 @@
   root = "//:root"
 
   secondary_source = "//build/config/temporary_buildfiles/"
+
+  default_args = {
+    # Default to release builds for this project.
+    is_debug = false
+    is_component_build = false
+  }
 
 
 ```
@@ -6583,6 +6596,13 @@
       out directory if the source file is in a different directory than the
       build.gn file.
         "//foo/bar/baz.txt" => "obj/foo/bar"
+
+  {{source_target_relative}}
+      The path to the source file relative to the target's directory. This will
+      generally be used for replicating the source directory layout in the
+      output directory. This can only be used in actions and it is an error to
+      use in process_file_template where there is no "target".
+        "//foo/bar/baz.txt" => "baz.txt"
 
 ```
 

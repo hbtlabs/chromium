@@ -28,7 +28,8 @@
     // TODO(rtoy): This should be AudioContext, not BaseAudioContext.
     Constructor(BaseAudioContext context, MediaElementAudioSourceOptions options),
     RaisesException=Constructor,
+    Measure
 ]
-interface MediaElementAudioSourceNode : AudioSourceNode {
+interface MediaElementAudioSourceNode : AudioNode {
     readonly attribute HTMLMediaElement mediaElement;
 };

@@ -2,6 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
 static_library("supervised_user_error_page") {
   sources = [
     "supervised_user_error_page.cc",
@@ -31,11 +35,20 @@ if (target_os == "android") {
       "gin_wrapper.h",
     ]
     deps = [
+      "//cc/paint",
       "//components/web_restrictions:interfaces",
       "//content/public/renderer",
       "//gin",
       "//third_party/WebKit/public:blink_headers",
       "//url",
+    ]
+  }
+}
+
+if (is_android) {
+  java_cpp_enum("enums_srcjar") {
+    sources = [
+      "supervised_user_error_page.h",
     ]
   }
 }

@@ -5,6 +5,7 @@
 #include "ios/chrome/browser/ui/webui/version_ui.h"
 
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
@@ -20,11 +21,14 @@
 #include "ios/chrome/browser/ui/webui/version_handler.h"
 #include "ios/chrome/common/channel_info.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
-#include "ios/chrome/grit/ios_strings.h"
 #include "ios/web/public/web_client.h"
 #include "ios/web/public/web_ui_ios_data_source.h"
 #include "ios/web/public/webui/web_ui_ios.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 
@@ -41,10 +45,7 @@ web::WebUIIOSDataSource* CreateVersionUIDataSource() {
   html_source->AddString(version_ui::kVersionModifier,
                          GetChannelString(GetChannel()));
   html_source->AddLocalizedString(version_ui::kOSName, IDS_VERSION_UI_OS);
-  html_source->AddLocalizedString(version_ui::kPlatform,
-                                  IDS_IOS_PLATFORM_LABEL);
   html_source->AddString(version_ui::kOSType, version_info::GetOSType());
-  html_source->AddString(version_ui::kOSVersion, std::string());
 
   html_source->AddLocalizedString(version_ui::kCompany,
                                   IDS_IOS_ABOUT_VERSION_COMPANY_NAME);
@@ -104,7 +105,7 @@ web::WebUIIOSDataSource* CreateVersionUIDataSource() {
 }  // namespace
 
 VersionUI::VersionUI(web::WebUIIOS* web_ui) : web::WebUIIOSController(web_ui) {
-  web_ui->AddMessageHandler(new VersionHandler());
+  web_ui->AddMessageHandler(base::MakeUnique<VersionHandler>());
   web::WebUIIOSDataSource::Add(ios::ChromeBrowserState::FromWebUIIOS(web_ui),
                                CreateVersionUIDataSource());
 }

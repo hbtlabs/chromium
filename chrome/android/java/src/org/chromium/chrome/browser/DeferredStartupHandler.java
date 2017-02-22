@@ -106,7 +106,7 @@ public class DeferredStartupHandler {
             public boolean queueIdle() {
                 Runnable currentTask = mDeferredTasks.poll();
                 if (currentTask == null) {
-                    if (mDeferredStartupInitializedForApp) {
+                    if (mDeferredStartupInitializedForApp && !mDeferredStartupCompletedForApp) {
                         mDeferredStartupCompletedForApp = true;
                         recordDeferredStartupStats();
                     }
@@ -137,7 +137,6 @@ public class DeferredStartupHandler {
                 "UMA.Debug.EnableCrashUpload.DeferredStartUpCompleteTime",
                 SystemClock.uptimeMillis() - UmaUtils.getForegroundStartTime(),
                 TimeUnit.MILLISECONDS);
-        LocaleManager.getInstance().recordStartupMetrics();
     }
 
     /**
@@ -191,7 +190,7 @@ public class DeferredStartupHandler {
 
                 PartnerBookmarksShim.kickOffReading(mAppContext);
 
-                PowerMonitor.create(mAppContext);
+                PowerMonitor.create();
 
                 ShareHelper.clearSharedImages();
 
@@ -219,6 +218,13 @@ public class DeferredStartupHandler {
             }
         });
 
+        mDeferredTasks.add(new Runnable() {
+            @Override
+            public void run() {
+                LocaleManager.getInstance().recordStartupMetrics();
+            }
+        });
+
         final ChromeApplication application = (ChromeApplication) mAppContext;
 
         mDeferredTasks.add(new Runnable() {
@@ -234,22 +240,20 @@ public class DeferredStartupHandler {
 
     private void initAsyncDiskTask() {
         new AsyncTask<Void, Void, Void>() {
+            private long mAsyncTaskStartTime;
+
             @Override
             protected Void doInBackground(Void... params) {
                 try {
                     TraceEvent.begin("ChromeBrowserInitializer.onDeferredStartup.doInBackground");
-                    long asyncTaskStartTime = SystemClock.uptimeMillis();
-
-                    // Initialize the WebappRegistry if it's not already initialized. Must be in
-                    // async task due to shared preferences disk access on N.
-                    WebappRegistry.getInstance();
+                    mAsyncTaskStartTime = SystemClock.uptimeMillis();
 
                     boolean crashDumpDisabled = CommandLine.getInstance().hasSwitch(
                             ChromeSwitches.DISABLE_CRASH_DUMP_UPLOAD);
                     if (!crashDumpDisabled) {
                         RecordHistogram.recordLongTimesHistogram(
                                 "UMA.Debug.EnableCrashUpload.Uptime3",
-                                asyncTaskStartTime - UmaUtils.getForegroundStartTime(),
+                                mAsyncTaskStartTime - UmaUtils.getForegroundStartTime(),
                                 TimeUnit.MILLISECONDS);
                         PrivacyPreferencesManager.getInstance().enablePotentialCrashUploading();
                         MinidumpUploadService.tryUploadAllCrashDumps(mAppContext);
@@ -259,7 +263,11 @@ public class DeferredStartupHandler {
                     crashFileManager.cleanOutAllNonFreshMinidumpFiles();
 
                     MinidumpUploadService.storeBreakpadUploadStatsInUma(
-                            ChromePreferenceManager.getInstance(mAppContext));
+                            ChromePreferenceManager.getInstance());
+
+                    // Initialize the WebappRegistry if it's not already initialized. Must be in
+                    // async task due to shared preferences disk access on N.
+                    WebappRegistry.getInstance();
 
                     // Force a widget refresh in order to wake up any possible zombie widgets.
                     // This is needed to ensure the right behavior when the process is suddenly
@@ -277,11 +285,6 @@ public class DeferredStartupHandler {
 
                     cacheIsChromeDefaultBrowser();
 
-                    RecordHistogram.recordLongTimesHistogram(
-                            "UMA.Debug.EnableCrashUpload.DeferredStartUpDurationAsync",
-                            SystemClock.uptimeMillis() - asyncTaskStartTime,
-                            TimeUnit.MILLISECONDS);
-
                     // Warm up all web app shared prefs. This must be run after the WebappRegistry
                     // instance is initialized.
                     WebappRegistry.warmUpSharedPrefs();
@@ -296,6 +299,11 @@ public class DeferredStartupHandler {
             protected void onPostExecute(Void params) {
                 // Must be run on the UI thread after the WebappRegistry has been completely warmed.
                 WebappRegistry.getInstance().unregisterOldWebapps(System.currentTimeMillis());
+
+                RecordHistogram.recordLongTimesHistogram(
+                        "UMA.Debug.EnableCrashUpload.DeferredStartUpAsyncTaskDuration",
+                        SystemClock.uptimeMillis() - mAsyncTaskStartTime,
+                        TimeUnit.MILLISECONDS);
             }
         }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
@@ -322,7 +330,7 @@ public class DeferredStartupHandler {
         ResolveInfo info = mAppContext.getPackageManager().resolveActivity(intent, 0);
         boolean isDefault = (info != null && info.match != 0
                 && mAppContext.getPackageName().equals(info.activityInfo.packageName));
-        ChromePreferenceManager.getInstance(mAppContext).setCachedChromeDefaultBrowser(isDefault);
+        ChromePreferenceManager.getInstance().setCachedChromeDefaultBrowser(isDefault);
     }
 
     /**
@@ -341,6 +349,7 @@ public class DeferredStartupHandler {
         }
     }
 
+    @SuppressWarnings("deprecation")  // InputMethodSubtype.getLocale() deprecated in API 24
     private void recordKeyboardLocaleUma() {
         InputMethodManager imm =
                 (InputMethodManager) mAppContext.getSystemService(Context.INPUT_METHOD_SERVICE);

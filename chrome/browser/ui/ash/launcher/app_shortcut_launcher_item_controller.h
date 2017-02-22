@@ -16,6 +16,10 @@
 class Browser;
 class URLPattern;
 
+namespace content {
+class WebContents;
+}
+
 namespace extensions {
 class Extension;
 }
@@ -37,18 +41,11 @@ class AppShortcutLauncherItemController : public LauncherItemController {
   std::vector<content::WebContents*> GetRunningApplications();
 
   // LauncherItemController overrides:
-  bool IsVisible() const override;
-  void Launch(ash::LaunchSource source, int event_flags) override;
-  ash::ShelfItemDelegate::PerformedAction Activate(
-      ash::LaunchSource source) override;
-  ChromeLauncherAppMenuItems GetApplicationList(int event_flags) override;
-  ash::ShelfItemDelegate::PerformedAction ItemSelected(
-      const ui::Event& event) override;
-  base::string16 GetTitle() override;
-  ash::ShelfMenuModel* CreateApplicationMenu(int event_flags) override;
-  bool IsDraggable() override;
-  bool CanPin() const override;
-  bool ShouldShowTooltip() override;
+  ash::ShelfAction ItemSelected(ui::EventType event_type,
+                                int event_flags,
+                                int64_t display_id,
+                                ash::ShelfLaunchSource source) override;
+  ash::ShelfAppMenuItemList GetAppMenuItems(int event_flags) override;
   void Close() override;
 
   // Get the refocus url pattern, which can be used to identify this application
@@ -58,10 +55,6 @@ class AppShortcutLauncherItemController : public LauncherItemController {
   void set_refocus_url(const GURL& refocus_url) { refocus_url_ = refocus_url; }
 
   ChromeLauncherController* controller() { return chrome_launcher_controller_; }
-
-  const std::string& app_id() const { return app_id_; }
-
-  const std::string& launch_id() const { return launch_id_; }
 
  protected:
   AppShortcutLauncherItemController(const std::string& app_id,
@@ -84,8 +77,7 @@ class AppShortcutLauncherItemController : public LauncherItemController {
 
   // Activate the browser with the given |content| and show the associated tab.
   // Returns the action performed by activating the content.
-  ash::ShelfItemDelegate::PerformedAction ActivateContent(
-      content::WebContents* content);
+  ash::ShelfAction ActivateContent(content::WebContents* content);
 
   // Advance to the next item if an owned item is already active. The function
   // will return true if it has successfully advanced.
@@ -104,14 +96,6 @@ class AppShortcutLauncherItemController : public LauncherItemController {
   base::Time last_launch_attempt_;
 
   ChromeLauncherController* chrome_launcher_controller_;
-
-  // The application id associated with this app shortcut.
-  const std::string app_id_;
-
-  // An id that can be passed to an app when launched in order to support
-  // multiple shelf items per app. This id is used together with the app_id to
-  // uniquely identify each shelf item that has the same app_id.
-  const std::string launch_id_;
 
   DISALLOW_COPY_AND_ASSIGN(AppShortcutLauncherItemController);
 };

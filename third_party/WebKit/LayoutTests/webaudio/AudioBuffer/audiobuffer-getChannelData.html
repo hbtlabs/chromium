@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+  <head>
+    <script src="../../resources/testharness.js"></script>
+    <script src="../../resources/testharnessreport.js"></script> 
+    <script src="../resources/audit-util.js"></script>
+    <script src="../resources/audio-testing.js"></script>
+    <script src="../resources/audioparam-testing.js"></script>
+    <title>Test AudioBuffer.getChannelData() Returns the Same Object</title>
+  </head>
+
+  <body>
+    <script>
+
+      var sampleRate = 48000;
+      var renderDuration = 0.5;
+
+      var audit = Audit.createTaskRunner();
+
+      audit.defineTask("buffer-eq", function (done) {
+        // Verify that successive calls to getChannelData return the same buffer.
+        var context = new AudioContext();
+        var channelCount = 2;
+        var frameLength = 1000;
+        var buffer = context.createBuffer(channelCount, frameLength, context.sampleRate);
+        var success = true;
+
+        for (var c = 0; c < channelCount; ++c) {
+          var a = buffer.getChannelData(c);
+          var b = buffer.getChannelData(c);
+          //testPassed("a = buffer.getChannelData(" + c + ")");
+          //testPassed("b = buffer.getChannelData(" + c + ")");
+
+          let message = "buffer.getChannelData(" + c + ")";
+          success = Should(message + " === "+  message, a === b)
+            .beEqualTo(true) && success;
+        }
+
+        Should("getChannelData", success)
+          .summarize("correctly returned the same buffer",
+                     "inccorrectly returned the different buffers");
+        done();
+      });
+
+      audit.defineTask("buffer-not-eq", function (done) {
+        var context = new AudioContext();
+        var channelCount = 2;
+        var frameLength = 1000;
+        var buffer1 = context.createBuffer(channelCount, frameLength, context.sampleRate);
+        var buffer2 = context.createBuffer(channelCount, frameLength, context.sampleRate);
+        var success = true;
+
+        for (var c = 0; c < channelCount; ++c) {
+          var a = buffer1.getChannelData(c);
+          var b = buffer2.getChannelData(c);
+          //testPassed("a = buffer1.getChannelData(" + c + ")");
+          //testPassed("b = buffer2.getChannelData(" + c + ")");
+
+          let message = "getChannelData(" + c + ")";
+          success = Should("buffer1." + message + " === buffer2." + message,
+            a === b)
+            .beEqualTo(false) && success;
+        }
+
+        Should("getChannelData", success)
+          .summarize("correctly returned different buffers",
+      "incorrectly returned the same buffers");
+        done();
+      });
+
+      audit.defineTask("finish", function (done) {
+        done();
+      });
+
+      audit.runTasks();
+    </script>
+  </body>
+</html>

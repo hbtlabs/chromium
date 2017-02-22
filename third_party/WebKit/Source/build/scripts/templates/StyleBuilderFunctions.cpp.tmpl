@@ -100,7 +100,7 @@ namespace blink {
 {{declare_initial_function(property_id)}} {
   CSS{{animation}}Data& data = state.style()->access{{animation}}s();
   data.{{vector}}.clear();
-  data.{{vector}}.append(CSS{{animation}}Data::initial{{attribute}}());
+  data.{{vector}}.push_back(CSS{{animation}}Data::initial{{attribute}}());
 }
 
 {{declare_inherit_function(property_id)}} {
@@ -115,7 +115,7 @@ namespace blink {
   CSS{{animation}}Data& data = state.style()->access{{animation}}s();
   data.{{vector}}.clear();
   for (auto& listValue : toCSSValueList(value))
-    data.{{vector}}.append(CSSToStyleMap::mapAnimation{{attribute}}(*listValue));
+    data.{{vector}}.push_back(CSSToStyleMap::mapAnimation{{attribute}}(*listValue));
 }
 {% endmacro %}
 {{apply_animation('CSSPropertyAnimationDelay', 'Delay', 'Animation')}}
@@ -337,7 +337,7 @@ static bool borderImageLengthMatchesAllSides(
   typedef CounterDirectiveMap::const_iterator Iterator;
   Iterator end = parentMap->end();
   for (Iterator it = parentMap->begin(); it != end; ++it) {
-    CounterDirectives& directives = map.add(it->key, CounterDirectives()).storedValue->value;
+    CounterDirectives& directives = map.insert(it->key, CounterDirectives()).storedValue->value;
     directives.inherit{{action}}(it->value);
   }
 }
@@ -360,7 +360,7 @@ static bool borderImageLengthMatchesAllSides(
     AtomicString identifier(toCSSCustomIdentValue(pair.first()).value());
     int value = toCSSPrimitiveValue(pair.second()).getIntValue();
     CounterDirectives& directives =
-        map.add(identifier, CounterDirectives()).storedValue->value;
+        map.insert(identifier, CounterDirectives()).storedValue->value;
     {% if action == 'Reset' %}
     directives.setResetValue(value);
     {% else %}

@@ -133,7 +133,7 @@ Resources.DatabaseModel = class extends SDK.SDKModel {
    * @param {!SDK.Target} target
    */
   constructor(target) {
-    super(Resources.DatabaseModel, target);
+    super(target);
 
     this._databases = [];
     this._agent = target.databaseAgent();
@@ -145,10 +145,7 @@ Resources.DatabaseModel = class extends SDK.SDKModel {
    * @return {!Resources.DatabaseModel}
    */
   static fromTarget(target) {
-    if (!target[Resources.DatabaseModel._symbol])
-      target[Resources.DatabaseModel._symbol] = new Resources.DatabaseModel(target);
-
-    return target[Resources.DatabaseModel._symbol];
+    return /** @type {!Resources.DatabaseModel} */ (target.model(Resources.DatabaseModel));
   }
 
   enable() {
@@ -164,7 +161,7 @@ Resources.DatabaseModel = class extends SDK.SDKModel {
     this._enabled = false;
     this._databases = [];
     this._agent.disable();
-    this.dispatchEventToListeners(Resources.DatabaseModel.Events.DatabasesRemoved);
+    this.emit(new Resources.DatabaseModel.DatabasesRemovedEvent());
   }
 
   /**
@@ -182,15 +179,25 @@ Resources.DatabaseModel = class extends SDK.SDKModel {
    */
   _addDatabase(database) {
     this._databases.push(database);
-    this.dispatchEventToListeners(Resources.DatabaseModel.Events.DatabaseAdded, database);
+    this.emit(new Resources.DatabaseModel.DatabaseAddedEvent(database));
   }
 };
 
-/** @enum {symbol} */
-Resources.DatabaseModel.Events = {
-  DatabaseAdded: Symbol('DatabaseAdded'),
-  DatabasesRemoved: Symbol('DatabasesRemoved')
+SDK.SDKModel.register(Resources.DatabaseModel, SDK.Target.Capability.None);
+
+
+/** @implements {Common.Emittable} */
+Resources.DatabaseModel.DatabaseAddedEvent = class {
+  /**
+   * @param {!Resources.Database} database
+   */
+  constructor(database) {
+    this.database = database;
+  }
 };
+
+/** @implements {Common.Emittable} */
+Resources.DatabaseModel.DatabasesRemovedEvent = class {};
 
 /**
  * @implements {Protocol.DatabaseDispatcher}

@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
-#include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "chrome/browser/media/webrtc/webrtc_browsertest_base.h"
 #include "chrome/browser/media/webrtc/webrtc_browsertest_common.h"
@@ -49,12 +48,6 @@ class WebRtcBrowserTest : public WebRtcTestBase {
 
     // Flag used by TestWebAudioMediaStream to force garbage collection.
     command_line->AppendSwitchASCII(switches::kJavaScriptFlags, "--expose-gc");
-
-    // Flag used by |RunsAudioVideoWebRTCCallInTwoTabsGetStatsPromise|.
-    // TODO(hbos): Remove this when bug crbug.com/627816 is resolved (when this
-    // flag is removed).
-    command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
-                                    "RTCPeerConnectionNewGetStats");
   }
 
   void RunsAudioVideoWebRTCCallInTwoTabs(
@@ -99,7 +92,7 @@ class WebRtcBrowserTest : public WebRtcTestBase {
     DetectVideoAndHangUp();
   }
 
-protected:
+ protected:
   void StartServerAndOpenTabs() {
     ASSERT_TRUE(embedded_test_server()->Start());
     left_tab_ = OpenTestPageAndGetUserMediaInNewTab(kMainWebrtcTestHtmlPage);
@@ -220,9 +213,20 @@ IN_PROC_BROWSER_TEST_F(WebRtcBrowserTest,
   StartServerAndOpenTabs();
   SetupPeerconnectionWithLocalStream(left_tab_);
   SetupPeerconnectionWithLocalStream(right_tab_);
+  CreateDataChannel(left_tab_, "data");
+  CreateDataChannel(right_tab_, "data");
   NegotiateCall(left_tab_, right_tab_);
 
-  VerifyStatsGeneratedPromise(left_tab_);
+  std::set<std::string> missing_expected_stats;
+  for (const std::string& type : GetWhitelistedStatsTypes(left_tab_)) {
+    missing_expected_stats.insert(type);
+  }
+  for (const std::string& type : VerifyStatsGeneratedPromise(left_tab_)) {
+    missing_expected_stats.erase(type);
+  }
+  for (const std::string& type : missing_expected_stats) {
+    EXPECT_TRUE(false) << "Expected stats dictionary is missing: " << type;
+  }
 
   DetectVideoAndHangUp();
 }

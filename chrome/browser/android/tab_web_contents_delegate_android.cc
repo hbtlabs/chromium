@@ -41,11 +41,11 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/file_chooser_params.h"
 #include "jni/TabWebContentsDelegateAndroid_jni.h"
-#include "third_party/WebKit/public/web/WebWindowFeatures.h"
+#include "ppapi/features/features.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 #include "chrome/browser/pepper_broker_infobar_delegate.h"
 #endif
 
@@ -286,7 +286,7 @@ bool TabWebContentsDelegateAndroid::RequestPpapiBrokerPermission(
     const GURL& url,
     const base::FilePath& plugin_path,
     const base::Callback<void(bool)>& callback) {
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
     PepperBrokerInfoBarDelegate::Create(
         web_contents, url, plugin_path, callback);
     return true;
@@ -330,7 +330,7 @@ WebContents* TabWebContentsDelegateAndroid::OpenURLFromTab(
       !base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisablePopupBlocking)) {
     if (popup_blocker_helper->MaybeBlockPopup(nav_params,
-                                              blink::WebWindowFeatures())) {
+                                              blink::mojom::WindowFeatures())) {
       return nullptr;
     }
   }

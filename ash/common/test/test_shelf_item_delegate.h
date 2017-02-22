@@ -6,7 +6,6 @@
 #define ASH_COMMON_TEST_TEST_SHELF_ITEM_DELEGATE_H_
 
 #include "ash/common/shelf/shelf_item_delegate.h"
-#include "base/compiler_specific.h"
 #include "base/macros.h"
 
 namespace ash {
@@ -21,22 +20,16 @@ class TestShelfItemDelegate : public ShelfItemDelegate {
   explicit TestShelfItemDelegate(WmWindow* window);
   ~TestShelfItemDelegate() override;
 
-  void set_is_draggable(bool is_draggable) { is_draggable_ = is_draggable; }
-
   // ShelfItemDelegate:
-  ShelfItemDelegate::PerformedAction ItemSelected(
-      const ui::Event& event) override;
-  base::string16 GetTitle() override;
-  ShelfMenuModel* CreateApplicationMenu(int event_flags) override;
-  bool IsDraggable() override;
-  bool CanPin() const override;
-  bool ShouldShowTooltip() override;
+  ShelfAction ItemSelected(ui::EventType event_type,
+                           int event_flags,
+                           int64_t display_id,
+                           ShelfLaunchSource source) override;
+  ShelfAppMenuItemList GetAppMenuItems(int event_flags) override;
   void Close() override;
 
  private:
   WmWindow* window_;
-
-  bool is_draggable_;
 
   DISALLOW_COPY_AND_ASSIGN(TestShelfItemDelegate);
 };

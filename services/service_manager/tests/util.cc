@@ -36,7 +36,7 @@ void QuitLoop(base::RunLoop* loop) {
 
 std::unique_ptr<Connection> LaunchAndConnectToProcess(
     const std::string& target_exe_name,
-    const Identity target,
+    const Identity& target,
     service_manager::Connector* connector,
     base::Process* process) {
   base::FilePath target_path;
@@ -58,26 +58,20 @@ std::unique_ptr<Connection> LaunchAndConnectToProcess(
   platform_channel_pair.PrepareToPassClientHandleToChildProcess(
       &child_command_line, &handle_passing_info);
 
-  // Generate a token for the child to find and connect to a primordial pipe
-  // and pass that as well.
-  std::string primordial_pipe_token = mojo::edk::GenerateRandomToken();
-  child_command_line.AppendSwitchASCII(switches::kPrimordialPipeToken,
-                                        primordial_pipe_token);
-
-  // Allocate the pipe locally.
-  std::string child_token = mojo::edk::GenerateRandomToken();
+  mojo::edk::PendingProcessConnection pending_process;
+  std::string token;
   mojo::ScopedMessagePipeHandle pipe =
-      mojo::edk::CreateParentMessagePipe(primordial_pipe_token, child_token);
+      pending_process.CreateMessagePipe(&token);
+  child_command_line.AppendSwitchASCII(switches::kPrimordialPipeToken, token);
 
   service_manager::mojom::ServicePtr client;
   client.Bind(mojo::InterfacePtrInfo<service_manager::mojom::Service>(
       std::move(pipe), 0u));
   service_manager::mojom::PIDReceiverPtr receiver;
 
-  service_manager::Connector::ConnectParams params(target);
-  params.set_client_process_connection(std::move(client), GetProxy(&receiver));
+  connector->StartService(target, std::move(client), MakeRequest(&receiver));
   std::unique_ptr<service_manager::Connection> connection =
-      connector->Connect(&params);
+      connector->Connect(target);
   {
     base::RunLoop loop;
     connection->AddConnectionCompletedClosure(base::Bind(&QuitLoop, &loop));
@@ -95,9 +89,8 @@ std::unique_ptr<Connection> LaunchAndConnectToProcess(
   *process = base::LaunchProcess(child_command_line, options);
   DCHECK(process->IsValid());
   receiver->SetPID(process->Pid());
-  mojo::edk::ChildProcessLaunched(process->Handle(),
-                                  platform_channel_pair.PassServerHandle(),
-                                  child_token);
+  pending_process.Connect(process->Handle(),
+                          platform_channel_pair.PassServerHandle());
   return connection;
 }
 

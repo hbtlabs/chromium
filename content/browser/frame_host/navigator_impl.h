@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
@@ -15,6 +14,7 @@
 #include "content/browser/frame_host/navigator.h"
 #include "content/common/content_export.h"
 #include "content/common/navigation_params.h"
+#include "content/public/common/previews_state.h"
 #include "url/gurl.h"
 
 class GURL;
@@ -23,7 +23,6 @@ namespace content {
 
 class NavigationControllerImpl;
 class NavigatorDelegate;
-class NavigatorTest;
 class ResourceRequestBodyImpl;
 struct LoadCommittedDetails;
 
@@ -44,6 +43,7 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
   void DidStartProvisionalLoad(
       RenderFrameHostImpl* render_frame_host,
       const GURL& url,
+      const std::vector<GURL>& redirect_chain,
       const base::TimeTicks& navigation_start) override;
   void DidFailProvisionalLoadWithError(
       RenderFrameHostImpl* render_frame_host,
@@ -88,9 +88,6 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
   void OnBeginNavigation(FrameTreeNode* frame_tree_node,
                          const CommonNavigationParams& common_params,
                          const BeginNavigationParams& begin_params) override;
-  void FailedNavigation(FrameTreeNode* frame_tree_node,
-                        bool has_stale_copy_in_cache,
-                        int error_code) override;
   void LogResourceRequestTime(base::TimeTicks timestamp,
                               const GURL& url) override;
   void LogBeforeUnloadTime(
@@ -129,7 +126,7 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
                          const FrameNavigationEntry& frame_entry,
                          const NavigationEntryImpl& entry,
                          ReloadType reload_type,
-                         LoFiState lofi_state,
+                         PreviewsState previews_state,
                          bool is_same_document_history_load,
                          bool is_history_navigation_in_new_child,
                          base::TimeTicks navigation_start);

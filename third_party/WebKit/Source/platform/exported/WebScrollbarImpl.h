@@ -43,7 +43,7 @@ class PLATFORM_EXPORT WebScrollbarImpl final : public WebScrollbar {
 
  public:
   static std::unique_ptr<WebScrollbarImpl> create(Scrollbar* scrollbar) {
-    return wrapUnique(new WebScrollbarImpl(scrollbar));
+    return WTF::wrapUnique(new WebScrollbarImpl(scrollbar));
   }
 
   // Implement WebScrollbar methods
@@ -69,7 +69,11 @@ class PLATFORM_EXPORT WebScrollbarImpl final : public WebScrollbar {
  private:
   explicit WebScrollbarImpl(Scrollbar*);
 
-  Persistent<Scrollbar> m_scrollbar;
+  // Accessed by main and compositor threads, e.g., the compositor thread
+  // checks |orientation()|.
+  //
+  // TODO: minimize or avoid cross-thread use, if possible.
+  CrossThreadPersistent<Scrollbar> m_scrollbar;
 };
 
 }  // namespace blink

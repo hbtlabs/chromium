@@ -18,8 +18,8 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/signin/chrome_proximity_auth_client.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
@@ -103,13 +103,13 @@ EasyUnlockServiceRegular::GetProximityAuthPrefManager() {
 }
 
 void EasyUnlockServiceRegular::LoadRemoteDevices() {
-  if (device_manager_->unlock_keys().empty()) {
-    SetProximityAuthDevices(GetAccountId(), proximity_auth::RemoteDeviceList());
+  if (device_manager_->GetUnlockKeys().empty()) {
+    SetProximityAuthDevices(GetAccountId(), cryptauth::RemoteDeviceList());
     return;
   }
 
   remote_device_loader_.reset(new proximity_auth::RemoteDeviceLoader(
-      device_manager_->unlock_keys(), proximity_auth_client()->GetAccountId(),
+      device_manager_->GetUnlockKeys(), proximity_auth_client()->GetAccountId(),
       enrollment_manager_->GetUserPrivateKey(),
       proximity_auth_client()->CreateSecureMessageDelegate(),
       pref_manager_.get()));
@@ -119,7 +119,7 @@ void EasyUnlockServiceRegular::LoadRemoteDevices() {
 }
 
 void EasyUnlockServiceRegular::OnRemoteDevicesLoaded(
-    const proximity_auth::RemoteDeviceList& remote_devices) {
+    const cryptauth::RemoteDeviceList& remote_devices) {
   SetProximityAuthDevices(GetAccountId(), remote_devices);
 
 #if defined(OS_CHROMEOS)
@@ -317,7 +317,7 @@ void EasyUnlockServiceRegular::SetRemoteBleDevices(
           return;
         }
         const std::vector<cryptauth::ExternalDeviceInfo> unlock_keys =
-            GetCryptAuthDeviceManager()->unlock_keys();
+            GetCryptAuthDeviceManager()->GetUnlockKeys();
         auto iterator = std::find_if(
             unlock_keys.begin(), unlock_keys.end(),
             [&public_key](const cryptauth::ExternalDeviceInfo& unlock_key) {

@@ -96,6 +96,10 @@ static bool isTerminatingCharacter(UChar c) {
           c == '>' || c == ',');
 }
 
+static bool isSlash(UChar c) {
+  return (c == '/' || c == '\\');
+}
+
 static bool isHTMLQuote(UChar c) {
   return (c == '"' || c == '\'');
 }
@@ -203,30 +207,54 @@ static String fullyDecodeString(const String& string,
   return workingString;
 }
 
+// XSSAuditor's task is to determine how much of any given content came
+// from a reflection vs. what occurs normally on the page. It must do
+// this in face of an attacker avoiding detection by splicing on page
+// content in such a way as to remain syntactically valid. The next two
+// functions apply heurisitcs to get the longest possible fragment in
+// face of such trickery.
+
 static void truncateForSrcLikeAttribute(String& decodedSnippet) {
-  // In HTTP URLs, characters following the first ?, #, or third slash may come
-  // from the page itself and can be merely ignored by an attacker's server when
-  // a remote script or script-like resource is requested. In DATA URLS, the
-  // payload starts at the first comma, and the the first /*, //, or <!-- may
-  // introduce a comment.
+  // In HTTP URLs, characters in the query string (following the first ?),
+  // in the fragment (following the first #), or even in the path (typically
+  // following the third slash but subject to generous interpretation of a
+  // lack of leading slashes) may be merely ignored by an attacker's server
+  // when a remote script or script-like resource is requested. Hence these
+  // are places where organic page content may be spliced.
+  //
+  // In DATA URLS, the payload starts at the first comma, and the the first
+  //  "/*", "//", or "<!--" may introduce a comment, which can then be used
+  // to splice page data harmlessly onto the end of the payload.
   //
   // Also, DATA URLs may use the same string literal tricks as with script
   // content itself. In either case, content following this may come from the
   // page and may be ignored when the script is executed. Also, any of these
   // characters may now be represented by the (enlarged) set of html5 entities.
   //
-  // For simplicity, we don't differentiate based on URL scheme, and stop at the
-  // first & (since it might be part of an entity for any of the subsequent
-  // punctuation), the first # or ?, the third slash, or the first slash, <, ',
-  // or " once a comma is seen.
+  // For simplicity, we don't differentiate based on URL scheme, and stop at
+  // any of the following:
+  //   - the first &, since it might be part of an entity for any of the
+  //     subsequent punctuation.
+  //   - the first # or ?, since the query and fragment can be ignored.
+  //   - the third slash, since this typically starts the path, but account
+  //     for a possible lack of leading slashes following the scheme).
+  //   - the first slash, <, ', or " once a comma is seen, since we
+  //     may now be in a data URL payload.
   int slashCount = 0;
   bool commaSeen = false;
-  for (size_t currentLength = 0; currentLength < decodedSnippet.length();
-       ++currentLength) {
+  bool colonSeen = false;
+  for (size_t currentLength = 0, remainingLength = decodedSnippet.length();
+       remainingLength; ++currentLength, --remainingLength) {
     UChar currentChar = decodedSnippet[currentLength];
+    if (currentChar == ':' && !colonSeen) {
+      if (remainingLength > 1 && !isSlash(decodedSnippet[currentLength + 1]))
+        ++slashCount;
+      if (remainingLength > 2 && !isSlash(decodedSnippet[currentLength + 2]))
+        ++slashCount;
+      colonSeen = true;
+    }
     if (currentChar == '&' || currentChar == '?' || currentChar == '#' ||
-        ((currentChar == '/' || currentChar == '\\') &&
-         (commaSeen || ++slashCount > 2)) ||
+        (isSlash(currentChar) && (commaSeen || ++slashCount > 2)) ||
         (currentChar == '<' && commaSeen) ||
         (currentChar == '\'' && commaSeen) ||
         (currentChar == '"' && commaSeen)) {
@@ -283,7 +311,7 @@ static String semicolonSeparatedValueContainingJavaScriptURL(
     if (protocolIsJavaScript(stripped))
       return stripped;
   }
-  return emptyString();
+  return emptyString;
 }
 
 XSSAuditor::XSSAuditor()
@@ -314,7 +342,7 @@ void XSSAuditor::init(Document* document, XSSAuditorDelegate* auditorDelegate) {
   m_state = FilteringTokens;
 
   if (Settings* settings = document->settings())
-    m_isEnabled = settings->xssAuditorEnabled();
+    m_isEnabled = settings->getXSSAuditorEnabled();
 
   if (!m_isEnabled)
     return;
@@ -390,13 +418,13 @@ void XSSAuditor::init(Document* document, XSSAuditorDelegate* auditorDelegate) {
     m_xssProtection = xssProtectionHeader;
     if (m_xssProtection == ReflectedXSSInvalid ||
         m_xssProtection == ReflectedXSSUnset) {
-      m_xssProtection = FilterReflectedXSS;
+      m_xssProtection = BlockReflectedXSS;
     }
 
     if (auditorDelegate)
       auditorDelegate->setReportURL(xssProtectionReportURL.copy());
 
-    EncodedFormData* httpBody = documentLoader->request().httpBody();
+    EncodedFormData* httpBody = documentLoader->getRequest().httpBody();
     if (httpBody && !httpBody->isEmpty())
       m_httpBodyAsString = httpBody->flattenToString();
   }
@@ -423,7 +451,7 @@ void XSSAuditor::setEncoding(const WTF::TextEncoding& encoding) {
     if (m_decodedHTTPBody.find(isRequiredForInjection) == kNotFound)
       m_decodedHTTPBody = String();
     if (m_decodedHTTPBody.length() >= miniumLengthForSuffixTree)
-      m_decodedHTTPBodySuffixTree = wrapUnique(
+      m_decodedHTTPBodySuffixTree = WTF::wrapUnique(
           new SuffixTree<ASCIICodebook>(m_decodedHTTPBody, suffixTreeDepth));
   }
 
@@ -751,13 +779,19 @@ String XSSAuditor::nameFromAttribute(const FilterTokenRequest& request,
 String XSSAuditor::snippetFromAttribute(const FilterTokenRequest& request,
                                         const HTMLToken::Attribute& attribute) {
   // The range doesn't include the character which terminates the value. So,
-  // for an input of |name="value"|, the snippet is |name="value|. For an
-  // unquoted input of |name=value |, the snippet is |name=value|.
+  // for an input of |name="value"|, the snippet is |name="value|. For a space
+  // terminated unquoted input of |name=value |, the snippet is |name=value|.
+  // Beware of empty unquoted values at the end of a token, we need to make sure
+  // we don't clip off the equals-sign as there is no trailing space.
   // FIXME: We should grab one character before the name also.
-  int start = attribute.nameRange().start - request.token.startIndex();
-  int end = attribute.valueRange().end - request.token.startIndex();
+  int nameStart = attribute.nameRange().start - request.token.startIndex();
+  int valueStart = attribute.valueRange().start - request.token.startIndex();
+  int valueEnd = attribute.valueRange().end - request.token.startIndex();
+  int length = valueEnd - nameStart;
+  if (valueStart == valueEnd)
+    length += 1;
   return request.sourceTracker.sourceForToken(request.token)
-      .substring(start, end - start);
+      .substring(nameStart, length);
 }
 
 String XSSAuditor::canonicalize(String snippet, TruncationKind treatment) {

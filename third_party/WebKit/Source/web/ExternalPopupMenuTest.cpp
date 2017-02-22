@@ -4,6 +4,7 @@
 
 #include "web/ExternalPopupMenu.h"
 
+#include <memory>
 #include "core/HTMLNames.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/frame/FrameHost.h"
@@ -14,20 +15,19 @@
 #include "core/testing/DummyPageHolder.h"
 #include "platform/PopupMenu.h"
 #include "platform/testing/URLTestHelpers.h"
+#include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
-#include "public/web/WebCache.h"
 #include "public/web/WebExternalPopupMenu.h"
 #include "public/web/WebPopupMenuInfo.h"
 #include "public/web/WebSettings.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/tests/FrameTestHelpers.h"
-#include <memory>
 
 namespace blink {
 
-class ExternalPopupMenuDisplayNoneItemsTest : public testing::Test {
+class ExternalPopupMenuDisplayNoneItemsTest : public ::testing::Test {
  public:
   ExternalPopupMenuDisplayNoneItemsTest() {}
 
@@ -97,7 +97,7 @@ class ExternalPopupMenuWebFrameClient
   MockWebExternalPopupMenu m_mockWebExternalPopupMenu;
 };
 
-class ExternalPopupMenuTest : public testing::Test {
+class ExternalPopupMenuTest : public ::testing::Test {
  public:
   ExternalPopupMenuTest() : m_baseURL("http://www.test.com") {}
 
@@ -107,15 +107,15 @@ class ExternalPopupMenuTest : public testing::Test {
     webView()->setUseExternalPopupMenus(true);
   }
   void TearDown() override {
-    Platform::current()->getURLLoaderMockFactory()->unregisterAllURLs();
-    WebCache::clear();
+    Platform::current()
+        ->getURLLoaderMockFactory()
+        ->unregisterAllURLsAndClearMemoryCache();
   }
 
   void registerMockedURLLoad(const std::string& fileName) {
-    URLTestHelpers::registerMockedURLLoad(
-        URLTestHelpers::toKURL(m_baseURL + fileName),
-        WebString::fromUTF8(fileName.c_str()), WebString::fromUTF8("popup/"),
-        WebString::fromUTF8("text/html"));
+    URLTestHelpers::registerMockedURLLoadFromBase(
+        WebString::fromUTF8(m_baseURL), testing::webTestDataPath("popup"),
+        WebString::fromUTF8(fileName), WebString::fromUTF8("text/html"));
   }
 
   void loadFrame(const std::string& fileName) {
@@ -139,7 +139,7 @@ class ExternalPopupMenuTest : public testing::Test {
   FrameTestHelpers::WebViewHelper m_helper;
 };
 
-TEST_F(ExternalPopupMenuTest, PopupAccountsForVisualViewportOffset) {
+TEST_F(ExternalPopupMenuTest, PopupAccountsForVisualViewportTransform) {
   registerMockedURLLoad("select_mid_screen.html");
   loadFrame("select_mid_screen.html");
 
@@ -156,15 +156,20 @@ TEST_F(ExternalPopupMenuTest, PopupAccountsForVisualViewportOffset) {
 
   IntRect rectInDocument = menuList->absoluteBoundingBoxRect();
 
-  webView()->setPageScaleFactor(2);
+  constexpr int scaleFactor = 2;
   ScrollOffset scrollDelta(20, 30);
-  visualViewport.move(scrollDelta);
 
+  const int expectedX =
+      (rectInDocument.x() - scrollDelta.width()) * scaleFactor;
+  const int expectedY =
+      (rectInDocument.y() - scrollDelta.height()) * scaleFactor;
+
+  webView()->setPageScaleFactor(scaleFactor);
+  visualViewport.move(scrollDelta);
   select->showPopup();
 
-  EXPECT_EQ(rectInDocument.x() - scrollDelta.width(), client().shownBounds().x);
-  EXPECT_EQ(rectInDocument.y() - scrollDelta.height(),
-            client().shownBounds().y);
+  EXPECT_EQ(expectedX, client().shownBounds().x);
+  EXPECT_EQ(expectedY, client().shownBounds().y);
 }
 
 TEST_F(ExternalPopupMenuTest, DidAcceptIndex) {

@@ -42,7 +42,7 @@ Resources.ClearStorageView = class extends UI.VBox {
 
     SDK.targetManager.observeTargets(this, SDK.Target.Capability.Browser);
     var footer = this._reportView.appendSection('', 'clear-storage-button').appendRow();
-    this._clearButton = createTextButton(
+    this._clearButton = UI.createTextButton(
         Common.UIString('Clear site data'), this._clear.bind(this), Common.UIString('Clear site data'));
     footer.appendChild(this._clearButton);
   }
@@ -143,7 +143,7 @@ Resources.ClearStorageView = class extends UI.VBox {
     }
 
     if (set.has(Protocol.Storage.StorageType.Appcache) || hasAll) {
-      var appcacheModel = SDK.ApplicationCacheModel.fromTarget(this._target);
+      var appcacheModel = Resources.ApplicationCacheModel.fromTarget(this._target);
       if (appcacheModel)
         appcacheModel.reset();
     }

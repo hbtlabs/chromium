@@ -33,17 +33,18 @@ WebSocketHandleImpl::~WebSocketHandleImpl() {
   NETWORK_DVLOG(1) << this << " deleted";
 
   if (m_websocket)
-    m_websocket->StartClosingHandshake(kAbnormalShutdownOpCode, emptyString());
+    m_websocket->StartClosingHandshake(kAbnormalShutdownOpCode, emptyString);
 }
 
 void WebSocketHandleImpl::initialize(InterfaceProvider* interfaceProvider) {
   NETWORK_DVLOG(1) << this << " initialize(...)";
 
   DCHECK(!m_websocket);
-  interfaceProvider->getInterface(mojo::GetProxy(&m_websocket));
+  interfaceProvider->getInterface(mojo::MakeRequest(&m_websocket));
 
-  m_websocket.set_connection_error_with_reason_handler(convertToBaseCallback(
-      WTF::bind(&WebSocketHandleImpl::onConnectionError, unretained(this))));
+  m_websocket.set_connection_error_with_reason_handler(
+      convertToBaseCallback(WTF::bind(&WebSocketHandleImpl::onConnectionError,
+                                      WTF::unretained(this))));
 }
 
 void WebSocketHandleImpl::connect(const KURL& url,
@@ -63,7 +64,7 @@ void WebSocketHandleImpl::connect(const KURL& url,
 
   m_websocket->AddChannelRequest(
       url, protocols, origin, firstPartyForCookies,
-      userAgentOverride.isNull() ? emptyString() : userAgentOverride,
+      userAgentOverride.isNull() ? emptyString : userAgentOverride,
       m_clientBinding.CreateInterfacePtrAndBind(
           Platform::current()
               ->currentThread()
@@ -118,7 +119,7 @@ void WebSocketHandleImpl::close(unsigned short code, const String& reason) {
   NETWORK_DVLOG(1) << this << " close(" << code << ", " << reason << ")";
 
   m_websocket->StartClosingHandshake(code,
-                                     reason.isNull() ? emptyString() : reason);
+                                     reason.isNull() ? emptyString : reason);
 }
 
 void WebSocketHandleImpl::disconnect() {
@@ -128,14 +129,6 @@ void WebSocketHandleImpl::disconnect() {
 
 void WebSocketHandleImpl::onConnectionError(uint32_t customReason,
                                             const std::string& description) {
-  if (!blink::Platform::current()) {
-    // In the renderrer shutdown sequence, mojo channels are destructed and this
-    // function is called. On the other hand, blink objects became invalid
-    // *silently*, which means we must not touch |*client_| any more.
-    // TODO(yhirano): Remove this code once the shutdown sequence is fixed.
-    return;
-  }
-
   // Our connection to the WebSocket was dropped. This could be due to
   // exceeding the maximum number of concurrent websockets from this process.
   String failureMessage;

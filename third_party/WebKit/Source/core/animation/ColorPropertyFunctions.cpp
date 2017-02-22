@@ -8,11 +8,12 @@
 
 namespace blink {
 
-StyleColor ColorPropertyFunctions::getInitialColor(CSSPropertyID property) {
+OptionalStyleColor ColorPropertyFunctions::getInitialColor(
+    CSSPropertyID property) {
   return getUnvisitedColor(property, ComputedStyle::initialStyle());
 }
 
-StyleColor ColorPropertyFunctions::getUnvisitedColor(
+OptionalStyleColor ColorPropertyFunctions::getUnvisitedColor(
     CSSPropertyID property,
     const ComputedStyle& style) {
   switch (property) {
@@ -26,6 +27,10 @@ StyleColor ColorPropertyFunctions::getUnvisitedColor(
       return style.borderTopColor();
     case CSSPropertyBorderBottomColor:
       return style.borderBottomColor();
+    case CSSPropertyCaretColor:
+      if (style.caretColor().isAutoColor())
+        return nullptr;
+      return style.caretColor().toStyleColor();
     case CSSPropertyColor:
       return style.color();
     case CSSPropertyOutlineColor:
@@ -50,12 +55,13 @@ StyleColor ColorPropertyFunctions::getUnvisitedColor(
       return style.textDecorationColor();
     default:
       NOTREACHED();
-      return StyleColor::currentColor();
+      return nullptr;
   }
 }
 
-StyleColor ColorPropertyFunctions::getVisitedColor(CSSPropertyID property,
-                                                   const ComputedStyle& style) {
+OptionalStyleColor ColorPropertyFunctions::getVisitedColor(
+    CSSPropertyID property,
+    const ComputedStyle& style) {
   switch (property) {
     case CSSPropertyBackgroundColor:
       return style.visitedLinkBackgroundColor();
@@ -67,6 +73,12 @@ StyleColor ColorPropertyFunctions::getVisitedColor(CSSPropertyID property,
       return style.visitedLinkBorderTopColor();
     case CSSPropertyBorderBottomColor:
       return style.visitedLinkBorderBottomColor();
+    case CSSPropertyCaretColor:
+      // TODO(rego): "auto" value for caret-color should not interpolate
+      // (http://crbug.com/676295).
+      if (style.visitedLinkCaretColor().isAutoColor())
+        return StyleColor::currentColor();
+      return style.visitedLinkCaretColor().toStyleColor();
     case CSSPropertyColor:
       return style.visitedLinkColor();
     case CSSPropertyOutlineColor:
@@ -91,7 +103,7 @@ StyleColor ColorPropertyFunctions::getVisitedColor(CSSPropertyID property,
       return style.visitedLinkTextDecorationColor();
     default:
       NOTREACHED();
-      return StyleColor::currentColor();
+      return nullptr;
   }
 }
 
@@ -114,6 +126,8 @@ void ColorPropertyFunctions::setUnvisitedColor(CSSPropertyID property,
     case CSSPropertyBorderTopColor:
       style.setBorderTopColor(color);
       return;
+    case CSSPropertyCaretColor:
+      return style.setCaretColor(color);
     case CSSPropertyColor:
       style.setColor(color);
       return;
@@ -163,6 +177,8 @@ void ColorPropertyFunctions::setVisitedColor(CSSPropertyID property,
     case CSSPropertyBorderTopColor:
       style.setVisitedLinkBorderTopColor(color);
       return;
+    case CSSPropertyCaretColor:
+      return style.setVisitedLinkCaretColor(color);
     case CSSPropertyColor:
       style.setVisitedLinkColor(color);
       return;

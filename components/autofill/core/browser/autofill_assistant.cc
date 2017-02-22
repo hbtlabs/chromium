@@ -31,8 +31,7 @@ bool AutofillAssistant::CanShowCreditCardAssist(
       !IsAutofillCreditCardAssistEnabled() ||
       // Context of the page is not secure or target URL is valid but not
       // secure.
-      !(autofill_manager_->client()->IsContextSecure(
-            form_structures.front()->source_url()) &&
+      !(autofill_manager_->client()->IsContextSecure() &&
         (!form_structures.front()->target_url().is_valid() ||
          !form_structures.front()->target_url().SchemeIs("http")))) {
     return false;
@@ -56,8 +55,8 @@ void AutofillAssistant::ShowAssistForCreditCard(const CreditCard& card) {
 
 void AutofillAssistant::OnUserDidAcceptCreditCardFill(const CreditCard& card) {
   autofill_manager_->GetOrCreateFullCardRequest()->GetFullCard(
-      card, AutofillClient::UNMASK_FOR_AUTOFILL,
-      weak_ptr_factory_.GetWeakPtr());
+      card, AutofillClient::UNMASK_FOR_AUTOFILL, weak_ptr_factory_.GetWeakPtr(),
+      autofill_manager_->GetAsFullCardRequestUIDelegate());
 }
 
 void AutofillAssistant::OnFullCardRequestSucceeded(const CreditCard& card,

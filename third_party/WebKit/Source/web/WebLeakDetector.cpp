@@ -31,13 +31,16 @@
 #include "public/web/WebLeakDetector.h"
 
 #include "bindings/core/v8/V8GCController.h"
+#include "core/editing/spellcheck/IdleSpellCheckCallback.h"
 #include "core/editing/spellcheck/SpellChecker.h"
-#include "core/fetch/MemoryCache.h"
 #include "core/workers/InProcessWorkerMessagingProxy.h"
 #include "core/workers/WorkerThread.h"
 #include "modules/compositorworker/AbstractAnimationWorkletThread.h"
 #include "platform/InstanceCounters.h"
 #include "platform/Timer.h"
+#include "platform/loader/fetch/MemoryCache.h"
+#include "public/platform/Platform.h"
+#include "public/platform/WebThread.h"
 #include "public/web/WebFrame.h"
 #include "web/WebLocalFrameImpl.h"
 
@@ -51,9 +54,14 @@ class WebLeakDetectorImpl final : public WebLeakDetector {
  public:
   explicit WebLeakDetectorImpl(WebLeakDetectorClient* client)
       : m_client(client),
-        m_delayedGCAndReportTimer(this,
-                                  &WebLeakDetectorImpl::delayedGCAndReport),
-        m_delayedReportTimer(this, &WebLeakDetectorImpl::delayedReport),
+        m_delayedGCAndReportTimer(
+            Platform::current()->currentThread()->getWebTaskRunner(),
+            this,
+            &WebLeakDetectorImpl::delayedGCAndReport),
+        m_delayedReportTimer(
+            Platform::current()->currentThread()->getWebTaskRunner(),
+            this,
+            &WebLeakDetectorImpl::delayedReport),
         m_numberOfGCNeeded(0) {
     DCHECK(m_client);
   }
@@ -68,8 +76,8 @@ class WebLeakDetectorImpl final : public WebLeakDetector {
   void delayedReport(TimerBase*);
 
   WebLeakDetectorClient* m_client;
-  Timer<WebLeakDetectorImpl> m_delayedGCAndReportTimer;
-  Timer<WebLeakDetectorImpl> m_delayedReportTimer;
+  TaskRunnerTimer<WebLeakDetectorImpl> m_delayedGCAndReportTimer;
+  TaskRunnerTimer<WebLeakDetectorImpl> m_delayedReportTimer;
   int m_numberOfGCNeeded;
 };
 
@@ -94,8 +102,10 @@ void WebLeakDetectorImpl::prepareForLeakDetection(WebFrame* frame) {
   // Stop the spellchecker to prevent this.
   if (frame->isWebLocalFrame()) {
     WebLocalFrameImpl* localFrame = toWebLocalFrameImpl(frame);
-    SpellChecker& spellChecker = localFrame->frame()->spellChecker();
-    spellChecker.prepareForLeakDetection();
+    if (RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled())
+      localFrame->frame()->idleSpellCheckCallback().prepareForLeakDetection();
+    else
+      localFrame->frame()->spellChecker().prepareForLeakDetection();
   }
 
   // FIXME: HTML5 Notification should be closed because notification affects the
@@ -162,8 +172,8 @@ void WebLeakDetectorImpl::delayedReport(TimerBase*) {
       InstanceCounters::counterValue(InstanceCounters::LayoutObjectCounter);
   result.numberOfLiveResources =
       InstanceCounters::counterValue(InstanceCounters::ResourceCounter);
-  result.numberOfLiveActiveDOMObjects =
-      InstanceCounters::counterValue(InstanceCounters::ActiveDOMObjectCounter);
+  result.numberOfLiveSuspendableObjects = InstanceCounters::counterValue(
+      InstanceCounters::SuspendableObjectCounter);
   result.numberOfLiveScriptPromises =
       InstanceCounters::counterValue(InstanceCounters::ScriptPromiseCounter);
   result.numberOfLiveFrames =

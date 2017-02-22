@@ -64,7 +64,6 @@ class CC_EXPORT ResourceProvider
 
  public:
   using ResourceIdArray = std::vector<ResourceId>;
-  using ResourceIdSet = std::unordered_set<ResourceId>;
   using ResourceIdMap = std::unordered_map<ResourceId, ResourceId>;
   enum TextureHint {
     TEXTURE_HINT_DEFAULT = 0x0,
@@ -84,7 +83,6 @@ class CC_EXPORT ResourceProvider
       SharedBitmapManager* shared_bitmap_manager,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       BlockingTaskRunner* blocking_main_thread_task_runner,
-      int highp_threshold_min,
       size_t id_allocation_chunk_size,
       bool delegated_sync_points_required,
       bool use_gpu_memory_buffer_resources,
@@ -96,13 +94,15 @@ class CC_EXPORT ResourceProvider
 
   void DidLoseContextProvider() { lost_context_provider_ = true; }
 
-  int max_texture_size() const { return max_texture_size_; }
-  ResourceFormat best_texture_format() const { return best_texture_format_; }
+  int max_texture_size() const { return settings_.max_texture_size; }
+  ResourceFormat best_texture_format() const {
+    return settings_.best_texture_format;
+  }
   ResourceFormat best_render_buffer_format() const {
-    return best_render_buffer_format_;
+    return settings_.best_render_buffer_format;
   }
   ResourceFormat YuvResourceFormat(int bits) const;
-  bool use_sync_query() const { return use_sync_query_; }
+  bool use_sync_query() const { return settings_.use_sync_query; }
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager() {
     return gpu_memory_buffer_manager_;
   }
@@ -120,7 +120,9 @@ class CC_EXPORT ResourceProvider
 
   // Producer interface.
 
-  ResourceType default_resource_type() const { return default_resource_type_; }
+  ResourceType default_resource_type() const {
+    return settings_.default_resource_type;
+  }
   ResourceType GetResourceType(ResourceId id);
   GLenum GetResourceTextureTarget(ResourceId id);
   bool IsImmutable(ResourceId id);
@@ -151,6 +153,10 @@ class CC_EXPORT ResourceProvider
       bool read_lock_fences_enabled);
 
   void DeleteResource(ResourceId id);
+  // In the case of GPU resources, we may need to flush the GL context to ensure
+  // that texture deletions are seen in a timely fashion. This function should
+  // be called after texture deletions that may happen during an idle state.
+  void FlushPendingDeletions() const;
 
   // Update pixels from image, copying source_rect (in image) to dest_offset (in
   // the resource).
@@ -161,6 +167,9 @@ class CC_EXPORT ResourceProvider
   // Generates sync tokesn for resources which need a sync token.
   void GenerateSyncTokenForResource(ResourceId resource_id);
   void GenerateSyncTokenForResources(const ResourceIdArray& resource_ids);
+
+  // Gets the most recent sync token from the indicated resources.
+  gpu::SyncToken GetSyncTokenForResources(const ResourceIdArray& resource_ids);
 
   // Creates accounting for a child. Returns a child ID.
   int CreateChild(const ReturnCallback& return_callback);
@@ -206,6 +215,15 @@ class CC_EXPORT ResourceProvider
   // wait on it.
   void ReceiveReturnsFromParent(
       const ReturnedResourceArray& transferable_resources);
+
+#if defined(OS_ANDROID)
+  // Send an overlay promotion hint to all resources that requested it via
+  // |wants_promotion_hints_set_|.  |promotable_hints| contains all the
+  // resources that should be told that they're promotable.  Others will be told
+  // that they're not promotable right now.
+  void SendPromotionHints(
+      const OverlayCandidateList::PromotionHintInfoMap& promotion_hints);
+#endif
 
   // The following lock classes are part of the ResourceProvider API and are
   // needed to read and write the resource contents. The user must ensure
@@ -321,6 +339,7 @@ class CC_EXPORT ResourceProvider
                             bool use_mailbox,
                             bool use_distance_field_text,
                             bool can_use_lcd_text,
+                            bool ignore_color_space,
                             int msaa_sample_count);
     ~ScopedSkSurfaceProvider();
 
@@ -470,6 +489,18 @@ class CC_EXPORT ResourceProvider
   // Indicates if this resource may be used for a hardware overlay plane.
   bool IsOverlayCandidate(ResourceId id);
 
+#if defined(OS_ANDROID)
+  // Indicates if this resource is backed by an Android SurfaceTexture, and thus
+  // can't really be promoted to an overlay.
+  bool IsBackedBySurfaceTexture(ResourceId id);
+
+  // Indicates if this resource wants to receive promotion hints.
+  bool WantsPromotionHint(ResourceId id);
+
+  // Return the number of resources that request promotion hints.
+  size_t CountPromotionHintRequestsForTesting();
+#endif
+
   void WaitSyncTokenIfNeeded(ResourceId id);
 
   static GLint GetActiveTextureUnit(gpu::gles2::GLES2Interface* gl);
@@ -573,6 +604,20 @@ class CC_EXPORT ResourceProvider
     bool read_lock_fences_enabled : 1;
     bool has_shared_bitmap_id : 1;
     bool is_overlay_candidate : 1;
+#if defined(OS_ANDROID)
+    // Indicates whether this resource may not be overlayed on Android, since
+    // it's not backed by a SurfaceView.  This may be set in combination with
+    // |is_overlay_candidate|, to find out if switching the resource to a
+    // a SurfaceView would result in overlay promotion.  It's good to find this
+    // out in advance, since one has no fallback path for displaying a
+    // SurfaceView except via promoting it to an overlay.  Ideally, one _could_
+    // promote SurfaceTexture via the overlay path, even if one ended up just
+    // drawing a quad in the compositor.  However, for now, we use this flag to
+    // refuse to promote so that the compositor will draw the quad.
+    bool is_backed_by_surface_texture : 1;
+    // Indicates that this resource would like a promotion hint.
+    bool wants_promotion_hint : 1;
+#endif
     scoped_refptr<Fence> read_lock_fence;
     gfx::Size size;
     Origin origin;
@@ -668,48 +713,54 @@ class CC_EXPORT ResourceProvider
   gpu::gles2::GLES2Interface* ContextGL() const;
   bool IsGLContextLost() const;
 
-  // Returns null if |enable_color_correct_rendering_| is false.
+  // Returns null if |settings_.enable_color_correct_rendering| is false.
   sk_sp<SkColorSpace> GetResourceSkColorSpace(const Resource* resource) const;
+
+  // Holds const settings for the ResourceProvider. Never changed after init.
+  struct Settings {
+    Settings(ContextProvider* compositor_context_provider,
+             bool delegated_sync_points_required,
+             bool use_gpu_memory_buffer_resources,
+             bool enable_color_correct_rendering);
+
+    int max_texture_size = 0;
+    bool use_texture_storage_ext = false;
+    bool use_texture_format_bgra = false;
+    bool use_texture_usage_hint = false;
+    bool use_sync_query = false;
+    ResourceType default_resource_type = RESOURCE_TYPE_GL_TEXTURE;
+    ResourceFormat yuv_resource_format = LUMINANCE_8;
+    ResourceFormat yuv_highbit_resource_format = LUMINANCE_8;
+    ResourceFormat best_texture_format = RGBA_8888;
+    ResourceFormat best_render_buffer_format = RGBA_8888;
+    bool enable_color_correct_rendering = false;
+    bool delegated_sync_points_required = false;
+  } const settings_;
 
   ContextProvider* compositor_context_provider_;
   SharedBitmapManager* shared_bitmap_manager_;
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager_;
   BlockingTaskRunner* blocking_main_thread_task_runner_;
   bool lost_context_provider_;
-  int highp_threshold_min_;
   ResourceId next_id_;
   ResourceMap resources_;
   int next_child_;
   ChildMap children_;
-
-  const bool delegated_sync_points_required_;
-
-  ResourceType default_resource_type_;
-  bool use_texture_storage_ext_;
-  bool use_texture_format_bgra_;
-  bool use_texture_usage_hint_;
-  bool use_compressed_texture_etc1_;
-  ResourceFormat yuv_resource_format_;
-  ResourceFormat yuv_highbit_resource_format_;
-  int max_texture_size_;
-  ResourceFormat best_texture_format_;
-  ResourceFormat best_render_buffer_format_;
-  const bool enable_color_correct_rendering_ = false;
-
-  base::ThreadChecker thread_checker_;
-
   scoped_refptr<Fence> current_read_lock_fence_;
-
-  const size_t id_allocation_chunk_size_;
   std::unique_ptr<IdAllocator> texture_id_allocator_;
   std::unique_ptr<IdAllocator> buffer_id_allocator_;
-
-  bool use_sync_query_;
   BufferToTextureTargetMap buffer_to_texture_target_map_;
+
+  base::ThreadChecker thread_checker_;
 
   // A process-unique ID used for disambiguating memory dumps from different
   // resource providers.
   int tracing_id_;
+
+#if defined(OS_ANDROID)
+  // Set of resource Ids that would like to be notified about promotion hints.
+  ResourceIdSet wants_promotion_hints_set_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(ResourceProvider);
 };

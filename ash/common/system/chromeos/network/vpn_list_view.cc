@@ -14,12 +14,12 @@
 #include "ash/common/system/chromeos/network/network_icon_animation.h"
 #include "ash/common/system/chromeos/network/network_icon_animation_observer.h"
 #include "ash/common/system/chromeos/network/network_list_delegate.h"
-#include "ash/common/system/chromeos/network/vpn_delegate.h"
+#include "ash/common/system/chromeos/network/vpn_list.h"
 #include "ash/common/system/tray/hover_highlight_view.h"
 #include "ash/common/system/tray/system_menu_button.h"
-#include "ash/common/system/tray/system_tray_delegate.h"
+#include "ash/common/system/tray/system_tray_controller.h"
+#include "ash/common/system/tray/throbber_view.h"
 #include "ash/common/system/tray/tray_constants.h"
-#include "ash/common/system/tray/tray_popup_label_button.h"
 #include "ash/common/system/tray/tray_popup_utils.h"
 #include "ash/common/system/tray/tri_view.h"
 #include "ash/common/wm_shell.h"
@@ -34,6 +34,7 @@
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_type_pattern.h"
 #include "grit/ash_strings.h"
+#include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/geometry/rect.h"
@@ -42,6 +43,7 @@
 #include "ui/gfx/text_constants.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/separator.h"
 #include "ui/views/layout/box_layout.h"
@@ -56,12 +58,19 @@ bool UseMd() {
   return MaterialDesignController::IsSystemTrayMenuMaterial();
 }
 
-bool IsConnectedOrConnecting(const chromeos::NetworkState* network) {
-  return network->IsConnectedState() || network->IsConnectingState();
+// Indicates whether |network| belongs to this VPN provider.
+bool VpnProviderMatchesNetwork(const VPNProvider& provider,
+                               const chromeos::NetworkState& network) {
+  if (network.type() != shill::kTypeVPN)
+    return false;
+  const bool network_uses_third_party_provider =
+      network.vpn_provider_type() == shill::kProviderThirdPartyVpn;
+  if (!provider.third_party)
+    return !network_uses_third_party_provider;
+  return network_uses_third_party_provider &&
+         network.third_party_vpn_provider_extension_id() ==
+             provider.extension_id;
 }
-
-void IgnoreDisconnectError(const std::string& error_name,
-                           std::unique_ptr<base::DictionaryValue> error_data) {}
 
 // The base class of all list entries, a |HoverHighlightView| with no border.
 class VPNListEntryBase : public HoverHighlightView {
@@ -93,31 +102,29 @@ class VPNListProviderEntryMd : public views::ButtonListener,
                                public views::View {
  public:
   VPNListProviderEntryMd(ViewClickListener* parent,
+                         bool top_item,
                          const std::string& name,
                          int button_accessible_name_id)
       : parent_(parent) {
+    TrayPopupUtils::ConfigureAsStickyHeader(this);
     SetLayoutManager(new views::FillLayout);
-    TriView* tri_view = TrayPopupUtils::CreateDefaultRowView();
-    tri_view->SetContainerVisible(TriView::Container::START, false);
+    TriView* tri_view = TrayPopupUtils::CreateSubHeaderRowView();
     AddChildView(tri_view);
 
-    const ui::NativeTheme* theme = GetNativeTheme();
-    const SkColor prominent_color =
-        theme->GetSystemColor(ui::NativeTheme::kColorId_ProminentButtonColor);
     views::Label* label = TrayPopupUtils::CreateDefaultLabel();
-    TrayPopupItemStyle style(
-        theme, TrayPopupItemStyle::FontStyle::DETAILED_VIEW_LABEL);
+    TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::SUB_HEADER);
     style.SetupLabel(label);
     label->SetText(base::ASCIIToUTF16(name));
-    label->SetEnabledColor(prominent_color);
     tri_view->AddView(TriView::Container::CENTER, label);
 
+    const SkColor image_color = GetNativeTheme()->GetSystemColor(
+        ui::NativeTheme::kColorId_ProminentButtonColor);
     gfx::ImageSkia icon =
-        gfx::CreateVectorIcon(kSystemMenuAddConnectionIcon, prominent_color);
-    views::ImageButton* add_vpn_button =
+        gfx::CreateVectorIcon(kSystemMenuAddConnectionIcon, image_color);
+    SystemMenuButton* add_vpn_button =
         new SystemMenuButton(this, TrayPopupInkDropStyle::HOST_CENTERED, icon,
                              icon, button_accessible_name_id);
-    add_vpn_button->set_ink_drop_base_color(prominent_color);
+    add_vpn_button->SetInkDropColor(image_color);
     add_vpn_button->SetEnabled(true);
     tri_view->AddView(TriView::Container::END, add_vpn_button);
   }
@@ -149,31 +156,14 @@ class VPNListNetworkEntry : public VPNListEntryBase,
   // network_icon::AnimationObserver:
   void NetworkIconChanged() override;
 
-  // Overriden from ActionableView.
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
  private:
-  // A disconnect button that will be shown if the network is currently
-  // connected. Updates the list entry's hover state as the mouse enters/exits
-  // the button.
-  class DisconnectButton : public TrayPopupLabelButton {
-   public:
-    explicit DisconnectButton(VPNListNetworkEntry* parent);
-
-   private:
-    // TrayPopupLabelButton:
-    void OnMouseEntered(const ui::MouseEvent& event) override;
-    void OnMouseExited(const ui::MouseEvent& event) override;
-    void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
-
-    VPNListNetworkEntry* parent_;
-
-    DISALLOW_COPY_AND_ASSIGN(DisconnectButton);
-  };
-
   void UpdateFromNetworkState(const chromeos::NetworkState* network);
+  void SetupConnectedItemMd(const base::string16& text,
+                            const gfx::ImageSkia& image);
+  void SetupConnectingItemMd(const base::string16& text,
+                             const gfx::ImageSkia& image);
 
-  const std::string service_path_;
+  const std::string guid_;
 
   views::LabelButton* disconnect_button_ = nullptr;
 
@@ -182,12 +172,13 @@ class VPNListNetworkEntry : public VPNListEntryBase,
 
 VPNListEntryBase::VPNListEntryBase(VPNListView* parent)
     : HoverHighlightView(parent) {
-  SetBorder(views::CreateEmptyBorder(0, kTrayPopupPaddingHorizontal, 0, 0));
+  if (!UseMd())
+    SetBorder(views::CreateEmptyBorder(0, kTrayPopupPaddingHorizontal, 0, 0));
 }
 
 VPNListNetworkEntry::VPNListNetworkEntry(VPNListView* parent,
                                          const chromeos::NetworkState* network)
-    : VPNListEntryBase(parent), service_path_(network->path()) {
+    : VPNListEntryBase(parent), guid_(network->guid()) {
   UpdateFromNetworkState(network);
 }
 
@@ -196,56 +187,9 @@ VPNListNetworkEntry::~VPNListNetworkEntry() {
 }
 
 void VPNListNetworkEntry::NetworkIconChanged() {
-  UpdateFromNetworkState(
-      chromeos::NetworkHandler::Get()->network_state_handler()->GetNetworkState(
-          service_path_));
-}
-
-void VPNListNetworkEntry::ButtonPressed(views::Button* sender,
-                                        const ui::Event& event) {
-  if (sender != disconnect_button_) {
-    ActionableView::ButtonPressed(sender, event);
-    return;
-  }
-
-  WmShell::Get()->RecordUserMetricsAction(
-      UMA_STATUS_AREA_VPN_DISCONNECT_CLICKED);
-  chromeos::NetworkHandler::Get()
-      ->network_connection_handler()
-      ->DisconnectNetwork(service_path_, base::Bind(&base::DoNothing),
-                          base::Bind(&IgnoreDisconnectError));
-}
-
-VPNListNetworkEntry::DisconnectButton::DisconnectButton(
-    VPNListNetworkEntry* parent)
-    : TrayPopupLabelButton(
-          parent,
-          l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_VPN_DISCONNECT)),
-      parent_(parent) {
-  DCHECK(!UseMd());
-  DCHECK(parent_);
-}
-
-void VPNListNetworkEntry::DisconnectButton::OnMouseEntered(
-    const ui::MouseEvent& event) {
-  TrayPopupLabelButton::OnMouseEntered(event);
-  parent_->SetHoverHighlight(false);
-}
-
-void VPNListNetworkEntry::DisconnectButton::OnMouseExited(
-    const ui::MouseEvent& event) {
-  TrayPopupLabelButton::OnMouseExited(event);
-  if (parent_->IsMouseHovered())
-    parent_->SetHoverHighlight(true);
-}
-
-void VPNListNetworkEntry::DisconnectButton::OnBoundsChanged(
-    const gfx::Rect& previous_bounds) {
-  TrayPopupLabelButton::OnBoundsChanged(previous_bounds);
-  if (IsMouseHovered()) {
-    SetState(STATE_HOVERED);
-    parent_->SetHoverHighlight(false);
-  }
+  UpdateFromNetworkState(chromeos::NetworkHandler::Get()
+                             ->network_state_handler()
+                             ->GetNetworkStateFromGuid(guid_));
 }
 
 void VPNListNetworkEntry::UpdateFromNetworkState(
@@ -260,82 +204,82 @@ void VPNListNetworkEntry::UpdateFromNetworkState(
     // the network list in the UI has not been updated yet.
     return;
   }
-
   RemoveAllChildViews(true);
   disconnect_button_ = nullptr;
 
-  AddIconAndLabel(
-      network_icon::GetImageForNetwork(network, network_icon::ICON_TYPE_LIST),
-      network_icon::GetLabelForNetwork(network, network_icon::ICON_TYPE_LIST),
-      IsConnectedOrConnecting(network));
-  if (IsConnectedOrConnecting(network)) {
-    if (UseMd()) {
-      disconnect_button_ = TrayPopupUtils::CreateTrayPopupButton(
-          this, l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_VPN_DISCONNECT));
-    } else {
-      disconnect_button_ = new DisconnectButton(this);
-    }
-    if (UseMd()) {
-      DCHECK(tri_view());
-      tri_view()->AddView(TriView::Container::END, disconnect_button_);
-      tri_view()->SetContainerVisible(TriView::Container::END, true);
-    } else {
-      AddChildView(disconnect_button_);
-    }
+  gfx::ImageSkia image =
+      network_icon::GetImageForNetwork(network, network_icon::ICON_TYPE_LIST);
+  base::string16 label = network_icon::GetLabelForNetwork(
+      network, UseMd() ? network_icon::ICON_TYPE_MENU_LIST
+                       : network_icon::ICON_TYPE_LIST);
+  if (network->IsConnectedState())
+    SetupConnectedItemMd(label, image);
+  else if (network->IsConnectingState())
+    SetupConnectingItemMd(label, image);
+  else
+    AddIconAndLabel(image, label, false);
 
-    SetBorder(
-        views::CreateEmptyBorder(0, kTrayPopupPaddingHorizontal, 0,
-                                 UseMd() ? kTrayPopupButtonEndMargin : 3));
-  } else {
-    SetBorder(views::CreateEmptyBorder(0, kTrayPopupPaddingHorizontal, 0, 0));
-  }
-
-  if (!UseMd()) {
-    // The icon and the disconnect button are always set to their preferred
-    // size. All remaining space is used for the network name.
-    views::BoxLayout* layout = new views::BoxLayout(
-        views::BoxLayout::kHorizontal, 0, 3, kTrayPopupPaddingBetweenItems);
-    SetLayoutManager(layout);
-    layout->SetDefaultFlex(0);
-    layout->SetFlexForView(text_label(), 1);
+  if (network->IsConnectedState()) {
+    disconnect_button_ = TrayPopupUtils::CreateTrayPopupButton(
+        this, l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_VPN_DISCONNECT));
+    tri_view()->AddView(TriView::Container::END, disconnect_button_);
+    tri_view()->SetContainerVisible(TriView::Container::END, true);
+    tri_view()->SetContainerBorder(
+        TriView::Container::END,
+        views::CreateEmptyBorder(0, 0, 0, kTrayPopupButtonEndMargin));
   }
   Layout();
+}
+
+// TODO(varkha): Consolidate with a similar method in tray_bluetooth.cc.
+void VPNListNetworkEntry::SetupConnectedItemMd(const base::string16& text,
+                                               const gfx::ImageSkia& image) {
+  AddIconAndLabels(
+      image, text,
+      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NETWORK_STATUS_CONNECTED));
+  TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::CAPTION);
+  style.set_color_style(TrayPopupItemStyle::ColorStyle::CONNECTED);
+  style.SetupLabel(sub_text_label());
+}
+
+// TODO(varkha): Consolidate with a similar method in tray_bluetooth.cc.
+void VPNListNetworkEntry::SetupConnectingItemMd(const base::string16& text,
+                                                const gfx::ImageSkia& image) {
+  AddIconAndLabels(
+      image, text,
+      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NETWORK_STATUS_CONNECTING));
+  ThrobberView* throbber = new ThrobberView;
+  throbber->Start();
+  AddRightView(throbber);
 }
 
 }  // namespace
 
 VPNListView::VPNListView(NetworkListDelegate* delegate) : delegate_(delegate) {
-  WmShell::Get()->system_tray_delegate()->GetVPNDelegate()->AddObserver(this);
+  WmShell::Get()->vpn_list()->AddObserver(this);
 }
 
 VPNListView::~VPNListView() {
-  // We need the check as on shell destruction, the delegate is destroyed first.
-  SystemTrayDelegate* const system_tray_delegate =
-      WmShell::Get()->system_tray_delegate();
-  if (system_tray_delegate) {
-    VPNDelegate* const vpn_delegate = system_tray_delegate->GetVPNDelegate();
-    if (vpn_delegate)
-      vpn_delegate->RemoveObserver(this);
-  }
+  WmShell::Get()->vpn_list()->RemoveObserver(this);
 }
 
 void VPNListView::Update() {
   // Before updating the list, determine whether the user was hovering over one
   // of the VPN provider or network entries.
-  std::unique_ptr<VPNProvider::Key> hovered_provider_key;
-  std::string hovered_network_service_path;
-  for (const std::pair<const views::View* const, VPNProvider::Key>& provider :
-       provider_view_key_map_) {
+  std::unique_ptr<VPNProvider> hovered_provider;
+  std::string hovered_network_guid;
+  for (const std::pair<const views::View* const, VPNProvider>& provider :
+       provider_view_map_) {
     if (static_cast<const HoverHighlightView*>(provider.first)->hover()) {
-      hovered_provider_key.reset(new VPNProvider::Key(provider.second));
+      hovered_provider.reset(new VPNProvider(provider.second));
       break;
     }
   }
-  if (!hovered_provider_key) {
+  if (!hovered_provider) {
     for (const std::pair<const views::View*, std::string>& entry :
-         network_view_service_path_map_) {
+         network_view_guid_map_) {
       if (static_cast<const HoverHighlightView*>(entry.first)->hover()) {
-        hovered_network_service_path = entry.second;
+        hovered_network_guid = entry.second;
         break;
       }
     }
@@ -343,8 +287,8 @@ void VPNListView::Update() {
 
   // Clear the list.
   container()->RemoveAllChildViews(true);
-  provider_view_key_map_.clear();
-  network_view_service_path_map_.clear();
+  provider_view_map_.clear();
+  network_view_guid_map_.clear();
   list_empty_ = true;
   if (!UseMd()) {
     container()->SetLayoutManager(
@@ -358,12 +302,6 @@ void VPNListView::Update() {
       ->GetVisibleNetworkListByType(chromeos::NetworkTypePattern::VPN(),
                                     &networks);
 
-  if (!networks.empty() && IsConnectedOrConnecting(networks.front())) {
-    // If there is a connected or connecting network, show that network first.
-    AddNetwork(networks.front());
-    networks.erase(networks.begin());
-  }
-
   // Show all VPN providers and all networks that are currently disconnected.
   AddProvidersAndNetworks(networks);
 
@@ -371,18 +309,18 @@ void VPNListView::Update() {
   // the user was previously hovering over. If such an entry is found, the list
   // will be scrolled to ensure the entry is visible.
   const views::View* scroll_to_show_view = nullptr;
-  if (hovered_provider_key) {
-    for (const std::pair<const views::View* const, VPNProvider::Key>& provider :
-         provider_view_key_map_) {
-      if (provider.second == *hovered_provider_key) {
+  if (hovered_provider) {
+    for (const std::pair<const views::View* const, VPNProvider>& provider :
+         provider_view_map_) {
+      if (provider.second == *hovered_provider) {
         scroll_to_show_view = provider.first;
         break;
       }
     }
-  } else if (!hovered_network_service_path.empty()) {
+  } else if (!hovered_network_guid.empty()) {
     for (const std::pair<const views::View*, std::string>& entry :
-         network_view_service_path_map_) {
-      if (entry.second == hovered_network_service_path) {
+         network_view_guid_map_) {
+      if (entry.second == hovered_network_guid) {
         scroll_to_show_view = entry.first;
         break;
       }
@@ -399,12 +337,11 @@ void VPNListView::Update() {
   }
 }
 
-bool VPNListView::IsNetworkEntry(views::View* view,
-                                 std::string* service_path) const {
-  const auto& entry = network_view_service_path_map_.find(view);
-  if (entry == network_view_service_path_map_.end())
+bool VPNListView::IsNetworkEntry(views::View* view, std::string* guid) const {
+  const auto& entry = network_view_guid_map_.find(view);
+  if (entry == network_view_guid_map_.end())
     return false;
-  *service_path = entry->second;
+  *guid = entry->second;
   return true;
 }
 
@@ -413,15 +350,21 @@ void VPNListView::OnVPNProvidersChanged() {
 }
 
 void VPNListView::OnViewClicked(views::View* sender) {
-  const auto& provider = provider_view_key_map_.find(sender);
-  if (provider != provider_view_key_map_.end()) {
+  const auto& provider_iter = provider_view_map_.find(sender);
+  if (provider_iter != provider_view_map_.end()) {
     // If the user clicks on a provider entry, request that the "add network"
     // dialog for this provider be shown.
-    const VPNProvider::Key& key = provider->second;
-    WmShell::Get()->RecordUserMetricsAction(
-        key.third_party ? UMA_STATUS_AREA_VPN_ADD_THIRD_PARTY_CLICKED
-                        : UMA_STATUS_AREA_VPN_ADD_BUILT_IN_CLICKED);
-    WmShell::Get()->system_tray_delegate()->GetVPNDelegate()->ShowAddPage(key);
+    const VPNProvider& provider = provider_iter->second;
+    WmShell* shell = WmShell::Get();
+    if (provider.third_party) {
+      shell->RecordUserMetricsAction(
+          UMA_STATUS_AREA_VPN_ADD_THIRD_PARTY_CLICKED);
+      shell->system_tray_controller()->ShowThirdPartyVpnCreate(
+          provider.extension_id);
+    } else {
+      shell->RecordUserMetricsAction(UMA_STATUS_AREA_VPN_ADD_BUILT_IN_CLICKED);
+      shell->system_tray_controller()->ShowNetworkCreate(shill::kTypeVPN);
+    }
     return;
   }
 
@@ -434,37 +377,36 @@ void VPNListView::OnViewClicked(views::View* sender) {
 void VPNListView::AddNetwork(const chromeos::NetworkState* network) {
   views::View* entry(new VPNListNetworkEntry(this, network));
   container()->AddChildView(entry);
-  network_view_service_path_map_[entry] = network->path();
+  network_view_guid_map_[entry] = network->guid();
   list_empty_ = false;
 }
 
 void VPNListView::AddProviderAndNetworks(
-    const VPNProvider::Key& key,
-    const std::string& name,
+    const VPNProvider& vpn_provider,
     const chromeos::NetworkStateHandler::NetworkStateList& networks) {
   // Add a visual separator, unless this is the topmost entry in the list.
-  if (!list_empty_) {
-    views::Separator* const separator =
-        new views::Separator(views::Separator::HORIZONTAL);
-    separator->SetColor(kBorderLightColor);
-    container()->AddChildView(separator);
-  } else {
-    list_empty_ = false;
-  }
+  if (!list_empty_)
+    container()->AddChildView(TrayPopupUtils::CreateListSubHeaderSeparator());
+  std::string vpn_name =
+      vpn_provider.third_party
+          ? vpn_provider.third_party_provider_name
+          : l10n_util::GetStringUTF8(IDS_ASH_STATUS_TRAY_VPN_BUILT_IN_PROVIDER);
+
   // Add a list entry for the VPN provider.
-  views::View* provider = nullptr;
+  views::View* provider_view = nullptr;
   if (UseMd()) {
-    provider = new VPNListProviderEntryMd(this, name,
-                                          IDS_ASH_STATUS_TRAY_ADD_CONNECTION);
+    provider_view = new VPNListProviderEntryMd(
+        this, list_empty_, vpn_name, IDS_ASH_STATUS_TRAY_ADD_CONNECTION);
   } else {
-    provider = new VPNListProviderEntry(this, name);
+    provider_view = new VPNListProviderEntry(this, vpn_name);
   }
-  container()->AddChildView(provider);
-  provider_view_key_map_[provider] = key;
+  container()->AddChildView(provider_view);
+  provider_view_map_[provider_view] = vpn_provider;
+  list_empty_ = false;
   // Add the networks belonging to this provider, in the priority order returned
   // by shill.
   for (const chromeos::NetworkState* const& network : networks) {
-    if (key.MatchesNetwork(*network))
+    if (VpnProviderMatchesNetwork(vpn_provider, *network))
       AddNetwork(network);
   }
 }
@@ -472,10 +414,8 @@ void VPNListView::AddProviderAndNetworks(
 void VPNListView::AddProvidersAndNetworks(
     const chromeos::NetworkStateHandler::NetworkStateList& networks) {
   // Get the list of VPN providers enabled in the primary user's profile.
-  std::vector<VPNProvider> providers = WmShell::Get()
-                                           ->system_tray_delegate()
-                                           ->GetVPNDelegate()
-                                           ->GetVPNProviders();
+  std::vector<VPNProvider> providers =
+      WmShell::Get()->vpn_list()->vpn_providers();
 
   // Add providers with at least one configured network along with their
   // networks. Providers are added in the order of their highest priority
@@ -483,9 +423,9 @@ void VPNListView::AddProvidersAndNetworks(
   for (const chromeos::NetworkState* const& network : networks) {
     for (auto provider = providers.begin(); provider != providers.end();
          ++provider) {
-      if (!provider->key.MatchesNetwork(*network))
+      if (!VpnProviderMatchesNetwork(*provider, *network))
         continue;
-      AddProviderAndNetworks(provider->key, provider->name, networks);
+      AddProviderAndNetworks(*provider, networks);
       providers.erase(provider);
       break;
     }
@@ -494,7 +434,7 @@ void VPNListView::AddProvidersAndNetworks(
   // Add providers without any configured networks, in the order that the
   // providers were returned by the extensions system.
   for (const VPNProvider& provider : providers)
-    AddProviderAndNetworks(provider.key, provider.name, networks);
+    AddProviderAndNetworks(provider, networks);
 }
 
 }  // namespace ash

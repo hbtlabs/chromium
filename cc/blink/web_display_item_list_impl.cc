@@ -9,10 +9,10 @@
 
 #include <vector>
 
+#include "cc/paint/paint_record.h"
 #include "cc/playback/clip_display_item.h"
 #include "cc/playback/clip_path_display_item.h"
 #include "cc/playback/compositing_display_item.h"
-#include "cc/playback/display_item_list_settings.h"
 #include "cc/playback/drawing_display_item.h"
 #include "cc/playback/filter_display_item.h"
 #include "cc/playback/float_clip_display_item.h"
@@ -21,7 +21,6 @@
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
 #include "third_party/skia/include/core/SkMatrix44.h"
-#include "third_party/skia/include/core/SkPicture.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "ui/gfx/transform.h"
@@ -30,17 +29,10 @@ namespace cc_blink {
 
 namespace {
 
-scoped_refptr<cc::DisplayItemList> CreateUncachedDisplayItemListForBlink() {
-  cc::DisplayItemListSettings settings;
-  settings.use_cached_picture = false;
-  return cc::DisplayItemList::Create(settings);
-}
-
 }  // namespace
 
 WebDisplayItemListImpl::WebDisplayItemListImpl()
-    : display_item_list_(CreateUncachedDisplayItemListForBlink()) {
-}
+    : display_item_list_(new cc::DisplayItemList) {}
 
 WebDisplayItemListImpl::WebDisplayItemListImpl(
     cc::DisplayItemList* display_list)
@@ -49,9 +41,9 @@ WebDisplayItemListImpl::WebDisplayItemListImpl(
 
 void WebDisplayItemListImpl::appendDrawingItem(
     const blink::WebRect& visual_rect,
-    sk_sp<const SkPicture> picture) {
+    sk_sp<const cc::PaintRecord> record) {
   display_item_list_->CreateAndAppendDrawingItem<cc::DrawingDisplayItem>(
-      visual_rect, std::move(picture));
+      visual_rect, std::move(record));
 }
 
 void WebDisplayItemListImpl::appendClipItem(
@@ -70,12 +62,10 @@ void WebDisplayItemListImpl::appendEndClipItem() {
   display_item_list_->CreateAndAppendPairedEndItem<cc::EndClipDisplayItem>();
 }
 
-void WebDisplayItemListImpl::appendClipPathItem(
-    const SkPath& clip_path,
-    SkRegion::Op clip_op,
-    bool antialias) {
+void WebDisplayItemListImpl::appendClipPathItem(const SkPath& clip_path,
+                                                bool antialias) {
   display_item_list_->CreateAndAppendPairedBeginItem<cc::ClipPathDisplayItem>(
-      clip_path, clip_op, antialias);
+      clip_path, antialias);
 }
 
 void WebDisplayItemListImpl::appendEndClipPathItem() {
@@ -110,7 +100,7 @@ void WebDisplayItemListImpl::appendEndTransformItem() {
 
 void WebDisplayItemListImpl::appendCompositingItem(
     float opacity,
-    SkXfermode::Mode xfermode,
+    SkBlendMode xfermode,
     SkRect* bounds,
     SkColorFilter* color_filter) {
   DCHECK_GE(opacity, 0.f);
@@ -159,6 +149,11 @@ void WebDisplayItemListImpl::appendEndScrollItem() {
 
 void WebDisplayItemListImpl::setIsSuitableForGpuRasterization(bool isSuitable) {
   display_item_list_->SetIsSuitableForGpuRasterization(isSuitable);
+}
+
+void WebDisplayItemListImpl::setImpliedColorSpace(
+    const gfx::ColorSpace& implied_color_space) {
+  display_item_list_->SetImpliedColorSpace(implied_color_space);
 }
 
 WebDisplayItemListImpl::~WebDisplayItemListImpl() {

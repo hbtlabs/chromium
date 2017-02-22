@@ -5,11 +5,11 @@
 #ifndef PreloadRequest_h
 #define PreloadRequest_h
 
-#include "core/fetch/ClientHintsPreferences.h"
-#include "core/fetch/FetchRequest.h"
-#include "core/fetch/IntegrityMetadata.h"
-#include "core/fetch/Resource.h"
 #include "platform/CrossOriginAttributeValue.h"
+#include "platform/loader/fetch/ClientHintsPreferences.h"
+#include "platform/loader/fetch/FetchRequest.h"
+#include "platform/loader/fetch/IntegrityMetadata.h"
+#include "platform/loader/fetch/Resource.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "wtf/Allocator.h"
 #include "wtf/PtrUtil.h"
@@ -52,16 +52,15 @@ class PreloadRequest {
         protocolIs(resourceURL, "data")) {
       return nullptr;
     }
-    return wrapUnique(new PreloadRequest(
+    return WTF::wrapUnique(new PreloadRequest(
         initiatorName, initiatorPosition, resourceURL, baseURL, resourceType,
         resourceWidth, clientHintsPreferences, requestType, referrerPolicy));
   }
 
   bool isSafeToSendToAnotherThread() const;
 
-  FetchRequest resourceRequest(Document*);
+  Resource* start(Document*);
 
-  const String& charset() const { return m_charset; }
   double discoveryTime() const { return m_discoveryTime; }
   void setDefer(FetchRequest::DeferOption defer) { m_defer = defer; }
   void setCharset(const String& charset) { m_charset = charset.isolatedCopy(); }

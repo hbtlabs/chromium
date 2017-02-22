@@ -167,13 +167,12 @@ DateView::DateView(SystemTrayItem* owner)
   if (UseMd()) {
     // TODO(tdanderson): Tweak spacing and layout for material design.
     views::BoxLayout* box_layout =
-        new views::BoxLayout(views::BoxLayout::kHorizontal, 8, 0, 0);
+        new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 0);
+    box_layout->set_inside_border_insets(gfx::Insets(0, 12, 0, 0));
     box_layout->set_main_axis_alignment(
         views::BoxLayout::MAIN_AXIS_ALIGNMENT_START);
     box_layout->set_cross_axis_alignment(
         views::BoxLayout::CROSS_AXIS_ALIGNMENT_CENTER);
-    box_layout->set_minimum_cross_axis_size(
-        GetTrayConstant(TRAY_POPUP_ITEM_MIN_HEIGHT));
     SetLayoutManager(box_layout);
   } else {
     SetLayoutManager(
@@ -184,6 +183,8 @@ DateView::DateView(SystemTrayItem* owner)
   if (!UseMd())
     date_label_->SetEnabledColor(kHeaderTextColorNormal);
   UpdateTextInternal(base::Time::Now());
+  TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::SYSTEM_INFO);
+  style.SetupLabel(date_label_);
   AddChildView(date_label_);
 }
 
@@ -204,10 +205,8 @@ void DateView::SetAction(DateAction action) {
 
   // Disable |this| when not clickable so that the material design ripple is
   // not shown.
-  // TODO(tdanderson|bruthig): Add the material design ripple to |this|.
   if (UseMd()) {
-    SetState(action_ == DateAction::NONE ? views::Button::STATE_DISABLED
-                                         : views::Button::STATE_NORMAL);
+    SetEnabled(action_ != DateAction::NONE);
     if (action_ != DateAction::NONE)
       SetInkDropMode(views::InkDropHostView::InkDropMode::ON);
   }
@@ -229,12 +228,6 @@ void DateView::SetActive(bool active) {
   date_label_->SetEnabledColor(active ? kHeaderTextColorHover
                                       : kHeaderTextColorNormal);
   SchedulePaint();
-}
-
-void DateView::UpdateStyle() {
-  TrayPopupItemStyle style(GetNativeTheme(),
-                           TrayPopupItemStyle::FontStyle::SYSTEM_INFO);
-  style.SetupLabel(date_label_);
 }
 
 void DateView::UpdateTextInternal(const base::Time& now) {
@@ -276,10 +269,6 @@ void DateView::OnGestureEvent(ui::GestureEvent* event) {
     SetActive(false);
   }
   BaseDateTimeView::OnGestureEvent(event);
-}
-
-void DateView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
-  UpdateStyle();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -338,6 +327,14 @@ bool TimeView::PerformAction(const ui::Event& event) {
 bool TimeView::OnMousePressed(const ui::MouseEvent& event) {
   // Let the event fall through.
   return false;
+}
+
+void TimeView::OnGestureEvent(ui::GestureEvent* event) {
+  // Skip gesture handling happening in CustomButton so that the container views
+  // receive and handle them properly.
+  // TODO(mohsen): Refactor TimeView/DateView classes so that they are not
+  // ActionableView anymore. Create an ActionableView as a container for when
+  // needed.
 }
 
 void TimeView::UpdateClockLayout(ClockLayout clock_layout) {

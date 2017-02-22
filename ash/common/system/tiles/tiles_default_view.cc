@@ -16,6 +16,10 @@
 #include "ash/common/system/tray/tray_popup_utils.h"
 #include "ash/common/wm_shell.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/shell.h"
+#include "ash/wm/lock_state_controller.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/session_manager_client.h"
 #include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/geometry/insets.h"
@@ -23,11 +27,6 @@
 #include "ui/views/controls/button/custom_button.h"
 #include "ui/views/controls/separator.h"
 #include "ui/views/layout/box_layout.h"
-
-#if defined(OS_CHROMEOS)
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/session_manager_client.h"
-#endif
 
 namespace {
 
@@ -68,7 +67,7 @@ void TilesDefaultView::Init() {
       this, TrayPopupInkDropStyle::HOST_CENTERED, kSystemMenuSettingsIcon,
       IDS_ASH_STATUS_TRAY_SETTINGS);
   if (disable_buttons || !shell->system_tray_delegate()->ShouldShowSettings())
-    settings_button_->SetState(views::Button::STATE_DISABLED);
+    settings_button_->SetEnabled(false);
   AddChildView(settings_button_);
   AddChildView(TrayPopupUtils::CreateVerticalSeparator());
 
@@ -83,16 +82,15 @@ void TilesDefaultView::Init() {
     help_button_->EnableCanvasFlippingForRTLUI(false);
   }
   if (disable_buttons)
-    help_button_->SetState(views::Button::STATE_DISABLED);
+    help_button_->SetEnabled(false);
   AddChildView(help_button_);
   AddChildView(TrayPopupUtils::CreateVerticalSeparator());
 
-#if !defined(OS_WIN)
   lock_button_ =
       new SystemMenuButton(this, TrayPopupInkDropStyle::HOST_CENTERED,
                            kSystemMenuLockIcon, IDS_ASH_STATUS_TRAY_LOCK);
   if (disable_buttons || !shell->GetSessionStateDelegate()->CanLockScreen())
-    lock_button_->SetState(views::Button::STATE_DISABLED);
+    lock_button_->SetEnabled(false);
 
   AddChildView(lock_button_);
   AddChildView(TrayPopupUtils::CreateVerticalSeparator());
@@ -106,7 +104,6 @@ void TilesDefaultView::Init() {
   bool reboot = WmShell::Get()->shutdown_controller()->reboot_on_shutdown();
   power_button_->SetTooltipText(l10n_util::GetStringUTF16(
       reboot ? IDS_ASH_STATUS_TRAY_REBOOT : IDS_ASH_STATUS_TRAY_SHUTDOWN));
-#endif  // !defined(OS_WIN)
 }
 
 void TilesDefaultView::ButtonPressed(views::Button* sender,
@@ -121,14 +118,12 @@ void TilesDefaultView::ButtonPressed(views::Button* sender,
     shell->system_tray_controller()->ShowHelp();
   } else if (sender == lock_button_) {
     shell->RecordUserMetricsAction(UMA_TRAY_LOCK_SCREEN);
-#if defined(OS_CHROMEOS)
     chromeos::DBusThreadManager::Get()
         ->GetSessionManagerClient()
         ->RequestLockScreen();
-#endif
   } else if (sender == power_button_) {
     shell->RecordUserMetricsAction(UMA_TRAY_SHUT_DOWN);
-    shell->RequestShutdown();
+    Shell::GetInstance()->lock_state_controller()->RequestShutdown();
   }
 
   owner_->system_tray()->CloseSystemBubble();

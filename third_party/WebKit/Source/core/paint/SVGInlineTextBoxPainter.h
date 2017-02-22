@@ -43,12 +43,12 @@ class SVGInlineTextBoxPainter {
   void paintSelectionBackground(const PaintInfo&);
   void paintTextMatchMarkerForeground(const PaintInfo&,
                                       const LayoutPoint&,
-                                      DocumentMarker*,
+                                      const DocumentMarker&,
                                       const ComputedStyle&,
                                       const Font&);
   void paintTextMatchMarkerBackground(const PaintInfo&,
                                       const LayoutPoint&,
-                                      DocumentMarker*,
+                                      const DocumentMarker&,
                                       const ComputedStyle&,
                                       const Font&);
 
@@ -65,20 +65,21 @@ class SVGInlineTextBoxPainter {
   bool setupTextPaint(const PaintInfo&,
                       const ComputedStyle&,
                       LayoutSVGResourceMode,
-                      SkPaint&);
+                      PaintFlags&);
   void paintText(const PaintInfo&,
                  TextRun&,
                  const SVGTextFragment&,
                  int startPosition,
                  int endPosition,
-                 const SkPaint&);
+                 const PaintFlags&);
   void paintText(const PaintInfo&,
                  const ComputedStyle&,
                  const ComputedStyle& selectionStyle,
                  const SVGTextFragment&,
                  LayoutSVGResourceMode,
                  bool shouldPaintSelection);
-  Vector<SVGTextFragmentWithRange> collectTextMatches(DocumentMarker*) const;
+  Vector<SVGTextFragmentWithRange> collectTextMatches(
+      const DocumentMarker&) const;
   Vector<SVGTextFragmentWithRange> collectFragmentsInRange(
       int startPosition,
       int endPosition) const;

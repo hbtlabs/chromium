@@ -42,14 +42,14 @@ Vector<String> RTCLegacyStatsReport::names() const {
   Vector<String> result;
   for (HashMap<String, String>::const_iterator it = m_stats.begin();
        it != m_stats.end(); ++it) {
-    result.append(it->key);
+    result.push_back(it->key);
   }
   return result;
 }
 
 void RTCLegacyStatsReport::addStatistic(const String& name,
                                         const String& value) {
-  m_stats.add(name, value);
+  m_stats.insert(name, value);
 }
 
 }  // namespace blink

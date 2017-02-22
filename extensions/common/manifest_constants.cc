@@ -68,6 +68,7 @@ const char kJs[] = "js";
 const char kKey[] = "key";
 const char kKeycode[] = "keyCode";
 const char kKiosk[] = "kiosk";
+const char kKioskAlwaysUpdate[] = "kiosk.always_update";
 const char kKioskEnabled[] = "kiosk_enabled";
 const char kKioskOnly[] = "kiosk_only";
 const char kKioskMode[] = "kiosk_mode";
@@ -186,6 +187,7 @@ const char kWebviewName[] = "name";
 const char kWebviewPartitions[] = "partitions";
 const char kWhitelist[] = "whitelist";
 #if defined(OS_CHROMEOS)
+const char kActionHandlers[] = "action_handlers";
 const char kFileSystemProviderCapabilities[] =
     "file_system_provider_capabilities";
 #endif
@@ -472,6 +474,8 @@ const char kInvalidKeyBindingTooMany[] =
 const char kInvalidKeyBindingUnknownPlatform[] =
     "Unknown platform for 'command[*]': *. Valid values are: 'windows', 'mac'"
     " 'chromeos', 'linux' and 'default'.";
+const char kInvalidKioskAlwaysUpdate[] =
+    "Invalid value for 'kiosk.always_update'.";
 const char kInvalidKioskEnabled[] =
     "Invalid value for 'kiosk_enabled'.";
 const char kInvalidKioskOnly[] =
@@ -735,6 +739,10 @@ const char kWebRequestConflictsWithLazyBackground[] =
 #if defined(OS_CHROMEOS)
 const char kIllegalPlugins[] =
     "Extensions cannot install plugins on Chrome OS.";
+const char kInvalidActionHandlersActionType[] =
+    "Invalid entry in 'action_handlers': \"*\".";
+const char kInvalidActionHandlersType[] =
+    "Invalid value for 'action_handlers'. Value must be a list of strings.";
 const char kInvalidFileSystemProviderMissingCapabilities[] =
     "The 'fileSystemProvider' permission requires the "
     "'file_system_provider_capabilities' section to be specified in the "

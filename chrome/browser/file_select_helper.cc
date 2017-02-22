@@ -16,7 +16,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/platform_util.h"
@@ -200,9 +200,9 @@ void FileSelectHelper::FileSelectedWithExtraInfo(
   files.push_back(file);
 
 #if defined(OS_MACOSX)
-  content::BrowserThread::PostTask(
-      content::BrowserThread::FILE_USER_BLOCKING,
-      FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, base::TaskTraits().MayBlock().WithShutdownBehavior(
+                     base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN),
       base::Bind(&FileSelectHelper::ProcessSelectedFilesMac, this, files));
 #else
   NotifyRenderFrameHostAndEnd(files);
@@ -228,9 +228,9 @@ void FileSelectHelper::MultiFilesSelectedWithExtraInfo(
     profile_->set_last_selected_directory(path);
   }
 #if defined(OS_MACOSX)
-  content::BrowserThread::PostTask(
-      content::BrowserThread::FILE_USER_BLOCKING,
-      FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, base::TaskTraits().MayBlock().WithShutdownBehavior(
+                     base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN),
       base::Bind(&FileSelectHelper::ProcessSelectedFilesMac, this, files));
 #else
   NotifyRenderFrameHostAndEnd(files);
@@ -250,15 +250,8 @@ void FileSelectHelper::StartNewEnumeration(const base::FilePath& path,
   entry->delegate_.reset(new DirectoryListerDispatchDelegate(this, request_id));
   entry->lister_.reset(new net::DirectoryLister(
       path, net::DirectoryLister::NO_SORT_RECURSIVE, entry->delegate_.get()));
-  if (!entry->lister_->Start(base::WorkerPool::GetTaskRunner(true).get())) {
-    if (request_id == kFileSelectEnumerationId)
-      FileSelectionCanceled(NULL);
-    else
-      render_view_host->DirectoryEnumerationFinished(request_id,
-                                                     entry->results_);
-  } else {
-    directory_enumerations_[request_id] = entry.release();
-  }
+  entry->lister_->Start();
+  directory_enumerations_[request_id] = entry.release();
 }
 
 void FileSelectHelper::OnListFile(
@@ -540,7 +533,10 @@ void FileSelectHelper::CheckDownloadRequestWithSafeBrowsing(
 
   GURL requestor_url = params->requestor;
   sb_service->download_protection_service()->CheckPPAPIDownloadRequest(
-      requestor_url, default_file_path, alternate_extensions, profile_,
+      requestor_url,
+      render_frame_host_? render_frame_host_->GetLastCommittedURL() : GURL(),
+      WebContents::FromRenderFrameHost(render_frame_host_),
+      default_file_path, alternate_extensions, profile_,
       base::Bind(&InterpretSafeBrowsingVerdict,
                  base::Bind(&FileSelectHelper::ProceedWithSafeBrowsingVerdict,
                             this, default_file_path, base::Passed(&params))));

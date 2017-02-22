@@ -66,16 +66,6 @@ if (use_ozone) {
     defines = [ "USE_EVDEV_GESTURES" ]
   }
 
-  if (use_evdev_gestures) {
-    pkg_config("libevdev-cros") {
-      packages = [ "libevdev-cros" ]
-    }
-
-    pkg_config("libgestures") {
-      packages = [ "libgestures" ]
-    }
-  }
-
   component("events_ozone_evdev") {
     sources = [
       "evdev/device_event_dispatcher_evdev.cc",
@@ -109,6 +99,8 @@ if (use_ozone) {
       "evdev/keyboard_util_evdev.h",
       "evdev/mouse_button_map_evdev.cc",
       "evdev/mouse_button_map_evdev.h",
+      "evdev/scoped_input_device.cc",
+      "evdev/scoped_input_device.h",
       "evdev/tablet_event_converter_evdev.cc",
       "evdev/tablet_event_converter_evdev.h",
       "evdev/touch_evdev_debug_buffer.cc",
@@ -117,15 +109,17 @@ if (use_ozone) {
       "evdev/touch_evdev_types.h",
       "evdev/touch_event_converter_evdev.cc",
       "evdev/touch_event_converter_evdev.h",
-      "evdev/touch_noise/far_apart_taps_touch_noise_filter.cc",
-      "evdev/touch_noise/far_apart_taps_touch_noise_filter.h",
-      "evdev/touch_noise/horizontally_aligned_touch_noise_filter.cc",
-      "evdev/touch_noise/horizontally_aligned_touch_noise_filter.h",
-      "evdev/touch_noise/single_position_touch_noise_filter.cc",
-      "evdev/touch_noise/single_position_touch_noise_filter.h",
-      "evdev/touch_noise/touch_noise_filter.h",
-      "evdev/touch_noise/touch_noise_finder.cc",
-      "evdev/touch_noise/touch_noise_finder.h",
+      "evdev/touch_filter/edge_touch_filter.cc",
+      "evdev/touch_filter/edge_touch_filter.h",
+      "evdev/touch_filter/false_touch_finder.cc",
+      "evdev/touch_filter/false_touch_finder.h",
+      "evdev/touch_filter/far_apart_taps_touch_noise_filter.cc",
+      "evdev/touch_filter/far_apart_taps_touch_noise_filter.h",
+      "evdev/touch_filter/horizontally_aligned_touch_noise_filter.cc",
+      "evdev/touch_filter/horizontally_aligned_touch_noise_filter.h",
+      "evdev/touch_filter/single_position_touch_noise_filter.cc",
+      "evdev/touch_filter/single_position_touch_noise_filter.h",
+      "evdev/touch_filter/touch_filter.h",
     ]
 
     defines = [ "EVENTS_OZONE_EVDEV_IMPLEMENTATION" ]
@@ -162,12 +156,12 @@ if (use_ozone) {
         "evdev/libgestures_glue/gesture_timer_provider.h",
       ]
 
-      public_configs += [ ":evdev_gestures" ]
-
-      configs += [
-        ":libevdev-cros",
-        ":libgestures",
+      deps += [
+        "//third_party/gestures",
+        "//third_party/libevdev",
       ]
+
+      public_configs += [ ":evdev_gestures" ]
     }
   }
 }

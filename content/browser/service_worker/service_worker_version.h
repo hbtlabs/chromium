@@ -17,7 +17,6 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/gtest_prod_util.h"
 #include "base/id_map.h"
 #include "base/macros.h"
@@ -26,14 +25,17 @@
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "content/browser/service_worker/embedded_worker_instance.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
+#include "content/browser/service_worker/service_worker_context_request_handler.h"
 #include "content/browser/service_worker/service_worker_metrics.h"
 #include "content/browser/service_worker/service_worker_script_cache_map.h"
 #include "content/common/content_export.h"
 #include "content/common/origin_trials/trial_token_validator.h"
+#include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "ipc/ipc_message.h"
@@ -54,6 +56,7 @@ class HttpResponseInfo;
 
 namespace content {
 
+class MessagePort;
 class ServiceWorkerContextCore;
 class ServiceWorkerProviderHost;
 class ServiceWorkerRegistration;
@@ -71,6 +74,8 @@ class CONTENT_EXPORT ServiceWorkerVersion
       public EmbeddedWorkerInstance::Listener {
  public:
   using StatusCallback = base::Callback<void(ServiceWorkerStatusCode)>;
+  using SimpleEventCallback =
+      base::Callback<void(ServiceWorkerStatusCode, base::Time)>;
 
   // Current version status; some of the status (e.g. INSTALLED and ACTIVATED)
   // should be persisted unlike running status.
@@ -96,6 +101,14 @@ class CONTENT_EXPORT ServiceWorkerVersion
     UNKNOWN,  // This version is a new version and not installed yet.
     EXISTS,
     DOES_NOT_EXIST,
+  };
+
+  // Navigation Preload support status of the service worker.
+  enum class NavigationPreloadSupportStatus {
+    SUPPORTED,
+    NOT_SUPPORTED_FIELD_TRIAL_STOPPED,
+    NOT_SUPPORTED_DISABLED_BY_COMMAND_LINE,
+    NOT_SUPPORTED_NO_VALID_ORIGIN_TRIAL_TOKEN,
   };
 
   class Listener {
@@ -152,8 +165,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
   }
   // This also updates |site_for_uma_| when it was Site::OTHER.
   void set_fetch_handler_existence(FetchHandlerExistence existence);
-
-  bool should_exclude_from_uma() const { return should_exclude_from_uma_; }
 
   const std::vector<GURL>& foreign_fetch_scopes() const {
     return foreign_fetch_scopes_;
@@ -267,15 +278,15 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // was not found or the worker already terminated.
   bool FinishExternalRequest(const std::string& request_uuid);
 
-  // Connects to a specific mojo service exposed by the (running) service
-  // worker. If a connection to a service for the same Interface already exists
-  // this will return that existing connection. The |request_id| must be a value
-  // previously returned by StartRequest. If the connection to the service
-  // fails or closes before the request finished, the error callback associated
-  // with |request_id| is called.
-  // Only call GetMojoServiceForRequest once for a specific |request_id|.
-  template <typename Interface>
-  base::WeakPtr<Interface> GetMojoServiceForRequest(int request_id);
+  // Creates a callback that is to be used for marking simple events dispatched
+  // through the ServiceWorkerEventDispatcher as finished for the |request_id|.
+  SimpleEventCallback CreateSimpleEventCallback(int request_id);
+
+  // This must be called when the worker is running.
+  mojom::ServiceWorkerEventDispatcher* event_dispatcher() {
+    DCHECK(event_dispatcher_.is_bound());
+    return event_dispatcher_.get();
+  }
 
   // Dispatches an event. If dispatching the event fails, all of the error
   // callbacks that were associated with |request_ids| via StartRequest are
@@ -348,6 +359,8 @@ class CONTENT_EXPORT ServiceWorkerVersion
   void ReportError(ServiceWorkerStatusCode status,
                    const std::string& status_message);
 
+  void ReportForceUpdateToDevTools();
+
   // Sets the status code to pass to StartWorker callbacks if start fails.
   void SetStartWorkerStatusCode(ServiceWorkerStatusCode status);
 
@@ -400,6 +413,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // Simulate ping timeout. Should be used for tests-only.
   void SimulatePingTimeoutForTesting();
 
+  // Used to allow tests to change time for testing.
+  void SetTickClockForTesting(std::unique_ptr<base::TickClock> tick_clock);
+
   // Returns true if the service worker has work to do: it has pending
   // requests, in-progress streaming URLRequestJobs, or pending start callbacks.
   bool HasWork() const;
@@ -409,6 +425,53 @@ class CONTENT_EXPORT ServiceWorkerVersion
     return external_request_uuid_to_request_id_.size();
   }
 
+  // Returns the amount of time left until the request with the latest
+  // expiration time expires.
+  base::TimeDelta remaining_timeout() const {
+    return max_request_expiration_time_ - tick_clock_->NowTicks();
+  }
+
+  // Returns the Navigation Preload support status of the service worker.
+  //  - Origin Trial: Have an effective token.
+  //                                 Command line
+  //                             Default  Enable  Disabled
+  //                   Default      A       A        B2
+  //      Field trial  Enabled      A       A        B2
+  //                   Disabled     B1      A        B2
+  //
+  //  - Origin Trial: No token.
+  //                                 Command line
+  //                             Default  Enable  Disabled
+  //                   Default      C       A        C
+  //      Field trial  Enabled      C       A        C
+  //                   Disabled     C       A        C
+  //
+  //   * A  = SUPPORTED
+  //     B1 = NOT_SUPPORTED_FIELD_TRIAL_STOPPED
+  //     B2 = NOT_SUPPORTED_DISABLED_BY_COMMAND_LINE
+  //     C  = NOT_SUPPORTED_NO_VALID_ORIGIN_TRIAL_TOKEN
+  //
+  // There are three types of behaviors:
+  //  - A: Navigation Preload related methods and attributes are available in JS
+  //       and work correctly.
+  //  - B: Navigation Preload related methods and attributes are available in
+  //       JS. But NavigationPreloadManager's enable, disable and setHeaderValue
+  //       methods always return a rejected promise. And FetchEvent's
+  //       preloadResponse attribute returns a promise which always resolve with
+  //       undefined.
+  //  - C: Navigation Preload related methods and attributes are not available
+  //       in JS.
+  // This method returns SUPPORTED only for A case.
+  // blink::OriginTrials::serviceWorkerNavigationPreloadEnabled() returns true
+  // for both A and B case. So the methods and attributes are available in JS.
+  NavigationPreloadSupportStatus GetNavigationPreloadSupportStatus() const;
+
+  void CountFeature(uint32_t feature);
+  void set_used_features(const std::set<uint32_t>& used_features) {
+    used_features_ = used_features;
+  }
+  const std::set<uint32_t>& used_features() const { return used_features_; }
+
  private:
   friend class base::RefCounted<ServiceWorkerVersion>;
   friend class ServiceWorkerMetrics;
@@ -416,23 +479,22 @@ class CONTENT_EXPORT ServiceWorkerVersion
   friend class ServiceWorkerStallInStoppingTest;
   friend class ServiceWorkerURLRequestJobTest;
   friend class ServiceWorkerVersionBrowserTest;
-  friend class ServiceWorkerVersionTestP;
+  friend class ServiceWorkerVersionTest;
 
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerControlleeRequestHandlerTestP,
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerControlleeRequestHandlerTest,
                            ActivateWaitingVersion);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerControlleeRequestHandlerTestP,
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerControlleeRequestHandlerTest,
                            FallbackWithNoFetchHandler);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP, IdleTimeout);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP, SetDevToolsAttached);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP, StaleUpdate_FreshWorker);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP,
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, IdleTimeout);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, SetDevToolsAttached);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, StaleUpdate_FreshWorker);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest,
                            StaleUpdate_NonActiveWorker);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP, StaleUpdate_StartWorker);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP,
-                           StaleUpdate_RunningWorker);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP,
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, StaleUpdate_StartWorker);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, StaleUpdate_RunningWorker);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest,
                            StaleUpdate_DoNotDeferTimer);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP, RequestTimeout);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerRequestTimeoutTest, RequestTimeout);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerFailToStartTest, Timeout);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionBrowserTest,
                            TimeoutStartingWorker);
@@ -440,12 +502,12 @@ class CONTENT_EXPORT ServiceWorkerVersion
                            TimeoutWorkerInEvent);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerStallInStoppingTest, DetachThenStart);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerStallInStoppingTest, DetachThenRestart);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP,
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest,
                            RegisterForeignFetchScopes);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP, RequestCustomizedTimeout);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP,
-                           RequestCustomizedTimeoutKill);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTestP, MixedRequestTimeouts);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, RequestNowTimeout);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, RequestNowTimeoutKill);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, RequestCustomizedTimeout);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, MixedRequestTimeouts);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerURLRequestJobTest, EarlyResponse);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerURLRequestJobTest, CancelRequest);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerActivationTest, SkipWaiting);
@@ -483,15 +545,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
     base::TimeTicks start_time_ticks;
     ServiceWorkerMetrics::EventType event_type;
 
-    // -------------------------------------------------------------------------
-    // For Mojo requests.
-    // -------------------------------------------------------------------------
-    // Name of the mojo service this request is associated with. Used to call
-    // the callback when a connection closes with outstanding requests. Compared
-    // as pointer, so should only contain static strings. Typically this would
-    // be Interface::Name_ for some mojo interface.
-    const char* mojo_service = nullptr;
-
     // ------------------------------------------------------------------------
     // For IPC message requests.
     // ------------------------------------------------------------------------
@@ -502,41 +555,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
     bool is_dispatched = false;
   };
 
-  // Base class to enable storing a list of mojo interface pointers for
-  // arbitrary interfaces. The destructor is also responsible for calling the
-  // error callbacks for any outstanding requests using this service.
-  class CONTENT_EXPORT BaseMojoServiceWrapper {
-   public:
-    BaseMojoServiceWrapper(ServiceWorkerVersion* worker,
-                           const char* service_name);
-    virtual ~BaseMojoServiceWrapper();
-
-   private:
-    ServiceWorkerVersion* worker_;
-    const char* service_name_;
-
-    DISALLOW_COPY_AND_ASSIGN(BaseMojoServiceWrapper);
-  };
-
-  // Wrapper around a mojo::InterfacePtr, which passes out WeakPtr's to the
-  // interface.
-  template <typename Interface>
-  class MojoServiceWrapper : public BaseMojoServiceWrapper {
-   public:
-    MojoServiceWrapper(ServiceWorkerVersion* worker,
-                       mojo::InterfacePtr<Interface> interface_ptr)
-        : BaseMojoServiceWrapper(worker, Interface::Name_),
-          interface_(std::move(interface_ptr)),
-          weak_ptr_factory_(interface_.get()) {}
-
-    base::WeakPtr<Interface> GetWeakPtr() {
-      return weak_ptr_factory_.GetWeakPtr();
-    }
-
-   private:
-    mojo::InterfacePtr<Interface> interface_;
-    base::WeakPtrFactory<Interface> weak_ptr_factory_;
-  };
 
   typedef ServiceWorkerVersion self;
   using ServiceWorkerClients = std::vector<ServiceWorkerClientInfo>;
@@ -587,6 +605,12 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   ~ServiceWorkerVersion() override;
 
+  // The following methods all rely on the internal |tick_clock_| for the
+  // current time.
+  void RestartTick(base::TimeTicks* time) const;
+  bool RequestExpired(const base::TimeTicks& expiration) const;
+  base::TimeDelta GetTickDuration(const base::TimeTicks& time) const;
+
   // EmbeddedWorkerInstance::Listener overrides:
   void OnThreadStarted() override;
   void OnStarting() override;
@@ -619,6 +643,10 @@ class CONTENT_EXPORT ServiceWorkerVersion
   void OnGetClients(int request_id,
                     const ServiceWorkerClientQueryOptions& options);
 
+  // Receiver function of responses of simple events dispatched through chromium
+  // IPCs. This is internally the same with OnSimpleEventFinished and will be
+  // replaced with OnSimpleEventFinished after all of simple events are
+  // dispatched via mojo.
   void OnSimpleEventResponse(int request_id,
                              blink::WebServiceWorkerEventResult result,
                              base::Time dispatch_event_time);
@@ -632,9 +660,10 @@ class CONTENT_EXPORT ServiceWorkerVersion
   void OnClearCachedMetadata(const GURL& url);
   void OnClearCachedMetadataFinished(int64_t callback_id, int result);
 
-  void OnPostMessageToClient(const std::string& client_uuid,
-                             const base::string16& message,
-                             const std::vector<int>& sent_message_ports);
+  void OnPostMessageToClient(
+      const std::string& client_uuid,
+      const base::string16& message,
+      const std::vector<MessagePort>& sent_message_ports);
   void OnFocusClient(int request_id, const std::string& client_uuid);
   void OnNavigateClient(int request_id,
                         const std::string& client_uuid,
@@ -662,6 +691,13 @@ class CONTENT_EXPORT ServiceWorkerVersion
   void StartWorkerInternal();
 
   void DidSkipWaiting(int request_id);
+
+  // Callback function for simple events dispatched through mojo interface
+  // mojom::ServiceWorkerEventDispatcher. Use CreateSimpleEventCallback() to
+  // create a callback for a given |request_id|.
+  void OnSimpleEventFinished(int request_id,
+                             ServiceWorkerStatusCode status,
+                             base::Time dispatch_event_time);
 
   void OnGetClientFinished(int request_id,
                            const ServiceWorkerClientInfo& client_info);
@@ -710,9 +746,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   void OnStoppedInternal(EmbeddedWorkerStatus old_status);
 
-  // Called when the remote side of a connection to a mojo service is lost.
-  void OnMojoConnectionError(const char* service_name);
-
   // Called at the beginning of each Dispatch*Event function: records
   // the time elapsed since idle (generally the time since the previous
   // event ended).
@@ -748,20 +781,15 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   // Holds in-flight requests, including requests due to outstanding push,
   // fetch, sync, etc. events.
-  IDMap<PendingRequest, IDMapOwnPointer> pending_requests_;
+  IDMap<std::unique_ptr<PendingRequest>> pending_requests_;
 
   // Container for pending external requests for this service worker.
   // (key, value): (request uuid, request id).
   using RequestUUIDToRequestIDMap = std::map<std::string, int>;
   RequestUUIDToRequestIDMap external_request_uuid_to_request_id_;
 
-  // Stores all open connections to mojo services. Maps the service name to
-  // the actual interface pointer. When a connection is closed it is removed
-  // from this map.
-  // mojo_services_[Interface::Name_] is assumed to always contain a
-  // MojoServiceWrapper<Interface> instance.
-  base::ScopedPtrHashMap<const char*, std::unique_ptr<BaseMojoServiceWrapper>>
-      mojo_services_;
+  // Connected to ServiceWorkerContextClient while the worker is running.
+  mojom::ServiceWorkerEventDispatcherPtr event_dispatcher_;
 
   std::set<const ServiceWorkerURLRequestJob*> streaming_url_request_jobs_;
 
@@ -785,6 +813,11 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // to update once the worker stops, but will also update if it stays alive too
   // long.
   base::TimeTicks stale_time_;
+  // The latest expiration time of all requests that have ever been started. In
+  // particular this is not just the maximum of the expiration times of all
+  // currently existing requests, but also takes into account the former
+  // expiration times of finished requests.
+  base::TimeTicks max_request_expiration_time_;
 
   // Keeps track of requests for timeout purposes. Requests are sorted by
   // their expiration time (soonest to expire on top of the priority queue). The
@@ -809,9 +842,15 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // running |start_callbacks_|.
   ServiceWorkerStatusCode start_worker_status_ = SERVICE_WORKER_OK;
 
+  // The clock used to vend tick time.
+  std::unique_ptr<base::TickClock> tick_clock_;
+
   std::unique_ptr<PingController> ping_controller_;
-  std::unique_ptr<Metrics> metrics_;
-  const bool should_exclude_from_uma_ = false;
+
+  // Used for recording worker activities (e.g., a ratio of handled events)
+  // while this service worker is running (i.e., after it starts up until it
+  // stops).
+  std::unique_ptr<ServiceWorkerMetrics::ScopedEventRecorder> event_recorder_;
 
   bool stop_when_devtools_detached_ = false;
 
@@ -819,35 +858,15 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // FinishStartWorker().
   base::Optional<ServiceWorkerMetrics::EventType> start_worker_first_purpose_;
 
+  // This is the set of features that were used up until installation of this
+  // version completed, or used during the lifetime of |this|. The values must
+  // be from blink::UseCounter::Feature enum.
+  std::set<uint32_t> used_features_;
+
   base::WeakPtrFactory<ServiceWorkerVersion> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerVersion);
 };
-
-template <typename Interface>
-base::WeakPtr<Interface> ServiceWorkerVersion::GetMojoServiceForRequest(
-    int request_id) {
-  DCHECK_EQ(EmbeddedWorkerStatus::RUNNING, running_status());
-  PendingRequest* request = pending_requests_.Lookup(request_id);
-  DCHECK(request) << "Invalid request id";
-  DCHECK(!request->mojo_service)
-      << "Request is already associated with a mojo service";
-
-  MojoServiceWrapper<Interface>* service =
-      static_cast<MojoServiceWrapper<Interface>*>(
-          mojo_services_.get(Interface::Name_));
-  if (!service) {
-    mojo::InterfacePtr<Interface> interface_ptr;
-    embedded_worker_->GetRemoteInterfaces()->GetInterface(&interface_ptr);
-    interface_ptr.set_connection_error_handler(
-        base::Bind(&ServiceWorkerVersion::OnMojoConnectionError,
-                   weak_factory_.GetWeakPtr(), Interface::Name_));
-    service = new MojoServiceWrapper<Interface>(this, std::move(interface_ptr));
-    mojo_services_.add(Interface::Name_, base::WrapUnique(service));
-  }
-  request->mojo_service = Interface::Name_;
-  return service->GetWeakPtr();
-}
 
 template <typename ResponseMessage>
 void ServiceWorkerVersion::DispatchSimpleEvent(int request_id,
