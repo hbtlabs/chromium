@@ -126,10 +126,11 @@ export PATH=$PATH:/media/hassen/linux-tmp/chromium/depot_tools
 # include PATH to depot tools binaries in zsh config
 
 
-# download chromium code base
+# first time? download chromium code base 
 fetch chromium
 
 # update code base 
+cd src
 git pull origin master
 sudo ./build/install-build-deps.sh
 gclient runhooks
@@ -158,6 +159,9 @@ ninja -C out/Release chrome && ./out/Release/chrome
 #make changes in source code, compile and launch
 ninja -C out/Release chrome && ./out/Release/chrome
 
+# backup compiled folder so you dont have to wait next time
+cp -R out/Release ../Release-bak
+
 ```
 
 
@@ -167,7 +171,8 @@ ninja -C out/Release chrome && ./out/Release/chrome
 
 # connect to remote and push 
 sshlabs
-cd /mnt/extra/chrome/src
+cd /mnt/extra
+git clone https://chromium.googlesource.com/chromium/src.git
 git remote add gh_origin git@github.com:hbtlabs/chromium-white-flash-fix.git  
 
 
