@@ -140,6 +140,8 @@ gclient sync
 # generate config 
 gn args out/Release
 
+# extra features e.g SSL issue
+# fieldtrial_testing_like_official_build=true
 is_component_build = true
 is_debug = false
 symbol_level = 0
